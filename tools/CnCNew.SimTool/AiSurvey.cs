@@ -20,8 +20,10 @@ internal static class AiSurvey
 {
     private const string UsageText = """
         Usage: CnCNew.SimTool ai-survey <content-dir> --out <tsv> [--seeds N] [--first-seed N] [--tick-rate 30|60|120] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
+               [--composition uniform|exchange|default,uniform|exchange|default]
           plays every AI-vs-AI pairing of the reference manifest once per seed (default 20 seeds from 1), record only, with a budget of M game
           minutes (default 25: 45,000 ticks at 30 Hz); the seed is applied like `ai-match --seed N`. One line per match, sorted by pairing and seed.
+          --composition names how the first and the second player's AI chooses its army units (the built-in AI only).
         """;
 
     public static int Run(string[] args)
@@ -79,7 +81,7 @@ internal static class AiSurvey
                     }
                     row = OriginalAi.Requested(args)
                         ? OriginalAi.Survey(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks, args)
-                        : Play(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks);
+                        : Play(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks, Compositions(args));
                 }
                 catch (Exception exception) when (exception is not OutOfMemoryException)
                 {
@@ -110,7 +112,20 @@ internal static class AiSurvey
         return failed == 0 ? 0 : 1;
     }
 
-    private static SurveyRow Play(SimContext context, string id, string mapPath, string[] factions, uint seed, long maxTicks)
+    /// <summary><c>--composition a,b</c>: how the AI of the first and of the second slot chooses its army units (<c>uniform</c>, <c>exchange</c>, <c>default</c>); absent: the default for both.</summary>
+    internal static ArmyComposition?[]? Compositions(string[] args)
+    {
+        if (ManifestCommands.Option(args, "--composition") is not { } text) return null;
+        return [..text.Split(',', StringSplitOptions.TrimEntries).Select(value => value switch
+        {
+            "uniform" => ArmyComposition.Uniform,
+            "exchange" => ArmyComposition.ExchangeValue,
+            "default" => (ArmyComposition?)null,
+            _ => throw new ArgumentException($"Unknown composition '{value}' (uniform, exchange, default)."),
+        })];
+    }
+
+    private static SurveyRow Play(SimContext context, string id, string mapPath, string[] factions, uint seed, long maxTicks, ArmyComposition?[]? compositions)
     {
         using var stream = context.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
@@ -137,7 +152,7 @@ internal static class AiSurvey
                         break;
                     }
             }
-        });
+        }, compositions);
         var rate = context.Catalog.Rate.TicksPerSecond;
         for (var side = 0; side < 2; side++)
             if (scenario.Players[side].Faction != factions[side]) throw new InvalidOperationException($"Player {side + 1} plays {scenario.Players[side].Faction}, not {factions[side]}.");

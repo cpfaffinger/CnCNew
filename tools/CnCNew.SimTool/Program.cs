@@ -68,6 +68,9 @@ const string Usage = """
       ai-census <content-dir> --out <tsv> [--orbits <txt>] [--seeds N] [--first-seed N] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
                                                            the same matches observed: what each AI built and produced (by producer), how every look of its army
                                                            production ended, money, damage by attacker type and victim kind, losses, and units that walk in circles
+      composition-test --rule-first <tsv> --rule-second <tsv> --symmetric <tsv> --baseline <decided>/<matches> [--out <report.md>]
+                                                           the acceptance test of an army composition rule from three surveys (`ai-survey --composition a,b`): exact
+                                                           binomial test of the paired survey, decided share of the symmetric one against the baseline
       rate-distribution <tsv-reference> <tsv-candidate> [--out <report.md>]
                                                            two surveys of the same pairings and seeds at two rates, compared as distributions against limits fixed in
                                                            advance (docs/SIMULATION-CORE.md §40); exit code 0 all tests passed, 1 a test failed, 2 input error
@@ -128,6 +131,7 @@ try
         "range-audit" when args.Length >= 2 => CnCNew.SimTool.RangeAudit.Run(args, CompileShipped),
         "ai-survey" => CnCNew.SimTool.AiSurvey.Run(args),
         "ai-census" => CnCNew.SimTool.AiCensus.Run(args),
+        "composition-test" => CnCNew.SimTool.CompositionTest.Run(args),
         "ai-data" when args.Length >= 2 => CnCNew.SimTool.OriginalAi.Data(args, CompileGraph),
         "rate-distribution" => CnCNew.SimTool.Survey.RateDistribution.Run(args),
         "rate-compare" when args.Length >= 2 => CnCNew.SimTool.RateCompare.Run(args, CompileGraph),

@@ -24,6 +24,7 @@ internal static class AiCensus
 {
     private const string UsageText = """
         Usage: CnCNew.SimTool ai-census <content-dir> --out <tsv> [--orbits <txt>] [--seeds N] [--first-seed N] [--tick-rate 30|60|120] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
+               [--composition uniform|exchange|default,uniform|exchange|default] [--watch <entity id>]
           plays every AI-vs-AI pairing of the reference manifest once per seed (default 5 seeds from 1, 25 game minutes) and writes one line per observed quantity:
           pairing, seed, slot, faction, section, key, value. Sections: match, built (first completion tick per structure), produced (producer|unit), army (outcome of every
           look of the army production, producer|outcome), rejections, money (every 50 s), damage (attacker|victim kind), lost (unit), circling (orbit|shuffle per unit type and place: rally, goal-near, goal-far, no-order).
@@ -127,7 +128,9 @@ internal static class AiCensus
         var terrain = TerrainMap.Build(map, mapPath);
         var options = SkirmishMatchOptions.Standard with { MaxTicks = maxTicks, AiSeed = seed, WorldSeed = seed ^ 0xC0FFEE06 };
         var participants = ReferenceManifest.Participants(context, factions);
-        var session = SkirmishMatchSession.Start(options, context.Catalog, context.Fingerprint, terrain, map.Objects, [..participants.Select(participant => new SkirmishSlot(participant))]);
+        var compositions = AiSurvey.Compositions(args);
+        var session = SkirmishMatchSession.Start(options, context.Catalog, context.Fingerprint, terrain, map.Objects,
+            [..participants.Select((participant, index) => new SkirmishSlot(participant, Composition: compositions is not null && index < compositions.Length ? compositions[index] : null))]);
         var world = session.World;
         var slotOf = new Dictionary<int, int>();
         for (var slot = 0; slot < session.Players.Length; slot++) slotOf[session.Players[slot].Id.Value] = slot;
@@ -207,6 +210,8 @@ internal static class AiCensus
             if (session.Ais[slot] is not { } ai) continue;
             counts[(slot, "match", "waves")] = ai.Stats.Waves;
             counts[(slot, "match", "productions")] = ai.Stats.Productions;
+            counts[(slot, "match", "informedDraws")] = ai.Stats.InformedDraws;
+            counts[(slot, "match", "uninformedDraws")] = ai.Stats.UninformedDraws;
             foreach (var (key, value) in ai.Stats.ArmyProduction) counts[(slot, "army", key.Replace('\t', '|'))] = value;
             foreach (var (reason, value) in ai.Stats.RejectionsByReason) counts[(slot, "rejections", reason.ToString())] = value;
         }
