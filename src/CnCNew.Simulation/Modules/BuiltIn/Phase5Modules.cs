@@ -682,11 +682,59 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _exitAfterEvacuate = false;
         _returning = false;
         _lastCommandFromPlayer = fromPlayer;
+        _exitRallyPending = false;
+        _viaPending = false;
         Entity.HasMoveTarget = true;
         Entity.MoveTargetX = x;
         Entity.MoveTargetY = y;
         InvalidatePath();
         world.WakeAt(Entity, this, world.Tick);
+        world.MarkDirty(Entity);
+    }
+
+    private bool _exitRallyPending;
+    private Fixed _exitRallyX;
+    private Fixed _exitRallyY;
+
+    // A point the path of the current move has to pass first (the door of the factory a unit leaves); gone once the object has been there or got another order.
+    private bool _viaPending;
+    private Fixed _viaX;
+    private Fixed _viaY;
+
+    /// <summary>
+    /// <c>aiFollowExitProductionPath</c> (<c>AI_FOLLOW_EXIT_PRODUCTION_PATH</c>) for a unit its factory just created: a move to the place in front of the factory whose path
+    /// first passes the door point, and, when the player set a rally point, a second move there once the first has ended. The path search leaves the footprint the unit
+    /// stands in by itself (the reference ignores the factory as an obstacle on this path). Any later order replaces the whole path.
+    /// </summary>
+    public void OrderExitProduction(IWorldServices world, Fixed doorX, Fixed doorY, Fixed exitX, Fixed exitY, bool hasRally, Fixed rallyX, Fixed rallyY)
+    {
+        OrderMove(world, exitX, exitY, false);
+        _viaPending = true;
+        _viaX = doorX;
+        _viaY = doorY;
+        _exitRallyPending = hasRally;
+        _exitRallyX = rallyX;
+        _exitRallyY = rallyY;
+    }
+
+    /// <summary>The order of <see cref="OrderExitProduction"/> still stands and the unit has not been through the door yet; gives the door point.</summary>
+    internal bool TryGetExitOrder(out Fixed doorX, out Fixed doorY)
+    {
+        doorX = _viaX;
+        doorY = _viaY;
+        return _viaPending && Entity.HasMoveTarget;
+    }
+
+    /// <summary>
+    /// Above 30 Hz: the place in front of the factory the standing exit order ends at, chosen at the end of the logic frame of the original the unit appeared in
+    /// (<c>SimulationWorld.ProcessExitClaims</c>). The unit has not moved yet; its first step is planned to this goal.
+    /// </summary>
+    internal void RetargetExit(IWorldServices world, Fixed exitX, Fixed exitY)
+    {
+        if (Entity.MoveTargetX == exitX && Entity.MoveTargetY == exitY) return;
+        Entity.MoveTargetX = exitX;
+        Entity.MoveTargetY = exitY;
+        InvalidatePath();
         world.MarkDirty(Entity);
     }
 
@@ -973,6 +1021,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             }
             else Move(world, locomotor);
         }
+        // Above 30 Hz the second leg is ordered with the last tick of the unit's logic frame of the original, where the 30 Hz step that ends the first leg orders it
+        // (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): an arrival ends there by itself, a first leg that ends in the first tick of a frame (no way out) waits for it.
+        if (_exitRallyPending && !Entity.HasMoveTarget && world.Time.BeginsFrameOf(Entity, world.Tick + TickOrder.Next))
+        {
+            // The first leg of the exit path is done (the unit is out of its factory): on to the rally point.
+            _exitRallyPending = false;
+            // exitObjectViaDoor adjusts the rally point for the unit (Pathfinder::adjustDestination): the units of a factory do not all end on the same spot.
+            var (rallyX, rallyY) = world.FindFreeGoal(Entity, Entity.X, Entity.Y, _exitRallyX, _exitRallyY);
+            OrderMove(world, rallyX, rallyY, false);
+        }
         if (_enterTarget.IsValid) UpdateEnter(world);
         if (_goal.IsValid) UpdateGoal(world);
         if (_evacuatePending && !Entity.HasMoveTarget && _dock is null && ReadyToUnload(world))
@@ -992,7 +1050,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _returning = false;
             world.RequestDestroy(Entity.Id);
         }
-        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None || _evacuatePending || _returning || _goal.IsValid ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return _dock is not null || Entity.HasMoveTarget || _task != BuilderTask.None || _evacuatePending || _returning || _goal.IsValid || _exitRallyPending ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     /// <summary>
@@ -1079,6 +1137,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
+        if (_viaPending)
+        {
+            // Through the door: from here on a new plan goes straight to the goal.
+            var viaX = _viaX - Entity.X;
+            var viaY = _viaY - Entity.Y;
+            if (air || SquaredReach.Of(Fixed.FromInt(TerrainMap.CellSize)).Contains(viaX * viaX + viaY * viaY)) _viaPending = false;
+        }
         if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum)) PlanPath(navigation, locomotor, air);
         if (_path.Count == 0)
         {
@@ -1443,6 +1508,20 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _pathComplete = true;
             return;
         }
+        if (_viaPending)
+        {
+            var toDoor = navigation.FindPath(Entity.X, Entity.Y, _viaX, _viaY, locomotor.Surfaces);
+            if (toDoor.Status == PathStatus.Found)
+            {
+                var onward = navigation.FindPath(_viaX, _viaY, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces);
+                _pathComplete = onward.Status == PathStatus.Found;
+                _path.AddRange(toDoor.Points);
+                _path.AddRange(onward.Points);
+                return;
+            }
+            // The door point cannot be reached (something was built in front of the door): straight to the goal.
+            _viaPending = false;
+        }
         var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces);
         _pathComplete = result.Status == PathStatus.Found;
         _path.AddRange(result.Points);
@@ -1547,6 +1626,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             writer.Fixed("frameAngle", _frameAngle);
             if (_frameArriving) writer.Bool("frameArriving", true);
         }
+        if (_exitRallyPending)
+        {
+            writer.Fixed("exitRallyX", _exitRallyX);
+            writer.Fixed("exitRallyY", _exitRallyY);
+        }
+        if (_viaPending)
+        {
+            writer.Fixed("viaX", _viaX);
+            writer.Fixed("viaY", _viaY);
+        }
         if (_pathValid)
         {
             writer.Bool("pathValid", true);
@@ -1591,6 +1680,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _frameStepX = reader.Has("frameStepX") ? reader.Fixed("frameStepX") : Fixed.Zero;
         _frameStepY = reader.Has("frameStepY") ? reader.Fixed("frameStepY") : Fixed.Zero;
         _frameAngle = reader.Has("frameAngle") ? reader.Fixed("frameAngle") : Fixed.Zero;
+        _exitRallyPending = reader.Has("exitRallyX");
+        _exitRallyX = _exitRallyPending ? reader.Fixed("exitRallyX") : Fixed.Zero;
+        _exitRallyY = _exitRallyPending ? reader.Fixed("exitRallyY") : Fixed.Zero;
+        _viaPending = reader.Has("viaX");
+        _viaX = _viaPending ? reader.Fixed("viaX") : Fixed.Zero;
+        _viaY = _viaPending ? reader.Fixed("viaY") : Fixed.Zero;
         InvalidatePath();
         if (reader.Has("pathValid"))
         {
@@ -1608,7 +1703,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 // ============================================================================================= ProductionUpdate
 
 /// <summary>
-/// <c>ProductionUpdate.h</c>. <c>QuantityModifier</c> is typed but not applied: phase 5 spawns one unit per completed queue entry at the producer's own position (no exit-point geometry, no rally points — see docs/GAME-RULES.md).
+/// <c>ProductionUpdate.h</c>. <c>QuantityModifier</c> is typed but not applied: one unit per completed queue entry, created at the exit module's <c>UnitCreatePoint</c> and sent along its exit path (docs/SIMULATION-CORE.md §42).
 /// The door-animation timing fields (<c>NumDoorAnimations</c>, <c>DoorOpeningTime</c>, <c>DoorWaitOpenTime</c>, <c>DoorCloseTime</c>, <c>ConstructionCompleteDuration</c>; milliseconds in the INI, ticks here) change no
 /// simulation behaviour — nothing waits for a door — and are kept for the presentation only (docs/MODEL-CONDITIONS-BUILDINGS.md); the catalog carries them as Opaque, so they are read from the original text.
 /// </summary>
@@ -1646,7 +1741,7 @@ public readonly record struct ProductionQueueItem(int TemplateIndex, Fixed Cost,
 
 /// <summary>
 /// <c>ProductionUpdate::update()</c>: only the head-of-queue entry accumulates progress, one tick per call; when it reaches
-/// zero the unit spawns at the producer's own position and the next entry (if any) starts from a fresh tick count. The full
+/// zero the unit spawns at the exit's <c>UnitCreatePoint</c>, is sent along its exit path (<see cref="IProductionExit.TryGetExitPath"/>) and the next entry (if any) starts from a fresh tick count. The full
 /// cost is withdrawn at queue time (<c>SimulationWorld</c>'s <c>QueueProductionCommand</c> handler) and refunded in full on
 /// cancel, matching <c>Money::withdraw</c>/<c>deposit</c> semantics; there is no per-frame energy-ratio build-time penalty
 /// (a documented phase-5 simplification — <c>ProductionUpdate::calcTimeToBuild</c> in the reference).
@@ -1756,8 +1851,11 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         {
             _queue.RemoveAt(0);
             var forcesSupplyWanting = exit is { ForcesSupplyWanting: true };
+            // exitObjectViaDoor: the unit leaves over the exit point of its factory (NaturalRallyPoint) and goes on to the player's rally point, if one is set.
+            Fixed doorX = Fixed.Zero, doorY = Fixed.Zero, exitX = Fixed.Zero, exitY = Fixed.Zero;
+            var hasExit = !forcesSupplyWanting && exit is not null && exit.TryGetExitPath(out doorX, out doorY, out exitX, out exitY);
             var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
-                : _hasRally ? new SpawnExtras(Fixed.Zero, HasRally: true, RallyX: _rallyX, RallyY: _rallyY)
+                : _hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: _hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
                 : default(SpawnExtras?);
             var (x, y, z, angle) = exit is null ? (Entity.X, Entity.Y, Entity.Z, Entity.Angle) : exit.ClaimExit(world, world.Templates[head.TemplateIndex]);
             if (extras is { } value) world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle, value);

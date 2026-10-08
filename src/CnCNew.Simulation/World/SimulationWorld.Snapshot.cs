@@ -102,10 +102,13 @@ public sealed partial class SimulationWorld
                         : null,
                     pending.Has("creator"), pending.Has("creator") ? new EntityId(checked((uint)pending.UInt("creator"))) : EntityId.Invalid,
                     pending.Has("enslaver") ? new EntityId(checked((uint)pending.UInt("enslaver"))) : default,
-                    pending.Has("producer") ? new EntityId(checked((uint)pending.UInt("producer"))) : default),
+                    pending.Has("producer") ? new EntityId(checked((uint)pending.UInt("producer"))) : default,
+                    pending.Has("exitX"), pending.Has("exitX") ? pending.Fixed("doorX") : default, pending.Has("exitX") ? pending.Fixed("doorY") : default,
+                    pending.Has("exitX") ? pending.Fixed("exitX") : default, pending.Has("exitX") ? pending.Fixed("exitY") : default),
                 pending.Has("notBefore") ? pending.Int("notBefore") : 0));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
+        LoadExitClaims(state);
 
         foreach (var item in state.Array("entityList")) LoadEntity(item);
         foreach (var player in state.Array("players")) _players[checked((int)player.Int("id"))].EnergyProduction = checked((int)player.Int("energyProduction"));

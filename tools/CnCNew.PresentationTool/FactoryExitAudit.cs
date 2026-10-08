@@ -26,7 +26,8 @@ internal sealed class FactoryExitAudit
     private const float RallyOffset = 20f;
 
     private const float SpawnTolerance = 1.5f;
-    private const float RestTolerance = 30f;
+    /// <summary>A unit rests on the exit point or, once later units asked it to make room, on a place beside it (up to three unit spacings away; a spacing is twice the bounding radius plus a margin).</summary>
+    private const float RestTolerance = 130f;
     private const float LaneTolerance = 20f;
 
     private sealed class Track(EntityId id, string template, long born)
@@ -36,6 +37,7 @@ internal sealed class FactoryExitAudit
         public long Born { get; } = born;
         public List<(long Frame, Vector2 Local, bool Drawn, float Speed)> Path { get; } = [];
         public string DoorAtBirth { get; set; } = string.Empty;
+        public float Radius { get; set; }
     }
 
     private sealed class Site(FactoryExitSite definition, EntityId building, Vector2 create, Vector2 rally, float major, float minor, ProductionData? production)
@@ -112,7 +114,7 @@ internal sealed class FactoryExitAudit
                 if (entity.Owner != building.Owner || !entity.Template.Name.Equals(site.Definition.Produces, StringComparison.OrdinalIgnoreCase) || !_known.Add(entity.Id.Value)) continue;
                 // What appears before the first order was not built here (the free worker of a GLA supply stash).
                 if (now < _firstOrder) continue;
-                site.Units.Add(new Track(entity.Id, entity.Template.Name, now) { DoorAtBirth = door });
+                site.Units.Add(new Track(entity.Id, entity.Template.Name, now) { DoorAtBirth = door, Radius = ToFloat(entity.Template.BoundingCircleRadius) });
             }
 
             var cos = MathF.Cos(ToFloat(building.Angle));
@@ -176,8 +178,20 @@ internal sealed class FactoryExitAudit
                 else if (firstOutside.Local.X < site.Major || MathF.Abs(firstOutside.Local.Y - site.Rally.Y) > LaneTolerance)
                     failures.Add($"{who} leaves the box at ({firstOutside.Local.X:F0},{firstOutside.Local.Y:F0}), not through the exit side at ({site.Major:F0},{site.Rally.Y:F0})");
                 if (left && Vector2.Distance(last.Local, rallyOut) > RestTolerance) failures.Add($"{who} rests {Vector2.Distance(last.Local, rallyOut):F0} away from the end of its exit path ({rallyOut.X:F0},{rallyOut.Y:F0})");
+                if (left && site.Inside(last.Local)) failures.Add($"{who} rests inside the building's box again, at ({last.Local.X:F0},{last.Local.Y:F0})");
+                if (left && restFrom > _live.Clock.OriginalFrames - 30) failures.Add($"{who} is still moving when the scene ends (it never settles)");
                 if (drawn < track.Path.Count) failures.Add($"{who} is not drawn in {track.Path.Count - drawn} of {track.Path.Count} frames");
             }
+
+            // Nobody stands in anybody: the rest places of two units are at least 0.9 of their bounding radii apart.
+            for (var first = 0; first < site.Units.Count; first++)
+                for (var second = first + 1; second < site.Units.Count; second++)
+                {
+                    var (a, b) = (site.Units[first], site.Units[second]);
+                    if (a.Path.Count == 0 || b.Path.Count == 0) continue;
+                    var apart = Vector2.Distance(a.Path[^1].Local, b.Path[^1].Local);
+                    if (apart < 0.9f * (a.Radius + b.Radius)) failures.Add($"{name}: units {first + 1} and {second + 1} rest {apart:F1} apart, inside each other (bounding radii {a.Radius:F1} and {b.Radius:F1})");
+                }
 
             if (doors && site.Units.Count > 0)
             {
