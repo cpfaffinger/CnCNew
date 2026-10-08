@@ -460,6 +460,51 @@ static partial class Tests
     }
 
     /// <summary>
+    /// <c>WaveGuideUpdate</c> (the flood of a broken dam): the wave moves every tick, its front wets and hurts what it reaches once per frame of the original.
+    /// The wave is where it is at 30 Hz at every frame boundary (within the rounding of its step per tick), every object in its way is hurt in the same
+    /// frame, and the wave is destroyed at the end of its path in the same frame.
+    /// </summary>
+    public static void RateInvarianceWaveGuide()
+    {
+        AtThreeRates(rate =>
+        {
+            var (world, fixture, _) = RatedStructuresWorld(rate);
+            RequestSpawn(world, fixture, "SwDam", 0, 50, 50);
+            RequestSpawn(world, fixture, "SwWave", 0, 10, 10);
+            // Objects along and beside the wave's path (WaveGuide1 at 100,250 to WaveGuide2 at 500,250).
+            foreach (var (x, y) in new[] { (150, 250), (200, 250), (263, 262), (331, 241), (397, 255), (440, 249) }) RequestSpawn(world, fixture, "SwWalker", 1, x, y);
+            for (var tick = 0; tick < world.Frames(10); tick++) world.Step();
+            var wave = world.Entities.Single(entity => entity.Template.Name == "SwWave");
+            var dam = world.Entities.Single(entity => entity.Template.Name == "SwDam");
+            var walkers = world.Entities.Where(entity => entity.Template.Name == "SwWalker").OrderBy(entity => entity.Id.Value).ToArray();
+            world.Kill(dam.Id);
+            var places = new List<long>();
+            var (gone, frame) = (-1, 0);
+            var events = FrameSeries(world, 500, () =>
+            {
+                var live = world.FindEntity(wave.Id);
+                if (gone < 0 && (live is null || live.DestroyRequested)) gone = frame;
+                places.Add(live is null ? 0 : live.X.Raw);
+                places.Add(live is null ? 0 : live.Y.Raw);
+                frame++;
+                long mixed = 0;
+                foreach (var walker in walkers) mixed = unchecked(mixed * 31 + (walker.Body?.Health.Raw ?? 0) + (walker.EffectivelyDead ? 1 : 0) + (walker.HasStatus(ObjectStatusBits.Index("WET")) ? 2 : 0));
+                return mixed;
+            }, item => item.Kind is SimEventKind.EntityDamaged or SimEventKind.EntityDied or SimEventKind.EntityDestroyed);
+            return (Events: events, Places: places, Gone: gone, Wet: walkers.Count(walker => walker.HasStatus(ObjectStatusBits.Index("WET"))));
+        }, (reference, other, rate) =>
+        {
+            Check.That(reference.Gone > 50 && reference.Wet >= 4, "Setup: the wave ran its path and flooded what was in its way at 30 Hz (gone in frame " + reference.Gone + ", " + reference.Wet + " wet).");
+            Check.That(other.Gone == reference.Gone, "The wave is destroyed in the same frame at " + rate + ": " + other.Gone + " instead of " + reference.Gone + ".");
+            SameSeries(reference.Events, other.Events, "What the wave wets, hurts and kills at " + rate);
+            var tolerance = Fixed.FromDecimal(0.001m).Raw;
+            for (var index = 0; index < reference.Places.Count; index++)
+                Check.That(Math.Abs(reference.Places[index] - other.Places[index]) <= tolerance,
+                    "Place of the wave at " + rate + ", value " + index + ": " + Fixed.FromRaw(other.Places[index]) + " instead of " + Fixed.FromRaw(reference.Places[index]) + ".");
+        });
+    }
+
+    /// <summary>
     /// <c>RailroadBehavior</c>: the conductor's recursion (push, acceleration factor, braking factor, friction), the wait at the station, the crush damage
     /// "speed · 10" and the shove by a quarter of the overlap happen once per frame of the original; the train moves every tick. Positions of the locomotive
     /// and its carriages, the conductor's state, the position and health of a vehicle it grinds along and every death are those of 30 Hz at each frame boundary.
