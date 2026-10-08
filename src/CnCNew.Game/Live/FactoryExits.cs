@@ -9,12 +9,15 @@ public sealed record FactoryExitSite(string Building, string Tag, string Templat
 /// The staged scenes that show how freshly built units leave their factory (<c>scripts/demo-factory-exits.ps1</c>, <c>PresentationTool scenario-audit</c>): per faction the command centre
 /// builds dozers or workers, the barracks infantry and the war factory tanks, three orders each, one after another, so the exit can be watched repeatedly. A scene shows one building
 /// (<c>exit-america-warfactory</c>) or all three of a faction (<c>exit-america-all</c>, which also places a builder, a power plant and a supply centre behind them). Every building keeps its default heading: the exit
-/// (<c>UnitCreatePoint</c> to <c>NaturalRallyPoint</c>) points east, to the right of the default camera.
+/// (<c>UnitCreatePoint</c> to <c>NaturalRallyPoint</c>) points east; the camera looks from the south-east, so that is towards the lower right of the picture.
 /// </summary>
 public static class FactoryExits
 {
     /// <summary>How many units every building of a scene is told to build.</summary>
     public const int OrdersPerBuilding = 3;
+
+    /// <summary>The camera of the scenes looks north-west, from the south-east: it sees the exit side (east) and the front of the building, so a door on the east face is in view.</summary>
+    private const float ExitCameraAngleDegrees = 50f;
 
     public static ImmutableArray<string> Factions { get; } = ["america", "china", "gla"];
 
@@ -80,9 +83,9 @@ public static class FactoryExits
         var what = string.Join(", ", sites.Select(site => $"{site.Template} baut {OrdersPerBuilding}-mal {site.Produces}"));
         return new DemoScenario(
             NameOf(faction, building), all ? $"Fabrikausfahrten {side}" : $"Fabrikausfahrt {sites[0].Template}",
-            $"{what}. Zu sehen: wo die Einheit erscheint, ob das Tor vorher offen ist, ob sie durch die Torseite (rechts im Bild) hinausfährt und wo sie stehen bleibt.",
+            $"{what}. Zu sehen: wo die Einheit erscheint, ob das Tor vorher offen ist, ob sie durch die Torseite (im Bild rechts unten) hinausfährt und wo sie stehen bleibt.",
             all ? 1800 : 1500, [..units], [..orders],
-            all ? 40 : 45, 0, 0f, all ? 50f : 40f, all ? 560f : 230f)
+            all ? 40 : 45, 0, ExitCameraAngleDegrees, all ? 50f : 40f, all ? 560f : 230f)
         {
             StartMoney = 30000,
             HumanFaction = side,

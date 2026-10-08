@@ -3,7 +3,7 @@
   Zeigt im Fenster, wie frisch gebaute Einheiten ihre Fabrik verlassen (gestellte Szenen exit-<fraktion>-<gebaeude>, docs/DEMO-SCENARIOS.md).
 
 .DESCRIPTION
-  Startet den Client in einer kleinen Szene auf Alpine Assault, die Kamera nah am Gebaeude, die Ausfahrt zeigt nach rechts (Osten). Jedes Gebaeude bekommt
+  Startet den Client in einer kleinen Szene auf Alpine Assault, die Kamera nah am Gebaeude; sie blickt aus Suedosten auf die Torseite, die Ausfahrt (Osten) zeigt im Bild nach rechts unten. Jedes Gebaeude bekommt
   ab Bild 30 drei Bauauftraege nacheinander, die Ausfahrt ist also dreimal zu sehen:
     commandcenter  Kommandozentrale baut Planierraupen (GLA: Arbeiter)
     barracks       Kaserne baut Infanterie (Ranger / Rotgardist / Rebell)
@@ -62,7 +62,7 @@ Write-Host @'
    Worauf achten (das Original als Massstab: ProductionUpdate / DefaultProductionExitUpdate):
      1. Die Einheit erscheint IM Gebaeude (am UnitCreatePoint), nicht davor und nicht mitten auf dem Dach.
      2. Bei Gebaeuden mit Tor: das Tor ist ganz offen, wenn die Einheit erscheint, bleibt offen, solange sie hinausfaehrt, und schliesst danach.
-     3. Die Einheit faehrt/geht von selbst durch die Torseite (rechts im Bild) hinaus - sie bleibt nicht im Gebaeude stehen und springt nicht.
+     3. Die Einheit faehrt/geht von selbst durch die Torseite (im Bild rechts unten) hinaus - sie bleibt nicht im Gebaeude stehen und springt nicht.
      4. Sie haelt kurz vor dem Gebaeude (rund 20 Einheiten hinter der Gebaeudekante); die naechste Einheit stellt sich daneben, nicht in sie hinein.
      5. Waehrend der Ausfahrt gleitet sie durch die eigene Fabrik, weicht aber nicht seitlich durch die Wand aus.
      6. Nach einem gesetzten Sammelpunkt (Gebaeude waehlen, Rechtsklick auf den Boden) faehrt sie erst hinaus, dann zum Sammelpunkt.

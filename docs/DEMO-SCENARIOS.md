@@ -50,8 +50,8 @@ ihre Objekte setzt, ihre Befehle ausführt und zweimal denselben Zustandshash li
 Frage des Projektinhabers: fahren frisch gebaute Einheiten aus ihrer Fabrik heraus, oder „clippen“ sie hinaus? Zwölf Szenen (`CnCNew.Game/Live/FactoryExits.cs`) stellen je Fraktion
 (`america`, `china`, `gla`) die Kommandozentrale (baut Planierraupen bzw. Arbeiter), die Kaserne (Ranger, Rotgardist, Rebell) und die Waffenfabrik bzw. den Waffenhändler (Crusader,
 Battlemaster, Scorpion) einzeln nahe an die Kamera (`exit-america-warfactory` …) oder alle drei in ein Bild (`exit-america-all`, dazu ein Bauarbeiter, Kraftwerk und Versorgungslager –
-dieselbe Szene benutzt der Bautasten-Test). Jedes Gebäude bekommt ab Bild 30 drei Bauaufträge nacheinander. Alle Gebäude stehen im Standardwinkel: die Ausfahrt zeigt nach Osten, im Bild
-nach rechts.
+dieselbe Szene benutzt der Bautasten-Test). Jedes Gebäude bekommt ab Bild 30 drei Bauaufträge nacheinander. Alle Gebäude stehen im Standardwinkel: die Ausfahrt zeigt nach Osten; die Kamera blickt aus Südosten
+auf die Torseite, im Bild fährt die Einheit also nach rechts unten hinaus.
 
 ```powershell
 .\scripts\demo-factory-exits.ps1                                    # Fenster: America, alle drei Gebäude; druckt, worauf zu achten ist
@@ -119,7 +119,7 @@ in Prüfung (c)/(d) **rot** – das ist der Befund, kein Werkzeugfehler.
 
 1. Die Einheit erscheint im Gebäude, nicht davor und nicht auf dem Dach.
 2. Gebäude mit Tor (beide Kommandozentralen außer GLA, alle drei Fabriken): das Tor ist ganz offen, wenn die Einheit erscheint, und schließt danach wieder.
-3. Die Einheit fährt/geht von selbst durch die Torseite (rechts im Bild) hinaus und hält kurz vor dem Gebäude.
+3. Die Einheit fährt/geht von selbst durch die Torseite (im Bild rechts unten) hinaus und hält kurz vor dem Gebäude.
 4. Die zweite und dritte Einheit stellen sich neben die erste, nicht in sie hinein.
 5. Sitzt das Modell der Einheit während der Ausfahrt sichtbar richtig im Tor (Höhe, Richtung), oder ragt es durch Wand oder Dach?
 6. Mit gesetztem Sammelpunkt (Gebäude wählen, Rechtsklick auf den Boden): erst hinaus, dann zum Sammelpunkt.
