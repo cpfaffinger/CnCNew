@@ -1,314 +1,314 @@
-# Türme in der Simulation: Zielen vor dem Schuss, Angriffszustand und Leerlaufabtasten (`TurretAI`)
+# Turrets in the simulation: aiming before the shot, attack state and idle scanning (`TurretAI`)
 
-**Hinweis (9. Oktober 2026, Phase 23): historisch, 30 Hz.** Tickzahlen, Siegticks und Hashes in diesem Dokument sind bei 30 Hz und an ihrem damaligen Stand gemessen und als Referenzwerte überholt (maßgeblich: `baselines/reference-manifest.json`, seit `ea52f87` bei 60 Hz). Tickangaben gelten als Zahl von Originalbildern weiter. Oberhalb von 30 Hz entscheidet ein Turm seinen Schritt einmal je Originalbild **des Turms** mit der Drehrate des 30-Hz-Katalogs und geht ihn in Teilen je Tick; der Winkel ist an jedem Bildende bitgleich, die Feuerfreigabe fällt ins selbe Bild, `TurretWaits` zählt Bilder, und Peilung und Neigung werden am Bildende des Opfers gelesen: `docs/rate-invariance/RATE-INVARIANCE-TURRETS.md` (`32eb25c`, `6e0c691`, `276a8de`, `dc888d3`), `docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md` (`c87748a`), `docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` (`43acce8`, `36a2404`). Offen: der Turm einer `AmericaFireBase` beginnt in zwei Gefechten auf ausgelieferten Karten bei 60 Hz einen Tick statt ein Bild nach einem ergebnislosen Blick zu drehen (nicht bis zum Symbol verfolgt).
+**Note (9 October 2026, Phase 23): historical, 30 Hz.** Tick counts, victory ticks and hashes in this document were measured at 30 Hz and at their state at the time and are superseded as reference values (authoritative: `baselines/reference-manifest.json`, at 60 Hz since `ea52f87`). Tick figures remain valid as a number of original frames. Above 30 Hz a turret decides its step once per original frame **of the turret** with the turn rate of the 30 Hz catalog and takes it in parts per tick; the angle is bit-identical at every frame end, the fire release falls into the same frame, `TurretWaits` counts frames, and bearing and pitch are read at the frame end of the victim: `docs/rate-invariance/RATE-INVARIANCE-TURRETS.md` (`32eb25c`, `6e0c691`, `276a8de`, `dc888d3`), `docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md` (`c87748a`), `docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` (`43acce8`, `36a2404`). Open: the turret of an `AmericaFireBase` begins, in two matches on shipped maps at 60 Hz, to turn one tick instead of one frame after a look without result (not traced down to the symbol).
 
-Stand 4. Oktober 2026 (Messwerte neu gemessen). Quellen der Referenz: `GeneralsMD/Code/GameEngine/Source/GameLogic/AI/TurretAI.cpp` und
-`Include/GameLogic/TurretAI.h` (Zustandsmaschine, `friend_turnTowardsAngle`/`friend_turnTowardsPitch`, `TurretAIData::buildFieldParse`, `TurretAIIdleState`,
+As of 4 October 2026 (measured values re-measured). Sources of the reference: `GeneralsMD/Code/GameEngine/Source/GameLogic/AI/TurretAI.cpp` and
+`Include/GameLogic/TurretAI.h` (state machine, `friend_turnTowardsAngle`/`friend_turnTowardsPitch`, `TurretAIData::buildFieldParse`, `TurretAIIdleState`,
 `TurretAIIdleScanState`, `TurretAIHoldTurretState`, `TurretAIRecenterTurretState`, `TurretAI::setTurretTargetObject`),
 `AI/AIStates.cpp` (`AIAttackAimAtTargetState::onEnter/update`, `AIAttackFireWeaponState::update`, `AIAttackApproachTargetState::onEnter`, `AIAttackState::onEnter/update/onExit`),
-`Object/Update/AIUpdate.cpp` (`getWhichTurretForCurWeapon`, `getTurretRotAndPitch`, `setTurretTargetObject`). Nichts davon ist kopiert; der Ablauf ist verstanden und für die
-befehlsgetriebene Kampfsimulation dieses Projekts neu geschrieben.
+`Object/Update/AIUpdate.cpp` (`getWhichTurretForCurWeapon`, `getTurretRotAndPitch`, `setTurretTargetObject`). None of it is copied; the sequence is understood and rewritten for the
+command-driven combat simulation of this project.
 
-## 1. Befund
+## 1. Finding
 
-Die Simulation kannte keinen Turmzustand. Ein `FireWeaponCommand` löste den Schuss sofort aus, sobald Waffe, Reichweite und Sicht stimmten; die Darstellung
-(`TurretTracker`) drehte den gezeichneten Turm erst *nach* dem Schuss und riet dabei die Richtung. Das Szenario `tank-duel` (`PresentationTool scenario-audit`)
-zeigte es: der Crusader schoss in Tick 5 mit einem Turm, der 45° neben dem Ziel stand.
+The simulation knew no turret state. A `FireWeaponCommand` triggered the shot immediately as soon as weapon, range and vision were right; the presentation
+(`TurretTracker`) turned the drawn turret only *after* the shot and guessed the direction in doing so. The scenario `tank-duel` (`PresentationTool scenario-audit`)
+showed it: the Crusader fired in tick 5 with a turret that stood 45° beside the target.
 
-In der Referenz dreht die KI den Turm zuerst (`TurretAIAimTurretState`), und nur wenn er ausgerichtet ist, feuert der Zustand `TURRETAI_FIRE`
-(`AIAttackFireWeaponState`) – für Waffen auf einem Turm feuert der Turm-Automat, nicht der Körper (`AIAttackAimAtTargetState::update` gibt für Türme mit Drehrate
-immer `STATE_CONTINUE` zurück: „The Body can never return Success if the weapon is on the turret“).
+In the reference the AI turns the turret first (`TurretAIAimTurretState`), and only when it is aligned does the state `TURRETAI_FIRE` fire
+(`AIAttackFireWeaponState`) – for weapons on a turret the turret automaton fires, not the body (`AIAttackAimAtTargetState::update` always returns `STATE_CONTINUE` for turrets with a turn rate:
+"The Body can never return Success if the weapon is on the turret").
 
-Die erste Fassung dieses Modells kannte zwei Lücken, die jetzt geschlossen sind (Abschnitt 3.3 und 3.5): Ein Angriff war ein Strom einzelner Feuerbefehle, der Turm hielt sein Ziel nur
-„Bereitschaft der Waffe + Rückstellzeit“ nach dem letzten Befehl und drehte danach zurück, auch wenn die Einheit weiter angriff (Nachladen, Anmarsch). Und ein Turm ohne Ziel blieb in Ruhe,
-obwohl die Daten von rund 40 Türmen ein zufälliges Umsehen verlangen.
+The first version of this model had two gaps, which are now closed (sections 3.3 and 3.5): an attack was a stream of individual fire commands, the turret held its target only for
+"readiness of the weapon + recentre time" after the last command and turned back after that, even if the unit kept attacking (reloading, approach). And a turret without a target stayed at rest,
+although the data of about 40 turrets require a random looking around.
 
-## 2. Daten: `Turret`/`AltTurret` streng typisiert (`CnCNew.Data`)
+## 2. Data: `Turret`/`AltTurret` strictly typed (`CnCNew.Data`)
 
-`Schema/TurretSchema.cs` enthält **jeden** Schlüssel von `TurretAIData::buildFieldParse`; der Compiler (`DefinitionCompiler.CompileModule`) übersetzt die
-verschachtelten Blöcke `Turret`/`AltTurret` implementierter Module damit statt mit der heuristischen Generik:
+`Schema/TurretSchema.cs` contains **every** key of `TurretAIData::buildFieldParse`; the compiler (`DefinitionCompiler.CompileModule`) translates the
+nested blocks `Turret`/`AltTurret` of implemented modules with it instead of with the heuristic generic path:
 
-| Schlüssel | Typ | Einheit/Bedeutung |
+| Key | Type | Unit/meaning |
 |---|---|---|
-| `TurretTurnRate`, `TurretPitchRate` | Real | Grad je Sekunde (`parseAngularVelocityReal`) |
-| `NaturalTurretAngle`, `NaturalTurretPitch`, `FirePitch`, `MinPhysicalPitch`, `GroundUnitPitch`, `MinIdleScanAngle`, `MaxIdleScanAngle` | Angle | Grad |
-| `TurretFireAngleSweep`, `TurretSweepSpeedModifier` | Waffenslot + Angle/Real, je Slot wiederholbar | Spreizwinkel / Drehfaktor |
-| `ControlledWeaponSlots` | Flags (`PRIMARY`/`SECONDARY`/`TERTIARY`), **Pflicht** | `TurretAI::TurretAI`: „MUST specify controlled weapon slots“ |
-| `RecenterTime`, `MinIdleScanInterval`, `MaxIdleScanInterval` | DurationMs | Millisekunden, auf Ticks aufgerundet |
+| `TurretTurnRate`, `TurretPitchRate` | Real | degrees per second (`parseAngularVelocityReal`) |
+| `NaturalTurretAngle`, `NaturalTurretPitch`, `FirePitch`, `MinPhysicalPitch`, `GroundUnitPitch`, `MinIdleScanAngle`, `MaxIdleScanAngle` | Angle | degrees |
+| `TurretFireAngleSweep`, `TurretSweepSpeedModifier` | weapon slot + Angle/Real, repeatable per slot | sweep angle / turn factor |
+| `ControlledWeaponSlots` | Flags (`PRIMARY`/`SECONDARY`/`TERTIARY`), **mandatory** | `TurretAI::TurretAI`: "MUST specify controlled weapon slots" |
+| `RecenterTime`, `MinIdleScanInterval`, `MaxIdleScanInterval` | DurationMs | milliseconds, rounded up to ticks |
 | `AllowsPitch`, `InitiallyDisabled`, `FiresWhileTurning` | Bool | |
 
-Ein unbekannter Schlüssel oder ein fehlendes `ControlledWeaponSlots` ist ein Compilerfehler, kein stiller Standardwert. `InterTurretDelay` gibt es in der Referenz
-nur unter `INTER_TURRET_DELAY`, das der ausgelieferte Build nicht definiert; kein Objekt setzt es.
+An unknown key or a missing `ControlledWeaponSlots` is a compiler error, not a silent default value. `InterTurretDelay` exists in the reference
+only under `INTER_TURRET_DELAY`, which the shipped build does not define; no object sets it.
 
-`baselines/compatibility.json` ändert sich in genau einem Eintrag: `compatibility-ignored-tokens` 132 → **208**. Die 76 neuen Fälle sind die Anmerkungen
-`// turn rate, in degrees per sec` hinter Werten von `TurretTurnRate`/`TurretPitchRate`; der Referenzparser liest das erste Token und ignoriert den Rest, das wird jetzt
-gezählt statt unsichtbar zu sein. Die Zahl der Basislinieneinträge bleibt 751. Waffenfelder wurden nicht neu typisiert: `AcceptableAimDelta` (Weapon/AcceptableAimDelta,
-44 Fälle, weiter `deferred-field`) wirkt in der Referenz nur auf das **Körper**-Zielen von Waffen ohne Turm (`AIAttackAimAtTargetState`), nicht auf Türme; der Turm
-benutzt die feste Schwelle `REL_THRESH` (siehe 3.4).
+`baselines/compatibility.json` changes in exactly one entry: `compatibility-ignored-tokens` 132 → **208**. The 76 new cases are the annotations
+`// turn rate, in degrees per sec` behind values of `TurretTurnRate`/`TurretPitchRate`; the reference parser reads the first token and ignores the rest, that is now
+counted instead of being invisible. The number of baseline entries stays 751. Weapon fields were not newly typed: `AcceptableAimDelta` (Weapon/AcceptableAimDelta,
+44 cases, still `deferred-field`) acts in the reference only on the **body** aiming of weapons without a turret (`AIAttackAimAtTargetState`), not on turrets; the turret
+uses the fixed threshold `REL_THRESH` (see 3.4).
 
-Die Abtastfelder (`MinIdleScanAngle`, `MaxIdleScanAngle`, `MinIdleScanInterval`, `MaxIdleScanInterval`) waren schon typisiert und im Katalog nur nicht gelesen; die Daten ändern sich dafür nicht,
-`IniTool compat-check` meldet unverändert 751 Einträge.
+The scan fields (`MinIdleScanAngle`, `MaxIdleScanAngle`, `MinIdleScanInterval`, `MaxIdleScanInterval`) were already typed and merely not read in the catalog; the data do not change for this,
+`IniTool compat-check` reports 751 entries unchanged.
 
 ## 3. Simulation
 
-### 3.1 Vorlage und Zustand
+### 3.1 Template and state
 
-* `Templates/TurretInfo.cs`: `TurretInfo` (eine Turmvorlage in Radiant je Tick und Ticks) und `TurretSet` (Haupt- und Zweitturm, `TurretsLinked` des AI-Moduls);
-  `ObjectTemplate.Turrets` ist `null` für Objekte ohne Block. Fehlende Schlüssel haben die Konstruktorwerte von `TurretAIData` (0,01 rad je Frame, zwei Sekunden Rückstellzeit,
-  Abtastintervall 9.999.999 Frames, kein Abtastwinkel).
-* `TurretInfo.Gates`: nur ein Turm mit Drehrate > 0 und nicht `InitiallyDisabled` nimmt am Zielen teil (siehe 5). `TurretInfo.CanScan`: `Gates`, ein Abtastwinkel größer 0 und ein echtes
-  Intervall (kleiner als der Standardwert); sonst sieht `TurretAIIdleScanState::onEnter` (`minA == 0 && maxA == 0` → sofort `STATE_SUCCESS`) nie etwas zu tun.
-* `World/TurretState.cs`: je Turm Winkel (relativ zur Fahrzeugrichtung), Neigung, Ziel, `HoldUntil`, Waffenslot des letzten Befehls, `Rotating`, Sweep-Zustand sowie neu der Angriffszustand
-  (`Persistent`, `Pursuing`, `LoseInterestAt`) und die Abtastung (`Scanning`, `ScanAngle`, `NextScan`, `ScanDraws`). `Entity.Turrets`, öffentlich lesbar als `Entity.TurretOf(index)` →
-  `TurretReading(Angle, Pitch, Rotating)`. `SimulationWorld.AttackTargetOf(entity)` nennt das Opfer des Angriffs einer Einheit (Ziel ihres ersten Turms mit Angriffszustand).
+* `Templates/TurretInfo.cs`: `TurretInfo` (a turret template in radians per tick and ticks) and `TurretSet` (main and second turret, `TurretsLinked` of the AI module);
+  `ObjectTemplate.Turrets` is `null` for objects without a block. Missing keys have the constructor values of `TurretAIData` (0.01 rad per frame, two seconds of recentre time,
+  scan interval 9,999,999 frames, no scan angle).
+* `TurretInfo.Gates`: only a turret with a turn rate > 0 and not `InitiallyDisabled` takes part in aiming (see 5). `TurretInfo.CanScan`: `Gates`, a scan angle greater than 0 and a real
+  interval (smaller than the default value); otherwise `TurretAIIdleScanState::onEnter` (`minA == 0 && maxA == 0` → immediately `STATE_SUCCESS`) never sees anything to do.
+* `World/TurretState.cs`: per turret angle (relative to the vehicle direction), pitch, target, `HoldUntil`, weapon slot of the last command, `Rotating`, sweep state and, new, the attack state
+  (`Persistent`, `Pursuing`, `LoseInterestAt`) and the scanning (`Scanning`, `ScanAngle`, `NextScan`, `ScanDraws`). `Entity.Turrets`, publicly readable as `Entity.TurretOf(index)` →
+  `TurretReading(Angle, Pitch, Rotating)`. `SimulationWorld.AttackTargetOf(entity)` names the victim of the attack of a unit (target of its first turret with an attack state).
 
-### 3.2 Phasen (`World/SimulationWorld.Turrets.cs`)
+### 3.2 Phases (`World/SimulationWorld.Turrets.cs`)
 
-Die Referenz hat einen Turm-Zustandsautomaten (`IDLE`, `IDLESCAN`, `AIM`, `FIRE`, `HOLD`, `RECENTER`), der vom Angriffszustand der KI gesteuert wird. Hier folgen die Phasen aus wenigen Feldern;
-`StepTurrets` dreht einmal je Tick (nach allen Bewegungen des Ticks, in Entity-Id-Reihenfolge) jeden Turm, der nicht in Ruhe ist oder abtasten kann:
+The reference has a turret state machine (`IDLE`, `IDLESCAN`, `AIM`, `FIRE`, `HOLD`, `RECENTER`) that is controlled by the attack state of the AI. Here the phases follow from a few fields;
+`StepTurrets` turns once per tick (after all movements of the tick, in entity id order) every turret that is not at rest or can scan:
 
-| Phase | Bedingung | Verhalten | Referenz |
+| Phase | Condition | Behaviour | Reference |
 |---|---|---|---|
-| Zielen | Ziel gültig und (Angriff oder Zeit ≤ `HoldUntil`) | Drehung um höchstens `TurretTurnRate` je Tick zum Opfer; liegt der Rest unter einem Schritt, rastet der Turm ein; `TURRET_ROTATE` solange er nicht angekommen ist; Neigung analog | `TurretAIAimTurretState`, `friend_turnTowardsAngle/Pitch` |
-| Halten | kein Ziel, Zeit ≤ `HoldUntil` | der Winkel bleibt | `TurretAIHoldTurretState` (`m_timestamp = frame + RecenterTime`) |
-| Rückstellen | kein Ziel, `HoldUntil` verstrichen, Winkel ≠ Ruhewinkel | Drehung zum `NaturalTurretAngle`/`NaturalTurretPitch` mit halber Rate; danach Ruhe | `TurretAIRecenterTurretState` |
-| Ruhe | Ruhewinkel, `HoldUntil` = 0 | nichts (abtastende Türme: warten auf `NextScan`) | `TurretAIIdleState` |
-| Abtasten | `Scanning` | Drehung zu Ruhewinkel + `ScanAngle` mit halber Rate; angekommen → Halten | `TurretAIIdleScanState` |
+| Aiming | target valid and (attack or time ≤ `HoldUntil`) | rotation by at most `TurretTurnRate` per tick towards the victim; if the remainder is below one step, the turret snaps in; `TURRET_ROTATE` as long as it has not arrived; pitch analogously | `TurretAIAimTurretState`, `friend_turnTowardsAngle/Pitch` |
+| Holding | no target, time ≤ `HoldUntil` | the angle stays | `TurretAIHoldTurretState` (`m_timestamp = frame + RecenterTime`) |
+| Recentring | no target, `HoldUntil` elapsed, angle ≠ rest angle | rotation to `NaturalTurretAngle`/`NaturalTurretPitch` at half rate; after that rest | `TurretAIRecenterTurretState` |
+| Rest | rest angle, `HoldUntil` = 0 | nothing (scanning turrets: wait for `NextScan`) | `TurretAIIdleState` |
+| Scanning | `Scanning` | rotation to rest angle + `ScanAngle` at half rate; arrived → holding | `TurretAIIdleScanState` |
 
-Ein Turm eines Objekts im Bau (`UNDER_CONSTRUCTION`) stellt weder zurück noch tastet er ab (`TurretAIRecenterTurretState::update`, `TurretAIIdleScanState::update` warten dort).
+A turret of an object under construction (`UNDER_CONSTRUCTION`) neither recentres nor scans (`TurretAIRecenterTurretState::update`, `TurretAIIdleScanState::update` wait there).
 
-### 3.3 Angriffszustand: das Ziel bleibt, bis der Angriff endet
+### 3.3 Attack state: the target stays until the attack ends
 
-**Befund der Referenz.** Ein Angriffsbefehl setzt die Einheit in `AIAttackState`. Dessen Teilautomat (`AttackStateMachine`: Anmarsch `AIAttackApproachTargetState`, Zielen `AIAttackAimAtTargetState`,
-Feuern `AIAttackFireWeaponState`) ruft in `onEnter` des Anmarschs, in jedem `update` des Zielzustands und beim Neuwählen des Opfers `AIUpdateInterface::setTurretTargetObject(turret, victim)` auf, solange er
-läuft, also auch beim Anmarsch und beim Nachladen. Der Turm bleibt im Zustand `AIM`/`FIRE`, bis `AIAttackState::onExit` die Ziele aller Türme auf `NULL` setzt (→ `TURRETAI_HOLD`, `RecenterTime`,
-`RECENTER`, `IDLE`). `onExit` läuft, wenn das Opfer tot ist (`AIAttackState::update`: `isEffectivelyDead` → `STATE_SUCCESS`), wenn die Einheit einen neuen AI-Befehl bekommt (Bewegung,
-Idle/Stopp, Andocken, Betreten, Bauen …: der neue Zustand ersetzt den alten) oder wenn der Angriff scheitert (kein Waffenfenster, Opfer nicht mehr feindlich, „keine Verfolgung erlaubt“ im Anmarsch).
-Der Turm selbst bricht das Zielen ab (`TurretAIAimTurretState::update` → `STATE_FAILURE` → `HOLD`), wenn `getAbleToAttackSpecificObject(ATTACK_CONTINUED_TARGET, …)` scheitert (Opfer im Nebel,
-getarnt, verschwunden); Reichweite spielt für das *Hauptziel* keine Rolle (`isPrimaryEnemy`).
+**Finding of the reference.** An attack command puts the unit into `AIAttackState`. Its sub-automaton (`AttackStateMachine`: approach `AIAttackApproachTargetState`, aiming `AIAttackAimAtTargetState`,
+firing `AIAttackFireWeaponState`) calls `AIUpdateInterface::setTurretTargetObject(turret, victim)` in `onEnter` of the approach, in every `update` of the aim state and when re-choosing the victim, as long as it
+runs, so also during approach and reloading. The turret stays in the state `AIM`/`FIRE` until `AIAttackState::onExit` sets the targets of all turrets to `NULL` (→ `TURRETAI_HOLD`, `RecenterTime`,
+`RECENTER`, `IDLE`). `onExit` runs when the victim is dead (`AIAttackState::update`: `isEffectivelyDead` → `STATE_SUCCESS`), when the unit gets a new AI command (movement,
+idle/stop, docking, entering, building …: the new state replaces the old one) or when the attack fails (no weapon window, victim no longer hostile, "no pursuit allowed" in the approach).
+The turret itself aborts the aiming (`TurretAIAimTurretState::update` → `STATE_FAILURE` → `HOLD`) if `getAbleToAttackSpecificObject(ATTACK_CONTINUED_TARGET, …)` fails (victim in the fog,
+stealthed, vanished); range plays no role for the *main target* (`isPrimaryEnemy`).
 
-**Umsetzung.** Der Angriff ist die Absicht, das Opfer zu bekämpfen; sie lebt in den Türmen (`TurretState.Persistent`, `Target`), weil das ihr einziger Verbraucher ist. Ein Turm ohne Angriffszustand
-verhält sich wie vorher (einmaliges Zielen, 3.4). Eintritt:
+**Implementation.** The attack is the intention to fight the victim; it lives in the turrets (`TurretState.Persistent`, `Target`), because that is its only consumer. A turret without an attack state
+behaves as before (one-off aiming, 3.4). Entry:
 
-* ein **angenommener** `FireWeaponCommand` mit Ursprung Spieler oder KI (`FireOrigin.Player`/`Ai`; auch `MissionSession` und `SkirmishAi`): die Türme des gewählten Slots (bei `TurretsLinked` alle) bekommen das Opfer.
-  Ein abgewiesener Befehl (außer Reichweite, Waffe lädt nach, Opfer unsichtbar) beginnt nichts.
-* ein neuer **`PursueCommand`** (Befehlstabelle 12 → 13, Replay-Format 9 → 10): Bewegung zu einem Punkt (X, Y) *zum Angriff auf* ein Opfer – `AIAttackApproachTargetState::onEnter` („If we have a turret,
-  start aiming“). Die Türme der Waffe, die die Einheit gegen das Opfer einsetzen würde (`AttackSlotIgnoringRange`: wie `ChooseWeapon` ohne Reichweiten- und Bereitschaftsfilter), folgen dem Opfer schon,
-  wenn es noch weit außerhalb der Reichweite ist. Der Befehl gilt auch als „bleib stehen und greif an“ (Ziel = eigene Position). Er schießt nichts; geschossen wird weiter per `FireWeaponCommand`.
-  Neu ist der Befehl, weil sich eine Verfolgung sonst nicht von einem echten Bewegungsbefehl unterscheiden ließe (beide sind `SetMoveTargetCommand`); der alte Befehl wurde dafür nicht verändert.
-* nicht: `FireOrigin.Script` (ein einmaliger Knopfbefehl wird nicht wiederholt, verhält sich wie früher), modulgesteuerte Schüsse (`TryFireWeaponSlot` u. a.) – beide behalten das alte Verhalten
-  „Bereitschaft der Waffe + max(`RecenterTime`, 15 Ticks) nach dem letzten Befehl“ (`HoldUntil`).
+* an **accepted** `FireWeaponCommand` with origin player or AI (`FireOrigin.Player`/`Ai`; also `MissionSession` and `SkirmishAi`): the turrets of the chosen slot (all with `TurretsLinked`) get the victim.
+  A rejected command (out of range, weapon reloading, victim invisible) starts nothing.
+* a new **`PursueCommand`** (command table 12 → 13, replay format 9 → 10): movement to a point (X, Y) *in order to attack* a victim – `AIAttackApproachTargetState::onEnter` ("If we have a turret,
+  start aiming"). The turrets of the weapon that the unit would use against the victim (`AttackSlotIgnoringRange`: like `ChooseWeapon` without the range and readiness filter) already follow the victim
+  when it is still far out of range. The command also counts as "stand still and attack" (target = own position). It shoots nothing; shooting is still done by `FireWeaponCommand`.
+  The command is new because a pursuit could otherwise not be distinguished from a real move command (both are `SetMoveTargetCommand`); the old command was not changed for it.
+* not: `FireOrigin.Script` (a one-off button command is not repeated, behaves as before), module-driven shots (`TryFireWeaponSlot` among others) – both keep the old behaviour
+  "readiness of the weapon + max(`RecenterTime`, 15 ticks) after the last command" (`HoldUntil`).
 
-Dauer: kein Ablauf, solange der Angriff besteht. Er endet (`StopAiming` → Ziel gelöscht, `HoldUntil` = jetzt + `RecenterTime`, dann Rückstellen) bei
+Duration: no expiry as long as the attack exists. It ends (`StopAiming` → target cleared, `HoldUntil` = now + `RecenterTime`, then recentring) on
 
-| Ende | Umsetzung | Referenz |
+| End | Implementation | Reference |
 |---|---|---|
-| Opfer tot oder verschwunden | in `StepTurret` im selben Tick | `AIAttackState::update` (`isEffectivelyDead`), `friend_getTurretTarget` |
-| neuer AI-Befehl an die Einheit | `IWorldServices.EndAttack(entity)`, aufgerufen von `AIUpdateInterface.OrderMove`/`OrderIdle`/`OrderDock`/`StartTask` (Bewegung, Idle, Andocken, Betreten, Bauen/Reparieren; also auch Skript- und Modulbefehle) | der neue Zustand ersetzt `AI_ATTACK` |
-| Opfer für den Besitzer nicht mehr angreifbar (`CanPlayerSee`: Nebel, getarnt und nicht entdeckt, im Container) | je Tick geprüft | `TurretAIAimTurretState::update` (`ATTACK_CONTINUED_TARGET`) |
-| Opfer außerhalb der Reichweite *jeder* Waffe länger als 45 Ticks, **sofern die Einheit nicht verfolgt** (`Pursuing`) | `KeepsAttackIntent`, `LoseInterestAt` | `AIAttackApproachTargetState::onEnter` gibt für Einheiten ohne Verfolgungserlaubnis (`isAllowedToChase`) `STATE_FAILURE` zurück |
-| ein neuer Feuerbefehl auf ein anderes Opfer | ersetzt das Ziel | `AIAttackFireWeaponState`/`notifyNewVictimChosen` |
-| der Angreifer stirbt | der Turm wird nicht mehr gesteppt | – |
+| Victim dead or vanished | in `StepTurret` in the same tick | `AIAttackState::update` (`isEffectivelyDead`), `friend_getTurretTarget` |
+| new AI command to the unit | `IWorldServices.EndAttack(entity)`, called by `AIUpdateInterface.OrderMove`/`OrderIdle`/`OrderDock`/`StartTask` (movement, idle, docking, entering, building/repairing; so also script and module commands) | the new state replaces `AI_ATTACK` |
+| Victim no longer attackable for the owner (`CanPlayerSee`: fog, stealthed and not detected, in a container) | checked per tick | `TurretAIAimTurretState::update` (`ATTACK_CONTINUED_TARGET`) |
+| Victim outside the range of *every* weapon for longer than 45 ticks, **provided the unit does not pursue** (`Pursuing`) | `KeepsAttackIntent`, `LoseInterestAt` | `AIAttackApproachTargetState::onEnter` returns `STATE_FAILURE` for units without permission to chase (`isAllowedToChase`) |
+| a new fire command at another victim | replaces the target | `AIAttackFireWeaponState`/`notifyNewVictimChosen` |
+| the attacker dies | the turret is no longer stepped | – |
 
-`Pursuing` merkt sich, dass der Angriff mit einem `PursueCommand` begann; ein späterer `FireWeaponCommand` auf dasselbe Opfer behält es. Eine Einheit, die verfolgt, gibt wegen der Entfernung nie auf; die
-Darstellung (`StandingOrders`) beendet ihren Befehl, wenn das Opfer verschwindet oder unsichtbar wird. Einheiten, deren Angriff nur aus Feuerbefehlen besteht (KI-Einheiten, Angriffsmarsch), geben ein Opfer auf,
-das aus jeder Reichweite ist – gehend oder stehend. Die Zahl 45 Ticks ist eine Annäherung (kurze Lücken zwischen zwei Verfolgungsbefehlen dürfen den Turm nicht zurückdrehen).
+`Pursuing` remembers that the attack began with a `PursueCommand`; a later `FireWeaponCommand` at the same victim keeps it. A unit that pursues never gives up because of the distance; the
+presentation (`StandingOrders`) ends its order when the victim vanishes or becomes invisible. Units whose attack consists only of fire commands (AI units, attack move) give up a victim
+that is out of every range – moving or standing. The number 45 ticks is an approximation (short gaps between two pursue commands must not turn the turret back).
 
-**Darstellung.** `StandingOrders` (`Presentation/Input`) nutzt `PursueCommand` statt `SetMoveTargetCommand` für den Anmarsch und für das Anhalten in Reichweite und sendet ihn einmal, wenn die Einheit in
-Reichweite steht, aber nachlädt, ohne dass ein Turm schon ein Opfer hat. Flugzeuge (haben keine Türme) bekommen weiter `SetMoveTargetCommand`. `SimTool reference-match` benutzt für das Annähern ebenfalls `PursueCommand`.
+**Presentation.** `StandingOrders` (`Presentation/Input`) uses `PursueCommand` instead of `SetMoveTargetCommand` for the approach and for stopping within range and sends it once when the unit stands within
+range but is reloading, without a turret already having a victim. Aircraft (have no turrets) still get `SetMoveTargetCommand`. `SimTool reference-match` likewise uses `PursueCommand` for approaching.
 
-### 3.4 Feuerfreigabe
+### 3.4 Fire release
 
-`FireWeaponCommand` (Ausführung in `SimulationWorld.Step` → `ExecuteCommands`): nach Waffenwahl, Sicht und `IFireGate` ruft `AimTurretsAt(source, slot, victim, Angriff)` die Türme auf, die den gewählten
-Slot steuern (bei `TurretsLinked` alle): jeder bekommt das Ziel (`setTurretTargetObject`, aufgerufen von `AIAttackAimAtTargetState`), und die Waffe feuert nur, wenn **alle** ausgerichtet sind:
+`FireWeaponCommand` (execution in `SimulationWorld.Step` → `ExecuteCommands`): after weapon choice, vision and `IFireGate`, `AimTurretsAt(source, slot, victim, attack)` calls on the turrets that control the chosen
+slot (all with `TurretsLinked`): each gets the target (`setTurretTargetObject`, called by `AIAttackAimAtTargetState`), and the weapon fires only if **all** are aligned:
 
-* Winkel: Abweichung zur *aktuellen* Zielrichtung ≤ `REL_THRESH` = 0,035 rad (≈ 2°, `TurretAIAimTurretState::update`); bei einer Waffe mit `TurretFireAngleSweep` < Sweepwinkel
+* Angle: deviation from the *current* target direction ≤ `REL_THRESH` = 0.035 rad (≈ 2°, `TurretAIAimTurretState::update`); for a weapon with `TurretFireAngleSweep` < sweep angle
   (`turnAlignedToNemesis = fabs(angleDiff) < sweep`).
-* Neigung (nur `AllowsPitch` und Rate > 0): Differenz zur Sollneigung ≤ 2°. Sollneigung: `FirePitch`, sonst die Erhebung zum Ziel (von der Oberkante des Schützen, wie `v.z -= maxHeightAbovePosition/2`),
-  nie unter `MinPhysicalPitch`; mit `GroundUnitPitch` ein Bogen, der mit der Entfernung zu unbeweglichen oder fahrenden Bodenzielen wächst.
-* Sweep: nach einem Schuss ist der Sweep 3 Ticks aktiv (`ENABLE_SWEEP_FRAME_COUNT`); der Turm zielt dann abwechselnd ±Sweepwinkel neben das Ziel mit `TurretSweepSpeedModifier` als Drehfaktor.
+* Pitch (only `AllowsPitch` and rate > 0): difference from the desired pitch ≤ 2°. Desired pitch: `FirePitch`, otherwise the elevation to the target (from the top edge of the shooter, like `v.z -= maxHeightAbovePosition/2`),
+  never below `MinPhysicalPitch`; with `GroundUnitPitch` an arc that grows with the distance to immobile or driving ground targets.
+* Sweep: after a shot the sweep is active for 3 ticks (`ENABLE_SWEEP_FRAME_COUNT`); the turret then aims alternately ±sweep angle beside the target with `TurretSweepSpeedModifier` as turn factor.
 
-Ist ein Turm nicht ausgerichtet, bleibt der Befehl **angenommen** (kein `CommandRejected`-Ereignis, also kein „NoCanDoSound“ und keine HUD-Meldung bei jedem Tick des Drehens), es fällt kein Schuss, und
-`SimulationWorld.TurretWaits` zählt es. Nach dem Schuss verlängert `NoteTurretShot` bei einem einmaligen Zielen den Halte-Zeitpunkt (ein Angriff braucht das nicht) und schaltet den Sweep ein.
+If a turret is not aligned, the command stays **accepted** (no `CommandRejected` event, so no "NoCanDoSound" and no HUD message on every tick of the turning), no shot falls, and
+`SimulationWorld.TurretWaits` counts it. After the shot `NoteTurretShot` extends the hold time for a one-off aiming (an attack does not need that) and switches the sweep on.
 
-Gleiches gilt für das modulinterne `TryFireActiveWeapon` (ungenutzt). `TryFireWeaponSlot` (Module, die ihre Angriffsfolge selbst fahren und bei einem Fehlschlag aufgeben, z. B.
-`AssistedTargetingUpdate`) richtet die Türme aus (einmaliges Zielen), wartet aber nicht.
+The same applies to the module-internal `TryFireActiveWeapon` (unused). `TryFireWeaponSlot` (modules that drive their attack sequence themselves and give up on a failure, e.g.
+`AssistedTargetingUpdate`) aligns the turrets (one-off aiming), but does not wait.
 
-### 3.5 Leerlaufabtasten (`TurretAIIdleState`, `TurretAIIdleScanState`)
+### 3.5 Idle scanning (`TurretAIIdleState`, `TurretAIIdleScanState`)
 
-Der Ablauf der Referenz für einen Turm ohne Ziel: `IDLE` wartet ein zufälliges Intervall `MinIdleScanInterval`..`MaxIdleScanInterval` (`resetIdleScan`: `GameLogicRandomValue`), dann `IDLESCAN`:
-zufälliger Winkel `MinIdleScanAngle + Zufall(0, Max − Min)` mit zufälligem Vorzeichen, Drehung zu `NaturalTurretAngle` + Winkel mit halber Rate; angekommen → `HOLD` (`RecenterTime`) → `RECENTER` →
-`IDLE` mit neuem Intervall. Ein Angriff unterbricht jeden Schritt; danach geht es über `HOLD`/`RECENTER` zurück in `IDLE`.
+The sequence of the reference for a turret without a target: `IDLE` waits a random interval `MinIdleScanInterval`..`MaxIdleScanInterval` (`resetIdleScan`: `GameLogicRandomValue`), then `IDLESCAN`:
+random angle `MinIdleScanAngle + random(0, Max − Min)` with a random sign, rotation to `NaturalTurretAngle` + angle at half rate; arrived → `HOLD` (`RecenterTime`) → `RECENTER` →
+`IDLE` with a new interval. An attack interrupts every step; after that it goes back to `IDLE` through `HOLD`/`RECENTER`.
 
-Umsetzung wie oben (`ScheduleScan`, `IdleScanStep`, `ScanStep`):
+Implementation as above (`ScheduleScan`, `IdleScanStep`, `ScanStep`):
 
-* Abtastende Türme (`TurretInfo.CanScan`) sind immer im Schrittverzeichnis. Der Zeitpunkt des ersten Abtastens wird beim ersten Schritt des Turms gezogen (`NextScan = Tick + Intervall`) und nach jedem
-  Zurückstellen neu.
-* **Zufall:** die Referenz zieht aus dem gemeinsamen Logikstrom (`GameLogicRandomValue`), sodass jeder ruhende Turm alle anderen Verbraucher verschiebt. Hier ist jede Ziehung ein Hash aus
-  (Weltsamen, Entity-Id, Turmindex, Ziehungszähler `ScanDraws`) (SplitMix64-Mischung, ganzzahlig): gleiche Eingaben liefern dieselben Werte, Replays und Snapshots stimmen überein, und
-  `world.LogicRandom` wird **nicht** berührt (Test: eine Welt mit und eine ohne abtastenden Turm haben nach 1500 Ticks denselben Zustand des Logikstroms). Die Werte unterscheiden sich von denen der
-  Referenz, die Verteilung (gleichverteilt im Intervall, gleichverteilt im Winkelbereich, Vorzeichen 50 : 50) nicht. Reihenfolge der Ziehungen wie in der Referenz: Intervall, Winkel, Vorzeichen.
-* Die Daten: 38 `Turret`-Blöcke setzen ein Abtastintervall (50 Objekte einschließlich der Reskins der Generäle haben einen abtastenden Turm): die Sentry-Drohne (alle 250 ms, bis 360°),
-  Patriot-Batterie und Gattling-Kanone (250 ms, 360°), die Feuerbasis (550–950 ms, 360°), Strategiezentrum (Hauptturm; 500–1000 ms, 60°; sein `AltTurret` ist `InitiallyDisabled`), die Technicals (5–10 s, 30–60°), das ECM-Fahrzeug (Intervall 0, genau 180°,
-  `RecenterTime` 0: es dreht sich ununterbrochen hin und zurück, wie in der Referenz).
-* Selbstzielen: `TurretAI::friend_checkForIdleMoodTarget` (ein ruhender Turm wählt von sich aus ein Opfer, `AutoAcquireEnemiesWhenIdle`) ist seit Phase 17 Teil des Zielerwerbs der Simulation
-  (`docs/SIMULATION-CORE.md` §33): ein ruhender Turm bekommt sein Opfer von der Einheit, auch wenn deren Körper fährt; ein Opfer unterbricht das Abtasten wie jeder Angriff.
+* Scanning turrets (`TurretInfo.CanScan`) are always in the step directory. The time of the first scan is drawn at the first step of the turret (`NextScan = Tick + interval`) and anew after every
+  recentring.
+* **Randomness:** the reference draws from the common logic stream (`GameLogicRandomValue`), so that every resting turret shifts all other consumers. Here every draw is a hash of
+  (world seed, entity id, turret index, draw counter `ScanDraws`) (SplitMix64 mixing, integer): the same inputs yield the same values, replays and snapshots agree, and
+  `world.LogicRandom` is **not** touched (test: a world with and one without a scanning turret have the same state of the logic stream after 1500 ticks). The values differ from those of the
+  reference, the distribution (uniform in the interval, uniform in the angle range, sign 50 : 50) does not. Order of the draws as in the reference: interval, angle, sign.
+* The data: 38 `Turret` blocks set a scan interval (50 objects including the reskins of the generals have a scanning turret): the sentry drone (every 250 ms, up to 360°),
+  Patriot battery and Gattling cannon (250 ms, 360°), the fire base (550–950 ms, 360°), strategy center (main turret; 500–1000 ms, 60°; its `AltTurret` is `InitiallyDisabled`), the technicals (5–10 s, 30–60°), the ECM vehicle (interval 0, exactly 180°,
+  `RecenterTime` 0: it turns back and forth without interruption, as in the reference).
+* Self-acquisition: `TurretAI::friend_checkForIdleMoodTarget` (a resting turret chooses a victim of its own accord, `AutoAcquireEnemiesWhenIdle`) has been part of the target acquisition of the simulation since Phase 17
+  (`docs/SIMULATION-CORE.md` §33): a resting turret gets its victim from the unit, even if its body is driving; a victim interrupts the scanning like every attack.
 
-### 3.6 Snapshot, Hash, Determinismus
+### 3.6 Snapshot, hash, determinism
 
-* `Entity.Describe` schreibt `turrets` nur, solange ein Turm vom Ruhezustand abweicht (oder abtasten kann); ebenso `turretWaits` im Weltteil erst nach dem ersten Warten. Neu und nur bei gesetztem
-  Zustand: `persistent`, `pursuing`, `loseInterestAt`, `scanning` + `scanAngle`, `nextScan`, `scanDraws`. Welten ohne Türme (der 216.000-Tick-Stresstest) behalten Serialisierung und Hash.
-* `WorldSnapshot.Version` bleibt **9**: die neuen Felder sind optional und werden nur gelesen, wenn vorhanden; ein Snapshot der ersten Fassung (ohne sie) lädt unverändert (sein Turm verhält sich
-  als einmaliges Zielen). Läufe mit Türmen haben dennoch andere Hashes (Abschnitt 8).
-* `CommandTypes.Version` 12 → **13** (`PursueCommand` = 31), `ReplayFormat.CurrentVersion` 9 → **10** (der neue Befehl hat eine Nutzlast: Einheit, Opfer, X, Y). Alte Replays scheitern an der
-  Befehlstabelle (`ReplayRunner` prüft sie) und wären wegen der geänderten Kampfzeiten ohnehin an den Prüfsummen gescheitert.
-* Alle Größen sind `Fixed`/ganzzahlig; Winkel über `FixedTrig` (CORDIC-`Atan2`, Fehler < 1e-3 rad, weit unter der 2°-Schwelle). Kein `float`, keine Wandzeit, kein `Random`.
+* `Entity.Describe` writes `turrets` only as long as a turret differs from the rest state (or can scan); likewise `turretWaits` in the world part only after the first wait. New and only when the state
+  is set: `persistent`, `pursuing`, `loseInterestAt`, `scanning` + `scanAngle`, `nextScan`, `scanDraws`. Worlds without turrets (the 216,000-tick stress test) keep serialisation and hash.
+* `WorldSnapshot.Version` stays **9**: the new fields are optional and are read only if present; a snapshot of the first version (without them) loads unchanged (its turret behaves
+  as a one-off aiming). Runs with turrets nevertheless have different hashes (section 8).
+* `CommandTypes.Version` 12 → **13** (`PursueCommand` = 31), `ReplayFormat.CurrentVersion` 9 → **10** (the new command has a payload: unit, victim, X, Y). Old replays fail at the
+  command table (`ReplayRunner` checks it) and would have failed at the checksums anyway because of the changed combat times.
+* All quantities are `Fixed`/integer; angles through `FixedTrig` (CORDIC `Atan2`, error < 1e-3 rad, far below the 2° threshold). No `float`, no wall time, no `Random`.
 
-## 4. Darstellung
+## 4. Presentation
 
-`TurretTracker` (jetzt `Presentation/Objects/TurretTracker.cs`) liest `Entity.TurretOf` und merkt sich nur, ob ein Turm sich drehte (`MODELCONDITION_TURRET_ROTATE` über `IsRotating`). `TurretMotion` (die
-Rohtext-Auswertung der Turmblöcke), `TurretTracker.Observe` und `ObjectVisual.Turrets` sind entfernt; die Stride-Schicht (`ObjectLayerCore.ApplyTurret`) ist unverändert, `DrawableInstance.TurretYaw/TurretPitch/
-AltTurret*` kommen aus dem Simulationszustand. Damit folgt auch das Abtasten ohne eigenen Code: gezeichneter Turm und `TURRET_ROTATE` kommen aus demselben Zustand (das Audit `tank-duel` prüft es an
-der Sentry-Drohne; das gezeichnete Bild kann dem Simulationsstand um einen Tick nachlaufen).
+`TurretTracker` (now `Presentation/Objects/TurretTracker.cs`) reads `Entity.TurretOf` and remembers only whether a turret was turning (`MODELCONDITION_TURRET_ROTATE` through `IsRotating`). `TurretMotion` (the
+raw-text evaluation of the turret blocks), `TurretTracker.Observe` and `ObjectVisual.Turrets` are removed; the Stride layer (`ObjectLayerCore.ApplyTurret`) is unchanged, `DrawableInstance.TurretYaw/TurretPitch/
+AltTurret*` come from the simulation state. With that the scanning follows as well without code of its own: drawn turret and `TURRET_ROTATE` come from the same state (the audit `tank-duel` checks it on
+the sentry drone; the drawn picture can lag behind the simulation state by one tick).
 
-## 5. Ausnahmen: was feuert wie vorher
+## 5. Exceptions: what fires as before
 
-| Fall | Verhalten | Begründung |
+| Case | Behaviour | Reason |
 |---|---|---|
-| Objekt ohne `Turret`-Block (Infanterie, Gebäude ohne Turm, Flugzeuge) | feuert sofort | kein `m_turretAI` |
-| Turm mit `TurretTurnRate = 0` (18 Blöcke der Retaildaten; der „Scheinturm“ der Referenz, z. B. des Comanche) | feuert sofort, Turm bleibt mittig | `AIAttackAimAtTargetState::update`: „incapable of turning, turn ourself“ → Körper zielt |
-| `InitiallyDisabled = Yes` (4 Blöcke, die Strategiezentren; zusammen mit den Scheintürmen 22 Objekte mit nicht zielendem Turm) | wie vorher; tastet auch nicht ab | die Referenz schaltet sie über `BattlePlanUpdate`/`DeployStyleAIUpdate` ein (`setTurretEnabled`); `BattlePlanModule` schaltet hier keinen Turm |
-| Slot, den kein Turm steuert (`ControlledWeaponSlots`) | feuert sofort | `getWhichTurretForCurWeapon` = `TURRET_INVALID` |
-| `FireOrigin.Script` (Einzelbefehl einer Skript-Schaltfläche) | feuert sofort, der Turm dreht trotzdem, **kein** Angriffszustand | der Befehl wird nicht wiederholt |
-| Modulgesteuerte Schüsse (`TryFireWeaponSlot`, `FireCurrentWeaponAtPosition`, Flugzeuge, Projektile) | wie vorher (einmaliges Zielen) | eigener Ablauf |
-| Ziel als Position (Bodenangriff) | kein Zielen | `FireWeaponCommand` kennt nur Objektziele |
+| Object without a `Turret` block (infantry, buildings without a turret, aircraft) | fires immediately | no `m_turretAI` |
+| Turret with `TurretTurnRate = 0` (18 blocks of the retail data; the "fake turret" of the reference, e.g. of the Comanche) | fires immediately, turret stays centred | `AIAttackAimAtTargetState::update`: "incapable of turning, turn ourself" → body aims |
+| `InitiallyDisabled = Yes` (4 blocks, the strategy centers; together with the fake turrets 22 objects with a non-aiming turret) | as before; does not scan either | the reference switches them on through `BattlePlanUpdate`/`DeployStyleAIUpdate` (`setTurretEnabled`); `BattlePlanModule` switches no turret here |
+| Slot that no turret controls (`ControlledWeaponSlots`) | fires immediately | `getWhichTurretForCurWeapon` = `TURRET_INVALID` |
+| `FireOrigin.Script` (single command of a script button) | fires immediately, the turret turns nevertheless, **no** attack state | the command is not repeated |
+| Module-driven shots (`TryFireWeaponSlot`, `FireCurrentWeaponAtPosition`, aircraft, projectiles) | as before (one-off aiming) | sequence of their own |
+| Target as a position (ground attack) | no aiming | `FireWeaponCommand` knows only object targets |
 
-`FiresWhileTurning` hat in `TurretAI.cpp` keine Wirkung auf die Feuerfreigabe (es steuert nur das Ende des Drehgeräuschs, `m_continuousFireExpirationFrame`); es ist typisiert und gelesen, aber ohne Folge.
+`FiresWhileTurning` has no effect on the fire release in `TurretAI.cpp` (it controls only the end of the turning sound, `m_continuousFireExpirationFrame`); it is typed and read, but without consequence.
 
-## 6. Bekannte Grenzen (ehrlich)
+## 6. Known limits (honest)
 
-* **Der Angriff lebt nur in den Türmen.** Eine Einheit ohne Turm hat keinen Angriffszustand; wer ihn braucht, müsste ihn auf die Einheit heben. Die Verfolgung selbst (Fahren zum Opfer, Anhalten in
-  Reichweite, Neuberechnen) macht weiter die Darstellung (`StandingOrders`) bzw. die Befehlsgeber; die Simulation kennt nur „Verfolgung läuft“ (`PursueCommand`).
-* **Annäherungen am Angriffsende:** Aufgeben nach 45 Ticks außerhalb jeder Reichweite statt der Zustandsregeln der Referenz (`isAllowedToChase`, Stealth, Garnison, Zeit in `AIAttackApproachTargetState`);
-  die Bewegungsbefehle, die die Referenz als „neuer AI-Befehl“ kennt, sind die der `AIUpdateInterface`-Methoden (`OrderMove`, `OrderIdle`, `OrderDock`, Bauen). `OrderEvacuate` ohne Bewegung beendet
-  den Angriff nicht – wie in der Referenz: `AIUpdateInterface::privateEvacuate` ruft nur `orderAllPassengersToExit` und wechselt den AI-Zustand nicht (mit Ziel, `aiMoveToAndEvacuate`, läuft es über
-  `OrderMove` und beendet ihn). Eine Einheitenfähigkeit beendet Angriff und Bewegung: `SpecialAbilityUpdate::initiateIntentToDoSpecialPower` ruft `aiIdle` („Clear any old AI before starting this special
-  ability“), umgesetzt beim `UseSpecialPowerCommand` für jedes Objekt mit einem `SpecialAbilityUpdate` der Kraft (die gestufte Übernahme tat es schon selbst; Test `TurretAttackEndsWhenTheUnitStartsAnAbility`).
-  Spezialkräfte ohne `SpecialAbilityUpdate` (Gebäudekräfte, OCL-Kräfte) berühren den AI-Zustand auch in der Referenz nicht.
-* **Selbstzielen (seit Phase 17 umgesetzt, vorher bewusst zurückgestellt):** `friend_checkForIdleMoodTarget` und `AutoAcquireEnemiesWhenIdle` sind nachgebildet – nicht im Turm, sondern als Angriffszustand der
-  Einheit (`Entity.Acquisition`, `World/SimulationWorld.Acquisition.cs`), der den Türmen ihr Opfer gibt (`AimTurretsForAttack`) und es ihnen am Ende des Angriffs wieder nimmt (`StopTurrets`). Die drei Befehlsgeber
-  (`MissionSession.DriveCombat`, `SkirmishAi.Fire`, `StandingOrders.FireAtNearestEnemy`) wählen keine Opfer mehr; ein Opfer, das ein Befehlsgeber ausdrücklich nennt (`FireWeaponCommand`, `PursueCommand`), sperrt die
-  eigene Zielwahl der Einheit, solange solche Befehle kommen. Regeln, Quellen, Näherungen und Messwerte: `docs/SIMULATION-CORE.md` §33. Weiter nicht nachgebildet: die Verfolgung aus dem Leerlauf (eine ruhende Einheit
-  eines Computerspielers läuft ihrem Opfer nicht nach; nur im Angriffsmarsch) und die Antwort einer passiven Einheit auf ihren letzten Angreifer.
-* **Eigener Zufallsstrom für das Abtasten:** gleiche Verteilung wie die Referenz, andere Werte (3.5). Die Abtastung wartet nicht auf Aktivierung durch Energie, EMP oder Deaktivierung
-  (`m_enabled` der Referenz entspricht nur `Gates`).
-* **Körper zielt nicht:** Waffen ohne Turm feuern weiter ohne Drehung des Körpers (`AcceptableAimDelta` bleibt `deferred-field`); fahrende Einheiten drehen den Körper nur durch ihre Bewegung.
-* `DeployStyleAIUpdate`: `ALIGNING_TURRETS` (Turm vor dem Einpacken mittig) wird nicht betreten; `TurretsFunctionOnlyWhenDeployed` ist weiter nur durch das Feuer-Gate (Waffen) umgesetzt.
-* Bei `TurretsLinked` (3 der 4 Schlachtschiffe) feuert jede Waffe erst, wenn beide Türme zeigen; die Referenz lässt den jeweils ausgerichteten Turm feuern.
-* Das Feuern geschieht im Tick nach dem Ausrichten (der Befehl prüft den Zustand am Ende des Vortags gegen die aktuelle Zielrichtung); die Referenz feuert einen Update später im Turm-Automaten.
-* Die Sichtbarkeitsregel (Opfer unsichtbar beendet das Zielen) ist mit `STEALTHED` und mit Nebel getestet (`TurretAttackEndsWhenTheVictimFallsIntoTheFog`: das Opfer bleibt in Reichweite und ungetarnt, das einzige Objekt, das es sah, verschwindet).
-* Sicht- und Darstellungsänderungen brauchen weiter eine Sichtprüfung durch einen Menschen (Rauchtests beweisen Reproduzierbarkeit, nicht Richtigkeit).
+* **The attack lives only in the turrets.** A unit without a turret has no attack state; whoever needs it would have to lift it onto the unit. The pursuit itself (driving to the victim, stopping within
+  range, recomputing) is still done by the presentation (`StandingOrders`) or the command issuers; the simulation knows only "pursuit is running" (`PursueCommand`).
+* **Approximations at the end of the attack:** giving up after 45 ticks outside every range instead of the state rules of the reference (`isAllowedToChase`, stealth, garrison, time in `AIAttackApproachTargetState`);
+  the movement commands that the reference knows as a "new AI command" are those of the `AIUpdateInterface` methods (`OrderMove`, `OrderIdle`, `OrderDock`, building). `OrderEvacuate` without movement does not end
+  the attack – as in the reference: `AIUpdateInterface::privateEvacuate` only calls `orderAllPassengersToExit` and does not change the AI state (with a target, `aiMoveToAndEvacuate`, it goes through
+  `OrderMove` and ends it). A unit ability ends attack and movement: `SpecialAbilityUpdate::initiateIntentToDoSpecialPower` calls `aiIdle` ("Clear any old AI before starting this special
+  ability"), implemented at the `UseSpecialPowerCommand` for every object with a `SpecialAbilityUpdate` of the power (the staged capture already did it itself; test `TurretAttackEndsWhenTheUnitStartsAnAbility`).
+  Special powers without a `SpecialAbilityUpdate` (building powers, OCL powers) do not touch the AI state in the reference either.
+* **Self-acquisition (implemented since Phase 17, before deliberately deferred):** `friend_checkForIdleMoodTarget` and `AutoAcquireEnemiesWhenIdle` are reproduced – not in the turret, but as an attack state of the
+  unit (`Entity.Acquisition`, `World/SimulationWorld.Acquisition.cs`), which gives the turrets their victim (`AimTurretsForAttack`) and takes it from them again at the end of the attack (`StopTurrets`). The three command issuers
+  (`MissionSession.DriveCombat`, `SkirmishAi.Fire`, `StandingOrders.FireAtNearestEnemy`) no longer choose victims; a victim that a command issuer names explicitly (`FireWeaponCommand`, `PursueCommand`) locks the
+  unit's own target choice as long as such commands come. Rules, sources, approximations and measured values: `docs/SIMULATION-CORE.md` §33. Still not reproduced: the pursuit from idle (a resting unit
+  of a computer player does not run after its victim; only in the attack move) and the answer of a passive unit to its last attacker.
+* **Own random stream for the scanning:** the same distribution as the reference, different values (3.5). The scanning does not wait for activation by power, EMP or deactivation
+  (`m_enabled` of the reference corresponds only to `Gates`).
+* **Body does not aim:** weapons without a turret still fire without rotation of the body (`AcceptableAimDelta` stays `deferred-field`); driving units turn the body only through their movement.
+* `DeployStyleAIUpdate`: `ALIGNING_TURRETS` (turret centred before packing up) is not entered; `TurretsFunctionOnlyWhenDeployed` is still implemented only through the fire gate (weapons).
+* With `TurretsLinked` (3 of the 4 battleships) every weapon fires only when both turrets point; the reference lets the respectively aligned turret fire.
+* The firing happens in the tick after the alignment (the command checks the state at the end of the previous tick against the current target direction); the reference fires one update later in the turret automaton.
+* The visibility rule (an invisible victim ends the aiming) is tested with `STEALTHED` and with fog (`TurretAttackEndsWhenTheVictimFallsIntoTheFog`: the victim stays within range and unstealthed, the only object that saw it vanishes).
+* Vision and presentation changes still need a visual check by a human (smoke tests prove reproducibility, not correctness).
 
-## 7. Tests und Audits
+## 7. Tests and audits
 
-* `Simulation.Tests` (`Tests.Turrets.cs`): Vorlagenmodell, Standardwerte und strenge Fehler; Drehung mit 6°/Tick und Wartezeit bis Tick +15; Körperrichtung; Ausnahmen aus Abschnitt 5; Rückstellen, Ruhezustand
-  (kein `turrets` im Snapshot), einmaliges Zielen (Skriptbefehl) und totes Ziel; zwei Türme mit Firing-Pitch, Sweep, `TurretsLinked`; Snapshot mitten in der Drehung und Determinismus; echte Daten: Crusader (180°/s),
-  Battlemaster, keine Türme beim Ranger, vier Schlachtschiffe mit Zweitturm (3 verbunden), Sweepwaffen, Duell Crusader gegen Battlemaster.
-* `Simulation.Tests` (`Tests.TurretAttack.cs`): Angriff überlebt Befehlslücken (300 Ticks ohne Befehl) und eine Verfolgung (Fahrt am Opfer vorbei, Turmfehler ≤ 2,5° ab Tick 10, kein Befehl wartet),
-  ein laufendes Opfer wird verfolgt, eine Bewegung beendet den Angriff, Halten genau `RecenterTime`, dann Rückstellen; totes Opfer; Aufgeben außer Reichweite (stehend 45 Ticks, gehend 45 Ticks, Verfolgung nie); toter Angreifer;
-  Skriptbefehl ist kein Angriff, neues Opfer ersetzt das alte; unsichtbares Opfer beendet das Zielen; Snapshot mitten in der Verfolgung und im Abtasten setzt identisch fort, `PursueCommand` im Replay;
-  Abtasten: Winkelbereich, Haltezeit `RecenterTime`, Intervall, beide Vorzeichen, deterministisch, Logikstrom unberührt, anderer Weltsamen andere Werte, Unterbrechung durch einen Angriff und Wiederaufnahme;
-  echte Daten: Crusader verfolgt einen Battlemaster (Zielfehler 0,00° ab Tick 60, 7 Schüsse, kein Befehl wartet), Sentry-Drohne, Patriot und Technical tasten innerhalb ihres Bereichs ab (zwei Läufe gleich), 50 abtastende Objekte.
-* `Presentation.Tests`: Turm folgt Befehl/Schuss/Rückstellung aus der Simulation (`TurretFollowsOrders`, Rückstellen jetzt nach dem Tod des Opfers), `TURRET_ROTATE` durch den Projektor (`TurretRotate`),
-  Standing orders (`PursueCommand` für den Anmarsch), echte Daten: alle Turmblöcke typisiert.
-* `PresentationTool scenario-audit … --name tank-duel` (Standardlauf, Ausgabe unten): jeder Schuss mit 0,0° Winkelfehler; **in jedem Tick** zwischen Befehl und Tod des Opfers bleibt der Turm innerhalb 5° (Crusader ab Tick 13,
-  Battlemaster ab Tick 6, 0 Ticks außerhalb), nach dem Tod des Battlemasters hält der Crusader-Turm 45° genau bis Tick 445 und dreht ab Tick 446 zurück (Tod 384 + `RecenterTime` 60 Ticks + 2), in Ruhe ab Tick 460;
-  die Sentry-Drohne tastet 9-mal ab (Winkel −170°…62°, je 31 Ticks gehalten bei `RecenterTime` 30, genau 8 Ticks Ruhe dazwischen = `MinIdleScanInterval` 8), der gezeichnete Turm stimmt mit dem simulierten überein,
-  `TURRET_ROTATE` steht in 518 von 537 drehenden Samples (die übrigen sind die einrastenden Schritte). `capture-building` und `jet-strafe` bleiben grün (`scripts/audit-scenarios.ps1`).
+* `Simulation.Tests` (`Tests.Turrets.cs`): template model, default values and strict errors; rotation at 6°/tick and waiting time until tick +15; body direction; exceptions from section 5; recentring, rest state
+  (no `turrets` in the snapshot), one-off aiming (script command) and dead target; two turrets with firing pitch, sweep, `TurretsLinked`; snapshot in the middle of the rotation and determinism; real data: Crusader (180°/s),
+  Battlemaster, no turrets on the Ranger, four battleships with a second turret (3 linked), sweep weapons, duel Crusader against Battlemaster.
+* `Simulation.Tests` (`Tests.TurretAttack.cs`): attack survives command gaps (300 ticks without a command) and a pursuit (drive past the victim, turret error ≤ 2.5° from tick 10, no command waits),
+  a walking victim is pursued, a movement ends the attack, holding exactly `RecenterTime`, then recentring; dead victim; giving up out of range (standing 45 ticks, moving 45 ticks, pursuit never); dead attacker;
+  a script command is no attack, a new victim replaces the old one; an invisible victim ends the aiming; a snapshot in the middle of the pursuit and of the scanning continues identically, `PursueCommand` in the replay;
+  scanning: angle range, hold time `RecenterTime`, interval, both signs, deterministic, logic stream untouched, a different world seed different values, interruption by an attack and resumption;
+  real data: Crusader pursues a Battlemaster (aim error 0.00° from tick 60, 7 shots, no command waits), sentry drone, Patriot and technical scan within their range (two runs equal), 50 scanning objects.
+* `Presentation.Tests`: turret follows command/shot/recentring from the simulation (`TurretFollowsOrders`, recentring now after the death of the victim), `TURRET_ROTATE` through the projector (`TurretRotate`),
+  standing orders (`PursueCommand` for the approach), real data: all turret blocks typed.
+* `PresentationTool scenario-audit … --name tank-duel` (default run, output below): every shot with 0.0° angle error; **in every tick** between command and death of the victim the turret stays within 5° (Crusader from tick 13,
+  Battlemaster from tick 6, 0 ticks outside), after the death of the Battlemaster the Crusader turret holds 45° exactly until tick 445 and turns back from tick 446 (death 384 + `RecenterTime` 60 ticks + 2), at rest from tick 460;
+  the sentry drone scans 9 times (angles −170°…62°, each held 31 ticks with `RecenterTime` 30, exactly 8 ticks of rest in between = `MinIdleScanInterval` 8), the drawn turret agrees with the simulated one,
+  `TURRET_ROTATE` is set in 518 of 537 turning samples (the others are the snapping-in steps). `capture-building` and `jet-strafe` stay green (`scripts/audit-scenarios.ps1`).
 
-## 8. Messwerte (Release, Retaildaten, 4. Oktober 2026)
+## 8. Measured values (Release, retail data, 4 October 2026)
 
-| Lauf | vor der ersten Turmfassung | Stand der ersten Turmfassung (vorher) | jetzt (Angriffszustand + Abtasten) |
+| Run | before the first turret version | state of the first turret version (before) | now (attack state + scanning) |
 |---|---|---|---|
-| `SimTool reference-match` | Sieger FactionGLA, Tick 13.890, Endhash `76F22CB0CA79BEEF` | Sieger FactionGLA, Tick 13.875, Endhash `482FC8C52D507662`, Kette `34AB50A397B0125C` | Sieger FactionGLA, Tick **15.000**, Endhash `01C01E3B91EAE18C`, Kette `045DA5259A104F01`; Run 2 und Snapshot-Fortsetzung identisch |
-| `SimTool stress` (216.000 Ticks, synthetisch, ohne Türme) | Endhash `56882F763EABEF67`, Kette `B8E663493F2C73D5` | unverändert | **unverändert** |
-| `ai-match` China/GLA (Alpine Assault) | China, Tick 43.275, Endhash `757327AE69B87C2A` | China, Tick 43.965, Endhash `AE34F9421AA76C9A`, Kette `DF948386BA2C5C98` | **Patt** (kein Sieger in 45.000 Ticks; China hat noch Gebäude, GLA nur Waffenhändler und zwei Tunnelnetze), Endhash `BE5A7A4A37403928`, Kette `1AF7BD86DED30A1B` |
-| `ai-match` AmericaAirForce/China | Patt, Endhash `AF78F914D08B09DD` | Patt, Endhash `D31EB9C8679D6632`, Kette `2536E3A7B8CB6620` | Patt, Endhash `21BC6E1596A8702E`, Kette `4B231593B1ACA841` |
-| `ai-match` America/GLA | America, Tick 16.110, Endhash `ED637C7C3E4FFF9E` | unverändert (`2B93BACCDB0F6450`) | America, Tick 16.110, Endhash `03CED6D83F6BD0A1`, Kette `0F03F254211B30BA` (die Feuerbasen tasten ab) |
-| `ai-match` ChinaTank/AmericaLaser (neu) | – | – | Patt, Endhash `8C6F376D82A0F548`, Kette `77C4A5F4F42006D7` |
-| `CampaignTool audit --ticks 900 --campaign CHALLENGE_0` | – | 7/7 deterministisch, 7/7 identisch nach Speichern/Laden; Ausschalt-Enden Sieg 7/7, Niederlage 6/7 | **unverändert**: 7/7, 7/7, Sieg 7/7, Niederlage 6/7 |
+| `SimTool reference-match` | winner FactionGLA, tick 13,890, final hash `76F22CB0CA79BEEF` | winner FactionGLA, tick 13,875, final hash `482FC8C52D507662`, chain `34AB50A397B0125C` | winner FactionGLA, tick **15,000**, final hash `01C01E3B91EAE18C`, chain `045DA5259A104F01`; run 2 and snapshot continuation identical |
+| `SimTool stress` (216,000 ticks, synthetic, without turrets) | final hash `56882F763EABEF67`, chain `B8E663493F2C73D5` | unchanged | **unchanged** |
+| `ai-match` China/GLA (Alpine Assault) | China, tick 43,275, final hash `757327AE69B87C2A` | China, tick 43,965, final hash `AE34F9421AA76C9A`, chain `DF948386BA2C5C98` | **stalemate** (no winner in 45,000 ticks; China still has buildings, GLA only arms dealer and two tunnel networks), final hash `BE5A7A4A37403928`, chain `1AF7BD86DED30A1B` |
+| `ai-match` AmericaAirForce/China | stalemate, final hash `AF78F914D08B09DD` | stalemate, final hash `D31EB9C8679D6632`, chain `2536E3A7B8CB6620` | stalemate, final hash `21BC6E1596A8702E`, chain `4B231593B1ACA841` |
+| `ai-match` America/GLA | America, tick 16,110, final hash `ED637C7C3E4FFF9E` | unchanged (`2B93BACCDB0F6450`) | America, tick 16,110, final hash `03CED6D83F6BD0A1`, chain `0F03F254211B30BA` (the fire bases scan) |
+| `ai-match` ChinaTank/AmericaLaser (new) | – | – | stalemate, final hash `8C6F376D82A0F548`, chain `77C4A5F4F42006D7` |
+| `CampaignTool audit --ticks 900 --campaign CHALLENGE_0` | – | 7/7 deterministic, 7/7 identical after save/load; elimination endings victory 7/7, defeat 6/7 | **unchanged**: 7/7, 7/7, victory 7/7, defeat 6/7 |
 
-Alle `ai-match`-Läufe: zwei unabhängige Läufe und die Fortsetzung ab einem Snapshot in der Mitte sind tickgenau identisch. Die Hashes ändern sich aus zwei Gründen: Türme folgen ihrem Opfer jetzt ununterbrochen
-(auch zwischen den Schüssen und beim Anmarsch, dadurch andere Treffzeitpunkte), und alle abtastenden Türme (Patriot, Gattling-Kanone, Feuerbasis, Sentry-Drohne …) drehen sich im Leerlauf, was den Zustandshash jedes Ticks
-ändert, auch wenn kein Kampf stattfindet; der Stresstest hat keine Türme und bleibt gleich. Beim Referenzspiel kommt hinzu, dass das Szenario seine Annäherung jetzt als `PursueCommand` sendet. Der Ausgang des
-KI-Spiels China/GLA kippt von „Sieg in Tick 43.965“ zu „Patt“; die Ursache ist in Abschnitt 8a aufgeschlüsselt (die Regel „ein neuer Befehl beendet das Zielen“; das Spiel war schon vorher knapp vor dem Tick-Limit). Es wurde nichts
-aus anderem Anlass verändert.
+All `ai-match` runs: two independent runs and the continuation from a snapshot in the middle are identical to the tick. The hashes change for two reasons: turrets now follow their victim without interruption
+(also between the shots and during the approach, hence different hit times), and all scanning turrets (Patriot, Gattling cannon, fire base, sentry drone …) turn when idle, which changes the state hash of every tick
+even when no combat takes place; the stress test has no turrets and stays the same. For the reference match there is in addition that the scenario now sends its approach as a `PursueCommand`. The outcome of the
+AI match China/GLA tips from "victory in tick 43,965" to "stalemate"; the cause is broken down in section 8a (the rule "a new command ends the aiming"; the match was already close to the tick limit before). Nothing was
+changed for any other reason.
 
-Die Werte der Spalte „jetzt“ sind seit den Feuerstufen, der Vorangriffsverzögerung, den beschädigten Locomotoren und der Platzierung des KI-Versorgungszentrums überholt; aktuelle Referenzwerte stehen in `docs/SIMULATION-CORE.md` §32.
+The values of the column "now" are superseded since the continuous-fire levels, the pre-attack delay, the damaged locomotors and the placement of the AI supply center; current reference values are in `docs/SIMULATION-CORE.md` §32.
 
-## 8a. Aufschlüsselung der KI-Verschiebung (4. Oktober 2026, gemessen)
+## 8a. Breakdown of the AI shift (4 October 2026, measured)
 
-Offen war, warum `ai-match` China/GLA auf Alpine Assault seit dem Angriffszustand im Patt endet (vorher China bei Tick 43.965). Die Effekte wurden einzeln aus- und eingeschaltet: ein Wegwerf-Worktree
-auf dem Stand `2b854d3` bekam je Variante einen Ein-Zeilen-Patch, das Werkzeug wurde je Variante in ein eigenes Verzeichnis gebaut, dann liefen alle 16 Paarungen aus `SIMULATION-CORE.md` §19
-(`--max-ticks 45000`, Standardseeds). Jeder der 128 Läufe (acht Stände) ist mit Lauf 2 und der Snapshot-Fortsetzung identisch.
+What was open was why `ai-match` China/GLA on Alpine Assault has ended in a stalemate since the attack state (before, China at tick 43,965). The effects were switched off and on individually: a throwaway worktree
+at the state `2b854d3` got a one-line patch per variant, the tool was built into a directory of its own per variant, then all 16 pairings from `SIMULATION-CORE.md` §19 ran
+(`--max-ticks 45000`, default seeds). Each of the 128 runs (eight states) is identical with run 2 and the snapshot continuation.
 
-| Variante | Stand | Patch |
+| Variant | State | Patch |
 |---|---|---|
-| G | `8b8c8a7` (erste Turmfassung) | – |
-| I | `2b854d3` | Idle-Scan aus, Angriffszustand aus, `EndAttack` ohne Wirkung |
-| D | `2b854d3` | Idle-Scan aus, Angriffszustand aus |
-| B | `2b854d3` | Idle-Scan aus (`TurretInfo.CanScan` = falsch) |
-| C | `2b854d3` | Angriffszustand aus (`FireWeaponCommand` zielt wie ein Einzelschuss, `TurretAimOrder.Shot`) |
-| J | `2b854d3` | `EndAttack` ohne Wirkung (ein neuer Befehl beendet das Zielen nicht) |
-| A | `2b854d3` | – (auch `d713531` gemessen: in allen 16 Läufen hashgleich) |
+| G | `8b8c8a7` (first turret version) | – |
+| I | `2b854d3` | idle scan off, attack state off, `EndAttack` without effect |
+| D | `2b854d3` | idle scan off, attack state off |
+| B | `2b854d3` | idle scan off (`TurretInfo.CanScan` = false) |
+| C | `2b854d3` | attack state off (`FireWeaponCommand` aims like a single shot, `TurretAimOrder.Shot`) |
+| J | `2b854d3` | `EndAttack` without effect (a new command does not end the aiming) |
+| A | `2b854d3` | – (`d713531` measured as well: hash-identical in all 16 runs) |
 
-Ergebnis je Lauf (Sieger und Tick oder Patt, dahinter die ersten acht Stellen des Endhashes):
+Result per run (winner and tick or stalemate, followed by the first eight digits of the final hash):
 
-| Karte | Paarung | G | I | D | B | C | J | A |
+| Map | Pairing | G | I | D | B | C | J | A |
 |---|---|---|---|---|---|---|---|---|
-| Alpine Assault | China, GLA | China 43.965 `AE34F942` | China 43.965 `AE34F942` | Patt `553A2186` | Patt `553A2186` | Patt `BE5A7A4A` | China 44.100 `A8EC7BF4` | Patt `BE5A7A4A` |
-| Alpine Assault | America, China | Patt `63EEA99F` | Patt `63EEA99F` | Patt `63EEA99F` | Patt `2616F0B2` | Patt `131253B5` | Patt `B748B8DD` | Patt `B748B8DD` |
-| Alpine Assault | GLA, America | America 12.120 `5BADFE2A` | America 12.120 `5BADFE2A` | America 12.120 `5BADFE2A` | America 12.120 `5BADFE2A` | America 12.120 `83FA72B7` | America 12.120 `83FA72B7` | America 12.120 `83FA72B7` |
-| Alpine Assault | ChinaTank, AirForce | Patt `36BD9041` | Patt `36BD9041` | Patt `36BD9041` | Patt `F6C1297B` | Patt `61CB3CC2` | Patt `710439C5` | Patt `710439C5` |
-| Armored Fury | China, GLA | Patt `1DA176CF` | Patt `1DA176CF` | Patt `1DA176CF` | Patt `F8B0885E` | Patt `7B9BC049` | Patt `6F0CA3F1` | Patt `6F0CA3F1` |
-| Armored Fury | America, China | America 41.130 `12495B5C` | America 41.130 `12495B5C` | America 44.325 `871BA9DA` | America 35.175 `C8675A5A` | America 40.875 `D8620C00` | Patt `4035F8F0` | America 36.375 `D3A4AAD6` |
-| Armored Fury | GLA, America | America 22.410 `B5CD779E` | America 22.410 `B5CD779E` | America 22.410 `B5CD779E` | America 22.410 `B5CD779E` | America 22.410 `29601DCA` | America 22.410 `29601DCA` | America 22.410 `29601DCA` |
-| Armored Fury | ChinaTank, AirForce | AirForce 9.405 `2261402C` | AirForce 9.405 `2261402C` | AirForce 9.405 `2261402C` | AirForce 9.405 `2261402C` | AirForce 9.405 `DF5D46B1` | AirForce 9.405 `DF5D46B1` | AirForce 9.405 `DF5D46B1` |
-| Bitter Winter | China, GLA | Patt `C9F239FC` | Patt `C9F239FC` | Patt `C9F239FC` | Patt `C9F239FC` | Patt `94F023A5` | Patt `2C65DC45` | Patt `2C65DC45` |
-| Bitter Winter | America, China | Patt `D660891B` | Patt `D660891B` | Patt `D660891B` | Patt `A64316B6` | Patt `C9D7E892` | Patt `781E31A8` | Patt `781E31A8` |
-| Bitter Winter | GLA, America | America 14.565 `752A8CA8` | America 14.565 `752A8CA8` | America 14.565 `752A8CA8` | America 14.565 `752A8CA8` | America 14.565 `3922E188` | America 14.565 `3922E188` | America 14.565 `3922E188` |
-| Bitter Winter | ChinaTank, AirForce | Patt `4F07AF52` | Patt `4F07AF52` | Patt `4F07AF52` | Patt `E61AB63B` | Patt `92F1F0A9` | Patt `75A58BD4` | Patt `75A58BD4` |
-| Death Valley | China, GLA | China 8.805 `DFB8BB3F` | China 8.805 `DFB8BB3F` | China 8.805 `DFB8BB3F` | China 8.805 `DFB8BB3F` | China 8.805 `4F687B3B` | China 8.805 `4F687B3B` | China 8.805 `4F687B3B` |
-| Death Valley | America, China | Patt `B27C7202` | Patt `B27C7202` | Patt `B27C7202` | Patt `B27C7202` | Patt `82DEB8C7` | China 35.985 `4A4BF443` | China 35.985 `4A4BF443` |
-| Death Valley | GLA, America | Patt `2C7EE0E2` | Patt `2C7EE0E2` | Patt `2C7EE0E2` | Patt `C0947735` | Patt `8252C18F` | Patt `41808E02` | Patt `41808E02` |
-| Death Valley | ChinaTank, AirForce | Patt `2BF5DE1C` | Patt `2BF5DE1C` | Patt `2BF5DE1C` | Patt `2BF5DE1C` | Patt `A619B93E` | Patt `5532EEC9` | Patt `5532EEC9` |
+| Alpine Assault | China, GLA | China 43,965 `AE34F942` | China 43,965 `AE34F942` | stalemate `553A2186` | stalemate `553A2186` | stalemate `BE5A7A4A` | China 44,100 `A8EC7BF4` | stalemate `BE5A7A4A` |
+| Alpine Assault | America, China | stalemate `63EEA99F` | stalemate `63EEA99F` | stalemate `63EEA99F` | stalemate `2616F0B2` | stalemate `131253B5` | stalemate `B748B8DD` | stalemate `B748B8DD` |
+| Alpine Assault | GLA, America | America 12,120 `5BADFE2A` | America 12,120 `5BADFE2A` | America 12,120 `5BADFE2A` | America 12,120 `5BADFE2A` | America 12,120 `83FA72B7` | America 12,120 `83FA72B7` | America 12,120 `83FA72B7` |
+| Alpine Assault | ChinaTank, AirForce | stalemate `36BD9041` | stalemate `36BD9041` | stalemate `36BD9041` | stalemate `F6C1297B` | stalemate `61CB3CC2` | stalemate `710439C5` | stalemate `710439C5` |
+| Armored Fury | China, GLA | stalemate `1DA176CF` | stalemate `1DA176CF` | stalemate `1DA176CF` | stalemate `F8B0885E` | stalemate `7B9BC049` | stalemate `6F0CA3F1` | stalemate `6F0CA3F1` |
+| Armored Fury | America, China | America 41,130 `12495B5C` | America 41,130 `12495B5C` | America 44,325 `871BA9DA` | America 35,175 `C8675A5A` | America 40,875 `D8620C00` | stalemate `4035F8F0` | America 36,375 `D3A4AAD6` |
+| Armored Fury | GLA, America | America 22,410 `B5CD779E` | America 22,410 `B5CD779E` | America 22,410 `B5CD779E` | America 22,410 `B5CD779E` | America 22,410 `29601DCA` | America 22,410 `29601DCA` | America 22,410 `29601DCA` |
+| Armored Fury | ChinaTank, AirForce | AirForce 9,405 `2261402C` | AirForce 9,405 `2261402C` | AirForce 9,405 `2261402C` | AirForce 9,405 `2261402C` | AirForce 9,405 `DF5D46B1` | AirForce 9,405 `DF5D46B1` | AirForce 9,405 `DF5D46B1` |
+| Bitter Winter | China, GLA | stalemate `C9F239FC` | stalemate `C9F239FC` | stalemate `C9F239FC` | stalemate `C9F239FC` | stalemate `94F023A5` | stalemate `2C65DC45` | stalemate `2C65DC45` |
+| Bitter Winter | America, China | stalemate `D660891B` | stalemate `D660891B` | stalemate `D660891B` | stalemate `A64316B6` | stalemate `C9D7E892` | stalemate `781E31A8` | stalemate `781E31A8` |
+| Bitter Winter | GLA, America | America 14,565 `752A8CA8` | America 14,565 `752A8CA8` | America 14,565 `752A8CA8` | America 14,565 `752A8CA8` | America 14,565 `3922E188` | America 14,565 `3922E188` | America 14,565 `3922E188` |
+| Bitter Winter | ChinaTank, AirForce | stalemate `4F07AF52` | stalemate `4F07AF52` | stalemate `4F07AF52` | stalemate `E61AB63B` | stalemate `92F1F0A9` | stalemate `75A58BD4` | stalemate `75A58BD4` |
+| Death Valley | China, GLA | China 8,805 `DFB8BB3F` | China 8,805 `DFB8BB3F` | China 8,805 `DFB8BB3F` | China 8,805 `DFB8BB3F` | China 8,805 `4F687B3B` | China 8,805 `4F687B3B` | China 8,805 `4F687B3B` |
+| Death Valley | America, China | stalemate `B27C7202` | stalemate `B27C7202` | stalemate `B27C7202` | stalemate `B27C7202` | stalemate `82DEB8C7` | China 35,985 `4A4BF443` | China 35,985 `4A4BF443` |
+| Death Valley | GLA, America | stalemate `2C7EE0E2` | stalemate `2C7EE0E2` | stalemate `2C7EE0E2` | stalemate `C0947735` | stalemate `8252C18F` | stalemate `41808E02` | stalemate `41808E02` |
+| Death Valley | ChinaTank, AirForce | stalemate `2BF5DE1C` | stalemate `2BF5DE1C` | stalemate `2BF5DE1C` | stalemate `2BF5DE1C` | stalemate `A619B93E` | stalemate `5532EEC9` | stalemate `5532EEC9` |
 
-Befunde:
+Findings:
 
-* **Die Zerlegung ist vollständig.** Variante I ist in allen 16 Läufen hashgleich mit der ersten Turmfassung G. Zwischen den beiden Ständen gibt es also genau drei wirksame Änderungen für KI-Spiele:
-  den Idle-Scan, den dauerhaften Angriffszustand und – bisher nicht als eigener Effekt benannt – **„ein neuer Befehl beendet das Zielen“** (`EndAttack` in `OrderMove`/`OrderIdle`/`OrderDock`/Bauauftrag;
-  es wirkt auch auf das einmalige Zielen, deshalb unterscheidet sich D von G).
-* **`PursueCommand` spielt in `ai-match` keine Rolle:** `SkirmishAi` sendet ihn nie (nur `StandingOrders` der Darstellung und das Referenzszenario). Im Referenzspiel dagegen ist er der Haupteffekt:
-  ohne ihn (`SetMoveTargetCommand` für die Annäherung) endet es bei Tick 15.225 statt 15.000, ohne alle drei Effekte bei Tick 13.875 wie die erste Turmfassung; der Idle-Scan ändert dort nichts
-  (Endhash und Kette gleich), der Angriffszustand der Feuerbefehle nur die Kette.
-* **China/GLA auf Alpine Assault kippt allein durch „Befehl beendet das Zielen“:** mit der Regel Patt (A, B, C, D), ohne sie China bei Tick 43.965 (G, I) bzw. 44.100 (J). In diesem Spiel hat der Angriffszustand
-  keinen Einfluss (A = C, B = D), der Idle-Scan ändert nur den Hash. Das Spiel war schon vorher 1.035 Ticks vom Limit entfernt; eine verlorene Schussgelegenheit (der Turm einer Einheit, die einen neuen
-  Marschbefehl bekommt, hält seinen Winkel, statt dem letzten Ziel zu folgen) reicht für die Verschiebung.
-* **Kein systematischer Effekt:** G, I, J und A entscheiden 7 von 16 Läufen, B, C und D 6; einzelne knappe Spiele kippen in beide Richtungen (Death Valley America/China: Patt in G, China bei 35.985 in A;
-  Armored Fury America/China: America zwischen 35.175 und 44.325, Patt in J). 13 der 16 Paarungen haben in jeder Variante denselben Ausgang.
-* **Die Patts haben eine andere Ursache.** In jedem Patt stehen beide Seiten am Ende mit 0 bis wenigen hundert Credits und wenigen Objekten da (die Kartenvorräte sind erschöpft, 2–4 Angriffswellen in 45.000 Ticks):
-  ein Befund der Skirmish-KI (Wirtschaft, Angriffsschwelle), nicht der Türme. Er besteht seit Phase 15 (8 statt 10 entschiedene Läufe nach der Wegsuche um stehende Einheiten) und gehört zu Phase 17.
+* **The decomposition is complete.** Variant I is hash-identical with the first turret version G in all 16 runs. Between the two states there are therefore exactly three effective changes for AI matches:
+  the idle scan, the persistent attack state and – so far not named as an effect of its own – **"a new command ends the aiming"** (`EndAttack` in `OrderMove`/`OrderIdle`/`OrderDock`/build order;
+  it also acts on the one-off aiming, which is why D differs from G).
+* **`PursueCommand` plays no role in `ai-match`:** `SkirmishAi` never sends it (only `StandingOrders` of the presentation and the reference scenario). In the reference match, by contrast, it is the main effect:
+  without it (`SetMoveTargetCommand` for the approach) it ends at tick 15,225 instead of 15,000, without all three effects at tick 13,875 like the first turret version; the idle scan changes nothing there
+  (final hash and chain equal), the attack state of the fire commands only the chain.
+* **China/GLA on Alpine Assault tips solely through "command ends the aiming":** with the rule stalemate (A, B, C, D), without it China at tick 43,965 (G, I) or 44,100 (J). In this match the attack state has
+  no influence (A = C, B = D), the idle scan changes only the hash. The match was already 1,035 ticks away from the limit before; one lost opportunity to shoot (the turret of a unit that gets a new
+  march command holds its angle instead of following the last target) is enough for the shift.
+* **No systematic effect:** G, I, J and A decide 7 of 16 runs, B, C and D 6; individual close matches tip in both directions (Death Valley America/China: stalemate in G, China at 35,985 in A;
+  Armored Fury America/China: America between 35,175 and 44,325, stalemate in J). 13 of the 16 pairings have the same outcome in every variant.
+* **The stalemates have a different cause.** In every stalemate both sides end up with 0 to a few hundred credits and few objects (the map supplies are exhausted, 2–4 attack waves in 45,000 ticks):
+  a finding of the skirmish AI (economy, attack threshold), not of the turrets. It has existed since Phase 15 (8 instead of 10 decided runs after the pathfinding around standing units) and belongs to Phase 17.
 
-**Entscheidung:** keine Verhaltenskorrektur an Haltezeit, Sichtregel oder Idle-Scan. „Ein neuer Befehl beendet das Zielen“ ist das Verhalten der Referenz (`AIAttackState::onExit` setzt die Turmziele auf `NULL`,
-sobald ein anderer AI-Zustand den Angriff ersetzt); es zurückzunehmen würde ein KI-Ergebnis reparieren, indem ein belegtes Verhalten gefälscht wird. Der Idle-Scan während eines Angriffs ist schon ausgeschlossen
-(ein Ziel unterbricht ihn). Was der Referenz gegenüber fehlt, ist der Zielerwerb durch die Einheit selbst (Angriffsmarsch, `friend_checkForIdleMoodTarget`): dort verliert eine marschierende Einheit ihr Ziel nicht
-dauerhaft, weil sie sich das nächste selbst sucht. Bis Phase 16 übernahm das der Befehlsgeber im nächsten Denkschritt.
+**Decision:** no behaviour correction to hold time, visibility rule or idle scan. "A new command ends the aiming" is the behaviour of the reference (`AIAttackState::onExit` sets the turret targets to `NULL`
+as soon as another AI state replaces the attack); taking it back would repair an AI result by falsifying a verified behaviour. The idle scan during an attack is already excluded
+(a target interrupts it). What is missing compared with the reference is the target acquisition by the unit itself (attack move, `friend_checkForIdleMoodTarget`): there a marching unit does not lose its target
+permanently, because it looks for the next one itself. Until Phase 16 the command issuer took that over in the next thinking step.
 
-**Nachtrag Phase 17 (5. Oktober 2026):** der Zielerwerb durch die Einheit und der Angriffsmarsch sind umgesetzt (`docs/SIMULATION-CORE.md` §33). "Ein neuer Befehl beendet das Zielen" gilt unverändert
-(`EndAttack` löscht jetzt auch den Angriffszustand der Einheit); die Einheit sucht sich danach selbst das nächste Opfer: im Angriffsmarsch zwei Frames nach dem Befehl, sonst sobald sie wieder ruht. Die 16 KI-Läufe sind
-dort neu erhoben; die Spalten dieses Abschnitts beschreiben den Stand davor.
-## 9. Nachziehen in anderen Dokumenten (nicht Teil dieser Änderung)
+**Addendum Phase 17 (5 October 2026):** the target acquisition by the unit and the attack move are implemented (`docs/SIMULATION-CORE.md` §33). "A new command ends the aiming" applies unchanged
+(`EndAttack` now also clears the attack state of the unit); the unit then looks for the next victim itself: in the attack move two frames after the command, otherwise as soon as it rests again. The 16 AI runs are
+re-collected there; the columns of this section describe the state before that.
+## 9. Follow-up in other documents (not part of this change)
 
-`docs/SIMULATION-CORE.md` (Waffenwahl-Näherungen „Turm- und Neigungsbedingungen fehlen“, Abschnitt zur Waffenwahl), `docs/PRESENTATION-OBJECTS.md` (Zeile 47 `TURRET_ROTATE`, Abschnitt zu `TurretYaw`: „null, weil die Simulation
-keinen Turmwinkel führt“), `docs/MODEL-CONDITIONS-UNITS.md` (Zeilen zu `TurretTracker`), `docs/CLIENT-OBJECTS.md`, `docs/DEMO-FINDINGS.md`, `README.md`/`ROADMAP.md`/`IMPLEMENTATION-PLAN.md`
-(Snapshotversion 9, Turmzustand, Befehlstabelle 13, Replay 10) und `CLAUDE.md` (Referenzwerte) beschreiben noch den Stand ohne Turmzustand beziehungsweise ohne Angriffszustand.
+`docs/SIMULATION-CORE.md` (weapon choice approximations "turret and pitch conditions are missing", section on the weapon choice), `docs/PRESENTATION-OBJECTS.md` (line 47 `TURRET_ROTATE`, section on `TurretYaw`: "zero, because the simulation
+keeps no turret angle"), `docs/MODEL-CONDITIONS-UNITS.md` (lines on `TurretTracker`), `docs/CLIENT-OBJECTS.md`, `docs/DEMO-FINDINGS.md`, `README.md`/`ROADMAP.md`/`IMPLEMENTATION-PLAN.md`
+(snapshot version 9, turret state, command table 13, replay 10) and `CLAUDE.md` (reference values) still describe the state without a turret state or without an attack state respectively.
