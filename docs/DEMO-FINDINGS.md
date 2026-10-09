@@ -90,6 +90,74 @@ In der ersten Phase-17-Sitzung (5. Oktober 2026) hat kein Mensch neue Befunde ge
 
 Nr. 31 bis 35 sind fünf Fragen und Wünsche des Projektinhabers vom 7. Oktober 2026 (Demo-Skripte, Scrolltempo, Mausbelegung, Fabrikausfahrten, Bautasten). Alles daran ist headless gebaut und gemessen; **gesehen, gefühlt oder gedrückt hat es noch kein Mensch**.
 
+## Dritte Rückmeldung eines Menschen: das erste angesehene KI-Gefecht (8. Oktober 2026) und Stand Phase 23
+
+Am 8. Oktober 2026 hat der Projektinhaber zum ersten Mal ein Gefecht zweier eingebauter KIs im Zuschauermodus angesehen (`scripts/demo-spectator.ps1`, **30 Hz**, eine der Standardpaarungen, Seed
+nicht notiert). Das ist die einzige Sichtung seit dem 4. Oktober und die einzige der Phase 23; sie fand **vor** den Korrekturen statt, die aus ihr folgten. Vier Beobachtungen, jede headless
+reproduziert, mit Ursache und Korrektur (`docs/AI-OBSERVED-2026-10-08.md`); „behoben“ heißt wie oben: gemessen, **nicht** von einem Menschen wieder angesehen.
+
+| # | Beobachtung | Reproduziert (vorher) | Ursache | Status und was gemessen ist | Was nicht belegt ist |
+| --- | --- | --- | --- | --- | --- |
+| 36 | Produzierte Einheiten stehen in der Kaserne | 0 von 27 Einheiten der neun Ausfahrtsszenen verlassen ihr Gebäude (dieselbe Ursache wie Nr. 34) | `ProductionUpdate` setzte die Einheit auf den `UnitCreatePoint` und gab ihr keinen Weg | **behoben** (`c821fbd`, `docs/SIMULATION-CORE.md` §42): 27 von 27 fahren hinaus, bei 30 und 60 Hz in denselben Bildern; ändert 23 Manifestläufe bei 30 Hz | ob es im Fenster richtig aussieht; eine Einheit, die noch im Gebäude einen Befehl bekommt (die Raupe der KI), verlässt es weiter auf dem kürzesten Weg, also durch eine Wand – die Variante „immer durch das Tor“ ist gemessen und nicht gemergt (Entscheidung des Projektinhabers) |
+| 37 | „Die China-KI baut keine Panzer, obwohl das Gebäude dafür steht“ | in 80 Gefechten baut China 6 Fahrzeuge bei 2.137 Infanteristen (0,3 %); nur 4 von 23 Fabriken bauen je etwas – und nicht nur bei China (alle Fraktionen 0,3–4,1 %) | `SkirmishAi.ProduceArmy` kaufte je Produzent, was das Geld im Augenblick deckt; die Kaserne gab jeden Credit aus, bevor die Fabrik gefragt wurde. Gespart wurde nie | **behoben** (Regel „stehender Heeresauftrag“, `50718d7`): nach dem Merge China 456 Fahrzeuge bei 1.042 Infanteristen (30,4 %), 24 von 25 Fabriken bauen | ob die Armee „nach Panzern aussieht“; die GLA-KI baut auf drei der vier Karten nur die Kaserne (10 von 40 mit Fabrik, Ursache nicht untersucht) |
+| 38 | „Drei Infanteristen draußen, einer steht in der Mitte, zwei laufen um ihn herum“ | 269 Kreis-Episoden am Sammelpunkt in 80 Gefechten, in 74 von 160 Spieler-Gefechten | (a) alle Einheiten haben denselben Zielpunkt, der Schritt dorthin ist blockiert und das Ausweichen dreht im Kreis; (b) wer einsteigen soll, wich seinem eigenen Fahrzeug aus (1.523 Einsteigebefehle, 130 Einstiege in den 20 KI-Läufen des Manifests) | **behoben**: ein freier Platz neben einem besetzten Ziel (derselbe Mechanismus wie die Ausfahrt), Einsteiger erreichen ihr Fahrzeug – am Sammelpunkt 0 Episoden; Einsteigebefehle / Aufnahmen 1.693 / 945 | unterwegs drehen sich weiter gelegentlich zwei Einheiten umeinander (40 Episoden), Sammler kreisen am Dock (209) – beides offen; wie Einheiten aussehen, die in Reihen neben dem Sammelpunkt stehen |
+| 39 | „Die China-KI passt sich nicht an ihren Gegner an“ | stimmt: der Gegner ging in die Wahl der Einheiten nicht ein | `ProduceArmy` wählte gleich wahrscheinlich unter den bezahlbaren Einheiten | **neue Regel „Tauschwert“** (`SkirmishAi.Composition.cs`), mit vorab festgelegter Abnahme: gepaart über 640 Gefechte gewinnt die KI mit Regel 337, verliert 250 (57,4 % der entschiedenen, p = 0,0004); symmetrisch 305 von 320 entschieden | **Balance ist nicht bewertet**: ChinaTankGeneral gewinnt in der Erhebung danach 70 von 80 Gefechten gegen AirForce; ob die Mischung als Antwort auf den Gegner wirkt, kann nur ein Mensch sagen |
+
+Die Korrekturen zu Nr. 37 bis 39 sind zusammen gemergt (`0fe9923`, Manifest `cca6f92`): 14 statt 12 der 16 KI-Läufe des Manifests entschieden, der Ausgang ist in 8 anders. Der Nur-Befehle-Agent
+gewinnt `MD_CHI02` danach erst nach 43:34 statt 16:15 Spielminuten (`docs/SCRIPT-ENGINE.md` §9). Wer beim nächsten Ansehen etwas findet, notiert bitte **Seed** (das Skript gibt ihn aus), Paarung,
+Spielzeit und die Einheiten.
+
+**Stand der Wünsche vom 7. Oktober (Nr. 31 bis 35) und des Zuschauermodus** – alles gebaut und headless geprüft, **nichts von einem Menschen abgenommen**:
+
+| Punkt | Was belegt ist | Prüfung ohne Fenster |
+| --- | --- | --- |
+| Demo-Skripte (Nr. 31) | ohne `-Scenario` listet `demo-scenario.ps1` die Szenen; ein abstürzendes Beispiel und ein Steuerzeichen im Kommentar behoben | – |
+| Scrolltempo am Bildrand (Nr. 32) | 437,2 statt 1.748,6 Welteinheiten je Sekunde seitwärts bei 1280 Pixeln Breite (zweites Wertepaar der Messung: 591,4 statt 2.365,6) – die Werte des Originals; nur gemeldet: Rechtsziehen ist 6,4-mal langsamer als im Original | Test gegen die Referenzformel |
+| Alternative Mausbelegung als Vorgabe (Nr. 33) | `ControlSettings.AlternateMouse = true`, Kästchen der Optionen verdrahtet, Client `--mouse classic\|alternate` | Tests |
+| Fabrikausfahrten (Nr. 34, 36) | siehe Nr. 36; `scripts/demo-factory-exits.ps1` zum Ansehen | `pwsh scripts/audit-scenarios.ps1 -Scenario exits` (9 Szenen, bei 30 und 60 Hz bestanden) |
+| Bautasten (Nr. 35) | `S`, `F`, `E` gehen (Prüfskript je Fraktion: 16 von 16, 18 von 18, 19 von 19) | `pwsh scripts/check-build-hotkeys.ps1` (3 von 3 PASS) |
+| Zuschauermodus | zwei KIs, Tafeln Produktion/Einheiten/Verluste/Wirtschaft, KI-Kamera als Radarrahmen, weiter Zoom, Tempo, Nebelsichten (`docs/SPECTATOR-MODE.md`); die Original-KI ist dort **nicht** wählbar | `pwsh scripts/check-spectator.ps1` (PASS) |
+
+## Sichtprüfliste 60 Hz (Stand 9. Oktober 2026)
+
+**Nichts auf dieser Liste hat ein Mensch bei 60 Hz gesehen oder gehört.** Die einzige Sichtung überhaupt seit dem 4. Oktober ist das eine KI-Gefecht bei 30 Hz vom 8. Oktober (oben), vor den
+Korrekturen Nr. 36 bis 39. Die Simulation läuft seit `e8632bb` standardmäßig mit 60 Hz; jedes Skript unten startet ohne Option mit 60 Hz und mit `-TickRate 30` dieselbe Szene bei 30 Hz zum
+Vergleich. Was headless belegt ist – die Raten-Äquivalenz-Suite, gleiche Bildzahlen der Ausfahrten, gleiche Befehlsströme –, sagt, dass 60 Hz *dasselbe* tut wie 30 Hz, nicht, dass es richtig
+aussieht. Bildfolgen zum Nebeneinanderlegen: `pwsh scripts/capture-scenarios.ps1` und `pwsh scripts/capture-scenarios.ps1 -TickRate 30` (nach Runde 4 nicht neu erzeugt).
+
+Aus `docs/TICKRATE-MIGRATION.md` §14.7 (Phase 21: Darstellung, Ton, Oberfläche):
+
+- [ ] **Bewegung:** Einheiten fahren bei 60 Hz weicher und gleich schnell; kein Ruckeln im Zweiertakt, kein Springen beim Anhalten. – `pwsh scripts/demo-skirmish.ps1`, `pwsh scripts/demo-tank-duel.ps1`
+- [ ] **Effekte:** Explosionen, Rauch, Staub, Leuchtspuren dauern gleich lang und sind gleich dicht; Rauchfahnen bewegter Objekte reißen nicht ab. – `pwsh scripts/demo-tank-duel.ps1`, `pwsh scripts/demo-jet-strafe.ps1`
+- [ ] **Mündungsfeuer:** bei jedem Schuss sichtbar, weder Dauerfeuer noch nur ein Aufblitzen; der Rückstoß passt. – `pwsh scripts/demo-tank-duel.ps1`
+- [ ] **Feuerzustand:** Schussanimationen starten bei jedem Schuss und werden nicht doppelt ausgelöst. – `pwsh scripts/demo-tank-duel.ps1`
+- [ ] **Federung und Lenkung:** Radfahrzeuge nicken beim Anfahren und Bremsen, schwingen aus und zittern nicht; Räder lenken ein und zurück. – `pwsh scripts/demo-skirmish.ps1`
+- [ ] **Heilsymbol und Jubel:** das Symbol bleibt etwa drei Sekunden nach der letzten Heilung. – `pwsh scripts/demo-skirmish.ps1`
+- [ ] **Nebel:** Aufdecken und Abdunkeln laufen gleich schnell, ohne sichtbares Nachhinken. – `pwsh scripts/demo-skirmish.ps1`
+- [ ] **HUD:** Meldungszeilen stehen etwa neun Sekunden, die Superwaffenuhr zählt Sekunden und blinkt im gleichen Takt. – `pwsh scripts/demo-skirmish.ps1`
+- [ ] **Ton:** keine doppelten oder fehlenden Schuss- und Einschlagtöne; Eva und die Unter-Beschuss-Meldung kommen nicht öfter. – `pwsh scripts/demo-skirmish.ps1`, `pwsh scripts/demo-tank-duel.ps1`
+- [ ] **Missionsintro:** Kamerafahrten enden, wenn das Skript weitergeht; Blenden, Letterbox und Graustufen dauern gleich; Untertitel tippen im gleichen Tempo und stehen gleich lange; Zähler zeigen dieselbe Zeit. – `pwsh scripts/demo-mission.ps1 -Map "Maps/GC_ChemGeneral/GC_ChemGeneral.map"`, ebenso `Maps/MD_USA01/MD_USA01.map`
+- [ ] **Daueraufträge:** eine angreifende Einheit schießt im gleichen Rhythmus; Wegpunktfolgen werden abgefahren. – `pwsh scripts/demo-skirmish.ps1`
+- [ ] **Shell und Kamera:** Übergänge, Scrollen, Drehen und Zoomen sind von der Rate unberührt. – `pwsh scripts/demo-shell.ps1`
+
+Neu durch Phase 23 (Simulation oberhalb von 30 Hz; je Punkt, was sich geändert hat):
+
+- [ ] **Anfahren und Bremsen:** das Tempo ändert sich einmal je Originalbild, die Lage in jedem Tick. Fährt ein Panzer gleichmäßig an und bremst ohne Stufen oder Rucken? – `pwsh scripts/demo-tank-duel.ps1`, `pwsh scripts/demo-skirmish.ps1`
+- [ ] **Ankunft und Ausrollen:** ein Marsch endet im ersten Tick seines letzten Bildes und rollt den Rest aus. Bleibt die Einheit sauber stehen, ohne Nachzucken, und stimmt die Animation (Stehen/Fahren) mit der Bewegung überein? – `pwsh scripts/demo-skirmish.ps1`
+- [ ] **Drehen:** der Kurs dreht in Anteilen auf den Kurs des Bildes. Drehen Fahrzeuge und Soldaten stetig? – `pwsh scripts/demo-skirmish.ps1`
+- [ ] **Geschossbahnen:** Granaten und Raketen fliegen je Bild einen Bahnpunkt, in jedem Tick einen Anteil. Fliegen sie glatt, treffen sie, wo sie einschlagen, und passt die Detonation zum Einschlag? – `pwsh scripts/demo-tank-duel.ps1`
+- [ ] **Türme und Feuerfreigabe:** ein Turm entscheidet seinen Schritt je Bild und geht ihn in Teilen. Schwenkt er stetig auf das Ziel, schießt er erst, wenn er darauf zeigt, und kehrt er ruhig in die Ruhelage zurück? – `pwsh scripts/demo-tank-duel.ps1`
+- [ ] **Jets:** Rollen, Start, Kurven, Landung und Parken; der Jet schießt im Anflug. – `pwsh scripts/demo-jet-strafe.ps1`
+- [ ] **Blitzen der Übernahme:** die Kaserne blinkt beim Flaggehissen so oft wie bei 30 Hz (in der Szene 49 Blitze, vorher bei 60 Hz 99), schneller zum Ende hin, mit dem Tickton im Takt. – `pwsh scripts/demo-capture-building.ps1`
+- [ ] **Fabrikausfahrten:** die Einheit erscheint im Gebäude, fährt durch die Torseite hinaus und hält davor; die zweite und dritte stellen sich daneben; mit Sammelpunkt erst hinaus, dann dorthin (Checkliste in `docs/DEMO-SCENARIOS.md`). – `pwsh scripts/demo-factory-exits.ps1 -Faction America`, ebenso `China`, `GLA`
+- [ ] **Eigener Zielplatz:** mehrere Einheiten, auf einen Punkt geschickt, stellen sich in Reihen daneben, statt umeinander zu kreisen. – `pwsh scripts/demo-skirmish.ps1` (mehrere Einheiten wählen, ein Ziel), `pwsh scripts/demo-spectator.ps1` (Sammelpunkt der KI)
+- [ ] **Einsteigen:** Soldaten, die in einen Transporter sollen, laufen hinein statt um ihn herum. – `pwsh scripts/demo-spectator.ps1 -FactionA FactionChina -FactionB FactionAmerica`
+- [ ] **Die KI baut Fahrzeuge:** eine China-KI mit Waffenfabrik stellt Battlemaster, Gattling und Dragon ins Feld. – `pwsh scripts/demo-spectator.ps1 -FactionA FactionChina -FactionB FactionGLA`
+- [ ] **Zuschauermodus:** Tafeln, Zoom, Übersicht, Nebelsichten, KI-Kamera, Tempo, Ende (elf Punkte in `docs/SPECTATOR-MODE.md` §11). – `pwsh scripts/demo-spectator.ps1 -Seed 7 -Map "Alpine Assault" -FactionA FactionAmerica -FactionB FactionChina -Speed 2`
+- [ ] **Bedienung:** Scrollen am Bildrand im Tempo des Originals; links wählen, rechts befehlen als Vorgabe; die Bautasten `S`, `F`, `E`. – `pwsh scripts/demo-skirmish.ps1`
+- [ ] **Straßen:** die Stapelung überlappender Straßenstücke kann bei 30 und 60 Hz verschieden aussehen (bekannt, offene Entscheidung). Welche ist richtig? – `pwsh scripts/demo-skirmish.ps1` gegen `pwsh scripts/demo-skirmish.ps1 -TickRate 30`
+- [ ] **Alter Spielstand:** ein vor dem 8. Oktober (bei 30 Hz) gespeicherter Stand wird vom Client ohne Option mit einer Meldung abgelehnt und lädt mit `--tick-rate 30`. – `pwsh scripts/demo-shell.ps1`, `pwsh scripts/demo-shell.ps1 -TickRate 30`
+
 ## Was daraus folgt
 
 - Der Stand nach Phase 14 war **kein** „spielbares Produkt“: Simulation und Skripte sind belegt, die Darstellung ist es nicht. Das Phase-14-Handoff hatte den Client nicht im Umfang; dass dort 21 Warnungen als „erklärt“ standen, galt für die Warnzahl, nicht für die Sicherheit.
