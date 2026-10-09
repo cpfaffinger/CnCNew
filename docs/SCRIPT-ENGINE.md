@@ -980,7 +980,7 @@ now game time: `drive` 2,000 s, `audit` 60 s, `playthrough` 30 s.
 | `CampaignTool audit`, 30 Hz (900 ticks) and 60 Hz (1,800 ticks) | `3b44506`, `cca6f92` | 24/24 deterministic and identical after save/load, end probes victory 13/24, defeat 15/24 at both rates |
 | `CampaignTool reachability` | `3b44506`, `cca6f92` | victory clean 24/24, defeat clean 24/24 |
 | `drive`, `audit`, `reachability` at the default rate 60 Hz | trial state of the switch, **before** round 4 (`docs/TICKRATE-MIGRATION.md` §15.6.4) | 24/24 and 24/24; audit 24/24, end probes 13/24 and 15/24, 0 hits on missing types; clean 24/24 |
-| the same at the final state (`f3acc2e`, after round 4 and the switch) | – | **not measured** |
+| `reachability`, `drive` at 30 / 60 / 120 Hz, `audit` at 60 Hz | published state `39e41df` (after round 4 and the switch, clean content) | clean 24/24 and 24/24; `drive` 24/24 and 24/24 at every rate, deviation 0.00 s except `MD_USA02` defeat −1.00 s at 60 and 120 Hz; audit 24/24, end probes 13/24 and 15/24 |
 
 The cause of the one earlier deviation (`MD_USA02`: victory at 60 Hz after 340.57 instead of 90.60 s) was `SET_TIMER` in ticks against a frame literal of the map; it is fixed with the clock of the VM
 (`docs/TICKRATE-MIGRATION.md` §15.3).
@@ -998,4 +998,4 @@ exchange value rule) change the agent, which uses the `SkirmishAi` as army leade
 took a different path; the new army does not lose its mass and needed a rule of its own to defer an unreachable target (`05b2c1f`, only for an agent with mission objectives).
 Why it takes 14 minutes longer than the earlier run has not been investigated. The ticks of the row "before the AI corrections" deviate from the values of Phase 17 above (`MD_CHI01` @18,492,
 `MD_CHI02` @29,605), because Phase 22 and the factory exit lie in between. **Not measured:** the remaining 21 maps in commands-only mode after the AI corrections (the statement "3 of 24 at
-2,000 s" has not been repeated for the final state – verified are the three maps of the table, of which `MD_CHI02` only with a longer budget) and the commands-only mode at 60 Hz.
+2,000 s" has not been repeated for the final state – verified are the three maps of the table, of which `MD_CHI02` only with a longer budget). At 60 Hz (published state `39e41df`, `--minutes 34`): `MD_GLA04` victory @2,044, `MD_CHI01` victory @32,056, `MD_CHI02` not reached – the same three outcomes as at 30 Hz with that budget.

@@ -1965,7 +1965,17 @@ After the switch (`e8632bb`) and with the 60 Hz manifests (`ea52f87`; logs `veri
 | `input-manifest check` against the last 30 Hz file and against the new one | "Input manifest (30 Hz, schema 1): identical." and "Input manifest (60 Hz, schema 2): identical."; world fingerprint at 60 Hz `C81DC18A282037CD` |
 | `reference-manifest check --set full` against the last 30 Hz file (the same binary, default now 60 Hz) | 50 of 50 runs identical |
 | `reference-manifest check --set full` against the new 60 Hz file, **twice** (Windows, Release) | both times 50 of 50 runs identical |
-| Linux (WSL2) with the 60 Hz manifest, determinism matrix at 60 Hz, campaign (`drive`, `audit`, `reachability`) with the binaries after round 4 at the default rate, survey at the final state, commands-only agent at 60 Hz | **not measured** (was not available when this section was written) |
+| Linux (WSL2) with the 60 Hz manifest, determinism matrix at 60 Hz | **not measured** (Windows is the only target platform since 9 October 2026; the matrix rows are listed in `docs/DETERMINISM.md` §2c) |
+
+Closing measurements at the published state (`39e41df`, against `game/content`, Windows, Release, 9 October 2026):
+
+| Check | Result |
+|---|---|
+| `CampaignTool reachability` | victory clean 24/24, defeat clean 24/24 |
+| `CampaignTool drive`, 24 maps, 30 / 60 / 120 Hz | victory 24/24 and defeat 24/24 at every rate; deviation 0.00 s on all maps except `MD_USA02`, defeat 421.03 against 420.03 s (−1.00 s at 60 and 120 Hz; not investigated) |
+| `CampaignTool audit` at 60 Hz | 24/24 deterministic and identical after save/load; end probes victory 13/24, defeat 15/24 |
+| commands-only agent at 60 Hz (`--minutes 34`, three maps) | `MD_GLA04` victory @2,044 (the same frame as at 30 Hz), `MD_CHI01` victory @32,056 (30 Hz: @16,452, i.e. not the same frame), `MD_CHI02` **not reached** in 34 game minutes (as at 30 Hz); the other 21 maps not measured |
+| survey 30 against 60 Hz at the final state, 320 matches per rate | 305 against 305 decided, 0 failed; distribution comparison 39 of 39 checks passed; same seed: same outcome and winner 317 of 320, end within 1 s 287 of 320; pooled mean duration 9.328 against 9.430 min |
 
 **New reference values at 60 Hz** (`baselines/reference-manifest.json`, schema 2): reference match winner FactionGLA at **tick 28,260** (original frame 14,130, 7:51 min), final hash `CA05181C36C62C7A`, chain `21ACEDA63325A658`, 26,626 commands; stress test 216,000 steps (one hour of game time at 60 Hz) final hash `9EE9F730D124C3BD`, chain `F338463BE66D99C0`; 16 AI runs **14 decided**; the four 8-player runs stalemate at the budget; 27 mission runs without an outcome in 100 s. Versions unchanged: `WorldSnapshot` 10, Replay 12, `CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3. **Superseded:** tick 17,805 / `D0CA5F4EE456D6CE` / `C5EE1090E1C24D7B` (30 Hz, Phase 22) and the 30 Hz intermediate states tick 14,130 / `5BF9BB7CED6D7A35` / `56149C0105E992D7`; the stress test final hash `56882F763EABEF67` now only holds for 30 Hz.
 
