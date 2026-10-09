@@ -1,76 +1,64 @@
 # NOTICE
 
-**English summary.** CnCNew is an independent C#/.NET reimplementation of the parts of the SAGE engine runtime that
-*Command & Conquer™ Generals – Zero Hour* needs, plus a patcher that builds a local game directory from a copy of the
-game the user already owns. **This repository contains no game data**: no assets, no archives, nothing exported from
-them. You need your own legally acquired copy of the game. The code was written with reference to the source code that
-Electronic Arts Inc. released under the GNU General Public License version 3 with additional terms under section 7;
-it is a modified/derived work in the sense of those terms, **it is not the original program**, and it is licensed under
-**GPL-3.0-or-later** (`LICENSE.md`) with the upstream additional terms reproduced below. "Command & Conquer", "Generals"
-and "Zero Hour" are trademarks of Electronic Arts Inc. This project is not affiliated with, endorsed by or supported by
-Electronic Arts Inc. No trademark or publicity rights are granted or claimed. This notice is not legal advice.
+## 1. What this project is
 
----
+CnCNew is an independent reimplementation, in C#/.NET, of the parts of the SAGE engine runtime that
+*Command & Conquer™ Generals – Zero Hour* needs (simulation, data model, presentation, client on Stride/Direct3D 11), together with a patcher
+that builds a new local game directory with open files and this engine from an existing installation of the game –
+a copy of the game the user already owns. The user's installation is only read in the process, never modified.
 
-## 1. Was dieses Projekt ist
+Copyright © 2026 Christopher Pfaffinger and the contributors of this repository.
 
-CnCNew ist eine eigenständige Neuimplementierung der für *Command & Conquer™ Generals – Zero Hour* benötigten
-SAGE-Laufzeit in C#/.NET (Simulation, Datenmodell, Präsentation, Client auf Stride/Direct3D 11) samt einem Patcher,
-der aus einer vorhandenen Installation des Spiels ein neues lokales Spielverzeichnis mit offenen Dateien und dieser
-Engine erzeugt. Die Installation des Anwenders wird dabei nur gelesen, nie verändert.
+## 2. No game data
 
-Copyright © 2026 Christopher Pfaffinger und die Mitwirkenden dieses Repositorys.
+This repository contains **no game data**: no original files, no archives, no texts,
+graphics, models, maps or sounds exported from them. Whoever wants to use the software needs their own, legally acquired copy
+of the game (exactly one source version is supported: the fresh English Steam installation, see
+`docs/INSTALLATION.md`). The rights to the game data lie with Electronic Arts Inc.; this licence does not extend
+to them.
 
-## 2. Keine Spieldaten
+The only things about the game that are checked in are metadata needed for checking: paths, sizes, counts and
+SHA-256 checksums of files (`baselines/`) as well as identifiers that the data itself prescribes (names of objects,
+modules, fields, maps). Test fixtures are synthetic; they use individual `key = value` lines in the
+syntax and with identifiers of the game data, but no excerpts from original files.
 
-Dieses Repository enthält **keine Spieldaten**: keine Originaldateien, keine Archive, keine daraus exportierten Texte,
-Grafiken, Modelle, Karten oder Töne. Wer die Software benutzen will, braucht eine eigene, rechtmäßig erworbene Kopie
-des Spiels (unterstützt ist genau eine Ausgangsversion: die frische englische Steam-Installation, siehe
-`docs/INSTALLATION.md`). Die Rechte an den Spieldaten liegen bei Electronic Arts Inc.; diese Lizenz erstreckt sich
-nicht auf sie.
+## 3. Licence of this repository
 
-Eingecheckt sind über das Spiel ausschließlich Metadaten, die zur Prüfung nötig sind: Pfade, Größen, Anzahlen und
-SHA-256-Prüfsummen von Dateien (`baselines/`) sowie Bezeichner, die die Daten selbst vorgeben (Namen von Objekten,
-Modulen, Feldern, Karten). Testfixtures sind synthetisch; sie verwenden einzelne `Schlüssel = Wert`-Zeilen in der
-Syntax und mit Bezeichnern der Spieldaten, aber keine Auszüge aus Originaldateien.
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the
+Free Software Foundation, either **version 3 of the License, or
+(at your option) any later version** (SPDX: `GPL-3.0-or-later`). It is distributed without any warranty,
+without even the implied warranty of merchantability or fitness for a particular purpose. The
+licence text is in `LICENSE.md`.
 
-## 3. Lizenz dieses Repositorys
+Reason for the choice: the code was written with reference to the source code published by Electronic Arts under GPL v3
+(algorithms understood and rewritten, with a source reference to file and function in documentation and
+comments); GPL v3 is therefore the licence that fits in any case – regardless of whether the result is legally
+classified as a derived work. "Or later" instead of "version 3 only", because the file headers of the EA source code themselves
+say "either version 3 of the License, or (at your option) any later version" (counted locally: 5,497 of 5,510
+`.cpp`/`.h` files) and the community continuation GeneralsGameCode marks its `LICENSE.md` with
+`SPDX-License-Identifier: GPL-3.0-or-later`; this way the exchange of code remains possible in both directions.
 
-Dieses Programm ist freie Software: Sie können es unter den Bedingungen der GNU General Public License, wie von der
-Free Software Foundation veröffentlicht, weitergeben und/oder verändern, entweder gemäß **Version 3 der Lizenz oder
-(nach Ihrer Wahl) jeder späteren Version** (SPDX: `GPL-3.0-or-later`). Es wird ohne jede Gewährleistung verbreitet,
-auch ohne die implizite Gewährleistung der Marktgängigkeit oder der Eignung für einen bestimmten Zweck. Der
-Lizenztext steht in `LICENSE.md`.
+The licence applies to **all files of this repository** unless a file says otherwise. Individual source files
+deliberately carry no licence header.
 
-Begründung der Wahl: Der Code ist mit Blick in den von Electronic Arts unter GPL v3 veröffentlichten Quelltext
-entstanden (Algorithmen verstanden und neu geschrieben, mit Quellverweis auf Datei und Funktion in Dokumentation und
-Kommentaren); die GPL v3 ist damit die Lizenz, die in jedem Fall passt – gleichgültig, ob man das Ergebnis rechtlich
-als abgeleitetes Werk einordnet. „Oder später“ statt „nur Version 3“, weil die Dateiköpfe des EA-Quelltexts selbst
-„either version 3 of the License, or (at your option) any later version“ sagen (lokal gezählt: 5.497 von 5.510
-`.cpp`/`.h`-Dateien) und die Community-Fortführung GeneralsGameCode ihr `LICENSE.md` mit
-`SPDX-License-Identifier: GPL-3.0-or-later` kennzeichnet; so bleibt der Austausch von Code in beide Richtungen möglich.
+`LICENSE.md` is the unmodified text of the GNU GPL version 3 of 29 June 2007 (preamble, sections 0 to 17, "END OF
+TERMS AND CONDITIONS", appendix "How to Apply These Terms to Your New Programs") in the Markdown version, taken over byte for byte from
+the `LICENSE.md` of the EA release (without its introductory sentence and without the additional terms, which
+are in section 4 below); the file therefore has Windows line endings.
 
-Die Lizenz gilt für **alle Dateien dieses Repositorys**, soweit eine Datei nichts anderes sagt. Einzelne Quelldateien
-tragen bewusst keinen Lizenzkopf.
+## 4. Relationship to the source code release by Electronic Arts
 
-`LICENSE.md` ist der unveränderte Text der GNU GPL Version 3 vom 29. Juni 2007 (Präambel, Abschnitte 0 bis 17, „END OF
-TERMS AND CONDITIONS“, Anhang „How to Apply These Terms to Your New Programs“) in der Markdown-Fassung, byteweise aus
-dem `LICENSE.md` der EA-Veröffentlichung übernommen (ohne deren Einleitungssatz und ohne die Zusatzbedingungen, die
-unten in Abschnitt 4 stehen); die Datei hat deshalb Windows-Zeilenenden.
+Electronic Arts Inc. released the source code of *Command & Conquer Generals* and *Zero Hour* under GPL v3 with
+additional terms under section 7 (Copyright 2025 Electronic Arts Inc.; repository
+`electronicarts/CnC_Generals_Zero_Hour`). This project is **not the original program** and not a version of it
+that originates from Electronic Arts: it is an implementation newly written in another language that was created with reference
+to that source code and marks itself as a modified or derived work in the sense of the additional terms.
+Where an algorithm follows the original, documentation and comments name the source (file, function).
+In addition, the community projects GeneralsGameCode and GeneralsGamePatch (TheSuperHackers) were read; no code
+has been taken over from them.
 
-## 4. Verhältnis zur Quelltextveröffentlichung von Electronic Arts
-
-Electronic Arts Inc. hat den Quelltext von *Command & Conquer Generals* und *Zero Hour* unter der GPL v3 mit
-Zusatzbedingungen nach Abschnitt 7 veröffentlicht (Copyright 2025 Electronic Arts Inc.; Repository
-`electronicarts/CnC_Generals_Zero_Hour`). Dieses Projekt ist **nicht das Originalprogramm** und keine Fassung davon,
-die von Electronic Arts stammt: Es ist eine in einer anderen Sprache neu geschriebene Implementierung, die mit Bezug
-auf jenen Quelltext entstanden ist und sich im Sinn der Zusatzbedingungen als verändertes bzw. abgeleitetes Werk
-kennzeichnet. Wo ein Algorithmus dem Original folgt, nennen Dokumentation und Kommentare die Quelle (Datei, Funktion).
-Daneben wurden die Community-Projekte GeneralsGameCode und GeneralsGamePatch (TheSuperHackers) gelesen; aus ihnen ist
-kein Code übernommen.
-
-Die Zusatzbedingungen der EA-Veröffentlichung verlangen, dass sie bei jeder Weitergabe mitgegeben werden. Sie lauten
-im Original (aus `LICENSE.md` der EA-Veröffentlichung, unverändert):
+The additional terms of the EA release require that they are passed on with every conveyance. In the original
+they read (from `LICENSE.md` of the EA release, unmodified):
 
 > ## ADDITIONAL TERMS per GNU GPL Section 7
 >
@@ -110,45 +98,45 @@ im Original (aus `LICENSE.md` der EA-Veröffentlichung, unverändert):
 > CONSUMER, SO SOME OR ALL OF THE ABOVE EXCLUSIONS AND LIMITATIONS MAY NOT APPLY
 > TO YOU.
 
-Kurz auf Deutsch, ohne den Originalwortlaut zu ersetzen: Es werden keine Marken- oder Persönlichkeitsrechte
-eingeräumt; Veränderungen dürfen nicht unter einer Marke von Electronic Arts verbreitet werden und keine Verbindung zu
-Electronic Arts behaupten; Urhebervermerk und diese Bedingungen sind bei jeder Weitergabe mitzugeben; wer vertraglich
-für das Programm haftet, stellt Electronic Arts von daraus entstehender Haftung frei; die Herkunft darf nicht falsch
-dargestellt werden, veränderte Fassungen sind als solche zu kennzeichnen und nicht als das Originalprogramm
-auszugeben; dazu ein erweiterter Gewährleistungsausschluss.
+In short, without replacing the original wording: no trademark or publicity rights
+are granted; modifications may not be distributed under a trademark of Electronic Arts and may not claim any affiliation with
+Electronic Arts; the copyright notice and these terms must be included with every conveyance; whoever assumes contractual
+liability for the program indemnifies Electronic Arts against liability arising from it; the origin may not be
+misrepresented, modified versions must be marked as such and not identified as the original
+program; in addition an extended disclaimer of warranty.
 
-## 5. Marken
+## 5. Trademarks
 
-„Command & Conquer“, „Generals“ und „Zero Hour“ sind Marken von Electronic Arts Inc. Sie werden hier nur beschreibend
-verwendet, um zu sagen, wofür diese Software gedacht ist. Dieses Projekt steht in keiner Verbindung zu Electronic Arts
-Inc. oder deren verbundenen Unternehmen und wird von ihnen weder unterstützt noch gebilligt. Alle anderen Marken
-gehören ihren jeweiligen Inhabern.
+"Command & Conquer", "Generals" and "Zero Hour" are trademarks of Electronic Arts Inc. They are used here only descriptively,
+to say what this software is intended for. This project is not affiliated with Electronic Arts
+Inc. or its affiliates and is neither supported nor endorsed by them. No trademark or publicity rights are granted
+or claimed. All other trademarks belong to their respective owners.
 
-## 6. Komponenten Dritter
+## 6. Third-party components
 
-Mit einer Ausnahme liegt im Repository kein Code Dritter: `build/StrideAssetCompile.targets` enthält eine angepasste
-Kopie des MSBuild-Targets `StrideCompileAsset` aus dem Paket Stride.Core.Assets.CompilerApp 4.3.0.2507 (MIT; Vermerk
-und Lizenztext von Stride am Ende dieses Abschnitts). Alle folgenden Pakete werden beim Bauen über NuGet bezogen. Lizenzangaben aus
-den `.nuspec`-Dateien der lokal wiederhergestellten Pakete (Stand 9. Oktober 2026).
+With one exception the repository contains no third-party code: `build/StrideAssetCompile.targets` contains an adapted
+copy of the MSBuild target `StrideCompileAsset` from the package Stride.Core.Assets.CompilerApp 4.3.0.2507 (MIT; notice
+and licence text of Stride at the end of this section). All of the following packages are obtained through NuGet when building. Licence information from
+the `.nuspec` files of the locally restored packages (as of 9 October 2026).
 
-| Paket | Version | Wo referenziert | Zweck | Lizenz |
+| Package | Version | Where referenced | Purpose | Licence |
 |---|---|---|---|---|
-| Stride.Engine | 4.3.0.2507 | `src/CnCNew.Client.Stride`, `tools/CnCNew.UiRenderTool` | Engine des Clients (Direct3D 11, Ton, Eingabe) | MIT |
-| Stride.Core.Assets.CompilerApp | 4.3.0.2507 | dieselben (nur Build) | Asset-/Shadercompiler von Stride | MIT |
-| NLayer | 3.0.0 | `src/CnCNew.Audio` | MP3-Decoder | MIT |
-| Microsoft.Build.Tasks.Core | 17.14.28 | `build/StrideToolingPins.props` (nur Build, `PrivateAssets=all`) | angehobene Version eines Werkzeugpakets von Stride | MIT |
-| SSH.NET | 2026.0.0 | wie oben | wie oben | MIT |
-| NuGet.Packaging | 7.0.3 | wie oben | wie oben | Apache-2.0 |
-| NuGet.Protocol | 7.0.3 | wie oben | wie oben | Apache-2.0 |
-| System.Security.Cryptography.Xml | 10.0.12 | wie oben | wie oben | MIT |
-| .NET 10 (SDK, Laufzeit, BCL) | SDK 10.0.401 (`global.json`) | alle Projekte | Plattform | nicht lokal belegt (von Microsoft als MIT veröffentlicht) |
+| Stride.Engine | 4.3.0.2507 | `src/CnCNew.Client.Stride`, `tools/CnCNew.UiRenderTool` | engine of the client (Direct3D 11, sound, input) | MIT |
+| Stride.Core.Assets.CompilerApp | 4.3.0.2507 | the same (build only) | asset/shader compiler of Stride | MIT |
+| NLayer | 3.0.0 | `src/CnCNew.Audio` | MP3 decoder | MIT |
+| Microsoft.Build.Tasks.Core | 17.14.28 | `build/StrideToolingPins.props` (build only, `PrivateAssets=all`) | raised version of a tooling package of Stride | MIT |
+| SSH.NET | 2026.0.0 | as above | as above | MIT |
+| NuGet.Packaging | 7.0.3 | as above | as above | Apache-2.0 |
+| NuGet.Protocol | 7.0.3 | as above | as above | Apache-2.0 |
+| System.Security.Cryptography.Xml | 10.0.12 | as above | as above | MIT |
+| .NET 10 (SDK, runtime, BCL) | SDK 10.0.401 (`global.json`) | all projects | platform | not verified locally (published by Microsoft as MIT) |
 
-Stride bringt weitere, transitive Pakete und native Bibliotheken mit (unter anderem FreeType für die Textausgabe);
-deren Lizenzen sind hier nicht einzeln lokal belegt – maßgeblich ist die Datei `THIRD PARTY.md` des
-Stride-Repositorys. Wer ein Binärpaket dieser Software weitergibt, muss die Lizenztexte aller mitgelieferten
-Komponenten beilegen; ein solches Paket gibt es noch nicht.
+Stride brings along further, transitive packages and native libraries (among others FreeType for text output);
+their licences are not verified locally one by one here – authoritative is the file `THIRD PARTY.md` of the
+Stride repository. Whoever passes on a binary package of this software must enclose the licence texts of all
+components shipped with it; such a package does not exist yet.
 
-Lizenz von Stride (aus `LICENSE.md` des Stride-Repositorys, unverändert):
+Licence of Stride (from `LICENSE.md` of the Stride repository, unmodified):
 
 ```text
 The MIT License (MIT)
@@ -178,11 +166,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-Nur gelesen, nicht enthalten: der EA-Quelltext (GPL v3 mit Zusatzbedingungen, siehe oben), GeneralsGameCode
-(`GPL-3.0-or-later` mit denselben Zusatzbedingungen laut dessen `LICENSE.md`), GeneralsGamePatch (Lizenz nicht lokal
-belegt), der Quelltext von Stride (MIT).
+Only read, not contained: the EA source code (GPL v3 with additional terms, see above), GeneralsGameCode
+(`GPL-3.0-or-later` with the same additional terms according to its `LICENSE.md`), GeneralsGamePatch (licence not verified
+locally), the source code of Stride (MIT).
 
-## 7. Keine Rechtsberatung
+## 7. No legal advice
 
-Dieser Hinweis beschreibt, wie das Projekt seine Lizenzlage versteht. Er ist keine Rechtsberatung und ersetzt keine
-anwaltliche Prüfung.
+This notice describes how the project understands its licence situation. It is not legal advice and does not replace a
+review by a lawyer.
