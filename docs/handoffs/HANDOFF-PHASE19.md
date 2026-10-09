@@ -1,57 +1,57 @@
-N+1-Handoff (Phase 19): Leistung – Tickkosten echter Matches senken, ohne ein Ergebnis zu ändern
+N+1 handoff (Phase 19): Performance – lower the tick cost of real matches without changing a result
 
-Du arbeitest autonom an diesem Repository (`<repo>` = Wurzel des Arbeitsverzeichnisses). Lies zuerst `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/DETERMINISM.md`, `docs/SIMULATION-CORE.md` (Tickphasen, Zustands-Hash, Sicht, Navigation, Leistungsbudget) und den Abschlussbericht der Phase 18 mit dem Leistungsprofil.
-Voraussetzung: Phase 18 ist abgeschlossen und hat das Programm freigegeben; das Referenzmanifest (`baselines/`, `SimTool reference-manifest check`) besteht.
+You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/DETERMINISM.md`, `docs/SIMULATION-CORE.md` (tick phases, state hash, vision, navigation, performance budget) and the final report of Phase 18 with the performance profile.
+Prerequisite: Phase 18 is completed and has released the programme; the reference manifest (`baselines/`, `SimTool reference-manifest check`) passes.
 
-## Warum diese Phase so früh kommt
+## Why this phase comes so early
 
-Die Tickrate soll von 30 auf 60 Hz steigen, und acht Spieler sollen gleichzeitig spielen. Beides verdoppelt bzw. vervielfacht die Rechenlast. Außerdem müssen die Phasen 22 und 23 **jeden** Referenzwert neu erheben, und Phase 23 bei doppelter Tickzahl. Eine schnelle Simulation ist also Voraussetzung für das Ziel *und* für die Arbeit daran. Optimierungen sind am sichersten, solange die Hashes als Messlatte unverändert gelten – das ist jetzt, vor den Phasen, die sie ändern.
+The tick rate is to rise from 30 to 60 Hz, and eight players are to play at the same time. Both double or multiply the computing load. In addition Phases 22 and 23 must re-measure **every** reference value, and Phase 23 at double the tick count. A fast simulation is therefore a prerequisite for the goal *and* for the work on it. Optimisations are safest as long as the hashes apply unchanged as the yardstick – that is now, before the phases that change them.
 
-## Ehrlicher Status (Ausgangslage; maßgeblich ist das Profil aus Phase 18)
+## Honest status (starting point; the profile from Phase 18 is authoritative)
 
-**Ruhig gemessen am Ende von Phase 18 (6. Oktober 2026, Stand `b432fb7`, `scripts/perf-profile.ps1`, AMD Ryzen 7 PRO 6850U; Tabellen in `docs/PERFORMANCE.md` §6 – das ist die Ausgangslage, die Probe unten ist überholt):** 8 Spieler, Twilight Flame, 54.000 Ticks: Mittel **4,98 ms** je Tick, Median 4,29, 95 % 8,36, 99 % 13,60, Maximum **547 ms** (ein Tick, 100 % Updates), 95 KB Allokation je Tick, GC 616/68/2, Wiedergabe ohne KI 4,87 ms, Aufholtempo 6,8-fach bei 30 Hz und 3,4-fach bei 60 Hz, Endhash `0A69FC72FF6975CD`. Phasen im Mittel: Updates 3.264 µs (davon `AIUpdateInterface` 81,4 %, `TransportAIUpdate` 4,6 %, `SupplyTruckAIUpdate` 3,8 %), Vision 716, VisionHash 379, Hash 531, KI 45. Mit 4 Spielern 2,07 ms, mit 2 Spielern 0,80 ms auf derselben Karte. Missionen: `MD_USA05` 5,5–5,9 ms (Updates 2,0–2,2, Hash 1,6–1,7, Vision 0,9, VisionHash 0,56, Zielerwerb 0,3, Skripte 0,2–0,3), `MD_GLA05` 12,6–13,5 ms (Updates 4,6–5,3 mit `PointDefenseLaserUpdate` 30,6 %, Skripte 2,8–3,0 ms und 4 MB Allokation je Tick, Hash 2,2, Vision 1,5–1,7, VisionHash 0,8). Gegen die Sollwerte unten fehlt beim Mittel rund der Faktor 5, beim 99-%-Quantil 4,5, beim Maximum 68. Der Stresstest liegt ruhig bei 61 µs je Tick. Das Referenzmanifest (`SimTool reference-manifest check … --set full`, 50 Läufe) dauert auf diesem Rechner 25 bis 40 Minuten und ist die Prüfung nach jedem Commit; der Schnellsatz 5 Minuten.
+**Measured quietly at the end of Phase 18 (6 October 2026, state `b432fb7`, `scripts/perf-profile.ps1`, AMD Ryzen 7 PRO 6850U; tables in `docs/PERFORMANCE.md` §6 – this is the starting point, the probe below is superseded):** 8 players, Twilight Flame, 54,000 ticks: mean **4.98 ms** per tick, median 4.29, 95 % 8.36, 99 % 13.60, maximum **547 ms** (one tick, 100 % updates), 95 KB of allocation per tick, GC 616/68/2, playback without AI 4.87 ms, catch-up speed 6.8 times at 30 Hz and 3.4 times at 60 Hz, final hash `0A69FC72FF6975CD`. Phases on average: updates 3,264 µs (of which `AIUpdateInterface` 81.4 %, `TransportAIUpdate` 4.6 %, `SupplyTruckAIUpdate` 3.8 %), Vision 716, VisionHash 379, Hash 531, AI 45. With 4 players 2.07 ms, with 2 players 0.80 ms on the same map. Missions: `MD_USA05` 5.5–5.9 ms (updates 2.0–2.2, hash 1.6–1.7, vision 0.9, VisionHash 0.56, target acquisition 0.3, scripts 0.2–0.3), `MD_GLA05` 12.6–13.5 ms (updates 4.6–5.3 with `PointDefenseLaserUpdate` 30.6 %, scripts 2.8–3.0 ms and 4 MB of allocation per tick, hash 2.2, vision 1.5–1.7, VisionHash 0.8). Against the target values below around the factor 5 is missing for the mean, 4.5 for the 99 % quantile, 68 for the maximum. The stress test lies quietly at 61 µs per tick. The reference manifest (`SimTool reference-manifest check … --set full`, 50 runs) takes 25 to 40 minutes on this machine and is the check after every commit; the quick set 5 minutes.
 
-Erste, nicht ruhige Probe vom 5. Oktober 2026 (siehe `docs/handoffs/HANDOFF-PHASE18.md`): 8 KI-Spieler auf Twilight Flame (486 × 469 Zellen), 18.000 Ticks – Aufzeichnung 123,1 s, Wiedergabe ohne KI 163,0 s, also **rund 7 bis 9 ms je Tick** bei 218 Spielerobjekten am Ende. Der synthetische Stresstest braucht 70–80 µs je Tick bei 13.220 Objekten. Die Kosten eines echten Matches kommen demnach nicht aus der Objektzahl, sondern aus etwas, das mit Kartengröße, Spielerzahl oder echten Modulen wächst. Frühere Messungen (Phase 17-Handoff): Kampagnenaudit je Karte 2 bis 10 Minuten, Gesamtlauf über eine Stunde.
+First, not quiet probe of 5 October 2026 (see `docs/handoffs/HANDOFF-PHASE18.md`): 8 AI players on Twilight Flame (486 × 469 cells), 18,000 ticks – recording 123.1 s, playback without AI 163.0 s, that is **around 7 to 9 ms per tick** with 218 player objects at the end. The synthetic stress test needs 70–80 µs per tick with 13,220 objects. The cost of a real match accordingly does not come from the object count but from something that grows with map size, player count or real modules. Earlier measurements (Phase 17 handoff): campaign audit per map 2 to 10 minutes, total run over an hour.
 
-Unbelegte Spuren (jede erst im Profil bestätigen, nichts auf Verdacht umbauen):
+Unverified leads (confirm each in the profile first, rebuild nothing on suspicion):
 
-- Der Sicht-Hash wird alle `VisionIntervalTicks` (3) über jede Zelle für jeden Spieler berechnet (`VisionMap.cs`); bei 8 Spielern und 228.000 Zellen sind das 1,8 Millionen Zellen je Durchgang.
-- `RefreshVision()` selbst im selben Rhythmus.
-- `Describe` für jedes veränderte Objekt hasht Namen zeichenweise; die globale Beschreibung läuft in jedem Tick.
-- Zielerfassung und Verfolgung im festen Rhythmus, Wegsuche mit zeitweise blockierten Zellen, Kollisionsverteilung, die KI-Beobachtung alle 5 Ticks über `EntitiesVisibleTo`.
-- LINQ und Allokationen in heißen Pfaden (jede Speicherbereinigung ist im Lockstep ein Stocken, das aufgeholt werden muss).
+- The vision hash is computed every `VisionIntervalTicks` (3) over every cell for every player (`VisionMap.cs`); with 8 players and 228,000 cells that is 1.8 million cells per pass.
+- `RefreshVision()` itself in the same rhythm.
+- `Describe` for every changed object hashes names character by character; the global description runs in every tick.
+- Target acquisition and pursuit in a fixed rhythm, pathfinding with temporarily blocked cells, collision distribution, the AI observation every 5 ticks via `EntitiesVisibleTo`.
+- LINQ and allocations in hot paths (in lockstep every garbage collection is a stall that must be caught up).
 
-## Ziel (Vorschlag; mit den Zahlen aus Phase 18 bestätigen oder begründet ändern)
+## Goal (proposal; confirm with the numbers from Phase 18 or change with justification)
 
-Auf dem Entwicklungsrechner, 8 Spieler, 30 Spielminuten, große Karte, Release:
+On the development machine, 8 players, 30 game minutes, large map, Release:
 
-| Größe | Soll |
+| Quantity | Target |
 |---|---|
-| Tickzeit Mittel | ≤ 1,0 ms |
-| Tickzeit 99-%-Quantil | ≤ 3 ms |
-| Tickzeit Maximum | ≤ 8 ms |
-| Aufholtempo (Wiedergabe mit KI) | ≥ 16-fache Echtzeit bei 30 Hz (entspricht ≥ 8-fach bei 60 Hz) |
-| Speicherbereinigung im laufenden Match | keine Gen-2-Läufe, Allokation je Tick im Ruhezustand nahe 0 |
-| Kampagnenaudit je Karte (900 Ticks) | unter 1 Minute |
+| Tick time mean | ≤ 1.0 ms |
+| Tick time 99 % quantile | ≤ 3 ms |
+| Tick time maximum | ≤ 8 ms |
+| Catch-up speed (playback with AI) | ≥ 16 times real time at 30 Hz (corresponds to ≥ 8 times at 60 Hz) |
+| Garbage collection in the running match | no Gen 2 runs, allocation per tick at rest close to 0 |
+| Campaign audit per map (900 ticks) | under 1 minute |
 
-Die Zahlen stehen für: die Simulation belegt bei 60 Hz höchstens einen kleinen Teil eines Kerns, ein wiedereinsteigender Client holt 30 Minuten in wenigen Minuten auf, und die Neuerhebung der Referenzwerte dauert Minuten statt Stunden.
+The numbers stand for: the simulation occupies at most a small part of one core at 60 Hz, a rejoining client catches up 30 minutes in a few minutes, and the re-measurement of the reference values takes minutes instead of hours.
 
-## Auftrag (in dieser Reihenfolge)
+## Brief (in this order)
 
-1. **Ausgangszustand reproduzieren.** Build, Tests, Manifest (`check --set full`), das Leistungsprofil aus Phase 18 auf ruhiger Maschine wiederholen. Ohne reproduzierte Ausgangszahlen keine Optimierung.
-2. **Profil lesen und eine Rangliste schreiben:** je Kostenstelle Anteil an der Tickzeit, wie sie mit Spielerzahl, Kartengröße und Objektzahl wächst, und ob sie sich ohne Ergebnisänderung senken lässt.
-3. **Kostenstellen einzeln abtragen, größte zuerst.** Für jede: Messung vorher, Änderung, `reference-manifest check` (muss unverändert bestehen), Messung nachher, ein Commit. Zulässige Mittel: inkrementelle statt vollständiger Berechnung (z. B. Sicht-Hash als fortgeschriebene Summe je Spieler, nur geänderte Zellen), Vorberechnung unveränderlicher Werte (Namenshashes), Datenstrukturen ohne Allokation, das Vermeiden wiederholter Arbeit im selben Tick.
-4. **Der Zustands-Hash selbst.** Sein Wert darf sich in dieser Phase nicht ändern (das Manifest hängt daran). Wenn die Messung zeigt, dass nur eine andere Hashkonstruktion das Ziel erreicht, ist das eine eigene, benannte Entscheidung: Manifest mit Begründung neu schreiben, alle Läufe vorher/nachher auf identische *Ergebnisse* (Sieger, Endtick, Objektlisten) prüfen.
-5. **Lastverteilung nur deterministisch.** Wenn eine Arbeit über mehrere Ticks verteilt werden muss (Wegsuche, KI), dann nach festen Zählgrößen (Knoten je Tick, Reihenfolge nach ID), niemals nach Wandzeit. Eine solche Verteilung ändert Ergebnisse und ist deshalb keine „Optimierung“, sondern eine vermessene Verhaltensänderung in einem eigenen Commit mit neu geschriebenem Manifest – nur wenn das Ziel ohne sie nicht erreichbar ist.
-6. **Keine Threads im Simulationskern** (`SourceRules`). Ob der Client die Simulation auf einen eigenen Thread legen sollte, ist nicht Gegenstand dieser Phase; festhalten, was dem im Weg stünde (die Präsentation liest über `SimulationQueries` und den `FrameProjector` die laufende Welt).
-7. **Spielschicht mitmessen.** `LiveGame.SyncAfterTick` (Projektion, Effekte, Nebel) läuft je Tick; seine Kosten je Tick mit 8 Spielern messen und die größten Stellen abtragen, soweit bild- und hashneutral (Golden-Hashes der Captures unverändert).
-8. **Messwerkzeug dauerhaft machen.** `SimTool perf` schreibt eine maschinenlesbare Zusammenfassung; ein Vergleichslauf (`perf-compare alt neu`) zeigt Verschlechterungen. Es wird bewusst **kein** fehlschlagender Test daraus (Zeiten sind rechnerabhängig); der Lauf gehört aber ab jetzt zum Phasenabschluss.
-9. **Doku:** `docs/SIMULATION-CORE.md` (Leistungsbudget, Kostenstellen, was geändert wurde und warum es ergebnisneutral ist), `docs/MULTIPLAYER-PLAN.md` (Register), `CLAUDE.md` (Befehle, neue Messwerte), README, ROADMAP, IMPLEMENTATION-PLAN.
+1. **Reproduce the starting state.** Build, tests, manifest (`check --set full`), repeat the performance profile from Phase 18 on a quiet machine. Without reproduced starting numbers no optimisation.
+2. **Read the profile and write a ranking:** per cost centre its share of the tick time, how it grows with player count, map size and object count, and whether it can be lowered without a change of results.
+3. **Work off cost centres individually, largest first.** For each: measurement before, change, `reference-manifest check` (must pass unchanged), measurement after, one commit. Permissible means: incremental instead of complete computation (e.g. vision hash as a running sum per player, only changed cells), precomputation of immutable values (name hashes), data structures without allocation, avoiding repeated work in the same tick.
+4. **The state hash itself.** Its value must not change in this phase (the manifest depends on it). If the measurement shows that only a different hash construction reaches the goal, that is a separate, named decision: rewrite the manifest with justification, check all runs before/after for identical *results* (winner, end tick, object lists).
+5. **Load distribution only deterministically.** If a piece of work must be distributed over several ticks (pathfinding, AI), then by fixed counting quantities (nodes per tick, order by ID), never by wall-clock time. Such a distribution changes results and is therefore not an "optimisation" but a measured behaviour change in a commit of its own with a rewritten manifest – only if the goal is not reachable without it.
+6. **No threads in the simulation core** (`SourceRules`). Whether the client should put the simulation on a thread of its own is not the subject of this phase; record what would stand in the way of that (the presentation reads the running world via `SimulationQueries` and the `FrameProjector`).
+7. **Measure the game layer too.** `LiveGame.SyncAfterTick` (projection, effects, fog) runs per tick; measure its cost per tick with 8 players and work off the largest places, as far as frame- and hash-neutral (golden hashes of the captures unchanged).
+8. **Make the measuring tool permanent.** `SimTool perf` writes a machine-readable summary; a comparison run (`perf-compare alt neu`) shows degradations. Deliberately **no** failing test is made of it (times are machine-dependent); but from now on the run belongs to the completion of a phase.
+9. **Docs:** `docs/SIMULATION-CORE.md` (performance budget, cost centres, what was changed and why it is result-neutral), `docs/MULTIPLAYER-PLAN.md` (register), `CLAUDE.md` (commands, new measured values), README, ROADMAP, IMPLEMENTATION-PLAN.
 
-## Nicht verhandelbare Regeln
+## Non-negotiable rules
 
-`CLAUDE.md` und `docs/MULTIPLAYER-PLAN.md` §6. Für diese Phase: **Nach jedem Commit besteht das unveränderte Referenzmanifest.** Jede Ausnahme ist ein eigener Commit mit Begründung, Vorher/Nachher-Werten und Ergebnisvergleich. Messungen nur auf ruhiger Maschine, jede Zahl aus einem Lauf, Release-Werkzeuge vor jeder Messung neu gebaut.
+`CLAUDE.md` and `docs/MULTIPLAYER-PLAN.md` §6. For this phase: **After every commit the unchanged reference manifest passes.** Every exception is a commit of its own with justification, before/after values and a comparison of results. Measurements only on a quiet machine, every number from a run, Release tools rebuilt before every measurement.
 
-## Abnahme
+## Acceptance
 
-Die Sollwerte sind erreicht oder die verbleibenden Kostenstellen sind einzeln benannt, mit Anteil und dem Grund, warum sie ohne Ergebnisänderung nicht weiter sinken. Das Manifest ist unverändert (oder jede Änderung einzeln begründet). Der Abschlussbericht enthält die Tabelle vorher/nachher je Kostenstelle mit Commit-Hashes und die Hochrechnung auf 60 Hz. Am Ende die „Ausgangslage“ in `docs/handoffs/HANDOFF-PHASE20.md` aktualisieren.
+The target values are reached or the remaining cost centres are named individually, with their share and the reason why they do not drop further without a change of results. The manifest is unchanged (or every change justified individually). The final report contains the table before/after per cost centre with commit hashes and the projection to 60 Hz. At the end update the "starting point" in `docs/handoffs/HANDOFF-PHASE20.md`.
