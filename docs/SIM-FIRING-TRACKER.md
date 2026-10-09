@@ -1,93 +1,93 @@
-# Feuerstufen, Vorangriffsverzögerung und beschädigte Locomotoren in der Simulation
+# Continuous-fire levels, pre-attack delay and damaged locomotors in the simulation
 
-**Hinweis (9. Oktober 2026, Phase 23): historisch, 30 Hz.** Tickzahlen, Siegticks und Hashes in diesem Dokument sind bei 30 Hz und an ihrem damaligen Stand gemessen und als Referenzwerte überholt (maßgeblich: `baselines/reference-manifest.json`, seit `ea52f87` bei 60 Hz). Tickangaben gelten als Zahl von Originalbildern weiter. Oberhalb von 30 Hz fallen die Feuerstufen ein Bild (nicht einen Tick) nach der Frist, ein Magazin ohne Nachladezeit wartet ein Bild, und die Blitzphase der Übernahme läuft einmal je Bild (4 / 4 / 4 Blitze); beschädigte Locomotoren haben eigene Größen je Bild: `docs/rate-invariance/RATE-INVARIANCE-TURRETS.md` (`165e6d8`, `20d4766`, `d923cea`), `docs/rate-invariance/RATE-INVARIANCE-GROUND.md`.
+**Note (9 October 2026, Phase 23): historical, 30 Hz.** Tick counts, victory ticks and hashes in this document were measured at 30 Hz and at their state at the time and are superseded as reference values (authoritative: `baselines/reference-manifest.json`, at 60 Hz since `ea52f87`). Tick figures remain valid as a number of original frames. Above 30 Hz the continuous-fire levels drop one frame (not one tick) after the deadline, a clip without reload time waits one frame, and the flash phase of the capture runs once per frame (4 / 4 / 4 flashes); damaged locomotors have their own quantities per frame: `docs/rate-invariance/RATE-INVARIANCE-TURRETS.md` (`165e6d8`, `20d4766`, `d923cea`), `docs/rate-invariance/RATE-INVARIANCE-GROUND.md`.
 
-Stand 4. Oktober 2026 (Messwerte neu gemessen). Quellen der Referenz: `GeneralsMD/Code/GameEngine/Source/GameLogic/Object/FiringTracker.cpp` (`shotFired`, `update`, `speedUp`, `coolDown`),
+As of 4 October 2026 (measured values re-measured). Sources of the reference: `GeneralsMD/Code/GameEngine/Source/GameLogic/Object/FiringTracker.cpp` (`shotFired`, `update`, `speedUp`, `coolDown`),
 `Object/Weapon.cpp` (`Weapon::preFireWeapon`, `getPreAttackDelay`, `getStatus`, `WeaponTemplate::getPreAttackDelay`), `Object/Object.cpp` (`preFireCurrentWeapon`, `adjustModelConditionForWeaponStatus`),
 `AI/AIStates.cpp` (`AIAttackFireWeaponState::onEnter/update/onExit`), `Object/Locomotor.cpp` (`getMaxSpeedForCondition`, `getMaxTurnRate`, `getMaxAcceleration`, `LocomotorTemplate::validate`),
-`Object/Update/SpecialAbilityUpdate.cpp` (`initiateIntentToDoSpecialPower`, `continuePreparation`). Nichts davon ist kopiert; die Abläufe sind verstanden und neu geschrieben.
+`Object/Update/SpecialAbilityUpdate.cpp` (`initiateIntentToDoSpecialPower`, `continuePreparation`). None of it is copied; the sequences are understood and rewritten.
 
-## 1. Befund
+## 1. Finding
 
-Drei Verhaltensweisen der Waffen und der Bewegung waren nur als Bild oder gar nicht vorhanden:
+Three behaviours of the weapons and of the movement existed only as a picture or not at all:
 
-* `CONTINUOUS_FIRE_SLOW/MEAN/FAST` leitete die Darstellung aus den Schussereignissen ab (`UnitConditionTracker`); die Simulation kannte die Stufen nicht. Der Gattling-Panzer drehte den Lauf schneller, schoss aber
-  nie schneller (`WeaponBonus = CONTINUOUS_FIRE_MEAN RATE_OF_FIRE 200%` der Waffe blieb ohne Wirkung).
-* `PreAttackDelay` (29 Retailwaffen: 250 ms bis 3.000 ms, 20 je Schuss, 5 je Angriff, 4 je Magazin) wurde nicht gelesen: jeder Schuss fiel im Tick des Befehls. `PREATTACK_A/B/C` konnte deshalb kein Modellzustand sein.
-* `SpeedDamaged`, `TurnRateDamaged`, `AccelerationDamaged`, `LiftDamaged` (507 Zeilen in `Locomotor.ini`) wurden nicht gelesen: schwer beschädigte Einheiten fuhren und flogen wie neue.
+* `CONTINUOUS_FIRE_SLOW/MEAN/FAST` was derived by the presentation from the shot events (`UnitConditionTracker`); the simulation did not know the levels. The Gattling tank spun the barrel faster, but never
+  fired faster (`WeaponBonus = CONTINUOUS_FIRE_MEAN RATE_OF_FIRE 200%` of the weapon had no effect).
+* `PreAttackDelay` (29 retail weapons: 250 ms to 3,000 ms, 20 per shot, 5 per attack, 4 per clip) was not read: every shot fell in the tick of the command. `PREATTACK_A/B/C` could therefore not be a model condition.
+* `SpeedDamaged`, `TurnRateDamaged`, `AccelerationDamaged`, `LiftDamaged` (507 lines in `Locomotor.ini`) were not read: heavily damaged units drove and flew like new ones.
 
-## 2. Feuerstufen (`SimulationWorld.FiringTracker.cs`)
+## 2. Continuous-fire levels (`SimulationWorld.FiringTracker.cs`)
 
-Zustand je Objekt (`FiringState`, nur vorhanden, solange etwas gesetzt ist): Schüsse in Folge, Opfer, Abkühl-Tick, „langsam“. Die Stufen „mittel“ und „schnell“ sind die Waffenbonusbedingungen
-`CONTINUOUS_FIRE_MEAN`/`CONTINUOUS_FIRE_FAST` des Objekts (`Entity.WeaponBonusConditions`, exklusiv, nicht kumulativ); die Feuerrate folgt damit ohne weiteren Code aus `WeaponInfo.DelayBetweenShotsWith`.
+State per object (`FiringState`, present only while something is set): consecutive shots, victim, cool-down tick, "slow". The levels "mean" and "fast" are the weapon bonus conditions
+`CONTINUOUS_FIRE_MEAN`/`CONTINUOUS_FIRE_FAST` of the object (`Entity.WeaponBonusConditions`, exclusive, not cumulative); the rate of fire thus follows from `WeaponInfo.DelayBetweenShotsWith` without further code.
 
-| Ablauf | Umsetzung | Referenz |
+| Sequence | Implementation | Reference |
 |---|---|---|
-| Schuss auf dasselbe Opfer | Zähler + 1 | `shotFired` |
-| Schuss auf ein anderes Opfer innerhalb der Auslaufzeit | Zähler + 1, neues Opfer („we will not spin down“) | `shotFired` (`now < m_frameToStartCooldown`) |
-| sonst | Zähler = 1 | `shotFired` |
-| Abkühl-Tick | nächster möglicher Schuss + `ContinuousFireCoast`; ohne Auslaufzeit 0 (kein Zeitablauf) | `getPossibleNextShotFrame() + coast` |
-| Zähler > `ContinuousFireOne` | keine Stufe → mittel | `speedUp` |
-| Zähler > `ContinuousFireTwo` | mittel → schnell | `speedUp` |
-| Zähler unter der Schwelle der aktuellen Stufe | zurück auf nichts, „langsam“ gesetzt | `coolDown` |
-| Tick nach dem Abkühl-Tick | Stufe fällt direkt auf nichts („straight to zero“), „langsam“ für eine Sekunde, dann Ende | `update`, `coolDown` |
+| Shot at the same victim | counter + 1 | `shotFired` |
+| Shot at another victim within the coast time | counter + 1, new victim ("we will not spin down") | `shotFired` (`now < m_frameToStartCooldown`) |
+| otherwise | counter = 1 | `shotFired` |
+| Cool-down tick | next possible shot + `ContinuousFireCoast`; without coast time 0 (no timeout) | `getPossibleNextShotFrame() + coast` |
+| Counter > `ContinuousFireOne` | no level → mean | `speedUp` |
+| Counter > `ContinuousFireTwo` | mean → fast | `speedUp` |
+| Counter below the threshold of the current level | back to nothing, "slow" set | `coolDown` |
+| Tick after the cool-down tick | level drops directly to nothing ("straight to zero"), "slow" for one second, then the end | `update`, `coolDown` |
 
-Der Tracker wird **nach** dem Schuss benachrichtigt (`Object::fireCurrentWeapon`): der Schuss, der eine Stufe erreicht, ist noch mit der alten Verzögerung getaktet. Getestet (`FiringTrackerSpinsUpCoastsAndCoolsDown`):
-Abstände 18, 18, 18, 18, 9, 9, 9, 4 … Ticks bei 600 ms, `ContinuousFireOne = 3`, `ContinuousFireTwo = 6`; Zielwechsel in der Auslaufzeit hält die Stufe; nach dem letzten Schuss 30–36 Ticks schnell, 31 Ticks
-langsam, dann nichts; ein Snapshot mitten im Lauf setzt identisch fort.
+The tracker is notified **after** the shot (`Object::fireCurrentWeapon`): the shot that reaches a level is still timed with the old delay. Tested (`FiringTrackerSpinsUpCoastsAndCoolsDown`):
+intervals 18, 18, 18, 18, 9, 9, 9, 4 … ticks at 600 ms, `ContinuousFireOne = 3`, `ContinuousFireTwo = 6`; a target change within the coast time keeps the level; after the last shot 30–36 ticks fast, 31 ticks
+slow, then nothing; a snapshot in the middle of the run continues identically.
 
-Die Darstellung liest die Stufe aus der Simulation (`SimulationWorld.ContinuousFireOf`); die eigene Zählung des `UnitConditionTracker` ist entfernt, die Stufen überleben jetzt das Laden eines Spielstands.
+The presentation reads the level from the simulation (`SimulationWorld.ContinuousFireOf`); the `UnitConditionTracker`'s own counting is removed, the levels now survive loading a saved game.
 
-Nicht umgesetzt (Teile desselben Trackers der Referenz): die Dauerfeuer-Tonschleife (`FireSoundLoopTime`, Ton), `AutoReloadWhenIdle` (`m_frameToForceReload`) und der Bonus `TARGET_FAERIE_FIRE`.
+Not implemented (parts of the same tracker of the reference): the continuous-fire sound loop (`FireSoundLoopTime`, sound), `AutoReloadWhenIdle` (`m_frameToForceReload`) and the bonus `TARGET_FAERIE_FIRE`.
 
-## 3. Vorangriffsverzögerung (`PreAttackDone`)
+## 3. Pre-attack delay (`PreAttackDone`)
 
-`WeaponInfo.PreAttackDelayTicks` und `PreAttackType` (`PER_SHOT` – der Konstruktorwert –, `PER_ATTACK`, `PER_CLIP`; ein unbekannter Wert ist ein Fehler beim Katalogbau). Beide Schlüssel bleiben in `CnCNew.Data`
-`deferred-field` und werden wie `ContinuousFireOne` aus dem Quelltext des Felds gelesen (Basislinie unverändert).
+`WeaponInfo.PreAttackDelayTicks` and `PreAttackType` (`PER_SHOT` – the constructor value –, `PER_ATTACK`, `PER_CLIP`; an unknown value is an error when the catalog is built). Both keys remain `deferred-field` in `CnCNew.Data`
+and are read from the source text of the field like `ContinuousFireOne` (baseline unchanged).
 
-Ein `FireWeaponCommand` (Spieler oder KI), dessen Waffe sonst feuern würde – gewählt, in Reichweite, bereit, Turm ausgerichtet –, beginnt stattdessen das Aufziehen: Slot, Opfer und Endtick stehen im `FiringState`,
-der Befehl bleibt **angenommen** (kein `CommandRejected`), es fällt kein Schuss. Ein späterer Befehl desselben Angriffs feuert, sobald der Endtick erreicht ist. Die Verzögerung entfällt
-(`Weapon::getPreAttackDelay`: „Look for a reason to return zero“)
+A `FireWeaponCommand` (player or AI) whose weapon would otherwise fire – selected, in range, ready, turret aligned – starts the wind-up instead: slot, victim and end tick are in the `FiringState`,
+the command remains **accepted** (no `CommandRejected`), no shot falls. A later command of the same attack fires as soon as the end tick is reached. The delay is dropped
+(`Weapon::getPreAttackDelay`: "Look for a reason to return zero")
 
-* bei `PER_CLIP`, wenn das Magazin angebrochen ist,
-* bei `PER_ATTACK`, wenn schon ein Schuss in Folge auf dieses Opfer gefallen ist (der Zähler aus Abschnitt 2; er wird deshalb auch für solche Waffen geführt),
+* for `PER_CLIP`, if the clip has been started,
+* for `PER_ATTACK`, if a consecutive shot has already fallen on this victim (the counter from section 2; it is therefore kept for such weapons as well),
 
-und sie skaliert mit dem Waffenbonus `PRE_ATTACK`. Abbruch: ein neuer Befehl an die Einheit (`EndAttack`, wie `AIAttackFireWeaponState::onExit`: `setPreAttackFinishedFrame(0)`), ein anderes Opfer, oder – als
-Näherung, weil die Simulation das Ende eines Angriffs ohne Befehl nicht sieht – eine Sekunde ohne Folgebefehl nach dem Endtick. Ein einmaliger Skript-Knopfbefehl (`FireOrigin.Script`) und modulgesteuerte Schüsse
-(`TryFireWeaponSlot`, `TryFireActiveWeapon`, Flugzeuge) feuern wie vorher ohne Aufziehen.
+and it scales with the weapon bonus `PRE_ATTACK`. Cancellation: a new command to the unit (`EndAttack`, like `AIAttackFireWeaponState::onExit`: `setPreAttackFinishedFrame(0)`), another victim, or – as
+an approximation, because the simulation does not see the end of an attack without a command – one second without a follow-up command after the end tick. A one-off script button command (`FireOrigin.Script`) and module-driven shots
+(`TryFireWeaponSlot`, `TryFireActiveWeapon`, aircraft) fire as before without a wind-up.
 
-`SimulationWorld.PreAttackSlotOf(entity)` nennt den aufziehenden Slot; `ConditionDeriver.Weapon` setzt daraus `PREATTACK_A/B/C` mit `USING_WEAPON_A/B/C`. Getestet (`PreAttackDelayWindsUpBeforeTheShot`,
-`UnitConditionTests.PreAttack`): je Schuss 15 Ticks vor jedem Schuss (Schüsse bei 15 und 60), je Angriff nur vor dem ersten Schuss auf ein Opfer und erneut nach einem Zielwechsel, je Magazin vor dem ersten von drei
-Schüssen; ein Bewegungsbefehl verwirft das Aufziehen; Snapshot mitten im Aufziehen; Bildfolge `PREATTACK_A > FIRING_A > BETWEEN_FIRING_SHOTS_A`.
+`SimulationWorld.PreAttackSlotOf(entity)` names the slot that is winding up; from it `ConditionDeriver.Weapon` sets `PREATTACK_A/B/C` with `USING_WEAPON_A/B/C`. Tested (`PreAttackDelayWindsUpBeforeTheShot`,
+`UnitConditionTests.PreAttack`): per shot 15 ticks before every shot (shots at 15 and 60), per attack only before the first shot at a victim and again after a target change, per clip before the first of three
+shots; a move command discards the wind-up; snapshot in the middle of the wind-up; picture sequence `PREATTACK_A > FIRING_A > BETWEEN_FIRING_SHOTS_A`.
 
-## 4. Beschädigte Locomotoren
+## 4. Damaged locomotors
 
-`LocomotorInfo.Damaged` trägt die Konstanten mit `SpeedDamaged`, `TurnRateDamaged`, `AccelerationDamaged`, `LiftDamaged` (ein fehlender Schlüssel behält den Normalwert, wie `LocomotorTemplate::validate`; fehlen alle, gibt
-es keine beschädigte Form). `AIUpdateInterface.ActiveLocomotor` liefert sie, sobald der Körper mindestens so beschädigt ist wie `GameData.ini MovementPenaltyDamageState` (Retail und Konstruktorwert: `REALLYDAMAGED`);
-Jets wählen erst ihren Satz (Rollen, Angriff, Rückflug) und dann dessen beschädigte Form. Getestet (`DamagedLocomotorSlowsAReallyDamagedObject`): bei 50 % Leben unverändert, bei 20 % ein Drittel der Strecke.
+`LocomotorInfo.Damaged` carries the constants with `SpeedDamaged`, `TurnRateDamaged`, `AccelerationDamaged`, `LiftDamaged` (a missing key keeps the normal value, like `LocomotorTemplate::validate`; if all are missing, there
+is no damaged form). `AIUpdateInterface.ActiveLocomotor` supplies them as soon as the body is at least as damaged as `GameData.ini MovementPenaltyDamageState` (retail and constructor value: `REALLYDAMAGED`);
+jets first choose their set (taxiing, attack, return flight) and then its damaged form. Tested (`DamagedLocomotorSlowsAReallyDamagedObject`): unchanged at 50 % health, one third of the distance at 20 %.
 
-Nicht erfasst: Objekte, die ihren Locomotor nicht über `AIUpdateInterface` lesen (Projektile, das Spectre-Gunship, `WorldEffectModules`).
+Not covered: objects that do not read their locomotor through `AIUpdateInterface` (projectiles, the Spectre gunship, `WorldEffectModules`).
 
-## 5. Fähigkeit beendet Bewegung und Angriff, Blinken der Übernahme
+## 5. Ability ends movement and attack, flashing of the capture
 
-* `SpecialAbilityUpdate::initiateIntentToDoSpecialPower` ruft `aiIdle` („Clear any old AI before starting this special ability“): jede Einheitenfähigkeit (ein `SpecialAbilityUpdate` zur benutzten Kraft) hält die
-  Einheit an und beendet ihren Angriff; vorher tat das nur die gestufte Gebäudeübernahme (`docs/SIM-TURRET-AIM.md` §6).
-* `SimEventKind.CaptureFlash` (Gebäude, einnehmende Einheit): `continuePreparation` mit `DoCaptureFX` erhöht eine Phase je Tick um ein Drittel des abgelaufenen Anteils der Vorbereitung; jedes Mal, wenn ihr ganzzahliger
-  Teil von ungerade auf gerade wechselt, blinkt das Gebäude. Bei 60 Ticks Vorbereitung vier Blinker mit Abständen 11, 8, 8 Ticks (`StagedCaptureFlashesTheBuilding`). Farbe und Ton sind Sache der Darstellung
+* `SpecialAbilityUpdate::initiateIntentToDoSpecialPower` calls `aiIdle` ("Clear any old AI before starting this special ability"): every unit ability (a `SpecialAbilityUpdate` for the power used) stops the
+  unit and ends its attack; before, only the staged building capture did that (`docs/SIM-TURRET-AIM.md` §6).
+* `SimEventKind.CaptureFlash` (building, capturing unit): `continuePreparation` with `DoCaptureFX` increases a phase per tick by one third of the elapsed share of the preparation; every time its integer
+  part changes from odd to even, the building flashes. With 60 ticks of preparation four flashes with intervals 11, 8, 8 ticks (`StagedCaptureFlashesTheBuilding`). Color and sound are a matter of the presentation
   (`docs/SIM-STAGED-CAPTURE.md`).
 
-## 6. Snapshot, Hash, Versionen
+## 6. Snapshot, hash, versions
 
-`FiringState` wird nur geschrieben, solange er vom Ruhezustand abweicht (`firing`), die Vorangriffsfelder nur während des Aufziehens, die Blinkphase nur während einer Übernahme; `WorldSnapshot.Version` bleibt **9**,
-ältere Snapshots laden unverändert. Befehlstabelle (13) und Replay-Format (10) sind unverändert. Läufe mit Dauerfeuer- oder Vorangriffswaffen haben andere Hashes als vorher.
+`FiringState` is written only while it differs from the idle state (`firing`), the pre-attack fields only during the wind-up, the flash phase only during a capture; `WorldSnapshot.Version` stays **9**,
+older snapshots load unchanged. Command table (13) and replay format (10) are unchanged. Runs with continuous-fire or pre-attack weapons have different hashes than before.
 
-| Lauf | vorher (`2b854d3`) | jetzt |
+| Run | before (`2b854d3`) | now |
 |---|---|---|
-| `SimTool reference-match` | Sieger FactionGLA, Tick 15.000, Endhash `01C01E3B91EAE18C`, Kette `045DA5259A104F01` | nach Feuerstufen und Vorangriff Tick 14.490, `1104C4CD97A0D4CA`; mit beschädigten Locomotoren Tick **13.500**, Endhash `0946FB676DEC615C`, Kette `EA6D12F180930D71` |
-| `SimTool stress` (216.000 Ticks, synthetisch) | Endhash `56882F763EABEF67` | **unverändert** |
+| `SimTool reference-match` | winner FactionGLA, tick 15,000, final hash `01C01E3B91EAE18C`, chain `045DA5259A104F01` | after continuous-fire levels and pre-attack tick 14,490, `1104C4CD97A0D4CA`; with damaged locomotors tick **13,500**, final hash `0946FB676DEC615C`, chain `EA6D12F180930D71` |
+| `SimTool stress` (216,000 ticks, synthetic) | final hash `56882F763EABEF67` | **unchanged** |
 
-## 7. Bekannte Grenzen
+## 7. Known limits
 
-* Das Aufziehen kennt den Angriffszustand der Referenz nicht: sein Ende ohne Befehl wird über eine Sekunde ohne Folgebefehl angenähert; `LeechRangeWeapon` (Reichweite bleibt während des Aufziehens gültig) fehlt.
-* `PreAttackDelay`/`PreAttackType`/`ContinuousFire*` sind in `CnCNew.Data` weiter generisch getippt (`deferred-field`); der Katalog prüft sie beim Bau streng.
-* Sicht- und Tonwirkung (schnellerer Lauf, Aufzieh-Animation, Blinken) braucht die Sichtprüfung durch einen Menschen.
+* The wind-up does not know the attack state of the reference: its end without a command is approximated by one second without a follow-up command; `LeechRangeWeapon` (range stays valid during the wind-up) is missing.
+* `PreAttackDelay`/`PreAttackType`/`ContinuousFire*` are still typed generically in `CnCNew.Data` (`deferred-field`); the catalog checks them strictly when it is built.
+* The visual and audible effect (faster barrel, wind-up animation, flashing) needs the visual check by a human.
