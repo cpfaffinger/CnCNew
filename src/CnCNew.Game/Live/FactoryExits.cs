@@ -80,10 +80,10 @@ public static class FactoryExits
         foreach (var site in sites)
             for (var number = 1; number <= OrdersPerBuilding; number++)
                 orders.Add(new ScenarioOrder(30, site.Tag, ScenarioOrderKind.Produce, UnitTag(site, number), Template: site.Produces));
-        var what = string.Join(", ", sites.Select(site => $"{site.Template} baut {OrdersPerBuilding}-mal {site.Produces}"));
+        var what = string.Join(", ", sites.Select(site => $"{site.Template} builds {site.Produces} {OrdersPerBuilding} times"));
         return new DemoScenario(
-            NameOf(faction, building), all ? $"Fabrikausfahrten {side}" : $"Fabrikausfahrt {sites[0].Template}",
-            $"{what}. Zu sehen: wo die Einheit erscheint, ob das Tor vorher offen ist, ob sie durch die Torseite (im Bild rechts unten) hinausfährt und wo sie stehen bleibt.",
+            NameOf(faction, building), all ? $"Factory exits {side}" : $"Factory exit {sites[0].Template}",
+            $"{what}. To be seen: where the unit appears, whether the door is open beforehand, whether it drives out through the door side (lower right of the image) and where it stops.",
             all ? 1800 : 1500, [..units], [..orders],
             all ? 40 : 45, 0, ExitCameraAngleDegrees, all ? 50f : 40f, all ? 560f : 230f)
         {

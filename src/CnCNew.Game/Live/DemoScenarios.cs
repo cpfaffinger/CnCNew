@@ -14,8 +14,8 @@ public static class DemoScenarios
 
     /// <summary>A Ranger walks up to an enemy barracks, plants the flag (unpack, raise flag, pack) and the building changes sides.</summary>
     public static DemoScenario CaptureBuilding { get; } = new(
-        "capture-building", "Infanterie nimmt ein Gebäude ein",
-        "Ein Ranger geht zur gegnerischen Kaserne, packt aus, hisst die Flagge (RAISING_FLAG) und packt wieder ein; danach gehört das Gebäude ihm.",
+        "capture-building", "Infantry captures a building",
+        "A Ranger walks to the enemy barracks, unpacks, raises the flag (RAISING_FLAG) and packs up again; after that the building is his.",
         1500,
         [
             new("ranger", "AmericaInfantryRanger", 1, 0, 0, 0f),
@@ -34,8 +34,8 @@ public static class DemoScenarios
     /// after its recentre time. A Sentry Drone stands far outside everybody's weapon range and glances around while idle (<c>TurretAIIdleScanState</c>).
     /// </summary>
     public static DemoScenario TankDuel { get; } = new(
-        "tank-duel", "Panzer gegen Panzer",
-        "Ein Crusader und ein Battlemaster stehen schräg zueinander. Beide Türme müssen sich dem Gegner zuwenden, bevor geschossen wird, und bleiben bis zum Tod des Gegners auf ihn gerichtet (auch zwischen den Schüssen); danach drehen sie nach der Rückstellzeit zurück. Die Sentry-Drohne weit abseits dreht den Turm im Leerlauf zufällig umher. Das Audit misst den Winkelfehler in jedem Tick.",
+        "tank-duel", "Tank against tank",
+        "A Crusader and a Battlemaster stand at an angle to each other. Both turrets have to turn to the opponent before a shot is fired, and stay aimed at it until the opponent dies (also between the shots); after that they turn back after the recentre time. The Sentry Drone far off to the side turns its turret around at random while idle. The audit measures the angle error in every tick.",
         900,
         [
             new("crusader", "AmericaTankCrusader", 1, 0, 0, 0f),
@@ -50,8 +50,8 @@ public static class DemoScenarios
 
     /// <summary>Raptors are built at an airfield, take off on the attack order, fly to two Missile Defenders and are shot at; what survives lands and reloads.</summary>
     public static DemoScenario JetStrafe { get; } = new(
-        "jet-strafe", "Kampfjet gegen Raketentruppen",
-        "Der Flugplatz baut zwei Raptors. Sie starten auf den Angriffsbefehl, fliegen zu zwei Raketentruppen (Missile Defender), werden beschossen, feuern ihre Raketen ab, fliegen zurück, landen und laden nach.",
+        "jet-strafe", "Jet against missile troopers",
+        "The airfield builds two Raptors. They take off on the attack order, fly to two missile troopers (Missile Defender), are shot at, fire their missiles, fly back, land and reload.",
         3600,
         [
             new("airfield", "AmericaAirfield", 1, 0, 0, 0f),

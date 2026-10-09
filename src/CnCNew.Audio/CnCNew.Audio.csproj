@@ -6,7 +6,7 @@
     <ProjectReference Include="../CnCNew.Data/CnCNew.Data.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Managed MPEG audio decoder, MIT licence; justification in docs/AUDIO.md ("Neue Abhängigkeit NLayer"). -->
+    <!-- Managed MPEG audio decoder, MIT licence; justification in docs/AUDIO.md (the section on the new dependency NLayer). -->
     <PackageReference Include="NLayer" Version="3.0.0" />
   </ItemGroup>
 </Project>
