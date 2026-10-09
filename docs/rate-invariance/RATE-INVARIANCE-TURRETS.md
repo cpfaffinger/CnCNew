@@ -11,7 +11,7 @@ beschreiben an den hier genannten Stellen noch den Stand davor.
 
 ## 1. Ergebnis in Zahlen
 
-Größen außerhalb der Toleranz (ohne die bei jeder Rate ungemessenen), Release, Realdaten `.local/content`, `SimTool rate-compare --group …`:
+Größen außerhalb der Toleranz (ohne die bei jeder Rate ungemessenen), Release, Realdaten `game/content`, `SimTool rate-compare --group …`:
 
 | Gruppe | Größen | vorher 60 Hz / 120 Hz (gesamt) | nachher 60 Hz / 120 Hz (gesamt) | was übrig ist |
 |---|---|---|---|---|

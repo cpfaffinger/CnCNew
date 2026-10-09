@@ -126,7 +126,7 @@ Beide Modi laufen nur, wenn die Variable gesetzt ist, und ändern nichts an der 
 
 ## Gemessene Werte
 
-Headless-Capture, `.local/content`, Karte „Alpine Assault“, 1600×900, `dotnet build src/CnCNew.Client.Stride -c
+Headless-Capture, `game/content`, Karte „Alpine Assault“, 1600×900, `dotnet build src/CnCNew.Client.Stride -c
 Release` (0 Fehler, gleiche 21 Warnungen wie vor diesem Paket – alle bekannten `NU1901`/`NU1903`- und
 AssetCompiler/YamlAssemblyRegistry-Hinweise, keine neuen):
 

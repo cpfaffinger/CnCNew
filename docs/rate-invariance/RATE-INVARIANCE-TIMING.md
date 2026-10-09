@@ -4,7 +4,7 @@ Phase 23, Schritt 3 (`docs/handoffs/HANDOFF-PHASE23.md`), Ausgangsstand `7b54374
 Ursachen: `docs/TICKRATE-MIGRATION.md` §5.3 ohne die Zeilen der Türme und des Feuerzählers, die dem Paket zugewiesenen Zeilen aus §5.4 und die dazugehörigen neuen Befunde der
 Raten-Äquivalenz-Suite (`docs/SIMULATION-CORE.md` §39). Die gemeinsamen Dokumente sind nicht angefasst; was hier steht, ist dort beim Zusammenführen nachzutragen.
 
-Alles ist gemessen mit `SimTool rate-compare --group <gruppe>` (Release, Realdaten `.local/content`, Kataloge ohne Modellgeometrie) und mit den Tests in
+Alles ist gemessen mit `SimTool rate-compare --group <gruppe>` (Release, Realdaten `game/content`, Kataloge ohne Modellgeometrie) und mit den Tests in
 `tests/CnCNew.Simulation.Tests/Tests.RateInvariance.Timing.cs`. Zeiten in Sekunden, immer in der Reihenfolge 30 / 60 / 120 Hz. **Kein Mensch hat das Spiel bei 60 Hz gesehen.**
 
 ## 1. Ergebnis

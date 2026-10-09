@@ -230,7 +230,7 @@ Nachweise:
 |---|---|---|
 | `Determinism D3/D4/D5/D7/D8 …`, `Determinism rules …` | `tests/CnCNew.Simulation.Tests` (`Tests.Determinism.cs`, `Tests.SourceRules.cs`) | `dotnet run --project tests/CnCNew.Simulation.Tests [-- --only "Determinism"]` |
 | `SingleBitsMatchTheRuntimeCast`, `FingerprintEncodingIsPinned` | `tests/CnCNew.Data.Tests` | `dotnet run --project tests/CnCNew.Data.Tests` |
-| `DeterminismTests` (D1 synthetisch ohne Inhalt; D1 golden, D2/D7, D3, D4, D5, D8 auf echten Daten) | `tests/CnCNew.Game.Tests` | `dotnet build -c Release tests/CnCNew.Game.Tests`, dann `dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --only DeterminismTests --content-dir .local/content` |
+| `DeterminismTests` (D1 synthetisch ohne Inhalt; D1 golden, D2/D7, D3, D4, D5, D8 auf echten Daten) | `tests/CnCNew.Game.Tests` | `dotnet build -c Release tests/CnCNew.Game.Tests`, dann `dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --only DeterminismTests --content-dir game/content` |
 | dasselbe, volle Läufe (jede wiederhergestellte Welt bis zum Ende; alle 45 Kampagnen-/Challenge-Karten in jedem Tick geprüft) | | `… --determinism-full` (rund eine Stunde); `--determinism-only D8` wählt die Tests eines Befunds |
 
 ## 13. Was nach diesem Punkt offen ist

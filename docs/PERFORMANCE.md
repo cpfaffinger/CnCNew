@@ -78,9 +78,9 @@ als 0,0 oder 0,1 µs; ihre Mittelwerte sind nur der Größenordnung nach zu lese
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf .local/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --replay --csv <datei.csv>
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf .local/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions FactionChina,FactionGLA --ticks 54000 --replay
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf-mission .local/content --map "Maps/MD_USA05/MD_USA05.map" --ticks 3000 --csv <datei.csv>
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --replay --csv <datei.csv>
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf game/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions FactionChina,FactionGLA --ticks 54000 --replay
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf-mission game/content --map "Maps/MD_USA05/MD_USA05.map" --ticks 3000 --csv <datei.csv>
 pwsh scripts/perf-profile.ps1 [-Ticks 54000] [-MissionTicks 3000,9000] [-Only 'large-*'] [-OutDir <verzeichnis>] [-TimeoutMinutes 60]
 ```
 

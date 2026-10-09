@@ -41,7 +41,7 @@ liefern die Sichten.
 
 ## Formate (am Realbestand verifiziert)
 
-Gemessen mit `dotnet run -c Release --project tests/CnCNew.Audio.Tests -- --content-dir .local/content`:
+Gemessen mit `dotnet run -c Release --project tests/CnCNew.Audio.Tests -- --content-dir game/content`:
 8.531 von 8.531 Audiodateien unter `Data/Audio` dekodieren (989,1 MiB, 553,6 Minuten Audio,
 47,2 s, rund 700-fache Echtzeit).
 

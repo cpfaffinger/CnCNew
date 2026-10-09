@@ -16,10 +16,10 @@ Geändert ist nur Testcode. Nichts unter `src/` oder `tools/`, keine Datei unter
 ## 1. Aufruf
 
 ```powershell
-dotnet run --project tests/CnCNew.Ui.Tests -- --tick-rate 60 [--content-dir .local/content]
-dotnet run --project tests/CnCNew.Presentation.Tests -- --tick-rate 60 [--content-dir .local/content]
+dotnet run --project tests/CnCNew.Ui.Tests -- --tick-rate 60 [--content-dir game/content]
+dotnet run --project tests/CnCNew.Presentation.Tests -- --tick-rate 60 [--content-dir game/content]
 dotnet build -c Release tests/CnCNew.Game.Tests
-dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --content-dir .local/content --tick-rate 60 [--only <Suite>[,<Suite>]]
+dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --content-dir game/content --tick-rate 60 [--only <Suite>[,<Suite>]]
 $env:CNCNEW_TEST_TICK_RATE = '60'   # dasselbe über die Umgebung; die Option hat Vorrang
 ```
 
@@ -142,7 +142,7 @@ Folgen für die Lesart:
 
 Stand 8. Oktober 2026, Ausgang `4d9d9e5` (die Simulation ist dort nach der Raten-Äquivalenz-Suite bei 30, 60 und 120 Hz dasselbe Spiel), Endstand der Zweig dieses
 Pakets. Die Standardrate ist **nicht** umgestellt (`GameData.DefaultSessionRate` bleibt 30 Hz; die Umstellung ist ein eigener Commit des Projektinhabers). Gemessen ist mit
-`--tick-rate 30|60|120`, Release, Realdaten `.local/content`. „Bild“ heißt Logikbild des Originals (1/30 s), „Tick“ ein Schritt der Simulation.
+`--tick-rate 30|60|120`, Release, Realdaten `game/content`. „Bild“ heißt Logikbild des Originals (1/30 s), „Tick“ ein Schritt der Simulation.
 **Nichts davon hat ein Mensch gesehen oder gehört.**
 
 Klassen: **T** – die Erwartung oder das Schrittmaß des Tests unterstellt „ein Tick ist ein Bild“; **P** – Code der Präsentation, der Spielschicht oder eines Werkzeugs unterstellt

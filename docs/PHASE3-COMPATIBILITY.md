@@ -11,7 +11,7 @@ neu erzeugt, sobald sich getypte Felder verschoben haben (zuletzt **746 Einträg
 prüft sie gegen Drift:
 
 ```powershell
-dotnet run --project tools/CnCNew.IniTool -- compat-check .local/content baselines/compatibility.json
+dotnet run --project tools/CnCNew.IniTool -- compat-check game/content baselines/compatibility.json
 ```
 
 Der Befehl endet bei jedem neuen (`NEW`), fehlenden (`MISSING`) oder in Häufigkeit, Besitzerart oder Ziel geänderten

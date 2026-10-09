@@ -103,8 +103,8 @@ vorigen Phase vergleichen.
 
 ```powershell
 dotnet build -c Release tools/CnCNew.PresentationTool
-dotnet run -c Release --no-build --project tools/CnCNew.PresentationTool -- sync-perf .local/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud --json <datei.json> --label "<commit>"
-dotnet run -c Release --no-build --project tools/CnCNew.PresentationTool -- sync-perf .local/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud --digest
+dotnet run -c Release --no-build --project tools/CnCNew.PresentationTool -- sync-perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud --json <datei.json> --label "<commit>"
+dotnet run -c Release --no-build --project tools/CnCNew.PresentationTool -- sync-perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud --digest
 ```
 
 Optionen: `--map`, `--players N` (die ersten N spielbaren Fraktionen, wie `SimTool perf`) oder `--factions A,B,…`, `--ticks`, `--seed`,
@@ -418,10 +418,10 @@ muss der Client ohnehin auf den Tick warten); ein eigener Thread hilft vor allem
 Für `CLAUDE.md` (Abschnitt „Build, Tests, Audits“):
 
 ```powershell
-dotnet run -c Release --project tools/CnCNew.SimTool -- perf .local/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --replay --json <datei.json> --label <commit>
-dotnet run -c Release --project tools/CnCNew.SimTool -- perf-mission .local/content --map "Maps/MD_USA05/MD_USA05.map" --ticks 3000 --json <datei.json> --label <commit>
+dotnet run -c Release --project tools/CnCNew.SimTool -- perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --replay --json <datei.json> --label <commit>
+dotnet run -c Release --project tools/CnCNew.SimTool -- perf-mission game/content --map "Maps/MD_USA05/MD_USA05.map" --ticks 3000 --json <datei.json> --label <commit>
 dotnet run -c Release --project tools/CnCNew.SimTool -- perf-compare <alt.json> <neu.json> [--threshold-percent N] [--min-us N] [--all] [--allow-different-hash] [--out <datei>]
-dotnet run -c Release --project tools/CnCNew.PresentationTool -- sync-perf .local/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud [--digest] [--json <datei.json>] [--label <commit>]
+dotnet run -c Release --project tools/CnCNew.PresentationTool -- sync-perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud [--digest] [--json <datei.json>] [--label <commit>]
 pwsh scripts/perf-profile.ps1 [-Label <commit>] [-OutDir <verzeichnis>] [-Ticks 54000] [-Only 'large-*']
 pwsh scripts/perf-compare.ps1 <altesVerzeichnis> <neuesVerzeichnis> [-ThresholdPercent 10] [-AllowDifferentHash]
 ```

@@ -142,7 +142,7 @@ Windows, im Release-Build, zweimal hintereinander.
 Braucht einen Menschen. Nichts davon wird committet; Originaldaten verlassen den eigenen Besitz nicht (lokal kopieren, kein Upload).
 
 1. Auf dem Entwicklungsrechner: `dotnet publish tools/CnCNew.SimTool -c Release -r win-x64 --self-contained true -o <ordner>\simtool` (für Linux `-r linux-x64`, für ARM `-r win-arm64`/`linux-arm64`).
-2. Auf einen Datenträger kopieren: `<ordner>\simtool`, das Verzeichnis `.local\content` (rund 25.682 Dateien) und `baselines\input-manifest.json`, `baselines\reference-manifest.json`.
+2. Auf einen Datenträger kopieren: `<ordner>\simtool`, das Verzeichnis `game\content` (rund 25.682 Dateien) und `baselines\input-manifest.json`, `baselines\reference-manifest.json`.
 3. Auf dem zweiten Rechner (kein .NET nötig), im Verzeichnis mit den drei Teilen:
    ```
    simtool\CnCNew.SimTool input-manifest check content input-manifest.json

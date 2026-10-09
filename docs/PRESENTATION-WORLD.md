@@ -8,7 +8,7 @@ hier nicht vor. Abhängigkeiten: `CnCNew.Data`, `CnCNew.Simulation` (nur `Terrai
 Formats, Content und Archive werden nicht referenziert.
 
 Alle Zahlen in diesem Dokument sind mit `PresentationTool terrain-audit` und `CnCNew.Presentation.Tests --content-dir`
-auf `.local/content` gemessen (Stand 30. September 2026).
+auf `game/content` gemessen (Stand 30. September 2026).
 
 ## 1. Konventionen
 

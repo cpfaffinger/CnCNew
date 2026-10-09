@@ -164,7 +164,7 @@ void UpdateMinimap(CommandList commandList, IReadOnlyList<MinimapDot> dots,
 `FogTexture`/`FogUvScale` sind für den kommenden Objekt-Layer gedacht (Einheiten/Gebäude im
 selben Nebel abdunkeln); `UpdateMinimap` für den HUD-/UI-Layer.
 
-## Messwerte (diese Phase, `--content-dir .local/content`, Release)
+## Messwerte (diese Phase, `--content-dir game/content`, Release)
 
 Elf Karten sondiert (Attach-Log), sechs davon mit Screenshots visuell geprüft (Wüste, Schnee,
 Wasser/Fluss, Klippen, siehe unten):

@@ -67,7 +67,7 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   erfordert eine nichtleere `TriggeredBy`-Maske im Schlüssel (alle oder irgendeine, je `RequiresAllTriggers`), keine
   gesetzte `ConflictsWith`-Maske und noch nicht ausgeführt; `AttemptUpgrade` entfernt zuerst die in `RemovesUpgrades`
   genannten Upgrades, wendet dann den Moduleffekt an und markiert sich als ausgeführt.
-- **Elf `*Upgrade`-Module**, alle gegen den echten Bestand (`.local/content`) geprüft:
+- **Elf `*Upgrade`-Module**, alle gegen den echten Bestand (`game/content`) geprüft:
 
   | Modul | Effekt | Quelle |
   |---|---|---|
@@ -100,7 +100,7 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   Bedingungen: `Conditions = None` (Standard) und `Conditions = PLAYER_UPGRADE`. Seit Phase 10 kommen `VETERAN`/`ELITE`/`HERO` als weitere,
   je für sich stehende Bedingungen hinzu (`ObjectTemplate.VeteranArmor`/`VeteranWeapon`, ausgewählt nach `Entity.VeterancyLevel` in
   `SimulationWorld.ActiveArmor`/`ActiveWeaponIndex`); nicht modelliert bleibt die Kombination mehrerer gleichzeitiger Bedingungen (ein Satz, der
-  z. B. `PLAYER_UPGRADE` UND `VETERAN` zugleich verlangt) – geprüft gegen `.local/content`: **kein einziges `ArmorSet`/`WeaponSet` der
+  z. B. `PLAYER_UPGRADE` UND `VETERAN` zugleich verlangt) – geprüft gegen `game/content`: **kein einziges `ArmorSet`/`WeaponSet` der
   Retail-Zero-Hour-Daten kombiniert eine Bedingung mit der Veteranenstufe**, die Einschränkung hat also auf den echten Bestand keine Auswirkung.
   Die Veteranenstufe wirkte zuvor nur über Waffenbonus und Gesundheit (§6h), jetzt zusätzlich über die Satzauswahl selbst.
 - **`FireWeaponCommand`:** direkter, expliziter Schuss (kein automatisches Zielsuchen, keine Sichtlinie). Ablehnungen:
@@ -735,7 +735,7 @@ Lager, steht das als `supply note` im Bericht; der Generator zählt `SupplyDeliv
 Ersatzgebäude, weil ihre Startbasis ein ungebundenes Modul enthält), einer wegen fehlender Einheit ausgeschlossenen und einer
 unspielbaren Fraktion. Das Match endet mit einem Sieger, das Replay läuft durch Datei, zwei Läufe und Snapshot identisch.
 
-**Retail-Daten.** Neu gemessen (`SimTool reference-match .local/content`, Basisdaten ohne Kartenoverlays,
+**Retail-Daten.** Neu gemessen (`SimTool reference-match game/content`, Basisdaten ohne Kartenoverlays,
 Fingerabdruck `9F5307957A55CD46`): **alle 13 spielbaren Fraktionen nehmen teil**, jede mit ihrer **echten Kommandozentrale**
 (`AmericaCommandCenter`, `Infa_ChinaCommandCenter`, `GLACommandCenter`, …), und **kein Startobjekt wird übersprungen**
 (`StartObjectsSkipped` = 0, vom Realdatentest erzwungen; die früheren 13 Bauarbeiter-Fahrzeuge und GLA-Arbeiter sind seit `DozerAIUpdate`/`WorkerAIUpdate` instanziierbar).

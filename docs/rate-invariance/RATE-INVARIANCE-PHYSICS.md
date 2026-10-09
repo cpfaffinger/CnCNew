@@ -4,7 +4,7 @@ Stand 8. Oktober 2026, Zweig `worktree-agent-a1997b956694a9a6c`, Ausgang `7b5437
 Korrekturpaketen der Phase 23 (`docs/handoffs/HANDOFF-PHASE23.md`, Schritt 3). Es beschreibt nur, was dieses Paket geändert und gemessen hat; die
 gemeinsamen Dokumente (`docs/TICKRATE-MIGRATION.md`, `docs/SIMULATION-CORE.md`) sind unberührt und werden beim Zusammenführen fortgeschrieben.
 
-**Nichts davon hat ein Mensch gesehen.** Alle Zahlen stammen aus Läufen dieses Tages (Release, Realdaten `.local/content`).
+**Nichts davon hat ein Mensch gesehen.** Alle Zahlen stammen aus Läufen dieses Tages (Release, Realdaten `game/content`).
 
 ## 1. Prinzip
 

@@ -1416,7 +1416,7 @@ Regel, Helfer und die vollständige Liste stehen in §14.5. Verfahren: zuerst di
 #### 14.9.2 Probelauf der Simulationstests bei 60 Hz
 
 ```powershell
-dotnet run --project tests/CnCNew.Simulation.Tests -- --tick-rate 60 [--content-dir .local/content] [--only TEXT]
+dotnet run --project tests/CnCNew.Simulation.Tests -- --tick-rate 60 [--content-dir game/content] [--only TEXT]
 $env:CNCNEW_TEST_TICK_RATE = '60'   # dasselbe über die Umgebung
 ```
 
@@ -1475,7 +1475,7 @@ Laufzeit je Karte: Zielfahrer 13 bis 134 s (`MD_CHI04`), Audit 9 bis 57 s (`MD_U
 
 ### 15.2 Die Ausfälle der Simulationstests bei 120 Hz, einzeln eingeordnet
 
-Probelauf am Stand `20ffce9` (Release, `--tick-rate N --content-dir .local/content`, 429 Tests): bei 60 Hz **6** Fehlschläge (die sechs aus §14.9.2), bei 120 Hz **14** (§14.9.2 nannte 13 ohne Realdaten). Jeder der 14 ist gelesen und, wo es ging, durch Einzelläufe bei allen drei Raten vermessen. Klassen: **T** – nur die Erwartung des Tests zählt Ticks, die Simulation verhält sich in Spielzeit gleich; **S** – die Simulation hängt an der Schrittweite (Stelle in §5); **C** – chaotischer Ausgang eines ganzen Matchs. Ein Fall der Festkomma-Auflösung ist nicht darunter.
+Probelauf am Stand `20ffce9` (Release, `--tick-rate N --content-dir game/content`, 429 Tests): bei 60 Hz **6** Fehlschläge (die sechs aus §14.9.2), bei 120 Hz **14** (§14.9.2 nannte 13 ohne Realdaten). Jeder der 14 ist gelesen und, wo es ging, durch Einzelläufe bei allen drei Raten vermessen. Klassen: **T** – nur die Erwartung des Tests zählt Ticks, die Simulation verhält sich in Spielzeit gleich; **S** – die Simulation hängt an der Schrittweite (Stelle in §5); **C** – chaotischer Ausgang eines ganzen Matchs. Ein Fall der Festkomma-Auflösung ist nicht darunter.
 
 | Nr. | Test | Klasse | Ursache | §5 | 30 / 60 / 120 Hz (gemessen) | Verbleib |
 |---|---|---|---|---|---|---|
@@ -1717,7 +1717,7 @@ Am Ende der Vorbereitung (Standard noch 30 Hz) dazu: `Simulation.Tests` ohne Opt
 
 #### 15.6.2 Testprogramme mit angewandter Umstellung
 
-Release-Build, Realdaten `.local/content`; gezählt sind Testzeilen aus den Einzelprotokollen (bestanden / fehlgeschlagen). „ohne Option“ ist jetzt 60 Hz.
+Release-Build, Realdaten `game/content`; gezählt sind Testzeilen aus den Einzelprotokollen (bestanden / fehlgeschlagen). „ohne Option“ ist jetzt 60 Hz.
 
 | Programm | ohne Option (60 Hz) | `--tick-rate 30` | `--tick-rate 120` |
 |---|---|---|---|
@@ -1863,8 +1863,8 @@ Eingecheckte Dateien mit Golden-Werten, die an der Standardrate hängen, sind ge
 
 | Datei | Hängt an der Rate | Neu erzeugen mit |
 |---|---|---|
-| `baselines/reference-manifest.json` | ja (jeder Lauf) | `dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest write .local/content baselines/reference-manifest.json --set full --jobs 5` (ohne `--tick-rate`: Standardrate) |
-| `baselines/input-manifest.json` | ja (Welt-Fingerabdruck und Katalog-Hashes; Karten und Definitionen nicht) | `… -- input-manifest write .local/content baselines/input-manifest.json` |
+| `baselines/reference-manifest.json` | ja (jeder Lauf) | `dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest write game/content baselines/reference-manifest.json --set full --jobs 5` (ohne `--tick-rate`: Standardrate) |
+| `baselines/input-manifest.json` | ja (Welt-Fingerabdruck und Katalog-Hashes; Karten und Definitionen nicht) | `… -- input-manifest write game/content baselines/input-manifest.json` |
 | `baselines/compatibility.json` | nein (INI-Kompatibilität) | – |
 | `tests/CnCNew.Game.Tests/baselines/screens.txt`, `hud-drawlist-1280x720.sha256` | nein, bei 30, 60 und 120 Hz gemessen | – |
 
@@ -1876,7 +1876,7 @@ Prüfsummen, die nur in Dokumenttabellen stehen (kein Test liest sie) und bei 60
 | `scenario-audit tank-duel` | §14.2 (30 Hz damals: `8FD85E76B599D514…`) | wie oben | `25BC3C786F8C3837` |
 | `scenario-audit jet-strafe` | §14.2 (30 Hz damals: `67DE0DFB83346317…`) | wie oben | `163DB77C14A0A257` |
 | neun `exit-<fraktion>-<gebäude>` | – (bisher nicht tabelliert) | `pwsh scripts/audit-scenarios.ps1 -Scenario exits` | america: `C5CC32D01893815B` (barracks), `DA3F60F789A09001` (commandcenter), `B338020853A0437F` (warfactory); china: `A45494EBAEEC4085`, `5D9A45FF9EA02CF5`, `0A935EA49EA0379B`; gla: `4BB751EE1C437CBB`, `E92AFB4EACE5C9B5`, `17604EE390E972A4` |
-| `sync-perf --digest` | `docs/PERF-GAME-LAYER.md` (Vorher/Nachher-Vergleich, kein fester Wert) | `dotnet run -c Release --project tools/CnCNew.PresentationTool -- sync-perf .local/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --hud --digest` (Standardbudget jetzt zehn Minuten Spielzeit: 36.000 Ticks) | `EE731E8D792C759A…`, kein Sieger im Budget |
+| `sync-perf --digest` | `docs/PERF-GAME-LAYER.md` (Vorher/Nachher-Vergleich, kein fester Wert) | `dotnet run -c Release --project tools/CnCNew.PresentationTool -- sync-perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --hud --digest` (Standardbudget jetzt zehn Minuten Spielzeit: 36.000 Ticks) | `EE731E8D792C759A…`, kein Sieger im Budget |
 | Manifest von `scripts/capture-world.ps1` (19 Szenen), Filmstreifen von `scripts/capture-scenarios.ps1` (77 Bilder) | temporäre Manifeste der Skripte (beschrieben in `docs/CLIENT-OBJECTS.md`, `docs/DEMO-SCENARIOS.md`), nicht eingecheckt | die beiden Skripte ohne `-TickRate` | **nicht neu erzeugt** (Straßenbefund `docs/rate-invariance/RATE-SWITCH-OUTER-TESTS.md` §7.7 vorher zu entscheiden) |
 | `fx-audit` | `docs/PRESENTATION-FX.md` (Prüfsumme des Ausführungsdurchlaufs) | nennt `SimulationRate.Original` selbst | bleibt bei 30 Hz |
 

@@ -84,54 +84,54 @@ dotnet run --project tests/CnCNew.Images.Tests
 dotnet run --project tests/CnCNew.Formats.Tests
 dotnet run --project tests/CnCNew.Import.Tests
 dotnet run --project tests/CnCNew.Simulation.Tests
-dotnet run --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content
+dotnet run --project tests/CnCNew.Simulation.Tests -- --content-dir game/content
 dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --long
-dotnet run --project tests/CnCNew.Data.Tests -- --content-dir .local/content
-dotnet run --project tests/CnCNew.W3D.Tests -- --content-dir .local/content
+dotnet run --project tests/CnCNew.Data.Tests -- --content-dir game/content
+dotnet run --project tests/CnCNew.W3D.Tests -- --content-dir game/content
 dotnet run --project tests/CnCNew.Ui.Tests
 dotnet run --project tests/CnCNew.Presentation.Tests
-dotnet run --project tests/CnCNew.Game.Tests -- --content-dir .local/content
-dotnet run --project tests/CnCNew.Audio.Tests -- --content-dir .local/content
+dotnet run --project tests/CnCNew.Game.Tests -- --content-dir game/content
+dotnet run --project tests/CnCNew.Audio.Tests -- --content-dir game/content
 
-dotnet run --project tools/CnCNew.AssetTool -- verify .local/content
-dotnet run --project tools/CnCNew.IniTool -- audit .local/content
-dotnet run --project tools/CnCNew.IniTool -- compile .local/content <ausgabe.json> [--maps include|exclude]
-dotnet run --project tools/CnCNew.IniTool -- compat-check .local/content baselines/compatibility.json
-dotnet run --project tools/CnCNew.IniTool -- load-order-report .local/content
-dotnet run --project tools/CnCNew.IniTool -- debt-report .local/content
+dotnet run --project tools/CnCNew.AssetTool -- verify game/content
+dotnet run --project tools/CnCNew.IniTool -- audit game/content
+dotnet run --project tools/CnCNew.IniTool -- compile game/content <ausgabe.json> [--maps include|exclude]
+dotnet run --project tools/CnCNew.IniTool -- compat-check game/content baselines/compatibility.json
+dotnet run --project tools/CnCNew.IniTool -- load-order-report game/content
+dotnet run --project tools/CnCNew.IniTool -- debt-report game/content
 dotnet run -c Release --project tools/CnCNew.SimTool -- stress
-dotnet run -c Release --project tools/CnCNew.SimTool -- audit-modules .local/content
-dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage .local/content
-dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match .local/content
-dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match .local/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions China,GLA --max-ticks 45000
-dotnet run --project tools/CnCNew.MapTool -- audit .local/content
-dotnet run --project tools/CnCNew.ImageTool -- audit-tga .local/content
-dotnet run --project tools/CnCNew.W3dTool -- audit .local/content
-dotnet run --project tools/CnCNew.W3dTool -- audit-skeletons .local/content
-dotnet run -c Release --project tools/CnCNew.SimTool -- mission-run .local/content --map "Maps/USA01/USA01.map" --ticks 3000
-dotnet run --project tools/CnCNew.CampaignTool -- list .local/content
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/content --ticks 900
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough .local/content --campaign CHALLENGE_0
-dotnet run --project tools/CnCNew.CampaignTool -- reachability .local/content [--campaign NAME] [--difficulty easy|normal|hard]
-dotnet run --project tools/CnCNew.CampaignTool -- sides .local/content --campaign CHALLENGE_0
-dotnet run --project tools/CnCNew.CampaignTool -- script .local/content --map MD_CHI04 --name END_Final_
-dotnet run --project tools/CnCNew.PresentationTool -- object-audit .local/content
-dotnet run --project tools/CnCNew.PresentationTool -- fx-audit .local/content
-dotnet run --project tools/CnCNew.PresentationTool -- terrain-audit .local/content
-dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir .local/content --model-path Art/W3D/ABArFrcCmd.W3D
-dotnet run --project src/CnCNew.Client.Stride -c Release -- --match "Maps/Alpine Assault/Alpine Assault.map" --content-dir .local/content
-dotnet run --project src/CnCNew.Client.Stride -c Release -- --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/content
-dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content --only RateEquivalence --rate-report <datei außerhalb des Repos>
-dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --tick-rate 30|60|120 [--content-dir .local/content]
-dotnet run -c Release --project tests/CnCNew.Game.Tests -- --content-dir .local/content --tick-rate 30|60|120
-dotnet run --project tests/CnCNew.Presentation.Tests -- --tick-rate 30|60|120 [--content-dir .local/content]
-dotnet run -c Release --project tools/CnCNew.SimTool -- rate-compare .local/content --list | --group <gruppe> | "<fall>"
-dotnet run -c Release --project tools/CnCNew.SimTool -- rate-compare .local/content --ai-diff A,B --fields [--rates 30,60] | --reference-diff --fields | --map-diff A,B --map "<Karte>" --fields
-dotnet run -c Release --project tools/CnCNew.SimTool -- ai-survey .local/content --out <tsv> [--tick-rate 30] [--seeds 20] [--minutes 25] [--jobs N]
+dotnet run -c Release --project tools/CnCNew.SimTool -- audit-modules game/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage game/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match game/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match game/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions China,GLA --max-ticks 45000
+dotnet run --project tools/CnCNew.MapTool -- audit game/content
+dotnet run --project tools/CnCNew.ImageTool -- audit-tga game/content
+dotnet run --project tools/CnCNew.W3dTool -- audit game/content
+dotnet run --project tools/CnCNew.W3dTool -- audit-skeletons game/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- mission-run game/content --map "Maps/USA01/USA01.map" --ticks 3000
+dotnet run --project tools/CnCNew.CampaignTool -- list game/content
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit game/content --ticks 900
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough game/content --campaign CHALLENGE_0
+dotnet run --project tools/CnCNew.CampaignTool -- reachability game/content [--campaign NAME] [--difficulty easy|normal|hard]
+dotnet run --project tools/CnCNew.CampaignTool -- sides game/content --campaign CHALLENGE_0
+dotnet run --project tools/CnCNew.CampaignTool -- script game/content --map MD_CHI04 --name END_Final_
+dotnet run --project tools/CnCNew.PresentationTool -- object-audit game/content
+dotnet run --project tools/CnCNew.PresentationTool -- fx-audit game/content
+dotnet run --project tools/CnCNew.PresentationTool -- terrain-audit game/content
+dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir game/content --model-path Art/W3D/ABArFrcCmd.W3D
+dotnet run --project src/CnCNew.Client.Stride -c Release -- --match "Maps/Alpine Assault/Alpine Assault.map" --content-dir game/content
+dotnet run --project src/CnCNew.Client.Stride -c Release -- --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir game/content
+dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --content-dir game/content --only RateEquivalence --rate-report <datei außerhalb des Repos>
+dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --tick-rate 30|60|120 [--content-dir game/content]
+dotnet run -c Release --project tests/CnCNew.Game.Tests -- --content-dir game/content --tick-rate 30|60|120
+dotnet run --project tests/CnCNew.Presentation.Tests -- --tick-rate 30|60|120 [--content-dir game/content]
+dotnet run -c Release --project tools/CnCNew.SimTool -- rate-compare game/content --list | --group <gruppe> | "<fall>"
+dotnet run -c Release --project tools/CnCNew.SimTool -- rate-compare game/content --ai-diff A,B --fields [--rates 30,60] | --reference-diff --fields | --map-diff A,B --map "<Karte>" --fields
+dotnet run -c Release --project tools/CnCNew.SimTool -- ai-survey game/content --out <tsv> [--tick-rate 30] [--seeds 20] [--minutes 25] [--jobs N]
 dotnet run -c Release --project tools/CnCNew.SimTool -- rate-distribution <30.tsv> <60.tsv> [--out <bericht.md>]
-dotnet run -c Release --project tools/CnCNew.SimTool -- ai-census .local/content --out <tsv> [--orbits <txt>] [--seeds N]
-dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match .local/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions FactionChina,FactionGLA --ai original --difficulty easy|medium|hard [--minutes 25]
-dotnet run -c Release --project tools/CnCNew.MapTool -- script-library .local/content [--show "<Text>"]
+dotnet run -c Release --project tools/CnCNew.SimTool -- ai-census game/content --out <tsv> [--orbits <txt>] [--seeds N]
+dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match game/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions FactionChina,FactionGLA --ai original --difficulty easy|medium|hard [--minutes 25]
+dotnet run -c Release --project tools/CnCNew.MapTool -- script-library game/content [--show "<Text>"]
 pwsh scripts/demo-spectator.ps1 [-Seed 7 -Map "Alpine Assault" -FactionA FactionAmerica -FactionB FactionChina] [-TickRate 30]
 pwsh scripts/demo-factory-exits.ps1 -Faction America|China|GLA [-TickRate 30]
 pwsh scripts/check-spectator.ps1
@@ -145,7 +145,7 @@ Beispiele `--max-ticks 45000`, `--ticks 3000` und `--ticks 900` oben meinen bei 
 
 `tools/CnCNew.UiRenderTool` ist bewusst **nicht** in `CnCNew.slnx` (zwei Stride-Game-.exe-Projekte in einer Solution
 erzeugen erneut Assetcompiler-Warnrauschen, siehe `docs/CLIENT-UI-RENDERING.md`); es wird eigenständig gebaut und
-ausgeführt: `dotnet run --project tools/CnCNew.UiRenderTool -- --content-dir .local/content --out-dir <ausgabe>`.
+ausgeführt: `dotnet run --project tools/CnCNew.UiRenderTool -- --content-dir game/content --out-dir <ausgabe>`.
 
 Tests sind eigenständige Konsolenprogramme (`tests/<Projekt>.Tests/Program.cs`, `OutputType=Exe`,
 Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern – kein xUnit/NUnit.
@@ -254,7 +254,7 @@ Verstärkungstransport/Formationen, eine Missions-HUD und die Generals'-Challeng
 ## Ablauf einer Phase
 
 1. Ausgangszustand reproduzieren: `git status`, Build, alle acht Testprogramme, relevante Audits.
-2. Fachliche Annahmen gegen reale Daten (`.local/content`) und die Referenzquellen prüfen.
+2. Fachliche Annahmen gegen reale Daten (`game/content`) und die Referenzquellen prüfen.
 3. Implementieren, jeweils mit Tests; Vollbestandsaudit; zwei unabhängige Läufe vergleichen.
 4. Doku aktualisieren (README, ARCHITECTURE, ROADMAP, IMPLEMENTATION-PLAN + Fachdokument).
 5. Commits, sauberer Working Tree, Abschlussbericht mit Zahlen und Commit-Hashes.

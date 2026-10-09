@@ -195,7 +195,7 @@ Parser und Factory) und `ModuleBindingTable` prüft sie beim Erzeugen gegen die 
 | implementiertes Simulationsmodul ohne Bindung | `ModuleBindingException` |
 
 `StrictUnknownModules` besteht auf den Bestandsdaten; der Test `catalog == beobachtete Modulmenge` (205 Namen) läuft gegen
-`.local/content`. Nicht implementierte Module bleiben sichtbare Kompatibilitätsfälle: ein Objekt mit einem
+`game/content`. Nicht implementierte Module bleiben sichtbare Kompatibilitätsfälle: ein Objekt mit einem
 solchen Modul ist **nicht instanziierbar** und nennt es in `ObjectTemplate.MissingModules`; Draw-/ClientUpdate-Module
 werden gelistet (`PresentationModules`), aber nie instanziiert.
 
@@ -376,20 +376,20 @@ umfasst damit **alle 25 Befehlstypen**; `Tests.Construction` (`ConstructionSnaps
 ```powershell
 dotnet build CnCNew.slnx
 dotnet run --project tests/CnCNew.Simulation.Tests
-dotnet run --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content
+dotnet run --project tests/CnCNew.Simulation.Tests -- --content-dir game/content
 dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --long
-dotnet run --project tests/CnCNew.Data.Tests -- --content-dir .local/content
+dotnet run --project tests/CnCNew.Data.Tests -- --content-dir game/content
 dotnet run -c Release --project tools/CnCNew.SimTool -- stress
 dotnet run -c Release --project tools/CnCNew.SimTool -- replay-record .local/stress.replay
 dotnet run -c Release --project tools/CnCNew.SimTool -- replay-run .local/stress.replay
 dotnet run -c Release --project tools/CnCNew.SimTool -- hash .local/stress.replay
-dotnet run -c Release --project tools/CnCNew.SimTool -- audit-modules .local/content
-dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage .local/content
-dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match .local/content
-dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match .local/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions China,GLA --max-ticks 45000
-dotnet run --project tools/CnCNew.MapTool -- audit .local/content
-dotnet run --project tools/CnCNew.IniTool -- compat-check .local/content baselines/compatibility.json
-dotnet run --project tools/CnCNew.IniTool -- load-order-report .local/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- audit-modules game/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage game/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match game/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match game/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions China,GLA --max-ticks 45000
+dotnet run --project tools/CnCNew.MapTool -- audit game/content
+dotnet run --project tools/CnCNew.IniTool -- compat-check game/content baselines/compatibility.json
+dotnet run --project tools/CnCNew.IniTool -- load-order-report game/content
 ```
 
 ## 10. Stress, Speicher und Budgets
@@ -584,7 +584,7 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   Live-Vergleichen (zwei unabhängige Läufe derselben Session), die von dieser Lücke nie berührt wurden, weil beide Läufe dieselbe KI-
   Abfragefolge produzieren. Neu gemessen nach dem Fix: Der Retail-Referenzmatch (`SimTool reference-match`) liefert unverändert Endhash
   `4DCB46FE3D2E8214` (Sieger FactionAmerica, Tick 13.800) — dieses Szenario durchläuft `ReferenceMatchScenario`, nicht `SkirmishAi`, und
-  berührt die gefixte Stelle nicht. Ein Skirmish-KI-Lauf, der die Stelle sehr wohl berührt (`SimTool ai-match .local/content --map
+  berührt die gefixte Stelle nicht. Ein Skirmish-KI-Lauf, der die Stelle sehr wohl berührt (`SimTool ai-match game/content --map
   "Maps/Alpine Assault/Alpine Assault.map" --factions FactionAmericaAirForceGeneral,FactionChina --max-ticks 45000`; America benutzt die
   geteilte Spezialkraft 8-mal), ändert sein Ergebnis wie erwartet (KI-Timing verschiebt sich): Sieger FactionChina bei Tick 16.155 (vorher nicht
   mit diesem exakten Aufruf vermessen, daher kein Vorher/Nachher-Hash), Endhash `0FDF97B63EFECC6A`, weiterhin über zwei frische Läufe und
@@ -943,7 +943,7 @@ Codes 28/29, Ablehnungsgründe 35–38), `Replay/ReplayFormat.cs` (Kodierung der
   zählt die lebenden, nicht toten Objekte exakt dieser Vorlage des Spielers plus – nur für Nicht-`STRUCTURE`-Vorlagen – alle noch in irgendeiner `ProductionUpdate`-Warteschlange
   dieses Spielers stehenden Einträge derselben Vorlage (`ProductionUpdate.CountInQueue`, neu öffentlich); Quelle `Player::canBuildMoreOfType`/`countExisting` (`Player.cpp`). Gilt für
   `ConstructCommand` und `QueueProductionCommand` gleichermaßen. Neuer Ablehnungsgrund `ProductionLimitReached` (36). **Nicht modelliert:** `MaxSimultaneousLinkKey` (eine
-  `NameKeyType`-Gruppierung mehrerer Vorlagen unter einem gemeinsamen Zähler); in `.local/content` kommt der Schlüssel in 17 Dateien vor, aber nie zusammen mit
+  `NameKeyType`-Gruppierung mehrerer Vorlagen unter einem gemeinsamen Zähler); in `game/content` kommt der Schlüssel in 17 Dateien vor, aber nie zusammen mit
   `MaxSimultaneousOfType` an genau der gruppierten Stelle, die den Unterschied sichtbar machen würde – die Lücke ist dokumentiert, nicht gemessen folgenlos.
   Gemessene Wirkung auf echte Daten: `AmericaInfantry.ini` (Colonel Burton, `MaxSimultaneousOfType = 1`), `AirforceGeneral.ini`, `TankGeneral.ini` und 21 weitere Objektdateien tragen
   den Schlüssel; die Skirmish-KI besaß vorher keinerlei Kappungs-Bewusstsein und hätte (ohne das hier neue, serverseitige Verbot) beliebig viele Kopien einer eigentlich einmaligen
@@ -983,7 +983,7 @@ Codes 28/29, Ablehnungsgründe 35–38), `Replay/ReplayFormat.cs` (Kodierung der
 `VETERAN`/`ELITE`/`HERO` befüllt (`ObjectTemplate.ResolveArmor`/`ResolveWeapon`, `VeterancyConditionIndex`). `SimulationWorld.ActiveArmor`/`ActiveWeaponIndex` wählen zuerst den zur
 aktuellen Stufe passenden Veteranensatz, dann `PLAYER_UPGRADE`, zuletzt den Standardsatz. **Modellierungsgrenze (unverändert gegenüber Phase 5, nur erweitert):** nur Sätze mit genau
 einer Bedingung werden aufgelöst; ein Satz, der zwei Bedingungen gleichzeitig verlangt (z. B. `PLAYER_UPGRADE VETERAN`), wird nicht unterschieden – der `SparseMatchFinder` des
-Originals score-basiert über beliebige Kombinationen zu matchen bleibt offen. **Gemessene Wirkung auf echte Daten: keine.** Eine Volltextsuche über `.local/content` nach
+Originals score-basiert über beliebige Kombinationen zu matchen bleibt offen. **Gemessene Wirkung auf echte Daten: keine.** Eine Volltextsuche über `game/content` nach
 `Conditions` mit `VETERAN`/`ELITE`/`HERO` in einem `ArmorSet`- oder `WeaponSet`-Block ergibt **null Treffer** – kein einziges Zero-Hour-Objekt nutzt diese Bedingungen überhaupt, die
 Veteranenstufe wirkt im Original nach wie vor hauptsächlich über Waffenbonus und Gesundheit (§6h in `docs/GAME-RULES.md`). Die Auswahl ist damit für zukünftige Daten korrekt, ändert
 aber weder `audit-coverage` noch `reference-match` am echten Bestand.
@@ -1023,7 +1023,7 @@ zwei Startpositionen ein kurzes, zweiseitiges `SkirmishMatchScenario` (`FactionA
 mit `--max-ticks` (Standard 3.000) als hartem Budget. „Start- und beendbar“ heißt hier: die Sitzung durchläuft ihren vollen Lebenszyklus (Startobjekte, KI-Denkschritte, Sieg oder
 Tick-Budget) ohne Ausnahme – keine Balance- oder Gewinnratenmessung (dafür `ai-match` und die Tabelle in §19).
 
-**Ergebnis (30.09./1.10.2026, `.local/content`, `--max-ticks 3000`):** 150 Karten; 75 ohne jeden Startwegpunkt (Kampagnenkarten, dieselbe Zahl wie `MapTool audit`), 11 mit genau
+**Ergebnis (30.09./1.10.2026, `game/content`, `--max-ticks 3000`):** 150 Karten; 75 ohne jeden Startwegpunkt (Kampagnenkarten, dieselbe Zahl wie `MapTool audit`), 11 mit genau
 einem (nicht genug für zwei Spieler); **alle 64 Karten mit mindestens zwei Startpositionen starten und enden sauber** (0 Abstürze; da `--max-ticks` klein gegenüber den in §19 gemessenen
 Siegzeiten ist, enden praktisch alle am Tick-Budget statt mit einem Sieger, was für diese Messung irrelevant ist – entscheidend ist der exakte Lebenszyklus ohne Ausnahme). Dauer: 75 s.
 Damit ist die seit `docs/handoffs/HANDOFF-PHASE8.md` offene Abnahme „alle Skirmish-Karten start- und beendbar“ für jede Karte mit genug Startpositionen gemessen und bestanden; Karten ohne
@@ -1082,7 +1082,7 @@ Ein `SkirmishAiSnapshot`, der Lücke 2 schließt, ist reale, aber begrenzte Fort
 Bis es ihn gibt, ist `SkirmishMatchSession.CreateSave()` der eine, dokumentierte, laute Fehlschlagpunkt für ein Live-Sitzungs-Speichern (Test: `Tests.Skirmish.cs` →
 `SkirmishSessionRefusesToSave`), statt einer Speicherroutine, die die KI still fallen lässt und einen kaputten Spielstand ausliefert.
 
-### Gemessene Zahlen (1. Oktober 2026, `.local/content`, unverändert gegenüber Phase 9 wo nicht anders vermerkt)
+### Gemessene Zahlen (1. Oktober 2026, `game/content`, unverändert gegenüber Phase 9 wo nicht anders vermerkt)
 
 - `SimTool audit-coverage`: 2.115 Objekte, **1.494 instanziierbar (70,6 %) – unverändert**, 621 blockiert, Fingerabdruck `2B9D902AEC46A6DE…` unverändert (keine neue
   Simulationsmodul-Anforderung durch Phase 10).
@@ -1167,7 +1167,7 @@ Begleitende Änderungen: `LocomotorInfo.SpeedLimitZ`; `AIUpdateInterface.OrderMo
 den Upgrade-Modulen) liefert die Bereitschaft der Upgrade-Knöpfe (`docs/SCRIPT-ENGINE.md` §8 Punkt 18); `DetonateProjectile(…, damage)`; die Skriptseite (Verstärkung mit Transport, Team-Warteschlangen,
 Startaktionen) steht in `docs/SCRIPT-ENGINE.md` §5/§8.
 
-Messung (3. Oktober 2026, `.local/content`; ohne Versionssprung: `WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10): Modulkatalog **107 von 205** implementiert (183 Simulations-,
+Messung (3. Oktober 2026, `game/content`; ohne Versionssprung: `WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10): Modulkatalog **107 von 205** implementiert (183 Simulations-,
 22 Präsentationsmodule), **1.735 von 2.115** Retail-Objekten instanziierbar (82,0 %), Modulverwendungen abgedeckt 16.085 von 19.553 (82,3 %), Kompatibilitätsbasislinie **771** Einträge. Größte verbleibende
 Blocker nach Objekten (davon nur durch dieses Modul): `JetAIUpdate` 34/34, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `SlavedUpdate` 20/7, `PropagandaTowerBehavior` 14/13, `UpgradeDie` 13/0,
 `HiveStructureBody` 11/4, `RiderChangeContain` 11/11, `DeployStyleAIUpdate` 10/10, `StructureCollapseUpdate` 10/10, `ParkingPlaceBehavior` 9/9. Retail-Referenzmatch: Sieger FactionGLA bei Tick 15.000,
@@ -1330,7 +1330,7 @@ macht die aktive `WeaponSet`-Auswahl zur einzigen Quelle dafür, welche Waffe ei
 **Näherungen:** die Waffenwahl kennt nur `PREFER_MOST_DAMAGE`; Reichweite ist ein Filter ohne Anlaufen; Turm- und Neigungsbedingungen fehlen; die Garnison-Sonderfälle der Schadensschätzung fehlen; `FireWeaponPower` hat keinen
 KI-Angriffsbefehl und keinen An-/Abmarsch; `AssistedTargetingUpdate` bleibt ein Modulschuss ohne die Rückmeldelaser; `CleanupHazardUpdate` setzt das Veteranen-Flag beim Erzeugen nicht.
 
-### 30.7 Messung (3. Oktober 2026, `.local/content`, frisch)
+### 30.7 Messung (3. Oktober 2026, `game/content`, frisch)
 
 - Modulkatalog **183 von 205** implementiert – alle 183 Simulationsmodule (offen nur die 22 Präsentationsmodule); Instanziierbarkeit **2.115 von 2.115 (100,0 %)**; Modulverwendungen abgedeckt **16.558 von 19.553 (84,7 %)** (der Rest sind
   Präsentationsmodule); Kompatibilitätsbasislinie **751** Einträge. Echtdaten: 2.477 Waffensätze auf 2.115 Objekten, 187 Objekte mit Slotzustand.
@@ -1741,14 +1741,14 @@ Keine Änderung an der Simulation. Neu sind zwei Dateien unter `baselines/` und 
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/content baselines/reference-manifest.json --set quick
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/content baselines/reference-manifest.json [--set full] [--only <id>[,<id>]] [--jobs N]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/content baselines/reference-manifest.json --set quick --verify-incremental
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest write .local/content baselines/reference-manifest.json [--set full]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest list .local/content
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest show .local/content --only <id> [--explain-incremental]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest check .local/content baselines/input-manifest.json
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest write .local/content baselines/input-manifest.json
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check game/content baselines/reference-manifest.json --set quick
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check game/content baselines/reference-manifest.json [--set full] [--only <id>[,<id>]] [--jobs N]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check game/content baselines/reference-manifest.json --set quick --verify-incremental
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest write game/content baselines/reference-manifest.json [--set full]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest list game/content
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest show game/content --only <id> [--explain-incremental]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest check game/content baselines/input-manifest.json
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest write game/content baselines/input-manifest.json
 ```
 
 ### 37.1 Dateiform
@@ -2013,14 +2013,14 @@ Die Zahl der Fälle je Gruppe, die Zusammenfassungen der Generatoren und was sie
 ```powershell
 # Suite (Release, mit Realdaten); ohne --content-dir sind die Tests nicht registriert
 dotnet build -c Release tests/CnCNew.Simulation.Tests
-dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content --only RateEquivalence --rate-report <datei außerhalb des Repos>
-dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content --only "RateEquivalence: weapons"
+dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir game/content --only RateEquivalence --rate-report <datei außerhalb des Repos>
+dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir game/content --only "RateEquivalence: weapons"
 
 # Einzelfälle
 dotnet build -c Release tools/CnCNew.SimTool
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/content --list
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/content --group turrets [--tsv <datei>]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/content "locomotion/Nuke_ChinaTankBattleMaster"
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare game/content --list
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare game/content --group turrets [--tsv <datei>]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare game/content "locomotion/Nuke_ChinaTankBattleMaster"
 ```
 
 Je Gruppe ein Test `RateEquivalence: <gruppe>`. Ein Gruppentest fängt Ausnahmen je Fall und je Rate (eigene Zeile), sammelt **alle** Größen, druckt die Tabelle
@@ -2052,7 +2052,7 @@ Was ein Generator oder ein fester Fall nicht stellen kann, steht als `not covere
 - **KI:** Ausgang und Länge ganzer Matches, Heer und Wirtschaft später im Match, mehr als zwei Spieler, echte Karten (Schritt 4).
 - **Nicht geprüft:** dass jede Zeile der Liste in `docs/TICKRATE-MIGRATION.md` §5 von einem Fall erfasst wird – die Zuordnung in §39.6 nennt, was gefunden wurde und was nicht gestellt ist.
 
-### 39.6 Erster vollständiger Lauf (7. Oktober 2026, Release, Realdaten `.local/content`)
+### 39.6 Erster vollständiger Lauf (7. Oktober 2026, Release, Realdaten `game/content`)
 
 Gemessen am Stand dieses Abschnitts; nichts an der Simulation ist dafür geändert (`input-manifest check` identisch, `reference-manifest check --set quick` 9 Läufe identisch, alle 414
 Simulationstests ohne Realdaten grün einschließlich `SourceRules`). Zwei Läufe hintereinander liefern eine bytegleiche TSV-Datei. Nach dem allerersten Lauf wurde eine Messung der Suite
@@ -2188,7 +2188,7 @@ des Bildes und zählt ein Ereignis im ersten Tick – wie die Bildkonvention (§
 - **199 Größen sind bei jeder Rate ungemessen** (das Ereignis tritt im Budget bei keiner Rate ein); sie zählen weder als bestanden noch als Fehlschlag.
 - **„Besteht“ heißt:** jede gemessene Größe liegt bei 60 und 120 Hz innerhalb der Toleranz ihres 30-Hz-Werts – nicht, dass jedes Gefecht identisch ist, und nicht, dass ein Mensch einen Fall gesehen hat.
 
-Ausführen und Phasenabschluss: `dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content --only RateEquivalence --rate-report <datei>`; die
+Ausführen und Phasenabschluss: `dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir game/content --only RateEquivalence --rate-report <datei>`; die
 Erwartung ist 0 / 0 in allen zehn Gruppen.
 
 ## 40. Verteilungsvergleich zwischen Raten (Phase 23, 7. Oktober 2026): `ai-survey` und `rate-distribution`
@@ -2202,8 +2202,8 @@ die Methode und die Grenzen fest, bevor Zahlen vorliegen.
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey .local/content --out <30.tsv> --tick-rate 30 [--seeds 20] [--first-seed 1] [--minutes 25] [--pairings all|<id>,<id>] [--jobs N]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey .local/content --out <60.tsv> --tick-rate 60
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey game/content --out <30.tsv> --tick-rate 30 [--seeds 20] [--first-seed 1] [--minutes 25] [--pairings all|<id>,<id>] [--jobs N]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey game/content --out <60.tsv> --tick-rate 60
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-distribution <30.tsv> <60.tsv> [--out <bericht.md>]
 ```
 

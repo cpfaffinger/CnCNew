@@ -117,11 +117,11 @@ beiden Richtungen, Version 1, fehlende und nicht unterstützte Rate, gefälschte
 ## 6. Werkzeug `CnCNew.CampaignTool`
 
 ```powershell
-dotnet run --project tools/CnCNew.CampaignTool -- list .local/content
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/content --ticks 900
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/content --map MD_USA01 --explain
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/content --map GC_LaserGeneral --human-side PlyrLaserGeneral
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough .local/content --campaign USA
+dotnet run --project tools/CnCNew.CampaignTool -- list game/content
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit game/content --ticks 900
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit game/content --map MD_USA01 --explain
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit game/content --map GC_LaserGeneral --human-side PlyrLaserGeneral
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough game/content --campaign USA
 ```
 
 `--human-side <Name>` (`audit` und `playthrough`): reicht `MissionOptions.HumanSideName` durch, für Karten ohne eigene `playerIsHuman`-Seite

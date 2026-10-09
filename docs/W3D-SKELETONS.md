@@ -30,7 +30,7 @@ Override je Knochen).
 
 ## Verifizierte Chunk-Layouts
 
-Alle Größen wurden gegen den Realbestand (`.local/content/Art/W3D`, 8.897 Dateien) per
+Alle Größen wurden gegen den Realbestand (`game/content/Art/W3D`, 8.897 Dateien) per
 Hex-/Skriptanalyse geprüft; Quelle der Strukturen ist `w3d_file.h` (GeneralsMD/WW3D2).
 Little Endian, Namen sind nullterminierte Latin-1-Felder fester Länge.
 
@@ -170,7 +170,7 @@ verschiedener Pivotanzahl, etwa `CVBAIKTRANSNR_D` mit 14/10/10); das Audit liste
 
 ## Messwerte (`W3dTool audit-skeletons`, Release)
 
-Gemessen am 30. September 2026 auf `.local/content`, zwei Läufe byteidentisch
+Gemessen am 30. September 2026 auf `game/content`, zwei Läufe byteidentisch
 (Stdout-SHA-256 `FEE71ECF45DF6CBABF5FB371546A4E0C52AA1C8BB773B144CAB3895D22C21EE7`):
 
 | Größe | Wert |

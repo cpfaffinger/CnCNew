@@ -47,7 +47,7 @@ Sounddateien oder Swapchains; sie benennt nur, was der Host tun soll.
 
 Jeder Screen registriert genau die `SYSTEMCALLBACK`/`INPUTCALLBACK`-Namen, die die ausgelieferte WND-Datei tatsächlich
 benutzt (siehe Quellendumps unter dem Scratchpad der Sitzung). Ergebnis des Klickdurchlaufs in
-`tests/CnCNew.Game.Tests/ShellTests.cs` gegen `.local/content` (neu messen, siehe unten): **0 nicht
+`tests/CnCNew.Game.Tests/ShellTests.cs` gegen `game/content` (neu messen, siehe unten): **0 nicht
 registrierte Callbacks, 0 nicht aufgelöste Labels** über alle acht besuchten Screens.
 
 | Screen (Datei) | Registrierte Callbacks | Zweck |
@@ -186,7 +186,7 @@ keinem Gadget aus erreichbar, weil die ausgelieferte `OptionsMenu.wnd` keins daf
 ## 9. Tests und gemessene Zahlen
 
 `tests/CnCNew.Game.Tests/ShellTests.cs` (Suite `ShellTests`, registriert in `Program.cs`), gegen
-`.local/content`:
+`game/content`:
 
 * **Klickdurchlauf**: Hauptmenü → Einzelspieler-Untermenü → Skirmish-Einrichtung → Kartenauswahl (Klick auf die erste
   Zeile der echten, gefilterten Kartenliste) → zurück → Start → Ladebildschirm → `StartMatchOutput` → ein echtes,
@@ -369,7 +369,7 @@ praktisch nicht mehr aufrufen) und bleiben harte Schnitte.
 Einzelspieler-Untermenü (sichtbar oder darunter), Ursache ausschließlich die fünf Logos (Punkt 9). Unverändert: `MainMenu`, `MatchLoading`, `ScoreScreen`, `Credits`, `Options`, `QuitConfirm` (30 Werte) und der
 HUD-Hash. Die Übergänge selbst ändern keinen Hash, weil die Hülle ohne `animateTransitions` keine Gruppe anlegt (`NoTransitionsNoAnimation`); die Ruhezustände der Animation sind in den Tests bytegleich mit denen ohne.
 
-### Messwerte (30 Frames/s, `.local/content`, neu messen)
+### Messwerte (30 Frames/s, `game/content`, neu messen)
 
 * Hauptmenü: erster Start 57 Frames (1,90 s): Blende 29 Frames, Rand ab Frame 34, Logo 40, erster Knopf 46, letzter Knopf 51. Längster Vorwärtslauf im Realdatentest (alle Zahlen als `1234` angenommen): 60 Frames (2,00 s, `ScoreScreenShow`).
 * Alle 56 Gruppen laufen vorwärts und rückwärts ohne `Overrun` bis zum Ende (Realdatentest).

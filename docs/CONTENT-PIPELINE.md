@@ -80,8 +80,9 @@ Decoder fehlt; im ausgelieferten Graphen wird er nicht benötigt. Es gibt keinen
 
 > Historischer Abschnitt (Abnahme der Phase 2, 27. September 2026). Die hier genannten Verzeichnisse
 > `.local/game-original`, `.local/content` (damals Schema 1) und `.local/phase2-import-a`/`-b` gibt es nicht mehr.
-> Heute erzeugt `scripts/dev-content.ps1` den Entwicklerbestand aus der Steam-Installation nach `.local/content`
-> (Schema 2); der Weg für Anwender steht in `docs/INSTALLATION.md`.
+> Heute erzeugt `scripts/dev-content.ps1` den Entwicklerbestand aus der Steam-Installation nach `game/content`
+> (Schema 2, ignoriertes Verzeichnis `game/` in der Wurzel des Repositorys); der Weg für Anwender steht in
+> `docs/INSTALLATION.md`.
 
 ```powershell
 dotnet run --project tools/CnCNew.AssetTool -- audit-formats .local/content
