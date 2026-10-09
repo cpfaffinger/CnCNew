@@ -1,487 +1,487 @@
-# Stride-freie Spielhülle: Boot, Menüs, Skirmish-Setup, Ergebnis (Paket G1)
+# Stride-free game shell: boot, menus, skirmish setup, result (package G1)
 
-Dieses Dokument beschreibt `src/CnCNew.Game/Shell/**`: eine Stride-freie, headless testbare Zustandsmaschine für den
-Rahmen um `LiveMatch` (`src/CnCNew.Game/Live/LiveMatch.cs`, nicht Teil dieses Pakets) – Programmstart, Hauptmenü,
-Optionen, Skirmish-Einrichtung, Übergabe an das laufende Match und Ergebnisbildschirm. Die Schicht liest reale WND-
-Layouts (`src/CnCNew.Ui/Wnd`, geparst über `WndParser`) und treibt sie über die Callback-Registry von `UiWindowTree`
-(`src/CnCNew.Ui/Runtime`); kein Stride-Typ, kein Direct3D-Aufruf kommt in dieser Schicht vor. Referenzdokumente:
+This document describes `src/CnCNew.Game/Shell/**`: a Stride-free, headlessly testable state machine for the
+frame around `LiveMatch` (`src/CnCNew.Game/Live/LiveMatch.cs`, not part of this package) – program start, main menu,
+options, skirmish setup, handover to the running match and result screen. The layer reads real WND
+layouts (`src/CnCNew.Ui/Wnd`, parsed via `WndParser`) and drives them through the callback registry of `UiWindowTree`
+(`src/CnCNew.Ui/Runtime`); no Stride type, no Direct3D call occurs in this layer. Reference documents:
 `docs/UI-WND.md`, `docs/UI-TEXT-AND-SETTINGS.md`, `docs/PRESENTATION-INPUT.md`.
 
-## 1. Zustandsmaschine (`GameShell`, `ShellPhase`)
+## 1. State machine (`GameShell`, `ShellPhase`)
 
 ```
-Boot (GameData.Load im Hintergrundthread, ShellGameLoadScreen)
-  └─▶ Menus: MainMenu; darauf Options / QuitConfirm / MapSelect als Überlagerung, SkirmishSetup / Credits / ChallengeMenu / LoadGame als Ersatz (§13)
-        └─▶ MatchLoading (SinglePlayerLoadScreen, genau ein gezeichneter Frame)
-              └─▶ InMatch (Host besitzt LiveMatch/HUD; die Hülle zeichnet nichts)
-                    └─▶ Results (ScoreScreen, aus einem echten SkirmishMatchSession)
-                          └─▶ zurück zu Menus
+Boot (GameData.Load in the background thread, ShellGameLoadScreen)
+  └─▶ Menus: MainMenu; on top of it Options / QuitConfirm / MapSelect as an overlay, SkirmishSetup / Credits / ChallengeMenu / LoadGame as a replacement (§13)
+        └─▶ MatchLoading (SinglePlayerLoadScreen, exactly one drawn frame)
+              └─▶ InMatch (the host owns LiveMatch/HUD; the shell draws nothing)
+                    └─▶ Results (ScoreScreen, from a real SkirmishMatchSession)
+                          └─▶ back to Menus
 ```
 
-`GameShell` hält einen Stapel von `ShellScreen`s (ein Screen = eine eigene `UiWindowTree`-Instanz, damit ein modaler
-Dialog seine eigene Fokusreihenfolge hat und nicht in den darunterliegenden Screen durchsickert – `FocusOrder()` deckt
-sonst den ganzen Baum ab). Nur der oberste Screen erhält Eingaben; `BuildDrawList()` verkettet die Zeichenlisten des
-obersten Screens, der die darunterliegenden verdeckt (`ShellScreen.HidesScreensBelow`, wie `Shell::push`), und aller Screens darüber von unten nach oben und summiert deren
-Statistik (§13). Das Hauptmenü scheint also nicht mehr durch Skirmish-Einrichtung, Credits, Challenge-Menü und Ladeliste.
+`GameShell` holds a stack of `ShellScreen`s (one screen = a separate `UiWindowTree` instance, so that a modal
+dialog has its own focus order and does not seep through into the screen underneath – `FocusOrder()` otherwise covers
+the whole tree). Only the topmost screen receives input; `BuildDrawList()` chains the draw lists of the
+topmost screen that hides the ones underneath (`ShellScreen.HidesScreensBelow`, like `Shell::push`) and of all screens above it from bottom to top and sums their
+statistics (§13). So the main menu no longer shines through skirmish setup, credits, challenge menu and load list.
 
-### Host-Schnittstelle
+### Host interface
 
-| Methode | Zweck |
+| Method | Purpose |
 |---|---|
-| `GameShell.Create(GameData, IShellEnvironment, language = "English", viewport?)` | Start bereits nach Boot (Tests, oder ein Host, der Content selbst lädt). |
-| `GameShell.CreateLoading(contentDirectory, IShellEnvironment, language?, viewport?)` | Start in `ShellPhase.Boot`: öffnet den Content sofort synchron (WND/CSF brauchen keine kompilierten Definitionen), lädt `GameData` per `Task.Run` mit Fortschritts-Callback. |
-| `Resize(width, height)` | Setzt den Viewport aller Screens im Stapel neu. |
-| `HandleInput(InputEvent)` | Übersetzt `CnCNew.Presentation.Input`-Ereignisse in `UiWindowTree`-Aufrufe (`MouseMove/Down/Up/Wheel`, `KeyDown`, `Character`) und ruft `Dispatch()`. |
-| `Update(dtSeconds)` | Bootfortschritt abfragen, Bildschirmübergänge (`MatchLoading` → `InMatch`), pro-Screen-`Update` (Credits-Scroll), UI-Uhr weiterstellen. |
-| `BuildDrawList()` | Zeichenliste der sichtbaren Screens des Stapels (§13), mit `ShellCustomDraw` nachbearbeitet. |
-| `DrainOutputs()` | Zieht `ShellOutput`s ab (siehe unten), wie `LiveMatch.DrainSoundCues`. |
-| `MatchFinished(SkirmishMatchSession, MatchStatistics?)` | Vom Host aufgerufen, wenn das Match vorbei ist; zeigt den Ergebnisbildschirm. |
+| `GameShell.Create(GameData, IShellEnvironment, language = "English", viewport?)` | Start already after boot (tests, or a host that loads content itself). |
+| `GameShell.CreateLoading(contentDirectory, IShellEnvironment, language?, viewport?)` | Start in `ShellPhase.Boot`: opens the content synchronously at once (WND/CSF need no compiled definitions), loads `GameData` via `Task.Run` with a progress callback. |
+| `Resize(width, height)` | Sets the viewport of all screens in the stack anew. |
+| `HandleInput(InputEvent)` | Translates `CnCNew.Presentation.Input` events into `UiWindowTree` calls (`MouseMove/Down/Up/Wheel`, `KeyDown`, `Character`) and calls `Dispatch()`. |
+| `Update(dtSeconds)` | Query boot progress, screen transitions (`MatchLoading` → `InMatch`), per-screen `Update` (credits scroll), advance the UI clock. |
+| `BuildDrawList()` | Draw list of the visible screens of the stack (§13), post-processed with `ShellCustomDraw`. |
+| `DrainOutputs()` | Drains `ShellOutput`s (see below), like `LiveMatch.DrainSoundCues`. |
+| `MatchFinished(SkirmishMatchSession, MatchStatistics?)` | Called by the host when the match is over; shows the result screen. |
 
-### Ausgaben (`ShellOutput`)
+### Outputs (`ShellOutput`)
 
 `StartMatchOutput(MatchSetup)`, `ExitRequestedOutput`, `SettingsChangedOutput(GameSettings)`,
-`PlayUiSoundOutput(string EventName)`, `ApplyResolutionOutput(DisplayMode, Width, Height, VSync)`. Die Hülle kennt keine
-Sounddateien oder Swapchains; sie benennt nur, was der Host tun soll.
+`PlayUiSoundOutput(string EventName)`, `ApplyResolutionOutput(DisplayMode, Width, Height, VSync)`. The shell knows no
+sound files or swap chains; it only names what the host is to do.
 
-## 2. Implementierte Screens und Callbacks
+## 2. Implemented screens and callbacks
 
-Jeder Screen registriert genau die `SYSTEMCALLBACK`/`INPUTCALLBACK`-Namen, die die ausgelieferte WND-Datei tatsächlich
-benutzt (siehe Quellendumps unter dem Scratchpad der Sitzung). Ergebnis des Klickdurchlaufs in
-`tests/CnCNew.Game.Tests/ShellTests.cs` gegen `game/content` (neu messen, siehe unten): **0 nicht
-registrierte Callbacks, 0 nicht aufgelöste Labels** über alle acht besuchten Screens.
+Every screen registers exactly the `SYSTEMCALLBACK`/`INPUTCALLBACK` names that the shipped WND file actually
+uses (see source dumps under the scratchpad of the session). Result of the click-through in
+`tests/CnCNew.Game.Tests/ShellTests.cs` against `game/content` (re-measure, see below): **0 unregistered
+callbacks, 0 unresolved labels** across all eight visited screens.
 
-| Screen (Datei) | Registrierte Callbacks | Zweck |
+| Screen (file) | Registered callbacks | Purpose |
 |---|---|---|
-| `MainMenuScreen` (`MainMenu.wnd`) | `MainMenuSystem`, `MainMenuInput` | Eine gestapelte Datei mit allen Untermenüs; keine davon ist im WND-File selbst `Hidden` – das entspricht `MainMenuInit` (`MainMenu.cpp`), das die Hülle direkt im Konstruktor nachbildet: Einstiegsgruppe `MapBorder2` zeigen, die vier anderen Gruppen verstecken, dazu die sechs Fraktions-Schaltflächen „Recent Save“/„Load Game“ links neben der Spalte (`showSelectiveButtons(SHOW_NONE)`; Zero Hours `MainMenu.cpp` zeigt sie nie wieder – siehe §11). USA/GLA/China/Challenge öffnen die **Schwierigkeitsfrage in dieser Datei** (`MapBorder4`, §13). |
-| `OptionsScreen` (`OptionsMenu.wnd`) | `OptionsMenuSystem`, `OptionsMenuInput` | Auflösung, drei Lautstärkeregler, Scrollgeschwindigkeit; Accept/Cancel/Defaults. Überlagerung des Hauptmenüs (`getOptionsLayout`, kein `Shell::push`). |
-| `SkirmishSetupScreen` (`SkirmishGameOptionsMenu.wnd`) | `SkirmishGameOptionsMenuSystem`, `SkirmishGameOptionsMenuInput` | Karte, menschliche Fraktion/Name, bis zu 7 Computergegner, Startkapital → `MatchSetup`. |
-| `SkirmishMapSelectScreen` (`SkirmishMapSelectMenu.wnd`) | `SkirmishMapSelectMenuSystem`, `SkirmishMapSelectMenuInput` | Kartenliste aus `Maps/MapCache.ini` (nur `isMultiplayer = yes`), Namen in der zweiten der zwei Spalten. Überlagerung der Einrichtung, die dafür Kartenvorschau, Armee-/Farb-/Team-Felder und Start versteckt (§13). |
-| `ScoreScreenScreen` (`ScoreScreen.wnd`) | `ScoreScreenSystem`, `ScoreScreenInput` | Acht Ergebniszeilen aus `MatchResult`. |
-| `CreditsScreen` (`CreditsMenu.wnd`) | `CreditsMenuInput` | Scrollender Abspann aus `Data/INI/Credits.ini`. |
-| `LoadingScreen` (`ShellGameLoadScreen.wnd`, `SinglePlayerLoadScreen.wnd`) | keine | Beide Dateien deklarieren nirgends einen System-/Eingabe-Callback; nur `ProgressLoad` wird gesetzt. |
-| `MessageBoxScreen` (`MessageBox.wnd`, `QuitMessageBox.wnd`) | `MessageBoxSystem`/`QuitMessageBoxSystem` | Gemeinsame Implementierung; beide Dateien deklarieren ebenfalls nirgends einen `INPUTCALLBACK`, Escape ist deshalb hier bewusst nicht verdrahtet. |
+| `MainMenuScreen` (`MainMenu.wnd`) | `MainMenuSystem`, `MainMenuInput` | One stacked file with all submenus; none of them is `Hidden` in the WND file itself – this corresponds to `MainMenuInit` (`MainMenu.cpp`), which the shell reproduces directly in the constructor: show the entry group `MapBorder2`, hide the four other groups, plus the six faction buttons "Recent Save"/"Load Game" to the left of the column (`showSelectiveButtons(SHOW_NONE)`; Zero Hour's `MainMenu.cpp` never shows them again – see §11). USA/GLA/China/Challenge open the **difficulty question in this file** (`MapBorder4`, §13). |
+| `OptionsScreen` (`OptionsMenu.wnd`) | `OptionsMenuSystem`, `OptionsMenuInput` | Resolution, three volume sliders, scroll speed; Accept/Cancel/Defaults. Overlay of the main menu (`getOptionsLayout`, no `Shell::push`). |
+| `SkirmishSetupScreen` (`SkirmishGameOptionsMenu.wnd`) | `SkirmishGameOptionsMenuSystem`, `SkirmishGameOptionsMenuInput` | Map, human faction/name, up to 7 computer opponents, starting cash → `MatchSetup`. |
+| `SkirmishMapSelectScreen` (`SkirmishMapSelectMenu.wnd`) | `SkirmishMapSelectMenuSystem`, `SkirmishMapSelectMenuInput` | Map list from `Maps/MapCache.ini` (only `isMultiplayer = yes`), names in the second of the two columns. Overlay of the setup, which hides map preview, army/colour/team fields and Start for it (§13). |
+| `ScoreScreenScreen` (`ScoreScreen.wnd`) | `ScoreScreenSystem`, `ScoreScreenInput` | Eight result rows from `MatchResult`. |
+| `CreditsScreen` (`CreditsMenu.wnd`) | `CreditsMenuInput` | Scrolling credits from `Data/INI/Credits.ini`. |
+| `LoadingScreen` (`ShellGameLoadScreen.wnd`, `SinglePlayerLoadScreen.wnd`) | none | Neither file declares a system/input callback anywhere; only `ProgressLoad` is set. |
+| `MessageBoxScreen` (`MessageBox.wnd`, `QuitMessageBox.wnd`) | `MessageBoxSystem`/`QuitMessageBoxSystem` | Shared implementation; neither of the two files declares an `INPUTCALLBACK` anywhere either, Escape is therefore deliberately not wired here. |
 
-Eingebaute Callback-Namen (`PassMessagesToParentSystem`, `PassSelectedButtonsToParentSystem`,
-`GameWinBlockInput`, `W3DNoDraw`, Gadget-Funktionen) brauchen keine Registrierung – `UiWindowTree` kennt sie bereits.
+Built-in callback names (`PassMessagesToParentSystem`, `PassSelectedButtonsToParentSystem`,
+`GameWinBlockInput`, `W3DNoDraw`, gadget functions) need no registration – `UiWindowTree` already knows them.
 
-### Kampagnen- und Speicherstand-Screens (Phase 10, `CampaignScreens.cs`)
+### Campaign and saved-game screens (Phase 10, `CampaignScreens.cs`)
 
-Fünf weitere Screens, nicht Teil des oben genannten Klickdurchlaufs/der 54 Golden-Hashes (eigene Tests in
+Five further screens, not part of the click-through named above/of the 54 golden hashes (own tests in
 `tests/CnCNew.Game.Tests/CampaignShellTests.cs`, `ShellTests.cs`): `ChallengeSelectScreen` (`ChallengeMenu.wnd`), `LoadGameScreen` (`SaveLoad.wnd`),
-`MissionBriefingScreen` (`SinglePlayerLoadScreen.wnd` wiederverwendet), `MissionBannerScreen` (`Victorious.wnd`/`Defeat.wnd`,
-keine Schaltflächen) und `MissionResultScreen` (`ScoreScreen.wnd` wiederverwendet). `CampaignFactionScreen` (`SinglePlayerMenu.wnd`) und `DifficultySelectScreen`
-(`DifficultySelect.wnd`) gibt es seit Phase 16 nicht mehr: das Original öffnet beide in Zero Hour nie (§13). Details und Begründung je Screen:
+`MissionBriefingScreen` (`SinglePlayerLoadScreen.wnd` reused), `MissionBannerScreen` (`Victorious.wnd`/`Defeat.wnd`,
+no buttons) and `MissionResultScreen` (`ScoreScreen.wnd` reused). `CampaignFactionScreen` (`SinglePlayerMenu.wnd`) and `DifficultySelectScreen`
+(`DifficultySelect.wnd`) have no longer existed since Phase 16: the original never opens either of them in Zero Hour (§13). Details and justification per screen:
 `docs/CAMPAIGN-AND-SAVEGAMES.md` §7.
 
-### Nicht in diesem Paket
+### Not in this package
 
 `GameSpyGameOptionsMenu.wnd`, `LanGameOptionsMenu.wnd`, `GameSpyLoadScreen.wnd`, `MultiplayerLoadScreen.wnd`,
-`ChallengeLoadScreen.wnd` (Multiplayer/Kampagne) sind nicht Teil des Scopes (siehe `CLAUDE.md`) und werden nicht
-geladen; ihre Callback-Namen erscheinen daher folgerichtig nirgends in `UnregisteredCallbacks`, weil `ShellLayouts` sie
-nie parst.
+`ChallengeLoadScreen.wnd` (multiplayer/campaign) are not part of the scope (see `CLAUDE.md`) and are not
+loaded; their callback names therefore consistently appear nowhere in `UnregisteredCallbacks`, because `ShellLayouts`
+never parses them.
 
-## 3. Benutzerdefinierte Zeichen-Callbacks (`ShellCustomDraw`)
+## 3. Custom draw callbacks (`ShellCustomDraw`)
 
-Ein `DRAWCALLBACK`, den `UiWindowTree` nicht kennt, erscheint als `UiCustomDraw`-Befehl in der Zeichenliste
-(`UiWindowTree.BuildDrawList`), gezählt in `UiDrawStatistics.CustomDraws`. `ShellCustomDraw` ersetzt genau die zwei
-Namen, die in den implementierten Screens tatsächlich mit sichtbaren Fensterns vorkommen:
+A `DRAWCALLBACK` that `UiWindowTree` does not know appears as a `UiCustomDraw` command in the draw list
+(`UiWindowTree.BuildDrawList`), counted in `UiDrawStatistics.CustomDraws`. `ShellCustomDraw` replaces exactly the two
+names that actually occur with visible windows in the implemented screens:
 
 * **`W3DDrawMapPreview`** (`MapWindow` in `SkirmishGameOptionsMenu.wnd`, `WinMapPreview` in
-  `SkirmishMapSelectMenu.wnd`) → Füllfläche, Rahmen, zentrierter Name der gewählten Karte (oder „No map selected“).
-* **`W3DCreditsMenuDraw`** (`WinTextDraw` in `CreditsMenu.wnd`) → die Zeilen aus `ShellCredits`, vertikal scrollend
-  über `CreditsScreen.Update(dtSeconds)` (deterministisch: eine Funktion der akkumulierten Simulationszeit, nie der
-  Wanduhr).
+  `SkirmishMapSelectMenu.wnd`) → filled area, frame, centred name of the selected map (or "No map selected").
+* **`W3DCreditsMenuDraw`** (`WinTextDraw` in `CreditsMenu.wnd`) → the lines from `ShellCredits`, scrolling vertically
+  via `CreditsScreen.Update(dtSeconds)` (deterministic: a function of the accumulated simulation time, never of the
+  wall clock).
 
-**`W3DClockDraw`** (`Clock`) und **`W3DShellMenuSchemeDraw`** (`ShellMenuScheme`) aus `MainMenu.wnd` erscheinen in
-keinem gemessenen Lauf: beide Fenster sind im WND-File selbst `Hidden`, und `UiWindowTree.BuildDrawList` bricht für ein
-verstecktes Fenster ab, bevor es dessen Zeichen-Callback überhaupt auswertet. Die Hülle hebt diese Fenster nicht auf
-(kein Uhr-Widget, kein animiertes 3D-Hintergrundschema) – eine bewusste, dokumentierte Vereinfachung, keine fehlende
-Registrierung: Zeichen-Callbacks sind keine gerouteten Nachrichten, es gibt nichts zu registrieren.
+**`W3DClockDraw`** (`Clock`) and **`W3DShellMenuSchemeDraw`** (`ShellMenuScheme`) from `MainMenu.wnd` appear in
+no measured run: both windows are `Hidden` in the WND file itself, and `UiWindowTree.BuildDrawList` aborts for a
+hidden window before it evaluates its draw callback at all. The shell does not unhide these windows
+(no clock widget, no animated 3D background scheme) – a deliberate, documented simplification, not a missing
+registration: draw callbacks are not routed messages, there is nothing to register.
 
-## 4. Lokalisierung (`ShellTextSource`)
+## 4. Localisation (`ShellTextSource`)
 
-Jedes Label läuft über `GameData.LoadText(language)` (`LocalizedText`). `ShellTextSource.FallbackLabels` ist eine
-vorsorgliche, gezählte Ersatztabelle für Labels, die laut Faktenlage einiger Menüs fehlen könnten
-(`Tooltip:LoadProgress`, `GUI:LanguageFilter`, Anzeigemodus/Sprache/Seitenverhältnis/Skalierung/Kontrast, für die es in
-den ausgelieferten Dateien gar keine eigenen Gadgets gibt). **Gemessen** (Klickdurchlauf über acht Screens, echte
-Retail-Daten, Englisch): **0 Fallback-Treffer, 0 nicht aufgelöste Labels insgesamt** – jedes Label, das die acht
-implementierten Screens tatsächlich sichtbar zeichnen, steht bereits in der ausgelieferten CSF. Die Tabelle bleibt als
-Sicherheitsnetz bestehen (z. B. für den Fall, dass ein Tooltip einmal tatsächlich angezeigt wird) und wird weiter
-gezählt, falls sich das mit mehr Testabdeckung ändert.
+Every label runs through `GameData.LoadText(language)` (`LocalizedText`). `ShellTextSource.FallbackLabels` is a
+precautionary, counted substitute table for labels that, according to the facts available for some menus, could be missing
+(`Tooltip:LoadProgress`, `GUI:LanguageFilter`, display mode/language/aspect ratio/scaling/contrast, for which there are
+no gadgets of their own at all in the shipped files). **Measured** (click-through over eight screens, real
+retail data, English): **0 fallback hits, 0 unresolved labels in total** – every label that the eight
+implemented screens actually draw visibly is already in the shipped CSF. The table remains as a
+safety net (e.g. for the case that a tooltip is actually displayed some day) and continues to be
+counted in case that changes with more test coverage.
 
-Kartennamen (`ShellMapNames.DisplayName`) lösen `MapCache.ini`s `nameLookupTag` (z. B. `MAP:AlpineAssault`) über die
-gleiche Textquelle auf; **gemessen: 0 Dateinamen-Rückfälle** unter 64 gelisteten Mehrspielerkarten (von 150
-Karteneinträgen/-dateien insgesamt) – jede hat einen auflösbaren Anzeigenamen.
+Map names (`ShellMapNames.DisplayName`) resolve `MapCache.ini`'s `nameLookupTag` (e.g. `MAP:AlpineAssault`) through the
+same text source; **measured: 0 file name fallbacks** among 64 listed multiplayer maps (of 150
+map entries/files in total) – each has a resolvable display name.
 
-## 5. Einstellungen (`GameSettings`, `SettingsStore`)
+## 5. Settings (`GameSettings`, `SettingsStore`)
 
-`OptionsScreen` bearbeitet eine Arbeitskopie von `GameSettings` und schreibt sie erst bei „Accept“ über
-`SettingsStore` (`settings.json`, atomar, siehe `src/CnCNew.Ui/Settings/SettingsStore.cs`) und meldet
-`SettingsChangedOutput`/`ApplyResolutionOutput`. „Cancel“ verwirft die Arbeitskopie, „Defaults“ setzt nur
-Anzeige/Audio/Steuerung auf `GameSettings.Default` zurück (Sprache und Skirmish-Erinnerung bleiben unverändert).
-Verdrahtet: Auflösung (`ComboBoxResolution`, gegen `Resolutions.Standard` plus die aktuelle Auflösung, falls sie nicht
-in der Standardliste steht), die drei Lautstärkeregler, die Scrollgeschwindigkeit (der Reglerwert ist der Faktor des
-Originals, `docs/PRESENTATION-INPUT.md` §4a) und – seit 7. Oktober 2026 – die alternative Maus (`CheckAlternateMouse` ↔
-`ControlSettings.AlternateMouse`, Vorgabe angehakt, `docs/PRESENTATION-INPUT.md` §6). **Nicht verdrahtet** (kein
-passendes `GameSettings`-Feld, aber sichtbar und interaktiv, damit der Screen authentisch aussieht): Gamma, Detail-
-/Antialiasing-Auswahl, Doppelklick-Angriffsbewegung, Vergeltung, die gesamte `NetworkParent`-Gruppe,
-das versteckte „erweiterte Anzeigeoptionen“-Panel. Anzeigemodus (Fenster/Vollbild), Sprache, Seitenverhältnis und
-Barrierefreiheits-Textskalierung haben in der ausgelieferten Datei kein eigenes Gadget und sind von diesem Screen aus
-nicht erreichbar (Anfrage: ein zukünftiges Revision bräuchte entweder eine eigene WND-Sektion oder die
-Wiederverwendung eines der inerten Platzhalter).
+`OptionsScreen` edits a working copy of `GameSettings` and writes it only on "Accept" via
+`SettingsStore` (`settings.json`, atomic, see `src/CnCNew.Ui/Settings/SettingsStore.cs`) and reports
+`SettingsChangedOutput`/`ApplyResolutionOutput`. "Cancel" discards the working copy, "Defaults" resets only
+display/audio/controls to `GameSettings.Default` (language and skirmish memory remain unchanged).
+Wired: resolution (`ComboBoxResolution`, against `Resolutions.Standard` plus the current resolution if it is not
+in the standard list), the three volume sliders, the scroll speed (the slider value is the factor of the
+original, `docs/PRESENTATION-INPUT.md` §4a) and – since 7 October 2026 – the alternate mouse (`CheckAlternateMouse` ↔
+`ControlSettings.AlternateMouse`, default checked, `docs/PRESENTATION-INPUT.md` §6). **Not wired** (no
+matching `GameSettings` field, but visible and interactive so that the screen looks authentic): gamma, detail/
+anti-aliasing selection, double-click attack move, retaliation, the entire `NetworkParent` group,
+the hidden "advanced display options" panel. Display mode (window/full screen), language, aspect ratio and
+accessibility text scaling have no gadget of their own in the shipped file and cannot be reached from this screen
+(request: a future revision would need either a WND section of its own or the
+reuse of one of the inert placeholders).
 
-## 6. Skirmish-Einrichtung und Anfragen an `LiveMatch`/die Simulation
+## 6. Skirmish setup and requests to `LiveMatch`/the simulation
 
-`SkirmishSetupScreen` erzeugt einen `MatchSetup` aus: Karte (`SkirmishMapSelectScreen`, nur `isMultiplayer`-Karten),
-menschliche Fraktion (`ComboBoxPlayerTemplate0`, inklusive „Random“, deterministisch über einen pro Slot festen Seed
-aufgelöst – nicht den Match-Seed), bis zu 7 Computergegner (`ComboBoxPlayer1..7` = `GUI:Open`, `GUI:Closed`, `GUI:MediumAI`; `SkirmishGameOptionsMenuInit` bietet zusätzlich `GUI:EasyAI` und `GUI:HardAI`, siehe unten; begrenzt durch die
-Startpositionsanzahl der gewählten Karte aus `MapCache.ini`), Startkapital (`ComboBoxStartingCash` →
-`SkirmishMatchOptions.StartMoney`). Die Karte ist wie im Original vorbelegt: die zuletzt gespielte (`SkirmishMemory.LastMap`, `SkirmishPreferences::getPreferredMap`),
-sonst die erste Mehrspielerkarte des Katalogs in der Reihenfolge der kleingeschriebenen Pfade (`getDefaultMap(TRUE)`, der `MapCache` ist danach sortiert); den Text
-„(no map selected)“ gibt es nicht mehr, ohne jede Mehrspielerkarte bleibt das Namensfeld leer und die Vorschau zeigt nur ihren Rahmen. Der zweite Slot beginnt als „Medium Army“
-(das Original nimmt je nach Zahl der Siege die leichte, mittlere oder schwere Armee; hier gibt es nur eine), das Namensfeld trägt `GUI:Player`. Start tut ohne mindestens einen Computergegner
-einfach nichts (keine Inline-Fehlermeldung – bewusste Vereinfachung).
+`SkirmishSetupScreen` produces a `MatchSetup` from: map (`SkirmishMapSelectScreen`, only `isMultiplayer` maps),
+human faction (`ComboBoxPlayerTemplate0`, including "Random", resolved deterministically via a seed fixed per slot
+– not the match seed), up to 7 computer opponents (`ComboBoxPlayer1..7` = `GUI:Open`, `GUI:Closed`, `GUI:MediumAI`; `SkirmishGameOptionsMenuInit` additionally offers `GUI:EasyAI` and `GUI:HardAI`, see below; limited by the
+number of start positions of the selected map from `MapCache.ini`), starting cash (`ComboBoxStartingCash` →
+`SkirmishMatchOptions.StartMoney`). The map is preset as in the original: the one played last (`SkirmishMemory.LastMap`, `SkirmishPreferences::getPreferredMap`),
+otherwise the first multiplayer map of the catalogue in the order of the lower-cased paths (`getDefaultMap(TRUE)`, the `MapCache` is sorted by that); the text
+"(no map selected)" no longer exists, without any multiplayer map the name field stays empty and the preview shows only its frame. The second slot starts as "Medium Army"
+(the original takes the easy, medium or hard army depending on the number of victories; here there is only one), the name field carries `GUI:Player`. Without at least one computer opponent, Start
+simply does nothing (no inline error message – deliberate simplification).
 
-Nicht verdrahtet, weil `LiveMatch`/`SkirmishMatchOptions` es nicht unterstützen (Anfragen für eine künftige Phase):
+Not wired because `LiveMatch`/`SkirmishMatchOptions` do not support it (requests for a future phase):
 
-* **Mehr als 7 Computergegner-Slots / eigene Startpositionswahl**: `LiveMatch.Create` weist Startposition 0 fest dem
-  Menschen zu und iteriert die restlichen Startpositionen der Reihe nach; `ButtonMapStartPosition0..7` in beiden
-  Karten-Screens sind rein dekorativ (Klicks laufen ins Leere).
-* **Teams**: `ComboBoxTeam0..7` ist sichtbar und bedienbar, aber `SkirmishSlot.Team`/`MatchSetup` haben kein Feld dafür.
-* **Spielerfarbe**: `ComboBoxColor0..7` zeigt nur generische „Color N“-Einträge (keine echte Farbpalette angebunden).
-* **KI-Schwierigkeitsgrad**: das Original bietet je Slot drei Armeen (`GUI:EasyAI`/`MediumAI`/`HardAI` = `SLOT_EASY_AI`/`SLOT_MED_AI`/`SLOT_BRUTAL_AI`;
-  `GameLogic::startNewGame` macht daraus `skirmishDifficulty`). Diese Einrichtung bietet **eine** („Medium Army“, `GUI:MediumAI`, `ShellSkirmishText.ComputerArmy`), weil
-  keine der in den Daten belegten Schwierigkeitswirkungen für einen Computerspieler im Skirmish gilt und der Rest in den hier nicht ausgeführten KI-Skripten steckt
-  (Belege und Abgrenzung: `docs/SIMULATION-CORE.md` §35). Drei Einträge, die dieselbe KI starten, gibt es damit nicht mehr; der Zähler `GameShell.SkirmishDifficultyIgnored`
-  ist entfallen, weil kein Eintrag mehr etwas verspricht, das nicht eingehalten wird. Der mittlere Eintrag bleibt, weil der eine Computerspieler der Simulation
-  `DIFFICULTY_NORMAL` entspricht (kein Bonus, kein Malus). `GeneralSettings.DefaultAiDifficulty` wird weiterhin von nichts gelesen. Die Änderung der Einrichtung ist
-  nicht von einem Menschen gesehen.
-* **Spielgeschwindigkeit/Superwaffen-Limit**: `SliderGameSpeed`/`CheckboxLimitSuperweapons` sind sichtbar, aber ohne
-  Wirkung.
+* **More than 7 computer opponent slots / own choice of start position**: `LiveMatch.Create` firmly assigns start position 0 to the
+  human and iterates the remaining start positions in turn; `ButtonMapStartPosition0..7` in both
+  map screens are purely decorative (clicks go nowhere).
+* **Teams**: `ComboBoxTeam0..7` is visible and operable, but `SkirmishSlot.Team`/`MatchSetup` have no field for it.
+* **Player colour**: `ComboBoxColor0..7` shows only generic "Color N" entries (no real colour palette connected).
+* **AI difficulty level**: the original offers three armies per slot (`GUI:EasyAI`/`MediumAI`/`HardAI` = `SLOT_EASY_AI`/`SLOT_MED_AI`/`SLOT_BRUTAL_AI`;
+  `GameLogic::startNewGame` turns that into `skirmishDifficulty`). This setup offers **one** ("Medium Army", `GUI:MediumAI`, `ShellSkirmishText.ComputerArmy`), because
+  none of the difficulty effects evidenced in the data applies to a computer player in the skirmish and the rest is in the AI scripts not executed here
+  (evidence and delimitation: `docs/SIMULATION-CORE.md` §35). Three entries that start the same AI therefore no longer exist; the counter `GameShell.SkirmishDifficultyIgnored`
+  has been dropped because no entry promises anything any more that is not kept. The medium entry stays because the one computer player of the simulation
+  corresponds to `DIFFICULTY_NORMAL` (no bonus, no malus). `GeneralSettings.DefaultAiDifficulty` is still read by nothing. The change of the setup has
+  not been seen by a human.
+* **Game speed/superweapon limit**: `SliderGameSpeed`/`CheckboxLimitSuperweapons` are visible but without
+  effect.
 
-## 7. Ergebnisbildschirm (`MatchResult`, `MatchStatistics`)
+## 7. Result screen (`MatchResult`, `MatchStatistics`)
 
-`LiveMatch` exponiert keine Tick-Ereignisse; der Host muss deshalb selbst eine `MatchStatistics` führen (`Record`
-einmal pro `TickResult`, wie `SkirmishMatchSession.Step()` sie liefert) und sie `GameShell.MatchFinished` übergeben.
-Ohne Tracker (`statistics: null`) oder wenn `HasData` nie wahr wurde, zeigt jede Zahlenspalte `-` statt einer
-erfundenen Null. Gezählt werden nur `SimEventKind`-Werte mit eindeutigem Spielerbezug: `ProductionCompleted` →
-Einheiten gebaut, `EntityDied`/`EntityDestroyed` → Einheiten verloren/zerstört, `ConstructionCompleted` → Gebäude
-gebaut, `StructureSold` → Gebäude verloren, `SupplyDeposited` → Ressourcen. **`BuildingsDestroyed` wird nicht
-gezählt** – es gibt kein Ereignis, das ein zerstörtes Gebäude von einer zerstörten Einheit unterscheidet (Anfrage an
-die Simulation für ein künftiges `SimEventKind.StructureDestroyed` oder ein `IsBuilding`-Flag an `EntityDestroyed`).
-Beobachter sind in `LiveMatch` nicht modelliert; `StaticTextObserverN` bleibt für jede Zeile versteckt.
+`LiveMatch` exposes no tick events; the host therefore has to keep a `MatchStatistics` itself (`Record`
+once per `TickResult`, as `SkirmishMatchSession.Step()` delivers them) and hand it to `GameShell.MatchFinished`.
+Without a tracker (`statistics: null`) or if `HasData` never became true, every number column shows `-` instead of an
+invented zero. Only `SimEventKind` values with an unambiguous player reference are counted: `ProductionCompleted` →
+units built, `EntityDied`/`EntityDestroyed` → units lost/destroyed, `ConstructionCompleted` → buildings
+built, `StructureSold` → buildings lost, `SupplyDeposited` → resources. **`BuildingsDestroyed` is not
+counted** – there is no event that distinguishes a destroyed building from a destroyed unit (request to
+the simulation for a future `SimEventKind.StructureDestroyed` or an `IsBuilding` flag on `EntityDestroyed`).
+Observers are not modelled in `LiveMatch`; `StaticTextObserverN` stays hidden for every row.
 
-## 8. Fokus, Tastatur, Barrierefreiheit
+## 8. Focus, keyboard, accessibility
 
-Escape schließt den obersten Dialog, sofern die zugehörige WND-Datei überhaupt einen `INPUTCALLBACK` deklariert
-(`MainMenu`, `OptionsMenu`, die beiden Skirmish-Screens, `CreditsMenu`, `ChallengeMenu`, `SaveLoad` tun das; `MessageBox`/`QuitMessageBox` nicht –
-das ist keine Lücke der Hülle, sondern exakt das Verhalten der ausgelieferten Datei). Hängt der Callback nicht an der Wurzel (`SaveLoad.wnd`: am Kind `SaveLoadMenu`), setzt der
-Screen `UiWindowTree.KeyboardHome` (das `winSetFocus(parent)` der Layout-Init); Escape wirkt dort jetzt auch ohne fokussiertes Gadget (§13). Tab/Umschalt+Tab, Pfeiltasten,
-Eingabe/Leertaste laufen unverändert durch `UiWindowTree.KeyDown` (siehe `docs/UI-WND.md`); jeder Screen hat wegen der
-eigenen `UiWindowTree`-Instanz eine eigene, in sich geschlossene Fokusreihenfolge. UI-Skalierung läuft über
-`UiScaleOptions`/`UiScaler` (`Mode = Uniform`, siehe `GameShell`-Konstruktor); ein Regler dafür in `GameSettings`
-(`AccessibilitySettings.UiTextScalePercent`, `HighContrastUi`) existiert bereits, ist aber – siehe Abschnitt 5 – von
-keinem Gadget aus erreichbar, weil die ausgelieferte `OptionsMenu.wnd` keins dafür vorsieht.
+Escape closes the topmost dialog provided the associated WND file declares an `INPUTCALLBACK` at all
+(`MainMenu`, `OptionsMenu`, the two skirmish screens, `CreditsMenu`, `ChallengeMenu`, `SaveLoad` do; `MessageBox`/`QuitMessageBox` do not –
+that is not a gap of the shell but exactly the behaviour of the shipped file). If the callback is not attached to the root (`SaveLoad.wnd`: to the child `SaveLoadMenu`), the
+screen sets `UiWindowTree.KeyboardHome` (the `winSetFocus(parent)` of the layout init); Escape now also works there without a focused gadget (§13). Tab/Shift+Tab, arrow keys,
+Enter/space run unchanged through `UiWindowTree.KeyDown` (see `docs/UI-WND.md`); because of its
+own `UiWindowTree` instance every screen has its own, self-contained focus order. UI scaling runs via
+`UiScaleOptions`/`UiScaler` (`Mode = Uniform`, see the `GameShell` constructor); a control for it in `GameSettings`
+(`AccessibilitySettings.UiTextScalePercent`, `HighContrastUi`) already exists but – see section 5 – cannot be reached from
+any gadget, because the shipped `OptionsMenu.wnd` provides none for it.
 
-## 9. Tests und gemessene Zahlen
+## 9. Tests and measured numbers
 
-`tests/CnCNew.Game.Tests/ShellTests.cs` (Suite `ShellTests`, registriert in `Program.cs`), gegen
+`tests/CnCNew.Game.Tests/ShellTests.cs` (suite `ShellTests`, registered in `Program.cs`), against
 `game/content`:
 
-* **Klickdurchlauf**: Hauptmenü → Einzelspieler-Untermenü → Skirmish-Einrichtung → Kartenauswahl (Klick auf die erste
-  Zeile der echten, gefilterten Kartenliste) → zurück → Start → Ladebildschirm → `StartMatchOutput` → ein echtes,
-  600 Ticks laufendes `SkirmishMatchSession` (über das bereits vorhandene `LiveMatch.Create`, nicht neu geschrieben) →
-  `MatchFinished` → Ergebnisbildschirm → zurück zum Hauptmenü → Credits → Escape → Beenden-Bestätigung (Nein, dann Ja).
-* **Acht besuchte Screens** (`MainMenu`, `SkirmishSetup`, `SkirmishMapSelect`, `MatchLoading`, `ScoreScreen`,
-  `Credits`, `Options`, `QuitConfirm`) je an sechs Auflösungen gezeichnet: 800×600, 1024×768, 1280×720, 1920×1080,
-  2560×1080 und 640×960 (schmal, hochkant-ähnlich) – **54 goldene Hashes** in
-  `tests/CnCNew.Game.Tests/baselines/screens.txt` (`SHA-256` von `UiDrawList.Dump()`), zwei unabhängige Läufe
-  bytegleich.
-* **0 nicht registrierte Callbacks, 0 nicht aufgelöste Labels** über alle 54 Messpunkte.
-* Optionen: Auflösung und Musiklautstärke ändern, Accept, neue `GameShell`-Instanz mit demselben
-  `IShellEnvironment` erzeugen → beide Werte kommen unverändert zurück (`settings.json`-Persistenz).
-  `CNCNEW_UPDATE_BASELINES=1` schreibt die Hash-Datei neu (nach einer bewussten Änderung); Standardlauf vergleicht nur.
-* Boot: `GameShell.CreateLoading` zeichnet sofort etwas (der Ladebildschirm ist ab dem ersten Frame sichtbar), erreicht
-  nach dem Hintergrund-Ladevorgang zuverlässig `ShellPhase.Menus`.
+* **Click-through**: main menu → single-player submenu → skirmish setup → map selection (click on the first
+  row of the real, filtered map list) → back → Start → loading screen → `StartMatchOutput` → a real
+  `SkirmishMatchSession` running 600 ticks (via the already existing `LiveMatch.Create`, not rewritten) →
+  `MatchFinished` → result screen → back to the main menu → credits → Escape → quit confirmation (No, then Yes).
+* **Eight visited screens** (`MainMenu`, `SkirmishSetup`, `SkirmishMapSelect`, `MatchLoading`, `ScoreScreen`,
+  `Credits`, `Options`, `QuitConfirm`), each drawn at six resolutions: 800×600, 1024×768, 1280×720, 1920×1080,
+  2560×1080 and 640×960 (narrow, portrait-like) – **54 golden hashes** in
+  `tests/CnCNew.Game.Tests/baselines/screens.txt` (`SHA-256` of `UiDrawList.Dump()`), two independent runs
+  byte-identical.
+* **0 unregistered callbacks, 0 unresolved labels** across all 54 measuring points.
+* Options: change resolution and music volume, Accept, create a new `GameShell` instance with the same
+  `IShellEnvironment` → both values come back unchanged (`settings.json` persistence).
+  `CNCNEW_UPDATE_BASELINES=1` rewrites the hash file (after a deliberate change); the default run only compares.
+* Boot: `GameShell.CreateLoading` draws something immediately (the loading screen is visible from the first frame), reliably reaches
+  `ShellPhase.Menus` after the background loading.
 
-* **Bildschirmstapel** (Phase 16, §13, `ShellTests`): nur der oberste ersetzende Screen wird gezeichnet (Skirmish-Einrichtung, Credits, Ladeliste, Challenge-Menü: keiner der sechs Hauptmenütexte
-  erscheint), Optionen, Beenden-Dialog und Kartenwahl liegen über dem Screen darunter (Befehlszahl = Summe beider), die Einrichtung versteckt unter der Kartenwahl die Felder des Originals und
-  stellt sie wieder her; Escape beendet die Ladeliste ohne Gadgetfokus; das Challenge-Menü zeigt Biografie und Play erst nach der Wahl, mit aufgelösten Texten, und startet die gewählte Kampagne mit
-  der im Hauptmenü gewählten Schwierigkeit.
-* **Fensterübergänge** (`ShellTransitionTests.cs`, zehn Tests gegen die echten Layouts, Einzelheiten §12): Einstieg, Eingabe bei versteckten Fenstern, Untermenüs, Fraktionslogos, Screen-Rundgang
-  mit Flash-out/Fade-in/erneutem Einstieg, alle Kampagnenknöpfe, Ergebnisbildschirm mit hochzählenden Zahlen, byteidentische Wiederholung, Lauf ohne Animation.
+* **Screen stack** (Phase 16, §13, `ShellTests`): only the topmost replacing screen is drawn (skirmish setup, credits, load list, challenge menu: none of the six main menu texts
+  appears), options, quit dialog and map selection lie above the screen underneath (command count = sum of both), under the map selection the setup hides the fields of the original and
+  restores them; Escape ends the load list without gadget focus; the challenge menu shows biography and Play only after the selection, with resolved texts, and starts the selected campaign with
+  the difficulty selected in the main menu.
+* **Window transitions** (`ShellTransitionTests.cs`, ten tests against the real layouts, details §12): entry, input with hidden windows, submenus, faction logos, screen tour
+  with flash-out/fade-in/renewed entry, all campaign buttons, result screen with numbers counting up, byte-identical repetition, run without animation.
 
-`dotnet build CnCNew.slnx`: unverändert **21 Warnungen** (die dokumentierte Stride-Asset-Compiler-Basislinie), **0**
-davon neu.
+`dotnet build CnCNew.slnx`: unchanged **21 warnings** (the documented Stride asset compiler baseline), **0**
+of them new.
 
-## 10. Bekannte Grenzen (Zusammenfassung)
+## 10. Known limits (summary)
 
-* Kampagnenauswahl, Briefing, Ladeliste, Speichern im Spiel und Missionsabschluss sind seit Phase 10 angebunden
+* Campaign selection, briefing, load list, saving in the game and mission completion have been connected since Phase 10
   (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7, `src/CnCNew.Game/Shell/Screens/CampaignScreens.cs`,
-  `src/CnCNew.Game/Shell/MissionPresentation.cs`, `src/CnCNew.Game/Hud/MissionPauseMenu.cs`); nur Mehrspieler und
-  Wiedergabe (Replays) bleiben außerhalb des Produktumfangs (Buttons sichtbar, deaktiviert).
-* `RadioButtonUserMaps` liefert eine leere Liste (kein Importpfad für eigene Karten in diesem Stand).
-* Kein Mausklick beendet den Abspann (nur Escape) – `WinTextDraw` ist ein einfaches `USER`-Fenster, und diese Laufzeit
-  routet nur Gadget- und Tastaturnachrichten (siehe `docs/UI-WND.md`); eine „beliebiger Mausklick auf ein Nicht-
-  Gadget-Fenster“-Nachricht existiert im Nachrichtenmodell bislang nicht.
-* `ShellTextMeasure` liefert synthetische, deterministische Zeichenbreiten (keine echte Glyphenmetrik) und ist nur
-  noch der Standard für kopflose Tests. Ein Host übergibt `GameShell.Create(…, textMeasure)` die Metrik der Schrift,
-  mit der er zeichnet; der Stride-Client tut das seit dem Befundpaket in §11 (`ClientRuntime.ForShell` reicht
-  `UiRenderer.TextMeasure` durch) – vorher saßen alle zentrierten Texte sichtbar neben der Mitte.
-* Anzeigemodus/Sprache/Seitenverhältnis/Barrierefreiheits-Textskalierung sind in `GameSettings` vorhanden, aber von
-  keinem Gadget der ausgelieferten `OptionsMenu.wnd` aus erreichbar.
-* **Fensterübergänge (§12):** nur im Stride-Client eingeschaltet (`GameShell.Create(…, animateTransitions: true)`, `--no-transitions` schaltet sie ab); `Create` ohne den Parameter,
-  alle Tests und die goldenen Hashes laufen ohne Animation. Nicht gespielt werden die Gruppen von Mehrspieler-Bildschirmen, des Schwierigkeitsmenüs (hier ein eigener Screen), des Spielmenüs
-  im Spiel (`Quit*`, gehört zum HUD), `GenExpFade`, `ControlBarArrow` und der Bildschirmfade beim Spielstart (`FadeWholeScreen` nach dem Laden) – siehe §12 „Nicht umgesetzt“.
-* **Phase 16 (Bildschirmstapel, §13):** das Hauptmenü bleibt unter ersetzenden Screens im Stapel (es spielt beim Zurückkehren seinen Einstieg erneut), wird aber nicht gezeichnet. Es gibt keine eigene
-  Hintergrundebene: im Original liegt hinter allen Menüs die 3D-„Shell-Karte“ (zurückgestellt, §11), hier Schwarz; Rahmen und Lineal zeichnen die Layouts selbst (`MainMenuRuler` an der Wurzel von
-  `SkirmishGameOptionsMenu.wnd`, `SaveLoad.wnd`, `ScoreScreen.wnd`). Escape im Hauptmenü und in der Schwierigkeitsfrage ist Zutat dieser Hülle (`MainMenuInput` des Originals kennt keine Escape-Taste).
-* **Phase 12:** die Shell-Ausgaben (`StartMatchOutput`, `StartMissionOutput`, `ExitRequestedOutput`, Anzeige-/Einstellungsänderungen) und die Rückmeldungen
-  (`MatchFinished`/`MissionFinished`) sind im Stride-Client angeschlossen (`ClientRuntime`, `docs/GAME-HUD.md` §15). `GameShell` liest beim Start `Data/INI/ChallengeMode.ini` und setzt über
-  `CampaignCatalog.WithPersonas` die Persona-Fraktion jeder Challenge-Kampagne (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
+  `src/CnCNew.Game/Shell/MissionPresentation.cs`, `src/CnCNew.Game/Hud/MissionPauseMenu.cs`); only multiplayer and
+  playback (replays) remain outside the product scope (buttons visible, disabled).
+* `RadioButtonUserMaps` delivers an empty list (no import path for own maps in this state).
+* No mouse click ends the credits (only Escape) – `WinTextDraw` is a simple `USER` window, and this runtime
+  routes only gadget and keyboard messages (see `docs/UI-WND.md`); an "any mouse click on a non-
+  gadget window" message does not exist in the message model so far.
+* `ShellTextMeasure` delivers synthetic, deterministic character widths (no real glyph metrics) and is now only
+  the default for headless tests. A host passes `GameShell.Create(…, textMeasure)` the metrics of the font
+  with which it draws; the Stride client has done so since the package of findings in §11 (`ClientRuntime.ForShell` passes
+  `UiRenderer.TextMeasure` through) – before, all centred texts sat visibly beside the centre.
+* Display mode/language/aspect ratio/accessibility text scaling are present in `GameSettings` but cannot be reached from
+  any gadget of the shipped `OptionsMenu.wnd`.
+* **Window transitions (§12):** switched on only in the Stride client (`GameShell.Create(…, animateTransitions: true)`, `--no-transitions` switches them off); `Create` without the parameter,
+  all tests and the golden hashes run without animation. Not played are the groups of multiplayer screens, of the difficulty menu (here a screen of its own), of the game menu
+  in the game (`Quit*`, belongs to the HUD), `GenExpFade`, `ControlBarArrow` and the screen fade at game start (`FadeWholeScreen` after loading) – see §12 "Not implemented".
+* **Phase 16 (screen stack, §13):** the main menu stays in the stack under replacing screens (it plays its entry again on returning) but is not drawn. There is no background layer of its
+  own: in the original the 3D "shell map" lies behind all menus (deferred, §11), here black; the layouts draw frame and ruler themselves (`MainMenuRuler` at the root of
+  `SkirmishGameOptionsMenu.wnd`, `SaveLoad.wnd`, `ScoreScreen.wnd`). Escape in the main menu and in the difficulty question is an addition of this shell (`MainMenuInput` of the original knows no Escape key).
+* **Phase 12:** the shell outputs (`StartMatchOutput`, `StartMissionOutput`, `ExitRequestedOutput`, display/settings changes) and the feedback
+  (`MatchFinished`/`MissionFinished`) are connected in the Stride client (`ClientRuntime`, `docs/GAME-HUD.md` §15). On start `GameShell` reads `Data/INI/ChallengeMode.ini` and sets, via
+  `CampaignCatalog.WithPersonas`, the persona faction of every challenge campaign (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
 
-## 11. Befunde der ersten Sichtprüfung (Demo `shell`, 4. Oktober 2026)
+## 11. Findings of the first visual check (demo `shell`, 4 October 2026)
 
-Ein Mensch hat `scripts/demo-shell.ps1` gespielt und fünf Auffälligkeiten gemeldet. Ursachen, Behebung und Tests:
+A human played `scripts/demo-shell.ps1` and reported five conspicuous points. Causes, fix and tests:
 
-| Befund | Ursache | Behebung | Test | Was ein Mensch noch prüfen muss |
+| Finding | Cause | Fix | Test | What a human still has to check |
 |---|---|---|---|---|
-| Schaltflächen ohne sichtbaren Zustandswechsel | Die Auswahl der Zeichendaten war bereits richtig (`W3DGadgetPushButtonImageDrawThree/One`, `W3DGadgetPushButtonDraw`: Hilite 0/5/6 unter der Maus, Hilite 1/3/4 gedrückt, Disabled 0/5/6) und zeichnete kopflos einen Wechsel. Falsch war der Zustand selbst: (a) ein Klick gab der Schaltfläche den Tastaturfokus (im Original ruft `GadgetPushButtonInput` nie `winSetFocus`), und die Fokus-Hervorhebung überlebte das Verlassen – jede einmal geklickte Schaltfläche blieb hervorgehoben, Überfahren änderte an ihr nichts mehr; (b) eine Schaltfläche, die beim Gruppenwechsel versteckt wurde, behielt Hilite/Pressed und kam hervorgehoben zurück; (c) der von einem Dialog verdeckte Screen erfuhr nie, dass die Maus weg ist. | `UiWindowTree`: Fokus per Klick nur noch für Combo-Box, List-Box und Texteingabe; `GWM_MOUSE_LEAVING` löscht die Hervorhebung unbedingt; Verstecken löscht Hilite/Pressed; neues `PointerLeft()`, das `GameShell.Push` für den verdeckten Screen aufruft. | `WndTests.PushButtonStatesPickTheirDrawData`, `WndTests.HiliteFollowsThePointerOnly`; `ShellTests` „Buttons draw hilite and pushed images …“ | Ob Überfahren und Drücken im laufenden Client jetzt deutlich genug sind (die ausgelieferten Bilder `Buttons-HiLite-*` und `Buttons-Pushed-*` unterscheiden sich nur wenig). Ein vollständiges Ausbleiben jeder Hervorhebung ließ sich kopflos **nicht** nachstellen. |
-| Regler im Optionsmenü unsichtbar | Der horizontale Regler mit `IMAGE`-Status wurde als dreiteiliger Balken aus Enabled 0/2/1 gezeichnet; diese Einträge sind `NoImage`. Das Original (`W3DGadgetHorizontalSliderImageDraw`) zeichnet keinen Balken, sondern eine zentrierte Reihe quadratischer Kästchen aus festen Plätzen: Disabled 0 = gefüllt, Disabled 1 = leer, Hilite 0 = Rahmen hinter der Reihe bei Hervorhebung. | `UiDrawBuilder.SliderBoxes`; Daumen wie der Kindknopf aus `gogoGadgetSlider` (13×16, 10 unter der Oberkante, Hilite-Bild nur bei Hervorhebung, gedrückt Eintrag 1). Ziehen funktionierte schon. | `WndTests.HorizontalSliderDrawsBoxesAndThumb`; `ShellTests` „Options: sliders draw their boxes and drag …“ | Farben und Abstand der Kästchen gegen das Original; der Rahmen (`linebox`) beim Überfahren. |
-| Grüner Hintergrund hinter Überschriften beim Überfahren | Jedes Gadget mit `MOUSETRACK` wurde hervorgehoben. Statische Texte tragen in den Dateien `MOUSETRACK` und eine grelle `HILITEDRAWDATA`-Füllung, aber `GadgetStaticTextInput` behandelt `GWM_MOUSE_ENTERING` nicht – der Zustand entsteht im Original nie. | Hervorhebung und Enter/Leave-Nachrichten nur für Gadgets, deren Eingabefunktion sie behandelt (Knopf, Check-Box, Radio, Regler, List-Box, Combo-Box, Texteingabe). | `WndTests.StaticTextHasNoHiliteState`; `ShellTests` (sieben Beschriftungen des Optionsmenüs) | Nichts Offenes bekannt. |
-| Graue Texte mit Schaltflächen links neben der Spalte | Die sechs Schaltflächen `Button{USA,GLA,China}{RecentSave,LoadGame}`. Sie sind in `MainMenu.wnd` nicht `HIDDEN`; `MainMenuInit` versteckt sie über `showSelectiveButtons(SHOW_NONE)`. Die Hülle hatte sie nur deaktiviert. | `MainMenuScreen` versteckt sie. | `ShellTests` „Main menu shows only what MainMenuInit leaves visible“ | Im Original erscheint ein Paar beim Überfahren von USA/GLA/China; das ist nicht umgesetzt (Speicherstände tragen keine Fraktion). |
-| Text im Beenden-Dialog zu klein | `QuitMessageBox.wnd` ist bei 1920×1080 verfasst, die übrigen Shell-Screens bei 800×600. `UiScaler.ScaleFontSize` skalierte im Modus `Uniform`/`Anchor` auch Header-Template-Schriften mit der Erstellungsauflösung des Fensters; Template-Punktgrößen beziehen sich aber immer auf 800 Pixel Breite (`GlobalLanguage::adjustFontSize`). Folge bei 16:9: nur 600/1080 = 56 % der gemeinten Größe (LabelSmall 8 → 5 statt 9 bei 1280×720, 8 statt 14 bei 1920×1080). | Template-Schriften skalieren mit dem gleichförmigen Faktor gegen 800×600, `FONT` des Fensters weiter gegen die Erstellungsauflösung. | `WndTests.FontScalingFollowsModeAndAccessibilityFactor`; `ShellTests` „Quit dialog text takes the header template size …“ | Dieselbe Ursache traf **alle** bei 1920×1080 verfassten Layouts mit Template-Schrift: `ControlBar.wnd` (HUD), `QuitMenu.wnd`, `MessageBox.wnd`, `Diplomacy`, `GeneralsExpPoints`, die Kurzbefehlsleisten, `Victorious`/`Defeat`. Deren Texte sind jetzt bei 16:9 1,8-mal so groß wie vorher – im HUD nachsehen, ob etwas überläuft. |
+| Buttons without a visible change of state | The selection of the draw data was already right (`W3DGadgetPushButtonImageDrawThree/One`, `W3DGadgetPushButtonDraw`: Hilite 0/5/6 under the mouse, Hilite 1/3/4 pressed, Disabled 0/5/6) and drew a change headlessly. What was wrong was the state itself: (a) a click gave the button the keyboard focus (in the original `GadgetPushButtonInput` never calls `winSetFocus`), and the focus highlight survived leaving – every button clicked once stayed highlighted, hovering no longer changed anything about it; (b) a button that was hidden on a change of group kept Hilite/Pressed and came back highlighted; (c) the screen covered by a dialog never learned that the mouse is gone. | `UiWindowTree`: focus by click now only for combo box, list box and text entry; `GWM_MOUSE_LEAVING` clears the highlight unconditionally; hiding clears Hilite/Pressed; new `PointerLeft()`, which `GameShell.Push` calls for the covered screen. | `WndTests.PushButtonStatesPickTheirDrawData`, `WndTests.HiliteFollowsThePointerOnly`; `ShellTests` "Buttons draw hilite and pushed images …" | Whether hovering and pressing are now clear enough in the running client (the shipped images `Buttons-HiLite-*` and `Buttons-Pushed-*` differ only slightly). A complete absence of any highlight could **not** be reproduced headlessly. |
+| Sliders in the options menu invisible | The horizontal slider with `IMAGE` status was drawn as a three-part bar from Enabled 0/2/1; these entries are `NoImage`. The original (`W3DGadgetHorizontalSliderImageDraw`) draws no bar but a centred row of square boxes from fixed slots: Disabled 0 = filled, Disabled 1 = empty, Hilite 0 = frame behind the row when highlighted. | `UiDrawBuilder.SliderBoxes`; thumb like the child button from `gogoGadgetSlider` (13×16, 10 below the top edge, Hilite image only when highlighted, pressed entry 1). Dragging already worked. | `WndTests.HorizontalSliderDrawsBoxesAndThumb`; `ShellTests` "Options: sliders draw their boxes and drag …" | Colours and spacing of the boxes against the original; the frame (`linebox`) on hovering. |
+| Green background behind headings on hovering | Every gadget with `MOUSETRACK` was highlighted. Static texts carry `MOUSETRACK` and a glaring `HILITEDRAWDATA` fill in the files, but `GadgetStaticTextInput` does not handle `GWM_MOUSE_ENTERING` – the state never arises in the original. | Highlight and enter/leave messages only for gadgets whose input function handles them (button, check box, radio, slider, list box, combo box, text entry). | `WndTests.StaticTextHasNoHiliteState`; `ShellTests` (seven captions of the options menu) | Nothing open known. |
+| Grey texts with buttons to the left of the column | The six buttons `Button{USA,GLA,China}{RecentSave,LoadGame}`. They are not `HIDDEN` in `MainMenu.wnd`; `MainMenuInit` hides them via `showSelectiveButtons(SHOW_NONE)`. The shell had only disabled them. | `MainMenuScreen` hides them. | `ShellTests` "Main menu shows only what MainMenuInit leaves visible" | In the original a pair appears on hovering over USA/GLA/China; that is not implemented (saved games carry no faction). |
+| Text in the quit dialog too small | `QuitMessageBox.wnd` is authored at 1920×1080, the remaining shell screens at 800×600. In the mode `Uniform`/`Anchor`, `UiScaler.ScaleFontSize` also scaled header template fonts with the creation resolution of the window; but template point sizes always refer to a width of 800 pixels (`GlobalLanguage::adjustFontSize`). Consequence at 16:9: only 600/1080 = 56 % of the intended size (LabelSmall 8 → 5 instead of 9 at 1280×720, 8 instead of 14 at 1920×1080). | Template fonts scale with the uniform factor against 800×600, `FONT` of the window still against the creation resolution. | `WndTests.FontScalingFollowsModeAndAccessibilityFactor`; `ShellTests` "Quit dialog text takes the header template size …" | The same cause hit **all** layouts authored at 1920×1080 with a template font: `ControlBar.wnd` (HUD), `QuitMenu.wnd`, `MessageBox.wnd`, `Diplomacy`, `GeneralsExpPoints`, the shortcut bars, `Victorious`/`Defeat`. Their texts are now 1.8 times as large as before at 16:9 – check in the HUD whether anything overflows. |
 
-Dazu behoben, nicht gemeldet: Die Hülle setzte ihre Texte mit `ShellTextMeasure` (synthetische Breiten), gezeichnet
-wurde mit der echten Schrift; zentrierte Beschriftungen saßen deshalb rechts der Mitte (§10).
+Fixed in addition, not reported: the shell set its texts with `ShellTextMeasure` (synthetic widths), drawing
+was done with the real font; centred captions therefore sat to the right of the centre (§10).
 
-**Nicht gemacht:** die animierte Gefechtsszene hinter dem Hauptmenü (zurückgestellt). Die Übergangsanimationen des Originals
-(`GameWindowTransitions`, `WindowTransitions.ini`, `TheTransitionHandler->setGroup(...)`: Einblenden der Schaltflächen, Aufklappen der Gruppen,
-Aufblitzen des Logos) sind seit Phase 16 umgesetzt, siehe §12; ohne `animateTransitions` bleiben Gruppenwechsel harte Schnitte.
+**Not done:** the animated battle scene behind the main menu (deferred). The transition animations of the original
+(`GameWindowTransitions`, `WindowTransitions.ini`, `TheTransitionHandler->setGroup(...)`: fading in of the buttons, unfolding of the groups,
+flashing of the logo) have been implemented since Phase 16, see §12; without `animateTransitions` group changes remain hard cuts.
 
-**Goldene Hashes:** 42 der 54 Werte in `baselines/screens.txt` haben sich geändert – alle Screens, die das Hauptmenü
-enthalten oder über ihm liegen (versteckte Fraktions-Schaltflächen), dazu die Regler der Skirmish-Einrichtung und die
-Schrift des Beenden-Dialogs; `MatchLoading` und `ScoreScreen` sind unverändert. `baselines/hud-drawlist-1280x720.sha256`
-hat sich wegen der Template-Schriften von `ControlBar.wnd` geändert. Die Hashes belegen Reproduzierbarkeit, nicht
-Richtigkeit.
+**Golden hashes:** 42 of the 54 values in `baselines/screens.txt` have changed – all screens that contain the main menu
+or lie above it (hidden faction buttons), plus the sliders of the skirmish setup and the
+font of the quit dialog; `MatchLoading` and `ScoreScreen` are unchanged. `baselines/hud-drawlist-1280x720.sha256`
+has changed because of the template fonts of `ControlBar.wnd`. The hashes prove reproducibility, not
+correctness.
 
-**Sichtmittel:** `tools/CnCNew.UiRenderTool` zeichnet seitdem auch die Hülle selbst (`shell-*.png`, über
-`GameShell.Create` und echte Eingabeereignisse): Hauptmenü, überfahrene und gedrückte Schaltfläche, Optionen mit
-Reglern (überfahren, gezogen), Beenden-Dialog – siehe `docs/CLIENT-UI-RENDERING.md` §5.
+**Means of inspection:** since then `tools/CnCNew.UiRenderTool` also draws the shell itself (`shell-*.png`, via
+`GameShell.Create` and real input events): main menu, hovered and pressed button, options with
+sliders (hovered, dragged), quit dialog – see `docs/CLIENT-UI-RENDERING.md` §5.
 
-## 12. Fensterübergänge (`WindowTransitions.ini`, Phase 16)
+## 12. Window transitions (`WindowTransitions.ini`, Phase 16)
 
-Das Original animiert die Hülle über `GameWindowTransitionsHandler` (`GameWindowTransitions.cpp/.h`, `GameWindowTransitionsStyles.cpp`): Schaltflächen blitzen nacheinander auf, Untermenüs klappen
-auf und zu, das Logo blendet ein, Bildschirmwechsel gehen durch eine schwarze Blende, die Zahlen des Ergebnisbildschirms zählen hoch. Die Daten stehen in `Data/INI/WindowTransitions.ini`
-(56 Gruppen, 381 Fenstereinträge); die Screens bestellen Gruppen mit `TheTransitionHandler->setGroup(name)`, `reverse(name)`, `remove(name)` und warten auf `isFinished()`.
+The original animates the shell via `GameWindowTransitionsHandler` (`GameWindowTransitions.cpp/.h`, `GameWindowTransitionsStyles.cpp`): buttons flash one after another, submenus fold
+open and closed, the logo fades in, screen changes go through a black fade, the numbers of the result screen count up. The data are in `Data/INI/WindowTransitions.ini`
+(56 groups, 381 window entries); the screens order groups with `TheTransitionHandler->setGroup(name)`, `reverse(name)`, `remove(name)` and wait for `isFinished()`.
 
-### Datenweg
+### Data path
 
-`WindowTransition` ist im Definitionsgraph weiter ein gezählter Kompatibilitätsblock (56, `baselines/compatibility.json` unverändert, `IniTool compat-check`: 751 Einträge, Definitionssnapshot unverändert).
-Gelesen wird die Datei vom strengen Leser `WindowTransitionTable.Parse` (`src/CnCNew.Ui/Transitions/`), wie Credits und Kampagnen (§4/`ShellCredits`): es ist ein reines Anzeigeskript der Hülle, ohne
-Verbraucher in Simulation oder Präsentationsgraph; eine Typisierung in `CnCNew.Data` hätte nur die Snapshot-Hashes verschoben. Der Leser kennt keinen Standardwert: unbekannter Schlüssel, unbekannter
-Stil, fehlender Stil, fehlender `WinName` (außer bei den zwei ganzbildschirmigen Stilen), doppelte Gruppe, negative Verzögerung und nicht beendeter Block sind `WindowTransitionFormatException` mit Datei und
-Zeile (das Original setzt hier still den ersten Stil bzw. den leeren Namen). Realdaten: 56 Gruppen, 381 Einträge, alle Stile bekannt, **alle Fensternamen lösen in den ausgelieferten Layouts auf** (0 offen).
+`WindowTransition` is still a counted compatibility block in the definition graph (56, `baselines/compatibility.json` unchanged, `IniTool compat-check`: 751 entries, definition snapshot unchanged).
+The file is read by the strict reader `WindowTransitionTable.Parse` (`src/CnCNew.Ui/Transitions/`), like credits and campaigns (§4/`ShellCredits`): it is a pure display script of the shell, without
+a consumer in simulation or presentation graph; typing it in `CnCNew.Data` would only have shifted the snapshot hashes. The reader knows no default value: unknown key, unknown
+style, missing style, missing `WinName` (except for the two full-screen styles), duplicate group, negative delay and unterminated block are a `WindowTransitionFormatException` with file and
+line (the original silently sets the first style or the empty name here). Real data: 56 groups, 381 entries, all styles known, **all window names resolve in the shipped layouts** (0 open).
 
-### Aufbau (Stride-frei, `CnCNew.Ui`)
+### Structure (Stride-free, `CnCNew.Ui`)
 
-| Typ | Aufgabe | Original |
+| Type | Task | Original |
 |---|---|---|
-| `WindowTransitionTable` / `TransitionGroupSpec` | Gruppen, Fenstereinträge (`WinName`, `Style`, `FrameDelay`), `FireOnce` | `parseWindowTransitions`, `parseWindow` |
-| `TransitionEffect` + 15 Klassen | ein Effekt eines Fensters: `Init`, `Update(frame)`, `Reverse`, `Skip`, `Draw`, `IsFinished`, `FrameLength` | `Transition` und Stile |
-| `TransitionWindow`, `TransitionGroup` | Verzögerung je Fenster; Gruppenzähler, der vorwärts oder (nach `Reverse`) rückwärts läuft; `Reverse` setzt ihn auf die längste `Verzögerung + Länge` | `TransitionWindow`, `TransitionGroup` |
-| `WindowTransitionHandler` | `SetGroup`, `Reverse`, `Remove`, `IsFinished`, `Step`, `Advance(Sekunden)`, `AppendDraw`; aktuelle, wartende, gezeichnete und zuletzt gezeichnete Gruppe | `GameWindowTransitionsHandler` |
-| `UiTransitionHost`, `ITransitionWindow` | bindet die Effekte an einen `UiWindowTree`: Fenster per dekoriertem Namen, Verstecken, Bild/Text lesen und setzen, Töne | `TheWindowManager->winGetWindowFromId` und `GameWindow`-Aufrufe |
+| `WindowTransitionTable` / `TransitionGroupSpec` | groups, window entries (`WinName`, `Style`, `FrameDelay`), `FireOnce` | `parseWindowTransitions`, `parseWindow` |
+| `TransitionEffect` + 15 classes | one effect of a window: `Init`, `Update(frame)`, `Reverse`, `Skip`, `Draw`, `IsFinished`, `FrameLength` | `Transition` and styles |
+| `TransitionWindow`, `TransitionGroup` | delay per window; group counter that runs forwards or (after `Reverse`) backwards; `Reverse` sets it to the longest `delay + length` | `TransitionWindow`, `TransitionGroup` |
+| `WindowTransitionHandler` | `SetGroup`, `Reverse`, `Remove`, `IsFinished`, `Step`, `Advance(seconds)`, `AppendDraw`; current, waiting, drawn and last drawn group | `GameWindowTransitionsHandler` |
+| `UiTransitionHost`, `ITransitionWindow` | binds the effects to a `UiWindowTree`: window by decorated name, hiding, reading and setting image/text, sounds | `TheWindowManager->winGetWindowFromId` and `GameWindow` calls |
 
-* **Zeit:** ein Übergangs-Frame je Clientframe des Originals; die Hülle läuft dort mit 30 FPS (`GameData.ini`: `UseFPSLimit = Yes`, `FramesPerSecondLimit = 30`). `Advance(Sekunden)` macht daraus ganze Frames zu
-  1/30 s (Rest wird übertragen), nichts liest Wandzeit – eine Folge ist eine reine Funktion der gesteppten Frames. `ShellScreen.Update` deckelt einen Aufruf auf 0,1 s (3 Frames), damit ein Ladehänger die
-  Folge nicht in einem Schritt abspielt.
-* **Zeichnen:** ein Effekt versteckt sein Fenster und zeichnet an dessen Stelle einen Ersatz (`UiBorderRect`/`UiFillRect`/`UiImageDraw`/`UiTextDraw` mit Alpha), den `GameShell.BuildDrawList` hinter die Zeichenliste des
-  jeweiligen Screens hängt (im Original zeichnet `winRepaint` die Übergänge zuletzt). Der Ersatz des Schaltflächen-Aufblitzens ist `PushButtonImageDrawThree` (`UiWindowTree.BuildPushButtonImages`: linkes, mittleres
-  und rechtes Bild mit Alpha, ohne Text). Jeder Screen hat seinen eigenen Handler (jeder Screen hat seinen eigenen Fensterbaum); der Handler des Originals ist global.
-* **Eingabe:** wie im Original gibt es keine Sperre im Handler. Ein Fenster, das der Effekt versteckt hält (Schaltflächen bis Effektframe 11, Gruppen bis zum Ende ihres Aufblitzens), nimmt keine Eingabe
-  (versteckte Fenster werden nicht getroffen); darüber hinaus verweigern die Screens Navigation, solange eine Gruppe läuft (`dontAllowTransitions` im Hauptmenü: Untermenüwechsel, Kampagnen-/Skirmish-/Lade-/Credits-/
-  Optionsknöpfe und Escape; „Beenden“ ist ausgenommen); ein Screen, der gerade ausblendet (`IsClosing`), bekommt keine Eingabe mehr. `GameShell.IsAnimating` sagt dem Host (und den Tests), wann alles still steht.
+* **Time:** one transition frame per client frame of the original; the shell runs at 30 FPS there (`GameData.ini`: `UseFPSLimit = Yes`, `FramesPerSecondLimit = 30`). `Advance(seconds)` turns that into whole frames of
+  1/30 s (the remainder is carried over), nothing reads wall time – a sequence is a pure function of the stepped frames. `ShellScreen.Update` caps one call at 0.1 s (3 frames) so that a loading hang does not
+  play the sequence in one step.
+* **Drawing:** an effect hides its window and draws a substitute in its place (`UiBorderRect`/`UiFillRect`/`UiImageDraw`/`UiTextDraw` with alpha), which `GameShell.BuildDrawList` appends behind the draw list of the
+  respective screen (in the original `winRepaint` draws the transitions last). The substitute of the button flash is `PushButtonImageDrawThree` (`UiWindowTree.BuildPushButtonImages`: left, middle
+  and right image with alpha, without text). Every screen has its own handler (every screen has its own window tree); the handler of the original is global.
+* **Input:** as in the original there is no lock in the handler. A window that the effect keeps hidden (buttons up to effect frame 11, groups until the end of their flash) takes no input
+  (hidden windows are not hit); beyond that the screens refuse navigation as long as a group is running (`dontAllowTransitions` in the main menu: submenu change, campaign/skirmish/load/credits/
+  options buttons and Escape; "Quit" is excepted); a screen that is just fading out (`IsClosing`) no longer gets input. `GameShell.IsAnimating` tells the host (and the tests) when everything stands still.
 
-### Die 15 Stile (Häufigkeit in der Datei; Frames = Länge des Effekts)
+### The 15 styles (frequency in the file; frames = length of the effect)
 
-| Stil | n | Frames | Verhalten (Quelle: `GameWindowTransitionsStyles.cpp`) |
+| Style | n | Frames | Behaviour (source: `GameWindowTransitionsStyles.cpp`) |
 |---|---|---|---|
-| `FLASH` | 117 | 8 | Fenster Frames 1–3 versteckt, weißer Rahmen und Füllung mit Alpha 100/33, 150/66, 200/99, danach ab Frame 4 sichtbar mit abklingendem Weiß (75/50/25/10); Ton `GUIBoarderFadeIn` |
-| `BUTTONFLASH` | 77 | 17 | 1–3 weißes Aufblitzen wachsend (Ton `GUIButtonsFadeIn`), 4–7 Schaltflächenbild unter abklingendem Weiß, 8–10 nur das Bild, 11–16 Fenster sichtbar unter abklingendem Verlauf `Gradient`; rückwärts dieselben Tabellen gespiegelt |
-| `WINFADE` | 7 | 10 | das erste Bild des Fensters mit Alpha 25 · Frame (1–9) |
-| `WINSCALEUP` | 47 | 6 | das Bild wächst aus der Mitte in sechs Schritten (Frames 1–5 gezeichnet); Ton `GUILogoMouseOver` |
-| `SCORESCALEUP` | 7 | 6 | wie `WINSCALEUP`; Ton `GUIScoreScreenPictures` |
-| `MAINMENUSCALEUP` | 8 | 5 | das Disabled-Bild fliegt und wächst in fünf Schritten in `WinGrowMarker`; Ton `GUILogoSelect` |
-| `MAINMENUMEDIUMSCALEUP` | 10 | 3 | das Logo `WinFactionX` wächst um seine Mitte auf die Größe von `WinFactionXMedium`; Ton `GUILogoMouseOver` |
-| `MAINMENUSMALLSCALEDOWN` | 0 | 6 | wie oben auf `…Small`; von der ausgelieferten Datei **nicht benutzt** (umgesetzt und getestet) |
-| `TYPETEXT` | 4 | min(Textlänge, 30) | ein Zeichen je Frame, Ton `GUITypeText`; rückwärts löscht es |
-| `SCREENFADE` | 1 | 30 | schwarze Fläche über den ganzen Bildschirm, Alpha `1/29 · 255 · Frame`; rückwärts blendet es auf |
-| `COUNTUP` | 56 | min(Wert/Schritt, 30) | Zahl zählt in 1er, 100er oder 1000er Schritten von 0 hoch; Ton `GUIScoreScreenTick` |
-| `FULLFADE` | 12 | 10 | Schwarz mit blauem Rahmen über der Fensterfläche, Alpha 51·Frame bis Frame 5 (volles Schwarz, das Fenster erscheint), danach wieder herunter |
-| `TEXTONFRAME` | 16 | 1 | das Fenster erscheint nach seiner Verzögerung (+1); ein bereits verstecktes Fenster bleibt versteckt |
-| `CONTROLBARARROW` | 1 | 22 | Pfeilbild gleitet in 16 Frames auf `ControlBar.wnd:ButtonGeneral`, blendet in 6 aus |
-| `REVERSESOUND` | 18 | 2 | kein Bild, spielt `GUITransitionFade` auf Frame 1 |
+| `FLASH` | 117 | 8 | window hidden in frames 1–3, white frame and fill with alpha 100/33, 150/66, 200/99, then visible from frame 4 with decaying white (75/50/25/10); sound `GUIBoarderFadeIn` |
+| `BUTTONFLASH` | 77 | 17 | 1–3 white flash growing (sound `GUIButtonsFadeIn`), 4–7 button image under decaying white, 8–10 only the image, 11–16 window visible under decaying gradient `Gradient`; backwards the same tables mirrored |
+| `WINFADE` | 7 | 10 | the first image of the window with alpha 25 · frame (1–9) |
+| `WINSCALEUP` | 47 | 6 | the image grows from the centre in six steps (frames 1–5 drawn); sound `GUILogoMouseOver` |
+| `SCORESCALEUP` | 7 | 6 | like `WINSCALEUP`; sound `GUIScoreScreenPictures` |
+| `MAINMENUSCALEUP` | 8 | 5 | the Disabled image flies and grows in five steps into `WinGrowMarker`; sound `GUILogoSelect` |
+| `MAINMENUMEDIUMSCALEUP` | 10 | 3 | the logo `WinFactionX` grows about its centre to the size of `WinFactionXMedium`; sound `GUILogoMouseOver` |
+| `MAINMENUSMALLSCALEDOWN` | 0 | 6 | as above to `…Small`; **not used** by the shipped file (implemented and tested) |
+| `TYPETEXT` | 4 | min(text length, 30) | one character per frame, sound `GUITypeText`; backwards it deletes |
+| `SCREENFADE` | 1 | 30 | black area over the whole screen, alpha `1/29 · 255 · Frame`; backwards it fades up |
+| `COUNTUP` | 56 | min(value/step, 30) | number counts up from 0 in steps of 1, 100 or 1000; sound `GUIScoreScreenTick` |
+| `FULLFADE` | 12 | 10 | black with blue frame over the window area, alpha 51·frame up to frame 5 (full black, the window appears), then down again |
+| `TEXTONFRAME` | 16 | 1 | the window appears after its delay (+1); a window that is already hidden stays hidden |
+| `CONTROLBARARROW` | 1 | 22 | arrow image glides onto `ControlBar.wnd:ButtonGeneral` in 16 frames, fades out in 6 |
+| `REVERSESOUND` | 18 | 2 | no image, plays `GUITransitionFade` on frame 1 |
 
-Die Frame-, Alpha- und Schrittwerte stammen aus dem Quelltext (neu geschrieben, kein Code kopiert); jeder Effekt ist mit Abtastwerten getestet (`tests/CnCNew.Ui.Tests/TransitionTests.cs`).
+The frame, alpha and step values come from the source code (rewritten, no code copied); every effect is tested with samples (`tests/CnCNew.Ui.Tests/TransitionTests.cs`).
 
-### Welche Screens welche Gruppen spielen (23 von 56, im Test `GroupsAreKnown` gezählt)
+### Which screens play which groups (23 of 56, counted in the test `GroupsAreKnown`)
 
-| Screen | Gruppen | Auslöser (nach `MainMenu.cpp`, `SkirmishGameOptionsMenu.cpp`, `ChallengeMenu.cpp`, `PopupSaveLoad.cpp`, `ScoreScreen.cpp`) |
+| Screen | Groups | Trigger (after `MainMenu.cpp`, `SkirmishGameOptionsMenu.cpp`, `ChallengeMenu.cpp`, `PopupSaveLoad.cpp`, `ScoreScreen.cpp`) |
 |---|---|---|
-| Hauptmenü, erster Start | `FadeWholeScreen` (rückwärts: aus Schwarz einblenden), danach `MainMenuDefaultMenuLogoFade` | `MainMenuInit` mit `FirstTimeRunningTheGame` |
-| Hauptmenü, jede Rückkehr | `MainMenuDefaultMenuLogoFade` | `MainMenuInit` nach dem Schließen eines Screens, der das Menü ausgeblendet hat (`OnRevealed`) |
-| Untermenü Einzelspieler | `MainMenuDefaultMenu` entfernen, `MainMenuDefaultMenuBack` rückwärts, `MainMenuSinglePlayerMenu`; zurück: `…SinglePlayerMenu` entfernen, `MainMenuSinglePlayerMenuBack` rückwärts, `MainMenuDefaultMenu` | Knöpfe Einzelspieler / Zurück, Escape |
-| Untermenü Laden/Wiedergabe | `MainMenuLoadReplayMenu` / `MainMenuLoadReplayMenuBack` | Knöpfe Laden/Wiedergabe / Zurück |
-| Fraktionslogos | `MainMenuFactionUS`, `…GLA`, `…China`, `…Training` (für „Challenge“), `…Skirmish` | Überfahren des Knopfes (setzen), Verlassen (rückwärts); während einer Übergangs-Gruppe wird die Anfrage gemerkt (`showLogo`/`showSide`) |
-| Hauptmenü → Skirmish | `MainMenuSinglePlayerMenuBackSkirmish` rückwärts (Logo entfernt), der Screen öffnet, wenn alles fertig ist (`Shell::push` wartet auf das Ende der Abschaltanimation) | Knopf der Einzelspieler-Spalte |
-| Hauptmenü → USA / GLA / China / Challenge | `MainMenuFaction<X>` (gesetzt und entfernt, bei Challenge nur gesetzt), `MainMenuSinglePlayerMenuBack<X>` rückwärts, `MainMenuDifficultyMenu<X>`; zurück: `…Menu<X>Back` rückwärts, `MainMenuSinglePlayer<X>MenuFromDiff`; Wahl: `MainMenuDifficultyMenuBack` rückwärts, Kampagne `FadeWholeScreen`, Challenge `MainMenuDifficultyMenuTraining` rückwärts und dann das Challenge-Menü (§13) | Knöpfe der Einzelspieler-Spalte, `ButtonEasy/Medium/Hard/DiffBack` |
-| Hauptmenü → Credits | `MainMenuDefaultMenu` rückwärts | Knopf Credits |
-| Hauptmenü → Spiel laden | `MainMenuLoadReplayMenuBackTransition` rückwärts | Knopf Laden |
-| Skirmish-Einrichtung | `SkirmishGameOptionsMenuFade` (Einstieg und rückwärts beim Schließen) | `SkirmishGameOptionsMenuUpdate` / `…Shutdown` |
-| Challenge-Auswahl | `ChallengeMenuFade` (ebenso) | `ChallengeMenu.cpp` |
-| Spiel laden | `SaveLoadMenuFade` (ebenso) | `PopupSaveLoad.cpp` |
-| Ergebnisbildschirm (Skirmish) | `ScoreScreenShow` (Zeilen erscheinen nacheinander, Zahlen zählen hoch, Bilder wachsen) | `ScoreScreenInit` |
+| Main menu, first start | `FadeWholeScreen` (backwards: fade in from black), then `MainMenuDefaultMenuLogoFade` | `MainMenuInit` with `FirstTimeRunningTheGame` |
+| Main menu, every return | `MainMenuDefaultMenuLogoFade` | `MainMenuInit` after the closing of a screen that has faded the menu out (`OnRevealed`) |
+| Submenu single player | remove `MainMenuDefaultMenu`, `MainMenuDefaultMenuBack` backwards, `MainMenuSinglePlayerMenu`; back: remove `…SinglePlayerMenu`, `MainMenuSinglePlayerMenuBack` backwards, `MainMenuDefaultMenu` | buttons single player / back, Escape |
+| Submenu load/replay | `MainMenuLoadReplayMenu` / `MainMenuLoadReplayMenuBack` | buttons load/replay / back |
+| Faction logos | `MainMenuFactionUS`, `…GLA`, `…China`, `…Training` (for "Challenge"), `…Skirmish` | hovering over the button (set), leaving (backwards); during a transition group the request is remembered (`showLogo`/`showSide`) |
+| Main menu → skirmish | `MainMenuSinglePlayerMenuBackSkirmish` backwards (logo removed), the screen opens when everything is finished (`Shell::push` waits for the end of the shutdown animation) | button of the single-player column |
+| Main menu → USA / GLA / China / Challenge | `MainMenuFaction<X>` (set and removed, for Challenge only set), `MainMenuSinglePlayerMenuBack<X>` backwards, `MainMenuDifficultyMenu<X>`; back: `…Menu<X>Back` backwards, `MainMenuSinglePlayer<X>MenuFromDiff`; choice: `MainMenuDifficultyMenuBack` backwards, campaign `FadeWholeScreen`, Challenge `MainMenuDifficultyMenuTraining` backwards and then the challenge menu (§13) | buttons of the single-player column, `ButtonEasy/Medium/Hard/DiffBack` |
+| Main menu → credits | `MainMenuDefaultMenu` backwards | button credits |
+| Main menu → load game | `MainMenuLoadReplayMenuBackTransition` backwards | button load |
+| Skirmish setup | `SkirmishGameOptionsMenuFade` (entry and backwards on closing) | `SkirmishGameOptionsMenuUpdate` / `…Shutdown` |
+| Challenge selection | `ChallengeMenuFade` (likewise) | `ChallengeMenu.cpp` |
+| Load game | `SaveLoadMenuFade` (likewise) | `PopupSaveLoad.cpp` |
+| Result screen (skirmish) | `ScoreScreenShow` (rows appear one after another, numbers count up, images grow) | `ScoreScreenInit` |
 
-Optionen, Credits, Beenden-Dialog, Kartenwahl, Briefing und Missionsergebnis haben im Original keine Gruppe (die Optionen nutzten nur den älteren `AnimateWindowManager`, den die ausgelieferten Menüs
-praktisch nicht mehr aufrufen) und bleiben harte Schnitte.
+Options, credits, quit dialog, map selection, briefing and mission result have no group in the original (the options only used the older `AnimateWindowManager`, which the shipped menus
+practically no longer call) and remain hard cuts.
 
-### Abweichungen vom Original (bewusst, alle benannt)
+### Deviations from the original (deliberate, all named)
 
-1. **Erster Start:** das Original wartet mit dem Hauptmenü, bis die Maus um mehr als 20 Pixel bewegt oder eine Taste gedrückt wird (`notShown`), und spielt dann `MainMenuFade` (Lineal) und das Menü. Hier beginnt es
-   nach der Blende von selbst; das Lineal (`MainMenuRuler`) ist sofort da.
-2. **Frame 0:** die Übergangsgruppe, die gerade begonnen wurde, wird schon im ersten Frame gezeichnet (`PrimeDraw`); das Original zeichnet erst nach dem ersten `update` (ein Frame nacktes Bild, z. B. vor der Blende aus Schwarz).
-3. **Effekte ohne Fenster** (Name nicht im Screen) enden sofort und der Name wird gezählt (`MissingWindows`); das Original dereferenziert den Nullzeiger bzw. lässt den Zustand offen. `MAINMENUSCALEUP` ohne `WinGrowMarker` ebenso.
-4. **`TYPETEXT`** beendet sich bei `Frame == Länge`; das Original nur bei Frame 30, so dass ein Text unter 30 Zeichen die Gruppe nie beendet. Bei 30 und mehr Zeichen identisch.
-5. **`COUNTUP`/`TEXTONFRAME` auf verstecktem Fenster** (Zeile eines nicht belegten Spielerplatzes): das Fenster bleibt versteckt. Das Original macht es auf seinem Startframe sichtbar (`COUNTUP`), was nur gut aussieht, solange der
-   Text leer ist; hier steht der Vorlagentext („Units Built“) in den leeren Zeilen, deshalb die Abweichung.
-6. **Nicht endende rückwärts laufende Gruppe:** läuft der Zähler unter 0, ohne dass alle Fenster fertig melden, wird die Gruppe beendet (`Overrun`, Test: tritt bei den ausgelieferten Daten nie auf).
-7. **Bild `Gradient`:** das Verlaufsbild von `BUTTONFLASH` (Frames 11–16) gibt es im Retail-Bestand nicht (`findImageByName` liefert im Original NULL, `drawImage(NULL)` zeichnet nichts). Hier ebenso nichts, der Name steht in
-   `MissingImages`. Die Knöpfe blitzen also bis Frame 10 und erscheinen dann ohne Verlauf.
-8. **Rückkehr:** `OnRevealed` spielt den Einstieg erneut, wenn das Menü für einen anderen Screen ausgeblendet hat; wird ein Dialog (Beenden) geschlossen, passiert das nicht.
-9. **Zustand der Ruhe:** das Einzelspieler-Untermenü zeigt in der Ruhe die fünf kleinen Fraktionslogos am unteren Rand (`WINSCALEUP` lässt sie sichtbar). Die harte Variante zeigte sie bisher nicht; sie tut es jetzt, damit
-   Ruhezustand mit und ohne Animation gleich sind (siehe Hashes).
-10. **Hauptmenü-Init:** `initialHide()` versteckt alle fünfzehn Logofenster (fünf Fraktionen × drei Größen); ohne das blieb nach einer Kampagnenwahl das mittlere Logo stehen (im Test aufgefallen).
+1. **First start:** the original waits with the main menu until the mouse is moved by more than 20 pixels or a key is pressed (`notShown`), and then plays `MainMenuFade` (ruler) and the menu. Here it begins
+   by itself after the fade; the ruler (`MainMenuRuler`) is there immediately.
+2. **Frame 0:** the transition group that has just been started is already drawn in the first frame (`PrimeDraw`); the original only draws after the first `update` (one frame of bare image, e.g. before the fade from black).
+3. **Effects without a window** (name not in the screen) end immediately and the name is counted (`MissingWindows`); the original dereferences the null pointer or leaves the state open. `MAINMENUSCALEUP` without `WinGrowMarker` likewise.
+4. **`TYPETEXT`** finishes at `Frame == length`; the original only at frame 30, so that a text below 30 characters never finishes the group. Identical at 30 and more characters.
+5. **`COUNTUP`/`TEXTONFRAME` on a hidden window** (row of an unoccupied player slot): the window stays hidden. The original makes it visible on its start frame (`COUNTUP`), which only looks good as long as the
+   text is empty; here the template text ("Units Built") is in the empty rows, hence the deviation.
+6. **Backwards-running group that does not end:** if the counter runs below 0 without all windows reporting finished, the group is ended (`Overrun`, test: never occurs with the shipped data).
+7. **Image `Gradient`:** the gradient image of `BUTTONFLASH` (frames 11–16) does not exist in the retail content (`findImageByName` returns NULL in the original, `drawImage(NULL)` draws nothing). Here likewise nothing, the name is in
+   `MissingImages`. So the buttons flash up to frame 10 and then appear without a gradient.
+8. **Return:** `OnRevealed` plays the entry again when the menu has faded out for another screen; when a dialog (quit) is closed, that does not happen.
+9. **State of rest:** the single-player submenu shows the five small faction logos at the bottom edge at rest (`WINSCALEUP` leaves them visible). The hard variant did not show them so far; it does now, so that
+   the state of rest with and without animation is the same (see hashes).
+10. **Main menu init:** `initialHide()` hides all fifteen logo windows (five factions × three sizes); without that the medium logo stayed after a campaign choice (noticed in the test).
 
-### Goldene Hashes
+### Golden hashes
 
-`baselines/screens.txt`: **24 von 54** Werten geändert (4 Screens × 6 Auflösungen): `MainMenu-SinglePlayer`, `SkirmishSetup`, `SkirmishMapSelect`, `SkirmishSetup-MapChosen`; alle vier enthalten das offene
-Einzelspieler-Untermenü (sichtbar oder darunter), Ursache ausschließlich die fünf Logos (Punkt 9). Unverändert: `MainMenu`, `MatchLoading`, `ScoreScreen`, `Credits`, `Options`, `QuitConfirm` (30 Werte) und der
-HUD-Hash. Die Übergänge selbst ändern keinen Hash, weil die Hülle ohne `animateTransitions` keine Gruppe anlegt (`NoTransitionsNoAnimation`); die Ruhezustände der Animation sind in den Tests bytegleich mit denen ohne.
+`baselines/screens.txt`: **24 of 54** values changed (4 screens × 6 resolutions): `MainMenu-SinglePlayer`, `SkirmishSetup`, `SkirmishMapSelect`, `SkirmishSetup-MapChosen`; all four contain the open
+single-player submenu (visible or underneath), the cause exclusively the five logos (item 9). Unchanged: `MainMenu`, `MatchLoading`, `ScoreScreen`, `Credits`, `Options`, `QuitConfirm` (30 values) and the
+HUD hash. The transitions themselves change no hash, because without `animateTransitions` the shell creates no group (`NoTransitionsNoAnimation`); the states of rest of the animation are byte-identical in the tests with those without.
 
-### Messwerte (30 Frames/s, `game/content`, neu messen)
+### Measured values (30 frames/s, `game/content`, re-measure)
 
-* Hauptmenü: erster Start 57 Frames (1,90 s): Blende 29 Frames, Rand ab Frame 34, Logo 40, erster Knopf 46, letzter Knopf 51. Längster Vorwärtslauf im Realdatentest (alle Zahlen als `1234` angenommen): 60 Frames (2,00 s, `ScoreScreenShow`).
-* Alle 56 Gruppen laufen vorwärts und rückwärts ohne `Overrun` bis zum Ende (Realdatentest).
-* 18 synthetische Tests plus Realdatentest in `TransitionTests` (Ui: Leser, Effekte, Handler, Uhr, echter Fensterbaum), 10 Tests in `ShellTransitionTests` (Game). Zwei Läufe derselben Folge: gleicher Hash (`1730265A0B3D8B31` für
-  20 Frames Einstieg + Einzelspieler-Wechsel + Hover).
-* `tools/CnCNew.UiRenderTool` schreibt die Folgen als PNG (`docs/CLIENT-UI-RENDERING.md` §7): 49 neue Bilder, alle 113 PNGs in zwei Läufen byteidentisch; angesehen: Einstieg (Schwarz, Lineal, Logo und Knöpfe im
-  Aufblitzen), Einzelspieler-Wechsel mit wachsenden Logos, Hover-Logo, Skirmish-Ausblenden/Einblenden, Ergebnisbildschirm.
+* Main menu: first start 57 frames (1.90 s): fade 29 frames, border from frame 34, logo 40, first button 46, last button 51. Longest forward run in the real-data test (all numbers assumed to be `1234`): 60 frames (2.00 s, `ScoreScreenShow`).
+* All 56 groups run forwards and backwards to the end without `Overrun` (real-data test).
+* 18 synthetic tests plus real-data test in `TransitionTests` (Ui: reader, effects, handler, clock, real window tree), 10 tests in `ShellTransitionTests` (Game). Two runs of the same sequence: same hash (`1730265A0B3D8B31` for
+  20 frames of entry + single-player change + hover).
+* `tools/CnCNew.UiRenderTool` writes the sequences as PNG (`docs/CLIENT-UI-RENDERING.md` §7): 49 new images, all 113 PNGs byte-identical in two runs; looked at: entry (black, ruler, logo and buttons in the
+  flash), single-player change with growing logos, hover logo, skirmish fade-out/fade-in, result screen.
 
-### Nicht umgesetzt (benannt)
+### Not implemented (named)
 
-* Die Gruppen von Mehrspieler- und GameSpy-Bildschirmen (elf `FULLFADE`-Gruppen, `Multi`-Untermenü), des Schwierigkeitsmenüs (`MainMenuDifficulty*`, `…FromDiff`: hier ist die Auswahl ein eigener Screen), die Spielmenü-Gruppen im
-  Spiel (`QuitNoSave`, `QuitFull` und ihre `Back`-Gruppen; das Spielmenü gehört dem HUD), `GenExpFade` und `ControlBarArrow` (die Effekte sind umgesetzt und getestet, aber das HUD ruft sie nicht auf).
-* Der Bildschirmfade beim Spielstart (`FadeWholeScreen` nach dem Laden zu Schwarz, beim Spielbeginn zurück): der Stride-Client hat keine Ebene dafür über Welt und HUD; der Ladebildschirm schaltet hart.
-* Die Maus-Warteschleife des ersten Starts (Abweichung 1), die Bibs/Hinweise anderer Screens und die Gefechtsszene hinter dem Menü.
+* The groups of multiplayer and GameSpy screens (eleven `FULLFADE` groups, `Multi` submenu), of the difficulty menu (`MainMenuDifficulty*`, `…FromDiff`: here the selection is a screen of its own), the game menu groups in
+  the game (`QuitNoSave`, `QuitFull` and their `Back` groups; the game menu belongs to the HUD), `GenExpFade` and `ControlBarArrow` (the effects are implemented and tested, but the HUD does not call them).
+* The screen fade at game start (`FadeWholeScreen` to black after loading, back at the start of the game): the Stride client has no layer for it above world and HUD; the loading screen switches hard.
+* The mouse wait loop of the first start (deviation 1), the bibs/hints of other screens and the battle scene behind the menu.
 
-### Nicht belegt (ein Mensch muss hinsehen)
+### Not verified (a human has to look)
 
-* **Dass die Folgen im Fenster so aussehen und sich so anfühlen wie im Original.** Geprüft sind Abtastwerte, Reihenfolgen, Zustände und einzelne PNGs eines Offscreen-Renderers; Tempo (30 Frames/s gegen die
-  tatsächliche Bildrate des Fensters), Tonzeitpunkte (`GUIButtonsFadeIn` je Knopf) und Gesamteindruck sind **nicht** gesehen oder gehört.
-* Ob der erste Start ohne Maus-Warten stört, ob die fehlende Verlaufsstufe (Punkt 7) auffällt, ob die 0,1-s-Deckelung bei langsamen Frames spürbar ist.
-* Die Wirkung bei anderen Auflösungen als 1280×720 (die Ersatzflächen nutzen die skalierten Fensterrechtecke; die PNG-Folgen gibt es nur dort).
-* (Erledigt in §13: `LoadGameScreen` und Escape ohne Tastaturfokus.)
-### Phase 16: Textvergleich mit dem Original (Zusammenfassung, Tabelle in `docs/TEXT-AUDIT.md`)
+* **That the sequences look and feel in the window as in the original.** What has been checked is samples, orders, states and individual PNGs of an offscreen renderer; tempo (30 frames/s against the
+  actual frame rate of the window), sound timings (`GUIButtonsFadeIn` per button) and overall impression have **not** been seen or heard.
+* Whether the first start without waiting for the mouse is disturbing, whether the missing gradient stage (item 7) is noticeable, whether the 0.1 s cap is perceptible with slow frames.
+* The effect at resolutions other than 1280×720 (the substitute areas use the scaled window rectangles; the PNG sequences exist only there).
+* (Done in §13: `LoadGameScreen` and Escape without keyboard focus.)
+### Phase 16: text comparison with the original (summary, table in `docs/TEXT-AUDIT.md`)
 
-Der Mensch fand die Texte „komisch“ gegenüber dem Original. Systematisch untersucht (Daten + Referenzcode, kein Originalbild vorhanden); behoben und im Schalenbereich wirksam:
+The human found the texts "odd" ("komisch") compared with the original. Examined systematically (data + reference code, no original image available); fixed and effective in the shell area:
 
-| Befund | Ursache | Behebung | Test |
+| Finding | Cause | Fix | Test |
 |---|---|---|---|
-| „Generals“-Schrift (Titel, Hauptmenüknöpfe, 294 Fenstertexte) bis 85 px zu breit, Zeilenhöhen 1 px daneben | FreeType-Näherung (91-%-Stauchung, ungehintete Vorschübe) statt der GDI-Schrift des Originals (`lfWidth = 0,40·Höhe`, GDI wählt die Breite: ca. 87 %) | `GdiFontProvider` (`docs/CLIENT-UI-RENDERING.md` §2) | `UiRenderTool` Selbstprüfung + `--font-audit` (Sichtmittel) |
-| „Alternate Mouse Setu“ abgeschnitten | Texte von Knöpfen, Kontrollkästchen und Radioknöpfen waren auf das Fenster geschnitten; im Original setzt nur statischer Text einen Zuschnitt | `UiDrawBuilder.Text` mit Zuschnitt je Gadgettyp | `WndTests` (Golden), `SentenceLayoutTests` |
-| Zeilenumbruch und Zentrierung anders | greedy `<=`-Umbruch ohne Einzug und Überlappung statt `Build_Sentence_*` | `UiSentenceLayout` | `SentenceLayoutTests` (9 Fälle, von Hand nachgerechnet) |
-| Skirmish-Einrichtung: `FactionAmerica`, `Color 1`, `None` | feste Namen statt `PlayerTemplate.DisplayName` (`INI:FactionAmerica` = „USA“), `MultiplayerColor.TooltipName` (`Color:Gold`), `Team:n` | `ShellSkirmishText` (Fallbacks gezählt in `ShellTextSource.RawNameHits`) | `ShellTests` „Skirmish setup and options show localized words …“ |
-| Optionen: Eingabefelder zeigen das Wort „Entry“ | TEXT der Layoutdatei, `OptionsMenuInit` überschreibt es | beide Netzwerkfelder starten leer | dasselbe |
-| Credits in Arial 24 fett / 16 fett / 12 | feste Werte statt `CreditsTitleFont`/`CreditsMinorTitleFont`/`CreditsNormalFont` aus `Language.ini` mit `adjustFontSize` | `LanguageFonts`, `CreditsFonts` | `ShellTests` „Credits lines use the Language.ini credits fonts …“ |
-| Tooltips fehlten ganz | nie umgesetzt | `TooltipPainter` im Shell- und HUD-Zeichenpfad | `ShellTests` „A window with TOOLTIPTEXT shows the pointer tooltip …“ |
+| "Generals" font (title, main menu buttons, 294 window texts) up to 85 px too wide, line heights 1 px off | FreeType approximation (91 % compression, unhinted advances) instead of the GDI font of the original (`lfWidth = 0,40·height`, GDI chooses the width: approx. 87 %) | `GdiFontProvider` (`docs/CLIENT-UI-RENDERING.md` §2) | `UiRenderTool` self-check + `--font-audit` (means of inspection) |
+| "Alternate Mouse Setu" cut off | Texts of buttons, check boxes and radio buttons were clipped to the window; in the original only static text sets a clip | `UiDrawBuilder.Text` with clip per gadget type | `WndTests` (golden), `SentenceLayoutTests` |
+| Line wrapping and centring different | greedy `<=` wrapping without indent and overlap instead of `Build_Sentence_*` | `UiSentenceLayout` | `SentenceLayoutTests` (9 cases, recomputed by hand) |
+| Skirmish setup: `FactionAmerica`, `Color 1`, `None` | fixed names instead of `PlayerTemplate.DisplayName` (`INI:FactionAmerica` = "USA"), `MultiplayerColor.TooltipName` (`Color:Gold`), `Team:n` | `ShellSkirmishText` (fallbacks counted in `ShellTextSource.RawNameHits`) | `ShellTests` "Skirmish setup and options show localized words …" |
+| Options: entry fields show the word "Entry" | TEXT of the layout file, `OptionsMenuInit` overwrites it | both network fields start empty | the same |
+| Credits in Arial 24 bold / 16 bold / 12 | fixed values instead of `CreditsTitleFont`/`CreditsMinorTitleFont`/`CreditsNormalFont` from `Language.ini` with `adjustFontSize` | `LanguageFonts`, `CreditsFonts` | `ShellTests` "Credits lines use the Language.ini credits fonts …" |
+| Tooltips were missing entirely | never implemented | `TooltipPainter` in the shell and HUD draw path | `ShellTests` "A window with TOOLTIPTEXT shows the pointer tooltip …" |
 
-**Seither behoben (§13): (a) Bildschirmstapel, (b) `SinglePlayerMenu.wnd`.** Wortlaut des Befunds vor der Behebung: (a) *Bildschirmstapel*: `GameShell.BuildDrawList` zeichnete **jeden** Bildschirm des Stapels. `Shell::push` fährt im Original
-zuerst den oberen Bildschirm herunter (`runShutdown`, danach versteckt), sodass Optionen, Skirmish-Einrichtung und Kampagnenbildschirme das Hauptmenü ersetzen; hier scheinen dessen Knopftexte
-(„CHALLENGE“, „BACK“ …) durch die neuen Fenster, am deutlichsten in der Skirmish-Einrichtung. Dazu bräuchte der Hintergrund (Rahmen, Logo, im Original die 3D-Schattenkarte) eine eigene Ebene.
-(b) *`SinglePlayerMenu.wnd`* (Zwischenseite Neu/Laden/Zurück nach „USA“) gibt es im Original nicht (USA führt direkt in den Schwierigkeitsdialog); ihre Texte standen in Times New Roman, wie
-die Layoutdatei es vorgibt. (c) *Skirmish-Einrichtung* – **behoben** (5. Oktober 2026): „Computer“ und „(no map selected)“/„No map selected“ sind durch die Labels und die Kartenvorbelegung des Originals ersetzt
-(Abschnitt „Skirmish-Einrichtung“ oben). Noch offen: die Farb-Einträge tragen keine Farbfläche. (d) Briefing und Ladeschirm haben im Original Filmhintergründe und Fortschrittstexte, hier ein Standbild.
+**Fixed since (§13): (a) screen stack, (b) `SinglePlayerMenu.wnd`.** Wording of the finding before the fix: (a) *screen stack*: `GameShell.BuildDrawList` drew **every** screen of the stack. In the original `Shell::push` first
+shuts down the upper screen (`runShutdown`, then hidden), so that options, skirmish setup and campaign screens replace the main menu; here its button texts
+("CHALLENGE", "BACK" …) shine through the new windows, most clearly in the skirmish setup. For that the background (frame, logo, in the original the 3D shadow map) would need a layer of its own.
+(b) *`SinglePlayerMenu.wnd`* (intermediate page New/Load/Back after "USA") does not exist in the original (USA leads directly into the difficulty dialog); its texts were in Times New Roman, as
+the layout file prescribes. (c) *Skirmish setup* – **fixed** (5 October 2026): "Computer" and "(no map selected)"/"No map selected" are replaced by the labels and the map preset of the original
+(section "Skirmish setup" above). Still open: the colour entries carry no colour swatch. (d) Briefing and loading screen have movie backgrounds and progress texts in the original, here a still image.
 
-## 13. Bildschirmstapel, Schwierigkeitsfrage, Ladeliste (Phase 16, Menüs)
+## 13. Screen stack, difficulty question, load list (Phase 16, menus)
 
-Drei Befunde der Textprüfung (`docs/TEXT-AUDIT.md`, §11 oben) mit Quellen im Original (`Shell.cpp`: `push`, `pop`, `shutdownComplete`, `showShellMap`; `MainMenu.cpp`: `MainMenuShutdown`, `shutdownComplete`,
+Three findings of the text check (`docs/TEXT-AUDIT.md`, §11 above) with sources in the original (`Shell.cpp`: `push`, `pop`, `shutdownComplete`, `showShellMap`; `MainMenu.cpp`: `MainMenuShutdown`, `shutdownComplete`,
 `GBM_SELECTED`, `setupGameStart`, `prepareCampaignGame`, `diffReverseSide`; `SkirmishMapSelectMenu.cpp`: `showSkirmishGameOptionsUnderlyingGUIElements`; `PopupSaveLoad.cpp`: `SaveLoadMenuInput`,
-`SaveLoadMenuFullScreenInit`; `ChallengeMenu.cpp`: `ChallengeMenuInit`, `setGeneralBio`, `setEnabledButtons`; Code neu geschrieben, nichts kopiert).
+`SaveLoadMenuFullScreenInit`; `ChallengeMenu.cpp`: `ChallengeMenuInit`, `setGeneralBio`, `setEnabledButtons`; code rewritten, nothing copied).
 
-### 13.1 Welcher Screen was verdeckt
+### 13.1 Which screen hides what
 
-`Shell::push` fährt den oberen Screen herunter, dessen Shutdown mit `layout->hide(TRUE)` endet (`MainMenuShutdown` → `shutdownComplete`), und legt dann erst den neuen an: das Hauptmenü ist **weg**, nicht darunter. Nicht
-alles ist ein `push`:
+`Shell::push` shuts down the upper screen, whose shutdown ends with `layout->hide(TRUE)` (`MainMenuShutdown` → `shutdownComplete`), and only then creates the new one: the main menu is **gone**, not underneath. Not
+everything is a `push`:
 
-| Öffnet | Weg im Original | Verdeckt den Screen darunter |
+| Opens | Path in the original | Hides the screen underneath |
 |---|---|---|
-| Skirmish-Einrichtung, Credits, Challenge-Menü, Ladeliste (`SaveLoad.wnd`) | `TheShell->push(...)` | ja (`HidesScreensBelow = true`, der Standard) |
-| Optionen | `getOptionsLayout` + `runInit` + `hide(FALSE)`, `OptionsMenuParent` ist `SEE_THRU` | nein: das Hauptmenü bleibt dahinter sichtbar (`OptionsScreen`) |
-| Kartenwahl | `winCreateLayout("SkirmishMapSelectMenu.wnd")` + `hide(FALSE)` | nein, aber `showSkirmishGameOptionsUnderlyingGUIElements(FALSE)` versteckt in der Einrichtung `MapWindow`, `StaticTextTeam/Faction/Color`, die Felder `ComboBoxTeam/Color/PlayerTemplate0..7`, `TextEntryMapDisplay`, `ButtonSelectMap`, `ButtonStart`, `StaticTextMapPreview` und sperrt Reset/Back; OK und Back stellen sie wieder her (`SkirmishSetupScreen.SetMapPickerOpen`) |
-| Beenden-Dialog, Fehlerdialog | `QuitMessageBoxYesNo`/`MessageBoxOk` | nein (`MessageBoxScreen`) |
-| Missionsergebnis über dem Banner | – | nein (Zutat dieser Hülle: das Banner ist der Hintergrund, `MissionResultScreen`) |
+| Skirmish setup, credits, challenge menu, load list (`SaveLoad.wnd`) | `TheShell->push(...)` | yes (`HidesScreensBelow = true`, the default) |
+| Options | `getOptionsLayout` + `runInit` + `hide(FALSE)`, `OptionsMenuParent` is `SEE_THRU` | no: the main menu stays visible behind it (`OptionsScreen`) |
+| Map selection | `winCreateLayout("SkirmishMapSelectMenu.wnd")` + `hide(FALSE)` | no, but `showSkirmishGameOptionsUnderlyingGUIElements(FALSE)` hides in the setup `MapWindow`, `StaticTextTeam/Faction/Color`, the fields `ComboBoxTeam/Color/PlayerTemplate0..7`, `TextEntryMapDisplay`, `ButtonSelectMap`, `ButtonStart`, `StaticTextMapPreview` and locks Reset/Back; OK and Back restore them (`SkirmishSetupScreen.SetMapPickerOpen`) |
+| Quit dialog, error dialog | `QuitMessageBoxYesNo`/`MessageBoxOk` | no (`MessageBoxScreen`) |
+| Mission result above the banner | – | no (addition of this shell: the banner is the background, `MissionResultScreen`) |
 
-`GameShell.BuildDrawList` zeichnet ab dem untersten Screen, der von oben aus gezählt der erste mit `HidesScreensBelow` ist (`FirstDrawnScreen`), bis zur Spitze; Übergangs-Ersatzflächen und Statistik zählen nur diese.
-Eingabe erhielt ohnehin nur der oberste Screen. **Hintergrundebene:** nicht nötig. Rahmen, Lineal und Logo liegen nicht in einer Ebene, die stehen bleibt – das Original versteckt das ganze Hauptmenülayout
-(`MainMenuParent`, `MainMenuRuler`, `Logo`, `MapBorder*`), und die ersetzenden Layouts bringen ihr Lineal selbst mit (`IMAGE: MainMenuRuler` an der Wurzel von `SkirmishGameOptionsMenu.wnd`, `SaveLoad.wnd`,
-`ScoreScreen.wnd`); was dahinter liegt, ist im Original die 3D-Shell-Karte (§11, zurückgestellt: hier Schwarz). `ChallengeMenu.wnd` bringt einen eigenen Hintergrund (Weltkarte).
-Wird der verdeckende Screen geschlossen, läuft das Hauptmenü seine Init erneut (`doPop` → `runInit`): `OnRevealed` setzt es auf die Wurzelgruppe zurück, jetzt auch ohne Animation (`LeaveFor` merkt sich den Weggang).
+`GameShell.BuildDrawList` draws from the lowest screen that, counted from the top, is the first with `HidesScreensBelow` (`FirstDrawnScreen`) up to the top; transition substitute areas and statistics count only these.
+Only the topmost screen received input anyway. **Background layer:** not necessary. Frame, ruler and logo do not lie in a layer that stays – the original hides the whole main menu layout
+(`MainMenuParent`, `MainMenuRuler`, `Logo`, `MapBorder*`), and the replacing layouts bring their ruler along themselves (`IMAGE: MainMenuRuler` at the root of `SkirmishGameOptionsMenu.wnd`, `SaveLoad.wnd`,
+`ScoreScreen.wnd`); what lies behind is the 3D shell map in the original (§11, deferred: here black). `ChallengeMenu.wnd` brings a background of its own (world map).
+When the hiding screen is closed, the main menu runs its init again (`doPop` → `runInit`): `OnRevealed` resets it to the root group, now also without animation (`LeaveFor` remembers the departure).
 
-### 13.2 Warum es `SinglePlayerMenu.wnd` nicht mehr gibt
+### 13.2 Why `SinglePlayerMenu.wnd` no longer exists
 
-`SinglePlayerMenu.wnd`/`SinglePlayerMenu.cpp` sind Erbe des ersten Generals: die Datei wird ausgeliefert, `SinglePlayerMenuInit` & Co. sind in `FunctionLexicon` eingetragen, aber **nichts in Zero Hour öffnet sie**
-(`Shell::push` nennt sie nirgends; die Treffer in `MainMenu.cpp` sind auskommentiert). Der Weg nach „USA“ im Original: `GBM_SELECTED` von `ButtonUSA/GLA/China` setzt die Kampagne, spielt `MainMenuFactionUS` (gesetzt und mit
-`remove(…, TRUE)` auf den Endzustand gebracht), versteckt `WinFactionUS`, spielt `MainMenuSinglePlayerMenuBackUS` rückwärts und `MainMenuDifficultyMenuUS` – die **Schwierigkeitsfrage ist Teil von `MainMenu.wnd`**
-(`MapBorder4` mit `StaticTextSelectDifficulty`, `ButtonEasy/Medium/Hard/DiffBack`, das große Fraktionslogo fliegt per `MAINMENUSCALEUP` in `WinGrowMarker`). Easy/Medium/Hard rufen `prepareCampaignGame` →
-`MainMenuDifficultyMenuBack` rückwärts, `FadeWholeScreen`, dann beginnt die Kampagne; `ButtonDiffBack` (`diffReverseSide`) spielt `…MenuUSBack` rückwärts und `MainMenuSinglePlayerUSAMenuFromDiff`. Challenge fragt dasselbe
-(`…Training`) und schiebt dann `ChallengeMenu.wnd` (`setupGameStart` mit `launchChallengeMenu`, die Schwierigkeit geht an `TheChallengeGenerals`). `DifficultySelect.wnd` (Radioknöpfe) ist ebenso ungenutzt. „Laden“ ist der
-Knopf **Load** des Hauptmenüs (`MapBorder3`: `ButtonLoadGame` → `SaveLoad.wnd`); die Schnellspeicher-Paare der Fraktionen (`showSelectiveButtons`) zeigt Zero Hour nie. `MainMenuScreen` bildet das nach
-(`OpenDifficulty`, `ChooseDifficulty`, `CloseDifficulty`; Gruppennamen als Tabelle `Factions`); `CampaignFactionScreen`/`DifficultySelectScreen` und die zwei Layoutnamen sind entfernt. Der Ruhezustand ohne Animation
-entspricht dem der Gruppen (Test: `Dump` beider bytegleich, `ShellTransitionTests.CampaignButtons`). Eine Eigenheit der Daten bleibt sichtbar: `MainMenuSinglePlayerMenuBackTraining` blendet das Titellogo aus (`WINFADE`
-rückwärts), und `…TrainingMenuFromDiff` bringt es nicht zurück – bei Challenge fehlt das Logo auf der Schwierigkeitsfrage und beim Zurück bis zur Rückkehr ins Hauptmenü.
+`SinglePlayerMenu.wnd`/`SinglePlayerMenu.cpp` are a legacy of the first Generals: the file is shipped, `SinglePlayerMenuInit` & co. are entered in `FunctionLexicon`, but **nothing in Zero Hour opens them**
+(`Shell::push` names them nowhere; the hits in `MainMenu.cpp` are commented out). The path after "USA" in the original: `GBM_SELECTED` of `ButtonUSA/GLA/China` sets the campaign, plays `MainMenuFactionUS` (set and brought to the
+final state with `remove(…, TRUE)`), hides `WinFactionUS`, plays `MainMenuSinglePlayerMenuBackUS` backwards and `MainMenuDifficultyMenuUS` – the **difficulty question is part of `MainMenu.wnd`**
+(`MapBorder4` with `StaticTextSelectDifficulty`, `ButtonEasy/Medium/Hard/DiffBack`, the large faction logo flies into `WinGrowMarker` via `MAINMENUSCALEUP`). Easy/Medium/Hard call `prepareCampaignGame` →
+`MainMenuDifficultyMenuBack` backwards, `FadeWholeScreen`, then the campaign begins; `ButtonDiffBack` (`diffReverseSide`) plays `…MenuUSBack` backwards and `MainMenuSinglePlayerUSAMenuFromDiff`. Challenge asks the same
+(`…Training`) and then pushes `ChallengeMenu.wnd` (`setupGameStart` with `launchChallengeMenu`, the difficulty goes to `TheChallengeGenerals`). `DifficultySelect.wnd` (radio buttons) is likewise unused. "Load" is the
+button **Load** of the main menu (`MapBorder3`: `ButtonLoadGame` → `SaveLoad.wnd`); Zero Hour never shows the quick-save pairs of the factions (`showSelectiveButtons`). `MainMenuScreen` reproduces this
+(`OpenDifficulty`, `ChooseDifficulty`, `CloseDifficulty`; group names as the table `Factions`); `CampaignFactionScreen`/`DifficultySelectScreen` and the two layout names are removed. The state of rest without animation
+corresponds to that of the groups (test: `Dump` of both byte-identical, `ShellTransitionTests.CampaignButtons`). One peculiarity of the data remains visible: `MainMenuSinglePlayerMenuBackTraining` fades the title logo out (`WINFADE`
+backwards), and `…TrainingMenuFromDiff` does not bring it back – for Challenge the logo is missing on the difficulty question and on going back until the return to the main menu.
 
-### 13.3 Ladeliste und Escape
+### 13.3 Load list and Escape
 
-`SaveLoadMenuInput` hängt am Kind `SaveLoadMenu`, nicht an der Wurzel; die Layout-Init fokussiert es (`winSetFocus`). `UiWindowTree` fiel ohne Fokus auf die oberste Wurzel zurück und fand dort keinen Callback, Escape ging nur
-nach einem Klick auf ein Gadget. Neu: `UiWindowTree.KeyboardHome` – das Fenster, das Tasten ohne Gadgetfokus bekommt, solange es sichtbar ist (anders als ein Gadgetfokus überlebt es das Verstecken durch eine Übergangsgruppe,
-`FULLFADE` von `SaveLoadMenu`); `LoadGameScreen` setzt es. Alle anderen Shell-Screens haben den Callback an der Wurzel (geprüft gegen die Dateien) und brauchen es nicht. Im Original behandeln alle diese Eingabefunktionen
-nur `KEY_ESC`.
+`SaveLoadMenuInput` is attached to the child `SaveLoadMenu`, not to the root; the layout init focuses it (`winSetFocus`). Without focus `UiWindowTree` fell back to the topmost root and found no callback there, Escape only worked
+after a click on a gadget. New: `UiWindowTree.KeyboardHome` – the window that gets keys without gadget focus as long as it is visible (unlike a gadget focus it survives being hidden by a transition group,
+`FULLFADE` of `SaveLoadMenu`); `LoadGameScreen` sets it. All other shell screens have the callback at the root (checked against the files) and do not need it. In the original all these input functions handle
+only `KEY_ESC`.
 
-### 13.4 Weitere Textbefunde auf dem Weg (nicht Gegenstand der drei Aufträge)
+### 13.4 Further text findings along the way (not subject of the three briefs)
 
-* **Kartenliste**: `ListboxMap` hat zwei Spalten (5 % Erfolgsbild, 95 % Name); die Namen standen in der ersten und waren nach zwei Buchstaben abgeschnitten.
-* **Startplatzmarken** der Kartenvorschau (`ButtonMapStartPosition0..7`): im Original zu Beginn versteckt und von `positionStartSpots` platziert; hier standen sie als Diagonale über dem Vorschautext. Der Katalog kennt die Zahl der
-  Startplätze, nicht ihre Lage: die Marken bleiben versteckt (offen).
-* **Challenge-Menü**: Biografie (`GeneralsBioParent`) und Play sind bis zur Wahl versteckt (`ChallengeMenuInit`), die vier Zeilen (`BioNameEntry`, `BioDOBEntry`, `BioBirthplaceEntry`, `BioStrategyEntry` – im Original umgewidmet für
-  Name, Rang, Waffengattung, Taktik) zeigen die Labels der Persona aus `ChallengeMode.ini` (`BioNameString`, `BioRankString`, `BioBranchString`, `BioStrategyString`; `CampaignCatalog.Personas`) sofort statt Buchstabe für Buchstabe
-  (`updateBio`), nicht startbare Positionen sind versteckt (`setEnabledButtons`), und die Knöpfe tragen die Medaillen der Spielervorlage (`MedallionRegular/Hilite/Select`) in deren Bildgröße (`winSetSize`) – vorher war das Menü
-  unsichtbar (die Knöpfe haben im Layout kein Bild) und zeigte die Platzhalter `GUI:BioNameEntry` …. Dafür neu in `CnCNew.Ui`: `UiWindow.SetDrawImage`/`DrawImage` (Bild je Zeichenzustand ersetzen), `SetDesignSize`.
-  Nicht umgesetzt: Porträt (`BioPortrait`), Taunt-/Vorschautöne, die Einführungssequenz der Knöpfe.
+* **Map list**: `ListboxMap` has two columns (5 % success image, 95 % name); the names were in the first and were cut off after two letters.
+* **Start position markers** of the map preview (`ButtonMapStartPosition0..7`): hidden at the beginning in the original and placed by `positionStartSpots`; here they stood as a diagonal over the preview text. The catalogue knows the number of
+  start positions, not their location: the markers stay hidden (open).
+* **Challenge menu**: biography (`GeneralsBioParent`) and Play are hidden until the selection (`ChallengeMenuInit`), the four lines (`BioNameEntry`, `BioDOBEntry`, `BioBirthplaceEntry`, `BioStrategyEntry` – repurposed in the original for
+  name, rank, branch of service, tactics) show the labels of the persona from `ChallengeMode.ini` (`BioNameString`, `BioRankString`, `BioBranchString`, `BioStrategyString`; `CampaignCatalog.Personas`) at once instead of letter by letter
+  (`updateBio`), positions that cannot be started are hidden (`setEnabledButtons`), and the buttons carry the medallions of the player template (`MedallionRegular/Hilite/Select`) in their image size (`winSetSize`) – before, the menu was
+  invisible (the buttons have no image in the layout) and showed the placeholders `GUI:BioNameEntry` …. For this, new in `CnCNew.Ui`: `UiWindow.SetDrawImage`/`DrawImage` (replace the image per draw state), `SetDesignSize`.
+  Not implemented: portrait (`BioPortrait`), taunt/preview sounds, the introductory sequence of the buttons.
 
-### 13.5 Goldene Werte und Werkzeug
+### 13.5 Golden values and tool
 
-`baselines/screens.txt`: **24 von 54** Werten neu aufgenommen (4 Bildschirme × 6 Auflösungen): `Credits`, `SkirmishSetup`, `SkirmishMapSelect`, `SkirmishSetup-MapChosen`. Ursachen: das Hauptmenü (Logo, Spaltenknöpfe, Fraktionslogos) wird
-unter diesen Bildschirmen nicht mehr gezeichnet; dazu in Einrichtung und Kartenwahl die versteckten Startplatzmarken, unter der Kartenwahl die versteckten Felder der Einrichtung und die Namensspalte der Liste. Unverändert: `MainMenu`,
-`MainMenu-SinglePlayer`, `MatchLoading`, `ScoreScreen`, `Options`, `QuitConfirm` (Optionen und Beenden-Dialog liegen im Original über dem Hauptmenü) und der HUD-Hash. Die Hashes belegen Reproduzierbarkeit, nicht Richtigkeit.
-`tools/CnCNew.UiRenderTool` zeichnet dazu `flow-skirmish-after-map-back`, `flow-main-after-skirmish`, `flow-load-replay-menu`, `flow-load-game`, `flow-challenge-difficulty`, `flow-challenge-menu(-picked)` und
-`flow-campaign-difficulty` (1280×720 und 1920×1080).
+`baselines/screens.txt`: **24 of 54** values newly recorded (4 screens × 6 resolutions): `Credits`, `SkirmishSetup`, `SkirmishMapSelect`, `SkirmishSetup-MapChosen`. Causes: the main menu (logo, column buttons, faction logos) is
+no longer drawn under these screens; in addition, in setup and map selection the hidden start position markers, under the map selection the hidden fields of the setup and the name column of the list. Unchanged: `MainMenu`,
+`MainMenu-SinglePlayer`, `MatchLoading`, `ScoreScreen`, `Options`, `QuitConfirm` (options and quit dialog lie above the main menu in the original) and the HUD hash. The hashes prove reproducibility, not correctness.
+For this `tools/CnCNew.UiRenderTool` draws `flow-skirmish-after-map-back`, `flow-main-after-skirmish`, `flow-load-replay-menu`, `flow-load-game`, `flow-challenge-difficulty`, `flow-challenge-menu(-picked)` and
+`flow-campaign-difficulty` (1280×720 and 1920×1080).
 
-### 13.6 Nicht belegt (ein Mensch muss hinsehen)
+### 13.6 Not verified (a human has to look)
 
-* Dass die Seiten im Fenster wie im Original aussehen: geprüft sind Zeichenlisten, Zustände und einzelne PNGs eines Offscreen-Renderers, kein Originalbild und kein Fenster.
-* Die **Schwierigkeitsfrage in Bewegung** (Logoflug, Tippen von „SELECT DIFFICULTY“, Rückweg mit `…FromDiff`) und das Fehlen des Titellogos bei Challenge (Dateneigenheit, nicht gegen ein Original gesehen).
-* Dass die **Optionen** im Original wirklich über den **sichtbaren** Hauptmenüknöpfen liegen: das folgt aus dem Code (kein `push`, `SEE_THRU`), nicht aus einem Bild. Zeigt das Original sie nicht, müsste `OptionsScreen.HidesScreensBelow` wahr werden.
-* Die **Kartenwahl**: welche Felder der Einrichtung sichtbar bleiben (nur die Namensspalte und die unteren Felder) ist aus `showSkirmishGameOptionsUnderlyingGUIElements` gelesen, nicht gesehen.
-* Die **Challenge-Medaillen** (Größe, Hervorhebung, gewählte Medaille) und die Positionen auf der Weltkarte.
-* Wie auffällig das schwarze Dahinter ohne die 3D-Shell-Karte des Originals wirkt.
+* That the pages look in the window as in the original: what has been checked is draw lists, states and individual PNGs of an offscreen renderer, no original image and no window.
+* The **difficulty question in motion** (logo flight, typing of "SELECT DIFFICULTY", way back with `…FromDiff`) and the absence of the title logo for Challenge (peculiarity of the data, not seen against an original).
+* That the **options** really lie above the **visible** main menu buttons in the original: that follows from the code (no `push`, `SEE_THRU`), not from an image. If the original does not show them, `OptionsScreen.HidesScreensBelow` would have to become true.
+* The **map selection**: which fields of the setup stay visible (only the name column and the lower fields) is read from `showSkirmishGameOptionsUnderlyingGUIElements`, not seen.
+* The **challenge medallions** (size, highlight, selected medallion) and the positions on the world map.
+* How conspicuous the black behind it appears without the 3D shell map of the original.
