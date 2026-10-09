@@ -285,6 +285,16 @@ public static partial class FxTests
           FireSound = TestGunShot
         End
 
+        Weapon TestShellGun
+          PrimaryDamage = 10
+          AttackRange = 100
+          DamageType = ARMOR_PIERCING
+          WeaponSpeed = 300
+          ProjectileObject = TestTracer
+          FireFX = FX_TestFire
+          ProjectileDetonationFX = FX_TestBone
+        End
+
         DamageFX TestDamageFX
           ThrottleTime = DEFAULT 1000
           AmountForMajorFX = DEFAULT 5.0
@@ -721,6 +731,15 @@ public static partial class FxTests
         Assert(executor.Counters["damagefx-throttled"] == 2, "same damage type inside the window is throttled");
         executor.ExecuteEvents([Event(SimEventKind.EntityDamaged, TestView.Tank, TestView.Base, string.Empty, 2 * CnCNew.Simulation.Numerics.Fixed.ScaleRaw)], view);
         Assert(executor.Counters["damagefx-without-weapon"] == 1, "damage without a shot in the same tick has no damage type and is counted");
+
+        // A weapon with a projectile object: the shot plays FireFX only; the detonation effect comes with the simulation's request when the projectile detonates - once, not twice.
+        executor.DrainSoundCues();
+        executor.ExecuteEvents([Event(SimEventKind.WeaponFired, TestView.Base, TestView.Tank, "TestShellGun", 0)], view);
+        var shot = executor.DrainSoundCues().Select(cue => cue.EventName).ToArray();
+        Assert(shot.Contains("TestMuzzleSound") && !shot.Contains("TestBoneSound"), $"a projectile weapon's shot plays FireFX and not the detonation: {string.Join(",", shot)}");
+        executor.ExecuteEvents([Event(SimEventKind.FxRequested, TestView.Tank, TestView.Base, "FX_TestBone", 0)], view);
+        var impact = executor.DrainSoundCues().Select(cue => cue.EventName).ToArray();
+        Assert(impact.Count(name => name == "TestBoneSound") == 1, $"the detonation effect plays once, when the simulation asks for it: {string.Join(",", impact)}");
     }
 
     private static void CameraShakeSemantics()

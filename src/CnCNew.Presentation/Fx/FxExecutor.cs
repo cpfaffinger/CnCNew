@@ -128,12 +128,8 @@ public sealed class FxExecutor
                 OverrideRadius = weapon.PrimaryDamageRadius,
             }, view);
         }
-        if (weapon.ProjectileObject is not null && weapon.ProjectileDetonationFx[level] is { } detonation && target is { } impact)
-        {
-            // The simulation resolves shots instantly (no projectile objects yet): the detonation effect plays at the target now.
-            Count("projectile-detonation-immediate");
-            ExecuteFxListAtPosition(detonation, new FxInvocation(impact) { OverrideRadius = weapon.PrimaryDamageRadius }, view);
-        }
+        // ProjectileDetonationFX is not played here: the simulation flies the projectile object and asks for the effect where and when it detonates
+        // (SimulationWorld.DetonateProjectile -> SimEventKind.FxRequested). Playing it at the shot as well showed and sounded every impact twice, once before the shell arrived.
     }
 
     /// <summary><c>ActiveBody::doDamageFX</c> with the victim's unconditional armor set's DamageFX.</summary>

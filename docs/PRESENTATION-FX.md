@@ -145,9 +145,10 @@ outputs (lists in creation order, sorted dictionaries). Two runs with the same s
   Shroud is checked through `IFxWorldView.IsShrouded` (adapter: no shroud model yet, always visible).
 - `WeaponFired`: FireFX of the veterancy level at the weapon muzzle (`GetWeaponMuzzle`), otherwise at the source, for
   contact weapons (`AttackRange - 2.5 < 10`, `WeaponTemplate::isContactWeapon` with `RATIONALIZE_ATTACK_RANGE`) at the target;
-  velocity = weapon speed, secondary position = target, radius = PrimaryDamageRadius. Since the simulation
-  resolves shots immediately (no projectile objects yet), `ProjectileDetonationFX` plays immediately at the target (counted as
-  `projectile-detonation-immediate`).
+  velocity = weapon speed, secondary position = target, radius = PrimaryDamageRadius.
+  `ProjectileDetonationFX` does **not** play at the shot: the simulation flies the projectile object and requests the effect at the place and tick of the
+  detonation (`SimulationWorld.DetonateProjectile` → `FxRequested`). Until 9 October 2026 the effect additionally played immediately at the target
+  (a leftover from the time without projectile objects): every impact was seen and heard twice, once before the projectile arrived (`docs/ACCEPTANCE.md`).
 - `EntityDamaged`: `ActiveBody::doDamageFX` with the DamageFX of the unconditional ArmorSet (`Conditions = None`); the
   damage type comes from the `WeaponFired` of the same tick (pair source/target, otherwise source), the veterancy level from the
   source, major for `damage >= AmountForMajorFX`, throttling per victim and damage type with `ThrottleTime` in ticks.
@@ -265,7 +266,7 @@ camera shake, decal buffer, sound cue rules and rate limiter. With `--content-di
   systems when emitting is missing.
 - DamageFX uses only the unconditional ArmorSet; `DamageFXOverride` and upgrade-dependent ArmorSets are missing, because the
   event carries neither damage type nor ArmorSet.
-- Projectiles are instantaneous in the simulation; detonation effects and tracers have no real flight time.
+- Tracers have no real flight time; detonation effects of projectile weapons follow the projectile of the simulation (see `WeaponFired` above).
 - `FireSoundLoopTime` (36 weapons, `FiringTracker::shotFired`: loop sound instead of single sound) is not reproduced;
   every shot produces a cue, which `SoundCueRateLimiter` throttles.
 - `GameLOD.ini` levels (MaxParticleCount 500/1,500/3,000, MinParticlePriority, ParticleSkipMask) are not read;
