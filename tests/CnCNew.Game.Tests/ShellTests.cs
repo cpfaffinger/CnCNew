@@ -53,7 +53,8 @@ internal static class ShellTests
         harness.Run("Main menu shows only what MainMenuInit leaves visible", () => MainMenuInitialState(data));
         harness.Run("Buttons draw hilite and pushed images under the pointer and drop them when it leaves", () => ButtonStates(data));
         harness.Run("Options: sliders draw their boxes and drag, static texts have no hover fill", () => OptionsSlidersAndLabels(data));
-        harness.Run("Quit dialog text takes the header template size, not the 1920x1080 layout scale", () => QuitDialogFonts(data));
+        harness.Run("Quit dialog: Yes and No stand at the first and the last button place, and the text takes the header template size", () => QuitDialogFonts(data));
+        harness.Run("Main menu: the custom mission button of the retail layout has its text from Data/Patch.str and is inert", () => CustomMissionButton(data));
         harness.Run("Skirmish setup and options show localized words, not internal names or the layout's placeholders", () => LocalizedSetupText(data));
         harness.Run("A window with TOOLTIPTEXT shows the pointer tooltip after the delay with the Mouse.ini style", () => PointerTooltip(data));
         harness.Run("Credits lines use the Language.ini credits fonts at the adjusted size", () => CreditsFonts(data));
@@ -528,7 +529,7 @@ internal static class ShellTests
     /// </summary>
     private static void QuitDialogFonts(GameData data)
     {
-        foreach (var (width, height, title, message, button) in new[] { (1920, 1080, 36, 14, 21), (1280, 720, 24, 9, 14), (800, 600, 20, 8, 12) })
+        foreach (var (width, height, title, message, button) in new[] { (1920, 1080, 36, 18, 27), (1280, 720, 24, 12, 18), (800, 600, 20, 10, 15) })
         {
             var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(width, height));
             var mainButton = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonExit")!;
@@ -536,8 +537,18 @@ internal static class ShellTests
             var tree = shell.CurrentScreen.Tree;
             var titleWindow = tree.FindByName("QuitMessageBox.wnd:StaticTextTitle")!;
             var messageWindow = tree.FindByName("QuitMessageBox.wnd:StaticTextMessage")!;
-            TestHarness.Assert(messageWindow.Definition.Rect.CreationWidth == 1920 && messageWindow.Definition.HeaderTemplate == "LabelSmall" && titleWindow.Definition.HeaderTemplate == "Title",
-                "the quit dialog is a 1920x1080 layout with header template fonts");
+            // The retail QuitMessageBox.wnd: an 800x600 layout, Title (20) over a LabelRegular (10) message, MainButton (15) buttons.
+            TestHarness.Assert(messageWindow.Definition.Rect is { CreationWidth: 800, CreationHeight: 600 } && messageWindow.Definition.HeaderTemplate == "LabelRegular" && titleWindow.Definition.HeaderTemplate == "Title",
+                "the quit dialog is the retail 800x600 layout with header template fonts");
+            // gogoMessageBox: Yes stands at Ok's place, No (without Cancel) at Cancel's; the layout parks Yes one row higher and No in the middle.
+            var yes = tree.FindByName("QuitMessageBox.wnd:ButtonYes")!;
+            var no = tree.FindByName("QuitMessageBox.wnd:ButtonNo")!;
+            var okPlace = tree.FindByName("QuitMessageBox.wnd:ButtonOk")!.Definition.Rect;
+            var cancelPlace = tree.FindByName("QuitMessageBox.wnd:ButtonCancel")!.Definition.Rect;
+            TestHarness.Assert(yes.DesignRect.Left == okPlace.Left && yes.DesignRect.Top == okPlace.Top && yes.DesignRect.Width == yes.Definition.Rect.Width
+                               && no.DesignRect.Left == cancelPlace.Left && no.DesignRect.Top == cancelPlace.Top && no.DesignRect.Width == no.Definition.Rect.Width,
+                $"{width}x{height}: Yes takes the first button place and No the last ({yes.DesignRect} / {no.DesignRect})");
+            TestHarness.Assert(yes.IsVisible && no.IsVisible && yes.Rect.Y == no.Rect.Y && yes.Rect.Right <= no.Rect.X, $"{width}x{height}: the two buttons stand in one row, Yes left of No ({yes.Rect} / {no.Rect})");
             TestHarness.Assert(titleWindow.Font.Size == title && messageWindow.Font.Size == message && tree.FindByName("QuitMessageBox.wnd:ButtonYes")!.Font.Size == button,
                 $"{width}x{height}: title {titleWindow.Font.Size} (want {title}), message {messageWindow.Font.Size} (want {message}), button {tree.FindByName("QuitMessageBox.wnd:ButtonYes")!.Font.Size} (want {button})");
             var drawn = shell.BuildDrawList().Commands.OfType<UiTextDraw>().Where(text => text.LabelKey == "GUI:QuitPopupMessage").ToArray();
@@ -545,6 +556,23 @@ internal static class ShellTests
             // The same template family in an 800x600 layout: MainButton (15) on the main menu scales by the same factor.
             TestHarness.Assert(mainButton.Font.Size * 20 / 15 == title, $"{width}x{height}: dialog and main menu fonts share one scale (MainButton {mainButton.Font.Size}, Title {title})");
         }
+    }
+
+    /// <summary>
+    /// The retail <c>MainMenu.wnd</c> comes from <c>PatchWindow.big</c> and has a button the main string table has no text for; the text is in <c>Data/Patch.str</c>.
+    /// The label must resolve (no "missing label" on the single-player menu) and the button must not react: this build has no screen behind it.
+    /// </summary>
+    private static void CustomMissionButton(GameData data)
+    {
+        var text = data.LoadText("English");
+        TestHarness.Assert(text.TryGet("GUI:CustomMission", out var caption) && caption.Length > 0, "the label of the custom mission button resolves");
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        var button = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonCustomMission");
+        TestHarness.Assert(button is { IsVisible: true, IsEnabled: false }, "the button is shown and disabled");
+        var before = shell.CurrentScreen;
+        Click(shell, "MainMenu.wnd:ButtonCustomMission");
+        TestHarness.Assert(ReferenceEquals(shell.CurrentScreen, before), "a click on it opens nothing");
     }
 
     // ------------------------------------------------------------------------------------------------- options persistence
