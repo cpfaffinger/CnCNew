@@ -202,6 +202,7 @@ public sealed partial class ScriptEngine
         _nextEvaluation = new long[program.Units.Length];
         _groupActive = new bool[program.Groups.Length];
         _conditionTeam = new string?[program.Units.Length];
+        InitializeConditionOrdinals();
         for (var index = 0; index < program.Units.Length; index++)
         {
             var script = program.Units[index].Script;
@@ -411,9 +412,11 @@ public sealed partial class ScriptEngine
                     if (!_program.Units[index].IsSubroutine) ExecuteScript(_program.Units[index]);
             }
         }
-        UpdateAiPlayers();
-        _uiInteractions.Clear();
         observer?.SectionEnded(ScriptSection.Scripts);
+        observer?.SectionStarted(ScriptSection.AiPlayers);
+        UpdateAiPlayers();
+        observer?.SectionEnded(ScriptSection.AiPlayers);
+        _uiInteractions.Clear();
         if (observer is null)
         {
             UpdateFollowers();
@@ -550,19 +553,26 @@ public sealed partial class ScriptEngine
         var techMemory = _techBuildingAnswers.ToDictionary(pair => pair.Key, pair => pair.Value);
         var missingMemory = new Dictionary<string, long>(_missingConditions, StringComparer.Ordinal);
         var diagnosticMemory = new Dictionary<string, long>(_diagnostics, StringComparer.Ordinal);
+        var conditionMemory = _conditionMemory.ToArray();
+        var outerOrdinal = _conditionOrdinal;
         _callingTeam = team;
         try
         {
+            var ordinal = _conditionBase[unit.Index];
             for (var branch = 0; branch < unit.Script.OrConditions.Length; branch++)
                 for (var index = 0; index < unit.Script.OrConditions[branch].AndConditions.Length; index++)
                 {
                     var condition = unit.Script.OrConditions[branch].AndConditions[index];
+                    _conditionOrdinal = ordinal++;
                     result.Add((InvariantText.Format($"{branch}.{index} {condition.TypeName}"), EvaluateCondition(condition)));
                 }
         }
         finally
         {
             _callingTeam = previous;
+            _conditionOrdinal = outerOrdinal;
+            _conditionMemory.Clear();
+            foreach (var (key, value) in conditionMemory) _conditionMemory[key] = value;
             Restore(_areaInside, areaMemory);
             Restore(_missingConditions, missingMemory);
             Restore(_diagnostics, diagnosticMemory);
@@ -590,19 +600,27 @@ public sealed partial class ScriptEngine
 
     private bool EvaluateConditions(ScriptUnit unit)
     {
-        foreach (var or in unit.Script.OrConditions)
+        var outer = _conditionOrdinal;
+        var ordinal = _conditionBase[unit.Index];
+        try
         {
-            if (or.AndConditions.IsDefaultOrEmpty) continue;
-            var all = true;
-            foreach (var condition in or.AndConditions)
+            foreach (var or in unit.Script.OrConditions)
             {
-                if (EvaluateCondition(condition)) continue;
-                all = false;
-                break;
+                if (or.AndConditions.IsDefaultOrEmpty) continue;
+                var all = true;
+                for (var index = 0; index < or.AndConditions.Length; index++)
+                {
+                    _conditionOrdinal = ordinal + index;
+                    if (EvaluateCondition(or.AndConditions[index])) continue;
+                    all = false;
+                    break;
+                }
+                if (all) return true;
+                ordinal += or.AndConditions.Length;
             }
-            if (all) return true;
+            return false;
         }
-        return false;
+        finally { _conditionOrdinal = outer; }
     }
 
     private void ExecuteActions(ImmutableArray<MapScriptAction> actions)

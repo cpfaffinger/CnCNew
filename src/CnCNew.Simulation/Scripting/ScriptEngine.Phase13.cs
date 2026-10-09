@@ -713,7 +713,7 @@ public sealed partial class ScriptEngine
                 }
                 return true;
             case "SUPPLY_SOURCE_SAFE":
-                result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } safe && SupplySourceSafe(safe.Id, Int(p, 1));
+                result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } safe && SupplySourceSafeRemembered(safe.Id, Int(p, 1));
                 return true;
             // evaluateSkirmishSupplySourceAttacked -> AIPlayer::isSupplySourceAttacked: a cash generator, dozer or harvester of the player was damaged within the last 10 seconds.
             case "SUPPLY_SOURCE_ATTACKED":

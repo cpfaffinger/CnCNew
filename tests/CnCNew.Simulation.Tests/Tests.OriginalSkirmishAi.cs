@@ -131,6 +131,8 @@ static partial class Tests
             Scr.Script(letter + " Attack Condition", [Scr.And(Scr.If("FLAG", Scr.Flag(letter + " Started"), Scr.Bool(true)))], [], subroutine: true),
             Scr.Script(letter + " Attack Go", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_HUNT", Scr.Team("<This Team>")), Scr.Do("SET_FLAG", Scr.Flag(letter + " Attacking"), Scr.Bool(true))], subroutine: true),
             Scr.Script(letter + " Mark", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_FLAG", Scr.Flag(letter + " Marked"), Scr.Bool(true))], oneShot: true, subroutine: true),
+            Scr.Script(letter + " Power", [Scr.And(Scr.If("SKIRMISH_SPECIAL_POWER_READY", Scr.Side(owner), Scr.Named(MapScriptParameterType.SpecialPower, side + "Shared")))],
+                [Scr.Do("SET_FLAG", Scr.Flag(letter + " Power"), Scr.Bool(true))], oneShot: true),
         ];
         var team = new MapProperties(
         [
@@ -305,6 +307,34 @@ static partial class Tests
         // SKIRMISH_BUILD_BASE_DEFENSE_FRONT adds the side's base defence (a plant in the fixture) on the circle around the base, towards the enemy.
         var list = session.Engine.AiBuildListOf(new PlayerId(1));
         Check.That(list.Length == 4 && list[0] is { Template: "AlphaPlant", Priority: true } && list[0].X > Fixed.FromInt(100), $"The front defence is a new priority entry east of the base ({list.Length} entries, first at {list[0].X}).");
+    }
+
+    /// <summary>
+    /// <c>evaluateSkirmishSpecialPowerIsReady</c> remembers in the condition when to look again: the frame the nearest module becomes ready, at most ten seconds ahead. A power that
+    /// becomes ready earlier by other means is not noticed before that frame.
+    /// </summary>
+    public static void OriginalAiRemembersWhenToLookAtAPowerAgain()
+    {
+        foreach (var rate in new[] { CnCNew.Simulation.Time.SimulationRate.Hz30, CnCNew.Simulation.Time.SimulationRate.Hz60 })
+        {
+            var (session, fixture, terrain, map, library, data) = StartOriginalSkirmish(rate: new SimulationRateChoice(rate));
+            var world = session.World;
+            var alpha = new PlayerId(1);
+            Check.That(world.SpecialPowers.TryGet("AlphaShared", out var power), "The fixture has the shared power of the command centre.");
+            StepFrames(session, 20);
+            Check.That(!session.Engine.FlagValue("A Power0"), "The power recharges for ten seconds: the condition is false at the start.");
+            var state = System.Text.Encoding.UTF8.GetString(session.Save());
+            Check.That(state.Contains("\"aiConditionMemory\"", StringComparison.Ordinal), "The frame of the next look is part of the saved state.");
+            // Ready now, by a route the condition does not see (the reference: any change of the module's ready frame after the look).
+            world.SetSharedReadyFrame(alpha, power.Index, world.Tick);
+            var restored = ScriptedSkirmishSession.Restore(session.Save(), fixture.Templates, fixture.Fingerprint, terrain, map, library, data);
+            StepFrames(session, 200);
+            Check.That(!session.Engine.FlagValue("A Power0"), $"Before the remembered frame the condition is not evaluated again, although the power is ready ({rate}).");
+            StepFrames(session, 90);
+            Check.That(session.Engine.FlagValue("A Power0"), $"From the remembered frame on it is looked at again and is true ({rate}).");
+            StepFrames(restored, 290);
+            Check.That(restored.StateHash() == session.StateHash(), $"A session restored between the two looks continues identically: the memory is state ({rate}).");
+        }
     }
 
     public static void OriginalAiSeedsAndRates()

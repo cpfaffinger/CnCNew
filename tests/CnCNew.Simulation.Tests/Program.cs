@@ -424,6 +424,7 @@ run.Test("Original skirmish AI: the script library is attached to the slots like
 run.Test("Original skirmish AI: base, teams, difficulty per player, determinism and save/restore", Tests.OriginalAiPlaysASkirmishFromItsScripts);
 run.Test("Original skirmish AI: rebuilding and base defences", Tests.OriginalAiRebuildsAndDefends);
 run.Test("Original skirmish AI: the seed decides, the tick rate does not", Tests.OriginalAiSeedsAndRates);
+run.Test("Original skirmish AI: a power that was not ready is looked at again at the remembered frame", Tests.OriginalAiRemembersWhenToLookAtAPowerAgain);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Skirmish: a live session refuses to be saved (explicit, loud guard)", Tests.SkirmishSessionRefusesToSave);
 run.Test("Projectiles: straight shell flight time, impact event and detonation effect", Tests.ProjectileStraightShellFlightTime);

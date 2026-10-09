@@ -1244,6 +1244,7 @@ public sealed partial class ScriptEngine
             writer.EndObject();
         }
         writer.EndArray();
+        DescribeConditionMemory(writer);
     }
 
     private void LoadAi(IStateReader reader)
@@ -1284,5 +1285,6 @@ public sealed partial class ScriptEngine
         foreach (var item in reader.Array("aiProductionNext")) _productionNextTick[item.Text("team")] = item.Int("tick");
         _genericDone.Clear();
         foreach (var item in reader.Array("aiGenericDone")) _genericDone[checked((int)item.Int("team"))] = checked((int)item.Int("mask"));
+        LoadConditionMemory(reader);
     }
 }

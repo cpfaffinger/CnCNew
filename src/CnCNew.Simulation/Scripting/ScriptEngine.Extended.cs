@@ -56,7 +56,7 @@ public sealed partial class ScriptEngine
                 return true;
             }
             case "SKIRMISH_SPECIAL_POWER_READY":
-                result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } powerOwner && SkirmishSpecialPowerReady(powerOwner.Id, Str(p, 1));
+                result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } powerOwner && SkirmishSpecialPowerReadyRemembered(powerOwner.Id, Str(p, 1));
                 return true;
             case "SKIRMISH_PLAYER_HAS_COMPARISON_GARRISONED":
             {
