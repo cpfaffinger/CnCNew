@@ -1,96 +1,96 @@
-# W3D-Materialvertrag
+# W3D material contract
 
-Stand: 27. September 2026
+As of: 27 September 2026
 
-## Rendererunabhängige Semantik
+## Renderer-independent semantics
 
-`CnCNew.W3D` erhält die Reihenfolge aller Materialpässe und Texture-Stages. Der Renderplan gruppiert
-ein Dreieck anhand des vollständigen Zustands aller Pässe; ein späterer Pass wird deshalb nicht als
-unabhängiger Batch sortiert. W3D definiert höchstens zwei Texture-Stages pro Pass. Mehr als zwei
-Stages sind strukturell ungültig und werden beim Decoding mit Meshdiagnose abgewiesen, nicht erst
-im Client mit `NotSupportedException`.
+`CnCNew.W3D` preserves the order of all material passes and texture stages. The render plan groups
+a triangle by the complete state of all passes; a later pass is therefore not sorted as an
+independent batch. W3D defines at most two texture stages per pass. More than two
+stages are structurally invalid and are rejected during decoding with a mesh diagnostic, not only
+in the client with a `NotSupportedException`.
 
-Shaderwerte sind typisierte Enums. Unterstützt und getestet sind alle W3D-Werte für Depth Compare,
-Depth Write, Alpha-Test, Source-/Destination-Blend, Primary/Secondary Gradient, Detail Color,
-Detail Alpha, Post-Detail Color und Post-Detail Alpha. Der Generals-PC-Lader kopiert beim Laden die
-alten `Detail*`-Felder in seinen aktiven Post-Detail-Zustand und ignoriert die serialisierten
-`PostDetail*`-Bytes; CnCNew erhält beide verlustfrei und verwendet dieselbe effektive Regel.
+Shader values are typed enums. Supported and tested are all W3D values for depth compare,
+depth write, alpha test, source/destination blend, primary/secondary gradient, detail color,
+detail alpha, post-detail color and post-detail alpha. On loading, the Generals PC loader copies the
+old `Detail*` fields into its active post-detail state and ignores the serialised
+`PostDetail*` bytes; CnCNew preserves both losslessly and uses the same effective rule.
 
-Die Dateibytes `ColorMask`, `FogFunc`, `ShaderPreset` und Padding wurden von den Werkzeugen als
-PlayStation-2-Parameter A bis D wiederverwendet. Der EA-PC-Lader setzt Farbschreiben immer an und
-Datei-Fog immer aus. CnCNew bildet deshalb nicht die häufigen Rohwerte `0/2/2/2` fälschlich als
-PC-Renderzustand ab. Die Rohwerte bleiben als `W3dLegacyShaderMetadata` verfügbar.
+The file bytes `ColorMask`, `FogFunc`, `ShaderPreset` and padding were reused by the tools as
+PlayStation 2 parameters A to D. The EA PC loader always turns color writing on and
+file fog always off. CnCNew therefore does not wrongly map the frequent raw values `0/2/2/2` as
+PC render state. The raw values remain available as `W3dLegacyShaderMetadata`.
 
-DCG, DIG und SCG werden getrennt validiert. DCG und Vertexmaterial-Diffuse/Opacity bilden den
-primären Color-Stream; SCG bildet den sekundären Gradienten. Unbekannte Shaderwerte fallen nie
-stillschweigend auf einen Standardwert zurück.
+DCG, DIG and SCG are validated separately. DCG and vertex material diffuse/opacity form the
+primary color stream; SCG forms the secondary gradient. Unknown shader values never fall back
+silently to a default value.
 
-## Mapper
+## Mappers
 
-Der ausgelieferte Bestand verwendet:
+The shipped content uses:
 
 - UV;
-- Environment (Camera-Space Reflection Vector);
-- Classic/Cheap Environment (Camera-Space Normal);
-- Linear Offset mit `UPerSec`, `VPerSec`, `UOffset`, `VOffset`, `UScale`, `VScale`, `ClampFix`;
-- Grid mit `FPS`, `Log2Width` beziehungsweise der ausgelieferten Schreibweise `Log1Width`, `Last`
-  und `Offset`.
+- Environment (camera-space reflection vector);
+- Classic/Cheap Environment (camera-space normal);
+- Linear Offset with `UPerSec`, `VPerSec`, `UOffset`, `VOffset`, `UScale`, `VScale`, `ClampFix`;
+- Grid with `FPS`, `Log2Width` or the shipped spelling `Log1Width`, `Last`
+  and `Offset`.
 
-Mapperart und Slot stammen aus den Vertexmaterial-Attributbits. Argumente werden invariant und
-streng typisiert; unbekannte, doppelte oder ungültige Werte erzeugen eine Diagnose. Linear Offset
-übernimmt die historische negative Zeitrichtung des EA-Renderers. Positive und negative
-Geschwindigkeiten, Wrap/Clamp, Grid-Frames und beide Slots sind automatisiert getestet.
+Mapper kind and slot come from the vertex material attribute bits. Arguments are typed invariantly and
+strictly; unknown, duplicate or invalid values produce a diagnostic. Linear Offset
+adopts the historical negative time direction of the EA renderer. Positive and negative
+speeds, wrap/clamp, grid frames and both slots are tested automatically.
 
-Gültige, aber im Bestand nicht verwendete Mapperarten (unter anderem Rotate, Sine, Step, ZigZag,
-Screen, World-Space- und Bump-Varianten) werden mit genauer Diagnose abgewiesen. Ebenso sind die
-Primary-Gradient-Modi Bump Environment und Bump Environment Luminance typisiert, benötigen aber
-einen Tangent-Space-Bumppfad und werden außerhalb des auditierten Bestands bewusst hart
-diagnostiziert. Add und Modulate2X sind implementiert und CPU-semantisch getestet.
+Valid mapper kinds that are not used in the content (among others Rotate, Sine, Step, ZigZag,
+Screen, world-space and bump variants) are rejected with an exact diagnostic. Likewise the
+primary gradient modes Bump Environment and Bump Environment Luminance are typed, but need
+a tangent-space bump path and are deliberately diagnosed hard outside the audited
+content. Add and Modulate2X are implemented and tested for their CPU semantics.
 
-## Stride-Abbildung
+## Stride mapping
 
-Ein kombinierter W3D-Batch wird zu einem Stride-Material mit einem Stride-Pass je W3D-Pass.
-Die Passreihenfolge bleibt erhalten. Vier UV-Streams (`pass * 2 + stage`) und vier Color-Streams
-(primär/sekundär je Pass) verhindern, dass ein späterer Pass UVs oder Vertexfarben des ersten
-Passes erbt. Blend, Depth Compare, Depth Write, Alpha-Test und Culling werden pro Pass gesetzt.
-Animated Linear-/Grid-Mapper aktualisieren dynamische Vertexpuffer aus der expliziten Renderzeit.
+A combined W3D batch becomes one Stride material with one Stride pass per W3D pass.
+The pass order is preserved. Four UV streams (`pass * 2 + stage`) and four color streams
+(primary/secondary per pass) prevent a later pass from inheriting UVs or vertex colors of the first
+pass. Blend, depth compare, depth write, alpha test and culling are set per pass.
+Animated linear/grid mappers update dynamic vertex buffers from the explicit render time.
 
-Texturen werden über das case-insensitive Runtime-Content-Dateisystem gesucht. Kandidaten sind die
-angegebene virtuelle Referenz, `Art/Textures/<Datei>` sowie gleichnamige DDS- und TGA-Dateien.
-Fehlt eine Textur, erscheint eine genaue Diagnose und ein sichtbares Magenta-Schachbrett; der
-Smoke-Test schlägt zusätzlich fehl. Geladene Texturen werden pfadbasiert gecacht und zusammen mit
-Vertex-/Indexpuffern deterministisch freigegeben.
+Textures are looked up through the case-insensitive runtime content file system. Candidates are the
+given virtual reference, `Art/Textures/<Datei>` and DDS and TGA files of the same name.
+If a texture is missing, an exact diagnostic and a visible magenta checkerboard appear; the
+smoke test additionally fails. Loaded textures are cached by path and released deterministically
+together with vertex/index buffers.
 
-## Vollbestandsabnahme
+## Full-content acceptance
 
 ```powershell
 dotnet run --project tests/CnCNew.W3D.Tests -- --content-dir .local/content
 dotnet run --project tools/CnCNew.W3dTool -- audit .local/content
 ```
 
-Der Audit verarbeitet 8.904/8.904 Dateien, 70.587 Meshes, 76.212 Materialpässe, 74.374
-Texture-Stages, 77.672 Shader und 80.041 Vertexmaterialien. Es gibt 64.962 Einpass- und 5.625
-Zweipass-Meshes; pro Pass kommen 2.155-mal keine, 73.740-mal eine und 317-mal zwei Stages vor.
-Der Bestand enthält 113.824 DCG-Sätze; DIG und SCG kommen in den ausgelieferten Dateien nicht vor,
-ihr Decoder- und Renderpfad ist deshalb über synthetische Regressionstests abgedeckt.
-Mapperverteilung: Stage 0 enthält 77.389 UV-, 2.397 Environment-, 253 Linear- und zwei
-Grid-Mapper; Stage 1 enthält 79.933 UV- und 108 Linear-Mapper.
+The audit processes 8,904/8,904 files, 70,587 meshes, 76,212 material passes, 74,374
+texture stages, 77,672 shaders and 80,041 vertex materials. There are 64,962 single-pass and 5,625
+two-pass meshes; per pass, no stage occurs 2,155 times, one stage 73,740 times and two stages 317 times.
+The content contains 113,824 DCG sets; DIG and SCG do not occur in the shipped files,
+their decoder and render path is therefore covered by synthetic regression tests.
+Mapper distribution: stage 0 contains 77,389 UV, 2,397 Environment, 253 Linear and two
+Grid mappers; stage 1 contains 79,933 UV and 108 Linear mappers.
 
-## Visuelle Regression
+## Visual regression
 
-Captures liegen ausschließlich im ignorierten Verzeichnis `.local/visual-verification`; weder
-Originalassets noch daraus gerenderte Bilder werden committed. Der Capture-Zeitpunkt verwendet
-im Smoke-Modus einen festen 60-Hz-Zeitschritt. Zwei unabhängige Läufe des animierten Modells waren
-bitidentisch.
+Captures live exclusively in the ignored directory `.local/visual-verification`; neither
+original assets nor images rendered from them are committed. In smoke mode the capture time uses
+a fixed 60 Hz time step. Two independent runs of the animated model were
+bit-identical.
 
-| Pfad | Modell | SHA-256 |
+| Path | Model | SHA-256 |
 | --- | --- | --- |
-| Mehrpass, Alpha-Test, Additiv, Environment | `ABArFrcCmd.W3D` | `9FC7420083E96542CD96ADBCACDF5BD310EC2426E3B389F4144FB20C570E8C22` |
-| Zwei Stages, Detailfunktion | `AbbtCmdHQA.W3D` | `D40C4B03135A5AB5D950E7E81AE7E66874EE45FE31C4070B1D82D43E7A079ECC` |
-| Animierter Mapper in Stage 1 | `AVSoloDrn.W3D` | `A24DBFEC49658F1ECCDBE99B5D0346F45FA56CD9AF5FE05EC839CE49BFCE7E90` |
-| Grid-Mapper | `ExEMPSphere.W3D` | `A6EB428C26002075AC311654985F98597674662DD84E3A3D989F46C6EA35DFD2` |
+| Multi-pass, alpha test, additive, environment | `ABArFrcCmd.W3D` | `9FC7420083E96542CD96ADBCACDF5BD310EC2426E3B389F4144FB20C570E8C22` |
+| Two stages, detail function | `AbbtCmdHQA.W3D` | `D40C4B03135A5AB5D950E7E81AE7E66874EE45FE31C4070B1D82D43E7A079ECC` |
+| Animated mapper in stage 1 | `AVSoloDrn.W3D` | `A24DBFEC49658F1ECCDBE99B5D0346F45FA56CD9AF5FE05EC839CE49BFCE7E90` |
+| Grid mapper | `ExEMPSphere.W3D` | `A6EB428C26002075AC311654985F98597674662DD84E3A3D989F46C6EA35DFD2` |
 
-Beispiel:
+Example:
 
 ```powershell
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test `
