@@ -62,8 +62,9 @@ public static partial class ConditionDeriver
         if (context.Night) set = set.With(ModelConditions.Night);
         if (context.Snow) set = set.With(ModelConditions.Snow);
 
-        // Drawable::onDamageStateChanged: exactly one of DAMAGED/REALLYDAMAGED/RUBBLE per BodyDamageType.
-        set = entity.DamageState() switch
+        // Drawable::onDamageStateChanged: exactly one of DAMAGED/REALLYDAMAGED/RUBBLE per BodyDamageType. A structure under construction shows none: its health grows with the work,
+        // and ActiveBody::internalChangeHealth does not call evaluateVisualCondition for it ("we just don't have all the art states for that during buildup").
+        set = (entity.HasStatus(ObjectStatusBits.UnderConstruction) ? BodyDamageStates.Pristine : entity.DamageState()) switch
         {
             BodyDamageStates.Damaged => set.With(ModelConditions.Damaged),
             BodyDamageStates.ReallyDamaged => set.With(ModelConditions.ReallyDamaged),
