@@ -1,0 +1,22 @@
+# Tour of the command bar for the acceptance catalogue (docs/ACCEPTANCE.md, items HUD-01 to HUD-04), scene exit-america-all, one picture every 30 frames.
+# FRAME VERB ARGUMENTS, see docs/GAME-HUD.md section 17. Frame 30: nothing selected.
+35   look own:DOZER
+40   click left own:DOZER                  # 60: dozer selected - portrait and construction menu
+50   move command:DozerConstruct           # 90: pointer on a construct button - tooltip
+95   look template:AmericaWarFactory
+100  click left template:AmericaWarFactory
+106  key down C                            # Crusader, twice
+108  key up C
+112  key down C
+114  key up C                              # 120 and 150: war factory with its queue
+155  look template:AmericaBarracks
+160  click left template:AmericaBarracks
+166  key down G                            # Ranger
+168  key up G                              # 180 and 210: barracks with its queue
+215  look own:DOZER
+220  click left own:DOZER
+230  click left command:DozerConstruct
+245  move placement from own:DOZER         # 270: the building preview on a legal spot
+280  click right ground:+0,+60 from own:DOZER
+330  key down Escape                       # 360 to 420: the game menu
+332  key up Escape
