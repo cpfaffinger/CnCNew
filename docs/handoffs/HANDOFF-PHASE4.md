@@ -1,220 +1,220 @@
-# N+1-Handoff: Phase 4 – Deterministischer Simulationskern
+# N+1 handoff: Phase 4 – deterministic simulation core
 
-> **Status: abgeschlossen am 28. September 2026** (Ergebnisse in `docs/SIMULATION-CORE.md`, `docs/TYPED-DEFINITIONS.md`,
-> `docs/IMPLEMENTATION-PLAN.md`). Der nächste Auftrag steht in `docs/handoffs/HANDOFF-PHASE5.md`. Dieses Dokument bleibt als Historie erhalten.
+> **Status: completed on 28 September 2026** (results in `docs/SIMULATION-CORE.md`, `docs/TYPED-DEFINITIONS.md`,
+> `docs/IMPLEMENTATION-PLAN.md`). The next brief is in `docs/handoffs/HANDOFF-PHASE5.md`. This document is kept as history.
 
-Du arbeitest autonom an diesem Repository (`<repo>` = Wurzel des Arbeitsverzeichnisses).
+You work autonomously on this repository (`<repo>` = root of the working directory).
 
-## Auftrag
+## Brief
 
-Setze Phase 4 des Implementierungsplans vollständig um: einen headless laufenden,
-deterministischen Simulationskern (`CnCNew.Simulation`) mit festem Tick, stabilen IDs,
-reproduzierbaren RNG-Streams, Befehlsqueue, Objekt-/Modul-/Behavior-Lebenszyklus, kanonischen
-Zustandssnapshots, Replay-Harness und Stresstest. Zuvor schließt ein kleiner **Block 0** die für
-Phase 4 notwendigen Lücken aus Phase 3 (siehe unten).
+Implement Phase 4 of the implementation plan completely: a headless running,
+deterministic simulation core (`CnCNew.Simulation`) with a fixed tick, stable IDs,
+reproducible RNG streams, command queue, object/module/behaviour life cycle, canonical
+state snapshots, replay harness and stress test. Before that a small **Block 0** closes the gaps
+from Phase 3 that are necessary for Phase 4 (see below).
 
-Lies vor Änderungen vollständig `CLAUDE.md` (verbindliche Regeln, Befehle, Git-Regeln),
+Before making changes read completely `CLAUDE.md` (binding rules, commands, Git rules),
 `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`,
-`docs/CONTENT-PIPELINE.md`, `docs/TYPED-DEFINITIONS.md` (inkl. „Bekannte Grenzen“) und
+`docs/CONTENT-PIPELINE.md`, `docs/TYPED-DEFINITIONS.md` (incl. "Known limits") and
 `docs/PHASE3-COMPATIBILITY.md`.
 
-## Verbindlicher Ausgangsstand
+## Binding starting state
 
-- Branch `main`, kein Remote; nichts pushen, keinen Remote anlegen. Phase 1–3 sind abgeschlossen
-  (letzte Phase-3-Commits `07b5959`, `a030a98`, Doku `ae71e55`, `ebe04fe`).
-- Falls `CLAUDE.md`, `AGENTS.md`, `docs/handoffs/HANDOFF-PHASE4.md` und die Doku-Nachträge zu
-  `docs/TYPED-DEFINITIONS.md` / `docs/IMPLEMENTATION-PLAN.md` noch unversioniert sind: zuerst
-  als eigener Commit `docs: add agent guidance and phase 4 handoff` einchecken.
-- Verifiziert am 28. September 2026: Solution-Build (nur die 10 bekannten transitiven
-  Stride-NU1901/NU1903-Warnungen) und alle acht Testprogramme grün; `AssetTool verify`,
-  `IniTool audit`, `ImageTool audit-tga`, `W3dTool audit` grün.
-- Frische Vollkompilierung: 256/256 INIs, 66.623 Blöcke, 12.677 Definitionen, 16.360 Module,
-  335.592 Schlüssel, 12.441/12.468 Referenzen aufgelöst (27 sichtbare Kompatibilitätsfälle: 25
-  Veterancy-Pseudoupgrades, `DieByFireUSA`, `Boss_VehicleSentryDrone`), 41 Definitionsdomänen
-  (2.801 Instanzen) und 206 Module inventarisiert, Snapshot 112.664.082 Byte, SHA-256
-  `14154C512DED47C4AD72B651F8FCB0BA702EACBF8678C51DDAB7D125BEC675D4`. Messe alles neu.
-- Definitionsanzahl je Art: Object 2.127, Weapon 364, Armor 53, Damage 11, Upgrade 82,
-  Science 96, Faction 15, CommandButton 820, CommandSet 479, FxList 429, Fx 1.087,
-  AudioEvent 1.410, DialogEvent 2.569, MusicTrack 69, Locomotor 184, SpecialPower 80,
-  GameData 1, sonstige (Compatibility) 2.801.
+- Branch `main`, no remote; push nothing, create no remote. Phases 1–3 are completed
+  (last Phase 3 commits `07b5959`, `a030a98`, docs `ae71e55`, `ebe04fe`).
+- If `CLAUDE.md`, `AGENTS.md`, `docs/handoffs/HANDOFF-PHASE4.md` and the doc addenda to
+  `docs/TYPED-DEFINITIONS.md` / `docs/IMPLEMENTATION-PLAN.md` are still unversioned: first
+  check them in as a commit of their own `docs: add agent guidance and phase 4 handoff`.
+- Verified on 28 September 2026: solution build (only the 10 known transitive
+  Stride NU1901/NU1903 warnings) and all eight test programs green; `AssetTool verify`,
+  `IniTool audit`, `ImageTool audit-tga`, `W3dTool audit` green.
+- Fresh full compilation: 256/256 INIs, 66,623 blocks, 12,677 definitions, 16,360 modules,
+  335,592 keys, 12,441/12,468 references resolved (27 visible compatibility cases: 25
+  veterancy pseudo-upgrades, `DieByFireUSA`, `Boss_VehicleSentryDrone`), 41 definition domains
+  (2,801 instances) and 206 modules inventoried, snapshot 112,664,082 bytes, SHA-256
+  `14154C512DED47C4AD72B651F8FCB0BA702EACBF8678C51DDAB7D125BEC675D4`. Re-measure everything.
+- Number of definitions per kind: Object 2,127, Weapon 364, Armor 53, Damage 11, Upgrade 82,
+  Science 96, Faction 15, CommandButton 820, CommandSet 479, FxList 429, Fx 1,087,
+  AudioEvent 1,410, DialogEvent 2,569, MusicTrack 69, Locomotor 184, SpecialPower 80,
+  GameData 1, others (Compatibility) 2,801.
 
-## Architekturgrenzen
+## Architecture boundaries
 
-- `CnCNew.Simulation` hängt nur von `CnCNew.Data` ab. Kein Stride, DirectX, UI, Content-,
-  Archiv-, Filesystem- oder Netzwerkzugriff; keine `IniNode`, keine rohen INI-Strings.
-- Keine Wandzeit (`DateTime`, `Stopwatch`, `Environment.TickCount`) im Kern, keine Threads im
-  Tick, kein `Random.Shared`, keine `Dictionary`-/`HashSet`-Iterationsreihenfolge in
-  zustandsrelevanter Logik, keine Reflection-Reihenfolge, keine ungebundenen `float`/`double`
-  im Zustand (siehe Numerik).
-- Die Präsentation liest später nur immutable Snapshots und schreibt nur typisierte Befehle.
-- Unbekannte Module dürfen nicht instanziiert werden. Nicht implementierte Bestandsmodule
-  bleiben sichtbare, nicht ausführbare Kompatibilitätsfälle.
+- `CnCNew.Simulation` depends only on `CnCNew.Data`. No Stride, DirectX, UI, content,
+  archive, filesystem or network access; no `IniNode`, no raw INI strings.
+- No wall-clock time (`DateTime`, `Stopwatch`, `Environment.TickCount`) in the core, no threads in the
+  tick, no `Random.Shared`, no `Dictionary`/`HashSet` iteration order in
+  state-relevant logic, no reflection order, no unbound `float`/`double`
+  in the state (see numerics).
+- The presentation later reads only immutable snapshots and writes only typed commands.
+- Unknown modules must not be instantiated. Existing modules that are not implemented
+  remain visible, non-executable compatibility cases.
 
-## Block 0: Phase-3-Härtung (nur soweit für Phase 4 nötig)
+## Block 0: Phase 3 hardening (only as far as necessary for Phase 4)
 
-Die Nachprüfung von Phase 3 bestätigte Zahlen und Determinismus, fand aber fachliche Lücken
-(`docs/TYPED-DEFINITIONS.md`, „Bekannte Grenzen“). Schließe vorab genau diese Punkte; alles
-darüber hinaus (domänenspezifische Typen für Weapon/Armor/Locomotor/… ) ist Vorleistung für
-Phase 5 und wird nur mit Zahlen als Schuld dokumentiert. Block 0 darf Phase 4 nicht verdrängen.
+The re-examination of Phase 3 confirmed numbers and determinism but found gaps in substance
+(`docs/TYPED-DEFINITIONS.md`, "Known limits"). Close exactly these items beforehand; everything
+beyond that (domain-specific types for Weapon/Armor/Locomotor/… ) is advance work for
+Phase 5 and is only documented as debt with numbers. Block 0 must not displace Phase 4.
 
-0.1 **Kompatibilitätsliste als geprüfte Basislinie.** Bisher zählt der Compiler jeden
-    unregistrierten Modul-/Definitionsnamen automatisch; die Liste ist nirgends fixiert.
-    Checke eine kleine, reviewte Basislinie ein (Namen, Besitzerarten, Häufigkeiten, Zielphase;
-    keine Assetinhalte) und ergänze `IniTool compat-check`, das bei jeder Abweichung (neuer,
-    fehlender, in der Häufigkeit geänderter Eintrag) mit Exitcode ≠ 0 endet. Dazu ein Test mit
-    synthetischen Daten. Ein Tippfehler im Modulnamen muss von einem bekannten,
-    noch nicht implementierten Modul unterscheidbar sein.
-0.2 **Modulbindung.** `ModuleDescriptor.Factory` ist `Func<ModuleConfiguration, object>` –
-    untypisiert und nicht in Data bindbar, ohne dass Data die Simulation kennt. Entwirf die
-    Trennung sauber: Data führt die Deskriptoren (Name, Besitzerarten, Feldschema,
-    `CompatibilityOnly`, Zielphase) inklusive aller 206 Bestandsmodule als explizit bekannte,
-    nicht implementierte Einträge; `CnCNew.Simulation` besitzt eine explizite, sortierte,
-    reflexionsfreie Bindungstabelle Modulname → typisierte Factory und prüft sie beim Start gegen die
-    Data-Deskriptoren (unbekannter Name, falscher Besitzer, Duplikat = Fehler). Der strikte Modus
-    (`StrictUnknownModules`) muss auf den Bestandsdaten bestehen und bei jedem neuen Namen
-    scheitern. Test: Katalog == im Vollbestand beobachtete Modulmenge.
-0.3 **Wertgrammatik für das, was Phase 4 liest.** Messe zuerst die realen Formen im Bestand
-    (bekannt: `R:255 G:0 B:0 [A:..]` 9.150×, `X:0 Y:0 Z:0` 6.161×, `KindOf = A B C` 1.964×,
-    wiederholtes `Locomotor = SET_NORMAL <Name>`). Implementiere echte `Color`-, `Vector2/3`-,
-    `Enum`- und `Flags`-Werte mit strikten Namenstabellen, die aus der Referenz abgeleitet und
-    dort zitiert werden (z. B. `KindOfMaskType`-Namen); ein unbekannter Token ist ein Fehler, nicht
-    `Text`. Umfang: alle Felder, die die Phase-4-Module und die Objektinstanziierung lesen
-    (mindestens `KindOf`, Side/Geometrie-Grundlagen, Modulfelder aus 0.2). Der Rest → Phase 5.
-    Pflichtfelder und Schlüsselschemata für diese Felder validieren; unbekannte Schlüssel an
-    solchen Definitionen sind Fehler oder stehen in einer expliziten, gezählten Liste.
-0.4 **Ladereihenfolge und Mehrfachdefinitionen.** Gleiche die Reihenfolge des Compilers mit
+0.1 **Compatibility list as a checked baseline.** So far the compiler automatically counts every
+    unregistered module/definition name; the list is fixed nowhere.
+    Check in a small, reviewed baseline (names, owner kinds, frequencies, target phase;
+    no asset contents) and add `IniTool compat-check`, which ends with exit code ≠ 0 on every deviation (new,
+    missing, entry changed in frequency). In addition a test with
+    synthetic data. A typo in the module name must be distinguishable from a known,
+    not yet implemented module.
+0.2 **Module binding.** `ModuleDescriptor.Factory` is `Func<ModuleConfiguration, object>` –
+    untyped and not bindable in Data without Data knowing the simulation. Design the
+    separation cleanly: Data keeps the descriptors (name, owner kinds, field schema,
+    `CompatibilityOnly`, target phase) including all 206 existing modules as explicitly known,
+    not implemented entries; `CnCNew.Simulation` owns an explicit, sorted,
+    reflection-free binding table module name → typed factory and checks it at start against the
+    Data descriptors (unknown name, wrong owner, duplicate = error). The strict mode
+    (`StrictUnknownModules`) must pass on the existing data and fail on every new name.
+    Test: catalogue == module set observed in the full content.
+0.3 **Value grammar for what Phase 4 reads.** First measure the real forms in the content
+    (known: `R:255 G:0 B:0 [A:..]` 9,150×, `X:0 Y:0 Z:0` 6,161×, `KindOf = A B C` 1,964×,
+    repeated `Locomotor = SET_NORMAL <Name>`). Implement real `Color`, `Vector2/3`,
+    `Enum` and `Flags` values with strict name tables that are derived from the reference and
+    cited there (e.g. `KindOfMaskType` names); an unknown token is an error, not
+    `Text`. Scope: all fields that the Phase 4 modules and the object instantiation read
+    (at least `KindOf`, side/geometry basics, module fields from 0.2). The rest → Phase 5.
+    Validate mandatory fields and key schemas for these fields; unknown keys on
+    such definitions are errors or are in an explicit, counted list.
+0.4 **Load order and multiple definitions.** Reconcile the order of the compiler with
     `references/ea-generals-zero-hour/GeneralsMD/Code/GameEngine/Source/Common/GameEngine.cpp`
-    (Zeilen ca. 363–532: `initSubsystem` mit Default-/Haupt-INI und `Data\INI\Object`) sowie den
-    Ladearten `INI_LOAD_OVERWRITE`/`CREATE_OVERRIDES`/`MULTIFILE` in `INI.cpp` ab. Erzeuge einen
-    Report aller Definitionen, die in mehr als einer Datei vorkommen (mit Dateireihenfolge), und
-    weise nach, dass die Compilerreihenfolge dieselben Gewinner liefert wie das Original; andernfalls
-    korrigieren. Prüfe außerdem, welche Schlüssel innerhalb eines Definitionskopfs mehrfach
-    vorkommen und ob das Überschreiben (`fields.RemoveAll`) für sie fachlich richtig ist;
-    wiederholbare Schlüssel behalten ihre Vielfachheit und Reihenfolge.
-0.5 **Fehlende Phase-3-Tests nachziehen** (klein, synthetisch): Definition-IDs und Snapshots
-    unabhängig von der Einfüge- beziehungsweise `EnumerateIniFiles`-Reihenfolge; abgeschnittene
-    Eingaben im Compiler; falsch typisierter Modulfeldwert; Enum/Flags/Color/Vector-Fehlerfälle;
-    zwei Vollkompilierungen synthetisch byteidentisch.
+    (lines approx. 363–532: `initSubsystem` with default/main INI and `Data\INI\Object`) as well as the
+    load kinds `INI_LOAD_OVERWRITE`/`CREATE_OVERRIDES`/`MULTIFILE` in `INI.cpp`. Produce a
+    report of all definitions that occur in more than one file (with file order), and
+    prove that the compiler order yields the same winners as the original; otherwise
+    correct it. In addition check which keys occur several times within a definition header
+    and whether overwriting (`fields.RemoveAll`) is correct in substance for them;
+    repeatable keys keep their multiplicity and order.
+0.5 **Add missing Phase 3 tests** (small, synthetic): definition IDs and snapshots
+    independent of the insertion or `EnumerateIniFiles` order respectively; truncated
+    inputs in the compiler; wrongly typed module field value; enum/flags/color/vector error cases;
+    two full compilations synthetically byte-identical.
 
-Block 0 endet mit einem eigenen Commit und aktualisierten Zahlen; der Snapshot-Hash ändert sich
-erwartungsgemäß – erkläre jede Abweichung (Feldarten-Zähler, Anzahl `Text`/`List` vorher/nachher)
-und dokumentiere den neuen Referenzhash.
+Block 0 ends with a commit of its own and updated numbers; the snapshot hash changes
+as expected – explain every deviation (field kind counters, number of `Text`/`List` before/after)
+and document the new reference hash.
 
-## Vollständiger Umfang Phase 4
+## Complete scope of Phase 4
 
-Neue Projekte: `src/CnCNew.Simulation`, `tests/CnCNew.Simulation.Tests` (Konsolenprogramm im Stil
-der übrigen Tests), `tools/CnCNew.SimTool` (Replay, Hash, Stresstest, Audit); alle in
-`CnCNew.slnx` eintragen.
+New projects: `src/CnCNew.Simulation`, `tests/CnCNew.Simulation.Tests` (console program in the style
+of the other tests), `tools/CnCNew.SimTool` (replay, hash, stress test, audit); enter all of them in
+`CnCNew.slnx`.
 
-1. **Tick und Numerik.** Fester Logiktakt 30 Hz (`LOGICFRAMES_PER_SECOND`,
-   `GameCommon.h:72`). Verwende Ganzzahl- oder Fixed-Point-Arithmetik (begründe die Wahl; z. B.
-   Q-Format mit `long`) für Position, Geschwindigkeit, Winkel und Schaden; kein `float`/`double`
-   im Zustand. Lege Umrechnungen aus den Data-Werten (`GameTime` in ms, Geschwindigkeit pro
-   Sekunde, Winkel in Grad, Prozent) in Ticks, Distanz pro Tick und Fixed-Point explizit fest –
-   inklusive Rundungsregel. Prüfe dazu `ConvertDurationFromMsecsToFrames` und Verwandte in
-   `GameCommon.h:80–107` sowie die Dauer-/Geschwindigkeitsparser in `INI.cpp` und dokumentiere
-   Übernahmen und Abweichungen. Grenzwerte (Überlauf, negative Werte, 0 ms) sind getestet.
-2. **IDs und Ordnung.** Monotone, deterministische World-/Entity-/Player-/Command-/Event-/Timer-IDs
-   (Entity-ID-Vergabe und ungültige ID 0 gegen `GameLogic.cpp` prüfen). Kanonische
-   Update-Reihenfolge unabhängig von Hash- oder Threadreihenfolge. Prüfe das „sleepy update“-
-   Modell des Originals (`UpdateModule` mit Wake-Frame, `UPDATE_SLEEP_FOREVER`, Sortierung nach
-   Wake-Frame dann Objekt-ID) und übernimm es oder begründe die Abweichung.
-3. **RNG.** Benannte Streams (mindestens `logic` und ein für die Logik unbeachtlicher
-   `cosmetic`-Stream) mit festem Algorithmus, dokumentierter Seedableitung, serialisierbarem
-   Zustand und Golden-Sequenzen. Prüfe `RandomValue.cpp` der Referenz und implementiere den
-   `logic`-Stream originalgetreu oder begründe eine bewusste Abweichung. Golden-Werte unabhängig
-   nachrechnen (kompiliere die Referenz nur, wenn ein Compiler verfügbar ist; andernfalls
-   dokumentierte, unabhängige Handrechnung). Kein `Random.Shared`.
-4. **World und Lebenszyklus.** Entityspeicher, Spawn/Destroy-Transaktionen, Modulbesitz, Events,
-   Timer und klar getrennte Tickphasen (z. B. Befehle → Updates → Events → Destroy → Spawn →
-   Hash). Mutationen während einer Iteration laufen über deterministische Queues; ein am Tickende
-   zerstörtes Objekt empfängt in diesem Tick keine weiteren Updates, aber seine Events werden
-   definiert zugestellt. Dokumentiere die Phasenreihenfolge.
-5. **Module.** Aus der Registrierung (0.2) die minimalen Lebenszyklusmodule implementieren, die ein
-   synthetisches Objekt erzeugen, ticken, Ereignisse empfangen und zerstören: Wähle anhand der
-   Häufigkeiten im Bestand (`ActiveBody`, `InactiveBody`, `ImmortalBody`, `StructureBody`,
-   `LifetimeUpdate`, `DeletionUpdate`, `DestroyDie`, `InstantDeathBehavior`, … – belege die Auswahl
-   mit Zahlen). Jedes implementierte Modul hat ein strenges Feldschema aus den realen INIs.
-   Keine Präsentationsmodule (`W3D*Draw`, `*ClientUpdate`) in der Simulation. Erzeuge zusätzlich
-   einen Audit „Modulabdeckung“: wie viele der 2.127 Objekte lassen sich heute vollständig
-   instanziieren, wie viele scheitern an welchem nicht implementierten Modul (Häufigkeitsliste).
-6. **Befehle.** Typisierte, tick-adressierte Befehlsqueue mit versionierter Command-Typ-Tabelle,
-   validierter Spieler-/Entity-Zuordnung, stabiler Reihenfolge bei gleichem Tick (Spieler-ID,
-   dann Befehlssequenz) und expliziter, protokollierter Ablehnung verspäteter, doppelter oder
-   ungültiger Befehle. Phase 4 nutzt nur synthetische Befehle (z. B. Spawn, Destroy, Schaden,
-   Timer setzen); Gameplaybefehle folgen in Phase 5.
-7. **Snapshots und Hashes.** Kanonischer, versionierter, maschinenlesbarer World-Snapshot ohne
-   absolute Pfade, Zeitstempel oder ungeordnete Collections, plus schneller Zustands-Hash pro Tick
-   (begründe den Algorithmus; neue Paketabhängigkeit nur mit Begründung, bevorzugt BCL/
-   `System.IO.Hashing`) und SHA-256 für vollständige Snapshots. Restore nur, wenn der Vertrag
-   ohne Vorgriff auf Phase 9 stabil ist; der Fortsetzungslauf (Punkt 8) braucht ihn jedoch – halte
-   Restore dann minimal und intern.
-8. **Replay-Harness.** Versioniertes Replay-Format: Kopf (Schemaversion, Tickrate,
-   Fingerabdruck des Definitionsgraphen, Fixture-/Kartenkennung, Seed) + tick-adressierte
-   Befehle + periodische Checkpoint-Hashes. Der Fingerabdruck der Definitionen muss aus dem
-   kanonischen Snapshot oder einem streamenden Hash stammen; ein Replay auf abweichenden
-   Definitionen wird abgelehnt. Zwei frische Läufe und ein Snapshot-/Fortsetzungslauf liefern
-   identische Tickhashes über mindestens 216.000 Ticks (zwei Stunden Spielzeit). Beschädigte,
-   abgeschnittene oder versionsfremde Snapshots/Replays werden abgewiesen.
-9. **Speicher und Stress.** Headless-Stresstest mit mindestens 10.000 gleichzeitig lebenden
-   Entities, mindestens 100.000 Spawn/Destroy-Operationen, vielen Timern, Events und Befehlen
-   über mindestens 216.000 Ticks. Prüfe Leaks (Entity-/Modul-/Timer-/Eventtabellen kehren auf den
-   Ausgangszustand zurück, Allokationen pro Tick im Beharrungszustand gemessen), Deadlocks und
-   Nichtdeterminismus. Lege ein begründetes Laufzeit- und Speicherbudget fest und dokumentiere die
-   gemessenen Werte samt Hardware.
-10. **Doku.** README, Architektur, Roadmap, Implementierungsplan aktualisieren; neues
-    `docs/SIMULATION-CORE.md` mit Tickphasen, Numerik, RNG, ID-/Queueordnung, Snapshot- und
-    Replayformat, Modulbindung, Modulabdeckung, Budgets und Abnahmebefehlen; Kompatibilitäts-
-    Basislinie und Block-0-Ergebnisse dokumentieren; `CLAUDE.md` bei Bedarf nachführen.
+1. **Tick and numerics.** Fixed logic rate 30 Hz (`LOGICFRAMES_PER_SECOND`,
+   `GameCommon.h:72`). Use integer or fixed-point arithmetic (justify the choice; e.g.
+   Q format with `long`) for position, speed, angle and damage; no `float`/`double`
+   in the state. Define conversions from the Data values (`GameTime` in ms, speed per
+   second, angle in degrees, percent) into ticks, distance per tick and fixed point explicitly –
+   including the rounding rule. For this check `ConvertDurationFromMsecsToFrames` and relatives in
+   `GameCommon.h:80–107` as well as the duration/speed parsers in `INI.cpp` and document
+   what is adopted and what deviates. Limit values (overflow, negative values, 0 ms) are tested.
+2. **IDs and order.** Monotonic, deterministic world/entity/player/command/event/timer IDs
+   (check entity ID assignment and invalid ID 0 against `GameLogic.cpp`). Canonical
+   update order independent of hash or thread order. Check the "sleepy update"
+   model of the original (`UpdateModule` with wake frame, `UPDATE_SLEEP_FOREVER`, sorting by
+   wake frame then object ID) and adopt it or justify the deviation.
+3. **RNG.** Named streams (at least `logic` and a `cosmetic` stream that is irrelevant
+   for the logic) with a fixed algorithm, documented seed derivation, serialisable
+   state and golden sequences. Check `RandomValue.cpp` of the reference and implement the
+   `logic` stream true to the original or justify a deliberate deviation. Recalculate golden values
+   independently (compile the reference only if a compiler is available; otherwise a
+   documented, independent hand calculation). No `Random.Shared`.
+4. **World and life cycle.** Entity storage, spawn/destroy transactions, module ownership, events,
+   timers and clearly separated tick phases (e.g. commands → updates → events → destroy → spawn →
+   hash). Mutations during an iteration run via deterministic queues; an object destroyed at the end of
+   the tick receives no further updates in this tick, but its events are
+   delivered in a defined way. Document the phase order.
+5. **Modules.** From the registration (0.2) implement the minimal life cycle modules that create,
+   tick, deliver events to and destroy a synthetic object: choose on the basis of the
+   frequencies in the content (`ActiveBody`, `InactiveBody`, `ImmortalBody`, `StructureBody`,
+   `LifetimeUpdate`, `DeletionUpdate`, `DestroyDie`, `InstantDeathBehavior`, … – back the selection
+   with numbers). Every implemented module has a strict field schema from the real INIs.
+   No presentation modules (`W3D*Draw`, `*ClientUpdate`) in the simulation. In addition produce
+   an audit "module coverage": how many of the 2,127 objects can be completely
+   instantiated today, how many fail on which not implemented module (frequency list).
+6. **Commands.** Typed, tick-addressed command queue with a versioned command type table,
+   validated player/entity assignment, stable order at the same tick (player ID,
+   then command sequence) and explicit, logged rejection of late, duplicate or
+   invalid commands. Phase 4 uses only synthetic commands (e.g. spawn, destroy, damage,
+   set timer); gameplay commands follow in Phase 5.
+7. **Snapshots and hashes.** Canonical, versioned, machine-readable world snapshot without
+   absolute paths, timestamps or unordered collections, plus a fast state hash per tick
+   (justify the algorithm; a new package dependency only with justification, preferably BCL/
+   `System.IO.Hashing`) and SHA-256 for complete snapshots. Restore only if the contract
+   is stable without anticipating Phase 9; the continuation run (item 8) needs it, however – then keep
+   restore minimal and internal.
+8. **Replay harness.** Versioned replay format: header (schema version, tick rate,
+   fingerprint of the definition graph, fixture/map identifier, seed) + tick-addressed
+   commands + periodic checkpoint hashes. The fingerprint of the definitions must come from the
+   canonical snapshot or a streaming hash; a replay on deviating
+   definitions is rejected. Two fresh runs and a snapshot/continuation run yield
+   identical tick hashes over at least 216,000 ticks (two hours of game time). Damaged,
+   truncated or foreign-version snapshots/replays are rejected.
+9. **Memory and stress.** Headless stress test with at least 10,000 simultaneously living
+   entities, at least 100,000 spawn/destroy operations, many timers, events and commands
+   over at least 216,000 ticks. Check leaks (entity/module/timer/event tables return to the
+   initial state, allocations per tick measured in the steady state), deadlocks and
+   non-determinism. Define a justified run time and memory budget and document the
+   measured values together with the hardware.
+10. **Docs.** Update README, architecture, roadmap, implementation plan; new
+    `docs/SIMULATION-CORE.md` with tick phases, numerics, RNG, ID/queue order, snapshot and
+    replay format, module binding, module coverage, budgets and acceptance commands; document the compatibility
+    baseline and Block 0 results; update `CLAUDE.md` if needed.
 
-## Mindesttests
+## Minimum tests
 
-- Block 0: alle Punkte aus 0.1–0.5.
-- Tickrate, Zeitkonvertierung, Fixed-Point-Rundung und Grenzwerte;
-- ID-Stabilität und kanonische Iterationsreihenfolge, insbesondere bei permutierter
-  Einfügereihenfolge;
-- Golden-RNG-Sequenzen, getrennte Streams, Seedableitung, Zustands-Roundtrip;
-- Spawn, Tick, Event, Timer, Destroy und Mutation während eines Ticks;
-- Bindungstabelle: Factory, falscher Besitzer, Duplikat, unbekanntes und nicht implementiertes Modul;
-- Command-Reihenfolge, Duplikate, verspätete und ungültige Befehle;
-- identische Snapshots/Hashes bei unterschiedlichen Einfügereihenfolgen;
-- Replaygleichheit über lange Läufe und nach Snapshotfortsetzung;
-- beschädigte Snapshots/Replays, Versions- und Definitionsfingerabdruckfehler;
-- Stresstest ohne Leaks, Deadlocks oder Abweichung;
-- ein optionaler Realdatentest (`--content-dir .local/phase2-import-a`), der nur über
-  `CnCNew.Data` kompilierte Bestandsobjekte instanziiert.
+- Block 0: all items from 0.1–0.5.
+- Tick rate, time conversion, fixed-point rounding and limit values;
+- ID stability and canonical iteration order, in particular with permuted
+  insertion order;
+- Golden RNG sequences, separate streams, seed derivation, state round trip;
+- Spawn, tick, event, timer, destroy and mutation during a tick;
+- Binding table: factory, wrong owner, duplicate, unknown and not implemented module;
+- Command order, duplicates, late and invalid commands;
+- identical snapshots/hashes with different insertion orders;
+- replay equality over long runs and after snapshot continuation;
+- damaged snapshots/replays, version and definition fingerprint errors;
+- stress test without leaks, deadlocks or deviation;
+- an optional real-data test (`--content-dir .local/phase2-import-a`) that instantiates only
+  existing objects compiled via `CnCNew.Data`.
 
-Fixtures sind klein, synthetisch und rechtlich unbedenklich; Tests der Simulation kompilieren
-synthetische INIs über eine In-Memory-`IDefinitionSource`. Neue Warnungen und stille Fallbacks
-gelten bis zur Erklärung als Fehler.
+Fixtures are small, synthetic and legally unobjectionable; tests of the simulation compile
+synthetic INIs via an in-memory `IDefinitionSource`. New warnings and silent fallbacks
+count as errors until explained.
 
 ## Definition of Done
 
-Phase 4 ist erst abgeschlossen, wenn:
+Phase 4 is only completed when:
 
-- Solution-Build und alle bestehenden und neuen Tests grün sind (Warnungen: nur die bekannten
+- solution build and all existing and new tests are green (warnings: only the known
   NU1901/NU1903);
-- Block 0 vollständig umgesetzt ist, `compat-check` gegen die Basislinie besteht und der strikte
-  Modulmodus auf den Bestandsdaten besteht;
-- identische Definitionen/Fixture/Seed/Befehle über lange Läufe bitidentische Tickhashes liefern,
-  auch nach Snapshotfortsetzung;
-- World-/Entity-/Command-/Eventreihenfolgen spezifiziert und getestet sind;
-- der Modulvertrag ohne Reflection und ohne Engine-Typen gebunden ist und `CnCNew.Simulation`
-  nur von `CnCNew.Data` abhängt;
-- Speicher- und Headless-Stresstest bestehen und Budgets dokumentiert sind;
-- Dokumentation und Code übereinstimmen und der Implementierungsplan bekannte Grenzen ehrlich benennt;
-- der Working Tree sauber ist, alle Änderungen in mehreren fachlich geschlossenen Commits vorliegen,
-  keine Originalassets, lokalen Snapshots, Manifeste, Captures, Buildoutputs oder IDE-Daten
-  committed wurden und kein Remote angelegt oder etwas gepusht wurde.
+- Block 0 is completely implemented, `compat-check` passes against the baseline and the strict
+  module mode passes on the existing data;
+- identical definitions/fixture/seed/commands yield bit-identical tick hashes over long runs,
+  also after snapshot continuation;
+- world/entity/command/event orders are specified and tested;
+- the module contract is bound without reflection and without engine types and `CnCNew.Simulation`
+  depends only on `CnCNew.Data`;
+- memory and headless stress test pass and budgets are documented;
+- documentation and code agree and the implementation plan honestly names known limits;
+- the working tree is clean, all changes are present in several commits each closed in subject matter,
+  no original assets, local snapshots, manifests, captures, build outputs or IDE data
+  were committed and no remote was created or anything pushed.
 
-## Abschlussbericht und N+1
+## Final report and N+1
 
-Berichte: Block-0-Ergebnisse (mit neuen Zahlen und Referenzhash), Implementierung,
-Determinismusregeln, Test-/Stress-/Replayergebnisse samt Hashwerten, Modulabdeckung und
-Objektinstanziierungsquote, bekannte Grenzen und technische Schulden, alle Commit-Hashes,
-finalen Git-Status sowie Bestätigung „kein Remote, nichts gepusht“.
+Report: Block 0 results (with new numbers and reference hash), implementation,
+determinism rules, test/stress/replay results together with hash values, module coverage and
+object instantiation rate, known limits and technical debt, all commit hashes,
+final Git status as well as the confirmation "no remote, nothing pushed".
 
-Erzeuge danach als `docs/handoffs/HANDOFF-PHASE5.md` einen eigenständigen N+1-Handoff für Phase 5
-„Spielregeln, Kampf, Wirtschaft und Produktion“ – inklusive der verbleibenden Schuld an
-domänenspezifischen Definitionstypen – und committe ihn. Falls Phase 4 nicht vollständig ist,
-erzeuge stattdessen einen präzisen Fortsetzungsprompt für Phase 4.
+After that produce as `docs/handoffs/HANDOFF-PHASE5.md` a self-contained N+1 handoff for Phase 5
+"Game rules, combat, economy and production" – including the remaining debt in
+domain-specific definition types – and commit it. If Phase 4 is not complete,
+produce a precise continuation prompt for Phase 4 instead.
