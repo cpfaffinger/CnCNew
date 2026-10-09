@@ -165,7 +165,7 @@ rest state (§6c in `docs/GAME-RULES.md`).
 ## Brief for this pass
 
 Continue the remaining scope of Phase 5, in this order (every step with tests, real-data audit,
-docs update, as described in `CLAUDE.md` "Ablauf einer Phase"). Before every step measure for yourself which
+docs update, as described in `CLAUDE.md` "Procedure of a phase" (Ablauf einer Phase)). Before every step measure for yourself which
 module unlocks how many objects **on its own** (`SimTool audit-coverage .local/phase2-import-a`) — do not rely
 on the list above, it is already a snapshot in time:
 
