@@ -74,8 +74,6 @@ public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingl
     /// <summary><c>teamAttackCommonTarget</c> (<c>TeamTemplateInfo::m_attackCommonTarget</c>): the members of a computer player's team attack one victim together (<c>Team::setTeamTargetObject</c>).</summary>
     public bool AttackCommonTarget { get; init; }
 
-    /// <summary><c>teamVeterancy</c> (<c>TeamTemplateInfo::m_veterancy</c>): the level the units of a team the AI builds start with, 0 (regular) to 3 (heroic).</summary>
-    public int Veterancy { get; init; }
 }
 
 /// <summary>One <c>teamUnitTypeN</c> line of a team: the object type and how many of it the team has at most.</summary>
@@ -293,7 +291,6 @@ public sealed class ScriptProgram
                 GenericScripts = [..Enumerable.Range(0, 16).Select(hook => EventScript(team, "teamGenericScriptHook" + hook.ToString(System.Globalization.CultureInfo.InvariantCulture))).Where(script => script.Length > 0)],
                 AutoReinforce = team.GetBool("teamAutoReinforce"),
                 AttackCommonTarget = team.GetBool("teamAttackCommonTarget"),
-                Veterancy = team.TryGetInt("teamVeterancy", out var veterancy) ? veterancy : 0,
             });
         }
 

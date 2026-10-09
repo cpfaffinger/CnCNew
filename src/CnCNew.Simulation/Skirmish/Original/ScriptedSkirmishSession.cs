@@ -41,7 +41,12 @@ public sealed record ScriptedSkirmishSlot(MatchParticipant Participant, ScriptDi
 /// supply sources. The default leaves out trees, rocks, lamps, ambient sound objects and trains - several hundred objects per map whose updates cost more than the rest of the match
 /// (docs/SKIRMISH-AI-ORIGINAL.md, measurement) and that no script of the library refers to.
 /// </param>
-public sealed record ScriptedSkirmishOptions(uint Seed, long MaxTicks, long GraceFrames, int StartMoney, int SciencePointIntervalFrames, bool AllMapObjects = false)
+/// <param name="LibraryScriptsForMissingSides">
+/// Not the reference (<see cref="SkirmishScriptAttachment.Attach"/>): a computer player whose side has no template side on the map takes the library's scripts for its side instead of
+/// running without an AI. Off by default: "original" stays what the reference does.
+/// </param>
+public sealed record ScriptedSkirmishOptions(uint Seed, long MaxTicks, long GraceFrames, int StartMoney, int SciencePointIntervalFrames, bool AllMapObjects = false,
+    bool LibraryScriptsForMissingSides = false)
 {
     /// <summary>The budget, start money and science stand-in of <see cref="SkirmishMatchOptions.Standard"/>, so that matches of the two AIs compare.</summary>
     public static ScriptedSkirmishOptions Standard { get; } = new(0xC0FFEE06, 108_000, 300, 10_000, 2_700);
@@ -148,7 +153,8 @@ public sealed class ScriptedSkirmishSession
             if (slot.IsHuman) { if (human.Length == 0) human = SkirmishScriptAttachment.PlayerName(index); }
             else if (scripted) players.Add(new ScriptAiPlayerSetup(PlayerOf(index), slot.Difficulty, slot.Participant.Side, index, starts[index].X, starts[index].Y));
         }
-        var attached = SkirmishScriptAttachment.Attach(map, library, scriptSlots.MoveToImmutable(), faction => catalog.Factions.TryGet(faction, out var info) ? info.Side : null, out report);
+        var attached = SkirmishScriptAttachment.Attach(map, library, scriptSlots.MoveToImmutable(), faction => catalog.Factions.TryGet(faction, out var info) ? info.Side : null, out report,
+            options.LibraryScriptsForMissingSides);
         missionOptions = new MissionOptions(seed, ScriptDifficulty.Normal, HumanSideName: human) { Ai = new ScriptAiSetup(aiData, players.ToImmutable()) };
         return attached;
     }
@@ -252,6 +258,7 @@ public sealed class ScriptedSkirmishSession
             writer.Int("startMoney", _options.StartMoney);
             writer.Int("sciencePointIntervalFrames", _options.SciencePointIntervalFrames);
             writer.Bool("allMapObjects", _options.AllMapObjects);
+            if (_options.LibraryScriptsForMissingSides) writer.Bool("libraryScriptsForMissingSides", true);
             writer.EndObject();
             writer.BeginArray("slots");
             foreach (var slot in _slots)
@@ -302,7 +309,8 @@ public sealed class ScriptedSkirmishSession
                 throw new SnapshotFormatException("The skirmish state was written for different definitions (fingerprint mismatch).");
             var optionsReader = root.Object("options");
             var options = new ScriptedSkirmishOptions(checked((uint)optionsReader.UInt("seed")), optionsReader.Int("maxTicks"), optionsReader.Int("graceFrames"),
-                checked((int)optionsReader.Int("startMoney")), checked((int)optionsReader.Int("sciencePointIntervalFrames")), optionsReader.Bool("allMapObjects"));
+                checked((int)optionsReader.Int("startMoney")), checked((int)optionsReader.Int("sciencePointIntervalFrames")), optionsReader.Bool("allMapObjects"),
+                optionsReader.Has("libraryScriptsForMissingSides") && optionsReader.Bool("libraryScriptsForMissingSides"));
             var slots = ImmutableArray.CreateBuilder<ScriptedSkirmishSlot>();
             foreach (var item in root.Array("slots"))
             {

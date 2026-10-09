@@ -31,10 +31,25 @@ public sealed record SkirmishAttachmentReport(ImmutableArray<string> Notes, bool
 public static class SkirmishScriptAttachment
 {
     private const string ThisTeam = "<This Team>";
+    /// <summary>The template players of the shipped library are named after their side: <c>SkirmishAmerica</c>, <c>SkirmishChinaTankGeneral</c> ...</summary>
+    private const string LibraryPlayerPrefix = "Skirmish";
+
+    private static (string Name, string Faction, MapScriptList Scripts)? LibraryTemplate(MapScriptLibrary library, string side)
+    {
+        for (var index = 0; index < library.Players.Length && index < library.ScriptLists.Length; index++)
+            if (string.Equals(library.Players[index].Name, LibraryPlayerPrefix + side, StringComparison.Ordinal)) return (library.Players[index].Name, string.Empty, library.ScriptLists[index]);
+        return null;
+    }
     private const string CivilianFaction = "FactionCivilian";
 
     /// <param name="sideOfFaction">The side of a player template name (<c>PlayerTemplate::getSide</c>), or <see langword="null"/> for an unknown template.</param>
-    public static MapData Attach(MapData map, MapScriptLibrary? library, ImmutableArray<SkirmishScriptSlot> slots, Func<string, string?> sideOfFaction, out SkirmishAttachmentReport report)
+    /// <param name="libraryForMissingSides">
+    /// Not the reference: a computer slot whose side has no template side on the map takes the scripts and teams of the library's template player of that side
+    /// (<c>Skirmish&lt;Side&gt;</c>) instead of running without scripts. The reference leaves such a player without AI ("quietly ... nonskirmish"); two shipped maps
+    /// (<c>Armored Fury</c>, <c>Scorched Earth</c>) only have the three template sides of the base game, so a general has no scripts there.
+    /// </param>
+    public static MapData Attach(MapData map, MapScriptLibrary? library, ImmutableArray<SkirmishScriptSlot> slots, Func<string, string?> sideOfFaction, out SkirmishAttachmentReport report,
+        bool libraryForMissingSides = false)
     {
         ArgumentNullException.ThrowIfNull(map);
         ArgumentNullException.ThrowIfNull(sideOfFaction);
@@ -118,13 +133,19 @@ public static class SkirmishScriptAttachment
                 lists.Add(Qualify(source, qualifier, civilianName + qualifier, name));
                 continue;
             }
-            if (templateIndex < 0)
+            (string Name, string Faction, MapScriptList Scripts) template;
+            if (templateIndex >= 0) template = templates[templateIndex];
+            else if (libraryForMissingSides && attached && LibraryTemplate(library!, setup.Side) is { } fromLibrary)
+            {
+                template = fromLibrary;
+                notes.Add($"{name}: the map has no skirmish template side for side '{setup.Side}'; by option the player takes the library's '{fromLibrary.Name}' (not what the reference does)");
+            }
+            else
             {
                 notes.Add($"{name}: the map has no skirmish template side for side '{setup.Side}'; the player runs without scripts");
                 lists.Add(Empty);
                 continue;
             }
-            var template = templates[templateIndex];
             lists.Add(Qualify(template.Scripts, qualifier, template.Name + qualifier, name));
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var team in templateTeams)

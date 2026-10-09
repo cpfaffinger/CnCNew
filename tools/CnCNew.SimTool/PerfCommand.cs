@@ -212,7 +212,7 @@ internal static class PerfCommand
         Console.WriteLine($"Perf on {common.MapPath} ({terrain.CellsX}x{terrain.CellsY} cells, {terrain.StartPositions.Length} start positions, terrain {terrain.Fingerprint[..16]}), definitions {context.Fingerprint[..16]}; {slots.Length} computer players in a scripted skirmish: {string.Join(", ", slots.Select(OriginalAi.Describe))}.");
         Console.WriteLine($"Setup (definitions, model geometry, map, script library): {setup.Elapsed.TotalSeconds:F1} s. Budget {common.Ticks} ticks; observer {(common.Observe ? "attached" : "ABSENT (--no-observer): only the whole tick is timed")}; per-module timing {(common.Observe && common.Modules ? "on" : "off")}.");
 
-        var session = OriginalAi.Start(context, map, terrain, library, slots, seed, common.Ticks, args.Contains("--all-map-objects"));
+        var session = OriginalAi.Start(context, map, terrain, library, slots, seed, common.Ticks, args.Contains("--all-map-objects"), OriginalAi.LibraryForMissingSides(args));
         var world = session.World;
         var recorder = new TickRecorder(world, common.Modules) { VisionProbe = common.VisionProbe, PrefixProbe = args.Contains("--prefix-probe") };
         if (common.Observe) world.PhaseObserver = recorder;

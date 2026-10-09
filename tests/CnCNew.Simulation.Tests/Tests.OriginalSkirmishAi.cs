@@ -219,6 +219,15 @@ static partial class Tests
         Check.That(unscripted.PlayerScripts[1].Scripts.IsEmpty && unscripted.PlayerScripts[2].Scripts.Length > 0, "A slot another AI plays gets no scripts.");
         var noSide = SkirmishScriptAttachment.Attach(map, library, [new("FactionGamma", "Gamma", 0, false, 0), new("FactionBeta", "Beta", 1, false, 0)], AiSideOfFaction, out var gammaReport);
         Check.That(noSide.PlayerScripts[1].Scripts.IsEmpty && gammaReport.Notes.Single().Contains("Gamma", StringComparison.Ordinal), "A side without a template player is reported, never silently scriptless.");
+
+        // The named option that is not the reference: a map without the template side of a player's side (two shipped maps for the generals) takes the library's template player.
+        var bare = map with { Sides = [..map.Sides.Where(side => side.Properties.GetText("playerName") != "SkirmishBeta")], Teams = [..map.Teams.Where(team => team.GetText("teamOwner") != "SkirmishBeta")], PlayerScripts = [..map.PlayerScripts.Take(3)] };
+        ImmutableArray<SkirmishScriptSlot> two = [new("FactionAlpha", "Alpha", 0, false, 0), new("FactionBeta", "Beta", 1, false, 0)];
+        var asReference = SkirmishScriptAttachment.Attach(bare, library, two, AiSideOfFaction, out var bareReport);
+        Check.That(asReference.PlayerScripts[2].Scripts.IsEmpty && bareReport.Notes.Single().Contains("runs without scripts", StringComparison.Ordinal), "By default such a player has no scripts, as in the reference.");
+        var byOption = SkirmishScriptAttachment.Attach(bare, library, two, AiSideOfFaction, out var optionReport, libraryForMissingSides: true);
+        Check.That(byOption.PlayerScripts[2].Scripts.Any(script => script.Name == "B Base1") && byOption.Teams.Any(team => team.GetText("teamName") == "B Attack1" && team.GetText("teamOwner") == "player1")
+                   && optionReport.Notes.Single().Contains("not what the reference does", StringComparison.Ordinal), "With the option it gets the library's scripts and teams for its side, and the report says that this is not the reference.");
     }
 
     private static (ScriptedSkirmishSession Session, SyntheticFixture Fixture, TerrainMap Terrain, MapData Map, MapScriptLibrary Library, AiData Data) StartOriginalSkirmish(
