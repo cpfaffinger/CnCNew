@@ -1,171 +1,171 @@
-# Determinismus über Rechnergrenzen (Phase 18)
+# Determinism across machine boundaries (Phase 18)
 
-Stand: 6. Oktober 2026, Commit `b432fb7`; §2a (die Matrix mit dem Manifest der Phase 22, Q39.24) am Stand `d7fca91`, §2b (Wiederholung am Ausgangsstand der Phase 23) am Stand `20ffce9`, §2c (die 60-Hz-Manifeste nach der Umstellung des Standards, 9. Oktober 2026) am Stand `ea52f87` – dort sind bisher nur zwei Zeilen gemessen. Dieses Dokument beschreibt, **wie** geprüft wird, dass zwei Rechner dieselbe Welt rechnen, und **was** davon gemessen ist. Die Einzelbefunde D1–D9 mit Test,
-Korrektur und Vorher/Nachher-Werten stehen in `docs/DETERMINISM-FINDINGS.md`; die Messlatte selbst (Referenzmanifest, Eingangsmanifest) in `docs/SIMULATION-CORE.md` §37.
+As of: 6 October 2026, commit `b432fb7`; §2a (the matrix with the manifest of Phase 22, Q39.24) at the state `d7fca91`, §2b (repetition at the starting state of Phase 23) at the state `20ffce9`, §2c (the 60 Hz manifests after the switch of the default, 9 October 2026) at the state `ea52f87` – only two rows are measured there so far. This document describes **how** it is checked that two machines compute the same world, and **what** of that is measured. The individual findings D1–D9 with test,
+fix and before/after values are in `docs/DETERMINISM-FINDINGS.md`; the yardstick itself (reference manifest, input manifest) in `docs/SIMULATION-CORE.md` §37.
 
-## 1. Was verglichen wird
+## 1. What is compared
 
-Lockstep (`docs/MULTIPLAYER-PLAN.md` §2.1) verlangt, dass jeder Rechner aus denselben Befehlen bitgleich denselben Zustand errechnet. Geprüft wird in zwei Stufen, damit eine Abweichung zuzuordnen ist:
+Lockstep (`docs/MULTIPLAYER-PLAN.md` §2.1) demands that every machine computes bit-identically the same state from the same commands. The check has two stages, so that a deviation can be attributed:
 
-1. **Eingänge** – `SimTool input-manifest check <content> baselines/input-manifest.json`: Definitions-Fingerabdruck, Knochentabelle, Welt-Fingerabdruck, Inhalts-Hashes der gebauten Kataloge, je Karte Dateihash,
-   Gelände-Fingerabdruck, Zellen und Startpositionen (150 Karten). Weicht das ab, rechnen die Rechner schon mit verschiedenen Daten.
-2. **Rechnung** – `SimTool reference-manifest check <content> baselines/reference-manifest.json --set full`: 50 Läufe (Referenzmatch, Stresstest, 16 KI-Läufe, drei 8-Spieler-Läufe, Skirmish-Übersicht über 64 Karten,
-   27 Missionsläufe), je Lauf Endtick, Sieger, Endhash, Kettenhash, „Lauf 2 identisch“, „nach Snapshot-Fortsetzung identisch“ und für Missionen „nach Speichern/Laden identisch zum ununterbrochenen Lauf“.
-   Der Schnellsatz (`--set quick`, 9 Läufe) dauert rund 5 Minuten, der volle rund 25 bis 40.
+1. **Inputs** – `SimTool input-manifest check <content> baselines/input-manifest.json`: definition fingerprint, bone table, world fingerprint, content hashes of the built catalogs, per map file hash,
+   terrain fingerprint, cells and start positions (150 maps). If that deviates, the machines already compute with different data.
+2. **Computation** – `SimTool reference-manifest check <content> baselines/reference-manifest.json --set full`: 50 runs (reference match, stress test, 16 AI runs, three 8-player runs, skirmish overview over 64 maps,
+   27 mission runs), per run end tick, winner, end hash, chain hash, "run 2 identical", "identical after snapshot continuation" and for missions "identical to the uninterrupted run after save/load".
+   The quick set (`--set quick`, 9 runs) takes about 5 minutes, the full one about 25 to 40.
 
-Dazu `--verify-incremental` (prüft in jedem Tick den inkrementellen gegen den voll berechneten Hash; deckt fehlende `MarkDirty` auf, Befund D8).
+In addition `--verify-incremental` (checks in every tick the incremental hash against the fully computed one; uncovers missing `MarkDirty`, finding D8).
 
-## 2. Die Matrix (gemessen am 6. Oktober 2026)
+## 2. The matrix (measured on 6 October 2026)
 
-Jede Zeile ist ein voller Lauf beider Manifeste gegen die eingecheckten Dateien; „identisch“ heißt Exitcode 0 bei beiden, also kein einziges abweichendes Feld in 50 Läufen.
+Every row is a full run of both manifests against the checked-in files; "identical" means exit code 0 for both, i.e. not a single deviating field in 50 runs.
 
-| Zeile | Wie | Eingänge | Rechnung (Satz) | Ergebnis |
+| Row | How | Inputs | Computation (set) | Result |
 |---|---|---|---|---|
-| Release, Lauf 1 | `dotnet CnCNew.SimTool.dll …` | identisch | 50/50 (full) | **identisch** |
-| Release, Lauf 2 | derselbe Aufruf noch einmal | identisch | 50/50 (full) | **identisch** |
-| Debug-Build | `dotnet build -c Debug tools/CnCNew.SimTool` | identisch | 9/9 (**quick**) | **identisch**; der volle Satz ist im Debug-Build nicht in zwei Stunden durchgelaufen und wurde nicht abgewartet |
-| Tiered Compilation aus | `DOTNET_TieredCompilation=0` | identisch | 50/50 (full) | **identisch** |
-| Tiered PGO aus | `DOTNET_TieredPGO=0` | identisch | 50/50 (full) | **identisch** |
-| ReadyToRun aus | `DOTNET_ReadyToRun=0` | identisch | 50/50 (full) | **identisch** |
-| Hardware-Intrinsics aus | `DOTNET_EnableHWIntrinsic=0` | identisch | 50/50 (full) | **identisch** |
-| AVX2 aus | `DOTNET_EnableAVX2=0` | identisch | 50/50 (full) | **identisch** |
-| Server-GC | `DOTNET_gcServer=1` | identisch | 50/50 (full) | **identisch** |
-| Kultur `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identisch | 50/50 (full) | **identisch** |
-| Kultur `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identisch | 50/50 (full) | **identisch** |
-| Kultur `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identisch | 50/50 (full) | **identisch** |
-| **Linux** auf demselben Rechner | WSL2 (Ubuntu, Kernel 6.6), `dotnet publish -r linux-x64 --self-contained`, derselbe Inhalt über `/mnt/c` (ICU statt NLS, andere C-Laufzeit) | identisch | 50/50 (full) | **identisch** |
-| andere .NET-Patchversion | – | – | – | **offen**: installiert ist nur .NET 10.0.12 |
-| **zweiter physischer Rechner, andere CPU** | Anleitung in §4 | – | – | **offen**: hat nicht stattgefunden (braucht den Menschen und einen zweiten Rechner) |
+| Release, run 1 | `dotnet CnCNew.SimTool.dll …` | identical | 50/50 (full) | **identical** |
+| Release, run 2 | the same call once more | identical | 50/50 (full) | **identical** |
+| Debug build | `dotnet build -c Debug tools/CnCNew.SimTool` | identical | 9/9 (**quick**) | **identical**; the full set did not finish within two hours in the Debug build and was not waited for |
+| Tiered compilation off | `DOTNET_TieredCompilation=0` | identical | 50/50 (full) | **identical** |
+| Tiered PGO off | `DOTNET_TieredPGO=0` | identical | 50/50 (full) | **identical** |
+| ReadyToRun off | `DOTNET_ReadyToRun=0` | identical | 50/50 (full) | **identical** |
+| Hardware intrinsics off | `DOTNET_EnableHWIntrinsic=0` | identical | 50/50 (full) | **identical** |
+| AVX2 off | `DOTNET_EnableAVX2=0` | identical | 50/50 (full) | **identical** |
+| Server GC | `DOTNET_gcServer=1` | identical | 50/50 (full) | **identical** |
+| Culture `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identical | 50/50 (full) | **identical** |
+| Culture `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identical | 50/50 (full) | **identical** |
+| Culture `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identical | 50/50 (full) | **identical** |
+| **Linux** on the same machine | WSL2 (Ubuntu, kernel 6.6), `dotnet publish -r linux-x64 --self-contained`, the same content via `/mnt/c` (ICU instead of NLS, different C runtime) | identical | 50/50 (full) | **identical** |
+| different .NET patch version | – | – | – | **open**: only .NET 10.0.12 is installed |
+| **second physical machine, different CPU** | instructions in §4 | – | – | **open**: has not taken place (needs the human and a second machine) |
 
-Die Kultur des Entwicklungsrechners ist `de-AT`; alle Läufe ohne Schalter liefen also schon immer unter einer nicht invarianten Kultur. Der Schalter `CNCNEW_TEST_CULTURE` setzt in `SimTool` die Standardkultur aller
-Threads, bevor irgendein Befehl läuft.
+The culture of the development machine is `de-AT`; so all runs without a switch have always run under a non-invariant culture. The switch `CNCNEW_TEST_CULTURE` sets the default culture of all
+threads in `SimTool` before any command runs.
 
-**Vor den Korrekturen** (Stand `981aec4`) bestand der Linux-Lauf nicht: der Definitions-Snapshot hatte 139.503.384 statt 144.626.133 Byte (Zeilenenden der Plattform), damit einen anderen Fingerabdruck; die
-Endhashes und Ketten aller neun Läufe des Schnellsatzes waren dagegen schon identisch – die Rechnung selbst war portabel, nur ein Eingang nicht (D9).
+**Before the fixes** (state `981aec4`) the Linux run did not pass: the definition snapshot had 139,503,384 instead of 144,626,133 bytes (line endings of the platform), and with that a different fingerprint; the
+end hashes and chains of all nine runs of the quick set, in contrast, were already identical – the computation itself was portable, only one input was not (D9).
 
-## 2a. Die Matrix mit dem Manifest der Phase 22 (Q39.24, gemessen am 6. Oktober 2026, Stand `d7fca91`)
+## 2a. The matrix with the manifest of Phase 22 (Q39.24, measured on 6 October 2026, state `d7fca91`)
 
-Phase 22 hat die Festkomma-Auflösung von 16 auf 24 Nachkommabits gestellt und damit beide Manifeste neu geschrieben (`docs/FIXED-POINT-Q39-24.md`). Die Zeilen dieses Rechners wurden mit den neuen Dateien
-wiederholt; jede Zeile ist wieder `input-manifest check` plus `reference-manifest check` gegen die eingecheckten Dateien, „identisch“ heißt Exitcode 0 bei beiden und kein abweichendes Feld.
+Phase 22 switched the fixed-point resolution from 16 to 24 fractional bits and with that rewrote both manifests (`docs/FIXED-POINT-Q39-24.md`). The rows of this machine were repeated with the new
+files; every row is again `input-manifest check` plus `reference-manifest check` against the checked-in files, "identical" means exit code 0 for both and no deviating field.
 
-| Zeile | Wie | Eingänge | Rechnung (Satz) | Ergebnis |
+| Row | How | Inputs | Computation (set) | Result |
 |---|---|---|---|---|
-| Release, Lauf 1 | `CnCNew.SimTool.exe …` (Kopie des `bin`-Verzeichnisses) | identisch | 50/50 (full) | **identisch** |
-| Release, Lauf 2 | derselbe Aufruf noch einmal | identisch | 50/50 (full) | **identisch** |
-| Debug-Build | `dotnet build -c Debug tools/CnCNew.SimTool` | identisch | 9/9 (**quick**) | **identisch** (der volle Satz wurde im Debug-Build wie in Phase 18 nicht gefahren) |
-| Tiered Compilation aus | `DOTNET_TieredCompilation=0` | identisch | 50/50 (full) | **identisch** |
-| Tiered PGO aus | `DOTNET_TieredPGO=0` | identisch | 50/50 (full) | **identisch** |
-| ReadyToRun aus | `DOTNET_ReadyToRun=0` | identisch | 50/50 (full) | **identisch** |
-| Hardware-Intrinsics aus | `DOTNET_EnableHWIntrinsic=0` | identisch | 50/50 (full) | **identisch** |
-| AVX2 aus | `DOTNET_EnableAVX2=0` | identisch | 50/50 (full) | **identisch** |
-| Server-GC | `DOTNET_gcServer=1` | identisch | 50/50 (full) | **identisch** |
-| Kultur `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identisch | 50/50 (full) | **identisch** |
-| Kultur `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identisch | 50/50 (full) | **identisch** |
-| Kultur `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identisch | 50/50 (full) | **identisch** |
-| **Linux** auf demselben Rechner | WSL2 (Ubuntu, Kernel 6.6.87), `dotnet publish -r linux-x64 --self-contained`, derselbe Inhalt über `/mnt/c` | identisch | 50/50 (full) | **identisch** |
-| andere .NET-Patchversion | – | – | – | **offen** wie in §2 |
-| **zweiter physischer Rechner, andere CPU** | Anleitung in §4 | – | – | **offen** wie in §2 |
+| Release, run 1 | `CnCNew.SimTool.exe …` (copy of the `bin` directory) | identical | 50/50 (full) | **identical** |
+| Release, run 2 | the same call once more | identical | 50/50 (full) | **identical** |
+| Debug build | `dotnet build -c Debug tools/CnCNew.SimTool` | identical | 9/9 (**quick**) | **identical** (the full set was not run in the Debug build, as in Phase 18) |
+| Tiered compilation off | `DOTNET_TieredCompilation=0` | identical | 50/50 (full) | **identical** |
+| Tiered PGO off | `DOTNET_TieredPGO=0` | identical | 50/50 (full) | **identical** |
+| ReadyToRun off | `DOTNET_ReadyToRun=0` | identical | 50/50 (full) | **identical** |
+| Hardware intrinsics off | `DOTNET_EnableHWIntrinsic=0` | identical | 50/50 (full) | **identical** |
+| AVX2 off | `DOTNET_EnableAVX2=0` | identical | 50/50 (full) | **identical** |
+| Server GC | `DOTNET_gcServer=1` | identical | 50/50 (full) | **identical** |
+| Culture `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identical | 50/50 (full) | **identical** |
+| Culture `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identical | 50/50 (full) | **identical** |
+| Culture `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identical | 50/50 (full) | **identical** |
+| **Linux** on the same machine | WSL2 (Ubuntu, kernel 6.6.87), `dotnet publish -r linux-x64 --self-contained`, the same content via `/mnt/c` | identical | 50/50 (full) | **identical** |
+| different .NET patch version | – | – | – | **open** as in §2 |
+| **second physical machine, different CPU** | instructions in §4 | – | – | **open** as in §2 |
 
-Für die Arithmetik heißt das: die für eine Bitzahl hergeleiteten Routinen (`FixedMath`: schriftliche Division auf Maschinenworten, bitweise erweiterte Wurzel, CORDIC mit 24 Schritten) rechnen mit und ohne
-Hardware-Intrinsics dasselbe (`Math.BigMul` und `BitOperations.LeadingZeroCount` haben dann Softwarepfade) und unter Linux dasselbe wie unter Windows. Was §3 als nicht belegt nennt, bleibt nicht belegt.
-Zusätzlich deterministisch gelaufen, ohne Teil des Manifests zu sein: zwölf Läufe bei 60 und 120 Hz (`docs/TICKRATE-MIGRATION.md` §11.5; zweiter frischer Lauf und Fortsetzung gleich, wo geprüft).
+For the arithmetic this means: the routines derived for a bit count (`FixedMath`: long division on machine words, bitwise extended root, CORDIC with 24 steps) compute the same with and without
+hardware intrinsics (`Math.BigMul` and `BitOperations.LeadingZeroCount` then have software paths) and the same under Linux as under Windows. What §3 names as not verified stays not verified.
+Additionally run deterministically, without being part of the manifest: twelve runs at 60 and 120 Hz (`docs/TICKRATE-MIGRATION.md` §11.5; second fresh run and continuation the same, where checked).
 
-Neue Regel zu §5: **die Skala von `Fixed` steht an einer Stelle.** `Tests.FixedScaleSourceRules` verbietet sie als Zahl oder Verschiebung in allen Projekten und ihre Verwendung außerhalb der Simulation
-(Ausnahme: `CnCNew.Presentation.FixedConvert`). Formate, die Rohwerte tragen, wechseln mit der Auflösung ihre Version; ein alter Stand wird abgelehnt, nie umgedeutet.
+New rule for §5: **the scale of `Fixed` is in one place.** `Tests.FixedScaleSourceRules` forbids it as a number or shift in all projects and its use outside the simulation
+(exception: `CnCNew.Presentation.FixedConvert`). Formats that carry raw values change their version with the resolution; an old state is rejected, never reinterpreted.
 
-## 2b. Die Matrix am Ausgangsstand der Phase 23 (gemessen am 7. Oktober 2026, Stand `20ffce9`)
+## 2b. The matrix at the starting state of Phase 23 (measured on 7 October 2026, state `20ffce9`)
 
-§2a lief am Stand `d7fca91`, also **vor** dem Merge mit Phase 21 und **vor** der Reichweiten-Reparatur (`b274df5`, `SquaredReach`). Beide waren als ergebnisgleich angekündigt; die Zeilen dieses Rechners wurden deshalb am gemergten
-Stand `20ffce9` wiederholt, bevor Phase 23 etwas ändert. Verfahren wie in §2a: je Zeile `input-manifest check` und `reference-manifest check` gegen die eingecheckten Dateien aus einer Kopie des `bin`-Verzeichnisses;
-„identisch“ heißt Exitcode 0 bei beiden und 50 (bzw. 9) Zeilen `OK`. Die Läufe liefen nicht ruhig (andere Läufe nebenher); die Laufzeit steht nur zur Einordnung dabei.
+§2a ran at the state `d7fca91`, i.e. **before** the merge with Phase 21 and **before** the range repair (`b274df5`, `SquaredReach`). Both were announced as result-identical; the rows of this machine were therefore repeated at the merged
+state `20ffce9` before Phase 23 changes anything. Procedure as in §2a: per row `input-manifest check` and `reference-manifest check` against the checked-in files from a copy of the `bin` directory;
+"identical" means exit code 0 for both and 50 (or 9) rows `OK`. The runs did not run quietly (other runs alongside); the run time is given only for orientation.
 
-| Zeile | Wie | Eingänge | Rechnung (Satz) | Laufzeit | Ergebnis |
+| Row | How | Inputs | Computation (set) | Run time | Result |
 |---|---|---|---|---|---|
-| Release, Lauf 1 | `dotnet CnCNew.SimTool.dll …`, `--jobs 6` | identisch | 50/50 (full) | 404 s | **identisch** |
-| Release, Lauf 2 | derselbe Aufruf noch einmal | identisch | 50/50 (full) | 450 s | **identisch** |
-| Debug-Build | `tools/CnCNew.SimTool/bin/Debug`, `--jobs 3` | identisch | 9/9 (**quick**) | 1.035 s | **identisch** (der volle Satz wurde im Debug-Build wie bisher nicht gefahren) |
-| Tiered Compilation aus | `DOTNET_TieredCompilation=0` | identisch | 50/50 (full) | 648 s | **identisch** |
-| Tiered PGO aus | `DOTNET_TieredPGO=0` | identisch | 50/50 (full) | 628 s | **identisch** |
-| ReadyToRun aus | `DOTNET_ReadyToRun=0` | identisch | 50/50 (full) | 604 s | **identisch** |
-| Hardware-Intrinsics aus | `DOTNET_EnableHWIntrinsic=0` | identisch | 50/50 (full) | 741 s | **identisch** |
-| AVX2 aus | `DOTNET_EnableAVX2=0` | identisch | 50/50 (full) | nicht notiert | **identisch** |
-| Server-GC | `DOTNET_gcServer=1`, `--jobs 5` | identisch | 50/50 (full) | 760 s | **identisch** |
-| Kultur `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identisch | 50/50 (full) | 726 s | **identisch** |
-| Kultur `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identisch | 50/50 (full) | 587 s | **identisch** |
-| Kultur `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identisch | 50/50 (full) | 489 s | **identisch** |
-| **Linux** auf demselben Rechner | WSL2 (Ubuntu, Kernel 6.6.87.2), `dotnet publish -r linux-x64 --self-contained`, derselbe Inhalt über `/mnt/c`, `--jobs 4` | identisch | 50/50 (full) | nicht notiert | **identisch** |
-| andere .NET-Patchversion | – | – | – | – | **offen** wie in §2 |
-| **zweiter physischer Rechner, andere CPU** | Anleitung in §4 | – | – | – | **offen** wie in §2; nachzuholen vor Phase 26 |
+| Release, run 1 | `dotnet CnCNew.SimTool.dll …`, `--jobs 6` | identical | 50/50 (full) | 404 s | **identical** |
+| Release, run 2 | the same call once more | identical | 50/50 (full) | 450 s | **identical** |
+| Debug build | `tools/CnCNew.SimTool/bin/Debug`, `--jobs 3` | identical | 9/9 (**quick**) | 1,035 s | **identical** (the full set was not run in the Debug build, as before) |
+| Tiered compilation off | `DOTNET_TieredCompilation=0` | identical | 50/50 (full) | 648 s | **identical** |
+| Tiered PGO off | `DOTNET_TieredPGO=0` | identical | 50/50 (full) | 628 s | **identical** |
+| ReadyToRun off | `DOTNET_ReadyToRun=0` | identical | 50/50 (full) | 604 s | **identical** |
+| Hardware intrinsics off | `DOTNET_EnableHWIntrinsic=0` | identical | 50/50 (full) | 741 s | **identical** |
+| AVX2 off | `DOTNET_EnableAVX2=0` | identical | 50/50 (full) | not noted | **identical** |
+| Server GC | `DOTNET_gcServer=1`, `--jobs 5` | identical | 50/50 (full) | 760 s | **identical** |
+| Culture `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identical | 50/50 (full) | 726 s | **identical** |
+| Culture `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identical | 50/50 (full) | 587 s | **identical** |
+| Culture `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identical | 50/50 (full) | 489 s | **identical** |
+| **Linux** on the same machine | WSL2 (Ubuntu, kernel 6.6.87.2), `dotnet publish -r linux-x64 --self-contained`, the same content via `/mnt/c`, `--jobs 4` | identical | 50/50 (full) | not noted | **identical** |
+| different .NET patch version | – | – | – | – | **open** as in §2 |
+| **second physical machine, different CPU** | instructions in §4 | – | – | – | **open** as in §2; to be made up before Phase 26 |
 
-Alle 13 Zeilen dieses Rechners sind am gemergten Stand identisch; kein Referenzwert hat sich geändert. Was §3 als nicht belegt nennt, bleibt nicht belegt.
+All 13 rows of this machine are identical at the merged state; no reference value has changed. What §3 names as not verified stays not verified.
 
-## 2c. Die Matrix mit den 60-Hz-Manifesten (Phase 23, Stand `ea52f87`, 9. Oktober 2026) – erst zwei Zeilen gemessen
+## 2c. The matrix with the 60 Hz manifests (Phase 23, state `ea52f87`, 9 October 2026) – only two rows measured so far
 
-**Die Matrix aus §2b ist am 30-Hz-Ausgangsstand `20ffce9` gemessen.** Seither hat Phase 23 das Verhalten oberhalb von 30 Hz in vier Runden geändert, drei Verhaltensänderungen bei 30 Hz gemergt
-(Manifeste `6a99102`, `8a6e5b7`, `cca6f92`), den Standard auf 60 Hz gestellt (`e8632bb`) und beide Manifeste bei 60 Hz neu geschrieben (`ea52f87`; Referenzmanifest Schema 2, Eingangsmanifest
-Schema 2 mit `simulation.tickRate`). Eine Matrix mit den neuen Dateien gibt es noch nicht. Gemessen sind am Stand `ea52f87` zwei Zeilen, auf demselben Rechner, Windows, Release
-(Protokolle der Sitzung: `verify\switch\check-60-1.log`, `check-60-2.log`, `input-60.log`):
+**The matrix from §2b is measured at the 30 Hz starting state `20ffce9`.** Since then Phase 23 has changed the behaviour above 30 Hz in four rounds, merged three behaviour changes at 30 Hz
+(manifests `6a99102`, `8a6e5b7`, `cca6f92`), switched the default to 60 Hz (`e8632bb`) and rewritten both manifests at 60 Hz (`ea52f87`; reference manifest schema 2, input manifest
+schema 2 with `simulation.tickRate`). A matrix with the new files does not exist yet. Measured at the state `ea52f87` are two rows, on the same machine, Windows, Release
+(logs of the session: `verify\switch\check-60-1.log`, `check-60-2.log`, `input-60.log`):
 
-| Zeile | Wie | Eingänge | Rechnung (Satz) | Ergebnis |
+| Row | How | Inputs | Computation (set) | Result |
 |---|---|---|---|---|
-| Release, Lauf 1 | `reference-manifest check … --set full` gegen `baselines/reference-manifest.json` (60 Hz, Schema 2) | identisch („Input manifest (60 Hz, schema 2): identical.“) | 50/50 (full) | **identisch** |
-| Release, Lauf 2 | derselbe Aufruf noch einmal | – | 50/50 (full) | **identisch** |
-| Debug-Build | – | – | – | **nicht gemessen** |
-| Tiered Compilation aus, Tiered PGO aus, ReadyToRun aus | – | – | – | **nicht gemessen** |
-| Hardware-Intrinsics aus, AVX2 aus | – | – | – | **nicht gemessen** |
-| Server-GC | – | – | – | **nicht gemessen** |
-| Kulturen `de-DE`, `tr-TR`, `ar-SA` | – | – | – | **nicht gemessen** |
-| **Linux** auf demselben Rechner (WSL2) | – | – | – | **nicht gemessen** |
-| andere .NET-Patchversion | – | – | – | **offen** wie in §2 |
-| **zweiter physischer Rechner, andere CPU** | Anleitung in §4 | – | – | **offen** wie in §2; nachzuholen vor Phase 26 |
+| Release, run 1 | `reference-manifest check … --set full` against `baselines/reference-manifest.json` (60 Hz, schema 2) | identical ("Input manifest (60 Hz, schema 2): identical.") | 50/50 (full) | **identical** |
+| Release, run 2 | the same call once more | – | 50/50 (full) | **identical** |
+| Debug build | – | – | – | **not measured** |
+| Tiered compilation off, Tiered PGO off, ReadyToRun off | – | – | – | **not measured** |
+| Hardware intrinsics off, AVX2 off | – | – | – | **not measured** |
+| Server GC | – | – | – | **not measured** |
+| Cultures `de-DE`, `tr-TR`, `ar-SA` | – | – | – | **not measured** |
+| **Linux** on the same machine (WSL2) | – | – | – | **not measured** |
+| different .NET patch version | – | – | – | **open** as in §2 |
+| **second physical machine, different CPU** | instructions in §4 | – | – | **open** as in §2; to be made up before Phase 26 |
 
-Dazu, mit derselben Binärdatei (Standard 60 Hz) gegen die letzten 30-Hz-Dateien (`cca6f92`, in der Sitzung aufbewahrt): `input-manifest check` „(30 Hz, schema 1): identical“ und
-`reference-manifest check --set full` 50 von 50 Läufen identisch – ein Manifest wird mit der Rate geprüft, die seine Datei nennt, unabhängig vom Standard.
+In addition, with the same binary (default 60 Hz) against the last 30 Hz files (`cca6f92`, kept in the session): `input-manifest check` "(30 Hz, schema 1): identical" and
+`reference-manifest check --set full` 50 of 50 runs identical – a manifest is checked at the rate its file names, independently of the default.
 
-**Was daraus folgt:** die zehn Schalter- und Kulturzeilen und die Linux-Zeile sind für die Simulation oberhalb von 30 Hz **nicht belegt**. Oberhalb von 30 Hz laufen Rechenwege, die es bei 30 Hz
-nicht gibt (die Anteile eines Bildschritts, die Bildend-Sicht, die Tabellen der Konstanten je Bild); dass die Matrix bei 30 Hz bestand, sagt über sie nichts. Auch die drei 30-Hz-Zwischenstände der
-Phase sind nur unter Windows im Release-Build geprüft, nicht über die Matrix und nicht unter Linux. Bis die Zeilen nachgetragen sind, gilt für 60 Hz: deterministisch auf einem Rechner, unter
-Windows, im Release-Build, zweimal hintereinander.
+**What follows from this:** the ten switch and culture rows and the Linux row are **not verified** for the simulation above 30 Hz. Above 30 Hz, computation paths run that do not exist at 30 Hz
+(the fractions of a frame step, the end-of-frame vision, the tables of the constants per frame); that the matrix passed at 30 Hz says nothing about them. The three 30 Hz intermediate states of the
+phase, too, are checked only under Windows in the Release build, not across the matrix and not under Linux. Until the rows have been added, the following holds for 60 Hz: deterministic on one machine, under
+Windows, in the Release build, twice in a row.
 
-## 3. Was daraus folgt und was nicht
+## 3. What follows from this and what does not
 
-- **Belegt:** auf einem Rechner (AMD Ryzen 7 PRO 6850U, x64) ist das Ergebnis unabhängig von JIT-Stufe, PGO, ReadyToRun, Hardware-Intrinsics, GC-Art, Kultur, Debug/Release (Schnellsatz) und Betriebssystem
-  (Windows 11 gegen Linux unter WSL2). Das Manifest besteht zweimal hintereinander.
-- **Nicht belegt:** eine andere CPU (anderer Hersteller, andere Generation, ARM), eine andere .NET-Patch- oder Hauptversion, ein anderer Kernel als der von WSL2, ein natives Linux. Die Simulation rechnet in
-  Ganzzahlen (`Fixed`, `FixedTrig`, `SageRandom`) und `SourceRules` verbietet `float`, Intrinsics und Kulturabhängiges im Kern und in allem, was ihn speist (D6); das macht eine CPU-Abhängigkeit unwahrscheinlich,
-  ersetzt aber den Lauf nicht. **E1 im Register bleibt deshalb offen**, bis §4 einmal ausgeführt wurde.
-- Die Matrix prüft die 50 Läufe des Manifests. Pfade, die keiner dieser Läufe betritt (Spielereingaben eines Menschen, selten benutzte Module), sind durch sie nicht abgedeckt; D8 hat gezeigt, dass gerade dort
-  Fehler lagen (vier unvermutete Zustandsänderungen ohne `MarkDirty` in 19 von 45 Missionskarten).
+- **Verified:** on one machine (AMD Ryzen 7 PRO 6850U, x64) the result is independent of JIT tier, PGO, ReadyToRun, hardware intrinsics, GC kind, culture, Debug/Release (quick set) and operating system
+  (Windows 11 against Linux under WSL2). The manifest passes twice in a row.
+- **Not verified:** a different CPU (different vendor, different generation, ARM), a different .NET patch or major version, a kernel other than that of WSL2, a native Linux. The simulation computes in
+  integers (`Fixed`, `FixedTrig`, `SageRandom`) and `SourceRules` forbids `float`, intrinsics and anything culture-dependent in the core and in everything that feeds it (D6); that makes a CPU dependency unlikely,
+  but does not replace the run. **E1 in the register therefore stays open** until §4 has been carried out once.
+- The matrix checks the 50 runs of the manifest. Paths that none of these runs enters (player inputs of a human, rarely used modules) are not covered by it; D8 showed that precisely there
+  errors lay (four unsuspected state changes without `MarkDirty` in 19 of 45 mission maps).
 
-## 4. Anleitung: der Lauf auf einem zweiten Rechner
+## 4. Instructions: the run on a second machine
 
-Braucht einen Menschen. Nichts davon wird committet; Originaldaten verlassen den eigenen Besitz nicht (lokal kopieren, kein Upload).
+Needs a human. None of this is committed; original data does not leave one's own possession (copy locally, no upload).
 
-1. Auf dem Entwicklungsrechner: `dotnet publish tools/CnCNew.SimTool -c Release -r win-x64 --self-contained true -o <ordner>\simtool` (für Linux `-r linux-x64`, für ARM `-r win-arm64`/`linux-arm64`).
-2. Auf einen Datenträger kopieren: `<ordner>\simtool`, das Verzeichnis `game\content` (rund 25.682 Dateien) und `baselines\input-manifest.json`, `baselines\reference-manifest.json`.
-3. Auf dem zweiten Rechner (kein .NET nötig), im Verzeichnis mit den drei Teilen:
+1. On the development machine: `dotnet publish tools/CnCNew.SimTool -c Release -r win-x64 --self-contained true -o <ordner>\simtool` (for Linux `-r linux-x64`, for ARM `-r win-arm64`/`linux-arm64`).
+2. Copy onto a storage medium: `<ordner>\simtool`, the directory `game\content` (about 25,682 files) and `baselines\input-manifest.json`, `baselines\reference-manifest.json`.
+3. On the second machine (no .NET needed), in the directory with the three parts:
    ```
    simtool\CnCNew.SimTool input-manifest check content input-manifest.json
    simtool\CnCNew.SimTool reference-manifest check content reference-manifest.json --set quick
    simtool\CnCNew.SimTool reference-manifest check content reference-manifest.json --set full
    ```
-4. Ergebnis melden: die drei Schlusszeilen („identical“ oder die erste Abweichung je Lauf), dazu CPU-Modell, Betriebssystem und die Ausgabe von `simtool\CnCNew.SimTool --version`, falls vorhanden.
-5. Bei einer Abweichung zuerst das Eingangsmanifest ansehen: weicht es ab, liegt der Fehler in den Daten oder ihrer Aufbereitung; ist es gleich und ein Lauf weicht ab, liegt er in der Rechnung –
-   dann denselben Lauf mit `--only <id> --verify-incremental` wiederholen und das Ergebnis in `docs/DETERMINISM-FINDINGS.md` eintragen.
+4. Report the result: the three closing lines ("identical" or the first deviation per run), plus CPU model, operating system and the output of `simtool\CnCNew.SimTool --version`, if available.
+5. In case of a deviation look at the input manifest first: if it deviates, the error lies in the data or their preparation; if it is the same and a run deviates, it lies in the computation –
+   then repeat the same run with `--only <id> --verify-incremental` and enter the result in `docs/DETERMINISM-FINDINGS.md`.
 
-Das Ergebnis gehört in die Tabelle in §2 (Zeile „zweiter physischer Rechner“) und in `docs/MULTIPLAYER-PLAN.md` §4 (E1).
+The result belongs in the table in §2 (row "second physical machine") and in `docs/MULTIPLAYER-PLAN.md` §4 (E1).
 
-## 5. Regeln, die daraus bleiben
+## 5. Rules that remain from this
 
-- Das Manifest ist die Messlatte (`docs/MULTIPLAYER-PLAN.md` §6 Punkt 2). Wer es ändert, tut das in einem eigenen Commit mit einer Ursache und Vorher/Nachher-Werten.
-- Neue Simulationseingänge laufen über die geprüften Wandlungsroutinen (`SingleBits.ToDecimal` für Fließkommawerte aus Dateien, `ExactBoneMath` für die Knochentabelle); `SourceRules` und `FeederSourceRules` erzwingen das.
-- Jede Zustandsänderung ruft `MarkDirty`; ein von Hand gesetztes `Dirty`-Flag ist verboten (Regel in `SourceRules`). Neue Module laufen einmal mit `--verify-incremental`.
-- Vor jedem Phasenabschluss: `input-manifest check`, `reference-manifest check --set full` – unter Windows; das ist die Abnahme.
-- **Die Linux-Zeile ist informativ, kein Abnahmekriterium** (Entscheidung des Projektinhabers vom 9. Oktober 2026, `docs/MULTIPLAYER-PLAN.md` §7): Zielplattform ist vorerst nur
-  Windows, Linux kommt später allein als Wirt des Dedicated Servers in Betracht. Die Linux-Zeilen der Matrizen in §2 bis §2b bleiben als Messung ihres Stands stehen; ein neuer
-  Linux-Lauf (WSL) ist bei Änderungen an Formaten oder Fingerabdrücken nützlich, aber keine Phase scheitert an ihm oder an seinem Fehlen. Wird der Server unter Linux Lieferziel
-  (Phase 28), wird die Zeile dort wieder Kriterium – für den Server, nicht für den Client.
-- **Golden-Hashes werden bei der Produktrate gehalten (60 Hz, seit Phase 23).** `check` läuft mit der Rate und in dem Schema, die **die Datei** nennt (`simulation.tickRate`); eine abweichende
-  `--tick-rate` wird abgelehnt („A manifest is checked at the rate it was written at.“). `write` nimmt `--tick-rate` oder den Standard. 30 und 120 Hz haben keine eigenen Golden-Hashes; sie werden
-  über die Raten-Äquivalenz-Suite gegen 30 Hz als Definition geprüft (`docs/SIMULATION-CORE.md` §39.7) und über Tests, die ihre Raten selbst nennen.
-- Zum Phasenabschluss gehören seit Phase 23 zusätzlich: die Suite mit 0 / 0 in allen zehn Gruppen und die Testprogramme bei 30, 60 und 120 Hz (`--tick-rate N`).
+- The manifest is the yardstick (`docs/MULTIPLAYER-PLAN.md` §6 item 2). Whoever changes it does so in a commit of its own with a cause and before/after values.
+- New simulation inputs go through the checked conversion routines (`SingleBits.ToDecimal` for floating-point values from files, `ExactBoneMath` for the bone table); `SourceRules` and `FeederSourceRules` enforce that.
+- Every state change calls `MarkDirty`; a `Dirty` flag set by hand is forbidden (rule in `SourceRules`). New modules run once with `--verify-incremental`.
+- Before every phase completion: `input-manifest check`, `reference-manifest check --set full` – under Windows; that is the acceptance.
+- **The Linux row is informative, not an acceptance criterion** (decision of the project owner of 9 October 2026, `docs/MULTIPLAYER-PLAN.md` §7): the target platform is for now only
+  Windows, Linux comes into consideration later solely as the host of the dedicated server. The Linux rows of the matrices in §2 to §2b remain as a measurement of their state; a new
+  Linux run (WSL) is useful on changes to formats or fingerprints, but no phase fails because of it or because of its absence. If the server under Linux becomes a delivery target
+  (Phase 28), the row becomes a criterion again there – for the server, not for the client.
+- **Golden hashes are kept at the product rate (60 Hz, since Phase 23).** `check` runs at the rate and in the schema that **the file** names (`simulation.tickRate`); a deviating
+  `--tick-rate` is rejected ("A manifest is checked at the rate it was written at."). `write` takes `--tick-rate` or the default. 30 and 120 Hz have no golden hashes of their own; they are
+  checked through the rate-equivalence suite against 30 Hz as the definition (`docs/SIMULATION-CORE.md` §39.7) and through tests that name their rates themselves.
+- Since Phase 23 the phase completion additionally includes: the suite with 0 / 0 in all ten groups and the test programs at 30, 60 and 120 Hz (`--tick-rate N`).
