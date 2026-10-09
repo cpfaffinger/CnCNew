@@ -1,32 +1,32 @@
 <#
 .SYNOPSIS
-  Vergleicht zwei Ausgabeverzeichnisse von scripts/perf-profile.ps1 (docs/PERF-GAME-LAYER.md): je Lauf, der in beiden liegt, `SimTool perf-compare`.
+  Compares two output directories of scripts/perf-profile.ps1 (docs/PERF-GAME-LAYER.md): `SimTool perf-compare` for every run present in both.
 
 .DESCRIPTION
-  Sucht in beiden Verzeichnissen die <name>.json der Messlaeufe (perf, perf-mission, sync-perf), ruft fuer jeden Namen, der in beiden vorkommt,
-  `SimTool perf-compare <alt> <neu>` auf und schreibt
-    - compare-<name>.txt   die volle Tabelle des Werkzeugs je Lauf,
-    - compare.md           eine Uebersicht: je Lauf Tickzeit (Mittel, 99 %, Maximum), Allokation, Aufholtempo, Zahl der markierten Aenderungen.
-  in das neue Verzeichnis (oder nach -OutFile). Laeufe, die nur auf einer Seite liegen, und abgelehnte Vergleiche (andere Parameter, anderer Endhash)
-  stehen als solche in der Tabelle.
+  Looks in both directories for the <name>.json of the measurement runs (perf, perf-mission, sync-perf), calls
+  `SimTool perf-compare <old> <new>` for every name that occurs in both and writes
+    - compare-<name>.txt   the tool's full table per run,
+    - compare.md           an overview: per run tick time (mean, 99 %, maximum), allocation, catch-up speed, number of flagged changes.
+  into the new directory (or to -OutFile). Runs that exist on one side only and refused comparisons (other parameters, other final hash)
+  are listed as such in the table.
 
-  Das Skript schlaegt nie wegen einer Zeit fehl (Zeiten sind rechnerabhaengig); Exitcode 1 nur, wenn kein Lauf vergleichbar war oder das Werkzeug fehlt.
-  Nur mit pwsh (PowerShell 7) ausfuehren.
+  The script never fails because of a time (times depend on the machine); exit code 1 only when no run was comparable or the tool is missing.
+  Run with pwsh (PowerShell 7) only.
 
 .EXAMPLE
-  .\scripts\perf-compare.ps1 $env:TEMP\perf-alt $env:TEMP\perf-neu
-  .\scripts\perf-compare.ps1 $env:TEMP\perf-alt $env:TEMP\perf-neu -ThresholdPercent 5 -AllowDifferentHash
+  .\scripts\perf-compare.ps1 $env:TEMP\perf-old $env:TEMP\perf-new
+  .\scripts\perf-compare.ps1 $env:TEMP\perf-old $env:TEMP\perf-new -ThresholdPercent 5 -AllowDifferentHash
 #>
 [CmdletBinding()]
 param(
     [Parameter(Mandatory, Position = 0)][string]$OldDir,
     [Parameter(Mandatory, Position = 1)][string]$NewDir,
-    # Ab welcher Aenderung (in Prozent des alten Werts) eine Kennzahl markiert wird.
+    # The change (in percent of the old value) from which a metric is flagged.
     [double]$ThresholdPercent = 10,
-    # Auch Laeufe mit anderem Endhash vergleichen (das sind andere Laeufe; die Tabelle traegt dann eine Warnung).
+    # Also compare runs with a different final hash (those are different runs; the table then carries a warning).
     [switch]$AllowDifferentHash,
     [string]$OutFile,
-    # SimTool.exe; ohne Angabe <NewDir>\bin (dort legt perf-profile.ps1 es ab), sonst wird SimTool gebaut.
+    # SimTool.exe; when omitted <NewDir>\bin (where perf-profile.ps1 puts it), otherwise SimTool is built.
     [string]$Tool
 )
 
@@ -39,19 +39,19 @@ if (-not $OutFile) { $OutFile = Join-Path $NewDir 'compare.md' }
 if (-not $Tool) {
     $Tool = Join-Path $NewDir 'bin' 'CnCNew.SimTool.exe'
     if (-not (Test-Path -LiteralPath $Tool)) {
-        Write-Host '== Baue SimTool (Release) ...' -ForegroundColor Cyan
+        Write-Host '== Building SimTool (Release) ...' -ForegroundColor Cyan
         dotnet build (Join-Path $repo 'tools' 'CnCNew.SimTool' 'CnCNew.SimTool.csproj') -c Release --nologo -v quiet
-        if ($LASTEXITCODE -ne 0) { throw "Build fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+        if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
         $built = Get-ChildItem -LiteralPath (Join-Path $repo 'tools' 'CnCNew.SimTool' 'bin' 'Release') -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         $Tool = Join-Path $built.FullName 'CnCNew.SimTool.exe'
     }
 }
-if (-not (Test-Path -LiteralPath $Tool)) { throw "SimTool nicht gefunden: $Tool" }
+if (-not (Test-Path -LiteralPath $Tool)) { throw "SimTool not found: $Tool" }
 
 function Get-Runs([string]$directory) {
     $runs = @{}
     foreach ($file in Get-ChildItem -LiteralPath $directory -Filter '*.json' -File) {
-        # Nur Zusammenfassungen der Messwerkzeuge; andere JSON-Dateien im Verzeichnis werden uebergangen.
+        # Only summaries of the measurement tools; other JSON files in the directory are skipped.
         try { $document = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json -AsHashtable } catch { continue }
         if ($document -is [hashtable] -and $document['kind'] -ceq 'perf-summary') { $runs[$file.BaseName] = @{ Path = $file.FullName; Document = $document } }
     }
@@ -71,20 +71,20 @@ function Get-Value($document, [string]$section, [string]$name) {
 $old = Get-Runs $OldDir
 $new = Get-Runs $NewDir
 $names = @(@($old.Keys) + @($new.Keys) | Sort-Object -Unique)
-if ($names.Count -eq 0) { throw "Keine Zusammenfassungen (*.json mit kind = perf-summary) in $OldDir und $NewDir." }
+if ($names.Count -eq 0) { throw "No summaries (*.json with kind = perf-summary) in $OldDir and $NewDir." }
 
 $lines = @()
-$lines += '# Leistungsvergleich'
+$lines += '# Performance comparison'
 $lines += ''
-$lines += "Erzeugt von ``scripts/perf-compare.ps1`` am $(Get-Date -Format 'yyyy-MM-dd HH:mm'). Schwelle $($ThresholdPercent.ToString([Globalization.CultureInfo]::InvariantCulture)) %. Zeiten in Mikrosekunden je Tick."
-$lines += 'Zeiten haengen vom Rechner und seiner Last ab: das ist ein Bericht, kein Test. Die volle Tabelle je Lauf steht in `compare-<lauf>.txt`.'
+$lines += "Generated by ``scripts/perf-compare.ps1`` on $(Get-Date -Format 'yyyy-MM-dd HH:mm'). Threshold $($ThresholdPercent.ToString([Globalization.CultureInfo]::InvariantCulture)) %. Times in microseconds per tick."
+$lines += 'Times depend on the machine and its load: this is a report, not a test. The full table per run is in `compare-<run>.txt`.'
 $lines += ''
-$lines += '| Lauf | Stand alt | Stand neu | Ergebnis | Mittel alt | Mittel neu | Aenderung | 99 % alt | 99 % neu | Aenderung | Maximum alt | Maximum neu | Bytes je Tick alt | Bytes je Tick neu | Ticks/s Wiedergabe alt | neu | Verschlechterungen | Verbesserungen | Endhash |'
+$lines += '| Run | Label old | Label new | Result | Mean old | Mean new | Change | 99 % old | 99 % new | Change | Maximum old | Maximum new | Bytes per tick old | Bytes per tick new | Ticks/s replay old | new | Regressions | Improvements | Final hash |'
 $lines += '|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|'
 $compared = 0
 foreach ($name in $names) {
-    if (-not $old.ContainsKey($name)) { $lines += "| $name | - | $($new[$name].Document['label']) | nur im neuen Verzeichnis | | | | | | | | | | | | | | | |"; continue }
-    if (-not $new.ContainsKey($name)) { $lines += "| $name | $($old[$name].Document['label']) | - | nur im alten Verzeichnis | | | | | | | | | | | | | | | |"; continue }
+    if (-not $old.ContainsKey($name)) { $lines += "| $name | - | $($new[$name].Document['label']) | only in the new directory | | | | | | | | | | | | | | | |"; continue }
+    if (-not $new.ContainsKey($name)) { $lines += "| $name | $($old[$name].Document['label']) | - | only in the old directory | | | | | | | | | | | | | | | |"; continue }
     $a = $old[$name].Document
     $b = $new[$name].Document
     $report = Join-Path (Split-Path -Parent $OutFile) "compare-$name.txt"
@@ -92,19 +92,19 @@ foreach ($name in $names) {
     if ($AllowDifferentHash) { $arguments += '--allow-different-hash' }
     $output = & $Tool @arguments 2>&1
     $code = $LASTEXITCODE
-    $result = 'verglichen'
+    $result = 'compared'
     $regressions = ''
     $improvements = ''
     if ($code -eq 2) {
         $refusal = @($output | Where-Object { "$_" -cmatch '^REFUSED: ' } | Select-Object -First 1)
-        $result = 'ABGELEHNT: ' + ("$refusal" -replace '^REFUSED: ', '' -replace '\|', '/')
+        $result = 'REFUSED: ' + ("$refusal" -replace '^REFUSED: ', '' -replace '\|', '/')
     }
-    elseif ($code -ne 0) { $result = "Fehler (Exitcode $code)" }
+    elseif ($code -ne 0) { $result = "error (exit code $code)" }
     else {
         $compared++
         $last = @($output | Where-Object { "$_" -cmatch '^\d+ regression\(s\) and \d+ improvement\(s\)' } | Select-Object -Last 1)
         if ("$last" -cmatch '^(\d+) regression\(s\) and (\d+) improvement\(s\)') { $regressions = $Matches[1]; $improvements = $Matches[2] }
-        if (@($output | Where-Object { "$_" -cmatch '^WARNING: DIFFERENT FINAL HASH' }).Count -gt 0) { $result = 'verglichen, ANDERER ENDHASH' }
+        if (@($output | Where-Object { "$_" -cmatch '^WARNING: DIFFERENT FINAL HASH' }).Count -gt 0) { $result = 'compared, DIFFERENT FINAL HASH' }
     }
     $hashOld = Get-Value $a 'results' 'finalHash'
     $hashNew = Get-Value $b 'results' 'finalHash'
@@ -117,8 +117,8 @@ foreach ($name in $names) {
         (Get-Value $a 'allocation' 'bytesPerTickMean'), (Get-Value $b 'allocation' 'bytesPerTickMean'),
         (Get-Value $a 'replay' 'ticksPerSecond'), (Get-Value $b 'replay' 'ticksPerSecond'), $regressions, $improvements, $hash)
     $lines += '| ' + (($cells | ForEach-Object { if ($null -eq $_) { '-' } else { "$_" } }) -join ' | ') + ' |'
-    Write-Host "== $name`: $result; Mittel $(Format-Us (Get-Value $a 'tick' 'meanNs')) -> $(Format-Us (Get-Value $b 'tick' 'meanNs')) us ($(Format-Delta (Get-Value $a 'tick' 'meanNs') (Get-Value $b 'tick' 'meanNs')))"
+    Write-Host "== $name`: $result; mean $(Format-Us (Get-Value $a 'tick' 'meanNs')) -> $(Format-Us (Get-Value $b 'tick' 'meanNs')) us ($(Format-Delta (Get-Value $a 'tick' 'meanNs') (Get-Value $b 'tick' 'meanNs')))"
 }
 [IO.File]::WriteAllText($OutFile, (($lines -join "`n") + "`n"), [Text.UTF8Encoding]::new($false))
-Write-Host "== Vergleich: $OutFile" -ForegroundColor Cyan
+Write-Host "== Comparison: $OutFile" -ForegroundColor Cyan
 exit ($compared -gt 0 ? 0 : 1)
