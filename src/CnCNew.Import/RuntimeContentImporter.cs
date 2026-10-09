@@ -62,11 +62,30 @@ public static class RuntimeContentImporter
         return new DependencyAuditResult(paths.Length, resolved, fallbackCounts.Values.Sum(), fallbackCounts);
     }
 
+    /// <summary>
+    /// Computes the manifest an import of <paramref name="sourceDirectory"/> would publish, without writing anything: every selected source is hashed and
+    /// validated exactly as <see cref="ImportAsync"/> does. The canonical bytes of the result are what <c>content-manifest.json</c> would contain.
+    /// </summary>
+    public static async Task<RuntimeContentManifest> DescribeAsync(
+        string sourceDirectory,
+        IProgress<ImportProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+    {
+        using var source = GameFileSystem.OpenInstallation(sourceDirectory);
+        var (drafts, _) = await ScanAsync(source, null, null, null, null, progress, cancellationToken);
+        return BuildManifest(drafts);
+    }
+
+    /// <summary>
+    /// Publishes the runtime content of <paramref name="sourceDirectory"/>. A published artifact whose manifest entry has the hash of its source is taken over
+    /// without being read again when its size matches; <paramref name="trustPublishedArtifact"/> lets a caller that has found damaged files exclude them.
+    /// </summary>
     public static async Task<ImportResult> ImportAsync(
         string sourceDirectory,
         string destinationDirectory,
         IProgress<ImportProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Predicate<RuntimeArtifact>? trustPublishedArtifact = null)
     {
         var destination = Path.GetFullPath(destinationDirectory);
         var parent = Path.GetDirectoryName(destination) ?? throw new InvalidDataException("Import destination has no parent.");
@@ -76,37 +95,62 @@ public static class RuntimeContentImporter
         try
         {
             using var source = GameFileSystem.OpenInstallation(sourceDirectory);
-            var virtualPaths = source.EnumerateFiles().Where(path => !path.EndsWith(".big", StringComparison.OrdinalIgnoreCase)).ToArray();
-            EnsureNoCaseCollisions(virtualPaths);
             var old = TryReadManifest(destination);
             var oldById = old?.Assets.ToDictionary(asset => asset.Id, StringComparer.Ordinal);
-            var drafts = new List<Draft>(virtualPaths.Length);
-            var cacheHits = 0;
-            var written = 0;
+            var (drafts, cacheHits) = await ScanAsync(source, staging, destination, oldById, trustPublishedArtifact, progress, cancellationToken);
+            var manifest = BuildManifest(drafts);
+            await File.WriteAllBytesAsync(Path.Combine(staging, "content-manifest.json"), RuntimeManifestSerializer.WriteCanonical(manifest), cancellationToken);
+            Publish(staging, destination);
+            staging = string.Empty;
+            var counts = manifest.Assets.GroupBy(asset => asset.Type).ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+            return new ImportResult(manifest, cacheHits, drafts.Count, counts);
+        }
+        finally
+        {
+            if (staging.Length != 0 && Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
+        }
+    }
 
-            for (var index = 0; index < virtualPaths.Length; index++)
+    // staging == null: hash and validate only (DescribeAsync); nothing is written.
+    private static async Task<(List<Draft> Drafts, int CacheHits)> ScanAsync(
+        GameFileSystem source,
+        string? staging,
+        string? destination,
+        Dictionary<string, RuntimeAsset>? oldById,
+        Predicate<RuntimeArtifact>? trustPublishedArtifact,
+        IProgress<ImportProgress>? progress,
+        CancellationToken cancellationToken)
+    {
+        var virtualPaths = source.EnumerateFiles().Where(path => !path.EndsWith(".big", StringComparison.OrdinalIgnoreCase)).ToArray();
+        EnsureNoCaseCollisions(virtualPaths);
+        var drafts = new List<Draft>(virtualPaths.Length);
+        var cacheHits = 0;
+
+        for (var index = 0; index < virtualPaths.Length; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var path = ContentPath.Normalize(virtualPaths[index]);
+            progress?.Report(new ImportProgress(index, virtualPaths.Length, path));
+            await using var input = source.OpenRead(path);
+            var (bytes, hash) = await HashAsync(input, cancellationToken);
+            input.Position = 0;
+            var format = AssetFormat.Classify(path);
+            if (format.Strategy == "unclassified")
+                throw new InvalidDataException($"{path}: unclassified extension '{Path.GetExtension(path)}'.");
+
+            var references = ValidateAndReadReferences(path, input, format);
+            var id = ContentPath.ToAssetId(path);
+            if (staging is not null)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var path = ContentPath.Normalize(virtualPaths[index]);
-                progress?.Report(new ImportProgress(index, virtualPaths.Length, path));
-                await using var input = source.OpenRead(path);
-                var (bytes, hash) = await HashAsync(input, cancellationToken);
-                input.Position = 0;
-                var format = AssetFormat.Classify(path);
-                if (format.Strategy == "unclassified")
-                    throw new InvalidDataException($"{path}: unclassified extension '{Path.GetExtension(path)}'.");
-
-                var references = ValidateAndReadReferences(path, input, format);
                 var relative = ToSafeRelativePath(path);
                 var output = ResolveContained(staging, relative);
                 Directory.CreateDirectory(Path.GetDirectoryName(output)!);
-                var id = ContentPath.ToAssetId(path);
-                if (oldById is not null && oldById.TryGetValue(id, out var previous) &&
+                if (oldById is not null && destination is not null && oldById.TryGetValue(id, out var previous) &&
                     previous.Sha256.Equals(hash, StringComparison.OrdinalIgnoreCase))
                 {
                     var previousArtifact = previous.Artifacts.Single();
                     var previousPath = ResolveContained(destination, previousArtifact.Path);
-                    if (File.Exists(previousPath) && new FileInfo(previousPath).Length == bytes)
+                    if ((trustPublishedArtifact is null || trustPublishedArtifact(previousArtifact)) && File.Exists(previousPath) && new FileInfo(previousPath).Length == bytes)
                     {
                         File.Copy(previousPath, output);
                         cacheHits++;
@@ -114,23 +158,13 @@ public static class RuntimeContentImporter
                     else await CopySourceAsync(source, path, output, cancellationToken);
                 }
                 else await CopySourceAsync(source, path, output, cancellationToken);
-                written++;
-
-                var candidates = source.GetCandidates(path).Select(value => new RuntimeCandidate(value.Instance, value.Source, value.Length)).ToArray();
-                drafts.Add(new Draft(path, id, format, bytes, hash, references, candidates));
             }
 
-            var manifest = BuildManifest(drafts);
-            await File.WriteAllBytesAsync(Path.Combine(staging, "content-manifest.json"), RuntimeManifestSerializer.WriteCanonical(manifest), cancellationToken);
-            Publish(staging, destination);
-            staging = string.Empty;
-            var counts = manifest.Assets.GroupBy(asset => asset.Type).ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
-            return new ImportResult(manifest, cacheHits, written, counts);
+            var candidates = source.GetCandidates(path).Select(value => new RuntimeCandidate(value.Instance, value.Source, value.Length)).ToArray();
+            drafts.Add(new Draft(path, id, format, bytes, hash, references, candidates));
         }
-        finally
-        {
-            if (staging.Length != 0 && Directory.Exists(staging)) Directory.Delete(staging, recursive: true);
-        }
+
+        return (drafts, cacheHits);
     }
 
     private static IReadOnlyList<string> ValidateAndReadReferences(string path, Stream stream, AssetFormatInfo format)

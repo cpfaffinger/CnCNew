@@ -25,6 +25,11 @@ internal static class AssetTool
                 ["verify", var content] => await VerifyAsync(content),
                 ["audit-formats", var content] => AuditFormats(content),
                 ["audit-dependencies", var content] => AuditDependencies(content),
+                ["check-install", var game, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.CheckInstallAsync(game, options)),
+                ["describe-install", var game, var output, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.DescribeInstallAsync(game, output, options)),
+                ["install", var game, var target, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.InstallAsync(game, target, options)),
+                ["check-export", var content, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.CheckExportAsync(content, options)),
+                ["uninstall", var target, .. var options] => await InstallCommands.RunAsync(() => Task.FromResult(InstallCommands.Uninstall(target, options))),
                 _ => PrintUsage(),
             };
         }
@@ -291,6 +296,7 @@ internal static class AssetTool
         Console.Error.WriteLine("  CnCNew.AssetTool verify <content-directory>");
         Console.Error.WriteLine("  CnCNew.AssetTool audit-formats <content-directory>");
         Console.Error.WriteLine("  CnCNew.AssetTool audit-dependencies <content-directory>");
+        InstallCommands.PrintUsage();
         return 2;
     }
 
