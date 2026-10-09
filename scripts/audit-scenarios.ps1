@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-  Fuehrt die gestellten Demos (capture-building, tank-duel, jet-strafe; mit -Scenario exits die Fabrikausfahrten) ohne Fenster aus und prueft, was sie zeigen sollen.
+  Runs the staged demos (capture-building, tank-duel, jet-strafe; with -Scenario exits the factory exits) without a window and checks what they are meant to show.
 
 .DESCRIPTION
-  Baut PresentationTool (Release) und startet fuer jede Szene `scenario-audit`: Zeitverlauf der Objekte, Ereignisse und die szenenspezifischen Pruefungen
-  (Turmwinkel bei jedem Schuss, Fangstufen UNPACKING/RAISING_FLAG/PACKING, Flugphasen des Jets). Der Exitcode ist 1, sobald eine Szene eine Pruefung nicht besteht –
-  ein Fehlschlag ist hier ein Befund ueber den Stand der Simulation/Darstellung, kein Werkzeugfehler. Ausgaben liegen unter -OutDir (Standard: %TEMP%\cncnew-scenarios).
+  Builds PresentationTool (Release) and starts `scenario-audit` for every scene: timeline of the objects, events and the scene-specific checks
+  (turret angle at every shot, capture stages UNPACKING/RAISING_FLAG/PACKING, flight phases of the jet). The exit code is 1 as soon as a scene fails a check -
+  a failure here is a finding about the state of the simulation/presentation, not a tool error. The output lies under -OutDir (default: %TEMP%\cncnew-scenarios).
 
-  -Scenario all    (Standard) die drei Verhaltensszenen capture-building, tank-duel, jet-strafe
-  -Scenario exits  die neun Fabrikausfahrten exit-<fraktion>-<gebaeude> (mit -Faction nur eine Fraktion): Erscheinungsort, Tor, Ausfahrt durch die Torseite, Haltepunkt
-  -Scenario <Name> genau diese Szene (Namen: PresentationTool scenario-audit <Inhalt> ohne --name)
+  -Scenario all    (default) the three behaviour scenes capture-building, tank-duel, jet-strafe
+  -Scenario exits  the nine factory exits exit-<faction>-<building> (with -Faction only one faction): spawn position, door, exit through the door side, stopping point
+  -Scenario <name> exactly this scene (names: PresentationTool scenario-audit <content> without --name)
 
 .EXAMPLE
   .\scripts\audit-scenarios.ps1
@@ -19,13 +19,13 @@
 [CmdletBinding()]
 param(
     [string]$Scenario = 'all',
-    # Nur mit -Scenario exits: eine Fraktion statt aller drei.
+    # Only with -Scenario exits: one faction instead of all three.
     [ValidateSet('', 'America', 'China', 'GLA')]
     [string]$Faction = '',
     [string]$ContentDir,
     [string]$OutDir,
     [int]$Every = 30,
-    # Simulationsrate (30, 60 oder 120 Hz); 0 = Standard der Spielschicht. -Every und alle Zeitangaben der Ausgabe zaehlen Originalbilder (1/30 s) bei jeder Rate.
+    # Simulation rate (30, 60 or 120 Hz); 0 = the game layer's default. -Every and all times in the output count original frames (1/30 s) at every rate.
     [int]$TickRate = 0,
     [switch]$NoBuild
 )
@@ -33,16 +33,16 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 if (-not $ContentDir) { $ContentDir = Join-Path $repo 'game\content' }
-if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Inhaltsverzeichnis nicht gefunden: $ContentDir" }
+if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Content directory not found: $ContentDir (pass -ContentDir)." }
 $ContentDir = (Resolve-Path -LiteralPath $ContentDir).Path
 if (-not $OutDir) { $OutDir = Join-Path ([IO.Path]::GetTempPath()) 'cncnew-scenarios' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
 $project = Join-Path $repo 'tools\CnCNew.PresentationTool\CnCNew.PresentationTool.csproj'
 if (-not $NoBuild) {
-    Write-Host '== Baue PresentationTool (Release) ...' -ForegroundColor Cyan
+    Write-Host '== Building PresentationTool (Release) ...' -ForegroundColor Cyan
     dotnet build $project -c Release --nologo -v quiet
-    if ($LASTEXITCODE -ne 0) { throw "Build fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+    if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
 }
 
 $names = switch ($Scenario) {
@@ -62,7 +62,7 @@ foreach ($name in $names) {
     $code = $LASTEXITCODE
     Get-Content -LiteralPath $log | Where-Object { $_ -match '^(RESULT|  FAIL|Unhandled)' } | ForEach-Object { Write-Host $_ }
     if ($code -ne 0) { $failed++ }
-    Write-Host "   vollstaendige Ausgabe: $log"
+    Write-Host "   full output: $log"
 }
 
 exit ($failed -gt 0 ? 1 : 0)

@@ -1,18 +1,18 @@
 <#
 .SYNOPSIS
-  Prueft alle Projekte (Solution plus das Stride-Werkzeug ausserhalb der Solution) auf bekannte NuGet-Sicherheitsluecken.
+  Checks all projects (the solution plus the Stride tool outside the solution) for known NuGet vulnerabilities.
 
 .DESCRIPTION
-  Ruft `dotnet list <ziel> package --vulnerable --include-transitive --format json` auf und beendet sich mit Exitcode 1,
-  sobald irgendein Paket (direkt oder transitiv) eine Sicherheitsanfaelligkeit traegt. NuGetAudit bleibt im Build an;
-  dieses Skript ist die ausdrueckliche Abnahmepruefung (docs/DEMO-FINDINGS.md #1).
+  Calls `dotnet list <target> package --vulnerable --include-transitive --format json` and exits with code 1
+  as soon as any package (direct or transitive) carries a vulnerability. NuGetAudit stays on in the build;
+  this script is the explicit acceptance check (docs/DEMO-FINDINGS.md #1).
 
 .EXAMPLE
   .\scripts\audit-vulnerable.ps1
 #>
 [CmdletBinding()]
 param(
-    # Abweichende Ziele (Projekt-/Solution-Dateien), z. B. fuer den Selbsttest des Skripts.
+    # Other targets (project/solution files), e.g. for the script's self-test.
     [string[]]$Target
 )
 
@@ -27,7 +27,7 @@ $findings = 0
 foreach ($target in $targets) {
     Write-Host "== $([IO.Path]::GetFileName($target))" -ForegroundColor Cyan
     $json = dotnet list $target package --vulnerable --include-transitive --format json
-    if ($LASTEXITCODE -ne 0) { throw "dotnet list fehlgeschlagen fuer $target (Exitcode $LASTEXITCODE)." }
+    if ($LASTEXITCODE -ne 0) { throw "dotnet list failed for $target (exit code $LASTEXITCODE)." }
     $report = ($json -join "`n") | ConvertFrom-Json
     foreach ($project in $report.projects) {
         foreach ($framework in @($project.frameworks)) {
@@ -43,8 +43,8 @@ foreach ($target in $targets) {
 }
 
 if ($findings -gt 0) {
-    Write-Host "$findings Sicherheitsanfaelligkeit(en) gefunden." -ForegroundColor Red
+    Write-Host "$findings vulnerability(ies) found." -ForegroundColor Red
     exit 1
 }
-Write-Host 'Keine bekannten Sicherheitsanfaelligkeiten in direkten oder transitiven Paketen.' -ForegroundColor Green
+Write-Host 'No known vulnerabilities in direct or transitive packages.' -ForegroundColor Green
 exit 0
