@@ -427,6 +427,7 @@ run.Test("Original skirmish AI: the seed decides, the tick rate does not", Tests
 run.Test("Original skirmish AI: a power that was not ready is looked at again at the remembered frame", Tests.OriginalAiRemembersWhenToLookAtAPowerAgain);
 run.Test("Original skirmish AI: a team attacks one victim together, except on the easy level", Tests.OriginalAiTeamsAttackOneVictimTogetherExceptOnEasy);
 run.Test("Original skirmish AI: a team in the field is reinforced", Tests.OriginalAiReinforcesATeamInTheField);
+run.Test("Original skirmish AI: saved at any tick, also inside a frame at 60 and 120 Hz, the session continues identically", Tests.OriginalAiSessionContinuesFromAnyTick);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Skirmish: a live session refuses to be saved (explicit, loud guard)", Tests.SkirmishSessionRefusesToSave);
 run.Test("Projectiles: straight shell flight time, impact event and detonation effect", Tests.ProjectileStraightShellFlightTime);
@@ -563,6 +564,7 @@ if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turr
 if (contentDirectory is not null) run.Test("Real data: retail AutoAcquire flags; a Crusader and a Battlemaster fight without orders", () => Tests.RealAcquisition(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI with the shipped script library on Alpine Assault", () => Tests.RealOriginalSkirmishAi(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI plays the same match at 30, 60 and 120 Hz", () => Tests.RealOriginalSkirmishAiAcrossRates(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: a session of the original skirmish AI saved inside a frame at 60 and 120 Hz continues identically", () => Tests.RealOriginalSkirmishAiContinuesFromAnyTick(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: every retail DeployStyleAIUpdate object is ready to attack, fires and is packed after the same time at 30, 60 and 120 Hz", () => Tests.RealDeployStyleTimesAreTheSame(contentDirectory));

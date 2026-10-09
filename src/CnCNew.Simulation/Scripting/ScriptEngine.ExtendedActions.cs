@@ -31,6 +31,8 @@ public sealed partial class ScriptEngine
         /// <summary>One unit for a team in the field (<c>TeamInQueue::m_reinforcement</c>, <c>AIPlayer::selectTeamToReinforce</c>) and the tick it was asked for; the team stays active meanwhile.</summary>
         public bool Reinforcement;
         public long Started;
+        /// <summary><c>TeamInQueue::m_reinforcementID</c>: the trained unit of a reinforcement, to be sent after its team at the next update (0: none yet).</summary>
+        public uint Recruit;
     }
 
     private readonly List<TeamBuildOrder> _teamBuilds = [];
@@ -369,6 +371,7 @@ public sealed partial class ScriptEngine
     private void ProcessTeamBuilds()
     {
         if (_teamBuilds.Count == 0) return;
+        SendTrainedReinforcements();
         AiDropFinishedTeamBuilds();
         foreach (var order in _teamBuilds)
         {
@@ -424,8 +427,13 @@ public sealed partial class ScriptEngine
         order.Joined++;
         if (!joined.Members.Contains(unit.Id.Value)) joined.Members.Add(unit.Id.Value);
         if (joined.AttackPriority.Length > 0) _prioritySetOf[unit.Id.Value] = joined.AttackPriority;
-        if (order.Reinforcement) JoinTeam(unit, joined);
-        else if (_program.FindTeam(joined.Prototype) is { Home.Length: > 0 } built && _program.FindWaypoint(built.Home) is { } home && unit.Template.Locomotor is not null) MoveTo(unit, home.X, home.Y);
+        // A trained reinforcement is sent after its team by the next update (ProcessTeamBuilds), on the frame grid, as checkReadyTeams does it; its order stays until then.
+        if (order.Reinforcement)
+        {
+            order.Recruit = unit.Id.Value;
+            return;
+        }
+        if (_program.FindTeam(joined.Prototype) is { Home.Length: > 0 } built && _program.FindWaypoint(built.Home) is { } home && unit.Template.Locomotor is not null) MoveTo(unit, home.X, home.Y);
         if (_teamBuilds.Where(other => other.TeamId == order.TeamId).All(other => other.Joined >= other.Total)) _teamBuilds.RemoveAll(other => other.TeamId == order.TeamId);
     }
 
@@ -448,6 +456,7 @@ public sealed partial class ScriptEngine
             {
                 writer.Bool("reinforcement", true);
                 writer.Int("started", order.Started);
+                if (order.Recruit != 0) writer.UInt("recruit", order.Recruit);
             }
             writer.EndObject();
         }
@@ -465,6 +474,7 @@ public sealed partial class ScriptEngine
                 Queued = checked((int)item.Int("queued")), Joined = checked((int)item.Int("joined")), FactoryMissing = item.Bool("factoryMissing"),
                 IdleOnly = item.Has("idleOnly") && item.Bool("idleOnly"),
                 Reinforcement = item.Has("reinforcement") && item.Bool("reinforcement"), Started = item.Has("started") ? item.Int("started") : 0,
+                Recruit = item.Has("recruit") ? checked((uint)item.UInt("recruit")) : 0,
             });
     }
 }

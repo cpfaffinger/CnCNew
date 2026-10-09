@@ -114,6 +114,18 @@ public sealed partial class ScriptEngine
         MoveTo(unit, other.X, other.Y, attack: !IsIdle(other));
     }
 
+    /// <summary><c>AIPlayer::checkReadyTeams</c> for a reinforcement: the trained unit joins what its team is doing (<c>joinTeam</c>) and the order is done.</summary>
+    private void SendTrainedReinforcements()
+    {
+        for (var index = _teamBuilds.Count - 1; index >= 0; index--)
+        {
+            var order = _teamBuilds[index];
+            if (!order.Reinforcement || order.Joined < order.Total) continue;
+            if (order.Recruit != 0 && _teams.TryGetValue(order.TeamId, out var team) && _world.FindEntity(new EntityId(order.Recruit)) is { DestroyRequested: false, EffectivelyDead: false } unit) JoinTeam(unit, team);
+            _teamBuilds.RemoveAt(index);
+        }
+    }
+
     /// <summary>A reinforcement that could not be trained within the build time of its team (<c>teamInitialIdleFrames</c>) is given up, so that the team can be looked at again.</summary>
     private void DropExpiredReinforcements()
     {
