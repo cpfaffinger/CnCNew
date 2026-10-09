@@ -30,6 +30,8 @@ internal sealed class ObjectLayerStats
     /// <summary>Muzzle flash sub-objects of drawn parts this frame: hidden because the weapon did not just fire / shown by a shot.</summary>
     public int MuzzleFlashesHidden;
     public int MuzzleFlashesShown;
+    /// <summary>Headlight sub-objects hidden in the last frame because it is not night (W3DModelDraw::hideAllHeadlights).</summary>
+    public int HeadlightsHidden;
 
     /// <summary>Model parts drawn with a flash tint this frame (a building that is being captured) / since the start (cumulative: a flash lasts five ticks).</summary>
     public int FlashTinted;
@@ -81,7 +83,7 @@ internal sealed class ObjectLayerStats
     }
 
     public override string ToString() =>
-        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} wheels={WheelsDriven} flashes={MuzzleFlashesShown}/{MuzzleFlashesShown + MuzzleFlashesHidden} tinted={FlashTinted} tintedTotal={FlashTintedTotal} translucent={Translucent} triangles={Triangles} " +
+        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} wheels={WheelsDriven} flashes={MuzzleFlashesShown}/{MuzzleFlashesShown + MuzzleFlashesHidden} headlightsHidden={HeadlightsHidden} tinted={FlashTinted} tintedTotal={FlashTintedTotal} translucent={Translucent} triangles={Triangles} " +
         $"models={ModelsLoaded} missingModels={ModelsMissing} missingTextures={TexturesMissing} missingAnimations={MissingAnimations} placeholders={Placeholders} gpuProblems={GpuResourceProblems} " +
         $"frameMs={FrameMilliseconds:F3} avgMs={AverageFrameMilliseconds:F3} allocB={FrameAllocatedBytes}";
 }

@@ -78,6 +78,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         stats.WheelsDriven = 0;
         stats.MuzzleFlashesHidden = 0;
         stats.MuzzleFlashesShown = 0;
+        stats.HeadlightsHidden = 0;
         stats.FlashTinted = 0;
         stats.Translucent = 0;
         stats.Triangles = 0;
@@ -301,6 +302,12 @@ internal sealed class ObjectLayerCore : IWorldLayer
             {
                 visible = pose.IsBoneVisible(rigidPart.BoneIndex) && drawable.HasFired(flashSlot);
                 if (visible) Stats.MuzzleFlashesShown++; else Stats.MuzzleFlashesHidden++;
+            }
+            // W3DModelDraw::hideAllHeadlights: every sub-object whose name contains HEADLIGHT (the light cones of vehicles) is hidden unless the drawable has the NIGHT condition.
+            if (visible && rigidPart.FullName.Contains("HEADLIGHT", StringComparison.OrdinalIgnoreCase) && !drawable.Conditions.Contains(CnCNew.Presentation.Objects.ModelConditions.Night))
+            {
+                visible = false;
+                Stats.HeadlightsHidden++;
             }
             // The EnableRender bit alone did not hide the mesh in the running client (hiding every part of a tank left it fully drawn, 4 Oct 2026): a hidden part also gets a
             // degenerate world matrix, which no triangle survives.
