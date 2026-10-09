@@ -1,377 +1,377 @@
-# Deterministischer Simulationskern (Phase 4, erweitert in Phase 5 und 6)
+# Deterministic simulation core (Phase 4, extended in Phases 5 and 6)
 
-Stand: 30. September 2026 (Phase 6 abgeschlossen, Phase 8 Paket E1: Projektilflugzeit, Transporter, Tunnel, Chinook; §1–§12 beschreiben den Kern und die Phase-5-Regeln, `docs/GAME-RULES.md`
-die Spielregeln, §13–§20 die Phase-6-Erweiterungen: Terrain, Navigation, Sicht, Bau, Kraftwerke, Skirmish-KI, §21 das Paket E1)
+As of: 30 September 2026 (Phase 6 completed, Phase 8 package E1: projectile flight time, transports, tunnels, Chinook; §1–§12 describe the core and the Phase 5 rules, `docs/GAME-RULES.md`
+the game rules, §13–§20 the Phase 6 extensions: terrain, navigation, vision, construction, power plants, skirmish AI, §21 package E1)
 
-`CnCNew.Simulation` ist die headless laufende, deterministische Welt: fester Tick, stabile IDs,
-reproduzierbare Zufallszahlen, Befehlsqueue, Objekt-/Modul-Lebenszyklus, Timer, Events,
-kanonische Snapshots, Zustands-Hashes und ein Replay-Harness. Das Projekt hängt ausschließlich von
-`CnCNew.Data` ab (kein Stride, keine UI, kein Content-/Archiv-/Dateisystemzugriff). Ein Test
-(`SourceRules`) erzwingt das mechanisch: verbotene Konstrukte im Quelltext (Wandzeit, ambiente
-Zufallszahlen, `float`/`double`, Threads, Dateizugriff, Reflection) und jede Assemblyreferenz außer
-`CnCNew.Data` und der BCL lassen den Test scheitern.
+`CnCNew.Simulation` is the headless, deterministic world: fixed tick, stable IDs,
+reproducible random numbers, command queue, object/module life cycle, timers, events,
+canonical snapshots, state hashes and a replay harness. The project depends exclusively on
+`CnCNew.Data` (no Stride, no UI, no content/archive/file system access). A test
+(`SourceRules`) enforces this mechanically: forbidden constructs in the source text (wall-clock time, ambient
+random numbers, `float`/`double`, threads, file access, reflection) and every assembly reference other than
+`CnCNew.Data` and the BCL make the test fail.
 
-**Hinweis (9. Oktober 2026, Phase 23):** die Simulation läuft seit `e8632bb` standardmäßig mit **60 Hz**. Hashwerte, Siegticks, Tickbudgets und Laufzeiten in den Abschnitten vor §43 sind Abschriften des jeweiligen Stands bei 30 Hz und **historisch**; maßgeblich ist `baselines/reference-manifest.json` (60 Hz, Schema 2), die aktuellen Werte stehen in §43.9.
+**Note (9 October 2026, Phase 23):** since `e8632bb` the simulation runs at **60 Hz** by default. Hash values, winning ticks, tick budgets and run times in the sections before §43 are copies of the respective state at 30 Hz and **historical**; authoritative is `baselines/reference-manifest.json` (60 Hz, schema 2), the current values are in §43.9.
 
-Die Fachgrundlagen der Definitionsdaten (Block 0 der Phase) stehen in `TYPED-DEFINITIONS.md` und
-`PHASE3-COMPATIBILITY.md`; dieses Dokument beschreibt den Kern selbst.
+The domain foundations of the definition data (block 0 of the phase) are in `TYPED-DEFINITIONS.md` and
+`PHASE3-COMPATIBILITY.md`; this document describes the core itself.
 
-## 1. Tick und Numerik
+## 1. Tick and numerics
 
-### Zeit und Einheiten
+### Time and units
 
-Die Tickrate ist ein **Wert der Welt** (Phase 20; Einzelheiten, Zählungen und die offenen Listen in `docs/TICKRATE-MIGRATION.md`):
+The tick rate is a **value of the world** (Phase 20; details, counts and the open lists in `docs/TICKRATE-MIGRATION.md`):
 
-- **Rate:** `WorldConfiguration.Rate` vom Typ `SimulationRate`. Unterstützt sind genau 30, 60 und 120 Hz (30 · 2ᵏ); alles andere wird beim
-  Erzeugen von Welt, Katalog, Snapshot und Replay abgelehnt. Der Katalog (`TemplateCatalog.Build(…, rate, …)`) wird **für eine Rate gebaut**
-  – er enthält Ticks und Werte je Tick –, und eine Welt lehnt einen Katalog einer anderen Rate ab. Bis Phase 23 liefen alle Sitzungen mit
-  30 Hz. **Seit Phase 23 (`e8632bb`, 8. Oktober 2026) ist der Standard einer Sitzung 60 Hz**: die eine Definition ist
-  `ProductRate.TicksPerSecond` in `CnCNew.Game` (daraus `GameData.DefaultSessionRate`, Client, Werkzeuge und Tests). Die Simulation selbst
-  kennt keinen Standard – wer eine Welt erzeugt, nennt die Rate –, und die Rate bleibt ein Wert der Welt. 30 und 120 Hz bleiben
-  unterstützt und werden von der Raten-Äquivalenz-Suite (§39) gegen 30 Hz geprüft; oberhalb von 30 Hz gilt die Bildkonvention aus §43
-  („der 30-Hz-Schritt ist die Definition, höhere Raten unterteilen ihn“). Was bei einer Rate aufgezeichnet ist, trägt seine Rate: Replays, Snapshots und
-  Speicherstände werden von einer Sitzung anderer Rate abgelehnt, ein Manifest wird mit der Rate seiner Datei geprüft.
-- **Drei Einheiten für Zeit.** *Tick*: ein Schritt der Simulation (`SimulationWorld.Tick` ist die Zahl der ausgeführten Ticks und zugleich
-  die Nummer des nächsten); Zustand, Snapshots, Replays und Befehle tragen Ticks der Rate der Welt. *Bild des Originals*: 1/30 s
-  (`LOGICFRAMES_PER_SECOND`, `GameCommon.h:72`; `SimulationRate.OriginalFramesPerSecond` ist die einzige benannte 30 der Simulation) –
-  die Einheit aller Konstanten des Originals, aller eigenen Fristen und Rhythmen und der Bildzähler der Kartenskripte. *Sekunden und
-  Millisekunden*: die Einheit der Daten. Es gibt keine Wandzeit im Kern.
-- **Rasterregel:** Dauern bleiben auf dem 30-Hz-Raster des Originals. Eine Dauer aus den Daten wird wie im Original auf ganze Bilder
-  aufgerundet und dann mit Rate/30 multipliziert (eine Nachladezeit von 50 ms dauert bei jeder Rate zwei Bilder); eine Konstante in Bildern
-  wird mit Rate/30 multipliziert; was zur Laufzeit gerundet, begrenzt, gezählt oder gewürfelt wird, wird in Bildern gerechnet und erst das
-  Ergebnis skaliert (`FrameGrid`: `AtLeastOneFrame`, `CountdownReload`, `DrawFrames`, `FloorToFrame`). Größen je Sekunde werden durch die
-  Rate bzw. ihr Quadrat geteilt, additive Rohwerte je Bild durch Rate/30 bzw. dessen Quadrat.
-- **Ein Weg:** jede Umrechnung geht über den Zeitdienst `SimulationTime` – zur Laufzeit `world.Time`, beim Katalogbau der Zeitdienst der
-  Rate (`configuration.Time`, `timing`). Kein Modul rechnet mit einer Rate. Literale, die Reihenfolge meinen („im nächsten Tick“), werden
-  mit `TickOrder.Next` geschrieben und nie skaliert; `SimulationTiming` enthält nur noch, was nicht von der Rate abhängt (`SleepNone`,
-  `SleepForever`, Grad → Bogenmaß, Verhältnisse). Der Test `SourceRules` verbietet nackte Tickzahlen in der Simulation
+- **Rate:** `WorldConfiguration.Rate` of type `SimulationRate`. Exactly 30, 60 and 120 Hz (30 · 2ᵏ) are supported; everything else is rejected when
+  a world, catalog, snapshot or replay is created. The catalog (`TemplateCatalog.Build(…, rate, …)`) is **built for one rate**
+  – it contains ticks and values per tick –, and a world rejects a catalog of another rate. Until Phase 23 all sessions ran at
+  30 Hz. **Since Phase 23 (`e8632bb`, 8 October 2026) the default of a session is 60 Hz**: the one definition is
+  `ProductRate.TicksPerSecond` in `CnCNew.Game` (from it `GameData.DefaultSessionRate`, client, tools and tests). The simulation itself
+  knows no default – whoever creates a world names the rate –, and the rate remains a value of the world. 30 and 120 Hz remain
+  supported and are checked against 30 Hz by the rate-equivalence suite (§39); above 30 Hz the frame convention from §43 applies
+  ("the 30 Hz step is the definition, higher rates subdivide it"). What is recorded at a rate carries its rate: replays, snapshots and
+  savegames are rejected by a session of another rate, a manifest is checked with the rate of its file.
+- **Three units for time.** *Tick*: one step of the simulation (`SimulationWorld.Tick` is the number of executed ticks and at the same time
+  the number of the next one); state, snapshots, replays and commands carry ticks of the rate of the world. *Original frame*: 1/30 s
+  (`LOGICFRAMES_PER_SECOND`, `GameCommon.h:72`; `SimulationRate.OriginalFramesPerSecond` is the only named 30 of the simulation) –
+  the unit of all constants of the original, of all own deadlines and rhythms and of the frame counters of the map scripts. *Seconds and
+  milliseconds*: the unit of the data. There is no wall-clock time in the core.
+- **Grid rule:** durations stay on the 30 Hz grid of the original. A duration from the data is rounded up to whole frames as in the original
+  and then multiplied by rate/30 (a reload time of 50 ms lasts two frames at every rate); a constant in frames
+  is multiplied by rate/30; whatever is rounded, clamped, counted or rolled at run time is computed in frames and only the
+  result is scaled (`FrameGrid`: `AtLeastOneFrame`, `CountdownReload`, `DrawFrames`, `FloorToFrame`). Quantities per second are divided by the
+  rate or its square, additive raw values per frame by rate/30 or its square.
+- **One way:** every conversion goes through the time service `SimulationTime` – at run time `world.Time`, during the catalog build the time service of the
+  rate (`configuration.Time`, `timing`). No module computes with a rate. Literals that mean order ("in the next tick") are
+  written with `TickOrder.Next` and never scaled; `SimulationTiming` now only contains what does not depend on the rate (`SleepNone`,
+  `SleepForever`, degrees → radians, ratios). The test `SourceRules` forbids bare tick numbers in the simulation
   (`docs/TICKRATE-MIGRATION.md` §10).
-- **Nicht erledigt:** richtiges Verhalten bei 60 und 120 Hz. Die Simulation läuft dort durch und ist deterministisch
-  (`docs/TICKRATE-MIGRATION.md` §11); Integration je Tick, multiplikative Faktoren je Bild und Abtastung je Tick stehen als Liste für
-  Phase 23 in §5 dort.
+- **Not done:** correct behaviour at 60 and 120 Hz. The simulation runs through there and is deterministic
+  (`docs/TICKRATE-MIGRATION.md` §11); integration per tick, multiplicative factors per frame and sampling per tick are listed for
+  Phase 23 in §5 there.
 
-- **Zahlenart:** Zustand besteht nur aus Ganzzahlen und `Fixed`. `Fixed` ist seit Phase 22 ein Q39.24-Festkomma in
-  einem `long` (24 Nachkommabits, Auflösung 2⁻²⁴ ≈ 6·10⁻⁸ Welteinheiten, Bereich ±5,5·10^11; bis Phase 22: Q47.16,
-  Auflösung 2⁻¹⁶, Bereich ±1,4·10^14 – alle Rohwerte, Hashes und Formatversionen in den Abschnitten vor §38 stammen
-  aus dieser Zeit und sind überholt). Die Zahl der Nachkommabits steht an genau einer Stelle (`Fixed.FractionBits`);
-  die Arithmetik (`FixedMath`) ist für eine Bitzahl hergeleitet, nicht für sechzehn (§38, `docs/FIXED-POINT-Q39-24.md`).
-  Begründung der Zahlenart: Das Original hält
-  binary32-`Real` im Zustand und setzt dafür `setFPMode()` (`INI::load`); Ganzzahlarithmetik ist auf jeder Plattform
-  bitgleich. Produkte und Quotienten sind exakt die der 128-Bit-Formeln. Ein Wert über 741.455 darf nicht quadriert
-  werden (sein Quadrat verlässt den Bereich und wirft).
-- **Rundungsregel (überall):** zur nächsten Zahl, Halbwerte weg von null. Überlauf wirft `OverflowException`;
-  nichts wickelt oder sättigt still. Division durch null wirft.
-- **Umrechnungen** (`SimulationTime`; R = Rate, f = R/30). Rundung und Reihenfolge je Funktion stehen in
-  `docs/TICKRATE-MIGRATION.md` §2; bei 30 Hz ist jede Zeile der frühere Ausdruck.
+- **Kind of number:** state consists only of integers and `Fixed`. Since Phase 22 `Fixed` is a Q39.24 fixed point in
+  a `long` (24 fractional bits, resolution 2⁻²⁴ ≈ 6·10⁻⁸ world units, range ±5.5·10^11; until Phase 22: Q47.16,
+  resolution 2⁻¹⁶, range ±1.4·10^14 – all raw values, hashes and format versions in the sections before §38 come
+  from that time and are superseded). The number of fractional bits is in exactly one place (`Fixed.FractionBits`);
+  the arithmetic (`FixedMath`) is derived for a number of bits, not for sixteen (§38, `docs/FIXED-POINT-Q39-24.md`).
+  Reason for the kind of number: the original keeps
+  binary32 `Real` in the state and sets `setFPMode()` for it (`INI::load`); integer arithmetic is bit-identical on every
+  platform. Products and quotients are exactly those of the 128-bit formulas. A value above 741,455 must not be squared
+  (its square leaves the range and throws).
+- **Rounding rule (everywhere):** to the nearest number, half values away from zero. Overflow throws `OverflowException`;
+  nothing wraps or saturates silently. Division by zero throws.
+- **Conversions** (`SimulationTime`; R = rate, f = R/30). Rounding and order per function are in
+  `docs/TICKRATE-MIGRATION.md` §2; at 30 Hz every row is the former expression.
 
-| Datenwert | Regel | Referenz |
+| Data value | Rule | Reference |
 |---|---|---|
-| Dauer in ms → ganze Ticks | `ceil(ms · 30 / 1000) · f`, exakt in Ganzzahl-/Dezimalarithmetik; 0 ms = 0 Ticks; negativ → Fehler | `INI::parseDurationUnsignedInt` (`ceilf`) |
-| Dauer in ms → Ticks (ungerundet) | `Fixed(ms · R / 1000)` | `INI::parseDurationReal` |
-| Sekunden (`BuildTime`) → Ticks | `ceil(s · 30) · f` | – |
-| Bilder des Originals → Ticks | `n · f` (exakt) | Konstanten des Originals in Logikbildern |
-| Geschwindigkeit pro s → pro Tick | `v / R` | `ConvertVelocityInSecsToFrames` |
-| Beschleunigung pro s² → pro Tick² | `a / R²` | `ConvertAccelerationInSecsToFrames` |
-| Rohwert je Bild → je Tick (additiv) | `v / f`, je Bild² `v / f²` | Felder, die das Original je Bild anwendet |
-| Grad → Bogenmaß | `deg · π / 180`, π auf 28 Stellen | `INI::parseAngleReal` |
-| Grad/s → Bogenmaß/Tick | `deg · π / 180 / R` | `ConvertAngularVelocityInDegreesPerSecToRadsPerFrame` |
-| Prozent | Verhältnis (`50 %` → 0,5) als `Fixed` | `INI::parsePercentToReal` |
+| Duration in ms → whole ticks | `ceil(ms · 30 / 1000) · f`, exact in integer/decimal arithmetic; 0 ms = 0 ticks; negative → error | `INI::parseDurationUnsignedInt` (`ceilf`) |
+| Duration in ms → ticks (unrounded) | `Fixed(ms · R / 1000)` | `INI::parseDurationReal` |
+| Seconds (`BuildTime`) → ticks | `ceil(s · 30) · f` | – |
+| Original frames → ticks | `n · f` (exact) | constants of the original in logic frames |
+| Speed per s → per tick | `v / R` | `ConvertVelocityInSecsToFrames` |
+| Acceleration per s² → per tick² | `a / R²` | `ConvertAccelerationInSecsToFrames` |
+| Raw value per frame → per tick (additive) | `v / f`, per frame² `v / f²` | fields that the original applies per frame |
+| Degrees → radians | `deg · π / 180`, π to 28 digits | `INI::parseAngleReal` |
+| Degrees/s → radians/tick | `deg · π / 180 / R` | `ConvertAngularVelocityInDegreesPerSecToRadsPerFrame` |
+| Percent | ratio (`50 %` → 0.5) as `Fixed` | `INI::parsePercentToReal` |
 
-- **Abweichung Dauern:** Das Original rechnet `ceilf((Real)msec · (30.0f/1000.0f))` in binary32. Ein Test emuliert das
-  in IEEE-binary32 und vergleicht mit der exakten Regel über 0 bis 5.000.000 ms (≈ 83 Minuten): **6.310 von 5.000.001 Werten
-  weichen ab**, alle um genau einen Tick nach unten (24-Bit-Mantisse); der erste Unterschied liegt bei 4.369.067 ms
-  (≈ 73 Minuten). Alle Dauern unter 4.000.000 ms (≈ 66 Minuten) sind identisch. Der Kern rechnet exakt.
-- **Grenzwerte** (getestet): 0 ms, 1 ms, 33/34 ms (Rundung), 4.294.967.295 ms (128.849.019 Ticks), Überlauf von
-  `decimal`/`long`, negative Dauern, `Fixed`-Über- und Unterlauf, `Halbwert`-Rundung bei Multiplikation, Division und
-  Dezimalkonvertierung, `Floor`/`Ceiling`/`Round` bei negativen Werten. Negative Dauern in den Daten folgen
-  `sscanf("%u")`: `MinLifetime = -1` (Karte `MD_GLA01`) ergibt 4.294.967.295 ms und wird als
-  `compatibility-unsigned-wrap` sichtbar gemacht.
+- **Deviation for durations:** the original computes `ceilf((Real)msec · (30.0f/1000.0f))` in binary32. A test emulates this
+  in IEEE binary32 and compares with the exact rule over 0 to 5,000,000 ms (≈ 83 minutes): **6,310 of 5,000,001 values
+  deviate**, all by exactly one tick downwards (24-bit mantissa); the first difference is at 4,369,067 ms
+  (≈ 73 minutes). All durations below 4,000,000 ms (≈ 66 minutes) are identical. The core computes exactly.
+- **Limit values** (tested): 0 ms, 1 ms, 33/34 ms (rounding), 4,294,967,295 ms (128,849,019 ticks), overflow of
+  `decimal`/`long`, negative durations, `Fixed` overflow and underflow, `Halbwert` rounding in multiplication, division and
+  decimal conversion, `Floor`/`Ceiling`/`Round` for negative values. Negative durations in the data follow
+  `sscanf("%u")`: `MinLifetime = -1` (map `MD_GLA01`) yields 4,294,967,295 ms and is made visible as
+  `compatibility-unsigned-wrap`.
 
-## 2. IDs und kanonische Ordnung
+## 2. IDs and canonical order
 
-- `EntityId` beginnt bei 1, **0 ist ungültig** (`INVALID_ID`, `GameLogic::allocateObjectID`: `m_nextObjID = 1`, danach
-  `+1`). IDs werden **nie wiederverwendet** (das Original vergibt ebenfalls monoton; die Lückensuche steht dort als
-  `@todo`). `EventId`, `TimerId` und `CommandId` sind ebenfalls monotone Zähler ab 1; `PlayerId` 0 ist die eingebaute
-  Systeminstanz (Skripte, Werkzeuge, Tests), echte Spieler beginnen bei 1; `WorldId` vergibt der Ersteller der Welt.
-- Alle Zähler sind Teil des Zustands (Hash und Snapshot).
-- **Update-Reihenfolge** hängt weder von `Dictionary`-/`HashSet`-Reihenfolge noch von Threads ab: Updates nach
-  (Weckzeit, Entity-ID, Modulindex), Befehle nach (Spieler-ID, Sequenz), Timer nach (Fälligkeit, Timer-ID), Zerstörungen
-  in aufsteigender Entity-ID, Spawns in Reservierungsreihenfolge (= aufsteigende ID), Events nach Event-ID.
+- `EntityId` starts at 1, **0 is invalid** (`INVALID_ID`, `GameLogic::allocateObjectID`: `m_nextObjID = 1`, then
+  `+1`). IDs are **never reused** (the original also assigns monotonically; the gap search is there as a
+  `@todo`). `EventId`, `TimerId` and `CommandId` are likewise monotonic counters from 1; `PlayerId` 0 is the built-in
+  system instance (scripts, tools, tests), real players start at 1; `WorldId` is assigned by the creator of the world.
+- All counters are part of the state (hash and snapshot).
+- **Update order** depends neither on `Dictionary`/`HashSet` order nor on threads: updates by
+  (wake time, entity ID, module index), commands by (player ID, sequence), timers by (due time, timer ID), destructions
+  in ascending entity ID, spawns in reservation order (= ascending ID), events by event ID.
 
-### Sleepy-Update-Modell
+### Sleepy update model
 
-Übernommen wird das Modell des Originals (`GameLogic::m_sleepyUpdates`, `UpdateModule`): Jedes Updatemodul hat einen
-absoluten Weckzeitpunkt, ein Min-Heap mit Rückverweis (`indexInLogic`) hält die geplanten Module, `update()` liefert
-die Schlafdauer (≥ 1, `UPDATE_SLEEP_NONE = 1`, `UPDATE_SLEEP_FOREVER = 0x3fffffff`), Weckzeiten werden auf
-`UPDATE_SLEEP_FOREVER` begrenzt, `setWakeFrame` aus dem eigenen `update()` wird ignoriert, und der Sonderfall
-„bereits wach, will nächsten Tick“ ändert nichts (`friend_awakenUpdateModule`).
+The model of the original is adopted (`GameLogic::m_sleepyUpdates`, `UpdateModule`): every update module has an
+absolute wake time, a min-heap with back reference (`indexInLogic`) holds the scheduled modules, `update()` returns
+the sleep duration (≥ 1, `UPDATE_SLEEP_NONE = 1`, `UPDATE_SLEEP_FOREVER = 0x3fffffff`), wake times are clamped to
+`UPDATE_SLEEP_FOREVER`, `setWakeFrame` from the module's own `update()` is ignored, and the special case
+"already awake, wants the next tick" changes nothing (`friend_awakenUpdateModule`).
 
-Bewusste Abweichungen:
-1. **Totale Ordnung statt Heap-Zufall.** Das Original vergleicht nur `(Frame << 2) | Phase`; bei Gleichstand entscheidet die
-   Heapstruktur. Der Kern sortiert zusätzlich nach Entity-ID und Modulindex; die Reihenfolge ist damit unabhängig von der
-   Heapimplementierung.
-2. **Keine Update-Phasen.** `SleepyUpdatePhase` (0..3) wird noch von keinem implementierten Modul benutzt; alle Module
-   laufen in Phase 0. Sobald ein Modul Phasen braucht, wird der Schlüssel erweitert (Grenze).
-3. **„Forever“ = nicht eingeplant.** Module mit Weckzeit ≥ `UPDATE_SLEEP_FOREVER` liegen nicht im Heap (das Original hält
-   sie am Heapende); dadurch kehrt die Tabelle nach Ablauf aller Lebensdauern auf null zurück.
-4. **Zerstörte Entities.** Ein Entity, das in diesem Tick zur Zerstörung markiert wurde, wird nicht mehr aktualisiert
-   (das Original prüft das nicht im Sleepy-Loop und löscht erst am Frameende).
+Deliberate deviations:
+1. **Total order instead of heap chance.** The original compares only `(Frame << 2) | Phase`; on a tie the
+   heap structure decides. The core additionally sorts by entity ID and module index; the order is thereby independent of the
+   heap implementation.
+2. **No update phases.** `SleepyUpdatePhase` (0..3) is not yet used by any implemented module; all modules
+   run in phase 0. As soon as a module needs phases, the key is extended (limit).
+3. **"Forever" = not scheduled.** Modules with a wake time ≥ `UPDATE_SLEEP_FOREVER` are not in the heap (the original keeps
+   them at the end of the heap); as a result the table returns to zero after all lifetimes have expired.
+4. **Destroyed entities.** An entity that was marked for destruction in this tick is no longer updated
+   (the original does not check this in the sleepy loop and deletes only at the end of the frame).
 
-## 3. Zufallszahlen
+## 3. Random numbers
 
-- **Algorithmus:** `SageRandom` ist eine 1:1-Portierung von `RandomValue.cpp` (`randomValue`, `seedRandom`,
-  `GetGameLogicRandomValue`): sechs 32-Bit-Wörter, Addition mit Übertrag über alle Wörter, danach übertragsfortpflanzendes
-  Inkrement des untersten Wortes. Auch die Randfälle des Originals bleiben erhalten: `delta = hi - lo + 1` läuft als
-  `unsigned` über (voller Bereich liefert `hi` ohne Zug), Bereiche mit `hi < lo` verhalten sich wie im Original.
-- **Streams und Seedableitung** (`RandomStreams`): `logic`, `cosmetic` (im Original „client“) und `audio`. Jeder Stream
-  wird wie in `InitRandom(seed)` mit demselben Weltseed über `seedRandom` initialisiert und schreitet danach unabhängig
-  fort. Nur `logic` darf die Simulation ziehen und ist Teil des Tick-Hashes. `cosmetic` und `audio` gehören der
-  Präsentation, stehen im Snapshot, aber **nicht** im Hash. Es gibt keinen ambienten Generator (`Random.Shared` ist
-  verboten und wird mechanisch geprüft).
-- **Abweichung Real-Zufall:** Das Original multipliziert mit einem binary32-Faktor; `Range(Fixed, Fixed)` rechnet exakt
-  `lo + (hi − lo) · r / (2^32 − 1)` in Festkomma (überschreitet `hi` nie).
-- **Golden-Werte, unabhängig berechnet.** Auf dieser Maschine steht kein C++-Compiler (`gcc`, `clang`, `cl` fehlen), die
-  Referenz konnte daher nicht kompiliert werden. Stattdessen entstand eine getrennte Python-Transkription
-  (`randomValue`, `seedRandom`, `range` mit expliziten 32-Bit-Masken, direkt aus `RandomValue.cpp` abgeschrieben, ohne den
-  C#-Code anzusehen). Getestet sind die ersten 8 Rohwerte und der Zustand danach für die Seeds `0`, `1`, `0x12345678`,
-  `0xFFFFFFFF`; Bereichsziehungen `[0,99]` und `[-5,5]` (je 12 Werte); der Zustand nach **1.000.000 Zügen** (Seed
-  `0x12345678`: `d020b74b dafd10ec e5c0df3d 405d1ab8 3717abd5 8222d41c`); konstruierte Übertragsketten einschließlich der
-  vollen Inkrement-Kaskade (`[0,0,0,0,0,0xFFFFFFFF]` → Rückgabe 0 und Nullzustand); der Vollbereichsfall. Die
-  Handrechnung ist damit die dokumentierte Ersatzbeweisführung; ein Abgleich mit dem kompilierten Original bleibt als
-  Schuld für einen Rechner mit Compiler offen (Phase 5 braucht ihn ohnehin für die Golden-Master-Szenarien).
+- **Algorithm:** `SageRandom` is a 1:1 port of `RandomValue.cpp` (`randomValue`, `seedRandom`,
+  `GetGameLogicRandomValue`): six 32-bit words, addition with carry across all words, then a carry-propagating
+  increment of the lowest word. The edge cases of the original are preserved too: `delta = hi - lo + 1` overflows as
+  `unsigned` (the full range yields `hi` without a draw), ranges with `hi < lo` behave as in the original.
+- **Streams and seed derivation** (`RandomStreams`): `logic`, `cosmetic` ("client" in the original) and `audio`. Each stream
+  is initialised as in `InitRandom(seed)` with the same world seed via `seedRandom` and then advances
+  independently. Only `logic` may be drawn by the simulation and is part of the tick hash. `cosmetic` and `audio` belong to the
+  presentation, are in the snapshot, but **not** in the hash. There is no ambient generator (`Random.Shared` is
+  forbidden and is checked mechanically).
+- **Deviation for Real random:** the original multiplies by a binary32 factor; `Range(Fixed, Fixed)` computes exactly
+  `lo + (hi − lo) · r / (2^32 − 1)` in fixed point (never exceeds `hi`).
+- **Golden values, computed independently.** There is no C++ compiler on this machine (`gcc`, `clang`, `cl` are missing), so the
+  reference could not be compiled. Instead a separate Python transcription was made
+  (`randomValue`, `seedRandom`, `range` with explicit 32-bit masks, copied directly from `RandomValue.cpp`, without looking at the
+  C# code). Tested are the first 8 raw values and the state afterwards for the seeds `0`, `1`, `0x12345678`,
+  `0xFFFFFFFF`; range draws `[0,99]` and `[-5,5]` (12 values each); the state after **1,000,000 draws** (seed
+  `0x12345678`: `d020b74b dafd10ec e5c0df3d 405d1ab8 3717abd5 8222d41c`); constructed carry chains including the
+  full increment cascade (`[0,0,0,0,0,0xFFFFFFFF]` → return value 0 and zero state); the full-range case. The
+  hand calculation is thus the documented substitute proof; a comparison with the compiled original remains open as a
+  debt for a machine with a compiler (Phase 5 needs it anyway for the golden master scenarios).
 
-## 4. Welt, Tickphasen und Lebenszyklus
+## 4. World, tick phases and life cycle
 
-`SimulationWorld.Step()` führt genau diese Phasen in dieser Reihenfolge aus:
+`SimulationWorld.Step()` executes exactly these phases in this order:
 
-| # | Phase | Inhalt |
+| # | Phase | Content |
 |---|---|---|
-| 1 | Befehle | Befehle mit Ziel-Tick = aktueller Tick, geordnet nach (Spieler, Sequenz); Spawn reserviert eine ID und stellt in die Spawn-Queue, Destroy markiert, Damage/Kill wirken sofort, Timer entstehen |
-| 2 | Timer | fällige Timer nach (Fälligkeit, ID); Wiederholung setzt `Fälligkeit = aktueller Tick + Intervall` |
-| 3 | Updates | Sleepy-Scheduler; markierte Entities werden übersprungen; Rückgabewert bestimmt die nächste Weckzeit |
-| 4 | Events | Zustellung in Event-ID-Reihenfolge; während der Zustellung erzeugte Events kommen im selben Durchlauf dran |
-| 5 | Zerstören | markierte Entities in aufsteigender ID: `OnRemove`, Scheduler-Einträge und eigene Timer entfernen, Tabelle leeren |
-| 5a | Verzögerte Treffer | fällige Treffer von Waffen ohne Projektilobjekt in Einfügereihenfolge (`WeaponStore::update`, Phase 8, §21) |
-| 6 | Spawnen | reservierte Entities in ID-Reihenfolge erzeugen; Module erhalten `OnSpawn` (dürfen `logic` ziehen); Updates werden eingeplant |
-| 7 | Events | Events der Spawn-Phase werden zugestellt |
-| 8 | Hash | Tick-Zähler steigt, Zustands-Hash wird berechnet |
+| 1 | Commands | commands with target tick = current tick, ordered by (player, sequence); spawn reserves an ID and puts it into the spawn queue, destroy marks, damage/kill take effect immediately, timers are created |
+| 2 | Timers | due timers by (due time, ID); repetition sets `Fälligkeit = aktueller Tick + Intervall` |
+| 3 | Updates | sleepy scheduler; marked entities are skipped; the return value determines the next wake time |
+| 4 | Events | delivery in event ID order; events created during delivery are handled in the same pass |
+| 5 | Destroy | marked entities in ascending ID: `OnRemove`, remove scheduler entries and own timers, clear the table |
+| 5a | Delayed hits | due hits of weapons without a projectile object in insertion order (`WeaponStore::update`, Phase 8, §21) |
+| 6 | Spawn | create reserved entities in ID order; modules receive `OnSpawn` (may draw `logic`); updates are scheduled |
+| 7 | Events | events of the spawn phase are delivered |
+| 8 | Hash | the tick counter increases, the state hash is computed |
 
-Regeln:
-- **Mutationen während einer Iteration laufen über Queues.** Ein Spawn wird erst in Phase 6 sichtbar (ein Entity wird also
-  nie in dem Tick aktualisiert, in dem es entsteht; frühester Update ist der nächste Tick), eine Zerstörung erst in
-  Phase 5. Das Original erzeugt Objekte sofort; die Spawn-Queue ist eine bewusste, dokumentierte Abweichung – die ID wird
-  aber schon bei der Anforderung vergeben, sodass der Anforderer sie kennt.
-- **Ein am Tickende zerstörtes Entity** (`RequestDestroy`) erhält in diesem Tick keine weiteren Updates, aber sein
-  `EntityDestroyed`-Event und alle bis dahin erzeugten Events werden zugestellt, **bevor** es entfernt wird (`OnRemove`
-  läuft danach).
-- **Tod ist nicht Zerstörung.** `Kill` löst Todesmodule aus; ein Entity ohne zerstörendes Todesmodul (`KeepObjectDie`)
-  bleibt als Leiche bestehen, wie im Original. `Destroy` entfernt ohne Todesmodule.
-- **Schutz vor Endlosschleifen:** Updates und Events pro Tick sind hart begrenzt (50 bzw. 20 Millionen); Überschreitung
-  wirft. Es gibt keine Threads und keine Sperren; ein Deadlock ist konstruktionsbedingt ausgeschlossen (der Test
-  `SourceRules` verbietet `Thread`, `Task.Run`, `Parallel`, `lock`).
+Rules:
+- **Mutations during an iteration go through queues.** A spawn only becomes visible in phase 6 (so an entity is
+  never updated in the tick in which it is created; the earliest update is the next tick), a destruction only in
+  phase 5. The original creates objects immediately; the spawn queue is a deliberate, documented deviation – the ID is
+  however already assigned at the request, so that the requester knows it.
+- **An entity destroyed at the end of the tick** (`RequestDestroy`) receives no further updates in this tick, but its
+  `EntityDestroyed` event and all events created until then are delivered **before** it is removed (`OnRemove`
+  runs afterwards).
+- **Death is not destruction.** `Kill` triggers death modules; an entity without a destroying death module (`KeepObjectDie`)
+  remains as a corpse, as in the original. `Destroy` removes without death modules.
+- **Protection against endless loops:** updates and events per tick are hard-limited (50 and 20 million respectively); exceeding
+  throws. There are no threads and no locks; a deadlock is excluded by construction (the test
+  `SourceRules` forbids `Thread`, `Task.Run`, `Parallel`, `lock`).
 
-## 5. Module
+## 5. Modules
 
-### Bindung
+### Binding
 
-`CnCNew.Data` führt Deskriptoren ohne Factory (`ModuleDescriptor`: Name, Blockart, Interfacemaske, Besitzerarten,
-Feldschema, `CompatibilityOnly`, Zielphase, Kategorie); der Katalog enthält alle **205** Modultypen des Bestands (eine
-frühere Zählung von 206 enthielt das Phantommodul `ArmorSet`, entstanden aus einem in `Maps/MD_CHI03/map.ini` nie
-geschlossenen `AddModule`, dessen Felder das Original auf das Objekt anwendet). Phase 5 hat **35** dieser 205 Typen
-implementiert (12 aus Phase 4 plus 23 neue: `StealthUpdate`, `AutoHealBehavior`, die elf `*Upgrade`-Module,
+`CnCNew.Data` holds descriptors without a factory (`ModuleDescriptor`: name, block kind, interface mask, owner kinds,
+field schema, `CompatibilityOnly`, target phase, category); the catalog contains all **205** module types of the content (an
+earlier count of 206 contained the phantom module `ArmorSet`, which arose from an `AddModule` never closed in
+`Maps/MD_CHI03/map.ini`, whose fields the original applies to the object). Phase 5 has implemented **35** of these 205 types
+(12 from Phase 4 plus 23 new ones: `StealthUpdate`, `AutoHealBehavior`, the eleven `*Upgrade` modules,
 `AIUpdateInterface`, `ProductionUpdate`, `FlammableUpdate`, `TransitionDamageFX`, `SlowDeathBehavior`,
 `FireWeaponWhenDeadBehavior`, `StealthDetectorUpdate`, `PoisonedBehavior`, `GarrisonContain`, `TransportContain` –
-siehe `docs/GAME-RULES.md` §3/§6/§6a). `CnCNew.Simulation` besitzt die
-explizite, ordinal sortierte, reflexionsfreie Bindungstabelle `BuiltInModules.Bindings` (Name → `ModuleBinding<TData>` mit
-Parser und Factory) und `ModuleBindingTable` prüft sie beim Erzeugen gegen die Deskriptoren:
+see `docs/GAME-RULES.md` §3/§6/§6a). `CnCNew.Simulation` owns the
+explicit, ordinally sorted, reflection-free binding table `BuiltInModules.Bindings` (name → `ModuleBinding<TData>` with
+parser and factory) and `ModuleBindingTable` checks it against the descriptors on creation:
 
-| Fehlerfall | Ergebnis |
+| Error case | Result |
 |---|---|
-| unsortierte Tabelle, doppelter Name | `ModuleBindingException` |
-| Name ohne Deskriptor | `ModuleBindingException` (unbekanntes Modul) |
-| Deskriptor `CompatibilityOnly` (nicht implementiert) | `ModuleBindingException` |
-| Präsentationsmodul (Draw/ClientUpdate) | `ModuleBindingException` |
-| falsche Besitzerart | `ModuleBindingException` |
-| implementiertes Simulationsmodul ohne Bindung | `ModuleBindingException` |
+| unsorted table, duplicate name | `ModuleBindingException` |
+| name without descriptor | `ModuleBindingException` (unknown module) |
+| descriptor `CompatibilityOnly` (not implemented) | `ModuleBindingException` |
+| presentation module (Draw/ClientUpdate) | `ModuleBindingException` |
+| wrong owner kind | `ModuleBindingException` |
+| implemented simulation module without binding | `ModuleBindingException` |
 
-`StrictUnknownModules` besteht auf den Bestandsdaten; der Test `catalog == beobachtete Modulmenge` (205 Namen) läuft gegen
-`game/content`. Nicht implementierte Module bleiben sichtbare Kompatibilitätsfälle: ein Objekt mit einem
-solchen Modul ist **nicht instanziierbar** und nennt es in `ObjectTemplate.MissingModules`; Draw-/ClientUpdate-Module
-werden gelistet (`PresentationModules`), aber nie instanziiert.
+`StrictUnknownModules` passes on the content data; the test `catalog == beobachtete Modulmenge` (205 names) runs against
+`game/content`. Modules that are not implemented remain visible compatibility cases: an object with such
+a module is **not instantiable** and names it in `ObjectTemplate.MissingModules`; Draw/ClientUpdate modules
+are listed (`PresentationModules`), but never instantiated.
 
-### Auswahl mit Zahlen
+### Selection with numbers
 
-Grundlage: alle Moduleinträge der Basisobjekte im Retail-Bestand einschließlich der vom `DefaultThingTemplate` geerbten
-(19.529 Verwendungen in 2.113 Objekten; `SimTool audit-modules <content-dir>`). Die zwölf implementierten Module decken
-5.497 Verwendungen (28,1 %):
+Basis: all module entries of the base objects in the retail content including those inherited from the `DefaultThingTemplate`
+(19,529 uses in 2,113 objects; `SimTool audit-modules <content-dir>`). The twelve implemented modules cover
+5,497 uses (28.1 %):
 
-| Modul | Verwendungen | Objekte | Rolle |
+| Module | Uses | Objects | Role |
 |---|---:|---:|---|
-| `DestroyDie` | 1.295 | 1.295 | Todesmodul (Default und explizit) |
-| `ActiveBody` | 1.217 | 1.215 | Körper mit Gesundheit |
-| `FXListDie` | 1.144 | 1.008 | Todesmodul, Effektanforderung |
-| `CreateObjectDie` | 629 | 536 | Todesmodul, Erzeugungslistenanforderung |
-| `InactiveBody` | 453 | 453 | Default-Körper (Props) |
-| `StructureBody` | 365 | 365 | Gebäudekörper |
-| `LifetimeUpdate` | 136 | 136 | zeitgesteuerter Tod |
-| `InstantDeathBehavior` | 114 | 56 | sofortiger Tod mit Effekten |
-| `KeepObjectDie` | 62 | 62 | Leiche behalten |
-| `ImmortalBody` | 42 | 42 | unsterblicher Körper |
-| `HighlanderBody` | 21 | 21 | Körper mit 1-HP-Boden |
-| `DeletionUpdate` | 19 | 19 | zeitgesteuerte Zerstörung |
+| `DestroyDie` | 1,295 | 1,295 | death module (default and explicit) |
+| `ActiveBody` | 1,217 | 1,215 | body with health |
+| `FXListDie` | 1,144 | 1,008 | death module, effect request |
+| `CreateObjectDie` | 629 | 536 | death module, object creation list request |
+| `InactiveBody` | 453 | 453 | default body (props) |
+| `StructureBody` | 365 | 365 | building body |
+| `LifetimeUpdate` | 136 | 136 | timed death |
+| `InstantDeathBehavior` | 114 | 56 | instant death with effects |
+| `KeepObjectDie` | 62 | 62 | keep the corpse |
+| `ImmortalBody` | 42 | 42 | immortal body |
+| `HighlanderBody` | 21 | 21 | body with a 1 HP floor |
+| `DeletionUpdate` | 19 | 19 | timed destruction |
 
-Kriterium: höchste Häufigkeit unter den Modulen, die ohne weiteres Subsystem (Waffen, Bewegung, KI, Upgrades, Spieler)
-auskommen und Erzeugen, Ticken, Ereignisse, Sterben und Zerstören vollständig abdecken. `SlowDeathBehavior` (1.623) und
-`FlammableUpdate` (843) waren zu diesem Zeitpunkt häufiger, brauchten aber jeweils ein eigenes mechanisches Modell
-(gewichtete Sterbelotterie beziehungsweise Brand-/Schaden-über-Zeit-Zustandsmaschine) und folgten mit Phase 5 (siehe
-`docs/GAME-RULES.md` §3, Unterabschnitt „Schadenszustände, Brand, Gift und Tod").
+Criterion: highest frequency among the modules that get by without a further subsystem (weapons, movement, AI, upgrades, players)
+and fully cover creating, ticking, events, dying and destroying. `SlowDeathBehavior` (1,623) and
+`FlammableUpdate` (843) were more frequent at that time, but each needed its own mechanical model
+(weighted death lottery and fire/damage-over-time state machine respectively) and followed with Phase 5 (see
+`docs/GAME-RULES.md` §3, subsection "Damage states, fire, poison and death").
 
-Die Module ab Phase 5 (Versorgung und Andocken, Spawner, Reparatur, `FireWeaponUpdate`, `ReplaceObjectUpgrade`, `CrushDie`, Erfahrung und
-Veteranenstufen, Teams) sind mit Katalogschema, Bindung, Tests und Semantik in `docs/GAME-RULES.md` §6e–§6h und §7 beschrieben; die
-tagesaktuelle Zählung liefert `SimTool audit-modules`.
+The modules from Phase 5 on (supply and docking, spawners, repair, `FireWeaponUpdate`, `ReplaceObjectUpgrade`, `CrushDie`, experience and
+veterancy levels, teams) are described with catalog schema, binding, tests and semantics in `docs/GAME-RULES.md` §6e–§6h and §7; the
+up-to-date count is provided by `SimTool audit-modules`.
 
-### Semantik der implementierten Module
+### Semantics of the implemented modules
 
-- **Körper** (`ActiveBody`-Familie): Startgesundheit `InitialHealth`, Deckel `MaxHealth`, Boden 0. Tod ist der Übergang
-  „Gesundheit ≤ 0 und vorherige > 0“ (`ActiveBody::attemptDamage`) und ruft die Todesmodule genau einmal in Modulreihenfolge
-  auf; tote Entities nehmen keinen Schaden mehr. `Kill` = `DAMAGE_UNRESISTABLE` mit Kill-Flag und Betrag = maximale
-  Gesundheit (`Object::kill`). Heilung (`DAMAGE_HEALING`) wird begrenzt. `ImmortalBody`: `delta = max(delta, −Gesundheit + 1)`,
-  nie tot. `HighlanderBody`: Betrag `min(Betrag, Gesundheit − 1)` außer bei `UNRESISTABLE`. `InactiveBody`: ab Spawn
-  „effectively dead“, nur unresistabler Schaden wirkt und löst die Todesmodule einmal aus.
-- **Todesfilter** (`DieMuxData`): `DeathTypes` (Start immer `ALL`, `+X`/`−X`/`ALL`/`NONE`), `VeterancyLevels`,
-  `ExemptStatus`, `RequiredStatus` mit den Regeln aus `DieModule.cpp`.
-- **`DestroyDie`** fordert die Zerstörung an; **`KeepObjectDie`** tut nichts; **`FXListDie`** erzeugt ein
-  `FxRequested`-Event (bei `StartsActive = No` ruht es – die Aktivierung gehört zum Upgradesystem); **`CreateObjectDie`**
-  ein `CreationListRequested`-Event (leere Liste, wie in Kartenoverlays zum Abschalten benutzt, fordert nichts an) und
-  führt die Liste seit Phase 5 aus (`SimulationWorld.CreateFromList`, `docs/GAME-RULES.md` §6b);
-  **`InstantDeathBehavior`** in der Reihenfolge Effekte → Erzeugungslisten → Waffen (`WeaponFireRequested`) und danach
-  Zerstörung. Erzeugungslisten werden ausgeführt (eine Liste je Modul, Zug wie im Original); `FxRequested` und
-  `WeaponFireRequested` bleiben Verträge für die Präsentation beziehungsweise spätere Phasen.
-- **`LifetimeUpdate`/`DeletionUpdate`:** beim Spawn wird einmal `logic.Range(min, max)` gezogen (mindestens 1 Tick), das
-  Ablaufmodul schläft bis dahin; `LifetimeUpdate` **tötet**, `DeletionUpdate` **zerstört**.
-- **Feldschemata** stehen in `ModuleCatalog` (Quelle je Feld: `ActiveBody.cpp`, `DieModule.cpp`, `LifetimeUpdate.h`, …) und
-  wurden gegen jede Vorkommnis im Bestand geprüft; unbekannte Schlüssel, doppelte Schlüssel, falsche Wertarten und fehlende
-  Pflichtfelder (`MinLifetime`/`MaxLifetime`) sind Fehler.
+- **Bodies** (`ActiveBody` family): starting health `InitialHealth`, cap `MaxHealth`, floor 0. Death is the transition
+  "health ≤ 0 and previous > 0" (`ActiveBody::attemptDamage`) and calls the death modules exactly once in module
+  order; dead entities take no more damage. `Kill` = `DAMAGE_UNRESISTABLE` with kill flag and amount = maximum
+  health (`Object::kill`). Healing (`DAMAGE_HEALING`) is clamped. `ImmortalBody`: `delta = max(delta, −Gesundheit + 1)`,
+  never dead. `HighlanderBody`: amount `min(Betrag, Gesundheit − 1)` except for `UNRESISTABLE`. `InactiveBody`: from spawn on
+  "effectively dead", only unresistable damage takes effect and triggers the death modules once.
+- **Death filter** (`DieMuxData`): `DeathTypes` (start always `ALL`, `+X`/`−X`/`ALL`/`NONE`), `VeterancyLevels`,
+  `ExemptStatus`, `RequiredStatus` with the rules from `DieModule.cpp`.
+- **`DestroyDie`** requests the destruction; **`KeepObjectDie`** does nothing; **`FXListDie`** creates an
+  `FxRequested` event (with `StartsActive = No` it is dormant – activation belongs to the upgrade system); **`CreateObjectDie`**
+  a `CreationListRequested` event (an empty list, as used in map overlays for switching off, requests nothing) and
+  has executed the list since Phase 5 (`SimulationWorld.CreateFromList`, `docs/GAME-RULES.md` §6b);
+  **`InstantDeathBehavior`** in the order effects → object creation lists → weapons (`WeaponFireRequested`) and then
+  destruction. Object creation lists are executed (one list per module, draw as in the original); `FxRequested` and
+  `WeaponFireRequested` remain contracts for the presentation and later phases respectively.
+- **`LifetimeUpdate`/`DeletionUpdate`:** at spawn `logic.Range(min, max)` is drawn once (at least 1 tick), the
+  expiry module sleeps until then; `LifetimeUpdate` **kills**, `DeletionUpdate` **destroys**.
+- **Field schemas** are in `ModuleCatalog` (source per field: `ActiveBody.cpp`, `DieModule.cpp`, `LifetimeUpdate.h`, …) and
+  were checked against every occurrence in the content; unknown keys, duplicate keys, wrong value kinds and missing
+  mandatory fields (`MinLifetime`/`MaxLifetime`) are errors.
 
-Bewusst **nicht** in Phase 4: Rüstungskoeffizienten (Koeffizient 1), Schadensmultiplikatoren, Schadenszustände und
--effekte, das Furchtsignal samt `GameLogicRandomValue`-Zug (`ActiveBody::attemptDamage`), Subdual-Schaden (alle
-Subdual-Typen wirken nicht auf Gesundheit), `KILLPILOT`/`KILL_GARRISONED`/`STATUS`-Schaden, das Konstruktorobjekt der
-`StructureBody`. Die Zufallsverbräuche des Originals müssen für die Golden-Master-Vergleiche der Phase 5 ergänzt werden.
+Deliberately **not** in Phase 4: armor coefficients (coefficient 1), damage multipliers, damage states and
+damage effects, the fear signal together with its `GameLogicRandomValue` draw (`ActiveBody::attemptDamage`), subdual damage (all
+subdual types do not affect health), `KILLPILOT`/`KILL_GARRISONED`/`STATUS` damage, the constructor object of the
+`StructureBody`. The random consumptions of the original have to be added for the golden master comparisons of Phase 5.
 
-## 6. Befehle
+## 6. Commands
 
-Typisiert, tick-adressiert, versionierte Typtabelle, jetzt `CommandTypes.Version = 9` (Phase 5 hat 13 Typen ergänzt, Version 6
-brachte `DockCommand`, Version 7 `SetRelationshipCommand`, Version 8 die sechs Baubefehle der Phase 6, Version 9 `MoveAndEnterCommand` und `EvacuateCommand`; bestehende Codes ändern sich nie):
+Typed, tick-addressed, versioned type table, now `CommandTypes.Version = 9` (Phase 5 added 13 types, version 6
+brought `DockCommand`, version 7 `SetRelationshipCommand`, version 8 the six construction commands of Phase 6, version 9 `MoveAndEnterCommand` and `EvacuateCommand`; existing codes never change):
 
-| Code | Typ | Zweck | nur System |
+| Code | Type | Purpose | system only |
 |---:|---|---|:-:|
-| 1 | `SpawnCommand` | Entity aus Template erzeugen (Owner 0 = Absender; fremde Owner nur System) | |
-| 2 | `DestroyCommand` | Entity entfernen (Besitzer oder System) | |
-| 3 | `DamageCommand` | Rohschaden | ✔ |
-| 4 | `KillCommand` | wie `Object::kill` | ✔ |
-| 5 | `SetTimerCommand` | Timer am Entity oder an der Welt (Welttimer nur Notify) | ✔ |
-| 6 | `CancelTimerCommand` | Timer löschen | ✔ |
-| 7 | `GiveMoneyCommand` | Guthaben eines Spielers direkt gutschreiben (Szenario-/Testwerkzeug; der Referenzmatch schreibt es nicht mehr) | ✔ |
-| 8 | `PurchaseUpgradeCommand` | Upgrade kaufen (spieler- oder objektgebunden), Kosten sofort abgebucht | |
-| 9 | `QueueProductionCommand` | Einheit in die Produktionswarteschlange eines Entity einreihen | |
-| 10 | `CancelProductionCommand` | Warteschlangenplatz stornieren, volle Rückerstattung | |
-| 11 | `SetMoveTargetCommand` | Geradlinigen Bewegungsauftrag setzen (Phase-5-Bewegungsmodell) | |
-| 12 | `FireWeaponCommand` | Direkter Waffenschuss auf ein Ziel (kein Auto-Ziel, keine Sichtlinie) | |
-| 13 | `GiveSciencePointsCommand` | "Science Purchase Points" eines Spielers direkt gutschreiben (Rang aus Erfahrung ist nicht modelliert) | ✔ |
-| 14 | `PurchaseScienceCommand` | Science kaufen (`Player::attemptToPurchaseScience`), sofort abgeschlossen | |
-| 15 | `EnterContainerCommand` | Entity in einen Container stellen (`ContainModuleInterface::addToContain`), sofort, keine Pfadsuche | |
-| 16 | `ExitContainerCommand` | Entity aus seinem Container entfernen (Besitzer der Einheit oder des Containers) | |
-| 17 | `UseSpecialPowerCommand` | Spezialkraft eines Objekts auslösen (`ActionManager::canDoSpecialPower`, Ziel: keines, Objekt oder Ort) | |
-| 18 | `DockCommand` | Ein Objekt zum Andocken an ein Dock schicken (`aiDock`: Versorger liefern ab oder holen, das Dock wird ihr bevorzugtes) | |
-| 19 | `SetRelationshipCommand` | Gerichtete Beziehung eines Spielers zu einem anderen setzen (`Player::setPlayerRelationship`) | ✔ |
-| 20 | `ConstructCommand` | Baumeister (Dozer/Arbeiter) setzt ein Gebäude an eine Position mit Winkel (`MSG_DOZER_CONSTRUCT`, §16) | |
-| 21 | `SellCommand` | Gebäude verkaufen (§16) | |
-| 22 | `SetRallyPointCommand` | Sammelpunkt eines Produktionsgebäudes auf einen Ort setzen (§16) | |
-| 23 | `ResumeConstructCommand` | Unterbrochene Baustelle mit einem (anderen) Baumeister fortsetzen (`DozerAIUpdate::resumeConstruction`) | |
-| 24 | `CancelConstructCommand` | Baustelle abbrechen, Kosten werden erstattet | |
-| 25 | `RepairCommand` | Baumeister repariert ein beschädigtes eigenes Gebäude (`MSG_REPAIR`, kostenlos, §16) | |
-| 26 | `MoveAndEnterCommand` | Eigenes Objekt läuft zu einem Container (Transporter, Tunnel, Gebäude) und steigt bei Ankunft ein (`aiEnter`, §21) | |
-| 27 | `EvacuateCommand` | Besitzer entlädt einen Container, beweglich wahlweise erst an einer Position; ein Tunnel entlässt das ganze Netz (`MSG_EVACUATE`, §21) | |
+| 1 | `SpawnCommand` | create an entity from a template (owner 0 = sender; foreign owners system only) | |
+| 2 | `DestroyCommand` | remove an entity (owner or system) | |
+| 3 | `DamageCommand` | raw damage | ✔ |
+| 4 | `KillCommand` | like `Object::kill` | ✔ |
+| 5 | `SetTimerCommand` | timer on the entity or on the world (world timers notify only) | ✔ |
+| 6 | `CancelTimerCommand` | delete a timer | ✔ |
+| 7 | `GiveMoneyCommand` | credit a player's balance directly (scenario/test tool; the reference match no longer writes it) | ✔ |
+| 8 | `PurchaseUpgradeCommand` | buy an upgrade (player-bound or object-bound), cost debited immediately | |
+| 9 | `QueueProductionCommand` | enqueue a unit in the production queue of an entity | |
+| 10 | `CancelProductionCommand` | cancel a queue slot, full refund | |
+| 11 | `SetMoveTargetCommand` | set a straight-line movement order (Phase 5 movement model) | |
+| 12 | `FireWeaponCommand` | direct weapon shot at a target (no auto target, no line of sight) | |
+| 13 | `GiveSciencePointsCommand` | credit a player's "Science Purchase Points" directly (rank from experience is not modelled) | ✔ |
+| 14 | `PurchaseScienceCommand` | buy a science (`Player::attemptToPurchaseScience`), completed immediately | |
+| 15 | `EnterContainerCommand` | put an entity into a container (`ContainModuleInterface::addToContain`), immediately, no path search | |
+| 16 | `ExitContainerCommand` | remove an entity from its container (owner of the unit or of the container) | |
+| 17 | `UseSpecialPowerCommand` | trigger a special power of an object (`ActionManager::canDoSpecialPower`, target: none, object or location) | |
+| 18 | `DockCommand` | send an object to dock at a dock (`aiDock`: suppliers deliver or fetch, the dock becomes their preferred one) | |
+| 19 | `SetRelationshipCommand` | set the directed relationship of a player to another (`Player::setPlayerRelationship`) | ✔ |
+| 20 | `ConstructCommand` | a builder (dozer/worker) places a building at a position with an angle (`MSG_DOZER_CONSTRUCT`, §16) | |
+| 21 | `SellCommand` | sell a building (§16) | |
+| 22 | `SetRallyPointCommand` | set the rally point of a production building to a location (§16) | |
+| 23 | `ResumeConstructCommand` | continue an interrupted construction site with a (different) builder (`DozerAIUpdate::resumeConstruction`) | |
+| 24 | `CancelConstructCommand` | cancel a construction site, the cost is refunded | |
+| 25 | `RepairCommand` | a builder repairs a damaged own building (`MSG_REPAIR`, free of charge, §16) | |
+| 26 | `MoveAndEnterCommand` | an own object walks to a container (transport, tunnel, building) and enters on arrival (`aiEnter`, §21) | |
+| 27 | `EvacuateCommand` | the owner unloads a container, a mobile one optionally only at a position; a tunnel releases the whole network (`MSG_EVACUATE`, §21) | |
 
-`Submit` prüft sofort und lehnt **explizit, gezählt und als `CommandRejected`-Event** ab: `Late` (Tick liegt zurück),
-`Duplicate` (gleiche (Spieler, Sequenz) wie die zuletzt akzeptierte), `OutOfOrder` (kleinere Sequenz), `UnknownPlayer`,
-`NotPermitted`, `InvalidArguments` (Sequenz 0, negative Werte, ungültige Typen), `UnknownTemplate` (unbekannt oder nicht
-instanziierbar). Zur Ausführungszeit folgen `UnknownEntity`, `NotPermitted` (fremdes Entity) und `UnknownTimer`; Phase 5
-ergänzt `InsufficientFunds`, `AlreadyOwned`, `UnknownUpgrade`, `NoWeapon`, `WeaponNotReady`, `OutOfRange`, `QueueFull`,
+`Submit` checks immediately and rejects **explicitly, counted and as a `CommandRejected` event**: `Late` (the tick lies in the past),
+`Duplicate` (same (player, sequence) as the last accepted one), `OutOfOrder` (smaller sequence), `UnknownPlayer`,
+`NotPermitted`, `InvalidArguments` (sequence 0, negative values, invalid types), `UnknownTemplate` (unknown or not
+instantiable). At execution time `UnknownEntity`, `NotPermitted` (foreign entity) and `UnknownTimer` follow; Phase 5
+adds `InsufficientFunds`, `AlreadyOwned`, `UnknownUpgrade`, `NoWeapon`, `WeaponNotReady`, `OutOfRange`, `QueueFull`,
 `CannotMove`, `CannotProduce`, `UnknownScience`, `ScienceNotPurchasable`, `InsufficientSciencePurchasePoints`,
-`MissingPrerequisite`, `CannotEnterContainer` (KindOf-/Beziehungsfilter, Kapazität oder ein zu stark beschädigter/toter
-Container), `NotContained` sowie für Spezialkräfte `UnknownSpecialPower`, `MissingScience`, `SpecialPowerNotReady`,
-`InvalidSpecialPowerTarget` und `SpecialPowerHandlerMissing` sowie für das Andocken `CannotDock` (Code 30; Details und Numerik:
-`docs/GAME-RULES.md` §4/§1a/§6a/§6d/§6e). Phase 6 ergänzt `TargetNotVisible` (31, `FireWeaponCommand` auf ein für den Spieler unsichtbares Ziel, §15), `InvalidPlacement` (32, Bauplatz
-unzulässig: Gelände, Fußabdruck, Hindernis oder unerkundet), `CannotConstruct` (33: Baumeister, Vorlage, Voraussetzung oder Rolle passen nicht) und `CannotSell` (34). Sequenzen sind pro Spieler streng
-aufsteigend; Befehle desselben Ticks laufen nach (Spieler-ID, Sequenz), unabhängig von der Einreihreihenfolge. Die Zähler
-je Grund gehören zum Zustand. **Wichtig:** `Validate()` prüft beim `Submit()` gegen den *aktuellen* Weltzustand, nicht
-gegen den Zustand nach zuvor im selben Tick eingereihten Befehlen – ein `GiveMoneyCommand` und ein darauf aufbauender
-`PurchaseUpgradeCommand` im selben Tick sehen die Gutschrift erst, wenn dazwischen ein `Step()` ausgeführt wurde.
+`MissingPrerequisite`, `CannotEnterContainer` (KindOf/relationship filter, capacity or a too heavily damaged/dead
+container), `NotContained` and for special powers `UnknownSpecialPower`, `MissingScience`, `SpecialPowerNotReady`,
+`InvalidSpecialPowerTarget` and `SpecialPowerHandlerMissing` and for docking `CannotDock` (code 30; details and numerics:
+`docs/GAME-RULES.md` §4/§1a/§6a/§6d/§6e). Phase 6 adds `TargetNotVisible` (31, `FireWeaponCommand` at a target invisible to the player, §15), `InvalidPlacement` (32, building site
+not permitted: terrain, footprint, obstacle or unexplored), `CannotConstruct` (33: builder, template, prerequisite or role do not fit) and `CannotSell` (34). Sequences are strictly
+ascending per player; commands of the same tick run by (player ID, sequence), independent of the order of enqueueing. The counters
+per reason belong to the state. **Important:** `Validate()` checks at `Submit()` against the *current* world state, not
+against the state after commands enqueued earlier in the same tick – a `GiveMoneyCommand` and a
+`PurchaseUpgradeCommand` building on it in the same tick see the credit only once a `Step()` has been executed in between.
 
-## 7. Snapshots und Hashes
+## 7. Snapshots and hashes
 
-**Zustands-Hash.** Ein 64-Bit-Hash aus SplitMix64-Schritten (`StateHash.Mix`), nicht kryptographisch (er erkennt
-Abweichungen, er widersteht keinen Angriffen). Begründung der Wahl: Es ist keine Paketabhängigkeit nötig
-(`System.IO.Hashing` wäre ein neues NuGet-Paket), das Ergebnis ist unabhängig von Endianness und Hardwareintrinsics, und
-die Eingabe sind ohnehin kanonisierte Ganzzahlen. **Inkrementell:** Pro Entity wird der Hash über dieselbe
-`Describe`-Traversierung berechnet, die auch den Snapshot schreibt (ein einziger Ort für „was ist Zustand“); die
-Entity-Hashes werden addiert, ein Entity wird nur neu gehasht, wenn der Kern es in diesem Tick berührt hat (jeder Aufruf in
-ein Modul markiert es). Timer und ausstehende Befehle sind ebenso Summen; die kleinen globalen Teile (Tick, ID-Zähler,
-`logic`-Zustand, Spielertabelle, Ablehnungszähler, Spawn-/Destroy-Queue, ausstehende Events) werden jeden Tick neu
-gehasht. `VerifyIncrementalHash()` vergleicht mit einer vollständigen Neuberechnung (Tests und Stresslauf prüfen das
-regelmäßig, der Snapshot-Restore immer).
+**State hash.** A 64-bit hash from SplitMix64 steps (`StateHash.Mix`), not cryptographic (it detects
+deviations, it does not withstand attacks). Reason for the choice: no package dependency is needed
+(`System.IO.Hashing` would be a new NuGet package), the result is independent of endianness and hardware intrinsics, and
+the input is canonicalised integers anyway. **Incremental:** per entity the hash is computed over the same
+`Describe` traversal that also writes the snapshot (a single place for "what is state"); the
+entity hashes are added, an entity is only rehashed if the core has touched it in this tick (every call into
+a module marks it). Timers and pending commands are sums likewise; the small global parts (tick, ID counters,
+`logic` state, player table, rejection counters, spawn/destroy queue, pending events) are rehashed
+every tick. `VerifyIncrementalHash()` compares with a complete recomputation (tests and the stress run check this
+regularly, the snapshot restore always).
 
-**Snapshot.** `WorldSnapshot.Write` erzeugt kanonisches UTF-8-JSON (feste Eigenschaftsreihenfolge, nur Ganzzahlen –
-`Fixed` als Rohwert –, keine Pfade oder Zeitstempel, jede Sammlung nach ID beziehungsweise (Tick, Spieler, Sequenz)
-sortiert): Kopf `format = cncnew-world-snapshot`, `version = 7` (2 ergänzte die Teams der Spielertabelle, 3 das Computerspieler-Flag, 4 den Geländefingerabdruck, 5 die Sichtkarten – der Sicht-Hash ist Teil des Zustands-Hashes –, 6 Bau-, Verkaufs- und Sammelpunktzustand, 7 siehe unten), `tickRate`, `definitionFingerprint`, `fixture`, `worldId`,
-`seed`, `stateHash` (Version 7, Phase 8: Tunnelnetz je Spieler, verzögerte Treffer, Startdaten eines Projektils in der Spawn-Queue, Ereignisposition), danach `state` (Tick, ID-Zähler, `logic`-Zustand, Spielertabelle, Ablehnungszähler, Spawn-/Destroy-Queue,
-Events, Entities mit Modulzuständen, Timer, Befehle) und `presentation` (`cosmetic`, `audio`). **SHA-256** identifiziert einen
-Snapshot (`WorldSnapshot.Sha256`). `Restore` ist bewusst minimal und intern gehalten (Phase 9 besitzt den späteren
-Speichervertrag) und weist ab: leere/abgeschnittene/verstümmelte Dateien, fremde Version/Format, eine nicht unterstützte
-Tickrate (seit Phase 20 wird die Welt mit der gespeicherten Rate erzeugt – 30, 60 oder 120 Hz –, und der übergebene Katalog
-muss für genau diese Rate gebaut sein; `docs/TICKRATE-MIGRATION.md` §7), abweichenden
-Definitionsfingerabdruck, abweichende Templates (Name und Index werden gegenseitig geprüft) und jeden Zustand, dessen
-wiederberechneter Hash nicht dem gespeicherten entspricht (Integritätsprüfung).
+**Snapshot.** `WorldSnapshot.Write` produces canonical UTF-8 JSON (fixed property order, integers only –
+`Fixed` as a raw value –, no paths or timestamps, every collection sorted by ID or by (tick, player, sequence)
+respectively): header `format = cncnew-world-snapshot`, `version = 7` (2 added the teams of the player table, 3 the computer player flag, 4 the terrain fingerprint, 5 the vision maps – the vision hash is part of the state hash –, 6 construction, sale and rally point state, 7 see below), `tickRate`, `definitionFingerprint`, `fixture`, `worldId`,
+`seed`, `stateHash` (version 7, Phase 8: tunnel network per player, delayed hits, start data of a projectile in the spawn queue, event position), then `state` (tick, ID counters, `logic` state, player table, rejection counters, spawn/destroy queue,
+events, entities with module states, timers, commands) and `presentation` (`cosmetic`, `audio`). **SHA-256** identifies a
+snapshot (`WorldSnapshot.Sha256`). `Restore` is deliberately kept minimal and internal (Phase 9 owns the later
+save contract) and rejects: empty/truncated/mangled files, foreign version/format, an unsupported
+tick rate (since Phase 20 the world is created with the stored rate – 30, 60 or 120 Hz –, and the catalog passed in
+must be built for exactly this rate; `docs/TICKRATE-MIGRATION.md` §7), a deviating
+definition fingerprint, deviating templates (name and index are checked against each other) and every state whose
+recomputed hash does not match the stored one (integrity check).
 
-**Energiewiederherstellung (Phase 6).** Die Energieproduktion eines Spielers wird nach dem Laden der Entities explizit aus dem Snapshot
-gesetzt, denn `PowerPlantUpgrade` und `OverchargeBehavior` verändern sie über `IWorldServices.AddEnergyProduction` und würden
-sonst beim Registrieren der Module doppelt oder gar nicht angerechnet (der Integritätshash schlug im Test dadurch fehl).
+**Energy restoration (Phase 6).** The energy production of a player is set explicitly from the snapshot after the entities are loaded,
+because `PowerPlantUpgrade` and `OverchargeBehavior` change it via `IWorldServices.AddEnergyProduction` and would
+otherwise be counted twice or not at all when the modules are registered (the integrity hash failed in the test because of this).
 
-**Definitionsfingerabdruck.** SHA-256 des kanonischen Definitionssnapshots, beim Schreiben gestreamt
-(`DefinitionSnapshotWriter.ComputeFingerprint`), ohne den 142-MB-Snapshot im Speicher zu halten.
+**Definition fingerprint.** SHA-256 of the canonical definition snapshot, streamed while writing
+(`DefinitionSnapshotWriter.ComputeFingerprint`), without holding the 142 MB snapshot in memory.
 
 ## 8. Replay
 
-Binärformat, little endian: `CNCRPLAY`, u32 Formatversion, u32 Befehlstabellenversion, u32 Tickrate, 32 Byte
-Definitionsfingerabdruck, Fixture-ID, u32 Seed, u32 Welt-ID, Spielertabelle, End-Tick, Checkpointintervall, Befehle
-(sortiert nach (Tick, Spieler, Sequenz)), Checkpoints (Tick, Hash) und ein abschließendes SHA-256 über alles Vorherige.
-`ReplayFormat.Read` weist ab: falsche Magic, fremde Version (vor der Hashprüfung, mit klarer Meldung), abgeschnittene oder
-verstümmelte Dateien (Hashabweichung), überzählige Bytes, unbekannte Befehlstypen, unsortierte Befehle. `ReplayRunner`
-lehnt ein Replay ab, dessen Fingerabdruck oder Befehlstabellenversion nicht passt, dessen Tickrate nicht unterstützt ist oder
-nicht die des Katalogs bzw. der übergebenen Welt ist (`Run(replay, world)` prüft die Rate der Welt), und meldet Abweichungen an
-Checkpoints als `ReplayDivergenceException` mit Tick und Hashes. Die Fortsetzung (Snapshot → Restore → Weiterlauf) nutzt
-denselben Runner und beginnt beim Tick der Welt.
+Binary format, little endian: `CNCRPLAY`, u32 format version, u32 command table version, u32 tick rate, 32 bytes of
+definition fingerprint, fixture ID, u32 seed, u32 world ID, player table, end tick, checkpoint interval, commands
+(sorted by (tick, player, sequence)), checkpoints (tick, hash) and a concluding SHA-256 over everything preceding.
+`ReplayFormat.Read` rejects: wrong magic, foreign version (before the hash check, with a clear message), truncated or
+mangled files (hash deviation), surplus bytes, unknown command types, unsorted commands. `ReplayRunner`
+rejects a replay whose fingerprint or command table version does not fit, whose tick rate is not supported or
+is not that of the catalog or of the world passed in (`Run(replay, world)` checks the rate of the world), and reports deviations at
+checkpoints as `ReplayDivergenceException` with tick and hashes. The continuation (snapshot → restore → continued run) uses
+the same runner and starts at the tick of the world.
 
-**Format v2 (Phase 5).** Die Spielertabelle trägt zusätzlich den Fraktionsnamen (leer = keine Fraktion), damit ein Replay
-ohne Nebeninformation einem Fraktionsmatch zugeordnet werden kann; Version 1 wird mit klarer Meldung abgewiesen. Außerdem
-kodiert das Format jetzt **alle 17 Befehlstypen** (zuvor nur die sechs aus Phase 4): `GiveMoney`, `PurchaseUpgrade`,
+**Format v2 (Phase 5).** The player table additionally carries the faction name (empty = no faction), so that a replay
+can be assigned to a faction match without side information; version 1 is rejected with a clear message. In addition
+the format now encodes **all 17 command types** (previously only the six from Phase 4): `GiveMoney`, `PurchaseUpgrade`,
 `QueueProduction`, `CancelProduction`, `SetMoveTarget`, `FireWeapon`, `GiveSciencePoints`, `PurchaseScience`,
-`EnterContainer`, `ExitContainer` und `UseSpecialPower` sind hinzugekommen. `Tests.ReferenceMatch` schreibt und liest jeden Typ zurück und
-vergleicht die Befehle; ein unbekannter Typ im Schreiber ist ein Fehler, keine stille Auslassung.
+`EnterContainer`, `ExitContainer` and `UseSpecialPower` have been added. `Tests.ReferenceMatch` writes and reads back every type and
+compares the commands; an unknown type in the writer is an error, not a silent omission.
 
-**Format v3 und v4.** v3 ergänzt je Spieler die Team-Nummer (`PlayerConfiguration.Team`, 0 = kein Team), v4 das Computerspieler-Flag
-(`IsComputer`, Voraussetzung für `AutoFindHealingUpdate`). Die Befehlstabelle kodiert inzwischen **alle 19 Befehlstypen**
-(`DockCommand` und `SetRelationshipCommand` sind hinzugekommen); ältere Formatversionen werden mit klarer Meldung abgewiesen.
+**Format v3 and v4.** v3 adds the team number per player (`PlayerConfiguration.Team`, 0 = no team), v4 the computer player flag
+(`IsComputer`, prerequisite for `AutoFindHealingUpdate`). The command table by now encodes **all 19 command types**
+(`DockCommand` and `SetRelationshipCommand` have been added); older format versions are rejected with a clear message.
 
-**Format v7 (Phase 8, E1).** Kodiert zusätzlich `MoveAndEnterCommand` (u32 Akteur, u32 Container) und `EvacuateCommand` (u32 Container, bool Position,
-i64 X, i64 Y roh); Befehlstabelle Version 9, **alle 27 Befehlstypen**; v6 wird mit klarer Meldung abgewiesen (`Tests.Transports`).
+**Format v7 (Phase 8, E1).** Additionally encodes `MoveAndEnterCommand` (u32 actor, u32 container) and `EvacuateCommand` (u32 container, bool position,
+i64 X, i64 Y raw); command table version 9, **all 27 command types**; v6 is rejected with a clear message (`Tests.Transports`).
 
-**Format v5 und v6 (Phase 6).** v5 trägt den Geländefingerabdruck im Kopf (`TerrainMap.Fingerprint`, 32 Byte; der Runner lehnt ein
-Replay ab, dessen Gelände nicht passt, wie beim Definitionsfingerabdruck); v6 kodiert die sechs Baubefehle. Die Befehlstabelle
-umfasst damit **alle 25 Befehlstypen**; `Tests.Construction` (`ConstructionSnapshotAndReplay`) prüft Snapshot und Replay mit Baubefehlen.
+**Format v5 and v6 (Phase 6).** v5 carries the terrain fingerprint in the header (`TerrainMap.Fingerprint`, 32 bytes; the runner rejects a
+replay whose terrain does not fit, as with the definition fingerprint); v6 encodes the six construction commands. The command table
+thus comprises **all 25 command types**; `Tests.Construction` (`ConstructionSnapshotAndReplay`) checks snapshot and replay with construction commands.
 
-## 9. Abnahmebefehle
+## 9. Acceptance commands
 
 ```powershell
 dotnet build CnCNew.slnx
@@ -392,1352 +392,1352 @@ dotnet run --project tools/CnCNew.IniTool -- compat-check game/content baselines
 dotnet run --project tools/CnCNew.IniTool -- load-order-report game/content
 ```
 
-## 10. Stress, Speicher und Budgets
+## 10. Stress, memory and budgets
 
-`SimTool stress` nimmt das synthetische Szenario (`StressScenario`, Fixture `synthetic-lifecycle-v1`, ausschließlich
-eigene, rechtlich unbedenkliche Definitionen) als Replay auf und führt es mehrfach aus. Der Treiber beobachtet nur
-Welt-Events und einen eigenen `SageRandom`; Last: Rampe auf 10.500 langlebige Entities, danach je Tick ein Kill/Destroy
-mit Ersatz-Spawn, alle 2 Ticks ein Funke, alle 3 Ticks ein Puff, alle 40 Ticks ein unsterbliches Entity, zufälliger Schaden,
-Besitzer-Destroys, Timer (wiederholende Notify- und Damage-Timer an etwa 45 % der neuen Entities, Welttimer), bewusst
-ungültige Befehle; die letzten 6.000 Ticks zerstören alle Überlebenden.
+`SimTool stress` records the synthetic scenario (`StressScenario`, fixture `synthetic-lifecycle-v1`, exclusively
+own, legally unobjectionable definitions) as a replay and executes it several times. The driver observes only
+world events and its own `SageRandom`; load: ramp to 10,500 long-lived entities, then per tick one kill/destroy
+with a replacement spawn, every 2 ticks a spark, every 3 ticks a puff, every 40 ticks an immortal entity, random damage,
+owner destroys, timers (repeating notify and damage timers on about 45 % of the new entities, world timers), deliberately
+invalid commands; the last 6,000 ticks destroy all survivors.
 
-Erstmessung am 28. September 2026 (Release, `dotnet run -c Release`) auf: AMD64 Family 25 Model 68 Stepping 1
-(AuthenticAMD), 16 logische Prozessoren, 28 GiB RAM, Windows 11 (10.0.26200), .NET 10.0.12, Workstation-GC:
+First measurement on 28 September 2026 (Release, `dotnet run -c Release`) on: AMD64 Family 25 Model 68 Stepping 1
+(AuthenticAMD), 16 logical processors, 28 GiB RAM, Windows 11 (10.0.26200), .NET 10.0.12, workstation GC:
 
-| Größe | Messwert |
+| Quantity | Measured value |
 |---|---|
-| Ticks | 216.000 (zwei Stunden Spielzeit) |
-| Befehle | 914.394 (Replay-Datei 47.094.803 Byte im Format v2, 216 Checkpoints) |
-| Spawn/Destroy | 401.237 / 401.237 |
-| gleichzeitig lebende Entities | Spitze 15.775 (Ziel ≥ 10.000) |
-| Module / Timer / geplante Updates (Spitze) | 42.105 / 7.099 / 30 |
-| Laufzeit je 216.000-Tick-Lauf | 22 s (Ø 102 µs je Tick), langsamster Tick 30,7 ms |
-| Aufnahme des Szenarios (Treiber + Welt) | 37 s |
-| Allokation `Step()` im Beharrungszustand | Ø 1.350 Byte je Tick unter Churn (Entity- und Modulobjekte der Spawns); **0 Byte** bei ruhender Welt (Test) |
-| Snapshot bei Tick 108.000 | 10.262.399 Byte für 13.220 Entities (≈ 776 Byte je Entity), Restore 0,7 s (Restore-Zeit nicht neu gemessen) |
-| Peak Working Set des Prozesses | 532 MiB (einschließlich der 915.000 Befehlsobjekte des Aufnehmers) |
-| Fehlerbefehle | 2.170 `UnknownEntity`-Ablehnungen, in jedem Lauf identisch |
+| Ticks | 216,000 (two hours of game time) |
+| Commands | 914,394 (replay file 47,094,803 bytes in format v2, 216 checkpoints) |
+| Spawn/Destroy | 401,237 / 401,237 |
+| simultaneously living entities | peak 15,775 (target ≥ 10,000) |
+| Modules / timers / scheduled updates (peak) | 42,105 / 7,099 / 30 |
+| Run time per 216,000-tick run | 22 s (avg. 102 µs per tick), slowest tick 30.7 ms |
+| Recording of the scenario (driver + world) | 37 s |
+| Allocation of `Step()` in steady state | avg. 1,350 bytes per tick under churn (entity and module objects of the spawns); **0 bytes** with a world at rest (test) |
+| Snapshot at tick 108,000 | 10,262,399 bytes for 13,220 entities (≈ 776 bytes per entity), restore 0.7 s (restore time not re-measured) |
+| Peak working set of the process | 532 MiB (including the 915,000 command objects of the recorder) |
+| Error commands | 2,170 `UnknownEntity` rejections, identical in every run |
 
-Ergebnisse: drei frische Läufe liefern identische Tickhashes über alle 216.000 Ticks (Kettenhash `E230DA5F04821478`,
-Endhash `A299C38BFE07681D`); der Lauf mit Snapshot bei Tick 108.000 und Fortsetzung liefert dieselben 216.000 Hashes;
-Entity-, Modul-, Update-, Timer-, Event-, Befehls-, Spawn- und Destroy-Tabellen stehen am Ende auf null; kein Deadlock
-(keine Threads, alle Schleifen begrenzt); der inkrementelle Hash stimmte in jeder Stichprobe mit der vollständigen
-Neuberechnung überein.
+Results: three fresh runs yield identical tick hashes over all 216,000 ticks (chain hash `E230DA5F04821478`,
+final hash `A299C38BFE07681D`); the run with a snapshot at tick 108,000 and continuation yields the same 216,000 hashes;
+entity, module, update, timer, event, command, spawn and destroy tables are at zero at the end; no deadlock
+(no threads, all loops bounded); the incremental hash matched the complete
+recomputation in every sample.
 
-**Neumessung am 29. September 2026** (nach Erzeugungslistenausführung und `CreateCrateDie`; Kette und Endhash haben sich
-geändert, weil `CreateObjectDie`/`InstantDeathBehavior` jetzt Zufallszüge verbrauchen und Objekte erzeugen): Kettenhash
-`36211DD938214B9C`, Endhash `9E4AF85CBFBB84C6`, 401.237 Spawns und ebenso viele Destroys, Ø 54,7 µs je Tick, Snapshot
-bei Tick 108.000: 10.262.399 Byte. Alle Läufe (unabhängig wiederholt, mit Snapshotfortsetzung) stimmen tickweise überein. Die
-Befehls-, Entity- und Fehlerzahlen sowie Snapshotgröße der Tabelle sind ebenfalls neu gemessen (Replay v2); die übrigen Größen nicht.
+**Re-measurement on 29 September 2026** (after object creation list execution and `CreateCrateDie`; chain and final hash have
+changed, because `CreateObjectDie`/`InstantDeathBehavior` now consume random draws and create objects): chain hash
+`36211DD938214B9C`, final hash `9E4AF85CBFBB84C6`, 401,237 spawns and as many destroys, avg. 54.7 µs per tick, snapshot
+at tick 108,000: 10,262,399 bytes. All runs (repeated independently, with snapshot continuation) agree tick by tick. The
+command, entity and error numbers as well as the snapshot size of the table are also re-measured (replay v2); the other quantities are not.
 
-**Neumessung nach dem Spezialkraft-Subsystem** (29. September 2026, zehn weitere Module; die synthetische Fixture ist
-unverändert, aber Spielerzustand und Snapshot tragen jetzt Kopfgeldrate und geteilte Bereitschaftsframes): Kettenhash
-`76A8FCEEEE625672`, Endhash `4A99EE46FD623A09`, 914.394 Befehle, Spitze 15.775 Entities, Snapshot bei Tick 108.000:
-10.262.573 Byte (SHA-256 `A14A06E08A3C05796FF59E5B94E9AC1F0E31F45A5CABE4E1285C3A578AC896A0`), Hash nach Restore
-`1D2E96E0BB12303A`; drei frische Läufe und die Snapshotfortsetzung stimmen tickweise überein, Stresslauf 1.950 Byte je Tick,
-ruhender Tick 0 Byte (der Bereitschaftszustand nutzt eine Indexschleife über die sortierte Liste, keine Enumeratorallokation).
+**Re-measurement after the special power subsystem** (29 September 2026, ten further modules; the synthetic fixture is
+unchanged, but player state and snapshot now carry the bounty rate and shared ready frames): chain hash
+`76A8FCEEEE625672`, final hash `4A99EE46FD623A09`, 914,394 commands, peak 15,775 entities, snapshot at tick 108,000:
+10,262,573 bytes (SHA-256 `A14A06E08A3C05796FF59E5B94E9AC1F0E31F45A5CABE4E1285C3A578AC896A0`), hash after restore
+`1D2E96E0BB12303A`; three fresh runs and the snapshot continuation agree tick by tick, stress run 1,950 bytes per tick,
+tick at rest 0 bytes (the readiness state uses an index loop over the sorted list, no enumerator allocation).
 
-**Neumessung zum Abschluss von Phase 5** (29. September 2026, 74 gebundene Module, Supply, Erfahrung, Teams, Reparatur, Flächenschaden; die
-synthetische Fixture ist unverändert, Snapshot Version 3, Replay Format v4): Kettenhash `8E1FA50D21433123`, Endhash `D80B367CEEF6D72D`,
-Replay 47.094.813 Byte (SHA-256 `AF97976870D69C52E48C889A753E955D85C7DDE94F5061A3F8AEF4610310B0CC`), 914.394 Befehle, 216 verifizierte
-Checkpoints, Ø 59,9 µs je Tick (12,9 s je Lauf), langsamster Tick 21,07 ms, Spitze 15.775 Entities, 42.064 Module und 7.048 Timer, 401.237
-Spawns und ebenso viele Destroys, 2.170 `UnknownEntity`-Ablehnungen, Snapshot bei Tick 108.000: 11.135.228 Byte (SHA-256
-`0372D5025C1C2433435BB03F06E77ACC1E40D5D7B55C8A136718D221C8CEAFBA`), Restore 0,66 s, Hash nach Restore `413FAD6458E026C6`, Allokation
-1.994 Byte je Tick unter Churn, Spitzenarbeitsspeicher 596 MiB. Drei frische Läufe und die Snapshotfortsetzung stimmen tickweise überein;
-alle Tabellen stehen am Ende auf null. Die älteren Neumessungen oben sind überholt und nur als Verlauf stehen geblieben.
+**Re-measurement at the completion of Phase 5** (29 September 2026, 74 bound modules, supply, experience, teams, repair, area damage; the
+synthetic fixture is unchanged, snapshot version 3, replay format v4): chain hash `8E1FA50D21433123`, final hash `D80B367CEEF6D72D`,
+replay 47,094,813 bytes (SHA-256 `AF97976870D69C52E48C889A753E955D85C7DDE94F5061A3F8AEF4610310B0CC`), 914,394 commands, 216 verified
+checkpoints, avg. 59.9 µs per tick (12.9 s per run), slowest tick 21.07 ms, peak 15,775 entities, 42,064 modules and 7,048 timers, 401,237
+spawns and as many destroys, 2,170 `UnknownEntity` rejections, snapshot at tick 108,000: 11,135,228 bytes (SHA-256
+`0372D5025C1C2433435BB03F06E77ACC1E40D5D7B55C8A136718D221C8CEAFBA`), restore 0.66 s, hash after restore `413FAD6458E026C6`, allocation
+1,994 bytes per tick under churn, peak working memory 596 MiB. Three fresh runs and the snapshot continuation agree tick by tick;
+all tables are at zero at the end. The older re-measurements above are superseded and have only been left as history.
 
-**Neumessung am 30. September 2026** (Phase 6, Release, gleiche Maschine; Snapshot v6, Replay v6, Sichtkarten im Zustands-Hash;
-das synthetische Szenario nutzt weder Gelände noch Navigation noch Bau): 216.000 Ticks in 13,0 s (60,2 µs je Tick), 914.394 Befehle,
-langsamster Tick 18,93 ms, Allokation 2.054 Byte je Tick unter Churn, Spitzen 15.775 Entities / 42.064 Module / 29 geplante Updates /
-7.048 Timer, Kettenhash `C298F5F74993D6CD`, Endhash `D1521974C861A4B9`. Snapshot bei Tick 108.000: 11.862.400 Byte für 13.220 Entities,
-SHA-256 `7E3DBFDCBCD4D46502FA0C571598E826343C14D23F97A0D2919BF53661009A60`, Restore 0,59 s (Hash `ACCDC2E5315991DB`). Working Set (Spitze)
-596 MiB. Drei frische Läufe und die Snapshotfortsetzung stimmen tickweise überein; 401.237 Spawns/Destroys und 2.170 `UnknownEntity`-Ablehnungen
-wie zuvor. Kettenhash und Endhash unterscheiden sich von denen vom 29. September, weil sich die Zustandsdarstellung (Sicht-Hash,
-Terrain-Fingerabdruck) und die Stealth-Regel (§15) geändert haben; das Szenario selbst blieb unverändert.
+**Re-measurement on 30 September 2026** (Phase 6, Release, same machine; snapshot v6, replay v6, vision maps in the state hash;
+the synthetic scenario uses neither terrain nor navigation nor construction): 216,000 ticks in 13.0 s (60.2 µs per tick), 914,394 commands,
+slowest tick 18.93 ms, allocation 2,054 bytes per tick under churn, peaks 15,775 entities / 42,064 modules / 29 scheduled updates /
+7,048 timers, chain hash `C298F5F74993D6CD`, final hash `D1521974C861A4B9`. Snapshot at tick 108,000: 11,862,400 bytes for 13,220 entities,
+SHA-256 `7E3DBFDCBCD4D46502FA0C571598E826343C14D23F97A0D2919BF53661009A60`, restore 0.59 s (hash `ACCDC2E5315991DB`). Working set (peak)
+596 MiB. Three fresh runs and the snapshot continuation agree tick by tick; 401,237 spawns/destroys and 2,170 `UnknownEntity` rejections
+as before. Chain hash and final hash differ from those of 29 September, because the state representation (vision hash,
+terrain fingerprint) and the stealth rule (§15) have changed; the scenario itself remained unchanged.
 
-**Neumessung Phase 8, Paket E1** (30. September 2026, Release, gleiche Maschine, parallel zu einer KI-Auswertung gemessen, daher langsamer; Snapshot v7, Replay v7):
-216.000 Ticks, 914.394 Befehle, Replay 47.094.815 Byte, Lauf 1 20,6 s (95,5 µs je Tick), langsamster Tick 31,34 ms, Allokation 2.158 Byte je Tick unter Churn,
-Spitzen 15.775 Entities / 42.064 Module / 29 geplante Updates / 7.048 Timer, **Kettenhash `3AECEB0579E460AF`, Endhash `ED6F9329F59662E3`**; Snapshot bei
-Tick 108.000 11.862.512 Byte (SHA-256 `6A8D0B9BD9F64F22384FF8A39D7D1AA25F0C8D0D959527D6365CC3E572DBBA8C`), Restore 0,72 s (Hash `3D5CD16AC1FEAA30`), Working Set 567 MiB.
-Drei frische Läufe und die Fortsetzung stimmen tickweise überein, 401.237 Spawns/Destroys, 2.170 `UnknownEntity`. Die Hashes ändern sich, weil der globale
-Zustand jetzt Tunnelnetz je Spieler und die (leere) Liste verzögerter Treffer beschreibt; die synthetische Fixture hat keine Projektile.
+**Re-measurement Phase 8, package E1** (30 September 2026, Release, same machine, measured in parallel with an AI evaluation, therefore slower; snapshot v7, replay v7):
+216,000 ticks, 914,394 commands, replay 47,094,815 bytes, run 1 20.6 s (95.5 µs per tick), slowest tick 31.34 ms, allocation 2,158 bytes per tick under churn,
+peaks 15,775 entities / 42,064 modules / 29 scheduled updates / 7,048 timers, **chain hash `3AECEB0579E460AF`, final hash `ED6F9329F59662E3`**; snapshot at
+tick 108,000 11,862,512 bytes (SHA-256 `6A8D0B9BD9F64F22384FF8A39D7D1AA25F0C8D0D959527D6365CC3E572DBBA8C`), restore 0.72 s (hash `3D5CD16AC1FEAA30`), working set 567 MiB.
+Three fresh runs and the continuation agree tick by tick, 401,237 spawns/destroys, 2,170 `UnknownEntity`. The hashes change because the global
+state now describes the tunnel network per player and the (empty) list of delayed hits; the synthetic fixture has no projectiles.
 
-**Budgets** (mit Messwert als Grundlage, etwa 2,7-facher Spielraum): 216.000-Tick-Lauf dieses Szenarios ≤ 60 s;
-Ø ≤ 300 µs je Tick; langsamster Tick ≤ 100 ms (echtes Echtzeitbudget, 33,3 ms bei 30 Hz, wird erst mit den Regeln der
-Phase 5 unter realer Last festgelegt); Working Set ≤ 1 GiB; ruhender Tick 0 Byte, Churn ≤ 4 KiB je Tick; Snapshot ≤ 1 KiB
-je Entity. Die Zahlen sind Regressionsschwellen, keine Leistungszusagen für das Spiel.
+**Budgets** (with the measured value as the basis, about 2.7-fold margin): 216,000-tick run of this scenario ≤ 60 s;
+avg. ≤ 300 µs per tick; slowest tick ≤ 100 ms (the real real-time budget, 33.3 ms at 30 Hz, is only set with the rules of
+Phase 5 under real load); working set ≤ 1 GiB; tick at rest 0 bytes, churn ≤ 4 KiB per tick; snapshot ≤ 1 KiB
+per entity. The numbers are regression thresholds, not performance commitments for the game.
 
-## 11. Modulabdeckung des Bestands
+## 11. Module coverage of the content
 
-`SimTool audit-coverage` kompiliert den Retail-Basisbestand (ohne Kartenoverlays; Phase 5 hat den INI-Parser korrigiert –
-siehe §12 – wodurch sich die Objektzahl von 2.113 auf **2.115** und der Fingerabdruck ändern; 12.550 Definitionen,
-Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementierte oder Präsentationsmodule besitzt:
+`SimTool audit-coverage` compiles the retail base content (without map overlays; Phase 5 corrected the INI parser –
+see §12 – which changes the object count from 2,113 to **2,115** and the fingerprint; 12,550 definitions,
+fingerprint `2FAE6DCC…`) and instantiates every object that has only implemented or presentation modules:
 
-- **Stand nach Zusammenführung von Kollision und Spezialfähigkeits-Hülle (1. Oktober 2026, neu zu messen): beide Zweige unten wurden unabhängig
-  voneinander auf demselben Phase-9-Stand gemessen und danach gemergt; 91 von 205 Modultypen implementiert (4 neu gegenüber dem Phase-9-Stand:
-  `ToppleUpdate`, `StructureToppleUpdate`, `HeightDieUpdate`, `SpecialAbilityUpdate`).** Instanziierbarkeit, Modulverwendungen, Kompatibilitätsbasislinie
-  und Referenzmatch-Hash sind nach dem Merge neu zu messen (siehe Abschlussbericht dieser Phase für die frischen Zahlen).
-- **Stand nach Phase 10, Kollision (1. Oktober 2026, frisch gemessen): 2.115 Objekte, 1.588 vollständig instanziierbar (75,1 %)**, 527 blockiert; 90 von 205 Modultypen
-  implementiert (3 neu: `ToppleUpdate`, `StructureToppleUpdate`, `HeightDieUpdate`, §23), sie decken 15.752 von 19.553 Modulverwendungen (80,6 %); Fingerabdruck `D112D8B5AF345559…`.
-  `ToppleUpdate` (76/66) und `HeightDieUpdate` (31/24) verschwinden vollständig aus der Blockerliste; größte verbleibende Blocker: `SpecialAbilityUpdate` 64/36,
+- **State after merging collision and the special-ability shell (1 October 2026, to be re-measured): both branches below were measured independently
+  of each other on the same Phase 9 state and merged afterwards; 91 of 205 module types implemented (4 new compared with the Phase 9 state:
+  `ToppleUpdate`, `StructureToppleUpdate`, `HeightDieUpdate`, `SpecialAbilityUpdate`).** Instantiability, module usages, compatibility baseline
+  and reference match hash are to be re-measured after the merge (see the final report of this phase for the fresh numbers).
+- **State after Phase 10, collision (1 October 2026, freshly measured): 2,115 objects, 1,588 fully instantiable (75.1 %)**, 527 blocked; 90 of 205 module types
+  implemented (3 new: `ToppleUpdate`, `StructureToppleUpdate`, `HeightDieUpdate`, §23), they cover 15,752 of 19,553 module usages (80.6 %); fingerprint `D112D8B5AF345559…`.
+  `ToppleUpdate` (76/66) and `HeightDieUpdate` (31/24) disappear completely from the blocker list; largest remaining blockers: `SpecialAbilityUpdate` 64/36,
   `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25,
-  `BaikonurLaunchPower` 23/23. Retail-Referenzmatch (`SimTool reference-match`): Sieger FactionAmerica bei Tick 10.575 (Replay 10.876 Ticks), Endhash (`final hash`, Run 1)
-  `057C6678FE8F3381` (verändert sich gegenüber dem Phase-9-Stand, weil zuvor blockierte Objekte – u. a. Bäume und Höhenstopp-Objekte auf den Startkarten – jetzt instanziierbar
-  sind und am Kampf teilnehmen); zwei frische Läufe und eine Fortsetzung ab Tick 5.438 liefern identische Hashes. Der synthetische 216.000-Tick-Stresstest trägt keine der drei
-  neuen Module und bleibt unverändert bei `ED6F9329F59662E3`. Kompatibilitätsbasislinie 756 Einträge (vorher 749): 9 `module`-Einträge entfallen (jetzt implementiert), 16 neue
-  `deferred-field`-Einträge für reine Präsentationsfelder der drei Module (FX-Listen, `ReorientToppledRubble`, Salven-Timing, `DestroyAttachedParticlesAtHeight`).
-- **Stand nach Phase 10, Spezialfähigkeits-Hülle (1. Oktober 2026, frisch gemessen): 2.115 Objekte, 1.530 vollständig instanziierbar (72,3 %)**, 585 blockiert; 88 von 205
-  Modultypen implementiert (1 neu: `SpecialAbilityUpdate`, ehrliche Hülle, siehe §23), sie decken 15.730 von 19.553 Modulverwendungen (80,4 %);
-  Kompatibilitätsbasislinie 751 Einträge. `SpecialAbilityUpdate` fällt aus der Blockerliste (vorher 64 Objekte/36 nur dadurch blockiert). Der
-  Retail-Referenzmatch verändert sich dadurch (Ranger, Jarmen Kell, GLA-Rebellin u. a. sind jetzt vollständig instanziierbar, nicht nur ihre Hülle):
-  Sieger FactionAmerica bei Tick 14.550 (Replay 14.851 Ticks), Endhash (`final hash`, Run 1) `3DA826C10BB6781B`; zuvor Tick 13.665 (13.966 Ticks),
+  `BaikonurLaunchPower` 23/23. Retail reference match (`SimTool reference-match`): winner FactionAmerica at tick 10,575 (replay 10,876 ticks), final hash (`final hash`, run 1)
+  `057C6678FE8F3381` (changes compared with the Phase 9 state because previously blocked objects – among others trees and height-die objects on the start maps – are now instantiable
+  and take part in the fight); two fresh runs and a continuation from tick 5,438 yield identical hashes. The synthetic 216,000-tick stress test carries none of the three
+  new modules and stays unchanged at `ED6F9329F59662E3`. Compatibility baseline 756 entries (previously 749): 9 `module` entries are dropped (now implemented), 16 new
+  `deferred-field` entries for pure presentation fields of the three modules (FX lists, `ReorientToppledRubble`, salvo timing, `DestroyAttachedParticlesAtHeight`).
+- **State after Phase 10, special-ability shell (1 October 2026, freshly measured): 2,115 objects, 1,530 fully instantiable (72.3 %)**, 585 blocked; 88 of 205
+  module types implemented (1 new: `SpecialAbilityUpdate`, honest shell, see §23), they cover 15,730 of 19,553 module usages (80.4 %);
+  compatibility baseline 751 entries. `SpecialAbilityUpdate` drops out of the blocker list (previously 64 objects/36 blocked only by it). The
+  retail reference match changes because of this (Ranger, Jarmen Kell, GLA Rebel and others are now fully instantiable, not only their shell):
+  winner FactionAmerica at tick 14,550 (replay 14,851 ticks), final hash (`final hash`, run 1) `3DA826C10BB6781B`; previously tick 13,665 (13,966 ticks),
   `D4779BE413835B6D`. Details in §23.
-- Stand nach den Phase-9-Missionsmodulen (1. Oktober 2026): 2.115 Objekte, 1.494 vollständig instanziierbar (70,6 %), 621 blockiert; 87 von 205 Modultypen implementiert (2 neu: `CommandButtonHuntUpdate`, `LockWeaponCreate` – ehrliche Hüllenmodule, siehe unten), sie decken 15.639 von 19.553 Modulverwendungen (80,0 %); Fingerabdruck `2B9D902AEC46A6DE…`. Größte verbleibende Blocker (Objekte insgesamt / nur dadurch blockiert): `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/36, `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `HeightDieUpdate` 31/24, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `BaikonurLaunchPower` 23/23. **Hüllenmodule:** `CommandButtonHuntUpdate` (86 Verwendungen, keine Schlüssel; wird im Original nur von `TEAM_HUNT_WITH_COMMAND_BUTTON` ausgelöst) hält keinen Zustand, `LockWeaponCreate` sperrt den Primär-Slot (`SlotToLock = PRIMARY` in allen 12 Verwendungen; die Simulation führt nur eine Waffe, ein anderer Slot ist eine `UnsupportedModuleConfigurationException`); die auslösenden Skriptaktionen bleiben fehlend und werden gezählt (`docs/SCRIPT-ENGINE.md` §8). Der Retail-Referenzmatch verändert sich dadurch (Ranger u. a. entstehen jetzt als Startobjekte): Sieger FactionAmerica bei Tick 13.665 (Replay 13.966 Ticks), Endhash (`final hash`, Run 1) `D4779BE413835B6D`; zuvor Tick 13.800 (14.101 Ticks), `95022B80366E841E`. Der Stresstest (216.000 Ticks) bleibt bei `ED6F9329F59662E3`.
-- **Stand nach Phase 8, Paket E1 (30. September 2026, frisch gemessen): 2.115 Objekte, 1.470 vollständig instanziierbar (69,5 %)**, 645 blockiert;
-  85 von 205 Modultypen implementiert (8 neu: `DumbProjectileBehavior`, `MissileAIUpdate`, `PointDefenseLaserUpdate`, `TransportAIUpdate`, `ChinookAIUpdate`,
-  `HelicopterSlowDeathBehavior`, `TunnelContain`, `HelixContain`, §21), sie decken 15.543 von 19.553 Modulverwendungen (79,5 %); Fingerabdruck
-  `2A31BC2A83D63A58…`. Alle 1.470 Objekte werden in einer Welt erzeugt (9.670 Module). Nicht implementiert: 72 Module „Phase 5“, 26 „Phase 6“, 22 „Phase 7“.
-  Größte verbleibende Blocker: `CommandButtonHuntUpdate` 79/18, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/3, `JetSlowDeathBehavior` 59/0,
+- State after the Phase 9 mission modules (1 October 2026): 2,115 objects, 1,494 fully instantiable (70.6 %), 621 blocked; 87 of 205 module types implemented (2 new: `CommandButtonHuntUpdate`, `LockWeaponCreate` – honest shell modules, see below), they cover 15,639 of 19,553 module usages (80.0 %); fingerprint `2B9D902AEC46A6DE…`. Largest remaining blockers (objects in total / blocked only by it): `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/36, `JetSlowDeathBehavior` 59/0, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `HeightDieUpdate` 31/24, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `BaikonurLaunchPower` 23/23. **Shell modules:** `CommandButtonHuntUpdate` (86 usages, no keys; in the original it is triggered only by `TEAM_HUNT_WITH_COMMAND_BUTTON`) holds no state, `LockWeaponCreate` locks the primary slot (`SlotToLock = PRIMARY` in all 12 usages; the simulation carries only one weapon, any other slot is an `UnsupportedModuleConfigurationException`); the triggering script actions remain missing and are counted (`docs/SCRIPT-ENGINE.md` §8). The retail reference match changes because of this (Rangers and others now come into being as start objects): winner FactionAmerica at tick 13,665 (replay 13,966 ticks), final hash (`final hash`, run 1) `D4779BE413835B6D`; previously tick 13,800 (14,101 ticks), `95022B80366E841E`. The stress test (216,000 ticks) stays at `ED6F9329F59662E3`.
+- **State after Phase 8, package E1 (30 September 2026, freshly measured): 2,115 objects, 1,470 fully instantiable (69.5 %)**, 645 blocked;
+  85 of 205 module types implemented (8 new: `DumbProjectileBehavior`, `MissileAIUpdate`, `PointDefenseLaserUpdate`, `TransportAIUpdate`, `ChinookAIUpdate`,
+  `HelicopterSlowDeathBehavior`, `TunnelContain`, `HelixContain`, §21), they cover 15,543 of 19,553 module usages (79.5 %); fingerprint
+  `2A31BC2A83D63A58…`. All 1,470 objects are created in one world (9,670 modules). Not implemented: 72 modules "Phase 5", 26 "Phase 6", 22 "Phase 7".
+  Largest remaining blockers: `CommandButtonHuntUpdate` 79/18, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/3, `JetSlowDeathBehavior` 59/0,
   `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/5, `HeightDieUpdate` 31/24, `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25,
-  `BaikonurLaunchPower` 23/23. Der Stand nach Phase 6 steht als Verlauf darunter.
-- Verlauf (Stand nach Phase 6, 30. September 2026): 2.115 Objekte, 1.393 vollständig instanziierbar (65,9 %), 722 blockiert;
-  77 von 205 Modultypen sind implementiert (12 aus Phase 4, 62 aus Phase 5, 3 aus Phase 6: `PowerPlantUpdate`, `PowerPlantUpgrade`, `OverchargeBehavior`;
-  183 Simulations- und 22 Präsentationsmodule im Katalog), sie decken 15.382 von 19.553 Modulverwendungen (78,7 %); der Fingerabdruck des Retail-Basisbestands ist `1248585D0BAAB79F…`.
-  Alle 1.393 Objekte werden in einer Welt erzeugt (8.925 Module). Die folgenden Zahlen beschreiben den Stand am Ende von Phase 5 und bleiben als Verlauf stehen.
-- Verlauf (Ende Phase 5): 2.115 Objekte, 1.384 vollständig instanziierbar (65,4 %), 731 blockiert; 74 von 205 Modultypen implementiert (12 aus Phase 4, 62 aus Phase 5), sie decken 15.364 von 19.553
-  Modulverwendungen (78,6 %). Gegenüber Phase 4 (26/2.113,
-  1,2 %) ein Sprung um den Faktor ~46, getragen von Block 0.2, den elf `*Upgrade`-Modulen, `AIUpdateInterface`,
-  `ProductionUpdate`, den sechs Blockermodulen aus §6/§6a, dem Containment-Paar `GarrisonContain`/`TransportContain` und den
-  vierzehn Modulen aus `docs/GAME-RULES.md` §6c (`PhysicsBehavior`, `SquishCollide`, die drei Produktionsausgänge,
-  `BaseRegenerateUpdate`, `GenerateMinefieldBehavior`, `HealContain`, Lochmodule usw. – zusammen +336 Objekte) sowie den
-  zehn Spezialkraftmodulen aus `docs/GAME-RULES.md` §6d (+25 Objekte, darunter die 13 Kommandozentralen der Fraktionen).
-  `CreateCrateDie` und die Erzeugungslistenausführung (`docs/GAME-RULES.md` §6b) schalten allein kein Objekt frei. Der Abschluss von
-  Phase 5 ergänzte (1.224 → 1.384, +160 Objekte): Versorgungswirtschaft und Spawner (§6e), Reparaturdock und `AutoFindHealingUpdate`
-  (§6f), `FireWeaponUpdate`, `ReplaceObjectUpgrade` und `CrushDie` (§6g), Erfahrungsmodule (§6h).
-- Alle 1.384 instanziierbaren Objekte werden in einer Welt erzeugt und laufen im Realdatentest identisch zweimal durch
-  (Test `--content-dir`); der Stresstest (`SimTool stress`, §10) nutzt eine synthetische Fixture und ist von den neuen
-  Modulen bis auf den Zustandsumfang unberührt (Hashes neu gemessen, §10). Der Referenzmatch auf Retail-Daten
-  (`docs/GAME-RULES.md` §7a) instanziiert reale Einheiten, Produktionsgebäude und Kommandozentralen aller 13 Fraktionen ohne
-  übersprungenes Startobjekt.
-- Verbleibende häufigste Blocker (Objekte / davon nur durch dieses Modul blockiert, frische Messung vom 30. September):
+  `BaikonurLaunchPower` 23/23. The state after Phase 6 is kept below as history.
+- History (state after Phase 6, 30 September 2026): 2,115 objects, 1,393 fully instantiable (65.9 %), 722 blocked;
+  77 of 205 module types are implemented (12 from Phase 4, 62 from Phase 5, 3 from Phase 6: `PowerPlantUpdate`, `PowerPlantUpgrade`, `OverchargeBehavior`;
+  183 simulation and 22 presentation modules in the catalog), they cover 15,382 of 19,553 module usages (78.7 %); the fingerprint of the retail base content is `1248585D0BAAB79F…`.
+  All 1,393 objects are created in one world (8,925 modules). The following numbers describe the state at the end of Phase 5 and are kept as history.
+- History (end of Phase 5): 2,115 objects, 1,384 fully instantiable (65.4 %), 731 blocked; 74 of 205 module types implemented (12 from Phase 4, 62 from Phase 5), they cover 15,364 of 19,553
+  module usages (78.6 %). Compared with Phase 4 (26/2,113,
+  1.2 %) a jump by a factor of ~46, carried by block 0.2, the eleven `*Upgrade` modules, `AIUpdateInterface`,
+  `ProductionUpdate`, the six blocker modules from §6/§6a, the containment pair `GarrisonContain`/`TransportContain` and the
+  fourteen modules from `docs/GAME-RULES.md` §6c (`PhysicsBehavior`, `SquishCollide`, the three production exits,
+  `BaseRegenerateUpdate`, `GenerateMinefieldBehavior`, `HealContain`, hole modules etc. – together +336 objects) as well as the
+  ten special power modules from `docs/GAME-RULES.md` §6d (+25 objects, among them the 13 command centers of the factions).
+  `CreateCrateDie` and the creation list execution (`docs/GAME-RULES.md` §6b) alone unlock no object. The completion of
+  Phase 5 added (1,224 → 1,384, +160 objects): supply economy and spawners (§6e), repair dock and `AutoFindHealingUpdate`
+  (§6f), `FireWeaponUpdate`, `ReplaceObjectUpgrade` and `CrushDie` (§6g), experience modules (§6h).
+- All 1,384 instantiable objects are created in one world and run through identically twice in the real-data test
+  (test `--content-dir`); the stress test (`SimTool stress`, §10) uses a synthetic fixture and is untouched by the new
+  modules except for the extent of the state (hashes re-measured, §10). The reference match on retail data
+  (`docs/GAME-RULES.md` §7a) instantiates real units, production buildings and command centers of all 13 factions without
+  a skipped start object.
+- Remaining most frequent blockers (objects / of these blocked only by this module, fresh measurement of 30 September):
   `CommandButtonHuntUpdate` 79/18, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/3, `JetSlowDeathBehavior` 59/0,
   `MissileAIUpdate` 44/29, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/2, `HeightDieUpdate` 31/15,
-  `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `TransportAIUpdate` 24/13, `BaikonurLaunchPower` 23/23. Die noch nicht
-  implementierten Module verteilen sich nach der im Katalog vermerkten Phase auf 77 (Phase 5), 29 (Phase 6) und 22 (Phase 7). `ToppleUpdate` braucht echte Kollisionserkennung (durch Lesen der
-  Referenzquelle verifiziert, siehe `docs/handoffs/HANDOFF-PHASE5.md`); Phase 6 hat bewusst keine Kollision eingeführt (§14), das Modul bleibt offen. Die vollständige, tagesaktuelle Liste liefert
-  das Werkzeug.
-- **Regel für Aktualisierungsmodule:** jedes Modul, das `IUpdateModule` implementiert, speichert und lädt seinen Weckzeitpunkt
-  (`nextWake`). `SimulationWorld.Register` weckt wiederhergestellte Module mit negativem Weckzeitpunkt sonst ab dem
-  Wiederherstellungstick neu (`_tick + SleepNone`), was die Fortsetzung nach einem Snapshot vom Originallauf abweichen lässt.
-  Der `SourceRules`-Test erzwingt die Zeichenkette `"nextWake"` in jeder solchen Klasse.
+  `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `TransportAIUpdate` 24/13, `BaikonurLaunchPower` 23/23. The modules not yet
+  implemented are distributed, by the phase noted in the catalog, over 77 (Phase 5), 29 (Phase 6) and 22 (Phase 7). `ToppleUpdate` needs real collision detection (verified by reading the
+  reference source, see `docs/handoffs/HANDOFF-PHASE5.md`); Phase 6 deliberately introduced no collision (§14), the module stays open. The complete, up-to-date list is delivered by
+  the tool.
+- **Rule for update modules:** every module that implements `IUpdateModule` saves and loads its wake time
+  (`nextWake`). Otherwise `SimulationWorld.Register` wakes restored modules with a negative wake time anew from the
+  restore tick (`_tick + SleepNone`), which makes the continuation after a snapshot deviate from the original run.
+  The `SourceRules` test enforces the string `"nextWake"` in every such class.
 
-## 12. Bekannte Grenzen und technische Schulden
+## 12. Known limits and technical debt
 
-- **Phase 6 (abgeschlossen)**: Gelände, Navigation, Sicht, Bau und Skirmish-KI sind umgesetzt, aber vereinfacht; die Grenzen stehen gesammelt in §20 und in
+- **Phase 6 (completed)**: terrain, navigation, vision, construction and skirmish AI are implemented, but simplified; the limits are collected in §20 and in
   `docs/IMPLEMENTATION-PLAN.md` §6.
-- **Phase 5 (abgeschlossen)**: Wirtschaft mit Versorgung, Upgrades, Sciences, direkter Kampf mit Flächenschaden und
-  `WeaponBonus`, Erfahrung und Veteranenstufen, Teams und Diplomatie, Garnison/Transport, Reparaturdock, einfache Bewegung,
-  Produktion und Sieg/Niederlage sind implementiert (`docs/GAME-RULES.md`), aber bewusst vereinfacht; Terrain, Pfadsuche, Bau und Verkauf sind seit Phase 6 vorhanden (§13–§16), offen bleiben
-  Kollision (Projektil-Flugzeit ist seit Phase 8 umgesetzt, §21), die Wirkung von `CommandSet` und Radar und die Rüstungs-/Waffensatzauswahl nach Veteranenstufe. Jede Vereinfachung steht mit Quellverweis im Modul- oder
-  Katalog-Kommentar; die Liste der Grenzen steht in `docs/GAME-RULES.md` §10.
-- Ein INI-Parser-Fehler wurde in Phase 5 behoben: `SageIniParser` verglich das `End`-Schlüsselwort gegen die *gesamte*
-  Zeile statt (wie das Original, `INI::initFromINIMulti`, `strtok`) nur gegen ihr erstes Token; zwei Objekte
-  (`AmericaVehicle.ini`, `BossGeneral.ini`) tragen einen Tippfehler `End Upgrade_AmericaHallfireDrone`, den das Original
-  toleriert, der alte Parser aber als offenen Block fortsetzte. Dadurch ändert sich die Objektzahl leicht (2.113 → 2.115)
-  und der Definitionsfingerabdruck.
-- Die Update-Phasen des Originals (`SleepyUpdatePhase`) sind nicht modelliert.
-- Der Fear-Sound-Zufallsverbrauch (`ActiveBody::attemptDamage`, `GameLogicRandomValue(0,99)` bei Unterschreiten der
-  25-%-Schwelle) ist portiert (Block 0.3 abgeschlossen, `VoiceFearRequested`-Event, Test `Phase5FearSoundRng`).
-- Der Abgleich des RNG mit einem kompilierten Original steht aus (kein Compiler verfügbar); die Handrechnung ist unabhängig
-  und reicht als Beleg für Algorithmusgleichheit, nicht als Beleg für die Weiterverwendung in Netzwerkspielen.
-- `Restore` ist intern; Vorwärts-/Rückwärtskompatibilität von Snapshots (aktuell Version 7, ältere werden abgewiesen) ist erst Thema von Phase 9.
-- Der Zustands-Hash ist nicht kryptographisch und die Snapshot-JSON-Größe (≈ 485 Byte je Entity) ist nicht optimiert.
-- Vom Kern erzeugte Anforderungen (`FxRequested`, `WeaponFireRequested`, `VoiceFearRequested`, `CrateRequested`) werden
-  nicht ausgeführt; sie sind Verträge für Präsentation. `CreationListRequested` ist Protokoll: die Liste wird in der Welt
-  ausgeführt (`CreateFromList`); nicht simulierte Nuggets (`CreateDebris`, `ApplyRandomForce`, `FireWeapon`, `Attack`,
-  `DeliverPayload`) melden sich mit `CreationSkipped`. Weitere Abweichungen von `ObjectCreationList.cpp` (Zugreihenfolge
-  wegen verzögertem Spawn, flaches Terrain, `FixedTrig` statt binary32, einmaliger `LifetimeUpdate`-Zug) stehen in
+- **Phase 5 (completed)**: economy with supply, upgrades, sciences, direct combat with area damage and
+  `WeaponBonus`, experience and veterancy levels, teams and diplomacy, garrison/transport, repair dock, simple movement,
+  production and victory/defeat are implemented (`docs/GAME-RULES.md`), but deliberately simplified; terrain, pathfinding, construction and selling have existed since Phase 6 (§13–§16), what remains open is
+  collision (projectile flight time has been implemented since Phase 8, §21), the effect of `CommandSet` and radar and the armor/weapon set selection by veterancy level. Every simplification is stated with a source reference in the module or
+  catalog comment; the list of limits is in `docs/GAME-RULES.md` §10.
+- An INI parser bug was fixed in Phase 5: `SageIniParser` compared the `End` keyword against the *entire*
+  line instead of (like the original, `INI::initFromINIMulti`, `strtok`) only against its first token; two objects
+  (`AmericaVehicle.ini`, `BossGeneral.ini`) carry a typo `End Upgrade_AmericaHallfireDrone`, which the original
+  tolerates, but which the old parser continued as an open block. This slightly changes the object count (2,113 → 2,115)
+  and the definition fingerprint.
+- The update phases of the original (`SleepyUpdatePhase`) are not modelled.
+- The fear sound random consumption (`ActiveBody::attemptDamage`, `GameLogicRandomValue(0,99)` when falling below the
+  25 % threshold) is ported (block 0.3 completed, `VoiceFearRequested` event, test `Phase5FearSoundRng`).
+- The comparison of the RNG with a compiled original is pending (no compiler available); the hand calculation is independent
+  and suffices as evidence of algorithm equality, not as evidence for reuse in network games.
+- `Restore` is internal; forward/backward compatibility of snapshots (currently version 7, older ones are rejected) is a topic of Phase 9 only.
+- The state hash is not cryptographic and the snapshot JSON size (≈ 485 bytes per entity) is not optimised.
+- Requests generated by the core (`FxRequested`, `WeaponFireRequested`, `VoiceFearRequested`, `CrateRequested`) are
+  not executed; they are contracts for presentation. `CreationListRequested` is a log: the list is executed in the world
+  (`CreateFromList`); nuggets that are not simulated (`CreateDebris`, `ApplyRandomForce`, `FireWeapon`, `Attack`,
+  `DeliverPayload`) report themselves with `CreationSkipped`. Further deviations from `ObjectCreationList.cpp` (draw order
+  because of delayed spawn, flat terrain, `FixedTrig` instead of binary32, a single `LifetimeUpdate` draw) are in
   `docs/GAME-RULES.md` §6b.
-- Die Definitionsdomänen außer Object, Weapon, Armor, Upgrade, Science und Locomotor sind weiterhin flach typisiert
-  (Zahlen in `TYPED-DEFINITIONS.md`): CommandButton, Faction, GameData; `SpecialPower` ist seit Phase 5 streng typisiert. `ObjectCreationList`, `CrateData` und
-  `GameData/Gravity` sind typisiert.
-- Der Referenzmatch (`ReferenceMatchScenario`, `SimTool reference-match`) läuft auf synthetischen und auf Retail-Daten
-  deterministisch und replaybar (13 von 13 Fraktionen mit ihren echten Kommandozentralen, ohne
-  Dozer/Arbeiter, Supply und Spezialkräfte im Befehlsstrom; Messung in `docs/GAME-RULES.md` §7a). Golden-Master-
-  Szenarien existieren für die Schadenskette und die Produktionsuhr; Supply und Erfahrung stehen aus. Übrige Mechaniken sind
-  durch gezielte Integrationstests (`Tests.Phase5.cs`) und den 216.000-Tick-Stresstest mit realen Objekten abgesichert.
-- **Live/Replay-Lücke bei `SharedReadyFrame` (gefunden in Phase 8, Paket G2; behoben in Phase 9):** `SpecialPowerBase.SharedReadyFrame()`
-  (`src/CnCNew.Simulation/Modules/BuiltIn/SpecialPowerModules.cs`) legte den geteilten Bereitschafts-Tick eines `SharedSynced`-Spezialkraft
-  verzögert an, beim *ersten* `IsReady()`-Zugriff, und schrieb ihn dabei in `SimulationWorld`. Für Objekte, die die Kraft von Anfang an besitzen
-  (kein `PurchaseScienceCommand`, also kein `OnSpecialPowerCreation`), war dieser lesende Zugriff der einzige Anlegezeitpunkt. Die Skirmish-KI
-  ruft `IsReady()` in ihrer eigenen Entscheidungslogik in jedem echten Tick ab; ein reiner `ReplayRunner`-Lauf führt keinen KI-Code aus und
-  erreichte diesen Zugriff nie zum gleichen Tick (wenn überhaupt). Dadurch konnte `SkirmishMatchSession.Step()` (live) einen anderen
-  `World.StateHash` liefern als `ReplayRunner.Run` über denselben `Session.ToReplay()`-Mitschnitt, reproduziert an `LiveMatch` auf
-  „Alpine Assault“: `players[2].sharedReadyFrames` hatte nach einem KI-`ConstructCommand` bei Tick 13/14 acht Einträge live gegenüber null im
-  Replay (Diagnose mit `WorldSnapshot.Write` beider Welten verglichen; kein Effekt der Präsentationsschicht, reproduzierte auch mit reinem
-  `Session.Step()`). Betroffen waren ausschließlich `SharedSynced`-Spezialkräfte ohne expliziten Gewährungsbefehl.
-  **Fix (Phase 9):** `SpecialPowerModuleBase.OnSpawn` legt den Bereitschafts-Tick jetzt für nicht im Bau befindliche Objekte deterministisch an
-  (`SharedReadyFrame(world)` statt der bisherigen Auslassung für `SharedSynced`-Kräfte); `IsReady()` liest ihn nur noch, ohne ihn selbst
-  anzulegen. Objekte, die noch im Bau sind, erhalten ihn weiterhin über `OnSpecialPowerCreation` (Baufertigstellung via `SpecialPowerCreate`,
-  oder Wissenschaftsgewährung via `AddScience`) — dieselben Anlegezeitpunkte wie bei nicht geteilten Kräften. **Nicht betroffen** waren und sind
-  alle in dieser Datei gemessenen Zahlen (Referenzmatch-, Stresstest- und KI-Lauf-Hashes in §19 und in `CLAUDE.md`): die entstehen aus Live-gegen-
-  Live-Vergleichen (zwei unabhängige Läufe derselben Session), die von dieser Lücke nie berührt wurden, weil beide Läufe dieselbe KI-
-  Abfragefolge produzieren. Neu gemessen nach dem Fix: Der Retail-Referenzmatch (`SimTool reference-match`) liefert unverändert Endhash
-  `4DCB46FE3D2E8214` (Sieger FactionAmerica, Tick 13.800) — dieses Szenario durchläuft `ReferenceMatchScenario`, nicht `SkirmishAi`, und
-  berührt die gefixte Stelle nicht. Ein Skirmish-KI-Lauf, der die Stelle sehr wohl berührt (`SimTool ai-match game/content --map
-  "Maps/Alpine Assault/Alpine Assault.map" --factions FactionAmericaAirForceGeneral,FactionChina --max-ticks 45000`; America benutzt die
-  geteilte Spezialkraft 8-mal), ändert sein Ergebnis wie erwartet (KI-Timing verschiebt sich): Sieger FactionChina bei Tick 16.155 (vorher nicht
-  mit diesem exakten Aufruf vermessen, daher kein Vorher/Nachher-Hash), Endhash `0FDF97B63EFECC6A`, weiterhin über zwei frische Läufe und
-  Snapshotfortsetzung identisch. Die 16-Karten-KI-Übersicht in §19 (Phase-6-/Paket-E1-Vergleich) wurde für diesen Fix **nicht** neu vermessen;
-  das ist eine eigene, umfangreiche Balance-Erhebung und keine reine Determinismusprüfung – wer ihre Zahlen braucht, muss sie neu laufen lassen.
-  Der 216.000-Tick-Stresstest (`SimTool stress`, synthetische Fixture) bleibt exakt gleich (`ED6F9329F59662E3`, geprüft durch Vergleich vor/nach
-  dem Fix bei sonst unverändertem Code) — die Fixture trägt keine `SharedSynced`-Spezialkraft.
+- The definition domains other than Object, Weapon, Armor, Upgrade, Science and Locomotor are still flatly typed
+  (numbers in `TYPED-DEFINITIONS.md`): CommandButton, Faction, GameData; `SpecialPower` has been strictly typed since Phase 5. `ObjectCreationList`, `CrateData` and
+  `GameData/Gravity` are typed.
+- The reference match (`ReferenceMatchScenario`, `SimTool reference-match`) runs deterministically and replayably on synthetic and on retail
+  data (13 of 13 factions with their real command centers, without
+  dozers/workers, supply and special powers in the command stream; measurement in `docs/GAME-RULES.md` §7a). Golden-master
+  scenarios exist for the damage chain and the production clock; supply and experience are pending. The remaining mechanics are
+  covered by targeted integration tests (`Tests.Phase5.cs`) and the 216,000-tick stress test with real objects.
+- **Live/replay gap at `SharedReadyFrame` (found in Phase 8, package G2; fixed in Phase 9):** `SpecialPowerBase.SharedReadyFrame()`
+  (`src/CnCNew.Simulation/Modules/BuiltIn/SpecialPowerModules.cs`) created the shared ready tick of a `SharedSynced` special power
+  lazily, on the *first* `IsReady()` access, and wrote it into `SimulationWorld` while doing so. For objects that own the power from the start
+  (no `PurchaseScienceCommand`, hence no `OnSpecialPowerCreation`), this reading access was the only creation point. The skirmish AI
+  calls `IsReady()` in its own decision logic in every real tick; a pure `ReplayRunner` run executes no AI code and
+  never reached this access at the same tick (if at all). As a result `SkirmishMatchSession.Step()` (live) could yield a different
+  `World.StateHash` than `ReplayRunner.Run` over the same `Session.ToReplay()` recording, reproduced on `LiveMatch` on
+  "Alpine Assault": after an AI `ConstructCommand` at tick 13/14, `players[2].sharedReadyFrames` had eight entries live against zero in the
+  replay (diagnosis by comparing `WorldSnapshot.Write` of both worlds; not an effect of the presentation layer, it also reproduced with pure
+  `Session.Step()`). Affected were exclusively `SharedSynced` special powers without an explicit grant command.
+  **Fix (Phase 9):** `SpecialPowerModuleBase.OnSpawn` now creates the ready tick deterministically for objects that are not under construction
+  (`SharedReadyFrame(world)` instead of the previous omission for `SharedSynced` powers); `IsReady()` now only reads it, without creating it
+  itself. Objects that are still under construction continue to receive it via `OnSpecialPowerCreation` (construction completion via `SpecialPowerCreate`,
+  or science grant via `AddScience`) — the same creation points as for non-shared powers. **Not affected** were and are
+  all numbers measured in this file (reference match, stress test and AI run hashes in §19 and in `CLAUDE.md`): they arise from live-against-
+  live comparisons (two independent runs of the same session), which were never touched by this gap because both runs produce the same AI
+  query sequence. Re-measured after the fix: the retail reference match (`SimTool reference-match`) yields an unchanged final hash
+  `4DCB46FE3D2E8214` (winner FactionAmerica, tick 13,800) — this scenario runs through `ReferenceMatchScenario`, not `SkirmishAi`, and
+  does not touch the fixed place. A skirmish AI run that does touch the place (`SimTool ai-match game/content --map
+  "Maps/Alpine Assault/Alpine Assault.map" --factions FactionAmericaAirForceGeneral,FactionChina --max-ticks 45000`; America uses the
+  shared special power 8 times) changes its result as expected (AI timing shifts): winner FactionChina at tick 16,155 (previously not
+  measured with this exact invocation, hence no before/after hash), final hash `0FDF97B63EFECC6A`, still identical over two fresh runs and
+  snapshot continuation. The 16-map AI overview in §19 (Phase 6 / package E1 comparison) was **not** re-measured for this fix;
+  that is a separate, extensive balance survey and not a pure determinism check – whoever needs its numbers must run them again.
+  The 216,000-tick stress test (`SimTool stress`, synthetic fixture) stays exactly the same (`ED6F9329F59662E3`, checked by comparing before/after
+  the fix with otherwise unchanged code) — the fixture carries no `SharedSynced` special power.
 
-## 12a. Live/Replay-Determinismus: Testlücke (geschlossen)
+## 12a. Live/replay determinism: test gap (closed)
 
-Die bestehenden Replay-Tests (`Tests.ReferenceMatch.cs`, `Tests.Skirmish.cs`, `Tests.State.cs`) verglichen bisher ausschließlich zwei
-`ReplayRunner`-Läufe untereinander oder den Sieger, nie den `World.StateHash` eines live gelaufenen `SkirmishMatchSession` gegen einen
-`ReplayRunner`-Lauf über dessen eigenen `ToReplay()`-Mitschnitt. Deshalb hatte kein bestehender Test die oben beschriebene Lücke gefunden; sie
-wurde erst in Paket G2 (`CnCNew.Game.Tests`) beim Testen eines echten Live-Matches sichtbar. Phase 9 ergänzt genau diesen Vergleich:
-`Tests.Skirmish.cs` → `SkirmishLiveSessionMatchesItsOwnReplay` startet eine `SkirmishMatchSession` direkt (ohne `SkirmishMatchScenario`s
-Umweg über eine Kopie), lässt sie bis `IsOver` laufen, vergleicht `session.World.StateHash` mit `ReplayRunner.Run(session.ToReplay())` und
-prüft zusätzlich, dass die KI die geteilte Spezialkraft (`AlphaShared`/`BetaShared`, `SharedSyncedTimer = Yes` auf der Kommandozentrale der
-Testfixtur) tatsächlich benutzt hat, damit der Test die Lücke wirklich durchläuft, statt sie nur zufällig nicht zu treffen. Der Test schlägt
-auf dem unbehobenen Code fehl (verifiziert) und besteht mit dem Fix oben.
+The existing replay tests (`Tests.ReferenceMatch.cs`, `Tests.Skirmish.cs`, `Tests.State.cs`) so far compared exclusively two
+`ReplayRunner` runs with each other or the winner, never the `World.StateHash` of a live-run `SkirmishMatchSession` against a
+`ReplayRunner` run over its own `ToReplay()` recording. That is why no existing test had found the gap described above; it
+only became visible in package G2 (`CnCNew.Game.Tests`) when testing a real live match. Phase 9 adds exactly this comparison:
+`Tests.Skirmish.cs` → `SkirmishLiveSessionMatchesItsOwnReplay` starts a `SkirmishMatchSession` directly (without `SkirmishMatchScenario`'s
+detour via a copy), lets it run until `IsOver`, compares `session.World.StateHash` with `ReplayRunner.Run(session.ToReplay())` and
+additionally checks that the AI actually used the shared special power (`AlphaShared`/`BetaShared`, `SharedSyncedTimer = Yes` on the command center of the
+test fixture), so that the test really runs through the gap instead of merely not hitting it by chance. The test fails
+on the unfixed code (verified) and passes with the fix above.
 
-## 13. Gelände und Karten (Phase 6)
+## 13. Terrain and maps (Phase 6)
 
-`CnCNew.Formats` dekodiert die Kartendatei (`SageMapDecoder`; Container CkMp, EAR (RefPack) und ZL5, Blend-Tile-Versionen 6–8) in ein
-unveränderliches `MapData` (`CnCNew.Data.World`: Höhenraster, Blend-Tiles, Objekte, Wegpunkte und -verbindungen, Polygontrigger,
-Bauliste). Die Simulation liest kein Kartenformat: `TerrainMap` (`CnCNew.Simulation/Terrain`) wird aus `MapData` gebaut und ist
-das einzige Geländeobjekt, das die Welt kennt.
+`CnCNew.Formats` decodes the map file (`SageMapDecoder`; containers CkMp, EAR (RefPack) and ZL5, blend tile versions 6–8) into an
+immutable `MapData` (`CnCNew.Data.World`: height grid, blend tiles, objects, waypoints and waypoint links, polygon triggers,
+build list). The simulation reads no map format: `TerrainMap` (`CnCNew.Simulation/Terrain`) is built from `MapData` and is
+the only terrain object the world knows.
 
-- Raster mit `CellSize` 10 Weltkoordinaten, `CellFlags` `Cliff` (aus dem Blend-Tile-Kliffmerkmal der Karte) und `Water` (Polygontrigger mit Wasserfläche). Die Höhe wird aus dem Höhenraster
-  in Festkomma abgetastet.
-- Wegpunkte (`Player_N_Start` liefert `StartPositions`), Wasserflächen und ein **Fingerabdruck** (kanonisch, nie Pfade oder Zeit).
-  Der Fingerabdruck steht im Snapshot (v4) und im Replay (v5); ein Replay auf einem anderen Gelände wird abgewiesen.
-- Nicht übernommen (`MapTool audit` zählt sie): `GlobalLighting` (150 Karten, 130.800 Byte) und `SidesList`/`PlayerScriptsList` (150 Karten, 9.542.461 Byte), also
-  Beleuchtung, Spielerlisten und Skripte der Karte; Skripte gehören nicht zu Phase 6.
-- **`MapTool audit`** (Realdaten, 30. September): 150 Karten dekodiert, 0 fehlgeschlagen; Container CkMp 4 / EAR 145 / ZL5 1; Blend-Tile-Versionen v6 3 / v7 31 / v8 116;
-  30.391.581 Höhenpunkte, 30.259.192 Zellen, davon 8.253.119 Kliffzellen; 281.480 Objekte (0 wegen Höhenbereich verworfen), 25.463 Wegpunkte, 16.489 Wegpunktverbindungen,
-  höchstens 8 Startwegpunkte je Karte (75 Karten ohne Startwegpunkt), 2.488 Polygontrigger (davon 526 Wasser), 1.631 Seiten, 7.704 Teams, 1.356 Bauliste-Einträge.
-  Gelände: 150 Karten gebaut, 16.475.736 Pfadzellen (3.278.645 Kliff, 1.856.627 Wasser), 258 Startpositionen, größte Ausdehnung 589 Zellen, 0 abgewiesen;
-  Digest der Fingerabdrücke `723F6640405C5445189D523BA257D182149CBFCEC01A6C8F0B053031FB130459`.
-- **Bodenpfade zwischen Startpositionen:** 462 Paare, 456 vollständig, 6 nur teilweise, 0 blockiert, 1.679 Wegpunkte, Digest
-  `C775CD5CD41E90BC7C55E054E6C0F04EC60A0E02D29DFC5705359B1128BF8481`. Die sechs Teilpfade sind eine bekannte Grenze (§20).
+- Grid with `CellSize` 10 world coordinates, `CellFlags` `Cliff` (from the blend tile cliff attribute of the map) and `Water` (polygon trigger with a water area). The height is sampled from the height grid
+  in fixed point.
+- Waypoints (`Player_N_Start` yields `StartPositions`), water areas and a **fingerprint** (canonical, never paths or time).
+  The fingerprint is in the snapshot (v4) and in the replay (v5); a replay on a different terrain is rejected.
+- Not taken over (`MapTool audit` counts them): `GlobalLighting` (150 maps, 130,800 bytes) and `SidesList`/`PlayerScriptsList` (150 maps, 9,542,461 bytes), that is
+  lighting, player lists and scripts of the map; scripts do not belong to Phase 6.
+- **`MapTool audit`** (real data, 30 September): 150 maps decoded, 0 failed; containers CkMp 4 / EAR 145 / ZL5 1; blend tile versions v6 3 / v7 31 / v8 116;
+  30,391,581 height points, 30,259,192 cells, of which 8,253,119 cliff cells; 281,480 objects (0 discarded because of the height range), 25,463 waypoints, 16,489 waypoint links,
+  at most 8 start waypoints per map (75 maps without a start waypoint), 2,488 polygon triggers (of which 526 water), 1,631 sides, 7,704 teams, 1,356 build list entries.
+  Terrain: 150 maps built, 16,475,736 path cells (3,278,645 cliff, 1,856,627 water), 258 start positions, largest extent 589 cells, 0 rejected;
+  digest of the fingerprints `723F6640405C5445189D523BA257D182149CBFCEC01A6C8F0B053031FB130459`.
+- **Ground paths between start positions:** 462 pairs, 456 complete, 6 only partial, 0 blocked, 1,679 waypoints, digest
+  `C775CD5CD41E90BC7C55E054E6C0F04EC60A0E02D29DFC5705359B1128BF8481`. The six partial paths are a known limit (§20).
 
-## 14. Navigation und Bewegung (Phase 6)
+## 14. Navigation and movement (Phase 6)
 
-`NavigationGrid` ist ein 8-fach verbundener A* auf dem Zellraster: Kosten 10 (gerade) und 14 (diagonal), **kein Eckenschneiden**, Gleichstände nach Zellindex,
-Erweiterungsbudget 200.000 je Anfrage (danach ist das Ergebnis `Partial` oder `Blocked`, nie ein stiller Ersatzweg). Zellklassen in dieser Vorrangfolge: Hindernis,
-Kliff, Wasser, frei; erlaubt ist, was die `Surfaces` des Locomotors zulassen (jetzt als Flags-Feld typisiert statt als Kompatibilitätswert).
+`NavigationGrid` is an 8-connected A* on the cell grid: costs 10 (straight) and 14 (diagonal), **no corner cutting**, ties by cell index,
+expansion budget 200,000 per request (after that the result is `Partial` or `Blocked`, never a silent substitute path). Cell classes in this order of precedence: obstacle,
+cliff, water, free; allowed is what the `Surfaces` of the locomotor permit (now typed as a flags field instead of a compatibility value).
 
-- **Hindernisse** sind Gebäude und andere `OBSTACLE`-Entities. Der Fußabdruck sind die Zellen, deren Mittelpunkt in der um eine Viertelzelle vergrößerten Form liegt, plus die Zelle
-  des Objekts selbst (Näherung, keine Kopie der Pathfinder-Klassifikation des Originals). `ObstacleSum` ist eine reihenfolgeunabhängige
-  Summe der Hindernisse; ändert sie sich, planen laufende Bewegungen neu.
-- **Fluchtzellen:** Steht eine Einheit (Radius 12 Zellen) oder ihr Ziel (Radius 8) in einem Hindernis, dürfen Zellen des Hindernisses mit Zuschlag 4 betreten werden. Das verhindert
-  eingeschlossene Einheiten und ist eine bewusst benannte Vereinfachung, kein Original-Verhalten.
-- `IsFootprintLegal` ist der Gelände-/Fußabdruck-Teil von `BuildAssistant::isLocationLegalToBuild` (§16).
-- `AIUpdateInterface` folgt geplanten Pfaden (`PathStatus` `Found`/`Partial`/`Blocked`), plant bei geänderter `ObstacleSum` neu, begrenzt die Drehung (`TurnRatePerTick`,
-  `FixedTrig` bekam `Atan2`, `AngleDifference`, `Normalize`) und setzt Bodeneinheiten auf die Geländehöhe. Ein teilweiser oder fehlender Pfad beendet den Befehl; es gibt keine
-  stille Ersatzbewegung.
-- Grenzen: Punktförmige Einheiten (kein echtes Blockieren von Zellen durch andere Einheiten), ein flacher A* mit Budget (keine Hierarchie, keine Brücken), Fußabdruck genähert.
-  Seit Phase 10 (§23) gibt es eine begrenzte lokale Ausweichbewegung gegen andere Einheiten (`AvoidLocalBlockers`, nicht Teil der Pfadplanung) sowie echte
-  Crush-/Squish-/Topple-Kollision, sobald sich zwei Fußabdrücke überlappen (`ResolveFootprintCollisions`); eine vollständige Steuerung/Vermeidung (Flocking) bleibt offen.
+- **Obstacles** are buildings and other `OBSTACLE` entities. The footprint is the cells whose centre lies in the shape enlarged by a quarter cell, plus the cell
+  of the object itself (an approximation, not a copy of the pathfinder classification of the original). `ObstacleSum` is an order-independent
+  sum of the obstacles; if it changes, running movements re-plan.
+- **Escape cells:** if a unit (radius 12 cells) or its destination (radius 8) stands inside an obstacle, cells of the obstacle may be entered with a surcharge of 4. This prevents
+  trapped units and is a deliberately named simplification, not original behaviour.
+- `IsFootprintLegal` is the terrain/footprint part of `BuildAssistant::isLocationLegalToBuild` (§16).
+- `AIUpdateInterface` follows planned paths (`PathStatus` `Found`/`Partial`/`Blocked`), re-plans when `ObstacleSum` has changed, limits the turn (`TurnRatePerTick`,
+  `FixedTrig` received `Atan2`, `AngleDifference`, `Normalize`) and puts ground units on the terrain height. A partial or missing path ends the command; there is no
+  silent substitute movement.
+- Limits: point-shaped units (no real blocking of cells by other units), a flat A* with a budget (no hierarchy, no bridges), approximated footprint.
+  Since Phase 10 (§23) there is a limited local avoidance movement against other units (`AvoidLocalBlockers`, not part of path planning) as well as real
+  crush/squish/topple collision as soon as two footprints overlap (`ResolveFootprintCollisions`); complete steering/avoidance (flocking) remains open.
 
-## 15. Sicht und Kriegsnebel (Phase 6)
+## 15. Vision and fog of war (Phase 6)
 
-`VisionMap` hält je Spieler und Zelle ein Byte (Bit 0 sichtbar, Bit 1 erkundet) und wird alle `VisionIntervalTicks` = 3 Ticks neu berechnet; der Sicht-Hash gehört zum Zustands-Hash
-(Snapshot v5). Aufdeckung ist kreisförmig, ohne Höhen-Sichtlinie.
+`VisionMap` holds one byte per player and cell (bit 0 visible, bit 1 explored) and is recomputed every `VisionIntervalTicks` = 3 ticks; the vision hash belongs to the state hash
+(snapshot v5). Revealing is circular, without a height line of sight.
 
-- Objekte mit Sichtweite decken für ihren Besitzer und dessen Verbündete auf; `REVEAL_TO_ALL` deckt für alle auf; Baustellen decken nur ihren `BoundingCircleRadius` auf.
-- `CanPlayerSee` schließt enthaltene Entities und nicht entdeckte `STEALTHED`-Entities aus; `EntitiesVisibleTo` liefert in aufsteigender Entity-ID-Reihenfolge. Diese Abfragen sind die einzige
-  Informationsquelle der Skirmish-KI (§18).
-- `FireWeaponCommand` auf ein für den Spieler unsichtbares Ziel wird mit `TargetNotVisible` abgelehnt.
-- Fehlerbehebung: `STEALTHED` wird nur gesetzt, wenn `CAN_STEALTH` besteht (angeboren, `StealthUpgrade`, `GrantStealth`); vorher wurde es unabhängig davon gesetzt und ließ alle Objekte getarnt erscheinen.
-- Grenzen: keine Höhenverdeckung, Aktualisierung nur alle 3 Ticks, kein Detektor-Modul (getarnte Einheiten bleiben verborgen, bis das Modul existiert).
+- Objects with a vision range reveal for their owner and its allies; `REVEAL_TO_ALL` reveals for everyone; construction sites reveal only their `BoundingCircleRadius`.
+- `CanPlayerSee` excludes contained entities and undetected `STEALTHED` entities; `EntitiesVisibleTo` delivers in ascending entity ID order. These queries are the only
+  source of information of the skirmish AI (§18).
+- `FireWeaponCommand` on a target invisible to the player is rejected with `TargetNotVisible`.
+- Bug fix: `STEALTHED` is only set if `CAN_STEALTH` exists (innate, `StealthUpgrade`, `GrantStealth`); before, it was set regardless of that and made all objects appear stealthed.
+- Limits: no height occlusion, update only every 3 ticks, no detector module (stealthed units stay hidden until the module exists).
 
-## 16. Bau, Verkauf, Reparatur und Sammelpunkte (Phase 6)
+## 16. Construction, selling, repair and rally points (Phase 6)
 
-Ein Bauwerk ist von Anfang an ein echtes Entity mit `UNDER_CONSTRUCTION`; seine Gesundheit steigt linear mit der Arbeit des Baumeisters über `BuildTime`
-(`SimulationWorld.Construction.cs`). `CheckConstruct` prüft in dieser Reihenfolge: Baumeister existiert → Erlaubnis → `BuilderOf` (Baumeister passt zur Vorlage über `CommandCatalog`) →
-Vorlage → `CanBuildTemplate` (`STRUCTURE`, `Buildable` Yes/Only_By_AI, Seite) → Voraussetzungen (`PrerequisitesSatisfied`: Science- und Objektzeilen, nur fertige Objekte) →
-Guthaben → Bauplatz (`IsFootprintLegal` plus erkundet). Die Kosten werden beim Start abgebucht; Abbruch erstattet sie.
+A structure is a real entity with `UNDER_CONSTRUCTION` from the start; its health rises linearly with the work of the builder over `BuildTime`
+(`SimulationWorld.Construction.cs`). `CheckConstruct` checks in this order: builder exists → permission → `BuilderOf` (builder matches the template via `CommandCatalog`) →
+template → `CanBuildTemplate` (`STRUCTURE`, `Buildable` Yes/Only_By_AI, side) → prerequisites (`PrerequisitesSatisfied`: science and object lines, only finished objects) →
+credits → building site (`IsFootprintLegal` plus explored). The costs are debited at the start; cancelling refunds them.
 
-- **Verkauf:** `SaleDurationTicks` = 179, Erlös = `BuildCost` × `SellPercentage` (jetzt typisiert). Der Verkauf beendet laufende Produktion des Gebäudes.
-- **Reparatur:** kostenlos (`AIUpdateInterface.IsRepairable`), eine Vereinfachung.
-- **Sammelpunkt:** `SetRallyPointCommand` setzt den Punkt, zu dem neu produzierte Einheiten laufen.
-- Snapshot v6 trägt Bau-, Verkaufs- und Sammelpunktzustand; das Replay v6 die sechs Befehle.
-- Grenzen (Stand Phase 6, siehe §23 für den Phase-10-Stand): `QueueProduction` prüfte weder Voraussetzung noch Fähigkeit des Gebäudes, `MaxSimultaneousOfType`
-  wurde nicht geprüft. Reparatur ist (und bleibt) kostenlos – das ist keine Vereinfachung, siehe §23.
+- **Selling:** `SaleDurationTicks` = 179, proceeds = `BuildCost` × `SellPercentage` (now typed). Selling ends running production of the building.
+- **Repair:** free of charge (`AIUpdateInterface.IsRepairable`), a simplification.
+- **Rally point:** `SetRallyPointCommand` sets the point to which newly produced units walk.
+- Snapshot v6 carries construction, sale and rally point state; the replay v6 the six commands.
+- Limits (as of Phase 6, see §23 for the Phase 10 state): `QueueProduction` checked neither prerequisite nor capability of the building, `MaxSimultaneousOfType`
+  was not checked. Repair is (and remains) free of charge – that is not a simplification, see §23.
 
-## 17. Kraftwerksmodule und CommandCatalog (Phase 6)
+## 17. Power plant modules and CommandCatalog (Phase 6)
 
-`PowerPlantUpgrade` (`EnergyBonus` bei Upgrade), `PowerPlantUpdate` (Stäbe ausfahren, passiv) und `OverchargeBehavior` (Energiebonus mit Gesundheitsverlust, schaltet sich bei niedriger Gesundheit selbst ab) verändern die Energieproduktion des
-Spielers über `IWorldServices.AddEnergyProduction`; `ObjectTemplate.EnergyBonus` und `CommandSets` sind neu. `TemplateCatalog.Commands` (`CommandCatalog`) löst `CommandSet` → `CommandButton` auf und
-beantwortet `OffersBuild` (welches Objekt was bauen oder produzieren kann); die KI nutzt es für Rollen (§18). Grenzen (Stand Phase 6): kein Eroberungsverhalten, kein
-Umschaltbefehl für Overcharge, Reset entfernt auch den Bonus. Seit Phase 10: `OverchargeCommand` und eine reduzierte Kraftwerkseroberung (`CaptureCommand`), §23.
+`PowerPlantUpgrade` (`EnergyBonus` on upgrade), `PowerPlantUpdate` (extend rods, passive) and `OverchargeBehavior` (energy bonus with health loss, switches itself off at low health) change the energy production of the
+player via `IWorldServices.AddEnergyProduction`; `ObjectTemplate.EnergyBonus` and `CommandSets` are new. `TemplateCatalog.Commands` (`CommandCatalog`) resolves `CommandSet` → `CommandButton` and
+answers `OffersBuild` (which object can build or produce what); the AI uses it for roles (§18). Limits (as of Phase 6): no capture behaviour, no
+toggle command for overcharge, reset also removes the bonus. Since Phase 10: `OverchargeCommand` and a reduced power plant capture (`CaptureCommand`), §23.
 
-## 18. Skirmish-KI (Phase 6)
+## 18. Skirmish AI (Phase 6)
 
-`SkirmishAi` (`Simulation/Skirmish/SkirmishAi.cs`) ist ein reiner Befehlsgeber je Computerspieler: alle 15 Ticks (`ThinkInterval`) entscheidet sie in fester Reihenfolge – Arbeiter,
-Gebäude, Baustellen, Reparatur, Science, Spezialkräfte, Armee, Sammelpunkte, Armeebefehle, Versorger – und schreibt ausschließlich typisierte Befehle (`FireInterval` 5). Sie ist eine eigenständige Neuentwicklung,
-kein Port des Skriptsystems des Originals.
+`SkirmishAi` (`Simulation/Skirmish/SkirmishAi.cs`) is a pure command issuer per computer player: every 15 ticks (`ThinkInterval`) it decides in a fixed order – workers,
+buildings, construction sites, repair, science, special powers, army, rally points, army orders, suppliers – and writes exclusively typed commands (`FireInterval` 5). It is an independent new development,
+not a port of the script system of the original.
 
-- **Rollen** ergeben sich aus Modulen und `KindOf` (Kommandozentrale, Versorgungsgebäude, Produktionsgebäude je Klasse, Kraftwerk, Verteidigung, Baumeister, Versorger, Kampfeinheit), nie aus Namen.
-- **Informationsregel:** Die KI plant nur mit `EntitiesVisibleTo`, einem Gedächtnis gesehener Gegner (`MemoryTicks` 900, Wiederbesuch alle `RevisitTicks` 3600) und den öffentlichen Startpositionen
-  (`HintPositions`). Der Test `SkirmishAiOnlyUsesWhatItSees` prüft in einem 60-Tick-Fenster, dass sie nichts verwendet, was sie nicht sieht oder erinnert.
-- Konstanten: `RetryTicks` 300, `OrderRefreshTicks` 150, Angriffsschwelle 8–30 Einheiten (`MinAttackThreshold`/`MaxAttackThreshold`), höchstens 400 Platzprüfungen je Denkschritt (`PlacementChecksPerThink`), `DefenseRadius` 450,
-  `EngageRadius` 260, Reparatur unter 70 % Gesundheit.
-- **`SkirmishMatchScenario`** (`SimTool ai-match`): kompiliert den Bestand ohne Kartenoverlays, baut das Gelände, setzt Lagerhäuser der Karte, gibt jeder Fraktion ihre Startobjekte, 10.000 Startgeld und alle 2.700 Ticks einen Science-Punkt (Ersatz für das nicht vorhandene Rangsystem, vom System gutgeschrieben) und lässt alle Computerspieler bis zum Sieg oder `--max-ticks` laufen. Exitcode 0 nur, wenn Lauf 2 und die Fortsetzung aus einem Snapshot
-  tickgleich sind (`SkirmishMatchOptions.Standard`: Weltseed `0xC0FFEE06`, KI-Seed `0x5EED0006`, 108.000 Ticks, Checkpoint 300).
+- **Roles** result from modules and `KindOf` (command center, supply building, production building per class, power plant, defence, builder, supplier, combat unit), never from names.
+- **Information rule:** the AI plans only with `EntitiesVisibleTo`, a memory of seen enemies (`MemoryTicks` 900, revisit every `RevisitTicks` 3600) and the public start positions
+  (`HintPositions`). The test `SkirmishAiOnlyUsesWhatItSees` checks in a 60-tick window that it uses nothing it does not see or remember.
+- Constants: `RetryTicks` 300, `OrderRefreshTicks` 150, attack threshold 8–30 units (`MinAttackThreshold`/`MaxAttackThreshold`), at most 400 placement checks per think step (`PlacementChecksPerThink`), `DefenseRadius` 450,
+  `EngageRadius` 260, repair below 70 % health.
+- **`SkirmishMatchScenario`** (`SimTool ai-match`): compiles the content without map overlays, builds the terrain, places the supply warehouses of the map, gives every faction its start objects, 10,000 starting money and a science point every 2,700 ticks (substitute for the non-existent rank system, credited by the system) and lets all computer players run until victory or `--max-ticks`. Exit code 0 only if run 2 and the continuation from a snapshot
+  are tick-identical (`SkirmishMatchOptions.Standard`: world seed `0xC0FFEE06`, AI seed `0x5EED0006`, 108,000 ticks, checkpoint 300).
 
-## 19. Ergebnisse der KI-gegen-KI-Läufe (30. September 2026)
+## 19. Results of the AI-versus-AI runs (30 September 2026)
 
-*Historisch (30 Hz, Stand dieses Abschnitts): die Tabellen, Siegticks und Hashes hier sind überholt; maßgeblich ist `baselines/reference-manifest.json` (seit `ea52f87` bei 60 Hz), die aktuellen Werte stehen in §43.9.*
+*Historical (30 Hz, state of this section): the tables, victory ticks and hashes here are superseded; authoritative is `baselines/reference-manifest.json` (since `ea52f87` at 60 Hz), the current values are in §43.9.*
 
-Vier Karten (Alpine Assault, Armored Fury, Bitter Winter, Death Valley) × vier Paarungen, höchstens 45.000 Ticks; **jeder der 16 Läufe ist mit Lauf 2 und Snapshotfortsetzung identisch**.
-15 Läufe enden mit einem Sieger, einer (Alpine Assault, America gegen China) bleibt bis zum Limit unentschieden.
+Four maps (Alpine Assault, Armored Fury, Bitter Winter, Death Valley) × four pairings, at most 45,000 ticks; **each of the 16 runs is identical to run 2 and the snapshot continuation**.
+15 runs end with a winner, one (Alpine Assault, America versus China) stays undecided up to the limit.
 
-| Karte | Paarung | Ergebnis |
+| Map | Pairing | Result |
 |---|---|---|
-| Alpine Assault | China, GLA | China, Tick 38.655 |
-| Alpine Assault | America, China | Patt bei 45.000 |
-| Alpine Assault | GLA, America | GLA, Tick 10.980 |
-| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 22.335 |
-| Armored Fury | China, GLA | GLA, Tick 7.335 |
-| Armored Fury | America, China | China, Tick 15.840 |
-| Armored Fury | GLA, America | GLA, Tick 6.330 |
-| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 16.695 |
-| Bitter Winter | China, GLA | China, Tick 28.515 |
-| Bitter Winter | America, China | China, Tick 18.480 |
-| Bitter Winter | GLA, America | GLA, Tick 9.465 |
-| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 23.565 |
-| Death Valley | China, GLA | China, Tick 21.600 |
-| Death Valley | America, China | China, Tick 20.565 |
-| Death Valley | GLA, America | GLA, Tick 8.355 |
-| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 19.095 |
+| Alpine Assault | China, GLA | China, tick 38,655 |
+| Alpine Assault | America, China | stalemate at 45,000 |
+| Alpine Assault | GLA, America | GLA, tick 10,980 |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 22,335 |
+| Armored Fury | China, GLA | GLA, tick 7,335 |
+| Armored Fury | America, China | China, tick 15,840 |
+| Armored Fury | GLA, America | GLA, tick 6,330 |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 16,695 |
+| Bitter Winter | China, GLA | China, tick 28,515 |
+| Bitter Winter | America, China | China, tick 18,480 |
+| Bitter Winter | GLA, America | GLA, tick 9,465 |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 23,565 |
+| Death Valley | China, GLA | China, tick 21,600 |
+| Death Valley | America, China | China, tick 20,565 |
+| Death Valley | GLA, America | GLA, tick 8,355 |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 19,095 |
 
-America gewann in Phase 6 nie: Die vier America-Fraktionen hatten keine Versorgungswirtschaft, weil `ChinookAIUpdate`/`TransportAIUpdate` fehlten (seit Paket E1 vorhanden, Wiederholung unten). Das ist keine Balance-Aussage,
-sondern ein Nebenbefund der Modullücke. Der Retail-Referenzmatch (`SimTool reference-match`, 13 Fraktionen, kein Startobjekt übersprungen) endet nach Phase 6 mit
-Sieger Spieler 12 (`FactionGLAStealthGeneral`) bei Tick 26.880, Replay 27.181 Ticks, Endhash `5C370ED383EC9F6B`, Replay-Datei 949.193 Byte (SHA-256 `DCEE89309520371C0288EDB44309DA212AEE167D129343B6BB55BEA9F08A78C2`), 27 Checkpoints;
-Lauf 2 (Kettenhash `EB8BDC1482BC20DF`) und die Fortsetzung bei Tick 13.590 sind identisch. 27.607 Befehle (1.240 Produktion, 7.194 Bewegung, 13 Andocken, 18.591 Schüsse) in 7,8 s.
+America never won in Phase 6: the four America factions had no supply economy because `ChinookAIUpdate`/`TransportAIUpdate` were missing (present since package E1, repetition below). That is not a balance statement
+but a side finding of the module gap. The retail reference match (`SimTool reference-match`, 13 factions, no start object skipped) ends after Phase 6 with
+winner player 12 (`FactionGLAStealthGeneral`) at tick 26,880, replay 27,181 ticks, final hash `5C370ED383EC9F6B`, replay file 949,193 bytes (SHA-256 `DCEE89309520371C0288EDB44309DA212AEE167D129343B6BB55BEA9F08A78C2`), 27 checkpoints;
+run 2 (chain hash `EB8BDC1482BC20DF`) and the continuation at tick 13,590 are identical. 27,607 commands (1,240 production, 7,194 movement, 13 docking, 18,591 shots) in 7.8 s.
 
-### Wiederholung nach Paket E1 (Phase 8: Chinook, Transporter, Tunnel, Projektilflugzeit)
+### Repetition after package E1 (Phase 8: Chinook, transports, tunnels, projectile flight time)
 
-Gleiche Aufrufe (`SimTool ai-match … --factions <A>,<B> --max-ticks 45000`, Standardseeds), alle 16 Läufe, ohne Auswahl. **Jeder Lauf ist mit Lauf 2 und
-Snapshotfortsetzung identisch**, und eine zweite, unabhängige Auswertung mit einem frisch gebauten Werkzeug lieferte dieselben 16 Ergebnisse.
+Same invocations (`SimTool ai-match … --factions <A>,<B> --max-ticks 45000`, default seeds), all 16 runs, without selection. **Every run is identical to run 2 and
+the snapshot continuation**, and a second, independent evaluation with a freshly built tool delivered the same 16 results.
 
-| Karte | Paarung | Phase 6 | Paket E1 |
+| Map | Pairing | Phase 6 | Package E1 |
 |---|---|---|---|
-| Alpine Assault | China, GLA | China, Tick 38.655 | **Patt bei 45.000** |
-| Alpine Assault | America, China | Patt bei 45.000 | **America, Tick 10.575** |
-| Alpine Assault | GLA, America | GLA, Tick 10.980 | GLA, Tick 18.870 |
-| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 22.335 | China Tank General, Tick 22.155 |
-| Armored Fury | China, GLA | GLA, Tick 7.335 | GLA, Tick 9.240 |
-| Armored Fury | America, China | China, Tick 15.840 | **America, Tick 9.390** |
-| Armored Fury | GLA, America | GLA, Tick 6.330 | GLA, Tick 30.735 |
-| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 16.695 | China Tank General, Tick 17.430 |
-| Bitter Winter | China, GLA | China, Tick 28.515 | China, Tick 32.490 |
-| Bitter Winter | America, China | China, Tick 18.480 | **America, Tick 19.980** |
-| Bitter Winter | GLA, America | GLA, Tick 9.465 | GLA, Tick 18.240 |
-| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 23.565 | China Tank General, Tick 34.515 |
-| Death Valley | China, GLA | China, Tick 21.600 | China, Tick 39.555 |
-| Death Valley | America, China | China, Tick 20.565 | **America, Tick 10.155** |
-| Death Valley | GLA, America | GLA, Tick 8.355 | GLA, Tick 16.320 |
-| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 19.095 | China Tank General, Tick 19.035 |
+| Alpine Assault | China, GLA | China, tick 38,655 | **stalemate at 45,000** |
+| Alpine Assault | America, China | stalemate at 45,000 | **America, tick 10,575** |
+| Alpine Assault | GLA, America | GLA, tick 10,980 | GLA, tick 18,870 |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 22,335 | China Tank General, tick 22,155 |
+| Armored Fury | China, GLA | GLA, tick 7,335 | GLA, tick 9,240 |
+| Armored Fury | America, China | China, tick 15,840 | **America, tick 9,390** |
+| Armored Fury | GLA, America | GLA, tick 6,330 | GLA, tick 30,735 |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 16,695 | China Tank General, tick 17,430 |
+| Bitter Winter | China, GLA | China, tick 28,515 | China, tick 32,490 |
+| Bitter Winter | America, China | China, tick 18,480 | **America, tick 19,980** |
+| Bitter Winter | GLA, America | GLA, tick 9,465 | GLA, tick 18,240 |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 23,565 | China Tank General, tick 34,515 |
+| Death Valley | China, GLA | China, tick 21,600 | China, tick 39,555 |
+| Death Valley | America, China | China, tick 20,565 | **America, tick 10,155** |
+| Death Valley | GLA, America | GLA, tick 8,355 | GLA, tick 16,320 |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 19,095 | China Tank General, tick 19,035 |
 
-Ehrliche Einordnung: **America gewinnt jetzt 4 von 4 Läufen gegen China** (vorher 0 von 4, darunter das frühere Patt), **gegen GLA weiterhin 0 von 4**, und
-die Air-Force-General-Paarung verliert weiter 4 von 4. Das frühere Patt (Alpine Assault, America gegen China) ist verschwunden, dafür gibt es **ein neues Patt**
-(Alpine Assault, China gegen GLA: China steht am Ende mit 29 Objekten, GLA mit 7, darunter Kommandozentrale, Tunnel und Arbeiter; China greift nur einmal an).
-15 von 16 Läufen enden also weiterhin mit einem Sieger. Die America-Siege gegen China sind nicht allein der Chinook-Wirtschaft zuzuschreiben: in drei der
-vier Siege gibt America keinen einzigen Dockbefehl (die Chinooks versorgen selbstständig über die Versorgungsmaschine), aber die Humvees (jetzt instanziierbar,
-`TransportAIUpdate`) und die Flugzeit der chinesischen Flammenprojektile (Drachenpanzer treffen nicht mehr sofort) verschieben das Kräfteverhältnis ebenfalls;
-eine Zerlegung nach Ursachen wurde nicht gemessen. GLA-Siege dauern im Mittel länger (Tunnelheilung, Flugzeit der Raketen). Keine Balance-Aussage.
-## 20. Grenzen der Phase 6
+Honest assessment: **America now wins 4 of 4 runs against China** (previously 0 of 4, including the former stalemate), **against GLA still 0 of 4**, and
+the Air Force General pairing still loses 4 of 4. The former stalemate (Alpine Assault, America versus China) has disappeared, in exchange there is **a new stalemate**
+(Alpine Assault, China versus GLA: China stands at the end with 29 objects, GLA with 7, among them command center, tunnel and workers; China attacks only once).
+So 15 of 16 runs still end with a winner. The America victories against China are not attributable to the Chinook economy alone: in three of the
+four victories America issues not a single dock command (the Chinooks supply on their own via the supply machine), but the Humvees (now instantiable,
+`TransportAIUpdate`) and the flight time of the Chinese flame projectiles (Dragon Tanks no longer hit instantly) shift the balance of power as well;
+a breakdown by cause was not measured. GLA victories take longer on average (tunnel healing, flight time of the rockets). No balance statement.
+## 20. Limits of Phase 6
 
-- **Navigation:** punktförmige Einheiten (seit Phase 10, §23, mit begrenzter lokaler Ausweichbewegung und echter Crush-/Squish-/Topple-Kollision bei Überlappung, aber ohne echte
-  Steuerung/Flocking), flacher A* mit Budget, genäherter Fußabdruck mit Fluchtzellen (Zuschlag), Locomotoren nur über `Surfaces`; ein teilweiser oder fehlender Pfad beendet den
-  Befehl. Von 462 Startpositionspaaren sind 6 nur teilweise begehbar.
-- **Sicht:** kreisförmig, keine Höhen-Sichtlinie, Aktualisierung alle 3 Ticks, keine Detektoren. (Beides seit Phase 10 vorhanden: `StealthDetectorUpdate`
-  kam mit den Phase-7/8/9-Blockermodulen hinzu, eine Höhen-Sichtlinie für Detektoren seit Phase 10, §23; die kreisförmige Sichtweite/Aufdeckung selbst
-  (`VisionMap`, §15) bleibt ohne Höhenverdeckung.)
-- **Bau:** `QueueProduction` ohne Voraussetzungs-/Fähigkeitsprüfung, `MaxSimultaneousOfType` ungeprüft, Reparatur kostenlos. (Die ersten zwei seit Phase 10
-  behoben, §23; Reparatur ist weiterhin kostenlos, aber das ist keine Vereinfachung – siehe §23.)
-- **Kraftwerke:** keine Eroberung, kein Umschaltbefehl für `Overcharge`, Reset entfernt auch den Bonus. (Die ersten zwei seit Phase 10 vorhanden, als
-  reduzierter `CaptureCommand` bzw. `OverchargeCommand`, §23.)
-- **KI:** Spezialkräfte nicht klassifiziert, Startpositionen der Gegner sind öffentliches Wissen (`HintPositions`), von der Karte nur Lagerhäuser gesetzt, Startgeld und Science-Punkte vom System, keine Flugzeuge/Flugplätze,
-  (seit Paket E1 mit Chinook-Wirtschaft, Tunneln und Transportern, §21), Armeezusammensetzung durch Instanziierbarkeit begrenzt, gleichstarke Paarungen können in ein Patt laufen (1 von 16), ohne Detektoren können getarnte Überlebende verborgen
-  bleiben.
-- **Offen aus früheren Phasen:** Block 0.4 (RNG-Abgleich mit einem kompilierten Original; Projektilflugzeit und `ChinookAIUpdate`/`TransportAIUpdate` seit Paket E1, §21;
-  `ToppleUpdate`/`StructureToppleUpdate`/`HeightDieUpdate` und echte `CrushDie`/`SquishCollide`-Kollision seit Phase 10, §23). Seit Phase 10 teilweise geklärt (§23): Wirkung
-  von `CommandSet`/Radar, Veteranen-`ArmorSet`/`WeaponSet` (implementiert, aber in Retail-Daten ohne messbare Wirkung), Kraftwerkseroberung und Overcharge-Umschaltbefehl
-  (reduzierte Fassungen). Weiterhin offen: `CommandButtonHuntUpdate` und `SpecialAbilityUpdate` als volle Implementierungen (bleiben ehrliche Hüllenmodule).
+- **Navigation:** point-shaped units (since Phase 10, §23, with limited local avoidance movement and real crush/squish/topple collision on overlap, but without real
+  steering/flocking), flat A* with a budget, approximated footprint with escape cells (surcharge), locomotors only via `Surfaces`; a partial or missing path ends the
+  command. Of 462 start position pairs, 6 are only partially walkable.
+- **Vision:** circular, no height line of sight, update every 3 ticks, no detectors. (Both present since Phase 10: `StealthDetectorUpdate`
+  was added with the Phase 7/8/9 blocker modules, a height line of sight for detectors since Phase 10, §23; the circular vision range/revealing itself
+  (`VisionMap`, §15) remains without height occlusion.)
+- **Construction:** `QueueProduction` without prerequisite/capability check, `MaxSimultaneousOfType` unchecked, repair free of charge. (The first two fixed since Phase 10,
+  §23; repair is still free of charge, but that is not a simplification – see §23.)
+- **Power plants:** no capture, no toggle command for `Overcharge`, reset also removes the bonus. (The first two present since Phase 10, as a
+  reduced `CaptureCommand` and `OverchargeCommand` respectively, §23.)
+- **AI:** special powers not classified, start positions of the opponents are public knowledge (`HintPositions`), only supply warehouses placed from the map, starting money and science points from the system, no aircraft/airfields,
+  (since package E1 with Chinook economy, tunnels and transports, §21), army composition limited by instantiability, evenly matched pairings can run into a stalemate (1 of 16), without detectors stealthed survivors can stay
+  hidden.
+- **Open from earlier phases:** block 0.4 (RNG comparison with a compiled original; projectile flight time and `ChinookAIUpdate`/`TransportAIUpdate` since package E1, §21;
+  `ToppleUpdate`/`StructureToppleUpdate`/`HeightDieUpdate` and real `CrushDie`/`SquishCollide` collision since Phase 10, §23). Partly clarified since Phase 10 (§23): effect
+  of `CommandSet`/radar, veteran `ArmorSet`/`WeaponSet` (implemented, but without measurable effect in retail data), power plant capture and overcharge toggle command
+  (reduced versions). Still open: `CommandButtonHuntUpdate` and `SpecialAbilityUpdate` as full implementations (they remain honest shell modules).
 
-## 21. Phase 8, Paket E1: Projektilflugzeit, Transporter, Tunnel, Chinook
+## 21. Phase 8, package E1: projectile flight time, transports, tunnels, Chinook
 
-Regeln mit Quellverweisen: `docs/GAME-RULES.md` §6i (Flugzeit) und §6j (Transporter, Tunnel, Chinook). Kurzfassung der Kernänderungen:
+Rules with source references: `docs/GAME-RULES.md` §6i (flight time) and §6j (transports, tunnels, Chinook). Short version of the core changes:
 
-- **Acht neue Module** mit Katalogschema (`ModuleCatalog`, Felder aus den FieldParse-Tabellen, gegen den Bestand geprüft), Bindung und Tests:
+- **Eight new modules** with catalog schema (`ModuleCatalog`, fields from the FieldParse tables, checked against the content), binding and tests:
   `DumbProjectileBehavior`, `MissileAIUpdate`, `PointDefenseLaserUpdate` (`ProjectileModules.cs`); `TransportAIUpdate`, `ChinookAIUpdate`,
-  `HelicopterSlowDeathBehavior`, `TunnelContain`, `HelixContain` (`TransportModules.cs`). `PointDefenseLaserUpdate` und `HelicopterSlowDeathBehavior` kamen hinzu,
-  weil sonst kein Chinook der Air-Force-Generals bzw. gar kein Chinook instanziierbar geworden wäre.
-- **Flugzeit im Kern** (`SimulationWorld.Projectiles.cs`): `FireWeaponAt` ersetzt den Sofortschaden; verzögerte Treffer sind eine geordnete Liste im globalen
-  Zustand (Hash, Snapshot) und werden nach der Zerstörungsphase ausgewertet (Tickphase 5a); Projektilobjekte entstehen über die Spawn-Queue, ihre Startdaten
-  (`ProjectileLaunch`) liegen im Queue-Eintrag. Neue Ereignisse `ProjectileLaunched` (27) und `WeaponImpact` (28); Ereignisse mit Ort tragen `HasPosition` und
-  X/Y/Z. Neuer Überspringgrund `CreationSkipReasons.ProjectileNotInstantiable` (10).
-- **Festkomma:** Bézierpunkte aus der Bernsteinform (keine aufsummierten Vorwärtsdifferenzen), Kurvenlänge nach `BezierSegment::getApproximateLength` mit Rekursionsgrenze 24,
-  Flugticks `ceil` auf Rohwerten (`(d + v − 1) / v`), Richtungen über `Fixed.Sqrt`, Schwerkraft `GameData.ini Gravity / 900` je Tick²
-  (`TemplateCatalog.GravityPerTickSquared`), Winkel über `FixedTrig`. Kein `float`/`double` (`SourceRules`).
-- **Tunnelnetz:** `TunnelTracker` je Spieler im Weltzustand (Hash und Snapshot); `TunnelContain` ist `IContainerModule` auf dem gemeinsamen Netz,
-  `IWorldAttached` verbindet es beim Registrieren (auch nach Restore), `ISellModule` bildet `onSelling` ab.
-- **Befehle 26/27** (`MoveAndEnterCommand`, `EvacuateCommand`), `CommandTypes.Version = 9`; **Snapshot v7, Replay v7** (ältere werden mit klarer Meldung abgewiesen).
-- **Skirmish-KI:** Chinooks als Versorger, Tunnel (Heilung und Abkürzung), Transporter (Infanterie laden/entladen); siehe §19 für die Auswertung.
+  `HelicopterSlowDeathBehavior`, `TunnelContain`, `HelixContain` (`TransportModules.cs`). `PointDefenseLaserUpdate` and `HelicopterSlowDeathBehavior` were added
+  because otherwise no Chinook of the Air Force General, respectively no Chinook at all, would have become instantiable.
+- **Flight time in the core** (`SimulationWorld.Projectiles.cs`): `FireWeaponAt` replaces the instant damage; delayed hits are an ordered list in the global
+  state (hash, snapshot) and are evaluated after the destruction phase (tick phase 5a); projectile objects come into being via the spawn queue, their launch data
+  (`ProjectileLaunch`) lie in the queue entry. New events `ProjectileLaunched` (27) and `WeaponImpact` (28); events with a location carry `HasPosition` and
+  X/Y/Z. New skip reason `CreationSkipReasons.ProjectileNotInstantiable` (10).
+- **Fixed point:** Bézier points from the Bernstein form (no accumulated forward differences), curve length after `BezierSegment::getApproximateLength` with recursion limit 24,
+  flight ticks `ceil` on raw values (`(d + v − 1) / v`), directions via `Fixed.Sqrt`, gravity `GameData.ini Gravity / 900` per tick²
+  (`TemplateCatalog.GravityPerTickSquared`), angles via `FixedTrig`. No `float`/`double` (`SourceRules`).
+- **Tunnel network:** `TunnelTracker` per player in the world state (hash and snapshot); `TunnelContain` is an `IContainerModule` on the shared network,
+  `IWorldAttached` connects it on registration (also after restore), `ISellModule` maps `onSelling`.
+- **Commands 26/27** (`MoveAndEnterCommand`, `EvacuateCommand`), `CommandTypes.Version = 9`; **snapshot v7, replay v7** (older ones are rejected with a clear message).
+- **Skirmish AI:** Chinooks as suppliers, tunnels (healing and shortcut), transports (load/unload infantry); see §19 for the evaluation.
 
-**Messungen (30. September 2026, alle zweimal ausgeführt und verglichen):**
+**Measurements (30 September 2026, all executed twice and compared):**
 
-| Größe | Wert |
+| Quantity | Value |
 |---|---|
-| Vollinventar (`IniTool compile`) | 228 INI-Dateien (28 ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 18.321/19.871 Referenzen (1.550 Fallbacks), Snapshot 144.895.033 Byte, SHA-256 `09B84AC13823DC02C250F6BC95507BC58E13CF270E028E0DC1B5E55AA5391AA5` |
-| Retail-Basis (`--maps exclude`) | 146 INI-Dateien, 12.550 Definitionen, Snapshot 144.284.158 Byte, SHA-256 `2A31BC2A83D63A58752FD5F98B7C47215978AD8DD3C1B2870A83DA31DDDEAFE7` |
-| Kompatibilitätsbasislinie | 749 Einträge (vorher 741): 16 neue `deferred-field` (Präsentationsfelder der neuen Module: Seile/Rotorwind des Chinook, Partikel/Knochen/Ton der Helikopter-Absturzbehandlung, Ausstiegs-/Anzeigefelder des `HelixContain`), 8 `module`-Einträge entfallen (jetzt implementiert), `compatibility-module` 4.133 → 3.974 Verwendungen |
-| Module | 205 Typen, 85 implementiert, 1.470 von 2.115 Objekten instanziierbar (69,5 %), 15.543 von 19.553 Verwendungen (79,5 %) |
-| Stresstest | Endhash `ED6F9329F59662E3`, Kettenhash `3AECEB0579E460AF` (§10) |
-| Retail-Referenzmatch | 13 Fraktionen, America jetzt mit Chinook-Versorgung (keine `supply note`); Sieger Spieler 1 (FactionAmerica) bei Tick 13.800, Replay 14.101 Ticks, 1.197.235 Byte (SHA-256 `80BB3FF93421C4D7EB1F7FEA2ADCF3BBA5BB0A2B006F828EB5C3A78199AF3B98`, zwei Aufnahmen byteidentisch), 36.880 Befehle, 428 Lieferungen mit 114.450 Guthaben, Endhash `4DCB46FE3D2E8214`, Kettenhash `795E3C9868716E1B`, Fortsetzung ab Tick 7.050 identisch |
+| Full inventory (`IniTool compile`) | 228 INI files (28 excluded), 65,875 blocks, 12,574 definitions, 16,380 modules, 333,061 keys, 18,321/19,871 references (1,550 fallbacks), snapshot 144,895,033 bytes, SHA-256 `09B84AC13823DC02C250F6BC95507BC58E13CF270E028E0DC1B5E55AA5391AA5` |
+| Retail base (`--maps exclude`) | 146 INI files, 12,550 definitions, snapshot 144,284,158 bytes, SHA-256 `2A31BC2A83D63A58752FD5F98B7C47215978AD8DD3C1B2870A83DA31DDDEAFE7` |
+| Compatibility baseline | 749 entries (previously 741): 16 new `deferred-field` (presentation fields of the new modules: ropes/rotor wash of the Chinook, particles/bones/sound of the helicopter crash handling, exit/display fields of `HelixContain`), 8 `module` entries are dropped (now implemented), `compatibility-module` 4,133 → 3,974 usages |
+| Modules | 205 types, 85 implemented, 1,470 of 2,115 objects instantiable (69.5 %), 15,543 of 19,553 usages (79.5 %) |
+| Stress test | final hash `ED6F9329F59662E3`, chain hash `3AECEB0579E460AF` (§10) |
+| Retail reference match | 13 factions, America now with Chinook supply (no `supply note`); winner player 1 (FactionAmerica) at tick 13,800, replay 14,101 ticks, 1,197,235 bytes (SHA-256 `80BB3FF93421C4D7EB1F7FEA2ADCF3BBA5BB0A2B006F828EB5C3A78199AF3B98`, two recordings byte-identical), 36,880 commands, 428 deliveries with 114,450 credits, final hash `4DCB46FE3D2E8214`, chain hash `795E3C9868716E1B`, continuation from tick 7,050 identical |
 
-**Grenzen:** Projektile kollidieren nicht (Punkt 9 des Handoffs); Täuschkörper, Störsender, Marschflughöhe, veteranenabhängige Detonationseffekte, Abseilen,
-Feuern aus Containern, Flugfeldheilung des Chinook, Nemesis-Zielwahl der Tunnelverteidiger und Bunkerbrecher-Effekte fehlen; Chinook-Höhenwechsel und
-Helikopterabsturz sind kinematisch statt über `PhysicsBehavior`. 40 von 157 Projektilwaffen feuern ein nicht instanziierbares Objekt und fallen sichtbar
-(`CreationSkipped`) auf den projektillosen Flugzeitpfad zurück.
-## 22. Phase 9: Skript-VM, Missionssitzung und Zustandsformate
+**Limits:** projectiles do not collide (item 9 of the handoff); decoys, jammers, cruise altitude, veterancy-dependent detonation effects, rappelling,
+firing from containers, airfield healing of the Chinook, nemesis target selection of the tunnel defenders and bunker buster effects are missing; Chinook altitude change and
+helicopter crash are kinematic instead of via `PhysicsBehavior`. 40 of 157 projectile weapons fire a non-instantiable object and visibly
+(`CreationSkipped`) fall back to the projectile-less flight time path.
+## 22. Phase 9: script VM, mission session and state formats
 
-Die Simulation trägt seit Phase 9 zusätzlich die Ausführung der World-Builder-Skripte (`Scripting/`), die Missionssitzung und ihren Zustand (`Mission/`); Entwurf,
-Quellverweise, Abdeckungstabellen, Abweichungen und Messwerte stehen in `docs/SCRIPT-ENGINE.md`, Kampagne und Savegame in `docs/CAMPAIGN-AND-SAVEGAMES.md`.
+Since Phase 9 the simulation additionally carries the execution of the World Builder scripts (`Scripting/`), the mission session and its state (`Mission/`); design,
+source references, coverage tables, deviations and measured values are in `docs/SCRIPT-ENGINE.md`, campaign and savegame in `docs/CAMPAIGN-AND-SAVEGAMES.md`.
 
-- **Neue Weltzugriffe** (`World/SimulationWorld.Scripting.cs`): `HasPlayer`, `SetMoney`, `SetRelationship`, `TransferOwnership` (Besitzerwechsel inkl. Energieproduktion),
-  `RequestSpawn(…, healthPercent)`, `MaterializePendingSpawns()` (legt angeforderte Spawns sofort an, wie `newObject` im Original). Kein Befehlscode, keine Änderung an Snapshot (Version 7)
-  oder Replay (Version 7); `CommandTypes.Version` bleibt 9.
-- **Zustand:** `MissionSnapshot` Version 1 (`cncnew-mission-state`) bettet den unveränderten Welt-Snapshot als Roh-JSON ein und ergänzt Skriptzustand (`ScriptEngine.Describe`, in
-  einem `IStateWriter`-Durchlauf für Hash und Datei), Befehlssequenzen je Spieler und die Startoptionen; `MissionSession.StateHash` = Welt- und Skripthash.
-- **Determinismus:** alle Skriptsammlungen sind sortiert; Zufallstimer ziehen aus `LogicRandom`; der erste Auswertungszeitpunkt verzögerter Skripte ist namensabgeleitet statt zufällig
-  (Abweichung 3 in `docs/SCRIPT-ENGINE.md` §8). Der Test `SourceRules` gilt für den neuen Code unverändert und besteht.
-- **Nicht replayfähig:** Skriptaktionen (Erzeugen, Töten, Geld, Besitzerwechsel, Beziehungen) sind direkte Weltänderungen, keine aufgezeichneten Befehle; Missionen werden über Snapshots
-  verglichen, nicht über `ReplayRunner`.
+- **New world accesses** (`World/SimulationWorld.Scripting.cs`): `HasPlayer`, `SetMoney`, `SetRelationship`, `TransferOwnership` (change of owner incl. energy production),
+  `RequestSpawn(…, healthPercent)`, `MaterializePendingSpawns()` (creates requested spawns immediately, like `newObject` in the original). No command code, no change to the snapshot (version 7)
+  or replay (version 7); `CommandTypes.Version` stays 9.
+- **State:** `MissionSnapshot` version 1 (`cncnew-mission-state`) embeds the unchanged world snapshot as raw JSON and adds script state (`ScriptEngine.Describe`, in
+  one `IStateWriter` pass for hash and file), command sequences per player and the start options; `MissionSession.StateHash` = world and script hash.
+- **Determinism:** all script collections are sorted; random timers draw from `LogicRandom`; the first evaluation time of delayed scripts is name-derived instead of random
+  (deviation 3 in `docs/SCRIPT-ENGINE.md` §8). The test `SourceRules` applies unchanged to the new code and passes.
+- **Not replayable:** script actions (create, kill, money, change of owner, relationships) are direct world changes, not recorded commands; missions are compared via snapshots,
+  not via `ReplayRunner`.
 
-## 23. Phase 10, Teil B Punkt 9: Topple, Höhenstopp und echte Crush-/Squish-Kollision
+## 23. Phase 10, Part B item 9: topple, height die and real crush/squish collision
 
-Quellen (Datei, Funktion) und Kompatibilitätsfragen stehen an den Modulen selbst (`Modules/BuiltIn/ToppleAndFallModules.cs`); diese Sektion fasst Semantik, Vereinfachungen und
-Messwerte zusammen. Alle drei Module sind reine `CnCNew.Data`-Konsumenten (keine Wandzeit, kein `float`/`double`, keine Threads) und bestehen `SourceRules`.
+Sources (file, function) and compatibility questions are at the modules themselves (`Modules/BuiltIn/ToppleAndFallModules.cs`); this section summarises semantics, simplifications and
+measured values. All three modules are pure `CnCNew.Data` consumers (no wall-clock time, no `float`/`double`, no threads) and pass `SourceRules`.
 
 ### `ToppleUpdate` (`ToppleUpdate.cpp`)
 
-Ein aufrechtes Objekt (Baum, Laterne, Zaun), das von einem Objekt mit `CrusherLevel` > 1 gerammt wird (`onCollide`, hier `SimulationWorld.Collision.cs` → `TryTopple`), kippt: eine
-skalare Winkelgeschwindigkeit/-beschleunigung treibt eine Akkumulation von 0 bis zu einer festen Grenze (`π/2 − π/64`, wie im Original); wird die Grenze mit positiver
-Geschwindigkeit erreicht, dämpft `BounceVelocityPercent` die Geschwindigkeit, bis sie unter eine feste Schwelle (0,01) fällt und das Objekt zur Ruhe kommt. `KillWhenStartToppling`
-tötet sofort (keine Fallanimation); sonst tötet `KillWhenFinishedToppling` (Standard an) mit dem Todestyp `TOPPLED`, sobald das Kippen zur Ruhe kommt, und optional auch den per
-`StumpName` erzeugten Stumpf (`KillStumpWhenToppled`). `ToppleLeftOrRightOnly` schränkt die Fallrichtung auf die nähere der beiden um ±90° gedrehten Objektachsen ein
-(`angleClosestTo`) – das beeinflusst, wohin Leiche und Stumpf tatsächlich zu liegen kommen, nicht nur die Optik. **Nicht modelliert** (rein kosmetisch, da keine 3D-Transformation
-existiert): die Ebenen-Realignment-Drehung aus `applyTopplingForce` (`ReorientToppledRubble`), Topple-/Bounce-FX und die Partikel-/Soundeffekte des Treffers; diese Felder sind
-`Opaque` im Katalogschema. Eine Fehlabstimmung der drei Prozentfelder kann (wie im Original) zu einem stabilen Grenzzyklus führen, der die Schwelle nie unterschreitet – kein Fehler
-der Portierung, sondern eine Eigenschaft der Formel; die Testfixtur wählt Werte, die zuverlässig innerhalb weniger Ticks konvergieren.
+An upright object (tree, lamp post, fence) that is rammed by an object with `CrusherLevel` > 1 (`onCollide`, here `SimulationWorld.Collision.cs` → `TryTopple`) topples: a
+scalar angular velocity/acceleration drives an accumulation from 0 up to a fixed limit (`π/2 − π/64`, as in the original); if the limit is reached with positive
+velocity, `BounceVelocityPercent` damps the velocity until it falls below a fixed threshold (0.01) and the object comes to rest. `KillWhenStartToppling`
+kills immediately (no fall animation); otherwise `KillWhenFinishedToppling` (default on) kills with the death type `TOPPLED` as soon as the toppling comes to rest, and optionally also the
+stump created via `StumpName` (`KillStumpWhenToppled`). `ToppleLeftOrRightOnly` restricts the fall direction to the nearer of the two object axes rotated by ±90°
+(`angleClosestTo`) – this influences where corpse and stump actually come to lie, not only the looks. **Not modelled** (purely cosmetic, since no 3D transformation
+exists): the plane realignment rotation from `applyTopplingForce` (`ReorientToppledRubble`), topple/bounce FX and the particle/sound effects of the hit; these fields are
+`Opaque` in the catalog schema. A mismatch of the three percent fields can (as in the original) lead to a stable limit cycle that never falls below the threshold – not a bug
+of the port but a property of the formula; the test fixture chooses values that reliably converge within a few ticks.
 
 ### `StructureToppleUpdate` (`StructureToppleUpdate.cpp`)
 
-Reagiert auf den normalen Tod des Gebäudes (`DieMuxData`, Standardmaske): nach einer zufälligen Verzögerung (`MinToppleDelay`/`MaxToppleDelay`, aus `LogicRandom` gezogen) kippt das
-Gebäude in eine aus der Angreiferposition abgeleitete Richtung (plus ±π/8 Jitter, ebenfalls aus `LogicRandom` – deterministisch, nicht der nicht-synchronisierte
-`GameLogicRandomValueReal` des Originals) über eine sinusförmig beschleunigte, durch `StructuralIntegrity`/`StructuralDecay` gedämpfte Akkumulation bis `π/2`. Während des Kippens
-feuert `CrushingWeaponName` Bodentreffer entlang der Falllinie, sobald der Neigungswinkel ≤ π/6 ist (`applyCrushingDamage`), über die bestehende Waffeninfrastruktur
-(`IWorldServices.FireWeaponAt`). **Vereinfacht:** das Original feuert pro Tick ein Raster aus Schüssen über die gesamte Gebäudebreite (`doDamageLine`); portiert ist nur der
-vorderste Punkt der Linie (`m_lastCrushedLocation`-Fortschritt), die seitliche Streuung entfällt – weniger Flächenschaden unter einem einstürzenden Gebäude, nicht keiner; das
-Modul meldet das einmal je Objekt explizit (`SimEventKind.CreationSkipped`, `CreationSkipReasons.SettingNotSimulated`, Text „StructureToppleUpdate crushing grid sweep“). FX-Listen,
-die Salven-Kadenz (`Min/MaxToppleBurstDelay`) und die `OCL`/`AngleFX`-Trümmerlisten sind `Opaque` (reine Optik); das Gebäude ändert keinen Modellzustand und wird nie selbst entfernt
-(das Modul ist sein einziges Die-Modul und löst keine Zerstörung aus – wie die Original-Trümmer, die als Objekt bestehen bleiben).
+Reacts to the normal death of the building (`DieMuxData`, default mask): after a random delay (`MinToppleDelay`/`MaxToppleDelay`, drawn from `LogicRandom`) the
+building topples in a direction derived from the attacker position (plus ±π/8 jitter, also from `LogicRandom` – deterministic, not the non-synchronised
+`GameLogicRandomValueReal` of the original) via a sinusoidally accelerated accumulation, damped by `StructuralIntegrity`/`StructuralDecay`, up to `π/2`. During the toppling
+`CrushingWeaponName` fires ground hits along the fall line as soon as the tilt angle is ≤ π/6 (`applyCrushingDamage`), via the existing weapon infrastructure
+(`IWorldServices.FireWeaponAt`). **Simplified:** the original fires a grid of shots per tick over the entire building width (`doDamageLine`); ported is only the
+foremost point of the line (`m_lastCrushedLocation` progress), the lateral spread is dropped – less area damage under a collapsing building, not none; the
+module reports this explicitly once per object (`SimEventKind.CreationSkipped`, `CreationSkipReasons.SettingNotSimulated`, text "StructureToppleUpdate crushing grid sweep"). FX lists,
+the salvo cadence (`Min/MaxToppleBurstDelay`) and the `OCL`/`AngleFX` debris lists are `Opaque` (pure looks); the building changes no model state and is never removed itself
+(the module is its only die module and triggers no destruction – like the original rubble, which persists as an object).
 
 ### `HeightDieUpdate` (`HeightDieUpdate.cpp`)
 
-Ein reiner Höhentest, jeden Tick nach `InitialDelay`: stirbt (`IWorldServices.Kill`), sobald die Z-Position unter die Zielhöhe (Geländehöhe plus `TargetHeight`, oder – mit
-`TargetHeightIncludesStructures` – die Höhe des höchsten `STRUCTURE`-Objekts im eigenen `BoundingCircleRadius`, falls größer) fällt, außer `OnlyWhenMovingDown` ist gesetzt und das
-Objekt bewegt sich gerade nicht abwärts. Ein enthaltenes Objekt (Transport) wird nie geprüft. `SnapToGroundOnDeath` setzt beim Sterben die Z-Position exakt auf die Geländehöhe; auch
-ohne das Flag verhindert die gleiche Zeile ein Absinken unter das Gelände. **Nicht modelliert:** die Brücken-/Tunnel-Ebenenhöhe, die das Original zusätzlich zur flachen
-Geländehöhe berücksichtigt (keine Pfadebenen in dieser Simulation) und `DestroyAttachedParticlesAtHeight` (reine Partikel-Aufräum-Optik, `Opaque`).
+A pure height test, every tick after `InitialDelay`: dies (`IWorldServices.Kill`) as soon as the Z position falls below the target height (terrain height plus `TargetHeight`, or – with
+`TargetHeightIncludesStructures` – the height of the highest `STRUCTURE` object within its own `BoundingCircleRadius`, if greater), unless `OnlyWhenMovingDown` is set and the
+object is currently not moving downwards. A contained object (transport) is never checked. `SnapToGroundOnDeath` sets the Z position exactly to the terrain height on dying; even
+without the flag the same line prevents sinking below the terrain. **Not modelled:** the bridge/tunnel layer height, which the original takes into account in addition to the flat
+terrain height (no path layers in this simulation) and `DestroyAttachedParticlesAtHeight` (pure particle clean-up looks, `Opaque`).
 
-### Echte Kollision für `CrushDie`/`SquishCollide`
+### Real collision for `CrushDie`/`SquishCollide`
 
-Beide Module bestanden seit Phase 5 nur, damit ihre Objekte instanziierbar werden; ihre Wirkung (Zerquetschen-Flaggen bzw. Zerquetschen-Tod) wurde nie ausgelöst, weil es keine
-Kollisionserkennung gab (vgl. die Kommentare an den Modulen selbst). Seit Phase 10 ruft `AIUpdateInterface.Move`/`MoveStraight` (`Modules/BuiltIn/Phase5Modules.cs`) nach jeder
-Positionsänderung eines Bodenobjekts `IWorldServices.ResolveFootprintCollisions(mover, stepX, stepY)` auf (implementiert in der neuen Datei `World/SimulationWorld.Collision.cs`):
+Both modules had existed since Phase 5 only so that their objects become instantiable; their effect (crush flags and crush death respectively) was never triggered because there was no
+collision detection (cf. the comments at the modules themselves). Since Phase 10 `AIUpdateInterface.Move`/`MoveStraight` (`Modules/BuiltIn/Phase5Modules.cs`) calls, after every
+position change of a ground object, `IWorldServices.ResolveFootprintCollisions(mover, stepX, stepY)` (implemented in the new file `World/SimulationWorld.Collision.cs`):
 
-- **Topple** (`TryTopple`): überlappen sich die Begrenzungskreise von Angreifer und Ziel und hat der Angreifer `CrusherLevel` > 1, wird `ToppleUpdate.ApplyTopplingForce` auf dem
-  Ziel aufgerufen (Richtung vom Angreifer zum Ziel, Geschwindigkeit = aktuelle Geschwindigkeit des Angreifers) – keine Allianzprüfung, wie im Original.
-- **Squish** (`TrySquish`): ist das Ziel kein Verbündeter des Angreifers (`RelationshipOf`), sein `SquishCollide` vorhanden, die beiden Begrenzungskreise mit einem auf 1,0 verkleinerten
-  Zielradius überlappen (wie im Original: „der Panzer muss die Infanterie wirklich treffen“) und verringert der tatsächliche Schritt dieses Ticks (`stepX`/`stepY`, nicht eine aus
-  `Angle`/`Speed` neu berechnete Geschwindigkeit – das vermeidet Vorzeichenfehler durch `Sin`/`Cos`-Rundung exakt auf der Fahrlinie) den quadrierten Abstand zum Ziel, stirbt das
-  Ziel sofort (`DamageType CRUSH`, `DeathType CRUSHED`, Schaden `HUGE_DAMAGE_AMOUNT`, unresistierbar in der Höhe, aber als normaler Schaden durchgereicht).
-- `mover.Template.CrusherLevel`/`CrushableLevel` sind neue, strikt typisierte Felder auf `ObjectTemplate` (`Templates/ObjectTemplate.cs`, `Object`-Schlüssel `CrusherLevel`/
-  `CrushableLevel`, Standard 0/255 wie im Original); `CrushableLevel` wird noch nicht ausgewertet (im Original nur für `canCrushOrSquish`, das in dieser Simulation nicht existiert –
-  jede Einheit mit `SquishCollide` ist quetschbar, unabhängig von ihrem eigenen `CrushableLevel`; eine künftige Phase kann das nachtragen).
+- **Topple** (`TryTopple`): if the bounding circles of attacker and target overlap and the attacker has `CrusherLevel` > 1, `ToppleUpdate.ApplyTopplingForce` is called on the
+  target (direction from the attacker to the target, velocity = current velocity of the attacker) – no alliance check, as in the original.
+- **Squish** (`TrySquish`): if the target is not an ally of the attacker (`RelationshipOf`), its `SquishCollide` is present, the two bounding circles overlap with a target radius reduced to 1.0
+  (as in the original: "the tank must really hit the infantry") and the actual step of this tick (`stepX`/`stepY`, not a velocity recomputed from
+  `Angle`/`Speed` – this avoids sign errors from `Sin`/`Cos` rounding exactly on the driving line) reduces the squared distance to the target, the
+  target dies immediately (`DamageType CRUSH`, `DeathType CRUSHED`, damage `HUGE_DAMAGE_AMOUNT`, unresistable in its amount, but passed through as normal damage).
+- `mover.Template.CrusherLevel`/`CrushableLevel` are new, strictly typed fields on `ObjectTemplate` (`Templates/ObjectTemplate.cs`, `Object` keys `CrusherLevel`/
+  `CrushableLevel`, default 0/255 as in the original); `CrushableLevel` is not evaluated yet (in the original only for `canCrushOrSquish`, which does not exist in this simulation –
+  every unit with `SquishCollide` is squishable, regardless of its own `CrushableLevel`; a future phase can add this).
 
-### Lokale Ausweichbewegung (`AvoidLocalBlockers`, keine Originalfunktion)
+### Local avoidance movement (`AvoidLocalBlockers`, not an original function)
 
-Kein Original-Mechanismus, sondern eine bewusst einfache Ergänzung, damit Bodeneinheiten einander nicht klaglos durchdringen: Bevor `AIUpdateInterface` den geplanten Schritt zum
-nächsten Wegpunkt anwendet, prüft `AvoidLocalBlockers`, ob die Zielposition innerhalb des Begrenzungskreises einer anderen lebenden, beweglichen Einheit (`Template.Locomotor` gesetzt
-– Gebäude blockieren bereits über `NavigationGrid`) liegt; falls ja, wird der Schrittvektor nacheinander um vier feste Winkel gedreht (±45°, ±90°) und erneut geprüft, der erste freie
-Versuch gewinnt. Bleiben alle vier Versuche blockiert, bewegt sich die Einheit unverändert in den Blocker hinein (was dort ggf. `ResolveFootprintCollisions` auslöst). **Ehrliche
-Grenzen:** das ist ein beschränktes Ausweichen, keine Steuerung/kein Flocking – es schaut nur einen Schritt voraus, stimmt sich nicht mit dem Blocker ab und kann mit einer
-entgegenkommenden Einheit pendeln; es wirkt nur mit vorhandenem `NavigationGrid` (nicht im terrainlosen Testmodus) und ändert nie den geplanten Pfad selbst, nur den einzelnen
-Schritt.
+Not an original mechanism but a deliberately simple addition so that ground units do not pass through each other without complaint: before `AIUpdateInterface` applies the planned step to the
+next waypoint, `AvoidLocalBlockers` checks whether the target position lies within the bounding circle of another living, mobile unit (`Template.Locomotor` set
+– buildings already block via `NavigationGrid`); if so, the step vector is rotated one after the other by four fixed angles (±45°, ±90°) and checked again, the first free
+attempt wins. If all four attempts remain blocked, the unit moves unchanged into the blocker (which may trigger `ResolveFootprintCollisions` there). **Honest
+limits:** this is a limited avoidance, no steering/no flocking – it looks only one step ahead, does not coordinate with the blocker and can oscillate with an
+oncoming unit; it works only with an existing `NavigationGrid` (not in the terrain-less test mode) and never changes the planned path itself, only the single
+step.
 
-### Nicht verhandelbare Einträge
+### Non-negotiable entries
 
-Katalogschema und Bindung: `src/CnCNew.Data/Registry/ModuleCatalog.cs`, `src/CnCNew.Simulation/Modules/BuiltIn/ToppleAndFallModules.cs`,
-`src/CnCNew.Simulation/Modules/BuiltIn/BuiltInModules.cs` (Registrierung). Tests: `tests/CnCNew.Simulation.Tests/Tests.Collision.cs` (fünf Testfälle: Crush/Squish,
-`ToppleUpdate` inklusive Fortsetzungstest nach einem Snapshot mitten im Fall, `StructureToppleUpdate`, `HeightDieUpdate`, lokale Ausweichbewegung), registriert in
-`tests/CnCNew.Simulation.Tests/Program.cs`. Kompatibilitätsbasislinie nach `IniTool compat-baseline`: 756 Einträge (vorher 749, siehe §11). Additive Erweiterungen an geteilten
-Dateien, die andere Agenten parallel bearbeiten könnten: zwei neue Methoden auf `IWorldServices`/`SimulationWorld` (`AvoidLocalBlockers`, `ResolveFootprintCollisions`, beide in der
-neuen Datei `World/SimulationWorld.Collision.cs`), zwei neue Felder auf `ObjectTemplate` (`CrusherLevel`, `CrushableLevel`), ein neuer Eintrag in der Bindungsliste
-`BuiltInModules.cs` und zwei minimale Aufrufe (keine Logikänderung) im Bewegungscode von `AIUpdateInterface` (`Modules/BuiltIn/Phase5Modules.cs`).
+Catalog schema and binding: `src/CnCNew.Data/Registry/ModuleCatalog.cs`, `src/CnCNew.Simulation/Modules/BuiltIn/ToppleAndFallModules.cs`,
+`src/CnCNew.Simulation/Modules/BuiltIn/BuiltInModules.cs` (registration). Tests: `tests/CnCNew.Simulation.Tests/Tests.Collision.cs` (five test cases: crush/squish,
+`ToppleUpdate` including a continuation test after a snapshot in the middle of the fall, `StructureToppleUpdate`, `HeightDieUpdate`, local avoidance movement), registered in
+`tests/CnCNew.Simulation.Tests/Program.cs`. Compatibility baseline after `IniTool compat-baseline`: 756 entries (previously 749, see §11). Additive extensions to shared
+files that other agents could be editing in parallel: two new methods on `IWorldServices`/`SimulationWorld` (`AvoidLocalBlockers`, `ResolveFootprintCollisions`, both in the
+new file `World/SimulationWorld.Collision.cs`), two new fields on `ObjectTemplate` (`CrusherLevel`, `CrushableLevel`), one new entry in the binding list
+`BuiltInModules.cs` and two minimal calls (no logic change) in the movement code of `AIUpdateInterface` (`Modules/BuiltIn/Phase5Modules.cs`).
 
-## 24. Phase 10: Befehlsknopf-Fähigkeiten, lokale Seite
+## 24. Phase 10: command button abilities, local side
 
-Details, Quellverweise und Messwerte in `docs/SCRIPT-ENGINE.md` §5/§7/§8/§9; dieser Abschnitt nennt nur die neuen Schnittstellen.
+Details, source references and measured values in `docs/SCRIPT-ENGINE.md` §5/§7/§8/§9; this section names only the new interfaces.
 
-- **Neues Modul** `SpecialAbilityUpdate` (`Modules/BuiltIn/SpecialPowerModules.cs`): eine `SpecialPowerModuleBase`-Hülle ohne eigene Wirkung (siehe
-  `docs/GAME-RULES.md` §6d); Katalogschema in `CnCNew.Data.Registry.ModuleCatalog` (31 im Bestand verwendete Felder, Quelle `SpecialAbilityUpdate.cpp`).
-  Modultypen implementiert jetzt 88 von 205 (vorher 87); Instanziierbarkeit 1.530 von 2.115 Objekten (72,3 %, vorher 70,6 %), Modulverwendungen
-  abgedeckt 15.730 von 19.553 (80,4 %, vorher 80,0 %); Kompatibilitätsbasislinie **751** Einträge (vorher 747 — fünf neue `deferred-field`-Einträge für
-  die Sound-/Partikelfelder des Moduls, ein `MISSING module`-Eintrag entfällt; `IniTool compat-baseline` neu geschrieben, Review-Gegenstand).
-- **Neue, additive API** (keine bestehende Signatur geändert):
-  - `CnCNew.Simulation.Templates.CommandCatalog.TryGetSpecialPowerAbility(string buttonName, out string specialPower)`: löst einen `CommandButton`
-    (`Command = SPECIAL_POWER*`) global auf seinen `SpecialPowerTemplate`-Namen auf; `CommandCatalog.Build` füllt die Tabelle zusätzlich zu den
-    bestehenden Baulisten.
-  - `MissionSession.LocalPlayerOf(ScriptProgram, string humanSideName = "")` (zusätzlicher Parameter, Standard unverändert) und
-    `MissionOptions.HumanSideName` (zusätzlicher Record-Parameter mit Standard `""`): der Host kann die Seite des menschlichen Betrachters benennen,
-    unabhängig von `playerIsHuman` (Generals'-Challenge-Karten ohne markierte menschliche Seite). `CampaignController.StartCurrentMission` bekommt
-    denselben zusätzlichen Parameter; `CampaignTool audit|playthrough` ein neues `--human-side <Name>`.
-- **Zustandsformat:** `MissionSnapshot.Version` **2** (vorher 1): `options.humanSideName` ergänzt; ältere Missionszustände werden mit
-  `SnapshotFormatException` abgelehnt (keine stille Migration). Welt-Snapshot (7), Replay (7) und `CommandTypes.Version` (9) sind unverändert.
-- **Determinismus:** `SpecialAbilityUpdate` fügt keinen eigenen Zustand hinzu (die geerbte Nachlademaschine von `SpecialPowerModuleBase` deckt es ab);
-  der `SourceRules`-Test besteht unverändert. `CommandCatalog`s neue Tabelle wird aus den Definitionen gebaut, nicht zur Laufzeit verändert.
+- **New module** `SpecialAbilityUpdate` (`Modules/BuiltIn/SpecialPowerModules.cs`): a `SpecialPowerModuleBase` shell without an effect of its own (see
+  `docs/GAME-RULES.md` §6d); catalog schema in `CnCNew.Data.Registry.ModuleCatalog` (31 fields used in the content, source `SpecialAbilityUpdate.cpp`).
+  Module types implemented now 88 of 205 (previously 87); instantiability 1,530 of 2,115 objects (72.3 %, previously 70.6 %), module usages
+  covered 15,730 of 19,553 (80.4 %, previously 80.0 %); compatibility baseline **751** entries (previously 747 — five new `deferred-field` entries for
+  the sound/particle fields of the module, one `MISSING module` entry is dropped; `IniTool compat-baseline` rewritten, subject of review).
+- **New, additive API** (no existing signature changed):
+  - `CnCNew.Simulation.Templates.CommandCatalog.TryGetSpecialPowerAbility(string buttonName, out string specialPower)`: resolves a `CommandButton`
+    (`Command = SPECIAL_POWER*`) globally to its `SpecialPowerTemplate` name; `CommandCatalog.Build` fills the table in addition to the
+    existing build lists.
+  - `MissionSession.LocalPlayerOf(ScriptProgram, string humanSideName = "")` (additional parameter, default unchanged) and
+    `MissionOptions.HumanSideName` (additional record parameter with default `""`): the host can name the side of the human viewer,
+    independently of `playerIsHuman` (Generals' Challenge maps without a marked human side). `CampaignController.StartCurrentMission` gets
+    the same additional parameter; `CampaignTool audit|playthrough` a new `--human-side <Name>`.
+- **State format:** `MissionSnapshot.Version` **2** (previously 1): `options.humanSideName` added; older mission states are rejected with
+  `SnapshotFormatException` (no silent migration). World snapshot (7), replay (7) and `CommandTypes.Version` (9) are unchanged.
+- **Determinism:** `SpecialAbilityUpdate` adds no state of its own (the inherited reload machine of `SpecialPowerModuleBase` covers it);
+  the `SourceRules` test passes unchanged. `CommandCatalog`'s new table is built from the definitions, not changed at run time.
 
-## 25. Phase 10: Bau-/Regelgrenzen, Veteranen-Sätze, Höhen-Sichtlinie, Capture
+## 25. Phase 10: construction/rule limits, veteran sets, height line of sight, capture
 
-Quelle und Auftrag: `docs/handoffs/HANDOFF-PHASE10.md` Punkt 10 (Fortsetzung der in Phase 9 offen gebliebenen Teile A/B). Neue Dateien: `World/SimulationWorld.PowerAndCapture.cs`
-(Overcharge-/Capture-Befehl, `MaxSimultaneousOfType`-Zähler teilt sich `World/SimulationWorld.Construction.cs`). Geänderte Dateien: `Commands/Commands.cs` (`CommandTypes.Version` 9 → 10,
-Codes 28/29, Ablehnungsgründe 35–38), `Replay/ReplayFormat.cs` (Kodierung der zwei neuen Befehle, Containerformat selbst unverändert), `Events/SimEvent.cs` (`StructureCaptured` = 29),
-`Templates/ObjectTemplate.cs` (`MaxSimultaneousOfType`, `VeteranArmor`/`VeteranWeapon`), `World/SimulationWorld.cs` (`ActiveArmor`/`ActiveWeaponIndex` nach Veteranenstufe, `IsDock`,
-`AddEnergyProduction`-Nachbarschaft), `World/SimulationWorld.Construction.cs` (`CanProduceTemplate`, `ExceedsMaxSimultaneousOfType`, `CanQueueProductionTemplate`, öffentliches
+Source and brief: `docs/handoffs/HANDOFF-PHASE10.md` item 10 (continuation of the parts A/B left open in Phase 9). New files: `World/SimulationWorld.PowerAndCapture.cs`
+(overcharge/capture command, the `MaxSimultaneousOfType` counter shares `World/SimulationWorld.Construction.cs`). Changed files: `Commands/Commands.cs` (`CommandTypes.Version` 9 → 10,
+codes 28/29, rejection reasons 35–38), `Replay/ReplayFormat.cs` (encoding of the two new commands, container format itself unchanged), `Events/SimEvent.cs` (`StructureCaptured` = 29),
+`Templates/ObjectTemplate.cs` (`MaxSimultaneousOfType`, `VeteranArmor`/`VeteranWeapon`), `World/SimulationWorld.cs` (`ActiveArmor`/`ActiveWeaponIndex` by veterancy level, `IsDock`,
+`AddEnergyProduction` neighbourhood), `World/SimulationWorld.Construction.cs` (`CanProduceTemplate`, `ExceedsMaxSimultaneousOfType`, `CanQueueProductionTemplate`, public
 `CheckConstruct`), `Modules/BuiltIn/Phase5Modules.cs` (`UpgradeMuxModule.Executed`, `ProductionUpdate.Queue`/`CountInQueue`), `Modules/BuiltIn/SpecialPowerModules.cs`
-(`SpecialPowerModuleBase.AvailableOnFrame`), `Modules/BuiltIn/Phase5BlockerModules.cs` (`StealthDetectorUpdate`, Höhen-Sichtlinie), `Terrain/TerrainMap.cs` (`HasHeightLineOfSight`),
-`Skirmish/SkirmishMatchSession.cs` (`CreateSave`-Sperre), `Testing/ReferenceMatchScenario.cs` (Produktionsauswahl respektiert jetzt Voraussetzungen).
+(`SpecialPowerModuleBase.AvailableOnFrame`), `Modules/BuiltIn/Phase5BlockerModules.cs` (`StealthDetectorUpdate`, height line of sight), `Terrain/TerrainMap.cs` (`HasHeightLineOfSight`),
+`Skirmish/SkirmishMatchSession.cs` (`CreateSave` lock), `Testing/ReferenceMatchScenario.cs` (production selection now respects prerequisites).
 
-### Bauregeln (Punkt 1)
+### Construction rules (item 1)
 
-- **Voraussetzungs- und Fähigkeitsprüfung für Einheiten:** `QueueProductionCommand` prüfte bisher nur `IsInstantiable`, Eigentümerschaft und Geld; `ConstructCommand` (Gebäude) hatte
-  seit Phase 6 bereits `CanBuildTemplate`/`PrerequisitesSatisfied`. `CanProduceTemplate` (`SimulationWorld.Construction.cs`) überträgt dieselbe Regel auf produzierte Einheiten: die
-  Vorlage darf kein `STRUCTURE` sein (die werden nur über `ConstructCommand` platziert – `Player::canBuildMoreOfType`s eigener `checkProductionInterface`-Unterschied in
-  `Player.cpp`), `Buildable = No` ist gesperrt, `Only_By_AI` nur für Computerspieler, die Seite muss zur des Produzenten passen (leere Seite auf beiden Seiten gilt als Freipass, wie bei
-  Gebäuden). `PrerequisitesSatisfied` (unverändert, §16) wird jetzt auch für Einheiten aufgerufen. Neuer Ablehnungsgrund `CannotProduceTemplate` (35); `MissingPrerequisite` (12, schon
-  vorhanden) wird wiederverwendet, weil die Bedeutung identisch ist. Quelle: `Player::canBuild` (`Player.cpp`), dessen `BSTATUS_*`-Fallunterscheidung Gebäude und Einheiten nicht
-  unterscheidet.
-- **`MaxSimultaneousOfType`:** `ObjectTemplate.MaxSimultaneousOfType` (0 = unbegrenzt) ist jetzt typisiert (`ThingTemplate::getMaxSimultaneousOfType`). `ExceedsMaxSimultaneousOfType`
-  zählt die lebenden, nicht toten Objekte exakt dieser Vorlage des Spielers plus – nur für Nicht-`STRUCTURE`-Vorlagen – alle noch in irgendeiner `ProductionUpdate`-Warteschlange
-  dieses Spielers stehenden Einträge derselben Vorlage (`ProductionUpdate.CountInQueue`, neu öffentlich); Quelle `Player::canBuildMoreOfType`/`countExisting` (`Player.cpp`). Gilt für
-  `ConstructCommand` und `QueueProductionCommand` gleichermaßen. Neuer Ablehnungsgrund `ProductionLimitReached` (36). **Nicht modelliert:** `MaxSimultaneousLinkKey` (eine
-  `NameKeyType`-Gruppierung mehrerer Vorlagen unter einem gemeinsamen Zähler); in `game/content` kommt der Schlüssel in 17 Dateien vor, aber nie zusammen mit
-  `MaxSimultaneousOfType` an genau der gruppierten Stelle, die den Unterschied sichtbar machen würde – die Lücke ist dokumentiert, nicht gemessen folgenlos.
-  Gemessene Wirkung auf echte Daten: `AmericaInfantry.ini` (Colonel Burton, `MaxSimultaneousOfType = 1`), `AirforceGeneral.ini`, `TankGeneral.ini` und 21 weitere Objektdateien tragen
-  den Schlüssel; die Skirmish-KI besaß vorher keinerlei Kappungs-Bewusstsein und hätte (ohne das hier neue, serverseitige Verbot) beliebig viele Kopien einer eigentlich einmaligen
-  Heldeneinheit anfordern können – `SkirmishAi`s eigene `PrerequisitesMet`-Vorprüfung kennt `MaxSimultaneousOfType` weiterhin nicht, verlässt sich also jetzt auf diese serverseitige
-  Schranke als Netz (ein abgelehnter Befehl ist für die KI nur ein verlorener Denkschritt, kein Fehler).
-- **Reparaturkosten – kein Fehlverhalten, sondern eine bereits korrekte Portierung:** geprüft gegen `DozerAIUpdate.cpp` (`privateRepair`/`DozerPrimaryStateMachine`'s Heilschritt:
-  `health = maxHealth * getRepairHealthPerSecond() / LOGICFRAMES_PER_SECOND`, dann `attemptHealingFromSoleBenefactor`) und `RepairDockUpdate.cpp` (`action`:
-  `healthToAddPerFrame = (maxHealth - health) / framesForFullHeal`) – **keiner der beiden Reparaturwege im Original zieht Geld ab.** Die bisherige Doku-Formulierung „Reparatur:
-  kostenlos … eine Vereinfachung“ (§16/§20, `docs/GAME-RULES.md` §11) war demnach unpräzise: es ist keine Vereinfachung, sondern die treue Portierung beider Quellfunktionen. Es gibt
-  deshalb absichtlich **keine** Codeänderung an der bestehenden kostenlosen Reparatur.
-- **Kraftwerkseroberung und der `Overcharge`-Befehl** (`World/SimulationWorld.PowerAndCapture.cs`): `OverchargeBehavior` (seit Phase 6 implementiert, `RetailMatchModules.cs`) hatte nie
-  einen Befehl, der `Toggle` erreicht – die Schaltfläche `CommandButton.ini`s `Command = TOGGLE_OVERCHARGE` lief ins Leere. `OverchargeCommand` (Typcode 28) prüft Eigentümerschaft,
-  Lebendigkeit, Fertigstellung und das Vorhandensein eines `OverchargeBehavior`-Moduls (sonst `CannotToggleOvercharge`, 38) und ruft dann dessen bereits vorhandenes `Toggle` auf – keine
-  neue Spielmechanik, nur der fehlende Draht zur bestehenden.
-  Kraftwerkseroberung ist dagegen eine echte Lücke: im Original hängt „ein Gebäude einnehmen“ komplett an `SpecialAbilityUpdate` (`ActionManager::canCaptureBuilding` verlangt
-  `obj->hasSpecialPower(SPECIAL_*_CAPTURE_BUILDING)`, eine kanalisierte, wissenschafts- und tarnungsabhängige Fähigkeit), und `SpecialAbilityUpdate` ist mit 64 blockierten Objekten (36
-  nur dadurch) der zweitgrößte verbleibende Blocker (§11) – ein eigenständiges, mehrere unzusammenhängende Fähigkeiten (Tarnen, Entführen, Hacken, Kampfabsprung, Einnehmen) umfassendes
-  Modul, dessen vollständige Umsetzung den Rahmen dieser Phase sprengt. `CaptureCommand` (Typcode 29, Ablehnungsgrund `CannotCapture` = 37) bildet stattdessen nur das **Ergebnis** nach:
-  ein beliebiges eigenes, bewegliches (ein `AIUpdateInterface` besitzendes), nicht im Bau befindliches Objekt kann ein für den Spieler sichtbares, fertiges, nicht verkauftes
-  `STRUCTURE`-Ziel direkt übernehmen, wenn es entweder einem Feind gehört oder `KINDOF_CAPTURABLE` trägt und nicht einem Verbündeten gehört (reduziertes
-  `ActionManager::canCaptureBuilding`), und wenn der Akteur bereits in Reichweite steht (`BoundingCircleRadius` + 2 Zellen, wie die Baumeister-Reichweite in `UpdateTask`, §16) –
-  **ohne** Kanalisierungstimer, Wissenschaftsvorbehalt oder Tarnungs-Erkennungs-Check der echten Fähigkeit. `ExecuteCapture` überträgt die statische `EnergyProduction` (wie die
-  Skript-Engine-eigene, unveränderte `TransferOwnership` es für `NAMED_TRANSFER_ASSETS_TO_PLAYER` schon tat) und zusätzlich jeden gerade gewährten dynamischen Bonus (ein ausgeführtes
-  `PowerPlantUpgrade`, ein aktives `OverchargeBehavior`) – das war die eigentliche Lücke: beide Module hatten keinerlei Besitzerwechsel-Rückruf, der `TransferOwnership` schon vorher
-  nicht erreichte. Nicht übertragen/zurückgesetzt: Produktionswarteschlange, Upgrades, Garnisoninhalt. Quelle für den begrenzten Mechanismus-Zuschnitt: `CommandTypes.Capture`s
-  XML-Kommentar in `Commands.cs` zitiert dieselbe Stelle in `ActionManager.cpp`.
-- **`CommandSet`/Radar – geprüft, keine weitere Wirkung gefunden:** `CommandSet` hat bereits eine echte Spielwirkung (`TemplateCatalog.Commands`/`CommandCatalog.OffersBuild`, von der
-  Skirmish-KI für Rollen genutzt, §17/§18); was fehlte, war nicht „Wirkung“, sondern der oben beschriebene `Overcharge`-Befehl – derselbe Fund wie oben, hier nur aus der
-  `CommandSet`-Perspektive dokumentiert. Radar wurde gegen die Referenz geprüft: `Player::hasRadar()` (`Player.h`/`.cpp`) wird außerhalb dieser beiden Dateien nirgends in
-  `GameLogic` gelesen – keine Spezialkraft, kein Gebäude, keine Sichtregel hängt davon ab. Der einzige Spielwirkung von Radar im Original ist die Minimap-Übersicht und
-  Radar-Pings, beides Präsentation. `RadarUpdate`/`RadarUpgrade` (seit Phase 6 implementiert) tragen bereits den vollständigen Simulationsvertrag (`Extended`/`IsExtendComplete`);
-  es gibt keine weitere Simulationswirkung nachzuholen.
+- **Prerequisite and capability check for units:** `QueueProductionCommand` so far checked only `IsInstantiable`, ownership and money; `ConstructCommand` (buildings) had
+  had `CanBuildTemplate`/`PrerequisitesSatisfied` since Phase 6. `CanProduceTemplate` (`SimulationWorld.Construction.cs`) transfers the same rule to produced units: the
+  template must not be a `STRUCTURE` (those are placed only via `ConstructCommand` – `Player::canBuildMoreOfType`'s own `checkProductionInterface` distinction in
+  `Player.cpp`), `Buildable = No` is locked, `Only_By_AI` only for computer players, the side must match that of the producer (an empty side on both sides counts as a free pass, as with
+  buildings). `PrerequisitesSatisfied` (unchanged, §16) is now also called for units. New rejection reason `CannotProduceTemplate` (35); `MissingPrerequisite` (12, already
+  present) is reused because the meaning is identical. Source: `Player::canBuild` (`Player.cpp`), whose `BSTATUS_*` case distinction does not distinguish between buildings and
+  units.
+- **`MaxSimultaneousOfType`:** `ObjectTemplate.MaxSimultaneousOfType` (0 = unlimited) is now typed (`ThingTemplate::getMaxSimultaneousOfType`). `ExceedsMaxSimultaneousOfType`
+  counts the living, not dead objects of exactly this template of the player plus – only for non-`STRUCTURE` templates – all entries of the same template still standing in any `ProductionUpdate` queue
+  of this player (`ProductionUpdate.CountInQueue`, newly public); source `Player::canBuildMoreOfType`/`countExisting` (`Player.cpp`). Applies to
+  `ConstructCommand` and `QueueProductionCommand` alike. New rejection reason `ProductionLimitReached` (36). **Not modelled:** `MaxSimultaneousLinkKey` (a
+  `NameKeyType` grouping of several templates under one shared counter); in `game/content` the key occurs in 17 files, but never together with
+  `MaxSimultaneousOfType` at exactly the grouped place that would make the difference visible – the gap is documented, not measured to be without consequence.
+  Measured effect on real data: `AmericaInfantry.ini` (Colonel Burton, `MaxSimultaneousOfType = 1`), `AirforceGeneral.ini`, `TankGeneral.ini` and 21 further object files carry
+  the key; the skirmish AI previously had no awareness of the cap whatsoever and could (without the server-side prohibition that is new here) have requested any number of copies of an actually unique
+  hero unit – `SkirmishAi`'s own `PrerequisitesMet` pre-check still does not know `MaxSimultaneousOfType`, so it now relies on this server-side
+  barrier as a net (a rejected command is only a lost think step for the AI, not an error).
+- **Repair costs – not a misbehaviour but an already correct port:** checked against `DozerAIUpdate.cpp` (`privateRepair`/`DozerPrimaryStateMachine`'s healing step:
+  `health = maxHealth * getRepairHealthPerSecond() / LOGICFRAMES_PER_SECOND`, then `attemptHealingFromSoleBenefactor`) and `RepairDockUpdate.cpp` (`action`:
+  `healthToAddPerFrame = (maxHealth - health) / framesForFullHeal`) – **neither of the two repair paths in the original deducts money.** The previous doc wording "Repair:
+  free of charge … a simplification" (§16/§20, `docs/GAME-RULES.md` §11) was therefore imprecise: it is not a simplification but the faithful port of both source functions. There is
+  therefore intentionally **no** code change to the existing free repair.
+- **Power plant capture and the `Overcharge` command** (`World/SimulationWorld.PowerAndCapture.cs`): `OverchargeBehavior` (implemented since Phase 6, `RetailMatchModules.cs`) never had
+  a command that reaches `Toggle` – the button `CommandButton.ini`'s `Command = TOGGLE_OVERCHARGE` led nowhere. `OverchargeCommand` (type code 28) checks ownership,
+  aliveness, completion and the presence of an `OverchargeBehavior` module (otherwise `CannotToggleOvercharge`, 38) and then calls its already existing `Toggle` – no
+  new game mechanic, only the missing wire to the existing one.
+  Power plant capture, in contrast, is a real gap: in the original "capturing a building" hangs completely on `SpecialAbilityUpdate` (`ActionManager::canCaptureBuilding` requires
+  `obj->hasSpecialPower(SPECIAL_*_CAPTURE_BUILDING)`, a channelled, science- and stealth-dependent ability), and `SpecialAbilityUpdate` is, with 64 blocked objects (36
+  only by it), the second-largest remaining blocker (§11) – an independent module comprising several unrelated abilities (stealth, hijack, hack, combat drop, capture),
+  whose complete implementation goes beyond the scope of this phase. `CaptureCommand` (type code 29, rejection reason `CannotCapture` = 37) instead reproduces only the **result**:
+  any own, mobile (owning an `AIUpdateInterface`) object that is not under construction can directly take over a finished, not sold `STRUCTURE` target visible to the player
+  if it either belongs to an enemy or carries `KINDOF_CAPTURABLE` and does not belong to an ally (reduced
+  `ActionManager::canCaptureBuilding`), and if the actor already stands in range (`BoundingCircleRadius` + 2 cells, like the builder range in `UpdateTask`, §16) –
+  **without** the channelling timer, science reservation or stealth detection check of the real ability. `ExecuteCapture` transfers the static `EnergyProduction` (as the
+  script engine's own, unchanged `TransferOwnership` already did for `NAMED_TRANSFER_ASSETS_TO_PLAYER`) and additionally every dynamic bonus currently granted (an executed
+  `PowerPlantUpgrade`, an active `OverchargeBehavior`) – that was the actual gap: both modules had no change-of-owner callback whatsoever, which `TransferOwnership` did not reach
+  before either. Not transferred/reset: production queue, upgrades, garrison contents. Source for the limited cut of the mechanism: `CommandTypes.Capture`'s
+  XML comment in `Commands.cs` cites the same place in `ActionManager.cpp`.
+- **`CommandSet`/radar – checked, no further effect found:** `CommandSet` already has a real game effect (`TemplateCatalog.Commands`/`CommandCatalog.OffersBuild`, used by the
+  skirmish AI for roles, §17/§18); what was missing was not "effect" but the `Overcharge` command described above – the same finding as above, documented here only from the
+  `CommandSet` perspective. Radar was checked against the reference: `Player::hasRadar()` (`Player.h`/`.cpp`) is read nowhere in `GameLogic` outside these two
+  files – no special power, no building, no vision rule depends on it. The only game effect of radar in the original is the minimap overview and
+  radar pings, both presentation. `RadarUpdate`/`RadarUpgrade` (implemented since Phase 6) already carry the complete simulation contract (`Extended`/`IsExtendComplete`);
+  there is no further simulation effect to catch up on.
 
-### Veteranen-`ArmorSet`/`WeaponSet`-Auswahl (Punkt 2)
+### Veteran `ArmorSet`/`WeaponSet` selection (item 2)
 
-`ObjectTemplate.VeteranArmor`/`VeteranWeapon` (je ein 4-elementiges Array, Index 1..3 = `Entity.VeterancyLevel`) werden aus `ArmorSet`/`WeaponSet`-Blöcken mit genau einer Bedingung
-`VETERAN`/`ELITE`/`HERO` befüllt (`ObjectTemplate.ResolveArmor`/`ResolveWeapon`, `VeterancyConditionIndex`). `SimulationWorld.ActiveArmor`/`ActiveWeaponIndex` wählen zuerst den zur
-aktuellen Stufe passenden Veteranensatz, dann `PLAYER_UPGRADE`, zuletzt den Standardsatz. **Modellierungsgrenze (unverändert gegenüber Phase 5, nur erweitert):** nur Sätze mit genau
-einer Bedingung werden aufgelöst; ein Satz, der zwei Bedingungen gleichzeitig verlangt (z. B. `PLAYER_UPGRADE VETERAN`), wird nicht unterschieden – der `SparseMatchFinder` des
-Originals score-basiert über beliebige Kombinationen zu matchen bleibt offen. **Gemessene Wirkung auf echte Daten: keine.** Eine Volltextsuche über `game/content` nach
-`Conditions` mit `VETERAN`/`ELITE`/`HERO` in einem `ArmorSet`- oder `WeaponSet`-Block ergibt **null Treffer** – kein einziges Zero-Hour-Objekt nutzt diese Bedingungen überhaupt, die
-Veteranenstufe wirkt im Original nach wie vor hauptsächlich über Waffenbonus und Gesundheit (§6h in `docs/GAME-RULES.md`). Die Auswahl ist damit für zukünftige Daten korrekt, ändert
-aber weder `audit-coverage` noch `reference-match` am echten Bestand.
+`ObjectTemplate.VeteranArmor`/`VeteranWeapon` (a 4-element array each, index 1..3 = `Entity.VeterancyLevel`) are filled from `ArmorSet`/`WeaponSet` blocks with exactly one condition
+`VETERAN`/`ELITE`/`HERO` (`ObjectTemplate.ResolveArmor`/`ResolveWeapon`, `VeterancyConditionIndex`). `SimulationWorld.ActiveArmor`/`ActiveWeaponIndex` choose first the veteran set matching the
+current level, then `PLAYER_UPGRADE`, last the default set. **Modelling limit (unchanged compared with Phase 5, only extended):** only sets with exactly
+one condition are resolved; a set that requires two conditions at the same time (e.g. `PLAYER_UPGRADE VETERAN`) is not distinguished – matching score-based over arbitrary combinations like the `SparseMatchFinder` of the
+original remains open. **Measured effect on real data: none.** A full-text search over `game/content` for
+`Conditions` with `VETERAN`/`ELITE`/`HERO` in an `ArmorSet` or `WeaponSet` block yields **zero hits** – not a single Zero Hour object uses these conditions at all, the
+veterancy level in the original still acts mainly via weapon bonus and health (§6h in `docs/GAME-RULES.md`). The selection is thus correct for future data, but changes
+neither `audit-coverage` nor `reference-match` on the real content.
 
-### Detektoren und Höhen-Sichtlinie (Punkt 3)
+### Detectors and height line of sight (item 3)
 
-`StealthDetectorUpdate` existierte bereits (seit den Phase-7/8/9-Blockermodulen, `Phase5BlockerModules.cs`) und erkannte getarnte Objekte in Reichweite bereits korrekt (geprüft:
-`Tests.Phase5StealthDetector` bestand unverändert) – die offene Lücke war nicht die Erkennung selbst, sondern die fehlende Geländeverdeckung. `TerrainMap.HasHeightLineOfSight`
-(`Terrain/TerrainMap.cs`) ist eine eigenständige, nicht aus dem Original portierte Sichtlinienprüfung (das Original löst Sichtlinien über `PartitionManager`s
-Objekt-zu-Objekt-Tests, die dieses Projekt nicht hat): sie läuft die Gerade zwischen zwei Augenpunkten in Schritten von `CellSize` ab (höchstens `MaxLineOfSightSamples` = 64 Proben;
-länger als das wird unterabgetastet – eine benannte, bei den real vorkommenden Sicht-/Erkennungsreichweiten folgenlose Grenze) und vergleicht an jeder Probe die Geländehöhe
-(`HeightAt`) gegen die geradlinig interpolierte Höhe der Sichtlinie; die erste Probe, an der das Gelände die Linie übersteigt, blockiert. Das ist reine Verdeckung: eine höher
-stehende Beobachterin bekommt keinen Reichweitenbonus, sie wird nur seltener blockiert („sieht über“ niedrigeres Gelände bis zur regulären Reichweitengrenze); nur Geländehöhe zählt,
-Gebäude/Bäume/Klippen-als-Hindernis sind keine Geometrie hier. `StealthDetectorUpdate.Update` ruft sie zwischen Detektor und Ziel auf, mit der „Augenhöhe“ = Bodenposition plus volle
-`GeometryHeight` des Objekts (kein eigenes Augenhöhenfeld im Katalog – eine benannte Vereinfachung); ohne Terrain (synthetische Fixtures) bleibt das Verhalten exakt wie zuvor (jedes
-Ziel in Reichweite ist erreichbar). Die kreisförmige Sichtweiten-/Aufdeckungsberechnung selbst (`VisionMap`, §15) bleibt unverändert ohne Höhenverdeckung – das wäre eine
-Schattenwurf-Berechnung pro Zelle und deutlich teurer; nur die Detektor-zu-Ziel-Prüfung (paarweise, so teuer wie der ohnehin vorhandene O(Objekte)-Scan) bekam die Höhenprüfung.
+`StealthDetectorUpdate` already existed (since the Phase 7/8/9 blocker modules, `Phase5BlockerModules.cs`) and already detected stealthed objects in range correctly (checked:
+`Tests.Phase5StealthDetector` passed unchanged) – the open gap was not the detection itself but the missing terrain occlusion. `TerrainMap.HasHeightLineOfSight`
+(`Terrain/TerrainMap.cs`) is an independent line-of-sight check not ported from the original (the original resolves lines of sight via `PartitionManager`'s
+object-to-object tests, which this project does not have): it walks the straight line between two eye points in steps of `CellSize` (at most `MaxLineOfSightSamples` = 64 samples;
+anything longer than that is undersampled – a named limit without consequence at the vision/detection ranges that really occur) and compares at every sample the terrain height
+(`HeightAt`) against the linearly interpolated height of the line of sight; the first sample at which the terrain exceeds the line blocks. This is pure occlusion: an observer standing
+higher gets no range bonus, she is only blocked less often ("sees over" lower terrain up to the regular range limit); only terrain height counts,
+buildings/trees/cliffs-as-obstacle are not geometry here. `StealthDetectorUpdate.Update` calls it between detector and target, with the "eye height" = ground position plus the full
+`GeometryHeight` of the object (no eye height field of its own in the catalog – a named simplification); without terrain (synthetic fixtures) the behaviour stays exactly as before (every
+target in range is reachable). The circular vision range/revealing computation itself (`VisionMap`, §15) remains unchanged without height occlusion – that would be a
+shadow-casting computation per cell and considerably more expensive; only the detector-to-target check (pairwise, as expensive as the O(objects) scan that exists anyway) got the height check.
 
-### Fehlende Lese-/Schreib-APIs (Punkt 4, `docs/PRESENTATION-INPUT.md` §10, `docs/GAME-HUD.md`)
+### Missing read/write APIs (item 4, `docs/PRESENTATION-INPUT.md` §10, `docs/GAME-HUD.md`)
 
-Alle fünf in Phase 7/8 (Paket C3) offenen Wünsche sind erledigt, ausnahmslos als kleine, lesende Ergänzungen ohne Protokolländerung:
+All five wishes open in Phase 7/8 (package C3) are done, without exception as small, reading additions without a protocol change:
 
-| API | Datei | Bemerkung |
+| API | File | Remark |
 |---|---|---|
-| `SimulationWorld.CheckConstruct(PlayerId, ConstructCommand)` | `World/SimulationWorld.Construction.cs` | öffentlicher Trockenlauf der exakt gleichen privaten Prüfung, die auch `Submit`/`ExecuteCommands` nutzen |
-| `ProductionUpdate.Queue` | `Modules/BuiltIn/Phase5Modules.cs` | `ImmutableArray<ProductionQueueItem>`, Kopf zuerst, Vorlage/Kosten/Restticks |
-| `SpecialPowerModuleBase.AvailableOnFrame(IWorldServices)` | `Modules/BuiltIn/SpecialPowerModules.cs` | liest bei geteilten Kräften denselben gemeinsamen Bereitschaftsframe wie `IsReady` |
-| `UpgradeMuxModule.Executed` | `Modules/BuiltIn/Phase5Modules.cs` | liest den bisher `protected`en `UpgradeMuxState.Executed` |
-| `SimulationWorld.IsDock(EntityId)` | `World/SimulationWorld.cs` | ersetzt den Modulnamen-Abgleich (`SupplyCenterDockUpdate` usw.) von außen |
+| `SimulationWorld.CheckConstruct(PlayerId, ConstructCommand)` | `World/SimulationWorld.Construction.cs` | public dry run of the exact same private check that `Submit`/`ExecuteCommands` also use |
+| `ProductionUpdate.Queue` | `Modules/BuiltIn/Phase5Modules.cs` | `ImmutableArray<ProductionQueueItem>`, head first, template/cost/remaining ticks |
+| `SpecialPowerModuleBase.AvailableOnFrame(IWorldServices)` | `Modules/BuiltIn/SpecialPowerModules.cs` | for shared powers reads the same shared ready frame as `IsReady` |
+| `UpgradeMuxModule.Executed` | `Modules/BuiltIn/Phase5Modules.cs` | reads the `UpgradeMuxState.Executed` that was `protected` so far |
+| `SimulationWorld.IsDock(EntityId)` | `World/SimulationWorld.cs` | replaces the module name comparison (`SupplyCenterDockUpdate` etc.) from outside |
 
-Keine dieser Ergänzungen ändert Snapshot, Replay oder `CommandTypes.Version` – reine Lesezugriffe.
+None of these additions changes snapshot, replay or `CommandTypes.Version` – pure read accesses.
 
-### Skirmish: Start-/Endbarkeit jeder Karte (Punkt 5)
+### Skirmish: every map can be started and ended (item 5)
 
-Neues Werkzeug `SimTool skirmish-sweep <content-dir> [--max-ticks N]`: kompiliert den Bestand einmal, läuft dann über jede `.map`-Datei, baut ihr Terrain, und startet bei mindestens
-zwei Startpositionen ein kurzes, zweiseitiges `SkirmishMatchScenario` (`FactionAmerica` gegen `FactionAmericaAirForceGeneral`, die ersten zwei aus `ReferenceMatchScenario.Participants`)
-mit `--max-ticks` (Standard 3.000) als hartem Budget. „Start- und beendbar“ heißt hier: die Sitzung durchläuft ihren vollen Lebenszyklus (Startobjekte, KI-Denkschritte, Sieg oder
-Tick-Budget) ohne Ausnahme – keine Balance- oder Gewinnratenmessung (dafür `ai-match` und die Tabelle in §19).
+New tool `SimTool skirmish-sweep <content-dir> [--max-ticks N]`: compiles the content once, then runs over every `.map` file, builds its terrain, and with at least
+two start positions starts a short, two-sided `SkirmishMatchScenario` (`FactionAmerica` versus `FactionAmericaAirForceGeneral`, the first two from `ReferenceMatchScenario.Participants`)
+with `--max-ticks` (default 3,000) as a hard budget. "Can be started and ended" here means: the session runs through its full life cycle (start objects, AI think steps, victory or
+tick budget) without an exception – no balance or win rate measurement (for that `ai-match` and the table in §19).
 
-**Ergebnis (30.09./1.10.2026, `game/content`, `--max-ticks 3000`):** 150 Karten; 75 ohne jeden Startwegpunkt (Kampagnenkarten, dieselbe Zahl wie `MapTool audit`), 11 mit genau
-einem (nicht genug für zwei Spieler); **alle 64 Karten mit mindestens zwei Startpositionen starten und enden sauber** (0 Abstürze; da `--max-ticks` klein gegenüber den in §19 gemessenen
-Siegzeiten ist, enden praktisch alle am Tick-Budget statt mit einem Sieger, was für diese Messung irrelevant ist – entscheidend ist der exakte Lebenszyklus ohne Ausnahme). Dauer: 75 s.
-Damit ist die seit `docs/handoffs/HANDOFF-PHASE8.md` offene Abnahme „alle Skirmish-Karten start- und beendbar“ für jede Karte mit genug Startpositionen gemessen und bestanden; Karten ohne
-(genug) Startpositionen sind keine Skirmish-Karten (Kampagnenkarten oder Einzelstart-Herausforderungskarten) und kein Fehlbefund.
+**Result (30.09./1.10.2026, `game/content`, `--max-ticks 3000`):** 150 maps; 75 without any start waypoint (campaign maps, the same number as `MapTool audit`), 11 with exactly
+one (not enough for two players); **all 64 maps with at least two start positions start and end cleanly** (0 crashes; since `--max-ticks` is small compared with the victory times measured
+in §19, practically all end at the tick budget instead of with a winner, which is irrelevant for this measurement – what matters is the exact life cycle without an exception). Duration: 75 s.
+With that, the acceptance "all skirmish maps can be started and ended", open since `docs/handoffs/HANDOFF-PHASE8.md`, is measured and passed for every map with enough start positions; maps without
+(enough) start positions are not skirmish maps (campaign maps or single-start challenge maps) and not an adverse finding.
 
-### Wiederholung der 16-Karten-KI-Übersicht nach dem `SharedReadyFrame`-Fix (§19)
+### Repetition of the 16-map AI overview after the `SharedReadyFrame` fix (§19)
 
-Alle 16 Läufe aus §19s „Wiederholung nach Paket E1“-Tabelle erneut mit denselben Aufrufen (`SimTool ai-match … --max-ticks 45000`, Standardseeds) ausgeführt, da der in §12/§12a
-beschriebene `SharedReadyFrame`-Fix nach der letzten Messung dieser Tabelle gelandet war:
+All 16 runs from §19's "Repetition after package E1" table executed again with the same invocations (`SimTool ai-match … --max-ticks 45000`, default seeds), since the
+`SharedReadyFrame` fix described in §12/§12a had landed after the last measurement of this table:
 
-| Karte | Paarung | Paket E1 | Phase 10 (jetzt) | Geändert? |
+| Map | Pairing | Package E1 | Phase 10 (now) | Changed? |
 |---|---|---|---|---|
-| Alpine Assault | China, GLA | Patt bei 45.000 | Patt bei 45.000 | nein |
-| Alpine Assault | America, China | America, Tick 10.575 | America, Tick 10.575 | nein |
-| Alpine Assault | GLA, America | GLA, Tick 18.870 | GLA, Tick 18.870 | nein |
-| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 22.155 | China Tank General, Tick 23.325 | **ja** |
-| Armored Fury | China, GLA | GLA, Tick 9.240 | GLA, Tick 9.240 | nein |
-| Armored Fury | America, China | America, Tick 9.390 | America, Tick 9.390 | nein |
-| Armored Fury | GLA, America | GLA, Tick 30.735 | GLA, Tick 30.735 | nein |
-| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 17.430 | China Tank General, Tick 19.020 | **ja** |
-| Bitter Winter | China, GLA | China, Tick 32.490 | China, Tick 32.490 | nein |
-| Bitter Winter | America, China | America, Tick 19.980 | America, Tick 19.980 | nein |
-| Bitter Winter | GLA, America | GLA, Tick 18.240 | GLA, Tick 18.240 | nein |
-| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 34.515 | China Tank General, Tick 27.990 | **ja** |
-| Death Valley | China, GLA | China, Tick 39.555 | China, Tick 39.555 | nein |
-| Death Valley | America, China | America, Tick 10.155 | America, Tick 10.155 | nein |
-| Death Valley | GLA, America | GLA, Tick 16.320 | GLA, Tick 16.320 | nein |
-| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, Tick 19.035 | China Tank General, Tick 15.900 | **ja** |
+| Alpine Assault | China, GLA | stalemate at 45,000 | stalemate at 45,000 | no |
+| Alpine Assault | America, China | America, tick 10,575 | America, tick 10,575 | no |
+| Alpine Assault | GLA, America | GLA, tick 18,870 | GLA, tick 18,870 | no |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 22,155 | China Tank General, tick 23,325 | **yes** |
+| Armored Fury | China, GLA | GLA, tick 9,240 | GLA, tick 9,240 | no |
+| Armored Fury | America, China | America, tick 9,390 | America, tick 9,390 | no |
+| Armored Fury | GLA, America | GLA, tick 30,735 | GLA, tick 30,735 | no |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 17,430 | China Tank General, tick 19,020 | **yes** |
+| Bitter Winter | China, GLA | China, tick 32,490 | China, tick 32,490 | no |
+| Bitter Winter | America, China | America, tick 19,980 | America, tick 19,980 | no |
+| Bitter Winter | GLA, America | GLA, tick 18,240 | GLA, tick 18,240 | no |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 34,515 | China Tank General, tick 27,990 | **yes** |
+| Death Valley | China, GLA | China, tick 39,555 | China, tick 39,555 | no |
+| Death Valley | America, China | America, tick 10,155 | America, tick 10,155 | no |
+| Death Valley | GLA, America | GLA, tick 16,320 | GLA, tick 16,320 | no |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | China Tank General, tick 19,035 | China Tank General, tick 15,900 | **yes** |
 
-Jeder der 16 Läufe ist weiterhin mit Lauf 2 und Snapshotfortsetzung identisch. Auffällig und durchgängig: **alle 12 Paarungen ohne `FactionAmericaAirForceGeneral`/`FactionChinaTankGeneral`
-sind tickgleich mit der Paket-E1-Tabelle, alle 4 Paarungen mit genau diesen beiden Generälen weichen ab.** Das ist kein Nebeneffekt des `SharedReadyFrame`-Fixes selbst (der schon vor
-dieser Messung landete und in §12 bereits mit einem eigenen `ai-match`-Lauf belegt ist), sondern der hier neuen `MaxSimultaneousOfType`-Schranke (oben, Punkt 1): `AirforceGeneral.ini`
-und `TankGeneral.ini` tragen beide den Schlüssel für ihre einmaligen General-Einheiten, und `SkirmishAi`s eigene Vorprüfung (`PrerequisitesMet`) kannte diese Schranke nie – vorher
-konnte die KI (soweit die Vorlage sonst instanziierbar und erschwinglich war) in der Theorie mehrere Kopien einer eigentlich einmaligen Einheit anfordern, was das Original verbietet;
-jetzt wird der zweite Versuch korrekt abgelehnt. Eine abgelehnte Produktion ist für die KI nur ein verlorener Denkschritt (`Backoff`), verschiebt aber nachfolgende Entscheidungen und
-damit, über die deterministische Kaskade, den gesamten weiteren Spielverlauf – daher die veränderten, aber weiterhin deterministischen Siegzeiten. Keine Balance-Aussage.
+Each of the 16 runs is still identical to run 2 and the snapshot continuation. Conspicuous and consistent: **all 12 pairings without `FactionAmericaAirForceGeneral`/`FactionChinaTankGeneral`
+are tick-identical to the package E1 table, all 4 pairings with exactly these two generals deviate.** This is not a side effect of the `SharedReadyFrame` fix itself (which had already landed before
+this measurement and is already evidenced in §12 with an `ai-match` run of its own) but of the `MaxSimultaneousOfType` barrier that is new here (above, item 1): `AirforceGeneral.ini`
+and `TankGeneral.ini` both carry the key for their unique general units, and `SkirmishAi`'s own pre-check (`PrerequisitesMet`) never knew this barrier – before,
+the AI could (as far as the template was otherwise instantiable and affordable) in theory request several copies of an actually unique unit, which the original forbids;
+now the second attempt is correctly rejected. A rejected production is only a lost think step (`Backoff`) for the AI, but shifts subsequent decisions and
+thus, via the deterministic cascade, the entire further course of the game – hence the changed, but still deterministic victory times. No balance statement.
 
-### Skirmish-Speicherstand: Entscheidung (Punkt 6)
+### Skirmish savegame: decision (item 6)
 
-**Entscheidung: kein Speichern einer laufenden Skirmish-Sitzung als fortsetzbares Live-Spiel in dieser Phase; `SkirmishMatchSession.CreateSave()` verweigert das laut und dokumentiert,
-statt einen stillschweigend unvollständigen Spielstand zu schreiben.**
+**Decision: no saving of a running skirmish session as a resumable live game in this phase; `SkirmishMatchSession.CreateSave()` refuses this loudly and documented,
+instead of writing a silently incomplete savegame.**
 
-Zwei Dinge, die ähnlich klingen, aber zu unterscheiden sind:
+Two things that sound similar but are to be distinguished:
 
-1. **Ein abgeschlossener oder teilweise aufgezeichneter Lauf speichert und lädt bereits heute exakt:** `ToReplay()` plus ein `WorldSnapshot`-Checkpoint
-   (`SkirmishMatchOptions.CheckpointInterval`) ergeben eine tickgleiche Fortsetzung – genau das prüft jeder „snapshot continuation“-Check in `ai-match`/`reference-match` schon
-   seit Phase 6/8/9, und braucht keinerlei KI-Zustand, weil ein Replay nur die von der KI bereits erzeugten Befehle erneut ausführt, nie die KI selbst.
-2. **Was fehlt, ist das Pausieren einer noch laufenden, nicht vollständig aufgezeichneten Sitzung und ihre Fortsetzung als weiterhin live entscheidende Partie.** Dafür müsste
-   `SkirmishAi` selbst den Rundweg überleben: pro Computerspieler hält sie erhebliches, außerhalb von `World` liegendes Erinnerungs- und Ablaufwissen (Feind-/Lagerhaus-Gedächtnis mit
-   Zeitstempeln, Auftrags- und Rückzugs-Timer-Tabellen, Produktion-in-Arbeit-Verfolgung, Sammel-/Erkundungsziele, Schlechte-Stellen-Vermeidung, einen eigenen `SageRandom`-Strom – die
-   vollständige Feldliste steht in `SkirmishAi.cs`), nichts davon trägt `WorldSnapshot`. Nur die Welt zu schreiben würde beim Laden jede KI mit ausgelöschtem Gedächtnis
-   fortsetzen – kein sauberer Neustart, sondern ein leise falscher: die KI „entdeckt“ sofort wieder Feinde und Lagerhäuser, die sie längst kannte, und vergisst laufende Produktion und
-   Rückzugs-Zeitsperren, ohne dass irgendetwas einen Fehler meldet.
+1. **A completed or partially recorded run already saves and loads exactly today:** `ToReplay()` plus a `WorldSnapshot` checkpoint
+   (`SkirmishMatchOptions.CheckpointInterval`) yield a tick-identical continuation – exactly that is what every "snapshot continuation" check in `ai-match`/`reference-match` has been checking
+   since Phase 6/8/9, and it needs no AI state at all, because a replay only re-executes the commands already generated by the AI, never the AI itself.
+2. **What is missing is pausing a still running, not completely recorded session and continuing it as a game that keeps deciding live.** For that
+   `SkirmishAi` itself would have to survive the round trip: per computer player it holds considerable memory and process knowledge lying outside `World` (enemy/warehouse memory with
+   timestamps, order and retreat timer tables, production-in-progress tracking, rally/scouting targets, bad-spot avoidance, a `SageRandom` stream of its own – the
+   complete field list is in `SkirmishAi.cs`), none of which `WorldSnapshot` carries. Writing only the world would continue every AI with an erased memory
+   on loading – not a clean restart but a quietly wrong one: the AI immediately "discovers" again enemies and warehouses it had long known, and forgets running production and
+   retreat time locks, without anything reporting an error.
 
-Ein `SkirmishAiSnapshot`, der Lücke 2 schließt, ist reale, aber begrenzte Fortsetzungsarbeit (ein flacher Zustandsdump, keine neue Mechanik) und bewusst nicht Teil dieser Phase.
-Bis es ihn gibt, ist `SkirmishMatchSession.CreateSave()` der eine, dokumentierte, laute Fehlschlagpunkt für ein Live-Sitzungs-Speichern (Test: `Tests.Skirmish.cs` →
-`SkirmishSessionRefusesToSave`), statt einer Speicherroutine, die die KI still fallen lässt und einen kaputten Spielstand ausliefert.
+A `SkirmishAiSnapshot` that closes gap 2 is real, but limited continuation work (a flat state dump, no new mechanic) and deliberately not part of this phase.
+Until it exists, `SkirmishMatchSession.CreateSave()` is the one, documented, loud failure point for saving a live session (test: `Tests.Skirmish.cs` →
+`SkirmishSessionRefusesToSave`), instead of a save routine that silently drops the AI and delivers a broken savegame.
 
-### Gemessene Zahlen (1. Oktober 2026, `game/content`, unverändert gegenüber Phase 9 wo nicht anders vermerkt)
+### Measured numbers (1 October 2026, `game/content`, unchanged compared with Phase 9 where not noted otherwise)
 
-- `SimTool audit-coverage`: 2.115 Objekte, **1.494 instanziierbar (70,6 %) – unverändert**, 621 blockiert, Fingerabdruck `2B9D902AEC46A6DE…` unverändert (keine neue
-  Simulationsmodul-Anforderung durch Phase 10).
-- `SimTool audit-modules` mit Inhaltsverzeichnis: 19.553 Modulverwendungen, 15.639 abgedeckt (80,0 %) – **unverändert**.
-- `IniTool compat-check`: 747 Einträge – **unverändert** (`MaxSimultaneousOfType` ist ein Objekt-Top-Level-Feld, kein Modulfeld, und war nie als `deferred-field` geführt; die neue
-  Typisierung ändert daher keine Baseline).
-- `SimTool reference-match`: **geändert**, weil `ReferenceMatchScenario`s Zufallsproduktionsauswahl jetzt `CanQueueProductionTemplate` respektiert (vorher konnte sie Vorlagen wählen,
-  deren Voraussetzungsgebäude in diesem Szenario nie gebaut werden – das Szenario baut bewusst keine Gebäude außer den Start-Kommandozentralen, §7a) – 13 Fraktionen, 46.284 Befehle
-  (0 abgelehnt), Sieger Spieler 10 (`FactionGLA`) bei Tick 17.580, Endhash `EC8267B594CC4D8A`, zwei frische Läufe und eine Snapshotfortsetzung bei Tick 8.940 tickgleich; vorher (Phase
-  9) Sieger `FactionAmerica` bei Tick 13.665, `D4779BE413835B6D`. Weder Sieger noch Hash sind ein Qualitätsmerkmal dieses Szenarios (reine Zufallsproduktion ohne Baugebäude);
-  entscheidend ist 0 abgelehnte Befehle (die Auswahl ist jetzt wieder vollständig gültig) und die unveränderte Determinismus-/Fortsetzungsgarantie.
-- `MapTool audit`: von Phase 10 unberührt (keine Änderung an `CnCNew.Formats`/`SageMapDecoder`/`TerrainMap.Build`/`Classify`; `skirmish-sweep`s 150/150 dekodierte, 0 fehlgeschlagene
-  Karten bei identischen 75/11/64-Zahlen bestätigen das indirekt).
-- `dotnet build CnCNew.slnx`: weiterhin 0 Fehler, 21 bekannte Warnungen bei sauberem `CnCNew.Client.Stride`-`bin`/`obj`.
-- `tests/CnCNew.Simulation.Tests` (synthetisch und `--content-dir`) sowie `tests/CnCNew.Game.Tests` (ohne und mit `--content-dir`): alle bestehen.
+- `SimTool audit-coverage`: 2,115 objects, **1,494 instantiable (70.6 %) – unchanged**, 621 blocked, fingerprint `2B9D902AEC46A6DE…` unchanged (no new
+  simulation module requirement from Phase 10).
+- `SimTool audit-modules` with table of contents: 19,553 module usages, 15,639 covered (80.0 %) – **unchanged**.
+- `IniTool compat-check`: 747 entries – **unchanged** (`MaxSimultaneousOfType` is an object top-level field, not a module field, and was never listed as `deferred-field`; the new
+  typing therefore changes no baseline).
+- `SimTool reference-match`: **changed**, because `ReferenceMatchScenario`'s random production selection now respects `CanQueueProductionTemplate` (before, it could choose templates
+  whose prerequisite buildings are never built in this scenario – the scenario deliberately builds no buildings except the start command centers, §7a) – 13 factions, 46,284 commands
+  (0 rejected), winner player 10 (`FactionGLA`) at tick 17,580, final hash `EC8267B594CC4D8A`, two fresh runs and a snapshot continuation at tick 8,940 tick-identical; previously (Phase
+  9) winner `FactionAmerica` at tick 13,665, `D4779BE413835B6D`. Neither winner nor hash is a quality attribute of this scenario (pure random production without construction buildings);
+  what matters is 0 rejected commands (the selection is now completely valid again) and the unchanged determinism/continuation guarantee.
+- `MapTool audit`: untouched by Phase 10 (no change to `CnCNew.Formats`/`SageMapDecoder`/`TerrainMap.Build`/`Classify`; `skirmish-sweep`'s 150/150 decoded, 0 failed
+  maps with identical 75/11/64 numbers confirm this indirectly).
+- `dotnet build CnCNew.slnx`: still 0 errors, 21 known warnings with a clean `CnCNew.Client.Stride` `bin`/`obj`.
+- `tests/CnCNew.Simulation.Tests` (synthetic and `--content-dir`) as well as `tests/CnCNew.Game.Tests` (without and with `--content-dir`): all pass.
 
-## 26. Phase 11: Weltschnittstellen für die Skript-VM
+## 26. Phase 11: world interfaces for the script VM
 
-Quelle und Auftrag: `docs/handoffs/HANDOFF-PHASE11.md` (Skript-Restfamilien); die Skriptseite steht in `docs/SCRIPT-ENGINE.md` §4–§5a. Alle neuen Weltzustände folgen derselben Regel wie
-`SimEvent`s Position seit Phase 8: **sie werden nur geschrieben, wenn sie vom Standard abweichen**. Ein Lauf, der keine dieser Schnittstellen benutzt, behält Zustandsform und
-Hash von vorher (`SimTool reference-match` weiterhin Sieger FactionGLA bei Tick 19.200, Endhash `28BE35C1174E369F`; `SimTool stress` Endhash `56882F763EABEF67`, vor und nach dieser
-Phase gleich – die in früheren Ständen genannte Zahl `ED6F9329F59662E3` stammt aus der Zeit vor Phase 9 und war schon zu Beginn dieser Phase nicht mehr reproduzierbar). Snapshot-,
-Replay- und Befehlsversionen bleiben deshalb unverändert (`WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10); ein älterer Zustand lädt unverändert, ein neuer
-mit benutzten Schnittstellen wäre für eine ältere Version nicht lesbar – bewusst nicht als Versionssprung geführt, weil kein bestehender Lauf betroffen ist (Entscheidung, Review-Gegenstand).
+Source and brief: `docs/handoffs/HANDOFF-PHASE11.md` (remaining script families); the script side is in `docs/SCRIPT-ENGINE.md` §4–§5a. All new world states follow the same rule as
+`SimEvent`'s position since Phase 8: **they are only written if they deviate from the default**. A run that uses none of these interfaces keeps the state shape and
+hash from before (`SimTool reference-match` still winner FactionGLA at tick 19,200, final hash `28BE35C1174E369F`; `SimTool stress` final hash `56882F763EABEF67`, the same before and after this
+phase – the number `ED6F9329F59662E3` named in earlier states comes from the time before Phase 9 and was no longer reproducible already at the start of this phase). Snapshot,
+replay and command versions therefore stay unchanged (`WorldSnapshot` 7, replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10); an older state loads unchanged, a new one
+with used interfaces would not be readable for an older version – deliberately not treated as a version bump because no existing run is affected (decision, subject of review).
 
-- **Dauerhafte Aufdeckung** (`Terrain/VisionMap.cs`, `World/SimulationWorld.Scripting.cs`): ein dritter Bit je Zelle und Spieler (`PermanentBit`, immer zusammen mit „sichtbar“ und
-  „erkundet“); `BeginRefresh` lässt ihn stehen, alles andere wird neu berechnet. `RevealMapPermanently`/`ExploreMap`/`ShroudMap`/`ExploreArea`/`ShroudArea`/`RevealAreaPermanently` setzen
-  oder löschen ihn (Quellen: `ScriptActions::doRevealMapEntire`, `doRevealMapEntirePermanently`, `doShroudMapEntire`, `doRevealMapAtWaypoint`, `doShroudMapAtWaypoint`,
-  `doRevealMapAtWaypointPermanent`; das Original deckt „einen kurzen Blick“ mit `doShroudReveal` + `undoShroudReveal` im selben Frame auf, das Ergebnis ist „erkundet, nicht sichtbar“, und
-  genau das setzen `ExploreMap`/`ExploreArea`). Ein Zustand mit Bit 2 wird beim Laden geprüft (Bit 2 verlangt Bit 0 und 1).
-- **Bauschalter** (`PlayerState.CanBuildBase`/`CanBuildUnits`, `SetCanBuild`, `CanBuildStructures`/`CanBuildUnits`): `Player::allowedToBuild` – Strukturen platzieren (`ConstructCommand` →
-  `CannotConstruct`) bzw. Einheiten einreihen (`QueueProductionCommand` → `CannotProduceTemplate`) ist gesperrt, solange der Schalter aus ist; kein neuer Ablehnungsgrund, also keine neue
-  `CommandTypes.Version`. Serialisiert nur, wenn aus (`canBuildBase`/`canBuildUnits`).
-- **Lese-/Schreib-APIs:** `SimulationWorld.WarehouseBoxes(id)` und `SupplyWarehouseDockUpdate.SetCashValue` (`WAREHOUSE_SET_VALUE`: `ceil(cash / ValuePerSupplyBox)` Kisten, wie
-  `SupplyWarehouseDockUpdate::setCashValue`), `SpecialPowerInfo.RadiusCursorRadius` (aus `SpecialPower.ini`, für `SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST`),
-  `CommandCatalog.TryGetButton` (Befehlsart, `Upgrade`, `WeaponSlot` jedes Knopfes; Grundlage der neuen Pfade für Upgrade-/`FIRE_WEAPON`-Knöpfe),
-  `ScriptEngine.IsNamedSelected` (Lesezugriff auf die vom Client gemeldete Auswahl).
+- **Permanent reveal** (`Terrain/VisionMap.cs`, `World/SimulationWorld.Scripting.cs`): a third bit per cell and player (`PermanentBit`, always together with "visible" and
+  "explored"); `BeginRefresh` leaves it standing, everything else is recomputed. `RevealMapPermanently`/`ExploreMap`/`ShroudMap`/`ExploreArea`/`ShroudArea`/`RevealAreaPermanently` set
+  or clear it (sources: `ScriptActions::doRevealMapEntire`, `doRevealMapEntirePermanently`, `doShroudMapEntire`, `doRevealMapAtWaypoint`, `doShroudMapAtWaypoint`,
+  `doRevealMapAtWaypointPermanent`; the original reveals "a short glance" with `doShroudReveal` + `undoShroudReveal` in the same frame, the result is "explored, not visible", and
+  exactly that is what `ExploreMap`/`ExploreArea` set). A state with bit 2 is checked on loading (bit 2 requires bits 0 and 1).
+- **Build switches** (`PlayerState.CanBuildBase`/`CanBuildUnits`, `SetCanBuild`, `CanBuildStructures`/`CanBuildUnits`): `Player::allowedToBuild` – placing structures (`ConstructCommand` →
+  `CannotConstruct`) and queueing units (`QueueProductionCommand` → `CannotProduceTemplate`) respectively is locked as long as the switch is off; no new rejection reason, hence no new
+  `CommandTypes.Version`. Serialised only if off (`canBuildBase`/`canBuildUnits`).
+- **Read/write APIs:** `SimulationWorld.WarehouseBoxes(id)` and `SupplyWarehouseDockUpdate.SetCashValue` (`WAREHOUSE_SET_VALUE`: `ceil(cash / ValuePerSupplyBox)` boxes, like
+  `SupplyWarehouseDockUpdate::setCashValue`), `SpecialPowerInfo.RadiusCursorRadius` (from `SpecialPower.ini`, for `SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST`),
+  `CommandCatalog.TryGetButton` (command kind, `Upgrade`, `WeaponSlot` of every button; basis of the new paths for upgrade/`FIRE_WEAPON` buttons),
+  `ScriptEngine.IsNamedSelected` (read access to the selection reported by the client).
 
-## 27. Phase 12: Missionsobjekt-Module, Überschreibungs-Beziehungen, Besitzerwechsel
+## 27. Phase 12: mission object modules, override relationships, change of owner
 
-Die Missionen der Kampagne benennen Objekte, die erst mit sieben weiteren Modulen instanziierbar sind. Sie stehen in `Modules/BuiltIn/Phase12Modules.cs` (Schemas in `ModuleCatalog`, Bindungen in
-`BuiltInModules`, Test `Phase12ModulesCreateAndBehave`), je Modul mit Quellverweis; was ein Modul der Präsentation überlässt, steht an ihm.
+The missions of the campaign name objects that are only instantiable with seven further modules. They are in `Modules/BuiltIn/Phase12Modules.cs` (schemas in `ModuleCatalog`, bindings in
+`BuiltInModules`, test `Phase12ModulesCreateAndBehave`), each module with a source reference; what a module leaves to the presentation is stated at it.
 
-| Modul | Quelle | Verhalten |
+| Module | Source | Behaviour |
 | --- | --- | --- |
-| `FireWeaponWhenDamagedBehavior` | `FireWeaponWhenDamagedBehavior.cpp` | nach Aktivierung (`StartsActive` oder passendes Upgrade) feuert ein schädigender Treffer eines angenommenen `DamageTypes`-Typs mit mindestens `DamageAmount` die Reaktionswaffe des aktuellen Körperzustands auf das Objekt selbst (`forceFireWeapon(obj, position)`); die Dauerwaffe des Zustands feuert, sooft sie bereit ist; Nachladen = `DelayBetweenShots`, Zustand im Objekt |
-| `HordeUpdate` | `HordeUpdate.cpp`, `AIUpdateInterface::evaluateMoraleBonus` | zählt Objekte mit `HordeUpdate` im `Radius` (Verbündete, `KindOf`, ggf. exakte Vorlage, `RubOffRadius`); ab `Count` gilt die Waffenbonus-Bedingung `HORDE` (Bit aus `NameTablesPhase5.WeaponBonusCondition`) |
-| `FireWeaponPower` | `FireWeaponPower.cpp` | die Spezialkraft lädt nach und lässt das Objekt `MaxShotsToFire` Schuss seiner Standardwaffe auf Objekt/Ort/sich selbst abgeben, je Schuss `DelayBetweenShots` (ohne Anfahrt/Drehzeit der KI) |
-| `BaikonurLaunchPower` | `BaikonurLaunchPower.cpp` | am Zielort entsteht das `DetonationObject` des Kraft-Besitzers (Tod und Waffe des Objekts erledigen den Rest); ohne Ort nur das gemeinsame Nachladen (das Original öffnet nur die Tür); eine nicht erzeugbare Vorlage wird als übersprungene Erzeugung gemeldet |
-| `TechBuildingBehavior` | `TechBuildingBehavior.cpp` | ein zerstörtes Technikgebäude wird neutral; `PulseFX` und das Erobert-Modell sind Präsentation (nur die Rate bleibt) |
-| `RadiusDecalUpdate` | `RadiusDecalUpdate.cpp` | reine Präsentation (Zielkreis einer Superwaffe), ohne Zustand |
-| `FlightDeckBehavior` | `FlightDeckBehavior.cpp` | ehrliche **Hülle**: Felder gebunden, Flugdeck-Betrieb (Start/Landung/Reparatur) nicht simuliert, das Objekt kann existieren (der Träger von `MD_GLA03`, dessen Zerstörung das Missionsziel ist) |
+| `FireWeaponWhenDamagedBehavior` | `FireWeaponWhenDamagedBehavior.cpp` | after activation (`StartsActive` or matching upgrade) a damaging hit of an accepted `DamageTypes` type with at least `DamageAmount` fires the reaction weapon of the current body state at the object itself (`forceFireWeapon(obj, position)`); the continuous weapon of the state fires as often as it is ready; reload = `DelayBetweenShots`, state in the object |
+| `HordeUpdate` | `HordeUpdate.cpp`, `AIUpdateInterface::evaluateMoraleBonus` | counts objects with `HordeUpdate` in the `Radius` (allies, `KindOf`, possibly exact template, `RubOffRadius`); from `Count` on the weapon bonus condition `HORDE` applies (bit from `NameTablesPhase5.WeaponBonusCondition`) |
+| `FireWeaponPower` | `FireWeaponPower.cpp` | the special power reloads and makes the object fire `MaxShotsToFire` shots of its default weapon at object/location/itself, `DelayBetweenShots` per shot (without approach/turn time of the AI) |
+| `BaikonurLaunchPower` | `BaikonurLaunchPower.cpp` | at the target location the `DetonationObject` of the power's owner comes into being (death and weapon of the object do the rest); without a location only the shared reload (the original only opens the door); a template that cannot be created is reported as a skipped creation |
+| `TechBuildingBehavior` | `TechBuildingBehavior.cpp` | a destroyed tech building becomes neutral; `PulseFX` and the captured model are presentation (only the rate remains) |
+| `RadiusDecalUpdate` | `RadiusDecalUpdate.cpp` | pure presentation (target circle of a superweapon), without state |
+| `FlightDeckBehavior` | `FlightDeckBehavior.cpp` | honest **shell**: fields bound, flight deck operation (take-off/landing/repair) not simulated, the object can exist (the carrier of `MD_GLA03`, whose destruction is the mission objective) |
 
-Zustand dieser Module wird nur geschrieben, wenn er vom Anfangswert abweicht (keine Versionssprünge; `WorldSnapshot` 7, Replay 7, `CommandTypes.Version` 10 bleiben). Neu im Katalog: 98 von 205
-Modultypen, 1.680 von 2.115 Retail-Objekten instanziierbar (79,4 %), 15.903 von 19.553 Modulverwendungen abgedeckt (81,3 %), Kompatibilitätsbasislinie 765 Einträge (neu gemessen, `baselines/compatibility.json`).
+State of these modules is only written if it deviates from the initial value (no version bumps; `WorldSnapshot` 7, replay 7, `CommandTypes.Version` 10 remain). New in the catalog: 98 of 205
+module types, 1,680 of 2,115 retail objects instantiable (79.4 %), 15,903 of 19,553 module usages covered (81.3 %), compatibility baseline 765 entries (re-measured, `baselines/compatibility.json`).
 
-**Überschreibungs-Beziehungen** (`SimulationWorld.RelationshipOverride`): ein Haken `Func<Entity, Entity, Relationship?>`, den `RelationshipBetween` vor der Spielerbeziehung befragt; `AreEnemies(Entity, Entity)`,
-die Zielwahl und der Kampf (`SimulationWorld.Combat`) und der Zielerwerb der Einheiten (§33; bis Phase 16 `MissionSession.DriveCombat`) benutzen die Entitätsvariante. Der Haken gehört dem Skript-Motor (`docs/SCRIPT-ENGINE.md` §5, §8 Punkt 19) und ist `null`,
-solange keine Überschreibung gesetzt ist – Läufe ohne sie bleiben byteidentisch (Retail-Referenzmatch und Stresstest unverändert).
+**Override relationships** (`SimulationWorld.RelationshipOverride`): a hook `Func<Entity, Entity, Relationship?>` that `RelationshipBetween` consults before the player relationship; `AreEnemies(Entity, Entity)`,
+target selection and combat (`SimulationWorld.Combat`) and the target acquisition of the units (§33; until Phase 16 `MissionSession.DriveCombat`) use the entity variant. The hook belongs to the script engine (`docs/SCRIPT-ENGINE.md` §5, §8 item 19) and is `null`
+as long as no override is set – runs without it stay byte-identical (retail reference match and stress test unchanged).
 
-**`IWorldServices.TransferOwnership`:** die Modulschnittstelle bietet jetzt den Besitzerwechsel an (für `TechBuildingBehavior`; `SimulationWorld.TransferOwnership` aus §22 verschiebt auch die Energieproduktion).
-**`StealthUpdate.ScriptUnstealthed`:** Schalter für `NAMED/TEAM_SET_STEALTH_ENABLED`, nur gespeichert, wenn gesetzt.
+**`IWorldServices.TransferOwnership`:** the module interface now offers the change of owner (for `TechBuildingBehavior`; `SimulationWorld.TransferOwnership` from §22 also moves the energy production).
+**`StealthUpdate.ScriptUnstealthed`:** switch for `NAMED/TEAM_SET_STEALTH_ENABLED`, only saved if set.
 
-## 28. Phase 13: Flugzeug-, Fallschirm-, Uplink- und Fahrzeugmodule, Team-Warteschlangen
+## 28. Phase 13: aircraft, parachute, uplink and vehicle modules, team queues
 
-Phase 13 (`git log b620a50..HEAD`) schließt die Missionsmodule, an denen die Verstärkungs- und Siegketten der Kampagne hingen. Alle Module stehen mit Katalogschema (`ModuleCatalog`), Bindung (`BuiltInModules`),
-`Describe`/`Load` (Zustand nur, wenn er vom Anfangswert abweicht) und Test (`Tests.Flight.cs`) im Projekt; was das Original über Physik oder Knochentransformationen löst, ist durch Kinematik ersetzt und am Modul benannt.
-Fliegende Lokomotoren fahren weiterhin geradeaus zu einem Zielpunkt (`PreferredHeight`, neu `SpeedLimitZ`).
+Phase 13 (`git log b620a50..HEAD`) closes the mission modules on which the reinforcement and victory chains of the campaign depended. All modules are in the project with catalog schema (`ModuleCatalog`), binding (`BuiltInModules`),
+`Describe`/`Load` (state only if it deviates from the initial value) and test (`Tests.Flight.cs`); what the original solves via physics or bone transformations is replaced by kinematics and named at the module.
+Flying locomotors still travel straight ahead to a target point (`PreferredHeight`, new `SpeedLimitZ`).
 
-| Modul | Quelle | Verhalten |
+| Module | Source | Behaviour |
 | --- | --- | --- |
-| `DeliverPayloadAIUpdate` | `DeliverPayloadAIUpdate.cpp` | Zustandsautomat des Transportflugzeugs: Anflug auf den Lieferpunkt (`DeliveryDistance`, `DoorDelay`, `DropDelay`, `DropOffset`/`DropVariance`, `PutInContainer`), Absetzen der Fracht (Fallschirm über `ParachuteContain`, `IOverrideDestination` für den genauen Ort), `ConsiderNewApproach` (`MaxAttempts`), Verlassen der Karte (`RecoverFromOffMap`, `HeadOffMap`, `ClosestEdgePoint`); stirbt das Flugzeug, stirbt die Besatzung (`TransportContain.OnDie`) |
-| `ParachuteContain` | `ParachuteContain.cpp` | der Fallschirm trägt die Fracht: freier Fall bis `OpenDistance`, dann Sinkflug; Landung im Wasser tötet, Fallschaden `FreeFallDamagePercent`; Schwank-/Dämpfungsfelder sind Präsentation |
-| `JetSlowDeathBehavior` | `JetSlowDeathBehavior.cpp` | `SlowDeathBehavior` für Flugzeuge: am Boden nur Bodeneffekte und Verschwinden; in der Luft Teilnahme an der Lotterie (`ISlowDeathCandidate`/`SlowDeathLottery`), danach geradeaus weiter mit dem Anteil `FallHowFast` der Schwerkraft, Sekundäreffekte `DelaySecondaryFromInitialDeath`, Aufschlag `FXHitGround`/`OCLHitGround` |
-| `CountermeasuresBehavior` | `CountermeasuresBehavior.cpp` | nach dem Upgrade `NumberOfVolleys · VolleySize` Täuschkörper; eine Lenkwaffe auf das Flugzeug (`ICountermeasuresModule.ReportMissile`) wird mit `EvasionRate` markiert (ein Zug des Logikstroms), lenkt nach `MissileDecoyDelay` auf den nächsten Täuschkörper um und richtet dann keinen Schaden an (`DetonateProjectile(damage:false)`); Täuschkörper sind echte Entitäten, kinematisch bewegt |
-| `ParticleUplinkCannonUpdate` | `ParticleUplinkCannonUpdate.cpp` | Spezialkraft-Handler (`ISpecialPowerHandler`): Ablauf Ladung/Ausrichtung/Strahl/Abklingen, Strahlzeiten (`WidthGrowTime`, `BeamTravelTime`, `TotalFiringTime`), Schwenk (`SwathOfDeathDistance`/`Amplitude`, Rotationsformel und S-Kurve der Quelle), `TotalDamagePulses` Schadenspulse (`DamagePerSecond`, `DamageRadiusScalar`, Strahlradius `LaserBeamRadius` neu im Vorlagenmodell) entlang des Streifens; `ParticleUplinkCannonUpdate` war der einzige Blocker von 8 Objekten und des Siegziels von `MD_GLA03` |
-| `UndeadBody` | `UndeadBody.cpp` | `ActiveBody` mit zwei Leben: tödlicher Schaden lässt einen Trefferpunkt übrig, startet das zweite Leben (`SecondLifeMaxHealth`, volle Gesundheit) und lässt die passenden Langsamtod-Module losen, welches *beginnt* |
-| `BattleBusSlowDeathBehavior` | `BattleBusSlowDeathBehavior.cpp` | der erste Tod des Busses: Wurf (`ThrowForce` durch Masse), Landung und Effekte, danach das zweite Leben |
-| `SubObjectsUpgrade`, `AnimationSteeringUpdate` | `SubObjectsUpgrade.cpp`, `AnimationSteeringUpdate.cpp` | reine Modellanimation: ehrliche Hüllen mit `WouldUpgrade` bzw. ohne Zustand (das Objekt kann existieren) |
+| `DeliverPayloadAIUpdate` | `DeliverPayloadAIUpdate.cpp` | state machine of the transport aircraft: approach to the delivery point (`DeliveryDistance`, `DoorDelay`, `DropDelay`, `DropOffset`/`DropVariance`, `PutInContainer`), dropping the cargo (parachute via `ParachuteContain`, `IOverrideDestination` for the exact location), `ConsiderNewApproach` (`MaxAttempts`), leaving the map (`RecoverFromOffMap`, `HeadOffMap`, `ClosestEdgePoint`); if the aircraft dies, the crew dies (`TransportContain.OnDie`) |
+| `ParachuteContain` | `ParachuteContain.cpp` | the parachute carries the cargo: free fall down to `OpenDistance`, then descent; landing in water kills, fall damage `FreeFallDamagePercent`; sway/damping fields are presentation |
+| `JetSlowDeathBehavior` | `JetSlowDeathBehavior.cpp` | `SlowDeathBehavior` for aircraft: on the ground only ground effects and disappearing; in the air participation in the lottery (`ISlowDeathCandidate`/`SlowDeathLottery`), afterwards straight on with the share `FallHowFast` of gravity, secondary effects `DelaySecondaryFromInitialDeath`, impact `FXHitGround`/`OCLHitGround` |
+| `CountermeasuresBehavior` | `CountermeasuresBehavior.cpp` | after the upgrade `NumberOfVolleys · VolleySize` decoys; a guided missile at the aircraft (`ICountermeasuresModule.ReportMissile`) is marked with `EvasionRate` (one draw of the logic stream), redirects to the next decoy after `MissileDecoyDelay` and then does no damage (`DetonateProjectile(damage:false)`); decoys are real entities, moved kinematically |
+| `ParticleUplinkCannonUpdate` | `ParticleUplinkCannonUpdate.cpp` | special power handler (`ISpecialPowerHandler`): sequence charge/alignment/beam/decay, beam times (`WidthGrowTime`, `BeamTravelTime`, `TotalFiringTime`), sweep (`SwathOfDeathDistance`/`Amplitude`, rotation formula and S-curve of the source), `TotalDamagePulses` damage pulses (`DamagePerSecond`, `DamageRadiusScalar`, beam radius `LaserBeamRadius` new in the template model) along the swath; `ParticleUplinkCannonUpdate` was the only blocker of 8 objects and of the victory objective of `MD_GLA03` |
+| `UndeadBody` | `UndeadBody.cpp` | `ActiveBody` with two lives: lethal damage leaves one hit point, starts the second life (`SecondLifeMaxHealth`, full health) and lets the matching slow death modules draw lots for which one *begins* |
+| `BattleBusSlowDeathBehavior` | `BattleBusSlowDeathBehavior.cpp` | the first death of the bus: throw (`ThrowForce` divided by mass), landing and effects, afterwards the second life |
+| `SubObjectsUpgrade`, `AnimationSteeringUpdate` | `SubObjectsUpgrade.cpp`, `AnimationSteeringUpdate.cpp` | pure model animation: honest shells with `WouldUpgrade` and without state respectively (the object can exist) |
 
-Begleitende Änderungen: `LocomotorInfo.SpeedLimitZ`; `AIUpdateInterface.OrderMove` ist virtuell, `OrderEvacuate(…, thenExit)` für den Rückflug; `IUpgradeModule.WouldUpgrade` (Standardmethode, überschrieben von
-den Upgrade-Modulen) liefert die Bereitschaft der Upgrade-Knöpfe (`docs/SCRIPT-ENGINE.md` §8 Punkt 18); `DetonateProjectile(…, damage)`; die Skriptseite (Verstärkung mit Transport, Team-Warteschlangen,
-Startaktionen) steht in `docs/SCRIPT-ENGINE.md` §5/§8.
+Accompanying changes: `LocomotorInfo.SpeedLimitZ`; `AIUpdateInterface.OrderMove` is virtual, `OrderEvacuate(…, thenExit)` for the return flight; `IUpgradeModule.WouldUpgrade` (default method, overridden by
+the upgrade modules) delivers the readiness of the upgrade buttons (`docs/SCRIPT-ENGINE.md` §8 item 18); `DetonateProjectile(…, damage)`; the script side (reinforcement with transport, team queues,
+start actions) is in `docs/SCRIPT-ENGINE.md` §5/§8.
 
-Messung (3. Oktober 2026, `game/content`; ohne Versionssprung: `WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10): Modulkatalog **107 von 205** implementiert (183 Simulations-,
-22 Präsentationsmodule), **1.735 von 2.115** Retail-Objekten instanziierbar (82,0 %), Modulverwendungen abgedeckt 16.085 von 19.553 (82,3 %), Kompatibilitätsbasislinie **771** Einträge. Größte verbleibende
-Blocker nach Objekten (davon nur durch dieses Modul): `JetAIUpdate` 34/34, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `SlavedUpdate` 20/7, `PropagandaTowerBehavior` 14/13, `UpgradeDie` 13/0,
-`HiveStructureBody` 11/4, `RiderChangeContain` 11/11, `DeployStyleAIUpdate` 10/10, `StructureCollapseUpdate` 10/10, `ParkingPlaceBehavior` 9/9. Retail-Referenzmatch: Sieger FactionGLA bei Tick 15.000,
-`final hash` (Run 1) `532F19F360C59550` (vorher Tick 19.200, `28BE35C1174E369F`: die neuen Module – am Stand `5416d81` bereits gemessen, vor den Team-Warteschlangen – verändern das Szenario;
-Wiederholung und Snapshot-Fortsetzung identisch über 15.301 Ticks, Kettenhash `5B799AA9398CE305`); Stresstest (216.000 Ticks) unverändert `56882F763EABEF67`, Kettenhash `B8E663493F2C73D5`.
+Measurement (3 October 2026, `game/content`; without a version bump: `WorldSnapshot` 7, replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10): module catalog **107 of 205** implemented (183 simulation,
+22 presentation modules), **1,735 of 2,115** retail objects instantiable (82.0 %), module usages covered 16,085 of 19,553 (82.3 %), compatibility baseline **771** entries. Largest remaining
+blockers by objects (of these only by this module): `JetAIUpdate` 34/34, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `SlavedUpdate` 20/7, `PropagandaTowerBehavior` 14/13, `UpgradeDie` 13/0,
+`HiveStructureBody` 11/4, `RiderChangeContain` 11/11, `DeployStyleAIUpdate` 10/10, `StructureCollapseUpdate` 10/10, `ParkingPlaceBehavior` 9/9. Retail reference match: winner FactionGLA at tick 15,000,
+`final hash` (run 1) `532F19F360C59550` (previously tick 19,200, `28BE35C1174E369F`: the new modules – already measured at the state `5416d81`, before the team queues – change the scenario;
+repetition and snapshot continuation identical over 15,301 ticks, chain hash `5B799AA9398CE305`); stress test (216,000 ticks) unchanged `56882F763EABEF67`, chain hash `B8E663493F2C73D5`.
 
-## 29. Phase 13, Fortsetzung: Luftlieferungen, Spezialkräfte am Kartenrand, Todeswaffen, Formationen
+## 29. Phase 13, continuation: air deliveries, special powers at the map edge, death weapons, formations
 
-Der erste Teil von Phase 13 (§28) hat Module für Verstärkungen und die Missionsketten ergänzt. Die Fortsetzung schließt Lücken, die die **Spielbarkeit** der Spezialkräfte betrafen – bis dahin taten alle
-Kraftobjekte mit `CREATE_AT_EDGE_*` und `DeliverPayload` nichts (nur `CreationSkipped`-Ereignisse), und `FireWeaponWhenDeadBehavior`/`InstantDeathBehavior` forderten ihre Waffe nur als Ereignis an, das nie ausgeführt wurde.
+The first part of Phase 13 (§28) added modules for reinforcements and the mission chains. The continuation closes gaps that concerned the **playability** of the special powers – until then all
+power objects with `CREATE_AT_EDGE_*` and `DeliverPayload` did nothing (only `CreationSkipped` events), and `FireWeaponWhenDeadBehavior`/`InstantDeathBehavior` requested their weapon only as an event that was never executed.
 
-| Baustein | Quelle | Verhalten |
+| Building block | Source | Behaviour |
 | --- | --- | --- |
-| `DeliverPayload`-Nugget (`PayloadDelivery`, `DeliveryRun`) | `ObjectCreationList.cpp` `DeliverPayloadNugget::create` | `FormationSize` Transporter am Startpunkt (seitlich versetzt, abwechselnd, `FormationSpacing`, `WeaponConvergenceFactor`, `WeaponErrorRadius`, `DelayDeliveryMax`), die `Payload`-Objekte (je optional in `PutInContainer` verpackt) werden mit erzeugt und in den Transporter gesteckt; `SpecialPowerCompletionDie` bekommt den Erzeuger (nur der erste Transporter/die erste Nutzlast). Mit `createOwner=false` (`USE_OWNER_OBJECT`) ist das Objekt selbst der Transporter. Nicht modelliert: `StartAtMaxSpeed` (ein Physik-Stoß), die Zielmarke |
-| `OCLSpecialPower` | `OCLSpecialPower.cpp` `doSpecialPowerAtLocation` | die drei Randlagen (`CREATE_AT_EDGE_NEAR_SOURCE`/`_NEAR_TARGET`/`_FARTHEST_FROM_TARGET`: nächster Randpunkt, entfernteste Ecke + 300) und das Ziel als zweiter Punkt der Liste; ohne Terrain weiter `NoTerrainEdge` |
-| `DeliverPayloadAIUpdate` (Lauf) | `DeliverPayloadAIUpdate.cpp` | `PreOpenDistance` (nur im Anflug), `FireWeapon` (der Transporter feuert seine Waffe auf Ziel + Versatz, der Insasse wird gelöscht), sichtbare Nutzlast (`VisiblePayloadTemplateName`: Raketen werden mit `VisiblePayloadWeaponTemplate` auf das Ziel gestartet, anderes fällt), `ParachuteDirectly`, `SelfDestructObject`, Tauchflug mit Beschuss (`DiveStart/EndDistance`, Strafen mit der Standardwaffe), Startverzögerung; der gesamte Lauf steht im Zustand |
-| `PhysicsBehavior` (Fall) | `PhysicsUpdate.cpp` | ein in der Luft losgelassenes Objekt (Bombe) fällt mit der Schwerkraft, landet und ruht (`KillWhenRestingOnGround` tötet); `HeightDieUpdate` beendet es meist einen Tick früher |
-| Todeswaffen | `WeaponStore::createAndFireTempWeapon` | `FireWeaponWhenDeadBehavior`/`InstantDeathBehavior` feuern ihre Waffe am eigenen Ort (`IWorldServices.FireTempWeapon`); das Ereignis bleibt für die Präsentation |
-| `FireWeapon`-Nugget | `FireWeaponNugget::create` | die Quelle feuert die Waffe einmal auf den zweiten Punkt; `Attack`, `CreateDebris`, `ApplyRandomForce` bleiben `NuggetNotSimulated` (Effekte/Physik ohne Spielwirkung bzw. Zielbefehl ohne Verbraucher) |
-| `ParticleUplinkCannonUpdate` (Wegpunktmodus) | `ParticleUplinkCannonUpdate.cpp` `initiateIntentToDoSpecialPower(way)` | ein Skript (`NAMED_USE_COMMANDBUTTON_ABILITY_USING_WAYPOINT_PATH`) bietet dem Modul den Weg ab dem nächsten Wegpunkt an (`PrepareScriptedPath`); der Strahl fährt mit `ManualFastDrivingSpeed` von Wegpunkt zu Wegpunkt und bleibt am Ende stehen (die Weggabelung wird der Reihe nach, nicht zufällig gewählt) |
-| Formationen | `AIStates.cpp` `AIFollowWaypointPathState` (`m_moveAsGroup`), `AIGroup::getSpeed` | `TEAM_FOLLOW_WAYPOINTS(_EXACT)` mit `asTeam`: jedes Mitglied behält seinen Versatz zur Gruppenmitte, alle folgen einem Teamwegpunkt (das erste Mitglied am Ziel schaltet weiter, die anderen wechseln), niemand ist schneller als das langsamste Mitglied (`AIUpdateInterface.SpeedCap`, nur bei Gruppenmarsch gesetzt) |
-| Welthaken | `ScriptEngine::adjustToppleDirection`, `GameLogic::setBuildableStatusOverride` | `SimulationWorld.ToppleDirectionOverride`/`BuildableOverride` (Skript-Tabellen, in deren Zustand), `BuildableOf(template)` in Produktion, Bau und `SkirmishAi` |
+| `DeliverPayload` nugget (`PayloadDelivery`, `DeliveryRun`) | `ObjectCreationList.cpp` `DeliverPayloadNugget::create` | `FormationSize` transports at the start point (laterally offset, alternating, `FormationSpacing`, `WeaponConvergenceFactor`, `WeaponErrorRadius`, `DelayDeliveryMax`), the `Payload` objects (each optionally packed in `PutInContainer`) are created along with them and put into the transport; `SpecialPowerCompletionDie` gets the creator (only the first transport/the first payload). With `createOwner=false` (`USE_OWNER_OBJECT`) the object itself is the transport. Not modelled: `StartAtMaxSpeed` (a physics impulse), the target marker |
+| `OCLSpecialPower` | `OCLSpecialPower.cpp` `doSpecialPowerAtLocation` | the three edge positions (`CREATE_AT_EDGE_NEAR_SOURCE`/`_NEAR_TARGET`/`_FARTHEST_FROM_TARGET`: nearest edge point, farthest corner + 300) and the target as the second point of the list; without terrain still `NoTerrainEdge` |
+| `DeliverPayloadAIUpdate` (run) | `DeliverPayloadAIUpdate.cpp` | `PreOpenDistance` (only on approach), `FireWeapon` (the transport fires its weapon at target + offset, the occupant is deleted), visible payload (`VisiblePayloadTemplateName`: missiles are launched at the target with `VisiblePayloadWeaponTemplate`, anything else falls), `ParachuteDirectly`, `SelfDestructObject`, dive with fire (`DiveStart/EndDistance`, strafing with the default weapon), start delay; the entire run is in the state |
+| `PhysicsBehavior` (fall) | `PhysicsUpdate.cpp` | an object released in the air (bomb) falls with gravity, lands and rests (`KillWhenRestingOnGround` kills); `HeightDieUpdate` mostly ends it one tick earlier |
+| Death weapons | `WeaponStore::createAndFireTempWeapon` | `FireWeaponWhenDeadBehavior`/`InstantDeathBehavior` fire their weapon at their own location (`IWorldServices.FireTempWeapon`); the event remains for the presentation |
+| `FireWeapon` nugget | `FireWeaponNugget::create` | the source fires the weapon once at the second point; `Attack`, `CreateDebris`, `ApplyRandomForce` remain `NuggetNotSimulated` (effects/physics without game effect and a target command without a consumer respectively) |
+| `ParticleUplinkCannonUpdate` (waypoint mode) | `ParticleUplinkCannonUpdate.cpp` `initiateIntentToDoSpecialPower(way)` | a script (`NAMED_USE_COMMANDBUTTON_ABILITY_USING_WAYPOINT_PATH`) offers the module the path from the nearest waypoint (`PrepareScriptedPath`); the beam travels with `ManualFastDrivingSpeed` from waypoint to waypoint and stops at the end (the fork in the path is chosen in order, not randomly) |
+| Formations | `AIStates.cpp` `AIFollowWaypointPathState` (`m_moveAsGroup`), `AIGroup::getSpeed` | `TEAM_FOLLOW_WAYPOINTS(_EXACT)` with `asTeam`: every member keeps its offset to the group centre, all follow one team waypoint (the first member at the destination advances it, the others switch), nobody is faster than the slowest member (`AIUpdateInterface.SpeedCap`, only set on a group march) |
+| World hooks | `ScriptEngine::adjustToppleDirection`, `GameLogic::setBuildableStatusOverride` | `SimulationWorld.ToppleDirectionOverride`/`BuildableOverride` (script tables, in their state), `BuildableOf(template)` in production, construction and `SkirmishAi` |
 
-Messung (3. Oktober 2026): Retail-Referenzmatch und Stresstest ändern sich durch diese Bausteine nicht (das Szenario hat keine Todeswaffen mit Splash, keine Spezialkräfte und keine Gruppenmärsche; gemessen `532F19F360C59550` bzw. `56882F763EABEF67`);
-`CampaignTool drive` weiter Sieg und Niederlage 24/24; Test `FlightStrikePowerDeliversBombs` (zwei Bomber, sechs Bomben, Beschädigung des Ziels, Abschlussmeldung, Wiederaufnahme aus dem Snapshot), `FlightUplinkFollowsAScriptedWaypointPath`,
+Measurement (3 October 2026): retail reference match and stress test do not change through these building blocks (the scenario has no death weapons with splash, no special powers and no group marches; measured `532F19F360C59550` and `56882F763EABEF67` respectively);
+`CampaignTool drive` still victory and defeat 24/24; test `FlightStrikePowerDeliversBombs` (two bombers, six bombs, damage to the target, completion message, resumption from the snapshot), `FlightUplinkFollowsAScriptedWaypointPath`,
 `ScriptTeamFollowsAPathAsAFormation`.
 
-## 30. Phase 14: Luft-, Kisten-/Spezial- und Struktur-/Weltmodule
+## 30. Phase 14: air, crate/special and structure/world modules
 
-Drei unabhängig entwickelte Modulgruppen (je ein eigener Worktree, danach zusammengeführt) schließen die Blocker, die `audit-coverage` nach Phase 13 zuoberst führte. Alle Module haben Katalogschema
-(`ModuleCatalog`), Bindung (`BuiltInModules`), `Describe`/`Load` (Zustand nur, wenn er vom Anfangswert abweicht) und Tests; was das Original über Physik, Modellknochen oder Darstellung löst, ist am Modul als
-Näherung benannt. Beim Zusammenführen wurden zwei parallel entstandene Kollisionsschnittstellen auf **eine** vereinheitlicht (`ICollideModule` mit `WouldLikeToCollideWith`, `Entity.CollideModules`,
-`SimulationWorld.DeliverCollisions` der Kistengruppe; die Verteilung der Strukturgruppe entfiel), und `SpawnExtras`/`SpawnSetup` tragen jetzt `Enslaver` und `Producer` nebeneinander (Snapshot-Felder
-`enslaver`/`producer`, nur wenn gesetzt).
+Three independently developed module groups (each in a worktree of its own, merged afterwards) close the blockers that `audit-coverage` listed at the top after Phase 13. All modules have catalog schema
+(`ModuleCatalog`), binding (`BuiltInModules`), `Describe`/`Load` (state only if it deviates from the initial value) and tests; what the original solves via physics, model bones or rendering is named at the module as
+an approximation. During the merge, two collision interfaces that had come into being in parallel were unified into **one** (`ICollideModule` with `WouldLikeToCollideWith`, `Entity.CollideModules`,
+`SimulationWorld.DeliverCollisions` of the crate group; the distribution of the structure group was dropped), and `SpawnExtras`/`SpawnSetup` now carry `Enslaver` and `Producer` side by side (snapshot fields
+`enslaver`/`producer`, only if set).
 
-### 30.1 Luftgruppe (`AirModules.cs`, `JetAIUpdate.cs`, `AirWeaponModules.cs`)
+### 30.1 Air group (`AirModules.cs`, `JetAIUpdate.cs`, `AirWeaponModules.cs`)
 
-| Modul | Quelle | Verhalten |
+| Module | Source | Behaviour |
 | --- | --- | --- |
-| `ParkingPlaceBehavior` | `ParkingPlaceBehavior.cpp` | Flugplatz: `NumRows·NumCols` Stellplätze (reserveSpace/releaseSpace, ein Flugzeug behält seinen Platz bis zum Tod oder zur Landung anderswo), eine Piste je Spalte mit genau einem Wartenden (`reserveRunway`, `transferRunwayReservationToNextInLineForTakeoff`, `releaseRunway`), Heilung geparkter Flugzeuge (`HealAmountPerSecond`, alle 6 Ticks), Produktionsausgang (`IProductionExit`: Hangarposition, Hubschrauber am Helipad ohne Platz), Zerstörung tötet alles Geparkte/Startende/Landende; **Geometrie berechnet statt Modellknochen** (Platz-, Rollweg-, Pisten- und Anflugpunkte aus Gebäudeposition, -ausrichtung und Geometrieradien), `defectAllParkedUnits` und Flugdecks nicht modelliert |
-| `JetAIUpdate` | `JetAIUpdate.cpp` | Zustandsautomat der Flugzeuge: Hangar→Stellplatz→Ausrichten→Munition laden; Befehl an Geparkten wird gespeichert und löst Piste-Reservieren→Rollen→Pause (`TakeoffPause`, Wartezeit hinter dem Vordermann)→Start (Auftrieb mit dem Quadrat des Pistenanteils)→gespeicherter Befehl aus; Rückkehr bei leerem `RETURN_TO_BASE`-Magazin (Rückkehr-Lokomotor) oder nach `ReturnToBaseIdleTime`, Anflugpunkt, Landeerlaubnis, Gleitflug mit Mindestgeschwindigkeit, Ausrollen, Rollen zum Platz, Gegenmaßnahmen nachladen, Waffe nachladen (anteilig `ClipReloadTime`); ohne Flugplatz kreist der Jet über der Heimatposition und nimmt `OutOfAmmoDamagePerSecond`; Hubschrauber starten/landen senkrecht am Helipad; Lokomotor-Sätze `SET_TAXIING`/Angriff/Rückkehr; kinematisch statt Physik und Wegsuche |
-| `SpectreGunshipUpdate` | `SpectreGunshipUpdate.cpp` | Gunship: Anflug auf einen Kreis um das Ziel (Einflugsteigung 0,5–0,8), Transit-Lokomotor bis zum Orbit, Gattling erst im Orbit frei, alle `HowitzerFiringRate` Ticks Zielsuche im Fadenkreuz (Computerspieler auch im Angriffsgebiet), Gattling-Zielpunkt wandert mit `StrafingIncrement`, Haubitze nach `HowitzerFollowLag` mit Zufallsversatz, Abflug nach `OrbitTime`, Gattling wird mit aufgeräumt; der Träger erzeugt das Gunship auf Karten mit Gelände am Kartenrand (`SpectreGunshipDeploymentUpdate`) |
-| `MissileLauncherBuildingUpdate` | `MissileLauncherBuildingUpdate.cpp` | Silotür folgt dem Nachladen der Superwaffe: öffnet `DoorOpenTime` vor Bereitschaft, offen bei Bereitschaft, nach Einsatz warten, schließen (höchstens halbe Restzeit), je Zustand eine Effektliste; reine Zustandsfolge ohne eigene Spielwirkung |
-| `NeutronMissileUpdate` | `NeutronMissileUpdate.cpp` | Flug von Hand: Start senkrecht, `DistanceToTravelBeforeTurning`, Wendung begrenzt durch `MaxTurnRate` (ohne Arkusfunktionen) zum Punkt über dem Ziel, dann Sturz mit halber Geschwindigkeit, Beschleunigung `RelativeSpeed` minus `ForwardDamping`, Sonderhöhenkurve für `SpecialSpeedTime`; schlägt am Boden ein (`kill`, damit die Todesmodule laufen); ohne Zittern, Abgas, Decal |
-| `NeutronMissileSlowDeathBehavior` | `NeutronMissileSlowDeathUpdate.cpp` | `SlowDeathBehavior` mit bis zu neun Explosionsstufen: nach (unaufgerundeter) Verzögerung Umkippen und Schaden im Außenradius (voll im Innenradius, linear fallend, mindestens `MinDamage`, EXPLOSION/EXPLODED nach Rüstung), Boden-FX bei Aktivierung; Verbrennung/Brandfleck nur Darstellung |
-| `NeutronBlastBehavior` | `NeutonBlastBehavior.cpp` | Beim Tod des Geschosses im `BlastRadius`: Infanterie und Insassen sterben, Kletterräder sterben, übrige Fahrzeuge (keine Drohnen) werden herrenlos (neutral, gestoppt); Luftziele nur mit `AffectAirborne`, Verbündete nur mit `AffectAllies` |
-| `EMPUpdate` | `EMPUpdate.cpp` | EMP-Impuls: nach `StartFadeTime` Wirkung im `EffectRadius` (Standard 200): Infanterie unberührt, fliegende nicht gehärtete Flugzeuge sterben, Gebäude nur Fraktionsgebäude, sonst `DisabledDuration` lang gelähmt (`Entity.EmpDisabledUntil`: keine Bewegung, keine Waffe), `DoesNotAffect=ALLIES` und eigene Gebäude (`DoesNotAffectMyOwnBuildings`) ausgenommen; stirbt nach `Lifetime`; zwei Zufallsziehungen bei der Erzeugung |
-| `LeafletDropBehavior` | `EMPUpdate.cpp` | Flugblattbombe: beim Tod lähmt sie feindliche Infanterie und Fahrzeuge im `AffectRadius` (Standard 60) für `DisabledDuration`; die Update-Funktion schläft wie im Original nach dem ersten Tick, solange die Verzögerung nicht abgelaufen ist |
-| `BunkerBusterBehavior` | `BunkerBusterBehavior.cpp` | Beim Tod der Bombe (mit `UpgradeRequired` des Besitzers): Insassen des anvisierten Garnison-/Tunnelcontainers werden mit der Insassenwaffe (100 Schaden) herausgezwungen und getötet bzw. sterben, Detonations-FX am Ziel, Schockwellenwaffe dort; Absturz-FX alle `CrashThroughBunkerFXFrequency` Ticks im Kill-Self-Warten; Seismik nur Darstellung |
+| `ParkingPlaceBehavior` | `ParkingPlaceBehavior.cpp` | Airfield: `NumRows·NumCols` parking spaces (reserveSpace/releaseSpace, an aircraft keeps its space until death or landing elsewhere), one runway per column with exactly one waiting aircraft (`reserveRunway`, `transferRunwayReservationToNextInLineForTakeoff`, `releaseRunway`), healing of parked aircraft (`HealAmountPerSecond`, every 6 ticks), production exit (`IProductionExit`: hangar position, helicopters at the helipad without a space), destruction kills everything parked/taking off/landing; **geometry computed instead of model bones** (space, taxiway, runway and approach points from building position, building orientation and geometry radii), `defectAllParkedUnits` and flight decks not modelled |
+| `JetAIUpdate` | `JetAIUpdate.cpp` | State machine of the aircraft: hangar→parking space→align→load ammunition; a command to a parked aircraft is stored and triggers reserve runway→taxi→pause (`TakeoffPause`, waiting time behind the aircraft in front)→take-off (lift with the square of the runway fraction)→stored command; return with an empty `RETURN_TO_BASE` clip (return locomotor) or after `ReturnToBaseIdleTime`, approach point, landing permission, glide with minimum speed, roll-out, taxi to the space, reload countermeasures, reload weapon (proportionally `ClipReloadTime`); without an airfield the jet circles over the home position and takes `OutOfAmmoDamagePerSecond`; helicopters take off/land vertically at the helipad; locomotor sets `SET_TAXIING`/attack/return; kinematic instead of physics and pathfinding |
+| `SpectreGunshipUpdate` | `SpectreGunshipUpdate.cpp` | Gunship: approach to a circle around the target (entry slope 0.5–0.8), transit locomotor up to the orbit, gattling only released in the orbit, every `HowitzerFiringRate` ticks target search in the crosshair (computer players also in the attack area), gattling aim point wanders with `StrafingIncrement`, howitzer after `HowitzerFollowLag` with random offset, departure after `OrbitTime`, the gattling is cleaned up with it; on maps with terrain the carrier creates the gunship at the map edge (`SpectreGunshipDeploymentUpdate`) |
+| `MissileLauncherBuildingUpdate` | `MissileLauncherBuildingUpdate.cpp` | Silo door follows the reload of the superweapon: opens `DoorOpenTime` before readiness, open at readiness, wait after use, close (at most half the remaining time), one effect list per state; pure state sequence without a game effect of its own |
+| `NeutronMissileUpdate` | `NeutronMissileUpdate.cpp` | Flight by hand: launch vertically, `DistanceToTravelBeforeTurning`, turn limited by `MaxTurnRate` (without arc functions) to the point above the target, then dive with half the speed, acceleration `RelativeSpeed` minus `ForwardDamping`, special height curve for `SpecialSpeedTime`; impacts on the ground (`kill`, so that the death modules run); without jitter, exhaust, decal |
+| `NeutronMissileSlowDeathBehavior` | `NeutronMissileSlowDeathUpdate.cpp` | `SlowDeathBehavior` with up to nine explosion stages: after an (unrounded) delay toppling and damage in the outer radius (full in the inner radius, falling linearly, at least `MinDamage`, EXPLOSION/EXPLODED by armor), ground FX on activation; burning/scorch mark only rendering |
+| `NeutronBlastBehavior` | `NeutonBlastBehavior.cpp` | On the death of the projectile within the `BlastRadius`: infantry and occupants die, technicals die, the remaining vehicles (no drones) become ownerless (neutral, stopped); air targets only with `AffectAirborne`, allies only with `AffectAllies` |
+| `EMPUpdate` | `EMPUpdate.cpp` | EMP pulse: after `StartFadeTime` effect within the `EffectRadius` (default 200): infantry untouched, flying non-hardened aircraft die, buildings only faction buildings, otherwise paralysed for `DisabledDuration` (`Entity.EmpDisabledUntil`: no movement, no weapon), `DoesNotAffect=ALLIES` and own buildings (`DoesNotAffectMyOwnBuildings`) excepted; dies after `Lifetime`; two random draws on creation |
+| `LeafletDropBehavior` | `EMPUpdate.cpp` | Leaflet bomb: on death it paralyses enemy infantry and vehicles within the `AffectRadius` (default 60) for `DisabledDuration`; as in the original the update function sleeps after the first tick as long as the delay has not expired |
+| `BunkerBusterBehavior` | `BunkerBusterBehavior.cpp` | On the death of the bomb (with `UpgradeRequired` of the owner): occupants of the targeted garrison/tunnel container are forced out with the occupant weapon (100 damage) and killed, or die, detonation FX at the target, shockwave weapon there; crash FX every `CrashThroughBunkerFXFrequency` ticks during the kill-self wait; seismics only rendering |
 
-Begleitende Änderungen: `AIUpdateInterface.IsIdle`/`OrderEnter` virtuell, `ActiveLocomotor` virtuell, `OrderIdle` neu, `Update` ruht unter EMP; `IProductionExit` mit schablonenbewussten Standardmethoden
-(`IsFreeToExitFor`, `ClaimExit(world, template)`); `ObjectTemplate.LocomotorSets`, `LocomotorInfo.Lift`, `WeaponInfo.ReloadsAtBase` (ein trockenes `RETURN_TO_BASE`-Magazin lädt nur am Flugplatz nach);
-`Entity.EmpDisabledUntil`; `MissileAIUpdate.Victim`/`IsKillingSelf`. **Grenzen:** ~~die Atomraketen starten noch nicht aus dem Silo~~ und ~~ein Jet mit gespeichertem Befehl erscheint dem Skript als „untätig“~~ sind seit Phase 15 **widerlegt** (Echtdatentests: der Start über `UseSpecialPowerCommand` und `OCLSpecialPower` beginnt am Silo und tötet das Ziel; der `IsIdle`-Override des Jets wird über den Basistyp `AIUpdateInterface` gesehen, den die Skripte benutzen); Deaktivierung wirkt nur auf Bewegung und Waffen;
-nicht modelliert: Überlaufen eroberter Flugplätze, Trägerdecks, Nebel des Krieges für das Gunship, die Patch-1.01-Einschränkung des EMP (braucht eine Erzeugerverknüpfung).
+Accompanying changes: `AIUpdateInterface.IsIdle`/`OrderEnter` virtual, `ActiveLocomotor` virtual, `OrderIdle` new, `Update` rests under EMP; `IProductionExit` with template-aware default methods
+(`IsFreeToExitFor`, `ClaimExit(world, template)`); `ObjectTemplate.LocomotorSets`, `LocomotorInfo.Lift`, `WeaponInfo.ReloadsAtBase` (a dry `RETURN_TO_BASE` clip reloads only at the airfield);
+`Entity.EmpDisabledUntil`; `MissileAIUpdate.Victim`/`IsKillingSelf`. **Limits:** ~~the nuclear missiles do not launch from the silo yet~~ and ~~a jet with a stored command appears "idle" to the script~~ have been **refuted** since Phase 15 (real-data tests: the launch via `UseSpecialPowerCommand` and `OCLSpecialPower` begins at the silo and kills the target; the `IsIdle` override of the jet is seen via the base type `AIUpdateInterface`, which the scripts use); disabling acts only on movement and weapons;
+not modelled: defection of captured airfields, carrier decks, fog of war for the gunship, the patch 1.01 restriction of the EMP (needs a creator link).
 
-### 30.2 Kisten-, Kollisions- und Spezialgruppe (`CrateModules.cs`, `SpecialsModules.cs`, `CleanupAndSpyModules.cs`, `BattlePlanModule.cs`)
+### 30.2 Crate, collision and special group (`CrateModules.cs`, `SpecialsModules.cs`, `CleanupAndSpyModules.cs`, `BattlePlanModule.cs`)
 
-| Modul | Quelle | Verhalten |
+| Module | Source | Behaviour |
 | --- | --- | --- |
-| `MoneyCrateCollide` | `CrateCollide.cpp onCollide/isValidToExecute`, `MoneyCrateCollide.cpp executeCrateBehavior` | Überfahrene Kiste zahlt `MoneyProvided` plus den ersten besessenen `UpgradedBoost` an den Spieler des Berührers und verschwindet. Neutrale Berührer, Ziele ohne AI (außer `BuildingPickup`), verbotene Arten, Luftkisten und Fallschirme zahlen nicht. |
-| `VeterancyCrateCollide` | `VeterancyCrateCollide.cpp` | Hebt den Berührer, bei `EffectRange` alle eigenen Objekte in Reichweite, um eine Stufe, mit `AddsOwnerVeterancy` um die Stufe des Trägers (Pilot). Pilot nur für eigene Bodenfahrzeuge. Ohne AI und Zielobjekt wird nichts verbraucht, wie im Original (Level-Up-Kisten ohne AI bleiben liegen). |
-| `ConvertToCarBombCrateCollide` | `ConvertToCarBombCrateCollide.cpp`, `Object::defect`, `checkAndDetonateBoobyTrap` | Der zum Ziel gesandte Terrorist macht ein Fahrzeug mit `WeaponSet CARBOMB` zur Autobombe (`IS_CARBOMB`, die Welt wählt die CARBOMB-Waffe). Das Fahrzeug läuft zum Terroristen über und erbt dessen Veteranenstufe und Skriptnamen (`ObjectNameTransferred`), der Terrorist ist verbraucht. Eine Sprengfalle am Ziel geht zuerst los. Kein Flugzeug, Boot oder bestehende Autobombe. |
-| `ConvertToHijackedVehicleCrateCollide`, `HijackerUpdate` | `ConvertToHijackedVehicleCrateCollide.cpp`, `HijackerUpdate.cpp` | Übernimmt ein feindliches Bodenfahrzeug (nicht `IMMUNE_TO_CAPTURE`, Drohne, beladener Transporter oder schon gekaperter Wagen), setzt `HIJACKED`, gleicht die Veteranenstufe an und beendet dessen Auftrag; der Hijacker versteckt sich im Fahrzeug (ohne `EjectPilotDie` ist er verbraucht), folgt ihm und erscheint, wenn es weg ist, sichtbar und untätig an dessen letzter Position (aus der Luft mit `ParachuteName`-Fallschirm). |
-| `SabotageCommandCenterCrateCollide`, `…SuperweaponCrateCollide` | `Sabotage*CrateCollide.cpp` | Ein Saboteur am feindlichen Kommandozentrum startet die Aufladung aller Spezialkräfte neu; ebenso für `FS_SUPERWEAPON`/`FS_STRATEGY_CENTER`. Er muss das Zielobjekt seiner Order sein. |
-| `SabotageMilitaryFactoryCrateCollide` | `SabotageMilitaryFactoryCrateCollide.cpp` | Kaserne, Waffenfabrik oder Flugplatz (kein Träger) sind `SabotageDuration` lang deaktiviert; simulierte Wirkung: die Produktionswarteschlange steht (`ProductionUpdate.DisableUntil`). |
-| `SabotagePowerPlantCrateCollide` | `SabotagePowerPlantCrateCollide.cpp`, `Energy::setPowerSabotagedTillFrame` | Setzt den „Strom sabotiert“-Tick des Feindspielers (`SabotagePowerDuration`). Ohne Verbraucher in der Simulation (kein Unterstromzustand), nur Zustand. |
-| `SabotageSupplyCenterCrateCollide` | `SabotageSupplyCenterCrateCollide.cpp` | Bucht bis zu `StealCashAmount` vom Konto des Feindes auf das des Saboteurs, begrenzt auf dessen Guthaben. |
-| `PilotFindVehicleUpdate` | `PilotFindVehicleUpdate.cpp` | Ein untätiger KI-Pilot sucht alle `ScanRate` das nächste gesunde (`MinHealth`) eigene Fahrzeug in `ScanRange`, das sein Kollisionsmodul annimmt, und läuft hin (`OrderApproachGoal`). Menschliche Spieler: schläft. Der einmalige Rückweg zur Basis fehlt (keine Basis-Mitte). |
-| `StickyBombUpdate` | `StickyBombUpdate.cpp` (`initStickyBomb`, `update`, `detonate`), `Object::checkAndDetonateBoobyTrap` | Haftet an einem Opfer (folgt ihm, `OffsetZ`), Sprengfalle setzt `BOOBY_TRAPPED`. `detonate` schadet mit `GeometryBasedDamageWeapon` (beide Radien plus Opferumkreis, ohne Beziehungsfilter), löscht den Status und tötet die Bombe. Stirbt das Opfer, geht die Falle los; Verbündete lösen sie nicht aus. Die Skriptaktionen `NAMED_/TEAM_SET_BOOBYTRAPPED` setzen sie an einen Zufallspunkt des Opferumrisses (§30.4). |
-| `GrantStealthBehavior` | `GrantStealthBehavior.cpp`, `StealthUpdate::receiveGrant` | Der Radius wächst je Tick um `RadiusGrowRate`; jedes lebende verbündete Objekt der `KindOf` mit `StealthUpdate` erhält dauerhaft Tarnung. Am `FinalRadius` verschwindet der Marker. |
-| `WanderAIUpdate` | `WanderAIUpdate.cpp` | Läuft ein untätiges Objekt zu einem Punkt 5 bis 50 weiter in x und y (zwei Züge aus dem Logik-Strom), danach normales AI-Update; schläft nie. |
-| `ProjectileStreamUpdate` | `ProjectileStreamUpdate.cpp` | Ringpuffer (20) der Projektile einer Sprühwaffe mit Lücke bei Zielwechsel, Abschneiden vorn, Selbstzerstörung ohne Projektile und Besitzer, `Points` für die Zeichnung. Ohne Spielwirkung; die Waffe erzeugt noch keine Stream-Objekte (`ProjectileStreamName` ist untypisiert). |
-| `CleanupHazardUpdate`, `CleanupAreaPower` | `CleanupHazardUpdate.cpp`, `CleanupAreaPower.cpp` | Sucht alle `ScanRate` das nächste `CLEANUP_HAZARD`-Objekt in `ScanRange`, läuft in Waffenreichweite und feuert, bis es weg ist; im Flächenmodus (die Spezialkraft ruft `setCleanupAreaParameters`) wird um den Punkt gesucht, bis nichts bleibt; ein Spieler- oder Skriptbefehl bricht ihn ab. Nur Slot PRIMARY. |
-| `SpyVisionUpdate`, `SpyVisionSpecialPower` | `SpyVisionUpdate.cpp`, `SpyVisionSpecialPower.cpp` | Solange aktiv, sieht der Besitzer durch die Augen jedes feindlichen Objekts der `SpyOnKindof` (Referenzzähler je Objekt, in der Sichtberechnung aufgedeckt). Schaltet sich per Upgrade, Spezialkraft (`BaseDuration` plus `BonusDurationPerCaptured`, bei einem Container auf `MaxDuration` gekappt) oder selbstgetaktet ein und aus, beim Entfernen ab. |
-| `AssistedTargetingUpdate` | `AssistedTargetingUpdate.cpp`, `Weapon::processRequestAssistance` | Feuert eine Nachbarwaffe mit `RequestAssistRange` auf ein Opfer, greifen alle freien gleichartigen Objekte in Reichweite mit ihrer Slot-Waffe `AssistingClipSize` Schuss an. Feedback-Laser fehlen (Darstellung). |
-| `BattlePlanUpdate` | `BattlePlanUpdate.cpp`, `Player::changeBattlePlan`, `applyBattlePlanBonusesForObject` | Zyklus Idle, Unpacking, Active, Packing mit den Animationszeiten. Aktiv: `BATTLEPLAN_*`-Waffenbonus für alle passenden Objekte des Spielers (auch neue und übernommene), Hold the Line halbiert (`HoldTheLinePlanArmorDamageScalar`) den Schaden, Search and Destroy weitet die Aufdeckung. Die Zentrale verdoppelt je nach Plan Lebenspunkte beziehungsweise Sicht und erkennt Tarnung. Beim Packen sind die Truppen `BattlePlanChangeParalyzeTime` gelähmt. Der Plan kommt über `SelectPlan` oder `Initiate` (die Wahl steht in `target.X`: 1 Bombardement, 2 Linie halten, 3 Suchen und Zerstören – ein typisiertes Optionsfeld mit Versionssprung der Befehle fehlt). |
+| `MoneyCrateCollide` | `CrateCollide.cpp onCollide/isValidToExecute`, `MoneyCrateCollide.cpp executeCrateBehavior` | A crate that is driven over pays `MoneyProvided` plus the first owned `UpgradedBoost` to the player of the toucher and disappears. Neutral touchers, targets without AI (except `BuildingPickup`), forbidden kinds, air crates and parachutes do not pay. |
+| `VeterancyCrateCollide` | `VeterancyCrateCollide.cpp` | Raises the toucher, with `EffectRange` all own objects in range, by one level, with `AddsOwnerVeterancy` by the level of the carrier (pilot). Pilot only for own ground vehicles. Without AI and target object nothing is consumed, as in the original (level-up crates without AI stay lying). |
+| `ConvertToCarBombCrateCollide` | `ConvertToCarBombCrateCollide.cpp`, `Object::defect`, `checkAndDetonateBoobyTrap` | The terrorist sent to the target turns a vehicle with `WeaponSet CARBOMB` into a car bomb (`IS_CARBOMB`, the world selects the CARBOMB weapon). The vehicle defects to the terrorist and inherits his veterancy level and script name (`ObjectNameTransferred`), the terrorist is consumed. A booby trap at the target goes off first. No aircraft, boat or existing car bomb. |
+| `ConvertToHijackedVehicleCrateCollide`, `HijackerUpdate` | `ConvertToHijackedVehicleCrateCollide.cpp`, `HijackerUpdate.cpp` | Takes over an enemy ground vehicle (not `IMMUNE_TO_CAPTURE`, drone, loaded transport or already hijacked vehicle), sets `HIJACKED`, aligns the veterancy level and ends its order; the hijacker hides in the vehicle (without `EjectPilotDie` he is consumed), follows it and, when it is gone, appears visible and idle at its last position (from the air with a `ParachuteName` parachute). |
+| `SabotageCommandCenterCrateCollide`, `…SuperweaponCrateCollide` | `Sabotage*CrateCollide.cpp` | A saboteur at the enemy command center restarts the charging of all special powers; likewise for `FS_SUPERWEAPON`/`FS_STRATEGY_CENTER`. It must be the target object of his order. |
+| `SabotageMilitaryFactoryCrateCollide` | `SabotageMilitaryFactoryCrateCollide.cpp` | Barracks, war factory or airfield (no carrier) are disabled for `SabotageDuration`; simulated effect: the production queue stands still (`ProductionUpdate.DisableUntil`). |
+| `SabotagePowerPlantCrateCollide` | `SabotagePowerPlantCrateCollide.cpp`, `Energy::setPowerSabotagedTillFrame` | Sets the "power sabotaged" tick of the enemy player (`SabotagePowerDuration`). Without a consumer in the simulation (no low-power state), only state. |
+| `SabotageSupplyCenterCrateCollide` | `SabotageSupplyCenterCrateCollide.cpp` | Books up to `StealCashAmount` from the account of the enemy to that of the saboteur, limited to the enemy's credits. |
+| `PilotFindVehicleUpdate` | `PilotFindVehicleUpdate.cpp` | An idle AI pilot searches every `ScanRate` for the nearest healthy (`MinHealth`) own vehicle in `ScanRange` that accepts its collision module, and walks there (`OrderApproachGoal`). Human players: sleeps. The one-time way back to the base is missing (no base centre). |
+| `StickyBombUpdate` | `StickyBombUpdate.cpp` (`initStickyBomb`, `update`, `detonate`), `Object::checkAndDetonateBoobyTrap` | Sticks to a victim (follows it, `OffsetZ`), a booby trap sets `BOOBY_TRAPPED`. `detonate` damages with `GeometryBasedDamageWeapon` (both radii plus victim bounding circle, without relationship filter), clears the status and kills the bomb. If the victim dies, the trap goes off; allies do not trigger it. The script actions `NAMED_/TEAM_SET_BOOBYTRAPPED` put it at a random point of the victim outline (§30.4). |
+| `GrantStealthBehavior` | `GrantStealthBehavior.cpp`, `StealthUpdate::receiveGrant` | The radius grows per tick by `RadiusGrowRate`; every living allied object of the `KindOf` with `StealthUpdate` permanently receives stealth. At the `FinalRadius` the marker disappears. |
+| `WanderAIUpdate` | `WanderAIUpdate.cpp` | If an object is idle, it walks to a point 5 to 50 further in x and y (two draws from the logic stream), afterwards normal AI update; never sleeps. |
+| `ProjectileStreamUpdate` | `ProjectileStreamUpdate.cpp` | Ring buffer (20) of the projectiles of a spray weapon with a gap on target change, cutting off at the front, self-destruction without projectiles and owner, `Points` for the drawing. Without game effect; the weapon does not create stream objects yet (`ProjectileStreamName` is untyped). |
+| `CleanupHazardUpdate`, `CleanupAreaPower` | `CleanupHazardUpdate.cpp`, `CleanupAreaPower.cpp` | Searches every `ScanRate` for the nearest `CLEANUP_HAZARD` object in `ScanRange`, walks into weapon range and fires until it is gone; in area mode (the special power calls `setCleanupAreaParameters`) the search runs around the point until nothing remains; a player or script command aborts it. Only slot PRIMARY. |
+| `SpyVisionUpdate`, `SpyVisionSpecialPower` | `SpyVisionUpdate.cpp`, `SpyVisionSpecialPower.cpp` | As long as it is active, the owner sees through the eyes of every enemy object of the `SpyOnKindof` (reference counter per object, revealed in the vision computation). Switches on and off by upgrade, special power (`BaseDuration` plus `BonusDurationPerCaptured`, with a container capped at `MaxDuration`) or self-timed, off on removal. |
+| `AssistedTargetingUpdate` | `AssistedTargetingUpdate.cpp`, `Weapon::processRequestAssistance` | If a neighbouring weapon with `RequestAssistRange` fires at a victim, all free objects of the same kind in range attack with their slot weapon for `AssistingClipSize` shots. Feedback lasers are missing (rendering). |
+| `BattlePlanUpdate` | `BattlePlanUpdate.cpp`, `Player::changeBattlePlan`, `applyBattlePlanBonusesForObject` | Cycle Idle, Unpacking, Active, Packing with the animation times. Active: `BATTLEPLAN_*` weapon bonus for all matching objects of the player (also new and taken-over ones), Hold the Line halves (`HoldTheLinePlanArmorDamageScalar`) the damage, Search and Destroy widens the revealing. Depending on the plan the center doubles hit points or vision respectively and detects stealth. While packing the troops are paralysed for `BattlePlanChangeParalyzeTime`. The plan comes via `SelectPlan` or `Initiate` (the choice is in `target.X`: 1 Bombardment, 2 Hold the Line, 3 Search and Destroy – a typed option field with a version bump of the commands is missing). |
 
-Schnittstellen: Hijack-, Autobomben-, Sabotage- und Pilotenaufträge laufen über `AIUpdateInterface.OrderApproachGoal(world, goal, fromPlayer)` (kein neuer `SimCommand`); neue Ereignisse `CrateCollected` 80,
-`ObjectConverted` 81, `Sabotaged` 82, `ObjectNameTransferred` 83 (das Skript nimmt den Namen mit, §30.4). **Näherungen:** Kollisionen feuern nur für Bewegende (wer auf einer Kiste steht, sammelt sie erst beim
-nächsten Zug); Hijack und Autobombe übernehmen die Sichtweite nicht; Pilot kehrt nicht zur Basis zurück; Spionagesicht wechselt bei Eroberung nicht den Besitzer; Kampfplan (seit Phase 15 mit typisiertem Feld `UseSpecialPowerCommand.Option` = `OPTION_ONE/TWO/THREE` des Befehlsknopfs, `CommandTypes.Version` 12, Replay 9) skaliert nur die Aufdeckungsreichweite
-(nicht die Sichtweite je Einheit), das Bombardement-Geschütz gilt als immer zentriert; Panzerung/Sicht-Skalare werden abgeleitet statt multipliziert, um Festkomma-Drift zu vermeiden.
+Interfaces: hijack, car bomb, sabotage and pilot orders run via `AIUpdateInterface.OrderApproachGoal(world, goal, fromPlayer)` (no new `SimCommand`); new events `CrateCollected` 80,
+`ObjectConverted` 81, `Sabotaged` 82, `ObjectNameTransferred` 83 (the script takes the name along, §30.4). **Approximations:** collisions fire only for movers (whoever stands on a crate collects it only on the
+next move); hijack and car bomb do not take over the vision range; the pilot does not return to the base; spy vision does not change owner on capture; battle plan (since Phase 15 with the typed field `UseSpecialPowerCommand.Option` = `OPTION_ONE/TWO/THREE` of the command button, `CommandTypes.Version` 12, replay 9) scales only the revealing range
+(not the vision range per unit), the bombardment gun counts as always centred; armor/vision scalars are derived instead of multiplied, to avoid fixed-point drift.
 
-### 30.3 Struktur- und Weltgruppe (`StructureModules.cs`, `RailroadModules.cs`, `MineModules.cs`, `BridgeModules.cs`, `WorldEffectModules.cs`)
+### 30.3 Structure and world group (`StructureModules.cs`, `RailroadModules.cs`, `MineModules.cs`, `BridgeModules.cs`, `WorldEffectModules.cs`)
 
-| Modul | Quelle | Verhalten |
+| Module | Source | Behaviour |
 | --- | --- | --- |
-| `RailroadBehavior` | `RailroadGuideAIUpdate.cpp` (`update`, `loadTrackData`, `createCarriages`, `getPulled`, `updatePositionTrackDistance`, `FindPosByPathDistance`, `onCollide`) | Lokomotive sucht den nächsten Kartenwegpunkt als Anker, die Wegpunktverknüpfungen (`getLink(0)`) sind das Gleis (Schleife erkannt). Beschleunigt `(v+0,02)·Acceleration` bis `SpeedMax`, bremst hinter `…Station`/`…Disembark`/`…PingPong`-Punkten, wartet `WaitAtStationTime` (`SET_TRAIN_HELD` hält sie dort). Waggons aus `CarriageTemplateName` oder unverbundene verbündete Waggons hinter dem Haken; ein Waggon ohne Zieher wird Führungswagen und rollt aus (`Friction`). Offene Strecke: Wagen in den Kulissen/Streckenende (destroy). Lok tötet ab `KillSpeedMin` (sonst Quetschschaden), Zug gegen Zug beide, Basisstrukturen/Demofallen sterben, Objekte mit Physik werden verschoben. Nicht: Audio, Pfadsperre am Bahnhof, Physikimpuls |
-| `UpgradeDie` | `UpgradeDie.cpp` | Beim Tod verliert der Erzeuger (`getProducerID`, von der Erzeugungsliste eingetragen) das Objekt-Upgrade `UpgradeToRemove`; ohne Erzeuger nichts |
-| `StructureCollapseUpdate` | `StructureCollapseUpdate.cpp` | Nach `onDie` zufällige Verzögerung, dann Einsturz mit `COLLAPSE`-Beschleunigung (Gravitation·(1−`CollapseDamping`)) bis unter die Geometriehöhe; Phasen INITIAL/DELAY/BURST/FINAL wählen je eine FX-/OCL-Liste (eine Logikziehung je Liste), Bursts alle `MinBurstDelay..MaxBurstDelay` (groß mit 1/`BigBurstFrequency`). Zittern und Absenken nur Modell |
-| `DeployStyleAIUpdate` | `DeployStyleAIUpdate.cpp` | Zustände READY_TO_MOVE/DEPLOY/READY_TO_ATTACK/UNDEPLOY: ein Feuerbefehl in Reichweite startet das Aufbauen (`UnpackTime`, Status `DEPLOYED`), Schüsse bis dahin verworfen und gezählt (`WeaponNotReady`); ein Bewegungsbefehl packt ein (`PackTime`) und fährt danach; Umkehr eines laufenden Auf-/Abbaus. Das Tor (`IFireGate`) wird erst bei der Ausführung eines akzeptierten Feuerbefehls gefragt, nie bei der Prüfung (sonst änderte ein verworfener Befehl den Zustand). Nicht: Bewacher-Autoentfaltung, Turmzentrierung |
-| `FireWeaponCollide` | `FireWeaponCollide.cpp` | Berührt etwas das Objekt, solange alle `RequiredStatus` (z. B. `AFLAME`) und kein `ForbiddenStatus` gesetzt sind, feuert die Kollisionswaffe jedes Mal auf den Berührer; `FireOnce` wirkt wie im Original nicht |
-| `FireSpreadUpdate` | `FireSpreadUpdate.cpp`, `FlammableUpdate::tryToIgnite` | Brennt das Objekt, erzeugt es Glut (`OCLEmbers`) und entzündet das nächste noch entzündbare Objekt in `SpreadTryRange` (3D), danach Schlaf `MinSpreadDelay..MaxSpreadDelay` |
-| `BridgeBehavior`, `BridgeTowerBehavior`, `BridgeScaffoldBehavior` | `BridgeBehavior.cpp`, `BridgeTowerBehavior.cpp`, `BridgeScaffoldBehavior.cpp` | Schaden/Heilung an die vier Türme im gleichen Anteil (nicht bei Turmquelle); Tod tötet Türme und Objekte ohne Physik auf dem Deck (eigene Box), `BridgeDieFX/OCL` je genau einmal nach ihrem Delay; Heilung aus Rubble belebt; ein Turm gibt Schaden an die anderen Türme und die Brücke weiter, sein Tod tötet die Brücke; das Gerüst bewegt sich RISE → BUILD_ACROSS bzw. TEAR_DOWN_ACROSS → SINK (zerstört) mit Verlangsamung im letzten Viertel, angetrieben nur von außen. Türme per `SetTower`; kein Brückenterrain, keine Layer, kein Gerüstbau |
-| `DemoTrapUpdate` | `DemoTrapUpdate.cpp` | Läuft ein Feind (nicht in der Luft, nicht ignorierte Art) in `TriggerDetonationRange`, feuert es `DetonationWeapon` (falls gesetzt) und tötet sich; Verbündete blockieren außer bei `AutoDetonationWithFriendsInvolved`; Modus (Nähe/manuell/Zündung) als Modulzustand statt Waffenslot (kein Befehl verdrahtet); `DetonateWhenKilled` |
-| `MinefieldBehavior` | `MinefieldBehavior.cpp` | `NumVirtualMines`: Berührung (nach `DetonatedBy`, Arbeiter nur mit `WorkersDetonate`) löst eine virtuelle Mine am nächsten Footprintpunkt aus (Waffe, Zähler, Gesundheit auf den Anteil, mind. 0,1, `CreationList`), erneut erst nach `RepeatDetonateMoveThresh`; Schaden/Heilung gleichen Zähler und Gesundheit ab; ohne Erzeuger Degeneration. Nicht: Minenräumer-Immunität, Scoot |
-| `OCLUpdate` | `OCLUpdate.cpp` | Erzeugt alle `MinDelay..MaxDelay` seine Liste (am Objekt oder Kartenrand), erster Versuch startet nur den Timer; `FactionTriggered`: ruht neutral, Liste nach `PlayerTemplate`-Side des Besitzers |
-| `DynamicShroudClearingRangeUpdate` | `DynamicShroudClearingRangeUpdate.cpp` | Sichtweite wächst von 0 auf die Vorlage, hält, schrumpft auf `FinalVision` (Countdown `ShrinkDelay+ShrinkTime`), alle `ChangeInterval` an die Sichtkarte übergeben (`IShroudRangeProvider`); Decals Präsentation |
-| `FireOCLAfterWeaponCooldownUpdate` | `FireOCLAfterWeaponCooldownUpdate.cpp` | Zählt Schüsse in Folge der überwachten Waffe, erzeugt nach dem Abklingen/Waffenwechsel bei `MinShotsToCreateOCL` die Liste mit Lebensdauer `OCLLifetimePerSecond`/Deckel; liest seit dem Waffenslot-Modell (§30.6) den echten Slot, auch SECONDARY |
-| `FloatUpdate` | `FloatUpdate.cpp` | Aktiviert (`Enabled`) schwimmt das Objekt auf dem Wasserspiegel des Wassergebiets; alle ausgelieferten Nutzungen (Bojen) deaktiviert, Schwanken nur Modell |
-| `WaveGuideUpdate`, `DamDie` | `WaveGuideUpdate.cpp`, `DamDie.cpp` | Ab Start deaktiviert; aktiviert und nach `WaveDelay` auf `WaveGuide1` gesetzt, bewegt sich entlang der Wegpunktkette, am Ende zerstört. Je Tick Schaden an allen Punkten der parabolischen Front unterhalb `PreferredHeight` (Brücken ausgenommen), nass, umgeworfen, `DamageAmount` Wasserschaden (Tod FLOODED); `DamDie` aktiviert beim Tod alle `WAVEGUIDE`-Objekte. Nicht: Wasserstand, Uferefekte |
-| `CheckpointUpdate`, `EnemyNearUpdate` | `CheckpointUpdate.cpp`, `EnemyNearUpdate.cpp` | Checkpoint: jeden Tick Feind/Verbündeter in Sichtweite, offen bei Verbündetem ohne Feind, Torradius ±1/3 je Tick (nur Zustand, die Wegsuche sieht ihn nicht); EnemyNear: alle `ScanDelayTime` nächster Feind in Sichtweite, Flag `IsEnemyNear` |
-| `FirestormDynamicGeometryInfoUpdate` | `DynamicGeometryInfoUpdate.cpp`, `FirestormDynamicGeometryInfoUpdate.cpp` | Nach `InitialDelay` wächst die Geometrie linear in `TransitionTime` (mit `ReverseAtTransitionTime` zurück); alle `DelayBetweenDamageFrames` Flammenschaden (nach Rüstung) an allem im aktuellen Umkreis und nicht über `MaxHeightForDamage` |
-| `WeaponBonusUpdate` | `WeaponBonusUpdate.cpp`, `TempWeaponBonusHelper.cpp` | Alle `BonusDelay` erhalten lebende Verbündete (und Passagiere) im Radius mit den geforderten Arten die Bedingung `BonusConditionType` für `BonusDuration`; ein anderer Bonus ersetzt den alten. Zeitgeber in der Quelle (endet mit ihr) |
-| `CostModifierUpgrade` | `CostModifierUpgrade.cpp`, `Player::addKindOfProductionCostChange` | Nach dem Upgrade kosten Objekte mit allen `EffectKindOf` für den Besitzer `1+Percentage` (Produkt, ganzzahlig abgerundet; an Produktion und Bau); Tod/Zerstörung nimmt zurück, Eroberung verschiebt zum neuen Besitzer |
-| `BoneFXDamage`, `BoneFXUpdate` | `BoneFXDamage.cpp`, `BoneFXUpdate.cpp` | ehrliche Hüllen: Effekte an Modellknochen sind Präsentation, kein Zustand; ein ausgefüllter OCL-Slot macht das Objekt nicht instanziierbar |
+| `RailroadBehavior` | `RailroadGuideAIUpdate.cpp` (`update`, `loadTrackData`, `createCarriages`, `getPulled`, `updatePositionTrackDistance`, `FindPosByPathDistance`, `onCollide`) | The locomotive searches for the nearest map waypoint as an anchor, the waypoint links (`getLink(0)`) are the track (loop detected). Accelerates `(v+0.02)·Acceleration` up to `SpeedMax`, brakes behind `…Station`/`…Disembark`/`…PingPong` points, waits `WaitAtStationTime` (`SET_TRAIN_HELD` holds it there). Carriages from `CarriageTemplateName` or unconnected allied carriages behind the hook; a carriage without a puller becomes the lead car and coasts to a stop (`Friction`). Open track: car into the wings/end of the track (destroy). The locomotive kills from `KillSpeedMin` on (otherwise crush damage), train against train both, base structures/demo traps die, objects with physics are pushed. Not: audio, path lock at the station, physics impulse |
+| `UpgradeDie` | `UpgradeDie.cpp` | On death the producer (`getProducerID`, entered by the creation list) loses the object upgrade `UpgradeToRemove`; without a producer nothing |
+| `StructureCollapseUpdate` | `StructureCollapseUpdate.cpp` | After `onDie` a random delay, then collapse with `COLLAPSE` acceleration (gravity·(1−`CollapseDamping`)) until below the geometry height; the phases INITIAL/DELAY/BURST/FINAL each select an FX/OCL list (one logic draw per list), bursts every `MinBurstDelay..MaxBurstDelay` (large with 1/`BigBurstFrequency`). Shaking and sinking only model |
+| `DeployStyleAIUpdate` | `DeployStyleAIUpdate.cpp` | States READY_TO_MOVE/DEPLOY/READY_TO_ATTACK/UNDEPLOY: a fire command in range starts the deploying (`UnpackTime`, status `DEPLOYED`), shots until then discarded and counted (`WeaponNotReady`); a move command packs up (`PackTime`) and drives afterwards; reversal of a running deploy/undeploy. The gate (`IFireGate`) is only asked on execution of an accepted fire command, never during the check (otherwise a discarded command would change the state). Not: guard auto-deployment, turret centring |
+| `FireWeaponCollide` | `FireWeaponCollide.cpp` | If something touches the object while all `RequiredStatus` (e.g. `AFLAME`) and no `ForbiddenStatus` are set, the collision weapon fires at the toucher every time; `FireOnce` has no effect, as in the original |
+| `FireSpreadUpdate` | `FireSpreadUpdate.cpp`, `FlammableUpdate::tryToIgnite` | If the object burns, it creates embers (`OCLEmbers`) and ignites the nearest still ignitable object in `SpreadTryRange` (3D), afterwards sleep `MinSpreadDelay..MaxSpreadDelay` |
+| `BridgeBehavior`, `BridgeTowerBehavior`, `BridgeScaffoldBehavior` | `BridgeBehavior.cpp`, `BridgeTowerBehavior.cpp`, `BridgeScaffoldBehavior.cpp` | Damage/healing to the four towers in the same proportion (not with a tower as the source); death kills towers and objects without physics on the deck (own box), `BridgeDieFX/OCL` each exactly once after their delay; healing from rubble revives; a tower passes damage on to the other towers and the bridge, its death kills the bridge; the scaffold moves RISE → BUILD_ACROSS or TEAR_DOWN_ACROSS → SINK (destroyed) with slowing in the last quarter, driven only from outside. Towers via `SetTower`; no bridge terrain, no layers, no scaffold construction |
+| `DemoTrapUpdate` | `DemoTrapUpdate.cpp` | If an enemy (not in the air, not an ignored kind) walks into `TriggerDetonationRange`, it fires `DetonationWeapon` (if set) and kills itself; allies block except with `AutoDetonationWithFriendsInvolved`; mode (proximity/manual/detonation) as module state instead of weapon slot (no command wired); `DetonateWhenKilled` |
+| `MinefieldBehavior` | `MinefieldBehavior.cpp` | `NumVirtualMines`: a touch (by `DetonatedBy`, workers only with `WorkersDetonate`) triggers a virtual mine at the nearest footprint point (weapon, counter, health to the proportion, at least 0.1, `CreationList`), again only after `RepeatDetonateMoveThresh`; damage/healing reconcile counter and health; without a creator degeneration. Not: mine clearer immunity, scoot |
+| `OCLUpdate` | `OCLUpdate.cpp` | Creates its list every `MinDelay..MaxDelay` (at the object or the map edge), the first attempt only starts the timer; `FactionTriggered`: rests while neutral, list by the `PlayerTemplate` side of the owner |
+| `DynamicShroudClearingRangeUpdate` | `DynamicShroudClearingRangeUpdate.cpp` | Vision range grows from 0 to the template value, holds, shrinks to `FinalVision` (countdown `ShrinkDelay+ShrinkTime`), handed to the vision map every `ChangeInterval` (`IShroudRangeProvider`); decals presentation |
+| `FireOCLAfterWeaponCooldownUpdate` | `FireOCLAfterWeaponCooldownUpdate.cpp` | Counts consecutive shots of the monitored weapon, creates the list after the cooldown/weapon change at `MinShotsToCreateOCL` with lifetime `OCLLifetimePerSecond`/cap; since the weapon slot model (§30.6) it reads the real slot, also SECONDARY |
+| `FloatUpdate` | `FloatUpdate.cpp` | When activated (`Enabled`) the object floats on the water level of the water area; all shipped usages (buoys) deactivated, swaying only model |
+| `WaveGuideUpdate`, `DamDie` | `WaveGuideUpdate.cpp`, `DamDie.cpp` | Disabled from the start; activated and set to `WaveGuide1` after `WaveDelay`, moves along the waypoint chain, destroyed at the end. Per tick damage to all points of the parabolic front below `PreferredHeight` (bridges excepted), wet, knocked over, `DamageAmount` water damage (death FLOODED); on death `DamDie` activates all `WAVEGUIDE` objects. Not: water level, shore effects |
+| `CheckpointUpdate`, `EnemyNearUpdate` | `CheckpointUpdate.cpp`, `EnemyNearUpdate.cpp` | Checkpoint: every tick enemy/ally in vision range, open with an ally without an enemy, gate radius ±1/3 per tick (only state, pathfinding does not see it); EnemyNear: every `ScanDelayTime` nearest enemy in vision range, flag `IsEnemyNear` |
+| `FirestormDynamicGeometryInfoUpdate` | `DynamicGeometryInfoUpdate.cpp`, `FirestormDynamicGeometryInfoUpdate.cpp` | After `InitialDelay` the geometry grows linearly in `TransitionTime` (back with `ReverseAtTransitionTime`); every `DelayBetweenDamageFrames` flame damage (by armor) to everything within the current bounding circle and not above `MaxHeightForDamage` |
+| `WeaponBonusUpdate` | `WeaponBonusUpdate.cpp`, `TempWeaponBonusHelper.cpp` | Every `BonusDelay` living allies (and passengers) in the radius with the required kinds receive the condition `BonusConditionType` for `BonusDuration`; another bonus replaces the old one. Timers in the source (ends with it) |
+| `CostModifierUpgrade` | `CostModifierUpgrade.cpp`, `Player::addKindOfProductionCostChange` | After the upgrade, objects with all `EffectKindOf` cost the owner `1+Percentage` (product, rounded down to an integer; on production and construction); death/destruction takes it back, capture moves it to the new owner |
+| `BoneFXDamage`, `BoneFXUpdate` | `BoneFXDamage.cpp`, `BoneFXUpdate.cpp` | honest shells: effects on model bones are presentation, no state; a filled OCL slot makes the object non-instantiable |
 
-Begleitende Änderungen: `FieldSchema` lässt bei Referenzfeldern wie das Original nachfolgende Token zu (`UpgradeToRemove = Upgrade_X ModuleTag_13`); `TerrainMap`-Wegpunkte tragen ihre Id und den ersten Link
-(Gleis, Wellenführung); neue `IWorldServices`-Mitglieder und Schnittstellen `IProducerReceiver`, `IFireGate`, `IShroudRangeProvider`, `IOwnerChangeReceiver`. **Grenzen:** Brückenterrain, Brückenschichten und
-Gerüstbau fehlen (nur Wahrzeichenbrücken, deren Box das Deck ist); `FireOCLAfterWeaponCooldownUpdate` wirkte vor dem Slotmodell (§30.6) nie, weil jede Nutzung SECONDARY beobachtet; `WaveGuideUpdate` hebt kein Wasser; `WeaponBonusUpdate` hält seine Zeitgeber im Beacon.
+Accompanying changes: for reference fields `FieldSchema` permits trailing tokens like the original (`UpgradeToRemove = Upgrade_X ModuleTag_13`); `TerrainMap` waypoints carry their id and the first link
+(track, wave guide); new `IWorldServices` members and interfaces `IProducerReceiver`, `IFireGate`, `IShroudRangeProvider`, `IOwnerChangeReceiver`. **Limits:** bridge terrain, bridge layers and
+scaffold construction are missing (only landmark bridges whose box is the deck); `FireOCLAfterWeaponCooldownUpdate` never had an effect before the slot model (§30.6) because every usage observes SECONDARY; `WaveGuideUpdate` raises no water; `WeaponBonusUpdate` keeps its timers in the beacon.
 
-### 30.4 Skriptseite (`ScriptEngine.Phase13.cs`)
+### 30.4 Script side (`ScriptEngine.Phase13.cs`)
 
-| Aktion / Bedingung | Quelle | Verhalten |
+| Action / condition | Source | Behaviour |
 | --- | --- | --- |
-| `NAMED_SET_HELD` | `ScriptActions::doNamedSetHeld` | `Entity.ScriptDisableMask` Bit 1 (`DISABLED_HELD`): AI-Update und Produktion ruhen; vorher nur aufgezeichnet |
-| `PLAYER_DISABLE_FACTORIES`, `PLAYER_ENABLE_FACTORIES` | `Player::setObjectsEnabled` | Bit 2 (`OBJECT_STATUS_SCRIPT_DISABLED`) für alle bestehenden Objekte der Vorlage des Spielers; die Produktion steht, später gebaute Objekte sind nicht betroffen (wie im Original) |
-| `SET_TRAIN_HELD` | `ScriptActions::doNamedSetTrainHeld` | `RailroadBehavior.SetHeld`: die Lokomotive bleibt am Bahnhof |
-| `NAMED_SET_EVAC_LEFT_OR_RIGHT` | `GarrisonContain::exitObjectViaDoor` | `GarrisonContain.EvacDisposition` (1 links, 2 rechts): der Insasse erscheint in einer Tasche neben dem Gebäude (`±¼` der Länge, ½–2 Breiten seitlich) und läuft zu einem Punkt zehn Breiten entfernt (drei Logikziehungen) |
-| `NAMED_SET_BOOBYTRAPPED`, `TEAM_SET_BOOBYTRAPPED` | `ScriptActions::doNamedSetBoobytrapped`, `GeometryInfo::makeRandomOffsetOnPerimeter` | das Fallenobjekt wird angefordert, am Zufallspunkt des Opferumrisses (Box: Umriss, sonst Winkel; in das Opferkoordinatensystem gedreht) angeheftet, sobald es existiert (`_pendingTraps`, im Zustand) |
-| `BRIDGE_BROKEN`, `BRIDGE_REPAIRED` | `TerrainLogic::isBridgeBroken/isBridgeRepaired` | nur für ein Update nach dem Wechsel des Brückenobjekts in oder aus dem Rubble-Schadenszustand wahr (`_bridgeStates`, im Zustand; die erste Auswertung merkt sich den Ausgangszustand) |
-| Namenstransfer (`ObjectNameTransferred`) | `ScriptEngine::transferObjectName` | der Skriptname des verbrauchten Objekts (Autobombe, Hijack, Pilot) gehört danach dem Objekt, das übernommen hat |
+| `NAMED_SET_HELD` | `ScriptActions::doNamedSetHeld` | `Entity.ScriptDisableMask` bit 1 (`DISABLED_HELD`): AI update and production rest; previously only recorded |
+| `PLAYER_DISABLE_FACTORIES`, `PLAYER_ENABLE_FACTORIES` | `Player::setObjectsEnabled` | bit 2 (`OBJECT_STATUS_SCRIPT_DISABLED`) for all existing objects of the template of the player; production stands still, objects built later are not affected (as in the original) |
+| `SET_TRAIN_HELD` | `ScriptActions::doNamedSetTrainHeld` | `RailroadBehavior.SetHeld`: the locomotive stays at the station |
+| `NAMED_SET_EVAC_LEFT_OR_RIGHT` | `GarrisonContain::exitObjectViaDoor` | `GarrisonContain.EvacDisposition` (1 left, 2 right): the occupant appears in a pocket next to the building (`±¼` of the length, ½–2 widths to the side) and walks to a point ten widths away (three logic draws) |
+| `NAMED_SET_BOOBYTRAPPED`, `TEAM_SET_BOOBYTRAPPED` | `ScriptActions::doNamedSetBoobytrapped`, `GeometryInfo::makeRandomOffsetOnPerimeter` | the trap object is requested, attached at the random point of the victim outline (box: outline, otherwise angle; rotated into the victim coordinate system) as soon as it exists (`_pendingTraps`, in the state) |
+| `BRIDGE_BROKEN`, `BRIDGE_REPAIRED` | `TerrainLogic::isBridgeBroken/isBridgeRepaired` | true only for one update after the bridge object changes into or out of the rubble damage state (`_bridgeStates`, in the state; the first evaluation remembers the initial state) |
+| Name transfer (`ObjectNameTransferred`) | `ScriptEngine::transferObjectName` | the script name of the consumed object (car bomb, hijack, pilot) afterwards belongs to the object that took over |
 
-Nicht umgesetzt (`CampaignTool coverage`; in keiner Kampagnenkarte benutzt, `CampaignTool usage` leer): `SKIRMISH_BUILD_BUILDING`, `SKIRMISH_BUILD_BASE_DEFENSE_FRONT/_FLANK`,
+Not implemented (`CampaignTool coverage`; used in no campaign map, `CampaignTool usage` empty): `SKIRMISH_BUILD_BUILDING`, `SKIRMISH_BUILD_BASE_DEFENSE_FRONT/_FLANK`,
 `SKIRMISH_BUILD_STRUCTURE_FRONT/_FLANK`, `SKIRMISH_ATTACK_NEAREST_GROUP_WITH_VALUE`, `SKIRMISH_PERFORM_COMMANDBUTTON_ON_MOST_VALUABLE_OBJECT`, `AI_PLAYER_BUILD_TYPE_NEAREST_TEAM`,
-`NAMED_FIRE_WEAPON_FOLLOWING_WAYPOINT_PATH` – die ersten sechs gehören zu `AISkirmishPlayer` (Bauliste, Basisradius, Seiten-`AIData`), die sich die Simulation mit dem `SkirmishAi`-Ersatz nicht teilt.
+`NAMED_FIRE_WEAPON_FOLLOWING_WAYPOINT_PATH` – the first six belong to `AISkirmishPlayer` (build list, base radius, side `AIData`), which the simulation with the `SkirmishAi` substitute does not share.
 
-### 30.5 Die letzten neun Blockermodule (`LastBlockerModules.cs`, `FerryModules.cs`)
+### 30.5 The last nine blocker modules (`LastBlockerModules.cs`, `FerryModules.cs`)
 
-| Modul | Quelle | Verhalten |
+| Module | Source | Behaviour |
 | --- | --- | --- |
-| `SalvageCrateCollide` | `SalvageCrateCollide.cpp` | Nur `SALVAGER` nehmen die Kiste. Reihenfolge wie im Original: `ARMOR_SALVAGER` nimmt immer die nächste Panzerungsstufe, dann `WEAPON_SALVAGER` mit `WeaponChance` die nächste Waffenstufe, dann trainierbare Einheiten mit `LevelChance` eine Veteranenstufe, sonst Geld zwischen `MinMoney` und `MaxMoney`. Zufallszahlen werden nur bei Chancen ungleich 100 % und bei Min ungleich Max gezogen. Stufen liegen an `Entity.CrateWeaponLevel`/`CrateArmorLevel` und wählen das `CRATEUPGRADE_ONE/TWO`-WeaponSet bzw. `CRATE_UPGRADE_ONE/TWO`-ArmorSet. |
-| `UnitCrateCollide` | `UnitCrateCollide.cpp` | Der Spieler des Berührers erhält `UnitCount` Objekte `UnitName`, mit der Ausrichtung des Berührers (ein Ring um den Berührer statt der Kollisionssuche). Ein unbekannter oder nicht instanziierbarer Name lässt die Kiste stehen und meldet `CreationSkipped`. |
-| `SabotageFakeBuildingCrateCollide` | `SabotageFakeBuilding.cpp` | Ein feindliches `FS_FAKE`-Gebäude erhält unresistenten Schaden in Höhe seiner Maximalgesundheit (`DETONATED`) und zerfällt sofort. |
-| `SabotageInternetCenterCrateCollide` | `SabotageInternetCenterCrateCollide.cpp` | Alle Internet-Center des Opfers schalten ihr `SpyVisionUpdate` für `SabotageDuration` ab; Hacker im getroffenen Center stehen für die Dauer still (`HackInternetAIUpdate.DisableUntil`, kein Geld). Die Markierung `DISABLED_HACKED` am Center selbst wird nicht gespeichert. |
-| `SmartBombTargetHomingUpdate` | `SmartBombTargetHomingUpdate.cpp` | Nach `SetTargetPosition` (von `DeliverPayloadAIUpdate` beim Abwurf) wandert x/y jeden Tick im Flug auf `Ziel·(1−s)+Position·s` mit `s` = `CourseCorrectionScalar` auf [0,1] geklemmt. Die Höhe bleibt dem Fall überlassen, der Nullpunkt wird abgelehnt. |
-| `SupplyWarehouseCripplingBehavior` | `SupplyWarehouseCripplingBehavior.cpp` | Beim Übergang in `REALLYDAMAGED` wird das Dock gelähmt (`SetDockCrippled`): Anfahrt ja, Einlass nie, ein Lkw zwischen Eintritt und Austritt stirbt, ein nur angefahrener wird idle gesetzt mit erzwungenem Versorgungswunsch. Jeder Treffer startet die Heilungsruhe `SelfHealSupression`, danach heilt es `SelfHealAmount` je `SelfHealDelay`. Ein Objekt ohne Dock wird nicht gelähmt (das Original würde Null dereferenzieren). |
-| `RailedTransportAIUpdate` | `RailedTransportAIUpdate.cpp` | Die Fähre fährt Wegpunktpfade `<Präfix>Start%02d`/`End%02d` (bis 32) Hop für Hop ab, wählt anfangs den Pfad mit dem nächsten Endpunkt und ist unterwegs „in transit“ (Dock zu). Innerhalb 5 Einheiten vom Endpunkt oder im Leerlauf öffnet das Dock. `ExecuteRailedTransport` nimmt den nächsten Pfad reihum (kein Befehlstyp – das würde das Replayformat ändern), `OrderEvacuate` entlädt über das Dock. Spielerbefehle außer Evakuieren werden ignoriert. Keine Karte des Retailbestands enthält die Fähre. |
-| `RailedTransportContain` | `RailedTransportContain.cpp` | Ein `TransportContain`: nach dem letzten Entfernen öffnet sich das Dock; Austritt nur bei offenem Dock (sonst `NotPermitted`); ein Austrittsbefehl übergibt an das Dock (`unloadSingleObject`, entlädt den ersten der Liste). |
-| `RailedTransportDockUpdate` | `RailedTransportDockUpdate.cpp` | Ein Docker innerhalb `ToleranceDistance` wird gehalten, nicht wählbar, zur Fähre gedreht und über `PullInsideDuration` bis 6 Einheiten zur Mitte gezogen, dann in die Fähre gesetzt; Entladen holt den ersten Passagier heraus und schiebt ihn über `PushOutsideDuration` zum Ausgangspunkt (bis 3 Einheiten). Ohne Modellknochen: Warteplatz am Rand des Umkreises, Ausgang eine Hauptachse vor der Fähre. |
+| `SalvageCrateCollide` | `SalvageCrateCollide.cpp` | Only `SALVAGER` take the crate. Order as in the original: `ARMOR_SALVAGER` always takes the next armor level, then `WEAPON_SALVAGER` with `WeaponChance` the next weapon level, then trainable units with `LevelChance` a veterancy level, otherwise money between `MinMoney` and `MaxMoney`. Random numbers are only drawn for chances not equal to 100 % and for min not equal to max. Levels lie at `Entity.CrateWeaponLevel`/`CrateArmorLevel` and select the `CRATEUPGRADE_ONE/TWO` WeaponSet and the `CRATE_UPGRADE_ONE/TWO` ArmorSet respectively. |
+| `UnitCrateCollide` | `UnitCrateCollide.cpp` | The player of the toucher receives `UnitCount` objects `UnitName`, with the orientation of the toucher (a ring around the toucher instead of the collision search). An unknown or non-instantiable name leaves the crate standing and reports `CreationSkipped`. |
+| `SabotageFakeBuildingCrateCollide` | `SabotageFakeBuilding.cpp` | An enemy `FS_FAKE` building receives unresisted damage in the amount of its maximum health (`DETONATED`) and falls apart immediately. |
+| `SabotageInternetCenterCrateCollide` | `SabotageInternetCenterCrateCollide.cpp` | All internet centers of the victim switch off their `SpyVisionUpdate` for `SabotageDuration`; hackers in the hit center stand still for the duration (`HackInternetAIUpdate.DisableUntil`, no money). The marker `DISABLED_HACKED` at the center itself is not saved. |
+| `SmartBombTargetHomingUpdate` | `SmartBombTargetHomingUpdate.cpp` | After `SetTargetPosition` (by `DeliverPayloadAIUpdate` at the drop) x/y moves every tick in flight to `Ziel·(1−s)+Position·s` with `s` = `CourseCorrectionScalar` clamped to [0,1]. The height is left to the fall, the zero point is rejected. |
+| `SupplyWarehouseCripplingBehavior` | `SupplyWarehouseCripplingBehavior.cpp` | On the transition into `REALLYDAMAGED` the dock is crippled (`SetDockCrippled`): approach yes, admission never, a truck between entry and exit dies, one that has only approached is set idle with a forced supply wish. Every hit starts the healing rest `SelfHealSupression`, afterwards it heals `SelfHealAmount` per `SelfHealDelay`. An object without a dock is not crippled (the original would dereference null). |
+| `RailedTransportAIUpdate` | `RailedTransportAIUpdate.cpp` | The ferry travels waypoint paths `<Präfix>Start%02d`/`End%02d` (up to 32) hop by hop, initially chooses the path with the nearest end point and is "in transit" on the way (dock closed). Within 5 units of the end point or when idle the dock opens. `ExecuteRailedTransport` takes the next path in turn (no command type – that would change the replay format), `OrderEvacuate` unloads via the dock. Player commands other than evacuate are ignored. No map of the retail content contains the ferry. |
+| `RailedTransportContain` | `RailedTransportContain.cpp` | A `TransportContain`: after the last removal the dock opens; exit only with the dock open (otherwise `NotPermitted`); an exit command hands over to the dock (`unloadSingleObject`, unloads the first of the list). |
+| `RailedTransportDockUpdate` | `RailedTransportDockUpdate.cpp` | A docker within `ToleranceDistance` is held, not selectable, turned towards the ferry and pulled over `PullInsideDuration` up to 6 units to the centre, then put into the ferry; unloading fetches the first passenger out and pushes him over `PushOutsideDuration` to the exit point (up to 3 units). Without model bones: waiting spot at the edge of the bounding circle, exit one main axis in front of the ferry. |
 
-Damit ist jedes für die Simulation vorgesehene Modul des Katalogs implementiert (183 von 183); offen bleiben nur die 22 Präsentationsmodule.
+With that, every module of the catalog intended for the simulation is implemented (183 of 183); only the 22 presentation modules remain open.
 
-### 30.6 Das Waffenslot-Modell (`WeaponSets.cs`, `SimulationWorld.WeaponSlots.cs`, `WeaponSlotState.cs`)
+### 30.6 The weapon slot model (`WeaponSets.cs`, `SimulationWorld.WeaponSlots.cs`, `WeaponSlotState.cs`)
 
-Bis hierher feuerte jedes Objekt eine Waffe (`DefaultWeapon`, `PlayerUpgradeWeapon`, `VeteranWeapon` …); `AssistedTargetingUpdate` und `FireOCLAfterWeaponCooldownUpdate` führten ein eigenes Slot-Buchhalten oder wirkten nie. Das Slotmodell
-macht die aktive `WeaponSet`-Auswahl zur einzigen Quelle dafür, welche Waffe ein Objekt feuert; die Sonderauswahlen der anderen Gruppen (Autobombe, Kistenstufen) speisen es.
+Up to here every object fired one weapon (`DefaultWeapon`, `PlayerUpgradeWeapon`, `VeteranWeapon` …); `AssistedTargetingUpdate` and `FireOCLAfterWeaponCooldownUpdate` kept a slot bookkeeping of their own or never had an effect. The slot model
+makes the active `WeaponSet` selection the only source for which weapon an object fires; the special selections of the other groups (car bomb, crate levels) feed it.
 
-| Baustein | Quelle | Verhalten |
+| Building block | Source | Behaviour |
 | --- | --- | --- |
-| Waffensätze und Slots | `ThingTemplate::findWeaponTemplateSet`, `WeaponSet.cpp` | Jedes `WeaponSet` der Vorlage wird streng geparst (Primär/Sekundär/Tertiär, `AutoChooseSources`, `PreferredAgainst`, `ShareWeaponReloadTime`, `WeaponLockSharedAcrossSets`); `DefaultWeapon` bleibt Alias des Primärslots des Standardsatzes. Nur Objekte mit mehr als einer Waffe tragen Slotzustand (`Entity.WeaponSlots`), Einwaffen-Objekte behalten Form und Snapshot. |
-| Clips und Nachladen je Slot | `Weapon.cpp` (`fireWeapon`, `reloadAmmo`) | Eigener Clip, Bereit-Tick und letzter Schuss je Slot. Ein leerer Clip wartet `ClipReloadTime`, sonst `DelayBetweenShots`; `ShareWeaponReloadTime` setzt alle Slots auf denselben Tick; `RETURN_TO_BASE`-Waffen laden nie per Zeit nach (Bereit-Tick `SleepForever`, nur der Flugplatz füllt). |
-| Beste-Waffe-Wahl | `WeaponSet::chooseBestWeaponForTarget` (reduziert) | Von Tertiär abwärts geprüft, bei Gleichstand gewinnt der niedrigere Slot; berücksichtigt `AutoChooseSources` je Befehlsquelle (Spieler/Skript/KI), die Anti-Maske gegen das Ziel, den Schaden nach Rüstung, die Reichweite und `PreferredAgainst`; eine bevorzugte Waffe bleibt auch beim Nachladen. Waffen, die das Ziel nicht verletzen können, werden abgelehnt (außer `UNRESISTABLE`). |
-| Sperren | `Object::setWeaponLock`, `SetWeaponLockCommand`, `LockWeaponCreate` | Vorübergehend (Befehlsknopf, Spezialfähigkeit, `CleanupHazard`, `AssistedTargeting`): endet beim leeren Clip oder einem Bewegungsbefehl; dauerhaft (`LockWeaponCreate`, `SWITCH_WEAPON`): nur durch Freigabe oder Satzwechsel. `LockWeaponCreate` ist damit kein Hüllenmodul mehr. |
-| Satzauswahl nach Bedingungen | `WeaponSetFlagsOf`, `WeaponSetResolver.Find` | Flags Veteran/Elite/Hero, `PLAYER_UPGRADE`, `CRATEUPGRADE_ONE/TWO` (aus `Entity.CrateWeaponLevel`) und `CARBOMB` (aus `IS_CARBOMB`); kombinierte Sätze (`CRATEUPGRADE_ONE PLAYER_UPGRADE`) werden per dünnem Abgleich gefunden. Ein Satzwechsel (`WeaponSetFlagsChanged`) baut die Slots frisch auf (volle Clips, Sperre gelöst, außer geteilt). |
-| `AssistedTargetingUpdate`, `CleanupHazardUpdate` | wie §30.2 | feuern über `TryFireWeaponSlot` aus dem echten Slot und sperren ihn vorübergehend; das eigene Clip-Buchhalten entfällt. |
-| `FireOCLAfterWeaponCooldownUpdate` | wie §30.3 | beobachtet jetzt den Slot (auch SECONDARY): aktuelle Waffe, letzter Schuss, Bereit-Tick; erzeugt die Liste nach der Serie oder sofort beim Waffenwechsel – im Retailbestand wirkt es damit erstmals. |
-| `JetAIUpdate`, `FireWeaponPower`, `SpectreGunship`, EMP, `DeployStyleAIUpdate` | wie §30.1/§30.3 | `isOutOfSpecialReloadAmmo` gilt, wenn alle `RETURN_TO_BASE`-Waffen leer sind; Nachladezeit ist das Maximum über alle Slots; `FireWeaponPower` ruft `ReloadAllAmmo` und feuert die aktuelle Waffe; die Lähmung verzögert alle Slots (`DelayWeaponsUntil`); das Tor von `DeployStyleAIUpdate` läuft nach der Wahl und vor dem Verbrauch. |
-| Befehle und Skripte | `FireWeaponCommand`/`SetWeaponLockCommand`, `FIRE_WEAPON`, `SWITCH_WEAPON` | `FireWeaponCommand` trägt einen optionalen Slot und die Befehlsquelle; Skript-Befehlsknöpfe feuern aus dem Knopf-Slot und sperren ihn. **Versionssprünge:** `WorldSnapshot` 7 → 8, Replay 7 → 8, `CommandTypes.Version` 10 → 11. |
+| Weapon sets and slots | `ThingTemplate::findWeaponTemplateSet`, `WeaponSet.cpp` | Every `WeaponSet` of the template is parsed strictly (primary/secondary/tertiary, `AutoChooseSources`, `PreferredAgainst`, `ShareWeaponReloadTime`, `WeaponLockSharedAcrossSets`); `DefaultWeapon` remains an alias of the primary slot of the default set. Only objects with more than one weapon carry slot state (`Entity.WeaponSlots`), single-weapon objects keep shape and snapshot. |
+| Clips and reloading per slot | `Weapon.cpp` (`fireWeapon`, `reloadAmmo`) | Own clip, ready tick and last shot per slot. An empty clip waits `ClipReloadTime`, otherwise `DelayBetweenShots`; `ShareWeaponReloadTime` sets all slots to the same tick; `RETURN_TO_BASE` weapons never reload by time (ready tick `SleepForever`, only the airfield fills). |
+| Best weapon choice | `WeaponSet::chooseBestWeaponForTarget` (reduced) | Checked from tertiary downwards, on a tie the lower slot wins; takes into account `AutoChooseSources` per command source (player/script/AI), the anti mask against the target, the damage by armor, the range and `PreferredAgainst`; a preferred weapon stays even while reloading. Weapons that cannot hurt the target are rejected (except `UNRESISTABLE`). |
+| Locks | `Object::setWeaponLock`, `SetWeaponLockCommand`, `LockWeaponCreate` | Temporary (command button, special ability, `CleanupHazard`, `AssistedTargeting`): ends on an empty clip or a move command; permanent (`LockWeaponCreate`, `SWITCH_WEAPON`): only by release or set change. `LockWeaponCreate` is thereby no longer a shell module. |
+| Set selection by conditions | `WeaponSetFlagsOf`, `WeaponSetResolver.Find` | Flags Veteran/Elite/Hero, `PLAYER_UPGRADE`, `CRATEUPGRADE_ONE/TWO` (from `Entity.CrateWeaponLevel`) and `CARBOMB` (from `IS_CARBOMB`); combined sets (`CRATEUPGRADE_ONE PLAYER_UPGRADE`) are found by sparse matching. A set change (`WeaponSetFlagsChanged`) builds the slots afresh (full clips, lock released, unless shared). |
+| `AssistedTargetingUpdate`, `CleanupHazardUpdate` | as §30.2 | fire via `TryFireWeaponSlot` from the real slot and lock it temporarily; the clip bookkeeping of their own is dropped. |
+| `FireOCLAfterWeaponCooldownUpdate` | as §30.3 | now observes the slot (also SECONDARY): current weapon, last shot, ready tick; creates the list after the series or immediately on the weapon change – in the retail content it thereby has an effect for the first time. |
+| `JetAIUpdate`, `FireWeaponPower`, `SpectreGunship`, EMP, `DeployStyleAIUpdate` | as §30.1/§30.3 | `isOutOfSpecialReloadAmmo` holds when all `RETURN_TO_BASE` weapons are empty; reload time is the maximum over all slots; `FireWeaponPower` calls `ReloadAllAmmo` and fires the current weapon; the paralysis delays all slots (`DelayWeaponsUntil`); the gate of `DeployStyleAIUpdate` runs after the choice and before the consumption. |
+| Commands and scripts | `FireWeaponCommand`/`SetWeaponLockCommand`, `FIRE_WEAPON`, `SWITCH_WEAPON` | `FireWeaponCommand` carries an optional slot and the command source; script command buttons fire from the button slot and lock it. **Version bumps:** `WorldSnapshot` 7 → 8, replay 7 → 8, `CommandTypes.Version` 10 → 11. |
 
-**Näherungen:** die Waffenwahl kennt nur `PREFER_MOST_DAMAGE`; Reichweite ist ein Filter ohne Anlaufen; Turm- und Neigungsbedingungen fehlen; die Garnison-Sonderfälle der Schadensschätzung fehlen; `FireWeaponPower` hat keinen
-KI-Angriffsbefehl und keinen An-/Abmarsch; `AssistedTargetingUpdate` bleibt ein Modulschuss ohne die Rückmeldelaser; `CleanupHazardUpdate` setzt das Veteranen-Flag beim Erzeugen nicht.
+**Approximations:** the weapon choice knows only `PREFER_MOST_DAMAGE`; range is a filter without approaching; turret and pitch conditions are missing; the garrison special cases of the damage estimate are missing; `FireWeaponPower` has no
+AI attack command and no approach/departure; `AssistedTargetingUpdate` remains a module shot without the feedback lasers; `CleanupHazardUpdate` does not set the veteran flag on creation.
 
-### 30.7 Messung (3. Oktober 2026, `game/content`, frisch)
+### 30.7 Measurement (3 October 2026, `game/content`, fresh)
 
-- Modulkatalog **183 von 205** implementiert – alle 183 Simulationsmodule (offen nur die 22 Präsentationsmodule); Instanziierbarkeit **2.115 von 2.115 (100,0 %)**; Modulverwendungen abgedeckt **16.558 von 19.553 (84,7 %)** (der Rest sind
-  Präsentationsmodule); Kompatibilitätsbasislinie **751** Einträge. Echtdaten: 2.477 Waffensätze auf 2.115 Objekten, 187 Objekte mit Slotzustand.
-- Retail-Referenzmatch: Sieger FactionGLA bei **Tick 13.890**, `final hash` (Run 1) `76F22CB0CA79BEEF`, Kettenhash `35F54CAD40A43E6E`; zweiter Lauf und Snapshot-Fortsetzung bei Tick 7.095 identisch (die Werte der Phase 13 – Tick 15.000,
-  `532F19F360C59550` – sind überholt: mehr produzierbare Objekte und die Slot-Waffenwahl verändern das Szenario). Stresstest (216.000 Ticks) unverändert `56882F763EABEF67`, Kettenhash `B8E663493F2C73D5`.
-- Versionen: `WorldSnapshot` 8, Replay 8, `CommandTypes.Version` 11, `MissionSnapshot` 2.
+- Module catalog **183 of 205** implemented – all 183 simulation modules (open only the 22 presentation modules); instantiability **2,115 of 2,115 (100.0 %)**; module usages covered **16,558 of 19,553 (84.7 %)** (the rest are
+  presentation modules); compatibility baseline **751** entries. Real data: 2,477 weapon sets on 2,115 objects, 187 objects with slot state.
+- Retail reference match: winner FactionGLA at **tick 13,890**, `final hash` (run 1) `76F22CB0CA79BEEF`, chain hash `35F54CAD40A43E6E`; second run and snapshot continuation at tick 7,095 identical (the values of Phase 13 – tick 15,000,
+  `532F19F360C59550` – are superseded: more producible objects and the slot weapon choice change the scenario). Stress test (216,000 ticks) unchanged `56882F763EABEF67`, chain hash `B8E663493F2C73D5`.
+- Versions: `WorldSnapshot` 8, replay 8, `CommandTypes.Version` 11, `MissionSnapshot` 2.
 
-## 31. Nachtrag Phase 15 (4. Oktober 2026): Turmzustand, gestufte Übernahme, Flügelflug
+## 31. Addendum Phase 15 (4 October 2026): turret state, staged capture, winged flight
 
-Drei Verhaltenslücken, die die gestellten Demos (`docs/DEMO-SCENARIOS.md`) aufdeckten, sind geschlossen; die Einzelheiten stehen in eigenen Dokumenten:
+Three behaviour gaps that the staged demos (`docs/DEMO-SCENARIOS.md`) uncovered are closed; the details are in documents of their own:
 
-- **Turmzustand mit Feuerfreigabe** (`docs/SIM-TURRET-AIM.md`): typisierte `Turret`/`AltTurret`-Blöcke, `TurretState` je Turm, die Waffe eines vom Turm gesteuerten Slots wartet auf die Ausrichtung;
-  `WorldSnapshot` 8 → 9. Die Bemerkung „Turm- und Neigungsbedingungen fehlen“ weiter oben ist damit überholt. Referenzmatch jetzt Tick 13.875, Endhash `482FC8C52D507662`, Kette `34AB50A397B0125C`.
-  Nachtrag: dauerhafter Angriffszustand (in `TurretState`, `PursueCommand` Typ 31 für die Verfolgung, Replay 10, `CommandTypes.Version` 13) und Idle-Scan (`TurretAI`-Leerlauf, Zufall aus einem eigenen Hash-Strom statt `LogicRandom`) – Referenzmatch jetzt Tick 15.000, `01C01E3B91EAE18C`, Kette `045DA5259A104F01`.
-- **Gestufte Gebäudeübernahme** (`docs/SIM-STAGED-CAPTURE.md`): `SpecialAbilityUpdate` führt für `SPECIAL_INFANTRY_CAPTURE_BUILDING` und `SPECIAL_BLACKLOTUS_CAPTURE_BUILDING` Anlaufen, Auspacken, Vorbereiten
-  (Flagge), Besitzerwechsel und Einpacken aus; die Erwähnungen von `SpecialAbilityUpdate` als Hülle in §11, §23, §25 und §30 gelten nur noch für die übrigen Fähigkeiten.
-- **Flügelflug und Flugplatzgeometrie** (`docs/SIM-JET-FLIGHT.md`): `Appearance = WINGS` fliegt mit Mindestgeschwindigkeit, begrenzter Kurvenrate und kreist bei `CirclingRadius`; die Start- und Landebahn
-  des Flugplatzes kommt aus einer eingespeisten Knochentabelle der Flugplatzmodelle (`ModelGeometry`, Teil von `GameData.Fingerprint`).
+- **Turret state with fire clearance** (`docs/SIM-TURRET-AIM.md`): typed `Turret`/`AltTurret` blocks, `TurretState` per turret, the weapon of a slot controlled by the turret waits for the alignment;
+  `WorldSnapshot` 8 → 9. The remark "turret and pitch conditions are missing" further up is thereby superseded. Reference match now tick 13,875, final hash `482FC8C52D507662`, chain `34AB50A397B0125C`.
+  Addendum: permanent attack state (in `TurretState`, `PursueCommand` type 31 for the pursuit, replay 10, `CommandTypes.Version` 13) and idle scan (`TurretAI` idle, randomness from a hash stream of its own instead of `LogicRandom`) – reference match now tick 15,000, `01C01E3B91EAE18C`, chain `045DA5259A104F01`.
+- **Staged building capture** (`docs/SIM-STAGED-CAPTURE.md`): for `SPECIAL_INFANTRY_CAPTURE_BUILDING` and `SPECIAL_BLACKLOTUS_CAPTURE_BUILDING`, `SpecialAbilityUpdate` executes approaching, unpacking, preparing
+  (flag), change of owner and packing; the mentions of `SpecialAbilityUpdate` as a shell in §11, §23, §25 and §30 now apply only to the remaining abilities.
+- **Winged flight and airfield geometry** (`docs/SIM-JET-FLIGHT.md`): `Appearance = WINGS` flies with a minimum speed, a limited turn rate and circles at `CirclingRadius`; the runway
+  of the airfield comes from a fed-in bone table of the airfield models (`ModelGeometry`, part of `GameData.Fingerprint`).
 
-## 32. Nachtrag Phase 16 (4. Oktober 2026): Feuerstufen, Vorangriff, beschädigte Locomotoren, Versorgungszentrum und Angriffsgruppen der KI, KI-Übersicht neu
+## 32. Addendum Phase 16 (4 October 2026): firing stages, pre-attack, damaged locomotors, supply center and attack groups of the AI, AI overview anew
 
-*Historisch (30 Hz, Stand dieses Abschnitts): die Tabellen, Siegticks und Hashes hier sind überholt; maßgeblich ist `baselines/reference-manifest.json` (seit `ea52f87` bei 60 Hz), die aktuellen Werte stehen in §43.9.*
+*Historical (30 Hz, state of this section): the tables, victory ticks and hashes here are superseded; authoritative is `baselines/reference-manifest.json` (since `ea52f87` at 60 Hz), the current values are in §43.9.*
 
-Fachdokumente: `docs/SIM-FIRING-TRACKER.md` (Feuerstufen `CONTINUOUS_FIRE_*` als Waffenbonus, `PreAttackDelay`, `SpeedDamaged` und Geschwister, `CaptureFlash`, Fähigkeit beendet Angriff) und
-`docs/SIM-TURRET-AIM.md` §8a (Aufschlüsselung der KI-Verschiebung nach Effekten). Außerdem: `StructureToppleUpdate` erreicht seinen Endzustand (Winkel und Winkelgeschwindigkeit mit 32 zusätzlichen
-Nachkommabits, `docs/MODEL-CONDITIONS-BUILDINGS.md` §6); `SimTool` und `CampaignTool` bauen den Katalog mit der Modell-Bone-Tabelle der Flugplätze wie der Client (`ModelGeometryLoader`).
-Keine neuen Module, keine Versionssprünge (`WorldSnapshot` 9, Replay 10, `CommandTypes.Version` 13, `MissionSnapshot` 2): aller neue Zustand ist optional und wird nur geschrieben, wenn er gesetzt ist.
+Domain documents: `docs/SIM-FIRING-TRACKER.md` (firing stages `CONTINUOUS_FIRE_*` as a weapon bonus, `PreAttackDelay`, `SpeedDamaged` and siblings, `CaptureFlash`, ability ends attack) and
+`docs/SIM-TURRET-AIM.md` §8a (breakdown of the AI shift by effects). In addition: `StructureToppleUpdate` reaches its final state (angle and angular velocity with 32 additional
+fractional bits, `docs/MODEL-CONDITIONS-BUILDINGS.md` §6); `SimTool` and `CampaignTool` build the catalog with the model bone table of the airfields like the client (`ModelGeometryLoader`).
+No new modules, no version bumps (`WorldSnapshot` 9, replay 10, `CommandTypes.Version` 13, `MissionSnapshot` 2): all new state is optional and is only written if it is set.
 
-### Versorgungszentrum der Skirmish-KI (`AIPlayer::buildBySupplies`, `AIPlayer::findSupplyCenter`)
+### Supply center of the skirmish AI (`AIPlayer::buildBySupplies`, `AIPlayer::findSupplyCenter`)
 
-**Befund.** `SimTool ai-match … --trace N` (neu: je N Ticks Geld, Gebäude, Armee, Sammler, Wellen je Spieler, Kisten auf der Karte und die Strecke Versorgungszentrum–nächstes gefülltes Lager) zeigte, warum die
-meisten KI-Spiele im Patt endeten: `SkirmishAi` stellte das Versorgungszentrum wie jedes Gebäude auf Ringe um die Basis, 400 bis 660 Einheiten vom nächsten Lager entfernt. Zwei Sammler brachten so rund 15 Kisten
-je 100 Sekunden; beide Seiten standen nach wenigen Minuten bei 0 Credits und führten in 45.000 Ticks zwei bis vier Angriffswellen.
+**Finding.** `SimTool ai-match … --trace N` (new: every N ticks money, buildings, army, gatherers, waves per player, boxes on the map and the distance supply center–nearest filled supply depot) showed why
+most AI games ended in a stalemate: `SkirmishAi` placed the supply center, like every building, on rings around the base, 400 to 660 units away from the nearest supply depot. Two gatherers thus brought around 15 boxes
+per 100 seconds; after a few minutes both sides stood at 0 credits and conducted two to four attack waves in 45,000 ticks.
 
-**Umsetzung** (`SkirmishAi.FindSupplySource`, `FindSupplyPlacement`):
+**Implementation** (`SkirmishAi.FindSupplySource`, `FindSupplyPlacement`):
 
-* Wahl des Lagers wie `findSupplyCenter`: das der Basis nächste gefüllte Lager (Mindestwert 1.000, halbiert bis über 100), das keinem Feind gehört, in dessen Nähe (`SUPPLY_CENTER_CLOSE_DIST` = 20 Zellen plus
-  Radien) kein eigenes Versorgungszentrum steht und das nicht deutlich näher am Feind liegt als an der eigenen Basis (60/40-Regel; die Feindbasis ist nur, was der Spieler von ihr gesehen hat). Wie der
-  Computerspieler der Referenz betrachtet die Wahl **alle** Lager der Karte, gesehen oder nicht – die einzige Stelle, an der `SkirmishAi` über die eigene Sicht hinaus weiß.
-* Platz wie `buildBySupplies`: drei Zellen vom Lager in Richtung Basis; ist der Platz nicht legal, der erste legale auf wachsenden Quadraten darum (je zwei Zellen breiter, bis zur doppelten
-  `SUPPLY_CENTER_CLOSE_DIST`), mit Fußabdruck-, Abstands- und Erreichbarkeitsprüfung. Ein unerkundeter Platz kann nicht bebaut werden (`ConstructCommand`): der Bauarbeiter fährt zuerst hin.
-* Ohne jedes Lager auf der Karte bleibt es bei den Ringen um die Basis. Das zweite Versorgungszentrum (ab zehn Armee-Einheiten) entsteht am nächsten freien Lager.
+* Choice of the supply depot like `findSupplyCenter`: the filled supply depot nearest to the base (minimum value 1,000, halved until above 100) that belongs to no enemy, near which (`SUPPLY_CENTER_CLOSE_DIST` = 20 cells plus
+  radii) no supply center of its own stands and which does not lie considerably nearer to the enemy than to its own base (60/40 rule; the enemy base is only what the player has seen of it). Like the
+  computer player of the reference, the choice considers **all** supply depots of the map, seen or not – the only place at which `SkirmishAi` knows beyond its own vision.
+* Place like `buildBySupplies`: three cells from the supply depot in the direction of the base; if the place is not legal, the first legal one on growing squares around it (two cells wider each, up to twice
+  `SUPPLY_CENTER_CLOSE_DIST`), with footprint, distance and reachability check. An unexplored place cannot be built on (`ConstructCommand`): the construction worker drives there first.
+* Without any supply depot on the map it stays with the rings around the base. The second supply center (from ten army units on) comes into being at the nearest free supply depot.
 
-**Wirkung** (Alpine Assault, China gegen GLA, `--trace 3000`): Strecke 128 bzw. 107 statt 587 bzw. 393; China gewinnt bei Tick 7.425 statt Patt. Über die 16 Läufe: 10 statt 5 entschieden.
+**Effect** (Alpine Assault, China versus GLA, `--trace 3000`): distance 128 and 107 respectively instead of 587 and 393 respectively; China wins at tick 7,425 instead of a stalemate. Over the 16 runs: 10 instead of 5 decided.
 
-### Die 16 KI-Läufe (§19) neu, 4. Oktober 2026
+### The 16 AI runs (§19) anew, 4 October 2026
 
-Gleiche Aufrufe wie in §19 (`--max-ticks 45000`, Standardseeds); jeder Lauf ist mit Lauf 2 und Snapshot-Fortsetzung identisch.
+Same invocations as in §19 (`--max-ticks 45000`, default seeds); every run is identical to run 2 and the snapshot continuation.
 
-| Karte | Paarung | erste Turmfassung (`8b8c8a7`) | Angriffszustand (`2b854d3`) | + Feuerstufen, Vorangriff | + beschädigte Locomotoren, Versorgungszentrum am Lager | **jetzt** (+ Angriff in Gruppen) | Endhash jetzt |
+| Map | Pairing | first turret version (`8b8c8a7`) | attack state (`2b854d3`) | + firing stages, pre-attack | + damaged locomotors, supply center at the supply depot | **now** (+ attack in groups) | final hash now |
 |---|---|---|---|---|---|---|---|
-| Alpine Assault | China, GLA | China, Tick 43.965 | Patt bei 45.000 | Patt bei 45.000 | China, Tick 7.425 | **China, Tick 7.545** | `39344016A5EE8F91` |
-| Alpine Assault | America, China | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | America, Tick 15.615 | **America, Tick 16.800** | `745839146322DDE6` |
-| Alpine Assault | GLA, America | America, Tick 12.120 | America, Tick 12.120 | America, Tick 12.120 | America, Tick 9.135 | **America, Tick 10.740** | `DDDFE22494F29A34` |
-| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | AmericaAirForceGeneral, Tick 18.120 | **Patt bei 45.000** | `3CD8D8C4D53675C0` |
-| Armored Fury | China, GLA | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **China, Tick 11.460** | `6CAD71B81D3CE47A` |
-| Armored Fury | America, China | America, Tick 41.130 | America, Tick 36.375 | Patt bei 45.000 | Patt bei 45.000 | **America, Tick 33.255** | `63486D2572E76BCE` |
-| Armored Fury | GLA, America | America, Tick 22.410 | America, Tick 22.410 | America, Tick 22.410 | America, Tick 27.600 | **America, Tick 40.260** | `9801D2537695316C` |
-| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | AmericaAirForceGeneral, Tick 9.405 | AmericaAirForceGeneral, Tick 9.405 | AmericaAirForceGeneral, Tick 9.405 | Patt bei 45.000 | **Patt bei 45.000** | `E5ED792B12D35CC0` |
-| Bitter Winter | China, GLA | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | China, Tick 15.435 | **China, Tick 12.930** | `CB890471FCB4B084` |
-| Bitter Winter | America, China | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **Patt bei 45.000** | `0FDEB99B1DEFAAA6` |
-| Bitter Winter | GLA, America | America, Tick 14.565 | America, Tick 14.565 | America, Tick 14.565 | America, Tick 10.800 | **America, Tick 14.430** | `A3A6295689F3F0E5` |
-| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **Patt bei 45.000** | `0EC68A99E3ED5ACD` |
-| Death Valley | China, GLA | China, Tick 8.805 | China, Tick 8.805 | China, Tick 8.805 | China, Tick 7.350 | **China, Tick 11.160** | `DA30DBBC2434E499` |
-| Death Valley | America, China | Patt bei 45.000 | China, Tick 35.985 | Patt bei 45.000 | America, Tick 16.260 | **China, Tick 9.975** | `8DB4AA743B8F349A` |
-| Death Valley | GLA, America | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | America, Tick 10.110 | **America, Tick 13.755** | `2992C9E0876B2C95` |
-| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | Patt bei 45.000 | **AmericaAirForceGeneral, Tick 32.280** | `C443660F229E157E` |
+| Alpine Assault | China, GLA | China, tick 43,965 | stalemate at 45,000 | stalemate at 45,000 | China, tick 7,425 | **China, tick 7,545** | `39344016A5EE8F91` |
+| Alpine Assault | America, China | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | America, tick 15,615 | **America, tick 16,800** | `745839146322DDE6` |
+| Alpine Assault | GLA, America | America, tick 12,120 | America, tick 12,120 | America, tick 12,120 | America, tick 9,135 | **America, tick 10,740** | `DDDFE22494F29A34` |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | AmericaAirForceGeneral, tick 18,120 | **stalemate at 45,000** | `3CD8D8C4D53675C0` |
+| Armored Fury | China, GLA | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | **China, tick 11,460** | `6CAD71B81D3CE47A` |
+| Armored Fury | America, China | America, tick 41,130 | America, tick 36,375 | stalemate at 45,000 | stalemate at 45,000 | **America, tick 33,255** | `63486D2572E76BCE` |
+| Armored Fury | GLA, America | America, tick 22,410 | America, tick 22,410 | America, tick 22,410 | America, tick 27,600 | **America, tick 40,260** | `9801D2537695316C` |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | AmericaAirForceGeneral, tick 9,405 | AmericaAirForceGeneral, tick 9,405 | AmericaAirForceGeneral, tick 9,405 | stalemate at 45,000 | **stalemate at 45,000** | `E5ED792B12D35CC0` |
+| Bitter Winter | China, GLA | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | China, tick 15,435 | **China, tick 12,930** | `CB890471FCB4B084` |
+| Bitter Winter | America, China | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | **stalemate at 45,000** | `0FDEB99B1DEFAAA6` |
+| Bitter Winter | GLA, America | America, tick 14,565 | America, tick 14,565 | America, tick 14,565 | America, tick 10,800 | **America, tick 14,430** | `A3A6295689F3F0E5` |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | **stalemate at 45,000** | `0EC68A99E3ED5ACD` |
+| Death Valley | China, GLA | China, tick 8,805 | China, tick 8,805 | China, tick 8,805 | China, tick 7,350 | **China, tick 11,160** | `DA30DBBC2434E499` |
+| Death Valley | America, China | stalemate at 45,000 | China, tick 35,985 | stalemate at 45,000 | America, tick 16,260 | **China, tick 9,975** | `8DB4AA743B8F349A` |
+| Death Valley | GLA, America | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | America, tick 10,110 | **America, tick 13,755** | `2992C9E0876B2C95` |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | stalemate at 45,000 | **AmericaAirForceGeneral, tick 32,280** | `C443660F229E157E` |
 
-Entschiedene Läufe: 7, 7, 5, 10, **12** von 16. Die frühere Tabelle „Phase 10“ (16 von 16 entschieden) ist seit der Wegsuche um stehende Einheiten (Phase 15) überholt und wurde bis jetzt nicht neu erhoben.
-**Angriff in Gruppen.** Nach dem Versorgungszentrum blieben sechs Patts mit anderem Muster: die Kassen waren nicht mehr leer, aber die während eines Angriffs produzierten Einheiten liefen einzeln in die
-gegnerische Verteidigung (Armored Fury, China gegen GLA: GLA produzierte 236 Einheiten und zählte eine einzige Welle, weil der Angriff nie endete). Die Referenz schickt Teams; `SkirmishAi.CommandArmy` führt
-deshalb jetzt die Welle als Menge der gemeinsam losmarschierten Einheiten: Nachzügler sammeln sich am Sammelpunkt und folgen, sobald sie mindestens die halbe Angriffsschwelle sind; die Welle gilt als
-gebrochen, wenn von ihr weniger als ein Drittel der Schwelle (mindestens drei) übrig ist. Verteidigung (`FindThreat`) nimmt weiter alle. Wirkung: 12 statt 10 entschiedene Läufe – drei gewonnen
-(Armored Fury China/GLA und America/China, Death Valley Tank/AirForce), einer verloren (Alpine Assault Tank/AirForce). Bei 16 Läufen ist das kein starker Beleg; übernommen wurde es, weil es dem Vorbild näher ist.
-Die vier verbleibenden Patts (dreimal ChinaTankGeneral gegen AmericaAirForceGeneral, Bitter Winter America/China) sind Gegenstand von Phase 17. Keine Balance-Aussage. Stand nach dem Zielerwerb der Einheiten (Phase 17): §33.6.
+Decided runs: 7, 7, 5, 10, **12** of 16. The earlier table "Phase 10" (16 of 16 decided) has been superseded since the pathfinding around standing units (Phase 15) and was not surveyed anew until now.
+**Attack in groups.** After the supply center six stalemates with a different pattern remained: the coffers were no longer empty, but the units produced during an attack walked individually into the
+enemy defence (Armored Fury, China versus GLA: GLA produced 236 units and counted a single wave because the attack never ended). The reference sends teams; `SkirmishAi.CommandArmy` therefore
+now treats the wave as the set of units that marched off together: stragglers gather at the rally point and follow as soon as they are at least half the attack threshold; the wave counts as
+broken when less than a third of the threshold (at least three) is left of it. Defence (`FindThreat`) still takes all. Effect: 12 instead of 10 decided runs – three won
+(Armored Fury China/GLA and America/China, Death Valley Tank/AirForce), one lost (Alpine Assault Tank/AirForce). With 16 runs that is not strong evidence; it was adopted because it is closer to the model.
+The four remaining stalemates (three times ChinaTankGeneral versus AmericaAirForceGeneral, Bitter Winter America/China) are the subject of Phase 17. No balance statement. State after the target acquisition of the units (Phase 17): §33.6.
 
-Weitere Referenzwerte (4. Oktober 2026, `SimTool` Release, Welt-Fingerabdruck mit Bone-Tabelle `CC9641FC1D68F326…`):
+Further reference values (4 October 2026, `SimTool` Release, world fingerprint with bone table `CC9641FC1D68F326…`):
 
-| Lauf | Ergebnis |
+| Run | Result |
 |---|---|
-| `reference-match` | Sieger FactionGLA, Tick 13.500, Endhash `0946FB676DEC615C`, Kette `EA6D12F180930D71`; Lauf 2 und Snapshot-Fortsetzung identisch |
-| `stress` (216.000 Ticks) | Endhash `56882F763EABEF67`, Kette `B8E663493F2C73D5` (unverändert) |
-| `ai-match` Alpine Assault, China/GLA | China, Tick 7.545, Endhash `39344016A5EE8F91`, Kette `FFF843E719A2C2DD` |
-| `ai-match` Alpine Assault, AmericaAirForceGeneral/China | Patt, Endhash `E222322067493EB4`, Kette `F6ED83919F0E7C8F` |
-| `ai-match` Alpine Assault, America/GLA | GLA, Tick 8.865, Endhash `542BE1D4891FEB71`, Kette `0B244A5DD2471633` |
+| `reference-match` | winner FactionGLA, tick 13,500, final hash `0946FB676DEC615C`, chain `EA6D12F180930D71`; run 2 and snapshot continuation identical |
+| `stress` (216,000 ticks) | final hash `56882F763EABEF67`, chain `B8E663493F2C73D5` (unchanged) |
+| `ai-match` Alpine Assault, China/GLA | China, tick 7,545, final hash `39344016A5EE8F91`, chain `FFF843E719A2C2DD` |
+| `ai-match` Alpine Assault, AmericaAirForceGeneral/China | stalemate, final hash `E222322067493EB4`, chain `F6ED83919F0E7C8F` |
+| `ai-match` Alpine Assault, America/GLA | GLA, tick 8,865, final hash `542BE1D4891FEB71`, chain `0B244A5DD2471633` |
 
-Der Weg des Referenzspiels über diesen Tag: Tick 15.000 (`01C01E3B91EAE18C`) → 14.490 (`1104C4CD97A0D4CA`; Feuerstufen und Vorangriffsverzögerung) → 13.500 (beschädigte Locomotoren). Das Referenzszenario benutzt
-`SkirmishAi` nicht; die Bone-Tabelle der Werkzeuge und die Fähigkeitsregel änderten es nicht.
+The path of the reference match over this day: tick 15,000 (`01C01E3B91EAE18C`) → 14,490 (`1104C4CD97A0D4CA`; firing stages and pre-attack delay) → 13,500 (damaged locomotors). The reference scenario does not use
+`SkirmishAi`; the bone table of the tools and the ability rule did not change it.
 
-## 33. Phase 17 (5. Oktober 2026): Zielerwerb der Einheiten und Angriffsmarsch
+## 33. Phase 17 (5 October 2026): target acquisition of the units and attack move
 
-Bis Phase 16 wählte die Simulation keine Opfer: das taten drei Befehlsgeber (`MissionSession.DriveCombat`, `SkirmishAi.Fire`, `StandingOrders.FireAtNearestEnemy` der Darstellung), jeder mit eigener Regel
-und eigenem Takt, und eine marschierende Einheit verlor ihr Ziel bis zum nächsten Denkschritt ihres Befehlsgebers (`docs/SIM-TURRET-AIM.md` §6, §8a). Jetzt erwirbt jede Einheit ihr Opfer selbst, und es gibt
-einen Angriffsmarsch als Befehl. Code: `World/SimulationWorld.Acquisition.cs`, `World/AcquisitionState.cs`, `Scripting/ScriptEngine.Acquisition.cs`; Tests: `Tests.Acquisition.cs`.
+Until Phase 16 the simulation chose no victims: three command issuers did that (`MissionSession.DriveCombat`, `SkirmishAi.Fire`, `StandingOrders.FireAtNearestEnemy` of the presentation), each with its own rule
+and its own cadence, and a marching unit lost its target until the next think step of its command issuer (`docs/SIM-TURRET-AIM.md` §6, §8a). Now every unit acquires its victim itself, and there is
+an attack move as a command. Code: `World/SimulationWorld.Acquisition.cs`, `World/AcquisitionState.cs`, `Scripting/ScriptEngine.Acquisition.cs`; tests: `Tests.Acquisition.cs`.
 
-### 33.1 Daten: `AutoAcquireEnemiesWhenIdle` streng typisiert
+### 33.1 Data: `AutoAcquireEnemiesWhenIdle` strictly typed
 
-Der Schlüssel war als `Bool` typisiert; `INI::parseBitString32` mit `TheAutoAcquireEnemiesNames` (`AIUpdate.cpp` `AIUpdateModuleData::buildFieldParse`, `AIUpdate.h`) liest aber eine Bitliste. Von den Werten des
-Retailbestands (Textsuche über `Data/INI`: 271-mal `Yes`, 62-mal `No`, 28-mal `Yes Stealthed`, 17-mal `No NotWhileAttacking`, 11-mal `No ATTACK_BUILDINGS`, 5-mal `Yes Stealthed ATTACK_BUILDINGS`, 2-mal
-`No ATTACK_BUILDINGS Stealthed`, je einmal `YES ATTACK_BUILDINGS` und `Yes Stealthed ATTACK_BUILDINGS Stealthed`) ging bei 65 Zeilen alles nach dem ersten Token als „von der Referenz überlesen“ verloren –
-was falsch war: die Referenz liest sie.
+The key was typed as `Bool`; but `INI::parseBitString32` with `TheAutoAcquireEnemiesNames` (`AIUpdate.cpp` `AIUpdateModuleData::buildFieldParse`, `AIUpdate.h`) reads a bit list. Of the values of the
+retail content (text search over `Data/INI`: 271 times `Yes`, 62 times `No`, 28 times `Yes Stealthed`, 17 times `No NotWhileAttacking`, 11 times `No ATTACK_BUILDINGS`, 5 times `Yes Stealthed ATTACK_BUILDINGS`, 2 times
+`No ATTACK_BUILDINGS Stealthed`, once each `YES ATTACK_BUILDINGS` and `Yes Stealthed ATTACK_BUILDINGS Stealthed`), in 65 lines everything after the first token was lost as "skipped by the reference" –
+which was wrong: the reference reads them.
 
-* `NameTablesPhase5.AutoAcquireEnemies` (`YES`, `STEALTHED`, `NO`, `NOTWHILEATTACKING`, `ATTACK_BUILDINGS`; Bits `AAS_Idle` 0x01 … `AAS_Idle_Attack_Buildings` 0x10), Feldtyp `Flags` in `AIUpdateInterface` und
-  allen abgeleiteten AI-Modulen (`ModuleCatalog`, `AiBase`). Ein unbekanntes Token ist ein Fehler, `NONE` und `+`/`-` verhalten sich wie in `parseBitString32`.
-* `AIUpdateData.AutoAcquire` (`[Flags] AutoAcquire`, gleiche Bitwerte) und `AIUpdateData.MoodCheckTicks` (`MoodAttackCheckRate`, Standard `LOGICFRAMES_PER_SECOND * 2` = 60 Ticks wie der Konstruktor von
-  `AIUpdateModuleData`; im Bestand 50-mal 250 ms, 4-mal 500 ms). `NO` ist ein eigenes Bit, das niemand prüft: „No ATTACK_BUILDINGS“ setzt zwei Bits und erwirbt im Leerlauf trotzdem nichts.
-* `baselines/compatibility.json` ist **unverändert** (751 Einträge, `IniTool compat-check` und ein frisch erzeugter `compat-baseline` sind bytegleich mit der Datei): die verlorenen Tokens waren Diagnosen des
-  Graphen, die der Sammelzähler der Basislinie nicht führte. Der Realdatentest prüft jetzt, dass keine `compatibility-ignored-tokens`-Diagnose mehr `AutoAcquireEnemiesWhenIdle` nennt.
-* Folge: Definitionssnapshot und Welt-Fingerabdruck ändern sich (das Feld ist ein `Flags`-Wert statt eines `Bool`).
+* `NameTablesPhase5.AutoAcquireEnemies` (`YES`, `STEALTHED`, `NO`, `NOTWHILEATTACKING`, `ATTACK_BUILDINGS`; bits `AAS_Idle` 0x01 … `AAS_Idle_Attack_Buildings` 0x10), field type `Flags` in `AIUpdateInterface` and
+  all derived AI modules (`ModuleCatalog`, `AiBase`). An unknown token is an error, `NONE` and `+`/`-` behave as in `parseBitString32`.
+* `AIUpdateData.AutoAcquire` (`[Flags] AutoAcquire`, same bit values) and `AIUpdateData.MoodCheckTicks` (`MoodAttackCheckRate`, default `LOGICFRAMES_PER_SECOND * 2` = 60 ticks like the constructor of
+  `AIUpdateModuleData`; in the content 50 times 250 ms, 4 times 500 ms). `NO` is a bit of its own that nobody checks: "No ATTACK_BUILDINGS" sets two bits and still acquires nothing when idle.
+* `baselines/compatibility.json` is **unchanged** (751 entries, `IniTool compat-check` and a freshly generated `compat-baseline` are byte-identical to the file): the lost tokens were diagnostics of the
+  graph that the collective counter of the baseline did not carry. The real-data test now checks that no `compatibility-ignored-tokens` diagnostic names `AutoAcquireEnemiesWhenIdle` any more.
+* Consequence: definition snapshot and world fingerprint change (the field is a `Flags` value instead of a `Bool`).
 
-### 33.2 Regeln
+### 33.2 Rules
 
-Die Referenz ruft `AIUpdateInterface::getNextMoodTarget` von drei Stellen: `AIIdleState::update` (ruhende Einheit), `TurretAI::friend_checkForIdleMoodTarget` aus `TurretAIIdleState::update` (ruhender Turm, während der
-Körper etwas anderes tut) und `AIAttackMoveToState::update` (Angriffsmarsch). `StepAcquisition` läuft einmal je Tick nach allen Bewegungen und vor `StepTurrets`, über die Objekte mit AI-Modul in Id-Reihenfolge:
+The reference calls `AIUpdateInterface::getNextMoodTarget` from three places: `AIIdleState::update` (resting unit), `TurretAI::friend_checkForIdleMoodTarget` from `TurretAIIdleState::update` (resting turret, while the
+body does something else) and `AIAttackMoveToState::update` (attack move). `StepAcquisition` runs once per tick after all movements and before `StepTurrets`, over the objects with an AI module in id order:
 
-| Zustand der Einheit (`AcquireMode`) | Bedingung | Verhalten | Referenz |
+| State of the unit (`AcquireMode`) | Condition | Behaviour | Reference |
 |---|---|---|---|
-| Leerlauf | `AIUpdateInterface.IsIdle`, Bit `YES` | sucht ein Opfer **in Waffenreichweite**; feuert, solange es in Reichweite bleibt; verlässt es die Reichweite, wird es aufgegeben und zwei Frames später neu gesucht | `AIIdleState::update` → `aiAttackObject(enemy, NO_MAX_SHOTS_LIMIT, CMD_FROM_AI)` |
-| Turm | Körper beschäftigt (fährt, baut, dockt), Bit `YES`, Objekt hat einen zielenden Turm (`TurretInfo.Gates`) | wie Leerlauf, aber nur mit Waffen auf einem Turm; die Einheit fährt weiter | `friend_checkForIdleMoodTarget`, `m_targetWasSetByIdleMood` |
-| Angriffsmarsch | `AttackMoveCommand` (kein `YES` nötig) | sucht im Marsch; hält für den Kampf an, feuert, sucht nach dem Tod des Opfers sofort das nächste und marschiert ohne Opfer weiter zum Ziel | `AIAttackMoveToState::update` (`forceRetargetThisFrame`, `friend_endingMove`) |
-| keiner | sonst (kein `YES`, getarnt ohne `STEALTHED`, deaktiviert) | nichts | `getNextMoodTarget` gibt `NULL` |
+| Idle | `AIUpdateInterface.IsIdle`, bit `YES` | searches for a victim **in weapon range**; fires as long as it stays in range; if it leaves the range, it is given up and searched for anew two frames later | `AIIdleState::update` → `aiAttackObject(enemy, NO_MAX_SHOTS_LIMIT, CMD_FROM_AI)` |
+| Turret | body busy (drives, builds, docks), bit `YES`, object has an aiming turret (`TurretInfo.Gates`) | like idle, but only with weapons on a turret; the unit keeps driving | `friend_checkForIdleMoodTarget`, `m_targetWasSetByIdleMood` |
+| Attack move | `AttackMoveCommand` (no `YES` needed) | searches while marching; stops for the fight, fires, after the death of the victim immediately searches for the next one and without a victim marches on to the destination | `AIAttackMoveToState::update` (`forceRetargetThisFrame`, `friend_endingMove`) |
+| none | otherwise (no `YES`, stealthed without `STEALTHED`, disabled) | nothing | `getNextMoodTarget` returns `NULL` |
 
-* **Takt** (`m_nextMoodCheckTime`): beim Eintritt in einen der Zustände wird die Suche auf „jetzt + 2 Frames“ gestellt (`resetNextMoodCheckTime`, `ForceIdleMSEC` = 67 ms in `AIData.ini`), danach alle
-  `MoodAttackCheckRate`; das erste Intervall nach einem Eintritt ist um bis zu eine halbe Rate verschoben (`m_randomlyOffsetMoodCheck`). Der Zufall dafür ist wie beim Abtasten der Türme ein Hash aus
-  (Weltsamen, Entity-Id, Tick) und zieht nichts aus `LogicRandom`.
-* **Wer nicht sucht:** Objekte im Bau, verkaufte, per EMP oder Skript (`DISABLED_HELD`) stillgelegte und enthaltene Objekte; getarnte Einheiten ohne Bit `STEALTHED` („Sorry, stealthed and not allowed to idle fire
-  when stealthed“; gilt wie in der Referenz nicht für den Angriffsmarsch); schlafende und passive Teams eines Computerspielers („Human units don't have a mood“).
-* **Opferwahl** (`AI::findClosestEnemy`): der nächste Feind (Mittelpunktabstand, bei Gleichstand die kleinere Id), der lebt, kein Projektil/`INERT`/Mine ist, nicht in einem Container steckt, für den Spieler der
-  Einheit sichtbar ist (`CanPlayerSee`: Nebel) und nicht getarnt und unentdeckt ist (`PartitionFilterStealthedAndUndetected`), und gegen den eine Waffe wirkt, die die Einheit selbst wählen darf
-  (`PartitionFilterPossibleToAttack`: `AutoChooseSources` mit `CMD_FROM_AI`, `AntiMask`, Schaden durch die Panzerung, gepinnter Slot).
-* **Gebäude:** `PartitionFilterInsignificantBuildings` (`AttackIgnoreInsignificantBuildings = Yes`): ein leeres Gebäude mit Container, das kein Fraktionsgebäude (`FS_*`) ist, nimmt niemand.
-  `PartitionFilterRejectBuildings`: andere feindliche Gebäude sind Opfer für Einheiten eines **Computerspielers** (`m_acquireEnemies`) und für Einheiten mit `ATTACK_BUILDINGS`; alle anderen nehmen nur
-  `FS_BASE_DEFENSE` und besetzte Gebäude. Eine ruhende Einheit des Menschen schießt also nicht von selbst auf eine Kaserne – wie im Original.
-* **Angriffspriorität** (Missionen, `IAcquisitionAdvisor` = `ScriptEngine`): hat die Einheit einen Prioritätssatz, gewinnt die höchste Priorität nach Abzug von einem Punkt je `AttackPriorityDistanceModifier`
-  (100) Entfernung, mindestens 1; bei Gleichstand die höhere Rohpriorität, dann der nähere; Priorität 0 wird nie angegriffen. Ohne Satz gilt „der nächste“ (`getDefaultAttackInfo`).
-* **Reichweite der Suche** (`AI::getAdjustedVisionRangeForObject`): wer nicht verfolgen darf, sucht nur in Waffenreichweite (`AI::WITHIN_ATTACK_RANGE`). Wer verfolgen darf – nur Bodeneinheiten eines
-  Computerspielers **im Angriffsmarsch** –, sucht bis `VisionRange` × `GuardOuterModifierAI` (1,333), bei wachsamen Teams × 1,1 und bei aggressiven × 1,5, läuft dem Opfer nach (`AIAttackApproachTargetState`;
-  das Ziel der Verfolgung wird alle 15 Ticks nachgeführt, die Türme folgen als Verfolgung) und gibt es auf, wenn es weiter als zwei Suchradien weg oder nicht mehr sichtbar ist.
-* **Schuss:** eine Einheit mit Opfer feuert in jedem Tick, in dem sie darf – derselbe Weg wie ein angenommener `FireWeaponCommand` mit `FireOrigin.Ai` (`ChooseWeapon`, `IFireGate`, Turmausrichtung mit
-  Angriffszustand, `PreAttackDelay`, Magazin, `WeaponFired`-Ereignis), aber ohne Befehl. Ein Deploy-Fahrzeug baut dadurch von selbst auf, sobald es ein Opfer hat.
-* **Ende:** Opfer tot, unsichtbar, kein Feind mehr oder außer Reichweite (ohne Verfolgung); jeder neue AI-Befehl (`EndAttack`: Bewegung, Idle, Andocken, Bauen, Fähigkeit) löscht Opfer **und** Angriffsmarsch.
-* **Befohlene Angriffe:** ein angenommener `FireWeaponCommand` (Ursprung Spieler oder KI, nicht Skript-Knopf) oder `PursueCommand` macht dessen Ziel zum Opfer der Einheit (`Ordered`); solange solche Befehle
-  kommen – bis 45 Ticks nach dem Zeitpunkt, an dem die Einheit wieder hätte feuern können –, sucht und feuert die Einheit nicht selbst. So schießt nichts doppelt: `StandingOrders.Attack`, das Referenzszenario
-  und `ObjectiveDriver` fahren ihre Angriffe weiter über Befehle.
-* **Flugzeuge** (`KINDOF_AIRCRAFT`): halten im Angriffsmarsch nicht an und verfolgen nicht, sie feuern im Vorbeiflug; ein gespeicherter Angriffsmarsch eines parkenden Jets bleibt einer (`JetAIUpdate`
-  trägt ihn mit dem aufgeschobenen Befehl).
+* **Cadence** (`m_nextMoodCheckTime`): on entry into one of the states the search is set to "now + 2 frames" (`resetNextMoodCheckTime`, `ForceIdleMSEC` = 67 ms in `AIData.ini`), afterwards every
+  `MoodAttackCheckRate`; the first interval after an entry is shifted by up to half a rate (`m_randomlyOffsetMoodCheck`). The randomness for that is, as with the scanning of the turrets, a hash of
+  (world seed, entity id, tick) and draws nothing from `LogicRandom`.
+* **Who does not search:** objects under construction, sold objects, objects shut down by EMP or script (`DISABLED_HELD`) and contained objects; stealthed units without the bit `STEALTHED` ("Sorry, stealthed and not allowed to idle fire
+  when stealthed"; as in the reference this does not apply to the attack move); sleeping and passive teams of a computer player ("Human units don't have a mood").
+* **Choice of victim** (`AI::findClosestEnemy`): the nearest enemy (centre distance, on a tie the smaller id) that lives, is not a projectile/`INERT`/mine, is not inside a container, is visible to the player of the
+  unit (`CanPlayerSee`: fog) and is not stealthed and undetected (`PartitionFilterStealthedAndUndetected`), and against which a weapon is effective that the unit may choose itself
+  (`PartitionFilterPossibleToAttack`: `AutoChooseSources` with `CMD_FROM_AI`, `AntiMask`, damage through the armor, pinned slot).
+* **Buildings:** `PartitionFilterInsignificantBuildings` (`AttackIgnoreInsignificantBuildings = Yes`): an empty building with a container that is not a faction building (`FS_*`) is taken by nobody.
+  `PartitionFilterRejectBuildings`: other enemy buildings are victims for units of a **computer player** (`m_acquireEnemies`) and for units with `ATTACK_BUILDINGS`; all others take only
+  `FS_BASE_DEFENSE` and occupied buildings. A resting unit of the human therefore does not shoot at a barracks by itself – as in the original.
+* **Attack priority** (missions, `IAcquisitionAdvisor` = `ScriptEngine`): if the unit has a priority set, the highest priority wins after deducting one point per `AttackPriorityDistanceModifier`
+  (100) of distance, at least 1; on a tie the higher raw priority, then the nearer one; priority 0 is never attacked. Without a set "the nearest" applies (`getDefaultAttackInfo`).
+* **Range of the search** (`AI::getAdjustedVisionRangeForObject`): whoever may not pursue searches only in weapon range (`AI::WITHIN_ATTACK_RANGE`). Whoever may pursue – only ground units of a
+  computer player **on an attack move** – searches up to `VisionRange` × `GuardOuterModifierAI` (1.333), for alert teams × 1.1 and for aggressive ones × 1.5, runs after the victim (`AIAttackApproachTargetState`;
+  the destination of the pursuit is updated every 15 ticks, the turrets follow as a pursuit) and gives it up when it is further than two search radii away or no longer visible.
+* **Shot:** a unit with a victim fires in every tick in which it may – the same path as an accepted `FireWeaponCommand` with `FireOrigin.Ai` (`ChooseWeapon`, `IFireGate`, turret alignment with
+  attack state, `PreAttackDelay`, clip, `WeaponFired` event), but without a command. A deploy vehicle thereby deploys by itself as soon as it has a victim.
+* **End:** victim dead, invisible, no longer an enemy or out of range (without pursuit); every new AI command (`EndAttack`: movement, idle, docking, building, ability) clears victim **and** attack move.
+* **Ordered attacks:** an accepted `FireWeaponCommand` (origin player or AI, not script button) or `PursueCommand` makes its target the victim of the unit (`Ordered`); as long as such commands
+  arrive – up to 45 ticks after the time at which the unit could have fired again – the unit does not search and fire itself. That way nothing shoots twice: `StandingOrders.Attack`, the reference scenario
+  and `ObjectiveDriver` continue to run their attacks via commands.
+* **Aircraft** (`KINDOF_AIRCRAFT`): do not stop on an attack move and do not pursue, they fire in passing; a stored attack move of a parked jet remains one (`JetAIUpdate`
+  carries it with the deferred command).
 
 ### 33.3 `AttackMoveCommand`
 
-`AttackMoveCommand(Unit, X, Y)` (Typ 32; `MSG_DO_ATTACKMOVETO` → `aiAttackMoveToPosition`): `AIUpdateInterface.OrderMove(…, attackMove: true)` → `IWorldServices.BeginAttackMove`. Die Welt hält den Zustand
-(`AcquisitionState.AttackMove`, Ziel, `Halted`, `Chasing`); für den Kampf nimmt sie der Einheit das Bewegungsziel (`StopInternalMove`) und gibt es ihr danach wieder (`StartInternalMove` zum Ziel), ohne dass
-das ein neuer Befehl wäre. Abfragen für Befehlsgeber: `SimulationWorld.IsAttackMoving`, `AttackMoveGoalOf`, `AcquiredVictimOf`. Eine angehaltene Einheit auf Angriffsmarsch hat kein Bewegungsziel; Befehlsgeber, die
-„steht still“ als „braucht einen neuen Befehl“ lasen, fragen deshalb `IsAttackMoving` mit (`ScriptEngine.Marching`, `SkirmishAi.CommandArmy`, `StandingOrders`).
+`AttackMoveCommand(Unit, X, Y)` (type 32; `MSG_DO_ATTACKMOVETO` → `aiAttackMoveToPosition`): `AIUpdateInterface.OrderMove(…, attackMove: true)` → `IWorldServices.BeginAttackMove`. The world holds the state
+(`AcquisitionState.AttackMove`, destination, `Halted`, `Chasing`); for the fight it takes the movement destination from the unit (`StopInternalMove`) and gives it back afterwards (`StartInternalMove` to the destination), without
+this being a new command. Queries for command issuers: `SimulationWorld.IsAttackMoving`, `AttackMoveGoalOf`, `AcquiredVictimOf`. A halted unit on an attack move has no movement destination; command issuers that
+read "stands still" as "needs a new command" therefore also ask `IsAttackMoving` (`ScriptEngine.Marching`, `SkirmishAi.CommandArmy`, `StandingOrders`).
 
-**Versionen:** `CommandTypes.Version` 13 → **14**, `ReplayFormat.CurrentVersion` 10 → **11** (alte Replays scheitern an der Befehlstabelle). `WorldSnapshot.Version` bleibt **9**: der neue Zustand je Objekt
-(`acquisition`: Opfer, befohlen, Angriffsmarsch mit Ziel, Modus und nächster Suchzeitpunkt) wird nur geschrieben, wenn das Objekt selbst sucht oder angreift, und nur gelesen, wenn er da ist.
-`MissionSnapshot` bleibt **2** (`combatIntervalTicks` behält Name und Feld; 0 schaltet den Zielerwerb der Mission ab, `SimulationWorld.SelfAcquisition`).
+**Versions:** `CommandTypes.Version` 13 → **14**, `ReplayFormat.CurrentVersion` 10 → **11** (old replays fail at the command table). `WorldSnapshot.Version` stays **9**: the new state per object
+(`acquisition`: victim, ordered, attack move with destination, mode and next search time) is only written if the object itself searches or attacks, and only read if it is there.
+`MissionSnapshot` stays **2** (`combatIntervalTicks` keeps name and field; 0 switches off the target acquisition of the mission, `SimulationWorld.SelfAcquisition`).
 
-### 33.4 Die Befehlsgeber
+### 33.4 The command issuers
 
-| Befehlsgeber | vorher | jetzt |
+| Command issuer | before | now |
 |---|---|---|
-| `MissionSession` | `DriveCombat`: jedes bewaffnete Objekt feuerte alle 3 Ticks per Befehl auf den nächsten Feind in Reichweite – auch im Gehen, auch mit `AutoAcquire = No`, auch ohne AI-Modul | entfallen; die Sitzung setzt `World.AcquisitionAdvisor = Engine` und zählt `WeaponFired` |
-| `ScriptEngine` | Jagd-/Angriffsbefehle als `SetMoveTargetCommand`, Schüsse durch `DriveCombat` | Jagd, Team- und Gebietsangriff als `AttackMoveCommand` (`AttackToward`: eine kämpfende oder schon dorthin marschierende Einheit bekommt keinen neuen Befehl); Angriff auf ein benanntes Objekt zusätzlich als Feuerbefehl (`FireAtOrdered`); Bewegungen wachsamer/aggressiver Teams eines Computerspielers werden Angriffsmärsche (`privateMoveToPosition`, `MAA_Action_To_AttackMove`); Stimmung aus `teamAggressiveness` (`Team.cpp`, `TeamTemplateInfo`) und `TEAM_SET_ATTITUDE` |
-| `SkirmishAi` | `Fire()` alle 5 Ticks, `MoveGoalFor` (Annäherung auf 70 % der Reichweite) | `Fire` und `MoveGoalFor` entfallen; `CommandArmy` schickt die Armee per `AttackMoveCommand` zum Gruppenziel |
-| `StandingOrders` (Darstellung) | Angriffsbewegung und Wachen feuerten per Befehl auf den nächsten Feind | Angriffsbewegung = `AttackMoveCommand`; kein Feuerbefehl mehr außer beim Angriff auf ein genanntes Ziel |
-| `ObjectiveDriver` (Nur-Befehle-Modus) | Bewegungsbefehl zum Opfer, Schüsse durch `DriveCombat` | Angriffsmarsch plus Angriffsbefehl auf das Opfer (`Assault`, `DriveAssaults`) |
+| `MissionSession` | `DriveCombat`: every armed object fired by command every 3 ticks at the nearest enemy in range – also while walking, also with `AutoAcquire = No`, also without an AI module | dropped; the session sets `World.AcquisitionAdvisor = Engine` and counts `WeaponFired` |
+| `ScriptEngine` | hunt/attack commands as `SetMoveTargetCommand`, shots through `DriveCombat` | hunt, team and area attack as `AttackMoveCommand` (`AttackToward`: a unit that is fighting or already marching there gets no new command); attack on a named object additionally as a fire command (`FireAtOrdered`); movements of alert/aggressive teams of a computer player become attack moves (`privateMoveToPosition`, `MAA_Action_To_AttackMove`); mood from `teamAggressiveness` (`Team.cpp`, `TeamTemplateInfo`) and `TEAM_SET_ATTITUDE` |
+| `SkirmishAi` | `Fire()` every 5 ticks, `MoveGoalFor` (approach to 70 % of the range) | `Fire` and `MoveGoalFor` are dropped; `CommandArmy` sends the army to the group destination by `AttackMoveCommand` |
+| `StandingOrders` (presentation) | attack movement and guarding fired by command at the nearest enemy | attack movement = `AttackMoveCommand`; no fire command any more except when attacking a named target |
+| `ObjectiveDriver` (commands-only mode) | move command to the victim, shots through `DriveCombat` | attack move plus attack command on the victim (`Assault`, `DriveAssaults`) |
 
-### 33.5 Näherungen und was fehlt
+### 33.5 Approximations and what is missing
 
-* **Keine Verfolgung aus dem Leerlauf.** In der Referenz läuft eine ruhende Einheit eines Computerspielers einem Opfer in ihrem Suchradius nach (`aiAttackObject`); hier bleibt sie stehen und nimmt nur, was in
-  Reichweite ist. Verfolgt wird nur im Angriffsmarsch. Grund: die Befehlsgeber stellen ihre Einheiten (Sammelpunkt, Skriptposten); eine Einheit, die ihren Posten verlässt, kollidiert mit deren Buchführung.
-* **`AIData.ini` ist nicht typisiert:** `GuardOuterModifierAI` 1,333, `AlertRangeModifier` 1,1, `AggressiveRangeModifier` 1,5, `AttackPriorityDistanceModifier` 100, `ForceIdleMSEC` 67 und
-  `AttackIgnoreInsignificantBuildings = Yes` stehen als benannte Konstanten mit den Werten der ausgelieferten Datei im Code. `GuardOuterModifierHuman` (2,2) hat keine Wirkung, weil Einheiten des Menschen ohnehin
-  nur in Waffenreichweite suchen.
-* **Passive Teams** erwerben nichts (die Referenz lässt sie auf ihren letzten Angreifer antworten); **schlafende** Teams bewegen sich weiter, wenn ein Skript es befiehlt (`MAA_Action_To_Idle` fehlt).
-  `NAMED_SET_ATTITUDE` (einzelnes Objekt) bleibt aufgezeichnet ohne Wirkung; `m_attackCommonTarget` (Team greift gemeinsames Ziel an) fehlt.
-* **`NOTWHILEATTACKING`** ist gelesen, hat aber keine eigene Wirkung: eine Einheit mit Opfer sucht hier nie ein zweites.
-* **Sichtlinie:** `AttackUsesLineOfSight`/`KINDOF_ATTACK_NEEDS_LINE_OF_SIGHT` (`AI::CAN_SEE`) ist nicht geprüft; Sicht ist die des Spielers (Nebel) – die Referenz verlangt den Nebeltest nur für Einheiten des
-  Menschen, hier gilt er für alle.
-* **Abstände** sind Mittelpunktabstände (die Referenz misst `FROM_BOUNDINGSPHERE_2D`); der leere-Gebäude-Filter fragt „hat einen Container und ist leer“ statt `isGarrisonable`.
-* **Aus Containern wird nicht gefeuert** (Garnison, `isPassengerAllowedToFire`): enthaltene Objekte erwerben nichts. `DriveCombat` ließ sie feuern; das war kein belegtes Verhalten.
-* **Objekte ohne AI-Modul erwerben nichts** (in der Referenz hat jedes angreifende Objekt eines). `DriveCombat` ließ auch sie schießen.
-* **Aufgeschobene Bewegungen:** nur `JetAIUpdate` trägt den Angriffsmarsch durch einen aufgeschobenen Befehl; ein `DeployStyleAIUpdate`-Fahrzeug, das erst einpacken muss, und ein Hacker, der erst abbaut, führen ihn als
-  einfache Bewegung aus. `AIAttackMoveToState` wiederholt eine gescheiterte Wegsuche (`ATTACK_RETRY_COUNT`); hier endet der Angriffsmarsch, wenn die Bewegung endet.
-* **Einheitenfähigkeit:** `OBJECT_STATUS_IS_USING_ABILITY` wird nicht gesetzt; eine Einheit, die eine Fähigkeit ausführt und dabei als untätig gilt, könnte ein Opfer erwerben.
-* **Darstellung und Bedienung** (Angriffsbewegung im Client, selbst schießende ruhende Einheiten des Menschen) hat **kein Mensch gesehen**.
+* **No pursuit from idle.** In the reference a resting unit of a computer player runs after a victim in its search radius (`aiAttackObject`); here it stays where it is and takes only what is in
+  range. Pursuit happens only on an attack move. Reason: the command issuers position their units (rally point, script posts); a unit that leaves its post collides with their bookkeeping.
+* **`AIData.ini` is not typed:** `GuardOuterModifierAI` 1.333, `AlertRangeModifier` 1.1, `AggressiveRangeModifier` 1.5, `AttackPriorityDistanceModifier` 100, `ForceIdleMSEC` 67 and
+  `AttackIgnoreInsignificantBuildings = Yes` are in the code as named constants with the values of the shipped file. `GuardOuterModifierHuman` (2.2) has no effect because units of the human search
+  only in weapon range anyway.
+* **Passive teams** acquire nothing (the reference lets them answer their last attacker); **sleeping** teams keep moving when a script orders it (`MAA_Action_To_Idle` is missing).
+  `NAMED_SET_ATTITUDE` (single object) remains recorded without effect; `m_attackCommonTarget` (team attacks a common target) is missing.
+* **`NOTWHILEATTACKING`** is read but has no effect of its own: a unit with a victim never searches for a second one here.
+* **Line of sight:** `AttackUsesLineOfSight`/`KINDOF_ATTACK_NEEDS_LINE_OF_SIGHT` (`AI::CAN_SEE`) is not checked; vision is that of the player (fog) – the reference requires the fog test only for units of the
+  human, here it applies to all.
+* **Distances** are centre distances (the reference measures `FROM_BOUNDINGSPHERE_2D`); the empty-building filter asks "has a container and is empty" instead of `isGarrisonable`.
+* **There is no firing from containers** (garrison, `isPassengerAllowedToFire`): contained objects acquire nothing. `DriveCombat` let them fire; that was not verified behaviour.
+* **Objects without an AI module acquire nothing** (in the reference every attacking object has one). `DriveCombat` let them shoot too.
+* **Deferred movements:** only `JetAIUpdate` carries the attack move through a deferred command; a `DeployStyleAIUpdate` vehicle that first has to pack up, and a hacker that first packs up, execute it as
+  a simple movement. `AIAttackMoveToState` repeats a failed pathfinding (`ATTACK_RETRY_COUNT`); here the attack move ends when the movement ends.
+* **Unit ability:** `OBJECT_STATUS_IS_USING_ABILITY` is not set; a unit that executes an ability and counts as idle while doing so could acquire a victim.
+* **Presentation and operation** (attack movement in the client, resting units of the human shooting by themselves) **no human has seen**.
 
-### 33.6 Messwerte (Release, Retaildaten, 5. Oktober 2026)
+### 33.6 Measured values (Release, retail data, 5 October 2026)
 
-„Vorher“ ist der Stand `4eea97b`, mit denselben Werkzeugen neu gemessen (er stimmt mit §32 überein); „nachher“ ist dieser Stand.
+"Before" is the state `4eea97b`, re-measured with the same tools (it agrees with §32); "after" is this state.
 
-| Lauf | vorher (`4eea97b`) | nachher |
+| Run | before (`4eea97b`) | after |
 |---|---|---|
-| `SimTool reference-match` | Sieger FactionGLA, Tick 13.500, Endhash `0946FB676DEC615C`, Kette `EA6D12F180930D71` | Sieger FactionGLA, Tick **14.490**, Endhash `23B4B25DF62765D8`, Kette `DE5849AF9F8493C4`; Lauf 2 und Snapshot-Fortsetzung (Tick 7.395) identisch |
-| `SimTool stress` (216.000 Ticks) | Endhash `56882F763EABEF67`, Kette `B8E663493F2C73D5` | **unverändert**: Endhash und Kette gleich, also bekommt in der synthetischen Fixture kein Objekt einen Angriffszustand (er stünde im Hash des Objekts) |
-| 16 KI-Läufe (`ai-match … --max-ticks 45000`) | 12 von 16 entschieden | **11 von 16** entschieden; alle 16 in Lauf 2 und nach Snapshot-Fortsetzung tickgenau identisch (Tabelle unten) |
-| `CampaignTool audit --ticks 900 --campaign CHALLENGE_0` | 7/7 deterministisch, 7/7 identisch nach Speichern/Laden, Ausschalt-Enden Sieg 7/7, Niederlage 6/7 | **unverändert** 7/7, 7/7, 7/7, 6/7 (4.984 statt 4.980 Skripte ausgeführt, 0 Treffer auf fehlende Typen) |
-| `CampaignTool drive --campaign CHALLENGE_0` (60.000 Ticks) | Sieg 7/7, Niederlage 7/7 | **unverändert**, jede Zeile (Skript, Tick, Eingriffe) gleich |
-| `CampaignTool drive --campaign GLA` | Sieg 5/5, Niederlage 5/5 | **unverändert** 5/5 und 5/5, gleiche Skripte und Ticks; `MD_GLA03` braucht 258 statt 227 Welteingriffe |
-| `scripts/audit-scenarios.ps1` | drei Szenen grün | **drei Szenen grün** |
-| Tests | – | `Simulation.Tests` Release mit `--long --content-dir`: 348 bestanden (8 neu: 7 synthetisch, 1 Realdaten); `Presentation.Tests` bestanden; `Game.Tests` (Release, `--content-dir`) bestanden |
+| `SimTool reference-match` | winner FactionGLA, tick 13,500, final hash `0946FB676DEC615C`, chain `EA6D12F180930D71` | winner FactionGLA, tick **14,490**, final hash `23B4B25DF62765D8`, chain `DE5849AF9F8493C4`; run 2 and snapshot continuation (tick 7,395) identical |
+| `SimTool stress` (216,000 ticks) | final hash `56882F763EABEF67`, chain `B8E663493F2C73D5` | **unchanged**: final hash and chain the same, so in the synthetic fixture no object gets an attack state (it would be in the hash of the object) |
+| 16 AI runs (`ai-match … --max-ticks 45000`) | 12 of 16 decided | **11 of 16** decided; all 16 tick-exactly identical in run 2 and after snapshot continuation (table below) |
+| `CampaignTool audit --ticks 900 --campaign CHALLENGE_0` | 7/7 deterministic, 7/7 identical after save/load, elimination ends victory 7/7, defeat 6/7 | **unchanged** 7/7, 7/7, 7/7, 6/7 (4,984 instead of 4,980 scripts executed, 0 hits on missing types) |
+| `CampaignTool drive --campaign CHALLENGE_0` (60,000 ticks) | victory 7/7, defeat 7/7 | **unchanged**, every line (script, tick, interventions) the same |
+| `CampaignTool drive --campaign GLA` | victory 5/5, defeat 5/5 | **unchanged** 5/5 and 5/5, same scripts and ticks; `MD_GLA03` needs 258 instead of 227 world interventions |
+| `scripts/audit-scenarios.ps1` | three scenes green | **three scenes green** |
+| Tests | – | `Simulation.Tests` Release with `--long --content-dir`: 348 passed (8 new: 7 synthetic, 1 real data); `Presentation.Tests` passed; `Game.Tests` (Release, `--content-dir`) passed |
 
-Das Referenzspiel verschiebt sich (sein Szenario befiehlt weiter jeden Schuss; neu ist, dass Einheiten in den Lücken zwischen seinen Befehlen selbst schießen und dass seine Befehle die eigene Zielwahl der
-Einheit sperren). Der Realdatentest `RealAcquisition` lässt einen Crusader und einen Battlemaster ohne jeden Befehl kämpfen: erster Schuss in Tick 3, 13 Schüsse, einer zerstört, zwei Läufe hashgleich.
+The reference match shifts (its scenario still orders every shot; new is that units shoot by themselves in the gaps between its commands and that its commands lock the unit's own target
+choice). The real-data test `RealAcquisition` lets a Crusader and a Battlemaster fight without any command: first shot in tick 3, 13 shots, one destroyed, two runs hash-identical.
 
-**Die 16 KI-Läufe** (Standardseeds; „vorher“ deckt sich mit der Spalte „jetzt“ aus §32):
+**The 16 AI runs** (default seeds; "before" coincides with the column "now" from §32):
 
-| Karte | Paarung | vorher | Endhash vorher | **nachher** | Endhash nachher | Kette nachher |
+| Map | Pairing | before | final hash before | **after** | final hash after | chain after |
 |---|---|---|---|---|---|---|
-| Alpine Assault | China, GLA | China, Tick 7.545 | `39344016A5EE8F91` | **China, Tick 23.310** | `54DD2C9094141CC8` | `582FA4C6DF853C4B` |
-| Alpine Assault | America, China | America, Tick 16.800 | `745839146322DDE6` | **America, Tick 16.965** | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` |
-| Alpine Assault | GLA, America | America, Tick 10.740 | `DDDFE22494F29A34` | **America, Tick 8.895** | `23A93C58C775A691` | `B29CF881F6B1CC59` |
-| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | Patt | `3CD8D8C4D53675C0` | **Patt** | `2EDDC1B7BF19F28B` | `0C7DD733866C09BA` |
-| Armored Fury | China, GLA | China, Tick 11.460 | `6CAD71B81D3CE47A` | **Patt** | `89B05A25738A9E6D` | `35DFAE191CAD2649` |
-| Armored Fury | America, China | America, Tick 33.255 | `63486D2572E76BCE` | **America, Tick 19.095** | `4A99580AC54F4EBD` | `AD65CED96F474586` |
-| Armored Fury | GLA, America | America, Tick 40.260 | `9801D2537695316C` | **America, Tick 37.365** | `3C7BC00FB4E3E8C1` | `0C664B1DEFEFDF44` |
-| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | Patt | `E5ED792B12D35CC0` | **Patt** | `C8ACAB511BFC8C86` | `15D05EFD38B29EEB` |
-| Bitter Winter | China, GLA | China, Tick 12.930 | `CB890471FCB4B084` | **China, Tick 17.220** | `26CD35AC8AA660F5` | `2B86E2038EDFAAB7` |
-| Bitter Winter | America, China | Patt | `0FDEB99B1DEFAAA6` | **Patt** | `3C403645D06C2E92` | `6F84497D225021F4` |
-| Bitter Winter | GLA, America | America, Tick 14.430 | `A3A6295689F3F0E5` | **America, Tick 8.895** | `AB725263AEF8E3B7` | `CDFCDF66730FF07B` |
-| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | Patt | `0EC68A99E3ED5ACD` | **Patt** | `A4B3ACB444C989B4` | `BA6DCDD5A38758EF` |
-| Death Valley | China, GLA | China, Tick 11.160 | `DA30DBBC2434E499` | **China, Tick 8.565** | `9F0F8D7D28E8654D` | `90CDEBE18E7C6B01` |
-| Death Valley | America, China | China, Tick 9.975 | `8DB4AA743B8F349A` | **America, Tick 9.330** | `E98A532C90F89642` | `AC321A0CFA9C00E1` |
-| Death Valley | GLA, America | America, Tick 13.755 | `2992C9E0876B2C95` | **America, Tick 8.175** | `3F33A4FEDEBA85C1` | `3B00774A84E69278` |
-| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | AmericaAirForceGeneral, Tick 32.280 | `C443660F229E157E` | **ChinaTankGeneral, Tick 32.475** | `828EE15100622D42` | `0C3AF1B086B9428E` |
+| Alpine Assault | China, GLA | China, tick 7,545 | `39344016A5EE8F91` | **China, tick 23,310** | `54DD2C9094141CC8` | `582FA4C6DF853C4B` |
+| Alpine Assault | America, China | America, tick 16,800 | `745839146322DDE6` | **America, tick 16,965** | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` |
+| Alpine Assault | GLA, America | America, tick 10,740 | `DDDFE22494F29A34` | **America, tick 8,895** | `23A93C58C775A691` | `B29CF881F6B1CC59` |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | stalemate | `3CD8D8C4D53675C0` | **stalemate** | `2EDDC1B7BF19F28B` | `0C7DD733866C09BA` |
+| Armored Fury | China, GLA | China, tick 11,460 | `6CAD71B81D3CE47A` | **stalemate** | `89B05A25738A9E6D` | `35DFAE191CAD2649` |
+| Armored Fury | America, China | America, tick 33,255 | `63486D2572E76BCE` | **America, tick 19,095** | `4A99580AC54F4EBD` | `AD65CED96F474586` |
+| Armored Fury | GLA, America | America, tick 40,260 | `9801D2537695316C` | **America, tick 37,365** | `3C7BC00FB4E3E8C1` | `0C664B1DEFEFDF44` |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | stalemate | `E5ED792B12D35CC0` | **stalemate** | `C8ACAB511BFC8C86` | `15D05EFD38B29EEB` |
+| Bitter Winter | China, GLA | China, tick 12,930 | `CB890471FCB4B084` | **China, tick 17,220** | `26CD35AC8AA660F5` | `2B86E2038EDFAAB7` |
+| Bitter Winter | America, China | stalemate | `0FDEB99B1DEFAAA6` | **stalemate** | `3C403645D06C2E92` | `6F84497D225021F4` |
+| Bitter Winter | GLA, America | America, tick 14,430 | `A3A6295689F3F0E5` | **America, tick 8,895** | `AB725263AEF8E3B7` | `CDFCDF66730FF07B` |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | stalemate | `0EC68A99E3ED5ACD` | **stalemate** | `A4B3ACB444C989B4` | `BA6DCDD5A38758EF` |
+| Death Valley | China, GLA | China, tick 11,160 | `DA30DBBC2434E499` | **China, tick 8,565** | `9F0F8D7D28E8654D` | `90CDEBE18E7C6B01` |
+| Death Valley | America, China | China, tick 9,975 | `8DB4AA743B8F349A` | **America, tick 9,330** | `E98A532C90F89642` | `AC321A0CFA9C00E1` |
+| Death Valley | GLA, America | America, tick 13,755 | `2992C9E0876B2C95` | **America, tick 8,175** | `3F33A4FEDEBA85C1` | `3B00774A84E69278` |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | AmericaAirForceGeneral, tick 32,280 | `C443660F229E157E` | **ChinaTankGeneral, tick 32,475** | `828EE15100622D42` | `0C3AF1B086B9428E` |
 
-Entschieden: vorher 12, nachher **11**. Zwei Ausgänge kippen: Armored Fury China/GLA (China bei 11.460 → Patt) und Death Valley Tank/AirForce (AirForce bei 32.280 → ChinaTankGeneral bei 32.475); Death Valley
-America/China wechselt den Sieger (China → America). Von den elf entschiedenen Läufen enden sieben früher als vorher und vier später (deutlich: Alpine Assault China/GLA 7.545 → 23.310 und Bitter Winter China/GLA 12.930 →
-17.220; knapp: Alpine Assault America/China und Death Valley Tank/AirForce). Bei 16 Läufen ist das keine Aussage über Stärke; **keine Balance-Aussage**.
+Decided: before 12, after **11**. Two outcomes flip: Armored Fury China/GLA (China at 11,460 → stalemate) and Death Valley Tank/AirForce (AirForce at 32,280 → ChinaTankGeneral at 32,475); Death Valley
+America/China changes the winner (China → America). Of the eleven decided runs seven end earlier than before and four later (clearly: Alpine Assault China/GLA 7,545 → 23,310 and Bitter Winter China/GLA 12,930 →
+17,220; narrowly: Alpine Assault America/China and Death Valley Tank/AirForce). With 16 runs that is no statement about strength; **no balance statement**.
 
-**Was die Spuren der fünf Patts zeigen** (`SimTool ai-match … --trace N --trace-army`; `--trace-army` ist neu und druckt je Spieler die Armee nach Typ mit „marschiert / Angriffsmarsch / kämpft“, dem
-Abstand zum nächsten feindlichen Gebäude und der Selbstauskunft der KI):
+**What the traces of the five stalemates show** (`SimTool ai-match … --trace N --trace-army`; `--trace-army` is new and prints per player the army by type with "marching / attack move / fighting", the
+distance to the nearest enemy building and the self-report of the AI):
 
-| Lauf | Bild bei Tick 45.000 |
+| Run | Picture at tick 45,000 |
 |---|---|
-| Alpine Assault, Tank/AirForce | China: 7 Gebäude, Armee 0 seit Tick 27.000, 150 Credits, Strecke Zentrum–Lager 956 (das nahe Lager ist leer), Produktion steht bei 74. AirForce: 13 Gebäude, 0 Credits, 4 Sammler, produziert 200 Einheiten – ausschließlich Ranger und Missile Defender –, die in Gruppen von 4 bis 12 an Chinas einer Verteidigung sterben; die erste Welle endet nie (Wellen 1) |
-| Armored Fury, China/GLA | China: 9 Gebäude, 0 Credits, Armee 0–2, Strecke 654. GLA: 9 Gebäude, 30 Credits, 295 Einheiten produziert, fast nur Rebellen, die über 180 bis 1.150 Einheiten verteilt anmarschieren und an einer Verteidigung sterben |
-| Armored Fury, Tank/AirForce | beide 12–13 Gebäude, 125–150 Credits, Strecken 654 und 521, Armeen 4 und 6 unter der Angriffsschwelle (16 und 22) |
-| Bitter Winter, America/China | beide seit Tick 30.000 eingefroren: 25 und 250 Credits, Strecken 1.173 und 1.127, Armeen 2 und 0, die Vorräte der Karte bleiben bei 1.068 Kisten stehen |
-| Bitter Winter, Tank/AirForce | AirForce hat 3 Gebäude, keine Armee, keinen Bauarbeiter, keine Kaserne; China 11 Gebäude, aber 125 Credits, Strecke 1.173 und 3 Einheiten unter der Schwelle 12 – es greift nicht mehr an |
+| Alpine Assault, Tank/AirForce | China: 7 buildings, army 0 since tick 27,000, 150 credits, distance center–supply depot 956 (the near supply depot is empty), production stands at 74. AirForce: 13 buildings, 0 credits, 4 gatherers, produces 200 units – exclusively Rangers and Missile Defenders – which die in groups of 4 to 12 at China's one defence; the first wave never ends (waves 1) |
+| Armored Fury, China/GLA | China: 9 buildings, 0 credits, army 0–2, distance 654. GLA: 9 buildings, 30 credits, 295 units produced, almost only Rebels, which march up spread over 180 to 1,150 units and die at one defence |
+| Armored Fury, Tank/AirForce | both 12–13 buildings, 125–150 credits, distances 654 and 521, armies 4 and 6 below the attack threshold (16 and 22) |
+| Bitter Winter, America/China | both frozen since tick 30,000: 25 and 250 credits, distances 1,173 and 1,127, armies 2 and 0, the supplies of the map stay at 1,068 boxes |
+| Bitter Winter, Tank/AirForce | AirForce has 3 buildings, no army, no construction worker, no barracks; China 11 buildings, but 125 credits, distance 1,173 and 3 units below the threshold 12 – it no longer attacks |
 
-Gemeinsam ist allen: am Ende haben beide Seiten kein Geld (das Lager neben dem Versorgungszentrum ist leer, das nächste gefüllte 500 bis 1.200 Einheiten entfernt, für ein weiteres Zentrum reicht das Geld
-nicht), und die Armeen bestehen aus der jeweils billigsten Infanterie, die eine einzelne Basisverteidigung nicht überwindet. Der Zielerwerb zeigt in den Spuren keinen Fehler (Einheiten im Angriffsmarsch
-kämpfen und marschieren weiter; „kämpft“ und „marschiert“ zugleich sind Verfolgungen). Das ist der Befund aus §32 und `SIM-TURRET-AIM.md` §8a, jetzt mit Zahlen je Lauf.
+Common to all: at the end both sides have no money (the supply depot next to the supply center is empty, the nearest filled one 500 to 1,200 units away, the money does not suffice for a further
+center), and the armies consist of the respective cheapest infantry, which does not overcome a single base defence. The target acquisition shows no error in the traces (units on an attack move
+fight and march on; "fighting" and "marching" at the same time are pursuits). That is the finding from §32 and `SIM-TURRET-AIM.md` §8a, now with numbers per run.
 
-**Ein Korrekturversuch, gemessen und verworfen:** „eine Armee, die 90 Sekunden nicht gewachsen ist, greift auch unter der Schwelle an“ (für Bitter Winter Tank/AirForce naheliegend). Alle 16 Läufe neu:
-dieselben 11 entschieden, die elf mit identischem Endhash, die fünf Patts blieben Patts (nur ihre Hashes änderten sich). Die Änderung ist deshalb nicht im Code. Was die Spuren als Ursache nennen –
-Wirtschaft nach dem Leerlaufen des ersten Lagers und die Zusammensetzung der Armee – ist ein eigener Auftrag an `SkirmishAi` (Geld für ein zweites Zentrum zurückhalten, nicht nur das Billigste bauen).
+**A correction attempt, measured and discarded:** "an army that has not grown for 90 seconds attacks even below the threshold" (obvious for Bitter Winter Tank/AirForce). All 16 runs anew:
+the same 11 decided, the eleven with an identical final hash, the five stalemates remained stalemates (only their hashes changed). The change is therefore not in the code. What the traces name as the cause –
+economy after the first supply depot has run empty and the composition of the army – is a brief of its own for `SkirmishAi` (hold back money for a second center, do not build only the cheapest).
 
-## 34. Phase 17 (5. Oktober 2026): `SkirmishAi` als Agent einer Mission, Leistung ruhig gemessen
+## 34. Phase 17 (5 October 2026): `SkirmishAi` as the agent of a mission, performance measured on a quiet machine
 
-### 34.1 Was sich an `SkirmishAi` geändert hat
+### 34.1 What has changed in `SkirmishAi`
 
-Der Nur-Befehle-Modus des Zielfahrers (`docs/SCRIPT-ENGINE.md` §9) lässt `SkirmishAi` für den Betrachter einer Mission spielen. Zwei Fehler fielen nur dort auf und sind in der KI selbst behoben; drei
-Schalter setzt nur der Missionsagent (ein Skirmish-Match setzt keinen davon).
+The commands-only mode of the objective driver (`docs/SCRIPT-ENGINE.md` §9) lets `SkirmishAi` play for the viewer of a mission. Two bugs were noticed only there and are fixed in the AI itself; three
+switches are set only by the mission agent (a skirmish match sets none of them).
 
-| Änderung | Wo | Begründung |
+| Change | Where | Rationale |
 | --- | --- | --- |
-| Lager einer **nicht feindlichen Seite** zählen als Lager (`Observe`) | `SkirmishAi.Observe` | Missionskarten geben die `SupplyDock`s einem Zivilspieler statt dem Systemspieler; `FindSupplySource` nahm sie schon an, das Gedächtnis `_warehouses` nicht – „warehouses known 0“, kein Sammler wurde geschickt |
-| Versorgungszentrum an der Basis nach drei vergeblichen Platzsuchen neben der Quelle (`SupplyPlacementPatience`) | `BuildStructures` | `AIPlayer::buildBySupplies` kennt den Fall „kein legaler Platz“ nicht; hier blieb das Zentrum sonst für immer ungebaut (`GC_ChemGeneral`: Lager am Kartenrand) |
-| `Objectives` (Angriffsziele vor der eigenen Wahl) | `AttackTarget` | die Opfer der Missionsziele, wie Briefing und Zielmarken sie einem Spieler nennen |
-| `CommitEverything` (Angriff ohne Schwelle, kein Rückzug zum Sammeln) | `CommandArmy` | eine Seite ohne Produktionsgebäude wartete sonst für immer unter der Angriffsschwelle |
-| `ObjectiveReserve` (Geld, das die KI nicht anrührt) | `Think` | der Kauf, den ein Missionsziel braucht (Eroberungs-Upgrade) |
-| Option `EconomyFirst` (nichts anderes bauen, bis das erste Versorgungszentrum steht) | `BuildStructures` | ohne Einkommen ging das Startgeld der Challenge-Karten in Kraftwerke und Kasernen |
+| Supply depots of a **non-hostile side** count as supply depots (`Observe`) | `SkirmishAi.Observe` | mission maps give the `SupplyDock`s to a civilian player instead of the system player; `FindSupplySource` already accepted them, the memory `_warehouses` did not – "warehouses known 0", no gatherer was sent |
+| Supply center at the base after three futile placement searches next to the source (`SupplyPlacementPatience`) | `BuildStructures` | `AIPlayer::buildBySupplies` does not know the case "no legal place"; here the center otherwise stayed unbuilt forever (`GC_ChemGeneral`: supply depot at the map edge) |
+| `Objectives` (attack targets before its own choice) | `AttackTarget` | the victims of the mission objectives, as briefing and target markers name them to a player |
+| `CommitEverything` (attack without threshold, no retreat to gather) | `CommandArmy` | a side without production buildings otherwise waited forever below the attack threshold |
+| `ObjectiveReserve` (money the AI does not touch) | `Think` | the purchase that a mission objective needs (capture upgrade) |
+| Option `EconomyFirst` (build nothing else until the first supply center stands) | `BuildStructures` | without income the starting money of the Challenge maps went into power plants and barracks |
 
-Die 16 KI-gegen-KI-Läufe sind davon unberührt: die Endhashes des gemergten Stands sind die aus §33.6 (dort ohne diese Änderungen gemessen).
+The 16 AI-versus-AI runs are untouched by this: the final hashes of the merged state are those from §33.6 (measured there without these changes).
 
-### 34.2 Leistung (ruhige Maschine, keine parallelen Läufe, Release, 5. Oktober 2026)
+### 34.2 Performance (quiet machine, no parallel runs, Release, 5 October 2026)
 
-| Lauf | vorher (`4eea97b`) | nachher (`2a66661`) |
+| Run | before (`4eea97b`) | after (`2a66661`) |
 | --- | --- | --- |
-| `SimTool stress`, Lauf 1 (216.000 Ticks), zweimal gemessen | 13,1 s / 13,3 s (60,5 / 61,6 µs je Tick) | 13,3 s / 13,3 s (61,5 / 61,6 µs je Tick) |
-| Endhash / Kette | `56882F763EABEF67` / `B8E663493F2C73D5` | unverändert |
-| `SimTool mission-run` `MD_USA05`, 3.000 Ticks (Gesamtlaufzeit des Werkzeugs) | 73,4 s | 66,7 s |
-| `SimTool mission-run` `MD_GLA05`, 3.000 Ticks | 135,6 s | 147,9 s |
+| `SimTool stress`, run 1 (216,000 ticks), measured twice | 13.1 s / 13.3 s (60.5 / 61.6 µs per tick) | 13.3 s / 13.3 s (61.5 / 61.6 µs per tick) |
+| Final hash / chain | `56882F763EABEF67` / `B8E663493F2C73D5` | unchanged |
+| `SimTool mission-run` `MD_USA05`, 3,000 ticks (total run time of the tool) | 73.4 s | 66.7 s |
+| `SimTool mission-run` `MD_GLA05`, 3,000 ticks | 135.6 s | 147.9 s |
 
-Der Stresstest zeigt keinen Schwund (die 150 µs je Tick aus Phase 14 waren Last, nicht Code; unter Last maß derselbe Stand heute 166 µs). Die Missionsläufe ändern ihre Hashes, weil der Zielerwerb jetzt in der
-Simulation liegt; `MD_GLA05` ist 9 % langsamer, `MD_USA05` 9 % schneller. **Nicht gemacht:** ein Profil der heißesten Module. Die Missionsläufe sind der Ort dafür (die Zahl oben ist die Gesamtlaufzeit des Werkzeugs
-mit Laden und Wiederholungsläufen, kein Wert je Tick).
+The stress test shows no loss (the 150 µs per tick from Phase 14 were load, not code; under load the same state measured 166 µs today). The mission runs change their hashes because the target acquisition now lies in the
+simulation; `MD_GLA05` is 9 % slower, `MD_USA05` 9 % faster. **Not done:** a profile of the hottest modules. The mission runs are the place for it (the number above is the total run time of the tool
+with loading and repetition runs, not a value per tick).
 
-## 35. Phase 17 (5. Oktober 2026): Schwierigkeit eines Computerspielers im Skirmish – Befund, keine Simulationsänderung
+## 35. Phase 17 (5 October 2026): difficulty of a computer player in skirmish – finding, no simulation change
 
-Auftrag war, der Simulation eine in den Daten belegte Schwierigkeitsachse für Computerspieler zu geben und die drei Armeen der Skirmish-Einrichtung
-(„Easy/Medium/Hard Army“) daran zu binden. Die Prüfung der Referenz ergibt: **keine der in den Daten belegten Wirkungen gilt für einen Computerspieler im Skirmish.**
-Es wurde deshalb nichts an der Simulation geändert (kein Feld, kein Snapshot-Eintrag, keine Version); stattdessen bietet die Einrichtung nur noch eine Armee
-(`docs/GAME-SHELL.md` §6). Erfunden wurde nichts.
+The brief was to give the simulation a difficulty axis for computer players that is evidenced in the data and to tie the three armies of the skirmish setup
+("Easy/Medium/Hard Army") to it. The examination of the reference yields: **none of the effects evidenced in the data applies to a computer player in skirmish.**
+Therefore nothing was changed in the simulation (no field, no snapshot entry, no version); instead the setup now offers only one army
+(`docs/GAME-SHELL.md` §6). Nothing was invented.
 
-### 35.1 Was die Daten enthalten
+### 35.1 What the data contain
 
-| Datei | Inhalt | gemessen |
+| File | Content | measured |
 | --- | --- | --- |
-| `Data/INI/GameData.ini` | `WeaponBonus = SOLO_AI_EASY RATE_OF_FIRE 80%`, `SOLO_AI_NORMAL … 100%`, `SOLO_AI_HARD … 120%` | drei Zeilen; für `SOLO_HUMAN_*` gibt es keine `WeaponBonus`-Zeile |
-| `Data/INI/GameData.ini` | `HumanSoloPlayerHealthBonus_Easy = 150%`, `_Normal = 100%`, `_Hard = 80%` | `AISoloPlayerHealthBonus_*` kommt nicht vor (Vorgabe 1,0, `GlobalData::GlobalData`) |
-| `Data/INI/Default/AIData.ini` | `SideInfo` mit `ResourceGatherersEasy/Normal/Hard` | 12 Seiten; je Seite sind alle drei Werte gleich (2, bei den GLA-Seiten 5) |
+| `Data/INI/GameData.ini` | `WeaponBonus = SOLO_AI_EASY RATE_OF_FIRE 80%`, `SOLO_AI_NORMAL … 100%`, `SOLO_AI_HARD … 120%` | three lines; for `SOLO_HUMAN_*` there is no `WeaponBonus` line |
+| `Data/INI/GameData.ini` | `HumanSoloPlayerHealthBonus_Easy = 150%`, `_Normal = 100%`, `_Hard = 80%` | `AISoloPlayerHealthBonus_*` does not occur (default 1.0, `GlobalData::GlobalData`) |
+| `Data/INI/Default/AIData.ini` | `SideInfo` with `ResourceGatherersEasy/Normal/Hard` | 12 sides; per side all three values are the same (2, for the GLA sides 5) |
 
-Die `WeaponBonus`-Zeilen sind in `CnCNew.Data` bereits streng typisiert (`GameDataSchema`, `FieldType.WeaponBonusEntry`); die Bedingungsnamen `SOLO_*` stehen in der
-Namenstabelle. An `baselines/compatibility.json` ändert sich nichts.
+The `WeaponBonus` lines are already strictly typed in `CnCNew.Data` (`GameDataSchema`, `FieldType.WeaponBonusEntry`); the condition names `SOLO_*` are in the
+name table. Nothing changes in `baselines/compatibility.json`.
 
-### 35.2 Wo die Referenz sie anwendet
+### 35.2 Where the reference applies them
 
-| Wirkung | Fundstelle (Datei, Funktion) | gilt im Skirmish? |
+| Effect | Location (file, function) | applies in skirmish? |
 | --- | --- | --- |
-| Waffenbonus `SOLO_AI_*` / `SOLO_HUMAN_*` auf jedes Objekt des Spielers | `Common/RTS/Player.cpp`, `Player::friend_applyDifficultyBonusesForObject` (aufgerufen aus `Object::setReceivingDifficultyBonus`, `Object.cpp`; `Object::initObject` setzt es, solange `ScriptEngine::getObjectsShouldReceiveDifficultyBonus` gilt) | **nein** – der ganze Rumpf steht unter `if (TheGameLogic->isInSinglePlayerGame())` |
-| Lebenspunktefaktor `m_soloPlayerHealthBonusForDifficulty[Spielertyp][Schwierigkeit]` | dieselbe Funktion | **nein**, dieselbe Bedingung; für Computerspieler ohnehin 1,0 |
-| Spielmodus | `GameLogic/System/GameLogic.cpp`, `GameLogic::isInSinglePlayerGame`: nur `GAME_SINGLE_PLAYER` (oder dessen Wiedergabe). Das Skirmish-Menü startet `GAME_SKIRMISH` (`SkirmishGameOptionsMenu.cpp`, `reallyDoStart`: `MSG_NEW_GAME` mit `GAME_SKIRMISH`) | – |
-| Slot → Schwierigkeit | `GameLogic::startNewGame`: `SLOT_EASY_AI`/`SLOT_MED_AI`/`SLOT_BRUTAL_AI` → `skirmishDifficulty` = `DIFFICULTY_EASY`/`NORMAL`/`HARD`; `Player::initFromDict` gibt es an `AIPlayer::setAIDifficulty`; `Player::getPlayerDifficulty` liefert es | ja – die Achse selbst existiert je Computerspieler |
-| Zahl der Sammler | `GameLogic/AI/AIPlayer.cpp`, `AIPlayer::checkForSupplyCenter` (`AISideInfo::m_easy/m_normal/m_hard`) | ja, aber wirkungslos: die ausgelieferten Werte sind je Seite gleich |
-| Skripte mit Leicht/Normal/Schwer-Flaggen | `ScriptEngine::executeScript` (`Script::isEasy/isNormal/isHard` gegen `Player::getPlayerDifficulty`), `TeamPrototype::evaluateProductionCondition` (`Common/RTS/Team.cpp`) | ja – das ist der eigentliche Unterschied der drei Armeen (`SkirmishScripts.scb`) |
-| Gemeinsames Teamziel | `Team::setTeamTargetObject` (`Team.cpp`): ein Computerspieler der Stufe leicht setzt kein gemeinsames Angriffsziel | ja, aber nur für Skript-Teams |
-| Opferwahl beim Angriff auf einen Trupp | `AIAttackSquadState::chooseVictim` (`GameLogic/AI/AIStates.cpp`): leicht zufällig, normal das nächste, schwer alle dasselbe | ja, aber nur über `aiAttackTeam` (Skriptaktion bzw. `AIGroup`) |
+| Weapon bonus `SOLO_AI_*` / `SOLO_HUMAN_*` on every object of the player | `Common/RTS/Player.cpp`, `Player::friend_applyDifficultyBonusesForObject` (called from `Object::setReceivingDifficultyBonus`, `Object.cpp`; `Object::initObject` sets it as long as `ScriptEngine::getObjectsShouldReceiveDifficultyBonus` holds) | **no** – the entire body is under `if (TheGameLogic->isInSinglePlayerGame())` |
+| Hit point factor `m_soloPlayerHealthBonusForDifficulty[Spielertyp][Schwierigkeit]` | the same function | **no**, the same condition; for computer players 1.0 anyway |
+| Game mode | `GameLogic/System/GameLogic.cpp`, `GameLogic::isInSinglePlayerGame`: only `GAME_SINGLE_PLAYER` (or its replay). The skirmish menu starts `GAME_SKIRMISH` (`SkirmishGameOptionsMenu.cpp`, `reallyDoStart`: `MSG_NEW_GAME` with `GAME_SKIRMISH`) | – |
+| Slot → difficulty | `GameLogic::startNewGame`: `SLOT_EASY_AI`/`SLOT_MED_AI`/`SLOT_BRUTAL_AI` → `skirmishDifficulty` = `DIFFICULTY_EASY`/`NORMAL`/`HARD`; `Player::initFromDict` passes it to `AIPlayer::setAIDifficulty`; `Player::getPlayerDifficulty` delivers it | yes – the axis itself exists per computer player |
+| Number of gatherers | `GameLogic/AI/AIPlayer.cpp`, `AIPlayer::checkForSupplyCenter` (`AISideInfo::m_easy/m_normal/m_hard`) | yes, but without effect: the shipped values are the same per side |
+| Scripts with easy/normal/hard flags | `ScriptEngine::executeScript` (`Script::isEasy/isNormal/isHard` against `Player::getPlayerDifficulty`), `TeamPrototype::evaluateProductionCondition` (`Common/RTS/Team.cpp`) | yes – that is the actual difference of the three armies (`SkirmishScripts.scb`) |
+| Common team target | `Team::setTeamTargetObject` (`Team.cpp`): a computer player of the level easy sets no common attack target | yes, but only for script teams |
+| Choice of victim when attacking a squad | `AIAttackSquadState::chooseVictim` (`GameLogic/AI/AIStates.cpp`): easy random, normal the nearest, hard all the same one | yes, but only via `aiAttackTeam` (script action or `AIGroup`) |
 
-Es gibt keine weitere Stelle, die `getPlayerDifficulty`, `getAIDifficulty` oder `m_difficulty` liest (gesucht in `GameEngine/Source/Common` und `GameEngine/Source/GameLogic`).
+There is no further place that reads `getPlayerDifficulty`, `getAIDifficulty` or `m_difficulty` (searched in `GameEngine/Source/Common` and `GameEngine/Source/GameLogic`).
 
-### 35.3 Folgerung
+### 35.3 Conclusion
 
-- Die beiden Zahlenwirkungen der Daten (Feuerrate 80 %/120 %, Lebenspunkte) sind **Kampagnenregeln** („Solo“), keine Skirmish-Regeln. Sie auf Skirmish-Gegner anzuwenden wäre erfundenes Tuning.
-- Die im Skirmish wirksame Schwierigkeit des Originals steckt in den KI-Skripten und in zwei Team-Verhalten, die an Skript-Teams hängen. Dieses Projekt führt `SkirmishScripts.scb`
-  nicht aus (`SkirmishAi` ersetzt sie, §19/§32) und `SkirmishAi` arbeitet ohne Skript-Teams; eine Nachbildung wäre Imitation, kein Beleg. **Das bleibt der Unterschied zum Original.**
-- Der eine Computerspieler dieser Simulation entspricht damit `DIFFICULTY_NORMAL`: kein Bonus, kein Malus. Die Einrichtung bietet deshalb `GUI:Open`, `GUI:Closed` und `GUI:MediumAI`
-  („Medium Army“) – ein Eintrag des Originals in seiner Bedeutung, statt dreier, die dasselbe starten. `GameShell.SkirmishDifficultyIgnored` ist entfallen.
-- **Nebenbefund, nicht bearbeitet:** dieselbe Funktion gilt in Kampagnenmissionen, und dort wendet diese Simulation sie **nicht** an – `MissionOptions.Difficulty` steuert nur die
-  Skriptflaggen (`ScriptEngine`), weder der Waffenbonus `SOLO_AI_EASY/HARD` noch `HumanSoloPlayerHealthBonus_Easy/Hard` wirken; auch die Skriptaktion, die den Bonus je Karte
-  ab- und anschaltet (`OBJECT_ALLOW_BONUSES`, `ScriptActions::doEnableOrDisableObjectDifficultyBonuses`), ist nur aufgezeichnet und hat keinen Verbraucher. Auf „normal“ ist das ohne Wirkung (100 %), auf „leicht“/„schwer“ weicht
-  eine Mission vom Original ab. Das lag außerhalb dieses Auftrags (Skirmish) und ist eine Entscheidung vor dem Einfrieren der Simulation.
+- The two numeric effects of the data (rate of fire 80 %/120 %, hit points) are **campaign rules** ("solo"), not skirmish rules. Applying them to skirmish opponents would be invented tuning.
+- The difficulty of the original that is effective in skirmish lies in the AI scripts and in two team behaviours that depend on script teams. This project does not execute `SkirmishScripts.scb`
+  (`SkirmishAi` replaces them, §19/§32) and `SkirmishAi` works without script teams; a replica would be imitation, not evidence. **That remains the difference from the original.**
+- The one computer player of this simulation thus corresponds to `DIFFICULTY_NORMAL`: no bonus, no malus. The setup therefore offers `GUI:Open`, `GUI:Closed` and `GUI:MediumAI`
+  ("Medium Army") – one entry of the original in its meaning, instead of three that start the same thing. `GameShell.SkirmishDifficultyIgnored` has been dropped.
+- **Side finding, not worked on:** the same function applies in campaign missions, and there this simulation does **not** apply it – `MissionOptions.Difficulty` controls only the
+  script flags (`ScriptEngine`), neither the weapon bonus `SOLO_AI_EASY/HARD` nor `HumanSoloPlayerHealthBonus_Easy/Hard` take effect; the script action that switches the bonus off and on
+  per map (`OBJECT_ALLOW_BONUSES`, `ScriptActions::doEnableOrDisableObjectDifficultyBonuses`) is also only recorded and has no consumer. On "normal" this is without effect (100 %), on "easy"/"hard"
+  a mission deviates from the original. That lay outside this brief (skirmish) and is a decision before the freezing of the simulation.
 
-### 35.4 Messung (Release, 5. Oktober 2026)
+### 35.4 Measurement (Release, 5 October 2026)
 
-Kein Quelltext von `CnCNew.Simulation`, `CnCNew.Data` oder `tools/CnCNew.SimTool` wurde geändert; die Läufe bestätigen den Stand und sind zugleich „vorher“ und „nachher“.
-Eine Wirkungstabelle Leicht/Schwer gibt es nicht, weil es keine Wirkung gibt; `SimTool ai-match` hat keine Option `--difficulty` bekommen.
+No source of `CnCNew.Simulation`, `CnCNew.Data` or `tools/CnCNew.SimTool` was changed; the runs confirm the state and are "before" and "after" at the same time.
+There is no effect table easy/hard because there is no effect; `SimTool ai-match` has not received an option `--difficulty`.
 
-| Lauf | Ergebnis | Endhash | Kette | Lauf 2 / Fortsetzung aus Snapshot |
+| Run | Result | Final hash | Chain | Run 2 / continuation from snapshot |
 | --- | --- | --- | --- | --- |
-| `SimTool reference-match` | FactionGLA bei Tick 14.490 | `23B4B25DF62765D8` | `DE5849AF9F8493C4` | identisch / identisch |
-| `SimTool stress` (216.000 Ticks) | – | `56882F763EABEF67` | `B8E663493F2C73D5` | identisch |
-| `ai-match` Alpine Assault, `FactionChina,FactionGLA`, 45.000 Ticks | FactionChina bei 23.310 | `54DD2C9094141CC8` | `582FA4C6DF853C4B` | identisch / identisch |
-| `ai-match` Alpine Assault, `FactionAmerica,FactionChina` | FactionAmerica bei 16.965 | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` | identisch / identisch |
-| `ai-match` Alpine Assault, `FactionGLA,FactionAmerica` | FactionAmerica bei 8.895 | `23A93C58C775A691` | `B29CF881F6B1CC59` | identisch / identisch |
+| `SimTool reference-match` | FactionGLA at tick 14,490 | `23B4B25DF62765D8` | `DE5849AF9F8493C4` | identical / identical |
+| `SimTool stress` (216,000 ticks) | – | `56882F763EABEF67` | `B8E663493F2C73D5` | identical |
+| `ai-match` Alpine Assault, `FactionChina,FactionGLA`, 45,000 ticks | FactionChina at 23,310 | `54DD2C9094141CC8` | `582FA4C6DF853C4B` | identical / identical |
+| `ai-match` Alpine Assault, `FactionAmerica,FactionChina` | FactionAmerica at 16,965 | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` | identical / identical |
+| `ai-match` Alpine Assault, `FactionGLA,FactionAmerica` | FactionAmerica at 8,895 | `23A93C58C775A691` | `B29CF881F6B1CC59` | identical / identical |
 
-## 36. Abschluss Phase 17 (6. Oktober 2026): zweites Versorgungszentrum der KI; Heeresauswahl nach Wert gemessen und verworfen
+## 36. Completion of Phase 17 (6 October 2026): second supply center of the AI; army selection by value measured and discarded
 
-*Historisch (30 Hz, Stand dieses Abschnitts): die Tabellen, Siegticks und Hashes hier sind überholt; maßgeblich ist `baselines/reference-manifest.json` (seit `ea52f87` bei 60 Hz), die aktuellen Werte stehen in §43.9.*
+*Historical (30 Hz, state of this section): the tables, victory ticks and hashes here are superseded; authoritative is `baselines/reference-manifest.json` (since `ea52f87` at 60 Hz), the current values are in §43.9.*
 
-### 36.1 Befund und Regel
+### 36.1 Finding and rule
 
-Die fünf Patts aus §33.6 enden alle gleich: das Lager neben dem Versorgungszentrum ist leer, das nächste gefüllte liegt 500 bis 1.200 Einheiten entfernt, und ein weiteres Zentrum plante `SkirmishAi` nur mit
-einer Armee von zehn Einheiten (`PlanGoals`) – die es ohne Einkommen nie mehr gab. In der Referenz entscheiden die Skirmish-Skripte, wann ein weiteres Zentrum gebaut wird (`AI_PLAYER_BUILD_SUPPLY_CENTER` →
-`AIPlayer::buildBySupplies`, Bedingung `SUPPLY_SOURCE_SAFE` → `AIPlayer::isSupplySourceSafe`); diese Skripte führt das Projekt nicht aus. Die Regel hier nimmt deshalb die Bausteine der Referenz und eine eigene
-Auslösebedingung:
+The five stalemates from §33.6 all end the same way: the supply depot next to the supply center is empty, the nearest filled one lies 500 to 1,200 units away, and `SkirmishAi` planned a further center only with
+an army of ten units (`PlanGoals`) – which without income never existed again. In the reference the skirmish scripts decide when a further center is built (`AI_PLAYER_BUILD_SUPPLY_CENTER` →
+`AIPlayer::buildBySupplies`, condition `SUPPLY_SOURCE_SAFE` → `AIPlayer::isSupplySourceSafe`); the project does not execute these scripts. The rule here therefore takes the building blocks of the reference and a trigger
+condition of its own:
 
-| Baustein | Referenz (`GameLogic/AI/AIPlayer.cpp`) | hier (`Skirmish/SkirmishAi.cs`) |
+| Building block | Reference (`GameLogic/AI/AIPlayer.cpp`) | here (`Skirmish/SkirmishAi.cs`) |
 | --- | --- | --- |
-| Was ein Zentrum noch sammeln kann | `AIPlayer::queueSupplyTruck`: „Make sure we have supplies near it“ – Lager im Umkreis `SUPPLY_CENTER_CLOSE_DIST` (20 Zellen) plus Radius, nicht feindlich, mit Kisten; ein Zentrum ohne solche Quelle bekommt keine Sammler mehr | `SupplyStockInReach`: Summe der Kistenwerte dieser Lager über alle eigenen Zentren |
-| Wohin das nächste Zentrum | `AIPlayer::findSupplyCenter` (schon seit Phase 16: `FindSupplySource`) | unverändert |
-| Ob die Quelle sicher ist | `AIPlayer::isSupplySourceSafe` → `isLocationSafe`: kein Feind im Umkreis `SupplyCenterSafeRadius` (AIData.ini: 300) plus Radius; Sammler, Dozer und unbedeutende Gebäude zählen nicht | `SupplySourceSafe`: sichtbare feindliche Einheiten und bewaffnete Gebäude sowie erinnerte bewaffnete Gebäude (nur was der Spieler sieht oder gesehen hat; die Referenz liest die Partition) |
-| **Auslöser** | Skript (nicht ausgeführt) | **eigen:** sobald der Vorrat in Reichweite unter 3.000 Credits fällt (`LowSupplyStock`), höchstens vier Zentren; das Ziel steht dann vor allen anderen Bauzielen, und solange das Geld nicht reicht, hält die Heeresproduktion den Preis zurück (die vorhandene Rücklage von `BuildStructures`) |
-| Untätige Sammler | – | `OrderCarriers` schickt sie zum nächsten Lager, das noch etwas enthält (vorher: zum nächsten, auch wenn es leer war) |
+| What a center can still gather | `AIPlayer::queueSupplyTruck`: "Make sure we have supplies near it" – supply depots within the radius `SUPPLY_CENTER_CLOSE_DIST` (20 cells) plus radius, not hostile, with boxes; a center without such a source gets no more gatherers | `SupplyStockInReach`: sum of the box values of these supply depots over all own centers |
+| Where the next center goes | `AIPlayer::findSupplyCenter` (already since Phase 16: `FindSupplySource`) | unchanged |
+| Whether the source is safe | `AIPlayer::isSupplySourceSafe` → `isLocationSafe`: no enemy within the radius `SupplyCenterSafeRadius` (AIData.ini: 300) plus radius; gatherers, dozers and insignificant buildings do not count | `SupplySourceSafe`: visible enemy units and armed buildings as well as remembered armed buildings (only what the player sees or has seen; the reference reads the partition) |
+| **Trigger** | script (not executed) | **own:** as soon as the stock in reach falls below 3,000 credits (`LowSupplyStock`), at most four centers; the goal then stands before all other construction goals, and as long as the money does not suffice, army production holds back the price (the existing reserve of `BuildStructures`) |
+| Idle gatherers | – | `OrderCarriers` sends them to the nearest supply depot that still contains something (before: to the nearest, even if it was empty) |
 
-Die Schwelle 3.000 ist eine eigene Wahl (das Zentrum muss aus dem Resteinkommen noch bezahlbar sein), kein Wert der Daten. Einen Unit-Test hat die Regel nicht: die synthetische Fixture kennt kein
-Versorgungszentrum mit Andockmodul; belegt ist sie durch die 16 Läufe unten.
+The threshold 3,000 is a choice of our own (the center must still be affordable from the remaining income), not a value of the data. The rule has no unit test: the synthetic fixture knows no
+supply center with a dock module; it is evidenced by the 16 runs below.
 
-### 36.2 Die 16 KI-Läufe (Release, `ai-match … --max-ticks 45000`, Standardseeds; vorher = Stand `1a1732c`, nachher = `6eb7ae4`)
+### 36.2 The 16 AI runs (Release, `ai-match … --max-ticks 45000`, default seeds; before = state `1a1732c`, after = `6eb7ae4`)
 
-| Karte | Paarung | vorher | **nachher** | Endhash nachher | Kette nachher |
+| Map | Pairing | before | **after** | final hash after | chain after |
 |---|---|---|---|---|---|
-| Alpine Assault | China, GLA | China, Tick 23.310 | China, Tick 23.370 | `0BD4FE5EEB2C37E7` | `BF9939E5A3B45736` |
-| Alpine Assault | America, China | America, Tick 16.965 | unverändert | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` |
-| Alpine Assault | GLA, America | America, Tick 8.895 | unverändert | `23A93C58C775A691` | `B29CF881F6B1CC59` |
-| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | Patt | Patt | `D99B60905846A6B1` | `80EDA8449C86CEE6` |
-| Armored Fury | China, GLA | Patt | Patt | `7196F712342A3BDA` | `FF370FDA722BFA3B` |
-| Armored Fury | America, China | America, Tick 19.095 | America, Tick 19.095 (anderer Hash) | `0E0E07558397DB62` | `E41C4EF3D1DFBEF4` |
-| Armored Fury | GLA, America | America, Tick 37.365 | America, Tick 29.865 | `58B066C7284C21B2` | `64E8453DEE5297E4` |
-| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | Patt | Patt | `7AC8B5574DE21417` | `68F33BE69B8EDF6D` |
-| Bitter Winter | China, GLA | China, Tick 17.220 | unverändert | `26CD35AC8AA660F5` | `2B86E2038EDFAAB7` |
-| Bitter Winter | America, China | Patt | **America, Tick 33.750** | `38380B920A732955` | `5FED11D99834B1B6` |
-| Bitter Winter | GLA, America | America, Tick 8.895 | unverändert | `AB725263AEF8E3B7` | `CDFCDF66730FF07B` |
-| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | Patt | Patt | `9D040D6ACB8E269D` | `24F626B9E8F8CCA2` |
-| Death Valley | China, GLA | China, Tick 8.565 | unverändert | `9F0F8D7D28E8654D` | `90CDEBE18E7C6B01` |
-| Death Valley | America, China | America, Tick 9.330 | unverändert | `E98A532C90F89642` | `AC321A0CFA9C00E1` |
-| Death Valley | GLA, America | America, Tick 8.175 | unverändert | `3F33A4FEDEBA85C1` | `3B00774A84E69278` |
-| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | ChinaTankGeneral, Tick 32.475 | ChinaTankGeneral, Tick 31.770 | `FDAD90E9E139AFE9` | `6E2EE5C9DA09EFD1` |
+| Alpine Assault | China, GLA | China, tick 23,310 | China, tick 23,370 | `0BD4FE5EEB2C37E7` | `BF9939E5A3B45736` |
+| Alpine Assault | America, China | America, tick 16,965 | unchanged | `BA10AC1EB0EB8AC9` | `F669459C2FA6E39C` |
+| Alpine Assault | GLA, America | America, tick 8,895 | unchanged | `23A93C58C775A691` | `B29CF881F6B1CC59` |
+| Alpine Assault | ChinaTankGeneral, AmericaAirForceGeneral | stalemate | stalemate | `D99B60905846A6B1` | `80EDA8449C86CEE6` |
+| Armored Fury | China, GLA | stalemate | stalemate | `7196F712342A3BDA` | `FF370FDA722BFA3B` |
+| Armored Fury | America, China | America, tick 19,095 | America, tick 19,095 (different hash) | `0E0E07558397DB62` | `E41C4EF3D1DFBEF4` |
+| Armored Fury | GLA, America | America, tick 37,365 | America, tick 29,865 | `58B066C7284C21B2` | `64E8453DEE5297E4` |
+| Armored Fury | ChinaTankGeneral, AmericaAirForceGeneral | stalemate | stalemate | `7AC8B5574DE21417` | `68F33BE69B8EDF6D` |
+| Bitter Winter | China, GLA | China, tick 17,220 | unchanged | `26CD35AC8AA660F5` | `2B86E2038EDFAAB7` |
+| Bitter Winter | America, China | stalemate | **America, tick 33,750** | `38380B920A732955` | `5FED11D99834B1B6` |
+| Bitter Winter | GLA, America | America, tick 8,895 | unchanged | `AB725263AEF8E3B7` | `CDFCDF66730FF07B` |
+| Bitter Winter | ChinaTankGeneral, AmericaAirForceGeneral | stalemate | stalemate | `9D040D6ACB8E269D` | `24F626B9E8F8CCA2` |
+| Death Valley | China, GLA | China, tick 8,565 | unchanged | `9F0F8D7D28E8654D` | `90CDEBE18E7C6B01` |
+| Death Valley | America, China | America, tick 9,330 | unchanged | `E98A532C90F89642` | `AC321A0CFA9C00E1` |
+| Death Valley | GLA, America | America, tick 8,175 | unchanged | `3F33A4FEDEBA85C1` | `3B00774A84E69278` |
+| Death Valley | ChinaTankGeneral, AmericaAirForceGeneral | ChinaTankGeneral, tick 32,475 | ChinaTankGeneral, tick 31,770 | `FDAD90E9E139AFE9` | `6E2EE5C9DA09EFD1` |
 
-Entschieden: vorher 11, nachher **12**; kein Sieger wechselt; sieben Läufe sind hashgleich (die Regel greift dort nie), alle 16 sind in Lauf 2 und nach der Snapshot-Fortsetzung identisch. Die vier verbliebenen Patts
-(dreimal ChinaTankGeneral gegen AmericaAirForceGeneral, Armored Fury China/GLA) enden weiter mit Armeen aus der billigsten Infanterie vor einer Basisverteidigung. **Keine Balance-Aussage.** Unverändert, weil
-das Referenzszenario und der Stresstest `SkirmishAi` nicht benutzen: Referenzmatch Sieger FactionGLA bei Tick 14.490, `23B4B25DF62765D8`, Kette `DE5849AF9F8493C4`; Stresstest `56882F763EABEF67` / `B8E663493F2C73D5`.
+Decided: before 11, after **12**; no winner changes; seven runs are hash-identical (the rule never takes effect there), all 16 are identical in run 2 and after the snapshot continuation. The four remaining stalemates
+(three times ChinaTankGeneral versus AmericaAirForceGeneral, Armored Fury China/GLA) still end with armies of the cheapest infantry in front of a base defence. **No balance statement.** Unchanged, because
+the reference scenario and the stress test do not use `SkirmishAi`: reference match winner FactionGLA at tick 14,490, `23B4B25DF62765D8`, chain `DE5849AF9F8493C4`; stress test `56882F763EABEF67` / `B8E663493F2C73D5`.
 
-### 36.3 Heeresauswahl nach Wert und Reichweite: zwei Messrunden, zurückgenommen
+### 36.3 Army selection by value and range: two measurement rounds, reverted
 
-Versucht wurde, `ProduceArmy` nicht mehr zufällig aus dem gerade Bezahlbaren wählen zu lassen, sondern je Produzent die wertvollste Einheit (Preis, verdoppelt, wenn die Waffe weiter reicht als jede gesehene
-feindliche Basisverteidigung), Fabriken vor Kasernen, Sparen statt Kleinkauf. Abbruchkriterium der Sitzung: höchstens zwei Messrunden.
+The attempt was to no longer let `ProduceArmy` choose randomly from what is currently affordable, but per producer the most valuable unit (price, doubled if the weapon reaches further than any seen
+enemy base defence), factories before barracks, saving instead of small purchases. Abort criterion of the session: at most two measurement rounds.
 
-| Stand | 16 KI-Läufe entschieden | Was die Spur zeigt |
+| State | 16 AI runs decided | What the trace shows |
 | --- | --- | --- |
-| nur Versorgungsregel (§36.2) | **12** | – |
-| Runde 1: Wert = Preis × Reichweitenbonus | 10 | Preis ist kein Kampfwert: America baut 18 `AmericaTankAvenger` (Flugabwehr, 2.000 Credits), die vor der Basis stehen und nicht auf sie schießen können; China baut `ChinaVehicleTroopCrawler` |
-| Runde 2: nur Einheiten, deren Waffe Bodenziele trifft (`AntiGround`), keine Transporter | 11 | ein Patt endet (Armored Fury Tank/AirForce: ChinaTankGeneral bei 18.765), zwei Siege werden Patts (Armored Fury und Bitter Winter America/China) |
+| supply rule only (§36.2) | **12** | – |
+| Round 1: value = price × range bonus | 10 | price is not a combat value: America builds 18 `AmericaTankAvenger` (anti-air, 2,000 credits), which stand in front of the base and cannot shoot at it; China builds `ChinaVehicleTroopCrawler` |
+| Round 2: only units whose weapon hits ground targets (`AntiGround`), no transports | 11 | one stalemate ends (Armored Fury Tank/AirForce: ChinaTankGeneral at 18,765), two victories become stalemates (Armored Fury and Bitter Winter America/China) |
 
-Der Nur-Befehle-Agent der Missionen (`docs/SCRIPT-ENGINE.md` §9) mit der Fassung aus Runde 2: bei 15.000 Ticks unverändert 1 von 24, bei 60.000 Ticks **2 statt 3** Karten (`MD_CHI02` geht verloren, `MD_CHI01`
-endet bei Tick 20.733 statt 18.492). Die Änderung trägt also weder im Skirmish noch in den Missionen und ist **nicht im Code**. Was die Messung lehrt: der Preis taugt nicht als Maß, und Sparen hält die Armee
-länger unter der Angriffsschwelle. Ein tragfähiger Ansatz braucht einen Kampfwert je Ziel (Schaden gegen Rüstung, wie `WeaponSet`/`ArmorSet` ihn hergeben) und Teams statt Einzelkäufen
-(`AIPlayer::selectTeamToBuild`); das ist eine eigene, vermessene Arbeit hinter dem Programm aus `docs/MULTIPLAYER-PLAN.md`.
+The commands-only agent of the missions (`docs/SCRIPT-ENGINE.md` §9) with the version from round 2: at 15,000 ticks unchanged 1 of 24, at 60,000 ticks **2 instead of 3** maps (`MD_CHI02` is lost, `MD_CHI01`
+ends at tick 20,733 instead of 18,492). So the change holds up neither in skirmish nor in the missions and is **not in the code**. What the measurement teaches: the price is no good as a measure, and saving keeps the army
+below the attack threshold longer. A viable approach needs a combat value per target (damage against armor, as `WeaponSet`/`ArmorSet` provide it) and teams instead of single purchases
+(`AIPlayer::selectTeamToBuild`); that is a separate, measured piece of work behind the programme from `docs/MULTIPLAYER-PLAN.md`.
 
-## 37. Phase 18 (6. Oktober 2026): Referenzmanifest, Eingangsmanifest und Prüfmodus des inkrementellen Hashs
+## 37. Phase 18 (6 October 2026): reference manifest, input manifest and check mode of the incremental hash
 
-Keine Änderung an der Simulation. Neu sind zwei Dateien unter `baselines/` und die Werkzeugbefehle, die sie schreiben und prüfen (`tools/CnCNew.SimTool`: `ReferenceManifest.cs`, `InputManifest.cs`,
-`IncrementalHashCheck.cs`, `ManifestDocument.cs`, `CanonicalObjectHasher.cs`). Ab hier ist **das Manifest maßgeblich**; Hashwerte in dieser und anderen Dokumentationen sind Abschriften
-(`docs/MULTIPLAYER-PLAN.md` §6 Regel 2). Jede Änderung an den beiden Dateien ist Review-Gegenstand wie `baselines/compatibility.json`.
+No change to the simulation. New are two files under `baselines/` and the tool commands that write and check them (`tools/CnCNew.SimTool`: `ReferenceManifest.cs`, `InputManifest.cs`,
+`IncrementalHashCheck.cs`, `ManifestDocument.cs`, `CanonicalObjectHasher.cs`). From here on **the manifest is authoritative**; hash values in this and other documentation are transcripts
+(`docs/MULTIPLAYER-PLAN.md` §6 rule 2). Every change to the two files is a subject of review like `baselines/compatibility.json`.
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
@@ -1751,264 +1751,264 @@ dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifes
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest write game/content baselines/input-manifest.json
 ```
 
-### 37.1 Dateiform
+### 37.1 File form
 
-Beide Dateien sind eine strenge Teilmenge von JSON (`ManifestDocument`): nur Texte, ganze Zahlen, Wahrheitswerte und Objekte; keine Arrays, keine Brüche, kein `null`. Die Schreibweise ist eindeutig: UTF-8 ohne
-BOM, LF, zwei Leerzeichen je Ebene, Schlüssel auf jeder Ebene ordinal sortiert (Läufe stehen als Schlüssel in `runs`, also nach Id sortiert), Zahlen in invarianter Schreibweise, ein eigenes Escaping (nur `"`,
-`\` und Steuerzeichen unter U+0020; nicht das der Laufzeit, vgl. Befund D9). Die Dateien enthalten keine absoluten Pfade, Zeitstempel, Rechnernamen oder Laufzeiten; Karten stehen als logische Inhaltspfade.
-Der Leser lehnt alles außerhalb des Modells ab (auch doppelte Schlüssel und ein BOM). Zeiten stehen nur auf der Konsole (Fortschritt auf `stderr`, das Ergebnis je Lauf in Id-Reihenfolge auf `stdout`).
+Both files are a strict subset of JSON (`ManifestDocument`): only texts, integers, booleans and objects; no arrays, no fractions, no `null`. The notation is unambiguous: UTF-8 without
+BOM, LF, two spaces per level, keys on every level sorted ordinally (runs are keys in `runs`, hence sorted by id), numbers in invariant notation, an escaping of its own (only `"`,
+`\` and control characters below U+0020; not that of the runtime, cf. finding D9). The files contain no absolute paths, timestamps, machine names or run times; maps are given as logical content paths.
+The reader rejects everything outside the model (also duplicate keys and a BOM). Times appear only on the console (progress on `stderr`, the result per run in id order on `stdout`).
 
-### 37.2 Läufe des Referenzmanifests
+### 37.2 Runs of the reference manifest
 
-50 Läufe, davon 9 in der Stufe `quick`. `full` heißt „alle“; jede Zeile der Datei trägt ihre Stufe (`set`). `--only` wählt Läufe nach Id, unabhängig von der Stufe; unbekannte Ids sind ein Fehler
-(Exitcode 2). Seeds sind die Standardwerte der jeweiligen `…Options.Standard`, Tickrate 30.
+50 runs, of which 9 in the tier `quick`. `full` means "all"; every line of the file carries its tier (`set`). `--only` selects runs by id, independently of the tier; unknown ids are an error
+(exit code 2). Seeds are the default values of the respective `…Options.Standard`, tick rate 30.
 
-| Lauf (Id) | Art | Stufe | Parameter |
+| Run (id) | Kind | Tier | Parameters |
 |---|---|---|---|
-| `reference-match` | Retail-Referenzmatch (`ReferenceMatchScenario`) | quick | 13 Fraktionen, höchstens 216.000 Ticks |
-| `stress` | synthetischer Stresstest (`StressScenario`) | quick | 216.000 Ticks, Zielbestand 10.500 |
-| `<Karte>_<A>-<B>` (16) | KI gegen KI (`SkirmishMatchScenario`, wie `ai-match`) | 4 quick, 12 full | Alpine Assault, Armored Fury, Bitter Winter, Death Valley × China/GLA, America/China, GLA/America, ChinaTankGeneral/AmericaAirForceGeneral; `--max-ticks 45000` |
-| `ai8_TwilightFlame`, `ai8_FortressAvalanche`, `ai8_IronDragon` | acht KIs | full | die ersten acht spielbaren Fraktionen in Katalogreihenfolge (was `ai-match --players 8` nimmt, im Manifest ausgeschrieben), 9.000 Ticks |
-| `ai8_TwilightFlame_short` | acht KIs, gekürzt | quick | 3.000 Ticks |
-| `skirmish-sweep` | alle Karten mit mindestens zwei Startpositionen, zwei KIs, 3.000 Ticks | full | 150 Karten, 64 gespielt |
-| `mission_<Karte>[_<Fraktion>]` (27) | Mission über 3.000 Ticks (`MissionScenario`, wie `mission-run`) | 2 quick, 25 full | je Kampagne die erste und die letzte Mission |
+| `reference-match` | retail reference match (`ReferenceMatchScenario`) | quick | 13 factions, at most 216,000 ticks |
+| `stress` | synthetic stress test (`StressScenario`) | quick | 216,000 ticks, target population 10,500 |
+| `<Karte>_<A>-<B>` (16) | AI versus AI (`SkirmishMatchScenario`, like `ai-match`) | 4 quick, 12 full | Alpine Assault, Armored Fury, Bitter Winter, Death Valley × China/GLA, America/China, GLA/America, ChinaTankGeneral/AmericaAirForceGeneral; `--max-ticks 45000` |
+| `ai8_TwilightFlame`, `ai8_FortressAvalanche`, `ai8_IronDragon` | eight AIs | full | the first eight playable factions in catalog order (what `ai-match --players 8` takes, written out in the manifest), 9,000 ticks |
+| `ai8_TwilightFlame_short` | eight AIs, shortened | quick | 3,000 ticks |
+| `skirmish-sweep` | all maps with at least two start positions, two AIs, 3,000 ticks | full | 150 maps, 64 played |
+| `mission_<Karte>[_<Fraktion>]` (27) | mission over 3,000 ticks (`MissionScenario`, like `mission-run`) | 2 quick, 25 full | per campaign the first and the last mission |
 
-- **Quick-Auswahl der KI-Läufe:** `AlpineAssault_GLA-America`, `BitterWinter_GLA-America`, `DeathValley_America-China`, `DeathValley_China-GLA` – die kürzesten entschiedenen, drei Karten, jede Grundfraktion
-  mindestens zweimal. Quick-Missionen: `mission_MD_USA05`, `mission_MD_GLA05`.
-- **Acht Spieler:** Twilight Flame (486 × 469 Zellen, die größte Karte mit acht Startpositionen), Fortress Avalanche (418 × 413) und Iron Dragon (531 × 282, anderes Seitenverhältnis). Death Valley hat ebenfalls
-  acht Startpositionen, ist aber schon unter den Zwei-Spieler-Karten. 9.000 Ticks (fünf Spielminuten) sind eine Grenze der Laufzeit, kein Spielende: alle drei enden ohne Sieger. Ein solcher Lauf kostet hier
-  220 bis 305 s (Aufzeichnung und drei Wiedergaben), bei 45.000 Ticks wären es je Lauf deutlich über 20 Minuten.
-- **Missionen:** je Kampagne die erste und die letzte Mission ihrer Reihenfolge, bei nur einer Mission diese. Kampagnen, die dieselbe Karte mit derselben menschlichen Fraktion spielen, teilen sich den Lauf
-  (`MD_USA_1_DEMO` und `USA` → `mission_MD_USA01`; der Parameter `campaigns` nennt alle). Challenge-Kampagnen laufen mit ihrer Persona (`HumanFaction`, `ChallengeSides.HumanSideFor`), deshalb neun verschiedene
-  Läufe auf `GC_ChinaBoss`. Das ergibt 27 Läufe aus 17 Kampagnen. Die Karte von `MD_CAMPEA_DEMO` fehlt im Bestand; das steht als `unavailable` im Manifest und wird mitgeprüft.
-- **Sweep:** ein Eintrag mit Zählern (64 gestartet und beendet, 0 mit Sieger, 0 fehlgeschlagen, 75 Karten ohne und 11 mit nur einer Startposition), Endtick/Endhash/Kette je Karte und einem SHA-256 über
-  diese Zeilen (`combinedSha256`). Der Sweep spielt live und wird nicht wiedergegeben.
+- **Quick selection of the AI runs:** `AlpineAssault_GLA-America`, `BitterWinter_GLA-America`, `DeathValley_America-China`, `DeathValley_China-GLA` – the shortest decided ones, three maps, every base faction
+  at least twice. Quick missions: `mission_MD_USA05`, `mission_MD_GLA05`.
+- **Eight players:** Twilight Flame (486 × 469 cells, the largest map with eight start positions), Fortress Avalanche (418 × 413) and Iron Dragon (531 × 282, different aspect ratio). Death Valley also has
+  eight start positions, but is already among the two-player maps. 9,000 ticks (five game minutes) are a limit of the run time, not an end of the game: all three end without a winner. Such a run costs
+  220 to 305 s here (recording and three replays), at 45,000 ticks it would be well over 20 minutes per run.
+- **Missions:** per campaign the first and the last mission of its order, with only one mission that one. Campaigns that play the same map with the same human faction share the run
+  (`MD_USA_1_DEMO` and `USA` → `mission_MD_USA01`; the parameter `campaigns` names all). Challenge campaigns run with their persona (`HumanFaction`, `ChallengeSides.HumanSideFor`), hence nine different
+  runs on `GC_ChinaBoss`. That yields 27 runs from 17 campaigns. The map of `MD_CAMPEA_DEMO` is missing in the content; that is in the manifest as `unavailable` and is checked along.
+- **Sweep:** one entry with counters (64 started and ended, 0 with a winner, 0 failed, 75 maps without and 11 with only one start position), end tick/final hash/chain per map and a SHA-256 over
+  these lines (`combinedSha256`). The sweep plays live and is not replayed.
 
-Die in `docs/handoffs/HANDOFF-PHASE18.md` und §36.2 genannten Werte (Referenzmatch, Stresstest, 16 KI-Läufe, `MD_USA05`, `MD_GLA05`) stehen unverändert im Manifest.
+The values named in `docs/handoffs/HANDOFF-PHASE18.md` and §36.2 (reference match, stress test, 16 AI runs, `MD_USA05`, `MD_GLA05`) are in the manifest unchanged.
 
-### 37.3 Was je Lauf steht
+### 37.3 What is recorded per run
 
-`kind`, `set`, `parameters` (Karte, Fraktionen, Seeds, Tickgrenzen, Tickrate) und `results`. Für aufgezeichnete Läufe (Referenzmatch, Stresstest, KI): `endTick`, `outcome` (`winner`/`stalemate`/`none`),
-`winner`, `victoryTick`, `finalHash`, `chainHash` (Kette über alle Tick-Hashes von Lauf 1), Zahl der Befehle und SHA-256 des Befehlsstroms (die Replay-Datei ohne Prüfpunkte – unterscheidet „die KI hat anders
-entschieden“ von „die Welt hat anders gerechnet“), `identicalInRun2` (zweite frische Wiedergabe, Tick für Tick), `snapshotTick`/`snapshotBytes`/`snapshotSha256` und `identicalAfterSnapshotContinuation`
-(Snapshot bei halber Länge, Wiederherstellung, Rest; verglichen mit Lauf 1). Für Missionen zusätzlich Skript- und Objektzähler, `saveTick`, `hashAtSave` (vor dem Speichern), `hashAfterRestore` (aus der
-wiederhergestellten Sitzung) und zwei Wahrheitswerte:
+`kind`, `set`, `parameters` (map, factions, seeds, tick limits, tick rate) and `results`. For recorded runs (reference match, stress test, AI): `endTick`, `outcome` (`winner`/`stalemate`/`none`),
+`winner`, `victoryTick`, `finalHash`, `chainHash` (chain over all tick hashes of run 1), number of commands and SHA-256 of the command stream (the replay file without checkpoints – distinguishes "the AI decided
+differently" from "the world computed differently"), `identicalInRun2` (second fresh replay, tick by tick), `snapshotTick`/`snapshotBytes`/`snapshotSha256` and `identicalAfterSnapshotContinuation`
+(snapshot at half the length, restore, rest; compared with run 1). For missions additionally script and object counters, `saveTick`, `hashAtSave` (before saving), `hashAfterRestore` (from the
+restored session) and two booleans:
 
-- `identicalAfterSaveRestore`: gespeicherte und wiederhergestellte Sitzung laufen gleich weiter – das prüfen `mission-run` und das Kampagnen-Audit;
-- `identicalToUninterruptedRunAfterSaveRestore`: beide gleichen außerdem Lauf 1, der nie gespeichert wurde, und der Hash am Speicherpunkt ist vor und nach dem Laden derselbe.
+- `identicalAfterSaveRestore`: saved and restored session continue running the same – that is what `mission-run` and the campaign audit check;
+- `identicalToUninterruptedRunAfterSaveRestore`: both additionally equal run 1, which was never saved, and the hash at the save point is the same before and after loading.
 
-`write` schreibt, was gemessen wurde – auch einen falschen Wahrheitswert, mit Warnung. `check` rechnet alles neu und meldet je Lauf `OK` oder das **erste abweichende Feld** mit erwartetem und tatsächlichem
-Wert, dazu abweichende Kopfwerte (`simulation`: Tickrate, `CommandTypes.Version`, Replay-, Snapshot-Versionen) und Läufe, die nur die Datei oder nur das Werkzeug kennt; Exitcode 1 bei jeder Abweichung.
+`write` writes what was measured – also a false boolean, with a warning. `check` recomputes everything and reports per run `OK` or the **first deviating field** with expected and actual
+value, plus deviating header values (`simulation`: tick rate, `CommandTypes.Version`, replay, snapshot versions) and runs that only the file or only the tool knows; exit code 1 on every deviation.
 
-### 37.4 Befund D8 bestätigt: fünf Missionen tragen einen veralteten inkrementellen Hash
+### 37.4 Finding D8 confirmed: five missions carry a stale incremental hash
 
-In fünf der 27 Missionsläufe ist `identicalToUninterruptedRunAfterSaveRestore` **falsch** (so im Manifest festgehalten): `mission_MD_USA01`, `mission_MD_USA02`, `mission_MD_GLA03`, `mission_MD_GLA05`,
-`mission_GC_LaserGeneral_ChinaNukeGeneral`. `identicalAfterSaveRestore` ist überall wahr. Ursache: ein Objekt ändert seinen Zustand, ohne dass die Welt es als geändert kennt; sein alter Hash bleibt in der
-Summe, bis etwas alle Hashes neu rechnet – das tut `WorldSnapshot.Write` (`ComputeFullHash`). Die Sitzung hasht deshalb nach dem Speichern anders als ein Lauf, der nie gespeichert hat; die bisherigen Prüfungen
-verglichen nur die beiden Fortsetzungen miteinander und sahen es nicht. Für Lockstep heißt das: zwei Rechner mit demselben Zustand melden verschiedene Hashes, sobald einer von ihnen einen Snapshot schreibt.
-Die dokumentierten Missionshashes dieser fünf Karten (auch `MD_GLA05` `317B464E8BA98377`) sind Hashes mit veralteten Anteilen.
+In five of the 27 mission runs `identicalToUninterruptedRunAfterSaveRestore` is **false** (recorded as such in the manifest): `mission_MD_USA01`, `mission_MD_USA02`, `mission_MD_GLA03`, `mission_MD_GLA05`,
+`mission_GC_LaserGeneral_ChinaNukeGeneral`. `identicalAfterSaveRestore` is true everywhere. Cause: an object changes its state without the world knowing it as changed; its old hash stays in the
+sum until something recomputes all hashes – `WorldSnapshot.Write` does that (`ComputeFullHash`). The session therefore hashes differently after saving than a run that has never saved; the previous checks
+compared only the two continuations with each other and did not see it. For lockstep that means: two machines with the same state report different hashes as soon as one of them writes a snapshot.
+The documented mission hashes of these five maps (also `MD_GLA05` `317B464E8BA98377`) are hashes with stale parts.
 
-`--verify-incremental` ruft in Lauf 1 nach jedem Tick `SimulationWorld.VerifyIncrementalHash` auf (Stresstest: alle 1.000 Ticks; die Prüfung frischt die Zwischenstände auf, ein betroffener Lauf weicht danach
-auch im Hash ab). `--explain-incremental` nennt zusätzlich Objekt und Felder: es beschreibt jedes Objekt mit `Entity.Describe` und vergleicht dessen Hash mit dem von der Welt gemerkten (`Entity.CachedHash`,
-per Reflection gelesen – der einzige Zugriff auf Internes, kein Eingriff in die Simulation). Ergebnis (Stufe `quick` mit Erklärung, dazu die vier übrigen betroffenen Missionen einzeln):
+`--verify-incremental` calls `SimulationWorld.VerifyIncrementalHash` in run 1 after every tick (stress test: every 1,000 ticks; the check refreshes the intermediate states, an affected run then deviates
+in the hash as well). `--explain-incremental` additionally names object and fields: it describes every object with `Entity.Describe` and compares its hash with the one remembered by the world (`Entity.CachedHash`,
+read via reflection – the only access to internals, no intervention in the simulation). Result (tier `quick` with explanation, plus the four other affected missions individually):
 
-| Lauf | Ticks mit Abweichung | Objekt, Modul, Feld |
+| Run | Ticks with deviation | Object, module, field |
 |---|---|---|
-| Referenzmatch, 4 KI-Läufe, `ai8_TwilightFlame_short`, `MD_USA05` (je Tick), Stresstest (216 Stichproben) | 0 | – |
-| `mission_MD_GLA05` | 1 (nach Tick 854) | fünf `SupplyDock`: `SupplyWarehouseDockUpdate.boxes` (z. B. 400 → 740). Stelle: `SupplyWarehouseDockUpdate.SetCashValue` (`Modules/BuiltIn/DockModules.cs`) setzt `Entity.Dirty = true`, statt die Welt zu benachrichtigen – das Objekt steht nicht in der Dirty-Liste, und spätere `MarkDirty`-Aufrufe kehren wegen des gesetzten Flags sofort zurück. Aufrufer: Skriptaktion `WAREHOUSE_SET_VALUE` (`ScriptEngine.ExtendedActions.cs`) |
-| `mission_MD_USA01` | 4 (ab Tick 58) | `AmericaVehicleChinook`: `TransportContain.contained[]`, `usedSlots` beim Einsteigen |
-| `mission_MD_USA02` | 27 (ab Tick 1.338) | `CivilianBunker01`: `GarrisonContain.contained[]` (`id`, `since`) beim Besetzen; `AmericaCommandCenter`: `OCLSpecialPower.availableOnFrame` (0 → 2.485, Tick 2.455) |
-| `mission_MD_GLA03` | 29 (ab Tick 65) | `CivilianBunker01`, `GreekShop`, `GreekHouse2/3`, `AmericaFireBase`: `GarrisonContain.contained[]` |
-| `mission_GC_LaserGeneral_ChinaNukeGeneral` | 24 (ab Tick 37) | `GuardTower`: `GarrisonContain.contained[]`; `Lazr_AmericaParticleCannonUplink`: `ParticleUplinkCannonUpdate.pendingPath[]`, `pendingPathTick` (Tick 360) |
+| Reference match, 4 AI runs, `ai8_TwilightFlame_short`, `MD_USA05` (per tick), stress test (216 samples) | 0 | – |
+| `mission_MD_GLA05` | 1 (after tick 854) | five `SupplyDock`: `SupplyWarehouseDockUpdate.boxes` (e.g. 400 → 740). Place: `SupplyWarehouseDockUpdate.SetCashValue` (`Modules/BuiltIn/DockModules.cs`) sets `Entity.Dirty = true` instead of notifying the world – the object is not in the dirty list, and later `MarkDirty` calls return immediately because of the set flag. Caller: script action `WAREHOUSE_SET_VALUE` (`ScriptEngine.ExtendedActions.cs`) |
+| `mission_MD_USA01` | 4 (from tick 58) | `AmericaVehicleChinook`: `TransportContain.contained[]`, `usedSlots` on boarding |
+| `mission_MD_USA02` | 27 (from tick 1,338) | `CivilianBunker01`: `GarrisonContain.contained[]` (`id`, `since`) on garrisoning; `AmericaCommandCenter`: `OCLSpecialPower.availableOnFrame` (0 → 2,485, tick 2,455) |
+| `mission_MD_GLA03` | 29 (from tick 65) | `CivilianBunker01`, `GreekShop`, `GreekHouse2/3`, `AmericaFireBase`: `GarrisonContain.contained[]` |
+| `mission_GC_LaserGeneral_ChinaNukeGeneral` | 24 (from tick 37) | `GuardTower`: `GarrisonContain.contained[]`; `Lazr_AmericaParticleCannonUplink`: `ParticleUplinkCannonUpdate.pendingPath[]`, `pendingPathTick` (tick 360) |
 
-Gemeinsam ist den Fällen nach Augenschein, dass ein Skript den Zustand setzt (Besetzen, Einsteigen, Lagerwert, Spezialkraft, Strahlpfad); in keinem KI-Lauf der Stufe `quick` und nicht im Referenzmatch trat
-eine Abweichung auf. Nur die Stelle in `SetCashValue` ist im Quelltext nachgelesen; die Aufrufwege der anderen vier Felder sind nicht untersucht. **Nicht behoben** (Auftrag dieser Arbeit: melden, nicht
-ändern). Die Korrektur ändert die Hashes der fünf Missionen und gehört in einen eigenen Commit mit neuem Manifest; danach müssen die fünf Wahrheitswerte wahr sein. Nicht mit Erklärung gelaufen: die 12 KI-Läufe,
-die drei langen Acht-Spieler-Läufe, der Sweep und die übrigen 21 Missionen der Stufe `full` (deren Fortsetzung nach dem Laden gleicht dem ununterbrochenen Lauf, was einen veralteten Hash am Speicherpunkt bei
-Tick 1.500 ausschließt, nicht danach).
+By the look of it, the cases have in common that a script sets the state (garrisoning, boarding, warehouse value, special power, beam path); in no AI run of the tier `quick` and not in the reference match did
+a deviation occur. Only the place in `SetCashValue` has been read up in the source; the call paths of the other four fields have not been examined. **Not fixed** (brief of this work: report, do not
+change). The correction changes the hashes of the five missions and belongs in a commit of its own with a new manifest; afterwards the five booleans must be true. Not run with explanation: the 12 AI runs,
+the three long eight-player runs, the sweep and the remaining 21 missions of the tier `full` (their continuation after loading equals the uninterrupted run, which rules out a stale hash at the save point at
+tick 1,500, not after it).
 
-### 37.5 Eingangsmanifest
+### 37.5 Input manifest
 
-`baselines/input-manifest.json` beantwortet bei einer Abweichung zwischen zwei Rechnern zuerst die Frage, ob schon die Eingänge verschieden sind.
+On a deviation between two machines, `baselines/input-manifest.json` first answers the question whether the inputs are already different.
 
-| Abschnitt | Inhalt | Quelle |
+| Section | Content | Source |
 |---|---|---|
-| `definitions` | SHA-256, Länge und Zahl der Definitionen der Retail-Basisdaten (Karten-Overlays ausgeschlossen) | `DefinitionSnapshotWriter.ComputeFingerprint` |
-| `modelGeometry` | Hash der Knochentabelle (Flugplatz-Layouts aus den Modellen), Zahl der Flugplätze | `ModelGeometry.Fingerprint`, gebaut wie im Client (`ModelGeometryLoader`) |
-| `worldFingerprint` | was Welt, Replay und Speicherstand prüfen: Definitionen + Knochentabelle | `ModelGeometry.Combine` |
-| `catalogs` | je Katalog (`templates`, `weapons`, `upgrades`, `specialPowers`, `sciences`, `commands`, `factions`, `crates`, `creationLists`) und für den ganzen `TemplateCatalog` (`whole`, samt der Globalwerte aus `GameData.ini`) ein Inhalts-Hash, die Zahl der Einträge und der beschriebenen Werte | `CanonicalObjectHasher` |
-| `files` | Größe und SHA-256 von `Campaign.ini` und `ChallengeMode.ini` | Content-Manifest |
-| `maps` | je Karte (150): Größe und SHA-256 der Datei laut Content-Manifest, Gelände-Fingerabdruck, Zellen, Zahl der Startpositionen | `ContentFileSystem.GetEntry`, `TerrainMap.Fingerprint` |
+| `definitions` | SHA-256, length and number of definitions of the retail base data (map overlays excluded) | `DefinitionSnapshotWriter.ComputeFingerprint` |
+| `modelGeometry` | hash of the bone table (airfield layouts from the models), number of airfields | `ModelGeometry.Fingerprint`, built as in the client (`ModelGeometryLoader`) |
+| `worldFingerprint` | what world, replay and savegame check: definitions + bone table | `ModelGeometry.Combine` |
+| `catalogs` | per catalog (`templates`, `weapons`, `upgrades`, `specialPowers`, `sciences`, `commands`, `factions`, `crates`, `creationLists`) and for the whole `TemplateCatalog` (`whole`, including the global values from `GameData.ini`) a content hash, the number of entries and of the described values | `CanonicalObjectHasher` |
+| `files` | size and SHA-256 of `Campaign.ini` and `ChallengeMode.ini` | content manifest |
+| `maps` | per map (150): size and SHA-256 of the file according to the content manifest, terrain fingerprint, cells, number of start positions | `ContentFileSystem.GetEntry`, `TerrainMap.Fingerprint` |
 
-Die Kataloge haben keine eigene serialisierte Form. `CanonicalObjectHasher` beschreibt deshalb den Objektgraphen selbst: Zahlen, Wahrheitswerte und Enums als Wert, `decimal` invariant, Brüche als Bitmuster,
-Texte mit Länge; ein Struct ist seine Felder; ein Objekt ist der SHA-256 aus Typname und allen Instanzfeldern (auch privaten, auch der Basisklassen, ordinal nach Typ und Name sortiert – nicht in der
-Reihenfolge der Reflection); Arrays und Listen behalten ihre Reihenfolge, Dictionaries werden nach der Beschreibung des Schlüssels, Mengen nach der des Elements sortiert. Speicheradressen, Hashcodes der
-Laufzeit und Einfügereihenfolgen gehen nicht ein. Gemessen: 588.087 beschriebene Werte für den ganzen Katalog, drei unabhängige Prozesse liefern dieselbe Datei.
+The catalogs have no serialised form of their own. `CanonicalObjectHasher` therefore describes the object graph itself: numbers, booleans and enums as a value, `decimal` invariant, fractions as a bit pattern,
+texts with length; a struct is its fields; an object is the SHA-256 of type name and all instance fields (also private ones, also those of the base classes, sorted ordinally by type and name – not in the
+order of reflection); arrays and lists keep their order, dictionaries are sorted by the description of the key, sets by that of the element. Memory addresses, hash codes of the
+runtime and insertion orders do not enter. Measured: 588,087 described values for the whole catalog, three independent processes deliver the same file.
 
-**Abgedeckt** ist damit alles, was `TemplateCatalog.Build` aus den Definitionen und der Knochentabelle macht (Vorlagen samt geparster Moduldaten und allem, was sie referenzieren, Waffen, Upgrades,
-Wissenschaften, Spezialkräfte, Befehlssätze, Fraktionen, Kisten, Erzeugungslisten, Globalwerte).
+**Covered** by this is everything that `TemplateCatalog.Build` makes of the definitions and the bone table (templates including parsed module data and everything they reference, weapons, upgrades,
+sciences, special powers, command sets, factions, crates, creation lists, global values).
 
-**Nicht abgedeckt:**
-- Code. Delegates werden nur gezählt (366: je Modulbindung Parser und Fabrik); welches Programm die Daten auswertet, steht in keinem der beiden Manifeste (Befund D5: es gibt keine Kennung des Codestands).
-- Der Vergleicher eines Dictionaries (ordinal oder ohne Groß-/Kleinschreibung) und statischer Zustand.
-- Die dekodierten Kartenobjekte, Skripte und Wegpunkt-Ids sowie ihre Wandlung nach `Fixed` (Befunde D2/D5): der Gelände-Fingerabdruck enthält sie nicht. Sie sind nur mittelbar erfasst – über den Dateihash
-  und über die Missions- und KI-Läufe des Referenzmanifests.
-- Die Dateihashes werden dem Content-Manifest entnommen, nicht neu berechnet (die Laufzeit prüft beim Öffnen nur die Länge; den Inhalt prüft `AssetTool verify`).
-- Die synthetische Fixture des Stresstests (sie ist Quelltext).
-- Die Overlay-Definitionen der Karten (`map.ini`): die Läufe benutzen wie der Client die Retail-Basisdaten.
+**Not covered:**
+- Code. Delegates are only counted (366: per module binding parser and factory); which program evaluates the data is in neither of the two manifests (finding D5: there is no identifier of the code state).
+- The comparer of a dictionary (ordinal or case-insensitive) and static state.
+- The decoded map objects, scripts and waypoint ids as well as their conversion to `Fixed` (findings D2/D5): the terrain fingerprint does not contain them. They are captured only indirectly – via the file hash
+  and via the mission and AI runs of the reference manifest.
+- The file hashes are taken from the content manifest, not recomputed (the runtime checks only the length on opening; the content is checked by `AssetTool verify`).
+- The synthetic fixture of the stress test (it is source code).
+- The overlay definitions of the maps (`map.ini`): like the client, the runs use the retail base data.
 
-### 37.6 Ausführung und Laufzeiten
+### 37.6 Execution and run times
 
-Die Läufe sind unabhängig und werden von `--jobs N` Arbeitsthreads abgearbeitet (Standard: halbe Zahl der logischen Prozessoren), die schwersten zuerst. Jeder Arbeiter baut seine eigenen Kataloge (nichts aus
-der Simulation wird zwischen Threads geteilt; das Kompilieren läuft nacheinander); alle Arbeiter müssen denselben Welt-Fingerabdruck erreichen, sonst bricht der Lauf ab. Die Ausgabe hängt nicht von der
-Reihenfolge ab, in der Läufe fertig werden.
+The runs are independent and are processed by `--jobs N` worker threads (default: half the number of logical processors), the heaviest first. Every worker builds its own catalogs (nothing from
+the simulation is shared between threads; compiling runs sequentially); all workers must reach the same world fingerprint, otherwise the run aborts. The output does not depend on the
+order in which runs finish.
 
-Gemessen am 6. Oktober 2026 auf einem Rechner mit 16 logischen Prozessoren, Release, `--jobs 6`, **nicht ruhig** (andere Prozesse liefen mit): `write --set quick` 283 s; `write --set full` 1.663 s (27,7 min;
-davon etwa 13 Minuten zusammen mit einem zweiten eigenen Lauf); `check --set full` zweimal bestanden, 1.599 s (`--jobs 5`) und 1.438 s (24,0 min); `check --set quick` bestanden, 262 s;
-`input-manifest write` und `check` je 13 s. `check --set quick --verify-incremental`: 268 s, 60.896 Ticks geprüft, eine Abweichung (`mission_MD_GLA05`, §37.4) und deshalb Exitcode 1 –
-solange D8 offen ist, ist das der erwartete Ausgang dieses Modus. Längster Einzellauf ist `mission_MD_USA01`
-(632 s für 3.000 Ticks in dreieinhalb Durchgängen).
+Measured on 6 October 2026 on a machine with 16 logical processors, Release, `--jobs 6`, **not quiet** (other processes were running alongside): `write --set quick` 283 s; `write --set full` 1,663 s (27.7 min;
+of which about 13 minutes together with a second run of our own); `check --set full` passed twice, 1,599 s (`--jobs 5`) and 1,438 s (24.0 min); `check --set quick` passed, 262 s;
+`input-manifest write` and `check` 13 s each. `check --set quick --verify-incremental`: 268 s, 60,896 ticks checked, one deviation (`mission_MD_GLA05`, §37.4) and therefore exit code 1 –
+as long as D8 is open, that is the expected outcome of this mode. The longest single run is `mission_MD_USA01`
+(632 s for 3,000 ticks in three and a half passes).
 
 ### 37.7 Tests
 
-`tests/CnCNew.Simulation.Tests/Tests.ReferenceManifest.cs` (drei Tests): kanonische Schreibweise und Rundreise, strenges Lesen, „erstes abweichendes Feld“ an einem synthetischen Manifest, Unabhängigkeit des
-Inhalts-Hashs von Einfügereihenfolgen. `ManifestDocument.cs` und `CanonicalObjectHasher.cs` hängen nur von der BCL ab und werden als verknüpfte Quelldateien in das Testprojekt kompiliert (kein Verweis auf ein
-ausführbares Projekt, keine neue Abhängigkeit). Die Läufe selbst prüft `check`; ein Test über den realen Bestand wäre derselbe halbstündige Lauf.
+`tests/CnCNew.Simulation.Tests/Tests.ReferenceManifest.cs` (three tests): canonical notation and round trip, strict reading, "first deviating field" on a synthetic manifest, independence of the
+content hash from insertion orders. `ManifestDocument.cs` and `CanonicalObjectHasher.cs` depend only on the BCL and are compiled into the test project as linked source files (no reference to an
+executable project, no new dependency). The runs themselves are checked by `check`; a test over the real content would be the same half-hour run.
 
-### 37.8 Grenzen
+### 37.8 Limits
 
-- Ein Rechner, ein Betriebssystem, eine .NET-Version: das Manifest ist die Messlatte für die Determinismus-Matrix (Auftrag 3 der Phase 18), nicht ihr Ergebnis.
-- Missionen laufen 3.000 Ticks, Acht-Spieler-Läufe 9.000: spätes Spielgeschehen dieser Läufe ist nicht erfasst. Die 16 KI-Läufe decken bis zu 45.000 Ticks ab.
-- Der Sweep und die Missionen sind keine Replays; ihr Befehlsstrom steht nicht im Manifest.
-- `write --set quick` schreibt eine Datei nur mit den Quick-Läufen; die eingecheckte Datei wird mit `--set full` geschrieben.
+- One machine, one operating system, one .NET version: the manifest is the yardstick for the determinism matrix (brief 3 of Phase 18), not its result.
+- Missions run 3,000 ticks, eight-player runs 9,000: late game events of these runs are not captured. The 16 AI runs cover up to 45,000 ticks.
+- The sweep and the missions are not replays; their command stream is not in the manifest.
+- `write --set quick` writes a file with only the quick runs; the checked-in file is written with `--set full`.
 
-## 38. Phase 22 (6. Oktober 2026): Festkomma Q39.24, Formate und neue Referenzwerte
+## 38. Phase 22 (6 October 2026): fixed point Q39.24, formats and new reference values
 
-Das vollständige Protokoll (Vorarbeit, Vergleich aller Ergebnisgrößen, Überlaufanalyse, Matrix, Leistung, Zähler bei 60 und 120 Hz) ist `docs/FIXED-POINT-Q39-24.md`. Hier steht, was am Kern gilt.
+The complete log (preparatory work, comparison of all result quantities, overflow analysis, matrix, performance, counters at 60 and 120 Hz) is `docs/FIXED-POINT-Q39-24.md`. Here is what applies to the core.
 
-### 38.1 Numerik
+### 38.1 Numerics
 
-- `Fixed`: `long`, **24 Nachkommabits** (`Fixed.FractionBits`), Auflösung 2⁻²⁴, Bereich ± 5,5 · 10¹¹. Rundung unverändert (zur nächsten Zahl, Halbwerte weg von null), Überlauf wirft.
-  Neu: `Fixed.FromFraction(zähler, nenner)` für Konstanten, die ein Bruch sind, `Fixed.Epsilon` (ein Schritt). `ToDecimal()` ist bis 65.536 Einheiten exakt, darüber auf die 28 Stellen eines `decimal`
-  gerundet (weit unter einem halben Rohschritt).
-- `FixedMath` (`Numerics/FixedMath.cs`) trägt die Arithmetik auf Rohwerten mit der Bitzahl als Argument: Produkt, Quotient (schriftliche Division auf Maschinenworten für große Dividenden), Wurzel
-  (64-Bit-Wurzel plus bitweise Erweiterung gegen das exakte 128-Bit-Quadrat), π und seine Bruchteile, Arkustangens-Tabelle, `Atan2` (CORDIC, ein Schritt je Nachkommabit), `Sin`/`Cos`
-  (Taylor bis x¹³/x¹²). Konstanten mit 61 Nachkommabits, auf die Auflösung gerundet. Gemessener größter Fehler bei 24 Bit: `Sin` 1,0 · 10⁻⁷, `Cos` 1,2 · 10⁻⁷, `Atan2` 2,7 · 10⁻⁷ rad (bei 16 Bit:
-  2,6 · 10⁻⁵, 2,4 · 10⁻⁵, 5,9 · 10⁻⁵). Die frühere Angabe im Quelltext („`Atan2` unter 10⁻³ rad“) war eine Schranke, kein Messwert.
-- `FixedTrig.PiFraction(zähler, nenner)` für Winkelkonstanten (π/6 der Bewegung).
-- **Das Quadrat eines Werts über 741.455 passt nicht** (die Wurzel der größten Zahl). Die Daten enthalten solche Werte (Reichweiten 999.999 und 1.000.000, „sofort“-Geschwindigkeiten 999.999, Gesundheit 99.999.999,
-  `AbilityAbortRange` 10.000.000). Eine Reichweite, ein Radius oder eine Grenze wird deshalb nie mit `*` quadriert, sondern über **`SquaredReach`** (`Numerics/SquaredReach.cs`) mit einem Abstandsquadrat verglichen:
-  `SquaredReach.Of(reach).Contains(d²)` ist `d² <= reach * reach`, `ContainsStrictly` ist `<`, mit dem Quadrat in 128 Bit – bitgleich zum alten Ausdruck, wo der rechnen konnte, und „immer innerhalb“, wo das
-  Quadrat den Bereich verlässt. `Fixed.MultiplyDivide(a, b, c)` ist `a * b / c` mit beiden Rundungen für ein Produkt, das allein den Bereich verließe (Gesundheitsverhältnis). Der Katalogwert bleibt, was die
-  Daten sagen; nichts wird beim Laden gekappt. Der Befund der Phase 22 ist damit behoben, kein Referenzwert hat sich geändert (`docs/FIXED-POINT-Q39-24.md` §5a). Regel: `Tests.SquaredReachSourceRules`
-  (kein `x * x` in der Simulation außer Koordinatenkomponenten und 21 benannten Ausnahmen); Werkzeuge: `SimTool rate-audit <content> --ranges`, `SimTool range-audit <content>`.
-- **Die Simulation ist nicht insgesamt `checked`**, nur die Operatoren von `Fixed`. Rohwertrechnungen stehen in `checked(…)` oder rechnen in 128 Bit (`VisionMap`, `StructureToppleUpdate`,
+- `Fixed`: `long`, **24 fractional bits** (`Fixed.FractionBits`), resolution 2⁻²⁴, range ± 5.5 · 10¹¹. Rounding unchanged (to the nearest number, half values away from zero), overflow throws.
+  New: `Fixed.FromFraction(zähler, nenner)` for constants that are a fraction, `Fixed.Epsilon` (one step). `ToDecimal()` is exact up to 65,536 units, above that rounded to the 28 digits of a `decimal`
+  (far below half a raw step).
+- `FixedMath` (`Numerics/FixedMath.cs`) carries the arithmetic on raw values with the bit count as an argument: product, quotient (long division on machine words for large dividends), root
+  (64-bit root plus bitwise extension against the exact 128-bit square), π and its fractions, arctangent table, `Atan2` (CORDIC, one step per fractional bit), `Sin`/`Cos`
+  (Taylor up to x¹³/x¹²). Constants with 61 fractional bits, rounded to the resolution. Measured largest error at 24 bits: `Sin` 1.0 · 10⁻⁷, `Cos` 1.2 · 10⁻⁷, `Atan2` 2.7 · 10⁻⁷ rad (at 16 bits:
+  2.6 · 10⁻⁵, 2.4 · 10⁻⁵, 5.9 · 10⁻⁵). The earlier statement in the source ("`Atan2` below 10⁻³ rad") was a bound, not a measured value.
+- `FixedTrig.PiFraction(zähler, nenner)` for angle constants (π/6 of the movement).
+- **The square of a value above 741,455 does not fit** (the root of the largest number). The data contain such values (ranges 999,999 and 1,000,000, "instant" speeds 999,999, health 99,999,999,
+  `AbilityAbortRange` 10,000,000). A range, a radius or a limit is therefore never squared with `*`, but compared with a squared distance via **`SquaredReach`** (`Numerics/SquaredReach.cs`):
+  `SquaredReach.Of(reach).Contains(d²)` is `d² <= reach * reach`, `ContainsStrictly` is `<`, with the square in 128 bits – bit-identical to the old expression where that could compute, and "always within" where the
+  square leaves the range. `Fixed.MultiplyDivide(a, b, c)` is `a * b / c` with both roundings for a product that alone would leave the range (health ratio). The catalog value remains what the
+  data say; nothing is capped on loading. The finding of Phase 22 is thereby fixed, no reference value has changed (`docs/FIXED-POINT-Q39-24.md` §5a). Rule: `Tests.SquaredReachSourceRules`
+  (no `x * x` in the simulation except coordinate components and 21 named exceptions); tools: `SimTool rate-audit <content> --ranges`, `SimTool range-audit <content>`.
+- **The simulation is not `checked` as a whole**, only the operators of `Fixed`. Raw value computations are in `checked(…)` or compute in 128 bits (`VisionMap`, `StructureToppleUpdate`,
   `ConstructionHealthTarget`).
-- **Sichtkreise** (`VisionMap`): der Test „Zellmitte im Kreis“ ist bei 16 Nachkommabits definiert (Mittelpunkt und Radius darauf gekürzt), gleich welche Auflösung `Fixed` hat. Das Quadrat eines Radius über
-  46.340 Einheiten gilt als „größer als jedes Abstandsquadrat“ (`SquaredRadius`), was es für jede Zelle im Umkreis von 32.768 Einheiten ist; die Differenzen bleiben geprüft.
-- **Leerlauf-Scan der Türme:** der Bruchteil eines Zugs sind die niedrigsten 16 Bit des Hashs als führende Binärstellen, weitere Stellen aus den Bits darüber.
+- **Vision circles** (`VisionMap`): the test "cell centre in the circle" is defined at 16 fractional bits (centre and radius truncated to that), whatever resolution `Fixed` has. The square of a radius above
+  46,340 units counts as "greater than every squared distance" (`SquaredRadius`), which it is for every cell within 32,768 units; the differences remain checked.
+- **Idle scan of the turrets:** the fraction of a draw is the lowest 16 bits of the hash as leading binary digits, further digits from the bits above.
 
-### 38.2 Formate
+### 38.2 Formats
 
-`WorldSnapshot.Version` **10**, `ReplayFormat.CurrentVersion` **12**, `CommandTypes.Version` **15**, `MissionSnapshot.Version` **3**, `SaveGame.Version` **2**. Alle fünf tragen Rohwerte; ein Stand mit 16
-Nachkommabits (9 / 11 / 14 / 2 / 1) wird an seiner Version mit klarer Meldung abgelehnt und nie umgedeutet (`Tests.StatesOfSixteenFractionBitsAreRejected`, `Tests.Scripting`, `CampaignTests`). Die
-Versionsangaben in den Abschnitten davor sind Geschichte.
+`WorldSnapshot.Version` **10**, `ReplayFormat.CurrentVersion` **12**, `CommandTypes.Version` **15**, `MissionSnapshot.Version` **3**, `SaveGame.Version` **2**. All five carry raw values; a state with 16
+fractional bits (9 / 11 / 14 / 2 / 1) is rejected at its version with a clear message and never reinterpreted (`Tests.StatesOfSixteenFractionBitsAreRejected`, `Tests.Scripting`, `CampaignTests`). The
+version statements in the sections before are history.
 
-### 38.3 Referenzwerte (Messlatte: `baselines/reference-manifest.json`, Stand `d7fca91`)
+### 38.3 Reference values (yardstick: `baselines/reference-manifest.json`, state `d7fca91`)
 
-| Größe | Wert | vorher |
+| Quantity | Value | before |
 |---|---|---|
-| Referenzmatch (`ReferenceMatchOptions.Standard`, Treiber-Startwert jetzt `5EED0007`) | Sieger FactionGLA bei Tick **17.805**, Endhash `D0CA5F4EE456D6CE`, Kette `C5EE1090E1C24D7B` | bis Phase 21: Tick 14.490, `23B4B25DF62765D8` / `DE5849AF9F8493C4` (Startwert `5EED0005`); mit dem neuen Startwert bei 16 Bit: Tick 14.055, `AE9C688309DA37E4` / `FC6DFA759B1DCAF0` |
-| Stresstest (216.000 Ticks) | Endhash `56882F763EABEF67` (leerer Endzustand, unverändert), Kette **`754FA4DCB9A41DF7`** | Kette `B8E663493F2C73D5` |
-| 16 KI-Läufe | 12 entschieden; fünf mit anderem Ausgang als bei 16 Bit, ein Siegerwechsel (`docs/FIXED-POINT-Q39-24.md` §7.2) | 12 entschieden |
-| 27 Missionsläufe, Skirmish-Übersicht, 8-Spieler-Läufe | Ausgänge wie zuvor; neue Hashes | – |
-| Kampagne | Zielfahrer Sieg 24/24, Niederlage 24/24 (auf jeder Karte dasselbe Endskript im selben Tick wie bei 16 Bit); Audit 24/24 deterministisch und nach Speichern/Laden identisch, Endproben 13/24 und 15/24; Erreichbarkeit sauber 24/24 und 24/24 | dieselben Zahlen |
-| Welt-Fingerabdruck der Eingänge | `49A55E310F780F60` | – |
+| Reference match (`ReferenceMatchOptions.Standard`, driver seed now `5EED0007`) | winner FactionGLA at tick **17,805**, final hash `D0CA5F4EE456D6CE`, chain `C5EE1090E1C24D7B` | until Phase 21: tick 14,490, `23B4B25DF62765D8` / `DE5849AF9F8493C4` (seed `5EED0005`); with the new seed at 16 bits: tick 14,055, `AE9C688309DA37E4` / `FC6DFA759B1DCAF0` |
+| Stress test (216,000 ticks) | final hash `56882F763EABEF67` (empty final state, unchanged), chain **`754FA4DCB9A41DF7`** | chain `B8E663493F2C73D5` |
+| 16 AI runs | 12 decided; five with a different outcome than at 16 bits, one change of winner (`docs/FIXED-POINT-Q39-24.md` §7.2) | 12 decided |
+| 27 mission runs, skirmish overview, 8-player runs | outcomes as before; new hashes | – |
+| Campaign | objective driver victory 24/24, defeat 24/24 (on every map the same end script in the same tick as at 16 bits); audit 24/24 deterministic and identical after save/load, end probes 13/24 and 15/24; reachability clean 24/24 and 24/24 | the same numbers |
+| World fingerprint of the inputs | `49A55E310F780F60` | – |
 
-Der Startwert des Referenzmatchs wurde in einem eigenen Commit gewechselt (`41c3bc0`), weil das Match mit dem alten bei 24 Bit nicht endet; die Erhebung über 36 Startwerte steht in
-`docs/FIXED-POINT-Q39-24.md` §6. Die KI-Tabellen in §19, §32 und §36 und alle Hashes in den Abschnitten davor sind überholt.
+The seed of the reference match was changed in a commit of its own (`41c3bc0`) because with the old one the match does not end at 24 bits; the survey over 36 seeds is in
+`docs/FIXED-POINT-Q39-24.md` §6. The AI tables in §19, §32 and §36 and all hashes in the sections before are superseded.
 
-### 38.4 Werkzeuge
+### 38.4 Tools
 
-- `SimTool reference-manifest results <content> --out <json> [--commands <dir>] [--set quick|full] [--only …]`: je Lauf, was kein Hash ist (Ausgang, Endtick, Objekte und Geld je Spieler, Befehle nach Typ,
-  Ereignisse nach Art; Missionen: Ausgang, Tick und Name des Endskripts, Skriptzähler) – und auf Wunsch der Befehlsstrom als Text mit Mengen in ganzen Einheiten. Zwei Stände, die sich unterscheiden
-  **sollen** (Auflösung, Tickrate), werden damit verglichen: Größe für Größe und über die erste abweichende Befehlszeile.
-- `SimTool reference-match … [--world-seed HEX] [--driver-seed HEX] [--record-only]`: der Verlauf des Referenzmatchs unter anderen Startwerten.
-- `SimTool rate-audit <content> [--tick-rate N] [--ranges [--ranges-above N]]`: läuft auch bei 30 Hz und listet den Wertebereich des Katalogs (größter Betrag, jeder Wert über der Wurzel der größten Zahl;
-  mit `--ranges` den größten Betrag jedes Festkommafelds).
-- `SimTool range-audit <content> [--frames N] [--distance N]`: jedes Retail-Objekt mit einer Waffe bekommt einen Feuerbefehl auf einen Panzer und einen Soldaten; listet jeden Lauf, der wirft, und die Waffen
-  mit Werten über der Quadratgrenze.
-- `Tests.FixedScaleSourceRules`: die Skala steht einmal – kein `65536`/`16777216`/`<< 16`/`<< 24` in irgendeinem Projekt (33 benannte Ausnahmen), außerhalb der Simulation nur
-  `CnCNew.Presentation.FixedConvert`, kein Rohwert als Zahl.
+- `SimTool reference-manifest results <content> --out <json> [--commands <dir>] [--set quick|full] [--only …]`: per run, what is not a hash (outcome, end tick, objects and money per player, commands by type,
+  events by kind; missions: outcome, tick and name of the end script, script counters) – and on request the command stream as text with quantities in whole units. Two states that are **supposed** to
+  differ (resolution, tick rate) are compared with it: quantity by quantity and via the first deviating command line.
+- `SimTool reference-match … [--world-seed HEX] [--driver-seed HEX] [--record-only]`: the course of the reference match under other seeds.
+- `SimTool rate-audit <content> [--tick-rate N] [--ranges [--ranges-above N]]`: also runs at 30 Hz and lists the value range of the catalog (largest magnitude, every value above the root of the largest number;
+  with `--ranges` the largest magnitude of every fixed-point field).
+- `SimTool range-audit <content> [--frames N] [--distance N]`: every retail object with a weapon gets a fire command on a tank and a soldier; lists every run that throws, and the weapons
+  with values above the square limit.
+- `Tests.FixedScaleSourceRules`: the scale is stated once – no `65536`/`16777216`/`<< 16`/`<< 24` in any project (33 named exceptions), outside the simulation only
+  `CnCNew.Presentation.FixedConvert`, no raw value as a number.
 
-## 39. Phase 23 (7. Oktober 2026): Raten-Äquivalenz-Suite
+## 39. Phase 23 (7 October 2026): rate-equivalence suite
 
-Die Suite belegt, ob das Spiel bei 60 und 120 Hz *dasselbe Spiel* ist wie bei 30 Hz – nicht über Hashes (die können nicht übereinstimmen), sondern über gemessene Spielgrößen in Sekunden und
-Welteinheiten. Sie misst; sie entscheidet nicht, was richtig ist. Ihr erster Lauf **soll** breit fehlschlagen: die Liste der Fehlschläge ist der Arbeitsvorrat für Schritt 3 der Phase
-(`docs/handoffs/HANDOFF-PHASE23.md`). Dieser Abschnitt legt die Suite und ihre Toleranzen fest; die Toleranztabelle (§39.2) stand, bevor die Suite zum ersten Mal vollständig lief, und wird nie an ein
-Ergebnis angepasst.
+The suite shows whether the game at 60 and 120 Hz is *the same game* as at 30 Hz – not through hashes (they cannot match), but through measured game quantities in seconds and
+world units. It measures; it does not decide what is correct. Its first run **is meant to** fail broadly: the list of failures is the work backlog for step 3 of the phase
+(`docs/handoffs/HANDOFF-PHASE23.md`). This section defines the suite and its tolerances; the tolerance table (§39.2) was fixed before the suite ran completely for the first time, and is never adjusted to a
+result.
 
-### 39.1 Aufbau
+### 39.1 Structure
 
-- **Szenen und Messungen** liegen in `src/CnCNew.Simulation/Testing/RateEquivalence/` (Namensraum `CnCNew.Simulation.Testing`), damit Test und Werkzeug dieselben Fälle fahren. Der Ordner
-  unterliegt `SourceRules` wie die übrige Simulation: kein Fließkomma, keine Wandzeit, keine nackten Tickzahlen (Budgets in ganzen Sekunden über `RateScene.Seconds`, Laufzeiten über
-  `Time.WholeSecondsToTicks`), kein `x * x` auf Reichweiten. **Jeder Messwert ist eine ganze Zahl.**
-- **Typen:** `RateQuantityKind` (sechs Arten, §39.2), `RateQuantity(Name, Kind, Units, Present)`, `RateCase(Id, Group, Measure)`, `RateScene` (Rate, Katalog der Rate, flache Karte, zwei
-  verfeindete Spieler, die die ganze Karte sehen; die Welt entsteht beim ersten Zugriff), `RateQuantities`/`RateMeasure` (Helfer), `RateTolerance.Within(kind, reference30, value)`,
-  `RateCases.Group(catalogs, name)`/`RateCases.All(catalogs)` (feste Fälle und Generatoren), `RateRunner` (führt einen Fall bei drei Raten aus, bildet die Tabelle und die TSV-Datei).
-- **Einheiten:** Zeiten in 1/120 s (`Ticks · 120 / Rate`, bei 30, 60 und 120 Hz ganzzahlig), Strecken, Winkel und Mengen als Rohwert von `Fixed`, Anzahlen als Zahl.
-- **Zeitkonvention:** eine Zeit ist „der Tick, in dem es geschah, weniger der Tick, in dem der Befehl ausgeführt wurde“. Ein Befehl, der vor einem Schritt eingereicht wird, wird in diesem
-  Schritt ausgeführt; was im selben Schritt geschieht, hat die Zeit 0 – bei jeder Rate. (`RateScene.StepUntil` und `RateCases.Elapsed` halten das an einer Stelle.) Eine Messung beginnt mit
-  `RateScene.Align` an einer Bildgrenze des Originals (`world.Time.IsOriginalFrameBoundary`) und nach dem Schritt, der die Objekte erzeugt hat; jedes `Spawn` dauert ein Bild des Originals,
-  damit vor der Messung bei jeder Rate dieselbe Spielzeit vergangen ist. Die Suite fügt selbst keinen Versatz unter einem Bild hinzu.
-- **Längen von Wegen** werden einmal je Bild des Originals abgetastet (dieselben Sehnen bei jeder Rate); Gesundheit wird für „Bilder mit Heilung“ einmal je Bild verglichen.
-- **Raten:** die Suite nennt ihre Raten selbst (`RateCatalogs.Rates`: 30, 60, 120 Hz). Sie beachtet weder `--tick-rate` noch `TestRate.Default` und setzt nie `SimulationTime.Probe`.
-- **Katalog:** der echte Definitionsgraph wird einmal je Prozess kompiliert (`Tests.RateCatalogsOf`, `SimTool` `CompileGraph`), die drei Kataloge entstehen beim ersten Zugriff. Test und
-  Werkzeug bauen **ohne Modellgeometrie** (Park- und Startbahnpunkte der Flugfelder aus der Vorlagengeometrie), damit beide dieselben Zahlen drucken; `rate-compare` sagt das in seiner
-  ersten Zeile. Fälle entstehen aus dem 30-Hz-Katalog und werden in den anderen über den Vorlagen- bzw. Waffennamen wiedergefunden; was eine Szene aus Daten ableitet (Abstand, Fahrstrecke),
-  nimmt sie aus dem 30-Hz-Katalog (`RateScene.Reference`), damit die Szene bei jeder Rate dieselbe ist.
-- **Karte:** `FlatMap.Build` (derselbe Code wie bisher `SyntheticMaps.Build` der Tests, das jetzt dorthin delegiert; die Bytes der bestehenden Karten sind unverändert). Standard 400 × 400
-  Zellen (4.000 Einheiten), Flugfälle 600 × 600.
-- **Selbsterwerb aus:** Einheiten wählen in den Szenen keine Opfer selbst (`SimulationWorld.SelfAcquisition = false`), außer in der KI-Gruppe.
-- **Staging ohne Befehl:** wo es keinen Spielerbefehl gibt, ruft die Szene die Stelle auf, die der Befehl aufrufen würde, und sagt es im Quelltext: `SimulationWorld.FireWeaponAt` (Geschosse),
-  `JetAIUpdate.OrderLand` (Heimkehr eines Flugzeugs), `HackInternetAIUpdate.StartHacking`, `SimulationWorld.CompleteUpgrade`/`GrantScience`/`SetVeterancy`, `ISpecialPowerModule.SetReadyFrame`
-  (Übernahme ohne Wartezeit), die Flags der Waffensätze (`HasPlayerUpgradeWeapon`, `CrateWeaponLevel`). Schaden, Tötung und neutrale Objekte kommen über Systembefehle.
-- **Zwei Lesezugriffe sind neu** (keine Felder, kein Zustand): `ToppleUpdate.IsDown` und `ToppleUpdate.ToppleAngle`.
+- **Scenes and measurements** live in `src/CnCNew.Simulation/Testing/RateEquivalence/` (namespace `CnCNew.Simulation.Testing`), so that test and tool run the same cases. The folder
+  is subject to `SourceRules` like the rest of the simulation: no floating point, no wall-clock time, no bare tick counts (budgets in whole seconds through `RateScene.Seconds`, run times through
+  `Time.WholeSecondsToTicks`), no `x * x` on ranges. **Every measured value is an integer.**
+- **Types:** `RateQuantityKind` (six kinds, §39.2), `RateQuantity(Name, Kind, Units, Present)`, `RateCase(Id, Group, Measure)`, `RateScene` (rate, catalog of the rate, flat map, two
+  hostile players who see the whole map; the world is created on first access), `RateQuantities`/`RateMeasure` (helpers), `RateTolerance.Within(kind, reference30, value)`,
+  `RateCases.Group(catalogs, name)`/`RateCases.All(catalogs)` (fixed cases and generators), `RateRunner` (runs a case at three rates, builds the table and the TSV file).
+- **Units:** times in 1/120 s (`Ticks · 120 / Rate`, an integer at 30, 60 and 120 Hz), distances, angles and amounts as the raw value of `Fixed`, counts as a number.
+- **Time convention:** a time is "the tick in which it happened, minus the tick in which the command was executed". A command that is submitted before a step is executed in that
+  step; what happens in the same step has the time 0 – at every rate. (`RateScene.StepUntil` and `RateCases.Elapsed` keep that in one place.) A measurement begins with
+  `RateScene.Align` at a frame boundary of the original (`world.Time.IsOriginalFrameBoundary`) and after the step that created the objects; every `Spawn` takes one original frame,
+  so that before the measurement the same game time has passed at every rate. The suite itself adds no offset below one frame.
+- **Lengths of paths** are sampled once per original frame (the same chords at every rate); health is compared once per frame for "frames with healing".
+- **Rates:** the suite names its rates itself (`RateCatalogs.Rates`: 30, 60, 120 Hz). It observes neither `--tick-rate` nor `TestRate.Default` and never sets `SimulationTime.Probe`.
+- **Catalog:** the real definition graph is compiled once per process (`Tests.RateCatalogsOf`, `SimTool` `CompileGraph`), the three catalogs are created on first access. Test and
+  tool build **without model geometry** (parking and runway points of the airfields from the template geometry), so that both print the same numbers; `rate-compare` says so in its
+  first line. Cases are created from the 30 Hz catalog and are found again in the others through the template or weapon name; what a scene derives from data (distance, travel distance),
+  it takes from the 30 Hz catalog (`RateScene.Reference`), so that the scene is the same at every rate.
+- **Map:** `FlatMap.Build` (the same code as `SyntheticMaps.Build` of the tests so far, which now delegates to it; the bytes of the existing maps are unchanged). Default 400 × 400
+  cells (4,000 units), flight cases 600 × 600.
+- **Self-acquisition off:** units do not choose victims themselves in the scenes (`SimulationWorld.SelfAcquisition = false`), except in the AI group.
+- **Staging without a command:** where there is no player command, the scene calls the place that the command would call, and says so in the source: `SimulationWorld.FireWeaponAt` (projectiles),
+  `JetAIUpdate.OrderLand` (return home of an aircraft), `HackInternetAIUpdate.StartHacking`, `SimulationWorld.CompleteUpgrade`/`GrantScience`/`SetVeterancy`, `ISpecialPowerModule.SetReadyFrame`
+  (capture without waiting time), the flags of the weapon sets (`HasPlayerUpgradeWeapon`, `CrateWeaponLevel`). Damage, kills and neutral objects come through system commands.
+- **Two read accessors are new** (no fields, no state): `ToppleUpdate.IsDown` and `ToppleUpdate.ToppleAngle`.
 
-### 39.2 Toleranzen (vor dem ersten Lauf festgelegt; Bezug ist immer der 30-Hz-Wert, 60 **und** 120 Hz müssen innerhalb liegen)
+### 39.2 Tolerances (fixed before the first run; the reference is always the 30 Hz value, 60 **and** 120 Hz must lie within)
 
-| Art (`RateQuantityKind`) | Was | Zulässige Abweichung vom 30-Hz-Wert | Begründung |
+| Kind (`RateQuantityKind`) | What | Permitted deviation from the 30 Hz value | Reason |
 |---|---|---|---|
-| `ExactTime` | Dauern, die aus den Daten kommen und auf dem 30-Hz-Raster liegen: Schussabstand, Nachladen, `PreAttackDelay`, Bau-, Produktions- und Upgradezeit, Verkauf, Abklingzeiten, Lebensdauern, Skriptzeitgeber, `EndGameDelay` | **exakt gleich** | Phase 20 hat diese Zeiten auf das Raster des Originals gelegt (`docs/TICKRATE-MIGRATION.md` §2); jede Abweichung ist ein Ein-Tick-Versatz oder ein Zähler N + 1 |
-| `Count` | Anzahl von Schüssen, Pulsen, Ereignissen, Blitzen in fester Spielzeit | **exakt gleich** | Ereignisse im Raster fallen bei jeder Rate gleich oft |
-| `MovementEventTime` | Zeitpunkte, die aus Bewegung oder Integration folgen: Ankunft, Zeit bis zur Höchstgeschwindigkeit, Zeit für 90°/180°, Flugzeit, Aufschlag, Landung, Dauer eines Umsturzes, erster Schuss nach einem Turmschwenk | **\|Δ\| ≤ 1 Bild des Originals** (4/120 s) | feiner als ein Bild löst das Original nicht auf; ein Schritt mehr oder weniger an einer Schwelle ist höchstens ein Bild |
-| `Distance` | Strecken und Endlagen in Welteinheiten | **\|Δ\| ≤ 0,5 %** des 30-Hz-Werts, mindestens **0,5 Einheiten** | 0,5 % ist unter jeder im Spiel sichtbaren Größe; der Boden (ein Zwanzigstel einer Wegsuchzelle von 10 Einheiten) gilt für Größen nahe null wie den Ankunftsfehler |
-| `Angle` | Winkel in Radiant | **\|Δ\| ≤ 0,5 %** des 30-Hz-Werts, mindestens **0,01 rad** | wie `Distance`; 0,01 rad sind 0,57° |
-| `RateOver60s` | Mengen über feste Spielzeit: Schaden und Heilung je 60 s, Einkommen je 5 Minuten, Erstattung | **\|Δ\| ≤ 1 %** des 30-Hz-Werts | ein Puls mehr oder weniger an der Fenstergrenze bei über 100 Pulsen; darüber ist es ein Ratenfehler |
-| – | eine Größe, die bei einer Rate vorhanden ist und bei einer anderen fehlt (das Ereignis trat im Budget nicht ein) | **Fehlschlag** | |
-| – | eine Ausnahme bei einer Rate | **Fehlschlag** aller Größen dieser Rate, eigene Zeile `(exception)` | |
+| `ExactTime` | Durations that come from the data and lie on the 30 Hz grid: shot interval, reload, `PreAttackDelay`, build, production and upgrade time, sale, cooldowns, lifetimes, script timers, `EndGameDelay` | **exactly equal** | Phase 20 put these times on the grid of the original (`docs/TICKRATE-MIGRATION.md` §2); every deviation is a one-tick offset or a counter N + 1 |
+| `Count` | Number of shots, pulses, events, flashes in fixed game time | **exactly equal** | Events on the grid occur equally often at every rate |
+| `MovementEventTime` | Points in time that follow from movement or integration: arrival, time to top speed, time for 90°/180°, flight time, impact, landing, duration of a topple, first shot after a turret swing | **\|Δ\| ≤ 1 original frame** (4/120 s) | the original does not resolve finer than one frame; one step more or less at a threshold is at most one frame |
+| `Distance` | Distances and end positions in world units | **\|Δ\| ≤ 0.5 %** of the 30 Hz value, at least **0.5 units** | 0.5 % is below every quantity visible in the game; the floor (one twentieth of a pathfinding cell of 10 units) applies to quantities near zero such as the arrival error |
+| `Angle` | Angles in radians | **\|Δ\| ≤ 0.5 %** of the 30 Hz value, at least **0.01 rad** | like `Distance`; 0.01 rad is 0.57° |
+| `RateOver60s` | Amounts over fixed game time: damage and healing per 60 s, income per 5 minutes, refund | **\|Δ\| ≤ 1 %** of the 30 Hz value | one pulse more or less at the window boundary with over 100 pulses; above that it is a rate error |
+| – | a quantity that is present at one rate and missing at another (the event did not occur within the budget) | **failure** | |
+| – | an exception at one rate | **failure** of all quantities of that rate, own row `(exception)` | |
 
-Eine Größe, die bei **allen drei** Raten fehlt, ist weder bestanden noch ein Unterschied zwischen den Raten: sie steht als `unmeasured` in der Tabelle und wird gezählt, aber nicht als
-Fehlschlag gewertet. Die Zahlen stehen als Konstanten in `RateTolerance` (`OneOriginalFrameUnits`, `HalfPercentDivisor`, `OnePercentDivisor`, `DistanceFloorRaw`, `AngleFloorRaw`).
+A quantity that is missing at **all three** rates is neither passed nor a difference between the rates: it stands as `unmeasured` in the table and is counted, but not rated as a
+failure. The numbers stand as constants in `RateTolerance` (`OneOriginalFrameUnits`, `HalfPercentDivisor`, `OnePercentDivisor`, `DistanceFloorRaw`, `AngleFloorRaw`).
 
-### 39.3 Gruppen
+### 39.3 Groups
 
-| Gruppe | Fälle | Was gemessen wird |
+| Group | Cases | What is measured |
 |---|---|---|
-| `locomotion` | einer je verschiedenem Locomotor der Retail-Daten (nach den 30-Hz-Werten von `LocomotorInfo` zusammengefasst, das erste Objekt nach Namen steht für jeden) | Geradeausfahrt: Höchstgeschwindigkeit, Zeit und Strecke bis dahin, Bremsweg und -zeit, Ankunftszeit, Ankunftsfehler, Weglänge; Zeit für 90° und 180°; ein Quadratkurs (Zeit, Weglänge, Endfehler); der beschädigte Zustand (`SpeedDamaged` …) auf derselben Geraden |
-| `flight` | Raptor, Aurora, MiG und Comanche vom Flugfeld; Comanche und Chinook frei; der Fallschirmabwurf der Kommandozentrale; der Raptor-Angriff der Szenen-Audits | Produktion, Rollen zum Parkplatz, Start, Reiseflug, Kehre, Landung, Rollen; Steigen, Flug und Halt der Hubschrauber; Flugzeug, Abwurf und Landung der Fallschirmjäger; erster und letzter Schuss, Heimkehr und Nachladen |
-| `weapons` | einer je verschiedener Waffe, die ein Objekt in einem Standard-, Veteranen-, Upgrade- oder Kistensatz trägt (nach Zeiten, Schaden, Reichweite, Tempo und Geschoss zusammengefasst) | Befehl bis erster Schuss (bei Türmen als Bewegungsereignis), Schussabstand, Magazin, Nachladen, zweites Nachladen, Zeit des 20. Schusses (Feuerstufen), Schüsse und Schaden in 60 s auf ein Standardziel, erster Schaden nach dem ersten Schuss, wirksame Reichweite (Bisektion über die Frage, mit der ein Feuerbefehl geprüft wird) |
-| `projectiles` | einer je verschiedenem Geschoss einer Waffe (Geschossobjekt, Tempo, Streuung, Reichweite), nach Modul: `DumbProjectileBehavior`, `MissileAIUpdate`, `NeutronMissileUpdate`, andere | Flugzeit, Aufschlagpunkt, Scheitelhöhe und Weglänge auf einen Bodenpunkt; Flugzeit und Treffer auf ein stehendes und auf ein querfahrendes Ziel; mittlere Streuung über 40 Schüsse |
-| `turrets` | einer je verschiedenem Turm eines Bodenobjekts (Drehrate, Rückstellzeit, Scan- und Schwenkwerte) | Schwenk um 90° und 180° bis zum ersten Schuss, Turmwinkel beim Schuss, Halten und Rückkehr in die Ruhelage, Leerlauf-Scan (erster und dritter Blick, Blicke in 120 s, größter Winkel) |
-| `overtime` | einer je verschiedenem Feldobjekt (Gift, Strahlung, Feuer), Gift direkt, einer je verschiedenem `FlammableUpdate`, 18 Heil- und Reparaturfälle | Lebensdauer des Felds, Schadenspulse, Schaden und Tod von Panzer und Soldat; Brenndauer und Brandschaden; erste und zweite Heilung, Zeit bis zur vollen Gesundheit, Bilder mit Heilung, Heilung in 60 s (Selbstheilung, Basisregeneration, Sanitäter, Hospital, Reparaturbucht, Dozer, Reparaturdock, Kaserne, Tunnel, Truppentransporter) |
-| `economy` | 4 Baustellen, 7 Produktionen, 5 Upgrades, 3 Verkäufe, 3 Sammler, 3 Einkommensquellen | Baubeginn und Bauzeit; Produktionszeit, zweite Einheit, Verlassen der Fabrik; Upgradezeit; Verkauf und Erstattung; erste Lieferung, Umlauf, Lieferungen und Einkommen in 5 Minuten; Takt von Schwarzmarkt, Ölturm und Hacker |
-| `timed` | einer je Spezialkraft (Aufladen), je verschiedenem `LifetimeUpdate`/`DeletionUpdate`, je verschiedenem Satz `SlowDeathBehavior`, je verschiedenem `ToppleUpdate`, `StructureToppleUpdate`, `StructureCollapseUpdate`, `StealthUpdate`, `StealthDetectorUpdate`; dazu Hubschrauber-Absturz, Battle Bus, Minen, Sicht, Aufdeckung, gestufte Übernahme, Lawine, EMP, Feuersturm, Zug | Aufladezeit; Lebensdauer; Tötung bis Entfernung; Absturz; Umsturz (Dauer und Winkel), Einsturz; Minenschaden; Tarnung, Enttarnung, Aufdeckung; Sichtradius; Blitze und Dauer der Übernahme; Rutschweg der Lawine; EMP-Dauer; Anfahren, Bremsen und Halt des Zugs |
-| `scripts` | 5 Fälle mit synthetischen Kartenskripten auf dem echten Katalog | Zeitgeber in Sekunden und in Bildern (fest und zufällig), Zähler je Auswertung, Auswertungsverzögerung, Sequenzwartezeiten und -wege, `EndGameDelay` (`VICTORY`, `DEFEAT`, `QUICKVICTORY`) |
-| `ai` | 3 Paarungen der `SkirmishAi` auf einer flachen Karte, 8 Spielminuten | erster Befehl, erster Bauauftrag, erstes Gebäude, erste Kaserne, erster Angriffsbefehl; Befehle in der ersten Minute, in drei und in acht Minuten; Bau- und Produktionsaufträge; Geld nach acht Minuten |
+| `locomotion` | one per distinct locomotor of the retail data (grouped by the 30 Hz values of `LocomotorInfo`, the first object by name stands for each) | Straight-line travel: top speed, time and distance until then, braking distance and time, arrival time, arrival error, path length; time for 90° and 180°; a square course (time, path length, end error); the damaged state (`SpeedDamaged` …) on the same straight |
+| `flight` | Raptor, Aurora, MiG and Comanche from the airfield; Comanche and Chinook free; the paradrop of the command center; the Raptor attack of the scene audits | Production, taxiing to the parking space, takeoff, cruise, turn-around, landing, taxiing; climb, flight and stop of the helicopters; aircraft, drop and landing of the paratroopers; first and last shot, return home and reload |
+| `weapons` | one per distinct weapon that an object carries in a default, veteran, upgrade or crate set (grouped by times, damage, range, speed and projectile) | Command to first shot (for turrets as a movement event), shot interval, clip, reload, second reload, time of the 20th shot (firing stages), shots and damage in 60 s on a standard target, first damage after the first shot, effective range (bisection over the question with which a fire command is checked) |
+| `projectiles` | one per distinct projectile of a weapon (projectile object, speed, scatter, range), by module: `DumbProjectileBehavior`, `MissileAIUpdate`, `NeutronMissileUpdate`, others | Flight time, impact point, apex height and path length onto a ground point; flight time and hit on a standing and on a crossing target; mean scatter over 40 shots |
+| `turrets` | one per distinct turret of a ground object (turn rate, recentre time, scan and swing values) | Swing by 90° and 180° until the first shot, turret angle at the shot, holding and return to the rest position, idle scan (first and third look, looks in 120 s, largest angle) |
+| `overtime` | one per distinct field object (poison, radiation, fire), poison directly, one per distinct `FlammableUpdate`, 18 healing and repair cases | Lifetime of the field, damage pulses, damage and death of tank and soldier; burn duration and fire damage; first and second healing, time to full health, frames with healing, healing in 60 s (self-healing, base regeneration, medic, hospital, repair bay, dozer, repair dock, barracks, tunnel, troop transport) |
+| `economy` | 4 construction sites, 7 productions, 5 upgrades, 3 sales, 3 gatherers, 3 income sources | Construction start and construction time; production time, second unit, leaving the factory; upgrade time; sale and refund; first delivery, round trip, deliveries and income in 5 minutes; cadence of black market, oil derrick and hacker |
+| `timed` | one per special power (recharge), per distinct `LifetimeUpdate`/`DeletionUpdate`, per distinct set of `SlowDeathBehavior`, per distinct `ToppleUpdate`, `StructureToppleUpdate`, `StructureCollapseUpdate`, `StealthUpdate`, `StealthDetectorUpdate`; in addition helicopter crash, Battle Bus, mines, vision, reveal, staged capture, avalanche, EMP, firestorm, train | Recharge time; lifetime; kill to removal; crash; topple (duration and angle), collapse; mine damage; stealth, loss of stealth, detection; vision radius; flashes and duration of the capture; slide distance of the avalanche; EMP duration; starting, braking and stop of the train |
+| `scripts` | 5 cases with synthetic map scripts on the real catalog | Timers in seconds and in frames (fixed and random), counters per evaluation, evaluation delay, sequence waiting times and paths, `EndGameDelay` (`VICTORY`, `DEFEAT`, `QUICKVICTORY`) |
+| `ai` | 3 pairings of the `SkirmishAi` on a flat map, 8 game minutes | first command, first build order, first building, first barracks, first attack command; commands in the first minute, in three and in eight minutes; build and production orders; money after eight minutes |
 
-Die Zahl der Fälle je Gruppe, die Zusammenfassungen der Generatoren und was sie nicht stellen konnten, druckt `SimTool rate-compare <content> --list`; der Stand des ersten Laufs steht in §39.6.
+The number of cases per group, the groupings of the generators and what they could not stage are printed by `SimTool rate-compare <content> --list`; the state of the first run is in §39.6.
 
-### 39.4 Ausführen
+### 39.4 Running
 
 ```powershell
 # Suite (Release, mit Realdaten); ohne --content-dir sind die Tests nicht registriert
@@ -2023,131 +2023,131 @@ dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare 
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare game/content "locomotion/Nuke_ChinaTankBattleMaster"
 ```
 
-Je Gruppe ein Test `RateEquivalence: <gruppe>`. Ein Gruppentest fängt Ausnahmen je Fall und je Rate (eigene Zeile), sammelt **alle** Größen, druckt die Tabelle
-(`case | quantity | kind | 30 Hz | 60 Hz | 120 Hz | d60 | d120 | result`; Zeiten in Sekunden, Strecken in Welteinheiten), die Laufzeit der Gruppe und wirft dann genau einmal:
-„n of m quantities in k cases outside tolerance“. Der Test schreibt nichts ins Repo; `--rate-report <datei>` (oder die Umgebungsvariable `CNCNEW_RATE_REPORT`) schreibt die ganze Tabelle als
-TSV mit den ganzzahligen Einheiten, der zulässigen Abweichung und dem Urteil an einen Ort außerhalb des Repos (ein Pfad im Repo wird abgelehnt). `rate-compare <case-id>` nimmt die genaue
-Kennung oder einen Teil davon; `--tick-rate` wird ignoriert. Zwei Läufe liefern eine bytegleiche Datei (§39.6).
+One test `RateEquivalence: <gruppe>` per group. A group test catches exceptions per case and per rate (own row), collects **all** quantities, prints the table
+(`case | quantity | kind | 30 Hz | 60 Hz | 120 Hz | d60 | d120 | result`; times in seconds, distances in world units), the run time of the group and then throws exactly once:
+"n of m quantities in k cases outside tolerance". The test writes nothing into the repo; `--rate-report <datei>` (or the environment variable `CNCNEW_RATE_REPORT`) writes the whole table as
+TSV with the integer units, the permitted deviation and the verdict to a place outside the repo (a path inside the repo is rejected). `rate-compare <case-id>` takes the exact
+identifier or a part of it; `--tick-rate` is ignored. Two runs produce a byte-identical file (§39.6).
 
-### 39.5 Nicht abgedeckt
+### 39.5 Not covered
 
-Was ein Generator oder ein fester Fall nicht stellen kann, steht als `not covered` in der Ausgabe von `--list` und des Gruppentests. Die Liste:
+What a generator or a fixed case cannot stage stands as `not covered` in the output of `--list` and of the group test. The list:
 
-- **Fortbewegung:** Locomotoren, die erst ein Upgrade oder ein anderer Locomotor-Satz als `SET_NORMAL` gibt; Hänge, Wasser und Klippen (die Karte ist flach); Ausweichen um stehende Einheiten,
-  Kollision und Formationen (ganze Gruppenfahrten sind Sache des Verteilungsvergleichs, Schritt 4).
-- **Flug:** Park- und Startbahnpunkte aus den Modellknochen (die Welt des Clients); die übrigen `JetAIUpdate`-Objekte der Generäle (nicht je Objekt geprüft). **Der Fallschirmabwurf der
-  Spezialkraft lässt sich nicht messen:** die fünf Fallschirme sterben bei jeder Rate im Schritt ihrer Entstehung, die Soldaten stehen am Kartenrand (ein Befund, kein Ratenunterschied; §39.6).
-  Ein Flugzeug hat keinen Spielerbefehl „zurück zur Basis“ (`MoveAndEnterCommand` verlangt einen Container); die Landung wird über `JetAIUpdate.OrderLand` ausgelöst.
-- **Waffen:** Waffen nur in Sätzen, die die Suite nicht einschalten kann (Autobombe, Entführung, Minenräumen, Rider), und Waffen, die kein Objekt in einem Satz trägt (von Modulen,
-  Erzeugungslisten und Spezialkräften gefeuert); Boni von Kampfplänen und von Upgrades, die den Satz nicht wechseln; die wirksame Reichweite von Waffen, die nur Flugzeuge tragen; Waffen, die
-  nur Geschosse, Minen oder Fallschirme treffen (erscheinen `unmeasured`).
-- **Geschosse:** Startpunkte an Waffenknochen und die Eigenbewegung des Trägers; jedes Geschoss startet aus der Mitte eines stehenden Panzers.
-- **Türme:** zweite und gekoppelte Türme, Neigung (Flugabwehr), Türme auf Flugzeugen.
-- **Schaden und Heilung:** Heilung in einem besetzten Zivilgebäude (`GarrisonContain`), Selbstheilung, die erst ein Upgrade oder ein Rang startet, Feuer, das von Objekt zu Objekt springt.
-- **Wirtschaft:** die Bauzeit jedes einzelnen Objekts (Katalogdauern, mit einer Umrechnung gelesen), mehrere Dozer an einer Baustelle, Strommangel, Abwurfzone, Kopfgeld, die Ränge des
-  Hackers über fünf Minuten hinaus. **Ein Upgrade ist bei jeder Rate im Tick des Kaufs fertig** – die Simulation führt keine Upgradezeit (ein Befund, kein Ratenunterschied).
-- **Zeitmodule:** die Abläufe der Superwaffen nach dem Auslösen (Scud-Sturm, Partikelkanone, A-10, Bombenteppich, Artillerie, Spectre, Flugblätter, Streuminen), Kampfpläne, Brückengerüst,
-  Kontrollpunkt, Wellenleiter, die Lenkung der MOAB; Aufladen nach einer Benutzung und geteilte Zeitgeber nach der ersten Benutzung; Tarnung von Flugzeugen, Minen und Besatzungen.
-- **Skripte:** die 109 Bedingungs- und 344 Aktionstypen einzeln, Team-Warteschlangen, Verstärkung mit Transport, die Skripte der Kampagnenkarten (Schritt 4 vergleicht die je Karte).
-- **KI:** Ausgang und Länge ganzer Matches, Heer und Wirtschaft später im Match, mehr als zwei Spieler, echte Karten (Schritt 4).
-- **Nicht geprüft:** dass jede Zeile der Liste in `docs/TICKRATE-MIGRATION.md` §5 von einem Fall erfasst wird – die Zuordnung in §39.6 nennt, was gefunden wurde und was nicht gestellt ist.
+- **Locomotion:** locomotors that only an upgrade or a locomotor set other than `SET_NORMAL` gives; slopes, water and cliffs (the map is flat); avoidance around standing units,
+  collision and formations (whole group movements are a matter for the distribution comparison, step 4).
+- **Flight:** parking and runway points from the model bones (the world of the client); the remaining `JetAIUpdate` objects of the generals (not checked per object). **The paradrop of the
+  special power cannot be measured:** the five parachutes die at every rate in the step of their creation, the soldiers stand at the map edge (a finding, not a rate difference; §39.6).
+  An aircraft has no player command "back to base" (`MoveAndEnterCommand` requires a container); the landing is triggered through `JetAIUpdate.OrderLand`.
+- **Weapons:** weapons only in sets that the suite cannot switch on (car bomb, hijack, mine clearing, rider), and weapons that no object carries in a set (fired by modules,
+  creation lists and special powers); bonuses of battle plans and of upgrades that do not switch the set; the effective range of weapons that only aircraft carry; weapons that
+  hit only projectiles, mines or parachutes (appear as `unmeasured`).
+- **Projectiles:** launch points at weapon bones and the carrier's own movement; every projectile launches from the centre of a standing tank.
+- **Turrets:** second and coupled turrets, pitch (anti-air), turrets on aircraft.
+- **Damage and healing:** healing in an occupied civilian building (`GarrisonContain`), self-healing that only an upgrade or a rank starts, fire that jumps from object to object.
+- **Economy:** the construction time of every single object (catalog durations, read with one conversion), several dozers at one construction site, power shortage, drop zone, bounty, the ranks of the
+  hacker beyond five minutes. **An upgrade is finished at every rate in the tick of the purchase** – the simulation keeps no upgrade time (a finding, not a rate difference).
+- **Timed modules:** the sequences of the superweapons after triggering (Scud Storm, particle cannon, A-10, carpet bomb, artillery, Spectre, leaflets, cluster mines), battle plans, bridge scaffold,
+  checkpoint, wave guide, the steering of the MOAB; recharge after a use and shared timers after the first use; stealth of aircraft, mines and crews.
+- **Scripts:** the 109 condition and 344 action types individually, team queues, reinforcement with transport, the scripts of the campaign maps (step 4 compares them per map).
+- **AI:** outcome and length of whole matches, army and economy later in the match, more than two players, real maps (step 4).
+- **Not checked:** that every row of the list in `docs/TICKRATE-MIGRATION.md` §5 is captured by a case – the mapping in §39.6 names what was found and what is not staged.
 
-### 39.6 Erster vollständiger Lauf (7. Oktober 2026, Release, Realdaten `game/content`)
+### 39.6 First complete run (7 October 2026, Release, real data `game/content`)
 
-Gemessen am Stand dieses Abschnitts; nichts an der Simulation ist dafür geändert (`input-manifest check` identisch, `reference-manifest check --set quick` 9 Läufe identisch, alle 414
-Simulationstests ohne Realdaten grün einschließlich `SourceRules`). Zwei Läufe hintereinander liefern eine bytegleiche TSV-Datei. Nach dem allerersten Lauf wurde eine Messung der Suite
-berichtigt (Lebensdauern und Feld-Lebensdauern lasen „gilt als tot“ statt „aus der Welt entfernt“ und zeigten für Objekte ohne Körper 0 s bei jeder Rate – ein falsches „bestanden“); die
-Toleranzen sind unberührt, die Zahlen unten sind die des berichtigten Laufs (erster Lauf: 639 statt 643 Fehlschläge).
+Measured at the state of this section; nothing in the simulation was changed for it (`input-manifest check` identical, `reference-manifest check --set quick` 9 runs identical, all 414
+simulation tests without real data green including `SourceRules`). Two runs in a row produce a byte-identical TSV file. After the very first run one measurement of the suite
+was corrected (lifetimes and field lifetimes read "counts as dead" instead of "removed from the world" and showed 0 s at every rate for objects without a body – a false "passed"); the
+tolerances are untouched, the numbers below are those of the corrected run (first run: 639 instead of 643 failures).
 
-| Gruppe | Fälle | Größen | außerhalb bei 60 Hz | bei 120 Hz | Größen mit Fehlschlag | Fälle mit Fehlschlag | bei jeder Rate ungemessen | Laufzeit |
+| Group | Cases | Quantities | outside at 60 Hz | at 120 Hz | Quantities with failure | Cases with failure | unmeasured at every rate | Run time |
 |---|---|---|---|---|---|---|---|---|
-| `locomotion` | 54 | 837 | 152 | 211 | 217 | 52 | 50 | 10,7 s |
-| `flight` | 8 | 74 | 21 | 21 | 23 | 7 | 5 | 1,8 s |
-| `weapons` | 194 | 1.474 | 43 | 57 | 57 | 27 | 43 | 51,6 s |
-| `projectiles` | 91 | 743 | 54 | 103 | 106 | 53 | 16 | 4,7 s |
-| `turrets` | 31 | 216 | 28 | 36 | 40 | 23 | 4 | 2,4 s |
-| `overtime` | 45 | 418 | 80 | 84 | 85 | 32 | 55 | 9,2 s |
-| `economy` | 25 | 81 | 22 | 25 | 26 | 18 | 0 | 3,8 s |
-| `timed` | 221 | 383 | 53 | 56 | 56 | 33 | 36 | 7,7 s |
-| `scripts` | 5 | 15 | 4 | 5 | 5 | 3 | 0 | 0,7 s |
-| `ai` | 3 | 66 | 22 | 27 | 28 | 3 | 0 | 53,7 s |
-| **Summe** | **677** | **4.307** | **479** | **625** | **643** | **251** | **209** | **rund 2,5 min** |
+| `locomotion` | 54 | 837 | 152 | 211 | 217 | 52 | 50 | 10.7 s |
+| `flight` | 8 | 74 | 21 | 21 | 23 | 7 | 5 | 1.8 s |
+| `weapons` | 194 | 1,474 | 43 | 57 | 57 | 27 | 43 | 51.6 s |
+| `projectiles` | 91 | 743 | 54 | 103 | 106 | 53 | 16 | 4.7 s |
+| `turrets` | 31 | 216 | 28 | 36 | 40 | 23 | 4 | 2.4 s |
+| `overtime` | 45 | 418 | 80 | 84 | 85 | 32 | 55 | 9.2 s |
+| `economy` | 25 | 81 | 22 | 25 | 26 | 18 | 0 | 3.8 s |
+| `timed` | 221 | 383 | 53 | 56 | 56 | 33 | 36 | 7.7 s |
+| `scripts` | 5 | 15 | 4 | 5 | 5 | 3 | 0 | 0.7 s |
+| `ai` | 3 | 66 | 22 | 27 | 28 | 3 | 0 | 53.7 s |
+| **Total** | **677** | **4,307** | **479** | **625** | **643** | **251** | **209** | **about 2.5 min** |
 
-Zusammenfassungen der Generatoren: 442 Objekte fahren auf einen Bewegungsbefehl mit einem Locomotor ohne Flügel, 54 verschiedene Locomotoren; 363 Waffenvorlagen, davon 194 verschiedene in
-einem einschaltbaren Waffensatz; 91 verschiedene Geschosse; 31 verschiedene Türme; 845 brennbare Objekte, aber nur 4 verschiedene `FlammableUpdate`.
+Groupings of the generators: 442 objects drive on a move command with a locomotor without wings, 54 distinct locomotors; 363 weapon templates, of which 194 distinct ones in
+a weapon set that can be switched on; 91 distinct projectiles; 31 distinct turrets; 845 flammable objects, but only 4 distinct `FlammableUpdate`.
 
-**Die Fehlschläge nach wahrscheinlicher Ursache** (Werte: 30 / 60 / 120 Hz; Zuordnung zu `docs/TICKRATE-MIGRATION.md` §5, wo es eine Zeile gibt). „Wahrscheinlich“ heißt: aus dem Muster
-der Zahlen und dem Quelltext geschlossen, nicht durch eine Korrektur belegt.
+**The failures by probable cause** (values: 30 / 60 / 120 Hz; mapping to `docs/TICKRATE-MIGRATION.md` §5, where there is a row). "Probable" means: inferred from the pattern
+of the numbers and the source, not verified by a correction.
 
-| # | Ursache | §5 | Beispiel | Umfang |
+| # | Cause | §5 | Example | Extent |
 |---|---|---|---|---|
-| 1 | Euler-Schritt der Bodenbewegung, Bremsweg und Ankunftsradius in Tick-Einheiten | 5.2 `AIUpdateInterface.Move`, `LocomotorInfo.CloseEnoughDist`, `Entity.Speed` | Chinook, 1.500 Einheiten geradeaus: Strecke bis Höchsttempo 195,0 / 191,25 / 189,375; Bremsweg 110,0 / 111,25 / 111,875; Ankunft 11,7000 / 11,7833 / 11,8417 s; Quadratkurs 21,1333 / 21,4667 / 21,7083 s | `locomotion`: 52 von 54 Fällen (Strecke bis Höchsttempo 30/33 Fälle bei 60/120 Hz, Bremsweg 19/23, Bremszeit 11/30, Ankunft 23/36, Kurs 41/47, beschädigt 17/32); dazu Sammler-Umlauf (`economy`, 3 Fälle: 27,4000 / 27,4167 / 27,5667 s), Sequenzweg (`scripts`), Reparatur und Einsteigen (`overtime`) |
-| 2 | Flügelflug und Flugfeld: Rollen, Start, Kreisbahn, Landung | 5.2 `JetAIUpdate` (`TaxiAlongPath`, `TakeOff`, `Land`), `CircleStep`, `MoveWinged` | Raptor: Start 4,8333 / 4,7667 / 4,7250 s; Aurora: Ankunft 23,1000 / 23,5667 / 23,8083 s; Raptor-Angriff: erster Schuss 18,6333 / 18,7167 / 18,7083 s, geparkt und nachgeladen 60,8000 / 60,8500 / 61,1750 s | `flight`: 7 von 8 Fällen |
-| 3 | Geschosse: Flugdauer in ganzen Ticks, Nachführung und Ankunftsschwelle je Tick | 5.2 `DumbProjectileBehavior`, `MissileAIUpdate`; 5.6 `FlightTicks` | Battlemaster-Granate auf einen Bodenpunkt: 0,3000 / 0,2667 / 0,2500 s; Aurora-Bombe auf ein querfahrendes Ziel: Ablage 12,583 / 12,287 / 11,895 | `projectiles`: 53 von 91 Fällen (Flugzeit 3 Fälle bei 60 Hz, 12 bei 120 Hz; Ablage bei fahrendem Ziel 19/35; Weglänge 12/15); `weapons` „erster Schaden nach dem ersten Schuss“ 9 Fälle, nur bei 120 Hz |
-| 4 | Neutronenrakete: Dämpfung und Schub je Bild | 5.1 `NeutronMissileData`, 5.2 `NeutronMissileUpdate` | Flugzeit 8,0667 / 6,5667 / 5,8083 s (−19 %, −28 %); Ablage bei fahrendem Ziel 119,25 / 88,62 / 73,06 | 2 Fälle (`NeutronMissileWeapon`, `SupW_NeutronMissileWeapon`) |
-| 5 | Turm: Feuerfreigabe gegen einen festen Winkel | 5.2 `IsAligned` (0,035 rad), `AimStep` | Fire Base, 90°: Turmwinkel beim ersten Schuss 1,57080 / 1,55334 / 1,54462 rad (der Schuss fällt bis zu 0,026 rad vor dem Ziel); die Schwenk**zeit** liegt bei allen 31 Türmen innerhalb eines Bilds | `turrets`: Winkel 10/15 Fälle (90°) und 7/7 (180°); Rückkehr 2 Fälle; dritter Leerlauf-Blick 1/4 von 8 |
-| 6 | Ein Tick statt ein Bild: erstes Update einen Tick nach dem Erscheinen, Zähler N + 1 | 5.3 `Register`, `RunUpdates`, `ProcessSpawns`, `StepTurrets`, `StealthUpdate.MarkDetected` | Giftfeld: erster Schaden 0,0333 / 0,0167 / 0,0083 s; Tarnung nach dem Entstehen 2,0333 / 2,0167 / 2,0083 s; erster Leerlauf-Blick 0,6333 / 0,6167 / 0,6083 s; Enttarnung endet 0,5000 / 0,4833 / 0,4750 s; Lawine bemerkt den Schaden 0,9667 / 0,9500 / 0,9417 s | `overtime` Felder: 42 Größen (erster Schaden) und 17 (Tod eines Opfers); `timed`: Tarnung 9 von 14, Enttarnung 8 von 17, Lawine 1; `turrets`: 8 von 8 |
-| 7 | Dauer „N Bilder weniger ein Tick“ | 5.3 `_saleDurationTicks` (Verkauf, wie vorhergesagt), `HackInternetAIUpdate`, `BaseRegenerateUpdate.OnDamage`; **neu:** Produktion, Bau, Selbstheilung | Verkauf 5,9667 / 5,9833 / 5,9917 s; Ranger aus der Kaserne 4,9667 / 4,9833 / 4,9917 s; Kraftwerk gebaut 15,2333 / 15,2500 / 15,2500 s; Hacker zahlt 8,1000 / 8,1167 / 8,1250 s; Basisregeneration beginnt 2,9667 / 2,9833 / 2,9917 s; Mine heilt sich 14,9333 / 14,9500 / 14,9583 s | Verkauf 3 von 3, Produktion 7 von 7 (und die 4 Flugfeld-Produktionen), Bau 2/4 von 4, Hacker 1, Heilbeginn 7 von 11 |
-| 8 | Schusszahl von Dauerfeuerwaffen: ein Schuss mehr in 60 s | 5.3 `StepFiringTrackers`/`PreAttackDone` (N + 1), 5.4 `AutoFire` | Gattling-Panzer 440 / 441 / 441 Schüsse; Toxin-Laster 899 / 900 / 900; letzter Schuss 59,6000 / 59,7333 / 59,7333 s | `weapons`: 16/18 Fälle (einschließlich der beiden Befunde unten: Nachladen 0 und Feuerwand) |
-| 9 | Zähler je Auswertung der Skripte | 5.4 `ScriptEngine.Update` (W6), Timerwerte | Zähler nach 10 s: 300 / 600 / 1.200; „Zähler erreicht 150“ nach 4,9667 / 2,4833 / 1,2417 s | 1 Fall, 2 Größen; Sequenzwartezeit 90 Bilder 3,0333 / 3,0167 / 3,0083 s (5.4 `ProcessSequences`); `QUICKVICTORY` ein Schritt (Ordnung, als Dauer gemessen) |
-| 10 | Blitzphase der gestuften Übernahme | 5.2 `SpecialAbilityUpdate.StepCaptureFlash` | Blitze 49 / 99 / 199; erster Blitz 12,6000 / 11,7833 / 11,2000 s | 3 von 3 Fällen (Ranger, Rotgardist, Rebell) |
-| 11 | Umstürzen: Winkelbeschleunigung und Kippkraft | 5.1 `ToppleUpdateData.InitialAccelPercent`, 5.2 `ToppleUpdate.Update`, `TryTopple` | Baum: Fall 1,2000 / 0,8000 / 0,5667 s; Mauer 0,2667 / 0,2167 / 0,1667 s (der Endwinkel ist gleich) | 4 von 5 gemessenen `ToppleUpdate` |
-| 12 | Hubschrauber-Absturz: Dämpfung und Spirale je Bild | 5.1 `HelicopterSlowDeathData`, 5.2/5.3 `HelicopterSlowDeathBehavior` | Comanche: letzte Lage 26,524 / 20,950 / 24,518 Einheiten vom Abschussort, Drehung 18,117 / 17,174 / 17,061 rad (die Dauer ist gleich: 6,6000 / 6,6000 / 6,5833 s) | 3 von 3 |
-| 13 | Zug: Faktoren je Bild | 5.1 `RailroadData`, `RailroadBehavior` | Höchsttempo erreicht nach 2,4333 / 1,1000 / 1,0000 s; steht am Bahnhof nach 19,8000 / 16,1833 / 14,7417 s, bei 2.703 / 2.618 / 2.578 (Bahnhof bei 2.500) | 1 Fall, 4 Größen |
-| 14 | Heilung in kleineren Scheiben | 5.6 `RepairDockUpdate`, `HealContain`, 5.2 `TunnelContain.Update`; AutoHeal | Reparaturdock: Bilder mit Heilung 150 / 151 / 151; Tunnel 75 / 76 / 76; Lautsprecherturm 750 / 751 / 751 | 5 Fälle bei 60 Hz, 4 bei 120 Hz (die geheilte Menge in 60 s ist gleich) |
-| 15 | KI: Zahl der Befehle | 5.4 `SkirmishAi` (`Think`, die Welt hat sich zwischen zwei Denkschritten feiner bewegt) | USA gegen China: Befehle in drei Minuten 274 / 297 / 300, in acht 696 / 659 / 691, Produktionsaufträge 65 / 61 / 63, Geld 0 / 675 / 600; **erster Befehl und erster Bauauftrag sind bei allen sechs Spielern exakt gleich**, die erste Kaserne innerhalb eines Bilds bei 60 Hz (36,5000 / 36,5333 / 36,5417 s) | 3 von 3 Fällen, 28 Größen |
+| 1 | Euler step of ground movement, braking distance and arrival radius in tick units | 5.2 `AIUpdateInterface.Move`, `LocomotorInfo.CloseEnoughDist`, `Entity.Speed` | Chinook, 1,500 units straight ahead: distance to top speed 195.0 / 191.25 / 189.375; braking distance 110.0 / 111.25 / 111.875; arrival 11.7000 / 11.7833 / 11.8417 s; square course 21.1333 / 21.4667 / 21.7083 s | `locomotion`: 52 of 54 cases (distance to top speed 30/33 cases at 60/120 Hz, braking distance 19/23, braking time 11/30, arrival 23/36, course 41/47, damaged 17/32); in addition gatherer round trip (`economy`, 3 cases: 27.4000 / 27.4167 / 27.5667 s), sequence path (`scripts`), repair and entering (`overtime`) |
+| 2 | Winged flight and airfield: taxiing, takeoff, circular path, landing | 5.2 `JetAIUpdate` (`TaxiAlongPath`, `TakeOff`, `Land`), `CircleStep`, `MoveWinged` | Raptor: takeoff 4.8333 / 4.7667 / 4.7250 s; Aurora: arrival 23.1000 / 23.5667 / 23.8083 s; Raptor attack: first shot 18.6333 / 18.7167 / 18.7083 s, parked and reloaded 60.8000 / 60.8500 / 61.1750 s | `flight`: 7 of 8 cases |
+| 3 | Projectiles: flight duration in whole ticks, tracking and arrival threshold per tick | 5.2 `DumbProjectileBehavior`, `MissileAIUpdate`; 5.6 `FlightTicks` | Battlemaster shell onto a ground point: 0.3000 / 0.2667 / 0.2500 s; Aurora bomb onto a crossing target: miss distance 12.583 / 12.287 / 11.895 | `projectiles`: 53 of 91 cases (flight time 3 cases at 60 Hz, 12 at 120 Hz; miss distance with a moving target 19/35; path length 12/15); `weapons` "first damage after the first shot" 9 cases, only at 120 Hz |
+| 4 | Neutron missile: damping and thrust per frame | 5.1 `NeutronMissileData`, 5.2 `NeutronMissileUpdate` | Flight time 8.0667 / 6.5667 / 5.8083 s (−19 %, −28 %); miss distance with a moving target 119.25 / 88.62 / 73.06 | 2 cases (`NeutronMissileWeapon`, `SupW_NeutronMissileWeapon`) |
+| 5 | Turret: fire clearance against a fixed angle | 5.2 `IsAligned` (0.035 rad), `AimStep` | Fire Base, 90°: turret angle at the first shot 1.57080 / 1.55334 / 1.54462 rad (the shot falls up to 0.026 rad before the target); the swing **time** lies within one frame for all 31 turrets | `turrets`: angle 10/15 cases (90°) and 7/7 (180°); return 2 cases; third idle look 1/4 of 8 |
+| 6 | One tick instead of one frame: first update one tick after appearing, counter N + 1 | 5.3 `Register`, `RunUpdates`, `ProcessSpawns`, `StepTurrets`, `StealthUpdate.MarkDetected` | Poison field: first damage 0.0333 / 0.0167 / 0.0083 s; stealth after creation 2.0333 / 2.0167 / 2.0083 s; first idle look 0.6333 / 0.6167 / 0.6083 s; loss of stealth ends 0.5000 / 0.4833 / 0.4750 s; avalanche notices the damage 0.9667 / 0.9500 / 0.9417 s | `overtime` fields: 42 quantities (first damage) and 17 (death of a victim); `timed`: stealth 9 of 14, loss of stealth 8 of 17, avalanche 1; `turrets`: 8 of 8 |
+| 7 | Duration "N frames minus one tick" | 5.3 `_saleDurationTicks` (sale, as predicted), `HackInternetAIUpdate`, `BaseRegenerateUpdate.OnDamage`; **new:** production, construction, self-healing | Sale 5.9667 / 5.9833 / 5.9917 s; Ranger from the barracks 4.9667 / 4.9833 / 4.9917 s; power plant built 15.2333 / 15.2500 / 15.2500 s; hacker pays 8.1000 / 8.1167 / 8.1250 s; base regeneration begins 2.9667 / 2.9833 / 2.9917 s; mine heals itself 14.9333 / 14.9500 / 14.9583 s | Sale 3 of 3, production 7 of 7 (and the 4 airfield productions), construction 2/4 of 4, hacker 1, start of healing 7 of 11 |
+| 8 | Shot count of continuous-fire weapons: one shot more in 60 s | 5.3 `StepFiringTrackers`/`PreAttackDone` (N + 1), 5.4 `AutoFire` | Gattling tank 440 / 441 / 441 shots; toxin truck 899 / 900 / 900; last shot 59.6000 / 59.7333 / 59.7333 s | `weapons`: 16/18 cases (including the two findings below: reload 0 and fire wall) |
+| 9 | Counter per evaluation of the scripts | 5.4 `ScriptEngine.Update` (W6), timer values | Counter after 10 s: 300 / 600 / 1,200; "counter reaches 150" after 4.9667 / 2.4833 / 1.2417 s | 1 case, 2 quantities; sequence waiting time 90 frames 3.0333 / 3.0167 / 3.0083 s (5.4 `ProcessSequences`); `QUICKVICTORY` one step (order, measured as a duration) |
+| 10 | Flash phase of the staged capture | 5.2 `SpecialAbilityUpdate.StepCaptureFlash` | Flashes 49 / 99 / 199; first flash 12.6000 / 11.7833 / 11.2000 s | 3 of 3 cases (Ranger, Red Guard, Rebel) |
+| 11 | Toppling: angular acceleration and tipping force | 5.1 `ToppleUpdateData.InitialAccelPercent`, 5.2 `ToppleUpdate.Update`, `TryTopple` | Tree: fall 1.2000 / 0.8000 / 0.5667 s; wall 0.2667 / 0.2167 / 0.1667 s (the end angle is equal) | 4 of 5 measured `ToppleUpdate` |
+| 12 | Helicopter crash: damping and spiral per frame | 5.1 `HelicopterSlowDeathData`, 5.2/5.3 `HelicopterSlowDeathBehavior` | Comanche: last position 26.524 / 20.950 / 24.518 units from the place it was shot down, rotation 18.117 / 17.174 / 17.061 rad (the duration is equal: 6.6000 / 6.6000 / 6.5833 s) | 3 of 3 |
+| 13 | Train: factors per frame | 5.1 `RailroadData`, `RailroadBehavior` | Top speed reached after 2.4333 / 1.1000 / 1.0000 s; stands at the station after 19.8000 / 16.1833 / 14.7417 s, at 2,703 / 2,618 / 2,578 (station at 2,500) | 1 case, 4 quantities |
+| 14 | Healing in smaller slices | 5.6 `RepairDockUpdate`, `HealContain`, 5.2 `TunnelContain.Update`; AutoHeal | Repair dock: frames with healing 150 / 151 / 151; tunnel 75 / 76 / 76; speaker tower 750 / 751 / 751 | 5 cases at 60 Hz, 4 at 120 Hz (the amount healed in 60 s is equal) |
+| 15 | AI: number of commands | 5.4 `SkirmishAi` (`Think`, the world has moved more finely between two thinking steps) | USA against China: commands in three minutes 274 / 297 / 300, in eight 696 / 659 / 691, production orders 65 / 61 / 63, money 0 / 675 / 600; **first command and first build order are exactly equal for all six players**, the first barracks within one frame at 60 Hz (36.5000 / 36.5333 / 36.5417 s) | 3 of 3 cases, 28 quantities |
 
-**Fehlschläge ohne Zeile in §5 (neue Befunde):**
+**Failures without a row in §5 (new findings):**
 
-- **Ein Nachladen von 0 ist ein Tick, kein Bild:** Schlachtschiff-Geschütze (`BattleshipDemoGun`, `BattleshipUSSBenderGun`): Nachladen 0,0333 / 0,0167 / 0,0083 s, Schüsse in 60 s 110 / 112 / 112,
-  Schaden +1,9 %. 2 Fälle.
-- **Feuerwand des Dragon Tanks:** 838 / 899 / 899 Schüsse in 60 s (30 Hz verliert rund 7 %), Schaden 14.605,5 / 14.250,5 / 14.253,0; auch die Upgrade-Fassung. 2 Fälle. Ursache nicht untersucht.
-- **Produktion und Bau dauern N Bilder weniger einen Tick** (Zeile 7): dieselbe Form wie der Verkauf, aber nicht in §5 geführt.
-- **Aufladen ab der Entstehung** bei sechs Objekten mit einer Superwaffe (`Lazr_LaserCannon`, `SupW_CruiseMissile`, zwei Neutronenraketen, Partikelkanone, Scud-Sturm):
-  120,0000 / 120,0167 / 120,0083 s – der Bereitschaftstick liegt bei 60 Hz zwei, bei 120 Hz einen Tick hinter dem Raster. Die übrigen 62 Kräfte sind exakt gleich.
-- **Drei Locomotoren mit 2 bzw. 1 Einheit je Sekunde bei 30 Hz haben bei 60 Hz die Hälfte und bei 120 Hz ein Viertel** (`AirF_AmericaCrateParachute`, `CINE_U04_AmericaParachute`,
-  `HorizontalArrow`: 2,000 / 1,000 / 0,500): eine Geschwindigkeit je Tick, die nicht mit der Rate skaliert.
-- **Kampfrad und Mob:** `Boss_VehicleCombatBikeTerrorist` erreicht sein Höchsttempo nach 2,0333 / 4,6667 / 1,3250 s und fährt 1.447 / 1.458 / 1.440 Einheiten für 1.440; der Mob-Nexus fährt den
-  Quadratkurs mit 400,06 / 404,46 / 430,00 Einheiten. Nicht monoton in der Rate; nicht untersucht.
-- **Streuschüsse, die nie einschlagen:** `ArtilleryPlatformGun` 8 / 8 / 7 von 40, `BattleshipUSSBenderGun` 21 / 20 / 20 (bei jeder Rate schlägt nur ein Teil der 40 im selben Schritt gestarteten
-  Geschosse ein; die Zahl hängt an der Rate).
-- **Einzelfälle:** Streumine entfernt nach 4,8000 / 4,7000 / 4,6667 s; Helix, tiefste Höhe vor dem Entfernen 0,000 / 0,798 / 0,935; `CINE_BShipWeaponDetonationObject` endet bei 30 Hz in
-  300 s nicht, bei 60 und 120 Hz nach 0,0667 s; Patriot gegen Luftziele bei 120 Hz +1,2 % Schaden in 60 s; `AirF_AmericaCrateParachute` nach der Tötung entfernt nach
-  3,0000 / 2,9833 / 2,9750 s.
+- **A reload of 0 is one tick, not one frame:** battleship guns (`BattleshipDemoGun`, `BattleshipUSSBenderGun`): reload 0.0333 / 0.0167 / 0.0083 s, shots in 60 s 110 / 112 / 112,
+  damage +1.9 %. 2 cases.
+- **Fire wall of the Dragon Tank:** 838 / 899 / 899 shots in 60 s (30 Hz loses about 7 %), damage 14,605.5 / 14,250.5 / 14,253.0; also the upgrade version. 2 cases. Cause not investigated.
+- **Production and construction take N frames minus one tick** (row 7): the same form as the sale, but not listed in §5.
+- **Recharge from creation** for six objects with a superweapon (`Lazr_LaserCannon`, `SupW_CruiseMissile`, two neutron missiles, particle cannon, Scud Storm):
+  120.0000 / 120.0167 / 120.0083 s – the ready tick lies two ticks behind the grid at 60 Hz, one tick at 120 Hz. The remaining 62 powers are exactly equal.
+- **Three locomotors with 2 or 1 unit per second at 30 Hz have half of that at 60 Hz and a quarter at 120 Hz** (`AirF_AmericaCrateParachute`, `CINE_U04_AmericaParachute`,
+  `HorizontalArrow`: 2.000 / 1.000 / 0.500): a speed per tick that does not scale with the rate.
+- **Combat bike and mob:** `Boss_VehicleCombatBikeTerrorist` reaches its top speed after 2.0333 / 4.6667 / 1.3250 s and drives 1,447 / 1,458 / 1,440 units for 1,440; the mob nexus drives the
+  square course with 400.06 / 404.46 / 430.00 units. Not monotonic in the rate; not investigated.
+- **Scatter shots that never impact:** `ArtilleryPlatformGun` 8 / 8 / 7 of 40, `BattleshipUSSBenderGun` 21 / 20 / 20 (at every rate only a part of the 40 projectiles launched in the same step
+  impacts; the number depends on the rate).
+- **Individual cases:** cluster mine removed after 4.8000 / 4.7000 / 4.6667 s; Helix, lowest height before removal 0.000 / 0.798 / 0.935; `CINE_BShipWeaponDetonationObject` does not end at 30 Hz within
+  300 s, at 60 and 120 Hz after 0.0667 s; Patriot against air targets at 120 Hz +1.2 % damage in 60 s; `AirF_AmericaCrateParachute` removed after the kill after
+  3.0000 / 2.9833 / 2.9750 s.
 
-**Befunde, die kein Ratenunterschied sind** (bei jeder Rate gleich, beim Stellen der Szenen aufgefallen): der Fallschirmabwurf der Spezialkraft verliert alle fünf Fallschirme im Schritt
-ihrer Entstehung; ein Upgrade ist im Tick des Kaufs fertig; der Battle Bus stirbt bei `KillCommand` sofort (kein zweites Leben, kein Wurf messbar) und erreicht sein Ziel auf einer geraden
-Fahrt bei keiner Rate mit `MoveArrived`; ein Flugzeug hat keinen Spielerbefehl für die Heimkehr; die Lawine rutscht auf der flachen Karte nicht (Rutschweg 0, die Rekursion aus §5.1 ist damit
-**nicht** geprüft); der Truppentransporter heilt seine Insassen nicht.
+**Findings that are not a rate difference** (equal at every rate, noticed while staging the scenes): the paradrop of the special power loses all five parachutes in the step
+of their creation; an upgrade is finished in the tick of the purchase; the Battle Bus dies immediately on `KillCommand` (no second life, no throw measurable) and reaches its destination on a straight
+drive at no rate with `MoveArrived`; an aircraft has no player command for the return home; the avalanche does not slide on the flat map (slide distance 0, the recursion from §5.1 is therefore
+**not** checked); the troop transport does not heal its occupants.
 
-**Bestanden, obwohl §5 einen Unterschied nennt:**
+**Passed, although §5 names a difference:**
 
-- §5.1 `EmpUpdate` (`_scale`): Lähmung nach 0,3000 s und bis 30,3000 s bei jeder Rate – wie dort vermerkt keine Spielwirkung.
-- §5.1/§5.2 `StructureToppleUpdate` (Zerfall, Quetsch-Schüsse je Tick): das eine verschiedene Retail-Objekt (`GLAVictoryStatue_Topple`) liegt nach 4,3333 / 4,3000 / 4,3000 s, mit einem
-  Treffer und einem Toten unter acht Umstehenden bei jeder Rate. Die verdoppelten Quetsch-Schüsse zeigen sich an diesem Aufbau nicht.
-- §5.2 `StructureCollapseUpdate`: Einsturz 2,4667 / 2,4833 / 2,4917 s (`AsianBank`), bei jedem verschiedenen Einsturz innerhalb eines Bilds.
-- §5.2 Turmschwenk (`AimStep`, `RecenterStep`): die Zeit bis zum ersten Schuss liegt bei allen 31 Türmen innerhalb eines Bilds; nur der Winkel beim Schuss fällt heraus (Zeile 5).
-- §5.2 Hubschrauber-Absturz: Dauer und halbe Höhe innerhalb eines Bilds (nur Lage und Drehung fallen heraus, Zeile 12).
-- §5.3 `FirestormDynamicGeometryInfoUpdate` und §5.6 `DynamicShroudClearingRangeUpdate`: Feuersturm, Spionagesatellit und Radarwagen-Ping in jeder Größe gleich.
-- §5.4 `PointDefenseLaserUpdate`, `FireWeaponWhenDamagedBehavior`, `MinefieldBehavior`: nicht gestellt bzw. (Mine) Schaden gleich, erster Schaden bei 60 Hz innerhalb eines Bilds.
-- §5.6 `WeaponInfo.WeaponSpeed`, Quantisierung der Katalogwerte: Schussabstand und Magazindauer sind bei allen Waffen exakt gleich, das Nachladen bei allen außer den beiden mit
-  Nachladezeit 0, die Zeit des 20. Schusses (Feuerstufen) bei 117 von 121, „Befehl bis erster Schuss“ bei allen; die wirksame Reichweite bei allen Bodenträgern.
-- Skripte: Zeitgeber in Sekunden und in Bildern, fest und zufällig, die Auswertungsverzögerung und `EndGameDelay` sind exakt gleich.
+- §5.1 `EmpUpdate` (`_scale`): paralysis after 0.3000 s and until 30.3000 s at every rate – as noted there, no effect on the game.
+- §5.1/§5.2 `StructureToppleUpdate` (decay, crush shots per tick): the one distinct retail object (`GLAVictoryStatue_Topple`) lies down after 4.3333 / 4.3000 / 4.3000 s, with one
+  hit and one dead among eight bystanders at every rate. The doubled crush shots do not show in this setup.
+- §5.2 `StructureCollapseUpdate`: collapse 2.4667 / 2.4833 / 2.4917 s (`AsianBank`), within one frame for every distinct collapse.
+- §5.2 turret swing (`AimStep`, `RecenterStep`): the time to the first shot lies within one frame for all 31 turrets; only the angle at the shot falls outside (row 5).
+- §5.2 helicopter crash: duration and half height within one frame (only position and rotation fall outside, row 12).
+- §5.3 `FirestormDynamicGeometryInfoUpdate` and §5.6 `DynamicShroudClearingRangeUpdate`: firestorm, spy satellite and radar van ping equal in every quantity.
+- §5.4 `PointDefenseLaserUpdate`, `FireWeaponWhenDamagedBehavior`, `MinefieldBehavior`: not staged or (mine) damage equal, first damage at 60 Hz within one frame.
+- §5.6 `WeaponInfo.WeaponSpeed`, quantisation of the catalog values: shot interval and clip duration are exactly equal for all weapons, the reload for all except the two with
+  reload time 0, the time of the 20th shot (firing stages) for 117 of 121, "command to first shot" for all; the effective range for all ground carriers.
+- Scripts: timers in seconds and in frames, fixed and random, the evaluation delay and `EndGameDelay` are exactly equal.
 
-**Nicht geprüft:** ob jede der 95 Zeilen aus §5 von einem Fall getroffen wird; die Ursachen sind zugeordnet, nicht durch Korrektur belegt; kein Fall ist von einem Menschen angesehen.
+**Not checked:** whether each of the 95 rows from §5 is hit by a case; the causes are assigned, not verified by correction; no case has been looked at by a human.
 
-**Nachtrag (9. Oktober 2026):** der Verlauf über die Runden und der Endstand (0 / 0 in allen zehn Gruppen) stehen in §39.7; der Verbleib jeder der 95 Zeilen steht in `docs/TICKRATE-MIGRATION.md` §5.
-### 39.7 Verlauf über die Runden und Endstand (9. Oktober 2026)
+**Addendum (9 October 2026):** the course over the rounds and the final state (0 / 0 in all ten groups) are in §39.7; what became of each of the 95 rows is in `docs/TICKRATE-MIGRATION.md` §5.
+### 39.7 Course over the rounds and final state (9 October 2026)
 
-Größen außerhalb der Toleranz bei 60 Hz / bei 120 Hz je Gruppe. Die Toleranzen aus §39.2 sind in der ganzen Phase nicht angefasst worden. Spalten: erster Lauf (§39.6, `91cb830`), nach Runde 1
-(sieben Pakete, `62fbb6a`), nach Runde 2 (Konsolidierung, `3b44506`), nach Runde 3 (`502e75b`: Beobachter und Flug, dazwischen die Korrektur der verlorenen Weckbitte und die Fabrikausfahrt), Endstand
-(`1b82e45`, nach den KI-Korrekturen und Runde 4; gezählt aus dem Protokoll der Schlussprüfung).
+Quantities outside the tolerance at 60 Hz / at 120 Hz per group. The tolerances from §39.2 were not touched in the whole phase. Columns: first run (§39.6, `91cb830`), after round 1
+(seven packages, `62fbb6a`), after round 2 (consolidation, `3b44506`), after round 3 (`502e75b`: observers and flight, in between the correction of the lost wake request and the factory exit), final state
+(`1b82e45`, after the AI corrections and round 4; counted from the log of the final check).
 
-| Gruppe | Fälle (Ende) | Größen (Ende) | erster Lauf | nach Runde 1 | nach Runde 2 | nach Runde 3 | **Endstand** | bei jeder Rate ungemessen (Ende) |
+| Group | Cases (end) | Quantities (end) | first run | after round 1 | after round 2 | after round 3 | **Final state** | unmeasured at every rate (end) |
 |---|---:|---:|---|---|---|---|---|---:|
 | `locomotion` | 54 | 837 | 152 / 211 | 12 / 12 | 2 / 2 | 0 / 0 | **0 / 0** | 50 |
 | `flight` | 8 | 74 | 21 / 21 | 0 / 4 | 0 / 3 | 0 / 0 | **0 / 0** | 0 |
-| `weapons` | 194 | 1.474 | 43 / 57 | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 0** | 43 |
+| `weapons` | 194 | 1,474 | 43 / 57 | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 0** | 43 |
 | `projectiles` | 91 | 743 | 54 / 103 | 10 / 9 | 4 / 4 | 0 / 0 | **0 / 0** | 16 |
 | `turrets` | 31 | 216 | 28 / 36 | 4 / 0 | 4 / 0 | 0 / 0 | **0 / 0** | 4 |
 | `overtime` | 45 | 418 | 80 / 84 | 2 / 2 | 0 / 0 | 0 / 0 | **0 / 0** | 52 |
@@ -2155,50 +2155,50 @@ Größen außerhalb der Toleranz bei 60 Hz / bei 120 Hz je Gruppe. Die Toleranze
 | `timed` | 221 | 383 | 53 / 56 | 3 / 3 | 1 / 1 | 0 / 0 | **0 / 0** | 34 |
 | `scripts` | 5 | 15 | 4 / 5 | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 0** | 0 |
 | `ai` | 3 | 66 | 22 / 27 | 25 / 24 | 24 / 23 | 0 / 0 | **0 / 0** | 0 |
-| **Summe** | **686** | **4.388** | **479 / 625** | **63 / 64** | **35 / 33** | **0 / 0** | **0 / 0** | **199** |
+| **Total** | **686** | **4,388** | **479 / 625** | **63 / 64** | **35 / 33** | **0 / 0** | **0 / 0** | **199** |
 
-Bis zur Fabrikausfahrt hatte die Suite 677 Fälle und 4.307 Größen (`economy` 25 Fälle, 81 Größen); die Spalten bis „nach Runde 2“ zählen gegen diese Menge.
+Up to the factory exit the suite had 677 cases and 4,307 quantities (`economy` 25 cases, 81 quantities); the columns up to "after round 2" count against this set.
 
-**Später hinzugekommen:**
+**Added later:**
 
-- **Neun Fälle `economy/production exit <Gebäude>`** (Kommandozentrale, Kaserne, Waffenfabrik der drei Fraktionen; 81 Größen: „Auftrag bis außerhalb des Grundrisses“, „Auftrag bis alle ruhen“,
-  Ruheabstand, Abstände der Ruheorte; §42.4) – alle bei 60 und 120 Hz bitgleich zu 30 Hz.
-- **Der Fallschirmabwurf ist messbar** (fünf Größen der Gruppe `flight` waren bei jeder Rate ungemessen, weil der Abwurf niemanden absetzte – ein 30-Hz-Fehler, behoben in `09b4d21`).
-- **Diagnose statt Fälle:** `SimTool rate-compare --ai-diff A,B`, `--reference-diff` und `--map-diff A,B --map KARTE` (je mit `--fields`) vergleichen zwei Raten eines ganzen Gefechts Feld für Feld
-  am Ende jedes Bildes und nennen das erste abweichende Bild (`docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §2, `…-ROUND3-OBSERVERS.md` §8, `…-ROUND4-FIRST-FRAME.md` §8). Sie sind Werkzeug, keine Fälle
-  der Suite, und haben keine Toleranz.
-- **Drei-Raten-Tests je Paket** (`Tests.RateInvariance.*.cs`: Geschosse, Physik, Zeitversatz, Boden, Flug, Türme, Konsolidierung, Beobachter, Runde 3 Flug/Aufstellen, Ausfahrten, Runde 4) nennen ihre
-  Raten selbst und verlangen meist Bitgleichheit an jeder Bildgrenze.
+- **Nine cases `economy/production exit <Gebäude>`** (command center, barracks, war factory of the three factions; 81 quantities: "order until outside the footprint", "order until all rest",
+  rest distance, distances between the rest places; §42.4) – all bit-identical to 30 Hz at 60 and 120 Hz.
+- **The paradrop is measurable** (five quantities of the group `flight` were unmeasured at every rate because the drop set nobody down – a 30 Hz bug, fixed in `09b4d21`).
+- **Diagnosis instead of cases:** `SimTool rate-compare --ai-diff A,B`, `--reference-diff` and `--map-diff A,B --map KARTE` (each with `--fields`) compare two rates of a whole skirmish field by field
+  at the end of every frame and name the first deviating frame (`docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §2, `…-ROUND3-OBSERVERS.md` §8, `…-ROUND4-FIRST-FRAME.md` §8). They are a tool, not cases
+  of the suite, and have no tolerance.
+- **Three-rate tests per package** (`Tests.RateInvariance.*.cs`: projectiles, physics, time offset, ground, flight, turrets, consolidation, observers, round 3 flight/deploy, exits, round 4) name their
+  rates themselves and mostly require bit-identity at every frame boundary.
 
-**Elf Berichtigungen der Messung** (nie einer Toleranz, nie eines Falls): `a6fdfea` (Heilung und Detektor lasen den letzten statt den ersten Schritt eines Bildes), `fbe8d9a`/`466d85f` (Tempo am
-Bildende abgetastet), `be4d800` (Battle Bus über Schaden statt `KillCommand`), `1f87669` und `2f62a6b` (zwei verkettete `StepUntil` verloren einen Tick statt eines Bildes; `2f62a6b` hebt dabei die
-30-Hz-Werte der „Rückkehr“ um ein Bild, 2,9333 → 2,9667 s), `f791682` (Turmwinkel am Bildende gelesen), `234f3c3` und `3a8d256` (Befehle und Kurs des Einsatz-Falls an Bildgrenzen), `43443f5`
-(fahrendes Opfer am Bildende gelesen), `f55c16d` (Sicht als Zustand des Bildendes), `b99bd9c` (eine Fahrt endet, wenn das Objekt steht). Gemeinsamer Nenner: die Suite liest einen Zustand am Ende
-des Bildes und zählt ein Ereignis im ersten Tick – wie die Bildkonvention (§43).
+**Eleven corrections of the measurement** (never of a tolerance, never of a case): `a6fdfea` (healing and detector read the last instead of the first step of a frame), `fbe8d9a`/`466d85f` (speed sampled at the
+end of the frame), `be4d800` (Battle Bus through damage instead of `KillCommand`), `1f87669` and `2f62a6b` (two chained `StepUntil` lost one tick instead of one frame; `2f62a6b` thereby raises the
+30 Hz values of the "return" by one frame, 2.9333 → 2.9667 s), `f791682` (turret angle read at the end of the frame), `234f3c3` and `3a8d256` (commands and course of the deployment case at frame boundaries), `43443f5`
+(moving victim read at the end of the frame), `f55c16d` (vision as a state of the end of the frame), `b99bd9c` (a drive ends when the object stands). Common denominator: the suite reads a state at the end
+of the frame and counts an event in the first tick – like the frame convention (§43).
 
-**Was die Suite weiterhin nicht abdeckt** (zusätzlich zu §39.5; aus den Paketen):
+**What the suite still does not cover** (in addition to §39.5; from the packages):
 
-- **Nur die flache Karte.** Hänge, Wasser, Klippen und Brücken stellt keine Szene; die Lawine rutscht auf der flachen Karte nicht (ihre Rekursion ist nur durch einen Drei-Raten-Test am Hang
-  belegt), Hänge sind auf den vier Karten des Manifests über `--map-diff` gemessen, nicht in der Suite.
-- **Kein Fall** für Brückengerüst, Fähre, Flutwelle, Lenkbombe, freien Fall, `GarrisonContain`, Kampfpläne, die Mine als eigene Fahrt und den Laser der Punktverteidigung; je ein Drei-Raten-Test
-  bzw. (Laser) die Gefechte der Gruppe `ai`.
-- **Die Gruppe `ai` sind drei Paarungen auf einer flachen Karte über acht Minuten.** Dass sie in jeder Größe gleich sind, sagt nichts über ausgelieferte Karten: dort stimmen 14 von 16 Paarungen in
-  Sieger und Bild des Siegs überein, und 120 Hz ist nicht gemessen (§43.9).
-- **Die Suite befiehlt an Bildgrenzen.** Ein Befehl mitten im Bild (ein Mensch) hat kein 30-Hz-Gegenstück und keinen Fall.
-- **199 Größen sind bei jeder Rate ungemessen** (das Ereignis tritt im Budget bei keiner Rate ein); sie zählen weder als bestanden noch als Fehlschlag.
-- **„Besteht“ heißt:** jede gemessene Größe liegt bei 60 und 120 Hz innerhalb der Toleranz ihres 30-Hz-Werts – nicht, dass jedes Gefecht identisch ist, und nicht, dass ein Mensch einen Fall gesehen hat.
+- **Only the flat map.** No scene stages slopes, water, cliffs and bridges; the avalanche does not slide on the flat map (its recursion is verified only by a three-rate test on a slope),
+  slopes are measured on the four maps of the manifest through `--map-diff`, not in the suite.
+- **No case** for bridge scaffold, ferry, flood wave, guided bomb, free fall, `GarrisonContain`, battle plans, the mine as a drive of its own and the laser of the point defense; one three-rate test each
+  or (laser) the skirmishes of the group `ai`.
+- **The group `ai` is three pairings on a flat map over eight minutes.** That they are equal in every quantity says nothing about shipped maps: there 14 of 16 pairings agree in
+  winner and frame of the victory, and 120 Hz is not measured (§43.9).
+- **The suite commands at frame boundaries.** A command in the middle of a frame (a human) has no 30 Hz counterpart and no case.
+- **199 quantities are unmeasured at every rate** (the event occurs within the budget at no rate); they count neither as passed nor as a failure.
+- **"Passes" means:** every measured quantity lies at 60 and 120 Hz within the tolerance of its 30 Hz value – not that every skirmish is identical, and not that a human has seen a case.
 
-Ausführen und Phasenabschluss: `dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir game/content --only RateEquivalence --rate-report <datei>`; die
-Erwartung ist 0 / 0 in allen zehn Gruppen.
+Running and phase completion: `dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir game/content --only RateEquivalence --rate-report <datei>`; the
+expectation is 0 / 0 in all ten groups.
 
-## 40. Verteilungsvergleich zwischen Raten (Phase 23, 7. Oktober 2026): `ai-survey` und `rate-distribution`
+## 40. Distribution comparison between rates (Phase 23, 7 October 2026): `ai-survey` and `rate-distribution`
 
-Ein ganzes Match ist chaotisch (§38.3, `docs/FIXED-POINT-Q39-24.md` §7.2): eine Rundung im ersten Gefecht reicht für einen anderen Sieger. Zwei Tickraten lassen sich deshalb nicht Lauf für Lauf
-vergleichen, sondern nur als **Verteilungen** über viele Startwerte (`docs/handoffs/HANDOFF-PHASE23.md` Punkt 4). Dieser Abschnitt beschreibt das Werkzeug dafür. Es ist reiner Werkzeugcode
-(`tools/CnCNew.SimTool/AiSurvey.cs`, `RateDistribution.cs`); an der Simulation und an `baselines/` ändert es nichts. **Die Erhebung selbst (640 Matches) ist hier nicht enthalten** – der Abschnitt legt
-die Methode und die Grenzen fest, bevor Zahlen vorliegen.
+A whole match is chaotic (§38.3, `docs/FIXED-POINT-Q39-24.md` §7.2): one rounding in the first fight is enough for a different winner. Two tick rates therefore cannot be compared run by run,
+but only as **distributions** over many seeds (`docs/handoffs/HANDOFF-PHASE23.md` item 4). This section describes the tool for that. It is pure tool code
+(`tools/CnCNew.SimTool/AiSurvey.cs`, `RateDistribution.cs`); it changes nothing in the simulation or in `baselines/`. **The survey itself (640 matches) is not contained here** – the section lays down
+the method and the limits before any numbers exist.
 
-### 40.1 Befehle
+### 40.1 Commands
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
@@ -2207,293 +2207,293 @@ dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey gam
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-distribution <30.tsv> <60.tsv> [--out <bericht.md>]
 ```
 
-- **`ai-survey`** spielt jede der 16 KI-Paarungen des Referenzmanifests (§37.2; die Tabelle kommt aus `ReferenceManifest.AiPairingRuns()`, dieselbe Quelle wie das Manifest) einmal je Startwert, **nur als
-  Aufzeichnung** (keine Wiedergabe, keine Snapshot-Fortsetzung). Der Startwert wirkt genau wie bei `ai-match --seed N`: `AiSeed = N`, `WorldSeed = N ^ 0xC0FFEE06`. Das Budget ist **Spielzeit**:
-  `MaxTicks = Minuten × 60 × Rate` (25 Minuten = 45.000 Ticks bei 30 Hz = das Budget des Manifests, 90.000 Ticks bei 60 Hz). `--jobs` arbeitet wie `reference-manifest check`: jeder Arbeiter baut eigene
-  Kataloge für die Rate, nichts der Simulation wird zwischen Threads geteilt, alle Arbeiter müssen denselben Welt-Fingerabdruck erreichen.
-- **Ausgabedatei** (TSV, LF, eine Kopfzeile, sortiert nach Paarung und Startwert, keine Zeitstempel, keine Wandzeit – zwei gleiche Aufrufe liefern dieselben Bytes, unabhängig von `--jobs`):
-  `pairing`, `map`, `factionA`, `factionB`, `seed`, `tickRate`, `outcome` (`winner`/`stalemate`, wie die Sitzung es meldet; `failed`, wenn ein Match eine Ausnahme wirft – dann Exitcode 1),
-  `winnerFaction`, `winnerSlot` (1 = erstgenannte Fraktion, 2 = zweite, 0 = keiner), `endTick` (Tick des Siegs, ohne Sieger der Tick des Abbruchs), `endGameMilliseconds`
-  (`endTick × 1000 / tickRate`, ganzzahlig), `recordedTicks` (gespielte Ticks einschließlich der Nachlaufzeit nach dem Sieg; der Zustand von `finalHash`), `commands` (Zahl der aufgezeichneten Befehle),
-  `finalHash` (Zustandshash der Welt am Ende der Aufzeichnung), `firstBarracksTickA/B` (erster Tick, nach dem die Seite ein fertiges Gebäude der Art `FS_BARRACKS` besitzt, −1 = nie),
-  `firstAttackTickA/B` (erster Tick, nach dem `SkirmishAiStats.Waves` der Seite über 0 liegt – die erste Angriffswelle der KI, −1 = nie). Die vier Meilensteine werden nach jedem Tick nur gelesen.
-  Der Fortschritt geht nach stderr, jede fertige Zeile mit ihrer Laufzeit (ein abgebrochener Lauf hinterlässt seine fertigen Matches im Protokoll).
-- **`rate-distribution`** liest zwei Erhebungen (Referenz, Kandidat), **lehnt sie ab**, wenn sich die Mengen aus Paarung und Startwert, die Karten oder die Fraktionen unterscheiden oder eine Datei ein
-  fehlgeschlagenes Match enthält, und druckt einen Bericht (Markdown) mit Statistik, Grenze und Urteil je Prüfung. Exitcode 0: keine Prüfung gescheitert; 1: mindestens eine gescheitert; 2: Eingabefehler.
-  Eine **nicht prüfbare** Zeile (siehe e) ist weder bestanden noch gescheitert; der Bericht zählt sie getrennt, und sie macht den Exitcode nicht zu 1.
+- **`ai-survey`** plays each of the 16 AI pairings of the reference manifest (§37.2; the table comes from `ReferenceManifest.AiPairingRuns()`, the same source as the manifest) once per seed, **as a recording
+  only** (no replay, no continuation from a snapshot). The seed acts exactly as with `ai-match --seed N`: `AiSeed = N`, `WorldSeed = N ^ 0xC0FFEE06`. The budget is **game time**:
+  `MaxTicks = minutes × 60 × rate` (25 minutes = 45,000 ticks at 30 Hz = the budget of the manifest, 90,000 ticks at 60 Hz). `--jobs` works like `reference-manifest check`: every worker builds its own
+  catalogs for the rate, nothing of the simulation is shared between threads, all workers must reach the same world fingerprint.
+- **Output file** (TSV, LF, one header line, sorted by pairing and seed, no timestamps, no wall time – two identical invocations yield the same bytes, independent of `--jobs`):
+  `pairing`, `map`, `factionA`, `factionB`, `seed`, `tickRate`, `outcome` (`winner`/`stalemate`, as the session reports it; `failed` if a match throws an exception – then exit code 1),
+  `winnerFaction`, `winnerSlot` (1 = first-named faction, 2 = second, 0 = none), `endTick` (tick of the win, without a winner the tick of the abort), `endGameMilliseconds`
+  (`endTick × 1000 / tickRate`, integer), `recordedTicks` (ticks played including the run-on time after the win; the state of `finalHash`), `commands` (number of recorded commands),
+  `finalHash` (state hash of the world at the end of the recording), `firstBarracksTickA/B` (first tick after which the side owns a finished building of the kind `FS_BARRACKS`, −1 = never),
+  `firstAttackTickA/B` (first tick after which `SkirmishAiStats.Waves` of the side is above 0 – the first attack wave of the AI, −1 = never). The four milestones are only read after each tick.
+  Progress goes to stderr, each finished line with its run time (an aborted run leaves its finished matches in the log).
+- **`rate-distribution`** reads two surveys (reference, candidate), **rejects them** if the sets of pairing and seed, the maps or the factions differ or a file contains a
+  failed match, and prints a report (Markdown) with statistic, limit and verdict per test. Exit code 0: no test failed; 1: at least one failed; 2: input error.
+  A **not testable** line (see e) is neither passed nor failed; the report counts it separately, and it does not turn the exit code into 1.
 
-### 40.2 Die Grenzen (vorab festgelegt, nicht an Daten angepasst)
+### 40.2 The limits (laid down beforehand, not fitted to data)
 
-Jede Familie von Prüfungen ist zweiseitig auf dem Niveau α = 0,05. Innerhalb einer Familie mit k Prüfungen gilt Bonferroni (α/k je Prüfung), weil es unter beliebiger Abhängigkeit hält. Mit n Matches je Rate,
-x entschiedenen bzw. gewonnenen Matches und den Indizes 30/60 für Referenz und Kandidat:
+Every family of tests is two-sided at the level α = 0.05. Within a family of k tests Bonferroni applies (α/k per test), because it holds under arbitrary dependence. With n matches per rate,
+x decided or won matches respectively, and the indices 30/60 for reference and candidate:
 
-| | Größe | Prüfung | Grenze |
+| | Quantity | Test | Limit |
 |---|---|---|---|
-| a | Anteil entschiedener Matches, alle Paarungen zusammen | Zwei-Anteile-z-Test mit gepoolter Varianz: p̂ = (x₃₀ + x₆₀)/(n₃₀ + n₆₀), SE = √(p̂(1 − p̂)(1/n₃₀ + 1/n₆₀)), z = (p₆₀ − p₃₀)/SE | bestanden, wenn \|z\| ≤ 1,960 = Φ⁻¹(0,975) |
-| b | Siegquote **je Fraktion** (Siege der Fraktion / Matches, an denen sie teilnimmt) | derselbe z-Test je Fraktion, Bonferroni über die k = 5 Fraktionen | bestanden, wenn jedes \|z\| ≤ Φ⁻¹(1 − 0,05/(2·5)) = 2,5758 |
-| c | Dauer entschiedener Matches in Spielminuten, **geschichtet nach Paarung** | über die m Paarungen mit mindestens zwei entschiedenen Matches bei beiden Raten: dᵢ = x̄₆₀,ᵢ − x̄₃₀,ᵢ, vᵢ = s²₃₀,ᵢ/n₃₀,ᵢ + s²₆₀,ᵢ/n₆₀,ᵢ, D = Σdᵢ/m, SE = √(Σvᵢ)/m | bestanden, wenn \|D\| ≤ 1,960 · SE |
-| d | Siegerverteilung je Paarung (A siegt / B siegt / unentschieden) | exakter Test der 2 × 3-Tafel nach Fisher, Freeman und Halton: Summe der Wahrscheinlichkeiten aller Tafeln mit denselben Randsummen, die höchstens so wahrscheinlich sind wie die beobachtete (vollständige Aufzählung); Bonferroni über 16 Paarungen | bestanden, wenn p ≥ 0,05/16 = 0,003125 |
-| e | Dauer entschiedener Matches je Paarung | Welch-Test: t = (x̄₆₀ − x̄₃₀)/√(v₃₀ + v₆₀) mit v = s²/n, Freiheitsgrade ν = (v₃₀ + v₆₀)²/(v₃₀²/(n₃₀ − 1) + v₆₀²/(n₆₀ − 1)), zweiseitiges p = I_{ν/(ν + t²)}(ν/2, 1/2); Bonferroni über 16 Paarungen | bestanden, wenn p ≥ 0,003125; mit weniger als zwei entschiedenen Matches bei einer Rate **nicht prüfbar** |
+| a | Share of decided matches, all pairings together | two-proportion z-test with pooled variance: p̂ = (x₃₀ + x₆₀)/(n₃₀ + n₆₀), SE = √(p̂(1 − p̂)(1/n₃₀ + 1/n₆₀)), z = (p₆₀ − p₃₀)/SE | passed if \|z\| ≤ 1.960 = Φ⁻¹(0.975) |
+| b | Win rate **per faction** (wins of the faction / matches in which it takes part) | the same z-test per faction, Bonferroni over the k = 5 factions | passed if every \|z\| ≤ Φ⁻¹(1 − 0.05/(2·5)) = 2.5758 |
+| c | Duration of decided matches in game minutes, **stratified by pairing** | over the m pairings with at least two decided matches at both rates: dᵢ = x̄₆₀,ᵢ − x̄₃₀,ᵢ, vᵢ = s²₃₀,ᵢ/n₃₀,ᵢ + s²₆₀,ᵢ/n₆₀,ᵢ, D = Σdᵢ/m, SE = √(Σvᵢ)/m | passed if \|D\| ≤ 1.960 · SE |
+| d | Winner distribution per pairing (A wins / B wins / undecided) | exact test of the 2 × 3 table after Fisher, Freeman and Halton: sum of the probabilities of all tables with the same marginal totals that are at most as probable as the observed one (complete enumeration); Bonferroni over 16 pairings | passed if p ≥ 0.05/16 = 0.003125 |
+| e | Duration of decided matches per pairing | Welch test: t = (x̄₆₀ − x̄₃₀)/√(v₃₀ + v₆₀) with v = s²/n, degrees of freedom ν = (v₃₀ + v₆₀)²/(v₃₀²/(n₃₀ − 1) + v₆₀²/(n₆₀ − 1)), two-sided p = I_{ν/(ν + t²)}(ν/2, 1/2); Bonferroni over 16 pairings | passed if p ≥ 0.003125; with fewer than two decided matches at one rate **not testable** |
 
-Begründungen und Einzelheiten:
+Reasons and details:
 
-- **Warum b je Fraktion:** „erstgenannte“ und „zweitgenannte“ Seite bedeuten über Paarungen hinweg nichts. Grundfraktionen kommen in 8 Paarungen vor (160 Matches je Rate), die beiden Generäle in 4 (80).
-  Die Prüfungen zweier Fraktionen, die gegeneinander spielen, sind abhängig (der Sieg der einen ist die Niederlage der anderen); Bonferroni braucht keine Unabhängigkeit.
-- **Warum c geschichtet:** die Paarungen haben sehr verschiedene Dauern (im Manifest liegen die Siege zwischen Tick 7.815 und 42.840, also zwischen gut 4 und knapp 24 Spielminuten); ein Welch-Test auf den zusammengeworfenen Stichproben würde die Streuung zwischen Paarungen als Rauschen
-  zählen und eine Verschiebung des Anteils entschiedener Matches je Paarung als Dauerunterschied missdeuten. Der Bericht druckt zusätzlich das Verhältnis der gepoolten Mittelwerte, nur zur Orientierung.
-- **Familiengröße:** der Bericht teilt durch die Zahl der Paarungen bzw. Fraktionen **in der Datei** – bei der vollen Erhebung 16 und 5. Bei e zählen alle Paarungen, auch die nicht prüfbaren (die Zahl
-  hängt damit nicht vom Ergebnis ab). Ein Teil-Lauf (`--pairings`) hat entsprechend eine schwächere Korrektur; maßgeblich ist nur die volle Erhebung.
-- **Ohne Varianz:** enden alle Matches beider Erhebungen gleich, ist die Differenz 0 und z = 0 (bestanden); zwei Stichproben ohne Streuung bestehen e bei gleichen Mittelwerten und scheitern sonst.
-- **Numerik** (`SurveyStatistics`, `double`, invariante Kultur): Φ über die Reihe Φ(x) = ½ + φ(x)·Σ x^(2k+1)/(1·3·…·(2k+1)) unter 3 und den Kettenbruch Q(x) = φ(x)/(x + 1/(x + 2/(x + …))) darüber; das
-  Quantil durch Bisektion (keine Tabelle); ln Γ über die Stirling-Reihe nach Verschieben des Arguments über 15; die regularisierte unvollständige Betafunktion über ihren Kettenbruch (modifiziertes
-  Lentz-Verfahren) auf der schnell konvergierenden Seite; die Tafeln von d über Logarithmen der Fakultäten.
+- **Why b per faction:** "first-named" and "second-named" side mean nothing across pairings. Base factions occur in 8 pairings (160 matches per rate), the two generals in 4 (80).
+  The tests of two factions that play against each other are dependent (the win of the one is the defeat of the other); Bonferroni needs no independence.
+- **Why c stratified:** the pairings have very different durations (in the manifest the wins lie between tick 7,815 and 42,840, that is between a good 4 and just under 24 game minutes); a Welch test on the lumped-together samples would count the spread between pairings as noise
+  and misread a shift of the share of decided matches per pairing as a difference in duration. The report additionally prints the ratio of the pooled means, for orientation only.
+- **Family size:** the report divides by the number of pairings or factions **in the file** – 16 and 5 for the full survey. For e all pairings count, including the not testable ones (the number
+  therefore does not depend on the result). A partial run (`--pairings`) accordingly has a weaker correction; only the full survey is authoritative.
+- **Without variance:** if all matches of both surveys end the same way, the difference is 0 and z = 0 (passed); two samples without spread pass e with equal means and fail otherwise.
+- **Numerics** (`SurveyStatistics`, `double`, invariant culture): Φ via the series Φ(x) = ½ + φ(x)·Σ x^(2k+1)/(1·3·…·(2k+1)) below 3 and the continued fraction Q(x) = φ(x)/(x + 1/(x + 2/(x + …))) above it; the
+  quantile by bisection (no table); ln Γ via the Stirling series after shifting the argument above 15; the regularized incomplete beta function via its continued fraction (modified
+  Lentz method) on the rapidly converging side; the tables of d via logarithms of the factorials.
 
-**Was ein Scheitern bedeutet.** Wären beide Raten gleich verteilt, schlüge jede der fünf Familien mit höchstens 5 % Wahrscheinlichkeit falsch an; erwartet werden höchstens 0,05 falsche Zeilen unter den 5
-von b, 0,05 unter den 16 von d und 0,05 unter den 16 von e. Über den ganzen Bericht sind das höchstens 0,25 erwartete Fehlalarme und höchstens 25 % Wahrscheinlichkeit für mindestens einen (22,6 % bei
-unabhängigen Familien) – die Familien sind **nicht** gegeneinander korrigiert. Eine einzelne gescheiterte Zeile ist deshalb ein schwaches Indiz, eine gescheiterte Familie mit gleicher Richtung in einer
-anderen ein starkes. Der exakte Test d ist diskret und strenger als sein Niveau: bei 20 Matches je Rate und wahrer Siegquote 0,5 verwirft er je Paarung mit Wahrscheinlichkeit 0,0011 statt 0,0031.
+**What a failure means.** If both rates were distributed identically, each of the five families would raise a false alarm with a probability of at most 5 %; at most 0.05 false lines are expected among the 5
+of b, 0.05 among the 16 of d and 0.05 among the 16 of e. Over the whole report that is at most 0.25 expected false alarms and at most a 25 % probability of at least one (22.6 % with
+independent families) – the families are **not** corrected against each other. A single failed line is therefore weak evidence, a failed family with the same direction in
+another one strong evidence. The exact test d is discrete and stricter than its level: with 20 matches per rate and a true win rate of 0.5 it rejects per pairing with probability 0.0011 instead of 0.0031.
 
-### 40.3 Was der Vergleich sehen kann: kleinste nachweisbare Unterschiede (Trennschärfe 80 %)
+### 40.3 What the comparison can see: smallest detectable differences (power 80 %)
 
-Berechnet (`rate-distribution` druckt die Tabelle zu jeder Erhebung; die Werte hier gelten für den Plan 16 Paarungen × 20 Startwerte = 320 Matches je Rate):
+Calculated (`rate-distribution` prints the table for every survey; the values here apply to the plan 16 pairings × 20 seeds = 320 matches per rate):
 
-| Prüfung | n je Rate | Niveau | Ausgangswert | kleinste nachweisbare Änderung |
+| Test | n per rate | Level | Baseline value | smallest detectable change |
 |---|---|---|---|---|
-| a Anteil entschieden | 320 | 0,05 | 0,50 (größte Streuung) | ±0,110 (11 Prozentpunkte) |
-| b Siegquote einer Grundfraktion | 160 | 0,01 | 0,50 | ±0,187 |
-| b Siegquote eines Generals | 80 | 0,01 | 0,50 | ±0,259 |
-| c Dauer, geschichtet | 16 × 20 entschieden | 0,05 | – | 2,802 · SE; bei gleicher Standardabweichung σ in allen Paarungen 0,221 σ |
-| d Siegerverteilung einer Paarung | 20 | 0,003125 | 0,00 → | 0,52 |
-| | | | 0,10 → | 0,69 |
-| | | | 0,25 → | 0,86 |
-| | | | 0,50 → | **nicht erreichbar** (auch 0,50 → 1,00 wird nur mit 75 % gefunden) |
-| e Dauer einer Paarung | 20 / 10 / 5 entschieden | 0,003125 | – | 1,27 σ / 1,91 σ / 3,20 σ |
+| a share decided | 320 | 0.05 | 0.50 (largest spread) | ±0.110 (11 percentage points) |
+| b win rate of a base faction | 160 | 0.01 | 0.50 | ±0.187 |
+| b win rate of a general | 80 | 0.01 | 0.50 | ±0.259 |
+| c duration, stratified | 16 × 20 decided | 0.05 | – | 2.802 · SE; with the same standard deviation σ in all pairings 0.221 σ |
+| d winner distribution of a pairing | 20 | 0.003125 | 0.00 → | 0.52 |
+| | | | 0.10 → | 0.69 |
+| | | | 0.25 → | 0.86 |
+| | | | 0.50 → | **not reachable** (even 0.50 → 1.00 is found with only 75 %) |
+| e duration of a pairing | 20 / 10 / 5 decided | 0.003125 | – | 1.27 σ / 1.91 σ / 3.20 σ |
 
-- a und b: Normalnäherung des z-Tests, nach der Änderung δ aufgelöst (Bisektion): Φ((δ − z_{1−α/2}·SE₀)/SE₁) ≥ 0,8 mit SE₀ unter der Nullhypothese (gepoolt) und SE₁ unter der Alternative.
-- d: **exakte** Trennschärfe durch Aufzählung aller 21 × 21 Ausgangspaare zweier Binomialverteilungen (zwei Kategorien; eine dritte verteilt die Zählungen nur weiter), Suche in Schritten von 0,005; nach
-  unten gelten dieselben Werte spiegelbildlich (1,00 → 0,48 usw.).
-- e: (t_{1−α/2; 2n−2} + t_{0,8; 2n−2}) · √(2/n) in Standardabweichungen der Matchdauer innerhalb der Paarung (übliche Näherung der nichtzentralen Verteilung); der Bericht rechnet sie mit der gepoolten
-  Standardabweichung der Referenz in Minuten um. c: (1,960 + 0,842) · SE mit dem SE der Daten.
+- a and b: normal approximation of the z-test, solved for the change δ (bisection): Φ((δ − z_{1−α/2}·SE₀)/SE₁) ≥ 0.8 with SE₀ under the null hypothesis (pooled) and SE₁ under the alternative.
+- d: **exact** power by enumerating all 21 × 21 outcome pairs of two binomial distributions (two categories; a third one only spreads the counts further), search in steps of 0.005;
+  downward the same values apply mirrored (1.00 → 0.48 etc.).
+- e: (t_{1−α/2; 2n−2} + t_{0.8; 2n−2}) · √(2/n) in standard deviations of the match duration within the pairing (usual approximation of the noncentral distribution); the report converts them into minutes with the pooled
+  standard deviation of the reference. c: (1.960 + 0.842) · SE with the SE of the data.
 
-**Ehrliche Lesart:** Zusammengefasst sieht der Vergleich eine Verschiebung des Anteils entschiedener Matches ab rund 11 Prozentpunkten und der Siegquote einer Grundfraktion ab rund 19. **Je Paarung sieht er
-bei 20 Startwerten nur grobe Umschläge** (eine fast sichere Seite wird zur Münze oder umgekehrt) und Dauerunterschiede über einer Standardabweichung. Ein bestandener Vergleich heißt „kein Unterschied
-mindestens dieser Größe gefunden“, nicht „die Raten sind gleich“.
+**Honest reading:** In aggregate the comparison sees a shift of the share of decided matches from about 11 percentage points and of the win rate of a base faction from about 19. **Per pairing it sees
+only coarse flips with 20 seeds** (an almost certain side becomes a coin toss or vice versa) and differences in duration above one standard deviation. A passed comparison means "no difference
+of at least this size found", not "the rates are equal".
 
-### 40.4 Grenzen der Methode
+### 40.4 Limits of the method
 
-- Startwerte sind nur der Nummer nach gepaart: derselbe Startwert ist bei zwei Raten nicht dasselbe Match. Die Prüfungen behandeln beide Erhebungen als unabhängige Stichproben.
-- Unentschiedene Matches haben keine Dauer. Rutschen lange Matches über das Budget, zeigt sich das in a und d, nicht in c und e; die Dauerprüfungen sind dann zugunsten kürzerer Matches verzerrt.
-- Die Matches einer Paarung teilen Karte und Eröffnung (der erste Kasernenbau fällt über Startwerte fast auf denselben Tick); die Streuung zwischen Startwerten stammt aus dem Gefecht. Die Erhebung misst
-  die Verteilung über **diese** Startwerte und die vier Karten, nicht „das Spiel“.
-- Die Tabelle hat nur fünf Fraktionen und vier Karten; eine Abweichung, die nur andere Fraktionen oder große Karten trifft, bleibt unsichtbar. Balance wird nicht bewertet, nur der Unterschied zwischen
-  zwei Raten.
-- Die Meilenstein-Spalten (Kaserne, erste Angriffswelle) werden erhoben, aber von `rate-distribution` **nicht geprüft**; sie dienen der Ursachensuche, wenn eine Prüfung scheitert.
-- Der Kampagnenteil von Punkt 4 des Auftrags (Zielfahrer: Sieg/Niederlage je Karte, Zeitpunkt des Endskripts) ist nicht Teil dieser Werkzeuge.
+- Seeds are paired by number only: the same seed is not the same match at two rates. The tests treat both surveys as independent samples.
+- Undecided matches have no duration. If long matches slip beyond the budget, that shows in a and d, not in c and e; the duration tests are then biased in favor of shorter matches.
+- The matches of a pairing share map and opening (the first barracks construction falls on almost the same tick across seeds); the spread between seeds stems from the fighting. The survey measures
+  the distribution over **these** seeds and the four maps, not "the game".
+- The table has only five factions and four maps; a deviation that only hits other factions or large maps stays invisible. Balance is not assessed, only the difference between
+  two rates.
+- The milestone columns (barracks, first attack wave) are collected, but **not tested** by `rate-distribution`; they serve the search for causes when a test fails.
+- The campaign part of item 4 of the brief (objective driver: victory/defeat per map, time of the final script) is not part of these tools.
 
-### 40.5 Tests und gemessene Stichprobe
+### 40.5 Tests and measured sample
 
-`tests/CnCNew.Simulation.Tests` bindet `RateDistribution.cs` als Quelltext ein (`Tests.RateSurvey.cs`, vier Tests, `-- --only "Rate survey"`): Normalverteilung gegen bekannte Werte und gegen das
-Simpson-Integral der Dichte; ln Γ, Betafunktion und t-Verteilung gegen geschlossene Formen (I_x(1,b), I_x(a,1), I_x(2,3) = 6x² − 8x³ + 3x⁴, I_x(½,½) = (2/π)·asin √x; t mit 1, 2 und 4 Freiheitsgraden);
-der exakte Test gegen von Hand ausgezählte Tafeln (2 × 3 mit Wahrscheinlichkeiten 1/6, 1/3, 1/3, 1/6; Fisher 2 × 2 mit Gleichstand 7462/C(24,12)); Welch von Hand; Rundlauf der Datei, Ablehnung
-abweichender Mengen (fehlender Startwert, andere Startwerte, andere Karte, gemischte Rate, doppelte Zeile, fehlgeschlagenes Match) und die Urteile eines Berichts auf zwei kleinen synthetischen Erhebungen.
+`tests/CnCNew.Simulation.Tests` includes `RateDistribution.cs` as source text (`Tests.RateSurvey.cs`, four tests, `-- --only "Rate survey"`): normal distribution against known values and against the
+Simpson integral of the density; ln Γ, beta function and t distribution against closed forms (I_x(1,b), I_x(a,1), I_x(2,3) = 6x² − 8x³ + 3x⁴, I_x(½,½) = (2/π)·asin √x; t with 1, 2 and 4 degrees of freedom);
+the exact test against tables counted out by hand (2 × 3 with probabilities 1/6, 1/3, 1/3, 1/6; Fisher 2 × 2 with tie 7462/C(24,12)); Welch by hand; round trip of the file, rejection
+of deviating sets (missing seed, other seeds, other map, mixed rate, duplicate line, failed match) and the verdicts of a report on two small synthetic surveys.
 
-Stichprobe am 7. Oktober 2026 (Release, 2 Paarungen × 2 Startwerte, **keine Erhebung**): zwei Aufrufe mit verschiedenem `--jobs` liefern bei 30 Hz und bei 60 Hz jeweils bytegleiche Dateien;
-`AlpineAssault_China-GLA` mit Startwert 1 endet in der Erhebung wie bei `ai-match … --max-ticks 45000 --seed 1` (Sieger FactionGLA bei Tick 9.930, 1.794 Befehle, 10.231 Ticks, Endhash `BDC0218A0BA5EE96`).
-Laufzeit eines Matches über das volle Budget (ein Arbeiter, `ArmoredFury_America-China`, Patt): 13,2 s bei 30 Hz und 24,5 s bei 60 Hz; entschiedene Matches
-(`DeathValley_America-China`, Startwerte 2 und 3): 6,0 s und 3,5 s bei 30 Hz (15.076 und 10.261 Ticks), 14,3 s und 7,1 s bei 60 Hz (49.351 und 27.571 Ticks). Dazu kommt einmal je Arbeiter der Katalogbau
-(rund 12 bis 16 s, unter einer prozessweiten Sperre nacheinander). Nicht ruhig gemessen, nur zur Planung.
+Sample on 7 October 2026 (Release, 2 pairings × 2 seeds, **not a survey**): two invocations with different `--jobs` yield byte-identical files at 30 Hz and at 60 Hz respectively;
+`AlpineAssault_China-GLA` with seed 1 ends in the survey as with `ai-match … --max-ticks 45000 --seed 1` (winner FactionGLA at tick 9,930, 1,794 commands, 10,231 ticks, final hash `BDC0218A0BA5EE96`).
+Run time of a match over the full budget (one worker, `ArmoredFury_America-China`, stalemate): 13.2 s at 30 Hz and 24.5 s at 60 Hz; decided matches
+(`DeathValley_America-China`, seeds 2 and 3): 6.0 s and 3.5 s at 30 Hz (15,076 and 10,261 ticks), 14.3 s and 7.1 s at 60 Hz (49,351 and 27,571 ticks). On top of that comes, once per worker, the catalog build
+(about 12 to 16 s, one after another under a process-wide lock). Not measured on a quiet machine, for planning only.
 
-### 40.6 Die Erhebungen der Phase 23 (7. bis 9. Oktober 2026)
+### 40.6 The surveys of Phase 23 (7 to 9 October 2026)
 
-Je Rate 320 Gefechte (16 Paarungen × 20 Seeds, 25 Spielminuten), `rate-distribution <30.tsv> <60.tsv>`; Dateien und Berichte im Scratchpad der Sitzung (`survey\r0-…` bis `r3-…`). Die Grenzen aus
-§40.2 sind unverändert. „r0“ bis „r2“ vergleichen gegen dieselbe 30-Hz-Erhebung (bei 30 Hz hatte sich bis dahin nichts geändert: die 30-Hz-Datei nach Runde 1 und nach Runde 2 ist Byte für Byte die
-von r0); „r3“ brauchte eine neue 30-Hz-Referenz, weil Fabrikausfahrt und KI-Korrekturen das Verhalten bei 30 Hz geändert haben.
+Per rate 320 matches (16 pairings × 20 seeds, 25 game minutes), `rate-distribution <30.tsv> <60.tsv>`; files and reports in the scratchpad of the session (`survey\r0-…` to `r3-…`). The limits from
+§40.2 are unchanged. "r0" to "r2" compare against the same 30 Hz survey (at 30 Hz nothing had changed until then: the 30 Hz file after round 1 and after round 2 is byte for byte the
+one of r0); "r3" needed a new 30 Hz reference, because factory exit and AI corrections changed the behaviour at 30 Hz.
 
-| Erhebung | Stand (60 Hz) | entschieden 30 Hz | entschieden 60 Hz | a: z (Grenze 1,960) | b: Siegquote je Fraktion, Differenz 60 − 30 Hz (Grenze \|z\| ≤ 2,576) | c: Dauer D, SE (min) | gepoolte mittlere Dauer 30 / 60 Hz (min) | Prüfungen |
+| Survey | State (60 Hz) | decided 30 Hz | decided 60 Hz | a: z (limit 1.960) | b: win rate per faction, difference 60 − 30 Hz (limit \|z\| ≤ 2.576) | c: duration D, SE (min) | pooled mean duration 30 / 60 Hz (min) | Tests |
 |---|---|---:|---:|---|---|---|---|---|
-| r0 | vor jeder Korrektur (`36d6b1c`) | 253 | 224 | **−2,631, durchgefallen** | America −0,100 (z −2,03), ChinaTank −0,075 (z −1,96); alle bestanden | −0,404, 0,407 | 8,402 / 7,831 | 38 bestanden, 1 durchgefallen |
-| r1 | nach Runde 1 (`62fbb6a`) | 253 | 244 | −0,854 | America −0,044 (z −0,92), AirForce −0,025, China −0,019, ChinaTank −0,013, GLA +0,025 | −0,103, 0,366 | 8,402 / 8,002 | 39 bestanden |
-| r2 | nach Runde 2 (`3b44506`) | 253 | 245 | −0,761 | America −0,044 (z −0,92), AirForce +0,013, China −0,038, ChinaTank +0,013, GLA +0,019 | −0,114, 0,387 | 8,402 / 8,136 | 39 bestanden |
-| r3 | nach den KI-Korrekturen (`cca6f92`) | 305 | 301 | −0,705 | America −0,038 (z −0,88), AirForce −0,013, China +0,025, ChinaTank +0,013, GLA −0,013 | −0,009, 0,286 | 9,328 / 9,227 | 39 bestanden |
+| r0 | before any correction (`36d6b1c`) | 253 | 224 | **−2.631, failed** | America −0.100 (z −2.03), ChinaTank −0.075 (z −1.96); all passed | −0.404, 0.407 | 8.402 / 7.831 | 38 passed, 1 failed |
+| r1 | after round 1 (`62fbb6a`) | 253 | 244 | −0.854 | America −0.044 (z −0.92), AirForce −0.025, China −0.019, ChinaTank −0.013, GLA +0.025 | −0.103, 0.366 | 8.402 / 8.002 | 39 passed |
+| r2 | after round 2 (`3b44506`) | 253 | 245 | −0.761 | America −0.044 (z −0.92), AirForce +0.013, China −0.038, ChinaTank +0.013, GLA +0.019 | −0.114, 0.387 | 8.402 / 8.136 | 39 passed |
+| r3 | after the AI corrections (`cca6f92`) | 305 | 301 | −0.705 | America −0.038 (z −0.88), AirForce −0.013, China +0.025, ChinaTank +0.013, GLA −0.013 | −0.009, 0.286 | 9.328 / 9.227 | 39 passed |
 
-**Derselbe Seed bei 30 und 60 Hz** (nicht Teil von `rate-distribution`; eine eigene Auswertung der beiden TSV-Dateien: gleicher Ausgang und Sieger, Ende höchstens eine Sekunde auseinander):
+**The same seed at 30 and 60 Hz** (not part of `rate-distribution`; a separate evaluation of the two TSV files: same outcome and winner, end at most one second apart):
 
-| Stand | derselbe Ausgang und Sieger | dazu Ende innerhalb einer Sekunde | Quelle |
+| State | the same outcome and winner | in addition end within one second | Source |
 |---|---:|---:|---|
-| nach den KI-Korrekturen (`cca6f92`, r3) | 297 von 320 (laut `docs/AI-OBSERVED-2026-10-08.md` §11.4) bzw. 295 (laut Runde 4) | **188** (Arbeitsnotizen der Sitzung) bzw. 192 (eigene Auswertung der Runde 4) | zwei Auswertungen desselben Stands, nicht abgeglichen |
-| nach Runde 4 (`1b82e45`) | **317 von 320** | **287 von 320**; Endzeit gleich 285, gleiche Befehlszahl 282 | `docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.3 |
+| after the AI corrections (`cca6f92`, r3) | 297 of 320 (according to `docs/AI-OBSERVED-2026-10-08.md` §11.4) or 295 (according to round 4) | **188** (working notes of the session) or 192 (round 4's own evaluation) | two evaluations of the same state, not reconciled |
+| after round 4 (`1b82e45`) | **317 of 320** | **287 of 320**; end time equal 285, same number of commands 282 | `docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.3 |
 
-Lesart: der Verteilungsvergleich bestand schon nach Runde 1; dass er besteht, heißt „kein Unterschied der in §40.3 genannten Größe gefunden“. Der Seed-Vergleich ist die schärfere Aussage und
-zeigt den Rest: 33 von 320 Gefechten enden bei 60 Hz mehr als eine Sekunde neben dem 30-Hz-Gefecht, 3 mit anderem Ausgang. **Nicht gemessen:** das Urteil von `rate-distribution` nach Runde 4 und
-am umgestellten Stand; 120 Hz in jeder Erhebung. **Balance ist nicht bewertet** – in der 30-Hz-Erhebung r3 gewinnt ChinaTankGeneral 70 von 80 Gefechten gegen AirForce (9 von 80), vor den
-KI-Korrekturen lag AirForce vorn (§42.6).
+Reading: the distribution comparison already passed after round 1; that it passes means "no difference of the size named in §40.3 found". The seed comparison is the sharper statement and
+shows the rest: 33 of 320 matches end at 60 Hz more than one second away from the 30 Hz match, 3 with a different outcome. **Not measured:** the verdict of `rate-distribution` after round 4 and
+at the switched-over state; 120 Hz in every survey. **Balance is not assessed** – in the 30 Hz survey r3 ChinaTankGeneral wins 70 of 80 matches against AirForce (9 of 80); before the
+AI corrections AirForce was ahead (§42.6).
 
-## 41. Ausweg „Originalraster“
+## 41. The escape "original grid" (German: Ausweg „Originalraster“)
 
-Festlegung aus `docs/handoffs/HANDOFF-PHASE23.md`: Logik, die das Original einmal je Logikbild (1/30 s) ausführt und die sich nicht sinnvoll auf eine andere Schrittweite umrechnen lässt, darf auf jedem
-(Rate/30)-ten Tick laufen – auf den Ticks, für die `SimulationTime.IsOriginalFrameBoundary(tick)` gilt. Für Bewegung, Befehlsannahme und Zielerwerb ist der Ausweg nicht zulässig. Jede Stelle steht
-in dieser Tabelle; bei 30 Hz ist jede von ihnen unverändert (jeder Tick beginnt ein Bild).
+Stipulation from `docs/handoffs/HANDOFF-PHASE23.md`: logic that the original executes once per logic frame (1/30 s) and that cannot sensibly be converted to another step size may run on every
+(rate/30)-th tick – on the ticks for which `SimulationTime.IsOriginalFrameBoundary(tick)` holds. For movement, command acceptance and target acquisition the escape is not permitted. Every place is listed
+in this table; at 30 Hz each of them is unchanged (every tick begins a frame).
 
-| Stelle | Was je Originalbild läuft | Warum nicht umrechenbar | Quelle im Original |
+| Place | What runs per original frame | Why not convertible | Source in the original |
 |---|---|---|---|
-| `Scripting/ScriptEngine.cs`, `ScriptEngine.Update` (`BeginsFrame`) – die Skript-VM als Ganzes | Endspiel-Zeitgeber, Timer (zählen Bilder), die Auswertung aller Skripte, Teamereignisse, Sequenzskripte mit ihren Wartezeiten, Team-Bauaufträge und -Warteschlangen, die Standbefehle der VM (`UpdateFollowers`, `UpdateButtonHunts`, `UpdatePhase13`) | Karten vergleichen Timer mit Bildliteralen, rechnen auf Timern, zählen eigene Auswertungen und fragen Flanken „seit der vorigen Auswertung“ ab; „ein Befehl je Update“ und „zwei Updates untätig“ sind Regeln des Originals in Bildern. Beleg: `MD_USA02` lief bei 60 Hz 250 s später (`docs/SCRIPT-ENGINE.md` §2) | `GameLogic.cpp`, `GameLogic::update` (`TheScriptEngine->UPDATE()` einmal je Bild); `ScriptEngine.cpp`, `ScriptEngine::update`, `setTimer`, `setSequentialTimer`, `evaluateAndProgressAllSequentialScripts`, `startEndGameTimer`/`startQuickEndGameTimer`; `Team.cpp`, `Team::updateState`; `ScriptConditions.cpp`, `evaluateUnitHasEmptied` |
-| dieselbe Stelle unter `FREEZE_TIME` | wie oben; weil der Tick der Welt steht, zählt die VM die Aufrufe selbst (`frozenPhase`) | wie oben; Skripttimer laufen im Original bei eingefrorener Zeit weiter, ein Update je Bild | `GameLogic::update` (Rückkehr nach den Skripten bei `isTimeFrozen`), `ScriptEngine::isTimeFrozenScript` |
+| `Scripting/ScriptEngine.cs`, `ScriptEngine.Update` (`BeginsFrame`) – the script VM as a whole | end-game timer, timers (count frames), the evaluation of all scripts, team events, sequential scripts with their wait times, team build orders and queues, the standing commands of the VM (`UpdateFollowers`, `UpdateButtonHunts`, `UpdatePhase13`) | maps compare timers with frame literals, do arithmetic on timers, count their own evaluations and query edges "since the previous evaluation"; "one command per update" and "idle for two updates" are rules of the original in frames. Evidence: `MD_USA02` ran 250 s later at 60 Hz (`docs/SCRIPT-ENGINE.md` §2) | `GameLogic.cpp`, `GameLogic::update` (`TheScriptEngine->UPDATE()` once per frame); `ScriptEngine.cpp`, `ScriptEngine::update`, `setTimer`, `setSequentialTimer`, `evaluateAndProgressAllSequentialScripts`, `startEndGameTimer`/`startQuickEndGameTimer`; `Team.cpp`, `Team::updateState`; `ScriptConditions.cpp`, `evaluateUnitHasEmptied` |
+| the same place under `FREEZE_TIME` | as above; because the tick of the world stands still, the VM counts the calls itself (`frozenPhase`) | as above; in the original, script timers keep running while time is frozen, one update per frame | `GameLogic::update` (return after the scripts on `isTimeFrozen`), `ScriptEngine::isTimeFrozenScript` |
 
-Was an derselben Stelle **bewusst in jedem Tick** bleibt: `ScriptEngine.Observe` (die Ereignisse jedes Weltschritts), das Merken benannter Objekte, die es gab (`NoteNamedObjectsThatExist`), die
-Auskünfte der VM an den Zielerwerb der Welt und die Annahme der von der VM erteilten Befehle im Weltschritt. Gemessen ist die Stelle über die 24 Kampagnenkarten bei 30, 60 und 120 Hz
+What **deliberately stays in every tick** at the same place: `ScriptEngine.Observe` (the events of every world step), the remembering of named objects that existed (`NoteNamedObjectsThatExist`), the
+information the VM gives to the target acquisition of the world and the acceptance, in the world step, of the commands issued by the VM. The place is measured over the 24 campaign maps at 30, 60 and 120 Hz
 (`docs/TICKRATE-MIGRATION.md` §15.3).
 
-Stellen außerhalb der Simulation, die schon seit Phase 21 je Originalbild laufen (Effekte, Meldungen, Daueraufträge der Eingabe), stehen in `docs/TICKRATE-MIGRATION.md` §14; sie sind Präsentation und
-kein Fall dieser Tabelle.
+Places outside the simulation that have been running per original frame since Phase 21 already (effects, messages, standing orders of the input) are listed in `docs/TICKRATE-MIGRATION.md` §14; they are presentation and
+not a case of this table.
 
-### 41.1 Die vollständige Liste (Stand 9. Oktober 2026, alle Pakete der Phase 23)
+### 41.1 The complete list (as of 9 October 2026, all packages of Phase 23)
 
-Die Tabelle oben nennt die Skript-VM. Die Pakete der Phase haben den Ausweg an weiteren Stellen benutzt und ihn dabei in zwei Formen gebraucht: am **Raster der Welt** (Ticks mit
-`IsOriginalFrameBoundary`, die Form der Festlegung) und am **Bild des Objekts** (ganze Bilder nach dem Tick, in dem das Objekt entstand, einen Befehl bekam oder einen Zustand begann –
-`EntityFrames.BeginsFrameOf`). Die zweite Form hält niemanden bis zur nächsten Bildgrenze der Welt auf; sie ist aber ebenso „einmal je Originalbild“ und steht deshalb hier. Jede Zeile ist bei
-30 Hz unverändert (jeder Tick beginnt ein Bild). Paketdokumente: `docs/rate-invariance/RATE-INVARIANCE-<PAKET>.md`; „OBSERVERS“, „R3-FLIGHT“ und „ROUND4“ sind `…-ROUND3-OBSERVERS.md`, `…-ROUND3-FLIGHT.md`,
+The table above names the script VM. The packages of the phase used the escape in further places and employed it in two forms: on the **grid of the world** (ticks with
+`IsOriginalFrameBoundary`, the form of the stipulation) and on the **frame of the object** (whole frames after the tick in which the object came into being, received a command or began a state –
+`EntityFrames.BeginsFrameOf`). The second form holds nobody up until the next frame boundary of the world; but it is just as much "once per original frame" and is therefore listed here. Every row is unchanged at
+30 Hz (every tick begins a frame). Package documents: `docs/rate-invariance/RATE-INVARIANCE-<PAKET>.md`; "OBSERVERS", "R3-FLIGHT" and "ROUND4" are `…-ROUND3-OBSERVERS.md`, `…-ROUND3-FLIGHT.md`,
 `…-ROUND4-FIRST-FRAME.md`.
 
-**A. Am nächsten am Verbot „nicht für Zielerwerb“ – die Bestätigung des Projektinhabers steht aus** (`docs/TICKRATE-MIGRATION.md` §15.7.7, Entscheidung 1). Der Durchlauf bzw. das Modul läuft
-weiter in jedem Tick, Befehle werden in jedem Tick angenommen, und ein befohlener Schuss fällt im Tick des Befehls; **was eine Einheit von sich aus entscheidet, entscheidet sie aber nur noch
-einmal je Bild.**
+**A. Closest to the prohibition "not for target acquisition" – the confirmation of the project owner is pending** (`docs/TICKRATE-MIGRATION.md` §15.7.7, decision 1). The pass or the module respectively keeps running
+in every tick, commands are accepted in every tick, and a commanded shot is fired in the tick of the command; **but what a unit decides of its own accord, it now decides only
+once per frame.**
 
-| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Warum nicht unterteilbar | Quelle im Original | Paket | Commit |
+| Place | What runs once per original frame, and on whose frame | Why not subdividable | Source in the original | Package | Commit |
 |---|---|---|---|---|---|
-| `SimulationWorld.StepAcquisition` | die eigenständige Entscheidung einer Einheit – Blick, Angriff, Verfolgen, Halt, Weitermarsch –, im ersten Tick des Bildes **der Einheit** (Tick ihres Erscheinens) | liest der Durchlauf alles am Bildende, sind seine Eingaben in allen Ticks eines Bildes gleich; ein Schuss im zweiten Tick ist ein anderes Spiel (anderes Opfer, anderes Nachladen). Kosten: eine mitten im Bild durch einen Befehl frei gewordene Einheit sucht bis zu r − 1 Ticks später | – (Paket nennt keine Stelle) | OBSERVERS §2 | `f6dacdb` |
-| `PointDefenseLaserUpdate.Update` | Scan und Schuss im ersten Tick des Bildes **des Trägers**, Träger und Ziele am Bildende; nach einem leeren Scan ruht die Schusspause für den Rest des Bildes (`_quietFrame`) | je Tick sah der Laser Geschosse an ihrer augenblicklichen Lage und schoss bei 60 Hz ein Bild früher; ein Bild ohne Ziel zählt bei 30 Hz die Pause nicht herunter | – | `docs/AI-OBSERVED-2026-10-08.md` §11.3, ROUND4 | `3c24352`, `887b51e` |
-| `CleanupHazardUpdate.Update` | Scan, Zielverlust, Annäherungsbefehl und Schuss, im Bild **des Besitzers** | Zustandsautomat mit einem Schritt je Bild; je Tick entschieden verlässt sein Zähler das Raster | – | ROUND4 | `7880aed` |
-| `DeployStyleAIUpdate.AllowsFire` | im Bild des Fertigwerdens werden Feuerversuche, die **vor** dem Update der Einheit kommen, verworfen (r − 1 Ticks); der eigene Zielerwerb nach dem Update kommt durch | bei 30 Hz wird der Befehl desselben Ticks verworfen und erst der des nächsten Bildes angenommen; „einen Schritt später“ ist ein Bild | – | R3-FLIGHT §3 | `c1a57ee` |
+| `SimulationWorld.StepAcquisition` | the independent decision of a unit – look, attack, pursue, halt, march on –, in the first tick of the frame **of the unit** (tick of its appearance) | if the pass reads everything at the frame end, its inputs are the same in all ticks of a frame; a shot in the second tick is a different game (different victim, different reload). Cost: a unit freed by a command in the middle of the frame searches up to r − 1 ticks later | – (package names no place) | OBSERVERS §2 | `f6dacdb` |
+| `PointDefenseLaserUpdate.Update` | scan and shot in the first tick of the frame **of the carrier**, carrier and targets at the frame end; after an empty scan the shot pause rests for the remainder of the frame (`_quietFrame`) | per tick the laser saw projectiles at their momentary position and fired one frame earlier at 60 Hz; a frame without a target does not count the pause down at 30 Hz | – | `docs/AI-OBSERVED-2026-10-08.md` §11.3, ROUND4 | `3c24352`, `887b51e` |
+| `CleanupHazardUpdate.Update` | scan, loss of target, approach command and shot, in the frame **of the owner** | state machine with one step per frame; decided per tick, its counter leaves the grid | – | ROUND4 | `7880aed` |
+| `DeployStyleAIUpdate.AllowsFire` | in the frame of becoming ready, fire attempts that come **before** the update of the unit are discarded (r − 1 ticks); the unit's own target acquisition after the update gets through | at 30 Hz the command of the same tick is discarded and only that of the next frame is accepted; "one step later" is one frame | – | R3-FLIGHT §3 | `c1a57ee` |
 
-**B. Zustandsautomaten und Entscheidungen „ein Schritt je Bild“.**
+**B. State machines and decisions "one step per frame".**
 
-| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Warum nicht unterteilbar | Quelle im Original | Paket | Commit |
+| Place | What runs once per original frame, and on whose frame | Why not subdividable | Source in the original | Package | Commit |
 |---|---|---|---|---|---|
-| `ScriptEngine.Update` (auch unter `FREEZE_TIME`) | die Skript-VM als Ganzes, Raster der **Welt** | Tabelle oben | Tabelle oben | `docs/SCRIPT-ENGINE.md` §2 | `727c4d6`, `2fe8b32`, `d710835` |
-| `AIUpdateInterface.Update` → `DockMachine.Update` | die Zustandswechsel des Andockens (Anflug beendet, Freigabe, Einfahrt, Ausfahrt), Raster der **Welt**; die Arbeit des Docks läuft je Tick | jeder Wechsel kostet ein Update; das lässt sich nur zählen | `AIDockMachine` | GROUND | `096160d` |
-| `SupplyCarrierAI.Update` → `SupplyMachine.Update` | untätig → will liefern → Dockbefehl, Raster der **Welt** | wie oben | `SupplyTruckStateMachine` | GROUND | `096160d` |
-| `DockMachine.ActionDelay` | die Aktion eines Versorgungsdocks an einem Andockenden ohne Wartezeit, ab dem Betreten | „beim nächsten Update“ ist ein Bild (`ZeroIsNextFrame`) | – | ROUND4 | `d9b5490` |
-| `AssaultTransportAIUpdate.Update` | Mitgliederliste, Blick nach dem eigenen Schuss, Befehle an die Truppen, Bild **des Transporters** | „im nächsten Update“ ist ein Bild | – | ROUND4 | `015e975` |
-| `AIUpdateInterface.UpdateTask` (drei Prüfungen), `UpdateGoal` | „lohnt die Aufgabe noch“ (Ziel fort, Bau fertig oder fremd, nichts zu reparieren), Reichweite des Bauauftrags und Nachführen auf ein Zielobjekt, Bild **des Bauenden** | geprüft wird die Lage, die auch der 30-Hz-Lauf prüft; die Arbeit selbst bleibt je Tick | – | GROUND, OBSERVERS | `6e018fe`, `3d90f25` |
-| `JetAIUpdate.Update`, geparktes Flugzeug ohne Auftrag | der Leerlaufblick (Heilung melden, gespeicherten Befehl ausführen, Rückkehrzeit), Bild **des Flugzeugs**; ein Befehl beendet das Leerlaufbild sofort | Zustandsautomat, ein Schritt je Bild | – | R3-FLIGHT §8 | `cc7fd75` |
-| `ContainChainModules.EnterPayload` | das Nachsehen eines Trägers, ob seine Erstbesatzung erschienen ist, Bild **des Trägers** | Zustandswechsel „ein Update nach dem Erscheinen“ | – | CONSOLIDATION | `f8ce7c4` |
-| `SimulationWorld.StepTurret` (`OccupyFrame`) | ein Turmschritt ohne Drehung (Scan-Frist setzen, Seitenwechsel eines schwenkenden Turms) belegt ein Bild **des Turms** | ein Schritt des Turms ist ein Bild | `TurretAI::friend_turnTowardsAngle` | TURRETS, ROUND4 | `276a8de`, `43acce8` |
-| `StealthDetectorUpdate.Update` bei `DetectionRate = 0` | ein Scan je Bild statt je Tick (Untergrenze `AtLeastOneFrame`; Retail hat keinen solchen Detektor) | – | `StealthDetectorUpdate.cpp`, `update` (`markAsDetected(m_updateRate + 1)`) | TIMING | `f922979` |
+| `ScriptEngine.Update` (also under `FREEZE_TIME`) | the script VM as a whole, grid of the **world** | table above | table above | `docs/SCRIPT-ENGINE.md` §2 | `727c4d6`, `2fe8b32`, `d710835` |
+| `AIUpdateInterface.Update` → `DockMachine.Update` | the state changes of docking (approach finished, clearance, entry, exit), grid of the **world**; the work of the dock runs per tick | every change costs one update; that can only be counted | `AIDockMachine` | GROUND | `096160d` |
+| `SupplyCarrierAI.Update` → `SupplyMachine.Update` | idle → wants to deliver → dock command, grid of the **world** | as above | `SupplyTruckStateMachine` | GROUND | `096160d` |
+| `DockMachine.ActionDelay` | the action of a supply dock on a docker without wait time, from entering onward | "at the next update" is one frame (`ZeroIsNextFrame`) | – | ROUND4 | `d9b5490` |
+| `AssaultTransportAIUpdate.Update` | member list, look after its own shot, commands to the troops, frame **of the transport** | "in the next update" is one frame | – | ROUND4 | `015e975` |
+| `AIUpdateInterface.UpdateTask` (three checks), `UpdateGoal` | "is the task still worthwhile" (target gone, construction finished or foreign, nothing to repair), range of the build order and tracking toward a target object, frame **of the builder** | what is checked is the situation that the 30 Hz run checks too; the work itself stays per tick | – | GROUND, OBSERVERS | `6e018fe`, `3d90f25` |
+| `JetAIUpdate.Update`, parked aircraft without an order | the idle look (report healing, execute stored command, return time), frame **of the aircraft**; a command ends the idle frame immediately | state machine, one step per frame | – | R3-FLIGHT §8 | `cc7fd75` |
+| `ContainChainModules.EnterPayload` | a carrier's check whether its initial crew has appeared, frame **of the carrier** | state change "one update after the appearance" | – | CONSOLIDATION | `f8ce7c4` |
+| `SimulationWorld.StepTurret` (`OccupyFrame`) | a turret step without rotation (setting the scan deadline, change of side of a sweeping turret) occupies one frame **of the turret** | one step of the turret is one frame | `TurretAI::friend_turnTowardsAngle` | TURRETS, ROUND4 | `276a8de`, `43acce8` |
+| `StealthDetectorUpdate.Update` with `DetectionRate = 0` | one scan per frame instead of per tick (lower bound `AtLeastOneFrame`; retail has no such detector) | – | `StealthDetectorUpdate.cpp`, `update` (`markAsDetected(m_updateRate + 1)`) | TIMING | `f922979` |
 
-**C. Abtastung und Kollision** (eine dichtere Abtastung findet Überlappungen früher und in anderer Reihenfolge).
+**C. Sampling and collision** (a denser sampling finds overlaps earlier and in a different order).
 
-| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Warum nicht unterteilbar | Quelle im Original | Paket | Commit |
+| Place | What runs once per original frame, and on whose frame | Why not subdividable | Source in the original | Package | Commit |
 |---|---|---|---|---|---|
-| `AIUpdateInterface.AdvanceFrame` → `ResolveFootprintCollisions`, `TryTopple`, `TrySquish` | die Prüfung auf Überlappung (Quetschen, Umstoßen, `ICollideModule`), im ersten Tick des Bildes **des Fahrenden**, der dabei am Bildende steht (bis Runde 4: im letzten Tick) | bei 30 Hz wird nach jedem ganzen Schritt geprüft | – | GROUND, ROUND4 | `1c65446`, `e910174` |
-| `MinefieldBehavior.OnCollide` | der Vergleich „hat sich die Einheit seit der letzten Detonation um `RepeatDetonateMoveThresh` bewegt“, Raster **des Meldenden** (des Fahrenden) | die Schwelle steht gegen den Weg seit dem letzten Vergleich; ein feinerer Takt zündet schneller | – | TIMING, CONSOLIDATION | `eca983f`, `0136733` |
-| `RailroadBehavior.Collide` | Kollisionsantwort des Zugs (Töten, Quetschschaden, Wegschieben um ein Viertel der Überlappung), Bild **der Lok** | Schaden und Schub sind Beträge je Bild; das Viertel klingt geometrisch ab | – | PHYSICS | `9871bc2` |
-| `RailedTransportDockUpdate` | die Ankunftsfrage (6 bzw. 3 Einheiten), ab Beginn des Ziehens bzw. Schiebens | das Original fragt einmal je Bild | – | PHYSICS | `b53cbd3` |
-| `WaveGuideUpdate.DoDamage`, Bahnende | Abtastung der Front, Ende der Bahn, Bild **der Welle** | eine dichtere Abtastung trifft Objekte, an denen eine gröbere vorbeigeht | – | PHYSICS | `c333364` |
-| `HeightDieUpdate.Update` | Höhenprüfung und „bewegt sich abwärts“, Bild **des Objekts** (Tick der Entstehung), gelesen am Bildende | vergleicht mit der Höhe des vorigen Bildes; je Tick stirbt das Objekt in einer Höhe, die das Original nie sieht | – | PHYSICS, CONSOLIDATION | `5440888`, `ad2b9e9`, `f0770fe` |
+| `AIUpdateInterface.AdvanceFrame` → `ResolveFootprintCollisions`, `TryTopple`, `TrySquish` | the check for overlap (squishing, toppling, `ICollideModule`), in the first tick of the frame **of the mover**, which stands at the frame end while doing so (until round 4: in the last tick) | at 30 Hz the check happens after every whole step | – | GROUND, ROUND4 | `1c65446`, `e910174` |
+| `MinefieldBehavior.OnCollide` | the comparison "has the unit moved by `RepeatDetonateMoveThresh` since the last detonation", grid **of the reporter** (of the mover) | the threshold stands against the distance since the last comparison; a finer cadence detonates faster | – | TIMING, CONSOLIDATION | `eca983f`, `0136733` |
+| `RailroadBehavior.Collide` | collision response of the train (killing, crush damage, pushing away by a quarter of the overlap), frame **of the locomotive** | damage and push are amounts per frame; the quarter decays geometrically | – | PHYSICS | `9871bc2` |
+| `RailedTransportDockUpdate` | the arrival question (6 or 3 units respectively), from the start of pulling or pushing respectively | the original asks once per frame | – | PHYSICS | `b53cbd3` |
+| `WaveGuideUpdate.DoDamage`, end of path | sampling of the front, end of the path, frame **of the wave** | a denser sampling hits objects that a coarser one passes by | – | PHYSICS | `c333364` |
+| `HeightDieUpdate.Update` | height check and "is moving downward", frame **of the object** (tick of creation), read at the frame end | compares with the height of the previous frame; per tick the object dies at a height the original never sees | – | PHYSICS, CONSOLIDATION | `5440888`, `ad2b9e9`, `f0770fe` |
 
-**D. Heilung in der Scheibe des Originals** (Scheiben je Tick sind einzeln gerundet und summieren sich nicht zur Bildscheibe; ein Treffer im ersten Tick eines Bildes träfe eine andere Gesundheit).
+**D. Healing in the slice of the original** (slices per tick are rounded individually and do not add up to the frame slice; a hit in the first tick of a frame would hit a different health).
 
-| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Paket | Commit |
+| Place | What runs once per original frame, and on whose frame | Package | Commit |
 |---|---|---|---|
-| `HealContain.Update`, `GarrisonContain.HealOne`, `RepairDockUpdate.Action` | die Heilscheibe, gezählt ab Eintritt bzw. erster Aktion | PHYSICS | `b05da71` |
-| `TunnelContain.Update` | die Heilscheibe eines Insassen, gezählt ab seinem Eintritt | FLIGHT | `81931ab` |
-| `PropagandaTowerBehavior.Give` | die Heilscheibe, Bild **des Turms** (Bonus und Scan bleiben je Tick) | CONSOLIDATION | `f05af4f` |
-| `AIUpdateInterface.UpdateTask` (Reparatur) | die Heilscheibe, Bild **des Bauenden** | OBSERVERS | `64f438f` |
-| `RebuildHoleBehavior.Update` | die Regeneration, Bild **des Lochs** | OBSERVERS | `2a433ba` |
-| `TransportContain` (Regeneration der Insassen) | die Scheibe einer Sekunde über 30 Bilder, gezählt ab dem Einstieg | `docs/AI-OBSERVED-2026-10-08.md` §11.3 | `df639ff` |
+| `HealContain.Update`, `GarrisonContain.HealOne`, `RepairDockUpdate.Action` | the healing slice, counted from entry or first action respectively | PHYSICS | `b05da71` |
+| `TunnelContain.Update` | the healing slice of an occupant, counted from its entry | FLIGHT | `81931ab` |
+| `PropagandaTowerBehavior.Give` | the healing slice, frame **of the tower** (bonus and scan stay per tick) | CONSOLIDATION | `f05af4f` |
+| `AIUpdateInterface.UpdateTask` (repair) | the healing slice, frame **of the builder** | OBSERVERS | `64f438f` |
+| `RebuildHoleBehavior.Update` | the regeneration, frame **of the hole** | OBSERVERS | `2a433ba` |
+| `TransportContain` (regeneration of the occupants) | the slice of one second over 30 frames, counted from boarding | `docs/AI-OBSERVED-2026-10-08.md` §11.3 | `df639ff` |
 
-**E. Zufallszüge, Ereignisse und Statistik** (ein Zufallszug ist nicht teilbar; die Zahl der Züge je Spielzeit muss gleich sein).
+**E. Random draws, events and statistics** (a random draw is not divisible; the number of draws per game time must be equal).
 
-| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Paket | Commit |
+| Place | What runs once per original frame, and on whose frame | Package | Commit |
 |---|---|---|---|
-| `SlavedUpdate.DoRepairLogic` | Höhen-Zufallszug und Bewegungsbefehl einer Drohne im Reparaturzustand, Raster der **Welt** | TURRETS | `01121cc`, `e1252df` |
-| `WanderAIUpdate.Update` | der Blick eines untätigen Wanderers (zwei Züge, ein Befehl), Raster der **Welt** | TURRETS | `022bec8` |
-| `GrantStealthBehavior.Update` | Wachsen des Radius und Vergabe der Tarnung, Bild **des Markers** | TURRETS | `f1c5ceb` |
-| `SpecialAbilityUpdate.StepCaptureFlash` | die Blitzphase der Übernahme, Bild **der Vorbereitung** (`SpecialAbilityUpdate::continuePreparation`) | TURRETS | `d923cea` |
-| `EmpUpdate.Update` | der Wachstumsanteil des EMP-Maßes, Bild **des Pulses** (keine Spielwirkung) | PROJECTILES | `9132127` |
-| `SimulationWorld.NoteTurretWait` | das Hochzählen von `TurretWaits` (Statistik, Teil des Hashes), Raster der **Welt** | TURRETS | `dc888d3` |
+| `SlavedUpdate.DoRepairLogic` | height random draw and move command of a drone in the repair state, grid of the **world** | TURRETS | `01121cc`, `e1252df` |
+| `WanderAIUpdate.Update` | the look of an idle wanderer (two draws, one command), grid of the **world** | TURRETS | `022bec8` |
+| `GrantStealthBehavior.Update` | growth of the radius and granting of the stealth, frame **of the marker** | TURRETS | `f1c5ceb` |
+| `SpecialAbilityUpdate.StepCaptureFlash` | the flash phase of the capture, frame **of the preparation** (`SpecialAbilityUpdate::continuePreparation`) | TURRETS | `d923cea` |
+| `EmpUpdate.Update` | the growth fraction of the EMP measure, frame **of the pulse** (no gameplay effect) | PROJECTILES | `9132127` |
+| `SimulationWorld.NoteTurretWait` | the incrementing of `TurretWaits` (statistics, part of the hash), grid of the **world** | TURRETS | `dc888d3` |
 
-**Kein Ausweg, sondern die beschlossene Unterteilung** (Entscheidung je Bild, Fortschritt in jedem Tick – §43): Bodenbewegung, Flügelflug und die Zustände des Jets, Türme, Geschosse und Raketen,
-Umstürzen, Zug, Lawine, Battle Bus, Einsturz, Brückengerüst, Fallschirm, Absturz, Chinook, Spectre (sein Bildschritt liegt am Raster der Welt, weil sein Haubitzentakt `tick % HowitzerFiringRate`
-dort liegt), dynamische Aufdeckung. Ebenfalls kein Ausweg: die Sicht (läuft unverändert alle drei Bilder, seit `a8eed4a` nach dem **letzten** Tick ihres Bildes) und die Leser, die nur eine andere
-Lage lesen (§43.4).
+**Not an escape, but the agreed subdivision** (decision per frame, progress in every tick – §43): ground movement, winged flight and the states of the jet, turrets, projectiles and missiles,
+toppling, train, avalanche, Battle Bus, collapse, bridge scaffold, parachute, crash, Chinook, Spectre (its frame step lies on the grid of the world, because its howitzer cadence `tick % HowitzerFiringRate`
+lies there), dynamic shroud reveal. Likewise not an escape: vision (runs unchanged every three frames, since `a8eed4a` after the **last** tick of its frame) and the readers that merely read a different
+position (§43.4).
 
-## 42. Fabrikausfahrt (8. Oktober 2026): Ausfahrtsweg frisch gebauter Einheiten
+## 42. Factory exit (8 October 2026): exit path of freshly built units
 
-**Der Commit zu diesem Abschnitt ändert die Simulation bei 30 Hz** (jeder Lauf mit Produktion bekommt neue Hashes). Das Referenzmanifest und das Eingangsmanifest sind in diesem
-Commit bewusst **nicht** neu geschrieben; das geschieht in einem eigenen Commit mit dieser Ursache. Geschrieben wurde die Korrektur am 7. Oktober gegen einen älteren Stand und
-zurückgehalten; hier steht sie auf dem Stand nach Phase 23 (`docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md`) und folgt deren Bildkonvention. **Nichts davon hat ein Mensch gesehen.**
+**The commit for this section changes the simulation at 30 Hz** (every run with production gets new hashes). The reference manifest and the input manifest are deliberately **not** rewritten in this
+commit; that happens in a separate commit with this cause. The fix was written on 7 October against an older state and
+held back; here it stands on the state after Phase 23 (`docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md`) and follows its frame convention. **No human has seen any of this.**
 
-### 42.1 Befund und Maßstab
+### 42.1 Finding and yardstick
 
-`ProductionUpdate.Update` setzte die fertige Einheit auf den `UnitCreatePoint` – im Gebäude – und gab ihr keinen Weg. Sie blieb dort stehen, drei nacheinander gebaute Einheiten
-standen ineinander; nur ein vom Spieler gesetzter Sammelpunkt bewegte sie (`docs/DEMO-SCENARIOS.md`, Abschnitt „Fabrikausfahrten“, `docs/DEMO-FINDINGS.md` Nr. 34).
+`ProductionUpdate.Update` put the finished unit on the `UnitCreatePoint` – inside the building – and gave it no path. It stayed standing there, three units built one after another
+stood inside each other; only a rally point set by the player moved them (`docs/DEMO-SCENARIOS.md`, section "Factory exits", `docs/DEMO-FINDINGS.md` no. 34).
 
-Das Original (gelesen, nicht kopiert): `DefaultProductionExitUpdate.cpp` und `QueueProductionExitUpdate.cpp`, `exitObjectViaDoor` – die Einheit wird auf den ins Gebäude gedrehten
-`UnitCreatePoint` gesetzt und bekommt mit `aiFollowExitProductionPath` (`AI_FOLLOW_EXIT_PRODUCTION_PATH`, `AIStates.cpp`, `AIFollowPathState`) einen Weg: zuerst
-`getNaturalRallyPoint(…, offset = TRUE)` – der `NaturalRallyPoint` der Daten, um `2 * PATHFIND_CELL_SIZE_F` (20) in seiner eigenen Richtung nach außen geschoben –, danach, falls
-gesetzt, der Sammelpunkt des Spielers, den `exitObjectViaDoor` vorher mit `Pathfinder::adjustDestination` für die Einheit zurechtrückt. Die eigene Fabrik ist auf diesem Weg kein
-Hindernis (`ignoreObstacle`). Untätige Verbündete auf dem Weg werden weggeschickt (`Pathfinder::moveAllies`, `AIUpdateInterface::aiMoveAwayFromUnit`).
-`SupplyCenterProductionExitUpdate.cpp` fährt über den nicht verschobenen `NaturalRallyPoint` und schickt den Laster sofort an die Arbeit.
+The original (read, not copied): `DefaultProductionExitUpdate.cpp` and `QueueProductionExitUpdate.cpp`, `exitObjectViaDoor` – the unit is put on the `UnitCreatePoint` rotated into the building
+and gets a path with `aiFollowExitProductionPath` (`AI_FOLLOW_EXIT_PRODUCTION_PATH`, `AIStates.cpp`, `AIFollowPathState`): first
+`getNaturalRallyPoint(…, offset = TRUE)` – the `NaturalRallyPoint` of the data, pushed outwards by `2 * PATHFIND_CELL_SIZE_F` (20) in its own direction –, then, if
+set, the rally point of the player, which `exitObjectViaDoor` adjusts for the unit beforehand with `Pathfinder::adjustDestination`. The unit's own factory is no obstacle on this
+path (`ignoreObstacle`). Idle allies on the path are sent away (`Pathfinder::moveAllies`, `AIUpdateInterface::aiMoveAwayFromUnit`).
+`SupplyCenterProductionExitUpdate.cpp` drives via the unshifted `NaturalRallyPoint` and sends the truck to work immediately.
 
-### 42.2 Verhalten
+### 42.2 Behaviour
 
-| Schritt | Verhalten | Quelle / eigene Festlegung |
+| Step | Behaviour | Source / own decision |
 | --- | --- | --- |
-| Ausfahrtspunkt | `NaturalRallyPoint` (neu typisiert: `ProductionExitData.NaturalRallyPoint`), um zwei Wegfindungszellen (20) in seiner eigenen Richtung nach außen geschoben, ins Gebäude gedreht (`ProductionExitBase.TryGetExitPath`). Ein Modul ohne `NaturalRallyPoint` (0, 0, 0) hat keinen Ausfahrtsweg | `getNaturalRallyPoint(…, offset = TRUE)`; ein Punkt, der nicht auf der x-Achse liegt, wandert dabei wie im Original auch seitwärts |
-| Torpunkt | derselbe Punkt, nur eine Zelle (10) nach außen; der Weg der Einheit führt zuerst über ihn (`AIUpdateInterface.OrderExitProduction`: Zwischenpunkt des Wegs, kein Halt; `_viaPending`) | **eigene Festlegung:** so verlässt die Einheit das Gebäude auf der Torseite, auch wenn ihr Halteplatz seitlich liegt. Die Wegsuche verlässt den Grundriss, in dem die Einheit steht, von selbst (Ersatz für `ignoreObstacle`). Ist der Torpunkt nicht erreichbar (zugebaut), fährt die Einheit direkt zum Ziel |
-| Platz machen | Steht eine untätige eigene Einheit auf dem Ausfahrtspunkt, wird sie auf den nächsten freien Platz daneben geschickt, die neue Einheit nimmt den Punkt (`SimulationWorld.ClaimExitPoint`) | reduziert nach `Pathfinder::moveAllies` / `aiMoveAwayFromUnit` (das Original räumt untätige Verbündete entlang des ganzen Wegs weg) |
-| Freier Platz | `IWorldServices.FindFreeGoal`: Plätze in Reihen quer zur Laufrichtung (0, +1, −1, … ±3 Plätze, vier Reihen; Abstand = doppelter Begrenzungsradius + 5, mindestens eine Zelle); frei heißt: Zelle begehbar und nicht bebaut, kein anderes bewegliches Objekt steht dort oder ist dorthin unterwegs. Ist alles belegt, bleibt es beim Ziel selbst | reduziert nach `Pathfinder::adjustDestination`; Reihen- und Platzzahl sind eigene Werte |
-| Sammelpunkt | erst der Ausfahrtsweg, dann – auf einem freien Platz am Sammelpunkt – der Sammelpunkt (`_exitRallyPending`) | `exitObjectViaDoor`: `adjustDestination` für den Sammelpunkt |
-| Anderer Befehl während der Ausfahrt | ersetzt den ganzen Ausfahrtsweg samt Torpunkt und zweiter Etappe – jeder Befehl, nicht nur ein Bewegungsbefehl (`AIUpdateInterface.EndExitPath`; §42.6) | der Ausfahrtsweg ist ein Zustand der KI des Originals (`AI_FOLLOW_EXIT_PRODUCTION_PATH`), ein neuer Befehl ersetzt ihn |
-| Versorgungslager | unverändert: der Lastwagen wird sofort von der Versorgungs-KI übernommen (`ForceSupplyWanting`), ohne Ausfahrtsweg | Abweichung, nur gemeldet |
+| Exit point | `NaturalRallyPoint` (newly typed: `ProductionExitData.NaturalRallyPoint`), pushed outwards by two pathfinding cells (20) in its own direction, rotated into the building (`ProductionExitBase.TryGetExitPath`). A module without a `NaturalRallyPoint` (0, 0, 0) has no exit path | `getNaturalRallyPoint(…, offset = TRUE)`; a point that does not lie on the x axis also moves sideways in the process, as in the original |
+| Door point | the same point, only one cell (10) outwards; the path of the unit leads via it first (`AIUpdateInterface.OrderExitProduction`: intermediate point of the path, no stop; `_viaPending`) | **own decision:** this way the unit leaves the building on the door side, even if its stopping place lies to the side. The pathfinding leaves the footprint in which the unit stands by itself (replacement for `ignoreObstacle`). If the door point is not reachable (built over), the unit drives directly to the goal |
+| Making room | If an idle own unit stands on the exit point, it is sent to the nearest free place beside it, the new unit takes the point (`SimulationWorld.ClaimExitPoint`) | reduced after `Pathfinder::moveAllies` / `aiMoveAwayFromUnit` (the original clears idle allies away along the whole path) |
+| Free place | `IWorldServices.FindFreeGoal`: places in rows across the direction of travel (0, +1, −1, … ±3 places, four rows; spacing = twice the bounding radius + 5, at least one cell); free means: cell walkable and not built on, no other movable object stands there or is on its way there. If everything is occupied, it stays with the goal itself | reduced after `Pathfinder::adjustDestination`; the numbers of rows and places are own values |
+| Rally point | first the exit path, then – on a free place at the rally point – the rally point (`_exitRallyPending`) | `exitObjectViaDoor`: `adjustDestination` for the rally point |
+| Another command during the exit | replaces the whole exit path including the door point and the second leg – every command, not only a move command (`AIUpdateInterface.EndExitPath`; §42.6) | the exit path is a state of the AI of the original (`AI_FOLLOW_EXIT_PRODUCTION_PATH`), a new command replaces it |
+| Supply depot | unchanged: the truck is taken over by the supply AI immediately (`ForceSupplyWanting`), without an exit path | deviation, only reported |
 
-### 42.3 Bildkonvention (30 / 60 / 120 Hz)
+### 42.3 Frame convention (30 / 60 / 120 Hz)
 
-Bei 30 Hz wählt die Erzeugungsphase des Ticks, in dem die Einheit entsteht, den Platz und schickt, wer dort steht, zur Seite; sie sieht dabei jedes Objekt nach seinem ganzen Schritt
-dieses Bildes. Die Einheit und die Weggeschickten bewegen sich mit dem nächsten Tick. Über 30 Hz gilt nach `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1.3:
+At 30 Hz the spawn phase of the tick in which the unit comes into being chooses the place and sends whoever stands there aside; in doing so it sees every object after its whole step
+of this frame. The unit and those sent away move with the next tick. Above 30 Hz, `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1.3 applies:
 
-| Was | bei 30 Hz | über 30 Hz (r Ticks je Bild) | Regel |
+| What | at 30 Hz | above 30 Hz (r ticks per frame) | Rule |
 | --- | --- | --- | --- |
-| Die Einheit entsteht | Ende von Tick T | Ende des **ersten** Ticks des Bildes der Fabrik (`ProductionUpdate.Enqueue` zählt das Bild des Auftrags ganz, Paket TIMING) | 1, 7 |
-| Platzwahl und „Platz machen“ | Erzeugungsphase von T | Erzeugungsphase des **letzten** Ticks dieses Bildes (`SimulationWorld.ProcessExitClaims`, Liste `_exitClaims`): erst dann hat jedes Objekt in Phase seinen Schritt zurückgelegt. Bis dahin steht der Befehl mit dem Ausfahrtspunkt selbst; eine Einheit, die inzwischen einen anderen Befehl bekam oder nicht mehr lebt, behält, was sie hat. Einheiten, die im selben Tick **nach** der wählenden entstanden sind, gibt es für sie nicht (bei 30 Hz entstehen sie erst nach ihrer Wahl) | 3, 5 |
-| Erster Schritt der Einheit und der Weggeschickten | Tick T + 1 | erster Tick des nächsten Bildes (`DeferSpawnPhaseOrders` für die Einheit; die Weggeschickten werden im letzten Tick des Bildes befohlen und laufen im nächsten Tick) | 7 |
-| Durchfahrt des Torpunkts, neuer Wegplan | Entscheidung je Tick | Entscheidung im ersten Tick des Bildes der Einheit (Teil von `Move`, das über 30 Hz einmal je Bild entscheidet, Paket GROUND) | 1 |
-| Zweite Etappe zum Sammelpunkt | im Update, das die erste beendet | im **letzten** Tick des Bildes der Einheit: dort endet eine Ankunft von selbst (`BeginArrival`); eine erste Etappe, die im ersten Tick endet (kein Weg hinaus), wartet darauf (`EntityFrames.BeginsFrameOf` des Folgeticks) | 2, 7 |
+| The unit comes into being | end of tick T | end of the **first** tick of the frame of the factory (`ProductionUpdate.Enqueue` counts the frame of the order in full, package TIMING) | 1, 7 |
+| Choice of place and "making room" | spawn phase of T | spawn phase of the **last** tick of this frame (`SimulationWorld.ProcessExitClaims`, list `_exitClaims`): only then has every object in phase covered its step. Until then the command stands with the exit point itself; a unit that has received another command in the meantime or is no longer alive keeps what it has. Units that came into being in the same tick **after** the choosing one do not exist for it (at 30 Hz they come into being only after its choice) | 3, 5 |
+| First step of the unit and of those sent away | tick T + 1 | first tick of the next frame (`DeferSpawnPhaseOrders` for the unit; those sent away are commanded in the last tick of the frame and run in the next tick) | 7 |
+| Passing the door point, new path plan | decision per tick | decision in the first tick of the frame of the unit (part of `Move`, which above 30 Hz decides once per frame, package GROUND) | 1 |
+| Second leg to the rally point | in the update that ends the first | in the **last** tick of the frame of the unit: there an arrival ends by itself (`BeginArrival`); a first leg that ends in the first tick (no path out) waits for that (`EntityFrames.BeginsFrameOf` of the following tick) | 2, 7 |
 
-Der Ausweg „Originalraster“ (§41) wird nicht benutzt: nichts läuft am Raster der Welt, die Platzwahl hängt am Bild der Einheit (Tick ihres Entstehens).
+The escape "original grid" (§41) is not used: nothing runs on the grid of the world, the choice of place hangs on the frame of the unit (tick of its coming into being).
 
-**Zustand:** `exitRallyX/Y` und `viaX/Y` der KI, `doorX/Y` und `exitX/Y` einer wartenden Erzeugung, über 30 Hz die Liste `exitClaims` der Welt (Einheit, Tick) – alles nur geschrieben,
-wenn vorhanden; keine Versionssprünge (`WorldSnapshot` 10, Replay 12, `CommandTypes.Version` 15). Die Liste der Welt steht im Kopf des Zustands und wird in jedem Tick voll gehasht;
-`RetargetExit` und `OrderMove` melden die Einheit mit `MarkDirty`.
+**State:** `exitRallyX/Y` and `viaX/Y` of the AI, `doorX/Y` and `exitX/Y` of a waiting spawn, above 30 Hz the list `exitClaims` of the world (unit, tick) – all written only
+when present; no version bumps (`WorldSnapshot` 10, Replay 12, `CommandTypes.Version` 15). The list of the world stands in the header of the state and is hashed in full in every tick;
+`RetargetExit` and `OrderMove` report the unit with `MarkDirty`.
 
-**Eingangsmanifest:** genau ein neues Feld, `ProductionExitData.NaturalRallyPoint` (vorher vom Katalog typisiert, aber vom Modul nicht gelesen). `input-manifest check`:
-`catalogs.templates` und `catalogs.whole` weichen ab, alles andere gleich.
+**Input manifest:** exactly one new field, `ProductionExitData.NaturalRallyPoint` (previously typed by the catalog, but not read by the module). `input-manifest check`:
+`catalogs.templates` and `catalogs.whole` differ, everything else is the same.
 
-**Kosten:** kein neuer Durchlauf je Tick. Je Tick der Welt ein Vergleich (`_exitClaims.Count`, bei 30 Hz immer 0). Solange eine Einheit ausfährt, läuft je Entscheidung ihrer Bewegung
-(je Bild) ein Abstandsvergleich zum Torpunkt und je Update eine Abfrage `_exitRallyPending`; der Wegplan der Ausfahrt sind zwei Wegsuchen statt einer (einmal je Plan). Je **gebauter
-Einheit** einmal: ein Durchlauf über die beweglichen Objekte (`GoalIsFree`); nur wenn der Ausfahrtspunkt belegt ist, ein zweiter und bis zu 27 Plätze mit je einem Durchlauf
-(`FindFreeGoal`), dasselbe einmal bei der Ankunft mit Sammelpunkt. Nicht ruhig gemessen (kein Vergleichslauf zweier Binärverzeichnisse).
+**Cost:** no new pass per tick. Per tick of the world one comparison (`_exitClaims.Count`, at 30 Hz always 0). As long as a unit is exiting, per decision of its movement
+(per frame) a distance comparison to the door point runs, and per update a query of `_exitRallyPending`; the path plan of the exit is two path searches instead of one (once per plan). Per **built
+unit** once: one pass over the movable objects (`GoalIsFree`); only if the exit point is occupied, a second one and up to 27 places with one pass each
+(`FindFreeGoal`), the same once at the arrival with a rally point. Not measured on a quiet machine (no comparison run of two binary directories).
 
-### 42.4 Gemessen (8. Oktober 2026)
+### 42.4 Measured (8 October 2026)
 
-**Szenen** (`scripts/audit-scenarios.ps1 -Scenario exits` und die drei Gesamtszenen `exit-<fraktion>-all`): vorher 12 von 12 Szenen rot (0 von 27 Einheiten der neun Einzelszenen
-verlassen ihr Gebäude), jetzt 12 von 12 grün bei 30 Hz **und** mit `-TickRate 60`; die drei klassischen Szenen bestehen bei beiden Raten. Erstes Bild außerhalb des Kastens nach dem
-Erscheinen, bei 30 und 60 Hz in jeder Einheit gleich:
+**Scenes** (`scripts/audit-scenarios.ps1 -Scenario exits` and the three overall scenes `exit-<fraktion>-all`): before, 12 of 12 scenes red (0 of 27 units of the nine single scenes
+leave their building), now 12 of 12 green at 30 Hz **and** with `-TickRate 60`; the three classic scenes pass at both rates. First frame outside the box after
+appearing, the same at 30 and 60 Hz for every unit:
 
 | | America | China | GLA |
 | --- | --- | --- | --- |
-| Kommandozentrale | +93 / +93 / +93 | +93 / +94 / +94 | +52 / +52 / +52 |
-| Kaserne | +86 / +86 / +86 | +47 / +48 / +48 | +66 / +66 / +66 |
-| Waffenfabrik / Waffenhändler | +64 / +64 / +64 | +69 / +69 / +69 | +46 / +46 / +46 |
+| Command center | +93 / +93 / +93 | +93 / +94 / +94 | +52 / +52 / +52 |
+| Barracks | +86 / +86 / +86 | +47 / +48 / +48 | +66 / +66 / +66 |
+| War factory / arms dealer | +64 / +64 / +64 | +69 / +69 / +69 | +46 / +46 / +46 |
 
-Auch das letzte bewegte Bild und der Ruheort jeder der 27 Einheiten sind bei 60 Hz die von 30 Hz (z. B. Kaserne America: Ruheorte (75, 19), (75, −19), (75, 0)).
+The last frame with movement and the resting place of each of the 27 units at 60 Hz are also those of 30 Hz (e.g. barracks America: resting places (75, 19), (75, −19), (75, 0)).
 
-**Raten-Äquivalenz** (§39; neue Fallgruppe `economy/production exit <Gebäude>` für Kommandozentrale, Kaserne und Waffenfabrik der drei Fraktionen: drei Aufträge, je Einheit „Auftrag
-bis außerhalb des Grundrisses“, „Auftrag bis alle ruhen“, Ruheabstand zur Fabrik, Abstände der Ruheorte; gelesen am Bildende): 9 Fälle, 81 Größen, **alle bei 60 und 120 Hz bitgleich
-zu 30 Hz** (z. B. `AmericaCommandCenter`: 8,0667 / 13,0667 / 18,0667 s, alle ruhen nach 18,8000 s). Ganze Suite vorher → nachher, Größen außerhalb der Toleranz bei 60 / 120 Hz:
+**Rate equivalence** (§39; new case group `economy/production exit <Gebäude>` for command center, barracks and war factory of the three factions: three orders, per unit "order
+until outside the footprint", "order until all rest", resting distance to the factory, distances between the resting places; read at the frame end): 9 cases, 81 quantities, **all bit-identical at 60 and 120 Hz
+to 30 Hz** (e.g. `AmericaCommandCenter`: 8.0667 / 13.0667 / 18.0667 s, all rest after 18.8000 s). Whole suite before → after, quantities outside the tolerance at 60 / 120 Hz:
 
-| Gruppe | vorher | nachher |
+| Group | before | after |
 | --- | --- | --- |
 | `locomotion` | 2 / 2 | 2 / 2 |
 | `flight` | 0 / 3 | 0 / 3 |
@@ -2501,268 +2501,268 @@ zu 30 Hz** (z. B. `AmericaCommandCenter`: 8,0667 / 13,0667 / 18,0667 s, alle ruh
 | `projectiles` | 4 / 4 | 4 / 4 |
 | `turrets` | 4 / 0 | 4 / 0 |
 | `overtime` | 0 / 0 | 0 / 0 |
-| `economy` (81 → 162 Größen) | 0 / 0 | 0 / 0 |
+| `economy` (81 → 162 quantities) | 0 / 0 | 0 / 0 |
 | `timed` | 1 / 1 | 1 / 1 |
 | `scripts` | 0 / 0 | 0 / 0 |
 | `ai` | 24 / 23 | 24 / 26 |
-| Summe (4.307 → 4.388 Größen) | 35 / 33 | 35 / 36 |
+| Total (4,307 → 4,388 quantities) | 35 / 33 | 35 / 36 |
 
-Außerhalb von `ai` schlägt dieselbe Menge von 14 Zeilen fehl wie vorher. In sechs bestehenden Fällen `economy/produce …` hat sich „queue to both units standing“ geändert (die
-Einheiten fahren jetzt hinaus, z. B. Ranger 9,9667 × 3 → 13,8333 / 13,8500 / 13,8583 s; der Rest ist die Ankunft im letzten Tick des Bildes, innerhalb der Toleranz). Die Gruppe `ai`
-(ganze Gefechte, chaotisch) ist bei 120 Hz um drei Größen schlechter, mit den Folge-Commits aus §42.6 bei 27 / 26; nicht nachverfolgt (das erste Bild mit abweichender Lage
-im Gefecht America gegen China liegt mit Ausfahrtsweg und Folge-Commits weiter bei 3543, 118,10 s, wie auf `main`: der ganze Aufbau mit allen Ausfahrten ist zwischen 30 und 60 Hz
-bitgleich). Keine Toleranz wurde angefasst.
+Outside `ai` the same set of 14 rows fails as before. In six existing cases `economy/produce …` "queue to both units standing" has changed (the
+units now drive out, e.g. Ranger 9.9667 × 3 → 13.8333 / 13.8500 / 13.8583 s; the rest is the arrival in the last tick of the frame, within the tolerance). The group `ai`
+(whole skirmishes, chaotic) is worse by three quantities at 120 Hz, with the follow-up commits from §42.6 at 27 / 26; not traced (the first frame with a deviating position
+in the match America against China lies, with exit path and follow-up commits, still at 3543, 118.10 s, as on `main`: the whole build-up with all exits is, between 30 and 60 Hz,
+bit-identical). No tolerance was touched.
 
-**Tests:** `Simulation.Tests` grün bei 30 Hz und mit `--tick-rate 60` und `120`; neu `ConstructionExitPath` (Erscheinen, Ausfahrt, Platz machen, Sammelpunkt, Fortsetzung aus dem
-Snapshot), „Rate invariance, exits: …“ (drei Einheiten ohne und mit Sammelpunkt: Lage, Kurs, Befehlszustand und Ziel nach jedem von 450 Bildern bitgleich bei 30, 60 und 120 Hz, in
-jedem Tick `VerifyIncrementalHash`) und der Snapshot-Test (ein Snapshot in jedem Tick des Bildes, in dem die Einheit auf ihren Platz wartet, und einer mitten in der Ausfahrt setzt
-bei 30, 60 und 120 Hz hashgleich fort). Gegenprobe: mit der Platzwahl im Tick des Entstehens auch über 30 Hz (die unveränderte Übernahme des alten Commits) schlagen beide Tests
-fehl (bei 60 Hz hat im Bild 95 eine Einheit am Bildende einen Rest ihres Schritts: die weggeschickte läuft neben ihrer Phase). `Presentation.Tests` (ohne und mit Inhalt), `Ui.Tests`, `Game.Tests` (Release, mit Inhalt),
-`check-dozer-build`, `check-build-hotkeys`, `check-spectator`: grün; Solution-Build 0 Warnungen.
+**Tests:** `Simulation.Tests` green at 30 Hz and with `--tick-rate 60` and `120`; new `ConstructionExitPath` (appearing, exit, making room, rally point, continuation from the
+snapshot), "Rate invariance, exits: …" (three units without and with a rally point: position, heading, command state and goal after each of 450 frames bit-identical at 30, 60 and 120 Hz, in
+every tick `VerifyIncrementalHash`) and the snapshot test (a snapshot in every tick of the frame in which the unit waits for its place, and one in the middle of the exit, continues
+with the same hash at 30, 60 and 120 Hz). Cross-check: with the choice of place in the tick of coming into being above 30 Hz too (the unchanged adoption of the old commit) both tests
+fail (at 60 Hz, in frame 95 one unit has a remainder of its step at the frame end: the one sent away runs beside its phase). `Presentation.Tests` (without and with content), `Ui.Tests`, `Game.Tests` (Release, with content),
+`check-dozer-build`, `check-build-hotkeys`, `check-spectator`: green; solution build 0 warnings.
 
-**Referenzmanifest** (`reference-manifest check --set full`, nicht neu geschrieben): **23 von 50 Läufen weichen ab** – `reference-match`, alle 16 KI-Läufe, die vier 8-Spieler-Läufe
-(`ai8_FortressAvalanche`, `ai8_IronDragon`, `ai8_TwilightFlame`, `ai8_TwilightFlame_short`), `skirmish-sweep` und `mission_MD_USA05`; **27 sind identisch**: `stress` (die synthetische
-Fabrik hat keinen `NaturalRallyPoint`) und die übrigen 26 Missionsläufe. `--set quick --verify-incremental`: 95.230 Ticks, 0 Abweichungen zwischen inkrementellem und vollem Hash.
-Referenzmatch jetzt: Sieger FactionGLA bei **Tick 14.130** (vorher 17.805), Endhash `5BF9BB7CED6D7A35`, Kette `56149C0105E992D7`, zweiter Lauf und Fortsetzung aus dem Snapshot identisch
-(26.626 Befehle statt 33.648, 13.589 Schüsse des Szenarios statt 15.940).
+**Reference manifest** (`reference-manifest check --set full`, not rewritten): **23 of 50 runs differ** – `reference-match`, all 16 AI runs, the four 8-player runs
+(`ai8_FortressAvalanche`, `ai8_IronDragon`, `ai8_TwilightFlame`, `ai8_TwilightFlame_short`), `skirmish-sweep` and `mission_MD_USA05`; **27 are identical**: `stress` (the synthetic
+factory has no `NaturalRallyPoint`) and the remaining 26 mission runs. `--set quick --verify-incremental`: 95,230 ticks, 0 deviations between incremental and full hash.
+Reference match now: winner FactionGLA at **tick 14,130** (before 17,805), final hash `5BF9BB7CED6D7A35`, chain `56149C0105E992D7`, second run and continuation from the snapshot identical
+(26,626 commands instead of 33,648, 13,589 shots of the scenario instead of 15,940).
 
-**Ergebnisgrößen statt Hashes** (`reference-manifest results`, vorher = Binärdateien von `main`):
+**Result quantities instead of hashes** (`reference-manifest results`, before = binaries of `main`):
 
-- 27 Missionsläufe: alle Ergebnisgrößen gleich (Ausgang, Schusszahlen, Ereigniszahlen) – auch `mission_MD_USA05`, dessen Hash sich ändert. `stress` gleich.
-- 16 KI-Läufe **nur mit dem Commit des Ausfahrtswegs (`df7443d`), überholt durch §42.6** (mit den beiden Folge-Commits wieder 12 von 16 mit den Siegern von `main`): **8 statt 12 entschieden**. Vier Läufe enden jetzt im Patt statt mit einem Sieger (Alpine Assault und Death Valley, je America gegen China und ChinaTank gegen
-  AirForce; vorher gewann America bzw. AirForce bei Tick 16.665, 14.610, 9.390, 10.635); **ein Siegerwechsel** (Death Valley China gegen GLA: China bei 8.580 → GLA bei 8.940); sieben
-  Läufe haben denselben Sieger zu anderer Zeit (China gegen GLA: Alpine 10.710 → 19.395, Armored Fury 42.840 → 11.865, Bitter Winter 7.950 → 13.935; GLA gegen America, Sieger America:
-  Alpine 7.815 → 7.590, Armored Fury 28.800 → 18.795, Bitter Winter 9.075 → 9.150, Death Valley 8.475 → 11.955); vier waren und bleiben Patt. Damit enden alle acht Paarungen America
-  bzw. AirForce gegen China bzw. ChinaTank im Patt. An einem Lauf angesehen (Death Valley America gegen China, `ai-match … --trace`): kein Stillstand – 301 statt 53 Produktionsaufträge,
-  9.422 statt 2.767 Schüsse, China drängt America bis Tick 40.500 auf ein Gebäude zurück und beendet es nicht; Chinas Aufbau beginnt später (bei Tick 1.500 noch 5.400 Credits und 2
-  Aufträge statt 200 Credits und 17). Ursache und Korrektur: §42.6.
-- Die vier 8-Spieler-Läufe: vorher wie nachher Patt am Tickbudget.
-- `skirmish-sweep` (150 Karten, 3.000 Ticks): alle 64 Karten, die starten, haben andere Zahlen; überall dieselbe Richtung im frühen Aufbau (z. B. Alpine Assault: 24 statt 29
-  fertige Produktionen, 10 statt 8 fertige Gebäude). Keine Karte endet mit einem Fehler.
+- 27 mission runs: all result quantities the same (outcome, shot counts, event counts) – also `mission_MD_USA05`, whose hash changes. `stress` the same.
+- 16 AI runs **only with the commit of the exit path (`df7443d`), superseded by §42.6** (with the two follow-up commits again 12 of 16 with the winners of `main`): **8 instead of 12 decided**. Four runs now end in a stalemate instead of with a winner (Alpine Assault and Death Valley, each America against China and ChinaTank against
+  AirForce; before, America resp. AirForce won at tick 16,665, 14,610, 9,390, 10,635); **one change of winner** (Death Valley China against GLA: China at 8,580 → GLA at 8,940); seven
+  runs have the same winner at a different time (China against GLA: Alpine 10,710 → 19,395, Armored Fury 42,840 → 11,865, Bitter Winter 7,950 → 13,935; GLA against America, winner America:
+  Alpine 7,815 → 7,590, Armored Fury 28,800 → 18,795, Bitter Winter 9,075 → 9,150, Death Valley 8,475 → 11,955); four were and remain a stalemate. With that, all eight pairings America
+  resp. AirForce against China resp. ChinaTank end in a stalemate. Looked at in one run (Death Valley America against China, `ai-match … --trace`): no standstill – 301 instead of 53 production orders,
+  9,422 instead of 2,767 shots, China pushes America back to one building by tick 40,500 and does not finish it; China's build-up begins later (at tick 1,500 still 5,400 credits and 2
+  orders instead of 200 credits and 17). Cause and fix: §42.6.
+- The four 8-player runs: before as after a stalemate at the tick budget.
+- `skirmish-sweep` (150 maps, 3,000 ticks): all 64 maps that start have different numbers; everywhere the same direction in the early build-up (e.g. Alpine Assault: 24 instead of 29
+  finished productions, 10 instead of 8 finished buildings). No map ends with an error.
 
-**Kampagne** (30 Hz; vorher = Protokolle der Binärdateien von `main` vom selben Tag): `drive` Sieg 24/24, Niederlage 24/24, auf jeder Karte dasselbe Endskript beim selben Tick und
-mit denselben Eingriffen wie vorher; `audit --ticks 900` 24/24 deterministisch und identisch nach Speichern/Laden, Endproben Sieg 13/24, Niederlage 15/24, 0 Treffer auf fehlende Typen,
-keine Zeile anders als vorher; `reachability` sauber 24/24 und 24/24.
+**Campaign** (30 Hz; before = logs of the binaries of `main` from the same day): `drive` victory 24/24, defeat 24/24, on every map the same end script at the same tick and
+with the same interventions as before; `audit --ticks 900` 24/24 deterministic and identical after save/load, end probes victory 13/24, defeat 15/24, 0 hits on missing types,
+no line different from before; `reachability` clean 24/24 and 24/24.
 
-### 42.5 Bekannte Grenzen (nur gemeldet)
+### 42.5 Known limits (only reported)
 
-- Die Einheit entsteht weiter sofort bei Fertigstellung und nicht erst nach `DoorOpeningTime` (die Darstellung öffnet das Tor entsprechend früher).
-- `QuantityModifier` wird weiter nicht angewendet: die chinesische Kaserne baut je Auftrag einen Rotgardisten statt zwei.
-- Laster des Versorgungslagers und `SpawnBehavior`-Erzeugungen (Tunnel, Stinger-Stellung) benutzen den Ausfahrtsweg nicht; `QueueProductionExitUpdate` rastert den Punkt nicht auf
-  das Zellgitter (`snapPosition`); „Platz machen“ gilt nur für den Ausfahrtspunkt, nicht für beliebige Wege.
-- Über 30 Hz liest die Platzwahl Objekte, die nicht in Phase mit der Fabrik sind (mitten im Bild befohlen), an ihrer augenblicklichen Lage bzw. ihrem Ziel (Regel 6 der Konvention);
-  ein Befehl an die neue Einheit in den r − 1 Ticks vor der Platzwahl, der ihren Bewegungsbefehl nicht ersetzt (ein Angriffsbefehl), ändert die Platzwahl nicht.
-- Die Zeitleiste der Tore in den Gesamtszenen weicht zwischen 30 und 60 Hz in zwei Einträgen um ein Bild ab
-  (Darstellung, nicht Gegenstand dieses Commits; nicht geprüft, ob das auf `main` auch so ist).
+- The unit still comes into being immediately on completion and not only after `DoorOpeningTime` (the presentation opens the door correspondingly earlier).
+- `QuantityModifier` is still not applied: the Chinese barracks builds one Red Guard per order instead of two.
+- Trucks of the supply depot and `SpawnBehavior` spawns (tunnel, Stinger site) do not use the exit path; `QueueProductionExitUpdate` does not snap the point to
+  the cell grid (`snapPosition`); "making room" applies only to the exit point, not to arbitrary paths.
+- Above 30 Hz the choice of place reads objects that are not in phase with the factory (commanded in the middle of the frame) at their momentary position resp. their goal (rule 6 of the convention);
+  a command to the new unit in the r − 1 ticks before the choice of place that does not replace its move command (an attack command) does not change the choice of place.
+- The timeline of the doors in the overall scenes differs between 30 and 60 Hz in two entries by one frame
+  (presentation, not the subject of this commit; not checked whether that is also the case on `main`).
 
-### 42.6 Nachtrag (8. Oktober 2026): warum die KI-Gefechte schlechter wurden, und zwei Folge-Commits
+### 42.6 Addendum (8 October 2026): why the AI skirmishes got worse, and two follow-up commits
 
-Frage nach §42.4: 8 statt 12 der 16 KI-Läufe entschieden, alle Paarungen America/AirForce gegen China/ChinaTank im Patt, China gibt 50 Sekunden lang kein Geld aus. Zwei Ursachen,
-je ein Commit; beide gehören zum Ausfahrtsweg (`df7443d`) und stehen nach dessen Test- und Doku-Commit, weil die Historie nicht umgeschrieben wird.
+Question after §42.4: 8 instead of 12 of the 16 AI runs decided, all pairings America/AirForce against China/ChinaTank in a stalemate, China spends no money for 50 seconds. Two causes,
+one commit each; both belong to the exit path (`df7443d`) and stand after its test and documentation commit, because the history is not rewritten.
 
-**Ursache 1 – eine Schwäche der eingebauten `SkirmishAi`, die der Ausfahrtsweg nur freilegt** (Commit `fix(skirmish-ai): a builder driving out of its factory can be given work`).
-`SkirmishAi.PickBuilder` nahm nur Bauarbeiter, die untätig sind (`IsIdle`). Vorher stand eine frisch gebaute Raupe untätig im Gebäude und bekam im nächsten Denkschritt ihren
-Bauauftrag; jetzt fährt sie 50 bis 95 Bilder hinaus und ist dabei nicht untätig – der Denkschritt fand keinen Bauarbeiter, das Bauziel rutschte um ein Denkintervall, danach fiel die
-Reihenfolge der Ziele anders. Beleg (Death Valley, America gegen China, Befehlsströme aus `reference-manifest results --commands`): die Ströme von `main` und `df7443d` sind bis
-Zeile 34 gleich; dann hat `main` in Tick 628 `ConstructCommand Builder=29 ChinaBarracks` für die in Tick 627 fertige Raupe, `df7443d` für Raupe 29 nichts bis
-`778 SetMoveTargetCommand Target=29` und baut die Kaserne erst in Tick 1468 mit der anderen Raupe (Produktion ab 2233 statt 1108). Korrektur: `AIUpdateInterface.IsOnUnorderedMove`
-(das Objekt bewegt sich, aber niemand hat es befohlen: Ausfahrt, zweite Etappe, Platz machen; aus dem Befehlszustand abgeleitet, kein neuer Zustand) und `PickBuilder` nimmt auch
-solche Bauarbeiter. Der Computerspieler des Originals fragt seine Raupen, ob eine Aufgabe ansteht (`AIPlayer::findDozer`, `DozerAIInterface::isAnyTaskPending`), nicht, ob sie
-stehen. Mit dem Commit ist der Befehlsstrom dieses Gefechts über alle 641 Befehle der von `main` (Sieger America bei 9.390).
+**Cause 1 – a weakness of the built-in `SkirmishAi` that the exit path only exposes** (commit `fix(skirmish-ai): a builder driving out of its factory can be given work`).
+`SkirmishAi.PickBuilder` took only builders that are idle (`IsIdle`). Before, a freshly built dozer stood idle in the building and got its construction order in the next think step;
+now it drives out for 50 to 95 frames and is not idle while doing so – the think step found no builder, the construction goal slipped by one think interval, after that the
+order of the goals fell out differently. Evidence (Death Valley, America against China, command streams from `reference-manifest results --commands`): the streams of `main` and `df7443d` are the same up to
+line 34; then `main` has in tick 628 `ConstructCommand Builder=29 ChinaBarracks` for the dozer finished in tick 627, `df7443d` has nothing for dozer 29 until
+`778 SetMoveTargetCommand Target=29` and builds the barracks only in tick 1468 with the other dozer (production from 2233 instead of 1108). Fix: `AIUpdateInterface.IsOnUnorderedMove`
+(the object moves, but nobody has commanded it: exit, second leg, making room; derived from the command state, no new state) and `PickBuilder` also takes
+such builders. The computer player of the original asks its dozers whether a task is pending (`AIPlayer::findDozer`, `DozerAIInterface::isAnyTaskPending`), not whether they
+stand still. With the commit the command stream of this match is, over all 641 commands, that of `main` (winner America at 9,390).
 
-**Ursache 2 – ein Fehler in `df7443d` selbst** (Commit `fix(sim): any order replaces the exit path, not only a move order`). Die zweite Etappe (Sammelpunkt) und der Torpunkt wurden
-nur von `OrderMove` verworfen. Eine mit gesetztem Sammelpunkt gebaute Einheit, die während der Ausfahrt einen anderen Befehl bekam – Bauaufgabe, Dock, Halt, ein von der Welt
-geführter Angriff –, behielt die zweite Etappe und lief, sobald sie stand, zum Sammelpunkt davon; der Befehl war damit abgebrochen. Test `ConstructionExitPathYieldsToAnOrder`
-(30, 60, 120 Hz): eine Raupe, die im Gebäude einen Bauauftrag bekommt, baut und bleibt; auf `df7443d` stand sie am Sammelpunkt, die Baustelle bei einem Arbeitsschritt. In den
-KI-Gefechten des Manifests kommt der Fall nicht vor (die KI setzt Sammelpunkte nur an Kasernen und Fabriken und befiehlt deren Einheiten mit Bewegungsbefehlen); gefunden beim
-Durchsehen, was ein Befehl während der Ausfahrt bewirkt. Korrektur: `EndExitPath` überall, wo eine Bewegung von außen ersetzt oder angehalten wird (`OrderMove`, `OrderDock`,
+**Cause 2 – a bug in `df7443d` itself** (commit `fix(sim): any order replaces the exit path, not only a move order`). The second leg (rally point) and the door point were
+discarded only by `OrderMove`. A unit built with a rally point set that got another command during the exit – construction task, dock, stop, an attack led by the
+world –, kept the second leg and, as soon as it stood, ran off to the rally point; the command was thereby aborted. Test `ConstructionExitPathYieldsToAnOrder`
+(30, 60, 120 Hz): a dozer that gets a construction order inside the building builds and stays; on `df7443d` it stood at the rally point, the construction site at one work step. In the
+AI skirmishes of the manifest the case does not occur (the AI sets rally points only at barracks and factories and commands their units with move commands); found while
+looking through what a command during the exit does. Fix: `EndExitPath` everywhere a movement is replaced or stopped from outside (`OrderMove`, `OrderDock`,
 `StartInternalMove`, `StopInternalMove`).
 
-**Geprüft und ohne Befund:** die Fabrik wartet nicht auf einen freien Ausfahrtspunkt (`IsFreeToExit` unverändert; die Einheit nimmt einen Platz daneben); Laster des
-Versorgungslagers sind unberührt; weggeschickte Einheiten gehen höchstens drei Plätze zur Seite oder vier Reihen nach hinten; im untersuchten Gefecht wurde kein Bauauftrag der KI abgelehnt (Ablehnungen nur bei Spezialfähigkeiten).
+**Checked and without a finding:** the factory does not wait for a free exit point (`IsFreeToExit` unchanged; the unit takes a place beside it); trucks of the
+supply depot are untouched; units sent away go at most three places to the side or four rows back; in the examined match no construction order of the AI was rejected (rejections only for special abilities).
 
-**Die 16 KI-Läufe des Manifests** (Sieger und Siegtick; `reference-manifest results`):
+**The 16 AI runs of the manifest** (winner and winning tick; `reference-manifest results`):
 
-| Lauf | `main` | nur `df7443d` | mit beiden Folge-Commits |
+| Run | `main` | only `df7443d` | with both follow-up commits |
 | --- | --- | --- | --- |
-| `AlpineAssault_America-China` | America 16665 | Patt | America 16665 |
+| `AlpineAssault_America-China` | America 16665 | stalemate | America 16665 |
 | `AlpineAssault_China-GLA` | China 10710 | China 19395 | China 10665 |
-| `AlpineAssault_ChinaTankGeneral-AmericaAirForceGeneral` | AirForce 14610 | Patt | AirForce 15195 |
+| `AlpineAssault_ChinaTankGeneral-AmericaAirForceGeneral` | AirForce 14610 | stalemate | AirForce 15195 |
 | `AlpineAssault_GLA-America` | America 7815 | America 7590 | America 7815 |
-| `ArmoredFury_America-China` | Patt | Patt | Patt |
+| `ArmoredFury_America-China` | stalemate | stalemate | stalemate |
 | `ArmoredFury_China-GLA` | China 42840 | China 11865 | China 11595 |
-| `ArmoredFury_ChinaTankGeneral-AmericaAirForceGeneral` | Patt | Patt | Patt |
+| `ArmoredFury_ChinaTankGeneral-AmericaAirForceGeneral` | stalemate | stalemate | stalemate |
 | `ArmoredFury_GLA-America` | America 28800 | America 18795 | America 13215 |
-| `BitterWinter_America-China` | Patt | Patt | Patt |
+| `BitterWinter_America-China` | stalemate | stalemate | stalemate |
 | `BitterWinter_China-GLA` | China 7950 | China 13935 | China 7950 |
-| `BitterWinter_ChinaTankGeneral-AmericaAirForceGeneral` | Patt | Patt | Patt |
+| `BitterWinter_ChinaTankGeneral-AmericaAirForceGeneral` | stalemate | stalemate | stalemate |
 | `BitterWinter_GLA-America` | America 9075 | America 9150 | America 9090 |
-| `DeathValley_America-China` | America 9390 | Patt | America 9390 |
+| `DeathValley_America-China` | America 9390 | stalemate | America 9390 |
 | `DeathValley_China-GLA` | China 8580 | GLA 8940 | China 10515 |
-| `DeathValley_ChinaTankGeneral-AmericaAirForceGeneral` | AirForce 10635 | Patt | AirForce 10635 |
+| `DeathValley_ChinaTankGeneral-AmericaAirForceGeneral` | AirForce 10635 | stalemate | AirForce 10635 |
 | `DeathValley_GLA-America` | America 8475 | America 11955 | America 8415 |
-| entschieden | 12 von 16 | 8 von 16 | **12 von 16**, dieselben zwölf Sieger wie `main` |
+| decided | 12 of 16 | 8 of 16 | **12 of 16**, the same twelve winners as `main` |
 
-**Verteilung statt Einzelläufen** (`ai-survey --tick-rate 30 --seeds 10`, 16 Paarungen × 10 Seeds = 160 Gefechte; `main` = die ersten zehn Seeds der Referenzerhebung, über 20 Seeds
-253 von 320):
+**Distribution instead of single runs** (`ai-survey --tick-rate 30 --seeds 10`, 16 pairings × 10 seeds = 160 matches; `main` = the first ten seeds of the reference survey, over 20 seeds
+253 of 320):
 
-| | `main` | nur `df7443d` | mit beiden Folge-Commits | verworfene Variante „Tor bleibt“ |
+| | `main` | only `df7443d` | with both follow-up commits | discarded variant "door stays" |
 | --- | --- | --- | --- | --- |
-| entschieden | 128 (80,0 %) | 106 (66,2 %) | **124 (77,5 %)** | 120 (75,0 %) |
-| mittlere Dauer der entschiedenen (Ticks) | 14.963 | 15.344 | 14.319 | 15.259 |
-| Siege America (von 80) | 61 | 50 | 62 | 46 |
-| Siege AirForce (von 40) | 19 | 16 | 18 | 29 |
-| Siege China (von 80) | 23 | 19 | 18 | 32 |
-| Siege ChinaTank (von 40) | 5 | 2 | 5 | 2 |
-| Siege GLA (von 80) | 20 | 19 | 21 | 11 |
-| entschieden America–China (von 40) | 26 | 14 | 26 | 16 |
-| entschieden China–GLA (von 40) | 38 | 34 | 35 | 35 |
-| entschieden ChinaTank–AirForce (von 40) | 24 | 18 | 23 | 31 |
-| entschieden GLA–America (von 40) | 40 | 40 | 40 | 38 |
-| erste Kaserne, Mittel (Tick, Seite A / B) | 1.054 / 1.054 | 1.573 / 1.252 | 1.054 / 1.054 | 1.133 / 1.135 |
-| erster Angriff, Mittel (Tick, Seite A / B) | 3.236 / 2.739 | 3.752 / 3.070 | 3.206 / 2.688 | 3.256 / 2.700 |
+| decided | 128 (80.0 %) | 106 (66.2 %) | **124 (77.5 %)** | 120 (75.0 %) |
+| mean duration of the decided ones (ticks) | 14,963 | 15,344 | 14,319 | 15,259 |
+| wins America (of 80) | 61 | 50 | 62 | 46 |
+| wins AirForce (of 40) | 19 | 16 | 18 | 29 |
+| wins China (of 80) | 23 | 19 | 18 | 32 |
+| wins ChinaTank (of 40) | 5 | 2 | 5 | 2 |
+| wins GLA (of 80) | 20 | 19 | 21 | 11 |
+| decided America–China (of 40) | 26 | 14 | 26 | 16 |
+| decided China–GLA (of 40) | 38 | 34 | 35 | 35 |
+| decided ChinaTank–AirForce (of 40) | 24 | 18 | 23 | 31 |
+| decided GLA–America (of 40) | 40 | 40 | 40 | 38 |
+| first barracks, mean (tick, side A / B) | 1,054 / 1,054 | 1,573 / 1,252 | 1,054 / 1,054 | 1,133 / 1,135 |
+| first attack, mean (tick, side A / B) | 3,236 / 2,739 | 3,752 / 3,070 | 3,206 / 2,688 | 3,256 / 2,700 |
 
-Mit beiden Folge-Commits liegt der Anteil entschiedener Gefechte vier Gefechte unter `main` (77,5 gegen 80,0 %; über 160 Gefechte kein belegter Unterschied), die Siegverteilung
-und der Zeitpunkt der ersten Kaserne sind die von `main`. **Balance weiter nicht bewertet.**
+With both follow-up commits the share of decided matches lies four matches below `main` (77.5 against 80.0 %; over 160 matches no verified difference), the distribution of wins
+and the time of the first barracks are those of `main`. **Balance still not assessed.**
 
-**Gemessen und verworfen, nicht im Zweig** (Flicken liegt im Scratchpad der Sitzung): „eine Einheit, die im Gebäude einen anderen Befehl bekommt, fährt trotzdem zuerst durch das
-Tor“ (der Torpunkt bliebe bei jedem ersetzenden Befehl stehen). Das Original kennt das nicht belegt, die Raupen der KI brauchen dadurch im Mittel 80 Ticks länger zur ersten Kaserne,
-und die Siegverteilung verschiebt sich deutlich (America 46 statt 61 Siege, China 32 statt 23; 10 statt 12 der 16 Manifestläufe entschieden). **Folge, offen:** eine Einheit, die
-noch im Gebäude einen Befehl bekommt – bei der KI die Raupe im Tick nach ihrem Erscheinen –, verlässt das Gebäude auf dem kürzesten Weg, also durch eine Wand, wie auf `main`.
-Die vom Projektinhaber gesehene Raupe, die „hinausclippt“, gibt es für solche Einheiten weiter; von selbst ausfahrende Einheiten nehmen das Tor.
+**Measured and discarded, not in the branch** (the patch lies in the scratchpad of the session): "a unit that gets another command inside the building still drives through the
+door first" (the door point would stay on every replacing command). The original is not verified to know this, the dozers of the AI thereby need on average 80 ticks longer to the first barracks,
+and the distribution of wins shifts clearly (America 46 instead of 61 wins, China 32 instead of 23; 10 instead of 12 of the 16 manifest runs decided). **Consequence, open:** a unit that
+gets a command while still inside the building – with the AI the dozer in the tick after its appearance – leaves the building on the shortest path, i.e. through a wall, as on `main`.
+The dozer seen by the project owner that "clips out" still exists for such units; units driving out by themselves take the door.
 
-**Nach den Folge-Commits neu gemessen:** `Simulation.Tests` bei 30, 60 und 120 Hz grün (neu `ConstructionExitPathYieldsToAnOrder`, `ConstructionUnorderedMove`); Suite außerhalb
-von `ai` unverändert (dieselben 14 Zeilen), die 81 Größen der neun Ausfahrtsfälle bitgleich, `ai` 27 / 26; alle zwölf Ausfahrtsszenen und die drei klassischen bei 30 und 60 Hz grün
-mit denselben Bildzahlen wie in §42.4; `reference-manifest check --set full`: dieselben 23 von 50 Läufen weichen ab, Referenzmatch unverändert Tick 14.130, `5BF9BB7CED6D7A35`,
-`56149C0105E992D7`; `--set quick --verify-incremental`: 61.661 Ticks, 0 Abweichungen; Kampagne bei 30 Hz `drive` 24/24 und 24/24 mit denselben Endskripten und Ticks, `audit` 24/24,
-Endproben 13/24 und 15/24; Eingangsmanifest wie in §42.3; `Game.Tests` (Release, mit Inhalt), `Presentation.Tests`, `Ui.Tests`, `check-dozer-build`, `check-build-hotkeys`,
-`check-spectator` grün, Solution-Build 0 Warnungen. Die Seite der KI (Ursache 1) ist an echten Daten gemessen, nicht mit einem eigenen Test der `SkirmishAi` abgedeckt.
+**Re-measured after the follow-up commits:** `Simulation.Tests` green at 30, 60 and 120 Hz (new `ConstructionExitPathYieldsToAnOrder`, `ConstructionUnorderedMove`); suite outside
+`ai` unchanged (the same 14 rows), the 81 quantities of the nine exit cases bit-identical, `ai` 27 / 26; all twelve exit scenes and the three classic ones green at 30 and 60 Hz
+with the same frame numbers as in §42.4; `reference-manifest check --set full`: the same 23 of 50 runs differ, reference match unchanged tick 14,130, `5BF9BB7CED6D7A35`,
+`56149C0105E992D7`; `--set quick --verify-incremental`: 61,661 ticks, 0 deviations; campaign at 30 Hz `drive` 24/24 and 24/24 with the same end scripts and ticks, `audit` 24/24,
+end probes 13/24 and 15/24; input manifest as in §42.3; `Game.Tests` (Release, with content), `Presentation.Tests`, `Ui.Tests`, `check-dozer-build`, `check-build-hotkeys`,
+`check-spectator` green, solution build 0 warnings. The side of the AI (cause 1) is measured on real data, not covered by a test of its own for the `SkirmishAi`.
 
-**Offen:** die Patts, die bleiben (4 von 16, wie auf `main`), sind Gefechte, in denen eine Seite die andere bis auf wenige Gebäude zurückdrängt und nicht beendet (vgl. §36); der
-Unterschied von vier Gefechten in der Erhebung ist nicht aufgeschlüsselt; 60/120 Hz der KI-Gefechte nicht erhoben.
+**Open:** the stalemates that remain (4 of 16, as on `main`) are matches in which one side pushes the other back to a few buildings and does not finish it (cf. §36); the
+difference of four matches in the survey is not broken down; 60/120 Hz of the AI skirmishes not surveyed.
 
-## 43. Phase 23: Bildkonvention der Simulation oberhalb von 30 Hz
+## 43. Phase 23: frame convention of the simulation above 30 Hz
 
-Stand 9. Oktober 2026 (`f3acc2e`). Zusammengeführt aus `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1.3, `docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md` und `docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md`; wo
-ein Paketdokument der ersten Runde etwas anderes sagt (die Ankunft „mit dem letzten Anteil“, die Kollisionsprüfung „im letzten Tick“), gilt dieser Abschnitt. „Bild“ heißt Logikbild des Originals
-(1/30 s), „Tick“ ein Schritt der Simulation, r = Ticks je Bild (1, 2, 4). **Nichts davon hat ein Mensch gesehen.** Das Protokoll der Phase steht in `docs/TICKRATE-MIGRATION.md` §15.
+As of 9 October 2026 (`f3acc2e`). Merged from `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1.3, `docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md` and `docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md`; where
+a package document of the first round says something else (the arrival "with the last share", the collision check "in the last tick"), this section applies. "Frame" means logic frame of the original
+(1/30 s), "tick" a step of the simulation, r = ticks per frame (1, 2, 4). **No human has seen any of this.** The log of the phase is in `docs/TICKRATE-MIGRATION.md` §15.
 
-### 43.1 Grundsatz
+### 43.1 Principle
 
-Der 30-Hz-Schritt ist die Definition des richtigen Verhaltens. Eine höhere Rate **unterteilt** ihn: was das Original einmal je Bild entscheidet, wird einmal je Bild entschieden, mit den Größen
-je Bild; was sich dadurch bewegt, rückt in jedem Tick um einen Anteil vor. Ein einzelnes Objekt steht deshalb nach jedem seiner Bilder dort, wo der 30-Hz-Schritt es hinstellt – in den
-Drei-Raten-Tests Bit für Bit. Die Konvention regelt, was daraus für zwei Objekte (oder zwei Module eines Objekts) folgt, die einander **ansehen**.
+The 30 Hz step is the definition of the correct behaviour. A higher rate **subdivides** it: what the original decides once per frame is decided once per frame, with the quantities
+per frame; what moves as a result advances by a share in every tick. A single object therefore stands, after each of its frames, where the 30 Hz step puts it – in the
+three-rate tests bit for bit. The convention governs what follows from this for two objects (or two modules of one object) that **look at** each other.
 
-### 43.2 Die Regeln
+### 43.2 The rules
 
-1. **Entschieden wird im ersten Tick des Bildes.** Größen zweiter Ordnung, Zustandsautomaten und Ereignisse „einmal je Bild“ fallen auf den ersten Tick – in Sekunden der Zeitpunkt des 30-Hz-Ticks.
-2. **Die Lage erreicht ihren 30-Hz-Wert mit dem letzten Tick des Bildes**; dazwischen liegt das Objekt auf der Geraden dorthin.
-3. **Das Bild gehört dem Objekt**, nicht dem Modul und nicht der Welt: ein Objekt, das an einer Bildgrenze entsteht oder befohlen wird, ist in Phase mit der Welt; eines, das mitten im Bild einen
-   Befehl bekommt, zählt seine Bewegungsbilder ab diesem Tick. Befehle werden in jedem Tick angenommen und warten auf nichts. Zwei Module eines Objekts entscheiden im selben Tick in der
-   Reihenfolge ihres Modulindex (`EntityFrames.BeginsFrameOf`: die Phase ist der Tick der Entstehung).
-4. **Wer ein anderes Objekt ansieht, um etwas zu entscheiden, liest es am Ende des Bildes, das es begonnen hat** (§43.3). Ein Beweger, der in diesem Tick schon dran war, zählt mit seiner Lage nach
-   Schritt T; einer, der noch drankommt, mit seiner Lage nach Schritt T − 1 – genau wie bei 30 Hz. Die Antwort kippt nicht mitten im Bild.
-5. **Ein Ereignis, das ein Beobachter an der Bildend-Lage auslöst, setzt das Objekt auf diese Lage** (`Entity.CompleteFrame`): Tod durch `HeightDieUpdate`, in Reichweite gekommen, angehalten,
-   eingestiegen – und seit Runde 3 **jeder Tod** (`SimulationWorld.OnEntityDied` vollendet das begonnene Bild, auch das des Turms). Der Beweger legt danach keinen Anteil dieses Bildes mehr zurück.
-6. **Die Sicht läuft nach dem letzten Tick ihres Bildes** (unverändert alle drei Bilder) und liest die augenblickliche Lage, die dann bei jedem Objekt in Phase die Lage nach Schritt T ist. Wer Sicht
-   liest, liest bis dahin den Stand des vorigen Bildes – nie einen, den es bei 30 Hz zu dieser Spielzeit noch nicht gibt.
-7. **„Einen Tick später“ ist ein Bild später.** Ein neues Objekt gibt es am Ende des Ticks, der es angefordert hat; sein erstes Bild beginnt r Ticks danach. Ein in der Erzeugungsphase
-   angefordertes Objekt entsteht ein Bild später (`PendingSpawn.NotBefore`), ein Befehl aus der Erzeugungsphase (Sammelpunkt) wird mit dem ersten Bild ausgeführt
-   (`SimulationWorld.DeferSpawnPhaseOrders`), ein nach der Zerstörungsphase getötetes Objekt wird ein Bild später entfernt (`Entity.DestroyNotBefore`), ein Marsch, den der Zielerwerb nach den
-   Updates gibt, beginnt im nächsten Bild (`BeginMoveWithNextFrame`).
-8. **Eine Meldung hat ein Raster, das des Meldenden** (`ICollideModule.OnCollide` kommt je Bild des Fahrenden; der Empfänger führt kein eigenes).
-9. **Was nicht umgestellt ist, liest die augenblickliche Lage** und liegt höchstens einen Bildschritt des Beobachteten vom 30-Hz-Wert entfernt (§43.9).
+1. **Decisions are made in the first tick of the frame.** Second-order quantities, state machines and events "once per frame" fall on the first tick – in seconds the point in time of the 30 Hz tick.
+2. **The position reaches its 30 Hz value with the last tick of the frame**; in between the object lies on the straight line to it.
+3. **The frame belongs to the object**, not to the module and not to the world: an object that comes into being or is commanded at a frame boundary is in phase with the world; one that gets a
+   command in the middle of the frame counts its movement frames from this tick on. Commands are accepted in every tick and wait for nothing. Two modules of one object decide in the same tick in the
+   order of their module index (`EntityFrames.BeginsFrameOf`: the phase is the tick of coming into being).
+4. **Whoever looks at another object in order to decide something reads it at the end of the frame it has begun** (§43.3). A mover that has already had its turn in this tick counts with its position after
+   step T; one that is still to come, with its position after step T − 1 – exactly as at 30 Hz. The answer does not flip in the middle of the frame.
+5. **An event that an observer triggers at the frame-end position puts the object on this position** (`Entity.CompleteFrame`): death by `HeightDieUpdate`, come into range, stopped,
+   entered – and since round 3 **every death** (`SimulationWorld.OnEntityDied` completes the begun frame, also that of the turret). The mover covers no further share of this frame afterwards.
+6. **Vision runs after the last tick of its frame** (unchanged every three frames) and reads the momentary position, which then, for every object in phase, is the position after step T. Whoever reads
+   vision reads until then the state of the previous frame – never one that at 30 Hz does not yet exist at this game time.
+7. **"One tick later" is one frame later.** A new object exists at the end of the tick that requested it; its first frame begins r ticks after that. An object requested in the spawn phase
+   comes into being one frame later (`PendingSpawn.NotBefore`), a command from the spawn phase (rally point) is executed with the first frame
+   (`SimulationWorld.DeferSpawnPhaseOrders`), an object killed after the destruction phase is removed one frame later (`Entity.DestroyNotBefore`), a march that the target acquisition gives after the
+   updates begins in the next frame (`BeginMoveWithNextFrame`).
+8. **A notification has one grid, that of the notifier** (`ICollideModule.OnCollide` comes per frame of the driving one; the receiver keeps none of its own).
+9. **What has not been converted reads the momentary position** and lies at most one frame step of the observed one away from the 30 Hz value (§43.9).
 
-### 43.3 Die Bildend-Sicht am Objekt
+### 43.3 The frame-end view at the object
 
-`World/Entity.cs` trägt, was einem Beweger von seinem begonnenen Bild noch fehlt; ein Beobachter addiert es beim Lesen.
+`World/Entity.cs` carries what a mover still lacks of its begun frame; an observer adds it when reading.
 
-| Symbol | Was |
+| Symbol | What |
 |---|---|
-| `Entity.AheadX/Y/Z`, `AheadTick`, `SetAhead`, `CoverShare` | der noch nicht zurückgelegte Rest des Bildschritts und der Tick, in dem der Beweger ihn zuletzt angefasst hat; ein Rest, den sein Beweger weder in diesem noch im vorigen Tick angefasst hat (angehalten, gelähmt), zählt nicht mehr |
-| `Entity.FrameEnd(tick)` | Lage am Ende des begonnenen Bildes; bei 30 Hz die Lage |
-| `Entity.AheadAngle`, `HasAheadAngle`, `FrameEndAngle` | der Kurs am Bildende (Runde 3: ein Schütze, der mitten im Bild hält, startet seine Rakete damit) |
-| `Entity.SetAheadHeight` | die Höhe am Bildende (Runde 4: ein Bodenfahrer am Hang) |
-| `Entity.SpeedPerFrame` | das Tempo je Bild für ein zweites bewegendes Modul desselben Objekts (Chinook), nur über 30 Hz |
-| `Entity.CompleteFrame` | setzt das Objekt auf sein Bildende (Regel 5) |
-| `Entity.DestroyNotBefore` | Entfernen frühestens ein Bild nach der Anforderung (Regel 7) |
-| `EntityFrames.BeginsFrameOf` (`Time/FrameGrid.Consolidation.cs`) | die Ticks, mit denen die Bilder eines Objekts beginnen |
-| `IWorldServices.IsSignificantlyAboveTerrainAtFrameEnd` | „in der Luft?“ aus der Höhe am Bildende |
+| `Entity.AheadX/Y/Z`, `AheadTick`, `SetAhead`, `CoverShare` | the not yet covered remainder of the frame step and the tick in which the mover last touched it; a remainder that its mover has touched neither in this nor in the previous tick (stopped, paralysed) no longer counts |
+| `Entity.FrameEnd(tick)` | position at the end of the begun frame; at 30 Hz the position |
+| `Entity.AheadAngle`, `HasAheadAngle`, `FrameEndAngle` | the heading at the frame end (round 3: a shooter that stops in the middle of the frame launches its missile with it) |
+| `Entity.SetAheadHeight` | the height at the frame end (round 4: a ground vehicle on a slope) |
+| `Entity.SpeedPerFrame` | the speed per frame for a second moving module of the same object (Chinook), only above 30 Hz |
+| `Entity.CompleteFrame` | puts the object on its frame end (rule 5) |
+| `Entity.DestroyNotBefore` | removal at the earliest one frame after the request (rule 7) |
+| `EntityFrames.BeginsFrameOf` (`Time/FrameGrid.Consolidation.cs`) | the ticks with which the frames of an object begin |
+| `IWorldServices.IsSignificantlyAboveTerrainAtFrameEnd` | "in the air?" from the height at the frame end |
 
-**Wer veröffentlicht:** die Bodenbewegung (`AIUpdateInterface.AdvanceFrame`: Lage, Kurs, Höhe), Granaten, Raketen und die Neutronenrakete, alle Flugbeweger über `FlightFrameStep.Publish` (Jet,
-Hubschrauber, Chinook, Fallschirm samt Reiter, abgeschossener Jet und Hubschrauber, Spectre, Leuchtkörper). **Nicht veröffentlichend:** Zug, Lawine, Fähre, Welle, freier Fall von `PhysicsBehavior`.
+**Who publishes:** the ground movement (`AIUpdateInterface.AdvanceFrame`: position, heading, height), shells, missiles and the neutron missile, all flight movers via `FlightFrameStep.Publish` (jet,
+helicopter, Chinook, parachute including rider, shot-down jet and helicopter, Spectre, flare). **Not publishing:** train, avalanche, ferry, wave, free fall of `PhysicsBehavior`.
 
-### 43.4 Wer am Bildende liest
+### 43.4 Who reads at the frame end
 
-Umgestellt sind die Leser, an denen ein Fehlschlag der Suite oder die erste Abweichung eines Gefechts gemessen wurde – nicht alle (mehrere hundert Stellen lesen `X`/`Y` eines anderen Objekts):
+Converted are the readers at which a failure of the suite or the first deviation of a match was measured – not all (several hundred places read `X`/`Y` of another object):
 
-- **Zielerwerb:** `FindMoodTarget`/`ConsiderMoodTarget` messen von Bildende zu Bildende; `Engage`, `WithinWeaponRange`, `FireWeaponAt` (Verfolgungsziel, „in Reichweite“, Start eines Geschosses mit
-  Lage und Kurs des Bildendes). Die Entscheidung selbst fällt im ersten Tick des Bildes der Einheit (§41.1 A).
-- **Türme:** `DesiredTurretAngle`, `DesiredTurretPitch`, `KeepsAttackIntent`.
-- **Schaden:** `DealDamageCore` – Hauptopfer und jeder Kandidat im Radius am Bildende (vorher fielen von 40 Streuschüssen je nach Rate verschieden viele aus).
-- **Bewegung:** `StepBlockedAtFrameEnd`, `StationaryBlockersAheadAtFrameEnd`, `StandsStillAtFrameEnd`, `FootprintsOverlapAtFrameEnd`; `HordeUpdate.Evaluate`; `MobMemberSlavedUpdate` (Nexus);
-  `OpenContain.Add`/`Remove`, `UpdateEnter`/`UpdateGoal`, `OrderApproachGoal`/`OrderEnter`; die Platzwahl der Fabrikausfahrt (`GoalIsFree`, §42.3).
-- **Module:** `HeightDieUpdate`, `PointDefenseLaserUpdate`, `CleanupHazardUpdate`, `AssaultTransportAIUpdate`, `PilotFindVehicleUpdate`.
-- **Die Suite und die Tests** lesen einen Zustand am Bildende (`RateScene.StepUntilFrameEnd`); wer oberhalb von 30 Hz eine Lage „einen Tick nach“ einem Ereignis liest, liest einen Anteil vor dem
-  Bildende und misst die Ablesung, nicht das Verhalten.
+- **Target acquisition:** `FindMoodTarget`/`ConsiderMoodTarget` measure from frame end to frame end; `Engage`, `WithinWeaponRange`, `FireWeaponAt` (pursuit target, "in range", launch of a projectile with
+  position and heading of the frame end). The decision itself is made in the first tick of the frame of the unit (§41.1 A).
+- **Turrets:** `DesiredTurretAngle`, `DesiredTurretPitch`, `KeepsAttackIntent`.
+- **Damage:** `DealDamageCore` – main victim and every candidate in the radius at the frame end (before, of 40 scatter shots a different number failed depending on the rate).
+- **Movement:** `StepBlockedAtFrameEnd`, `StationaryBlockersAheadAtFrameEnd`, `StandsStillAtFrameEnd`, `FootprintsOverlapAtFrameEnd`; `HordeUpdate.Evaluate`; `MobMemberSlavedUpdate` (Nexus);
+  `OpenContain.Add`/`Remove`, `UpdateEnter`/`UpdateGoal`, `OrderApproachGoal`/`OrderEnter`; the choice of place of the factory exit (`GoalIsFree`, §42.3).
+- **Modules:** `HeightDieUpdate`, `PointDefenseLaserUpdate`, `CleanupHazardUpdate`, `AssaultTransportAIUpdate`, `PilotFindVehicleUpdate`.
+- **The suite and the tests** read a state at the frame end (`RateScene.StepUntilFrameEnd`); whoever above 30 Hz reads a position "one tick after" an event reads one share before the
+  frame end and measures the reading, not the behaviour.
 
-### 43.5 Das erste Bild neuer Objekte
+### 43.5 The first frame of new objects
 
-Die allgemeine Fassung („jedes Update eines neuen Objekts frühestens `SpawnTick + r`“) ist zweimal gemessen und **nicht übernommen**: Integratoren und Module, die ihre Updates ab dem ersten zählen,
-liefen r − 1 Ticks zu spät (13 rote Simulationstests bei 60 Hz, 15 bei 120 Hz). Umgestellt ist je Modul, dort, wo eine gemessene Abweichung beginnt: Module, deren erstes Update ein Ereignis
-entscheidet oder etwas erzeugt (Feld, Tarnung, Create-Module, Flugblatt, `SpawnBehavior`, `AutoFindHealingUpdate`), `JetAIUpdate`, `ChinookAIUpdate`, `PilotFindVehicleUpdate`,
-`HelicopterSlowDeathBehavior` (ein Bild nach dem Tod), die Geschosse (erster Schritt ein Bild nach dem Start). **Faustregel für neue Module:** entscheidet das erste Update ein Ereignis, kommt es
-ein Bild nach dem Entstehen. **Nicht umgestellt:** `DeliverPayloadAIUpdate`, Fallschirm, Fähre, dynamische Aufdeckung, Feuersturm, `FireOCLAfterWeaponCooldownUpdate`, Feindnähe-Scan, Checkpoint.
+The general version ("every update of a new object at the earliest `SpawnTick + r`") has been measured twice and **not adopted**: integrators and modules that count their updates from the first one
+ran r − 1 ticks too late (13 red simulation tests at 60 Hz, 15 at 120 Hz). The conversion is per module, where a measured deviation begins: modules whose first update decides an event
+or creates something (field, stealth, create modules, leaflet, `SpawnBehavior`, `AutoFindHealingUpdate`), `JetAIUpdate`, `ChinookAIUpdate`, `PilotFindVehicleUpdate`,
+`HelicopterSlowDeathBehavior` (one frame after the death), the projectiles (first step one frame after the launch). **Rule of thumb for new modules:** if the first update decides an event, it comes
+one frame after coming into being. **Not converted:** `DeliverPayloadAIUpdate`, parachute, ferry, dynamic reveal, firestorm, `FireOCLAfterWeaponCooldownUpdate`, enemy-proximity scan, checkpoint.
 
-### 43.6 Ende eines Marschs, Halt und Ausrollen
+### 43.6 End of a march, stop and coasting
 
-Ein Marsch endet im **ersten** Tick seines letzten Bildes (`BeginArrival`: `MoveArrived`, kein Bewegungsziel mehr) und legt den Rest in den übrigen Ticks zurück (`Coast`); so sieht jeder, der das
-Objekt im ersten Tick ansieht (Zielerwerb, der Container, in den es läuft), es wie bei 30 Hz angekommen. Hält ein Beobachter eine Einheit nach den Updates an (Verfolgung endet, Opfer in
-Reichweite), vollendet sie ihr Bild und trifft die nächste Marschentscheidung erst im nächsten (`StopInternalMoveAtFrameEnd`, `SettleFrame`, `moveHoldUntil` nur über 30 Hz). Wer das Ereignis oder
-`HasMoveTarget` als „steht am Ziel“ liest und sofort die **augenblickliche** Lage nimmt, liest einen Anteil vor dem Ziel – die Präsentation ist darauf nicht geprüft.
+A march ends in the **first** tick of its last frame (`BeginArrival`: `MoveArrived`, no movement goal any more) and covers the remainder in the remaining ticks (`Coast`); this way everyone who looks at the
+object in the first tick (target acquisition, the container it is walking into) sees it arrived as at 30 Hz. If an observer stops a unit after the updates (pursuit ends, victim in
+range), it completes its frame and makes the next march decision only in the next one (`StopInternalMoveAtFrameEnd`, `SettleFrame`, `moveHoldUntil` only above 30 Hz). Whoever reads the event or
+`HasMoveTarget` as "stands at the goal" and immediately takes the **momentary** position reads one share before the goal – the presentation has not been checked for this.
 
-### 43.7 Zustand, der nur oberhalb von 30 Hz geschrieben wird
+### 43.7 State that is written only above 30 Hz
 
-Bei 30 Hz ist ein Bild ein Tick: jeder Anteil ist der ganze Schritt, jede Phase null, jeder Rest null. Die Buchführung der Unterteilung wird deshalb **nur geschrieben, wenn sie vom Standard
-abweicht** – bei 30 Hz nie. Das ist der Grund, warum alle Runden der Raten-Invarianz das 30-Hz-Manifest unverändert ließen (Snapshots, Hashes und Replays bytegleich; `WorldSnapshot` 10, Replay 12,
-`CommandTypes.Version` 15 ohne Versionssprung). Bei 60 und 120 Hz ändert sich der Inhalt eines Snapshots innerhalb eines Bildes; ein Snapshot mitten im Bild setzt bitgleich fort (je Paket getestet).
-Dazu gehören: `frameSpeed`, `frameTicksLeft`, `frameDue`, `frameStepX/Y`, `frameAngle`, `frameArriving`, `moveHoldUntil` der Bodenbewegung; `subStep` der Geschosse; `FramePhase` der Physikmodule;
-`FlightFrameStep` der Flugbeweger; `subSteps`, `goalAngle`/`goalPitch`, `startAngle`/`startPitch` der Türme; `abilityFacePhase`; die `Ahead…`-Felder des Objekts; `PendingSpawn.NotBefore`,
-`DestroyNotBefore` und die Liste `exitClaims` der Welt; `_quietFrame` des Lasers; zwei Felder von `DeployStyleAIUpdate` im Bild des Fertigwerdens.
+At 30 Hz a frame is one tick: every share is the whole step, every phase zero, every remainder zero. The bookkeeping of the subdivision is therefore **written only when it deviates from the
+default** – at 30 Hz never. That is the reason why all rounds of the rate invariance left the 30 Hz manifest unchanged (snapshots, hashes and replays byte-identical; `WorldSnapshot` 10, Replay 12,
+`CommandTypes.Version` 15 without a version bump). At 60 and 120 Hz the content of a snapshot changes within a frame; a snapshot in the middle of the frame continues bit-identically (tested per package).
+This includes: `frameSpeed`, `frameTicksLeft`, `frameDue`, `frameStepX/Y`, `frameAngle`, `frameArriving`, `moveHoldUntil` of the ground movement; `subStep` of the projectiles; `FramePhase` of the physics modules;
+`FlightFrameStep` of the flight movers; `subSteps`, `goalAngle`/`goalPitch`, `startAngle`/`startPitch` of the turrets; `abilityFacePhase`; the `Ahead…` fields of the object; `PendingSpawn.NotBefore`,
+`DestroyNotBefore` and the list `exitClaims` of the world; `_quietFrame` of the laser; two fields of `DeployStyleAIUpdate` in the frame of becoming ready.
 
-### 43.8 Die Helfer nebeneinander, und der Vorschlag
+### 43.8 The helpers side by side, and the proposal
 
-Jedes Paket hat seine eigene Familie mitgebracht; sie rechnen dasselbe mit verschiedener Rundung und verschiedener Zählweise (vollständige Tabelle: `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §7).
+Every package brought its own family; they compute the same thing with different rounding and a different way of counting (complete table: `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §7).
 
-| Familie (Datei) | Anteil eines Bildschritts | Zählweise, Zustand | Konstanten je Bild | Benutzer |
+| Family (file) | Share of a frame step | Way of counting, state | Constants per frame | Users |
 |---|---|---|---|---|
-| `ProjectileFrameGrid` (`Time/FrameGrid.Projectiles.cs`) | Schritt / n, der letzte Anteil nimmt den Rest | `subStep` 0 … n − 1 im Modul | aus dem Tickwert rekonstruiert (Dezimalzahl mit vier Stellen), sonst × n; Raketen seit Runde 4 aus `LocomotorFrames` | Granaten, Raketen, Neutronenrakete, freier Fall, Lenkbombe |
-| `FramePhysics` (`Time/FrameGrid.Physics.cs`) | `floor(Schritt · k / n) − floor(Schritt · (k − 1) / n)`, Summe exakt | `FramePhase` 0 … n − 1 | × n bzw. × n² | Umstürzen, Zug, Battle Bus, Einsturz, Aufdeckung |
-| `FlightFrames`, `FlightFrameStep` (`Time/FrameGrid.Flight.cs`) | Rohwert / n zur Null abgeschnitten, der erste Tick nimmt den Rest | `left` n − 1 … 0, als Objekt im Snapshot | × n, × n²; Flügelflug und Jet seit Runde 3 aus `LocomotorFrames` | Flug, Jet, Fallschirm, Chinook, Spectre, Absturz |
-| `AIUpdateInterface.AdvanceFrame` (`Phase5Modules.cs`) | `Roh · (i + 1) / n − Roh · i / n`, Summe exakt | `frameTicksLeft` n … 1, `frameDue` | `LocomotorFrames` (die 30-Hz-Umrechnung derselben Quellzahlen, Tabelle neben dem Katalogtyp) | Bodenbewegung |
-| `TurretState.SubSteps`, `TurretInfo.RatesPerOriginalFrame` | Rest / verbleibende Teilschritte abwärts, der letzte setzt das Ziel | `SubSteps` | Tabelle wie `LocomotorFrames` | Türme |
-| `FrameGrid`, `FrameGridTiming.ZeroIsNextFrame` (`Time/FrameGrid.cs`, `FrameGrid.Timing.cs`) | – (Dauern auf dem Raster) | – | – | überall |
-| `Entity.Ahead…`, `EntityFrames.BeginsFrameOf` | keine eigene Rundung (der Beweger liefert seine Anteile) | `AheadTick` | – | Beobachter |
+| `ProjectileFrameGrid` (`Time/FrameGrid.Projectiles.cs`) | step / n, the last share takes the remainder | `subStep` 0 … n − 1 in the module | reconstructed from the tick value (decimal number with four places), otherwise × n; missiles since round 4 from `LocomotorFrames` | shells, missiles, neutron missile, free fall, guided bomb |
+| `FramePhysics` (`Time/FrameGrid.Physics.cs`) | `floor(Schritt · k / n) − floor(Schritt · (k − 1) / n)`, sum exact | `FramePhase` 0 … n − 1 | × n resp. × n² | toppling, train, Battle Bus, collapse, reveal |
+| `FlightFrames`, `FlightFrameStep` (`Time/FrameGrid.Flight.cs`) | raw value / n truncated towards zero, the first tick takes the remainder | `left` n − 1 … 0, as an object in the snapshot | × n, × n²; winged flight and jet since round 3 from `LocomotorFrames` | flight, jet, parachute, Chinook, Spectre, crash |
+| `AIUpdateInterface.AdvanceFrame` (`Phase5Modules.cs`) | `Roh · (i + 1) / n − Roh · i / n`, sum exact | `frameTicksLeft` n … 1, `frameDue` | `LocomotorFrames` (the 30 Hz conversion of the same source numbers, table next to the catalog type) | ground movement |
+| `TurretState.SubSteps`, `TurretInfo.RatesPerOriginalFrame` | remainder / remaining sub-steps downwards, the last one sets the goal | `SubSteps` | table like `LocomotorFrames` | turrets |
+| `FrameGrid`, `FrameGridTiming.ZeroIsNextFrame` (`Time/FrameGrid.cs`, `FrameGrid.Timing.cs`) | – (durations on the grid) | – | – | everywhere |
+| `Entity.Ahead…`, `EntityFrames.BeginsFrameOf` | no rounding of its own (the mover supplies its shares) | `AheadTick` | – | observers |
 
-**Vorschlag für später** (ändert Ergebnisse bei 60 und 120 Hz, nie bei 30 Hz; ein eigener Schritt mit der Suite als Maß, nicht gemacht): *ein* Anteilshelfer in der Form von
-`FramePhysics.FrameSlice` (Summe exakt, vorzeichenrichtig, kein Zustand außer der Nummer des Ticks im Bild) und der Rest am Objekt (`Entity.Ahead…`) als einzige Buchführung dessen, was fehlt – dann
-entfallen `subStep`, `FlightFrameStep`, `frameTicksLeft` und `FramePhase` als je eigener Zustand, und jeder Beweger veröffentlicht von selbst. Für Konstanten je Bild das Muster von
-`LocomotorFrames` statt `× n` und statt der Dezimal-Rekonstruktion; damit fielen auch die Beweger weg, die heute noch `Wert je Tick × r` rechnen (§43.9). Fallstrick, schon einmal eingetreten:
-parallele Pakete, die Helfer gleichen Namens einführen, kollidieren erst beim Bauen – nach jedem Merge bauen.
+**Proposal for later** (changes results at 60 and 120 Hz, never at 30 Hz; a step of its own with the suite as the measure, not done): *one* share helper in the form of
+`FramePhysics.FrameSlice` (sum exact, sign-correct, no state except the number of the tick in the frame) and the remainder at the object (`Entity.Ahead…`) as the only bookkeeping of what is missing – then
+`subStep`, `FlightFrameStep`, `frameTicksLeft` and `FramePhase` cease to exist as a state of their own each, and every mover publishes by itself. For constants per frame the pattern of
+`LocomotorFrames` instead of `× n` and instead of the decimal reconstruction; with that the movers that today still compute `Wert je Tick × r` would also disappear (§43.9). Pitfall, already occurred once:
+parallel packages that introduce helpers of the same name collide only when building – build after every merge.
 
-### 43.9 Neue Referenzwerte, und was nicht gleich ist
+### 43.9 New reference values, and what is not the same
 
-**Referenzwerte bei 60 Hz** (`baselines/reference-manifest.json`, Schema 2, geschrieben in `ea52f87`; zweimal mit 50 von 50 Läufen identisch geprüft): Retail-Referenzmatch Sieger FactionGLA bei
-**Tick 28.260** (Originalbild 14.130), Endhash `CA05181C36C62C7A`, Kette `21ACEDA63325A658`, 26.626 Befehle; Stresstest 216.000 Schritte (bei 60 Hz eine Stunde Spielzeit) Endhash
-`9EE9F730D124C3BD`, Kette `F338463BE66D99C0`; 16 KI-Läufe **14 entschieden**; Welt-Fingerabdruck des Eingangsmanifests `C81DC18A282037CD`. Versionen unverändert: `WorldSnapshot` 10, Replay 12,
-`CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3. Überholt: Tick 17.805 / `D0CA5F4EE456D6CE` / `C5EE1090E1C24D7B` (§38, 30 Hz) und die 30-Hz-Zwischenstände der Phase, Tick 14.130 /
-`5BF9BB7CED6D7A35` / `56149C0105E992D7` (§42.4). Ein Manifest wird mit der Rate geprüft, die seine Datei nennt; eine abweichende `--tick-rate` wird abgelehnt.
+**Reference values at 60 Hz** (`baselines/reference-manifest.json`, schema 2, written in `ea52f87`; checked twice with 50 of 50 runs identical): retail reference match winner FactionGLA at
+**tick 28,260** (original frame 14,130), final hash `CA05181C36C62C7A`, chain `21ACEDA63325A658`, 26,626 commands; stress test 216,000 steps (at 60 Hz one hour of game time) final hash
+`9EE9F730D124C3BD`, chain `F338463BE66D99C0`; 16 AI runs **14 decided**; world fingerprint of the input manifest `C81DC18A282037CD`. Versions unchanged: `WorldSnapshot` 10, Replay 12,
+`CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3. Superseded: tick 17,805 / `D0CA5F4EE456D6CE` / `C5EE1090E1C24D7B` (§38, 30 Hz) and the 30 Hz intermediate states of the phase, tick 14,130 /
+`5BF9BB7CED6D7A35` / `56149C0105E992D7` (§42.4). A manifest is checked with the rate that its file names; a differing `--tick-rate` is rejected.
 
-**Das Referenzmatch ist bei 30, 60 und 120 Hz dasselbe Spiel:** Sieger FactionGLA in Tick 14.130 / 28.260 / 56.520, bei jeder Rate Bild 14.130, 26.626 Befehle, und `rate-compare --reference-diff
---fields` findet zwischen 30 und 60 sowie zwischen 30 und 120 Hz kein abweichendes Feld am Ende irgendeines Bildes (`docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.1).
+**The reference match is the same game at 30, 60 and 120 Hz:** winner FactionGLA in tick 14,130 / 28,260 / 56,520, at every rate frame 14,130, 26,626 commands, and `rate-compare --reference-diff
+--fields` finds, between 30 and 60 as well as between 30 and 120 Hz, no deviating field at the end of any frame (`docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.1).
 
-**Nicht gleich, nicht umgestellt, nicht gemessen** – die zusammengeführte Liste steht in `docs/TICKRATE-MIGRATION.md` §15.7.6. In Kürze: 2 von 16 Paarungen auf ausgelieferten Karten enden bei
-60 Hz in einem anderen Bild; 33 von 320 Gefechten der Erhebung enden mehr als eine Sekunde neben dem 30-Hz-Gefecht, 3 mit anderem Ausgang; 120 Hz ist für Paarungen und Erhebung nicht gemessen;
-Spectre, Fallschirm, Leuchtkörper, Partikelstrahl, abgeschossener Jet und die Schwerkraft der Physikmodule rechnen weiter `Wert je Tick × r`; `SlavedUpdate` und die Regeneration der Insassen in
-`ContainModules.cs` heilen weiter je Tick; Skript-VM, Spezialfähigkeiten, Brücken, Wasser und Klippen sind nicht untersucht. Die Entscheidung über den Selbsterwerb je Bild der Einheit und die
-drei verwandten Stellen (§41.1 A) liegt beim Projektinhaber.
+**Not the same, not converted, not measured** – the merged list is in `docs/TICKRATE-MIGRATION.md` §15.7.6. In short: 2 of 16 pairings on shipped maps end at
+60 Hz in a different frame; 33 of 320 matches of the survey end more than one second beside the 30 Hz match, 3 with a different outcome; 120 Hz is not measured for pairings and survey;
+Spectre, parachute, flare, particle beam, shot-down jet and the gravity of the physics modules still compute `Wert je Tick × r`; `SlavedUpdate` and the regeneration of the occupants in
+`ContainModules.cs` still heal per tick; script VM, special abilities, bridges, water and cliffs have not been examined. The decision on the self-acquisition per frame of the unit and the
+three related places (§41.1 A) lies with the project owner.
