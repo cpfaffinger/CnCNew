@@ -81,7 +81,19 @@ Acceptance by a human is driven by `pwsh scripts/acceptance.ps1` (documented in 
 
 ## For developers
 
+Restoring the whole developer state on another machine takes a clone and one script. It checks the prerequisites, clones the
+reference sources into `references/` at the recorded commits, exports `game/content` from your Steam installation, builds and
+checks against the baselines (each step can be skipped; running it again repairs):
+
 ```powershell
+git clone https://github.com/cpfaffinger/CnCNew.git
+pwsh CnCNew/scripts/setup-dev.ps1        # options: -ShallowReferences -GameDir <path> -SkipReferences -SkipContent -SkipBuild -SkipCheck
+```
+
+The single steps:
+
+```powershell
+pwsh scripts/get-references.ps1          # the four upstream repositories to <repo>\references (git-ignored); -Shallow, -Only <name>
 pwsh scripts/dev-content.ps1             # developer installation to <repo>\game (git-ignored): game\content
 dotnet build CnCNew.slnx                 # clean build: 0 warnings (TreatWarningsAsErrors)
 dotnet run --project tests/CnCNew.Simulation.Tests

@@ -8,6 +8,8 @@ coding agents and humans alike); the licence situation is described in [NOTICE.m
 - Windows, .NET SDK 10.0.401 or a newer feature band (`global.json`), PowerShell 7 (`pwsh`).
 - Your own fresh English Steam installation of *Command & Conquer Generals – Zero Hour*. The repository
   contains no game data.
+- A new machine: `pwsh scripts/setup-dev.ps1` after the clone restores everything that is not in the repository (reference
+  sources at the recorded commits via `scripts/get-references.ps1`, developer content, build, check against the baselines).
 - Creating the developer data: `pwsh scripts/dev-content.ps1` reads the installation (without modifying it) and writes
   the developer installation to `game/` (`game/content`); details in `docs/INSTALLATION.md`.
 
