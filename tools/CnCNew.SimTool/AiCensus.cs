@@ -25,10 +25,13 @@ internal static class AiCensus
     private const string UsageText = """
         Usage: CnCNew.SimTool ai-census <content-dir> --out <tsv> [--orbits <txt>] [--seeds N] [--first-seed N] [--tick-rate 30|60|120] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
                [--composition uniform|exchange|default,uniform|exchange|default] [--watch <entity id>]
+               [--ai original [--difficulty easy|medium|hard] [--ai-b ..] [--difficulty-b ..]]
           plays every AI-vs-AI pairing of the reference manifest once per seed (default 5 seeds from 1, 25 game minutes) and writes one line per observed quantity:
           pairing, seed, slot, faction, section, key, value. Sections: match, built (first completion tick per structure), produced (producer|unit), army (outcome of every
           look of the army production, producer|outcome), rejections, money (every 50 s), damage (attacker|victim kind), lost (unit), circling (orbit|shuffle per unit type and place: rally, goal-near, goal-far, no-order).
           --orbits writes one line per circling episode with the unit's state and its neighbours.
+          With --ai/--difficulty the matches are played by the original skirmish AI and the sections are the ones of OriginalAiCensus (times in game seconds):
+          match (first barracks, war factory and attack, attack waves, teams, units, money, powers), built, produced10, power, money.
         """;
 
     /// <summary>Money is sampled every this many logic frames of the original (50 s).</summary>
@@ -79,7 +82,13 @@ internal static class AiCensus
                 try
                 {
                     context ??= SimContext.Load(directory, rate);
-                    census = Play(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks, args);
+                    if (OriginalAi.Requested(args))
+                    {
+                        // The original AI in its own session: the same line format, its own sections (OriginalAiCensus).
+                        var (outcome, lines) = OriginalAiCensus.Play(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks, args);
+                        census = new MatchCensus(outcome, lines, []);
+                    }
+                    else census = Play(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks, args);
                 }
                 catch (Exception exception) when (exception is not OutOfMemoryException)
                 {
