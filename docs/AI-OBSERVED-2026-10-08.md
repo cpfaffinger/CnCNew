@@ -1,500 +1,500 @@
-# Erste Beobachtung zweier eingebauter KIs durch einen Menschen (8. Oktober 2026): vier Befunde, Ursachen, Korrekturen, Messung
+# First observation of two built-in AIs by a human (8 October 2026): four findings, causes, fixes, measurement
 
-Stand: 8. Oktober 2026, Branch `worktree-agent-a4e29cbcc29f6bab6` (Basis `main` `5abbeea`). Zum ersten Mal hat ein Mensch – der Projektinhaber – ein Gefecht zweier eingebauter
-KIs (`SkirmishAi`) im Client angesehen (`scripts/demo-spectator.ps1`, 30 Hz, eine der fünf Standardpaarungen, Seed nicht notiert). Dieses Dokument nimmt seine vier Beobachtungen
-einzeln: reproduziert? (Zahlen), Ursache (Datei, Symbol), Korrektur (Commit), gemessene Wirkung, was bleibt. **Niemand hat das Ergebnis im Fenster gesehen:** alles hier ist
-headless gemessen; was nur ein Mensch bestätigen kann, steht in §6.
+As of: 8 October 2026, branch `worktree-agent-a4e29cbcc29f6bab6` (base `main` `5abbeea`). For the first time a human – the project owner – has watched a match between two built-in
+AIs (`SkirmishAi`) in the client (`scripts/demo-spectator.ps1`, 30 Hz, one of the five standard pairings, seed not noted). This document takes his four observations
+one by one: reproduced? (numbers), cause (file, symbol), fix (commit), measured effect, what remains. **Nobody has seen the result in the window:** everything here is
+measured headless; what only a human can confirm is in §6.
 
-**Nachtrag:** der Branch ist auf `main` `4d9d9e5` gebracht (Ausfahrtsweg, Runde 3 der Raten-Pakete). §1 bis §10 beschreiben den Stand vor dem Merge und bleiben als Messprotokoll
-stehen; **was heute gilt – ein einziger Zielplatz-Mechanismus, alle Messungen neu, die Abnahme der Regel D wiederholt – steht in §11.**
+**Addendum:** the branch has been brought onto `main` `4d9d9e5` (exit path, round 3 of the rate packages). §1 to §10 describe the state before the merge and remain as a measurement
+log; **what holds today – a single goal-spot mechanism, all measurements redone, the acceptance of rule D repeated – is in §11.**
 
-**Methode.** Ein ganzes Gefecht ist chaotisch; kein Befund stützt sich auf ein einzelnes. Gemessen wird mit `SimTool ai-census` (neu, §5): die 16 Paarungen des Referenzmanifests
-(vier Karten × vier Paarungen) mit je 5 Seeds = 80 Gefechte = 160 Spieler-Gefechte, 25 Spielminuten Budget, 30 Hz; dazu `ai-survey` (16 × 20 Seeds = 320 Gefechte). „vorher“ ist
-`main` (`5abbeea`), wenn nichts anderes dasteht. Die Stände heißen wie die Commits in §7: **B** (Produktion), **C1** (Zielplätze), **C2** (Einsteigen), **D** (Zusammensetzung).
+**Method.** A whole match is chaotic; no finding rests on a single one. Measurement is done with `SimTool ai-census` (new, §5): the 16 pairings of the reference manifest
+(four maps × four pairings) with 5 seeds each = 80 matches = 160 player-matches, 25 game minutes of budget, 30 Hz; in addition `ai-survey` (16 × 20 seeds = 320 matches). "before" is
+`main` (`5abbeea`) unless something else is stated. The states are named like the commits in §7: **B** (production), **C1** (goal spots), **C2** (entering), **D** (composition).
 
-| Stand | `ai-census`: entschieden von 80 | `ai-survey`: entschieden von 320 |
+| State | `ai-census`: decided of 80 | `ai-survey`: decided of 320 |
 |---|---|---|
-| `main` | 66 | 253 (Vorgabe des Auftrags; nicht neu erhoben) |
-| nach B | 73 | 281 |
-| nach C1 | 74 | 288 |
-| nach C2 | 71 | 284 |
-| nach D (Regel für beide Spieler) | 75 | 298 |
+| `main` | 66 | 253 (given by the brief; not collected anew) |
+| after B | 73 | 281 |
+| after C1 | 74 | 288 |
+| after C2 | 71 | 284 |
+| after D (rule for both players) | 75 | 298 |
 
-Die Unterschiede zwischen B, C1 und C2 liegen innerhalb der Streuung (die halbe Breite des 95-%-Intervalls für die Differenz zweier solcher Anteile ist rund 5 Punkte); der Schritt
-von `main` zu B (8,8 Punkte) nicht, der von C2 zu D (4,4 Punkte) liegt an der Grenze. Belastbar für D ist der gepaarte Test in §4.3, nicht diese Spalte.
+The differences between B, C1 and C2 lie within the scatter (half the width of the 95 % interval for the difference of two such proportions is about 5 points); the step
+from `main` to B (8.8 points) does not, the one from C2 to D (4.4 points) lies at the boundary. What is reliable for D is the paired test in §4.3, not this column.
 
-## 1. Beobachtung A: produzierte Einheiten stehen in der Kaserne
+## 1. Observation A: produced units stand in the barracks
 
-Bekannt, nicht Gegenstand dieses Auftrags (kein produziertes Fahrzeug und kein Soldat irgendeiner Fraktion fährt heraus; die Korrektur „Einheiten verlassen die Fabrik auf dem
-Ausfahrtsweg“ liegt auf einem anderen Branch). Für alles Folgende heißt das: die eingebaute KI arbeitet heute mit Einheiten, die am `UnitCreatePoint` im Gebäude entstehen und von
-dort zum Sammelpunkt gehen. Sobald jene Korrektur gemergt ist, sind die Zahlen dieses Dokuments neu zu erheben.
+Known, not subject of this brief (no produced vehicle and no soldier of any faction drives out; the fix "units leave the factory on the
+exit path" lies on another branch). For everything that follows this means: the built-in AI today works with units that come into being at the `UnitCreatePoint` inside the building and go from
+there to the rally point. As soon as that fix is merged, the numbers of this document are to be collected anew.
 
-## 2. Beobachtung B: „Die China-KI baut keine Panzer, obwohl das Gebäude dafür steht“
+## 2. Observation B: "The China AI builds no tanks although the building for them is standing"
 
-### 2.1 Reproduziert – und nicht nur bei China
+### 2.1 Reproduced – and not only for China
 
-| Fraktion (Spieler-Gefechte) | mit Fahrzeugfabrik | Fabriken, die je ein Fahrzeug bauten | Infanterie | Fahrzeuge | Fahrzeuganteil | Blicke der Heeresproduktion auf eine Fabrik: Auftrag / „nicht bezahlbar“ |
+| Faction (player-matches) | with vehicle factory | factories that ever built a vehicle | infantry | vehicles | vehicle share | looks of the army production at a factory: order / "not affordable" |
 |---|---|---|---|---|---|---|
-| China (40) | 23 | **4** | 2.137 | **6** | 0,3 % | 8 / 28.388 |
-| ChinaTankGeneral (20) | 18 | 14 | 1.342 | 57 | 4,1 % | 61 / 35.909 |
-| America (40) | 36 | 31 | 3.991 | 161 | 3,9 % | 165 / 55.205 |
-| AmericaAirForceGeneral (20) | 20 | 17 | 2.166 | 65 | 2,9 % | 69 / 43.589 |
-| GLA (40) | 10 | 10 | 2.202 | 25 | 1,1 % | 25 / 25.514 |
+| China (40) | 23 | **4** | 2,137 | **6** | 0.3 % | 8 / 28,388 |
+| ChinaTankGeneral (20) | 18 | 14 | 1,342 | 57 | 4.1 % | 61 / 35,909 |
+| America (40) | 36 | 31 | 3,991 | 161 | 3.9 % | 165 / 55,205 |
+| AmericaAirForceGeneral (20) | 20 | 17 | 2,166 | 65 | 2.9 % | 69 / 43,589 |
+| GLA (40) | 10 | 10 | 2,202 | 25 | 1.1 % | 25 / 25,514 |
 
-Über alle Fraktionen endeten 188.605 Blicke auf eine Fabrik mit „nichts bezahlbar“ und 328 mit einem Auftrag. Abgelehnt wurde kein einziger Produktionsbefehl (keine Ablehnung
-wegen Voraussetzungen, Warteschlange, Strom, `MaxSimultaneousOfType` oder Wissenschaft); Chinas Panzer brauchen keine Voraussetzung, die die KI nicht baut (Battlemaster, Gattling
-und Dragon nur die Waffenfabrik); die Fabrik ist nicht blockiert. Die amerikanischen „Fahrzeuge“ vorher sind zu 73 % Sanitätswagen (das billigste, 118 von 161).
+Over all factions 188,605 looks at a factory ended with "nothing affordable" and 328 with an order. Not a single production command was rejected (no rejection
+because of prerequisites, queue, power, `MaxSimultaneousOfType` or science); China's tanks need no prerequisite that the AI does not build (Battlemaster, Gattling
+and Dragon only the war factory); the factory is not blocked. The American "vehicles" before are 73 % Ambulances (the cheapest, 118 of 161).
 
-### 2.2 Ursache
+### 2.2 Cause
 
-`Skirmish/SkirmishAi.cs`, `ProduceArmy` (Stand `main`): jeder Produzent kaufte, in der Reihenfolge, in der die Gebäude entstanden sind, eine zufällige Einheit **unter denen, die das
-Geld in diesem Augenblick deckt**. Die Kaserne steht zuerst (`PlanGoals`: Kaserne vor Fabrik), und ihre Infanterie ist die billigste Heereseinheit (Infanterie 300, Panzer ab 800). Bei
-einem Einkommen von zwei Sammlern überschreitet der Kontostand den Preis eines Soldaten alle paar Sekunden und den eines Panzers nie: die Kaserne gibt jeden Credit aus, bevor die
-Fabrik gefragt wird. Gespart wurde nie.
+`Skirmish/SkirmishAi.cs`, `ProduceArmy` (state `main`): every producer bought, in the order in which the buildings came into being, a random unit **among those that the
+money covers at this moment**. The barracks stands first (`PlanGoals`: barracks before factory), and its infantry is the cheapest army unit (infantry 300, tanks from 800). With
+an income of two gatherers the account balance exceeds the price of a soldier every few seconds and that of a tank never: the barracks spends every credit before the
+factory is asked. Nothing was ever saved.
 
-Maßstab Original (`MapTool script-library <content> --show "China N "`, normale Schwierigkeit): nach vier Rotgardisten der ersten Welle besteht jede Welle aus Fahrzeugen –
+Yardstick original (`MapTool script-library <content> --show "China N "`, normal difficulty): after four Red Guards of the first wave every wave consists of vehicles –
 `China N 1ST Wave Veh` 1 Gattling + 2 Battlemaster, `2ND Wave Tanks` 2 Battlemaster + ECM + Gattling, `3RD Wave Tanks` 4 Battlemaster, `3RD Wave Artillery` 2 Inferno,
-`4TH Wave Tanks` 2–4 Battlemaster + 2 Overlord. „Eine China-Armee hat Battlemaster und Gattlings“ ist dort Datum der Skripte (mit Geldgeschenken, `docs/SKIRMISH-AI-ORIGINAL.md` §1.4).
+`4TH Wave Tanks` 2–4 Battlemaster + 2 Overlord. "A China army has Battlemasters and Gattlings" is a datum of the scripts there (with money gifts, `docs/SKIRMISH-AI-ORIGINAL.md` §1.4).
 
-### 2.3 Korrektur: Regel „stehender Heeresauftrag“ (Commit `50718d7`, Test `7a29943`)
+### 2.3 Fix: rule "standing army order" (commit `50718d7`, test `7a29943`)
 
-Die nächste Heereseinheit wird unter **allem** gezogen, was Kasernen und Fabriken mit Platz in der Warteschlange bauen könnten (Voraussetzungen erfüllt, jeder Einheitentyp mit
-derselben Chance, **der Preis wird nicht angesehen**), und die KI spart dann auf genau diese Einheit; für das Heer wird nichts anderes gekauft, bis sie bezahlt ist. Ein Auftrag, der
-60 s (`ArmyOrderPatienceFrames`, eigene Wahl) nicht bezahlt werden konnte, weicht einer Ziehung unter dem, was das Geld jetzt deckt – eine Wirtschaft, die stehen geblieben ist, gibt
-ihr letztes Geld trotzdem aus (im Zensus 121 von 7.308 Aufträgen). Der Auftrag ist ein Feld im Zustand der KI (`_armyOrder`), neben ihren anderen; Zufall nur aus ihrem eigenen Strom.
+The next army unit is drawn among **everything** that barracks and factories with room in the queue could build (prerequisites fulfilled, every unit type with
+the same chance, **the price is not looked at**), and the AI then saves for exactly this unit; nothing else is bought for the army until it is paid for. An order that
+could not be paid for 60 s (`ArmyOrderPatienceFrames`, own choice) gives way to a draw among what the money covers now – an economy that has come to a standstill
+spends its last money nevertheless (in the census 121 of 7,308 orders). The order is a field in the state of the AI (`_armyOrder`), next to its others; randomness only from its own stream.
 
-### 2.4 Wirkung
+### 2.4 Effect
 
-| Fraktion | Fabriken, die bauen | Infanterie | Fahrzeuge | Fahrzeuganteil |
+| Faction | factories that build | infantry | vehicles | vehicle share |
 |---|---|---|---|---|
-| China | 21 von 23 (vorher 4) | 1.033 | **300** (vorher 6) | 22,5 % |
-| ChinaTankGeneral | 17 von 17 | 514 | 477 | 48,1 % |
-| America | 34 von 35 | 1.282 | 491 | 27,7 % |
-| AmericaAirForceGeneral | 20 von 20 | 870 | 266 | 23,4 % |
-| GLA | 10 von 10 | 1.654 | 261 | 13,6 % |
+| China | 21 of 23 (before 4) | 1,033 | **300** (before 6) | 22.5 % |
+| ChinaTankGeneral | 17 of 17 | 514 | 477 | 48.1 % |
+| America | 34 of 35 | 1,282 | 491 | 27.7 % |
+| AmericaAirForceGeneral | 20 of 20 | 870 | 266 | 23.4 % |
+| GLA | 10 of 10 | 1,654 | 261 | 13.6 % |
 
-China baut jetzt Battlemaster (84), Dragon (83), Gattling (74) und Truppentransporter (59). Die 16 Läufe des
-Referenzmanifests (ein Seed): entschieden 12 → 12, der Ausgang wechselt in 7 (vier Patts kommen und gehen, drei Siegerwechsel).
+China now builds Battlemasters (84), Dragons (83), Gattlings (74) and Troop Crawlers (59). The 16 runs of the
+reference manifest (one seed): decided 12 → 12, the outcome changes in 7 (four stalemates come and go, three changes of winner).
 
-**Was bleibt.** (a) Der Anteil der Infanterie bleibt hoch, weil die Kaserne früher steht als die Fabrik (Median der ersten Fabrik: Tick 4.725) und bis dahin allein gezogen wird. (b) Die Regel wählt blind
-(bis D): auch Sanitätswagen, Flugabwehr gegen einen Gegner ohne Flugzeuge, leere Transporter. (c) **Nebenbefund, nicht behoben:** die GLA-KI stellt auf drei der vier Karten (Alpine
-Assault, Bitter Winter, Death Valley) genau ein Gebäude fertig, die Kaserne, und nur auf Armored Fury Lager, Tunnel und Waffenhändler – in allen 30 Spieler-Gefechten dort, vorher wie
-nachher. Darum „GLA mit Fabrik: 10 von 40“. Ursache nicht untersucht. (d) Die Angriffsschwelle zählt Köpfe (acht Einheiten); eine teurere Armee erreicht sie später.
+**What remains.** (a) The share of infantry stays high because the barracks stands earlier than the factory (median of the first factory: tick 4,725) and until then is drawn from alone. (b) The rule chooses blindly
+(until D): Ambulances too, anti-air against an opponent without aircraft, empty transports. (c) **Side finding, not fixed:** on three of the four maps (Alpine
+Assault, Bitter Winter, Death Valley) the GLA AI finishes exactly one building, the barracks, and only on Armored Fury Supply Stash, Tunnel and Arms Dealer – in all 30 player-matches there, before as
+after. Hence "GLA with factory: 10 of 40". Cause not investigated. (d) The attack threshold counts heads (eight units); a more expensive army reaches it later.
 
-## 3. Beobachtung C: „Drei Infanteristen draußen, einer steht in der Mitte, zwei laufen um ihn herum“
+## 3. Observation C: "Three infantrymen outside, one stands in the middle, two run around him"
 
-### 3.1 Der Detektor
+### 3.1 The detector
 
-`OrbitDetector` (`tools/CnCNew.SimTool/AiCensus.cs`): je Logikbild die Lage jeder beweglichen Bodeneinheit eines Spielers; einmal je Sekunde werden die letzten 10 s beurteilt. Eine
-Einheit, die mehr als 150 Einheiten Weg zurücklegt und weniger als 20 vom Fleck kommt, ist eine Episode: **Kreisen** (`orbit`) bei mindestens zwei vollen Drehungen der
-Laufrichtung, sonst **Hin und Her** (`shuffle`). Gezählt wird mit dem Ort – am Sammelpunkt der KI (`rally`), nahe dem eigenen Ziel anderswo, unterwegs zu einem fernen Ziel, ohne
-Bewegungsauftrag – und getrennt nach Heer und Wirtschaft (Sammler, Dozer). `--orbits <datei>` schreibt je Episode Zustand und Nachbarn, `--watch <id>` verfolgt eine Einheit.
+`OrbitDetector` (`tools/CnCNew.SimTool/AiCensus.cs`): per logic frame the position of every mobile ground unit of a player; once per second the last 10 s are judged. A
+unit that covers more than 150 units of path and gets less than 20 away from the spot is an episode: **circling** (`orbit`) with at least two full turns of the
+walking direction, otherwise **back and forth** (`shuffle`). Counting is done with the place – at the rally point of the AI (`rally`), near its own goal elsewhere, on the way to a distant goal, without
+a move order – and separately for army and economy (gatherers, dozers). `--orbits <datei>` writes state and neighbours per episode, `--watch <id>` follows one unit.
 
-### 3.2 Reproduziert
+### 3.2 Reproduced
 
-Auf `main`: 359 Kreis-Episoden von Heereseinheiten in 80 Gefechten, davon **269 am Sammelpunkt, in 74 von 160 Spieler-Gefechten**, bei jeder Fraktion (unter den 359: Rotgardist 235,
-Ranger 47, Raketensoldat 32 …). Das Bild ist immer dasselbe, hier das erste:
+On `main`: 359 circling episodes of army units in 80 matches, of which **269 at the rally point, in 74 of 160 player-matches**, for every faction (among the 359: Red Guard 235,
+Ranger 47, Missile Defender 32 …). The picture is always the same, here the first:
 
 ```
-AlpineAssault_America-China, Seed 1, Tick 2580: ChinaInfantryRedguard#27 bei (1087, 596), Weg 250, vom Fleck 19,9, 2,7 Drehungen;
-  Ziel (1098, 605) – der Sammelpunkt, 14,1 entfernt; Nachbarn: ChinaInfantryRedguard#23 steht bei (+11, +9), ChinaInfantryRedguard#32 läuft
+AlpineAssault_America-China, seed 1, tick 2580: ChinaInfantryRedguard#27 at (1087, 596), path 250, from the spot 19.9, 2.7 turns;
+  goal (1098, 605) – the rally point, 14.1 away; neighbours: ChinaInfantryRedguard#23 stands at (+11, +9), ChinaInfantryRedguard#32 is walking
 ```
 
-Einer steht genau auf dem Sammelpunkt, die anderen laufen im Abstand der beiden Radien (rund 14) um ihn herum – was der Inhaber gesehen hat. Oft stehen mehrere Einheiten auf
-demselben Punkt übereinander (auf `main` bis zu drei, nach B bis zu acht in einer Episode): wer keinen Ausweichschritt mehr findet, geht durch.
+One stands exactly on the rally point, the others run around him at the distance of the two radii (about 14) – what the owner saw. Often several units stand on
+the same point on top of each other (on `main` up to three, after B up to eight in one episode): whoever finds no avoidance step any more walks through.
 
-### 3.3 Erste Ursache: alle haben denselben Zielpunkt
+### 3.3 First cause: all have the same goal point
 
-Alles Produzierte bekommt denselben Punkt (`SetRallyPointCommand`, danach `AttackMoveCommand` der KI). `AIUpdateInterface.Move` (`Modules/BuiltIn/Phase5Modules.cs`): der letzte
-Wegpunkt ist das Ziel selbst, angekommen ist, wer innerhalb von `max(CloseEnoughDist, ein Bildschritt)` liegt. Steht dort schon jemand, liegt der Wegpunkt in dessen Kreis; der
-Schritt dorthin ist blockiert, `SimulationWorld.AvoidLocalBlockers` dreht ihn um 45° oder 90° – jedes Bild wieder, also im Kreis. Die Umplanung um stehende Einheiten
-(`StationaryBlockersAhead` → `ReplanAround`) hilft nicht: einen Umweg, der ankommt, gibt es nicht, und ohne den bleibt der alte Weg.
+Everything produced gets the same point (`SetRallyPointCommand`, after that the AI's `AttackMoveCommand`). `AIUpdateInterface.Move` (`Modules/BuiltIn/Phase5Modules.cs`): the last
+waypoint is the goal itself, arrived is whoever lies within `max(CloseEnoughDist, ein Bildschritt)`. If somebody already stands there, the waypoint lies in his circle; the
+step there is blocked, `SimulationWorld.AvoidLocalBlockers` turns it by 45° or 90° – every frame again, hence in a circle. The replanning around standing units
+(`StationaryBlockersAhead` → `ReplanAround`) does not help: a detour that arrives does not exist, and without one the old path stays.
 
-**Was das Original tut** (gelesen, neu geschrieben, nichts kopiert): jede Einheit bekommt eine eigene Zielzelle. `AIInternalMoveToState::onEnter` (`GameLogic/AI/AIStates.cpp`)
-schickt das Ziel durch `Pathfinder::adjustDestination` (`GameLogic/AI/AIPathfind.cpp`): eine quadratische Spirale um die gewünschte Zelle (rechts, hoch, zweimal links, zweimal
-runter, dreimal rechts …, höchstens `MAX_CELLS_TO_TRY` = 400), die erste Zelle, die `checkDestination` annimmt – begehbar, nicht Zielzelle eines Verbündeten („Don't usurp your
-allies goals“), nicht von einer stehenden Einheit besetzt, die man nicht überfahren kann („Don't move to an occupied cell“) –, wird mit `Pathfinder::updateGoal` reserviert; findet
-sich keine, `snapClosestGoalPosition`. Gruppen bekommen zusätzlich versetzte Ziele (`AIGroup::computeIndividualDestination`, `AIGroup.cpp`: der Abstand zur Gruppenmitte, auf
-sechs Radien begrenzt, dann ebenfalls `adjustDestination`).
+**What the original does** (read, rewritten, nothing copied): every unit gets a goal cell of its own. `AIInternalMoveToState::onEnter` (`GameLogic/AI/AIStates.cpp`)
+sends the goal through `Pathfinder::adjustDestination` (`GameLogic/AI/AIPathfind.cpp`): a square spiral around the desired cell (right, up, twice left, twice
+down, three times right …, at most `MAX_CELLS_TO_TRY` = 400), the first cell that `checkDestination` accepts – walkable, not the goal cell of an ally ("Don't usurp your
+allies goals"), not occupied by a standing unit that one cannot run over ("Don't move to an occupied cell") – is reserved with `Pathfinder::updateGoal`; if none
+is found, `snapClosestGoalPosition`. Groups additionally get offset goals (`AIGroup::computeIndividualDestination`, `AIGroup.cpp`: the distance to the group centre, limited to
+six radii, then likewise `adjustDestination`).
 
-**Korrektur (Commit `3816445`, Test `ccdc12b`):** `SimulationWorld.TryFreeGoalSpot` (`World/SimulationWorld.GoalSpots.cs`), ohne Reservierungstabelle: eine stehende Einheit
-beansprucht den Platz, auf dem sie steht, eine laufende den, zu dem sie unterwegs ist (`Entity.MoveTargetX/Y` – Zustand, den jeder Snapshot schon trägt, **kein neuer Zustand**).
-Ist das eigene Ziel von einer stehenden Einheit besetzt oder läuft eine mit kleinerer Kennung dorthin, nimmt die Einheit den ersten Platz auf derselben Spirale, den niemand
-beansprucht und der in gerader Linie begehbarer Zellen vom Ziel liegt. Einheiten eines Feindes beanspruchen nie (ein Panzer, der auf feindliche Infanterie befohlen ist, fährt
-weiter). Die KI schickt eine Einheit, die innerhalb von elf Zellen des Sammelpunkts zur Ruhe gekommen ist, nicht erneut hin (`SkirmishAi.GatherRadius`).
+**Fix (commit `3816445`, test `ccdc12b`):** `SimulationWorld.TryFreeGoalSpot` (`World/SimulationWorld.GoalSpots.cs`), without a reservation table: a standing unit
+claims the spot on which it stands, a moving one the spot to which it is on its way (`Entity.MoveTargetX/Y` – state that every snapshot already carries, **no new state**).
+If the own goal is occupied by a standing unit or one with a smaller id is walking there, the unit takes the first spot on the same spiral that nobody
+claims and that lies in a straight line of walkable cells from the goal. Units of an enemy never claim (a tank that is ordered onto enemy infantry drives
+on). The AI does not send a unit that has come to rest within eleven cells of the rally point there again (`SkirmishAi.GatherRadius`).
 
-*Für den Merge (das Paket R3-OBSERVERS bearbeitet dieselbe Datei):* der Eingriff in `AIUpdateInterface` ist **ein Block von sechs Zeilen** am Anfang der Bildentscheidung von `Move`,
-unmittelbar vor `if (!_pathValid || …) PlanPath(…)`, und **ein Helfer** `GoalSpotCheckDue` mit zwei Konstanten vor `BlockerReplanFrames`. Gefragt wird nur bei einem schlichten
-Bewegungsauftrag (kein Dock, keine Bauaufgabe, kein Einsteigeziel, kein Zielobjekt, kein Rückweg, kein Opfer im Visier), nur innerhalb von sechs Zellen des Ziels und nur in jedem
-15. Logikbild der Welt, versetzt um die Kennung. Abweichungen vom Original: gefragt wird nahe am Ziel statt bei der Auftragserteilung (so fällt auch ein Platz auf, der unterwegs
-besetzt wurde); die Spirale liegt um den genauen Zielpunkt, nicht um die Zellmitte; „erreichbar“ ist die gerade Linie, nicht die Zonentabelle.
+*For the merge (the package R3-OBSERVERS edits the same file):* the intervention in `AIUpdateInterface` is **one block of six lines** at the beginning of the frame decision of `Move`,
+immediately before `if (!_pathValid || …) PlanPath(…)`, and **one helper** `GoalSpotCheckDue` with two constants before `BlockerReplanFrames`. The question is asked only for a plain
+move order (no dock, no build task, no enter target, no goal object, no way back, no victim in the sights), only within six cells of the goal and only in every
+15th logic frame of the world, offset by the id. Deviations from the original: the question is asked near the goal instead of when the order is given (so a spot that was occupied on the way
+is noticed too); the spiral lies around the exact goal point, not around the cell centre; "reachable" is the straight line, not the zone table.
 
-**Bildkonvention (`docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1):** die Frage fällt in die eine Entscheidung je Logikbild; der Rhythmus ist die Bildnummer der Welt
-(`Time.FramesIn(Tick)`), also bei jeder Rate dasselbe Bild; eine Einheit, die bei über 30 Hz gerade den letzten Schritt ihres Weges zurücklegt, zählt wie beim 30-Hz-Schritt als auf
-ihrem Ziel stehend (Regel 3). Der Test schickt sechs Einheiten auf einen Punkt: alle kommen nach 193 Bildern an, genau eine steht auf dem Punkt, die anderen auf den Nachbarzellen
-(10,10), (−10,0), (−10,10), (10,0), (0,10), niemand steht in einem anderen – und Lage, Blickrichtung und Auftragszustand nach **jedem** Logikbild sind bei 30, 60 und 120 Hz
-bitgleich. Ohne die Korrektur laufen zwei der sechs nach 20 s noch.
+**Frame convention (`docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1):** the question falls into the one decision per logic frame; the rhythm is the frame number of the world
+(`Time.FramesIn(Tick)`), hence the same frame at every rate; a unit that at above 30 Hz is just covering the last step of its path counts, as with the 30 Hz step, as standing on
+its goal (rule 3). The test sends six units to one point: all arrive after 193 frames, exactly one stands on the point, the others on the neighbouring cells
+(10,10), (−10,0), (−10,10), (10,0), (0,10), nobody stands inside another – and position, facing and order state after **every** logic frame are bit-identical at 30, 60 and 120 Hz.
+Without the fix two of the six are still walking after 20 s.
 
-### 3.4 Zweite Ursache: wer einsteigen soll, läuft um sein Fahrzeug herum
+### 3.4 Second cause: whoever is to enter runs around his vehicle
 
-Nach der ersten Korrektur blieben Fälle am Sammelpunkt mit demselben Bild – in der Mitte aber ein **Fahrzeug** (Humvee, Truppentransporter; seit B baut die KI sie), und die
-Laufenden hatten den Befehl einzusteigen (`SkirmishAi.UseTransports` → `MoveAndEnterCommand`). Zahlen von `main`: in den 20 KI-Läufen des Referenzmanifests **1.523
-Einsteigebefehle und 130 Einstiege**; der Fall „heal inside ChinaVehicleTroopCrawler“ der Raten-Suite war dort „unmeasured“, weil der Rotgardist nie hineinkam.
+After the first fix, cases remained at the rally point with the same picture – in the middle, however, a **vehicle** (Humvee, Troop Crawler; since B the AI builds them), and the
+walking ones had the command to enter (`SkirmishAi.UseTransports` → `MoveAndEnterCommand`). Numbers from `main`: in the 20 AI runs of the reference manifest **1,523
+enter commands and 130 entries**; the case "heal inside ChinaVehicleTroopCrawler" of the rate suite was "unmeasured" there because the Red Guard never got in.
 
-Ursache: das Fahrzeug war für den Einsteiger ein Hindernis wie jede andere Einheit (`SimulationWorld.Collision.cs`: `AvoidLocalBlockersCore` und die beiden
-`StationaryBlockersAhead…` nahmen nur das Zielobjekt einer Annäherung aus), und aufgenommen wurde er erst, wenn seine Bewegung **beendet** war – auf dem Mittelpunkt des Fahrzeugs,
-den er nicht erreichen kann (`AIUpdateInterface.UpdateEnter`).
+Cause: for the enterer the vehicle was an obstacle like every other unit (`SimulationWorld.Collision.cs`: `AvoidLocalBlockersCore` and the two
+`StationaryBlockersAhead…` excluded only the goal object of an approach), and he was taken in only when his movement was **finished** – on the centre of the vehicle,
+which he cannot reach (`AIUpdateInterface.UpdateEnter`).
 
-Original: `AIEnterState::onEnter` (`AIStates.cpp`) sagt dem Pfadfinder, das zu betretende Objekt zu ignorieren (`ai->ignoreObstacle(goal)`), und der Container nimmt auf, wer mit
-ihm zusammenstößt und ihn als Einsteigeziel hat (`OpenContain::onCollide`, `GameLogic/Object/Contain/OpenContain.cpp`).
+Original: `AIEnterState::onEnter` (`AIStates.cpp`) tells the pathfinder to ignore the object to be entered (`ai->ignoreObstacle(goal)`), and the container takes in whoever collides with
+it and has it as enter target (`OpenContain::onCollide`, `GameLogic/Object/Contain/OpenContain.cpp`).
 
-**Korrektur (Commit `b93ba6c`, Test `2259f70`):** `AIUpdateInterface.IgnoredObstacle` (Zielobjekt oder Einsteigeziel) ist, was die drei Kollisionsabfragen ausnehmen; `UpdateEnter`
-nimmt eine Einheit auf, sobald ihr Kreis den des Containers berührt, geprüft nach einem ganzen Bildschritt. Ein Gebäude behält die alte Regel (der Weg endet an seiner Wand; sein
-Umkreis reicht weit über einen rechteckigen Grundriss hinaus). *Für den Merge:* eine Eigenschaft nach `GoalObject`, elf Zeilen in `UpdateEnter`, dreimal ein Wort in
-`SimulationWorld.Collision.cs`. Der Test: drei Einsteiger aus drei Richtungen sind nach 51, 52 und 68 Bildern im Fahrzeug, bei 30, 60 und 120 Hz in denselben Bildern; vorher
-läuft nach 15 s jeder der drei noch um das Fahrzeug, 18 Einheiten vom Mittelpunkt.
+**Fix (commit `b93ba6c`, test `2259f70`):** `AIUpdateInterface.IgnoredObstacle` (goal object or enter target) is what the three collision queries exclude; `UpdateEnter`
+takes a unit in as soon as its circle touches that of the container, checked after a whole frame step. A building keeps the old rule (the path ends at its wall; its
+circumcircle reaches far beyond a rectangular footprint). *For the merge:* one property after `GoalObject`, eleven lines in `UpdateEnter`, three times one word in
+`SimulationWorld.Collision.cs`. The test: three enterers from three directions are in the vehicle after 51, 52 and 68 frames, in the same frames at 30, 60 and 120 Hz; before,
+each of the three is still running around the vehicle after 15 s, 18 units from the centre.
 
-### 3.5 Wirkung (Kreis-Episoden von Heereseinheiten, 80 Gefechte)
+### 3.5 Effect (circling episodes of army units, 80 matches)
 
-| Stand | am Sammelpunkt | Spieler-Gefechte mit einer | nahe dem Ziel anderswo | unterwegs zu fernem Ziel | ohne Auftrag | Einsteigebefehle / Aufnahmen in Container (20 Manifestläufe) |
+| State | at the rally point | player-matches with one | near the goal elsewhere | on the way to a distant goal | without an order | enter commands / intakes into containers (20 manifest runs) |
 |---|---|---|---|---|---|---|
-| `main` | **269** | **74 von 160** | 8 | 61 | 21 | 1.523 / 130 |
-| nach B | 238 | 78 | 8 | 50 | 14 | 2.396 / 1.100 |
-| nach C1 | 15 | 12 | 9 | 48 | 2 | 2.343 / 639 |
-| nach C2 | **2** | **2 von 160** | 2 | 33 | 2 | 1.469 / 844 |
-| nach D | 2 | 1 | 2 | 19 | 2 | 1.726 / 1.001 |
+| `main` | **269** | **74 of 160** | 8 | 61 | 21 | 1,523 / 130 |
+| after B | 238 | 78 | 8 | 50 | 14 | 2,396 / 1,100 |
+| after C1 | 15 | 12 | 9 | 48 | 2 | 2,343 / 639 |
+| after C2 | **2** | **2 of 160** | 2 | 33 | 2 | 1,469 / 844 |
+| after D | 2 | 1 | 2 | 19 | 2 | 1,726 / 1,001 |
 
-Hin-und-Her-Episoden am Sammelpunkt: 534 → 71 (nach C2).
+Back-and-forth episodes at the rally point: 534 → 71 (after C2).
 
-**Was bleibt.** (a) Zwei Episoden am Sammelpunkt: Einsteiger eines Fahrzeugs, auf dem schon eine abgewiesene Einheit steht (die KI bestellt mehr Einsteiger, als Plätze frei
-sind; sie zählt die unterwegs befindlichen nicht). (b) **Unterwegs, nicht behoben:** zwei Einheiten, die sich auf dem Marsch gegenseitig ausweichen und dabei umeinander drehen
-(33 Episoden; `AvoidLocalBlockers` kennt seine Grenze: „can oscillate against a mover coming the other way“) – sichtbar als zwei Soldaten, die sich umkreisen, ohne dass einer
-steht. (c) **Sammler am Dock, nicht behoben:** Arbeiter und Versorgungslaster kreisen am Lager oder Zentrum, wenn ein anderer dort steht (88 Episoden auf `main`, 235 nach C2,
-68 nach D; die Zahl schwankt mit der Zahl der Sammler). Dieselbe Art Ursache wie C1, aber im Dock-Automaten, den die Korrektur bewusst ausnimmt. (d) Die Raten-Suite misst den
-Truppentransporter-Fall jetzt und zeigt dabei eine Größe außerhalb der Toleranz, die vorher nicht zu sehen war (§8).
+**What remains.** (a) Two episodes at the rally point: enterers of a vehicle on which a rejected unit already stands (the AI orders more enterers than there are free
+seats; it does not count those on their way). (b) **On the way, not fixed:** two units that avoid each other on the march and in doing so turn around each other
+(33 episodes; `AvoidLocalBlockers` knows its limit: "can oscillate against a mover coming the other way") – visible as two soldiers circling each other without one
+standing. (c) **Gatherers at the dock, not fixed:** workers and supply trucks circle at the supply depot or supply center when another one stands there (88 episodes on `main`, 235 after C2,
+68 after D; the number fluctuates with the number of gatherers). The same kind of cause as C1, but in the dock state machine, which the fix deliberately excludes. (d) The rate suite now measures the
+Troop Crawler case and in doing so shows a quantity outside the tolerance that was not to be seen before (§8).
 
-## 4. Beobachtung D: „Die China-KI passt sich nicht an ihren Gegner an“
+## 4. Observation D: "The China AI does not adapt to its opponent"
 
-### 4.1 Tatsachen
+### 4.1 Facts
 
-**Woraus `ProduceArmy` wählt.** Auf `main`: je Produzent gleich wahrscheinlich unter den gerade bezahlbaren Einheiten – faktisch nur Infanterie, China 52 % Panzerjäger und 47 %
-Rotgardisten, gleich gegen wen. Seit B: jeder Einheitentyp aller Produzenten mit derselben Chance. Der Gegner geht in keine der beiden ein. Die Beobachtung stimmt.
+**What `ProduceArmy` chooses from.** On `main`: per producer equally likely among the units affordable right now – in fact only infantry, China 52 % Tank Hunters and 47 %
+Red Guards, no matter against whom. Since B: every unit type of all producers with the same chance. The opponent enters into neither of the two. The observation is correct.
 
-**Was die Armeen bauen** (Anteile der produzierten Heereseinheiten, 80 Gefechte, Stand C2; in Klammern: wogegen sie nach den Waffendaten taugen):
+**What the armies build** (shares of the produced army units, 80 matches, state C2; in parentheses: what they are good against according to the weapon data):
 
-| Fraktion | Zusammensetzung |
+| Faction | Composition |
 |---|---|
-| China | Panzerjäger 38 % (Fahrzeuge, Gebäude), Rotgardist 34 % (Infanterie), Battlemaster 9 %, Dragon 8 % (Infanterie, Gebäude), Gattling 7 % (Infanterie, Flugzeuge), Truppentransporter 5 % |
-| America | Ranger 38 % (Infanterie), Raketensoldat 35 % (Fahrzeuge, Gebäude, Flugzeuge), Sanitätswagen 8 % (nichts), Crusader 7 %, Humvee 6 %, Avenger 5 % (nur Flugzeuge und Geschosse) |
-| GLA | Terrorist 34 %, Rebell 29 % (Infanterie), Tunnelverteidiger 25 % (Fahrzeuge, Gebäude), Scorpion 5 %, Gifttransporter 4 %, Vierling 4 % |
+| China | Tank Hunter 38 % (vehicles, buildings), Red Guard 34 % (infantry), Battlemaster 9 %, Dragon 8 % (infantry, buildings), Gattling 7 % (infantry, aircraft), Troop Crawler 5 % |
+| America | Ranger 38 % (infantry), Missile Defender 35 % (vehicles, buildings, aircraft), Ambulance 8 % (nothing), Crusader 7 %, Humvee 6 %, Avenger 5 % (only aircraft and projectiles) |
+| GLA | Terrorist 34 %, Rebel 29 % (infantry), Tunnel Defender 25 % (vehicles, buildings), Scorpion 5 %, Toxin Tractor 4 %, Quad Cannon 4 % |
 
-**Was was trifft** (Schaden aus `EntityDamaged`, nach Angreifertyp und Art des Opfers, Stand C2): Rotgardist 56 % auf Infanterie, 37 % auf Gebäude; Panzerjäger 18 % Infanterie,
-18 % Fahrzeuge, 59 % Gebäude; Dragon 26 % / 16 % / 55 %; Battlemaster 7 % / 28 % / 63 %; Gattling-Panzer 34 % / 24 % / 33 % und 6 % Flugzeuge; Ranger 43 % Infanterie, 52 %
-Gebäude; Raketensoldat 8 % / 12 % / 76 %; Crusader 5 % / 45 % / 46 %; Avenger 100 % auf Geschosse – auf kein einziges Bodenziel. Der größte Posten jeder Einheit außer den reinen
-Infanteriewaffen ist die gegnerische Basis: die Armeen, die sich hier begegnen, sind überwiegend Infanterie und Gebäude.
+**What hits what** (damage from `EntityDamaged`, by attacker type and kind of the victim, state C2): Red Guard 56 % on infantry, 37 % on buildings; Tank Hunter 18 % infantry,
+18 % vehicles, 59 % buildings; Dragon 26 % / 16 % / 55 %; Battlemaster 7 % / 28 % / 63 %; Gattling Tank 34 % / 24 % / 33 % and 6 % aircraft; Ranger 43 % infantry, 52 %
+buildings; Missile Defender 8 % / 12 % / 76 %; Crusader 5 % / 45 % / 46 %; Avenger 100 % on projectiles – on not a single ground target. The largest item of every unit except the pure
+infantry weapons is the enemy base: the armies that meet here are predominantly infantry and buildings.
 
-**Was das Original tut.** Es passt sich an, aber nicht Einheit für Einheit, sondern mit **Gegenteams** der Skripte (`SkirmishScripts.scb`, gelesen mit
-`MapTool script-library <content> --show "China"`). Skripte setzen Flaggen aus der Zahl gegnerischer Objekte einer Objektliste:
+**What the original does.** It adapts, but not unit by unit, rather with **counter teams** of the scripts (`SkirmishScripts.scb`, read with
+`MapTool script-library <content> --show "China"`). Scripts set flags from the number of enemy objects of an object list:
 
 ```
 IF FLAG['_CT_INFANTRY'; 0] AND PLAYER_HAS_OBJECT_COMPARISON['<This Player's Enemy>'; 3; 25; 'Infantry']   DO SET_FLAG['_CT_INFANTRY'; 1]
 IF FLAG['_CT_INFANTRY'; 1] AND PLAYER_HAS_OBJECT_COMPARISON['<This Player's Enemy>'; 0; 10; 'Infantry']   DO SET_FLAG['_CT_INFANTRY'; 0]
 ```
 
-ebenso `_CT_TANK` (ab 8 bzw. 15 `'Tanks'`), `_CT_AIR` (ab 4 `'Aircraft'`), `_CT_BASEDEF` (ab 5 `'Base Defenses'`), `_CT_STEALTH` (ab 5 `'Spy'`). An den Flaggen hängen die
-Produktionsbedingungen von Teams mit höherer Priorität (170–215) als die Wellen (100–130): `China CT - Infantry 1` (bis 2 Gattling-Panzer, bis 4 Rotgardisten),
-`China CT - Infantry 2` (Dragon, Gattling, Rotgardist), `China CT - Tank 1–3` (Panzerjäger, Battlemaster), `China CT - Air 1/2` (Panzerjäger, Gattling-Panzer),
-`China CT - Base Def 1/2` (Inferno-Kanone, Nuklearkanone), `China CT - Stealth 1/2` (Truppentransporter). Die Bedingung zählt die Objekte des Gegners, gesehen oder nicht. Gegen
-viel Infanterie baut Chinas Original-KI also Gattling- und Dragon-Panzer **und** Rotgardisten – was der Inhaber erwartet hat. Die eingebaute KI führt keine Skripte aus.
+likewise `_CT_TANK` (from 8 or 15 `'Tanks'`), `_CT_AIR` (from 4 `'Aircraft'`), `_CT_BASEDEF` (from 5 `'Base Defenses'`), `_CT_STEALTH` (from 5 `'Spy'`). On the flags hang the
+production conditions of teams with higher priority (170–215) than the waves (100–130): `China CT - Infantry 1` (up to 2 Gattling Tanks, up to 4 Red Guards),
+`China CT - Infantry 2` (Dragon, Gattling, Red Guard), `China CT - Tank 1–3` (Tank Hunter, Battlemaster), `China CT - Air 1/2` (Tank Hunter, Gattling Tank),
+`China CT - Base Def 1/2` (Inferno Cannon, Nuke Cannon), `China CT - Stealth 1/2` (Troop Crawler). The condition counts the objects of the opponent, seen or not. Against
+a lot of infantry China's original AI therefore builds Gattling and Dragon tanks **and** Red Guards – what the owner expected. The built-in AI executes no scripts.
 
-**Der Versuch aus Phase 17** (`docs/SIMULATION-CORE.md` §36.3): je Produzent die teuerste Einheit, verdoppelt bei größerer Reichweite, Fabriken zuerst, Sparen statt Kleinkauf.
-Zurückgenommen nach zwei Messrunden über 16 einzelne Läufe (12 → 10 → 11 entschieden): der Preis ist kein Kampfwert (18 Avenger vor einer Basis, auf die sie nicht schießen
-können), und das Urteil stand auf einem Seed je Paarung. Die Lehre dort – „ein Kampfwert je Ziel, Schaden gegen Rüstung“ – ist, was hier gebaut ist; und gemessen wird mit 640
-Gefechten statt 16.
+**The attempt from Phase 17** (`docs/SIMULATION-CORE.md` §36.3): per producer the most expensive unit, doubled for greater range, factories first, saving instead of small purchases.
+Withdrawn after two measurement rounds over 16 individual runs (12 → 10 → 11 decided): the price is not a combat value (18 Avengers in front of a base at which they cannot
+shoot), and the verdict stood on one seed per pairing. The lesson there – "a combat value per target, damage against armour" – is what is built here; and measurement is done with 640
+matches instead of 16.
 
-### 4.2 Die Regel „Tauschwert“ (`ArmyComposition.ExchangeValue`, `Skirmish/SkirmishAi.Composition.cs`)
+### 4.2 The rule "exchange value" (`ArmyComposition.ExchangeValue`, `Skirmish/SkirmishAi.Composition.cs`)
 
-Was der Spieler in den letzten drei Minuten vom Gegner **gesehen** hat (jedes feindliche Objekt mit Lebenspunkten, nach Typ; die KI merkt es sich in `Observe` neben ihren anderen
-Erinnerungen – keine Abfrage der Welt, nichts, was der Spieler nicht wissen kann) ist die Streitmacht E. Für eine Kandidateneinheit u, nur aus dem Katalog:
+What the player has **seen** of the opponent in the last three minutes (every enemy object with hit points, by type; the AI remembers it in `Observe` next to its other
+memories – no query of the world, nothing that the player cannot know) is the force E. For a candidate unit u, only from the catalog:
 
-- **Schaden je Bild** d(a, b): die beste Waffe des Standard-Waffensatzes von a, die auf b gefeuert werden darf (Boden oder Luft): Grundschaden × Rüstungskoeffizient von b für die
-  Schadensart × Schüsse je Logikbild (Magazin und Nachladen eingerechnet); eine Waffe, die ihren Träger tötet, zählt als ein Schuss im Leben; höchstens ein Objekt je Bild;
-- **Wirkung** O(u) = Σ über E von n(e) · Preis(e) · d(u, e) / Leben(e) – die Credits des Gegners, die u je Bild zerstört, solange sie feuert;
-- **Gefährdung** X(u) = 1/1800 + Σ über E von n(e) · d(e, u) / Leben(u) – der Anteil ihrer selbst, den u je Bild verliert; nie weniger als „lebt eine Minute“;
-- **Tauschwert** V(u) = O(u) / (X(u) · Preis(u)) – zerstörte gegnerische Credits je ausgegebenem Credit.
+- **Damage per frame** d(a, b): the best weapon of the default weapon set of a that may be fired at b (ground or air): base damage × armour coefficient of b for the
+  damage type × shots per logic frame (magazine and reloading included); a weapon that kills its carrier counts as one shot in a lifetime; at most one object per frame;
+- **Effect** O(u) = Σ over E of n(e) · price(e) · d(u, e) / health(e) – the credits of the opponent that u destroys per frame as long as it fires;
+- **Exposure** X(u) = 1/1800 + Σ over E of n(e) · d(e, u) / health(u) – the share of itself that u loses per frame; never less than "lives one minute";
+- **Exchange value** V(u) = O(u) / (X(u) · price(u)) – destroyed enemy credits per credit spent.
 
-Die Ziehung gibt jedem Kandidaten denselben Anteil an einem Viertel (`VarietyShare`: der Boden an Vielfalt, und die einzige Chance für Einheiten, deren Wert der Katalog nicht
-zeigt – Transporter, Heiler, Einheiten, die nur erobern) und verteilt den Rest proportional zu V. Ohne Sichtung, oder wenn kein Kandidat etwas Gesehenes verletzen kann, ist die
-Ziehung die gleichverteilte von B. Immer genau ein Zug aus dem eigenen, geseedeten Strom der KI. Kosten: je Ziehung (alle paar Sekunden) Kandidaten × gesehene Typen; die
-Schadenswerte je Typenpaar werden gemerkt. Der neue Zustand (`_sightings`) liegt im selben Objekt wie der übrige KI-Zustand (Register E11).
+The draw gives every candidate the same share of one quarter (`VarietyShare`: the floor of variety, and the only chance for units whose value the catalog does not
+show – transports, healers, units that only capture) and distributes the rest proportionally to V. Without a sighting, or if no candidate can hurt anything seen, the
+draw is the uniform one of B. Always exactly one draw from the AI's own, seeded stream. Cost: per draw (every few seconds) candidates × seen types; the
+damage values per pair of types are remembered. The new state (`_sightings`) lies in the same object as the rest of the AI state (register E11).
 
-Was die Regel **nicht** weiß: Reichweite und Tempo (eine Einheit, die nie zum Schuss kommt), Flächenschaden, Besatzungen in Gebäuden, Upgrades und Veteranenstufen, Tarnung,
-Spezialkräfte, die nächste Einheit des Gegners. Sie beurteilt die Einheit eines Produzenten, nicht Teams. Drei Zahlen sind eigene Wahl: drei Minuten Gedächtnis, eine Minute
-Lebenszeit als Obergrenze, ein Viertel Vielfalt.
+What the rule does **not** know: range and speed (a unit that never gets to shoot), area damage, garrisons in buildings, upgrades and veterancy levels, stealth,
+special powers, the next unit of the opponent. It judges the unit of a producer, not teams. Three numbers are our own choice: three minutes of memory, one minute of
+lifetime as the upper limit, one quarter of variety.
 
-Test (`8d8dcdf`): zwei gleich teure Soldaten aus einem Lager, ein Gewehr (gegen weiche Rüstung) und eine Panzerfaust (gegen harte). Gegen harte Ziele 20 Gewehre zu 82
-Panzerfäusten, gegen weiche 80 zu 22, ohne Sichtung oder ohne Regel 48 zu 54; gleicher Seed, gleiche Armee.
+Test (`8d8dcdf`): two equally expensive soldiers from one camp, a rifle (against soft armour) and a bazooka (against hard). Against hard targets 20 rifles to 82
+bazookas, against soft ones 80 to 22, without a sighting or without the rule 48 to 54; same seed, same army.
 
-### 4.3 Abnahme – vorab festgelegt, nicht nachgestellt
+### 4.3 Acceptance – fixed in advance, not adjusted afterwards
 
-Kriterien (aus dem Auftrag, vor jedem Lauf): **(1)** gepaart, dieselben 16 Paarungen × 20 Seeds (1–20) bei 30 Hz, ein Spieler mit Regel gegen einen ohne im selben Gefecht, beide
-Sitzordnungen, 640 Gefechte: die KI mit Regel muss mehr entschiedene Gefechte gewinnen, zweiseitiger exakter Binomialtest, α = 0,05. **(2)** symmetrisch (beide mit Regel, 320
-Gefechte): der Anteil entschiedener Gefechte darf nicht um mehr als die halbe Breite des 95-%-Intervalls zweier Anteile unter `main`s 253 von 320 liegen.
+Criteria (from the brief, before any run): **(1)** paired, the same 16 pairings × 20 seeds (1–20) at 30 Hz, one player with the rule against one without in the same match, both
+seating orders, 640 matches: the AI with the rule must win more decided matches, two-sided exact binomial test, α = 0.05. **(2)** symmetric (both with the rule, 320
+matches): the share of decided matches must not lie more than half the width of the 95 % interval of two proportions below `main`'s 253 of 320.
 
-Vor der Abnahme lief **eine** Probe mit anderen Seeds (101–105, 160 Gefechte: 86 Siege, 63 Niederlagen, 11 offen), um grobe Fehler auszuschließen; an der Regel wurde danach nichts
-geändert. Befehle: `ai-survey --composition exchange,uniform`, `uniform,exchange`, `exchange,exchange`, dann `composition-test`.
+Before the acceptance **one** trial ran with other seeds (101–105, 160 matches: 86 victories, 63 defeats, 11 open) to exclude gross errors; nothing was changed in the rule
+afterwards. Commands: `ai-survey --composition exchange,uniform`, `uniform,exchange`, `exchange,exchange`, then `composition-test`.
 
-| Kriterium | Ergebnis |
+| Criterion | Result |
 |---|---|
-| (1) gepaart, 640 Gefechte | KI mit Regel: **339 Siege, 252 Niederlagen**, 49 unentschieden; Siegquote unter den 591 entschiedenen **57,4 %**, exaktes 95-%-Intervall [53,3 %, 61,4 %]; p = **0,0004** → **bestanden** |
-| (2) symmetrisch, 320 Gefechte | **298 von 320** entschieden (93,1 %); `main` 253 von 320 (79,1 %); halbe Breite 5,2 Punkte, Grenze 73,8 % → **bestanden** |
+| (1) paired, 640 matches | AI with the rule: **339 victories, 252 defeats**, 49 undecided; win rate among the 591 decided **57.4 %**, exact 95 % interval [53.3 %, 61.4 %]; p = **0.0004** → **passed** |
+| (2) symmetric, 320 matches | **298 of 320** decided (93.1 %); `main` 253 of 320 (79.1 %); half width 5.2 points, limit 73.8 % → **passed** |
 
-Dazu, nicht Teil des Kriteriums: derselbe Stand ohne Regel entscheidet 284 von 320. Je Paarung (Siege mit Regel / Niederlagen / offen): die Regel gewinnt in 12 von 16 Paarungen
-mehr, als sie verliert, in 4 gleich viel, in keiner weniger; am deutlichsten Bitter Winter America–China (22/5/13), Bitter Winter ChinaTank–AirForce (26/10/4) und Armored Fury
-America–China (25/10/5). In den vier Paarungen mit Gleichstand (20/20) entscheidet die Fraktion, nicht die Regel: zweimal gewinnt America alle 40
-Gefechte gegen GLA, zweimal eine Fraktion 34 bzw. 38 von 40.
+In addition, not part of the criterion: the same state without the rule decides 284 of 320. Per pairing (victories with the rule / defeats / open): the rule wins in 12 of 16 pairings
+more than it loses, in 4 equally many, in none fewer; most clearly Bitter Winter America–China (22/5/13), Bitter Winter ChinaTank–AirForce (26/10/4) and Armored Fury
+America–China (25/10/5). In the four pairings with a tie (20/20) the faction decides, not the rule: twice America wins all 40
+matches against GLA, twice one faction 34 or 38 of 40.
 
-**Folge:** die Regel ist **Standard** (`SkirmishAi.DefaultComposition = ExchangeValue`, eigener Commit); `SkirmishAiOptions.Composition` und `SkirmishSlot.Composition` wählen je
-Spieler.
+**Consequence:** the rule is the **default** (`SkirmishAi.DefaultComposition = ExchangeValue`, own commit); `SkirmishAiOptions.Composition` and `SkirmishSlot.Composition` choose per
+player.
 
-### 4.4 Was die Regel an den Armeen ändert – und was nicht
+### 4.4 What the rule changes in the armies – and what it does not
 
-Anteile mit Regel (derselbe Zensus, in Klammern ohne): China Dragon **21 %** (8), Battlemaster 3 % (9), Gattling 6 % (7), Truppentransporter 1–2 % (5), Rotgardist 34–37 % (34),
-Panzerjäger 33–34 % (38); America Humvee 15–16 % (6), Crusader 8–13 % (7), **Sanitätswagen 2 % (8), Avenger 1 % (5)**; GLA Terrorist **47 %** (34), Fahrzeuge 6 % (13). Von 7.511
-Ziehungen waren 4.228 informiert und 3.283 (44 %) fielen vor der ersten Sichtung.
+Shares with the rule (the same census, in parentheses without): China Dragon **21 %** (8), Battlemaster 3 % (9), Gattling 6 % (7), Troop Crawler 1–2 % (5), Red Guard 34–37 % (34),
+Tank Hunter 33–34 % (38); America Humvee 15–16 % (6), Crusader 8–13 % (7), **Ambulance 2 % (8), Avenger 1 % (5)**; GLA Terrorist **47 %** (34), vehicles 6 % (13). Of 7,511
+draws 4,228 were informed and 3,283 (44 %) fell before the first sighting.
 
-**Ehrlich zur Beobachtung selbst:** „Infanterie kommt, und die China-KI baut Panzerjäger statt eigener Infanterie“ ist damit **nur zum Teil** behoben. Die Regel streicht, was
-nichts trifft (Sanitätswagen, Flugabwehr ohne Flugzeuge, leere Transporter), und verschiebt zu dem, was Infanterie und Gebäude billig zerstört (Dragon, Humvee, Terrorist). Der
-Anteil der Panzerjäger sinkt aber nur von 38 % auf ein Drittel: fast die Hälfte der Ziehungen fällt, bevor die KI einen Gegner gesehen hat (dann 50 : 50 aus der Kaserne), und die
-Regel rechnet dem Panzerjäger seinen Schaden an Gebäuden an – die Hälfte dessen, was er in diesen Gefechten tatsächlich trifft. Gegen wen China spielt, ändert die Mischung kaum
-(gegen America wie gegen GLA 21 % Dragon), weil beide Gegner hier überwiegend Infanterie und Gebäude aufstellen. Ob das im Fenster wie „passt sich an“ aussieht, kann nur ein Mensch
-sagen.
+**Honest about the observation itself:** "Infantry comes, and the China AI builds Tank Hunters instead of infantry of its own" is thereby fixed **only in part**. The rule strikes out what
+hits nothing (Ambulances, anti-air without aircraft, empty transports), and shifts towards what destroys infantry and buildings cheaply (Dragon, Humvee, Terrorist). The
+share of Tank Hunters, however, sinks only from 38 % to one third: almost half of the draws fall before the AI has seen an opponent (then 50 : 50 from the barracks), and the
+rule credits the Tank Hunter with his damage to buildings – half of what he actually hits in these matches. Against whom China plays hardly changes the mix
+(against America as against GLA 21 % Dragon), because both opponents here field predominantly infantry and buildings. Whether that looks like "adapts" in the window only a human can
+say.
 
-## 5. Werkzeuge (neu)
+## 5. Tools (new)
 
-| Befehl | Zweck |
+| Command | Purpose |
 |---|---|
-| `SimTool ai-census <content> --out <tsv> [--orbits <txt>] [--seeds N] [--first-seed N] [--pairings …] [--jobs N] [--composition a,b] [--watch <id>]` | die Gefechte von `ai-survey`, beobachtet: je Spieler erste Fertigstellung jedes Gebäudes, Produktion je Produzent, Ausgang jedes Blicks der Heeresproduktion (`SkirmishAiStats.ArmyProduction`), Geld alle 50 s, Schaden nach Angreifertyp und Opferart, Verluste, kreisende Einheiten nach Ort |
-| `SimTool ai-survey … --composition uniform\|exchange\|default,uniform\|exchange\|default` | Zusammensetzung je Spieler |
-| `SimTool composition-test --rule-first <tsv> --rule-second <tsv> --symmetric <tsv> --baseline 253/320 [--out <md>]` | die Abnahme aus §4.3: exakter Binomialtest, Clopper-Pearson-Intervall, Zwei-Anteile-Grenze |
+| `SimTool ai-census <content> --out <tsv> [--orbits <txt>] [--seeds N] [--first-seed N] [--pairings …] [--jobs N] [--composition a,b] [--watch <id>]` | the matches of `ai-survey`, observed: per player first completion of every building, production per producer, outcome of every look of the army production (`SkirmishAiStats.ArmyProduction`), money every 50 s, damage by attacker type and victim kind, losses, circling units by place |
+| `SimTool ai-survey … --composition uniform\|exchange\|default,uniform\|exchange\|default` | composition per player |
+| `SimTool composition-test --rule-first <tsv> --rule-second <tsv> --symmetric <tsv> --baseline 253/320 [--out <md>]` | the acceptance from §4.3: exact binomial test, Clopper-Pearson interval, two-proportion limit |
 
-## 6. Was nur ein Mensch bestätigen kann, und was er beim nächsten Mal notieren sollte
+## 6. What only a human can confirm, and what he should note next time
 
-- Ob im Fenster nichts mehr kreist. Headless: von 269 Episoden am Sammelpunkt bleiben 2; **unterwegs** drehen sich weiter gelegentlich zwei Einheiten umeinander (§3.5 b), und
-  Sammler kreisen am Dock (c). Wer das sieht, hat keinen Rückfall von C gesehen, sondern einen der beiden offenen Fälle.
-- Ob die China-Armee „nach Panzern aussieht“ (rund ein Viertel bis ein Drittel Fahrzeuge, vor allem Dragon) und ob die Mischung als Antwort auf den Gegner wirkt (§4.4).
-- Wie Einheiten aussehen, die neben dem Sammelpunkt auf Nachbarzellen stehen (ein Raster von 10 Einheiten; Formationen gibt es nicht), und wie ein Soldat aussieht, der beim
-  Berühren im Fahrzeug verschwindet.
-- Bitte notieren: **den Seed** (das Skript gibt ihn aus: `Seed N`) und die Paarung, die **Spielzeit**, die **Einheiten** (Typ, welcher Spieler) und ob eine davon steht. Mit dem
-  Seed ist das Gefecht headless dasselbe: `SimTool ai-census <content> --out x.tsv --orbits x.txt --pairings <Paarung> --first-seed N --seeds 1`.
-- Beobachtung A ist offen; sobald ihre Korrektur gemergt ist, ändern sich Wege, Sammelzeiten und alle Zahlen hier.
+- Whether nothing circles in the window any more. Headless: of 269 episodes at the rally point 2 remain; **on the way** two units still occasionally turn around each other (§3.5 b), and
+  gatherers circle at the dock (c). Whoever sees that has not seen a relapse of C, but one of the two open cases.
+- Whether the China army "looks like tanks" (about a quarter to a third vehicles, above all Dragon) and whether the mix comes across as an answer to the opponent (§4.4).
+- What units look like that stand next to the rally point on neighbouring cells (a grid of 10 units; formations do not exist), and what a soldier looks like who disappears into the
+  vehicle on touching it.
+- Please note: **the seed** (the script prints it: `Seed N`) and the pairing, the **game time**, the **units** (type, which player) and whether one of them is standing. With the
+  seed the match is the same headless: `SimTool ai-census <content> --out x.tsv --orbits x.txt --pairings <Paarung> --first-seed N --seeds 1`.
+- Observation A is open; as soon as its fix is merged, paths, gathering times and all numbers here change.
 
-## 7. Commits, Referenzmanifest, Missionen
+## 7. Commits, reference manifest, missions
 
-`baselines/reference-manifest.json` ist **nicht** neu geschrieben (Auftrag). `reference-manifest check --set full` gegen die Datei des Branch-Ausgangs; „Ergebnisse“ aus
-`reference-manifest results`, jeweils gegen den Stand davor. Auf `main` selbst weichen drei Missionsläufe ab (`MD_GLA01`, `MD_USA02`, `MD_USA05`: die Korrektur des verlorenen
-Weckrufs, Manifest dort noch ausstehend); das ist aus deren Commit-Nachricht geschlossen und daraus, dass die beiden Werkzeug-Commits dieselben drei Abweichungen zeigen.
+`baselines/reference-manifest.json` is **not** rewritten (brief). `reference-manifest check --set full` against the file of the branch start; "results" from
+`reference-manifest results`, each against the state before. On `main` itself three mission runs deviate (`MD_GLA01`, `MD_USA02`, `MD_USA05`: the fix of the lost
+wake-up, manifest still outstanding there); that is inferred from their commit message and from the fact that the two tool commits show the same three deviations.
 
-| Commit | Inhalt | Läufe mit anderem Hash als das Manifest | Ergebnisvergleich mit dem Stand davor |
+| Commit | Content | Runs with a different hash than the manifest | Result comparison with the state before |
 |---|---|---|---|
-| `8c42f70`, `6d83063` | Werkzeuge: `ai-census`, Zähler `ArmyProduction`, Ort der Episoden, `--watch` | 3 (die von `main`) | – (kein Verhalten geändert) |
-| `50718d7` (B), Test `7a29943` | stehender Heeresauftrag | 24 = 3 + die 21 Läufe mit `SkirmishAi` (16 Zweispieler, 4 `ai8_…`, `skirmish-sweep`) | 29 Läufe gleich; 16 Zweispielerläufe: entschieden 12 → 12, Ausgang anders in 7; `skirmish-sweep` andere Prüfsumme; alle 27 Missionsläufe gleich |
-| `3816445` (C1), Test `ccdc12b` | freier Zielplatz | 40: die 21 KI-Läufe und 19 Missionsläufe (`GC_ChinaBoss_*` ×9, `GC_LaserGeneral_ChinaNukeGeneral`, `MD_CHI01`, `MD_CHI05`, `MD_GLA01`, `MD_GLA03`, `MD_GLA05`, `MD_USA01`, `MD_USA02`, `MD_USA05`, `Training01`) | 22 Läufe gleich (darunter 12 der 19 Missionen: nur der Hash ist anders); 7 Missionen mit anderen Ereigniszahlen, **kein Ausgang und kein Endskript anders** – z. B. `MD_GLA01` `MoveArrived` 53 → 185, `MD_USA01` 699 → 796; Zweispielerläufe entschieden 12 → 13, Ausgang anders in 3 |
-| `b93ba6c` (C2), Test `2259f70` | Einsteigen | dieselben 40; gegenüber C1 ändern sich 18 Hashes (13 Zweispielerläufe, `ai8_FortressAvalanche`, `ai8_IronDragon`, `ai8_TwilightFlame`, `mission_MD_USA01`, `mission_MD_USA02`) | 32 Läufe gleich; Missionen: `MD_USA01` `EntityContained` 216 → 217, `MD_USA02` `MoveArrived` 93 → 92, Ausgang gleich; Zweispielerläufe entschieden 13 → 15, Ausgang anders in 5 |
-| `ca02d34`, Test `8d8dcdf`, Werkzeuge `a933fc2` | Regel „Tauschwert“, **aus** | dieselben 40, dieselben Hashes wie C2 (die Messung für C2 lief mit diesem Stand) | – |
-| `2451852` | Regel **an** (Standard) | dieselben 40; gegenüber dem Stand davor ändern sich 19 Hashes: die 16 Zweispielerläufe, `ai8_FortressAvalanche`, `ai8_IronDragon`, `ai8_TwilightFlame` – nicht `ai8_TwilightFlame_short`, nicht `skirmish-sweep` (in 3.000 Ticks sieht keine KI einen Gegner), keine Mission | 31 Läufe gleich; Zweispielerläufe entschieden 15 → 14, Ausgang anders in 4 |
+| `8c42f70`, `6d83063` | tools: `ai-census`, counter `ArmyProduction`, place of the episodes, `--watch` | 3 (those of `main`) | – (no behaviour changed) |
+| `50718d7` (B), test `7a29943` | standing army order | 24 = 3 + the 21 runs with `SkirmishAi` (16 two-player, 4 `ai8_…`, `skirmish-sweep`) | 29 runs the same; 16 two-player runs: decided 12 → 12, outcome different in 7; `skirmish-sweep` different checksum; all 27 mission runs the same |
+| `3816445` (C1), test `ccdc12b` | free goal spot | 40: the 21 AI runs and 19 mission runs (`GC_ChinaBoss_*` ×9, `GC_LaserGeneral_ChinaNukeGeneral`, `MD_CHI01`, `MD_CHI05`, `MD_GLA01`, `MD_GLA03`, `MD_GLA05`, `MD_USA01`, `MD_USA02`, `MD_USA05`, `Training01`) | 22 runs the same (among them 12 of the 19 missions: only the hash is different); 7 missions with different event counts, **no outcome and no end script different** – e.g. `MD_GLA01` `MoveArrived` 53 → 185, `MD_USA01` 699 → 796; two-player runs decided 12 → 13, outcome different in 3 |
+| `b93ba6c` (C2), test `2259f70` | entering | the same 40; compared with C1 18 hashes change (13 two-player runs, `ai8_FortressAvalanche`, `ai8_IronDragon`, `ai8_TwilightFlame`, `mission_MD_USA01`, `mission_MD_USA02`) | 32 runs the same; missions: `MD_USA01` `EntityContained` 216 → 217, `MD_USA02` `MoveArrived` 93 → 92, outcome the same; two-player runs decided 13 → 15, outcome different in 5 |
+| `ca02d34`, test `8d8dcdf`, tools `a933fc2` | rule "exchange value", **off** | the same 40, the same hashes as C2 (the measurement for C2 ran with this state) | – |
+| `2451852` | rule **on** (default) | the same 40; compared with the state before 19 hashes change: the 16 two-player runs, `ai8_FortressAvalanche`, `ai8_IronDragon`, `ai8_TwilightFlame` – not `ai8_TwilightFlame_short`, not `skirmish-sweep` (in 3,000 ticks no AI sees an opponent), no mission | 31 runs the same; two-player runs decided 15 → 14, outcome different in 4 |
 
-Unverändert gegenüber `main` bleiben nach allen Commits: `reference-match`, `stress` und acht Missionsläufe (`GC_AirGeneral_*` ×3, `GC_ChemGeneral_*` ×2,
+Unchanged compared with `main` after all commits remain: `reference-match`, `stress` and eight mission runs (`GC_AirGeneral_*` ×3, `GC_ChemGeneral_*` ×2,
 `GC_SuperWeaponsGeneral_GLADemolitionGeneral`, `GC_TankGeneral_*` ×2).
 
-**Nur-Befehle-Agent der Missionen** (`CampaignTool drive <content> --commands-only --map "/NAME.map" --minutes 34`, 0 Weltschreibungen; er benutzt `SkirmishAi`):
+**Commands-only agent of the missions** (`CampaignTool drive <content> --commands-only --map "/NAME.map" --minutes 34`, 0 world writes; it uses `SkirmishAi`):
 
-| Stand | `MD_GLA04` | `MD_CHI01` | `MD_CHI02` |
+| State | `MD_GLA04` | `MD_CHI01` | `MD_CHI02` |
 |---|---|---|---|
-| `main` | Sieg @1.022 | Sieg @18.252 | Sieg @29.250 |
-| nach B | Sieg @1.022 | Sieg @15.504 | **nicht erreicht** (61.200 Ticks) |
-| nach C2 (Regel aus) | Sieg @1.022 | Sieg @18.206 | **nicht erreicht** |
-| nach D (Regel an) | Sieg @1.022 | Sieg @18.585 | **nicht erreicht** |
+| `main` | victory @1,022 | victory @18,252 | victory @29,250 |
+| after B | victory @1,022 | victory @15,504 | **not reached** (61,200 ticks) |
+| after C2 (rule off) | victory @1,022 | victory @18,206 | **not reached** |
+| after D (rule on) | victory @1,022 | victory @18,585 | **not reached** |
 
-**`MD_CHI02` wird seit B in 34 Spielminuten nicht mehr gewonnen** (vorher bei 16:15); C und D ändern daran nichts. Es ist ein einzelner, chaotischer Lauf, und schon der Versuch aus
-Phase 17, der ebenfalls sparen ließ, hat genau diese Mission verloren (`docs/SIMULATION-CORE.md` §36.3) – das spricht dafür, dass der Agent dieser Mission mit vielen billigen
-Einheiten besser fährt als mit wenigen teuren. Untersucht ist es nicht. Auch mit 60 Spielminuten (108.000 Ticks, Stand D) wird sie nicht gewonnen: das ist kein „später“, sondern
-ein Rückschritt dieses einen Laufs, den B verursacht.
+**`MD_CHI02` has not been won within 34 game minutes since B** (before at 16:15); C and D change nothing about that. It is a single, chaotic run, and already the attempt from
+Phase 17, which likewise made the AI save, lost exactly this mission (`docs/SIMULATION-CORE.md` §36.3) – that suggests that the agent of this mission does better with many cheap
+units than with few expensive ones. It is not investigated. With 60 game minutes too (108,000 ticks, state D) it is not won: that is not a "later", but
+a regression of this one run that B causes.
 
-## 8. Raten-Suite (`Simulation.Tests -- --content-dir … --only RateEquivalence`)
+## 8. Rate suite (`Simulation.Tests -- --content-dir … --only RateEquivalence`)
 
-Größen außerhalb der Toleranz bei 60 / 120 Hz, `main` laut Auftrag gegen diesen Branch: locomotion 2/2 → 2/2, flight 0/3 → 0/3, projectiles 4/4 → 4/4, turrets 4/0 → 4/0,
+Quantities outside the tolerance at 60 / 120 Hz, `main` according to the brief against this branch: locomotion 2/2 → 2/2, flight 0/3 → 0/3, projectiles 4/4 → 4/4, turrets 4/0 → 4/0,
 weapons, economy, timed, scripts 0/0 → 0/0, **ai 24/23 → 22/22**, **overtime 0/0 → 0/1**.
 
-Zu `overtime`: das ist keine Größe, die schlechter geworden ist, sondern eine, die vorher nicht gemessen werden konnte. Auf `main` kommt der Rotgardist des Falls „heal inside
-ChinaVehicleTroopCrawler“ nie in den Transporter (drei Größen „unmeasured“, zwei mit dem Wert 0 bei allen Raten „ok“; nachgemessen am Ausgangsstand). Seit C2 steigt er ein – das
-erste Bild mit Heilung liegt bei allen drei Raten bei 5,2000 s –, und die Suite sieht zum ersten Mal die Heilung im Transporter: „frames with healing in 120 s“ 151 / 151 / 150.
-Die Abweichung liegt im Heilen (`TransportContain`), nicht im Einsteigen; sie ist **nicht behoben** und gehört zu den Raten-Paketen. In der Gruppe sind jetzt 52 statt 55 Größen
-ungemessen.
+On `overtime`: that is not a quantity that has become worse, but one that could not be measured before. On `main` the Red Guard of the case "heal inside
+ChinaVehicleTroopCrawler" never gets into the transport (three quantities "unmeasured", two with the value 0 at all rates "ok"; re-measured at the starting state). Since C2 he enters – the
+first frame with healing lies at 5.2000 s at all three rates –, and the suite sees the healing in the transport for the first time: "frames with healing in 120 s" 151 / 151 / 150.
+The deviation lies in the healing (`TransportContain`), not in the entering; it is **not fixed** and belongs to the rate packages. In the group 52 instead of 55 quantities are now
+unmeasured.
 
-## 9. Verifikation am Endstand (`2451852`)
+## 9. Verification at the final state (`2451852`)
 
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| `dotnet build CnCNew.slnx` | 0 Warnungen, 0 Fehler |
-| `Simulation.Tests` (Release) bei 30 Hz, `-- --tick-rate 60`, `-- --tick-rate 120` | je „All simulation core tests passed“ (502 Tests, darunter die vier neuen) |
-| `reference-manifest check --set quick --verify-incremental` | inkrementeller Hash in 67.031 geprüften Ticks gleich dem voll berechneten, **0 Abweichungen**; 7 der 9 Läufe weichen wie erwartet vom Manifest ab, `reference-match` und `stress` OK |
-| `input-manifest check` | identisch |
-| Raten-Suite | §8 |
-| `Game.Tests` (Release, `--content-dir`) | „All game tests passed“ (Zuschauer- und Skirmish-Tests benutzen die KI) |
-| `scripts/check-spectator.ps1` | PASS (Alpine Assault America–China, Seed 7: America baut dabei einen Crusader in der Waffenfabrik) |
+| `dotnet build CnCNew.slnx` | 0 warnings, 0 errors |
+| `Simulation.Tests` (Release) at 30 Hz, `-- --tick-rate 60`, `-- --tick-rate 120` | each "All simulation core tests passed" (502 tests, among them the four new ones) |
+| `reference-manifest check --set quick --verify-incremental` | incremental hash in 67,031 checked ticks equal to the fully computed one, **0 deviations**; 7 of the 9 runs deviate from the manifest as expected, `reference-match` and `stress` OK |
+| `input-manifest check` | identical |
+| Rate suite | §8 |
+| `Game.Tests` (Release, `--content-dir`) | "All game tests passed" (spectator and skirmish tests use the AI) |
+| `scripts/check-spectator.ps1` | PASS (Alpine Assault America–China, seed 7: America builds a Crusader in the war factory in the process) |
 
-Nicht gelaufen: `CampaignTool drive` über alle 24 Karten, `audit`, `reachability`, die Szenen-Audits, `reference-manifest check --set full` unter Linux, die Determinismus-Matrix. Die
-Missionsläufe des Manifests zeigen keinen geänderten Ausgang (§7); mehr ist für die Kampagne nicht belegt.
+Not run: `CampaignTool drive` over all 24 maps, `audit`, `reachability`, the scene audits, `reference-manifest check --set full` under Linux, the determinism matrix. The
+mission runs of the manifest show no changed outcome (§7); more is not verified for the campaign.
 
-## 10. Nicht erledigt, nicht belegt
+## 10. Not done, not verified
 
-- Kein Mensch hat irgendetwas davon gesehen (§6).
-- Beobachtung D ist nur zum Teil behoben (§4.4); ein Gegenstück zu den Gegenteams des Originals (Schwellen je Objektliste) gibt es nicht.
-- GLA baut auf drei von vier Karten nur eine Kaserne (§2.4 c) – gefunden, nicht untersucht.
-- Zwei Einheiten, die sich unterwegs umkreisen, und Sammler am Dock (§3.5 b, c) – gefunden, nicht behoben.
-- Die KI überbucht Transporter (§3.5 a).
-- Die Heilung im Transporter bei 120 Hz (§8).
-- **`MD_CHI02` im Nur-Befehle-Modus geht seit B verloren** (§7), auch mit 60 Spielminuten; der Nur-Befehle-Agent gewinnt damit von den drei geprüften Karten zwei statt drei.
-- Die 16 Tabellenläufe in `docs/SIMULATION-CORE.md` §19/§36 und alle dortigen Hashes sind überholt; jenes Dokument, `CLAUDE.md`, README und die Handoffs sind auftragsgemäß nicht
-  angefasst.
-- Balance ist nicht bewertet: „mehr entschiedene Gefechte“ und „gewinnt gegen die KI ohne Regel“ sagen nichts darüber, ob die KI gegen einen Menschen gut spielt.
+- No human has seen any of this (§6).
+- Observation D is fixed only in part (§4.4); a counterpart to the counter teams of the original (thresholds per object list) does not exist.
+- GLA builds only a barracks on three of four maps (§2.4 c) – found, not investigated.
+- Two units that circle each other on the way, and gatherers at the dock (§3.5 b, c) – found, not fixed.
+- The AI overbooks transports (§3.5 a).
+- The healing in the transport at 120 Hz (§8).
+- **`MD_CHI02` in commands-only mode has been lost since B** (§7), with 60 game minutes too; the commands-only agent thereby wins two instead of three of the three maps checked.
+- The 16 table runs in `docs/SIMULATION-CORE.md` §19/§36 and all hashes there are superseded; that document, `CLAUDE.md`, README and the handoffs are, in accordance with the brief, not
+  touched.
+- Balance is not assessed: "more decided matches" and "wins against the AI without the rule" say nothing about whether the AI plays well against a human.
 
-## 11. Nachtrag: auf `main` `4d9d9e5` gebracht (8. Oktober 2026)
+## 11. Addendum: brought onto `main` `4d9d9e5` (8 October 2026)
 
-`main` hat seit dem Ausgangsstand den Ausfahrtsweg (produzierte Einheiten fahren aus der Fabrik – Beobachtung A ist damit behoben), die neuen Manifeste und die Runden 3 der
-Pakete Flug und Beobachter bekommen. Der Merge ist `c683067`; danach vier Commits. Alles in diesem Abschnitt ist auf dem gemergten Stand gemessen.
+Since the starting state `main` has received the exit path (produced units drive out of the factory – observation A is thereby fixed), the new manifests and the rounds 3 of the
+packages flight and observers. The merge is `c683067`; after that four commits. Everything in this section is measured on the merged state.
 
-### 11.1 Konflikte und ihre Auflösung
+### 11.1 Conflicts and their resolution
 
-| Stelle | beide Seiten | Auflösung |
+| Place | both sides | Resolution |
 |---|---|---|
-| `IWorldServices` (`ModuleFramework.cs`) | `main`: `FindFreeGoal` (Ausfahrt: Sammelpunkt je Einheit); Branch: `TryFreeGoalSpot` (Einheit unterwegs zu einem besetzten Ziel) | beide Methoden bleiben, **aber es gibt nur noch eine Suche** (11.2) |
-| `AIUpdateInterface.Move` (`Phase5Modules.cs`) | `main`: Block „durch die Tür“ (`_viaPending`); Branch: Block „Ziel besetzt“ | beide vor `PlanPath`, erst die Tür; eine Einheit auf dem Weg aus der Fabrik (`_exitRallyPending`, `_viaPending`) wird nicht nach einem freien Platz gefragt |
-| `UpdateEnter`, die drei Kollisionsabfragen, `SkirmishAi.PickBuilder`, Testprogramm | – | ohne Konflikt gemergt; `UpdateEnter` an die Konvention der Runde 3 angepasst (11.3) |
+| `IWorldServices` (`ModuleFramework.cs`) | `main`: `FindFreeGoal` (exit: rally point per unit); branch: `TryFreeGoalSpot` (unit on the way to an occupied goal) | both methods stay, **but there is now only one search** (11.2) |
+| `AIUpdateInterface.Move` (`Phase5Modules.cs`) | `main`: block "through the door" (`_viaPending`); branch: block "goal occupied" | both before `PlanPath`, the door first; a unit on the way out of the factory (`_exitRallyPending`, `_viaPending`) is not asked about a free spot |
+| `UpdateEnter`, the three collision queries, `SkirmishAi.PickBuilder`, test program | – | merged without conflict; `UpdateEnter` adapted to the convention of round 3 (11.3) |
 
-### 11.2 Ein Mechanismus für den freien Zielplatz
+### 11.2 One mechanism for the free goal spot
 
-Der Ausfahrtsweg hatte dieselbe Aufgabe aus derselben Originalfunktion (`Pathfinder::adjustDestination`) schon gelöst: `SimulationWorld.FindFreeGoal`/`GoalIsFree`
-(`World/SimulationWorld.ExitGoals.cs`), Plätze in Reihen quer zur Laufrichtung, neben dem Ziel zuerst. Die eigene Spirale des Branch (`SimulationWorld.GoalSpots.cs`, §3.3) ist
-**gelöscht**. Behalten ist die Suche von `main`: auf ihr stehen der Ausfahrtsweg, seine Tests, neun Szenen und neun Fälle der Raten-Suite, und sie liest jede Einheit schon dort,
-wo ihr Logikbild endet. `TryFreeGoalSpot` liegt jetzt in derselben Datei und ist nur noch die **Frage**, die die Ausfahrt nicht stellt – ist das Ziel einer Einheit, die schon
-unterwegs ist, inzwischen besetzt (eine nicht feindliche Bodeneinheit steht dort, oder eine mit kleinerer Kennung läuft dorthin)? – und ruft dann dieselbe Suche vom Standort der
-Einheit aus, mit zwölf statt vier Reihen (83 Plätze: eine Armee sammelt sich auf einem Punkt, vor einer Fabriktür stehen wenige). Die Aufrufe des Ausfahrtswegs sind unverändert.
-Der Test mit sechs Einheiten auf einen Punkt besteht bei 30, 60 und 120 Hz bildgleich (Ankunft nach 110 Bildern, die Plätze liegen jetzt in Reihen statt auf Zellen).
+The exit path had already solved the same task from the same original function (`Pathfinder::adjustDestination`): `SimulationWorld.FindFreeGoal`/`GoalIsFree`
+(`World/SimulationWorld.ExitGoals.cs`), spots in rows across the walking direction, next to the goal first. The branch's own spiral (`SimulationWorld.GoalSpots.cs`, §3.3) is
+**deleted**. Kept is the search of `main`: on it stand the exit path, its tests, nine scenes and nine cases of the rate suite, and it already reads every unit where
+its logic frame ends. `TryFreeGoalSpot` now lies in the same file and is only the **question** that the exit does not ask – is the goal of a unit that is already
+on its way occupied in the meantime (a non-enemy ground unit stands there, or one with a smaller id is walking there)? – and then calls the same search from the location of the
+unit, with twelve instead of four rows (83 spots: an army gathers on one point, in front of a factory door few stand). The calls of the exit path are unchanged.
+The test with six units to one point passes frame-identically at 30, 60 and 120 Hz (arrival after 110 frames, the spots now lie in rows instead of on cells).
 
-### 11.3 Was für die Raten-Suite nötig war (Ziel: jede Gruppe 0 / 0 bei 60 und 120 Hz – erreicht)
+### 11.3 What was necessary for the rate suite (goal: every group 0 / 0 at 60 and 120 Hz – reached)
 
-| Gruppe | nach dem Merge, vor den Korrekturen | Ursache | Korrektur | jetzt |
+| Group | after the merge, before the fixes | Cause | Fix | now |
 |---|---|---|---|---|
-| overtime | 0 / 1 („heal inside ChinaVehicleTroopCrawler“: Bilder mit Heilung 151 / 151 / 150) | `TransportContain` gab je Tick `HealthRegen%PerSec` / Tickrate; die Scheiben je Tick summieren sich nicht zur Scheibe eines Bildes | `df639ff`: die Scheibe des Originals (eine Sekunde über 30 Bilder), einmal je Logikbild, gezählt ab dem Tick des Einstiegs – wie `GarrisonContain` und das Tunnelnetz; bei 30 Hz wird nichts gespeichert und kein Hash ändert sich | 0 / 0 (151 / 151 / 151) |
-| locomotion | 1 / 1 (`Boss_InfantryAngryMobNexus`, Laufzeit 23,20 / 23,05 / 23,06 s) | Mob-Mitglieder werden von ihrem Modul immer wieder auf den Platz ihres Nexus geschickt und bekamen dort einen „freien Platz“ | im Merge: ein Sklave oder Mob-Mitglied (`ISlavedModule`) behält das Ziel, das sein Modul ihm gibt | 0 / 0 |
-| ai | 5 / 5 (America gegen China) | (a) `UpdateEnter` hielt einen Einsteiger, dessen Container gerade gestorben war, mitten im Bildschritt an; (b) **nicht vom Branch:** `PointDefenseLaserUpdate` sah Geschosse in jedem Tick an ihrer augenblicklichen Lage und schoss bei 60 Hz ein Bild früher (erste Abweichung: Bild 5494, ein Avenger schießt eine Panzerjäger-Rakete ab) | (a) im Merge: der Blick auf den Container fällt in den Tick, der den Bildschritt entschieden hat, liest beide am Bildende und setzt den Einsteiger dorthin (`SettleFrame`), bevor er anhält oder einsteigt; (b) `3c24352`: der Laser entscheidet im ersten Tick des Logikbilds seines Trägers und liest Träger und Ziele am Bildende; bei 30 Hz unverändert | 0 / 0 |
+| overtime | 0 / 1 ("heal inside ChinaVehicleTroopCrawler": frames with healing 151 / 151 / 150) | `TransportContain` gave `HealthRegen%PerSec` / tick rate per tick; the slices per tick do not add up to the slice of a frame | `df639ff`: the slice of the original (one second over 30 frames), once per logic frame, counted from the tick of the entry – like `GarrisonContain` and the tunnel network; at 30 Hz nothing is stored and no hash changes | 0 / 0 (151 / 151 / 151) |
+| locomotion | 1 / 1 (`Boss_InfantryAngryMobNexus`, run time 23.20 / 23.05 / 23.06 s) | mob members are sent again and again by their module to the spot of their nexus and got a "free spot" there | in the merge: a slave or mob member (`ISlavedModule`) keeps the goal that its module gives it | 0 / 0 |
+| ai | 5 / 5 (America against China) | (a) `UpdateEnter` stopped an enterer whose container had just died in the middle of the frame step; (b) **not from the branch:** `PointDefenseLaserUpdate` looked at projectiles in every tick at their momentary position and shot one frame earlier at 60 Hz (first deviation: frame 5494, an Avenger shoots down a Tank Hunter rocket) | (a) in the merge: the look at the container falls into the tick that decided the frame step, reads both at the end of the frame and puts the enterer there (`SettleFrame`) before he stops or enters; (b) `3c24352`: the laser decides in the first tick of the logic frame of its carrier and reads carrier and targets at the end of the frame; unchanged at 30 Hz | 0 / 0 |
 
-Zu (b): der Fall der Gruppe `ai` war auf `main` nur gleich, weil dessen KI fast nur Infanterie baute. Die Mechanik von `main` mit **nur** dem Heereskauf dieses Branch (Regel aus)
-ergibt in der Gruppe 10 / 8 Größen außerhalb der Toleranz (gemessen: Export von `4d9d9e5` mit `SkirmishAi*.cs` darüber) – dort kreisen die Einheiten noch, und Kreisen verstärkt
-jeden Unterschied. `docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md` §5.4 hatte den Laser bewusst gelassen („weniger als ein Bild früher, kein Fall schlägt fehl“); das stimmt nicht mehr,
-sobald eine KI Avenger baut. Alle zehn Gruppen: locomotion, flight, weapons, projectiles, turrets, overtime, economy (34 Fälle), timed, scripts, ai je **0 / 0**.
+On (b): the case of the group `ai` was the same on `main` only because its AI built almost only infantry. The mechanics of `main` with **only** the army purchase of this branch (rule off)
+gives 10 / 8 quantities outside the tolerance in the group (measured: export of `4d9d9e5` with `SkirmishAi*.cs` on top) – there the units still circle, and circling amplifies
+every difference. `docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md` §5.4 had deliberately left the laser alone ("less than one frame earlier, no case fails"); that is no longer true
+as soon as an AI builds Avengers. All ten groups: locomotion, flight, weapons, projectiles, turrets, overtime, economy (34 cases), timed, scripts, ai **0 / 0** each.
 
-### 11.4 Messungen (30 Hz, gemergter Stand)
+### 11.4 Measurements (30 Hz, merged state)
 
-**Zensus** (16 Paarungen × 5 Seeds, Regel an; in Klammern derselbe Stand mit Regel aus):
+**Census** (16 pairings × 5 seeds, rule on; in parentheses the same state with the rule off):
 
-| Fraktion | mit Fabrik | Fabriken, die bauen | Infanterie | Fahrzeuge | Fahrzeuganteil |
+| Faction | with factory | factories that build | infantry | vehicles | vehicle share |
 |---|---|---|---|---|---|
-| China (40) | 25 | 24 | 1.042 | 456 | 30,4 % (22,9 %) |
-| ChinaTankGeneral (20) | 18 | 18 | 507 | 380 | 42,8 % (39,9 %) |
-| America (40) | 36 | 36 | 1.383 | 606 | 30,5 % (29,0 %) |
-| AmericaAirForceGeneral (20) | 20 | 19 | 738 | 240 | 24,5 % (31,4 %) |
-| GLA (40) | 10 | 10 | 1.918 | 175 | 8,4 % (13,3 %) |
+| China (40) | 25 | 24 | 1,042 | 456 | 30.4 % (22.9 %) |
+| ChinaTankGeneral (20) | 18 | 18 | 507 | 380 | 42.8 % (39.9 %) |
+| America (40) | 36 | 36 | 1,383 | 606 | 30.5 % (29.0 %) |
+| AmericaAirForceGeneral (20) | 20 | 19 | 738 | 240 | 24.5 % (31.4 %) |
+| GLA (40) | 10 | 10 | 1,918 | 175 | 8.4 % (13.3 %) |
 
-Entschieden 78 von 80 (Regel aus: 77). Kreis-Episoden von Heereseinheiten: **am Sammelpunkt 0** (Regel aus: 1; `main` vor allem: 269), nahe dem Ziel anderswo 10, unterwegs 40
-(die beiden offenen Fälle aus §3.5 b); Sammler am Dock 209 (offen, §3.5 c). Chinas Armee: Rotgardist 36 %, Panzerjäger 34 %, Dragon 20 %, Gattling 5 %, Battlemaster 4 %,
-Truppentransporter 1 %. Einsteigebefehle / Aufnahmen in den 20 KI-Läufen des Manifests: `main` 1.126 / 99, jetzt 1.693 / 945. GLA baut weiter nur auf Armored Fury eine Basis (10 von 40).
+Decided 78 of 80 (rule off: 77). Circling episodes of army units: **at the rally point 0** (rule off: 1; `main` before everything: 269), near the goal elsewhere 10, on the way 40
+(the two open cases from §3.5 b); gatherers at the dock 209 (open, §3.5 c). China's army: Red Guard 36 %, Tank Hunter 34 %, Dragon 20 %, Gattling 5 %, Battlemaster 4 %,
+Troop Crawler 1 %. Enter commands / intakes in the 20 AI runs of the manifest: `main` 1,126 / 99, now 1,693 / 945. GLA still builds a base only on Armored Fury (10 of 40).
 
-**Abnahme der Regel D, wiederholt** (dieselben Kriterien, dieselben Seeds 1–20, nichts nachgestellt; `composition-test`):
+**Acceptance of rule D, repeated** (the same criteria, the same seeds 1–20, nothing adjusted afterwards; `composition-test`):
 
-| Kriterium | Ergebnis auf dem gemergten Stand |
+| Criterion | Result on the merged state |
 |---|---|
-| (1) gepaart, 640 Gefechte | KI mit Regel: **337 Siege, 250 Niederlagen**, 53 unentschieden; Siegquote unter den 587 entschiedenen 57,4 %, exaktes 95-%-Intervall [53,3 %, 61,4 %]; p = **0,0004** → **bestanden** |
-| (2) symmetrisch, 320 Gefechte | **305 von 320** entschieden (95,3 %); Grenze 74,0 % (253 von 320, halbe Breite 5,0 Punkte) → **bestanden** |
+| (1) paired, 640 matches | AI with the rule: **337 victories, 250 defeats**, 53 undecided; win rate among the 587 decided 57.4 %, exact 95 % interval [53.3 %, 61.4 %]; p = **0.0004** → **passed** |
+| (2) symmetric, 320 matches | **305 of 320** decided (95.3 %); limit 74.0 % (253 of 320, half width 5.0 points) → **passed** |
 
-Die Regel bleibt Standard. Derselbe Stand ohne Regel entscheidet 299 von 320; der Abstand 305 gegen 299 liegt innerhalb der Streuung – belastbar ist der gepaarte Test. Je Paarung
-gewinnt die Regel in 9 mehr, in 4 gleich viel und in 3 weniger, als sie verliert (Armored Fury China–GLA 15 : 21, Death Valley America–China 19 : 20, Death Valley China–GLA 19 : 21).
+The rule stays the default. The same state without the rule decides 299 of 320; the gap 305 against 299 lies within the scatter – what is reliable is the paired test. Per pairing
+the rule wins in 9 more, in 4 equally many and in 3 fewer than it loses (Armored Fury China–GLA 15 : 21, Death Valley America–China 19 : 20, Death Valley China–GLA 19 : 21).
 
-**60 Hz, zur Information** (symmetrisch, 320 Gefechte, Regel an): 301 entschieden (30 Hz: 305); mittlere Dauer der entschiedenen 9,23 gegen 9,33 Spielminuten, Median beide 7,88;
-in **297 von 320** Gefechten derselbe Ausgang wie bei 30 Hz mit demselben Seed.
+**60 Hz, for information** (symmetric, 320 matches, rule on): 301 decided (30 Hz: 305); mean duration of the decided ones 9.23 against 9.33 game minutes, median both 7.88;
+in **297 of 320** matches the same outcome as at 30 Hz with the same seed.
 
-### 11.5 Was sich bei 30 Hz gegenüber `main` `4d9d9e5` ändert
+### 11.5 What changes at 30 Hz compared with `main` `4d9d9e5`
 
-`reference-manifest check --set full --jobs 5` gegen das Manifest von `main` (nicht neu geschrieben): **40 von 50 Läufen weichen ab** – die 16 Zweispielerläufe, die vier
-`ai8_…`-Läufe, `skirmish-sweep` und 19 Missionsläufe (`GC_ChinaBoss_*` ×9, `GC_LaserGeneral_ChinaNukeGeneral`, `MD_CHI01`, `MD_CHI05`, `MD_GLA01`, `MD_GLA03`, `MD_GLA05`,
-`MD_USA01`, `MD_USA02`, `MD_USA05`, `Training01`). **Unverändert:** `reference-match` (Sieger FactionGLA bei Tick 14.130, 26.626 Befehle, 13.589 Schüsse, Endhash und Kette wie im
-Manifest), `stress` und acht Missionsläufe (`GC_AirGeneral_*` ×3, `GC_ChemGeneral_*` ×2, `GC_SuperWeaponsGeneral_GLADemolitionGeneral`, `GC_TankGeneral_*` ×2). Eingangsmanifest
-identisch. Ergebnisse (`reference-manifest results`, `main` = Werkzeug des Stands nach dem Ausfahrtsweg, dessen 30-Hz-Ergebnisse die von `main` sind):
+`reference-manifest check --set full --jobs 5` against the manifest of `main` (not rewritten): **40 of 50 runs deviate** – the 16 two-player runs, the four
+`ai8_…` runs, `skirmish-sweep` and 19 mission runs (`GC_ChinaBoss_*` ×9, `GC_LaserGeneral_ChinaNukeGeneral`, `MD_CHI01`, `MD_CHI05`, `MD_GLA01`, `MD_GLA03`, `MD_GLA05`,
+`MD_USA01`, `MD_USA02`, `MD_USA05`, `Training01`). **Unchanged:** `reference-match` (winner FactionGLA at tick 14,130, 26,626 commands, 13,589 shots, end hash and chain as in the
+manifest), `stress` and eight mission runs (`GC_AirGeneral_*` ×3, `GC_ChemGeneral_*` ×2, `GC_SuperWeaponsGeneral_GLADemolitionGeneral`, `GC_TankGeneral_*` ×2). Input manifest
+identical. Results (`reference-manifest results`, `main` = tool of the state after the exit path, whose 30 Hz results are those of `main`):
 
-| Lauf | `main` | Branch |
+| Run | `main` | Branch |
 |---|---|---|
-| Alpine Assault America–China | America @16.665 | kein Sieger |
-| Alpine Assault China–GLA | China @10.665 | China @8.595 |
-| Alpine Assault ChinaTank–AirForce | AirForce @15.195 | ChinaTank @18.300 |
-| Alpine Assault GLA–America | America @7.815 | America @9.660 |
-| Armored Fury America–China | kein Sieger | America @37.050 |
-| Armored Fury China–GLA | China @11.595 | kein Sieger |
-| Armored Fury ChinaTank–AirForce | kein Sieger | ChinaTank @10.860 |
-| Armored Fury GLA–America | America @13.215 | America @36.180 |
-| Bitter Winter America–China | kein Sieger | China @22.005 |
-| Bitter Winter China–GLA | China @7.950 | China @8.385 |
-| Bitter Winter ChinaTank–AirForce | kein Sieger | ChinaTank @30.150 |
-| Bitter Winter GLA–America | America @9.090 | America @8.730 |
-| Death Valley America–China | America @9.390 | America @8.700 |
-| Death Valley China–GLA | China @10.515 | China @12.930 |
-| Death Valley ChinaTank–AirForce | AirForce @10.635 | ChinaTank @22.860 |
-| Death Valley GLA–America | America @8.415 | America @10.530 |
+| Alpine Assault America–China | America @16,665 | no winner |
+| Alpine Assault China–GLA | China @10,665 | China @8,595 |
+| Alpine Assault ChinaTank–AirForce | AirForce @15,195 | ChinaTank @18,300 |
+| Alpine Assault GLA–America | America @7,815 | America @9,660 |
+| Armored Fury America–China | no winner | America @37,050 |
+| Armored Fury China–GLA | China @11,595 | no winner |
+| Armored Fury ChinaTank–AirForce | no winner | ChinaTank @10,860 |
+| Armored Fury GLA–America | America @13,215 | America @36,180 |
+| Bitter Winter America–China | no winner | China @22,005 |
+| Bitter Winter China–GLA | China @7,950 | China @8,385 |
+| Bitter Winter ChinaTank–AirForce | no winner | ChinaTank @30,150 |
+| Bitter Winter GLA–America | America @9,090 | America @8,730 |
+| Death Valley America–China | America @9,390 | America @8,700 |
+| Death Valley China–GLA | China @10,515 | China @12,930 |
+| Death Valley ChinaTank–AirForce | AirForce @10,635 | ChinaTank @22,860 |
+| Death Valley GLA–America | America @8,415 | America @10,530 |
 
-Entschieden 12 → **14** von 16, der Ausgang ist in 8 anders. Die vier 8-Spieler-Läufe enden wie vorher ohne Sieger in ihrem Budget. Missionen: in allen 27 Läufen **gleicher
-Ausgang und gleiches Endskript**; 18 mit identischen Ergebnisgrößen, 9 mit anderen Ereigniszahlen (am deutlichsten `MD_USA02`: 72 → 143 Schadensereignisse, 39 → 63 Schüsse;
-`MD_GLA01`: `MoveArrived` 53 → 81; in drei davon auch die Zahl ausgeführter Skripte oder Aktionen: `GC_LaserGeneral_ChinaNukeGeneral` 122 → 123 Skripte, `MD_GLA05` 102 → 100,
-`MD_USA05` 396 → 394 Aktionen).
+Decided 12 → **14** of 16, the outcome is different in 8. The four 8-player runs end as before without a winner within their budget. Missions: in all 27 runs **the same
+outcome and the same end script**; 18 with identical result quantities, 9 with different event counts (most clearly `MD_USA02`: 72 → 143 damage events, 39 → 63 shots;
+`MD_GLA01`: `MoveArrived` 53 → 81; in three of them also the number of executed scripts or actions: `GC_LaserGeneral_ChinaNukeGeneral` 122 → 123 scripts, `MD_GLA05` 102 → 100,
+`MD_USA05` 396 → 394 actions).
 
-**Kampagne** (30 Hz): `CampaignTool drive` auf allen 24 Karten **Sieg 24 / 24, Niederlage 24 / 24**; `audit --ticks 900`: 24 von 24 beim zweiten Lauf und nach
-Speichern/Laden identisch, 0 Treffer auf fehlende Typen, Endproben Sieg 13 / 24, Niederlage 15 / 24 – wie `main`.
+**Campaign** (30 Hz): `CampaignTool drive` on all 24 maps **victory 24 / 24, defeat 24 / 24**; `audit --ticks 900`: 24 of 24 identical on the second run and after
+save/load, 0 hits on missing types, end probes victory 13 / 24, defeat 15 / 24 – like `main`.
 
-### 11.6 `MD_CHI02` im Nur-Befehle-Modus
+### 11.6 `MD_CHI02` in commands-only mode
 
-Ursache gefunden, und sie liegt **nicht** in der Sparregel. Der Agent marschiert auf das Ziel, das seiner Armee am nächsten liegt; sein Weg endet 120 Einheiten vor einem, an
-das er nicht herankommt, und weil er dort steht, bleibt es das nächste – für den Rest der Mission („1 Angriffswelle, 60.645 Ticks im Angriff“, 241 Einheiten an einem Ort). Der
-Lauf auf `main` tat 22.000 Ticks lang dasselbe, bis er binnen 50 Sekunden 107 seiner 130 dort versammelten Infanteristen verlor (woran, ist nicht untersucht); die Welle wurde
-zurückgesetzt, die nächste brach von der Basis nach Westen auf und gewann bei Tick 29.250. Die Armee, die auf Panzer spart, verliert ihre Masse dort nicht (ihre Zahl wächst nur)
-und wird nie zurückgesetzt. Der Sieg auf `main` folgte aus einer Niederlage. Zeiten bis Kaserne und erstem Angriff unterscheiden die Läufe nicht: beide greifen von Anfang an an
-(Welle 1 in den ersten 500 Ticks).
+Cause found, and it does **not** lie in the saving rule. The agent marches on the goal that lies nearest to its army; its path ends 120 units before one that
+it cannot get at, and because it stands there, that one stays the nearest – for the rest of the mission ("1 attack wave, 60,645 ticks in the attack", 241 units in one place). The
+run on `main` did the same for 22,000 ticks until it lost, within 50 seconds, 107 of its 130 infantrymen gathered there (to what is not investigated); the wave was
+reset, the next one set out from the base to the west and won at tick 29,250. The army that saves for tanks does not lose its mass there (its number only grows)
+and is never reset. The victory on `main` followed from a defeat. Times until barracks and first attack do not distinguish the runs: both attack from the start
+(wave 1 in the first 500 ticks).
 
-Korrektur (`05b2c1f`, nur für einen Agenten mit Missionszielen; ein Skirmish setzt keine): ein Ziel, auf das die Armee zwei Minuten marschiert ist und das noch steht, kommt
-hinter alle anderen, bis jedes an der Reihe war. Damit zieht die Armee durch alle vier gegnerischen Basen.
+Fix (`05b2c1f`, only for an agent with mission goals; a skirmish sets none): a goal on which the army has marched for two minutes and which is still standing goes
+behind all others until each has had its turn. With that the army moves through all four enemy bases.
 
 | `--commands-only`, `--minutes 34` | `MD_GLA04` | `MD_CHI01` | `MD_CHI02` |
 |---|---|---|---|
-| `main` (vor dem Branch) | Sieg @1.022 | Sieg @18.252 | Sieg @29.250 |
-| gemergter Stand | Sieg @1.022 | Sieg @16.452 | **nicht erreicht**; nach 34 Minuten sind zwei der vier Basen nur noch GLA-Löcher |
-| gemergter Stand, `--minutes 60` | – | – | **Sieg @78.429** (43:34) |
+| `main` (before the branch) | victory @1,022 | victory @18,252 | victory @29,250 |
+| merged state | victory @1,022 | victory @16,452 | **not reached**; after 34 minutes two of the four bases are only GLA holes any more |
+| merged state, `--minutes 60` | – | – | **victory @78,429** (43:34) |
 
-`MD_CHI02` wird also wieder gewonnen, aber nicht mehr in 34 Spielminuten. Warum es 14 Minuten länger dauert als der glückliche Lauf auf `main`, ist nicht weiter untersucht (die
-Löcher der GLA bauen sich wieder auf, während die Armee beim nächsten Ziel ist).
+So `MD_CHI02` is won again, but no longer within 34 game minutes. Why it takes 14 minutes longer than the lucky run on `main` is not investigated further (the
+holes of the GLA rebuild themselves while the army is at the next goal).
 
-### 11.7 Verifikation (gemergter Stand)
+### 11.7 Verification (merged state)
 
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| `dotnet build CnCNew.slnx` | 0 Warnungen, 0 Fehler |
-| `Simulation.Tests` (Release) ohne `--content-dir` bei 30, 60, 120 Hz | je „All simulation core tests passed“ |
-| `Simulation.Tests` mit `--content-dir` | 30 Hz: alle bestanden. 60 und 120 Hz: **2 von 540 schlagen fehl** – „a Crusader keeps its turret on a Battlemaster it chases“ (3,00° schlechtester Wert) und „the original skirmish AI … Player 2 has built a base“ (4 Gebäude nach 150 s). **Beide schlagen auf `main` `4d9d9e5` allein genauso fehl** (derselbe Text, dieselben Zahlen; nachgemessen an einem Export von `main`); nicht von diesem Branch, nicht behoben |
-| Raten-Suite | alle zehn Gruppen 0 / 0 bei 60 und 120 Hz (11.3) |
-| eigene Tests | sechs Einheiten auf einen Punkt, drei Einsteiger, Heeresauftrag, Zusammensetzung: grün bei allen drei Raten |
-| `reference-manifest check --set quick --verify-incremental` | 64.871 Ticks geprüft, **0 Abweichungen** des inkrementellen Hashs |
-| `input-manifest check` | identisch |
-| `Game.Tests` (Release, `--content-dir`) | „All game tests passed“ |
+| `dotnet build CnCNew.slnx` | 0 warnings, 0 errors |
+| `Simulation.Tests` (Release) without `--content-dir` at 30, 60, 120 Hz | each "All simulation core tests passed" |
+| `Simulation.Tests` with `--content-dir` | 30 Hz: all passed. 60 and 120 Hz: **2 of 540 fail** – "a Crusader keeps its turret on a Battlemaster it chases" (3.00° worst value) and "the original skirmish AI … Player 2 has built a base" (4 buildings after 150 s). **Both fail in exactly the same way on `main` `4d9d9e5` alone** (the same text, the same numbers; re-measured on an export of `main`); not from this branch, not fixed |
+| Rate suite | all ten groups 0 / 0 at 60 and 120 Hz (11.3) |
+| own tests | six units to one point, three enterers, army order, composition: green at all three rates |
+| `reference-manifest check --set quick --verify-incremental` | 64,871 ticks checked, **0 deviations** of the incremental hash |
+| `input-manifest check` | identical |
+| `Game.Tests` (Release, `--content-dir`) | "All game tests passed" |
 | `scripts/check-spectator.ps1` | PASS |
-| `scripts/audit-scenarios.ps1 -Scenario exits` | 9 von 9 Szenen „all checks passed“, bei 30 Hz und mit `-TickRate 60` (das Skript führt neun Szenen: drei Fraktionen × Kommandozentrale, Kaserne, Fabrik) |
+| `scripts/audit-scenarios.ps1 -Scenario exits` | 9 of 9 scenes "all checks passed", at 30 Hz and with `-TickRate 60` (the script runs nine scenes: three factions × command center, barracks, factory) |
 
-Nicht gelaufen: der volle Manifestlauf unter Linux, die Determinismus-Matrix, `reachability`, die drei Szenen-Audits außer `exits`, die Abnahme der Regel bei 60 Hz (nur die
-symmetrische Erhebung), `drive` und `audit` bei 60 Hz. Kein Mensch hat etwas davon gesehen.
+Not run: the full manifest run under Linux, the determinism matrix, `reachability`, the three scene audits other than `exits`, the acceptance of the rule at 60 Hz (only the
+symmetric survey), `drive` and `audit` at 60 Hz. No human has seen any of it.
