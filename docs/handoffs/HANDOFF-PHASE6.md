@@ -1,117 +1,117 @@
-# N+1-Handoff: Phase 5 – Restumfang, danach Phase 6 (Welt, Terrain, Bewegung, Sicht, Skirmish-KI)
+# N+1 handoff: Phase 5 – remaining scope, then Phase 6 (world, terrain, movement, vision, skirmish AI)
 
-> **Abgelöst durch `docs/handoffs/HANDOFF-PHASE7.md`** (29. September 2026, Abschluss von Phase 5). Teil A dieses Dokuments ist erledigt (Supply,
-> Erfahrung, Teams, Reparatur, Flächenschaden, weitere Modulfreischaltungen); offen blieben Block 0.4, Bauvorgang, Radar-/Command-Set-Wirkung und Terrain.
-> Das Dokument bleibt als Verlauf erhalten; die Zahlen unten sind veraltet, aktuelle stehen in `CLAUDE.md` und im neuen Handoff.
+> **Superseded by `docs/handoffs/HANDOFF-PHASE7.md`** (29 September 2026, completion of Phase 5). Part A of this document is done (supply,
+> experience, teams, repair, area damage, further module unlocks); what remained open were Block 0.4, the construction process, radar/command set effect and terrain.
+> The document is kept as history; the numbers below are outdated, current ones are in `CLAUDE.md` and in the new handoff.
 
-Du arbeitest autonom an diesem Repository (`<repo>` = Wurzel des Arbeitsverzeichnisses). Lies zuerst `CLAUDE.md`, `README.md`,
-`docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, `docs/GAME-RULES.md` und `docs/SIMULATION-CORE.md`.
-`docs/handoffs/HANDOFF-PHASE5.md` bleibt als Verlauf der Phase-5-Blöcke erhalten (Zahlen dort sind veraltet).
+You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`,
+`docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, `docs/GAME-RULES.md` and `docs/SIMULATION-CORE.md`.
+`docs/handoffs/HANDOFF-PHASE5.md` is kept as the history of the Phase 5 blocks (the numbers there are outdated).
 
-## Ehrlicher Status von Phase 5
+## Honest status of Phase 5
 
-Phase 5 ist **nicht vollständig abgenommen**. Das Abnahmekriterium („headless Referenzmatch aller Fraktionen ohne Sonderpfade“
-und Golden-Master-Szenarien gegen bekannte Originalwerte) ist nur teilweise erfüllt:
+Phase 5 is **not fully accepted**. The acceptance criterion ("headless reference match of all factions without special paths"
+and golden master scenarios against known original values) is only partly met:
 
-- Erreicht: Wirtschaft, Sciences, Upgrades, direkter Kampf, einfache Bewegung, Produktion, Garrison/Transport, Erzeugungslisten,
-  Kisten, Spezialkraft-Subsystem, „letzter Überlebender“ als Sieg. Der Referenzmatch läuft auf Retail-Daten mit allen 13 Fraktionen
-  und deren **echten Kommandozentralen**, deterministisch, mit Replay und Snapshotfortsetzung.
-- Sonderpfade im Referenzmatch: 13 Startobjekte werden übersprungen (9 Dozer, 4 GLA-Arbeiter, weil deren KI-Module fehlen), es gibt
-  kein Supply (Geld nur aus Startkapital und Kopfgeld/Kisten) und der Generator gibt keinen `UseSpecialPowerCommand` aus.
-- Fehlt: Teams/Diplomatie, Supply/Transport der Wirtschaft, Reparatur/Verkauf, Radarwirkung, Flächenschaden, Erfahrung und
-  veteranenbasierte `ArmorSet`/`WeaponSet`-Auswahl, Dozer-/Arbeiter-KI, Command-Set-Wirkung.
-- Fehlt: Golden Master für Supply und Erfahrung; Block 0.4 (RNG-Abgleich mit einem kompilierten Original, kein Compiler verfügbar).
-- Bewusste Vereinfachungen der Spezialkräfte (`docs/GAME-RULES.md` §6d): kein Konstruktionsmodell, kein Disabled-Zustand, kein
-  `createOwner=false`, keine `OCLAdjustPositionToPassable`-Anpassung, kein Kanonenboot-Anflug/-KI, keine View-Objekte, kein EVA/Ton,
-  keine Skriptbenachrichtigungen, Kopfgeld ohne Teammodell, `SpecialPowerCompletionDie` ist inert, die drei Randpositionen
-  (`CREATE_AT_EDGE_*`) erzeugen nichts (`CreationSkipped(NoTerrainEdge)`), lösen aber Kraft und Nachladung aus.
+- Achieved: economy, sciences, upgrades, direct combat, simple movement, production, garrison/transport, creation lists,
+  crates, special power subsystem, "last survivor" as victory. The reference match runs on retail data with all 13 factions
+  and their **real command centres**, deterministically, with replay and snapshot continuation.
+- Special paths in the reference match: 13 start objects are skipped (9 dozers, 4 GLA workers, because their AI modules are missing), there is
+  no supply (money only from starting capital and bounty/crates) and the generator issues no `UseSpecialPowerCommand`.
+- Missing: teams/diplomacy, supply/transport of the economy, repair/selling, radar effect, area damage, experience and
+  veteran-based `ArmorSet`/`WeaponSet` selection, dozer/worker AI, command set effect.
+- Missing: golden master for supply and experience; Block 0.4 (RNG comparison with a compiled original, no compiler available).
+- Deliberate simplifications of the special powers (`docs/GAME-RULES.md` §6d): no construction model, no disabled state, no
+  `createOwner=false`, no `OCLAdjustPositionToPassable` adjustment, no gunship approach/AI, no view objects, no EVA/sound,
+  no script notifications, bounty without a team model, `SpecialPowerCompletionDie` is inert, the three edge positions
+  (`CREATE_AT_EDGE_*`) create nothing (`CreationSkipped(NoTerrainEdge)`), but trigger power and reload.
 
-Entscheidung für den nächsten Durchlauf: **Zuerst den Phase-5-Rest schließen, soweit er ohne Terrain möglich ist**
-(Abschnitt „Teil A“), dann Phase 6 (Teil B) beginnen. Was Terrain/Kollision braucht, gehört nach Phase 6, nicht in
-Phase-5-Ersatzlösungen.
+Decision for the next pass: **first close the Phase 5 remainder, as far as it is possible without terrain**
+(section "Part A"), then begin Phase 6 (Part B). What needs terrain/collision belongs after Phase 6, not into
+Phase 5 substitute solutions.
 
-## Reproduktionsbasis (Stand Ende des Spezialkraft-Blocks; vor dem Weiterarbeiten neu messen)
+## Reproduction basis (as of the end of the special power block; re-measure before continuing to work)
 
-Commits des letzten Blocks: `5f34b41` (Schema/Katalog/Baseline), `9efbf2c` (Subsystem, Befehl, Module), `1de0b6c` (Tests);
-danach die Dokumentation. Alle lokal, kein Remote.
+Commits of the last block: `5f34b41` (schema/catalogue/baseline), `9efbf2c` (subsystem, command, modules), `1de0b6c` (tests);
+after that the documentation. All local, no remote.
 
-- Build: 0 Fehler, genau die 10 bekannten NU1901/NU1903-Warnungen. Alle Testprogramme grün, auch `--long` im Release.
-- Vollinventar: 228 INI-Dateien (28 ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel,
-  18.050/19.600 Referenzen aufgelöst (1.550 Fallbacks), Snapshot 144.745.050 Byte, SHA-256
+- Build: 0 errors, exactly the 10 known NU1901/NU1903 warnings. All test programs green, also `--long` in Release.
+- Full inventory: 228 INI files (28 excluded), 65,875 blocks, 12,574 definitions, 16,380 modules, 333,061 keys,
+  18,050/19,600 references resolved (1,550 fallbacks), snapshot 144,745,050 bytes, SHA-256
   `D0C06A2B06CD7065474A3EB729E36B87E1815DAE2D461E564D023EAA019295CF`.
-- Retail-Basis (`--maps exclude`): 146 Dateien (110 ausgeschlossen), 63.747 Blöcke, 12.550 Definitionen, 16.065 Module,
-  327.293 Schlüssel, 2.115 Objekte, 17.658/19.181 Referenzen, SHA-256
+- Retail base (`--maps exclude`): 146 files (110 excluded), 63,747 blocks, 12,550 definitions, 16,065 modules,
+  327,293 keys, 2,115 objects, 17,658/19,181 references, SHA-256
   `7110C5BA69917279ADD6B0270754AA081ADEF2DC37166FFB598CAF2313F979DA`.
-- Kompatibilitätsbasislinie 761 Einträge (Vollinventar: deferred-field 519 Einträge/20.936 Verwendungen, definition 36/2.590,
-  diagnostic 9/4.907, duplicate-key 24/120, excluded-file 28/28, module 145/4.441); `compat-check` besteht.
-- Modulkatalog 205 Typen, **60 implementiert** (12 Phase 4, 24 + 14 + 10 Phase 5); Instanziierbarkeit **1.224 von 2.115
-  (57,9 %)**, 891 blockiert; Modulverwendungen 15.078 von 19.553 (77,1 %). Asset-Runtimebestand 25.682 Dateien.
-- Stresstest (`SimTool stress`, 216.000 Ticks): Endhash `4A99EE46FD623A09`, Kettenhash `76A8FCEEEE625672`, 914.394 Befehle,
-  Spitze 15.775 Entities, Snapshot bei Tick 108.000 mit 10.262.573 Byte, Restore-Hash `1D2E96E0BB12303A`, 0 B/Tick im Leerlauf.
-- Referenzmatch (`SimTool reference-match`, Retail): 13 Fraktionen, 13.978 Befehle (625 Produktion, 2.153 Bewegung, 10.875
-  Schüsse), Sieger Spieler 1 (Amerika) bei Tick 11.385 (6,3 Min.), Replay 11.686 Ticks/462.194 Byte/11 Checkpoints, 43
-  `UnknownEntity`-Ablehnungen, Endhash `83EBD54549BB1DB5`, Kettenhash `928D78E6DD172836`, Fortsetzung ab Tick 5.843 identisch.
-- Befehle: 17 Typen, `CommandTypes.Version = 5`, Replay-Format v2; Ablehnungscodes 1–29 (25–29 Spezialkraft).
+- Compatibility baseline 761 entries (full inventory: deferred-field 519 entries/20,936 uses, definition 36/2,590,
+  diagnostic 9/4,907, duplicate-key 24/120, excluded-file 28/28, module 145/4,441); `compat-check` passes.
+- Module catalogue 205 types, **60 implemented** (12 Phase 4, 24 + 14 + 10 Phase 5); instantiability **1,224 of 2,115
+  (57.9 %)**, 891 blocked; module uses 15,078 of 19,553 (77.1 %). Asset runtime content 25,682 files.
+- Stress test (`SimTool stress`, 216,000 ticks): final hash `4A99EE46FD623A09`, chain hash `76A8FCEEEE625672`, 914,394 commands,
+  peak 15,775 entities, snapshot at tick 108,000 with 10,262,573 bytes, restore hash `1D2E96E0BB12303A`, 0 B/tick when idle.
+- Reference match (`SimTool reference-match`, retail): 13 factions, 13,978 commands (625 production, 2,153 movement, 10,875
+  shots), winner player 1 (America) at tick 11,385 (6.3 min), replay 11,686 ticks/462,194 bytes/11 checkpoints, 43
+  `UnknownEntity` rejections, final hash `83EBD54549BB1DB5`, chain hash `928D78E6DD172836`, continuation from tick 5,843 identical.
+- Commands: 17 types, `CommandTypes.Version = 5`, replay format v2; rejection codes 1–29 (25–29 special power).
 
-## Teil A – Rest von Phase 5 (in dieser Reihenfolge; jeweils Tests, Realdatenaudit, Doku, zwei Läufe)
+## Part A – rest of Phase 5 (in this order; each with tests, real-data audit, docs, two runs)
 
-Miss vor jedem Schritt mit `SimTool audit-coverage .local/phase2-import-a`, was ein Modul **allein** freischaltet. Stand
-(Objekte insgesamt / nur dieses Modul fehlt): `CommandButtonHuntUpdate` 79/10, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/2,
+Before every step measure with `SimTool audit-coverage .local/phase2-import-a` what a module unlocks **on its own**. State
+(objects in total / only this module missing): `CommandButtonHuntUpdate` 79/10, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/2,
 `JetSlowDeathBehavior` 59/0, `MissileAIUpdate` 44/29, `CrushDie` 42/39, `CountermeasuresBehavior` 40/0, `FireWeaponUpdate` 36/26,
 `SpawnBehavior` 35/6, `AutoFindHealingUpdate` 34/10, `JetAIUpdate` 34/2, `HeightDieUpdate` 31/15, `DeliverPayloadAIUpdate` 28/1,
 `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `TransportAIUpdate` 24/13, `BaikonurLaunchPower` 23/23,
 `ReplaceObjectUpgrade` 20/16, `SlavedUpdate` 20/7, `RepairDockUpdate` 17/16, `DozerAIUpdate` 10/10.
 
-1. **Supply-Wirtschaft** (`SupplyCenterDockUpdate`, `SupplyWarehouseDockUpdate`, `SupplyTruckAIUpdate`, `WorkerAIUpdate`,
-   `DozerAIUpdate`, `DockUpdate`-Basis): Erst die Anforderungen am Original lesen (`references/`), dann als eigenes
-   Dock-/Wirtschaftsmodell mit Katalogschemata bauen. Danach die 13 übersprungenen Startobjekte des Referenzmatches einsetzen und
-   Golden Master für Supply-Einnahmen mit unabhängiger Nachrechnung ergänzen. Das ist der größte offene Punkt für das
-   Abnahmekriterium „ohne Sonderpfade“.
-2. **Erfahrung und Veteranenstufen**: Erfahrungsvergabe beim Kill, `ExperienceTracker`, `ArmorSet`/`WeaponSet`-Auswahl nach
-   Stufe, Golden Master.
-3. **Teams/Diplomatie** als Datenmodell (Kopfgeld und Siegregel auf Teams heben, siehe „Kopfgeld ohne Teammodell“).
-4. **Reparatur/Verkauf** (`RepairDockUpdate`, `AutoFindHealingUpdate` – Achtung: das Fixture `Blocked` in
-   `tests/CnCNew.Simulation.Tests/Tests.Basics.cs` benutzt `AutoFindHealingUpdate` als Beispiel für ein nicht implementiertes
-   Modul; auf ein anderes umstellen, sobald es implementiert ist).
-5. **Weitere Modulfreischaltungen nach Messung**, ohne Terrain/Kollision: `CommandButtonHuntUpdate`, `SpecialAbilityUpdate`
-   (Handler der Einheitenfähigkeiten, erst dadurch werden die `SpecialAbility`-Kräfte im Befehlsstrom nützlich),
-   `MissileAIUpdate`, `FireWeaponUpdate`, `ReplaceObjectUpgrade`, `CountermeasuresBehavior`, `JetAIUpdate`. Den
-   Referenzmatch-Generator um `UseSpecialPowerCommand` erweitern, sobald sinnvolle Ziele existieren.
-6. **Radarwirkung, Flächenschaden**, Command-Set-Wirkung (welche Buttons ein Objekt anbietet).
-7. Block 0.4 (RNG-Abgleich) bleibt offen, solange kein kompiliertes Original zur Verfügung steht; nicht raten.
+1. **Supply economy** (`SupplyCenterDockUpdate`, `SupplyWarehouseDockUpdate`, `SupplyTruckAIUpdate`, `WorkerAIUpdate`,
+   `DozerAIUpdate`, `DockUpdate` base): first read the requirements on the original (`references/`), then build it as a
+   dock/economy model of our own with catalogue schemas. After that put in the 13 skipped start objects of the reference match and
+   add a golden master for supply income with an independent recalculation. That is the largest open item for the
+   acceptance criterion "without special paths".
+2. **Experience and veteran levels**: awarding experience on a kill, `ExperienceTracker`, `ArmorSet`/`WeaponSet` selection by
+   level, golden master.
+3. **Teams/diplomacy** as a data model (lift bounty and victory rule to teams, see "bounty without a team model").
+4. **Repair/selling** (`RepairDockUpdate`, `AutoFindHealingUpdate` – caution: the fixture `Blocked` in
+   `tests/CnCNew.Simulation.Tests/Tests.Basics.cs` uses `AutoFindHealingUpdate` as an example of a module that is not
+   implemented; switch to another one as soon as it is implemented).
+5. **Further module unlocks after measurement**, without terrain/collision: `CommandButtonHuntUpdate`, `SpecialAbilityUpdate`
+   (handler of the unit abilities, only through it do the `SpecialAbility` powers become useful in the command stream),
+   `MissileAIUpdate`, `FireWeaponUpdate`, `ReplaceObjectUpgrade`, `CountermeasuresBehavior`, `JetAIUpdate`. Extend the
+   reference match generator by `UseSpecialPowerCommand` as soon as sensible targets exist.
+6. **Radar effect, area damage**, command set effect (which buttons an object offers).
+7. Block 0.4 (RNG comparison) stays open as long as no compiled original is available; do not guess.
 
-Erst wenn 1–3 stehen und der Referenzmatch ohne übersprungene Startobjekte läuft, darf Phase 5 als abgeschlossen
-dokumentiert werden; bleiben Grenzen, benenne sie in `IMPLEMENTATION-PLAN.md` ehrlich.
+Only when 1–3 are in place and the reference match runs without skipped start objects may Phase 5 be documented as
+completed; if limits remain, name them honestly in `IMPLEMENTATION-PLAN.md`.
 
-## Teil B – Phase 6: Welt, Terrain, Bewegung, Sicht, Skirmish-KI
+## Part B – Phase 6: world, terrain, movement, vision, skirmish AI
 
-Umfang laut `docs/IMPLEMENTATION-PLAN.md` §6: MAP-Daten zu spielbarer Welt (Heightfield, Wasser, Bridges, Waypoints,
-Triggerbereiche, Props), Footprints, Kollision, Bodentypen, Formationen, deterministische Pfadsuche mit lokaler Vermeidung,
-Sichtweite/Shroud/Fog/Tarnung, Skirmish-KI (Build-Pläne, Angriff, Verteidigung, Fähigkeitsnutzung). Damit werden auch die
-Terrain-/Physik-Module möglich, die in Phase 5 bewusst offen blieben (`ToppleUpdate` 76/66, `CrushDie` 42/39,
-`HeightDieUpdate` 31/15, echte `PhysicsBehavior`-Kräfte, `OCLAdjustPositionToPassable`, `CREATE_AT_EDGE_*`-Positionen).
+Scope according to `docs/IMPLEMENTATION-PLAN.md` §6: MAP data to a playable world (heightfield, water, bridges, waypoints,
+trigger areas, props), footprints, collision, ground types, formations, deterministic pathfinding with local avoidance,
+vision range/shroud/fog/stealth, skirmish AI (build plans, attack, defence, ability use). With that the
+terrain/physics modules also become possible that deliberately stayed open in Phase 5 (`ToppleUpdate` 76/66, `CrushDie` 42/39,
+`HeightDieUpdate` 31/15, real `PhysicsBehavior` forces, `OCLAdjustPositionToPassable`, `CREATE_AT_EDGE_*` positions).
 
-Regeln für die Schichtung: Terrain und Navigation als Datenmodell in `CnCNew.Data`/`CnCNew.Simulation` (ganzzahlig/Festkomma,
-keine Gleitkommazahlen, `SourceRules` beachten); Kartenformate über `CnCNew.Formats`/`CnCNew.Import`, Laufzeitzugriff nur über
-`CnCNew.Content`. Die Karten-Overlays der Vollinventarmessung (`--maps include`) sind der Einstieg.
+Rules for the layering: terrain and navigation as a data model in `CnCNew.Data`/`CnCNew.Simulation` (integer/fixed point,
+no floating-point numbers, observe `SourceRules`); map formats via `CnCNew.Formats`/`CnCNew.Import`, run-time access only via
+`CnCNew.Content`. The map overlays of the full inventory measurement (`--maps include`) are the entry point.
 
-## Nicht verhandelbare Regeln (unverändert, siehe `CLAUDE.md`)
+## Non-negotiable rules (unchanged, see `CLAUDE.md`)
 
-- Unbekannte Schlüssel/Module/Enums/Referenzen fallen nie still auf Standardwerte zurück; jeder Fall ist explizit, gezählt,
-  dokumentiert und gegen `baselines/compatibility.json` abgesichert.
-- Determinismus: kanonische Sortierung, keine Wandzeit, keine `Dictionary`-/`HashSet`-Reihenfolgeabhängigkeit; zwei unabhängige
-  Läufe byteidentisch. `CnCNew.Simulation` hängt nur von `CnCNew.Data` ab (`SourceRules`-Test); jedes `IUpdateModule` enthält
+- Unknown keys/modules/enums/references never fall back silently to defaults; every case is explicit, counted,
+  documented and secured against `baselines/compatibility.json`.
+- Determinism: canonical sorting, no wall-clock time, no dependency on `Dictionary`/`HashSet` order; two independent
+  runs byte-identical. `CnCNew.Simulation` depends only on `CnCNew.Data` (`SourceRules` test); every `IUpdateModule` contains
   `nextWake`.
-- `TreatWarningsAsErrors=true`; nur die zehn bekannten NU1901/NU1903-Warnungen sind erklärt.
-- Bestandszahlen immer neu messen, nie aus Docs oder diesem Handoff übernehmen.
-- Fremder Code darf gelesen, nicht unbesehen kopiert werden; jeder portierte Algorithmus braucht einen Quellverweis (Datei,
-  Funktion).
-- Neue Befehle erhöhen `CommandTypes.Version` (aktuell 5) und bekommen eigene Codes; bestehende ändern sich nie.
-- Nur lokal arbeiten, kein Remote, nichts pushen; mehrere fachlich geschlossene Commits; Working Tree am Ende sauber;
-  am Ende dieses Durchlaufs `docs/handoffs/HANDOFF-PHASE7.md` (oder einen neuen Fortsetzungsauftrag) schreiben und committen.
+- `TreatWarningsAsErrors=true`; only the ten known NU1901/NU1903 warnings are explained.
+- Always re-measure inventory numbers, never adopt them from docs or this handoff.
+- Third-party code may be read, not copied unexamined; every ported algorithm needs a source reference (file,
+  function).
+- New commands increase `CommandTypes.Version` (currently 5) and get codes of their own; existing ones never change.
+- Work only locally, no remote, push nothing; several commits each closed in subject matter; working tree clean at the end;
+  at the end of this pass write and commit `docs/handoffs/HANDOFF-PHASE7.md` (or a new continuation brief).
 
-## Abschlussbericht
+## Final report
 
-Zahlen (mit Commit-Hashes), implementierte Regeln/Module, Determinismus-, Test-, Stress- und Replayergebnisse,
-Modulabdeckung und Instanziierungsquote vorher/nachher mit Blockerliste, Golden-Master-Herleitungen, bekannte Grenzen und
-technische Schulden, `git status` und Bestätigung „kein Remote, nichts gepusht“.
+Numbers (with commit hashes), implemented rules/modules, determinism, test, stress and replay results,
+module coverage and instantiation rate before/after with blocker list, golden master derivations, known limits and
+technical debt, `git status` and the confirmation "no remote, nothing pushed".
