@@ -272,6 +272,10 @@ static partial class Tests
         StepFrames(session, 900);
         Check.That(engine.FlagValue("A Attacking0"), "A team whose production condition holds is selected, trained and, once complete, runs its create script.");
         Check.That(engine.FlagValue("A Marked0"), "The generic script hook of the team ran for its instance.");
+        var attackers = engine.TeamInstances.Single(team => team.Prototype == "A Attack0");
+        Check.That(attackers.Members.Count == 2 || CountOwned(session, 1, "AlphaSoldier") < 2, $"The team has both its soldiers: the start soldier, recruited, and a trained one - a start unit is not taken for a trained one ({attackers.Members.Count}).");
+        Check.That(System.Text.Encoding.UTF8.GetString(session.Save()).Contains("\"path\":\"hunt\"", StringComparison.Ordinal) || CountOwned(session, 1, "AlphaSoldier") == 0,
+            "The create script of the team is run with the team as <This Team>: its TEAM_HUNT sends the members hunting.");
         Check.That(engine.AiEnemyOf(new PlayerId(1)) == new PlayerId(2), "A front defence without an approach path looks towards the acquired enemy.");
         Check.That(engine.MissingActionHits.Count == 0 && engine.MissingConditionHits.Count == 0, $"No script type without implementation was hit ({string.Join(", ", engine.MissingActionHits.Keys)}).");
         Check.That(!engine.Diagnostics.Keys.Any(key => key.Contains("not run by the skirmish AI", StringComparison.Ordinal)), "Skirmish actions found their AI player.");

@@ -166,7 +166,8 @@ public sealed partial class ScriptEngine
     {
         if (_ai.Count == 0) return _currentList < _program.Players.Length ? _program.Players[_currentList] : null;
         if (_aiCurrent is { } thinking) return PlayerById(thinking.Setup.Player);
-        if (_callingTeam is { } team && !team.Owner.IsSystem) return PlayerById(team.Owner);
+        // evaluateConditions / runScript: "if (thisTeam) player = thisTeam->getControllingPlayer()".
+        if (ThisTeam is { } team && !team.Owner.IsSystem) return PlayerById(team.Owner);
         return _currentList < _program.Players.Length ? _program.Players[_currentList] : null;
     }
 

@@ -185,6 +185,21 @@ public sealed partial class ScriptEngine
     private long _frozenPhase;
     private int _currentList;
     private ScriptTeam? _callingTeam;
+
+    /// <summary>
+    /// <c>ScriptEngine::m_conditionTeam</c>: the instance a script's conditions are evaluated for, kept apart from the team a script was called for (<c>m_callingTeam</c>) as the
+    /// reference keeps it - in a session of the original skirmish AI. There <c>executeScript</c> leaves the calling team alone, so a team's own script (<c>runScript(name, team)</c>:
+    /// on create, on idle, on destroyed ...) still has its team as <c>&lt;This Team&gt;</c> when its conditions name no team. A mission keeps the one variable it always had (and its
+    /// reference values): there this field stays <see langword="null"/> and a called script without a condition team has no <c>&lt;This Team&gt;</c>.
+    /// </summary>
+    private ScriptTeam? _conditionInstance;
+
+    /// <summary><c>getTeamNamed(THIS_TEAM)</c>: "if (m_callingTeam) return m_callingTeam; return m_conditionTeam".</summary>
+    private ScriptTeam? ThisTeam => _callingTeam ?? _conditionInstance;
+
+    /// <summary><c>getTeamNamed</c>: the calling team, else the condition team, when it is an instance of the named prototype.</summary>
+    private ScriptTeam? ContextInstance(string prototype)
+        => _callingTeam is { } calling && calling.Prototype == prototype ? calling : _conditionInstance is { } condition && condition.Prototype == prototype ? condition : null;
     private int _depth;
     private string _runningScript = string.Empty;
     private long _executedScripts;
@@ -494,6 +509,7 @@ public sealed partial class ScriptEngine
         if (script.DelayEvaluationSeconds > 0) _nextEvaluation[unit.Index] = _tick + _world.Time.WholeSecondsToTicks((long)script.DelayEvaluationSeconds);
 
         var previousTeam = _callingTeam;
+        var previousCondition = _conditionInstance;
         // The instances of the team the conditions talk about, as they are before the first evaluation (in id order): none, one, or - rarely - several.
         ScriptTeam? onlyInstance = null;
         List<ScriptTeam>? instances = null;
@@ -511,7 +527,8 @@ public sealed partial class ScriptEngine
         else if (onlyInstance is not null) RunForInstance(unit, script, onlyInstance);
         else
         {
-            _callingTeam = null;
+            if (_ai.Count > 0) _conditionInstance = null;
+            else _callingTeam = null;
             if (EvaluateConditions(unit))
             {
                 _executedScripts++;
@@ -525,11 +542,13 @@ public sealed partial class ScriptEngine
             }
         }
         _callingTeam = previousTeam;
+        _conditionInstance = previousCondition;
     }
 
     private void RunForInstance(ScriptUnit unit, MapScript script, ScriptTeam instance)
     {
-        _callingTeam = instance;
+        if (_ai.Count > 0) _conditionInstance = instance;
+        else _callingTeam = instance;
         if (EvaluateConditions(unit))
         {
             _executedScripts++;
@@ -735,8 +754,8 @@ public sealed partial class ScriptEngine
     /// </summary>
     private ScriptTeam? FindTeam(string name)
     {
-        if (name == ThisTeamName) return _callingTeam;
-        if (_callingTeam is { } calling && calling.Prototype == name) return calling;
+        if (name == ThisTeamName) return ThisTeam;
+        if (ContextInstance(name) is { } context) return context;
         var team = FindTeamInstance(name);
         return team is not null && !team.Created && _program.FindTeam(name) is { IsSingleton: true } ? null : team;
     }

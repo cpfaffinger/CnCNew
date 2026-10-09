@@ -411,6 +411,9 @@ public sealed partial class ScriptEngine
     private void JoinProducedUnit(Entity unit)
     {
         if (_teamBuilds.Count == 0) return;
+        // "factory could be NULL at the start of the game": what a session placed before its first tick came out of no factory and fills no order (asked for the skirmish AI only;
+        // a mission has no such objects when its first team is built).
+        if (_ai.Count > 0 && unit.SpawnTick <= 0) return;
         var order = _teamBuilds.FirstOrDefault(candidate => candidate.Joined < candidate.Queued && candidate.Type == unit.Template.Name
             && _teams.TryGetValue(candidate.TeamId, out var team) && team.Owner == unit.Owner);
         if (order is null || !_teams.TryGetValue(order.TeamId, out var joined)) return;

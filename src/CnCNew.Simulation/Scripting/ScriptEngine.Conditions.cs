@@ -277,8 +277,8 @@ public sealed partial class ScriptEngine
     /// <summary>Some team <see cref="TeamsNamed"/> yields has a unit.</summary>
     private bool AnyTeamNamedHasUnits(string name)
     {
-        if (name == ThisTeamName) return _callingTeam is { } calling && TeamHasUnit(calling);
-        if (_callingTeam is { } instance && instance.Prototype == name) return TeamHasUnit(instance);
+        if (name == ThisTeamName) return ThisTeam is { } calling && TeamHasUnit(calling);
+        if (ContextInstance(name) is { } instance) return TeamHasUnit(instance);
         foreach (var team in _teams.Values)
             if (team.Prototype == name && TeamHasUnit(team)) return true;
         return false;
@@ -364,10 +364,10 @@ public sealed partial class ScriptEngine
     {
         if (name == ThisTeamName)
         {
-            if (_callingTeam is { } calling) yield return calling;
+            if (ThisTeam is { } calling) yield return calling;
             yield break;
         }
-        if (_callingTeam is { } instance && instance.Prototype == name)
+        if (ContextInstance(name) is { } instance)
         {
             yield return instance;
             yield break;
@@ -393,7 +393,7 @@ public sealed partial class ScriptEngine
     private bool TeamAreaEntirely(string teamName, string areaName, int surfaceMask)
     {
         if (AreaOrDiagnose(areaName) is not { } area) return false;
-        var team = teamName == ThisTeamName ? _callingTeam : FindTeam(teamName);
+        var team = teamName == ThisTeamName ? ThisTeam : FindTeam(teamName);
         if (team is null) return false;
         if (!TeamHasCountingMember(team)) return false;
         var considered = false;
@@ -411,7 +411,7 @@ public sealed partial class ScriptEngine
     private bool TeamAreaPartially(string teamName, string areaName, int surfaceMask)
     {
         if (AreaOrDiagnose(areaName) is not { } area) return false;
-        var team = teamName == ThisTeamName ? _callingTeam : FindTeam(teamName);
+        var team = teamName == ThisTeamName ? ThisTeam : FindTeam(teamName);
         if (team is null) return false;
         foreach (var id in team.Members)
         {
