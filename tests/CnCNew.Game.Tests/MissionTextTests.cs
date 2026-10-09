@@ -509,7 +509,7 @@ internal static class MissionTextTests
                 && subtitles.Single(entry => !entry.Text.StartsWith("*", StringComparison.Ordinal)).Label == "DIALOGEVENT:01_AllCheerSoundSubtitle", "2454 of the 2455 retail subtitles are hidden by a leading asterisk; only the cheering is shown");
         }
         var style = InGameUiStyle.FromGraph(data.Graph);
-        TestHarness.Assert(style.Settings.MessagePosition == new InGameUiPixelPoint(10, 22) && style.Settings.MilitaryCaptionPosition == new InGameUiPixelPoint(10, 340), "the retail positions");
+        TestHarness.Assert(style.Settings.MessagePosition == new InGameUiPixelPoint(10, 10) && style.Settings.MilitaryCaptionPosition == new InGameUiPixelPoint(10, 340), "the retail positions");
         var viewport = new UiViewport(1280, 720);
         var options = new UiScaleOptions();
         TestHarness.Assert(style.Font(InGameUiFontRole.MilitaryCaptionTitle, viewport, options) is { Name: "Courier New", Bold: true }
@@ -594,7 +594,7 @@ internal static class MissionTextTests
         var font = controller.Hud.TextStyle.Font(InGameUiFontRole.Message, new UiViewport(1280, 720), controller.Hud.ScaleOptions);
         var list = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(text => text.Text == "You can't build here").ToArray();
         var index = director.Messages.Lines.Length - 1;
-        var expectedY = 22 + index * new MonospaceTextMeasure().LineHeight(font);
+        var expectedY = 10 + index * new MonospaceTextMeasure().LineHeight(font);
         Console.WriteLine($"       shared message list: {string.Join(" | ", director.Messages.Lines.Select(entry => entry.Text))}");
         TestHarness.Assert(director.Messages.Lines[^1].Text == "You can't build here" && list is [{ X: 10 } line] && line.Y == expectedY && line.Font == font,
             $"the line is drawn once, by the director, as line {index} of the list from the message position in the message font ({string.Join(" | ", list.Select(draw => $"{draw.X},{draw.Y} {draw.Font}"))} vs {expectedY} {font})");

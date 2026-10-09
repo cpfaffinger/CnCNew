@@ -523,9 +523,9 @@ internal static class ShellTests
     }
 
     /// <summary>
-    /// <c>QuitMessageBox.wnd</c>/<c>MessageBox.wnd</c> are authored at 1920x1080 (the other shell screens at 800x600) and take
-    /// their fonts from header templates. Template point sizes are relative to the 800 pixel wide default display
-    /// (<c>GlobalLanguage::adjustFontSize</c>), so at 1920x1080 LabelSmall (8) is 14, not 8, and Title (20) is 36.
+    /// <c>QuitMessageBox.wnd</c>/<c>MessageBox.wnd</c> take their fonts from header templates. Template point sizes are relative to the 800 pixel wide
+    /// default display (<c>GlobalLanguage::adjustFontSize</c>), so at 1920x1080 LabelRegular (10) is 18 and Title (20) is 36. The buttons the caller asks for
+    /// stand at the layout's button places (<c>GameWindowManager::gogoMessageBox</c>).
     /// </summary>
     private static void QuitDialogFonts(GameData data)
     {
