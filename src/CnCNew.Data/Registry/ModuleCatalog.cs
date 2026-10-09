@@ -228,7 +228,7 @@ public static class ModuleCatalog
             ..UpgradeMux(),
             new("UpgradeObject", FieldType.Reference, ReferenceKind: DefinitionKind.ObjectCreationList, Source: "ObjectCreationUpgrade.cpp"),
         ]);
-        // Field list verified against every occurrence in .local/phase2-import-a (510 AIUpdateInterface blocks, 34 files):
+        // Field list verified against every occurrence in game/content (510 AIUpdateInterface blocks, 34 files):
         // exactly these four top-level fields occur; AIUpdate.cpp's full FieldParse table is much larger (idle-scan timing,
         // mood, etc.) but nothing else appears in the shipped data, so nothing else is typed (avoids guessing spellings for
         // fields that cannot be checked against real usage). Turret/AltTurret are nested blocks (167/4 occurrences: aim,
@@ -242,7 +242,7 @@ public static class ModuleCatalog
             new("TurretsLinked", FieldType.Bool, Source: "AIUpdate.cpp"),
         ], allowsNestedSections: true);
         // ------------------------------------------------------------------------- supply economy (docks, gatherers, deposits)
-        // Field lists verified against every occurrence in .local/phase2-import-a (docs/GAME-RULES.md 6e). The AI-derived modules
+        // Field lists verified against every occurrence in game/content (docs/GAME-RULES.md 6e). The AI-derived modules
         // carry the AIUpdateInterface base fields (AIUpdate.cpp) plus their own table.
         ImmutableArray<FieldSchema> AiBase(string source) =>
         [
@@ -773,7 +773,7 @@ public static class ModuleCatalog
         ]);
 
         // ------------------------------------------------------------------------- transports, tunnels, projectiles (phase 8, E1)
-        // Field lists: the reference FieldParse tables (sources named per field), verified against every occurrence in .local/phase2-import-a.
+        // Field lists: the reference FieldParse tables (sources named per field), verified against every occurrence in game/content.
         ImmutableArray<FieldSchema> OpenContainFields(string containMaxSource) =>
         [
             ..DieMux(),
@@ -1172,7 +1172,7 @@ public static class ModuleCatalog
         ]);
 
         // ------------------------------------------------------------------------- slaves, spawns and containers (phase 14)
-        // Field lists are the reference FieldParse tables (sources named per field), verified against every occurrence in .local/phase2-import-a.
+        // Field lists are the reference FieldParse tables (sources named per field), verified against every occurrence in game/content.
         Add("SlavedUpdate",
         [
             new("GuardMaxRange", FieldType.Integer, Source: "SlavedUpdate.h"),

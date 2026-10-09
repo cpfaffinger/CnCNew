@@ -41,9 +41,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-if (-not $ContentDir) { $ContentDir = Join-Path $repo '.local\phase2-import-a' }
+if (-not $ContentDir) { $ContentDir = Join-Path $repo 'game\content' }
 if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) {
-    throw "Inhaltsverzeichnis nicht gefunden: $ContentDir`nDer gepruefte Runtimebestand liegt lokal unter .local\phase2-import-a (nicht im Repo); mit -ContentDir angeben."
+    throw "Inhaltsverzeichnis nicht gefunden: $ContentDir`nDer gepruefte Runtimebestand liegt lokal unter game\content (nicht im Repo; scripts\dev-content.ps1 erzeugt ihn aus der eigenen Steam-Installation); sonst mit -ContentDir angeben."
 }
 $ContentDir = (Resolve-Path -LiteralPath $ContentDir).Path
 
