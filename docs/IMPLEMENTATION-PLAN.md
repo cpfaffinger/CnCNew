@@ -661,7 +661,8 @@ sauber 24/24 und 24/24. Referenzwerte: Retail-Referenzmatch Sieger FactionGLA be
 
 ## 10. Tickrate, Festkomma und Mehrspieler über Dedicated Server
 
-**Status: geplant am 5. Oktober 2026, nichts davon gebaut.** Aufträge: `docs/HANDOFF-PHASE18.md` bis
+**Status: geplant am 5. Oktober 2026. Stand 9. Oktober 2026: die Phasen 18 bis 23 sind abgeschlossen, vom
+Mehrspieler-Teil (Phasen 24 bis 29) ist nichts gebaut; als Nächstes folgt Phase 24.** Aufträge: `docs/HANDOFF-PHASE18.md` bis
 `docs/HANDOFF-PHASE29.md`; gemeinsamer Rahmen: `docs/MULTIPLAYER-PLAN.md`.
 
 **Ergebnis:** Die Simulation läuft mit 60 Hz bei parametrisierter Tickrate und Q39.24-Festkomma,
@@ -678,7 +679,8 @@ Umfang (je Punkt eine Phase):
   Tests, ergebnis- und bildgleich bei 30 Hz;
 - 22: Festkomma Q47.16 → Q39.24 als einzelne, vermessene Änderung;
 - 23: Zeitschritt-Invarianz, Raten-Äquivalenz-Suite (30/60/120 Hz) als neu entworfene Abnahme,
-  60 Hz als Standard, Neuerhebung aller Referenzwerte;
+  60 Hz als Standard, Neuerhebung aller Referenzwerte – **erledigt am 9. Oktober 2026, gemessene Abnahme und
+  Grenzen unten**;
 - 24: KI im gehashten und gespeicherten Sitzungszustand, Skirmish-Speicherstand, Match-Beschreibung,
   zweistufiger Befehlsweg, Tickquelle;
 - 25: Protokoll, Raum und Relay im Prozess; lokales Gefecht über den Netzpfad; KI-Slots;
@@ -696,6 +698,27 @@ Internet-Match mit KI-Slots abgenommen haben.
 Bekannte Grenzen (Stand der Planung): Kartenaufdeckung durch manipulierte Clients ist im
 Lockstep-Modell nicht verhinderbar; die Kampagne bleibt lokal (ihre Skripte nehmen Rückmeldungen der
 Präsentation entgegen); der Server verteilt keine Karten und keine Daten.
+
+**Gemessene Abnahme der Phase 23 (9. Oktober 2026, Stand `f3acc2e`; `docs/TICKRATE-MIGRATION.md` §15.7):**
+
+- Raten-Äquivalenz-Suite: 0 von 4.388 Größen außerhalb der Toleranz bei 60 und bei 120 Hz, in allen zehn Gruppen (erster Lauf: 479 / 625 von 4.307); die Toleranzen standen vor dem ersten Lauf und sind nie geändert worden.
+- Standard 60 Hz (`e8632bb`, eine Zeile); beide Manifeste bei 60 Hz geschrieben (`ea52f87`) und zweimal mit 50 von 50 Läufen identisch geprüft (Windows, Release).
+- Alle Testprogramme bestehen bei 30, 60 und 120 Hz (`Simulation.Tests` 513 von 513, mit Realdaten 543 von 543; Stand `1b82e45`); sauberer Build 0 Warnungen; compat-check 751.
+- Das Retail-Referenzmatch ist bei 30, 60 und 120 Hz dasselbe Spiel (Sieger FactionGLA im Originalbild 14.130, 26.626 Befehle).
+- Verteilungsvergleich 30 gegen 60 Hz über 320 Gefechte je Rate: 39 von 39 Prüfungen bestanden.
+- Leistungstor bei 60 Hz (8 Spieler, 30 Spielminuten): Mittel, 99-%-Quantil, Aufholtempo und Gen-2-Freiheit erreicht.
+
+**Bekannte Grenzen der Phase 23 (benannt, nicht behoben):**
+
+- **Kein Mensch hat das Spiel bei 60 Hz gesehen oder gehört.** Es gab eine Sichtung eines KI-Gefechts bei 30 Hz (8. Oktober 2026), vor den daraus folgenden Korrekturen.
+- Vom Abnahmesatz dieses Abschnitts ist „das Manifest auf mindestens zwei verschiedenen Rechnern identisch“ **nicht erfüllt** (zweiter Rechner offen); mit den 60-Hz-Manifesten sind auch der Linux-Lauf und die Determinismus-Matrix nicht gemessen (`docs/DETERMINISM.md` §2c).
+- „Die Suite besteht“ heißt: die gemessenen Größen ihrer Fälle liegen innerhalb der Toleranz – nicht, dass jedes Gefecht identisch ist. Auf ausgelieferten Karten enden 2 von 16 Paarungen bei 60 Hz in einem anderen Bild (7 s und 84,5 s, derselbe Sieger); 33 von 320 Gefechten der Erhebung enden mehr als eine Sekunde neben dem 30-Hz-Gefecht, 3 mit anderem Ausgang; 120 Hz ist für Paarungen und Erhebung nicht gemessen.
+- Die Gleichheit ganzer KI-Gefechte beruht darauf, dass eine Einheit ihren eigenen Angriff einmal je Originalbild entscheidet; der Auftrag der Phase verbot das dem Wortlaut nach für den Zielerwerb. Die Bestätigung liegt beim Projektinhaber (`docs/MULTIPLAYER-PLAN.md` §7a Nr. 1).
+- Leistungstor: Maximum 141–143 ms je Tick (Soll ≤ 8 ms) und Allokation 8 KB je Tick verfehlt; das Maximum sinkt nur mit einer Verhaltensänderung, die sich der Projektinhaber vorbehalten hat.
+- Nicht umgestellt: einige Beweger rechnen weiter `Wert je Tick × r` (Spectre, Fallschirm, Leuchtkörper, Partikelstrahl, abgeschossener Jet, Schwerkraft der Physikmodule); `SlavedUpdate` und die Regeneration der Insassen heilen je Tick; Skript-VM, Spezialfähigkeiten, Brücken, Wasser und Klippen sind nicht untersucht; die Suite kennt nur die flache Karte.
+- Drei Verhaltensänderungen bei 30 Hz kamen dazu (verlorene Weckbitte, Fabrikausfahrt, KI und Bewegung nach der ersten Sichtung); die Balance danach ist nicht bewertet.
+- Ein bei 30 Hz geschriebener Spielstand wird vom Client ohne Option abgelehnt und lädt nur mit `--tick-rate 30`; die Zeichenreihenfolge der Straßen hängt an der Rate.
+- Die übrigen offenen Entscheidungen des Projektinhabers (elf): `docs/MULTIPLAYER-PLAN.md` §7a.
 
 ## 11. Patch-Integration, Qualität und auslieferbarer Abschluss
 
@@ -743,5 +766,7 @@ Phase 20 „Tickrate als Wert der Welt – Simulation“ (6. Oktober 2026, gemes
 Phase 21 „Tickrate als Parameter – Präsentation, Spielschicht, UI, Ton, Werkzeuge, Tests“ (7. Oktober 2026, gemessen am Stand `2a0a6f5`; `docs/TICKRATE-MIGRATION.md` §14): außerhalb der Simulation unterstellt nichts mehr 1/30 s je Tick – eine Konstante für das Originalbild (`OriginalFrame.PerSecond`), Präsentationsuhr `GameClock`, Rate der Sitzung aus `GameData.Rate`, Client `--tick-rate N` (Standard 30), `SaveGame` Version 2 mit Rate. Bei 30 Hz bildgleich und ergebnisgleich: alle reproduzierbaren Prüfsummen (Screens, HUD, UI-Renderer, Audits, Captures, Ton) unverändert, volles Referenzmanifest unter Windows und Linux identisch, alle Testprogramme grün, 0 Warnungen. Zeitmaß bei 30/60/120 Hz für alle geprüften Elemente innerhalb eines Originalbilds gleich; drei Größen folgen der Simulation und stehen auf der Liste für Phase 23. **Kein Mensch hat das Spiel bei 60 Hz gesehen oder gehört** (Sichtprüfliste §14.7).
 
 Phase 22 „Festkomma Q39.24“ (7. Oktober 2026, gemessen am Stand `8d74ef8`; `docs/FIXED-POINT-Q39-24.md`): `Fixed` hat 24 statt 16 Nachkommabits; die Umstellung ist ein einzelner Commit (`d7fca91`) und ändert planmäßig jeden Referenzwert. Neue Versionen: `WorldSnapshot` 10, Replay 12, `CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3. Neues Referenzmatch: FactionGLA bei Tick 17.805, `D0CA5F4EE456D6CE` (neuer Treiber-Seed `5EED0007`); Stresstest `56882F763EABEF67` mit Kette `754FA4DCB9A41DF7`. Gegenüber 16 Bit: Missionen, Zielfahrer, Audit und Skirmish-Übersicht mit gleichem Ausgang; 5 der 16 KI-Läufe mit anderem Ausgang (chaotische Verstärkung einer Rundung, Balance nicht bewertet). Der Überlauf beim Quadrieren von Platzhalter-Reichweiten ist ohne Ergebnisänderung behoben (`SquaredReach`). Volles Manifest unter Windows und Linux identisch, alle Testprogramme grün, 0 Warnungen; bei 60/120 Hz rundet beim Katalogbau nichts mehr auf null. Nur gemeldet: ungeprüfte Zielkoordinaten in Befehlen können die Bewegung überlaufen lassen (Phase 27/28).
+
+Phase 23 „Zeitschritt-Invarianz und 60 Hz als Standard“ (7. bis 9. Oktober 2026, Stand `f3acc2e`; `docs/TICKRATE-MIGRATION.md` §15, `docs/SIMULATION-CORE.md` §39–§43, `docs/PERFORMANCE.md` §6c, `docs/DEMO-FINDINGS.md`): die Simulation läuft standardmäßig mit **60 Hz** (`e8632bb`; die Rate bleibt ein Wert der Welt, 30 und 120 Hz bleiben unterstützt und werden von der Raten-Äquivalenz-Suite gegen 30 Hz geprüft). Prinzip: der 30-Hz-Schritt ist die Definition, höhere Raten unterteilen ihn – entschieden wird im ersten Tick des Originalbilds eines Objekts, die 30-Hz-Lage wird mit dem letzten Tick erreicht, Beobachter lesen das Bildende. Die Suite (4.388 gemessene Spielgrößen in zehn Gruppen, Toleranzen vor dem ersten Lauf festgelegt und nie geändert) ging in vier Runden von 479 / 625 Größen außerhalb der Toleranz (60 / 120 Hz) auf 0 / 0; das Retail-Referenzmatch ist bei 30, 60 und 120 Hz dasselbe Spiel. Drei Fehler bei 30 Hz wurden auf dem Weg behoben, je mit eigenem Manifest: die verlorene Weckbitte eines langsamen Todes, die Fabrikausfahrt, und – nach der ersten Sichtung eines KI-Gefechts durch den Projektinhaber – Sparen der KI für Fahrzeuge, eigene Zielplätze, Einsteigen und Heereszusammensetzung. **Die Referenzwerte stehen bei 60 Hz in `baselines/reference-manifest.json`** (Referenzmatch Sieger FactionGLA bei Tick 28.260 = Originalbild 14.130, Endhash `CA05181C36C62C7A`; Stresstest `9EE9F730D124C3BD`; 14 von 16 KI-Läufen entschieden; `WorldSnapshot` 10, Replay 12, `CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3 unverändert); ältere Hashes, Siegticks und Tickzahlen in diesem Dokument sind 30-Hz-Werte ihres Stands. Leistungstor bei 60 Hz (8 Spieler, 30 Spielminuten, ruhig gemessen): Mittel 0,68–0,69 ms je Tick, 99 % 1,6–1,8 ms, Aufholtempo 26-fach – erreicht; Maximum 141–143 ms und Allokation 8 KB je Tick – verfehlt. Daneben: ein Zuschauermodus (KI gegen KI im Fenster, `docs/SPECTATOR-MODE.md`), die Skirmish-KI des Originals als wählbare Sitzung mit drei Schwierigkeitsgraden (nicht Standard, im Client nicht wählbar; `docs/SKIRMISH-AI-ORIGINAL.md`), Fabrikausfahrten, Scrolltempo, Mausbelegung, Bautasten. **Grenzen:** kein Mensch hat das Spiel bei 60 Hz gesehen oder gehört – es gab eine Sichtung eines KI-Gefechts bei 30 Hz am 8. Oktober, vor den daraus folgenden Korrekturen, und nichts an Zuschauermodus, Ausfahrten, Scrolltempo, Mausbelegung oder Bautasten ist abgenommen; „die Suite besteht“ heißt nicht, dass jedes Gefecht identisch ist: 2 von 16 Paarungen auf ausgelieferten Karten enden bei 60 Hz in einem anderen Bild, 33 von 320 Gefechten der Erhebung enden mehr als eine Sekunde neben dem 30-Hz-Gefecht, und 120 Hz ist dort nicht gemessen; die Gleichheit ganzer KI-Gefechte beruht auf einem Selbsterwerb je Originalbild der Einheit, dessen Bestätigung beim Projektinhaber liegt; mit den 60-Hz-Manifesten sind der Linux-Lauf und die Determinismus-Matrix nicht gemessen; ein bei 30 Hz geschriebener Spielstand lädt nur mit `--tick-rate 30`; elf offene Entscheidungen des Projektinhabers stehen in `docs/MULTIPLAYER-PLAN.md` §7a. Nächster Schritt: Phase 24 (`docs/HANDOFF-PHASE24.md`).
 
 **Planänderung vom 5. Oktober 2026:** Nach `docs/HANDOFF-PHASE17.md` folgt Schritt 10 (Tickrate, Festkomma, Mehrspieler; `docs/MULTIPLAYER-PLAN.md`, `docs/HANDOFF-PHASE18.md` bis `docs/HANDOFF-PHASE29.md`), danach Schritt 11 (`docs/HANDOFF-PHASE30.md`). Die Aufträge 18 bis 30 existieren bereits; jede Phase schreibt am Ende die „Ausgangslage“ des nächsten Auftrags fort, statt ihn neu zu schreiben.
