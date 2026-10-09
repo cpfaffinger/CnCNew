@@ -47,6 +47,8 @@ fremden Mission wird abgewiesen. `ResumeCurrentMission(state)` setzt einen gespe
 
 ### `MissionSnapshot` (Simulation, Version 2)
 
+*Die Überschrift nennt die Version der Phase 10; aktuell ist Version **3** (seit Phase 22, Festkomma Q39.24). Phase 23 hat keine Version erhöht.*
+
 UTF-8-JSON, feste Schlüsselreihenfolge, nur Ganzzahlen, keine Pfade/Zeitstempel. Felder: `format` (`cncnew-mission-state`), `version`,
 `tickRate`, `programFingerprint` (strukturelle Prüfsumme des Kartenskripts), `definitionFingerprint`, `terrainFingerprint`, `options`
 (Seed, Schwierigkeit, Tick-Limit, Präsentationslatenz, Gefechtsintervall, Missionsversuche, seit Version 2 `humanSideName`), `stateHash` (Welt + Skript), `session`
@@ -83,6 +85,11 @@ enthält). Seit Version 2 steht `tickRate` (Ticks je Sekunde: 30, 60 oder 120) d
   weist sie mit „Unsupported savegame version 1 (this game reads version 3)“ ab, in der Ladeliste erscheint der Slot mit diesem Grund. Es gibt keine
   Umwandlung alter Spielstände (binäre Kompatibilität zu alten Savegames ist nicht im Scope).
 - **Die Rate wird vor dem Fingerabdruck geprüft**, damit die Meldung die Ursache nennt. Ein Spielstand von 60 Hz lädt nur in einer Sitzung mit 60 Hz.
+- **Seit der Umstellung des Standards auf 60 Hz (Phase 23, `e8632bb`, 8. Oktober 2026) lehnt der Client ohne Option einen bei 30 Hz geschriebenen Spielstand ab** („This savegame was written at 30 Hz;
+  this session runs at 60 Hz. It cannot be loaded.“). Er lädt nur in einer Sitzung mit 30 Hz – Client mit `--tick-rate 30` – und läuft dort mit 30 Hz weiter. Die Shell bietet keine Wahl der Rate
+  und lädt einen Stand nicht mit dessen Rate nach; es gibt keine Umwandlung. Kein Byte des Formats hat sich geändert, keine Version wurde erhöht (`SaveGame` 3, `MissionSnapshot` 3,
+  `WorldSnapshot` 10); nach `docs/MULTIPLAYER-PLAN.md` §6 Regel 7 ist das vor der ersten Veröffentlichung zulässig und hier als Grenze benannt. Tests mit einer bei 30 Hz geschriebenen Fixture:
+  `Tests.TickRateStatesWrittenAtThirtyOutliveTheDefault` (Simulation) und `CampaignTests` „Savegame: the header carries the tick rate …“ (`docs/TICKRATE-MIGRATION.md` §15.5.3).
 - **Kopf und Zustand müssen übereinstimmen:** nach dem Wiederherstellen werden Tick und Rate des Kopfs mit der Welt verglichen (der eingebettete
   `MissionSnapshot` trägt seine Rate selbst); ein Kopf mit gefälschter Rate oder falschem Tick wird abgewiesen.
 - **Listen zeigen Spielzeit statt des Ticks:** `SaveGameHeader.GameTime` (`m:ss`, ganze Sekunden aus Tick und Rate, Minuten laufen über 59 hinaus) –
@@ -124,6 +131,9 @@ dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough .local/
 `game time (m:ss at 30 Hz): victory after 0:26, defeat after 0:07` und am Schluss `Budget: N ticks are m:ss of game time (m:ss) at 30 Hz.`; `playthrough`
 nennt die Spielzeit in Klammern hinter dem Tick. Die Kartenzeilen selbst (`victory REACHED … @Tick`, `win@Tick`, `lose@Tick`) und die Summenzeilen
 („… identical on a second run …“) sind Byte für Byte unverändert, weil sie ausgewertet werden; Ticks bleiben Ticks der gewählten Rate (`--tick-rate N`).
+**Seit Phase 23** laufen `CampaignTool` und `SimTool` ohne `--tick-rate` mit 60 Hz (die Zeilen nennen dann „at 60 Hz“, und ein Tick ist 1/60 s); die Standardbudgets sind Spielzeit
+(`drive` 2.000 s, `audit` 60 s, `playthrough` 30 s; `--seconds`/`--minutes`, `--ticks` bleibt als Rohangabe). Tickzahlen in diesem Dokument (`--ticks 900`, „1.500 Ticks“, „330–360 Ticks“) sind
+historisch und bei 30 Hz gemessen. Was die Kampagnenwerkzeuge bei 30, 60 und 120 Hz ergeben: `docs/SCRIPT-ENGINE.md` §9, letzter Unterabschnitt.
 
 `audit`: jede eindeutige Kampagnenkarte – zwei frische Läufe, Speichern/Wiederherstellen, Endproben Sieg/Niederlage, danach die
 Aggregation der fehlenden Aktions-/Bedingungstypen, nicht auflösbarer Verweise und nicht erzeugbarer Objekttypen; Exitcode ≠ 0 bei
