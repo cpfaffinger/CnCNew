@@ -120,8 +120,21 @@ public sealed class GameData
         var table = files.StringFormat == StringTableFormat.Csf
             ? StringTable.FromCsf(CsfReader.Read(stream), files.StringFile)
             : StrReader.Read(stream, files.StringFile);
+        if (content.Exists(PatchStringFile))
+        {
+            using var patch = content.OpenRead(PatchStringFile);
+            // The language's own table comes first: a label both define keeps its text there and is listed in Duplicates.
+            table = new StringTable(table.Source, table.Format, table.Entries.Concat(StrReader.Read(patch, PatchStringFile).Entries));
+        }
         return new LocalizedText(table);
     }
+
+    /// <summary>
+    /// The string file the retail installation carries beside its patched layouts (<c>PatchWindow.big</c>): the patched <c>MainMenu.wnd</c> names the label
+    /// <c>GUI:CustomMission</c>, which only this file defines, not the language's <c>generals.csf</c>. The published source of the original does not read the file
+    /// (<c>GameTextManager::init</c> opens the CSF or <c>Generals.str</c> only), so that the retail executable does is inferred from the data, not shown.
+    /// </summary>
+    public const string PatchStringFile = "Data/Patch.str";
 }
 
 public sealed class ContentDefinitionSource(ContentFileSystem content) : IDefinitionSource
