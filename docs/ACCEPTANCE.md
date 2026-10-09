@@ -367,7 +367,7 @@ creates the object list and fires the weapon of the phase – at the beginning (
 | `acceptance.ps1 -Item WORLD-04 -Capture`, `-Capture -All` | 0.4 min; 38 scenes in 36.5 min on this machine, exit code 0, every scene audit on the page green |
 | windowed: `--loop` restarts a scene (seen twice in the log), `--caption` drawn (capture) | passed |
 | `acceptance.ps1 -Compare -SideBySide` with two windows | passed: two client windows of 960x540 ran at once, were placed side by side (60 Hz at 0,40, 30 Hz at 976,40), and the verdict was recorded after both were closed; the two windows load independently and are not started in step |
-| `scripts/audit-publish.ps1 -ContentDir <content>` | run on the branch after the last code commit: see the commit that follows this document |
+| `scripts/audit-publish.ps1 -ContentDir <content>` | at `73ebdff`: 5,084 blobs in the history, 0 equal to a game file, 0 binary; one path with a verbatim game line of 60 characters or more, older than this package (`tests/CnCNew.Simulation.Tests/Tests.BattlePlan.cs`, one `key = value` line) |
 
 `SimTool input-manifest check` and `reference-manifest check` were not run: no commit of this package touches `src/CnCNew.Simulation` or `src/CnCNew.Data`.
 
