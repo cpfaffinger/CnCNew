@@ -14,6 +14,7 @@ using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Skirmish;
+using CnCNew.Simulation.Skirmish.Original;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
@@ -185,6 +186,80 @@ internal static class PerfCommand
         PrintSummary(summary);
         WriteJson(common, json);
         return failed ? 1 : 0;
+    }
+
+    // ------------------------------------------------------------------------------------- skirmish, original AI
+
+    /// <summary>
+    /// <c>perf ... --ai original|builtin [--difficulty ..] [--ai-b ..] [--difficulty-b ..]</c>: the same measurement for a match in a <see cref="ScriptedSkirmishSession"/>
+    /// (docs/SKIRMISH-AI-ORIGINAL.md). Scripts and the AI run in the phases <see cref="TickPhase.MissionScripts"/> and <see cref="TickPhase.MissionEvents"/>; <c>--script-detail</c> adds
+    /// the sections of the script engine and its condition and action types. The final hash is the session's.
+    /// </summary>
+    public static int OriginalSkirmish(string[] args)
+    {
+        CultureInfo.CurrentCulture = Invariant;
+        var common = Common.Parse(args);
+        var hardware = HardwareLine();
+        Console.WriteLine("Hardware: " + hardware);
+        var setup = Stopwatch.StartNew();
+        var context = SimContext.Load(common.Directory, ToolRate.Current);
+        var (map, terrain, library) = OriginalAi.Load(context, common.MapPath);
+        var everyone = ReferenceMatchScenario.Participants(context.Catalog, out _);
+        var factions = Arg(args, "--factions")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                       ?? [..everyone.Take(int.Parse(Arg(args, "--players") ?? "2", Invariant)).Select(value => value.Faction.Name)];
+        var slots = OriginalAi.Slots(context, factions, args);
+        var seed = Arg(args, "--seed") is { } text ? uint.Parse(text, Invariant) : ScriptedSkirmishOptions.Standard.Seed;
+        Console.WriteLine($"Perf on {common.MapPath} ({terrain.CellsX}x{terrain.CellsY} cells, {terrain.StartPositions.Length} start positions, terrain {terrain.Fingerprint[..16]}), definitions {context.Fingerprint[..16]}; {slots.Length} computer players in a scripted skirmish: {string.Join(", ", slots.Select(OriginalAi.Describe))}.");
+        Console.WriteLine($"Setup (definitions, model geometry, map, script library): {setup.Elapsed.TotalSeconds:F1} s. Budget {common.Ticks} ticks; observer {(common.Observe ? "attached" : "ABSENT (--no-observer): only the whole tick is timed")}; per-module timing {(common.Observe && common.Modules ? "on" : "off")}.");
+
+        var session = OriginalAi.Start(context, map, terrain, library, slots, seed, common.Ticks, args.Contains("--all-map-objects"));
+        var world = session.World;
+        var recorder = new TickRecorder(world, common.Modules) { VisionProbe = common.VisionProbe, PrefixProbe = args.Contains("--prefix-probe") };
+        if (common.Observe) world.PhaseObserver = recorder;
+        var scriptRecorder = args.Contains("--script-detail") ? new ScriptRecorder() : null;
+        session.Engine.Observer = scriptRecorder;
+        var gcBefore = GcCounts();
+        var wall = Stopwatch.StartNew();
+        var chain = StateHash.Seed;
+        while (!session.IsOver)
+        {
+            var allocated = GC.GetAllocatedBytesForCurrentThread();
+            var start = Stopwatch.GetTimestamp();
+            var result = session.Step();
+            var elapsed = Stopwatch.GetTimestamp() - start;
+            recorder.Commit(result.Tick, elapsed, GC.GetAllocatedBytesForCurrentThread() - allocated, world.Entities.Count);
+            chain = StateHash.Mix(chain, result.StateHash);
+        }
+        wall.Stop();
+        var gcAfter = GcCounts();
+        world.PhaseObserver = null;
+        session.Engine.Observer = null;
+        var finalHash = session.StateHash();
+        var summary = new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["kind"] = "skirmish-original", ["map"] = common.MapPath, ["cells"] = $"{terrain.CellsX}x{terrain.CellsY}", ["players"] = slots.Length.ToString(Invariant),
+        };
+        Console.WriteLine(session.Winner is null
+            ? $"Match: {recorder.Count} ticks in {wall.Elapsed.TotalSeconds:F1} s wall time, no winner (tick budget); scripts executed {session.Engine.ExecutedScripts}, actions {session.Engine.ExecutedActions}."
+            : $"Match: {recorder.Count} ticks in {wall.Elapsed.TotalSeconds:F1} s wall time, winner player {session.Winner.Value.Value} at tick {session.VictoryTick}; scripts executed {session.Engine.ExecutedScripts}, actions {session.Engine.ExecutedActions}.");
+        var json = PerfSummary.Create("perf-original", common.Label, hardware, common.Parameters().Add("factions", string.Join(",", factions)).Add("seed", seed)
+            .Add("slots", string.Join(",", slots.Select(OriginalAi.Describe))));
+        Report(recorder, common, summary, json, gcBefore, gcAfter, [TickPhase.MissionScripts, TickPhase.MissionEvents, TickPhase.SkirmishAi, TickPhase.SkirmishVictory], []);
+        scriptRecorder?.Report(recorder.Count, common.Top, summary);
+        var missing = session.Engine.MissingActionHits.Values.Sum() + session.Engine.MissingConditionHits.Values.Sum();
+        Console.WriteLine($"Script types without implementation hit at run time: {missing}.");
+        var results = new ManifestObject().Add("ticks", recorder.Count).Add("finalHash", finalHash.ToString("X16")).Add("chainHash", chain.ToString("X16"))
+            .Add("winner", session.Winner is { } winner ? winner.Value : 0L).Add("victoryTick", session.Winner is null ? -1L : session.VictoryTick).Add("missingScriptTypeHits", missing);
+        json.Add("results", results);
+        Console.WriteLine($"Final session hash {finalHash:X16}, world hash chain {chain:X16} (must equal the same run without the observer).");
+        summary["hash"] = finalHash.ToString("X16");
+        summary["chain"] = chain.ToString("X16");
+        Console.WriteLine();
+        results.Add("incrementalEqualsFull", CheckIncrementalHash(world, summary));
+        Extrapolate(recorder, null, summary);
+        PrintSummary(summary);
+        WriteJson(common, json);
+        return missing == 0 ? 0 : 1;
     }
 
     // -------------------------------------------------------------------------------------------------- mission

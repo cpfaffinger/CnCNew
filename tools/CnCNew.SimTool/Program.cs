@@ -122,6 +122,7 @@ try
         "skirmish-sweep" when args.Length >= 2 => SkirmishSweep(args[1], args),
         "unit-audit" when args.Length >= 2 => UnitAudit(args[1], args),
         "mission-run" when args.Length >= 2 => MissionRun(args[1], args),
+        "perf" when args.Length >= 2 && CnCNew.SimTool.OriginalAi.Requested(args) => CnCNew.SimTool.PerfCommand.OriginalSkirmish(args),
         "perf" when args.Length >= 2 => CnCNew.SimTool.PerfCommand.Skirmish(args, CompileShipped),
         "perf-mission" when args.Length >= 2 => CnCNew.SimTool.PerfCommand.Mission(args, CompileShipped),
         "perf-compare" => CnCNew.SimTool.PerfCompareCommand.Run(args),

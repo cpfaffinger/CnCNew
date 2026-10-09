@@ -97,7 +97,7 @@ internal static class OriginalAi
         return ScriptedSkirmishSession.Start(options, context.Catalog, context.Fingerprint, terrain, map, library, data, slots);
     }
 
-    private static string Describe(ScriptedSkirmishSlot slot)
+    internal static string Describe(ScriptedSkirmishSlot slot)
         => slot.Kind == SkirmishAiKind.Builtin ? "builtin" : "original/" + slot.Difficulty.ToString().ToLowerInvariant();
 
     /// <summary>The line the surveys write for one match played in a <see cref="ScriptedSkirmishSession"/>.</summary>

@@ -17,6 +17,8 @@ public enum ScriptSection
     TeamQueues,
     /// <summary>Capture orders, pending structures, traps and bridge states.</summary>
     WorldOrders,
+    /// <summary>The players of the original skirmish AI (<c>Player::update</c>): base and team building, skills, the generic scripts of their teams. Runs between the scripts and the followers.</summary>
+    AiPlayers,
 }
 
 /// <summary>
