@@ -1,590 +1,590 @@
-# In-Match-HUD und Steueroberfläche des menschlichen Spielers (Paket G2)
+# In-match HUD and control surface of the human player (package G2)
 
-Dieses Dokument beschreibt `src/CnCNew.Game/Hud/**`: die Stride-freie, headless testbare Schicht, die für den menschlichen Spieler
-das gesamte Steuer- und Anzeigeflächenmodell eines laufenden `LiveMatch` bereitstellt. `MatchController` besitzt den
-`GameInputController` (Paket C3, `CnCNew.Presentation.Input`) und die aus den Original-Layouts gebundene Control-Bar-HUD, wandelt
-`InputEvent`s ausschließlich über `LiveMatch.Commands` in Simulationsbefehle um (damit `SkirmishMatchSession.ToReplay()` alles
-reproduziert, was der Spieler getan hat) und liefert pro Frame eine `UiDrawList` (Paket B, `CnCNew.Ui.Runtime`) sowie
-bildschirmraumbezogene Overlay-Daten. Kein Stride-Typ kommt vor; die gesamte Klasse läuft headless in Tests.
+This document describes `src/CnCNew.Game/Hud/**`: the Stride-free, headless testable layer that provides for the human player
+the whole control and display surface model of a running `LiveMatch`. `MatchController` owns the
+`GameInputController` (package C3, `CnCNew.Presentation.Input`) and the control bar HUD bound from the original layouts, converts
+`InputEvent`s into simulation commands exclusively through `LiveMatch.Commands` (so that `SkirmishMatchSession.ToReplay()` reproduces
+everything the player has done) and delivers per frame a `UiDrawList` (package B, `CnCNew.Ui.Runtime`) as well as
+screen-space overlay data. No Stride type occurs; the whole class runs headless in tests.
 
-## 1. Aufrufreihenfolge
+## 1. Call order
 
-Pro gerendertem Frame:
+Per rendered frame:
 
-1. `controller.Process(inputEvent)` für jedes anstehende Geräteereignis (Maus, Tastatur, Fokusverlust).
-2. `liveMatch.Advance(deltaSeconds)` (Paket-C-Vertrag, unverändert außer den unten beschriebenen additiven Erweiterungen).
-3. `controller.Update(deltaSeconds)` – wendet die Kameraabsicht an, baut `CommandBar`/`Hud` neu, aktualisiert die Meldungsliste und das
+1. `controller.Process(inputEvent)` for every pending device event (mouse, keyboard, loss of focus).
+2. `liveMatch.Advance(deltaSeconds)` (package C contract, unchanged except for the additive extensions described below).
+3. `controller.Update(deltaSeconds)` – applies the camera intent, rebuilds `CommandBar`/`Hud`, updates the message list and the
    `Overlay`.
-4. `controller.BuildDrawList(width, height)` – aktualisiert die Sichtbarkeit der dynamischen Fenster und liefert die fertige
-   `UiDrawList` inklusive der dynamischen Cameo-/Kostüm-/Abklingzeit-Overlays.
+4. `controller.BuildDrawList(width, height)` – updates the visibility of the dynamic windows and delivers the finished
+   `UiDrawList` including the dynamic cameo/costume/cooldown overlays.
 
-`MatchController.WindowRect(decoratedName)` gibt den aktuellen Bildschirmbereich eines benannten Fensters zurück (z. B.
-`"ControlBar.wnd:ButtonCommand01"`); ein Host kann damit ohne eigene Skalierungsrechnung Hit-Tests durchführen, und die Tests
-(`HudTests.cs`) klicken echte Schaltflächen darüber an.
+`MatchController.WindowRect(decoratedName)` returns the current screen area of a named window (e.g.
+`"ControlBar.wnd:ButtonCommand01"`); with it a host can do hit tests without a scaling calculation of its own, and the tests
+(`HudTests.cs`) click real buttons through it.
 
-## 2. Additive Erweiterungen an `LiveMatch.cs`
+## 2. Additive extensions to `LiveMatch.cs`
 
-`src/CnCNew.Game/Live/LiveMatch.cs` gehört Paket C4; G2 hat nur vier zusätzliche, rückwärtskompatible Mitglieder ergänzt:
+`src/CnCNew.Game/Live/LiveMatch.cs` belongs to package C4; G2 has added only four additional, backward-compatible members:
 
-* `ICommandSink Commands` – lazygebauter `SkirmishSessionCommandSink(Session, Human)`; der einzige Weg, wie diese Schicht die Welt
-  verändert.
-* `Action<SimulationWorld>? BeforeTick` – wird in `Advance`s Tick-Schleife unmittelbar **vor** `Session.Step()` aufgerufen.
-  `MatchController` hängt hier `Input.Tick(world)` ein (Selektion bereinigen, stehende Befehle nachführen), wie es der Vertrag von
-  `GameInputController.Tick` verlangt.
-* `event Action<TickResult>? TickStepped` – nach jedem Tick mit dem Ergebnis (Zustandshash, Ereignisse). `MatchController` speist
-  hierüber `MatchStatsTracker` und die Meldungsliste.
+* `ICommandSink Commands` – lazily built `SkirmishSessionCommandSink(Session, Human)`; the only way in which this layer changes
+  the world.
+* `Action<SimulationWorld>? BeforeTick` – is called in `Advance`'s tick loop immediately **before** `Session.Step()`.
+  `MatchController` hooks `Input.Tick(world)` in here (clean up the selection, track standing orders), as the contract of
+  `GameInputController.Tick` requires.
+* `event Action<TickResult>? TickStepped` – after every tick with the result (state hash, events). Through this `MatchController` feeds
+  `MatchStatsTracker` and the message list.
 
-Keines der drei Felder wird von `LiveMatch` selbst aufgerufen, wenn niemand zuhört; das Verhalten ohne `MatchController` ist
-unverändert (siehe `LiveMatchTests.cs`, weiterhin grün).
+None of the three fields is called by `LiveMatch` itself if nobody listens; the behaviour without `MatchController` is
+unchanged (see `LiveMatchTests.cs`, still green).
 
-## 3. Dateien
+## 3. Files
 
-| Datei | Inhalt |
+| File | Content |
 |---|---|
-| `MatchController.cs` | Öffentliche API: `Process`, `Update`, `BuildDrawList`, `WindowRect`, Ereignisse `UiRequest`/`MenuActionRequested`/`MatchEnded`, öffentliche Zustände `CommandBar`/`Hud`/`Overlay`/`IsMenuOpen`. |
-| `HudAssets.cs` | Lädt einmalig `Window/ControlBar.wnd`, `Window/Menus/QuitMenu.wnd`, `Data/<Sprache>/HeaderTemplate.ini`, `Data/INI/ControlBarScheme.ini` und die `LocalizedText`/`MappedImageTable`-Adapter. |
-| `ControlBarScheme.cs` | Eigenständiger, kleiner Parser für `ControlBarScheme.ini` (keine `=`/`;`-Grammatik, siehe unten). |
-| `HudTextAdapters.cs` | `MonospaceTextMeasure` (deterministisches Ersatzmaß für Headless-Tests/Renderer ohne echte Glyphenmetrik), `MappedImageLookup`, `LocalizedTextSource`. |
-| `Overlays.cs` | Bildschirmraum-Records: `SelectionBoxOverlay`, `UnitMarker`, `RallyPointMarker`, `OrderLine`, `PlacementGhostOverlay`, `HudOverlay`. |
-| `MatchResult.cs` | `PlayerMatchStats`, `MatchResult`, `MatchStatsTracker` (siehe Abschnitt 7). |
+| `MatchController.cs` | Public API: `Process`, `Update`, `BuildDrawList`, `WindowRect`, events `UiRequest`/`MenuActionRequested`/`MatchEnded`, public states `CommandBar`/`Hud`/`Overlay`/`IsMenuOpen`. |
+| `HudAssets.cs` | Loads once `Window/ControlBar.wnd`, `Window/Menus/QuitMenu.wnd`, `Data/<language>/HeaderTemplate.ini`, `Data/INI/ControlBarScheme.ini` and the `LocalizedText`/`MappedImageTable` adapters. |
+| `ControlBarScheme.cs` | Standalone, small parser for `ControlBarScheme.ini` (no `=`/`;` grammar, see below). |
+| `HudTextAdapters.cs` | `MonospaceTextMeasure` (deterministic substitute measure for headless tests/renderers without real glyph metrics), `MappedImageLookup`, `LocalizedTextSource`. |
+| `Overlays.cs` | Screen-space records: `SelectionBoxOverlay`, `UnitMarker`, `RallyPointMarker`, `OrderLine`, `PlacementGhostOverlay`, `HudOverlay`. |
+| `MatchResult.cs` | `PlayerMatchStats`, `MatchResult`, `MatchStatsTracker` (see section 7). |
 
-## 4. HUD-Bindung: `ControlBar.wnd` und `QuitMenu.wnd`
+## 4. HUD binding: `ControlBar.wnd` and `QuitMenu.wnd`
 
-`MatchController` baut einen `UiWindowTree` mit `UiScaleMode.Anchor` (aus `GameSettings.Display.UiScale` abgeleitet: `Stretch`→
-`Stretch`, `Uniform`→`Anchor`, `IntegerMultiple`→`Uniform`) und lädt beide Original-Layouts hinein. `ControlBarParent` deckt nur den
-unteren Streifen ab (`0,740`–`1920,1080` in 1920×1080-Erstellungsraum) und wird von `UiScaler` deshalb als eigene Ankergruppe
-klassifiziert: X wird gestreckt, Y am unteren Rand verankert, eine gemeinsame gleichförmige Skala für beide Achsen. Dieselbe
-Transformation gilt für jedes Kindfenster der Datei (gleiche Erstellungsgröße, gleiche Gruppe), weshalb `MatchController`
-`ControlBarParent.Transform` auch für die aus `ControlBarScheme.ini` gelesenen Geld-/Energie-Rechtecke wiederverwendet
-(`Transform.Map(new WndScreenRect(...))`), statt eine eigene Skalierung zu rechnen.
+`MatchController` builds a `UiWindowTree` with `UiScaleMode.Anchor` (derived from `GameSettings.Display.UiScale`: `Stretch`→
+`Stretch`, `Uniform`→`Anchor`, `IntegerMultiple`→`Uniform`) and loads both original layouts into it. `ControlBarParent` covers only the
+lower strip (`0,740`–`1920,1080` in 1920×1080 creation space) and is therefore classified by `UiScaler` as an anchor group of its
+own: X is stretched, Y anchored at the lower edge, one common uniform scale for both axes. The same
+transformation applies to every child window of the file (same creation size, same group), which is why `MatchController`
+reuses `ControlBarParent.Transform` also for the money/power rectangles read from `ControlBarScheme.ini`
+(`Transform.Map(new WndScreenRect(...))`) instead of computing a scaling of its own.
 
-`QuitMenu.wnd` wird mitgeladen und sofort versteckt (`QuitMenuParent.SetHidden(true)`); `MetaAction.Options` (Esc, siehe
-`GameInputController.DispatchMeta`) wird von `MatchController` selbst abgefangen (nicht über `UiRequest` durchgereicht) und
-öffnet/schließt das Menü, wobei `LiveMatch.Paused` gesetzt/zurückgesetzt wird. Ein Klick auf `ButtonReturn` schließt es ebenfalls
-(`MenuActionRequested(MenuAction.Resume)`); die übrigen vier Knöpfe (`ButtonSaveLoad`, `ButtonOptions`, `ButtonRestart`,
-`ButtonExit`) lösen `MenuActionRequested` mit dem passenden Wert aus – ihre Umsetzung (Speichern/Laden, Optionsmenü, Neustart,
-Beenden) liegt beim Shell/Host (Paket G1), nicht bei G2.
+`QuitMenu.wnd` is loaded along with it and hidden immediately (`QuitMenuParent.SetHidden(true)`); `MetaAction.Options` (Esc, see
+`GameInputController.DispatchMeta`) is intercepted by `MatchController` itself (not passed on through `UiRequest`) and
+opens/closes the menu, with `LiveMatch.Paused` being set/reset. A click on `ButtonReturn` closes it as well
+(`MenuActionRequested(MenuAction.Resume)`); the other four buttons (`ButtonSaveLoad`, `ButtonOptions`, `ButtonRestart`,
+`ButtonExit`) raise `MenuActionRequested` with the matching value – their implementation (save/load, options menu, restart,
+quit) lies with the shell/host (package G1), not with G2.
 
-Die beiden `ObserverPlayerInfoWindow`/`ObserverPlayerListWindow`-Fenster bleiben in der Originaldatei sichtbar; da dieses Paket
-nur den menschlichen Spieler bedient, werden sie beim Aufbau fest versteckt.
+The two `ObserverPlayerInfoWindow`/`ObserverPlayerListWindow` windows stay visible in the original file; since this package
+serves only the human player, they are hidden firmly during construction.
 
-### 4.1 Eingaberouting: HUD gegen Spielwelt
+### 4.1 Input routing: HUD against game world
 
-Tastatur geht immer direkt an `GameInputController.Process` (die `UiWindowTree`-Tastaturpfade werden nicht benutzt; Hotkeys,
-Steuergruppen, Kameratasten usw. laufen vollständig über Paket C3). Einzige Ausnahme: Ist das Menü offen, wird nur `Escape`
-ausgewertet (schließt das Menü), alle anderen Tasten werden verschluckt, damit das pausierte Menü modal wirkt.
+The keyboard always goes directly to `GameInputController.Process` (the `UiWindowTree` keyboard paths are not used; hotkeys,
+control groups, camera keys etc. run entirely through package C3). The only exception: if the menu is open, only `Escape`
+is evaluated (closes the menu), all other keys are swallowed so that the paused menu acts modally.
 
-Für Mausereignisse entscheidet `MatchController` pro Tastendruck, ob die HUD oder das Spiel das Ereignis bekommt:
+For mouse events `MatchController` decides per button press whether the HUD or the game gets the event:
 
-* Liegt der Punkt innerhalb von `LeftHUD` (dem Minimap-Rahmen), behandelt `MatchController` ihn selbst (Abschnitt 6), unabhängig
-  vom Mausschema.
-* Ist das Menü offen, gehört jeder Klick der HUD (das Spiel darunter ist eingefroren).
-* Sonst entscheidet `UiWindowTree.InputTarget(x, y)`: Trifft der Klick ein sichtbares, aktiviertes Fenster (z. B. eine
-  Control-Bar-Schaltfläche), bekommt der Baum `MouseDown`/`MouseUp` und `Dispatch()`; sonst bekommt `GameInputController.Process`
-  das Ereignis. `MouseMove` geht immer zusätzlich an den Baum (für Hover/Tooltip-Zeitmessung), unabhängig vom Ergebnis.
+* If the point lies within `LeftHUD` (the minimap frame), `MatchController` handles it itself (section 6), independent
+  of the mouse scheme.
+* If the menu is open, every click belongs to the HUD (the game below is frozen).
+* Otherwise `UiWindowTree.InputTarget(x, y)` decides: if the click hits a visible, enabled window (e.g. a
+  control bar button), the tree gets `MouseDown`/`MouseUp` and `Dispatch()`; otherwise `GameInputController.Process` gets
+  the event. `MouseMove` always goes to the tree in addition (for hover/tooltip timing), independent of the result.
 
-Wichtig für Aufrufer (und für `HudTests.cs`): Welche Control-Bar-Fenster überhaupt sichtbar/aktiviert sind, wird ausschließlich in
-`BuildDrawList` aktualisiert (`RefreshDynamicWindows`), weil die Fensterzustände (`ButtonCommandNN` etc.) direkt aus
-`CommandBarView` gesetzt werden. Ein Klick auf eine Control-Bar-Schaltfläche funktioniert daher erst, nachdem `BuildDrawList`
-mindestens einmal nach der letzten Auswahländerung gelaufen ist.
+Important for callers (and for `HudTests.cs`): which control bar windows are visible/enabled at all is updated exclusively in
+`BuildDrawList` (`RefreshDynamicWindows`), because the window states (`ButtonCommandNN` etc.) are set directly from
+`CommandBarView`. A click on a control bar button therefore works only after `BuildDrawList`
+has run at least once after the last change of selection.
 
 ### 4.2 `ControlBarSystem`, `QuitMenuSystem`
 
-`ButtonCommandNN`, `ButtonQueueNN` und die übrigen Control-Bar-Knöpfe haben selbst `SYSTEMCALLBACK = "[None]"`; das Ereignis
-wandert (`PassSelectedButtonsToParentSystem`) bis zu `ControlBarParent.SYSTEMCALLBACK = "ControlBarSystem"` hoch, das
-`MatchController` als einzigen Handler registriert:
+`ButtonCommandNN`, `ButtonQueueNN` and the other control bar buttons themselves have `SYSTEMCALLBACK = "[None]"`; the event
+travels (`PassSelectedButtonsToParentSystem`) up to `ControlBarParent.SYSTEMCALLBACK = "ControlBarSystem"`, which
+`MatchController` registers as the only handler:
 
-| Fenstername | Wirkung |
+| Window name | Effect |
 |---|---|
-| `ButtonCommand01`…`14` | `CommandBarModel.Activate(world, view, slot, commands)` – Bau, Einheit, Verkauf, Spezialkraft usw. je nach `CommandButtonInfo.Kind`. |
+| `ButtonCommand01`…`14` | `CommandBarModel.Activate(world, view, slot, commands)` – construction, unit, sale, special power etc. depending on `CommandButtonInfo.Kind`. |
 | `ButtonQueue01`…`09` | `CommandModeController.CancelProduction(producer, index)`. |
 | `ButtonCancelConstruction` | `CommandModeController.CancelConstruction(producer)`. |
 | `ButtonIdleWorker` | `GameInputController.DispatchMeta(MetaAction.SelectNextIdleWorker, …)`. |
-| `ButtonOptions` | öffnet das Menü (wie Esc). |
-| `ButtonGeneral`, `ButtonPlaceBeacon`, `PopupCommunicator` | nicht umgesetzt (Generalspunkte-Popup, Leuchtfeuer, Chat – außerhalb des Auftragsumfangs); erzeugen eine eingeklammerte Meldungszeile „(not supported in this build: …)“ (`HudMessageFeed.ClientNote`), nie einen stillen Fehlschlag. |
+| `ButtonOptions` | opens the menu (like Esc). |
+| `ButtonGeneral`, `ButtonPlaceBeacon`, `PopupCommunicator` | not implemented (generals points popup, beacon, chat – outside the scope of the brief); produce a parenthesised message line "(not supported in this build: …)" (`HudMessageFeed.ClientNote`), never a silent failure. |
 
-`QuitMenuParent.SYSTEMCALLBACK = "QuitMenuSystem"` wird analog registriert (Abschnitt 4).
+`QuitMenuParent.SYSTEMCALLBACK = "QuitMenuSystem"` is registered analogously (section 4).
 
-## 5. Dynamischer HUD-Inhalt
+## 5. Dynamic HUD content
 
-Die vom `.wnd`-Baum selbst gezeichneten Elemente (Fensterhintergründe, Text laut `TEXT`/`TOOLTIPTEXT`) reichen nicht: Cameo-Bilder,
-Hotkey-Buchstaben, Kosten, Abklingzeit-/Baufortschrittsüberlagerungen sowie Geld/Energie existieren im Original nur durch
-`DRAWCALLBACK`s wie `W3DCommandBarBackgroundDraw`, `W3DLeftHUDDraw`, `W3DPowerDraw`, die dieses Projekt (noch) nicht implementiert.
-`UiWindowTree.BuildDrawList()` wandelt jeden unbekannten `DRAWCALLBACK` bereits in ein `UiCustomDraw(callback, window, rect)` um,
-die einem Renderer das komplette Zeichnen dieser Elemente überlässt.
+The elements drawn by the `.wnd` tree itself (window backgrounds, text according to `TEXT`/`TOOLTIPTEXT`) are not enough: cameo images,
+hotkey letters, costs, cooldown/build progress overlays as well as money/power exist in the original only through
+`DRAWCALLBACK`s such as `W3DCommandBarBackgroundDraw`, `W3DLeftHUDDraw`, `W3DPowerDraw`, which this project does not implement (yet).
+`UiWindowTree.BuildDrawList()` already converts every unknown `DRAWCALLBACK` into a `UiCustomDraw(callback, window, rect)`,
+which leaves the complete drawing of these elements to a renderer.
 
-`MatchController.BuildDrawList` nutzt diesen Mechanismus für die 3D-Ansicht und die Minimap unverändert:
+`MatchController.BuildDrawList` uses this mechanism unchanged for the 3D view and the minimap:
 
-* `W3DLeftHUDDraw` (aus der Originaldatei, für das `LeftHUD`-Fenster) ist der Minimap-Rahmen; ein Renderer zeichnet
-  `LiveMatch.Minimap` (per `MinimapImage.Compose`) achsenerhaltend hineinskaliert (siehe `TryMinimapWorld`, Abschnitt 6, für die
-  exakt gleiche Rechenregel, mit der `MatchController` Klicks zurückrechnet).
-* `Viewport3D` ist **kein** Originalname, sondern eine eigene Ergänzung dieses Pakets: ein `UiCustomDraw("Viewport3D", "Viewport",
-  rect)`, dessen Rechteck den gesamten Bereich oberhalb der Control-Bar abdeckt (`0,0` bis `Breite, ControlBarParent.Rect.Y`), damit
-  ein Host weiß, wohin die 3D-Szene gerendert werden soll, ohne die Control-Bar-Geometrie selbst nachzurechnen.
+* `W3DLeftHUDDraw` (from the original file, for the `LeftHUD` window) is the minimap frame; a renderer draws
+  `LiveMatch.Minimap` (through `MinimapImage.Compose`) scaled into it preserving the axes (see `TryMinimapWorld`, section 6, for the
+  exactly identical computation rule with which `MatchController` computes clicks back).
+* `Viewport3D` is **not** an original name, but an addition of this package: a `UiCustomDraw("Viewport3D", "Viewport",
+  rect)` whose rectangle covers the whole area above the control bar (`0,0` to `width, ControlBarParent.Rect.Y`), so that
+  a host knows where the 3D scene is to be rendered without recomputing the control bar geometry itself.
 
-Für alles andere ergänzt `MatchController` die vom Baum gelieferte `UiDrawList` um zusätzliche Befehle (`BuildDynamicCommands`),
-bevor sie zurückgegeben wird:
+For everything else `MatchController` supplements the `UiDrawList` delivered by the tree with additional commands (`BuildDynamicCommands`)
+before it is returned:
 
-* **Cameo:** `UiImageDraw(button.ButtonImage, slotRect, …)`, sofern das benannte Bild in `GameData.Images` existiert (fehlt es,
-  wird nichts gezeichnet – kein Platzhalter, kein Absturz; das Original hätte hier ebenfalls kein Bild).
-* **Kein Text auf den Symbolen.** Das Original druckt weder Hotkeybuchstaben noch Kosten auf die Befehlssymbole (`ControlBar::setControlCommand` leert den
-  Knopftext, Name, Kosten und Hotkey stehen in der Beschreibung); der Client hat sie früher aufgedruckt und ist davon abgekommen (Phase 16, `docs/TEXT-AUDIT.md`).
-  Stattdessen gibt es **Tooltips** (Abschnitt 5a).
-* **Abklingzeit/Nachladen:** ein halbtransparentes Rechteck, das von oben in den Knopf hineinwischt (`ButtonAvailability.NotReady`,
-  `ReadyFraction`); dieselbe Wischlogik für den ersten Warteschlangeneintrag (`QueueEntry.Progress`).
-* **Warteschlangen-Cameo** je sichtbarem `ButtonQueueNN`.
-* **Geld/Energie:** das Fenster `ControlBar.wnd:MoneyDisplay` trägt den Text `GUI:ControlBarMoneyDisplay` (`$ %d`) mit dem Geld des lokalen Spielers
-  (`InGameUI::update`) und liegt am Geldrechteck des Schemas (`MoneyUL/LR`, `ControlBarScheme`; `UiWindow.SetScreenRect`); die Layoutdatei hat dort nur den
-  Platzhalter „$$$“ in einem 100x100-Rechteck oben links, den der Client früher so zeigte. Der Energiebalken ist ein gefüllter Balken am Rechteck
-  `PowerBarUL/LR`, projiziert über `ControlBarParent.Transform` (Abschnitt 4). Der Energiebalken ist proportional zu
-  `Produktion / Verbrauch` (auf `[0,1]` begrenzt) statt eines festen Balkens, was dem Original nahekommt, ohne dessen exakte
-  Balkengrafik zu benötigen.
+* **Cameo:** `UiImageDraw(button.ButtonImage, slotRect, …)`, provided the named image exists in `GameData.Images` (if it is missing,
+  nothing is drawn – no placeholder, no crash; the original would have had no image here either).
+* **No text on the icons.** The original prints neither hotkey letters nor costs onto the command icons (`ControlBar::setControlCommand` empties the
+  button text, name, cost and hotkey are in the description); the client used to print them and has abandoned that (Phase 16, `docs/TEXT-AUDIT.md`).
+  Instead there are **tooltips** (section 5a).
+* **Cooldown/reload:** a semi-transparent rectangle that wipes into the button from the top (`ButtonAvailability.NotReady`,
+  `ReadyFraction`); the same wipe logic for the first queue entry (`QueueEntry.Progress`).
+* **Queue cameo** per visible `ButtonQueueNN`.
+* **Money/power:** the window `ControlBar.wnd:MoneyDisplay` carries the text `GUI:ControlBarMoneyDisplay` (`$ %d`) with the money of the local player
+  (`InGameUI::update`) and lies at the money rectangle of the scheme (`MoneyUL/LR`, `ControlBarScheme`; `UiWindow.SetScreenRect`); the layout file has there only the
+  placeholder "$$$" in a 100x100 rectangle at the top left, which the client used to show that way. The power bar is a filled bar at the rectangle
+  `PowerBarUL/LR`, projected through `ControlBarParent.Transform` (section 4). The power bar is proportional to
+  `production / consumption` (clamped to `[0,1]`) instead of a fixed bar, which comes close to the original without needing its exact
+  bar artwork.
 
 ### 5a. Tooltips (Phase 16)
 
-`MatchController` und `GameShell` hängen den Zeigertooltip des Fensters unter dem Zeiger an die Zeichenliste (`TooltipPainter`, `UiTooltipLayout`;
-`Mouse::drawTooltip` in Mouse.cpp): Kasten 20 Pixel rechts vom Zeiger (links bzw. über dem Zeiger am Bildrand), Umbruch bei `TooltipWidth` Prozent der
-Bildbreite, Text von links über `TooltipFillTime` eingeblendet (Hervorhebungsfarbe auf den vorderen 15 Pixeln), Stil aus dem `Mouse`-Block von `Mouse.ini`,
-Schrift `TooltipFontName` aus `Language.ini` (Arial 8) mit Auflösungsanpassung. Er erscheint, wenn der Zeiger `TOOLTIPDELAY` (sonst 800 ms) still
-über dem Fenster stand, und verschwindet bei jeder Bewegung.
+`MatchController` and `GameShell` attach the pointer tooltip of the window under the pointer to the draw list (`TooltipPainter`, `UiTooltipLayout`;
+`Mouse::drawTooltip` in Mouse.cpp): box 20 pixels to the right of the pointer (to the left of or above the pointer at the screen edge), wrap at `TooltipWidth` percent of the
+screen width, text faded in from the left over `TooltipFillTime` (highlight color on the leading 15 pixels), style from the `Mouse` block of `Mouse.ini`,
+font `TooltipFontName` from `Language.ini` (Arial 8) with resolution adjustment. It appears when the pointer has stood still over the window for `TOOLTIPDELAY` (otherwise 800 ms),
+and disappears on every movement.
 
-**Beschreibung der Befehlsknöpfe** (`CommandButtonDescription`, nach `ControlBar::populateBuildTooltipLayout` in ControlBarPopupDescription.cpp und
-`ProductionPrerequisite::getRequiresList`): die drei Texte des Originalpopups – Name (`TextLabel`, ohne `&`), Kosten (`TOOLTIP:Cost`, nur wenn > 0), Beschreibung (`DescriptLabel`) – als
-Zeilen des Zeigertooltips (`TOOLTIPDELAY = 1`). An die Beschreibung hängt das Original, und jetzt auch der Client:
+**Description of the command buttons** (`CommandButtonDescription`, after `ControlBar::populateBuildTooltipLayout` in ControlBarPopupDescription.cpp and
+`ProductionPrerequisite::getRequiresList`): the three texts of the original popup – name (`TextLabel`, without `&`), cost (`TOOLTIP:Cost`, only if > 0), description (`DescriptLabel`) – as
+lines of the pointer tooltip (`TOOLTIPDELAY = 1`). The original appends to the description, and now the client does too:
 
-| Fall | Text | Regel |
+| Case | Text | Rule |
 |---|---|---|
-| Einheit/Gebäude, zu wenig Geld | Leerzeile, `TOOLTIP:TooltipNotEnoughMoneyToBuild` („Insufficient funds“) | `canMakeUnit` = `CANMAKE_NO_MONEY`; nur mit Beschreibungslabel und ausgewähltem Objekt |
-| Einheit/Gebäude oder Upgrade, Warteschlange voll | Leerzeile, `TOOLTIP:TooltipCannotPurchaseBecauseQueueFull` | `CANMAKE_QUEUE_FULL` bzw. `getProductionCount() == MAX_BUILD_QUEUE_BUTTONS` |
-| Voraussetzung fehlt | neue Zeile `CONTROLBAR:Requirements` („Requires: %s“) mit je einem Eintrag je unerfüllter `Prerequisites`-Zeile, durch „, “ getrennt: Anzeigename des Objekts; bei Alternativen die **letzten zwei** mit `CONTROLBAR:OrRequirement` („A or B“ – `getRequiresList` nennt nur diese beiden); bei einer Wissenschaftszeile `CONTROLBAR:GeneralsPromotion` | `getRequiresList` je Voraussetzung; `Ignore_Prerequisites` wird dort nicht beachtet |
-| Upgrade schon vorhanden (Spieler oder ausgewähltes Objekt) | `PurchasedLabel` des Knopfs, sonst `TOOLTIP:AlreadyUpgradedDefault`, **statt** der Beschreibung, ohne Kosten | `hasUpgradeComplete`/`hasUpgrade` |
-| Upgrade, Wissenschaft des Knopfs fehlt | neue Zeile „Requires: General's Promotion“ | `getScienceVec`, `hasScience` |
-| Overcharge-Knopf | neue Zeile `TOOLTIP:TooltipNukeReactorOverChargeIsOn`/`…IsOff` | `OverchargeBehaviorInterface::isOverchargeActive` |
+| Unit/building, too little money | blank line, `TOOLTIP:TooltipNotEnoughMoneyToBuild` ("Insufficient funds") | `canMakeUnit` = `CANMAKE_NO_MONEY`; only with a description label and a selected object |
+| Unit/building or upgrade, queue full | blank line, `TOOLTIP:TooltipCannotPurchaseBecauseQueueFull` | `CANMAKE_QUEUE_FULL` or `getProductionCount() == MAX_BUILD_QUEUE_BUTTONS` |
+| Prerequisite missing | new line `CONTROLBAR:Requirements` ("Requires: %s") with one entry per unfulfilled `Prerequisites` line, separated by ", ": display name of the object; for alternatives the **last two** with `CONTROLBAR:OrRequirement` ("A or B" – `getRequiresList` names only these two); for a science line `CONTROLBAR:GeneralsPromotion` | `getRequiresList` per prerequisite; `Ignore_Prerequisites` is not observed there |
+| Upgrade already present (player or selected object) | `PurchasedLabel` of the button, otherwise `TOOLTIP:AlreadyUpgradedDefault`, **instead of** the description, without cost | `hasUpgradeComplete`/`hasUpgrade` |
+| Upgrade, science of the button missing | new line "Requires: General's Promotion" | `getScienceVec`, `hasScience` |
+| Overcharge button | new line `TOOLTIP:TooltipNukeReactorOverChargeIsOn`/`…IsOff` | `OverchargeBehaviorInterface::isOverchargeActive` |
 
-Dazu die zwei Fenster, die das Original im selben Popup beschreibt: `ControlBar.wnd:MoneyDisplay` (`CONTROLBAR:Money`, `CONTROLBAR:MoneyDescription`) und `ControlBar.wnd:PowerWindow`
-(`CONTROLBAR:Power`, `CONTROLBAR:PowerDescription` mit Erzeugung und Verbrauch des Spielers); das Energiefenster liegt jetzt wie das Geldfenster am Rechteck des Schemas
-(`ControlBarScheme::init`), dort wo der Balken gezeichnet wird. Die fehlenden Zeilen einer Vorlage liefert `SimulationQueries.MissingPrerequisites` (derselbe Test wie
-`PrerequisitesSatisfied`, je Zeile).
+In addition the two windows that the original describes in the same popup: `ControlBar.wnd:MoneyDisplay` (`CONTROLBAR:Money`, `CONTROLBAR:MoneyDescription`) and `ControlBar.wnd:PowerWindow`
+(`CONTROLBAR:Power`, `CONTROLBAR:PowerDescription` with production and consumption of the player); the power window now lies, like the money window, at the rectangle of the scheme
+(`ControlBarScheme::init`), where the bar is drawn. The missing lines of a template are supplied by `SimulationQueries.MissingPrerequisites` (the same test as
+`PrerequisitesSatisfied`, per line).
 
-**Ausgegraute Knöpfe erklären sich:** Die Tooltip-Suche des Originals ignoriert den Enabled-Zustand (`GameWindowManager::winProcessMouseEvent`:
-`winPointInAnyChild( x, y, TRUE, TRUE )`), die Eingabe nicht. `UiWindowTree.Tooltip` fragt deshalb zuerst das tiefste sichtbare Fenster unter dem Zeiger, wenn es (oder ein Fenster
-darüber) deaktiviert ist; vorher bekam ein deaktivierter Knopf nie einen Tooltip – genau die Knöpfe, bei denen „Requires: …“ steht. Eingabe und Hervorhebung bleiben unverändert beim
-aktivierten Fenster (`WndTests.TooltipStateMachine`).
+**Greyed-out buttons explain themselves:** the tooltip search of the original ignores the enabled state (`GameWindowManager::winProcessMouseEvent`:
+`winPointInAnyChild( x, y, TRUE, TRUE )`), the input does not. `UiWindowTree.Tooltip` therefore first asks the deepest visible window under the pointer if it (or a window
+above it) is disabled; before, a disabled button never got a tooltip – exactly the buttons that say "Requires: …". Input and highlighting stay unchanged with the
+enabled window (`WndTests.TooltipStateMachine`).
 
-**Nebenbefund Energiefenster:** `ControlBar.wnd:PowerWindow` steht in der Layoutdatei als 100x100-Rechteck oben links (bei 1920x1080) mit `INPUTCALLBACK = GameWinBlockInput`; solange es
-dort blieb, verschluckte die HUD jeden Klick in die linke obere Bildecke (etwa 67x67 Pixel bei 1280x720). Am Schemarechteck liegt es jetzt in der Befehlsleiste. Dadurch ändert sich der
-goldene Wert `hud-drawlist-1280x720.sha256`: das Rechteck des `W3DPowerDraw`-Eintrags der Zeichenliste ist ein anderes (der Client zählt diesen Eintrag nur; den Balken zeichnet weiterhin
+**Side finding power window:** `ControlBar.wnd:PowerWindow` is in the layout file as a 100x100 rectangle at the top left (at 1920x1080) with `INPUTCALLBACK = GameWinBlockInput`; as long as it
+stayed there, the HUD swallowed every click into the top left corner of the screen (about 67x67 pixels at 1280x720). At the scheme rectangle it now lies in the command bar. This changes the
+golden value `hud-drawlist-1280x720.sha256`: the rectangle of the `W3DPowerDraw` entry of the draw list is a different one (the client only counts this entry; the bar is still drawn by
 `BuildDynamicCommands`).
 
-**Vereinfacht / nicht gebaut:** Das Original zeigt das alles in `ControlBarPopupDescription.wnd` (eigenes Fenster über der Befehlsleiste, eigene Zeichenfunktion
-`W3DCommandBarHelpPopupDraw`, unterstrichener Hotkey); hier bleibt es der Zeigertooltip. Es fehlen: die Texte der Wissenschaftsknöpfe (`ScienceStore::getNameAndDescription`,
-`TOOLTIP:ScienceCost` – der Client hat kein Generalspunkte-Fenster), der Text bei widersprechendem Upgrade (`ConflictingLabel`; die Simulation kennt kein `affectedByUpgrade`), die Gründe
-„Höchstzahl“ und „Flugfeld voll“ (`TooltipCannotBuild…BecauseMaximumNumber`, `…ParkingFull`), das `GeneralsExp`-Fenster, Objekttooltips (Einheit unter dem Zeiger).
-**Nicht belegt:** ob ein Mensch die Zeilen lesbar findet und ob Lage und Tempo des Tooltips taugen – nichts davon wurde gesehen.
+**Simplified / not built:** the original shows all of this in `ControlBarPopupDescription.wnd` (a window of its own above the command bar, a draw function of its own
+`W3DCommandBarHelpPopupDraw`, underlined hotkey); here it stays the pointer tooltip. Missing are: the texts of the science buttons (`ScienceStore::getNameAndDescription`,
+`TOOLTIP:ScienceCost` – the client has no generals points window), the text for a conflicting upgrade (`ConflictingLabel`; the simulation knows no `affectedByUpgrade`), the reasons
+"maximum number" and "airfield full" (`TooltipCannotBuild…BecauseMaximumNumber`, `…ParkingFull`), the `GeneralsExp` window, object tooltips (unit under the pointer).
+**Not verified:** whether a human finds the lines readable and whether position and speed of the tooltip are any good – none of it has been seen.
 
-**Nicht umgesetzt** (bewusst außerhalb des Umfangs, siehe Auftrag): Beacon- und Diplomatie-Fenster, das Generalspunkte-Popup, die
-fünf `UnitUpgradeN`-Symbole (die Simulation liefert nur die Namen der abgeschlossenen Upgrades über
-`CommandBarView.Upgrades`, aber keinen Symbolkatalog dafür), ein Objektporträt in `CameoWindow`/`WinUnitSelected` (nur
-Sichtbarkeit je nach `CommandBarContext.Command` wird geschaltet, kein Bildinhalt). Diese Lücken sind funktional harmlos (die
-Schaltflächen bleiben nutzbar), aber optisch unvollständig; sie sind für eine spätere Phase vorgemerkt.
+**Not implemented** (deliberately outside the scope, see the brief): beacon and diplomacy windows, the generals points popup, the
+five `UnitUpgradeN` icons (the simulation supplies only the names of the completed upgrades through
+`CommandBarView.Upgrades`, but no icon catalog for them), an object portrait in `CameoWindow`/`WinUnitSelected` (only
+visibility depending on `CommandBarContext.Command` is switched, no image content). These gaps are functionally harmless (the
+buttons stay usable), but visually incomplete; they are earmarked for a later phase.
 
-## 6. Minimap: Klick, Ziehen, Rechtsklick-Befehl
+## 6. Minimap: click, drag, right-click command
 
-Das Original bindet die Minimap-Klicklogik nicht über das normale Gadget-System (das `LeftHUD`-Fenster ist ein reines
-`USER`-Fenster ohne interaktiven Gadget-Typ), sondern direkt im Eingabepfad. `MatchController.TryMinimapWorld` bildet einen
-Bildschirmpunkt exakt achsenerhaltend zentriert (Letterbox) auf eine Weltkoordinate von `LiveMatch.Minimap` ab (dieselbe Regel, mit
-der ein Renderer das Minimapbild in `LeftHUD.Rect` zeichnen sollte). Linksklick zentriert die Kamera dorthin und hält beim Ziehen
-mit; Rechtsklick löst über `CommandModeController.IssueContext` einen Bewegungsbefehl der aktuellen Auswahl an diese Stelle aus –
-unabhängig vom gewählten `MouseScheme` (Minimap-Konventionen sind im Original schemaunabhängig).
+The original does not bind the minimap click logic through the normal gadget system (the `LeftHUD` window is a pure
+`USER` window without an interactive gadget type), but directly in the input path. `MatchController.TryMinimapWorld` maps a
+screen point, centred exactly and preserving the axes (letterbox), to a world coordinate of `LiveMatch.Minimap` (the same rule with
+which a renderer should draw the minimap image in `LeftHUD.Rect`). A left click centres the camera there and keeps up while
+dragging; a right click issues, through `CommandModeController.IssueContext`, a move command of the current selection to this place –
+independent of the chosen `MouseScheme` (minimap conventions are scheme-independent in the original).
 
-## 7. Auswahlmodus und Kontextbefehle
+## 7. Selection mode and context commands
 
-`GameInputController.Settings.Scheme` kommt aus `GameSettings.Controls.AlternateMouse` (`MatchController.MapMouseScheme`); Vorgabe ist seit dem
-7. Oktober 2026 `MouseScheme.RightClickCommands` (links wählen, rechts befehlen; `docs/PRESENTATION-INPUT.md` §6): ein Rechtsklick auf freiem, begehbarem
-Boden löst einen Bewegungsbefehl aus, ein Linksklick auf leeren Boden leert die Auswahl, ein Rechtsklick storniert einen offenen Modus. Mit
-`AlternateMouse = false` (Client: `--mouse classic`) gilt das Schema des Originals. `HudTests.cs` prüft beide: die Bewegungs-/Angriffsbewegungsfälle laufen
-im Schema des Originals (dort ausdrücklich gesetzt), ein eigener Fall prüft die Vorgabe.
+`GameInputController.Settings.Scheme` comes from `GameSettings.Controls.AlternateMouse` (`MatchController.MapMouseScheme`); the default since
+7 October 2026 is `MouseScheme.RightClickCommands` (select with left, command with right; `docs/PRESENTATION-INPUT.md` §6): a right click on free, passable
+ground issues a move command, a left click on empty ground clears the selection, a right click cancels an open mode. With
+`AlternateMouse = false` (client: `--mouse classic`) the scheme of the original applies. `HudTests.cs` checks both: the move/attack-move cases run
+in the scheme of the original (set explicitly there), a case of its own checks the default.
 
-## 8. Bildschirmraum-Overlay (`HudOverlay`)
+## 8. Screen-space overlay (`HudOverlay`)
 
-`MatchController.Update` berechnet pro Frame:
+`MatchController.Update` computes per frame:
 
-| Feld | Herkunft |
+| Field | Origin |
 |---|---|
-| `SelectionBox` | `InputState.IsDragging(Left)`/`PressPosition(Left)` – reines Ablesen des laufenden Ziehvorgangs, keine eigene Zustandsverfolgung. |
-| `Selected` (`UnitMarker`) | `SelectionModel.Selected` projiziert über `EntityPicker.TryProject`; Lebensanteil aus `IBodyModule.Health/MaxHealth`. |
-| `RallyPoints` | Für jede ausgewählte Einheit mit `ProductionUpdate`: `SimulationQueries.Describe(production)` liest `hasRally`/`rallyX`/`rallyY` (als `Fixed` im `StateNode`) – der einzige öffentliche Weg an diesen Zustand. |
-| `OrderLines` | Stehende Befehle **der ausgewählten eigenen Einheiten** (Angriff, Angriffsbewegung, Wache; seit Phase 16 nicht mehr die aller Einheiten): eine Linie Einheit → Ziel (beim Angriff die aktuelle Position des Opfers). Ein einfacher Bewegungsbefehl (`ContextAction.Move`) erzeugt **keinen** `StandingOrder` und hat deshalb keine Linie, sondern eine Befehlsmarke. Wegpunkte stehen in `WaypointPaths`. |
-| `WaypointPaths` (`WaypointPathOverlay`) | `OrderMarkers.WaypointPaths` (§16): je ausgewählter Einheit mit Wegpunktbefehl die Punktliste Einheit → Stationen, nur solange Alt gehalten wird. |
-| `OrderHints` (`OrderHintMarker`) | `OrderHintBook` (§16): die Marken frisch erteilter Befehle mit ihrem Alter 0..1. |
-| `Placement` | `CommandModeController.Ghost` plus eine selbst berechnete Grundfläche (`Footprint`): bei `Geometry == BOX` die um `Angle` gedrehten Eckpunkte aus `GeometryMajorRadius`/`MinorRadius`, sonst ein Quadrat aus `BoundingCircleRadius` (die Simulation liefert für Nicht-Box-Geometrien keine Kantenlängen). |
-| `HintText` | grobe Textform von `GameInputController.Hint.Action` (kein String-Tabellen-Label – nur ein technischer Platzhaltertext für einen Host, der noch keine eigene Übersetzung hat). |
-| `Ticker` | Die Texte der Meldungsliste dieses Bildes (siehe unten); gezeichnet wird die Liste selbst, nicht dieses Feld. |
+| `SelectionBox` | `InputState.IsDragging(Left)`/`PressPosition(Left)` – pure reading of the running drag, no state tracking of its own. |
+| `Selected` (`UnitMarker`) | `SelectionModel.Selected` projected through `EntityPicker.TryProject`; health fraction from `IBodyModule.Health/MaxHealth`. |
+| `RallyPoints` | For every selected unit with `ProductionUpdate`: `SimulationQueries.Describe(production)` reads `hasRally`/`rallyX`/`rallyY` (as `Fixed` in the `StateNode`) – the only public way to this state. |
+| `OrderLines` | Standing orders **of the selected own units** (attack, attack move, guard; since Phase 16 no longer those of all units): a line unit → target (for an attack the current position of the victim). A simple move command (`ContextAction.Move`) produces **no** `StandingOrder` and therefore has no line, but an order mark. Waypoints are in `WaypointPaths`. |
+| `WaypointPaths` (`WaypointPathOverlay`) | `OrderMarkers.WaypointPaths` (§16): per selected unit with a waypoint order the point list unit → stations, only while Alt is held. |
+| `OrderHints` (`OrderHintMarker`) | `OrderHintBook` (§16): the marks of freshly issued orders with their age 0..1. |
+| `Placement` | `CommandModeController.Ghost` plus a footprint computed here (`Footprint`): for `Geometry == BOX` the corner points rotated by `Angle` from `GeometryMajorRadius`/`MinorRadius`, otherwise a square from `BoundingCircleRadius` (the simulation supplies no edge lengths for non-box geometries). |
+| `HintText` | rough text form of `GameInputController.Hint.Action` (no string table label – only a technical placeholder text for a host that has no translation of its own yet). |
+| `Ticker` | The texts of the message list of this frame (see below); what is drawn is the list itself, not this field. |
 
-### Meldungsliste (`InGameUI::message`, Phase 16)
+### Message list (`InGameUI::message`, Phase 16)
 
-**Vorher:** `MatchController` führte einen „Ticker“ mit erfundenen englischen Texten („Rejected: …“, „Cannot do that.“, „… ready“, „Command rejected“), acht Sekunden Lebensdauer – und
-**kein Zeichencode las ihn** (`HudOverlay.Ticker` hatte außerhalb von `MatchController` keinen Verbraucher). Der Spieler erfuhr also nie, warum ein Befehl nichts tat.
+**Before:** `MatchController` kept a "ticker" with invented English texts ("Rejected: …", "Cannot do that.", "… ready", "Command rejected"), eight seconds of lifetime – and
+**no drawing code read it** (`HudOverlay.Ticker` had no consumer outside `MatchController`). So the player never learned why a command did nothing.
 
-**Jetzt** gibt es wie im Original **eine** Meldungsliste (`InGameUI::m_uiMessages`, hier `UiMessageLog` aus der Missionstext-Arbeit: sechs Zeilen, `MessagePosition`/`MessageFont`/
-`MessageColor1/2` aus `InGameUI.ini`, Verblassen nach der Ganzzahlrechnung des Originals, weg nach 277 Logikbildern). `HudMessageFeed` (`CnCNew.Game/Hud`) schreibt die Zeilen des
-Spiels hinein, `DISPLAY_TEXT` der Missionsskripte die seinen – in dieselbe Liste: in einer Mission gehört sie dem Director (`MissionPresentationDirector.UseMessages`, er verblasst und
-zeichnet sie, auch während die Befehlsleiste versteckt ist), im Skirmish dem HUD (`MatchController.OwnsMessageList`, ein Update je Logikschritt, gezeichnet nach den Fenstern wie
-`InGameUI::postDraw`). Jede Zeile ist ein Label der Stringtabelle, gewählt wo das Original es wählt; ein fehlendes Label erscheint als `??Label??` und wird von `LocalizedText`
-gezählt.
+**Now** there is, as in the original, **one** message list (`InGameUI::m_uiMessages`, here `UiMessageLog` from the mission text work: six lines, `MessagePosition`/`MessageFont`/
+`MessageColor1/2` from `InGameUI.ini`, fading by the integer computation of the original, gone after 277 logic frames). `HudMessageFeed` (`CnCNew.Game/Hud`) writes the lines of the
+game into it, `DISPLAY_TEXT` of the mission scripts writes its own – into the same list: in a mission it belongs to the director (`MissionPresentationDirector.UseMessages`, it fades and
+draws it, also while the command bar is hidden), in the skirmish to the HUD (`MatchController.OwnsMessageList`, one update per logic step, drawn after the windows like
+`InGameUI::postDraw`). Every line is a label of the string table, chosen where the original chooses it; a missing label appears as `??Label??` and is counted by
+`LocalizedText`.
 
-| Anlass | Label (englischer Text) | Quelle im Original |
+| Occasion | Label (English text) | Source in the original |
 |---|---|---|
-| Produktion/Bau abgelehnt: kein Geld | `GUI:NotEnoughMoneyToBuild` („You don't have enough money to build that“) | `ControlBar::processCommandUI`, `PlaceEventTranslator::translateGameMessage` |
-| Upgrade abgelehnt: kein Geld | `GUI:NotEnoughMoneyToUpgrade` | `UpgradeCenter::canAffordUpgrade` |
-| Warteschlange voll | `GUI:ProductionQueueFull` | `ControlBar::processCommandUI` |
-| Höchstzahl erreicht (`MaxSimultaneousOfType`) | `GUI:UnitMaxedOut` | ebenda |
-| Bauplatz unerkundet | `GUI:CantBuildShroud` | `InGameUI::displayCantBuildMessage` (`LBC_SHROUD`) |
-| Bauplatz sonst abgelehnt | `GUI:CantBuildThere` | ebenda (`LBC_GENERIC_FAILURE`) |
-| Gebäude des Spielers fertig | `DOZER:ConstructionComplete` mit dem Anzeigenamen (`Object.DisplayName`, sonst `INI:MissingDisplayName`) | `DozerAIUpdate` (Abschluss der Bauaufgabe) |
-| vom Spieler bestelltes Upgrade fertig | `UPGRADE:UpgradeComplete` mit `Upgrade.DisplayName` | `ProductionUpdate::update` |
-| eigenes Objekt von einem anderen Spieler beschädigt | `RADAR:UnitUnderAttack`, `RADAR:HarvesterUnderAttack`, `RADAR:StructureUnderAttack` (Gebäude mit `MP_COUNT_FOR_VICTORY`), sonst `RADAR:UnderAttack`; höchstens eine Zeile je 250 Welteinheiten und 10 Sekunden | `Radar::tryUnderAttackEvent`, `Radar::tryEvent` |
-| Spieler besiegt (nur Skirmish) | `GUI:PlayerHasBeenDefeated` mit dem Armeenamen | `VictoryConditions::update` (läuft nur, wenn `RecorderClass::isMultiplayer`) |
+| Production/construction rejected: no money | `GUI:NotEnoughMoneyToBuild` ("You don't have enough money to build that") | `ControlBar::processCommandUI`, `PlaceEventTranslator::translateGameMessage` |
+| Upgrade rejected: no money | `GUI:NotEnoughMoneyToUpgrade` | `UpgradeCenter::canAffordUpgrade` |
+| Queue full | `GUI:ProductionQueueFull` | `ControlBar::processCommandUI` |
+| Maximum number reached (`MaxSimultaneousOfType`) | `GUI:UnitMaxedOut` | ibid. |
+| Building site unexplored | `GUI:CantBuildShroud` | `InGameUI::displayCantBuildMessage` (`LBC_SHROUD`) |
+| Building site rejected otherwise | `GUI:CantBuildThere` | ibid. (`LBC_GENERIC_FAILURE`) |
+| Building of the player finished | `DOZER:ConstructionComplete` with the display name (`Object.DisplayName`, otherwise `INI:MissingDisplayName`) | `DozerAIUpdate` (completion of the build task) |
+| upgrade ordered by the player finished | `UPGRADE:UpgradeComplete` with `Upgrade.DisplayName` | `ProductionUpdate::update` |
+| own object damaged by another player | `RADAR:UnitUnderAttack`, `RADAR:HarvesterUnderAttack`, `RADAR:StructureUnderAttack` (buildings with `MP_COUNT_FOR_VICTORY`), otherwise `RADAR:UnderAttack`; at most one line per 250 world units and 10 seconds | `Radar::tryUnderAttackEvent`, `Radar::tryEvent` |
+| Player defeated (skirmish only) | `GUI:PlayerHasBeenDefeated` with the army name | `VictoryConditions::update` (runs only if `RecorderClass::isMultiplayer`) |
 
-**Ohne Zeile, gezählt** (`HudMessageFeed.WithoutLine`, Schlüssel = Art, Wert = Anzahl): jede andere Ablehnung der Simulation (`rejected <Grund> (<Befehl>)`), ein ungültiger Befehl
-ohne Bauplatz (`invalid order` – das Original zeigt dort den Verbots-Zeiger, keinen Text), ein Upgrade ohne `DisplayName`, und Upgrades, die niemand bestellt hat
-(`upgrade granted, not ordered`: das Radar des Kommandozentrums, `GrantUpgradeCreate`, Skripte – das Ereignis der Simulation unterscheidet sie nicht von einem gekauften, deshalb merkt sich
-die Liste die angenommenen `PurchaseUpgradeCommand`s des Spielers; ohne das stand „Upgrade Complete: Radar“ am Anfang jeder Partie). **Eigene Zeile des Clients** (eingeklammert, wie
-die Sprach-/Filmplatzhalter): „(not supported in this build: …)“ für Knöpfe, deren Befehl die Simulation nicht kennt.
+**Without a line, counted** (`HudMessageFeed.WithoutLine`, key = kind, value = count): every other rejection of the simulation (`rejected <reason> (<command>)`), an invalid command
+without a building site (`invalid order` – the original shows the forbidden pointer there, no text), an upgrade without `DisplayName`, and upgrades that nobody ordered
+(`upgrade granted, not ordered`: the radar of the command center, `GrantUpgradeCreate`, scripts – the event of the simulation does not distinguish them from a purchased one, therefore the
+list remembers the accepted `PurchaseUpgradeCommand`s of the player; without that, "Upgrade Complete: Radar" stood at the beginning of every game). **The client's own line** (parenthesised, like
+the speech/movie placeholders): "(not supported in this build: …)" for buttons whose command the simulation does not know.
 
-**Vereinfacht/nicht umgesetzt:** Die Simulation meldet einen „blockierten Grundriss“, wo das Original Gelände, Neigung, Hindernisse, Versorgungsnähe und Weg unterscheidet
-(`GUI:CantBuildRestrictedTerrain` …) – alle laufen auf `GUI:CantBuildThere`. `GUI:ParkingPlacesFull`, `DOZER:RepairComplete`, `RADAR:Infiltration`, `GUI:OverchargeExhausted`,
-die Kampfplan- und Tarnungs-Meldungen, `GUI:NothingSelected`/`SelectedAcross…` und die Meldungen der Tastenkürzel (`GUI:MessagesOn` …) haben keine Quelle in diesem Stand. Der Name des
-besiegten Spielers ist der Armeename (`PlayerTemplate.DisplayName`), weil die Sitzung keine Spielernamen trägt. In den meisten Fällen verhindert schon der ausgegraute Knopf den Befehl
-(wie im Original: `getCommandAvailability` liefert `COMMAND_RESTRICTED` bei zu wenig Geld); die Ablehnungszeilen erscheinen dann nur bei Tastenkürzeln und Wettläufen.
-**Bildproben (nur selbst angesehen, keine Abnahme):** `tools/CnCNew.UiRenderTool` schreibt `hudfeedback-WxH.png` (echte Befehlsleiste, drei Meldungszeilen, Zeiger auf einem ausgegrauten
-Bauknopf mit „Requires: …“) und `hudletterbox-WxH.png` (dieselben Zeilen unter den Letterbox-Balken); der Client zeigt die Zeile im Rauchtest mit
-`--match "Maps/Alpine Assault/Alpine Assault.map" --frames 110 --input-script scripts/input/placement-refused-click.txt --capture <png>` (Klick auf das eigene Kommandozentrum:
-„You can't build here“ oben links, Vorschau rot).
-**Nicht belegt:** Aussehen, Lesbarkeit und Takt der Liste im Fenster – kein Mensch hat sie gesehen.
+**Simplified/not implemented:** the simulation reports a "blocked footprint" where the original distinguishes terrain, slope, obstacles, supply proximity and path
+(`GUI:CantBuildRestrictedTerrain` …) – all run to `GUI:CantBuildThere`. `GUI:ParkingPlacesFull`, `DOZER:RepairComplete`, `RADAR:Infiltration`, `GUI:OverchargeExhausted`,
+the battle plan and disguise messages, `GUI:NothingSelected`/`SelectedAcross…` and the messages of the keyboard shortcuts (`GUI:MessagesOn` …) have no source at this state. The name of the
+defeated player is the army name (`PlayerTemplate.DisplayName`), because the session carries no player names. In most cases the greyed-out button already prevents the command
+(as in the original: `getCommandAvailability` returns `COMMAND_RESTRICTED` with too little money); the rejection lines then appear only with keyboard shortcuts and races.
+**Picture samples (only looked at by ourselves, no acceptance):** `tools/CnCNew.UiRenderTool` writes `hudfeedback-WxH.png` (real command bar, three message lines, pointer on a greyed-out
+build button with "Requires: …") and `hudletterbox-WxH.png` (the same lines below the letterbox bars); the client shows the line in the smoke test with
+`--match "Maps/Alpine Assault/Alpine Assault.map" --frames 110 --input-script scripts/input/placement-refused-click.txt --capture <png>` (click on the own command center:
+"You can't build here" at the top left, preview red).
+**Not verified:** look, readability and rhythm of the list in the window – no human has seen it.
 
-## 9. Kameraeinstellungen
+## 9. Camera settings
 
-`GameSettings.Controls` (Schieberegler `0..1`) wird auf `CnCNew.Presentation.Input.CameraSettings` abgebildet (`MatchController.MapCameraSettings`).
-Der Scrollregler ist der Wert des Originals selbst: `KeyboardScrollSpeedFactor` = Reglerwert (`OptionsMenu.cpp`: `m_keyboardScrollFactor = Position / 100`,
-Vorgabe 0,5; er wirkt nur auf Tasten- und Randscroll, `docs/PRESENTATION-INPUT.md` §4a). Der Drehregler hat kein Gegenstück im Original: bei `0.5` gilt
-der Engine-Wert, an den Enden wird er halbiert bzw. verdoppelt (bewusste, dokumentierte Näherung).
+`GameSettings.Controls` (sliders `0..1`) is mapped to `CnCNew.Presentation.Input.CameraSettings` (`MatchController.MapCameraSettings`).
+The scroll slider is the value of the original itself: `KeyboardScrollSpeedFactor` = slider value (`OptionsMenu.cpp`: `m_keyboardScrollFactor = Position / 100`,
+default 0.5; it affects only key and edge scrolling, `docs/PRESENTATION-INPUT.md` §4a). The rotation slider has no counterpart in the original: at `0.5` the
+engine value applies, at the ends it is halved or doubled (a deliberate, documented approximation).
 
-## 10. Spielergebnis und Statistik (`MatchResult.cs`)
+## 10. Match result and statistics (`MatchResult.cs`)
 
-`MatchStatsTracker.Observe(TickResult, world)` wird von `MatchController` an `LiveMatch.TickStepped` gehängt und wertet
-ausschließlich Felder aus, die die Simulation bereits über `SimEvent` offenlegt (keine Zusatzabfrage von Spielerzustand):
+`MatchStatsTracker.Observe(TickResult, world)` is hooked by `MatchController` to `LiveMatch.TickStepped` and evaluates
+exclusively fields that the simulation already exposes through `SimEvent` (no additional query of player state):
 
-* **Gebaute Einheiten:** ein `EntitySpawned` ohne `STRUCTURE`-KindOf, mit echtem Spieler (die anfängliche Kartenbevölkerung
-  entsteht vor dem ersten `Advance`-Aufruf und erreicht `TickStepped` nie).
-* **Gebaute Gebäude:** `ConstructionCompleted` (trägt den Besitzer direkt).
-* **Verlorene Einheiten:** Besitzer der gestorbenen Einheit (`EntityDied.Entity`), vor einer eventuellen Entfernung nachgeschlagen.
-* **Kills:** Besitzer des Angreifers (`EntityDied.Other`), wenn er sich vom Opfer unterscheidet und keiner der beiden das
-  Systemkonto ist (entspricht `Object::scoreTheKill`: kein Eigenbeschuss, kein Selbstmord).
-* **Verdientes Geld:** `SupplyDeposited` gutgeschrieben an den Besitzer des Lagerhauses (`Entity`, nicht `Other` – das Ereignis
-  trägt kein eigenes Spielerfeld).
+* **Units built:** an `EntitySpawned` without the `STRUCTURE` KindOf, with a real player (the initial map population
+  arises before the first `Advance` call and never reaches `TickStepped`).
+* **Buildings built:** `ConstructionCompleted` (carries the owner directly).
+* **Units lost:** owner of the unit that died (`EntityDied.Entity`), looked up before a possible removal.
+* **Kills:** owner of the attacker (`EntityDied.Other`) if it differs from the victim and neither of the two is the
+  system account (corresponds to `Object::scoreTheKill`: no friendly fire, no suicide).
+* **Money earned:** `SupplyDeposited` credited to the owner of the warehouse (`Entity`, not `Other` – the event
+  carries no player field of its own).
 
-`MatchController.MatchEnded` feuert genau einmal, sobald `SkirmishMatchSession.IsOver` erstmals beobachtet wird.
+`MatchController.MatchEnded` fires exactly once, as soon as `SkirmishMatchSession.IsOver` is observed for the first time.
 
-## 11. Bekannte Grenzen
+## 11. Known limits
 
-* **Objektporträt, Upgrade-Symbole, Generalspunkte, Leuchtfeuer, Chat** – siehe Abschnitt 5, bewusst außerhalb des Umfangs.
-* **`ControlBarScheme.ini`** wird nur für Geld-/Energie-Rechtecke und Hintergrundbildteile gelesen; Umschalt-/Chat-/Leuchtfeuer-
-  Knopfbilder, `AnimatingPart`-Blöcke und die vier Rahmenfarben (`ButtonBorder*Color`) werden geparst-übersprungen bzw. gar nicht
-  gelesen, weil dieses Paket sie nirgends braucht.
-* **Minimap-Seitenverhältnis:** `TryMinimapWorld` nimmt an, dass ein Renderer das Minimapbild seitenverhältniserhaltend zentriert in
-  `LeftHUD.Rect` zeichnet (Letterbox); zeichnet ein Host es anders (z. B. gestreckt), muss er entweder dieselbe Regel verwenden oder
-  eigene Klick-Umrechnung ergänzen.
-* **Reproduzierbarkeit von Replays bei laufendem `LiveMatch` (wichtiger Befund, nicht in diesem Paket entstanden):** Ein
-  `LiveMatch`, das über `Advance` mehrere Ticks lief, liefert einen `World.StateHash`, der **nicht** mit einem frischen
-  `ReplayRunner.Run(session.ToReplay(), …)` derselben Aufzeichnung übereinstimmt, sobald der Computergegner den ersten eigenen
-  Befehl erteilt. Das reproduziert sich mit einer minimalen Gegenprobe, die nur `LiveMatch.Create`/`LiveMatch.Advance` benutzt –
-  ganz ohne `MatchController`, ohne Eingabe, ohne HUD-Code – gegen echte Inhalte (`game/content`, Karte
-  „Alpine Assault“). Die bestehenden Replay-Tests in `CnCNew.Simulation.Tests` (`Tests.Skirmish.cs`) vergleichen bisher nur zwei
-  frische `ReplayRunner.Run`-Aufrufe gegeneinander, nie gegen den Hash einer live fortgeschrittenen `SkirmishMatchSession` – die
-  Lücke war also bisher ungetestet. `tests/CnCNew.Game.Tests/HudTests.cs` prüft deshalb nur die intern konsistente Reproduzierbarkeit
-  zweier frischer Replay-Läufe derselben Aufzeichnung (wie es die bestehenden Simulationstests auch tun), nicht die Übereinstimmung
-  mit dem Live-Hash. Ein Hintergrundauftrag zur Ursachensuche wurde separat angestoßen (siehe Abschlussbericht von Paket G2).
-* **Kameraeinstellungs-Zuordnung** (Abschnitt 9) ist eine dokumentierte Näherung, keine originalgetreue Übernahme.
+* **Object portrait, upgrade icons, generals points, beacon, chat** – see section 5, deliberately outside the scope.
+* **`ControlBarScheme.ini`** is read only for money/power rectangles and background image parts; toggle/chat/beacon
+  button images, `AnimatingPart` blocks and the four border colors (`ButtonBorder*Color`) are parsed and skipped or not read at
+  all, because this package needs them nowhere.
+* **Minimap aspect ratio:** `TryMinimapWorld` assumes that a renderer draws the minimap image centred in
+  `LeftHUD.Rect` preserving the aspect ratio (letterbox); if a host draws it differently (e.g. stretched), it must either use the same rule or
+  add a click conversion of its own.
+* **Reproducibility of replays with a running `LiveMatch` (important finding, did not arise in this package):** a
+  `LiveMatch` that ran several ticks through `Advance` yields a `World.StateHash` that does **not** agree with a fresh
+  `ReplayRunner.Run(session.ToReplay(), …)` of the same recording as soon as the computer opponent issues its first own
+  command. This reproduces with a minimal counter-check that uses only `LiveMatch.Create`/`LiveMatch.Advance` –
+  entirely without `MatchController`, without input, without HUD code – against real content (`game/content`, map
+  "Alpine Assault"). The existing replay tests in `CnCNew.Simulation.Tests` (`Tests.Skirmish.cs`) so far compare only two
+  fresh `ReplayRunner.Run` calls against each other, never against the hash of a `SkirmishMatchSession` advanced live – the
+  gap was therefore untested so far. `tests/CnCNew.Game.Tests/HudTests.cs` therefore checks only the internally consistent reproducibility
+  of two fresh replay runs of the same recording (as the existing simulation tests do as well), not the agreement
+  with the live hash. A background brief to search for the cause was started separately (see the final report of package G2).
+* **Camera settings mapping** (section 9) is a documented approximation, not a faithful adoption of the original.
 
 ## 12. Tests
 
-`tests/CnCNew.Game.Tests/HudTests.cs` (registriert in `Program.cs`, `--content-dir` erforderlich, sonst `SKIP`):
+`tests/CnCNew.Game.Tests/HudTests.cs` (registered in `Program.cs`, `--content-dir` required, otherwise `SKIP`):
 
-* Start-Dozer per Klick auswählen, ein Bauwerk über die Control-Bar und Platzierung errichten (bevorzugt ein Kraftwerk, sonst das
-  erste verfügbare `DozerConstruct`, damit der Test auch für GLA ohne Energiewirtschaft läuft), eine Einheit von einem Erzeuger in
-  die Warteschlange stellen (sucht selbst nach dem ersten eigenen Erzeuger mit einem `UnitBuild`-Knopf, nicht hartkodiert auf
-  Infanterie, da das von Fraktion/Karte abhängt), Bewegungs- und – falls die produzierte Einheit einen Angriffsbewegungs-Knopf
-  besitzt – Angriffsbewegungsbefehl per Klick.
-* Wiedergabe: Der aufgezeichnete Befehlsstrom enthält den Bewegungsbefehl des Menschen; zwei unabhängige frische
-  `ReplayRunner.Run`-Läufe derselben Aufzeichnung stimmen überein (siehe Abschnitt 11 für die Live-Hash-Einschränkung).
-* HUD-Zeichenlisten bei 800×600, 1280×720, 1920×1080 und 2560×1080: nicht leer, mindestens der Minimap-`UiCustomDraw` vorhanden,
-  alle 14 Befehlsknöpfe liegen vollständig im Bildschirmbereich, der `Viewport3D`-Bereich deckt die volle Breite ab.
-* Minimapklick verschiebt die Kamera.
-* Ziehauswahl selektiert den Start-Dozer.
-* Strg+1 speichert, `1` ruft die Gruppe ab.
-* Goldener Hash von `BuildDrawList(1280, 720).Dump()` gegen `tests/CnCNew.Game.Tests/baselines/hud-drawlist-1280x720.sha256`
-  (wird beim ersten Lauf ohne vorhandene Datei geschrieben; danach ein Review-Gegenstand wie jede andere Baseline).
-* Mauszeiger und Marken (Phase 16, §16): Cursor je Kontext, Alt-Wegpunkte als Pfad mit drei Stationsmarken, verblassende Befehlsmarke.
+* Select the starting dozer by click, erect a structure through the control bar and placement (preferably a power plant, otherwise the
+  first available `DozerConstruct`, so that the test also runs for GLA without a power economy), queue a unit at a producer
+  (searches itself for the first own producer with a `UnitBuild` button, not hard-coded to
+  infantry, since that depends on faction/map), move command and – if the produced unit has an attack-move button –
+  attack-move command by click.
+* Replay: the recorded command stream contains the move command of the human; two independent fresh
+  `ReplayRunner.Run` runs of the same recording agree (see section 11 for the live-hash restriction).
+* HUD draw lists at 800×600, 1280×720, 1920×1080 and 2560×1080: not empty, at least the minimap `UiCustomDraw` present,
+  all 14 command buttons lie completely within the screen area, the `Viewport3D` area covers the full width.
+* A minimap click moves the camera.
+* Drag selection selects the starting dozer.
+* Ctrl+1 saves, `1` recalls the group.
+* Golden hash of `BuildDrawList(1280, 720).Dump()` against `tests/CnCNew.Game.Tests/baselines/hud-drawlist-1280x720.sha256`
+  (is written on the first run without an existing file; after that a review item like every other baseline).
+* Mouse pointer and marks (Phase 16, §16): cursor per context, Alt waypoints as a path with three station marks, fading order mark.
 
-`dotnet run --project tests/CnCNew.Game.Tests -- --content-dir <dir> --only HudTests` führt nur diese Suite aus (das ganze Programm braucht auf
-Realdaten viele Minuten; `--only` nimmt eine kommagetrennte Liste von Suitennamen, ein unbekannter Name ist ein Fehler mit Exitcode 2).
+`dotnet run --project tests/CnCNew.Game.Tests -- --content-dir <dir> --only HudTests` runs only this suite (the whole program needs many minutes on
+real data; `--only` takes a comma-separated list of suite names, an unknown name is an error with exit code 2).
 
-## 13. Anfragen an Simulation/Präsentation
+## 13. Requests to simulation/presentation
 
-* **`ReplayRunner`/`SkirmishMatchSession`-Divergenz** (Abschnitt 11) – bitte durch das Team untersuchen, das `LiveMatch.cs`
-  bzw. die Simulation/Presentation-Kopplung verantwortet; ein Hintergrundauftrag wurde dafür angelegt.
-* Die von Paket C3 offenen Wünsche (`CheckConstruct`-Trockenlauf, Produktionswarteschlangen-Zugriff, `AvailableOnFrame`
-  für Spezialkräfte, `Executed` für Upgrades) sind seit Phase 10 erledigt (`SimulationWorld.CheckConstruct`, `ProductionUpdate.Queue`,
-  `SpecialPowerModuleBase.AvailableOnFrame`, `UpgradeMuxModule.Executed` — siehe `docs/PRESENTATION-INPUT.md` §10, `docs/SIMULATION-CORE.md` §23);
-  G2 selbst hatte keine weiteren Simulationsänderungen benötigt.
-* Für ein originalgetreues Objektporträt und Upgrade-Symbole bräuchte `CommandBarView`/`ObjectTemplate` einen Verweis auf ein
-  Porträtbild bzw. einen Upgrade→Bild-Katalog; aktuell liefert die Simulation nur Namen.
+* **`ReplayRunner`/`SkirmishMatchSession` divergence** (section 11) – please have it investigated by the team that is responsible for `LiveMatch.cs`
+  or the simulation/presentation coupling; a background brief was created for it.
+* The wishes left open by package C3 (`CheckConstruct` dry run, access to production queues, `AvailableOnFrame`
+  for special powers, `Executed` for upgrades) have been done since Phase 10 (`SimulationWorld.CheckConstruct`, `ProductionUpdate.Queue`,
+  `SpecialPowerModuleBase.AvailableOnFrame`, `UpgradeMuxModule.Executed` — see `docs/PRESENTATION-INPUT.md` §10, `docs/SIMULATION-CORE.md` §23);
+  G2 itself had needed no further simulation changes.
+* For a faithful object portrait and upgrade icons, `CommandBarView`/`ObjectTemplate` would need a reference to a
+  portrait image or an upgrade→image catalog; currently the simulation supplies only names.
 
-## 14. Phase 11: dieselbe Befehlsleiste für Kampagnenmissionen (`LiveGame`, `LiveMission`, `MissionController`)
+## 14. Phase 11: the same command bar for campaign missions (`LiveGame`, `LiveMission`, `MissionController`)
 
-`MatchController` (und die Stride-Schichten, `AudioDirector`) sahen bis Phase 10 nur ein `LiveMatch`, also eine Skirmish-Sitzung. Seit Phase 11 sehen sie ein `LiveGame`
-(`src/CnCNew.Game/Live/LiveGame.cs`): die gemeinsame Präsentationsschicht (projizierte Frames, Fog, Kamera, Minimap, Effekte, Teamfarben, 30-Hz-Schleife `Advance`) hinter der
-abstrakten Sicht „welche Simulation läuft“ (`IsOver`, `Winner`, `Players`, `HumanFaction`, `Commands`, `StepSimulation`). Aus `LiveMatch.cs` wurde nichts kopiert – die Konstruktion der
-Schichten wanderte unverändert in die Basisklasse, `LiveMatch` blieb für seine Aufrufer gleich (`Create`, `Setup`, `Session`, `Commands`).
+Until Phase 10 `MatchController` (and the Stride layers, `AudioDirector`) saw only a `LiveMatch`, i.e. a skirmish session. Since Phase 11 they see a `LiveGame`
+(`src/CnCNew.Game/Live/LiveGame.cs`): the common presentation layer (projected frames, fog, camera, minimap, effects, team colors, 30 Hz loop `Advance`) behind the
+abstract view "which simulation is running" (`IsOver`, `Winner`, `Players`, `HumanFaction`, `Commands`, `StepSimulation`). Nothing was copied from `LiveMatch.cs` – the construction of the
+layers moved unchanged into the base class, `LiveMatch` stayed the same for its callers (`Create`, `Setup`, `Session`, `Commands`).
 
-- **`LiveMission`** (`Live/LiveMission.cs`) setzt eine `MissionRun` (`MissionSession`) dahinter. Der Betrachter ist die lokale Seite der Mission (`MissionSession.LocalPlayerOf`,
-  einschließlich der von `ChallengeSides` gewählten Seite); die Kamera startet über dem Schwerpunkt seiner Objekte. Ein Tick ist `MissionPresentationDirector.BeforeStep` → `Session.Step()`
-  (Skripte, automatisches Gefecht, Welt) → `AfterStep`; die vom Skript bestellte Kamera fährt je Frame über die Dauer des Skripts (`OnAdvanced` → `ApplyCameraTo`, seit Phase 16; vorher ein Sprung je neuem Ziel – `docs/SCRIPT-ENGINE.md` §7a). Befehle des Menschen laufen
-  über `MissionCommandSink` (`Presentation/Input/CommandSink.cs`) in `MissionSession.Issue`, also durch denselben Sequenzzähler je Spieler wie die der Skripte.
-  `Winner` ist der Betrachter bei einem Missionssieg, sonst `null` (die Gegner sind geskriptet, kein konkurrierender Mensch).
-- **`MissionController`** (`Hud/MissionController.cs`) setzt ein `MatchController` über die `LiveMission`, hängt `SelectionModel.SelectionChanged` an `MissionUiBridge.OnSelectionChanged`
-  (die Auswahl erreicht `NAMED_SELECTED`), liefert `BuildDrawList` mit dem Bildschirmtext des Directors (Meldungszeilen, getippte Missionsbeschriftung, Zeitgeber und Zähler, Filmtext, Sprach-/Filmplatzhalter, seit Phase 16 auch Letterbox, Blenden, Ergebnisbanner; während der Letterbox ohne Befehlsleiste) über dem HUD, danach das Meldungsfenster (`MissionPopupWindow`, `INGAME_POPUP_MESSAGE`: eigener Fensterbaum aus `InGamePopupMessage.wnd`; ein Fenster mit Pausenmarke pausiert die Mission und schluckt alle Ereignisse, OK/Enter/Escape schließen es und heben die Pause auf), sperrt die Welteingabe, solange das Skript sie gesperrt hat (`MatchController.WorldInputEnabled`), und meldet das Missionsende
-  einmal (`MissionEnded`); danach ruft der Host `GameShell.MissionFinished(run, controller)`.
-- **Was Skripte an Befehlsleiste und HUD ändern** (Phase 16, zweite Sitzung; `MissionController` setzt `IMissionHudControl`, Wortlaut je Ausgabetyp in `docs/SCRIPT-ENGINE.md` §7a):
-  `COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE`/`COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT` verändern den **Befehlssatz** des Objekttyps, nicht ein einzelnes Objekt: `ControlBarScriptState`
-  (`Presentation/Input/ControlBarScriptState.cs`) hält Überschreibungen je (Satzname, Platz) – ein entfernter Knopf ist eine Überschreibung ohne Knopf (`GameLogic::setControlBarOverride`,
-  `CommandSet::getCommandButton` fragt sie zuerst) –, und `CommandBarModel.Build` (Einzel- und Mehrfachauswahl) sowie die Bauschlangen-Bilder lesen sie über `ButtonOf`. Der Spieler sieht und
-  klickt den Knopf also bei **jedem** Objekt dieses Satzes nicht mehr; ein Knopf, der schon fehlt, bleibt weg, ein unbekannter Knopf oder Objekttyp wird abgewiesen und gemeldet. In `MD_USA01`
-  setzt das Skript in Tick 0 25 solcher Entfernungen (Rekrutierungs-/Aufrüstknöpfe der Fraktionen). `PLAYER_SCIENCE_AVAILABILITY` (nur für die lokale Seite) wirkt auf `PurchaseScience`-Knöpfe
-  („Hidden“ = Knopf verborgen, „Disabled“ = gesperrt, `ButtonReason.NotPurchasable`); sichtbar wird das erst mit einem Generals-Powers-Fenster, das der Client nicht hat. `OPTIONS_SET_DRAWICON_UI_MODE`
-  schaltet `MatchController.IconUiEnabled`: aus = keine Heilsymbole (Auswahlmarken bleiben). `UNIT_AFFECT_OBJECT_PANEL_FLAGS` „Selectable“ = `EntityPicker.SetScriptSelectable`: der Pick und die
-  Auswahl lassen das Objekt weg, eine bestehende Auswahl verliert es (`SelectionModel.Replace/Change`). Zustände gehen beim Speichern/Laden einer Mission nicht mit. Tests:
-  `MissionEffectsTests` (Attrappen; echte `MD_USA01`: Knopf verschwindet aus der Leiste eines gewählten Objekts und kommt zurück, Wissenschaft, Auswahl).
-- **Superwaffen-Liste** (`Hud/SuperweaponTimers.cs`, `MatchController.Superweapons`, gilt für Gefechte und Missionen): oben rechts, bei x = 0,90, y = 0,01 der Bildfläche (`SuperweaponCountdownPosition` der
-  Retail-`InGameUI.ini`, jetzt aus `InGameUiSettings`), je Macht mit `PublicTimer` und je Objekt eine Zeile „Name: m:ss“ – der Name rechtsbündig bis x, die Zeit linksbündig ab x (`SuperweaponInfo::drawName/drawTime`), in der Hausfarbe
-  des Besitzers, **auch die gegnerischen** (ein feindlicher Atomschlag läuft auf dem eigenen Bildschirm herunter). Regeln nach `InGameUI::draw`: Spieler nach Index, Mächte nach Name, Objekte in
-  Anlegereihenfolge; eine Baustelle zeigt nichts; eine Macht mit gemeinsamem Zeitgeber (`SharedSyncedTimer`) steht je Spieler einmal; fehlt dem Besitzer die geforderte Wissenschaft, fehlt die Zeile;
-  die Zeit ist `(Bereitschaftsbild − Tick) / 30` ganzzahlig (`CommandBarModel.ReadyFrameOf`), eine bereite Macht hat die Bereitschaftsschrift (`SuperweaponCountdownReadyFont`, Retail: fett) und wechselt alle 15 Logikbilder (`SuperweaponCountdownFlashDuration` 500 ms) zwischen Hausfarbe und `SuperweaponCountdownFlashColor`, die Blinkfarbe in den ungeraden Perioden (der Zustand `m_superweaponUsedFlashColor` beginnt wahr; vorher lag die Phase umgekehrt); die Liste
-  hört über der Befehlsleiste (0,82 der Sichthöhe) mit „...“ auf (linksbündig ab x in der Normalschrift, wie `drawTime` im Original; vorher rechtsbündig). Der Name ist der Eintrag `GUI:<Machtname>` der Zeichenkettentabelle; fehlt er, steht der Schlüssel selbst da und
-  `SuperweaponTimers.MissingLabels` zählt ihn. Missionsskripte blenden die ganze Liste (`DisplayEnabled`) oder einzelne Objekte aus (`HiddenByScript`, über `IMissionHudControl`). Die Werte (Position,
-  Blinkdauer und -farbe aus `InGameUI.ini`, die Schriften aus `Language.ini` über `InGameUiStyle`, `docs/TEXT-AUDIT.md` §4.6) sind keine Konstanten mehr; `InGameUiSettings` ist streng typisiert und von `TextAndSettingsTests` an der Retaildatei geprüft. **Nicht übernommen:**
-  die EVA-Ansage „Superwaffe bereit“, die `drawSuperweaponTimers` im Original mit auslöst (Eva meldet das hier über die Simulationsereignisse), der Wechsel der Schrift beim Bereitwerden mit eigenem
-  Textobjekt, die Wiederaufnahme des Zustands aus einem Spielstand. Die benannten Missionszeitgeber (`DISPLAY_COUNTDOWN_TIMER`) stehen seit der Missionstext-Sitzung bei
-  `NamedTimerCountdownPosition` (X:0,90 Y:0,666) der Retail-Datei (`MissionTextOverlay.NamedTimers`, `docs/SCRIPT-ENGINE.md` §7a).
-- **Stride:** `LiveMatchHost` und alle Weltschichten nehmen ein `LiveGame`; `CnCNew.Client.Stride --mission <Karte> [--human-side <Name>]` startet eine Kampagnenkarte (Rauchtest:
-  `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir game/content`). Seit Phase 12 zeichnet die Stride-Hülle auch die HUD-Zeichenliste
-  (`MissionController.BuildDrawList`) und verarbeitet die Shell-Ausgaben (`StartMissionOutput`), §15.
-- **Grenzen:** das Schnellspeichern im Spiel bleibt `MissionPauseMenu` (`MatchController` hat seinen eigenen Quit-Dialog); Kampagnenzustand und Fortschritt hält weiter der
-  `CampaignController`. Die Skirmish-Statistik (`MatchResult`) wird für Missionen mit denselben Ereignissen gefüllt (`MatchStatsTracker.Snapshot(Players, Winner, Tick)`), ihre Zählung
-  „gebaut/verloren/getötet“ gilt also auch dort, ein Missionsergebnis mit Zielen/Punkten gibt es nicht. Test: `tests/CnCNew.Game.Tests/MissionHudTests.cs` (echte Karte
-  `GC_ChemGeneral`: Frames, Zeichenliste, Befehl über die Senke, Auswahl erreicht die VM, Ende genau einmal).
+- **`LiveMission`** (`Live/LiveMission.cs`) puts a `MissionRun` (`MissionSession`) behind it. The viewer is the local side of the mission (`MissionSession.LocalPlayerOf`,
+  including the side chosen by `ChallengeSides`); the camera starts above the centroid of its objects. A tick is `MissionPresentationDirector.BeforeStep` → `Session.Step()`
+  (scripts, automatic combat, world) → `AfterStep`; the camera ordered by the script travels per frame over the duration of the script (`OnAdvanced` → `ApplyCameraTo`, since Phase 16; before, one jump per new target – `docs/SCRIPT-ENGINE.md` §7a). Commands of the human go
+  through `MissionCommandSink` (`Presentation/Input/CommandSink.cs`) into `MissionSession.Issue`, i.e. through the same sequence counter per player as those of the scripts.
+  `Winner` is the viewer on a mission victory, otherwise `null` (the opponents are scripted, no competing human).
+- **`MissionController`** (`Hud/MissionController.cs`) puts a `MatchController` over the `LiveMission`, hooks `SelectionModel.SelectionChanged` to `MissionUiBridge.OnSelectionChanged`
+  (the selection reaches `NAMED_SELECTED`), delivers `BuildDrawList` with the screen text of the director (message lines, typed military caption, timers and counters, cinematic text, speech/movie placeholders, since Phase 16 also letterbox, fades, result banner; during the letterbox without the command bar) above the HUD, after that the message window (`MissionPopupWindow`, `INGAME_POPUP_MESSAGE`: a window tree of its own from `InGamePopupMessage.wnd`; a window with a pause mark pauses the mission and swallows all events, OK/Enter/Escape close it and lift the pause), locks the world input as long as the script has locked it (`MatchController.WorldInputEnabled`), and reports the end of the mission
+  once (`MissionEnded`); after that the host calls `GameShell.MissionFinished(run, controller)`.
+- **What scripts change on command bar and HUD** (Phase 16, second session; `MissionController` implements `IMissionHudControl`, wording per output type in `docs/SCRIPT-ENGINE.md` §7a):
+  `COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE`/`COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT` change the **command set** of the object type, not a single object: `ControlBarScriptState`
+  (`Presentation/Input/ControlBarScriptState.cs`) holds overrides per (set name, slot) – a removed button is an override without a button (`GameLogic::setControlBarOverride`,
+  `CommandSet::getCommandButton` asks them first) –, and `CommandBarModel.Build` (single and multiple selection) as well as the build queue images read them through `ButtonOf`. The player thus no longer sees and
+  clicks the button on **every** object of this set; a button that is already missing stays away, an unknown button or object type is rejected and reported. In `MD_USA01`
+  the script sets 25 such removals in tick 0 (recruiting/upgrade buttons of the factions). `PLAYER_SCIENCE_AVAILABILITY` (only for the local side) acts on `PurchaseScience` buttons
+  ("Hidden" = button hidden, "Disabled" = locked, `ButtonReason.NotPurchasable`); that becomes visible only with a generals powers window, which the client does not have. `OPTIONS_SET_DRAWICON_UI_MODE`
+  switches `MatchController.IconUiEnabled`: off = no heal icons (selection marks stay). `UNIT_AFFECT_OBJECT_PANEL_FLAGS` "Selectable" = `EntityPicker.SetScriptSelectable`: the pick and the
+  selection leave the object out, an existing selection loses it (`SelectionModel.Replace/Change`). States do not go along when a mission is saved/loaded. Tests:
+  `MissionEffectsTests` (dummies; real `MD_USA01`: button disappears from the bar of a selected object and comes back, science, selection).
+- **Superweapon list** (`Hud/SuperweaponTimers.cs`, `MatchController.Superweapons`, applies to skirmishes and missions): top right, at x = 0.90, y = 0.01 of the screen area (`SuperweaponCountdownPosition` of the
+  retail `InGameUI.ini`, now from `InGameUiSettings`), per power with `PublicTimer` and per object one line "Name: m:ss" – the name right-aligned up to x, the time left-aligned from x (`SuperweaponInfo::drawName/drawTime`), in the house color
+  of the owner, **the enemy ones too** (an enemy nuclear strike counts down on one's own screen). Rules after `InGameUI::draw`: players by index, powers by name, objects in
+  creation order; a construction site shows nothing; a power with a shared timer (`SharedSyncedTimer`) is listed once per player; if the owner lacks the required science, the line is missing;
+  the time is `(ready frame − tick) / 30` as an integer (`CommandBarModel.ReadyFrameOf`), a ready power has the ready font (`SuperweaponCountdownReadyFont`, retail: bold) and switches every 15 logic frames (`SuperweaponCountdownFlashDuration` 500 ms) between house color and `SuperweaponCountdownFlashColor`, the flash color in the odd periods (the state `m_superweaponUsedFlashColor` starts true; before, the phase was reversed); the list
+  stops above the command bar (0.82 of the view height) with "..." (left-aligned from x in the normal font, like `drawTime` in the original; before, right-aligned). The name is the entry `GUI:<power name>` of the string table; if it is missing, the key itself stands there and
+  `SuperweaponTimers.MissingLabels` counts it. Mission scripts hide the whole list (`DisplayEnabled`) or individual objects (`HiddenByScript`, through `IMissionHudControl`). The values (position,
+  flash duration and color from `InGameUI.ini`, the fonts from `Language.ini` through `InGameUiStyle`, `docs/TEXT-AUDIT.md` §4.6) are no longer constants; `InGameUiSettings` is strictly typed and checked by `TextAndSettingsTests` on the retail file. **Not adopted:**
+  the EVA announcement "superweapon ready", which `drawSuperweaponTimers` also triggers in the original (Eva reports that here through the simulation events), the change of the font on becoming ready with a
+  text object of its own, the resumption of the state from a saved game. The named mission timers (`DISPLAY_COUNTDOWN_TIMER`) have been, since the mission text session, at
+  `NamedTimerCountdownPosition` (X:0.90 Y:0.666) of the retail file (`MissionTextOverlay.NamedTimers`, `docs/SCRIPT-ENGINE.md` §7a).
+- **Stride:** `LiveMatchHost` and all world layers take a `LiveGame`; `CnCNew.Client.Stride --mission <map> [--human-side <Name>]` starts a campaign map (smoke test:
+  `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir game/content`). Since Phase 12 the Stride shell also draws the HUD draw list
+  (`MissionController.BuildDrawList`) and processes the shell outputs (`StartMissionOutput`), §15.
+- **Limits:** quick saving in the game stays `MissionPauseMenu` (`MatchController` has its own quit dialog); campaign state and progress are still held by the
+  `CampaignController`. The skirmish statistics (`MatchResult`) are filled for missions with the same events (`MatchStatsTracker.Snapshot(Players, Winner, Tick)`), so their counting
+  "built/lost/killed" applies there as well, a mission result with objectives/points does not exist. Test: `tests/CnCNew.Game.Tests/MissionHudTests.cs` (real map
+  `GC_ChemGeneral`: frames, draw list, command through the sink, selection reaches the VM, end exactly once).
 
-## 15. Phase 12: HUD, Eingabe und Shell im Stride-Client (`ClientRuntime`)
+## 15. Phase 12: HUD, input and shell in the Stride client (`ClientRuntime`)
 
-Die Stride-Hülle zeichnete bis Phase 11 nur die Welt. Seit Phase 12 verdrahtet `src/CnCNew.Client.Stride/ClientRuntime.cs` alles, was die Präsentationsschicht liefert – ohne Simulationszustand zu berühren, sie liest
-nur, was die Controller zeigen, und gibt typisierte Eingaben weiter:
+Until Phase 11 the Stride shell drew only the world. Since Phase 12 `src/CnCNew.Client.Stride/ClientRuntime.cs` wires up everything the presentation layer delivers – without touching simulation state, it only
+reads what the controllers show, and passes on typed inputs:
 
-- **Eingabe:** `Ui/StrideInputTranslator.cs` übersetzt je Frame `InputManager.Events` und die absolute Mausposition in die gerätneutralen `PresentationInput.InputEvent`s (Fensterpixel, Ursprung oben links =
-  Raum des Backbuffers, in dem das UI gelegt ist; Move-Ereignis zuerst, wenn sich der Zeiger bewegte; Tasten ohne Namen in `KeyNames` werden verworfen, Text geht als Zeichen durch). Der Empfänger ist
-  der Bildschirmbesitzer: die Shell (Menüs) oder das HUD des laufenden Spiels (`MatchController`/`MissionController`).
-- **Zeichnen:** `GameShell.BuildDrawList`, `MatchController.BuildDrawList` und `MissionController.BuildDrawList` werden mit **einem** `UiRenderer` über der 3D-Welt (`LiveMatchHost`) gezeichnet. Die Fenster, die die
-  Befehlsleiste dem Host überlässt (§5): `W3DLeftHUDDraw` ist der Minimaprahmen, seitenverhältniserhaltend zentriert wie in `MatchController.TryMinimapWorld` (§11) – ein Punkt je Objekt, das der Betrachter sieht
-  (Teamfarbe; die Projektion lässt aus, was Nebel/Schatten verbergen); `Viewport3D` braucht nichts (die Welt liegt schon dahinter); jeder andere Rückruf wird vom Renderer gezählt und bleibt ungezeichnet
-  (`ClientRuntime.LastFrame`: gezeichnete Befehle und offen gebliebene Eigenzeichnungen, für Rauchtests).
-- **Shell-Ausgaben:** `StartMatchOutput`, `StartMissionOutput`, `ExitRequestedOutput` und die Anzeige-/Einstellungsänderungen werden ausgeführt; ein beendetes Spiel meldet sich genau einmal an die Shell
-  zurück (`GameShell.MatchFinished`/`MissionFinished`: Ergebnis-/Abspannbildschirme), danach fällt die Welt weg und die Shell erscheint wieder. Befehlszeile: `--shell` (Standard bei `--content-dir` ohne
+- **Input:** `Ui/StrideInputTranslator.cs` translates per frame `InputManager.Events` and the absolute mouse position into the device-neutral `PresentationInput.InputEvent`s (window pixels, origin top left =
+  space of the back buffer in which the UI is laid out; move event first if the pointer moved; keys without a name in `KeyNames` are discarded, text passes through as characters). The receiver is
+  the screen owner: the shell (menus) or the HUD of the running game (`MatchController`/`MissionController`).
+- **Drawing:** `GameShell.BuildDrawList`, `MatchController.BuildDrawList` and `MissionController.BuildDrawList` are drawn with **one** `UiRenderer` above the 3D world (`LiveMatchHost`). The windows that the
+  command bar leaves to the host (§5): `W3DLeftHUDDraw` is the minimap frame, centred preserving the aspect ratio as in `MatchController.TryMinimapWorld` (§11) – one dot per object that the viewer sees
+  (team color; the projection leaves out what fog/shroud hide); `Viewport3D` needs nothing (the world already lies behind it); every other callback is counted by the renderer and stays undrawn
+  (`ClientRuntime.LastFrame`: drawn commands and custom draws left open, for smoke tests).
+- **Shell outputs:** `StartMatchOutput`, `StartMissionOutput`, `ExitRequestedOutput` and the display/settings changes are executed; a finished game reports back to the shell exactly once
+  (`GameShell.MatchFinished`/`MissionFinished`: result/credits screens), after that the world goes away and the shell appears again. Command line: `--shell` (default with `--content-dir` without
   `--match`/`--mission`/`--model-path`), `--match`, `--mission`, `--smoke-test [--frames N --capture <png>]`.
-- **Schema-Kunst der Befehlsleiste (Fund beim Verdrahten):** die Befehlsleiste hatte bisher nur die Fensterbaumgrafik. `ControlBarScheme.ini` liefert den eigentlichen Hintergrund: `BuildSchemeBackground`
-  (`ControlBarScheme::drawBackground`) legt die `ImagePart`s der Seite des Menschen in Ebenenreihenfolge (Ebene 0 zuletzt, oben) unter den Fensterbaum, jeweils über dieselbe Abbildung wie die Geld-/Energie-
-  Rechtecke; ein Bild, das die Tabelle nicht kennt, wird übersprungen. Das Porträtfenster rechts nennt das Bild `HardCodedWithControlBarSchemeIni`, das das Original durch das `RightHUDImage` des Schemas (das
-  Seitenlogo) ersetzt (`ResolveHardCodedImages`, neues Feld `ControlBarSchemeInfo.RightHudImage`). Das hat die HUD-Zeichenliste geändert: der Golden-Hash `hud-drawlist-1280x720.sha256` wurde bewusst neu
-  erzeugt (Test `HudTests`).
-- **Grenzen:** Schriftmetrik und echte Glyphen kommen weiter aus `ShellTextMeasure` (synthetisch, `docs/GAME-SHELL.md` §10); Video und die Tonausgabe der Shell/Missionen sind nicht Teil dieses Pakets (die Ausgabe `Audio/AudioOutput` ist unverändert);
-  die Verdrahtung ist headless per Rauchtest geprüft, nicht von einem Menschen gespielt.
-- **Bildprobe (2. Oktober 2026):** `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --frames 60 --capture <png>` zeigt über der Welt die Minimap mit Teampunkten im Rahmen, die Befehlsleiste mit Geldanzeige, Fortschrittsbalken und
-  leerem Befehlsraster sowie den Sprach-Untertitel der Mission (`(speech: Taunts_Toxin102)`); das Porträtfenster rechts bleibt leer. Die Shell (`--shell`) zeichnet 172 Befehle ohne fehlende Bilder/Texturen/Beschriftungen/Glyphen.
+- **Scheme art of the command bar (found while wiring):** the command bar so far had only the window tree artwork. `ControlBarScheme.ini` supplies the actual background: `BuildSchemeBackground`
+  (`ControlBarScheme::drawBackground`) puts the `ImagePart`s of the side of the human in layer order (layer 0 last, on top) below the window tree, each through the same mapping as the money/power
+  rectangles; an image that the table does not know is skipped. The portrait window on the right names the image `HardCodedWithControlBarSchemeIni`, which the original replaces by the `RightHUDImage` of the scheme (the
+  side logo) (`ResolveHardCodedImages`, new field `ControlBarSchemeInfo.RightHudImage`). That has changed the HUD draw list: the golden hash `hud-drawlist-1280x720.sha256` was deliberately regenerated
+  (test `HudTests`).
+- **Limits:** font metrics and real glyphs still come from `ShellTextMeasure` (synthetic, `docs/GAME-SHELL.md` §10); video and the sound output of the shell/missions are not part of this package (the output `Audio/AudioOutput` is unchanged);
+  the wiring is checked headless by smoke test, not played by a human.
+- **Picture sample (2 October 2026):** `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --frames 60 --capture <png>` shows above the world the minimap with team dots in the frame, the command bar with money display, progress bar and
+  empty command grid as well as the speech subtitle of the mission (`(speech: Taunts_Toxin102)`); the portrait window on the right stays empty. The shell (`--shell`) draws 172 commands without missing images/textures/labels/glyphs.
 
-## 16. Phase 16: Mauszeiger, Wegpunkte und Befehlsmarken
+## 16. Phase 16: mouse pointer, waypoints and order marks
 
-Befund aus der ersten Tech-Demo (`docs/DEMO-FINDINGS.md` Punkt 8): der Client zeigte den Pfeil des Betriebssystems, Alt änderte nichts Sichtbares, gesetzte Wegpunkte waren unsichtbar. Die Regeln (welcher Cursor, welche
-Marken) stehen in `docs/PRESENTATION-INPUT.md` §11/§12; dieser Abschnitt beschreibt, was das HUD und der Client daraus machen. Nichts davon schreibt in die Simulation: Cursor und Marken lesen Auswahl, `StandingOrders`
-und die Welt; Befehle gehen weiter nur als typisierte Kommandos durch die Senke.
+Finding from the first tech demo (`docs/DEMO-FINDINGS.md` item 8): the client showed the arrow of the operating system, Alt changed nothing visible, placed waypoints were invisible. The rules (which cursor, which
+marks) are in `docs/PRESENTATION-INPUT.md` §11/§12; this section describes what the HUD and the client make of them. None of it writes into the simulation: cursor and marks read selection, `StandingOrders`
+and the world; commands still go only as typed commands through the sink.
 
-### Cursor im HUD (`MatchController`)
+### Cursor in the HUD (`MatchController`)
 
-| Mitglied | Bedeutung |
+| Member | Meaning |
 |---|---|
-| `Cursor` (`CursorState`) | Der Cursor dieses Frames: im geöffneten Spielmenü der Pfeil, sonst `GameInputController.Cursor(PointerOverWindow)`. |
-| `PointerOverWindow` | Zeiger über Befehlsleiste, Minimap oder Menü, oder ein dort begonnener Druck wird noch gehalten (`UiWindowTree.InputTarget`, `TryMinimapWorld`). Dann gilt der Pfeil (`InGameUI`: `underWindow`). |
-| `PointerPosition` | Zeigerposition in Fensterpixeln, `null` vor dem ersten Mausereignis. |
+| `Cursor` (`CursorState`) | The cursor of this frame: the arrow in the opened game menu, otherwise `GameInputController.Cursor(PointerOverWindow)`. |
+| `PointerOverWindow` | Pointer above command bar, minimap or menu, or a press started there is still held (`UiWindowTree.InputTarget`, `TryMinimapWorld`). Then the arrow applies (`InGameUI`: `underWindow`). |
+| `PointerPosition` | Pointer position in window pixels, `null` before the first mouse event. |
 
-`Update` liest den Kontext unter dem ruhenden Zeiger in jedem Frame neu (`GameInputController.RefreshHint`), solange der Zeiger über der Welt steht: die Welt bewegt sich unter ihm, und die Auswahl kann sich ohne
-Eingabeereignis ändern. Für Missionen gilt dasselbe über `MissionController.Hud`.
+`Update` re-reads the context under the resting pointer in every frame (`GameInputController.RefreshHint`) as long as the pointer is above the world: the world moves under it, and the selection can change without
+an input event. For missions the same applies through `MissionController.Hud`.
 
-### Software-Cursor im Client (`CnCNew.Client.Stride/Ui/SoftwareCursor.cs`)
+### Software cursor in the client (`CnCNew.Client.Stride/Ui/SoftwareCursor.cs`)
 
-Das Original lässt Windows die ANI-Dateien zeichnen (`Win32Mouse::setCursor`, `LoadCursorFromFile`). Der Client zeichnet dieselben Dateien selbst als letztes Sprite über der Zeichenliste (`ClientRuntime.Draw`), damit der
-Cursor in Captures erscheint und nicht vom Fenstersystem abhängt: `GameData.LoadCursors()` dekodiert die Cursor über `CnCNew.Content`, je Frame entsteht bei Bedarf eine Textur (`R8G8B8A8_UNorm` wie alle UI-Texturen),
-gezeichnet 1:1 mit dem Hotspot der Datei auf der Zeigerposition. Die Animationsuhr (`CursorAnimator`) beginnt bei jedem Cursorwechsel neu.
+The original lets Windows draw the ANI files (`Win32Mouse::setCursor`, `LoadCursorFromFile`). The client draws the same files itself as the last sprite above the draw list (`ClientRuntime.Draw`), so that the
+cursor appears in captures and does not depend on the window system: `GameData.LoadCursors()` decodes the cursors through `CnCNew.Content`, per frame a texture is created on demand (`R8G8B8A8_UNorm` like all UI textures),
+drawn 1:1 with the hot spot of the file on the pointer position. The animation clock (`CursorAnimator`) starts anew on every cursor change.
 
-* Der Betriebssystem-Cursor wird versteckt (`Game.IsMouseVisible = false`), solange der Software-Cursor verfügbar ist. Lässt sich der Pfeil aus `Mouse.ini` nicht laden, bleibt der Betriebssystem-Cursor sichtbar
-  und der Client schreibt **eine** Warnung auf die Konsole. Außerhalb des Fensters zeichnet der Client nichts.
-* Shell und Spielmenü zeigen den Pfeil; ein laufendes Spiel den Cursor des HUD.
-* Ein Cursor ohne Bild wird nicht ersetzt: `Build`/`InvalidBuild` haben in den Retaildaten keinen `MouseCursor`-Block, beim Platzieren ist also wie im Original kein Cursor zu sehen (die Bauvorschau steht unter dem
-  Zeiger). Ein definierter Cursor, dessen Datei fehlt oder nicht dekodierbar ist, wird je Art gezählt (`unresolved` in der Berichtszeile).
-* `--smoke-test` läuft weiter ohne Geräteeingabe und druckt eine Zeile `cursor: software; 37 definitions, issues [], 34 files loaded, 235 frames, 0 inverting pixels, missing files [], undecodable [], engine cursors
-  without a definition [Build, InvalidBuild]; N frames drawn, …; current <Name> (<Datei> frame i/n, hot spot x,y)` (gemessen 4. Oktober 2026; ohne Zeiger: `current none (no pointer position yet)`).
-* Capture-Hilfen eines Festschritt-Laufs: `--cursor-at x,y` setzt den Zeiger über ein synthetisches Mausereignis je Frame (derselbe Ereignisweg wie eine echte Maus); `--waypoints "dx,dy;dx,dy;…"` (mit
-  `--select-own`) hält Alt und ordnet je Versatz (Meter ab der ersten beweglichen ausgewählten Einheit) einen Wegpunkt über die Eingabeschicht an.
+* The operating system cursor is hidden (`Game.IsMouseVisible = false`) as long as the software cursor is available. If the arrow from `Mouse.ini` cannot be loaded, the operating system cursor stays visible
+  and the client writes **one** warning to the console. Outside the window the client draws nothing.
+* Shell and game menu show the arrow; a running game the cursor of the HUD.
+* A cursor without an image is not replaced: `Build`/`InvalidBuild` have no `MouseCursor` block in the retail data, so when placing no cursor is visible, as in the original (the build preview is under the
+  pointer). A defined cursor whose file is missing or cannot be decoded is counted per kind (`unresolved` in the report line).
+* `--smoke-test` still runs without device input and prints a line `cursor: software; 37 definitions, issues [], 34 files loaded, 235 frames, 0 inverting pixels, missing files [], undecodable [], engine cursors
+  without a definition [Build, InvalidBuild]; N frames drawn, …; current <Name> (<file> frame i/n, hot spot x,y)` (measured 4 October 2026; without a pointer: `current none (no pointer position yet)`).
+* Capture aids of a fixed-step run: `--cursor-at x,y` sets the pointer through a synthetic mouse event per frame (the same event path as a real mouse); `--waypoints "dx,dy;dx,dy;…"` (with
+  `--select-own`) holds Alt and orders one waypoint per offset (metres from the first movable selected unit) through the input layer.
 
-### Wegpunktpfad und Befehlsmarken (`HudOverlayRenderer`)
+### Waypoint path and order marks (`HudOverlayRenderer`)
 
-| Marke | Zeichnung | Original |
+| Mark | Drawing | Original |
 |---|---|---|
-| Wegpunktpfad | Linie Einheit → Station 1 → … in (64, 128, 255), 2 px; je Station eine Raute mit Mittelring. Drei Wegpunkte = drei Marken, das Segment ab der Einheit plus zwei zwischen den Stationen. | `W3DWaypointBuffer::drawWaypoints`: Linie in (0,25; 0,5; 1,0), additiv, 1,5 breit, mit `EXLaser.tga`; je Station das Modell `SCMNode`. Der Client hat noch keine 3D-Markenmodelle, die Station ist deshalb eine 2D-Raute im Overlay. |
-| Befehlsmarke Bewegen / Wegpunkt / Sammelpunkt / Betreten | Ring, der sich von 20 px auf 6 px Radius zusammenzieht und dabei verblasst, mit Mittelkreuz; Farbe wie die jeweilige Linie. | `W3DInGameUI::drawMoveHints`: das Modell `MoveHintName` spielt seine Animation einmal und verschwindet nach 40 Frames. |
-| Befehlsmarke Angriff | Vier rote Eckwinkel, die sich um das Ziel schließen; die Marke folgt dem Ziel, solange es existiert. | `drawAttackHints` ist im Original leer; das Ziel blinkt dort (`SelectionFlash`, schon vorhanden). Die Marke ist eine Ergänzung. |
-| Sammelpunkt | unverändert die gelbe Fahne am Sammelpunkt des ausgewählten Produktionsgebäudes. | `W3DWaypointBuffer` zeichnet außerhalb des Wegpunktmodus die Sammelpunktlinie der Auswahl. |
+| Waypoint path | line unit → station 1 → … in (64, 128, 255), 2 px; per station a diamond with a centre ring. Three waypoints = three marks, the segment from the unit plus two between the stations. | `W3DWaypointBuffer::drawWaypoints`: line in (0.25; 0.5; 1.0), additive, 1.5 wide, with `EXLaser.tga`; per station the model `SCMNode`. The client has no 3D mark models yet, the station is therefore a 2D diamond in the overlay. |
+| Order mark move / waypoint / rally point / enter | ring that contracts from 20 px to 6 px radius and fades in the process, with a centre cross; color like the respective line. | `W3DInGameUI::drawMoveHints`: the model `MoveHintName` plays its animation once and disappears after 40 frames. |
+| Order mark attack | four red corner angles that close around the target; the mark follows the target as long as it exists. | `drawAttackHints` is empty in the original; the target flashes there (`SelectionFlash`, already present). The mark is an addition. |
+| Rally point | unchanged, the yellow flag at the rally point of the selected production building. | `W3DWaypointBuffer` draws the rally point line of the selection outside the waypoint mode. |
 
-Bodenpunkte (Stationen, Sammelpunkt, Marken, Befehlslinien) werden jetzt auf Geländehöhe projiziert (`LiveGame.Heights`), vorher auf z = 0 – auf einer hügeligen Karte lag die Fahne sonst neben dem Punkt. Ein Punkt
-hinter der Kamera beendet den Pfad an dieser Stelle.
+Ground points (stations, rally point, marks, order lines) are now projected onto terrain height (`LiveGame.Heights`), before onto z = 0 – on a hilly map the flag otherwise lay beside the point. A point
+behind the camera ends the path at this place.
 
-**Sichtbarkeit wie im Original:** der Wegpunktpfad erscheint nur für ausgewählte Einheiten und nur, solange Alt gehalten wird; lässt der Spieler Alt los, läuft die Einheit den Pfad weiter ab, er wird aber nicht mehr
-gezeichnet. Eine erreichte Station verschwindet aus dem Pfad, ein anderer Befehl (oder der Tod der Einheit) entfernt ihn ganz.
+**Visibility as in the original:** the waypoint path appears only for selected units and only as long as Alt is held; if the player releases Alt, the unit continues to follow the path, but it is no longer
+drawn. A station reached disappears from the path, another command (or the death of the unit) removes it entirely.
 
-### Tests und Bildproben
+### Tests and picture samples
 
-* `tests/CnCNew.Game.Tests/HudTests.cs` „Cursor and markers“ (Realdaten, Alpine Assault): Pfeil ohne Zeiger; `Normal` ohne Auswahl; `Move` mit ausgewählter Planierraupe; Alt schaltet ohne Mausbewegung auf
-  `Waypoint`; drei Alt-Klicks ergeben einen Pfad mit vier Punkten, dessen Stationen höchstens 2,5 px neben den Klickpunkten liegen, 33 blaue Linien (3 Segmente + 3 × 10 Markenlinien) und drei Marken, die nach 40
-  Frames weg sind; Alt los: Pfad verborgen; ein einfacher Bewegungsbefehl ersetzt den Pfad und hinterlässt eine Marke, die mit der Zeit verblasst; über der Befehlsleiste der Pfeil; am rechten Bildrand der
-  Scrollcursor Richtung 0, für den `GameData.LoadCursors()` das Bild `SCCScroll0.ani` hat.
-* `scripts/capture-world.ps1`: Szenen `match-cursor-move` und `match-waypoints`. Beide Bilder wurden headless erzeugt und angesehen (4. Oktober 2026): der Bewegungscursor (vier grüne Pfeile nach innen) steht
-  über dem Boden, der Auswahlcursor über der Kommandozentrale, die Scrollpfeile zeigen am rechten und unteren Rand nach rechts bzw. unten; die blaue Wegpunktlinie führt von der Planierraupe über drei Rauten,
-  um jede Station liegt der verblassende Ring. Zwei Läufe der Wegpunktszene lieferten dieselbe Prüfsumme.
+* `tests/CnCNew.Game.Tests/HudTests.cs` "Cursor and markers" (real data, Alpine Assault): arrow without a pointer; `Normal` without a selection; `Move` with a selected dozer; Alt switches to
+  `Waypoint` without a mouse movement; three Alt clicks give a path with four points whose stations lie at most 2.5 px beside the click points, 33 blue lines (3 segments + 3 × 10 mark lines) and three marks that are gone after 40
+  frames; Alt released: path hidden; a simple move command replaces the path and leaves a mark that fades with time; above the command bar the arrow; at the right screen edge the
+  scroll cursor direction 0, for which `GameData.LoadCursors()` has the image `SCCScroll0.ani`.
+* `scripts/capture-world.ps1`: scenes `match-cursor-move` and `match-waypoints`. Both pictures were produced headless and looked at (4 October 2026): the move cursor (four green arrows pointing inwards) is
+  above the ground, the selection cursor above the command center, the scroll arrows point right and down at the right and lower edge respectively; the blue waypoint line leads from the dozer over three diamonds,
+  around every station lies the fading ring. Two runs of the waypoint scene yielded the same checksum.
 
-### Nicht belegt, nicht getan
+### Not verified, not done
 
-* **Kein Mensch hat Cursor und Marken im laufenden Client gesehen** (Wirkung, Größe, Lesbarkeit, Verzögerung des Software-Cursors gegenüber der echten Maus, Verhalten beim Verlassen des Fensters und im Vollbild).
-* Der Radius-Cursor der Spezialkräfte (`RadiusCursorType`, die Wirkkreis-Decals) und der Cursor-Text (`CursorText`) werden nicht gezeichnet.
-* 3D-Marken (`SCMNode`, das Bewegungsmarken-Modell) fehlen; die Marken sind 2D-Ersatz im Overlay.
-* Die Einnahme-, Hack-, Entführungs- und Scharfschützen-Cursor kommen nur über Befehlsknöpfe, die die Eingabeschicht noch als „nicht unterstützt“ führt (`docs/PRESENTATION-INPUT.md` §6); ihre Bilder sind geladen,
-  gezeigt werden sie heute nur von Knöpfen mit Zielmodus.
+* **No human has seen cursor and marks in the running client** (effect, size, readability, delay of the software cursor compared with the real mouse, behaviour when leaving the window and in full screen).
+* The radius cursor of the special powers (`RadiusCursorType`, the effect-radius decals) and the cursor text (`CursorText`) are not drawn.
+* 3D marks (`SCMNode`, the move mark model) are missing; the marks are 2D substitutes in the overlay.
+* The capture, hack, hijack and sniper cursors come only through command buttons that the input layer still lists as "not supported" (`docs/PRESENTATION-INPUT.md` §6); their images are loaded,
+  today they are shown only by buttons with a target mode.
 
-## 17. Phase 16: Eingabe-Wiedergabe im Client (`--input-script`) und der Befund „Dozer baut nicht“
+## 17. Phase 16: input playback in the client (`--input-script`) and the finding "dozer does not build"
 
-### 17.1 Die Testeinrichtung
+### 17.1 The test facility
 
-`src/CnCNew.Client.Stride/Testing/InputScript.cs` spielt eine Folge von Zeiger- und Tastenereignissen **an der Stelle ein, an der sonst `StrideInputTranslator.Poll` in `ClientRuntime.Update`
-mündet**. Ein Skript läuft damit durch den echten Clientweg: das HUD ist für den echten Backbuffer gelegt, die Textmaße kommen vom Renderer, pro Frame gibt es ein Update und eine Zeichenliste –
-nichts davon sieht ein Headless-Test des `MatchController`. Die Einrichtung schreibt nie in die Simulation: alles ist ein `InputEvent`; die einzige Ausnahme `look` bewegt nur die Kamera.
+`src/CnCNew.Client.Stride/Testing/InputScript.cs` plays in a sequence of pointer and key events **at the place where otherwise `StrideInputTranslator.Poll` flows into `ClientRuntime.Update`**.
+A script thus runs through the real client path: the HUD is laid out for the real back buffer, the text measures come from the renderer, per frame there is one update and one draw list –
+a headless test of the `MatchController` sees none of that. The facility never writes into the simulation: everything is an `InputEvent`; the only exception `look` moves only the camera.
 
-Aufruf (nur mit festen Zeitschritten): `--smoke-test --frames N --input-script <Datei>` zusammen mit `--match`, `--mission` oder `--scenario`.
+Invocation (only with fixed time steps): `--smoke-test --frames N --input-script <file>` together with `--match`, `--mission` or `--scenario`.
 
-Format: eine Zeile je Schritt, `#` beginnt einen Kommentar, `FRAME VERB ARGUMENTE` (Frames zählen die Updates der Laufzeit ab 1).
+Format: one line per step, `#` begins a comment, `FRAME VERB ARGUMENTS` (frames count the updates of the runtime from 1).
 
-| Verb | Bedeutung |
+| Verb | Meaning |
 | --- | --- |
-| `move ZIEL` | Zeiger auf das Ziel |
-| `down [left\|right\|middle] [ZIEL]`, `up […]` | Taste drücken/loslassen (ohne Ziel an der aktuellen Zeigerposition) |
-| `click [left\|right\|middle] ZIEL` | Bewegen und Drücken in diesem Frame, Loslassen zwei Frames später auf demselben Pixel |
-| `key down\|up KEYCODE` | Taste (`KeyCode`-Name, z. B. `S`, `LeftControl`); die Knopftaste der Befehlsleiste wirkt beim `up` (Beispiele: `scripts/input/hotkeys-*.txt`) |
-| `look ZIEL` | Kamera auf das Ziel zentrieren (Testhilfe, keine Eingabe) |
+| `move TARGET` | pointer to the target |
+| `down [left\|right\|middle] [TARGET]`, `up […]` | press/release a button (without a target at the current pointer position) |
+| `click [left\|right\|middle] TARGET` | move and press in this frame, release two frames later on the same pixel |
+| `key down\|up KEYCODE` | key (`KeyCode` name, e.g. `S`, `LeftControl`); the button key of the command bar takes effect on `up` (examples: `scripts/input/hotkeys-*.txt`) |
+| `look TARGET` | centre the camera on the target (test aid, no input) |
 
-Ziele werden im Frame ihrer Verwendung aufgelöst: `screen:X,Y`; `own:KINDOF[#N]` und `template:NAME[#N]` (das N-te eigene lebende Objekt nach Id, an seinem Auswahl-Mittelpunkt);
-`button:FENSTER` (Mitte eines HUD-Fensters, z. B. `ControlBar.wnd:ButtonOptions`); `command:ART[:OBJEKT]` (der erste freigeschaltete Befehlsleisten-Platz dieser `GuiCommandKind`);
-`ground:X,Y`; `ground:+DX,+DY from OBJEKT`; `placement from OBJEKT` (die erste Stelle um das Objekt, an der die anstehende Platzierung angenommen würde). Wie beim echten Gerät gibt es **eine**
-Zeigerposition je Frame: zuerst ein Bewegungsereignis, wenn sie sich änderte, dann die Tastenereignisse des Frames mit dieser Position.
+Targets are resolved in the frame of their use: `screen:X,Y`; `own:KINDOF[#N]` and `template:NAME[#N]` (the N-th own living object by id, at its selection centre);
+`button:WINDOW` (centre of a HUD window, e.g. `ControlBar.wnd:ButtonOptions`); `command:KIND[:OBJECT]` (the first unlocked command bar slot of this `GuiCommandKind`);
+`ground:X,Y`; `ground:+DX,+DY from OBJECT`; `placement from OBJECT` (the first place around the object at which the pending placement would be accepted). As with the real device there is **one**
+pointer position per frame: first a move event if it changed, then the button and key events of the frame with this position.
 
-Bericht am Ende (Konsole, Präfix `input-script:`): jeder Schritt mit aufgelöstem Pixel und Ziel, jede Auswahländerung, jeder Wechsel des Befehlsmodus und der Bauvorschau (gültig/ungültig mit
-Grund, gezeichnet oder nicht), jeder abgesetzte Befehl mit Antwort der Simulation (`LiveGame.CommandIssued`: angenommen oder Ablehnungsgrund), ungültige Klicks, entstandene und fertige
-Baustellen, der Zustand am Ende und eine Summenzeile (`input-script summary: steps=… events=… unresolved=… selectionChanges=… commandsAccepted=… commandsRejected=… invalidOrders=… sitesCreated=…
-sitesCompleted=…`). Ein Ziel, das sich nicht auflösen lässt, wird gemeldet und gezählt, nie still übergangen; der Prozess endet dann mit Exitcode 3.
+Report at the end (console, prefix `input-script:`): every step with resolved pixel and target, every change of selection, every change of the command mode and of the build preview (valid/invalid with
+reason, drawn or not), every issued command with the answer of the simulation (`LiveGame.CommandIssued`: accepted or rejection reason), invalid clicks, construction sites created and
+finished, the state at the end and a summary line (`input-script summary: steps=… events=… unresolved=… selectionChanges=… commandsAccepted=… commandsRejected=… invalidOrders=… sitesCreated=…
+sitesCompleted=…`). A target that cannot be resolved is reported and counted, never silently skipped; the process then ends with exit code 3.
 
-Regressionsprüfung: `scripts/check-dozer-build.ps1 [-Quick] [-NoBuild]` (Skripte unter `scripts/input/`) fährt den Release-Client fünfmal, jeweils zeitbegrenzt, und prüft die Summenzeile:
-Mission `GC_ChemGeneral` und Gefecht `Alpine Assault` je in 1280x720 und 1920x1080 (Gebäude platziert und fertig gebaut) sowie Klicks während der Eröffnungssequenz der Mission (müssen
-verworfen werden, die Sperre muss enden). Gemessen 4. Oktober 2026: 5 von 5 bestanden; 7. Oktober 2026 mit der neuen Mausvorgabe erneut 5 von 5 (das Skript benutzt nur Klicks,
-die in beiden Mausbelegungen dasselbe bedeuten). `scripts/check-build-hotkeys.ps1 [-Faction …] [-Mouse classic]` prüft auf demselben Weg die Bautasten in den Szenen
-`exit-<fraktion>-all` (`docs/PRESENTATION-INPUT.md` §3a).
+Regression check: `scripts/check-dozer-build.ps1 [-Quick] [-NoBuild]` (scripts under `scripts/input/`) runs the Release client five times, each time-limited, and checks the summary line:
+mission `GC_ChemGeneral` and skirmish `Alpine Assault`, each in 1280x720 and 1920x1080 (building placed and built to completion), as well as clicks during the opening sequence of the mission (must be
+discarded, the lock must end). Measured 4 October 2026: 5 of 5 passed; 7 October 2026 with the new mouse default again 5 of 5 (the script uses only clicks
+that mean the same in both mouse assignments). `scripts/check-build-hotkeys.ps1 [-Faction …] [-Mouse classic]` checks the build keys in the same way in the scenes
+`exit-<faction>-all` (`docs/PRESENTATION-INPUT.md` §3a).
 
-### 17.2 Befund: „im Mission-Demo kann ich keine Gebäude mit dem Dozer bauen“
+### 17.2 Finding: "in the mission demo I cannot build buildings with the dozer"
 
-Mit der Wiedergabe „Dozer wählen → Bauknopf → Zeiger über den Boden → Klick“ im echten Client gemessen:
+Measured with the playback "select dozer → build button → pointer over the ground → click" in the real client:
 
-- **Nach der Eröffnungssequenz funktioniert der Bau** in `--mission GC_ChemGeneral` und in `--match Alpine Assault`, jeweils in 1280x720 und 1920x1080: Auswahl, Knopf
-  (`ButtonCommand01` bei 445,617 59x47 in 1280x720), Platzierungsmodus, gültige Vorschau, `ConstructCommand` angenommen, Baustelle entsteht, Dozer baut fertig (407 Ticks). UI-Skalierung,
-  Renderer-Textmaß und die Update-/Zeichenreihenfolge des Clients sind also nicht die Ursache.
-- **In den ersten 25 Sekunden der Mission scheiterte er**: dieselbe Folge ab Frame 40 ergab im alten Client eine gültige Vorschau bei Frame 60 und zehn Frames später am selben Pixel
-  `BlockedFootprint` – der Klick wurde als „Cannot do that“ abgewiesen und der Platzierungsmodus blieb stehen. Ursache: `GC_ChemGeneral` beginnt mit einer Kamerafahrt über die gegnerische Basis
-  (Tick 0–750: `CAMERA_LETTERBOX_BEGIN`, `DISABLE_INPUT`, `SETUP_CAMERA`, `MOVE_CAMERA_TO` bei Tick 60 und 330, `RESET_CAMERA` bei 681, `ENABLE_INPUT` bei 750). Der Client hat davon nur die
-  Kameraziele übernommen – als harten Sprung –, aber weder die Eingabesperre noch die Letterbox: die Befehlsleiste blieb bedienbar, während das Skript die Kamera unter dem Zeiger wegzog. Wer
-  in dieser Zeit baute, klickte auf eine andere Weltstelle als die, die er sah.
-- **Behoben** (§7a in `docs/SCRIPT-ENGINE.md`): die Skriptkamera fährt jetzt über die Dauer des Skripts, `DISABLE_INPUT`/`ENABLE_INPUT` sperren die Welteingabe (`MatchController.WorldInputEnabled`;
-  wie `ScriptActions::doDisableInput` werden Auswahl, Befehlsmodi und gehaltene Tasten gelöscht, das Spielmenü bleibt mit Esc erreichbar), die Letterbox blendet die Befehlsleiste aus und zeigt
-  Balken mit dem Hinweis, dass das Missionsskript die Eingabe gesperrt hat.
-- **Rückmeldung beim Bauen** (Bildprobe, PNGs außerhalb des Repos angesehen): die Bauvorschau war ein dünner Rahmen mit Diagonalen; sie ist jetzt zusätzlich schraffiert
-  (`HudOverlayRenderer`, grün = erlaubt, rot = nicht erlaubt). Ein Geistermodell des Gebäudes gibt es weiterhin nicht. Die Baustelle ist während des Baus sichtbar (Zaun und Gerüstteile des
-  Modells), der Dozer fährt sichtbar hin.
-- **Zusätzlich gehärtet:** `StrideInputTranslator` skaliert die normalisierte Zeigerposition jetzt mit dem Backbuffer statt mit der Fenstergröße; weicht die Fensterfläche vom Backbuffer ab
-  (ein 1920x1080-Fenster, das der Desktop nicht fasst; Anzeigeskalierung), trifft ein Klick trotzdem den Knopf unter dem Zeiger. Der Client schreibt beide Größen beim Start
-  (`display: back buffer …, window client area …`). Das ließ sich headless nicht nachstellen und ist **nicht** als Ursache belegt.
-- **Nicht belegt:** ob der Tester genau in diesen 25 Sekunden gebaut hat. Die Eröffnungssequenz ist der einzige Weg, auf dem die Wiedergabe im echten Client scheiterte; ein Mensch muss im
-  laufenden Client bestätigen, dass der Bau jetzt geht (Fenster, echte Maus, echte Frametimes sind headless nicht prüfbar).
+- **After the opening sequence construction works** in `--mission GC_ChemGeneral` and in `--match Alpine Assault`, each in 1280x720 and 1920x1080: selection, button
+  (`ButtonCommand01` at 445,617 59x47 in 1280x720), placement mode, valid preview, `ConstructCommand` accepted, construction site is created, dozer builds to completion (407 ticks). UI scaling,
+  renderer text measure and the update/draw order of the client are therefore not the cause.
+- **In the first 25 seconds of the mission it failed**: the same sequence from frame 40 gave, in the old client, a valid preview at frame 60 and ten frames later at the same pixel
+  `BlockedFootprint` – the click was rejected as "Cannot do that" and the placement mode stayed. Cause: `GC_ChemGeneral` begins with a camera flight over the enemy base
+  (tick 0–750: `CAMERA_LETTERBOX_BEGIN`, `DISABLE_INPUT`, `SETUP_CAMERA`, `MOVE_CAMERA_TO` at tick 60 and 330, `RESET_CAMERA` at 681, `ENABLE_INPUT` at 750). Of that the client adopted only the
+  camera targets – as a hard jump –, but neither the input lock nor the letterbox: the command bar stayed operable while the script pulled the camera away under the pointer. Whoever
+  built during this time clicked on a different world location than the one he saw.
+- **Fixed** (§7a in `docs/SCRIPT-ENGINE.md`): the script camera now travels over the duration of the script, `DISABLE_INPUT`/`ENABLE_INPUT` lock the world input (`MatchController.WorldInputEnabled`;
+  like `ScriptActions::doDisableInput`, selection, command modes and held keys are cleared, the game menu stays reachable with Esc), the letterbox hides the command bar and shows
+  bars with the hint that the mission script has locked the input.
+- **Feedback when building** (picture sample, PNGs looked at outside the repo): the build preview was a thin frame with diagonals; it is now additionally hatched
+  (`HudOverlayRenderer`, green = allowed, red = not allowed). There is still no ghost model of the building. The construction site is visible during construction (fence and scaffolding parts of the
+  model), the dozer visibly drives there.
+- **Additionally hardened:** `StrideInputTranslator` now scales the normalised pointer position with the back buffer instead of with the window size; if the window area deviates from the back buffer
+  (a 1920x1080 window that the desktop cannot hold; display scaling), a click still hits the button under the pointer. The client writes both sizes at the start
+  (`display: back buffer …, window client area …`). That could not be reproduced headless and is **not** verified as the cause.
+- **Not verified:** whether the tester built exactly in these 25 seconds. The opening sequence is the only path on which the playback failed in the real client; a human has to confirm in the
+  running client that construction now works (window, real mouse, real frame times cannot be checked headless).
 
-### 17.3 Bildprobe der Missionstexte
+### 17.3 Picture sample of the mission texts
 
-Die Missionstexte (`docs/TEXT-AUDIT.md` §4.6, `docs/SCRIPT-ENGINE.md` §7a „Bildschirmtexte nach `InGameUI`“) wurden so angesehen: (1) im Client mit
-`--smoke-test --mission "Maps/MD_USA01/MD_USA01.map" --content-dir … --size 1280x720 --mute --frames 1500 --filmstrip <Ordner> --every 20` (die Schreibmaschine Bild für Bild: Frame 60 zeigt 19 Zeichen der Titelzeile, Frame 100 die fertige Titelzeile
-mit Cursor auf der leeren zweiten Zeile, Frame 160 beide Zeilen) und `MD_CHI02` mit `--frames 2700 --every 90` (der Zeitgeber „Reinforcements Arrive In“ rechts bei 0,90/0,666 neben einer sich tippenden Beschriftung);
-(2) in `tools/CnCNew.UiRenderTool` als Szene `missiontext-WxH.png` (800x600, 1280x720, 1920x1080), die alle Texte eines Bildschirms einschließlich Superwaffenliste und Meldungsfenster auf einem Untergrund zeigt – die
-Superwaffenliste und die Meldungszeilen kommen in den Kampagnenkarten nicht (oder erst spät) vor und sind sonst nur über Tests zu sehen. **Stolperstein:** die PNGs des Werkzeugs behalten den Alphakanal der Zielfläche, durchscheinende Flächen (Meldungsfenster,
-Schatten) erscheinen in manchen Betrachtern zu hell; der Alphakanal ist vor dem Ansehen zu verwerfen. Bewegtbild (Takt der Schreibmaschine, Ausblenden) und das echte Clientfenster sind damit **nicht** belegt.
-## 18. Phase 16: Vorschaumodell beim Platzieren
+The mission texts (`docs/TEXT-AUDIT.md` §4.6, `docs/SCRIPT-ENGINE.md` §7a "Screen texts according to `InGameUI`") were looked at as follows: (1) in the client with
+`--smoke-test --mission "Maps/MD_USA01/MD_USA01.map" --content-dir … --size 1280x720 --mute --frames 1500 --filmstrip <folder> --every 20` (the typewriter frame by frame: frame 60 shows 19 characters of the title line, frame 100 the finished title line
+with the cursor on the empty second line, frame 160 both lines) and `MD_CHI02` with `--frames 2700 --every 90` (the timer "Reinforcements Arrive In" on the right at 0.90/0.666 beside a caption typing itself);
+(2) in `tools/CnCNew.UiRenderTool` as scene `missiontext-WxH.png` (800x600, 1280x720, 1920x1080), which shows all texts of one screen including superweapon list and message window on a background – the
+superweapon list and the message lines do not occur in the campaign maps (or only late) and can otherwise be seen only through tests. **Pitfall:** the PNGs of the tool keep the alpha channel of the target surface, translucent areas (message window,
+shadows) appear too bright in some viewers; the alpha channel is to be discarded before looking. Motion (rhythm of the typewriter, fading out) and the real client window are thus **not** verified.
+## 18. Phase 16: preview model when placing
 
-Bisher zeigte die Platzierung eines Gebäudes nur die schraffierte Grundfläche (`PlacementGhostOverlay`, `HudOverlayRenderer`). Das Original zeigt außerdem das Gebäude selbst durchscheinend am Zeiger
-(`InGameUI::placeBuildAvailable` legt ein `Drawable` der Vorlage an, `handleBuildPlacements` setzt Ort und Winkel jeden Frame, `setDrawableOpacity(0.45)`, bei verweigertem Ort `colorTint(rot)`).
+So far the placement of a building showed only the hatched footprint (`PlacementGhostOverlay`, `HudOverlayRenderer`). The original additionally shows the building itself translucently at the pointer
+(`InGameUI::placeBuildAvailable` creates a `Drawable` of the template, `handleBuildPlacements` sets place and angle every frame, `setDrawableOpacity(0.45)`, at a refused place `colorTint(red)`).
 
-**Datenweg** (jede Stufe getestet):
-1. `CommandModeController.Ghost` (Präsentation) – Ort, Winkel, gültig oder `PlacementIssue`; der Winkel beginnt beim `PlacementViewAngle` der Vorlage (`docs/PRESENTATION-INPUT.md` §7).
-2. `MatchController.Update` (nach `LiveGame.Advance`, vor den Welt-Layern) setzt `LiveGame.PlacementGhost` = Geist im Platzierungsmodus (nicht bei offenem Spielmenü), sonst `null`.
-3. `LiveGame.ObjectFrame` = `Frame` plus `PlacementPreview.Create(…)` des Geistes (`DrawableInstance` mit `Opacity` 0,45, `FlashTint` rot bei verweigertem Ort, `SceneryIndex = PlacementPreviewIndex`). `Frame` selbst bleibt
-   frei davon: Minimap-Punkte, Heilsymbole und Auswahl lesen es und sehen die Vorschau nie.
-4. `LiveMatchHost` gibt dem Objekt-Layer `ObjectFrame`; der Layer zeichnet `Opacity < 1` mit durchscheinenden Materialvarianten (`docs/CLIENT-OBJECTS.md`, „Durchscheinende Objekte“).
+**Data path** (every stage tested):
+1. `CommandModeController.Ghost` (presentation) – place, angle, valid or `PlacementIssue`; the angle starts at the `PlacementViewAngle` of the template (`docs/PRESENTATION-INPUT.md` §7).
+2. `MatchController.Update` (after `LiveGame.Advance`, before the world layers) sets `LiveGame.PlacementGhost` = ghost in placement mode (not with the game menu open), otherwise `null`.
+3. `LiveGame.ObjectFrame` = `Frame` plus `PlacementPreview.Create(…)` of the ghost (`DrawableInstance` with `Opacity` 0.45, `FlashTint` red at a refused place, `SceneryIndex = PlacementPreviewIndex`). `Frame` itself stays
+   free of it: minimap dots, heal icons and selection read it and never see the preview.
+4. `LiveMatchHost` gives the object layer `ObjectFrame`; the layer draws `Opacity < 1` with translucent material variants (`docs/CLIENT-OBJECTS.md`, "Translucent objects").
 
-**Tests:** `PlacementPreviewTests` (Präsentation, 5 Tests: Winkel im Katalog, gültiger/verweigerter Geist, nichts zu zeigen, Zustandsauswahl), `InputTests` „a placement starts at the template's PlacementViewAngle …“,
-`HudTests` „Placement preview …“ (echte Daten, Dozer, Bauknopf, Hover: `ObjectFrame` hat genau ein Objekt mehr als `Frame`, `Opacity` 0,45, rot auf der eigenen Basisstruktur, nach dem Klick weg).
+**Tests:** `PlacementPreviewTests` (presentation, 5 tests: angle in the catalog, valid/refused ghost, nothing to show, state selection), `InputTests` "a placement starts at the template's PlacementViewAngle …",
+`HudTests` "Placement preview …" (real data, dozer, build button, hover: `ObjectFrame` has exactly one object more than `Frame`, `Opacity` 0.45, red on the own base structure, gone after the click).
 
-**Sichtprobe** (Client, `--smoke-test --match "Maps/Alpine Assault/Alpine Assault.map" --size 1280x720 --frames 100 --capture …`, Skripte `scripts/input/placement-preview.txt` und `placement-refused.txt`, PNGs
-außerhalb des Repos angesehen): Dozer auswählen, Kraftwerk-Knopf, Zeiger neben den Dozer: in der grünen Grundfläche steht das Kraftwerk als blasses, durchscheinendes Modell; auf der eigenen Basisstruktur
-(`BlockedFootprint`) ist es rötlich getönt, die Grundfläche rot. Objekt-Layer-Zeile: `translucent=1` (ein durchscheinender Teil), `tinted=1` bei verweigertem Ort.
+**Visual sample** (client, `--smoke-test --match "Maps/Alpine Assault/Alpine Assault.map" --size 1280x720 --frames 100 --capture …`, scripts `scripts/input/placement-preview.txt` and `placement-refused.txt`, PNGs
+looked at outside the repo): select dozer, power plant button, pointer beside the dozer: in the green footprint the power plant stands as a pale, translucent model; on the own base structure
+(`BlockedFootprint`) it is tinted reddish, the footprint red. Object layer line: `translucent=1` (one translucent part), `tinted=1` at a refused place.
 
-**Nicht umgesetzt:** Linienbau (Mauern: `m_placeIcon[1..]`, `buildTiledLocations` – es gibt ein Modell, keine Kette), das Fraktions-Bib-Decal unter einem verweigerten Ort (`addFactionBibDrawable`), die Spielerfarbe
-der Anzeige bei Nacht (`setIndicatorColor` mit Nachtfarbe), ein Schatten des Vorschaumodells. Die schraffierte Grundfläche bleibt als Hilfe (das Original zeichnet keine).
+**Not implemented:** line building (walls: `m_placeIcon[1..]`, `buildTiledLocations` – there is one model, no chain), the faction bib decal under a refused place (`addFactionBibDrawable`), the player color
+of the indicator at night (`setIndicatorColor` with night color), a shadow of the preview model. The hatched footprint stays as an aid (the original draws none).
 
-**Nicht belegt:** wie das Vorschaumodell im laufenden Fenster aussieht (Lesbarkeit bei 0,45 gegen helles Gelände, Rottönung bei dunklen Texturen, Schatten- und Sortierreihenfolge mit den anderen
-durchscheinenden Objekten) – gesehen sind zwei Standbilder des Headless-Laufs; die Rottönung ist ein Faktor auf die Oberflächenfarbe (`FlashTint.Gain`), nicht die Licht-Addition des Originals.
+**Not verified:** what the preview model looks like in the running window (readability at 0.45 against bright terrain, red tint on dark textures, shadow and sort order with the other
+translucent objects) – what has been seen are two still pictures of the headless run; the red tint is a factor on the surface color (`FlashTint.Gain`), not the light addition of the original.
 
-## 19. Phase 21: Zeit und Tickrate
+## 19. Phase 21: time and tick rate
 
-Das HUD nimmt nirgends mehr an, dass ein Tick 1/30 s dauert. Die Werte aus `InGameUI.ini` sind in **Originalbildern** (1/30 s; `InGameUiSettings` rechnet mit `CnCNew.Data.OriginalFrame.PerSecond`, die eigene Konstante `LogicFramesPerSecond` gibt es nicht mehr); verglichen werden sie mit der Spieluhr in Originalbildern (`LiveGame.Clock.OriginalFrames`), nie mit Simulationsticks. Bei 30 Hz sind alle 54 Screen-Hashes, der HUD-Drawlist-Hash und die 164 Dateien des `UiRenderTool` unverändert (`docs/TICKRATE-MIGRATION.md` §14.2).
+The HUD no longer assumes anywhere that a tick lasts 1/30 s. The values from `InGameUI.ini` are in **original frames** (1/30 s; `InGameUiSettings` computes with `CnCNew.Data.OriginalFrame.PerSecond`, the constant `LogicFramesPerSecond` of its own no longer exists); they are compared with the game clock in original frames (`LiveGame.Clock.OriginalFrames`), never with simulation ticks. At 30 Hz all 54 screen hashes, the HUD draw list hash and the 164 files of the `UiRenderTool` are unchanged (`docs/TICKRATE-MIGRATION.md` §14.2).
 
-| Was | Vorher | Jetzt |
+| What | Before | Now |
 |---|---|---|
-| Spielschleife (`LiveGame.Advance`) | fester Schritt `1.0 / 30`, höchstens 8 Ticks je Bild | Schritt `1.0 / world.Time.TicksPerSecond`; Aufholgrenze als Zeitbudget von 8 Originalbildern (0,27 s Spielzeit, bei 60 Hz 16 Ticks) |
-| Spieluhr | – | `LiveGame.Clock` (`GameClock`: Tick, Rate, Interpolationsanteil; ganzzahlig geführt, steht bei Pause, läuft mit der Spielgeschwindigkeit) |
-| Meldungsliste (`HudMessageFeed.Clock`, `UiMessageLog.Update`) | Stempel und ein Update je Tick | Stempel in Originalbildern, ein Update je Originalbild (`MatchController.OnTickStepped` nur auf Bildgrenzen) |
-| Unter-Beschuss-Zeile | `30 * 10` Ticks | `OriginalFrame.PerSecond * 10` Originalbilder, in Ticks der Welt verglichen |
-| Superwaffenliste | Restzeit `(readyFrame - Tick) / 30`, Blinken `tick / flashFrames` | Restzeit `world.Time.ToWholeSeconds`, Blinken auf der Originalbild-Uhr |
-| Benannte Zähler der Mission | Timerwert der Skript-VM (Ticks) durch 30 | der Director rechnet den Timerwert in Originalbilder um (`CounterForDisplay`), `MissionTextOverlay.NamedTimers` teilt durch `OriginalFrame.PerSecond` |
-| Nebeldarstellung | alle `SimulationWorld.VisionIntervalTicks` Ticks | alle `world.VisionInterval` Ticks (die Konstante ist entfernt) |
-| Daueraufträge (`StandingOrders.Update`) | je Tick geprüft, je Tick ein Feuerbefehl | je Originalbild (auf den Ticks, die eines beginnen): die Befehle, die ein Dauerauftrag erzeugt – und damit der Replay-Inhalt – folgen der Spielzeit; bei 30 Hz dieselben Befehle wie zuvor |
-| Befehlsmarken, Tooltip, Mauszeiger, Kamera | Wandzeit mit einer eigenen 30 | Wandzeit, die 30 ist `OriginalFrame.PerSecond` (`OrderHintBook`, `CameraSettings.FramesPerSecond`, `RtsCamera`) |
+| Game loop (`LiveGame.Advance`) | fixed step `1.0 / 30`, at most 8 ticks per frame | step `1.0 / world.Time.TicksPerSecond`; catch-up limit as a time budget of 8 original frames (0.27 s of game time, 16 ticks at 60 Hz) |
+| Game clock | – | `LiveGame.Clock` (`GameClock`: tick, rate, interpolation fraction; kept as integers, stands still during pause, runs with the game speed) |
+| Message list (`HudMessageFeed.Clock`, `UiMessageLog.Update`) | stamp and one update per tick | stamp in original frames, one update per original frame (`MatchController.OnTickStepped` only on frame boundaries) |
+| Under-attack line | `30 * 10` ticks | `OriginalFrame.PerSecond * 10` original frames, compared in ticks of the world |
+| Superweapon list | remaining time `(readyFrame - Tick) / 30`, blinking `tick / flashFrames` | remaining time `world.Time.ToWholeSeconds`, blinking on the original-frame clock |
+| Named counters of the mission | timer value of the script VM (ticks) divided by 30 | the director converts the timer value into original frames (`CounterForDisplay`), `MissionTextOverlay.NamedTimers` divides by `OriginalFrame.PerSecond` |
+| Fog presentation | every `SimulationWorld.VisionIntervalTicks` ticks | every `world.VisionInterval` ticks (the constant is removed) |
+| Standing orders (`StandingOrders.Update`) | checked per tick, one fire command per tick | per original frame (on the ticks that begin one): the commands that a standing order produces – and thus the replay content – follow the game time; at 30 Hz the same commands as before |
+| Order marks, tooltip, mouse pointer, camera | wall time with a 30 of their own | wall time, the 30 is `OriginalFrame.PerSecond` (`OrderHintBook`, `CameraSettings.FramesPerSecond`, `RtsCamera`) |
 
-Rauchtest und Eingabeskripte (§17): ein gezeichnetes Bild ist ein Originalbild Spielzeit bei jeder Rate; die Bildnummern eines Skripts bleiben gültig, wenn der Client mit `--tick-rate 60` läuft.
+Smoke test and input scripts (§17): one drawn frame is one original frame of game time at every rate; the frame numbers of a script stay valid when the client runs with `--tick-rate 60`.
 
-**Offen:** die Spielstandslisten (`MissionPauseMenu`, `LoadGameScreen`) zeigen weiter den rohen Tick („tick N“), und `SaveGame` (Version 1) schreibt keine Rate; ein Spielstand einer anderen Rate wird über den Definitions-Fingerabdruck (der die Rate enthält) und den eingebetteten Missionszustand abgelehnt, nicht über ein eigenes Feld. **Nicht belegt:** Aussehen und Bedienung bei 60 Hz – kein Mensch hat es gesehen.
+**Open:** the saved-game lists (`MissionPauseMenu`, `LoadGameScreen`) still show the raw tick ("tick N"), and `SaveGame` (version 1) writes no rate; a saved game of another rate is rejected through the definition fingerprint (which contains the rate) and the embedded mission state, not through a field of its own. **Not verified:** look and operation at 60 Hz – no human has seen it.
