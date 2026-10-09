@@ -276,6 +276,12 @@ public sealed class MissionSession
         return result;
     }
 
+    /// <summary>
+    /// A host's view of every command submitted through <see cref="Issue"/> (scripts, the AI of a scripted skirmish, the human), accepted or not, in the order of submission. A hook
+    /// for observers (the spectator's camera): not state, neither saved nor hashed, and it must not change the session.
+    /// </summary>
+    public Action<SimCommand>? CommandObserver { get; set; }
+
     /// <summary>Submits a command of <paramref name="player"/> at the current tick; the per-player sequence is assigned here, so every source of commands (scripts, the human) shares one counter.</summary>
     public SubmitResult Issue(PlayerId player, Func<ulong, long, SimCommand> make)
     {
@@ -283,6 +289,7 @@ public sealed class MissionSession
         _sequences[player.Value] = sequence;
         var command = make(sequence, World.Tick);
         var result = World.Submit(command);
+        CommandObserver?.Invoke(command);
         if (!result.Accepted && command is FireWeaponCommand) _rejectedShots++;
         return result;
     }

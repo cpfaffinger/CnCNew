@@ -50,6 +50,8 @@ internal static class SpectatorTests
         harness.Run("The spectator zooms out to the whole map, a player's limit is lower, an own limit holds", () => FarCamera(data));
         harness.Run("The observer HUD draws its panels, buttons and the radar at several resolutions, and a click on a button acts", () => DrawList(data));
         harness.Run("Income of the last game minute equals the deposits of the last game minute at 30 Hz", () => IncomeMatchesDeposits(data));
+        harness.Run("The spectator watches a match of the original AI: commands of both armies, panels with data, no missing script type, deterministic", () => OriginalAiMatch(data));
+        harness.Run("A human plays against the original AI through the same command sink as any match", () => HumanAgainstOriginalAi(data));
         var data60 = GameData.Load(contentDir, step => Console.WriteLine($"  loading (60 Hz): {step}"), modelGeometry: false, rate: SimulationRate.Hz60);
         harness.Run("Income of the last game minute equals the deposits of the last game minute at 60 Hz", () => IncomeMatchesDeposits(data60));
         return harness.Failures;
@@ -77,6 +79,70 @@ internal static class SpectatorTests
             watch.Spectator.Update(step);
             TestHarness.Assert(iteration < tick * 4 + 10_000, "the match stopped advancing");
         }
+    }
+
+    private static Watch StartOriginal(GameData data, CnCNew.Simulation.Scripting.ScriptDifficulty first, CnCNew.Simulation.Scripting.ScriptDifficulty second)
+    {
+        var map = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var kind = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original;
+        var setup = new MatchSetup(map, "FactionAmerica", ["FactionGLA"], SkirmishMatchOptions.StandardAt(data.Rate)) { Seed = Seed, Spectator = true, Ai = [new MatchAi(kind, first), new MatchAi(kind, second)] };
+        var match = LiveMatch.Create(data, setup, Viewport);
+        var hud = new MatchController(match, GameSettings.Default);
+        return new Watch(match, hud, new SpectatorController(match, hud, new SpectatorOptions(Seed: Seed)));
+    }
+
+    /// <summary>
+    /// The game layer runs a match of the original AI (docs/SKIRMISH-AI-ORIGINAL.md) like any other: the spectator's cameras follow the orders of both armies, the panels have
+    /// data, no script type without implementation is hit, and the same seed gives the same report.
+    /// </summary>
+    private static void OriginalAiMatch(GameData data)
+    {
+        var watch = StartOriginal(data, CnCNew.Simulation.Scripting.ScriptDifficulty.Hard, CnCNew.Simulation.Scripting.ScriptDifficulty.Easy);
+        TestHarness.Assert(watch.Match.Scripted is not null && watch.Match.Setup.UsesOriginalAi && watch.Match.Players.Length == 2, "the match is a scripted skirmish with the two slot players");
+        var until = watch.Match.World.Time.OriginalFrames(3_600);
+        RunTo(watch, until);
+        var report = watch.Spectator.Report();
+        TestHarness.Assert(watch.Match.MissingScriptTypeHits == 0, "no script type without implementation was hit");
+        TestHarness.Assert(report.Any(line => line.Contains("player1=original/hard, player2=original/easy, missingScriptTypeHits=0", StringComparison.Ordinal)), "the report names the AI of each slot");
+        foreach (var camera in watch.Spectator.Cameras)
+            TestHarness.Assert(camera.OrdersSeen > 0, $"the camera of player {camera.Player.Value} saw orders of its army ({camera.OrdersSeen})");
+        var structures = watch.Match.World.Entities.Count(entity => entity.Owner.Value is 1 or 2 && !entity.EffectivelyDead && entity.Template.IsKindOf("STRUCTURE"));
+        TestHarness.Assert(structures >= 6, $"both armies have built from their scripts ({structures} structures after two minutes)");
+        TestHarness.Assert(watch.Spectator.Panels.Players.Length == 2 && watch.Spectator.Panels.Players.All(player => player.Structures > 0), "the panels show both players with structures");
+        TestHarness.Assert(watch.Match.RecordedCommands.All(command => command.Player.Value is 1 or 2), "every recorded command is one of the two armies");
+
+        var again = StartOriginal(data, CnCNew.Simulation.Scripting.ScriptDifficulty.Hard, CnCNew.Simulation.Scripting.ScriptDifficulty.Easy);
+        RunTo(again, until);
+        TestHarness.Assert(again.Match.Scripted!.StateHash() == watch.Match.Scripted!.StateHash(), "the same seed gives the same session state");
+        TestHarness.Assert(again.Spectator.Report().SequenceEqual(report), "and the same report of the spectator");
+        var other = StartOriginal(data, CnCNew.Simulation.Scripting.ScriptDifficulty.Easy, CnCNew.Simulation.Scripting.ScriptDifficulty.Hard);
+        RunTo(other, until);
+        TestHarness.Assert(other.Match.Scripted!.StateHash() != watch.Match.Scripted.StateHash(), "another choice of armies is another match");
+    }
+
+    /// <summary>A human in the first slot of a match with the original AI: the human's orders reach the session through the match's command sink and are executed.</summary>
+    private static void HumanAgainstOriginalAi(GameData data)
+    {
+        var map = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var setup = new MatchSetup(map, "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.StandardAt(data.Rate))
+        {
+            Seed = Seed, Ai = [MatchAi.Builtin, new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original, CnCNew.Simulation.Scripting.ScriptDifficulty.Hard)],
+        };
+        var match = LiveMatch.Create(data, setup, Viewport);
+        var human = new PlayerId(1);
+        var step = TestTime.TickSeconds(match.World);
+        for (var index = 0; index < 4; index++) match.Advance(step);
+        var own = match.World.Entities.Where(entity => entity.Owner == human && !entity.EffectivelyDead).ToArray();
+        TestHarness.Assert(own.Any(entity => entity.Template.IsKindOf("COMMANDCENTER")) && own.Any(entity => entity.Template.IsKindOf("DOZER")), $"the human starts with a command centre and a dozer ({string.Join(", ", own.Select(entity => entity.Template.Name))})");
+        var dozer = own.First(entity => entity.Template.IsKindOf("DOZER"));
+        var (x, y) = (dozer.X + Fixed.FromInt(60), dozer.Y);
+        var result = match.Commands.Issue((sequence, tick) => new SetMoveTargetCommand(human, sequence, tick, dozer.Id, x, y));
+        TestHarness.Assert(result.Accepted, "the move order of the human is accepted by the session");
+        var before = dozer.X;
+        for (var index = 0; index < match.World.Time.OriginalFrames(60); index++) match.Advance(step);
+        TestHarness.Assert(dozer.X > before, "the dozer moved");
+        TestHarness.Assert(match.RecordedCommands.Any(command => command.Player == human) && match.RecordedCommands.Any(command => command.Player.Value == 2), "the human and the AI have both given orders");
+        TestHarness.Assert(match.MissingScriptTypeHits == 0, "no script type without implementation was hit");
     }
 
     private static void IncomeWindowRates()

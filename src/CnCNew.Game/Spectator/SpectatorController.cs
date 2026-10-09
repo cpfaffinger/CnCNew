@@ -397,7 +397,7 @@ public sealed class SpectatorController
     {
         var world = Match.World;
         Stats.Observe(result, world);
-        var recorded = Match.Session.RecordedCommands;
+        var recorded = Match.RecordedCommands;
         _tickCommands.Clear();
         _tickOrders.Clear();
         _tickRejections.Clear();
@@ -455,10 +455,10 @@ public sealed class SpectatorController
     {
         if (_panelTick != Match.Tick) RebuildPanels();
         var lines = new List<string>();
-        var session = Match.Session;
         string Number(float value) => value.ToString("F0", CultureInfo.InvariantCulture);
-        lines.Add(string.Create(CultureInfo.InvariantCulture, $"spectator: map {Match.Setup.MapPath}, seed {Options.Seed}, rate {Match.World.Time.TicksPerSecond}, ticks={Match.Tick}, gameSeconds={Match.Tick / Match.World.Time.TicksPerSecond}, over={Match.IsOver}, winner={(Match.Winner is { } winner ? winner.Value : 0)}, victoryTick={session.VictoryTick}, stateHash={Match.World.StateHash:X16}"));
-        lines.Add($"spectator commands: {string.Join(", ", Match.Players.Select(player => $"player{player.Id.Value}={_commandsByPlayer.GetValueOrDefault(player.Id.Value)}"))}, rejected=[{string.Join(" ", Match.Players.Select(player => $"player{player.Id.Value}:{_rejectedByPlayer.GetValueOrDefault(player.Id.Value)}"))}], viewerOrdersRefused={Match.SpectatorSink?.Refused ?? 0}, viewerOrdersRecorded={session.RecordedCommands.Count(command => !command.Player.IsSystem && !session.Players.Any(player => player.IsComputer && player.Id == command.Player))}");
+        lines.Add(string.Create(CultureInfo.InvariantCulture, $"spectator: map {Match.Setup.MapPath}, seed {Options.Seed}, rate {Match.World.Time.TicksPerSecond}, ticks={Match.Tick}, gameSeconds={Match.Tick / Match.World.Time.TicksPerSecond}, over={Match.IsOver}, winner={(Match.Winner is { } winner ? winner.Value : 0)}, victoryTick={Match.VictoryTick}, stateHash={Match.World.StateHash:X16}"));
+        lines.Add($"spectator commands: {string.Join(", ", Match.Players.Select(player => $"player{player.Id.Value}={_commandsByPlayer.GetValueOrDefault(player.Id.Value)}"))}, rejected=[{string.Join(" ", Match.Players.Select(player => $"player{player.Id.Value}:{_rejectedByPlayer.GetValueOrDefault(player.Id.Value)}"))}], viewerOrdersRefused={Match.SpectatorSink?.Refused ?? 0}, viewerOrdersRecorded={Match.RecordedCommands.Count(command => !command.Player.IsSystem && !Match.Players.Any(player => player.Id == command.Player))}");
+        lines.Add($"spectator ai: {string.Join(", ", Match.Players.Select((player, index) => $"player{player.Id.Value}={Match.Setup.AiOf(index)}"))}, missingScriptTypeHits={Match.MissingScriptTypeHits}");
         lines.Add($"spectator camera: playerMaxHeight={Number(PlayerMaxHeight)}, spectatorMaxHeight={Number(SpectatorMaxHeight)}, overviewHeight={Number(OverviewHeight)}, highestReached={Number(HighestReached)}, heightNow={Number(Match.Camera.HeightAboveGround)}, overview={Overview}, followed={(Followed is { } followed ? followed + 1 : 0)}");
         for (var index = 0; index < Cameras.Length; index++)
         {

@@ -356,11 +356,21 @@ public sealed class GameShell
     }
 
     /// <summary>The host calls this once its <c>LiveMatch</c>/<c>SkirmishMatchSession</c> is over, with the statistics tracker it fed while the match ran (or null if it fed none).</summary>
-    public void MatchFinished(SkirmishMatchSession session, MatchStatistics? statistics = null)
+    public void MatchFinished(SkirmishMatchSession session, MatchStatistics? statistics = null) => MatchFinished(MatchResult.From(session, statistics));
+
+    /// <summary>The same for a result the host has put together itself (a match with the original AI has no <c>SkirmishMatchSession</c>).</summary>
+    public void MatchFinished(MatchResult result)
     {
         Phase = ShellPhase.Results;
-        Replace(new ScoreScreenScreen(this, MatchResult.From(session, statistics)));
+        Replace(new ScoreScreenScreen(this, result));
     }
+
+    /// <summary>
+    /// Which AI the skirmish setup offers for a computer slot. The default is the simulation's own AI with its one "Medium Army" entry, as before. With
+    /// <see cref="CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original"/> - set by the host (the client's <c>--ai original</c>) before the setup screen is opened - a slot
+    /// offers the original's three armies (<c>GUI:EasyAI</c>, <c>GUI:MediumAI</c>, <c>GUI:HardAI</c>) and the match runs the original AI (docs/SKIRMISH-AI-ORIGINAL.md).
+    /// </summary>
+    public CnCNew.Simulation.Skirmish.Original.SkirmishAiKind SkirmishAi { get; set; } = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin;
 
     /// <summary>
     /// The host calls this once <c>run.Session.IsOver</c> (victory or defeat): applies the outcome to the campaign

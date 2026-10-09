@@ -81,11 +81,14 @@ internal sealed class ClientRuntime : IDisposable
     public void StageWaypoints((float X, float Y)[] offsets) => _stagedWaypoints = offsets;
 
     /// <summary>The shell (main menu and everything behind it); it starts matches and missions itself.</summary>
-    public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio, bool animateTransitions = true, bool? alternateMouse = null)
+    public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio, bool animateTransitions = true, bool? alternateMouse = null,
+        CnCNew.Simulation.Skirmish.Original.SkirmishAiKind skirmishAi = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin)
     {
         // animateTransitions: the menu animates like the original (Data/INI/WindowTransitions.ini, docs/GAME-SHELL.md section 11); --no-transitions switches to hard cuts.
         var runtime = new ClientRuntime(game, data, GameSettings.Default,
             ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions), audio) { _alternateMouse = alternateMouse };
+        // --ai original: the skirmish setup offers the three armies of the original and its matches run the original AI (the default is unchanged).
+        if (runtime._shell is { } shell) shell.SkirmishAi = skirmishAi;
         runtime._audio.Game.EnterShell();
         return runtime;
     }
@@ -339,7 +342,7 @@ internal sealed class ClientRuntime : IDisposable
         if (running.Mission is not null && running.Start is { } start)
             _shell!.MissionFinished(start.Run, start.Controller);
         else if (game is LiveMatch match)
-            _shell!.MatchFinished(match.Session, running.Statistics);
+            _shell!.MatchFinished(CnCNew.Game.Shell.MatchResult.From(match.Players, match.Winner, match.World, match.EndTick, running.Statistics));
         _game.SceneSystem.SceneInstance = null;
         running.Dispose();
         _audio.Game.EnterShell();

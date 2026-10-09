@@ -71,9 +71,13 @@ var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
     SelectOwn = args.Contains("--select-own", StringComparer.OrdinalIgnoreCase),
     // --spectate: nobody plays; --faction and --opponent are both computer players and the observer HUD replaces the player's (docs/SPECTATOR-MODE.md).
     Spectate = args.Contains("--spectate", StringComparer.OrdinalIgnoreCase),
+    Ai = GetArgument(args, "--ai"),
+    Difficulty = GetArgument(args, "--difficulty"),
     SpectatorMaxZoom = GetArgument(args, "--spectator-max-zoom") is { } maxZoom ? float.Parse(maxZoom, System.Globalization.CultureInfo.InvariantCulture) : null,
     SpectatorSpeed = GetArgument(args, "--spectator-speed") is { } speed ? double.Parse(speed, System.Globalization.CultureInfo.InvariantCulture) : 1,
 };
+// In the shell --ai original makes the skirmish setup offer the three armies of the original AI; the armies themselves are chosen there.
+CnCNewGame.ShellSkirmishAi = shellMode && GetArgument(args, "--ai") is { } shellAi ? MatchAi.ParseKind(shellAi) : CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin;
 if (liveOptions is { Spectate: true } && (matchMap is null || scenario is not null))
 {
     throw new ArgumentException("--spectate requires --match.");
@@ -153,6 +157,26 @@ static string? GetArgument(string[] arguments, string name)
 internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<string> Opponents, int Seed, int Frames, string Size,
     bool AutoPlay, string? Look, string? Angle, string? Pitch, string? Height)
 {
+    /// <summary>
+    /// <c>--ai builtin|original</c>: who plays the computer slots of a skirmish, one value for all or a comma list per slot in slot order (the first entry is the first slot, which
+    /// the computer plays with --autoplay or --spectate). Absent: the simulation's own AI, as before. In the shell, <c>--ai original</c> makes the skirmish setup offer the three armies.
+    /// </summary>
+    public string? Ai { get; init; }
+
+    /// <summary><c>--difficulty easy|medium|hard</c>: the army of the original AI, one value for all slots or a comma list per slot. Giving it without --ai selects the original AI.</summary>
+    public string? Difficulty { get; init; }
+
+    /// <summary>The AI of every slot of a match with <paramref name="slots"/> slots from --ai and --difficulty; empty when neither was given.</summary>
+    public ImmutableArray<MatchAi> AiSlots(int slots)
+    {
+        if (Ai is null && Difficulty is null) return [];
+        var kinds = (Ai ?? "original").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var levels = (Difficulty ?? "medium").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (kinds.Length is not 1 && kinds.Length != slots) throw new ArgumentException($"--ai takes one value or one per slot ({slots}), not {kinds.Length}.");
+        if (levels.Length is not 1 && levels.Length != slots) throw new ArgumentException($"--difficulty takes one value or one per slot ({slots}), not {levels.Length}.");
+        return [..Enumerable.Range(0, slots).Select(slot => new MatchAi(MatchAi.ParseKind(kinds[kinds.Length == 1 ? 0 : slot]), MatchAi.ParseDifficulty(levels[levels.Length == 1 ? 0 : slot])))];
+    }
+
     /// <summary>The map is a campaign mission played by its own scripts (--mission) instead of a skirmish (--match).</summary>
     public bool IsMission { get; init; }
 
@@ -202,6 +226,9 @@ internal sealed class CnCNewGame(
     private const double SmokeStepSeconds = 1.0 / CnCNew.Data.OriginalFrame.PerSecond;
 
     public int UnresolvedInputSteps { get; private set; }
+
+    /// <summary>The AI the shell's skirmish setup offers (--ai in shell mode); the simulation's own AI unless the option says otherwise.</summary>
+    public static CnCNew.Simulation.Skirmish.Original.SkirmishAiKind ShellSkirmishAi { get; set; }
 
     private ClientRuntime? _runtime;
 
@@ -258,7 +285,8 @@ internal sealed class CnCNewGame(
         {
             var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate);
             var back = GraphicsDevice.Presenter.BackBuffer;
-            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse);
+            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse,
+                ShellSkirmishAi);
             Window.Title = "CnCNew";
             ApplyStaging();
             return;
@@ -356,8 +384,12 @@ internal sealed class CnCNewGame(
             Window.Title = $"CnCNew — {scenario.Name}: {scenario.Title}";
             return;
         }
-        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.StandardAt(data.Rate)) { Seed = options.Seed, AutoPlay = options.AutoPlay, Spectator = options.Spectate };
+        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.StandardAt(data.Rate))
+        {
+            Seed = options.Seed, AutoPlay = options.AutoPlay, Spectator = options.Spectate, Ai = options.AiSlots(options.Opponents.Length + 1),
+        };
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
+        if (setup.UsesOriginalAi) Console.WriteLine($"session: original skirmish AI - {string.Join(", ", Enumerable.Range(0, options.Opponents.Length + 1).Select(slot => $"slot {slot + 1} {setup.AiOf(slot)}"))}");
         ApplyCamera(match.Camera, options);
         if (options.Spectate)
         {

@@ -62,9 +62,13 @@ public sealed record MatchResultRow(PlayerConfiguration Player, bool IsWinner, b
 public sealed record MatchResult(ImmutableArray<MatchResultRow> Rows, long EndTick)
 {
     public static MatchResult From(SkirmishMatchSession session, MatchStatistics? statistics)
+        => From(session.Players, session.Winner, session.World, session.EndTick, statistics);
+
+    /// <summary>The result of a match of either session kind (<c>LiveMatch</c> serves both) from its players, winner, world and end tick.</summary>
+    public static MatchResult From(IEnumerable<PlayerConfiguration> players, PlayerId? winner, SimulationWorld world, long endTick, MatchStatistics? statistics)
     {
-        var rows = session.Players.Select(player => new MatchResultRow(player, session.Winner == player.Id,
-            session.World.IsPlayerDefeated(player.Id), statistics?.HasData == true ? statistics.TryGet(player.Id) : null));
-        return new MatchResult([..rows], session.EndTick);
+        var rows = players.Select(player => new MatchResultRow(player, winner == player.Id,
+            world.IsPlayerDefeated(player.Id), statistics?.HasData == true ? statistics.TryGet(player.Id) : null));
+        return new MatchResult([..rows], endTick);
     }
 }

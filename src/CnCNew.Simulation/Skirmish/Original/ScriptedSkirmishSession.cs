@@ -99,6 +99,35 @@ public sealed class ScriptedSkirmishSession
     public long EndTick => _endTick;
     public bool IsOver => World.Tick >= _endTick;
 
+    /// <summary>The players of the slots in slot order (the map's neutral and civilian players are left out).</summary>
+    public ImmutableArray<PlayerConfiguration> Players => [..World.Configuration.Players.Where(player => player.Id.Value >= 1 && player.Id.Value <= _slots.Length).OrderBy(player => player.Id.Value)];
+
+    private List<Commands.SimCommand>? _recorded;
+
+    /// <summary>
+    /// Every command submitted since <see cref="RecordCommands"/> was called, in the order of submission (scripts and AI of every slot, a built-in AI's slot, the human; rejected ones
+    /// included) - what <see cref="SkirmishMatchSession.RecordedCommands"/> is for the other session. For observers only; empty until recording is asked for. Not state: a session
+    /// like this one is not replayed from its commands.
+    /// </summary>
+    public IReadOnlyList<Commands.SimCommand> RecordedCommands => (IReadOnlyList<Commands.SimCommand>?)_recorded ?? [];
+
+    /// <summary>Starts keeping the submitted commands for <see cref="RecordedCommands"/>. Changes nothing about the match.</summary>
+    public void RecordCommands()
+    {
+        if (_recorded is not null) return;
+        _recorded = [];
+        _mission.CommandObserver += _recorded.Add;
+    }
+
+    /// <summary>A command of a human slot at the current tick (the sequence is the session's, shared with the scripts).</summary>
+    public Commands.SubmitResult Issue(PlayerId player, Func<ulong, long, Commands.SimCommand> make) => _mission.Issue(player, make);
+
+    private Commands.SubmitResult SubmitBuiltin(Commands.SimCommand command)
+    {
+        _recorded?.Add(command);
+        return World.Submit(command);
+    }
+
     /// <summary>The player of a slot: slot <c>i</c> is player <c>i + 1</c>.</summary>
     public static PlayerId PlayerOf(int slot) => new(slot + 1);
 
@@ -177,7 +206,7 @@ public sealed class ScriptedSkirmishSession
                 for (var other = 0; other < _slots.Length; other++)
                     if (other != index) hints.Add((starts[other].X, starts[other].Y));
                 _builtin.Add(new SkirmishAi(World, catalog, new SkirmishAiOptions(player, unchecked(_options.Seed + (uint)index * 7919u), bx, by, participant.Side,
-                    SkirmishMatchSession.FamilyPrefix(participant.Faction), hints.ToImmutable()), World.Submit));
+                    SkirmishMatchSession.FamilyPrefix(participant.Faction), hints.ToImmutable()), SubmitBuiltin));
             }
             else World.ExploreMap(player);
             var ring = (catalog.TryGet(participant.BaseBuilding, out var building) ? building.BoundingCircleRadius : Fixed.Zero) + Fixed.FromInt(30);

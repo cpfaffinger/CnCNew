@@ -28,6 +28,13 @@ public sealed class SkirmishSetupScreen : ShellScreen
 
     /// <summary>The entries of an opponent slot: <c>GUI:Open</c>, <c>GUI:Closed</c> as <c>SkirmishGameOptionsMenuInit</c> fills them, then the computer army.</summary>
     private const int ComputerArmyEntry = 2;
+    /// <summary>
+    /// With the original AI (<see cref="GameShell.SkirmishAi"/>) the entries after open and closed are the original's three: easy, medium, hard
+    /// (<c>SLOT_EASY_AI</c>, <c>SLOT_MED_AI</c>, <c>SLOT_BRUTAL_AI</c>), and the medium army is the entry after the easy one.
+    /// </summary>
+    private readonly bool _originalAi;
+    private readonly CnCNew.Simulation.Scripting.ScriptDifficulty[] _difficulty = new CnCNew.Simulation.Scripting.ScriptDifficulty[Slots];
+    private int DefaultArmyEntry => _originalAi ? ComputerArmyEntry + 1 : ComputerArmyEntry;
     private string? _selectedMapPath;
     private int _startMoney;
 
@@ -44,6 +51,8 @@ public sealed class SkirmishSetupScreen : ShellScreen
 
         W("TextEntryPlayerName").SetEntryText(names.Player);
         var computerArmy = names.ComputerArmy;
+        _originalAi = Shell.SkirmishAi == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original;
+        Array.Fill(_difficulty, CnCNew.Simulation.Scripting.ScriptDifficulty.Normal);
         for (var slot = 0; slot < Slots; slot++)
         {
             var template = W($"ComboBoxPlayerTemplate{slot}");
@@ -59,12 +68,14 @@ public sealed class SkirmishSetupScreen : ShellScreen
             var player = W($"ComboBoxPlayer{slot}");
             player.AddComboEntry(names.Open);
             player.AddComboEntry(names.Closed);
+            if (_originalAi) player.AddComboEntry(names.EasyArmy);
             player.AddComboEntry(computerArmy);
+            if (_originalAi) player.AddComboEntry(names.HardArmy);
             player.SetComboSelection(0);
         }
         // SkirmishGameOptionsMenuInit: the second slot starts as a computer army (the original picks easy, medium or hard by the battle honors; this build has one).
         _computer[1] = true;
-        W("ComboBoxPlayer1").SetComboSelection(ComputerArmyEntry);
+        W("ComboBoxPlayer1").SetComboSelection(DefaultArmyEntry);
 
         var money = W("ComboBoxStartingCash");
         foreach (var value in MoneyChoices) money.AddComboEntry(Shell.FormatMoney(value));
@@ -160,11 +171,18 @@ public sealed class SkirmishSetupScreen : ShellScreen
     {
         if (_selectedMapPath is null) return;
         var opponents = ImmutableArray.CreateBuilder<string>();
+        // The AI of each slot in slot order; the first slot is the human's.
+        var ai = ImmutableArray.CreateBuilder<MatchAi>();
+        ai.Add(MatchAi.Builtin);
         for (var slot = 1; slot < _startPositionCount; slot++)
-            if (_computer[slot]) opponents.Add(ResolveFaction(slot));
+        {
+            if (!_computer[slot]) continue;
+            opponents.Add(ResolveFaction(slot));
+            ai.Add(new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original, _difficulty[slot]));
+        }
         if (opponents.Count == 0) return;
         var options = SkirmishMatchOptions.StandardAt(Shell.Data.Rate) with { StartMoney = _startMoney };
-        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options);
+        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = _originalAi ? ai.ToImmutable() : [] };
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });
         Shell.BeginMatchLoading(setup);
@@ -195,7 +213,8 @@ public sealed class SkirmishSetupScreen : ShellScreen
             if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayerTemplate{slot}") { _factionIndex[slot] = e.Value; return; }
             if (slot > 0 && e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayer{slot}")
             {
-                _computer[slot] = e.Value == ComputerArmyEntry;
+                _computer[slot] = _originalAi ? e.Value >= ComputerArmyEntry : e.Value == ComputerArmyEntry;
+                if (_originalAi && _computer[slot]) _difficulty[slot] = (CnCNew.Simulation.Scripting.ScriptDifficulty)Math.Clamp(e.Value - ComputerArmyEntry, 0, 2);
                 W($"ComboBoxPlayerTemplate{slot}").SetEnabled(_computer[slot]);
                 return;
             }

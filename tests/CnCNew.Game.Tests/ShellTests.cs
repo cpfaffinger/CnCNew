@@ -56,6 +56,7 @@ internal static class ShellTests
         harness.Run("Quit dialog: Yes and No stand at the first and the last button place, and the text takes the header template size", () => QuitDialogFonts(data));
         harness.Run("Main menu: the custom mission button of the retail layout has its text from Data/Patch.str and is inert", () => CustomMissionButton(data));
         harness.Run("Skirmish setup and options show localized words, not internal names or the layout's placeholders", () => LocalizedSetupText(data));
+        harness.Run("Skirmish setup with the original AI offers the three armies of the original and starts a match of that AI", () => OriginalAiArmies(data));
         harness.Run("A window with TOOLTIPTEXT shows the pointer tooltip after the delay with the Mouse.ini style", () => PointerTooltip(data));
         harness.Run("Credits lines use the Language.ini credits fonts at the adjusted size", () => CreditsFonts(data));
         harness.Run("Shell::push replaces the screen below, overlays keep it: only what the original shows is drawn", () => ScreenStackDrawing(data));
@@ -437,6 +438,46 @@ internal static class ShellTests
         Click(shell, "MainMenu.wnd:ButtonOptions");
         foreach (var name in new[] { "TextEntryHTTPProxy", "TextEntryFirewallPortOverride" })
             TestHarness.Assert(shell.CurrentScreen.Tree.FindByName($"OptionsMenu.wnd:{name}")!.TextEntry!.Text.Length == 0, $"{name} starts empty, not with the layout's word 'Entry'");
+    }
+
+    /// <summary>
+    /// With <see cref="GameShell.SkirmishAi"/> set to the original AI (the client's <c>--ai original</c>) an opponent slot lists what <c>SkirmishGameOptionsMenuInit</c> lists:
+    /// <c>GUI:Open</c>, <c>GUI:Closed</c>, <c>GUI:EasyAI</c>, <c>GUI:MediumAI</c>, <c>GUI:HardAI</c>, and the match it starts names the original AI with the chosen army per slot.
+    /// The default setup (<see cref="LocalizedSetupText"/>, the screen baselines) is the one "Medium Army" as before.
+    /// </summary>
+    private static void OriginalAiArmies(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        TestHarness.Assert(shell.SkirmishAi == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, "the shell offers the built-in AI unless its host says otherwise");
+        shell.SkirmishAi = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original;
+        Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        Click(shell, "MainMenu.wnd:ButtonSkirmish");
+        var tree = shell.CurrentScreen.Tree;
+        string[] Entries(string name) => [.. tree.FindByName($"SkirmishGameOptionsMenu.wnd:{name}")!.ComboBox!.Entries];
+        for (var slot = 1; slot <= 7; slot++)
+            TestHarness.Assert(Entries($"ComboBoxPlayer{slot}").SequenceEqual(["Open", "Closed", "Easy Army", "Medium Army", "Hard Army"]), $"opponent slot {slot} offers the three armies of the original: {string.Join(", ", Entries($"ComboBoxPlayer{slot}"))}");
+        TestHarness.Assert(tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer1")!.ComboBox!.SelectedIndex == 3, "the second slot starts as the medium army");
+        TestHarness.Assert(shell.TextSource!.RawNameHits.Count == 0, $"the labels of the armies come from the string table: {string.Join(", ", shell.TextSource.RawNameHits.Keys)}");
+
+        // Every army entry is an opponent of that level (the preselected map has two start positions: one opponent).
+        foreach (var (entry, level) in new[] { (2, CnCNew.Simulation.Scripting.ScriptDifficulty.Easy), (3, CnCNew.Simulation.Scripting.ScriptDifficulty.Normal), (4, CnCNew.Simulation.Scripting.ScriptDifficulty.Hard) })
+        {
+            tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer1")!, value: entry);
+            tree.Dispatch();
+            Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
+            TestHarness.Assert(shell.Phase == ShellPhase.MatchLoading, "Start loads the match");
+            shell.BuildDrawList();
+            shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            var started = shell.DrainOutputs().OfType<StartMatchOutput>().Single().Setup;
+            TestHarness.Assert(started.UsesOriginalAi && started.Opponents.Length == 1, $"the match runs the original AI with one opponent ({started.Opponents.Length})");
+            TestHarness.Assert(started.AiOf(1) == new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original, level), $"the opponent has the army its slot chose: {started.AiOf(1)} for entry {entry}");
+            if (entry == 4) break;
+            shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+            shell.SkirmishAi = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original;
+            Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+            Click(shell, "MainMenu.wnd:ButtonSkirmish");
+            tree = shell.CurrentScreen.Tree;
+        }
     }
 
     /// <summary>

@@ -91,6 +91,26 @@ public sealed class GameData
         return new GameData(content, graph, templates, fingerprint, visuals, fx, audio, images, factions, maps);
     }
 
+    /// <summary>The script library of the original skirmish AI in the content.</summary>
+    public const string SkirmishScriptLibraryPath = "Data/Scripts/SkirmishScripts.scb";
+
+    private (CnCNew.Data.World.MapScriptLibrary Library, CnCNew.Simulation.Skirmish.Original.AiData Data)? _originalAi;
+
+    /// <summary>
+    /// What a match with the original skirmish AI needs beside the catalogs (docs/SKIRMISH-AI-ORIGINAL.md): the script library <c>SkirmishScripts.scb</c> and the typed
+    /// <c>AIData.ini</c>. Read from the content on first use and kept; a content without either cannot play that AI and says which part is missing.
+    /// </summary>
+    public (CnCNew.Data.World.MapScriptLibrary Library, CnCNew.Simulation.Skirmish.Original.AiData Data) LoadOriginalAi()
+    {
+        if (_originalAi is { } loaded) return loaded;
+        var data = CnCNew.Simulation.Skirmish.Original.AiData.TryBuild(Graph) ?? throw new InvalidDataException("The content has no AIData block: the original skirmish AI cannot be played.");
+        if (!Content.Exists(SkirmishScriptLibraryPath)) throw new InvalidDataException($"The content has no {SkirmishScriptLibraryPath}: the original skirmish AI cannot be played.");
+        CnCNew.Data.World.MapScriptLibrary library;
+        using (var stream = Content.OpenRead(SkirmishScriptLibraryPath)) library = CnCNew.Formats.SageMapDecoder.DecodeScriptLibrary(stream);
+        _originalAi = (library, data);
+        return (library, data);
+    }
+
     /// <summary>Virtual paths of every <c>Maps/*.map</c> file, ordinal order. Needs only a directory listing, not compiled definitions, so callers that have not finished <see cref="Load"/> yet (a boot/loading screen) can use it too.</summary>
     public static ImmutableArray<string> EnumerateMaps(ContentFileSystem content)
         => ImmutableArray.CreateRange(content.EnumerateFiles()
