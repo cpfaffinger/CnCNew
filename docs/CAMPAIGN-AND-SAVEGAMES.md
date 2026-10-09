@@ -1,120 +1,120 @@
-# Kampagnen, Missionsablauf und Savegames (Phase 9, Teil A Punkte 3–5)
+# Campaigns, mission flow and savegames (Phase 9, part A items 3–5)
 
-Die Logikschicht für Kampagnen und Speicherstände liegt in `CnCNew.Game` (`Campaign/`, `Save/`); sie hängt nicht von Stride oder
-Shell ab und ist headless testbar (`tests/CnCNew.Game.Tests/CampaignTests.cs`). Die Missionssimulation selbst steht in
-`docs/SCRIPT-ENGINE.md`. **Nicht verdrahtet:** die Hauptmenüeinträge „Kampagne“ und „Spiel laden“ bleiben deaktiviert
-(`Shell/Screens/MainMenuScreen.cs`); die Screens (Kampagnenauswahl, Briefing, Ladeliste) sind Präsentationsarbeit der nächsten Phase,
-die Schnittstellen dafür sind fertig (§7).
+The logic layer for campaigns and savegames lies in `CnCNew.Game` (`Campaign/`, `Save/`); it does not depend on Stride or
+the shell and can be tested headless (`tests/CnCNew.Game.Tests/CampaignTests.cs`). The mission simulation itself is in
+`docs/SCRIPT-ENGINE.md`. **Not wired:** the main menu entries "Campaign" and "Load game" stay disabled
+(`Shell/Screens/MainMenuScreen.cs`); the screens (campaign selection, briefing, load list) are presentation work of the next phase,
+the interfaces for them are finished (§7).
 
-## 1. Kampagnenkatalog (`CampaignCatalog`)
+## 1. Campaign catalog (`CampaignCatalog`)
 
-`Data/INI/Campaign.ini` ist im Ladeplan als „nicht geladen“ geführt (`LoadPlan.cs`), also nicht Teil des kompilierten
-Definitionsgraphen. Das Format ist eine feste, flache INI-Teilmenge (`Key Value` oder `Key = Value`, `;`-Kommentare, `Campaign`- und
-`Mission`-Blöcke mit `END`); `CampaignCatalog.Parse` liest sie in der Schicht, die den Kampagnenfluss besitzt. Schlüssel nach
-`CampaignManager::parseMissionPart` (`CampaignManager.cpp`) plus die Zero-Hour-Schlüssel der Datei: Kampagne `CampaignNameLabel`,
-`FirstMission`, `FinalVictoryMovie`, `IsChallengeCampaign`, `PlayerFaction`; Mission `Map`, `NextMission`, `IntroMovie`,
-`ObjectiveLine0..4`, `BriefingVoice`, `UnitNames0..2`, `LocationNameLabel`, `VoiceLength`, `GeneralName`. **Unbekannte Schlüssel** werden in
-`UnknownKeys` gesammelt (nie still übergangen), ungeschlossene/überzählige Blöcke sind ein Fehler.
+`Data/INI/Campaign.ini` is listed in the load plan as "not loaded" (`LoadPlan.cs`), so it is not part of the compiled
+definition graph. The format is a fixed, flat INI subset (`Key Value` or `Key = Value`, `;` comments, `Campaign` and
+`Mission` blocks with `END`); `CampaignCatalog.Parse` reads it in the layer that owns the campaign flow. Keys according to
+`CampaignManager::parseMissionPart` (`CampaignManager.cpp`) plus the Zero Hour keys of the file: campaign `CampaignNameLabel`,
+`FirstMission`, `FinalVictoryMovie`, `IsChallengeCampaign`, `PlayerFaction`; mission `Map`, `NextMission`, `IntroMovie`,
+`ObjectiveLine0..4`, `BriefingVoice`, `UnitNames0..2`, `LocationNameLabel`, `VoiceLength`, `GeneralName`. **Unknown keys** are collected in
+`UnknownKeys` (never silently skipped), unclosed/surplus blocks are an error.
 
-`Validate(mapExists)` meldet: fehlende erste Mission, hängende `NextMission`, doppelte Namen, fehlende Karten, nicht erreichbare Missionen
-(Zyklen beenden den Lauf statt ihn zu endlosen).
+`Validate(mapExists)` reports: missing first mission, dangling `NextMission`, duplicate names, missing maps, unreachable missions
+(cycles end the run instead of making it endless).
 
-## 2. Fortschritt (`CampaignProgress`)
+## 2. Progress (`CampaignProgress`)
 
-Unveränderlicher Record: Kampagne, Schwierigkeit (`ScriptDifficulty`), aktuelle Mission, abgeschlossene Missionen (sortiert), Versuche je
-Mission, beendet-Flag. Übergänge: `Begin` → `Started()` (zählt einen Versuch) → `Won(campaign)` (Mission abgeschlossen, nächste wird
-aktuell, nach der letzten `Finished`) oder `Lost()` (Zustand bleibt, Wiederholung derselben Mission). `Describe`/`Load` in der
-kanonischen Zustandsform (`IStateWriter`/`IStateReader`).
+Immutable record: campaign, difficulty (`ScriptDifficulty`), current mission, completed missions (sorted), attempts per
+mission, finished flag. Transitions: `Begin` → `Started()` (counts an attempt) → `Won(campaign)` (mission completed, the next one becomes
+current, after the last one `Finished`) or `Lost()` (state stays, repetition of the same mission). `Describe`/`Load` in the
+canonical state form (`IStateWriter`/`IStateReader`).
 
-**Freischaltungen:** nicht modelliert – jede Kampagne und jede Mission der Kette ist wählbar. Die Reihenfolge der Challenge-Kampagnen und
-die Profilfreischaltung der Originalshell sind Sache des Profils/der Shell und hier nicht belegt.
+**Unlocks:** not modelled – every campaign and every mission of the chain is selectable. The order of the challenge campaigns and
+the profile unlocking of the original shell are a matter of the profile/the shell and not verified here.
 
-## 3. Ablauf (`CampaignController`, `MissionRun`)
+## 3. Flow (`CampaignController`, `MissionRun`)
 
-`MissionContext` = kompilierte Vorlagen + Definitions-Fingerprint + „Karte laden“ (entkoppelt von Dateisystem und `GameData`;
-`MissionContext.From(GameData)` für das Spiel, Lambdas für Tests). `MissionRun.Load` baut Terrain und `MissionSession`; `Restore`
-stellt sie aus einem `MissionSnapshot` wieder her.
+`MissionContext` = compiled templates + definition fingerprint + "load map" (decoupled from the file system and `GameData`;
+`MissionContext.From(GameData)` for the game, lambdas for tests). `MissionRun.Load` builds terrain and `MissionSession`; `Restore`
+restores them from a `MissionSnapshot`.
 
-`CampaignController.StartCurrentMission(maxTicks, humanSideName)` zählt den Versuch und startet die Mission mit Schwierigkeit und
-Versuchszahl (`MISSION_ATTEMPTS`); der Logik-Seed hängt von Mission und Versuch ab, eine Wiederholung ist also nicht der Lauf des
-letzten Versuchs. `humanSideName` (optional, Standard leer) reicht `MissionOptions.HumanSideName` durch — für Karten, die keine Seite
-selbst als `playerIsHuman` markieren (die Generals'-Challenge-Karten), muss der Host die Seite des Menschen benennen, siehe
-`docs/SCRIPT-ENGINE.md` §7; die General-Auswahl selbst ist Sache der Shell (§7 unten).
-`Conclude(run)` liest `MissionSession.Outcome` (vom Skript gesetzt): Sieg → `Won`, Niederlage → `Lost`; ein Lauf ohne Ergebnis oder einer
-fremden Mission wird abgewiesen. `ResumeCurrentMission(state)` setzt einen gespeicherten Lauf fort, ohne einen Versuch zu zählen.
+`CampaignController.StartCurrentMission(maxTicks, humanSideName)` counts the attempt and starts the mission with difficulty and
+attempt count (`MISSION_ATTEMPTS`); the logic seed depends on mission and attempt, so a repetition is not the run of the
+last attempt. `humanSideName` (optional, default empty) passes `MissionOptions.HumanSideName` through — for maps that do not mark a side
+as `playerIsHuman` themselves (the Generals' Challenge maps), the host must name the side of the human, see
+`docs/SCRIPT-ENGINE.md` §7; the general selection itself is a matter of the shell (§7 below).
+`Conclude(run)` reads `MissionSession.Outcome` (set by the script): victory → `Won`, defeat → `Lost`; a run without a result or of a
+foreign mission is rejected. `ResumeCurrentMission(state)` continues a saved run without counting an attempt.
 
-## 4. Zustandsformate
+## 4. State formats
 
 ### `MissionSnapshot` (Simulation, Version 2)
 
-*Die Überschrift nennt die Version der Phase 10; aktuell ist Version **3** (seit Phase 22, Festkomma Q39.24). Phase 23 hat keine Version erhöht.*
+*The heading names the version of Phase 10; the current one is version **3** (since Phase 22, fixed point Q39.24). Phase 23 did not raise any version.*
 
-UTF-8-JSON, feste Schlüsselreihenfolge, nur Ganzzahlen, keine Pfade/Zeitstempel. Felder: `format` (`cncnew-mission-state`), `version`,
-`tickRate`, `programFingerprint` (strukturelle Prüfsumme des Kartenskripts), `definitionFingerprint`, `terrainFingerprint`, `options`
-(Seed, Schwierigkeit, Tick-Limit, Präsentationslatenz, Gefechtsintervall, Missionsversuche, seit Version 2 `humanSideName`), `stateHash` (Welt + Skript), `session`
-(Gefechtszähler, Befehlssequenzen je Spieler), `script` (`ScriptEngine.Describe`: Skript-/Gruppenzustand, Zähler, Flags, benannte
-Objekte, Teams, Objektlisten, Folgeaufträge, Angriffsprioritäten, Schadenshistorie, Ergebnis, Zählerstände der fehlenden Typen), `world`
-(der **unveränderte** `WorldSnapshot`, Version 7, als Roh-JSON eingebettet). `Restore` baut die Welt aus dem Snapshot, leitet das Skriptprogramm
-aus der Karte neu ab, lädt den Skriptzustand und prüft beide Hashes. Abgewiesen (`SnapshotFormatException`): andere Version, andere
-Definitionen, anderes Gelände, anderes Kartenskript, gekippte/fehlende Bytes.
+UTF-8 JSON, fixed key order, integers only, no paths/timestamps. Fields: `format` (`cncnew-mission-state`), `version`,
+`tickRate`, `programFingerprint` (structural checksum of the map script), `definitionFingerprint`, `terrainFingerprint`, `options`
+(seed, difficulty, tick limit, presentation latency, combat interval, mission attempts, since version 2 `humanSideName`), `stateHash` (world + script), `session`
+(combat counter, command sequences per player), `script` (`ScriptEngine.Describe`: script/group state, counters, flags, named
+objects, teams, object lists, follow-up orders, attack priorities, damage history, outcome, counts of the missing types), `world`
+(the **unchanged** `WorldSnapshot`, version 7, embedded as raw JSON). `Restore` builds the world from the snapshot, derives the script program
+anew from the map, loads the script state and checks both hashes. Rejected (`SnapshotFormatException`): different version, different
+definitions, different terrain, different map script, flipped/missing bytes.
 
-Gemessen: gespeichert und wiederhergestellt läuft eine Mission Tick für Tick hash-identisch weiter; Speichern → Laden → Speichern
-reproduziert die Bytes.
+Measured: saved and restored, a mission continues tick by tick hash-identically; save → load → save
+reproduces the bytes.
 
 ### `SaveGame` (Game, Version 3)
 
-Eine Datei, ein UTF-8-JSON-Dokument: `format` (`cncnew-savegame`), `version`, `title`, `mapPath` (virtuell), `campaign`, `mission`,
-`difficulty`, `tick`, `tickRate` (seit Version 2), `definitionFingerprint`, `stateHash`, `stateSha256` (SHA-256 über den eingebetteten Zustand – deckt jedes Byte, auch
-den Präsentationsstrom, den der Simulationshash bewusst nicht enthält), `progress` (`CampaignProgress` oder leer), `state` (das
-`MissionSnapshot`, roh). Dieselbe Sitzung im selben Tick ergibt dieselben Bytes; Laden + erneutes Speichern reproduziert die Datei.
+One file, one UTF-8 JSON document: `format` (`cncnew-savegame`), `version`, `title`, `mapPath` (virtual), `campaign`, `mission`,
+`difficulty`, `tick`, `tickRate` (since version 2), `definitionFingerprint`, `stateHash`, `stateSha256` (SHA-256 over the embedded state – covers every byte, including
+the presentation stream, which the simulation hash deliberately does not contain), `progress` (`CampaignProgress` or empty), `state` (the
+`MissionSnapshot`, raw). The same session in the same tick yields the same bytes; loading + saving again reproduces the file.
 
-`SaveGame.ReadHeader` liest nur den Kopf (Ladeliste). `Load` meldet verständlich, **warum** eine Datei nicht lädt:
-„Not a CnCNew savegame“, „Unsupported savegame version N (this game reads version 3)“, „Unsupported tick rate N Hz in the savegame“,
-„written at 60 Hz; this session runs at 30 Hz“ (Rate des Spielstands gegen die Rate der Sitzung, in beiden Richtungen),
-„written with different game data“ (Definitions-Fingerprint), „belongs to campaign X, which this game does not have“,
-„damaged or truncated“, „checksum does not match“, „state does not match its header“ (Tick, Rate oder Zustandshash des Kopfs passen nicht zum
-eingebetteten Zustand).
+`SaveGame.ReadHeader` reads only the header (load list). `Load` reports understandably **why** a file does not load:
+"Not a CnCNew savegame", "Unsupported savegame version N (this game reads version 3)", "Unsupported tick rate N Hz in the savegame",
+"written at 60 Hz; this session runs at 30 Hz" (rate of the savegame against the rate of the session, in both directions),
+"written with different game data" (definition fingerprint), "belongs to campaign X, which this game does not have",
+"damaged or truncated", "checksum does not match", "state does not match its header" (tick, rate or state hash of the header do not match the
+embedded state).
 
-**Version 3 – Festkomma Q39.24 (7. Oktober 2026, `docs/FIXED-POINT-Q39-24.md`).** Der eingebettete Missionszustand trägt Festkommawerte mit 24 statt 16 Nachkommabits; Stände der Versionen 1 und 2 werden über ihre Version abgelehnt, nie mit dem neuen Maßstab gelesen.
+**Version 3 – fixed point Q39.24 (7 October 2026, `docs/FIXED-POINT-Q39-24.md`).** The embedded mission state carries fixed-point values with 24 instead of 16 fractional bits; states of versions 1 and 2 are rejected by their version, never read with the new scale.
 
-**Version 2 – die Hülle trägt ihre Rate (6. Oktober 2026, `docs/TICKRATE-MIGRATION.md` §14.9).** `tick` zählt Ticks der Welt, die gespeichert wurde, und
-sagt ohne Rate nichts; Version 1 schrieb keine Rate (ein Spielstand anderer Rate fiel nur mittelbar auf, über den Fingerabdruck, der die Rate
-enthält). Seit Version 2 steht `tickRate` (Ticks je Sekunde: 30, 60 oder 120) direkt hinter `tick`. Regeln:
+**Version 2 – the envelope carries its rate (6 October 2026, `docs/TICKRATE-MIGRATION.md` §14.9).** `tick` counts ticks of the world that was saved, and
+says nothing without a rate; version 1 wrote no rate (a savegame of a different rate was noticed only indirectly, through the fingerprint, which contains
+the rate). Since version 2 `tickRate` (ticks per second: 30, 60 or 120) stands directly behind `tick`. Rules:
 
-- **Version 1 wird abgelehnt, nie umgedeutet.** Eine Datei ohne Rate als „30 Hz“ zu lesen wäre eine stille Annahme; die vorhandene Versionsprüfung
-  weist sie mit „Unsupported savegame version 1 (this game reads version 3)“ ab, in der Ladeliste erscheint der Slot mit diesem Grund. Es gibt keine
-  Umwandlung alter Spielstände (binäre Kompatibilität zu alten Savegames ist nicht im Scope).
-- **Die Rate wird vor dem Fingerabdruck geprüft**, damit die Meldung die Ursache nennt. Ein Spielstand von 60 Hz lädt nur in einer Sitzung mit 60 Hz.
-- **Seit der Umstellung des Standards auf 60 Hz (Phase 23, `e8632bb`, 8. Oktober 2026) lehnt der Client ohne Option einen bei 30 Hz geschriebenen Spielstand ab** („This savegame was written at 30 Hz;
-  this session runs at 60 Hz. It cannot be loaded.“). Er lädt nur in einer Sitzung mit 30 Hz – Client mit `--tick-rate 30` – und läuft dort mit 30 Hz weiter. Die Shell bietet keine Wahl der Rate
-  und lädt einen Stand nicht mit dessen Rate nach; es gibt keine Umwandlung. Kein Byte des Formats hat sich geändert, keine Version wurde erhöht (`SaveGame` 3, `MissionSnapshot` 3,
-  `WorldSnapshot` 10); nach `docs/MULTIPLAYER-PLAN.md` §6 Regel 7 ist das vor der ersten Veröffentlichung zulässig und hier als Grenze benannt. Tests mit einer bei 30 Hz geschriebenen Fixture:
-  `Tests.TickRateStatesWrittenAtThirtyOutliveTheDefault` (Simulation) und `CampaignTests` „Savegame: the header carries the tick rate …“ (`docs/TICKRATE-MIGRATION.md` §15.5.3).
-- **Kopf und Zustand müssen übereinstimmen:** nach dem Wiederherstellen werden Tick und Rate des Kopfs mit der Welt verglichen (der eingebettete
-  `MissionSnapshot` trägt seine Rate selbst); ein Kopf mit gefälschter Rate oder falschem Tick wird abgewiesen.
-- **Listen zeigen Spielzeit statt des Ticks:** `SaveGameHeader.GameTime` (`m:ss`, ganze Sekunden aus Tick und Rate, Minuten laufen über 59 hinaus) –
-  derselbe Text für denselben Zeitpunkt bei jeder Rate. Ladebildschirm (`LoadGameScreen`) und Pausenmenü (`MissionPauseMenu`) zeigen
-  „Titel (m:ss)“ statt „Titel (tick N)“. Kein eingecheckter Bildschirm-Hash enthält eine Ladeliste mit Einträgen; die 54 Screen-Hashes sind unverändert.
+- **Version 1 is rejected, never reinterpreted.** Reading a file without a rate as "30 Hz" would be a silent assumption; the existing version check
+  rejects it with "Unsupported savegame version 1 (this game reads version 3)", in the load list the slot appears with this reason. There is no
+  conversion of old savegames (binary compatibility with old savegames is not in scope).
+- **The rate is checked before the fingerprint**, so that the message names the cause. A savegame of 60 Hz loads only in a session with 60 Hz.
+- **Since the switch of the default to 60 Hz (Phase 23, `e8632bb`, 8 October 2026) the client without an option rejects a savegame written at 30 Hz** ("This savegame was written at 30 Hz;
+  this session runs at 60 Hz. It cannot be loaded."). It loads only in a session with 30 Hz – client with `--tick-rate 30` – and continues there at 30 Hz. The shell offers no choice of the rate
+  and does not load a state with its own rate afterwards; there is no conversion. No byte of the format has changed, no version was raised (`SaveGame` 3, `MissionSnapshot` 3,
+  `WorldSnapshot` 10); according to `docs/MULTIPLAYER-PLAN.md` §6 rule 7 this is permissible before the first release and is named here as a limit. Tests with a fixture written at 30 Hz:
+  `Tests.TickRateStatesWrittenAtThirtyOutliveTheDefault` (Simulation) and `CampaignTests` "Savegame: the header carries the tick rate …" (`docs/TICKRATE-MIGRATION.md` §15.5.3).
+- **Header and state must agree:** after restoring, tick and rate of the header are compared with the world (the embedded
+  `MissionSnapshot` carries its rate itself); a header with a forged rate or a wrong tick is rejected.
+- **Lists show game time instead of the tick:** `SaveGameHeader.GameTime` (`m:ss`, whole seconds from tick and rate, minutes run beyond 59) –
+  the same text for the same point in time at every rate. Load screen (`LoadGameScreen`) and pause menu (`MissionPauseMenu`) show
+  "Title (m:ss)" instead of "Title (tick N)". No checked-in screen hash contains a load list with entries; the 54 screen hashes are unchanged.
 
-**Bewusst außerhalb des Formats:** Skirmish-Partien. Die Skirmish-KI hält Zustand außerhalb der Welt, den dieses Format nicht trägt;
-ein Skirmish-Speicherstand würde also nicht identisch fortsetzen. Ein Speicherstand entspricht nie einem `ReplayFile` (der Fehler
-`SharedReadyFrame` ist behoben, aber Missionen sind ohnehin nicht als Replay reproduzierbar, `docs/SCRIPT-ENGINE.md` §3).
+**Deliberately outside the format:** skirmish matches. The skirmish AI keeps state outside the world that this format does not carry;
+a skirmish savegame would therefore not continue identically. A savegame never corresponds to a `ReplayFile` (the bug
+`SharedReadyFrame` is fixed, but missions are not reproducible as a replay anyway, `docs/SCRIPT-ENGINE.md` §3).
 
 ### `SaveGameStore`
 
-`<Slot>.cncsave` in einem Verzeichnis: atomares Schreiben (temporäre Datei, dann Verschieben), `List()` meldet beschädigte Dateien mit
-Grund statt zu werfen, Slotnamen können das Verzeichnis nicht verlassen, `Delete`. Den Speicherort wählt die Shell (Einstellungen), nicht der
-Store.
+`<Slot>.cncsave` in a directory: atomic writing (temporary file, then move), `List()` reports damaged files with a
+reason instead of throwing, slot names cannot leave the directory, `Delete`. The storage location is chosen by the shell (settings), not the
+store.
 
-## 5. Automatisierte Prüfung
+## 5. Automated check
 
-`tests/CnCNew.Game.Tests/CampaignTests.cs` (synthetische Daten): Parser, Validierung, Fortschritt inkl. JSON-Runde, Kontrollfluss mit
-Niederlage/Wiederholung/Versuchszähler/Seed, Speichern → Laden → identische Fortsetzung durch einen Sieg, Byte-Kanonizität,
-Ablehnung fremder/beschädigter/abgeschnittener Dateien, Store; seit Version 2 die Rate der Hülle (Laden bei 30 und bei 60 Hz, Ablehnung über Kreuz in
-beiden Richtungen, Version 1, fehlende und nicht unterstützte Rate, gefälschter Kopf, gleiche Spielzeit in der Liste bei beiden Raten). Mit `--content-dir`: die echte `Campaign.ini` (17 Kampagnen, 85 Missionen,
-0 unbekannte Schlüssel, einzige Auffälligkeit die im Retail-Bestand fehlende Karte `Maps/CampEADemo/CampEADemo.map`).
+`tests/CnCNew.Game.Tests/CampaignTests.cs` (synthetic data): parser, validation, progress incl. JSON round trip, control flow with
+defeat/repetition/attempt counter/seed, save → load → identical continuation through a victory, byte canonicity,
+rejection of foreign/damaged/truncated files, store; since version 2 the rate of the envelope (loading at 30 and at 60 Hz, cross-wise rejection in
+both directions, version 1, missing and unsupported rate, forged header, same game time in the list at both rates). With `--content-dir`: the real `Campaign.ini` (17 campaigns, 85 missions,
+0 unknown keys, the only anomaly the map `Maps/CampEADemo/CampEADemo.map` missing in the retail content).
 
-## 6. Werkzeug `CnCNew.CampaignTool`
+## 6. Tool `CnCNew.CampaignTool`
 
 ```powershell
 dotnet run --project tools/CnCNew.CampaignTool -- list game/content
@@ -124,81 +124,81 @@ dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit game/content 
 dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough game/content --campaign USA
 ```
 
-`--human-side <Name>` (`audit` und `playthrough`): reicht `MissionOptions.HumanSideName` durch, für Karten ohne eigene `playerIsHuman`-Seite
-(`docs/SCRIPT-ENGINE.md` §7); ein Name, der keine Seite der Karte trifft, fällt mit einer Notiz auf den Standard zurück (nie still).
+`--human-side <Name>` (`audit` and `playthrough`): passes `MissionOptions.HumanSideName` through, for maps without a `playerIsHuman` side of their own
+(`docs/SCRIPT-ENGINE.md` §7); a name that matches no side of the map falls back to the default with a note (never silently).
 
-**Spielzeit in der Ausgabe (6. Oktober 2026):** `drive` und `audit` schreiben unter jede Kartenzeile, in der ein Ende erreicht wurde, eine eigene Zeile
-`game time (m:ss at 30 Hz): victory after 0:26, defeat after 0:07` und am Schluss `Budget: N ticks are m:ss of game time (m:ss) at 30 Hz.`; `playthrough`
-nennt die Spielzeit in Klammern hinter dem Tick. Die Kartenzeilen selbst (`victory REACHED … @Tick`, `win@Tick`, `lose@Tick`) und die Summenzeilen
-(„… identical on a second run …“) sind Byte für Byte unverändert, weil sie ausgewertet werden; Ticks bleiben Ticks der gewählten Rate (`--tick-rate N`).
-**Seit Phase 23** laufen `CampaignTool` und `SimTool` ohne `--tick-rate` mit 60 Hz (die Zeilen nennen dann „at 60 Hz“, und ein Tick ist 1/60 s); die Standardbudgets sind Spielzeit
-(`drive` 2.000 s, `audit` 60 s, `playthrough` 30 s; `--seconds`/`--minutes`, `--ticks` bleibt als Rohangabe). Tickzahlen in diesem Dokument (`--ticks 900`, „1.500 Ticks“, „330–360 Ticks“) sind
-historisch und bei 30 Hz gemessen. Was die Kampagnenwerkzeuge bei 30, 60 und 120 Hz ergeben: `docs/SCRIPT-ENGINE.md` §9, letzter Unterabschnitt.
+**Game time in the output (6 October 2026):** `drive` and `audit` write, below every map line in which an end was reached, a separate line
+`game time (m:ss at 30 Hz): victory after 0:26, defeat after 0:07` and at the end `Budget: N ticks are m:ss of game time (m:ss) at 30 Hz.`; `playthrough`
+names the game time in parentheses behind the tick. The map lines themselves (`victory REACHED … @Tick`, `win@Tick`, `lose@Tick`) and the summary lines
+("… identical on a second run …") are unchanged byte for byte, because they are parsed; ticks stay ticks of the chosen rate (`--tick-rate N`).
+**Since Phase 23** `CampaignTool` and `SimTool` run at 60 Hz without `--tick-rate` (the lines then say "at 60 Hz", and a tick is 1/60 s); the default budgets are game time
+(`drive` 2,000 s, `audit` 60 s, `playthrough` 30 s; `--seconds`/`--minutes`, `--ticks` stays as a raw value). Tick counts in this document (`--ticks 900`, "1,500 ticks", "330–360 ticks") are
+historical and measured at 30 Hz. What the campaign tools yield at 30, 60 and 120 Hz: `docs/SCRIPT-ENGINE.md` §9, last subsection.
 
-`audit`: jede eindeutige Kampagnenkarte – zwei frische Läufe, Speichern/Wiederherstellen, Endproben Sieg/Niederlage, danach die
-Aggregation der fehlenden Aktions-/Bedingungstypen, nicht auflösbarer Verweise und nicht erzeugbarer Objekttypen; Exitcode ≠ 0 bei
-Nichtdeterminismus, Fortsetzungsabweichung oder Ladefehler. `--explain` nennt je nicht erreichtem Ende die Endskripte und ihre
-falschen Bedingungen. `playthrough`: spielt eine Kampagne durch (Mission starten, Speicherstand schreiben und neu laden, Feinde
-ausschalten, Fortschritt übernehmen).
+`audit`: every unique campaign map – two fresh runs, save/restore, end probes victory/defeat, then the
+aggregation of the missing action/condition types, unresolvable references and object types that cannot be created; exit code ≠ 0 on
+non-determinism, continuation deviation or load error. `--explain` names, per end not reached, the end scripts and their
+false conditions. `playthrough`: plays a campaign through (start mission, write savegame and reload it, eliminate
+enemies, take over the progress).
 
-Stand 1. Oktober 2026: `CampaignTool list` – 17 Kampagnen, 85 Missionen, 0 unbekannte Schlüssel, ein Problem (die EA-Demokarte
-`CampEADemo` fehlt im Retail-Bestand). `CampaignTool audit` – 24 Karten, 24/24 deterministisch, 24/24 identisch nach Speichern/Wiederherstellen (Tabelle
-und Endproben: `docs/SCRIPT-ENGINE.md` §9). Die Größe eines Missionszustands liegt bei rund 3 MB (2.991.420 Byte für die Originalkarte `USA01` nach
-1.500 Ticks, Messung vom Werkzeug `SimTool mission-run`; der Weltzustand dominiert).
+As of 1 October 2026: `CampaignTool list` – 17 campaigns, 85 missions, 0 unknown keys, one problem (the EA demo map
+`CampEADemo` is missing in the retail content). `CampaignTool audit` – 24 maps, 24/24 deterministic, 24/24 identical after save/restore (table
+and end probes: `docs/SCRIPT-ENGINE.md` §9). The size of a mission state is around 3 MB (2,991,420 bytes for the original map `USA01` after
+1,500 ticks, measurement by the tool `SimTool mission-run`; the world state dominates).
 
-## 7. Anschluss an die Shell (Phase 10, Punkt 2 – umgesetzt)
+## 7. Connection to the shell (Phase 10, item 2 – implemented)
 
-`src/CnCNew.Game/Shell/Screens/CampaignScreens.cs`, `src/CnCNew.Game/Shell/MissionPresentation.cs` und die Erweiterungen in
-`GameShell.cs`/`MainMenuScreen.cs` verdrahten diesen Abschnitt vollständig:
+`src/CnCNew.Game/Shell/Screens/CampaignScreens.cs`, `src/CnCNew.Game/Shell/MissionPresentation.cs` and the extensions in
+`GameShell.cs`/`MainMenuScreen.cs` wire this section completely:
 
-- **Kampagnenauswahl** (seit Phase 16 wie im Original, `docs/GAME-SHELL.md` §13): `MainMenu.wnd`s `ButtonUSA`/`ButtonGLA`/`ButtonChina` öffnen die Schwierigkeitsfrage **im Hauptmenü** (`MapBorder4`:
-  Easy/Medium/Hard/Back), die Wahl ruft `GameShell.BeginCampaign` → `CampaignProgress.Begin` + `CampaignController.StartCurrentMission`; `ButtonChallenge` fragt dasselbe und öffnet dann
-  `ChallengeSelectScreen` (`ChallengeMenu.wnd`: die neun spielbaren `GeneralPersona`s von `ChallengeMode.ini` auf den `GeneralPosition0..11`-Knöpfen, Biografie und Play nach der Wahl, die gewählte Schwierigkeit gilt).
-  Laden ist der Knopf Load des Hauptmenüs (`LoadGameScreen`). `SinglePlayerMenu.wnd` und `DifficultySelect.wnd` benutzt Zero Hour nie und die Shell auch nicht mehr.
-- **Briefing**: `MissionBriefingScreen` nutzt das reale `SinglePlayerLoadScreen.wnd` wieder (dessen `ObjectivesWin`-Gruppe mit
-  `StaticTextLine0..4` schon für genau `ObjectiveLabels` gedacht ist; `StaticTextCameoText0..3` trägt `LocationLabel` plus
-  `UnitNames0..2`). `ShellPhase.MissionBriefing` hält den Bildschirm für `max(VoiceLengthSeconds, 2)` simulierte Sekunden
-  (kein Klick-Skip, exakt wie die ausgelieferte Datei – sie deklariert keinen Eingabe-Callback); `IntroMovie`/`BriefingVoice`
-  erscheinen als benannter Platzhalter im Fortschrittstext (kein Bink-Decoder, dauerhafte Grenze). Die meisten echten
-  USA/GLA/China-Missionen tragen gar keine `ObjectiveLine`-Einträge in `Campaign.ini` (nur `TRAINING` tut das) – eine leere
-  Zeile ist dann korrektes Verhalten, kein Fehler.
-- **Ladeliste**: `LoadGameScreen` (`SaveLoad.wnd`, aus dem Hauptmenü über „Load/Replay“ → „Load Game“) listet
-  `SaveGameStore.List()`, lädt über die vorhandenen Bestätigungsdialoge der Datei; ein `SaveGameException` zeigt
-  `GameShell.ShowError` als `MessageBox.wnd` (neue Klartext-Variante, da die Fehlermeldung nie ein CSF-Schlüssel ist).
-- **Speichern im Spiel**: `MissionPauseMenu` (`src/CnCNew.Game/Hud/MissionPauseMenu.cs`) kombiniert `QuitMenu.wnd` (wie
-  `MatchController`) mit `PopupSaveLoad.wnd` hinter dessen `ButtonSaveLoad`; der Slotname kommt aus der eingegebenen
-  Beschreibung (dateinamensicher gemacht), Überschreiben fragt über das vorhandene `OverwriteConfirmParent` nach.
-  Eigenständig von `MatchController`/`LiveMatch` (die bleiben Skirmish-spezifisch, siehe `docs/handoffs/HANDOFF-PHASE10.md`).
-- **Missionsabschluss**: `GameShell.MissionFinished` ruft `CampaignController.Conclude` auf und legt `MissionBannerScreen`
-  (`Victorious.wnd`/`Defeat.wnd`, reine Grafik ohne Knöpfe im Original) unter `MissionResultScreen` (`ScoreScreen.wnd`
-  wiederverwendet, da die echten Sieg/Niederlage-Dateien gar keine Schaltflächen haben); `ButtonContinue` wird zu „Next
-  Mission“/„Retry Mission“/„Campaign Complete“ je nach Ausgang, `ButtonOk` bleibt „Main Menu“.
-- **`ScriptOutput`-Wiedergabe und Rückmeldung an die VM**: `MissionPresentationDirector` (neu) zieht
-  `ScriptEngine.DrainOutputs()` pro Tick, verfolgt Sprache/Film (Platzhalter-Dauer, kein Audio-/Videolänge-Datensatz
-  vorhanden), Bildschirmtext (`DISPLAY_TEXT`/`SHOW_MILITARY_CAPTION`/`INGAME_POPUP_MESSAGE`, echte CSF-Auflösung über einen
-  Callback) und Radar-Ereignisse (`RADAR_CREATE_EVENT`/`OBJECT_CREATE_RADAR_EVENT`/`TEAM_CREATE_RADAR_EVENT`, echte
-  Weltposition). Kamerabewegungen (`MOVE_CAMERA_TO` u. a.) werden mit ihrer echten Sekundenparameter-Dauer verfolgt und
-  `CompletePresentation` wird exakt zu diesem Zeitpunkt aufgerufen (`BeforeStep`/`AfterStep`, zeitlich genauso wie die
-  eigene `PresentationLatencyTicks`-Selbstauflösung der Engine) – mit Test gegen eine echte Kamerabewegungssequenz
-  (`CnCNew.Game.Tests` → `MissionPresentationTests`). `ApplyCameraTo` spielt die Skriptkamera auf einer echten
-  `RtsCamera` ab (seit Phase 16 über die Dauer des Skripts, dazu Eingabesperre, Letterbox, Blenden, Zähler, Skript-Ton und Zähler je Ausgabetyp: `docs/SCRIPT-ENGINE.md` §7a); `BuildOverlayCommands` liefert den Bildschirmtext als `UiDrawCommand`s, die der vorhandene
-  `CnCNew.Client.Stride`-`UiRenderer` bereits zeichnen kann (kein neuer Renderer nötig). `MissionUiBridge` leitet
-  Selektionsänderungen an `ScriptEngine.SelectNamed` weiter (`NAMED_SELECTED`) und reicht `SignalUiInteraction` direkt durch
-  (`FLAG`); eine feste Zuordnung „dieser Knopf → dieses Flag“ gibt es nicht (die Mission-Metadaten tragen das nirgends),
-  das bleibt eine Entscheidung des jeweiligen Host-Codes.
-- **Verzögerung ohne Director (Phase 11):** `CampaignController.StartCurrentMission(maxTicks, humanSideName, presentationLatencyTicks)` reicht
-  `MissionOptions.PresentationLatencyTicks` durch; ein Host ohne `MissionPresentationDirector` setzt damit einen Verzögerungs-Fallback für
-  `HAS_FINISHED_*`/`CAMERA_MOVEMENT_FINISHED` (Standard 0 = sofort fertig, wie headless). Test: `CampaignTests` → „a host without a presentation director …“.
-- **Missions-HUD (Phase 11):** eine Kampagnenmission lässt sich jetzt mit der vollen Skirmish-Befehlsleiste spielen – `LiveGame`/`LiveMission`/`MissionController`, siehe
-  `docs/GAME-HUD.md` §14. `MissionPresentationDirector`/`MissionUiBridge` hängen darin; `MissionPauseMenu` bleibt der Speicher-/Lade-Dialog der Mission.
-- **Generals'-Challenge-General-Wahl (Phase 11, Phase 12 ergänzt):** `ChallengeSides.HumanSideFor(map)` (`CnCNew.Game/Campaign`) bestimmt die menschliche Seite einer Challenge-Karte, und
-  `CampaignController.StartCurrentMission` ruft es für `IsChallenge`-Kampagnen auf, wenn der Host keine Seite nennt (`ChallengeSelectScreen` ruft dadurch automatisch die richtige
-  Seite ab, ohne eigenen Code). Messung (`CampaignTool sides`): sieben der acht Challenge-Karten markieren ihre Seite selbst (`ThePlayer`, `playerIsHuman`) – dort entscheidet die Karte;
-  `GC_LaserGeneral` markiert keine und definiert nur ihre Gegner (`PlyrAmericaLaserGeneral` ist der Feind, dessen Bauanlagen das Siegskript zerstört sehen will). **Phase 12 – Persona-Fraktion:**
-  `MissionOptions.HumanFaction` (Missionszustand 2, `humanFaction` wird nur bei gesetztem Wert gespeichert) trägt die Fraktion des gewählten Generals; `ScriptProgram.WithHumanSide(seite, fraktion)` ersetzt
-  damit die Fraktion der menschlichen Seite und hängt auf einer Karte ohne menschliche Seite (`GC_LaserGeneral`) eine **synthetische Seite** `ThePlayer` an (Feind jeder nicht-zivilen Kartenseite und
-  umgekehrt; `ChallengeSides.SyntheticHumanSide`); die Programmprüfsumme bleibt die der Karte, damit ein Speicherstand das Programm erkennt, die Optionen sagen, wie es angepasst wurde.
-  `CampaignCatalog.WithPersonas(ChallengeMode.ini)` füllt die `PlayerFaction` jeder Challenge-Kampagne ohne eigene aus `GeneralPersonaN` (`PlayerTemplate` + `Campaign`; Personas mit
-  `Campaign = unimplemented` und Kampagnen mit eigener `PlayerFaction` bleiben unverändert), `GameShell` liest `Data/INI/ChallengeMode.ini` beim Start. Messung: `GC_LaserGeneral` hat jetzt eine eigene
-  menschliche Seite und ist auf dem Skriptweg gewinn- und verlierbar (Zielfahrer, `docs/SCRIPT-ENGINE.md` §9); `CampaignTool drive|audit` reichen die Persona durch.
-  Gemessen: `CampaignTool playthrough --campaign CHALLENGE_0` gewinnt Mission01–05 per Auslöschung (Sieg nach 330–360 Ticks).
+- **Campaign selection** (since Phase 16 as in the original, `docs/GAME-SHELL.md` §13): `MainMenu.wnd`'s `ButtonUSA`/`ButtonGLA`/`ButtonChina` open the difficulty question **in the main menu** (`MapBorder4`:
+  Easy/Medium/Hard/Back), the choice calls `GameShell.BeginCampaign` → `CampaignProgress.Begin` + `CampaignController.StartCurrentMission`; `ButtonChallenge` asks the same and then opens
+  `ChallengeSelectScreen` (`ChallengeMenu.wnd`: the nine playable `GeneralPersona`s of `ChallengeMode.ini` on the `GeneralPosition0..11` buttons, biography and Play after the choice, the chosen difficulty applies).
+  Loading is the Load button of the main menu (`LoadGameScreen`). Zero Hour never uses `SinglePlayerMenu.wnd` and `DifficultySelect.wnd`, and the shell no longer does either.
+- **Briefing**: `MissionBriefingScreen` reuses the real `SinglePlayerLoadScreen.wnd` (whose `ObjectivesWin` group with
+  `StaticTextLine0..4` is already meant for exactly `ObjectiveLabels`; `StaticTextCameoText0..3` carries `LocationLabel` plus
+  `UnitNames0..2`). `ShellPhase.MissionBriefing` holds the screen for `max(VoiceLengthSeconds, 2)` simulated seconds
+  (no click skip, exactly like the shipped file – it declares no input callback); `IntroMovie`/`BriefingVoice`
+  appear as a named placeholder in the progress text (no Bink decoder, permanent limit). Most real
+  USA/GLA/China missions carry no `ObjectiveLine` entries at all in `Campaign.ini` (only `TRAINING` does) – an empty
+  line is then correct behaviour, not an error.
+- **Load list**: `LoadGameScreen` (`SaveLoad.wnd`, from the main menu via "Load/Replay" → "Load Game") lists
+  `SaveGameStore.List()`, loads through the existing confirmation dialogs of the file; a `SaveGameException` shows
+  `GameShell.ShowError` as `MessageBox.wnd` (new plain-text variant, because the error message is never a CSF key).
+- **Saving in the game**: `MissionPauseMenu` (`src/CnCNew.Game/Hud/MissionPauseMenu.cs`) combines `QuitMenu.wnd` (like
+  `MatchController`) with `PopupSaveLoad.wnd` behind its `ButtonSaveLoad`; the slot name comes from the entered
+  description (made file-name safe), overwriting asks through the existing `OverwriteConfirmParent`.
+  Independent of `MatchController`/`LiveMatch` (those stay skirmish-specific, see `docs/handoffs/HANDOFF-PHASE10.md`).
+- **Mission completion**: `GameShell.MissionFinished` calls `CampaignController.Conclude` and puts `MissionBannerScreen`
+  (`Victorious.wnd`/`Defeat.wnd`, pure graphics without buttons in the original) under `MissionResultScreen` (`ScoreScreen.wnd`
+  reused, because the real victory/defeat files have no buttons at all); `ButtonContinue` becomes "Next
+  Mission"/"Retry Mission"/"Campaign Complete" depending on the outcome, `ButtonOk` stays "Main Menu".
+- **`ScriptOutput` playback and feedback to the VM**: `MissionPresentationDirector` (new) drains
+  `ScriptEngine.DrainOutputs()` per tick, tracks speech/movie (placeholder duration, no audio/video length data set
+  available), screen text (`DISPLAY_TEXT`/`SHOW_MILITARY_CAPTION`/`INGAME_POPUP_MESSAGE`, real CSF resolution through a
+  callback) and radar events (`RADAR_CREATE_EVENT`/`OBJECT_CREATE_RADAR_EVENT`/`TEAM_CREATE_RADAR_EVENT`, real
+  world position). Camera movements (`MOVE_CAMERA_TO` among others) are tracked with their real seconds-parameter duration and
+  `CompletePresentation` is called exactly at this point in time (`BeforeStep`/`AfterStep`, timed exactly like the
+  engine's own `PresentationLatencyTicks` self-resolution) – with a test against a real camera movement sequence
+  (`CnCNew.Game.Tests` → `MissionPresentationTests`). `ApplyCameraTo` plays the script camera on a real
+  `RtsCamera` (since Phase 16 over the duration of the script, plus input lock, letterbox, fades, counters, script sound and counters per output type: `docs/SCRIPT-ENGINE.md` §7a); `BuildOverlayCommands` delivers the screen text as `UiDrawCommand`s, which the existing
+  `CnCNew.Client.Stride` `UiRenderer` can already draw (no new renderer needed). `MissionUiBridge` forwards
+  selection changes to `ScriptEngine.SelectNamed` (`NAMED_SELECTED`) and passes `SignalUiInteraction` straight through
+  (`FLAG`); a fixed mapping "this button → this flag" does not exist (the mission metadata carries that nowhere),
+  that stays a decision of the respective host code.
+- **Delay without a director (Phase 11):** `CampaignController.StartCurrentMission(maxTicks, humanSideName, presentationLatencyTicks)` passes
+  `MissionOptions.PresentationLatencyTicks` through; a host without a `MissionPresentationDirector` thereby sets a delay fallback for
+  `HAS_FINISHED_*`/`CAMERA_MOVEMENT_FINISHED` (default 0 = finished immediately, as headless). Test: `CampaignTests` → "a host without a presentation director …".
+- **Mission HUD (Phase 11):** a campaign mission can now be played with the full skirmish command bar – `LiveGame`/`LiveMission`/`MissionController`, see
+  `docs/GAME-HUD.md` §14. `MissionPresentationDirector`/`MissionUiBridge` hang in it; `MissionPauseMenu` stays the save/load dialog of the mission.
+- **Generals' Challenge general choice (Phase 11, extended in Phase 12):** `ChallengeSides.HumanSideFor(map)` (`CnCNew.Game/Campaign`) determines the human side of a challenge map, and
+  `CampaignController.StartCurrentMission` calls it for `IsChallenge` campaigns when the host names no side (`ChallengeSelectScreen` thereby automatically obtains the right
+  side, without code of its own). Measurement (`CampaignTool sides`): seven of the eight challenge maps mark their side themselves (`ThePlayer`, `playerIsHuman`) – there the map decides;
+  `GC_LaserGeneral` marks none and defines only its opponents (`PlyrAmericaLaserGeneral` is the enemy whose production buildings the victory script wants to see destroyed). **Phase 12 – persona faction:**
+  `MissionOptions.HumanFaction` (mission state 2, `humanFaction` is saved only when a value is set) carries the faction of the chosen general; `ScriptProgram.WithHumanSide(seite, fraktion)` thereby replaces
+  the faction of the human side and, on a map without a human side (`GC_LaserGeneral`), appends a **synthetic side** `ThePlayer` (enemy of every non-civilian map side and
+  vice versa; `ChallengeSides.SyntheticHumanSide`); the program checksum stays that of the map, so that a savegame recognises the program, the options say how it was adapted.
+  `CampaignCatalog.WithPersonas(ChallengeMode.ini)` fills the `PlayerFaction` of every challenge campaign without one of its own from `GeneralPersonaN` (`PlayerTemplate` + `Campaign`; personas with
+  `Campaign = unimplemented` and campaigns with their own `PlayerFaction` stay unchanged), `GameShell` reads `Data/INI/ChallengeMode.ini` at start. Measurement: `GC_LaserGeneral` now has its own
+  human side and can be won and lost on the script path (objective driver, `docs/SCRIPT-ENGINE.md` §9); `CampaignTool drive|audit` pass the persona through.
+  Measured: `CampaignTool playthrough --campaign CHALLENGE_0` wins Mission01–05 by annihilation (victory after 330–360 ticks).
