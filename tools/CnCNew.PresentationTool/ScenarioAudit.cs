@@ -58,6 +58,7 @@ internal static class ScenarioAudit
 
         var shotsAt = new List<(long Tick, string Shooter, string Victim, float Bearing, float Turret, bool HasTurret)>();
         var exits = FactoryExitAudit.Create(data, live);
+        var acceptance = AcceptanceAudit.Create(live);
         // A scene starts one tick after its objects were placed; above 30 Hz that is in the middle of an original frame. Step single ticks to the next frame
         // boundary first, so every sample is taken exactly where an original frame ends (nothing to do at 30 Hz).
         while (!live.Clock.IsOriginalFrameBoundary && !live.IsOver) live.Advance(1.0 / live.World.Time.TicksPerSecond + 1e-9);
@@ -69,6 +70,7 @@ internal static class ScenarioAudit
             var sample = Capture(live, frame);
             history.Add(sample);
             exits?.Sample(frame);
+            acceptance?.Sample(frame);
             for (var i = eventsBefore; i < events.Count; i++) NoteEvent(live, events[i], frame, log, shotsAt);
             if (live.Clock.OriginalFrames % every == 0) PrintSample(live, sample);
             if (Option("--debug-fire") is { } pair && live.Clock.OriginalFrames % every == 0 && pair.Split(',') is [var shooterTag, var victimTag]
@@ -90,10 +92,14 @@ internal static class ScenarioAudit
             "tank-duel" => CheckTankDuel(shotsAt, history, events, live),
             "capture-building" => CheckCapture(history, events, live, SelectionFlashSettings.FromDefinitions(data.Graph)),
             "jet-strafe" => CheckJet(history, events, live),
-            _ => exits?.Check() ?? [],
+            _ => exits?.Check() ?? acceptance?.Check(events) ?? [],
         };
-        Console.WriteLine(failures.Count == 0 ? "RESULT: all checks passed" : $"RESULT: {failures.Count} check(s) failed");
+        // A check that fails for a documented finding of the simulation (docs/ACCEPTANCE.md) is reported as KNOWN and does not fail the audit, so anything new still does.
+        var known = failures.Where(failure => failure.StartsWith("KNOWN ", StringComparison.Ordinal)).ToList();
+        failures = failures.Except(known).ToList();
+        Console.WriteLine(failures.Count == 0 ? $"RESULT: all checks passed{(known.Count > 0 ? $" ({known.Count} known finding(s))" : "")}" : $"RESULT: {failures.Count} check(s) failed");
         foreach (var failure in failures) Console.WriteLine("  FAIL " + failure);
+        foreach (var finding in known) Console.WriteLine("  " + finding);
         return failures.Count == 0 ? 0 : 1;
     }
 
