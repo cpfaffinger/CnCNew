@@ -21,10 +21,11 @@ internal static class HudTests
     {
         var contentDir = ContentDir(args);
         var harness = new TestHarness(nameof(HudTests));
+        harness.Run("Control bar scheme: the creation resolution is read from the scheme, a scheme without one is refused, unread keys are counted", SchemeCreationResolution);
         if (contentDir is null)
         {
-            Console.WriteLine("SKIP HudTests (pass --content-dir <dir> to run against real data)");
-            return 0;
+            Console.WriteLine("SKIP HudTests real data (pass --content-dir <dir> to run against real data)");
+            return harness.Failures;
         }
 
         var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step}"), rate: CnCNew.Tests.TestRate.Default);
@@ -576,6 +577,32 @@ internal static class HudTests
         TestHarness.Assert(controller.Input.Selection.Contains(dozer.Id), "1 recalls the group");
     }
 
+    /// <summary>
+    /// A scheme is written for the resolution it names (<c>ScreenCreationRes</c>); the HUD used to take 1920x1080 for granted, the resolution of a modified control bar.
+    /// Synthetic text in the file's grammar, no game data.
+    /// </summary>
+    private static void SchemeCreationResolution()
+    {
+        const string text = "ControlBarScheme Small\n  ScreenCreationRes X:800 Y:600\n  Side Blue\n  MoneyUL X:360 Y:438\n  MoneyLR X:439 Y:457\n  SomeColor R:1 G:2 B:3 A:4\n"
+            + "  AnimatingPart\n    ImagePart\n      Position X:1 Y:2\n      Size X:3 Y:4\n      ImageName Moving\n      Layer 1\n    End\n    Duration 5\n  End\n"
+            + "  ImagePart\n    Position X:0 Y:408\n    Size X:800 Y:191\n    ImageName Base\n    Layer 4\n  End\n"
+            + "  ImagePart\n    Position X:10 Y:500\n    Size X:20 Y:30\n    ImageName Top\n    Layer 0\n  End\nEnd\n"
+            + "ControlBarScheme Large\n  ScreenCreationRes X:1920 Y:1080\n  Side Red\n  SomeColor R:1 G:2 B:3 A:4\nEnd\n";
+        var table = ControlBarSchemeTable.Parse(text);
+        TestHarness.Assert(table.Schemes.Length == 2, $"two schemes ({table.Schemes.Length})");
+        var small = table.Schemes[0];
+        var large = table.Schemes[1];
+        TestHarness.Assert(small is { CreationWidth: 800, CreationHeight: 600 } && large is { CreationWidth: 1920, CreationHeight: 1080 }, "each scheme carries its own creation resolution");
+        TestHarness.Assert(small.Money == new SchemeRect(360, 438, 439, 457) && large.Money.IsEmpty, "a rectangle the scheme does not name is empty");
+        TestHarness.Assert(small.ImageParts.Length == 2 && small.BackgroundParts.Single().ImageName == "Base" && small.ForegroundParts.Single().ImageName == "Top",
+            "the statement after an AnimatingPart block is read, and layers 3 to 5 are background, 0 to 2 foreground");
+        TestHarness.Assert(table.UnreadKeys.Count == 2 && table.UnreadKeys["SomeColor"] == 2 && table.UnreadKeys["AnimatingPart"] == 1, $"unread keys are counted ({string.Join(", ", table.UnreadKeys)})");
+        var refused = false;
+        try { ControlBarSchemeTable.Parse("ControlBarScheme NoSize\n  Side Blue\nEnd\n"); }
+        catch (FormatException) { refused = true; }
+        TestHarness.Assert(refused, "a scheme without ScreenCreationRes is refused");
+    }
+
     private static void SchemeArt(GameData data)
     {
         var (match, controller) = NewMatch(data, new Vector2(1280, 720));
@@ -584,6 +611,19 @@ internal static class HudTests
         TestHarness.Assert(commands.Length > 0 && commands[0] is UiImageDraw, "the scheme's background parts come first, under the window tree");
         var backgroundParts = commands.TakeWhile(command => command is UiImageDraw).Count();
         TestHarness.Assert(backgroundParts >= 1, $"the human side scheme contributes background parts ({backgroundParts})");
+        // The scheme of the human side is placed by its own creation resolution: a part as wide as that resolution is as wide as the control bar at every size.
+        TestHarness.Assert(controller.Assets.Schemes.Schemes.All(scheme => scheme.CreationWidth > 0 && scheme.CreationHeight > 0), "every scheme of the data names its creation resolution");
+        TestHarness.Assert(controller.Assets.Schemes.TryGetForSide("America", out var america), "the data has a scheme for the side America");
+        var wide = america.BackgroundParts.First(part => part.X == 0 && part.Width == america.CreationWidth);
+        foreach (var (width, height) in Resolutions)
+        {
+            var (sizedMatch, sized) = NewMatch(data, new Vector2(width, height));
+            Advance(sizedMatch, sized, 1);
+            var art = sized.BuildDrawList(width, height).Commands.OfType<UiImageDraw>().First(draw => draw.Image == wide.ImageName);
+            var bar = sized.WindowRect("ControlBar.wnd:ControlBarParent")!.Value;
+            TestHarness.Assert(art.Destination.X == bar.X && Math.Abs(art.Destination.Right - bar.Right) <= width / 400 + 1 && art.Destination.Bottom <= height && art.Destination.Bottom >= height - 3,
+                $"{width}x{height}: the scheme's full-width art lies on the control bar ({art.Destination} on {bar})");
+        }
         TestHarness.Assert(!commands.OfType<UiImageDraw>().Any(draw => draw.Image == "HardCodedWithControlBarSchemeIni"), "the hard-coded portrait image is replaced by the scheme's own right-hand image");
     }
 

@@ -674,10 +674,23 @@ public sealed class MatchController
         foreach (var part in scheme.ImageParts.Select((value, index) => (value, index)).OrderByDescending(item => item.value.Layer).ThenBy(item => item.index).Select(item => item.value))
         {
             if (!_assets.Images.TryGet(part.ImageName, out _)) continue;
-            var rect = _controlBarRoot.Transform.Map(new WndScreenRect(part.X, part.Y, part.X + part.Width, part.Y + part.Height, 1920, 1080));
+            var rect = SchemeRectOnScreen(scheme, new SchemeRect(part.X, part.Y, part.X + part.Width, part.Y + part.Height));
             commands.Add(new UiImageDraw(part.ImageName, rect, WndColor.White, false, false));
         }
         return commands.ToImmutable();
+    }
+
+    /// <summary>
+    /// A rectangle of the scheme on the screen. The scheme carries the resolution it was written for (<c>ScreenCreationRes</c>) and the original scales every
+    /// position of it by display / creation resolution per axis (<c>resMultiplier</c> in <c>ControlBarScheme::init</c>, <c>m_multiplyer</c> in
+    /// <c>ControlBarSchemeManager::setControlBarSchemeByPlayer</c>), independently of the resolution <c>ControlBar.wnd</c> was written for. Here the scheme goes through the
+    /// same kind of transform as the control bar's windows, anchored like the control bar itself, so the art and the windows stay on each other in every scale mode.
+    /// </summary>
+    private UiRect SchemeRectOnScreen(ControlBarSchemeInfo scheme, SchemeRect rect)
+    {
+        var bar = _controlBarRoot.Transform;
+        var transform = UiScaler.Create(_tree.Viewport, scheme.CreationWidth, scheme.CreationHeight, bar.AnchorX, bar.AnchorY);
+        return transform.Map(new WndScreenRect(rect.Left, rect.Top, rect.Right, rect.Bottom, scheme.CreationWidth, scheme.CreationHeight));
     }
 
     private void RefreshDynamicWindows()
@@ -689,11 +702,11 @@ public sealed class MatchController
         {
             moneyWindow.SetText(_assets.Text.Format("GUI:ControlBarMoneyDisplay", (int)Hud.Money.ToDecimal()));
             if (_scheme is { } moneyScheme)
-                moneyWindow.SetScreenRect(_controlBarRoot.Transform.Map(new WndScreenRect(moneyScheme.Money.Left, moneyScheme.Money.Top, moneyScheme.Money.Right, moneyScheme.Money.Bottom, 1920, 1080)));
+                moneyWindow.SetScreenRect(SchemeRectOnScreen(moneyScheme, moneyScheme.Money));
         }
         // ControlBarScheme::init puts the power window at the scheme's power bar, too: the bar is drawn there, and its description pops up there.
         if (_scheme is { } powerScheme && _tree.FindByName("ControlBar.wnd:PowerWindow") is { } powerWindow)
-            powerWindow.SetScreenRect(_controlBarRoot.Transform.Map(new WndScreenRect(powerScheme.PowerBar.Left, powerScheme.PowerBar.Top, powerScheme.PowerBar.Right, powerScheme.PowerBar.Bottom, 1920, 1080)));
+            powerWindow.SetScreenRect(SchemeRectOnScreen(powerScheme, powerScheme.PowerBar));
         _tree.FindByName("ControlBar.wnd:CommandWindow")!.SetHidden(view.Context is not (CommandBarContext.Command or CommandBarContext.MultiSelect));
         _tree.FindByName("ControlBar.wnd:UnderConstructionWindow")!.SetHidden(view.Context != CommandBarContext.UnderConstruction);
         var underConstructionDesc = _tree.FindByName("ControlBar.wnd:UnderConstructionDesc");
@@ -762,7 +775,7 @@ public sealed class MatchController
 
         if (_scheme is { } scheme)
         {
-            var powerRect = _controlBarRoot.Transform.Map(new WndScreenRect(scheme.PowerBar.Left, scheme.PowerBar.Top, scheme.PowerBar.Right, scheme.PowerBar.Bottom, 1920, 1080));
+            var powerRect = SchemeRectOnScreen(scheme, scheme.PowerBar);
             var powerColor = Hud.Underpowered ? new WndColor(220, 40, 40, 255) : new WndColor(40, 200, 60, 255);
             var ratio = Hud.EnergyConsumption <= 0 ? 1f : Math.Clamp(Hud.EnergyProduction / (float)Hud.EnergyConsumption, 0f, 1f);
             commands.Add(new UiFillRect(powerRect with { Width = (int)(powerRect.Width * ratio) }, powerColor));
