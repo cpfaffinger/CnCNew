@@ -103,7 +103,7 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         Riders.Add(candidate.Id);
         candidate.ContainedBy = Entity.Id;
         candidate.HasMoveTarget = false;
-        // Where the container's begun frame ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): a container that has had its turn in this tick has made its whole step
+        // Where the container's begun frame ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): a container that has had its turn in this tick has made its whole step
         // at 30 Hz. 30 Hz: its position.
         var (x, y, _) = Entity.FrameEnd(world.Tick);
         candidate.X = x;

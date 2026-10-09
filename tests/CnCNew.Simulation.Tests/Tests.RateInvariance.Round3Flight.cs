@@ -6,7 +6,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, third round, package flight (<c>docs/RATE-INVARIANCE-ROUND3-FLIGHT.md</c>): winged flight, the airfield states of a jet and a helicopter compute the step of a logic
+/// Phase 23, third round, package flight (<c>docs/rate-invariance/RATE-INVARIANCE-ROUND3-FLIGHT.md</c>): winged flight, the airfield states of a jet and a helicopter compute the step of a logic
 /// frame of the original with the constants and the speed the 30 Hz step computes with (<c>LocomotorFrames</c>, the speed per frame kept by the AI), so the state after every
 /// frame is the 30 Hz state bit for bit — not "within a tolerance". The tests name their rates and ignore <c>--tick-rate</c>.
 /// </summary>

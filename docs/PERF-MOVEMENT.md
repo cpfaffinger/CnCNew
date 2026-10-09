@@ -1,6 +1,6 @@
 # Leistung: Bewegung und Wegsuche (Phase 19)
 
-Stand: 6. Oktober 2026, Arbeitszweig `worktree-agent-a26ca0ad009d62c7a`, Ausgangsstand `74ccdde`. Auftrag: `docs/HANDOFF-PHASE19.md`,
+Stand: 6. Oktober 2026, Arbeitszweig `worktree-agent-a26ca0ad009d62c7a`, Ausgangsstand `74ccdde`. Auftrag: `docs/handoffs/HANDOFF-PHASE19.md`,
 Kostenstelle „Bewegung und Wegsuche“ – `AIUpdateInterface` und was es aufruft (`NavigationGrid`, `SimulationWorld.Collision.cs`),
 einschließlich der davon abgeleiteten Module (`TransportAIUpdate`, `SupplyTruckAIUpdate`, `DozerAIUpdate`, `AssaultTransportAIUpdate`,
 `ChinookAIUpdate`, `WorkerAIUpdate`). Die Messwerkzeuge stehen in `docs/PERFORMANCE.md`; dieses Dokument beschreibt nur, was für diese
@@ -314,7 +314,7 @@ gemessener Ausgangswert: 3,26 ms) und der Anteil dieser Kostenstelle (Wegsuche u
 ## 7. Was ein verhaltensändernder Schritt bräuchte und brächte
 
 Das Maximum von 8 ms ist mit exakten Mitteln nicht erreichbar, solange eine Gruppe von 70 Einheiten im selben Tick 70 Wege plant. Drei
-Schritte würden es erreichen; jeder ändert Hashes und braucht nach `docs/HANDOFF-PHASE19.md` Punkt 5 einen eigenen Commit mit neu
+Schritte würden es erreichen; jeder ändert Hashes und braucht nach `docs/handoffs/HANDOFF-PHASE19.md` Punkt 5 einen eigenen Commit mit neu
 geschriebenem Manifest und Ergebnisvergleich:
 
 1. **Ein Weg je Gruppe.** Einheiten, die im selben Tick denselben Befehl zum selben Ziel bekommen, teilen eine Suche (vom Gruppenschwerpunkt

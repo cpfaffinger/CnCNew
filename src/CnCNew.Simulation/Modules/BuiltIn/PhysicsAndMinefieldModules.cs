@@ -47,7 +47,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     /// <summary>
     /// Lets the object go: it keeps (<paramref name="velocityX"/>, <paramref name="velocityY"/>) per logic frame of the original horizontally and accelerates downwards. The fall is
     /// stepped once per frame, on the object's own phase (the first step one frame after the release), exactly as at 30 Hz: gravity per frame² is added to the velocity per frame,
-    /// the landing is judged on the whole step. The step of a frame is fallen in equal shares over its ticks (docs/RATE-INVARIANCE-PROJECTILES.md).
+    /// the landing is judged on the whole step. The step of a frame is fallen in equal shares over its ticks (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md).
     /// </summary>
     public void StartFall(IWorldServices world, Fixed velocityX, Fixed velocityY)
     {

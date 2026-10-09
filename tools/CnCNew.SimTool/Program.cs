@@ -555,7 +555,7 @@ static int AiMatch(string directory, string[] args)
 }
 
 /// <summary>
-/// `docs/HANDOFF-PHASE10.md` point 1 / `docs/IMPLEMENTATION-PLAN.md` §9's open "alle Skirmish-Karten start- und beendbar" acceptance: every
+/// `docs/handoffs/HANDOFF-PHASE10.md` point 1 / `docs/IMPLEMENTATION-PLAN.md` §9's open "alle Skirmish-Karten start- und beendbar" acceptance: every
 /// map with at least two start positions (<c>MapTool audit</c>: 75 of 150 maps have none at all — those are campaign maps, not a gap) gets a
 /// short, two-faction <see cref="SkirmishMatchScenario"/>. "Startable and endable" here means the match session runs its full lifecycle
 /// (starting objects spawn, the AIs think and act, the session reaches a winner or its own tick budget) without throwing; it is not a balance

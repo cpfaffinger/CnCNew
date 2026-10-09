@@ -37,7 +37,7 @@ internal static class ProjectileModules
     internal static Fixed GravityPerFrameSquared(IWorldServices world) => SimulationRate.Original.Time.PerSecondSquaredToPerTickSquared(world.Templates.Gravity);
 
     /// <summary>
-    /// A followed object where the frame it has begun ends (<see cref="Entity.FrameEnd"/>, docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): what the 30 Hz projectile sees of a
+    /// A followed object where the frame it has begun ends (<see cref="Entity.FrameEnd"/>, docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3): what the 30 Hz projectile sees of a
     /// victim that moved before it in the tick. 30 Hz: the victim's position.
     /// </summary>
     internal static Point3 FrameEnd(Entity entity, long tick)
@@ -84,7 +84,7 @@ public sealed record DumbProjectileData(long MaxLifespanTicks, bool TumbleRandom
 /// the update after the last point (or once <c>MaxLifespan</c> is over) detonates it. <c>FlightPathAdjustDistPerSecond</c> drags the end point
 /// after a moving victim and recomputes the curve with the same point count.
 /// <para>
-/// The path is defined on the frame grid of the original (docs/RATE-INVARIANCE-PROJECTILES.md): the speed is the speed per logic frame, so the path has one point per frame of
+/// The path is defined on the frame grid of the original (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md): the speed is the speed per logic frame, so the path has one point per frame of
 /// flight at every tick rate; the first point is taken one frame after the launch, every further one a frame later, and the detonation comes one frame after the last point. Within a
 /// frame the shell flies the way to that frame's point in equal shares and reaches it with the frame's last tick. Impact time and point are those of 30 Hz; at 30 Hz a frame is a
 /// tick and nothing differs.
@@ -480,7 +480,7 @@ public static class MissileFrames
 /// jamming, preferred-height cruise flight, bridge layers. All vectors are <see cref="Fixed"/>; directions are normalised with the
 /// fixed-point square root.
 /// <para>
-/// The state machine runs on the frame grid of the original, on the missile's own phase (docs/RATE-INVARIANCE-PROJECTILES.md): speed, top speed and acceleration are kept per logic
+/// The state machine runs on the frame grid of the original, on the missile's own phase (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md): speed, top speed and acceleration are kept per logic
 /// frame (and per frame²) at every tick rate; the first step is decided one frame after the launch and every further one a frame later, from the same state as at 30 Hz — speed,
 /// heading, distance flown, lock, arrival ("no more than one frame of flight away"), fuel and ground are judged once per frame. The step a frame decides is flown in equal shares
 /// over the ticks of that frame; an arrival or a hit on the ground ends the flight in the tick that decides it, as at 30 Hz. At 30 Hz a frame is a tick and nothing differs.
@@ -973,7 +973,7 @@ public sealed class PointDefenseLaserUpdate(PointDefenseLaserData data) : SimMod
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
         var weapon = world.Weapons.TryGet(data.Weapon, out var info) ? info : throw new InvalidDataException($"PointDefenseLaserUpdate references the unknown weapon '{data.Weapon}'.");
         // The laser looks and fires in the ticks its owner's logic frames of the original begin with, and reads the owner and every target where the frame each has begun
-        // ends (docs/RATE-INVARIANCE-CONSOLIDATION.md 1.3, rule 3): a look in every tick sees a projectile a share of a frame's step earlier than the 30 Hz step and shoots it
+        // ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md 1.3, rule 3): a look in every tick sees a projectile a share of a frame's step earlier than the 30 Hz step and shoots it
         // down a frame early. The counters fall every tick and lie on the frame grid. 30 Hz: every tick, the positions.
         var decide = world.Time.BeginsFrameOf(Entity, world.Tick);
         if (_nextScan > 0)

@@ -10,7 +10,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, package flight (<c>docs/RATE-INVARIANCE-FLIGHT.md</c>): the same little scene at 30, 60 and 120 Hz on the synthetic fixture. The 30 Hz run is the definition; at the higher
+/// Phase 23, package flight (<c>docs/rate-invariance/RATE-INVARIANCE-FLIGHT.md</c>): the same little scene at 30, 60 and 120 Hz on the synthetic fixture. The 30 Hz run is the definition; at the higher
 /// rates an object must stand, at the end of every logic frame of the original, where the 30 Hz step puts it, and events must fall on the same frame. The tests name their rates and ignore
 /// <c>--tick-rate</c>. Every test prints its measurement (30 / 60 / 120 Hz).
 /// <para>

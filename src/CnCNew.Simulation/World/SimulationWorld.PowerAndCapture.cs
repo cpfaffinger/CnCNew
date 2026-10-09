@@ -9,7 +9,7 @@ using CnCNew.Simulation.Terrain;
 namespace CnCNew.Simulation.World;
 
 /// <summary>
-/// Two rule-limit gaps named in <c>docs/HANDOFF-PHASE10.md</c> point 10 / <c>docs/SIMULATION-CORE.md</c> §17 and §20: a command to flip
+/// Two rule-limit gaps named in <c>docs/handoffs/HANDOFF-PHASE10.md</c> point 10 / <c>docs/SIMULATION-CORE.md</c> §17 and §20: a command to flip
 /// <see cref="OverchargeBehavior"/> (the module already runs, but nothing could ever reach it) and a direct structure capture whose power-pool
 /// effect was entirely unmodeled (no ownership-change path existed outside the mission script engine's own <c>TransferOwnership</c>, which
 /// moves only the static <c>EnergyProduction</c>, not a <see cref="PowerPlantUpgrade"/>/<see cref="OverchargeBehavior"/> bonus).

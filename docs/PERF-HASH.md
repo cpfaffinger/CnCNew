@@ -1,6 +1,6 @@
 # Leistung: der Zustands-Hash (`TickPhase.Hash`)
 
-Stand: Phase 19, Kostenstelle „Zustands-Hash“ (`docs/HANDOFF-PHASE19.md` Punkt 4; Ausgangslage `docs/PERFORMANCE.md` §6/§7).
+Stand: Phase 19, Kostenstelle „Zustands-Hash“ (`docs/handoffs/HANDOFF-PHASE19.md` Punkt 4; Ausgangslage `docs/PERFORMANCE.md` §6/§7).
 Ausgangscommit `74ccdde`, Branch `worktree-agent-ac725b90d346064f7`, 6. Oktober 2026.
 
 **Die eiserne Regel dieser Arbeit:** kein Hashwert ändert sich. Jeder Tick-Hash, Endhash und Kettenhash jedes Laufs bleibt

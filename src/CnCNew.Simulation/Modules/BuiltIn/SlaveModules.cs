@@ -599,7 +599,7 @@ public sealed class MobMemberSlavedUpdate(MobMemberData data) : SimModule, IUpda
         if (Entity.Template.Locomotor is null) return SimulationTiming.SleepNone;
 
         var radius = Fixed.FromInt(data.MustCatchUpRadius);
-        // The member and its nexus where the logic frame of the original each has begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the nexus had its turn
+        // The member and its nexus where the logic frame of the original each has begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the nexus had its turn
         // before its members and stands, for the 30 Hz member, after its whole step of this tick. At 30 Hz these are the positions.
         var (ownX, ownY, ownZ) = Entity.FrameEnd(world.Tick);
         var (masterX, masterY, masterZ) = master.FrameEnd(world.Tick);

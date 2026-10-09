@@ -195,7 +195,7 @@ Parser und Factory) und `ModuleBindingTable` prüft sie beim Erzeugen gegen die 
 | implementiertes Simulationsmodul ohne Bindung | `ModuleBindingException` |
 
 `StrictUnknownModules` besteht auf den Bestandsdaten; der Test `catalog == beobachtete Modulmenge` (205 Namen) läuft gegen
-`.local/phase2-import-a`. Nicht implementierte Module bleiben sichtbare Kompatibilitätsfälle: ein Objekt mit einem
+`.local/content`. Nicht implementierte Module bleiben sichtbare Kompatibilitätsfälle: ein Objekt mit einem
 solchen Modul ist **nicht instanziierbar** und nennt es in `ObjectTemplate.MissingModules`; Draw-/ClientUpdate-Module
 werden gelistet (`PresentationModules`), aber nie instanziiert.
 
@@ -376,20 +376,20 @@ umfasst damit **alle 25 Befehlstypen**; `Tests.Construction` (`ConstructionSnaps
 ```powershell
 dotnet build CnCNew.slnx
 dotnet run --project tests/CnCNew.Simulation.Tests
-dotnet run --project tests/CnCNew.Simulation.Tests -- --content-dir .local/phase2-import-a
+dotnet run --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content
 dotnet run -c Release --project tests/CnCNew.Simulation.Tests -- --long
-dotnet run --project tests/CnCNew.Data.Tests -- --content-dir .local/phase2-import-a
+dotnet run --project tests/CnCNew.Data.Tests -- --content-dir .local/content
 dotnet run -c Release --project tools/CnCNew.SimTool -- stress
 dotnet run -c Release --project tools/CnCNew.SimTool -- replay-record .local/stress.replay
 dotnet run -c Release --project tools/CnCNew.SimTool -- replay-run .local/stress.replay
 dotnet run -c Release --project tools/CnCNew.SimTool -- hash .local/stress.replay
-dotnet run -c Release --project tools/CnCNew.SimTool -- audit-modules .local/phase2-import-a
-dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage .local/phase2-import-a
-dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match .local/phase2-import-a
-dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match .local/phase2-import-a --map "Maps/Alpine Assault/Alpine Assault.map" --factions China,GLA --max-ticks 45000
-dotnet run --project tools/CnCNew.MapTool -- audit .local/phase2-import-a
-dotnet run --project tools/CnCNew.IniTool -- compat-check .local/phase2-import-a baselines/compatibility.json
-dotnet run --project tools/CnCNew.IniTool -- load-order-report .local/phase2-import-a
+dotnet run -c Release --project tools/CnCNew.SimTool -- audit-modules .local/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- audit-coverage .local/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match .local/content
+dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match .local/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions China,GLA --max-ticks 45000
+dotnet run --project tools/CnCNew.MapTool -- audit .local/content
+dotnet run --project tools/CnCNew.IniTool -- compat-check .local/content baselines/compatibility.json
+dotnet run --project tools/CnCNew.IniTool -- load-order-report .local/content
 ```
 
 ## 10. Stress, Speicher und Budgets
@@ -524,7 +524,7 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   `MissileAIUpdate` 44/29, `CountermeasuresBehavior` 40/0, `JetAIUpdate` 34/2, `HeightDieUpdate` 31/15,
   `DeliverPayloadAIUpdate` 28/1, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `TransportAIUpdate` 24/13, `BaikonurLaunchPower` 23/23. Die noch nicht
   implementierten Module verteilen sich nach der im Katalog vermerkten Phase auf 77 (Phase 5), 29 (Phase 6) und 22 (Phase 7). `ToppleUpdate` braucht echte Kollisionserkennung (durch Lesen der
-  Referenzquelle verifiziert, siehe `docs/HANDOFF-PHASE5.md`); Phase 6 hat bewusst keine Kollision eingeführt (§14), das Modul bleibt offen. Die vollständige, tagesaktuelle Liste liefert
+  Referenzquelle verifiziert, siehe `docs/handoffs/HANDOFF-PHASE5.md`); Phase 6 hat bewusst keine Kollision eingeführt (§14), das Modul bleibt offen. Die vollständige, tagesaktuelle Liste liefert
   das Werkzeug.
 - **Regel für Aktualisierungsmodule:** jedes Modul, das `IUpdateModule` implementiert, speichert und lädt seinen Weckzeitpunkt
   (`nextWake`). `SimulationWorld.Register` weckt wiederhergestellte Module mit negativem Weckzeitpunkt sonst ab dem
@@ -584,7 +584,7 @@ Fingerabdruck `2FAE6DCC…`) und instanziiert jedes Objekt, das nur implementier
   Live-Vergleichen (zwei unabhängige Läufe derselben Session), die von dieser Lücke nie berührt wurden, weil beide Läufe dieselbe KI-
   Abfragefolge produzieren. Neu gemessen nach dem Fix: Der Retail-Referenzmatch (`SimTool reference-match`) liefert unverändert Endhash
   `4DCB46FE3D2E8214` (Sieger FactionAmerica, Tick 13.800) — dieses Szenario durchläuft `ReferenceMatchScenario`, nicht `SkirmishAi`, und
-  berührt die gefixte Stelle nicht. Ein Skirmish-KI-Lauf, der die Stelle sehr wohl berührt (`SimTool ai-match .local/phase2-import-a --map
+  berührt die gefixte Stelle nicht. Ein Skirmish-KI-Lauf, der die Stelle sehr wohl berührt (`SimTool ai-match .local/content --map
   "Maps/Alpine Assault/Alpine Assault.map" --factions FactionAmericaAirForceGeneral,FactionChina --max-ticks 45000`; America benutzt die
   geteilte Spezialkraft 8-mal), ändert sein Ergebnis wie erwartet (KI-Timing verschiebt sich): Sieger FactionChina bei Tick 16.155 (vorher nicht
   mit diesem exakten Aufruf vermessen, daher kein Vorher/Nachher-Hash), Endhash `0FDF97B63EFECC6A`, weiterhin über zwei frische Läufe und
@@ -921,7 +921,7 @@ Details, Quellverweise und Messwerte in `docs/SCRIPT-ENGINE.md` §5/§7/§8/§9;
 
 ## 25. Phase 10: Bau-/Regelgrenzen, Veteranen-Sätze, Höhen-Sichtlinie, Capture
 
-Quelle und Auftrag: `docs/HANDOFF-PHASE10.md` Punkt 10 (Fortsetzung der in Phase 9 offen gebliebenen Teile A/B). Neue Dateien: `World/SimulationWorld.PowerAndCapture.cs`
+Quelle und Auftrag: `docs/handoffs/HANDOFF-PHASE10.md` Punkt 10 (Fortsetzung der in Phase 9 offen gebliebenen Teile A/B). Neue Dateien: `World/SimulationWorld.PowerAndCapture.cs`
 (Overcharge-/Capture-Befehl, `MaxSimultaneousOfType`-Zähler teilt sich `World/SimulationWorld.Construction.cs`). Geänderte Dateien: `Commands/Commands.cs` (`CommandTypes.Version` 9 → 10,
 Codes 28/29, Ablehnungsgründe 35–38), `Replay/ReplayFormat.cs` (Kodierung der zwei neuen Befehle, Containerformat selbst unverändert), `Events/SimEvent.cs` (`StructureCaptured` = 29),
 `Templates/ObjectTemplate.cs` (`MaxSimultaneousOfType`, `VeteranArmor`/`VeteranWeapon`), `World/SimulationWorld.cs` (`ActiveArmor`/`ActiveWeaponIndex` nach Veteranenstufe, `IsDock`,
@@ -943,7 +943,7 @@ Codes 28/29, Ablehnungsgründe 35–38), `Replay/ReplayFormat.cs` (Kodierung der
   zählt die lebenden, nicht toten Objekte exakt dieser Vorlage des Spielers plus – nur für Nicht-`STRUCTURE`-Vorlagen – alle noch in irgendeiner `ProductionUpdate`-Warteschlange
   dieses Spielers stehenden Einträge derselben Vorlage (`ProductionUpdate.CountInQueue`, neu öffentlich); Quelle `Player::canBuildMoreOfType`/`countExisting` (`Player.cpp`). Gilt für
   `ConstructCommand` und `QueueProductionCommand` gleichermaßen. Neuer Ablehnungsgrund `ProductionLimitReached` (36). **Nicht modelliert:** `MaxSimultaneousLinkKey` (eine
-  `NameKeyType`-Gruppierung mehrerer Vorlagen unter einem gemeinsamen Zähler); in `.local/phase2-import-a` kommt der Schlüssel in 17 Dateien vor, aber nie zusammen mit
+  `NameKeyType`-Gruppierung mehrerer Vorlagen unter einem gemeinsamen Zähler); in `.local/content` kommt der Schlüssel in 17 Dateien vor, aber nie zusammen mit
   `MaxSimultaneousOfType` an genau der gruppierten Stelle, die den Unterschied sichtbar machen würde – die Lücke ist dokumentiert, nicht gemessen folgenlos.
   Gemessene Wirkung auf echte Daten: `AmericaInfantry.ini` (Colonel Burton, `MaxSimultaneousOfType = 1`), `AirforceGeneral.ini`, `TankGeneral.ini` und 21 weitere Objektdateien tragen
   den Schlüssel; die Skirmish-KI besaß vorher keinerlei Kappungs-Bewusstsein und hätte (ohne das hier neue, serverseitige Verbot) beliebig viele Kopien einer eigentlich einmaligen
@@ -983,7 +983,7 @@ Codes 28/29, Ablehnungsgründe 35–38), `Replay/ReplayFormat.cs` (Kodierung der
 `VETERAN`/`ELITE`/`HERO` befüllt (`ObjectTemplate.ResolveArmor`/`ResolveWeapon`, `VeterancyConditionIndex`). `SimulationWorld.ActiveArmor`/`ActiveWeaponIndex` wählen zuerst den zur
 aktuellen Stufe passenden Veteranensatz, dann `PLAYER_UPGRADE`, zuletzt den Standardsatz. **Modellierungsgrenze (unverändert gegenüber Phase 5, nur erweitert):** nur Sätze mit genau
 einer Bedingung werden aufgelöst; ein Satz, der zwei Bedingungen gleichzeitig verlangt (z. B. `PLAYER_UPGRADE VETERAN`), wird nicht unterschieden – der `SparseMatchFinder` des
-Originals score-basiert über beliebige Kombinationen zu matchen bleibt offen. **Gemessene Wirkung auf echte Daten: keine.** Eine Volltextsuche über `.local/phase2-import-a` nach
+Originals score-basiert über beliebige Kombinationen zu matchen bleibt offen. **Gemessene Wirkung auf echte Daten: keine.** Eine Volltextsuche über `.local/content` nach
 `Conditions` mit `VETERAN`/`ELITE`/`HERO` in einem `ArmorSet`- oder `WeaponSet`-Block ergibt **null Treffer** – kein einziges Zero-Hour-Objekt nutzt diese Bedingungen überhaupt, die
 Veteranenstufe wirkt im Original nach wie vor hauptsächlich über Waffenbonus und Gesundheit (§6h in `docs/GAME-RULES.md`). Die Auswahl ist damit für zukünftige Daten korrekt, ändert
 aber weder `audit-coverage` noch `reference-match` am echten Bestand.
@@ -1023,10 +1023,10 @@ zwei Startpositionen ein kurzes, zweiseitiges `SkirmishMatchScenario` (`FactionA
 mit `--max-ticks` (Standard 3.000) als hartem Budget. „Start- und beendbar“ heißt hier: die Sitzung durchläuft ihren vollen Lebenszyklus (Startobjekte, KI-Denkschritte, Sieg oder
 Tick-Budget) ohne Ausnahme – keine Balance- oder Gewinnratenmessung (dafür `ai-match` und die Tabelle in §19).
 
-**Ergebnis (30.09./1.10.2026, `.local/phase2-import-a`, `--max-ticks 3000`):** 150 Karten; 75 ohne jeden Startwegpunkt (Kampagnenkarten, dieselbe Zahl wie `MapTool audit`), 11 mit genau
+**Ergebnis (30.09./1.10.2026, `.local/content`, `--max-ticks 3000`):** 150 Karten; 75 ohne jeden Startwegpunkt (Kampagnenkarten, dieselbe Zahl wie `MapTool audit`), 11 mit genau
 einem (nicht genug für zwei Spieler); **alle 64 Karten mit mindestens zwei Startpositionen starten und enden sauber** (0 Abstürze; da `--max-ticks` klein gegenüber den in §19 gemessenen
 Siegzeiten ist, enden praktisch alle am Tick-Budget statt mit einem Sieger, was für diese Messung irrelevant ist – entscheidend ist der exakte Lebenszyklus ohne Ausnahme). Dauer: 75 s.
-Damit ist die seit `docs/HANDOFF-PHASE8.md` offene Abnahme „alle Skirmish-Karten start- und beendbar“ für jede Karte mit genug Startpositionen gemessen und bestanden; Karten ohne
+Damit ist die seit `docs/handoffs/HANDOFF-PHASE8.md` offene Abnahme „alle Skirmish-Karten start- und beendbar“ für jede Karte mit genug Startpositionen gemessen und bestanden; Karten ohne
 (genug) Startpositionen sind keine Skirmish-Karten (Kampagnenkarten oder Einzelstart-Herausforderungskarten) und kein Fehlbefund.
 
 ### Wiederholung der 16-Karten-KI-Übersicht nach dem `SharedReadyFrame`-Fix (§19)
@@ -1082,7 +1082,7 @@ Ein `SkirmishAiSnapshot`, der Lücke 2 schließt, ist reale, aber begrenzte Fort
 Bis es ihn gibt, ist `SkirmishMatchSession.CreateSave()` der eine, dokumentierte, laute Fehlschlagpunkt für ein Live-Sitzungs-Speichern (Test: `Tests.Skirmish.cs` →
 `SkirmishSessionRefusesToSave`), statt einer Speicherroutine, die die KI still fallen lässt und einen kaputten Spielstand ausliefert.
 
-### Gemessene Zahlen (1. Oktober 2026, `.local/phase2-import-a`, unverändert gegenüber Phase 9 wo nicht anders vermerkt)
+### Gemessene Zahlen (1. Oktober 2026, `.local/content`, unverändert gegenüber Phase 9 wo nicht anders vermerkt)
 
 - `SimTool audit-coverage`: 2.115 Objekte, **1.494 instanziierbar (70,6 %) – unverändert**, 621 blockiert, Fingerabdruck `2B9D902AEC46A6DE…` unverändert (keine neue
   Simulationsmodul-Anforderung durch Phase 10).
@@ -1101,7 +1101,7 @@ Bis es ihn gibt, ist `SkirmishMatchSession.CreateSave()` der eine, dokumentierte
 
 ## 26. Phase 11: Weltschnittstellen für die Skript-VM
 
-Quelle und Auftrag: `docs/HANDOFF-PHASE11.md` (Skript-Restfamilien); die Skriptseite steht in `docs/SCRIPT-ENGINE.md` §4–§5a. Alle neuen Weltzustände folgen derselben Regel wie
+Quelle und Auftrag: `docs/handoffs/HANDOFF-PHASE11.md` (Skript-Restfamilien); die Skriptseite steht in `docs/SCRIPT-ENGINE.md` §4–§5a. Alle neuen Weltzustände folgen derselben Regel wie
 `SimEvent`s Position seit Phase 8: **sie werden nur geschrieben, wenn sie vom Standard abweichen**. Ein Lauf, der keine dieser Schnittstellen benutzt, behält Zustandsform und
 Hash von vorher (`SimTool reference-match` weiterhin Sieger FactionGLA bei Tick 19.200, Endhash `28BE35C1174E369F`; `SimTool stress` Endhash `56882F763EABEF67`, vor und nach dieser
 Phase gleich – die in früheren Ständen genannte Zahl `ED6F9329F59662E3` stammt aus der Zeit vor Phase 9 und war schon zu Beginn dieser Phase nicht mehr reproduzierbar). Snapshot-,
@@ -1167,7 +1167,7 @@ Begleitende Änderungen: `LocomotorInfo.SpeedLimitZ`; `AIUpdateInterface.OrderMo
 den Upgrade-Modulen) liefert die Bereitschaft der Upgrade-Knöpfe (`docs/SCRIPT-ENGINE.md` §8 Punkt 18); `DetonateProjectile(…, damage)`; die Skriptseite (Verstärkung mit Transport, Team-Warteschlangen,
 Startaktionen) steht in `docs/SCRIPT-ENGINE.md` §5/§8.
 
-Messung (3. Oktober 2026, `.local/phase2-import-a`; ohne Versionssprung: `WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10): Modulkatalog **107 von 205** implementiert (183 Simulations-,
+Messung (3. Oktober 2026, `.local/content`; ohne Versionssprung: `WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10): Modulkatalog **107 von 205** implementiert (183 Simulations-,
 22 Präsentationsmodule), **1.735 von 2.115** Retail-Objekten instanziierbar (82,0 %), Modulverwendungen abgedeckt 16.085 von 19.553 (82,3 %), Kompatibilitätsbasislinie **771** Einträge. Größte verbleibende
 Blocker nach Objekten (davon nur durch dieses Modul): `JetAIUpdate` 34/34, `MobMemberSlavedUpdate` 27/27, `RailroadBehavior` 25/25, `SlavedUpdate` 20/7, `PropagandaTowerBehavior` 14/13, `UpgradeDie` 13/0,
 `HiveStructureBody` 11/4, `RiderChangeContain` 11/11, `DeployStyleAIUpdate` 10/10, `StructureCollapseUpdate` 10/10, `ParkingPlaceBehavior` 9/9. Retail-Referenzmatch: Sieger FactionGLA bei Tick 15.000,
@@ -1330,7 +1330,7 @@ macht die aktive `WeaponSet`-Auswahl zur einzigen Quelle dafür, welche Waffe ei
 **Näherungen:** die Waffenwahl kennt nur `PREFER_MOST_DAMAGE`; Reichweite ist ein Filter ohne Anlaufen; Turm- und Neigungsbedingungen fehlen; die Garnison-Sonderfälle der Schadensschätzung fehlen; `FireWeaponPower` hat keinen
 KI-Angriffsbefehl und keinen An-/Abmarsch; `AssistedTargetingUpdate` bleibt ein Modulschuss ohne die Rückmeldelaser; `CleanupHazardUpdate` setzt das Veteranen-Flag beim Erzeugen nicht.
 
-### 30.7 Messung (3. Oktober 2026, `.local/phase2-import-a`, frisch)
+### 30.7 Messung (3. Oktober 2026, `.local/content`, frisch)
 
 - Modulkatalog **183 von 205** implementiert – alle 183 Simulationsmodule (offen nur die 22 Präsentationsmodule); Instanziierbarkeit **2.115 von 2.115 (100,0 %)**; Modulverwendungen abgedeckt **16.558 von 19.553 (84,7 %)** (der Rest sind
   Präsentationsmodule); Kompatibilitätsbasislinie **751** Einträge. Echtdaten: 2.477 Waffensätze auf 2.115 Objekten, 187 Objekte mit Slotzustand.
@@ -1741,14 +1741,14 @@ Keine Änderung an der Simulation. Neu sind zwei Dateien unter `baselines/` und 
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/phase2-import-a baselines/reference-manifest.json --set quick
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/phase2-import-a baselines/reference-manifest.json [--set full] [--only <id>[,<id>]] [--jobs N]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/phase2-import-a baselines/reference-manifest.json --set quick --verify-incremental
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest write .local/phase2-import-a baselines/reference-manifest.json [--set full]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest list .local/phase2-import-a
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest show .local/phase2-import-a --only <id> [--explain-incremental]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest check .local/phase2-import-a baselines/input-manifest.json
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest write .local/phase2-import-a baselines/input-manifest.json
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/content baselines/reference-manifest.json --set quick
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/content baselines/reference-manifest.json [--set full] [--only <id>[,<id>]] [--jobs N]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest check .local/content baselines/reference-manifest.json --set quick --verify-incremental
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest write .local/content baselines/reference-manifest.json [--set full]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest list .local/content
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- reference-manifest show .local/content --only <id> [--explain-incremental]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest check .local/content baselines/input-manifest.json
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- input-manifest write .local/content baselines/input-manifest.json
 ```
 
 ### 37.1 Dateiform
@@ -1784,7 +1784,7 @@ Der Leser lehnt alles außerhalb des Modells ab (auch doppelte Schlüssel und ei
 - **Sweep:** ein Eintrag mit Zählern (64 gestartet und beendet, 0 mit Sieger, 0 fehlgeschlagen, 75 Karten ohne und 11 mit nur einer Startposition), Endtick/Endhash/Kette je Karte und einem SHA-256 über
   diese Zeilen (`combinedSha256`). Der Sweep spielt live und wird nicht wiedergegeben.
 
-Die in `docs/HANDOFF-PHASE18.md` und §36.2 genannten Werte (Referenzmatch, Stresstest, 16 KI-Läufe, `MD_USA05`, `MD_GLA05`) stehen unverändert im Manifest.
+Die in `docs/handoffs/HANDOFF-PHASE18.md` und §36.2 genannten Werte (Referenzmatch, Stresstest, 16 KI-Läufe, `MD_USA05`, `MD_GLA05`) stehen unverändert im Manifest.
 
 ### 37.3 Was je Lauf steht
 
@@ -1945,7 +1945,7 @@ Der Startwert des Referenzmatchs wurde in einem eigenen Commit gewechselt (`41c3
 
 Die Suite belegt, ob das Spiel bei 60 und 120 Hz *dasselbe Spiel* ist wie bei 30 Hz – nicht über Hashes (die können nicht übereinstimmen), sondern über gemessene Spielgrößen in Sekunden und
 Welteinheiten. Sie misst; sie entscheidet nicht, was richtig ist. Ihr erster Lauf **soll** breit fehlschlagen: die Liste der Fehlschläge ist der Arbeitsvorrat für Schritt 3 der Phase
-(`docs/HANDOFF-PHASE23.md`). Dieser Abschnitt legt die Suite und ihre Toleranzen fest; die Toleranztabelle (§39.2) stand, bevor die Suite zum ersten Mal vollständig lief, und wird nie an ein
+(`docs/handoffs/HANDOFF-PHASE23.md`). Dieser Abschnitt legt die Suite und ihre Toleranzen fest; die Toleranztabelle (§39.2) stand, bevor die Suite zum ersten Mal vollständig lief, und wird nie an ein
 Ergebnis angepasst.
 
 ### 39.1 Aufbau
@@ -2013,14 +2013,14 @@ Die Zahl der Fälle je Gruppe, die Zusammenfassungen der Generatoren und was sie
 ```powershell
 # Suite (Release, mit Realdaten); ohne --content-dir sind die Tests nicht registriert
 dotnet build -c Release tests/CnCNew.Simulation.Tests
-dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/phase2-import-a --only RateEquivalence --rate-report <datei außerhalb des Repos>
-dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/phase2-import-a --only "RateEquivalence: weapons"
+dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content --only RateEquivalence --rate-report <datei außerhalb des Repos>
+dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content --only "RateEquivalence: weapons"
 
 # Einzelfälle
 dotnet build -c Release tools/CnCNew.SimTool
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/phase2-import-a --list
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/phase2-import-a --group turrets [--tsv <datei>]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/phase2-import-a "locomotion/Nuke_ChinaTankBattleMaster"
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/content --list
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/content --group turrets [--tsv <datei>]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-compare .local/content "locomotion/Nuke_ChinaTankBattleMaster"
 ```
 
 Je Gruppe ein Test `RateEquivalence: <gruppe>`. Ein Gruppentest fängt Ausnahmen je Fall und je Rate (eigene Zeile), sammelt **alle** Größen, druckt die Tabelle
@@ -2052,7 +2052,7 @@ Was ein Generator oder ein fester Fall nicht stellen kann, steht als `not covere
 - **KI:** Ausgang und Länge ganzer Matches, Heer und Wirtschaft später im Match, mehr als zwei Spieler, echte Karten (Schritt 4).
 - **Nicht geprüft:** dass jede Zeile der Liste in `docs/TICKRATE-MIGRATION.md` §5 von einem Fall erfasst wird – die Zuordnung in §39.6 nennt, was gefunden wurde und was nicht gestellt ist.
 
-### 39.6 Erster vollständiger Lauf (7. Oktober 2026, Release, Realdaten `.local/phase2-import-a`)
+### 39.6 Erster vollständiger Lauf (7. Oktober 2026, Release, Realdaten `.local/content`)
 
 Gemessen am Stand dieses Abschnitts; nichts an der Simulation ist dafür geändert (`input-manifest check` identisch, `reference-manifest check --set quick` 9 Läufe identisch, alle 414
 Simulationstests ohne Realdaten grün einschließlich `SourceRules`). Zwei Läufe hintereinander liefern eine bytegleiche TSV-Datei. Nach dem allerersten Lauf wurde eine Messung der Suite
@@ -2165,7 +2165,7 @@ Bis zur Fabrikausfahrt hatte die Suite 677 Fälle und 4.307 Größen (`economy` 
   Ruheabstand, Abstände der Ruheorte; §42.4) – alle bei 60 und 120 Hz bitgleich zu 30 Hz.
 - **Der Fallschirmabwurf ist messbar** (fünf Größen der Gruppe `flight` waren bei jeder Rate ungemessen, weil der Abwurf niemanden absetzte – ein 30-Hz-Fehler, behoben in `09b4d21`).
 - **Diagnose statt Fälle:** `SimTool rate-compare --ai-diff A,B`, `--reference-diff` und `--map-diff A,B --map KARTE` (je mit `--fields`) vergleichen zwei Raten eines ganzen Gefechts Feld für Feld
-  am Ende jedes Bildes und nennen das erste abweichende Bild (`docs/RATE-INVARIANCE-CONSOLIDATION.md` §2, `…-ROUND3-OBSERVERS.md` §8, `…-ROUND4-FIRST-FRAME.md` §8). Sie sind Werkzeug, keine Fälle
+  am Ende jedes Bildes und nennen das erste abweichende Bild (`docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §2, `…-ROUND3-OBSERVERS.md` §8, `…-ROUND4-FIRST-FRAME.md` §8). Sie sind Werkzeug, keine Fälle
   der Suite, und haben keine Toleranz.
 - **Drei-Raten-Tests je Paket** (`Tests.RateInvariance.*.cs`: Geschosse, Physik, Zeitversatz, Boden, Flug, Türme, Konsolidierung, Beobachter, Runde 3 Flug/Aufstellen, Ausfahrten, Runde 4) nennen ihre
   Raten selbst und verlangen meist Bitgleichheit an jeder Bildgrenze.
@@ -2188,13 +2188,13 @@ des Bildes und zählt ein Ereignis im ersten Tick – wie die Bildkonvention (§
 - **199 Größen sind bei jeder Rate ungemessen** (das Ereignis tritt im Budget bei keiner Rate ein); sie zählen weder als bestanden noch als Fehlschlag.
 - **„Besteht“ heißt:** jede gemessene Größe liegt bei 60 und 120 Hz innerhalb der Toleranz ihres 30-Hz-Werts – nicht, dass jedes Gefecht identisch ist, und nicht, dass ein Mensch einen Fall gesehen hat.
 
-Ausführen und Phasenabschluss: `dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/phase2-import-a --only RateEquivalence --rate-report <datei>`; die
+Ausführen und Phasenabschluss: `dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/content --only RateEquivalence --rate-report <datei>`; die
 Erwartung ist 0 / 0 in allen zehn Gruppen.
 
 ## 40. Verteilungsvergleich zwischen Raten (Phase 23, 7. Oktober 2026): `ai-survey` und `rate-distribution`
 
 Ein ganzes Match ist chaotisch (§38.3, `docs/FIXED-POINT-Q39-24.md` §7.2): eine Rundung im ersten Gefecht reicht für einen anderen Sieger. Zwei Tickraten lassen sich deshalb nicht Lauf für Lauf
-vergleichen, sondern nur als **Verteilungen** über viele Startwerte (`docs/HANDOFF-PHASE23.md` Punkt 4). Dieser Abschnitt beschreibt das Werkzeug dafür. Es ist reiner Werkzeugcode
+vergleichen, sondern nur als **Verteilungen** über viele Startwerte (`docs/handoffs/HANDOFF-PHASE23.md` Punkt 4). Dieser Abschnitt beschreibt das Werkzeug dafür. Es ist reiner Werkzeugcode
 (`tools/CnCNew.SimTool/AiSurvey.cs`, `RateDistribution.cs`); an der Simulation und an `baselines/` ändert es nichts. **Die Erhebung selbst (640 Matches) ist hier nicht enthalten** – der Abschnitt legt
 die Methode und die Grenzen fest, bevor Zahlen vorliegen.
 
@@ -2202,8 +2202,8 @@ die Methode und die Grenzen fest, bevor Zahlen vorliegen.
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey .local/phase2-import-a --out <30.tsv> --tick-rate 30 [--seeds 20] [--first-seed 1] [--minutes 25] [--pairings all|<id>,<id>] [--jobs N]
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey .local/phase2-import-a --out <60.tsv> --tick-rate 60
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey .local/content --out <30.tsv> --tick-rate 30 [--seeds 20] [--first-seed 1] [--minutes 25] [--pairings all|<id>,<id>] [--jobs N]
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey .local/content --out <60.tsv> --tick-rate 60
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- rate-distribution <30.tsv> <60.tsv> [--out <bericht.md>]
 ```
 
@@ -2321,7 +2321,7 @@ von r0); „r3“ brauchte eine neue 30-Hz-Referenz, weil Fabrikausfahrt und KI-
 | Stand | derselbe Ausgang und Sieger | dazu Ende innerhalb einer Sekunde | Quelle |
 |---|---:|---:|---|
 | nach den KI-Korrekturen (`cca6f92`, r3) | 297 von 320 (laut `docs/AI-OBSERVED-2026-10-08.md` §11.4) bzw. 295 (laut Runde 4) | **188** (Arbeitsnotizen der Sitzung) bzw. 192 (eigene Auswertung der Runde 4) | zwei Auswertungen desselben Stands, nicht abgeglichen |
-| nach Runde 4 (`1b82e45`) | **317 von 320** | **287 von 320**; Endzeit gleich 285, gleiche Befehlszahl 282 | `docs/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.3 |
+| nach Runde 4 (`1b82e45`) | **317 von 320** | **287 von 320**; Endzeit gleich 285, gleiche Befehlszahl 282 | `docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.3 |
 
 Lesart: der Verteilungsvergleich bestand schon nach Runde 1; dass er besteht, heißt „kein Unterschied der in §40.3 genannten Größe gefunden“. Der Seed-Vergleich ist die schärfere Aussage und
 zeigt den Rest: 33 von 320 Gefechten enden bei 60 Hz mehr als eine Sekunde neben dem 30-Hz-Gefecht, 3 mit anderem Ausgang. **Nicht gemessen:** das Urteil von `rate-distribution` nach Runde 4 und
@@ -2330,7 +2330,7 @@ KI-Korrekturen lag AirForce vorn (§42.6).
 
 ## 41. Ausweg „Originalraster“
 
-Festlegung aus `docs/HANDOFF-PHASE23.md`: Logik, die das Original einmal je Logikbild (1/30 s) ausführt und die sich nicht sinnvoll auf eine andere Schrittweite umrechnen lässt, darf auf jedem
+Festlegung aus `docs/handoffs/HANDOFF-PHASE23.md`: Logik, die das Original einmal je Logikbild (1/30 s) ausführt und die sich nicht sinnvoll auf eine andere Schrittweite umrechnen lässt, darf auf jedem
 (Rate/30)-ten Tick laufen – auf den Ticks, für die `SimulationTime.IsOriginalFrameBoundary(tick)` gilt. Für Bewegung, Befehlsannahme und Zielerwerb ist der Ausweg nicht zulässig. Jede Stelle steht
 in dieser Tabelle; bei 30 Hz ist jede von ihnen unverändert (jeder Tick beginnt ein Bild).
 
@@ -2351,7 +2351,7 @@ kein Fall dieser Tabelle.
 Die Tabelle oben nennt die Skript-VM. Die Pakete der Phase haben den Ausweg an weiteren Stellen benutzt und ihn dabei in zwei Formen gebraucht: am **Raster der Welt** (Ticks mit
 `IsOriginalFrameBoundary`, die Form der Festlegung) und am **Bild des Objekts** (ganze Bilder nach dem Tick, in dem das Objekt entstand, einen Befehl bekam oder einen Zustand begann –
 `EntityFrames.BeginsFrameOf`). Die zweite Form hält niemanden bis zur nächsten Bildgrenze der Welt auf; sie ist aber ebenso „einmal je Originalbild“ und steht deshalb hier. Jede Zeile ist bei
-30 Hz unverändert (jeder Tick beginnt ein Bild). Paketdokumente: `docs/RATE-INVARIANCE-<PAKET>.md`; „OBSERVERS“, „R3-FLIGHT“ und „ROUND4“ sind `…-ROUND3-OBSERVERS.md`, `…-ROUND3-FLIGHT.md`,
+30 Hz unverändert (jeder Tick beginnt ein Bild). Paketdokumente: `docs/rate-invariance/RATE-INVARIANCE-<PAKET>.md`; „OBSERVERS“, „R3-FLIGHT“ und „ROUND4“ sind `…-ROUND3-OBSERVERS.md`, `…-ROUND3-FLIGHT.md`,
 `…-ROUND4-FIRST-FRAME.md`.
 
 **A. Am nächsten am Verbot „nicht für Zielerwerb“ – die Bestätigung des Projektinhabers steht aus** (`docs/TICKRATE-MIGRATION.md` §15.7.7, Entscheidung 1). Der Durchlauf bzw. das Modul läuft
@@ -2422,7 +2422,7 @@ Lage lesen (§43.4).
 
 **Der Commit zu diesem Abschnitt ändert die Simulation bei 30 Hz** (jeder Lauf mit Produktion bekommt neue Hashes). Das Referenzmanifest und das Eingangsmanifest sind in diesem
 Commit bewusst **nicht** neu geschrieben; das geschieht in einem eigenen Commit mit dieser Ursache. Geschrieben wurde die Korrektur am 7. Oktober gegen einen älteren Stand und
-zurückgehalten; hier steht sie auf dem Stand nach Phase 23 (`docs/RATE-INVARIANCE-CONSOLIDATION.md`) und folgt deren Bildkonvention. **Nichts davon hat ein Mensch gesehen.**
+zurückgehalten; hier steht sie auf dem Stand nach Phase 23 (`docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md`) und folgt deren Bildkonvention. **Nichts davon hat ein Mensch gesehen.**
 
 ### 42.1 Befund und Maßstab
 
@@ -2451,7 +2451,7 @@ Hindernis (`ignoreObstacle`). Untätige Verbündete auf dem Weg werden weggeschi
 ### 42.3 Bildkonvention (30 / 60 / 120 Hz)
 
 Bei 30 Hz wählt die Erzeugungsphase des Ticks, in dem die Einheit entsteht, den Platz und schickt, wer dort steht, zur Seite; sie sieht dabei jedes Objekt nach seinem ganzen Schritt
-dieses Bildes. Die Einheit und die Weggeschickten bewegen sich mit dem nächsten Tick. Über 30 Hz gilt nach `docs/RATE-INVARIANCE-CONSOLIDATION.md` §1.3:
+dieses Bildes. Die Einheit und die Weggeschickten bewegen sich mit dem nächsten Tick. Über 30 Hz gilt nach `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1.3:
 
 | Was | bei 30 Hz | über 30 Hz (r Ticks je Bild) | Regel |
 | --- | --- | --- | --- |
@@ -2643,7 +2643,7 @@ Unterschied von vier Gefechten in der Erhebung ist nicht aufgeschlüsselt; 60/12
 
 ## 43. Phase 23: Bildkonvention der Simulation oberhalb von 30 Hz
 
-Stand 9. Oktober 2026 (`f3acc2e`). Zusammengeführt aus `docs/RATE-INVARIANCE-CONSOLIDATION.md` §1.3, `docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md` und `docs/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md`; wo
+Stand 9. Oktober 2026 (`f3acc2e`). Zusammengeführt aus `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1.3, `docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md` und `docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md`; wo
 ein Paketdokument der ersten Runde etwas anderes sagt (die Ankunft „mit dem letzten Anteil“, die Kollisionsprüfung „im letzten Tick“), gilt dieser Abschnitt. „Bild“ heißt Logikbild des Originals
 (1/30 s), „Tick“ ein Schritt der Simulation, r = Ticks je Bild (1, 2, 4). **Nichts davon hat ein Mensch gesehen.** Das Protokoll der Phase steht in `docs/TICKRATE-MIGRATION.md` §15.
 
@@ -2732,7 +2732,7 @@ Dazu gehören: `frameSpeed`, `frameTicksLeft`, `frameDue`, `frameStepX/Y`, `fram
 
 ### 43.8 Die Helfer nebeneinander, und der Vorschlag
 
-Jedes Paket hat seine eigene Familie mitgebracht; sie rechnen dasselbe mit verschiedener Rundung und verschiedener Zählweise (vollständige Tabelle: `docs/RATE-INVARIANCE-CONSOLIDATION.md` §7).
+Jedes Paket hat seine eigene Familie mitgebracht; sie rechnen dasselbe mit verschiedener Rundung und verschiedener Zählweise (vollständige Tabelle: `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §7).
 
 | Familie (Datei) | Anteil eines Bildschritts | Zählweise, Zustand | Konstanten je Bild | Benutzer |
 |---|---|---|---|---|
@@ -2759,7 +2759,7 @@ parallele Pakete, die Helfer gleichen Namens einführen, kollidieren erst beim B
 `5BF9BB7CED6D7A35` / `56149C0105E992D7` (§42.4). Ein Manifest wird mit der Rate geprüft, die seine Datei nennt; eine abweichende `--tick-rate` wird abgelehnt.
 
 **Das Referenzmatch ist bei 30, 60 und 120 Hz dasselbe Spiel:** Sieger FactionGLA in Tick 14.130 / 28.260 / 56.520, bei jeder Rate Bild 14.130, 26.626 Befehle, und `rate-compare --reference-diff
---fields` findet zwischen 30 und 60 sowie zwischen 30 und 120 Hz kein abweichendes Feld am Ende irgendeines Bildes (`docs/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.1).
+--fields` findet zwischen 30 und 60 sowie zwischen 30 und 120 Hz kein abweichendes Feld am Ende irgendeines Bildes (`docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.1).
 
 **Nicht gleich, nicht umgestellt, nicht gemessen** – die zusammengeführte Liste steht in `docs/TICKRATE-MIGRATION.md` §15.7.6. In Kürze: 2 von 16 Paarungen auf ausgelieferten Karten enden bei
 60 Hz in einem anderen Bild; 33 von 320 Gefechten der Erhebung enden mehr als eine Sekunde neben dem 30-Hz-Gefecht, 3 mit anderem Ausgang; 120 Hz ist für Paarungen und Erhebung nicht gemessen;

@@ -67,7 +67,7 @@ bei jeder Rate eine Zahl von **Bildern des Originals**.
 
 Das Original ruft `ScriptEngine::update` genau einmal je Logikbild (`GameLogic.cpp`, `GameLogic::update`: `TheScriptEngine->UPDATE()` vor den Objekten), und die Karten sind dagegen geschrieben: sie
 vergleichen laufende Timer mit Bildzahlen (`COUNTER`), rechnen auf Timern (`INCREMENT_COUNTER`), zählen ihre eigenen Auswertungen und fragen Flanken „seit der vorigen Auswertung“ ab. Nichts davon lässt
-sich auf eine andere Schrittweite umrechnen. Die VM benutzt deshalb den **Ausweg „Originalraster“** (`docs/HANDOFF-PHASE23.md`, Liste in `docs/SIMULATION-CORE.md` §41): `ScriptEngine.Update(tick)` wird
+sich auf eine andere Schrittweite umrechnen. Die VM benutzt deshalb den **Ausweg „Originalraster“** (`docs/handoffs/HANDOFF-PHASE23.md`, Liste in `docs/SIMULATION-CORE.md` §41): `ScriptEngine.Update(tick)` wird
 weiter in jedem Tick aufgerufen, arbeitet aber nur auf den Ticks, die ein Bild des Originals beginnen (`Time.IsOriginalFrameBoundary`: jeder Tick bei 30 Hz, jeder zweite bei 60 Hz, jeder vierte bei
 120 Hz). Bei 30 Hz ändert sich dadurch nichts.
 
@@ -230,7 +230,7 @@ sechsten Welle hängt an `teamOnUnitDestroyedScript`).
 
 ## 5c. Die `SKIRMISH_*`-Familie: Entscheidung (Phase 11)
 
-Zwei Wege standen offen (`docs/HANDOFF-PHASE11.md` Punkt 1): die Familie portieren oder `SkirmishAi` für Gegner der Challenge-Karten einhängen. **Entschieden: Portierung.** Begründung:
+Zwei Wege standen offen (`docs/handoffs/HANDOFF-PHASE11.md` Punkt 1): die Familie portieren oder `SkirmishAi` für Gegner der Challenge-Karten einhängen. **Entschieden: Portierung.** Begründung:
 (a) die Bedingungen sind klein, rein lesend und je Funktion in `ScriptConditions.cpp` abgrenzbar (§4); (b) sie stehen in den Karten-Skripten selbst und steuern dort das Verhalten der
 Kartenseiten (die häufigste fehlende Bedingung auf den Challenge-Karten, 37.227 Treffer bei `SKIRMISH_PLAYER_HAS_UNITS_IN_AREA`) – `SkirmishAi` wäre ein Ersatz *statt* der Skriptlogik und
 würde die Missionsdaten umgehen, statt sie auszuführen; (c) die Skirmish-KI des Originals (`AISkirmishPlayer`) ist ohnehin die Ausführung genau dieser Skripte plus Bauschlange, nicht etwas
@@ -262,7 +262,7 @@ geskriptet).
   und die „Mensch ist das“-Entscheidung dem Host überlassen (`GC_LaserGeneral` markiert keine Seite als Mensch). Ein nicht vorhandener Name fällt auf
   denselben Standard zurück und hinterlässt eine Notiz in `MissionSession.Notes`, nie still. `CampaignController.StartCurrentMission` und
   `CampaignTool audit|playthrough --human-side <Name>` reichen die Wahl durch; die eigentliche General-Auswahl bleibt Sache der Shell-Anbindung
-  (`docs/HANDOFF-PHASE10.md` Teil 2).
+  (`docs/handoffs/HANDOFF-PHASE10.md` Teil 2).
 - **Gefecht** (seit Phase 17, `docs/SIMULATION-CORE.md` §33): die Einheiten wählen ihre Opfer selbst (`AutoAcquireEnemiesWhenIdle`, `MoodAttackCheckRate`); der frühere Gefechtstreiber
   `DriveCombat` (jedes bewaffnete Objekt schoss alle drei Ticks auf den nächsten Feind in Reichweite, auch im Gehen und ohne Rücksicht auf sein `AutoAcquire`) ist entfallen. Der Skript-Motor ist
   `IAcquisitionAdvisor` der Welt: er liefert die Angriffspriorität (`AttackPriorityInfo`; Priorität 0 wird nie angegriffen, je 100 Einheiten Entfernung ein Punkt Abzug) und die Stimmung des Teams
@@ -873,14 +873,14 @@ Ohne Fraktion mit Startgebäude (z. B. `Training01`) gibt es keinen Agenten.
 GLA-Basis (Tunnelnetze, Bunker, Quad-Kanonen) und hat danach kein Heer mehr (`agent: … 1 attack waves … army now 0`). (b) Viele Ziele sind Weltzustände, die nur eine Schreibung erreicht: Geld, Wissenschaft,
 Besitzer, UI-Flags, Aufdeckung – sie stehen als `declined world write` in `Unmet`. (c) Kampagnenkarten verlangen Abläufe (Konvois eskortieren, Gebäude erobern, Skriptzeitpunkte), die weder der Agent noch die
 Blätter als Befehle kennen. (d) 15.000 Ticks (8,3 Spielminuten) sind für Basisbau plus Angriff knapp; längere Läufe kosten Minuten je Karte (der Agent plant alle paar Ticks). **Ein „Spieler-Agent“, der die Kampagne wirklich
-gewinnt, ist Gegenstand des nächsten Handoffs** (`docs/HANDOFF-PHASE14.md`): Angriffswellen mit Rückzug und Verstärkung, Eroberung (`CaptureCommand`), Spezialkräfte, eine KI, die Missionsziele liest.
+gewinnt, ist Gegenstand des nächsten Handoffs** (`docs/handoffs/HANDOFF-PHASE14.md`): Angriffswellen mit Rückzug und Verstärkung, Eroberung (`CaptureCommand`), Spezialkräfte, eine KI, die Missionsziele liest.
 Der Normalmodus bleibt bei Sieg und Niederlage 24/24 mit Welteingriffen (`Interventions` je Karte: Tabelle oben); der Nur-Befehle-Modus ist der Maßstab, an dem sich der Abstand zur Spielbarkeit messen lässt
 (Tests `ScriptCommandsOnlyDriverUsesOrdersNotWrites`, `…DeclinesWhatOnlyAWriteCanDo`: auf einer synthetischen Karte erreicht er den Sieg nur mit Befehlen, und Geld wird abgelehnt und benannt).
 
 **Stand nach Phase 14 (4. Oktober 2026, Release, je Kampagne einzeln mit 15.000 Ticks gelaufen, `drive --commands-only --outcome victory`):** unverändert **1 von 24 Karten** (`MD_GLA04`, Skript endet selbst @1022, 0 Weltschreibungen, 86 Befehle); die
 anderen 23 Karten „nicht erreicht“, darunter alle Challenge-Karten (7 + `GC_AirGeneral`), `Training01`, `MD_CHI01–05`, `MD_GLA01/02/03/05`, `MD_USA01–05`. Die neuen Module (Flugzeuge, Kisten, Strukturen, Waffenslots) haben den Abstand zur Spielbarkeit damit
 nicht verkleinert: die Ursachen (a)–(d) oben gelten unverändert; ob der Gegner, der jetzt tatsächlich fliegt und schießt (Raptor, Comanche, Schlachtschiffe), den Agenten früher trifft, wurde nicht untersucht. Die USA-Karten
-brauchen auch im Nur-Befehle-Modus über eine Stunde je Lauf (14.864 Befehle auf `MD_USA04`). Der Maßstab bleibt Gegenstand des nächsten Handoffs (`docs/HANDOFF-PHASE15.md`, Punkt 1).
+brauchen auch im Nur-Befehle-Modus über eine Stunde je Lauf (14.864 Befehle auf `MD_USA04`). Der Maßstab bleibt Gegenstand des nächsten Handoffs (`docs/handoffs/HANDOFF-PHASE15.md`, Punkt 1).
 
 **Stand 4. Oktober 2026 abends (Release, je Karte einzeln, `drive --commands-only --outcome victory --ticks 15000`, je 2.400 s Zeitgrenze; `SkirmishAi` mit Versorgungszentrum am Lager, `docs/SIMULATION-CORE.md` §32):**
 unverändert **1 Karte** (`MD_GLA04`, @1022, 92 Befehle, 0 Weltschreibungen); 22 Karten „nicht erreicht“ mit 0 Weltschreibungen (`Training01`: 0 Befehle – der Agent findet dort nichts zu tun), `MD_USA01` nach 2.400 s

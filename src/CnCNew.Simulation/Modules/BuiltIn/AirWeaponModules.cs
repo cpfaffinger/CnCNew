@@ -491,7 +491,7 @@ public sealed record NeutronMissileData(Fixed DistanceBeforeTurning, Fixed MaxTu
 /// <c>NeutronMissileSlowDeathBehavior</c> — run). The turn is computed without arc functions: the heading rotates toward the goal in the plane of both vectors by the turn limit
 /// (or snaps when the angle is smaller). Not modeled: the jitter of the model, the exhaust particle system, the delivery decal, collisions with objects.
 /// <para>
-/// The flight runs on the frame grid of the original, on the missile's own phase (docs/RATE-INVARIANCE-PROJECTILES.md): <c>RelativeSpeed</c> and <c>ForwardDamping</c> are a thrust
+/// The flight runs on the frame grid of the original, on the missile's own phase (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md): <c>RelativeSpeed</c> and <c>ForwardDamping</c> are a thrust
 /// and a damping share per logic frame, applied together in one step, so the velocity is a velocity per frame and changes once per frame exactly as at 30 Hz — as do the turn (the
 /// limit of one frame), the special climb, the distance before turning, the intermediate point and the ground. The launch is decided one frame after the shot, every further step a
 /// frame later; the velocity of a frame is flown in equal shares over its ticks. At 30 Hz a frame is a tick and nothing differs.

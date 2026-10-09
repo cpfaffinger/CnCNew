@@ -5,7 +5,7 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Time;
 
 /// <summary>
-/// Units of one logic frame of the original for the flight modules (phase 23, <c>docs/RATE-INVARIANCE-FLIGHT.md</c>). The 30 Hz step is the definition of an
+/// Units of one logic frame of the original for the flight modules (phase 23, <c>docs/rate-invariance/RATE-INVARIANCE-FLIGHT.md</c>). The 30 Hz step is the definition of an
 /// integration: a module decides one step per logic frame of the original with the very expressions it uses at 30 Hz, and for that it needs the catalog's
 /// values per tick (speed, turn rate) and per tick² (acceleration, gravity) as values per frame. Every function is the identity at 30 Hz (a factor or a
 /// divisor of 1 on the raw value), which keeps 30 Hz bit-identical; at 60 and 120 Hz the factor is a whole 2 or 4 (4 or 16 for the squares), exact on the raw value.
@@ -85,7 +85,7 @@ public struct FlightFrameStep
     }
 
     /// <summary>
-    /// Publishes what is left of the frame on the object (<see cref="Entity.FrameEnd"/>, docs/RATE-INVARIANCE-CONSOLIDATION.md 1.3 rule 3): whoever looks at the object to decide
+    /// Publishes what is left of the frame on the object (<see cref="Entity.FrameEnd"/>, docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md 1.3 rule 3): whoever looks at the object to decide
     /// something reads it where the frame it has begun ends, as an observer does at 30 Hz. The module that owns the step calls this in every tick it calls <see cref="Begin"/> or
     /// <see cref="Continue"/>, after them; (<paramref name="alsoX"/>, <paramref name="alsoY"/>) is the rest of another step of the same object (its ground or winged step). The
     /// publication is absolute, so a rest somebody else left on the object does not survive it. Nothing is written at 30 Hz.

@@ -4,7 +4,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, consolidation of the rate-invariance packages (<c>docs/RATE-INVARIANCE-CONSOLIDATION.md</c>): what happens where the frames of two objects meet. Every test names
+/// Phase 23, consolidation of the rate-invariance packages (<c>docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md</c>): what happens where the frames of two objects meet. Every test names
 /// its rates itself and compares 60 and 120 Hz with 30 Hz at the end of every logic frame of the original.
 /// </summary>
 internal static partial class Tests

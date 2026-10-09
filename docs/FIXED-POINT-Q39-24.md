@@ -1,7 +1,7 @@
 # Festkomma-Auflösung: von Q47.16 auf Q39.24 (Phase 22)
 
-Stand: 6. Oktober 2026, Zweig der Phase 22, Umstellung in Commit `d7fca91`. Auftrag: `docs/HANDOFF-PHASE22.md`; Rahmen: `docs/MULTIPLAYER-PLAN.md` §2.6 und §4 (E8). Alles hier ist bei **30 Hz** gemessen
-(Release, Retaildaten `.local/phase2-import-a`, ein Rechner: AMD Ryzen 7 PRO 6850U, 16 logische Prozessoren, Windows 11, .NET 10.0.12). Wo eine Zahl nicht ruhig gemessen ist, steht es dabei.
+Stand: 6. Oktober 2026, Zweig der Phase 22, Umstellung in Commit `d7fca91`. Auftrag: `docs/handoffs/HANDOFF-PHASE22.md`; Rahmen: `docs/MULTIPLAYER-PLAN.md` §2.6 und §4 (E8). Alles hier ist bei **30 Hz** gemessen
+(Release, Retaildaten `.local/content`, ein Rechner: AMD Ryzen 7 PRO 6850U, 16 logische Prozessoren, Windows 11, .NET 10.0.12). Wo eine Zahl nicht ruhig gemessen ist, steht es dabei.
 
 `Fixed` ist ein `long` mit jetzt **24 Nachkommabits** (Auflösung 2⁻²⁴ ≈ 6 · 10⁻⁸, Bereich ± 5,5 · 10¹¹) statt 16 (2⁻¹⁶ ≈ 1,5 · 10⁻⁵, ± 1,4 · 10¹⁴). Die Umstellung ändert jeden Hash, jeden Snapshot und jedes Replay und
 geschah deshalb allein: erst eine Vorarbeit, die kein Ergebnis ändert, dann ein Commit mit einer Ursache.

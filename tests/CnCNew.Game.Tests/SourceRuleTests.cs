@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace CnCNew.Game.Tests;
 
 /// <summary>
-/// The tick convention outside the simulation as a source test (docs/HANDOFF-PHASE21.md, item 10; the simulation's own rules are <c>SourceRules</c> in
+/// The tick convention outside the simulation as a source test (docs/handoffs/HANDOFF-PHASE21.md, item 10; the simulation's own rules are <c>SourceRules</c> in
 /// <c>CnCNew.Simulation.Tests</c>). In <c>CnCNew.Game</c>, <c>CnCNew.Presentation</c>, <c>CnCNew.Ui</c> and <c>CnCNew.Client.Stride</c> nothing names a rate:
 /// <list type="bullet">
 /// <item><description>the original frame (1/30 s, the unit of the original's client content) is <c>CnCNew.Data.OriginalFrame.PerSecond</c> and nothing else;</description></item>

@@ -4,7 +4,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// The exit path of produced units (<c>docs/SIMULATION-CORE.md</c> §42) under the frame convention of <c>docs/RATE-INVARIANCE-CONSOLIDATION.md</c> §1.3: the place in front of the
+/// The exit path of produced units (<c>docs/SIMULATION-CORE.md</c> §42) under the frame convention of <c>docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md</c> §1.3: the place in front of the
 /// factory is chosen after the whole logic frame of the original the unit appears in, the unit and whoever makes room for it move with the next frame. Every test names its
 /// rates itself and compares 60 and 120 Hz with 30 Hz at the end of every logic frame.
 /// </summary>

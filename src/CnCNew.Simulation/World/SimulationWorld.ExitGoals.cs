@@ -23,7 +23,7 @@ public sealed partial class SimulationWorld
     private Entity? _claiming;
 
     /// <summary>
-    /// Above 30 Hz (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): at 30 Hz the spawn phase that creates a produced unit chooses its place in front of the factory and asks who
+    /// Above 30 Hz (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3): at 30 Hz the spawn phase that creates a produced unit chooses its place in front of the factory and asks who
     /// stands there to make room, seeing every object after the whole step of that logic frame of the original. At a higher rate the unit appears with the first tick of that
     /// frame; the same decision is taken in the spawn phase of the frame's last tick, when every object in phase has covered its step, and the unit and whoever makes room for it
     /// begin to move with the next frame - as they do at 30 Hz. A unit that got another order meanwhile, or is gone, keeps what it has.
@@ -193,7 +193,7 @@ public sealed partial class SimulationWorld
             if (other.Id == mover.Id || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid) continue;
             if (AppearsAfterClaim(other)) continue;
             // A standing unit counts where it stands once its logic frame of the original is over: above 30 Hz a move ends with the first tick of its last frame and the unit
-            // covers the rest of the step afterwards (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md). At 30 Hz that is its position.
+            // covers the rest of the step afterwards (docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md). At 30 Hz that is its position.
             var (standsX, standsY, _) = other.FrameEnd(_tick);
             // The unit whose claim is being decided has no order yet where the 30 Hz spawn phase decides it (the exit order follows the claim): whoever makes room for it
             // sees it standing where it appeared, not heading for the exit point. Never the case at 30 Hz.

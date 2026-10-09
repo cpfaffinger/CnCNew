@@ -74,7 +74,7 @@ Parameter zwar vorhanden, aber bedeutungslos. `MapScriptParameter` bildet das 1:
 `ImmutableArray<MapScriptList>`, ein Eintrag pro Spieler/Seite in Dateireihenfolge (korrespondiert mit `MapData.Sides`).
 Alles unveränderlich, renderer- und filesystemunabhängig, wie der Rest von `CnCNew.Data`.
 
-## 5. Reale Zahlen (`.local/phase2-import-a`, `MapTool audit`, 30. September 2026 – neu messen)
+## 5. Reale Zahlen (`.local/content`, `MapTool audit`, 30. September 2026 – neu messen)
 
 150 von 150 Karten dekodieren fehlerfrei (vorher: 75 schlugen fehl – 25 Kampagnenkarten mit Condition-Version 2/3 ohne
 NameKeyType, 50 weitere an der NameKeyType-Fehlannahme; beide Ursachen sind mit dem Enum-Index-Ansatz behoben).

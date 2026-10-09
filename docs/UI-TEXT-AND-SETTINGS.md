@@ -157,9 +157,9 @@ fehlende Schlüssel, Texturgröße 0 (das Original lässt dann Pixelkoordinaten 
 nutzbare Desktopfläche, bleibt sie; sonst die größte Standardauflösung gleichen Seitenverhältnisses, sonst die größte
 beliebige; unter 800 × 600 wird angehoben, ein kleinerer Desktop ergibt 800 × 600 mit Begründung.
 
-## Gemessene Zahlen (`.local/phase2-import-a`)
+## Gemessene Zahlen (`.local/content`)
 
-`dotnet run --project tests/CnCNew.Ui.Tests -- --content-dir .local/phase2-import-a` (zwei Läufe byteidentisch):
+`dotnet run --project tests/CnCNew.Ui.Tests -- --content-dir .local/content` (zwei Läufe byteidentisch):
 
 - `Data/English/generals.csf`: Version 3, Sprache US, 6.422 Labels (alle dekodiert), 6.421 Werte (= Kopf
   `num_strings`), 0 doppelte Labels, 0 Labels mit mehreren Werten, 1 Label ohne Wert, 2 `STRW`-Werte mit Sprachname.

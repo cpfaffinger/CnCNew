@@ -270,7 +270,7 @@ Ursachenanalyse oben (Puffer, Windung, Licht), keine Zahl.
 | nie gezeigte versteckte Unterobjekte | 4 (`NBGATTLING.MUZZLEFX01/02`, `UBUNDTUNN(_S).BARRELFX01`) |
 | Modellzustände nie gesetzt | 11 von 106 Namen (vorher 54; Liste in den Einschränkungen) |
 
-## Gemessene Zahlen (Alpine Assault, `.local/phase2-import-a`, neu messen bei Bedarf)
+## Gemessene Zahlen (Alpine Assault, `.local/content`, neu messen bei Bedarf)
 
 - FactionAmerica vs. FactionChina, Startaufnahme: 590 Drawables gesamt, 10 im Sichtkegel gezeichnet,
   78 Modelle geladen, 2.080 Dreiecke, 0 fehlende Modelle/Texturen/Animationen,

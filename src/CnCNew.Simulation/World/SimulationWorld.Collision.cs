@@ -214,7 +214,7 @@ public sealed partial class SimulationWorld
 
     // ------------------------------------------------------------------------------------------------ above 30 Hz
     //
-    // A mover decides the step of a logic frame of the original in the first tick of its frame (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3). What the 30 Hz step sees of
+    // A mover decides the step of a logic frame of the original in the first tick of its frame (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3). What the 30 Hz step sees of
     // another mover in that tick is the other after its whole step if it ran earlier in the tick, and before it otherwise: the end of the frame the other has begun
     // (Entity.FrameEnd), and "standing" if the step it is covering is the last of its move. The two scans below are the scans above with exactly that view; they never run at
     // 30 Hz, where the rest of a frame is always zero and the scans above are untouched.
@@ -432,7 +432,7 @@ public sealed partial class SimulationWorld
     /// <summary>
     /// Above 30 Hz: the overlap test of a mover's collision check, which runs in the first tick of the mover's frame with the mover standing where that frame ends
     /// (<c>AIUpdateInterface.CollideWhereTheFrameEnds</c>). The other object is read where the frame it has begun ends: one that has had its turn in this tick after its
-    /// whole step, one that has not after its previous one - what the 30 Hz step reads (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3).
+    /// whole step, one that has not after its previous one - what the 30 Hz step reads (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3).
     /// </summary>
     private bool FootprintsOverlapAtFrameEnd(Entity a, Entity b)
     {

@@ -92,7 +92,7 @@ internal static class CaptureFlashTests
     /// <summary>
     /// The blink sequence of a capture as a whole at 30, 60 and 120 Hz (docs/TICKRATE-MIGRATION.md §14.4). The presentation's share is the envelope: every
     /// <c>CaptureFlash</c> event tints the building for the same game time, and nothing is tinted without an event. When the events come is the simulation's
-    /// (<c>SpecialAbilityUpdate.StepCaptureFlash</c> advances its phase once per logic frame of the preparation, docs/RATE-INVARIANCE-TURRETS.md): the number of
+    /// (<c>SpecialAbilityUpdate.StepCaptureFlash</c> advances its phase once per logic frame of the preparation, docs/rate-invariance/RATE-INVARIANCE-TURRETS.md): the number of
     /// flashes of one preparation is the same at every rate.
     /// </summary>
     private static void TimeScaleBlinkSequence()

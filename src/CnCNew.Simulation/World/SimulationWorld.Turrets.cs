@@ -356,7 +356,7 @@ public sealed partial class SimulationWorld
     /// <summary><c>getRelativeAngle2D(obj, enemyPosition)</c>: the bearing to the victim minus the body's heading, wrapped.</summary>
     private Fixed DesiredTurretAngle(Entity source, Entity victim)
     {
-        // Both objects where the logic frame of the original they have begun ends, and the body's heading there (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the
+        // Both objects where the logic frame of the original they have begun ends, and the body's heading there (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the
         // turret turns once per frame toward what the 30 Hz turret sees after the step of that frame. At 30 Hz these are the positions and the heading.
         var (victimX, victimY, _) = victim.FrameEnd(_tick);
         var (ownX, ownY, _) = source.FrameEnd(_tick);
@@ -529,7 +529,7 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// Above 30 Hz: the turrets of an object that dies inside their frame's step stand where that step ends, as the body does (<see cref="OnEntityDied"/>, rule 4 of
-    /// docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): the 30 Hz turret has taken its whole step when a hit of the phases after the turrets kills its object. A dead object's
+    /// docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3): the 30 Hz turret has taken its whole step when a hit of the phases after the turrets kills its object. A dead object's
     /// turret is not stepped any more, so the share it had covered would stay.
     /// </summary>
     private void CompleteTurretFrames(Entity entity, TurretState?[] turrets)

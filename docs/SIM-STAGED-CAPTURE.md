@@ -1,6 +1,6 @@
 # Gestufte Gebäudeübernahme (`SpecialAbilityUpdate`)
 
-**Hinweis (9. Oktober 2026, Phase 23): historisch, 30 Hz.** Tickzahlen, Siegticks und Hashes in diesem Dokument sind bei 30 Hz und an ihrem damaligen Stand gemessen und als Referenzwerte überholt (maßgeblich: `baselines/reference-manifest.json`, seit `ea52f87` bei 60 Hz). Tickangaben gelten als Zahl von Originalbildern weiter. Oberhalb von 30 Hz wächst die Blitzphase einmal je Originalbild der Vorbereitung (4 / 4 / 4 Blitze in 2 s statt 4 / 9 / 19; in der Suite 49 / 49 / 49), und das Zudrehen rastet gegen ein Bild Drehung ein: `docs/RATE-INVARIANCE-TURRETS.md` (`d923cea`, `95bcf3d`).
+**Hinweis (9. Oktober 2026, Phase 23): historisch, 30 Hz.** Tickzahlen, Siegticks und Hashes in diesem Dokument sind bei 30 Hz und an ihrem damaligen Stand gemessen und als Referenzwerte überholt (maßgeblich: `baselines/reference-manifest.json`, seit `ea52f87` bei 60 Hz). Tickangaben gelten als Zahl von Originalbildern weiter. Oberhalb von 30 Hz wächst die Blitzphase einmal je Originalbild der Vorbereitung (4 / 4 / 4 Blitze in 2 s statt 4 / 9 / 19; in der Suite 49 / 49 / 49), und das Zudrehen rastet gegen ein Bild Drehung ein: `docs/rate-invariance/RATE-INVARIANCE-TURRETS.md` (`d923cea`, `95bcf3d`).
 
 Stand: 4. Oktober 2026. Betrifft `CnCNew.Simulation` (`Modules/BuiltIn/SpecialAbilityStaging.cs`, `World/SimulationWorld.PowerAndCapture.cs`),
 `CnCNew.Presentation` (`Objects/CaptureConditions.cs`) und das Demo-Szenario `capture-building` (`docs/DEMO-SCENARIOS.md`).

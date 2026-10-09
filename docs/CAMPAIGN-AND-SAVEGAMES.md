@@ -117,11 +117,11 @@ beiden Richtungen, Version 1, fehlende und nicht unterstützte Rate, gefälschte
 ## 6. Werkzeug `CnCNew.CampaignTool`
 
 ```powershell
-dotnet run --project tools/CnCNew.CampaignTool -- list .local/phase2-import-a
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/phase2-import-a --ticks 900
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/phase2-import-a --map MD_USA01 --explain
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/phase2-import-a --map GC_LaserGeneral --human-side PlyrLaserGeneral
-dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough .local/phase2-import-a --campaign USA
+dotnet run --project tools/CnCNew.CampaignTool -- list .local/content
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/content --ticks 900
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/content --map MD_USA01 --explain
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- audit .local/content --map GC_LaserGeneral --human-side PlyrLaserGeneral
+dotnet run -c Release --project tools/CnCNew.CampaignTool -- playthrough .local/content --campaign USA
 ```
 
 `--human-side <Name>` (`audit` und `playthrough`): reicht `MissionOptions.HumanSideName` durch, für Karten ohne eigene `playerIsHuman`-Seite
@@ -168,7 +168,7 @@ und Endproben: `docs/SCRIPT-ENGINE.md` §9). Die Größe eines Missionszustands 
 - **Speichern im Spiel**: `MissionPauseMenu` (`src/CnCNew.Game/Hud/MissionPauseMenu.cs`) kombiniert `QuitMenu.wnd` (wie
   `MatchController`) mit `PopupSaveLoad.wnd` hinter dessen `ButtonSaveLoad`; der Slotname kommt aus der eingegebenen
   Beschreibung (dateinamensicher gemacht), Überschreiben fragt über das vorhandene `OverwriteConfirmParent` nach.
-  Eigenständig von `MatchController`/`LiveMatch` (die bleiben Skirmish-spezifisch, siehe `docs/HANDOFF-PHASE10.md`).
+  Eigenständig von `MatchController`/`LiveMatch` (die bleiben Skirmish-spezifisch, siehe `docs/handoffs/HANDOFF-PHASE10.md`).
 - **Missionsabschluss**: `GameShell.MissionFinished` ruft `CampaignController.Conclude` auf und legt `MissionBannerScreen`
   (`Victorious.wnd`/`Defeat.wnd`, reine Grafik ohne Knöpfe im Original) unter `MissionResultScreen` (`ScoreScreen.wnd`
   wiederverwendet, da die echten Sieg/Niederlage-Dateien gar keine Schaltflächen haben); `ButtonContinue` wird zu „Next

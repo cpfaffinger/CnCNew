@@ -16,7 +16,7 @@ namespace CnCNew.Game.Tests;
 
 /// <summary>
 /// Headless tests of the campaign/savegame wiring into <see cref="GameShell"/> (Phase 10 item 2,
-/// <c>docs/HANDOFF-PHASE10.md</c>): campaign selection from the main menu reaches a real mission with its real briefing
+/// <c>docs/handoffs/HANDOFF-PHASE10.md</c>): campaign selection from the main menu reaches a real mission with its real briefing
 /// text, saving and loading mid-mission continues identically, and a mission's conclusion reaches the result screen on
 /// both victory and defeat. Needs <c>--content-dir</c> for the real-campaign part (selection/briefing); the
 /// save/load-continuation and conclusion tests use a small synthetic campaign (same idiom as

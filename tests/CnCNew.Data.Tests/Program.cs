@@ -221,7 +221,7 @@ static void ModuleCatalogIsExplicitAndConsistent()
         "ActiveBody", "CreateObjectDie", "DeletionUpdate", "DestroyDie", "FXListDie", "HighlanderBody", "ImmortalBody",
         "InactiveBody", "InstantDeathBehavior", "KeepObjectDie", "LifetimeUpdate", "StructureBody",
         // phase 5 (24): Block 0.2 (StealthUpdate, AutoHealBehavior) + the upgrade family + movement + production
-        // + the next blocker modules by measured instantiability impact (docs/HANDOFF-PHASE5.md)
+        // + the next blocker modules by measured instantiability impact (docs/handoffs/HANDOFF-PHASE5.md)
         "AIUpdateInterface", "ArmorUpgrade", "AutoHealBehavior", "CommandSetUpgrade", "CreateCrateDie", "ExperienceScalarUpgrade",
         "FireWeaponWhenDeadBehavior", "FlammableUpdate", "GarrisonContain", "LocomotorSetUpgrade", "MaxHealthUpgrade",
         "ModelConditionUpgrade", "ObjectCreationUpgrade", "PoisonedBehavior", "ProductionUpdate", "RadarUpgrade",

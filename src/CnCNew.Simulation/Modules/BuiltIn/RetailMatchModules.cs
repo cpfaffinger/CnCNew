@@ -483,7 +483,7 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
             else if (world.Time.BeginsFrameOf(Entity, world.Tick))
             {
                 // Above 30 Hz the hole regenerates the slice of a logic frame of the original once per frame (the escape "Originalraster" for a heal slice,
-                // docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md §3): a hit in the first tick of a frame meets the health the 30 Hz step leaves, not one share of the frame's slice.
+                // docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md §3): a hit in the first tick of a frame meets the health the 30 Hz step leaves, not one share of the frame's slice.
                 var slice = body.MaxHealth * data.HealthRegenPercentPerSecond / Fixed.FromInt(SimulationRate.OriginalFramesPerSecond);
                 world.Damage(Entity.Id, new DamageInfo(Entity.Id, slice, DamageTypes.Healing, DeathTypes.None, false));
             }

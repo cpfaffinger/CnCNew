@@ -162,7 +162,7 @@ public sealed class SkirmishMatchSession
             [.._commands.OrderBy(value => value.Tick).ThenBy(value => value.Player.Value).ThenBy(value => value.Sequence)], []);
 
     /// <summary>
-    /// Phase 10 decision (`docs/HANDOFF-PHASE10.md` point 6, `docs/SIMULATION-CORE.md` §18): a <em>live, still in-progress</em> skirmish
+    /// Phase 10 decision (`docs/handoffs/HANDOFF-PHASE10.md` point 6, `docs/SIMULATION-CORE.md` §18): a <em>live, still in-progress</em> skirmish
     /// session cannot be saved and later resumed as a continuing live game, unlike a mission (<c>MissionSnapshot</c>). Two things that sound
     /// similar but are not what this blocks:
     /// <list type="bullet">

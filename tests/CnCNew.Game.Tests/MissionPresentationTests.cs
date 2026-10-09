@@ -16,7 +16,7 @@ namespace CnCNew.Game.Tests;
 
 /// <summary>
 /// Headless tests of <see cref="MissionPresentationDirector"/> and <see cref="MissionUiBridge"/>
-/// (<c>docs/HANDOFF-PHASE10.md</c> items 6 and 7): a scripted camera move completes exactly when its real duration
+/// (<c>docs/handoffs/HANDOFF-PHASE10.md</c> items 6 and 7): a scripted camera move completes exactly when its real duration
 /// elapses and unblocks a <c>CAMERA_MOVEMENT_FINISHED</c>-gated follow-up script (the actual feedback loop the mission
 /// scripts need, not just "it compiles"), radar events and on-screen text are captured with real positions/resolved
 /// text, and selecting a named unit / signalling a UI interaction reach the engine's own conditions

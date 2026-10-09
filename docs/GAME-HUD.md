@@ -299,7 +299,7 @@ ausschließlich Felder aus, die die Simulation bereits über `SimEvent` offenleg
   `LiveMatch`, das über `Advance` mehrere Ticks lief, liefert einen `World.StateHash`, der **nicht** mit einem frischen
   `ReplayRunner.Run(session.ToReplay(), …)` derselben Aufzeichnung übereinstimmt, sobald der Computergegner den ersten eigenen
   Befehl erteilt. Das reproduziert sich mit einer minimalen Gegenprobe, die nur `LiveMatch.Create`/`LiveMatch.Advance` benutzt –
-  ganz ohne `MatchController`, ohne Eingabe, ohne HUD-Code – gegen echte Inhalte (`.local/phase2-import-a`, Karte
+  ganz ohne `MatchController`, ohne Eingabe, ohne HUD-Code – gegen echte Inhalte (`.local/content`, Karte
   „Alpine Assault“). Die bestehenden Replay-Tests in `CnCNew.Simulation.Tests` (`Tests.Skirmish.cs`) vergleichen bisher nur zwei
   frische `ReplayRunner.Run`-Aufrufe gegeneinander, nie gegen den Hash einer live fortgeschrittenen `SkirmishMatchSession` – die
   Lücke war also bisher ungetestet. `tests/CnCNew.Game.Tests/HudTests.cs` prüft deshalb nur die intern konsistente Reproduzierbarkeit
@@ -378,7 +378,7 @@ Schichten wanderte unverändert in die Basisklasse, `LiveMatch` blieb für seine
   Textobjekt, die Wiederaufnahme des Zustands aus einem Spielstand. Die benannten Missionszeitgeber (`DISPLAY_COUNTDOWN_TIMER`) stehen seit der Missionstext-Sitzung bei
   `NamedTimerCountdownPosition` (X:0,90 Y:0,666) der Retail-Datei (`MissionTextOverlay.NamedTimers`, `docs/SCRIPT-ENGINE.md` §7a).
 - **Stride:** `LiveMatchHost` und alle Weltschichten nehmen ein `LiveGame`; `CnCNew.Client.Stride --mission <Karte> [--human-side <Name>]` startet eine Kampagnenkarte (Rauchtest:
-  `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/phase2-import-a`). Seit Phase 12 zeichnet die Stride-Hülle auch die HUD-Zeichenliste
+  `--smoke-test --mission "Maps/GC_ChemGeneral/GC_ChemGeneral.map" --content-dir .local/content`). Seit Phase 12 zeichnet die Stride-Hülle auch die HUD-Zeichenliste
   (`MissionController.BuildDrawList`) und verarbeitet die Shell-Ausgaben (`StartMissionOutput`), §15.
 - **Grenzen:** das Schnellspeichern im Spiel bleibt `MissionPauseMenu` (`MatchController` hat seinen eigenen Quit-Dialog); Kampagnenzustand und Fortschritt hält weiter der
   `CampaignController`. Die Skirmish-Statistik (`MatchResult`) wird für Missionen mit denselben Ereignissen gefüllt (`MatchStatsTracker.Snapshot(Players, Winner, Tick)`), ihre Zählung

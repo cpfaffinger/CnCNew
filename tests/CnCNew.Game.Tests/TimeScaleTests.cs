@@ -24,7 +24,7 @@ using static CnCNew.Game.Tests.MissionPresentationTests;
 namespace CnCNew.Game.Tests;
 
 /// <summary>
-/// The time scale of the game layer (docs/HANDOFF-PHASE21.md, item 9): everything a mission shows for a duration, and the clock the effects run on, lasts the same game
+/// The time scale of the game layer (docs/handoffs/HANDOFF-PHASE21.md, item 9): everything a mission shows for a duration, and the clock the effects run on, lasts the same game
 /// time at 30, 60 and 120 Hz. Each test plays the same script once per rate, counts the steps of that session, converts them with the session's own rate and compares the
 /// seconds; the tolerance is one original frame (1/30 s). The synthetic tests need no content. With <c>--content-dir</c> a staged scene is also played at 30, 60 and 120 Hz
 /// through <see cref="LiveGame"/>: the effect clock steps once per original frame and a particle system lives the same game time.

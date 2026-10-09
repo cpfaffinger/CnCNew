@@ -7,7 +7,7 @@ namespace CnCNew.Simulation.Templates;
 /// <summary>
 /// The movement constants of a locomotor per logic frame of the original (1/30 s): the travel of one frame at full speed, the change of that travel per frame, the turn of one frame.
 /// Ground movement decides once per logic frame with these values and covers the frame's step in equal shares per tick (<c>AIUpdateInterface.Move</c>,
-/// <c>docs/RATE-INVARIANCE-GROUND.md</c>), so the numbers of a decision have to be the numbers the 30 Hz step uses.
+/// <c>docs/rate-invariance/RATE-INVARIANCE-GROUND.md</c>), so the numbers of a decision have to be the numbers the 30 Hz step uses.
 /// </summary>
 public sealed class LocomotorFrame(Fixed speed, Fixed acceleration, Fixed turnRate, Fixed braking, Fixed minSpeed)
 {
@@ -17,7 +17,7 @@ public sealed class LocomotorFrame(Fixed speed, Fixed acceleration, Fixed turnRa
     public Fixed Braking { get; } = braking;
     public Fixed MinSpeed { get; } = minSpeed;
 
-    /// <summary><see cref="LocomotorInfo.SpeedLimitZ"/> per logic frame (flight: <c>docs/RATE-INVARIANCE-ROUND3-FLIGHT.md</c>).</summary>
+    /// <summary><see cref="LocomotorInfo.SpeedLimitZ"/> per logic frame (flight: <c>docs/rate-invariance/RATE-INVARIANCE-ROUND3-FLIGHT.md</c>).</summary>
     public Fixed SpeedLimitZ { get; init; }
 
     /// <summary><see cref="LocomotorInfo.Lift"/> per logic frame².</summary>

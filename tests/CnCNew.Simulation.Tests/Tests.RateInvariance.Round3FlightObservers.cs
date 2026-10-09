@@ -7,7 +7,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, third round (<c>docs/RATE-INVARIANCE-ROUND3-FLIGHT.md</c> §2): flight and special movers publish the rest of the frame they are flying (<c>Entity.AheadX/Y/Z</c>), so
+/// Phase 23, third round (<c>docs/rate-invariance/RATE-INVARIANCE-ROUND3-FLIGHT.md</c> §2): flight and special movers publish the rest of the frame they are flying (<c>Entity.AheadX/Y/Z</c>), so
 /// an observer reads them where their frame ends (<c>Entity.FrameEnd</c>) – the position the 30 Hz step has given them when a 30 Hz observer looks. The tests name their rates.
 /// </summary>
 static partial class Tests

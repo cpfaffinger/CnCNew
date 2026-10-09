@@ -1,6 +1,6 @@
 using CnCNew.Game.Tests;
 
-// "--tick-rate 30|60|120" (or CNCNEW_TEST_TICK_RATE) builds the default test worlds and game data at that rate: a probe, see docs/RATE-SWITCH-OUTER-TESTS.md.
+// "--tick-rate 30|60|120" (or CNCNEW_TEST_TICK_RATE) builds the default test worlds and game data at that rate: a probe, see docs/rate-invariance/RATE-SWITCH-OUTER-TESTS.md.
 CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame rate) name theirs; the golden hashes hold at every rate.");
 
 // Each suite exposes `static int Run(string[] args)` returning its failure count; one registration per line.

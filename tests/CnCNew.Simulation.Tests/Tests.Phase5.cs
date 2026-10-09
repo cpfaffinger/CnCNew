@@ -731,7 +731,7 @@ static partial class Tests
         Check.That(world.RejectionCounts[(int)CommandRejection.UnknownScience] == 1, "An unknown science name is rejected.");
     }
 
-    /// <summary>The next blocker module by frequency (<c>docs/HANDOFF-PHASE5.md</c>): <c>FlammableUpdate</c> ignites once accumulated flame damage exceeds its limit, burns periodically, turns permanently <c>BURNED</c> if it stays aflame long enough, and its <c>onDamage</c> hook runs through the new <see cref="IDamageModule"/> callback in <c>ActiveBody.AttemptDamage</c>.</summary>
+    /// <summary>The next blocker module by frequency (<c>docs/handoffs/HANDOFF-PHASE5.md</c>): <c>FlammableUpdate</c> ignites once accumulated flame damage exceeds its limit, burns periodically, turns permanently <c>BURNED</c> if it stays aflame long enough, and its <c>onDamage</c> hook runs through the new <see cref="IDamageModule"/> callback in <c>ActiveBody.AttemptDamage</c>.</summary>
     public static void Phase5Flammable()
     {
         var fixture = new SyntheticFixture(TestRate.Default, files: Phase5Files());
@@ -986,7 +986,7 @@ static partial class Tests
     }
 
     /// <summary>
-    /// The last of the originally named "next blocker modules by frequency" (docs/HANDOFF-PHASE5.md), even though a
+    /// The last of the originally named "next blocker modules by frequency" (docs/handoffs/HANDOFF-PHASE5.md), even though a
     /// fresh audit-coverage run showed it unlocks zero objects alone (every occurrence is also blocked by a still-missing
     /// module — see Phase5BlockerModules's doc comment): <c>PoisonedBehavior</c> reapplies a poison hit's actual damage
     /// periodically for its duration, re-poisoning extends the duration and only ever moves the next tick earlier, and
@@ -1114,7 +1114,7 @@ static partial class Tests
 
     /// <summary>
     /// The containment subsystem's first module (167 objects unlocked alone, the largest single blocker by measured
-    /// impact — see <c>docs/HANDOFF-PHASE5.md</c>): <c>GarrisonContain</c> capacity, <c>KindOf</c> gating, allied/enemy
+    /// impact — see <c>docs/handoffs/HANDOFF-PHASE5.md</c>): <c>GarrisonContain</c> capacity, <c>KindOf</c> gating, allied/enemy
     /// entry (the schema defaults admit allies and enemies alike; the relationship gating itself is covered by the
     /// teams tests), periodic healing, death ejection with <c>DamagePercentToUnits</c>, and immediate ejection on
     /// crossing into <c>REALLYDAMAGED</c>.

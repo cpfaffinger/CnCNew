@@ -13,13 +13,13 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Modules.BuiltIn;
 
 /// <summary>
-/// The next wave of phase-5 blocker modules by frequency (<c>docs/HANDOFF-PHASE5.md</c>): <c>FlammableUpdate</c>,
+/// The next wave of phase-5 blocker modules by frequency (<c>docs/handoffs/HANDOFF-PHASE5.md</c>): <c>FlammableUpdate</c>,
 /// each verified against every real occurrence in <c>.local/phase2-import-a</c>. <c>FireWeaponWhenDeadBehavior</c> was
 /// reprioritized ahead of the originally listed <c>CreateCrateDie</c>/<c>PoisonedBehavior</c> after a fresh
 /// <c>audit-coverage</c> run showed both of those unlock zero currently-blocked objects on their own (every occurrence
 /// is also blocked by a still-missing module), while <c>GarrisonContain</c> (166 alone) and <c>PhysicsBehavior</c> (113
 /// alone) each require a substantial new subsystem (object containment; rigid-body/terrain physics) out of scope for a
-/// single blocker fix — see docs/HANDOFF-PHASE5.md for the updated ordering and rationale.
+/// single blocker fix — see docs/handoffs/HANDOFF-PHASE5.md for the updated ordering and rationale.
 /// </summary>
 internal static class Phase5BlockerModules
 {

@@ -12,7 +12,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// The time scale of the object presentation (docs/HANDOFF-PHASE21.md, item 9): what an object shows for a duration lasts the same game time at 30, 60 and 120 Hz. Each
+/// The time scale of the object presentation (docs/handoffs/HANDOFF-PHASE21.md, item 9): what an object shows for a duration lasts the same game time at 30, 60 and 120 Hz. Each
 /// test plays the same scene once per rate on a synthetic fixture, measures the duration in ticks of that world, converts it with the world's own rate and compares the
 /// seconds; the tolerance is one original frame (1/30 s). Nothing here judges whether the simulation behaves the same at the faster rates - only how long the
 /// presentation shows what the simulation did.

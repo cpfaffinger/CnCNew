@@ -238,7 +238,7 @@ den Spieldaten). System und unbekannte Besitzer: neutral.
 ## 8. `PresentationTool object-audit`
 
 ```powershell
-dotnet run --project tools/CnCNew.PresentationTool -- object-audit .local/phase2-import-a
+dotnet run --project tools/CnCNew.PresentationTool -- object-audit .local/content
 ```
 
 Kompiliert die Retail-Basisdaten (`--maps exclude`-Äquivalent, strikt), baut den Katalog und schreibt deterministische
@@ -294,7 +294,7 @@ Parser, Auswahl einschließlich des FRONTCRUSHED-Beispiels der Referenz, Gleichs
 Übergänge/Warten im `ModelStateTracker`, `DrawSpec`-Kopiersemantik, Diagnosen, Anführungszeichen-Tokens,
 Flagableitung an einer echten `SimulationWorld` (Feuern/Nachladen, Schaden, Bewegung, Veteranen, Upgrades, Bau,
 Verkauf), Interpolation, Nebel mit Geistern, Kulisse mit Verdeckungsregel, Hausfarben. Mit
-`--content-dir .local/phase2-import-a` zusätzlich: Crusader und Kaserne gegen die Retaildaten, Audit ohne
+`--content-dir .local/content` zusätzlich: Crusader und Kaserne gegen die Retaildaten, Audit ohne
 Unklassifiziertes und deterministisch, Projektion echter Vorlagen, Kulisse von „Alpine Assault“.
 
 ## 11. Zeit und Tickrate (Phase 21)

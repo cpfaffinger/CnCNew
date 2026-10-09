@@ -43,7 +43,7 @@ public sealed partial class SimulationWorld
         if (_firstFrameTicks != TickOrder.Next)
         {
             sourceAngle = source.FrameEndAngle(_tick);
-            // Above 30 Hz the shot goes from where the shooter's begun logic frame of the original ends to where the victim's ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3,
+            // Above 30 Hz the shot goes from where the shooter's begun logic frame of the original ends to where the victim's ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3,
             // rule 3): the positions both have when the 30 Hz step fires, after their whole step of that frame.
             if (victim is not null) (x, y, z) = victim.FrameEnd(_tick);
             (sourceX, sourceY, sourceZ) = source.FrameEnd(_tick);

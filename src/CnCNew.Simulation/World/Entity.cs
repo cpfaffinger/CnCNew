@@ -38,7 +38,7 @@ public sealed class Entity
     public Fixed Z { get; internal set; }
 
     /// <summary>
-    /// What is left of the step of the logic frame of the original this object is covering in shares, one per tick (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): the module that
+    /// What is left of the step of the logic frame of the original this object is covering in shares, one per tick (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3): the module that
     /// moves the object publishes it when it decides a frame and takes each share off it. Zero between two frames – and always at 30 Hz, where a frame is one tick: nothing
     /// ever writes it there, and it is described only while it is not zero.
     /// </summary>
@@ -230,7 +230,7 @@ public sealed class Entity
 
     /// <summary>
     /// Above 30 Hz only: the first tick whose destroy phase may remove the object. An object whose removal is requested after the destroy phase of a tick is removed "in the
-    /// next tick" at 30 Hz, which is the next logic frame of the original (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md). Never set at 30 Hz, described only when set.
+    /// next tick" at 30 Hz, which is the next logic frame of the original (docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md). Never set at 30 Hz, described only when set.
     /// </summary>
     internal long DestroyNotBefore { get; set; }
     public long SpawnTick { get; }

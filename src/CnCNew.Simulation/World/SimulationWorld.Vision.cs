@@ -19,7 +19,7 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// The tick within <see cref="VisionInterval"/> after which the shroud is recomputed: the last tick of a logic frame of the original, when every object in phase with the world
-    /// stands where the 30 Hz step of that frame puts it (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 5). Who reads the shroud inside a frame reads the state of the frame
+    /// stands where the 30 Hz step of that frame puts it (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 5). Who reads the shroud inside a frame reads the state of the frame
     /// before, never one that 30 Hz does not have yet at that game time. 30 Hz: 0, the ticks that are a multiple of the interval, as ever.
     /// </summary>
     private readonly long _visionPhase;

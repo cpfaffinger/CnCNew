@@ -1,6 +1,6 @@
 # TEXT-AUDIT – Warum die Texte „komisch“ aussehen (Phase 16, Punkt 4)
 
-Stand 5. Oktober 2026 (alle Zahlen in diesem Dokument sind in dieser Sitzung neu gemessen). Auftrag: `docs/HANDOFF-PHASE16.md` Punkt 4, Befund
+Stand 5. Oktober 2026 (alle Zahlen in diesem Dokument sind in dieser Sitzung neu gemessen). Auftrag: `docs/handoffs/HANDOFF-PHASE16.md` Punkt 4, Befund
 `docs/DEMO-FINDINGS.md` Nr. 10. Ein Mensch fand die Texte der Demos im Vergleich zum Original „komisch“; eine Ursache (Vorlagenschriften gegen 800 Pixel Breite,
 `docs/GAME-SHELL.md` §11) war schon behoben, der systematische Vergleich fehlte.
 

@@ -5,7 +5,7 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Presentation.Tests;
 
 /// <summary>
-/// The frame convention of the simulation above 30 Hz, for tests that read the simulation (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): an object decides in the first tick of
+/// The frame convention of the simulation above 30 Hz, for tests that read the simulation (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3): an object decides in the first tick of
 /// its own logic frame of the original and stands where the 30 Hz step puts it after the last; a new object begins its first frame one frame after it appeared; the shroud is
 /// recomputed after the last tick of its frame. At 30 Hz a frame is a tick and none of these helpers steps more than the test did before.
 /// </summary>

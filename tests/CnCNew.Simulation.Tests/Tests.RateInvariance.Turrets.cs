@@ -7,7 +7,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, package turrets (docs/RATE-INVARIANCE-TURRETS.md): turrets, the fire gate, the firing tracker and the units' own target acquisition are the same game at 30, 60 and
+/// Phase 23, package turrets (docs/rate-invariance/RATE-INVARIANCE-TURRETS.md): turrets, the fire gate, the firing tracker and the units' own target acquisition are the same game at 30, 60 and
 /// 120 Hz. Each test runs one small scene of the synthetic fixture at the three rates and compares game time and angles; 30 Hz is the reference.
 /// </summary>
 static partial class Tests

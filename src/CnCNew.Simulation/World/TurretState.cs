@@ -76,7 +76,7 @@ internal sealed class TurretState
     public bool PositiveSweep = true;
 
     /// <summary>
-    /// Ticks the turret still needs to finish the step of the current logic frame of the original (docs/RATE-INVARIANCE-TURRETS.md): the step is decided once per frame exactly as at
+    /// Ticks the turret still needs to finish the step of the current logic frame of the original (docs/rate-invariance/RATE-INVARIANCE-TURRETS.md): the step is decided once per frame exactly as at
     /// 30 Hz and the angle moves there in equal parts, one per tick. Always 0 at 30 Hz, where a frame is a tick; written to the snapshot only while nonzero.
     /// </summary>
     public int SubSteps;

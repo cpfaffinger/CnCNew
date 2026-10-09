@@ -142,12 +142,12 @@ Windows, im Release-Build, zweimal hintereinander.
 Braucht einen Menschen. Nichts davon wird committet; Originaldaten verlassen den eigenen Besitz nicht (lokal kopieren, kein Upload).
 
 1. Auf dem Entwicklungsrechner: `dotnet publish tools/CnCNew.SimTool -c Release -r win-x64 --self-contained true -o <ordner>\simtool` (für Linux `-r linux-x64`, für ARM `-r win-arm64`/`linux-arm64`).
-2. Auf einen Datenträger kopieren: `<ordner>\simtool`, das Verzeichnis `.local\phase2-import-a` (rund 25.682 Dateien) und `baselines\input-manifest.json`, `baselines\reference-manifest.json`.
+2. Auf einen Datenträger kopieren: `<ordner>\simtool`, das Verzeichnis `.local\content` (rund 25.682 Dateien) und `baselines\input-manifest.json`, `baselines\reference-manifest.json`.
 3. Auf dem zweiten Rechner (kein .NET nötig), im Verzeichnis mit den drei Teilen:
    ```
-   simtool\CnCNew.SimTool input-manifest check phase2-import-a input-manifest.json
-   simtool\CnCNew.SimTool reference-manifest check phase2-import-a reference-manifest.json --set quick
-   simtool\CnCNew.SimTool reference-manifest check phase2-import-a reference-manifest.json --set full
+   simtool\CnCNew.SimTool input-manifest check content input-manifest.json
+   simtool\CnCNew.SimTool reference-manifest check content reference-manifest.json --set quick
+   simtool\CnCNew.SimTool reference-manifest check content reference-manifest.json --set full
    ```
 4. Ergebnis melden: die drei Schlusszeilen („identical“ oder die erste Abweichung je Lauf), dazu CPU-Modell, Betriebssystem und die Ausgabe von `simtool\CnCNew.SimTool --version`, falls vorhanden.
 5. Bei einer Abweichung zuerst das Eingangsmanifest ansehen: weicht es ab, liegt der Fehler in den Daten oder ihrer Aufbereitung; ist es gleich und ein Lauf weicht ab, liegt er in der Rechnung –

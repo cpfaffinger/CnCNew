@@ -216,7 +216,7 @@ public sealed record SmartBombHomingData(Fixed CourseCorrectionScalar) : ModuleD
 /// The module updates every tick for the bomb's whole life, as the reference does.
 /// <para>
 /// The scalar is a mixing factor per logic frame of the original: the mix is taken once per frame, from where the bomb is then, and the way it moves the bomb is flown in equal
-/// shares over the ticks of that frame, so the bomb is where 30 Hz has it when the frame is over (docs/RATE-INVARIANCE-PROJECTILES.md). At 30 Hz a frame is a tick.
+/// shares over the ticks of that frame, so the bomb is where 30 Hz has it when the frame is over (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md). At 30 Hz a frame is a tick.
 /// </para>
 /// </summary>
 public sealed class SmartBombTargetHomingUpdate(SmartBombHomingData data) : SimModule, IUpdateModule

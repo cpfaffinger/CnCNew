@@ -600,7 +600,7 @@ public sealed class PilotFindVehicleUpdate(PilotFindVehicleData data) : SimModul
     public override string ModuleName => "PilotFindVehicleUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
-    // The first look is the pilot's first update, one logic frame of the original after it appeared (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7; the next tick at
+    // The first look is the pilot's first update, one logic frame of the original after it appeared (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7; the next tick at
     // 30 Hz): one tick after it, every later look lay in the last tick of a frame above 30 Hz and read the vehicles a share of their step early.
     public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + world.Time.TicksPerOriginalFrame;
 
