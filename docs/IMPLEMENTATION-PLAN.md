@@ -1,772 +1,772 @@
-# Implementierungsplan bis zum abgeschlossenen ersten Scope
+# Implementation plan up to the completed first scope
 
-Stand: 30. September 2026 (Phase 6 abgeschlossen)
+As of: 30 September 2026 (Phase 6 completed)
 
-## Ziel und Abgrenzung
+## Goal and delimitation
 
-Dieser Plan führt den aktuellen Prototyp bis zu einer lokal spielbaren Neuimplementierung von
-*Generals: Zero Hour* für Singleplayer-Skirmish und Kampagne und – seit der Scope-Änderung vom
-5. Oktober 2026 – für Mehrspieler-Gefechte über Dedicated Server. Vernetzte Kampagne, Matchmaking,
-NAT-Durchdringung, GameSpy-Kompatibilität, Anti-Cheat sowie binäre Kompatibilität zu alten Mods und
-Savegames bleiben außerhalb dieses ersten Abschlusses.
+This plan takes the current prototype to a locally playable reimplementation of
+*Generals: Zero Hour* for single-player skirmish and campaign and – since the scope change of
+5 October 2026 – for multiplayer skirmishes through dedicated servers. Networked campaign, matchmaking,
+NAT traversal, GameSpy compatibility, anti-cheat as well as binary compatibility with old mods and
+savegames stay outside this first completion.
 
-**Scope-Änderung vom 5. Oktober 2026** (begründet und versioniert nach „Reihenfolge und
-Änderungsregel“): Der Projektinhaber nimmt Mehrspieler-Gefechte mit bis zu acht Spielern über
-Dedicated Server in den Scope, hebt die Simulation auf 60 Hz und verlangt, dass die Tickrate ein
-Parameter statt einer Konstante ist; das Mehrspieler-Modul trägt auch das lokale Gefecht gegen die KI.
-Begründung: Ziel ist ein modernes Spiel mit direkter Befehlsannahme und Netzwerkspiel, das nicht vom
-langsamsten Mitspieler abhängt. Folge für diesen Plan: ein neuer Schritt 10 (unten) liegt vor dem
-bisherigen Schritt 10, der zu Schritt 11 wird – Tickrate, Festkomma-Auflösung und Formate ändern jeden
-Referenzwert und jeden Speicherstand und müssen vor einem auslieferbaren Abschluss feststehen. Rahmen
-und Entscheidungen: `docs/MULTIPLAYER-PLAN.md`.
+**Scope change of 5 October 2026** (justified and versioned according to "Order and
+change rule"): the project owner takes multiplayer skirmishes with up to eight players through
+dedicated servers into the scope, raises the simulation to 60 Hz and demands that the tick rate be a
+parameter instead of a constant; the multiplayer module also carries the local skirmish against the AI.
+Justification: the goal is a modern game with direct command intake and network play that does not depend on the
+slowest fellow player. Consequence for this plan: a new step 10 (below) lies before the
+previous step 10, which becomes step 11 – tick rate, fixed-point resolution and formats change every
+reference value and every savegame and must be settled before a shippable completion. Frame
+and decisions: `docs/MULTIPLAYER-PLAN.md`.
 
-Jeder Schritt bildet eine geschlossene Domäne. Ein Schritt gilt erst als abgeschlossen, wenn
-seine öffentlichen Datenverträge feststehen, die reale Installation vollständig auditiert wird,
-automatisierte Regressionstests bestehen und die zugehörige Dokumentation den Istzustand
-beschreibt. Neue Domänen dürfen auf abgeschlossenen Verträgen aufbauen, aber keine bekannten
-Defekte aus dem vorherigen Schritt übernehmen.
+Every step forms a self-contained domain. A step counts as completed only when
+its public data contracts are settled, the real installation is fully audited,
+automated regression tests pass and the associated documentation describes the actual
+state. New domains may build on completed contracts, but may not take over known
+defects from the previous step.
 
-## Rekonstruierter Ausgangsstand
+## Reconstructed starting state
 
-Bereits vorhanden und funktionsfähig sind:
+Already present and functional are:
 
-- reproduzierbarer lokaler Import der Originalinstallation, BIG-Reader und materialisierter,
-  archivfreier Content mit Herkunftsmanifest;
-- validierender SAGE-INI-Syntaxparser;
-- W3D-Chunk-, Mesh- und Materialdecoder mit Vollbestandsaudit;
-- TGA-Decoder mit Vollbestandsaudit;
-- ein Stride-/Direct3D-11-Viewer, der ein statisches W3D-Modell mit Originaltexturen und einem
-  Teil der Materialzustände rendert;
-- ein aktuell erfolgreicher Solution-Build und fünf erfolgreiche Testprogramme.
+- reproducible local import of the original installation, BIG reader and materialised,
+  archive-free content with an origin manifest;
+- validating SAGE INI syntax parser;
+- W3D chunk, mesh and material decoder with full-content audit;
+- TGA decoder with full-content audit;
+- a Stride/Direct3D 11 viewer that renders a static W3D model with original textures and a
+  part of the material states;
+- a currently successful solution build and five successful test programs.
 
-Die zuletzt bearbeitete Domäne ist eindeutig W3D-Materialtreue und deren Abbildung auf Stride.
-`CnCNew.W3D.Tests` stoppt derzeit in einem neu hinzugefügten Test für per-face UVs der zweiten
-Texture-Stage. Die Auswahl und der V-Flip sind implementiert; die Assertion vergleicht jedoch
-binäre `float`-Ergebnisse exakt. Dahinter bleiben die bereits dokumentierten funktionalen Lücken:
-gleichzeitige Materialpässe und Texture-Stages, animierte Mapper sowie seltene Gradient-Modi.
+The domain worked on last is clearly W3D material fidelity and its mapping onto Stride.
+`CnCNew.W3D.Tests` currently stops in a newly added test for per-face UVs of the second
+texture stage. The selection and the V flip are implemented; the assertion, however, compares
+binary `float` results exactly. Behind it remain the already documented functional gaps:
+simultaneous material passes and texture stages, animated mappers as well as rare gradient modes.
 
-## 1. W3D-Material- und Renderingdomäne vollenden
+## 1. Completing the W3D material and rendering domain
 
-**Status: abgeschlossen am 27. September 2026.**
+**Status: completed on 27 September 2026.**
 
-**Ergebnis:** Statische W3D-Meshes werden mit allen im ausgelieferten Bestand vorkommenden
-Materialvarianten rendererunabhängig korrekt beschrieben und im Stride-Client dargestellt.
+**Result:** static W3D meshes are described correctly, independently of the renderer, with all
+material variants occurring in the shipped content and are displayed in the Stride client.
 
-Umfang:
+Scope:
 
-- den fehlerhaften exakten Floatvergleich durch eine fachlich passende Toleranzprüfung ersetzen
-  und alle W3D-Tests wieder grün machen;
-- Semantik und Reihenfolge mehrerer Materialpässe und Texture-Stages vollständig modellieren;
-- Primary-, Secondary-, Detail- und Post-Detail-Funktionen auf reproduzierbare Shaderpfade
-  abbilden, einschließlich der seltenen Gradient-Modi;
-- Mapper-Argumente typisieren und UV-Animationen zeitabhängig ausführen;
-- Texturauflösung, Fallbacks, Alpha-Test, Blend, Depth, Culling, Vertexfarben und Opacity über
-  repräsentative Modelle visuell und automatisiert absichern;
-- den monolithischen Viewerpfad in testbare W3D-zu-Stride-Komponenten zerlegen.
+- replace the faulty exact float comparison by a tolerance check appropriate to the subject
+  and make all W3D tests green again;
+- model semantics and order of several material passes and texture stages completely;
+- map primary, secondary, detail and post-detail functions onto reproducible shader paths,
+  including the rare gradient modes;
+- type mapper arguments and execute UV animations time-dependently;
+- secure texture resolution, fallbacks, alpha test, blend, depth, culling, vertex colours and opacity
+  visually and automatically over representative models;
+- break the monolithic viewer path down into testable W3D-to-Stride components.
 
-Abgeschlossen, wenn:
+Completed when:
 
-- Build und alle sechs vorhandenen Testprogramme erfolgreich sind;
-- der W3D-Vollbestandsaudit ohne unbekannte Materialzustände läuft;
-- ein Real-Asset-Test mehrere Pässe, zwei Stages, per-face UVs und animierte Mapper nachweist;
-- Golden Images für transparente, additive, zweistufige und animierte Beispielmaterialien
-  freigegeben sind;
-- der Smoke-Test ohne `NotSupportedException` für Daten aus dem ausgelieferten Bestand endet.
+- build and all six existing test programs are successful;
+- the W3D full-content audit runs without unknown material states;
+- a real-asset test demonstrates several passes, two stages, per-face UVs and animated mappers;
+- golden images for transparent, additive, two-stage and animated example materials
+  are released;
+- the smoke test ends without `NotSupportedException` for data from the shipped content.
 
-Abnahme:
+Acceptance:
 
-- Solution-Build und alle sechs Testprogramme sind erfolgreich; der W3D-Test läuft zusätzlich gegen `.local/content`.
-- Der Audit verarbeitet 8.904/8.904 Dateien und 70.587 Meshes ohne unbekannten Shader- oder Mapperzustand.
-- 5.625 Zweipass-Meshes, 317 zweistufige Pässe, beide Mapper-Slots und per-face UV-Indizes sind real nachgewiesen.
-- Der Stride-Pfad verwendet geordnete Materialpass-Sequenzen und dynamische Vertexpuffer für zeitabhängige Mapper.
-- Deterministische lokale PNG-Captures und SHA-256-Baselines decken Mehrpass/Alpha/Additiv, zwei Stages sowie Linear-/Grid-Animation ab.
-- Die implementierte Semantik und bewusst außerhalb des ausgelieferten Bestands liegende Mapper-/Bumpfälle sind in `docs/W3D-MATERIALS.md` dokumentiert.
+- Solution build and all six test programs are successful; the W3D test additionally runs against `.local/content`.
+- The audit processes 8,904/8,904 files and 70,587 meshes without an unknown shader or mapper state.
+- 5,625 two-pass meshes, 317 two-stage passes, both mapper slots and per-face UV indices are demonstrated on real data.
+- The Stride path uses ordered material-pass sequences and dynamic vertex buffers for time-dependent mappers.
+- Deterministic local PNG captures and SHA-256 baselines cover multi-pass/alpha/additive, two stages as well as linear/grid animation.
+- The implemented semantics and mapper/bump cases deliberately lying outside the shipped content are documented in `docs/W3D-MATERIALS.md`.
 
-## 2. Assetformate und Runtime-Contentvertrag abschließen
+## 2. Completing asset formats and the runtime content contract
 
-**Status: abgeschlossen am 27. September 2026.**
+**Status: completed on 27 September 2026.**
 
-**Ergebnis:** Alle für Karten, UI, Lokalisierung, Modelle, Animation, Effekte, Audio und Video
-benötigten Dateitypen haben einen validierenden Reader oder eine dokumentierte, reproduzierbare
-Konvertierung. Laufzeitcode greift ausschließlich über einen stabilen Contentvertrag zu.
+**Result:** all file types needed for maps, UI, localisation, models, animation, effects, audio and video
+have a validating reader or a documented, reproducible
+conversion. Runtime code accesses exclusively through a stable content contract.
 
-Umfang:
+Scope:
 
-- STR-, MAP-, WND-, W3D-Animations-/Hierarchie-, DDS/TGA-, Partikel-, Audio- und Videoformate
-  inventarisieren und nach Laufzeitdecoder beziehungsweise Importkonverter klassifizieren;
-- fehlende Reader mit Größen-, Bereichs- und Referenzvalidierung implementieren;
-- logische Asset-IDs, Abhängigkeiten, Overlay-Herkunft und Hashes in einem versionierten
-  Runtime-Manifest zusammenführen;
-- inkrementellen, reproduzierbaren Import sowie verständliche Diagnosen für defekte oder
-  unbekannte Assets bereitstellen;
-- Originaldaten, generierte Artefakte und Quellcode rechtlich und technisch getrennt halten.
+- inventory STR, MAP, WND, W3D animation/hierarchy, DDS/TGA, particle, audio and video formats
+  and classify them by runtime decoder or import converter respectively;
+- implement missing readers with size, range and reference validation;
+- merge logical asset IDs, dependencies, overlay origin and hashes in a versioned
+  runtime manifest;
+- provide incremental, reproducible import as well as understandable diagnostics for defective or
+  unknown assets;
+- keep original data, generated artefacts and source code legally and technically separate.
 
-Abgeschlossen, wenn der gesamte lokale Content ohne unbekannte benötigte Formate inventarisiert
-und aus einem frischen Import reproduzierbar aufgebaut werden kann und jede Laufzeitreferenz
-entweder auflösbar ist oder als bewusst unterstützter Fallback ausgewiesen wird.
+Completed when the entire local content is inventoried without unknown needed formats
+and can be built reproducibly from a fresh import and every runtime reference
+is either resolvable or identified as a deliberately supported fallback.
 
-Abnahme:
+Acceptance:
 
-- `CnCNew.Formats` validiert STR, MAP/SCB/WAK, WND, DDS, ANI, WAV, MP3 und BIK; vorhandene
-  INI-, TGA- und W3D-Reader sind in denselben Vollbestandsaudit integriert.
-- 25.682/25.682 Dateien sind klassifiziert; keine Erweiterung bleibt unbekannt. Die produktiven
-  Bestandszahlen und 119 scopefremden Installationsdateien stehen in `docs/CONTENT-PIPELINE.md`.
-- Schema 2 enthält kanonische IDs und Pfade, Typ, Hash, Größe, Overlaykandidaten/-priorität,
-  Importerversion/-optionen, Runtimeartefakte, direkte Abhängigkeiten und Diagnosen.
-- 41.308 von 41.527 Referenzverwendungen werden aufgelöst; 219 Verwendungen sind als einer von
-  drei geprüften Fallbacktypen sichtbar. Echte Zyklen und untypisierte fehlende Ziele sind Fehler.
-- Zwei unabhängige Frischimporte besitzen den identischen Manifest-SHA-256
-  `ACDF0B6CF98538469AA05F62E23D2A83BD3E17A911433B4EA73373FFFB1245FF`; der Folgelauf erreicht
-  25.682/25.682 Cachetreffer.
-- Staging und Verzeichnistausch verhindern Teilveröffentlichungen. Alle Artefakte wurden danach
-  ohne BIG-Zugriff gegen Größe und SHA-256 geprüft.
+- `CnCNew.Formats` validates STR, MAP/SCB/WAK, WND, DDS, ANI, WAV, MP3 and BIK; existing
+  INI, TGA and W3D readers are integrated into the same full-content audit.
+- 25,682/25,682 files are classified; no extension stays unknown. The productive
+  content numbers and 119 out-of-scope installation files are in `docs/CONTENT-PIPELINE.md`.
+- Schema 2 contains canonical IDs and paths, type, hash, size, overlay candidates/priority,
+  importer version/options, runtime artefacts, direct dependencies and diagnostics.
+- 41,308 of 41,527 reference uses are resolved; 219 uses are visible as one of
+  three checked fallback types. Real cycles and untyped missing targets are errors.
+- Two independent fresh imports have the identical manifest SHA-256
+  `ACDF0B6CF98538469AA05F62E23D2A83BD3E17A911433B4EA73373FFFB1245FF`; the follow-up run reaches
+  25,682/25,682 cache hits.
+- Staging and directory swap prevent partial publications. All artefacts were afterwards
+  checked against size and SHA-256 without BIG access.
 
-## 3. Typisierte Spieldaten und Modulregistrierung
+## 3. Typed game data and module registration
 
-**Status: abgeschlossen am 27. September 2026.**
+**Status: completed on 27 September 2026.**
 
-**Ergebnis:** Die INI-Syntax wird zu unveränderlichen, validierten Spieldefinitionen kompiliert;
-Strings und lose Knoten gelangen nicht mehr in die Simulation.
+**Result:** the INI syntax is compiled into immutable, validated game definitions;
+strings and loose nodes no longer reach the simulation.
 
-Umfang:
+Scope:
 
-- Includes, Vererbung, Überschreibungen, Conditions und Namensauflösung originalgetreu abbilden;
-- Typen für Object-, Weapon-, Armor-, Damage-, Upgrade-, Science-, Player-, Faction-, Command-,
-  FX- und Audio-Definitionen einführen;
-- Modul- und Behavior-Namen über explizite Registries an Implementierungen binden;
-- Einheiten, Maße, Enums, Referenzen und Pflichtfelder beim Laden validieren;
-- verständliche Quelldiagnosen sowie Snapshots der kompilierten Definitionsdaten erzeugen.
+- reproduce includes, inheritance, overrides, conditions and name resolution true to the original;
+- introduce types for Object, Weapon, Armor, Damage, Upgrade, Science, Player, Faction, Command,
+  FX and Audio definitions;
+- bind module and behavior names to implementations through explicit registries;
+- validate units, measures, enums, references and mandatory fields when loading;
+- generate understandable source diagnostics as well as snapshots of the compiled definition data.
 
-Abgeschlossen, wenn der vollständige ausgelieferte INI-Bestand zu einem deterministischen
-Definitionsgraphen kompiliert, alle Referenzen aufgelöst und unbekannte Schlüssel oder Module in
-einer geprüften Kompatibilitätsliste erfasst sind.
+Completed when the complete shipped INI content compiles into a deterministic
+definition graph, all references are resolved and unknown keys or modules are recorded in
+a checked compatibility list.
 
-Abnahme:
+Acceptance:
 
-- 256/256 Dateien und unverändert 66.623 Syntaxblöcke ergeben 12.677 Definitionen, 16.360
-  Modulinstanzen und 335.592 typisierte Schlüssel einschließlich rekursiver Konfigurationssektionen.
-- Eigene unveränderliche Vertragstypen decken Objects, Weapons/WeaponSets, Armor/Damage,
+- 256/256 files and unchanged 66,623 syntax blocks yield 12,677 definitions, 16,360
+  module instances and 335,592 typed keys including recursive configuration sections.
+- Own immutable contract types cover Objects, Weapons/WeaponSets, Armor/Damage,
   Upgrades/Sciences, Player/Factions, Commands, FX, Audio, Locomotors, Experience,
-  SpecialPowers und GlobalData ab; Parserknoten bleiben compilerintern.
-- Includes werden ausschließlich über virtuelle Runtimepfade aufgelöst. Zyklen, fehlende Basen,
-  falsche Conditions, ungültige Werte, Registryduplikate und unbekannte Module im strikten Modus
-  sind Fehler. Overlay und Add/Remove/ReplaceModule sind deterministisch.
-- 12.441/12.468 typisierte Referenzverwendungen sind aufgelöst. Die 27 übrigen Verwendungen
-  (25 Veterancy-Pseudoupgrades, `DieByFireUSA` und `Boss_VehicleSentryDrone`) sind explizite,
-  nicht stille Kompatibilitätsfälle.
-- 41 spätere Definitionsdomänen (2.801 Instanzen) und 206 noch nicht implementierte Modultypen
-  (16.360 Verwendungen) sind mit Häufigkeit, Besitzerart und Implementierungsziel inventarisiert.
-- Zwei unabhängige 112.664.082-Byte-Snapshots waren byteidentisch; SHA-256 jeweils
-  `14154C512DED47C4AD72B651F8FCB0BA702EACBF8678C51DDAB7D125BEC675D4`. Vertrag, Regeln,
-  Kompatibilitätsliste und Befehle stehen in `TYPED-DEFINITIONS.md` und
+  SpecialPowers and GlobalData; parser nodes stay internal to the compiler.
+- Includes are resolved exclusively through virtual runtime paths. Cycles, missing bases,
+  wrong conditions, invalid values, registry duplicates and unknown modules in strict mode
+  are errors. Overlay and Add/Remove/ReplaceModule are deterministic.
+- 12,441/12,468 typed reference uses are resolved. The 27 remaining uses
+  (25 veterancy pseudo-upgrades, `DieByFireUSA` and `Boss_VehicleSentryDrone`) are explicit,
+  not silent compatibility cases.
+- 41 later definition domains (2,801 instances) and 206 not yet implemented module types
+  (16,360 uses) are inventoried with frequency, owner kind and implementation target.
+- Two independent 112,664,082-byte snapshots were byte-identical; SHA-256 in each case
+  `14154C512DED47C4AD72B651F8FCB0BA702EACBF8678C51DDAB7D125BEC675D4`. Contract, rules,
+  compatibility list and commands are in `TYPED-DEFINITIONS.md` and
   `PHASE3-COMPATIBILITY.md`.
 
-Verifikation (28. September 2026): Build, alle acht Testprogramme, die Auditwerkzeuge und eine
-frische Vollkompilierung (identischer Snapshot-SHA-256) bestätigen die obigen Zahlen. Die
-Abnahme gilt für Struktur, Vollständigkeit und Determinismus. Fachlich flach bleiben: keine
-domänenspezifischen Definitionseigenschaften, Pflichtfelder oder Schlüsselschemata für
-Definitionen; heuristische Einheitentypisierung ohne Tickumrechnung; `Enum`/`Flags`/`Color`/
-`Vector` werden im Bestand nie erzeugt (9.150 Farben, 6.161 Koordinaten und 1.964 `KindOf`-Listen
-sind `List`); produktive `ModuleRegistry` ist leer und die Kompatibilitätsliste nicht als
-Basislinie abgesichert; Ladereihenfolge nicht gegen `GameEngine.cpp` abgeglichen; keine
-inkrementelle Kompilierung. Details in `TYPED-DEFINITIONS.md` („Bekannte Grenzen“). Der
-notwendige Teil wurde in Phase 4 als Block 0 nachgezogen (siehe unten und `TYPED-DEFINITIONS.md`), der Rest ist Vorleistung
-für Phase 5.
+Verification (28 September 2026): build, all eight test programs, the audit tools and a
+fresh full compilation (identical snapshot SHA-256) confirm the numbers above. The
+acceptance applies to structure, completeness and determinism. Shallow in subject matter remain: no
+domain-specific definition properties, mandatory fields or key schemas for
+definitions; heuristic unit typing without tick conversion; `Enum`/`Flags`/`Color`/
+`Vector` are never generated in the content (9,150 colours, 6,161 coordinates and 1,964 `KindOf` lists
+are `List`); the productive `ModuleRegistry` is empty and the compatibility list not secured as a
+baseline; load order not compared against `GameEngine.cpp`; no
+incremental compilation. Details in `TYPED-DEFINITIONS.md` ("Known limits"). The
+necessary part was made up in Phase 4 as block 0 (see below and `TYPED-DEFINITIONS.md`), the rest is advance work
+for Phase 5.
 
-## 4. Deterministischer Simulationskern
+## 4. Deterministic simulation core
 
-**Status: abgeschlossen am 28. September 2026 (einschließlich Block 0, Härtung der Phase 3).**
+**Status: completed on 28 September 2026 (including block 0, hardening of Phase 3).**
 
-**Ergebnis:** Eine headless laufende Welt besitzt festen Tick, deterministische IDs und
-Zufallszahlen, Befehlsqueue, Objektlebenszyklus und reproduzierbare Snapshots.
+**Result:** a world running headless has a fixed tick, deterministic IDs and
+random numbers, command queue, object life cycle and reproducible snapshots.
 
-Umfang:
+Scope:
 
-- `CnCNew.Simulation` ohne Abhängigkeit auf Stride, DirectX oder UI anlegen;
-- Zeit, RNG-Streams, Entity-IDs, Update-Reihenfolge und numerische Regeln fest definieren;
-- Objekt-, Modul-, Behavior-, Event-, Timer- und Command-Lebenszyklen implementieren;
-- Inputbefehle von Präsentation und Echtzeit entkoppeln;
-- Snapshot-, Hash- und Replay-Harness für deterministische Regressionen schaffen.
+- create `CnCNew.Simulation` without dependency on Stride, DirectX or UI;
+- firmly define time, RNG streams, entity IDs, update order and numeric rules;
+- implement object, module, behavior, event, timer and command life cycles;
+- decouple input commands from presentation and real time;
+- create a snapshot, hash and replay harness for deterministic regressions.
 
-Abgeschlossen, wenn identische Definitionen, Karte, Seed und Befehlsfolge über lange Läufe
-bitidentische Zustands-Hashes liefern und Speichervalidierung sowie Headless-Stresstest bestehen.
+Completed when identical definitions, map, seed and command sequence deliver
+bit-identical state hashes over long runs and memory validation as well as headless stress test pass.
 
-Abnahme Block 0 (Härtung der Phase 3):
+Acceptance block 0 (hardening of Phase 3):
 
-- Retail-Ladeplan der Original-Engine (Reihenfolge, Ausschluss von Debug-/Werkzeug-/Fremdsprachdateien); `IniTool load-order-report`
-  weist 478 mehrfach definierte Namen mit Gewinnern aus; 18 Gewinner änderten sich (16 `MappedImage`, 2 Kartenoverlays), bei
-  keinem hängt die Ordnung von einer nicht belegten Annahme ab.
-- `DefaultThingTemplate`-Vererbung, `Add/Remove/ReplaceModule`, `ObjectReskin` und nicht geschlossene `AddModule`-Blöcke wie im
-  Original; wiederholbare Schlüssel behalten Vielfachheit (Tabelle mit Parserquelle).
-- Object-Köpfe und Modulfelder streng typisiert (96 Schlüssel, 43 davon bewusst `Opaque` und gezählt); Farben, Vektoren, Enums und
-  Flags über Namenstabellen aus der Referenz; kein Token fällt auf `Text` zurück.
-- Modulkatalog mit 205 Typen ohne Factories (die frühere Zahl 206 enthielt ein Phantommodul); Bindungstabelle in der Simulation,
-  beim Start gegen die Deskriptoren geprüft; `StrictUnknownModules` besteht auf dem Bestand; `compat-check` besteht gegen die
-  eingecheckte Basislinie (344 Einträge); neuer Referenzhash `131ED730F2AD4DB85D6F50CE91A7059358CA32D6728F8EB6E91E6CF8775E58A4`
-  (zwei Läufe byteidentisch, Erklärung der Abweichung in `TYPED-DEFINITIONS.md`).
+- Retail load plan of the original engine (order, exclusion of debug/tool/foreign-language files); `IniTool load-order-report`
+  shows 478 multiply defined names with winners; 18 winners changed (16 `MappedImage`, 2 map overlays), for
+  none does the order depend on an unverified assumption.
+- `DefaultThingTemplate` inheritance, `Add/Remove/ReplaceModule`, `ObjectReskin` and unclosed `AddModule` blocks as in the
+  original; repeatable keys keep multiplicity (table with parser source).
+- Object headers and module fields strictly typed (96 keys, 43 of them deliberately `Opaque` and counted); colours, vectors, enums and
+  flags through name tables from the reference; no token falls back to `Text`.
+- Module catalogue with 205 types without factories (the earlier number 206 contained a phantom module); binding table in the simulation,
+  checked against the descriptors at start; `StrictUnknownModules` passes on the content; `compat-check` passes against the
+  checked-in baseline (344 entries); new reference hash `131ED730F2AD4DB85D6F50CE91A7059358CA32D6728F8EB6E91E6CF8775E58A4`
+  (two runs byte-identical, explanation of the deviation in `TYPED-DEFINITIONS.md`).
 
-Abnahme Phase 4:
+Acceptance Phase 4:
 
-- Solution-Build und alle neun Testprogramme sind grün (Warnungen: nur die zehn bekannten NU1901/NU1903); die Simulationstests
-  laufen zusätzlich mit `--content-dir` und `--long`.
-- 30-Hz-Tick, exakte Zeitumrechnung, Q47.16-Festkomma mit dokumentierter Rundung und Grenzwerten; die binary32-Abweichung des
-  Originals ist gemessen (6.310 von 5.000.001 Dauern, frühestens ab 66 Minuten) und dokumentiert.
-- Original-RNG mit `logic`/`cosmetic`/`audio`-Streams, Golden-Sequenzen aus einer unabhängigen Transkription (kein Compiler
-  verfügbar), Zustand nach einer Million Züge, Übertragsketten.
-- Monotone IDs (0 ungültig), kanonische Reihenfolgen, Sleepy-Update-Modell mit dokumentierten Abweichungen, acht Tickphasen,
-  Mutationsqueues, definierte Eventzustellung vor der Entfernung.
-- Zwölf Lebenszyklusmodule mit strengen Schemata; Auswahl mit Zahlen belegt (28,1 % der 19.529 Modulverwendungen der
-  Basisobjekte); Modulabdeckungsaudit: 26 von 2.113 Objekten vollständig instanziierbar, Blockerliste je Modul.
-- Versionierte Befehlstypen, Ablehnungsgründe (`Late`, `Duplicate`, `OutOfOrder`, `UnknownPlayer`, `NotPermitted`,
-  `InvalidArguments`, `UnknownTemplate`, `UnknownEntity`, `UnknownTimer`) gezählt und als Events protokolliert.
-- Kanonische Snapshots (SHA-256), inkrementeller 64-Bit-Zustands-Hash (Prüfung gegen die volle Neuberechnung), Replay-Format mit
-  Fingerabdruck, Checkpoints und Integritätshash; beschädigte, abgeschnittene, versions- und definitionsfremde Dateien werden
-  abgewiesen.
-- Stresstest über 216.000 Ticks: bis zu 15.774 gleichzeitige Entities, 401.229 Spawn-/Destroy-Vorgänge, 914.771 Befehle,
-  7.099 Timer; drei frische Läufe und die Snapshot-Fortsetzung sind über alle Ticks identisch; alle Tabellen kehren auf null zurück;
-  22 s je Lauf, 532 MiB Peak; Budgets und Hardware in `SIMULATION-CORE.md`.
+- Solution build and all nine test programs are green (warnings: only the ten known NU1901/NU1903); the simulation tests
+  additionally run with `--content-dir` and `--long`.
+- 30 Hz tick, exact time conversion, Q47.16 fixed point with documented rounding and limit values; the binary32 deviation of the
+  original is measured (6,310 of 5,000,001 durations, at the earliest from 66 minutes on) and documented.
+- Original RNG with `logic`/`cosmetic`/`audio` streams, golden sequences from an independent transcription (no compiler
+  available), state after one million draws, carry chains.
+- Monotonic IDs (0 invalid), canonical orders, sleepy-update model with documented deviations, eight tick phases,
+  mutation queues, defined event delivery before the removal.
+- Twelve life-cycle modules with strict schemas; selection supported by numbers (28.1 % of the 19,529 module uses of the
+  base objects); module coverage audit: 26 of 2,113 objects fully instantiable, blocker list per module.
+- Versioned command types, rejection reasons (`Late`, `Duplicate`, `OutOfOrder`, `UnknownPlayer`, `NotPermitted`,
+  `InvalidArguments`, `UnknownTemplate`, `UnknownEntity`, `UnknownTimer`) counted and logged as events.
+- Canonical snapshots (SHA-256), incremental 64-bit state hash (check against the full recomputation), replay format with
+  fingerprint, checkpoints and integrity hash; damaged, truncated files and files of a foreign version or foreign definitions are
+  rejected.
+- Stress test over 216,000 ticks: up to 15,774 simultaneous entities, 401,229 spawn/destroy operations, 914,771 commands,
+  7,099 timers; three fresh runs and the snapshot continuation are identical over all ticks; all tables return to zero;
+  22 s per run, 532 MiB peak; budgets and hardware in `SIMULATION-CORE.md`.
 
-Bekannte Grenzen der Phase: kein Bewegungs-/Waffen-/Rüstungs-/Produktionsregelwerk (Phase 5/6); Update-Phasen des Originals nicht
-modelliert; Zufallsverbräuche des Originals außerhalb der Lebensdauermodule fehlen; RNG-Abgleich mit kompiliertem Original steht
-aus; `Restore` ist intern; Definitionsdomänen außer Object bleiben flach typisiert (Zahlen in `TYPED-DEFINITIONS.md`); 26 von 2.113
-Objekten sind instanziierbar, weil vom Default geerbte Module (`StealthUpdate`, `AutoHealBehavior`) noch fehlen.
+Known limits of the phase: no movement/weapon/armour/production rule set (Phase 5/6); update phases of the original not
+modelled; random consumptions of the original outside the lifetime modules are missing; RNG comparison with the compiled original is
+outstanding; `Restore` is internal; definition domains other than Object stay shallowly typed (numbers in `TYPED-DEFINITIONS.md`); 26 of 2,113
+objects are instantiable because modules inherited from the default (`StealthUpdate`, `AutoHealBehavior`) are still missing.
 
-## 5. Spielregeln, Kampf, Wirtschaft und Produktion
+## 5. Game rules, combat, economy and production
 
-**Status: abgeschlossen (Stand 29. September 2026) mit dokumentierten Grenzen (siehe „Bekannte Grenzen“); Folgeauftrag in `docs/handoffs/HANDOFF-PHASE7.md`.**
+**Status: completed (as of 29 September 2026) with documented limits (see "Known limits"); follow-up brief in `docs/handoffs/HANDOFF-PHASE7.md`.**
 
-**Ergebnis (Ziel):** Die vollständige Kernschleife eines RTS-Matches funktioniert headless:
-Ressourcen sammeln, bauen, produzieren, bewegen, angreifen, Schaden anwenden und gewinnen.
+**Result (goal):** the complete core loop of an RTS match works headless:
+collecting resources, building, producing, moving, attacking, applying damage and winning.
 
-Umfang:
+Scope:
 
-- Spieler, Teams, Diplomatie, Fraktionen, Command Sets und Tech-Voraussetzungen;
-- Ressourcen, Supply, Bauplätze, Konstruktion, Produktion, Reparatur und Verkauf;
-- Waffen, Projektile, Zielwahl, Armor, Damage, Status, Erfahrung, Upgrades und Sciences;
-- Energie, Spezialfähigkeiten, Transport, Garrison, Stealth und relevante Modulinteraktionen;
-- Sieg-/Niederlagebedingungen und Regelereignisse.
+- players, teams, diplomacy, factions, command sets and tech prerequisites;
+- resources, supply, building sites, construction, production, repair and selling;
+- weapons, projectiles, target selection, armor, damage, status, experience, upgrades and sciences;
+- energy, special abilities, transport, garrison, stealth and relevant module interactions;
+- victory/defeat conditions and rule events.
 
-Abgeschlossen, wenn ein headless Referenzmatch aller Fraktionen vom Start bis zum Sieg ohne
-Sonderpfade durchläuft und zentrale Kampf- und Wirtschaftsabläufe durch Golden-Master-Szenarien
-gegen bekannte Originalwerte abgesichert sind.
+Completed when a headless reference match of all factions runs from start to victory without
+special paths and central combat and economy processes are secured by golden-master scenarios
+against known original values.
 
-**Umgesetzt** (Details, Numerik und bewusste Vereinfachungen in `docs/GAME-RULES.md`; Zahlen frisch gemessen am 29. September 2026):
+**Implemented** (details, numerics and deliberate simplifications in `docs/GAME-RULES.md`; numbers freshly measured on 29 September 2026):
 
-- Block 0.1: Domänenschemata für Weapon, Armor, Upgrade, Science, Locomotor und Faction (`docs/TYPED-DEFINITIONS.md`); als Nebenfund ein
-  INI-Parser-Fehler behoben (`End`-Erkennung nur erstes Token, wie das Original).
-- Block 0.2: `StealthUpdate` und `AutoHealBehavior` mit echten Feldern und Upgrade-Aktivierung. Block 0.3 (Furchtsignal-`GameLogicRandomValue`)
-  abgeschlossen; **0.4 (RNG-Abgleich mit kompiliertem Original) bleibt offen** (kein Compiler verfügbar, der Wert wird nicht geraten).
-- Wirtschaft (Guthaben, Energiebilanz) und **Versorgungswirtschaft** (`DockMachine`, `DockCommand`, Lager, Zentren, Nachschubträger, Arbeiter,
-  `SpawnBehavior`, `GAME-RULES.md` §6e), Upgrade-System (128-Bit-Maske, `UpgradeMux`, `*Upgrade`-Module), Sciences (`ScienceCatalog`,
-  `PurchaseScienceCommand`), direkter Kampf mit **Flächenschaden** (Waffen, Rüstungskoeffizienten, Magazin/Nachladen, §6g), **Erfahrung und
-  Veteranenstufen** mit Gesundheits- und Waffenboni (`WeaponBonusTable`, §6h), **Teams und Diplomatie** (gerichtete Beziehungen,
-  `SetRelationshipCommand`, Kopfgeld und Siegregel auf Teams, §7), **Reparaturdock und `AutoFindHealingUpdate`** (§6f), einfache geradlinige
-  Bewegung (kein Terrain, keine Pfadsuche), eine Produktionswarteschlange, „letzter Überlebender“ als Sieg, Garnison/Transport-Containment,
-  Erzeugungslisten, Kisten und das Spezialkraft-Subsystem (§6d).
-- Befehlstabelle mit 19 Typen (`CommandTypes.Version = 7`), Snapshot Version 3, Replay-Format v4.
-- Referenzmatch (`ReferenceMatchScenario`, `SimTool reference-match`) auf synthetischen **und** Retail-Daten deterministisch nachgewiesen (Sieger,
-  Replay-Runde, Snapshot-Fortsetzung): 13 Fraktionen mit echten Kommandozentralen, **0 übersprungene Startobjekte**, 707 Lieferungen mit 93.075
-  ausgezahltem Guthaben, Sieger Spieler 12 bei Tick 26.880, Endhash `B6E0CDECA3168EFC` (`GAME-RULES.md` §7a). Golden Masters mit unabhängigem
-  Modell im Test decken Schadenskette, Produktionsuhr, Supply und Erfahrung (aus dem Quelltext abgeleitet, nicht gegen Originalläufe gemessen).
-- 74 von 205 Modultypen implementiert (12 aus Phase 4, 62 aus Phase 5); **1.384 von 2.115 Retail-Objekten vollständig instanziierbar (65,4 %,
-  vorher 26 von 2.113), 15.364 von 19.553 Modulverwendungen abgedeckt (78,6 %)**; der 216.000-Tick-Stresstest läuft mit allen Modulen deterministisch
-  (Endhash `D80B367CEEF6D72D`), ohne Leck.
+- Block 0.1: domain schemas for Weapon, Armor, Upgrade, Science, Locomotor and Faction (`docs/TYPED-DEFINITIONS.md`); as a side finding an
+  INI parser defect fixed (`End` detection only on the first token, like the original).
+- Block 0.2: `StealthUpdate` and `AutoHealBehavior` with real fields and upgrade activation. Block 0.3 (fear signal `GameLogicRandomValue`)
+  completed; **0.4 (RNG comparison with the compiled original) stays open** (no compiler available, the value is not guessed).
+- Economy (credits, energy balance) and **supply economy** (`DockMachine`, `DockCommand`, depots, centres, supply carriers, workers,
+  `SpawnBehavior`, `GAME-RULES.md` §6e), upgrade system (128-bit mask, `UpgradeMux`, `*Upgrade` modules), sciences (`ScienceCatalog`,
+  `PurchaseScienceCommand`), direct combat with **area damage** (weapons, armour coefficients, magazine/reloading, §6g), **experience and
+  veterancy levels** with health and weapon bonuses (`WeaponBonusTable`, §6h), **teams and diplomacy** (directed relationships,
+  `SetRelationshipCommand`, bounty and victory rule on teams, §7), **repair dock and `AutoFindHealingUpdate`** (§6f), simple straight-line
+  movement (no terrain, no pathfinding), a production queue, "last survivor" as victory, garrison/transport containment,
+  creation lists, crates and the special-power subsystem (§6d).
+- Command table with 19 types (`CommandTypes.Version = 7`), snapshot version 3, replay format v4.
+- Reference match (`ReferenceMatchScenario`, `SimTool reference-match`) demonstrated deterministically on synthetic **and** retail data (winner,
+  replay round, snapshot continuation): 13 factions with real command centres, **0 skipped start objects**, 707 deliveries with 93,075
+  credits paid out, winner player 12 at tick 26,880, end hash `B6E0CDECA3168EFC` (`GAME-RULES.md` §7a). Golden masters with an independent
+  model in the test cover damage chain, production clock, supply and experience (derived from the source code, not measured against original runs).
+- 74 of 205 module types implemented (12 from Phase 4, 62 from Phase 5); **1,384 of 2,115 retail objects fully instantiable (65.4 %,
+  before 26 of 2,113), 15,364 of 19,553 module uses covered (78.6 %)**; the 216,000-tick stress test runs deterministically with all modules
+  (end hash `D80B367CEEF6D72D`), without a leak.
 
-**Abnahme:** Das Abnahmekriterium „headless Referenzmatch aller Fraktionen vom Start bis zum Sieg“ ist erfüllt; „ohne Sonderpfade“ und „gegen
-bekannte Originalwerte“ nur mit den folgenden Einschränkungen.
+**Acceptance:** the acceptance criterion "headless reference match of all factions from start to victory" is fulfilled; "without special paths" and "against
+known original values" only with the following restrictions.
 
-**Bekannte Grenzen** (Stand am Ende von Phase 5; Bauvorgang, Verkauf, Bauplatzprüfung, Rallypunkt, Terrain und Pfadsuche hat Phase 6 nachgeholt, siehe §6; vollständige Liste: `docs/GAME-RULES.md` §10):
+**Known limits** (state at the end of Phase 5; construction process, selling, building-site check, rally point, terrain and pathfinding were made up for by Phase 6, see §6; complete list: `docs/GAME-RULES.md` §10):
 
-- Block 0.4 offen; Golden Masters sind keine Originalmessungen, Festkomma statt `Real` ist eine dokumentierte Abweichung.
-- Kein Bauvorgang: Dozer und Arbeiter bewegen und liefern, bauen aber nicht; Basen im Referenzmatch sind Startobjekte plus protokollierte
-  Ersatzinfrastruktur (`SpawnSupplyInfrastructure`). Kein Verkauf, keine Bauplatzprüfung, kein Rallypunkt.
-- Kein Terrain, keine Kollision, keine Pfadsuche, keine Projektil-Flugzeit; `ToppleUpdate`, echte `PhysicsBehavior`-Kräfte und `CrushDie` (nur inert) folgen
-  mit Phase 6.
-- Wirkung von `CommandSet`/`CommandButton` und Radar nicht implementiert; `ChinookAIUpdate` fehlt, deshalb hat Amerika im Referenzmatch keine
-  Versorgungswirtschaft; kein `UseSpecialPowerCommand`-Generator.
-- Veteranenbasierte `ArmorSet`/`WeaponSet`-Auswahl und Science Purchase Points aus Erfahrung sind nicht modelliert; `FireWeaponWhenDeadBehavior` ohne
-  Flächenschaden.
-- 731 von 2.115 Objekten sind weiter nicht instanziierbar; 80 Module der Katalogkategorie „Phase 5“ sind ohne Terrain/Kollision/KI nicht sinnvoll umsetzbar
-  (Blockerliste in `docs/SIMULATION-CORE.md` §11).
+- Block 0.4 open; golden masters are not original measurements, fixed point instead of `Real` is a documented deviation.
+- No construction process: dozers and workers move and deliver, but do not build; bases in the reference match are start objects plus logged
+  substitute infrastructure (`SpawnSupplyInfrastructure`). No selling, no building-site check, no rally point.
+- No terrain, no collision, no pathfinding, no projectile flight time; `ToppleUpdate`, real `PhysicsBehavior` forces and `CrushDie` (only inert) follow
+  with Phase 6.
+- Effect of `CommandSet`/`CommandButton` and radar not implemented; `ChinookAIUpdate` is missing, which is why America has no
+  supply economy in the reference match; no `UseSpecialPowerCommand` generator.
+- Veteran-based `ArmorSet`/`WeaponSet` selection and science purchase points from experience are not modelled; `FireWeaponWhenDeadBehavior` without
+  area damage.
+- 731 of 2,115 objects are still not instantiable; 80 modules of the catalogue category "Phase 5" cannot sensibly be implemented without terrain/collision/AI
+  (blocker list in `docs/SIMULATION-CORE.md` §11).
 
 
-## 6. Welt, Terrain, Bewegung, Sicht und Skirmish-KI
+## 6. World, terrain, movement, vision and skirmish AI
 
-**Ergebnis:** MAP-Daten werden zu einer spielbaren Welt mit Terrain, Hindernissen, Navigation,
-Fog/Shroud und konkurrenzfähiger Skirmish-KI.
+**Result:** MAP data become a playable world with terrain, obstacles, navigation,
+fog/shroud and a competitive skirmish AI.
 
-Umfang:
+Scope:
 
-- Heightfield, Texturlayer, Wasser, Bridges, Waypoints, Triggerbereiche und Props laden;
-- Footprints, Kollision, Bodentypen, Formationen und getrennte Bewegungsarten abbilden;
-- deterministische Pfadsuche, lokale Vermeidung und Neuberechnung implementieren;
-- Sichtweite, Shroud, Fog, Tarnung und Aufdeckung simulieren;
-- Build-Pläne, Wirtschaft, Angriff, Verteidigung und Fähigkeitsnutzung der Skirmish-KI portieren.
+- load heightfield, texture layers, water, bridges, waypoints, trigger areas and props;
+- model footprints, collision, ground types, formations and separate movement kinds;
+- implement deterministic pathfinding, local avoidance and recomputation;
+- simulate sight range, shroud, fog, stealth and reveal;
+- port build plans, economy, attack, defence and ability use of the skirmish AI.
 
-Abgeschlossen, wenn die ausgewählte Vertical-Slice-Karte sowie ein repräsentativer Kartensatz
-vollständig geladen werden, Einheiten zuverlässig navigieren und mehrere lange KI-gegen-KI-Läufe
-deterministisch ohne Deadlock oder unerlaubte Information enden.
+Completed when the selected vertical-slice map as well as a representative set of maps
+are loaded completely, units navigate reliably and several long AI-versus-AI runs
+end deterministically without deadlock or unauthorised information.
 
-**Status: abgeschlossen am 30. September 2026, mit den unten benannten Einschränkungen.** Alle Zahlen frisch gemessen; Details, Numerik und Grenzen in `docs/SIMULATION-CORE.md` §13–§20.
+**Status: completed on 30 September 2026, with the restrictions named below.** All numbers freshly measured; details, numerics and limits in `docs/SIMULATION-CORE.md` §13–§20.
 
-**Umgesetzt:**
+**Implemented:**
 
-- **Karten:** `SageMapDecoder` (`CnCNew.Formats`, Containerformate CkMp/EAR/ZL5, Blend-Tile-Versionen 6–8) und das Vertragsmodell `MapData` (`CnCNew.Data.World`); `MapTool audit` dekodiert **150 von 150** Retail-Karten
-  ohne Fehler (30.391.581 Höhenpunkte, 281.480 Objekte, 25.463 Wegpunkte, 2.488 Polygontrigger), baut für alle das Gelände (16.475.736 Pfadzellen, 258 Startpositionen, größte Ausdehnung 589 Zellen).
-- **Gelände und Navigation:** `TerrainMap` (Zellklassen Kliff/Wasser, Höhe, Startpositionen, Fingerabdruck in Snapshot v4 und Replay v5), `NavigationGrid` (deterministischer A*, Fußabdruckprüfung,
-  Fluchtzellen, `ObstacleSum` zur Neuplanung), drehratenbegrenzte Bewegung mit Geländehöhe in `AIUpdateInterface`. Bodenpfade zwischen Startpositionen: 462 Paare, 456 vollständig, 6 teilweise, 0 blockiert.
-- **Sicht:** `VisionMap` (sichtbar/erkundet je Spieler, Sicht-Hash in Snapshot v5), Verbündetenteilung, `REVEAL_TO_ALL`, Baustellen, Tarnung; `FireWeaponCommand` verlangt Sicht (`TargetNotVisible`). Nebenfund: Stealth-Fehler
-  behoben (`STEALTHED` nur mit `CAN_STEALTH`).
-- **Bau:** Baustellen als Entities, sechs neue Befehle (Codes 20–25, `CommandTypes.Version = 8`, Replay v6, Snapshot v6), Bauplatzprüfung, Verkauf (179 Ticks, `SellPercentage`), kostenlose Reparatur, Sammelpunkte;
+- **Maps:** `SageMapDecoder` (`CnCNew.Formats`, container formats CkMp/EAR/ZL5, blend-tile versions 6–8) and the contract model `MapData` (`CnCNew.Data.World`); `MapTool audit` decodes **150 of 150** retail maps
+  without error (30,391,581 height points, 281,480 objects, 25,463 waypoints, 2,488 polygon triggers), builds the terrain for all of them (16,475,736 path cells, 258 start positions, largest extent 589 cells).
+- **Terrain and navigation:** `TerrainMap` (cell classes cliff/water, height, start positions, fingerprint in snapshot v4 and replay v5), `NavigationGrid` (deterministic A*, footprint check,
+  escape cells, `ObstacleSum` for replanning), turn-rate-limited movement with terrain height in `AIUpdateInterface`. Ground paths between start positions: 462 pairs, 456 complete, 6 partial, 0 blocked.
+- **Vision:** `VisionMap` (visible/explored per player, vision hash in snapshot v5), sharing with allies, `REVEAL_TO_ALL`, construction sites, stealth; `FireWeaponCommand` requires vision (`TargetNotVisible`). Side finding: stealth defect
+  fixed (`STEALTHED` only with `CAN_STEALTH`).
+- **Construction:** construction sites as entities, six new commands (codes 20–25, `CommandTypes.Version = 8`, replay v6, snapshot v6), building-site check, selling (179 ticks, `SellPercentage`), free repair, rally points;
   `PowerPlantUpdate`/`PowerPlantUpgrade`/`OverchargeBehavior`; `CommandCatalog` (`CommandSet` → `CommandButton`).
-- **Skirmish-KI:** `SkirmishAi` (Rollen aus Modulen, Bauplanung, Produktion, Angriff/Verteidigung, Versorger, Reparatur, Science), arbeitet nur mit sichtbaren Informationen, Gedächtnis und öffentlichen Startpositionen;
+- **Skirmish AI:** `SkirmishAi` (roles from modules, build planning, production, attack/defence, suppliers, repair, science), works only with visible information, memory and public start positions;
   `SkirmishMatchScenario`/`SimTool ai-match`.
-- **Zahlen:** 77 von 205 Modultypen implementiert (3 neue), **1.393 von 2.115 Retail-Objekten instanziierbar (65,9 %)**, 15.382 von 19.553 Modulverwendungen abgedeckt (78,7 %); Kompatibilitätsbasislinie 741 Einträge;
-  Definitionssnapshot 144.832.736 Byte (`AEB5108D…D2ADB7`); Stresstest 216.000 Ticks in 13,0 s, Endhash `D1521974C861A4B9`; Retail-Referenzmatch Sieger bei Tick 26.880, Endhash `5C370ED383EC9F6B`.
+- **Numbers:** 77 of 205 module types implemented (3 new), **1,393 of 2,115 retail objects instantiable (65.9 %)**, 15,382 of 19,553 module uses covered (78.7 %); compatibility baseline 741 entries;
+  definition snapshot 144,832,736 bytes (`AEB5108D…D2ADB7`); stress test 216,000 ticks in 13.0 s, end hash `D1521974C861A4B9`; retail reference match winner at tick 26,880, end hash `5C370ED383EC9F6B`.
 
-**Abnahme:**
+**Acceptance:**
 
-- *Karten laden:* erfüllt für alle 150 Karten (Dekodierung und Geländeaufbau). Eine einzelne, ausgezeichnete Vertical-Slice-Karte gibt es erst mit der Präsentation (Schritt 7); die KI-Läufe nutzen vier Karten
+- *Loading maps:* fulfilled for all 150 maps (decoding and terrain build). A single, designated vertical-slice map exists only with the presentation (step 7); the AI runs use four maps
   (Alpine Assault, Armored Fury, Bitter Winter, Death Valley).
-- *Einheiten navigieren zuverlässig:* erfüllt mit Einschränkung – Navigation ist deterministisch und ohne Blockade auf den geprüften Startpaaren, aber vereinfacht (punktförmig, keine Kollision, 6 von 462 Startpaaren nur teilweise begehbar).
-- *KI gegen KI, deterministisch, ohne Deadlock, ohne unerlaubte Information:* erfüllt. 16 Läufe (4 Karten × 4 Paarungen, höchstens 45.000 Ticks): **15 enden mit einem Sieger, 1 im Patt** (Alpine Assault, America gegen China);
-  alle 16 sind mit Zweitlauf und Snapshotfortsetzung identisch. Der Test `SkirmishAiOnlyUsesWhatItSees` sichert die Informationsregel; ein Patt ist kein Deadlock (die Simulation läuft weiter), aber ein benanntes Ergebnis.
-  America gewinnt nie, weil ohne `ChinookAIUpdate` keine Versorgungswirtschaft entsteht.
+- *Units navigate reliably:* fulfilled with a restriction – navigation is deterministic and without blockage on the checked start pairs, but simplified (point-shaped, no collision, 6 of 462 start pairs only partly walkable).
+- *AI against AI, deterministic, without deadlock, without unauthorised information:* fulfilled. 16 runs (4 maps × 4 pairings, at most 45,000 ticks): **15 end with a winner, 1 in a stalemate** (Alpine Assault, America against China);
+  all 16 are identical with second run and snapshot continuation. The test `SkirmishAiOnlyUsesWhatItSees` secures the information rule; a stalemate is not a deadlock (the simulation continues to run), but a named result.
+  America never wins, because without `ChinookAIUpdate` no supply economy arises.
 
-**Bekannte Grenzen:**
+**Known limits:**
 
-- *Nicht umgesetzt aus dem Umfang:* Brücken, Formationen, lokale Vermeidung und Kollision, Texturlayer (rein Präsentation), Skripte der Karte (`SidesList`/`PlayerScriptsList` bleiben ungelesen), Triggerbereiche nur als Wasserflächen.
-  Die Skirmish-KI ist eine eigene Neuentwicklung, kein Port der Originalskripte.
-- *Navigation:* flacher A* mit Budget von 200.000 Erweiterungen, genäherter Fußabdruck, Fluchtzellen mit Zuschlag statt echter Layer; Teil- oder Fehlpfad beendet den Befehl.
-- *Sicht:* kreisförmig, ohne Höhen-Sichtlinie, alle 3 Ticks, keine Detektoren (getarnte Überlebende können ein Match verlängern).
-- *Bau:* `QueueProduction` prüft keine Voraussetzung und keine Gebäudefähigkeit, `MaxSimultaneousOfType` ungeprüft, Reparatur kostenlos; keine Eroberung von Kraftwerken, kein Umschaltbefehl für `Overcharge`.
-- *KI:* Spezialkräfte unklassifiziert, Gegnerstartpositionen öffentlich bekannt, von der Karte nur Lagerhäuser gesetzt, Startgeld (10.000) und Science-Punkte vom System, keine Flugzeuge und Flugplätze, Armee durch
-  Instanziierbarkeit begrenzt, gleichstarke Paarungen können ein Patt erreichen.
-- *Weiterhin offen:* Block 0.4 (RNG-Abgleich, nicht geraten), Projektil-Flugzeit, `ToppleUpdate`/`CrushDie` mit echter Kollision, `ChinookAIUpdate`/`TransportAIUpdate`, Wirkung von `CommandSet`/Radar,
-  Veteranen-`ArmorSet`/`WeaponSet`, `CommandButtonHuntUpdate`, `SpecialAbilityUpdate`; 722 Objekte bleiben nicht instanziierbar (Blocker in `docs/SIMULATION-CORE.md` §11).
+- *Not implemented from the scope:* bridges, formations, local avoidance and collision, texture layers (purely presentation), scripts of the map (`SidesList`/`PlayerScriptsList` stay unread), trigger areas only as water surfaces.
+  The skirmish AI is a new development of its own, not a port of the original scripts.
+- *Navigation:* flat A* with a budget of 200,000 expansions, approximated footprint, escape cells with a surcharge instead of real layers; a partial or failed path ends the command.
+- *Vision:* circular, without height line of sight, every 3 ticks, no detectors (stealthed survivors can prolong a match).
+- *Construction:* `QueueProduction` checks no prerequisite and no building capability, `MaxSimultaneousOfType` unchecked, repair free; no capture of power plants, no toggle command for `Overcharge`.
+- *AI:* special powers unclassified, enemy start positions publicly known, only warehouses placed by the map, starting money (10,000) and science points from the system, no aircraft and airfields, army limited by
+  instantiability, equally strong pairings can reach a stalemate.
+- *Still open:* block 0.4 (RNG comparison, not guessed), projectile flight time, `ToppleUpdate`/`CrushDie` with real collision, `ChinookAIUpdate`/`TransportAIUpdate`, effect of `CommandSet`/radar,
+  veteran `ArmorSet`/`WeaponSet`, `CommandButtonHuntUpdate`, `SpecialAbilityUpdate`; 722 objects stay non-instantiable (blockers in `docs/SIMULATION-CORE.md` §11).
 
-## 7. Vollständige audiovisuelle Weltpräsentation
+## 7. Complete audiovisual world presentation
 
-**Ergebnis:** Der Windows-Client projiziert Simulations-Snapshots zu einer lesbaren und dem
-Original funktional entsprechenden 3D-Schlachtfeldansicht.
+**Result:** the Windows client projects simulation snapshots into a readable 3D battlefield view
+that functionally corresponds to the original.
 
-Umfang:
+Scope:
 
-- W3D-Hierarchien, Skelette, Animationen, Condition States und Turrets darstellen;
-- Terrain, Wasser, Props, Decals, Partikel, Tracer, Projektile und FX rendern;
-- Kamera, Auswahl, Kommandofeedback, Sicht/Fog, Beleuchtung und Schatten integrieren;
-- Audioereignisse, Musik und Sprachwiedergabe über einen freien Runtimepfad ausgeben;
-- Videos ohne proprietäre Miles-/Bink-SDK-Abhängigkeit wiedergeben;
-- Rendering, Streaming und Ressourcenlebensdauer profilieren und stabilisieren.
+- display W3D hierarchies, skeletons, animations, condition states and turrets;
+- render terrain, water, props, decals, particles, tracers, projectiles and FX;
+- integrate camera, selection, command feedback, vision/fog, lighting and shadows;
+- output audio events, music and speech playback through a free runtime path;
+- play videos without a proprietary Miles/Bink SDK dependency;
+- profile and stabilise rendering, streaming and resource lifetime.
 
-Abgeschlossen, wenn ein komplettes headless Match live visualisiert und gesteuert werden kann,
-alle sichtbaren Objektzustände korrekt wechseln und definierte Performance-, Speicher- und
-Golden-Image-Budgets auf Zielhardware eingehalten werden.
+Completed when a complete headless match can be visualised and controlled live,
+all visible object states change correctly and defined performance, memory and
+golden-image budgets are kept on target hardware.
 
-**Status: abgeschlossen am 30. September 2026, mit den unten benannten Einschränkungen.** Alle Zahlen aus den
-Fachdokumenten der Pakete übernommen; Details in `docs/CLIENT-TERRAIN.md`, `docs/CLIENT-OBJECTS.md`,
+**Status: completed on 30 September 2026, with the restrictions named below.** All numbers taken over from the
+subject documents of the packages; details in `docs/CLIENT-TERRAIN.md`, `docs/CLIENT-OBJECTS.md`,
 `docs/CLIENT-FX.md`, `docs/GAME-AUDIO.md`.
 
-**Einschränkung (nachträglich, 4. Oktober 2026):** „abgeschlossen“ gilt für die Bibliotheken und Rauchtests. Die erste Sichtprüfung durch einen Menschen fand grobe Darstellungsfehler (fehlende Wände, schwarze Flächen, Gebäude im Nebel ohne Gelände), und `AudioDirector`/`AudioOutput` werden im Client nie erzeugt – die Demos sind stumm. Korrekturen der Welt: Phase 15 (`docs/DEMO-FINDINGS.md`, `docs/CLIENT-OBJECTS.md`); Ton, Cursor, Wegpunkte, Text: Phase 16.
+**Restriction (subsequently, 4 October 2026):** "completed" applies to the libraries and smoke tests. The first visual check by a human found gross rendering defects (missing walls, black surfaces, buildings in the fog without terrain), and `AudioDirector`/`AudioOutput` are never created in the client – the demos are silent. Corrections of the world: Phase 15 (`docs/DEMO-FINDINGS.md`, `docs/CLIENT-OBJECTS.md`); sound, cursor, waypoints, text: Phase 16.
 
-**Umgesetzt:**
+**Implemented:**
 
-- **Welt-Layer-Nahtstelle:** `RenderServices`/`IWorldLayer`/`LiveMatchHost`/`StrideConvert` trennen die Stride-Szene in
-  unabhängige Layer, die ausschließlich Simulationssnapshots lesen; `--match <Karte>` startet ein steuerbares
-  Live-Skirmish, `--smoke-test --capture` erzeugt headless ein PNG.
-- **Terrain:** `Layers/Terrain` rendert Heightfield, Blend-/3-Wege-Texturen, Wasser und Kriegsnebel (Fog-Textur
-  0/127/255) sowie die Minimap (`MinimapImage.Compose`) direkt aus `TerrainRenderModel`/`FogOfWarGrid`; 11 von 150
-  Karten stichprobenhaft geprüft, 6 davon mit Screenshot verifiziert (z. B. Alpine Assault: 239×259 Zellen,
-  156 Chunks, 26.630 Blend-Zellen, 370 Diagonalabweichungen(4)); 0,266 ms/Frame CPU-Mittel (Fortress Avalanche,
-  900 Frames); Screenshot-SHA-256 zweier unabhängiger Läufe identisch (`CFF6C66C4708683A…`).
-- **Objekte:** `Layers/Objects` teilt sich ein Stride-Model+Skelett je Rigid-Part-Modell und baut skinned Teile
-  (169 im Vollbestand) pro Instanz; Teamfarbe über ZHC-Hue-Shift-Texturen und HOUSECOLOR-Vertexfärbung. Beispiel
-  Alpine Assault (America gegen China): 590 Drawables, 10 im Sichtkegel gezeichnet, 78 geladene Modelle,
-  2.080 Dreiecke, 0,19–0,27 ms/Frame, 0 zusätzliche Allokationen, SHA-256 über 300 und 1.500 Frames identisch.
-  Beispiel GLA gegen America (6.000 Frames): 612 Drawables, 16 gezeichnet, 9 skinned Infanteristen, 124 Modelle,
-  6.133 Dreiecke, 0,38–0,60 ms/Frame, 168 Byte/Frame, identischer Hash in beiden Läufen.
-- **FX:** `Layers/Fx` rendert Partikel (kamera-/bodenausgerichtete Sprites, Streaks), Tracer und Bodendecals
-  (`DefaultMaxQuads = 32768`, vier Materialien); Demoring-Test (400 Frames): letzter Frame 2.457 aktive Partikel,
-  1.516 gezeichnet, 9 Streaks, 4 Decals, 7 Batches, 0,23 ms CPU (Mittel 0,50 ms), SHA-256 über zwei Läufe identisch;
-  Realdaten-Skirmish (12.000 Frames) 0 verworfene Quads, 0 unbekannte Batches, SHA-256 identisch; Bench mit 10.000
-  aktiven Partikeln: 1,735 ms je Build (Mittel über 400 Wiederholungen).
-- **Audio (seit Phase 16 im Client verdrahtet und vermessen, nicht gehört – `docs/DEMO-FINDINGS.md` #7, `docs/GAME-AUDIO.md`):** `CnCNew.Game/Audio` (`AudioDirector`, `EvaCatalog`, `MusicPlaylist`) wählt Musik, EVA-Ansagen (u. a.
-  `BuildingLost`, `UnitLost`, `BaseUnderAttack`, `UpgradeComplete`, `LowPower`, `InsufficientFunds`) und Sound über
-  fünf Busse (Music/Sfx/Voice/Ambient/Ui) deterministisch aus Snapshot-Ereignissen aus; `Audio/AudioOutput` speist
-  `Stride.Audio`-`DynamicSoundSource`-Instanzen aus dem rendererunabhängigen Mixer (Blockgröße 882 Frames bei
-  44.100 Hz, vier Puffer, ~80 ms Latenz); Realdaten-Test über 600 gerenderte Frames (20 s) liefert über zwei Läufe
-  byteidentische SHA-256.
-- **Simulationsgrundlage (Paket E1):** Chinook-/Transport-/Tunnel-KI und Projektil-Flugzeit sind ergänzt; Modulkatalog
-  jetzt 85 von 205 Typen implementiert, 1.470 von 2.115 Objekten instanziierbar (69,5 %), Kompatibilitätsbasislinie
-  749 Einträge, Snapshot v7/Replay v7/`CommandTypes.Version` 9; Retail-Referenzmatch: Sieger FactionAmerica bei
-  Tick 13.800, Endhash `4DCB46FE3D2E8214`.
+- **World-layer seam:** `RenderServices`/`IWorldLayer`/`LiveMatchHost`/`StrideConvert` separate the Stride scene into
+  independent layers that read exclusively simulation snapshots; `--match <map>` starts a controllable
+  live skirmish, `--smoke-test --capture` generates a PNG headless.
+- **Terrain:** `Layers/Terrain` renders heightfield, blend/3-way textures, water and fog of war (fog texture
+  0/127/255) as well as the minimap (`MinimapImage.Compose`) directly from `TerrainRenderModel`/`FogOfWarGrid`; 11 of 150
+  maps spot-checked, 6 of them verified with a screenshot (e.g. Alpine Assault: 239×259 cells,
+  156 chunks, 26,630 blend cells, 370 diagonal deviations(4)); 0.266 ms/frame CPU mean (Fortress Avalanche,
+  900 frames); screenshot SHA-256 of two independent runs identical (`CFF6C66C4708683A…`).
+- **Objects:** `Layers/Objects` shares one Stride model+skeleton per rigid-part model and builds skinned parts
+  (169 in the full content) per instance; team colour through ZHC hue-shift textures and HOUSECOLOR vertex colouring. Example
+  Alpine Assault (America against China): 590 drawables, 10 drawn in the view frustum, 78 loaded models,
+  2,080 triangles, 0.19–0.27 ms/frame, 0 additional allocations, SHA-256 identical over 300 and 1,500 frames.
+  Example GLA against America (6,000 frames): 612 drawables, 16 drawn, 9 skinned infantrymen, 124 models,
+  6,133 triangles, 0.38–0.60 ms/frame, 168 bytes/frame, identical hash in both runs.
+- **FX:** `Layers/Fx` renders particles (camera/ground-aligned sprites, streaks), tracers and ground decals
+  (`DefaultMaxQuads = 32768`, four materials); demo-ring test (400 frames): last frame 2,457 active particles,
+  1,516 drawn, 9 streaks, 4 decals, 7 batches, 0.23 ms CPU (mean 0.50 ms), SHA-256 identical over two runs;
+  real-data skirmish (12,000 frames) 0 discarded quads, 0 unknown batches, SHA-256 identical; bench with 10,000
+  active particles: 1.735 ms per build (mean over 400 repetitions).
+- **Audio (since Phase 16 wired in the client and measured, not heard – `docs/DEMO-FINDINGS.md` #7, `docs/GAME-AUDIO.md`):** `CnCNew.Game/Audio` (`AudioDirector`, `EvaCatalog`, `MusicPlaylist`) selects music, EVA announcements (among others
+  `BuildingLost`, `UnitLost`, `BaseUnderAttack`, `UpgradeComplete`, `LowPower`, `InsufficientFunds`) and sound over
+  five buses (Music/Sfx/Voice/Ambient/Ui) deterministically from snapshot events; `Audio/AudioOutput` feeds
+  `Stride.Audio` `DynamicSoundSource` instances from the renderer-independent mixer (block size 882 frames at
+  44,100 Hz, four buffers, ~80 ms latency); real-data test over 600 rendered frames (20 s) delivers byte-identical SHA-256 over two
+  runs.
+- **Simulation foundation (package E1):** Chinook/transport/tunnel AI and projectile flight time are added; module catalogue
+  now 85 of 205 types implemented, 1,470 of 2,115 objects instantiable (69.5 %), compatibility baseline
+  749 entries, snapshot v7/replay v7/`CommandTypes.Version` 9; retail reference match: winner FactionAmerica at
+  tick 13,800, end hash `4DCB46FE3D2E8214`.
 
-**Abnahme:**
+**Acceptance:**
 
-- *Komplettes headless Match live visualisierbar und steuerbar:* erfüllt – `--match`/`--smoke-test --capture` zeigen
-  und steuern ein laufendes Skirmish-Match, mehrfach deterministisch reproduziert (identische Hashes über
-  wiederholte Läufe in Terrain-, Objekt- und FX-Layer).
-- *Alle sichtbaren Objektzustände wechseln korrekt:* erfüllt mit Einschränkung – `ModelConditionState`-Wechsel
-  (Bewegung, Angriff, Schaden, Bau-/Verkaufsfortschritt) werden dargestellt, (Stand Phase 7: Türme blieben in Ruhepose; seit Phase 15 folgen sie den Schüssen, Türen/Vorangriff/Packen
-  werden weiter nicht dargestellt, 54 von 106 Zustandsnamen setzt die Präsentation nie).
-- *Definierte Performance-/Speicher-/Golden-Image-Budgets eingehalten:* erfüllt für die gemessenen Layer (Terrain
-  0,266 ms, Objekte 0,19–0,60 ms, FX ≤ 1,735 ms für 10.000 Partikel – deutlich unter dem ursprünglich genannten
-  Richtwert von 4 ms für ~600 Drawables); Golden-Image-/Drawlist-Hashes sind über wiederholte Läufe byteidentisch.
-  Gemessen auf der Entwicklungsmaschine, nicht auf separat definierter Zielhardware.
-- *Videos ohne proprietäre Miles-/Bink-SDK-Abhängigkeit wiedergeben:* **nicht erfüllt.** Es gibt keinen
-  Bink-Decoder; jeder Aufruf wird gezählt (`Stats.SkippedMovies`) und tut sonst nichts. Laut `docs/GAME-AUDIO.md`
-  ist das eine bekannte, dauerhafte Grenze des Projekts (keine legale Dekodierung ohne die offizielle Bink-SDK),
-  kein Implementierungsfehler dieser Phase.
+- *Complete headless match can be visualised and controlled live:* fulfilled – `--match`/`--smoke-test --capture` show
+  and control a running skirmish match, reproduced deterministically several times (identical hashes over
+  repeated runs in terrain, object and FX layer).
+- *All visible object states change correctly:* fulfilled with a restriction – `ModelConditionState` changes
+  (movement, attack, damage, build/sell progress) are displayed, (state Phase 7: turrets stayed in rest pose; since Phase 15 they follow the shots, doors/pre-attack/packing
+  are still not displayed, the presentation never sets 54 of 106 state names).
+- *Defined performance/memory/golden-image budgets kept:* fulfilled for the measured layers (terrain
+  0.266 ms, objects 0.19–0.60 ms, FX ≤ 1.735 ms for 10,000 particles – clearly below the originally stated
+  guide value of 4 ms for ~600 drawables); golden-image/draw-list hashes are byte-identical over repeated runs.
+  Measured on the development machine, not on separately defined target hardware.
+- *Play videos without a proprietary Miles/Bink SDK dependency:* **not fulfilled.** There is no
+  Bink decoder; every call is counted (`Stats.SkippedMovies`) and otherwise does nothing. According to `docs/GAME-AUDIO.md`
+  this is a known, permanent limit of the project (no legal decoding without the official Bink SDK),
+  not an implementation defect of this phase.
 
-**Bekannte Grenzen:**
+**Known limits:**
 
-- Kein Bink-Videodecoder (siehe oben) – dauerhafte Grenze, keine SDK verfügbar.
-- Türme rendern in Ruhepose – überholt: seit Phase 15 folgen sie den Schüssen (`docs/CLIENT-OBJECTS.md`).
-- *(Überholt: die schwarzen Flächen waren der invertierte Windungssinn der Objekt-Meshes und fehlende Beleuchtung, behoben in Phase 15.)* Einige dünne, zweiseitige W3D-Meshes (`mesh.IsTwoSided` → `CullMode.None`) zeigen von der Rückseite eine
-  unbeleuchtete (schwarze) Fläche, weil `MaterialDiffuseLambertModelFeature` die Normalen für Rückseiten nicht
-  spiegelt – ein Verhalten der geteilten Stride-Materialpipeline, nicht des Objektlayers selbst.
-- Kein Blob-/Kontaktschatten: aus Zeitgründen in dieser Phase nicht umgesetzt.
-- `WaterAppearance.AdditiveBlending` ungeprüft (keine der elf sondierten Karten nutzt es); `WaterAppearance.TransparentWaterDepth`
-  wird nicht ausgewertet (Wasser hat konstante Deckkraft unabhängig von der Tiefe).
-- `FxFrame`-Inhalte werden nicht vollständig gezeichnet: `ParticleKind.Drawable` (1 von 1.087 Partikelsystemen im
-  Retail-Bestand betroffen, kein W3D-Partikelmodell-Renderpfad), `ParticleKind.Smudge` (kein Postprocessing-Zugriff),
-  `LightPulseInstance` (gezählt, nicht gezeichnet), `RayEffectRequest` (0 Retail-Verwendungen).
-- Kamera-ausgerichtete Billboards/HLOD-Aggregate und -Proxies werden nicht aufgelöst; `AnimationMode.Manual` rendert
-  immer Frame 0; `StartFrameFirst/Last`/`MaintainFrameAcrossStates*` werden nicht ausgewertet; Environment-Mapping
-  nutzt eine feste Blickrichtung statt echter Pro-Pixel-Reflexion.
-- Weiterhin offen aus Phase 6/Paket E1: echte Kollision (`ToppleUpdate`/`CrushDie`), Brücken, Formationen, lokale
-  Vermeidung, Wirkung von `CommandSet`/Radar, veteranenbasierte `ArmorSet`/`WeaponSet`-Auswahl; 645 der 2.115
-  Retail-Objekte bleiben nicht instanziierbar.
+- No Bink video decoder (see above) – permanent limit, no SDK available.
+- Turrets render in rest pose – superseded: since Phase 15 they follow the shots (`docs/CLIENT-OBJECTS.md`).
+- *(Superseded: the black surfaces were the inverted winding order of the object meshes and missing lighting, fixed in Phase 15.)* Some thin, two-sided W3D meshes (`mesh.IsTwoSided` → `CullMode.None`) show from the back an
+  unlit (black) surface, because `MaterialDiffuseLambertModelFeature` does not mirror the normals for back faces
+  – a behaviour of the shared Stride material pipeline, not of the object layer itself.
+- No blob/contact shadow: not implemented in this phase for reasons of time.
+- `WaterAppearance.AdditiveBlending` unchecked (none of the eleven probed maps uses it); `WaterAppearance.TransparentWaterDepth`
+  is not evaluated (water has constant opacity independent of the depth).
+- `FxFrame` contents are not drawn completely: `ParticleKind.Drawable` (1 of 1,087 particle systems in the
+  retail content affected, no W3D particle-model render path), `ParticleKind.Smudge` (no post-processing access),
+  `LightPulseInstance` (counted, not drawn), `RayEffectRequest` (0 retail uses).
+- Camera-aligned billboards/HLOD aggregates and proxies are not resolved; `AnimationMode.Manual` always renders
+  frame 0; `StartFrameFirst/Last`/`MaintainFrameAcrossStates*` are not evaluated; environment mapping
+  uses a fixed view direction instead of real per-pixel reflection.
+- Still open from Phase 6/package E1: real collision (`ToppleUpdate`/`CrushDie`), bridges, formations, local
+  avoidance, effect of `CommandSet`/radar, veteran-based `ArmorSet`/`WeaponSet` selection; 645 of the 2,115
+  retail objects stay non-instantiable.
 
-## 8. Eingabe, UI und Lokalisierung
+## 8. Input, UI and localisation
 
-**Ergebnis:** Menüs und Ingame-UI bilden den gesamten Singleplayer-Bedienpfad
-auflösungsunabhängig auf Basis der Originaldaten ab.
+**Result:** menus and in-game UI reproduce the entire single-player operating path
+resolution-independently on the basis of the original data.
 
-Umfang:
+Scope:
 
-- Maus, Tastatur, Hotkeys, Auswahl, Kontrollgruppen und Befehlsmodi implementieren;
-- WND-Layouts, Fonts, Texturen, Animationen und STR-Lokalisierung anbinden;
-- Hauptmenü, Optionen, Gefechtssetup, Ladebildschirm, HUD, Command Bar, Tooltips, Menüs und
-  Ergebnisbildschirm umsetzen;
-- Auflösung, Seitenverhältnis, Skalierung, Audio-/Grafikoptionen und persistente Einstellungen;
-- Fokus, Pausenverhalten und grundlegende Barrierefreiheit absichern.
+- implement mouse, keyboard, hotkeys, selection, control groups and command modes;
+- connect WND layouts, fonts, textures, animations and STR localisation;
+- implement main menu, options, skirmish setup, loading screen, HUD, command bar, tooltips, menus and
+  result screen;
+- resolution, aspect ratio, scaling, audio/graphics options and persistent settings;
+- secure focus, pause behaviour and basic accessibility.
 
-Abgeschlossen, wenn das Programm ohne Entwicklerargumente vom Startmenü in ein Match und zurück
-bedienbar ist, alle benötigten Texte auflösbar sind und UI-Tests mehrere Auflösungen und
-Seitenverhältnisse abdecken.
+Completed when the program can be operated without developer arguments from the start menu into a match and back,
+all needed texts are resolvable and UI tests cover several resolutions and
+aspect ratios.
 
-**Status: abgeschlossen am 30. September 2026, mit den unten benannten Einschränkungen.** Alle Zahlen aus den
-Fachdokumenten der Pakete übernommen; Details in `docs/PRESENTATION-INPUT.md`, `docs/GAME-SHELL.md`,
+**Status: completed on 30 September 2026, with the restrictions named below.** All numbers taken over from the
+subject documents of the packages; details in `docs/PRESENTATION-INPUT.md`, `docs/GAME-SHELL.md`,
 `docs/GAME-HUD.md`, `docs/CLIENT-UI-RENDERING.md`.
 
-**Umgesetzt:**
+**Implemented:**
 
-- **Eingabe:** `CnCNew.Presentation.Input` (`GameInputController`, `SelectionModel`, `CommandModeController`,
-  `CommandBarModel`, `HotkeyMap`, `CameraInputController`) übersetzt Ereignisse in der Reihenfolge von
-  `GameClient.cpp` (Metatasten 20, Command-Bar-Hotkeys 25, Platzierung 30, GUI-Befehl 40, Auswahl 50, Kamera 60,
-  Kontextbefehle 70) in typisierte Simulationsbefehle. `Data/English/CommandMap.ini`: 96 Einträge, 0 Probleme,
-  0 Konflikte; 820 Befehlsschaltflächen (7 ohne gebundenen Befehl), 472 Befehlssätze, 0 Probleme; 14 synthetische
-  Tests plus ein Realdatentest, zwei Läufe byteidentisch (`tests/CnCNew.Presentation.Tests`).
-- **Menüs (`CnCNew.Game/Shell`):** Zustandsautomat Boot → Menüs (MainMenu/Options/SkirmishSetup+MapSelect/
-  Credits/QuitConfirm) → MatchLoading → InMatch → Results → zurück, 8 Screens aus echten WND-Layouts, 0 nicht
-  registrierte Callbacks/0 unaufgelöste Labels über alle Screens, 54 Golden-Hashes (8 Screens × 6 Auflösungen von
-  800×600 bis 2560×1080), 0 Dateinamen-Rückfälle unter 64 gelisteten Mehrspielerkarten.
-- **HUD (`CnCNew.Game/Hud`):** `MatchController` bindet Command Bar (14 Slots + 9 Warteschlangen-Slots), Minimap
-  (Klick/Ziehen/Rechtsklick-Befehl), Ziehauswahl, Cameo-/Hotkey-/Kosten-/Cooldown-Overlays, Geld-/Energiebalken und
-  einen EVA-Text-Ersatz-Ticker aus echten `ControlBar.wnd`/`QuitMenu.wnd`-Daten, ausschließlich über
-  `LiveMatch.Commands`. Golden-Drawlist-Hash über vier Auflösungen (800×600 bis 2560×1080), alle 14
-  Befehlsschaltflächen vollständig im Bild.
-- **Einstellungen:** `OptionsScreen` bearbeitet eine Arbeitskopie von `GameSettings` und schreibt sie erst bei
-  „Accept“ persistent über `SettingsStore` (`settings.json`, atomar); verdrahtet sind Auflösung, die drei
-  Lautstärkeregler und die Scrollgeschwindigkeit.
-- **UI-Rendering/Lokalisierung:** `CnCNew.Client.Stride/Ui/UiRenderer` zeichnet die von Shell/Hud erzeugten
-  `UiDrawList`s auflösungsunabhängig per `SpriteBatch`; Text kommt aus FreeType (`Stride.SharpFont`), nicht aus
-  `SpriteFont`/GDI. Letzter Verifikationslauf (32 PNGs über vier Auflösungen): `commands=5778 sprites=12542
-  drawCalls=854 batches=361 missingImages=8 missingTextures=0 missingLabels=12 missingGlyphs=0`; zwei unabhängige
-  Läufe liefern für alle 32 PNGs identische SHA-256.
-- Build unverändert 21 Warnungen (bekannte Stride-Assetcompiler-Basislinie), 0 neu.
+- **Input:** `CnCNew.Presentation.Input` (`GameInputController`, `SelectionModel`, `CommandModeController`,
+  `CommandBarModel`, `HotkeyMap`, `CameraInputController`) translates events in the order of
+  `GameClient.cpp` (meta keys 20, command-bar hotkeys 25, placement 30, GUI command 40, selection 50, camera 60,
+  context commands 70) into typed simulation commands. `Data/English/CommandMap.ini`: 96 entries, 0 problems,
+  0 conflicts; 820 command buttons (7 without a bound command), 472 command sets, 0 problems; 14 synthetic
+  tests plus one real-data test, two runs byte-identical (`tests/CnCNew.Presentation.Tests`).
+- **Menus (`CnCNew.Game/Shell`):** state machine boot → menus (MainMenu/Options/SkirmishSetup+MapSelect/
+  Credits/QuitConfirm) → MatchLoading → InMatch → Results → back, 8 screens from real WND layouts, 0 unregistered
+  callbacks/0 unresolved labels over all screens, 54 golden hashes (8 screens × 6 resolutions from
+  800×600 to 2560×1080), 0 file-name fallbacks among 64 listed multiplayer maps.
+- **HUD (`CnCNew.Game/Hud`):** `MatchController` binds command bar (14 slots + 9 queue slots), minimap
+  (click/drag/right-click command), drag selection, cameo/hotkey/cost/cooldown overlays, money/energy bars and
+  an EVA text substitute ticker from real `ControlBar.wnd`/`QuitMenu.wnd` data, exclusively through
+  `LiveMatch.Commands`. Golden draw-list hash over four resolutions (800×600 to 2560×1080), all 14
+  command buttons completely in the picture.
+- **Settings:** `OptionsScreen` edits a working copy of `GameSettings` and writes it persistently only on
+  "Accept" through `SettingsStore` (`settings.json`, atomic); wired are resolution, the three
+  volume sliders and the scroll speed.
+- **UI rendering/localisation:** `CnCNew.Client.Stride/Ui/UiRenderer` draws the `UiDrawList`s generated by shell/HUD
+  resolution-independently by `SpriteBatch`; text comes from FreeType (`Stride.SharpFont`), not from
+  `SpriteFont`/GDI. Last verification run (32 PNGs over four resolutions): `commands=5778 sprites=12542
+  drawCalls=854 batches=361 missingImages=8 missingTextures=0 missingLabels=12 missingGlyphs=0`; two independent
+  runs deliver identical SHA-256 for all 32 PNGs.
+- Build unchanged 21 warnings (known Stride asset-compiler baseline), 0 new.
 
-**Abnahme:**
+**Acceptance:**
 
-- *Ohne Entwicklerargumente vom Startmenü in ein Match und zurück bedienbar:* erfüllt für Skirmish (MainMenu →
-  SkirmishSetup → MatchLoading → InMatch → Results → MainMenu); Mehrspieler-, Lade-/Wiedergabe- und
-  Kampagnen-Einstieg bleiben ohne Funktion (Buttons sichtbar, aber deaktiviert – außerhalb des Produktscopes,
-  siehe `CLAUDE.md`).
-- *Alle benötigten Texte auflösbar:* erfüllt mit Einschränkung – 0 gemessene Fallbacks bei Kartennamen und
-  Shell-Labels; `ShellTextMeasure` liefert aber synthetische statt echter Glyphenmetrik, und FreeType-Glyphen sind
-  pixelgenau zur FreeType-Rasterung, nicht zur originalen GDI-Rasterung (`CreateFont`/`ExtTextOut`) – Abweichungen
-  zeigen sich höchstens bei sehr kleinen Schriftgrößen.
-- *UI-Tests decken mehrere Auflösungen/Seitenverhältnisse ab:* erfüllt – Golden-Hashes für Shell (6 Auflösungen),
-  HUD (4 Auflösungen) und den UI-Renderer (4 Auflösungen) sind über wiederholte Läufe byteidentisch.
-- *Auflösung, Seitenverhältnis, Skalierung, Audio-/Grafikoptionen persistent:* **nicht vollständig erfüllt.**
-  Auflösung, Lautstärke und Scrollgeschwindigkeit sind verdrahtet und persistent; Anzeigemodus (Fenster/Vollbild),
-  Sprache, Seitenverhältnis und Barrierefreiheits-Textskalierung existieren zwar in `GameSettings`, haben aber in
-  der ausgelieferten `OptionsMenu.wnd` kein eigenes Gadget und sind von diesem Screen aus nicht erreichbar.
+- *Operable without developer arguments from the start menu into a match and back:* fulfilled for skirmish (MainMenu →
+  SkirmishSetup → MatchLoading → InMatch → Results → MainMenu); multiplayer, load/replay and
+  campaign entry stay without function (buttons visible, but disabled – outside the product scope,
+  see `CLAUDE.md`).
+- *All needed texts resolvable:* fulfilled with a restriction – 0 measured fallbacks for map names and
+  shell labels; but `ShellTextMeasure` delivers synthetic instead of real glyph metrics, and FreeType glyphs are
+  pixel-exact to the FreeType rasterisation, not to the original GDI rasterisation (`CreateFont`/`ExtTextOut`) – deviations
+  show at most at very small font sizes.
+- *UI tests cover several resolutions/aspect ratios:* fulfilled – golden hashes for shell (6 resolutions),
+  HUD (4 resolutions) and the UI renderer (4 resolutions) are byte-identical over repeated runs.
+- *Resolution, aspect ratio, scaling, audio/graphics options persistent:* **not completely fulfilled.**
+  Resolution, volume and scroll speed are wired and persistent; display mode (window/full screen),
+  language, aspect ratio and accessibility text scaling do exist in `GameSettings`, but have no gadget of their own in
+  the shipped `OptionsMenu.wnd` and are not reachable from this screen.
 
-**Bekannte Grenzen:**
+**Known limits:**
 
-- Kein Mehrspieler-, Lade-/Wiedergabe- oder Kampagnen-Einstieg vom Hauptmenü aus (Buttons sichtbar, deaktiviert);
-  die zugehörigen Multiplayer-/Kampagnen-WND-Dateien (`GameSpyGameOptionsMenu.wnd`, `LanGameOptionsMenu.wnd`,
-  `GameSpyLoadScreen.wnd`, `MultiplayerLoadScreen.wnd`, `ChallengeLoadScreen.wnd`) werden nicht geladen.
-- Anzeigemodus/Sprache/Seitenverhältnis/Barrierefreiheits-Textskalierung sind nicht über die ausgelieferte
-  `OptionsMenu.wnd` erreichbar (siehe oben).
-- `RadioButtonUserMaps` liefert eine leere Liste (kein Importpfad für eigene Karten).
-- Kein Mausklick beendet den Abspann (nur Escape) – das Nachrichtenmodell kennt bislang keine „beliebiger Klick auf
-  ein Nicht-Gadget-Fenster“-Nachricht.
-- Keine Formations-/Gruppenversatzlogik (`groupMoveToPosition` gibt allen Einheiten denselben Zielpunkt); kein
-  Befehl „Feuer auf Position“; Kontextbefehle für Entführen, Autobombe, Sabotage, Bergen, Gebäude einnehmen und
-  Hacken haben keine Simulationsbefehle und bleiben unübersetzt (`FeedbackKind.Unsupported`).
-- `docs/PRESENTATION-INPUT.md` §10 listet sechs fehlende Simulations-Lese-/Schreib-APIs (u. a.
-  Baukosten-Trockenlauf, Produktionswarteschlangen-Lesezugriff, `SpecialPowerModuleBase.AvailableOnFrame`,
-  `UpgradeMuxModule.Executed`) sowie fehlende Befehle für Feuer-auf-Position, dauerhaften Angriffsmarsch, Wächter,
-  Wegpunkte-als-KI-Zustände, Formationsbewegung, Einnehmen/Entführen/Sabotage/Hacken, Fallschirmabwurf,
-  Waffenwechsel, Overcharge, Leuchtfeuer, Upgrade-Abbruch, Spezialkraft-Bau und Linienbau.
-- FreeType-Glyphen sind pixelgenau zu FreeType, nicht zur originalen GDI-Rasterung (siehe oben).
+- No multiplayer, load/replay or campaign entry from the main menu (buttons visible, disabled);
+  the associated multiplayer/campaign WND files (`GameSpyGameOptionsMenu.wnd`, `LanGameOptionsMenu.wnd`,
+  `GameSpyLoadScreen.wnd`, `MultiplayerLoadScreen.wnd`, `ChallengeLoadScreen.wnd`) are not loaded.
+- Display mode/language/aspect ratio/accessibility text scaling are not reachable through the shipped
+  `OptionsMenu.wnd` (see above).
+- `RadioButtonUserMaps` delivers an empty list (no import path for custom maps).
+- No mouse click ends the credits (only Escape) – the message model so far knows no "any click on
+  a non-gadget window" message.
+- No formation/group-offset logic (`groupMoveToPosition` gives all units the same target point); no
+  command "fire at position"; context commands for hijacking, car bomb, sabotage, salvaging, capturing buildings and
+  hacking have no simulation commands and stay untranslated (`FeedbackKind.Unsupported`).
+- `docs/PRESENTATION-INPUT.md` §10 lists six missing simulation read/write APIs (among others
+  build-cost dry run, read access to the production queue, `SpecialPowerModuleBase.AvailableOnFrame`,
+  `UpgradeMuxModule.Executed`) as well as missing commands for fire at position, permanent attack march, guard,
+  waypoints as AI states, formation movement, capturing/hijacking/sabotage/hacking, parachute drop,
+  weapon switch, overcharge, beacon, upgrade cancel, special-power construction and line building.
+- FreeType glyphs are pixel-exact to FreeType, not to the original GDI rasterisation (see above).
 
-## 9. Skirmish, Missionen, Kampagnen und Savegames
+## 9. Skirmish, missions, campaigns and savegames
 
-**Ergebnis:** Der definierte Produktumfang ist spielbar: vollständiger Skirmish sowie alle
-Singleplayer-Kampagnen mit Fortschritt und neuen Savegames.
+**Result:** the defined product scope is playable: complete skirmish as well as all
+single-player campaigns with progress and new savegames.
 
-Umfang:
+Scope:
 
-- Skirmish-Setup, Startpositionen, Teams, Regeln, KI-Profile und Statistik abschließen;
-- Skriptengine, Trigger, Counter, Kameraabläufe, Briefings und Zwischensequenzen portieren;
-- Missionsziele, Niederlagen-/Siegespfade, Kampagnenreihenfolge und Freischaltungen abbilden;
-- versioniertes eigenes Savegameformat auf stabilen Simulations-Snapshots aufbauen;
-- jede Karte und Mission über automatisierte Lade- und Headless-Abläufe prüfen.
+- complete skirmish setup, start positions, teams, rules, AI profiles and statistics;
+- port script engine, triggers, counters, camera sequences, briefings and cutscenes;
+- reproduce mission objectives, defeat/victory paths, campaign order and unlocks;
+- build a versioned savegame format of our own on stable simulation snapshots;
+- check every map and mission through automated load and headless sequences.
 
-Abgeschlossen, wenn alle Skirmish-Karten start- und beendbar sind, jede Kampagnenmission ihre
-wesentlichen Erfolgs- und Fehlerpfade besteht und Speichern/Laden einen identischen
-Simulationszustand fortsetzt.
+Completed when all skirmish maps can be started and ended, every campaign mission passes its
+essential success and failure paths and save/load continues an identical
+simulation state.
 
-**Status: Teil A Punkte 2–5 (Skriptausführung, Kampagnenlogik, Savegames, Headless-Prüfung) und Teil B Punkt 11 umgesetzt am 1. Oktober 2026; die Phase
-ist damit noch nicht im Sinne der Abnahme abgeschlossen (siehe „Bekannte Grenzen“).** Alle Zahlen frisch gemessen; Details, Quellverweise und
-Abweichungen in `docs/SCRIPT-ENGINE.md` und `docs/CAMPAIGN-AND-SAVEGAMES.md`.
+**Status: part A items 2–5 (script execution, campaign logic, savegames, headless check) and part B item 11 implemented on 1 October 2026; the phase
+is thereby not yet completed in the sense of the acceptance (see "Known limits").** All numbers freshly measured; details, source references and
+deviations in `docs/SCRIPT-ENGINE.md` and `docs/CAMPAIGN-AND-SAVEGAMES.md`.
 
-**Phase-10-Zwischenstand (1. Oktober 2026, Teil der Durchspielbarkeits-Abnahme, noch nicht abgeschlossen):** Befehlsknopf-Fähigkeiten
-(`NAMED_/TEAM_USE_COMMANDBUTTON_ABILITY(_ON_NAMED)`, die vier häufigsten der Familie) lösen jetzt echte `UseSpecialPowerCommand`-Befehle aus;
-`SpecialAbilityUpdate` ist eine ehrliche Hülle (Nachlademechanismus ohne die inszenierte Fähigkeitswirkung) und macht 36 vorher blockierte
-Objekte instanziierbar (Ranger, Jarmen Kell, GLA-Rebellin-Fähigkeiten). Lokale Seite ohne `playerIsHuman`: `MissionOptions.HumanSideName` plus
-`CampaignTool --human-side` lösen das API-seitig; die General-Auswahl bleibt Shell-Arbeit. Zahlen: 1.530 von 2.115 Objekten instanziierbar
-(72,3 %, vorher 70,6 %), 88 von 205 Modultypen, Modulverwendungen abgedeckt 15.730 von 19.553 (80,4 %), Kompatibilitätsbasislinie 747 → 751.
-`CampaignTool audit`: fehlende Aktionsausführungen 5,7 % → 4,3 %, Endproben weiterhin Sieg 10/24, Niederlage 15/24 in Summe (Zusammensetzung
-verschoben, `docs/SCRIPT-ENGINE.md` §9). Garnison, Kartenaufdeckung, KI-Teambau, Sichtbedingungen, `SKIRMISH_*` und Skirmish-Setup (Teil A
-Punkt 1) bleiben offen; Details in `docs/handoffs/HANDOFF-PHASE11.md`.
+**Phase 10 interim state (1 October 2026, part of the play-through acceptance, not yet completed):** command-button abilities
+(`NAMED_/TEAM_USE_COMMANDBUTTON_ABILITY(_ON_NAMED)`, the four most frequent of the family) now trigger real `UseSpecialPowerCommand` commands;
+`SpecialAbilityUpdate` is an honest shell (reload mechanism without the staged ability effect) and makes 36 previously blocked
+objects instantiable (Ranger, Jarmen Kell, GLA Rebel abilities). Local side without `playerIsHuman`: `MissionOptions.HumanSideName` plus
+`CampaignTool --human-side` solve this on the API side; the general selection remains shell work. Numbers: 1,530 of 2,115 objects instantiable
+(72.3 %, before 70.6 %), 88 of 205 module types, module uses covered 15,730 of 19,553 (80.4 %), compatibility baseline 747 → 751.
+`CampaignTool audit`: missing action executions 5.7 % → 4.3 %, end probes still victory 10/24, defeat 15/24 in total (composition
+shifted, `docs/SCRIPT-ENGINE.md` §9). Garrison, map reveal, AI team building, vision conditions, `SKIRMISH_*` and skirmish setup (part A
+item 1) stay open; details in `docs/handoffs/HANDOFF-PHASE11.md`.
 
-**Phase-12-Stand (2. Oktober 2026, frisch gemessen; Auftrag `docs/handoffs/HANDOFF-PHASE12.md`, Vorbereitung für `docs/handoffs/HANDOFF-PHASE13.md`):**
+**Phase 12 state (2 October 2026, freshly measured; brief `docs/handoffs/HANDOFF-PHASE12.md`, preparation for `docs/handoffs/HANDOFF-PHASE13.md`):**
 
-- **Zielfahrer (Punkt 1, Kern):** `MissionObjectiveDriver`/`ObjectiveDriver` planen rückwärts von den `VICTORY`/`DEFEAT`-Skripten (Plan je Endskript, Blätter und Blocker, Gegenrichtung, richtungsbewusste Zähler,
-  Stillstandserkennung mit Vereinigung aller Alternativen, Abwehrblätter; `docs/SCRIPT-ENGINE.md` §9). Ergebnis (`CampaignTool drive`, 12.000 Ticks): **Sieg auf dem eigenen Skriptweg 22/24, Niederlage 24/24**
-  (vorher 10/24 und 16/24). Offen und benannt: `MD_GLA03` (der Träger ist unsterblich, das Siegskript wartet auf den Strahl von `ParticleUplinkCannonUpdate`, nicht implementiert) und `MD_CHI04` (lange
-  Wellenmission). Die statische Erreichbarkeit ist jetzt **Sieg sauber 24/24, Niederlage sauber 24/24**.
-- **Aktionen (Punkt 2):** 29 Typen ausgeführt (Überschreibungs-Beziehungen, die `TEAM_ALL_USE_COMMANDBUTTON_*`-Familie, Jagd mit Befehlsknopf, `TEAM_LOAD_TRANSPORTS`, `TEAM_PANIC`, Blickrichtung, Tarnschalter,
-  unbemannt, Priorität u. a.) und 8 aufgezeichnet (`TEAM_SET_ATTITUDE`, `TEAM_WANDER(_IN_PLACE)`, `NAMED_SET_HELD`, Rang, Wrack-Lebensdauer): Aktionen **160** ausgeführt / 129 weitergereicht / **10** aufgezeichnet / **45**
-  fehlend von 344 (vorher 131/129/2/82); Bedingungen unverändert 80/29 (die fehlenden Bedingungen stehen in keiner Endkette). Treffer auf fehlende Aktionstypen im Audit 1,1 % → 0,3 %.
-- **Module:** sieben Missionsobjekt-Module (`FireWeaponWhenDamagedBehavior`, `HordeUpdate`, `FireWeaponPower`, `BaikonurLaunchPower`, `TechBuildingBehavior`, `RadiusDecalUpdate`, `FlightDeckBehavior` als Hülle,
-  `docs/SIMULATION-CORE.md` §27): 98 von 205 Modultypen, **1.680 von 2.115 Objekten instanziierbar (79,4 %)**, Modulverwendungen abgedeckt 15.903 von 19.553 (81,3 %), Kompatibilitätsbasislinie 765 Einträge.
-- **Persona-Fraktion (Punkt 4):** `MissionOptions.HumanFaction`, `ScriptProgram.WithHumanSide` (synthetische Seite `ThePlayer` für `GC_LaserGeneral`), `CampaignCatalog.WithPersonas(ChallengeMode.ini)`;
-  `GC_LaserGeneral` hat jetzt eine eigene menschliche Seite (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
-- **Client-Verdrahtung (Punkt 5):** `ClientRuntime` und `StrideInputTranslator` schließen HUD-Zeichenliste, Eingabe und Shell-Ausgaben an den Stride-Client an, dazu die Hintergrundkunst der Befehlsleiste
-  (`ControlBarScheme.ini`, `RightHUDImage`) und die Minimap (`docs/GAME-HUD.md` §15).
-- **Nicht umgesetzt:** Punkt 3 (**Verstärkung mit Transport/Formationen**: alle `CINE_*`-Transportflugzeuge sind nicht instanziierbar, die Chinook-Lieferung fehlt) und Punkt 6 (**VM-Semantiklücken**, nur
-  dokumentiert und begründet belassen: `docs/SCRIPT-ENGINE.md` §8 Punkt 23). Beides ist Gegenstand von `docs/handoffs/HANDOFF-PHASE13.md`.
-- Unverändert: Retail-Referenzmatch Sieger FactionGLA bei Tick 19.200, Endhash `28BE35C1174E369F`; Stresstest `56882F763EABEF67`; keine Versionssprünge (`WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2,
-  `CommandTypes.Version` 10; `humanFaction` wird im Missionszustand nur bei gesetztem Wert geschrieben); 21 erklärte Build-Warnungen.
+- **Objective driver (item 1, core):** `MissionObjectiveDriver`/`ObjectiveDriver` plan backwards from the `VICTORY`/`DEFEAT` scripts (plan per end script, leaves and blockers, opposite direction, direction-aware counters,
+  standstill detection with union of all alternatives, defence leaves; `docs/SCRIPT-ENGINE.md` §9). Result (`CampaignTool drive`, 12,000 ticks): **victory on the own script path 22/24, defeat 24/24**
+  (before 10/24 and 16/24). Open and named: `MD_GLA03` (the carrier is immortal, the victory script waits for the beam of `ParticleUplinkCannonUpdate`, not implemented) and `MD_CHI04` (long
+  wave mission). The static reachability is now **victory clean 24/24, defeat clean 24/24**.
+- **Actions (item 2):** 29 types executed (override relationships, the `TEAM_ALL_USE_COMMANDBUTTON_*` family, hunt with command button, `TEAM_LOAD_TRANSPORTS`, `TEAM_PANIC`, facing direction, stealth switch,
+  unmanned, priority among others) and 8 recorded (`TEAM_SET_ATTITUDE`, `TEAM_WANDER(_IN_PLACE)`, `NAMED_SET_HELD`, rank, wreck lifetime): actions **160** executed / 129 passed on / **10** recorded / **45**
+  missing of 344 (before 131/129/2/82); conditions unchanged 80/29 (the missing conditions are in no end chain). Hits on missing action types in the audit 1.1 % → 0.3 %.
+- **Modules:** seven mission-object modules (`FireWeaponWhenDamagedBehavior`, `HordeUpdate`, `FireWeaponPower`, `BaikonurLaunchPower`, `TechBuildingBehavior`, `RadiusDecalUpdate`, `FlightDeckBehavior` as a shell,
+  `docs/SIMULATION-CORE.md` §27): 98 of 205 module types, **1,680 of 2,115 objects instantiable (79.4 %)**, module uses covered 15,903 of 19,553 (81.3 %), compatibility baseline 765 entries.
+- **Persona faction (item 4):** `MissionOptions.HumanFaction`, `ScriptProgram.WithHumanSide` (synthetic side `ThePlayer` for `GC_LaserGeneral`), `CampaignCatalog.WithPersonas(ChallengeMode.ini)`;
+  `GC_LaserGeneral` now has a human side of its own (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7).
+- **Client wiring (item 5):** `ClientRuntime` and `StrideInputTranslator` connect HUD draw list, input and shell outputs to the Stride client, plus the background art of the command bar
+  (`ControlBarScheme.ini`, `RightHUDImage`) and the minimap (`docs/GAME-HUD.md` §15).
+- **Not implemented:** item 3 (**reinforcement with transport/formations**: all `CINE_*` transport aircraft are not instantiable, the Chinook delivery is missing) and item 6 (**VM semantics gaps**, only
+  documented and left with reasons: `docs/SCRIPT-ENGINE.md` §8 item 23). Both are the subject of `docs/handoffs/HANDOFF-PHASE13.md`.
+- Unchanged: retail reference match winner FactionGLA at tick 19,200, end hash `28BE35C1174E369F`; stress test `56882F763EABEF67`; no version jumps (`WorldSnapshot` 7, replay 7, `MissionSnapshot` 2,
+  `CommandTypes.Version` 10; `humanFaction` is written in the mission state only when the value is set); 21 explained build warnings.
 
-**Phase-11-Stand (1. Oktober 2026, frisch gemessen; Auftrag `docs/handoffs/HANDOFF-PHASE11.md`, Vorbereitung für `docs/handoffs/HANDOFF-PHASE12.md`):** die Skript-VM führt jetzt auch die
-`SKIRMISH_*`-Bedingungen (Entscheidung „Portierung“ statt `SkirmishAi`-Ersatz, `docs/SCRIPT-ENGINE.md` §5c), Sicht-/Spezialkraft-Bedingungen, Kartenaufdeckung, Garnison/Behälter, Bauschalter,
-`BUILD_TEAM`/`TEAM_MERGE_INTO_TEAM`/`RECRUIT_TEAM`, die Wegpunkt-Varianten der Befehlsknopf-Fähigkeiten, **Sequenzskripte** (§5a) und **Teamereignis-Skripte** (§5b) aus; Upgrade-/`FIRE_WEAPON`-
-Knöpfe haben einen eigenen Pfad. Bedingungen **80** ausgeführt / 29 fehlend von 109, Aktionen **131** ausgeführt / 129 weitergereicht / **2 aufgezeichnet** / **82** fehlend von 344
-(vor der Phase: 63/46 und 73/129/0/142). Die Shell wählt die menschliche Seite einer Challenge-Karte selbst (`ChallengeSides`), `CampaignController.StartCurrentMission` hat den
-Latenz-Parameter, und eine Kampagnenmission spielt hinter der vollen Skirmish-Befehlsleiste (`LiveGame`/`LiveMission`/`MissionController`, `docs/GAME-HUD.md` §14).
-**Neuer Beleg für „die Mission endet auf ihrem eigenen Skriptweg“:** `CampaignTool reachability` prüft statisch, ob die `VICTORY`/`DEFEAT`-Skripte jeder Karte mit den implementierten Typen
-überhaupt feuern können (Ketten über Flags, Zähler, Timer, Freischaltungen und Teamereignisse). Vorher (Stand von Phase 10, gleiche Analyse): Sieg sauber 4 / eingeschränkt 18 / blockiert 2,
-Niederlage sauber 0 / eingeschränkt 24; **jetzt: Sieg sauber 21 / eingeschränkt 3 / blockiert 0, Niederlage sauber 24 / 24 Karten** (Tabelle: `docs/SCRIPT-ENGINE.md` §9). „Sauber“ heißt:
-jede Bedingung und Aktion auf der Kette ist implementiert; es heißt **nicht**, dass ein Spieler die Mission gewinnen kann (Zustandsbedingungen sind Blätter). Die Ausschalt-Endproben des
-`CampaignTool audit` sind unverändert Sieg 10/24, Niederlage 15/24 – sie fahren keine Ziele ab. Der neue Zielfahrer (`CampaignTool drive`, `MissionObjectiveDriver`) erfüllt die Weltzustands-Bedingungen der Skripte und zählt nur, wenn eine `VICTORY`/`DEFEAT`-Aktion des Skripts selbst feuert: **Sieg auf dem Skriptweg 10/24, Niederlage 16/24** (`docs/SCRIPT-ENGINE.md` §9, mit Befund, woran die übrigen scheitern). Weiterhin offen: `TEAM_HUNT_WITH_COMMAND_BUTTON`, `TEAM_SET_ATTITUDE`,
-`TEAM_LOAD_TRANSPORTS`, die `TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_*`-Familie, die Überschreibungs-Beziehungen, Verstärkung mit Transport, `PLAYER_COMPLETED/MIDWAY_SPECIAL_POWER`, die Persona-Fraktion
-der Challenge-Wahl (`docs/SCRIPT-ENGINE.md` §9, Blockerliste).
+**Phase 11 state (1 October 2026, freshly measured; brief `docs/handoffs/HANDOFF-PHASE11.md`, preparation for `docs/handoffs/HANDOFF-PHASE12.md`):** the script VM now also executes the
+`SKIRMISH_*` conditions (decision "porting" instead of a `SkirmishAi` substitute, `docs/SCRIPT-ENGINE.md` §5c), vision/special-power conditions, map reveal, garrison/containers, build switches,
+`BUILD_TEAM`/`TEAM_MERGE_INTO_TEAM`/`RECRUIT_TEAM`, the waypoint variants of the command-button abilities, **sequential scripts** (§5a) and **team-event scripts** (§5b); upgrade/`FIRE_WEAPON`
+buttons have a path of their own. Conditions **80** executed / 29 missing of 109, actions **131** executed / 129 passed on / **2 recorded** / **82** missing of 344
+(before the phase: 63/46 and 73/129/0/142). The shell selects the human side of a challenge map itself (`ChallengeSides`), `CampaignController.StartCurrentMission` has the
+latency parameter, and a campaign mission plays behind the full skirmish command bar (`LiveGame`/`LiveMission`/`MissionController`, `docs/GAME-HUD.md` §14).
+**New evidence for "the mission ends on its own script path":** `CampaignTool reachability` checks statically whether the `VICTORY`/`DEFEAT` scripts of every map can
+fire at all with the implemented types (chains over flags, counters, timers, unlocks and team events). Before (state of Phase 10, same analysis): victory clean 4 / restricted 18 / blocked 2,
+defeat clean 0 / restricted 24; **now: victory clean 21 / restricted 3 / blocked 0, defeat clean 24 / 24 maps** (table: `docs/SCRIPT-ENGINE.md` §9). "Clean" means:
+every condition and action on the chain is implemented; it does **not** mean that a player can win the mission (state conditions are leaves). The elimination end probes of the
+`CampaignTool audit` are unchanged victory 10/24, defeat 15/24 – they do not pursue objectives. The new objective driver (`CampaignTool drive`, `MissionObjectiveDriver`) fulfils the world-state conditions of the scripts and counts only when a `VICTORY`/`DEFEAT` action of the script itself fires: **victory on the script path 10/24, defeat 16/24** (`docs/SCRIPT-ENGINE.md` §9, with the finding of what the others fail at). Still open: `TEAM_HUNT_WITH_COMMAND_BUTTON`, `TEAM_SET_ATTITUDE`,
+`TEAM_LOAD_TRANSPORTS`, the `TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_*` family, the override relationships, reinforcement with transport, `PLAYER_COMPLETED/MIDWAY_SPECIAL_POWER`, the persona faction
+of the challenge selection (`docs/SCRIPT-ENGINE.md` §9, blocker list).
 
-**Verlauf (Stand vor Phase 11, nur noch zur Nachvollziehbarkeit; die Zahlen unten stammen aus Phase 9):**
+**History (state before Phase 11, only for traceability; the numbers below come from Phase 9):**
 
-- **Skript-VM** (`CnCNew.Simulation/Scripting`): deterministische Ausführung der dekodierten World-Builder-Skripte (Zähler, Flags, Timer, Zufallstimer,
-  Ein-Schuss-Skripte, Schwierigkeitsflags, verzögerte Auswertung, Unterprogramme, Teams mit Instanziierung, benannte Objekte, Bereichs- und
-  Schadensbedingungen, Wegpunktpfade, Befehle als validierte Spielerbefehle, Angriffsprioritäten, Verstärkung, Sieg/Niederlage). Bedingungen 63 ausgeführt
-  / 46 fehlend von 109, Aktionen 69 ausgeführt / 129 an den Client weitergereicht / 146 fehlend von 344; fehlende Typen werden zur Laufzeit gezählt
-  (`MissingActionHits`/`MissingConditionHits`), unauflösbare Verweise als `Diagnostics`.
-- **Missionssitzung** (`MissionSession`): Welt aus Kartendaten (Seiten, Beziehungen, platzierte Objekte, KI-Baulisten, Startbasis menschlicher Challenge-Spieler),
-  Skripte + automatisches Gefecht + Weltschritt je Tick; `MissionSnapshot` (Version 1) wrappt den `WorldSnapshot` (Version 7) und speichert Skriptzustand und
-  Befehlssequenzen. Objekte entstehen wie im Original sofort (`SimulationWorld.MaterializePendingSpawns`). Neue Weltzugriffe: `SetMoney`,
+- **Script VM** (`CnCNew.Simulation/Scripting`): deterministic execution of the decoded World Builder scripts (counters, flags, timers, random timers,
+  one-shot scripts, difficulty flags, deferred evaluation, subroutines, teams with instantiation, named objects, area and
+  damage conditions, waypoint paths, commands as validated player commands, attack priorities, reinforcement, victory/defeat). Conditions 63 executed
+  / 46 missing of 109, actions 69 executed / 129 passed on to the client / 146 missing of 344; missing types are counted at run time
+  (`MissingActionHits`/`MissingConditionHits`), unresolvable references as `Diagnostics`.
+- **Mission session** (`MissionSession`): world from map data (sides, relationships, placed objects, AI build lists, start base of human challenge players),
+  scripts + automatic combat + world step per tick; `MissionSnapshot` (version 1) wraps the `WorldSnapshot` (version 7) and stores script state and
+  command sequences. Objects come into being immediately as in the original (`SimulationWorld.MaterializePendingSpawns`). New world accesses: `SetMoney`,
   `SetRelationship`, `TransferOwnership`.
-- **Kampagne** (`CnCNew.Game/Campaign`): `CampaignCatalog` (Campaign.ini, 17 Kampagnen/85 Missionen, unbekannte Schlüssel gemeldet), `CampaignProgress`
-  (Sieg rückt vor, Niederlage wiederholt, Versuchszähler für `MISSION_ATTEMPTS`), `CampaignController`/`MissionRun`.
-- **Savegame** (`CnCNew.Game/Save`): `SaveGame` Version 1 (Kopf + Fortschritt + eingebetteter Missionszustand, SHA-256-Prüfsumme, kanonische Bytes,
-  verständliche Ablehnungsgründe), `SaveGameStore` (atomar, listet beschädigte Dateien mit Grund).
-- **Prüfung:** `CnCNew.CampaignTool` (`list`, `audit`, `playthrough`) und `SimTool mission-run`. 24 eindeutige Kampagnenkarten: 24/24 deterministisch (zwei Läufe),
-  24/24 identisch nach Speichern/Wiederherstellen, Endproben durch Ausschalten der Gegner Sieg 10/24 und durch Ausschalten des Betrachters Niederlage 15/24;
-  eine Challenge-Kampagne wurde über fünf Missionen mit Speichern/Laden je Mission durchgespielt. Neue Tests: 11 Skript-/Missionstests in
-  `Tests.Scripting.cs`, `CampaignTests.cs` (7 + Realdaten).
-- **Teil B:** Punkt 11 (Kartenskripte) siehe oben; Punkt 12 war bereits erledigt. `CommandButtonHuntUpdate` und `LockWeaponCreate` sind als ehrliche Hüllenmodule
-  gebunden (`docs/SCRIPT-ENGINE.md` §8): 1.494 von 2.115 Objekten instanziierbar (70,6 %, vorher 69,5 %), 87 von 205 Modultypen, Modulverwendungen
-  abgedeckt 15.639 von 19.553 (80,0 %), Kompatibilitätsbasislinie 749 → 747. Punkte 9 (Kollision) und 10 (Bau-/Regelgrenzen) sind **offen**.
+- **Campaign** (`CnCNew.Game/Campaign`): `CampaignCatalog` (Campaign.ini, 17 campaigns/85 missions, unknown keys reported), `CampaignProgress`
+  (victory advances, defeat repeats, attempt counter for `MISSION_ATTEMPTS`), `CampaignController`/`MissionRun`.
+- **Savegame** (`CnCNew.Game/Save`): `SaveGame` version 1 (header + progress + embedded mission state, SHA-256 checksum, canonical bytes,
+  understandable rejection reasons), `SaveGameStore` (atomic, lists damaged files with the reason).
+- **Checking:** `CnCNew.CampaignTool` (`list`, `audit`, `playthrough`) and `SimTool mission-run`. 24 unique campaign maps: 24/24 deterministic (two runs),
+  24/24 identical after save/restore, end probes by eliminating the opponents victory 10/24 and by eliminating the viewer defeat 15/24;
+  one challenge campaign was played through over five missions with save/load per mission. New tests: 11 script/mission tests in
+  `Tests.Scripting.cs`, `CampaignTests.cs` (7 + real data).
+- **Part B:** item 11 (map scripts) see above; item 12 was already done. `CommandButtonHuntUpdate` and `LockWeaponCreate` are bound as honest shell modules
+  (`docs/SCRIPT-ENGINE.md` §8): 1,494 of 2,115 objects instantiable (70.6 %, before 69.5 %), 87 of 205 module types, module uses
+  covered 15,639 of 19,553 (80.0 %), compatibility baseline 749 → 747. Items 9 (collision) and 10 (build/rule limits) are **open**.
 
-**Phase-13-Stand (3. Oktober 2026, frisch gemessen; Auftrag „offene Punkte fertig machen“ aus `docs/handoffs/HANDOFF-PHASE13.md`, Vorbereitung für `docs/handoffs/HANDOFF-PHASE14.md`):**
+**Phase 13 state (3 October 2026, freshly measured; brief "finishing the open items" from `docs/handoffs/HANDOFF-PHASE13.md`, preparation for `docs/handoffs/HANDOFF-PHASE14.md`):**
 
-- **Die zwei offenen Sieg-Missionen (Punkt 2):** `MD_GLA03` über `ParticleUplinkCannonUpdate` (Strahlzeiten, Schwenk, Schadenspulse, `LaserBeamRadius`) und das Fahrerblatt „Kraft beim Träger erfassen, aufladen, auslösen“ (Sieg `CINE_ENDVictory` @3.613);
-  `MD_CHI04` über `UndeadBody`, `BattleBusSlowDeathBehavior`, `SubObjectsUpgrade`, `AnimationSteeringUpdate` (Sieg `END_Final_` @48.348, deshalb Standard von `drive` jetzt 60.000 Ticks). **`CampaignTool drive`: Sieg 24/24, Niederlage 24/24**
-  (Ende Phase 12: 22/24 und 24/24); `reachability` unverändert sauber 24/24 und 24/24.
-- **Verstärkung mit Transport (Punkt 3):** `DeliverPayloadAIUpdate`, `ParachuteContain`, `JetSlowDeathBehavior`, `CountermeasuresBehavior`; `CREATE_REINFORCEMENT_TEAM` mit `teamTransport`/`teamStartsFull`/`teamTransportsExit`
-  (`ScriptEngine.Reinforcements.cs`); `CampaignTool transports`/`teams`. Nicht umgesetzt: Formationen/Angriffsmarsch (`asTeam`); `CINE_U06_CruiseMissileFLY` bleibt an `JetAIUpdate` blockiert.
-- **VM-Semantik (Punkt 5, `docs/SCRIPT-ENGINE.md` §8 Punkt 23):** erledigt: inaktive Singleton-Teams sind `NULL`, Team-Bau und Rekrutierung laufen durch die Bau-/Bereitschaftswarteschlangen mit Startaktionen
-  (`ScriptEngine.TeamQueues.cs`), Upgrade-Knöpfe melden Bereitschaft (`IUpgradeModule.WouldUpgrade`). Bewusst offen und begründet: „untätig“ ohne AI-Zustand, `…_USING_WAYPOINT_PATH` ohne Pfadflug, `FIRE_WEAPON` ohne `WeaponSlot`.
-- **Spielbarkeit (Punkt 1, Teilschritt):** `CampaignTool drive --commands-only` führt den Fahrer ohne jede Weltschreibung (Befehle statt Töten/Platzieren/Geld; `SkirmishAi` als Wirtschafts- und Heer-Agent des Betrachters, `docs/SCRIPT-ENGINE.md` §9 „Nur-Befehle-Modus“). **Messung (15.000 Ticks): 0 Weltschreibungen, Sieg über die eigenen Skripte nur auf 1 von 24 Karten (`MD_GLA04`, wo das Skript von selbst endet)** – der Agent verliert seine einzige Welle gegen die vorgefertigten Feindbasen, Geld/Wissenschaft/Besitzer/Flags sind nur durch Schreibungen erreichbar. Die Spielbarkeit ist damit **nicht** belegt, aber messbar; ein Kampagnen-Spieler-Agent ist Gegenstand von `docs/handoffs/HANDOFF-PHASE14.md`.
-- **Skriptaktionen (Punkt 4, Teil):** `TEAM_FACE_NAMED` und `PLAYER_SELL_EVERYTHING` ausgeführt, `NAMED_SET_STOPPING_DISTANCE`, `NAMED_SET_REPULSOR`, `SET_BASE_CONSTRUCTION_SPEED` aufgezeichnet: Aktionen **162** ausgeführt / 129 weitergereicht / **13** aufgezeichnet / **40** fehlend von 344 (vorher 160/129/10/45).
-- **Client (Punkt 6):** die Rauchtests (`--smoke-test`, `--shell`, `--mission GC_ChemGeneral`) laufen headless fehlerfrei mit den neuen Modulen; ein interaktives Durchklicken durch einen Menschen fand **nicht** statt.
-- **Module und Zahlen:** Modulkatalog **107 von 205**, **1.735 von 2.115 Objekten instanziierbar (82,0 %)**, Modulverwendungen abgedeckt 16.085 von 19.553 (82,3 %), Kompatibilitätsbasislinie **771**. Skript-VM unverändert 80/29 Bedingungen,
-  160/129/10/45 Aktionen. Audit (900 Ticks): 24/24 deterministisch, 24/24 identisch nach Speichern/Laden, Endproben Sieg 13/24, Niederlage 15/24, Treffer auf fehlende Aktionstypen 0,3 %.
-  Retail-Referenzmatch: Sieger FactionGLA bei Tick 15.000, Endhash `532F19F360C59550` (vorher Tick 19.200, `28BE35C1174E369F`; Ursache: die neuen Flug-/Fahrzeugmodule, nicht die Team-Warteschlangen); Stresstest unverändert `56882F763EABEF67`.
-  Keine Versionssprünge (`WorldSnapshot` 7, Replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10).
+- **The two open victory missions (item 2):** `MD_GLA03` through `ParticleUplinkCannonUpdate` (beam times, sweep, damage pulses, `LaserBeamRadius`) and the driver leaf "capture the power at the carrier, charge, trigger" (victory `CINE_ENDVictory` @3,613);
+  `MD_CHI04` through `UndeadBody`, `BattleBusSlowDeathBehavior`, `SubObjectsUpgrade`, `AnimationSteeringUpdate` (victory `END_Final_` @48,348, which is why the default of `drive` is now 60,000 ticks). **`CampaignTool drive`: victory 24/24, defeat 24/24**
+  (end of Phase 12: 22/24 and 24/24); `reachability` unchanged clean 24/24 and 24/24.
+- **Reinforcement with transport (item 3):** `DeliverPayloadAIUpdate`, `ParachuteContain`, `JetSlowDeathBehavior`, `CountermeasuresBehavior`; `CREATE_REINFORCEMENT_TEAM` with `teamTransport`/`teamStartsFull`/`teamTransportsExit`
+  (`ScriptEngine.Reinforcements.cs`); `CampaignTool transports`/`teams`. Not implemented: formations/attack march (`asTeam`); `CINE_U06_CruiseMissileFLY` stays blocked on `JetAIUpdate`.
+- **VM semantics (item 5, `docs/SCRIPT-ENGINE.md` §8 item 23):** done: inactive singleton teams are `NULL`, team building and recruiting run through the build/readiness queues with start actions
+  (`ScriptEngine.TeamQueues.cs`), upgrade buttons report readiness (`IUpgradeModule.WouldUpgrade`). Deliberately open and with reasons: "idle" without AI state, `…_USING_WAYPOINT_PATH` without path flight, `FIRE_WEAPON` without `WeaponSlot`.
+- **Playability (item 1, partial step):** `CampaignTool drive --commands-only` runs the driver without any world write (commands instead of killing/placing/money; `SkirmishAi` as the economy and army agent of the viewer, `docs/SCRIPT-ENGINE.md` §9 "commands-only mode"). **Measurement (15,000 ticks): 0 world writes, victory through the own scripts only on 1 of 24 maps (`MD_GLA04`, where the script ends by itself)** – the agent loses its only wave against the prefabricated enemy bases, money/science/owner/flags are reachable only through writes. The playability is thereby **not** verified, but measurable; a campaign player agent is the subject of `docs/handoffs/HANDOFF-PHASE14.md`.
+- **Script actions (item 4, part):** `TEAM_FACE_NAMED` and `PLAYER_SELL_EVERYTHING` executed, `NAMED_SET_STOPPING_DISTANCE`, `NAMED_SET_REPULSOR`, `SET_BASE_CONSTRUCTION_SPEED` recorded: actions **162** executed / 129 passed on / **13** recorded / **40** missing of 344 (before 160/129/10/45).
+- **Client (item 6):** the smoke tests (`--smoke-test`, `--shell`, `--mission GC_ChemGeneral`) run headless without error with the new modules; an interactive click-through by a human did **not** take place.
+- **Modules and numbers:** module catalogue **107 of 205**, **1,735 of 2,115 objects instantiable (82.0 %)**, module uses covered 16,085 of 19,553 (82.3 %), compatibility baseline **771**. Script VM unchanged 80/29 conditions,
+  160/129/10/45 actions. Audit (900 ticks): 24/24 deterministic, 24/24 identical after save/load, end probes victory 13/24, defeat 15/24, hits on missing action types 0.3 %.
+  Retail reference match: winner FactionGLA at tick 15,000, end hash `532F19F360C59550` (before tick 19,200, `28BE35C1174E369F`; cause: the new flight/vehicle modules, not the team queues); stress test unchanged `56882F763EABEF67`.
+  No version jumps (`WorldSnapshot` 7, replay 7, `MissionSnapshot` 2, `CommandTypes.Version` 10).
 
-**Bekannte Grenzen:**
+**Known limits:**
 
-**Phase-14-Stand (3. Oktober 2026, frisch gemessen; Auftrag aus `docs/handoffs/HANDOFF-PHASE14.md`, Vorbereitung für `docs/handoffs/HANDOFF-PHASE15.md`):** Die Modulabdeckung ist geschlossen: **alle 183 Simulationsmodule des Katalogs sind implementiert, 2.115 von 2.115 Retail-Objekten
-instanziierbar**, Modulverwendungen abgedeckt 16.558 von 19.553 (84,7 %; der Rest sind die 22 Präsentationsmodule), Kompatibilitätsbasislinie 751. Vier unabhängig entwickelte Gruppen (Luft 10 Module, Kisten/Spezial/Kollision 21, Struktur/Welt 24,
-Sklaven/Spawn/Container 12) und die letzten neun Blocker (`SalvageCrateCollide`, `UnitCrateCollide`, zwei Sabotage-Kisten, `SmartBombTargetHomingUpdate`, `SupplyWarehouseCripplingBehavior`, `RailedTransport*`) sind gemergt (`docs/SIMULATION-CORE.md` §30);
-ein **Waffenslot-Modell** (Primär/Sekundär/Tertiär, Clips und Nachladen je Slot, Sperren, Satzwahl nach Bedingungen, Beste-Waffe-Wahl; §30.6) macht die aktive `WeaponSet`-Auswahl zur einzigen Quelle der gefeuerten Waffe (`WorldSnapshot` 7 → 8,
-Replay 7 → 8, `CommandTypes.Version` 10 → 11). Skriptseite: Formationen (`asTeam`), Pfadflug des Partikelstrahls, Luftlieferungen per OCL (`DeliverPayload`, Spezialkräfte am Kartenrand), Todeswaffen, `NAMED_SET_HELD`, deaktivierte Fabriken, Zughalt,
-Garnison-Ausstiegsseite, Sprengfallen, Brückenzustand und mitwandernde Skriptnamen; die VM führt **109 von 109 Bedingungen** und 187 Aktionstypen aus (129 weitergereicht, 19 aufgezeichnet, 9 fehlend – keine davon in einer Kampagnenkarte benutzt).
-Der Zielfahrer erreicht **Sieg und Niederlage auf dem Skriptweg bei 24/24 Karten**; `audit --ticks 900`: 24/24 deterministisch und identisch nach Speichern/Laden, 0 Treffer auf fehlende Typen, Ausschalt-Endproben 13/24 Siege und 15/24 Niederlagen; Erreichbarkeit
-sauber 24/24 und 24/24. Referenzwerte: Retail-Referenzmatch Sieger FactionGLA bei Tick 13.890, Endhash `76F22CB0CA79BEEF`; Stresstest `56882F763EABEF67`; sauberer Solution-Build 21 erklärte Warnungen. Nur-Befehle-Agent (`drive --commands-only`, 15.000 Ticks, ohne jede Weltschreibung): Sieg über die eigenen Skripte weiterhin nur auf **1 von 24 Karten** (`MD_GLA04`) – die neuen Module haben die Spielbarkeit nicht verbessert.
+**Phase 14 state (3 October 2026, freshly measured; brief from `docs/handoffs/HANDOFF-PHASE14.md`, preparation for `docs/handoffs/HANDOFF-PHASE15.md`):** the module coverage is closed: **all 183 simulation modules of the catalogue are implemented, 2,115 of 2,115 retail objects
+instantiable**, module uses covered 16,558 of 19,553 (84.7 %; the rest are the 22 presentation modules), compatibility baseline 751. Four independently developed groups (air 10 modules, crates/special/collision 21, structure/world 24,
+slaves/spawn/container 12) and the last nine blockers (`SalvageCrateCollide`, `UnitCrateCollide`, two sabotage crates, `SmartBombTargetHomingUpdate`, `SupplyWarehouseCripplingBehavior`, `RailedTransport*`) are merged (`docs/SIMULATION-CORE.md` §30);
+a **weapon-slot model** (primary/secondary/tertiary, clips and reloading per slot, locks, set selection by conditions, best-weapon selection; §30.6) makes the active `WeaponSet` selection the only source of the fired weapon (`WorldSnapshot` 7 → 8,
+replay 7 → 8, `CommandTypes.Version` 10 → 11). Script side: formations (`asTeam`), path flight of the particle beam, air deliveries by OCL (`DeliverPayload`, special powers at the map edge), death weapons, `NAMED_SET_HELD`, disabled factories, train hold,
+garrison exit side, booby traps, bridge state and script names that travel along; the VM executes **109 of 109 conditions** and 187 action types (129 passed on, 19 recorded, 9 missing – none of them used in a campaign map).
+The objective driver reaches **victory and defeat on the script path on 24/24 maps**; `audit --ticks 900`: 24/24 deterministic and identical after save/load, 0 hits on missing types, elimination end probes 13/24 victories and 15/24 defeats; reachability
+clean 24/24 and 24/24. Reference values: retail reference match winner FactionGLA at tick 13,890, end hash `76F22CB0CA79BEEF`; stress test `56882F763EABEF67`; clean solution build 21 explained warnings. Commands-only agent (`drive --commands-only`, 15,000 ticks, without any world write): victory through the own scripts still only on **1 of 24 maps** (`MD_GLA04`) – the new modules have not improved the playability.
 
-**Bekannte Grenzen (Stand nach Phase 14):**
+**Known limits (state after Phase 14):**
 
-- **Die Spielbarkeit der Missionen durch einen Menschen ist nicht belegt.** Belegt ist: die Endskripte jeder Karte sind statisch erreichbar (Sieg und Niederlage je 24/24 „sauber“), jede Karte läuft
-  deterministisch und setzt nach Speichern/Laden identisch fort, und der zielgerichtete Fahrer erreicht Sieg auf dem eigenen Skriptweg bei 24/24 und Niederlage bei 24/24 Karten (seit Phase 13; vorher 22/24). Der Fahrer ersetzt jedoch Spielerhandlungen
-  durch Welteingriffe (platzierte Einheiten, entfernte Gegner in Abwehrbereichen, UI-Signale); „ja“ belegt die Skriptkette, nicht, dass ein Spieler mit den implementierten Einheiten gewinnen kann. Die
-  Ausschalt-Endproben erreichen weiter nur 13/24 Siege und 15/24 Niederlagen. `MD_GLA03` und `MD_CHI04` sind seit Phase 13 geschlossen; in Phase 14 mussten `MD_GLA03` (Sieg) und `MD_GLA04` (Niederlage) nach den neuen Gegnermodulen im Fahrer nachgezogen werden (`docs/SCRIPT-ENGINE.md` §9).
-- Noch fehlende Skriptaktionen (statisch, Skripte/Karten): `SKIRMISH_MOVE_TO_APPROACH_PATH` 10/3, `SKIRMISH_FOLLOW_APPROACH_PATH` 7/3, `AI_PLAYER_BUILD_SUPPLY_CENTER` 5/1, `SET_TRAIN_HELD` 5/1,
-  `TEAM_CAPTURE_NEAREST_UNOWNED_FACTION_UNIT` 5/4, `TEAM_GUARD_SUPPLY_CENTER` 5/1, …; fehlende Bedingungen unverändert `PLAYER_COMPLETED/MIDWAY_SPECIAL_POWER`, `SUPPLY_SOURCE_SAFE/ATTACKED`,
-  `PLAYER_BUILT_UPGRADE`, `TEAM_STATE_IS`, `PLAYER_POWER_COMPARE_PERCENT`, `SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE` (`docs/SCRIPT-ENGINE.md` §9). **Verstärkung mit Transport** ist seit Phase 13 für Flugzeuge, Fallschirm und `teamStartsFull` simuliert (offen: Chinook-Lieferung, `CINE_U06_CruiseMissileFLY`), Formationen/Angriffsmarsch sind nicht simuliert; zehn Aktionen werden nur aufgezeichnet (`SCRIPT-ENGINE.md` §8 Punkt 17).
-- Die verbliebenen VM-Semantiklücken (Stand Phase 14: der vollständige Mannschafts-Zustandsautomat des Originals, Pfadflug für andere Flugkörper als den Partikelstrahl, die neun fehlenden Skirmish-/Waffenpfad-Aktionen) stehen in `docs/SCRIPT-ENGINE.md` §8 Punkt 23; Formationen, Pfadflug des Strahls und `WeaponSlot` sind seit Phase 14 umgesetzt.
-- Das Skirmish-Setup (Teil A Punkt 1) ist seit Phase 10 abgeschlossen (alle 64 Skirmish-Karten mit ≥2 Startpositionen starten und enden, `SimTool skirmish-sweep`); ein Skirmish-Speicherstand ist
-  bewusst nicht unterstützt (`SkirmishMatchSession.CreateSave()` wirft; Replay/Checkpoint deckt Skirmish-Partien ab).
-- Objekte, deren Vorlage im Retail-Basisbestand fehlt (Kartenüberlagerungs-Definitionen wie Straßen, Zäune, Bäume), werden übersprungen und gezählt; `*_HUNT`/`*_ATTACK_*` sind Bewegungsaufträge plus
-  automatisches Gefecht (keine Formation, kein Angriffsmarsch).
-- Freischaltungen (Kampagnenreihenfolge der Challenge-Kampagnen, Profil) sind nicht modelliert; Menü, Briefing, Ladeliste, Speichern im Spiel und Missionsabschluss sind angeschlossen
-  (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7), und der Stride-Client verarbeitet seit Phase 12 die Shell-Ausgaben (`ClientRuntime`, `docs/GAME-HUD.md` §15); die Verdrahtung ist headless per Rauchtest geprüft, nicht von einem Menschen gespielt.
-- Missionen sind keine Replays (Skriptaktionen sind keine aufgezeichneten Befehle); Wahrheit ist der Snapshot.
-- Referenzwerte nach Phase 14: Retail-Referenzmatch Sieger FactionGLA bei Tick 13.890, Endhash `76F22CB0CA79BEEF` (Phase 13: Tick 15.000, `532F19F360C59550`; Phase 10–12: Tick 19.200, `28BE35C1174E369F`); Stresstest `56882F763EABEF67`.
+- **The playability of the missions by a human is not verified.** Verified is: the end scripts of every map are statically reachable (victory and defeat each 24/24 "clean"), every map runs
+  deterministically and continues identically after save/load, and the goal-directed driver reaches victory on the own script path on 24/24 and defeat on 24/24 maps (since Phase 13; before 22/24). The driver, however, replaces player actions
+  by interventions in the world (placed units, removed opponents in defence areas, UI signals); "yes" verifies the script chain, not that a player can win with the implemented units. The
+  elimination end probes still reach only 13/24 victories and 15/24 defeats. `MD_GLA03` and `MD_CHI04` have been closed since Phase 13; in Phase 14 `MD_GLA03` (victory) and `MD_GLA04` (defeat) had to be readjusted in the driver after the new opponent modules (`docs/SCRIPT-ENGINE.md` §9).
+- Script actions still missing (static, scripts/maps): `SKIRMISH_MOVE_TO_APPROACH_PATH` 10/3, `SKIRMISH_FOLLOW_APPROACH_PATH` 7/3, `AI_PLAYER_BUILD_SUPPLY_CENTER` 5/1, `SET_TRAIN_HELD` 5/1,
+  `TEAM_CAPTURE_NEAREST_UNOWNED_FACTION_UNIT` 5/4, `TEAM_GUARD_SUPPLY_CENTER` 5/1, …; missing conditions unchanged `PLAYER_COMPLETED/MIDWAY_SPECIAL_POWER`, `SUPPLY_SOURCE_SAFE/ATTACKED`,
+  `PLAYER_BUILT_UPGRADE`, `TEAM_STATE_IS`, `PLAYER_POWER_COMPARE_PERCENT`, `SKIRMISH_TECH_BUILDING_WITHIN_DISTANCE` (`docs/SCRIPT-ENGINE.md` §9). **Reinforcement with transport** has been simulated since Phase 13 for aircraft, parachute and `teamStartsFull` (open: Chinook delivery, `CINE_U06_CruiseMissileFLY`), formations/attack march are not simulated; ten actions are only recorded (`SCRIPT-ENGINE.md` §8 item 17).
+- The remaining VM semantics gaps (state Phase 14: the complete team state machine of the original, path flight for missiles other than the particle beam, the nine missing skirmish/weapon-path actions) are in `docs/SCRIPT-ENGINE.md` §8 item 23; formations, path flight of the beam and `WeaponSlot` have been implemented since Phase 14.
+- The skirmish setup (part A item 1) has been completed since Phase 10 (all 64 skirmish maps with ≥2 start positions start and end, `SimTool skirmish-sweep`); a skirmish savegame is
+  deliberately not supported (`SkirmishMatchSession.CreateSave()` throws; replay/checkpoint covers skirmish matches).
+- Objects whose template is missing in the retail base content (map-overlay definitions such as roads, fences, trees) are skipped and counted; `*_HUNT`/`*_ATTACK_*` are movement orders plus
+  automatic combat (no formation, no attack march).
+- Unlocks (campaign order of the challenge campaigns, profile) are not modelled; menu, briefing, load list, saving in the game and mission completion are connected
+  (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7), and the Stride client has processed the shell outputs since Phase 12 (`ClientRuntime`, `docs/GAME-HUD.md` §15); the wiring is checked headless by smoke test, not played by a human.
+- Missions are not replays (script actions are not recorded commands); truth is the snapshot.
+- Reference values after Phase 14: retail reference match winner FactionGLA at tick 13,890, end hash `76F22CB0CA79BEEF` (Phase 13: tick 15,000, `532F19F360C59550`; Phase 10–12: tick 19,200, `28BE35C1174E369F`); stress test `56882F763EABEF67`.
 
-## 10. Tickrate, Festkomma und Mehrspieler über Dedicated Server
+## 10. Tick rate, fixed point and multiplayer through dedicated servers
 
-**Status: geplant am 5. Oktober 2026. Stand 9. Oktober 2026: die Phasen 18 bis 23 sind abgeschlossen, vom
-Mehrspieler-Teil (Phasen 24 bis 29) ist nichts gebaut; als Nächstes folgt Phase 24.** Aufträge: `docs/handoffs/HANDOFF-PHASE18.md` bis
-`docs/handoffs/HANDOFF-PHASE29.md`; gemeinsamer Rahmen: `docs/MULTIPLAYER-PLAN.md`.
+**Status: planned on 5 October 2026. As of 9 October 2026: Phases 18 to 23 are completed, of the
+multiplayer part (Phases 24 to 29) nothing is built; next follows Phase 24.** Briefs: `docs/handoffs/HANDOFF-PHASE18.md` to
+`docs/handoffs/HANDOFF-PHASE29.md`; common frame: `docs/MULTIPLAYER-PLAN.md`.
 
-**Ergebnis:** Die Simulation läuft mit 60 Hz bei parametrisierter Tickrate und Q39.24-Festkomma,
-ist über Rechnergrenzen deterministisch belegt, und Gefechte mit bis zu acht Spielern (Menschen und
-KI gemischt) laufen als Lockstep über einen Relay-Server, der weder simuliert noch Spieldaten lädt.
-Das lokale Gefecht benutzt denselben Pfad mit eingebettetem Server.
+**Result:** the simulation runs at 60 Hz with a parameterised tick rate and Q39.24 fixed point,
+is verified as deterministic across machine boundaries, and matches with up to eight players (humans and
+AI mixed) run as lockstep through a relay server that neither simulates nor loads game data.
+The local skirmish uses the same path with an embedded server.
 
-Umfang (je Punkt eine Phase):
+Scope (one phase per item):
 
-- 18: Referenzmanifest als Messlatte, Determinismus über Rechnergrenzen, Leistungsprofil echter
-  Matches, geprüftes Inventar der Tickraten-Kopplung (`docs/TICKRATE-AUDIT.md`); Freigabe;
-- 19: Tickkosten echter Matches senken, ergebnisgleich;
-- 20, 21: Tickrate als Parameter in Simulation, Präsentation, Spielschicht, UI, Ton, Werkzeugen und
-  Tests, ergebnis- und bildgleich bei 30 Hz;
-- 22: Festkomma Q47.16 → Q39.24 als einzelne, vermessene Änderung;
-- 23: Zeitschritt-Invarianz, Raten-Äquivalenz-Suite (30/60/120 Hz) als neu entworfene Abnahme,
-  60 Hz als Standard, Neuerhebung aller Referenzwerte – **erledigt am 9. Oktober 2026, gemessene Abnahme und
-  Grenzen unten**;
-- 24: KI im gehashten und gespeicherten Sitzungszustand, Skirmish-Speicherstand, Match-Beschreibung,
-  zweistufiger Befehlsweg, Tickquelle;
-- 25: Protokoll, Raum und Relay im Prozess; lokales Gefecht über den Netzpfad; KI-Slots;
-- 26: Dedicated Server, UDP-Transport, Zeitabgleich, adaptive Puffer, acht Clients;
-- 27: Desync-Diagnose, Wiedereinstieg, Zuschauer, Server-Replay;
-- 28: Serverbetrieb und Sicherheit;
-- 29: Mehrspieler im Client, Latenzwahrnehmung, Abnahme mit Menschen.
+- 18: reference manifest as the yardstick, determinism across machine boundaries, performance profile of real
+  matches, checked inventory of the tick-rate coupling (`docs/TICKRATE-AUDIT.md`); go-ahead;
+- 19: lower the tick costs of real matches, result-identical;
+- 20, 21: tick rate as a parameter in simulation, presentation, game layer, UI, sound, tools and
+  tests, result-identical and image-identical at 30 Hz;
+- 22: fixed point Q47.16 → Q39.24 as a single, measured change;
+- 23: time-step invariance, rate-equivalence suite (30/60/120 Hz) as a newly designed acceptance,
+  60 Hz as the default, new survey of all reference values – **done on 9 October 2026, measured acceptance and
+  limits below**;
+- 24: AI in the hashed and saved session state, skirmish savegame, match description,
+  two-stage command path, tick source;
+- 25: protocol, room and relay in the process; local skirmish over the network path; AI slots;
+- 26: dedicated server, UDP transport, time synchronisation, adaptive buffers, eight clients;
+- 27: desync diagnosis, rejoining, spectators, server replay;
+- 28: server operation and security;
+- 29: multiplayer in the client, latency perception, acceptance with humans.
 
-Abgeschlossen, wenn die Raten-Äquivalenz-Suite bei 30, 60 und 120 Hz besteht, alle Referenzwerte bei
-60 Hz im Referenzmanifest stehen, das Manifest auf mindestens zwei verschiedenen Rechnern identisch
-besteht, acht Clients über einen Dedicated Server unter gestörtem Netz hashgleich bleiben, ein
-getrennter Client hashgleich wieder einsteigt und Menschen ein lokales Gefecht, ein LAN-Match und ein
-Internet-Match mit KI-Slots abgenommen haben.
+Completed when the rate-equivalence suite passes at 30, 60 and 120 Hz, all reference values at
+60 Hz are in the reference manifest, the manifest passes identically on at least two different
+machines, eight clients stay hash-identical through a dedicated server under a disturbed network, a
+disconnected client rejoins hash-identically and humans have accepted a local skirmish, a LAN match and an
+internet match with AI slots.
 
-Bekannte Grenzen (Stand der Planung): Kartenaufdeckung durch manipulierte Clients ist im
-Lockstep-Modell nicht verhinderbar; die Kampagne bleibt lokal (ihre Skripte nehmen Rückmeldungen der
-Präsentation entgegen); der Server verteilt keine Karten und keine Daten.
+Known limits (state of the planning): map reveal by manipulated clients is not preventable in the
+lockstep model; the campaign stays local (its scripts accept feedback from the
+presentation); the server distributes no maps and no data.
 
-**Gemessene Abnahme der Phase 23 (9. Oktober 2026, Stand `f3acc2e`; `docs/TICKRATE-MIGRATION.md` §15.7):**
+**Measured acceptance of Phase 23 (9 October 2026, state `f3acc2e`; `docs/TICKRATE-MIGRATION.md` §15.7):**
 
-- Raten-Äquivalenz-Suite: 0 von 4.388 Größen außerhalb der Toleranz bei 60 und bei 120 Hz, in allen zehn Gruppen (erster Lauf: 479 / 625 von 4.307); die Toleranzen standen vor dem ersten Lauf und sind nie geändert worden.
-- Standard 60 Hz (`e8632bb`, eine Zeile); beide Manifeste bei 60 Hz geschrieben (`ea52f87`) und zweimal mit 50 von 50 Läufen identisch geprüft (Windows, Release).
-- Alle Testprogramme bestehen bei 30, 60 und 120 Hz (`Simulation.Tests` 513 von 513, mit Realdaten 543 von 543; Stand `1b82e45`); sauberer Build 0 Warnungen; compat-check 751.
-- Das Retail-Referenzmatch ist bei 30, 60 und 120 Hz dasselbe Spiel (Sieger FactionGLA im Originalbild 14.130, 26.626 Befehle).
-- Verteilungsvergleich 30 gegen 60 Hz über 320 Gefechte je Rate: 39 von 39 Prüfungen bestanden.
-- Leistungstor bei 60 Hz (8 Spieler, 30 Spielminuten): Mittel, 99-%-Quantil, Aufholtempo und Gen-2-Freiheit erreicht.
+- Rate-equivalence suite: 0 of 4,388 quantities outside the tolerance at 60 and at 120 Hz, in all ten groups (first run: 479 / 625 of 4,307); the tolerances were set before the first run and have never been changed.
+- Default 60 Hz (`e8632bb`, one line); both manifests written at 60 Hz (`ea52f87`) and checked twice as identical with 50 of 50 runs (Windows, Release).
+- All test programs pass at 30, 60 and 120 Hz (`Simulation.Tests` 513 of 513, with real data 543 of 543; state `1b82e45`); clean build 0 warnings; compat-check 751.
+- The retail reference match is the same game at 30, 60 and 120 Hz (winner FactionGLA in original frame 14,130, 26,626 commands).
+- Distribution comparison 30 against 60 Hz over 320 matches per rate: 39 of 39 checks passed.
+- Performance gate at 60 Hz (8 players, 30 game minutes): mean, 99 % quantile, catch-up speed and freedom from gen-2 reached.
 
-**Bekannte Grenzen der Phase 23 (benannt, nicht behoben):**
+**Known limits of Phase 23 (named, not fixed):**
 
-- **Kein Mensch hat das Spiel bei 60 Hz gesehen oder gehört.** Es gab eine Sichtung eines KI-Gefechts bei 30 Hz (8. Oktober 2026), vor den daraus folgenden Korrekturen.
-- Vom Abnahmesatz dieses Abschnitts ist „das Manifest auf mindestens zwei verschiedenen Rechnern identisch“ **nicht erfüllt** (zweiter Rechner offen); mit den 60-Hz-Manifesten sind auch der Linux-Lauf und die Determinismus-Matrix nicht gemessen (`docs/DETERMINISM.md` §2c).
-- „Die Suite besteht“ heißt: die gemessenen Größen ihrer Fälle liegen innerhalb der Toleranz – nicht, dass jedes Gefecht identisch ist. Auf ausgelieferten Karten enden 2 von 16 Paarungen bei 60 Hz in einem anderen Bild (7 s und 84,5 s, derselbe Sieger); 33 von 320 Gefechten der Erhebung enden mehr als eine Sekunde neben dem 30-Hz-Gefecht, 3 mit anderem Ausgang; 120 Hz ist für Paarungen und Erhebung nicht gemessen.
-- Die Gleichheit ganzer KI-Gefechte beruht darauf, dass eine Einheit ihren eigenen Angriff einmal je Originalbild entscheidet; der Auftrag der Phase verbot das dem Wortlaut nach für den Zielerwerb. Die Bestätigung liegt beim Projektinhaber (`docs/MULTIPLAYER-PLAN.md` §7a Nr. 1).
-- Leistungstor: Maximum 141–143 ms je Tick (Soll ≤ 8 ms) und Allokation 8 KB je Tick verfehlt; das Maximum sinkt nur mit einer Verhaltensänderung, die sich der Projektinhaber vorbehalten hat.
-- Nicht umgestellt: einige Beweger rechnen weiter `Wert je Tick × r` (Spectre, Fallschirm, Leuchtkörper, Partikelstrahl, abgeschossener Jet, Schwerkraft der Physikmodule); `SlavedUpdate` und die Regeneration der Insassen heilen je Tick; Skript-VM, Spezialfähigkeiten, Brücken, Wasser und Klippen sind nicht untersucht; die Suite kennt nur die flache Karte.
-- Drei Verhaltensänderungen bei 30 Hz kamen dazu (verlorene Weckbitte, Fabrikausfahrt, KI und Bewegung nach der ersten Sichtung); die Balance danach ist nicht bewertet.
-- Ein bei 30 Hz geschriebener Spielstand wird vom Client ohne Option abgelehnt und lädt nur mit `--tick-rate 30`; die Zeichenreihenfolge der Straßen hängt an der Rate.
-- Die übrigen offenen Entscheidungen des Projektinhabers (elf): `docs/MULTIPLAYER-PLAN.md` §7a.
+- **No human has seen or heard the game at 60 Hz.** There was one viewing of an AI match at 30 Hz (8 October 2026), before the corrections that followed from it.
+- Of the acceptance sentence of this section, "the manifest identical on at least two different machines" is **not fulfilled** (second machine open); with the 60 Hz manifests the Linux run and the determinism matrix are also not measured (`docs/DETERMINISM.md` §2c).
+- "The suite passes" means: the measured quantities of its cases lie within the tolerance – not that every match is identical. On shipped maps 2 of 16 pairings end at 60 Hz in a different frame (7 s and 84.5 s, the same winner); 33 of 320 matches of the survey end more than one second away from the 30 Hz match, 3 with a different outcome; 120 Hz is not measured for pairings and survey.
+- The equality of whole AI matches rests on a unit deciding its own attack once per original frame; the brief of the phase forbade that by its wording for target acquisition. The confirmation lies with the project owner (`docs/MULTIPLAYER-PLAN.md` §7a no. 1).
+- Performance gate: maximum 141–143 ms per tick (target ≤ 8 ms) and allocation 8 KB per tick missed; the maximum goes down only with a behaviour change that the project owner has reserved.
+- Not converted: some movers still compute `value per tick × r` (Spectre, parachute, flares, particle beam, shot-down jet, gravity of the physics modules); `SlavedUpdate` and the regeneration of the occupants heal per tick; script VM, special abilities, bridges, water and cliffs are not investigated; the suite knows only the flat map.
+- Three behaviour changes at 30 Hz were added (lost wake request, factory exit, AI and movement after the first viewing); the balance after them is not assessed.
+- A savegame written at 30 Hz is rejected by the client without an option and loads only with `--tick-rate 30`; the draw order of the roads depends on the rate.
+- The remaining open decisions of the project owner (eleven): `docs/MULTIPLAYER-PLAN.md` §7a.
 
-## 11. Patch-Integration, Qualität und auslieferbarer Abschluss
+## 11. Patch integration, quality and shippable completion
 
-**Ergebnis:** Aus den Domänen entsteht ein reproduzierbar baubares, diagnostizierbares und lokal
-auslieferbares Produkt mit klar auswählbarem Original- und Bugfix-Verhalten.
+**Result:** from the domains arises a reproducibly buildable, diagnosable and locally
+shippable product with clearly selectable original and bug-fix behaviour.
 
-Umfang:
+Scope:
 
-- GeneralsGameCode-Fixes nach Subsystem prüfen und jeweils mit Regressionstest übernehmen;
-- GeneralsGamePatch als eigene Overlay-Schicht integrieren und Balanceänderungen getrennt
-  konfigurierbar halten;
-- Crash-Reporting, strukturierte Logs, Diagnose-Dumps, Profiler und Support-Bundle ergänzen;
-- Abhängigkeitswarnungen beseitigen oder Buildwerkzeuge isolieren, Lizenzen und Attributionen
-  dokumentieren;
-- Clean-Room-Build, frischen Assetimport, vollständige Testmatrix, Langzeitläufe und Packaging
-  automatisieren;
-- Installations-, Migrations- und Troubleshooting-Dokumentation fertigstellen;
-- Paket und Betriebsdokumentation für den Dedicated Server (Windows, Linux) sowie die Versions- und
-  Kompatibilitätsregel für Speicherstände, Replays und das Netzprotokoll ab der ersten Veröffentlichung.
+- check GeneralsGameCode fixes by subsystem and adopt each with a regression test;
+- integrate GeneralsGamePatch as an overlay layer of its own and keep balance changes separately
+  configurable;
+- add crash reporting, structured logs, diagnostic dumps, profiler and support bundle;
+- eliminate dependency warnings or isolate build tools, document licences and
+  attributions;
+- automate clean-room build, fresh asset import, complete test matrix, long-term runs and
+  packaging;
+- finish installation, migration and troubleshooting documentation;
+- package and operating documentation for the dedicated server (Windows, Linux) as well as the version and
+  compatibility rule for savegames, replays and the network protocol from the first release on.
 
-Abgeschlossen, wenn ein frischer Rechner aus dokumentierten Voraussetzungen Quellcode und lokale
-Originalinstallation reproduzierbar in ein startbares Paket überführen kann, die gesamte
-Regressionstestmatrix grün ist, keine ungeklärten hochprioren Defekte offen sind und der in diesem
-Dokument definierte Scope (Einzelspieler und Mehrspieler-Gefechte über Dedicated Server) end-to-end abgenommen wurde.
+Completed when a fresh machine can reproducibly turn source code and local
+original installation into a startable package from documented prerequisites, the entire
+regression test matrix is green, no unresolved high-priority defects are open and the scope defined in this
+document (single player and multiplayer skirmishes through dedicated servers) has been accepted end to end.
 
-## Reihenfolge und Änderungsregel
+## Order and change rule
 
-Die Schritte werden in der angegebenen Reihenfolge abgeschlossen. Erkenntnisse dürfen spätere
-Schritte präzisieren; Änderungen an Ziel, Abgrenzung oder Abschlusskriterien dieses Plans werden
-jedoch separat begründet und versioniert. Die Schritte 1 bis 8 sind abgeschlossen, Schritt 9 ist weit fortgeschritten, aber nicht im Sinne seiner Abnahme beendet (siehe oben „Bekannte Grenzen“).
-**Phase 15 „Tech-Demo-Reife I – Welt-Darstellung und Sicherheit der Abhängigkeiten“ (4. Oktober 2026, frisch gemessen; `docs/DEMO-FINDINGS.md`, `docs/CLIENT-OBJECTS.md`): **Sicherheit:** die vier verwundbaren transitiven Werkzeugpakete von Stride sind über `build/StrideToolingPins.props` auf Patch-Versionen angehoben, `scripts/audit-vulnerable.ps1` meldet keine bekannte Anfälligkeit, die Unterdrückung von `NU1901`/`NU1903` ist entfernt, der saubere Solution-Build hat **11** Warnungen (10 `YamlAssemblyRegistry`- und 1 `AssetCompiler`-Hinweis von Strides Werkzeug, vorher 21). **Welt:** die „halben Gebäude“ hatten drei Darstellungsursachen (Freigabe des geteilten Index-Puffers, invertierter Windungssinn der Objekt-Meshes, fehlende Beleuchtung) plus ignorierte Bone-Sichtbarkeit – behoben; `PresentationTool model-audit` zeichnet 1.585.401 von 1.585.417 Dreiecken (0 im Renderplan verloren); Türme folgen den Schüssen, Reifen drehen mit der Strecke, Mündungsfeuer erscheint nur nach einem Schuss, unerkundete Szenerie bleibt verborgen, das bisher nie gezeichnete HUD-Overlay (Auswahl, Lebensbalken, Befehlslinien, Sammelpunkte, Heilsymbole) wird gezeichnet, der Versorgungs-Chinook zeigt die Abladeanimation erst am Depot. Der gemeldete Befund falsch gedrehter Kartenobjekte wurde **nicht reproduziert** (`angle-audit`: gespeicherter Winkel richtet 64,6 % der Zaunreihen aus). Nebenbei: Wegfindung um stehende Einheiten (488 → 0 Überlappungs-Ticks), KI-Sammelpunkt frei von Gebäuden, Kampfplan als typisierte Option (`CommandTypes.Version` 12, Replay 9). Nachtrag 4. Oktober 2026: Straßen, Nebel-Abdunklung, Lenkung/Federung und 95 von 106 Modellzuständen sind gebaut; drei gestellte Auditdemos (`docs/DEMO-SCENARIOS.md`) deckten Lücken der Simulation auf, die geschlossen sind – Turmzustand mit Feuerfreigabe (`WorldSnapshot` 9), gestufte Gebäudeübernahme, Flügelflug mit Startbahn aus Modellknochen; neue Referenzwerte: Referenzmatch Sieger FactionGLA Tick 15.000, Endhash `01C01E3B91EAE18C` (nach dauerhaftem Turm-Angriffszustand und Idle-Scan; `CommandTypes.Version` 13, Replay 10), Stresstest unverändert `56882F763EABEF67`. **Nicht belegt:** die Sichtabnahme durch einen Menschen (Checkliste in `docs/CLIENT-OBJECTS.md` ist nicht abgehakt, die Prüfsummen von `scripts/capture-world.ps1` sind vorläufig), Ton, Cursor, Wegpunkte, Text und Mission im Client (Phase 16), die Spielbarkeit (Phase 17); 54 Modellzustände (Türen, Vorangriff, Packen, Nachbrenner …) werden nie gesetzt, Lenkung/Federung, Straßen und die Abdunklung von Objekten im Nebel fehlen.**
+The steps are completed in the stated order. Findings may make later
+steps more precise; changes to goal, delimitation or completion criteria of this plan are,
+however, justified and versioned separately. Steps 1 to 8 are completed, step 9 is far advanced, but not ended in the sense of its acceptance (see "Known limits" above).
+**Phase 15 "Tech-demo maturity I – world rendering and security of the dependencies" (4 October 2026, freshly measured; `docs/DEMO-FINDINGS.md`, `docs/CLIENT-OBJECTS.md`): **Security:** the four vulnerable transitive tooling packages of Stride are raised to patch versions through `build/StrideToolingPins.props`, `scripts/audit-vulnerable.ps1` reports no known vulnerability, the suppression of `NU1901`/`NU1903` is removed, the clean solution build has **11** warnings (10 `YamlAssemblyRegistry` and 1 `AssetCompiler` note from Stride's tool, before 21). **World:** the "half buildings" had three rendering causes (release of the shared index buffer, inverted winding order of the object meshes, missing lighting) plus ignored bone visibility – fixed; `PresentationTool model-audit` draws 1,585,401 of 1,585,417 triangles (0 lost in the render plan); turrets follow the shots, tyres rotate with the distance travelled, muzzle flash appears only after a shot, unexplored scenery stays hidden, the HUD overlay never drawn before (selection, health bars, command lines, rally points, healing symbols) is drawn, the supply Chinook shows the unloading animation only at the depot. The reported finding of wrongly rotated map objects was **not reproduced** (`angle-audit`: the stored angle aligns 64.6 % of the fence rows). In passing: pathfinding around standing units (488 → 0 overlap ticks), AI rally point free of buildings, battle plan as a typed option (`CommandTypes.Version` 12, replay 9). Addendum 4 October 2026: roads, fog darkening, steering/suspension and 95 of 106 model states are built; three staged audit demos (`docs/DEMO-SCENARIOS.md`) uncovered gaps of the simulation, which are closed – turret state with fire clearance (`WorldSnapshot` 9), staged building capture, winged flight with a runway from model bones; new reference values: reference match winner FactionGLA tick 15,000, end hash `01C01E3B91EAE18C` (after the permanent turret attack state and idle scan; `CommandTypes.Version` 13, replay 10), stress test unchanged `56882F763EABEF67`. **Not verified:** the visual acceptance by a human (the checklist in `docs/CLIENT-OBJECTS.md` is not ticked off, the checksums of `scripts/capture-world.ps1` are provisional), sound, cursor, waypoints, text and mission in the client (Phase 16), the playability (Phase 17); 54 model states (doors, pre-attack, packing, afterburner …) are never set, steering/suspension, roads and the darkening of objects in the fog are missing.**
 
-Phase 16 „Tech-Demo-Reife II – Bedienung“ (begonnen, nicht abgeschlossen; 4. Oktober 2026, **teilweise; nichts davon von einem Menschen abgenommen**; `docs/DEMO-FINDINGS.md` Nr. 16–19, `docs/handoffs/HANDOFF-PHASE16.md`): **Ton** ist im Client verdrahtet und vermessen (`ClientAudio`/`GameAudio`: Waffen, FX, Bauen, EVA, Stimmen, UI, Musik; Zähler je Quelle, `--audio-capture`, `--mute`; `docs/GAME-AUDIO.md`), aber nie gehört worden. **Mauszeiger** aus den Original-Cursordateien (`CursorReader`, Software-Cursor, Wechsel nach Kontext/Modus/Modifikator), **Wegpunktpfade** und Zielmarken sind gebaut (`docs/PRESENTATION-INPUT.md` §11/§12, `docs/GAME-HUD.md` §16). **Rückmeldung eines Menschen** abgearbeitet: Blinken und Tickton der Gebäudeübernahme (`SimEventKind.CaptureFlash`), fünf Shell-Mängel (Knopfzustände, Schieberegler, Hover auf Texten, versteckte Speicherknöpfe, Vorlagenschriftgröße – die Übergangsanimationen fehlen weiter), Kamerascrollen (war rund 3000-fach zu langsam); „Dozer baut in der Mission nicht“ ist reproduziert und behoben (das Skript-Intro von `GC_ChemGeneral` zog die Kamera unter dem Zeiger weg; Eingabesperre, Letterbox und Kameraschwenk des Skripts werden jetzt befolgt; `scripts/check-dozer-build.ps1` spielt die Klicks im echten Client nach). **Mission im Client:** der Director zeigt Skriptkamera, Letterbox, Blenden, Eingabesperre, Untertitel, Zähler, Banner und Skripttöne und zählt jede Skriptausgabe (`docs/SCRIPT-ENGINE.md` §7a; `GC_ChemGeneral` 17 von 29 dargestellt, `MD_USA01` 72 von 223). **Simulation** (`docs/SIM-FIRING-TRACKER.md`, `docs/SIM-TURRET-AIM.md` §8a, `docs/SIMULATION-CORE.md` §32): Feuerstufen `CONTINUOUS_FIRE_*` als Waffenbonus (Gattlings schießen jetzt schneller), `PreAttackDelay` (29 Waffen, `PREATTACK_A/B/C`), beschädigte Locomotoren, `StructureToppleUpdate` erreicht seinen Endzustand, Fähigkeit beendet Angriff, `SimTool`/`CampaignTool` mit Bone-Tabelle; die KI-Verschiebung ist aufgeschlüsselt (128 Läufe: der Ausschlag bei China/GLA ist die Regel „ein neuer Befehl beendet das Zielen“, `PursueCommand` spielt in `ai-match` keine Rolle, keine Verhaltenskorrektur); die Skirmish-KI stellt ihr Versorgungszentrum ans Lager (`AIPlayer::buildBySupplies`) und greift in Gruppen an: **12 von 16** KI-Läufen entschieden (vorher 5 bis 7). **Referenzwerte (4. Oktober 2026, gemessen):** Retail-Referenzmatch Sieger FactionGLA bei **Tick 13.500**, Endhash `0946FB676DEC615C`, Kette `EA6D12F180930D71`; Stresstest unverändert `56882F763EABEF67` / `B8E663493F2C73D5`; `ai-match` Alpine Assault China/GLA China bei 7.545 (`39344016A5EE8F91`), AirForce/China Patt (`E222322067493EB4`), America/GLA GLA bei 8.865 (`542BE1D4891FEB71`); `WorldSnapshot` 9, Replay 10, `CommandTypes.Version` 13, `MissionSnapshot` 2 unverändert; Modulkatalog 183 von 205, 2.115 von 2.115 instanziierbar, Kompatibilitätsbasislinie 751, sauberer Solution-Build 11 Warnungen. **Kampagne neu gemessen:** Zielfahrer Sieg 24/24 und Niederlage 24/24, Audit 24/24 deterministisch und identisch nach Speichern/Laden, Ausschalt-Endproben Sieg 13/24, Niederlage 15/24; Nur-Befehle-Agent weiter **1 von 24** (auch mit 60.000 Ticks auf vier Karten kein Sieg). **Nicht erledigt:** Textvergleich mit dem Original (Capture-Satz und Befundtabelle), die nicht dargestellten Skriptausgaben (Bildeffekte, Kamerapfade, Sprach-Untertitel), das Durchklicken Shell → Kampagne → Mission → Speichern/Laden → Abschluss mit einem Menschen, Skripttöne der Missionen, Leerlauf-Zielerwerb der Türme, Landeanflug-Bogen der Jets, Black-Lotus-Datenstrom, gezeichnete Fallschirmjäger; **Phase 17 (Spielbarkeit) ist nicht begonnen** außer der Neuerhebung der Zahlen und den KI-Korrekturen. Nachtrag 5. Oktober 2026: Texte (GDI-Schriftpfad, Satzumbruch, Tooltips; `docs/TEXT-AUDIT.md`), Shell-Übergänge und Screen-Stapel (`docs/GAME-SHELL.md` §12/§13), Platzier-Vorschau und für alle 92 Skriptausgabetypen ein Zustand (69 dargestellt; `docs/SCRIPT-ENGINE.md` §7a) sind gebaut und von allen Tests getragen, Referenzwerte unverändert (Referenzmatch Tick 13.500, `0946FB676DEC615C`); **weiterhin von keinem Menschen gesehen oder gehört.**
+Phase 16 "Tech-demo maturity II – operation" (begun, not completed; 4 October 2026, **partly; nothing of it accepted by a human**; `docs/DEMO-FINDINGS.md` nos. 16–19, `docs/handoffs/HANDOFF-PHASE16.md`): **Sound** is wired in the client and measured (`ClientAudio`/`GameAudio`: weapons, FX, building, EVA, voices, UI, music; counters per source, `--audio-capture`, `--mute`; `docs/GAME-AUDIO.md`), but has never been heard. **Mouse pointer** from the original cursor files (`CursorReader`, software cursor, change by context/mode/modifier), **waypoint paths** and target markers are built (`docs/PRESENTATION-INPUT.md` §11/§12, `docs/GAME-HUD.md` §16). **Feedback of a human** worked off: flashing and tick sound of the building capture (`SimEventKind.CaptureFlash`), five shell defects (button states, sliders, hover on texts, hidden save buttons, template font size – the transition animations are still missing), camera scrolling (was around 3000 times too slow); "dozer does not build in the mission" is reproduced and fixed (the script intro of `GC_ChemGeneral` pulled the camera away under the pointer; input lock, letterbox and camera pan of the script are now obeyed; `scripts/check-dozer-build.ps1` replays the clicks in the real client). **Mission in the client:** the director shows script camera, letterbox, fades, input lock, subtitles, counters, banners and script sounds and counts every script output (`docs/SCRIPT-ENGINE.md` §7a; `GC_ChemGeneral` 17 of 29 displayed, `MD_USA01` 72 of 223). **Simulation** (`docs/SIM-FIRING-TRACKER.md`, `docs/SIM-TURRET-AIM.md` §8a, `docs/SIMULATION-CORE.md` §32): firing stages `CONTINUOUS_FIRE_*` as a weapon bonus (Gatlings now shoot faster), `PreAttackDelay` (29 weapons, `PREATTACK_A/B/C`), damaged locomotors, `StructureToppleUpdate` reaches its end state, ability ends attack, `SimTool`/`CampaignTool` with bone table; the AI shift is broken down (128 runs: the decisive factor for China/GLA is the rule "a new command ends the aiming", `PursueCommand` plays no role in `ai-match`, no behaviour correction); the skirmish AI places its supply centre at the depot (`AIPlayer::buildBySupplies`) and attacks in groups: **12 of 16** AI runs decided (before 5 to 7). **Reference values (4 October 2026, measured):** retail reference match winner FactionGLA at **tick 13,500**, end hash `0946FB676DEC615C`, chain `EA6D12F180930D71`; stress test unchanged `56882F763EABEF67` / `B8E663493F2C73D5`; `ai-match` Alpine Assault China/GLA China at 7,545 (`39344016A5EE8F91`), AirForce/China stalemate (`E222322067493EB4`), America/GLA GLA at 8,865 (`542BE1D4891FEB71`); `WorldSnapshot` 9, replay 10, `CommandTypes.Version` 13, `MissionSnapshot` 2 unchanged; module catalogue 183 of 205, 2,115 of 2,115 instantiable, compatibility baseline 751, clean solution build 11 warnings. **Campaign re-measured:** objective driver victory 24/24 and defeat 24/24, audit 24/24 deterministic and identical after save/load, elimination end probes victory 13/24, defeat 15/24; commands-only agent still **1 of 24** (also with 60,000 ticks on four maps no victory). **Not done:** text comparison with the original (capture set and findings table), the script outputs not displayed (image effects, camera paths, speech subtitles), the click-through shell → campaign → mission → save/load → completion with a human, script sounds of the missions, idle target acquisition of the turrets, landing-approach arc of the jets, Black Lotus data stream, drawn paratroopers; **Phase 17 (playability) is not begun** apart from the new survey of the numbers and the AI corrections. Addendum 5 October 2026: texts (GDI font path, sentence wrapping, tooltips; `docs/TEXT-AUDIT.md`), shell transitions and screen stack (`docs/GAME-SHELL.md` §12/§13), placement preview and a state for all 92 script output types (69 displayed; `docs/SCRIPT-ENGINE.md` §7a) are built and carried by all tests, reference values unchanged (reference match tick 13,500, `0946FB676DEC615C`); **still not seen or heard by any human.**
 
-Der nächste Einstieg ist `docs/handoffs/HANDOFF-PHASE16.md` (Rest: Sichtabnahme, Texte, Mission im Client, Durchklicken), danach `docs/handoffs/HANDOFF-PHASE17.md` (Spielbarkeit der Missionen durch einen Menschen, Nur-Befehle-Agent, Leistung, Näherungen der neuen Module). Die Befunde der ersten Tech-Demo stehen in `docs/DEMO-FINDINGS.md`; die Aussage „Phase 7 abgeschlossen“ gilt nur für die Bibliotheken und Rauchtests, nicht für die Darstellungstreue.
+The next entry point is `docs/handoffs/HANDOFF-PHASE16.md` (rest: visual acceptance, texts, mission in the client, click-through), after that `docs/handoffs/HANDOFF-PHASE17.md` (playability of the missions by a human, commands-only agent, performance, approximations of the new modules). The findings of the first tech demo are in `docs/DEMO-FINDINGS.md`; the statement "Phase 7 completed" applies only to the libraries and smoke tests, not to rendering fidelity.
 
-Phase 17 „Spielbarkeit“ (5. Oktober 2026, **begonnen, nicht abgeschlossen; nichts davon von einem Menschen gesehen, gehört oder gespielt**; neu messen; `docs/SCRIPT-ENGINE.md` §9 „Phase 17“, `docs/SIMULATION-CORE.md` §33/§34, `docs/GAME-HUD.md`, `docs/DEMO-FINDINGS.md`, Handoff `docs/handoffs/HANDOFF-PHASE18.md`): **Zielerwerb in der Simulation:** Einheiten wählen ihre Opfer selbst (`AutoAcquireEnemiesWhenIdle` als strenge Bitliste, `MoodAttackCheckRate`, nach `AIUpdateInterface::getNextMoodTarget`), neuer `AttackMoveCommand`; `MissionSession.DriveCombat` und `SkirmishAi.Fire` entfallen, die Einheiten eines Menschen feuern im Leerlauf selbst auf Feinde in Reichweite (nicht auf gewöhnliche Gebäude). **Nur-Befehle-Agent:** die erste unerfüllte Bedingung der Siegkette ist je Karte als Befehl ausgedrückt (Angriff statt „Überschuss entfernen“, `CaptureCommand` mit Upgrade-Kauf statt Besitzwechsel, Späher, Wissenschaftskauf, UI-Signal; ein Nur-Befehle-Lauf kommandiert nur noch eigene Einheiten); der Agent kennt Lager nicht feindlicher Seiten und baut sein Versorgungszentrum zuerst. Ergebnis (0 Weltschreibungen): bei 15.000 Ticks weiter **1 von 24** (`MD_GLA04`), bei 60.000 Ticks (18 Karten gemessen) **3 Karten** (`MD_GLA04`, `MD_CHI01` @18.492, `MD_CHI02` @29.605); es scheitert jetzt an Gefecht und Wirtschaft des Agenten (Infanteriewellen gegen Basisverteidigung, kein zweites Lager), nicht mehr an abgelehnten Schreibungen. **Bedienung:** Meldungsliste des HUD mit den Originaltexten (der frühere „Ticker“ wurde nie gezeichnet), Letterbox nach `W3DDisplay::renderLetterBox` (bei 16:9 keine Balken), Tippton der Untertitel, lokalisierte Skirmish-Einträge mit vorgewählter Karte, Tooltip mit Anforderungen auch auf gesperrten Knöpfen. **Gemessen auf dem gemergten Stand:** sauberer Build **0 Warnungen**; alle Testprogramme grün (`Game.Tests` Release), compat-check 751, 183/205 Module, 2.115/2.115 Objekte; Retail-Referenzmatch Sieger FactionGLA bei **Tick 14.490**, Endhash `23B4B25DF62765D8`, Kette `DE5849AF9F8493C4` (Tick 13.500 / `0946FB676DEC615C` ist überholt); Stresstest unverändert `56882F763EABEF67` / `B8E663493F2C73D5`; 16 KI-Läufe **11 entschieden** (vorher 12), alle deterministisch; `CommandTypes.Version` **14**, Replay **11**, `WorldSnapshot` 9, `MissionSnapshot` 2; Zielfahrer Sieg 24/24 und Niederlage 24/24, Audit 24/24 deterministisch und identisch nach Speichern/Laden, Endproben 13/24 und 15/24, Erreichbarkeit sauber 24/24; drei Szenen-Audits grün. Leistung ruhig gemessen: Stresstest 60,5–61,6 µs/Tick vorher wie nachher; `mission-run` 3.000 Ticks `MD_USA05` 73,4 → 66,7 s, `MD_GLA05` 135,6 → 147,9 s (kein Profil erstellt). **Nicht erledigt:** Durchklicken und Spielen durch einen Menschen, ein Agent, der die Challenge-Karten gewinnt, die fünf Patts der KI-Läufe (Wirtschaft nach dem ersten Lager, Heereszusammensetzung), KI-Schwierigkeitsgrade (Easy/Medium/Hard Army starten dieselbe KI), Profil der Missionsläufe, `PowerSabotage`-Verbraucher. **Abschluss-Sitzung (6. Oktober 2026, gemessen am Stand `6eb7ae4`; `docs/SIMULATION-CORE.md` §35/§36):** die Skirmish-KI plant ihr nächstes Versorgungszentrum an einer anderen, sicheren Quelle, sobald der Vorrat neben den eigenen Zentren unter 3.000 Credits fällt (`AIPlayer::findSupplyCenter`/`isSupplySourceSafe`): **12 statt 11** der 16 KI-Läufe entschieden, kein Sieger wechselt, alle deterministisch (neue Endhashes in §36.2). Die Heeresauswahl nach Wert und Reichweite wurde zweimal gemessen (10 und 11 von 16, der Missionsagent verlor `MD_CHI02`) und zurückgenommen. KI-Schwierigkeit: keine belegte Wirkung gilt im Skirmish, die Einrichtung bietet eine Computerarmee (`GUI:MediumAI`), `SkirmishDifficultyIgnored` entfällt; die Solo-Boni der Kampagne auf leicht/schwer sind nicht umgesetzt. Unverändert: Referenzmatch Tick 14.490 `23B4B25DF62765D8`/`DE5849AF9F8493C4`, Stresstest `56882F763EABEF67`, Versionen, compat-check 751, 0 Warnungen; Zielfahrer 24/24 und 24/24, Audit 24/24, Endproben 13/24 und 15/24; Nur-Befehle-Agent 1 von 24 (15.000 Ticks) und 3 von 24 (60.000 Ticks, alle Karten gemessen, `MD_USA01`/`MD_USA04` abgebrochen). Phase 17 endet damit **ohne ihr Abnahmeziel**: die Spielbarkeit durch einen Menschen ist nicht belegt; der Rest steht am Ende von `docs/handoffs/HANDOFF-PHASE17.md` und liegt, soweit er die Simulation ändert, hinter dem Programm ab `docs/handoffs/HANDOFF-PHASE18.md`.
+Phase 17 "Playability" (5 October 2026, **begun, not completed; nothing of it seen, heard or played by a human**; re-measure; `docs/SCRIPT-ENGINE.md` §9 "Phase 17", `docs/SIMULATION-CORE.md` §33/§34, `docs/GAME-HUD.md`, `docs/DEMO-FINDINGS.md`, handoff `docs/handoffs/HANDOFF-PHASE18.md`): **Target acquisition in the simulation:** units choose their victims themselves (`AutoAcquireEnemiesWhenIdle` as a strict bit list, `MoodAttackCheckRate`, after `AIUpdateInterface::getNextMoodTarget`), new `AttackMoveCommand`; `MissionSession.DriveCombat` and `SkirmishAi.Fire` are dropped, the units of a human fire by themselves when idle at enemies in range (not at ordinary buildings). **Commands-only agent:** the first unfulfilled condition of the victory chain is expressed per map as a command (attack instead of "remove surplus", `CaptureCommand` with upgrade purchase instead of change of ownership, scouts, science purchase, UI signal; a commands-only run now commands only its own units); the agent knows depots of non-hostile sides and builds its supply centre first. Result (0 world writes): at 15,000 ticks still **1 of 24** (`MD_GLA04`), at 60,000 ticks (18 maps measured) **3 maps** (`MD_GLA04`, `MD_CHI01` @18,492, `MD_CHI02` @29,605); it now fails at combat and economy of the agent (infantry waves against base defence, no second depot), no longer at rejected writes. **Operation:** message list of the HUD with the original texts (the earlier "ticker" was never drawn), letterbox after `W3DDisplay::renderLetterBox` (no bars at 16:9), typing sound of the subtitles, localised skirmish entries with a preselected map, tooltip with requirements also on locked buttons. **Measured on the merged state:** clean build **0 warnings**; all test programs green (`Game.Tests` Release), compat-check 751, 183/205 modules, 2,115/2,115 objects; retail reference match winner FactionGLA at **tick 14,490**, end hash `23B4B25DF62765D8`, chain `DE5849AF9F8493C4` (tick 13,500 / `0946FB676DEC615C` is superseded); stress test unchanged `56882F763EABEF67` / `B8E663493F2C73D5`; 16 AI runs **11 decided** (before 12), all deterministic; `CommandTypes.Version` **14**, replay **11**, `WorldSnapshot` 9, `MissionSnapshot` 2; objective driver victory 24/24 and defeat 24/24, audit 24/24 deterministic and identical after save/load, end probes 13/24 and 15/24, reachability clean 24/24; three scene audits green. Performance measured quietly: stress test 60.5–61.6 µs/tick before as after; `mission-run` 3,000 ticks `MD_USA05` 73.4 → 66.7 s, `MD_GLA05` 135.6 → 147.9 s (no profile created). **Not done:** clicking through and playing by a human, an agent that wins the challenge maps, the five stalemates of the AI runs (economy after the first depot, army composition), AI difficulty levels (Easy/Medium/Hard Army start the same AI), profile of the mission runs, `PowerSabotage` consumer. **Closing session (6 October 2026, measured at state `6eb7ae4`; `docs/SIMULATION-CORE.md` §35/§36):** the skirmish AI plans its next supply centre at another, safe source as soon as the stock next to its own centres falls below 3,000 credits (`AIPlayer::findSupplyCenter`/`isSupplySourceSafe`): **12 instead of 11** of the 16 AI runs decided, no winner changes, all deterministic (new end hashes in §36.2). The army selection by value and range was measured twice (10 and 11 of 16, the mission agent lost `MD_CHI02`) and withdrawn. AI difficulty: no verified effect applies in skirmish, the setup offers one computer army (`GUI:MediumAI`), `SkirmishDifficultyIgnored` is dropped; the solo bonuses of the campaign on easy/hard are not implemented. Unchanged: reference match tick 14,490 `23B4B25DF62765D8`/`DE5849AF9F8493C4`, stress test `56882F763EABEF67`, versions, compat-check 751, 0 warnings; objective driver 24/24 and 24/24, audit 24/24, end probes 13/24 and 15/24; commands-only agent 1 of 24 (15,000 ticks) and 3 of 24 (60,000 ticks, all maps measured, `MD_USA01`/`MD_USA04` aborted). Phase 17 thus ends **without its acceptance goal**: the playability by a human is not verified; the rest is at the end of `docs/handoffs/HANDOFF-PHASE17.md` and lies, as far as it changes the simulation, behind the programme from `docs/handoffs/HANDOFF-PHASE18.md` on.
 
-Phase 18 „Messbasis“ (6. Oktober 2026, gemessen am Stand `b432fb7`; `docs/DETERMINISM.md`, `docs/DETERMINISM-FINDINGS.md`, `docs/PERFORMANCE.md`, `docs/TICKRATE-AUDIT.md`, `docs/SIMULATION-CORE.md` §37, Freigabe in `docs/MULTIPLAYER-PLAN.md` §4a): **Referenzmanifest** `baselines/reference-manifest.json` (50 Läufe: Referenzmatch, Stresstest, 16 KI-Läufe, drei 8-Spieler-Läufe, Skirmish-Übersicht, 27 Missionsläufe) und **Eingangsmanifest** `baselines/input-manifest.json` sind ab jetzt die Messlatte statt der Hashes in der Doku (`SimTool reference-manifest check`, `input-manifest check`). **Determinismus-Matrix:** das volle Manifest besteht zweimal hintereinander und unter Tiered Compilation aus, PGO aus, ReadyToRun aus, Hardware-Intrinsics aus, AVX2 aus, Server-GC, den Kulturen de-DE/tr-TR/ar-SA und unter **Linux (WSL2)**; der Debug-Build nur mit dem Schnellsatz; **offen:** ein zweiter physischer Rechner mit anderer CPU und eine andere .NET-Version. **Befunde D1–D9** abgearbeitet: echt waren Kulturabhängigkeit im Skriptzustand, lückenhafte Gelände-Fingerabdrücke, plattformabhängige Zeilenenden im Definitions-Snapshot (Linux und Windows hätten sich abgelehnt) und fehlendes `MarkDirty` auf 19 von 45 Missionskarten (15 Missionsläufe des Manifests haben neue Hashes; Referenzmatch Tick 14.490 `23B4B25DF62765D8`, Stresstest `56882F763EABEF67` und alle KI-Läufe unverändert); die Objekttabelle zählt jetzt in ID-Reihenfolge auf, Knochentabelle und Kartenwerte entstehen ohne Fließkomma-Laufzeitroutinen, `SourceRules` deckt auch den Code ab, der die Simulation speist. **Leistung, ruhig gemessen:** 8 Spieler auf Twilight Flame 4,98 ms je Tick (99 %: 13,6 ms, Maximum 547 ms), hochgerechnet auf 60 Hz 30 % eines Kerns und 3,4-faches Aufholtempo; `MD_GLA05` 12,6–13,5 ms (76–81 % eines Kerns bei 60 Hz); 81 % der Update-Zeit ist `AIUpdateInterface`, ein Drittel des Ticks Sicht und Hash. **Tickraten-Inventar geprüft:** 1.959 gekoppelte Stellen, zehn Widersprüche zum Plan. Sauberer Build 0 Warnungen, alle Testprogramme grün, compat-check 751, Zielfahrer 24/24 und 24/24. **Freigabe:** das Programm läuft wie geplant weiter (Phase 19 Leistung), mit der Auflage, den Lauf auf einem zweiten Rechner vor Phase 26 nachzuholen. Nichts aus den Phasen 15–17 ist von einem Menschen abgenommen.
+Phase 18 "Measurement basis" (6 October 2026, measured at state `b432fb7`; `docs/DETERMINISM.md`, `docs/DETERMINISM-FINDINGS.md`, `docs/PERFORMANCE.md`, `docs/TICKRATE-AUDIT.md`, `docs/SIMULATION-CORE.md` §37, go-ahead in `docs/MULTIPLAYER-PLAN.md` §4a): **Reference manifest** `baselines/reference-manifest.json` (50 runs: reference match, stress test, 16 AI runs, three 8-player runs, skirmish overview, 27 mission runs) and **input manifest** `baselines/input-manifest.json` are from now on the yardstick instead of the hashes in the documentation (`SimTool reference-manifest check`, `input-manifest check`). **Determinism matrix:** the full manifest passes twice in a row and with tiered compilation off, PGO off, ReadyToRun off, hardware intrinsics off, AVX2 off, server GC, the cultures de-DE/tr-TR/ar-SA and under **Linux (WSL2)**; the debug build only with the quick set; **open:** a second physical machine with a different CPU and a different .NET version. **Findings D1–D9** worked off: real were culture dependence in the script state, incomplete terrain fingerprints, platform-dependent line endings in the definition snapshot (Linux and Windows would have rejected each other) and missing `MarkDirty` on 19 of 45 mission maps (15 mission runs of the manifest have new hashes; reference match tick 14,490 `23B4B25DF62765D8`, stress test `56882F763EABEF67` and all AI runs unchanged); the object table now enumerates in ID order, bone table and map values are produced without floating-point runtime routines, `SourceRules` also covers the code that feeds the simulation. **Performance, measured quietly:** 8 players on Twilight Flame 4.98 ms per tick (99 %: 13.6 ms, maximum 547 ms), extrapolated to 60 Hz 30 % of one core and 3.4-fold catch-up speed; `MD_GLA05` 12.6–13.5 ms (76–81 % of one core at 60 Hz); 81 % of the update time is `AIUpdateInterface`, one third of the tick vision and hash. **Tick-rate inventory checked:** 1,959 coupled places, ten contradictions to the plan. Clean build 0 warnings, all test programs green, compat-check 751, objective driver 24/24 and 24/24. **Go-ahead:** the programme continues as planned (Phase 19 performance), with the condition to make up the run on a second machine before Phase 26. Nothing from Phases 15–17 is accepted by a human.
 
-Phase 19 „Leistung“ (6. Oktober 2026, gemessen am Stand `16d337c`; `docs/PERFORMANCE.md` §6a, `docs/PERF-MOVEMENT.md`, `docs/PERF-VISION.md`, `docs/PERF-HASH.md`, `docs/PERF-MISSIONS.md`, `docs/PERF-GAME-LAYER.md`): die Tickkosten echter Matches sind **ohne jede Ergebnisänderung** gesenkt – ruhig gemessen, alle zehn Endhashes der Messläufe identisch zu vorher: 8 Spieler auf Twilight Flame **1,14 ms je Tick statt 4,98** (99 %: 3,2 statt 13,6 ms; Maximum 94 statt 547 ms; bei 60 Hz 6,8 % eines Kerns und 16,2-faches Aufholtempo), `MD_GLA05` **3,4 statt 13,5 ms**, `MD_USA05` 2,5 statt 5,9 ms; Allokation je Tick 52 statt 95 KB (8 Spieler) und 10 KB statt 4 MB (`MD_GLA05`), keine Gen-2-Läufe mehr im Gefecht. Womit: `Fixed` ohne 128-Bit-Softwaredivision, Bewegungs-Scans ohne Allokation und nur über bewegliche Objekte, Wegsuche mit einem Zustandsbyte je Zelle, gemerkten Antworten und Abbruch bei bewiesen unerreichbarem Ziel; Sicht nur dort neu, wo sich Kreise geändert haben, Sicht-Hash ab der ersten geänderten Stelle; Objektbeschreibung mit vorbereiteten Modulrahmen; Besitzer-, Art- und Modultyp-Listen in der Welt statt Weltdurchläufen je Skriptbedingung, Zielerwerb und Modul (`PointDefenseLaserUpdate` scannte je Laser und Tick alle Objekte). **Sollwerte:** Aufholtempo, Gen-2-Freiheit und „Audit je Karte unter einer Minute“ (9–57 s) erreicht; Mittel (≤ 1,0 ms) und 99 % (≤ 3 ms) knapp verfehlt; **Maximum (≤ 8 ms) verfehlt** – es entsteht, wenn viele Einheiten gleichzeitig lange Wege suchen, und sinkt nur mit einer Verhaltensänderung (gemeinsamer Gruppenweg, Zellbudget je Tick oder andere Suche), die nicht gemacht wurde. Zwei Vorschläge für schnellere Hash-Konstruktionen (Sicht zeilenweise; Objekt-Hash mit Modul-Hashes) sind dokumentiert, ändern aber jeden Referenzhash und sind eine **offene Entscheidung des Projektinhabers**. **Referenzwerte:** das volle Manifest besteht unverändert unter Windows und Linux (jetzt rund 10 statt 27 Minuten) und Tick für Tick gegen den voll berechneten Hash (718.191 Ticks, 0 Abweichungen); ein weiterer `MarkDirty`-Fehler (`PauseCountdown`) ist in einem eigenen Commit behoben und ändert genau einen Missionslauf des Manifests; Referenzmatch Tick 14.490 `23B4B25DF62765D8`, Stresstest `56882F763EABEF67`, die 16 KI-Läufe und alle übrigen Läufe unverändert. Sauberer Build 0 Warnungen, alle Testprogramme grün, compat-check 751, Zielfahrer 24/24 und 24/24, Audit 24/24. Neue Werkzeuge: `SimTool perf --json`, `perf-compare`, `path-bench`, `PresentationTool sync-perf`, `scripts/perf-compare.ps1`. **Nicht ruhig gemessen:** die Spielschicht (`LiveGame.SyncAfterTick`, unter Last rund 2 ms je Tick vor und 1,6 ms nach drei ausgabeneutralen Kürzungen) und die Streuung zwischen Läufen. Was offen bleibt, steht als Abschnitt „Rest der Phase 17“ am Ende von `docs/handoffs/HANDOFF-PHASE17.md`.
+Phase 19 "Performance" (6 October 2026, measured at state `16d337c`; `docs/PERFORMANCE.md` §6a, `docs/PERF-MOVEMENT.md`, `docs/PERF-VISION.md`, `docs/PERF-HASH.md`, `docs/PERF-MISSIONS.md`, `docs/PERF-GAME-LAYER.md`): the tick costs of real matches are lowered **without any change of results** – measured quietly, all ten end hashes of the measurement runs identical to before: 8 players on Twilight Flame **1.14 ms per tick instead of 4.98** (99 %: 3.2 instead of 13.6 ms; maximum 94 instead of 547 ms; at 60 Hz 6.8 % of one core and 16.2-fold catch-up speed), `MD_GLA05` **3.4 instead of 13.5 ms**, `MD_USA05` 2.5 instead of 5.9 ms; allocation per tick 52 instead of 95 KB (8 players) and 10 KB instead of 4 MB (`MD_GLA05`), no gen-2 collections any more in the skirmish. By what means: `Fixed` without 128-bit software division, movement scans without allocation and only over movable objects, pathfinding with one state byte per cell, remembered answers and abort when the target is proven unreachable; vision recomputed only where circles have changed, vision hash from the first changed place on; object description with prepared module frames; owner, kind and module-type lists in the world instead of world passes per script condition, target acquisition and module (`PointDefenseLaserUpdate` scanned all objects per laser and tick). **Targets:** catch-up speed, freedom from gen-2 and "audit per map under one minute" (9–57 s) reached; mean (≤ 1.0 ms) and 99 % (≤ 3 ms) narrowly missed; **maximum (≤ 8 ms) missed** – it arises when many units search long paths at the same time, and goes down only with a behaviour change (shared group path, cell budget per tick or a different search), which was not made. Two proposals for faster hash constructions (vision row by row; object hash with module hashes) are documented, but change every reference hash and are an **open decision of the project owner**. **Reference values:** the full manifest passes unchanged under Windows and Linux (now around 10 instead of 27 minutes) and tick by tick against the fully computed hash (718,191 ticks, 0 deviations); a further `MarkDirty` defect (`PauseCountdown`) is fixed in a commit of its own and changes exactly one mission run of the manifest; reference match tick 14,490 `23B4B25DF62765D8`, stress test `56882F763EABEF67`, the 16 AI runs and all other runs unchanged. Clean build 0 warnings, all test programs green, compat-check 751, objective driver 24/24 and 24/24, audit 24/24. New tools: `SimTool perf --json`, `perf-compare`, `path-bench`, `PresentationTool sync-perf`, `scripts/perf-compare.ps1`. **Not measured quietly:** the game layer (`LiveGame.SyncAfterTick`, under load around 2 ms per tick before and 1.6 ms after three output-neutral cuts) and the scatter between runs. What stays open is the section "Rest of Phase 17" at the end of `docs/handoffs/HANDOFF-PHASE17.md`.
 
-Phase 20 „Tickrate als Wert der Welt – Simulation“ (6. Oktober 2026, gemessen am Stand `9299a2d`; `docs/TICKRATE-MIGRATION.md`): die Simulation trägt ihre Rate als Wert (30/60/120 Hz, Zeitdienst, Kataloge je Rate, Zeiten auf dem 30-Hz-Raster des Originals); 262 + 188 + 11 Stellen umgestellt, `SourceRules` verbietet nackte Tickzahlen. Bei 30 Hz ergebnisgleich: volles Referenzmanifest zweimal unter Windows und unter Linux identisch, Eingangsmanifest identisch, alle Testprogramme grün, 0 Warnungen. Bei 60 und 120 Hz laufen Referenzmatch, zwei KI-Gefechte und drei Missionen deterministisch und ohne Überlauf durch; das Verhalten dort ist **nicht bewertet** (Phase 23; das Referenzmatch findet bei 120 Hz keinen Sieger). Präsentation, Spielschicht, Ton und Werkzeuge unterstellen weiter 30 Hz (Phase 21).
+Phase 20 "Tick rate as a value of the world – simulation" (6 October 2026, measured at state `9299a2d`; `docs/TICKRATE-MIGRATION.md`): the simulation carries its rate as a value (30/60/120 Hz, time service, catalogues per rate, times on the 30 Hz grid of the original); 262 + 188 + 11 places converted, `SourceRules` forbids bare tick numbers. Result-identical at 30 Hz: full reference manifest identical twice under Windows and under Linux, input manifest identical, all test programs green, 0 warnings. At 60 and 120 Hz the reference match, two AI matches and three missions run through deterministically and without overflow; the behaviour there is **not assessed** (Phase 23; the reference match finds no winner at 120 Hz). Presentation, game layer, sound and tools still assume 30 Hz (Phase 21).
 
-Phase 21 „Tickrate als Parameter – Präsentation, Spielschicht, UI, Ton, Werkzeuge, Tests“ (7. Oktober 2026, gemessen am Stand `2a0a6f5`; `docs/TICKRATE-MIGRATION.md` §14): außerhalb der Simulation unterstellt nichts mehr 1/30 s je Tick – eine Konstante für das Originalbild (`OriginalFrame.PerSecond`), Präsentationsuhr `GameClock`, Rate der Sitzung aus `GameData.Rate`, Client `--tick-rate N` (Standard 30), `SaveGame` Version 2 mit Rate. Bei 30 Hz bildgleich und ergebnisgleich: alle reproduzierbaren Prüfsummen (Screens, HUD, UI-Renderer, Audits, Captures, Ton) unverändert, volles Referenzmanifest unter Windows und Linux identisch, alle Testprogramme grün, 0 Warnungen. Zeitmaß bei 30/60/120 Hz für alle geprüften Elemente innerhalb eines Originalbilds gleich; drei Größen folgen der Simulation und stehen auf der Liste für Phase 23. **Kein Mensch hat das Spiel bei 60 Hz gesehen oder gehört** (Sichtprüfliste §14.7).
+Phase 21 "Tick rate as a parameter – presentation, game layer, UI, sound, tools, tests" (7 October 2026, measured at state `2a0a6f5`; `docs/TICKRATE-MIGRATION.md` §14): outside the simulation nothing assumes 1/30 s per tick any more – one constant for the original frame (`OriginalFrame.PerSecond`), presentation clock `GameClock`, rate of the session from `GameData.Rate`, client `--tick-rate N` (default 30), `SaveGame` version 2 with rate. Image-identical and result-identical at 30 Hz: all reproducible checksums (screens, HUD, UI renderer, audits, captures, sound) unchanged, full reference manifest identical under Windows and Linux, all test programs green, 0 warnings. Timing at 30/60/120 Hz equal within one original frame for all checked elements; three quantities follow the simulation and are on the list for Phase 23. **No human has seen or heard the game at 60 Hz** (visual checklist §14.7).
 
-Phase 22 „Festkomma Q39.24“ (7. Oktober 2026, gemessen am Stand `8d74ef8`; `docs/FIXED-POINT-Q39-24.md`): `Fixed` hat 24 statt 16 Nachkommabits; die Umstellung ist ein einzelner Commit (`d7fca91`) und ändert planmäßig jeden Referenzwert. Neue Versionen: `WorldSnapshot` 10, Replay 12, `CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3. Neues Referenzmatch: FactionGLA bei Tick 17.805, `D0CA5F4EE456D6CE` (neuer Treiber-Seed `5EED0007`); Stresstest `56882F763EABEF67` mit Kette `754FA4DCB9A41DF7`. Gegenüber 16 Bit: Missionen, Zielfahrer, Audit und Skirmish-Übersicht mit gleichem Ausgang; 5 der 16 KI-Läufe mit anderem Ausgang (chaotische Verstärkung einer Rundung, Balance nicht bewertet). Der Überlauf beim Quadrieren von Platzhalter-Reichweiten ist ohne Ergebnisänderung behoben (`SquaredReach`). Volles Manifest unter Windows und Linux identisch, alle Testprogramme grün, 0 Warnungen; bei 60/120 Hz rundet beim Katalogbau nichts mehr auf null. Nur gemeldet: ungeprüfte Zielkoordinaten in Befehlen können die Bewegung überlaufen lassen (Phase 27/28).
+Phase 22 "Fixed point Q39.24" (7 October 2026, measured at state `8d74ef8`; `docs/FIXED-POINT-Q39-24.md`): `Fixed` has 24 instead of 16 fractional bits; the change is a single commit (`d7fca91`) and changes every reference value as planned. New versions: `WorldSnapshot` 10, replay 12, `CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3. New reference match: FactionGLA at tick 17,805, `D0CA5F4EE456D6CE` (new driver seed `5EED0007`); stress test `56882F763EABEF67` with chain `754FA4DCB9A41DF7`. Compared with 16 bits: missions, objective driver, audit and skirmish overview with the same outcome; 5 of the 16 AI runs with a different outcome (chaotic amplification of a rounding, balance not assessed). The overflow when squaring placeholder ranges is fixed without a change of results (`SquaredReach`). Full manifest identical under Windows and Linux, all test programs green, 0 warnings; at 60/120 Hz nothing rounds to zero any more when building the catalogue. Only reported: unchecked target coordinates in commands can make the movement overflow (Phase 27/28).
 
-Phase 23 „Zeitschritt-Invarianz und 60 Hz als Standard“ (7. bis 9. Oktober 2026, Stand `f3acc2e`; `docs/TICKRATE-MIGRATION.md` §15, `docs/SIMULATION-CORE.md` §39–§43, `docs/PERFORMANCE.md` §6c, `docs/DEMO-FINDINGS.md`): die Simulation läuft standardmäßig mit **60 Hz** (`e8632bb`; die Rate bleibt ein Wert der Welt, 30 und 120 Hz bleiben unterstützt und werden von der Raten-Äquivalenz-Suite gegen 30 Hz geprüft). Prinzip: der 30-Hz-Schritt ist die Definition, höhere Raten unterteilen ihn – entschieden wird im ersten Tick des Originalbilds eines Objekts, die 30-Hz-Lage wird mit dem letzten Tick erreicht, Beobachter lesen das Bildende. Die Suite (4.388 gemessene Spielgrößen in zehn Gruppen, Toleranzen vor dem ersten Lauf festgelegt und nie geändert) ging in vier Runden von 479 / 625 Größen außerhalb der Toleranz (60 / 120 Hz) auf 0 / 0; das Retail-Referenzmatch ist bei 30, 60 und 120 Hz dasselbe Spiel. Drei Fehler bei 30 Hz wurden auf dem Weg behoben, je mit eigenem Manifest: die verlorene Weckbitte eines langsamen Todes, die Fabrikausfahrt, und – nach der ersten Sichtung eines KI-Gefechts durch den Projektinhaber – Sparen der KI für Fahrzeuge, eigene Zielplätze, Einsteigen und Heereszusammensetzung. **Die Referenzwerte stehen bei 60 Hz in `baselines/reference-manifest.json`** (Referenzmatch Sieger FactionGLA bei Tick 28.260 = Originalbild 14.130, Endhash `CA05181C36C62C7A`; Stresstest `9EE9F730D124C3BD`; 14 von 16 KI-Läufen entschieden; `WorldSnapshot` 10, Replay 12, `CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3 unverändert); ältere Hashes, Siegticks und Tickzahlen in diesem Dokument sind 30-Hz-Werte ihres Stands. Leistungstor bei 60 Hz (8 Spieler, 30 Spielminuten, ruhig gemessen): Mittel 0,68–0,69 ms je Tick, 99 % 1,6–1,8 ms, Aufholtempo 26-fach – erreicht; Maximum 141–143 ms und Allokation 8 KB je Tick – verfehlt. Daneben: ein Zuschauermodus (KI gegen KI im Fenster, `docs/SPECTATOR-MODE.md`), die Skirmish-KI des Originals als wählbare Sitzung mit drei Schwierigkeitsgraden (nicht Standard, im Client nicht wählbar; `docs/SKIRMISH-AI-ORIGINAL.md`), Fabrikausfahrten, Scrolltempo, Mausbelegung, Bautasten. **Grenzen:** kein Mensch hat das Spiel bei 60 Hz gesehen oder gehört – es gab eine Sichtung eines KI-Gefechts bei 30 Hz am 8. Oktober, vor den daraus folgenden Korrekturen, und nichts an Zuschauermodus, Ausfahrten, Scrolltempo, Mausbelegung oder Bautasten ist abgenommen; „die Suite besteht“ heißt nicht, dass jedes Gefecht identisch ist: 2 von 16 Paarungen auf ausgelieferten Karten enden bei 60 Hz in einem anderen Bild, 33 von 320 Gefechten der Erhebung enden mehr als eine Sekunde neben dem 30-Hz-Gefecht, und 120 Hz ist dort nicht gemessen; die Gleichheit ganzer KI-Gefechte beruht auf einem Selbsterwerb je Originalbild der Einheit, dessen Bestätigung beim Projektinhaber liegt; mit den 60-Hz-Manifesten sind der Linux-Lauf und die Determinismus-Matrix nicht gemessen; ein bei 30 Hz geschriebener Spielstand lädt nur mit `--tick-rate 30`; elf offene Entscheidungen des Projektinhabers stehen in `docs/MULTIPLAYER-PLAN.md` §7a. Nächster Schritt: Phase 24 (`docs/handoffs/HANDOFF-PHASE24.md`).
+Phase 23 "Time-step invariance and 60 Hz as the default" (7 to 9 October 2026, state `f3acc2e`; `docs/TICKRATE-MIGRATION.md` §15, `docs/SIMULATION-CORE.md` §39–§43, `docs/PERFORMANCE.md` §6c, `docs/DEMO-FINDINGS.md`): the simulation runs at **60 Hz** by default (`e8632bb`; the rate remains a value of the world, 30 and 120 Hz remain supported and are checked by the rate-equivalence suite against 30 Hz). Principle: the 30 Hz step is the definition, higher rates subdivide it – the decision is made in the first tick of the original frame of an object, the 30 Hz position is reached with the last tick, observers read the frame end. The suite (4,388 measured game quantities in ten groups, tolerances fixed before the first run and never changed) went in four rounds from 479 / 625 quantities outside the tolerance (60 / 120 Hz) to 0 / 0; the retail reference match is the same game at 30, 60 and 120 Hz. Three defects at 30 Hz were fixed along the way, each with its own manifest: the lost wake request of a slow death, the factory exit, and – after the first viewing of an AI match by the project owner – the AI saving for vehicles, own target places, boarding and army composition. **The reference values stand at 60 Hz in `baselines/reference-manifest.json`** (reference match winner FactionGLA at tick 28,260 = original frame 14,130, end hash `CA05181C36C62C7A`; stress test `9EE9F730D124C3BD`; 14 of 16 AI runs decided; `WorldSnapshot` 10, replay 12, `CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3 unchanged); older hashes, victory ticks and tick numbers in this document are 30 Hz values of their state. Performance gate at 60 Hz (8 players, 30 game minutes, measured quietly): mean 0.68–0.69 ms per tick, 99 % 1.6–1.8 ms, catch-up speed 26-fold – reached; maximum 141–143 ms and allocation 8 KB per tick – missed. Besides: a spectator mode (AI against AI in a window, `docs/SPECTATOR-MODE.md`), the skirmish AI of the original as a selectable session with three difficulty levels (not the default, not selectable in the client; `docs/SKIRMISH-AI-ORIGINAL.md`), factory exits, scroll speed, mouse assignment, build keys. **Limits:** no human has seen or heard the game at 60 Hz – there was one viewing of an AI match at 30 Hz on 8 October, before the corrections that followed from it, and nothing about spectator mode, exits, scroll speed, mouse assignment or build keys is accepted; "the suite passes" does not mean that every match is identical: 2 of 16 pairings on shipped maps end at 60 Hz in a different frame, 33 of 320 matches of the survey end more than one second away from the 30 Hz match, and 120 Hz is not measured there; the equality of whole AI matches rests on a self-acquisition per original frame of the unit, whose confirmation lies with the project owner; with the 60 Hz manifests the Linux run and the determinism matrix are not measured; a savegame written at 30 Hz loads only with `--tick-rate 30`; eleven open decisions of the project owner are in `docs/MULTIPLAYER-PLAN.md` §7a. Next step: Phase 24 (`docs/handoffs/HANDOFF-PHASE24.md`).
 
-**Planänderung vom 5. Oktober 2026:** Nach `docs/handoffs/HANDOFF-PHASE17.md` folgt Schritt 10 (Tickrate, Festkomma, Mehrspieler; `docs/MULTIPLAYER-PLAN.md`, `docs/handoffs/HANDOFF-PHASE18.md` bis `docs/handoffs/HANDOFF-PHASE29.md`), danach Schritt 11 (`docs/handoffs/HANDOFF-PHASE30.md`). Die Aufträge 18 bis 30 existieren bereits; jede Phase schreibt am Ende die „Ausgangslage“ des nächsten Auftrags fort, statt ihn neu zu schreiben.
+**Plan change of 5 October 2026:** after `docs/handoffs/HANDOFF-PHASE17.md` follows step 10 (tick rate, fixed point, multiplayer; `docs/MULTIPLAYER-PLAN.md`, `docs/handoffs/HANDOFF-PHASE18.md` to `docs/handoffs/HANDOFF-PHASE29.md`), after that step 11 (`docs/handoffs/HANDOFF-PHASE30.md`). The briefs 18 to 30 already exist; every phase continues the "Starting point" of the next brief at its end instead of rewriting it.
