@@ -11,6 +11,8 @@ kanonische Snapshots, Zustands-Hashes und ein Replay-Harness. Das Projekt hängt
 Zufallszahlen, `float`/`double`, Threads, Dateizugriff, Reflection) und jede Assemblyreferenz außer
 `CnCNew.Data` und der BCL lassen den Test scheitern.
 
+**Hinweis (9. Oktober 2026, Phase 23):** die Simulation läuft seit `e8632bb` standardmäßig mit **60 Hz**. Hashwerte, Siegticks, Tickbudgets und Laufzeiten in den Abschnitten vor §43 sind Abschriften des jeweiligen Stands bei 30 Hz und **historisch**; maßgeblich ist `baselines/reference-manifest.json` (60 Hz, Schema 2), die aktuellen Werte stehen in §43.9.
+
 Die Fachgrundlagen der Definitionsdaten (Block 0 der Phase) stehen in `TYPED-DEFINITIONS.md` und
 `PHASE3-COMPATIBILITY.md`; dieses Dokument beschreibt den Kern selbst.
 
@@ -22,8 +24,13 @@ Die Tickrate ist ein **Wert der Welt** (Phase 20; Einzelheiten, Zählungen und d
 
 - **Rate:** `WorldConfiguration.Rate` vom Typ `SimulationRate`. Unterstützt sind genau 30, 60 und 120 Hz (30 · 2ᵏ); alles andere wird beim
   Erzeugen von Welt, Katalog, Snapshot und Replay abgelehnt. Der Katalog (`TemplateCatalog.Build(…, rate, …)`) wird **für eine Rate gebaut**
-  – er enthält Ticks und Werte je Tick –, und eine Welt lehnt einen Katalog einer anderen Rate ab. Bis Phase 23 laufen alle Sitzungen mit
-  30 Hz; **bei 30 Hz ist jedes Ergebnis unverändert** (Beleg: `SimTool reference-manifest check`, `input-manifest check`).
+  – er enthält Ticks und Werte je Tick –, und eine Welt lehnt einen Katalog einer anderen Rate ab. Bis Phase 23 liefen alle Sitzungen mit
+  30 Hz. **Seit Phase 23 (`e8632bb`, 8. Oktober 2026) ist der Standard einer Sitzung 60 Hz**: die eine Definition ist
+  `ProductRate.TicksPerSecond` in `CnCNew.Game` (daraus `GameData.DefaultSessionRate`, Client, Werkzeuge und Tests). Die Simulation selbst
+  kennt keinen Standard – wer eine Welt erzeugt, nennt die Rate –, und die Rate bleibt ein Wert der Welt. 30 und 120 Hz bleiben
+  unterstützt und werden von der Raten-Äquivalenz-Suite (§39) gegen 30 Hz geprüft; oberhalb von 30 Hz gilt die Bildkonvention aus §43
+  („der 30-Hz-Schritt ist die Definition, höhere Raten unterteilen ihn“). Was bei einer Rate aufgezeichnet ist, trägt seine Rate: Replays, Snapshots und
+  Speicherstände werden von einer Sitzung anderer Rate abgelehnt, ein Manifest wird mit der Rate seiner Datei geprüft.
 - **Drei Einheiten für Zeit.** *Tick*: ein Schritt der Simulation (`SimulationWorld.Tick` ist die Zahl der ausgeführten Ticks und zugleich
   die Nummer des nächsten); Zustand, Snapshots, Replays und Befehle tragen Ticks der Rate der Welt. *Bild des Originals*: 1/30 s
   (`LOGICFRAMES_PER_SECOND`, `GameCommon.h:72`; `SimulationRate.OriginalFramesPerSecond` ist die einzige benannte 30 der Simulation) –
@@ -687,6 +694,8 @@ kein Port des Skriptsystems des Originals.
 
 ## 19. Ergebnisse der KI-gegen-KI-Läufe (30. September 2026)
 
+*Historisch (30 Hz, Stand dieses Abschnitts): die Tabellen, Siegticks und Hashes hier sind überholt; maßgeblich ist `baselines/reference-manifest.json` (seit `ea52f87` bei 60 Hz), die aktuellen Werte stehen in §43.9.*
+
 Vier Karten (Alpine Assault, Armored Fury, Bitter Winter, Death Valley) × vier Paarungen, höchstens 45.000 Ticks; **jeder der 16 Läufe ist mit Lauf 2 und Snapshotfortsetzung identisch**.
 15 Läufe enden mit einem Sieger, einer (Alpine Assault, America gegen China) bleibt bis zum Limit unentschieden.
 
@@ -1343,6 +1352,8 @@ Drei Verhaltenslücken, die die gestellten Demos (`docs/DEMO-SCENARIOS.md`) aufd
 
 ## 32. Nachtrag Phase 16 (4. Oktober 2026): Feuerstufen, Vorangriff, beschädigte Locomotoren, Versorgungszentrum und Angriffsgruppen der KI, KI-Übersicht neu
 
+*Historisch (30 Hz, Stand dieses Abschnitts): die Tabellen, Siegticks und Hashes hier sind überholt; maßgeblich ist `baselines/reference-manifest.json` (seit `ea52f87` bei 60 Hz), die aktuellen Werte stehen in §43.9.*
+
 Fachdokumente: `docs/SIM-FIRING-TRACKER.md` (Feuerstufen `CONTINUOUS_FIRE_*` als Waffenbonus, `PreAttackDelay`, `SpeedDamaged` und Geschwister, `CaptureFlash`, Fähigkeit beendet Angriff) und
 `docs/SIM-TURRET-AIM.md` §8a (Aufschlüsselung der KI-Verschiebung nach Effekten). Außerdem: `StructureToppleUpdate` erreicht seinen Endzustand (Winkel und Winkelgeschwindigkeit mit 32 zusätzlichen
 Nachkommabits, `docs/MODEL-CONDITIONS-BUILDINGS.md` §6); `SimTool` und `CampaignTool` bauen den Katalog mit der Modell-Bone-Tabelle der Flugplätze wie der Client (`ModelGeometryLoader`).
@@ -1660,6 +1671,8 @@ Eine Wirkungstabelle Leicht/Schwer gibt es nicht, weil es keine Wirkung gibt; `S
 | `ai-match` Alpine Assault, `FactionGLA,FactionAmerica` | FactionAmerica bei 8.895 | `23A93C58C775A691` | `B29CF881F6B1CC59` | identisch / identisch |
 
 ## 36. Abschluss Phase 17 (6. Oktober 2026): zweites Versorgungszentrum der KI; Heeresauswahl nach Wert gemessen und verworfen
+
+*Historisch (30 Hz, Stand dieses Abschnitts): die Tabellen, Siegticks und Hashes hier sind überholt; maßgeblich ist `baselines/reference-manifest.json` (seit `ea52f87` bei 60 Hz), die aktuellen Werte stehen in §43.9.*
 
 ### 36.1 Befund und Regel
 
@@ -2122,6 +2135,62 @@ Fahrt bei keiner Rate mit `MoveArrived`; ein Flugzeug hat keinen Spielerbefehl f
 - Skripte: Zeitgeber in Sekunden und in Bildern, fest und zufällig, die Auswertungsverzögerung und `EndGameDelay` sind exakt gleich.
 
 **Nicht geprüft:** ob jede der 95 Zeilen aus §5 von einem Fall getroffen wird; die Ursachen sind zugeordnet, nicht durch Korrektur belegt; kein Fall ist von einem Menschen angesehen.
+
+**Nachtrag (9. Oktober 2026):** der Verlauf über die Runden und der Endstand (0 / 0 in allen zehn Gruppen) stehen in §39.7; der Verbleib jeder der 95 Zeilen steht in `docs/TICKRATE-MIGRATION.md` §5.
+### 39.7 Verlauf über die Runden und Endstand (9. Oktober 2026)
+
+Größen außerhalb der Toleranz bei 60 Hz / bei 120 Hz je Gruppe. Die Toleranzen aus §39.2 sind in der ganzen Phase nicht angefasst worden. Spalten: erster Lauf (§39.6, `91cb830`), nach Runde 1
+(sieben Pakete, `62fbb6a`), nach Runde 2 (Konsolidierung, `3b44506`), nach Runde 3 (`502e75b`: Beobachter und Flug, dazwischen die Korrektur der verlorenen Weckbitte und die Fabrikausfahrt), Endstand
+(`1b82e45`, nach den KI-Korrekturen und Runde 4; gezählt aus dem Protokoll der Schlussprüfung).
+
+| Gruppe | Fälle (Ende) | Größen (Ende) | erster Lauf | nach Runde 1 | nach Runde 2 | nach Runde 3 | **Endstand** | bei jeder Rate ungemessen (Ende) |
+|---|---:|---:|---|---|---|---|---|---:|
+| `locomotion` | 54 | 837 | 152 / 211 | 12 / 12 | 2 / 2 | 0 / 0 | **0 / 0** | 50 |
+| `flight` | 8 | 74 | 21 / 21 | 0 / 4 | 0 / 3 | 0 / 0 | **0 / 0** | 0 |
+| `weapons` | 194 | 1.474 | 43 / 57 | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 0** | 43 |
+| `projectiles` | 91 | 743 | 54 / 103 | 10 / 9 | 4 / 4 | 0 / 0 | **0 / 0** | 16 |
+| `turrets` | 31 | 216 | 28 / 36 | 4 / 0 | 4 / 0 | 0 / 0 | **0 / 0** | 4 |
+| `overtime` | 45 | 418 | 80 / 84 | 2 / 2 | 0 / 0 | 0 / 0 | **0 / 0** | 52 |
+| `economy` | 34 | 162 | 22 / 25 | 7 / 10 | 0 / 0 | 0 / 0 | **0 / 0** | 0 |
+| `timed` | 221 | 383 | 53 / 56 | 3 / 3 | 1 / 1 | 0 / 0 | **0 / 0** | 34 |
+| `scripts` | 5 | 15 | 4 / 5 | 0 / 0 | 0 / 0 | 0 / 0 | **0 / 0** | 0 |
+| `ai` | 3 | 66 | 22 / 27 | 25 / 24 | 24 / 23 | 0 / 0 | **0 / 0** | 0 |
+| **Summe** | **686** | **4.388** | **479 / 625** | **63 / 64** | **35 / 33** | **0 / 0** | **0 / 0** | **199** |
+
+Bis zur Fabrikausfahrt hatte die Suite 677 Fälle und 4.307 Größen (`economy` 25 Fälle, 81 Größen); die Spalten bis „nach Runde 2“ zählen gegen diese Menge.
+
+**Später hinzugekommen:**
+
+- **Neun Fälle `economy/production exit <Gebäude>`** (Kommandozentrale, Kaserne, Waffenfabrik der drei Fraktionen; 81 Größen: „Auftrag bis außerhalb des Grundrisses“, „Auftrag bis alle ruhen“,
+  Ruheabstand, Abstände der Ruheorte; §42.4) – alle bei 60 und 120 Hz bitgleich zu 30 Hz.
+- **Der Fallschirmabwurf ist messbar** (fünf Größen der Gruppe `flight` waren bei jeder Rate ungemessen, weil der Abwurf niemanden absetzte – ein 30-Hz-Fehler, behoben in `09b4d21`).
+- **Diagnose statt Fälle:** `SimTool rate-compare --ai-diff A,B`, `--reference-diff` und `--map-diff A,B --map KARTE` (je mit `--fields`) vergleichen zwei Raten eines ganzen Gefechts Feld für Feld
+  am Ende jedes Bildes und nennen das erste abweichende Bild (`docs/RATE-INVARIANCE-CONSOLIDATION.md` §2, `…-ROUND3-OBSERVERS.md` §8, `…-ROUND4-FIRST-FRAME.md` §8). Sie sind Werkzeug, keine Fälle
+  der Suite, und haben keine Toleranz.
+- **Drei-Raten-Tests je Paket** (`Tests.RateInvariance.*.cs`: Geschosse, Physik, Zeitversatz, Boden, Flug, Türme, Konsolidierung, Beobachter, Runde 3 Flug/Aufstellen, Ausfahrten, Runde 4) nennen ihre
+  Raten selbst und verlangen meist Bitgleichheit an jeder Bildgrenze.
+
+**Elf Berichtigungen der Messung** (nie einer Toleranz, nie eines Falls): `a6fdfea` (Heilung und Detektor lasen den letzten statt den ersten Schritt eines Bildes), `fbe8d9a`/`466d85f` (Tempo am
+Bildende abgetastet), `be4d800` (Battle Bus über Schaden statt `KillCommand`), `1f87669` und `2f62a6b` (zwei verkettete `StepUntil` verloren einen Tick statt eines Bildes; `2f62a6b` hebt dabei die
+30-Hz-Werte der „Rückkehr“ um ein Bild, 2,9333 → 2,9667 s), `f791682` (Turmwinkel am Bildende gelesen), `234f3c3` und `3a8d256` (Befehle und Kurs des Einsatz-Falls an Bildgrenzen), `43443f5`
+(fahrendes Opfer am Bildende gelesen), `f55c16d` (Sicht als Zustand des Bildendes), `b99bd9c` (eine Fahrt endet, wenn das Objekt steht). Gemeinsamer Nenner: die Suite liest einen Zustand am Ende
+des Bildes und zählt ein Ereignis im ersten Tick – wie die Bildkonvention (§43).
+
+**Was die Suite weiterhin nicht abdeckt** (zusätzlich zu §39.5; aus den Paketen):
+
+- **Nur die flache Karte.** Hänge, Wasser, Klippen und Brücken stellt keine Szene; die Lawine rutscht auf der flachen Karte nicht (ihre Rekursion ist nur durch einen Drei-Raten-Test am Hang
+  belegt), Hänge sind auf den vier Karten des Manifests über `--map-diff` gemessen, nicht in der Suite.
+- **Kein Fall** für Brückengerüst, Fähre, Flutwelle, Lenkbombe, freien Fall, `GarrisonContain`, Kampfpläne, die Mine als eigene Fahrt und den Laser der Punktverteidigung; je ein Drei-Raten-Test
+  bzw. (Laser) die Gefechte der Gruppe `ai`.
+- **Die Gruppe `ai` sind drei Paarungen auf einer flachen Karte über acht Minuten.** Dass sie in jeder Größe gleich sind, sagt nichts über ausgelieferte Karten: dort stimmen 14 von 16 Paarungen in
+  Sieger und Bild des Siegs überein, und 120 Hz ist nicht gemessen (§43.9).
+- **Die Suite befiehlt an Bildgrenzen.** Ein Befehl mitten im Bild (ein Mensch) hat kein 30-Hz-Gegenstück und keinen Fall.
+- **199 Größen sind bei jeder Rate ungemessen** (das Ereignis tritt im Budget bei keiner Rate ein); sie zählen weder als bestanden noch als Fehlschlag.
+- **„Besteht“ heißt:** jede gemessene Größe liegt bei 60 und 120 Hz innerhalb der Toleranz ihres 30-Hz-Werts – nicht, dass jedes Gefecht identisch ist, und nicht, dass ein Mensch einen Fall gesehen hat.
+
+Ausführen und Phasenabschluss: `dotnet run -c Release --no-build --project tests/CnCNew.Simulation.Tests -- --content-dir .local/phase2-import-a --only RateEquivalence --rate-report <datei>`; die
+Erwartung ist 0 / 0 in allen zehn Gruppen.
+
 ## 40. Verteilungsvergleich zwischen Raten (Phase 23, 7. Oktober 2026): `ai-survey` und `rate-distribution`
 
 Ein ganzes Match ist chaotisch (§38.3, `docs/FIXED-POINT-Q39-24.md` §7.2): eine Rundung im ersten Gefecht reicht für einen anderen Sieger. Zwei Tickraten lassen sich deshalb nicht Lauf für Lauf
@@ -2234,6 +2303,31 @@ Laufzeit eines Matches über das volle Budget (ein Arbeiter, `ArmoredFury_Americ
 (`DeathValley_America-China`, Startwerte 2 und 3): 6,0 s und 3,5 s bei 30 Hz (15.076 und 10.261 Ticks), 14,3 s und 7,1 s bei 60 Hz (49.351 und 27.571 Ticks). Dazu kommt einmal je Arbeiter der Katalogbau
 (rund 12 bis 16 s, unter einer prozessweiten Sperre nacheinander). Nicht ruhig gemessen, nur zur Planung.
 
+### 40.6 Die Erhebungen der Phase 23 (7. bis 9. Oktober 2026)
+
+Je Rate 320 Gefechte (16 Paarungen × 20 Seeds, 25 Spielminuten), `rate-distribution <30.tsv> <60.tsv>`; Dateien und Berichte im Scratchpad der Sitzung (`survey\r0-…` bis `r3-…`). Die Grenzen aus
+§40.2 sind unverändert. „r0“ bis „r2“ vergleichen gegen dieselbe 30-Hz-Erhebung (bei 30 Hz hatte sich bis dahin nichts geändert: die 30-Hz-Datei nach Runde 1 und nach Runde 2 ist Byte für Byte die
+von r0); „r3“ brauchte eine neue 30-Hz-Referenz, weil Fabrikausfahrt und KI-Korrekturen das Verhalten bei 30 Hz geändert haben.
+
+| Erhebung | Stand (60 Hz) | entschieden 30 Hz | entschieden 60 Hz | a: z (Grenze 1,960) | b: Siegquote je Fraktion, Differenz 60 − 30 Hz (Grenze \|z\| ≤ 2,576) | c: Dauer D, SE (min) | gepoolte mittlere Dauer 30 / 60 Hz (min) | Prüfungen |
+|---|---|---:|---:|---|---|---|---|---|
+| r0 | vor jeder Korrektur (`36d6b1c`) | 253 | 224 | **−2,631, durchgefallen** | America −0,100 (z −2,03), ChinaTank −0,075 (z −1,96); alle bestanden | −0,404, 0,407 | 8,402 / 7,831 | 38 bestanden, 1 durchgefallen |
+| r1 | nach Runde 1 (`62fbb6a`) | 253 | 244 | −0,854 | America −0,044 (z −0,92), AirForce −0,025, China −0,019, ChinaTank −0,013, GLA +0,025 | −0,103, 0,366 | 8,402 / 8,002 | 39 bestanden |
+| r2 | nach Runde 2 (`3b44506`) | 253 | 245 | −0,761 | America −0,044 (z −0,92), AirForce +0,013, China −0,038, ChinaTank +0,013, GLA +0,019 | −0,114, 0,387 | 8,402 / 8,136 | 39 bestanden |
+| r3 | nach den KI-Korrekturen (`cca6f92`) | 305 | 301 | −0,705 | America −0,038 (z −0,88), AirForce −0,013, China +0,025, ChinaTank +0,013, GLA −0,013 | −0,009, 0,286 | 9,328 / 9,227 | 39 bestanden |
+
+**Derselbe Seed bei 30 und 60 Hz** (nicht Teil von `rate-distribution`; eine eigene Auswertung der beiden TSV-Dateien: gleicher Ausgang und Sieger, Ende höchstens eine Sekunde auseinander):
+
+| Stand | derselbe Ausgang und Sieger | dazu Ende innerhalb einer Sekunde | Quelle |
+|---|---:|---:|---|
+| nach den KI-Korrekturen (`cca6f92`, r3) | 297 von 320 (laut `docs/AI-OBSERVED-2026-10-08.md` §11.4) bzw. 295 (laut Runde 4) | **188** (Arbeitsnotizen der Sitzung) bzw. 192 (eigene Auswertung der Runde 4) | zwei Auswertungen desselben Stands, nicht abgeglichen |
+| nach Runde 4 (`1b82e45`) | **317 von 320** | **287 von 320**; Endzeit gleich 285, gleiche Befehlszahl 282 | `docs/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.3 |
+
+Lesart: der Verteilungsvergleich bestand schon nach Runde 1; dass er besteht, heißt „kein Unterschied der in §40.3 genannten Größe gefunden“. Der Seed-Vergleich ist die schärfere Aussage und
+zeigt den Rest: 33 von 320 Gefechten enden bei 60 Hz mehr als eine Sekunde neben dem 30-Hz-Gefecht, 3 mit anderem Ausgang. **Nicht gemessen:** das Urteil von `rate-distribution` nach Runde 4 und
+am umgestellten Stand; 120 Hz in jeder Erhebung. **Balance ist nicht bewertet** – in der 30-Hz-Erhebung r3 gewinnt ChinaTankGeneral 70 von 80 Gefechten gegen AirForce (9 von 80), vor den
+KI-Korrekturen lag AirForce vorn (§42.6).
+
 ## 41. Ausweg „Originalraster“
 
 Festlegung aus `docs/HANDOFF-PHASE23.md`: Logik, die das Original einmal je Logikbild (1/30 s) ausführt und die sich nicht sinnvoll auf eine andere Schrittweite umrechnen lässt, darf auf jedem
@@ -2251,6 +2345,78 @@ Auskünfte der VM an den Zielerwerb der Welt und die Annahme der von der VM erte
 
 Stellen außerhalb der Simulation, die schon seit Phase 21 je Originalbild laufen (Effekte, Meldungen, Daueraufträge der Eingabe), stehen in `docs/TICKRATE-MIGRATION.md` §14; sie sind Präsentation und
 kein Fall dieser Tabelle.
+
+### 41.1 Die vollständige Liste (Stand 9. Oktober 2026, alle Pakete der Phase 23)
+
+Die Tabelle oben nennt die Skript-VM. Die Pakete der Phase haben den Ausweg an weiteren Stellen benutzt und ihn dabei in zwei Formen gebraucht: am **Raster der Welt** (Ticks mit
+`IsOriginalFrameBoundary`, die Form der Festlegung) und am **Bild des Objekts** (ganze Bilder nach dem Tick, in dem das Objekt entstand, einen Befehl bekam oder einen Zustand begann –
+`EntityFrames.BeginsFrameOf`). Die zweite Form hält niemanden bis zur nächsten Bildgrenze der Welt auf; sie ist aber ebenso „einmal je Originalbild“ und steht deshalb hier. Jede Zeile ist bei
+30 Hz unverändert (jeder Tick beginnt ein Bild). Paketdokumente: `docs/RATE-INVARIANCE-<PAKET>.md`; „OBSERVERS“, „R3-FLIGHT“ und „ROUND4“ sind `…-ROUND3-OBSERVERS.md`, `…-ROUND3-FLIGHT.md`,
+`…-ROUND4-FIRST-FRAME.md`.
+
+**A. Am nächsten am Verbot „nicht für Zielerwerb“ – die Bestätigung des Projektinhabers steht aus** (`docs/TICKRATE-MIGRATION.md` §15.7.7, Entscheidung 1). Der Durchlauf bzw. das Modul läuft
+weiter in jedem Tick, Befehle werden in jedem Tick angenommen, und ein befohlener Schuss fällt im Tick des Befehls; **was eine Einheit von sich aus entscheidet, entscheidet sie aber nur noch
+einmal je Bild.**
+
+| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Warum nicht unterteilbar | Quelle im Original | Paket | Commit |
+|---|---|---|---|---|---|
+| `SimulationWorld.StepAcquisition` | die eigenständige Entscheidung einer Einheit – Blick, Angriff, Verfolgen, Halt, Weitermarsch –, im ersten Tick des Bildes **der Einheit** (Tick ihres Erscheinens) | liest der Durchlauf alles am Bildende, sind seine Eingaben in allen Ticks eines Bildes gleich; ein Schuss im zweiten Tick ist ein anderes Spiel (anderes Opfer, anderes Nachladen). Kosten: eine mitten im Bild durch einen Befehl frei gewordene Einheit sucht bis zu r − 1 Ticks später | – (Paket nennt keine Stelle) | OBSERVERS §2 | `f6dacdb` |
+| `PointDefenseLaserUpdate.Update` | Scan und Schuss im ersten Tick des Bildes **des Trägers**, Träger und Ziele am Bildende; nach einem leeren Scan ruht die Schusspause für den Rest des Bildes (`_quietFrame`) | je Tick sah der Laser Geschosse an ihrer augenblicklichen Lage und schoss bei 60 Hz ein Bild früher; ein Bild ohne Ziel zählt bei 30 Hz die Pause nicht herunter | – | `docs/AI-OBSERVED-2026-10-08.md` §11.3, ROUND4 | `3c24352`, `887b51e` |
+| `CleanupHazardUpdate.Update` | Scan, Zielverlust, Annäherungsbefehl und Schuss, im Bild **des Besitzers** | Zustandsautomat mit einem Schritt je Bild; je Tick entschieden verlässt sein Zähler das Raster | – | ROUND4 | `7880aed` |
+| `DeployStyleAIUpdate.AllowsFire` | im Bild des Fertigwerdens werden Feuerversuche, die **vor** dem Update der Einheit kommen, verworfen (r − 1 Ticks); der eigene Zielerwerb nach dem Update kommt durch | bei 30 Hz wird der Befehl desselben Ticks verworfen und erst der des nächsten Bildes angenommen; „einen Schritt später“ ist ein Bild | – | R3-FLIGHT §3 | `c1a57ee` |
+
+**B. Zustandsautomaten und Entscheidungen „ein Schritt je Bild“.**
+
+| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Warum nicht unterteilbar | Quelle im Original | Paket | Commit |
+|---|---|---|---|---|---|
+| `ScriptEngine.Update` (auch unter `FREEZE_TIME`) | die Skript-VM als Ganzes, Raster der **Welt** | Tabelle oben | Tabelle oben | `docs/SCRIPT-ENGINE.md` §2 | `727c4d6`, `2fe8b32`, `d710835` |
+| `AIUpdateInterface.Update` → `DockMachine.Update` | die Zustandswechsel des Andockens (Anflug beendet, Freigabe, Einfahrt, Ausfahrt), Raster der **Welt**; die Arbeit des Docks läuft je Tick | jeder Wechsel kostet ein Update; das lässt sich nur zählen | `AIDockMachine` | GROUND | `096160d` |
+| `SupplyCarrierAI.Update` → `SupplyMachine.Update` | untätig → will liefern → Dockbefehl, Raster der **Welt** | wie oben | `SupplyTruckStateMachine` | GROUND | `096160d` |
+| `DockMachine.ActionDelay` | die Aktion eines Versorgungsdocks an einem Andockenden ohne Wartezeit, ab dem Betreten | „beim nächsten Update“ ist ein Bild (`ZeroIsNextFrame`) | – | ROUND4 | `d9b5490` |
+| `AssaultTransportAIUpdate.Update` | Mitgliederliste, Blick nach dem eigenen Schuss, Befehle an die Truppen, Bild **des Transporters** | „im nächsten Update“ ist ein Bild | – | ROUND4 | `015e975` |
+| `AIUpdateInterface.UpdateTask` (drei Prüfungen), `UpdateGoal` | „lohnt die Aufgabe noch“ (Ziel fort, Bau fertig oder fremd, nichts zu reparieren), Reichweite des Bauauftrags und Nachführen auf ein Zielobjekt, Bild **des Bauenden** | geprüft wird die Lage, die auch der 30-Hz-Lauf prüft; die Arbeit selbst bleibt je Tick | – | GROUND, OBSERVERS | `6e018fe`, `3d90f25` |
+| `JetAIUpdate.Update`, geparktes Flugzeug ohne Auftrag | der Leerlaufblick (Heilung melden, gespeicherten Befehl ausführen, Rückkehrzeit), Bild **des Flugzeugs**; ein Befehl beendet das Leerlaufbild sofort | Zustandsautomat, ein Schritt je Bild | – | R3-FLIGHT §8 | `cc7fd75` |
+| `ContainChainModules.EnterPayload` | das Nachsehen eines Trägers, ob seine Erstbesatzung erschienen ist, Bild **des Trägers** | Zustandswechsel „ein Update nach dem Erscheinen“ | – | CONSOLIDATION | `f8ce7c4` |
+| `SimulationWorld.StepTurret` (`OccupyFrame`) | ein Turmschritt ohne Drehung (Scan-Frist setzen, Seitenwechsel eines schwenkenden Turms) belegt ein Bild **des Turms** | ein Schritt des Turms ist ein Bild | `TurretAI::friend_turnTowardsAngle` | TURRETS, ROUND4 | `276a8de`, `43acce8` |
+| `StealthDetectorUpdate.Update` bei `DetectionRate = 0` | ein Scan je Bild statt je Tick (Untergrenze `AtLeastOneFrame`; Retail hat keinen solchen Detektor) | – | `StealthDetectorUpdate.cpp`, `update` (`markAsDetected(m_updateRate + 1)`) | TIMING | `f922979` |
+
+**C. Abtastung und Kollision** (eine dichtere Abtastung findet Überlappungen früher und in anderer Reihenfolge).
+
+| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Warum nicht unterteilbar | Quelle im Original | Paket | Commit |
+|---|---|---|---|---|---|
+| `AIUpdateInterface.AdvanceFrame` → `ResolveFootprintCollisions`, `TryTopple`, `TrySquish` | die Prüfung auf Überlappung (Quetschen, Umstoßen, `ICollideModule`), im ersten Tick des Bildes **des Fahrenden**, der dabei am Bildende steht (bis Runde 4: im letzten Tick) | bei 30 Hz wird nach jedem ganzen Schritt geprüft | – | GROUND, ROUND4 | `1c65446`, `e910174` |
+| `MinefieldBehavior.OnCollide` | der Vergleich „hat sich die Einheit seit der letzten Detonation um `RepeatDetonateMoveThresh` bewegt“, Raster **des Meldenden** (des Fahrenden) | die Schwelle steht gegen den Weg seit dem letzten Vergleich; ein feinerer Takt zündet schneller | – | TIMING, CONSOLIDATION | `eca983f`, `0136733` |
+| `RailroadBehavior.Collide` | Kollisionsantwort des Zugs (Töten, Quetschschaden, Wegschieben um ein Viertel der Überlappung), Bild **der Lok** | Schaden und Schub sind Beträge je Bild; das Viertel klingt geometrisch ab | – | PHYSICS | `9871bc2` |
+| `RailedTransportDockUpdate` | die Ankunftsfrage (6 bzw. 3 Einheiten), ab Beginn des Ziehens bzw. Schiebens | das Original fragt einmal je Bild | – | PHYSICS | `b53cbd3` |
+| `WaveGuideUpdate.DoDamage`, Bahnende | Abtastung der Front, Ende der Bahn, Bild **der Welle** | eine dichtere Abtastung trifft Objekte, an denen eine gröbere vorbeigeht | – | PHYSICS | `c333364` |
+| `HeightDieUpdate.Update` | Höhenprüfung und „bewegt sich abwärts“, Bild **des Objekts** (Tick der Entstehung), gelesen am Bildende | vergleicht mit der Höhe des vorigen Bildes; je Tick stirbt das Objekt in einer Höhe, die das Original nie sieht | – | PHYSICS, CONSOLIDATION | `5440888`, `ad2b9e9`, `f0770fe` |
+
+**D. Heilung in der Scheibe des Originals** (Scheiben je Tick sind einzeln gerundet und summieren sich nicht zur Bildscheibe; ein Treffer im ersten Tick eines Bildes träfe eine andere Gesundheit).
+
+| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Paket | Commit |
+|---|---|---|---|
+| `HealContain.Update`, `GarrisonContain.HealOne`, `RepairDockUpdate.Action` | die Heilscheibe, gezählt ab Eintritt bzw. erster Aktion | PHYSICS | `b05da71` |
+| `TunnelContain.Update` | die Heilscheibe eines Insassen, gezählt ab seinem Eintritt | FLIGHT | `81931ab` |
+| `PropagandaTowerBehavior.Give` | die Heilscheibe, Bild **des Turms** (Bonus und Scan bleiben je Tick) | CONSOLIDATION | `f05af4f` |
+| `AIUpdateInterface.UpdateTask` (Reparatur) | die Heilscheibe, Bild **des Bauenden** | OBSERVERS | `64f438f` |
+| `RebuildHoleBehavior.Update` | die Regeneration, Bild **des Lochs** | OBSERVERS | `2a433ba` |
+| `TransportContain` (Regeneration der Insassen) | die Scheibe einer Sekunde über 30 Bilder, gezählt ab dem Einstieg | `docs/AI-OBSERVED-2026-10-08.md` §11.3 | `df639ff` |
+
+**E. Zufallszüge, Ereignisse und Statistik** (ein Zufallszug ist nicht teilbar; die Zahl der Züge je Spielzeit muss gleich sein).
+
+| Stelle | Was einmal je Originalbild läuft, und auf wessen Bild | Paket | Commit |
+|---|---|---|---|
+| `SlavedUpdate.DoRepairLogic` | Höhen-Zufallszug und Bewegungsbefehl einer Drohne im Reparaturzustand, Raster der **Welt** | TURRETS | `01121cc`, `e1252df` |
+| `WanderAIUpdate.Update` | der Blick eines untätigen Wanderers (zwei Züge, ein Befehl), Raster der **Welt** | TURRETS | `022bec8` |
+| `GrantStealthBehavior.Update` | Wachsen des Radius und Vergabe der Tarnung, Bild **des Markers** | TURRETS | `f1c5ceb` |
+| `SpecialAbilityUpdate.StepCaptureFlash` | die Blitzphase der Übernahme, Bild **der Vorbereitung** (`SpecialAbilityUpdate::continuePreparation`) | TURRETS | `d923cea` |
+| `EmpUpdate.Update` | der Wachstumsanteil des EMP-Maßes, Bild **des Pulses** (keine Spielwirkung) | PROJECTILES | `9132127` |
+| `SimulationWorld.NoteTurretWait` | das Hochzählen von `TurretWaits` (Statistik, Teil des Hashes), Raster der **Welt** | TURRETS | `dc888d3` |
+
+**Kein Ausweg, sondern die beschlossene Unterteilung** (Entscheidung je Bild, Fortschritt in jedem Tick – §43): Bodenbewegung, Flügelflug und die Zustände des Jets, Türme, Geschosse und Raketen,
+Umstürzen, Zug, Lawine, Battle Bus, Einsturz, Brückengerüst, Fallschirm, Absturz, Chinook, Spectre (sein Bildschritt liegt am Raster der Welt, weil sein Haubitzentakt `tick % HowitzerFiringRate`
+dort liegt), dynamische Aufdeckung. Ebenfalls kein Ausweg: die Sicht (läuft unverändert alle drei Bilder, seit `a8eed4a` nach dem **letzten** Tick ihres Bildes) und die Leser, die nur eine andere
+Lage lesen (§43.4).
 
 ## 42. Fabrikausfahrt (8. Oktober 2026): Ausfahrtsweg frisch gebauter Einheiten
 
@@ -2474,3 +2640,129 @@ Endproben 13/24 und 15/24; Eingangsmanifest wie in §42.3; `Game.Tests` (Release
 
 **Offen:** die Patts, die bleiben (4 von 16, wie auf `main`), sind Gefechte, in denen eine Seite die andere bis auf wenige Gebäude zurückdrängt und nicht beendet (vgl. §36); der
 Unterschied von vier Gefechten in der Erhebung ist nicht aufgeschlüsselt; 60/120 Hz der KI-Gefechte nicht erhoben.
+
+## 43. Phase 23: Bildkonvention der Simulation oberhalb von 30 Hz
+
+Stand 9. Oktober 2026 (`f3acc2e`). Zusammengeführt aus `docs/RATE-INVARIANCE-CONSOLIDATION.md` §1.3, `docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md` und `docs/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md`; wo
+ein Paketdokument der ersten Runde etwas anderes sagt (die Ankunft „mit dem letzten Anteil“, die Kollisionsprüfung „im letzten Tick“), gilt dieser Abschnitt. „Bild“ heißt Logikbild des Originals
+(1/30 s), „Tick“ ein Schritt der Simulation, r = Ticks je Bild (1, 2, 4). **Nichts davon hat ein Mensch gesehen.** Das Protokoll der Phase steht in `docs/TICKRATE-MIGRATION.md` §15.
+
+### 43.1 Grundsatz
+
+Der 30-Hz-Schritt ist die Definition des richtigen Verhaltens. Eine höhere Rate **unterteilt** ihn: was das Original einmal je Bild entscheidet, wird einmal je Bild entschieden, mit den Größen
+je Bild; was sich dadurch bewegt, rückt in jedem Tick um einen Anteil vor. Ein einzelnes Objekt steht deshalb nach jedem seiner Bilder dort, wo der 30-Hz-Schritt es hinstellt – in den
+Drei-Raten-Tests Bit für Bit. Die Konvention regelt, was daraus für zwei Objekte (oder zwei Module eines Objekts) folgt, die einander **ansehen**.
+
+### 43.2 Die Regeln
+
+1. **Entschieden wird im ersten Tick des Bildes.** Größen zweiter Ordnung, Zustandsautomaten und Ereignisse „einmal je Bild“ fallen auf den ersten Tick – in Sekunden der Zeitpunkt des 30-Hz-Ticks.
+2. **Die Lage erreicht ihren 30-Hz-Wert mit dem letzten Tick des Bildes**; dazwischen liegt das Objekt auf der Geraden dorthin.
+3. **Das Bild gehört dem Objekt**, nicht dem Modul und nicht der Welt: ein Objekt, das an einer Bildgrenze entsteht oder befohlen wird, ist in Phase mit der Welt; eines, das mitten im Bild einen
+   Befehl bekommt, zählt seine Bewegungsbilder ab diesem Tick. Befehle werden in jedem Tick angenommen und warten auf nichts. Zwei Module eines Objekts entscheiden im selben Tick in der
+   Reihenfolge ihres Modulindex (`EntityFrames.BeginsFrameOf`: die Phase ist der Tick der Entstehung).
+4. **Wer ein anderes Objekt ansieht, um etwas zu entscheiden, liest es am Ende des Bildes, das es begonnen hat** (§43.3). Ein Beweger, der in diesem Tick schon dran war, zählt mit seiner Lage nach
+   Schritt T; einer, der noch drankommt, mit seiner Lage nach Schritt T − 1 – genau wie bei 30 Hz. Die Antwort kippt nicht mitten im Bild.
+5. **Ein Ereignis, das ein Beobachter an der Bildend-Lage auslöst, setzt das Objekt auf diese Lage** (`Entity.CompleteFrame`): Tod durch `HeightDieUpdate`, in Reichweite gekommen, angehalten,
+   eingestiegen – und seit Runde 3 **jeder Tod** (`SimulationWorld.OnEntityDied` vollendet das begonnene Bild, auch das des Turms). Der Beweger legt danach keinen Anteil dieses Bildes mehr zurück.
+6. **Die Sicht läuft nach dem letzten Tick ihres Bildes** (unverändert alle drei Bilder) und liest die augenblickliche Lage, die dann bei jedem Objekt in Phase die Lage nach Schritt T ist. Wer Sicht
+   liest, liest bis dahin den Stand des vorigen Bildes – nie einen, den es bei 30 Hz zu dieser Spielzeit noch nicht gibt.
+7. **„Einen Tick später“ ist ein Bild später.** Ein neues Objekt gibt es am Ende des Ticks, der es angefordert hat; sein erstes Bild beginnt r Ticks danach. Ein in der Erzeugungsphase
+   angefordertes Objekt entsteht ein Bild später (`PendingSpawn.NotBefore`), ein Befehl aus der Erzeugungsphase (Sammelpunkt) wird mit dem ersten Bild ausgeführt
+   (`SimulationWorld.DeferSpawnPhaseOrders`), ein nach der Zerstörungsphase getötetes Objekt wird ein Bild später entfernt (`Entity.DestroyNotBefore`), ein Marsch, den der Zielerwerb nach den
+   Updates gibt, beginnt im nächsten Bild (`BeginMoveWithNextFrame`).
+8. **Eine Meldung hat ein Raster, das des Meldenden** (`ICollideModule.OnCollide` kommt je Bild des Fahrenden; der Empfänger führt kein eigenes).
+9. **Was nicht umgestellt ist, liest die augenblickliche Lage** und liegt höchstens einen Bildschritt des Beobachteten vom 30-Hz-Wert entfernt (§43.9).
+
+### 43.3 Die Bildend-Sicht am Objekt
+
+`World/Entity.cs` trägt, was einem Beweger von seinem begonnenen Bild noch fehlt; ein Beobachter addiert es beim Lesen.
+
+| Symbol | Was |
+|---|---|
+| `Entity.AheadX/Y/Z`, `AheadTick`, `SetAhead`, `CoverShare` | der noch nicht zurückgelegte Rest des Bildschritts und der Tick, in dem der Beweger ihn zuletzt angefasst hat; ein Rest, den sein Beweger weder in diesem noch im vorigen Tick angefasst hat (angehalten, gelähmt), zählt nicht mehr |
+| `Entity.FrameEnd(tick)` | Lage am Ende des begonnenen Bildes; bei 30 Hz die Lage |
+| `Entity.AheadAngle`, `HasAheadAngle`, `FrameEndAngle` | der Kurs am Bildende (Runde 3: ein Schütze, der mitten im Bild hält, startet seine Rakete damit) |
+| `Entity.SetAheadHeight` | die Höhe am Bildende (Runde 4: ein Bodenfahrer am Hang) |
+| `Entity.SpeedPerFrame` | das Tempo je Bild für ein zweites bewegendes Modul desselben Objekts (Chinook), nur über 30 Hz |
+| `Entity.CompleteFrame` | setzt das Objekt auf sein Bildende (Regel 5) |
+| `Entity.DestroyNotBefore` | Entfernen frühestens ein Bild nach der Anforderung (Regel 7) |
+| `EntityFrames.BeginsFrameOf` (`Time/FrameGrid.Consolidation.cs`) | die Ticks, mit denen die Bilder eines Objekts beginnen |
+| `IWorldServices.IsSignificantlyAboveTerrainAtFrameEnd` | „in der Luft?“ aus der Höhe am Bildende |
+
+**Wer veröffentlicht:** die Bodenbewegung (`AIUpdateInterface.AdvanceFrame`: Lage, Kurs, Höhe), Granaten, Raketen und die Neutronenrakete, alle Flugbeweger über `FlightFrameStep.Publish` (Jet,
+Hubschrauber, Chinook, Fallschirm samt Reiter, abgeschossener Jet und Hubschrauber, Spectre, Leuchtkörper). **Nicht veröffentlichend:** Zug, Lawine, Fähre, Welle, freier Fall von `PhysicsBehavior`.
+
+### 43.4 Wer am Bildende liest
+
+Umgestellt sind die Leser, an denen ein Fehlschlag der Suite oder die erste Abweichung eines Gefechts gemessen wurde – nicht alle (mehrere hundert Stellen lesen `X`/`Y` eines anderen Objekts):
+
+- **Zielerwerb:** `FindMoodTarget`/`ConsiderMoodTarget` messen von Bildende zu Bildende; `Engage`, `WithinWeaponRange`, `FireWeaponAt` (Verfolgungsziel, „in Reichweite“, Start eines Geschosses mit
+  Lage und Kurs des Bildendes). Die Entscheidung selbst fällt im ersten Tick des Bildes der Einheit (§41.1 A).
+- **Türme:** `DesiredTurretAngle`, `DesiredTurretPitch`, `KeepsAttackIntent`.
+- **Schaden:** `DealDamageCore` – Hauptopfer und jeder Kandidat im Radius am Bildende (vorher fielen von 40 Streuschüssen je nach Rate verschieden viele aus).
+- **Bewegung:** `StepBlockedAtFrameEnd`, `StationaryBlockersAheadAtFrameEnd`, `StandsStillAtFrameEnd`, `FootprintsOverlapAtFrameEnd`; `HordeUpdate.Evaluate`; `MobMemberSlavedUpdate` (Nexus);
+  `OpenContain.Add`/`Remove`, `UpdateEnter`/`UpdateGoal`, `OrderApproachGoal`/`OrderEnter`; die Platzwahl der Fabrikausfahrt (`GoalIsFree`, §42.3).
+- **Module:** `HeightDieUpdate`, `PointDefenseLaserUpdate`, `CleanupHazardUpdate`, `AssaultTransportAIUpdate`, `PilotFindVehicleUpdate`.
+- **Die Suite und die Tests** lesen einen Zustand am Bildende (`RateScene.StepUntilFrameEnd`); wer oberhalb von 30 Hz eine Lage „einen Tick nach“ einem Ereignis liest, liest einen Anteil vor dem
+  Bildende und misst die Ablesung, nicht das Verhalten.
+
+### 43.5 Das erste Bild neuer Objekte
+
+Die allgemeine Fassung („jedes Update eines neuen Objekts frühestens `SpawnTick + r`“) ist zweimal gemessen und **nicht übernommen**: Integratoren und Module, die ihre Updates ab dem ersten zählen,
+liefen r − 1 Ticks zu spät (13 rote Simulationstests bei 60 Hz, 15 bei 120 Hz). Umgestellt ist je Modul, dort, wo eine gemessene Abweichung beginnt: Module, deren erstes Update ein Ereignis
+entscheidet oder etwas erzeugt (Feld, Tarnung, Create-Module, Flugblatt, `SpawnBehavior`, `AutoFindHealingUpdate`), `JetAIUpdate`, `ChinookAIUpdate`, `PilotFindVehicleUpdate`,
+`HelicopterSlowDeathBehavior` (ein Bild nach dem Tod), die Geschosse (erster Schritt ein Bild nach dem Start). **Faustregel für neue Module:** entscheidet das erste Update ein Ereignis, kommt es
+ein Bild nach dem Entstehen. **Nicht umgestellt:** `DeliverPayloadAIUpdate`, Fallschirm, Fähre, dynamische Aufdeckung, Feuersturm, `FireOCLAfterWeaponCooldownUpdate`, Feindnähe-Scan, Checkpoint.
+
+### 43.6 Ende eines Marschs, Halt und Ausrollen
+
+Ein Marsch endet im **ersten** Tick seines letzten Bildes (`BeginArrival`: `MoveArrived`, kein Bewegungsziel mehr) und legt den Rest in den übrigen Ticks zurück (`Coast`); so sieht jeder, der das
+Objekt im ersten Tick ansieht (Zielerwerb, der Container, in den es läuft), es wie bei 30 Hz angekommen. Hält ein Beobachter eine Einheit nach den Updates an (Verfolgung endet, Opfer in
+Reichweite), vollendet sie ihr Bild und trifft die nächste Marschentscheidung erst im nächsten (`StopInternalMoveAtFrameEnd`, `SettleFrame`, `moveHoldUntil` nur über 30 Hz). Wer das Ereignis oder
+`HasMoveTarget` als „steht am Ziel“ liest und sofort die **augenblickliche** Lage nimmt, liest einen Anteil vor dem Ziel – die Präsentation ist darauf nicht geprüft.
+
+### 43.7 Zustand, der nur oberhalb von 30 Hz geschrieben wird
+
+Bei 30 Hz ist ein Bild ein Tick: jeder Anteil ist der ganze Schritt, jede Phase null, jeder Rest null. Die Buchführung der Unterteilung wird deshalb **nur geschrieben, wenn sie vom Standard
+abweicht** – bei 30 Hz nie. Das ist der Grund, warum alle Runden der Raten-Invarianz das 30-Hz-Manifest unverändert ließen (Snapshots, Hashes und Replays bytegleich; `WorldSnapshot` 10, Replay 12,
+`CommandTypes.Version` 15 ohne Versionssprung). Bei 60 und 120 Hz ändert sich der Inhalt eines Snapshots innerhalb eines Bildes; ein Snapshot mitten im Bild setzt bitgleich fort (je Paket getestet).
+Dazu gehören: `frameSpeed`, `frameTicksLeft`, `frameDue`, `frameStepX/Y`, `frameAngle`, `frameArriving`, `moveHoldUntil` der Bodenbewegung; `subStep` der Geschosse; `FramePhase` der Physikmodule;
+`FlightFrameStep` der Flugbeweger; `subSteps`, `goalAngle`/`goalPitch`, `startAngle`/`startPitch` der Türme; `abilityFacePhase`; die `Ahead…`-Felder des Objekts; `PendingSpawn.NotBefore`,
+`DestroyNotBefore` und die Liste `exitClaims` der Welt; `_quietFrame` des Lasers; zwei Felder von `DeployStyleAIUpdate` im Bild des Fertigwerdens.
+
+### 43.8 Die Helfer nebeneinander, und der Vorschlag
+
+Jedes Paket hat seine eigene Familie mitgebracht; sie rechnen dasselbe mit verschiedener Rundung und verschiedener Zählweise (vollständige Tabelle: `docs/RATE-INVARIANCE-CONSOLIDATION.md` §7).
+
+| Familie (Datei) | Anteil eines Bildschritts | Zählweise, Zustand | Konstanten je Bild | Benutzer |
+|---|---|---|---|---|
+| `ProjectileFrameGrid` (`Time/FrameGrid.Projectiles.cs`) | Schritt / n, der letzte Anteil nimmt den Rest | `subStep` 0 … n − 1 im Modul | aus dem Tickwert rekonstruiert (Dezimalzahl mit vier Stellen), sonst × n; Raketen seit Runde 4 aus `LocomotorFrames` | Granaten, Raketen, Neutronenrakete, freier Fall, Lenkbombe |
+| `FramePhysics` (`Time/FrameGrid.Physics.cs`) | `floor(Schritt · k / n) − floor(Schritt · (k − 1) / n)`, Summe exakt | `FramePhase` 0 … n − 1 | × n bzw. × n² | Umstürzen, Zug, Battle Bus, Einsturz, Aufdeckung |
+| `FlightFrames`, `FlightFrameStep` (`Time/FrameGrid.Flight.cs`) | Rohwert / n zur Null abgeschnitten, der erste Tick nimmt den Rest | `left` n − 1 … 0, als Objekt im Snapshot | × n, × n²; Flügelflug und Jet seit Runde 3 aus `LocomotorFrames` | Flug, Jet, Fallschirm, Chinook, Spectre, Absturz |
+| `AIUpdateInterface.AdvanceFrame` (`Phase5Modules.cs`) | `Roh · (i + 1) / n − Roh · i / n`, Summe exakt | `frameTicksLeft` n … 1, `frameDue` | `LocomotorFrames` (die 30-Hz-Umrechnung derselben Quellzahlen, Tabelle neben dem Katalogtyp) | Bodenbewegung |
+| `TurretState.SubSteps`, `TurretInfo.RatesPerOriginalFrame` | Rest / verbleibende Teilschritte abwärts, der letzte setzt das Ziel | `SubSteps` | Tabelle wie `LocomotorFrames` | Türme |
+| `FrameGrid`, `FrameGridTiming.ZeroIsNextFrame` (`Time/FrameGrid.cs`, `FrameGrid.Timing.cs`) | – (Dauern auf dem Raster) | – | – | überall |
+| `Entity.Ahead…`, `EntityFrames.BeginsFrameOf` | keine eigene Rundung (der Beweger liefert seine Anteile) | `AheadTick` | – | Beobachter |
+
+**Vorschlag für später** (ändert Ergebnisse bei 60 und 120 Hz, nie bei 30 Hz; ein eigener Schritt mit der Suite als Maß, nicht gemacht): *ein* Anteilshelfer in der Form von
+`FramePhysics.FrameSlice` (Summe exakt, vorzeichenrichtig, kein Zustand außer der Nummer des Ticks im Bild) und der Rest am Objekt (`Entity.Ahead…`) als einzige Buchführung dessen, was fehlt – dann
+entfallen `subStep`, `FlightFrameStep`, `frameTicksLeft` und `FramePhase` als je eigener Zustand, und jeder Beweger veröffentlicht von selbst. Für Konstanten je Bild das Muster von
+`LocomotorFrames` statt `× n` und statt der Dezimal-Rekonstruktion; damit fielen auch die Beweger weg, die heute noch `Wert je Tick × r` rechnen (§43.9). Fallstrick, schon einmal eingetreten:
+parallele Pakete, die Helfer gleichen Namens einführen, kollidieren erst beim Bauen – nach jedem Merge bauen.
+
+### 43.9 Neue Referenzwerte, und was nicht gleich ist
+
+**Referenzwerte bei 60 Hz** (`baselines/reference-manifest.json`, Schema 2, geschrieben in `ea52f87`; zweimal mit 50 von 50 Läufen identisch geprüft): Retail-Referenzmatch Sieger FactionGLA bei
+**Tick 28.260** (Originalbild 14.130), Endhash `CA05181C36C62C7A`, Kette `21ACEDA63325A658`, 26.626 Befehle; Stresstest 216.000 Schritte (bei 60 Hz eine Stunde Spielzeit) Endhash
+`9EE9F730D124C3BD`, Kette `F338463BE66D99C0`; 16 KI-Läufe **14 entschieden**; Welt-Fingerabdruck des Eingangsmanifests `C81DC18A282037CD`. Versionen unverändert: `WorldSnapshot` 10, Replay 12,
+`CommandTypes.Version` 15, `MissionSnapshot` 3, `SaveGame` 3. Überholt: Tick 17.805 / `D0CA5F4EE456D6CE` / `C5EE1090E1C24D7B` (§38, 30 Hz) und die 30-Hz-Zwischenstände der Phase, Tick 14.130 /
+`5BF9BB7CED6D7A35` / `56149C0105E992D7` (§42.4). Ein Manifest wird mit der Rate geprüft, die seine Datei nennt; eine abweichende `--tick-rate` wird abgelehnt.
+
+**Das Referenzmatch ist bei 30, 60 und 120 Hz dasselbe Spiel:** Sieger FactionGLA in Tick 14.130 / 28.260 / 56.520, bei jeder Rate Bild 14.130, 26.626 Befehle, und `rate-compare --reference-diff
+--fields` findet zwischen 30 und 60 sowie zwischen 30 und 120 Hz kein abweichendes Feld am Ende irgendeines Bildes (`docs/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md` §1.1).
+
+**Nicht gleich, nicht umgestellt, nicht gemessen** – die zusammengeführte Liste steht in `docs/TICKRATE-MIGRATION.md` §15.7.6. In Kürze: 2 von 16 Paarungen auf ausgelieferten Karten enden bei
+60 Hz in einem anderen Bild; 33 von 320 Gefechten der Erhebung enden mehr als eine Sekunde neben dem 30-Hz-Gefecht, 3 mit anderem Ausgang; 120 Hz ist für Paarungen und Erhebung nicht gemessen;
+Spectre, Fallschirm, Leuchtkörper, Partikelstrahl, abgeschossener Jet und die Schwerkraft der Physikmodule rechnen weiter `Wert je Tick × r`; `SlavedUpdate` und die Regeneration der Insassen in
+`ContainModules.cs` heilen weiter je Tick; Skript-VM, Spezialfähigkeiten, Brücken, Wasser und Klippen sind nicht untersucht. Die Entscheidung über den Selbsterwerb je Bild der Einheit und die
+drei verwandten Stellen (§41.1 A) liegt beim Projektinhaber.
