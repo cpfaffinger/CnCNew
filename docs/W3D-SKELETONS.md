@@ -94,7 +94,7 @@ file transformation is ignored. The Euler angles of the pivots are redundant and
 stored.
 
 **Animation** (`HTreeClass::Anim_Update`): per pivot 1..n−1
-`lokal = Override · R(qAnim) · T(tAnim) · Basis`. Animation values are deltas to the base pose.
+`local = Override · R(qAnim) · T(tAnim) · base`. Animation values are deltas to the base pose.
 Pivots without a channel receive translation 0 and the unit quaternion, i.e. the base pose. Pivots from the
 pivot count of the animation hierarchy onwards stay in the base pose and visible. Root channels are
 ignored (as in the original, loop from pivot 1).
