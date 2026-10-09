@@ -160,7 +160,11 @@ Das Ergebnis gehört in die Tabelle in §2 (Zeile „zweiter physischer Rechner�
 - Das Manifest ist die Messlatte (`docs/MULTIPLAYER-PLAN.md` §6 Punkt 2). Wer es ändert, tut das in einem eigenen Commit mit einer Ursache und Vorher/Nachher-Werten.
 - Neue Simulationseingänge laufen über die geprüften Wandlungsroutinen (`SingleBits.ToDecimal` für Fließkommawerte aus Dateien, `ExactBoneMath` für die Knochentabelle); `SourceRules` und `FeederSourceRules` erzwingen das.
 - Jede Zustandsänderung ruft `MarkDirty`; ein von Hand gesetztes `Dirty`-Flag ist verboten (Regel in `SourceRules`). Neue Module laufen einmal mit `--verify-incremental`.
-- Vor jedem Phasenabschluss: `input-manifest check`, `reference-manifest check --set full`, und bei Änderungen an Formaten oder Fingerabdrücken zusätzlich die Linux-Zeile.
+- Vor jedem Phasenabschluss: `input-manifest check`, `reference-manifest check --set full` – unter Windows; das ist die Abnahme.
+- **Die Linux-Zeile ist informativ, kein Abnahmekriterium** (Entscheidung des Projektinhabers vom 9. Oktober 2026, `docs/MULTIPLAYER-PLAN.md` §7): Zielplattform ist vorerst nur
+  Windows, Linux kommt später allein als Wirt des Dedicated Servers in Betracht. Die Linux-Zeilen der Matrizen in §2 bis §2b bleiben als Messung ihres Stands stehen; ein neuer
+  Linux-Lauf (WSL) ist bei Änderungen an Formaten oder Fingerabdrücken nützlich, aber keine Phase scheitert an ihm oder an seinem Fehlen. Wird der Server unter Linux Lieferziel
+  (Phase 28), wird die Zeile dort wieder Kriterium – für den Server, nicht für den Client.
 - **Golden-Hashes werden bei der Produktrate gehalten (60 Hz, seit Phase 23).** `check` läuft mit der Rate und in dem Schema, die **die Datei** nennt (`simulation.tickRate`); eine abweichende
   `--tick-rate` wird abgelehnt („A manifest is checked at the rate it was written at.“). `write` nimmt `--tick-rate` oder den Standard. 30 und 120 Hz haben keine eigenen Golden-Hashes; sie werden
   über die Raten-Äquivalenz-Suite gegen 30 Hz als Definition geprüft (`docs/SIMULATION-CORE.md` §39.7) und über Tests, die ihre Raten selbst nennen.

@@ -7,7 +7,12 @@ noch nicht gebaut – Mehrspieler-Gefechte über Dedicated Server (`docs/MULTIPL
 Phase 23 (8. Oktober 2026) standardmäßig mit 60 Hz (die Rate ist ein Wert der Welt, 30 und 120 Hz bleiben unterstützt); der
 Mehrspieler-Teil ist weiter nur geplant. Nicht im Scope: vernetzte Kampagne, Matchmaking/Rangliste, NAT-Durchdringung,
 GameSpy-Kompatibilität, Anti-Cheat, binäre Kompatibilität zu alten Mods und Savegames.
-Das Repo ist rein lokal (Branch `main`, **kein Remote**).
+Das Repo ist seit dem 9. Oktober 2026 öffentlich: Remote `origin` = `https://github.com/cpfaffinger/CnCNew.git`, Branch `master`
+(keine CI, kein Branch-Schutz). Lizenz `GPL-3.0-or-later` (`LICENSE.md`, `NOTICE.md`). Es enthält **keine Spieldaten** und darf nie welche
+enthalten (Abschnitte „Lokale Daten“ und „Git-Regeln“). Zielplattform ist vorerst **nur Windows**; die Abnahme läuft unter Windows, Linux
+kommt später nur als Wirt des Dedicated Servers in Betracht (Entscheidung vom 9. Oktober 2026, `docs/MULTIPLAYER-PLAN.md` §7).
+Die Dokumentation ist über `docs/README.md` erschlossen; Phasenaufträge liegen in `docs/handoffs/`, die Paketberichte der Phase 23 in
+`docs/rate-invariance/`.
 
 Die Gesamtplanung steht in `docs/IMPLEMENTATION-PLAN.md`. Die aktuell zu bearbeitende Phase steht
 als vollständiger Auftrag in `docs/handoffs/HANDOFF-PHASE24.md` (Programm Tickrate/Festkomma/Mehrspieler, `docs/MULTIPLAYER-PLAN.md`; die Phasen 18 bis 23 sind abgeschlossen, die Messlatte ist `baselines/reference-manifest.json`). Was von Phase 17 offen ist – vor allem alles, was einen Menschen braucht –, steht im Abschnitt „Rest der Phase 17“ am Ende von `docs/handoffs/HANDOFF-PHASE17.md` und in `docs/DEMO-FINDINGS.md`.
@@ -65,9 +70,15 @@ Import → Runtime-Content → Datenmodelle → Simulation → Präsentation. Sc
 
 ## Lokale Daten (niemals committen)
 
-`.local/` (`game-original`, `assets/by-archive`, `content` = historisches Schema 1,
-`phase2-import-a` = **geprüfter Schema-2-Runtimebestand**, `phase2-import-b`, `manifests`,
-Snapshots, Captures), `references/`, `bin/`, `obj/`, `.idea/`, `.vs/`, `artifacts/`.
+- `game/` – die Entwicklerinstallation im Repository: derselbe Aufbau wie eine Anwenderinstallation (`game/content` =
+  Schema-2-Runtimebestand aus offenen Dateien, `game/install.json`, optional `game/bin`), aus der englischen Steam-Installation
+  (einzige unterstützte Ausgangsversion, beschrieben in `baselines/steam-master.json`) erzeugt von `scripts/dev-content.ps1`.
+  Anwender installieren mit `scripts/install.ps1` nach `%LOCALAPPDATA%\CnCNew\Game` (`docs/INSTALLATION.md`).
+- `.local/` – sonstige lokale Arbeitsdaten (Captures, Messprotokolle, Definitions-Snapshots). Die früheren Assetverzeichnisse
+  dort (`game-original`, `assets/by-archive`, `content` = Schema 1, `phase2-import-a`/`-b`, `manifests`, Snapshots) gibt es nicht mehr.
+- `references/` (EA-Quelltext, GeneralsGameCode, GeneralsGamePatch, Stride – nur lesen), `bin/`, `obj/`, `.idea/`, `.vs/`, `artifacts/`,
+  `.claude/` (Agenten-Worktrees und lokale Einstellungen).
+
 Originalassets, generierte Artefakte und eigener Quellcode bleiben rechtlich und technisch getrennt.
 Testfixtures sind klein, synthetisch und rechtlich unbedenklich (keine Auszüge aus Originaldateien).
 Temporäre Ausgaben gehören in das Scratchpad der Session, nicht in das Repo.
@@ -150,6 +161,8 @@ ausgeführt: `dotnet run --project tools/CnCNew.UiRenderTool -- --content-dir ga
 Tests sind eigenständige Konsolenprogramme (`tests/<Projekt>.Tests/Program.cs`, `OutputType=Exe`,
 Exitcode ungleich 0 bei Fehler) mit kleinen lokalen `Assert`/`Throws`-Helfern – kein xUnit/NUnit.
 Diesen Stil beibehalten. Für schnelle Wiederholung nach einem Build: `dotnet run --no-build`.
+
+**Zur Phasengeschichte ab hier und weiter unten:** Pfade, die in älteren Absätzen `.local/phase2-import-a` heißen, sind heute `game/content`; der Branch `main` der älteren Absätze heißt heute `master`; „unter Windows und Linux identisch“ beschreibt, was damals gemessen wurde, und ist kein Abnahmekriterium mehr.
 
 Referenzwerte (Stand Abschluss Phase 6, 30. September 2026; neu messen): Vollinventar mit allen Kartenoverlays 228 geladene
 INI-Dateien (28 nach Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 18.138/19.688
@@ -244,12 +257,27 @@ Verstärkungstransport/Formationen, eine Missions-HUD und die Generals'-Challeng
 
 ## Git-Regeln
 
-- Nur lokal arbeiten. **Keinen Remote anlegen, nichts pushen.**
+- Remote `origin` = `https://github.com/cpfaffinger/CnCNew.git`, Branch `master`. Lokal committen wie bisher; **gepusht wird nur,
+  wenn der Projektinhaber es verlangt.** Nie force-pushen, keinen weiteren Remote anlegen.
+- **Nie Spieldaten oder etwas daraus Exportiertes committen oder pushen:** nichts aus `game/` und `.local/`, keine Captures
+  (Bilder, Ton, Filmstreifen), keine Welt-/Missions-Snapshots und Spielstände aus echten Daten, keine Content-Manifeste, keine
+  Definitions-Snapshots (`IniTool compile`), keine extrahierten Texte, Grafiken, Modelle, Karten oder Töne. Erlaubt sind
+  Prüfsummen, Größen, Namen und Anzahlen von Spieldateien (so stehen sie in `baselines/`) – Dateiinhalte nicht. Testfixtures
+  bleiben synthetisch.
+- **Vor jedem Push die Verlaufsprüfung fahren** (beide müssen ohne Treffer enden; ein Treffer wird vor dem Push geklärt, nicht danach):
+  `scripts/audit-history-assets.py` vergleicht jeden Blob des gesamten Git-Verlaufs über SHA-256 mit jeder Datei der Installation
+  und des exportierten Runtimebestands; `scripts/audit-history-excerpts.py` sucht wörtliche Zeilen aus den Textdateien des Spiels
+  in allen Blobs (bekannt und zulässig: einzelne `Schlüssel = Wert`-Zeilen in synthetischen Testfixtures). Stand der ersten
+  Prüfung am 9. Oktober 2026: 4.605 Blobs, 0 binär, 0 gleich einer Spieldatei.
 - Mehrere fachlich geschlossene Commits pro Phase (Implementierung, Tests, Doku getrennt, wenn
   sinnvoll). Vor jedem Commit `git status` prüfen und gezielt stagen (`git add <dateien>`).
 - Keine destruktiven Befehle (`reset --hard`, `clean`, `checkout .`, Force-Operationen). Fremde oder
-  unerwartete Änderungen bewahren.
+  unerwartete Änderungen bewahren. Veröffentlichter Verlauf wird nicht umgeschrieben.
 - Kein `--no-verify`. Working Tree am Phasenende sauber.
+- Zeilenenden: `.gitattributes` setzt `* -text` – Git wandelt nichts um, jede Datei behält ihre eigenen Zeilenenden
+  (`git ls-files --eol <datei>` vor dem Bearbeiten, `git ls-files --eol -m` danach).
+- Plattform: Abnahmeläufe (Build, Tests, Manifeste, Audits) gelten unter Windows. Ein Linux-Lauf (WSL) ist informativ und kein
+  Abnahmekriterium (`docs/DETERMINISM.md` §5).
 
 ## Ablauf einer Phase
 
@@ -258,7 +286,7 @@ Verstärkungstransport/Formationen, eine Missions-HUD und die Generals'-Challeng
 3. Implementieren, jeweils mit Tests; Vollbestandsaudit; zwei unabhängige Läufe vergleichen.
 4. Doku aktualisieren (README, ARCHITECTURE, ROADMAP, IMPLEMENTATION-PLAN + Fachdokument).
 5. Commits, sauberer Working Tree, Abschlussbericht mit Zahlen und Commit-Hashes.
-6. Eigenständigen N+1-Handoff nach `docs/handoffs/HANDOFF-PHASE<N+1>.md` schreiben und committen.
+6. Eigenständigen N+1-Handoff nach `docs/handoffs/HANDOFF-PHASE<N+1>.md` schreiben und committen; neue Dokumente in `docs/README.md` eintragen.
 
 Phase 11 (Stand 1. Oktober 2026; neu messen; `docs/SCRIPT-ENGINE.md` §4–§9, `docs/GAME-HUD.md` §14, `docs/SIMULATION-CORE.md` §26): die Skript-VM führt jetzt 80 von 109 Bedingungs- und 131 von
 344 Aktionstypen aus (129 weitergereicht, 2 aufgezeichnet – `ScriptSupport.Recorded`: Wert gespeichert, aber ohne Verbraucher in der Simulation –, 82 fehlend), darunter die `SKIRMISH_*`-Bedingungen

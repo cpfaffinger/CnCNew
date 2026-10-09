@@ -1,10 +1,11 @@
 .local/
+/game/
 references/
 artifacts/
 bin/
 obj/
 .idea/
 .vs/
+.claude/
 *.user
 *.suo
-

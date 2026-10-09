@@ -189,6 +189,7 @@ Die Aufträge nennen jeweils einen Standard, damit niemand blockiert ist; die En
 | Zuschauer-Verzögerung | 120 s | 27 |
 | KI-Stärken (das Original kennt drei, die KI hier eine) | eine Stärke, Wahl gezählt statt befolgt | 24 |
 | Server unter Linux als Lieferziel? | ja (kostet wenig, weil der Server keine Daten und kein Stride braucht) | 28 |
+| Zielplattform und Abnahme | **entschieden am 9. Oktober 2026: vorerst nur Windows.** Abnahmeläufe (Build, Tests, Manifeste, Audits) gelten unter Windows; Linux kommt später nur als Wirt des Dedicated Servers in Betracht. Jede frühere Forderung „und unter Linux (WSL)“ ist damit informativ und kein Abnahmekriterium mehr (`docs/DETERMINISM.md` §5, `CLAUDE.md` „Git-Regeln“). Zugleich: das Repository ist öffentlich (`origin` = `https://github.com/cpfaffinger/CnCNew.git`, Branch `master`, `GPL-3.0-or-later`), ohne Spieldaten. | – |
 | Soll 30 Hz im fertigen Spiel wählbar bleiben? | nein (nur Testrate) | 23 |
 | Bleibt der Standard bei 30 Hz, wenn die Raten-Äquivalenz-Suite nach zwei Messrunden nicht besteht? | **entschieden am 8. Oktober 2026: nein.** Das Abbruchkriterium der Phase 23 ist aufgehoben; die Suite ist zum Bestehen zu bringen und 60 Hz wird Standard. Was auf dem Weg liegt, wird behoben, auch Fehler bei 30 Hz (je eine Ursache, eigener Commit, neu geschriebenes Manifest). Stand und Restursachen: `docs/TICKRATE-MIGRATION.md` §15.4 | 23 |
 | Zweiter Rechner und Mitspieler für die Abnahmen | vom Projektinhaber zu stellen | 18, 26, 29 |
