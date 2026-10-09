@@ -56,7 +56,7 @@ pass. Blend, depth compare, depth write, alpha test and culling are set per pass
 Animated linear/grid mappers update dynamic vertex buffers from the explicit render time.
 
 Textures are looked up through the case-insensitive runtime content file system. Candidates are the
-given virtual reference, `Art/Textures/<Datei>` and DDS and TGA files of the same name.
+given virtual reference, `Art/Textures/<file>` and DDS and TGA files of the same name.
 If a texture is missing, an exact diagnostic and a visible magenta checkerboard appear; the
 smoke test additionally fails. Loaded textures are cached by path and released deterministically
 together with vertex/index buffers.

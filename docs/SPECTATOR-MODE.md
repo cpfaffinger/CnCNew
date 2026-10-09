@@ -33,7 +33,7 @@ pwsh scripts/check-spectator.ps1                                  # the same wit
 Parameters of `demo-spectator.ps1`: `-Map`, `-FactionA`, `-FactionB`, `-Seed`, `-TickRate` (30/60/120; if not given, the default of the client), `-MaxZoom`, `-Speed`,
 `-Size`, `-ContentDir`, `-Mute`, `-NoBuild`. The script prints seed, map, armies, the result of the survey for the pairing and the keys.
 
-Options of the client (together with `--match <Karte> --faction <A> --opponent <B>`):
+Options of the client (together with `--match <map> --faction <A> --opponent <B>`):
 
 | Option | Meaning |
 | --- | --- |
