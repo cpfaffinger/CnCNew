@@ -624,7 +624,53 @@ internal static class HudTests
             TestHarness.Assert(art.Destination.X == bar.X && Math.Abs(art.Destination.Right - bar.Right) <= width / 400 + 1 && art.Destination.Bottom <= height && art.Destination.Bottom >= height - 3,
                 $"{width}x{height}: the scheme's full-width art lies on the control bar ({art.Destination} on {bar})");
         }
-        TestHarness.Assert(!commands.OfType<UiImageDraw>().Any(draw => draw.Image == "HardCodedWithControlBarSchemeIni"), "the hard-coded portrait image is replaced by the scheme's own right-hand image");
+        SchemeWindows(data, america);
+    }
+
+    /// <summary>
+    /// <c>ControlBarScheme::init</c> places the control bar's own buttons at the scheme's rectangles and gives them the scheme's images; the layout has neither (its buttons name
+    /// no image). The art is drawn by the two marker windows, the right-hand window shows the side's logo until one object is selected, then the object's portrait.
+    /// </summary>
+    private static void SchemeWindows(GameData data, ControlBarSchemeInfo america)
+    {
+        const int width = 1280, height = 720;
+        var (match, controller) = NewMatch(data, new Vector2(width, height));
+        TestHarness.Assert(match.HumanFaction.Contains("America", StringComparison.OrdinalIgnoreCase), $"the test match is played by America ({match.HumanFaction})");
+        Advance(match, controller, 1);
+        var commands = controller.BuildDrawList(width, height).Commands;
+        // Every scheme of the retail file names the QueueButtonImage "SCBigButton", which no mapped image file defines: the original gets a null image and leaves the empty
+        // queue places without a picture (ControlBar::updateBuildQueueDisabledImages returns). It is the one missing name, and it is listed, not dropped.
+        TestHarness.Assert(controller.MissingSchemeImages.SequenceEqual(["SCBigButton"]), $"the image table has every image the scheme names except the queue place ({string.Join(", ", controller.MissingSchemeImages)})");
+        var bar = controller.WindowRect("ControlBar.wnd:ControlBarParent")!.Value;
+        foreach (var (window, rect, images) in new[]
+                 {
+                     ("ButtonOptions", america.Options, america.OptionsImages), ("ButtonIdleWorker", america.Worker, america.WorkerImages),
+                     ("ButtonPlaceBeacon", america.Beacon, america.BeaconImages), ("PopupCommunicator", america.Chat, america.ChatImages),
+                     ("ButtonGeneral", america.General, america.GeneralImages),
+                 })
+        {
+            var onScreen = controller.WindowRect($"ControlBar.wnd:{window}")!.Value;
+            TestHarness.Assert(!rect.IsEmpty && onScreen.X == rect.Left * width / america.CreationWidth && onScreen.Right == rect.Right * width / america.CreationWidth && onScreen.Y >= bar.Y - height / 20 && onScreen.Bottom <= height,
+                $"{window} lies at the scheme's rectangle ({onScreen} for {rect})");
+            // The idle worker button is disabled in the layout: it shows its disabled image.
+            var expected = window == "ButtonIdleWorker" ? images.Disabled : images.Enabled;
+            TestHarness.Assert(expected.Length > 0 && commands.OfType<UiImageDraw>().Any(draw => draw.Image == expected && draw.Destination == onScreen), $"{window} shows the scheme's image");
+        }
+        TestHarness.Assert(!commands.OfType<UiCustomDraw>().Any(draw => draw.Callback is "W3DCommandBarBackgroundDraw" or "W3DCommandBarForegroundDraw" || draw is { Callback: "W3DRightHUDDraw", Window: "ControlBar.wnd:RightHUD" }),
+            "the scheme's draw callbacks are drawn here, not left to the host");
+        var rightHud = controller.WindowRect("ControlBar.wnd:RightHUD")!.Value;
+        TestHarness.Assert(america.RightHudImage.Length > 0 && commands.OfType<UiImageDraw>().Any(draw => draw.Image == america.RightHudImage && draw.Destination == rightHud), "with nothing selected the right-hand window shows the side's logo");
+
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        long time = 10_000;
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        commands = controller.BuildDrawList(width, height).Commands;
+        var cameo = controller.WindowRect("ControlBar.wnd:CameoWindow")!.Value;
+        TestHarness.Assert(data.Visuals.TryGet(dozer.Template.Name, out var visual) && visual.SelectPortrait is { Length: > 0 }, "the dozer has a portrait in the data");
+        TestHarness.Assert(commands.OfType<UiImageDraw>().Any(draw => draw.Image == visual.SelectPortrait && draw.Destination == cameo), "one selected object shows its portrait in the cameo window");
+        TestHarness.Assert(!commands.OfType<UiImageDraw>().Any(draw => draw.Image == america.RightHudImage), "the logo is gone while a portrait shows");
+        TestHarness.Assert(!commands.OfType<UiFillRect>().Any(fill => fill.Rect == cameo), "the cameo window draws its image only, never a filled box");
     }
 
     /// <summary>
@@ -824,7 +870,7 @@ internal static class HudTests
         Click(controller, ref time, MouseButton.Left, refusedAt!.Value);
         Advance(match, controller, 1);
         var drawn = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(draw => draw.Text == "You can't build here").ToArray();
-        TestHarness.Assert(drawn is [{ X: 10, Y: 22 }], $"the click prints GUI:CantBuildThere at the message position ({string.Join(" | ", controller.Messages.Log.Lines.Select(line => line.Text))})");
+        TestHarness.Assert(drawn is [{ X: 10, Y: 10 }], $"the click prints GUI:CantBuildThere at the message position of the retail InGameUI.ini, 10,10 ({string.Join(" | ", controller.Messages.Log.Lines.Select(line => line.Text))})");
         TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.Placement, "and the placement stays on for another try");
     }
 
