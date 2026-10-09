@@ -7,4 +7,8 @@
     <ProjectReference Include="../CnCNew.IO/CnCNew.IO.csproj" />
     <ProjectReference Include="../CnCNew.W3D/CnCNew.W3D.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The one accepted game installation (sizes and hashes only); InstallationMaster.LoadBuiltIn reads it. -->
+    <EmbeddedResource Include="../../baselines/steam-master.json" LogicalName="steam-master.json" />
+  </ItemGroup>
 </Project>

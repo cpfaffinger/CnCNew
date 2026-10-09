@@ -217,7 +217,7 @@ public sealed class ObjectTemplate
     /// conditions (veterancy, <c>PLAYER_UPGRADE</c>, second life, crate upgrades, ...); this only resolves single-condition sets (exactly one of
     /// <c>None</c>/<c>PLAYER_UPGRADE</c>/<c>VETERAN</c>/<c>ELITE</c>/<c>HERO</c>), matching the retail Zero Hour object data, where no shipped
     /// <c>ArmorSet</c>/<c>WeaponSet</c> ever combines two conditions (verified: zero occurrences of <c>Conditions = ... VETERAN|ELITE|HERO</c> in
-    /// <c>.local/phase2-import-a</c>). A set requiring more than one simultaneous condition is not modeled and falls back to the next best
+    /// <c>game/content</c>). A set requiring more than one simultaneous condition is not modeled and falls back to the next best
     /// single-condition match, a named simplification with no effect on the shipped game.
     /// </summary>
     public ImmutableArray<ArmorInfo?> VeteranArmor { get; }

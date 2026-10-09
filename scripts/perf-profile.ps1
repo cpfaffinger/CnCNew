@@ -59,7 +59,7 @@ else {
 }
 $rateArgs = if ($TickRate -gt 0) { @('--tick-rate', "$TickRate") } else { @() }
 $repo = Split-Path -Parent $PSScriptRoot
-if (-not $ContentDir) { $ContentDir = Join-Path $repo '.local\phase2-import-a' }
+if (-not $ContentDir) { $ContentDir = Join-Path $repo 'game\content' }
 if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Inhaltsverzeichnis nicht gefunden: $ContentDir" }
 $ContentDir = (Resolve-Path -LiteralPath $ContentDir).Path
 if (-not $OutDir) { $OutDir = Join-Path ([IO.Path]::GetTempPath()) 'cncnew-perf' }
