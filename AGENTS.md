@@ -1,8 +1,9 @@
-# Agent-Anweisungen
+# Agent instructions
 
-Die verbindlichen Arbeitsanweisungen für dieses Repository stehen in [CLAUDE.md](CLAUDE.md) und
-gelten für jeden Coding-Agenten; diese Datei ist nur der Verweis darauf und wiederholt nichts.
-Dort stehen auch die aktuell zu bearbeitende Phase (Aufträge in `docs/handoffs/`), die Git-Regeln
-(Remote `origin`, Branch `master`, Push nur auf Verlangen des Projektinhabers, nie Spieldaten
-committen) und der Ort der Entwicklerdaten (`game/content`). Die Dokumentation ist über
-[docs/README.md](docs/README.md) erschlossen.
+The binding working instructions for this repository are in [CLAUDE.md](CLAUDE.md) and
+apply to every coding agent; this file is only the pointer to them and repeats nothing.
+They also state the phase currently to be worked on (briefs in `docs/handoffs/`), the git rules
+(remote `origin`, branch `master` only and no branches, commit and push to `origin master` when a task is
+finished, never force-push, `pwsh scripts/audit-publish.ps1` before every push, never commit game data)
+and the location of the developer data (`game/content`). The documentation is indexed in
+[docs/README.md](docs/README.md).
