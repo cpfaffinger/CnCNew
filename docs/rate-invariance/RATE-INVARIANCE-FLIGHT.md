@@ -65,7 +65,7 @@ Two commits correct a measurement, not a simulation:
 
 ## 3. Suite, before → after
 
-Failures outside the tolerance at 60 / 120 Hz, measured with `--only "RateEquivalence: <gruppe>"`:
+Failures outside the tolerance at 60 / 120 Hz, measured with `--only "RateEquivalence: <group>"`:
 
 | Group | Quantities | Starting state | Final state | of which this package | The remainder belongs to |
 |---|---|---|---|---|---|
@@ -120,7 +120,7 @@ counter of the Spectre target point (the target point wanders in shares per tick
 - **The reversal of the self-spin of the helicopter crash depends on the last bit of a sum** when `(MaxSelfSpin − MinSelfSpin)` is a multiple of `SelfSpinUpdateAmount`
   (Comanche): with values per tick of the respective rate it tipped over one interval later at 120 Hz (spin sum 18.117 → 18.530 rad). Solved by the per-frame values of the 30 Hz catalogue in the
   data record (row 8). The same pattern applies everywhere where catalogue values per tick are added and compared against a bound.
-- **Catalogue values per tick² are rounded separately per rate**; a frame step from `Wert · (Rate/30)²` is therefore not bit-identical to the 30 Hz step (relatively about 10⁻⁵ for
+- **Catalogue values per tick² are rounded separately per rate**; a frame step from `value · (Rate/30)²` is therefore not bit-identical to the 30 Hz step (relatively about 10⁻⁵ for
   accelerations). For paths without a threshold this is invisible (0.0002 units after 900 frames of winged flight), at thresholds it can cost a frame (§5). The remedy would be to carry the
   per-frame values of the 30 Hz catalogue along in the locomotor.
 - **`TemplateCatalog.GravityPerTickSquared` computes a decimal division on every call** (property without a cache); the flight modules now call

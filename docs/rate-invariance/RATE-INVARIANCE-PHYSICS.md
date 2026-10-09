@@ -15,7 +15,7 @@ straight line between the two.
 
 - **The frame is that of the object**, not the grid of the world: it begins with the update in which the movement began (`FramePhase`, state of the module,
   only written as long as it is not zero – at 30 Hz never; snapshots and hashes at 30 Hz stay byte-identical).
-- **Shares sum exactly:** `FramePhysics.FrameShare(schritt, k)` = `floor(schritt · k / n) − floor(schritt · (k − 1) / n)` on the raw value; the
+- **Shares sum exactly:** `FramePhysics.FrameShare(step, k)` = `floor(step · k / n) − floor(step · (k − 1) / n)` on the raw value; the
   shares of a frame add up to exactly the frame step. Where the target of a frame is fixed in advance (avalanche, scaffold), the object advances per tick by
   "remainder divided by remaining ticks" and is exactly at the target with the last tick.
 - **Catalogue values per tick are read back per frame** (`PerTickToPerOriginalFrame`, `PerTickSquaredToPerOriginalFrameSquared`): no new field on
