@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Nimmt den festen Aufnahmesatz der Weltdarstellung auf (Phase 15) und schreibt PNGs plus eine Pruefsummenliste.
+  Records the fixed capture set of the world presentation (Phase 15) and writes PNGs plus a checksum list.
 
 .DESCRIPTION
-  Jede Szene ist ein reproduzierbarer `--smoke-test --capture`-Lauf des Stride-Clients (feste Karte, Seed, Frameanzahl, Kamera). Die Bilder
-  gehoeren NICHT ins Repo (Originalassets liegen nur lokal); der Standardausgabeort ist ein Verzeichnis unter %TEMP%.
-  Die Autoplay-Szenen (match-base-late, match-combat) sind zwischen Laeufen nicht pixelgenau gleich (1-11 Pixel, auch vor Phase 15); ihre Pruefsumme ist kein Golden Hash. Die Checkliste, die ein Mensch
-  gegen die Bilder abhakt, steht in docs/CLIENT-OBJECTS.md ("Sichtpruefung der Weltdarstellung"). Die Pruefsummen in manifest.txt sind
-  *vorlaeufig*: sie belegen Reproduzierbarkeit, nicht Richtigkeit, und werden erst nach der Abnahme durch einen Menschen als Golden Hashes verwendet.
+  Every scene is a reproducible `--smoke-test --capture` run of the Stride client (fixed map, seed, frame count, camera). The images
+  do NOT belong in the repository (original assets exist only locally); the default output location is a directory under %TEMP%.
+  The autoplay scenes (match-base-late, match-combat) are not pixel-identical between runs (1-11 pixels, also before Phase 15); their checksum is not a golden hash. The checklist that a human
+  ticks off against the images is in docs/CLIENT-OBJECTS.md (the visual check of the world presentation). The checksums in manifest.txt are
+  *provisional*: they verify reproducibility, not correctness, and are used as golden hashes only after acceptance by a human.
 
 .EXAMPLE
   .\scripts\capture-world.ps1
@@ -18,7 +18,7 @@ param(
     [string]$ContentDir,
     [string]$OutDir,
     [string]$Size = '1280x720',
-    # Simulationsrate (30, 60 oder 120 Hz); 0 = Standard der Spielschicht. Die Bildzahlen der Szenen sind Originalbilder (1/30 s Spielzeit) bei jeder Rate.
+    # Simulation rate (30, 60 or 120 Hz); 0 = the game layer's default. The frame counts of the scenes are original frames (1/30 s game time) at every rate.
     [int]$TickRate = 0,
     [switch]$NoBuild
 )
@@ -26,7 +26,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 if (-not $ContentDir) { $ContentDir = Join-Path $repo 'game\content' }
-if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Inhaltsverzeichnis nicht gefunden: $ContentDir" }
+if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Content directory not found: $ContentDir (pass -ContentDir)." }
 $ContentDir = (Resolve-Path -LiteralPath $ContentDir).Path
 if (-not $OutDir) { $OutDir = Join-Path ([IO.Path]::GetTempPath()) 'cncnew-captures' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -34,34 +34,34 @@ $OutDir = (Resolve-Path -LiteralPath $OutDir).Path
 
 $project = Join-Path $repo 'src\CnCNew.Client.Stride\CnCNew.Client.Stride.csproj'
 if (-not $NoBuild) {
-    Write-Host '== Baue Client (Release) ...' -ForegroundColor Cyan
+    Write-Host '== Building client (Release) ...' -ForegroundColor Cyan
     dotnet build $project -c Release --nologo -v quiet
-    if ($LASTEXITCODE -ne 0) { throw "Build fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+    if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
 }
 
 $alpine = 'Maps/Alpine Assault/Alpine Assault.map'
-# name, Argumente (ohne --smoke-test/--content-dir/--size/--capture), was das Bild zeigen muss
+# name, arguments (without --smoke-test/--content-dir/--size/--capture), what the image has to show
 $scenes = @(
-    @('viewer-commandcenter', @('--model-path', 'Art/W3D/ABBtCmdHQ.W3D'), 'Kommandozentrale: geschlossene Waende, Sternwappen an der Vorderseite, kein schwarzes Gitter-Skelett.'),
-    @('viewer-barracks', @('--model-path', 'Art/W3D/ABBARRACKS.W3D'), 'Kaserne: alle Waende vorhanden, Zaun, Fahnenmast.'),
-    @('viewer-crusader', @('--model-path', 'Art/W3D/AVLEOPARD.W3D'), 'Crusader: Wanne, Turm und Rohr in Ruhepose, Ketten unten.'),
-    @('viewer-dozer', @('--model-path', 'Art/W3D/AVCONSTDOZ_A.W3D'), 'Planierraupe: vier Reifen unten, Schaufel vorn.'),
-    @('match-start', @('--match', $alpine, '--frames', '120'), 'Startbasis: Kommandozentrale mit Wanddetails, Planierraupe, Rest der Karte schwarz (unerkundet), keine Gebaeude ohne Gelaende.'),
-    @('match-lowangle', @('--match', $alpine, '--frames', '120', '--pitch', '30', '--height', '250'), 'Wie match-start, flache Kamera: Waende der Kommandozentrale sichtbar und beleuchtet (nicht schwarz).'),
-    @('match-selected', @('--match', $alpine, '--frames', '120', '--pitch', '30', '--height', '250', '--select-own'), 'Auswahl: gruene Eckklammern und Lebensbalken an der Kommandozentrale, Ring und Balken an der Planierraupe (Overlay, docs/GAME-HUD.md).'),
-    @('match-cursor-move', @('--match', $alpine, '--frames', '120', '--pitch', '30', '--height', '250', '--select-own', '--cursor-at', '300,380'), 'Mauszeiger (docs/PRESENTATION-INPUT.md Abschnitt 11): bei ausgewaehlter Planierraupe steht ueber freiem Boden bei (300,380) der Bewegungscursor (vier gruene Pfeile nach innen), nicht der Windows-Pfeil.'),
-    @('match-waypoints', @('--match', $alpine, '--frames', '30', '--pitch', '30', '--height', '250', '--select-own', '--cursor-at', '700,560', '--waypoints', '-10,-60;-90,-70;-170,-90'), 'Wegpunkte mit Alt (docs/GAME-HUD.md Abschnitt 16): blaue Linie von der Planierraupe ueber drei Stationen, je Station eine Raute, an jeder Station ein verblassender Ring (Befehlsmarke); Wegpunkt-Cursor bei (700,560).'),
-    @('match-fog-unexplored', @('--match', $alpine, '--frames', '120', '--look', '2002,1349'), 'Kamera auf unerkundetem Gelaende mit einer Oelquelle: alles schwarz, kein Gebaeude im Schwarz.'),
-    @('match-base-late', @('--match', $alpine, '--autoplay', '--frames', '4000'), 'Ausgebaute Basis: Gebaeude mit Teamfarbe, Geschuetztuerme, Zaeune ausgerichtet an den Gebaeudekanten.'),
-    @('match-combat', @('--match', $alpine, '--autoplay', '--frames', '7500'), 'Gefecht: Patriot-Rohr zeigt auf das Ziel, Muendungsfeuer; Reifen/Tuerme nicht in Ruhepose.'),
-    @('scenario-tank-duel', @('--scenario', 'tank-duel', '--frames', '30'), 'Gestellte Demo Panzer gegen Panzer, Tick 30: der Crusader hat seinen Turm bereits zum Gegner gedreht (vor dem ersten Schuss muss er das; PresentationTool scenario-audit prueft es).'),
-    @('scenario-capture', @('--scenario', 'capture-building', '--frames', '400'), 'Gestellte Demo Gebaeude einnehmen, Tick 400: der Ranger steht an der Kaserne (Flagge hissen sichtbar, sobald die Faehigkeit gestuft ist).'),
-    @('scenario-jet', @('--scenario', 'jet-strafe', '--frames', '900'), 'Gestellte Demo Jet gegen Raketentruppen, Tick 900: Raptor im Anflug auf die Missile Defender.'),
-    @('mission-start', @('--mission', 'Maps/GC_ChemGeneral/GC_ChemGeneral.map', '--frames', '120'), 'Missionsstart (Generals Challenge): Basis mit Gebaeuden, Beleuchtung wie im Gefecht.'),
-    # Vierte Angabe 'reveal': die Szene laeuft mit CNCNEW_TERRAIN_REVEAL=1 (ganze Karte sichtbar), weil Strassen ausserhalb der Startsicht liegen.
-    @('roads-junctions', @('--match', $alpine, '--frames', '120', '--pitch', '60', '--height', '150', '--look', '1177,968'), 'Strassen (docs/CLIENT-ROADS.md): Y-Kreuzung mit Zebrastreifen, zusammenhaengende Fahrbahn mit gelber Mittellinie, Raender weich ueberblendet (keine grauen Rechtecke an den Ecken), Strasse folgt dem Gelaende.', 'reveal'),
-    @('roads-crossing', @('--match', $alpine, '--frames', '120', '--pitch', '60', '--height', '150', '--look', '1217,1200'), 'Strassen: Vierwege-Kreuzung (45 Grad gedreht), Gehweg-Ecken, geschlossene Uebergaenge zwischen Kreuzung und Fahrbahn.', 'reveal'),
-    @('roads-overview', @('--match', $alpine, '--frames', '120', '--pitch', '45', '--height', '400', '--look', '1000,1080'), 'Strassen: Kiesstrasse mit Kurven und T-Stueck, Bahngleise, Asphaltstrasse mit Kreuzung; Strassentypen ueberlappen in der richtigen Reihenfolge.', 'reveal')
+    @('viewer-commandcenter', @('--model-path', 'Art/W3D/ABBtCmdHQ.W3D'), 'Command center: closed walls, star emblem on the front, no black lattice skeleton.'),
+    @('viewer-barracks', @('--model-path', 'Art/W3D/ABBARRACKS.W3D'), 'Barracks: all walls present, fence, flagpole.'),
+    @('viewer-crusader', @('--model-path', 'Art/W3D/AVLEOPARD.W3D'), 'Crusader: hull, turret and barrel in rest pose, tracks at the bottom.'),
+    @('viewer-dozer', @('--model-path', 'Art/W3D/AVCONSTDOZ_A.W3D'), 'Dozer: four tyres at the bottom, blade in front.'),
+    @('match-start', @('--match', $alpine, '--frames', '120'), 'Starting base: command center with wall details, dozer, rest of the map black (unexplored), no buildings without terrain.'),
+    @('match-lowangle', @('--match', $alpine, '--frames', '120', '--pitch', '30', '--height', '250'), 'Like match-start, flat camera: walls of the command center visible and lit (not black).'),
+    @('match-selected', @('--match', $alpine, '--frames', '120', '--pitch', '30', '--height', '250', '--select-own'), 'Selection: green corner brackets and health bar on the command center, ring and bar on the dozer (overlay, docs/GAME-HUD.md).'),
+    @('match-cursor-move', @('--match', $alpine, '--frames', '120', '--pitch', '30', '--height', '250', '--select-own', '--cursor-at', '300,380'), 'Mouse pointer (docs/PRESENTATION-INPUT.md section 11): with the dozer selected, the move cursor (four green arrows pointing inwards) is over free ground at (300,380), not the Windows arrow.'),
+    @('match-waypoints', @('--match', $alpine, '--frames', '30', '--pitch', '30', '--height', '250', '--select-own', '--cursor-at', '700,560', '--waypoints', '-10,-60;-90,-70;-170,-90'), 'Waypoints with Alt (docs/GAME-HUD.md section 16): blue line from the dozer through three stations, a diamond per station, a fading ring at every station (order marker); waypoint cursor at (700,560).'),
+    @('match-fog-unexplored', @('--match', $alpine, '--frames', '120', '--look', '2002,1349'), 'Camera on unexplored terrain with an oil derrick: everything black, no building in the black.'),
+    @('match-base-late', @('--match', $alpine, '--autoplay', '--frames', '4000'), 'Developed base: buildings with team colour, gun turrets, fences aligned with the building edges.'),
+    @('match-combat', @('--match', $alpine, '--autoplay', '--frames', '7500'), 'Combat: the Patriot barrel points at the target, muzzle flash; tyres/turrets not in rest pose.'),
+    @('scenario-tank-duel', @('--scenario', 'tank-duel', '--frames', '30'), 'Staged demo tank against tank, tick 30: the Crusader has already turned its turret to the opponent (it has to before the first shot; PresentationTool scenario-audit checks it).'),
+    @('scenario-capture', @('--scenario', 'capture-building', '--frames', '400'), 'Staged demo capture a building, tick 400: the Ranger stands at the barracks (raising the flag is visible once the ability is staged).'),
+    @('scenario-jet', @('--scenario', 'jet-strafe', '--frames', '900'), 'Staged demo jet against missile troopers, tick 900: Raptor approaching the Missile Defenders.'),
+    @('mission-start', @('--mission', 'Maps/GC_ChemGeneral/GC_ChemGeneral.map', '--frames', '120'), 'Mission start (Generals Challenge): base with buildings, lighting as in a skirmish.'),
+    # Fourth entry 'reveal': the scene runs with CNCNEW_TERRAIN_REVEAL=1 (whole map visible) because roads lie outside the initial vision.
+    @('roads-junctions', @('--match', $alpine, '--frames', '120', '--pitch', '60', '--height', '150', '--look', '1177,968'), 'Roads (docs/CLIENT-ROADS.md): Y junction with zebra crossing, continuous carriageway with yellow centre line, edges blended softly (no grey rectangles at the corners), the road follows the terrain.', 'reveal'),
+    @('roads-crossing', @('--match', $alpine, '--frames', '120', '--pitch', '60', '--height', '150', '--look', '1217,1200'), 'Roads: four-way junction (rotated 45 degrees), pavement corners, closed transitions between junction and carriageway.', 'reveal'),
+    @('roads-overview', @('--match', $alpine, '--frames', '120', '--pitch', '45', '--height', '400', '--look', '1000,1080'), 'Roads: gravel road with curves and a T piece, railway tracks, asphalt road with a junction; road types overlap in the right order.', 'reveal')
 )
 
 # SHA-256 of the decoded pixels, not of the PNG file: the encoder's output differs by a few bytes between runs for identical pixels (seen on match-base-late, 4 runs, 4 file hashes, 0 differing pixels).
@@ -80,7 +80,7 @@ function Get-PixelHash([string]$path) {
 }
 
 $manifest = New-Object System.Collections.Generic.List[string]
-$manifest.Add("# cncnew world capture set, size $Size, VORLAEUFIGE Pruefsummen ueber die Pixel (Reproduzierbarkeit, nicht Richtigkeit)")
+$manifest.Add("# cncnew world capture set, size $Size, PROVISIONAL checksums over the pixels (reproducibility, not correctness)")
 foreach ($scene in $scenes) {
     $name = $scene[0]
     $png = Join-Path $OutDir "$name.png"
@@ -91,12 +91,12 @@ foreach ($scene in $scenes) {
     if ($scene.Count -gt 3 -and $scene[3] -eq 'reveal') { $env:CNCNEW_TERRAIN_REVEAL = '1' } else { Remove-Item Env:CNCNEW_TERRAIN_REVEAL -ErrorAction SilentlyContinue }
     dotnet run --project $project -c Release --no-build -- @clientArgs | Out-Null
     Remove-Item Env:CNCNEW_TERRAIN_REVEAL -ErrorAction SilentlyContinue
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $png)) { throw "Szene '$name' fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $png)) { throw "Scene '$name' failed (exit code $LASTEXITCODE)." }
     $hash = Get-PixelHash $png
     $manifest.Add("$hash  $name.png  | $($scene[2])")
 }
 
 $manifestPath = Join-Path $OutDir 'manifest.txt'
 [IO.File]::WriteAllLines($manifestPath, $manifest)
-Write-Host "`nAufnahmen: $OutDir" -ForegroundColor Green
+Write-Host "`nCaptures: $OutDir" -ForegroundColor Green
 Get-Content -LiteralPath $manifestPath

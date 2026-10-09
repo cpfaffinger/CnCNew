@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-  Nimmt den Textaufnahmesatz auf (Phase 16, Punkt 4) und schreibt PNGs, den Schriftvergleich und eine Pruefsummenliste.
+  Records the text capture set (Phase 16, point 4) and writes PNGs, the font comparison and a checksum list.
 
 .DESCRIPTION
-  Drei Teile, alle reproduzierbar:
-   1. tools/CnCNew.UiRenderTool: Schriftvergleich GDI gegen FreeType auf allen Originallayouts (`font-audit.txt`), dann die feste Szenenmenge in
-      1280x720 und 1920x1080 (Hauptmenue, Optionen, Skirmish-Einrichtung, Kartenwahl, Ladeschirm, Abschlussbildschirm, Kampagnenbildschirme,
-      Zeigertooltip) sowie die rohen Layouts in vier Aufloesungen.
-   2. Stride-Client `--smoke-test --capture`: Gefecht mit der Befehlsleiste (Geld, Auswahl), und der Zeigertooltip eines Befehlsknopfs ueber ein
-      Eingabeskript (`--input-script`).
-   3. Eine Pruefsummenliste (SHA-256 ueber die dekodierten Pixel) je Bild: sie belegt Reproduzierbarkeit, nicht Richtigkeit. Die Bilder gehoeren
-      NICHT ins Repo (Originalassets); der Standardausgabeort ist ein Verzeichnis unter %TEMP%. Ein Vergleich mit dem Original ist nur durch einen
-      Menschen moeglich (docs/TEXT-AUDIT.md, Abschnitt "Was nicht belegt ist").
+  Three parts, all reproducible:
+   1. tools/CnCNew.UiRenderTool: font comparison GDI against FreeType on all original layouts (`font-audit.txt`), then the fixed set of scenes in
+      1280x720 and 1920x1080 (main menu, options, skirmish setup, map selection, loading screen, score screen, campaign screens,
+      pointer tooltip) and the raw layouts in four resolutions.
+   2. Stride client `--smoke-test --capture`: a skirmish with the command bar (money, selection), and the pointer tooltip of a command button through an
+      input script (`--input-script`).
+   3. A checksum list (SHA-256 over the decoded pixels) per image: it verifies reproducibility, not correctness. The images do
+      NOT belong in the repository (original assets); the default output location is a directory under %TEMP%. A comparison with the original is only
+      possible for a human (docs/TEXT-AUDIT.md, the section on what is not verified).
 
 .EXAMPLE
   .\scripts\capture-text.ps1
@@ -21,7 +21,7 @@
 param(
     [string]$ContentDir,
     [string]$OutDir,
-    # Simulationsrate der beiden Client-Szenen (30, 60 oder 120 Hz); 0 = Standard des Clients. Das UiRenderTool baut keine Welt und kennt keine Rate.
+    # Simulation rate of the two client scenes (30, 60 or 120 Hz); 0 = the client's default. The UiRenderTool builds no world and knows no rate.
     [int]$TickRate = 0,
     [switch]$NoBuild
 )
@@ -29,7 +29,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 if (-not $ContentDir) { $ContentDir = Join-Path $repo 'game\content' }
-if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Inhaltsverzeichnis nicht gefunden: $ContentDir" }
+if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Content directory not found: $ContentDir (pass -ContentDir)." }
 $ContentDir = (Resolve-Path -LiteralPath $ContentDir).Path
 if (-not $OutDir) { $OutDir = Join-Path ([IO.Path]::GetTempPath()) 'cncnew-text-captures' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
@@ -38,23 +38,23 @@ $OutDir = (Resolve-Path -LiteralPath $OutDir).Path
 $tool = Join-Path $repo 'tools\CnCNew.UiRenderTool\CnCNew.UiRenderTool.csproj'
 $client = Join-Path $repo 'src\CnCNew.Client.Stride\CnCNew.Client.Stride.csproj'
 if (-not $NoBuild) {
-    Write-Host '== Baue UiRenderTool und Client (Release) ...' -ForegroundColor Cyan
+    Write-Host '== Building UiRenderTool and client (Release) ...' -ForegroundColor Cyan
     dotnet build $tool -c Release --nologo -v quiet
-    if ($LASTEXITCODE -ne 0) { throw "Build des UiRenderTool fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+    if ($LASTEXITCODE -ne 0) { throw "Build of the UiRenderTool failed (exit code $LASTEXITCODE)." }
     dotnet build $client -c Release --nologo -v quiet
-    if ($LASTEXITCODE -ne 0) { throw "Build des Clients fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+    if ($LASTEXITCODE -ne 0) { throw "Build of the client failed (exit code $LASTEXITCODE)." }
 }
 
 $toolDir = Join-Path $OutDir 'ui'
 New-Item -ItemType Directory -Force -Path $toolDir | Out-Null
-Write-Host '== Schriftvergleich GDI/FreeType' -ForegroundColor Cyan
+Write-Host '== Font comparison GDI/FreeType' -ForegroundColor Cyan
 dotnet run --project $tool -c Release --no-build -- --content-dir $ContentDir --out-dir $toolDir --font-audit | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "Schriftvergleich fehlgeschlagen (Exitcode $LASTEXITCODE)." }
-Write-Host '== Szenen des UiRenderTool (GDI)' -ForegroundColor Cyan
+if ($LASTEXITCODE -ne 0) { throw "Font comparison failed (exit code $LASTEXITCODE)." }
+Write-Host '== Scenes of the UiRenderTool (GDI)' -ForegroundColor Cyan
 dotnet run --project $tool -c Release --no-build -- --content-dir $ContentDir --out-dir $toolDir | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "UiRenderTool fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+if ($LASTEXITCODE -ne 0) { throw "UiRenderTool failed (exit code $LASTEXITCODE)." }
 
-# Eingabeskript: Planierraupe waehlen, auf den ersten Baubefehl zeigen (Tooltip nach TOOLTIPDELAY 1 ms und 250 ms Einblendung).
+# Input script: select the dozer, point at the first construction command (tooltip after TOOLTIPDELAY 1 ms and 250 ms fade-in).
 $scriptPath = Join-Path $OutDir 'tooltip-input.txt'
 [IO.File]::WriteAllLines($scriptPath, @('10 click left own:DOZER', '40 move command:DozerConstruct'))
 
@@ -73,7 +73,7 @@ foreach ($size in @('1280x720', '1920x1080')) {
         $clientArgs = @('--smoke-test', '--content-dir', $ContentDir, '--size', $size) + $scene[1] + @('--capture', $png)
         if ($TickRate -gt 0) { $clientArgs += @('--tick-rate', "$TickRate") }
         dotnet run --project $client -c Release --no-build -- @clientArgs | Out-Null
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $png)) { throw "Szene '$($scene[0])' fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $png)) { throw "Scene '$($scene[0])' failed (exit code $LASTEXITCODE)." }
     }
 }
 
@@ -93,11 +93,11 @@ function Get-PixelHash([string]$path) {
 }
 
 $manifest = New-Object System.Collections.Generic.List[string]
-$manifest.Add('# cncnew text capture set, VORLAEUFIGE Pruefsummen ueber die Pixel (Reproduzierbarkeit, nicht Richtigkeit)')
+$manifest.Add('# cncnew text capture set, PROVISIONAL checksums over the pixels (reproducibility, not correctness)')
 foreach ($file in (Get-ChildItem -LiteralPath $toolDir, $clientDir -Filter '*.png' | Sort-Object { $_.Directory.Name }, Name)) {
     $manifest.Add("$(Get-PixelHash $file.FullName)  $($file.Directory.Name)/$($file.Name)")
 }
 $manifestPath = Join-Path $OutDir 'manifest.txt'
 [IO.File]::WriteAllLines($manifestPath, $manifest)
-Write-Host "`nAufnahmen: $OutDir ($($manifest.Count - 1) Bilder)" -ForegroundColor Green
-Write-Host "Schriftvergleich: $(Join-Path $toolDir 'font-audit.txt')"
+Write-Host "`nCaptures: $OutDir ($($manifest.Count - 1) images)" -ForegroundColor Green
+Write-Host "Font comparison: $(Join-Path $toolDir 'font-audit.txt')"

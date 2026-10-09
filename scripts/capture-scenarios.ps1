@@ -1,12 +1,12 @@
 <#
 .SYNOPSIS
-  Rendert die gestellten Demos (capture-building, tank-duel, jet-strafe; einzeln auch jede andere Szene, z. B. exit-america-warfactory) ohne Fenster als Bildfolge und legt eine HTML-Uebersicht an.
+  Renders the staged demos (capture-building, tank-duel, jet-strafe; individually also any other scene, e.g. exit-america-warfactory) without a window as an image sequence and writes an HTML overview.
 
 .DESCRIPTION
-  Fuer jede Szene laeuft der Stride-Client im Rauchtestmodus (ein Bild = ein Originalbild von 1/30 s Spielzeit, bei jeder Simulationsrate; bei 30 Hz ist das ein Tick)
-  und schreibt alle -Every Bilder ein PNG
-  (`--filmstrip`). Zusammen mit der Szenenbeschreibung und dem Pruefsatz aus docs/DEMO-SCENARIOS.md steht in index.html, worauf man in der Folge achten soll.
-  Die Bilder gehoeren nicht ins Repo (Originalassets). Zum Selbstansehen im Fenster: scripts\demo-capture-building.ps1, demo-tank-duel.ps1, demo-jet-strafe.ps1.
+  For every scene the Stride client runs in smoke-test mode (one frame = one original frame of 1/30 s game time, at every simulation rate; at 30 Hz that is one tick)
+  and writes a PNG every -Every frames
+  (`--filmstrip`). Together with the scene description and the check sentence from docs/DEMO-SCENARIOS.md, index.html says what to look for in the sequence.
+  The images do not belong in the repository (original assets). To watch it yourself in a window: scripts\demo-capture-building.ps1, demo-tank-duel.ps1, demo-jet-strafe.ps1.
 
 .EXAMPLE
   .\scripts\capture-scenarios.ps1
@@ -14,14 +14,14 @@
 #>
 [CmdletBinding()]
 param(
-    # all = die drei Verhaltensszenen; sonst der Name einer Szene (auch exit-<fraktion>-<gebaeude>|all).
+    # all = the three behaviour scenes; otherwise the name of a scene (also exit-<faction>-<building>|all).
     [string]$Scenario = 'all',
     [string]$ContentDir,
     [string]$OutDir,
     [string]$Size = '1280x720',
-    # Abstand der Bilder in Originalbildern (1/30 s); 0 = Standard je Szene.
+    # Distance between the images in original frames (1/30 s); 0 = the default of the scene.
     [int]$Every = 0,
-    # Simulationsrate (30, 60 oder 120 Hz); 0 = Standard der Spielschicht. Bildzahlen und Abstaende bleiben Spielzeit.
+    # Simulation rate (30, 60 or 120 Hz); 0 = the game layer's default. Frame counts and distances stay game time.
     [int]$TickRate = 0,
     [switch]$NoBuild
 )
@@ -29,30 +29,30 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 if (-not $ContentDir) { $ContentDir = Join-Path $repo 'game\content' }
-if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Inhaltsverzeichnis nicht gefunden: $ContentDir" }
+if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) { throw "Content directory not found: $ContentDir (pass -ContentDir)." }
 $ContentDir = (Resolve-Path -LiteralPath $ContentDir).Path
 if (-not $OutDir) { $OutDir = Join-Path ([IO.Path]::GetTempPath()) 'cncnew-scenario-frames' }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 $OutDir = (Resolve-Path -LiteralPath $OutDir).Path
 
-# Szene: (Originalbilder, Standardabstand, worauf zu achten ist)
+# Scene: (original frames, default distance, what to look for)
 $plan = [ordered]@{
-    'capture-building' = @(1500, 100, 'Der Ranger geht zur Kaserne, packt aus (UNPACKING), hisst die Flagge (RAISING_FLAG, die Kaserne blinkt in seiner Farbe), die Kaserne wechselt die Seite, der Ranger packt wieder ein.')
-    'tank-duel'        = @(300, 10, 'Beide Tuerme drehen sich zum Gegner, bevor der erste Schuss faellt; Muendungsfeuer erst nach Ausrichtung; die Rohre zeigen bei jedem Schuss auf das Ziel.')
-    'jet-strafe'       = @(2100, 60, 'Der Flugplatz baut die Raptors (Tick ~600), Rollen, Start (~830), Anflug ohne Stillstand, vier Raketen, Kreisen statt Schweben, Rueckflug, Landung, Nachladen.')
+    'capture-building' = @(1500, 100, 'The Ranger walks to the barracks, unpacks (UNPACKING), raises the flag (RAISING_FLAG, the barracks flashes in his colour), the barracks changes sides, the Ranger packs up again.')
+    'tank-duel'        = @(300, 10, 'Both turrets turn to the opponent before the first shot is fired; muzzle flash only after aiming; the barrels point at the target at every shot.')
+    'jet-strafe'       = @(2100, 60, 'The airfield builds the Raptors (tick ~600), taxiing, take-off (~830), approach without standing still, four missiles, circling instead of hovering, return flight, landing, reloading.')
 }
 
 $project = Join-Path $repo 'src\CnCNew.Client.Stride\CnCNew.Client.Stride.csproj'
 if (-not $NoBuild) {
-    Write-Host '== Baue Client (Release) ...' -ForegroundColor Cyan
+    Write-Host '== Building client (Release) ...' -ForegroundColor Cyan
     dotnet build $project -c Release --nologo -v quiet
-    if ($LASTEXITCODE -ne 0) { throw "Build fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+    if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
 }
 
 $names = if ($Scenario -eq 'all') { $plan.Keys } else { @($Scenario) }
 foreach ($name in $names) {
-    # Eine Szene ohne eigenen Eintrag (die Fabrikausfahrten): 900 Originalbilder, alle 15 ein Bild.
-    if (-not $plan.Contains($name)) { $plan[$name] = @(900, 15, 'Fabrikausfahrt: die Einheit erscheint im Gebaeude, das Tor ist dabei offen, sie faehrt durch die Torseite (rechts) hinaus und haelt davor.') }
+    # A scene without an entry of its own (the factory exits): 900 original frames, an image every 15.
+    if (-not $plan.Contains($name)) { $plan[$name] = @(900, 15, 'Factory exit: the unit appears inside the building, the door is open at that moment, it drives out through the door side (right) and stops in front of it.') }
 }
 $html = New-Object System.Text.StringBuilder
 [void]$html.AppendLine('<!doctype html><meta charset="utf-8"><title>cncnew scenarios</title><style>body{font-family:sans-serif;background:#222;color:#ddd}img{width:420px;margin:2px}h2{margin-top:2em}</style>')
@@ -61,10 +61,10 @@ foreach ($name in $names) {
     $step = if ($Every -gt 0) { $Every } else { $default }
     $dir = Join-Path $OutDir $name
     if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
-    Write-Host "== $name ($ticks Originalbilder, alle $step)" -ForegroundColor Cyan
+    Write-Host "== $name ($ticks original frames, every $step)" -ForegroundColor Cyan
     $rateArgs = if ($TickRate -gt 0) { @('--tick-rate', "$TickRate") } else { @() }
     dotnet run --project $project -c Release --no-build -- --smoke-test --content-dir $ContentDir --size $Size --scenario $name --frames $ticks --filmstrip $dir --every $step @rateArgs | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Szene '$name' fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+    if ($LASTEXITCODE -ne 0) { throw "Scene '$name' failed (exit code $LASTEXITCODE)." }
     [void]$html.AppendLine("<h2>$name</h2><p>$note</p>")
     foreach ($png in Get-ChildItem -LiteralPath $dir -Filter 'frame-*.png' | Sort-Object Name) {
         $tick = [int]($png.BaseName -replace 'frame-', '')
@@ -74,4 +74,4 @@ foreach ($name in $names) {
 
 $index = Join-Path $OutDir 'index.html'
 [IO.File]::WriteAllText($index, $html.ToString(), (New-Object System.Text.UTF8Encoding($false)))
-Write-Host "`nBildfolgen: $OutDir`nUebersicht: $index" -ForegroundColor Green
+Write-Host "`nImage sequences: $OutDir`nOverview: $index" -ForegroundColor Green
