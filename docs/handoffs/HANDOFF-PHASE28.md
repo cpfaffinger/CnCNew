@@ -1,41 +1,41 @@
-N+1-Handoff (Phase 28): Serverbetrieb und Sicherheit – offener Port, Missbrauchsgrenzen, Verschlüsselung, Paket, Dauerlast
+N+1 handoff (Phase 28): Server operation and security – open port, abuse limits, encryption, package, sustained load
 
-Du arbeitest autonom an diesem Repository (`<repo>` = Wurzel des Arbeitsverzeichnisses). Lies zuerst `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/NETWORK-PROTOCOL.md`, `docs/DEDICATED-SERVER.md`, `docs/NETWORK-DIAGNOSTICS.md` und den Abschlussbericht der Phase 27.
-Voraussetzung: Phase 27 ist abgeschlossen.
+You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/NETWORK-PROTOCOL.md`, `docs/DEDICATED-SERVER.md`, `docs/NETWORK-DIAGNOSTICS.md` and the final report of Phase 27.
+Prerequisite: Phase 27 is completed.
 
-## Ehrlicher Status (Ausgangslage)
+## Honest status (starting point)
 
-Der Dedicated Server funktioniert unter gutwilligen Bedingungen. Ein Programm mit offenem UDP-Port im Internet wird aber von Fremden angesprochen, bevor der erste Spieler kommt. Bisher gibt es: einen Cookie-Handshake und einen strikten Parser (Phase 26). Es fehlt: jede Begrenzung gegen Überlast, jede Authentisierung der Pakete nach dem Handshake, jeder Schutz eines Raumpassworts, ein Paket, das jemand ohne Entwicklungsumgebung starten kann, und jede Aussage darüber, wie viele Räume ein Server trägt.
+The dedicated server works under benevolent conditions. But a program with an open UDP port on the internet is addressed by strangers before the first player arrives. So far there is: a cookie handshake and a strict parser (Phase 26). What is missing: any limit against overload, any authentication of the packets after the handshake, any protection of a room password, a package that someone can start without a development environment, and any statement about how many rooms a server carries.
 
-## Entscheidungen, die feststehen
+## Decisions that are fixed
 
-- **Kein Anti-Cheat gegen Kartenaufdeckung.** Im Lockstep-Modell kennt jeder Client den vollen Zustand; das ist dokumentierte Grenze des Modells (`docs/MULTIPLAYER-PLAN.md` §2), kein Auftrag dieser Phase. Was der Server leisten kann: kein Client kann für einen anderen Spieler Befehle senden (Spieler-ID vergibt der Server nach Verbindung), die Spielgeschwindigkeit bestimmt der Server, ungültige Befehle lehnt jede Simulation gleich ab, veränderter Zustand fällt als Desync auf.
-- **Nur BCL-Kryptografie** (`ECDiffieHellman`, `AesGcm` bzw. `ChaCha20Poly1305`, `HMACSHA256`). Keine eigene Kryptografie, keine neue Abhängigkeit.
-- **Der Server verteilt keine Originaldaten** und keine Karten. Ein Raum nennt Karte und Fingerabdrücke; wer sie nicht hat, kann nicht beitreten.
+- **No anti-cheat against map reveal.** In the lockstep model every client knows the full state; that is a documented limit of the model (`docs/MULTIPLAYER-PLAN.md` §2), not a task of this phase. What the server can provide: no client can send commands for another player (the server assigns the player ID per connection), the server determines the game speed, every simulation rejects invalid commands in the same way, modified state shows up as a desync.
+- **BCL cryptography only** (`ECDiffieHellman`, `AesGcm` or `ChaCha20Poly1305`, `HMACSHA256`). No cryptography of our own, no new dependency.
+- **The server distributes no original data** and no maps. A room names map and fingerprints; whoever does not have them cannot join.
 
-## Auftrag (in dieser Reihenfolge)
+## Brief (in this order)
 
-1. **Ausgangszustand reproduzieren**, Referenzwerte der Phase 27 neu messen.
-2. **Bedrohungsmodell schreiben** (`docs/DEDICATED-SERVER.md`, eigener Abschnitt): Angreifer ohne Verbindung (Flut, gefälschte Absender, Verstärkung), Angreifer mit Verbindung (Nachrichtenflut, übergroße oder fehlerhafte Nachrichten, Lobby-Missbrauch, absichtliches Stocken), Mitleser im Netz. Je Zeile: Maßnahme, Test, Restrisiko.
-3. **Grenzen und Drosselung.** Pakete je Sekunde und Absender vor dem Handshake; Nachrichten und Bytes je Sekunde je Verbindung; Befehlsabsichten je Tick und Spieler; maximale Nachrichten- und Fragmentgrößen; Verbindungen je Adresse; Räume und Spieler je Server; Speicherobergrenze je Raum (Bündelpuffer für Zuschauer und Wiedereinstieg). Jede Grenze ist Konfiguration mit dokumentiertem Standard; jede Überschreitung wird gezählt und führt zu einer definierten Reaktion (verwerfen, trennen), nie zu unbegrenztem Speicher- oder Rechenaufwand.
-4. **Fuzzing des Parsers.** Ein Testprogramm (`tests/CnCNew.Net.Tests`, Suite `Fuzz`) schickt aus einem Startwert erzeugte zufällige und gezielt verfälschte Pakete (abgeschnitten, Längenfelder über der Grenze, vertauschte Typen, alte Sequenzen, Wiederholungen) gegen Server- und Clientparser: keine Ausnahme verlässt den Parser, kein Zustand ändert sich durch ein ungültiges Paket, der Speicher wächst nicht. Ein Korpus der gefundenen Fälle bleibt als Regressionstest.
-5. **Authentisierte und verschlüsselte Verbindung.** Sitzungsschlüssel je Verbindung aus einem ECDH-Austausch im Handshake; alle Pakete danach mit AEAD (Sequenznummer als Nonce, Schutz gegen Wiedereinspielen). Raumpasswort nur als Challenge-Response (`HMACSHA256` über eine Server-Nonce), nie im Klartext. Der Server besitzt ein dauerhaftes Schlüsselpaar; der Client zeigt beim ersten Kontakt dessen Fingerabdruck und merkt ihn sich (Vertrauen beim ersten Kontakt). Ehrlich dokumentieren, wogegen das schützt (Mitlesen, Fälschen von außerhalb des Pfads) und wogegen nicht (aktiver Angreifer beim allerersten Kontakt).
-6. **Verwaltung.** Konfigurationsdatei, Sperrliste (Adresse/Schlüssel), Raumpasswort, Hinauswerfen durch den Raumersteller; Protokoll als strukturierte Zeilen mit einstellbarer Aufbewahrung. IP-Adressen sind personenbezogene Daten: Standard ist gekürzte Speicherung, die Doku nennt das.
-7. **Paket.** `dotnet publish` des Servers eigenständig (self-contained) für `win-x64` und `linux-x64`; der Server hat keine Windows- oder Stride-Abhängigkeit (Test über die Projektreferenzen). Start- und Konfigurationsanleitung in `docs/DEDICATED-SERVER.md`. Linux-Lauf belegen (WSL oder Container genügt; nicht behaupten, wenn er nicht stattfand).
-8. **Kapazität und Dauerlast.** Headless-Clients (Befehlsgeber aus Startwert) füllen N Räume zu je acht Spielern: CPU, Arbeitsspeicher und Bandbreite je Raum messen, daraus eine Kapazitätstabelle; 24-Stunden-Lauf mit ständig neu startenden Matches, Trennungen und Wiedereinstiegen: kein Speicherwachstum, kein Absturz, kein hängender Raum. Der Lauf braucht einen begrenzten Timeout und Zwischenstände (siehe `CLAUDE.md`, Hintergrundläufe).
-9. **Versionsregel im Betrieb.** Was beim Beitritt übereinstimmen muss (Protokollversion, `CommandTypes.Version`, Replay-Format, Simulationsversion aus Phase 25, Definitions- und Karten-Fingerabdruck) und wie der Client eine Abweichung dem Menschen erklärt, steht in der Doku; der Server bietet nie einen „trotzdem beitreten“-Weg an.
-10. **Doku:** `docs/DEDICATED-SERVER.md`, `docs/NETWORK-PROTOCOL.md`, `docs/MULTIPLAYER-PLAN.md`, README, ROADMAP, IMPLEMENTATION-PLAN, `CLAUDE.md`; `scripts/audit-vulnerable.ps1` um das Serverprojekt erweitern.
+1. **Reproduce the starting state**, re-measure the reference values of Phase 27.
+2. **Write the threat model** (`docs/DEDICATED-SERVER.md`, its own section): attackers without a connection (flood, forged senders, amplification), attackers with a connection (message flood, oversized or malformed messages, lobby abuse, deliberate stalling), eavesdroppers on the network. Per line: measure, test, residual risk.
+3. **Limits and throttling.** Packets per second and sender before the handshake; messages and bytes per second per connection; command intents per tick and player; maximum message and fragment sizes; connections per address; rooms and players per server; memory cap per room (bundle buffer for spectators and rejoin). Every limit is configuration with a documented default; every violation is counted and leads to a defined reaction (discard, disconnect), never to unbounded memory or computing effort.
+4. **Fuzzing of the parser.** A test program (`tests/CnCNew.Net.Tests`, suite `Fuzz`) sends random and deliberately corrupted packets generated from a seed (truncated, length fields above the limit, swapped types, old sequences, repetitions) against the server and client parser: no exception leaves the parser, no state changes because of an invalid packet, memory does not grow. A corpus of the cases found remains as a regression test.
+5. **Authenticated and encrypted connection.** Session key per connection from an ECDH exchange in the handshake; all packets after that with AEAD (sequence number as nonce, protection against replay). Room password only as challenge-response (`HMACSHA256` over a server nonce), never in clear text. The server owns a permanent key pair; the client shows its fingerprint on first contact and remembers it (trust on first use). Document honestly what this protects against (eavesdropping, forging from outside the path) and what it does not (active attacker at the very first contact).
+6. **Administration.** Configuration file, ban list (address/key), room password, kicking by the room creator; log as structured lines with configurable retention. IP addresses are personal data: the default is truncated storage, the docs say so.
+7. **Package.** `dotnet publish` of the server self-contained for `win-x64` and `linux-x64`; the server has no Windows or Stride dependency (test via the project references). Start and configuration guide in `docs/DEDICATED-SERVER.md`. Prove the Linux run (WSL or a container is enough; do not claim it if it did not take place).
+8. **Capacity and sustained load.** Headless clients (command generator from a seed) fill N rooms of eight players each: measure CPU, memory and bandwidth per room, from that a capacity table; 24-hour run with constantly restarting matches, disconnects and rejoins: no memory growth, no crash, no hanging room. The run needs a bounded timeout and intermediate results (see `CLAUDE.md`, background runs).
+9. **Version rule in operation.** What must match when joining (protocol version, `CommandTypes.Version`, replay format, simulation version from Phase 25, definition and map fingerprint) and how the client explains a deviation to the human is in the docs; the server never offers a "join anyway" path.
+10. **Docs:** `docs/DEDICATED-SERVER.md`, `docs/NETWORK-PROTOCOL.md`, `docs/MULTIPLAYER-PLAN.md`, README, ROADMAP, IMPLEMENTATION-PLAN, `CLAUDE.md`; extend `scripts/audit-vulnerable.ps1` by the server project.
 
-## Engstellen und Showstopper dieser Phase
+## Bottlenecks and showstoppers of this phase
 
-- **Kosten der Verschlüsselung** je Paket bei acht Clients und 60 Bündeln je Sekunde: messen, nicht annehmen.
-- **Nonce-Wiederverwendung** bei Neuübertragung: jede Übertragung braucht eine frische Paketsequenz, auch wenn der Inhalt derselbe ist (Test).
-- **Zeitgrenzen als Angriffsfläche:** ein Client, der genau unter jeder Grenze bleibt, darf einen Raum nicht dauerhaft aufhalten (Test „böswillig langsamer Client“ gegen die Regel aus Phase 26).
+- **Cost of the encryption** per packet with eight clients and 60 bundles per second: measure, do not assume.
+- **Nonce reuse** on retransmission: every transmission needs a fresh packet sequence, even if the content is the same (test).
+- **Time limits as attack surface:** a client that stays exactly below every limit must not hold up a room permanently (test "maliciously slow client" against the rule from Phase 26).
 
-## Nicht Gegenstand
+## Out of scope
 
-Rangliste, Konten, Spielersuche, zentrale Serverliste, NAT-Durchdringung (Clients verbinden sich ausgehend zu einem Server mit offenem Port), Kernel-Anti-Cheat. Wer das will, entscheidet es als eigene Scope-Änderung.
+Ranking, accounts, matchmaking, central server list, NAT traversal (clients connect outbound to a server with an open port), kernel anti-cheat. Whoever wants that decides it as a scope change of its own.
 
-## Abnahme
+## Acceptance
 
-Der Fuzz-Lauf findet keinen Absturz und kein Speicherwachstum; die Grenzen greifen nachweislich; die Verbindung ist authentisiert und verschlüsselt; der Server läuft als eigenständiges Paket unter Windows und Linux; die Kapazitätstabelle und der 24-Stunden-Lauf sind gemessen. Der Abschlussbericht nennt Zahlen mit Commit-Hashes, das Restrisiko je Zeile des Bedrohungsmodells und was nicht belegt ist. Am Ende `docs/handoffs/HANDOFF-PHASE29.md` prüfen und die „Ausgangslage“ aktualisieren.
+The fuzz run finds no crash and no memory growth; the limits demonstrably take effect; the connection is authenticated and encrypted; the server runs as a standalone package under Windows and Linux; the capacity table and the 24-hour run are measured. The final report names numbers with commit hashes, the residual risk per line of the threat model and what is not verified. At the end check `docs/handoffs/HANDOFF-PHASE29.md` and update the "starting point".
