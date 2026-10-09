@@ -125,11 +125,53 @@ internal sealed class ClientRuntime : IDisposable
         => _running?.Spectator is { } spectator ? [..spectator.Report(), .._spectatorCost.Report()] : [];
 
     /// <summary>A staged demonstration (<c>--scenario</c>), with the skirmish HUD.</summary>
-    public static ClientRuntime ForScenario(global::Stride.Engine.Game game, GameData data, LiveScenario scenario, ClientAudioOptions audio, bool? alternateMouse = null)
+    public static ClientRuntime ForScenario(global::Stride.Engine.Game game, GameData data, LiveScenario scenario, ClientAudioOptions audio, bool? alternateMouse = null, Func<LiveScenario>? restart = null)
     {
-        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio) { _alternateMouse = alternateMouse };
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio) { _alternateMouse = alternateMouse, _restartScenario = restart };
         runtime._running = runtime.Start(scenario, null);
         return runtime;
+    }
+
+    // --loop: a staged scene that has run its length starts again from its first frame (a fresh world from the same definition), so it can be watched as often as needed.
+    private Func<LiveScenario>? _restartScenario;
+    private double _restartInSeconds = RestartPauseSeconds;
+    private const double RestartPauseSeconds = 1.5;
+
+    /// <summary>How often a looping scene was started again.</summary>
+    public int ScenarioRestarts { get; private set; }
+
+    private void RestartScenarioWhenOver(double seconds)
+    {
+        if (_restartScenario is null || _running is not { Host.Match: LiveScenario { IsOver: true } } finished) return;
+        // The last picture stands for a moment before the scene begins again.
+        if ((_restartInSeconds -= seconds) > 0) return;
+        _restartInSeconds = RestartPauseSeconds;
+        _running = null;
+        _game.SceneSystem.SceneInstance = null;
+        finished.Dispose();
+        _running = Start(_restartScenario(), null);
+        ScenarioRestarts++;
+        Console.WriteLine($"scenario: restart {ScenarioRestarts}");
+    }
+
+    /// <summary>
+    /// A line over everything at the top of the picture (<c>--caption</c>; '|' starts a new line): which acceptance item the window shows and what to look for
+    /// (<c>scripts/acceptance.ps1</c>). Our own text, drawn with the UI renderer; nothing is drawn without it.
+    /// </summary>
+    public string? Caption { get; set; }
+
+    private void DrawCaption(string caption, int width)
+    {
+        var font = new UiFont("Arial", 11, true);
+        var lines = caption.Split('|', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length == 0) return;
+        const int lineHeight = 20, padding = 6;
+        var textWidth = lines.Max(line => _ui.TextMeasure.MeasureWidth(line, font));
+        var box = new CnCNew.Ui.Layout.UiRect((width - textWidth) / 2 - padding, 4, textWidth + 2 * padding, lines.Length * lineHeight + padding);
+        _ui.DrawRect(box, new CnCNew.Ui.Wnd.WndColor(0, 0, 0, 170));
+        for (var index = 0; index < lines.Length; index++)
+            _ui.DrawText(new UiTextDraw(lines[index], null, font, index == 0 ? new CnCNew.Ui.Wnd.WndColor(255, 220, 90, 255) : CnCNew.Ui.Wnd.WndColor.White, new CnCNew.Ui.Wnd.WndColor(0, 0, 0, 255),
+                box.X + padding, box.Y + padding / 2 + index * lineHeight, UiTextAlignment.Left, box));
     }
 
     /// <summary>A campaign mission started from the command line, with its HUD.</summary>
@@ -254,6 +296,7 @@ internal sealed class ClientRuntime : IDisposable
                 running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, dots);
             }
             if (running.TakeFinished() && _shell is not null) FinishRunning(running);
+            RestartScenarioWhenOver(seconds);
             _audio.Update(seconds);
             return;
         }
@@ -378,6 +421,7 @@ internal sealed class ClientRuntime : IDisposable
         _ui.Begin(context, back.Width, back.Height);
         if (list is not null)
             foreach (var command in list.Commands) _ui.Execute(command);
+        if (Caption is { Length: > 0 } caption) DrawCaption(caption, back.Width);
         // The cursor lies on top of everything: the shell and the in-game menu show the arrow, a running game its context cursor.
         if (_pointer is { } pointer) _cursor.Draw(_ui, _running is { Spectator: null } playing ? playing.Hud.Cursor : CursorState.Arrow, pointer, _clockMs);
         _ui.End();

@@ -51,6 +51,10 @@ bool? alternateMouse = GetArgument(args, "--mouse")?.ToLowerInvariant() switch
 };
 // --audio-capture DIR renders the mixer into DIR/audio.wav instead of a device; a smoke test never opens a device (it renders and discards unless a capture is asked for).
 var audioOptions = new CnCNew.Client.Stride.Audio.ClientAudioOptions(smokeTest, GetArgument(args, "--audio-capture"), args.Contains("--mute", StringComparer.OrdinalIgnoreCase));
+// --caption TEXT: a line over the picture and in the window title ('|' starts a new line): which acceptance item this window shows and what to look for (scripts/acceptance.ps1).
+// --loop: a staged scene (--scenario) starts again when it has run its length; not in a smoke test, whose frame numbers must stay those of one run.
+var caption = GetArgument(args, "--caption");
+var loopScenario = args.Contains("--loop", StringComparer.OrdinalIgnoreCase);
 var shellMode = args.Contains("--shell", StringComparer.OrdinalIgnoreCase) || (contentDirectory is not null && modelPath is null && matchMap is null && missionMap is null);
 var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
     (matchMap ?? missionMap)!,
@@ -108,6 +112,11 @@ if (inputScriptPath is not null && (!smokeTest || (matchMap ?? missionMap) is nu
     throw new ArgumentException("--input-script requires --smoke-test and one of --match, --mission or --scenario.");
 }
 
+if (loopScenario && (scenario is null || smokeTest))
+{
+    throw new ArgumentException("--loop requires --scenario and excludes --smoke-test.");
+}
+
 if (capturePath is not null && !smokeTest)
 {
     throw new ArgumentException("--capture requires --smoke-test.");
@@ -125,7 +134,7 @@ if (contentDirectory is not null)
 using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),
     audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30"), GetArgument(args, "--cursor-at"), GetArgument(args, "--waypoints"),
     inputScriptPath is null ? null : CnCNew.Client.Stride.Testing.InputScript.Load(inputScriptPath), int.Parse(GetArgument(args, "--mission-journal") ?? "0"),
-    !args.Contains("--no-transitions", StringComparer.OrdinalIgnoreCase), tickRate, alternateMouse))
+    !args.Contains("--no-transitions", StringComparer.OrdinalIgnoreCase), tickRate, alternateMouse, caption, loopScenario))
 {
     game.Run();
     if (game.UnresolvedInputSteps > 0) Environment.ExitCode = 3;
@@ -217,7 +226,9 @@ internal sealed class CnCNewGame(
     int missionJournalLines = 0,
     bool animateShell = true,
     CnCNew.Simulation.Time.SimulationRate? tickRate = null,
-    bool? alternateMouse = null) : Game
+    bool? alternateMouse = null,
+    string? caption = null,
+    bool loopScenario = false) : Game
 {
     /// <summary>
     /// The fixed step of a smoke test: every rendered frame advances the game by one original frame (1/30 s), whatever the tick rate - one tick at 30 Hz, two at 60 Hz.
@@ -273,9 +284,11 @@ internal sealed class CnCNewGame(
         await base.LoadContent();
         // The UI and the pointer live in back-buffer pixels; a window client area of another size (desktop too small, display scaling) is worth knowing about.
         Console.WriteLine($"display: back buffer {GraphicsDevice.Presenter.BackBuffer.Width}x{GraphicsDevice.Presenter.BackBuffer.Height}, window client area {Window.ClientBounds.Width}x{Window.ClientBounds.Height}");
+        if (caption is not null) Console.WriteLine($"caption: {caption}");
         if (liveOptions is not null)
         {
             LoadLiveMatch(liveOptions);
+            _runtime!.Caption = caption;
             ApplyStaging();
             if (inputScript is not null) _runtime!.UseInputScript(inputScript);
             return;
@@ -288,6 +301,7 @@ internal sealed class CnCNewGame(
             _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse,
                 ShellSkirmishAi);
             Window.Title = "CnCNew";
+            _runtime.Caption = caption;
             ApplyStaging();
             return;
         }
@@ -372,14 +386,18 @@ internal sealed class CnCNewGame(
         var back = GraphicsDevice.Presenter.BackBuffer;
         if (options.Scenario is { } scenario)
         {
-            var staged = LiveScenario.Create(data, scenario, new System.Numerics.Vector2(back.Width, back.Height));
-            staged.Camera.CenterOn(staged.Anchor + new System.Numerics.Vector2(scenario.LookX, scenario.LookY));
-            staged.Camera.SetAngle((options.Angle is { } angleText ? float.Parse(angleText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraAngleDegrees) * MathF.PI / 180);
-            staged.Camera.SetPitch((options.Pitch is { } pitchText ? float.Parse(pitchText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraPitchDegrees) * MathF.PI / 180);
-            staged.Camera.SetHeightAboveGround(options.Height is { } heightText ? float.Parse(heightText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraHeight);
-            staged.Camera.SettleZoom();
-            ApplyCamera(staged.Camera, options with { Angle = null, Pitch = null, Height = null });
-            _runtime = ClientRuntime.ForScenario(this, data, staged, audioOptions, alternateMouse);
+            LiveScenario Stage()
+            {
+                var staged = LiveScenario.Create(data, scenario, new System.Numerics.Vector2(back.Width, back.Height));
+                staged.Camera.CenterOn(staged.Anchor + new System.Numerics.Vector2(scenario.LookX, scenario.LookY));
+                staged.Camera.SetAngle((options.Angle is { } angleText ? float.Parse(angleText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraAngleDegrees) * MathF.PI / 180);
+                staged.Camera.SetPitch((options.Pitch is { } pitchText ? float.Parse(pitchText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraPitchDegrees) * MathF.PI / 180);
+                staged.Camera.SetHeightAboveGround(options.Height is { } heightText ? float.Parse(heightText, System.Globalization.CultureInfo.InvariantCulture) : scenario.CameraHeight);
+                staged.Camera.SettleZoom();
+                ApplyCamera(staged.Camera, options with { Angle = null, Pitch = null, Height = null });
+                return staged;
+            }
+            _runtime = ClientRuntime.ForScenario(this, data, Stage(), audioOptions, alternateMouse, loopScenario ? Stage : null);
             if (options.SelectOwn) _runtime.SelectOwn();
             Window.Title = $"CnCNew — {scenario.Name}: {scenario.Title}";
             return;
@@ -452,7 +470,7 @@ internal sealed class CnCNewGame(
         {
             var back = GraphicsDevice.Presenter.BackBuffer;
             _runtime.Update(gameTime, Input, back.Width, back.Height, smokeTest ? SmokeStepSeconds : null);
-            if (_runtime.Game is { } game && liveOptions is not { Spectate: true }) Window.Title = $"CnCNew — {game.HumanFaction}";
+            if (_runtime.Game is { } game && liveOptions is not { Spectate: true }) Window.Title = caption is null ? $"CnCNew — {game.HumanFaction}" : $"CnCNew — {caption.Replace('|', ' ')}";
             if (_runtime.PendingResolution is { } resolution)
             {
                 GraphicsDeviceManager.PreferredBackBufferWidth = resolution.Width;
