@@ -298,6 +298,8 @@ internal sealed class AcceptanceAudit
             var building = rows.Where(entry => entry.Row!.Conditions.Contains("CONSTRUCT", StringComparison.OrdinalIgnoreCase)).Select(entry => entry.Row!.Conditions).Distinct().Take(4).ToArray();
             Console.WriteLine($"  {tag}: site appears in frame {appeared} (+{appeared - order} after the order), finished in frame {finished}, progress fell back {falling} times, states while building: {string.Join(" | ", building)}; at the end [{rows[^1].Row!.Conditions}] health {rows[^1].Row!.Health * 100:F0} %");
             if (building.Length == 0) failures.Add($"{tag}: never drawn in a construction state");
+            // ActiveBody::internalChangeHealth: no visual damage state while under construction (the health grows with the work).
+            if (building.Any(state => state.Contains("DAMAGED", StringComparison.OrdinalIgnoreCase))) failures.Add($"{tag}: drawn with a damage state while under construction ({building.First(state => state.Contains("DAMAGED", StringComparison.OrdinalIgnoreCase))})");
             if (finished == 0) failures.Add($"{tag}: not finished at the end of the scene");
             if (falling > 0) failures.Add($"{tag}: the construction progress fell back {falling} times");
             if (rows[^1].Row!.Health < 0.999f) failures.Add($"{tag}: finished with {rows[^1].Row!.Health * 100:F0} % health");

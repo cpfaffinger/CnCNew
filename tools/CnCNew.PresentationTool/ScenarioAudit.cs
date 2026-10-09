@@ -73,6 +73,15 @@ internal static class ScenarioAudit
             acceptance?.Sample(frame);
             for (var i = eventsBefore; i < events.Count; i++) NoteEvent(live, events[i], frame, log, shotsAt);
             if (live.Clock.OriginalFrames % every == 0) PrintSample(live, sample);
+            // --drawables-at N: everything the frame of original frame N draws that is not scenery, and every simulated object it does not draw (what is on screen besides the tagged objects: projectiles, debris, wrecks).
+            if (Option("--drawables-at") is { } drawablesAt && live.Clock.OriginalFrames == long.Parse(drawablesAt, CultureInfo.InvariantCulture))
+            {
+                foreach (var drawable in frame.Drawables.Where(value => value.Entity.IsValid && !value.IsStatic))
+                    Console.WriteLine($"       drawn #{drawable.Entity.Value,-5} {live.World.FindEntity(drawable.Entity)?.Template.Name,-40} at ({drawable.Position.X - live.Anchor.X,7:F1},{drawable.Position.Y - live.Anchor.Y,7:F1},{drawable.Position.Z,6:F1}) model {drawable.PrimaryModel ?? "(none)"} [{drawable.Conditions}]");
+                var drawn = frame.Drawables.Select(value => value.Entity).ToHashSet();
+                foreach (var entity in live.World.Entities.Where(value => !drawn.Contains(value.Id)))
+                    Console.WriteLine($"       not drawn #{entity.Id.Value,-5} {entity.Template.Name,-40} at ({ToFloat(entity.X) - live.Anchor.X,7:F1},{ToFloat(entity.Y) - live.Anchor.Y,7:F1},{ToFloat(entity.Z),6:F1}) dead {entity.EffectivelyDead}");
+            }
             if (Option("--debug-fire") is { } pair && live.Clock.OriginalFrames % every == 0 && pair.Split(',') is [var shooterTag, var victimTag]
                 && live.Tags.TryGetValue(shooterTag, out var shooterId) && live.Tags.TryGetValue(victimTag, out var victimId)
                 && live.World.FindEntity(shooterId) is { } shooter && live.World.FindEntity(victimId) is { } victim)
@@ -168,6 +177,9 @@ internal static class ScenarioAudit
             }
             case SimEventKind.EntityDied:
                 log.Add($"t={simEvent.Tick,5} died   {Tag(simEvent.Entity)}");
+                break;
+            case SimEventKind.CreationSkipped:
+                log.Add($"t={simEvent.Tick,5} creation skipped at {Tag(simEvent.Entity)}: '{simEvent.Text}' (reason {simEvent.Value})");
                 break;
             case SimEventKind.StructureCaptured:
                 log.Add($"t={simEvent.Tick,5} captured {Tag(simEvent.Entity)} by {Tag(simEvent.Other)} (player {simEvent.Value} -> {simEvent.Player})");

@@ -34,8 +34,8 @@ public static class AcceptanceScenes
             foreach (var unit in units)
                 orders.Add(new ScenarioOrder(MarchLegs[leg], unit.Tag, ScenarioOrderKind.MoveTo, X: leg % 2 == 0 ? MarchEast : MarchWest, Y: 0));
         return new DemoScenario(
-            "acc-march", "Marsch auf einen Punkt",
-            "Drei Crusader, ein Humvee und sechs Ranger werden auf denselben Punkt geschickt und nach 24 Sekunden zurück. Zu sehen: Anfahren, Drehen, Bremsen, Ankunft ohne Nachzucken, und jeder bleibt auf einem eigenen Platz neben dem Ziel stehen, statt um die anderen zu kreisen.",
+            "acc-march", "March to one point",
+            "Three Crusaders, a Humvee and six Rangers are sent to the same point and back after 24 seconds. To see: starting, turning, braking, arriving without a twitch, and everybody ending on a place of his own beside the goal instead of circling the others.",
             MarchLegs[^1] + MarchLegFrames, [..units], [..orders], 0, 0, 0f, 42f, 290f);
     }
 
@@ -45,8 +45,8 @@ public static class AcceptanceScenes
 
     /// <summary>A Humvee drives a zig-zag close to the camera: the wheels steer in and back, the body nods when it starts and brakes.</summary>
     public static DemoScenario Wheels { get; } = new(
-        "acc-wheels", "Räder, Lenkung, Federung",
-        "Ein Humvee fährt zweimal einen Zickzackkurs dicht vor der Kamera, daneben fährt eine Planierraupe eine Gerade hin und zurück. Zu sehen: die Räder drehen mit der Strecke, lenken in den Kurven ein und wieder zurück, der Humvee neigt sich in der Kurve zur Seite, die Planierraupe nickt beim Anfahren und Bremsen und schwingt aus, ohne zu zittern.",
+        "acc-wheels", "Wheels, steering, suspension",
+        "A Humvee drives a zig-zag course twice close to the camera; beside it a dozer drives a straight line there and back. To see: the wheels turn with the distance, steer into the corners and back, and the dozer nods when it starts and brakes and settles without trembling.",
         WheelFirstFrame + WheelCourse.Length * WheelLegFrames + 60,
         [
             new("humvee", "AmericaVehicleHumvee", 1, 0, 0, 0f),
@@ -64,8 +64,8 @@ public static class AcceptanceScenes
 
     /// <summary>Five Rangers board a Humvee, are driven a short way and let out; then the same again in the other direction.</summary>
     public static DemoScenario Board { get; } = new(
-        "acc-board", "Einsteigen und Aussteigen",
-        "Fünf Ranger sollen in einen Humvee steigen. Zu sehen: sie laufen geradewegs hinein statt um das Fahrzeug herum, der Humvee fährt mit ihnen ein Stück, lässt sie aussteigen, und sie stehen danach neben dem Fahrzeug, nicht in ihm und nicht ineinander. Danach dasselbe zurück.",
+        "acc-board", "Boarding and leaving a transport",
+        "Five Rangers are told to board a Humvee. To see: they walk straight in instead of around the vehicle, the Humvee drives them a short way and lets them out, and afterwards they stand beside the vehicle, not inside it and not inside each other. Then the same on the way back.",
         BoardOutAgain + 150,
         [
             new("humvee", "AmericaVehicleHumvee", 1, 0, 0, 0f),
@@ -83,8 +83,8 @@ public static class AcceptanceScenes
 
     /// <summary>A Tomahawk launcher and an Inferno Cannon shell a command centre: a guided missile and a lobbed shell, flight, impact and detonation.</summary>
     public static DemoScenario Artillery { get; } = new(
-        "acc-artillery", "Geschossbahnen",
-        "Ein Tomahawk-Werfer und eine Inferno-Kanone beschießen eine gegnerische Kommandozentrale. Zu sehen: die Rakete steigt, schwenkt ein und trifft; die Granate fliegt einen Bogen; beide fliegen glatt, schlagen dort ein, wo sie detonieren, und Explosion und Feuer sitzen am Einschlag.",
+        "acc-artillery", "Projectile paths",
+        "A Tomahawk launcher and an Inferno Cannon shell an enemy command centre. To see: the missile climbs, turns in and hits; the shell flies an arc; both fly smoothly, and explosion and fire appear where and when the projectile arrives.",
         900,
         [
             new("tomahawk", "AmericaVehicleTomahawk", 1, 0, -45, 0f),
@@ -103,8 +103,8 @@ public static class AcceptanceScenes
 
     /// <summary>A dozer repairs a damaged power plant: the damaged look of the building and the wrench symbol over it.</summary>
     public static DemoScenario Repair { get; } = new(
-        "acc-repair", "Reparatur und Heilsymbol",
-        "Ein Kraftwerk ist beschädigt (Schadensmodell, unter halber Gesundheit); eine Planierraupe fährt hin und repariert es mit 2 % je Sekunde. Zu sehen: über dem Gebäude steht der Schraubenschlüssel, solange repariert wird; ab halber Gesundheit sieht das Gebäude wieder heil aus, und wenn es ganz repariert ist, verschwindet das Symbol.",
+        "acc-repair", "Repair and the wrench symbol",
+        "A power plant is damaged (damaged model, below half health); a dozer drives up and repairs it at 2 % per second. To see: the wrench stands over the building while it is repaired; from half health on the building looks whole again, and when it is fully repaired the symbol disappears.",
         990,
         [
             new("plant", "AmericaPowerPlant", 1, 60, 0, 0f),
@@ -120,8 +120,8 @@ public static class AcceptanceScenes
 
     /// <summary>A Gattling tank and three Rangers against six Rebels: rifle and Gattling fire, muzzle flashes, tracers, hits and deaths.</summary>
     public static DemoScenario Firefight { get; } = new(
-        "acc-firefight", "Feuergefecht",
-        "Ein Gattling-Panzer und drei Ranger schießen auf sechs Rebellen, die zurückschießen. Zu sehen: Mündungsfeuer bei jedem Schuss (kein Dauerleuchten), Leuchtspuren vom Rohr zum Ziel, die Gattling dreht hoch und feuert schneller, Getroffene fallen mit einer Sterbeanimation; zu hören: je Schuss ein Ton, keine doppelten.",
+        "acc-firefight", "Fire fight",
+        "A Gattling tank and three Rangers fire at six Rebels, who fire back. To see: a muzzle flash with every shot (no constant glow), tracers from the barrel to the target, the Gattling spinning up and firing faster, the hit falling with a death animation; to hear: one sound per shot, none doubled.",
         600,
         [
             new("gattling", "ChinaTankGattling", 1, 0, 0, 0f),
@@ -140,8 +140,8 @@ public static class AcceptanceScenes
 
     /// <summary>A dozer builds a power plant and then a barracks: the scaffold, the rising building, the finished one.</summary>
     public static DemoScenario Build { get; } = new(
-        "acc-build", "Bauen",
-        "Eine Planierraupe baut ein Kraftwerk und danach eine Kaserne. Zu sehen: die Raupe fährt zum Bauplatz, das Gebäude wächst aus dem Gerüst (Baufortschritt), ist danach vollständig und in der Farbe des Spielers; zu hören: Bauton und die Meldung zum fertigen Gebäude.",
+        "acc-build", "Construction",
+        "A dozer builds a power plant and then a barracks. To see: the dozer drives to the site, the building rises (construction progress), and stands complete in the player's colour afterwards; to hear: the construction sound and the announcement of the finished building.",
         960,
         [new("dozer", "AmericaVehicleDozer", 1, -90, 0, 0f)],
         [
