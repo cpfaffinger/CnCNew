@@ -195,7 +195,7 @@ and end probes: `docs/SCRIPT-ENGINE.md` §9). The size of a mission state is aro
   `CampaignController.StartCurrentMission` calls it for `IsChallenge` campaigns when the host names no side (`ChallengeSelectScreen` thereby automatically obtains the right
   side, without code of its own). Measurement (`CampaignTool sides`): seven of the eight challenge maps mark their side themselves (`ThePlayer`, `playerIsHuman`) – there the map decides;
   `GC_LaserGeneral` marks none and defines only its opponents (`PlyrAmericaLaserGeneral` is the enemy whose production buildings the victory script wants to see destroyed). **Phase 12 – persona faction:**
-  `MissionOptions.HumanFaction` (mission state 2, `humanFaction` is saved only when a value is set) carries the faction of the chosen general; `ScriptProgram.WithHumanSide(seite, fraktion)` thereby replaces
+  `MissionOptions.HumanFaction` (mission state 2, `humanFaction` is saved only when a value is set) carries the faction of the chosen general; `ScriptProgram.WithHumanSide(side, faction)` thereby replaces
   the faction of the human side and, on a map without a human side (`GC_LaserGeneral`), appends a **synthetic side** `ThePlayer` (enemy of every non-civilian map side and
   vice versa; `ChallengeSides.SyntheticHumanSide`); the program checksum stays that of the map, so that a savegame recognises the program, the options say how it was adapted.
   `CampaignCatalog.WithPersonas(ChallengeMode.ini)` fills the `PlayerFaction` of every challenge campaign without one of its own from `GeneralPersonaN` (`PlayerTemplate` + `Campaign`; personas with

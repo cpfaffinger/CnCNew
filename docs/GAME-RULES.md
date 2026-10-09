@@ -247,7 +247,7 @@ deliberately narrow until a second implementer, `TransportContain`, actually ext
 **`ObjectCreationList`** (295 definitions, strictly typed in `CnCNew.Data`: `ObjectCreationListDefinition.Sections`; the
 nugget counts in the content: `CreateObject` 184, `CreateDebris` 473, `DeliverPayload` 46, `ApplyRandomForce` 10, `FireWeapon` 4,
 `Attack` 1) is now executed, no longer just reported as a `CreationListRequested` event.
-`SimulationWorld.CreateFromList(source, liste, anforderer, transferPreviousHealth)` corresponds to
+`SimulationWorld.CreateFromList(source, list, requester, transferPreviousHealth)` corresponds to
 `ObjectCreationList::create` and is called by `CreateObjectDie` and `InstantDeathBehavior`. The event remains as a
 log. The catalog (`ObjectCreationListCatalog`) binds every list when the templates are built; only an unknown
 nugget type is a `TemplateBuildException`, everything else is reported at runtime as a `CreationSkipped` event with a reason.

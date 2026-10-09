@@ -112,5 +112,5 @@ conditions and the six most frequent actions were implemented first; the runtime
   (all parameter counts match the respective action). Should a future map nevertheless contain one of these legacy
   cases, the decoder does not abort (it reads what is on disk), but the parameter list then does not match
   what `ScriptActions`/`ScriptConditions` expect for execution – the VM handles a parameter list that is too short
-  explicitly (`Has(...)`: diagnostic `<Typ>: n of m parameters`, the action/condition does nothing), the decoder stays unchanged.
+  explicitly (`Has(...)`: diagnostic `<type>: n of m parameters`, the action/condition does nothing), the decoder stays unchanged.
 - `GlobalLighting` remains, independently of this, a skipped chunk (see `docs/PRESENTATION-WORLD.md`).
