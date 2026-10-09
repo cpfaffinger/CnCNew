@@ -1,233 +1,232 @@
-# Terrain-Layer des Stride-Clients
+# Terrain layer of the Stride client
 
-Zuständig: `src/CnCNew.Client.Stride/Layers/TerrainLayer.cs` und
-`src/CnCNew.Client.Stride/Layers/Terrain/**`. Der Layer zeigt Terrain, Wasser, Fog of War/Shroud
-und eine Minimap-Textur eines `LiveMatch` in Stride. Er liest ausschließlich das bereits
-aufbereitete `TerrainRenderModel` (`CnCNew.Presentation.Terrain`) und den `FogOfWarGrid`
-(schreibgeschützt); er bindet keine eigene Simulationslogik ein.
+Responsible: `src/CnCNew.Client.Stride/Layers/TerrainLayer.cs` and
+`src/CnCNew.Client.Stride/Layers/Terrain/**`. The layer shows terrain, water, fog of war/shroud
+and a minimap texture of a `LiveMatch` in Stride. It reads exclusively the already
+prepared `TerrainRenderModel` (`CnCNew.Presentation.Terrain`) and the `FogOfWarGrid`
+(read-only); it does not include any simulation logic of its own.
 
-## Datenfluss
+## Data flow
 
-`TerrainRenderModel` liefert pro Kartenausschnitt:
+`TerrainRenderModel` supplies per map section:
 
-- **Chunks** (`TerrainChunk`): drei Meshes pro Chunk (Base, Blend, ExtraBlend/3-way), je vier
-  Vertices pro Zelle, `ushort`-Indices. Farbe = statische Beleuchtung (RGB) und Blend-Gewicht (A).
-- **Water** (`WaterSurface[]`): einzelne Wasserflächen mit Textur, Farbe, optionalem Scroll
-  (Flüsse) und `IsRiver`.
-- **Atlas**: eine Textur mit allen Kacheltypen inklusive Mip-Kette (`BuildMipChain()`).
+- **Chunks** (`TerrainChunk`): three meshes per chunk (Base, Blend, ExtraBlend/3-way), four
+  vertices per cell each, `ushort` indices. Colour = static lighting (RGB) and blend weight (A).
+- **Water** (`WaterSurface[]`): individual water surfaces with texture, colour, optional scroll
+  (rivers) and `IsRiver`.
+- **Atlas**: one texture with all tile types including the mip chain (`BuildMipChain()`).
 
-`TerrainLayer.Attach` baut daraus einmalig GPU-Ressourcen; `Update` aktualisiert nur Fog-Textur,
-Wasser-Scroll, Minimap und Chunk-Sichtbarkeit.
+`TerrainLayer.Attach` builds GPU resources from this once; `Update` only updates the fog texture,
+water scroll, minimap and chunk visibility.
 
-## Ein Draw-Pass statt drei
+## One draw pass instead of three
 
-Das Referenzspiel zeichnet Base-, Blend- und 3-way-Pass einzeln mit Alpha-Blending übereinander.
-Das ist für Terrain unnötig und würde die Sortierung gegen das transparente Wasser erschweren.
-`TerrainMeshMerger.Merge` faltet die drei Pässe pro Chunk stattdessen in ein Vertex-Array:
+The reference game draws the base, blend and 3-way pass separately on top of each other with alpha blending.
+That is unnecessary for terrain and would make the sorting against the transparent water harder.
+`TerrainMeshMerger.Merge` instead folds the three passes per chunk into one vertex array:
 
-- Der Base-Pass legt Vertices und Indices fest (vier Vertices/Zelle, wie im Modell).
-- Blend- und 3-way-Zellen werden über die Position ihres ersten Vertex der passenden Base-Zelle
-  zugeordnet (`Attach`) und liefern eine zweite bzw. dritte UV-Menge (`Uv1`/`Uv2`) plus ihr
-  Blend-Gewicht in `Color0.A` bzw. `Color1.A`. Zellen ohne Overlay bekommen Gewicht 0.
-- Das Overlay kann entlang der anderen Diagonale trianguliert sein als der Base-Pass; der
-  gemergte Mesh behält immer den Base-Split. `DiagonalMismatches` zählt das (auf den getesteten
-  150 Karten typischerweise einstellig, siehe Messwerte unten) – rein kosmetisch, da die
-  Kachelfarbe pro Dreieck durch Interpolation kaum sichtbar abweicht.
-- `TerrainMeshMerger.Validate` prüft nach dem Merge Index-Grenzen und dass nur Zellen mit
-  zugeordnetem Overlay ein Blend-Gewicht tragen; jede Inkonsistenz wirft `InvalidDataException`.
-  Das läuft in `Attach` synchron mit – GPU-frei überprüfbar, da `TerrainMeshMerger` und
-  `TerrainVertex` kein Stride referenzieren.
+- The base pass defines vertices and indices (four vertices/cell, as in the model).
+- Blend and 3-way cells are assigned to the matching base cell via the position of their first vertex
+  (`Attach`) and supply a second and third UV set (`Uv1`/`Uv2`) plus their
+  blend weight in `Color0.A` and `Color1.A` respectively. Cells without an overlay get weight 0.
+- The overlay can be triangulated along the other diagonal than the base pass; the
+  merged mesh always keeps the base split. `DiagonalMismatches` counts that (on the tested
+  150 maps typically single-digit, see the measurements below) – purely cosmetic, because the
+  tile colour per triangle deviates hardly visibly through interpolation.
+- `TerrainMeshMerger.Validate` checks after the merge the index bounds and that only cells with
+  an assigned overlay carry a blend weight; every inconsistency throws `InvalidDataException`.
+  That runs synchronously in `Attach` – verifiable without a GPU, because `TerrainMeshMerger` and
+  `TerrainVertex` do not reference Stride.
 
-Der Materialgraph (`TerrainMaterials.CreateTerrain`) berechnet pro Pixel
-`lerp(lerp(atlas(uv0), atlas(uv1), w1), atlas(uv2), w2) * Beleuchtung * Nebel` und schreibt das
-Ergebnis in den Emissive-Kanal. Ein Pass, undurchsichtig, `CullMode.Back`, Tiefentest und
--schreiben aktiv.
+The material graph (`TerrainMaterials.CreateTerrain`) computes per pixel
+`lerp(lerp(atlas(uv0), atlas(uv1), w1), atlas(uv2), w2) * lighting * fog` and writes the
+result into the emissive channel. One pass, opaque, `CullMode.Back`, depth test and
+depth write active.
 
-## Windung und Koordinatensystem
+## Winding and coordinate system
 
-Simulation und Stride teilen dieselbe Rechtshand-Welt (X Ost, Y Nord, Z hoch); Kamera-View/
-Projection werden unverändert über `ToStride()` übernommen, es gibt keine Spiegelung. Die
-Dreiecke des Modells sind von oben gesehen gegen den Uhrzeigersinn (CCW), Direct3D/Stride werten
-im Default aber im Uhrzeigersinn (CW) als Vorderseite. `Attach` tauscht deshalb nach der
-Validierung pro Dreieck `Indices[t+1]` und `Indices[t+2]`, `CullMode.Back` bleibt aktiv. Ohne
-diesen Tausch war die Karte komplett wegkulled (nur Himmelblau sichtbar) – der erste
-Sichtbarkeitstest dieser Phase.
+Simulation and Stride share the same right-handed world (X east, Y north, Z up); camera view/
+projection are taken over unchanged via `ToStride()`, there is no mirroring. The
+triangles of the model are counter-clockwise (CCW) seen from above, but Direct3D/Stride by default
+treat clockwise (CW) as the front face. `Attach` therefore swaps, after the
+validation, `Indices[t+1]` and `Indices[t+2]` per triangle, `CullMode.Back` stays active. Without
+this swap the map was culled away completely (only sky blue visible) – the first
+visibility test of this phase.
 
-## Wasser
+## Water
 
-`WaterMeshBuilder.Build` gruppiert `WaterSurface`-Flächen nach Textur, `IsRiver` und Scroll-
-Geschwindigkeit zu `WaterBatch`es und baut je Gruppe ein zusammenhängendes Vertexarray
-(Stride-frei testbar). Animierte Batches (`Scroll != 0`) bekommen einen `Dynamic`-Vertexbuffer;
-`ApplyScroll(seconds)` schreibt `Uv = BaseUv + frac(Scroll * t)` pro Frame neu.
+`WaterMeshBuilder.Build` groups `WaterSurface` surfaces by texture, `IsRiver` and scroll
+speed into `WaterBatch`es and builds one contiguous vertex array per group
+(testable without Stride). Animated batches (`Scroll != 0`) get a `Dynamic` vertex buffer;
+`ApplyScroll(seconds)` rewrites `Uv = BaseUv + frac(Scroll * t)` per frame.
 
-Der Wassermaterial-Graph (`TerrainMaterials.CreateWater`) multipliziert Textur, Vertexfarbe und
-Nebelfaktor, ersetzt aber den Alphakanal wieder durch das unvernebelte Produkt (`SubstituteAlpha`):
-vernebeltes Wasser bleibt so genauso deckend wie unvernebeltes, nur dunkler. Wasser wird in der
-transparenten Stride-Stufe nach dem opaken Terrain gezeichnet (`CullMode.None`, kein Tiefenschreiben,
-Blend `SourceAlpha/InverseSourceAlpha`, bei `WaterAppearance.AdditiveBlending` stattdessen
-`SourceAlpha/One`). Da Terrain undurchsichtig mit Tiefenschreiben vorgeht, verdeckt es Wasser dort,
-wo die Geländehöhe über der Wasserebene liegt – so wie im Original nur echte Senken/Küsten geflutet
-erscheinen, obwohl die Wasserfläche im Modell oft die ganze Karte überspannt (siehe Messwerte).
+The water material graph (`TerrainMaterials.CreateWater`) multiplies texture, vertex colour and
+fog factor, but replaces the alpha channel again with the unfogged product (`SubstituteAlpha`):
+fogged water thus stays exactly as opaque as unfogged water, only darker. Water is drawn in the
+transparent Stride stage after the opaque terrain (`CullMode.None`, no depth write,
+blend `SourceAlpha/InverseSourceAlpha`, with `WaterAppearance.AdditiveBlending` instead
+`SourceAlpha/One`). Because terrain goes first, opaque and with depth write, it hides water where
+the terrain height lies above the water plane – just as in the original only real depressions/coasts appear
+flooded although the water surface in the model often spans the whole map (see the measurements).
 
-**Geprüft** (visuell, s. Screenshots-Abschnitt): Seeufer (Bitter Winter, unregelmäßige Küstenlinie
-gegen Schnee), Fluss mit Scroll-Animation (FloodedPlains, sichtbarer Wellenversatz zwischen Frame 1
-und Frame 600), Alphaüberblendung an der Uferlinie, Tiefenverhalten in Schrägansicht. **Nicht
-geprüft**: `WaterAppearance.AdditiveBlending == true` (keine der elf sondierten Karten nutzt es) und
-`WaterAppearance.TransparentWaterDepth` (wird derzeit nicht ausgewertet – Wasser hat konstante
-Deckkraft unabhängig von der Wassertiefe unter der Oberfläche; das ist eine bekannte Lücke).
+**Checked** (visually, see the screenshots section): lake shore (Bitter Winter, irregular coastline
+against snow), river with scroll animation (FloodedPlains, visible wave offset between frame 1
+and frame 600), alpha blending at the shoreline, depth behaviour in an oblique view. **Not
+checked**: `WaterAppearance.AdditiveBlending == true` (none of the eleven probed maps uses it) and
+`WaterAppearance.TransparentWaterDepth` (is currently not evaluated – water has constant
+opacity independent of the water depth below the surface; that is a known gap).
 
 ## Fog of War / Shroud
 
-`FogTexture` ist eine `R8_UNorm`-Textur mit einem Texel pro Zelle des spielbaren Bereichs
-(`FogOfWarGrid.CellsX/CellsY`), `Dynamic` angelegt. `UpdateFog` liest `match.Fog.CopyLevels(...)`
-höchstens alle `FogInterval` (1/20 s) und lädt nur hoch, wenn sich der Inhalt geändert hat
-(`SequenceEqual`-Vergleich gegen den letzten Upload) – auf einer stehenden Karte entfällt der
-Upload praktisch ganz. Die Werte 0/127/255 (Shroud/Fog/Clear) landen unverändert im Texel; die
-Terrain- und Wassermaterialien sampeln sie über eine gemeinsame Fog-UV (`world.xy * FogUvScale`,
-`Clamp`, `Linear`-Filterung sorgt für weiche Kanten an Shroud-/Fog-Grenzen) und multiplizieren das
-Ergebnis auf die Emissive-Farbe. In der (nach Messung) linearen Farbraum-Pipeline des Geräts wird
-der Faktor quadriert (`FogFactor`, `ComputeBinaryColor` Multiply mit sich selbst), damit ein
-Fog-Texel (127/255 ≈ 0,5) auf dem Bildschirm denselben Helligkeitsabfall ergibt wie im
-Referenzrenderer, der im Gammaraum multipliziert.
+`FogTexture` is an `R8_UNorm` texture with one texel per cell of the playable area
+(`FogOfWarGrid.CellsX/CellsY`), created `Dynamic`. `UpdateFog` reads `match.Fog.CopyLevels(...)`
+at most every `FogInterval` (1/20 s) and uploads only if the content has changed
+(`SequenceEqual` comparison against the last upload) – on a map standing still the
+upload is practically dropped altogether. The values 0/127/255 (Shroud/Fog/Clear) end up unchanged in the texel; the
+terrain and water materials sample them via a common fog UV (`world.xy * FogUvScale`,
+`Clamp`, `Linear` filtering provides soft edges at shroud/fog borders) and multiply the
+result onto the emissive colour. In the (according to measurement) linear colour space pipeline of the device
+the factor is squared (`FogFactor`, `ComputeBinaryColor` Multiply with itself), so that a
+fog texel (127/255 ≈ 0.5) gives the same brightness drop on the screen as in the
+reference renderer, which multiplies in gamma space.
 
-`FogTexture` ist öffentlich (`TerrainLayer.FogTexture`, `FogUvScale`), damit der ObjektLayer
-Einheiten und Gebäude mit demselben Nebel abdunkeln kann, ohne eine zweite Fog-Textur zu pflegen. Stand Phase 15
-verwendet der Objekt-Layer sie **nicht**: statische Kartenszenerie wird stattdessen in der Präsentation
-(`FrameProjector`) ausgeblendet, bis ihr Boden erkundet ist, und danach unabgedunkelt gezeichnet.
+`FogTexture` is public (`TerrainLayer.FogTexture`, `FogUvScale`) so that the object layer
+can darken units and buildings with the same fog without maintaining a second fog texture. As of Phase 15
+the object layer does **not** use it: static map scenery is instead hidden in the presentation
+(`FrameProjector`) until its ground is explored, and drawn undarkened afterwards.
 
-**Debug-Umgebungsvariable** `CNCNEW_TERRAIN_REVEAL=1`: überschreibt jeden Sample mit 255 (voll
-sichtbar), ohne die Simulation zu berühren – nur für Screenshot-Verifikation gedacht.
+**Debug environment variable** `CNCNEW_TERRAIN_REVEAL=1`: overwrites every sample with 255 (fully
+visible) without touching the simulation – intended only for screenshot verification.
 
-**Bekannte Einschränkung**: Die Fog-Textur hat beim ersten Attach keine Initialdaten (`Dynamic`
-ohne `DataBox`); der erste Sample wird immer hochgeladen, unabhängig vom Vergleich. Der aller-
-erste gerenderte Frame – bevor `Update` zum ersten Mal lief – zeigt deshalb noch die
-GPU-Nullinitialisierung, also vollständigen Shroud (schwarz), selbst wenn die Startposition
-bereits Sicht hätte. Ab dem zweiten Frame (spätestens nach `FogInterval`) stimmt der Zustand.
-Für ein Spiel, das mit dem ersten simulierten Tick startet, ist das ein Frame, den niemand sieht;
-dokumentiert, weil der Auftrag explizit Frame 1 gegen Frame 1800 verglichen hat und der Unterschied
-sonst wie ein Bug aussähe.
+**Known limitation**: the fog texture has no initial data at the first attach (`Dynamic`
+without `DataBox`); the first sample is always uploaded, independent of the comparison. The very
+first rendered frame – before `Update` ran for the first time – therefore still shows the
+GPU zero initialisation, i.e. complete shroud (black), even if the start position
+already had vision. From the second frame (at the latest after `FogInterval`) the state is correct.
+For a game that starts with the first simulated tick that is a frame nobody sees;
+documented because the brief explicitly compared frame 1 against frame 1800 and the difference
+would otherwise look like a bug.
 
 ## Minimap
 
-`TerrainLayer.MinimapTexture` (RGBA, Reihe 0 = Norden) wird aus `match.Minimap.Compose(fog, dots,
-footprint, dotSize)` erzeugt (`CnCNew.Presentation.Minimap.MinimapImage`, nicht Teil dieses
-Layers). Automatisch alle 0,25 s (`MinimapInterval`) neu komponiert, wenn sich Fog oder das
-Kamera-Footprint geändert haben. `UpdateMinimap(commandList, dots, cameraFootprint = null,
-dotSize = 2)` ist der öffentliche Einstiegspunkt für den HUD-/UI-Layer: `dots` sind Weltpositionen
-mit Farbe (im Fog verborgene Gegner vor dem Aufruf herausfiltern – der Layer kennt keine
-Spielerzugehörigkeit), `cameraFootprint` überschreibt testweise das aus `match.Camera
-.GroundFootprint()` abgeleitete Rechteck. Ohne Aufruf zeigt die Minimap nur Terrain, Fog und das
-Kamera-Footprint.
+`TerrainLayer.MinimapTexture` (RGBA, row 0 = north) is produced from `match.Minimap.Compose(fog, dots,
+footprint, dotSize)` (`CnCNew.Presentation.Minimap.MinimapImage`, not part of this
+layer). Recomposed automatically every 0.25 s (`MinimapInterval`) if fog or the
+camera footprint have changed. `UpdateMinimap(commandList, dots, cameraFootprint = null,
+dotSize = 2)` is the public entry point for the HUD/UI layer: `dots` are world positions
+with colour (filter out enemies hidden in the fog before the call – the layer knows no
+player affiliation), `cameraFootprint` overrides, for testing, the rectangle derived from `match.Camera
+.GroundFootprint()`. Without a call the minimap shows only terrain, fog and the
+camera footprint.
 
-**Debug-Umgebungsvariable** `CNCNEW_TERRAIN_DUMP=<Verzeichnis>`: schreibt bei jeder Minimap-
-Aktualisierung `minimap.png`, `terrain.png` und `fog.png` (eigener minimaler PNG-Writer,
-`PngDump`, ohne fremde Bildbibliothek) – diente in dieser Phase der Sichtprüfung ohne
-Screenshot-Tooling.
+**Debug environment variable** `CNCNEW_TERRAIN_DUMP=<directory>`: writes `minimap.png`, `terrain.png` and `fog.png` at every minimap
+update (own minimal PNG writer,
+`PngDump`, without a third-party image library) – served in this phase as the visual check without
+screenshot tooling.
 
-## Beleuchtung
+## Lighting
 
-Terrain- und Wasserfarbe kommen ausschließlich aus den Vertexfarben des Modells (bereits vom
-Import mit statischer Beleuchtung versehen) und texturbedingter Modulation; der Materialgraph
-nutzt nur den Emissive-Kanal, nie Diffuse+Licht. Die Sonne/Beleuchtung des Stride-Hosts hat daher
-keinen Einfluss auf Terrain – wie vom Auftrag gefordert.
+Terrain and water colour come exclusively from the vertex colours of the model (already provided
+with static lighting by the import) and texture-dependent modulation; the material graph
+uses only the emissive channel, never diffuse+light. The sun/lighting of the Stride host therefore has
+no influence on terrain – as demanded by the brief.
 
-## Farbraum
+## Colour space
 
-Das Gerät läuft zur Laufzeit mit `ColorSpace.Linear` (gemessen, nicht angenommen). Der Atlas wird
-deshalb als `R8G8B8A8_UNorm_SRgb` hochgeladen (GPU dekodiert beim Sampling), während
-Vertex-Lichtfarben und Wasserfarben vom Modell im Gammaraum vorliegen und deshalb einmalig auf der
-CPU per Lookup-Tabelle (`PackedColor.SrgbDecodeTable`) dekodiert werden, bevor sie in die gepackten
-Vertexfarben einfließen (`TerrainMeshMerger.Merge`, `WaterMeshBuilder.Build`). Der Fog-Faktor wird,
-wie oben beschrieben, quadriert. Ohne diese Korrekturen wäre alles sichtbar zu dunkel oder zu hell
-gegenüber dem Referenzrenderer, der im Gammaraum multipliziert.
+The device runs at runtime with `ColorSpace.Linear` (measured, not assumed). The atlas is
+therefore uploaded as `R8G8B8A8_UNorm_SRgb` (the GPU decodes on sampling), while
+vertex light colours and water colours from the model are in gamma space and are therefore decoded once on the
+CPU by lookup table (`PackedColor.SrgbDecodeTable`) before they flow into the packed
+vertex colours (`TerrainMeshMerger.Merge`, `WaterMeshBuilder.Build`). The fog factor is,
+as described above, squared. Without these corrections everything would be visibly too dark or too bright
+compared with the reference renderer, which multiplies in gamma space.
 
-## Sichtbarkeits-Culling
+## Visibility culling
 
-`Update` ruft `match.Camera.VisibleChunks(model)` pro Frame ab und schaltet nur die
-`ModelComponent`s um, deren Sichtbarkeit sich geändert hat (`Enabled`-Flag), statt jedes Mal die
-komplette Chunk-Liste neu zu evaluieren. Das hält den nicht sichtbaren Teil der Karte aus der
-Stride-Renderpipeline heraus, ohne eigene Frustum-Mathematik im Layer.
+`Update` queries `match.Camera.VisibleChunks(model)` per frame and switches only the
+`ModelComponent`s whose visibility has changed (`Enabled` flag), instead of re-evaluating the
+complete chunk list every time. That keeps the non-visible part of the map out of the
+Stride render pipeline without frustum mathematics of its own in the layer.
 
-## Öffentliche API für andere Layer
+## Public API for other layers
 
 ```csharp
-Texture FogTexture          // R8_UNorm, ein Texel je Fog-Zelle, gültig nach Attach()
-Vector2 FogUvScale          // world.xy * FogUvScale ergibt die Fog-UV
-Texture MinimapTexture      // RGBA, Reihe 0 = Norden, gültig nach Attach()
-long GpuBytes               // von diesem Layer gehaltener GPU-Speicher
-double AttachMilliseconds   // Wandzeit des letzten Attach()
+Texture FogTexture          // R8_UNorm, one texel per fog cell, valid after Attach()
+Vector2 FogUvScale          // world.xy * FogUvScale gives the fog UV
+Texture MinimapTexture      // RGBA, row 0 = north, valid after Attach()
+long GpuBytes               // GPU memory held by this layer
+double AttachMilliseconds   // wall time of the last Attach()
 
 void UpdateMinimap(CommandList commandList, IReadOnlyList<MinimapDot> dots,
                     IReadOnlyList<Vector2>? cameraFootprint = null, int dotSize = 2);
 ```
 
-`FogTexture`/`FogUvScale` sind für den kommenden Objekt-Layer gedacht (Einheiten/Gebäude im
-selben Nebel abdunkeln); `UpdateMinimap` für den HUD-/UI-Layer.
+`FogTexture`/`FogUvScale` are intended for the coming object layer (darkening units/buildings in the
+same fog); `UpdateMinimap` for the HUD/UI layer.
 
-## Messwerte (diese Phase, `--content-dir game/content`, Release)
+## Measurements (this phase, `--content-dir game/content`, Release)
 
-Elf Karten sondiert (Attach-Log), sechs davon mit Screenshots visuell geprüft (Wüste, Schnee,
-Wasser/Fluss, Klippen, siehe unten):
+Eleven maps probed (attach log), six of them checked visually with screenshots (desert, snow,
+water/river, cliffs, see below):
 
-| Karte | Zellen (spielbar) | Chunks | Blend-Zellen | 3-way (Diagonal-Mismatch) | Wasser-Batches | Attach | GPU |
+| Map | Cells (playable) | Chunks | Blend cells | 3-way (diagonal mismatch) | Water batches | Attach | GPU |
 |---|---|---|---|---|---|---|---|
-| Alpine Assault | 239×259 | 156 | 26.630 | 370 (4) | 0 | 131–168 ms | 39,4 MiB |
-| Bombardment Beach | 275×275 | 169 | 20.831 | 406 (0) | 1 | 167 ms | 54,4 MiB |
-| FloodedPlains | 300×300 | 144 | 23.571 | 1.133 (4) | 1 (Fluss, animiert) | 182–204 ms | 33,4 MiB |
-| Bitter Winter | 240×320 | 180 | 25.920 | 328 (1) | 1 (See) | 161–211 ms | 46,8 MiB |
-| Dark Mountain | 376×370 | 289 | 18.772 | 539 (6) | 1 | 274 ms | 63,1 MiB |
-| Fortress Avalanche | 418×413 | 289 | 25.629 | 185 (0) | 1 | 204–272 ms | 76,6 MiB |
+| Alpine Assault | 239×259 | 156 | 26,630 | 370 (4) | 0 | 131–168 ms | 39.4 MiB |
+| Bombardment Beach | 275×275 | 169 | 20,831 | 406 (0) | 1 | 167 ms | 54.4 MiB |
+| FloodedPlains | 300×300 | 144 | 23,571 | 1,133 (4) | 1 (river, animated) | 182–204 ms | 33.4 MiB |
+| Bitter Winter | 240×320 | 180 | 25,920 | 328 (1) | 1 (lake) | 161–211 ms | 46.8 MiB |
+| Dark Mountain | 376×370 | 289 | 18,772 | 539 (6) | 1 | 274 ms | 63.1 MiB |
+| Fortress Avalanche | 418×413 | 289 | 25,629 | 185 (0) | 1 | 204–272 ms | 76.6 MiB |
 
-Alle Werte deutlich unter dem Budget von ~2 s Attach-Zeit für eine Karte der 150er-Klasse.
-Per-Frame-CPU (`CNCNEW_TERRAIN_PROFILE=1`, eigene `Stopwatch` um `Update`, Fortress Avalanche,
-größte sondierte Karte, 900 Frames Autoplay): **0,266 ms/Frame** im Mittel, unter dem
-1-ms-Budget. Determinismus: zwei unabhängige Läufe derselben Kamera-/Kartenkombination liefern
-byteidentische Screenshot-SHA-256 (`CFF6C66C4708683A…` zweimal, Fortress Avalanche).
+All values clearly below the budget of ~2 s attach time for a map of the 150 class.
+Per-frame CPU (`CNCNEW_TERRAIN_PROFILE=1`, own `Stopwatch` around `Update`, Fortress Avalanche,
+largest probed map, 900 frames autoplay): **0.266 ms/frame** on average, below the
+1 ms budget. Determinism: two independent runs of the same camera/map combination yield
+byte-identical screenshot SHA-256 (`CFF6C66C4708683A…` twice, Fortress Avalanche).
 
-`dotnet build CnCNew.slnx`: 21 Warnungen in dieser Messung (Solution-Build), davon die zehn
-bekannten `NU1901`/`NU1903` aus den Stride-4.3-Buildwerkzeugen; die übrigen elf sind
-`AssetCompiler`/`YamlAssemblyRegistry`-Hinweise des Stride-Content-Builds zu anderen Assemblies
-(`CnCNew.W3D`, `CnCNew.Ui`, `CnCNew.Simulation`, …) und erscheinen nur beim Solution-Build, nicht
-beim Projekt-Build von `src/CnCNew.Client.Stride` allein (dort weiterhin genau 10 Warnungen). Sie
-entstehen unabhängig von den Änderungen dieses Layers (keine der geänderten Dateien berührt den
-Content-Build) und sind vermutlich auf zeitgleiche Arbeit anderer Layer-Pakete in ihren eigenen
-Worktrees zurückzuführen; zu klären beim Zusammenführen aller Pakete, nicht in dieser Phase.
+`dotnet build CnCNew.slnx`: 21 warnings in this measurement (solution build), of which the ten
+known `NU1901`/`NU1903` from the Stride 4.3 build tools; the remaining eleven are
+`AssetCompiler`/`YamlAssemblyRegistry` notes of the Stride content build about other assemblies
+(`CnCNew.W3D`, `CnCNew.Ui`, `CnCNew.Simulation`, …) and appear only in the solution build, not
+in the project build of `src/CnCNew.Client.Stride` alone (there still exactly 10 warnings). They
+arise independently of the changes of this layer (none of the changed files touches the
+content build) and are presumably due to simultaneous work of other layer packages in their own
+worktrees; to be clarified when merging all packages, not in this phase.
 
-## Screenshots (Sichtprüfung)
+## Screenshots (visual check)
 
-Aufgenommen mit `--smoke-test --capture` bei verschiedenen Kamerawinkeln (Pitch 15°–89°, Höhe
-400–20.000, mehrere Zoomstufen) und, wo zur Sichtprüfung nötig, `CNCNEW_TERRAIN_REVEAL=1`:
+Taken with `--smoke-test --capture` at different camera angles (pitch 15°–89°, height
+400–20,000, several zoom levels) and, where needed for the visual check, `CNCNEW_TERRAIN_REVEAL=1`:
 
-- **Klippen/Fels**: Alpine Assault (Felswand mit Schnee-Überzug, weicher Blend zur Wiese),
-  Fortress Avalanche (zwei schneebedeckte Klippen in Schrägansicht mit Himmel, keine sichtbaren
-  Chunk-Nähte trotz Blickfeld über mehrere der 289 Chunks).
-- **Wüste**: Bombardment Beach (rissige Sandtextur, weicher Übergang zu einem helleren Sandfleck).
-- **Schnee**: Bitter Winter (zwei Schneevarianten im Blend, Übergang ohne Kante).
-- **Wasser**: FloodedPlains (Fluss, Wellen-Textur, Scroll-Animation zwischen Frame 1 und 600
-  sichtbar verschoben, saubere Uferlinie in Schrägansicht ohne Z-Fighting), Bitter Winter (See mit
-  unregelmäßiger Küstenlinie gegen Schnee).
-- **Fog/Shroud**: Alpine Assault Frame 1 ohne `REVEAL` vollständig schwarz (siehe Einschränkung
-  oben), Frame 1800 mit `--autoplay` zeigt aufgedeckten Bereich um die Startposition mit weichem
-  Rand zur Shroud-Grenze.
-- **Minimap**: `CNCNEW_TERRAIN_DUMP` liefert `terrain.png` (Draufsicht, Nord oben) und
-  `minimap.png` (mit weißem Kamera-Footprint-Rechteck) für Alpine Assault, deckungsgleich mit der
-  Draufsicht-Aufnahme derselben Karte.
+- **Cliffs/rock**: Alpine Assault (rock face with snow cover, soft blend to the meadow),
+  Fortress Avalanche (two snow-covered cliffs in an oblique view with sky, no visible
+  chunk seams despite a field of view over several of the 289 chunks).
+- **Desert**: Bombardment Beach (cracked sand texture, soft transition to a lighter sand patch).
+- **Snow**: Bitter Winter (two snow variants in the blend, transition without an edge).
+- **Water**: FloodedPlains (river, wave texture, scroll animation visibly shifted between frame 1 and 600,
+  clean shoreline in an oblique view without Z-fighting), Bitter Winter (lake with
+  irregular coastline against snow).
+- **Fog/Shroud**: Alpine Assault frame 1 without `REVEAL` completely black (see the limitation
+  above), frame 1800 with `--autoplay` shows a revealed area around the start position with a soft
+  edge to the shroud border.
+- **Minimap**: `CNCNEW_TERRAIN_DUMP` yields `terrain.png` (top view, north up) and
+  `minimap.png` (with a white camera footprint rectangle) for Alpine Assault, congruent with the
+  top-view capture of the same map.
 
-Screenshots lagen im Scratchpad der Session (`…/scratchpad/s1/`), nicht im Repository.
+Screenshots were in the scratchpad of the session (`…/scratchpad/s1/`), not in the repository.
 
-## Bekannte Grenzen
+## Known limits
 
-- `WaterAppearance.TransparentWaterDepth` wird nicht ausgewertet; Wasserdeckkraft ist konstant.
-- `WaterAppearance.AdditiveBlending == true` ist im Code vorgesehen, aber an keiner der
-  sondierten Karten beobachtbar und deshalb visuell ungeprüft.
-- Diagonal-Mismatches zwischen Base- und Overlay-Pass (siehe Tabelle) werden gezählt, aber nicht
-  behoben; der gemergte Mesh behält die Base-Triangulierung, das Overlay kann dadurch an der
-  Diagonale einer betroffenen Zelle leicht verzerrt interpolieren. Auf keiner geprüften Karte
-  visuell auffällig.
-- Der erste gerenderte Frame nach `Attach` zeigt vollständigen Shroud, bevor der erste
-  `Update`-Tick den Fog-Sample hochlädt (siehe Fog-Abschnitt).
-- Objektbeleuchtung (Einheiten/Gebäude) ist nicht Teil dieses Layers (seit Phase 15: `Rendering/SceneLighting`
-  mit den Objektwerten aus `GameData`, nicht aus dem `GlobalLighting`-Chunk der Karte, der übersprungen wird);
-  `FogTexture`/`FogUvScale` liegen bereit, aber niemand konsumiert sie bisher – Objekte im Nebel werden
-  nicht abgedunkelt.
-- Straßen (Karten-Straßenobjekte) zeichnet der Layer als alpha-geblendete Streifen auf dem Gelände (`docs/CLIENT-ROADS.md`); Brücken (`FLAG_BRIDGE_POINT*`) sind keine Straßen und werden hier nicht gezeichnet.
+- `WaterAppearance.TransparentWaterDepth` is not evaluated; water opacity is constant.
+- `WaterAppearance.AdditiveBlending == true` is provided for in the code, but observable on none of the
+  probed maps and therefore visually unchecked.
+- Diagonal mismatches between base and overlay pass (see the table) are counted but not
+  fixed; the merged mesh keeps the base triangulation, the overlay can thereby interpolate slightly distorted at the
+  diagonal of an affected cell. Visually conspicuous on none of the checked maps.
+- The first rendered frame after `Attach` shows complete shroud before the first
+  `Update` tick uploads the fog sample (see the fog section).
+- Object lighting (units/buildings) is not part of this layer (since Phase 15: `Rendering/SceneLighting`
+  with the object values from `GameData`, not from the `GlobalLighting` chunk of the map, which is skipped);
+  `FogTexture`/`FogUvScale` are ready, but nobody consumes them so far – objects in the fog are
+  not darkened.
+- Roads (map road objects) are drawn by the layer as alpha-blended strips on the terrain (`docs/CLIENT-ROADS.md`); bridges (`FLAG_BRIDGE_POINT*`) are not roads and are not drawn here.
