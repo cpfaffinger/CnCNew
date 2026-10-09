@@ -1,161 +1,161 @@
-# Gestufte Gebäudeübernahme (`SpecialAbilityUpdate`)
+# Staged building capture (`SpecialAbilityUpdate`)
 
-**Hinweis (9. Oktober 2026, Phase 23): historisch, 30 Hz.** Tickzahlen, Siegticks und Hashes in diesem Dokument sind bei 30 Hz und an ihrem damaligen Stand gemessen und als Referenzwerte überholt (maßgeblich: `baselines/reference-manifest.json`, seit `ea52f87` bei 60 Hz). Tickangaben gelten als Zahl von Originalbildern weiter. Oberhalb von 30 Hz wächst die Blitzphase einmal je Originalbild der Vorbereitung (4 / 4 / 4 Blitze in 2 s statt 4 / 9 / 19; in der Suite 49 / 49 / 49), und das Zudrehen rastet gegen ein Bild Drehung ein: `docs/rate-invariance/RATE-INVARIANCE-TURRETS.md` (`d923cea`, `95bcf3d`).
+**Note (9 October 2026, Phase 23): historical, 30 Hz.** Tick counts, victory ticks and hashes in this document were measured at 30 Hz and at their state at the time and are superseded as reference values (authoritative: `baselines/reference-manifest.json`, at 60 Hz since `ea52f87`). Tick figures remain valid as a number of original frames. Above 30 Hz the flash phase grows once per original frame of the preparation (4 / 4 / 4 flashes in 2 s instead of 4 / 9 / 19; in the suite 49 / 49 / 49), and the turning towards the target snaps in against one frame of rotation: `docs/rate-invariance/RATE-INVARIANCE-TURRETS.md` (`d923cea`, `95bcf3d`).
 
-Stand: 4. Oktober 2026. Betrifft `CnCNew.Simulation` (`Modules/BuiltIn/SpecialAbilityStaging.cs`, `World/SimulationWorld.PowerAndCapture.cs`),
-`CnCNew.Presentation` (`Objects/CaptureConditions.cs`) und das Demo-Szenario `capture-building` (`docs/DEMO-SCENARIOS.md`).
+As of: 4 October 2026. Concerns `CnCNew.Simulation` (`Modules/BuiltIn/SpecialAbilityStaging.cs`, `World/SimulationWorld.PowerAndCapture.cs`),
+`CnCNew.Presentation` (`Objects/CaptureConditions.cs`) and the demo scenario `capture-building` (`docs/DEMO-SCENARIOS.md`).
 
-## 1. Befund und Ziel
+## 1. Finding and goal
 
-Die erste Tech-Demo zeigte, dass die Übernahme eines Gebäudes sofort geschah: `CaptureCommand` rief `ExecuteCapture` auf, `SpecialAbilityUpdate` war eine
-reine Hülle mit dem Aufladetimer der Spezialkraft (`docs/GAME-RULES.md` §6d), und die Modellzustände `UNPACKING`, `RAISING_FLAG` und `PACKING` wurden nie gesetzt
-(`PresentationTool scenario-audit --name capture-building`: 3 Checks scheiterten).
+The first tech demo showed that the capture of a building happened immediately: `CaptureCommand` called `ExecuteCapture`, `SpecialAbilityUpdate` was a
+pure shell with the recharge timer of the special power (`docs/GAME-RULES.md` §6d), and the model conditions `UNPACKING`, `RAISING_FLAG` and `PACKING` were never set
+(`PresentationTool scenario-audit --name capture-building`: 3 checks failed).
 
-Im Original läuft die Fähigkeit in Stufen ab: Der Ranger geht zum Gebäude, packt aus (`UnpackTime`), hisst die Flagge (`PreparationTime`, das Gebäude blinkt in
-seiner Farbe), das Gebäude wechselt den Besitzer, wenn die Vorbereitung endet, dann packt der Ranger ein (`PackTime`). Retail-Werte des Rangers
+In the original the ability runs in stages: the Ranger walks to the building, unpacks (`UnpackTime`), raises the flag (`PreparationTime`, the building flashes in
+his colour), the building changes owner when the preparation ends, then the Ranger packs (`PackTime`). Retail values of the Ranger
 (`AmericaInfantry.ini`, `ModuleTag_19`): `StartAbilityRange = 5`, `UnpackTime = 3000`, `PreparationTime = 20000`, `PackTime = 2000` (ms), Black Lotus
 (`ChinaInfantry.ini`, `ModuleTag_09`): `StartAbilityRange = 150`, `UnpackTime = 6730`, `PreparationTime = 6000`, `PackTime = 2800`.
 
-Gestuft sind jetzt genau die beiden Übernahmekräfte `SPECIAL_INFANTRY_CAPTURE_BUILDING` (Ranger, Red Guard, Rebell, ihre Generals-Varianten) und
-`SPECIAL_BLACKLOTUS_CAPTURE_BUILDING`. Jede andere Kraft, die ein `SpecialAbilityUpdate` trägt (Flashbang, Sprengladungen, Scharfschuss, Geldraub, Hackerangriffe ...),
-verhält sich unverändert: nur der Aufladetimer, kein Handler (`UseSpecialPowerCommand` mit `UpdateModuleStartsAttack` wird dort weiterhin mit `SpecialPowerHandlerMissing` abgelehnt).
+Staged are now exactly the two capture powers `SPECIAL_INFANTRY_CAPTURE_BUILDING` (Ranger, Red Guard, Rebel, their Generals variants) and
+`SPECIAL_BLACKLOTUS_CAPTURE_BUILDING`. Every other power that carries a `SpecialAbilityUpdate` (flashbang, demo charges, sniper shot, cash theft, hacker attacks ...)
+behaves unchanged: only the recharge timer, no handler (`UseSpecialPowerCommand` with `UpdateModuleStartsAttack` is still rejected there with `SpecialPowerHandlerMissing`).
 
-## 2. Quellen (gelesen, neu geschrieben)
+## 2. Sources (read, rewritten)
 
-Alle Verweise: `references/ea-generals-zero-hour/GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/SpecialAbilityUpdate.cpp` und `.../Include/GameLogic/Module/SpecialAbilityUpdate.h`.
+All references: `references/ea-generals-zero-hour/GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/SpecialAbilityUpdate.cpp` and `.../Include/GameLogic/Module/SpecialAbilityUpdate.h`.
 
-| Reimplementierung | Original |
+| Reimplementation | Original |
 | --- | --- |
-| `SpecialAbilityUpdate.Step` | `SpecialAbilityUpdate::update` (Reihenfolge der Abbrüche, Phasenwahl) |
-| `Begin` / `Initiate` | `initiateIntentToDoSpecialPower` (Ziel merken, `aiIdle`, Packzustand `PACKED`, bei `UnpackTime = 0` `UNPACKED`, andere Fähigkeiten desselben Objekts beenden) |
+| `SpecialAbilityUpdate.Step` | `SpecialAbilityUpdate::update` (order of the aborts, choice of phase) |
+| `Begin` / `Initiate` | `initiateIntentToDoSpecialPower` (remember the target, `aiIdle`, pack state `PACKED`, with `UnpackTime = 0` `UNPACKED`, end other abilities of the same object) |
 | `HandlePacking`, `NeedToPack/Unpack`, `StartUnpacking/StartPacking` | `handlePackingProcessing`, `needToPack`, `needToUnpack`, `startUnpacking`, `startPacking` |
-| `IsWithinStartRange`, `WithinSpheres` | `isWithinStartAbilityRange` (Abstand der Begrenzungskugeln, `FROM_BOUNDINGSPHERE_2D`; `PartitionManager.cpp` `distCalcProc_BoundaryAndBoundary`) |
+| `IsWithinStartRange`, `WithinSpheres` | `isWithinStartAbilityRange` (distance of the bounding spheres, `FROM_BOUNDINGSPHERE_2D`; `PartitionManager.cpp` `distCalcProc_BoundaryAndBoundary`) |
 | `ApproachTarget` | `approachTarget` (`aiMoveToObject`) |
 | `TurnToward` | `needToFace`, `startFacing`, `isFacing` (`aiFaceObject`) |
-| `StartPreparation` | `startPreparation` (Zweige `SPECIAL_INFANTRY_CAPTURE_BUILDING` und `SPECIAL_BLACKLOTUS_CAPTURE_BUILDING`) |
-| `ContinuePreparation` | `continuePreparation` (Abbruchreichweite, Ziel weg, Ziel verbündet, Aufladen des Infanteriefalls jeden Tick) |
-| `TriggerEffect` | `triggerAbilityEffect` (Erfahrung, Garnisonsfall, `defect`, Aufladen des Black Lotus) |
+| `StartPreparation` | `startPreparation` (branches `SPECIAL_INFANTRY_CAPTURE_BUILDING` and `SPECIAL_BLACKLOTUS_CAPTURE_BUILDING`) |
+| `ContinuePreparation` | `continuePreparation` (abort range, target gone, target allied, recharging of the infantry case every tick) |
+| `TriggerEffect` | `triggerAbilityEffect` (experience, garrison case, `defect`, recharging of the Black Lotus) |
 | `EndPreparation`, `FinishAbility`, `Exit` | `endPreparation`, `finishAbility`, `onExit` |
-| `StagedCaptureRules.CanCapture` | `ActionManager::canCaptureBuilding` (reduziert, wie bisher) |
+| `StagedCaptureRules.CanCapture` | `ActionManager::canCaptureBuilding` (reduced, as before) |
 
-## 3. Ablauf in der Simulation
+## 3. Sequence in the simulation
 
-`SpecialAbilityUpdate` ist jetzt ein `IUpdateModule` und ein `ISpecialPowerHandler`. Es schläft (`SleepForever`), bis `Begin` es weckt, und läuft dann jeden Tick:
+`SpecialAbilityUpdate` is now an `IUpdateModule` and an `ISpecialPowerHandler`. It sleeps (`SleepForever`) until `Begin` wakes it, and then runs every tick:
 
-| Stufe (`AbilityStage`) | Dauer | Inhalt |
+| Stage (`AbilityStage`) | Duration | Content |
 | --- | --- | --- |
-| `Approaching` | bis in Reichweite | Ziel liegt außerhalb von `StartAbilityRange`: `OrderMove` zum Gebäude (nicht vom Spieler, `ai.LastCommandFromPlayer = false`). Sobald die Kugeln nah genug sind, hält die Einheit an und dreht sich zum Ziel (Drehrate des Locomotors; ohne Locomotor sofort). |
-| `Unpacking` | `UnpackTime` | `_packState = Unpacking`; danach `Unpacked`. |
-| `Preparing` | `PreparationTime` | Die Aufladung der Kraft beginnt (`Trigger`), `USING_ABILITY` wird gesetzt, die Einheit steht. Beim Infanteriefall startet jeder Tick die Aufladung neu (die 15 s zählen erst nach der Übernahme), beim Black Lotus erst im Moment der Übernahme. |
-| Übernahme | am Ende von `Preparing` | Erfahrung (`AwardXPForTriggering`); ein garnisonierbares Ziel (`GarrisonContain`) wird nur geräumt und nicht übernommen (Original: „we do not want to set a neutral building to our team if we are not in it“), sonst `IWorldServices.CaptureStructure` = das bestehende `ExecuteCapture` (Besitzerwechsel, Energie-Pool, `StructureCaptured`). |
-| `Packing` | `PackTime` | danach `FinishAbility`: Zustand und Status werden gelöscht, das Modul schläft wieder. |
+| `Approaching` | until in range | Target lies outside `StartAbilityRange`: `OrderMove` to the building (not from the player, `ai.LastCommandFromPlayer = false`). As soon as the spheres are close enough, the unit stops and turns towards the target (turn rate of the locomotor; without a locomotor immediately). |
+| `Unpacking` | `UnpackTime` | `_packState = Unpacking`; afterwards `Unpacked`. |
+| `Preparing` | `PreparationTime` | The recharge of the power begins (`Trigger`), `USING_ABILITY` is set, the unit stands. In the infantry case every tick restarts the recharge (the 15 s count only after the capture), with the Black Lotus only at the moment of the capture. |
+| Capture | at the end of `Preparing` | Experience (`AwardXPForTriggering`); a garrisonable target (`GarrisonContain`) is only cleared and not captured (original: "we do not want to set a neutral building to our team if we are not in it"), otherwise `IWorldServices.CaptureStructure` = the existing `ExecuteCapture` (change of owner, energy pool, `StructureCaptured`). |
+| `Packing` | `PackTime` | afterwards `FinishAbility`: state and status are cleared, the module sleeps again. |
 
-Dauern in Ticks (30 pro Sekunde, aufgerundet): Ranger/Red Guard/Rebell 90 / 600 / 60, Black Lotus 202 / 180 / 84. `PackUnpackVariationFactor` (im Katalog neu als `Real` getypt;
-kein Retail-Modul setzt ihn) würde Entpack- und Packzeit mit `world.LogicRandom` streuen, gezogen wird nur bei einem Faktor über 0.
+Durations in ticks (30 per second, rounded up): Ranger/Red Guard/Rebel 90 / 600 / 60, Black Lotus 202 / 180 / 84. `PackUnpackVariationFactor` (newly typed as `Real` in the catalog;
+no retail module sets it) would scatter unpack and pack time with `world.LogicRandom`; a draw happens only with a factor above 0.
 
-Reichweite: `StartAbilityRange` gilt zwischen den Begrenzungskreisen beider Objekte. Mit `ApproachRequiresLOS` (Standard) sucht das Original das Ziel anschließend in
-`StartAbilityRange - 2,5` (ein Viertel Wegfindungszelle, `UNDERSIZE`); wirksam ist die kleinere Reichweite (Ranger 2,5, Black Lotus 147,5). Die Sichtlinie selbst fehlt.
-Gemessen: Ein Ranger bleibt vor einer `ChinaBarracks` bei 66,3 Einheiten Mittelpunktabstand stehen (Begrenzungskreis der Kaserne etwa 56,8, des Rangers 7). Endet eine
-Anreise, ohne die Reichweite zu erreichen (das Raster lässt die Einheit nicht näher), gilt ein Rest von zwei Zellen als angekommen; mehr als sechs ergebnislose Anreisebefehle
-beenden die Fähigkeit (das Original ordert die Anreise ewig neu).
+Range: `StartAbilityRange` applies between the bounding circles of both objects. With `ApproachRequiresLOS` (default) the original then looks for the target in
+`StartAbilityRange - 2.5` (a quarter of a pathfinding cell, `UNDERSIZE`); effective is the smaller range (Ranger 2.5, Black Lotus 147.5). The line of sight itself is missing.
+Measured: a Ranger stops in front of a `ChinaBarracks` at 66.3 units centre distance (bounding circle of the barracks about 56.8, of the Ranger 7). If an
+approach ends without reaching the range (the grid does not let the unit get closer), a remainder of two cells counts as arrived; more than six fruitless approach orders
+end the ability (the original re-orders the approach forever).
 
-### Auslöser
+### Triggers
 
-- **`CaptureCommand`** (bestehend, Replay-Format und `CommandTypes.Version` unverändert): Hat der Akteur ein gestuftes `SpecialAbilityUpdate`, entfällt die Pflicht, schon in Reichweite zu stehen.
-  Verlangt wird, dass die Kraft bereit ist (`UnpauseSpecialPowerUpgrade` angewendet, nachgeladen); sonst `SpecialPowerNotReady`. Der Befehl ruft `SpecialAbilityUpdate.Begin`. Ein
-  Akteur ohne so ein Modul behält den alten Sofortpfad (Fixtures und Tests hängen daran).
-- **`UseSpecialPowerCommand`** (Befehlsknopf, Skripte `*_USE_COMMANDBUTTON_ABILITY*`): findet jetzt den Handler (`ISpecialPowerHandler`), `Initiate` ruft `Begin`. Neu im Prüfpfad:
-  `ISpecialPowerHandler.ValidatesTarget` (Standard `true`); die Übernahme verlangt ein Objektziel, das `StagedCaptureRules.CanCapture` besteht, sonst `InvalidSpecialPowerTarget`.
-  Folge: Kampagnenskripte, die einen Ranger „einnehmen“ lassen, wurden bisher als `SpecialPowerHandlerMissing` abgelehnt und laufen jetzt wirklich.
-- **Freigabe der Kraft:** Der Ranger startet pausiert (`StartsPaused`), `Upgrade_InfantryCaptureBuilding` löst die Pause. Die Pause verlängert die Aufladung um die Pausenzeit: Ein Ranger
-  kann erst 15 s (`ReloadTime`) nach der Freigabe einnehmen. Das Szenario `capture-building` setzt deshalb `Upgrades` und `PowersReady` (siehe §6).
+- **`CaptureCommand`** (existing, replay format and `CommandTypes.Version` unchanged): if the actor has a staged `SpecialAbilityUpdate`, the obligation to already stand in range is dropped.
+  What is required is that the power is ready (`UnpauseSpecialPowerUpgrade` applied, recharged); otherwise `SpecialPowerNotReady`. The command calls `SpecialAbilityUpdate.Begin`. An
+  actor without such a module keeps the old immediate path (fixtures and tests depend on it).
+- **`UseSpecialPowerCommand`** (command button, scripts `*_USE_COMMANDBUTTON_ABILITY*`): now finds the handler (`ISpecialPowerHandler`), `Initiate` calls `Begin`. New in the check path:
+  `ISpecialPowerHandler.ValidatesTarget` (default `true`); the capture requires an object target that passes `StagedCaptureRules.CanCapture`, otherwise `InvalidSpecialPowerTarget`.
+  Consequence: campaign scripts that let a Ranger "capture" were so far rejected as `SpecialPowerHandlerMissing` and now really run.
+- **Release of the power:** the Ranger starts paused (`StartsPaused`), `Upgrade_InfantryCaptureBuilding` lifts the pause. The pause extends the recharge by the pause time: a Ranger
+  can capture only 15 s (`ReloadTime`) after the release. The scenario `capture-building` therefore sets `Upgrades` and `PowersReady` (see §6).
 
-### Abbruchregeln (`onExit`)
+### Abort rules (`onExit`)
 
-Die Fähigkeit endet sofort, ohne Einpacken, wenn
-- das Objekt tot ist oder zerstört wird,
-- der Spieler (oder ein Skript über einen Spielerbefehl) der Einheit etwas anderes befiehlt (`AIUpdateInterface.LastCommandFromPlayer`), oder sie sich nach Erreichen der Reichweite bewegt,
-- das Ziel noch existiert, aber tot ist, einem Verbündeten gehört (Besitzer gleich: „captured by a colleague“) oder getarnt und unentdeckt ist, solange die Vorbereitung läuft,
-- das `SpecialPowerModule` der Kraft fehlt.
+The ability ends immediately, without packing, if
+- the object is dead or is destroyed,
+- the player (or a script via a player command) orders the unit to do something else (`AIUpdateInterface.LastCommandFromPlayer`), or it moves after reaching the range,
+- the target still exists but is dead, belongs to an ally (owner equal: "captured by a colleague") or is stealthed and undetected, as long as the preparation runs,
+- the `SpecialPowerModule` of the power is missing.
 
-Ist das Ziel aus der Welt verschwunden (zerstört), bricht `continuePreparation` die Vorbereitung ab: Die Einheit packt (`PackTime`) und beendet dann (Original: `startPacking(false)`).
-Verlässt das Ziel während der Vorbereitung die `AbilityAbortRange` (Standard „unbegrenzt“), gilt derselbe Weg. Ein zweiter Übernahmebefehl, während einer läuft, ersetzt den Lauf.
+If the target has vanished from the world (destroyed), `continuePreparation` aborts the preparation: the unit packs (`PackTime`) and then ends (original: `startPacking(false)`).
+If the target leaves the `AbilityAbortRange` (default "unlimited") during the preparation, the same path applies. A second capture command while one is running replaces the run.
 
-## 4. Zustand und Determinismus
+## 4. State and determinism
 
-Der Zustand (`abilityActive`, Packzustand, Zähler, Ziel, Reichweite, Anreisebefehle, `nextWake`) wird **nur geschrieben, solange eine Fähigkeit läuft**; beim Laden fehlt er
-und das Modul schläft. Dadurch bleibt der Zustand aller Läufe ohne Übernahme byte-identisch: **keine** Versionssprünge (`WorldSnapshot` 8, Replay 8, `CommandTypes.Version` 11,
-`MissionSnapshot` 2). Die Quelltextregel „jedes `IUpdateModule` speichert `nextWake`“ ist erfüllt. Keine Gleitkommazahlen, kein Wandzeitbezug; der Zufallsstrom wird nur bei
-`PackUnpackVariationFactor > 0` verwendet.
+The state (`abilityActive`, pack state, counters, target, range, approach orders, `nextWake`) is **written only as long as an ability is running**; on loading it is missing
+and the module sleeps. Thereby the state of all runs without a capture stays byte-identical: **no** version bumps (`WorldSnapshot` 8, replay 8, `CommandTypes.Version` 11,
+`MissionSnapshot` 2). The source rule "every `IUpdateModule` stores `nextWake`" is fulfilled. No floating-point numbers, no reference to wall time; the random stream is used only with
+`PackUnpackVariationFactor > 0`.
 
-`baselines/compatibility.json` ist unverändert (751 Einträge): Der Katalog bekam das Feld `PackUnpackVariationFactor` (nicht in den Retail-Daten verwendet), alle übrigen gelesenen
-Felder (`StartAbilityRange`, `AbilityAbortRange`, `UnpackTime`, `PreparationTime`, `PackTime`, `NeedToFaceTarget`, `DoCaptureFX`, `AwardXPForTriggering`, `ApproachRequiresLOS`) waren bereits typisiert.
+`baselines/compatibility.json` is unchanged (751 entries): the catalog got the field `PackUnpackVariationFactor` (not used in the retail data), all other fields read
+(`StartAbilityRange`, `AbilityAbortRange`, `UnpackTime`, `PreparationTime`, `PackTime`, `NeedToFaceTarget`, `DoCaptureFX`, `AwardXPForTriggering`, `ApproachRequiresLOS`) were already typed.
 
-## 5. Darstellung
+## 5. Presentation
 
-`CnCNew.Presentation/Objects/CaptureConditions.cs` liest `SpecialAbilityUpdate.Stage` (schreibgeschützt) und setzt, aufgerufen mit einer Zeile aus `ConditionDeriver.Derive`:
-`UNPACKING` während `Unpacking`, `RAISING_FLAG` während `Preparing` (Original: `startPreparation` ersetzt `UNPACKING` durch `RAISING_FLAG`), beim Black Lotus stattdessen `FIRING_A`
-(die Hacker-Tippanimation, ebenfalls `startPreparation`), `PACKING` während `Packing`. `RAISING_FLAG` steht jetzt in `ConditionDeriver.ProducedNames`.
+`CnCNew.Presentation/Objects/CaptureConditions.cs` reads `SpecialAbilityUpdate.Stage` (read-only) and sets, called with one line from `ConditionDeriver.Derive`:
+`UNPACKING` during `Unpacking`, `RAISING_FLAG` during `Preparing` (original: `startPreparation` replaces `UNPACKING` with `RAISING_FLAG`), with the Black Lotus instead `FIRING_A`
+(the hacker typing animation, also `startPreparation`), `PACKING` during `Packing`. `RAISING_FLAG` is now in `ConditionDeriver.ProducedNames`.
 
-Nicht umgesetzt: der Ton (Entpack-/Pack-/Vorbereitungsschleife, EVA „Gebäude wird gestohlen“; das Tick-Geräusch zum Blinken ist ein eigener Auftrag),
-der Datenstrom-Spezialobjekt `BinaryDataStream` des Black Lotus und die Radar-Infiltrationsmeldung. `Stage` und `StageTicksLeft` liefern die Grundlage dafür.
+Not implemented: the sound (unpack/pack/preparation loop, EVA "building is being stolen"; the tick sound with the flashing is a brief of its own),
+the data stream special object `BinaryDataStream` of the Black Lotus and the radar infiltration message. `Stage` and `StageTicksLeft` supply the basis for that.
 
-### Blinken des Gebäudes (`DoCaptureFX`)
+### Flashing of the building (`DoCaptureFX`)
 
-Quellen (gelesen, neu geschrieben; `references/generals-game-code/GeneralsMD/Code/`): `SpecialAbilityUpdate::continuePreparation` (`GameLogic/Object/Update/SpecialAbilityUpdate.cpp`),
-`Drawable::flashAsSelected`, `Drawable::saturateRGB`, `Drawable::getSelectionColor`, `TintEnvelope::play`/`update` (`GameClient/Drawable.cpp`) und die Lichtaddition in `W3DScene.cpp`
-(Abschnitt „HANDLE THE SPECIAL DRAWABLE-LEVEL COLORING SETTINGS“ der Objektschleife von `RTS3DScene`).
+Sources (read, rewritten; `references/generals-game-code/GeneralsMD/Code/`): `SpecialAbilityUpdate::continuePreparation` (`GameLogic/Object/Update/SpecialAbilityUpdate.cpp`),
+`Drawable::flashAsSelected`, `Drawable::saturateRGB`, `Drawable::getSelectionColor`, `TintEnvelope::play`/`update` (`GameClient/Drawable.cpp`) and the light addition in `W3DScene.cpp`
+(section "HANDLE THE SPECIAL DRAWABLE-LEVEL COLORING SETTINGS" of the object loop of `RTS3DScene`).
 
-| Schicht | Umsetzung | Original |
+| Layer | Implementation | Original |
 | --- | --- | --- |
-| Simulation | `SpecialAbilityUpdate.StepCaptureFlash` meldet `SimEventKind.CaptureFlash` (`Entity` = Gebäude, `Other` = Einnehmer) | `m_captureFlashPhase` in `continuePreparation` |
-| Präsentation | `SelectionFlashTracker` (`CnCNew.Presentation/Objects/SelectionFlash.cs`): je Ereignis startet die Hüllkurve des Gebäudes neu; `DrawableInstance.FlashTint` trägt die aktuelle Farbe | `flashAsSelected(&color)`, `getSelectionColor` |
-| Farbe | Hausfarbe des Besitzers des **Einnehmers** (`TeamColors`), gesättigt mit `Farbe * Faktor - Faktor / 2` je Kanal; Faktor ist `GameData/SelectionFlashSaturationFactor` (Retail 0,5), streng gelesen (`SelectionFlashSettings.FromDefinitions`) | `getIndicatorColor`, `saturateRGB`, `m_selectionFlashSaturationFactor` |
-| Hüllkurve | 0 Anstiegs- und 4 Abklingticks: zwei Ticks voller Wert, dann 3/4, 1/2, 1/4, danach nichts (`SelectionFlashTracker.Envelope`) | `TintEnvelope::play(color, 0, 4)`, `TintEnvelope::update` einmal je 30-Hz-Frame |
-| Client | `Layers/Objects/FlashTint.cs`: Faktor `1 + 2 * Farbton` je Kanal (nie unter 0) auf der Oberflächenfarbe aller starren und gehäuteten Meshes des Drawables, als zwischengespeicherte Materialvarianten (`ModelAsset.GetTeamMaterial`/`GetSkinMaterial`, `W3dMaterialFactory.Tint`) | Addition des Farbtons auf Umgebungslicht und alle globalen Lichter dieses einen Drawables |
+| Simulation | `SpecialAbilityUpdate.StepCaptureFlash` reports `SimEventKind.CaptureFlash` (`Entity` = building, `Other` = capturer) | `m_captureFlashPhase` in `continuePreparation` |
+| Presentation | `SelectionFlashTracker` (`CnCNew.Presentation/Objects/SelectionFlash.cs`): per event the envelope of the building restarts; `DrawableInstance.FlashTint` carries the current colour | `flashAsSelected(&color)`, `getSelectionColor` |
+| Colour | House colour of the owner of the **capturer** (`TeamColors`), saturated with `colour * factor - factor / 2` per channel; the factor is `GameData/SelectionFlashSaturationFactor` (retail 0.5), read strictly (`SelectionFlashSettings.FromDefinitions`) | `getIndicatorColor`, `saturateRGB`, `m_selectionFlashSaturationFactor` |
+| Envelope | 0 attack and 4 decay ticks: two ticks of full value, then 3/4, 1/2, 1/4, after that nothing (`SelectionFlashTracker.Envelope`) | `TintEnvelope::play(color, 0, 4)`, `TintEnvelope::update` once per 30 Hz frame |
+| Client | `Layers/Objects/FlashTint.cs`: factor `1 + 2 * tint` per channel (never below 0) on the surface colour of all rigid and skinned meshes of the drawable, as cached material variants (`ModelAsset.GetTeamMaterial`/`GetSkinMaterial`, `W3dMaterialFactory.Tint`) | Addition of the tint to the ambient light and all global lights of this one drawable |
 
-Der Farbton ist vorzeichenbehaftet: Bei Faktor 0,5 wird aus Weiß (0,25; 0,25; 0,25), aus reinem Rot (0,25; -0,25; -0,25) – der Blitz hebt also die Hausfarbe an und dunkelt die
-übrigen Kanäle ab. Geister (erinnerte Gebäude im Nebel) blinken nicht. Ohne `FrameProjectorOptions.SelectionFlash` (Aufrufer ohne GameData, z. B. synthetische Tests) wird
-ausdrücklich kein Farbton projiziert; `LiveGame` setzt die Einstellung immer. Der Farbton schaltet mit dem Tick, nicht mit dem interpolierten Frame (das Original aktualisiert die
-Hüllkurve ebenfalls je Logikframe).
+The tint is signed: with factor 0.5 white becomes (0.25; 0.25; 0.25), pure red (0.25; -0.25; -0.25) – the flash therefore raises the house colour and darkens the
+other channels. Ghosts (remembered buildings in the fog) do not flash. Without `FrameProjectorOptions.SelectionFlash` (callers without GameData, e.g. synthetic tests)
+explicitly no tint is projected; `LiveGame` always sets the setting. The tint switches with the tick, not with the interpolated frame (the original also updates the
+envelope per logic frame).
 
-**Abweichung vom Original (bewusst, Näherung):** Die Szenenlichter sind hier allen Objekten gemeinsam, ein Farbton je Drawable lässt sich nicht auf die Lichter addieren. Der Client
-multipliziert deshalb die Oberflächenfarbe; die Verstärkung 2 ist aus typischen Lichtwerten (Umgebung etwa 0,4, Sonne etwa 0,8) abgeleitet, nicht gemessen. Schattenseiten hellt das
-Original relativ stärker auf als hier. Der Faktor ist auf 1/32 gerundet, damit die Materialvarianten (vier Stufen je Hausfarbe und Material) zwischengespeichert werden können.
+**Deviation from the original (deliberate, approximation):** the scene lights are common to all objects here, a tint per drawable cannot be added to the lights. The client
+therefore multiplies the surface colour; the gain 2 is derived from typical light values (ambient about 0.4, sun about 0.8), not measured. The original brightens shadow sides
+relatively more than here. The factor is rounded to 1/32 so that the material variants (four levels per house colour and material) can be cached.
 
-Prüfhilfen: Die Zeile `object layer:` der Client-Rauchtests zählt `tinted=` (Modellteile mit Farbton im letzten Frame) und `tintedTotal=` (seit Start).
-`CNCNEW_OBJECT_FLASH=r,g,b` (z. B. `-0.25,-0.25,0.25`) zeichnet alle Objekte dauerhaft mit diesem Farbton, weil ein echter Blitz nur fünf Ticks dauert.
+Check aids: the line `object layer:` of the client smoke tests counts `tinted=` (model parts with a tint in the last frame) and `tintedTotal=` (since the start).
+`CNCNEW_OBJECT_FLASH=r,g,b` (e.g. `-0.25,-0.25,0.25`) draws all objects permanently with this tint, because a real flash lasts only five ticks.
 
-## 6. Szenario `capture-building`
+## 6. Scenario `capture-building`
 
-`DemoScenario` hat zwei neue optionale Eigenschaften: `Upgrades` (Spielerupgrades des Spielers 1 von Anfang an, hier `Upgrade_InfantryCaptureBuilding`) und `PowersReady`
-(die Spezialkräfte der gesetzten Einheiten sind aufgeladen, statt 15 s nach dem Erscheinen). `LiveScenario.Populate` wendet sie nach dem Platzieren an.
+`DemoScenario` has two new optional properties: `Upgrades` (player upgrades of player 1 from the start, here `Upgrade_InfantryCaptureBuilding`) and `PowersReady`
+(the special powers of the placed units are charged, instead of 15 s after appearing). `LiveScenario.Populate` applies them after the placing.
 
-## 7. Messwerte (4. Oktober 2026)
+## 7. Measurements (4 October 2026)
 
-`PresentationTool scenario-audit --name capture-building`: **alle Checks bestehen.** Ranger geht ab Tick 12, bleibt bei x = 83,7 stehen (Kaserne bei 150), `UNPACKING` ab Tick 139 (90 Ticks),
-`RAISING_FLAG` ab Tick 229 (600 Ticks), Übernahme Tick 828, `PACKING` ab Tick 829 (60 Ticks), Ende Tick 889; die Kaserne gehört am Ende Spieler 1.
-Blinken (gemessen mit demselben Audit): 49 `CaptureFlash`-Ereignisse zwischen Tick 313 und 822, alle innerhalb `RAISING_FLAG`; Abstände von 35 Ticks am Anfang bis 6 Ticks am Ende; in 49 von 49
-Fällen trägt das Drawable der Kaserne im folgenden projizierten Frame den Spitzenwert (-0,25; -0,25; 0,25) der Hausfarbe des Rangers, insgesamt 245 gefärbte Frames, keiner ohne Blitz,
-der Ranger selbst nie gefärbt. Das Audit schlägt fehl, wenn eines davon nicht gilt.
+`PresentationTool scenario-audit --name capture-building`: **all checks pass.** The Ranger walks from tick 12, stops at x = 83.7 (barracks at 150), `UNPACKING` from tick 139 (90 ticks),
+`RAISING_FLAG` from tick 229 (600 ticks), capture tick 828, `PACKING` from tick 829 (60 ticks), end tick 889; the barracks belongs to player 1 at the end.
+Flashing (measured with the same audit): 49 `CaptureFlash` events between tick 313 and 822, all within `RAISING_FLAG`; intervals from 35 ticks at the beginning to 6 ticks at the end; in 49 of 49
+cases the drawable of the barracks carries in the following projected frame the peak value (-0.25; -0.25; 0.25) of the house colour of the Ranger, in total 245 tinted frames, none without a flash,
+the Ranger himself never tinted. The audit fails if one of these does not hold.
 
-Tests: `Tests.StagedCapture.cs` (Simulation, synthetisch: Stufenfolge und Dauern, Drehen zum Ziel, Black Lotus aus der Ferne, Abbruch bei zerstörtem Ziel / Spielerbefehl in der
-Anreise und im Auspacken / totem Einnehmer / bereits übernommenem Ziel, Zielprüfung der Kraft, Ersetzen durch einen zweiten Befehl, Befehlsknopfweg, Snapshot in jeder Stufe, zwei Läufe);
-`RealStagedCapture` (Retail: Ranger, Red Guard, Rebell auf `ChinaBarracks` mit 90/600/60 Ticks, Black Lotus auf `AmericaBarracks` mit 202/180/84); `CaptureConditionTests.cs`
-(Darstellung); `CaptureFlashTests.cs` (Darstellung, synthetisch: Hüllkurve, Sättigung, Farbe des Einnehmers auf dem Gebäude, Abklingen auf null, Neustart durch den nächsten Blitz und
-mitten im Abklingen, kein Farbton auf anderen Drawables und ohne Einstellung). Unverändert: Retail-Referenzmatch (Sieger FactionGLA, Tick 13.890, Endhash `76F22CB0CA79BEEF`, Kette `35F54CAD40A43E6E`) und Stresstest (`56882F763EABEF67`, Kette `B8E663493F2C73D5`).
+Tests: `Tests.StagedCapture.cs` (simulation, synthetic: stage sequence and durations, turning towards the target, Black Lotus from a distance, abort on a destroyed target / player command during the
+approach and during unpacking / dead capturer / already captured target, target check of the power, replacement by a second command, command button path, snapshot in every stage, two runs);
+`RealStagedCapture` (retail: Ranger, Red Guard, Rebel on `ChinaBarracks` with 90/600/60 ticks, Black Lotus on `AmericaBarracks` with 202/180/84); `CaptureConditionTests.cs`
+(presentation); `CaptureFlashTests.cs` (presentation, synthetic: envelope, saturation, colour of the capturer on the building, decay to zero, restart by the next flash and
+in the middle of the decay, no tint on other drawables and without the setting). Unchanged: retail reference match (winner FactionGLA, tick 13,890, final hash `76F22CB0CA79BEEF`, chain `35F54CAD40A43E6E`) and stress test (`56882F763EABEF67`, chain `B8E663493F2C73D5`).
 
-## 8. Bekannte Grenzen
+## 8. Known limits
 
-- Gestuft sind nur die zwei Übernahmekräfte; die übrigen `SpecialAbilityUpdate`-Fähigkeiten (Sprengladungen, Scharfschuss, Hackerangriffe, Geldraub ...) bleiben Aufladehüllen.
-- Fallen (`BOOBY_TRAPPED`, `checkAndDetonateBoobyTrap`), die Skill-/Rangpunkte (`SkillPointsForTriggering`), `FleeRangeAfterCompletion`, Sichtlinie der Annäherung und die Pflicht zur Kollision
-  bei Reichweiten unter 2,5 fehlen; das Original-Radar-/EVA-Signal fehlt.
-- Das Blinken ist bis zum `RenderFrame` geprüft (Tests, Szenario-Audit). **Nicht belegt ist das Bild:** Ob Helligkeit, Farbstich und Tempo des Blinkens im Client dem Original
-  entsprechen, muss ein Mensch ansehen (`scripts\demo-capture-building.ps1`, Blinken zwischen Tick 313 und 822, zuletzt fast durchgehend). Maschinell gesehen wurde nur der
-  Schalter `CNCNEW_OBJECT_FLASH` an Bäumen (deutlich umgefärbt); ein Bild der blinkenden Kaserne gibt es nicht, weil die Kamera der fensterlosen Szenenläufe
-  (`--scenario ... --smoke-test --filmstrip`) im geprüften Stand aus der Szene herauswandert (Tick 5 noch am Schauplatz, Tick 100 in der Kartenecke; nicht Teil dieser Änderung, nicht behoben).
-- Die Lichtaddition des Originals ist durch einen Faktor auf der Oberflächenfarbe angenähert (siehe §5); gehäutete Meshes blinken mit, tragen dabei aber wie bisher keine Hausfarbtextur.
-- Erkannt wird ein fremder Befehl nur über `AIUpdateInterface.LastCommandFromPlayer` (Bewegen, Andocken, Betreten, Bauen, Evakuieren). Ein reiner Feuerbefehl (`FireWeaponCommand`) fasst die KI nicht an und wurde nicht auf einen Abbruch geprüft.
-- Die Begrenzungskugel ist hier der 2D-Begrenzungskreis (`BoundingCircleRadius`); das Original rechnet mit der 3D-Kugel inklusive Höhe und lässt die Einheit daher etwas früher anhalten.
-- Das Anhalten in der gemessenen Entfernung (Ranger etwa 66 Einheiten vom Mittelpunkt einer Kaserne, ungefähr 20 vor der Wand) ist die Folge der Kugelregel. Ob es dem Original
-  entspricht, kann nur eine Sichtprüfung durch einen Menschen klären.
+- Staged are only the two capture powers; the other `SpecialAbilityUpdate` abilities (demo charges, sniper shot, hacker attacks, cash theft ...) remain recharge shells.
+- Booby traps (`BOOBY_TRAPPED`, `checkAndDetonateBoobyTrap`), the skill/rank points (`SkillPointsForTriggering`), `FleeRangeAfterCompletion`, line of sight of the approach and the obligation to collide
+  at ranges below 2.5 are missing; the original radar/EVA signal is missing.
+- The flashing is checked up to the `RenderFrame` (tests, scenario audit). **Not verified is the picture:** whether brightness, colour cast and tempo of the flashing in the client correspond to the
+  original has to be looked at by a human (`scripts\demo-capture-building.ps1`, flashing between tick 313 and 822, at the end almost continuous). Seen by machine was only the
+  switch `CNCNEW_OBJECT_FLASH` on trees (clearly recoloured); there is no picture of the flashing barracks, because the camera of the windowless scene runs
+  (`--scenario ... --smoke-test --filmstrip`) in the checked state wanders out of the scene (tick 5 still at the location, tick 100 in the map corner; not part of this change, not fixed).
+- The light addition of the original is approximated by a factor on the surface colour (see §5); skinned meshes flash along, but as before carry no house colour texture while doing so.
+- A foreign command is detected only via `AIUpdateInterface.LastCommandFromPlayer` (move, dock, enter, build, evacuate). A pure fire command (`FireWeaponCommand`) does not touch the AI and was not checked for an abort.
+- The bounding sphere here is the 2D bounding circle (`BoundingCircleRadius`); the original computes with the 3D sphere including height and therefore lets the unit stop a little earlier.
+- The stopping at the measured distance (Ranger about 66 units from the centre of a barracks, roughly 20 in front of the wall) is the consequence of the sphere rule. Whether it corresponds to the
+  original can only be clarified by a visual check by a human.
