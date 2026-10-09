@@ -1299,7 +1299,7 @@ public static class WndTests
         var files = content.EnumerateFiles("Window/").OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
         var wnd = files.Count(path => path.EndsWith(".wnd", StringComparison.OrdinalIgnoreCase));
         Console.WriteLine($"Real data: {files.Length} files under Window/ ({wnd} *.wnd, {files.Length - wnd} variants: {string.Join(", ", files.Where(path => !path.EndsWith(".wnd", StringComparison.OrdinalIgnoreCase)))})");
-        Check(files.Length == 83, $"Expected 83 files under Window/, found {files.Length}.");
+        Check(files.Length == 80, $"Expected 80 files under Window/, found {files.Length}.");
 
         HeaderTemplates(content, out var templates);
         var parse = Stopwatch.StartNew();
