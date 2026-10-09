@@ -39,6 +39,9 @@ try
 }
 finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
 
+// Options: --game-dir <directory> additionally checks the real master installation (reads only).
+await InstallTests.RunAsync(args);
+
 static byte[] CreateDds(byte fill)
 {
     var data = Enumerable.Repeat(fill, 136).Select(value => (byte)value).ToArray(); "DDS "u8.CopyTo(data);
