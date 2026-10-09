@@ -1,218 +1,218 @@
-# Installation: aus der eigenen Steam-Installation ein spielbares Verzeichnis
+# Installation: from your own Steam installation to a playable directory
 
-Stand: 9. Oktober 2026 (alle Zahlen an diesem Tag auf einem Rechner gemessen; neu messen)
+As of: 9 October 2026 (all numbers measured on that day on one machine; re-measure)
 
-Das Repository enthält nur selbst geschriebenen Code. Spieldateien und alles, was aus ihnen exportiert
-wird, liegen nie im Repository. Ein spielbares Verzeichnis entsteht auf dem Rechner des Nutzers: der
-**Patcher** liest die eigene Steam-Installation von *Command & Conquer Generals Zero Hour* und legt an
-anderer Stelle ein neues Spielverzeichnis an.
+The repository contains only self-written code. Game files and everything that is exported from
+them never lie in the repository. A playable directory is created on the user's machine: the
+**patcher** reads the user's own Steam installation of *Command & Conquer Generals Zero Hour* and creates a
+new game directory in another place.
 
-Rechtlicher Rahmen: Der Nutzer stellt sein eigenes, bei Steam erworbenes Spiel bereit; dieses Projekt
-verteilt keine Spieldateien und keine daraus erzeugten Dateien. Näheres steht in `LICENSE` und `NOTICE`.
+Legal framework: the user provides their own game, purchased on Steam; this project
+distributes no game files and no files generated from them. Details are in `LICENSE` and `NOTICE`.
 
-## Was der Patcher tut – und was nie
+## What the patcher does – and what it never does
 
-Er tut:
+It does:
 
-1. die Steam-Installation finden (oder `-GameDir` nehmen) und **Datei für Datei** gegen die eingecheckte
-   Masterbeschreibung `baselines/steam-master.json` prüfen (Pfad, Größe, SHA-256);
-2. nur bei vollständiger Übereinstimmung den Runtime-Bestand nach `<Ziel>\content` exportieren
-   (`RuntimeContentImporter`, Schema 2): **kein `.big`-Archiv wird übernommen, jede Datei liegt einzeln im
-   Verzeichnis**;
-3. den Export prüfen (jede Datei gegen Größe und SHA-256 des Manifests) und das erzeugte
-   `content-manifest.json` mit dem in der Masterbeschreibung festgehaltenen vergleichen (Bytezahl,
-   SHA-256, Dateizahl) – „der Export ist genau der bekannte“ ist ein einziger Vergleich;
-4. `<Ziel>\install.json` schreiben, den Client nach `<Ziel>\bin` veröffentlichen und
-   `<Ziel>\Start-CnCNew.cmd` anlegen.
+1. find the Steam installation (or take `-GameDir`) and check it **file by file** against the checked-in
+   master description `baselines/steam-master.json` (path, size, SHA-256);
+2. only on a complete match, export the runtime content to `<target>\content`
+   (`RuntimeContentImporter`, schema 2): **no `.big` archive is taken over, every file lies individually in the
+   directory**;
+3. check the export (every file against size and SHA-256 of the manifest) and compare the generated
+   `content-manifest.json` with the one recorded in the master description (byte count,
+   SHA-256, file count) – "the export is exactly the known one" is a single comparison;
+4. write `<target>\install.json`, publish the client to `<target>\bin` and
+   create `<target>\Start-CnCNew.cmd`.
 
-Er tut nie:
+It never does:
 
-- in das Steam-Verzeichnis schreiben, dort etwas umbenennen oder löschen (alle Quelldateien werden nur
-  lesend mit `FileShare.Read` geöffnet; ein Test vergleicht Dateiliste, Größen und Zeitstempel der Quelle
-  vor und nach Installation, Reparatur und Deinstallation);
-- eine andere Version, Sprache oder eine gemoddete Installation stillschweigend annehmen – es gibt
-  **keinen** Schalter, der die Prüfung abschaltet;
-- in ein Ziel schreiben, das im Spielverzeichnis liegt, es enthält oder nicht leer und nicht unsere eigene
-  frühere Installation ist.
+- write into the Steam directory, rename or delete anything there (all source files are opened
+  read-only with `FileShare.Read`; a test compares file list, sizes and timestamps of the source
+  before and after installation, repair and uninstallation);
+- silently accept another version, language or a modded installation – there is
+  **no** switch that turns the check off;
+- write into a target that lies inside the game directory, contains it, or is not empty and not our own
+  earlier installation.
 
-## Voraussetzungen
+## Prerequisites
 
-- Windows (Client: Direct3D 11) und PowerShell 7 (`pwsh`).
-- Das Spiel bei Steam besitzen und installiert haben: Steam-App **2732960**, **englische** Sprachfassung,
-  frische Installation ohne Mods. Das ist die eine bekannte Masterversion: 350 Dateien, 2.939.721.100 Byte.
-- Das .NET SDK aus `global.json`: **10.0.401** (`rollForward: latestFeature`). Das SDK wird gebraucht, weil
-  Werkzeug und Client aus dem Quelltext gebaut werden.
-- Rund 2,9 GB freier Platz am Ziel (gemessen: `content` 2.763.982.961 Byte in 25.609 Dateien, `bin`
-  67.793.031 Byte in 172 Dateien); während einer Reparatur kurzzeitig das Doppelte von `content`, weil der
-  neue Bestand neben dem alten entsteht und erst nach erfolgreicher Prüfung an seine Stelle tritt.
+- Windows (client: Direct3D 11) and PowerShell 7 (`pwsh`).
+- Owning the game on Steam and having it installed: Steam app **2732960**, **English** language version,
+  fresh installation without mods. That is the one known master version: 350 files, 2,939,721,100 bytes.
+- The .NET SDK from `global.json`: **10.0.401** (`rollForward: latestFeature`). The SDK is needed because
+  tool and client are built from the source code.
+- Around 2.9 GB of free space at the target (measured: `content` 2,763,982,961 bytes in 25,609 files, `bin`
+  67,793,031 bytes in 172 files); during a repair briefly twice the size of `content`, because the
+  new content is created next to the old one and only takes its place after a successful check.
 
-## Schritt für Schritt
+## Step by step
 
 ```powershell
-git clone <Repository>
+git clone <repository>
 cd CnCNew
 pwsh scripts\install.ps1
 ```
 
-Ohne Parameter sucht das Skript das Spiel unter
-`C:\Program Files (x86)\Steam\steamapps\common\Command & Conquer Generals - Zero Hour`, sonst über den
-Steam-Pfad der Registry (`HKCU:\Software\Valve\Steam`, `HKLM:\SOFTWARE\WOW6432Node\Valve\Steam`), die
-Bibliotheken aus `steamapps\libraryfolders.vdf` und `appmanifest_2732960.acf` (`installdir`), und sagt, was
-es gefunden hat. Das Ziel ist ohne Angabe `%LOCALAPPDATA%\CnCNew\Game` – außerhalb des Repositorys und
-außerhalb von Steam.
+Without parameters the script looks for the game under
+`C:\Program Files (x86)\Steam\steamapps\common\Command & Conquer Generals - Zero Hour`, otherwise through the
+Steam path of the registry (`HKCU:\Software\Valve\Steam`, `HKLM:\SOFTWARE\WOW6432Node\Valve\Steam`), the
+libraries from `steamapps\libraryfolders.vdf` and `appmanifest_2732960.acf` (`installdir`), and says what
+it has found. Without a specification the target is `%LOCALAPPDATA%\CnCNew\Game` – outside the repository and
+outside Steam.
 
-| Parameter | Bedeutung |
+| Parameter | Meaning |
 | --- | --- |
-| `-GameDir <Pfad>` | die Steam-Installation, falls sie nicht gefunden wird |
-| `-Target <Pfad>` | das neue Spielverzeichnis |
-| `-SkipClient` | den Client in diesem Lauf nicht veröffentlichen (ein vorhandener bleibt) |
-| `-ContentOnly` | nur `content` und `install.json`, kein Client, kein Startskript |
+| `-GameDir <path>` | the Steam installation, in case it is not found |
+| `-Target <path>` | the new game directory |
+| `-SkipClient` | do not publish the client in this run (an existing one stays) |
+| `-ContentOnly` | only `content` and `install.json`, no client, no start script |
 
-Gestartet wird mit `<Ziel>\Start-CnCNew.cmd`. Das Skript nennt seine Pfade relativ zu sich selbst; das
-Verzeichnis kann als Ganzes verschoben werden. Weitere Optionen werden an den Client durchgereicht
-(z. B. `Start-CnCNew.cmd --size 1920x1080`); ohne Optionen öffnet der Client das Hauptmenü.
+The game is started with `<target>\Start-CnCNew.cmd`. The script names its paths relative to itself; the
+directory can be moved as a whole. Further options are passed through to the client
+(e.g. `Start-CnCNew.cmd --size 1920x1080`); without options the client opens the main menu.
 
-Ein zweiter Aufruf auf ein vorhandenes eigenes Verzeichnis ist gefahrlos: er prüft jede Runtime-Datei,
-stellt fehlende und veränderte aus dem Spielverzeichnis wieder her, entfernt fremde Dateien **in
-`content`** und berichtet, was er getan hat (`AlreadyComplete`, `Repaired`). Eine abgebrochene
-Installation trägt `"verified": false` in `install.json` und wird beim nächsten Lauf vollendet.
+A second call on an existing directory of our own is safe: it checks every runtime file,
+restores missing and changed ones from the game directory, removes foreign files **in
+`content`** and reports what it has done (`AlreadyComplete`, `Repaired`). An aborted
+installation carries `"verified": false` in `install.json` and is completed on the next run.
 
-### Wohin geschrieben wird
+### Where things are written
 
-| Pfad | Inhalt |
+| Path | Content |
 | --- | --- |
-| `<Ziel>\content` | exportierter Runtime-Bestand mit `content-manifest.json` |
-| `<Ziel>\install.json` | Produkt, Version und Commit des Builds, Master-ID, Steam-App, Importerversion, Hash/Größe des Content-Manifests, Dateizahl, `verified` – ohne Zeitstempel und ohne absolute Pfade |
-| `<Ziel>\bin` | veröffentlichter Client (`dotnet publish -c Release`) |
-| `<Ziel>\Start-CnCNew.cmd` | Start mit `--content-dir` auf `content` |
+| `<target>\content` | exported runtime content with `content-manifest.json` |
+| `<target>\install.json` | product, version and commit of the build, master ID, Steam app, importer version, hash/size of the content manifest, file count, `verified` – without timestamps and without absolute paths |
+| `<target>\bin` | published client (`dotnet publish -c Release`) |
+| `<target>\Start-CnCNew.cmd` | start with `--content-dir` pointing to `content` |
 
-Sonst nirgends – ausgenommen die üblichen `bin`/`obj`-Verzeichnisse des Builds im Repository.
+Nowhere else – except for the usual `bin`/`obj` directories of the build in the repository.
 
-## Was die Masterprüfung meldet und was zu tun ist
+## What the master check reports and what to do
 
-`check-install` (und jeder `install`) nennt jede Abweichung einzeln:
+`check-install` (and every `install`) names every deviation individually:
 
-| Meldung | Bedeutung |
+| Message | Meaning |
 | --- | --- |
-| `missing` | eine Datei des Masters fehlt |
-| `renamed` | eine Datei des Masters fehlt unter ihrem Namen, liegt aber Byte für Byte unter einem anderen (etwa ein stillgelegtes Archiv `PatchWindow.big.bak`) |
-| `changed` | andere Größe oder, bei gleicher Größe, anderer SHA-256 |
-| `extra` | eine Datei, die der Master nicht kennt (Mods, zusätzliche DLLs, Sicherungskopien) |
-| `harmless` | eine zusätzliche Datei, die **ausdrücklich** in `harmlessExtraFiles` der Masterbeschreibung steht; sie wird gezählt, ist aber keine Abweichung |
+| `missing` | a file of the master is missing |
+| `renamed` | a file of the master is missing under its name, but lies byte for byte under another one (for instance a disabled archive `PatchWindow.big.bak`) |
+| `changed` | different size or, at the same size, different SHA-256 |
+| `extra` | a file that the master does not know (mods, additional DLLs, backup copies) |
+| `harmless` | an additional file that is **explicitly** listed in `harmlessExtraFiles` of the master description; it is counted, but is not a deviation |
 
-`harmlessExtraFiles` ist derzeit **leer**: es ist keine Datei bekannt, die Steam von sich aus hinzufügt.
-Ein Eintrag dort ist eine belegte Einzelfallentscheidung und Review-Gegenstand; es gibt keine Regel nach
-Muster oder Endung.
+`harmlessExtraFiles` is currently **empty**: no file is known that Steam adds of its own accord.
+An entry there is a verified case-by-case decision and subject to review; there is no rule by
+pattern or extension.
 
-Bei Abweichungen:
+In case of deviations:
 
-1. Mods und alle hinzugefügten Dateien aus dem Spielverzeichnis entfernen (die `extra`-Einträge, die neuen
-   Namen der `renamed`-Einträge).
-2. In Steam: Bibliothek → Rechtsklick auf das Spiel → Eigenschaften → Installierte Dateien →
-   „Dateien auf Fehler überprüfen“ (englisch: *Verify integrity of game files*). Steam stellt fehlende und
-   veränderte Dateien wieder her, löscht aber keine Dateien, die es nicht kennt.
-3. Sprache prüfen: Eigenschaften → Allgemein → Englisch.
-4. Erneut prüfen.
+1. Remove mods and all added files from the game directory (the `extra` entries, the new
+   names of the `renamed` entries).
+2. In Steam: Library → right-click on the game → Properties → Installed Files →
+   *Verify integrity of game files* (in the German Steam client: „Dateien auf Fehler überprüfen“). Steam restores missing and
+   changed files, but does not delete files it does not know.
+3. Check the language: Properties → General → English.
+4. Check again.
 
-Gemessenes Beispiel an einer gemoddeten Kopie derselben Installation: 23 Abweichungen – 1 `missing`
+Measured example on a modded copy of the same installation: 23 deviations – 1 `missing`
 (`Data/INI/INIZH.big`), 1 `renamed` (`PatchWindow.big` → `PatchWindow.big.bak`), 1 `changed` (`Game.dat`),
-20 `extra` (darunter `340_ControlBarProZH.big`, `400_ControlBarHDEnglishZH.big`, `990_DecalsZH.big`,
-`CustomContentMaps.big`, `310_ExpandedLANLobbyMenu.big`, `d3d8.dll`). Verglichen wird ohne Beachtung der
-Groß-/Kleinschreibung von Pfaden; leere Verzeichnisse zählen nicht.
+20 `extra` (among them `340_ControlBarProZH.big`, `400_ControlBarHDEnglishZH.big`, `990_DecalsZH.big`,
+`CustomContentMaps.big`, `310_ExpandedLANLobbyMenu.big`, `d3d8.dll`). The comparison ignores the
+case of paths; empty directories do not count.
 
-## Der Entwicklerweg: `game\`
+## The developer path: `game\`
 
-Skripte, Werkzeuge und Tests erwarten den Inhalt unter **`game/content`** im Repository. `game/` ist eine
-Installation mit genau dem Aufbau einer Nutzerinstallation (`game\content`, `game\install.json`, optional
-`game\bin`) und steht in `.gitignore`:
+Scripts, tools and tests expect the content under **`game/content`** in the repository. `game/` is an
+installation with exactly the layout of a user installation (`game\content`, `game\install.json`, optionally
+`game\bin`) and is listed in `.gitignore`:
 
 ```powershell
 pwsh scripts\dev-content.ps1                 # = install.ps1 -Target <repo>\game -ContentOnly
-pwsh scripts\dev-content.ps1 -WithClient     # zusätzlich game\bin und game\Start-CnCNew.cmd
+pwsh scripts\dev-content.ps1 -WithClient     # additionally game\bin and game\Start-CnCNew.cmd
 dotnet run --project tools/CnCNew.AssetTool -- verify game/content
 dotnet run --project tools/CnCNew.AssetTool -- check-export game/content
 ```
 
-`.local/` bleibt ignoriert, ist aber nicht mehr der Ort für Inhalte. Wer einen Bestand an anderer Stelle
-hat, gibt ihn wie bisher mit `--content-dir` bzw. `-ContentDir` an.
+`.local/` stays ignored, but is no longer the place for content. Whoever has content in another place
+specifies it as before with `--content-dir` or `-ContentDir`.
 
-## Werkzeugbefehle
+## Tool commands
 
-Die Logik liegt in `CnCNew.Import` (`InstallationMaster`, `InstallationInspector`, `GameInstaller`,
-`InstallRecord`), die Skripte sind dünne Treiber. Ein eigenes Projekt war nicht nötig: `CnCNew.Import` ist
-nach den Schichtenregeln ohnehin die einzige Verbindung zwischen der Originalinstallation (Import-VFS, BIG)
-und dem Runtimevertrag, und die Installation braucht genau diese Verbindung; hinzugekommen ist nur BCL-Code.
-Die Masterbeschreibung ist zusätzlich in die Assembly eingebettet (`InstallationMaster.LoadBuiltIn`), damit
-ein späteres GUI ohne Repository-Pfad auskommt.
+The logic lies in `CnCNew.Import` (`InstallationMaster`, `InstallationInspector`, `GameInstaller`,
+`InstallRecord`), the scripts are thin drivers. A project of its own was not necessary: under the layer rules `CnCNew.Import` is
+the only connection between the original installation (import VFS, BIG)
+and the runtime contract anyway, and the installation needs exactly this connection; only BCL code has been added.
+The master description is additionally embedded in the assembly (`InstallationMaster.LoadBuiltIn`), so that
+a later GUI can do without a repository path.
 
 ```powershell
-dotnet run -c Release --project tools/CnCNew.AssetTool -- check-install <Spielverzeichnis> [--master <json>]
-dotnet run -c Release --project tools/CnCNew.AssetTool -- describe-install <Spielverzeichnis> <aus.json> [--name <Name>] [--id <ID>]
-dotnet run -c Release --project tools/CnCNew.AssetTool -- install <Spielverzeichnis> <Ziel> [--master <json>]
-dotnet run -c Release --project tools/CnCNew.AssetTool -- check-export <Content-Verzeichnis> [--master <json>]
-dotnet run -c Release --project tools/CnCNew.AssetTool -- uninstall <Ziel> --yes
+dotnet run -c Release --project tools/CnCNew.AssetTool -- check-install <game directory> [--master <json>]
+dotnet run -c Release --project tools/CnCNew.AssetTool -- describe-install <game directory> <out.json> [--name <name>] [--id <ID>]
+dotnet run -c Release --project tools/CnCNew.AssetTool -- install <game directory> <target> [--master <json>]
+dotnet run -c Release --project tools/CnCNew.AssetTool -- check-export <content directory> [--master <json>]
+dotnet run -c Release --project tools/CnCNew.AssetTool -- uninstall <target> --yes
 ```
 
-Exitcodes: 0 identisch bzw. erledigt, 1 das Spielverzeichnis (bzw. der Export) ist nicht der Master,
-2 Aufruf-, Ziel- oder E/A-Fehler. Ohne `--master` gilt die eingebettete Beschreibung.
+Exit codes: 0 identical or done, 1 the game directory (or the export) is not the master,
+2 invocation, target or I/O error. Without `--master` the embedded description applies.
 
-`describe-install` erzeugt `baselines/steam-master.json` (kanonisches JSON: UTF-8 ohne BOM, LF, Pfade mit
-`/` in ordinaler Reihenfolge, keine absoluten Pfade, keine Zeitstempel; zwei Läufe sind byteidentisch). Die
-Datei enthält Namen, Steam-App-ID (aus `steam_appid.txt` der Installation gelesen), Dateizahl, Bytesumme,
-je Datei Pfad, Größe und SHA-256 sowie den erwarteten Export – **keinen Dateiinhalt**. Den erwarteten
-Export berechnet der Befehl ohne zu schreiben (`RuntimeContentImporter.DescribeAsync`). Das frühere
-`inventory`-Format (Liste aus `Path`/`Bytes`/`Sha256`) lieferte die Dateieinträge als Vorbild, reicht aber
-nicht: es kennt weder Identifikation noch erwarteten Export und schreibt plattformabhängige Zeilenenden.
-Ändert sich `RuntimeContentImporter.ImporterVersion`, muss die Beschreibung neu geschrieben werden; `install`
-lehnt eine Beschreibung für eine andere Importerversion ab.
+`describe-install` generates `baselines/steam-master.json` (canonical JSON: UTF-8 without BOM, LF, paths with
+`/` in ordinal order, no absolute paths, no timestamps; two runs are byte-identical). The
+file contains name, Steam app ID (read from `steam_appid.txt` of the installation), file count, byte total,
+per file path, size and SHA-256 as well as the expected export – **no file content**. The command computes the expected
+export without writing (`RuntimeContentImporter.DescribeAsync`). The earlier
+`inventory` format (list of `Path`/`Bytes`/`Sha256`) supplied the file entries as a model, but is not
+sufficient: it knows neither identification nor expected export and writes platform-dependent line endings.
+If `RuntimeContentImporter.ImporterVersion` changes, the description must be rewritten; `install`
+rejects a description for another importer version.
 
-Erwarteter Export des Masters: 25.608 Runtime-Dateien, `content-manifest.json` 27.087.727 Byte, SHA-256
-`b1f8b14cd5cb005afd16237759c9020a8c3f2402874d24d2ff204e61c620fbab` (Importer 2.0.0).
+Expected export of the master: 25,608 runtime files, `content-manifest.json` 27,087,727 bytes, SHA-256
+`b1f8b14cd5cb005afd16237759c9020a8c3f2402874d24d2ff204e61c620fbab` (importer 2.0.0).
 
-Tests: `dotnet run --project tests/CnCNew.Import.Tests` (synthetische Installation mit handgebautem
-BIG-Archiv) und mit `-- --game-dir <Steam-Pfad>` zusätzlich der echte Master gegen die eingebettete
-Beschreibung samt Export-Hash (liest nur).
+Tests: `dotnet run --project tests/CnCNew.Import.Tests` (synthetic installation with a hand-built
+BIG archive) and with `-- --game-dir <Steam path>` additionally the real master against the embedded
+description including the export hash (reads only).
 
-## Deinstallation
+## Uninstallation
 
 ```powershell
 pwsh scripts\uninstall.ps1 -Target "$env:LOCALAPPDATA\CnCNew\Game" -Yes
 ```
 
-Entfernt wird nur ein Verzeichnis, das unser `install.json` trägt, und davon nur `content`, `bin`,
-`Start-CnCNew.cmd` und `install.json`; alles andere bleibt und wird aufgelistet, das Verzeichnis selbst
-verschwindet nur, wenn es danach leer ist. Ein Verzeichnis mit `steam_appid.txt` in der Wurzel wird nie
-angefasst. Es wird nichts gefragt; ohne `-Yes` geschieht nichts.
+Only a directory that carries our `install.json` is removed, and of it only `content`, `bin`,
+`Start-CnCNew.cmd` and `install.json`; everything else stays and is listed, the directory itself
+disappears only if it is empty afterwards. A directory with `steam_appid.txt` in its root is never
+touched. Nothing is asked; without `-Yes` nothing happens.
 
-## Gemessene Zahlen (9. Oktober 2026)
+## Measured numbers (9 October 2026)
 
-| Vorgang | Dauer |
+| Operation | Duration |
 | --- | ---: |
-| `check-install` auf dem Master (350 Dateien, 2,9 GB) | 2,3 s (Dateien im Cache des Betriebssystems) |
-| `check-install` auf der gemoddeten Kopie | 2,5 s |
-| `describe-install` (Hash aller Dateien und Export-Probelauf) | 18,5 s |
-| `install` in ein neues Verzeichnis (prüfen, exportieren, prüfen) | 99,9 s beim ersten, 53,0 s bei einem weiteren Lauf in ein anderes Ziel |
-| `install.ps1` gesamt mit Werkzeug-Build und Client-Veröffentlichung | 130 s |
-| erneuter `install` auf eine vollständige Installation (`AlreadyComplete`) | 11,5 s |
-| `AssetTool verify` auf `game/content` | 8 s |
-| Realdatentest `Import.Tests -- --game-dir …` | 37 s |
-| Client aus dem installierten Verzeichnis, Rauchtest eines Gefechts mit 300 Bildern | 23 s, Exitcode 0 |
+| `check-install` on the master (350 files, 2.9 GB) | 2.3 s (files in the cache of the operating system) |
+| `check-install` on the modded copy | 2.5 s |
+| `describe-install` (hash of all files and export dry run) | 18.5 s |
+| `install` into a new directory (check, export, check) | 99.9 s on the first, 53.0 s on a further run into another target |
+| `install.ps1` in total with tool build and client publishing | 130 s |
+| repeated `install` on a complete installation (`AlreadyComplete`) | 11.5 s |
+| `AssetTool verify` on `game/content` | 8 s |
+| Real-data test `Import.Tests -- --game-dir …` | 37 s |
+| Client from the installed directory, smoke test of a skirmish with 300 frames | 23 s, exit code 0 |
 
-## Grenzen
+## Limits
 
-- Ein Skript, kein GUI. Die Logik ist als Bibliothek testbar und für ein GUI vorbereitet.
-- Genau eine Version und Sprache (Steam, Englisch). Andere Fassungen brauchen eine eigene, gemessene
-  Masterbeschreibung; es gibt keinen Entwicklerschalter für ungeprüfte Installationen. Wer bewusst einen
-  anderen Bestand importieren will, benutzt wie bisher `AssetTool runtime-import` – das schreibt kein
-  `install.json`, das Ergebnis kann sich also nicht als geprüfte Installation ausgeben.
-- Der Client wird aus dem Quelltext veröffentlicht: das braucht das SDK und, weil die Veröffentlichung
-  nicht eigenständig (self-contained) ist, zur Laufzeit .NET 10 auf dem Rechner.
-- Der Export übernimmt den ganzen Bestand der Installation, auch Dateien außerhalb des Produktumfangs
-  (Programmdateien, Handbücher, Installationsmetadaten des Originals – im Manifest als
-  `out-of-product-scope` markiert). Der Client braucht sie nicht.
-- `content-manifest.json` wird mit den Zeilenenden der Plattform geschrieben; der festgehaltene Hash gilt
-  für Windows.
-- Die Suche über Registry und `libraryfolders.vdf` ist nicht an einer Installation außerhalb des
-  Standardpfads erprobt.
-- Dass der installierte Client startet, ist durch einen Rauchtest belegt, nicht durch einen Menschen am
-  Bildschirm.
+- A script, no GUI. The logic is testable as a library and prepared for a GUI.
+- Exactly one version and language (Steam, English). Other versions need their own, measured
+  master description; there is no developer switch for unchecked installations. Whoever deliberately wants to import
+  different content uses `AssetTool runtime-import` as before – that writes no
+  `install.json`, so the result cannot pass itself off as a checked installation.
+- The client is published from the source code: that needs the SDK and, because the publishing
+  is not self-contained, .NET 10 on the machine at run time.
+- The export takes over the whole content of the installation, including files outside the product scope
+  (program files, manuals, installation metadata of the original – marked in the manifest as
+  `out-of-product-scope`). The client does not need them.
+- `content-manifest.json` is written with the line endings of the platform; the recorded hash applies
+  to Windows.
+- The search through registry and `libraryfolders.vdf` has not been tried on an installation outside the
+  default path.
+- That the installed client starts is verified by a smoke test, not by a human at the
+  screen.
