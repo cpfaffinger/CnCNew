@@ -1,5 +1,7 @@
 # Feuerstufen, Vorangriffsverzögerung und beschädigte Locomotoren in der Simulation
 
+**Hinweis (9. Oktober 2026, Phase 23): historisch, 30 Hz.** Tickzahlen, Siegticks und Hashes in diesem Dokument sind bei 30 Hz und an ihrem damaligen Stand gemessen und als Referenzwerte überholt (maßgeblich: `baselines/reference-manifest.json`, seit `ea52f87` bei 60 Hz). Tickangaben gelten als Zahl von Originalbildern weiter. Oberhalb von 30 Hz fallen die Feuerstufen ein Bild (nicht einen Tick) nach der Frist, ein Magazin ohne Nachladezeit wartet ein Bild, und die Blitzphase der Übernahme läuft einmal je Bild (4 / 4 / 4 Blitze); beschädigte Locomotoren haben eigene Größen je Bild: `docs/RATE-INVARIANCE-TURRETS.md` (`165e6d8`, `20d4766`, `d923cea`), `docs/RATE-INVARIANCE-GROUND.md`.
+
 Stand 4. Oktober 2026 (Messwerte neu gemessen). Quellen der Referenz: `GeneralsMD/Code/GameEngine/Source/GameLogic/Object/FiringTracker.cpp` (`shotFired`, `update`, `speedUp`, `coolDown`),
 `Object/Weapon.cpp` (`Weapon::preFireWeapon`, `getPreAttackDelay`, `getStatus`, `WeaponTemplate::getPreAttackDelay`), `Object/Object.cpp` (`preFireCurrentWeapon`, `adjustModelConditionForWeaponStatus`),
 `AI/AIStates.cpp` (`AIAttackFireWeaponState::onEnter/update/onExit`), `Object/Locomotor.cpp` (`getMaxSpeedForCondition`, `getMaxTurnRate`, `getMaxAcceleration`, `LocomotorTemplate::validate`),

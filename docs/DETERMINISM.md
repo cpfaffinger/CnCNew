@@ -1,6 +1,6 @@
 # Determinismus über Rechnergrenzen (Phase 18)
 
-Stand: 6. Oktober 2026, Commit `b432fb7`; §2a (die Matrix mit dem Manifest der Phase 22, Q39.24) am Stand `d7fca91`, §2b (Wiederholung am Ausgangsstand der Phase 23) am Stand `20ffce9`. Dieses Dokument beschreibt, **wie** geprüft wird, dass zwei Rechner dieselbe Welt rechnen, und **was** davon gemessen ist. Die Einzelbefunde D1–D9 mit Test,
+Stand: 6. Oktober 2026, Commit `b432fb7`; §2a (die Matrix mit dem Manifest der Phase 22, Q39.24) am Stand `d7fca91`, §2b (Wiederholung am Ausgangsstand der Phase 23) am Stand `20ffce9`, §2c (die 60-Hz-Manifeste nach der Umstellung des Standards, 9. Oktober 2026) am Stand `ea52f87` – dort sind bisher nur zwei Zeilen gemessen. Dieses Dokument beschreibt, **wie** geprüft wird, dass zwei Rechner dieselbe Welt rechnen, und **was** davon gemessen ist. Die Einzelbefunde D1–D9 mit Test,
 Korrektur und Vorher/Nachher-Werten stehen in `docs/DETERMINISM-FINDINGS.md`; die Messlatte selbst (Referenzmanifest, Eingangsmanifest) in `docs/SIMULATION-CORE.md` §37.
 
 ## 1. Was verglichen wird
@@ -99,6 +99,34 @@ Stand `20ffce9` wiederholt, bevor Phase 23 etwas ändert. Verfahren wie in §2a:
 
 Alle 13 Zeilen dieses Rechners sind am gemergten Stand identisch; kein Referenzwert hat sich geändert. Was §3 als nicht belegt nennt, bleibt nicht belegt.
 
+## 2c. Die Matrix mit den 60-Hz-Manifesten (Phase 23, Stand `ea52f87`, 9. Oktober 2026) – erst zwei Zeilen gemessen
+
+**Die Matrix aus §2b ist am 30-Hz-Ausgangsstand `20ffce9` gemessen.** Seither hat Phase 23 das Verhalten oberhalb von 30 Hz in vier Runden geändert, drei Verhaltensänderungen bei 30 Hz gemergt
+(Manifeste `6a99102`, `8a6e5b7`, `cca6f92`), den Standard auf 60 Hz gestellt (`e8632bb`) und beide Manifeste bei 60 Hz neu geschrieben (`ea52f87`; Referenzmanifest Schema 2, Eingangsmanifest
+Schema 2 mit `simulation.tickRate`). Eine Matrix mit den neuen Dateien gibt es noch nicht. Gemessen sind am Stand `ea52f87` zwei Zeilen, auf demselben Rechner, Windows, Release
+(Protokolle der Sitzung: `verify\switch\check-60-1.log`, `check-60-2.log`, `input-60.log`):
+
+| Zeile | Wie | Eingänge | Rechnung (Satz) | Ergebnis |
+|---|---|---|---|---|
+| Release, Lauf 1 | `reference-manifest check … --set full` gegen `baselines/reference-manifest.json` (60 Hz, Schema 2) | identisch („Input manifest (60 Hz, schema 2): identical.“) | 50/50 (full) | **identisch** |
+| Release, Lauf 2 | derselbe Aufruf noch einmal | – | 50/50 (full) | **identisch** |
+| Debug-Build | – | – | – | **nicht gemessen** |
+| Tiered Compilation aus, Tiered PGO aus, ReadyToRun aus | – | – | – | **nicht gemessen** |
+| Hardware-Intrinsics aus, AVX2 aus | – | – | – | **nicht gemessen** |
+| Server-GC | – | – | – | **nicht gemessen** |
+| Kulturen `de-DE`, `tr-TR`, `ar-SA` | – | – | – | **nicht gemessen** |
+| **Linux** auf demselben Rechner (WSL2) | – | – | – | **nicht gemessen** |
+| andere .NET-Patchversion | – | – | – | **offen** wie in §2 |
+| **zweiter physischer Rechner, andere CPU** | Anleitung in §4 | – | – | **offen** wie in §2; nachzuholen vor Phase 26 |
+
+Dazu, mit derselben Binärdatei (Standard 60 Hz) gegen die letzten 30-Hz-Dateien (`cca6f92`, in der Sitzung aufbewahrt): `input-manifest check` „(30 Hz, schema 1): identical“ und
+`reference-manifest check --set full` 50 von 50 Läufen identisch – ein Manifest wird mit der Rate geprüft, die seine Datei nennt, unabhängig vom Standard.
+
+**Was daraus folgt:** die zehn Schalter- und Kulturzeilen und die Linux-Zeile sind für die Simulation oberhalb von 30 Hz **nicht belegt**. Oberhalb von 30 Hz laufen Rechenwege, die es bei 30 Hz
+nicht gibt (die Anteile eines Bildschritts, die Bildend-Sicht, die Tabellen der Konstanten je Bild); dass die Matrix bei 30 Hz bestand, sagt über sie nichts. Auch die drei 30-Hz-Zwischenstände der
+Phase sind nur unter Windows im Release-Build geprüft, nicht über die Matrix und nicht unter Linux. Bis die Zeilen nachgetragen sind, gilt für 60 Hz: deterministisch auf einem Rechner, unter
+Windows, im Release-Build, zweimal hintereinander.
+
 ## 3. Was daraus folgt und was nicht
 
 - **Belegt:** auf einem Rechner (AMD Ryzen 7 PRO 6850U, x64) ist das Ergebnis unabhängig von JIT-Stufe, PGO, ReadyToRun, Hardware-Intrinsics, GC-Art, Kultur, Debug/Release (Schnellsatz) und Betriebssystem
@@ -133,3 +161,7 @@ Das Ergebnis gehört in die Tabelle in §2 (Zeile „zweiter physischer Rechner�
 - Neue Simulationseingänge laufen über die geprüften Wandlungsroutinen (`SingleBits.ToDecimal` für Fließkommawerte aus Dateien, `ExactBoneMath` für die Knochentabelle); `SourceRules` und `FeederSourceRules` erzwingen das.
 - Jede Zustandsänderung ruft `MarkDirty`; ein von Hand gesetztes `Dirty`-Flag ist verboten (Regel in `SourceRules`). Neue Module laufen einmal mit `--verify-incremental`.
 - Vor jedem Phasenabschluss: `input-manifest check`, `reference-manifest check --set full`, und bei Änderungen an Formaten oder Fingerabdrücken zusätzlich die Linux-Zeile.
+- **Golden-Hashes werden bei der Produktrate gehalten (60 Hz, seit Phase 23).** `check` läuft mit der Rate und in dem Schema, die **die Datei** nennt (`simulation.tickRate`); eine abweichende
+  `--tick-rate` wird abgelehnt („A manifest is checked at the rate it was written at.“). `write` nimmt `--tick-rate` oder den Standard. 30 und 120 Hz haben keine eigenen Golden-Hashes; sie werden
+  über die Raten-Äquivalenz-Suite gegen 30 Hz als Definition geprüft (`docs/SIMULATION-CORE.md` §39.7) und über Tests, die ihre Raten selbst nennen.
+- Zum Phasenabschluss gehören seit Phase 23 zusätzlich: die Suite mit 0 / 0 in allen zehn Gruppen und die Testprogramme bei 30, 60 und 120 Hz (`--tick-rate N`).

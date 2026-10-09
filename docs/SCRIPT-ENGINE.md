@@ -647,6 +647,8 @@ Der Director benutzt den Tick weiter als Uhr, nimmt aber nicht mehr an, dass er 
 
 ## 9. Headless-Prüfung (Messung)
 
+*Die Tickzahlen dieses Abschnitts bis einschließlich „Abschluss-Sitzung Phase 17“ sind historisch und bei 30 Hz gemessen (60.000 Ticks = 2.000 s, 15.000 Ticks = 500 s, `audit --ticks 900` = 30 s). Seit Phase 23 laufen die Werkzeuge standardmäßig mit 60 Hz und nehmen Budgets als Spielzeit (`--seconds`, `--minutes`; `--ticks` bleibt als Rohangabe der Rate des Laufs); der Stand der Phase 23 steht am Ende des Abschnitts.*
+
 Werkzeuge: `CnCNew.CampaignTool audit|list|playthrough` (`docs/CAMPAIGN-AND-SAVEGAMES.md` §6) und `SimTool mission-run`.
 Je Mission: zwei frische Läufe (Hash-Kette identisch), Speichern/Wiederherstellen nach der Hälfte (identisch), **Endprobe**
 (`MissionProbe`): nach 150 Ticks werden alle Objekte der Feinde (Sieg) bzw. des Betrachters und seiner Verbündeten (Niederlage)
@@ -965,3 +967,35 @@ unverändert: **Sieg 24/24, Niederlage 24/24** (60.000 Ticks, gemergter Stand), 
 15/24, Erreichbarkeit sauber 24/24 und 24/24.
 
 **Abschluss-Sitzung Phase 17 (6. Oktober 2026, Stand `6eb7ae4`, alle 24 Karten bei 15.000 und 60.000 Ticks, je Karte einzeln, 6 Läufe parallel):** mit der Versorgungsregel der KI (`docs/SIMULATION-CORE.md` §36.1) unverändert **1 von 24** bei 15.000 Ticks (`MD_GLA04`) und **3 von 24** bei 60.000 Ticks (`MD_GLA04` @1022, `MD_CHI01` @18.492, `MD_CHI02` @29.605 – dieselben Ticks wie vorher, die Regel greift in diesen Läufen nicht ein); `MD_USA01` und `MD_USA04` bei 60.000 Ticks nach 3.600 s abgebrochen, die übrigen 19 „nicht erreicht“ mit 0 Weltschreibungen. Damit sind erstmals auch `Training01`, `MD_USA02`, `MD_USA03` und `MD_GLA02` mit 60.000 Ticks gemessen (nicht erreicht). Die Heeresauswahl nach Wert und Reichweite verschlechterte den Agenten (60.000 Ticks: 2 statt 3, `MD_CHI02` verloren) und ist zurückgenommen (§36.3). Normalmodus des Fahrers unverändert Sieg 24/24, Niederlage 24/24.
+
+### Phase 23: Kampagnenwerkzeuge bei 30, 60 und 120 Hz, Nur-Befehle-Agent (8. und 9. Oktober 2026, gemessen)
+
+Die VM arbeitet seit Phase 23 auf dem Raster der Originalbilder (§2, „Die Uhr der VM ist das Originalbild“); damit sind die Kampagnenwerkzeuge zwischen den Raten vergleichbar. Standardbudgets sind
+jetzt Spielzeit: `drive` 2.000 s, `audit` 60 s, `playthrough` 30 s.
+
+| Lauf | Stand | Ergebnis |
+| --- | --- | --- |
+| `CampaignTool drive`, 24 Karten, 30 / 60 / 120 Hz | `3b44506` (nach Runde 2) | Sieg 24/24 und Niederlage 24/24 bei jeder Rate, auf jeder Karte dasselbe Endskript, Abweichung 0,00 s bei 60 und 120 Hz (z. B. `MD_CHI04`: Sieg in Tick 48.258 / 96.516 / 193.032, dasselbe Bild) |
+| `CampaignTool drive`, 24 Karten, 30 / 60 / 120 Hz | `cca6f92` (nach den KI- und Bewegungskorrekturen) | 24/24 und 24/24 bei jeder Rate; Abweichung 0,00 s auf allen Karten **außer** `MD_USA02`, Niederlage 421,03 gegen 420,03 s (−1,00 s bei 60 und 120 Hz; **nicht untersucht**) |
+| `CampaignTool audit`, 30 Hz (900 Ticks) und 60 Hz (1.800 Ticks) | `3b44506`, `cca6f92` | 24/24 deterministisch und identisch nach Speichern/Laden, Endproben Sieg 13/24, Niederlage 15/24 bei beiden Raten |
+| `CampaignTool reachability` | `3b44506`, `cca6f92` | Sieg sauber 24/24, Niederlage sauber 24/24 |
+| `drive`, `audit`, `reachability` bei der Standardrate 60 Hz | Probestand der Umstellung, **vor** Runde 4 (`docs/TICKRATE-MIGRATION.md` §15.6.4) | 24/24 und 24/24; Audit 24/24, Endproben 13/24 und 15/24, 0 Treffer auf fehlende Typen; sauber 24/24 |
+| dieselben am Endstand (`f3acc2e`, nach Runde 4 und der Umstellung) | – | **nicht gemessen** |
+
+Die Ursache der einen früheren Abweichung (`MD_USA02`: Sieg bei 60 Hz nach 340,57 statt 90,60 s) war `SET_TIMER` in Ticks gegen ein Bildliteral der Karte; sie ist mit der Uhr der VM behoben
+(`docs/TICKRATE-MIGRATION.md` §15.3).
+
+**Nur-Befehle-Agent** (`drive --commands-only --outcome victory`, 30 Hz; `docs/AI-OBSERVED-2026-10-08.md` §11.6). Die KI-Korrekturen der Phase (die KI spart für Fahrzeuge, eigene Zielplätze,
+Tauschwert-Regel) ändern den Agenten, der die `SkirmishAi` als Heerführer benutzt:
+
+| `--commands-only`, `--minutes 34` | `MD_GLA04` | `MD_CHI01` | `MD_CHI02` |
+| --- | --- | --- | --- |
+| vor den KI-Korrekturen | Sieg @1.022 | Sieg @18.252 | Sieg @29.250 |
+| nach den KI-Korrekturen | Sieg @1.022 | Sieg @16.452 | **nicht erreicht** in 34 Spielminuten |
+| nach den KI-Korrekturen, `--minutes 60` | – | – | **Sieg @78.429 (43:34)** |
+
+`MD_CHI02` wird also weiter gewonnen, braucht aber **43:34 statt 16:15 Spielminuten** (Tick 78.429 statt 29.250 bei 30 Hz): der frühere Sieg folgte aus einer verlorenen Welle, nach der die nächste
+einen anderen Weg nahm; die neue Armee verliert ihre Masse nicht und brauchte eine eigene Regel, um ein unerreichbares Ziel zurückzustellen (`05b2c1f`, nur für einen Agenten mit Missionszielen).
+Warum es 14 Minuten länger dauert als der frühere Lauf, ist nicht untersucht. Die Ticks der Zeile „vor den KI-Korrekturen“ weichen von den Werten der Phase 17 oben ab (`MD_CHI01` @18.492,
+`MD_CHI02` @29.605), weil dazwischen Phase 22 und die Fabrikausfahrt liegen. **Nicht gemessen:** die übrigen 21 Karten im Nur-Befehle-Modus nach den KI-Korrekturen (die Aussage „3 von 24 bei
+2.000 s“ ist für den Endstand nicht wiederholt – belegt sind die drei Karten der Tabelle, davon `MD_CHI02` erst mit längerem Budget) und der Nur-Befehle-Modus bei 60 Hz.
