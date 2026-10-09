@@ -1,236 +1,236 @@
-# Programm Tickrate, Festkomma und Mehrspieler (Phasen 18–29)
+# Programme tick rate, fixed point and multiplayer (Phases 18–29)
 
-Stand: 5. Oktober 2026 (Planung; nichts hiervon ist gebaut). Dieses Dokument ist der gemeinsame Rahmen der Aufträge `docs/handoffs/HANDOFF-PHASE18.md` bis `docs/handoffs/HANDOFF-PHASE29.md`. Jeder dieser Aufträge ist für sich bearbeitbar, setzt aber die Entscheidungen (§2) und Regeln (§6) dieses Dokuments voraus. Jede Phase schreibt ihre Messergebnisse hierher zurück (§4, §5).
+As of: 5 October 2026 (planning; nothing of this is built). This document is the common frame of the briefs `docs/handoffs/HANDOFF-PHASE18.md` to `docs/handoffs/HANDOFF-PHASE29.md`. Each of these briefs can be worked on by itself, but presupposes the decisions (§2) and rules (§6) of this document. Every phase writes its measurement results back here (§4, §5).
 
-## 1. Ziel und Scope-Änderung
+## 1. Goal and scope change
 
-Entscheidung des Projektinhabers vom 5. Oktober 2026:
+Decision of the project owner of 5 October 2026:
 
-1. **Mehrspieler ist im Scope.** Gefechte (Skirmish) mit bis zu acht Spielern laufen über **Dedicated Server**.
-2. **Die Simulation läuft mit 60 Hz** statt 30 Hz. Die Tickrate ist ein Parameter der Sitzung, keine Konstante des Spiels; alles, was heute fest an 30 Hz hängt, wird entkoppelt.
-3. **Ein Matchpfad.** Das Mehrspieler-Modul trägt auch das lokale Gefecht (Mensch gegen KI). Es muss deshalb KI-Spieler unterstützen.
-4. **Alle bisherigen Simulationen und Abnahmetests** werden geprüft und, wo sie an 30 Hz oder an Hashes aus der Doku hängen, neu entworfen.
-5. Der bisher nach Phase 17 geplante Abschluss (Patch-Integration, Qualität, Paket; `IMPLEMENTATION-PLAN.md` damals §10) rückt hinter dieses Programm und ist jetzt Phase 30.
+1. **Multiplayer is in scope.** Matches (skirmish) with up to eight players run through **dedicated servers**.
+2. **The simulation runs at 60 Hz** instead of 30 Hz. The tick rate is a parameter of the session, not a constant of the game; everything that today hangs firmly on 30 Hz is decoupled.
+3. **One match path.** The multiplayer module also carries the local skirmish (human against AI). It must therefore support AI players.
+4. **All previous simulations and acceptance tests** are checked and, where they hang on 30 Hz or on hashes from the documentation, redesigned.
+5. The completion planned so far after Phase 17 (patch integration, quality, package; `IMPLEMENTATION-PLAN.md` at that time §10) moves behind this programme and is now Phase 30.
 
-Ziel dahinter: ein modernes Spiel – direkte Befehlsannahme, flüssige Bewegung, Netzwerkspiel, das nicht vom langsamsten Mitspieler abhängt.
+The goal behind it: a modern game – direct command intake, smooth movement, network play that does not depend on the slowest fellow player.
 
-**Weiterhin nicht im Scope** (jede Erweiterung ist eine eigene Entscheidung): vernetzte Kampagne oder Koop-Missionen; Konten, Rangliste, Spielersuche, zentrale Serverliste; NAT-Durchdringung und Verbindungen zwischen Spielern (Clients verbinden sich ausgehend zu einem Server mit offenem Port); Kompatibilität mit dem Netzprotokoll oder den Diensten des Originals (GameSpy/WOL); Schutz gegen Kartenaufdeckung; Übertragung eigener Karten; binäre Kompatibilität zu alten Mods und Savegames.
+**Still not in scope** (every extension is a decision of its own): networked campaign or co-op missions; accounts, ladder, player search, central server list; NAT traversal and connections between players (clients connect outbound to a server with an open port); compatibility with the network protocol or the services of the original (GameSpy/WOL); protection against map reveal; transfer of custom maps; binary compatibility with old mods and savegames.
 
-## 2. Entscheidungen und Zielarchitektur
+## 2. Decisions and target architecture
 
-### 2.1 Lockstep über einen Relay-Server
+### 2.1 Lockstep through a relay server
 
-Die Simulation ist deterministisch und wird nur von Befehlen getrieben. Übertragen werden deshalb Befehle, kein Zustand. Jeder Client rechnet die volle Welt.
-
-```
- Client A ──Befehlsabsicht──▶ ┌────────────────────┐ ──Tickbündel N──▶ Client A
- Client B ──Befehlsabsicht──▶ │ Server (Relay)     │ ──Tickbündel N──▶ Client B
-   …                          │ Tickuhr, Zuordnung,│        …
- Client H ──Hashbericht─────▶ │ Hashvergleich,     │ ──Tickbündel N──▶ Client H
-                              │ Mitschrift (Replay)│
-                              └────────────────────┘
-```
-
-- Der Server führt die Tickuhr, ordnet jede eintreffende Befehlsabsicht dem nächsten offenen Tick zu und sendet je Tick ein Bündel an alle (auch ein leeres). **Er wartet beim Schließen eines Ticks auf niemanden.**
-- Ein Client rechnet Tick N, sobald er Bündel N hat. Die Verzögerung eines Spielers hängt damit an seiner eigenen Verbindung, nicht an der des langsamsten.
-- Der Server **simuliert nicht** und lädt **keine Spieldaten**. Das hält ihn billig (viele Räume je Kern), rechtlich sauber (keine aus Originaldaten erzeugten Bestände auf fremden Maschinen) und portabel (Windows und Linux).
-- Verworfen: *Rollback* (Zustand mehrmals je Sekunde sichern und Ticks neu rechnen ist bei tausenden Objekten und dem heutigen Snapshot um Größenordnungen zu teuer); *autoritativer Server mit Zustandsübertragung* (gibt den Hauptvorteil der Architektur auf, verlangt Spieldaten auf dem Server). Ein *mitsimulierender* Server (kennt den richtigen Zustand, kann Snapshots liefern) bleibt eine spätere Option; nichts in den Phasen 24–28 darf ihn verbauen.
-
-### 2.2 KI-Spieler laufen in der Simulation jedes Clients
-
-Die KI wird Teil des deterministischen, gehashten und gespeicherten Sitzungszustands (Phase 24). Jeder Client lässt alle KIs mitlaufen; ihre Befehle werden nicht übertragen. Der Server weiß von einer KI nur, dass ihr Slot belegt ist.
-
-- Dafür spricht: keine Latenz und keine Bandbreite für KI-Befehle; der Server bleibt ein Relay ohne Daten; Wiedereinstieg und Speichern funktionieren, weil der KI-Zustand im Snapshot steht; eine Abweichung im KI-Zustand fällt sofort im Hash auf; es ist das Modell des Originals.
-- Dagegen steht: die KI-Rechenzeit fällt auf jedem Client an (Phase 19 und 24 messen und begrenzen sie).
-- Verworfen: KI auf *einem* Client mit Übertragung ihrer Befehle (fällt mit diesem Client aus, braucht Übergabe); KI auf dem Server (verlangt Simulation und Daten dort).
-
-### 2.3 Ein Matchpfad
+The simulation is deterministic and is driven only by commands. What is transmitted is therefore commands, not state. Every client computes the full world.
 
 ```
- Shell/HUD/Eingabe ─▶ LiveMatch ─▶ Lockstep-Treiber ─▶ ITransport ─▶ Server-Logik
-                          │         (CnCNew.Net)        Loopback      (CnCNew.Server)
-                          ▼                              oder UDP      eingebettet oder
-                     MatchSession (Welt + KI, CnCNew.Simulation)       eigener Prozess
+ Client A ──command intent──▶ ┌────────────────────────┐ ──tick bundle N─▶ Client A
+ Client B ──command intent──▶ │ Server (relay)         │ ──tick bundle N─▶ Client B
+   …                          │ tick clock, assignment,│        …
+ Client H ──hash report─────▶ │ hash comparison,       │ ──tick bundle N─▶ Client H
+                              │ recording (replay)     │
+                              └────────────────────────┘
 ```
 
-Lokales Gefecht = eingebetteter Server + Loopback-Transport + ein Client, im Betrieb „clientgetaktet“ (der Tick schließt, sobald der eine Mensch ihn anfordert): keine zusätzliche Verzögerung, Pause und Spielgeschwindigkeit bleiben. Netzwerkmatch = derselbe Code mit UDP und „servergetaktet“. Missionen bleiben lokal, benutzen aber dieselben Schnittstellen für Befehlsweg und Tickquelle (Phase 24).
+- The server keeps the tick clock, assigns every incoming command intent to the next open tick and sends one bundle per tick to everyone (also an empty one). **When closing a tick it waits for nobody.**
+- A client computes tick N as soon as it has bundle N. The delay of a player thus hangs on their own connection, not on that of the slowest.
+- The server **does not simulate** and loads **no game data**. That keeps it cheap (many rooms per core), legally clean (no content generated from original data on foreign machines) and portable (Windows and Linux).
+- Rejected: *rollback* (saving the state several times per second and recomputing ticks is, with thousands of objects and today's snapshot, too expensive by orders of magnitude); *authoritative server with state transfer* (gives up the main advantage of the architecture, requires game data on the server). A *co-simulating* server (knows the correct state, can deliver snapshots) remains a later option; nothing in Phases 24–28 may obstruct it.
 
-### 2.4 Schichten und Abhängigkeiten (ergänzt `CLAUDE.md`)
+### 2.2 AI players run in the simulation of every client
 
-| Projekt | neu | darf referenzieren | darf nicht |
+The AI becomes part of the deterministic, hashed and saved session state (Phase 24). Every client lets all AIs run along; their commands are not transmitted. The server knows of an AI only that its slot is occupied.
+
+- In favour: no latency and no bandwidth for AI commands; the server stays a relay without data; rejoining and saving work because the AI state is in the snapshot; a deviation in the AI state shows up immediately in the hash; it is the model of the original.
+- Against: the AI computing time is incurred on every client (Phases 19 and 24 measure and limit it).
+- Rejected: AI on *one* client with transmission of its commands (fails with this client, needs a handover); AI on the server (requires simulation and data there).
+
+### 2.3 One match path
+
+```
+ Shell/HUD/input   ─▶ LiveMatch ─▶ lockstep driver  ─▶ ITransport ─▶ server logic
+                          │         (CnCNew.Net)        loopback      (CnCNew.Server)
+                          ▼                              or UDP        embedded or
+                     MatchSession (world + AI, CnCNew.Simulation)      own process
+```
+
+Local skirmish = embedded server + loopback transport + one client, in the operating mode "client-paced" (the tick closes as soon as the one human requests it): no additional delay, pause and game speed remain. Network match = the same code with UDP and "server-paced". Missions stay local, but use the same interfaces for command path and tick source (Phase 24).
+
+### 2.4 Layers and dependencies (supplements `CLAUDE.md`)
+
+| Project | new | may reference | may not |
 |---|---|---|---|
-| `CnCNew.Simulation` | – | `CnCNew.Data` | alles andere; Wandzeit, Threads, `float` (unverändert) |
-| `CnCNew.Net` | ja | `CnCNew.Simulation` (Befehls-Codec, Match-Beschreibung, Replay) | `CnCNew.Content`, `CnCNew.Game`, Präsentation, Stride |
-| `CnCNew.Server` | ja | `CnCNew.Net` | Spieldaten laden, `CnCNew.Content`, `CnCNew.Game`, Präsentation, Stride |
-| `tools/CnCNew.DedicatedServer` | ja | `CnCNew.Server` | wie oben |
-| `CnCNew.Game` | – | zusätzlich `CnCNew.Net`, `CnCNew.Server` (eingebettet) | Stride (unverändert) |
+| `CnCNew.Simulation` | – | `CnCNew.Data` | everything else; wall-clock time, threads, `float` (unchanged) |
+| `CnCNew.Net` | yes | `CnCNew.Simulation` (command codec, match description, replay) | `CnCNew.Content`, `CnCNew.Game`, presentation, Stride |
+| `CnCNew.Server` | yes | `CnCNew.Net` | load game data, `CnCNew.Content`, `CnCNew.Game`, presentation, Stride |
+| `tools/CnCNew.DedicatedServer` | yes | `CnCNew.Server` | as above |
+| `CnCNew.Game` | – | additionally `CnCNew.Net`, `CnCNew.Server` (embedded) | Stride (unchanged) |
 
-Wandzeit gibt es nur in `CnCNew.Net`/`CnCNew.Server`, nur über eine injizierte Uhr, nur für Taktung und Zeitabgleich. Sie erreicht die Simulation nie. Netzwerk ausschließlich mit der BCL; jede neue NuGet-Abhängigkeit braucht eine belegte Begründung.
+Wall-clock time exists only in `CnCNew.Net`/`CnCNew.Server`, only through an injected clock, only for pacing and time synchronisation. It never reaches the simulation. Networking exclusively with the BCL; every new NuGet dependency needs a verified justification.
 
-### 2.5 Tickrate
+### 2.5 Tick rate
 
-- Die Rate ist ein Wert der Welt (Phase 20). **Unterstützt sind 30, 60 und 120 Hz** (30 · 2ᵏ): Bildwerte des Originals skalieren exakt, multiplikative Faktoren brauchen nur Quadratwurzeln. Produktrate nach Phase 23: **60 Hz** für Gefecht und Kampagne. **Seit dem 8. Oktober 2026 (`e8632bb`) ist 60 Hz der Standard** – eine Definition, `ProductRate.TicksPerSecond` in `CnCNew.Game`; Client, Werkzeuge und Tests leiten davon ab, die Simulation selbst kennt keinen Standard.
-- **Zeiten aus den Daten bleiben auf dem 30-Hz-Raster des Originals** (aufrunden auf Originalbilder, dann × Rate/30). Die Balance ist damit bei jeder Rate dieselbe wie im Original; die höhere Rate bringt feinere Bewegung und schnellere Befehlsannahme, keine anderen Feuerraten.
-- Außerhalb der Simulation gibt es zwei getrennte Begriffe: die *Simulationsrate* (veränderlich) und das *Originalbild* von 1/30 s, in dem das Original Client-Inhalte verfasst hat (fest). Die Uhr der Präsentation ist Spielzeit in Sekunden (Phase 21).
-- Golden-Hashes werden nach Phase 23 nur für 60 Hz gepflegt; 30 und 120 Hz bleiben lauffähig und werden über die Raten-Äquivalenz-Suite geprüft.
+- The rate is a value of the world (Phase 20). **Supported are 30, 60 and 120 Hz** (30 · 2ᵏ): frame values of the original scale exactly, multiplicative factors need only square roots. Product rate after Phase 23: **60 Hz** for skirmish and campaign. **Since 8 October 2026 (`e8632bb`) 60 Hz is the default** – one definition, `ProductRate.TicksPerSecond` in `CnCNew.Game`; client, tools and tests derive from it, the simulation itself knows no default.
+- **Times from the data stay on the 30 Hz grid of the original** (round up to original frames, then × rate/30). The balance is thus the same at every rate as in the original; the higher rate brings finer movement and faster command intake, no different rates of fire.
+- Outside the simulation there are two separate concepts: the *simulation rate* (variable) and the *original frame* of 1/30 s, in which the original authored client content (fixed). The clock of the presentation is game time in seconds (Phase 21).
+- Golden hashes are maintained after Phase 23 only for 60 Hz; 30 and 120 Hz stay runnable and are checked by the rate-equivalence suite.
 
-### 2.6 Festkomma
+### 2.6 Fixed point
 
-`Fixed` wechselt von Q47.16 auf **Q39.24** (Phase 22), allein, bei 30 Hz, vor der Umstellung der Rate. Begründung und Zahlen in `docs/handoffs/HANDOFF-PHASE22.md`.
+`Fixed` changes from Q47.16 to **Q39.24** (Phase 22), alone, at 30 Hz, before the change of the rate. Justification and numbers in `docs/handoffs/HANDOFF-PHASE22.md`.
 
-### 2.7 Kompatibilität beim Beitritt
+### 2.7 Compatibility when joining
 
-Zwei Rechner dürfen nur gemeinsam spielen, wenn Protokollversion, Simulationsversion (Kennung des Codestands), `CommandTypes.Version`, Replay-Format, Definitions-Fingerabdruck, Karten-Dateihash und Tickrate übereinstimmen. Es gibt keinen „trotzdem beitreten“-Weg.
+Two machines may only play together if protocol version, simulation version (identifier of the code state), `CommandTypes.Version`, replay format, definition fingerprint, map file hash and tick rate match. There is no "join anyway" path.
 
-### 2.8 Was das Modell nicht kann
+### 2.8 What the model cannot do
 
-Jeder Client kennt den vollen Zustand; Kartenaufdeckung durch einen manipulierten Client ist im Lockstep nicht zu verhindern. Der Server verhindert, was er verhindern kann: Befehle unter fremder Spieler-ID, Manipulation der Spielgeschwindigkeit, veränderten Zustand (fällt als Desync auf).
+Every client knows the full state; map reveal by a manipulated client cannot be prevented in lockstep. The server prevents what it can prevent: commands under a foreign player ID, manipulation of the game speed, altered state (shows up as a desync).
 
-## 3. Latenzmodell (gerechnet, nicht gemessen)
+## 3. Latency model (calculated, not measured)
 
-Überschlag für die Zeit von der Befehlsabsicht bis zur sichtbaren Wirkung bei einem Spieler mit 30 ms Laufzeit hin und zurück:
+Rough estimate for the time from the command intent to the visible effect for a player with 30 ms round-trip time:
 
-| Stufe | 30 Hz | 60 Hz |
+| Stage | 30 Hz | 60 Hz |
 |---|---|---|
-| Laufzeit hin und zurück | 30 ms | 30 ms |
-| Warten auf den nächsten offenen Tick (Mittel) | 17 ms | 8 ms |
-| Abspielpuffer gegen Schwankung (1 Tick) | 33 ms | 17 ms |
-| Darstellungsverzug der Interpolation (1 Tick) | 33 ms | 17 ms |
-| Summe | rund 113 ms | rund 72 ms |
+| Round-trip time | 30 ms | 30 ms |
+| Waiting for the next open tick (mean) | 17 ms | 8 ms |
+| Playback buffer against jitter (1 tick) | 33 ms | 17 ms |
+| Display lag of the interpolation (1 tick) | 33 ms | 17 ms |
+| Sum | around 113 ms | around 72 ms |
 
-Die Tickrate verkürzt nur die drei Stufen, die in Ticks zählen (rund 40 ms Gewinn, unabhängig von der Laufzeit); bei 300 ms Laufzeit fällt das kaum ins Gewicht. Der größte Hebel für das *Empfinden* ist die sofortige lokale Rückmeldung (Phase 29). Gemessen wird in Phase 26 (Netz) und Phase 29 (Wahrnehmung); die Ergebnisse ersetzen diese Tabelle.
+The tick rate shortens only the three stages that count in ticks (around 40 ms gain, independent of the round-trip time); at 300 ms round-trip time that hardly matters. The biggest lever for the *perception* is the immediate local feedback (Phase 29). Measurement takes place in Phase 26 (network) and Phase 29 (perception); the results replace this table.
 
-## 4. Register der Engstellen und Showstopper
+## 4. Register of bottlenecks and showstoppers
 
-Stand 5. Oktober 2026, belegt durch Lesen des Codes (`2a66661`), zwei Suchläufe und eine Probe-Messung. „Showstopper“ heißt: ohne Lösung funktioniert das Ziel nicht. Jede Phase schreibt ihr Ergebnis in die letzte Spalte.
+As of 5 October 2026, verified by reading the code (`2a66661`), two search runs and one trial measurement. "Showstopper" means: without a solution the goal does not work. Every phase writes its result into the last column.
 
-| Nr. | Art | Befund | Beleg | Phase | Ergebnis |
+| No. | Kind | Finding | Evidence | Phase | Result |
 |---|---|---|---|---|---|
-| E1 | Showstopper | Determinismus ist nur auf einem Rechner belegt | alle bisherigen Vergleichsläufe | 18 | **teilweise belegt (Phase 18):** ein Rechner, 13 Zeilen der Matrix identisch, darunter Linux unter WSL2, Kulturen, JIT-/GC-Schalter (`docs/DETERMINISM.md` §2); **offen:** zweiter physischer Rechner mit anderer CPU, andere .NET-Version |
-| E2 | Risiko | Knochentabelle und Kartenkoordinaten entstehen über `float`/`MathF`/`(decimal)float`; Dictionary-Aufzählung mit Nebenwirkung; kulturabhängiger Skript-Hash; Lücken in Fingerabdrücken und `SourceRules` | `docs/handoffs/HANDOFF-PHASE18.md` D1–D9 | 18 | **behoben (Phase 18):** D1–D9 je mit Test bestätigt oder widerlegt und korrigiert (`docs/DETERMINISM-FINDINGS.md`); real waren D4 (Kultur), D5 (Fingerabdruck), D8 (fehlendes `MarkDirty` auf 19 von 45 Missionskarten), D9 (Zeilenenden: Linux lehnte Windows ab); Rest: eigenes Escaping des Fingerabdrucks, Kennung des Codestands (Phase 25) |
-| E3 | Engstelle | Referenzwerte stehen nur in der Doku, nicht in Tests | `docs/TICKRATE-AUDIT.md` §7 | 18 | **behoben (Phase 18):** `baselines/reference-manifest.json` (50 Läufe) und `baselines/input-manifest.json`, `SimTool reference-manifest check` (`docs/SIMULATION-CORE.md` §37) |
-| E4 | Showstopper | Echtes 8-Spieler-Match kostet rund 7–9 ms je Tick bei wenigen hundert Objekten (nicht ruhige Probe); bei 60 Hz rund ein halber Kern, Aufholtempo etwa 2-fach | `docs/handoffs/HANDOFF-PHASE18.md` Punkt 4 | 18 (Profil), 19, 23 (Tor) | **vermessen (Phase 18, ruhig):** 8 Spieler 4,98 ms je Tick (99 %: 13,6 ms, Maximum 547 ms), bei 60 Hz 30 % eines Kerns und 3,4-faches Aufholtempo; `MD_GLA05` 12,6–13,5 ms, bei 60 Hz 76–81 % und 1,2-fach; 81 % der Update-Zeit `AIUpdateInterface`, ein Drittel Sicht und Hash (`docs/PERFORMANCE.md` §6); Abtragen in Phase 19 **Phase 19 (ruhig gemessen, alle Endhashes unverändert):** 8 Spieler 1,14 ms je Tick (99 %: 3,2 ms, Maximum 94 ms), bei 60 Hz 6,8 % eines Kerns und 16,2-faches Aufholtempo; `MD_GLA05` 2,9–3,4 ms (17–21 % eines Kerns bei 60 Hz). Sollwerte Mittel und 99 % knapp verfehlt, Maximum verfehlt (viele gleichzeitige lange Wegsuchen; nur mit Verhaltensänderung senkbar, `docs/PERFORMANCE.md` §6a.4). **Phase 23, Leistungstor bei 60 Hz (9. Oktober 2026, ruhig, zwei Läufe, `docs/PERFORMANCE.md` §6c):** 8 Spieler, 30 Spielminuten (108.000 Ticks): Mittel 683 / 694 µs (Soll ≤ 1,0 ms: erreicht), 99 % 1.615 / 1.793 µs (≤ 3 ms: erreicht), Aufholtempo 26,7- / 26,5-fach (≥ 8-fach: erreicht), 4,1–4,2 % eines Kerns; **Maximum 141 / 143 ms (≤ 8 ms: verfehlt** – ein Tick mit vielen gleichzeitigen langen Wegsuchen; die Verhaltensänderung, die es senkt, hat sich der Projektinhaber vorbehalten, §7a Nr. 3). `MD_GLA05` bei 60 Hz 2,1–2,4 ms je Tick, 13–14 % eines Kerns, Aufholen live 7- bis 8-fach. Bei gleicher Arbeit kostet ein Tick bei 30 Hz nach der Phase rund 5 % mehr (Stresstest). |
-| E5 | Showstopper | Tickrate ist eine `const`; 61 Verwendungen, rund 110 nackte Tickzahlen in der Simulation, Kataloge rechnen beim Bau um | `docs/TICKRATE-AUDIT.md` §1–§3 | 20 | offen **erledigt für die Simulation (Phase 20, Stand `9299a2d`):** Rate als Wert der Welt, Kataloge je Rate, 262 + 188 + 11 Stellen umgestellt, Quelltextregel gegen nackte Tickzahlen; bei 30 Hz volles Manifest unter Windows und Linux identisch; bei 60/120 Hz deterministische Durchläufe ohne Überlauf, Verhalten unbewertet. Außerhalb der Simulation offen (Phase 21, 16 Punkte in `docs/TICKRATE-MIGRATION.md` §6). |
-| E6 | Showstopper | Daten als rohe Bildwerte (Zug, Dämpfungen, Skript-Bildzähler, Ersatzwerte) | `docs/TICKRATE-AUDIT.md` §4 | 20, 23 | offen **Phase 20:** additive Bildwerte, Skript-Bildzähler und Ersatzwerte sind umgerechnet; multiplikative Faktoren, Integration je Tick, N+1-Zähler und Abtastrhythmen stehen unverändert auf der Liste für Phase 23 (95 Einträge, `docs/TICKRATE-MIGRATION.md` §5). **Phase 23 (9. Oktober 2026, Stand `f3acc2e`): erledigt mit benanntem Rest.** Jede der 95 Zeilen trägt ihren Verbleib: 78 erledigt, 13 bewusst belassen, 4 offen (`Register`/erstes Bild für alle Module, `ObjectiveDriver.Commands`, Katalogwerte `je Tick × r` an einigen Bewegern, Beträge je Tick aus Zustand). Zug, Dämpfungen und gemischte Rekursionen laufen einmal je Originalbild; die Skript-VM zählt wieder Bilder des Originals. |
-| E7 | Showstopper | Partikeleffekte laufen am Simulationstick; Hüllkurven, EVA, HUD und Missionspräsentation zählen Ticks; Kopien der 30 außerhalb der Simulation | `docs/TICKRATE-AUDIT.md` §2, §6 | 21 | offen **erledigt (Phase 21, Stand `2a0a6f5`):** Effekte, Hüllkurven, Eva, HUD und Missionspräsentation laufen auf dem Originalbild-Raster an der Spieluhr (`GameClock`); eine Ratenkonstante außerhalb der Simulation, Quelltexttest mit 3 benannten Ausnahmen; bei 30 Hz alle reproduzierbaren Prüfsummen unverändert; Zeitmaß bei 30/60/120 Hz für alle geprüften Elemente gleich. Nicht von einem Menschen gesehen oder gehört. |
-| E8 | Engstelle | Q47.16 ist für Größen je Tick² bei 60 Hz zu grob; `FixedTrig` gröber als die Zielauflösung; rund 170 Rohwert-Stellen, feste `65536` außerhalb der Simulation | `docs/handoffs/HANDOFF-PHASE22.md` | 22 | offen **Messlatte aus Phase 20 (`SimTool rate-audit`):** kein benutzter Katalogwert rundet bei 60 oder 120 Hz auf null; über 1 % Quantisierungsfehler 1 Wert (60 Hz) bzw. 41 Werte (120 Hz, schlechtester `LocomotorInfo.Braking` 9,59 %); unter acht signifikanten Bits 46 bzw. 321 Werte. **erledigt bei 30 Hz (Phase 22, Stand `8d74ef8`):** Q39.24, `FixedTrig` auf rund 10⁻⁷ genau, Quelltextregel gegen Maßstabsliterale, alle Formate mit neuer Version, Manifest neu vermessen (5 von 16 KI-Läufen mit anderem Ausgang durch Rundungsverstärkung, Balance unbewertet). Bei 60 und 120 Hz rundet beim Katalogbau nichts mehr auf null, kein Wert über 1 % Fehler. Überlauf beim Quadrieren von Platzhalter-Reichweiten behoben (`SquaredReach`); **offen:** ungeprüfte Zielkoordinaten in Befehlen (ab rund 524.000 Einheiten Überlauf in der Bewegung) – Befehlsprüfung gegen die Kartengrenzen vor dem Lockstep (Phase 27/28). |
-| E9 | Showstopper | Integration je Tick ist nicht schrittweiten-invariant (Bewegung, Flug, Geschosse, Umstürzen, multiplikative Dämpfung) | `docs/TICKRATE-AUDIT.md` §5 | 23 | offen **Phase 23 (9. Oktober 2026, Stand `f3acc2e`): erledigt mit benanntem Rest, 60 Hz ist Standard.** Prinzip: der 30-Hz-Schritt ist die Definition, höhere Raten unterteilen ihn (entschieden im ersten Tick des Originalbilds eines Objekts, die 30-Hz-Lage mit dem letzten erreicht, Beobachter lesen das Bildende; `docs/SIMULATION-CORE.md` §43). Raten-Äquivalenz-Suite von 479 / 625 Größen außerhalb der Toleranz (60 / 120 Hz) über 63 / 64 und 35 / 33 auf **0 / 0** von 4.388, ohne eine Toleranz zu ändern; das Retail-Referenzmatch ist bei 30, 60 und 120 Hz dasselbe Spiel (Bild 14.130, 26.626 Befehle). **Rest, gemessen:** 2 von 16 Paarungen auf ausgelieferten Karten enden bei 60 Hz in einem anderen Bild (7 s und 84,5 s, derselbe Sieger); 33 von 320 Gefechten der Erhebung enden mehr als eine Sekunde neben dem 30-Hz-Gefecht, 3 mit anderem Ausgang; 120 Hz ist für Paarungen und Erhebung nicht gemessen; einige Beweger rechnen weiter `Wert je Tick × r` (`docs/TICKRATE-MIGRATION.md` §15.7.6). Die Gleichheit ganzer Gefechte ist mit einem Selbsterwerb je Originalbild der Einheit erkauft, den der Auftrag dem Wortlaut nach verbot (§7a Nr. 1, Bestätigung offen). Drei Fehler bei 30 Hz wurden auf dem Weg behoben, je mit eigenem Manifest (`6a99102`, `8a6e5b7`, `cca6f92`). Nicht von einem Menschen gesehen. |
-| E10 | Showstopper | Kein Test vergleicht zwei Raten; alle Abnahmen sind Hashes und Tickbudgets bei 30 Hz; rund 845 Testzeilen mit Tickerwartungen | `docs/TICKRATE-AUDIT.md` §7 | 21, 23 | offen **Phase 21:** Zeitmaß-Tests vergleichen 30, 60 und 120 Hz; 142 Testdateien bewertet (keine offen), Zeiterwartungen in Spielzeit; die Simulationstests laufen probeweise bei 60 Hz (396 von 402, sechs benannte Ausfälle für Phase 23). Der Vergleich der Spielergebnisse zwischen Raten bleibt Phase 23. **Phase 23 (9. Oktober 2026): erledigt.** Raten-Äquivalenz-Suite (686 Fälle, 4.388 Größen in zehn Gruppen, Toleranzen vor dem ersten Lauf festgelegt, `docs/SIMULATION-CORE.md` §39) und Verteilungsvergleich über 320 Gefechte je Rate (§40) vergleichen Spielgrößen zwischen 30, 60 und 120 Hz; `rate-compare --ai-diff/--reference-diff/--map-diff` nennt das erste abweichende Bild eines ganzen Gefechts. Alle Testprogramme nehmen `--tick-rate` und bestehen bei 30, 60 und 120 Hz (Simulation 513 von 513, mit Realdaten 543 von 543, am Stand `1b82e45`); Erwartungen stehen in Bildern. Das Referenzmanifest steht bei 60 Hz (`ea52f87`) und wird mit der Rate seiner Datei geprüft. **Offen:** die Determinismus-Matrix und der Linux-Lauf mit den 60-Hz-Manifesten (`docs/DETERMINISM.md` §2c). |
-| E11 | Showstopper | KI-Zustand liegt außerhalb von Snapshot und Hash; `CreateSave()` wirft; KI-Startwert steht in keinem Kopf | `SkirmishMatchSession.cs`, `SkirmishAi.cs` | 24 | offen **Phase 23 (Vorgriff, ändert den Befund nicht):** die als Option gebaute Original-KI (`ScriptedSkirmishSession`, `docs/SKIRMISH-AI-ORIGINAL.md`) hält ihren ganzen Zustand von Anfang an in Zustand, Hash und Speicherstand ihrer Sitzung; für die eingebaute `SkirmishAi` – den Standard – ist E11 unverändert offen, und ihr Verhalten ist in Phase 23 geändert worden (stehender Heeresauftrag, Tauschwert-Regel, Arbeit für ausfahrende Bauarbeiter) und hat dabei neuen Zustand bekommen (`_armyOrder`, `_sightings`), der wie der übrige außerhalb von Snapshot und Hash liegt. |
-| E12 | Showstopper | Befehle werden beim Einreichen gegen die aktuelle Welt geprüft und sofort gehasht; Einreichungszeitpunkt und -reihenfolge müssen auf allen Rechnern gleich sein | `SimulationWorld.Submit`/`Validate` | 24, 25 | offen |
-| E13 | Showstopper | Befehlsweg antwortet synchron und vergibt den aktuellen Tick; Anzeige der Ablehnung hängt daran | `ICommandSink`, `CommandModeController` | 24 | offen |
-| E14 | Showstopper | `LiveGame.Advance` besitzt die Zeit (Akkumulator, 8 Ticks je Bild, lokale Pause/Geschwindigkeit) | `LiveGame.cs` | 24 | offen |
-| E15 | Engstelle | Match-Eingabe unvollständig: keine Teams/Farben/Startpositionen/KI-Stärke in `MatchSetup`, Mensch fest Spieler 1, Zufallsfraktion aus Shell-Zufall | `LiveMatch.cs`, `SkirmishScreens.cs` | 24, 25 | offen |
-| E16 | Showstopper | Kein Netzwerkcode, kein Protokoll, keine Kennung des Simulationsstands | – | 25, 26 | offen |
-| E17 | Engstelle | Snapshot ist JSON, 485–776 Byte je Objekt (10–12 MB im Stresstest), für Übertragung unvermessen; Wiederherstellung fügt Objekte in anderer Reihenfolge ein als das laufende Spiel | `docs/SIMULATION-CORE.md`, D3 | 18, 27 | **teilweise (Phase 18):** Aufzählung jetzt in ID-Reihenfolge (`EntityTable`, D3); Snapshot vermessen: 3,2 MB bei 155 Objekten (Twilight Flame, 8 Spieler), 9,0 MB bei 2.249 Objekten (`MD_GLA05`), Schreiben 9–43 ms, Lesen 23–164 ms; Übertragung offen (Phase 27) |
-| E18 | Engstelle | Ohne Werkzeug ist ein Desync nicht auf Objekt und Feld zurückführbar | – | 27 | offen |
-| E19 | Risiko | Offener UDP-Port: Flut, gefälschte Absender, fehlerhafte Pakete, Mitlesen | – | 26 (Cookie, Parser), 28 | offen |
-| E20 | Engstelle | Speicherbereinigung und lange Bilder lassen einen Client stocken; im Lockstep muss er aufholen können | E4 | 19, 23, 26 | **vermessen (Phase 18):** 95 KB Allokation je Tick und 2 Gen-2-Läufe in 54.000 Ticks (8 Spieler); `MD_GLA05` 4 MB je Tick, 7 Gen-2-Läufe in 9.000 Ticks; Abtragen in Phase 19 **Phase 19:** 52 KB je Tick, keine Gen-2-Läufe in 54.000 Ticks (8 Spieler); `MD_GLA05` 10 KB je Tick; Ausreißer bis 94 ms (Gefecht) bzw. 152 ms (erster Missionstick) bleiben. **Phase 23 (Leistungstor bei 60 Hz):** rund 8 KB je Tick (8 Spieler; bei 30 Hz 17 KB), keine Gen-2-Läufe in 108.000 Ticks; Ausreißer bis 141–143 ms im Gefecht, 101–128 ms in den Missionen. Ein Client, der einen solchen Tick trifft, fällt bei 60 Hz um rund acht Ticks zurück (gerechnet: 141 ms gegen 16,7 ms je Tick) und muss aufholen (Aufholtempo 26-fach). |
-| E21 | Grenze | Mission: Präsentation meldet an die Skript-VM zurück (`CompletePresentation`, `SelectNamed`, `SignalUiInteraction`), `<Local Player>` je Rechner, `_selected` nicht gehasht | `MissionPresentation.cs`, `ScriptEngine*.cs` | – (Kampagne bleibt lokal; in Phase 24 dokumentiert) | bewusst |
-| E22 | Grenze | Kartenaufdeckung im Lockstep nicht verhinderbar | §2.8 | – | bewusst |
-| E23 | Engstelle | Oberfläche: Mehrspieler-Knopf deaktiviert, kein Raum, keine Anzeigen im Spiel; Interpolation nur für Position und Rumpfdrehung | `docs/GAME-SHELL.md`, `FrameProjector.cs` | 29 | offen |
-| E24 | Risiko | Nichts aus Phase 15–17 ist von einem Menschen abgenommen; ein Netzwerkspiel auf einem Spiel mit unbelegter Spielbarkeit verdeckt Ursachen | `CLAUDE.md` | 17, 29, 30 | offen **Phase 23:** unverändert offen. Der Projektinhaber hat am 8. Oktober 2026 ein KI-Gefecht im Zuschauermodus bei 30 Hz angesehen (vier Beobachtungen, daraus drei Korrekturen, `docs/AI-OBSERVED-2026-10-08.md`); bei 60 Hz hat kein Mensch das Spiel gesehen oder gehört. |
+| E1 | Showstopper | Determinism is verified on one machine only | all comparison runs so far | 18 | **partly verified (Phase 18):** one machine, 13 rows of the matrix identical, among them Linux under WSL2, cultures, JIT/GC switches (`docs/DETERMINISM.md` §2); **open:** second physical machine with a different CPU, different .NET version |
+| E2 | Risk | Bone table and map coordinates are produced through `float`/`MathF`/`(decimal)float`; dictionary enumeration with a side effect; culture-dependent script hash; gaps in fingerprints and `SourceRules` | `docs/handoffs/HANDOFF-PHASE18.md` D1–D9 | 18 | **fixed (Phase 18):** D1–D9 each confirmed or refuted with a test and corrected (`docs/DETERMINISM-FINDINGS.md`); real were D4 (culture), D5 (fingerprint), D8 (missing `MarkDirty` on 19 of 45 mission maps), D9 (line endings: Linux rejected Windows); rest: own escaping of the fingerprint, identifier of the code state (Phase 25) |
+| E3 | Bottleneck | Reference values exist only in the documentation, not in tests | `docs/TICKRATE-AUDIT.md` §7 | 18 | **fixed (Phase 18):** `baselines/reference-manifest.json` (50 runs) and `baselines/input-manifest.json`, `SimTool reference-manifest check` (`docs/SIMULATION-CORE.md` §37) |
+| E4 | Showstopper | A real 8-player match costs around 7–9 ms per tick with a few hundred objects (non-quiet sample); at 60 Hz around half a core, catch-up speed about 2-fold | `docs/handoffs/HANDOFF-PHASE18.md` item 4 | 18 (profile), 19, 23 (gate) | **measured (Phase 18, quiet):** 8 players 4.98 ms per tick (99 %: 13.6 ms, maximum 547 ms), at 60 Hz 30 % of one core and 3.4-fold catch-up speed; `MD_GLA05` 12.6–13.5 ms, at 60 Hz 76–81 % and 1.2-fold; 81 % of the update time `AIUpdateInterface`, one third vision and hash (`docs/PERFORMANCE.md` §6); reduction in Phase 19 **Phase 19 (measured quietly, all end hashes unchanged):** 8 players 1.14 ms per tick (99 %: 3.2 ms, maximum 94 ms), at 60 Hz 6.8 % of one core and 16.2-fold catch-up speed; `MD_GLA05` 2.9–3.4 ms (17–21 % of one core at 60 Hz). Targets for mean and 99 % narrowly missed, maximum missed (many simultaneous long path searches; can only be lowered with a behaviour change, `docs/PERFORMANCE.md` §6a.4). **Phase 23, performance gate at 60 Hz (9 October 2026, quiet, two runs, `docs/PERFORMANCE.md` §6c):** 8 players, 30 game minutes (108,000 ticks): mean 683 / 694 µs (target ≤ 1.0 ms: reached), 99 % 1,615 / 1,793 µs (≤ 3 ms: reached), catch-up speed 26.7-fold / 26.5-fold (≥ 8-fold: reached), 4.1–4.2 % of one core; **maximum 141 / 143 ms (≤ 8 ms: missed** – one tick with many simultaneous long path searches; the behaviour change that lowers it has been reserved by the project owner, §7a no. 3). `MD_GLA05` at 60 Hz 2.1–2.4 ms per tick, 13–14 % of one core, catching up live 7-fold to 8-fold. For the same work a tick at 30 Hz costs around 5 % more after the phase (stress test). |
+| E5 | Showstopper | Tick rate is a `const`; 61 uses, around 110 bare tick numbers in the simulation, catalogues convert at build time | `docs/TICKRATE-AUDIT.md` §1–§3 | 20 | open **done for the simulation (Phase 20, state `9299a2d`):** rate as a value of the world, catalogues per rate, 262 + 188 + 11 places converted, source-code rule against bare tick numbers; at 30 Hz full manifest identical under Windows and Linux; at 60/120 Hz deterministic runs without overflow, behaviour not assessed. Open outside the simulation (Phase 21, 16 items in `docs/TICKRATE-MIGRATION.md` §6). |
+| E6 | Showstopper | Data as raw frame values (drag, dampings, script frame counters, substitute values) | `docs/TICKRATE-AUDIT.md` §4 | 20, 23 | open **Phase 20:** additive frame values, script frame counters and substitute values are converted; multiplicative factors, integration per tick, N+1 counters and sampling rhythms stand unchanged on the list for Phase 23 (95 entries, `docs/TICKRATE-MIGRATION.md` §5). **Phase 23 (9 October 2026, state `f3acc2e`): done with a named rest.** Each of the 95 rows carries its whereabouts: 78 done, 13 deliberately left, 4 open (`Register`/first frame for all modules, `ObjectiveDriver.Commands`, catalogue values `per tick × r` on some movers, amounts per tick from state). Drag, dampings and mixed recursions run once per original frame; the script VM counts frames of the original again. |
+| E7 | Showstopper | Particle effects run on the simulation tick; envelopes, EVA, HUD and mission presentation count ticks; copies of the 30 outside the simulation | `docs/TICKRATE-AUDIT.md` §2, §6 | 21 | open **done (Phase 21, state `2a0a6f5`):** effects, envelopes, Eva, HUD and mission presentation run on the original-frame grid on the game clock (`GameClock`); one rate constant outside the simulation, source-code test with 3 named exceptions; at 30 Hz all reproducible checksums unchanged; timing at 30/60/120 Hz equal for all checked elements. Not seen or heard by a human. |
+| E8 | Bottleneck | Q47.16 is too coarse for quantities per tick² at 60 Hz; `FixedTrig` coarser than the target resolution; around 170 raw-value places, fixed `65536` outside the simulation | `docs/handoffs/HANDOFF-PHASE22.md` | 22 | open **yardstick from Phase 20 (`SimTool rate-audit`):** no used catalogue value rounds to zero at 60 or 120 Hz; above 1 % quantisation error 1 value (60 Hz) and 41 values (120 Hz, worst `LocomotorInfo.Braking` 9.59 %); below eight significant bits 46 and 321 values respectively. **done at 30 Hz (Phase 22, state `8d74ef8`):** Q39.24, `FixedTrig` accurate to around 10⁻⁷, source-code rule against scale literals, all formats with a new version, manifest re-measured (5 of 16 AI runs with a different outcome through rounding amplification, balance not assessed). At 60 and 120 Hz nothing rounds to zero any more when building the catalogue, no value above 1 % error. Overflow when squaring placeholder ranges fixed (`SquaredReach`); **open:** unchecked target coordinates in commands (from around 524,000 units on, overflow in the movement) – command check against the map bounds before lockstep (Phase 27/28). |
+| E9 | Showstopper | Integration per tick is not step-size invariant (movement, flight, projectiles, toppling, multiplicative damping) | `docs/TICKRATE-AUDIT.md` §5 | 23 | open **Phase 23 (9 October 2026, state `f3acc2e`): done with a named rest, 60 Hz is the default.** Principle: the 30 Hz step is the definition, higher rates subdivide it (decided in the first tick of the original frame of an object, the 30 Hz position reached with the last one, observers read the frame end; `docs/SIMULATION-CORE.md` §43). Rate-equivalence suite from 479 / 625 quantities outside the tolerance (60 / 120 Hz) via 63 / 64 and 35 / 33 to **0 / 0** of 4,388, without changing a tolerance; the retail reference match is the same game at 30, 60 and 120 Hz (frame 14,130, 26,626 commands). **Rest, measured:** 2 of 16 pairings on shipped maps end at 60 Hz in a different frame (7 s and 84.5 s, the same winner); 33 of 320 matches of the survey end more than one second away from the 30 Hz match, 3 with a different outcome; 120 Hz is not measured for pairings and survey; some movers still compute `value per tick × r` (`docs/TICKRATE-MIGRATION.md` §15.7.6). The equality of whole matches is bought with a self-acquisition per original frame of the unit, which the brief forbade by its wording (§7a no. 1, confirmation open). Three defects at 30 Hz were fixed along the way, each with its own manifest (`6a99102`, `8a6e5b7`, `cca6f92`). Not seen by a human. |
+| E10 | Showstopper | No test compares two rates; all acceptances are hashes and tick budgets at 30 Hz; around 845 test lines with tick expectations | `docs/TICKRATE-AUDIT.md` §7 | 21, 23 | open **Phase 21:** timing tests compare 30, 60 and 120 Hz; 142 test files assessed (none open), time expectations in game time; the simulation tests run on a trial basis at 60 Hz (396 of 402, six named failures for Phase 23). The comparison of the game results between rates remains Phase 23. **Phase 23 (9 October 2026): done.** Rate-equivalence suite (686 cases, 4,388 quantities in ten groups, tolerances fixed before the first run, `docs/SIMULATION-CORE.md` §39) and distribution comparison over 320 matches per rate (§40) compare game quantities between 30, 60 and 120 Hz; `rate-compare --ai-diff/--reference-diff/--map-diff` names the first deviating frame of a whole match. All test programs take `--tick-rate` and pass at 30, 60 and 120 Hz (simulation 513 of 513, with real data 543 of 543, at state `1b82e45`); expectations are stated in frames. The reference manifest stands at 60 Hz (`ea52f87`) and is checked with the rate of its file. **Open:** the determinism matrix and the Linux run with the 60 Hz manifests (`docs/DETERMINISM.md` §2c). |
+| E11 | Showstopper | AI state lies outside snapshot and hash; `CreateSave()` throws; AI seed is in no header | `SkirmishMatchSession.cs`, `SkirmishAi.cs` | 24 | open **Phase 23 (anticipation, does not change the finding):** the original AI built as an option (`ScriptedSkirmishSession`, `docs/SKIRMISH-AI-ORIGINAL.md`) keeps its whole state from the beginning in state, hash and savegame of its session; for the built-in `SkirmishAi` – the default – E11 is open unchanged, and its behaviour was changed in Phase 23 (standing army order, exchange-value rule, work for builders driving out) and received new state in the process (`_armyOrder`, `_sightings`), which like the rest lies outside snapshot and hash. |
+| E12 | Showstopper | Commands are checked against the current world when submitted and hashed immediately; time and order of submission must be the same on all machines | `SimulationWorld.Submit`/`Validate` | 24, 25 | open |
+| E13 | Showstopper | Command path answers synchronously and assigns the current tick; display of the rejection hangs on it | `ICommandSink`, `CommandModeController` | 24 | open |
+| E14 | Showstopper | `LiveGame.Advance` owns the time (accumulator, 8 ticks per frame, local pause/speed) | `LiveGame.cs` | 24 | open |
+| E15 | Bottleneck | Match input incomplete: no teams/colours/start positions/AI strength in `MatchSetup`, human fixed as player 1, random faction from shell randomness | `LiveMatch.cs`, `SkirmishScreens.cs` | 24, 25 | open |
+| E16 | Showstopper | No network code, no protocol, no identifier of the simulation state | – | 25, 26 | open |
+| E17 | Bottleneck | Snapshot is JSON, 485–776 bytes per object (10–12 MB in the stress test), unmeasured for transfer; restoring inserts objects in a different order than the running game | `docs/SIMULATION-CORE.md`, D3 | 18, 27 | **partly (Phase 18):** enumeration now in ID order (`EntityTable`, D3); snapshot measured: 3.2 MB with 155 objects (Twilight Flame, 8 players), 9.0 MB with 2,249 objects (`MD_GLA05`), writing 9–43 ms, reading 23–164 ms; transfer open (Phase 27) |
+| E18 | Bottleneck | Without a tool a desync cannot be traced back to object and field | – | 27 | open |
+| E19 | Risk | Open UDP port: flood, forged senders, malformed packets, eavesdropping | – | 26 (cookie, parser), 28 | open |
+| E20 | Bottleneck | Garbage collection and long frames make a client stall; in lockstep it must be able to catch up | E4 | 19, 23, 26 | **measured (Phase 18):** 95 KB allocation per tick and 2 gen-2 collections in 54,000 ticks (8 players); `MD_GLA05` 4 MB per tick, 7 gen-2 collections in 9,000 ticks; reduction in Phase 19 **Phase 19:** 52 KB per tick, no gen-2 collections in 54,000 ticks (8 players); `MD_GLA05` 10 KB per tick; outliers up to 94 ms (skirmish) and 152 ms (first mission tick) remain. **Phase 23 (performance gate at 60 Hz):** around 8 KB per tick (8 players; at 30 Hz 17 KB), no gen-2 collections in 108,000 ticks; outliers up to 141–143 ms in the skirmish, 101–128 ms in the missions. A client that hits such a tick falls back by around eight ticks at 60 Hz (calculated: 141 ms against 16.7 ms per tick) and must catch up (catch-up speed 26-fold). |
+| E21 | Limit | Mission: presentation reports back to the script VM (`CompletePresentation`, `SelectNamed`, `SignalUiInteraction`), `<Local Player>` per machine, `_selected` not hashed | `MissionPresentation.cs`, `ScriptEngine*.cs` | – (campaign stays local; documented in Phase 24) | deliberate |
+| E22 | Limit | Map reveal not preventable in lockstep | §2.8 | – | deliberate |
+| E23 | Bottleneck | User interface: multiplayer button disabled, no room, no displays in the game; interpolation only for position and hull rotation | `docs/GAME-SHELL.md`, `FrameProjector.cs` | 29 | open |
+| E24 | Risk | Nothing from Phases 15–17 is accepted by a human; a network game on top of a game with unverified playability conceals causes | `CLAUDE.md` | 17, 29, 30 | open **Phase 23:** open unchanged. On 8 October 2026 the project owner watched an AI match in spectator mode at 30 Hz (four observations, three corrections from them, `docs/AI-OBSERVED-2026-10-08.md`); at 60 Hz no human has seen or heard the game. |
 
-### 4a. Freigabe nach Phase 18 (6. Oktober 2026)
+### 4a. Go-ahead after Phase 18 (6 October 2026)
 
-**Das Programm wird wie geplant fortgesetzt**, mit zwei Auflagen.
+**The programme is continued as planned**, with two conditions.
 
-- *Dafür spricht:* die Rechnung ist auf dem gemessenen Rechner von JIT, GC, Kultur und Betriebssystem unabhängig (13 Matrixzeilen identisch, `docs/DETERMINISM.md`); die Messlatte existiert und besteht zweimal hintereinander; alle neun Befunde des Suchlaufs sind abgearbeitet; das Tickraten-Inventar ist geprüft (1.959 Stellen in acht Klassen, `docs/TICKRATE-AUDIT.md`).
-- *Auflage 1 (E1):* der Lauf auf einem zweiten physischen Rechner mit anderer CPU steht aus (`docs/DETERMINISM.md` §4). Er ist vor Phase 26 (erstes Netzwerkspiel zwischen Rechnern) nachzuholen; bis dahin gilt der Determinismus über Rechnergrenzen als *wahrscheinlich, nicht belegt*.
-- *Auflage 2 (E4):* die Leistung ist der eigentliche Engpass. Ohne Phase 19 kostet ein 8-Spieler-Gefecht bei 60 Hz 30 % eines Kerns mit Ausreißern bis 547 ms je Tick, und eine große Mission 76–81 %. Phase 19 bleibt deshalb vor Phase 20; ihr Sollwert „Mittel ≤ 1,0 ms“ verlangt rund den Faktor 5 und ist nach dem Profil nur erreichbar, wenn Bewegung/Wegsuche (`AIUpdateInterface`, 81 % der Update-Zeit) sinkt – Sicht und Hash allein bringen höchstens ein Drittel.
-- *Aus dem Inventar für die Phasen 20–23 (Widersprüche zum Plan, `docs/TICKRATE-AUDIT.md` Zusammenfassung):* „gleiche Balance bei jeder Rate“ gilt nur für die Katalogrundung, nicht für Abrundungen, Ein-Tick-Minima und N+1-Zähler zur Laufzeit; Literale, die Reihenfolge statt Zeit bedeuten, dürfen nicht skaliert werden; gemischte Rekurrenzen (Zug, Zugformation, MOAB) brauchen mehr als Quadratwurzeln; die Präsentation greift heute über `StandingOrders` und den Missions-Director in die Simulation ein; `SaveGame` schreibt keine Rate.
+- *In favour:* on the measured machine the computation is independent of JIT, GC, culture and operating system (13 matrix rows identical, `docs/DETERMINISM.md`); the yardstick exists and passes twice in a row; all nine findings of the search run are worked off; the tick-rate inventory is checked (1,959 places in eight classes, `docs/TICKRATE-AUDIT.md`).
+- *Condition 1 (E1):* the run on a second physical machine with a different CPU is outstanding (`docs/DETERMINISM.md` §4). It is to be made up before Phase 26 (first network game between machines); until then determinism across machine boundaries counts as *probable, not verified*.
+- *Condition 2 (E4):* performance is the actual bottleneck. Without Phase 19 an 8-player skirmish at 60 Hz costs 30 % of one core with outliers up to 547 ms per tick, and a large mission 76–81 %. Phase 19 therefore stays before Phase 20; its target "mean ≤ 1.0 ms" requires around a factor of 5 and according to the profile is only reachable if movement/pathfinding (`AIUpdateInterface`, 81 % of the update time) goes down – vision and hash alone yield at most one third.
+- *From the inventory for Phases 20–23 (contradictions to the plan, `docs/TICKRATE-AUDIT.md` summary):* "same balance at every rate" holds only for the catalogue rounding, not for round-downs, one-tick minima and N+1 counters at run time; literals that mean order instead of time must not be scaled; mixed recurrences (drag, drag formation, MOAB) need more than square roots; the presentation today intervenes in the simulation through `StandingOrders` and the mission director; `SaveGame` writes no rate.
 
-## 5. Phasenübersicht
+## 5. Phase overview
 
-| Phase | Inhalt | Ändert Referenzwerte? | Tor am Ende |
+| Phase | Content | Changes reference values? | Gate at the end |
 |---|---|---|---|
-| 17 | Spielbarkeit (läuft, unverändert `docs/handoffs/HANDOFF-PHASE17.md`) | ja (Regelkorrekturen) | – |
-| 18 | Messbasis: Referenzmanifest, Determinismus über Rechnergrenzen, Leistungsprofil, geprüftes Inventar | nur benannte Determinismus-Korrekturen | Freigabe des Programms |
-| 19 | Leistung: Tickkosten echter Matches | nein | Sollwerte erreicht oder Rest benannt |
-| 20 | Tickrate als Parameter – Simulation | nein (bytegleich bei 30 Hz) | Manifest unverändert |
-| 21 | Tickrate als Parameter – Präsentation, Spielschicht, UI, Ton, Werkzeuge, Tests | nein (bildgleich bei 30 Hz) | Prüfsummen unverändert |
-| 22 | Festkomma Q39.24 | **ja, einmal** | Ergebnisvergleich erklärt |
-| 23 | Zeitschritt-Invarianz, neue Abnahmetests, 60 Hz als Standard, Neuerhebung | **ja** (60 Hz) | Raten-Äquivalenz und Leistungstor – **erledigt am 9. Oktober 2026 (`e8632bb`, `ea52f87`)**: Suite 0 / 0, Manifeste bei 60 Hz; das Leistungstor bis auf Maximum und Allokation; dazu drei Verhaltensänderungen bei 30 Hz mit eigenen Manifesten; Rest und offene Entscheidungen in §7a |
-| 24 | Sitzungskern: KI im Zustand, Speicherstand, Match-Beschreibung, Befehlsweg, Tickquelle | nein (bei Verzögerung 0) | Referenzwerte unverändert |
-| 25 | Protokoll, Raum, Relay im Prozess; lokales Gefecht über den Netzpfad; KI-Slots | nein | Mehr-Client-Probe hashgleich |
-| 26 | Dedicated Server, UDP, Zeitabgleich, adaptive Puffer, 8 Clients | nein | Netzmatrix gemessen |
-| 27 | Desync-Diagnose, Wiedereinstieg, Zuschauer, Server-Replay | nein | Wiedereinstieg hashgleich |
-| 28 | Serverbetrieb und Sicherheit | nein | Fuzzing, Kapazität, Paket |
-| 29 | Mehrspieler im Client, Latenzwahrnehmung, Abnahme mit Menschen | nein | Checkliste durch Menschen |
-| 30 | Patch-Integration, Qualität, auslieferbarer Abschluss (verschoben) | ja (übernommene Fixes) | Paket, Abnahme |
+| 17 | Playability (running, unchanged `docs/handoffs/HANDOFF-PHASE17.md`) | yes (rule corrections) | – |
+| 18 | Measurement basis: reference manifest, determinism across machine boundaries, performance profile, checked inventory | only named determinism corrections | go-ahead for the programme |
+| 19 | Performance: tick costs of real matches | no | targets reached or rest named |
+| 20 | Tick rate as a parameter – simulation | no (byte-identical at 30 Hz) | manifest unchanged |
+| 21 | Tick rate as a parameter – presentation, game layer, UI, sound, tools, tests | no (image-identical at 30 Hz) | checksums unchanged |
+| 22 | Fixed point Q39.24 | **yes, once** | result comparison explained |
+| 23 | Time-step invariance, new acceptance tests, 60 Hz as the default, new survey | **yes** (60 Hz) | rate equivalence and performance gate – **done on 9 October 2026 (`e8632bb`, `ea52f87`)**: suite 0 / 0, manifests at 60 Hz; the performance gate except for maximum and allocation; in addition three behaviour changes at 30 Hz with their own manifests; rest and open decisions in §7a |
+| 24 | Session core: AI in the state, savegame, match description, command path, tick source | no (at delay 0) | reference values unchanged |
+| 25 | Protocol, room, relay in the process; local skirmish over the network path; AI slots | no | multi-client sample hash-identical |
+| 26 | Dedicated server, UDP, time synchronisation, adaptive buffers, 8 clients | no | network matrix measured |
+| 27 | Desync diagnosis, rejoining, spectators, server replay | no | rejoining hash-identical |
+| 28 | Server operation and security | no | fuzzing, capacity, package |
+| 29 | Multiplayer in the client, latency perception, acceptance with humans | no | checklist by humans |
+| 30 | Patch integration, quality, shippable completion (postponed) | yes (adopted fixes) | package, acceptance |
 
-Abhängigkeiten: 18 → 19 → 20 → {21 ∥ 22} → 23 → 24 → 25 → 26 → 27 → 28 → 29 → 30. Parallel dürfen nur 21 und 22 laufen (getrennte Worktrees, Merge 21 vor 22). Phase 24 hängt fachlich nicht an 60 Hz, kommt aber danach, damit ihre Referenzwerte nicht zweimal erhoben werden.
+Dependencies: 18 → 19 → 20 → {21 ∥ 22} → 23 → 24 → 25 → 26 → 27 → 28 → 29 → 30. Only 21 and 22 may run in parallel (separate worktrees, merge 21 before 22). Phase 24 does not depend on 60 Hz in subject matter, but comes after it so that its reference values are not surveyed twice.
 
-Warum die Tickrate vor dem Netz: Rate und Festkomma ändern jeden Hash und jedes Format. Netzwerkcode gegen eine Simulation zu entwickeln, deren Referenzwerte noch dreimal wechseln, hieße, jede Desync-Suche gegen ein bewegliches Ziel zu führen.
+Why the tick rate before the network: rate and fixed point change every hash and every format. Developing network code against a simulation whose reference values still change three times would mean conducting every desync search against a moving target.
 
-## 6. Regeln für alle Phasen des Programms (zusätzlich zu `CLAUDE.md`)
+## 6. Rules for all phases of the programme (in addition to `CLAUDE.md`)
 
-1. **Erst messen, dann ändern.** Jede Phase beginnt mit dem reproduzierten Ausgangszustand; keine Zahl aus diesem Dokument oder einem Handoff gilt als gemessen.
-2. **Das Referenzmanifest ist die Messlatte** (`baselines/`, ab Phase 18). Eine Phase, die als ergebnisgleich angekündigt ist, endet mit unverändertem Manifest. Wer es ändern muss, tut das in einem eigenen Commit mit einer einzigen Ursache, Vorher/Nachher-Werten und Begründung.
-3. **Eine Ursache je Referenzänderung.** Nie zwei ergebnisändernde Dinge in einem Commit; sonst ist keine Verschiebung mehr zuzuordnen.
-4. **Determinismus gilt über Rechnergrenzen.** Neue Simulationseingänge laufen über die geprüften Wandlungsroutinen; nichts Kultur-, Laufzeit- oder CPU-abhängiges erreicht den Zustand.
-5. **Keine Wandzeit in der Simulation**, auch nicht mittelbar: keine Lastverteilung nach Zeit, keine Rückmeldung der Präsentation in ein Netzwerkmatch.
-6. **Nichts fällt still zurück.** Unbekannte Nachrichten, Versionen, Fingerabdrücke, Raten: gezählt, gemeldet, abgelehnt.
-7. **Formate:** inkompatible Änderungen erhöhen die Version; alte Stände werden mit klarer Meldung abgelehnt. Bis zur ersten Veröffentlichung gibt es keine Migrationspflicht, danach ist jeder Formatbruch eine Entscheidung des Projektinhabers.
-8. **Headless belegt ist nicht abgenommen.** Was nur ein Mensch beurteilen kann (Aussehen bei 60 Hz, Spielgefühl mit Verzögerung, Netzwerkspiel mit echten Spielern, ein zweiter Rechner), wird als offen berichtet, bis es stattgefunden hat.
-9. **Vorhandene Handoffs fortschreiben.** Am Ende jeder Phase wird der Auftrag der nächsten *nicht neu geschrieben*, sondern sein Abschnitt „Ausgangslage“ mit dem gemessenen Stand aktualisiert; Abweichungen vom Plan (verschobene oder neue Punkte) werden dort und in §5 benannt.
-10. Zeilenenden, Git-Regeln, Hintergrundläufe mit Timeout, Release-Werkzeuge neu bauen: wie `CLAUDE.md`.
+1. **Measure first, then change.** Every phase begins with the reproduced starting state; no number from this document or a handoff counts as measured.
+2. **The reference manifest is the yardstick** (`baselines/`, from Phase 18 on). A phase that is announced as result-identical ends with an unchanged manifest. Whoever has to change it does so in a commit of its own with a single cause, before/after values and justification.
+3. **One cause per reference change.** Never two result-changing things in one commit; otherwise no shift can be attributed any more.
+4. **Determinism holds across machine boundaries.** New simulation inputs go through the checked conversion routines; nothing culture-, runtime- or CPU-dependent reaches the state.
+5. **No wall-clock time in the simulation**, not even indirectly: no load distribution by time, no feedback of the presentation into a network match.
+6. **Nothing falls back silently.** Unknown messages, versions, fingerprints, rates: counted, reported, rejected.
+7. **Formats:** incompatible changes raise the version; old states are rejected with a clear message. Until the first release there is no obligation to migrate, after that every format break is a decision of the project owner.
+8. **Verified headless is not accepted.** What only a human can judge (look at 60 Hz, game feel with delay, network play with real players, a second machine) is reported as open until it has taken place.
+9. **Continue existing handoffs.** At the end of every phase the brief of the next one is *not rewritten*; instead its section "Starting point" is updated with the measured state; deviations from the plan (postponed or new items) are named there and in §5.
+10. Line endings, git rules, background runs with a timeout, rebuilding release tools: as in `CLAUDE.md`.
 
-## 7. Offene Entscheidungen des Projektinhabers
+## 7. Open decisions of the project owner
 
-Die Aufträge nennen jeweils einen Standard, damit niemand blockiert ist; die Entscheidung bleibt beim Projektinhaber.
+The briefs each name a default so that nobody is blocked; the decision stays with the project owner.
 
-| Frage | Standard im Plan | fällig vor |
+| Question | Default in the plan | due before |
 |---|---|---|
-| Soll das Programm vor dem Abschluss von Phase 17 beginnen? | nein; Phase 18 (reine Messung) darf vorgezogen werden | 18 |
-| Regel für langsame Clients: wie lange drosseln, wann trennen? | bis 2 s anzeigen, bis 10 s drosseln, dann trennen | 26 |
-| Was geschieht mit den Objekten eines ausgeschiedenen Spielers? | Verhalten des Originals im Referenzquelltext nachlesen, vorschlagen, entscheiden lassen | 26 |
-| Wie lange wird ein Platz für den Wiedereinstieg gehalten? | 5 Minuten | 27 |
-| Zuschauer-Verzögerung | 120 s | 27 |
-| KI-Stärken (das Original kennt drei, die KI hier eine) | eine Stärke, Wahl gezählt statt befolgt | 24 |
-| Server unter Linux als Lieferziel? | ja (kostet wenig, weil der Server keine Daten und kein Stride braucht) | 28 |
-| Zielplattform und Abnahme | **entschieden am 9. Oktober 2026: vorerst nur Windows.** Abnahmeläufe (Build, Tests, Manifeste, Audits) gelten unter Windows; Linux kommt später nur als Wirt des Dedicated Servers in Betracht. Jede frühere Forderung „und unter Linux (WSL)“ ist damit informativ und kein Abnahmekriterium mehr (`docs/DETERMINISM.md` §5, `CLAUDE.md` „Git-Regeln“). Zugleich: das Repository ist öffentlich (`origin` = `https://github.com/cpfaffinger/CnCNew.git`, Branch `master`, `GPL-3.0-or-later`), ohne Spieldaten. | – |
-| Soll 30 Hz im fertigen Spiel wählbar bleiben? | nein (nur Testrate) | 23 |
-| Bleibt der Standard bei 30 Hz, wenn die Raten-Äquivalenz-Suite nach zwei Messrunden nicht besteht? | **entschieden am 8. Oktober 2026: nein.** Das Abbruchkriterium der Phase 23 ist aufgehoben; die Suite ist zum Bestehen zu bringen und 60 Hz wird Standard. Was auf dem Weg liegt, wird behoben, auch Fehler bei 30 Hz (je eine Ursache, eigener Commit, neu geschriebenes Manifest). Stand und Restursachen: `docs/TICKRATE-MIGRATION.md` §15.4 | 23 |
-| Zweiter Rechner und Mitspieler für die Abnahmen | vom Projektinhaber zu stellen | 18, 26, 29 |
-| *Aus Phase 23 (ausgeschrieben in §7a):* Selbsterwerb einmal je Originalbild der Einheit, ebenso `PointDefenseLaserUpdate`, `CleanupHazardUpdate`, `DeployStyleAIUpdate.AllowsFire` (§7a Nr. 1) | vorläufig so gebaut und gemergt; damit sind ganze Gefechte zwischen den Raten gleich | 24 (bevor Phase 24 Referenzwerte erhebt) |
-| Fabrikausfahrt „immer durch das Tor“ (§7a Nr. 2) | nicht gemergt; eine Einheit mit sofortigem Befehl verlässt das Gebäude auf dem kürzesten Weg | – |
-| Tickmaximum mit einer Verhaltensänderung senken (§7a Nr. 3) | nicht gemacht; 141–143 ms bei 60 Hz | 26 |
-| Die zwei schnelleren Hash-Konstruktionen (§7a Nr. 4) | nicht umgesetzt | – |
-| Befehlsprüfung gegen die Kartengrenzen (§7a Nr. 5) | nicht gebaut | 27/28 |
-| Solo-Boni der Kampagne (§7a Nr. 6) | nicht umgesetzt | – |
-| Zeichenreihenfolge der Straßen (§7a Nr. 7) | unverändert, hängt an der Rate | – |
-| Obergrenze eines Standardgefechts von einer Stunde Spielzeit (§7a Nr. 8) | unverändert so, auch für einen Menschen | – |
-| Original-Skirmish-KI als Standard und ihre Auswahl im Client (§7a Nr. 9) | nein: Standard ist die eingebaute KI, die Original-KI ist eine Option der Werkzeuge (`ai-match --ai original --difficulty …`) | 24 |
-| Balance nach den KI-Korrekturen bewerten (§7a Nr. 10) | nicht bewertet | – |
-| Zweiter physischer Rechner (§7a Nr. 11) | offen | 26 |
+| Should the programme begin before the completion of Phase 17? | no; Phase 18 (pure measurement) may be brought forward | 18 |
+| Rule for slow clients: how long to throttle, when to disconnect? | display up to 2 s, throttle up to 10 s, then disconnect | 26 |
+| What happens to the objects of a player who has dropped out? | look up the behaviour of the original in the reference source code, propose, have it decided | 26 |
+| How long is a seat held for rejoining? | 5 minutes | 27 |
+| Spectator delay | 120 s | 27 |
+| AI strengths (the original knows three, the AI here one) | one strength, choice counted instead of obeyed | 24 |
+| Server under Linux as a delivery target? | yes (costs little, because the server needs no data and no Stride) | 28 |
+| Target platform and acceptance | **decided on 9 October 2026: Windows only for the time being.** Acceptance runs (build, tests, manifests, audits) count under Windows; Linux comes into consideration later only as host of the dedicated server. Every earlier demand "and under Linux (WSL)" is thereby informative and no longer an acceptance criterion (`docs/DETERMINISM.md` §5, `CLAUDE.md` "Git rules"). At the same time: the repository is public (`origin` = `https://github.com/cpfaffinger/CnCNew.git`, branch `master`, `GPL-3.0-or-later`), without game data. | – |
+| Should 30 Hz remain selectable in the finished game? | no (test rate only) | 23 |
+| Does the default stay at 30 Hz if the rate-equivalence suite does not pass after two measurement rounds? | **decided on 8 October 2026: no.** The abort criterion of Phase 23 is lifted; the suite is to be brought to pass and 60 Hz becomes the default. What lies on the way is fixed, including defects at 30 Hz (one cause each, own commit, rewritten manifest). State and remaining causes: `docs/TICKRATE-MIGRATION.md` §15.4 | 23 |
+| Second machine and fellow players for the acceptances | to be provided by the project owner | 18, 26, 29 |
+| *From Phase 23 (written out in §7a):* self-acquisition once per original frame of the unit, likewise `PointDefenseLaserUpdate`, `CleanupHazardUpdate`, `DeployStyleAIUpdate.AllowsFire` (§7a no. 1) | provisionally built and merged this way; with it whole matches are equal between the rates | 24 (before Phase 24 surveys reference values) |
+| Factory exit "always through the gate" (§7a no. 2) | not merged; a unit with an immediate command leaves the building by the shortest route | – |
+| Lowering the tick maximum with a behaviour change (§7a no. 3) | not done; 141–143 ms at 60 Hz | 26 |
+| The two faster hash constructions (§7a no. 4) | not implemented | – |
+| Command check against the map bounds (§7a no. 5) | not built | 27/28 |
+| Solo bonuses of the campaign (§7a no. 6) | not implemented | – |
+| Draw order of the roads (§7a no. 7) | unchanged, depends on the rate | – |
+| Upper limit of a standard match of one hour of game time (§7a no. 8) | unchanged, also for a human | – |
+| Original skirmish AI as the default and its selection in the client (§7a no. 9) | no: the default is the built-in AI, the original AI is an option of the tools (`ai-match --ai original --difficulty …`) | 24 |
+| Assessing the balance after the AI corrections (§7a no. 10) | not assessed | – |
+| Second physical machine (§7a no. 11) | open | 26 |
 
-### 7a. Entscheidungen aus Phase 23 (9. Oktober 2026)
+### 7a. Decisions from Phase 23 (9 October 2026)
 
-Dieselbe Liste steht in `docs/TICKRATE-MIGRATION.md` §15.7.7, in `CLAUDE.md` (Absatz „Phase 23“) und im Nachtrag von `docs/handoffs/HANDOFF-PHASE24.md`. „Vorläufig“ heißt: so ist der Stand auf `main`; die Entscheidung liegt beim Projektinhaber.
+The same list is in `docs/TICKRATE-MIGRATION.md` §15.7.7, in `CLAUDE.md` (paragraph "Phase 23") and in the addendum of `docs/handoffs/HANDOFF-PHASE24.md`. "Provisionally" means: this is the state on `main`; the decision lies with the project owner.
 
-1. **Selbsterwerb einmal je Originalbild der Einheit.** Eine Einheit entscheidet ihren eigenen Angriff im ersten Tick ihres eigenen Bildes. Der Auftrag der Phase 23 verbot den Ausweg „Originalraster“ für den Zielerwerb; es ist vorläufig so gemacht, weil die Gleichheit ganzer Gefechte anders nicht erreichbar war. Kosten: eine Einheit, die mitten im Bild durch einen Befehl frei wird, beginnt ihre eigene Zielsuche bis zu 1 Tick (60 Hz) bzw. 3 Ticks (120 Hz) später. Alternative: je Tick entscheiden – dann unterscheiden sich Gefechte zwischen den Raten, und es gilt nur der Verteilungsvergleich. Dieselbe Frage für `PointDefenseLaserUpdate`, `CleanupHazardUpdate` und `DeployStyleAIUpdate.AllowsFire`.
-2. **Fabrikausfahrt „immer durch das Tor, auch bei sofortigem Befehl“.** Gebaut und gemessen, nicht gemergt: verschiebt die Balance (America 46 statt 61 Siege von 80, China 32 statt 23; damals 10 statt 12 der 16 Läufe entschieden); der Flicken liegt im Scratchpad der Sitzung.
-3. **Das Tickmaximum senken** (141–143 ms bei 60 Hz im Leistungstor): braucht eine Verhaltensänderung (gemeinsamer Gruppenweg, Zellbudget je Tick oder eine andere Suche) – vom Projektinhaber vorbehalten.
-4. **Die zwei schnelleren Hash-Konstruktionen** (Sicht zeilenweise; Objekt-Hash mit Modul-Hashes) – vorbehalten, unverändert.
-5. **Befehlsprüfung gegen die Kartengrenzen** (Ziele jenseits von rund 524.000 Einheiten lassen die Bewegung überlaufen) – für Phase 27/28 vorbehalten, unverändert.
-6. **Solo-Boni der Kampagne** – vorbehalten, unverändert.
-7. **Die Zeichenreihenfolge der Straßen hängt an der Rate** (`TerrainLayer.CreateRoads` gibt jedem Straßen-Mesh dieselbe Hülle; keine Korrektur gibt jedes 30-Hz-Bild wieder).
-8. **Ein Standardgefecht endet nach einer Stunde Spielzeit**, auch für einen Menschen – ist das gewollt?
-9. **Die Original-Skirmish-KI (drei Schwierigkeitsgrade) als Standard-KI** und ihre Auswahl im Client und im Zuschauermodus: sie kostet je Tick rund das 27-fache der eingebauten KI (1,1 ms für 8 Spieler), und ihr fehlen Teile des C++-Kerns; Standard ist die eingebaute KI.
-10. **Die Balance nach den KI-Korrekturen ist nicht bewertet** (ChinaTankGeneral gewinnt in der 30-Hz-Erhebung der Runde 3 70 von 80 Gefechten gegen AirForce).
-11. **Der zweite physische Rechner** (vor Phase 26) – unverändert offen.
+1. **Self-acquisition once per original frame of the unit.** A unit decides its own attack in the first tick of its own frame. The brief of Phase 23 forbade the escape "original grid" (Ausweg „Originalraster“) for target acquisition; it is provisionally done this way because the equality of whole matches was not reachable otherwise. Cost: a unit that becomes free through a command in the middle of the frame begins its own target search up to 1 tick (60 Hz) or 3 ticks (120 Hz) later. Alternative: decide per tick – then matches differ between the rates, and only the distribution comparison holds. The same question for `PointDefenseLaserUpdate`, `CleanupHazardUpdate` and `DeployStyleAIUpdate.AllowsFire`.
+2. **Factory exit "always through the gate, even with an immediate command".** Built and measured, not merged: shifts the balance (America 46 instead of 61 wins of 80, China 32 instead of 23; at that time 10 instead of 12 of the 16 runs decided); the patch lies in the scratchpad of the session.
+3. **Lowering the tick maximum** (141–143 ms at 60 Hz in the performance gate): needs a behaviour change (shared group path, cell budget per tick or a different search) – reserved by the project owner.
+4. **The two faster hash constructions** (vision row by row; object hash with module hashes) – reserved, unchanged.
+5. **Command check against the map bounds** (targets beyond around 524,000 units make the movement overflow) – reserved for Phase 27/28, unchanged.
+6. **Solo bonuses of the campaign** – reserved, unchanged.
+7. **The draw order of the roads depends on the rate** (`TerrainLayer.CreateRoads` gives every road mesh the same bounds; no correction reproduces every 30 Hz image).
+8. **A standard match ends after one hour of game time**, also for a human – is that intended?
+9. **The original skirmish AI (three difficulty levels) as the default AI** and its selection in the client and in spectator mode: per tick it costs around 27 times the built-in AI (1.1 ms for 8 players), and it lacks parts of the C++ core; the default is the built-in AI.
+10. **The balance after the AI corrections is not assessed** (ChinaTankGeneral wins 70 of 80 matches against AirForce in the 30 Hz survey of round 3).
+11. **The second physical machine** (before Phase 26) – open unchanged.
 
-## 8. Begriffe
+## 8. Terms
 
-- **Tick:** ein Schritt der Simulation; Dauer 1/Rate.
-- **Originalbild:** 1/30 s, die Zeiteinheit des Originals; Einheit vieler Daten und Konstanten.
-- **Befehlsabsicht:** was ein Spieler will, ohne Tick und Sequenz; der Server (oder lokal die Sitzung) macht daraus einen Befehl für einen Tick.
-- **Tickbündel:** alle Befehle der Menschen und des Systems für einen Tick, vom Server an alle verteilt.
-- **Lockstep:** alle Rechner führen dieselben Befehle im selben Tick aus und erreichen denselben Zustand.
-- **Relay:** Server, der Befehle ordnet und verteilt, ohne zu simulieren.
-- **Sitzungshash:** Zustands-Hash der Welt plus der KI-Zustände; Grundlage der Hashberichte.
-- **Desync:** zwei Rechner haben für denselben Tick verschiedene Sitzungshashes.
-- **Referenzmanifest:** Datei mit den Soll-Ergebnissen fester Läufe; ersetzt die Hashes in der Doku als Messlatte.
-- **Raten-Äquivalenz:** dieselbe Szene ergibt bei 30, 60 und 120 Hz dieselben Spielgrößen innerhalb erklärter Toleranzen.
-- **Aufholtempo:** wie viel schneller als Echtzeit ein Client rechnen kann; begrenzt Wiedereinstieg und Erholung nach einem Stocken.
+- **Tick:** one step of the simulation; duration 1/rate.
+- **Original frame:** 1/30 s, the time unit of the original; unit of many data and constants.
+- **Command intent:** what a player wants, without tick and sequence; the server (or locally the session) makes a command for a tick out of it.
+- **Tick bundle:** all commands of the humans and of the system for one tick, distributed by the server to everyone.
+- **Lockstep:** all machines execute the same commands in the same tick and reach the same state.
+- **Relay:** server that orders and distributes commands without simulating.
+- **Session hash:** state hash of the world plus the AI states; basis of the hash reports.
+- **Desync:** two machines have different session hashes for the same tick.
+- **Reference manifest:** file with the target results of fixed runs; replaces the hashes in the documentation as the yardstick.
+- **Rate equivalence:** the same scene yields the same game quantities at 30, 60 and 120 Hz within declared tolerances.
+- **Catch-up speed:** how much faster than real time a client can compute; limits rejoining and recovery after a stall.
