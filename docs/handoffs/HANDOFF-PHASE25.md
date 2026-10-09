@@ -1,57 +1,57 @@
-N+1-Handoff (Phase 25): Protokoll, Raum (Lobby) und Relay-Server im selben Prozess – das lokale Gefecht läuft über den Netzpfad, KI-Slots inklusive
+N+1 handoff (Phase 25): Protocol, room (lobby) and relay server in the same process – the local skirmish runs via the network path, AI slots included
 
-Du arbeitest autonom an diesem Repository (`<repo>` = Wurzel des Arbeitsverzeichnisses). Lies zuerst `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`** (Entscheidungen, Zielarchitektur, Register der Engstellen, Regeln für alle Phasen), `docs/ARCHITECTURE.md`, `docs/SIMULATION-CORE.md` (Sitzungszustand, Replay), `docs/PRESENTATION-INPUT.md` (Befehlsabsicht), `docs/GAME-SHELL.md` (Gefechtssetup) und den Abschlussbericht der Phase 24.
-Voraussetzung: Phase 24 ist abgeschlossen – KI-Zustand im Sitzungshash, Speicherstand, `MatchDescription`, zweistufiger Befehlsweg, `ITickDriver`, Lockstep-Probe mit künstlicher Verzögerung.
+You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`** (decisions, target architecture, register of bottlenecks, rules for all phases), `docs/ARCHITECTURE.md`, `docs/SIMULATION-CORE.md` (session state, replay), `docs/PRESENTATION-INPUT.md` (command intent), `docs/GAME-SHELL.md` (skirmish setup) and the final report of Phase 24.
+Prerequisite: Phase 24 is completed – AI state in the session hash, savegame, `MatchDescription`, two-stage command path, `ITickDriver`, lockstep probe with artificial delay.
 
-## Ehrlicher Status (Ausgangslage)
+## Honest status (starting point)
 
-Es gibt im Repo **keinen Netzwerkcode**: kein Projekt, kein Protokoll, keine Abhängigkeit. Nach Phase 24 ist die Sitzung so gebaut, dass sie von Tickbündeln getrieben werden kann, aber der einzige Treiber mit Verzögerung ist eine Probe im selben Objekt. Das Gefechtssetup der Shell baut die Partie direkt (`LiveMatch.Create`); es gibt keinen Raum, dem jemand beitreten könnte.
+There is **no network code** in the repo: no project, no protocol, no dependency. After Phase 24 the session is built so that it can be driven by tick bundles, but the only driver with delay is a probe in the same object. The skirmish setup of the shell builds the game directly (`LiveMatch.Create`); there is no room that anyone could join.
 
-## Entscheidungen, die feststehen (`docs/MULTIPLAYER-PLAN.md` §2)
+## Decisions that are fixed (`docs/MULTIPLAYER-PLAN.md` §2)
 
-- **Ein Matchpfad.** Das lokale Gefecht (Mensch gegen KI) läuft über dasselbe Modul wie ein Netzwerkmatch: eingebetteter Server, Loopback-Transport, ein Client. Der alte direkte Weg wird am Ende dieser Phase entfernt.
-- **Relay.** Der Server ordnet Befehlsabsichten Ticks zu und verteilt Bündel; er simuliert nicht und braucht keine Spieldaten.
-- **KI-Slots** stehen in der Match-Beschreibung; jeder Client lässt die KIs in seiner Simulation mitlaufen (Phase 24). Der Server weiß von einer KI nur, dass der Slot belegt ist.
-- **Neue Projekte und ihre Abhängigkeiten** (Namen dürfen abweichen, die Regeln nicht):
-  - `src/CnCNew.Net` – Nachrichten, Kodierung, `ITransport`, Loopback-Transport, Lockstep-Treiber des Clients. Referenziert nur `CnCNew.Simulation` (Befehls-Codec, Match-Beschreibung, Replay). Kein Stride, kein `CnCNew.Content`, kein `CnCNew.Game`.
-  - `src/CnCNew.Server` – Raum- und Relay-Logik als Bibliothek. Referenziert nur `CnCNew.Net`. Lädt nie Spieldaten.
+- **One match path.** The local skirmish (human against AI) runs via the same module as a network match: embedded server, loopback transport, one client. The old direct path is removed at the end of this phase.
+- **Relay.** The server assigns command intents to ticks and distributes bundles; it does not simulate and needs no game data.
+- **AI slots** are in the match description; every client lets the AIs run along in its simulation (Phase 24). Of an AI the server only knows that the slot is occupied.
+- **New projects and their dependencies** (names may differ, the rules may not):
+  - `src/CnCNew.Net` – messages, encoding, `ITransport`, loopback transport, lockstep driver of the client. References only `CnCNew.Simulation` (command codec, match description, replay). No Stride, no `CnCNew.Content`, no `CnCNew.Game`.
+  - `src/CnCNew.Server` – room and relay logic as a library. References only `CnCNew.Net`. Never loads game data.
   - `tests/CnCNew.Net.Tests`, `tools/CnCNew.NetTool`.
-  - `CnCNew.Game` referenziert `CnCNew.Net` und `CnCNew.Server` (für den eingebetteten Server). `CnCNew.Simulation` referenziert weiterhin nur `CnCNew.Data`.
-  - Ein Quelltext-/Referenztest erzwingt diese Regeln und dass Wandzeit in `CnCNew.Server`/`CnCNew.Net` nur über eine injizierte Uhr gelesen wird.
+  - `CnCNew.Game` references `CnCNew.Net` and `CnCNew.Server` (for the embedded server). `CnCNew.Simulation` still references only `CnCNew.Data`.
+  - A source/reference test enforces these rules and that wall-clock time in `CnCNew.Server`/`CnCNew.Net` is read only via an injected clock.
 
-## Auftrag (in dieser Reihenfolge)
+## Brief (in this order)
 
-1. **Ausgangszustand reproduzieren**, Referenzwerte der Phase 24 neu messen.
-2. **Simulationsversion.** Zwei Clients mit denselben Daten, aber verschiedenem Simulationscode laufen sicher auseinander. Eine Kennung der Simulation (beim Build eingebetteter Commit-Hash samt „verändert“-Kennzeichen als Assembly-Metadatum, zusätzlich die Formatversionen) gehört in Match-Beschreibung und Handshake. Lokale Entwicklungsstände mit „verändert“ dürfen nur über Loopback spielen, außer ein ausdrücklicher Entwicklerschalter erlaubt es (gezählt, im Protokoll sichtbar).
-3. **Protokoll (`docs/NETWORK-PROTOCOL.md` zuerst schreiben, dann bauen).** Versionierte binäre Nachrichten, Little Endian, längenpräfigiert, jede mit Obergrenze:
-   - Handshake: Protokollversion, Simulationsversion, `CommandTypes.Version`, Replay-Format, Definitions-Fingerabdruck; Ablehnung mit Ursache.
-   - Raum: Zustand des Raums (maßgeblich ist immer der Server), Slotwunsch, Bereit, Start mit `MatchDescription` (Startwert vom Server gewählt), Ladefortschritt, „alle geladen“, Chat.
-   - Match: Befehlsabsicht (Quittungsnummer des Clients, Nutzlast im Befehls-Codec der Simulation), Tickbündel (Tick, Befehle mit vom Server gestempelter Spieler-ID und Sequenz, auch leer), Hashbericht (Tick, Sitzungshash), Pause/Fortsetzen, Spieler ausgeschieden, Desync, Ende.
-   - Unbekannte oder zu große Nachrichten werden gezählt und verworfen; nichts fällt still auf einen Standard zurück.
-4. **Transport-Schnittstelle und Loopback.** `ITransport` liefert Nachrichten zuverlässig und geordnet je Verbindung. `LoopbackTransport` im Prozess mit einstellbarer Laufzeit, Schwankung und Umsortierung zwischen *verschiedenen* Verbindungen, aus einem eigenen Test-Startwert (niemals der Logik-Zufallsstrom).
-5. **Relay- und Raumlogik (`CnCNew.Server`).** Zustandsautomat Raum → Laden → Match → Ende. Tickuhr über eine injizierte Uhr; zwei Betriebsarten:
-   - **servergetaktet** (mehr als ein Mensch): der Server schließt Ticks nach seiner Uhr mit Tickrate × Geschwindigkeit und wartet auf niemanden;
-   - **clientgetaktet** (genau ein Mensch, lokales Gefecht): der Tick wird geschlossen, sobald der eine Client ihn anfordert. Damit hat das Einzelspieler-Gefecht keine zusätzliche Verzögerung, und Pause, Spielgeschwindigkeit und der schnelle Vorlauf der Tests bleiben möglich.
-   Der Server stempelt die Spieler-ID aus der Verbindung (niemand kann für einen anderen Befehle senden), begrenzt Absichten je Tick und Spieler, vergleicht Hashberichte und schreibt alle Bündel mit.
-6. **Lockstep-Treiber des Clients (`ITickDriver` aus Phase 24).** Sammelt Bündel, gibt Tick N frei, wenn Bündel N vorliegt, reicht dessen Befehle unmittelbar vor dem Schritt ein, sendet Hashberichte, ordnet Ergebnisse den Quittungsnummern zu. In dieser Phase fester Abspielpuffer (einstellbar); die adaptive Regelung kommt in Phase 26.
-7. **Lokales Gefecht über den Netzpfad.** `LiveMatch` startet eingebetteten Server, Loopback und Treiber. Das Gefechtssetup der Shell wird der Raum (lokal, ein Mensch): Slots mit Fraktion, Team, Farbe, Startposition, KI-Slots – alles wandert über die Match-Beschreibung in die Partie. Speichern/Laden (Phase 24) bleibt für das lokale Gefecht erhalten: ein Raum kann aus einem Speicherstand starten (Beschreibung + Sitzungssnapshot + Hash).
-8. **Mehr-Client-Probe im selben Prozess.** `tools/CnCNew.NetTool loopback-match --map … --humans H --ais A --ticks T [--delay … --jitter …]`: H Clients mit je eigener Welt gegen einen Server über Loopback. Die „Menschen“ sind Befehlsgeber: eine `SkirmishAi`, die nur auf diesem einen Client rechnet und ihre Befehle als Absichten über den Server schickt – so wird der echte Befehlsweg belastet. Nach jedem Tick werden die Sitzungshashes aller H Welten verglichen.
-   - Läufe: 2, 4 und 8 Clients; Mischungen 1+7, 2+6, 4+4, 8+0 (Menschen+KI) auf mindestens drei 8-Spieler-Karten; mit und ohne Laufzeit/Schwankung; je zweimal (Wiederholbarkeit).
-   - Jeder Lauf: alle Hashes identisch über alle Ticks, Server-Mitschrift als Replay abspielbar mit demselben Endhash.
-9. **Alten Weg entfernen.** `SkirmishSessionCommandSink` mit direktem Zugriff und jeder zweite Startweg einer Partie entfallen; Werkzeuge (`SimTool ai-match`, `reference-match`, `skirmish-sweep`) dürfen headless ohne Server direkt auf der Sitzung laufen (sie sind die Referenz), der Client nicht.
-10. **Doku:** `docs/NETWORK-PROTOCOL.md` (neu), `docs/MULTIPLAYER-PLAN.md`, `docs/GAME-SHELL.md`, `docs/ARCHITECTURE.md` (neue Schichten und Regeln), README, ROADMAP, IMPLEMENTATION-PLAN, `CLAUDE.md` (Schichtenregeln, Befehle, Referenzwerte).
+1. **Reproduce the starting state**, re-measure the reference values of Phase 24.
+2. **Simulation version.** Two clients with the same data but different simulation code are certain to diverge. An identifier of the simulation (commit hash embedded at build time together with a "modified" flag as assembly metadata, in addition the format versions) belongs in the match description and the handshake. Local development states with "modified" may play only via loopback, unless an explicit developer switch allows it (counted, visible in the log).
+3. **Protocol (write `docs/NETWORK-PROTOCOL.md` first, then build).** Versioned binary messages, little endian, length-prefixed, each with an upper limit:
+   - Handshake: protocol version, simulation version, `CommandTypes.Version`, replay format, definition fingerprint; rejection with cause.
+   - Room: state of the room (the server is always authoritative), slot request, ready, start with `MatchDescription` (seed chosen by the server), loading progress, "all loaded", chat.
+   - Match: command intent (receipt number of the client, payload in the command codec of the simulation), tick bundle (tick, commands with player ID and sequence stamped by the server, also empty), hash report (tick, session hash), pause/resume, player dropped, desync, end.
+   - Unknown or oversized messages are counted and discarded; nothing falls back silently to a default.
+4. **Transport interface and loopback.** `ITransport` delivers messages reliably and in order per connection. `LoopbackTransport` in the process with configurable delay, jitter and reordering between *different* connections, from its own test seed (never the logic random stream).
+5. **Relay and room logic (`CnCNew.Server`).** State machine room → loading → match → end. Tick clock via an injected clock; two operating modes:
+   - **server-paced** (more than one human): the server closes ticks by its clock with tick rate × speed and waits for nobody;
+   - **client-paced** (exactly one human, local skirmish): the tick is closed as soon as the one client requests it. This way the single-player skirmish has no additional delay, and pause, game speed and the fast forward of the tests remain possible.
+   The server stamps the player ID from the connection (nobody can send commands for someone else), limits intents per tick and player, compares hash reports and records all bundles.
+6. **Lockstep driver of the client (`ITickDriver` from Phase 24).** Collects bundles, releases tick N when bundle N is present, submits its commands immediately before the step, sends hash reports, assigns results to the receipt numbers. In this phase a fixed playback buffer (configurable); the adaptive control comes in Phase 26.
+7. **Local skirmish via the network path.** `LiveMatch` starts embedded server, loopback and driver. The skirmish setup of the shell becomes the room (local, one human): slots with faction, team, colour, start position, AI slots – everything travels via the match description into the game. Save/load (Phase 24) is kept for the local skirmish: a room can start from a savegame (description + session snapshot + hash).
+8. **Multi-client probe in the same process.** `tools/CnCNew.NetTool loopback-match --map … --humans H --ais A --ticks T [--delay … --jitter …]`: H clients, each with its own world, against one server via loopback. The "humans" are command generators: a `SkirmishAi` that computes only on this one client and sends its commands as intents via the server – this puts load on the real command path. After every tick the session hashes of all H worlds are compared.
+   - Runs: 2, 4 and 8 clients; mixes 1+7, 2+6, 4+4, 8+0 (humans+AI) on at least three 8-player maps; with and without delay/jitter; twice each (repeatability).
+   - Every run: all hashes identical over all ticks, server recording playable as a replay with the same final hash.
+9. **Remove the old path.** `SkirmishSessionCommandSink` with direct access and every second way of starting a game are dropped; tools (`SimTool ai-match`, `reference-match`, `skirmish-sweep`) may run headless without a server directly on the session (they are the reference), the client may not.
+10. **Docs:** `docs/NETWORK-PROTOCOL.md` (new), `docs/MULTIPLAYER-PLAN.md`, `docs/GAME-SHELL.md`, `docs/ARCHITECTURE.md` (new layers and rules), README, ROADMAP, IMPLEMENTATION-PLAN, `CLAUDE.md` (layer rules, commands, reference values).
 
-## Engstellen und Showstopper dieser Phase
+## Bottlenecks and showstoppers of this phase
 
-- **Einreichungszeitpunkt.** Wartende Befehle gehen in den Hash ein; ein Bündel darf erst unmittelbar vor seinem Tick in die Welt (Test: Bündel kommen bei verschiedenen Clients zu verschiedenen Zeiten an, Hashes bleiben gleich).
-- **Reihenfolge innerhalb eines Bündels.** Die Welt führt Befehle eines Ticks in fester Reihenfolge aus (Spieler, Sequenz); KI-Befehle (lokal erzeugt) und Menschenbefehle (aus dem Bündel) müssen auf jedem Client in derselben Gesamtreihenfolge landen. Regel festlegen und testen (ein Mensch und eine KI befehlen im selben Tick dasselbe Objekt bzw. konkurrieren um dasselbe Geld).
-- **Start bei Tick 0.** Alles, was vor dem ersten Tick geschieht (Startobjekte, Lagerhäuser, zufällige Fraktion/Position), muss allein aus der Match-Beschreibung folgen – kein Client-Zustand, keine Aufzählungsreihenfolge, keine Wandzeit.
-- **Lokales Gefecht darf nicht schlechter werden.** Messung vorher/nachher: Zeit von Befehlsabsicht bis Ausführung im clientgetakteten Betrieb (Soll: derselbe Tick wie vor dieser Phase), Tickkosten mit und ohne Netzpfad.
+- **Time of submission.** Pending commands enter the hash; a bundle may enter the world only immediately before its tick (test: bundles arrive at different clients at different times, hashes stay the same).
+- **Order within a bundle.** The world executes the commands of a tick in a fixed order (player, sequence); AI commands (generated locally) and human commands (from the bundle) must end up in the same overall order on every client. Define the rule and test it (a human and an AI command the same object in the same tick, or compete for the same money).
+- **Start at tick 0.** Everything that happens before the first tick (start objects, warehouses, random faction/position) must follow from the match description alone – no client state, no enumeration order, no wall-clock time.
+- **The local skirmish must not get worse.** Measurement before/after: time from command intent to execution in client-paced operation (target: the same tick as before this phase), tick cost with and without the network path.
 
-## Nicht Gegenstand
+## Out of scope
 
-Echte Sockets, Zeitabgleich, adaptive Puffer, eigenständiger Serverprozess (Phase 26); Wiedereinstieg, Zuschauer (Phase 27); Oberfläche für Beitritt über das Netz (Phase 29).
+Real sockets, clock synchronisation, adaptive buffers, standalone server process (Phase 26); rejoin, spectators (Phase 27); user interface for joining over the network (Phase 29).
 
-## Abnahme
+## Acceptance
 
-Das lokale Gefecht läuft ausschließlich über `CnCNew.Net`/`CnCNew.Server`, mit Referenzwerten identisch zu Phase 24 (clientgetaktet, ohne Verzögerung). Die Mehr-Client-Probe ist für alle genannten Mischungen hashgleich. Die Abhängigkeitsregeln sind durch einen Test erzwungen; der Server läuft ohne Spieldaten. Der Abschlussbericht nennt Zahlen mit Commit-Hashes und was nicht belegt ist. Am Ende `docs/handoffs/HANDOFF-PHASE26.md` prüfen und die „Ausgangslage“ aktualisieren.
+The local skirmish runs exclusively via `CnCNew.Net`/`CnCNew.Server`, with reference values identical to Phase 24 (client-paced, without delay). The multi-client probe is hash-identical for all the mixes named. The dependency rules are enforced by a test; the server runs without game data. The final report names numbers with commit hashes and what is not verified. At the end check `docs/handoffs/HANDOFF-PHASE26.md` and update the "starting point".
