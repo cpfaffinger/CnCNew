@@ -1,318 +1,317 @@
-# Client-Objektlayer (Stride)
+# Client object layer (Stride)
 
-Zeichnet jedes `DrawableInstance` eines laufenden Matches (Einheiten, Gebäude, Props, Szenerie) als
-animiertes W3D-Modell. Quelle: `src/CnCNew.Client.Stride/Layers/ObjectLayer.cs` (dünner
-`IWorldLayer`, den `WorldLayers.CreateAll()` unter diesem Namen instanziiert) und
-`src/CnCNew.Client.Stride/Layers/Objects/**` (eigentliche Implementierung, `ObjectLayerCore`).
-`ObjectLayer` reicht `Attach`/`Update`/`Dispose`/`Stats` unverändert an `ObjectLayerCore` weiter, weil
-`WorldLayers.cs` einen parameterlosen `ObjectLayer` im Namespace `CnCNew.Client.Stride.Layers`
-erwartet; die restlichen Quellen leben zusammen unter `Layers/Objects` im Namespace
+Draws every `DrawableInstance` of a running match (units, buildings, props, scenery) as an
+animated W3D model. Source: `src/CnCNew.Client.Stride/Layers/ObjectLayer.cs` (thin
+`IWorldLayer` that `WorldLayers.CreateAll()` instantiates under this name) and
+`src/CnCNew.Client.Stride/Layers/Objects/**` (the actual implementation, `ObjectLayerCore`).
+`ObjectLayer` passes `Attach`/`Update`/`Dispose`/`Stats` on unchanged to `ObjectLayerCore`, because
+`WorldLayers.cs` expects a parameterless `ObjectLayer` in the namespace `CnCNew.Client.Stride.Layers`;
+the remaining sources live together under `Layers/Objects` in the namespace
 `CnCNew.Client.Stride.Layers.Objects`.
 
-## Koordinaten und Platzierung
+## Coordinates and placement
 
-Die Präsentation liefert Weltkoordinaten (X Ost, Y Nord, Z hoch, rechtshändig) identisch zum
-Simulationsraum; W3D-Meshes sind ebenfalls Z-hoch, daher werden Vertexpositionen und Normalen aus
-`W3dMesh` unverändert übernommen (kein Y-Swap, keine Zentrierung, keine Skalierung –
-`ObjectRenderVertexBuilder`, bewusst eine eigene, schlankere Kopie von `W3dStrideScene.AddVertex`
-ohne dessen Konsolen-Rahmenlogik). Die Instanzmatrix ist
-`CreateScale(scale) * CreateRotationZ(yaw) * CreateTranslation(position)` (Zeilenvektor-Konvention,
-`world = local * parent`); W3D-„vorne" ist +X, Sim-Gieren 0 ist ebenfalls +X.
+The presentation delivers world coordinates (X east, Y north, Z up, right-handed) identical to the
+simulation space; W3D meshes are also Z-up, so vertex positions and normals from
+`W3dMesh` are taken over unchanged (no Y swap, no centring, no scaling –
+`ObjectRenderVertexBuilder`, deliberately a separate, leaner copy of `W3dStrideScene.AddVertex`
+without its console frame logic). The instance matrix is
+`CreateScale(scale) * CreateRotationZ(yaw) * CreateTranslation(position)` (row-vector convention,
+`world = local * parent`); W3D "front" is +X, sim yaw 0 is also +X.
 
-## Instanzierungsstrategie: ein Skelett-Knoten pro starrem Teil
+## Instancing strategy: one skeleton node per rigid part
 
-Jedes W3D-Modell wird einmal über `W3dAssetLibrary` (aus `CnCNew.W3D`, gebunden an
-`RenderServices.Content`) geladen und zu einem `ModelAsset` kompiliert
-(`ModelAssetCache`/`ModelAsset.Build`). Die höchste LOD-Stufe wird in starre und geskinnte
-Renderobjekte aufgeteilt:
+Every W3D model is loaded once via `W3dAssetLibrary` (from `CnCNew.W3D`, bound to
+`RenderServices.Content`) and compiled into a `ModelAsset`
+(`ModelAssetCache`/`ModelAsset.Build`). The highest LOD level is split into rigid and skinned
+render objects:
 
-- **Starre Teile** teilen sich **ein** Stride-`Model` und **ein** Skelett: Knoten 0 ist eine
-  ungenutzte Wurzel, jedes starre Renderobjekt bekommt Knoten `Index+1` mit den Flags
-  `EnableRender | OverrideWorldMatrix`. Laut dekompiliertem `Stride.Rendering.SkeletonUpdater`
-  (`UpdateNode`) lässt dieses Flag-Paar die automatische Welt-Matrix-Berechnung aus der Hierarchie
-  komplett aus – der Layer schreibt jeden sichtbaren Frame `boneWorld * instanceMatrix` direkt in
-  `ModelComponent.Skeleton.NodeTransformations[node].WorldMatrix` (Bone-Weltmatrix aus einer
-  `W3dPose`, ausgewertet mit `root = Identity`, da die Instanzmatrix die Wurzel schon enthält). Damit
-  zeichnet **ein** gepooltes `PooledEntity` (Entity + `ModelComponent`) ein komplettes,
-  mehrteiliges starres Modell; nichts wird pro Instanz geklont, außer bei HOUSECOLOR-Vertexfarbe
-  (siehe unten).
-- Sub-Objekt-Sichtbarkeit (Standard aus `W3dSubObject.IsVisibleByDefault`, überschrieben durch
-  `ModelStateSpec.SubObjects` in Deklarationsreihenfolge, letzter Treffer gewinnt, Abgleich über
-  Vollname oder Suffix nach dem Punkt, `OrdinalIgnoreCase` – `RenderObjClass::Get_Sub_Object_By_Name`)
-  wird **jeden sichtbaren Frame neu gesetzt**, indem das `EnableRender`-Bit des Knotens umgeschaltet
-  wird; ein Modellwechsel setzt es ohnehin über `ModelComponent.CheckSkeleton`/`ModelUpdated` auf den
-  Modell-Standard zurück.
-- **Geskinnte Teile** (169 im Vollbestand) bekommen ein eigenes, einknotiges Modell pro Instanz
-  (`SkinPart.CreateRuntimeModel`, Skelett und Materialien geteilt, aber eigene, dynamische
-  Vertexpuffer pro Batch – ein Puffer kann nicht von mehreren Instanzen mit unterschiedlicher Pose
-  geteilt werden). Jeden sichtbaren Frame: `W3dModel.SkinVertices(mesh, pose.BoneWorldTransforms, …)`
-  liefert Positionen/Normalen in Modell-Raum (root = Identity, wie bei starren Teilen); ein
-  `SourceIndices`-Array bildet jeden (pro Dreieck dupliziert vorliegenden) Ausgabe-Vertex auf seinen
-  Quell-Vertex ab, Farbe/UV bleiben aus der Vorlage. Der Knoten (Index 1) bekommt dieselbe
-  Instanzmatrix wie starre Teile.
-- Nicht aufgelöst: Kamera-ausgerichtete Billboards (`W3dSubObject.IsCameraFacing`), HLOD-Aggregate
-  und -Proxies. Türme folgen seit Phase 15 den Schüssen (`DrawableInstance.TurretYaw/TurretPitch`, siehe
-  „Phase 15: Korrekturen der Weltdarstellung“); ohne Schuss bleibt die Ruhepose.
+- **Rigid parts** share **one** Stride `Model` and **one** skeleton: node 0 is an
+  unused root, every rigid render object gets node `Index+1` with the flags
+  `EnableRender | OverrideWorldMatrix`. According to the decompiled `Stride.Rendering.SkeletonUpdater`
+  (`UpdateNode`), this pair of flags skips the automatic world matrix computation from the hierarchy
+  completely – the layer writes `boneWorld * instanceMatrix` directly into
+  `ModelComponent.Skeleton.NodeTransformations[node].WorldMatrix` every visible frame (bone world matrix from a
+  `W3dPose`, evaluated with `root = Identity`, since the instance matrix already contains the root). With that,
+  **one** pooled `PooledEntity` (entity + `ModelComponent`) draws a complete,
+  multi-part rigid model; nothing is cloned per instance, except for HOUSECOLOR vertex colour
+  (see below).
+- Sub-object visibility (default from `W3dSubObject.IsVisibleByDefault`, overridden by
+  `ModelStateSpec.SubObjects` in declaration order, last match wins, matching by
+  full name or suffix after the dot, `OrdinalIgnoreCase` – `RenderObjClass::Get_Sub_Object_By_Name`)
+  is **set anew every visible frame** by toggling the `EnableRender` bit of the node;
+  a model change resets it to the model default anyway via `ModelComponent.CheckSkeleton`/`ModelUpdated`.
+- **Skinned parts** (169 in the full content) get a single-node model of their own per instance
+  (`SkinPart.CreateRuntimeModel`, skeleton and materials shared, but separate, dynamic
+  vertex buffers per batch – a buffer cannot be shared by several instances with different poses).
+  Every visible frame: `W3dModel.SkinVertices(mesh, pose.BoneWorldTransforms, …)`
+  delivers positions/normals in model space (root = Identity, as with rigid parts); a
+  `SourceIndices` array maps every output vertex (present in duplicate per triangle) to its
+  source vertex, colour/UV stay from the template. The node (index 1) gets the same
+  instance matrix as rigid parts.
+- Not resolved: camera-facing billboards (`W3dSubObject.IsCameraFacing`), HLOD aggregates
+  and proxies. Since Phase 15 turrets follow the shots (`DrawableInstance.TurretYaw/TurretPitch`, see
+  "Phase 15: corrections of the world presentation"); without a shot the rest pose remains.
 
-Nicht indizierte Dreieckslisten-Batches kommen aus `W3dRenderPlan.Build`; ein einziger,
-bedarfsweise wachsender Identitäts-Indexpuffer (`SharedIndexBuffer`) bedient jede Batchgröße, da nur
-das Präfix bis zur jeweiligen Vertexzahl gelesen wird. Batches mit animiertem Mapper
-(`W3dLinearOffsetTextureMapper`/`W3dGridTextureMapper`) bekommen einen dynamischen Vertexpuffer, der
-höchstens einmal pro Frame und Asset neu berechnet wird (`ModelAsset.RefreshAnimatedBatches`,
-geteilt über alle Instanzen desselben Assets – die UV-Verzerrung hängt nur von der Zeit ab, nicht
-von der Instanz).
+Non-indexed triangle list batches come from `W3dRenderPlan.Build`; a single
+identity index buffer that grows on demand (`SharedIndexBuffer`) serves every batch size, since only
+the prefix up to the respective vertex count is read. Batches with an animated mapper
+(`W3dLinearOffsetTextureMapper`/`W3dGridTextureMapper`) get a dynamic vertex buffer that
+is recomputed at most once per frame and asset (`ModelAsset.RefreshAnimatedBatches`,
+shared across all instances of the same asset – the UV distortion depends only on the time, not
+on the instance).
 
-## Teamfarbe
+## Team colour
 
-Zwei unabhängige, im Original getrennte Mechanismen (`W3DAssetManager.cpp Recolor_Mesh`):
+Two independent mechanisms, separate in the original (`W3DAssetManager.cpp Recolor_Mesh`):
 
-1. **ZHC-Texturen** (`remapAlphaTexture32Bit`, `DO_HUE_SHIFT`): Texturnamen mit Präfix „ZHC" werden
-   als Alpha-Masken-TGA erwartet (vierter Buchstabe „A"); der Alphakanal ist eine Maske
-   (`maske = 255 - alpha`), maskierte Pixel übernehmen den Farbton (Hue) der Teamfarbe und skalieren
-   ihre Sättigung mit der Teamsättigung, Ausgabealpha ist immer 255. Implementiert in
-   `Layers/Objects/HouseColor.Recolor` (HSV-Konvertierung nach Beschreibung neu geschrieben, nicht
-   aus dem Original kopiert) und über `W3dTextureCache.HouseColor` an `W3dMaterialFactory.Create`
-   angeschlossen (additive Erweiterung, siehe Diff in `W3dTextureCache.cs`). Pro (Textur, Teamfarbe)
-   gecacht; nicht unterstützte ZHC-Varianten (keine TGA, kein Alpha-Masken-Byte) werden einmal
-   gewarnt und ungefärbt gezeichnet. Neutrale Teamfarbe (`TeamColors.Neutral`, RGB 200/200/200) läuft
-   durch denselben Pfad wie jede andere Farbe.
-2. **HOUSECOLOR-Vertexfarbe** (`Recolor_Vertex_Material`): Meshes, deren Name (nach dem Container-
-   Punkt) mit „HOUSECOLOR" beginnt (`_strnicmp(…, 10)`), tönen im Original Ambient/Diffuse des
-   Vertexmaterials. Hier: `HouseColor.TintVertexColors` ersetzt das RGB von Farbkanal 0 (und Kanal 2,
-   falls der Batch zwei Material-Pässe hat) durch die Teamfarbe, Alpha bleibt erhalten. Da die Farbe
-   in den Vertexpuffer gebacken ist, braucht das eine **Modellvariante pro Team**: `ModelAsset`
-   erkennt beim Laden, ob überhaupt HOUSECOLOR-Meshes vorkommen (`HasHouseColorMeshes`); nur dann
-   baut `GetRigidModel(team)` verzögert eine Variante (geteiltes Skelett, geteilte Materialliste,
-   nur die betroffenen `Mesh`-Objekte werden mit neuem Vertexpuffer ersetzt), gecacht pro
-   Team-Hexcode. Bei geskinnten HOUSECOLOR-Batches wird stattdessen einmalig beim (Neu-)Aufbau des
-   Skin-Runtime-Modells getönt (bekannte Einschränkung: ein Besitzerwechsel nach dem ersten Aufbau
-   färbt den Skin nicht nach, da danach nur noch Position/Normale neu berechnet werden).
+1. **ZHC textures** (`remapAlphaTexture32Bit`, `DO_HUE_SHIFT`): texture names with the prefix "ZHC" are
+   expected as alpha mask TGAs (fourth letter "A"); the alpha channel is a mask
+   (`mask = 255 - alpha`), masked pixels take over the hue of the team colour and scale
+   their saturation with the team saturation, the output alpha is always 255. Implemented in
+   `Layers/Objects/HouseColor.Recolor` (HSV conversion rewritten from the description, not
+   copied from the original) and connected to `W3dMaterialFactory.Create` via `W3dTextureCache.HouseColor`
+   (additive extension, see diff in `W3dTextureCache.cs`). Cached per (texture, team colour);
+   unsupported ZHC variants (no TGA, no alpha mask byte) are warned about once
+   and drawn uncoloured. The neutral team colour (`TeamColors.Neutral`, RGB 200/200/200) runs
+   through the same path as every other colour.
+2. **HOUSECOLOR vertex colour** (`Recolor_Vertex_Material`): meshes whose name (after the container
+   dot) begins with "HOUSECOLOR" (`_strnicmp(…, 10)`) tint ambient/diffuse of the
+   vertex material in the original. Here: `HouseColor.TintVertexColors` replaces the RGB of colour channel 0 (and channel 2,
+   if the batch has two material passes) with the team colour, alpha is preserved. Since the colour
+   is baked into the vertex buffer, this needs a **model variant per team**: `ModelAsset`
+   recognises on loading whether HOUSECOLOR meshes occur at all (`HasHouseColorMeshes`); only then
+   does `GetRigidModel(team)` lazily build a variant (shared skeleton, shared material list,
+   only the affected `Mesh` objects are replaced with a new vertex buffer), cached per
+   team hex code. For skinned HOUSECOLOR batches, tinting is instead done once on the (re)build of the
+   skin runtime model (known limitation: a change of owner after the first build
+   does not re-colour the skin, since afterwards only position/normal are recomputed).
 
-## Zustände, Animation, Konstruktionshöhe
+## States, animation, construction height
 
-Die Präsentation hat den passenden `ModelStateSpec` pro Draw-Modul bereits ausgewählt
-(`DrawableInstance.Selections`, `BestStateSelector`); der Layer wählt daraus nur noch, welche
-Animation aus `ModelStateSpec.Animations` gespielt wird: deterministisch aus einem Hash der
-Entity-/Szenerie-ID und dem Zustandsindex, bevorzugt eine Nicht-Idle-Animation, sonst Idle. Bei
-`AnimationFlags.RandomStart` wird ein ebenso deterministischer Zeitversatz in die Startzeit addiert,
-damit gleiche Einheiten nicht synchron animieren. Wiedergabegeschwindigkeit kommt aus
-`AnimationSpeedMin/Max`, ebenso deterministisch interpoliert. `W3dAnimationClock.GetFrame` liefert
-den Frame aus `AnimationMode`/Bildrate/verstrichener Zeit; `W3dPose.Evaluate` wird nur aufgerufen,
-wenn sich der Frame um mehr als ~0,001 geändert hat. Fehlt die Animation
-(`W3dAssetLibrary.GetAnimation` liefert `null`), bleibt die Ruhepose stehen, der Name wird einmalig
-gezählt und gewarnt (`ObjectLayerStats.MissingAnimations`). `AnimationMode.Manual` steht seit Phase 15 auf
-dem Startframe des Zustands (Türen, Pakete); die Flags `StartFrameFirst/Last` und
-`MaintainFrameAcrossStates*` werden weiter nicht ausgewertet. Türme, Reifen und Mündungsfeuer: siehe
-„Phase 15: Korrekturen der Weltdarstellung“.
+The presentation has already selected the matching `ModelStateSpec` per draw module
+(`DrawableInstance.Selections`, `BestStateSelector`); from it the layer only selects which
+animation from `ModelStateSpec.Animations` is played: deterministically from a hash of the
+entity/scenery ID and the state index, preferably a non-idle animation, otherwise idle. With
+`AnimationFlags.RandomStart` an equally deterministic time offset is added to the start time,
+so that identical units do not animate in sync. The playback speed comes from
+`AnimationSpeedMin/Max`, interpolated equally deterministically. `W3dAnimationClock.GetFrame` delivers
+the frame from `AnimationMode`/frame rate/elapsed time; `W3dPose.Evaluate` is only called
+when the frame has changed by more than ~0.001. If the animation is missing
+(`W3dAssetLibrary.GetAnimation` returns `null`), the rest pose remains, the name is counted and
+warned about once (`ObjectLayerStats.MissingAnimations`). Since Phase 15 `AnimationMode.Manual` stands on
+the start frame of the state (doors, packages); the flags `StartFrameFirst/Last` and
+`MaintainFrameAcrossStates*` are still not evaluated. Turrets, tyres and muzzle flash: see
+"Phase 15: corrections of the world presentation".
 
-`AnimationFlags.AdjustHeightByConstructionPercent` senkt die Instanz um
-`Höhe * (1 - Baufortschritt)` (`W3DModelDraw::adjustTransformMtx`, `references/generals-game-code/
-Core/GameEngineDevice/Source/W3DDevice/GameClient/Drawable/Draw/W3DModelDraw.cpp`); die Höhe ist die
-maximale Z-Ausdehnung der Ruhepose über dem Pivot (`ModelAsset.Height`), eine Näherung der
-Original-Kollisionsgeometrie (`GeometryInfo::getMaxHeightAbovePosition`) über die sichtbaren Bounds.
+`AnimationFlags.AdjustHeightByConstructionPercent` lowers the instance by
+`height * (1 - construction progress)` (`W3DModelDraw::adjustTransformMtx`, `references/generals-game-code/
+Core/GameEngineDevice/Source/W3DDevice/GameClient/Drawable/Draw/W3DModelDraw.cpp`); the height is the
+maximum Z extent of the rest pose above the pivot (`ModelAsset.Height`), an approximation of the
+original collision geometry (`GeometryInfo::getMaxHeightAbovePosition`) via the visible bounds.
 
-## Culling und Statistik
+## Culling and statistics
 
-`match.Camera.Frustum.Intersects(Aabb)` mit einer Kugel-abgeleiteten AABB um die Instanzposition
-(Radius aus der Ruhepose aller Teile, ca. 25 % + 2 Einheiten Spielraum, `ModelAsset.Radius`) – eine
-bewusste Vereinfachung gegenüber einer rotierten Bounding-Box; für gedrehte, längliche Objekte kann
-das Culling etwas konservativer ausfallen als nötig. `ObjectLayerStats` zählt pro Frame Drawables,
-Gezeichnete, Ausgeblendete, gepoolte Entities, geskinnte Zeichnungen, Dreiecke sowie kumulativ
-geladene/fehlende Modelle, fehlende Texturen, fehlende Animationen und Platzhalter; dazu
-Frame-Millisekunden und pro Thread allokierte Bytes (`Stopwatch`/
-`GC.GetAllocatedBytesForCurrentThread`). Im `--smoke-test`-Modus wird die Zeile einmal beim
-Erreichen von `--frames` (oder beim Beenden) auf die Konsole geschrieben.
+`match.Camera.Frustum.Intersects(Aabb)` with a sphere-derived AABB around the instance position
+(radius from the rest pose of all parts, approx. 25 % + 2 units of margin, `ModelAsset.Radius`) – a
+deliberate simplification compared with a rotated bounding box; for rotated, elongated objects
+the culling can turn out somewhat more conservative than necessary. `ObjectLayerStats` counts per frame drawables,
+drawn, hidden, pooled entities, skinned draws, triangles and, cumulatively,
+loaded/missing models, missing textures, missing animations and placeholders; in addition
+frame milliseconds and bytes allocated per thread (`Stopwatch`/
+`GC.GetAllocatedBytesForCurrentThread`). In `--smoke-test` mode the line is written to the console once when
+`--frames` is reached (or on exit).
 
-Nicht mehr gesehene Drawables geben ihre gepoolten Entities zurück (`EntityPool`, ein einziger
-Freispeicher für starre, geskinnte und Platzhalter-Entities, da nur `ModelComponent.Model`
-ausgetauscht wird); ausgeblendete, aber weiterhin vorhandene Instanzen werden nur aus der Szene
-entfernt, nicht freigegeben, und bei Rückkehr in den Sichtbereich wiederverwendet.
+Drawables no longer seen return their pooled entities (`EntityPool`, a single
+free store for rigid, skinned and placeholder entities, since only `ModelComponent.Model`
+is exchanged); instances that are hidden but still present are only removed from the scene,
+not released, and are reused on return into the visible area.
 
-## Fehlende Modelle
+## Missing models
 
-Schlägt `W3dAssetLibrary.GetModel` fehl (Datei oder Hierarchie fehlt), wird der Name einmalig
-gewarnt und gezählt (`ObjectLayerStats.ModelsMissing`); die Instanz bekommt stattdessen eine sichtbar
-pinke Platzhalter-Box (`PlaceholderBox`, Einheitswürfel, unlackiert, über denselben
-Skelett-Knoten-Trick platziert wie starre Teile) und zählt in `ObjectLayerStats.Placeholders`. In
-allen Testläufen (Alpine Assault, drei Fraktionen, mehrere hundert Frames) traten keine fehlenden
-Modelle, Texturen oder Animationen auf.
+If `W3dAssetLibrary.GetModel` fails (file or hierarchy missing), the name is warned about and
+counted once (`ObjectLayerStats.ModelsMissing`); the instance gets a visibly
+pink placeholder box instead (`PlaceholderBox`, unit cube, unpainted, placed via the same
+skeleton node trick as rigid parts) and counts in `ObjectLayerStats.Placeholders`. In
+all test runs (Alpine Assault, three factions, several hundred frames) no missing
+models, textures or animations occurred.
 
-## Bekannte Einschränkungen
+## Known limitations
 
-Stand Phase 15 (neu gemessen mit `PresentationTool model-audit`, siehe unten); frühere Einträge zu schwarzen
-Rückseiten und fehlenden Türmen sind durch die Phase-15-Korrekturen überholt.
+As of Phase 15 (re-measured with `PresentationTool model-audit`, see below); earlier entries on black
+back faces and missing turrets are superseded by the Phase 15 corrections.
 
-- **Nicht gesetzte Modellzustände:** nach den Zusatzarbeiten vom 4. Oktober 2026 setzt die Präsentation 95 von 106 Zustandsnamen (vorher 52; Einzelheiten und Näherungen in
-  `docs/MODEL-CONDITIONS-BUILDINGS.md`, `docs/MODEL-CONDITIONS-UNITS.md`). Acht bleiben ungesetzt, jeweils weil die Simulation das Verhalten nicht kennt: `EXPLODED_BOUNCING/FLAILING` (nichts wird weggeschleudert), `JAMMED` (kein Störsender),
-  `PANICKING`, `RAPPELLING` (kein Seilabstieg), `PREORDER` (Online-Profilmerkmal), `DOCKING_BEGINNING` (Ein- und Ausfahrt fallen in einen Tick). `PREATTACK_A/B/C` setzt die Simulation seit dem 4. Oktober 2026
-  (`PreAttackDelay`, `docs/SIM-FIRING-TRACKER.md`), `RAISING_FLAG` seit der gestuften Übernahme. Türen von Fabriken sind eine
-  Näherung (die Simulation hat keine Tür; die Öffnung beginnt `DoorOpeningTime` vor dem Erscheinen der Einheit).
-- **Federung und Lenkung** sind seit dem 4. Oktober 2026 gebaut (`SuspensionTracker`: Neigung zum Gelände und beim Beschleunigen, Lenkwinkel, vier Federwege, Kabinenschwung); es fehlen
-  der Hubeffekt beim Überrollen, der Powerslide und die Wegbegrenzung der Kabine.
-- **Straßen** werden gezeichnet (`docs/CLIENT-ROADS.md`); der `GlobalLighting`-Chunk der Karte wird weiter übersprungen: die Objektbeleuchtung kommt aus `GameData`
-  (`TerrainObjectsLighting*`), nicht aus der Karte.
-- **Nebel:** Kartenobjekte ohne Simulationsentität werden bis zur Erkundung ihres Bodens ausgeblendet; erinnerte Gebäude und erkundete, gerade nicht sichtbare Szenerie werden
-  abgedunkelt (`DrawableInstance.Fogged`, Helligkeit 0,25 wie der quadrierte Nebelwert des Geländes; Prüfhilfe `CNCNEW_OBJECT_FOG=1`). Geskinnte Teile (Infanterie) werden nicht abgedunkelt.
-- **Verstecken von Teilen (Korrektur 4. Oktober 2026):** das Umschalten des `EnableRender`-Bits eines Skelettknotens versteckt im laufenden Client **kein** Mesh (ein Test, der alle Teile eines
-  Panzers versteckte, ließ ihn voll gezeichnet). Dadurch standen Mündungsfeuer und jedes `HideSubObject` aller Objekte dauerhaft sichtbar. Ein verstecktes Teil bekommt jetzt zusätzlich eine
-  entartete (Null-)Weltmatrix; Aufnahmen belegen es (Tick 30 ohne, Tick 66 – ein Tick nach dem Schuss – mit Mündungsfeuer). Prüfhilfe: `CNCNEW_FX=0` blendet die Partikelschicht aus, um Modellteile
-  von Effekten zu unterscheiden.
-- Kamera-ausgerichtete Billboards, HLOD-Aggregate/-Proxies werden nicht gezeichnet (gezählt in
-  `W3dModel.UnresolvedSubObjects`/`Aggregates`/`Proxies`; `model-audit`: 10 Modelle mit nicht
-  auflösbaren Einträgen; 47 Modelle laden nicht, weil die Datei in den Assets fehlt – Kartenszenerie `cb…`).
-- `StartFrameFirst/Last`, `MaintainFrameAcrossStates*` (siehe oben).
-- Environment-Mapping-Texturstufen nutzen eine feste Normalen-/Blickrichtung
-  (`ObjectRenderVertexBuilder.FixedViewDirection`, ca. (0, −0,6, 0,8) normiert) statt einer
-  echten Pro-Pixel-Reflexion, weil die Geometrie pro Asset einmal gebaut und von allen Instanzen
-  geteilt wird.
-- Kein Blob-/Kontaktschatten (optionaler Punkt des Auftrags): nicht umgesetzt.
-- HOUSECOLOR-Vertexfärbung eines geskinnten Teils aktualisiert sich nicht bei Besitzerwechsel nach
-  dem ersten Aufbau (siehe oben).
+- **Model states not set:** after the additional work of 4 October 2026 the presentation sets 95 of 106 state names (before 52; details and approximations in
+  `docs/MODEL-CONDITIONS-BUILDINGS.md`, `docs/MODEL-CONDITIONS-UNITS.md`). Eight remain unset, each because the simulation does not know the behaviour: `EXPLODED_BOUNCING/FLAILING` (nothing is flung away), `JAMMED` (no jammer),
+  `PANICKING`, `RAPPELLING` (no rope descent), `PREORDER` (online profile feature), `DOCKING_BEGINNING` (entry and exit fall into one tick). `PREATTACK_A/B/C` has been set by the simulation since 4 October 2026
+  (`PreAttackDelay`, `docs/SIM-FIRING-TRACKER.md`), `RAISING_FLAG` since the staged capture. Doors of factories are an
+  approximation (the simulation has no door; the opening begins `DoorOpeningTime` before the appearance of the unit).
+- **Suspension and steering** have been built since 4 October 2026 (`SuspensionTracker`: tilt to the terrain and when accelerating, steering angle, four suspension travels, cabin sway); what is missing is
+  the lift effect when rolling over something, the powerslide and the travel limit of the cabin.
+- **Roads** are drawn (`docs/CLIENT-ROADS.md`); the `GlobalLighting` chunk of the map is still skipped: the object lighting comes from `GameData`
+  (`TerrainObjectsLighting*`), not from the map.
+- **Fog:** map objects without a simulation entity are hidden until their ground is explored; remembered buildings and explored scenery that is currently not visible are
+  darkened (`DrawableInstance.Fogged`, brightness 0.25 like the squared fog value of the terrain; test aid `CNCNEW_OBJECT_FOG=1`). Skinned parts (infantry) are not darkened.
+- **Hiding of parts (correction 4 October 2026):** toggling the `EnableRender` bit of a skeleton node hides **no** mesh in the running client (a test that hid all parts of a
+  tank left it fully drawn). As a result, muzzle flash and every `HideSubObject` of all objects were permanently visible. A hidden part now additionally gets a
+  degenerate (zero) world matrix; captures prove it (tick 30 without, tick 66 – one tick after the shot – with muzzle flash). Test aid: `CNCNEW_FX=0` hides the particle layer in order to distinguish model parts
+  from effects.
+- Camera-facing billboards, HLOD aggregates/proxies are not drawn (counted in
+  `W3dModel.UnresolvedSubObjects`/`Aggregates`/`Proxies`; `model-audit`: 10 models with entries that cannot be
+  resolved; 47 models do not load because the file is missing in the assets – map scenery `cb…`).
+- `StartFrameFirst/Last`, `MaintainFrameAcrossStates*` (see above).
+- Environment mapping texture stages use a fixed normal/view direction
+  (`ObjectRenderVertexBuilder.FixedViewDirection`, approx. (0, −0.6, 0.8) normalised) instead of a
+  real per-pixel reflection, because the geometry is built once per asset and shared by all
+  instances.
+- No blob/contact shadow (optional item of the brief): not implemented.
+- HOUSECOLOR vertex colouring of a skinned part does not update on a change of owner after
+  the first build (see above).
 
-## Phase 15: Korrekturen der Weltdarstellung
+## Phase 15: corrections of the world presentation
 
-Auslöser war die erste Sichtprüfung durch einen Menschen (`docs/DEMO-FINDINGS.md`): „die Hälfte der Wände
-fehlt“, Reifen nach oben, keine Türme, Gebäude im Nebel ohne Gelände. Die Ursachen waren nicht, wie
-vermutet, fehlende Mesh-Teile (der Mesh-Audit zählt alle Dreiecke als gezeichnet), sondern vier
-unabhängige Fehler der Darstellung:
+The trigger was the first visual check by a human (`docs/DEMO-FINDINGS.md`): "half of the walls
+are missing", tyres pointing upwards, no turrets, buildings in the fog without terrain. The causes were not, as
+suspected, missing mesh parts (the mesh audit counts all triangles as drawn) but four
+independent errors of the presentation:
 
-1. **Index-Puffer freigegeben.** `SharedIndexBuffer` ersetzte beim Wachsen den GPU-Puffer und gab den
-   alten sofort frei, obwohl bereits gebaute Modelle ihn noch referenzierten; deren Teile verschwanden
-   oder zeigten Fremddreiecke. Jetzt bleiben ersetzte Puffer bis `Dispose` am Leben (`_superseded`);
-   `ModelAsset.CountGpuResourceProblems` zählt tote/fehlende GPU-Ressourcen (`ObjectLayerStats`,
-   `gpuProblems`), und der `--smoke-test` bricht bei einem Problem ab.
-2. **Windungssinn.** W3D-Dreiecke sind gegen den Uhrzeigersinn orientiert, Strides Vorderseite ist im
-   Uhrzeigersinn; der Geländelayer dreht die Indizes bereits um, der Objektlayer (und `W3dStrideScene`)
-   nicht. Folge: Rückseitenauslese entfernte die Außenseiten der Wände und zeigte die Innenseiten.
-   Beide Bauer emittieren jetzt die Ecken 0,2,1 (`ObjectRenderVertexBuilder`, `W3dStrideScene`).
-3. **Keine Beleuchtung im Spiel.** Die Live-Szene hatte keine Richtungslichter; Objekte waren schwarz
-   oder nur ambient. `Rendering/SceneLighting` baut Sonne und Ambient aus `TerrainLighting`, dessen
-   Objektwerte `ObjectsFromDefinitions` aus `GameData` (`TerrainObjectsLighting*`) liest. Stride-Lichter
-   zeigen entlang −Z der Entität; `RotationFromForward` dreht entsprechend.
-4. **Bone-Sichtbarkeit ignoriert.** Teile, die der HLOD/die Animation per Sichtbarkeitskanal ausblendet
-   (`Set_Animation_Hidden`), wurden gezeichnet; Mündungsfeuer-Unterobjekte standen dauerhaft sichtbar.
-   Beides folgt jetzt dem Bone-Sichtbarkeitskanal; Mündungsfeuer erscheint nur nach einem Schuss.
+1. **Index buffer released.** When growing, `SharedIndexBuffer` replaced the GPU buffer and released the
+   old one immediately, although models already built still referenced it; their parts disappeared
+   or showed foreign triangles. Now replaced buffers stay alive until `Dispose` (`_superseded`);
+   `ModelAsset.CountGpuResourceProblems` counts dead/missing GPU resources (`ObjectLayerStats`,
+   `gpuProblems`), and the `--smoke-test` aborts on a problem.
+2. **Winding order.** W3D triangles are oriented counter-clockwise, Stride's front face is
+   clockwise; the terrain layer already reverses the indices, the object layer (and `W3dStrideScene`)
+   did not. Consequence: back-face culling removed the outsides of the walls and showed the insides.
+   Both builders now emit the corners 0,2,1 (`ObjectRenderVertexBuilder`, `W3dStrideScene`).
+3. **No lighting in the game.** The live scene had no directional lights; objects were black
+   or only ambient. `Rendering/SceneLighting` builds sun and ambient from `TerrainLighting`, whose
+   object values `ObjectsFromDefinitions` reads from `GameData` (`TerrainObjectsLighting*`). Stride lights
+   point along −Z of the entity; `RotationFromForward` rotates accordingly.
+4. **Bone visibility ignored.** Parts that the HLOD/the animation hides via a visibility channel
+   (`Set_Animation_Hidden`) were drawn; muzzle flash sub-objects were permanently visible.
+   Both now follow the bone visibility channel; muzzle flash appears only after a shot.
 
-Dazu die Zustände, die vorher nicht existierten:
+In addition, the states that did not exist before:
 
-- **Türme:** seit dem 4. Oktober 2026 hat die Simulation einen Turmzustand (`docs/SIM-TURRET-AIM.md`): der Turm dreht sich vor dem Schuss zum Ziel, die Waffe wartet auf die Ausrichtung.
-  `TurretTracker` liest nur noch `Entity.TurretOf`; Drehrate, Ruhestellung und Höhenwinkel kommen aus den typisierten `Turret`/`AltTurret`-Blöcken und steuern die Turm- und
-  Höhen-Bones (`Capture_Bone/Control_Bone`-Technik). Der zweite Turm (`AltTurret`) ist getrennt.
-- **Reifen** (`W3DTruckDraw`): Drehwinkel = Multiplikator · zurückgelegte Strecke (`WheelTravel` aus
-  den Positionsänderungen); Lenkung und Federung fehlen (siehe Einschränkungen).
-- **Mündungsfeuer** (`MuzzleFlashTicks`, `FiredSlots`): Unterobjekte `MUZZLEFX*`/`BARRELFX*` nur kurz
-  nach einem Schuss des zugehörigen Slots.
-- **Unerkundete Szenerie** (`FrameProjector`): Kartenobjekte ohne Entität erscheinen erst, wenn ihr
-  Boden erkundet ist, und bleiben dann (erinnert) stehen – vorher standen Gebäude im Schwarz.
-- **Heilsymbole** (`Drawable::drawHealing`): Schraubenschlüssel (`SCPWrench000–009`, Ping-Pong 60 ms) für
-  Gebäude/Fahrzeuge, Kreuz (`SCPCross000–015`, 30 ms) sonst; Bedingung: Leben unter Maximum, Heilung
-  innerhalb von 3 s (`ShowsHealing`). Gezeichnet vom neuen **HUD-Overlay** (`Game/Hud/HudOverlayRenderer`):
-  Auswahlrahmen, Ringe (Einheiten) bzw. Eckklammern (Gebäude), Lebensbalken, Befehlslinien, Sammelpunkt-
-  Flaggen und Bauvorschau. Das Overlay wurde bis Phase 15 berechnet, aber nie gezeichnet.
-- **Dock-Zustand:** das Original setzt `DOCKING` zwischen Einfahrt und Ausfahrt (`DockUpdate::onEnterReached`
-  bis `onExitReached`), nicht schon beim Anflug; der Versorgungs-Chinook senkt sein Netz jetzt am Depot,
-  nicht im Flug dorthin (`AIUpdateInterface.IsInsideDock`).
+- **Turrets:** since 4 October 2026 the simulation has a turret state (`docs/SIM-TURRET-AIM.md`): the turret turns to the target before the shot, the weapon waits for the alignment.
+  `TurretTracker` now only reads `Entity.TurretOf`; turn rate, rest position and elevation angle come from the typed `Turret`/`AltTurret` blocks and control the turret and
+  elevation bones (`Capture_Bone/Control_Bone` technique). The second turret (`AltTurret`) is separate.
+- **Tyres** (`W3DTruckDraw`): rotation angle = multiplier · distance travelled (`WheelTravel` from
+  the position changes); steering and suspension are missing (see limitations).
+- **Muzzle flash** (`MuzzleFlashTicks`, `FiredSlots`): sub-objects `MUZZLEFX*`/`BARRELFX*` only briefly
+  after a shot of the associated slot.
+- **Unexplored scenery** (`FrameProjector`): map objects without an entity appear only when their
+  ground is explored, and then stay (remembered) – before, buildings stood in the black.
+- **Healing symbols** (`Drawable::drawHealing`): wrench (`SCPWrench000–009`, ping-pong 60 ms) for
+  buildings/vehicles, cross (`SCPCross000–015`, 30 ms) otherwise; condition: health below maximum, healing
+  within 3 s (`ShowsHealing`). Drawn by the new **HUD overlay** (`Game/Hud/HudOverlayRenderer`):
+  selection frames, rings (units) or corner brackets (buildings), health bars, command lines, rally point
+  flags and build preview. Until Phase 15 the overlay was computed but never drawn.
+- **Dock state:** the original sets `DOCKING` between entry and exit (`DockUpdate::onEnterReached`
+  to `onExitReached`), not already on approach; the supply Chinook now lowers its net at the depot,
+  not in flight to it (`AIUpdateInterface.IsInsideDock`).
 
-### Kartenwinkel (Punkt 5 der Demo-Befunde)
+### Map angles (item 5 of the demo findings)
 
-`PresentationTool angle-audit` prüft an `ObjectsList`-Reihen länglicher Vorlagen (Zäune, Mauern), welche
-Konvention die Reihen in ihrer Längsrichtung ausrichtet. Auf 150 Karten (161 längliche von 1.520
-platzierten Vorlagen, 11.313 Reihenproben) richtet der **gespeicherte Winkel unverändert** 64,6 % der Proben
-auf 5° aus (7.313); Vorzeichenumkehr 22,1 %, Vierteldrehung 3,2 %, beides 23,5 % (die Anteile überlappen, eine
-Probe kann mehrere Konventionen erfüllen). Bei durchgehenden Zaunreihen ist die gespeicherte Konvention
-klar die beste (`ChainLinkFence` 90,7 % gegen 23,1 %). Die Umrechnung (Bogenmaß, Vorzeichen, +X-Vorderachse)
-ist damit **gemessen plausibel**; der gemeldete Befund „falsch gedreht“ ist **nicht reproduziert**.
-Wahrscheinliche Ursache des Eindrucks waren Windung und Beleuchtung (Punkte 2 und 3 oben).
-**Nicht belegt:** dass ein Mensch die Kartenobjekte jetzt als richtig gedreht empfindet.
+`PresentationTool angle-audit` checks, on `ObjectsList` rows of elongated templates (fences, walls), which
+convention aligns the rows in their longitudinal direction. On 150 maps (161 elongated of 1,520
+placed templates, 11,313 row samples) the **stored angle unchanged** aligns 64.6 % of the samples
+to within 5° (7,313); sign reversal 22.1 %, quarter turn 3.2 %, both 23.5 % (the shares overlap, one
+sample can satisfy several conventions). For continuous fence rows the stored convention is
+clearly the best (`ChainLinkFence` 90.7 % against 23.1 %). The conversion (radians, sign, +X front axis)
+is thus **measured to be plausible**; the reported finding "rotated wrongly" is **not reproduced**.
+The probable cause of the impression was winding and lighting (items 2 and 3 above).
+**Not verified:** that a human now perceives the map objects as rotated correctly.
 
-### Sichtprüfung der Weltdarstellung (Checkliste für den Menschen)
+### Visual check of the world presentation (checklist for the human)
 
-`scripts/capture-world.ps1` nimmt einen festen Satz von Szenen auf (`--smoke-test --capture`, feste
-Karte, Seed, Kamera; die Bilder liegen unter `%TEMP%\cncnew-captures`, nie im Repo; Szenen laufen
-nacheinander, nicht parallel). `manifest.txt` enthält **vorläufige** SHA-256 über die dekodierten Pixel (nicht über die
-PNG-Datei: deren Bytes schwanken bei gleichen Pixeln); sie belegen Reproduzierbarkeit, nicht Richtigkeit, und Golden Hashes entstehen erst nach der Abnahme.
-**Gemessene Grenze der Reproduzierbarkeit (4. Oktober 2026):** neun der elf Szenen liefern über wiederholte Läufe denselben Pixel-Hash; die beiden Autoplay-Szenen `match-base-late` und
-`match-combat` weichen zwischen Läufen um 1–11 Pixel ab (Flaggen-/Partikelkanten). Das Phänomen ist nicht neu – derselbe Autoplay-Lauf am Stand vor Phase 15 weicht um bis zu 93 Pixel ab –, die Ursache ist nicht gefunden
-(Stride-/GPU-Zeitabhängigkeit vermutet, nicht belegt). Für diese beiden Szenen taugt ein Hash daher nicht als Golden Hash; ein Pixelvergleich mit Toleranz wäre nötig. Die früheren Aussagen „identischer SHA-256
-über zwei Läufe“ (Phase 7, unten) galten für die damals verglichenen Paare, nicht allgemein. Jede Zeile unten
-ist von einem Menschen gegen die Aufnahme abzuhaken; ohne diese Abnahme gilt Phase 15 nicht als bestätigt.
+`scripts/capture-world.ps1` captures a fixed set of scenes (`--smoke-test --capture`, fixed
+map, seed, camera; the images are under `%TEMP%\cncnew-captures`, never in the repo; scenes run
+one after another, not in parallel). `manifest.txt` contains **preliminary** SHA-256 over the decoded pixels (not over the
+PNG file: its bytes vary for the same pixels); they prove reproducibility, not correctness, and golden hashes only come into being after the acceptance.
+**Measured limit of the reproducibility (4 October 2026):** nine of the eleven scenes deliver the same pixel hash over repeated runs; the two autoplay scenes `match-base-late` and
+`match-combat` deviate between runs by 1–11 pixels (flag/particle edges). The phenomenon is not new – the same autoplay run at the state before Phase 15 deviates by up to 93 pixels –, the cause has not been found
+(Stride/GPU time dependence suspected, not verified). For these two scenes a hash is therefore not suitable as a golden hash; a pixel comparison with tolerance would be necessary. The earlier statements "identical SHA-256
+over two runs" (Phase 7, below) applied to the pairs compared at the time, not in general. Every row below
+is to be ticked off by a human against the capture; without this acceptance Phase 15 does not count as confirmed.
 
-| Szene | Zu sehen | Abgenommen |
+| Scene | To be seen | Accepted |
 | --- | --- | --- |
-| `viewer-commandcenter` | geschlossene Wände, Sternwappen vorn, kein schwarzes Gitterskelett | ☐ |
-| `viewer-barracks` | alle Wände, Zaun, Fahnenmast | ☐ |
-| `viewer-crusader` | Wanne, Turm, Rohr in Ruhepose, Ketten unten | ☐ |
-| `viewer-dozer` | Planierraupe im Modellbetrachter: Reifen unten, Schaufel vorn (die Betrachterkamera ist fest, die Ansicht ungewohnt) | ☐ |
-| `match-start` | Basis mit Wanddetails, Rest der Karte schwarz, keine Gebäude im Schwarz | ☐ |
-| `match-lowangle` | flache Kamera: Wände beleuchtet, nicht schwarz | ☐ |
-| `match-selected` | Eckklammern + Balken an der Kommandozentrale, Ring + Balken an der Planierraupe | ☐ |
-| `match-fog-unexplored` | unerkundetes Gelände mit Ölquelle: alles schwarz | ☐ |
-| `match-base-late` | ausgebaute Basis, Teamfarbe, Geschütztürme, Zäune an den Kanten | ☐ |
-| `match-combat` | Rohr zeigt aufs Ziel, Mündungsfeuer, Reifen/Türme nicht in Ruhepose | ☐ |
-| `mission-start` | Challenge-Basis mit Gebäuden, Beleuchtung wie im Gefecht | ☐ |
+| `viewer-commandcenter` | closed walls, star emblem at the front, no black lattice skeleton | ☐ |
+| `viewer-barracks` | all walls, fence, flagpole | ☐ |
+| `viewer-crusader` | hull, turret, barrel in rest pose, tracks at the bottom | ☐ |
+| `viewer-dozer` | dozer in the model viewer: tyres at the bottom, blade at the front (the viewer camera is fixed, the view unfamiliar) | ☐ |
+| `match-start` | base with wall details, rest of the map black, no buildings in the black | ☐ |
+| `match-lowangle` | flat camera: walls lit, not black | ☐ |
+| `match-selected` | corner brackets + bar on the command center, ring + bar on the dozer | ☐ |
+| `match-fog-unexplored` | unexplored terrain with oil derrick: everything black | ☐ |
+| `match-base-late` | developed base, team colour, gun turrets, fences at the edges | ☐ |
+| `match-combat` | barrel points at the target, muzzle flash, tyres/turrets not in rest pose | ☐ |
+| `mission-start` | challenge base with buildings, lighting as in the skirmish | ☐ |
 
-Zusätzlich im laufenden Spiel zu prüfen (nicht aufnehmbar): Reifen drehen beim Fahren; Planierraupe
-repariert ein Gebäude → Schraubenschlüssel erscheint; Chinook senkt das Netz erst über dem Depot;
-Infanterie bleibt nicht im Fußabdruck des Depots stehen; Einheiten umgehen eine arbeitende Planierraupe.
+Additionally to be checked in the running game (cannot be captured): tyres rotate when driving; a dozer
+repairs a building → wrench appears; the Chinook lowers the net only above the depot;
+infantry does not stay standing in the footprint of the depot; units go around a working dozer.
 
-### Messung des Mesh-Audits (`PresentationTool model-audit <dir> --structures`, neu gemessen)
+### Measurement of the mesh audit (`PresentationTool model-audit <dir> --structures`, re-measured)
 
-Die Audit-Befehle (`model-audit`, `angle-audit`) entstanden in dieser Phase; eine Tabelle „vorher“ gibt
-es mit dem Werkzeug daher nicht – das „vorher“ ist die Beobachtung des Menschen und die
-Ursachenanalyse oben (Puffer, Windung, Licht), keine Zahl.
+The audit commands (`model-audit`, `angle-audit`) were created in this phase; a "before" table therefore does not
+exist with the tool – the "before" is the observation of the human and the
+cause analysis above (buffer, winding, light), not a number.
 
-| Größe | Wert |
+| Quantity | Value |
 | --- | --- |
-| nach Objektzuständen gewählte Modelle | 6.041 (4.933 von Gebäuden benutzt); geprüft 4.886; nicht ladbar 47 |
-| Unterobjekte (feinste LOD) | 56.746; gezeichnet 56.615; standardmäßig versteckt 4; nur Kollision 127 |
-| Dreiecke | 1.585.417 gesamt, **1.585.401 gezeichnet**, 16 standardmäßig versteckt, 0 im Renderplan verloren |
-| zweiseitig gezeichnete Teile | 246 |
-| nie gezeigte versteckte Unterobjekte | 4 (`NBGATTLING.MUZZLEFX01/02`, `UBUNDTUNN(_S).BARRELFX01`) |
-| Modellzustände nie gesetzt | 11 von 106 Namen (vorher 54; Liste in den Einschränkungen) |
+| models selected by object states | 6,041 (4,933 used by buildings); checked 4,886; not loadable 47 |
+| sub-objects (finest LOD) | 56,746; drawn 56,615; hidden by default 4; collision only 127 |
+| triangles | 1,585,417 in total, **1,585,401 drawn**, 16 hidden by default, 0 lost in the render plan |
+| parts drawn two-sided | 246 |
+| hidden sub-objects never shown | 4 (`NBGATTLING.MUZZLEFX01/02`, `UBUNDTUNN(_S).BARRELFX01`) |
+| model states never set | 11 of 106 names (before 54; list in the limitations) |
 
-## Gemessene Zahlen (Alpine Assault, `game/content`, neu messen bei Bedarf)
+## Measured numbers (Alpine Assault, `game/content`, re-measure if needed)
 
-- FactionAmerica vs. FactionChina, Startaufnahme: 590 Drawables gesamt, 10 im Sichtkegel gezeichnet,
-  78 Modelle geladen, 2.080 Dreiecke, 0 fehlende Modelle/Texturen/Animationen,
-  **0,19–0,27 ms Layerzeit pro Frame, 0 zusätzlich allokierte Bytes** im eingeschwungenen Zustand
-  (zwei unabhängige Läufe bei 300 bzw. 1.500 Frames: identischer SHA-256 der PNG-Aufnahme).
-- FactionGLA vs. FactionAmerica, `--autoplay --frames 6000`: 612 Drawables gesamt, 16 gezeichnet,
-  9 geskinnte Infanterieinstanzen, 124 Modelle, 6.133 Dreiecke, 0,38–0,60 ms Layerzeit,
-  168 Byte/Frame (Stride-interne Pufferaktualisierung der Skin-Meshes); zwei unabhängige Läufe
-  ergaben denselben SHA-256.
-- Der Auftrag nennt „~600 Drawables unter 4 ms" als Budget: Alle Testkarten liefern tatsächlich
-  ~590–612 Drawables **pro Frame insgesamt** (nicht nur im Sichtfeld), und genau diese Menge
-  durchläuft jeden Frame die Zustands-/Culling-Auswahl – gemessen 0,19–0,60 ms, weit innerhalb des
-  Budgets. Nur ein kleinerer Teil (10–26 in diesen Aufnahmen) besteht zusätzlich den Frustum-Test
-  und durchläuft die teurere Pose-/Skin-/Knotenaktualisierung; die RTS-Kamera begrenzt den
-  Sichtbereich so, dass in keinem Testlauf alle ~600 gleichzeitig sichtbar waren – die berichtete
-  Zeit ist daher die tatsächlich gemessene Volllast-Zahl, keine Hochrechnung.
-- Sichtprüfung (PNG-Aufnahmen, `--capture`): Gebäude, Fahrzeuge, geskinnte Infanterie, alle drei
-  getesteten Fraktionen mit korrekter Teamfarbe (blaue/rote/grüne Fahnen und Bannerflächen),
-  Animation über die Zeit (unterschiedlicher SHA-256 bei Frame 100 vs. 130 bei sonst gleichem Setup).
+- FactionAmerica vs. FactionChina, start capture: 590 drawables in total, 10 drawn in the view cone,
+  78 models loaded, 2,080 triangles, 0 missing models/textures/animations,
+  **0.19–0.27 ms layer time per frame, 0 additionally allocated bytes** in the steady state
+  (two independent runs at 300 and 1,500 frames respectively: identical SHA-256 of the PNG capture).
+- FactionGLA vs. FactionAmerica, `--autoplay --frames 6000`: 612 drawables in total, 16 drawn,
+  9 skinned infantry instances, 124 models, 6,133 triangles, 0.38–0.60 ms layer time,
+  168 bytes/frame (Stride-internal buffer update of the skin meshes); two independent runs
+  yielded the same SHA-256.
+- The brief names "~600 drawables under 4 ms" as the budget: all test maps actually deliver
+  ~590–612 drawables **per frame in total** (not only in the field of view), and exactly this amount
+  passes through the state/culling selection every frame – measured 0.19–0.60 ms, far within the
+  budget. Only a smaller part (10–26 in these captures) additionally passes the frustum test
+  and goes through the more expensive pose/skin/node update; the RTS camera limits the
+  visible area such that in no test run were all ~600 visible at the same time – the reported
+  time is therefore the actually measured full-load number, not an extrapolation.
+- Visual check (PNG captures, `--capture`): buildings, vehicles, skinned infantry, all three
+  tested factions with correct team colour (blue/red/green flags and banner surfaces),
+  animation over time (different SHA-256 at frame 100 vs. 130 with otherwise the same setup).
 
-## Quellenverweise
+## Source references
 
 - `references/generals-game-code/Core/GameEngineDevice/Source/W3DDevice/GameClient/Drawable/Draw/
-  W3DModelDraw.cpp`: `adjustTransformMtx` (Konstruktionshöhe), `handleClientTurretPositioning`
-  (Näherung aus Schussereignissen, siehe Phase 15), `adjustAnimation`/`doDrawModule` (Animationswahl bei
-  Zustandswechsel, hier durch einen deterministischen Hash ersetzt statt Zufall).
+  W3DModelDraw.cpp`: `adjustTransformMtx` (construction height), `handleClientTurretPositioning`
+  (approximation from shot events, see Phase 15), `adjustAnimation`/`doDrawModule` (animation selection on
+  state change, here replaced by a deterministic hash instead of randomness).
 - `W3DAssetManager.cpp`: `Recolor_Mesh`, `Recolor_Vertex_Material`, `remapAlphaTexture32Bit`
-  (Teamfarbe, siehe oben und `HouseColor.cs`).
-- `colorspace.h`: `RGB_To_HSV`/`HSV_To_RGB` (aus der Beschreibung neu geschrieben, nicht kopiert).
-- Stride-Interna verifiziert per Dekompilierung (`ilspycmd`, `Stride.Rendering.dll` 4.3.0.2507):
-  `SkeletonUpdater.UpdateNode` (Verhalten von `OverrideWorldMatrix`), `ModelComponent.Update`
-  (Wurzelknoten-Sonderfall), `IndexingDictionary<T>` (`Clear`, `null` entfernt einen Eintrag).
+  (team colour, see above and `HouseColor.cs`).
+- `colorspace.h`: `RGB_To_HSV`/`HSV_To_RGB` (rewritten from the description, not copied).
+- Stride internals verified by decompilation (`ilspycmd`, `Stride.Rendering.dll` 4.3.0.2507):
+  `SkeletonUpdater.UpdateNode` (behaviour of `OverrideWorldMatrix`), `ModelComponent.Update`
+  (root node special case), `IndexingDictionary<T>` (`Clear`, `null` removes an entry).
 
-## Durchscheinende Objekte (Phase 16, Vorschaumodell beim Platzieren)
+## Translucent objects (Phase 16, preview model when placing)
 
-`DrawableInstance.Opacity` (Standard 1) ist `Drawable::setDrawableOpacity`: unter 1 zeichnet der Objekt-Layer jede Oberfläche des Drawables durchscheinend. Heute setzt nur `PlacementPreview` einen Wert
-(0,45, `docs/GAME-HUD.md` §18); Entitäten und Kulissen bleiben bei 1.
+`DrawableInstance.Opacity` (default 1) is `Drawable::setDrawableOpacity`: below 1 the object layer draws every surface of the drawable translucently. Today only `PlacementPreview` sets a value
+(0.45, `docs/GAME-HUD.md` §18); entities and scenery stay at 1.
 
-* **Material:** `W3dMaterialFactory.Opacity` (gesetzt rund um `Create`, wie `Dim` und `Tint`). Ein undurchsichtiger Durchgang wird ein alphagemischter (`SourceAlpha`/`InverseSourceAlpha`) mit dem Alpha der Deckkraft (das Alpha
-  einer undurchsichtigen Textur ist beliebig); ein Durchgang mit Alphatest behält seine Löcher (Alpha mal Deckkraft); ein Durchgang, der schon mit `SourceAlpha` mischt, skaliert sein Alpha; additive und modulierende
-  Durchgänge skalieren die Farbe. Die Tiefenschreibung bleibt die des Shaders, damit man durch die Vorderseite nicht die Rückseite sieht.
-* **Cache:** `ModelAsset` hält die Varianten je (Materialplatz, Teamfarbe, gedimmt, Blitz, Deckkraft in ganzen Prozent) und für Hautteile je (Teil, Stapel, Blitz, Deckkraft); ein Vorschaumodell kostet also nach dem
-  ersten Frame keine Materialbauten mehr. `SolidOpacity = 100` ist der Zustand ohne Variante.
-* **Zähler:** `translucent=` in der Zeile `object layer:` (durchscheinend gezeichnete Teile des Frames).
-* Das Ganze gilt nicht für Schatten (der Layer zeichnet für die Vorschau keinen) und nicht für Teile, die der Hide-Mechanismus über die Nullmatrix versteckt (die bleiben unsichtbar).
+* **Material:** `W3dMaterialFactory.Opacity` (set around `Create`, like `Dim` and `Tint`). An opaque pass becomes an alpha-blended one (`SourceAlpha`/`InverseSourceAlpha`) with the alpha of the opacity (the alpha
+  of an opaque texture is arbitrary); a pass with alpha test keeps its holes (alpha times opacity); a pass that already blends with `SourceAlpha` scales its alpha; additive and modulating
+  passes scale the colour. The depth write stays that of the shader, so that one does not see the back through the front.
+* **Cache:** `ModelAsset` holds the variants per (material slot, team colour, dimmed, flash, opacity in whole percent) and for skin parts per (part, batch, flash, opacity); a preview model therefore costs
+  no more material builds after the first frame. `SolidOpacity = 100` is the state without a variant.
+* **Counter:** `translucent=` in the line `object layer:` (parts of the frame drawn translucently).
+* All of this does not apply to shadows (the layer draws none for the preview) and not to parts that the hide mechanism hides via the zero matrix (those stay invisible).
