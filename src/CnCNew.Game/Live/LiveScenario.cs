@@ -26,6 +26,18 @@ public enum ScenarioOrderKind
     Capture,
     /// <summary>Queue <see cref="ScenarioOrder.Template"/> at the actor (a producer); the unit that comes out is bound to the tag in <see cref="ScenarioOrder.Target"/>.</summary>
     Produce,
+    /// <summary>Walk to the transport named by <see cref="ScenarioOrder.Target"/> and board it (retried every original frame until the simulation accepts it).</summary>
+    Enter,
+    /// <summary>The actor (a transport) lets everybody out.</summary>
+    Evacuate,
+    /// <summary>The actor (a builder) repairs the structure named by <see cref="ScenarioOrder.Target"/> (retried until accepted).</summary>
+    Repair,
+    /// <summary>Staging, not a player's order: the actor loses <see cref="ScenarioOrder.X"/> percent of its full health at once.</summary>
+    Damage,
+    /// <summary>The actor (a builder) starts <see cref="ScenarioOrder.Template"/> at <see cref="ScenarioOrder.X"/>/<see cref="ScenarioOrder.Y"/>; the structure is bound to the tag in <see cref="ScenarioOrder.Target"/>.</summary>
+    Build,
+    /// <summary>Move to <see cref="ScenarioOrder.X"/>/<see cref="ScenarioOrder.Y"/> and attack whatever comes into range on the way.</summary>
+    AttackMove,
 }
 
 /// <summary>
@@ -149,6 +161,30 @@ public sealed class LiveScenario : LiveGame
                     throw new InvalidOperationException($"Scenario '{Scenario.Name}': queueing '{order.Template}' at '{order.Actor}' was refused.");
                 _pendingProduction[index] = order.Target;
                 return true;
+            case ScenarioOrderKind.Enter when order.Target is not null && _tags.TryGetValue(order.Target, out var transport):
+                Book(player).Clear(actor);
+                return Issue(player, (sequence, tick) => new MoveAndEnterCommand(player, sequence, tick, actor, transport)).Accepted;
+            case ScenarioOrderKind.Evacuate:
+                return Issue(player, (sequence, tick) => new EvacuateCommand(player, sequence, tick, actor, false, Fixed.FromInt(0), Fixed.FromInt(0))).Accepted;
+            case ScenarioOrderKind.Repair when order.Target is not null && _tags.TryGetValue(order.Target, out var broken):
+                Book(player).Clear(actor);
+                return Issue(player, (sequence, tick) => new RepairCommand(player, sequence, tick, actor, broken)).Accepted;
+            case ScenarioOrderKind.Damage when entity.Body is { } body:
+            {
+                var amount = Fixed.MultiplyDivide(body.MaxHealth, Fixed.FromDecimal((decimal)order.X), Fixed.FromInt(100));
+                return Issue(PlayerId.System, (sequence, tick) => new DamageCommand(PlayerId.System, sequence, tick, actor, amount, DamageTypes.Unresistable, 0)).Accepted;
+            }
+            case ScenarioOrderKind.Build when order.Template is not null && order.Target is not null:
+                Book(player).Clear(actor);
+                if (!Issue(player, (sequence, tick) => new ConstructCommand(player, sequence, tick, actor, order.Template,
+                        Fixed.FromDecimal((decimal)(Anchor.X + order.X)), Fixed.FromDecimal((decimal)(Anchor.Y + order.Y)), Fixed.FromInt(0))).Accepted)
+                    throw new InvalidOperationException($"Scenario '{Scenario.Name}': building '{order.Template}' with '{order.Actor}' was refused.");
+                _pendingProduction[index] = order.Target;
+                return true;
+            case ScenarioOrderKind.AttackMove:
+                Book(player).Clear(actor);
+                Issue(player, (sequence, tick) => new AttackMoveCommand(player, sequence, tick, actor, Fixed.FromDecimal((decimal)(Anchor.X + order.X)), Fixed.FromDecimal((decimal)(Anchor.Y + order.Y))));
+                return true;
         }
 
         return true;
@@ -207,6 +243,7 @@ public sealed class LiveScenario : LiveGame
         }
 
         if (Scenario.StartMoney > 0) World.Submit(new GiveMoneyCommand(PlayerId.System, ++systemSequence, World.Tick, new PlayerId(1), Fixed.FromInt(Scenario.StartMoney)));
+        _sequence[PlayerId.System.Value] = systemSequence; // staging orders (Damage) continue the system's numbering
         World.Step();
         // The spawn command creates the object in the tick after it was submitted; the tags are matched in spawn order.
         var created = World.Entities.Where(entity => !before.Contains(entity.Id.Value)).OrderBy(entity => entity.Id.Value).ToArray();

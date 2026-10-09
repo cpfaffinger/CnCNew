@@ -8,7 +8,7 @@ namespace CnCNew.Game.Live;
 /// </summary>
 public static class DemoScenarios
 {
-    public static ImmutableArray<DemoScenario> All => [CaptureBuilding, TankDuel, JetStrafe, ..FactoryExits.All];
+    public static ImmutableArray<DemoScenario> All => [CaptureBuilding, TankDuel, JetStrafe, ..FactoryExits.All, ..AcceptanceScenes.All];
 
     public static DemoScenario? Find(string name) => All.FirstOrDefault(scenario => scenario.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
