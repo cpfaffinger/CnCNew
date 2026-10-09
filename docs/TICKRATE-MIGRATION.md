@@ -1417,7 +1417,7 @@ Rule, helpers and the complete list are in §14.5. Method: first the rate of the
 
 ```powershell
 dotnet run --project tests/CnCNew.Simulation.Tests -- --tick-rate 60 [--content-dir game/content] [--only TEXT]
-$env:CNCNEW_TEST_TICK_RATE = '60'   # dasselbe über die Umgebung
+$env:CNCNEW_TEST_TICK_RATE = '60'   # the same through the environment
 ```
 
 Without the option nothing changes (30 Hz, no hint). With it the program reports the rate in the first line. The run is a **probe for Phase 23**, not an acceptance test: it tells which expectations break when the default is switched.
@@ -1517,7 +1517,7 @@ driver ("send named Truck01 to area Warehouse Lot") became possible at 30 Hz at 
 map stayed 15,000: 17,001 ticks = 283.4 s instead of 1,001 frames = 33.4 s. The same map compares further timers with frame literals (defeat). These are the lines "`Update` (W6)" and "timer values" from
 §5.4 – not a new finding, but the first measured one.
 
-**Correction** (one commit per cause; description in `docs/SCRIPT-ENGINE.md` §2 "Die Uhr der VM ist das Originalbild", site of the escape in `docs/SIMULATION-CORE.md` §41):
+**Correction** (one commit per cause; description in `docs/SCRIPT-ENGINE.md` §2 "The clock of the VM is the original frame", site of the escape in `docs/SIMULATION-CORE.md` §41):
 
 | Commit | Cause | Correction | 30 Hz |
 |---|---|---|---|
