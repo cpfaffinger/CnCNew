@@ -50,11 +50,11 @@ public static class AcceptanceScenes
         WheelFirstFrame + WheelCourse.Length * WheelLegFrames + 60,
         [
             new("humvee", "AmericaVehicleHumvee", 1, 0, 0, 0f),
-            new("dozer", "AmericaVehicleDozer", 1, -70, -50, 0f),
+            new("dozer", "AmericaVehicleDozer", 1, -70, 105, 0f),
         ],
         [
             ..WheelCourse.Select((corner, index) => new ScenarioOrder(WheelFirstFrame + index * WheelLegFrames, "humvee", ScenarioOrderKind.MoveTo, X: corner.X, Y: corner.Y)),
-            ..Enumerable.Range(0, 4).Select(index => new ScenarioOrder(WheelFirstFrame + index * 2 * WheelLegFrames, "dozer", ScenarioOrderKind.MoveTo, X: index % 2 == 0 ? 70 : -70, Y: -50)),
+            ..Enumerable.Range(0, 4).Select(index => new ScenarioOrder(WheelFirstFrame + index * 2 * WheelLegFrames, "dozer", ScenarioOrderKind.MoveTo, X: index % 2 == 0 ? 70 : -70, Y: 105)),
         ],
         0, 15, 15f, 38f, 190f);
 
@@ -95,7 +95,7 @@ public static class AcceptanceScenes
             new(20, "tomahawk", ScenarioOrderKind.Attack, "target"),
             new(20, "inferno", ScenarioOrderKind.Attack, "target"),
         ],
-        150, 0, 0f, 40f, 420f);
+        175, 0, 0f, 40f, 420f);
 
     /// <summary>Frames of the repair scene (the hit and the repair order) and how much health the hit takes, in percent.</summary>
     public const long RepairHit = 5, RepairOrder = 30;
@@ -148,7 +148,7 @@ public static class AcceptanceScenes
             new(BuildFirstOrder, "dozer", ScenarioOrderKind.Build, "plant", X: 30, Y: -70, Template: "AmericaPowerPlant"),
             new(BuildSecondOrder, "dozer", ScenarioOrderKind.Build, "barracks", X: 30, Y: 90, Template: "AmericaBarracks"),
         ],
-        20, 10, 20f, 42f, 330f)
+        20, -15, 20f, 42f, 330f)
     {
         StartMoney = 5000,
     };
