@@ -425,6 +425,8 @@ run.Test("Original skirmish AI: base, teams, difficulty per player, determinism 
 run.Test("Original skirmish AI: rebuilding and base defences", Tests.OriginalAiRebuildsAndDefends);
 run.Test("Original skirmish AI: the seed decides, the tick rate does not", Tests.OriginalAiSeedsAndRates);
 run.Test("Original skirmish AI: a power that was not ready is looked at again at the remembered frame", Tests.OriginalAiRemembersWhenToLookAtAPowerAgain);
+run.Test("Original skirmish AI: a team attacks one victim together, except on the easy level", Tests.OriginalAiTeamsAttackOneVictimTogetherExceptOnEasy);
+run.Test("Original skirmish AI: a team in the field is reinforced", Tests.OriginalAiReinforcesATeamInTheField);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Skirmish: a live session refuses to be saved (explicit, loud guard)", Tests.SkirmishSessionRefusesToSave);
 run.Test("Projectiles: straight shell flight time, impact event and detonation effect", Tests.ProjectileStraightShellFlightTime);

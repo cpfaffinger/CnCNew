@@ -61,6 +61,12 @@ public sealed class ScriptTeam(int id, string prototype, PlayerId owner)
 
     public bool Recruitable { get; set; }
 
+    /// <summary><c>Team::m_commonAttackTarget</c>: the victim the team attacks together, 0 for none. Only a team of a player the original skirmish AI runs ever has one.</summary>
+    internal uint CommonTarget;
+
+    /// <summary>The victim the team attacks together (<c>Team::getTeamTargetObject</c> without its validity test), or an invalid id.</summary>
+    public EntityId CommonAttackTarget => new(CommonTarget);
+
     // The prototype of this instance once the engine has looked it up (ScriptEngine.PrototypeOf); derived from the program, not state.
     internal ScriptTeamPrototype? Info;
     internal bool InfoKnown;
@@ -965,6 +971,7 @@ public sealed partial class ScriptEngine
             writer.Bool("created", team.Created);
             writer.Text("attackPriority", team.AttackPriority);
             if (team.RecruitableSet) writer.Bool("recruitable", team.Recruitable);
+            if (team.CommonTarget != 0) writer.UInt("commonTarget", team.CommonTarget);
             if (_program.FindTeam(team.Prototype) is { HasEventScripts: true })
             {
                 writer.Bool("eventsCreateHandled", team.CreateHandled);
@@ -1166,6 +1173,7 @@ public sealed partial class ScriptEngine
                 team.SeeEnemy = item.Bool("eventsSeeEnemy");
                 team.WasIdle = item.Bool("eventsWasIdle");
             }
+            if (item.Has("commonTarget")) team.CommonTarget = checked((uint)item.UInt("commonTarget"));
             team.Members.Stamp = _membership;
             foreach (var member in item.Array("members")) team.Members.Add(checked((uint)member.UInt("id")));
             _teams[team.Id] = team;

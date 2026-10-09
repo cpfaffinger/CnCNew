@@ -196,6 +196,17 @@ public sealed partial class SimulationWorld
                 state.Offset = true;
             }
 
+            // getNextMoodTarget: the common victim of the unit's team comes before the unit's own look and does not wait for the look to be due.
+            if (AcquisitionAdvisor is { } teams && teams.CommonTargetOf(entity) is { } common && IsAttackable(entity, common)
+                && CanAttack(entity, common, mode == AcquireMode.Turret, out var commonInRange)
+                && (commonInRange || (mode == AcquireMode.AttackMove && MayChase(entity, entity.Template.IsKindOf("AIRCRAFT")))))
+            {
+                state.Victim = common.Id;
+                AimTurretsForAttack(entity, common, TurretAimOrder.Attack);
+                if (Engage(entity, ai, state, common, mode, tick)) return;
+                EndEngagement(entity, ai, state);
+            }
+
             if (force || tick >= state.NextCheck)
             {
                 if (!force)
@@ -304,6 +315,7 @@ public sealed partial class SimulationWorld
                 state.Halted = true;
             }
 
+            AcquisitionAdvisor?.NoteFiring(entity, victim);
             AutoFire(entity, victim, turretOnly);
             return true;
         }

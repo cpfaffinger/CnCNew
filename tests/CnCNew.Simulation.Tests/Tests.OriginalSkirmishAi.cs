@@ -12,6 +12,7 @@ using CnCNew.Simulation.Skirmish.Original;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.World;
 
 /// <summary>The original skirmish AI (docs/SKIRMISH-AI-ORIGINAL.md): its data, the attachment of the script library to the slots of a match, and matches played by it.</summary>
 static partial class Tests
@@ -139,7 +140,7 @@ static partial class Tests
             Scr.Text("teamName", letter + " Attack"), Scr.Text("teamOwner", owner), Scr.Flag("teamIsSingleton", false), IntProperty("teamMaxInstances", 1),
             Scr.Text("teamUnitType1", side + "Soldier"), IntProperty("teamUnitMinCount1", 2), IntProperty("teamUnitMaxCount1", 2),
             Scr.Text("teamProductionCondition", letter + " Attack Condition"), IntProperty("teamProductionPriority", 5), Scr.Text("teamOnCreateScript", letter + " Attack Go"),
-            Scr.Text("teamGenericScriptHook0", letter + " Mark"),
+            Scr.Text("teamGenericScriptHook0", letter + " Mark"), Scr.Flag("teamAttackCommonTarget", true), Scr.Flag("teamAutoReinforce", side == "Alpha"),
         ]);
         var defaultTeam = new MapProperties([Scr.Text("teamName", "team" + owner), Scr.Text("teamOwner", owner), Scr.Flag("teamIsSingleton", true)]);
         return (new MapScriptList([..scripts], []), [defaultTeam, team]);
@@ -339,6 +340,75 @@ static partial class Tests
             StepFrames(restored, 290);
             Check.That(restored.StateHash() == session.StateHash(), $"A session restored between the two looks continues identically: the memory is state ({rate}).");
         }
+    }
+
+    private static Entity[] LiveTeamMembers(ScriptedSkirmishSession session, string prototype)
+        => [..session.Engine.TeamInstances.Where(team => team.Prototype == prototype).SelectMany(team => team.Members)
+            .Select(id => session.World.FindEntity(new EntityId(id))).Where(entity => entity is { EffectivelyDead: false, DestroyRequested: false }).Select(entity => entity!)];
+
+    /// <summary>
+    /// <c>Team::setTeamTargetObject</c>: the members of a team with <c>teamAttackCommonTarget</c> attack one victim together - on the normal and the hard level, never on the easy one.
+    /// </summary>
+    public static void OriginalAiTeamsAttackOneVictimTogetherExceptOnEasy()
+    {
+        var (session, fixture, terrain, map, library, data) = StartOriginalSkirmish(alpha: ScriptDifficulty.Hard, beta: ScriptDifficulty.Easy);
+        var engine = session.Engine;
+        var world = session.World;
+        var hardSet = false;
+        var easySet = false;
+        var together = false;
+        byte[]? saved = null;
+        ulong hashAtSave = 0;
+        for (var frame = 0; frame < 2_400 && !session.IsOver && !(hardSet && together && saved is not null); frame++)
+        {
+            StepFrames(session, 1);
+            foreach (var team in engine.TeamInstances)
+            {
+                if (!team.CommonAttackTarget.IsValid) continue;
+                if (team.Prototype == "B Attack1") easySet = true;
+                if (team.Prototype != "A Attack0") continue;
+                var victim = world.FindEntity(team.CommonAttackTarget);
+                Check.That(victim is null || victim.Owner == new PlayerId(2), "The common victim of the team of the hard army is an object of its enemy.");
+                hardSet = true;
+                if (saved is null) { saved = session.Save(); hashAtSave = session.StateHash(); }
+                var attacking = LiveTeamMembers(session, "A Attack0").Where(member => world.AcquiredVictimOf(member).IsValid).ToArray();
+                if (attacking.Length >= 2 && attacking.All(member => world.AcquiredVictimOf(member) == team.CommonAttackTarget)) together = true;
+            }
+        }
+        Check.That(hardSet, "A member of the hard team that fires or hunts names the victim of the team.");
+        Check.That(together, "Two members of the team attack the victim of the team at the same time.");
+        Check.That(!easySet, "The easy army never has a common victim (Team::setTeamTargetObject returns for DIFFICULTY_EASY).");
+        Check.That(System.Text.Encoding.UTF8.GetString(saved!).Contains("\"commonTarget\"", StringComparison.Ordinal), "The victim of the team is part of the saved state.");
+        var restored = ScriptedSkirmishSession.Restore(saved, fixture.Templates, fixture.Fingerprint, terrain, map, library, data);
+        Check.That(restored.StateHash() == hashAtSave, "Restored, the session hashes as it did when it was saved.");
+        var (twin, _, _, _, _, _) = StartOriginalSkirmish(alpha: ScriptDifficulty.Hard, beta: ScriptDifficulty.Easy);
+        while (twin.World.Tick < session.World.Tick) twin.Step();
+        while (restored.World.Tick < session.World.Tick) restored.Step();
+        Check.That(twin.StateHash() == session.StateHash() && restored.StateHash() == session.StateHash(), "A second run and the restored run reach the same state.");
+    }
+
+    /// <summary><c>AIPlayer::selectTeamToReinforce</c>: a team in the field that asks for it (<c>teamAutoReinforce</c>) gets a lost unit back, one at a time; another team does not.</summary>
+    public static void OriginalAiReinforcesATeamInTheField()
+    {
+        var (session, _, _, _, _, _) = StartOriginalSkirmish(alpha: ScriptDifficulty.Normal, beta: ScriptDifficulty.Normal);
+        var world = session.World;
+        while (!session.IsOver && !(session.Engine.FlagValue("A Attacking0") && session.Engine.FlagValue("B Attacking1"))) session.Step();
+        Check.That(session.Engine.FlagValue("A Attacking0") && session.Engine.FlagValue("B Attacking1"), "Both attack teams are in the field.");
+        var alpha = LiveTeamMembers(session, "A Attack0");
+        var beta = LiveTeamMembers(session, "B Attack1");
+        Check.That(alpha.Length == 2 && beta.Length == 2, $"Each team has its two soldiers: the start soldier, recruited, and a trained one - the start units are not taken for trained ones ({alpha.Length}, {beta.Length}).");
+        var newest = world.Entities.Max(entity => entity.Id.Value);
+        world.Kill(alpha[0].Id);
+        world.Kill(beta[0].Id);
+        var reinforced = false;
+        for (var frame = 0; frame < 600 && !session.IsOver && !reinforced; frame++)
+        {
+            StepFrames(session, 1);
+            reinforced = LiveTeamMembers(session, "A Attack0").Any(member => member.Id.Value > newest);
+        }
+        Check.That(reinforced, "The team that asks for reinforcements got a new soldier.");
+        Check.That(!LiveTeamMembers(session, "B Attack1").Any(member => member.Id.Value > newest), "The team that does not ask stays as it is.");
+        Check.That(session.Engine.MissingActionHits.Count == 0 && !session.Engine.Diagnostics.Keys.Any(key => key.Contains("not modelled", StringComparison.Ordinal)), "Nothing about the reinforcement is reported as missing.");
     }
 
     public static void OriginalAiSeedsAndRates()

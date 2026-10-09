@@ -740,24 +740,26 @@ public sealed partial class ScriptEngine
     /// <c>AIPlayer::selectTeamToBuild</c>: of the player's team prototypes that are a good idea now (<c>isAGoodIdeaToBuildTeam</c>) the ones with the highest production priority are the
     /// candidates, and one of them is drawn from the logic random stream (<c>GameLogicRandomValue(0, count - 1)</c>). It is built like a scripted <c>BUILD_TEAM</c> at low priority and the
     /// team timer starts again (<c>TeamSeconds</c>, longer when poor, shorter when wealthy).
-    /// <para>Not modelled: <c>selectTeamToReinforce</c> (<c>teamAutoReinforce</c>, 26 teams of the shipped library); a team that asks for it is counted in <see cref="Diagnostics"/> when it is chosen.</para>
+    /// <para>Before that <see cref="SelectTeamToReinforce"/> gets its turn, as in the reference.</para>
     /// </summary>
     private void SelectTeamToBuild(AiPlayer state)
     {
         if (PlayerById(state.Setup.Player) is not { } owner) return;
         var data = _options.Ai!.Data;
         List<ScriptTeamPrototype>? candidates = null;
-        var highest = int.MinValue;
+        var highest = NoTeamPriority;
         foreach (var prototype in _program.Teams)
         {
             if (prototype.Owner != owner.Name || !IsGoodIdeaToBuildTeam(state, prototype)) continue;
             (candidates ??= []).Add(prototype);
             if (prototype.ProductionPriority > highest) highest = prototype.ProductionPriority;
         }
+        // "if (selectTeamToReinforce(hiPri)) return true": a team in the field that wants a unit comes before a new team of lower or equal priority.
+        DropExpiredReinforcements();
+        if (SelectTeamToReinforce(state, owner, candidates is null ? NoTeamPriority : highest)) return;
         if (candidates is null) return;
         candidates.RemoveAll(prototype => prototype.ProductionPriority != highest);
         var pick = candidates[_world.LogicRandom.Range(0, candidates.Count - 1)];
-        if (pick.AutoReinforce) Diagnose("AI: automatic team reinforcement is not modelled");
         BuildTeam(pick.Name, idleOnly: true);
         state.ReadyTeam = false;
         state.TeamReadyTick = _tick + ScaledTimer(data.TeamSeconds, _world.MoneyOf(state.Setup.Player), data, data.TeamsPoorRate, data.TeamsWealthyRate);

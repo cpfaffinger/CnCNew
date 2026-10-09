@@ -651,7 +651,7 @@ public sealed partial class ScriptEngine
                 continue;
             }
             (Fixed X, Fixed Y)? target = null;
-            if (mode == HuntMode) target = NearestEnemy(entity) is { } enemy ? (enemy.X, enemy.Y) : null;
+            if (mode == HuntMode) target = HuntVictim(entity) is { } enemy ? (enemy.X, enemy.Y) : null;
             else if (mode.StartsWith(NamedMode, StringComparison.Ordinal)) target = NamedEntity(ModeArgument(mode, NamedMode.Length)) is { EffectivelyDead: false } named ? (named.X, named.Y) : null;
             else if (mode.StartsWith(TeamMode, StringComparison.Ordinal)) target = NearestOfTeam(entity, ModeArgument(mode, TeamMode.Length));
             else if (mode.StartsWith(AreaMode, StringComparison.Ordinal)) target = AreaCentre(ModeArgument(mode, AreaMode.Length));

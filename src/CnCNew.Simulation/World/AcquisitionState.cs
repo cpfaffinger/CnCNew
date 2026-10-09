@@ -139,6 +139,15 @@ public interface IAcquisitionAdvisor
 
     /// <summary><c>AIUpdateInterface::getAttitude</c>: the mood of the unit's team.</summary>
     Attitude AttitudeOf(Entity entity);
+
+    /// <summary>
+    /// <c>getNextMoodTarget</c>, "check if team auto targets same victim": the victim the unit's team attacks together (<c>Team::getTeamTargetObject</c>), when the team does that and
+    /// the unit's mood allows it; <see langword="null"/> otherwise. The world still decides whether the unit can attack it.
+    /// </summary>
+    Entity? CommonTargetOf(Entity entity) => null;
+
+    /// <summary><c>AIAttackFireWeaponState::onEnter</c>: the unit fires at a victim of its own choice; a team that attacks together and has no victim yet takes this one.</summary>
+    void NoteFiring(Entity attacker, Entity victim) { }
 }
 
 /// <summary><c>AttitudeType</c> (AI.h), same values as the reference and as the <c>teamAggressiveness</c> of a map's team.</summary>

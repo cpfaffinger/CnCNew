@@ -28,6 +28,9 @@ public sealed partial class ScriptEngine
         public bool FactoryMissing;
         /// <summary>A team the skirmish AI chose itself (<c>priorityBuild</c> false in the reference): its units are only started at a factory that is doing nothing (<c>AIPlayer::queueUnits</c>).</summary>
         public bool IdleOnly;
+        /// <summary>One unit for a team in the field (<c>TeamInQueue::m_reinforcement</c>, <c>AIPlayer::selectTeamToReinforce</c>) and the tick it was asked for; the team stays active meanwhile.</summary>
+        public bool Reinforcement;
+        public long Started;
     }
 
     private readonly List<TeamBuildOrder> _teamBuilds = [];
@@ -371,7 +374,8 @@ public sealed partial class ScriptEngine
         {
             if (order.Queued >= order.Total || !_teams.TryGetValue(order.TeamId, out var team)) continue;
             var owner = team.Owner;
-            if (AiRecruitsFor(order, team)) continue;
+            // A reinforcement looked for a recruit when it was chosen (around the team, not around the base); what is left is to train the one unit.
+            if (!order.Reinforcement && AiRecruitsFor(order, team)) continue;
             if (AiHoldsUnitOrders(owner)) continue;
             Entity? best = null;
             var bestBusy = true;
@@ -420,7 +424,8 @@ public sealed partial class ScriptEngine
         order.Joined++;
         if (!joined.Members.Contains(unit.Id.Value)) joined.Members.Add(unit.Id.Value);
         if (joined.AttackPriority.Length > 0) _prioritySetOf[unit.Id.Value] = joined.AttackPriority;
-        if (_program.FindTeam(joined.Prototype) is { Home.Length: > 0 } built && _program.FindWaypoint(built.Home) is { } home && unit.Template.Locomotor is not null) MoveTo(unit, home.X, home.Y);
+        if (order.Reinforcement) JoinTeam(unit, joined);
+        else if (_program.FindTeam(joined.Prototype) is { Home.Length: > 0 } built && _program.FindWaypoint(built.Home) is { } home && unit.Template.Locomotor is not null) MoveTo(unit, home.X, home.Y);
         if (_teamBuilds.Where(other => other.TeamId == order.TeamId).All(other => other.Joined >= other.Total)) _teamBuilds.RemoveAll(other => other.TeamId == order.TeamId);
     }
 
@@ -439,6 +444,11 @@ public sealed partial class ScriptEngine
             writer.Int("joined", order.Joined);
             writer.Bool("factoryMissing", order.FactoryMissing);
             if (order.IdleOnly) writer.Bool("idleOnly", true);
+            if (order.Reinforcement)
+            {
+                writer.Bool("reinforcement", true);
+                writer.Int("started", order.Started);
+            }
             writer.EndObject();
         }
         writer.EndArray();
@@ -454,6 +464,7 @@ public sealed partial class ScriptEngine
                 TeamId = checked((int)item.Int("team")), Type = item.Text("type"), Min = checked((int)item.Int("min")), Total = checked((int)item.Int("total")),
                 Queued = checked((int)item.Int("queued")), Joined = checked((int)item.Int("joined")), FactoryMissing = item.Bool("factoryMissing"),
                 IdleOnly = item.Has("idleOnly") && item.Bool("idleOnly"),
+                Reinforcement = item.Has("reinforcement") && item.Bool("reinforcement"), Started = item.Has("started") ? item.Int("started") : 0,
             });
     }
 }

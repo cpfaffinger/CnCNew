@@ -68,8 +68,14 @@ public sealed record ScriptTeamPrototype(string Name, string Owner, bool IsSingl
     /// <summary><c>teamGenericScriptHook0..15</c>: scripts every instance of the team tries each frame while the skirmish AI runs its player (<c>Team::updateGenericScripts</c>); empty hooks are left out.</summary>
     public ImmutableArray<string> GenericScripts { get; init; } = [];
 
-    /// <summary><c>teamAutoReinforce</c>: the AI refills the team's instances (<c>AIPlayer::selectTeamToReinforce</c>, not modelled).</summary>
+    /// <summary><c>teamAutoReinforce</c> (<c>TeamTemplateInfo::m_automaticallyReinforce</c>): the AI refills the team's instances one unit at a time (<c>AIPlayer::selectTeamToReinforce</c>).</summary>
     public bool AutoReinforce { get; init; }
+
+    /// <summary><c>teamAttackCommonTarget</c> (<c>TeamTemplateInfo::m_attackCommonTarget</c>): the members of a computer player's team attack one victim together (<c>Team::setTeamTargetObject</c>).</summary>
+    public bool AttackCommonTarget { get; init; }
+
+    /// <summary><c>teamVeterancy</c> (<c>TeamTemplateInfo::m_veterancy</c>): the level the units of a team the AI builds start with, 0 (regular) to 3 (heroic).</summary>
+    public int Veterancy { get; init; }
 }
 
 /// <summary>One <c>teamUnitTypeN</c> line of a team: the object type and how many of it the team has at most.</summary>
@@ -286,6 +292,8 @@ public sealed class ScriptProgram
                 Aggressiveness = team.TryGetInt("teamAggressiveness", out var aggressiveness) ? aggressiveness : 0,
                 GenericScripts = [..Enumerable.Range(0, 16).Select(hook => EventScript(team, "teamGenericScriptHook" + hook.ToString(System.Globalization.CultureInfo.InvariantCulture))).Where(script => script.Length > 0)],
                 AutoReinforce = team.GetBool("teamAutoReinforce"),
+                AttackCommonTarget = team.GetBool("teamAttackCommonTarget"),
+                Veterancy = team.TryGetInt("teamVeterancy", out var veterancy) ? veterancy : 0,
             });
         }
 
