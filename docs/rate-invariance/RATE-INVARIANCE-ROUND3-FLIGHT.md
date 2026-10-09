@@ -1,178 +1,178 @@
-# Raten-Invarianz, dritte Runde: Paket FLIGHT (Phase 23)
+# Rate invariance, third round: package FLIGHT (Phase 23)
 
-Stand: 8. Oktober 2026, Branch `worktree-agent-acaeab4437e5153cd`, Ausgangsstand `37b36b8` (`main`). Auftrag: die drei Flugfälle, die nur bei 120 Hz außerhalb der Toleranz lagen,
-die Veröffentlichung des Bildrests der Flug- und Sonderbeweger, die Sentry-Drohne (`DeployStyleAIUpdate`) und der Fallschirmabwurf der Spezialkraft. Messlatte ist die
-Raten-Äquivalenz-Suite (`docs/SIMULATION-CORE.md` §39) und je Ursache ein Drei-Raten-Test. „Bild“ heißt Logikbild des Originals (1/30 s), „Tick“ ein Schritt der Simulation,
-r = Ticks je Bild (1, 2, 4). Werte stehen als 30 / 60 / 120 Hz. Die Konvention der Bilder steht in `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1.3; dieses Dokument wendet sie an.
-**Nichts davon hat ein Mensch gesehen.**
+As of: 8 October 2026, branch `worktree-agent-acaeab4437e5153cd`, starting state `37b36b8` (`main`). Brief: the three flight cases that lay outside the tolerance only at 120 Hz,
+the publication of the frame remainder of the flight and special movers, the Sentry drone (`DeployStyleAIUpdate`) and the paradrop of the special power. The yardstick is the
+rate-equivalence suite (`docs/SIMULATION-CORE.md` §39) and one three-rate test per cause. "Frame" means a logic frame of the original (1/30 s), "tick" a step of the simulation,
+r = ticks per frame (1, 2, 4). Values are given as 30 / 60 / 120 Hz. The convention of the frames is in `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1.3; this document applies it.
+**No human has seen any of this.**
 
-**Bei 30 Hz ist nichts anders:** `input-manifest check` identisch und `reference-manifest check --set quick` (9 Läufe) identisch nach jedem Commit, der die Simulation ändert;
-`--set full` am Ende: 50 Läufe identisch (§7). Alle 4.307 Größen der Suite haben bei 30 Hz denselben Rohwert wie am Ausgangsstand. Kein Katalogtyp hat ein neues Feld, kein
-Referenzwert wurde geschrieben, keine Toleranz und kein Fall der Suite wurde angefasst.
+**At 30 Hz nothing is different:** `input-manifest check` identical and `reference-manifest check --set quick` (9 runs) identical after every commit that changes the simulation;
+`--set full` at the end: 50 runs identical (§7). All 4,307 quantities of the suite have the same raw value at 30 Hz as at the starting state. No catalogue type has a new field, no
+reference value was written, no tolerance and no case of the suite was touched.
 
-## 1. Ergebnis der Suite
+## 1. Result of the suite
 
-Größen außerhalb der Toleranz bei 60 Hz / bei 120 Hz, alle zehn Gruppen, Release, Realdaten (`--only RateEquivalence --rate-report`).
+Quantities outside the tolerance at 60 Hz / at 120 Hz, all ten groups, Release, real data (`--only RateEquivalence --rate-report`).
 
-| Gruppe | Größen | Ausgangsstand `37b36b8` | **Endstand `25a784e`** | Bemerkung |
+| Group | Quantities | Starting state `37b36b8` | **Final state `25a784e`** | Remark |
 |---|---|---|---|---|
-| `locomotion` | 837 | 2 / 2 | 2 / 2 | Mob-Nexus (Paket OBSERVERS) |
-| `flight` | 74 | 0 / 3 | **0 / 0** | 5 Größen des Fallschirmabwurfs bei jeder Rate ungemessen; mit dem zurückgehaltenen Commit (§6) 0 ungemessen |
-| `weapons` | 1.474 | 0 / 0 | 0 / 0 | |
-| `projectiles` | 743 | 4 / 4 | 4 / 4 | Streusalven (Paket OBSERVERS) |
-| `turrets` | 216 | 4 / 0 | **0 / 0** | Sentry-Drohne |
+| `locomotion` | 837 | 2 / 2 | 2 / 2 | Mob nexus (package OBSERVERS) |
+| `flight` | 74 | 0 / 3 | **0 / 0** | 5 quantities of the paradrop unmeasured at every rate; with the held-back commit (§6) 0 unmeasured |
+| `weapons` | 1,474 | 0 / 0 | 0 / 0 | |
+| `projectiles` | 743 | 4 / 4 | 4 / 4 | Scatter salvos (package OBSERVERS) |
+| `turrets` | 216 | 4 / 0 | **0 / 0** | Sentry drone |
 | `overtime` | 418 | 0 / 0 | 0 / 0 | |
 | `economy` | 81 | 0 / 0 | 0 / 0 | |
-| `timed` | 383 | 1 / 1 | 1 / 1 | `CINE_BShipWeaponDetonationObject` (Paket DEFECT) |
+| `timed` | 383 | 1 / 1 | 1 / 1 | `CINE_BShipWeaponDetonationObject` (package DEFECT) |
 | `scripts` | 15 | 0 / 0 | 0 / 0 | |
-| `ai` | 66 | 24 / 23 | 24 / 23 | Paket OBSERVERS |
-| **Summe** | **4.307** | **35 / 33** | **31 / 30** | keine Gruppe ist schlechter, keine Größe schlägt neu fehl |
+| `ai` | 66 | 24 / 23 | 24 / 23 | package OBSERVERS |
+| **Sum** | **4,307** | **35 / 33** | **31 / 30** | no group is worse, no quantity newly fails |
 
-## 2. Ursachen, je Zeile ein Commit
+## 2. Causes, one commit per row
 
-| # | Herkunft | Befund vorher (30 / 60 / 120 Hz) | Korrektur (Datei, Symbol, Prinzip) | nachher | Commit |
+| # | Origin | Finding before (30 / 60 / 120 Hz) | Correction (file, symbol, principle) | after | Commit |
 |---|---|---|---|---|---|
-| 1 | §5.2 Flügelflug und `JetAIUpdate`; FLIGHT §5, CONSOLIDATION §6 „`flight`, nur 120 Hz“ | MiG „Landebefehl bis Aufsetzen“ 14,6333 / 14,6333 / 14,5667 s; Raptor-Angriff „geparkt und nachgeladen“ 60,8000 / 60,8000 / 60,5333 s. Die Schritte rechneten `Katalogwert je Tick × Ticks je Bild`; die Katalogwerte sind je Rate eigens gerundet (16 · a₁₂₀ ≠ a₃₀, relativ rund 10⁻⁵), `Entity.Speed` je Tick verliert Bits. Nach einigen hundert Bildern lagen die Lagen rund 0,01 Einheiten auseinander und eine Ankunftsschwelle kippte | `Phase5Modules.cs` nur `MoveWinged`/`SteerWinged` und neue Helfer daneben (`FlightFrameConstants`, `FlightVerticalConstants`, `FlightFrameSpeed`, `SetFlightFrameSpeed`, `TurnRadius(turnRate, speed)`); `JetAIUpdate.cs` (`TaxiAlongPath`, `TurnTo`, `TakeOff`, `Land`, `ControlHeight`), `JetAIUpdate.Flight.cs` (`CircleStep`); `Templates/LocomotorFrames.cs` um `SpeedLimitZ` und `Lift` erweitert (bestehende Werte unverändert), `ObjectTemplate.cs` übergibt die beiden Quellzahlen. Der Flug entscheidet mit den Konstanten je Bild des 30-Hz-Katalogs und führt sein Tempo je Bild im Modul (`_frameSpeed`, das die Bodenbewegung schon führt). Schwerkraft der Höhenregelung aus dem Definitionswert | MiG 14,6333 × 3; Raptor 60,8000 × 3; dazu exakt geworden: Raptor „erster Schuss“ 18,6333 / 18,6500 / 18,6333 → × 3, Aurora „Aufsetzen“ 15,8000 / 15,7667 / 15,8000 → × 3. `flight` 0 / 3 → 0 / 1 | `346cadc` |
-| 2 | – (Messung der Suite) | Comanche „Kehre: umgekehrter Kurs bis Ankunft“ 13,3333 / 13,3667 / 13,3833 s bei **bitgleicher** Bahn (Spur: derselbe Rohwert von X am Ende jedes Bilds). `MeasureSortie` las den Kurs nach jedem Tick: der Kurs wird in Anteilen gedreht, die Schwelle wird mit dem ersten Anteil überschritten (bis zu ein Bild früh), die Zeit, die dort beginnt, endet mit einer Ankunft im letzten Tick eines Bilds: 2 · (r − 1) Ticks mehr als bei 30 Hz. „Produziert bis geparkt“ begann einen Tick nach dem Erscheinen, mitten im Bild | `RateCases.Flight.cs`, `MeasureSortie`: der Kurs wird am Bildende gelesen (`RateScene.StepUntilFrameEnd`, die Form von `f55c16d`); nach `Produce` ein `Align` (bei 30 Hz kein Schritt), wie seit `234f3c3` vor den anderen Befehlen dieses Falls. Keine Toleranz, keine Größe, kein 30-Hz-Wert geändert | 13,3333 / 13,3500 / 13,3583 s (der Rest ist die Ankunft im letzten Tick). `flight` 0 / 1 → 0 / 0 | `3a8d256` |
-| 3 | neu | `FlightFrameStep` nimmt die Anteile der Drehung zurück und addiert sie einzeln, jedes Mal normalisiert. Die Summe stimmt, aber eine halbe Drehung hat zwei Darstellungen: Kurs der Landung bei 30 Hz Rohwert 52707180 (+π aus `Atan2`), über 30 Hz −52707177 | `Time/FrameGrid.Flight.cs`: der letzte Anteil setzt den Kurs der Entscheidung (wie `_frameAngle` der Bodenbewegung); im Snapshot nur während eines Bilds mit Drehung | Einsatz-Test (§4): erstes Bild, das von 30 Hz abweicht, 1154 / 1154 → hinter der Landung | `8be3a73` |
-| 4 | §5.3 `Register` (erstes Update) für Flugzeuge; CONSOLIDATION §1.3 Regel 7, Ausnahme „Integratoren“ | `JetAIUpdate` lief zum ersten Mal einen **Tick** nach dem Erscheinen: ein im ersten Tick eines Bilds produziertes Flugzeug war für den Rest seines Lebens r − 1 Ticks vor seinem 30-Hz-Zustand. Ein geparktes Flugzeug sah jeden Tick nach: was es von selbst beginnt (gespeicherter Befehl nach dem Nachladen, Start des geheilten Hubschraubers), begann einen Tick statt ein Bild nach dem Zustand davor | `JetAIUpdate.cs`, `Update`/`BeginTakeoff` (nur über 30 Hz): erstes Update ein Bild nach dem Erscheinen; jede Entscheidung der Flugfeld-Zustände kostet ein Bild, auch der Leerlaufblick; ein Befehl an ein geparktes Flugzeug beendet dieses Leerlaufbild, der Start beginnt weiter im Tick des Befehls | Einsatz-Test: erstes abweichendes Bild Jet 30 / 30 → keines; Hubschrauber 30 / 30, danach 140 / 140 → keines. Suite: „produziert bis geparkt“ Raptor/Aurora 1,3667 / 1,3500 / 1,3417 → × 3, Comanche „Aufsetzen“ 12,7667 / 12,7833 / 12,7750 → × 3; die beiden Hubschrauber-Steigzeiten zeigen jetzt den Nachlauf einer Lage (1,6667 × 3 → 1,6667 / 1,6833 / 1,6917, innerhalb). `flight` 0 / 0 | `cc7fd75` |
-| 5 | neu (Sentry-Drohne; TURRETS Befund 1, CONSOLIDATION §6 „`turrets`“) | Turmwinkel beim ersten Schuss 1,57080 / 1,55771 / 1,57080; „Opfer weg bis Turm verlässt sein Ziel“ 1,0000 / 0,0000 / 1,0250 s; 180° −3,14159 / 3,12850 / −3,14159. Ursache in §3 | `StructureModules.cs`, `DeployStyleAIUpdate.AllowsFire`/`Update`/`SetState` (nur über 30 Hz): Feuerversuche, die im Bild des Fertigwerdens **vor** dem Update der Einheit kommen, werden verworfen wie bei 30 Hz der Befehl desselben Ticks; wer nach dem Update fragt (eigener Zielerwerb), kommt durch | Suite `turrets` 4 / 0 → 0 / 0 (alle vier × 3). Erster Schuss nach dem ersten Befehl, Bilder: Nuke Cannon (4 Varianten) 101 / 100,5 / 100,25 → 101 × 3; Sentry-Drohne 34 / 33,5 / 34,25 → 34 × 3 | `c1a57ee` |
-| 6 | neu | `JetAIUpdate.FlyOn` vergisst den Kreismittelpunkt, sobald das Flugzeug nicht kreist. Bei 30 Hz nennt ein Befehl, der im selben Schritt endet, den Punkt danach (`OnWingedArrival`); über 30 Hz liefen die Ticks, die den Rest des Ankunftsbilds fliegen, dieselbe Zeile noch einmal: ein Jet, der zur Landung zurückkehrt und am Anflugpunkt ankommt, kreiste um die Stelle, an der er gerade war | `JetAIUpdate.cs`, `FlyOn`: der Mittelpunkt wird nur bei einer Entscheidung vergessen (bei 30 Hz jeder Tick) | zweiter Einsatz des Tests (Heimkehr nach der Leerlaufzeit): erstes abweichendes Bild 782 / 782 (0,34 Einheiten, 0,14 rad, danach ein anderer Gleitpfad) → keines. Suite unverändert (ihre Einsätze bekommen den Landebefehl, während sie kreisen) | `fd96aff` |
-| 7 | CONSOLIDATION §6 „nicht veröffentlichende Beweger“ | Reichweitenfragen, Schüsse und gelenkte Geschosse lasen ein Flugzeug einen Teil seines Bildschritts von der Stelle entfernt, an der es bei 30 Hz steht: Jet bis 3,75 / 5,62 Einheiten, Hubschrauber 2,13 / 3,20, Chinook 3,30 / 4,95, Fallschirm 1,12 / 1,68, abgeschossener Jet 2,18 / 3,27, abgeschossener Hubschrauber 2,50 / 3,75, Spectre 4,00 / 6,00, Leuchtkörper 3,89 / 5,84 (60 / 120 Hz) | §5: `FlightFrameStep.Publish` und die Module, die einen Schritt besitzen (Regel 3) | Abstand zwischen Lesung und Bildende 0 / 0 bei allen neun Bewegern, Lesung gleich der 30-Hz-Lage (0 / 0). Suite: alle Gruppen unverändert | `e06259f` |
+| 1 | §5.2 winged flight and `JetAIUpdate`; FLIGHT §5, CONSOLIDATION §6 "`flight`, only 120 Hz" | MiG "landing command until touchdown" 14.6333 / 14.6333 / 14.5667 s; Raptor attack "parked and reloaded" 60.8000 / 60.8000 / 60.5333 s. The steps computed `catalogue value per tick × ticks per frame`; the catalogue values are rounded separately per rate (16 · a₁₂₀ ≠ a₃₀, relatively about 10⁻⁵), `Entity.Speed` per tick loses bits. After a few hundred frames the positions lay about 0.01 units apart and an arrival threshold tipped over | `Phase5Modules.cs` only `MoveWinged`/`SteerWinged` and new helpers next to them (`FlightFrameConstants`, `FlightVerticalConstants`, `FlightFrameSpeed`, `SetFlightFrameSpeed`, `TurnRadius(turnRate, speed)`); `JetAIUpdate.cs` (`TaxiAlongPath`, `TurnTo`, `TakeOff`, `Land`, `ControlHeight`), `JetAIUpdate.Flight.cs` (`CircleStep`); `Templates/LocomotorFrames.cs` extended by `SpeedLimitZ` and `Lift` (existing values unchanged), `ObjectTemplate.cs` passes the two source numbers. The flight decides with the per-frame constants of the 30 Hz catalogue and keeps its speed per frame in the module (`_frameSpeed`, which the ground movement already keeps). Gravity of the height control from the definition value | MiG 14.6333 × 3; Raptor 60.8000 × 3; in addition become exact: Raptor "first shot" 18.6333 / 18.6500 / 18.6333 → × 3, Aurora "touchdown" 15.8000 / 15.7667 / 15.8000 → × 3. `flight` 0 / 3 → 0 / 1 | `346cadc` |
+| 2 | – (measurement of the suite) | Comanche "turnaround: reversed course until arrival" 13.3333 / 13.3667 / 13.3833 s with a **bit-identical** path (trace: the same raw value of X at the end of every frame). `MeasureSortie` read the heading after every tick: the heading is turned in shares, the threshold is crossed with the first share (up to one frame early), the time that begins there ends with an arrival in the last tick of a frame: 2 · (r − 1) ticks more than at 30 Hz. "Produced until parked" began one tick after the appearance, in the middle of the frame | `RateCases.Flight.cs`, `MeasureSortie`: the heading is read at the frame end (`RateScene.StepUntilFrameEnd`, the form of `f55c16d`); after `Produce` an `Align` (no step at 30 Hz), as since `234f3c3` before the other commands of this case. No tolerance, no quantity, no 30 Hz value changed | 13.3333 / 13.3500 / 13.3583 s (the remainder is the arrival in the last tick). `flight` 0 / 1 → 0 / 0 | `3a8d256` |
+| 3 | new | `FlightFrameStep` takes back the shares of the turn and adds them individually, normalised each time. The sum is right, but half a turn has two representations: heading of the landing at 30 Hz raw value 52707180 (+π from `Atan2`), above 30 Hz −52707177 | `Time/FrameGrid.Flight.cs`: the last share sets the heading of the decision (like `_frameAngle` of the ground movement); in the snapshot only during a frame with a turn | sortie test (§4): first frame that deviates from 30 Hz, 1154 / 1154 → behind the landing | `8be3a73` |
+| 4 | §5.3 `Register` (first update) for aircraft; CONSOLIDATION §1.3 rule 7, exception "integrators" | `JetAIUpdate` ran for the first time one **tick** after the appearance: an aircraft produced in the first tick of a frame was r − 1 ticks ahead of its 30 Hz state for the rest of its life. A parked aircraft checked every tick: what it begins by itself (stored command after the reload, take-off of the healed helicopter) began one tick instead of one frame after the state before | `JetAIUpdate.cs`, `Update`/`BeginTakeoff` (only above 30 Hz): first update one frame after the appearance; every decision of the airfield states costs one frame, also the idle look; a command to a parked aircraft ends this idle frame, the take-off still begins in the tick of the command | sortie test: first deviating frame jet 30 / 30 → none; helicopter 30 / 30, after that 140 / 140 → none. Suite: "produced until parked" Raptor/Aurora 1.3667 / 1.3500 / 1.3417 → × 3, Comanche "touchdown" 12.7667 / 12.7833 / 12.7750 → × 3; the two helicopter climb times now show the lag of a position (1.6667 × 3 → 1.6667 / 1.6833 / 1.6917, within). `flight` 0 / 0 | `cc7fd75` |
+| 5 | new (Sentry drone; TURRETS finding 1, CONSOLIDATION §6 "`turrets`") | Turret angle at the first shot 1.57080 / 1.55771 / 1.57080; "victim gone until turret leaves its target" 1.0000 / 0.0000 / 1.0250 s; 180° −3.14159 / 3.12850 / −3.14159. Cause in §3 | `StructureModules.cs`, `DeployStyleAIUpdate.AllowsFire`/`Update`/`SetState` (only above 30 Hz): fire attempts that come in the frame of becoming ready **before** the update of the unit are discarded like the command of the same tick at 30 Hz; whoever asks after the update (own target acquisition) gets through | Suite `turrets` 4 / 0 → 0 / 0 (all four × 3). First shot after the first command, frames: Nuke Cannon (4 variants) 101 / 100.5 / 100.25 → 101 × 3; Sentry drone 34 / 33.5 / 34.25 → 34 × 3 | `c1a57ee` |
+| 6 | new | `JetAIUpdate.FlyOn` forgets the orbit centre as soon as the aircraft is not circling. At 30 Hz a command that ends in the same step names the point afterwards (`OnWingedArrival`); above 30 Hz the ticks that fly the remainder of the arrival frame ran the same line once more: a jet that returns for landing and arrives at the approach point circled around the place where it just was | `JetAIUpdate.cs`, `FlyOn`: the centre is only forgotten at a decision (at 30 Hz every tick) | second sortie of the test (return home after the idle time): first deviating frame 782 / 782 (0.34 units, 0.14 rad, after that a different glide path) → none. Suite unchanged (its sorties receive the landing command while they circle) | `fd96aff` |
+| 7 | CONSOLIDATION §6 "movers that do not publish" | Range questions, shots and guided projectiles read an aircraft a part of its frame step away from the place where it stands at 30 Hz: jet up to 3.75 / 5.62 units, helicopter 2.13 / 3.20, Chinook 3.30 / 4.95, parachute 1.12 / 1.68, shot-down jet 2.18 / 3.27, shot-down helicopter 2.50 / 3.75, Spectre 4.00 / 6.00, flare 3.89 / 5.84 (60 / 120 Hz) | §5: `FlightFrameStep.Publish` and the modules that own a step (rule 3) | distance between reading and frame end 0 / 0 for all nine movers, reading equal to the 30 Hz position (0 / 0). Suite: all groups unchanged | `e06259f` |
 
-Tests je Ursache: `813125d` (#1, #3, #4), `00db28e` (#5), `e6bf1d1` (#6), `25a784e` (#7); §4.
+Tests per cause: `813125d` (#1, #3, #4), `00db28e` (#5), `e6bf1d1` (#6), `25a784e` (#7); §4.
 
-## 3. Die Sentry-Drohne: was es war, und warum nur bei 60 Hz
+## 3. The Sentry drone: what it was, and why only at 60 Hz
 
-Der frühere Befund „Status bei 60 Hz in Tick 65 statt 64“ gilt am Ausgangsstand nicht mehr: das Statusbit `DEPLOYED` erscheint in Tick 32 / 64 / 128 (Protokoll von `SetState`).
-Die Ursache liegt einen Schritt dahinter.
+The earlier finding "status at 60 Hz in tick 65 instead of 64" no longer holds at the starting state: the status bit `DEPLOYED` appears in tick 32 / 64 / 128 (log of `SetState`).
+The cause lies one step behind it.
 
-- Eine Einheit mit `DeployStyleAIUpdate` wird **in ihrem Update** feuerbereit. Bei 30 Hz kam der Feuerbefehl desselben Ticks vor diesem Update und wird verworfen
-  (`WeaponNotReady`); der nächste Befehl, ein Bild später (Tick 33), passiert das Tor und gibt dem Turm seinen Auftrag.
-- Über 30 Hz kommen Befehle in jedem Tick. Der Befehl des nächsten **Ticks** passierte (65 statt 66, 129 statt 132): der Turm begann r − 1 Ticks zu früh und neben dem Bildraster
-  der Einheit, der Schuss fiel ein halbes bzw. drei Viertel Bild früh. Das ist die Art „einen Schritt später“ aus dem Prinzip: bei 30 Hz ein Bild, also bei jeder Rate ein Bild.
-- **Warum die Suite nur bei 60 Hz fehlschlug:** der frühe Beginn bestand bei beiden Raten. Die Suite liest den Turmwinkel an der nächsten Bildgrenze der **Welt** nach dem Schuss.
-  Ein Turm, der in den Ticks 4k + 1 entscheidet, hat dort (drei Ticks später) sein ganzes Bild gedreht: bei 120 Hz stand der 30-Hz-Winkel da, und die Zeiten blieben mit ¾ Bild
-  innerhalb der Toleranz von einem Bild. Ein Turm, der in den Ticks 2k + 1 entscheidet, wird unmittelbar nach seiner Entscheidung gelesen, nach dem ersten von zwei Anteilen:
-  1,55771 statt 1,57080 rad (ein halber Bildschritt von 1,5°). Die „Rückkehr“-Größen des Falls beginnen bei diesem Winkel und brachen mit ihm (0,0000 s: der Turm „verlässt“
-  einen Winkel, den er noch gar nicht erreicht hatte).
-- **Korrektur:** über 30 Hz merkt sich das Modul den ersten Tick des Bilds nach dem Fertigwerden und, solange dieses Bild läuft, den Tick seines letzten Updates. Ein Feuerversuch
-  in diesem Bild, der vor dem Update des Ticks kommt (ein Befehl), wird verworfen; einer danach (der eigene Zielerwerb der Einheit, Phase nach den Updates) kommt durch, wie bei
-  30 Hz im Tick des Updates. Zwei Zustandsfelder, nur während dieses einen Bilds geschrieben, nie bei 30 Hz.
-- **Die anderen Benutzer** (Realdaten-Test `RealDeployStyleTimesAreTheSame`): in den Daten tragen genau zehn Objekte `DeployStyleAIUpdate` – vier Nuke Cannons und sechs
-  Sentry-Drohnen; Artillerie-Plattformen und Tomahawk tragen es nicht. Fünf haben eine Waffe im Standard-Waffensatz und sind gemessen (die vier Nuke Cannons und die
-  Sentry-Drohne der Mission); die fünf übrigen Drohnen bekommen ihr Gewehr erst mit dem Upgrade und sind **nicht** gemessen (dasselbe Modul mit denselben Zeiten). „Feuerbereit“
-  und „gepackt“ waren schon vorher bei jeder Rate gleich (Nuke Cannon 100 × 3 und 100 × 3 Bilder, Drohne 30 × 3 und 30 × 3), der erste Schuss nicht (Tabelle #5).
+- A unit with `DeployStyleAIUpdate` becomes ready to fire **in its update**. At 30 Hz the fire command of the same tick came before this update and is discarded
+  (`WeaponNotReady`); the next command, one frame later (tick 33), passes the gate and gives the turret its order.
+- Above 30 Hz commands come in every tick. The command of the next **tick** passed (65 instead of 66, 129 instead of 132): the turret began r − 1 ticks too early and off the frame grid
+  of the unit, the shot fell half or three quarters of a frame early. This is the kind "one step later" from the principle: one frame at 30 Hz, therefore one frame at every rate.
+- **Why the suite failed only at 60 Hz:** the early beginning existed at both rates. The suite reads the turret angle at the next frame boundary of the **world** after the shot.
+  A turret that decides in the ticks 4k + 1 has turned its whole frame there (three ticks later): at 120 Hz the 30 Hz angle stood there, and the times stayed, with ¾ frame,
+  within the tolerance of one frame. A turret that decides in the ticks 2k + 1 is read immediately after its decision, after the first of two shares:
+  1.55771 instead of 1.57080 rad (half a frame step of 1.5°). The "return" quantities of the case begin at this angle and broke with it (0.0000 s: the turret "leaves"
+  an angle that it had not even reached yet).
+- **Correction:** above 30 Hz the module remembers the first tick of the frame after becoming ready and, as long as this frame runs, the tick of its last update. A fire attempt
+  in this frame that comes before the update of the tick (a command) is discarded; one after it (the unit's own target acquisition, phase after the updates) gets through, as at
+  30 Hz in the tick of the update. Two state fields, written only during this one frame, never at 30 Hz.
+- **The other users** (real-data test `RealDeployStyleTimesAreTheSame`): in the data exactly ten objects carry `DeployStyleAIUpdate` – four Nuke Cannons and six
+  Sentry drones; artillery platforms and Tomahawk do not carry it. Five have a weapon in the default weapon set and are measured (the four Nuke Cannons and the
+  Sentry drone of the mission); the five remaining drones only get their gun with the upgrade and are **not** measured (the same module with the same times). "Ready to fire"
+  and "packed" were already equal at every rate before (Nuke Cannon 100 × 3 and 100 × 3 frames, drone 30 × 3 and 30 × 3), the first shot was not (table #5).
 
-## 4. Die Drei-Raten-Tests
+## 4. The three-rate tests
 
-Alle nennen ihre Raten selbst und laufen ohne Realdaten, außer dem genannten.
+All name their rates themselves and run without real data, except the one named.
 
-| Test (Datei) | Was verglichen wird | Ergebnis |
+| Test (file) | What is compared | Result |
 |---|---|---|
-| `RateFlightJetSortieIsBitIdentical` (`Tests.RateInvariance.Round3Flight.cs`) | Rohwerte von Lage, Höhe, Kurs, Tempo je Bild, Flugfeld-Zustand, Befehlsflag und Magazin nach **jedem** von 1.500 Bildern. Einsatz 1: Produktion, Rollen aus dem Hangar, Parken, Befehl (Rollen, Pause, Startlauf, Steigen, Flug, Kreisen), zweiter Befehl im Flug (Kehre), Verfolgung und Feuer bis das Magazin leer ist, Heimkehr, Anflug, Landung, Ausrollen, Rollen, Drehen, Nachladen. Einsatz 2: ohne Angriff, Heimkehr nach der Leerlaufzeit | erstes Bild, das von 30 Hz abweicht: keines / keines, in beiden Einsätzen |
-| `RateFlightHelicopterIsBitIdentical` (dieselbe Datei) | dasselbe für einen Hubschrauber eines Helipads über 900 Bilder: Produktion, Abheben, Steigen, Flug, Kehre im Flug, Heimkehr, Landung, Start des geheilten Hubschraubers (acht Umläufe) | keines / keines |
-| `RateDeployStyleIsBitIdentical` (`Tests.RateInvariance.Round3Deploy.cs`) | Zustand, `DEPLOYED`, Turmwinkel, Gesundheit des Opfers, Lage nach jedem von 260 Bildern unter einem Feuerbefehl **in jedem Tick**: Aufstellen, Turm eine Vierteldrehung, Feuer, Packen auf einen Fahrbefehl, Fahrt, erneutes Aufstellen | Zustände `U@0 A@30 P@100 M@115 U@160 A@190`, 41 Schüsse bei jeder Rate (vorher 42 bei 60 Hz) |
-| `RealDeployStyleTimesAreTheSame` (dieselbe Datei, Realdaten) | „feuerbereit“, erster Schuss, „gepackt“ in Ticks Spielzeit für jedes Retail-Objekt mit `DeployStyleAIUpdate` | gleich bei jeder Rate (§3) |
-| `RateFlightObserversReadTheFrameEnd` (`Tests.RateInvariance.Round3FlightObservers.cs`) | nach jedem Tick: was ein Beobachter liest (`Entity.FrameEnd`) gegen die Lage am Ende des geflogenen Bilds und gegen die 30-Hz-Lage; neun Beweger (§5) | bei 30 Hz nichts veröffentlicht; über 30 Hz Abstand 0 / 0 |
+| `RateFlightJetSortieIsBitIdentical` (`Tests.RateInvariance.Round3Flight.cs`) | Raw values of position, height, heading, speed per frame, airfield state, command flag and clip after **each** of 1,500 frames. Sortie 1: production, taxiing out of the hangar, parking, command (taxiing, pause, take-off run, climbing, flight, circling), second command in flight (turnaround), pursuit and fire until the clip is empty, return home, approach, landing, roll-out, taxiing, turning, reloading. Sortie 2: without an attack, return home after the idle time | first frame that deviates from 30 Hz: none / none, in both sorties |
+| `RateFlightHelicopterIsBitIdentical` (the same file) | the same for a helicopter of a helipad over 900 frames: production, lift-off, climbing, flight, turnaround in flight, return home, landing, take-off of the healed helicopter (eight rounds) | none / none |
+| `RateDeployStyleIsBitIdentical` (`Tests.RateInvariance.Round3Deploy.cs`) | State, `DEPLOYED`, turret angle, health of the victim, position after each of 260 frames under a fire command **in every tick**: deploying, turret a quarter turn, fire, packing on a move command, drive, deploying again | States `U@0 A@30 P@100 M@115 U@160 A@190`, 41 shots at every rate (before 42 at 60 Hz) |
+| `RealDeployStyleTimesAreTheSame` (the same file, real data) | "ready to fire", first shot, "packed" in ticks of game time for every retail object with `DeployStyleAIUpdate` | equal at every rate (§3) |
+| `RateFlightObserversReadTheFrameEnd` (`Tests.RateInvariance.Round3FlightObservers.cs`) | after every tick: what an observer reads (`Entity.FrameEnd`) against the position at the end of the flown frame and against the 30 Hz position; nine movers (§5) | at 30 Hz nothing published; above 30 Hz distance 0 / 0 |
 
-Drei bestehende Szenen stellten sich auf „einen Tick nach dem Erscheinen“ ein und nehmen jetzt dieses Bild (bei 30 Hz dieselben Ticks; im Commit `cc7fd75`): `WingWorld`
-(`Tests.JetFlight.cs`), die Flügelbahn und die Snapshot-Szene `wingStep` (`Tests.RateInvariance.Flight.cs`). Die Ausnahme der Quelltextregel „kein Wert mit sich selbst
-multipliziert“ für den Bremsweg des Flügelflugs nennt den neuen Ausdruck (`Tests.SquareSourceRules.cs`, im Commit `346cadc`).
+Three existing scenes had adjusted themselves to "one tick after the appearance" and now take this frame (at 30 Hz the same ticks; in the commit `cc7fd75`): `WingWorld`
+(`Tests.JetFlight.cs`), the wing path and the snapshot scene `wingStep` (`Tests.RateInvariance.Flight.cs`). The exception of the source rule "no value multiplied by
+itself" for the braking distance of winged flight names the new expression (`Tests.SquareSourceRules.cs`, in the commit `346cadc`).
 
-## 5. Wer seinen Bildrest veröffentlicht
+## 5. Who publishes its frame remainder
 
-Über 30 Hz, einmal je Tick, absolut (ein fremder Rest am Objekt überlebt die Veröffentlichung nicht); bei 30 Hz wird nichts geschrieben.
+Above 30 Hz, once per tick, absolute (a foreign remainder on the object does not survive the publication); at 30 Hz nothing is written.
 
-| Beweger | Was veröffentlicht wird | Stelle |
+| Mover | What is published | Place |
 |---|---|---|
-| Jet (Rollen, Startlauf, Landung, Höhe, Flügelflug, Kreisen) | Rest des Zustandsschritts (`_frame`) + Rest des Flügelschritts (`WingedStepRest`) | `JetAIUpdate.FlyOn` |
-| Hubschrauber (`JetAIUpdate` ohne Flügel) | Rest des Zustandsschritts (Höhe) + Rest des Bewegungsschritts (`GroundStepRest`, nur lesend) | `JetAIUpdate.FlyOn` |
-| Chinook | Rest des Höhenschritts (`_climb`) + Rest des Bewegungsschritts | `ChinookAIUpdate.Update` |
-| Fallschirm und sein Reiter | Rest des Abstiegs (`_descent`); der Reiter bekommt denselben Rest, beim Landen keinen | `ParachuteContain.Update`/`Carry`/`Land` |
-| abgeschossener Jet, abgeschossener Hubschrauber | Rest des Falls (`_fall`, `_spiral`); mit dem Beginn des Falls verfällt, was die KI des Flugzeugs von einem Bild übrig hatte | `JetSlowDeathBehavior`, `HelicopterSlowDeathBehavior` |
-| Spectre | Rest des Flugschritts (`_flight`) | `SpectreGunshipUpdate.Update` |
-| Leuchtkörper | verbleibende Ticks seines Bilds mal das Tempo, das er für dieses Bild behält; Sinken bis höchstens zum Boden | `CountermeasuresBehavior.MoveFlares` |
-| abgeworfene Fracht, Frachtflugzeug | der Flug von `DeliverPayloadAIUpdate` ist die Luftbewegung von `AIUpdateInterface.Move` und veröffentlichte schon; die Fracht fällt am Fallschirm (oben) | – |
+| Jet (taxiing, take-off run, landing, height, winged flight, circling) | remainder of the state step (`_frame`) + remainder of the wing step (`WingedStepRest`) | `JetAIUpdate.FlyOn` |
+| Helicopter (`JetAIUpdate` without wings) | remainder of the state step (height) + remainder of the movement step (`GroundStepRest`, read-only) | `JetAIUpdate.FlyOn` |
+| Chinook | remainder of the height step (`_climb`) + remainder of the movement step | `ChinookAIUpdate.Update` |
+| Parachute and its rider | remainder of the descent (`_descent`); the rider gets the same remainder, none when landing | `ParachuteContain.Update`/`Carry`/`Land` |
+| shot-down jet, shot-down helicopter | remainder of the fall (`_fall`, `_spiral`); with the beginning of the fall, what the AI of the aircraft had left of a frame lapses | `JetSlowDeathBehavior`, `HelicopterSlowDeathBehavior` |
+| Spectre | remainder of the flight step (`_flight`) | `SpectreGunshipUpdate.Update` |
+| Flare | remaining ticks of its frame times the speed that it keeps for this frame; sinking at most down to the ground | `CountermeasuresBehavior.MoveFlares` |
+| dropped payload, cargo plane | the flight of `DeliverPayloadAIUpdate` is the air movement of `AIUpdateInterface.Move` and already published; the payload falls on the parachute (above) | – |
 
-Ein Schritt, dessen veröffentlichter Rest weg ist, wurde von außen vollendet (`Entity.CompleteFrame`: eine verfolgende Einheit kam in Reichweite, Tod durch Höhe): er fliegt
-von diesem Bild nichts mehr (`FlightFrameStep.Continue`), wie der Bodenschritt. **Folge:** ein verfolgendes Flugzeug, das in Reichweite kommt, steht wie eine Bodeneinheit sofort
-am Bildende und fliegt die übrigen r − 1 Ticks dieses einen Bilds nicht (vorher hatte es keinen veröffentlichten Rest und wurde nicht vollendet).
+A step whose published remainder is gone was completed from outside (`Entity.CompleteFrame`: a pursuing unit came into range, death by height): it flies
+nothing more of this frame (`FlightFrameStep.Continue`), like the ground step. **Consequence:** a pursuing aircraft that comes into range stands, like a ground unit, immediately
+at the frame end and does not fly the remaining r − 1 ticks of this one frame (before, it had no published remainder and was not completed).
 
-## 6. Fallschirmabwurf der Spezialkraft: zurückgehaltener Commit
+## 6. Paradrop of the special power: held-back commit
 
-„Befehl bis Flugzeug weg“ liegt innerhalb der Toleranz: 49,2667 / 49,2500 / 49,2417 s (Ausgangsstand und Endstand). Fünf Größen sind bei jeder Rate ungemessen, weil der Abwurf
-bei jeder Rate niemanden absetzt – ein **30-Hz-Fehler** (FLIGHT §6): (a) `SimulationWorld.ExecuteDeliverPayload` reiht die Fracht vor ihrem Fallschirm ein; (b) `SpawnEntity`
-fragt das Frachtflugzeug mit `IsValidContainerFor`, ob es den Fallschirm nimmt (`AllowInsideKindOf` nennt `PARACHUTE` nicht), das Original (`DeliverPayloadNugget::create`,
-`ObjectCreationList.cpp`) ruft `addToContain` ohne diese Frage.
+"Command until aircraft gone" lies within the tolerance: 49.2667 / 49.2500 / 49.2417 s (starting state and final state). Five quantities are unmeasured at every rate because the drop
+drops nobody at any rate – a **30 Hz error** (FLIGHT §6): (a) `SimulationWorld.ExecuteDeliverPayload` queues the payload before its parachute; (b) `SpawnEntity`
+asks the cargo plane with `IsValidContainerFor` whether it takes the parachute (`AllowInsideKindOf` does not name `PARACHUTE`), the original (`DeliverPayloadNugget::create`,
+`ObjectCreationList.cpp`) calls `addToContain` without this question.
 
-Die Korrektur ändert das Verhalten bei 30 Hz und ist deshalb **der letzte Commit des Zweigs, markiert „HELD BACK — changes 30 Hz“**, getrennt zu mergen: der Fallschirm wird vor
-seiner Fracht eingereiht (`SimulationWorld.CreationLists.cs`), und ein Transporter mit `DeliverPayloadAIUpdate` nimmt, was ihm die Lieferung zuweist, ohne Frage
-(`SimulationWorld.cs`, `SpawnEntity`). Gemessen mit diesem Commit:
+The correction changes the behaviour at 30 Hz and is therefore **the last commit of the branch, marked "HELD BACK — changes 30 Hz"**, to be merged separately: the parachute is queued before
+its payload (`SimulationWorld.CreationLists.cs`), and a transport with `DeliverPayloadAIUpdate` takes what the delivery assigns to it, without a question
+(`SimulationWorld.cs`, `SpawnEntity`). Measured with this commit:
 
-| Größe (Fall `flight/paradrop SuperweaponParadropAmerica`) | vorher | nachher |
+| Quantity (case `flight/paradrop SuperweaponParadropAmerica`) | before | after |
 |---|---|---|
-| Befehl bis erster Abwurf | – / – / – | 23,2667 / 23,2500 / 23,2417 s |
-| erster bis letzter Abwurf | – / – / – | 0,8000 × 3 |
-| Befehl bis erste Landung | – / – / – | 28,3667 / 28,3500 / 28,3417 s |
-| Befehl bis letzte Landung | – / – / – | 29,1667 / 29,1500 / 29,1417 s |
-| gelandete Soldaten | 0 / 0 / 0 | 5 / 5 / 5 |
-| mittlerer Abstand der Landung vom Ziel | – / – / – | 0,000 × 3 |
-| Befehl bis Flugzeug weg | 49,2667 / 49,2500 / 49,2417 s | 49,6333 / 49,6333 / 49,6250 s |
+| Command until first drop | – / – / – | 23.2667 / 23.2500 / 23.2417 s |
+| first until last drop | – / – / – | 0.8000 × 3 |
+| Command until first landing | – / – / – | 28.3667 / 28.3500 / 28.3417 s |
+| Command until last landing | – / – / – | 29.1667 / 29.1500 / 29.1417 s |
+| landed soldiers | 0 / 0 / 0 | 5 / 5 / 5 |
+| mean distance of the landing from the target | – / – / – | 0.000 × 3 |
+| Command until aircraft gone | 49.2667 / 49.2500 / 49.2417 s | 49.6333 / 49.6333 / 49.6250 s |
 
-- Suite mit dem Commit: `flight` 0 / 0 mit **0** ungemessenen Größen (vorher 5); alle anderen Gruppen wie am Endstand (Summe 31 / 30).
-- `reference-manifest check --set full` mit dem Commit: **50 Läufe identisch** – kein Lauf des Manifests benutzt eine Lieferung mit Behälter. Das Manifest muss für diesen Commit
-  nicht neu geschrieben werden (es wurde nicht geschrieben). `input-manifest check` identisch.
-- Simulationstests mit dem Commit, Release: bei 30, 60 und 120 Hz alle grün (ohne Realdaten); mit Realdaten bei 30 Hz fallen nur die vier Gruppentests der Suite, die auch
-  ohne ihn fallen.
-- Nicht geprüft: Abwürfe in Missionen und Gefechten außerhalb des Manifests (Zielfahrer, `CampaignTool`); der skriptgesteuerte Abwurf (`ScriptEngine.Reinforcements.cs`) geht
-  einen anderen Weg und ist nicht berührt. Auffällig, nicht untersucht: alle fünf Ranger landen exakt auf dem Zielpunkt (Abstand 0,000).
+- Suite with the commit: `flight` 0 / 0 with **0** unmeasured quantities (before 5); all other groups as at the final state (sum 31 / 30).
+- `reference-manifest check --set full` with the commit: **50 runs identical** – no run of the manifest uses a delivery with a container. The manifest does not have to be rewritten
+  for this commit (it was not written). `input-manifest check` identical.
+- Simulation tests with the commit, Release: at 30, 60 and 120 Hz all green (without real data); with real data at 30 Hz only the four group tests of the suite fail that also
+  fail without it.
+- Not checked: drops in missions and skirmishes outside the manifest (objective driver, `CampaignTool`); the script-controlled drop (`ScriptEngine.Reinforcements.cs`) goes
+  a different way and is not touched. Conspicuous, not investigated: all five Rangers land exactly on the target point (distance 0.000).
 
-## 7. Prüfläufe
+## 7. Check runs
 
-| Lauf | Ergebnis |
+| Run | Result |
 |---|---|
-| `input-manifest check`, `reference-manifest check --set quick --jobs 3` | identisch bzw. 9 Läufe identisch an den Ständen `346cadc`, `8be3a73`, `cc7fd75`, `c1a57ee`, `fd96aff`, `e06259f` (jeder Commit, der die Simulation ändert, mit frisch gebautem `SimTool`) |
-| `reference-manifest check --set full --jobs 4`, `input-manifest check` | **50 Läufe identisch**, Eingangsmanifest identisch, am Endstand `25a784e` |
-| Suite gesamt (4.307 Größen) | §1; TSV im Scratch-Ordner `round3-flight\final-suite.tsv`; alle 30-Hz-Rohwerte gleich denen des Ausgangsstands |
-| Simulationstests, Release, ohne Realdaten | 30 Hz, `--tick-rate 60`, `--tick-rate 120`: jeweils alle 499 grün (am Ausgangsstand 495, ebenfalls alle grün) |
-| Simulationstests, Release, mit Realdaten, 30 Hz | 522 grün; rot nur die vier Gruppentests der Suite (`locomotion`, `projectiles`, `timed`, `ai`) |
-| Simulationstests, Debug, 30 Hz (`dotnet run --project tests/CnCNew.Simulation.Tests`) | alle grün |
-| `dotnet build CnCNew.slnx` | 0 Warnungen, 0 Fehler (inkrementell, `bin`/`obj` nicht gelöscht) |
+| `input-manifest check`, `reference-manifest check --set quick --jobs 3` | identical and 9 runs identical respectively at the states `346cadc`, `8be3a73`, `cc7fd75`, `c1a57ee`, `fd96aff`, `e06259f` (every commit that changes the simulation, with a freshly built `SimTool`) |
+| `reference-manifest check --set full --jobs 4`, `input-manifest check` | **50 runs identical**, input manifest identical, at the final state `25a784e` |
+| Suite in total (4,307 quantities) | §1; TSV in the scratch folder `round3-flight\final-suite.tsv`; all 30 Hz raw values equal to those of the starting state |
+| Simulation tests, Release, without real data | 30 Hz, `--tick-rate 60`, `--tick-rate 120`: all 499 green each (at the starting state 495, likewise all green) |
+| Simulation tests, Release, with real data, 30 Hz | 522 green; red only the four group tests of the suite (`locomotion`, `projectiles`, `timed`, `ai`) |
+| Simulation tests, Debug, 30 Hz (`dotnet run --project tests/CnCNew.Simulation.Tests`) | all green |
+| `dotnet build CnCNew.slnx` | 0 warnings, 0 errors (incremental, `bin`/`obj` not deleted) |
 
-## 8. Ausweg „Originalraster“ und was ihm nahekommt
+## 8. The escape "original grid" (Ausweg „Originalraster“) and what comes close to it
 
-Kein Vorgang läuft neu „als Ganzes nur jeden r-ten Tick der Welt“. Drei Stellen legen etwas auf das Bild des Objekts; sie stehen hier, damit sie beurteilt werden können:
+No process newly runs "as a whole only every r-th tick of the world". Three places put something on the frame of the object; they are listed here so that they can be judged:
 
-| Stelle | Was einmal je Bild geschieht | Raster | Grund |
+| Place | What happens once per frame | Grid | Reason |
 |---|---|---|---|
-| `JetAIUpdate.Update`, geparktes Flugzeug ohne Auftrag | der Leerlaufblick (Heilung melden, gespeicherten Befehl ausführen, Rückkehrzeit, Start des geheilten Hubschraubers) | das des Flugzeugs | Zustandsautomat des Originals, ein Schritt je Bild; „einen Schritt später“ ist ein Bild. **Befehlsannahme bleibt je Tick:** ein Befehl beendet das Leerlaufbild, der Start beginnt im Tick des Befehls (Test: Zustand `TaxiToTakeoff` im Bild des Befehls bei jeder Rate) |
-| `JetAIUpdate.Update`, neues Flugzeug | das erste Update kommt ein Bild nach dem Erscheinen | Tick des Erscheinens | Regel 7 der Konvention; bei 30 Hz der nächste Tick |
-| `DeployStyleAIUpdate.AllowsFire` | im Bild des Fertigwerdens (r − 1 Ticks) werden Feuerversuche, die vor dem Update der Einheit kommen, verworfen | Tick des Fertigwerdens | §3. Der Befehl wird angenommen und ausgeführt wie in jedem Tick; das Tor antwortet in diesen Ticks, was es bei 30 Hz dem Befehl des Fertig-Ticks antwortet. Bewegung und Zielerwerb sind nicht berührt (der eigene Zielerwerb passiert das Tor ab dem Tick des Updates) |
+| `JetAIUpdate.Update`, parked aircraft without an order | the idle look (reporting healing, executing a stored command, return time, take-off of the healed helicopter) | that of the aircraft | state machine of the original, one step per frame; "one step later" is one frame. **Command acceptance stays per tick:** a command ends the idle frame, the take-off begins in the tick of the command (test: state `TaxiToTakeoff` in the frame of the command at every rate) |
+| `JetAIUpdate.Update`, new aircraft | the first update comes one frame after the appearance | tick of the appearance | rule 7 of the convention; at 30 Hz the next tick |
+| `DeployStyleAIUpdate.AllowsFire` | in the frame of becoming ready (r − 1 ticks) fire attempts that come before the update of the unit are discarded | tick of becoming ready | §3. The command is accepted and executed as in every tick; the gate answers in these ticks what it answers the command of the ready tick at 30 Hz. Movement and target acquisition are not touched (the own target acquisition passes the gate from the tick of the update) |
 
-## 9. Offen, bewusst gelassen, neue Befunde
+## 9. Open, deliberately left, new findings
 
-- **Nicht auf die 30-Hz-Konstanten umgestellt:** Spectre (`Fly`), Chinook-Höhenschritt, Fallschirm, Leuchtkörper, Partikelstrahl und der abgeschossene Jet rechnen weiter
-  `Katalogwert je Tick × r` (`FlightFrames.PerFrame`). Ihre Drei-Raten-Tests zeigen Abstand 0 / 0 mit den Zahlen der Fixture, die Suite hat dort keinen Fehlschlag; an einer
-  Schwelle kann es wie in #1 ein Bild kosten. Gleiches Muster wie #1 (`LocomotorFrames`), nicht gemacht.
-- **Regel 7 nur für `JetAIUpdate`:** Chinook, Frachtflugzeug und die übrigen von `AIUpdateInterface` abgeleiteten Flieger beginnen weiter einen Tick nach dem Erscheinen
-  (die Ausnahme der Konvention). Ein Chinook ohne Sammelpunkt vollendet sein Bild deshalb weiter im ersten statt im letzten Tick eines Bilds der Welt.
-- **Nicht veröffentlichend geblieben** (nicht in den Dateien dieses Pakets): Zug, Lawine, Fähre, Welle, freier Fall von `PhysicsBehavior`. In den Dateien dieses Pakets: das
-  Gattling des Spectre (es wird auf die Lage des Schiffs vor dessen Schritt gesetzt, bei jeder Rate einen Schritt hinter dem Schiff) und der Partikelstrahl (kein Objekt).
-- **Der Kurs am Bildende** wird weiterhin nicht veröffentlicht (`Entity.FrameEnd` kennt nur die Lage).
-- **Zwei Schritte eines Objekts mit verschiedener Phase** (ein Hubschrauber, der mitten in einem Bild seines Zustandsautomaten einen Fahrbefehl bekommt): veröffentlicht wird
-  die Summe beider Reste. Kein Test dafür; alle Szenen der Tests geben Befehle an Bildgrenzen.
-- **Messung „Steigen auf Flughöhe“** der Hubschrauber liegt jetzt (r − 1) Ticks hinter 30 Hz (innerhalb): eine Schwelle auf einer Lage, die mit dem letzten Tick erreicht wird.
-- **Leistung:** nicht ruhig gemessen. Ein direkter Wechsel der Binärverzeichnisse von Ausgangs- und Endstand (`SimTool perf`, Twilight Flame, 8 Spieler, 9.000 Ticks, 30 Hz,
-  je zwei Läufe, Mittel ohne die ersten 300 Ticks): 2.190,6 und 2.186,0 µs gegen 2.141,2 und 1.606,5 µs – kein Anstieg erkennbar, die Streuung ist größer als jeder Unterschied.
-  Bei 30 Hz kommen im Flügelflug und in den Flugfeld-Zuständen je Entscheidung ein Aufruf mit Vergleich (`_stride == 1`) dazu, keine
-  Division; über 30 Hz je Flugzeug und Tick eine Veröffentlichung (drei Additionen) und ein Tabellenzugriff, wenn der Locomotor wechselt (Rollen gegen Flug).
-- **Befund (TURRETS 1 überholt):** `DeployStyleAIUpdate` setzt seinen Status rechtzeitig; die Abweichung war der Befehl danach (§3).
-- **Befund:** dieselbe Art „das Update macht etwas möglich, der nächste Befehl nutzt es“ gibt es vermutlich an weiteren Toren, die ein Befehl je Tick abfragt und ein Update
-  öffnet (nicht durchgesehen; `IFireGate` hat nur diesen einen Implementierer).
-- **Befund:** Raptor und MiG flogen am Ausgangsstand mit einem Reisetempo, dessen Rohwert je Sekunde sich zwischen den Raten unterschied (Raptor 2936012790 / 2936012820 /
-  2936012760); die Suite zeigt es mit drei Nachkommastellen als 175,000 × 3. Am Endstand unterscheiden sich nur noch die abgeschnittenen Bits von `Entity.Speed` je Tick
-  (… 790 / … 760 / … 760), gerechnet wird mit dem Tempo je Bild.
-- **Nicht gemacht oder nicht geprüft:** Jets über ein echtes Gefecht bei 60 Hz; Flugfelder mit Modellknochen; mehrere Jets an einer Startbahn bei 60/120 Hz; ein Snapshot mitten
-  im Bild des Fertigwerdens einer aufgestellten Einheit (die beiden Felder werden geschrieben und gelesen, ein eigener Test fehlt); Zielfahrer und `CampaignTool`; Debug-Lauf
-  mit Realdaten; Präsentation (`Presentation.Tests`, `Game.Tests`).
+- **Not converted to the 30 Hz constants:** Spectre (`Fly`), Chinook height step, parachute, flares, particle beam and the shot-down jet still compute
+  `catalogue value per tick × r` (`FlightFrames.PerFrame`). Their three-rate tests show distance 0 / 0 with the numbers of the fixture, the suite has no failure there; at a
+  threshold it can cost a frame as in #1. The same pattern as #1 (`LocomotorFrames`), not done.
+- **Rule 7 only for `JetAIUpdate`:** Chinook, cargo plane and the other flyers derived from `AIUpdateInterface` still begin one tick after the appearance
+  (the exception of the convention). A Chinook without a rally point therefore still completes its frame in the first instead of in the last tick of a frame of the world.
+- **Stayed non-publishing** (not in the files of this package): train, avalanche, ferry, wave, free fall of `PhysicsBehavior`. In the files of this package: the
+  Gattling of the Spectre (it is put on the position of the ship before its step, one step behind the ship at every rate) and the particle beam (not an object).
+- **The heading at the frame end** is still not published (`Entity.FrameEnd` only knows the position).
+- **Two steps of an object with a different phase** (a helicopter that receives a move command in the middle of a frame of its state machine): what is published is
+  the sum of both remainders. No test for it; all scenes of the tests give commands at frame boundaries.
+- **Measurement "climbing to flight height"** of the helicopters now lies (r − 1) ticks behind 30 Hz (within): a threshold on a position that is reached with the last tick.
+- **Performance:** not measured quietly. A direct switch of the binary directories of starting and final state (`SimTool perf`, Twilight Flame, 8 players, 9,000 ticks, 30 Hz,
+  two runs each, mean without the first 300 ticks): 2,190.6 and 2,186.0 µs against 2,141.2 and 1,606.5 µs – no increase recognisable, the scatter is larger than any difference.
+  At 30 Hz, in winged flight and in the airfield states one call with a comparison (`_stride == 1`) is added per decision, no
+  division; above 30 Hz per aircraft and tick one publication (three additions) and one table access when the locomotor changes (taxiing against flight).
+- **Finding (TURRETS 1 superseded):** `DeployStyleAIUpdate` sets its status in time; the deviation was the command after it (§3).
+- **Finding:** the same kind "the update makes something possible, the next command uses it" presumably exists at further gates that a command queries per tick and an update
+  opens (not looked through; `IFireGate` has only this one implementer).
+- **Finding:** Raptor and MiG flew at the starting state with a cruising speed whose raw value per second differed between the rates (Raptor 2936012790 / 2936012820 /
+  2936012760); the suite shows it with three decimal places as 175.000 × 3. At the final state only the truncated bits of `Entity.Speed` per tick still differ
+  (… 790 / … 760 / … 760), the computation uses the speed per frame.
+- **Not done or not checked:** jets over a real match at 60 Hz; airfields with model bones; several jets at one runway at 60/120 Hz; a snapshot in the middle
+  of the frame of becoming ready of a deployed unit (the two fields are written and read, a test of its own is missing); objective driver and `CampaignTool`; Debug run
+  with real data; presentation (`Presentation.Tests`, `Game.Tests`).
