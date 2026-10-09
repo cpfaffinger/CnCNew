@@ -288,6 +288,76 @@ Phase 22 hat `Fixed` von 16 auf 24 Nachkommabits gestellt (`docs/FIXED-POINT-Q39
 - **Nicht gemessen:** `scripts/perf-profile.ps1` mit dem ruhigen Vergleich gegen den vorigen Lauf (§4) – die Maschine war nicht ruhig zu bekommen; die Tabellen in §6a sind damit die letzten ruhig gemessenen
   absoluten Zahlen und gelten für 16 Bit.
 
+## 6c. Leistungstor der Phase 23 (9. Oktober 2026, ruhig gemessen)
+
+Phase 23 endet mit einem Tor: das Spiel läuft jetzt standardmäßig mit 60 Hz, also müssen die Sollwerte der Phase 19 (`docs/HANDOFF-PHASE19.md`; 8 Spieler, 30 Spielminuten, große Karte) **bei
+60 Hz** gelten. Gemessen auf dem Entwicklungsrechner mit CPU-Last 0–11 % vor den Läufen, strikt nacheinander, mit `SimTool perf … --replay` aus kopierten Binärverzeichnissen; „alt“ ist der
+Ausgangsstand der Phase (`20ffce9`), „neu“ der Stand vor der Umstellung (`1b82e45`, alle vier Runden der Raten-Invarianz, Fabrikausfahrt und KI-Korrekturen; die Umstellung selbst ist danach eine
+Zeile und ändert keinen Rechenweg). Protokolle im Scratchpad der Sitzung (`perf-gate`). Ein bis drei Läufe je Zeile, keine Streuung über mehr erhoben. **`catchup` und `core_percent` werden seit
+`0740ebf` an der Rate des Laufs gemessen** (vorher hießen sie `catchup30`/`catchup60` und waren Hochrechnungen); Budgets sind seit `2b11488` Spielzeit (`--seconds`, `--minutes`).
+
+### 6c.1 Das Tor: 8 Spieler, Twilight Flame, 30 Spielminuten
+
+| Größe | Soll | 60 Hz, Lauf 1 | 60 Hz, Lauf 2 | erreicht? | zum Vergleich: derselbe Stand bei 30 Hz |
+|---|---|---:|---:|---|---:|
+| Ticks | – | 108.000 | 108.000 | – | 54.000 |
+| Tickzeit Mittel | ≤ 1,0 ms | 683,2 µs | 694,0 µs | **ja** | 820,7 µs |
+| 95-%-Quantil | – | 1.296,8 µs | 1.311,7 µs | – | 1.602,6 µs |
+| 99-%-Quantil | ≤ 3 ms | 1.614,9 µs | 1.793,3 µs | **ja** | 2.466,1 µs |
+| Maximum | ≤ 8 ms | **141.365 µs** | **142.897 µs** | **nein** | 46.499 µs |
+| Aufholtempo (Wiedergabe ohne KI) | ≥ 8-fach bei 60 Hz | 26,7-fach | 26,5-fach | **ja** | 45,9-fach (bei 30 Hz) |
+| Kernanteil in Echtzeit | – | 4,1 % | 4,2 % | – | 2,5 % |
+| Gen-2-Läufe (GC 0/1/2) | keine | 103/16/0 | 103/15/0 | **ja** | 112/20/0 |
+| Allokation je Tick | nahe 0 | 7.978 Byte | 7.977 Byte | **nein** | 17.357 Byte |
+| Endhash, inkrementell gleich voll | – | `CD9DC2A2A6699DAD`, ja | `CD9DC2A2A6699DAD`, ja | – | `D27D776C3FCA6413` |
+
+- **Verfehlt: das Maximum.** In beiden Läufen ist es derselbe Tick (Schritt 95.550, 202 Objekte), zu 100 % in der Phase `Updates`: ein Tick, in dem viele Einheiten zugleich lange Wege suchen – der
+  Befund aus §6a.4. Bei 30 Hz war das Maximum desselben Stands der erste Tick (46 ms, zur Hälfte `Spawns`); nach den ersten 300 Ticks liegt es dort bei 40,3 ms (Schritt 16.034, ebenfalls `Updates`).
+  Dass der Wert bei 60 Hz höher ist als die 94 ms aus §6a, ist nicht aufgeschlüsselt (anderes Gefecht nach den KI-Korrekturen, doppelte Tickzahl). Senken lässt es sich nur mit einer
+  Verhaltensänderung (gemeinsamer Gruppenweg, Zellbudget je Tick mit Warteschlange oder eine andere Suche); der Projektinhaber hat sich diese Entscheidung vorbehalten – **nicht gemacht**.
+- **Verfehlt: die Allokation.** Rund 8 KB je Tick (bei 30 Hz 17 KB je Tick, also etwa dieselbe Menge je Spielsekunde): 3.693 Byte in der KI, 3.568 in den Modul-Updates, 273 in der Erzeugung, 265
+  im Zielerwerb. Keine Gen-2-Läufe.
+- **Erreicht: Mittel, 99 % und Aufholtempo.** Der Tick kostet bei 60 Hz im Mittel weniger als bei 30 Hz – vermutlich, weil oberhalb von 30 Hz nur der erste Tick eines Bildes entscheidet und die übrigen einen
+  Anteil zurücklegen (nicht nach Phasen aufgeschlüsselt); je Spielsekunde sind es 41 ms Rechenzeit bei 60 Hz gegen 25 ms bei 30 Hz (4,1 % gegen 2,5 % eines Kerns).
+
+### 6c.2 Alt gegen neu bei 30 Hz, abwechselnd
+
+Die Raten-Invarianz hat in jeden heißen Pfad Vergleiche und Felder gelegt, die bei 30 Hz nie etwas tun. Was das kostet, zeigt nur dieselbe Arbeit:
+
+| Lauf | gleiche Arbeit? | alt (`20ffce9`), µs je Tick | neu (`1b82e45`), µs je Tick |
+|---|---|---|---|
+| Stresstest, 216.000 Schritte, erster Lauf (`SimTool stress`), drei Läufe abwechselnd | **ja** (914.394 Befehle, Endhash `56882F763EABEF67` in allen sechs) | 48,7 / 49,6 / 48,8 | 52,6 / 50,1 / 51,8 (**+5 %**) |
+| 8 Spieler, Twilight Flame, 12.000 Ticks, zwei Läufe | nein (anderes Gefecht: die Fabrikausfahrt und die KI-Korrekturen ändern 30 Hz; Endhash `F78F071AF5EC8A6E` gegen `AB24F9CE16D5DE30`) | 1.105,5 / 1.103,1; 99 % 3.981 / 4.165; Maximum 45,8 / 46,4 ms | 1.040,2 / 1.055,5; 99 % 3.998 / 4.137; Maximum 46,2 / 46,6 ms |
+| `MD_GLA05`, 3.000 Ticks | nein (anderer Endhash) | 3.019,2; 99 % 13.177 | 3.064,3; 99 % 13.952 |
+| `MD_USA05`, 3.000 Ticks | nein (anderer Endhash) | 2.193,9; 99 % 9.863 | 2.191,5; 99 % 9.673 |
+
+Belastbar ist nur die erste Zeile: **bei gleicher Arbeit kostet ein Tick bei 30 Hz rund 5 % mehr** (drei Läufe je Seite, die Bereiche überlappen nicht). Die drei anderen Zeilen sind verschiedene
+Gefechte bzw. Missionsabläufe und zeigen nur, dass nichts aus dem Rahmen fällt (−6 % bis +1,5 % im Mittel). Die Absolutwerte liegen in der Größenordnung von §6a (dort 1.141 µs über 54.000 Ticks);
+der direkte Wechsel bleibt der einzige zulässige Vergleich.
+
+### 6c.3 Missionen bei 60 Hz
+
+| Lauf | Ticks | Mittel | 95 % | 99 % | Maximum | Bytes je Tick | GC 0/1/2 | Aufholen live | Kernanteil |
+|---|---:|---:|---:|---:|---:|---:|---|---:|---:|
+| `MD_GLA05`, 100 s, 60 Hz | 6.000 | 2.384,1 | 3.962,8 | 10.155,6 | 109.166 | 5.676 | 4/2/0 | 7,0× | 14,3 % |
+| `MD_GLA05`, 300 s, 60 Hz | 17.097 (der Lauf endet vor dem Budget) | 2.138,6 | 3.397,1 | 5.098,8 | 128.023 | 7.374 | 16/3/0 | 7,8× | 12,8 % |
+| `MD_USA05`, 100 s, 60 Hz | 6.000 | 1.667,7 | 2.589,1 | 7.728,6 | 101.452 | 8.695 | 6/1/0 | 10,0× | 10,0 % |
+| `MD_USA05`, 300 s, 60 Hz | 18.000 | 1.486,0 | 2.278,6 | 3.000,0 | 101.458 | 6.625 | 14/2/0 | 11,2× | 8,9 % |
+| `MD_GLA05`, 300 s, 30 Hz | 9.000 | 2.560,9 | 3.874,9 | 9.067,2 | 119.318 | 13.443 | 14/2/0 | – | 7,7 % |
+| `MD_USA05`, 300 s, 30 Hz | 9.000 | 1.817,1 | 2.667,8 | 8.126,7 | 112.167 | 12.651 | 14/2/0 | – | 5,5 % |
+
+Die große Mission `MD_GLA05` kostet bei 60 Hz 13–14 % eines Kerns und holt live nur 7- bis 8-fach auf (kein Sollwert des Handoffs gilt für Missionen; für ein Netzwerkspiel wäre das Aufholtempo
+knapp – Missionen bleiben lokal). Das Maximum aller Missionsläufe liegt bei 101–128 ms; es ist nicht untersucht, ob es weiterhin der erste Tick ist.
+
+### 6c.4 Was das Tor sagt und was nicht
+
+- **Bestanden mit zwei benannten Ausnahmen:** Mittel, 99-%-Quantil, Aufholtempo und Gen-2-Freiheit halten bei 60 Hz; Maximum und Allokation nicht. Die Umstellung auf 60 Hz ist trotzdem erfolgt
+  (Entscheidung des Projektinhabers vom 8. Oktober 2026, das Ziel der Phase zu erreichen); das Maximum bleibt als offene Entscheidung bei ihm (`docs/MULTIPLAYER-PLAN.md` §7).
+- **Nicht gemessen:** `scripts/perf-profile.ps1` als ganzer ruhiger Lauf mit Vergleich gegen den vorigen (das Skript ist nach seinem Umbau auf Spielzeit nur auf Syntax geprüft); die übrigen neun
+  Zeilen aus §6a.1 bei 60 Hz; die Spielschicht (`sync-perf`) bei 60 Hz; die Original-KI (sie kostet nach `docs/SKIRMISH-AI-ORIGINAL.md` §7.3 bei 8 Spielern 1.123 µs je Tick allein für Skripte und
+  KI, rund das 27-fache der eingebauten); 120 Hz; die Streuung über mehr als zwei Läufe; ein zweiter Rechner.
+- Die 8-Spieler-Läufe des Tors sind am Stand `1b82e45` bei 60 Hz gemessen (`tick_rate=60` in der Zusammenfassung), nicht mit den Binärdateien nach der Umstellung; der Unterschied ist die eine Zeile `ProductRate`.
+
 ## 7. Vorläufig, nicht ruhig gemessen
 
 Alles in diesem Abschnitt stammt vom 6. Oktober 2026, Stand `b6b7454` plus Werkzeug, **von einem Rechner, auf dem
