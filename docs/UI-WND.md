@@ -1,236 +1,236 @@
-# UI-WND – Fensterlayouts, Skalierung, Laufzeit und Zeichenliste
+# UI-WND – window layouts, scaling, runtime and draw list
 
-Paket B2 der Präsentationsschicht (`src/CnCNew.Ui/Wnd`, `Layout`, `Runtime`; Tests in `tests/CnCNew.Ui.Tests/WndTests.cs`).
-`CnCNew.Ui` hängt nur von `CnCNew.Data` ab (derzeit ohne genutzte Typen daraus): kein Stride, keine Simulation, kein
-`CnCNew.Content`, keine Archive. Parser nehmen `string`, `ReadOnlySpan<byte>` oder `Stream`; der Aufrufer liefert die Dateien.
-Die Bibliothek liest keine Wandzeit, erzeugt keine Zufallszahlen und rendert nichts selbst.
+Package B2 of the presentation layer (`src/CnCNew.Ui/Wnd`, `Layout`, `Runtime`; tests in `tests/CnCNew.Ui.Tests/WndTests.cs`).
+`CnCNew.Ui` depends only on `CnCNew.Data` (currently without types used from it): no Stride, no simulation, no
+`CnCNew.Content`, no archives. Parsers take `string`, `ReadOnlySpan<byte>` or `Stream`; the caller supplies the files.
+The library reads no wall time, generates no random numbers and renders nothing itself.
 
-## 1. Einstiegspunkte für Integratoren
+## 1. Entry points for integrators
 
-| Aufgabe | API |
+| Task | API |
 | --- | --- |
-| `.wnd` parsen | `WndParser.Parse(stream \| bytes \| text, fileName)` → `WndLayout` (Fenster, `WndDiagnostic`s, Schlüsselzählung) |
-| Header-Templates | `WndHeaderTemplateTable.Parse(text, "Data/English/HeaderTemplate.ini")` |
-| Fensterbaum | `new UiWindowTree(viewport, UiScaleOptions, new UiTreeServices(textMeasure) { Images, Text, HeaderTemplates, DefaultTooltipDelayMs })`, `AddLayout(layout)`, `RemoveLayout(fileName)`, `SetViewport(viewport, options)` |
-| Suche | `FindByName("MainMenu.wnd:ButtonSinglePlayer")` (Groß-/Kleinschreibung zählt, erstes erzeugtes Fenster gewinnt) |
-| Eingabe | `MouseMove/MouseDown/MouseUp/MouseWheel`, `KeyDown(UiKey, UiModifiers)`, `Character(char)`, `AdvanceTo(ms)`; Rückgabe `true` = UI hat das Ereignis verbraucht |
-| Nachrichten | `Register(callbackName, Action<UiWindowTree, UiEvent>)`, `RegisterTooltip(name, Func<…, string?>)`, `Dispatch()` → `UiDelivery`s, `UnregisteredCallbacks`, `Post(kind, source)` |
-| Gadget-Zustand | `UiWindow.SetHidden/SetEnabled/SetText/SetTextLabel/SetChecked/SetProgress/AddListRow/SetListSelection/AddComboEntry/SetComboSelection/SetSliderValue/SetEntryText/SelectTab` (still, wie die `Gadget*Set*`-Helfer des Originals) |
-| Zeichnen | `BuildDrawList()` → `UiDrawList` (Befehle + `UiDrawStatistics`, `Dump()` für Goldens) |
-| Renderer-Schnittstellen | `IUiTextMeasure` (Breite, Zeilenhöhe), `IUiImageLookup` (Größe eines Mapped Image, z. B. über die `MappedImageTable` von Paket B1), `IUiTextSource` (Labels wie `GUI:Options`) |
+| Parse `.wnd` | `WndParser.Parse(stream \| bytes \| text, fileName)` → `WndLayout` (windows, `WndDiagnostic`s, key count) |
+| Header templates | `WndHeaderTemplateTable.Parse(text, "Data/English/HeaderTemplate.ini")` |
+| Window tree | `new UiWindowTree(viewport, UiScaleOptions, new UiTreeServices(textMeasure) { Images, Text, HeaderTemplates, DefaultTooltipDelayMs })`, `AddLayout(layout)`, `RemoveLayout(fileName)`, `SetViewport(viewport, options)` |
+| Search | `FindByName("MainMenu.wnd:ButtonSinglePlayer")` (case matters, the first created window wins) |
+| Input | `MouseMove/MouseDown/MouseUp/MouseWheel`, `KeyDown(UiKey, UiModifiers)`, `Character(char)`, `AdvanceTo(ms)`; return value `true` = the UI consumed the event |
+| Messages | `Register(callbackName, Action<UiWindowTree, UiEvent>)`, `RegisterTooltip(name, Func<…, string?>)`, `Dispatch()` → `UiDelivery`s, `UnregisteredCallbacks`, `Post(kind, source)` |
+| Gadget state | `UiWindow.SetHidden/SetEnabled/SetText/SetTextLabel/SetChecked/SetProgress/AddListRow/SetListSelection/AddComboEntry/SetComboSelection/SetSliderValue/SetEntryText/SelectTab` (silent, like the `Gadget*Set*` helpers of the original) |
+| Drawing | `BuildDrawList()` → `UiDrawList` (commands + `UiDrawStatistics`, `Dump()` for goldens) |
+| Renderer interfaces | `IUiTextMeasure` (width, line height), `IUiImageLookup` (size of a mapped image, e.g. via the `MappedImageTable` of package B1), `IUiTextSource` (labels such as `GUI:Options`) |
 
-## 2. Format (gegen die Realdaten geprüft)
+## 2. Format (checked against the real data)
 
-Grammatik nach `GameWindowManagerScript.cpp` (`winCreateFromScript`, `parseLayoutBlock`, `parseWindow`, `parseChildWindows`,
-Tabelle `gameWindowFieldList`), neu geschrieben:
+Grammar after `GameWindowManagerScript.cpp` (`winCreateFromScript`, `parseLayoutBlock`, `parseWindow`, `parseChildWindows`,
+table `gameWindowFieldList`), rewritten:
 
-- Erste Anweisung `FILE_VERSION = 2;`, ab Version 2 ein Block `STARTLAYOUTBLOCK … ENDLAYOUTBLOCK` mit `LAYOUTINIT`,
-  `LAYOUTUPDATE`, `LAYOUTSHUTDOWN` (Namen ohne Anführungszeichen; `[None]` → `null`).
-- Schlüssel sind durch Leerraum getrennte Tokens; ein Wert reicht vom Token nach `=` bis zum nächsten `;`. Zeilenenden
-  (`\r\n`/`\n`) und Tabs sind bedeutungslos (Test mit CRLF/Tab-Variante byteidentisch serialisiert). `;` ist Anweisungsende,
-  keine Kommentarmarke – die WND-Dateien enthalten keine Kommentare.
-- `WINDOW` beginnt ein Fenster: zuerst `WINDOWTYPE`, dann `SCREENRECT = UPPERLEFT: x y, BOTTOMRIGHT: x y, CREATIONRESOLUTION: w h`,
-  danach beliebige Felder, `CHILD` öffnet die Kinderliste (vor jedem Kind-`WINDOW` steht erneut `CHILD`), `ENDALLCHILDREN`
-  schließt sie, `END` schließt das Fenster. Dateireihenfolge = Z-Reihenfolge (später = oben), wie `addWindowToParent` +
-  `drawWindow` (Kinder rückwärts gezeichnet).
-- Felder: `NAME` (`Datei.wnd:Name`), `STATUS`/`STYLE` (`+`-Listen über `WindowStatusNames`/`WindowStyleNames`, `NULL` = leer),
-  `SYSTEMCALLBACK`, `INPUTCALLBACK`, `TOOLTIPCALLBACK`, `DRAWCALLBACK`, `HEADERTEMPLATE` (Anführungszeichen, `[None]`/`[NONE]` → `null`),
-  `FONT = NAME: "…", SIZE: n, BOLD: n`, `TOOLTIPDELAY`, `TOOLTIPTEXT`, `TEXT`, `TEXTCOLOR` (sechs RGBA-Werte),
-  `IMAGEOFFSET`, die neun Einträge `IMAGE: name, COLOR: r g b a, BORDERCOLOR: r g b a` jeder `*DRAWDATA`-Familie
-  (`ENABLED/DISABLED/HILITE` plus List-Box-, Slider-Thumb- und Combo-Box-Teile), Gadgetdaten `LISTBOXDATA`
-  (optional `SCROLLIFATEND`, `COLUMNSWIDTH` nur bei mehr als einer Spalte), `COMBOBOXDATA`, `SLIDERDATA`, `RADIOBUTTONDATA`,
-  `STATICTEXTDATA`, `TEXTENTRYDATA`, `TABCONTROLDATA`. Veraltete Schlüssel `DATA` und `TOOLTIP` werden erkannt und als
-  Kompatibilitätsfall gemeldet.
-- Fenstertypen: `USER, PUSHBUTTON, RADIOBUTTON, CHECKBOX, VERTSLIDER, HORZSLIDER, SCROLLLISTBOX, ENTRYFIELD, STATICTEXT,
-  PROGRESSBAR, TABCONTROL, TABPANE, COMBOBOX`; unbekannte Typen bleiben als `WndWindowType.Unknown` mit Originalnamen erhalten.
-- `255 255 255 0` ist `GAME_COLOR_UNDEFINED` (`Color.h`); die Zeichenliste lässt Farben mit Alpha 0 weg.
-- `TEXT` eines `ENTRYFIELD` ist Literaltext (`setWindowText` übersetzt ihn nicht), sonst ein Label.
+- First statement `FILE_VERSION = 2;`, from version 2 a block `STARTLAYOUTBLOCK … ENDLAYOUTBLOCK` with `LAYOUTINIT`,
+  `LAYOUTUPDATE`, `LAYOUTSHUTDOWN` (names without quotation marks; `[None]` → `null`).
+- Keys are tokens separated by whitespace; a value reaches from the token after `=` to the next `;`. Line endings
+  (`\r\n`/`\n`) and tabs are meaningless (test with a CRLF/tab variant serialised byte-identically). `;` is the end of a statement,
+  not a comment marker – the WND files contain no comments.
+- `WINDOW` begins a window: first `WINDOWTYPE`, then `SCREENRECT = UPPERLEFT: x y, BOTTOMRIGHT: x y, CREATIONRESOLUTION: w h`,
+  after that arbitrary fields, `CHILD` opens the list of children (before every child `WINDOW` there is `CHILD` again), `ENDALLCHILDREN`
+  closes it, `END` closes the window. File order = Z order (later = on top), like `addWindowToParent` +
+  `drawWindow` (children drawn backwards).
+- Fields: `NAME` (`File.wnd:Name`), `STATUS`/`STYLE` (`+` lists over `WindowStatusNames`/`WindowStyleNames`, `NULL` = empty),
+  `SYSTEMCALLBACK`, `INPUTCALLBACK`, `TOOLTIPCALLBACK`, `DRAWCALLBACK`, `HEADERTEMPLATE` (quotation marks, `[None]`/`[NONE]` → `null`),
+  `FONT = NAME: "…", SIZE: n, BOLD: n`, `TOOLTIPDELAY`, `TOOLTIPTEXT`, `TEXT`, `TEXTCOLOR` (six RGBA values),
+  `IMAGEOFFSET`, the nine entries `IMAGE: name, COLOR: r g b a, BORDERCOLOR: r g b a` of every `*DRAWDATA` family
+  (`ENABLED/DISABLED/HILITE` plus list box, slider thumb and combo box parts), gadget data `LISTBOXDATA`
+  (optional `SCROLLIFATEND`, `COLUMNSWIDTH` only with more than one column), `COMBOBOXDATA`, `SLIDERDATA`, `RADIOBUTTONDATA`,
+  `STATICTEXTDATA`, `TEXTENTRYDATA`, `TABCONTROLDATA`. Obsolete keys `DATA` and `TOOLTIP` are recognised and reported as a
+  compatibility case.
+- Window types: `USER, PUSHBUTTON, RADIOBUTTON, CHECKBOX, VERTSLIDER, HORZSLIDER, SCROLLLISTBOX, ENTRYFIELD, STATICTEXT,
+  PROGRESSBAR, TABCONTROL, TABPANE, COMBOBOX`; unknown types are kept as `WndWindowType.Unknown` with the original name.
+- `255 255 255 0` is `GAME_COLOR_UNDEFINED` (`Color.h`); the draw list omits colours with alpha 0.
+- `TEXT` of an `ENTRYFIELD` is literal text (`setWindowText` does not translate it), otherwise a label.
 
-**Diagnosen.** Jede Abweichung ist ein `WndDiagnostic(Code, Severity, File, Line, Message)`. `Compatibility` = in den
-ausgelieferten Dateien vorkommende, erklärte Eigenheit, die exakt wie im Original behandelt wird; `Unknown` und `Error` sind
-unerklärt und dürfen in den Realdaten nicht vorkommen. Erklärte Fälle:
+**Diagnostics.** Every deviation is a `WndDiagnostic(Code, Severity, File, Line, Message)`. `Compatibility` = an explained peculiarity
+occurring in the shipped files that is treated exactly as in the original; `Unknown` and `Error` are
+unexplained and must not occur in the real data. Explained cases:
 
-| Code | Vorkommen | Verhalten (wie das Original) |
+| Code | Occurrences | Behaviour (like the original) |
 | --- | --- | --- |
-| `status-disabled-flag` | 2 (`ControlBar.wnd`) | `DISABLED` ist kein Statusname; `parseBitString` ignoriert ihn, das Fenster ist deaktiviert, weil `ENABLED` fehlt |
-| `statement-swallows-next-key` | 4 (`ControlBar.wnd`) | `ENABLEDDRAWDATA` ohne `;` verschluckt `DISABLEDDRAWDATA`; `parseDrawData` liest neun Einträge, der Rest verfällt, die Disabled-Daten bleiben undefiniert |
-| `label-mismatch` | 6 (`ControlBar`, `Diplomacy`, `GeneralsExpPoints`, `InGameChat`) | `TEXTCOLOR` mit `ENABLEDBORDER` an der Stelle von `HILITEBORDER`; das Original verwirft Label-Wörter ungeprüft und liest positionsweise |
-| `obsolete-data-key`, `obsolete-tooltip-key`, `field-after-children`, `children-closed-by-end`, `child-default-color` | 0 | nur synthetisch getestet |
+| `status-disabled-flag` | 2 (`ControlBar.wnd`) | `DISABLED` is not a status name; `parseBitString` ignores it, the window is disabled because `ENABLED` is missing |
+| `statement-swallows-next-key` | 4 (`ControlBar.wnd`) | `ENABLEDDRAWDATA` without `;` swallows `DISABLEDDRAWDATA`; `parseDrawData` reads nine entries, the rest is lost, the disabled data stay undefined |
+| `label-mismatch` | 6 (`ControlBar`, `Diplomacy`, `GeneralsExpPoints`, `InGameChat`) | `TEXTCOLOR` with `ENABLEDBORDER` in the place of `HILITEBORDER`; the original discards label words unchecked and reads by position |
+| `obsolete-data-key`, `obsolete-tooltip-key`, `field-after-children`, `children-closed-by-end`, `child-default-color` | 0 | tested only synthetically |
 
-## 3. Skalierung (`UiScaler`, `UiScaleOptions`)
+## 3. Scaling (`UiScaler`, `UiScaleOptions`)
 
-Fenster sind in einer Erstellungsauflösung (`CREATIONRESOLUTION`, Realdaten: 800x600 und 1920x1080) in absoluten
-Bildschirmkoordinaten verfasst. Abgebildet werden immer beide Kanten; die Größe ist ihre Differenz, gemeinsame Kanten bleiben
-gemeinsam. Abbildung pro Achse `Offset + floor(v * Zähler / Nenner)` in exakter Ganzzahlarithmetik (`long`, Abrundung gegen
-minus unendlich). Das Original rechnet `(Int)(x * (Real)W / (Real)cw)` in `float` und liegt für manche Werte ein Pixel tiefer
-(100 · 2,4f = 239,99998 → 239 statt 240); diese Abweichung ist bewusst.
+Windows are authored in a creation resolution (`CREATIONRESOLUTION`, real data: 800x600 and 1920x1080) in absolute
+screen coordinates. Both edges are always mapped; the size is their difference, common edges stay
+common. Mapping per axis `offset + floor(v * numerator / denominator)` in exact integer arithmetic (`long`, rounding towards
+minus infinity). The original computes `(Int)(x * (Real)W / (Real)cw)` in `float` and lies one pixel lower for some values
+(100 · 2.4f = 239.99998 → 239 instead of 240); this deviation is deliberate.
 
-| Modus | Regel |
+| Mode | Rule |
 | --- | --- |
-| `Stretch` (Original, `parseScreenRect`) | x und y unabhängig: `W/cw`, `H/ch` |
-| `Uniform` | ein Faktor `s = min(W/cw, H/ch)`; der Erstellungsbereich wird zentriert (Letterbox/Pillarbox) |
-| `Anchor` | Gruppenregel: Ein Fenster, das den ganzen Erstellungsbereich bedeckt (Hintergründe), wird gestreckt; seine Kinder bilden eigene Gruppen. Jede andere Gruppenwurzel wählt pro Achse einen Anker, den alle Nachkommen teilen: volle Ausdehnung → Strecken, sonst nach der Lage der Mitte (erstes Drittel → Anfang, letztes Drittel → Ende, sonst Mitte) mit Faktor `s`. Offsets sind `0`, `(W − floor(cw·s))/2` oder `W − floor(cw·s)`. |
+| `Stretch` (original, `parseScreenRect`) | x and y independently: `W/cw`, `H/ch` |
+| `Uniform` | one factor `s = min(W/cw, H/ch)`; the creation area is centred (letterbox/pillarbox) |
+| `Anchor` | Group rule: a window that covers the whole creation area (backgrounds) is stretched; its children form groups of their own. Every other group root chooses one anchor per axis that all descendants share: full extent → stretch, otherwise by the position of the centre (first third → start, last third → end, otherwise centre) with factor `s`. Offsets are `0`, `(W − floor(cw·s))/2` or `W − floor(cw·s)`. |
 
-Schriften: `Stretch` folgt dem Original – Header-Template-Schriften wachsen mit `GlobalLanguage::adjustFontSize`
-(klassisch `1 + (W/800 − 1) · ResolutionFontAdjustment`, begrenzt auf [1, 2], abgerundet; `Language.ini`: 0,7), `FONT`
-des Fensters bleibt unverändert. `Uniform`/`Anchor` skalieren die `FONT` des Fensters mit dem gleichförmigen Faktor seiner
-Erstellungsauflösung, eine Header-Template-Schrift dagegen mit dem gleichförmigen Faktor gegen 800x600 – Template-Punktgrößen
-beziehen sich wie in `adjustFontSize` immer auf 800 Pixel Breite, auch in einem bei 1920x1080 verfassten Layout (sonst
-schrumpfen dessen Texte auf 800/1920). Danach multipliziert der Barrierefreiheitsfaktor `TextScale`; Mindestgröße 1 (`decimal`, abgerundet).
-`MinimumHitTarget` (Pixel, 0 = aus) vergrößert die Trefferfläche interaktiver Gadgets symmetrisch, ohne sie zu verschieben;
-Kinder bleiben auf den Elternbereich beschnitten.
+Fonts: `Stretch` follows the original – header template fonts grow with `GlobalLanguage::adjustFontSize`
+(classically `1 + (W/800 − 1) · ResolutionFontAdjustment`, limited to [1, 2], rounded down; `Language.ini`: 0.7), `FONT`
+of the window stays unchanged. `Uniform`/`Anchor` scale the `FONT` of the window with the uniform factor of its
+creation resolution, a header template font by contrast with the uniform factor against 800x600 – template point sizes
+always refer, as in `adjustFontSize`, to 800 pixels of width, also in a layout authored at 1920x1080 (otherwise
+its texts shrink to 800/1920). After that the accessibility factor `TextScale` multiplies; minimum size 1 (`decimal`, rounded down).
+`MinimumHitTarget` (pixels, 0 = off) enlarges the hit area of interactive gadgets symmetrically without moving them;
+children stay clipped to the parent area.
 
-Geprüfte Invarianten (Tabelle 640x480, 800x600, 1024x768, 1280x720, 1280x800, 1600x900, 1920x1080, 2560x1080, 3440x1440,
-3840x1080, 1080x1920, alle drei Modi):
+Checked invariants (table 640x480, 800x600, 1024x768, 1280x720, 1280x800, 1600x900, 1920x1080, 2560x1080, 3440x1440,
+3840x1080, 1080x1920, all three modes):
 
-- Jedes sichtbare, im Erstellungsbereich verfasste Fenster bleibt im Viewport (Realdaten: 0 Verstöße; 25 Fenster pro Durchlauf
-  sind außerhalb verfasst und ausgenommen).
-- Überlappungsbeziehungen (Paare gleicher Erstellungsauflösung): `Stretch`/`Uniform` identisch, solange keine Achse schrumpft;
-  beim Verkleinern können nur Überlappungen verloren gehen (monotone Abbildung), nie neue entstehen. `Anchor` kann Überlappungen
-  zwischen verschiedenen Gruppen auflösen (Realdaten 1080x1920: 125 Paare, übrige Auflösungen je 1), erzeugt aber keine neuen.
-- Treffertest der vier Eckpixel und der Mitte jedes sichtbaren, aktiven Gadgets (verfasste Punkte durch die Transformation des
-  Gadgets abgebildet) liefert dasselbe Fenster wie in der Erstellungsauflösung: exakt für `Stretch`/`Uniform`, wenn keine Achse
-  schrumpft (streng monotone Abbildung). Realdaten: 62.315 Proben je Modus, 0 Abweichungen ohne Schrumpfen; mit Schrumpfen
-  (z. B. 640x480: 699) oder in Dateien mit gemischter Erstellungsauflösung (`Diplomacy`, `GeneralsExpPoints`,
-  `DisconnectScreen`, `MessageBox`, `QuitMessageBox`) werden die Abweichungen gezählt und ausgegeben. `Anchor` ohne Schrumpfen:
-  30 Abweichungen bei 1080x1920, sonst höchstens 1 je Auflösung (gruppenübergreifende Überdeckungen).
-- Neu-Layout ist reproduzierbar; zwei Testläufe liefern bis auf Zeitmessungen identische Ausgaben.
+- Every visible window authored within the creation area stays in the viewport (real data: 0 violations; 25 windows per pass
+  are authored outside and exempt).
+- Overlap relations (pairs of the same creation resolution): `Stretch`/`Uniform` identical as long as no axis shrinks;
+  when scaling down, overlaps can only be lost (monotone mapping), new ones never arise. `Anchor` can dissolve overlaps
+  between different groups (real data 1080x1920: 125 pairs, other resolutions 1 each), but creates no new ones.
+- The hit test of the four corner pixels and of the centre of every visible, enabled gadget (authored points mapped through the transformation of the
+  gadget) yields the same window as in the creation resolution: exactly for `Stretch`/`Uniform` if no axis
+  shrinks (strictly monotone mapping). Real data: 62,315 samples per mode, 0 deviations without shrinking; with shrinking
+  (e.g. 640x480: 699) or in files with mixed creation resolution (`Diplomacy`, `GeneralsExpPoints`,
+  `DisconnectScreen`, `MessageBox`, `QuitMessageBox`) the deviations are counted and printed. `Anchor` without shrinking:
+  30 deviations at 1080x1920, otherwise at most 1 per resolution (overlaps across groups).
+- Re-layout is reproducible; two test runs yield identical output apart from time measurements.
 
-## 4. Laufzeit (`UiWindowTree`, `UiWindow`)
+## 4. Runtime (`UiWindowTree`, `UiWindow`)
 
-- **Zustand:** versteckt, aktiviert (eigene Bits wie im Original; wirksam über die Eltern), hilited, selected, Fokus,
-  Text (Label oder Klartext), Gadgetzustände (`UiListBoxState`, `UiSliderState`, `UiComboBoxState`, `UiTextEditState`,
-  `UiTabControlState`, Fortschritt in Prozent).
-- **Z-Reihenfolge:** Wurzeln in Einfügereihenfolge, Ebenen `BELOW` < normal < `ABOVE` (`winRepaint`); Kinder in Dateireihenfolge.
-- **Treffertest** (`GameWindow::winPointInChild`): tiefstes sichtbares, aktives Fenster; spätere Geschwister liegen oben;
-  Kinder nur innerhalb ihres Elternbereichs; deaktivierte und versteckte Fenster werden übersprungen; Enthaltensein halboffen
-  `[x, x+w)` (das Original prüft `<=`). Eingabeziel: zuerst die offene Combo-Liste („lone window"), `NOINPUT`-Fenster
-  verschlucken das Ereignis außer als Teil einer Combo-Box (`winProcessMouseEvent`).
-- **Maus:** Grab-Fenster beim Linksdruck; das Loslassen zählt nur innerhalb des Grab-Fensters (Klick = Druck und Loslassen im
-  Button). Enter/Leave (`GBM_MOUSE_ENTERING/LEAVING`) und die Hervorhebung nur für Gadgets mit `MOUSETRACK`, deren
-  Eingabefunktion `GWM_MOUSE_ENTERING` behandelt (Knopf, Check-Box, Radio, Regler, List-Box, Combo-Box, Texteingabe) –
-  nicht für Static Text, Fortschrittsbalken und Tab-Control, obwohl die Dateien ihnen `MOUSETRACK` und `HILITE*`-Daten
-  mitgeben. Das Verlassen löscht die Hervorhebung unbedingt (auch am fokussierten Gadget), Verstecken oder Deaktivieren
-  löscht Hilite und Pressed, `PointerLeft()` meldet dem Baum, dass ein anderer Screen die Maus übernommen hat. Während
-  eines Grabs ruht die Hover-Verfolgung wie im Original. Den Tastaturfokus nimmt ein Klick nur bei Combo-Box, List-Box
-  und Texteingabe (`winSetFocus` in deren Eingabefunktionen), nicht bei Knöpfen, Check-Boxen, Radios und Reglern.
-- **Gadgets:** Push-Button (Hover, gedrückt, Klick; `ON_MOUSE_DOWN`, `CHECK_LIKE`, `RIGHT_CLICK`), Check-Box (Umschalten beim
-  Loslassen im Fenster), Radio-Gruppen (Gruppe + Datei wie `unselectOtherRadioOfGroup`), Slider (Ziehen, Klick springt,
-  Pfeiltasten; Thumb 13 bzw. 16 Einheiten der Erstellungsauflösung, skaliert), List-Box (Auswahl, Mehrfachauswahl,
-  Doppelklick über `DoubleClickMs` der Tree-Uhr, Rechtsklick, Rad, Scrollbar-Pfeile/-Spur, Spaltenbreiten aus
-  `COLUMNSWIDTH`, `LENGTH` mit `AUTOPURGE`), Combo-Box (Aufklappen, Auswahl, Escape/Außenklick schließt, `MAXDISPLAY`,
-  editierbar), Texteingabe (Caret, Einfügen/Löschen, Umschalt-Auswahl, Filter `NUMERICALONLY`/`ALPHANUMERICALONLY`/`ASCIIONLY`,
-  `MAXLEN`, `SECRETTEXT`), Fortschrittsbalken, Tab-Control (Reiterköpfe entlang der Oberkante, genau eine Pane sichtbar).
-- **Tastatur/Barrierefreiheit:** Tab/Umschalt+Tab durchlaufen alle fokussierbaren Gadgets (sichtbar, wirksam aktiv, weder
-  `NOFOCUS` noch `NOINPUT`) in Lesereihenfolge (Oberkante, dann linke Kante, dann Erzeugungsreihenfolge; keine
-  Zeilenbündelung). Enter/Leertaste lösen Buttons, Check-Boxen, Radios aus; Pfeiltasten bewegen den Fokus zwischen Buttons
-  (`winNextTab`/`winPrevTab`), ändern Slider/List-/Combo-Auswahl und bewegen den Caret. Fokussierte Buttons sind hilited
-  (`GWM_INPUT_FOCUS`), das ist die sichtbare Fokusmarke.
+- **State:** hidden, enabled (own bits as in the original; effective via the parents), hilited, selected, focus,
+  text (label or plain text), gadget states (`UiListBoxState`, `UiSliderState`, `UiComboBoxState`, `UiTextEditState`,
+  `UiTabControlState`, progress in percent).
+- **Z order:** roots in insertion order, levels `BELOW` < normal < `ABOVE` (`winRepaint`); children in file order.
+- **Hit test** (`GameWindow::winPointInChild`): deepest visible, enabled window; later siblings lie on top;
+  children only within their parent area; disabled and hidden windows are skipped; containment half-open
+  `[x, x+w)` (the original checks `<=`). Input target: first the open combo list ("lone window"), `NOINPUT` windows
+  swallow the event except as part of a combo box (`winProcessMouseEvent`).
+- **Mouse:** grab window on left press; the release counts only within the grab window (click = press and release in the
+  button). Enter/leave (`GBM_MOUSE_ENTERING/LEAVING`) and the highlight only for gadgets with `MOUSETRACK` whose
+  input function handles `GWM_MOUSE_ENTERING` (button, check box, radio, slider, list box, combo box, text entry) –
+  not for static text, progress bar and tab control, although the files give them `MOUSETRACK` and `HILITE*` data.
+  Leaving clears the highlight unconditionally (also on the focused gadget), hiding or disabling
+  clears hilite and pressed, `PointerLeft()` reports to the tree that another screen has taken over the mouse. During
+  a grab the hover tracking rests as in the original. A click takes the keyboard focus only with combo box, list box
+  and text entry (`winSetFocus` in their input functions), not with buttons, check boxes, radios and sliders.
+- **Gadgets:** push button (hover, pressed, click; `ON_MOUSE_DOWN`, `CHECK_LIKE`, `RIGHT_CLICK`), check box (toggle on
+  release in the window), radio groups (group + file like `unselectOtherRadioOfGroup`), slider (dragging, a click jumps,
+  arrow keys; thumb 13 or 16 units of the creation resolution, scaled), list box (selection, multiple selection,
+  double click via `DoubleClickMs` of the tree clock, right click, wheel, scrollbar arrows/track, column widths from
+  `COLUMNSWIDTH`, `LENGTH` with `AUTOPURGE`), combo box (dropping down, selection, Escape/outside click closes, `MAXDISPLAY`,
+  editable), text entry (caret, insert/delete, shift selection, filters `NUMERICALONLY`/`ALPHANUMERICALONLY`/`ASCIIONLY`,
+  `MAXLEN`, `SECRETTEXT`), progress bar, tab control (tab headers along the top edge, exactly one pane visible).
+- **Keyboard/accessibility:** Tab/Shift+Tab walk through all focusable gadgets (visible, effectively enabled, neither
+  `NOFOCUS` nor `NOINPUT`) in reading order (top edge, then left edge, then creation order; no
+  row bundling). Enter/Space trigger buttons, check boxes, radios; arrow keys move the focus between buttons
+  (`winNextTab`/`winPrevTab`), change slider/list/combo selection and move the caret. Focused buttons are hilited
+  (`GWM_INPUT_FOCUS`), that is the visible focus mark.
 
-### Nachrichten- und Callback-Modell
+### Message and callback model
 
-Gadgets senden an ihren Owner = Elternfenster (Wurzel-Gadgets an sich selbst). `Dispatch()` liefert die wartenden Ereignisse
-in Reihenfolge (auch von Handlern erzeugte) an den `SYSTEMCALLBACK` des Empfängers:
+Gadgets send to their owner = parent window (root gadgets to themselves). `Dispatch()` delivers the waiting events
+in order (also those created by handlers) to the `SYSTEMCALLBACK` of the receiver:
 
-- `[None]`, `GameWinDefaultSystem`, `Gadget*System` → `NoCallback` (die Standard- bzw. Gadget-Systemfunktion ignoriert sie).
-- `PassMessagesToParentSystem` → weiter zum Elternfenster; `PassSelectedButtonsToParentSystem` → nur `GBM_SELECTED`,
-  `GBM_SELECTED_RIGHT`, `GBM_MOUSE_ENTERING/LEAVING`, `GEM_EDIT_DONE` weiter, sonst `Filtered` (`GameWindowManager.cpp`).
-- registrierter Name → `Handled`; unbekannter Name → `Unregistered`, gezählt in `UnregisteredCallbacks` (nie still).
-- Unverbrauchte Tasten gehen als `UiEventKind.Key` vom Fokus (ohne Fokus von der obersten sichtbaren Wurzel) aufwärts zum
-  nächsten `INPUTCALLBACK` (`winProcessKey`): `GameWinBlockInput` → `Blocked`, `GameWinDefaultInput`/`[None]` → weiter,
-  unbekannte Namen werden gezählt und weitergereicht (im Original: keine Funktion).
+- `[None]`, `GameWinDefaultSystem`, `Gadget*System` → `NoCallback` (the default or gadget system function ignores them).
+- `PassMessagesToParentSystem` → on to the parent window; `PassSelectedButtonsToParentSystem` → only `GBM_SELECTED`,
+  `GBM_SELECTED_RIGHT`, `GBM_MOUSE_ENTERING/LEAVING`, `GEM_EDIT_DONE` on, otherwise `Filtered` (`GameWindowManager.cpp`).
+- registered name → `Handled`; unknown name → `Unregistered`, counted in `UnregisteredCallbacks` (never silent).
+- Unconsumed keys go as `UiEventKind.Key` from the focus (without focus from the topmost visible root) upwards to the
+  next `INPUTCALLBACK` (`winProcessKey`): `GameWinBlockInput` → `Blocked`, `GameWinDefaultInput`/`[None]` → on,
+  unknown names are counted and passed on (in the original: no function).
 
-Realdaten: `GBM_SELECTED` aller 440 Push-Buttons (83 Dateien, je Datei ein eigener Baum) landet bei 49 verschiedenen Menü-Callbacks (z. B. `MainMenuSystem` 30,
-`SkirmishGameOptionsMenuSystem` 13, `ControlBarSystem` 68), 16 enden ohne Callback. Diese Namen muss die Shell registrieren.
+Real data: `GBM_SELECTED` of all 440 push buttons (83 files, a tree of its own per file) ends up at 49 different menu callbacks (e.g. `MainMenuSystem` 30,
+`SkirmishGameOptionsMenuSystem` 13, `ControlBarSystem` 68), 16 end without a callback. The shell has to register these names.
 
-Ausgesendete Nachrichten (`UiEventKind`): `GBM_MOUSE_ENTERING`, `GBM_MOUSE_LEAVING`, `GBM_SELECTED` (Button, Check-Box, Radio;
-Wert 1/0 bei Umschaltern), `GBM_SELECTED_RIGHT`, `GSM_SLIDER_TRACK`, `GSM_SLIDER_DONE`, `GLM_SELECTED`, `GLM_DOUBLE_CLICKED`,
-`GLM_RIGHT_CLICKED`, `GCM_SELECTED`, `GCM_UPDATE_TEXT`, `GEM_UPDATE_TEXT`, `GEM_EDIT_DONE`, `GGM_FOCUS_CHANGE`, Taste (`GWM_CHAR`).
+Messages sent (`UiEventKind`): `GBM_MOUSE_ENTERING`, `GBM_MOUSE_LEAVING`, `GBM_SELECTED` (button, check box, radio;
+value 1/0 with toggles), `GBM_SELECTED_RIGHT`, `GSM_SLIDER_TRACK`, `GSM_SLIDER_DONE`, `GLM_SELECTED`, `GLM_DOUBLE_CLICKED`,
+`GLM_RIGHT_CLICKED`, `GCM_SELECTED`, `GCM_UPDATE_TEXT`, `GEM_UPDATE_TEXT`, `GEM_EDIT_DONE`, `GGM_FOCUS_CHANGE`, key (`GWM_CHAR`).
 
-Nicht ausgesendet (bewusst): `GGM_LEFT_DRAG` (Ziehen verschiebbarer `DRAGGABLE`-Fenster ist nicht umgesetzt), `GGM_SET_LABEL`,
+Not sent (deliberately): `GGM_LEFT_DRAG` (dragging of movable `DRAGGABLE` windows is not implemented), `GGM_SET_LABEL`,
 `GGM_GET_LABEL`, `GGM_RESIZED`, `GGM_CLOSE`, `GBM_SET_SELECTION`, `GSM_SET_SLIDER`, `GSM_SET_MIN_MAX`, `GLM_ADD_ENTRY`,
 `GLM_DEL_ENTRY`, `GLM_DEL_ALL`, `GLM_SET_SELECTION`, `GLM_GET_SELECTION`, `GLM_TOGGLE_MULTI_SELECTION`, `GLM_GET_TEXT`,
 `GLM_SET_UP_BUTTON`, `GLM_SET_DOWN_BUTTON`, `GLM_SET_SLIDER`, `GLM_SCROLL_BUFFER`, `GLM_UPDATE_DISPLAY`, `GLM_GET/SET_ITEM_DATA`,
 `GCM_ADD_ENTRY`, `GCM_DEL_ENTRY`, `GCM_DEL_ALL`, `GCM_GET_TEXT`, `GCM_SET_TEXT`, `GCM_EDIT_DONE`, `GCM_GET/SET_ITEM_DATA`,
-`GCM_GET/SET_SELECTION`, `GEM_GET_TEXT`, `GEM_SET_TEXT`, `GPM_SET_PROGRESS` – die Setter/Getter sind Methoden an `UiWindow`;
-rohe `GWM_*`-Eingabenachrichten (`GWM_CREATE`, `GWM_DESTROY`, `GWM_SCRIPT_CREATE`, `GWM_INPUT_FOCUS`, `GWM_IME_*`) sind durch
-die Eingabemethoden ersetzt.
+`GCM_GET/SET_SELECTION`, `GEM_GET_TEXT`, `GEM_SET_TEXT`, `GPM_SET_PROGRESS` – the setters/getters are methods on `UiWindow`;
+raw `GWM_*` input messages (`GWM_CREATE`, `GWM_DESTROY`, `GWM_SCRIPT_CREATE`, `GWM_INPUT_FOCUS`, `GWM_IME_*`) are replaced by
+the input methods.
 
-Bewusste Abweichungen: `GSM_SLIDER_DONE` auch für horizontale Slider (das Original sendet ihn nur beim vertikalen Thumb) und
-nach Pfeiltasten; die Pfeiltasten des horizontalen Sliders sind nicht vertauscht wie in `GadgetHorizontalSliderInput`;
-vertikale Slider haben das Maximum oben; Enter/Leertaste lösen bei Buttons schon beim Drücken aus.
+Deliberate deviations: `GSM_SLIDER_DONE` also for horizontal sliders (the original sends it only with the vertical thumb) and
+after arrow keys; the arrow keys of the horizontal slider are not swapped as in `GadgetHorizontalSliderInput`;
+vertical sliders have the maximum at the top; Enter/Space trigger on buttons already on pressing.
 
 ### Tooltips
 
-Reine Zustandsmaschine über `AdvanceTo(ms)` (die Uhr darf nicht rückwärts laufen). Ein Fenster zeigt seinen Tooltip, wenn es
-seit `TOOLTIPDELAY` ms (≥ 0) bzw. `DefaultTooltipDelayMs` (`Mouse.ini TooltipDelayTime`, Einzelhandel 800) gehovert ist;
-Fensterwechsel startet neu, ein gehaltener Button unterdrückt ihn. Vorrang wie `winProcessMouseEvent`: ein
-`TOOLTIPCALLBACK` vor `TOOLTIPTEXT`; `GameWinDefaultTooltip` zeigt nichts (9 Fenster in den 83 Dateien), unregistrierte Namen werden einmal pro
-Hover gezählt; Labels werden über `IUiTextSource` aufgelöst, sonst mit Label als Text geliefert.
+Pure state machine over `AdvanceTo(ms)` (the clock must not run backwards). A window shows its tooltip if it
+has been hovered for `TOOLTIPDELAY` ms (≥ 0) or `DefaultTooltipDelayMs` (`Mouse.ini TooltipDelayTime`, retail 800);
+a change of window restarts, a held button suppresses it. Precedence like `winProcessMouseEvent`: a
+`TOOLTIPCALLBACK` before `TOOLTIPTEXT`; `GameWinDefaultTooltip` shows nothing (9 windows in the 83 files), unregistered names are counted once per
+hover; labels are resolved via `IUiTextSource`, otherwise delivered with the label as text.
 
-## 5. Zeichenliste (`UiDrawList`)
+## 5. Draw list (`UiDrawList`)
 
-Befehle: `UiFillRect`, `UiBorderRect` (1 px innen), `UiImageDraw` (Mapped-Image-Name, Zielrechteck, Tönung, Spiegelung),
-`UiTextDraw` (eine gesetzte Zeile: Text, Label-Schlüssel, Schrift, Farbe, Schattenfarbe = `TEXTCOLOR`-Border, Position,
-Ausrichtung, Clip), `UiPushClip`/`UiPopClip`, `UiCustomDraw` (nicht umgesetzter `DRAWCALLBACK`, vom Host zu zeichnen).
-Reihenfolge wie `winRepaint`/`drawWindow`; `SEE_THRU` überspringt nur das Fenster selbst; `W3DNoDraw`/`GameWinDefaultDraw`
-zeichnen nichts; `W3DGameWinDefaultDraw` zeichnet den Standardhintergrund. Zustand → Datensatz: deaktiviert (eigenes
-`ENABLED`-Bit fehlt) → `DISABLED*`, hilited → `HILITE*`, sonst `ENABLED*`. Gadgetregeln (Quellen `W3DGameWindow.cpp`,
-`W3DPushButton.cpp`, `W3DCheckBox.cpp`, `W3DRadioButton.cpp`, `W3DStaticText.cpp`, Header `Gadget*.h`):
+Commands: `UiFillRect`, `UiBorderRect` (1 px inside), `UiImageDraw` (mapped image name, target rectangle, tint, mirroring),
+`UiTextDraw` (one set line: text, label key, font, colour, shadow colour = `TEXTCOLOR` border, position,
+alignment, clip), `UiPushClip`/`UiPopClip`, `UiCustomDraw` (unimplemented `DRAWCALLBACK`, to be drawn by the host).
+Order like `winRepaint`/`drawWindow`; `SEE_THRU` skips only the window itself; `W3DNoDraw`/`GameWinDefaultDraw`
+draw nothing; `W3DGameWinDefaultDraw` draws the default background. State → data set: disabled (own
+`ENABLED` bit missing) → `DISABLED*`, hilited → `HILITE*`, otherwise `ENABLED*`. Gadget rules (sources `W3DGameWindow.cpp`,
+`W3DPushButton.cpp`, `W3DCheckBox.cpp`, `W3DRadioButton.cpp`, `W3DStaticText.cpp`, headers `Gadget*.h`):
 
-- Standard: mit `IMAGE` Bild 0 (plus `IMAGEOFFSET`), sonst Rahmen und Füllung von Eintrag 0.
-- Push-Button: mit Mittelbild (Enabled-Eintrag 5) dreiteilig links 0/1, Mitte 5/3, rechts 6/4 (ausgewählt), sonst ein Bild
-  (Enabled+ausgewählt nimmt Hilite 1 wie das Original); Farbvariante Eintrag 0/1; Text zentriert, Umbruch auf Breite,
-  `WRAP_CENTERED` zentriert jede Zeile.
-- Check-Box: Kästchen links (Höhe − 2·3), Einträge 1/2; in der Farbvariante zusätzlich eine gefüllte Häkchenmarke; Text ab x + Höhe.
-- Radio: dreiteilig 0/1/2, ausgewählt Hilite 3/4/5.
-- Static Text: Umbruch bei Breite − 10, links 7 oder zentriert, vertikal zentriert, Clip auf das Fenster.
-- Texteingabe: dreiteilig 0/2/1, Auswahl in Hilite-Textfarbe, Caret (1 px) im Fokus; List-Box: Zeilen (Zeilenhöhe =
-  `LineHeight` der Schrift), Auswahl dreiteilig 1/3/2 oder Farbe 1, Zellentext je Spalte, Scrollbar aus den
-  `LISTBOX*`-/`SLIDERTHUMB*`-Daten; Combo-Box: Editfeld, Pfeilknopf, offene Liste zuletzt (oben); horizontaler Slider mit
-  `IMAGE` (`W3DGadgetHorizontalSliderImageDraw`): zentrierte Reihe quadratischer Kästchen (Kante = Breite des gefüllten
-  Bildes im Anzeigemaßstab, Abstand 2), bis zum Wert Disabled 0, danach Disabled 1, bei Hervorhebung dahinter eine Reihe
-  Hilite 0; ohne `IMAGE` Rahmen und Füllung von Eintrag 0; vertikaler Slider mit `IMAGE` dreiteilig 0/2/1. Thumb des
-  horizontalen Sliders 13x16, 10 unter der Oberkante (`gogoGadgetSlider`), aus `SLIDERTHUMB*` nach Zustand, beim Ziehen
-  Eintrag 1; Fortschritt: Hintergrund 0/2/1, Balken 4/6/5 im Clip der Füllbreite (Farbvariante Eintrag 0 und 4).
-- Mittelteile werden unter einem Clip gekachelt (höchstens 256 Kacheln, sonst gestreckt). Unbekannte Bildgrößen werden in
-  `UnresolvedImageSizes` gezählt (Enden dann halbe Höhe, Mitte gestreckt); unaufgelöste Labels in `UnresolvedLabels`.
+- Default: with `IMAGE` image 0 (plus `IMAGEOFFSET`), otherwise border and fill of entry 0.
+- Push button: with a centre image (enabled entry 5) three-part left 0/1, centre 5/3, right 6/4 (selected), otherwise one image
+  (enabled+selected takes hilite 1 like the original); colour variant entry 0/1; text centred, wrapping to the width,
+  `WRAP_CENTERED` centres every line.
+- Check box: box on the left (height − 2·3), entries 1/2; in the colour variant additionally a filled check mark; text from x + height.
+- Radio: three-part 0/1/2, selected hilite 3/4/5.
+- Static text: wrapping at width − 10, left 7 or centred, vertically centred, clip to the window.
+- Text entry: three-part 0/2/1, selection in the hilite text colour, caret (1 px) in focus; list box: rows (row height =
+  `LineHeight` of the font), selection three-part 1/3/2 or colour 1, cell text per column, scrollbar from the
+  `LISTBOX*`/`SLIDERTHUMB*` data; combo box: edit field, arrow button, open list last (on top); horizontal slider with
+  `IMAGE` (`W3DGadgetHorizontalSliderImageDraw`): centred row of square boxes (edge = width of the filled
+  image at display scale, spacing 2), up to the value disabled 0, after that disabled 1, when highlighted a row of
+  hilite 0 behind it; without `IMAGE` border and fill of entry 0; vertical slider with `IMAGE` three-part 0/2/1. Thumb of the
+  horizontal slider 13x16, 10 below the top edge (`gogoGadgetSlider`), from `SLIDERTHUMB*` by state, while dragging
+  entry 1; progress: background 0/2/1, bar 4/6/5 in the clip of the fill width (colour variant entry 0 and 4).
+- Centre parts are tiled under a clip (at most 256 tiles, otherwise stretched). Unknown image sizes are counted in
+  `UnresolvedImageSizes` (ends then half the height, centre stretched); unresolved labels in `UnresolvedLabels`.
 
-Golden-Tests vergleichen `Dump()` mit literalen Erwartungen (Hintergrund, gedrückter Button, umbrochener Static Text,
-Check-Box, Custom-Draw; dreiteiliger Button mit Kacheln).
+Golden tests compare `Dump()` with literal expectations (background, pressed button, wrapped static text,
+check box, custom draw; three-part button with tiles).
 
-## 6. Realdatenzahlen (`dotnet run --project tests/CnCNew.Ui.Tests -- --content-dir game/content`)
+## 6. Real-data numbers (`dotnet run --project tests/CnCNew.Ui.Tests -- --content-dir game/content`)
 
-- *Stand 9. Oktober 2026 (Bestand aus der Steam-Vorlage, `docs/UI-VANILLA-FIT.md`): 80 Dateien, alle `*.wnd` und alle 800×600; die drei Varianten unten gab es nur im früheren, gemoddeten Bestand, und die Zahl 83 in diesem Dokument ist historisch.*
-- `Window/`: 83 Dateien = 80 `*.wnd` + 3 Varianten (`OptionsMenu.wnd_hideip`, `NetworkDirectConnect.wnd_hideip`,
-  `GameSpyLoginProfile.wnd_hidemail`), alle geparst; die Varianten lädt das Spiel nicht über ihren Namen.
-- 1.814 Fenster (davon 1.675 in den 80 `*.wnd`): STATICTEXT 582, USER 450, PUSHBUTTON 440, COMBOBOX 123, CHECKBOX 66,
-  SCROLLLISTBOX 40, ENTRYFIELD 39, PROGRESSBAR 34, RADIOBUTTON 24, HORZSLIDER 15, VERTSLIDER 1; keine TABCONTROL/TABPANE.
-  Erstellungsauflösung 800x600: 1.467, 1920x1080: 347.
-- Schlüssel (Auszug): WINDOW 1.814, CHILD 1.731, ENDALLCHILDREN 261, TEXT 880, TOOLTIPTEXT 159, STATICTEXTDATA 582,
-  COMBOBOXDATA 123, LISTBOXDATA 40, TEXTENTRYDATA 39, RADIOBUTTONDATA 24, SLIDERDATA 16, HEADERTEMPLATE 1.782
-  (vollständige Liste gibt der Test aus).
-- Diagnosen: 12, alle erklärt (Tabelle in Abschnitt 2), 0 unerklärt. Alle Fenster tragen einen dekorierten Namen.
-- `HeaderTemplate.ini`: 19 Templates, 0 Diagnosen, keine unbekannten Template-Namen; kein Fenster ohne Schrift. In einem Baum
-  mit allen Layouts: 211 doppelte Namen (Varianten und Mehrfachdateien; `FindByName` liefert das zuerst erzeugte Fenster).
-- Laufzeiten (Debug, einmalige Messung, JIT inklusive): Parsen aller 83 Dateien ≈ 0,4 s; 2.739 Bäume (83 × 11 Auflösungen
-  × 3 Modi) ≈ 0,08 s; Zeichenlisten aller Dateien je Auflösung und Modus 15–30 ms.
-- Zeichenliste 1920x1080 `Stretch`: 8.357 Befehle (Bilder 6.443, Text 703, Rahmen 326, Füllungen 254, Clip 305/305,
-  Custom 21); 1280x720 `Stretch`: 6.412; `Uniform`/`Anchor` 7.008 bzw. 5.492 (kleinere Kachelzahl). Mit Bildgrößen-Fake
-  16x16 und ohne Textquelle (671 unaufgelöste Labels).
-- Vom Host zu zeichnende `DRAWCALLBACK`s: `W3DDrawMapPreview` 8, `W3DMainMenuDraw` 3, je 1 `IMECandidateMainDraw`,
+- *As of 9 October 2026 (content from the Steam master installation, `docs/UI-VANILLA-FIT.md`): 80 files, all `*.wnd` and all 800×600; the three variants below existed only in the earlier, modded content, and the number 83 in this document is historical.*
+- `Window/`: 83 files = 80 `*.wnd` + 3 variants (`OptionsMenu.wnd_hideip`, `NetworkDirectConnect.wnd_hideip`,
+  `GameSpyLoginProfile.wnd_hidemail`), all parsed; the game does not load the variants via their name.
+- 1,814 windows (of which 1,675 in the 80 `*.wnd`): STATICTEXT 582, USER 450, PUSHBUTTON 440, COMBOBOX 123, CHECKBOX 66,
+  SCROLLLISTBOX 40, ENTRYFIELD 39, PROGRESSBAR 34, RADIOBUTTON 24, HORZSLIDER 15, VERTSLIDER 1; no TABCONTROL/TABPANE.
+  Creation resolution 800x600: 1,467, 1920x1080: 347.
+- Keys (excerpt): WINDOW 1,814, CHILD 1,731, ENDALLCHILDREN 261, TEXT 880, TOOLTIPTEXT 159, STATICTEXTDATA 582,
+  COMBOBOXDATA 123, LISTBOXDATA 40, TEXTENTRYDATA 39, RADIOBUTTONDATA 24, SLIDERDATA 16, HEADERTEMPLATE 1,782
+  (the test prints the complete list).
+- Diagnostics: 12, all explained (table in section 2), 0 unexplained. All windows carry a decorated name.
+- `HeaderTemplate.ini`: 19 templates, 0 diagnostics, no unknown template names; no window without a font. In one tree
+  with all layouts: 211 duplicate names (variants and multiple files; `FindByName` yields the window created first).
+- Run times (Debug, single measurement, JIT included): parsing of all 83 files ≈ 0.4 s; 2,739 trees (83 × 11 resolutions
+  × 3 modes) ≈ 0.08 s; draw lists of all files per resolution and mode 15–30 ms.
+- Draw list 1920x1080 `Stretch`: 8,357 commands (images 6,443, text 703, borders 326, fills 254, clip 305/305,
+  custom 21); 1280x720 `Stretch`: 6,412; `Uniform`/`Anchor` 7,008 and 5,492 respectively (smaller tile count). With an image-size fake of
+  16x16 and without a text source (671 unresolved labels).
+- `DRAWCALLBACK`s to be drawn by the host: `W3DDrawMapPreview` 8, `W3DMainMenuDraw` 3, 1 each of `IMECandidateMainDraw`,
   `IMECandidateTextAreaDraw`, `W3DCommandBarBackgroundDraw`, `W3DCommandBarForegroundDraw`, `W3DCommandBarGenExpDraw`,
   `W3DCommandBarHelpPopupDraw`, `W3DCreditsMenuDraw`, `W3DLeftHUDDraw`, `W3DPowerDraw`, `W3DRightHUDDraw`.
 
-## 7. Grenzen
+## 7. Limits
 
-- `ShellMenuScheme` (`Data/INI/ShellMenuScheme.ini`, im `CompiledDefinitionGraph` als Kompatibilitätsdefinition) wird hier
-  nicht gelesen; Menüübergänge (`WindowTransitions.ini`, `LAYOUTINIT`-Animationen) sind Aufgabe der Shell (`docs/GAME-SHELL.md` §12; der Handler liegt in `CnCNew.Ui/Transitions`).
-- Modale Fenster (`winSetModal`), Mauscapture durch Callbacks, Ziehen von `DRAGGABLE`-Fenstern, IME, Videopuffer,
-  `USE_OVERLAY_STATES`/`FLASHING`/`NOT_READY`-Overlays, Hotkey-Text und Uhr-Overlays der Control Bar sind nicht umgesetzt.
-- Der alte Rahmen `WIN_STATUS_BORDER` (`winDrawBorder`) wird nicht gezeichnet, nur gezählt (`BorderStatusWindows`; Realdaten: 37 gezeichnete Fenster je Auflösung, versteckte nicht mitgezählt).
-- Tab-Control nur minimal (Reiterköpfe oben, `TABORIENTATION`/`TABEDGE`/`PANEBORDER` ungenutzt); in den Realdaten kommt keins vor.
-- Die Farbvarianten von Check-Box, Radio, Slider und Scrollbar sind vereinfacht; Scrollbar-Spur und Thumb einteilig.
-- Lesereihenfolge ohne Zeilenbündelung; Zeilenhöhe = `LineHeight` ohne Zusatzabstand; Textumbruch nur an Leerzeichen.
-- Bildgrößen, Schriftmetriken und Übersetzungen liefert der Host; `UniformImages` im Realdatentest ist ein Fake.
-- `CnCNew.Ui` nutzt keine neue NuGet-Abhängigkeit.
+- `ShellMenuScheme` (`Data/INI/ShellMenuScheme.ini`, in the `CompiledDefinitionGraph` as a compatibility definition) is not
+  read here; menu transitions (`WindowTransitions.ini`, `LAYOUTINIT` animations) are the task of the shell (`docs/GAME-SHELL.md` §12; the handler lives in `CnCNew.Ui/Transitions`).
+- Modal windows (`winSetModal`), mouse capture by callbacks, dragging of `DRAGGABLE` windows, IME, video buffers,
+  `USE_OVERLAY_STATES`/`FLASHING`/`NOT_READY` overlays, hotkey text and clock overlays of the control bar are not implemented.
+- The old border `WIN_STATUS_BORDER` (`winDrawBorder`) is not drawn, only counted (`BorderStatusWindows`; real data: 37 drawn windows per resolution, hidden ones not counted).
+- Tab control only minimal (tab headers at the top, `TABORIENTATION`/`TABEDGE`/`PANEBORDER` unused); none occurs in the real data.
+- The colour variants of check box, radio, slider and scrollbar are simplified; scrollbar track and thumb one-part.
+- Reading order without row bundling; row height = `LineHeight` without extra spacing; text wrapping only at spaces.
+- Image sizes, font metrics and translations are supplied by the host; `UniformImages` in the real-data test is a fake.
+- `CnCNew.Ui` uses no new NuGet dependency.
