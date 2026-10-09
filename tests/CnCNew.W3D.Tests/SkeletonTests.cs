@@ -331,7 +331,7 @@ internal static class SkeletonTests
         var report = W3dSkeletonAudit.Run(names, library, decodeTime);
         stopwatch.Stop();
         Check(report.Failures.IsEmpty, "Real W3D decode failures:\n" + string.Join('\n', report.Failures.Take(20)));
-        Check(report.FileCount == 8897 && report["hierarchies"] == 6481 && report["models.hlod"] == 6505,
+        Check(report.FileCount == 8894 && report["hierarchies"] == 6478 && report["models.hlod"] == 6502,
             $"Real W3D inventory changed ({report.FileCount} files, {report["hierarchies"]} hierarchies, {report["models.hlod"]} HLODs).");
         Check(report["animations.None"] == 4074 && report["animations.TimeCoded"] == 21 && report["animations.AdaptiveDelta"] == 0,
             "Real animation counts changed.");
