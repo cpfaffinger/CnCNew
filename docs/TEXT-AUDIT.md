@@ -1,230 +1,230 @@
-# TEXT-AUDIT – Warum die Texte „komisch“ aussehen (Phase 16, Punkt 4)
+# TEXT-AUDIT – Why the texts look "odd" (Phase 16, item 4)
 
-Stand 5. Oktober 2026 (alle Zahlen in diesem Dokument sind in dieser Sitzung neu gemessen). Auftrag: `docs/handoffs/HANDOFF-PHASE16.md` Punkt 4, Befund
-`docs/DEMO-FINDINGS.md` Nr. 10. Ein Mensch fand die Texte der Demos im Vergleich zum Original „komisch“; eine Ursache (Vorlagenschriften gegen 800 Pixel Breite,
-`docs/GAME-SHELL.md` §11) war schon behoben, der systematische Vergleich fehlte.
+As of 5 October 2026 (all numbers in this document were re-measured in this session). Brief: `docs/handoffs/HANDOFF-PHASE16.md` item 4, finding
+`docs/DEMO-FINDINGS.md` no. 10. A human found the texts of the demos "odd" („komisch“) compared with the original; one cause (template fonts against 800 pixels of width,
+`docs/GAME-SHELL.md` §11) was already fixed, the systematic comparison was missing.
 
-**Methode und ihre Grenze.** Es gibt keine Originalaufnahmen. Die Beweise sind (1) die Daten des Spiels (WND-Layouts, `Language.ini`, `HeaderTemplate.ini`,
-`Mouse.ini`, die englische CSF), (2) der Referenzcode (`references/ea-generals-zero-hour/GeneralsMD/Code/…`, nur gelesen und neu geschrieben, Quellverweise unten) und
-(3) Messungen am eigenen Renderer. Ein Pixelvergleich mit dem Original ist nicht möglich; was hier „behoben“ heißt, heißt „stimmt mit dem Referenzcode überein“, nicht „sieht
-aus wie im Original“. Die letzte Instanz bleibt ein Mensch (Abschnitt 7).
+**Method and its limit.** There are no original captures. The evidence is (1) the data of the game (WND layouts, `Language.ini`, `HeaderTemplate.ini`,
+`Mouse.ini`, the English CSF), (2) the reference code (`references/ea-generals-zero-hour/GeneralsMD/Code/…`, only read and rewritten, source references below) and
+(3) measurements on our own renderer. A pixel comparison with the original is not possible; what is called "fixed" here means "agrees with the reference code", not "looks
+like in the original". The final authority remains a human (section 7).
 
-## 1. Zusammenfassung
+## 1. Summary
 
-Drei Gruppen von Ursachen, in der Reihenfolge ihrer sichtbaren Wirkung:
+Three groups of causes, in the order of their visible effect:
 
-1. **Die Schrift selbst.** Der Client rasterte mit FreeType und einer geschätzten Stauchung für die Schrift „Generals“, und die Ränder der Buchstaben wurden im Linearraum statt im Gammaraum
-   überblendet (heller, fetter). Das Original rastert mit GDI und blendet in Bytes. Auf den 80 Originallayouts
-   sind 326 von 1.190 Fenstertexten (27 %) mit FreeType anders breit, zusammen 2.258 px; **294 davon sind „Generals“-Texte** (Titel, Hauptmenüknöpfe, Überschriften; 2.224 px,
-   bis zu 85 px je Text). 29 von 36 verwendeten Schriftgrößen haben eine andere Zeilenhöhe (meist 1 px). Behoben: `GdiFontProvider`.
-2. **Das Layout des Textblocks.** Umbruchregel, Einzug nach Umbruch, Blockbreite, Zentrierung, Zuschnitt und Versätze der Gadgets wichen von `Render2DSentenceClass` und den
-   `W3D…Draw`-Funktionen ab. Behoben: `UiSentenceLayout`, Zuschnitt je Gadgettyp, Versätze von Listen, Eingabefeldern, Auswahlfeldern.
-3. **Texte, die es so nicht geben dürfte:** der Platzhalter „$$$“ oben links, aufgedruckte Hotkeys und Kosten auf den Befehlssymbolen, das Wort „Entry“ in Eingabefeldern, interne
-   Namen (`FactionAmerica`, `Color 1`) in der Skirmish-Einrichtung, feste Schriftgrößen in den Credits, **keine Tooltips**. Behoben (Tooltips vereinfacht).
+1. **The font itself.** The client rasterised with FreeType and an estimated horizontal compression for the font "Generals", and the edges of the letters were blended in linear space instead of in gamma space
+   (brighter, bolder). The original rasterises with GDI and blends in bytes. On the 80 original layouts
+   326 of 1,190 window texts (27 %) have a different width with FreeType, together 2,258 px; **294 of them are "Generals" texts** (titles, main menu buttons, headings; 2,224 px,
+   up to 85 px per text). 29 of 36 font sizes used have a different line height (mostly 1 px). Fixed: `GdiFontProvider`.
+2. **The layout of the text block.** Wrap rule, indent after a wrap, block width, centring, clipping and offsets of the gadgets deviated from `Render2DSentenceClass` and the
+   `W3D…Draw` functions. Fixed: `UiSentenceLayout`, clipping per gadget type, offsets of lists, entry fields, combo boxes.
+3. **Texts that should not exist like this:** the placeholder "$$$" at the top left, hotkeys and costs printed onto the command icons, the word "Entry" in entry fields, internal
+   names (`FactionAmerica`, `Color 1`) in the skirmish setup, fixed font sizes in the credits, **no tooltips**. Fixed (tooltips simplified).
 
-Danach behoben: durchscheinende Texte darunterliegender Menüs (Abschnitt 7) und die Missionstexte (Abschnitt 4.6: Schriften aus `Language.ini`, Positionen und Farben aus `InGameUI.ini`, Schreibmaschinentext der Missionsbeschriftung, Zeitgeber, Superwaffenliste, Meldungsfenster).
+Fixed after that: texts of menus lying underneath showing through (section 7) and the mission texts (section 4.6: fonts from `Language.ini`, positions and colors from `InGameUI.ini`, typewriter text of the military caption, timers, superweapon list, message window).
 
-## 2. Wie das Original Text zeichnet (Quellen)
+## 2. How the original draws text (sources)
 
-| Stufe | Verhalten | Quelle |
+| Stage | Behaviour | Source |
 |---|---|---|
-| Schriftwahl | `FontDesc` aus `Language.ini` (Name, Punkt, fett); Vorlagenschriften `HeaderTemplate.ini` mit `adjustFontSize` = `floor(Punkt · clamp(1 + (Breite/800 − 1) · 0,7, 1, 2))`; `FONT` eines Fensters bleibt unverändert, Fenster ohne `FONT` bekommen `DefaultWindowFont` (Times New Roman 14) | `GlobalLanguage.cpp` (`adjustFontSize`, `FontDesc::FontDesc`), `HeaderTemplate.cpp` (`populateGameFonts`), `GameWindowManager.cpp` (`WinCreate`), `GameWindowManagerScript.cpp` (`parseFont`, Ende von `parseGameWindow`) |
-| Rastern | `FontCharsClass::Create_GDI_Font`: Höhe `−MulDiv(Punkt, 96, 72)`; Name „Generals“ = Arial mit `lfWidth = 0,40·Höhe`, `CharOverhang = 0`; `PixelOverlap = Höhe/8` auf [0, 4]; `ANTIALIASED_QUALITY`. `Store_GDI_Char`: `ExtTextOutW` (`W` bei x = 1) in eine 24-Bit-DIB, Breite = `GetTextExtentPoint32W` + Überlappung, Alpha = `Pixel >> 4` in einer A4R4G4B4-Textur | `render2dsentence.cpp` |
-| Vorschub | `Get_Char_Spacing` = Breite − Überlappung − `tmOverhang` (kein Kerning); `Get_Char_Data`: Zeichen ≥ 256 aus `UnicodeFontName` („Arial Unicode MS“) | `render2dsentence.cpp`, `W3DGameFont.cpp` (`loadFontData`) |
-| Umbruch/Block | `Build_Sentence_Not_Centered` (Umbruch bei `Cursor.X + Wortbreite ≥ Umbruchbreite`, Leerzeichen am Anfang der Folgezeile, `extent.X = maxX + Überlappung`), `Build_Sentence_Centered` (zählt das Leerzeichen doppelt, zentriert jede Zeile auf die Blockbreite des anderen Aufbaus) | `render2dsentence.cpp` |
-| Zeichnen | Schatten bei (+1, +1) in der Randfarbe, danach der Text; Zuschnitt nur, wenn ihn die Gadgetfunktion setzt | `W3DDisplayString.cpp` (`draw`), `W3DStaticText.cpp` (Zuschnitt, Rand 7, Umbruch Breite − 10), `W3DPushButton.cpp` (`drawButtonText`: Umbruch = Breite, kein Zuschnitt, Kurzbefehlsknöpfe oben links + 2), `W3DCheckBox.cpp` (x = Höhe, kein Umbruch), `W3DRadioButton.cpp` (kein Umbruch), `W3DListBox.cpp` (Versatz `TEXT_X_OFFSET` = 5, Schatten fest schwarz), `W3DTextEntry.cpp` (Eingabefeld: x + 5 + 2, y + 5, Zuschnitt, Halbbreitenschritte; Auswahlfeld ohne Eingabe: x + 10) |
-| Geld | `GadgetStaticTextSetText(MoneyDisplay, format("GUI:ControlBarMoneyDisplay", money))`, Position/Größe aus `MoneyUL/LR` des Schemas | `InGameUI.cpp` (`update`), `ControlBarScheme.cpp` |
-| Befehlsknöpfe | `GadgetButtonSetText(button, "")` (kein Text auf dem Symbol), Tooltipfunktion `commandButtonTooltip` / Popup `ControlBarPopupDescription.wnd` (Name, Kosten, Beschreibung) | `ControlBar.cpp` (`setControlCommand`), `ControlBarPopupDescription.cpp` (`populateBuildTooltipLayout`) |
-| Tooltip | `Mouse::drawTooltip`: Kasten bei (x + 20, y), Umbruch bei `TooltipWidth` % der Bildbreite, Einblendung über `TooltipFillTime`, Schrift `TooltipFontName` aus `Language.ini` | `Mouse.cpp` (`setCursorTooltip`, `drawTooltip`, `createStreamMessages`, `mouseNotifyResolutionChange`) |
-| Credits | `CreditsTitleFont`/`CreditsMinorTitleFont`/`CreditsNormalFont` mit `adjustFontSize` | `Credits.cpp` |
+| Font choice | `FontDesc` from `Language.ini` (name, point, bold); template fonts `HeaderTemplate.ini` with `adjustFontSize` = `floor(point · clamp(1 + (width/800 − 1) · 0.7, 1, 2))`; `FONT` of a window stays unchanged, windows without `FONT` get `DefaultWindowFont` (Times New Roman 14) | `GlobalLanguage.cpp` (`adjustFontSize`, `FontDesc::FontDesc`), `HeaderTemplate.cpp` (`populateGameFonts`), `GameWindowManager.cpp` (`WinCreate`), `GameWindowManagerScript.cpp` (`parseFont`, end of `parseGameWindow`) |
+| Rasterising | `FontCharsClass::Create_GDI_Font`: height `−MulDiv(point, 96, 72)`; name "Generals" = Arial with `lfWidth = 0.40·height`, `CharOverhang = 0`; `PixelOverlap = height/8` on [0, 4]; `ANTIALIASED_QUALITY`. `Store_GDI_Char`: `ExtTextOutW` (`W` at x = 1) into a 24-bit DIB, width = `GetTextExtentPoint32W` + overlap, alpha = `Pixel >> 4` in an A4R4G4B4 texture | `render2dsentence.cpp` |
+| Advance | `Get_Char_Spacing` = width − overlap − `tmOverhang` (no kerning); `Get_Char_Data`: characters ≥ 256 from `UnicodeFontName` ("Arial Unicode MS") | `render2dsentence.cpp`, `W3DGameFont.cpp` (`loadFontData`) |
+| Wrap/block | `Build_Sentence_Not_Centered` (wrap at `Cursor.X + word width ≥ wrap width`, space at the beginning of the following line, `extent.X = maxX + overlap`), `Build_Sentence_Centered` (counts the space twice, centres every line on the block width of the other construction) | `render2dsentence.cpp` |
+| Drawing | Shadow at (+1, +1) in the border color, then the text; clipping only if the gadget function sets it | `W3DDisplayString.cpp` (`draw`), `W3DStaticText.cpp` (clipping, margin 7, wrap width − 10), `W3DPushButton.cpp` (`drawButtonText`: wrap = width, no clipping, shortcut buttons top left + 2), `W3DCheckBox.cpp` (x = height, no wrap), `W3DRadioButton.cpp` (no wrap), `W3DListBox.cpp` (offset `TEXT_X_OFFSET` = 5, shadow fixed black), `W3DTextEntry.cpp` (entry field: x + 5 + 2, y + 5, clipping, half-width steps; combo box without entry: x + 10) |
+| Money | `GadgetStaticTextSetText(MoneyDisplay, format("GUI:ControlBarMoneyDisplay", money))`, position/size from `MoneyUL/LR` of the scheme | `InGameUI.cpp` (`update`), `ControlBarScheme.cpp` |
+| Command buttons | `GadgetButtonSetText(button, "")` (no text on the icon), tooltip function `commandButtonTooltip` / popup `ControlBarPopupDescription.wnd` (name, cost, description) | `ControlBar.cpp` (`setControlCommand`), `ControlBarPopupDescription.cpp` (`populateBuildTooltipLayout`) |
+| Tooltip | `Mouse::drawTooltip`: box at (x + 20, y), wrap at `TooltipWidth` % of the screen width, fade-in over `TooltipFillTime`, font `TooltipFontName` from `Language.ini` | `Mouse.cpp` (`setCursorTooltip`, `drawTooltip`, `createStreamMessages`, `mouseNotifyResolutionChange`) |
+| Credits | `CreditsTitleFont`/`CreditsMinorTitleFont`/`CreditsNormalFont` with `adjustFontSize` | `Credits.cpp` |
 
-## 3. Der Capture-Satz
+## 3. The capture set
 
-`scripts/capture-text.ps1 [-ContentDir …] [-OutDir …] [-NoBuild]` (die Bilder liegen nicht im Repo, nur lokal): 96 PNGs und eine Liste der Pixel-Prüfsummen, zwei Läufe
-bit-gleich (alle 96 Prüfsummen identisch).
+`scripts/capture-text.ps1 [-ContentDir …] [-OutDir …] [-NoBuild]` (the pictures are not in the repo, only local): 96 PNGs and a list of the pixel checksums, two runs
+bit-identical (all 96 checksums identical).
 
-* `ui/` (Werkzeug `tools/CnCNew.UiRenderTool`, 92 Bilder): die rohen Layouts (Hauptmenü, Optionen, Skirmish-Einrichtung, Befehlsleiste, Beenden-Menü) in 800x600, 1280x720,
-  1920x1080, 2560x1080; die Hülle über `GameShell` mit echten Eingaben in 1280x720 und 1920x1080 (`shell-*`: Hauptmenü, Zustände der Knöpfe, Optionen und Regler, Beenden-Dialog;
-  `flow-*`: Einzelspielermenü, Zeigertooltip halb eingeblendet und fertig, Skirmish-Einrichtung, Kartenwahl leer und mit Auswahl, Einrichtung mit Karte, Ladeschirm,
-  **Abschlussbildschirm nach einem echten 600-Tick-Gefecht**, Credits, Kampagnenbildschirm USA, Schwierigkeitsdialog, Briefing zu Beginn und später);
-  dazu `font-audit.txt`.
-* `client/` (Stride-Client `--smoke-test --capture`, 4 Bilder): `hud-money` (Gefecht mit Auswahl, Geldfenster) und `hud-tooltip` (Eingabeskript: Planierraupe wählen, auf den ersten
-  Baubefehl zeigen) in beiden Größen.
-* Missionstexte: `ui/missiontext-WxH.png` (Werkzeugszene `MissionTextScenes`, 800x600, 1280x720, 1920x1080: Meldungszeilen, Missionsbeschriftung halb getippt, Zeitgeber und Zähler, Superwaffenliste, Filmtext, Meldungsfenster); die Bilder des Werkzeugs haben einen Alphakanal, in dem durchscheinende Flächen halbdurchsichtig bleiben (ein Betrachter über hellem Grund zeigt sie zu hell; vor dem Ansehen den Alphakanal verwerfen). Im Client: `--smoke-test --mission … --filmstrip` (`docs/GAME-HUD.md` §17.3).
-* Nicht im Satz: Übergangsanimationen.
+* `ui/` (tool `tools/CnCNew.UiRenderTool`, 92 pictures): the raw layouts (main menu, options, skirmish setup, command bar, quit menu) in 800x600, 1280x720,
+  1920x1080, 2560x1080; the shell through `GameShell` with real inputs in 1280x720 and 1920x1080 (`shell-*`: main menu, states of the buttons, options and sliders, quit dialog;
+  `flow-*`: single-player menu, pointer tooltip half faded in and finished, skirmish setup, map selection empty and with a selection, setup with map, loading screen,
+  **score screen after a real 600-tick match**, credits, campaign screen USA, difficulty dialog, briefing at the beginning and later);
+  plus `font-audit.txt`.
+* `client/` (Stride client `--smoke-test --capture`, 4 pictures): `hud-money` (match with selection, money window) and `hud-tooltip` (input script: select the dozer, point at the first
+  build command) in both sizes.
+* Mission texts: `ui/missiontext-WxH.png` (tool scene `MissionTextScenes`, 800x600, 1280x720, 1920x1080: message lines, military caption half typed, timers and counters, superweapon list, cinematic text, message window); the pictures of the tool have an alpha channel in which translucent areas stay half transparent (a viewer over a bright background shows them too bright; discard the alpha channel before looking). In the client: `--smoke-test --mission … --filmstrip` (`docs/GAME-HUD.md` §17.3).
+* Not in the set: transition animations.
 
-## 4. Tabelle: Element × Abweichung × Ursache
+## 4. Table: element × deviation × cause
 
-Status: **behoben** (mit Test oder Messung), **vereinfacht**, **offen**, **bewusst** (anders als das Original, mit Grund).
+Status: **fixed** (with test or measurement), **simplified**, **open**, **deliberate** (different from the original, with a reason).
 
-### 4.1 Schrift und Glyphen
+### 4.1 Font and glyphs
 
-| Element | Abweichung | Ursache | Status |
+| Element | Deviation | Cause | Status |
 |---|---|---|---|
-| Schrift „Generals“ (Vorlagen `Title` 20, `MainButton` 15 …; 294 Texte in 4 Größen) | 7 % zu breit (Großbuchstaben bei 24 px: 390 statt 364 px), je Text bis 85 px, Σ 2.224 px | FreeType-Näherung „91 % Stauchung“; das Original lässt GDI mit `lfWidth = 0,40·Höhe` die Breite wählen (real ca. 87 %) | **behoben** (`GdiFontProvider`), Selbstprüfung des Werkzeugs, `--font-audit` |
-| Zeilenhöhe/Ascent | 29 von 36 Schriftgrößen 1 px abweichend (z. B. Arial 16 px: 18 statt 17) | FreeType-Zellmaße (hhea/OS/2, gerundet) statt `tmHeight`/`tmAscent` | **behoben** |
-| Zeichenvorschub | je Schrift 1–19 Zeichen (ASCII + Latin-1) mit anderer Breite, 326 Texte betroffen | FreeType: gerundeter, ungehinteter Vorschub; GDI: gehinteter Ganzzahlvorschub aus `GetTextExtentPoint32` | **behoben** |
-| Buchstabe `W`, `PixelOverlap` | – | Sonderfälle von `Store_GDI_Char`/`Get_Char_Spacing` (`W` ein Pixel nach rechts, Überlappung zur Blockbreite) | **behoben** (`UiFontFaceMetrics.Overlap`) |
-| Kantendeckung | 256 statt 16 Stufen | Original: 4-Bit-Alpha der A4R4G4B4-Textur | **behoben** (Rasterergebnis nur 0, 17 … 255) |
-| Überlappende Glyphspalten | Alphamischung statt ODER der Alphabits | `Blit_Char` verknüpft die `PixelOverlap` ersten Spalten mit ODER | **offen**, nur bei Zeichen mit Überstand sichtbar |
-| `Courier`, `FixedSys` (Language.ini: Copyright, Militärtext, Debug) | als Arial ersetzt | FreeType kann nur TrueType; die Familien sind Rasterschriften | **behoben** durch GDI (`Courier/12` und `/18` kommen in Layouts vor) |
-| `Arial Unicode MS` (UnicodeFontName) | auf dem Messrechner nicht installiert (Office) | GDI ersetzt still durch Arial; jetzt per `GetTextFace` erkannt, gezählt, auf stderr gemeldet | **bewusst/gezählt**; alle Codepunkte der englischen CSF liegen in Arial außer drei C1-Zeichen |
-| U+0085 (267 Texte, vor allem Untertitel „…“), U+0093/0094 | unsichtbar, Breite 0 („all#we need support“) | Übersetzer legten cp1252-Codes in UTF-16 ab; GDI hat dafür weder Glyph noch Breite – im Original ebenso (`Get_Char_Spacing` = 0) | **bewusst** (kein Unterschied zum Original, aber sichtbar fehlende Auslassungspunkte) |
-| Windows-Version/Arial-Fassung | Pixel der Kanten und einzelne Vorschübe können vom Stand von 2003 abweichen | GDI dieser Installation | **offen**, nicht messbar ohne Original |
-| Kantenhelligkeit (Überblendung) | helle Schrift auf dunklem Grund war fetter und verwaschener: ein Randpixel mit 6/15 Deckung wurde 170 statt 102, 10/15 wurde 213 statt 170 (die Probe an `shell-options` vor der Änderung: 222, 213, 170, 231, 247, 203) | Das Original blendet im Bildspeicher in Bytes (Gammaraum); Stride blendet mit sRGB-Zielansicht im Linearraum (`docs/CLIENT-UI-RENDERING.md` §3). Gleiche Deckung ergibt im Linearraum einen helleren Rand | **behoben** für helle Schrift (`UiAlphaCurves.LightOnDark`: gespeichertes Alpha = `decode(Deckung)`, über Schwarz exakt der Gammaraum-Wert; nach der Änderung sind die Randpixel 102, 153, 170, 187, 204, 238 – die 17er-Stufen). Näherung über nicht schwarzem Grund; dunkle Schrift unverändert. Im Clientfenster (Swap-Chain) nicht nachgemessen |
-| `FONT` in Uniform-Modus | Fenster ohne Vorlage skalieren mit dem 4:3-Faktor, das Original lässt `FONT` unskaliert (nur Vorlagen wachsen mit `adjustFontSize`) | Layoutmodus der Hülle (`UiScaleMode.Uniform`) | **bewusst** (alles wächst gleichmäßig; bei 1280x720 sind Vorlagen 1,2- statt 1,42-fach) |
-| `DefaultWindowFont` (Times New Roman 14) | `UiWindowTree.FallbackFont` ist Arial Unicode MS 12 | gemessen: **0 von 792 Fenstern mit Text** haben weder `FONT` noch Vorlage, also ohne Wirkung | **offen**, folgenlos |
-| `LocalFontFile`, `UseHardWordWrap` | nicht angewandt | Englisch: kein `LocalFontFile`, Hartumbruch aus | nicht prüfbar (nur Englisch vorhanden) |
+| Font "Generals" (templates `Title` 20, `MainButton` 15 …; 294 texts in 4 sizes) | 7 % too wide (capitals at 24 px: 390 instead of 364 px), up to 85 px per text, Σ 2,224 px | FreeType approximation "91 % compression"; the original lets GDI choose the width with `lfWidth = 0.40·height` (in reality approx. 87 %) | **fixed** (`GdiFontProvider`), self-check of the tool, `--font-audit` |
+| Line height/ascent | 29 of 36 font sizes deviating by 1 px (e.g. Arial 16 px: 18 instead of 17) | FreeType cell metrics (hhea/OS/2, rounded) instead of `tmHeight`/`tmAscent` | **fixed** |
+| Character advance | per font 1–19 characters (ASCII + Latin-1) with a different width, 326 texts affected | FreeType: rounded, unhinted advance; GDI: hinted integer advance from `GetTextExtentPoint32` | **fixed** |
+| Letter `W`, `PixelOverlap` | – | special cases of `Store_GDI_Char`/`Get_Char_Spacing` (`W` one pixel to the right, overlap added to the block width) | **fixed** (`UiFontFaceMetrics.Overlap`) |
+| Edge coverage | 256 instead of 16 levels | original: 4-bit alpha of the A4R4G4B4 texture | **fixed** (raster result only 0, 17 … 255) |
+| Overlapping glyph columns | alpha blending instead of OR of the alpha bits | `Blit_Char` combines the first `PixelOverlap` columns with OR | **open**, visible only for characters with overhang |
+| `Courier`, `FixedSys` (Language.ini: copyright, military text, debug) | replaced by Arial | FreeType can only do TrueType; the families are raster fonts | **fixed** by GDI (`Courier/12` and `/18` occur in layouts) |
+| `Arial Unicode MS` (UnicodeFontName) | not installed on the measuring machine (Office) | GDI silently substitutes Arial; now detected through `GetTextFace`, counted, reported on stderr | **deliberate/counted**; all code points of the English CSF are in Arial except three C1 characters |
+| U+0085 (267 texts, above all subtitles "…"), U+0093/0094 | invisible, width 0 ("all#we need support") | translators stored cp1252 codes in UTF-16; GDI has neither glyph nor width for them – the same in the original (`Get_Char_Spacing` = 0) | **deliberate** (no difference from the original, but visibly missing ellipses) |
+| Windows version/Arial version | pixels of the edges and individual advances can deviate from the state of 2003 | GDI of this installation | **open**, not measurable without the original |
+| Edge brightness (blending) | bright text on a dark background was bolder and more washed out: an edge pixel with 6/15 coverage became 170 instead of 102, 10/15 became 213 instead of 170 (the sample on `shell-options` before the change: 222, 213, 170, 231, 247, 203) | The original blends in the frame buffer in bytes (gamma space); Stride blends with an sRGB target view in linear space (`docs/CLIENT-UI-RENDERING.md` §3). The same coverage gives a brighter edge in linear space | **fixed** for bright text (`UiAlphaCurves.LightOnDark`: stored alpha = `decode(coverage)`, over black exactly the gamma-space value; after the change the edge pixels are 102, 153, 170, 187, 204, 238 – the steps of 17). An approximation over a non-black background; dark text unchanged. Not re-measured in the client window (swap chain) |
+| `FONT` in Uniform mode | windows without a template scale with the 4:3 factor, the original leaves `FONT` unscaled (only templates grow with `adjustFontSize`) | layout mode of the shell (`UiScaleMode.Uniform`) | **deliberate** (everything grows evenly; at 1280x720 templates are 1.2 times instead of 1.42 times as large) |
+| `DefaultWindowFont` (Times New Roman 14) | `UiWindowTree.FallbackFont` is Arial Unicode MS 12 | measured: **0 of 792 windows with text** have neither `FONT` nor a template, so without effect | **open**, without consequence |
+| `LocalFontFile`, `UseHardWordWrap` | not applied | English: no `LocalFontFile`, hard wrap off | not checkable (only English present) |
 
-### 4.2 Layout des Textblocks
+### 4.2 Layout of the text block
 
-| Element | Abweichung | Ursache | Status |
+| Element | Deviation | Cause | Status |
 |---|---|---|---|
-| Zeilenumbruch (Statik, Knöpfe) | Wort wurde bei Breite = Umbruchbreite noch auf die Zeile gesetzt | greedy `>`; Original `≥` (`Cursor.X + Leerzeichen + Wort ≥ Breite`) | **behoben** (`UiSentenceLayout`, `SentenceLayoutTests`) |
-| Umgebrochene linksbündige Zeile | ohne Einzug | `Build_Sentence_Not_Centered` lässt die Folgezeile mit dem Leerzeichen beginnen (ein Leerzeichen breiter Einzug) | **behoben** |
-| Blockbreite/Zentrierung | Mitte um die Überlappung daneben | `extent.X = maxX + Get_Extra_Overlap` | **behoben** |
-| `WRAP_CENTERED` | Zeilen um ein Leerzeichen anders gebrochen und zentriert | `Build_Sentence_Centered` zählt das Leerzeichen doppelt und zentriert auf die Blockbreite des anderen Aufbaus | **behoben** (Höhe des Blocks bleibt die des anderen Aufbaus, wie im Original) |
-| Radioknöpfe | wurden umgebrochen | `drawRadioButtonText` setzt weder Umbruch noch Zentrierung | **behoben** |
-| Knöpfe, Kontrollkästchen, Radioknöpfe | Text am Fensterrand abgeschnitten („Alternate Mouse Setu“) | Zuschnitt auf das Fenster, den im Original nur statischer Text setzt | **behoben** |
-| Listen-/Auswahltext | Versatz 4, Randfarbe des Fensters | `TEXT_X_OFFSET` = 5, Schatten fest `(0, 0, 0, 255)` | **behoben** |
-| Eingabefelder | Text mittig, Versatz 4, kein Scrollen | Original: x + 5 + 2, y + 5, Zuschnitt, Scrollen in Halbbreitenschritten; schreibgeschütztes Auswahlfeld: x + 10 | **behoben** (Blinken des Cursors nicht nachgebildet) |
-| Kurzbefehlsknöpfe (`SHORTCUT_BUTTON`) | – | Status entsteht im Original zur Laufzeit im Code, nicht in den Layouts; die Kurzbefehlsleiste fehlt im Client | **offen** |
-| `&`-Hotkeymarken (`HOTKEY_TEXT`) | – | nur in `ControlBarPopupDescription.wnd`; 385 englische Texte enthalten `&` (z. B. „C&C“), dort wird es nie entfernt – richtig, weil `ParseHotKey` nur dort gilt | **offen** (mit dem Popup) |
+| Line wrap (static text, buttons) | a word was still put on the line at width = wrap width | greedy `>`; original `≥` (`Cursor.X + space + word ≥ width`) | **fixed** (`UiSentenceLayout`, `SentenceLayoutTests`) |
+| Wrapped left-aligned line | without indent | `Build_Sentence_Not_Centered` lets the following line begin with the space (an indent one space wide) | **fixed** |
+| Block width/centring | centre off by the overlap | `extent.X = maxX + Get_Extra_Overlap` | **fixed** |
+| `WRAP_CENTERED` | lines broken and centred differently by one space | `Build_Sentence_Centered` counts the space twice and centres on the block width of the other construction | **fixed** (the height of the block stays that of the other construction, as in the original) |
+| Radio buttons | were wrapped | `drawRadioButtonText` sets neither wrap nor centring | **fixed** |
+| Buttons, check boxes, radio buttons | text cut off at the window edge ("Alternate Mouse Setu") | clipping to the window, which in the original only static text sets | **fixed** |
+| List/combo text | offset 4, border color of the window | `TEXT_X_OFFSET` = 5, shadow fixed `(0, 0, 0, 255)` | **fixed** |
+| Entry fields | text centred, offset 4, no scrolling | original: x + 5 + 2, y + 5, clipping, scrolling in half-width steps; read-only combo box: x + 10 | **fixed** (blinking of the cursor not reproduced) |
+| Shortcut buttons (`SHORTCUT_BUTTON`) | – | in the original the status arises at run time in the code, not in the layouts; the shortcut bar is missing in the client | **open** |
+| `&` hotkey marks (`HOTKEY_TEXT`) | – | only in `ControlBarPopupDescription.wnd`; 385 English texts contain `&` (e.g. "C&C"), there it is never removed – correct, because `ParseHotKey` applies only there | **open** (with the popup) |
 
-### 4.3 Farbe, Umriss, Schatten
+### 4.3 Color, outline, shadow
 
-| Element | Abweichung | Ursache | Status |
+| Element | Deviation | Cause | Status |
 |---|---|---|---|
-| Schatten | – | (+1, +1) in der Randfarbe vor dem Text, durchsichtige Randfarbe = kein Schatten – stimmt mit `W3DDisplayString::draw` überein | geprüft, unverändert |
-| Textfarben je Zustand | – | `TEXTCOLOR` Enabled/Disabled/Hilite wie in den `W3D…Draw`-Funktionen | geprüft, unverändert |
+| Shadow | – | (+1, +1) in the border color before the text, transparent border color = no shadow – agrees with `W3DDisplayString::draw` | checked, unchanged |
+| Text colors per state | – | `TEXTCOLOR` Enabled/Disabled/Hilite as in the `W3D…Draw` functions | checked, unchanged |
 
-### 4.4 Zeichenketten (CSF/STR)
+### 4.4 Strings (CSF/STR)
 
-| Element | Abweichung | Ursache | Status |
+| Element | Deviation | Cause | Status |
 |---|---|---|---|
-| Platzhalter | – | 148 englische Zeichenketten mit printf-Umwandlungen; `GameTextFormatter` prüft Typ und Anzahl und wirft statt zu raten; Geld, Kosten, Gebäudezähler laufen darüber | geprüft (`TextAndSettingsTests`) |
-| Fehlende Labels | – | `LocalizedText.Get` liefert `??Label??` und zählt (`MissingLabels`); im Shell-Durchlauf 0, im Werkzeug nur die absichtlichen und `Static Text`, `Version` | geprüft |
-| Ungelöste Layout-Texte | 27 Texte in 80 Layouts (`GUI:Monkey`, `GUI:MockupScreen`, `$$$` …) | Platzhalter von GUIEdit; sie stehen in Layouts, die kein Bildschirm anzeigt, oder werden vom Programmcode ersetzt | gezählt (`font-audit.txt`) |
-| `Data/Patch.str` (7 Zeilen) | wird nicht gelesen | das Original liest `Generals.csf`/`Generals.str` und `map.str`, nie `Patch.str` | geprüft |
-| Nur Englisch | andere Sprachen nicht prüfbar | nur `Data/English/generals.csf` ist ausgeliefert | offen |
+| Placeholders | – | 148 English strings with printf conversions; `GameTextFormatter` checks type and count and throws instead of guessing; money, costs, building counters go through it | checked (`TextAndSettingsTests`) |
+| Missing labels | – | `LocalizedText.Get` returns `??Label??` and counts (`MissingLabels`); 0 in the shell pass, in the tool only the intentional ones and `Static Text`, `Version` | checked |
+| Unresolved layout texts | 27 texts in 80 layouts (`GUI:Monkey`, `GUI:MockupScreen`, `$$$` …) | placeholders of GUIEdit; they are in layouts that no screen shows, or are replaced by the program code | counted (`font-audit.txt`) |
+| `Data/Patch.str` (7 lines) | is not read | the original reads `Generals.csf`/`Generals.str` and `map.str`, never `Patch.str` | checked |
+| English only | other languages not checkable | only `Data/English/generals.csf` is shipped | open |
 
-### 4.5 Texte, die es so nicht geben dürfte
+### 4.5 Texts that should not exist like this
 
-| Element | Abweichung | Ursache | Status |
+| Element | Deviation | Cause | Status |
 |---|---|---|---|
-| Geldanzeige | „$$$“ oben links in der Ecke plus eine Zahl in Arial 10 am Schemarechteck | `MoneyDisplay` blieb mit Platzhalter und 100x100-Rechteck stehen; die Zahl wurde zusätzlich von Hand gezeichnet | **behoben** (`$ 10000` im Fenster am Schemarechteck, `HudTests.MoneyDisplay`) |
-| Befehlssymbole | Hotkeybuchstabe oben links, Kostenzahl unten rechts | Zusatz des Clients, das Original druckt nichts auf die Symbole | **behoben** (entfernt; Beschreibung als Tooltip) |
-| Tooltips | fehlten vollständig (`UiWindowTree.Tooltip` wurde von keinem Code gezeichnet) | nie umgesetzt | **behoben/vereinfacht**: `UiTooltipLayout`, `TooltipPainter`; die Befehlsknopfbeschreibung folgt `populateBuildTooltipLayout` (Name, Kosten, Beschreibung, „Insufficient funds“, „Requires: …“, gekauftes Upgrade; `docs/GAME-HUD.md` §5a), aber als Zeigertooltip statt `ControlBarPopupDescription.wnd`; Geld- und Energiefenster beschreiben sich; Objekttooltips und Wissenschaftstexte fehlen |
-| Tooltip-Zeitverhalten | blieb sichtbar, solange der Zeiger im Fenster war | Original: der Zeiger muss `Delay` still stehen (`createStreamMessages`) | **behoben** (`WndTests.TooltipStateMachine`) |
-| Optionen: Eingabefelder | zeigten „Entry“ | TEXT der Layoutdatei, `OptionsMenuInit` setzt Werte | **behoben** (leer) |
-| Skirmish: Armeen, Farben, Teams | `FactionAmerica`, `Color 1`, `None` | feste Namen | **behoben** (USA/China/GLA/Random, Gold/Red/Blue/Green/Orange/Cyan/Purple/Pink, Team:0..4; `ShellTests`) |
-| Skirmish: „Computer“, „(no map selected)“ | feste englische Wörter | kein CSF-Label | **behoben**: die Slots bieten wie `SkirmishGameOptionsMenuInit` `GUI:Open`, `GUI:Closed`, `GUI:EasyAI`, `GUI:MediumAI`, `GUI:HardAI`; Namensfeld `GUI:Player`; die Karte ist wie im Original vorbelegt (`getPreferredMap`/`getDefaultMap`), einen Zustand „keine Karte“ gibt es nur ohne jede Mehrspielerkarte (dann leer). **Nachtrag 5. Oktober 2026:** statt der drei Armeen bietet ein Slot nur noch `GUI:MediumAI` („Medium Army“) – die drei starteten dieselbe KI, und keine belegte Schwierigkeitswirkung gilt im Skirmish (`docs/SIMULATION-CORE.md` §35); der Zähler `GameShell.SkirmishDifficultyIgnored` ist entfallen |
-| Skirmish: Farbeinträge ohne Farbfläche | Text statt farbiger Fläche | Auswahlfelder kennen keine Eintragsfarben | **offen** |
-| Credits | Schriften Arial 24 fett/16 fett/12 | feste Werte | **behoben** (Language.ini + `adjustFontSize`, `ShellTests`); **offen:** `COLUMN`-Paare, Scrollrate (Original 2 px je Frame, hier 40 px/s) |
-| Abschlussbildschirm | Spielernamen sind die Armeenamen („FactionAmerica“) | Namen kommen aus der Sitzung | **offen** (außerhalb dieses Auftrags: Spielername aus der Einrichtung) |
-| Briefing/Ladeschirm | Standbild statt Film und Fortschrittstexten | Filme/Bink fehlen | **offen** (Phase 16, Punkt 5) |
-| Missionstexte | feste Arial-Größen, zentrierte Zeilen, erfundene Platzierung in `MissionPresentation.cs` | nicht über `Language.ini`/`InGameUI.ini` | **behoben**, Abschnitt 4.6 |
-| Cursortext (`drawCursorText`), Beschriftungen über Objekten | gibt es nicht | nie umgesetzt | **offen** |
-| Superwaffen-/Zeitgeberanzeige | feste Werte im Code (Position, Arial 10, Blinkphase) | `InGameUI.ini` war nicht typisiert | **behoben**, Abschnitt 4.6 |
-| Skirmish: Kartenliste | Namen nach zwei Buchstaben abgeschnitten („Al“, „Ar“) | Namen in der ersten von zwei Spalten (5 %/95 %) | **behoben** (zweite Spalte) |
-| Skirmish: Kartenvorschau | Diagonale Kreise über „No map selected“ | `ButtonMapStartPosition0..7` im Layout nicht versteckt, das Original versteckt sie bis `positionStartSpots` | **behoben/vereinfacht** (versteckt; Lage der Startplätze fehlt im Katalog) |
-| Skirmish: Kartenwahl | Spaltenüberschriften, Felder und Start der Einrichtung scheinen durch die Liste | `showSkirmishGameOptionsUnderlyingGUIElements` nicht umgesetzt | **behoben** (`GAME-SHELL.md` §13.1) |
-| Challenge-Menü | `GUI:BioNameEntry` … als Biografie, Knöpfe ohne Bild | Platzhalter des Layouts statt Persona-Texten und Medaillen | **behoben** (§13.4); **offen:** Porträt, Buchstabe-für-Buchstabe-Eingabe |
+| Money display | "$$$" at the top left in the corner plus a number in Arial 10 at the scheme rectangle | `MoneyDisplay` was left with placeholder and 100x100 rectangle; the number was additionally drawn by hand | **fixed** (`$ 10000` in the window at the scheme rectangle, `HudTests.MoneyDisplay`) |
+| Command icons | hotkey letter at the top left, cost number at the bottom right | addition of the client, the original prints nothing onto the icons | **fixed** (removed; description as a tooltip) |
+| Tooltips | were missing completely (`UiWindowTree.Tooltip` was drawn by no code) | never implemented | **fixed/simplified**: `UiTooltipLayout`, `TooltipPainter`; the command button description follows `populateBuildTooltipLayout` (name, cost, description, "Insufficient funds", "Requires: …", purchased upgrade; `docs/GAME-HUD.md` §5a), but as a pointer tooltip instead of `ControlBarPopupDescription.wnd`; money and power windows describe themselves; object tooltips and science texts are missing |
+| Tooltip timing | stayed visible as long as the pointer was in the window | original: the pointer has to stand still for `Delay` (`createStreamMessages`) | **fixed** (`WndTests.TooltipStateMachine`) |
+| Options: entry fields | showed "Entry" | TEXT of the layout file, `OptionsMenuInit` sets values | **fixed** (empty) |
+| Skirmish: armies, colors, teams | `FactionAmerica`, `Color 1`, `None` | fixed names | **fixed** (USA/China/GLA/Random, Gold/Red/Blue/Green/Orange/Cyan/Purple/Pink, Team:0..4; `ShellTests`) |
+| Skirmish: "Computer", "(no map selected)" | fixed English words | no CSF label | **fixed**: the slots offer, like `SkirmishGameOptionsMenuInit`, `GUI:Open`, `GUI:Closed`, `GUI:EasyAI`, `GUI:MediumAI`, `GUI:HardAI`; name field `GUI:Player`; the map is preselected as in the original (`getPreferredMap`/`getDefaultMap`), a state "no map" exists only without any multiplayer map (then empty). **Addendum 5 October 2026:** instead of the three armies a slot now offers only `GUI:MediumAI` ("Medium Army") – the three started the same AI, and no verified difficulty effect applies in the skirmish (`docs/SIMULATION-CORE.md` §35); the counter `GameShell.SkirmishDifficultyIgnored` has been dropped |
+| Skirmish: color entries without a color patch | text instead of a coloured area | combo boxes know no entry colors | **open** |
+| Credits | fonts Arial 24 bold/16 bold/12 | fixed values | **fixed** (Language.ini + `adjustFontSize`, `ShellTests`); **open:** `COLUMN` pairs, scroll rate (original 2 px per frame, here 40 px/s) |
+| Score screen | player names are the army names ("FactionAmerica") | names come from the session | **open** (outside this brief: player name from the setup) |
+| Briefing/loading screen | still image instead of movie and progress texts | movies/Bink are missing | **open** (Phase 16, item 5) |
+| Mission texts | fixed Arial sizes, centred lines, invented placement in `MissionPresentation.cs` | not through `Language.ini`/`InGameUI.ini` | **fixed**, section 4.6 |
+| Cursor text (`drawCursorText`), captions above objects | do not exist | never implemented | **open** |
+| Superweapon/timer display | fixed values in the code (position, Arial 10, blink phase) | `InGameUI.ini` was not typed | **fixed**, section 4.6 |
+| Skirmish: map list | names cut off after two letters ("Al", "Ar") | names in the first of two columns (5 %/95 %) | **fixed** (second column) |
+| Skirmish: map preview | diagonal circles across "No map selected" | `ButtonMapStartPosition0..7` not hidden in the layout, the original hides them until `positionStartSpots` | **fixed/simplified** (hidden; position of the start spots is missing in the catalog) |
+| Skirmish: map selection | column headings, fields and start of the setup show through the list | `showSkirmishGameOptionsUnderlyingGUIElements` not implemented | **fixed** (`GAME-SHELL.md` §13.1) |
+| Challenge menu | `GUI:BioNameEntry` … as biography, buttons without a picture | placeholders of the layout instead of persona texts and medals | **fixed** (§13.4); **open:** portrait, letter-by-letter entry |
 
-### 4.6 Missionstexte (`InGameUI`)
+### 4.6 Mission texts (`InGameUI`)
 
-Das Original zeichnet die Texte der Missionsskripte aus den Daten von `InGameUI.ini` (Positionen, Farben, Zeiten) und `Language.ini` (Schriften; `InGameUI::init` ersetzt jede Schrift des Blocks durch den gleichnamigen
-Language-Platz). Der Client benutzte feste Arial-Größen, zentrierte Zeilen und eigene Texte; jetzt liest `InGameUiSettings` (`CnCNew.Ui/Text`, streng typisiert, Retail: 29 Radiusdekal-Unterblöcke gezählt, Schlüssel
-ohne Wert laufen auf die Konstruktorstandardwerte von `InGameUI.cpp` und stehen in `DefaultedKeys`) die Datei und `InGameUiStyle` (`CnCNew.Game/Data`) löst Schriften wie alle anderen Texte (`LanguageFonts.Resolve`,
-`adjustFontSize`) auf. Einzelheiten und Quellen: `docs/SCRIPT-ENGINE.md` §7a „Bildschirmtexte nach `InGameUI`“.
+The original draws the texts of the mission scripts from the data of `InGameUI.ini` (positions, colors, times) and `Language.ini` (fonts; `InGameUI::init` replaces every font of the block by the
+Language slot of the same name). The client used fixed Arial sizes, centred lines and texts of its own; now `InGameUiSettings` (`CnCNew.Ui/Text`, strictly typed, retail: 29 radius decal sub-blocks counted, keys
+without a value run to the constructor defaults of `InGameUI.cpp` and are in `DefaultedKeys`) reads the file and `InGameUiStyle` (`CnCNew.Game/Data`) resolves fonts like all other texts (`LanguageFonts.Resolve`,
+`adjustFontSize`). Details and sources: `docs/SCRIPT-ENGINE.md` §7a "Screen texts according to `InGameUI`".
 
-| Element | Abweichung (vorher) | Ursache | Status |
+| Element | Deviation (before) | Cause | Status |
 |---|---|---|---|
-| `DISPLAY_TEXT` | eine zentrierte Titelzeile, 5 s | kein Weg zur Meldungsliste | **behoben**: Zeilenliste oben links (`MessagePosition` 10, 22 in Pixeln, `MessageFont` Arial 10 fett angepasst, `MessageColor1/2` abwechselnd, bis zu 6 Zeilen), Verblassen nach der ganzzahligen Rechnung des Originals (`MessageDelayMS / 30 / 1000` = 0; etwa 9,2 s) |
-| `SHOW_MILITARY_CAPTION` | Titel und Text zu einer Zeile zusammengeklebt („KazakhstanEn route“), zentriert, Arial 18 | Zeilenumbruch des Labels ohne Wirkung, feste Schrift | **behoben**: Schreibmaschine (22 Bilder Startverzögerung `MilitaryCaptionDelayMS`, danach ein Zeichen je zweitem Bild, Zeilenwechsel mit erneuter Verzögerung, höchstens 4 Zeilen), erste Zeile Titelschrift (Courier New fett), weitere Zeilen Textschrift, Blockcursor im Takt von 10 Bildern, Position (10, 340) von 800x600 auf den Bildschirm skaliert, nach der Dauer Ausblenden (`floor(Bilder · 0,1)` je Schritt) |
-| `DISPLAY_CINEMATIC_TEXT` | feste Arial 16 fett im unteren Balken | – | **behoben**: Schrift des Skripts (`Name - Size:N [Bold]`) angepasst, zentriert, Umbruch Breite − 20, Oberkante bei 0,9 der Höhe, weiß ohne Schatten, `30 · Sekunden` Bilder; von keiner Kampagnenkarte benutzt, nur synthetisch geprüft |
-| `DISPLAY_COUNTER` / `DISPLAY_COUNTDOWN_TIMER` | Arial 14 fett, Liste von oben unter dem Balken | feste Werte | **behoben**: ab `NamedTimerCountdownPosition` (0,90 / 0,666 der Bildfläche) nach oben gestapelt, rechtsbündig in der rechten Hälfte, Schrift/Farbe `NamedTimerCountdown*`, bei 0:00 Bereitschaftsschrift und Blinken (500 ms = 15 Bilder) in der Blinkfarbe |
-| Superwaffenliste | Konstanten im Code (`PositionX` …), Arial 10 aus dem Code, Blinkphase gegenläufig, „...“ rechtsbündig | `InGameUI.ini` nicht typisiert | **behoben**: Werte und Schriften aus `InGameUiStyle`, Blinkfarbe in ungeraden Perioden (`m_superweaponUsedFlashColor` beginnt wahr), „...“ linksbündig ab x |
-| `INGAME_POPUP_MESSAGE` | wie eine Titelzeile, nach 5 s verschwunden | nie als Fenster umgesetzt | **behoben/vereinfacht**: `InGamePopupMessage.wnd` mit OK-Knopf (`MissionPopupWindow`), Enter/Escape beim Loslassen, pausiert und ist modal, wenn das Skript es verlangt; Textfarbe die des Layouts (254) statt `PopupMessageColor` (255) |
-| Sprach-/Filmplatzhalter | Arial 14; kein Untertitel | feste Schrift; `doSpeechPlay` blieb unbeachtet | **behoben/bewusst**: Untertitel `DIALOGEVENT:<Name>Subtitle` als Missionsbeschriftung (8 s) wenn vorhanden, nicht leer und ohne führendes `*` (englisch 1 von 2.455); der Platzhalter („(speech: Name)“, „(movie placeholder: Name)“) bleibt, gekennzeichnet, in der `MessageFont` der Daten |
-| Hinweis „(cinematic: the mission script has disabled input)“ | erfundener Text | Debughilfe | **entfernt** (das Original zeigt nichts) |
-| Meldungen des Spiels (Befehl abgelehnt, Bau fertig, Angriff …) | ein „Ticker“ mit erfundenen englischen Texten, von keinem Code gezeichnet | nie an die Meldungsliste angeschlossen | **behoben**: `HudMessageFeed` schreibt die Labels des Originals in dieselbe Liste wie `DISPLAY_TEXT` (`docs/GAME-HUD.md` §8 „Meldungsliste“); was im Original keine Zeile hat, wird gezählt |
-| Letterbox-Balken | ein Achtel der Bildhöhe, unter den Texten | erfunden | **behoben**: `(Höhe − 9/16 · Breite) / 2` oben und unten (800x600: 75, 1024x768: 96, 16:9 und breiter: keine), über den Meldungen und unter dem Filmtext, in einer Sekunde eingeblendet, beim Ende blendet nur der obere aus (`W3DDisplay::renderLetterBox`, `W3DDisplay::draw`) |
-| Tippklick der Missionsbeschriftung | fehlte | nicht verdrahtet | **behoben**: je getipptem Zeichen `MilitarySubtitlesTyping` an den Ton des Clients (`InGameUI::update`); gezählt im Missionsbericht |
-| Ergebnisbanner („MISSION ACCOMPLISHED“) | feste Arial 28 fett | kein Original-Gegenstück (Ergebnisbildschirm/Film) | **bewusst** als erfundener Platzhalter, feste Schrift, in `MissionOutputCatalog`/Doku so benannt |
-## 5. Messwerte (`UiRenderTool --font-audit`, 80 Layouts, 1280x720 und 1920x1080, Uniform)
+| `DISPLAY_TEXT` | one centred title line, 5 s | no way to the message list | **fixed**: line list at the top left (`MessagePosition` 10, 22 in pixels, `MessageFont` Arial 10 bold adjusted, `MessageColor1/2` alternating, up to 6 lines), fading by the integer computation of the original (`MessageDelayMS / 30 / 1000` = 0; about 9.2 s) |
+| `SHOW_MILITARY_CAPTION` | title and text glued together into one line ("KazakhstanEn route"), centred, Arial 18 | line break of the label without effect, fixed font | **fixed**: typewriter (22 frames of start delay `MilitaryCaptionDelayMS`, then one character every second frame, line change with renewed delay, at most 4 lines), first line title font (Courier New bold), further lines text font, block cursor in a rhythm of 10 frames, position (10, 340) scaled from 800x600 to the screen, fading out after the duration (`floor(frames · 0.1)` per step) |
+| `DISPLAY_CINEMATIC_TEXT` | fixed Arial 16 bold in the lower bar | – | **fixed**: font of the script (`Name - Size:N [Bold]`) adjusted, centred, wrap width − 20, top edge at 0.9 of the height, white without shadow, `30 · seconds` frames; used by no campaign map, checked only synthetically |
+| `DISPLAY_COUNTER` / `DISPLAY_COUNTDOWN_TIMER` | Arial 14 bold, list from the top below the bar | fixed values | **fixed**: stacked upwards from `NamedTimerCountdownPosition` (0.90 / 0.666 of the screen area), right-aligned in the right half, font/color `NamedTimerCountdown*`, at 0:00 ready font and blinking (500 ms = 15 frames) in the flash color |
+| Superweapon list | constants in the code (`PositionX` …), Arial 10 from the code, blink phase reversed, "..." right-aligned | `InGameUI.ini` not typed | **fixed**: values and fonts from `InGameUiStyle`, flash color in odd periods (`m_superweaponUsedFlashColor` starts true), "..." left-aligned from x |
+| `INGAME_POPUP_MESSAGE` | like a title line, gone after 5 s | never implemented as a window | **fixed/simplified**: `InGamePopupMessage.wnd` with OK button (`MissionPopupWindow`), Enter/Escape on release, pauses and is modal if the script requires it; text color that of the layout (254) instead of `PopupMessageColor` (255) |
+| Speech/movie placeholders | Arial 14; no subtitle | fixed font; `doSpeechPlay` was disregarded | **fixed/deliberate**: subtitle `DIALOGEVENT:<Name>Subtitle` as military caption (8 s) if present, not empty and without a leading `*` (English 1 of 2,455); the placeholder ("(speech: Name)", "(movie placeholder: Name)") stays, marked, in the `MessageFont` of the data |
+| Hint "(cinematic: the mission script has disabled input)" | invented text | debug aid | **removed** (the original shows nothing) |
+| Messages of the game (command rejected, construction finished, attack …) | a "ticker" with invented English texts, drawn by no code | never connected to the message list | **fixed**: `HudMessageFeed` writes the labels of the original into the same list as `DISPLAY_TEXT` (`docs/GAME-HUD.md` §8 "Message list"); what has no line in the original is counted |
+| Letterbox bars | one eighth of the screen height, below the texts | invented | **fixed**: `(height − 9/16 · width) / 2` at the top and bottom (800x600: 75, 1024x768: 96, 16:9 and wider: none), above the messages and below the cinematic text, faded in within one second, at the end only the upper one fades out (`W3DDisplay::renderLetterBox`, `W3DDisplay::draw`) |
+| Typing click of the military caption | was missing | not wired | **fixed**: per typed character `MilitarySubtitlesTyping` to the sound of the client (`InGameUI::update`); counted in the mission report |
+| Result banner ("MISSION ACCOMPLISHED") | fixed Arial 28 bold | no counterpart in the original (result screen/movie) | **deliberate** as an invented placeholder, fixed font, named as such in `MissionOutputCatalog`/docs |
+## 5. Measured values (`UiRenderTool --font-audit`, 80 layouts, 1280x720 and 1920x1080, Uniform)
 
-* 36 verschiedene aufgelöste Schriften (Familie, Pixelhöhe, fett, Stauchung); 1.190 Fenstertextzeilen aus 792 Fenstern mit Text.
-* GDI gegen FreeType: 326 Zeilen mit anderer Breite (Σ 2.258 px); davon „Generals“: 294 Zeilen, 2.224 px, größte Abweichung 85 px (Vorlage mit 24 Punkt, 32 px).
-* Zeilenhöhe: 29 von 36 Schriften verschieden.
-* Vorschub (Großbuchstaben A–Z, „Generals“ 24 px): GDI 364, FreeType-91-% 390, FreeType 100 % 417.
-* Glyphdeckung der englischen CSF (6.422 Zeichenketten): 97 verschiedene Codepunkte (einer davon der Zeilenumbruch); alle ab U+0020 liegen in Arial bis auf drei C1-Zeichen (U+0085 ×267, U+0093 ×5, U+0094 ×6), die in der ganzen Kette keinen Glyph haben.
-* Zeichenketten mit `&`: 385; mit printf-Umwandlung: 148; mit Zeilenumbruch: 772.
-* Familien: `FixedSys`, `Courier`, `Courier New`, `Times New Roman`, `Arial` vorhanden; `Arial Unicode MS` ersetzt (gezählt).
-* Werkzeuglauf (92 Bilder + Selbstprüfung): `commands=20997 sprites=44459 drawCalls=3735 batches=1368 missingImages=12 missingTextures=0 missingLabels=12 missingGlyphs=0
-  substitutedGlyphs=12 customDraws=56 unbalancedClips=4` (die zwölf fehlenden Labels/Bilder und die zwölf ersetzten Glyphen sind die absichtlichen der synthetischen Szenen plus
-  `Static Text`/`Version`/`HardCodedWithControlBarSchemeIni` der rohen Layouts). Neu in den Briefing-Szenen: `WarSchoolBar.tga` ist 512x512, die Tabelle sagt 1.024x1.024 (gezählt,
-  Quellrechtecke werden skaliert).
+* 36 different resolved fonts (family, pixel height, bold, compression); 1,190 window text lines from 792 windows with text.
+* GDI against FreeType: 326 lines with a different width (Σ 2,258 px); of which "Generals": 294 lines, 2,224 px, largest deviation 85 px (template with 24 point, 32 px).
+* Line height: 29 of 36 fonts different.
+* Advance (capitals A–Z, "Generals" 24 px): GDI 364, FreeType 91 % 390, FreeType 100 % 417.
+* Glyph coverage of the English CSF (6,422 strings): 97 different code points (one of them the line break); all from U+0020 on are in Arial except for three C1 characters (U+0085 ×267, U+0093 ×5, U+0094 ×6), which have no glyph in the whole chain.
+* Strings with `&`: 385; with printf conversion: 148; with line break: 772.
+* Families: `FixedSys`, `Courier`, `Courier New`, `Times New Roman`, `Arial` present; `Arial Unicode MS` substituted (counted).
+* Tool run (92 pictures + self-check): `commands=20997 sprites=44459 drawCalls=3735 batches=1368 missingImages=12 missingTextures=0 missingLabels=12 missingGlyphs=0
+  substitutedGlyphs=12 customDraws=56 unbalancedClips=4` (the twelve missing labels/images and the twelve substituted glyphs are the intentional ones of the synthetic scenes plus
+  `Static Text`/`Version`/`HardCodedWithControlBarSchemeIni` of the raw layouts). New in the briefing scenes: `WarSchoolBar.tga` is 512x512, the table says 1,024x1,024 (counted,
+  source rectangles are scaled).
 
-## 6. Goldene Werte
+## 6. Golden values
 
-Die Sollwerte belegen Reproduzierbarkeit, nicht Richtigkeit.
+The expected values prove reproducibility, not correctness.
 
-* `tests/CnCNew.Game.Tests/baselines/screens.txt`: **48 von 54** Werten geändert (alle Bildschirme außer `MatchLoading`): `MainMenu`, `MainMenu-SinglePlayer`, `QuitConfirm`, `Credits`,
-  `ScoreScreen`, `SkirmishMapSelect`, `SkirmishSetup`, `SkirmishSetup-MapChosen`, je sechs Auflösungen. Ursachen: Zuschnittrechtecke der Knopf-/Kästchentexte (jetzt ganzer Bildschirm), Umbruch und
-  Einzug, Eingabefeld-/Auswahlfeldtexte, lokalisierte Skirmish-Wörter, Credits-Schriften. (Die Hash-Bildung nutzt das synthetische `ShellTextMeasure`, die Werte hängen also nicht von GDI ab.)
-* Danach (Phase 16, Menüs): vier der 54 Werte (`Credits`, `SkirmishSetup`, `SkirmishMapSelect`, `SkirmishSetup-MapChosen`, je sechs Auflösungen, also 24) neu aufgenommen, weil das Hauptmenü unter diesen Bildschirmen nicht mehr gezeichnet wird
+* `tests/CnCNew.Game.Tests/baselines/screens.txt`: **48 of 54** values changed (all screens except `MatchLoading`): `MainMenu`, `MainMenu-SinglePlayer`, `QuitConfirm`, `Credits`,
+  `ScoreScreen`, `SkirmishMapSelect`, `SkirmishSetup`, `SkirmishSetup-MapChosen`, six resolutions each. Causes: clipping rectangles of the button/check box texts (now the whole screen), wrap and
+  indent, entry field/combo box texts, localised skirmish words, credits fonts. (The hash formation uses the synthetic `ShellTextMeasure`, so the values do not depend on GDI.)
+* After that (Phase 16, menus): four of the 54 values (`Credits`, `SkirmishSetup`, `SkirmishMapSelect`, `SkirmishSetup-MapChosen`, six resolutions each, so 24) re-recorded, because the main menu is no longer drawn below these screens
   (`GAME-SHELL.md` §13.5).
-* `tests/CnCNew.Game.Tests/baselines/hud-drawlist-1280x720.sha256`: geändert (`B2C97FCE…` → `CE98E458…`): das Geldfenster trägt den Text „$ 10000“ am Schemarechteck statt „$$$“ im 100x100-Feld, die
-  von Hand gezeichnete Zahl entfällt.
-* `UiRenderTool`: die Bilder ändern sich insgesamt (Schrift); es gibt keine Sollwerte, nur die Zweilauf-Gleichheit.
-* Nach dem Zusammenführen mit dem Übergangsauftrag `screens.txt` neu schreiben (`CNCNEW_UPDATE_BASELINES=1`) und die Zeilenenden (CRLF) prüfen.
+* `tests/CnCNew.Game.Tests/baselines/hud-drawlist-1280x720.sha256`: changed (`B2C97FCE…` → `CE98E458…`): the money window carries the text "$ 10000" at the scheme rectangle instead of "$$$" in the 100x100 field, the
+  number drawn by hand is dropped.
+* `UiRenderTool`: the pictures change as a whole (font); there are no expected values, only the two-run equality.
+* After merging with the transition brief, rewrite `screens.txt` (`CNCNEW_UPDATE_BASELINES=1`) and check the line endings (CRLF).
 
-## 7. Was nicht belegt ist (ein Mensch muss hinsehen)
+## 7. What is not verified (a human has to look)
 
-1. **Ob die Texte jetzt wie im Original aussehen.** Alles Obige ist Übereinstimmung mit dem Referenzcode; die Rastergenauigkeit hängt an der Arial-Fassung und am Hinting dieser Installation.
-2. **Das Clientfenster.** Alle Bilder stammen aus dem Offscreen-Werkzeug und dem `--smoke-test --capture` des Clients, nie aus einem echten Fenster mit Swap-Chain (Gammaverhalten und damit die
-   Wirkung von `UiAlphaCurves`, DPI-Skalierung des Fensters, `UiRenderer`-Zähler im Betrieb).
-3. **Tooltips:** Aussehen, Platzierung, Geschwindigkeit der Einblendung und die vereinfachte Befehlsknopfbeschreibung gegen das Originalpopup.
-4. **Uniform-Modus gegen Originalmaßstab:** bei 1280x720 und größer sind Texte im Verhältnis zu den Fenstern anders als im Original, weil die Hülle gleichmäßig skaliert (Abschnitt 4.1).
-5. **Durchscheinende Menüs** – **behoben** (`docs/GAME-SHELL.md` §13): die Hülle zeichnet nur noch den obersten ersetzenden Bildschirm (`Shell::push` versteckt den darunter) und was darüber liegt; Optionen, Kartenwahl
-   und Dialoge sind wie im Original Überlagerungen. Eine Hintergrundebene war nicht nötig (Rahmen und Lineal bringen die ersetzenden Layouts selbst mit). Vorher schienen die Knopftexte des Hauptmenüs („CHALLENGE“,
-   „BACK“, „SKIRMISH“ …) durch die neue Seite, am stärksten in `flow-skirmish-setup-map-*.png`.
-6. **`SinglePlayerMenu.wnd`** (Neu/Laden/Zurück nach „USA“) – **behoben**: ist ein Erbstück des ersten Generals, das Zero Hour nie öffnet; das Original fragt die Schwierigkeit im Hauptmenü (`MapBorder4`), die Hülle
-   ebenso (`GAME-SHELL.md` §13.2). Die Seite mit Times New Roman gibt es nicht mehr.
-7. **Tooltip der Befehlsknöpfe:** Voraussetzungen, Geldmangel und gekaufte Upgrades stehen jetzt darin (`docs/GAME-HUD.md` §5a); anzusehen bleibt, ob die Zeilen im Zeigertooltip lesbar sind – das Original hat dafür ein eigenes Fenster.
-8. **Missionstexte (Abschnitt 4.6):** Alle Zeiten, Reihenfolgen und Zahlen stimmen mit `InGameUI.cpp`/`W3DDisplay.cpp` überein und sind in Tests festgehalten, aber nie mit einem Original verglichen. Ein Mensch muss ansehen: wie die
-   Schreibmaschine im Bewegtbild wirkt (Takt, Cursor, Ausblenden), ob Courier New in dieser Größe wie im Original aussieht, die Lage von Meldungen, Zeitgebern und Superwaffenliste auf den Bildschirmen, das Meldungsfenster
-   (Knopfbilder, Textumbruch) und den Wegfall des Hinweises bei gesperrter Eingabe.
-9. **Aktualisierung je Logikschritt statt je Bild:** Das Original verblasst Meldungen und Missionsbeschriftung in `InGameUI::update` einmal je gezeichnetem Bild (also schneller ab 60 Bildern je Sekunde); hier einmal je
-   Logikschritt (30 je Sekunde). Bei der Schreibmaschine macht das keinen Unterschied (sie vergleicht mit dem Logikbild), beim Verblassen schon.
-10. **Letterbox** – **behoben** nach `W3DDisplay::renderLetterBox`: Balken `(Höhe − 9/16 · Breite) / 2`, bei 16:9 und breiter keine; sie liegen über den Meldungen (y = 22 verschwindet bei 4:3
-    also unter dem oberen Balken, wie im Original) und unter dem Filmtext. Abweichung: die Blende zählt Logikschritte (30 = 1000 ms) statt Wanduhr, und der Mauszeiger des Clients liegt
-    über den Balken (im Original darunter). Anzusehen: ein 4:3-Fenster während eines Intros.
-11. **Tippklick** – **behoben**: je getipptem Zeichen `MilitarySubtitlesTyping` (`SoundEffects.ini`: `utext1a`, Lautstärke 15, `Type = ui player`); auf `MD_USA01` 52 Klicks angefragt und
-    52 gestartet. **Gehört hat es niemand**, auch nicht, ob 15 Klicks je Sekunde über der Musik angenehm sind.
-12. **Befehlsrückmeldungen** – **behoben**: sie stehen in derselben Meldungsliste wie `DISPLAY_TEXT` (`docs/GAME-HUD.md` §8). Anzusehen: ob die Zeilen oben links auffallen, wenn ein
-    Bauplatz abgelehnt wird.
+1. **Whether the texts now look like in the original.** Everything above is agreement with the reference code; the raster accuracy depends on the Arial version and on the hinting of this installation.
+2. **The client window.** All pictures come from the offscreen tool and the `--smoke-test --capture` of the client, never from a real window with a swap chain (gamma behaviour and thus the
+   effect of `UiAlphaCurves`, DPI scaling of the window, `UiRenderer` counters in operation).
+3. **Tooltips:** look, placement, speed of the fade-in and the simplified command button description against the original popup.
+4. **Uniform mode against original scale:** at 1280x720 and larger, texts are different in relation to the windows than in the original, because the shell scales evenly (section 4.1).
+5. **Menus showing through** – **fixed** (`docs/GAME-SHELL.md` §13): the shell now draws only the topmost replacing screen (`Shell::push` hides the one below) and what lies above it; options, map selection
+   and dialogs are overlays as in the original. A background layer was not necessary (the replacing layouts bring frame and ruler themselves). Before, the button texts of the main menu ("CHALLENGE",
+   "BACK", "SKIRMISH" …) showed through the new page, most strongly in `flow-skirmish-setup-map-*.png`.
+6. **`SinglePlayerMenu.wnd`** (New/Load/Back after "USA") – **fixed**: it is an heirloom of the first Generals that Zero Hour never opens; the original asks for the difficulty in the main menu (`MapBorder4`), the shell
+   likewise (`GAME-SHELL.md` §13.2). The page with Times New Roman no longer exists.
+7. **Tooltip of the command buttons:** prerequisites, lack of money and purchased upgrades are now in it (`docs/GAME-HUD.md` §5a); what remains to be looked at is whether the lines are readable in the pointer tooltip – the original has a window of its own for that.
+8. **Mission texts (section 4.6):** all times, orders and numbers agree with `InGameUI.cpp`/`W3DDisplay.cpp` and are recorded in tests, but never compared with an original. A human has to look at: how the
+   typewriter comes across in motion (rhythm, cursor, fading out), whether Courier New looks like in the original at this size, the position of messages, timers and superweapon list on the screens, the message window
+   (button images, text wrap) and the removal of the hint when input is locked.
+9. **Update per logic step instead of per frame:** the original fades messages and military caption in `InGameUI::update` once per drawn frame (so faster from 60 frames per second on); here once per
+   logic step (30 per second). For the typewriter that makes no difference (it compares with the logic frame), for the fading it does.
+10. **Letterbox** – **fixed** after `W3DDisplay::renderLetterBox`: bars `(height − 9/16 · width) / 2`, none at 16:9 and wider; they lie above the messages (y = 22 thus disappears at 4:3
+    below the upper bar, as in the original) and below the cinematic text. Deviation: the fade counts logic steps (30 = 1000 ms) instead of wall clock, and the mouse pointer of the client lies
+    above the bars (in the original below). To be looked at: a 4:3 window during an intro.
+11. **Typing click** – **fixed**: per typed character `MilitarySubtitlesTyping` (`SoundEffects.ini`: `utext1a`, volume 15, `Type = ui player`); on `MD_USA01` 52 clicks requested and
+    52 started. **Nobody has heard it**, nor whether 15 clicks per second over the music are pleasant.
+12. **Command feedback** – **fixed**: it is in the same message list as `DISPLAY_TEXT` (`docs/GAME-HUD.md` §8). To be looked at: whether the lines at the top left are noticed when a
+    building site is rejected.
 
-## 8. Tests und Werkzeuge
+## 8. Tests and tools
 
-| Prüfung | Ort |
+| Check | Place |
 |---|---|
-| Umbruch/Blockbreite/Zentrierung (9 Fälle) und Tooltip-Layout (Position, Kanten, Einblendung) | `tests/CnCNew.Ui.Tests/SentenceLayoutTests.cs` |
-| Tooltipstil aus `Mouse.ini`, strenge Fehler | `tests/CnCNew.Ui.Tests/TextAndSettingsTests.cs` (`MouseTooltipSettingsAreTypedFromTheGraph`) |
-| Zuschnitt und Position der Knopf-/Kästchentexte, Tooltipzeit und -alter | `tests/CnCNew.Ui.Tests/WndTests.cs` (`DrawListGolden`, `TooltipStateMachine`) |
-| Geldfenster, Befehlsknopf-Tooltip, keine Texte auf den Symbolen | `tests/CnCNew.Game.Tests/HudTests.cs` |
-| Skirmish-Wörter, leere Eingabefelder, Zeigertooltip der Hülle, Credits-Schriften | `tests/CnCNew.Game.Tests/ShellTests.cs` |
-| Bildschirmstapel (nichts vom Hauptmenü unter ersetzenden Screens), Kartenwahl, Challenge-Menü, Escape in der Ladeliste | `tests/CnCNew.Game.Tests/ShellTests.cs` (`ScreenStackDrawing`, `ChallengeMenuBio`, `LoadGameEscapeWithoutFocus`) |
-| `KeyboardHome`, Bild-/Größenersatz eines Fensters | `tests/CnCNew.Ui.Tests/WndTests.cs` |
-| `InGameUI.ini` typisiert (synthetisch und Retaildatei, Language-Platz gegen INI in Größe/Fett) | `tests/CnCNew.Ui.Tests/TextAndSettingsTests.cs` (`InGameUiSettingsAreTypedFromTheGraph`, `RealInGameUi`) |
-| Meldungsliste, Schreibmaschine Bild für Bild, Ausblenden, Zeitgeber, Filmtext, Meldungsfenster, Skalierung | `tests/CnCNew.Game.Tests/MissionTextTests.cs` (synthetisch; mit `--content-dir`: `MD_USA01`, `MD_CHI02`, Meldungsfenster in `GC_ChemGeneral`) |
-| Meldungen des Spiels: Labels, Lage, Farben, Verblassen, Zählung; abgelehnter Bauplatz über den echten Klickweg | `tests/CnCNew.Game.Tests/HudTests.cs` (`MessageList`, `MessageListFromARefusedPlacement`), `MissionTextTests.cs` (`RealSharedMessageList`) |
-| Letterbox (Maße, Blende, Reihenfolge), Tippklick (synthetisch und `MD_USA01` mit echtem Audio-Director) | `tests/CnCNew.Game.Tests/MissionTextTests.cs` (`LetterboxFollowsTheOriginal`, `TypingClick`, `RealTypingClick`) |
-| Knopfbeschreibung mit Voraussetzungen, Geldmangel, gekauftem Upgrade; Geld- und Energiefenster | `tests/CnCNew.Game.Tests/HudTests.cs` (`CommandButtonRequirements`, `MoneyAndPowerTooltips`) |
-| Tooltip eines deaktivierten Fensters | `tests/CnCNew.Ui.Tests/WndTests.cs` (`TooltipStateMachine`) |
-| Bild der Befehlsleiste mit Meldungszeilen und „Requires“-Tooltip, Letterbox über den Meldungen (drei Größen) | `tools/CnCNew.UiRenderTool` (`HudFeedbackScenes`: `hudfeedback-*.png`, `hudletterbox-*.png`) |
-| Missionstextbild (alle Texte eines Bildschirms, drei Größen) | `tools/CnCNew.UiRenderTool` (`MissionTextScenes`) |
-| GDI-Schrift (Familie wirklich Arial, 17er-Deckungsstufen, Zellmaße, Generals schmaler) | `tools/CnCNew.UiRenderTool` (`FontAudit.SelfCheck` bei jedem Lauf) |
-| Schriftvergleich, Glyphdeckung, Platzhalter-/Hotkey-Zählung | `tools/CnCNew.UiRenderTool -- --font-audit` |
-| Alphakurve für helle Schrift, Glyphcache mit Kurve | `tests/CnCNew.Ui.Tests/UiRenderingTests.cs` (`LightTextGetsTheGammaSpaceAlphaCurve`) |
+| Wrap/block width/centring (9 cases) and tooltip layout (position, edges, fade-in) | `tests/CnCNew.Ui.Tests/SentenceLayoutTests.cs` |
+| Tooltip style from `Mouse.ini`, strict errors | `tests/CnCNew.Ui.Tests/TextAndSettingsTests.cs` (`MouseTooltipSettingsAreTypedFromTheGraph`) |
+| Clipping and position of the button/check box texts, tooltip time and age | `tests/CnCNew.Ui.Tests/WndTests.cs` (`DrawListGolden`, `TooltipStateMachine`) |
+| Money window, command button tooltip, no texts on the icons | `tests/CnCNew.Game.Tests/HudTests.cs` |
+| Skirmish words, empty entry fields, pointer tooltip of the shell, credits fonts | `tests/CnCNew.Game.Tests/ShellTests.cs` |
+| Screen stack (nothing of the main menu below replacing screens), map selection, challenge menu, Escape in the load list | `tests/CnCNew.Game.Tests/ShellTests.cs` (`ScreenStackDrawing`, `ChallengeMenuBio`, `LoadGameEscapeWithoutFocus`) |
+| `KeyboardHome`, image/size replacement of a window | `tests/CnCNew.Ui.Tests/WndTests.cs` |
+| `InGameUI.ini` typed (synthetic and retail file, Language slot against INI in size/bold) | `tests/CnCNew.Ui.Tests/TextAndSettingsTests.cs` (`InGameUiSettingsAreTypedFromTheGraph`, `RealInGameUi`) |
+| Message list, typewriter frame by frame, fading out, timers, cinematic text, message window, scaling | `tests/CnCNew.Game.Tests/MissionTextTests.cs` (synthetic; with `--content-dir`: `MD_USA01`, `MD_CHI02`, message window in `GC_ChemGeneral`) |
+| Messages of the game: labels, position, colors, fading, counting; rejected building site through the real click path | `tests/CnCNew.Game.Tests/HudTests.cs` (`MessageList`, `MessageListFromARefusedPlacement`), `MissionTextTests.cs` (`RealSharedMessageList`) |
+| Letterbox (dimensions, fade, order), typing click (synthetic and `MD_USA01` with the real audio director) | `tests/CnCNew.Game.Tests/MissionTextTests.cs` (`LetterboxFollowsTheOriginal`, `TypingClick`, `RealTypingClick`) |
+| Button description with prerequisites, lack of money, purchased upgrade; money and power windows | `tests/CnCNew.Game.Tests/HudTests.cs` (`CommandButtonRequirements`, `MoneyAndPowerTooltips`) |
+| Tooltip of a disabled window | `tests/CnCNew.Ui.Tests/WndTests.cs` (`TooltipStateMachine`) |
+| Picture of the command bar with message lines and "Requires" tooltip, letterbox above the messages (three sizes) | `tools/CnCNew.UiRenderTool` (`HudFeedbackScenes`: `hudfeedback-*.png`, `hudletterbox-*.png`) |
+| Mission text picture (all texts of one screen, three sizes) | `tools/CnCNew.UiRenderTool` (`MissionTextScenes`) |
+| GDI font (family really Arial, coverage steps of 17, cell metrics, Generals narrower) | `tools/CnCNew.UiRenderTool` (`FontAudit.SelfCheck` on every run) |
+| Font comparison, glyph coverage, placeholder/hotkey counting | `tools/CnCNew.UiRenderTool -- --font-audit` |
+| Alpha curve for bright text, glyph cache with curve | `tests/CnCNew.Ui.Tests/UiRenderingTests.cs` (`LightTextGetsTheGammaSpaceAlphaCurve`) |
