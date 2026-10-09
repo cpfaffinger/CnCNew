@@ -1,3 +1,3 @@
-# Tech-Demo 'mission' (Parameter: siehe demo.ps1)
+# Tech demo 'mission' (parameters: see demo.ps1)
 & "$PSScriptRoot\demo.ps1" mission @args
 

@@ -1,3 +1,3 @@
-# Tech-Demo 'skirmish' (Parameter: siehe demo.ps1)
+# Tech demo 'skirmish' (parameters: see demo.ps1)
 & "$PSScriptRoot\demo.ps1" skirmish @args
 

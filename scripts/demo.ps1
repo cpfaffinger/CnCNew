@@ -1,24 +1,24 @@
 <#
 .SYNOPSIS
-  Baut den Stride-Client aus dem Quelltext und startet eine der Tech-Demos (skirmish, mission, shell) oder eine gestellte Szene (scenario).
+  Builds the Stride client from source and starts one of the tech demos (skirmish, mission, shell) or a staged scene (scenario).
 
 .DESCRIPTION
-  skirmish  Live-Gefecht auf einer Skirmish-Karte (Befehlsleiste, Eingabe, Minimap, Musik, EVA) gegen KI-Gegner.
-  mission   Kampagnenmission hinter der Befehlsleiste (Skripte, Missions-HUD, Briefing-Ablauf der Karte).
-  scenario  Gestellte Einzeldemo zum Auditieren (-Scenario <Name>): kleine Szene auf einer echten Karte, die ein Verhalten isoliert;
-            dieselbe Szene prueft `PresentationTool scenario-audit`. OHNE -Scenario startet nichts: das Skript listet die vorhandenen Szenen
-            (capture-building, tank-duel, jet-strafe, exit-<fraktion>-<gebaeude> ...) und endet. Es gibt keine Standardszene.
-  shell     Hauptmenue-Shell aus den echten WND-Layouts (Kampagne waehlen, Briefing, Mission, Speichern/Laden, Abschluss).
+  skirmish  Live match on a skirmish map (command bar, input, minimap, music, EVA) against AI opponents.
+  mission   Campaign mission behind the command bar (scripts, mission HUD, the map's briefing sequence).
+  scenario  Staged single demo for auditing (-Scenario <name>): a small scene on a real map that isolates one behaviour;
+            `PresentationTool scenario-audit` checks the same scene. WITHOUT -Scenario nothing starts: the script lists the available scenes
+            (capture-building, tank-duel, jet-strafe, exit-<faction>-<building> ...) and ends. There is no default scene.
+  shell     Main-menu shell from the real WND layouts (choose a campaign, briefing, mission, save/load, score screen).
 
 .EXAMPLE
   .\scripts\demo.ps1 skirmish
-  .\scripts\demo.ps1 skirmish -Faction FactionChina -Opponent FactionGLA,FactionAmerica -Map "Maps/Tournament Tundra/Tournament Tundra.map"   # Karte mit genug Startpositionen (Tournament Desert hat nur zwei)
+  .\scripts\demo.ps1 skirmish -Faction FactionChina -Opponent FactionGLA,FactionAmerica -Map "Maps/Tournament Tundra/Tournament Tundra.map"   # a map with enough start positions (Tournament Desert has only two)
   .\scripts\demo.ps1 mission -Map "Maps/GC_ChemGeneral/GC_ChemGeneral.map"
-  .\scripts\demo.ps1 scenario                       # listet die Szenen
+  .\scripts\demo.ps1 scenario                       # lists the scenes
   .\scripts\demo.ps1 scenario -Scenario tank-duel
-  .\scripts\demo.ps1 skirmish -Mouse classic         # Mausbelegung des Originals (links waehlen und befehlen); Vorgabe: alternate (links waehlen, rechts befehlen)
+  .\scripts\demo.ps1 skirmish -Mouse classic         # mouse setup of the original (left selects and commands); default: alternate (left selects, right commands)
   .\scripts\demo.ps1 shell -Size 1920x1080
-  .\scripts\demo.ps1 skirmish -SmokeTest      # headless Rauchtest statt Fenster
+  .\scripts\demo.ps1 skirmish -SmokeTest      # headless smoke test instead of a window
 #>
 [CmdletBinding()]
 param(
@@ -26,20 +26,20 @@ param(
     [ValidateSet('skirmish', 'mission', 'shell', 'scenario')]
     [string]$Demo,
 
-    # Schema-2-Runtimebestand (Originalassets, nicht im Repo).
+    # Schema-2 runtime content (original assets, not in the repository).
     [string]$ContentDir,
 
-    # Karte (nur skirmish/mission).
+    # Map (skirmish/mission only).
     [string]$Map,
 
-    # Spielerfraktion und Gegner (nur skirmish); mehrere Gegner mit Komma.
+    # Player faction and opponents (skirmish only); several opponents separated by commas.
     [string]$Faction = 'FactionAmerica',
     [string[]]$Opponent = @('FactionChina'),
 
-    # Name der gestellten Demo (nur scenario); ohne Namen werden die Szenen gelistet. Die Namen kennt der Client (--list-scenarios).
+    # Name of the staged demo (scenario only); without a name the scenes are listed. The client knows the names (--list-scenarios).
     [string]$Scenario,
 
-    # Spielerseite (nur mission; leer = Standard der Karte).
+    # Player side (mission only; empty = the map's default).
     [string]$HumanSide,
 
     [string]$Size = '1280x720',
@@ -48,17 +48,17 @@ param(
     [ValidateSet('Release', 'Debug')]
     [string]$Configuration = 'Release',
 
-    # Simulationsrate (30, 60 oder 120 Hz); 0 = Standard der Spielschicht.
+    # Simulation rate (30, 60 or 120 Hz); 0 = the game layer's default.
     [int]$TickRate = 0,
 
-    # Mausbelegung dieses Laufs: alternate (links waehlen, rechts befehlen; Vorgabe der Einstellungen) oder classic (Original: links waehlen und befehlen).
+    # Mouse setup of this run: alternate (left selects, right commands; the default of the settings) or classic (original: left selects and commands).
     [ValidateSet('', 'alternate', 'classic')]
     [string]$Mouse = '',
 
-    # Nur mit -SmokeTest: Zahl der Bilder (Originalbilder) des Rauchtests.
+    # Only with -SmokeTest: number of frames (original frames) of the smoke test.
     [int]$Frames = 0,
 
-    # Ton: stumm starten bzw. die Mixer-Ausgabe statt auf das Geraet nach <Verzeichnis>\audio.wav schreiben (ausserhalb des Repos; siehe docs/GAME-AUDIO.md).
+    # Sound: start muted, or write the mixer output to <directory>\audio.wav instead of the device (outside the repository; see docs/GAME-AUDIO.md).
     [switch]$Mute,
     [string]$AudioCapture,
 
@@ -70,7 +70,7 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 if (-not $ContentDir) { $ContentDir = Join-Path $repo 'game\content' }
 if (-not (Test-Path -LiteralPath $ContentDir -PathType Container)) {
-    throw "Inhaltsverzeichnis nicht gefunden: $ContentDir`nDer geprueften Runtimebestand liegt lokal unter game\content (nicht im Repo; scripts\dev-content.ps1 erzeugt ihn aus der eigenen Steam-Installation); sonst mit -ContentDir angeben."
+    throw "Content directory not found: $ContentDir`nThe verified runtime content lies locally under game\content (not in the repository; scripts\dev-content.ps1 creates it from your own Steam installation); otherwise pass -ContentDir."
 }
 $ContentDir = (Resolve-Path -LiteralPath $ContentDir).Path
 
@@ -84,9 +84,9 @@ if (-not $Map) {
 
 $project = Join-Path $repo 'src\CnCNew.Client.Stride\CnCNew.Client.Stride.csproj'
 if (-not $NoBuild) {
-    Write-Host "== Baue Client ($Configuration) ..." -ForegroundColor Cyan
+    Write-Host "== Building client ($Configuration) ..." -ForegroundColor Cyan
     dotnet build $project -c $Configuration --nologo -v quiet
-    if ($LASTEXITCODE -ne 0) { throw "Build fehlgeschlagen (Exitcode $LASTEXITCODE)." }
+    if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
 }
 
 if ($Demo -eq 'scenario') {
@@ -96,15 +96,15 @@ if ($Demo -eq 'scenario') {
     $known = @(dotnet run --project $project -c $Configuration --no-build -- --list-scenarios)
     $listExit = $LASTEXITCODE
     [Console]::OutputEncoding = $previousEncoding
-    if ($listExit -ne 0) { throw "Der Client konnte die Szenen nicht auflisten (Exitcode $listExit)." }
+    if ($listExit -ne 0) { throw "The client could not list the scenes (exit code $listExit)." }
     $names = $known | ForEach-Object { ($_ -split '\s+', 2)[0] }
     if (-not $Scenario) {
-        Write-Host "Keine Szene angegeben - es wird nichts gestartet. Vorhandene Szenen (Start: .\scripts\demo.ps1 scenario -Scenario <Name>):" -ForegroundColor Yellow
+        Write-Host "No scene given - nothing is started. Available scenes (start: .\scripts\demo.ps1 scenario -Scenario <name>):" -ForegroundColor Yellow
         $known | ForEach-Object { Write-Host "  $_" }
         exit 0
     }
     if ($names -notcontains $Scenario) {
-        Write-Host "Unbekannte Szene '$Scenario'. Vorhandene Szenen:" -ForegroundColor Red
+        Write-Host "Unknown scene '$Scenario'. Available scenes:" -ForegroundColor Red
         $known | ForEach-Object { Write-Host "  $_" }
         exit 2
     }
@@ -134,6 +134,6 @@ if ($Mouse) { $clientArgs += @('--mouse', $Mouse) }
 if ($Mute) { $clientArgs += '--mute' }
 if ($AudioCapture) { $clientArgs += @('--audio-capture', $AudioCapture) }
 
-Write-Host "== Starte Demo '$Demo': $($clientArgs -join ' ')" -ForegroundColor Cyan
+Write-Host "== Starting demo '$Demo': $($clientArgs -join ' ')" -ForegroundColor Cyan
 dotnet run --project $project -c $Configuration --no-build -- @clientArgs
 exit $LASTEXITCODE

@@ -1,22 +1,22 @@
 <#
 .SYNOPSIS
-  Zeigt im Fenster, wie frisch gebaute Einheiten ihre Fabrik verlassen (gestellte Szenen exit-<fraktion>-<gebaeude>, docs/DEMO-SCENARIOS.md).
+  Shows in a window how freshly built units leave their factory (staged scenes exit-<faction>-<building>, docs/DEMO-SCENARIOS.md).
 
 .DESCRIPTION
-  Startet den Client in einer kleinen Szene auf Alpine Assault, die Kamera nah am Gebaeude; sie blickt aus Suedosten auf die Torseite, die Ausfahrt (Osten) zeigt im Bild nach rechts unten. Jedes Gebaeude bekommt
-  ab Bild 30 drei Bauauftraege nacheinander, die Ausfahrt ist also dreimal zu sehen:
-    commandcenter  Kommandozentrale baut Planierraupen (GLA: Arbeiter)
-    barracks       Kaserne baut Infanterie (Ranger / Rotgardist / Rebell)
-    warfactory     Waffenfabrik bzw. Waffenhaendler baut Panzer (Crusader / Battlemaster / Scorpion)
-    all            alle drei Gebaeude einer Fraktion in einem Bild, dazu ein Bauarbeiter, Kraftwerk und Versorgungslager (auch zum Ausprobieren der Bautasten)
-  Die Szene laeuft mit der Skirmish-Befehlsleiste: eigene Befehle sind moeglich (z. B. weitere Einheiten in Auftrag geben, einen Sammelpunkt setzen).
-  Dieselben Szenen prueft ohne Fenster:  .\scripts\audit-scenarios.ps1 -Scenario exits [-Faction America]
+  Starts the client in a small scene on Alpine Assault, the camera close to the building; it looks at the door side from the south-east, the exit (east) points to the lower right of the image. Every building gets
+  three production orders one after another from frame 30 on, so the exit can be seen three times:
+    commandcenter  the command center builds dozers (GLA: workers)
+    barracks       the barracks builds infantry (Ranger / Red Guard / Rebel)
+    warfactory     the war factory or arms dealer builds tanks (Crusader / Battlemaster / Scorpion)
+    all            all three buildings of a faction in one image, plus a builder, a power plant and a supply center (also for trying out the build hot keys)
+  The scene runs with the skirmish command bar: commands of your own are possible (e.g. ordering further units, setting a rally point).
+  The same scenes are checked without a window by:  .\scripts\audit-scenarios.ps1 -Scenario exits [-Faction America]
 
 .EXAMPLE
-  .\scripts\demo-factory-exits.ps1                                   # America, alle drei Gebaeude
+  .\scripts\demo-factory-exits.ps1                                   # America, all three buildings
   .\scripts\demo-factory-exits.ps1 -Faction China -Building warfactory
   .\scripts\demo-factory-exits.ps1 -Faction GLA -Building barracks -TickRate 60
-  .\scripts\demo-factory-exits.ps1 -Building commandcenter -SmokeTest -Frames 600   # ohne Fenster, nur Lauffaehigkeit
+  .\scripts\demo-factory-exits.ps1 -Building commandcenter -SmokeTest -Frames 600   # without a window, only that it runs
 #>
 [CmdletBinding()]
 param(
@@ -26,7 +26,7 @@ param(
     [ValidateSet('commandcenter', 'barracks', 'warfactory', 'all')]
     [string]$Building = 'all',
 
-    # Simulationsrate (30, 60 oder 120 Hz); 0 = Standard der Spielschicht.
+    # Simulation rate (30, 60 or 120 Hz); 0 = the game layer's default.
     [int]$TickRate = 0,
 
     [string]$ContentDir,
@@ -43,30 +43,30 @@ $ErrorActionPreference = 'Stop'
 $scenario = "exit-$($Faction.ToLowerInvariant())-$Building"
 
 $units = @{
-    'America' = @{ commandcenter = 'Planierraupe'; barracks = 'Ranger'; warfactory = 'Crusader' }
-    'China'   = @{ commandcenter = 'Planierraupe'; barracks = 'Rotgardist'; warfactory = 'Battlemaster' }
-    'GLA'     = @{ commandcenter = 'Arbeiter'; barracks = 'Rebell'; warfactory = 'Scorpion' }
+    'America' = @{ commandcenter = 'Dozer'; barracks = 'Ranger'; warfactory = 'Crusader' }
+    'China'   = @{ commandcenter = 'Dozer'; barracks = 'Red Guard'; warfactory = 'Battlemaster' }
+    'GLA'     = @{ commandcenter = 'Worker'; barracks = 'Rebel'; warfactory = 'Scorpion' }
 }
 $doors = @{
-    'America' = @{ commandcenter = 'Tor (1,5 s auf, 3 s offen, 1,5 s zu)'; barracks = 'kein Tor'; warfactory = 'Tor (3,25 s auf, 3 s offen, 4 s zu)' }
-    'China'   = @{ commandcenter = 'Tor (3 s auf, 3 s offen, 3 s zu)'; barracks = 'kein Tor'; warfactory = 'Tor (4 s auf, 2 s offen, 5 s zu)' }
-    'GLA'     = @{ commandcenter = 'kein Tor'; barracks = 'kein Tor'; warfactory = 'Tor (2 s auf, 3 s offen, 2 s zu)' }
+    'America' = @{ commandcenter = 'door (1.5 s opening, 3 s open, 1.5 s closing)'; barracks = 'no door'; warfactory = 'door (3.25 s opening, 3 s open, 4 s closing)' }
+    'China'   = @{ commandcenter = 'door (3 s opening, 3 s open, 3 s closing)'; barracks = 'no door'; warfactory = 'door (4 s opening, 2 s open, 5 s closing)' }
+    'GLA'     = @{ commandcenter = 'no door'; barracks = 'no door'; warfactory = 'door (2 s opening, 3 s open, 2 s closing)' }
 }
 
-Write-Host "== Fabrikausfahrt: Szene '$scenario'" -ForegroundColor Cyan
+Write-Host "== Factory exit: scene '$scenario'" -ForegroundColor Cyan
 $shown = if ($Building -eq 'all') { @('commandcenter', 'barracks', 'warfactory') } else { @($Building) }
 foreach ($name in $shown) {
-    Write-Host ("   {0,-14} baut dreimal: {1,-13} {2}" -f $name, $units[$Faction][$name], $doors[$Faction][$name])
+    Write-Host ("   {0,-14} builds three times: {1,-13} {2}" -f $name, $units[$Faction][$name], $doors[$Faction][$name])
 }
 Write-Host @'
-   Worauf achten (das Original als Massstab: ProductionUpdate / DefaultProductionExitUpdate):
-     1. Die Einheit erscheint IM Gebaeude (am UnitCreatePoint), nicht davor und nicht mitten auf dem Dach.
-     2. Bei Gebaeuden mit Tor: das Tor ist ganz offen, wenn die Einheit erscheint, bleibt offen, solange sie hinausfaehrt, und schliesst danach.
-     3. Die Einheit faehrt/geht von selbst durch die Torseite (im Bild rechts unten) hinaus - sie bleibt nicht im Gebaeude stehen und springt nicht.
-     4. Sie haelt kurz vor dem Gebaeude (rund 20 Einheiten hinter der Gebaeudekante); die naechste Einheit stellt sich daneben, nicht in sie hinein.
-     5. Waehrend der Ausfahrt gleitet sie durch die eigene Fabrik, weicht aber nicht seitlich durch die Wand aus.
-     6. Nach einem gesetzten Sammelpunkt (Gebaeude waehlen, Rechtsklick auf den Boden) faehrt sie erst hinaus, dann zum Sammelpunkt.
-   Ohne Fenster dieselbe Pruefung mit Zahlen: .\scripts\audit-scenarios.ps1 -Scenario exits
+   What to look for (the original as the yardstick: ProductionUpdate / DefaultProductionExitUpdate):
+     1. The unit appears INSIDE the building (at the UnitCreatePoint), not in front of it and not in the middle of the roof.
+     2. For buildings with a door: the door is fully open when the unit appears, stays open while it drives out, and closes afterwards.
+     3. The unit drives/walks out through the door side (lower right of the image) by itself - it does not stay inside the building and does not jump.
+     4. It stops just in front of the building (about 20 units beyond the building edge); the next unit lines up beside it, not inside it.
+     5. While exiting it glides through its own factory, but does not dodge sideways through the wall.
+     6. With a rally point set (select the building, right-click the ground) it first drives out, then to the rally point.
+   The same check without a window, with numbers: .\scripts\audit-scenarios.ps1 -Scenario exits
 '@
 
 $forward = @{ Scenario = $scenario; Size = $Size }
