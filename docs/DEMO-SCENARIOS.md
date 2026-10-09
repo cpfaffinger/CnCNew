@@ -1,136 +1,136 @@
-# Gestellte Demos zum Auditieren
+# Staged demos for auditing
 
-Stand: 7. Oktober 2026. Drei kleine Verhaltensszenen und zwölf Fabrikausfahrten (eigener Abschnitt unten) auf einer echten Karte (Alpine Assault, Ursprung = erste Startposition), die je **ein** Verhalten isolieren. Dieselbe Definition
-(`CnCNew.Game/Live/DemoScenarios.cs`) läuft im Client und headless; `LiveScenario` (`CnCNew.Game/Live/LiveScenario.cs`) setzt genau die genannten Objekte (keine Basen, keine Wirtschaft),
-deckt die Karte für beide Seiten auf und gibt Befehle über dasselbe `StandingOrders`-Buch wie ein Spieler. Die Szenen sind **Prüfstände**: ein fehlgeschlagener Check ist ein Befund
-über den Stand der Simulation/Darstellung, kein Fehler des Werkzeugs. Alle drei bestehen seit den Fixes vom 4. Oktober 2026; die Sichtprüfung durch einen Menschen steht aus.
+As of: 7 October 2026. Three small behaviour scenes and twelve factory exits (separate section below) on a real map (Alpine Assault, origin = first start position), each of which isolates **one** behaviour. The same definition
+(`CnCNew.Game/Live/DemoScenarios.cs`) runs in the client and headless; `LiveScenario` (`CnCNew.Game/Live/LiveScenario.cs`) places exactly the named objects (no bases, no economy),
+reveals the map for both sides and issues commands through the same `StandingOrders` book as a player. The scenes are **test benches**: a failed check is a finding
+about the state of the simulation/presentation, not an error of the tool. All three have passed since the fixes of 4 October 2026; the visual check by a human is outstanding.
 
-**Zeiteinheit.** Alle Zeitangaben dieser Szenen, der Audit-Ausgabe (`t=`, „tick“, „ticks“) und der Optionen `-Every`/`--every`/`--ticks` sind **Originalbilder** (1/30 s Spielzeit),
-nicht Simulationsticks. Die Szenen sind in Originalbildern verfasst (`DemoScenario.Frames`, `ScenarioOrder.Frame`), der Audit nimmt einen Abtastwert je Originalbild und rechnet jeden Tick, den
-die Simulation herausgibt, beim Einlesen um; im Rauchtest des Clients ist ein gezeichnetes Bild ein Originalbild. Bei 30 Hz ist ein Originalbild ein Tick, bei 60 Hz (`-TickRate 60` an
-`audit-scenarios.ps1` und `capture-scenarios.ps1`, `--tick-rate 60` an Client und `scenario-audit`) sind es zwei – die Zahlen unten bedeuten bei jeder Rate dieselbe Spielzeit
+**Unit of time.** All times of these scenes, of the audit output (`t=`, "tick", "ticks") and of the options `-Every`/`--every`/`--ticks` are **original frames** (1/30 s of game time),
+not simulation ticks. The scenes are written in original frames (`DemoScenario.Frames`, `ScenarioOrder.Frame`), the audit takes one sample per original frame and converts every tick that
+the simulation hands out when reading it in; in the smoke test of the client one drawn frame is one original frame. At 30 Hz an original frame is one tick, at 60 Hz (`-TickRate 60` on
+`audit-scenarios.ps1` and `capture-scenarios.ps1`, `--tick-rate 60` on the client and `scenario-audit`) it is two – the numbers below mean the same game time at every rate
 (`docs/TICKRATE-MIGRATION.md` §14).
 
-| Szene | Zeigt | Stand des Audits (Zahlen: Originalbilder, gemessen am 6. Oktober 2026 bei 30 Hz) |
+| Scene | Shows | State of the audit (numbers: original frames, measured on 6 October 2026 at 30 Hz) |
 | --- | --- | --- |
-| `capture-building` | Ranger geht zur gegnerischen Kaserne, packt aus, hisst die Flagge (`RAISING_FLAG`), packt ein, Gebäude wechselt die Seite | **grün.** Gestufte Fähigkeit (`docs/SIM-STAGED-CAPTURE.md`): Anlaufen ab Bild 12, `UNPACKING` ab Bild 139 (90 Bilder = 3 s), `RAISING_FLAG` ab Bild 229 (600 Bilder = 20 s), Übernahme in Bild 828, `PACKING` ab Bild 829 (60 Bilder = 2 s). Bei 60 Hz dieselben Bilder (Anlaufen ab Bild 11); die Zahl der Blitze während des Flaggehissens ist dort eine andere (49 bei 30 Hz, 99 bei 60 Hz – `docs/TICKRATE-MIGRATION.md` §5.1, Phase 23) |
-| `tank-duel` | Crusader gegen Battlemaster, schräg zueinander; der Turm muss sich vor dem ersten Schuss drehen, bleibt bis zum Tod des Gegners auf ihn gerichtet und dreht nach der Rückstellzeit zurück; eine Sentry-Drohne tastet im Leerlauf ab | **grün.** Turm- und Angriffszustand in der Simulation (`docs/SIM-TURRET-AIM.md`): der Crusader schießt erst in Bild 11 (45° bei 180° je Sekunde, also 6° je Originalbild), jeder Schuss mit 0° Fehler, in **jedem** Abtastwert bis zum Tod innerhalb 5°; nach dem Tod (Bild 382) hält der Turm seine `RecenterTime` von 60 Bildern (2 s) und dreht ab Bild 444 zurück; die Drohne tastet 9-mal ab (Haltezeit 31 Bilder, Ruhe 8 Bilder dazwischen). Bei 60 Hz: erster Schuss in Bild 10, Tod in Bild 380, Rückdrehen ab Bild 441 |
-| `jet-strafe` | Der Flugplatz baut zwei Raptors; Start auf der Startbahn des Modells, Anflug, Raketen auf zwei Missile Defender, Beschuss, Kreisen, Rückflug, Landung, Nachladen | **grün.** Flügelmodell (`docs/SIM-JET-FLIGHT.md`): Mindestgeschwindigkeit, begrenzte Kurvenrate, Kreisen; Bahnpunkte aus dem Flugplatzmodell; beide Raptors starten, feuern 4 Raketen, landen und laden nach |
+| `capture-building` | Ranger walks to the enemy barracks, unpacks, raises the flag (`RAISING_FLAG`), packs, the building changes sides | **green.** Staged ability (`docs/SIM-STAGED-CAPTURE.md`): approach from frame 12, `UNPACKING` from frame 139 (90 frames = 3 s), `RAISING_FLAG` from frame 229 (600 frames = 20 s), capture in frame 828, `PACKING` from frame 829 (60 frames = 2 s). At 60 Hz the same frames (approach from frame 11); the number of flashes during the raising of the flag is a different one there (49 at 30 Hz, 99 at 60 Hz – `docs/TICKRATE-MIGRATION.md` §5.1, Phase 23) |
+| `tank-duel` | Crusader against Battlemaster, at an angle to each other; the turret has to turn before the first shot, stays aimed at the opponent until its death and turns back after the recentre time; a Sentry Drone scans while idle | **green.** Turret and attack state in the simulation (`docs/SIM-TURRET-AIM.md`): the Crusader only fires in frame 11 (45° at 180° per second, i.e. 6° per original frame), every shot with 0° error, in **every** sample until the death within 5°; after the death (frame 382) the turret holds its `RecenterTime` of 60 frames (2 s) and turns back from frame 444; the drone scans 9 times (hold time 31 frames, rest of 8 frames in between). At 60 Hz: first shot in frame 10, death in frame 380, turning back from frame 441 |
+| `jet-strafe` | The airfield builds two Raptors; take-off on the runway of the model, approach, missiles at two Missile Defenders, fire, circling, return flight, landing, reloading | **green.** Wing model (`docs/SIM-JET-FLIGHT.md`): minimum speed, limited turn rate, circling; runway points from the airfield model; both Raptors take off, fire 4 missiles, land and reload |
 
-(Hinweis zur Wahl der Ziele: Stinger-Soldaten sind laut `Armor.ini` (`StingerSoldierArmor`) **unverwundbar gegen Jet-Raketen**, deshalb ist der „Raketentrooper“ hier der Missile Defender.)
+(Note on the choice of targets: according to `Armor.ini` (`StingerSoldierArmor`), Stinger soldiers are **invulnerable to jet missiles**, which is why the "rocket trooper" here is the Missile Defender.)
 
-## Ausführen
+## Running
 
 ```powershell
-.\scripts\demo-scenario.ps1                              # OHNE Namen: listet die Szenen und startet nichts (bis 7. Oktober 2026 startete das stillschweigend tank-duel)
-.\scripts\demo-scenario.ps1 -Scenario tank-duel          # Fenster, Skirmish-HUD (Befehle des Spielers sind möglich)
-.\scripts\demo-capture-building.ps1                      # optischer Test im Fenster, je Szene ein Skript
+.\scripts\demo-scenario.ps1                              # WITHOUT a name: lists the scenes and starts nothing (until 7 October 2026 this silently started tank-duel)
+.\scripts\demo-scenario.ps1 -Scenario tank-duel          # window, skirmish HUD (commands of the player are possible)
+.\scripts\demo-capture-building.ps1                      # visual test in the window, one script per scene
 .\scripts\demo-tank-duel.ps1
 .\scripts\demo-jet-strafe.ps1
-.\scripts\capture-scenarios.ps1                          # alle drei als Bildfolge (PNG alle N Originalbilder) + index.html unter %TEMP%\cncnew-scenario-frames
+.\scripts\capture-scenarios.ps1                          # all three as an image sequence (PNG every N original frames) + index.html under %TEMP%\cncnew-scenario-frames
 .\scripts\capture-scenarios.ps1 -Scenario tank-duel -Every 5 -Size 1920x1080
 .\scripts\demo.ps1 scenario -Scenario jet-strafe -SmokeTest
-.\scripts\audit-scenarios.ps1                            # alle drei headless prüfen, Ausgaben unter %TEMP%\cncnew-scenarios
+.\scripts\audit-scenarios.ps1                            # check all three headless, output under %TEMP%\cncnew-scenarios
 .\scripts\audit-scenarios.ps1 -Scenario tank-duel -Every 10
-.\scripts\audit-scenarios.ps1 -TickRate 60                # dieselben Prüfungen mit 60 Simulationsticks je Sekunde; -Every und alle Ausgaben bleiben Originalbilder
+.\scripts\audit-scenarios.ps1 -TickRate 60                # the same checks with 60 simulation ticks per second; -Every and all output remain original frames
 dotnet run -c Release --project tools/CnCNew.PresentationTool -- scenario-audit game/content --name capture-building --debug-fire ranger,barracks
 ```
 
-`scripts/capture-world.ps1` enthält je Szene eine Aufnahme (`scenario-tank-duel`, `scenario-capture`, `scenario-jet`). `Game.Tests` (`ScenarioTests`) prüft mit echten Daten, dass jede Szene
-ihre Objekte setzt, ihre Befehle ausführt und zweimal denselben Zustandshash liefert; sie prüft **nicht** die oben genannten Befunde (sonst wäre die Suite rot).
+`scripts/capture-world.ps1` contains one capture per scene (`scenario-tank-duel`, `scenario-capture`, `scenario-jet`). `Game.Tests` (`ScenarioTests`) checks with real data that every scene
+places its objects, executes its commands and delivers the same state hash twice; it does **not** check the findings named above (otherwise the suite would be red).
 
-## Was ein grüner Audit bedeutet
+## What a green audit means
 
-- `capture-building`: gestufte Fähigkeit nach `SpecialAbilityUpdate.cpp` (Anlaufen, `UNPACKING` UnpackTime, `RAISING_FLAG` PreparationTime, Übernahme, `PACKING` PackTime).
-- `tank-duel`: kein Schuss mit mehr als 5° Turmfehler; der Turm hat sich vor dem ersten Schuss gedreht (Turmzustand und Feuerfreigabe in der Simulation, `TurretAI`); in jedem Abtastwert (einer je Originalbild) zwischen Befehl und Tod des Opfers (auch in den Nachladelücken) bleibt der Turm innerhalb 5°; nach dem Tod hält der Turm genau `RecenterTime` (Spielzeit aus den Daten) und dreht dann zurück; die abseits stehende Sentry-Drohne dreht im Leerlauf zufällig umher (Winkelbereich, Haltezeit, Ruheintervall) und gezeichneter Turm sowie `TURRET_ROTATE` folgen dem simulierten Winkel.
-- `jet-strafe`: kein Stillstand in der Luft über 10 Originalbilder (eine Drittelsekunde; Mindestgeschwindigkeit und Kreisen des Flügel-Locomotors).
+- `capture-building`: staged ability after `SpecialAbilityUpdate.cpp` (approach, `UNPACKING` UnpackTime, `RAISING_FLAG` PreparationTime, capture, `PACKING` PackTime).
+- `tank-duel`: no shot with more than 5° turret error; the turret has turned before the first shot (turret state and fire clearance in the simulation, `TurretAI`); in every sample (one per original frame) between the command and the death of the victim (also in the reload gaps) the turret stays within 5°; after the death the turret holds exactly `RecenterTime` (game time from the data) and then turns back; the Sentry Drone standing aside turns around randomly while idle (angle range, hold time, rest interval) and the drawn turret as well as `TURRET_ROTATE` follow the simulated angle.
+- `jet-strafe`: no standstill in the air for more than 10 original frames (a third of a second; minimum speed and circling of the wing locomotor).
 
-## Zuschauer-Demo (KI gegen KI)
+## Spectator demo (AI against AI)
 
-Keine gestellte Szene, sondern ein ganzes Skirmish, dem man zusieht: `pwsh scripts/demo-spectator.ps1` startet im Fenster ein Gefecht zweier Computerspieler ohne Spieler
-(ganze Karte ohne Nebel, weiter Zoom und Kartenübersicht, Folgen der simulierten Kamera einer KI, Beobachter-Tafeln für Produktion, Einheiten, Verluste und Wirtschaft). Je Start
-zieht das Skript einen neuen Seed und gibt ihn aus; `-Seed N` wiederholt genau dasselbe Gefecht. `pwsh scripts/check-spectator.ps1` fährt denselben Modus ohne Fenster mit gedrückten
-Zuschauertasten, prüft die Ausgabe des Clients und legt zehn Bilder unter `%TEMP%\cncnew-spectator-check` ab. Alles Weitere (Tasten, Herkunft der Werte, Grenzen, Checkliste für die
-Sichtprüfung) steht in `docs/SPECTATOR-MODE.md`; von einem Menschen gesehen ist davon nichts.
-## Fabrikausfahrten (`exit-<fraktion>-<gebäude>`, 7. Oktober 2026)
+Not a staged scene but a whole skirmish that one watches: `pwsh scripts/demo-spectator.ps1` starts, in the window, a match of two computer players without a player
+(whole map without fog, wide zoom and map overview, following the simulated camera of an AI, observer panels for production, units, losses and economy). On every start
+the script draws a new seed and prints it; `-Seed N` repeats exactly the same match. `pwsh scripts/check-spectator.ps1` runs the same mode without a window with pressed
+spectator keys, checks the output of the client and puts ten images under `%TEMP%\cncnew-spectator-check`. Everything else (keys, origin of the values, limits, checklist for the
+visual check) is in `docs/SPECTATOR-MODE.md`; none of it has been seen by a human.
+## Factory exits (`exit-<fraktion>-<gebäude>`, 7 October 2026)
 
-Frage des Projektinhabers: fahren frisch gebaute Einheiten aus ihrer Fabrik heraus, oder „clippen“ sie hinaus? Zwölf Szenen (`CnCNew.Game/Live/FactoryExits.cs`) stellen je Fraktion
-(`america`, `china`, `gla`) die Kommandozentrale (baut Planierraupen bzw. Arbeiter), die Kaserne (Ranger, Rotgardist, Rebell) und die Waffenfabrik bzw. den Waffenhändler (Crusader,
-Battlemaster, Scorpion) einzeln nahe an die Kamera (`exit-america-warfactory` …) oder alle drei in ein Bild (`exit-america-all`, dazu ein Bauarbeiter, Kraftwerk und Versorgungslager –
-dieselbe Szene benutzt der Bautasten-Test). Jedes Gebäude bekommt ab Bild 30 drei Bauaufträge nacheinander. Alle Gebäude stehen im Standardwinkel: die Ausfahrt zeigt nach Osten; die Kamera blickt aus Südosten
-auf die Torseite, im Bild fährt die Einheit also nach rechts unten hinaus.
+Question of the project owner: do freshly built units drive out of their factory, or do they "clip" out? Twelve scenes (`CnCNew.Game/Live/FactoryExits.cs`) place, per faction
+(`america`, `china`, `gla`), the command center (builds dozers or workers), the barracks (Ranger, Red Guard, Rebel) and the war factory or the arms dealer (Crusader,
+Battlemaster, Scorpion) individually close to the camera (`exit-america-warfactory` …) or all three in one picture (`exit-america-all`, plus a construction worker, power plant and supply depot –
+the build-key test uses the same scene). Each building receives three build orders one after another from frame 30. All buildings stand at the default angle: the exit points east; the camera looks from the south-east
+at the door side, so in the picture the unit drives out towards the bottom right.
 
 ```powershell
-.\scripts\demo-factory-exits.ps1                                    # Fenster: America, alle drei Gebäude; druckt, worauf zu achten ist
+.\scripts\demo-factory-exits.ps1                                    # window: America, all three buildings; prints what to look out for
 .\scripts\demo-factory-exits.ps1 -Faction China -Building warfactory
 .\scripts\demo-factory-exits.ps1 -Faction GLA -Building barracks -TickRate 60
-.\scripts\audit-scenarios.ps1 -Scenario exits [-Faction America]    # dieselben neun Einzelszenen ohne Fenster, mit Zahlen
-.\scripts\capture-scenarios.ps1 -Scenario exit-america-warfactory   # Bildfolge (900 Originalbilder, alle 15 eines)
+.\scripts\audit-scenarios.ps1 -Scenario exits [-Faction America]    # the same nine single scenes without a window, with numbers
+.\scripts\capture-scenarios.ps1 -Scenario exit-america-warfactory   # image sequence (900 original frames, one every 15)
 ```
 
-### Maßstab: das Original
+### Yardstick: the original
 
-Quellen: `ProductionUpdate.cpp` (`ProductionUpdate::update`, `updateDoors`), `DefaultProductionExitUpdate.cpp` und `QueueProductionExitUpdate.cpp` (`exitObjectViaDoor`,
-`getNaturalRallyPoint`), `SupplyCenterProductionExitUpdate.cpp`, `AIStates.cpp` (`AIFollowPathState` für `aiFollowExitProductionPath`).
+Sources: `ProductionUpdate.cpp` (`ProductionUpdate::update`, `updateDoors`), `DefaultProductionExitUpdate.cpp` and `QueueProductionExitUpdate.cpp` (`exitObjectViaDoor`,
+`getNaturalRallyPoint`), `SupplyCenterProductionExitUpdate.cpp`, `AIStates.cpp` (`AIFollowPathState` for `aiFollowExitProductionPath`).
 
-1. Ist der Bauauftrag fertig, reserviert `ProductionUpdate::update` ein Tor. Hat das Gebäude Toranimationen (`NumDoorAnimations > 0`), beginnt das Tor zu öffnen
-   (`DOOR_1_OPENING` für `DoorOpeningTime`); die Einheit wird **erst erzeugt, wenn das Tor ganz offen ist** (`m_doorWaitOpenFrame != 0`, `DOOR_1_WAITING_OPEN`). Das Tor bleibt
-   `DoorWaitOpenTime` nach der letzten Einheit offen und schließt dann über `DoorCloseTime` (`DOOR_1_CLOSING`).
-2. `exitObjectViaDoor` setzt die Einheit auf den ins Gebäude gedrehten `UnitCreatePoint` – das ist **im Gebäude** (Kaserne: die Gebäudemitte) –, mit der Ausrichtung des Gebäudes.
-3. Die Einheit bekommt einen Ausfahrtsweg (`aiFollowExitProductionPath`): zuerst `NaturalRallyPoint`, um zwei Wegfindungszellen (20 Einheiten) in seiner eigenen Richtung nach außen
-   geschoben (`getNaturalRallyPoint(…, offset = TRUE)`; der Punkt liegt laut Kommentar der Daten immer auf der Gebäudekante), danach – falls gesetzt – der Sammelpunkt des Spielers.
-   Die eigene Fabrik ist auf diesem Weg kein Hindernis (`ignoreObstacle`).
-4. `QueueProductionExitUpdate` (chinesische Kaserne) lässt nach jeder Einheit `ExitDelay` (300 ms) verstreichen, damit die paarweise gebauten Rotgardisten nacheinander herauskommen.
+1. When the build order is finished, `ProductionUpdate::update` reserves a door. If the building has door animations (`NumDoorAnimations > 0`), the door starts to open
+   (`DOOR_1_OPENING` for `DoorOpeningTime`); the unit is **only created when the door is fully open** (`m_doorWaitOpenFrame != 0`, `DOOR_1_WAITING_OPEN`). The door stays
+   open for `DoorWaitOpenTime` after the last unit and then closes over `DoorCloseTime` (`DOOR_1_CLOSING`).
+2. `exitObjectViaDoor` puts the unit on the `UnitCreatePoint` rotated into the building – that is **inside the building** (barracks: the centre of the building) –, with the orientation of the building.
+3. The unit receives an exit path (`aiFollowExitProductionPath`): first `NaturalRallyPoint`, pushed outwards by two pathfinding cells (20 units) in its own direction
+   (`getNaturalRallyPoint(…, offset = TRUE)`; according to the comment of the data the point always lies on the edge of the building), then – if set – the rally point of the player.
+   The unit's own factory is not an obstacle on this path (`ignoreObstacle`).
+4. `QueueProductionExitUpdate` (Chinese barracks) lets `ExitDelay` (300 ms) pass after every unit so that the Red Guards built in pairs come out one after the other.
 
-| Gebäude | Ausfahrtsmodul | `UnitCreatePoint` → `NaturalRallyPoint` (Gebäudekoordinaten) | Halbe Kantenlängen | Tor: auf / offen / zu (Bilder) |
+| Building | Exit module | `UnitCreatePoint` → `NaturalRallyPoint` (building coordinates) | Half edge lengths | Door: opening / open / closing (frames) |
 | --- | --- | --- | --- | --- |
 | `AmericaCommandCenter` | Default | (−18, 35) → (60, 35) | 60 × 70 | 45 / 90 / 45 |
-| `AmericaBarracks` | Default | (0, 0) → (55, 0) | 55 × 45 | kein Tor |
+| `AmericaBarracks` | Default | (0, 0) → (55, 0) | 55 × 45 | no door |
 | `AmericaWarFactory` | Default | (−10, −30) → (53, −30) | 53 × 60 | 98 / 90 / 120 |
 | `ChinaCommandCenter` | Default | (−18, 40) → (60, 40) | 60 × 63 | 90 / 90 / 90 |
-| `ChinaBarracks` | Queue (`ExitDelay` 300 ms) | (0, −25) → (36, −25) | 36 × 44 | kein Tor |
+| `ChinaBarracks` | Queue (`ExitDelay` 300 ms) | (0, −25) → (36, −25) | 36 × 44 | no door |
 | `ChinaWarFactory` | Default | (0, −27) → (57, −27) | 57 × 61 | 120 / 60 / 150 |
-| `GLACommandCenter` | Default | (25, 0) → (65, 0) | 65 × 65 | kein Tor |
-| `GLABarracks` | Default | (0, 0) → (42, 0) | 42 × 52 | kein Tor |
+| `GLACommandCenter` | Default | (25, 0) → (65, 0) | 65 × 65 | no door |
+| `GLABarracks` | Default | (0, 0) → (42, 0) | 42 × 52 | no door |
 | `GLAArmsDealer` | Default | (−20, −15) → (40, −15) | 40 × 62 | 60 / 90 / 60 |
 
-### Was der Audit misst und prüft (`tools/CnCNew.PresentationTool/FactoryExitAudit.cs`)
+### What the audit measures and checks (`tools/CnCNew.PresentationTool/FactoryExitAudit.cs`)
 
-Je Originalbild, in Gebäudekoordinaten (x zur Ausfahrtsseite): Erscheinungsbild und -ort jeder gebauten Einheit, ihr Weg in den ersten drei Sekunden (alle 15 Bilder), das erste Bild
-außerhalb des Gebäudekastens und die Stelle dort, der Ruheort, ob sie in jedem Bild gezeichnet wird, und die Zeitleiste der Torzustände des Gebäudes. Prüfungen: (a) Erscheinen am
-`UnitCreatePoint` (±1,5); (b) bei Gebäuden mit Tor: das Tor zeigt `DOOR_1_WAITING_OPEN`, wenn die Einheit erscheint, und nach der letzten Einheit folgen `DOOR_1_CLOSING` und „zu“;
-(c) die Einheit verlässt den Kasten über die Ausfahrtsseite (x ≥ halbe Länge, höchstens 20 neben der Linie des `NaturalRallyPoint`); (d) sie kommt zur Ruhe, außerhalb des
-Kastens, höchstens 130 vom Ende des Ausfahrtswegs (der Ausfahrtspunkt selbst oder ein Platz daneben), und keine zwei Einheiten eines Gebäudes ruhen ineinander (Abstand mindestens
-0,9 der Summe ihrer Begrenzungsradien); (e) sie wird in jedem Bild gezeichnet; (f) je Auftrag erscheint eine Einheit.
+Per original frame, in building coordinates (x towards the exit side): frame and place of appearance of every built unit, its path in the first three seconds (every 15 frames), the first frame
+outside the building box and the position there, the resting place, whether it is drawn in every frame, and the timeline of the door states of the building. Checks: (a) appearance at the
+`UnitCreatePoint` (±1.5); (b) for buildings with a door: the door shows `DOOR_1_WAITING_OPEN` when the unit appears, and after the last unit `DOOR_1_CLOSING` and "closed" follow;
+(c) the unit leaves the box via the exit side (x ≥ half length, at most 20 beside the line of the `NaturalRallyPoint`); (d) it comes to rest, outside the
+box, at most 130 from the end of the exit path (the exit point itself or a place beside it), and no two units of a building rest inside each other (distance at least
+0.9 of the sum of their bounding radii); (e) it is drawn in every frame; (f) one unit appears per order.
 
-### Befund und Korrektur (gemessen 8. Oktober 2026, 30 und 60 Hz; **nicht von einem Menschen gesehen**)
+### Finding and correction (measured 8 October 2026, 30 and 60 Hz; **not seen by a human**)
 
-| Prüfung | Vor der Korrektur der Simulation (27 Einheiten, neun Gebäude) | Mit dem Ausfahrtsweg (`docs/SIMULATION-CORE.md` §42) |
+| Check | Before the correction of the simulation (27 units, nine buildings) | With the exit path (`docs/SIMULATION-CORE.md` §42) |
 | --- | --- | --- |
-| (a) Erscheinungsort | 27 von 27 genau am `UnitCreatePoint`, im Gebäude – wie im Original | unverändert |
-| (b) Tor | bei allen fünf Gebäuden mit Tor offen (`WAITING_OPEN`), wenn die Einheit erscheint; schließt nach der letzten (z. B. `AmericaWarFactory`: öffnet ab Bild 231, offen ab 330, Einheit in Bild 330, schließt ab 1020, zu ab 1141). Davor war das Tor beim Erscheinen der **ersten** Einheit ein Bild lang noch `OPENING` (behoben in `StructureConditionTracker`: Vorlauf `DoorOpeningTime` + 1 Tick) | unverändert |
-| (c) Ausfahrt | **0 von 27**: keine Einheit bewegt sich. Sie bleibt am `UnitCreatePoint` im Gebäude stehen | **27 von 27** verlassen den Kasten über die Torseite auf der Linie des `NaturalRallyPoint`; erstes Bild außerhalb: Kommandozentrale America +93, China +93 bis +94, GLA +52; Kaserne America +86, China +47 bis +48, GLA +66; Waffenfabrik America +64, China +69, Waffenhändler +46 Bilder nach dem Erscheinen – bei 30 und bei 60 Hz dieselben Zahlen |
-| (d) Haltepunkt | entfällt: Abstand zum Ende des Ausfahrtswegs 54 bis 96 Einheiten, drei Einheiten auf demselben Punkt ineinander | die zuletzt gebaute Einheit steht auf dem Ausfahrtspunkt (Abstand 0,0); die früheren haben Platz gemacht und stehen 19 bis 77 daneben, alle außerhalb des Kastens, keine zwei ineinander; jede kommt zur Ruhe (Ruheorte bei 60 Hz wie bei 30 Hz) |
-| (e) gezeichnet | 27 von 27 in jedem Bild | unverändert |
-| (f) Stückzahl | 27 Aufträge liefern je **eine** Einheit – auch die chinesische Kaserne, die im Original je Auftrag **zwei** Rotgardisten baut (`QuantityModifier = ChinaInfantryRedguard 2`, typisiert, nicht angewendet; nur gemeldet) | unverändert |
+| (a) place of appearance | 27 of 27 exactly at the `UnitCreatePoint`, inside the building – as in the original | unchanged |
+| (b) door | open (`WAITING_OPEN`) at all five buildings with a door when the unit appears; closes after the last one (e.g. `AmericaWarFactory`: opens from frame 231, open from 330, unit in frame 330, closes from 1020, closed from 1141). Before that, the door was still `OPENING` for one frame when the **first** unit appeared (fixed in `StructureConditionTracker`: lead time `DoorOpeningTime` + 1 tick) | unchanged |
+| (c) exit | **0 of 27**: no unit moves. It stays standing at the `UnitCreatePoint` inside the building | **27 of 27** leave the box via the door side on the line of the `NaturalRallyPoint`; first frame outside: command center America +93, China +93 to +94, GLA +52; barracks America +86, China +47 to +48, GLA +66; war factory America +64, China +69, arms dealer +46 frames after the appearance – the same numbers at 30 and at 60 Hz |
+| (d) stopping point | not applicable: distance to the end of the exit path 54 to 96 units, three units on the same point inside each other | the unit built last stands on the exit point (distance 0.0); the earlier ones have made room and stand 19 to 77 beside it, all outside the box, no two inside each other; each one comes to rest (resting places at 60 Hz as at 30 Hz) |
+| (e) drawn | 27 of 27 in every frame | unchanged |
+| (f) quantity | 27 orders deliver **one** unit each – including the Chinese barracks, which in the original builds **two** Red Guards per order (`QuantityModifier = ChinaInfantryRedguard 2`, typed, not applied; only reported) | unchanged |
 
-Was der Projektinhaber als „clippt gerade hinaus“ sah, war also: die Raupe stand nach dem Bau **in** der Kommandozentrale und fuhr erst auf einen Befehl hin – dann quer durch das
-Gebäude. Die Abweichung lag in der **Simulation** (`ProductionUpdate.Update` gab der Einheit keinen Weg), nicht in der Darstellung. Seit dem Commit zu §42 fährt jede Einheit von
-selbst durch die Torseite hinaus, macht der nächsten Platz und fährt mit gesetztem Sammelpunkt von dort weiter. Abweichungen, die bleiben, nur gemeldet: die Einheit entsteht, sobald
-der Auftrag fertig ist, nicht erst nach `DoorOpeningTime` (die Darstellung öffnet das Tor dafür entsprechend früher, der ganze Torzyklus liegt um `DoorOpeningTime` vor dem Original);
-die Stückzahl der Rotgardisten; Laster des Versorgungslagers und `SpawnBehavior`-Erzeugungen benutzen den Ausfahrtsweg nicht.
+What the project owner saw as "clips straight out" was therefore: after being built, the dozer stood **inside** the command center and only drove on a command – then straight through the
+building. The deviation lay in the **simulation** (`ProductionUpdate.Update` gave the unit no path), not in the presentation. Since the commit for §42 every unit drives out through the
+door side by itself, makes room for the next one and, with a rally point set, continues from there. Deviations that remain, only reported: the unit is created as soon as
+the order is finished, not only after `DoorOpeningTime` (the presentation opens the door correspondingly earlier for this, the whole door cycle lies `DoorOpeningTime` ahead of the original);
+the quantity of the Red Guards; trucks of the supply depot and `SpawnBehavior` creations do not use the exit path.
 
-Stand des Audits (8. Oktober 2026): vor dem Commit zu §42 sind alle zwölf Szenen rot (je Gebäude drei Fehlschläge, in den Gesamtszenen neun: (c)/(d) je Einheit); mit ihm bestehen
-`audit-scenarios.ps1 -Scenario exits` (neun Einzelszenen) und die drei Gesamtszenen `exit-<fraktion>-all` bei 30 Hz und mit `-TickRate 60`, ebenso die drei klassischen Szenen. Der
-Commit ändert die Simulation bei 30 Hz (neue Hashes in 23 von 50 Läufen des Referenzmanifests, Zahlen in §42.4); das Manifest wird in einem eigenen Commit neu geschrieben. In den
-Gesamtszenen weicht die Zeitleiste der Tore zwischen 30 und 60 Hz in zwei Einträgen um ein Bild ab (z. B. `AmericaCommandCenter`: `CLOSING` ab 271 gegen 270, zu ab 616 gegen 615) –
-Darstellung, nur gemeldet.
+State of the audit (8 October 2026): before the commit for §42 all twelve scenes are red (three failures per building, nine in the combined scenes: (c)/(d) per unit); with it,
+`audit-scenarios.ps1 -Scenario exits` (nine single scenes) and the three combined scenes `exit-<fraktion>-all` pass at 30 Hz and with `-TickRate 60`, as do the three classic scenes. The
+commit changes the simulation at 30 Hz (new hashes in 23 of 50 runs of the reference manifest, numbers in §42.4); the manifest is rewritten in a commit of its own. In the
+combined scenes the timeline of the doors deviates between 30 and 60 Hz by one frame in two entries (e.g. `AmericaCommandCenter`: `CLOSING` from 271 against 270, closed from 616 against 615) –
+presentation, only reported.
 
-### Checkliste für den Menschen (`scripts/demo-factory-exits.ps1`)
+### Checklist for the human (`scripts/demo-factory-exits.ps1`)
 
-1. Die Einheit erscheint im Gebäude, nicht davor und nicht auf dem Dach.
-2. Gebäude mit Tor (beide Kommandozentralen außer GLA, alle drei Fabriken): das Tor ist ganz offen, wenn die Einheit erscheint, und schließt danach wieder.
-3. Die Einheit fährt/geht von selbst durch die Torseite (im Bild rechts unten) hinaus und hält kurz vor dem Gebäude.
-4. Die zweite und dritte Einheit stellen sich neben die erste, nicht in sie hinein.
-5. Sitzt das Modell der Einheit während der Ausfahrt sichtbar richtig im Tor (Höhe, Richtung), oder ragt es durch Wand oder Dach?
-6. Mit gesetztem Sammelpunkt (Gebäude wählen, Rechtsklick auf den Boden): erst hinaus, dann zum Sammelpunkt.
+1. The unit appears inside the building, not in front of it and not on the roof.
+2. Buildings with a door (both command centers except GLA, all three factories): the door is fully open when the unit appears, and closes again afterwards.
+3. The unit drives/walks out through the door side (bottom right in the picture) by itself and stops shortly in front of the building.
+4. The second and third unit place themselves beside the first, not inside it.
+5. Does the model of the unit sit visibly correctly in the door during the exit (height, direction), or does it protrude through wall or roof?
+6. With a rally point set (select the building, right-click on the ground): first out, then to the rally point.
