@@ -1,219 +1,219 @@
-# W3D-Hierarchien, Animationen und Modelle
+# W3D hierarchies, animations and models
 
-Stand: 30. September 2026
+As of: 30 September 2026
 
-`CnCNew.W3D` liefert neben Meshes und Materialien (`W3D-MATERIALS.md`) jetzt ganze Modelle: Skelett
-(Hierarchie), HLOD mit Sub-Objekten pro Knochen, unkomprimierte und komprimierte Animationen,
-Sichtbarkeitskanäle, Skinning-Einflüsse sowie eine rendererunabhängige Posenauswertung. Die Schicht
-kennt weder Stride noch `CnCNew.Content`; Dateien kommen über einen Resolver
-`Func<string, Stream?>` (virtueller Pfad → Stream, `null` = fehlt).
+Besides meshes and materials (`W3D-MATERIALS.md`), `CnCNew.W3D` now delivers whole models: skeleton
+(hierarchy), HLOD with sub-objects per bone, uncompressed and compressed animations,
+visibility channels, skinning influences and a renderer-independent pose evaluation. The layer
+knows neither Stride nor `CnCNew.Content`; files come through a resolver
+`Func<string, Stream?>` (virtual path → stream, `null` = missing).
 
-## Einstiegspunkte für Integratoren
+## Entry points for integrators
 
-| Typ | Zweck |
+| Type | Purpose |
 | --- | --- |
-| `W3dAssetLibrary(resolver, "Art/W3D")` | Lädt und cacht thread-sicher `GetModel(name)`, `GetSkeleton(hierarchyName)`, `GetAnimation("HIER.ANIM")`. |
-| `W3dAssetFile.Read(stream)` | Dekodiert alle Top-Level-Objekte einer Datei (Meshes, Hierarchien, HLODs, Animationen, Boxen, Null-Objekte). |
-| `W3dModel` | Geteiltes, unveränderliches Modell: `Skeleton`, `SubObjects` (LOD, Knochen, Mesh/Box, Flags), `FindBone`, `FindBones`, `FindSubObject`, `CreatePose()`, statisch `SkinVertices`. |
-| `W3dPose` | Instanzzustand: `SetRestPose(root)`, `Evaluate(binding, frame, root, rawSampling)`, `BoneWorldTransforms`, `IsBoneVisible`, `SetTurretYaw/SetTurretPitch/SetRecoil/SetBoneOverride`. |
-| `W3dAnimationBinding` | Animation gebunden an eine Pivotanzahl; `Sample(pivot, frame, …)`. |
-| `W3dAnimationClock.GetFrame(mode, frameCount, frameRate, elapsedSeconds, speed)` | Zeit → Frame für `Loop`, `Once`, `OnceBackwards`, `LoopBackwards`, `LoopPingPong`, `Manual`. |
-| `W3dSkeletonAudit.Run(names, library)` | Vollbestandsprüfung, genutzt von `W3dTool audit-skeletons` und dem Realdatentest. |
+| `W3dAssetLibrary(resolver, "Art/W3D")` | Loads and caches thread-safely `GetModel(name)`, `GetSkeleton(hierarchyName)`, `GetAnimation("HIER.ANIM")`. |
+| `W3dAssetFile.Read(stream)` | Decodes all top-level objects of a file (meshes, hierarchies, HLODs, animations, boxes, null objects). |
+| `W3dModel` | Shared, immutable model: `Skeleton`, `SubObjects` (LOD, bone, mesh/box, flags), `FindBone`, `FindBones`, `FindSubObject`, `CreatePose()`, static `SkinVertices`. |
+| `W3dPose` | Instance state: `SetRestPose(root)`, `Evaluate(binding, frame, root, rawSampling)`, `BoneWorldTransforms`, `IsBoneVisible`, `SetTurretYaw/SetTurretPitch/SetRecoil/SetBoneOverride`. |
+| `W3dAnimationBinding` | Animation bound to a pivot count; `Sample(pivot, frame, …)`. |
+| `W3dAnimationClock.GetFrame(mode, frameCount, frameRate, elapsedSeconds, speed)` | Time → frame for `Loop`, `Once`, `OnceBackwards`, `LoopBackwards`, `LoopPingPong`, `Manual`. |
+| `W3dSkeletonAudit.Run(names, library)` | Full-content check, used by `W3dTool audit-skeletons` and the real-data test. |
 
-Matrizen folgen der `System.Numerics`-Zeilenvektorkonvention: `world = local * parentWorld`,
-Punkte werden mit `Vector3.Transform(p, M)` transformiert. Knochen 0 ist die Wurzel und erhält die
-übergebene Objektmatrix. Starre Sub-Objekte werden mit der Weltmatrix ihres Knochens gezeichnet;
-Skins (`IsSkinned`) werden per `SkinVertices` in den Raum der Wurzelmatrix deformiert und ignorieren
-ihren HLOD-Knochen. Modell, Skelett und Animationsbindung sind unveränderlich und werden von allen
-Instanzen geteilt; teuer ist nur `W3dPose` pro Instanz (eine Matrix, ein Bool und ein optionaler
-Override je Knochen).
+Matrices follow the `System.Numerics` row-vector convention: `world = local * parentWorld`,
+points are transformed with `Vector3.Transform(p, M)`. Bone 0 is the root and receives the
+object matrix passed in. Rigid sub-objects are drawn with the world matrix of their bone;
+skins (`IsSkinned`) are deformed into the space of the root matrix by `SkinVertices` and ignore
+their HLOD bone. Model, skeleton and animation binding are immutable and are shared by all
+instances; only `W3dPose` per instance is expensive (one matrix, one bool and one optional
+override per bone).
 
-## Verifizierte Chunk-Layouts
+## Verified chunk layouts
 
-Alle Größen wurden gegen den Realbestand (`game/content/Art/W3D`, 8.897 Dateien) per
-Hex-/Skriptanalyse geprüft; Quelle der Strukturen ist `w3d_file.h` (GeneralsMD/WW3D2).
-Little Endian, Namen sind nullterminierte Latin-1-Felder fester Länge.
+All sizes were checked against the real content (`game/content/Art/W3D`, 8,897 files) by
+hex/script analysis; the source of the structures is `w3d_file.h` (GeneralsMD/WW3D2).
+Little endian, names are null-terminated Latin-1 fields of fixed length.
 
-| Chunk | Id | Layout (Bytes) | Befund im Bestand |
+| Chunk | Id | Layout (bytes) | Finding in the content |
 | --- | --- | --- | --- |
-| HIERARCHY_HEADER | 0x101 | Version u32, Name[16], NumPivots u32, Center vec3 = 36 | immer 36, Version 4.1 |
-| PIVOTS | 0x102 | je Pivot: Name[16], Parent u32 (0xFFFFFFFF = Wurzel), Translation vec3, Euler vec3, Rotation quat (x,y,z,w) = 60 | Eltern stets vor Kindern, Pivot 0 Wurzel |
-| PIVOT_FIXUPS | 0x103 | je Pivot 4×3 float (MAX-Matrix, Zeile 3 = Translation) = 48 | in allen 6.481 Hierarchien, nur informativ |
-| ANIMATION_HEADER | 0x201 | Version u32, Name[16], HierarchyName[16], NumFrames u32, FrameRate u32 = 44 | Version 4.1, 30 fps |
-| ANIMATION_CHANNEL | 0x202 | FirstFrame u16, LastFrame u16, VectorLen u16, Flags(Typ) u16, Pivot u16, Pad u16, dann (Last−First+1)·VectorLen float | 21.490 Kanäle mit Überhang (s. u.) |
-| BIT_CHANNEL | 0x203 | FirstFrame u16, LastFrame u16, Flags u16, Pivot u16, Default u8, dann ⌈n/8⌉ Bytes LSB-first | Größe exakt 9 + ⌈n/8⌉ |
-| COMPRESSED_ANIMATION_HEADER | 0x281 | wie 0x201, aber FrameRate u16 + Flavor u16 | Version 0.1, Flavor 0 |
-| COMPRESSED_ANIMATION_CHANNEL (time-coded) | 0x282 | NumTimeCodes u32, Pivot u16, VectorLen u8, Flags u8, dann je Key TimeCode u32 + VectorLen float | Größe exakt, erster Key Frame 0, streng steigend |
-| COMPRESSED_ANIMATION_CHANNEL (adaptive delta) | 0x282 | NumFrames u32, Pivot u16, VectorLen u8, Flags u8, Scale f32, dann Frame-0-Vektor float und Pakete | nicht im Bestand, synthetisch getestet |
-| COMPRESSED_BIT_CHANNEL | 0x283 | NumTimeCodes u32, Pivot u16, Flags u8, Default u8, dann Keys u32 (MSB = Zustand) | nicht im Bestand, synthetisch getestet |
-| HLOD_HEADER | 0x701 | Version u32, LodCount u32, Name[16], HierarchyName[16] = 40 | Version 1.0, immer 1 LOD |
-| HLOD_LOD_ARRAY / AGGREGATE_ARRAY / PROXY_ARRAY | 0x702 / 0x705 / 0x706 | Container: SUB_OBJECT_ARRAY_HEADER (0x703: ModelCount u32, MaxScreenSize f32 = 8), dann SUB_OBJECT (0x704: BoneIndex u32, Name[32] = 36) | nur LOD-Arrays; 0 Aggregate, 0 Proxies |
-| BOX | 0x740 | Version u32, Attributes u32, Name[32], Color rgb+pad, Center vec3, Extent vec3 = 68 | 679 Boxen, Attribut 1 (oriented) bzw. 2 (aligned) |
-| NULL_OBJECT | 0x750 | Version u32, Attributes u32, Pad[2] u32, Name[32] = 48 | nicht im Bestand |
-| VERTEX_INFLUENCES | 0x0E (im Mesh) | je Vertex BoneIdx u16 + 6 Byte Padding = 8 | 169 Skins, Padding immer 0 |
+| HIERARCHY_HEADER | 0x101 | Version u32, Name[16], NumPivots u32, Center vec3 = 36 | always 36, version 4.1 |
+| PIVOTS | 0x102 | per pivot: Name[16], Parent u32 (0xFFFFFFFF = root), Translation vec3, Euler vec3, Rotation quat (x,y,z,w) = 60 | parents always before children, pivot 0 root |
+| PIVOT_FIXUPS | 0x103 | per pivot 4×3 float (MAX matrix, row 3 = translation) = 48 | in all 6,481 hierarchies, informative only |
+| ANIMATION_HEADER | 0x201 | Version u32, Name[16], HierarchyName[16], NumFrames u32, FrameRate u32 = 44 | version 4.1, 30 fps |
+| ANIMATION_CHANNEL | 0x202 | FirstFrame u16, LastFrame u16, VectorLen u16, Flags(type) u16, Pivot u16, Pad u16, then (Last−First+1)·VectorLen float | 21,490 channels with surplus (see below) |
+| BIT_CHANNEL | 0x203 | FirstFrame u16, LastFrame u16, Flags u16, Pivot u16, Default u8, then ⌈n/8⌉ bytes LSB-first | size exactly 9 + ⌈n/8⌉ |
+| COMPRESSED_ANIMATION_HEADER | 0x281 | like 0x201, but FrameRate u16 + Flavor u16 | version 0.1, flavor 0 |
+| COMPRESSED_ANIMATION_CHANNEL (time-coded) | 0x282 | NumTimeCodes u32, Pivot u16, VectorLen u8, Flags u8, then per key TimeCode u32 + VectorLen float | size exact, first key frame 0, strictly increasing |
+| COMPRESSED_ANIMATION_CHANNEL (adaptive delta) | 0x282 | NumFrames u32, Pivot u16, VectorLen u8, Flags u8, Scale f32, then frame-0 vector float and packets | not in the content, tested synthetically |
+| COMPRESSED_BIT_CHANNEL | 0x283 | NumTimeCodes u32, Pivot u16, Flags u8, Default u8, then keys u32 (MSB = state) | not in the content, tested synthetically |
+| HLOD_HEADER | 0x701 | Version u32, LodCount u32, Name[16], HierarchyName[16] = 40 | version 1.0, always 1 LOD |
+| HLOD_LOD_ARRAY / AGGREGATE_ARRAY / PROXY_ARRAY | 0x702 / 0x705 / 0x706 | Container: SUB_OBJECT_ARRAY_HEADER (0x703: ModelCount u32, MaxScreenSize f32 = 8), then SUB_OBJECT (0x704: BoneIndex u32, Name[32] = 36) | only LOD arrays; 0 aggregates, 0 proxies |
+| BOX | 0x740 | Version u32, Attributes u32, Name[32], Color rgb+pad, Center vec3, Extent vec3 = 68 | 679 boxes, attribute 1 (oriented) or 2 (aligned) |
+| NULL_OBJECT | 0x750 | Version u32, Attributes u32, Pad[2] u32, Name[32] = 48 | not in the content |
+| VERTEX_INFLUENCES | 0x0E (in the mesh) | per vertex BoneIdx u16 + 6 bytes of padding = 8 | 169 skins, padding always 0 |
 
-Kanaltypen (`Flags`): 0/1/2 = Translation X/Y/Z (VectorLen 1), 3/4/5 = Euler XR/YR/ZR (VectorLen 1),
-6 = Quaternion (VectorLen 4). Die Enumeratoren `TIMECODED_*`/`ADAPTIVEDELTA_*` (7–14) werden von den
-Ladern (`hrawanim.cpp`/`hcanim.cpp` `add_channel`) nie als Kanaltyp benutzt; auch komprimierte Kanäle
-tragen 0/1/2/6. Bitkanaltyp 0 = Sichtbarkeit; andere Werte verwirft das Original stillschweigend –
-hier sind sie ein Decodefehler.
+Channel types (`Flags`): 0/1/2 = translation X/Y/Z (VectorLen 1), 3/4/5 = Euler XR/YR/ZR (VectorLen 1),
+6 = quaternion (VectorLen 4). The enumerators `TIMECODED_*`/`ADAPTIVEDELTA_*` (7–14) are never used by the
+loaders (`hrawanim.cpp`/`hcanim.cpp` `add_channel`) as a channel type; compressed channels, too,
+carry 0/1/2/6. Bit channel type 0 = visibility; the original silently discards other values –
+here they are a decode error.
 
-## Strenge und bewusste Kompatibilitätsfälle
+## Strictness and deliberate compatibility cases
 
-Decodefehler (`InvalidDataException`) sind: unbekannte Top-Level-Chunks, unbekannte oder doppelte
-Unterchunks, falsche Strukturgrößen, Eltern hinter ihren Kindern, Hierarchie-/Animationsversion vor
-3.0 (die Wurzelverschiebung des Originals ist nicht implementiert, der Bestand hat keine solchen
-Dateien), unbekannte Kanaltypen und Vektorlängen, Kanäle außerhalb der Frameanzahl, Time-Codes, die
-nicht bei Frame 0 beginnen oder nicht streng steigen, unbekannter Flavor, doppelte Kanäle gleichen
-Typs für einen Pivot, Skin-Padding ungleich 0 (spätere SAGE-Spiele legen dort zweite Knochen und
-Gewichte ab), Skin-Knochen außerhalb des Skeletts und HLOD-Knochen außerhalb des Skeletts.
+Decode errors (`InvalidDataException`) are: unknown top-level chunks, unknown or duplicate
+sub-chunks, wrong structure sizes, parents behind their children, hierarchy/animation version before
+3.0 (the root shift of the original is not implemented, the content has no such
+files), unknown channel types and vector lengths, channels outside the frame count, time codes that
+do not start at frame 0 or do not increase strictly, unknown flavor, duplicate channels of the same
+type for a pivot, skin padding not equal to 0 (later SAGE games store second bones and
+weights there), skin bones outside the skeleton and HLOD bones outside the skeleton.
 
-Explizit gezählte, nicht fatale Fälle:
+Explicitly counted, non-fatal cases:
 
-- **Überhang unkomprimierter Kanäle**: Ein Exporterfehler schrieb mehr Floats als der Framebereich
-  angibt; `MotionChannelClass::Load_W3D` (motchan.cpp) überspringt sie. CnCNew ebenso, gezählt in
-  `W3dAnimation.SurplusChannelBytes` (Bestand: 8.333.276 Byte).
-- **Kanäle jenseits der Hierarchie**: `HRawAnimClass::Load_W3D` verwirft Kanäle mit Pivot ≥
-  Pivotanzahl. `W3dAnimationBinding.DiscardedChannels` listet sie (Bestand: 233).
-- **Euler-Kanäle** werden geladen, vom Original aber nie ausgewertet; `IgnoredEulerChannels` zählt
-  sie (Bestand: 0).
-- **Nicht auflösbare HLOD-Einträge** (Exportreste wie Splines, `RECTANGLE01`, `... TOE0`): der
-  Assetmanager des Originals liefert `null`, `HLodClass` überspringt sie. CnCNew listet sie in
-  `W3dModel.UnresolvedSubObjects` (Bestand: 45).
-- **Ignorierte Render-Objekte**: Emitter, Dazzle, Light, Morph-Animation, HModel, LOD-Model,
-  Collection, Points, Aggregate, Sphere, Ring, Lightscape, Sound, ShaderMesh werden als
-  `W3dIgnoredChunk` mit Art und Offset geführt, nicht interpretiert (Bestand: 3 Emitter, sonst 0).
-- **CRLF-Textmodusschäden**: fünf `UISabotr_*`-Animationen werden über die bestehende Rekonstruktion
-  in `W3dFileReader` repariert und im Audit namentlich ausgewiesen.
+- **Surplus of uncompressed channels**: an exporter error wrote more floats than the frame range
+  states; `MotionChannelClass::Load_W3D` (motchan.cpp) skips them. So does CnCNew, counted in
+  `W3dAnimation.SurplusChannelBytes` (content: 8,333,276 bytes).
+- **Channels beyond the hierarchy**: `HRawAnimClass::Load_W3D` discards channels with pivot ≥
+  pivot count. `W3dAnimationBinding.DiscardedChannels` lists them (content: 233).
+- **Euler channels** are loaded, but never evaluated by the original; `IgnoredEulerChannels` counts
+  them (content: 0).
+- **Unresolvable HLOD entries** (export leftovers such as splines, `RECTANGLE01`, `... TOE0`): the
+  asset manager of the original returns `null`, `HLodClass` skips them. CnCNew lists them in
+  `W3dModel.UnresolvedSubObjects` (content: 45).
+- **Ignored render objects**: Emitter, Dazzle, Light, Morph-Animation, HModel, LOD-Model,
+  Collection, Points, Aggregate, Sphere, Ring, Lightscape, Sound, ShaderMesh are kept as
+  `W3dIgnoredChunk` with kind and offset, not interpreted (content: 3 emitters, otherwise 0).
+- **CRLF text-mode damage**: five `UISabotr_*` animations are repaired through the existing reconstruction
+  in `W3dFileReader` and are reported by name in the audit.
 
-## Auswertungsregeln
+## Evaluation rules
 
-**Basispose** (`htree.cpp` `HTreeClass::read_pivots`, `Base_Update`): lokale Matrix je Pivot
-`R(Rotation) * T(Translation)`; Welt = lokal · Elternwelt; Pivot 0 erhält die Wurzelmatrix, seine
-Datei-Transformation wird ignoriert. Die Euler-Winkel der Pivots sind redundant und werden nur
-gespeichert.
+**Base pose** (`htree.cpp` `HTreeClass::read_pivots`, `Base_Update`): local matrix per pivot
+`R(Rotation) * T(Translation)`; world = local · parent world; pivot 0 receives the root matrix, its
+file transformation is ignored. The Euler angles of the pivots are redundant and are only
+stored.
 
-**Animation** (`HTreeClass::Anim_Update`): je Pivot 1..n−1
-`lokal = Override · R(qAnim) · T(tAnim) · Basis`. Animationswerte sind Deltas zur Basispose.
-Pivots ohne Kanal erhalten Translation 0 und Einheitsquaternion, also die Basispose. Pivots ab der
-Pivotanzahl der Animationshierarchie bleiben in der Basispose und sichtbar. Wurzelkanäle werden
-(wie im Original, Schleife ab Pivot 1) ignoriert.
+**Animation** (`HTreeClass::Anim_Update`): per pivot 1..n−1
+`lokal = Override · R(qAnim) · T(tAnim) · Basis`. Animation values are deltas to the base pose.
+Pivots without a channel receive translation 0 and the unit quaternion, i.e. the base pose. Pivots from the
+pivot count of the animation hierarchy onwards stay in the base pose and visible. Root channels are
+ignored (as in the original, loop from pivot 1).
 
-**Unkomprimiert** (`hrawanim.cpp` `Get_Translation`/`Get_Orientation`): `frame0 = round_half_even(frame − 0.499999)`
-(x87-`fistp` von `WWMath::Float_To_Long`), `frame1 = frame0 + 1`, bei `frame1 ≥ NumFrames` auf 0
-gewrappt; Translation linear, Rotation per Slerp. Frames außerhalb `First..Last` eines Kanals liefern
-Identität (0 bzw. Einheitsquaternion), nicht die Basispose. Retail-EA verwendet für Raw-Animationen
-die nicht interpolierende Überladung `HTreeClass::Anim_Update(root, HRawAnimClass*, frame)`
-(`round_half_even(frame)`, Wrap auf 0); GeneralsGameCode aktiviert standardmäßig die Interpolation
-(`WW3D_ENABLE_RAW_ANIM_INTERPOLATION`). `W3dRawSampling.Interpolated` (Standard) und
-`W3dRawSampling.Nearest` bilden beide Varianten ab.
+**Uncompressed** (`hrawanim.cpp` `Get_Translation`/`Get_Orientation`): `frame0 = round_half_even(frame − 0.499999)`
+(x87 `fistp` of `WWMath::Float_To_Long`), `frame1 = frame0 + 1`, wrapped to 0 for `frame1 ≥ NumFrames`;
+translation linear, rotation by slerp. Frames outside `First..Last` of a channel yield
+identity (0 or the unit quaternion), not the base pose. Retail EA uses for raw animations
+the non-interpolating overload `HTreeClass::Anim_Update(root, HRawAnimClass*, frame)`
+(`round_half_even(frame)`, wrap to 0); GeneralsGameCode enables the interpolation by default
+(`WW3D_ENABLE_RAW_ANIM_INTERPOLATION`). `W3dRawSampling.Interpolated` (default) and
+`W3dRawSampling.Nearest` represent both variants.
 
-**Slerp** (`quat.cpp` `Fast_Slerp`, C-Fallback): kürzester Bogen (negatives Skalarprodukt dreht das
-Zielquaternion), unterhalb `1 − cos θ < 1e−8` linear, keine Renormalisierung. Die tabellenbasierten
-`Fast_Acos`/`Fast_Sin` sind durch exakte `MathF`-Funktionen ersetzt.
+**Slerp** (`quat.cpp` `Fast_Slerp`, C fallback): shortest arc (a negative dot product flips the
+target quaternion), linear below `1 − cos θ < 1e−8`, no renormalisation. The table-based
+`Fast_Acos`/`Fast_Sin` are replaced by exact `MathF` functions.
 
 **Time-coded** (`motchan.cpp` `TimeCodedMotionChannelClass::Get_Vector`, `Get_QuatVector`,
-`binary_search_index`): gesucht wird der letzte Key mit Zeit ≤ `(uint)frame`. Ist er der letzte Key
-oder trägt der Folgekey das MSB („binary movement“), gilt der Wert des gefundenen Keys unverändert
-(Stufe), sonst linear bzw. Slerp mit `ratio = (frame − t1)/(t2 − t1)`.
+`binary_search_index`): the last key with time ≤ `(uint)frame` is searched for. If it is the last key
+or the following key carries the MSB ("binary movement"), the value of the key found applies unchanged
+(step), otherwise linear or slerp with `ratio = (frame − t1)/(t2 − t1)`.
 
-**Adaptive Delta** (`motchan.cpp` `AdaptiveDeltaMotionChannelClass::decompress`, `getframe`,
-Filtertabelle `filtertable`): Frame 0 steht als Float-Vektor am Datenanfang. Frame f ≥ 1 liegt in
-Gruppe `(f−1) >> 4` an Nibble `(f−1) & 15`; je Gruppe und Komponente folgt ein 9-Byte-Paket
-(Filterindex + 16 Nibbles, gerade Nibbles im Low-, ungerade im High-Halbbyte, vorzeichenbehaftet
-−8..7). Wert(f) = Wert(f−1) + nibble · filter[index] · Scale. Filtertabelle: Einträge 0–15 sind
-1e−8 … 1e7, Einträge 16–255 sind `1 − sin(90° · i / 240)` (Winkel in double gerechnet, `sinf`).
-CnCNew dekodiert einmal in eine dichte Tabelle; die Additionsreihenfolge entspricht der
-inkrementellen Originaldekodierung. Abfrage: `frame1 = (uint)frame`, Folgeframe auf den letzten
-Frame geklemmt (kein Wrap), Translation linear, Rotation per Slerp.
+**Adaptive delta** (`motchan.cpp` `AdaptiveDeltaMotionChannelClass::decompress`, `getframe`,
+filter table `filtertable`): frame 0 is a float vector at the start of the data. Frame f ≥ 1 lies in
+group `(f−1) >> 4` at nibble `(f−1) & 15`; per group and component a 9-byte packet follows
+(filter index + 16 nibbles, even nibbles in the low, odd ones in the high half-byte, signed
+−8..7). Value(f) = value(f−1) + nibble · filter[index] · Scale. Filter table: entries 0–15 are
+1e−8 … 1e7, entries 16–255 are `1 − sin(90° · i / 240)` (angle computed in double, `sinf`).
+CnCNew decodes once into a dense table; the order of additions corresponds to the
+incremental original decoding. Query: `frame1 = (uint)frame`, following frame clamped to the last
+frame (no wrap), translation linear, rotation by slerp.
 
-**Sichtbarkeit**: Raw-Bitkanal (`BitChannelClass::Get_Bit`) liefert außerhalb `First..Last` den
-Default, sonst das Bit `frame − First`; Frameindex `(int)frame`. Time-coded (`TimeCodedBitChannelClass::Get_Bit`):
-letzter Key mit Zeit ≤ Frame, vor dem ersten Key gilt Key 0; der gespeicherte Default wird vom
-Original nicht verwendet. Knochen ohne Kanal sind sichtbar. Sub-Objekte sind anfänglich sichtbar,
-wenn sie renderbar sind und das Mesh-Flag `HIDDEN` fehlt (`MeshClass` ruft `Set_Hidden`).
+**Visibility**: a raw bit channel (`BitChannelClass::Get_Bit`) yields the default outside `First..Last`,
+otherwise the bit `frame − First`; frame index `(int)frame`. Time-coded (`TimeCodedBitChannelClass::Get_Bit`):
+last key with time ≤ frame, before the first key, key 0 applies; the stored default is not used by the
+original. Bones without a channel are visible. Sub-objects are initially visible
+if they are renderable and the mesh flag `HIDDEN` is missing (`MeshClass` calls `Set_Hidden`).
 
-**Überschreibungen** (`pivot.cpp` `PivotClass::Capture_Update`, `W3DModelDraw.cpp`
-`handleClientTurretPositioning`, `handleClientRecoil`): ein gefangener Knochen erhält nach Basis und
-Animation eine Nachmultiplikation im eigenen Raum und wird sichtbar erzwungen. Turm: `Rotate_Z(yaw)`,
-Rohrneigung: `Rotate_Y(−pitch)`, Rückstoß: `Translate_X(−shift)`. Die Wurzel kann nicht gefangen
-werden (W3DModelDraw behandelt Knochen 0 als „nicht gefunden“). Die Variante mit
-Welt-Translation (`WorldSpaceTranslation`) ist nicht implementiert, weil W3DModelDraw sie nicht nutzt.
+**Overrides** (`pivot.cpp` `PivotClass::Capture_Update`, `W3DModelDraw.cpp`
+`handleClientTurretPositioning`, `handleClientRecoil`): a captured bone receives, after base and
+animation, a post-multiplication in its own space and is forced visible. Turret: `Rotate_Z(yaw)`,
+barrel pitch: `Rotate_Y(−pitch)`, recoil: `Translate_X(−shift)`. The root cannot be captured
+(W3DModelDraw treats bone 0 as "not found"). The variant with
+world translation (`WorldSpaceTranslation`) is not implemented, because W3DModelDraw does not use it.
 
-**Zeit → Frame** (`animobj.cpp` `Compute_Current_Frame`): spielbarer Bereich 0..NumFrames−1, eine
-Schleife umfasst NumFrames−1 Frames. `Loop`: `t mod (n−1)`; `Once`: auf n−1 geklemmt;
-`OnceBackwards`: `(n−1) − t`, bei 0 geklemmt; `LoopBackwards`: `(n−1) − (t mod (n−1))`;
-`LoopPingPong`: Dreieckswelle mit Periode 2(n−1). Das Original schreitet inkrementell fort; die
-geschlossene Form ist für monotone Zeit gleichwertig, weicht aber an den „noch zu weit“-Resets des
-Originals (Überschreiten einer ganzen Periode in einem Schritt) und an der Grenze
-`LoopBackwards` bei exakt einem Periodenvielfachen (n−1 statt 0) ab.
+**Time → frame** (`animobj.cpp` `Compute_Current_Frame`): playable range 0..NumFrames−1, one
+loop comprises NumFrames−1 frames. `Loop`: `t mod (n−1)`; `Once`: clamped to n−1;
+`OnceBackwards`: `(n−1) − t`, clamped at 0; `LoopBackwards`: `(n−1) − (t mod (n−1))`;
+`LoopPingPong`: triangle wave with period 2(n−1). The original advances incrementally; the
+closed form is equivalent for monotonic time, but deviates at the "still too far" resets of the
+original (crossing a whole period in one step) and at the boundary of
+`LoopBackwards` at exactly a multiple of the period (n−1 instead of 0).
 
-**Knochensuche** (`W3DModelDraw.cpp` `doSingleBoneName`, `findSingleBone`,
-`rendobj.cpp` `Get_Sub_Object_By_Name`): `FindBone` ist exakt und case-insensitiv (erster Treffer).
-`FindBones("MUZZLE")` liefert den unverzierten Namen und `MUZZLE01..MUZZLE99` bis zur ersten Lücke
-als Knochen (Knochen 0 zählt als nicht gefunden); nur wenn nichts als Knochen existiert, werden
-dieselben Namen als Sub-Objekte des detailliertesten LOD gesucht (voller Name, dann Suffix nach dem
-Punkt) und deren Knochen verwendet. So werden INI-Namen aus `Turret`, `TurretPitch`,
-`WeaponFireFXBone`, `WeaponLaunchBone`, `WeaponRecoilBone` und `WeaponMuzzleFlash` aufgelöst.
+**Bone lookup** (`W3DModelDraw.cpp` `doSingleBoneName`, `findSingleBone`,
+`rendobj.cpp` `Get_Sub_Object_By_Name`): `FindBone` is exact and case-insensitive (first hit).
+`FindBones("MUZZLE")` yields the undecorated name and `MUZZLE01..MUZZLE99` up to the first gap
+as bones (bone 0 counts as not found); only if nothing exists as a bone are
+the same names searched for as sub-objects of the most detailed LOD (full name, then suffix after the
+dot) and their bones used. This is how INI names from `Turret`, `TurretPitch`,
+`WeaponFireFXBone`, `WeaponLaunchBone`, `WeaponRecoilBone` and `WeaponMuzzleFlash` are resolved.
 
-**Skinning** (`meshgeometry.cpp` `MeshGeometryClass::get_deformed_vertices`): jeder Vertex hängt an
-genau einem Knochen, Position = Vertex · Knochenwelt, Normale = Rotationsanteil ohne
-Renormalisierung.
+**Skinning** (`meshgeometry.cpp` `MeshGeometryClass::get_deformed_vertices`): every vertex is attached to
+exactly one bone, position = vertex · bone world, normal = rotation part without
+renormalisation.
 
-**Namensauflösung**: Modell `X` und Hierarchie `X` liegen in `X.W3D`, Animation `HIER.ANIM` in
-`ANIM.W3D` (`assetmgr.cpp` `Get_HAnim`, `Get_HTree`). Das Original registriert Hierarchien
-„first loaded wins“ (`htreemgr.cpp` `Load_Tree`) und hängt damit von der Ladereihenfolge ab. CnCNew
-löst deterministisch auf: ein Modell verwendet die gleichnamige Hierarchie der eigenen Datei, sonst
-`<HierarchyName>.W3D`; eine Animation ebenso die Hierarchie ihrer eigenen Datei, sonst
-`<HierarchyName>.W3D`. Zwölf Hierarchienamen sind im Bestand mehrfach definiert (teils mit
-verschiedener Pivotanzahl, etwa `CVBAIKTRANSNR_D` mit 14/10/10); das Audit listet sie.
+**Name resolution**: model `X` and hierarchy `X` are in `X.W3D`, animation `HIER.ANIM` in
+`ANIM.W3D` (`assetmgr.cpp` `Get_HAnim`, `Get_HTree`). The original registers hierarchies
+"first loaded wins" (`htreemgr.cpp` `Load_Tree`) and thus depends on the load order. CnCNew
+resolves deterministically: a model uses the hierarchy of the same name in its own file, otherwise
+`<HierarchyName>.W3D`; an animation likewise the hierarchy of its own file, otherwise
+`<HierarchyName>.W3D`. Twelve hierarchy names are defined several times in the content (partly with
+a different pivot count, such as `CVBAIKTRANSNR_D` with 14/10/10); the audit lists them.
 
-## Messwerte (`W3dTool audit-skeletons`, Release)
+## Measured values (`W3dTool audit-skeletons`, Release)
 
-Gemessen am 30. September 2026 auf `game/content`, zwei Läufe byteidentisch
-(Stdout-SHA-256 `FEE71ECF45DF6CBABF5FB371546A4E0C52AA1C8BB773B144CAB3895D22C21EE7`):
+Measured on 30 September 2026 on `game/content`, two runs byte-identical
+(stdout SHA-256 `FEE71ECF45DF6CBABF5FB371546A4E0C52AA1C8BB773B144CAB3895D22C21EE7`):
 
-| Größe | Wert |
+| Quantity | Value |
 | --- | --- |
-| W3D-Dateien in `Art/W3D` / fehlerfrei dekodiert | 8.897 / 8.897 |
-| Hierarchien / Knochen gesamt / maximal | 6.481 / 134.535 / 345 |
-| HLOD-Modelle / Modelle aus nackten Meshes | 6.505 / 1.172 |
-| Hierarchiequelle eigene Datei / extern / Default | 6.409 / 96 / 1.172 |
-| Animationen unkomprimiert / time-coded / adaptive delta | 4.074 / 21 / 0 |
-| Kanäle unkomprimiert X / Y / Z / Q | 14.272 / 12.360 / 15.718 / 36.350 |
-| Kanäle time-coded X / Y / Z / Q | 581 / 569 / 562 / 722 |
-| Sichtbarkeitskanäle (raw / time-coded) | 1.042 / 0 |
-| Quaternion-Samples / nicht normiert oder NaN | 4.650.500 / 0 |
-| Meshes / Skins / Skin-Vertices | 70.585 / 169 / 22.710 |
-| Sub-Objekte / renderbar / Boxen / anfangs verborgen | 71.263 / 70.585 / 678 / 48 |
-| Nicht auflösbare HLOD-Einträge | 45 |
-| Nicht auflösbare Hierarchiereferenzen | 6 (Animationen `GENERALSKEL.GENERAL_*`, Hierarchie fehlt im Bestand) |
-| Verworfene Kanäle jenseits der Hierarchie | 233 |
-| Überhang unkomprimierter Kanäle | 8.333.276 Byte |
-| Ignorierte Chunks | 3 Emitter |
-| Textmodus-reparierte Dateien | 5 |
-| Lesen + Dekodieren aller Dateien | 3,9 s (Release, inkl. Datei-I/O) |
-| Gesamtaudit inkl. Modellbau, Bindung, Posenstichproben | 4,8 s |
+| W3D files in `Art/W3D` / decoded without error | 8,897 / 8,897 |
+| Hierarchies / bones in total / maximum | 6,481 / 134,535 / 345 |
+| HLOD models / models from bare meshes | 6,505 / 1,172 |
+| Hierarchy source own file / external / default | 6,409 / 96 / 1,172 |
+| Animations uncompressed / time-coded / adaptive delta | 4,074 / 21 / 0 |
+| Channels uncompressed X / Y / Z / Q | 14,272 / 12,360 / 15,718 / 36,350 |
+| Channels time-coded X / Y / Z / Q | 581 / 569 / 562 / 722 |
+| Visibility channels (raw / time-coded) | 1,042 / 0 |
+| Quaternion samples / not normalised or NaN | 4,650,500 / 0 |
+| Meshes / skins / skin vertices | 70,585 / 169 / 22,710 |
+| Sub-objects / renderable / boxes / initially hidden | 71,263 / 70,585 / 678 / 48 |
+| Unresolvable HLOD entries | 45 |
+| Unresolvable hierarchy references | 6 (animations `GENERALSKEL.GENERAL_*`, hierarchy missing in the content) |
+| Discarded channels beyond the hierarchy | 233 |
+| Surplus of uncompressed channels | 8,333,276 bytes |
+| Ignored chunks | 3 emitters |
+| Files repaired from text mode | 5 |
+| Reading + decoding all files | 3.9 s (Release, incl. file I/O) |
+| Whole audit incl. model building, binding, pose samples | 4.8 s |
 
-Der Realdatentest (`dotnet run --project tests/CnCNew.W3D.Tests -- --content-dir …`) verlangt 0
-Fehler und prüft diese Zählungen sowie `AVCrusader` (Turm dreht das Rohr um den Turmpivot,
-`TurretFX01` per Präfix), `ABArFrcCmd` mit eingebetteter Animation, `AIRngr_SKN` mit
-`AIRngr_SKL.AIRngr_STA` (Skin bewegt sich) und die time-coded Animation `AIOFCR_SKL.AICIAOFF_PLNT`.
+The real-data test (`dotnet run --project tests/CnCNew.W3D.Tests -- --content-dir …`) requires 0
+errors and checks these counts as well as `AVCrusader` (the turret rotates the barrel around the turret pivot,
+`TurretFX01` by prefix), `ABArFrcCmd` with an embedded animation, `AIRngr_SKN` with
+`AIRngr_SKL.AIRngr_STA` (the skin moves) and the time-coded animation `AIOFCR_SKL.AICIAOFF_PLNT`.
 
-## Bekannte Grenzen
+## Known limits
 
-- Aggregate- und Proxy-Arrays werden dekodiert und am Modell bereitgestellt, aber nicht zu Objekten
-  aufgelöst; der Bestand enthält keine.
-- LOD-Umschaltung nach `MaxScreenSize` ist nicht implementiert; alle 6.505 HLODs haben genau einen
-  LOD. `W3dModel` liefert alle LODs mit Index.
-- Zwei-Animationen-Blend (`Blend_Update`) und Animationskombinationen (`Combo_Update`) sind nicht
-  implementiert; die Posenauswertung kennt eine Animation plus Überschreibungen.
-- Welt-Translation für gefangene Knochen, Pre-3.0-Dateien und Morph-Animationen werden nicht
-  unterstützt (nicht im Bestand bzw. nicht von Generals genutzt).
-- Adaptive-Delta-Kanäle und time-coded Bitkanäle sind nur synthetisch getestet, weil der Bestand
-  keine enthält.
-- `Fast_Slerp` rechnet im Original mit Tabellen-Approximationen; CnCNew rechnet exakt, die Posen
-  können daher im Bereich der Tabellenfehler abweichen.
-- Meshes eines Modells werden beim Laden vollständig dekodiert (nicht lazy); der Speicher wird aber
-  pro Modell einmal belegt und über `W3dAssetLibrary` von allen Instanzen geteilt.
-- Emitter und alle anderen ignorierten Render-Objektarten werden nur gezählt, nicht interpretiert.
+- Aggregate and proxy arrays are decoded and provided on the model, but not resolved into
+  objects; the content contains none.
+- LOD switching by `MaxScreenSize` is not implemented; all 6,505 HLODs have exactly one
+  LOD. `W3dModel` delivers all LODs with their index.
+- Two-animation blend (`Blend_Update`) and animation combinations (`Combo_Update`) are not
+  implemented; the pose evaluation knows one animation plus overrides.
+- World translation for captured bones, pre-3.0 files and morph animations are not
+  supported (not in the content or not used by Generals).
+- Adaptive-delta channels and time-coded bit channels are tested only synthetically, because the content
+  contains none.
+- `Fast_Slerp` computes with table approximations in the original; CnCNew computes exactly, the poses
+  can therefore deviate within the range of the table errors.
+- Meshes of a model are decoded completely on loading (not lazily); the memory is, however,
+  allocated once per model and shared by all instances through `W3dAssetLibrary`.
+- Emitters and all other ignored render object kinds are only counted, not interpreted.
