@@ -1,358 +1,357 @@
-# Leistung: der Zustands-Hash (`TickPhase.Hash`)
+# Performance: the state hash (`TickPhase.Hash`)
 
-Stand: Phase 19, Kostenstelle „Zustands-Hash“ (`docs/handoffs/HANDOFF-PHASE19.md` Punkt 4; Ausgangslage `docs/PERFORMANCE.md` §6/§7).
-Ausgangscommit `74ccdde`, Branch `worktree-agent-ac725b90d346064f7`, 6. Oktober 2026.
+As of: Phase 19, cost centre "state hash" (`docs/handoffs/HANDOFF-PHASE19.md` item 4; starting point `docs/PERFORMANCE.md` §6/§7).
+Starting commit `74ccdde`, branch `worktree-agent-ac725b90d346064f7`, 6 October 2026.
 
-**Die eiserne Regel dieser Arbeit:** kein Hashwert ändert sich. Jeder Tick-Hash, Endhash und Kettenhash jedes Laufs bleibt
-bitgleich, und der inkrementelle Hash ist in jedem Tick gleich der vollen Neuberechnung. Alles, was hier bleibt, ist eine
-andere *Berechnung* derselben Werte. Eine andere Hash-*Konstruktion* wird in §7 vorgeschlagen, nicht umgesetzt.
+**The iron rule of this work:** no hash value changes. Every tick hash, final hash and chain hash of every run stays
+bit-identical, and the incremental hash is equal to the full recomputation in every tick. Everything that remains here is a
+different *computation* of the same values. A different hash *construction* is proposed in §7, not implemented.
 
-**Alle Zeiten in diesem Dokument sind nicht ruhig gemessen.** Der Rechner (AMD Ryzen 7 PRO 6850U, 16 logische Prozessoren)
-war während der ganzen Arbeit von vier weiteren Agenten belegt; die Tickzeiten lagen zeitweise um das Zwei- bis Fünffache
-über den ruhigen Werten aus `docs/PERFORMANCE.md` §6. Vergleiche stammen deshalb aus **gleichzeitig laufenden** Prozessen
-(alter und neuer Stand nebeneinander, gleiche Last) und aus **Zählern**, die das Werkzeug deterministisch mitführt (Objekte,
-Wörter, Bytes). Die Zähler sind exakt, die Zeiten sind Verhältnisse unter Last. Die ruhige Messung steht aus.
+**All times in this document are not measured quietly.** The machine (AMD Ryzen 7 PRO 6850U, 16 logical processors)
+was occupied by four further agents during the whole work; the tick times were at times two to five times
+above the quiet values from `docs/PERFORMANCE.md` §6. Comparisons therefore come from processes **running at the same time**
+(old and new state side by side, same load) and from **counters** that the tool keeps deterministically (objects,
+words, bytes). The counters are exact, the times are ratios under load. The quiet measurement is outstanding.
 
-**Kurzfassung.** Geblieben sind drei wertneutrale Änderungen (§4.1–4.3): die Hash-Phase kostet unter gleicher Last noch
-rund zwei Drittel (Gefecht mit 8 Spielern: Mittel 598 → 426 µs; `MD_USA05` 1.880 → 1.263; `MD_GLA05` 2.520 → 1.679), die
-Allokation in der Phase ist weg. Zwei weitergehende Versuche sind gemessen und **nicht** übernommen (§4.4, §4.5): der eine
-halbiert die Hash-Phase der Missionen noch einmal, nimmt dem Hash aber einen Schutz, auf den sich heute Stellen ohne
-`MarkDirty` verlassen (zurückgenommen, als benannte Entscheidung für den Koordinator beschrieben); der andere war sicher,
-brachte aber nichts. Nebenbei gefunden: **ein bestehender D8-Fehler im Ausgangsstand**, der einen Wert des
-Referenzmanifests betrifft (§4.6, nicht behoben, weil die Korrektur diesen Wert ändert), und ein verdeckter, der behoben
-ist. Was bleibt, ist Struktur: §6 und der Vorschlag in §7.
+**Summary.** What has remained is three value-neutral changes (§4.1–4.3): under the same load the hash phase still costs
+roughly two thirds (skirmish with 8 players: mean 598 → 426 µs; `MD_USA05` 1,880 → 1,263; `MD_GLA05` 2,520 → 1,679), the
+allocation in the phase is gone. Two more far-reaching attempts were measured and **not** adopted (§4.4, §4.5): one
+halves the hash phase of the missions once more but takes away from the hash a protection on which places without
+`MarkDirty` rely today (reverted, described as a named decision for the coordinator); the other was safe
+but yielded nothing. Found along the way: **an existing D8 error in the starting state** that affects one value of the
+reference manifest (§4.6, not fixed because the correction changes this value), and a concealed one that is
+fixed. What remains is structure: §6 and the proposal in §7.
 
-## 1. Wie der Hash heute gebaut ist
+## 1. How the hash is built today
 
-- `StateHash.Mix(hash, wort)` ist ein SplitMix64-Schritt: `z = hash + wort + Konstante`, zwei Xorshift-Multiplikationen,
-  ein Xorshift. `HashStateWriter` faltet damit **sequentiell**: jeder Aufruf von `IStateWriter` ist ein Wort (ein Text:
-  seine Länge, dann **ein Wort je Zeichen**). Feldnamen gehen nicht in den Hash, nur Werte und Struktur
+- `StateHash.Mix(hash, word)` is a SplitMix64 step: `z = hash + word + constant`, two xorshift multiplications,
+  one xorshift. `HashStateWriter` folds with it **sequentially**: every call of `IStateWriter` is one word (a text:
+  its length, then **one word per character**). Field names do not go into the hash, only values and structure
   (`BeginObject` = `0xB1`, `EndObject` = `0xE1`, `BeginArray` = `0xB2`, `EndArray` = `0xE2`).
-- Je Objekt: `HashEntity` = Faltung von `Entity.Describe` ab `StateHash.Seed`. Die Beschreibung ist: eigene Felder des
-  Objekts (ID, Vorlagenindex, **Vorlagenname als Text**, Besitzer, Position, Status, …, Türme, Feuerstufen, Erfassung),
-  dann für jedes Modul ein Rahmen (`BeginObject`, Index, **Modulname als Text**, **Modul-Tag als Text**, `BeginObject`),
-  der eigene Zustand des Moduls (`SimModule.Describe`) und zwei `EndObject`.
-- Welt: `_entitySum` ist die **Summe** (mod 2⁶⁴) der Objekt-Hashes; dazu Summen der Zeitgeber und der anstehenden Befehle.
-  `FinishHash` faltet in jedem Tick den globalen Teil (Tick, ID-Zähler, Zufallsströme, Spieler mit Geld/Upgrades/…,
-  verzögerter Schaden, Ablehnungen, Spawn-Warteschlange, Sicht-Hash) und die drei Summen.
-- Inkrementell: `MarkDirty(entity)` trägt ein Objekt in die Dirty-Liste ein; `ComputeIncrementalHash` beschreibt genau
-  diese Objekte neu und korrigiert die Summe um `neu − alt`. `ComputeFullHash` beschreibt alles (Konstruktor, Snapshot,
-  Prüfung); `VerifyIncrementalHash` vergleicht beide.
+- Per object: `HashEntity` = folding of `Entity.Describe` from `StateHash.Seed`. The description is: the object's own
+  fields (ID, template index, **template name as text**, owner, position, status, …, turrets, firing stages, acquisition),
+  then for every module a frame (`BeginObject`, index, **module name as text**, **module tag as text**, `BeginObject`),
+  the module's own state (`SimModule.Describe`) and two `EndObject`.
+- World: `_entitySum` is the **sum** (mod 2⁶⁴) of the object hashes; in addition sums of the timers and of the pending commands.
+  `FinishHash` folds in every tick the global part (tick, ID counter, random streams, players with money/upgrades/…,
+  deferred damage, rejections, spawn queue, vision hash) and the three sums.
+- Incremental: `MarkDirty(entity)` enters an object into the dirty list; `ComputeIncrementalHash` re-describes exactly
+  these objects and corrects the sum by `new − old`. `ComputeFullHash` describes everything (constructor, snapshot,
+  check); `VerifyIncrementalHash` compares the two.
 
-Drei Eigenschaften dieser Konstruktion bestimmen alles Weitere:
+Three properties of this construction determine everything that follows:
 
-1. **Die Faltung ist eine Abhängigkeitskette.** Jedes `Mix` braucht das Ergebnis des vorigen. Der Zustand nach einem
-   Textstück hängt von jedem Wort davor ab (Position, Status, Module davor). Ein vorab berechneter „Zustand nach dem
-   Modulnamen“ ist deshalb nur an derselben Stelle desselben Stroms mit demselben Vorlauf gültig – also praktisch nie.
-   Vorab berechnen lassen sich die **Wörter**, nicht der Hashzustand (§4.2).
-2. **Der Wecktick jedes Update-Moduls wird gehasht** (`nextWake`, Pflicht laut `SourceRules`). Ein Modul, das jeden Tick
-   läuft, ändert damit in jedem Tick den Hash seines Objekts – auch wenn es sonst nichts tut. „Als geändert markiert,
-   obwohl sich nichts geändert hat“ gibt es in dieser Konstruktion nicht: der Test `UpdateChangeWatch` prüft über
-   149.155 echte Modul-Updates aller 183 Modultypen, dass **jedes** Update die Beschreibung seines Objekts verändert,
-   und der Zähler `HashWork.Unchanged` zeigt 0,00–0,53 % neu beschriebene Objekte mit unverändertem Hash.
-3. **Der Scheduler markiert jedes Objekt, dessen Modul gelaufen ist, als Ganzes.** Fast jedes Objekt trägt ein Modul, das
-   jeden Tick läuft (`StealthUpdate`). Diese Markierung deckt deshalb nebenbei jede Stelle zu, die ein solches Objekt von
-   außen ändert und `MarkDirty` vergisst (§4.4). Das ist kein Entwurf, aber es ist heute ein Teil der Sicherheit.
+1. **The folding is a dependency chain.** Every `Mix` needs the result of the previous one. The state after a
+   piece of text depends on every word before it (position, status, modules before it). A precomputed "state after the
+   module name" is therefore valid only at the same place of the same stream with the same lead-in – that is, practically never.
+   What can be precomputed is the **words**, not the hash state (§4.2).
+2. **The wake tick of every update module is hashed** (`nextWake`, mandatory according to `SourceRules`). A module that runs
+   every tick thereby changes the hash of its object in every tick – even if it does nothing else. "Marked as changed
+   although nothing has changed" does not exist in this construction: the test `UpdateChangeWatch` checks over
+   149,155 real module updates of all 183 module types that **every** update changes the description of its object,
+   and the counter `HashWork.Unchanged` shows 0.00–0.53 % re-described objects with an unchanged hash.
+3. **The scheduler marks every object whose module has run as a whole.** Almost every object carries a module that
+   runs every tick (`StealthUpdate`). This marking therefore incidentally covers up every place that changes such an object from
+   outside and forgets `MarkDirty` (§4.4). That is not a design, but today it is a part of the safety.
 
-## 2. Messwerkzeug
+## 2. Measuring tool
 
-`SimTool perf` / `perf-mission` (Befehle in `docs/PERFORMANCE.md` §3) geben in Sonde (b) zusätzlich aus:
+`SimTool perf` / `perf-mission` (commands in `docs/PERFORMANCE.md` §3) additionally print in probe (b):
 
-- **Zähler des inkrementellen Hashs** (`SimulationWorld.HashWorkDone`, kein Zustand): neu beschriebene Objekte, gefaltete
-  Wörter, Objekte mit unverändertem Hash; Allokation innerhalb der Hash-Phase.
-- **Die zwei Hälften der Phase** auf dem Endzustand, in warmer Schleife: Wörter aufschreiben; falten in einer Kette; falten
-  nebeneinander (`StateHash.FoldStreams`).
-- **Je Modultyp**, was ein `Describe` schreibt und allokiert (gezählt, nicht gestoppt).
-- Mit `--prefix-probe` (kostet Tickzeit, nicht für Zeitmessungen): alle 250 Ticks werden alle Objekte in zwei
-  aufeinanderfolgenden Ticks aufgeschrieben und verglichen: Anteil der Wörter vor der ersten Änderung; die geänderten
-  Objekte zerlegt in eigene Felder / Modulzustände / Rahmen; Objekte, an denen sich nur Weckticks bewegt haben; welche
-  Modultypen hinter „genau ein Modul geändert“ stehen.
-- Ein **Prototyp** für §7 (ein anderer Hash, wird nur gemessen): Modulname und Tag als je ein Wort.
+- **Counters of the incremental hash** (`SimulationWorld.HashWorkDone`, no state): re-described objects, folded
+  words, objects with an unchanged hash; allocation within the hash phase.
+- **The two halves of the phase** on the final state, in a warm loop: writing down words; folding in one chain; folding
+  side by side (`StateHash.FoldStreams`).
+- **Per module type**, what a `Describe` writes and allocates (counted, not timed).
+- With `--prefix-probe` (costs tick time, not for time measurements): every 250 ticks all objects are written down in two
+  consecutive ticks and compared: share of the words before the first change; the changed
+  objects broken down into own fields / module states / frames; objects on which only wake ticks have moved; which
+  module types are behind "exactly one module changed".
+- A **prototype** for §7 (a different hash, is only measured): module name and tag as one word each.
 
-## 3. Gemessene Anteile (Ausgangsstand)
+## 3. Measured shares (starting state)
 
-Zähler über den ganzen Lauf, Mittel je Tick:
+Counters over the whole run, mean per tick:
 
-| Lauf | Objekte neu beschrieben je Tick | Wörter je Tick | Wörter je Objekt | davon eigene Felder | davon Modulzustand | davon Modulrahmen (Index, Name, Tag) | Hash unverändert |
+| Run | Objects re-described per tick | Words per tick | Words per object | of which own fields | of which module state | of which module frame (index, name, tag) | Hash unchanged |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| Twilight Flame, 8 Spieler, 18.000 Ticks | 173,3 (89 % der Objekte) | 134.637 | 777 | 72 | 60 | 645 (83 %) | 0,17 % |
-| `MD_USA05`, 3.000 Ticks | 1.311,8 (70 %) | 426.247 | 325 | 55 | 15 | 255 (78 %) | 0,00 % |
-| `MD_GLA05`, 3.000 Ticks | 1.738,8 (77 %) | 553.584 | 318 | 53 | 13 | 252 (79 %) | 0,53 % |
+| Twilight Flame, 8 players, 18,000 ticks | 173.3 (89 % of the objects) | 134,637 | 777 | 72 | 60 | 645 (83 %) | 0.17 % |
+| `MD_USA05`, 3,000 ticks | 1,311.8 (70 %) | 426,247 | 325 | 55 | 15 | 255 (78 %) | 0.00 % |
+| `MD_GLA05`, 3,000 ticks | 1,738.8 (77 %) | 553,584 | 318 | 53 | 13 | 252 (79 %) | 0.53 % |
 
-Rund 75 % aller Wörter sind Textzeichen (Endzustand Twilight Flame: 138.755 von 184.273), fast alle aus Modulname und
-Tag; der eigene Zustand aller Module zusammen ist 5–8 % der Wörter.
+Roughly 75 % of all words are text characters (final state Twilight Flame: 138,755 of 184,273), almost all from module name and
+tag; the own state of all modules together is 5–8 % of the words.
 
-Woher die Zeit kommt:
+Where the time comes from:
 
-| Anteil | Befund |
+| Share | Finding |
 |---|---|
-| **Falten** | Die Phase ist an die Latenz der einen Kette gebunden: 3,4–4,0 ns je Wort in einer Kette (isolierter Mikrobenchmark; unter Last 4–10 ns). Bei 777 Wörtern sind das rund 3 µs je Objekt – im Ausgangsstand drei Viertel der Phase im warmen Zustand. |
-| **Beschreiben** | 0,8–1,2 µs je Objekt warm (Twilight Flame), davon der größte Teil die zwei Texte je Modul durch die Schreiber-Schnittstelle. Im Lauf kommt hinzu, dass jedes neu beschriebene Objekt samt aller Module (auch der schlafenden) aus kaltem Speicher gelesen wird. Nach §4.1/§4.2 ist das der größere Teil der Phase (§4.5). |
-| **Zu viele Objekte „geändert“** | In den Missionen haben sich an **95,5 % (`MD_USA05`) bzw. 92,7 % (`MD_GLA05`)** der neu beschriebenen Objekte **nur Weckticks** bewegt (Twilight Flame 27,7 %). Dahinter steht fast allein `StealthUpdate` (92–94 % der Fälle „genau ein Modul geändert“ in den Missionen): das Modul trägt fast jedes Objekt, es läuft jeden Tick, und fast kein Objekt kann sich tarnen. In Twilight Flame teilen sich `StealthUpdate` und `GenerateMinefieldBehavior` (wartet jeden Tick auf sein Upgrade) je rund 8 %, dann `SupplyWarehouseDockUpdate` 4,5 %, `ChinookAIUpdate` 3 %. |
-| **Globaler Teil** | 7–10 µs je Tick in den Missionen (10–12 Seiten), 0,3–0,5 % der Phase. Nicht angefasst. |
-| **Allokation in der Phase** | 3.042 Bytes je Tick (Twilight Flame), 3.739 (`MD_USA05`) von 82–218 KB je Tick insgesamt: zur Laufzeit zusammengesetzte Feldnamen (`"start" + "X"`, `"tower" + index`), die der Hash-Schreiber nie ansieht. |
+| **Folding** | The phase is bound to the latency of the one chain: 3.4–4.0 ns per word in one chain (isolated microbenchmark; under load 4–10 ns). With 777 words that is roughly 3 µs per object – in the starting state three quarters of the phase in the warm state. |
+| **Describing** | 0.8–1.2 µs per object warm (Twilight Flame), of which the largest part is the two texts per module through the writer interface. In the run there is the addition that every re-described object including all modules (also the sleeping ones) is read from cold memory. After §4.1/§4.2 this is the larger part of the phase (§4.5). |
+| **Too many objects "changed"** | In the missions, **only wake ticks** have moved on **95.5 % (`MD_USA05`) and 92.7 % (`MD_GLA05`) respectively** of the re-described objects (Twilight Flame 27.7 %). Behind this is almost solely `StealthUpdate` (92–94 % of the cases "exactly one module changed" in the missions): almost every object carries the module, it runs every tick, and almost no object can cloak. In Twilight Flame `StealthUpdate` and `GenerateMinefieldBehavior` (waits every tick for its upgrade) share roughly 8 % each, then `SupplyWarehouseDockUpdate` 4.5 %, `ChinookAIUpdate` 3 %. |
+| **Global part** | 7–10 µs per tick in the missions (10–12 sides), 0.3–0.5 % of the phase. Not touched. |
+| **Allocation in the phase** | 3,042 bytes per tick (Twilight Flame), 3,739 (`MD_USA05`) of 82–218 KB per tick in total: field names composed at runtime (`"start" + "X"`, `"tower" + index`) that the hash writer never looks at. |
 
-Die Vermutung des Handoffs „`MarkDirty` für jedes Modul-Update, ob sich etwas ändert oder nicht“ trifft den Kern nicht:
-es ändert sich immer etwas (der Wecktick). Und der naheliegende Schluss „dann für diese Objekte weniger tun“ ist genau
-die Stelle, an der diese Arbeit einen Hash verfälscht hat (§4.4).
+The assumption of the handoff "`MarkDirty` for every module update, whether something changes or not" does not hit the core:
+something always changes (the wake tick). And the obvious conclusion "then do less for these objects" is exactly
+the place at which this work falsified a hash (§4.4).
 
-## 4. Die Änderungen
+## 4. The changes
 
-### 4.1 Vier Objekte nebeneinander falten (`369fe0d`) – bleibt
+### 4.1 Folding four objects side by side (`369fe0d`) – stays
 
-`ComputeIncrementalHash` lässt die geänderten Objekte ihre Wörter in einen wiederverwendeten Puffer schreiben
-(`WordStateWriter`: dieselben Wörter in derselben Reihenfolge, die `HashStateWriter` mischen würde) und faltet sie mit
-`StateHash.FoldStreams`: vier Objekte gleichzeitig, jedes ab dem Startwert, jedes Wort durch dasselbe `Mix`. Ein Prozessor
-wartet in einer Kette die meiste Zeit auf die Multiplikation; vier voneinander unabhängige Ketten überlappen sich.
+`ComputeIncrementalHash` lets the changed objects write their words into a reused buffer
+(`WordStateWriter`: the same words in the same order that `HashStateWriter` would mix) and folds them with
+`StateHash.FoldStreams`: four objects at the same time, each from the start value, each word through the same `Mix`. In one chain a processor
+waits most of the time for the multiplication; four chains independent of each other overlap.
 
-**Wertneutral, weil** jeder Strom genau die Wörter in genau der Reihenfolge durch genau die Funktion bekommt wie zuvor;
-nur die Reihenfolge, in der die Ströme *untereinander* vorankommen, ist anders, und sie teilen keinen Zustand. Die
-Objekt-Hashes werden in Listenreihenfolge nacheinander in die Summe eingerechnet wie bisher. `ComputeFullHash` und
-`VerifyIncrementalHash` benutzen weiter den einfachen `HashStateWriter`: die volle Berechnung bleibt ein unabhängiger
-Richter über den neuen Weg. Tests: `FoldStreams` gegen den sequentiellen Hash für 400 zufällige Strommengen (leere Ströme,
-weniger als vier); `WordStateWriter` gegen `HashStateWriter` für jede Aufrufart.
+**Value-neutral because** every stream gets exactly the words in exactly the order through exactly the function as before;
+only the order in which the streams advance *among each other* is different, and they share no state. The
+object hashes are added into the sum one after another in list order as before. `ComputeFullHash` and
+`VerifyIncrementalHash` continue to use the simple `HashStateWriter`: the full computation remains an independent
+judge of the new path. Tests: `FoldStreams` against the sequential hash for 400 random sets of streams (empty streams,
+fewer than four); `WordStateWriter` against `HashStateWriter` for every kind of call.
 
-Keine Threads, keine Vektortypen, kein unsicherer Code: nur vier lokale Variablen in einer Schleife.
+No threads, no vector types, no unsafe code: only four local variables in a loop.
 
-### 4.2 Die Wörter der Modulrahmen vorbereiten (`158aee7`) – bleibt
+### 4.2 Preparing the words of the module frames (`158aee7`) – stays
 
-Index, Name und Tag eines Moduls ändern sich nach dem Anhängen nie. Die Welt hält ihre Wörter je Vorlage und Modulplatz
-(einmal geschrieben von `Entity.DescribeModuleFrame`, der einzigen Definition des Rahmens); der Wort-Schreiber des
-inkrementellen Hashs kopiert sie, statt zwei Zeichenketten je Modul durch die Schnittstelle zu schicken.
+Index, name and tag of a module never change after attaching. The world holds their words per template and module slot
+(written once by `Entity.DescribeModuleFrame`, the only definition of the frame); the word writer of the
+incremental hash copies them instead of sending two strings per module through the interface.
 
-**Warum nicht der Hashzustand:** siehe §1, Eigenschaft 1 – der Zustand vor dem Rahmen ist bei jedem Objekt und in jedem
-Tick ein anderer. Vorbereitet sind die kodierten Wörter; die Faltung sieht dieselben Wörter in derselben Reihenfolge.
-**Wertneutral, weil** die vorbereiteten Wörter von derselben Routine stammen, die jeder andere Schreiber weiter Aufruf
-für Aufruf bekommt (voller Hash, Snapshot, Werkzeuge). Test: die Wortbeschreibung jeder Vorlage der synthetischen Fixture
-und aller 2.115 instanziierbaren Objekte der echten Daten, lebend und sterbend, faltet zum Hash der ausgeschriebenen
-Beschreibung.
+**Why not the hash state:** see §1, property 1 – the state before the frame is a different one for every object and in every
+tick. What is prepared is the encoded words; the folding sees the same words in the same order.
+**Value-neutral because** the prepared words come from the same routine that every other writer continues to get call
+by call (full hash, snapshot, tools). Test: the word description of every template of the synthetic fixture
+and of all 2,115 instantiable objects of the real data, living and dying, folds to the hash of the written-out
+description.
 
-### 4.3 Keine Feldnamen für einen Schreiber bauen, der sie verwirft (`e4290ca`) – bleibt
+### 4.3 Not building field names for a writer that discards them (`e4290ca`) – stays
 
-`IStateWriter.KeepsNames` (Standard `true`; `false` für die beiden Hash-Schreiber). Fünf Stellen, die einen Namen zur
-Laufzeit zusammensetzen (`WritePoint` der Geschosse und der Flugzeuge, `FireWeaponWhenDamagedBehavior`, Brückentürme,
-späte Ablehnungsgründe), geben dem Hash den nackten Namen und bauen den echten nur für Schreiber, die Namen behalten.
-**Wertneutral, weil** Namen nie in den Hash gehen; Werte und Reihenfolge sind unberührt. Test: jede verglichene
-Beschreibung geht zusätzlich an einen Schreiber, der Namen behält; er muss zum selben Hash mischen und darf innerhalb
-eines Objekts keinen Namen zweimal sehen (ein gekürzter Name, der ihn erreichte, würde kollidieren).
+`IStateWriter.KeepsNames` (default `true`; `false` for the two hash writers). Five places that compose a name at
+runtime (`WritePoint` of the projectiles and of the aircraft, `FireWeaponWhenDamagedBehavior`, bridge towers,
+late rejection reasons) give the hash the bare name and build the real one only for writers that keep names.
+**Value-neutral because** names never go into the hash; values and order are untouched. Test: every compared
+description additionally goes to a writer that keeps names; it must mix to the same hash and must not see any name twice within
+one object (a shortened name that reached it would collide).
 
-### 4.4 Ein Modul allein hashen, wenn sein Update dafür bürgt (`cf36a42`) – **zurückgenommen** (`791bbf5`)
+### 4.4 Hashing one module alone when its update vouches for it (`cf36a42`) – **reverted** (`791bbf5`)
 
-**Die Idee.** Ein Update-Modul verspricht am Ende seines eigenen `Update`, dass sich außerhalb seines eigenen Zustands
-nichts geändert hat (`StealthUpdate`, wenn der Status des Objekts derselbe ist; `GenerateMinefieldBehavior`, solange es
-auf sein Upgrade wartet). Der Scheduler markiert dann nur das Modul; der Hash hält die Wörter des Objekts, ersetzt die
-des einen Moduls und setzt die Faltung ab einem Prüfpunkt vor diesem Modul fort. Das Objekt wird **nicht** neu
-beschrieben.
+**The idea.** An update module promises at the end of its own `Update` that nothing has changed outside its own state
+(`StealthUpdate`, when the status of the object is the same; `GenerateMinefieldBehavior`, as long as it
+waits for its upgrade). The scheduler then marks only the module; the hash holds the words of the object, replaces those
+of the one module and continues the folding from a checkpoint before this module. The object is **not** re-described.
 
-**Die Wirkung** (drei Stände gleichzeitig, starke Last; Hash-Phase Mittel / Median in µs): `MD_GLA05` 5.237,9 / 3.672,7
-(Ausgang) → 4.084,8 / 2.854,3 (nach §4.3) → 1.860,2 / 1.346,7; `MD_USA05` 4.599,3 / 2.747,3 → 3.056,8 / 1.788,3 →
-1.809,8 / 1.085,6; Twilight Flame unverändert (1.235 → 1.199). 90,6–92,4 % der Missionsobjekte gingen den Modulweg, die
-gefalteten Wörter fielen von 426.247 auf 173.733 bzw. von 553.584 auf 177.145 je Tick.
+**The effect** (three states at the same time, heavy load; hash phase mean / median in µs): `MD_GLA05` 5,237.9 / 3,672.7
+(start) → 4,084.8 / 2,854.3 (after §4.3) → 1,860.2 / 1,346.7; `MD_USA05` 4,599.3 / 2,747.3 → 3,056.8 / 1,788.3 →
+1,809.8 / 1,085.6; Twilight Flame unchanged (1,235 → 1,199). 90.6–92.4 % of the mission objects went the module path, the
+folded words fell from 426,247 to 173,733 and from 553,584 to 177,145 per tick respectively.
 
-**Geprüft** (dieser Stand, jeder Tick gegen die volle Neuberechnung): Schnellsatz (9 Läufe), die fünf D8-Missionen,
-Referenzmatch und 21 weitere Missionen – 34 verschiedene Läufe. Eine Abweichung, in
-`mission_GC_SuperWeaponsGeneral_GLADemolitionGeneral`; sie tritt **im Ausgangsstand genauso auf** und gehört nicht zu
-diesem Versuch (§4.6). Dem Versuch selbst ist in diesen Läufen kein Fehler nachgewiesen.
+**Checked** (this state, every tick against the full recomputation): quick set (9 runs), the five D8 missions,
+reference match and 21 further missions – 34 different runs. One deviation, in
+`mission_GC_SuperWeaponsGeneral_GLADemolitionGeneral`; it occurs **in the starting state in exactly the same way** and does not belong to
+this attempt (§4.6). No error has been proven against the attempt itself in these runs.
 
-**Warum trotzdem zurückgenommen.** Wegen Eigenschaft 3 aus §1: bis dahin deckt die ganze Markierung des Schedulers jede
-Stelle zu, die ein Objekt mit einem jeden Tick laufenden Modul von außen ändert und `MarkDirty` vergisst – das Objekt
-wird ohnehin jeden Tick neu beschrieben. Das Versprechen *eines* Moduls kann nicht dafür bürgen, was *anderer* Code in
-sein Objekt schreibt. Dass es solche Stellen gibt, ist belegt: eine wurde beim Lesen gefunden
-(`StealthUpdate.MarkDetected`, aus dem Update des Detektors gerufen; unter dem Versuch wäre der Hash des entdeckten
-Objekts veraltet), eine zweite ist der bestehende Fehler aus §4.6 – und der ist der Phase-18-Prüfung entgangen. Weitere
-sind auf Pfaden zu erwarten, die kein geprüfter Lauf nimmt (Spielerbefehle, späte Missionsphasen). Der Versuch macht aus
-jeder solchen verdeckten Stelle einen falschen Hash. Nach der Regel dieser Arbeit („im Zweifel markiert lassen“) ist das
-keine Optimierung, sondern eine Entscheidung über das Risiko – und die gehört dem Koordinator: der Commit `cf36a42` ist
-mit `git revert 791bbf5` wieder da.
+**Why reverted nevertheless.** Because of property 3 from §1: until then the whole marking of the scheduler covers up every
+place that changes an object with a module running every tick from outside and forgets `MarkDirty` – the object
+is re-described every tick anyway. The promise of *one* module cannot vouch for what *other* code writes into
+its object. That such places exist is proven: one was found while reading
+(`StealthUpdate.MarkDetected`, called from the update of the detector; under the attempt the hash of the detected
+object would be stale), a second is the existing error from §4.6 – and that one escaped the Phase 18 check. Further ones
+are to be expected on paths that no checked run takes (player commands, late mission phases). The attempt turns
+every such concealed place into a wrong hash. By the rule of this work ("when in doubt leave it marked") that is
+not an optimisation but a decision about the risk – and that belongs to the coordinator: the commit `cf36a42` is
+back with `git revert 791bbf5`.
 
-**Richtigstellung zur Historie:** Die Nachricht des Revert-Commits `791bbf5` schreibt die Abweichung in
-`mission_GC_SuperWeaponsGeneral_GLADemolitionGeneral` dem Versuch zu. Das war zum Zeitpunkt des Reverts die Annahme und
-ist falsch; die Gegenprobe am Ausgangsstand (§4.6) kam danach. Der Grund für die Rücknahme ist der oben genannte.
+**Correction to the history:** the message of the revert commit `791bbf5` attributes the deviation in
+`mission_GC_SuperWeaponsGeneral_GLADemolitionGeneral` to the attempt. That was the assumption at the time of the revert and
+is wrong; the cross-check on the starting state (§4.6) came afterwards. The reason for the reversal is the one named above.
 
-**Was davon bleibt (Commit `fix(sim)` nach dem Revert):** `StealthUpdate.MarkDetected` markiert das entdeckte Objekt
-selbst. Kein Hashwert ändert sich dadurch (das Objekt ist durch sein jeden Tick laufendes Modul ohnehin markiert). Test
-`Determinism D8: detection from another entity's update reaches the tick hash`: der Hash wird unmittelbar nach dem Aufruf
-geprüft, bevor ein Tick ihn zudecken kann; ohne die Korrektur scheitert er („changed without MarkDirty: 1 Cloaked“).
+**What remains of it (commit `fix(sim)` after the revert):** `StealthUpdate.MarkDetected` marks the detected object
+itself. No hash value changes because of it (the object is marked anyway by its module running every tick). Test
+`Determinism D8: detection from another entity's update reaches the tick hash`: the hash is checked immediately after the call,
+before a tick can cover it up; without the correction it fails ("changed without MarkDirty: 1 Cloaked").
 
-**Was der Versuch zeigt:** der große Hebel der Missionen ist nicht das Falten, sondern das **Nicht-Beschreiben** – und das
-ist erst ohne Vorbehalt zu haben, wenn die Markierung ohne den Schutz des Schedulers trägt (§7 C).
+**What the attempt shows:** the big lever of the missions is not the folding but the **not describing** – and that
+can only be had without reservation when the marking holds without the protection of the scheduler (§7 C).
 
-### 4.5 Die Faltung hinter einem verglichenen, unveränderten Anfang fortsetzen – **gemessen, nicht übernommen**
+### 4.5 Continuing the folding behind a compared, unchanged beginning – **measured, not adopted**
 
-Die sichere Variante derselben Idee, ohne Versprechen: jedes oft beschriebene Objekt wird weiter **ganz beschrieben**
-(der Scheduler markiert wie immer); sein Anfang (eigene Felder, Zustände der vorderen Module, die Wörter dazwischen) wird
-**Wort für Wort** mit einer gehaltenen Kopie verglichen, und nur wenn er gleich ist, setzt die Faltung an einem Prüfpunkt
-dahinter fort. Wertneutral nach Konstruktion (die Faltung läuft von links nach rechts; ein gleicher Anfang hat denselben
-Faltungszustand), keine neue D8-Fläche. Gebaut, getestet (jeder Tick geprüft), der Schnellsatz mit `--verify-incremental`
-lief für die erste Fassung ohne Abweichung (60.896 Ticks). Der Quelltext ist nicht im Branch.
+The safe variant of the same idea, without a promise: every frequently described object continues to be **described completely**
+(the scheduler marks as always); its beginning (own fields, states of the front modules, the words in between) is
+compared **word by word** with a held copy, and only if it is equal does the folding continue at a checkpoint
+behind it. Value-neutral by construction (the folding runs from left to right; an equal beginning has the same
+folding state), no new D8 surface. Built, tested (every tick checked), the quick set with `--verify-incremental`
+ran without deviation for the first version (60,896 ticks). The source code is not in the branch.
 
-Gemessen (gleichzeitig mit dem Stand nach §4.3): die gefalteten Wörter fielen in `MD_GLA05` von 553.584 auf 158.576–203.703
-je Tick, in `MD_USA05` von 426.247 auf 162.027–215.274 (66,7–98,1 % der Objekte fortgesetzt, 207–249 Wörter Anfang im
-Mittel) – **die Zeit aber nicht verlässlich**: `MD_USA05` 1.783 → 1.288 und 1.498 → 1.458 µs; `MD_GLA05` 1.913 → 1.641,
-2.004 → 2.482 und 1.946 → 1.979–2.141 µs in drei Messungen; Twilight Flame 2–9 % **langsamer** (524 → 562–571, 585 → 598).
-Nach §4.1 kostet ein Wort im Falten noch rund 1,1 ns; der Vergleich des Anfangs und die zusätzlich berührten
-Speicherzeilen kosten etwa so viel, wie die gesparte Faltung bringt. Der Rest der Phase ist das Beschreiben, und das
-bleibt. Nicht übernommen: Komplexität ohne belegten Gewinn.
+Measured (at the same time as the state after §4.3): the folded words fell in `MD_GLA05` from 553,584 to 158,576–203,703
+per tick, in `MD_USA05` from 426,247 to 162,027–215,274 (66.7–98.1 % of the objects continued, 207–249 words of beginning on
+average) – **but the time not reliably**: `MD_USA05` 1,783 → 1,288 and 1,498 → 1,458 µs; `MD_GLA05` 1,913 → 1,641,
+2,004 → 2,482 and 1,946 → 1,979–2,141 µs in three measurements; Twilight Flame 2–9 % **slower** (524 → 562–571, 585 → 598).
+After §4.1 a word still costs roughly 1.1 ns in folding; the comparison of the beginning and the additionally touched
+memory lines cost about as much as the saved folding yields. The rest of the phase is the describing, and that
+remains. Not adopted: complexity without a proven gain.
 
-### 4.6 Fund: ein bestehender D8-Fehler im Ausgangsstand (`PauseCountdown`) – **nicht behoben, gemeldet**
+### 4.6 Find: an existing D8 error in the starting state (`PauseCountdown`) – **not fixed, reported**
 
-`SpecialPowerModuleBase.PauseCountdown` (gerufen von den Skriptaktionen `NAMED_STOP_SPECIAL_POWER_COUNTDOWN` /
-`NAMED_START_SPECIAL_POWER_COUNTDOWN` und von `UnpauseSpecialPowerUpgrade`) ändert `pausedCount`, `pausedOnFrame` und
-`availableOnFrame`, ohne das Objekt zu markieren. Am **Ausgangscommit `74ccdde`** meldet
-`reference-manifest check --set full --only mission_GC_SuperWeaponsGeneral_GLADemolitionGeneral --explain-incremental`:
+`SpecialPowerModuleBase.PauseCountdown` (called by the script actions `NAMED_STOP_SPECIAL_POWER_COUNTDOWN` /
+`NAMED_START_SPECIAL_POWER_COUNTDOWN` and by `UnpauseSpecialPowerUpgrade`) changes `pausedCount`, `pausedOnFrame` and
+`availableOnFrame` without marking the object. At the **starting commit `74ccdde`**,
+`reference-manifest check --set full --only mission_GC_SuperWeaponsGeneral_GLADemolitionGeneral --explain-incremental` reports:
 
 > INCREMENTAL HASH MISMATCH in 1 of 3000 verified ticks; first: after tick 2100 (690 objects): Incremental state hash
 > `15DC6118968B6B1A` differs from the full hash `C9B158ECE41535CA` at tick 2101 (changed without MarkDirty: 659
 > `SupW_AmericaParticleCannonUplink`) – `modules.[3 SpecialAbility].state.availableOnFrame`: 7201 → 9301,
 > `pausedCount`: 1 → 0.
 
-Folgen, wie in `docs/DETERMINISM-FINDINGS.md` §6 beschrieben: der Wert dieses Laufs im Referenzmanifest (Kette
-`CC877D4FC06A1DF9`, Endhash `69721DF608A6C803`) ist der Hash eines veralteten Zwischenstands; der Lauf hasht anders,
-sobald etwas den vollen Hash berechnet (im Prüfmodus: Kette `E7EAD89208DD9861`). Ohne Prüfmodus besteht der Lauf das
-Manifest – deshalb ist es bisher nicht aufgefallen; die Phase-18-Prüfung lief je Karte 1.500 Ticks, der Fehler tritt bei
-Tick 2.100 auf.
+Consequences, as described in `docs/DETERMINISM-FINDINGS.md` §6: the value of this run in the reference manifest (chain
+`CC877D4FC06A1DF9`, final hash `69721DF608A6C803`) is the hash of a stale intermediate state; the run hashes differently
+as soon as something computes the full hash (in check mode: chain `E7EAD89208DD9861`). Without check mode the run passes the
+manifest – which is why it has not been noticed so far; the Phase 18 check ran 1,500 ticks per map, the error occurs at
+tick 2,100.
 
-Die Korrektur ist eine Zeile (`world.MarkDirty(Entity)` am Ende von `PauseCountdown`) und **ändert genau diesen
-Referenzwert**: Kette `ADCCB4A1B93CBAD7`, Endhash `5E436B3BD943DFC2`, Snapshot-SHA-256 `5C52347C…6426E`; der inkrementelle
-Hash ist dann in allen 3.000 Ticks gleich dem vollen, und die übrigen 49 Läufe des Manifests bleiben identisch (mit der
-Korrektur gemessen: 20 + 21 + 8 Läufe identisch, 718.191 Ticks ohne Abweichung geprüft). Sie ist **nicht im Branch**: diese
-Arbeit durfte keinen Hashwert und das Manifest nicht ändern. Empfehlung: eigener Commit des Koordinators mit dem neu
-geschriebenen Wert dieses einen Laufs, wie bei `99a02fe`/`df523e4`; ein Test dafür (Aufruf von `PauseCountdown`,
-`VerifyIncrementalHash` unmittelbar danach) scheitert heute und besteht mit der Zeile.
+The correction is one line (`world.MarkDirty(Entity)` at the end of `PauseCountdown`) and **changes exactly this
+reference value**: chain `ADCCB4A1B93CBAD7`, final hash `5E436B3BD943DFC2`, snapshot SHA-256 `5C52347C…6426E`; the incremental
+hash is then equal to the full one in all 3,000 ticks, and the remaining 49 runs of the manifest stay identical (measured with the
+correction: 20 + 21 + 8 runs identical, 718,191 ticks checked without deviation). It is **not in the branch**: this
+work was not allowed to change any hash value or the manifest. Recommendation: a commit of the coordinator's own with the newly
+written value of this one run, as with `99a02fe`/`df523e4`; a test for it (call of `PauseCountdown`,
+`VerifyIncrementalHash` immediately afterwards) fails today and passes with the line.
 
-## 5. Vorher/nachher (Stand des Branches)
+## 5. Before/after (state of the branch)
 
-**Nicht ruhig gemessen.** Hash-Phase, µs je Tick, Mittel / Median; beide Stände einer Zeile liefen gleichzeitig, sonst
-nichts von dieser Arbeit. Das ist die Messung mit der geringsten Fremdlast des Tages (der Ausgangsstand lag dabei 11–13 %
-über seinen ruhigen Werten aus `docs/PERFORMANCE.md` §6.2: 530,8 / 1.681,2 / 2.271,3 µs).
+**Not measured quietly.** Hash phase, µs per tick, mean / median; both states of a row ran at the same time, otherwise
+nothing of this work. This is the measurement with the lowest foreign load of the day (the starting state lay 11–13 %
+above its quiet values from `docs/PERFORMANCE.md` §6.2 in the process: 530.8 / 1,681.2 / 2,271.3 µs).
 
-| Lauf | Ausgang `74ccdde` | Stand des Branches `2f815d7` | Faktor (Mittel) | Tick ohne die ersten 300, Mittel |
+| Run | Start `74ccdde` | State of the branch `2f815d7` | Factor (mean) | Tick without the first 300, mean |
 |---|---:|---:|---:|---:|
-| Twilight Flame, 8 Spieler, 18.000 Ticks | 598,1 / 647,0 | 425,8 / 456,2 | 1,40 | 7.841 → 7.495 |
-| `MD_USA05`, 3.000 Ticks | 1.880,1 / 1.798,2 | 1.263,4 / 1.215,7 | 1,49 | 8.694 → 8.131 |
-| `MD_GLA05`, 3.000 Ticks | 2.520,2 / 2.464,6 | 1.679,1 / 1.638,4 | 1,50 | 20.007 → 20.580 |
+| Twilight Flame, 8 players, 18,000 ticks | 598.1 / 647.0 | 425.8 / 456.2 | 1.40 | 7,841 → 7,495 |
+| `MD_USA05`, 3,000 ticks | 1,880.1 / 1,798.2 | 1,263.4 / 1,215.7 | 1.49 | 8,694 → 8,131 |
+| `MD_GLA05`, 3,000 ticks | 2,520.2 / 2,464.6 | 1,679.1 / 1,638.4 | 1.50 | 20,007 → 20,580 |
 
-(Die Tickzeiten der letzten Spalte enthalten die Arbeit der anderen Agenten an anderen Kostenstellen nicht; ihre Streuung
-zwischen zwei gleichzeitigen Prozessen ist größer als der Gewinn der Hash-Phase in `MD_GLA05`.)
+(The tick times of the last column do not contain the work of the other agents on other cost centres; their scatter
+between two simultaneous processes is larger than the gain of the hash phase in `MD_GLA05`.)
 
-Dieselben Paare unter stärkerer Last (frühere Messungen, jeweils gleichzeitig, „nachher“ = `e4290ca`): Twilight Flame
-847,1 / 917,4 → 584,5 / 623,2 und 1.736,1 / 1.233,3 → 1.235,4 / 832,2; `MD_USA05` 2.288,9 / 2.203,9 → 1.497,9 / 1.441,9
-und 4.599,3 / 2.747,3 → 3.056,8 / 1.788,3; `MD_GLA05` 3.057,9 / 2.991,4 → 2.003,7 / 1.965,7 und 5.237,9 / 3.672,7 →
-4.084,8 / 2.854,3 – Faktoren 1,3 bis 1,5. Einzelschritte (gleichzeitig mit dem Vorgänger): Twilight Flame 9.000 Ticks
-1.436,9 → 1.275,2 (§4.1) → 978,2 (§4.2) → 875,0 (§4.3, eigener Lauf); `MD_USA05` 1.500 Ticks 3.176,2 → 2.515,9 → 2.097,6
-→ 1.994,0.
+The same pairs under heavier load (earlier measurements, each at the same time, "after" = `e4290ca`): Twilight Flame
+847.1 / 917.4 → 584.5 / 623.2 and 1,736.1 / 1,233.3 → 1,235.4 / 832.2; `MD_USA05` 2,288.9 / 2,203.9 → 1,497.9 / 1,441.9
+and 4,599.3 / 2,747.3 → 3,056.8 / 1,788.3; `MD_GLA05` 3,057.9 / 2,991.4 → 2,003.7 / 1,965.7 and 5,237.9 / 3,672.7 →
+4,084.8 / 2,854.3 – factors 1.3 to 1.5. Single steps (at the same time as the predecessor): Twilight Flame 9,000 ticks
+1,436.9 → 1,275.2 (§4.1) → 978.2 (§4.2) → 875.0 (§4.3, own run); `MD_USA05` 1,500 ticks 3,176.2 → 2,515.9 → 2,097.6
+→ 1,994.0.
 
-Auf die ruhigen Ausgangswerte übertragen wären das rund 380 / 1.130 / 1.510 µs – **eine Hochrechnung, keine Messung**.
+Transferred to the quiet starting values that would be roughly 380 / 1,130 / 1,510 µs – **an extrapolation, not a measurement**.
 
-Stresstest (`SimTool stress`, 216.000 Ticks, „Run 1“, µs je Tick, abwechselnd Ausgang / Branch): 97,5 / 85,5 – 112,4 / 50,8
-– 62,8 / 54,7. Endhash `56882F763EABEF67`, Kette `B8E663493F2C73D5` in allen sechs Läufen. Die Streuung zwischen zwei
-Läufen desselben Stands ist so groß wie der Unterschied; eine Verschlechterung ist nicht erkennbar.
+Stress test (`SimTool stress`, 216,000 ticks, "Run 1", µs per tick, alternating start / branch): 97.5 / 85.5 – 112.4 / 50.8
+– 62.8 / 54.7. Final hash `56882F763EABEF67`, chain `B8E663493F2C73D5` in all six runs. The scatter between two
+runs of the same state is as large as the difference; a deterioration is not discernible.
 
-Zähler (exakt, vom Rechner unabhängig):
+Counters (exact, independent of the machine):
 
-| Lauf | Objekte je Tick | Wörter gefaltet je Tick | Allokation in der Hash-Phase, Bytes je Tick vorher → nachher |
+| Run | Objects per tick | Words folded per tick | Allocation in the hash phase, bytes per tick before → after |
 |---|---:|---:|---:|
-| Twilight Flame, 8 Spieler, 18.000 Ticks | 173,3 | 134.637 (unverändert) | 3.042 → 26 |
-| `MD_USA05`, 3.000 Ticks | 1.311,8 | 426.247 (unverändert) | 3.739 → 209 |
-| `MD_GLA05`, 3.000 Ticks | 1.738,8 | 553.584 (unverändert) | (nicht erhoben) → 209 |
+| Twilight Flame, 8 players, 18,000 ticks | 173.3 | 134,637 (unchanged) | 3,042 → 26 |
+| `MD_USA05`, 3,000 ticks | 1,311.8 | 426,247 (unchanged) | 3,739 → 209 |
+| `MD_GLA05`, 3,000 ticks | 1,738.8 | 553,584 (unchanged) | (not collected) → 209 |
 
-Die verbleibende Allokation ist das einmalige Wachsen des Wortpuffers. Die Allokation des ganzen Ticks sinkt entsprechend
-(Twilight Flame 81.903 → 77.881 Bytes je Tick).
+The remaining allocation is the one-time growth of the word buffer. The allocation of the whole tick falls accordingly
+(Twilight Flame 81,903 → 77,881 bytes per tick).
 
-Warme Schleife auf dem Endzustand (unter Last, deshalb nur das Verhältnis): eine Kette 4,1–10 ns je Wort, nebeneinander
-1,1 (isolierter Mikrobenchmark) bis 2,2–4,5 ns je Wort; Aufschreiben 1,5–2,1 → rund 1,0 ns je Wort mit vorbereiteten
-Rahmen.
+Warm loop on the final state (under load, therefore only the ratio): one chain 4.1–10 ns per word, side by side
+1.1 (isolated microbenchmark) to 2.2–4.5 ns per word; writing down 1.5–2.1 → roughly 1.0 ns per word with prepared
+frames.
 
-Endhash und Kette sind in jedem dieser Läufe die des Ausgangsstands: Twilight Flame 18.000 Ticks `72CF0F846E0D9AA6` /
+Final hash and chain are those of the starting state in each of these runs: Twilight Flame 18,000 ticks `72CF0F846E0D9AA6` /
 `5E446FE63C5BEF46`, `MD_USA05` `1CB28E6AA923BDEF` / `0816C3438CB7F689`, `MD_GLA05` `826CCD82C8536DC2` /
 `10330D7D179054FD`.
 
-## 6. Was bleibt, und warum es in dieser Konstruktion nicht weiter sinkt
+## 6. What remains, and why it does not fall further in this construction
 
-| Rest | Größe | Warum er bleibt |
+| Remainder | Size | Why it remains |
 |---|---|---|
-| **Beschreiben** jedes markierten Objekts mit allen Modulen | Missionen: 1.300–1.700 Objekte je Tick, von denen sich an 93–96 % nur ein Wecktick bewegt hat; nach §4.1/§4.2 der größere Teil der Phase | Wer nicht alles liest, sieht nicht, was eine Stelle ohne `MarkDirty` geändert hat (§4.4). Ohne verlässliche Markierung je Modul oder Feld geht es nicht anders. |
-| **Falten** aller Wörter eines markierten Objekts | 318–777 Wörter je Objekt, davon 78–83 % Modulrahmen, die sich nie ändern | Die Rahmen stehen zwischen den Zuständen in derselben Kette. Den Anfang zu überspringen ist möglich, bringt nach §4.5 aber nichts mehr. |
-| Faltung selbst | rund 1,1 ns je Wort nebeneinander (isoliert) | Vier Ketten lasten den einen Multiplizierer des Kerns aus; acht Ketten waren im Mikrobenchmark nicht schneller. Vektorbefehle sind im Kern verboten (`SourceRules`) und haben keine 64-Bit-Multiplikation. |
-| Globaler Teil | 7–10 µs je Tick | 0,3–0,5 % der Phase. |
+| **Describing** every marked object with all modules | Missions: 1,300–1,700 objects per tick, on 93–96 % of which only a wake tick has moved; after §4.1/§4.2 the larger part of the phase | Whoever does not read everything does not see what a place without `MarkDirty` has changed (§4.4). Without reliable marking per module or field there is no other way. |
+| **Folding** all words of a marked object | 318–777 words per object, of which 78–83 % are module frames that never change | The frames stand between the states in the same chain. Skipping the beginning is possible but, after §4.5, yields nothing any more. |
+| Folding itself | roughly 1.1 ns per word side by side (isolated) | Four chains fully load the one multiplier of the core; eight chains were not faster in the microbenchmark. Vector instructions are forbidden in the core (`SourceRules`) and have no 64-bit multiplication. |
+| Global part | 7–10 µs per tick | 0.3–0.5 % of the phase. |
 
-Geprüft und verworfen, außer §4.4 und §4.5:
+Checked and discarded, apart from §4.4 and §4.5:
 
-- **Module mit leerem `Describe` überspringen:** 2–12 % der Module; bräuchte eine erklärte Eigenschaft je Modulklasse.
-  Zu wenig Ertrag für eine weitere Stelle, die stimmen muss.
-- **Acht statt vier Ketten:** im Mikrobenchmark gleich schnell.
+- **Skipping modules with an empty `Describe`:** 2–12 % of the modules; would need a declared property per module class.
+  Too little yield for a further place that has to be right.
+- **Eight instead of four chains:** equally fast in the microbenchmark.
 
-## 7. Vorschlag für den Koordinator: eine andere Konstruktion (nicht umgesetzt)
+## 7. Proposal for the coordinator: a different construction (not implemented)
 
-Nach Handoff Punkt 4 ist das eine eigene, benannte Entscheidung. Die Messung sagt: der Sollwert der Phase 19 (Tick im
-Mittel ≤ 1,0 ms) lässt für den Hash, wenn man ihm ein Zehntel des Ticks zugesteht, rund 100 µs; mit der heutigen
-Konstruktion bleiben auf ruhigem Rechner geschätzt 380 µs im Gefecht mit 8 Spielern und 1,1–1,5 ms in den Missionen (§5).
-Der Rest ist Struktur, nicht Code. Drei Teile, in der Reihenfolge ihres Ertrags für die Missionen **umgekehrt** zur
-Reihenfolge ihres Risikos:
+According to handoff item 4 this is a separate, named decision. The measurement says: the target value of Phase 19 (tick on
+average ≤ 1.0 ms) leaves roughly 100 µs for the hash if one grants it a tenth of the tick; with today's
+construction an estimated 380 µs remain on a quiet machine in the skirmish with 8 players and 1.1–1.5 ms in the missions (§5).
+The rest is structure, not code. Three parts, in the order of their yield for the missions, which is the **reverse** of the
+order of their risk:
 
-**A. Modulrahmen als ein Wort, Objekt-Hash aus Teil-Hashes** (ändert jeden Hashwert, sonst nichts).
+**A. Module frame as one word, object hash from partial hashes** (changes every hash value, nothing else).
 
-- Je Vorlage und Modulplatz ein vorab berechneter **Rahmenschlüssel** (die heutige Faltung von Index, Name, Tag, einmal).
-- `Modul-Hash = Fold(Mix(Mix(Seed, Objekt-ID), Rahmenschlüssel), Zustandswörter des Moduls)`.
-- `Objekt-Hash = Fold(Fold(Seed, eigene Felder), Modul-Hash₀ … Modul-Hashₙ₋₁)` (Reihenfolge bleibt erhalten).
-- Wirkung auf die Wortzahl (gemessen mit dem Prototyp-Schreiber des Werkzeugs, Namen als je ein Wort): 254 statt 787
-  Wörter je Objekt (Twilight Flame), 110 statt 294 (`MD_USA05`), 107 statt 302 (`MD_GLA05`). Mit Teil-Hashes entfallen
-  zusätzlich die übrigen Rahmenwörter: rund 150 (72 eigene + 60 Zustand + 17 Modul-Hashes) bzw. 76 und 72.
-- Das senkt das **Falten** auf ein Fünftel bis ein Viertel und das Aufschreiben um die Rahmen. Das **Beschreiben** der
-  Module bleibt. Hochrechnung aus Wörtern × 1,1 ns (isoliert gemessen), **keine Messung**: Twilight Flame rund 173 ×
-  (0,3 µs Beschreiben + 0,17 µs Falten) ≈ 80 µs je Tick; Missionen 1.300–1.700 × (0,3–0,5 µs + 0,08 µs) ≈ 0,5–1,0 ms.
-  Die Zeiten des Prototyps im Werkzeug waren unter der Last dieses Rechners nicht verwertbar; die Wortzahlen sind exakt.
+- Per template and module slot a precomputed **frame key** (today's folding of index, name, tag, once).
+- `module hash = Fold(Mix(Mix(Seed, object ID), frame key), state words of the module)`.
+- `object hash = Fold(Fold(Seed, own fields), module hash₀ … module hashₙ₋₁)` (the order is preserved).
+- Effect on the word count (measured with the prototype writer of the tool, names as one word each): 254 instead of 787
+  words per object (Twilight Flame), 110 instead of 294 (`MD_USA05`), 107 instead of 302 (`MD_GLA05`). With partial hashes
+  the remaining frame words are dropped in addition: roughly 150 (72 own + 60 state + 17 module hashes) and 76 and 72 respectively.
+- That lowers the **folding** to a fifth to a quarter and the writing down by the frames. The **describing** of the
+  modules remains. Extrapolation from words × 1.1 ns (measured in isolation), **not a measurement**: Twilight Flame roughly 173 ×
+  (0.3 µs describing + 0.17 µs folding) ≈ 80 µs per tick; missions 1,300–1,700 × (0.3–0.5 µs + 0.08 µs) ≈ 0.5–1.0 ms.
+  The times of the prototype in the tool were not usable under the load of this machine; the word counts are exact.
 
-**B. Den Wecktick eines jeden Tick laufenden Moduls nicht als absolute Zahl hashen** (ändert jeden Hashwert und die
-Bedeutung eines gehashten Felds).
+**B. Not hashing the wake tick of a module running every tick as an absolute number** (changes every hash value and the
+meaning of a hashed field).
 
-- Ein Modul, das „im nächsten Tick wieder“ sagt, trägt keine Information außer „wach“: der Tick steht im globalen Teil.
-  Gehasht würde „wach“ (ein festes Wort) statt `tick + 1`; ein späterer Wecktick weiter als Zahl. Der Snapshot behält die
-  Zahl (das Wiederherstellen braucht sie).
-- Dann sind die 93–96 % der Missionsobjekte, an denen sich nur Weckticks bewegen, **wirklich unverändert**. Für sich
-  allein spart das noch nichts (sie werden weiter markiert und beschrieben); es ist die Voraussetzung für C.
+- A module that says "again in the next tick" carries no information except "awake": the tick is in the global part.
+  What would be hashed is "awake" (a fixed word) instead of `tick + 1`; a later wake tick still as a number. The snapshot keeps the
+  number (restoring needs it).
+- Then the 93–96 % of the mission objects on which only wake ticks move are **really unchanged**. By itself
+  that saves nothing yet (they continue to be marked and described); it is the prerequisite for C.
 
-**C. Markierung, die ohne den Schutz des Schedulers trägt** (ändert keinen Hashwert, ist aber der Umbau aus
-`docs/DETERMINISM-FINDINGS.md` §13 Punkt 2).
+**C. Marking that holds without the protection of the scheduler** (changes no hash value, but is the rebuild from
+`docs/DETERMINISM-FINDINGS.md` §13 item 2).
 
-- Heute markiert der Scheduler jedes Objekt, dessen Modul lief; das deckt fehlende `MarkDirty`-Aufrufe zu (§4.4, §4.6:
-  eine verdeckte Stelle beim Lesen gefunden, eine nicht verdeckte ist im Ausgangsstand ein echter Fehler). Erst wenn jede Änderung eines gehashten Felds selbst markiert
-  (Setter, oder ein Prüflauf, der jede Schreibstelle erreicht), darf ein Update melden „nichts geändert“, und der
-  Scheduler darf darauf verzichten.
-- Mit B und C zusammen fielen in den Missionen rund 1.200–1.650 der 1.300–1.700 Objekte je Tick ganz aus der Phase. Der
-  Versuch in §4.4 hat das Ausmaß gemessen, ohne B (der Nachlauf hinter dem Modul wurde noch gefaltet): Faktor 2,5 bis 2,8
-  gegenüber dem Ausgang unter Last. Mit B entfiele auch der Nachlauf.
+- Today the scheduler marks every object whose module ran; that covers up missing `MarkDirty` calls (§4.4, §4.6:
+  one concealed place found while reading, one that is not concealed is a real error in the starting state). Only when every change of a hashed field marks by itself
+  (setters, or a check run that reaches every write site) may an update report "nothing changed", and the
+  scheduler may do without it.
+- With B and C together roughly 1,200–1,650 of the 1,300–1,700 objects per tick would drop out of the phase entirely in the missions. The
+  attempt in §4.4 measured the extent, without B (the trailing part behind the module was still folded): factor 2.5 to 2.8
+  compared with the start under load. With B the trailing part would be dropped as well.
 
-**Was für A und B neu geschrieben werden müsste:** jeder Tick-, End- und Kettenhash des Referenzmanifests (50 Läufe), die
-Snapshot-Hashes dort (der Snapshot trägt den Zustands-Hash), die Prüfpunkte in aufgezeichneten Replays (Replay-Format
-+1), die goldenen Werte der Tests (Stresstest `56882F763EABEF67` / `B8E663493F2C73D5`, Referenzmatch, Missionswerte) und
-die Referenzwerte in `CLAUDE.md` und den Dokumenten. **Was gleich bleiben muss und den Nachweis trägt:** Sieger, Endtick,
-Siegtick, Befehlszahl, `commandStreamSha256`, abgelehnte Befehle und die Objektlisten jedes Laufs; das Eingangsmanifest.
-Die Phasen 22 und 23 schreiben das Manifest ohnehin neu – dort kostet der Wechsel am wenigsten. C braucht kein neues
-Manifest, aber den Prüfmodus auf jedem Pfad, den Spielerbefehle erreichen.
+**What would have to be rewritten for A and B:** every tick, final and chain hash of the reference manifest (50 runs), the
+snapshot hashes there (the snapshot carries the state hash), the checkpoints in recorded replays (replay format
++1), the golden values of the tests (stress test `56882F763EABEF67` / `B8E663493F2C73D5`, reference match, mission values) and
+the reference values in `CLAUDE.md` and the documents. **What must stay the same and carries the proof:** winner, end tick,
+victory tick, command count, `commandStreamSha256`, rejected commands and the object lists of every run; the input manifest.
+Phases 22 and 23 rewrite the manifest anyway – there the change costs the least. C needs no new
+manifest, but the check mode on every path that player commands reach.
 
-## 8. Abschlussprüfungen
+## 8. Final checks
 
-Stand `2f815d7` (der Code-Stand des Branches; danach nur dieses Dokument), 6. Oktober 2026, Release-Werkzeug aus einer
-Kopie des Ausgabeverzeichnisses:
+State `2f815d7` (the code state of the branch; afterwards only this document), 6 October 2026, Release tool from a
+copy of the output directory:
 
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| `SimTool reference-manifest check <content> baselines/reference-manifest.json --set full` | **50 Läufe identisch** (2.092 s mit 6 Aufträgen nebeneinander) |
-| dasselbe mit `--verify-incremental` | 718.191 Ticks geprüft; **49 Läufe ohne Abweichung**, darunter `MD_GLA05`, `MD_USA01` (3.677 Ticks), `MD_USA02`, `MD_GLA03`, `GC_LaserGeneral`, `MD_USA05` (je 3.000), der Referenzmatch (14.791), der Stresstest (216 Prüfpunkte) und die Gefechts-Durchsicht (192.000); **1 Abweichung** in `mission_GC_SuperWeaponsGeneral_GLADemolitionGeneral`, identisch am Ausgangscommit (§4.6) |
-| `--set quick` und `--set quick --verify-incremental` nach jedem der drei bleibenden Commits | 9 Läufe identisch; 0 Abweichungen in 60.896 Ticks |
-| `SimTool input-manifest check <content> baselines/input-manifest.json` | identisch |
-| `SimTool stress` | `56882F763EABEF67`, Kette `B8E663493F2C73D5` (sechs Läufe, §5) |
-| Referenzmatch (im Manifest und im Test „retail match“) | FactionGLA bei Tick 14.490, wie im Manifest |
-| `tests/CnCNew.Simulation.Tests` Debug | 353 bestanden, 0 gescheitert |
-| `tests/CnCNew.Simulation.Tests -c Release -- --long --content-dir <content>` | 368 bestanden, 0 gescheitert (darunter der 216.000-Tick-Lauf und `SourceRules`) |
-| `dotnet build CnCNew.slnx` nach Löschen von `bin`/`obj` von `src/CnCNew.Client.Stride` | 0 Warnungen, 0 Fehler |
+| `SimTool reference-manifest check <content> baselines/reference-manifest.json --set full` | **50 runs identical** (2,092 s with 6 jobs side by side) |
+| the same with `--verify-incremental` | 718,191 ticks checked; **49 runs without deviation**, among them `MD_GLA05`, `MD_USA01` (3,677 ticks), `MD_USA02`, `MD_GLA03`, `GC_LaserGeneral`, `MD_USA05` (3,000 each), the reference match (14,791), the stress test (216 checkpoints) and the skirmish overview (192,000); **1 deviation** in `mission_GC_SuperWeaponsGeneral_GLADemolitionGeneral`, identical at the starting commit (§4.6) |
+| `--set quick` and `--set quick --verify-incremental` after each of the three remaining commits | 9 runs identical; 0 deviations in 60,896 ticks |
+| `SimTool input-manifest check <content> baselines/input-manifest.json` | identical |
+| `SimTool stress` | `56882F763EABEF67`, chain `B8E663493F2C73D5` (six runs, §5) |
+| Reference match (in the manifest and in the test "retail match") | FactionGLA at tick 14,490, as in the manifest |
+| `tests/CnCNew.Simulation.Tests` Debug | 353 passed, 0 failed |
+| `tests/CnCNew.Simulation.Tests -c Release -- --long --content-dir <content>` | 368 passed, 0 failed (among them the 216,000-tick run and `SourceRules`) |
+| `dotnet build CnCNew.slnx` after deleting `bin`/`obj` of `src/CnCNew.Client.Stride` | 0 warnings, 0 errors |
 
-Die Manifestdateien sind unverändert.
+The manifest files are unchanged.
 
-Nicht geprüft: die übrigen Testprogramme der Solution (`CnCNew.Game.Tests` mit seinen `DeterminismTests`), der Client,
-ein zweiter Rechner, eine ruhige Messung.
+Not checked: the remaining test programs of the solution (`CnCNew.Game.Tests` with its `DeterminismTests`), the client,
+a second machine, a quiet measurement.
 
-Für den Koordinator bleiben damit drei Dinge zu entscheiden: der bestehende D8-Fehler aus §4.6 (eine Zeile, ein
-Manifestwert), der zurückgenommene Versuch aus §4.4 (Faktor 2,5–2,8 statt 1,5 in den Missionen gegen den Schutz des
-Schedulers) und die andere Konstruktion aus §7.
+For the coordinator three things therefore remain to be decided: the existing D8 error from §4.6 (one line, one
+manifest value), the reverted attempt from §4.4 (factor 2.5–2.8 instead of 1.5 in the missions against the protection of the
+scheduler) and the different construction from §7.
