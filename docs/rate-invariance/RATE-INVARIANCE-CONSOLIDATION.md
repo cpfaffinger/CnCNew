@@ -1,152 +1,152 @@
-# Raten-Invarianz: Zusammenführung der sieben Pakete (Phase 23, Paket CONSOLIDATION)
+# Rate invariance: merging the seven packages (Phase 23, package CONSOLIDATION)
 
-Stand 8. Oktober 2026, Ausgangsstand `b1a47b4` (alle sieben Korrekturpakete PROJECTILES, SCRIPTS, PHYSICS, TIMING, GROUND, FLIGHT, TURRETS sind auf `main`). Dieses Dokument
-legt fest, wie die Bilder des Originals der einzelnen Objekte und Module zueinander liegen, was daran geändert wurde, und führt die Ursachen der Fehlschläge, die nach der
-Zusammenführung der Pakete übrig waren. Die Dokumente der Pakete (`docs/rate-invariance/RATE-INVARIANCE-*.md`) bleiben, wie sie sind; wo dieses Dokument ihnen widerspricht, gilt dieses.
-„Bild“ heißt Logikbild des Originals (1/30 s), „Tick“ ein Schritt der Simulation, r = Ticks je Bild (1, 2, 4). Werte stehen als 30 / 60 / 120 Hz.
-**Nichts davon hat ein Mensch gesehen.**
+As of 8 October 2026, starting state `b1a47b4` (all seven correction packages PROJECTILES, SCRIPTS, PHYSICS, TIMING, GROUND, FLIGHT, TURRETS are on `main`). This document
+lays down how the original frames of the individual objects and modules lie relative to each other, what was changed about that, and lists the causes of the failures that were left after the
+merging of the packages. The documents of the packages (`docs/rate-invariance/RATE-INVARIANCE-*.md`) stay as they are; where this document contradicts them, this one applies.
+"Frame" means a logic frame of the original (1/30 s), "tick" a step of the simulation, r = ticks per frame (1, 2, 4). Values are given as 30 / 60 / 120 Hz.
+**No human has seen any of this.**
 
-## 1. Die Konvention
+## 1. The convention
 
-### 1.1 Das Problem
+### 1.1 The problem
 
-Jedes Paket zählt „das eigene Bild des Objekts“ für sich: je Modul (`FramePhase`, `subStep`, `frameTicksLeft`, `FlightFrameStep`, Turm-`SubSteps`), am Raster der Welt
-(`IsOriginalFrameBoundary`: Skript-VM, Spectre, Zufallszüge, Dock- und Versorgungs-Automat) oder ab dem Entstehen (`SpawnTick`). Jedes für sich ist richtig: ein einzelnes Objekt
-steht nach jedem seiner Bilder bitgleich dort, wo der 30-Hz-Schritt es hinstellt. Wo aber zwei Module eines Objekts oder zwei Objekte einander **ansehen**, war nicht festgelegt,
-*in welchem Tick* angesehen wird und *welche Lage* der Beobachter dann liest. Gemessene Folgen am Ausgangsstand:
+Every package counts "the object's own frame" for itself: per module (`FramePhase`, `subStep`, `frameTicksLeft`, `FlightFrameStep`, turret `SubSteps`), on the grid of the world
+(`IsOriginalFrameBoundary`: script VM, Spectre, random draws, dock and supply machine) or from the creation (`SpawnTick`). Each on its own is correct: a single object
+stands, after each of its frames, bit-identically where the 30 Hz step puts it. But where two modules of an object or two objects **look at** each other, it was not laid down
+*in which tick* the look happens and *which position* the observer then reads. Measured consequences at the starting state:
 
-- `HeightDieUpdate` (sieht einmal je Bild nach) und das Geschoss desselben Objekts (entscheidet einmal je Bild) liegen im selben Tick, aber das Geschoss hat in diesem Tick erst
-  1/r seines Bildschritts zurückgelegt: Neutronenrakete im Test 94 / 94 / 95 Bilder Sturzflug; Inferno-Granate Ablage 1,258 / 0,000 / 0,000, Weglänge 247,837 / 257,625 / 257,625.
-- Mine (TIMING: vergleicht den Weg einmal je Bild *ab der ersten Berührung der Einheit*) und Bodenbewegung (GROUND: meldet Überlappung einmal je Bild *des Fahrenden*): zwei
-  Raster für dieselbe Meldung; liegen sie auf verschiedenen Ticks, bleibt die Mine stumm (Test „Structures: mines detonate …“ bei 60 und 120 Hz).
-- Der Schleier wird nach dem **ersten** Tick seines Bildes aufgefrischt: Leser der Sicht sehen eine Änderung bis zu (r − 1)/r Bild früher als bei 30 Hz (TURRETS, Befund 3).
-- Objekte, die ein anderes Objekt erzeugt (Fahrer, Mob-Mitglieder, der eigene Sammler des Versorgungszentrums), erscheinen einen **Tick** nach ihrem Träger statt ein Bild.
+- `HeightDieUpdate` (looks once per frame) and the projectile of the same object (decides once per frame) lie in the same tick, but the projectile has covered only
+  1/r of its frame step in this tick: neutron missile in the test 94 / 94 / 95 frames of dive; Inferno shell miss distance 1.258 / 0.000 / 0.000, path length 247.837 / 257.625 / 257.625.
+- Mine (TIMING: compares the distance once per frame *from the first contact of the unit*) and ground movement (GROUND: reports overlap once per frame *of the driving object*): two
+  grids for the same report; if they lie on different ticks, the mine stays mute (test "Structures: mines detonate …" at 60 and 120 Hz).
+- The shroud is refreshed after the **first** tick of its frame: readers of the vision see a change up to (r − 1)/r frame earlier than at 30 Hz (TURRETS, finding 3).
+- Objects that another object creates (rider, mob members, the supply centre's own gatherer) appear one **tick** after their carrier instead of one frame.
 
-### 1.2 Was bei 30 Hz gilt (die Definition)
+### 1.2 What applies at 30 Hz (the definition)
 
-In einem Tick T von 30 Hz laufen die Phasen Befehle → Updates (in der Reihenfolge Weckzeit, Objektkennung, Modulindex) → Zielerwerb/Türme → Ereignisse → Zerstören → verzögerte
-Treffer → Erzeugen → Sicht. Daraus folgt, was jeder Beobachter sieht:
+In a tick T of 30 Hz the phases run commands → updates (in the order wake time, object id, module index) → target acquisition/turrets → events → destroying → delayed
+hits → creating → vision. From this follows what every observer sees:
 
-| Beobachter in Tick T | sieht ein anderes Objekt (oder Modul) |
+| Observer in tick T | sees another object (or module) |
 |---|---|
-| Befehl (Phase 1) | im Zustand nach Schritt T − 1 |
-| Update, das **nach** dem Update des Beobachteten läuft (größere Kennung bzw. größerer Modulindex) | nach Schritt T |
-| Update, das **vor** ihm läuft | nach Schritt T − 1 |
-| Phasen nach den Updates (Zielerwerb, Türme, verzögerte Treffer, Sicht) | alle nach Schritt T |
-| ein in Tick T angefordertes neues Objekt | gibt es am Ende von Tick T; sein erstes Update läuft in T + 1; ein während der Erzeugungsphase angefordertes erscheint am Ende von T + 1 |
+| Command (phase 1) | in the state after step T − 1 |
+| Update that runs **after** the update of the observed one (larger id or larger module index respectively) | after step T |
+| Update that runs **before** it | after step T − 1 |
+| Phases after the updates (target acquisition, turrets, delayed hits, vision) | all after step T |
+| a new object requested in tick T | exists at the end of tick T; its first update runs in T + 1; one requested during the creation phase appears at the end of T + 1 |
 
-### 1.3 Die Festlegung für r > 1
+### 1.3 The determination for r > 1
 
-Das Bild f der Welt sind die Ticks r·f … r·f + r − 1. Ein Objekt, das an einer Bildgrenze entsteht oder befohlen wird, ist **in Phase** mit der Welt; eines, das mitten im Bild
-einen Befehl bekommt, zählt seine Bilder ab diesem Tick (Befehlsannahme bleibt je Tick). Für jedes Objekt gilt, in seiner Phase:
+The frame f of the world is the ticks r·f … r·f + r − 1. An object that is created or ordered at a frame boundary is **in phase** with the world; one that receives a command in the middle of the frame
+counts its frames from this tick (command acceptance stays per tick). For every object the following applies, in its phase:
 
-1. **Entschieden wird im ersten Tick des Bildes.** Größen zweiter Ordnung, Zustandsautomaten und Ereignisse „einmal je Bild“ fallen auf den ersten Tick – in Sekunden der
-   Zeitpunkt des 30-Hz-Ticks (so halten es alle sieben Pakete; die Zeitkonvention der Suite, `docs/SIMULATION-CORE.md` §39.1, verlangt es).
-2. **Die Lage erreicht ihren 30-Hz-Wert mit dem letzten Tick des Bildes**; dazwischen liegt das Objekt auf der Geraden dorthin (Unterteilung, ein Anteil je Tick).
-3. **Wer ein anderes Objekt oder ein anderes Modul desselben Objekts ansieht, um etwas zu entscheiden, liest dessen Lage am Ende des Bildes, das es bereits begonnen hat**
-   (`Entity.FrameEnd(tick)` = Lage + noch nicht zurückgelegter Rest des Bildschritts, `Entity.AheadX/Y/Z`). Das ist genau die Tabelle aus 1.2: ein Beweger, der in diesem Tick
-   schon dran war, hat sein Bild begonnen und zählt mit seiner Lage nach Schritt T; einer, der noch drankommt, hat sein voriges Bild beendet (Rest null) und zählt mit seiner
-   Lage nach Schritt T − 1. Für Objekte in Phase ist die Antwort in jedem Tick eines Bildes dieselbe wie die des 30-Hz-Schritts; sie kippt nicht mitten im Bild. Bei 30 Hz ist
-   der Rest immer null, `FrameEnd` ist die Lage, und nichts wird je geschrieben. Ein Rest, den sein Beweger weder in diesem noch im vorigen Tick angefasst hat (angehalten,
-   gelähmt, schlafen gelegt), zählt nicht mehr (`Entity.AheadTick`). Der Beweger selbst rechnet weiter mit seiner eigenen Lage.
-4. **Ein Ereignis, das der Beobachter im Entscheidungstick an der Bildend-Lage auslöst (Tod durch `HeightDieUpdate`), setzt das Objekt auf diese Lage** (`Entity.CompleteFrame`):
-   es stirbt dort, wo es bei 30 Hz stirbt. Der Beweger legt danach keinen Anteil dieses Bildes mehr zurück (der Rest am Objekt ist seine einzige Wahrheit über das, was fehlt).
-5. **Phasen der Welt, die nach allen Updates alle Objekte ansehen und selbst nur alle paar Bilder laufen (Sicht), laufen nach dem letzten Tick ihres Bildes** und lesen die
-   augenblickliche Lage; die ist dann bei jedem Objekt in Phase die Lage nach Schritt T. Wer Sicht liest, liest bis dahin den Stand des vorigen Bildes – nie einen, den es bei
-   30 Hz zu dieser Spielzeit noch nicht gibt.
-6. **Was nicht umgestellt ist, liest die augenblickliche Lage** (§6 nennt die Stellen: der Blick des Zielerwerbs, Schaden im Radius, Dock, Einsteigen, die Kollisionsprüfung
-   eines Fahrenden am Ende seines eigenen Bildes, alle Flug- und Sonderbeweger, die ihren Rest nicht veröffentlichen): höchstens einen Bildschritt des Beobachteten vom
-   30-Hz-Wert entfernt. Befehle werden in jedem Tick angenommen; ein Objekt, das mitten im Bild der Welt befohlen wird, hat seine eigene Phase.
-7. **Ein neues Objekt gibt es am Ende des Ticks, der es angefordert hat; sein erstes Bild beginnt ein Bild (r Ticks) danach** – seine Phase ist der Tick seiner Entstehung.
-   Ein Objekt, das während der Erzeugungsphase angefordert wird (bei 30 Hz „am Ende des nächsten Ticks“), entsteht ein Bild später, nicht einen Tick. Ein Befehl, den ein
-   Objekt in der Erzeugungsphase bekommt (Sammelpunkt), wird mit seinem ersten Bild ausgeführt. Ein Modul, dessen erstes Update ein Ereignis entscheidet oder etwas erzeugt,
-   läuft zum ersten Mal in diesem Tick (`SpawnTick + r`). **Ausnahme, bewusst gelassen:** ein Modul, das ab dem Entstehen integriert oder seine Updates zählt, beginnt weiter
-   mit dem Tick nach dem Entstehen (die Pakete und ihre Tests sind darauf gebaut; §6 „erstes Bild für alle Module“ nennt, was die allgemeine Regel gemessen kostet).
-8. **Eine Meldung hat ein Raster, das des Meldenden.** Wer eine Meldung je Bild empfängt (`ICollideModule.OnCollide` von einem Fahrenden), führt kein eigenes Raster dafür.
+1. **The decision is made in the first tick of the frame.** Second-order quantities, state machines and events "once per frame" fall on the first tick – in seconds the
+   point in time of the 30 Hz tick (all seven packages do it this way; the time convention of the suite, `docs/SIMULATION-CORE.md` §39.1, demands it).
+2. **The position reaches its 30 Hz value with the last tick of the frame**; in between the object lies on the straight line towards it (subdivision, one share per tick).
+3. **Whoever looks at another object or another module of the same object in order to decide something reads its position at the end of the frame that it has already begun**
+   (`Entity.FrameEnd(tick)` = position + not yet covered remainder of the frame step, `Entity.AheadX/Y/Z`). That is exactly the table from 1.2: a mover that has already had
+   its turn in this tick has begun its frame and counts with its position after step T; one that is still to have its turn has finished its previous frame (remainder zero) and counts with its
+   position after step T − 1. For objects in phase the answer is the same in every tick of a frame as that of the 30 Hz step; it does not tip over in the middle of the frame. At 30 Hz
+   the remainder is always zero, `FrameEnd` is the position, and nothing is ever written. A remainder that its mover has touched neither in this nor in the previous tick (stopped,
+   paralysed, put to sleep) no longer counts (`Entity.AheadTick`). The mover itself continues to compute with its own position.
+4. **An event that the observer triggers in the decision tick at the frame-end position (death by `HeightDieUpdate`) puts the object on this position** (`Entity.CompleteFrame`):
+   it dies where it dies at 30 Hz. The mover covers no further share of this frame afterwards (the remainder on the object is its only truth about what is missing).
+5. **Phases of the world that look at all objects after all updates and themselves run only every few frames (vision) run after the last tick of their frame** and read the
+   momentary position; for every object in phase that is then the position after step T. Whoever reads vision reads, until then, the state of the previous frame – never one that does not yet exist at
+   30 Hz at this game time.
+6. **What has not been converted reads the momentary position** (§6 names the places: the look of target acquisition, damage in a radius, dock, boarding, the collision check
+   of a driving object at the end of its own frame, all flight and special movers that do not publish their remainder): at most one frame step of the observed object away from the
+   30 Hz value. Commands are accepted in every tick; an object that is ordered in the middle of the frame of the world has its own phase.
+7. **A new object exists at the end of the tick that requested it; its first frame begins one frame (r ticks) after that** – its phase is the tick of its creation.
+   An object that is requested during the creation phase (at 30 Hz "at the end of the next tick") is created one frame later, not one tick. A command that an
+   object receives in the creation phase (rally point) is executed with its first frame. A module whose first update decides an event or creates something
+   runs for the first time in this tick (`SpawnTick + r`). **Exception, deliberately left:** a module that integrates or counts its updates from the creation still begins
+   with the tick after the creation (the packages and their tests are built on that; §6 "first frame for all modules" names what the general rule costs as measured).
+8. **A report has one grid, that of the reporter.** Whoever receives a report per frame (`ICollideModule.OnCollide` from a driving object) keeps no grid of its own for it.
 
-Die Phase gehört damit dem **Objekt** (Tick der Entstehung bzw. des Befehls, der es in Bewegung setzt), nicht dem Modul: zwei Module eines Objekts, die beide „ab dem Entstehen“
-oder beide „ab dem Schuss“ zählen, entscheiden im selben Tick und in der Reihenfolge ihres Modulindex, wie bei 30 Hz. Ein eigener Phasenzähler eines Moduls ist nur noch die
-Buchführung dieser einen Phase (er wird nicht in einen gemeinsamen Zähler am Objekt umgebaut: das wäre ein Umbau aller Beweger ohne gemessenen Nutzen und änderte den Inhalt
-jedes 60-Hz-Snapshots).
+The phase thus belongs to the **object** (tick of the creation or of the command that sets it in motion respectively), not to the module: two modules of an object that both count "from the creation"
+or both "from the shot" decide in the same tick and in the order of their module index, as at 30 Hz. A phase counter of a module's own is now only the
+bookkeeping of this one phase (it is not rebuilt into a shared counter on the object: that would be a rebuild of all movers without a measured benefit and would change the content
+of every 60 Hz snapshot).
 
-### 1.4 Verworfene Alternativen
+### 1.4 Discarded alternatives
 
-| Alternative | Was sie bedeutet | Kosten | Warum verworfen |
+| Alternative | What it means | Cost | Why discarded |
 |---|---|---|---|
-| A. Alle Objekte am Raster der Welt (Bildphase erzwungen) | jede Entscheidung fällt auf `tick % r == 0`; ein Befehl mitten im Bild wartet bis zur nächsten Grenze oder beginnt mit einem Teilbild | im heißen Pfad keine; aber jeder Beweger der sieben Pakete müsste umgestellt werden | ein wartender Befehl ist der verbotene Ausweg „Originalraster“ für Bewegung und Befehlsannahme (bis zu r − 1 Ticks Latenz); ein Teilbild hat kein 30-Hz-Gegenstück und ist nicht bitgleich. Die Beobachtung innerhalb eines Ticks (wer war schon dran?) löst es ohnehin nicht – dafür bräuchte es zusätzlich Regel 3 |
-| B. Beobachten im **letzten** Tick des Bildes, Lage „am letzten vollendeten Bild“ lesbar | Entscheidungen und Ereignisse fallen auf den letzten Tick; ein Beweger, der im Tick noch drankommt, wird mit seiner Lage vom Bildanfang gelesen | dieselbe Buchführung wie Regel 3 (ein zweites Lage-Tripel je Beweger), dazu jede Entscheidung (r − 1) Ticks später | verschiebt jede Zeit der Suite um (r − 1)/r Bild gegen ihre Zeitkonvention („was im Schritt des Befehls geschieht, hat die Zeit 0“): alle `ExactTime`-Größen der sieben Pakete fielen heraus |
-| C. Reihenfolge: erst alle Beweger, dann alle Beobachter | ein zweiter Durchlauf je Tick | der Scheduler weckt Module einzeln; ein zweiter Durchlauf verdoppelt die Arbeit auch bei 30 Hz und ändert dort die Reihenfolge | ändert 30 Hz |
-| D. gewählt: Regeln 1–8 | drei `Fixed` und ein Tick je Objekt, die nur Beweger oberhalb von 30 Hz schreiben; ein Beobachter addiert sie beim Lesen | bei 30 Hz: vier Felder mehr je Objekt, kein Schreibzugriff. Die Scans der Bodenbewegung im heißen Pfad (`StepBlocked`, `StationaryBlockersAhead`) und die Reichweitenfrage verzweigen einmal je Aufruf in eine Kopie mit der Bildend-Sicht, die bei 30 Hz nie läuft; je Kandidat kommt bei 30 Hz nichts dazu. Geändert sind nur Beobachter, an denen ein Fehlschlag oder die erste Abweichung eines Gefechts gemessen ist (§2, §5) | |
+| A. All objects on the grid of the world (frame phase enforced) | every decision falls on `tick % r == 0`; a command in the middle of the frame waits until the next boundary or begins with a partial frame | none in the hot path; but every mover of the seven packages would have to be converted | a waiting command is the forbidden escape "original grid" (Ausweg „Originalraster“) for movement and command acceptance (up to r − 1 ticks of latency); a partial frame has no 30 Hz counterpart and is not bit-identical. It does not solve the observation within a tick (who has already had its turn?) anyway – for that rule 3 would be needed in addition |
+| B. Observing in the **last** tick of the frame, position "at the last completed frame" readable | decisions and events fall on the last tick; a mover that is still to have its turn in the tick is read with its position from the frame beginning | the same bookkeeping as rule 3 (a second position triple per mover), plus every decision (r − 1) ticks later | shifts every time of the suite by (r − 1)/r frame against its time convention ("what happens in the step of the command has the time 0"): all `ExactTime` quantities of the seven packages would drop out |
+| C. Order: first all movers, then all observers | a second pass per tick | the scheduler wakes modules individually; a second pass doubles the work also at 30 Hz and changes the order there | changes 30 Hz |
+| D. chosen: rules 1–8 | three `Fixed` and one tick per object, which only movers above 30 Hz write; an observer adds them when reading | at 30 Hz: four more fields per object, no write access. The scans of the ground movement in the hot path (`StepBlocked`, `StationaryBlockersAhead`) and the range question branch once per call into a copy with the frame-end view that never runs at 30 Hz; per candidate nothing is added at 30 Hz. Only observers on which a failure or the first deviation of a match is measured are changed (§2, §5) | |
 
-## 2. Ursachen, je Zeile ein Commit
+## 2. Causes, one commit per row
 
-Werte 30 / 60 / 120 Hz. „Suite“ ist die Raten-Äquivalenz-Suite (`docs/SIMULATION-CORE.md` §39), Zahlen sind „Größen außerhalb der Toleranz bei 60 Hz / bei 120 Hz“ der genannten
-Gruppe unmittelbar vor und nach dem Commit. Nach jedem Commit, der die Simulation ändert: `input-manifest check` identisch und `reference-manifest check --set quick` 9 Läufe
-identisch (§8).
+Values 30 / 60 / 120 Hz. "Suite" is the rate-equivalence suite (`docs/SIMULATION-CORE.md` §39), numbers are "quantities outside the tolerance at 60 Hz / at 120 Hz" of the named
+group immediately before and after the commit. After every commit that changes the simulation: `input-manifest check` identical and `reference-manifest check --set quick` 9 runs
+identical (§8).
 
-| # | §5-Eintrag (`TICKRATE-MIGRATION.md`) bzw. Herkunft | Befund vorher | Korrektur (Datei, Symbol, Regel aus §1.3) | nachher | Commit |
+| # | §5 entry (`TICKRATE-MIGRATION.md`) or origin | Finding before | Correction (file, symbol, rule from §1.3) | after | Commit |
 |---|---|---|---|---|---|
-| 1 | 5.2 `HeightDieUpdate` gegen die Geschosse (Pakete PHYSICS und PROJECTILES) | Test „the neutron missile flies the 30 Hz flight“ rot: Sturzflug 94 / 94 / 95 Bilder; Inferno-Granate Ablage 1,258 / 0,000 / 0,000, Weglänge 247,837 / 257,625 / 257,625 | `World/Entity.cs` (`AheadX/Y/Z`, `AheadTick`, `FrameEnd`, `SetAhead`, `CoverShare`, `CompleteFrame`); `DumbProjectileBehavior`, `MissileAIUpdate`, `NeutronMissileUpdate` veröffentlichen den Rest; `HeightDieUpdate` liest das Bildende und lässt das Objekt dort sterben (Regeln 3, 4) | 94 × 3; 1,258 × 3 und 247,837 × 3; `projectiles` 10 / 9 → 6 / 6 | `ad2b9e9` |
-| 2 | 5.2 Nachführung der Geschosse auf ein fahrendes Opfer | das Geschoss las das Opfer einen Anteil weit im Schritt; 89 von 91 „moving victim: impact distance“ nicht bitgleich zu 30 Hz (innerhalb der Toleranz) | `AIUpdateInterface.AdvanceFrame` veröffentlicht den Rest des Bodenschritts; `DumbProjectileBehavior` (Start, Bahnanpassung) und `MissileAIUpdate` (Start, `FollowedVictim`) lesen `FrameEnd` (Regel 3) | zusammen mit #3: 89 → 2 nicht bitgleich; `projectiles` 6 / 6 → 6 / 10 (nur mit der alten Messung) | `910644d` |
-| 3 | – (Messung der Suite) | „moving victim: impact distance“ las das Opfer im Tick des Aufschlags an seiner augenblicklichen Lage: ein Versatz unter einem Bild, den die Suite nicht hinzufügen soll (§39.1) | `RateCases.Projectiles.cs`: das Opfer wird am Bildende gelesen (`Entity.FrameEnd`; bei 30 Hz die Lage). Keine Toleranz, kein Fall, kein 30-Hz-Wert geändert | Inferno 31,400 / 31,067 / 30,900 → 31,400 × 3; `projectiles` 6 / 10 → 6 / 6 | `43443f5` |
-| 4 | 5.3 (Art „erstes Update einen Tick nach …“): Neutronenexplosion | `NeutronMissileSlowDeathBehavior.BeginSlowDeath` weckte „im nächsten Tick“: alle Druckwellen ein halbes bzw. drei Viertel Bild zu früh; fahrendes Opfer 119,250 / 118,583 / 118,250 | `AirWeaponModules.cs`: ein Bild nach dem Tod | 119,250 / 118,917 / 118,750 (innerhalb; der Rest ist die Lage eines Opfers, das mitten im Bild stirbt); `projectiles` 6 / 6 → 4 / 4 | `ee4ef91` |
-| 5 | 5.4 `MinefieldBehavior` (Paket TIMING) gegen `ResolveFootprintCollisions` (Paket GROUND) | Test „Structures: mines detonate …“ rot bei `--tick-rate 60` und `120`: zwei Raster für eine Meldung, die Mine blieb stumm | `MineModules.cs`, `OnCollide`: kein eigenes Raster mehr, die Meldung kommt je Bild des Fahrenden (Regel 8); der Zustand `phase` entfällt | Test grün bei 30 / 60 / 120 Hz; `timed` unverändert, Minenfälle in Schaden und Ereignissen gleich | `0136733` |
-| 6 | – (Messung der Suite) | drei Sichtfälle fragten nach jedem Tick, ob eine Stelle gesehen wird, und nahmen diesen Tick als Zeit; die Sicht ist ein Zustand des Bildendes | `RateScene.StepUntilFrameEnd`, `RateCases.Timed.cs`: am Bildende gelesen, ab dem ersten Schritt des Bildes gezählt (die Form von `a6fdfea`) | 0,0000 s bei jeder Rate vor und nach #7 (ohne die Berichtigung nach #7: 0,0000 / 0,0167 / 0,0250) | `f55c16d` |
-| 7 | neu (Paket TURRETS, Befund 3): Auffrischung der Sicht | nach dem ersten Tick ihres Bildes; Leser sahen eine Änderung bis zu (r − 1)/r Bild früher | `SimulationWorld.Step`/`StepObserved`, `_visionPhase`: nach dem letzten Tick des Bildes (Regel 5) | Auffrischung für ein Objekt aus Bild 1: Ticks 3 / 6 / 12 → 3 / 7 / 15; alle Gruppen unverändert | `a8eed4a` |
-| 8 | – (ohne Verhaltensänderung) | `HeightDieUpdate` zählte sein Bild ab dem eigenen ersten Update (`FramePhase`) | `EntityFrames.BeginsFrameOf` (neue Datei `Time/FrameGrid.Consolidation.cs`): die Phase ist der Tick der Entstehung | dieselben Ticks; der Zustand `framePhase` entfällt | `f0770fe` |
-| 9 | 5.3 `ProcessSpawns` | ein in der Erzeugungsphase angefordertes Objekt (Fahrer des Kampfrads, Aufbau des Overlord) erschien einen Tick nach dem Träger und stieg einen weiteren Tick später ein; Kampfrad „Zeit bis Höchsttempo“ 2,0333 / 2,5167 / 1,3250 s | `SimulationWorld.ProcessSpawns` (`PendingSpawn.NotBefore`, nur über 30 Hz gesetzt und geschrieben); `ContainChainModules.EnterPayload` sieht in den Bildticks des Trägers nach (Regel 7) | 2,0333 / 2,0500 / 2,0583 s; `locomotion` 12 / 12 → 4 / 3 | `f8ce7c4` |
-| 10 | 5.3 `Register` (erstes Update): `SpawnBehavior` | der eigene Sammler des Versorgungszentrums und die Mob-Mitglieder entstanden ein halbes bzw. drei Viertel Bild zu früh; Laster-Einkommen in 5 min 6000 / 6300 / 6300 | `SpawnModules.cs`, `OnSpawn`: erstes Update ein Bild nach dem Entstehen | 6000 × 3; Chinook erste Lieferung 31,6333 × 3; `economy` 7 / 10 → 4 / 5, `locomotion` 4 / 3 → 2 / 2 | `21a6f7d` |
-| 11 | 5.3 (TIMING, §5 „drei Einzelfälle“) | leerer Fallschirm „Tötung bis Entfernung“ 3,0000 / 2,9833 / 2,9750 s, Mob-Mitglied ohne Nexus 7,0000 / 6,9833 / 6,9750 s | `FlightModules.cs` `ParachuteContain.Update`, `SlaveModules.cs` `MobMemberSlavedUpdate.Update`: nur das Aufgeben wartet auf das erste Bild des Objekts | 3,0000 × 3 und 7,0000 × 3; `timed` 3 / 3 → 1 / 1 | `9ba608c` |
-| 12 | neu (Bodenbewegung, mit `rate-compare --ai-diff` gefunden) | ein Tempo je Bild unter einem Rohwert je Tick (hier 1 Rohwert beim Bremsen) ging über 30 Hz verloren: `FrameSpeed()` nahm das veröffentlichte Tempo 0 für „angehalten“; Folgebild 1 Rohwert zu langsam | `Phase5Modules.cs`, `FrameSpeed`; das Modul löscht `_frameSpeed`, wo es selbst anhält | Tempo je Bild in Rohwerten, Bilder 2253–2255: 1864136 / 1 / 1864136 bei 30 Hz; bei 60 Hz vorher 1864136 / 0 / 1864135, nachher wie 30 Hz | `3f046f8` |
-| 13 | 5.2 (GROUND, offen: „zwei fahrende Objekte, die sich begegnen“) | `StepBlocked` und `StationaryBlockersAhead` lasen einen Beweger, der im Tick schon dran war, einen Anteil weit; Sammler-Umlauf 27,4000 / 27,3333 / 27,4000 s | `SimulationWorld.Collision.cs`: `StepBlockedAtFrameEnd`, `StationaryBlockersAheadAtFrameEnd`, `StandsStillAtFrameEnd` (über 30 Hz; Regel 3; wer den letzten Schritt seiner Fahrt zurücklegt, steht) | alle Sammlergrößen bei jeder Rate gleich; `economy` 4 / 5 → 0 / 0; neuer Drei-Raten-Test (acht Läufer, bitgleich über 400 Bilder) | `2db1fc6`, Test `305da79` |
-| 14 | 5.3 `Register`: Befehl in der Erzeugungsphase | eine mit Sammelpunkt produzierte Einheit fuhr einen Tick nach dem Erscheinen los und stand fortan einen Anteil vor allen Objekten in Phase | `SimulationWorld.DeferSpawnPhaseOrders` (über 30 Hz; Regel 7) | erstes Bild mit abweichender Lage im Gefecht USA gegen China: 1140 (38,00 s) → 3467 (115,57 s); `flight` 0 / 4 → 0 / 3 | `cc7d92e` |
-| 15 | 5.4 `StepAcquisition`/`AutoFire` (Lage beim Angriff) | Verfolgungsziel, „in Reichweite“ und Schuss wurden an einer Lage mitten im Bild entschieden | `SimulationWorld.Acquisition.cs` `Engage`, `WeaponSlots.cs` `WithinWeaponRange`, `Projectiles.cs` `FireWeaponAt`: Bildend-Sicht über 30 Hz; wer in Reichweite kommt, hält am Bildende (Regeln 3, 4) | erstes Bild mit abweichender Lage 3467 → 3537 → 3540 → 3543 (118,10 s); Suite unverändert (`weapons` 0 / 0, `turrets` 4 / 0, `projectiles` 4 / 4) | `04e2fc8` |
-| 16 | 5.6 Heilung in Scheiben: `PropagandaTowerBehavior` | „Bilder mit Heilung“ 750 / 751 / 751, volle Gesundheit 26,8667 / 26,9000 / 26,9000 s | `FieldEffectModules.cs`, `Give`: die Scheibe des Originals einmal je Bild des Turms (Ausweg, §3) | 750 × 3, 26,8667 × 3; `overtime` 2 / 2 → 0 / 0 | `f05af4f` |
+| 1 | 5.2 `HeightDieUpdate` against the projectiles (packages PHYSICS and PROJECTILES) | Test "the neutron missile flies the 30 Hz flight" red: dive 94 / 94 / 95 frames; Inferno shell miss distance 1.258 / 0.000 / 0.000, path length 247.837 / 257.625 / 257.625 | `World/Entity.cs` (`AheadX/Y/Z`, `AheadTick`, `FrameEnd`, `SetAhead`, `CoverShare`, `CompleteFrame`); `DumbProjectileBehavior`, `MissileAIUpdate`, `NeutronMissileUpdate` publish the remainder; `HeightDieUpdate` reads the frame end and lets the object die there (rules 3, 4) | 94 × 3; 1.258 × 3 and 247.837 × 3; `projectiles` 10 / 9 → 6 / 6 | `ad2b9e9` |
+| 2 | 5.2 tracking of the projectiles onto a driving victim | the projectile read the victim one share into the step; 89 of 91 "moving victim: impact distance" not bit-identical to 30 Hz (within the tolerance) | `AIUpdateInterface.AdvanceFrame` publishes the remainder of the ground step; `DumbProjectileBehavior` (launch, path adjustment) and `MissileAIUpdate` (launch, `FollowedVictim`) read `FrameEnd` (rule 3) | together with #3: 89 → 2 not bit-identical; `projectiles` 6 / 6 → 6 / 10 (only with the old measurement) | `910644d` |
+| 3 | – (measurement of the suite) | "moving victim: impact distance" read the victim in the tick of the impact at its momentary position: an offset below one frame that the suite is not supposed to add (§39.1) | `RateCases.Projectiles.cs`: the victim is read at the frame end (`Entity.FrameEnd`; at 30 Hz the position). No tolerance, no case, no 30 Hz value changed | Inferno 31.400 / 31.067 / 30.900 → 31.400 × 3; `projectiles` 6 / 10 → 6 / 6 | `43443f5` |
+| 4 | 5.3 (kind "first update one tick after …"): neutron explosion | `NeutronMissileSlowDeathBehavior.BeginSlowDeath` woke "in the next tick": all blast waves half or three quarters of a frame too early; driving victim 119.250 / 118.583 / 118.250 | `AirWeaponModules.cs`: one frame after the death | 119.250 / 118.917 / 118.750 (within; the remainder is the position of a victim that dies in the middle of the frame); `projectiles` 6 / 6 → 4 / 4 | `ee4ef91` |
+| 5 | 5.4 `MinefieldBehavior` (package TIMING) against `ResolveFootprintCollisions` (package GROUND) | Test "Structures: mines detonate …" red at `--tick-rate 60` and `120`: two grids for one report, the mine stayed mute | `MineModules.cs`, `OnCollide`: no grid of its own any more, the report comes per frame of the driving object (rule 8); the state `phase` is dropped | test green at 30 / 60 / 120 Hz; `timed` unchanged, mine cases equal in damage and events | `0136733` |
+| 6 | – (measurement of the suite) | three vision cases asked after every tick whether a place is seen and took this tick as the time; the vision is a state of the frame end | `RateScene.StepUntilFrameEnd`, `RateCases.Timed.cs`: read at the frame end, counted from the first step of the frame (the form of `a6fdfea`) | 0.0000 s at every rate before and after #7 (without the correction after #7: 0.0000 / 0.0167 / 0.0250) | `f55c16d` |
+| 7 | new (package TURRETS, finding 3): refresh of the vision | after the first tick of its frame; readers saw a change up to (r − 1)/r frame earlier | `SimulationWorld.Step`/`StepObserved`, `_visionPhase`: after the last tick of the frame (rule 5) | refresh for an object from frame 1: ticks 3 / 6 / 12 → 3 / 7 / 15; all groups unchanged | `a8eed4a` |
+| 8 | – (without a behaviour change) | `HeightDieUpdate` counted its frame from its own first update (`FramePhase`) | `EntityFrames.BeginsFrameOf` (new file `Time/FrameGrid.Consolidation.cs`): the phase is the tick of the creation | the same ticks; the state `framePhase` is dropped | `f0770fe` |
+| 9 | 5.3 `ProcessSpawns` | an object requested in the creation phase (rider of the combat bike, superstructure of the Overlord) appeared one tick after the carrier and boarded one further tick later; combat bike "time to top speed" 2.0333 / 2.5167 / 1.3250 s | `SimulationWorld.ProcessSpawns` (`PendingSpawn.NotBefore`, set and written only above 30 Hz); `ContainChainModules.EnterPayload` checks in the frame ticks of the carrier (rule 7) | 2.0333 / 2.0500 / 2.0583 s; `locomotion` 12 / 12 → 4 / 3 | `f8ce7c4` |
+| 10 | 5.3 `Register` (first update): `SpawnBehavior` | the supply centre's own gatherer and the mob members were created half or three quarters of a frame too early; truck income in 5 min 6000 / 6300 / 6300 | `SpawnModules.cs`, `OnSpawn`: first update one frame after the creation | 6000 × 3; Chinook first delivery 31.6333 × 3; `economy` 7 / 10 → 4 / 5, `locomotion` 4 / 3 → 2 / 2 | `21a6f7d` |
+| 11 | 5.3 (TIMING, §5 "three individual cases") | empty parachute "kill until removal" 3.0000 / 2.9833 / 2.9750 s, mob member without nexus 7.0000 / 6.9833 / 6.9750 s | `FlightModules.cs` `ParachuteContain.Update`, `SlaveModules.cs` `MobMemberSlavedUpdate.Update`: only the giving up waits for the first frame of the object | 3.0000 × 3 and 7.0000 × 3; `timed` 3 / 3 → 1 / 1 | `9ba608c` |
+| 12 | new (ground movement, found with `rate-compare --ai-diff`) | a speed per frame below one raw value per tick (here 1 raw value when braking) was lost above 30 Hz: `FrameSpeed()` took the published speed 0 for "stopped"; following frame 1 raw value too slow | `Phase5Modules.cs`, `FrameSpeed`; the module clears `_frameSpeed` where it stops itself | speed per frame in raw values, frames 2253–2255: 1864136 / 1 / 1864136 at 30 Hz; at 60 Hz before 1864136 / 0 / 1864135, after as 30 Hz | `3f046f8` |
+| 13 | 5.2 (GROUND, open: "two driving objects that meet") | `StepBlocked` and `StationaryBlockersAhead` read a mover that had already had its turn in the tick one share along; gatherer round trip 27.4000 / 27.3333 / 27.4000 s | `SimulationWorld.Collision.cs`: `StepBlockedAtFrameEnd`, `StationaryBlockersAheadAtFrameEnd`, `StandsStillAtFrameEnd` (above 30 Hz; rule 3; whoever covers the last step of its drive stands) | all gatherer quantities equal at every rate; `economy` 4 / 5 → 0 / 0; new three-rate test (eight runners, bit-identical over 400 frames) | `2db1fc6`, test `305da79` |
+| 14 | 5.3 `Register`: command in the creation phase | a unit produced with a rally point set off one tick after appearing and from then on stood one share ahead of all objects in phase | `SimulationWorld.DeferSpawnPhaseOrders` (above 30 Hz; rule 7) | first frame with a deviating position in the match USA against China: 1140 (38.00 s) → 3467 (115.57 s); `flight` 0 / 4 → 0 / 3 | `cc7d92e` |
+| 15 | 5.4 `StepAcquisition`/`AutoFire` (position when attacking) | pursuit target, "in range" and shot were decided at a position in the middle of the frame | `SimulationWorld.Acquisition.cs` `Engage`, `WeaponSlots.cs` `WithinWeaponRange`, `Projectiles.cs` `FireWeaponAt`: frame-end view above 30 Hz; whoever comes into range stops at the frame end (rules 3, 4) | first frame with a deviating position 3467 → 3537 → 3540 → 3543 (118.10 s); suite unchanged (`weapons` 0 / 0, `turrets` 4 / 0, `projectiles` 4 / 4) | `04e2fc8` |
+| 16 | 5.6 healing in slices: `PropagandaTowerBehavior` | "frames with healing" 750 / 751 / 751, full health 26.8667 / 26.9000 / 26.9000 s | `FieldEffectModules.cs`, `Give`: the slice of the original once per frame of the tower (escape, §3) | 750 × 3, 26.8667 × 3; `overtime` 2 / 2 → 0 / 0 | `f05af4f` |
 
-Werkzeug (kein Verhalten): `SimTool rate-compare <content> --ai-diff A,B [--rates 30,60] [--context N] [--dump DIR] [--state [--positions] [--frames N] [--watch ID --watch-from BILD]]`
-(`d5ce353`, `551f11a`) – der erste abweichende Befehl bzw. das erste Bild, nach dem ein Objekt zwischen zwei Raten abweicht.
+Tool (no behaviour): `SimTool rate-compare <content> --ai-diff A,B [--rates 30,60] [--context N] [--dump DIR] [--state [--positions] [--frames N] [--watch ID --watch-from BILD]]`
+(`d5ce353`, `551f11a`) – the first deviating command or the first frame after which an object deviates between two rates.
 
-## 3. Verwendungen des Auswegs „Originalraster“ in diesem Paket
+## 3. Uses of the escape "original grid" in this package
 
-| Stelle | Was einmal je Bild läuft | Raster | Grund |
+| Place | What runs once per frame | Grid | Reason |
 |---|---|---|---|
-| `PropagandaTowerBehavior.Give` | die Heilscheibe (Bonus und Scan bleiben je Tick) | das des Turms (`BeginsFrameOf`) | das Original heilt einmal je Bild; Scheiben je Tick sind einzeln gerundet und summieren sich nicht zur Bildscheibe. Weder Bewegung noch Befehlsannahme noch Zielerfassung |
-| `ContainChainModules.EnterPayload` | das Nachsehen eines Trägers, ob seine Erstbesatzung erschienen ist | das des Trägers | ein Zustandswechsel „ein Update nach dem Erscheinen“; nicht unterteilbar |
-| `SimulationWorld.Step` (Sicht) | unverändert alle drei Bilder; nur die Phase im Bild ist neu (letzter Tick) | Welt | – |
+| `PropagandaTowerBehavior.Give` | the heal slice (bonus and scan stay per tick) | that of the tower (`BeginsFrameOf`) | the original heals once per frame; slices per tick are rounded individually and do not sum to the frame slice. Neither movement nor command acceptance nor target acquisition |
+| `ContainChainModules.EnterPayload` | the check of a carrier whether its initial crew has appeared | that of the carrier | a state change "one update after appearing"; not subdividable |
+| `SimulationWorld.Step` (vision) | unchanged every three frames; only the phase within the frame is new (last tick) | world | – |
 
-Kein Ausweg, sondern die Sicht des 30-Hz-Schritts (Regel 3): `HeightDieUpdate`, die Scans der Bodenbewegung, `Engage`, `WithinWeaponRange`, `FireWeaponAt` laufen in jedem Tick bzw.
-bei jeder Entscheidung wie zuvor und lesen nur eine andere Lage.
+Not an escape but the view of the 30 Hz step (rule 3): `HeightDieUpdate`, the scans of the ground movement, `Engage`, `WithinWeaponRange`, `FireWeaponAt` run in every tick or
+at every decision respectively as before and only read a different position.
 
-## 4. Die Gruppe `ai`: erste Abweichung, mit Zahlen
+## 4. The group `ai`: first deviation, with numbers
 
-Fall „skirmish FactionAmerica against FactionChina“, 30 gegen 60 Hz, mit `rate-compare --ai-diff` (Befehlsstrom in Spielzeit) und `--state --positions` (Lage aller Objekte am Ende
-jedes Bildes). Am Ausgangsstand waren der erste Befehl und der erste Bauauftrag gleich, 1.120 gegen 1.168 Befehle in acht Minuten.
+Case "skirmish FactionAmerica against FactionChina", 30 against 60 Hz, with `rate-compare --ai-diff` (command stream in game time) and `--state --positions` (position of all objects at the end
+of every frame). At the starting state the first command and the first build order were equal, 1,120 against 1,168 commands in eight minutes.
 
-| Stand | erster abweichender Befehl | erstes Bild mit abweichender Lage | Ursache der Abweichung an dieser Stelle |
+| State | first deviating command | first frame with a deviating position | Cause of the deviation at this place |
 |---|---|---|---|
-| nach #11 (`9ba608c`) | Befehl 121, 113,4667 s (Angriffsziel 1927,66 gegen 1927,71) | nicht gemessen | die acht Infanteristen der ersten Welle Chinas weichen einander aus; `StepBlocked` las den Vordermann einen Anteil weit (#13) |
-| + #12 allein | 113,4667 s | 1140 (38,00 s) | der Versorgungs-Chinook steigt einen Tick nach dem Erscheinen (Sammelpunkt-Befehl in der Erzeugungsphase, #14) |
-| + #13, #14 ohne #12 | Befehl 135, 114,4333 s | 2255 (75,17 s) | Tempo je Bild von 1 Rohwert geht beim Bremsen verloren (#12) |
-| + #12, #13, #14 (`cc7d92e`) | Befehl 158, 116,4333 s | 3467 (115,57 s) | Ziel einer Verfolgung aus der augenblicklichen Lage des Opfers (#15) |
-| + Verfolgung am Bildende | Befehl 194, 119,9333 s | 3537 (117,90 s) | „in Reichweite“ kippt mitten im Bild, die Einheit hält einen halben Schritt früher (#15) |
-| + Reichweite und Halt am Bildende | Befehl 182, 119,4667 s | 3540 (118,00 s) | das Ziel einer Rakete aus der augenblicklichen Lage (#15) |
-| + Schuss am Bildende (`04e2fc8`, Endstand) | Befehl 182, **119,4667 s** | **3543 (118,10 s)** | der Kurs eines Schützen, der mitten in seinem Bild angehalten hat: die Rakete startet mit einem Zwischenwinkel (der Kurs gehört noch nicht zur Bildend-Sicht) |
+| after #11 (`9ba608c`) | command 121, 113.4667 s (attack target 1927.66 against 1927.71) | not measured | the eight infantrymen of China's first wave avoid each other; `StepBlocked` read the one in front one share along (#13) |
+| + #12 alone | 113.4667 s | 1140 (38.00 s) | the supply Chinook climbs one tick after appearing (rally-point command in the creation phase, #14) |
+| + #13, #14 without #12 | command 135, 114.4333 s | 2255 (75.17 s) | speed per frame of 1 raw value is lost when braking (#12) |
+| + #12, #13, #14 (`cc7d92e`) | command 158, 116.4333 s | 3467 (115.57 s) | target of a pursuit from the momentary position of the victim (#15) |
+| + pursuit at the frame end | command 194, 119.9333 s | 3537 (117.90 s) | "in range" tips over in the middle of the frame, the unit stops half a step earlier (#15) |
+| + range and stop at the frame end | command 182, 119.4667 s | 3540 (118.00 s) | the target of a missile from the momentary position (#15) |
+| + shot at the frame end (`04e2fc8`, final state) | command 182, **119.4667 s** | **3543 (118.10 s)** | the heading of a shooter that has stopped in the middle of its frame: the missile launches with an intermediate angle (the heading does not yet belong to the frame-end view) |
 
-Das Gefecht beginnt bei 117,9 s. Bis dahin – Aufbau, Wirtschaft, zwei Wellen im Anmarsch, 3.537 Bilder, alle Objekte – sind die Welten bei 30 und 60 Hz in der Lage **bitgleich**
-(vorher ab Bild 1140 nicht mehr). Die verbleibende Abweichung ist **kein** berechtigtes Ansprechen unter einem Bild, sondern die nächste nicht umgestellte Lesestelle (§6); jede
-weitere kostete bisher zwei bis siebzig Bilder. Die Zahlen der Gruppe (Befehle in drei Minuten usw.) bleiben deshalb außerhalb: 25 / 24 → 24 / 23. Nicht gemessen: 120 Hz, die
-beiden anderen Paarungen.
+The battle begins at 117.9 s. Until then – build-up, economy, two waves on the approach, 3,537 frames, all objects – the worlds at 30 and 60 Hz are **bit-identical** in position
+(before, no longer from frame 1140). The remaining deviation is **not** a legitimate response below one frame but the next not converted reading place (§6); each
+further one has so far cost two to seventy frames. The numbers of the group (commands in three minutes etc.) therefore stay outside: 25 / 24 → 24 / 23. Not measured: 120 Hz, the
+two other pairings.
 
-## 5. Suite am Endstand
+## 5. Suite at the final state
 
-Alle zehn Gruppen, 4.307 Größen, Release, Realdaten, `--only RateEquivalence --rate-report` am Endstand der Simulation (`f05af4f`). „Vorher“ ist der Lauf am Stand `62fbb6a`
-(alle sieben Pakete), „Start“ der erste Lauf der Suite (§39.6).
+All ten groups, 4,307 quantities, Release, real data, `--only RateEquivalence --rate-report` at the final state of the simulation (`f05af4f`). "Before" is the run at the state `62fbb6a`
+(all seven packages), "Start" the first run of the suite (§39.6).
 
-| Gruppe | Größen | Start 60 / 120 Hz | vorher 60 / 120 Hz | **nachher 60 / 120 Hz** | Größen mit Fehlschlag | Fälle mit Fehlschlag |
+| Group | Quantities | Start 60 / 120 Hz | before 60 / 120 Hz | **after 60 / 120 Hz** | Quantities with a failure | Cases with a failure |
 |---|---|---|---|---|---|---|
 | `locomotion` | 837 | 152 / 211 | 12 / 12 | **2 / 2** | 2 | 1 |
 | `flight` | 74 | 21 / 21 | 0 / 4 | **0 / 3** | 3 | 3 |
-| `weapons` | 1.474 | 43 / 57 | 0 / 0 | **0 / 0** | 0 | 0 |
+| `weapons` | 1,474 | 43 / 57 | 0 / 0 | **0 / 0** | 0 | 0 |
 | `projectiles` | 743 | 54 / 103 | 10 / 9 | **4 / 4** | 4 | 2 |
 | `turrets` | 216 | 28 / 36 | 4 / 0 | **4 / 0** | 4 | 1 |
 | `overtime` | 418 | 80 / 84 | 2 / 2 | **0 / 0** | 0 | 0 |
@@ -154,78 +154,78 @@ Alle zehn Gruppen, 4.307 Größen, Release, Realdaten, `--only RateEquivalence -
 | `timed` | 383 | 53 / 56 | 3 / 3 | **1 / 1** | 1 | 1 |
 | `scripts` | 15 | 4 / 5 | 0 / 0 | **0 / 0** | 0 | 0 |
 | `ai` | 66 | 22 / 27 | 25 / 24 | **24 / 23** | 26 | 3 |
-| **Summe** | **4.307** | **479 / 625** | **63 / 64** | **35 / 33** | **40** | **12** |
+| **Sum** | **4,307** | **479 / 625** | **63 / 64** | **35 / 33** | **40** | **12** |
 
-Ohne die Gruppe `ai` sind es 11 Größen bei 60 Hz und 10 bei 120 Hz in 9 Fällen; jede steht in §6. Bei jeder Rate ungemessen bleiben 207 Größen (unverändert die Fälle aus §39.5;
+Without the group `ai` it is 11 quantities at 60 Hz and 10 at 120 Hz in 9 cases; each is in §6. Unmeasured at every rate remain 207 quantities (unchanged the cases from §39.5;
 `timed` 36 → 34).
 
-## 6. Was noch fehlschlägt oder offen ist, mit Einordnung
+## 6. What still fails or is open, with classification
 
-| Was | Werte 30 / 60 / 120 Hz | Einordnung | Grund, Vorschlag |
+| What | Values 30 / 60 / 120 Hz | Classification | Reason, proposal |
 |---|---|---|---|
-| `locomotion`, Mob-Nexus: Kurszeit, Kursweg (2 / 2) | 23,0667 / 25,2167 / 25,0250 s; 400,062 / 439,291 / 435,284 | später behebbar | der Nexus fährt um seine Mitglieder; `MobMemberSlavedUpdate` liest Lage und Ziel des Nexus augenblicklich und zählt ab dem Tick nach dem Entstehen. Bildend-Sicht dort (Regel 3) |
-| `projectiles`, Streusalven (4 / 4) | Aufschläge von 40: Artillerie-Plattform 8 / 7 / 7, Schlachtschiff 21 / 20 / 20 | später behebbar, nicht nachverfolgt | vierzig Geschosse im selben Tick; die erste Detonation trifft die Nachbarn im Flug (`DetonateProjectile` liest den Radius an der augenblicklichen Lage) |
-| `turrets`, Sentry-Drohne (4 / 0) | Winkel beim ersten Schuss 1,57080 / 1,55771 / 1,57080 | später behebbar, nicht untersucht | `DeployStyleAIUpdate`: Status bei 60 Hz in Tick 65 statt 64 (Befund TURRETS); der Auslöser des Tors ist nicht gefunden |
-| `flight`, nur 120 Hz (0 / 3) | MiG Landebefehl bis Aufsetzen 14,6333 / 14,6333 / 14,5667 s; Raptor „geparkt und nachgeladen“ 60,8000 / 60,8000 / 60,5333 s; Comanche „Kehre bis Ankunft“ 13,3333 / 13,3667 / 13,3833 s | später behebbar (größerer Umbau) | Flügelflug und `JetAIUpdate` rechnen an rund 35 Stellen mit `Wert je Tick × Ticks je Bild` und führen `Entity.Speed` je Tick; `LocomotorFrames` passt (die Tabelle trägt Tempo, Beschleunigung, Drehrate, Bremsen, Mindesttempo je Bild), verlangt aber ein eigenes Tempo je Bild im Modul wie bei der Bodenbewegung. Der Fallschirmabwurf („Flugzeug weg“ 49,2667 / 49,2500 / 49,2417 s) liegt seit #14 innerhalb |
-| `timed`, `CINE_BShipWeaponDetonationObject` (1 / 1) | – / 0,0667 / 0,0667 s | **30-Hz-Fehler**, braucht eine Änderung bei 30 Hz | `LifetimeUpdate` (1 Bild) und `SlowDeathBehavior` (1 Bild) sind bei 30 Hz im selben Tick fällig; `WakeAt` verwirft die Weckbitte „nächster Tick“ eines noch wachen Moduls, dessen Update sieht die Frist nicht erreicht und schläft für immer: das Objekt endet nie. Über 30 Hz ist das Modul in diesem Tick nicht wach (es lief einen Tick nach dem Entstehen), die Bitte greift. Die Raten gleich zu machen hieße, den Fehler nachzubauen (Regel 7 für alle Module **und** „schon wach“ auf „innerhalb des nächsten Bildes“ erweitert; mit Regel 7 allein blieb der Fall gemessen bei – / 0,0667 / 0,0667). Vorschlag für einen eigenen Commit, der das Manifest ändern darf: `SlowDeathBehavior.Update` gibt den Rest bis zur Frist zurück statt `SleepForever` |
-| `ai` (24 / 23) | Befehle in drei Minuten usw. | chaotische Folge einer behebbaren Ursache | §4: die erste Abweichung liegt jetzt im ersten Gefecht (118,1 s); davor bitgleich |
-| Winkel am Bildende | – | später behebbar | `Entity.FrameEnd` kennt nur die Lage; ein Schütze, der mitten im Bild hält, behält einen Zwischenkurs (erste Abweichung des Gefechts, §4) |
-| ein Objekt, das mitten im Bild stirbt | Neutronenrakete, fahrendes Opfer 119,250 / 118,917 / 118,750 | später behebbar | es bleibt an der augenblicklichen Lage liegen; bei 30 Hz stirbt es nach seinem ganzen Schritt. `CompleteFrame` beim Tod wäre die Regel 4 für alle |
-| nicht umgestellte Leser (Regel 6) | – | später behebbar, jede Stelle einzeln | Blick des Zielerwerbs (`FindMoodTarget`), Schaden im Radius, Türme (`AimTurretsAt`), Dock und Einsteigen, `MobMemberSlavedUpdate`, `SlavedUpdate`, Spezialfähigkeiten, `SkirmishAi.Observe` (liest vor dem Schritt an einer Bildgrenze: schon richtig), Skript-VM (läuft im ersten Tick: liest Objekte in Phase einen Anteil weit) |
-| nicht veröffentlichende Beweger | – | später behebbar | alle Flug- und Sonderbeweger (`FlightFrameStep`, `JetAIUpdate`, Fallschirm, Absturz, Zug, Lawine, Fähre, Welle, freier Fall) führen ihren Rest selbst; ein Beobachter sieht sie augenblicklich |
-| Kollisionsprüfung eines Fahrenden | – | bewusst gelassen | `ResolveFootprintCollisions` läuft mit dem letzten Anteil (GROUND) an der augenblicklichen Lage: exakt gegen Stehende und gegen Fahrende, die im Tick vorher dran waren; ein späterer Fahrender ist (r − 1)/r seines Schritts weit. Ereignisse der Prüfung fallen auf den letzten Tick des Bildes (Mine weg 4,8000 / 4,8167 / 4,8250 s, innerhalb) |
-| **erstes Bild für alle Module** | – | Entscheidung offen | probeweise gemessen (nicht übernommen): jedes Update eines neuen Objekts frühestens `SpawnTick + r`. Suite: `locomotion` 12 / 12 → 10 / 10, `economy` 7 / 10 → 4 / 5, aber `projectiles` 4 / 4 → 24 / 24 und `timed` 3 / 3 → 5 / 5, weil Module, die ihre Updates ab dem ersten zählen (`HeightDieUpdate` – inzwischen umgestellt –, `FirestormDynamicGeometryInfoUpdate`), und Integratoren (Flügelflug, Fallschirm, Chinook, dynamische Aufdeckung, Fähre) um r − 1 Ticks später liefen: 6 Drei-Raten-Tests und 6 bis 8 weitere Tests bei `--tick-rate 60`/`120` schlugen fehl. Die schmale Lösung (#9, #10, #11, #14) behebt dieselben Suite-Fälle ohne diese Tests. Folge der Ausnahme: ein Integrator, der mit dem Entstehen beginnt (ein steigender Chinook ohne Sammelpunkt, ein fallender Fallschirm), vollendet sein Bild im ersten statt im letzten Tick eines Bildes der Welt |
-| Gesundheit einer Baustelle am Bildende | 5,997 / 8,495 (60 Hz) im ersten Bild der Arbeit | bewusst gelassen | „der erste Arbeitsschritt zählt ein ganzes Bild“ (TIMING): die Bauzeit ist exakt, der Zwischenstand liegt (r − 1)/r Bild voraus |
-| Leistung | – | nicht gemessen | bei 30 Hz kommen je Objekt vier Felder dazu, in `HeightDieUpdate`, beim Geschoss-Start und in `WithinWeaponRange`/`FireWeaponAt`/`Engage` je ein Vergleich; die Scans der Bodenbewegung verzweigen einmal je Aufruf. Kein Vergleichslauf zweier Binärverzeichnisse |
+| `locomotion`, mob nexus: course time, course distance (2 / 2) | 23.0667 / 25.2167 / 25.0250 s; 400.062 / 439.291 / 435.284 | fixable later | the nexus drives around its members; `MobMemberSlavedUpdate` reads position and target of the nexus momentarily and counts from the tick after the creation. Frame-end view there (rule 3) |
+| `projectiles`, scatter salvos (4 / 4) | impacts of 40: artillery platform 8 / 7 / 7, battleship 21 / 20 / 20 | fixable later, not traced | forty projectiles in the same tick; the first detonation hits the neighbours in flight (`DetonateProjectile` reads the radius at the momentary position) |
+| `turrets`, Sentry drone (4 / 0) | angle at the first shot 1.57080 / 1.55771 / 1.57080 | fixable later, not investigated | `DeployStyleAIUpdate`: status at 60 Hz in tick 65 instead of 64 (finding TURRETS); the trigger of the gate has not been found |
+| `flight`, only 120 Hz (0 / 3) | MiG landing command until touchdown 14.6333 / 14.6333 / 14.5667 s; Raptor "parked and reloaded" 60.8000 / 60.8000 / 60.5333 s; Comanche "turnaround until arrival" 13.3333 / 13.3667 / 13.3833 s | fixable later (larger rebuild) | winged flight and `JetAIUpdate` compute at about 35 places with `value per tick × ticks per frame` and keep `Entity.Speed` per tick; `LocomotorFrames` fits (the table carries speed, acceleration, turn rate, braking, minimum speed per frame), but demands a speed per frame of its own in the module as for the ground movement. The paradrop ("aircraft gone" 49.2667 / 49.2500 / 49.2417 s) has been within since #14 |
+| `timed`, `CINE_BShipWeaponDetonationObject` (1 / 1) | – / 0.0667 / 0.0667 s | **30 Hz error**, needs a change at 30 Hz | `LifetimeUpdate` (1 frame) and `SlowDeathBehavior` (1 frame) are due in the same tick at 30 Hz; `WakeAt` discards the wake request "next tick" of a module that is still awake, whose update sees the deadline not reached and sleeps forever: the object never ends. Above 30 Hz the module is not awake in this tick (it ran one tick after the creation), the request takes hold. Making the rates equal would mean rebuilding the error (rule 7 for all modules **and** "already awake" extended to "within the next frame"; with rule 7 alone the case stayed, as measured, at – / 0.0667 / 0.0667). Proposal for a commit of its own that may change the manifest: `SlowDeathBehavior.Update` returns the remainder until the deadline instead of `SleepForever` |
+| `ai` (24 / 23) | commands in three minutes etc. | chaotic consequence of a fixable cause | §4: the first deviation now lies in the first battle (118.1 s); before that bit-identical |
+| Angle at the frame end | – | fixable later | `Entity.FrameEnd` only knows the position; a shooter that stops in the middle of the frame keeps an intermediate heading (first deviation of the match, §4) |
+| an object that dies in the middle of the frame | neutron missile, driving victim 119.250 / 118.917 / 118.750 | fixable later | it stays lying at the momentary position; at 30 Hz it dies after its whole step. `CompleteFrame` at death would be rule 4 for all |
+| readers not converted (rule 6) | – | fixable later, each place individually | look of target acquisition (`FindMoodTarget`), damage in a radius, turrets (`AimTurretsAt`), dock and boarding, `MobMemberSlavedUpdate`, `SlavedUpdate`, special abilities, `SkirmishAi.Observe` (reads before the step at a frame boundary: already correct), script VM (runs in the first tick: reads objects in phase one share along) |
+| movers that do not publish | – | fixable later | all flight and special movers (`FlightFrameStep`, `JetAIUpdate`, parachute, crash, train, avalanche, ferry, wave, free fall) keep their remainder themselves; an observer sees them momentarily |
+| Collision check of a driving object | – | deliberately left | `ResolveFootprintCollisions` runs with the last share (GROUND) at the momentary position: exact against standing objects and against driving ones that had their turn earlier in the tick; a later driving object is (r − 1)/r of its step along. Events of the check fall on the last tick of the frame (mine gone 4.8000 / 4.8167 / 4.8250 s, within) |
+| **first frame for all modules** | – | decision open | measured on a trial basis (not adopted): every update of a new object at the earliest `SpawnTick + r`. Suite: `locomotion` 12 / 12 → 10 / 10, `economy` 7 / 10 → 4 / 5, but `projectiles` 4 / 4 → 24 / 24 and `timed` 3 / 3 → 5 / 5, because modules that count their updates from the first (`HeightDieUpdate` – converted in the meantime –, `FirestormDynamicGeometryInfoUpdate`) and integrators (winged flight, parachute, Chinook, dynamic shroud clearing, ferry) ran r − 1 ticks later: 6 three-rate tests and 6 to 8 further tests at `--tick-rate 60`/`120` failed. The narrow solution (#9, #10, #11, #14) fixes the same suite cases without these tests. Consequence of the exception: an integrator that begins with the creation (a climbing Chinook without a rally point, a falling parachute) completes its frame in the first instead of in the last tick of a frame of the world |
+| Health of a building site at the frame end | 5.997 / 8.495 (60 Hz) in the first frame of the work | deliberately left | "the first work step counts a whole frame" (TIMING): the build time is exact, the intermediate state lies (r − 1)/r frame ahead |
+| Performance | – | not measured | at 30 Hz four fields are added per object, in `HeightDieUpdate`, at the projectile launch and in `WithinWeaponRange`/`FireWeaponAt`/`Engage` one comparison each; the scans of the ground movement branch once per call. No comparison run of two binary directories |
 
-Aus dem Auftrag geprüft, ohne Änderung: die Feuerwand des Drachenpanzers ist am Ausgangsstand dieses Pakets gleich (Schaden in 60 s 14.605,5 × 3, mit Upgrade 18.167,625 × 3,
-Schüsse 838 × 3); der ECM-Panzer besteht in allen Größen (Winkel nach 180° −2,09440 × 3); die vier Baufälle sind exakt (Kraftwerk 15,2333 × 3, China 15,0333 × 3, GLA-Kaserne
-14,6333 × 3); verkettete `StepUntil` wurden nicht systematisch durchgesehen (kein Fall der Gruppen `timed`/`turrets` schlägt deswegen fehl).
+Checked from the brief, without a change: the fire wall of the Dragon Tank is equal at the starting state of this package (damage in 60 s 14,605.5 × 3, with upgrade 18,167.625 × 3,
+shots 838 × 3); the ECM tank passes in all quantities (angle after 180° −2.09440 × 3); the four build cases are exact (power plant 15.2333 × 3, China 15.0333 × 3, GLA barracks
+14.6333 × 3); chained `StepUntil` were not looked through systematically (no case of the groups `timed`/`turrets` fails because of it).
 
-## 7. Die Helfer nebeneinander (nur Bestandsaufnahme, nichts geändert)
+## 7. The helpers side by side (inventory only, nothing changed)
 
-| Helfer (Datei) | Was | Rundung | Zählweise | Benutzer |
+| Helper (file) | What | Rounding | Way of counting | Users |
 |---|---|---|---|---|
-| `FrameGrid` (`Time/FrameGrid.cs`) | Dauern auf dem Raster: `FloorToFrame`, `CeilingToFrame`, `AtLeastOneFrame`, `DrawFrames`, `CountdownReload` | ganze Bilder | – | überall, seit Phase 20 |
-| `FrameGridTiming.ZeroIsNextFrame` (`FrameGrid.Timing.cs`) | Frist 0 hinter einer Abfrage je Tick = ein Bild | – | – | Waffen-Nachladen, Kampfplan, `FireWeaponUpdate` |
-| `ProjectileFrameGrid.FrameShare` (`FrameGrid.Projectiles.cs`) | Anteil eines Bildschritts | `Fixed`-Division Schritt / n; der **letzte** Anteil nimmt den Rest | `subStep` 0 … n − 1 (0 = Entscheidung), Zustand im Modul | `MissileAIUpdate`, `NeutronMissileUpdate`, `PhysicsBehavior`, Lenkbombe |
-| `DumbProjectileBehavior.FlyToward` | Anteil zum Bahnpunkt | (Punkt − Lage) / verbleibende Anteile, neu je Tick; der letzte setzt den Punkt | wie oben | Granaten |
-| `ProjectileFrameGrid.PerTickToPerOriginalFrame` | Tempo je Bild des 30-Hz-Katalogs aus dem Wert je Tick | Rekonstruktion über Dezimalzahl mit vier Stellen, sonst × n | – | Geschosse, `FlightTicks` |
-| `FramePhysics.FrameSlice`/`FramePart` (`FrameGrid.Physics.cs`) | Anteil eines Bildschritts | `floor(Schritt · k / n) − floor(Schritt · (k − 1) / n)` (Schiebeoperation, rundet nach −∞), Summe exakt | `subTick` 1 … n über `FramePhase` (Zustand 0 … n − 1) | Umstürzen, Gebäudesturz, Zug, Battle Bus, Einsturz, Aufdeckung |
-| `FramePhysics.PerTickAsPerOriginalFrame` / `…Squared…` | Katalogwert je Tick → je Bild | × n bzw. × n² (letzte Bits je Rate verschieden) | – | Paket PHYSICS |
-| `FlightFrames.PerFrame`/`PerFrameSquared`/`PerTick` (`FrameGrid.Flight.cs`) | dasselbe; `PerTick` teilt den Rohwert | × n, × n²; Division schneidet zur Null ab | – | Flug, Jet, Fallschirm, Spectre, Chinook |
-| `FlightFrameStep` | Rest eines Bildschritts | Anteil = Rohwert / n zur Null abgeschnitten; der **erste** Tick nimmt den Rest (das Objekt wird um n − 1 Anteile zurückgesetzt) | `left` n − 1 … 0, Zustand als Objekt im Snapshot | Flügelflug, Jet, Absturz, Fallschirm, Chinook, Spectre |
-| `AIUpdateInterface.AdvanceFrame` (`Phase5Modules.cs`) | Anteil des Bodenschritts | `Roh · (i + 1) / n − Roh · i / n` mit Ganzzahldivision (zur Null), Summe exakt | `frameTicksLeft` n … 1, `frameDue` | Bodenbewegung |
-| `LocomotorFrames` (`Templates/LocomotorFrames.cs`) | Locomotor-Konstanten je Bild | die 30-Hz-Umrechnung derselben Quellzahlen (statische Tabelle, Schlüssel Kataloginstanz); sonst × n, × n² | – | Bodenbewegung |
-| `TurretInfo.RatesPerOriginalFrame`, `TurretState.SubSteps` | Drehraten je Bild; Anteil des Turmschritts | Tabelle wie oben; Anteil = Rest / verbleibende Teilschritte abwärts, der letzte setzt das Ziel | `SubSteps` | Türme |
-| neu: `Entity.Ahead…`/`FrameEnd`/`CoverShare`/`CompleteFrame`, `EntityFrames.BeginsFrameOf` | der veröffentlichte Rest; die Bildticks eines Objekts | keine eigene Rundung (der Beweger liefert seine Anteile) | `AheadTick` | Beobachter (§2) |
+| `FrameGrid` (`Time/FrameGrid.cs`) | durations on the grid: `FloorToFrame`, `CeilingToFrame`, `AtLeastOneFrame`, `DrawFrames`, `CountdownReload` | whole frames | – | everywhere, since Phase 20 |
+| `FrameGridTiming.ZeroIsNextFrame` (`FrameGrid.Timing.cs`) | delay 0 behind a per-tick query = one frame | – | – | weapon reload, battle plan, `FireWeaponUpdate` |
+| `ProjectileFrameGrid.FrameShare` (`FrameGrid.Projectiles.cs`) | share of a frame step | `Fixed` division step / n; the **last** share takes the remainder | `subStep` 0 … n − 1 (0 = decision), state in the module | `MissileAIUpdate`, `NeutronMissileUpdate`, `PhysicsBehavior`, guided bomb |
+| `DumbProjectileBehavior.FlyToward` | share towards the path point | (point − position) / remaining shares, anew per tick; the last sets the point | as above | shells |
+| `ProjectileFrameGrid.PerTickToPerOriginalFrame` | speed per frame of the 30 Hz catalogue from the value per tick | reconstruction via a decimal number with four places, otherwise × n | – | projectiles, `FlightTicks` |
+| `FramePhysics.FrameSlice`/`FramePart` (`FrameGrid.Physics.cs`) | share of a frame step | `floor(step · k / n) − floor(step · (k − 1) / n)` (shift operation, rounds towards −∞), sum exact | `subTick` 1 … n via `FramePhase` (state 0 … n − 1) | toppling, structure topple, train, Battle Bus, collapse, shroud clearing |
+| `FramePhysics.PerTickAsPerOriginalFrame` / `…Squared…` | catalogue value per tick → per frame | × n or × n² respectively (last bits different per rate) | – | package PHYSICS |
+| `FlightFrames.PerFrame`/`PerFrameSquared`/`PerTick` (`FrameGrid.Flight.cs`) | the same; `PerTick` divides the raw value | × n, × n²; division truncates towards zero | – | flight, jet, parachute, Spectre, Chinook |
+| `FlightFrameStep` | remainder of a frame step | share = raw value / n truncated towards zero; the **first** tick takes the remainder (the object is set back by n − 1 shares) | `left` n − 1 … 0, state as an object in the snapshot | winged flight, jet, crash, parachute, Chinook, Spectre |
+| `AIUpdateInterface.AdvanceFrame` (`Phase5Modules.cs`) | share of the ground step | `raw · (i + 1) / n − raw · i / n` with integer division (towards zero), sum exact | `frameTicksLeft` n … 1, `frameDue` | ground movement |
+| `LocomotorFrames` (`Templates/LocomotorFrames.cs`) | locomotor constants per frame | the 30 Hz conversion of the same source numbers (static table, key catalogue instance); otherwise × n, × n² | – | ground movement |
+| `TurretInfo.RatesPerOriginalFrame`, `TurretState.SubSteps` | turn rates per frame; share of the turret step | table as above; share = remainder / remaining sub-steps rounded down, the last sets the goal | `SubSteps` | turrets |
+| new: `Entity.Ahead…`/`FrameEnd`/`CoverShare`/`CompleteFrame`, `EntityFrames.BeginsFrameOf` | the published remainder; the frame ticks of an object | no rounding of its own (the mover supplies its shares) | `AheadTick` | observers (§2) |
 
-**Vorschlag für später (ändert Ergebnisse bei 60/120 Hz, nie bei 30 Hz; eigener Schritt mit der Suite als Maß):** *ein* Anteilshelfer in der Form von `FramePhysics.FrameSlice`
-(Summe exakt, vorzeichenrichtig, kein Zustand außer der Nummer des Ticks im Bild) und der Rest am Objekt (`Entity.Ahead…`) als einzige Buchführung dessen, was fehlt – dann
-entfallen `subStep`, `FlightFrameStep`, `frameTicksLeft`/`frameStep` und `FramePhase` als je eigener Zustand, und jeder Beweger veröffentlicht von selbst. Für Konstanten je Bild
-das Muster von `LocomotorFrames` (Tabelle neben dem Katalogtyp mit der 30-Hz-Umrechnung der Quellzahlen) statt `× n` und statt der Dezimal-Rekonstruktion.
+**Proposal for later (changes results at 60/120 Hz, never at 30 Hz; a step of its own with the suite as the measure):** *one* share helper in the form of `FramePhysics.FrameSlice`
+(sum exact, sign-correct, no state except the number of the tick within the frame) and the remainder on the object (`Entity.Ahead…`) as the only bookkeeping of what is missing – then
+`subStep`, `FlightFrameStep`, `frameTicksLeft`/`frameStep` and `FramePhase` are dropped as a state of their own each, and every mover publishes by itself. For constants per frame
+the pattern of `LocomotorFrames` (table next to the catalogue type with the 30 Hz conversion of the source numbers) instead of `× n` and instead of the decimal reconstruction.
 
-## 8. Prüfläufe
+## 8. Check runs
 
-| Lauf | Ergebnis |
+| Run | Result |
 |---|---|
-| `input-manifest check` | identisch, nach jedem der 14 Commits, die die Simulation ändern (`f0770fe` zusammen mit `f8ce7c4` geprüft), und am Ende |
-| `reference-manifest check --set quick --jobs 3` | 9 Läufe identisch, nach jedem dieser Commits (jeweils mit frisch gebautem `SimTool`; die drei reinen Mess- und Werkzeug-Commits `43443f5`, `f55c16d`, `d5ce353`/`551f11a` ohne eigenen Lauf) |
-| `reference-manifest check --set full --jobs 4` | **50 Läufe identisch**, am Stand `305da79` (letzter Commit an der Simulation: `f05af4f`) |
-| `dotnet build CnCNew.slnx` | 0 Warnungen, 0 Fehler (inkrementell, `bin`/`obj` von `CnCNew.Client.Stride` nicht gelöscht) |
-| Simulationstests, Release, ohne Realdaten, 30 Hz | alle 495 grün (494 bestehende, 1 neuer) |
-| dieselben mit `--tick-rate 60` | **alle grün** (am Ausgangsstand rot: „Structures: mines detonate …“) |
-| dieselben mit `--tick-rate 120` | **alle grün** (am Ausgangsstand rot: derselbe Test; dazu bei jeder Rate „the neutron missile flies the 30 Hz flight“) |
-| Simulationstests, Debug, 30 Hz (`dotnet run --project tests/CnCNew.Simulation.Tests`) | alle grün |
-| Zielfahrer, 24 Kampagnenkarten (`CampaignTool drive <content> --map "/NAME.map" [--tick-rate N]`, je Karte ein Prozess, Kopie des Binärverzeichnisses) | 30 Hz: Sieg 24 / 24, Niederlage 24 / 24. 60 Hz: 24 / 24 und 24 / 24, auf jeder Karte dasselbe Endskript und dieselbe Spielzeit wie bei 30 Hz (höchstens ein Bild Abstand). 120 Hz: 24 / 24 und 24 / 24, ebenso (z. B. `MD_CHI04`: Sieg in Tick 48.258 / 96.516 / 193.032, dasselbe Bild) |
+| `input-manifest check` | identical, after each of the 14 commits that change the simulation (`f0770fe` checked together with `f8ce7c4`), and at the end |
+| `reference-manifest check --set quick --jobs 3` | 9 runs identical, after each of these commits (each with a freshly built `SimTool`; the three pure measurement and tool commits `43443f5`, `f55c16d`, `d5ce353`/`551f11a` without a run of their own) |
+| `reference-manifest check --set full --jobs 4` | **50 runs identical**, at the state `305da79` (last commit on the simulation: `f05af4f`) |
+| `dotnet build CnCNew.slnx` | 0 warnings, 0 errors (incremental, `bin`/`obj` of `CnCNew.Client.Stride` not deleted) |
+| Simulation tests, Release, without real data, 30 Hz | all 495 green (494 existing, 1 new) |
+| the same with `--tick-rate 60` | **all green** (red at the starting state: "Structures: mines detonate …") |
+| the same with `--tick-rate 120` | **all green** (red at the starting state: the same test; plus at every rate "the neutron missile flies the 30 Hz flight") |
+| Simulation tests, Debug, 30 Hz (`dotnet run --project tests/CnCNew.Simulation.Tests`) | all green |
+| Objective driver, 24 campaign maps (`CampaignTool drive <content> --map "/NAME.map" [--tick-rate N]`, one process per map, copy of the binary directory) | 30 Hz: victory 24 / 24, defeat 24 / 24. 60 Hz: 24 / 24 and 24 / 24, on every map the same final script and the same game time as at 30 Hz (at most one frame apart). 120 Hz: 24 / 24 and 24 / 24, likewise (e.g. `MD_CHI04`: victory in tick 48,258 / 96,516 / 193,032, the same frame) |
 
-Zwischen `d5ce353` und `551f11a` war der Quelltexttest „Determinism rules hold in the simulation sources“ rot (eine Zahl ohne invariante Kultur in der Diagnose); in dieser Spanne
-liegen `3f046f8`, `2db1fc6` und `cc7d92e`, deren übrige Tests grün waren.
+Between `d5ce353` and `551f11a` the source test "Determinism rules hold in the simulation sources" was red (a number without invariant culture in the diagnostics); in this span
+lie `3f046f8`, `2db1fc6` and `cc7d92e`, whose other tests were green.
 
-Geänderte Testerwartungen: „Tick rate, world: the shroud is refreshed every three logic frames“ (Auffrischung nach dem letzten Tick des Bildes: Ticks 3 / 7 / 15) und „Turret
-attack: a victim that falls into the fog ends the aim“ (wartet zwei Bilder statt zwei Ticks auf die erste Auffrischung), beide in `a8eed4a`. Neuer Test: „Rate invariance,
-consolidation: movers that meet are where the 30 Hz movers are“ (`Tests.RateInvariance.Consolidation.cs`; schlägt ohne #13 bei 60 Hz nach Bild 15 fehl).
+Changed test expectations: "Tick rate, world: the shroud is refreshed every three logic frames" (refresh after the last tick of the frame: ticks 3 / 7 / 15) and "Turret
+attack: a victim that falls into the fog ends the aim" (waits two frames instead of two ticks for the first refresh), both in `a8eed4a`. New test: "Rate invariance,
+consolidation: movers that meet are where the 30 Hz movers are" (`Tests.RateInvariance.Consolidation.cs`; fails without #13 at 60 Hz after frame 15).
 
-Nicht gemacht oder nicht geprüft: eigene Drei-Raten-Tests für #1 bis #11 und #14 bis #16 über die genannten hinaus (die Suite und die beiden vorher roten Tests tragen sie); die
-erste Abweichung des Gefechts bei 120 Hz und für die beiden anderen Paarungen; Leistung; der Debug-Lauf mit Realdaten; Tests und Suite der Präsentation
-(`Presentation.Tests`, `Game.Tests`) – die Bildend-Sicht ändert nur die Simulation oberhalb von 30 Hz. **Kein Mensch hat etwas davon gesehen.**
+Not done or not checked: dedicated three-rate tests for #1 to #11 and #14 to #16 beyond the named ones (the suite and the two previously red tests carry them); the
+first deviation of the match at 120 Hz and for the two other pairings; performance; the Debug run with real data; tests and suite of the presentation
+(`Presentation.Tests`, `Game.Tests`) – the frame-end view changes only the simulation above 30 Hz. **No human has seen any of it.**
