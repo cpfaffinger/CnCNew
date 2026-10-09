@@ -1,88 +1,88 @@
-# Kompatibilitätsliste (Phase 3, als Basislinie abgesichert in Phase 4, fortgeschrieben in Phase 5)
+# Compatibility list (Phase 3, secured as a baseline in Phase 4, carried forward in Phase 5)
 
-Stand: 28. September 2026
+As of: 28 September 2026
 
-Der Compiler ignoriert unbekannte Semantik nie. Nicht benötigte Definitionen, noch nicht
-implementierte Simulations-/Präsentationsmodule, zurückgestellte Objekt-/Modulschlüssel, wiederholte
-Skalarschlüssel, Diagnosecodes und ausgeschlossene Dateien werden als `CompatibilityEntry` mit Kategorie,
-Name, Häufigkeit, Besitzerart und geplantem Ziel in jedem kanonischen Snapshot geführt. Seit Phase 4 ist die
-Liste als **geprüfte Basislinie** eingecheckt (`baselines/compatibility.json`); Phase 5 hat sie bewusst mehrfach
-neu erzeugt, sobald sich getypte Felder verschoben haben (zuletzt **746 Einträge**, keine Assetinhalte), und
-prüft sie gegen Drift:
+The compiler never ignores unknown semantics. Definitions that are not needed, simulation/presentation
+modules not yet implemented, deferred object/module keys, repeated
+scalar keys, diagnostic codes and excluded files are carried as a `CompatibilityEntry` with category,
+name, frequency, owner kind and planned target in every canonical snapshot. Since Phase 4 the
+list has been checked in as a **verified baseline** (`baselines/compatibility.json`); Phase 5 deliberately regenerated it several times
+as soon as typed fields shifted (most recently **746 entries**, no asset contents), and
+checks it against drift:
 
 ```powershell
 dotnet run --project tools/CnCNew.IniTool -- compat-check game/content baselines/compatibility.json
 ```
 
-Der Befehl endet bei jedem neuen (`NEW`), fehlenden (`MISSING`) oder in Häufigkeit, Besitzerart oder Ziel geänderten
-(`CHANGED`) Eintrag mit Exitcode 1; der Realdatentest von `CnCNew.Data.Tests --content-dir` prüft dasselbe. Die Basislinie
-erzeugt `IniTool compat-baseline`; jede Änderung ist Review-Gegenstand (Vollinventarmodus: alle Kartenoverlays, strikter
-Modulkatalog, Retail-Ladeplan).
+The command ends with exit code 1 on every new (`NEW`), missing (`MISSING`) or, in frequency, owner kind or target, changed
+(`CHANGED`) entry; the real-data test of `CnCNew.Data.Tests --content-dir` checks the same. The baseline
+is produced by `IniTool compat-baseline`; every change is subject to review (full-inventory mode: all map overlays, strict
+module catalogue, retail load plan).
 
-Kategorien (frisch gemessen, Vollinventar): `definition` (38 Typen, 2.899 Verwendungen), `module` (178 Modultypen,
-10.229 Verwendungen – 27 Typen sind inzwischen implementiert, siehe unten), `deferred-field` (184 Schlüssel, davon 37
-Objektschlüssel und 147 neue Phase-5-Modul-/Domänenfelder — Weapon/Armor/Upgrade/Science/Locomotor/**Faction**,
-12.921 Verwendungen), `duplicate-key` (24 Schlüssel, 120), `diagnostic` (9 Codes, 10.567 Verwendungen) und
-`excluded-file` (28 Dateien).
+Categories (freshly measured, full inventory): `definition` (38 types, 2,899 uses), `module` (178 module types,
+10,229 uses – 27 types have been implemented in the meantime, see below), `deferred-field` (184 keys, of which 37
+object keys and 147 new Phase 5 module/domain fields — Weapon/Armor/Upgrade/Science/Locomotor/**Faction**,
+12,921 uses), `duplicate-key` (24 keys, 120), `diagnostic` (9 codes, 10,567 uses) and
+`excluded-file` (28 files).
 
-## Definitionsdomänen außerhalb des Typvertrags
+## Definition domains outside the type contract
 
-38 Typen (2.899 Verwendungen) sind vollständig syntaktisch und werttypisiert erhalten, ihre fachspezifischen Verträge folgen in
-den angegebenen späteren Phasen:
+38 types (2,899 uses) are fully preserved syntactically and value-typed; their domain-specific contracts follow in
+the later phases stated:
 
-- Simulation/Welt/KI (Phase 4–6): AIData, Bridge, Campaign, ChallengeGenerals, CrateData, MapCache, ObjectCreationList, Rank,
-  Road, Terrain, WaterSet, WaterTransparency und Weather (ScriptAction/ScriptCondition gehören zu `Scripts.ini`, die nur das
-  WorldBuilder-Werkzeug lädt und daher ausgeschlossen ist).
-- Präsentation/UI (Phase 7–8): Animation, AudioSettings, CommandMap, ControlBarResizer, ControlBarScheme, Credits,
+- Simulation/world/AI (Phase 4–6): AIData, Bridge, Campaign, ChallengeGenerals, CrateData, MapCache, ObjectCreationList, Rank,
+  Road, Terrain, WaterSet, WaterTransparency and Weather (ScriptAction/ScriptCondition belong to `Scripts.ini`, which only the
+  WorldBuilder tool loads and which is therefore excluded).
+- Presentation/UI (Phase 7–8): Animation, AudioSettings, CommandMap, ControlBarResizer, ControlBarScheme, Credits,
   DrawGroupInfo, DynamicGameLOD, EvaEvent, HeaderTemplate, InGameUI, Language, MappedImage, MiscAudio, Mouse, MouseCursor,
   MultiplayerColor, MultiplayerSettings, MultiplayerStartingMoneyChoice, OnlineChatColors, ShellMenuScheme, StaticGameLOD,
-  Video, WebpageURL und WindowTransition.
+  Video, WebpageURL and WindowTransition.
 
-Compat-Definitionen haben IDs der Form `compatibility://<typ>/<name>`; sechs gleichnamige Definitionen verschiedener
-Typen verschmelzen damit nicht mehr.
+Compat definitions have IDs of the form `compatibility://<typ>/<name>`; six definitions of different
+types with the same name therefore no longer merge.
 
-## Modul-/Behaviorbestand
+## Module/behavior inventory
 
-Der Katalog `ModuleCatalog` führt alle **205** Modultypen des ausgelieferten Bestands (eine frühere Zählung von 206 enthielt
-das Phantommodul `ArmorSet`). **74** sind implementiert (Stand Abschluss Phase 5): die 12 aus Phase 4 plus 62 aus Phase 5 – die
-vollständige Liste gibt `SimTool audit-modules <content-dir>` aus, Details und Vereinfachungen stehen in `docs/GAME-RULES.md`. Die übrigen
-131 stehen in der Basislinie (davon 22 reine Präsentationsmodule ohne Simulationsbezug) mit Häufigkeit, Besitzerart und Ziel; eine Liste der Verwendungen je Modul liefert
-`SimTool audit-modules <content-dir>`. `StrictUnknownModules` scheitert an jedem Namen außerhalb des Katalogs, sodass ein
-Tippfehler von einem bekannten, noch nicht implementierten Modul unterscheidbar ist.
+The catalogue `ModuleCatalog` carries all **205** module types of the shipped content (an earlier count of 206 included
+the phantom module `ArmorSet`). **74** are implemented (as of the end of Phase 5): the 12 from Phase 4 plus 62 from Phase 5 – the
+complete list is printed by `SimTool audit-modules <content-dir>`, details and simplifications are in `docs/GAME-RULES.md`. The remaining
+131 are in the baseline (22 of them pure presentation modules without relation to the simulation) with frequency, owner kind and target; a list of the uses per module is provided by
+`SimTool audit-modules <content-dir>`. `StrictUnknownModules` fails on every name outside the catalogue, so that a
+typo can be distinguished from a known module that is not yet implemented.
 
-## Sichtbare Sonderfälle
+## Visible special cases
 
-- `GeometryMajorRadius = 18.5.0` und `GeometryHeight = 40v.0` sind explizite Compat-Werte (`shipped-double-decimal-radius`,
-  `shipped-real-trailing-text`, beide wie `sscanf("%f")` gelesen) und in `compatibility-value` gezählt (2).
-- Negative Dauern (`MinLifetime = -1`) wickeln modulo 2^32 wie `sscanf("%u")` (`compatibility-unsigned-wrap`, 10).
-- Überzählige Token hinter Einzelwerten (`compatibility-ignored-tokens`, 3).
-- Wiederholte Skalarschlüssel im selben Block: der letzte gewinnt (`compatibility-duplicate-key`, 120 Verwendungen in 24
-  Schlüsseln; wiederholbare Schlüssel wie `Armor` oder `Locomotor` behalten ihre Vielfachheit und stehen nicht hier).
-- Referenzen: 1.550 Verwendungen sind sichtbare Fallbacks im Vollinventar (1.523 in den Basisdaten; neu gemessen; die zusätzlichen echten Referenzen aus der
-  Phase-5-Domänentypisierung, siehe `TYPED-DEFINITIONS.md`, lösen alle auf und ändern diese Zahl nicht) – ganz
-  überwiegend `compatibility-engine-veterancy-upgrade` (`Upgrade_Veterancy_ELITE`/`_HEROIC`, engineinterne Namen ohne
-  INI-Definition, über das vom `DefaultThingTemplate` geerbte `AutoHealBehavior`) und eine kleine Zahl
-  `compatibility-unresolved-reference` (`DieByFireUSA`, `Boss_VehicleSentryDrone`); kein stiller Ersatz durch ein anderes
-  Ziel.
-- **Phase-5-Parserkorrektur:** `SageIniParser` erkannte das `End`-Schlüsselwort nur, wenn die gesamte Zeile exakt `End`
-  lautete; das Original (`INI::initFromINIMulti`) vergleicht nur das erste `strtok`-Token und ignoriert den Rest der
-  Zeile. Zwei Objekte im Bestand tragen den Tippfehler `End Upgrade_AmericaHallfireDrone`
-  (`AmericaVehicle.ini`, `BossGeneral.ini`); ohne die Korrektur blieb der Block offen und verschluckte alle folgenden
-  Geschwisterblöcke bis zum nächsten `End`, was unbemerkt blieb, solange kein implementiertes Modul die verschluckten
-  Felder validierte. Die Korrektur ändert die Objektzahl (2.113 → 2.115) und den Definitionsfingerabdruck.
-- Das Vollinventar wendet alle Kartenoverlays gemeinsam an. Dadurch fehlen Ziele von `ReplaceModule` (52,
-  `compatibility-missing-replace-target`) und `RemoveModule` (51, `compatibility-missing-remove-target`, neu gemessen),
-  und wiederholte Tags aus mehreren Overlays treten auf (`compatibility-duplicate-module-tag`, 95, neu gemessen; 18 davon
-  in den Basisdaten). Ein einzelnes Overlay behält korrekte Semantik; `--maps exclude` liefert die Basisdaten ohne diese
-  Aggregatartefakte.
-- Vier `AddModule`-Blöcke enthalten kein Modul (`compatibility-add-module-without-module`); ihre Felder wirken auf das
-  Objekt, wie im Original.
-- Ausgeschlossene Dateien (28) stehen mit Grund in der Liste: Debug-Dateien (`GameDataDebug.ini`, `CommandMapDebug.ini`,
-  `CommandMapDemo.ini`), die WorldBuilder-Datei `Scripts.ini`, nicht referenzierte Dateien (`MemoryPools.ini`,
-  `Default/ButtonSets.ini`, `Default/Webpages.ini`, Installer-`Options.ini`) und 20 Sprachvarianten.
+- `GeometryMajorRadius = 18.5.0` and `GeometryHeight = 40v.0` are explicit compat values (`shipped-double-decimal-radius`,
+  `shipped-real-trailing-text`, both read like `sscanf("%f")`) and counted in `compatibility-value` (2).
+- Negative durations (`MinLifetime = -1`) wrap modulo 2^32 like `sscanf("%u")` (`compatibility-unsigned-wrap`, 10).
+- Surplus tokens after single values (`compatibility-ignored-tokens`, 3).
+- Repeated scalar keys in the same block: the last one wins (`compatibility-duplicate-key`, 120 uses in 24
+  keys; repeatable keys such as `Armor` or `Locomotor` keep their multiplicity and are not listed here).
+- References: 1,550 uses are visible fallbacks in the full inventory (1,523 in the base data; re-measured; the additional real references from the
+  Phase 5 domain typing, see `TYPED-DEFINITIONS.md`, all resolve and do not change this number) – very
+  predominantly `compatibility-engine-veterancy-upgrade` (`Upgrade_Veterancy_ELITE`/`_HEROIC`, engine-internal names without
+  an INI definition, via the `AutoHealBehavior` inherited from the `DefaultThingTemplate`) and a small number of
+  `compatibility-unresolved-reference` (`DieByFireUSA`, `Boss_VehicleSentryDrone`); no silent replacement by another
+  target.
+- **Phase 5 parser correction:** `SageIniParser` recognised the `End` keyword only if the entire line read exactly `End`;
+  the original (`INI::initFromINIMulti`) compares only the first `strtok` token and ignores the rest of the
+  line. Two objects in the content carry the typo `End Upgrade_AmericaHallfireDrone`
+  (`AmericaVehicle.ini`, `BossGeneral.ini`); without the correction the block stayed open and swallowed all following
+  sibling blocks up to the next `End`, which went unnoticed as long as no implemented module validated the swallowed
+  fields. The correction changes the object count (2,113 → 2,115) and the definition fingerprint.
+- The full inventory applies all map overlays together. As a result, targets of `ReplaceModule` (52,
+  `compatibility-missing-replace-target`) and `RemoveModule` (51, `compatibility-missing-remove-target`, re-measured) are missing,
+  and repeated tags from several overlays occur (`compatibility-duplicate-module-tag`, 95, re-measured; 18 of them
+  in the base data). A single overlay keeps correct semantics; `--maps exclude` provides the base data without these
+  aggregate artefacts.
+- Four `AddModule` blocks contain no module (`compatibility-add-module-without-module`); their fields act on the
+  object, as in the original.
+- Excluded files (28) are in the list with a reason: debug files (`GameDataDebug.ini`, `CommandMapDebug.ini`,
+  `CommandMapDemo.ini`), the WorldBuilder file `Scripts.ini`, unreferenced files (`MemoryPools.ini`,
+  `Default/ButtonSets.ini`, `Default/Webpages.ini`, installer `Options.ini`) and 20 language variants.
 
-## Stand nach Phase 6
+## State after Phase 6
 
-Phase 6 hat `Locomotor/Surfaces` und `GameData/SellPercentage` streng typisiert und Katalogschemata für `PowerPlantUpdate`, `PowerPlantUpgrade` und `OverchargeBehavior` ergänzt
-(`docs/TYPED-DEFINITIONS.md`, Abschnitt „Phase 6“). Die Kompatibilitätsbasislinie `baselines/compatibility.json` hat **741 Einträge** (516 `deferred-field`, 36 `definition`, 9 `diagnostic`,
-24 `duplicate-key`, 28 `excluded-file`, 128 `module`; `IniTool compat-check` bestätigt sie, 30. September 2026). Die Zahl `746` und alle früheren Werte sind überholt.
+Phase 6 strictly typed `Locomotor/Surfaces` and `GameData/SellPercentage` and added catalogue schemas for `PowerPlantUpdate`, `PowerPlantUpgrade` and `OverchargeBehavior`
+(`docs/TYPED-DEFINITIONS.md`, section "Phase 6"). The compatibility baseline `baselines/compatibility.json` has **741 entries** (516 `deferred-field`, 36 `definition`, 9 `diagnostic`,
+24 `duplicate-key`, 28 `excluded-file`, 128 `module`; `IniTool compat-check` confirms it, 30 September 2026). The number `746` and all earlier values are superseded.
