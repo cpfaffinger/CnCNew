@@ -1,597 +1,596 @@
-# Festkomma-Auflösung: von Q47.16 auf Q39.24 (Phase 22)
+# Fixed-point resolution: from Q47.16 to Q39.24 (Phase 22)
 
-Stand: 6. Oktober 2026, Zweig der Phase 22, Umstellung in Commit `d7fca91`. Auftrag: `docs/handoffs/HANDOFF-PHASE22.md`; Rahmen: `docs/MULTIPLAYER-PLAN.md` §2.6 und §4 (E8). Alles hier ist bei **30 Hz** gemessen
-(Release, Retaildaten `game/content`, ein Rechner: AMD Ryzen 7 PRO 6850U, 16 logische Prozessoren, Windows 11, .NET 10.0.12). Wo eine Zahl nicht ruhig gemessen ist, steht es dabei.
+As of: 6 October 2026, branch of Phase 22, switch in commit `d7fca91`. Brief: `docs/handoffs/HANDOFF-PHASE22.md`; frame: `docs/MULTIPLAYER-PLAN.md` §2.6 and §4 (E8). Everything here is measured at **30 Hz**
+(Release, retail data `game/content`, one machine: AMD Ryzen 7 PRO 6850U, 16 logical processors, Windows 11, .NET 10.0.12). Where a number is not measured quietly, it says so.
 
-`Fixed` ist ein `long` mit jetzt **24 Nachkommabits** (Auflösung 2⁻²⁴ ≈ 6 · 10⁻⁸, Bereich ± 5,5 · 10¹¹) statt 16 (2⁻¹⁶ ≈ 1,5 · 10⁻⁵, ± 1,4 · 10¹⁴). Die Umstellung ändert jeden Hash, jeden Snapshot und jedes Replay und
-geschah deshalb allein: erst eine Vorarbeit, die kein Ergebnis ändert, dann ein Commit mit einer Ursache.
+`Fixed` is a `long` with now **24 fractional bits** (resolution 2⁻²⁴ ≈ 6 · 10⁻⁸, range ± 5.5 · 10¹¹) instead of 16 (2⁻¹⁶ ≈ 1.5 · 10⁻⁵, ± 1.4 · 10¹⁴). The switch changes every hash, every snapshot and every replay and
+therefore happened on its own: first preparatory work that changes no result, then one commit with one cause.
 
-**Zwei Befunde stehen in §5 und §6:** (1) das Quadrat einiger Reichweiten aus den Daten (1.000.000) verlässt den neuen Bereich und warf – in keinem der gemessenen Läufe, aber
-auf von einem Spieler erreichbaren Wegen. Die Umstellung hat das berichtet und nicht umgangen; **es ist seither behoben (§5a, Nachtrag vom 7. Oktober 2026), ohne einen Referenzwert zu ändern.** (2) Das Referenzmatch ist ein Zermürbungskrieg, dessen Ende von den Produktionswürfen abhängt; sein Startwert wurde in
-einem eigenen Commit gewechselt.
+**Two findings are in §5 and §6:** (1) the square of some ranges from the data (1,000,000) leaves the new range and threw – in none of the measured runs, but
+on paths reachable by a player. The switch reported that and did not work around it; **it has since been fixed (§5a, addendum of 7 October 2026), without changing a reference value.** (2) The reference match is a war of attrition whose end depends on the production rolls; its seed was changed in
+a commit of its own.
 
 ## 1. Commits
 
-| Commit | Was | Referenzwerte |
+| Commit | What | Reference values |
 |---|---|---|
-| `659db1d` | `SimTool reference-manifest results`: die Größen eines Laufs, die keine Hashes sind | unverändert |
-| `6596310` | `FixedMath`: Produkt, Quotient, Wurzel und Winkelfunktionen für eine Bitzahl hergeleitet | unverändert |
-| `756e978` | Rohwertrechnungen der Simulation ohne Annahme von 16 Bit | unverändert |
-| `1c07699` | eine Umrechnung `Fixed` ↔ Fließkomma außerhalb der Simulation (`FixedConvert`) | unverändert |
-| `d770cd4` | Quelltextregel „die Skala steht einmal“ für alle Projekte; Tests ohne Rohzahlen | unverändert |
-| `065067a` | Tests in Einheiten; `reference-match --world-seed/--driver-seed/--record-only`; `rate-audit` listet den Wertebereich | unverändert |
-| `5d1a09f` | Bau-Gesundheit in 128 Bit; `results --commands` (Befehlsströme als Text) | unverändert (`--set full`) |
-| `41c3bc0` | **Referenzänderung, eine Ursache:** Startwert des Referenzmatchs `5EED0005` → `5EED0007` | nur `reference-match` |
-| `a0e7b23` | Sichtkreis-Test in Maschinenworten bei 16 Nachkommabits | unverändert |
-| **`d7fca91`** | **DIE UMSTELLUNG:** `Fixed.FractionBits` 16 → 24, Formatversionen, beide Manifeste neu | alle 50 Läufe |
+| `659db1d` | `SimTool reference-manifest results`: the quantities of a run that are not hashes | unchanged |
+| `6596310` | `FixedMath`: product, quotient, root and trigonometric functions derived for a number of bits | unchanged |
+| `756e978` | raw-value computations of the simulation without the assumption of 16 bits | unchanged |
+| `1c07699` | one conversion `Fixed` ↔ floating point outside the simulation (`FixedConvert`) | unchanged |
+| `d770cd4` | source rule "the scale is written once" for all projects; tests without raw numbers | unchanged |
+| `065067a` | tests in units; `reference-match --world-seed/--driver-seed/--record-only`; `rate-audit` lists the value range | unchanged |
+| `5d1a09f` | construction health in 128 bits; `results --commands` (command streams as text) | unchanged (`--set full`) |
+| `41c3bc0` | **reference change, one cause:** seed of the reference match `5EED0005` → `5EED0007` | only `reference-match` |
+| `a0e7b23` | vision-circle test in machine words at 16 fractional bits | unchanged |
+| **`d7fca91`** | **THE SWITCH:** `Fixed.FractionBits` 16 → 24, format versions, both manifests new | all 50 runs |
 
-Nach jedem Commit der Vorarbeit bestanden `input-manifest check` und `reference-manifest check --set quick`, am Ende (`5d1a09f`) `--set full` (50 Läufe identisch); nach `a0e7b23` wieder der Schnellsatz. Die Manifeste der Umstellung stehen im
-Umstellungs-Commit selbst.
+After every commit of the preparatory work `input-manifest check` and `reference-manifest check --set quick` passed, at the end (`5d1a09f`) `--set full` (50 runs identical); after `a0e7b23` the quick set again. The manifests of the switch are in the
+switch commit itself.
 
-## 2. Die Vorarbeit (ohne Ergebnisänderung)
+## 2. The preparatory work (without a change of results)
 
-### 2.1 Arithmetik für eine Bitzahl (`src/CnCNew.Simulation/Numerics/FixedMath.cs`)
+### 2.1 Arithmetic for a number of bits (`src/CnCNew.Simulation/Numerics/FixedMath.cs`)
 
-`FixedMath` rechnet auf Rohwerten mit der Zahl der Nachkommabits als Argument; `Fixed` und `FixedTrig` rufen es mit `Fixed.FractionBits`, die Tests auch mit anderen Bitzahlen. Jede Routine ist exakte
-Ganzzahlarithmetik: Produkte und Quotienten sind die der 128-Bit-Formel (zur nächsten Zahl, Halbwerte weg von null), die Wurzel ist abgerundet, Überlauf wirft.
+`FixedMath` computes on raw values with the number of fractional bits as an argument; `Fixed` and `FixedTrig` call it with `Fixed.FractionBits`, the tests also with other numbers of bits. Every routine is exact
+integer arithmetic: products and quotients are those of the 128-bit formula (to the nearest number, halves away from zero), the root is rounded down, overflow throws.
 
-- **Produkt** und **Quotient mit kleinem Dividenden**: die Routinen der Phase 19, die Schiebeweiten folgen der Bitzahl.
-- **Quotient mit großem Dividenden** (`|a| · 2^F` passt nicht in ein Maschinenwort): schriftliche Division auf Maschinenworten – erst `|a| / |b|`, dann werden die F Nachkommabits in den größten Stücken nachgezogen,
-  die `Rest · 2^Stück` im Wort halten (der Rest ist kleiner als der Divisor, dessen führende Nullen sind der Platz). Statt einer 128-Bit-Softwaredivision zwei bis drei 64-Bit-Divisionen. Bei 16 Bit begann „groß“
-  bei 2³¹ Einheiten und kam nicht vor; bei 24 Bit beginnt es bei 32.768 Einheiten (jedes Abstandsquadrat über 181 Einheiten).
-- **Wurzel eines großen Werts**: die 64-Bit-Wurzel von so vielen Nachkommabits, wie in ein Wort passen (eine gerade Zahl weniger als alle), danach die restlichen Wurzelbits einzeln aus dem Vergleich des
-  Kandidatenquadrats mit dem exakten 128-Bit-Radikanden. Höchstens zwölf Schritte bei 24 Bit.
-- **Winkel:** π, 2π, π/2 und die Arkustangens-Tabelle sind fest einkodierte Konstanten mit 61 Nachkommabits, auf die Auflösung gerundet (nie zur Laufzeit aus `Math.*`). Bei 16 Bit ergibt das exakt die Zahlen, die
-  vorher ausgeschrieben waren (205.887, 411.775, 102.944 und die 16 Tabelleneinträge). Der CORDIC (`Atan2`) macht einen Schritt je Nachkommabit und skaliert den Vektor um die Nachkommabits – um weniger, wenn der
-  Vektor sonst das Wort verließe (über 2⁴⁵ roh lieferte die alte Routine still Unsinn). `Sin`/`Cos` behalten die Taylor-Polynome (bis x¹³ bzw. x¹²: Abbruchfehler 7 · 10⁻¹⁰ bzw. 7 · 10⁻⁹, unter jeder unterstützten
-  Auflösung); was bleibt, ist die Rundung der sieben Schritte, und die schrumpft mit der Auflösung. Die Divisionen durch die Reihenglieder sind Ganzzahldivisionen (bitgleich zum Festkommaquotienten, weil die
-  Glieder gerade Zahlen sind).
+- **Product** and **quotient with a small dividend**: the routines of Phase 19, the shift widths follow the number of bits.
+- **Quotient with a large dividend** (`|a| · 2^F` does not fit into a machine word): long division on machine words – first `|a| / |b|`, then the F fractional bits are brought down in the largest pieces
+  that keep `remainder · 2^piece` in the word (the remainder is smaller than the divisor, whose leading zeros are the room). Instead of one 128-bit software division two to three 64-bit divisions. At 16 bits "large" began
+  at 2³¹ units and did not occur; at 24 bits it begins at 32,768 units (every squared distance above 181 units).
+- **Root of a large value**: the 64-bit root of as many fractional bits as fit into a word (an even number fewer than all), after that the remaining root bits one by one from the comparison of the
+  candidate square with the exact 128-bit radicand. At most twelve steps at 24 bits.
+- **Angles:** π, 2π, π/2 and the arctangent table are hard-coded constants with 61 fractional bits, rounded to the resolution (never from `Math.*` at runtime). At 16 bits that gives exactly the numbers that
+  were written out before (205,887, 411,775, 102,944 and the 16 table entries). The CORDIC (`Atan2`) makes one step per fractional bit and scales the vector by the fractional bits – by fewer if the
+  vector would otherwise leave the word (above 2⁴⁵ raw the old routine silently returned nonsense). `Sin`/`Cos` keep the Taylor polynomials (up to x¹³ and x¹² respectively: truncation error 7 · 10⁻¹⁰ and 7 · 10⁻⁹, below every supported
+  resolution); what remains is the rounding of the seven steps, and that shrinks with the resolution. The divisions by the series terms are integer divisions (bit-identical to the fixed-point quotient, because the
+  terms are even numbers).
 
-**Äquivalenzbeweise** (`tests/CnCNew.Simulation.Tests/Tests.FixedResolution.cs`):
+**Equivalence proofs** (`tests/CnCNew.Simulation.Tests/Tests.FixedResolution.cs`):
 
-| Test | Was | Umfang |
+| Test | What | Scope |
 |---|---|---|
-| `FixedMathMatchesWideArithmeticAtEveryResolution` | Produkt, Quotient, Wurzel gegen `BigInteger`-Formeln (Wurzel per Bisektion, unabhängig von der Routine) bei **16, 24, 12 und 32** Bit | je Bitzahl über 1 Million Paare (Ränder, zufällige Bitlängen, Koordinaten, Abstandsquadrate bis 10⁸, Projektionen „großes Quadrat durch großes Quadrat“) und über 150.000 Wurzeln; dazu `Fixed` selbst |
-| `FixedTrigReproducesTheSixteenBitResults` | die Winkelfunktionen bei 16 Bit gegen die **frühere Implementierung**, die wortgleich als Orakel im Test steht | `Sin`/`Cos`: jeder Rohwinkel von drei Umdrehungen in beide Richtungen (2,47 Millionen) plus 300.000 beliebig große; `Atan2`: jeder Vektor eines Rohgitters ±260, eines Gitters in ganzen Einheiten und 6 Millionen Vektoren jeder Länge bis 2⁴⁴ roh |
-| `FixedTrigPrecisionFollowsTheResolution` | Fehler gegen `Math.Sin/Cos/Atan2` je Auflösung, Konstanten bei 24 Bit, sehr lange Vektoren | Zahlen unten |
+| `FixedMathMatchesWideArithmeticAtEveryResolution` | product, quotient, root against `BigInteger` formulas (root by bisection, independent of the routine) at **16, 24, 12 and 32** bits | per number of bits over 1 million pairs (edges, random bit lengths, coordinates, squared distances up to 10⁸, projections "large square by large square") and over 150,000 roots; in addition `Fixed` itself |
+| `FixedTrigReproducesTheSixteenBitResults` | the trigonometric functions at 16 bits against the **earlier implementation**, which stands word for word as an oracle in the test | `Sin`/`Cos`: every raw angle of three revolutions in both directions (2.47 million) plus 300,000 of arbitrary size; `Atan2`: every vector of a raw grid ±260, of a grid in whole units and 6 million vectors of every length up to 2⁴⁴ raw |
+| `FixedTrigPrecisionFollowsTheResolution` | error against `Math.Sin/Cos/Atan2` per resolution, constants at 24 bits, very long vectors | numbers below |
 
-Gemessener größter Fehler der Winkelfunktionen gegen die exakten:
+Measured largest error of the trigonometric functions against the exact ones:
 
-| Auflösung | `Sin` | `Cos` | `Atan2` (rad) |
+| Resolution | `Sin` | `Cos` | `Atan2` (rad) |
 |---|---|---|---|
-| 16 Bit (ein Schritt 1,5 · 10⁻⁵) | 2,59 · 10⁻⁵ | 2,42 · 10⁻⁵ | 5,94 · 10⁻⁵ |
-| 24 Bit (ein Schritt 6,0 · 10⁻⁸) | 1,00 · 10⁻⁷ | 1,15 · 10⁻⁷ | 2,69 · 10⁻⁷ |
+| 16 bits (one step 1.5 · 10⁻⁵) | 2.59 · 10⁻⁵ | 2.42 · 10⁻⁵ | 5.94 · 10⁻⁵ |
+| 24 bits (one step 6.0 · 10⁻⁸) | 1.00 · 10⁻⁷ | 1.15 · 10⁻⁷ | 2.69 · 10⁻⁷ |
 
-Die Genauigkeit folgt also der Auflösung (Faktor 210 bis 260 bei Faktor 256), ohne höhere Polynomordnung und ohne Schutzbits; das Dokument der Phase 6 nannte für `Atan2` nur die Schranke 10⁻³.
+The precision therefore follows the resolution (factor 210 to 260 at factor 256), without a higher polynomial order and without guard bits; the document of Phase 6 named only the bound 10⁻³ for `Atan2`.
 
-### 2.2 Rohwertrechnungen in der Simulation
+### 2.2 Raw-value computations in the simulation
 
-Alles, was direkt auf Rohwerten rechnet, wurde gelesen (`.Raw`, `FromRaw`, Schiebeoperationen). Die Simulation ist **nicht** insgesamt `checked` – nur die Operatoren von `Fixed` –, eine Rohwertrechnung, die den
-Bereich verlässt, wickelt also still. Geändert:
+Everything that computes directly on raw values was read (`.Raw`, `FromRaw`, shift operations). The simulation is **not** `checked` as a whole – only the operators of `Fixed` –, so a raw-value computation that leaves the
+range wraps silently. Changed:
 
-| Stelle | Vorher | Jetzt |
+| Place | Before | Now |
 |---|---|---|
-| `VisionMap` (drei Kreistests: `Trace`, `RevealReference`, `ForCircle`) | Quadrate von Rohdifferenzen in `long`, ungeprüft; Literal `65536` für die halbe Zelle | der Kreistest ist **bei 16 Nachkommabits definiert**, gleich welche Auflösung `Fixed` hat: Mittelpunkt und Radius werden darauf gekürzt, die Zellmitten (ganze Einheiten) sind darin exakt. Bei 24 Bit bräuchte das Quadrat eines Radius von 300 Einheiten 67 Bit; ein 128-Bit-Test war ein Drittel langsamer (§8.2). Die Rechnung ist jetzt `checked`: ein Radius über 46.000 Einheiten wirft, statt wie bisher still zu wickeln. Eine Zelle ist zehn Einheiten breit. |
-| `StructureToppleUpdate` | Produkt dreier Rohwerte „exakt bei 48 Nachkommabits“, Startwinkel als Literal | Produkt in 128 Bit, auf die feine Auflösung (Nachkommabits + 32) gekürzt; der Startwinkel 0,001 folgt aus der Bitzahl. Bei 16 Bit wird nichts gekürzt. |
-| Leerlauf-Scan der Türme (`DrawScanFraction`) | `Bits % 65536` | die niedrigsten 16 Bit des Zugs sind die 16 führenden Binärstellen, weitere Stellen kommen aus den Bits darüber: derselbe Zug ist bei jeder Auflösung dieselbe Zahl, soweit deren Stellen reichen. |
-| `JetAIUpdate`, `AIUpdateInterface` | `FromRaw(34315)` (π/6), `FromRaw(1024)` (zweimal) | `FixedTrig.PiFraction(1, 6)`, `Fixed.FromFraction(1, 64)` |
-| `ConstructionHealthTarget` | Rohgesundheit × Arbeitsschritte in `long`, ungeprüft | in 128 Bit (die Daten kennen eine Gesundheit von 99.999.999; bei 24 Bit wickelte das Produkt bei einem langen Bau) |
+| `VisionMap` (three circle tests: `Trace`, `RevealReference`, `ForCircle`) | squares of raw differences in `long`, unchecked; literal `65536` for half a cell | the circle test is **defined at 16 fractional bits**, whatever resolution `Fixed` has: centre and radius are truncated to it, the cell centres (whole units) are exact in it. At 24 bits the square of a radius of 300 units would need 67 bits; a 128-bit test was a third slower (§8.2). The computation is now `checked`: a radius above 46,000 units throws instead of wrapping silently as before. A cell is ten units wide. |
+| `StructureToppleUpdate` | product of three raw values "exact at 48 fractional bits", start angle as a literal | product in 128 bits, truncated to the fine resolution (fractional bits + 32); the start angle 0.001 follows from the number of bits. At 16 bits nothing is truncated. |
+| Idle scan of the turrets (`DrawScanFraction`) | `Bits % 65536` | the lowest 16 bits of the draw are the 16 leading binary places, further places come from the bits above them: the same draw is the same number at every resolution, as far as its places reach. |
+| `JetAIUpdate`, `AIUpdateInterface` | `FromRaw(34315)` (π/6), `FromRaw(1024)` (twice) | `FixedTrig.PiFraction(1, 6)`, `Fixed.FromFraction(1, 64)` |
+| `ConstructionHealthTarget` | raw health × work steps in `long`, unchecked | in 128 bits (the data know a health of 99,999,999; at 24 bits the product wrapped on a long construction) |
 
-**Bewusst rohwertabhängig und unverändert:** der Zustandshash (`HashStateWriter` mischt Rohwerte), Snapshot (`JsonState` schreibt Rohwerte), Replay und Befehle (Rohkoordinaten), die Ereignismengen (`SimEvent.Value`
-trägt Schaden und Geld als Rohwert), der Fingerabdruck von Gelände, Katalog und Knochentabelle (Rohwerte als Text bzw. Bytes), der Zeit-Messfühler („unter acht signifikanten Bits“ ist eine Aussage über Rohwerte).
-Diese Stellen sind der Grund für die neuen Formatversionen (§3). **Geprüft und von der Bitzahl unabhängig:** `decimal` → `Fixed` beim Laden (`FromDecimal` rundet auf die Auflösung; Werte aus den Daten behalten jetzt
-mehr Stellen), Geländehöhen und Kartenobjekte (`FromInt`/`FromDecimal`), die Knochentabelle (Schritte von 1/16 Einheit und 1/1024 rad sind in beiden Auflösungen exakt), die Zellumrechnung der Navigation
-(`Fixed`-Operationen), `SageRandom.Range` (128-Bit-Zwischenwert), der Stimmungsversatz (Ganzzahlen in Bildern), Flugzeiten (Verhältnis zweier Rohwerte).
+**Deliberately raw-value-dependent and unchanged:** the state hash (`HashStateWriter` mixes raw values), snapshot (`JsonState` writes raw values), replay and commands (raw coordinates), the event quantities (`SimEvent.Value`
+carries damage and money as a raw value), the fingerprint of terrain, catalog and bone table (raw values as text or bytes), the time probe ("below eight significant bits" is a statement about raw values).
+These places are the reason for the new format versions (§3). **Checked and independent of the number of bits:** `decimal` → `Fixed` on loading (`FromDecimal` rounds to the resolution; values from the data now keep
+more places), terrain heights and map objects (`FromInt`/`FromDecimal`), the bone table (steps of 1/16 unit and 1/1024 rad are exact in both resolutions), the cell conversion of the navigation
+(`Fixed` operations), `SageRandom.Range` (128-bit intermediate value), the mood offset (integers in frames), flight times (ratio of two raw values).
 
-### 2.3 Außerhalb der Simulation: eine Umrechnung
+### 2.3 Outside the simulation: one conversion
 
-`CnCNew.Presentation.FixedConvert` (`ToDouble`, `ToSingle`, `RawToSingle`, `FromDouble`, `FromSingle`, `FromSingleTruncated`) ist die einzige Stelle außerhalb der Simulation, die die Skala benutzt. 15 von Hand
-geschriebene Umrechnungen in 12 Dateien rufen sie jetzt (`x.Raw / 65536f`, `value.Raw / (double)Fixed.ScaleRaw`, `(long)(x * 65536f)`, `Math.Round(value * ScaleRaw)` in `LiveMatch`, `LiveScenario`, `LiveMission`,
-`FxExecutor`, `FxWorldView`, `MinimapImage`, `SimulationQueries`, `TurretTracker`, `Suspension`, `FrameProjector`, `SimTool`, `PresentationTool`); jede liefert die Bits des ersetzten Ausdrucks (Division und Produkt
-mit einer Zweierpotenz sind exakt, jede Variante rundete dieselbe Zahl einmal). Die Toleranz des `UnitConditionTracker` ist 1/8192 statt roh 8. Außerhalb der Simulation wurden nur diese Zeilen angefasst.
-Daneben gibt es 21 Stellen, die über `ToDecimal()` nach `float`/`double` gehen; sie hängen nicht von der Skala ab und blieben, wie sie sind.
+`CnCNew.Presentation.FixedConvert` (`ToDouble`, `ToSingle`, `RawToSingle`, `FromDouble`, `FromSingle`, `FromSingleTruncated`) is the only place outside the simulation that uses the scale. 15 hand-written
+conversions in 12 files now call it (`x.Raw / 65536f`, `value.Raw / (double)Fixed.ScaleRaw`, `(long)(x * 65536f)`, `Math.Round(value * ScaleRaw)` in `LiveMatch`, `LiveScenario`, `LiveMission`,
+`FxExecutor`, `FxWorldView`, `MinimapImage`, `SimulationQueries`, `TurretTracker`, `Suspension`, `FrameProjector`, `SimTool`, `PresentationTool`); each yields the bits of the replaced expression (division and product
+with a power of two are exact, every variant rounded the same number once). The tolerance of the `UnitConditionTracker` is 1/8192 instead of raw 8. Outside the simulation only these lines were touched.
+Besides there are 21 places that go via `ToDecimal()` to `float`/`double`; they do not depend on the scale and stayed as they are.
 
-### 2.4 Quelltextregel (`Tests.FixedScaleSourceRules`)
+### 2.4 Source rule (`Tests.FixedScaleSourceRules`)
 
-Dritter lexikalischer Regelsatz neben `SourceRules` und `FeederSourceRules`, über `src`, `tools` und `tests`:
+Third lexical rule set beside `SourceRules` and `FeederSourceRules`, over `src`, `tools` and `tests`:
 
-1. **Die Skala nie als Zahl oder Verschiebung**, weder 2¹⁶ noch 2²⁴: `65536`, `16777216`, `0x10000`, `0x1000000`, `<< 16`, `>> 16`, `<< 24`, `>> 24` (auch mit Suffix oder Unterstrichen). 33 benannte Ausnahmen
-   für Treffer, die etwas anderes sind: Farbkanäle und Bytes eines Worts (12), Dateiformate (9: WAV-24-Bit-Probe, RefPack-Länge, vier CSF-Marken, drei W3D-Felder), sonstige (7: log₁₀ 2 in `SingleBits`, ein
-   Optionsbit, eine Puffergröße, Testwürfel, Singles um 2²⁴) und das 16-Bit-Orakel der Winkelfunktionen (5 Zeilen).
-2. **Außerhalb der Simulation keine Verwendung von `Fixed.ScaleRaw`, `Fixed.FractionBits` oder `FixedMath`**: 4 Ausnahmen (die drei Zeilen von `FixedConvert`, ein Zufallswert des Wegsuche-Benchmarks).
-3. **Kein Rohwert als Zahl** (`FromRaw(1024)`) in Produktcode, auch nicht in der Simulation: keine Ausnahme.
+1. **The scale never as a number or shift**, neither 2¹⁶ nor 2²⁴: `65536`, `16777216`, `0x10000`, `0x1000000`, `<< 16`, `>> 16`, `<< 24`, `>> 24` (also with a suffix or underscores). 33 named exceptions
+   for hits that are something else: colour channels and bytes of a word (12), file formats (9: WAV 24-bit sample, RefPack length, four CSF markers, three W3D fields), others (7: log₁₀ 2 in `SingleBits`, an
+   option bit, a buffer size, test dice, singles around 2²⁴) and the 16-bit oracle of the trigonometric functions (5 lines).
+2. **Outside the simulation no use of `Fixed.ScaleRaw`, `Fixed.FractionBits` or `FixedMath`**: 4 exceptions (the three lines of `FixedConvert`, one random value of the pathfinding benchmark).
+3. **No raw value as a number** (`FromRaw(1024)`) in product code, not in the simulation either: no exception.
 
-Wie jede Regel dort ist sie ein Stolperdraht (reguläre Ausdrücke über Codezeilen); eine Ausnahme, die nichts mehr trifft, lässt den Test scheitern. Der Selbsttest der Regel fand beim Schreiben ihr erstes Loch
-(`65536f` mit Suffix).
+Like every rule there it is a tripwire (regular expressions over code lines); an exception that no longer hits anything makes the test fail. The self-test of the rule found its first hole while it was being written
+(`65536f` with a suffix).
 
-## 3. Die Umstellung (`d7fca91`)
+## 3. The switch (`d7fca91`)
 
-Eine Ursache: `Fixed.FractionBits = 24`. Keine andere Verhaltensänderung im Commit.
+One cause: `Fixed.FractionBits = 24`. No other change of behaviour in the commit.
 
-| Format | alt | neu | Ablehnung eines alten Stands |
+| Format | old | new | Rejection of an old state |
 |---|---|---|---|
 | `WorldSnapshot.Version` | 9 | **10** | `Unsupported snapshot version 9 (expected 10).` |
 | `ReplayFormat.CurrentVersion` | 11 | **12** | `Unsupported replay format version 11 (expected 12).` |
 | `CommandTypes.Version` | 14 | **15** | `The replay uses command table version 14; this build implements 15.` |
 | `MissionSnapshot.Version` | 2 | **3** | `Unsupported mission state version 2 (expected 3).` |
-| `SaveGame.Version` | 2 (seit Phase 21: Rate in der Hülle; im Zweig dieser Phase noch 1) | **3** (nach dem Merge mit Phase 21) | `Unsupported savegame version 2 (this game reads version 3).` |
+| `SaveGame.Version` | 2 (since Phase 21: rate in the envelope; in the branch of this phase still 1) | **3** (after the merge with Phase 21) | `Unsupported savegame version 2 (this game reads version 3).` |
 
-Ein alter Stand wird an seiner Version abgelehnt und nie mit der neuen Skala gelesen; Tests: `Tests.StatesOfSixteenFractionBitsAreRejected` (Snapshot, Replay-Container, Befehlstabelle), `Tests.Scripting`
-(Missionszustand), `CampaignTests` (Speicherstand).
+An old state is rejected by its version and never read with the new scale; tests: `Tests.StatesOfSixteenFractionBitsAreRejected` (snapshot, replay container, command table), `Tests.Scripting`
+(mission state), `CampaignTests` (saved game).
 
-Im selben Commit: `baselines/reference-manifest.json` (alle 50 Läufe neu, danach im vollen Satz gegengeprüft) und `baselines/input-manifest.json` (Kataloge, Gelände und Knochentabelle werden als Rohwerte gehasht;
-Welt-Fingerabdruck `49A55E310F780F60`). Testerwartungen, die Rohwerte oder alte Versionen einkodierten: Versionszahlen in drei Tests; die Winkelgeschwindigkeit von 180° je Tick wird mit `FixedTrig.Pi` verglichen;
-der Wert, der bei 120 Hz ganz verloren geht, ist jetzt 0,0004 je s² (die 0,1 des `NapalmBombLocomotor`, die bei 16 Bit verloren gingen, sind 117 Rohschritte); der Golden-Hash der Knochentabelle (als Rohwerte
-gehasht, dieselben Posen); die Schranke des Fahrwerk-Tests (§9).
+In the same commit: `baselines/reference-manifest.json` (all 50 runs new, afterwards cross-checked in the full set) and `baselines/input-manifest.json` (catalogs, terrain and bone table are hashed as raw values;
+world fingerprint `49A55E310F780F60`). Test expectations that encoded raw values or old versions: version numbers in three tests; the angular velocity of 180° per tick is compared with `FixedTrig.Pi`;
+the value that is lost entirely at 120 Hz is now 0.0004 per s² (the 0.1 of the `NapalmBombLocomotor`, which were lost at 16 bits, are 117 raw steps); the golden hash of the bone table (hashed as raw values,
+the same poses); the bound of the suspension test (§9).
 
-## 4. Referenzwerte alt und neu
+## 4. Reference values old and new
 
-| Größe | bis Phase 21 (16 Bit, Startwert `5EED0005`) | `41c3bc0` (16 Bit, Startwert `5EED0007`) | `d7fca91` (24 Bit) |
+| Quantity | up to Phase 21 (16 bits, seed `5EED0005`) | `41c3bc0` (16 bits, seed `5EED0007`) | `d7fca91` (24 bits) |
 |---|---|---|---|
-| Referenzmatch | FactionGLA bei Tick 14.490 | FactionGLA bei Tick 14.055 | **FactionGLA bei Tick 17.805** |
-| – Endhash / Kette | `23B4B25DF62765D8` / `DE5849AF9F8493C4` | `AE9C688309DA37E4` / `FC6DFA759B1DCAF0` | **`D0CA5F4EE456D6CE` / `C5EE1090E1C24D7B`** |
-| Stresstest Endhash / Kette | `56882F763EABEF67` / `B8E663493F2C73D5` | unverändert | **`56882F763EABEF67`** (der leere Endzustand, unverändert) / **`754FA4DCB9A41DF7`** |
-| 16 KI-Läufe entschieden | 12 | 12 | **12** (fünf mit anderem Ausgang, §7.2) |
-| Formate | Snapshot 9, Replay 11, Befehle 14, Mission 2, Savegame 1 | unverändert | **Snapshot 10, Replay 12, Befehle 15, Mission 3, Savegame 2** |
+| Reference match | FactionGLA at tick 14,490 | FactionGLA at tick 14,055 | **FactionGLA at tick 17,805** |
+| – final hash / chain | `23B4B25DF62765D8` / `DE5849AF9F8493C4` | `AE9C688309DA37E4` / `FC6DFA759B1DCAF0` | **`D0CA5F4EE456D6CE` / `C5EE1090E1C24D7B`** |
+| Stress test final hash / chain | `56882F763EABEF67` / `B8E663493F2C73D5` | unchanged | **`56882F763EABEF67`** (the empty final state, unchanged) / **`754FA4DCB9A41DF7`** |
+| 16 AI runs decided | 12 | 12 | **12** (five with a different outcome, §7.2) |
+| Formats | snapshot 9, replay 11, commands 14, mission 2, savegame 1 | unchanged | **snapshot 10, replay 12, commands 15, mission 3, savegame 2** |
 
-Die Endhashes und Ketten aller 50 Läufe stehen in `baselines/reference-manifest.json`; die Tabelle in Anhang B stellt alt und neu nebeneinander.
+The final hashes and chains of all 50 runs are in `baselines/reference-manifest.json`; the table in appendix B puts old and new side by side.
 
-## 5. Befund: Werte, deren Quadrat den Bereich verlässt (Stand der Umstellung; behoben in §5a)
+## 5. Finding: values whose square leaves the range (state of the switch; fixed in §5a)
 
-Der Bereich schrumpft um den Faktor 256 auf ± 5,5 · 10¹¹. Die Wurzel der größten Zahl ist **741.455**: ein größerer Wert darf nicht quadriert werden, sein Quadrat wirft `OverflowException` (bei 16 Bit lag die
-Grenze bei 11,9 Millionen). `SimTool rate-audit <content>` listet seit der Vorarbeit jeden Katalogwert über dieser Grenze:
+The range shrinks by the factor 256 to ± 5.5 · 10¹¹. The root of the largest number is **741,455**: a larger value must not be squared, its square throws `OverflowException` (at 16 bits the
+limit was at 11.9 million). Since the preparatory work `SimTool rate-audit <content>` lists every catalog value above this limit:
 
-| Feld | Werte über 741.455 | größter | Wird der Wert quadriert? |
+| Field | Values above 741,455 | largest | Is the value squared? |
 |---|---:|---|---|
-| `WeaponInfo.MinWeaponSpeed` | 360 | 999.999 (Vorgabe „sofort“) | nein (nur Vergleiche und Quotienten) |
-| `SpecialAbilityUpdateData.AbilityAbortRange` | 86 | 10.000.000 (Vorgabe „nie“) | nein: `SpecialAbilityStaging` fragt vorher `< HugeDistance` |
-| `BodyData.MaxHealth` / `InitialHealth` | je 62 | 99.999.999 (`CargoTruckNuke`) | nein; Gesundheit × 100 = 10¹⁰ bleibt im Bereich (Abstand Faktor 55) |
-| `WeaponInfo.WeaponSpeed` | 52 | 999.999 | nein |
-| **`WeaponInfo.AttackRange`** | **8** | 1.000.000 (`AircraftCarrierOrderLaunch`), 999.999 (`ScudStormWeapon` und seine drei Generalsvarianten, `CINE_RangerAdvancedCombatRifle`, `CINE_GLAJarmenKellRifle`, `CINE_USAPathfinderSniperRifle`) | **ja**: jede Reichweitenprüfung rechnet `reach * reach` (`SimulationWorld.WithinWeaponRange`, `Turrets.cs`, `Combat.cs`, `AirWeaponModules`, die Szenarien) – rund zehn Stellen |
-| **`SpecialAbilityUpdateData.StartAbilityRange`** | **6** | 1.000.000 (die sechs Bombenlaster: `GLAVehicleBombTruck` und Generalsvarianten) | **ja**: `SpecialAbilityUpdate.WithinSpheres` rechnet `reach * reach`, sobald die Fähigkeit ein Zielobjekt hat |
-| `WeaponInfo.PrimaryDamage` | 3 | 999.999 | nein (Schaden × Bonus) |
+| `WeaponInfo.MinWeaponSpeed` | 360 | 999,999 (default "instant") | no (only comparisons and quotients) |
+| `SpecialAbilityUpdateData.AbilityAbortRange` | 86 | 10,000,000 (default "never") | no: `SpecialAbilityStaging` asks `< HugeDistance` beforehand |
+| `BodyData.MaxHealth` / `InitialHealth` | 62 each | 99,999,999 (`CargoTruckNuke`) | no; health × 100 = 10¹⁰ stays in the range (margin factor 55) |
+| `WeaponInfo.WeaponSpeed` | 52 | 999,999 | no |
+| **`WeaponInfo.AttackRange`** | **8** | 1,000,000 (`AircraftCarrierOrderLaunch`), 999,999 (`ScudStormWeapon` and its three Generals variants, `CINE_RangerAdvancedCombatRifle`, `CINE_GLAJarmenKellRifle`, `CINE_USAPathfinderSniperRifle`) | **yes**: every range check computes `reach * reach` (`SimulationWorld.WithinWeaponRange`, `Turrets.cs`, `Combat.cs`, `AirWeaponModules`, the scenarios) – about ten places |
+| **`SpecialAbilityUpdateData.StartAbilityRange`** | **6** | 1,000,000 (the six bomb trucks: `GLAVehicleBombTruck` and Generals variants) | **yes**: `SpecialAbilityUpdate.WithinSpheres` computes `reach * reach` as soon as the ability has a target object |
+| `WeaponInfo.PrimaryDamage` | 3 | 999,999 | no (damage × bonus) |
 
-Bei 16 Bit lagen nur die zehn Gesundheitswerte von 99.999.999 über der Grenze.
+At 16 bits only the ten health values of 99,999,999 lay above the limit.
 
-**Was gemessen ist:** kein Lauf des Manifests, kein Kampagnenlauf (Audit und Zielfahrer, je 24 Karten), kein Test und keiner der Probeläufe bei 60 und 120 Hz hat einen Überlauf geworfen (§7, §10, §11). **Was
-daraus nicht folgt:** dass diese Wege nicht erreichbar wären. Die Verkleidung des Bombenlasters mit einem Fahrzeug als Ziel ist ein gewöhnlicher Spielerbefehl; kein gemessener Lauf gibt ihn. Bei 16 Bit rechnete
-derselbe Weg (10¹² lag im Bereich), bei 24 Bit wirft er. **Vor einer Veröffentlichung muss das behoben sein.** Der Auftrag verlangt, einen solchen Zwischenwert zu melden, bevor er umgangen wird; deshalb ist hier
-nichts umgangen.
+**What is measured:** no run of the manifest, no campaign run (audit and objective driver, 24 maps each), no test and none of the trial runs at 60 and 120 Hz threw an overflow (§7, §10, §11). **What
+does not follow from that:** that these paths were not reachable. The disguise of the bomb truck with a vehicle as the target is an ordinary player command; no measured run gives it. At 16 bits
+the same path computed (10¹² lay in the range), at 24 bits it throws. **This must be fixed before a release.** The brief demands that such an intermediate value be reported before it is worked around; therefore nothing
+is worked around here.
 
-**Vorschlag (nicht umgesetzt):** an den Stellen, die eine Reichweite aus den Daten quadrieren, um mit einem Abstandsquadrat zu vergleichen, das Quadrat über eine benannte Funktion bilden, die bei einem Wert über
-der Grenze die größte Zahl liefert (`Fixed.SquaredBound(reach)` o. ä.). Ein Abstandsquadrat, das selbst darstellbar ist, ist nie größer; der Vergleich hat dann für jeden darstellbaren Abstand dasselbe Ergebnis wie
-mit dem exakten Quadrat, und bei 16 Bit ändert sich kein Ergebnis. Es ist keine stille Sättigung: die Funktion heißt so und steht nur in Vergleichen. Betroffen sind die Reichweitenprüfungen der Waffen (über
-`RangeWith`/`MaxWeaponRange`) und `WithinSpheres`; die übrigen rund 30 Stellen der Form `range * range` nehmen Werte, die in den Daten klein sind (`ScanRange`, `TriggerRange` …) – `rate-audit` hält das fest. Jede
-ergebnisneutrale Lösung lässt die hier gemessenen Referenzwerte unberührt (sie betrifft nur Wege, die heute werfen). Die Alternative, eine andere Auflösung, würde sie ändern: bei 20 Nachkommabits läge die Grenze
-bei 2,97 Millionen (die Reichweiten 10⁶ passten, `AbilityAbortRange` 10⁷ weiterhin nicht), eine Beschleunigung von 1 Einheit/s² hätte bei 60 Hz 291 statt 4.660 Rohschritte.
+**Proposal (not implemented):** at the places that square a range from the data in order to compare with a squared distance, form the square via a named function that returns the largest number for a value above
+the limit (`Fixed.SquaredBound(reach)` or similar). A squared distance that is itself representable is never larger; the comparison then has the same result for every representable distance as
+with the exact square, and at 16 bits no result changes. It is not a silent saturation: the function is named that way and stands only in comparisons. Affected are the range checks of the weapons (via
+`RangeWith`/`MaxWeaponRange`) and `WithinSpheres`; the other about 30 places of the form `range * range` take values that are small in the data (`ScanRange`, `TriggerRange` …) – `rate-audit` records that. Every
+result-neutral solution leaves the reference values measured here untouched (it concerns only paths that throw today). The alternative, a different resolution, would change them: at 20 fractional bits the limit would be
+at 2.97 million (the ranges 10⁶ would fit, `AbilityAbortRange` 10⁷ still not), an acceleration of 1 unit/s² would have 291 instead of 4,660 raw steps at 60 Hz.
 
-**Größte gemessene Zwischenwerte** (Wegwerf-Build mit einem Messfühler in jedem Operator von `Fixed`, über alle 50 Läufe des Manifests und den Zielfahrer aller 24 Kampagnenkarten; die Sentinels `MaxValue` als „noch
-kein bester Wert“ ausgenommen):
+**Largest measured intermediate values** (throwaway build with a probe in every operator of `Fixed`, over all 50 runs of the manifest and the objective driver of all 24 campaign maps; the sentinels `MaxValue` as "no
+best value yet" excluded):
 
-| Operator | größtes Ergebnis | Abstand zum Rand | wo |
+| Operator | largest result | margin to the edge | where |
 |---|---:|---:|---|
-| Produkt | 1,0 · 10¹⁰ (100.000 × 100.000) | Faktor **55** | `SkirmishAi.UseTunnels`: die Konstante 100.000 als „überall“, quadriert |
-| Summe | 5,86 · 10⁷ | Faktor 9.400 | Abstandsquadrate (`DealDamageCore`; im Gefecht `SkirmishAi.DistanceSquared` mit 5,45 · 10⁷) – Abstände bis rund 7.600 Einheiten |
-| Differenz | 5,0 · 10⁷ | Faktor 11.000 | Geld (`SimulationWorld.Execute`, 50.000.000 − 1.000) |
-| Quotient | 1,2 · 10⁵ | Faktor 4,6 · 10⁶ | `ActiveBody.SetInitialHealth` |
-| `Fixed * long` | 3,0 · 10⁵ | Faktor 1,8 · 10⁶ | Skriptbedingung (3.000 × 100) |
+| Product | 1.0 · 10¹⁰ (100,000 × 100,000) | factor **55** | `SkirmishAi.UseTunnels`: the constant 100,000 as "everywhere", squared |
+| Sum | 5.86 · 10⁷ | factor 9,400 | squared distances (`DealDamageCore`; in the skirmish `SkirmishAi.DistanceSquared` with 5.45 · 10⁷) – distances up to about 7,600 units |
+| Difference | 5.0 · 10⁷ | factor 11,000 | money (`SimulationWorld.Execute`, 50,000,000 − 1,000) |
+| Quotient | 1.2 · 10⁵ | factor 4.6 · 10⁶ | `ActiveBody.SetInitialHealth` |
+| `Fixed * long` | 3.0 · 10⁵ | factor 1.8 · 10⁶ | script condition (3,000 × 100) |
 
-Nicht vom Messfühler erfasst: die Rohwertrechnungen außerhalb der Operatoren (Sicht, Topple, Bau – in §2.2 auf `checked` bzw. 128 Bit gestellt) und Wege, die kein Lauf betritt. `StructureToppleUpdate` hält Winkel
-und Winkelgeschwindigkeit mit 56 Nachkommabits; ein Viertelkreis ist dort 1,1 · 10¹⁷, Abstand zum Rand des `long` Faktor 81.
+Not captured by the probe: the raw-value computations outside the operators (vision, topple, construction – set to `checked` or 128 bits in §2.2) and paths that no run enters. `StructureToppleUpdate` holds angle
+and angular velocity with 56 fractional bits; a quarter circle is 1.1 · 10¹⁷ there, margin to the edge of the `long` factor 81.
 
-## 5a. Behebung (Nachtrag, 7. Oktober 2026): Vergleiche über `SquaredReach`
+## 5a. Fix (addendum, 7 October 2026): comparisons via `SquaredReach`
 
-Der Befund aus §5 ist behoben, ergebnisneutral: jeder Vergleich, der vorher rechnen konnte, gibt dieselbe Antwort; nur Wege, die vorher warfen, rechnen jetzt. Kein Referenzwert hat sich geändert
-(`reference-manifest check --set full` und `input-manifest check` identisch, §5a.7). Der Katalogwert bleibt, was die Daten sagen – nichts wird beim Laden gekappt, kein `if (range > …)` steht an einer Aufrufstelle.
+The finding from §5 is fixed, result-neutrally: every comparison that could compute before gives the same answer; only paths that threw before compute now. No reference value has changed
+(`reference-manifest check --set full` and `input-manifest check` identical, §5a.7). The catalog value stays what the data say – nothing is capped on loading, no `if (range > …)` stands at a call site.
 
-### 5a.1 Was der Befund in §5 unterschätzt und was er überschätzt hat
+### 5a.1 What the finding in §5 underestimated and what it overestimated
 
-Systematisch gesucht (alle Produkte zweier `Fixed`-Werte der Simulation, mit einem Wegwerf-Werkzeug auf dem Syntaxbaum des Compilers typgenau aufgezählt: 857 Produkte, davon 413 eines Werts mit sich selbst;
-dazu `CnCNew.Game`, `CnCNew.Presentation` und die Werkzeuge):
+Searched systematically (all products of two `Fixed` values of the simulation, enumerated type-exactly with a throwaway tool on the syntax tree of the compiler: 857 products, of which 413 of a value with itself;
+in addition `CnCNew.Game`, `CnCNew.Presentation` and the tools):
 
-- **Mehr Stellen als die zwei genannten.** Rund 95 Stellen quadrierten eine Reichweite, einen Radius oder eine Grenze für einen Vergleich (jetzt 91 Zeilen mit `SquaredReach` in 38 Dateien). Die Reichweite einer Waffe läuft über `RangeWith`/`MaxWeaponRange`
-  außer in `WithinWeaponRange` auch in die Zielerfassung (`AcquireRadius` → `FindMoodTarget`), die Angriffsabsicht der Türme (`KeepsAttackIntent`), `AssaultTransportAIUpdate.DetectDeployShot` (Waffen mit `DamageType = DEPLOY`, wie die des
-  Trägers), `SlavedUpdate` (`MasterTarget`), die beiden Treiber (`ReferenceMatchScenario`, `ObjectiveDriver`) und – **außerhalb der Simulation** – in `SimulationQueries.InRange`, die Frage
-  des Mauszeigers „ist das Ziel in Reichweite der Auswahl“ (`CommandModeController.Hover`, `StandingOrders`).
-- **Der Weg, den ein Spieler wirklich erreicht, war der Mauszeiger:** ein ausgewählter Scud-Sturm (Reichweite 999.999) und der Zeiger über einem Feind – `InRange` warf. Die Simulation selbst quadriert die
-  Reichweite des Scud-Sturms auf keinem Befehlsweg (`AutoChooseSources = PRIMARY NONE`: `ChooseWeapon` wählt die Waffe für keine Befehlsquelle, bevor die Reichweite geprüft wird; gefeuert wird über
-  `OCLSpecialPower`). Der Flugzeugträger (`AircraftCarrierOrderLaunch`, 1.000.000) und die drei Filmsoldaten warfen in der Simulation schon beim Feuerbefehl, die Soldaten auch ohne Befehl, sobald ein Feind neben ihnen stand.
-- **Die Verkleidung des Bombenlasters ist heute nicht erreichbar.** Für `SPECIAL_DISGUISE_AS_VEHICLE` gibt es keinen Handler (`SpecialAbilityUpdate.Handles` kennt nur die Übernahme-Fähigkeiten); der Befehl wird mit
-  `SpecialPowerHandlerMissing` abgelehnt, bevor `StartAbilityRange` gelesen wird. Die Aussage in §5, das sei ein gewöhnlicher Spielerbefehl, der werfe, stimmte für den Befehl, nicht für das Werfen. Der Weg selbst
-  (`IsWithinStartRange` → `WithinSpheres`) warf mit einer Fähigkeit, die einen Handler hat (synthetischer Test), und ist behoben. Die sechs Objekte sind fünf Bombenlaster und `GC_Slth_GLAVehicleBattleBus`.
-- **Ein Produkt, das §5 als ungefährlich führte, läuft über:** `ActiveBody.AdjustMaxHealth` bildet für `PRESERVE_RATIO` `Health * newMax / oldMax`. Ab einer Gesundheit von 741.455 (62 Retail-Objekte) verlässt das
-  Produkt den Bereich, sobald ein Bonus das Maximum ändert (Veteranenstufe, Kampfplan, `MaxHealthUpgrade`). Für die zehn Objekte mit 99.999.999 warf das schon bei 16 Bit (10¹⁶), für Werte bis 11,9 Millionen ist
-  es eine Regression der Phase 22.
-- **Sichtkreise:** seit der Vorarbeit der Phase 22 (§2.2) wirft der Kreistest der `VisionMap` für einen Radius über 46.340 Einheiten (vorher wickelte er still). `ShroudClearingRange` reicht in den Daten bis 1.000; ein Skript kann aber
-  mit jedem Radius aufdecken.
+- **More places than the two named.** About 95 places squared a range, a radius or a limit for a comparison (now 91 lines with `SquaredReach` in 38 files). The range of a weapon runs via `RangeWith`/`MaxWeaponRange`
+  not only into `WithinWeaponRange` but also into the target acquisition (`AcquireRadius` → `FindMoodTarget`), the attack intent of the turrets (`KeepsAttackIntent`), `AssaultTransportAIUpdate.DetectDeployShot` (weapons with `DamageType = DEPLOY`, like those of the
+  carrier), `SlavedUpdate` (`MasterTarget`), the two drivers (`ReferenceMatchScenario`, `ObjectiveDriver`) and – **outside the simulation** – into `SimulationQueries.InRange`, the question
+  of the mouse pointer "is the target in range of the selection" (`CommandModeController.Hover`, `StandingOrders`).
+- **The path that a player really reaches was the mouse pointer:** a selected Scud Storm (range 999,999) and the pointer over an enemy – `InRange` threw. The simulation itself squares the
+  range of the Scud Storm on no command path (`AutoChooseSources = PRIMARY NONE`: `ChooseWeapon` chooses the weapon for no command source before the range is checked; firing happens via
+  `OCLSpecialPower`). The aircraft carrier (`AircraftCarrierOrderLaunch`, 1,000,000) and the three cinematic soldiers threw in the simulation already on the fire command, the soldiers also without a command as soon as an enemy stood beside them.
+- **The disguise of the bomb truck is not reachable today.** For `SPECIAL_DISGUISE_AS_VEHICLE` there is no handler (`SpecialAbilityUpdate.Handles` knows only the capture abilities); the command is rejected with
+  `SpecialPowerHandlerMissing` before `StartAbilityRange` is read. The statement in §5 that this is an ordinary player command that throws was true for the command, not for the throwing. The path itself
+  (`IsWithinStartRange` → `WithinSpheres`) threw with an ability that has a handler (synthetic test), and is fixed. The six objects are five bomb trucks and `GC_Slth_GLAVehicleBattleBus`.
+- **A product that §5 listed as harmless overflows:** `ActiveBody.AdjustMaxHealth` forms `Health * newMax / oldMax` for `PRESERVE_RATIO`. From a health of 741,455 (62 retail objects) the
+  product leaves the range as soon as a bonus changes the maximum (veterancy level, battle plan, `MaxHealthUpgrade`). For the ten objects with 99,999,999 that already threw at 16 bits (10¹⁶), for values up to 11.9 million
+  it is a regression of Phase 22.
+- **Vision circles:** since the preparatory work of Phase 22 (§2.2) the circle test of the `VisionMap` throws for a radius above 46,340 units (before, it wrapped silently). `ShroudClearingRange` reaches up to 1,000 in the data; a script can however
+  reveal with any radius.
 
-### 5a.2 Entwurf
+### 5a.2 Design
 
-`src/CnCNew.Simulation/Numerics/SquaredReach.cs`, ein Werttyp für „das Quadrat einer Reichweite, nur zum Vergleichen“:
+`src/CnCNew.Simulation/Numerics/SquaredReach.cs`, a value type for "the square of a range, only for comparing":
 
-| Aufruf | Bedeutung |
+| Call | Meaning |
 |---|---|
-| `SquaredReach.Of(reach)` | das Quadrat, wie `Fixed` es bildet (Betrag², zur nächsten Zahl gerundet, Halbwerte weg von null) – in 128 Bit |
+| `SquaredReach.Of(reach)` | the square as `Fixed` forms it (magnitude², rounded to the nearest number, halves away from zero) – in 128 bits |
 | `.Contains(d²)` | `d² <= reach²` |
 | `.ContainsStrictly(d²)` | `d² < reach²` |
-| `SquaredReach.OfSquare(q)` | ein Wert, der schon ein Quadrat ist (bestes Abstandsquadrat einer Suche, „kein Radius“ = `MaxValue`) |
-| `SquaredReach.ContainsStrictly(reach, d², margin)` | `d² + margin < reach²`, Summe und Quadrat exakt (die Mindestreichweite: `distSqr < minAttackRangeSqr - 0.5`) |
-| `SquaredReach.Compare(a, b)` | Vorzeichen von `a² - b²` für zwei Längen, deren Quadrate verglichen wurden |
-| `Fixed.MultiplyDivide(a, b, c)` | `a * b / c` mit beiden Rundungen der zwei Operatoren, das Produkt in 128 Bit |
+| `SquaredReach.OfSquare(q)` | a value that already is a square (best squared distance of a search, "no radius" = `MaxValue`) |
+| `SquaredReach.ContainsStrictly(reach, d², margin)` | `d² + margin < reach²`, sum and square exact (the minimum range: `distSqr < minAttackRangeSqr - 0.5`) |
+| `SquaredReach.Compare(a, b)` | sign of `a² - b²` for two lengths whose squares were compared |
+| `Fixed.MultiplyDivide(a, b, c)` | `a * b / c` with both roundings of the two operators, the product in 128 bits |
 
-**Warum 128 Bit und nicht „über der Grenze = immer innerhalb“ an der Aufrufstelle:** der Typ speichert das gerundete Quadrat als Maschinenwort, oder – wo es das Wort verlässt – die größte Zahl und ein Merkbit.
-`Contains` ist dann ein einziger Vergleich zweier Maschinenworte (`d.Raw <= raw`): liegt das wahre Quadrat jenseits der größten Zahl, ist jedes darstellbare Abstandsquadrat kleiner, und der Vergleich mit der
-größten Zahl sagt genau das. Nur `ContainsStrictly` braucht das Merkbit (für `d² = MaxValue`, das als Markierung „noch nichts gefunden“ vorkommt). Das ist keine Sättigung eines Ergebnisses: das gesättigte Wort
-verlässt den Typ nie, es gibt keinen Weg, es als Zahl zu lesen. Die Bildung (`FixedMath.SquareSaturated`) ist dieselbe 64×64-Multiplikation mit derselben Rundung wie `FixedMath.Multiply`, ohne dessen Ausnahme:
-der schnelle Weg kostet, was `reach * reach` kostete.
+**Why 128 bits and not "above the limit = always inside" at the call site:** the type stores the rounded square as a machine word, or – where it leaves the word – the largest number and a flag bit.
+`Contains` is then a single comparison of two machine words (`d.Raw <= raw`): if the true square lies beyond the largest number, every representable squared distance is smaller, and the comparison with the
+largest number says exactly that. Only `ContainsStrictly` needs the flag bit (for `d² = MaxValue`, which occurs as a marker "nothing found yet"). That is not a saturation of a result: the saturated word
+never leaves the type, there is no way to read it as a number. The formation (`FixedMath.SquareSaturated`) is the same 64×64 multiplication with the same rounding as `FixedMath.Multiply`, without its exception:
+the fast path costs what `reach * reach` cost.
 
-**Beweis der Ergebnisneutralität.** (a) Aus der Konstruktion: `Multiply(r, r)` liefert `(|r|² + 2²³) >> 24`, wenn das unter 2⁶³ liegt, sonst wirft es; `SquareSaturated` liefert denselben Ausdruck unter derselben
-Bedingung (`high >> 23 == 0`), sonst `long.MaxValue`. Für jedes `r`, für das der alte Ausdruck rechnete, ist das gespeicherte Wort also der alte Wert, und `Contains`/`ContainsStrictly` sind die alten Vergleiche
-`<=`/`<` auf denselben zwei Worten. (b) Gemessen gegen ein unabhängiges Orakel (`Tests.SquaredReachGivesTheExactComparison`, `BigInteger`): 5.328.044 Vergleiche – jeder Rohwert in ±60.000 Schritten um die alte
-Überlaufgrenze (größter quadrierbarer Rohwert 12.439.554.047.901 = 741.455,2 Einheiten; einen Schritt darüber wirft das Produkt und `IsBeyondRange` kippt), die Sentinels der Daten und des Codes mit ihren
-Nachbarn (999.999, 1.000.000, 10.000.000, 99.999.999, die Ränder des Bereichs), 300.000 Werte jeder Größenordnung; je Reichweite die Abstände um das exakte Quadrat (±2 Rohschritte), 0, ±1, die Ränder,
-Zufallswerte. 3.885.182 davon zusätzlich gegen `d <= reach * reach` und `d < reach * reach`, wo das Produkt rechnet. Dazu 400.000 Vergleiche mit Marge (gegen `BigInteger` und gegen den ersetzten Ausdruck
-`d >= reach * reach - margin`) und 784.051 Quotienten von Produkten (`MultiplyDivide` gegen die Formel mit beiden Rundungen, 485.249 davon auch gegen `a * b / c`, 241.176 mit einem Produkt, das nur 128 Bit halten).
-(c) Am ganzen Programm: das volle Manifest und das Eingangsmanifest sind identisch.
+**Proof of result neutrality.** (a) From the construction: `Multiply(r, r)` returns `(|r|² + 2²³) >> 24` if that lies below 2⁶³, otherwise it throws; `SquareSaturated` returns the same expression under the same
+condition (`high >> 23 == 0`), otherwise `long.MaxValue`. For every `r` for which the old expression computed, the stored word is therefore the old value, and `Contains`/`ContainsStrictly` are the old comparisons
+`<=`/`<` on the same two words. (b) Measured against an independent oracle (`Tests.SquaredReachGivesTheExactComparison`, `BigInteger`): 5,328,044 comparisons – every raw value in ±60,000 steps around the old
+overflow limit (largest squarable raw value 12,439,554,047,901 = 741,455.2 units; one step above it the product throws and `IsBeyondRange` flips), the sentinels of the data and of the code with their
+neighbours (999,999, 1,000,000, 10,000,000, 99,999,999, the edges of the range), 300,000 values of every order of magnitude; per range the distances around the exact square (±2 raw steps), 0, ±1, the edges,
+random values. 3,885,182 of them additionally against `d <= reach * reach` and `d < reach * reach` where the product computes. In addition 400,000 comparisons with margin (against `BigInteger` and against the replaced expression
+`d >= reach * reach - margin`) and 784,051 quotients of products (`MultiplyDivide` against the formula with both roundings, 485,249 of them also against `a * b / c`, 241,176 with a product that only 128 bits hold).
+(c) On the whole program: the full manifest and the input manifest are identical.
 
-**Suchen mit laufendem Bestwert** (`var best = range * range; … if (distance > best) continue; best = distance;`) trennen jetzt Grenze und Bestwert: `var limit = SquaredReach.Of(range)`, der Bestwert gilt erst, wenn
-ein Kandidat gefunden ist. Für jeden Kandidaten ist die Bedingung dieselbe wie vorher (der alte Bestwert war nie größer als die Grenze).
+**Searches with a running best value** (`var best = range * range; … if (distance > best) continue; best = distance;`) now separate limit and best value: `var limit = SquaredReach.Of(range)`, the best value applies only when
+a candidate has been found. For every candidate the condition is the same as before (the old best value was never larger than the limit).
 
-**Sichtkreise** rechnen weiter in Maschinenworten bei 16 Nachkommabits (§2.2); `VisionMap.SquaredRadius` liefert für einen Radius, dessen Quadrat das Wort verlässt (über 46.340 Einheiten), die größte Zahl. Exakt für
-jede Zelle, die höchstens 32.768 Einheiten vom Mittelpunkt liegt (dann passt die Summe zweier Differenzquadrate); die Differenzen bleiben `checked`.
+**Vision circles** continue to compute in machine words at 16 fractional bits (§2.2); `VisionMap.SquaredRadius` returns the largest number for a radius whose square leaves the word (above 46,340 units). Exact for
+every cell that lies at most 32,768 units from the centre (then the sum of two squared differences fits); the differences stay `checked`.
 
-### 5a.3 Audit: welches Feld wird wo quadriert
+### 5a.3 Audit: which field is squared where
 
-Größte Werte aus `SimTool rate-audit <content> --ranges` (neu: der größte Betrag jedes der 251 Festkommafelder des Retail-Katalogs; mit `--ranges-above N` gekürzt). „Quadriert in“ aus der Aufzählung der Produkte.
+Largest values from `SimTool rate-audit <content> --ranges` (new: the largest magnitude of each of the 251 fixed-point fields of the retail catalog; shortened with `--ranges-above N`). "Squared in" from the enumeration of the products.
 
-| Feld | größter Retailwert | quadriert in | Überlauf bei Q39.24 möglich? | jetzt |
+| Field | largest retail value | squared in | Overflow possible at Q39.24? | now |
 |---|---:|---|---|---|
-| `WeaponInfo.AttackRange` (× Reichweitenbonus: `RangeWith`, `MaxWeaponRange`) | 1.000.000 (8 Waffen über der Grenze, auf 11 Objekten) | `WithinWeaponRange`, `KeepsAttackIntent`, `AcquireRadius` → `FindMoodTarget`, `DetectDeployShot`, `MasterTarget`, beide Treiber, `SimulationQueries.InRange` (Präsentation) | **ja** | `SquaredReach` |
-| `WeaponInfo.MinimumAttackRange` | 200 | `WithinWeaponRange` (`min² − 0,5`) | nein (Daten) | `SquaredReach.ContainsStrictly` mit Marge |
-| `WeaponInfo.PrimaryRadius` / `SecondaryRadius` (× Radiusbonus) | 300 / 200 | `DealDamageCore`, `AirWeaponModules.WithinSphere3D` | nein (Daten) | `SquaredReach` |
-| `WeaponInfo.RequestAssistRange` | 200 | `ProcessRequestAssistance` | nein | `SquaredReach` |
-| `SpecialAbilityUpdateData.StartAbilityRange` | 1.000.000 (6 Objekte) | `SpecialAbilityUpdate.WithinSpheres` | **ja** (heute vor der Prüfung abgelehnt, §5a.1) | `SquaredReach` |
-| `SpecialAbilityUpdateData.AbilityAbortRange` | 10.000.000 (= „nie“, 86 Objekte) | `WithinSpheres`, nur wenn unter 10.000.000 | ja für Werte zwischen 741.455 und 10⁷ | `SquaredReach` |
-| `BodyData.MaxHealth` / `InitialHealth` | 99.999.999 (62 Objekte über der Grenze) | nie quadriert; `Health * newMax / oldMax` in `AdjustMaxHealth` | **ja** (Produkt) | `Fixed.MultiplyDivide` |
-| `WeaponInfo.WeaponSpeed` / `MinWeaponSpeed` | 999.999 („sofort“) | nicht quadriert (Vergleiche, Quotienten, `ratio * (Speed − MinSpeed)`) | nein in Vergleichen; siehe §5a.6 | – |
-| `WeaponInfo.PrimaryDamage` | 999.999 | nicht quadriert (× Bonus, × Rüstung) | nein | – |
-| `ObjectTemplate.VisionRange` | 99.999 (`ChinaArtilleryCannon`) | `SightedObjects`, `EnemyInSight`, `AcquireRadius` (× Stimmungsfaktor), `StealthDetectorUpdate` (wenn `DetectionRange` fehlt) | nein (10¹⁰, Abstand Faktor 55) | `SquaredReach` |
-| `ObjectTemplate.ShroudClearingRange` | 1.000 | `VisionMap` | nein | `VisionMap.SquaredRadius` |
-| `ObjectTemplate.GeometryMajorRadius` / `MinorRadius` / `GeometryHeight` | 1.117 / 846 / 460 | `BoundingCircleRadius`/`BoundingSphereRadius` (Diagonale, unter der Wurzel); als Summe von Radien in Kollision, Zerquetschen, Andocken | nein | Diagonale: einfaches Produkt (benannte Ausnahme); Vergleiche: `SquaredReach` |
-| Suchradien der Module (`ScanRange`, `ScanDistance`, `DetectionRange`, `TriggerRange`, `Radius`, `Range`, `RubOffRadius`, `BlastRadius`, `OuterRadius`, `DamageRadius`, `LockDistance`, `DiveStartDistance`, `DeliveryDistance`, `CloseEnoughDist` …) | höchstens 3.000 (`DeliverPayloadData.DeliveryDistance`), sonst höchstens 700 | je ein Vergleich im Modul | nein | `SquaredReach` |
-| Ganzzahlfelder als Reichweite (`SlavedUpdate`: `GuardMaxRange`, `AttackRange`, `DistToTargetToGrantRangeBonus`; `MustCatchUpRadius`) | nicht im Festkomma-Audit | `SlaveModules` | – | `SquaredReach` |
-| Radien aus Karten (Skriptparameter: Aufdecken, `RECRUIT_TEAM`, Spezialkraft-Radius, Sichtweite) | nicht im Katalog | `VisionMap`, `ScriptEngine.Powers`, `ScriptEngine.Extended` | je nach Karte | `SquaredReach` / `SquaredRadius` |
-| Konstanten der KI und der Treiber (`DefenseRadius`, `EngageRadius`, `BoardingReach`, „überall“ = 100.000) | 100.000 | `SkirmishAi` | nein (10¹⁰) | `SquaredReach` |
+| `WeaponInfo.AttackRange` (× range bonus: `RangeWith`, `MaxWeaponRange`) | 1,000,000 (8 weapons above the limit, on 11 objects) | `WithinWeaponRange`, `KeepsAttackIntent`, `AcquireRadius` → `FindMoodTarget`, `DetectDeployShot`, `MasterTarget`, both drivers, `SimulationQueries.InRange` (presentation) | **yes** | `SquaredReach` |
+| `WeaponInfo.MinimumAttackRange` | 200 | `WithinWeaponRange` (`min² − 0.5`) | no (data) | `SquaredReach.ContainsStrictly` with margin |
+| `WeaponInfo.PrimaryRadius` / `SecondaryRadius` (× radius bonus) | 300 / 200 | `DealDamageCore`, `AirWeaponModules.WithinSphere3D` | no (data) | `SquaredReach` |
+| `WeaponInfo.RequestAssistRange` | 200 | `ProcessRequestAssistance` | no | `SquaredReach` |
+| `SpecialAbilityUpdateData.StartAbilityRange` | 1,000,000 (6 objects) | `SpecialAbilityUpdate.WithinSpheres` | **yes** (today rejected before the check, §5a.1) | `SquaredReach` |
+| `SpecialAbilityUpdateData.AbilityAbortRange` | 10,000,000 (= "never", 86 objects) | `WithinSpheres`, only if below 10,000,000 | yes for values between 741,455 and 10⁷ | `SquaredReach` |
+| `BodyData.MaxHealth` / `InitialHealth` | 99,999,999 (62 objects above the limit) | never squared; `Health * newMax / oldMax` in `AdjustMaxHealth` | **yes** (product) | `Fixed.MultiplyDivide` |
+| `WeaponInfo.WeaponSpeed` / `MinWeaponSpeed` | 999,999 ("instant") | not squared (comparisons, quotients, `ratio * (Speed − MinSpeed)`) | no in comparisons; see §5a.6 | – |
+| `WeaponInfo.PrimaryDamage` | 999,999 | not squared (× bonus, × armor) | no | – |
+| `ObjectTemplate.VisionRange` | 99,999 (`ChinaArtilleryCannon`) | `SightedObjects`, `EnemyInSight`, `AcquireRadius` (× mood factor), `StealthDetectorUpdate` (if `DetectionRange` is missing) | no (10¹⁰, margin factor 55) | `SquaredReach` |
+| `ObjectTemplate.ShroudClearingRange` | 1,000 | `VisionMap` | no | `VisionMap.SquaredRadius` |
+| `ObjectTemplate.GeometryMajorRadius` / `MinorRadius` / `GeometryHeight` | 1,117 / 846 / 460 | `BoundingCircleRadius`/`BoundingSphereRadius` (diagonal, under the root); as a sum of radii in collision, crushing, docking | no | diagonal: plain product (named exception); comparisons: `SquaredReach` |
+| Search radii of the modules (`ScanRange`, `ScanDistance`, `DetectionRange`, `TriggerRange`, `Radius`, `Range`, `RubOffRadius`, `BlastRadius`, `OuterRadius`, `DamageRadius`, `LockDistance`, `DiveStartDistance`, `DeliveryDistance`, `CloseEnoughDist` …) | at most 3,000 (`DeliverPayloadData.DeliveryDistance`), otherwise at most 700 | one comparison each in the module | no | `SquaredReach` |
+| Integer fields as a range (`SlavedUpdate`: `GuardMaxRange`, `AttackRange`, `DistToTargetToGrantRangeBonus`; `MustCatchUpRadius`) | not in the fixed-point audit | `SlaveModules` | – | `SquaredReach` |
+| Radii from maps (script parameters: reveal, `RECRUIT_TEAM`, special power radius, vision range) | not in the catalog | `VisionMap`, `ScriptEngine.Powers`, `ScriptEngine.Extended` | depending on the map | `SquaredReach` / `SquaredRadius` |
+| Constants of the AI and of the drivers (`DefenseRadius`, `EngageRadius`, `BoardingReach`, "everywhere" = 100,000) | 100,000 | `SkirmishAi` | no (10¹⁰) | `SquaredReach` |
 
-Über der Grenze liegen im Retail-Katalog unverändert 639 Werte in 8 Feldern (Tabelle in §5). Kein weiteres Feld liegt über 100.000.
+Above the limit there are unchanged 639 values in 8 fields in the retail catalog (table in §5). No further field lies above 100,000.
 
 ### 5a.4 Tests
 
-| Test | Was | Auf dem Stand vor der Behebung (`e1687c8`) |
+| Test | What | On the state before the fix (`e1687c8`) |
 |---|---|---|
-| `Tests.SquaredReachGivesTheExactComparison`, `Tests.MultiplyDivideEqualsTheTwoOperatorsWithoutTheirOverflow` | Orakel (§5a.2) | – (der Typ existiert dort nicht) |
-| `Tests.WeaponsWithAnEverywhereRangeFire` | synthetisch: Waffen mit `AttackRange` 999.999 und 1.000.000 feuern auf Befehl und von selbst; eine Mindestreichweite von 800.000; ein Schadensradius von 1.000.000 | **wirft** `OverflowException` in `WithinWeaponRange` (beim Einreichen des Feuerbefehls) |
-| `Tests.AbilityWithAnEverywhereStartRangeBeginsWhereTheUnitStands` | synthetisch: eine Fähigkeit mit Handler, `StartAbilityRange` 1.000.000, `AbilityAbortRange` 2.000.000 und einem Zielobjekt 600 Einheiten entfernt läuft durch ihre Stufen, die Einheit bewegt sich nicht | **wirft** in `SpecialAbilityUpdate.WithinSpheres` |
-| `Tests.HealthRatioOfTheLargestBodiesSurvivesANewMaximum` | ein Körper mit 99.999.999 bekommt ein neues Maximum (`PRESERVE_RATIO`) | **wirft** in `ActiveBody.AdjustMaxHealth` |
-| `Tests.VisionCircleWithAHugeRadiusCoversTheMap` | Radien 46.000, 46.341, 99.999, 1.000.000 decken die Karte auf (schneller Weg, Referenzweg, `ExploreCircle`) | **wirft** in `VisionMap.Trace` |
-| `Tests.RealSentinelRanges` (`--content-dir`) | die elf Retail-Objekte mit einer der acht Waffen: Feuerbefehl auf Panzer und Soldat, 150 Bilder ohne Befehl; die sechs Objekte mit `StartAbilityRange` 1.000.000: die Fähigkeit auf ein Fahrzeug | **7 Schritte werfen:** Träger (Feuerbefehl), `CINE_AmericaInfantryRanger`, `CINE_AmericanInfantryPathfinder`, `CINE_GLAInfantryJarmenKell` (je Feuerbefehl und Stehen neben einem Feind) |
-| `SentinelRangeTests` (Präsentation; mit `--content-dir` alle elf Retail-Objekte) | `SimulationQueries.InRange` für eine Reichweite von 999.999 | **wirft** (synthetisch und beim ersten Retail-Objekt) |
-| `Tests.SquaredReachSourceRules` | Quelltextregel (§5a.5) | – |
+| `Tests.SquaredReachGivesTheExactComparison`, `Tests.MultiplyDivideEqualsTheTwoOperatorsWithoutTheirOverflow` | oracle (§5a.2) | – (the type does not exist there) |
+| `Tests.WeaponsWithAnEverywhereRangeFire` | synthetic: weapons with `AttackRange` 999,999 and 1,000,000 fire on command and by themselves; a minimum range of 800,000; a damage radius of 1,000,000 | **throws** `OverflowException` in `WithinWeaponRange` (on submitting the fire command) |
+| `Tests.AbilityWithAnEverywhereStartRangeBeginsWhereTheUnitStands` | synthetic: an ability with a handler, `StartAbilityRange` 1,000,000, `AbilityAbortRange` 2,000,000 and a target object 600 units away runs through its stages, the unit does not move | **throws** in `SpecialAbilityUpdate.WithinSpheres` |
+| `Tests.HealthRatioOfTheLargestBodiesSurvivesANewMaximum` | a body with 99,999,999 gets a new maximum (`PRESERVE_RATIO`) | **throws** in `ActiveBody.AdjustMaxHealth` |
+| `Tests.VisionCircleWithAHugeRadiusCoversTheMap` | radii 46,000, 46,341, 99,999, 1,000,000 reveal the map (fast path, reference path, `ExploreCircle`) | **throws** in `VisionMap.Trace` |
+| `Tests.RealSentinelRanges` (`--content-dir`) | the eleven retail objects with one of the eight weapons: fire command at tank and soldier, 150 frames without a command; the six objects with `StartAbilityRange` 1,000,000: the ability on a vehicle | **7 steps throw:** carrier (fire command), `CINE_AmericaInfantryRanger`, `CINE_AmericanInfantryPathfinder`, `CINE_GLAInfantryJarmenKell` (each fire command and standing beside an enemy) |
+| `SentinelRangeTests` (presentation; with `--content-dir` all eleven retail objects) | `SimulationQueries.InRange` for a range of 999,999 | **throws** (synthetically and at the first retail object) |
+| `Tests.SquaredReachSourceRules` | source rule (§5a.5) | – |
 
-Auf dem alten Stand wurden die Verhaltenstests unverändert in eine Kopie des Baums gelegt und ausgeführt; sie benutzen nur die öffentliche Oberfläche der Welt.
+On the old state the behaviour tests were put unchanged into a copy of the tree and executed; they use only the public surface of the world.
 
-**Welche der 14 genannten Retail-Fälle wirklich durch ihre Prüfung liefen:**
+**Which of the 14 named retail cases really ran through their check:**
 
-| Fall | getrieben? |
+| Case | driven? |
 |---|---|
-| `AircraftCarrierOrderLaunch` (`AmericaAircraftCarrier`) | ja: Feuerbefehl angenommen, je ein Schuss auf Panzer und Soldat; warf vorher |
-| `CINE_RangerAdvancedCombatRifle` | ja: feuert auf Befehl und von selbst; warf vorher |
-| `CINE_USAPathfinderSniperRifle` | ja: ein Schuss (der Befehl auf den Panzer wird als ungültiges Ziel abgelehnt, die Prüfung läuft davor); warf vorher |
-| `CINE_GLAJarmenKellRifle` | ja: Feuerbefehl und Stehen neben einem Feind warfen vorher und laufen jetzt durch; gefeuert wird nicht (der Befehl wird mit `NoWeapon` abgelehnt, `AutoChooseSources = NONE`) |
-| `ScudStormWeapon`, `Chem_`, `Demo_`, `GC_Chem_ScudStormWeapon` (sieben Gebäude) | in der Simulation **nicht**: kein Befehlsweg quadriert ihre Reichweite (§5a.1), vorher wie nachher keine Ausnahme. **Ja** über `SimulationQueries.InRange` (Präsentationstest mit Retaildaten, alle sieben Gebäude); das warf vorher |
-| `StartAbilityRange` 1.000.000 (fünf Bombenlaster, `GC_Slth_GLAVehicleBattleBus`) | **nein:** der Befehl wird mit `SpecialPowerHandlerMissing` abgelehnt, die Verkleidung ist nicht simuliert. Der Test hält genau diese Ablehnung fest und prüft die Stufen, sobald der Befehl angenommen wird |
+| `AircraftCarrierOrderLaunch` (`AmericaAircraftCarrier`) | yes: fire command accepted, one shot each at tank and soldier; threw before |
+| `CINE_RangerAdvancedCombatRifle` | yes: fires on command and by itself; threw before |
+| `CINE_USAPathfinderSniperRifle` | yes: one shot (the command at the tank is rejected as an invalid target, the check runs before that); threw before |
+| `CINE_GLAJarmenKellRifle` | yes: fire command and standing beside an enemy threw before and now run through; nothing is fired (the command is rejected with `NoWeapon`, `AutoChooseSources = NONE`) |
+| `ScudStormWeapon`, `Chem_`, `Demo_`, `GC_Chem_ScudStormWeapon` (seven buildings) | in the simulation **not**: no command path squares their range (§5a.1), no exception before as after. **Yes** via `SimulationQueries.InRange` (presentation test with retail data, all seven buildings); that threw before |
+| `StartAbilityRange` 1,000,000 (five bomb trucks, `GC_Slth_GLAVehicleBattleBus`) | **no:** the command is rejected with `SpecialPowerHandlerMissing`, the disguise is not simulated. The test records exactly this rejection and checks the stages as soon as the command is accepted |
 
-`SimTool range-audit <content>` (neu) als Suchlauf darüber hinaus: jedes der 526 instanziierbaren Retail-Objekte mit einer Waffe steht 250 Einheiten vor einem Panzer und vor einem Soldaten, bekommt einen
-Feuerbefehl und läuft 150 Bilder: 1.052 Läufe, **0 Ausnahmen**; 68 Objekte feuerten (447 Schüsse). Der Lauf hat kein Gelände und gibt keine Spezialkräfte; dass 458 Objekte dabei nicht feuern, ist kein Befund
-und keine Abdeckung ihrer Schusswege.
+`SimTool range-audit <content>` (new) as a search run beyond that: each of the 526 instantiable retail objects with a weapon stands 250 units in front of a tank and in front of a soldier, gets a
+fire command and runs 150 frames: 1,052 runs, **0 exceptions**; 68 objects fired (447 shots). The run has no terrain and gives no special powers; that 458 objects do not fire in it is not a finding
+and not a coverage of their firing paths.
 
-### 5a.5 Was vor Rückfällen schützt
+### 5a.5 What protects against relapses
 
-- **Quelltextregel `Tests.SquaredReachSourceRules`** (vierter lexikalischer Regelsatz): in `src/CnCNew.Simulation` wird kein Wert mit sich selbst multipliziert (`x * x`, `(a + b) * (a + b)`), außer sein letzter
-  Bezeichner endet auf x, y oder z (eine Koordinatenkomponente: `dx * dx`, `v.X * v.X`). 21 benannte Ausnahmen mit Grund: Längen, die höchstens ein Abstand sind (3), Geometrie der Schablonen (3),
-  Geschwindigkeiten je Tick und Brüche zwischen 0 und 1 (10), Ganzzahlen (5). Die Regel liest Namen, nicht Typen – ein Quadrat als `a * b` geht durch; sie ist ein Stolperdraht wie die anderen.
-  Außerhalb der Simulation wäre sie zu laut (dort wird in `float` gerechnet, `radius * radius` ist dort gewöhnlich); die typgenaue Aufzählung fand dort ein einziges `Fixed`-Quadrat (`SimulationQueries.InRange`).
-- **Die Tests aus §5a.4**, darunter zwei mit Retaildaten, die die Liste der Waffen und Objekte über der Grenze festhalten: ein neuer Wert über der Grenze in diesen Feldern lässt sie scheitern.
-- **`SimTool rate-audit --ranges`** und **`SimTool range-audit`** für jede neue Datenquelle.
+- **Source rule `Tests.SquaredReachSourceRules`** (fourth lexical rule set): in `src/CnCNew.Simulation` no value is multiplied with itself (`x * x`, `(a + b) * (a + b)`), unless its last
+  identifier ends in x, y or z (a coordinate component: `dx * dx`, `v.X * v.X`). 21 named exceptions with a reason: lengths that are at most a distance (3), geometry of the templates (3),
+  speeds per tick and fractions between 0 and 1 (10), integers (5). The rule reads names, not types – a square as `a * b` gets through; it is a tripwire like the others.
+  Outside the simulation it would be too noisy (there `float` is used for computing, `radius * radius` is ordinary there); the type-exact enumeration found a single `Fixed` square there (`SimulationQueries.InRange`).
+- **The tests from §5a.4**, among them two with retail data that record the list of the weapons and objects above the limit: a new value above the limit in these fields makes them fail.
+- **`SimTool rate-audit --ranges`** and **`SimTool range-audit`** for every new data source.
 
-### 5a.6 Nur berichtet, nicht geändert
+### 5a.6 Only reported, not changed
 
-- **Abstandsquadrate selbst** (`dx * dx + dy * dy`, 110-mal `dx`/`dy`) sind einfache Produkte geblieben: zwei Positionen, die auf einer Achse mehr als 741.455 oder auf zwei Achsen mehr als rund 524.000 Einheiten
-  auseinanderliegen, werfen. Karten sind wenige tausend Einheiten groß. **Aber: ein Befehl mit Zielkoordinaten wird beim Einreichen nicht gegen die Karte geprüft** (`SetMoveTargetCommand` und andere tragen
-  Rohkoordinaten) – ein Bewegungsziel in 600.000 Einheiten Entfernung lässt die Bewegung der Einheit werfen (bei 16 Bit ab 8,4 Millionen). Für Mehrspieler ist das eine Frage der Befehlsprüfung (Phasen 27/28),
-  kein Vergleich, den ein Helfer neutral beantworten könnte.
-- **Gespeichert und gehasht** wird genau ein Quadrat: `DeliverPayloadAIUpdate._previousDistance2` (das Abstandsquadrat zum Ziel im vorigen Tick, im Snapshot als `previousDistance2`). Es ist ein Abstandsquadrat
-  zweier Positionen (voriger Punkt), kein Quadrat eines Katalogwerts; unverändert.
-- **`DeliverPayloadAIUpdate.MinTurnRadius`** liefert 999.999, wenn der Locomotor keine Drehrate hat, und `ConsiderNewApproach` setzt damit ein Bewegungsziel in 2,2 Millionen Einheiten Entfernung – danach wirft die
-  Bewegung (voriger Punkt). Ob ein Retail-Lieferflugzeug ohne Drehrate existiert, ist nicht geprüft; kein gemessener Lauf betritt den Weg. Das Ziel ist gespeicherter Zustand und wurde nicht angefasst.
-- **Geschosse mit `WeaponSpeed` 999.999** (52 Waffen): nicht quadriert; ein `MissileAIUpdate` mit `UseWeaponSpeed` bekäme diese Geschwindigkeit je Tick. `range-audit` feuerte, was es zum Feuern brachte, ohne
-  Ausnahme; die Abdeckung dieser Waffen ist damit nicht belegt.
-- **`VisionMap`:** ein Kreis, dessen Mittelpunkt weiter als 32.768 Einheiten von einer Zelle der Karte liegt, wirft weiterhin (geprüfte Differenzen), statt wie vor Phase 22 still zu wickeln.
+- **Squared distances themselves** (`dx * dx + dy * dy`, 110 times `dx`/`dy`) have stayed plain products: two positions that lie more than 741,455 apart on one axis or more than about 524,000 units apart on two axes
+  throw. Maps are a few thousand units in size. **But: a command with target coordinates is not checked against the map on submission** (`SetMoveTargetCommand` and others carry
+  raw coordinates) – a move target at a distance of 600,000 units makes the movement of the unit throw (at 16 bits from 8.4 million). For multiplayer that is a question of command validation (Phases 27/28),
+  not a comparison that a helper could answer neutrally.
+- **Stored and hashed** is exactly one square: `DeliverPayloadAIUpdate._previousDistance2` (the squared distance to the target in the previous tick, in the snapshot as `previousDistance2`). It is a squared distance
+  of two positions (previous item), not a square of a catalog value; unchanged.
+- **`DeliverPayloadAIUpdate.MinTurnRadius`** returns 999,999 if the locomotor has no turn rate, and `ConsiderNewApproach` thereby sets a move target at a distance of 2.2 million units – after that the
+  movement throws (previous item). Whether a retail delivery aircraft without a turn rate exists is not checked; no measured run enters the path. The target is stored state and was not touched.
+- **Projectiles with `WeaponSpeed` 999,999** (52 weapons): not squared; a `MissileAIUpdate` with `UseWeaponSpeed` would get this speed per tick. `range-audit` fired what it got to fire, without
+  an exception; the coverage of these weapons is thereby not verified.
+- **`VisionMap`:** a circle whose centre lies further than 32,768 units from a cell of the map still throws (checked differences) instead of wrapping silently as before Phase 22.
 
-### 5a.7 Prüfung
+### 5a.7 Verification
 
-Commits: `b274df5` (Behebung), `7e93401` (Tests und Quelltextregel), `2bd08d2` (Werkzeuge). Gemessen am Quelltextstand von `b274df5` (die beiden folgenden Commits ändern keinen Produktcode der Simulation):
+Commits: `b274df5` (fix), `7e93401` (tests and source rule), `2bd08d2` (tools). Measured at the source state of `b274df5` (the two following commits change no product code of the simulation):
 
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| `SimTool input-manifest check` | identisch |
-| `SimTool reference-manifest check --set quick` | 9 Läufe identisch (zweimal: vor und nach den letzten Kommentaränderungen) |
-| `SimTool reference-manifest check --set full` | **50 Läufe identisch** |
-| Simulationstests (Debug) ohne und mit `--content-dir` | bestanden (414 bzw. 429 Tests; das Referenzmatch im Test weiter FactionGLA bei Tick 17.805) |
-| Simulationstests `-c Release -- --long` | bestanden |
-| `CnCNew.Game.Tests` (Release, `--content-dir`) | bestanden |
-| `CnCNew.Presentation.Tests` (ohne und mit `--content-dir`) | bestanden |
-| Sauberer Build `dotnet build CnCNew.slnx` (`bin`/`obj` von `CnCNew.Client.Stride` gelöscht) | 0 Warnungen, 0 Fehler |
-| `SimTool range-audit` | 1.052 Läufe, 0 Ausnahmen |
+| `SimTool input-manifest check` | identical |
+| `SimTool reference-manifest check --set quick` | 9 runs identical (twice: before and after the last comment changes) |
+| `SimTool reference-manifest check --set full` | **50 runs identical** |
+| Simulation tests (Debug) without and with `--content-dir` | passed (414 and 429 tests respectively; the reference match in the test still FactionGLA at tick 17,805) |
+| Simulation tests `-c Release -- --long` | passed |
+| `CnCNew.Game.Tests` (Release, `--content-dir`) | passed |
+| `CnCNew.Presentation.Tests` (without and with `--content-dir`) | passed |
+| Clean build `dotnet build CnCNew.slnx` (`bin`/`obj` of `CnCNew.Client.Stride` deleted) | 0 warnings, 0 errors |
+| `SimTool range-audit` | 1,052 runs, 0 exceptions |
 
-Nicht wiederholt: die Determinismus-Matrix (§8.1), `CampaignTool audit`/`drive`, die Szenen-Audits, `tools/CnCNew.UiRenderTool` – das volle Manifest (27 Missionsläufe eingeschlossen) ist identisch, weitere Läufe gab es dafür nicht.
+Not repeated: the determinism matrix (§8.1), `CampaignTool audit`/`drive`, the scene audits, `tools/CnCNew.UiRenderTool` – the full manifest (27 mission runs included) is identical, there were no further runs for that.
 
-**Leistung, Rücken an Rücken** (`SimTool perf <content> --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 12000`, alter Stand `e1687c8` und neuer Stand abwechselnd, je dreimal, ohne eigene Läufe
-daneben; ein anderer Prüflauf arbeitete auf demselben Rechner). Mittel je Tick in Mikrosekunden ohne die ersten 300 Ticks; in allen sechs Läufen Endhash `F78F071AF5EC8A6E`, Kette `D9975439375F5DF7`:
+**Performance, back to back** (`SimTool perf <content> --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 12000`, old state `e1687c8` and new state alternately, three times each, without own runs
+beside them; another check run was working on the same machine). Mean per tick in microseconds without the first 300 ticks; in all six runs final hash `F78F071AF5EC8A6E`, chain `D9975439375F5DF7`:
 
-| | Lauf 1 | Lauf 2 | Lauf 3 |
+| | Run 1 | Run 2 | Run 3 |
 |---|---:|---:|---:|
-| vorher: ganzer Tick | 2.088,3 | 2.115,6 | 2.070,3 |
-| nachher: ganzer Tick | 2.089,7 | 2.080,9 | 2.071,7 |
-| vorher: Phase „Updates“ (Zielerfassung, Waffenreichweite, Bewegung) | 807,5 | 832,2 | 805,0 |
-| nachher: Phase „Updates“ | 821,7 | 814,4 | 811,2 |
+| before: whole tick | 2,088.3 | 2,115.6 | 2,070.3 |
+| after: whole tick | 2,089.7 | 2,080.9 | 2,071.7 |
+| before: phase "Updates" (target acquisition, weapon range, movement) | 807.5 | 832.2 | 805.0 |
+| after: phase "Updates" | 821.7 | 814.4 | 811.2 |
 
-Die Unterschiede liegen in der Streuung der Läufe desselben Programms (vorher 2.070 bis 2.116); ein Anstieg ist nicht messbar. Die absoluten Zahlen sind höher als in §8.2, weil der Rechner nicht ruhig war.
+The differences lie within the scatter of the runs of the same program (before 2,070 to 2,116); an increase is not measurable. The absolute numbers are higher than in §8.2 because the machine was not quiet.
 
-## 6. Befund: das Referenzmatch und das Dreiermatch der Tests sind metastabil
+## 6. Finding: the reference match and the three-way match of the tests are metastable
 
-### 6.1 Was geschah
+### 6.1 What happened
 
-Bei 24 Bit endete das Referenzmatch mit dem bisherigen Startwert nicht mehr (kein Sieger in 45.000 Ticks; das volle Budget von 216.000 Ticks dauert über eine Stunde je Lauf), und der Test
-„Phase 5: reference match scenario“ (drei Seiten der synthetischen Fixture) fand in 200.000 Ticks keinen Sieger, wo er bei 16 Bit bei Tick 13.080 endete.
+At 24 bits the reference match no longer ended with the previous seed (no winner in 45,000 ticks; the full budget of 216,000 ticks takes over an hour per run), and the test
+"Phase 5: reference match scenario" (three sides of the synthetic fixture) found no winner in 200,000 ticks where it ended at tick 13,080 at 16 bits.
 
-### 6.2 Ursache, mit Beleg
+### 6.2 Cause, with evidence
 
-Beide Szenarien sind Zermürbungskriege zwischen gleich starken Seiten mit laufender Produktion; sie enden, wenn eine Nächstes-Ziel-Entscheidung zwischen zwei fast gleich weit entfernten Einheiten das Gleichgewicht
-kippt.
+Both scenarios are wars of attrition between equally strong sides with ongoing production; they end when a next-target decision between two units almost equally far away tips
+the balance.
 
-- **Dreiermatch (kein Zufallszug in der Fixture; Welt- und Treiber-Startwert haben nachweislich keinen Einfluss):** bis Tick 3.000 sind die Verläufe statistisch gleich (643 Schüsse, 121 Tode in beiden
-  Auflösungen), die Positionen laufen stetig auseinander: bei 16 Bit hält eine beschleunigende Einheit die Geschwindigkeit 0,50011, wo der exakte Wert 0,5 ist und bei 24 Bit 0,50000 steht (die Quantisierung der
-  Beschleunigung je Tick – der Grund für diese Phase); bei Tick 2.145 liegt dieselbe Einheit in den beiden Auflösungen 0,7 Einheiten auseinander. **Erste abweichende Entscheidung: Tick 2.160**, Einheit 100 verfolgt bei 16 Bit das Ziel
-  88, bei 24 Bit bleibt sie beim Ziel 87. Wie empfindlich das Ende ist, zeigt der Arenaradius (16 Bit / 24 Bit, Siegtick): 300: 2.895 / 2.895; 350: 10.980 / 13.230; 380: 49.035 / 45.720; 390: 5.640 / 11.325;
-  398: **10.200 / 10.200**; 399: 30.870 / 4.050; 400: 13.080 / kein Sieger in 200.000; 401: 12.060 / 12.435; 402: 40.275 / 31.470; 410: 19.860 / 76.605; 420: 16.425 / 29.865; 450: 10.380 / 15.825;
-  500: 40.020 / 10.335. Ein Schritt des Radius um eine Einheit verschiebt das Ende um eine Größenordnung, in beiden Auflösungen. Der Test benutzt seit `065067a` den Radius 398, dessen Match in beiden Auflösungen
-  denselben Verlauf nimmt.
-- **Referenzmatch (Retaildaten, 13 Fraktionen auf einem Kreis):** die **erste abweichende Entscheidung fällt in Tick 15**, beim ersten Befehl: Einheit 41 verfolgt bei 16 Bit das Ziel 73, bei 24 Bit das Ziel 71.
-  Die Basen stehen auf einem Kreis; die beiden Ziele stehen bei den zwei Nachbarbasen und sind von der Basis der Einheit praktisch gleich weit entfernt (aus den Zielpositionen der Befehle: 700,2 und 700,3 Einheiten). Welches „näher“ ist, entscheiden die letzten Stellen der Positionen. Von da an ist es ein
-  anderes Match. Ob es endet, hängt von den Produktionswürfen ab – Erhebung über 36 Treiber-Startwerte (`5EED0005` + 0…35, 45.000 Ticks, `SimTool reference-match --driver-seed … --record-only`):
+- **Three-way match (no random draw in the fixture; world and driver seed demonstrably have no influence):** up to tick 3,000 the courses are statistically the same (643 shots, 121 deaths in both
+  resolutions), the positions drift apart steadily: at 16 bits an accelerating unit holds the speed 0.50011 where the exact value is 0.5 and at 24 bits 0.50000 stands (the quantisation of the
+  acceleration per tick – the reason for this phase); at tick 2,145 the same unit lies 0.7 units apart in the two resolutions. **First deviating decision: tick 2,160**, unit 100 pursues at 16 bits the target
+  88, at 24 bits it stays with the target 87. How sensitive the end is, is shown by the arena radius (16 bits / 24 bits, victory tick): 300: 2,895 / 2,895; 350: 10,980 / 13,230; 380: 49,035 / 45,720; 390: 5,640 / 11,325;
+  398: **10,200 / 10,200**; 399: 30,870 / 4,050; 400: 13,080 / no winner in 200,000; 401: 12,060 / 12,435; 402: 40,275 / 31,470; 410: 19,860 / 76,605; 420: 16,425 / 29,865; 450: 10,380 / 15,825;
+  500: 40,020 / 10,335. A step of the radius by one unit shifts the end by an order of magnitude, in both resolutions. Since `065067a` the test uses the radius 398, whose match takes the same course
+  in both resolutions.
+- **Reference match (retail data, 13 factions on a circle):** the **first deviating decision falls in tick 15**, at the first command: unit 41 pursues at 16 bits the target 73, at 24 bits the target 71.
+  The bases stand on a circle; the two targets stand at the two neighbouring bases and are practically equally far away from the base of the unit (from the target positions of the commands: 700.2 and 700.3 units). Which is "nearer" is decided by the last places of the positions. From then on it is a
+  different match. Whether it ends depends on the production rolls – survey over 36 driver seeds (`5EED0005` + 0…35, 45,000 ticks, `SimTool reference-match --driver-seed … --record-only`):
 
-  | | 16 Bit | 24 Bit |
+  | | 16 bits | 24 bits |
   |---|---|---|
-  | entschieden | 32 von 36 | 31 von 36 |
-  | Siegtick kleinster / Median / größter | 11.955 / 15.158 / 24.495 | 11.910 / 16.995 / 29.745 |
-  | Sieger | GLA 29, AmericaSuperWeaponGeneral 2, America 1 | GLA 24, America 4, GLAToxinGeneral 1, GLAStealthGeneral 1, AmericaSuperWeaponGeneral 1 |
-  | nicht entschieden (Startwert + …) | 9, 17, 30, 34 | 0, 1, 6, 7, 31 |
+  | decided | 32 of 36 | 31 of 36 |
+  | victory tick smallest / median / largest | 11,955 / 15,158 / 24,495 | 11,910 / 16,995 / 29,745 |
+  | winner | GLA 29, AmericaSuperWeaponGeneral 2, America 1 | GLA 24, America 4, GLAToxinGeneral 1, GLAStealthGeneral 1, AmericaSuperWeaponGeneral 1 |
+  | not decided (seed + …) | 9, 17, 30, 34 | 0, 1, 6, 7, 31 |
 
-  Ein nicht entschiedenes Match hat in beiden Auflösungen dieselbe Anatomie (je eines untersucht, 16 Bit +9 und 24 Bit +6): eine US-Fraktion ist übrig und hält mehrere hundert Einheiten, die das, was von den
-  anderen bleibt, nicht angreifen können (GLA-Löcher, Chinooks). Das ist eine Schwäche des Szenarios, keine der Umstellung. Die Verteilungen sind mit 36 Startwerten nicht zu unterscheiden (Rangsummentest über
-  die Dauer, zweiseitig p = 0,10); eine Verschiebung der Größenordnung zehn Prozent ist damit **nicht ausgeschlossen** und wäre, soweit sie besteht, eine Folge exakterer Raten (bei 16 Bit lagen zwei
-  Katalogumrechnungen um 3,9 % und 4,9 % daneben, §11).
-- Mit dem bisherigen Treiber-Startwert und zwölf anderen Welt-Startwerten dauern die Matches bei 24 Bit durchweg länger (9 von 12 entschieden, Median 25.635; bei 16 Bit 12 von 12, Median 15.300): die
-  Produktionsfolge dieses einen Startwerts ist bei 24 Bit eine andere als bei 16 (der Treiber zieht je Produktionsgebäude und Versuch; sobald ein Gebäude einen Tick früher frei wird, verschiebt sich die Folge)
-  und eine langsame. Die zwölf Läufe sind deshalb keine unabhängigen Stichproben.
+  An undecided match has the same anatomy in both resolutions (one examined each, 16 bits +9 and 24 bits +6): a US faction is left and holds several hundred units that cannot attack what remains of the
+  others (GLA holes, Chinooks). That is a weakness of the scenario, not of the switch. The distributions cannot be distinguished with 36 seeds (rank-sum test over
+  the duration, two-sided p = 0.10); a shift of the order of ten percent is thereby **not ruled out** and would, as far as it exists, be a consequence of more exact rates (at 16 bits two
+  catalog conversions were off by 3.9 % and 4.9 %, §11).
+- With the previous driver seed and twelve other world seeds the matches last longer throughout at 24 bits (9 of 12 decided, median 25,635; at 16 bits 12 of 12, median 15,300): the
+  production sequence of this one seed is a different one at 24 bits than at 16 (the driver draws per production building and attempt; as soon as a building becomes free one tick earlier, the sequence shifts)
+  and a slow one. The twelve runs are therefore not independent samples.
 
-### 6.3 Was daraus gemacht wurde
+### 6.3 What was made of it
 
-`41c3bc0` (eigener Commit, eine Ursache, bei 16 Bit): `ReferenceMatchOptions.Standard` benutzt den Treiber-Startwert **`5EED0007`**. Dessen Match endet in beiden Auflösungen mit demselben Sieger (FactionGLA bei
-Tick 14.055 bzw. 17.805). Im Manifest änderte sich dabei nur der Lauf `reference-match`; die 49 anderen wurden neu gerechnet und sind byteidentisch. Das Referenzmatch bleibt ein Lauf, dessen Ende bei der nächsten
-gewollten Ergebnisänderung (Phase 23, 60 Hz) wieder kippen kann; `--driver-seed` und `--record-only` sind dafür da.
+`41c3bc0` (commit of its own, one cause, at 16 bits): `ReferenceMatchOptions.Standard` uses the driver seed **`5EED0007`**. Its match ends in both resolutions with the same winner (FactionGLA at
+tick 14,055 and 17,805 respectively). In the manifest only the run `reference-match` changed with that; the 49 others were recomputed and are byte-identical. The reference match remains a run whose end can tip again at the next
+intended change of results (Phase 23, 60 Hz); `--driver-seed` and `--record-only` are there for that.
 
-## 7. Vergleich der Ergebnisgrößen (16 Bit gegen 24 Bit)
+## 7. Comparison of the result quantities (16 bits against 24 bits)
 
-Vergleichsstand alt: `41c3bc0` (16 Bit, neuer Startwert); neu: `d7fca91`. Erhoben mit `SimTool reference-manifest results <content> --out <json> --commands <dir> --set full` auf beiden Ständen; die vollständigen
-Tabellen stehen in Anhang A. Mengen sind in Einheiten, nicht roh.
+Comparison state old: `41c3bc0` (16 bits, new seed); new: `d7fca91`. Collected with `SimTool reference-manifest results <content> --out <json> --commands <dir> --set full` on both states; the complete
+tables are in appendix A. Quantities are in units, not raw.
 
-### 7.1 Zusammenfassung
+### 7.1 Summary
 
-| Läufe | Ergebnis |
+| Runs | Result |
 |---|---|
-| Stresstest (216.000 Ticks, synthetisch) | Befehlsstrom identisch (914.394 Befehle), jede Ereigniszahl identisch (238.273 Tode), Endzustand leer wie zuvor |
-| 27 Missionsläufe (3.000 Ticks) | Ausgang, Objektzahl, ausgeführte Skripte und Aktionen in **allen 27 identisch**; Schüsse in 26 identisch, `mission_MD_GLA05` 568 → 564 (Tode 162 → 158) |
-| Skirmish-Übersicht (64 Karten, 3.000 Ticks) | 64 von 64 mit demselben Ausgang (alle am Tickbudget) |
-| drei 8-Spieler-Läufe (9.000 Ticks) und der kurze | alle am Tickbudget wie zuvor; Objektzahlen 173 → 165, 194 → 226, 179 → 170, 178 → 177 |
-| 16 KI-Läufe (bis 45.000 Ticks) | 12 entschieden wie zuvor; **11 mit demselben Ausgang, 5 mit anderem** (§7.2) |
-| Referenzmatch | derselbe Sieger, Tick 14.055 → 17.805 (§6) |
-| Kampagne: Zielfahrer (24 Karten, 60.000 Ticks) | Sieg 24/24 und Niederlage 24/24 wie zuvor; **auf allen 24 Karten dasselbe Endskript im selben Tick**, dieselbe Zahl von Eingriffen (Anhang C) |
-| Kampagne: Audit (24 Karten, 900 Ticks) | 24/24 deterministisch, 24/24 nach Speichern/Laden identisch, Endproben Sieg 13/24, Niederlage 15/24, 0 Treffer auf fehlende Typen – Karte für Karte wie zuvor |
-| `CampaignTool reachability` | Sieg sauber 24/24, Niederlage sauber 24/24; die Ausgabe ist byteidentisch zu der bei 16 Bit (statische Analyse, hängt nicht an der Auflösung) |
+| Stress test (216,000 ticks, synthetic) | command stream identical (914,394 commands), every event count identical (238,273 deaths), final state empty as before |
+| 27 mission runs (3,000 ticks) | outcome, object count, executed scripts and actions **identical in all 27**; shots identical in 26, `mission_MD_GLA05` 568 → 564 (deaths 162 → 158) |
+| Skirmish sweep (64 maps, 3,000 ticks) | 64 of 64 with the same outcome (all at the tick budget) |
+| three 8-player runs (9,000 ticks) and the short one | all at the tick budget as before; object counts 173 → 165, 194 → 226, 179 → 170, 178 → 177 |
+| 16 AI runs (up to 45,000 ticks) | 12 decided as before; **11 with the same outcome, 5 with a different one** (§7.2) |
+| Reference match | the same winner, tick 14,055 → 17,805 (§6) |
+| Campaign: objective driver (24 maps, 60,000 ticks) | victory 24/24 and defeat 24/24 as before; **on all 24 maps the same end script in the same tick**, the same number of interventions (appendix C) |
+| Campaign: audit (24 maps, 900 ticks) | 24/24 deterministic, 24/24 identical after save/load, end probes victory 13/24, defeat 15/24, 0 hits on missing types – map by map as before |
+| `CampaignTool reachability` | victory clean 24/24, defeat clean 24/24; the output is byte-identical to that at 16 bits (static analysis, does not depend on the resolution) |
 
-### 7.2 Die 16 KI-Läufe: jede Abweichung und ihre Ursache
+### 7.2 The 16 AI runs: every deviation and its cause
 
-In **jedem** der 16 Läufe (und der vier 8-Spieler-Läufe) ist der Befehlsstrom der KI über den ganzen Aufbau identisch – 149 bis 467 Befehle (Bauplätze mit Position, Produktion, Versorgung, Upgrades), 2.890 bis
-5.670 Ticks. Die Umrechnung trägt also Wirtschaft, Bau und Produktion unverändert. Der erste abweichende Befehl ist in jedem Lauf ein Befehl des Gefechts; danach ist es ein anderes Gefecht. Erster abweichender
-Befehl je Lauf (`results --commands`, Positionen in ganzen Einheiten, eine Einheit Differenz zählt nicht):
+In **every** one of the 16 runs (and of the four 8-player runs) the command stream of the AI is identical over the whole build-up – 149 to 467 commands (building sites with position, production, supply, upgrades), 2,890 to
+5,670 ticks. The conversion therefore carries economy, construction and production unchanged. The first deviating command is in every run a command of the battle; after that it is a different battle. First deviating
+command per run (`results --commands`, positions in whole units, one unit of difference does not count):
 
-| Lauf | Ausgang 16 Bit | Ausgang 24 Bit | erster abweichender Befehl (Nr., Tick) | worin (16 Bit → 24 Bit) |
+| Run | Outcome 16 bits | Outcome 24 bits | first deviating command (no., tick) | in what (16 bits → 24 bits) |
 |---|---|---|---|---|
-| AlpineAssault America–China | America @16.965 | America @16.665 | 250, Tick 3.613 | bei 24 Bit kommt ein Angriffsmarsch (Tick 3.613) vor der Spezialkraft der Gegenseite (Tick 3.614) |
-| AlpineAssault China–GLA | China @23.370 | China @10.710 | 149, Tick 2.938 | Angriffsmarsch derselben Einheit, Ziel (1308, 1697) → (1311, 1698) |
-| AlpineAssault ChinaTank–AirForce | **Patt** | **AirForce @14.610** | 154, Tick 3.553 | Angriffsmarsch derselben Einheit, Ziel (1314, 1775) → (1334, 1770) |
-| AlpineAssault GLA–America | America @8.895 | America @7.815 | 317, Tick 2.969 | Angriffsmarsch derselben Einheit, Ziel (1129, 884) → (1122, 886) |
-| ArmoredFury America–China | **America @19.095** | **Patt** | 216, Tick 2.893 | Angriffsmarsch, Einheit 65 → 84 |
-| ArmoredFury China–GLA | **Patt** | **China @42.840** | 226, Tick 2.999 | Angriffsmarsch derselben Einheit, Ziel (1897, 2786) → (1888, 2784) |
-| ArmoredFury ChinaTank–AirForce | Patt | Patt | 220, Tick 3.299 | Angriffsmarsch, Einheit 124 → 125 |
-| ArmoredFury GLA–America | America @29.865 | America @28.800 | 386, Tick 3.794 | derselbe Einstiegsbefehl, Tick 3.809 → 3.794 |
-| BitterWinter America–China | **America @33.750** | **Patt** | 311, Tick 4.258 | Angriffsmarsch, Einheit 129 → 130 |
-| BitterWinter China–GLA | China @17.220 | China @7.950 | 293, Tick 3.644 | der Angriffsmarsch von Tick 3.644 entfällt bei 24 Bit |
-| BitterWinter ChinaTank–AirForce | Patt | Patt | 357, Tick 4.679 | Angriffsmarsch, Einheit 128 → 127 |
-| BitterWinter GLA–America | America @8.895 | America @9.075 | 426, Tick 3.583 | Angriffsmarsch derselben Einheit, Ziel (998, 1533) → (1010, 1544) |
-| DeathValley America–China | America @9.330 | America @9.390 | 326, Tick 4.078 | bei 24 Bit kommt ein Angriffsmarsch (Tick 4.078) vor einer Spezialfähigkeit (Tick 4.079) |
-| DeathValley China–GLA | China @8.565 | China @8.580 | 382, Tick 3.659 | Angriffsmarsch, Einheit 166 → 165 |
-| DeathValley ChinaTank–AirForce | **ChinaTank @31.770** | **AirForce @10.635** | 466, Tick 5.594 | Angriffsmarsch, Tick 5.669 → 5.594, Einheit 432 → 388 |
-| DeathValley GLA–America | America @8.175 | America @8.475 | 467, Tick 3.343 | Angriffsmarsch, Einheit 44 → 41 |
+| AlpineAssault America–China | America @16,965 | America @16,665 | 250, tick 3,613 | at 24 bits an attack-move (tick 3,613) comes before the special power of the opposing side (tick 3,614) |
+| AlpineAssault China–GLA | China @23,370 | China @10,710 | 149, tick 2,938 | attack-move of the same unit, target (1308, 1697) → (1311, 1698) |
+| AlpineAssault ChinaTank–AirForce | **stalemate** | **AirForce @14,610** | 154, tick 3,553 | attack-move of the same unit, target (1314, 1775) → (1334, 1770) |
+| AlpineAssault GLA–America | America @8,895 | America @7,815 | 317, tick 2,969 | attack-move of the same unit, target (1129, 884) → (1122, 886) |
+| ArmoredFury America–China | **America @19,095** | **stalemate** | 216, tick 2,893 | attack-move, unit 65 → 84 |
+| ArmoredFury China–GLA | **stalemate** | **China @42,840** | 226, tick 2,999 | attack-move of the same unit, target (1897, 2786) → (1888, 2784) |
+| ArmoredFury ChinaTank–AirForce | stalemate | stalemate | 220, tick 3,299 | attack-move, unit 124 → 125 |
+| ArmoredFury GLA–America | America @29,865 | America @28,800 | 386, tick 3,794 | the same enter command, tick 3,809 → 3,794 |
+| BitterWinter America–China | **America @33,750** | **stalemate** | 311, tick 4,258 | attack-move, unit 129 → 130 |
+| BitterWinter China–GLA | China @17,220 | China @7,950 | 293, tick 3,644 | the attack-move of tick 3,644 is absent at 24 bits |
+| BitterWinter ChinaTank–AirForce | stalemate | stalemate | 357, tick 4,679 | attack-move, unit 128 → 127 |
+| BitterWinter GLA–America | America @8,895 | America @9,075 | 426, tick 3,583 | attack-move of the same unit, target (998, 1533) → (1010, 1544) |
+| DeathValley America–China | America @9,330 | America @9,390 | 326, tick 4,078 | at 24 bits an attack-move (tick 4,078) comes before a special ability (tick 4,079) |
+| DeathValley China–GLA | China @8,565 | China @8,580 | 382, tick 3,659 | attack-move, unit 166 → 165 |
+| DeathValley ChinaTank–AirForce | **ChinaTank @31,770** | **AirForce @10,635** | 466, tick 5,594 | attack-move, tick 5,669 → 5,594, unit 432 → 388 |
+| DeathValley GLA–America | America @8,175 | America @8,475 | 467, tick 3,343 | attack-move, unit 44 → 41 |
 
-Die Abweichungen, die über „Endtick in der Nähe“ hinausgehen – fünf andere Ausgänge (zwei Patts werden Siege, zwei Siege werden Patts, **ein Sieger wechselt**: DeathValley ChinaTank–AirForce) und zwei Siege zum
-halben Tick (China–GLA auf Alpine Assault und Bitter Winter) – haben alle dieselbe benannte Ursache: **chaotische Verstärkung einer Rundung.** Beleg ist die Tabelle: bis zum genannten Tick sind die Befehle gleich,
-der erste Unterschied ist ein Angriffsbefehl, dessen Ziel (die Position eines gegnerischen Objekts zu diesem Tick) um wenige Einheiten anders liegt oder dessen Einheit eine andere ist (die Einheiten verlassen die
-Fabriken in anderer Reihenfolge oder einen Tick versetzt). Solche Unterschiede entstehen, weil Beträge je Tick bei 24 Bit exakter sind (im synthetischen Fall gemessen: 0,6 Einheiten Positionsunterschied nach
-2.100 Ticks). Die Richtung ist nicht einheitlich: von den neun Läufen, die in beiden Auflösungen mit demselben Sieger enden, enden fünf früher und vier später, die Ereignisraten je 1.000 Ticks (Schüsse, Treffer, Tode, Produktionen) schwanken in beide Richtungen. Die Zahl der
-entschiedenen Läufe bleibt 12 von 16. Ein Fehler der Umstellung hätte sich im Aufbau gezeigt, in den Missionen oder im Stresstest; dort ist alles gleich. **Nicht geprüft** ist, ob die neuen Ausgänge „besser“ sind
-(Balance); die KI-Tabelle in `docs/SIMULATION-CORE.md` §19/§36 ist damit überholt.
+The deviations that go beyond "end tick nearby" – five different outcomes (two stalemates become victories, two victories become stalemates, **one winner changes**: DeathValley ChinaTank–AirForce) and two victories at
+half the tick (China–GLA on Alpine Assault and Bitter Winter) – all have the same named cause: **chaotic amplification of a rounding.** The evidence is the table: up to the named tick the commands are the same,
+the first difference is an attack command whose target (the position of an enemy object at this tick) lies a few units differently or whose unit is a different one (the units leave the
+factories in a different order or offset by one tick). Such differences arise because amounts per tick are more exact at 24 bits (measured in the synthetic case: 0.6 units of position difference after
+2,100 ticks). The direction is not uniform: of the nine runs that end with the same winner in both resolutions, five end earlier and four later, the event rates per 1,000 ticks (shots, hits, deaths, productions) fluctuate in both directions. The number of
+decided runs stays 12 of 16. An error of the switch would have shown in the build-up, in the missions or in the stress test; there everything is the same. **Not checked** is whether the new outcomes are "better"
+(balance); the AI table in `docs/SIMULATION-CORE.md` §19/§36 is thereby superseded.
 
-## 8. Determinismus und Leistung
+## 8. Determinism and performance
 
-### 8.1 Matrix dieses Rechners mit dem neuen Manifest
+### 8.1 Matrix of this machine with the new manifest
 
-Jede Zeile: `input-manifest check` und `reference-manifest check --set full` gegen die eingecheckten Dateien von `d7fca91`.
+Every row: `input-manifest check` and `reference-manifest check --set full` against the checked-in files of `d7fca91`.
 
-| Zeile | Einstellung | Eingänge | Rechnung | Ergebnis |
+| Row | Setting | Inputs | Computation | Result |
 |---|---|---|---|---|
-| Release, Lauf 1 | – | identisch | 50/50 (full) | **identisch** |
-| Release, Lauf 2 | derselbe Aufruf noch einmal | identisch | 50/50 (full) | **identisch** |
-| Debug-Build | `dotnet build -c Debug tools/CnCNew.SimTool` | identisch | 9/9 (**quick**) | **identisch** |
-| Tiered Compilation aus | `DOTNET_TieredCompilation=0` | identisch | 50/50 (full) | **identisch** |
-| Tiered PGO aus | `DOTNET_TieredPGO=0` | identisch | 50/50 (full) | **identisch** |
-| ReadyToRun aus | `DOTNET_ReadyToRun=0` | identisch | 50/50 (full) | **identisch** |
-| Hardware-Intrinsics aus | `DOTNET_EnableHWIntrinsic=0` | identisch | 50/50 (full) | **identisch** |
-| AVX2 aus | `DOTNET_EnableAVX2=0` | identisch | 50/50 (full) | **identisch** |
-| Server-GC | `DOTNET_gcServer=1` | identisch | 50/50 (full) | **identisch** |
-| Kultur `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identisch | 50/50 (full) | **identisch** |
-| Kultur `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identisch | 50/50 (full) | **identisch** |
-| Kultur `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identisch | 50/50 (full) | **identisch** |
-| Linux auf demselben Rechner | WSL2 (Ubuntu, Kernel 6.6.87), `dotnet publish -r linux-x64 --self-contained`, Inhalt über `/mnt/c` | identisch | 50/50 (full) | **identisch** |
+| Release, run 1 | – | identical | 50/50 (full) | **identical** |
+| Release, run 2 | the same call once more | identical | 50/50 (full) | **identical** |
+| Debug build | `dotnet build -c Debug tools/CnCNew.SimTool` | identical | 9/9 (**quick**) | **identical** |
+| Tiered compilation off | `DOTNET_TieredCompilation=0` | identical | 50/50 (full) | **identical** |
+| Tiered PGO off | `DOTNET_TieredPGO=0` | identical | 50/50 (full) | **identical** |
+| ReadyToRun off | `DOTNET_ReadyToRun=0` | identical | 50/50 (full) | **identical** |
+| Hardware intrinsics off | `DOTNET_EnableHWIntrinsic=0` | identical | 50/50 (full) | **identical** |
+| AVX2 off | `DOTNET_EnableAVX2=0` | identical | 50/50 (full) | **identical** |
+| Server GC | `DOTNET_gcServer=1` | identical | 50/50 (full) | **identical** |
+| Culture `de-DE` | `CNCNEW_TEST_CULTURE=de-DE` | identical | 50/50 (full) | **identical** |
+| Culture `tr-TR` | `CNCNEW_TEST_CULTURE=tr-TR` | identical | 50/50 (full) | **identical** |
+| Culture `ar-SA` | `CNCNEW_TEST_CULTURE=ar-SA` | identical | 50/50 (full) | **identical** |
+| Linux on the same machine | WSL2 (Ubuntu, kernel 6.6.87), `dotnet publish -r linux-x64 --self-contained`, content via `/mnt/c` | identical | 50/50 (full) | **identical** |
 
-Dreizehn Zeilen, keine Abweichung in einem Feld. Das neue Manifest trägt kein falsches Wiederholungs-Flag (jeder Lauf: Lauf 2 identisch, Fortsetzung aus dem Snapshot identisch; jede Mission zusätzlich nach
-Speichern/Laden identisch zum ununterbrochenen Lauf). Laufzeiten des vollen Satzes: 439 s allein mit sechs Arbeitern, 585 bis 1.586 s mit vier Arbeitern neben anderen eigenen Läufen, 2.251 s unter WSL.
+Thirteen rows, no deviation in any field. The new manifest carries no false repetition flag (every run: run 2 identical, continuation from the snapshot identical; every mission additionally identical after
+save/load to the uninterrupted run). Run times of the full set: 439 s alone with six workers, 585 to 1,586 s with four workers beside other own runs, 2,251 s under WSL.
 
-Offen wie in `docs/DETERMINISM.md`: ein zweiter physischer Rechner mit anderer CPU, eine andere .NET-Version.
+Open as in `docs/DETERMINISM.md`: a second physical machine with a different CPU, a different .NET version.
 
-### 8.2 Leistung, Rücken an Rücken
+### 8.2 Performance, back to back
 
-Absolute Zahlen anderer Tage sind auf diesem Rechner nicht vergleichbar; verglichen wird deshalb im selben Zeitfenster, abwechselnd, je zweimal, ohne eigene Läufe daneben (ein zweiter Agent arbeitete auf demselben
-Rechner – die Messung ist ruhig, soweit ich es steuern konnte, nicht darüber hinaus). `SimTool perf … --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 12000` und
-`perf-mission … --map "Maps/MD_GLA05/MD_GLA05.map" --ticks 3000`; Mittel je Tick in Mikrosekunden, mit Beobachter.
+Absolute numbers of other days are not comparable on this machine; the comparison is therefore made in the same time window, alternately, twice each, without own runs beside them (a second agent was working on the same
+machine – the measurement is quiet as far as I could control it, not beyond that). `SimTool perf … --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 12000` and
+`perf-mission … --map "Maps/MD_GLA05/MD_GLA05.map" --ticks 3000`; mean per tick in microseconds, with observer.
 
-**Vorarbeit gegen den Stand der Phase 20** (beide 16 Bit, dieselben Endhashes `ADC3E2661AF15B6D` und `826CCD82C8536DC2`, ruhiges Fenster, je zwei Läufe):
+**Preparatory work against the state of Phase 20** (both 16 bits, the same final hashes `ADC3E2661AF15B6D` and `826CCD82C8536DC2`, quiet window, two runs each):
 
-| Lauf | Phase 20 (`4c45764`) | Vorarbeit (`a0e7b23`) |
+| Run | Phase 20 (`4c45764`) | Preparatory work (`a0e7b23`) |
 |---|---|---|
-| 8 Spieler, Twilight Flame, 12.000 Ticks: ganzer Tick | 1.670 / 1.649 | 1.666 / 1.647 |
-| – Phase „Vision“ (Sichtkreise) | 147 / 140 | 146 / 135 |
-| `MD_GLA05`, 3.000 Ticks | 4.583 / 4.569 | 4.547 / 4.601 |
+| 8 players, Twilight Flame, 12,000 ticks: whole tick | 1,670 / 1,649 | 1,666 / 1,647 |
+| – phase "Vision" (vision circles) | 147 / 140 | 146 / 135 |
+| `MD_GLA05`, 3,000 ticks | 4,583 / 4,569 | 4,547 / 4,601 |
 
-Mit den 128-Bit-Quadraten aus `756e978` hatte die Sichtphase 187 / 171 gegen 132 / 135 gebraucht (ganzer Tick 1.742 / 1.642 gegen 1.563 / 1.587); deshalb der Test in Maschinenworten (`a0e7b23`).
+With the 128-bit squares from `756e978` the vision phase had needed 187 / 171 against 132 / 135 (whole tick 1,742 / 1,642 against 1,563 / 1,587); hence the test in machine words (`a0e7b23`).
 
-**Umstellung gegen den Stand der Phase 20** (16 Bit gegen 24 Bit):
+**Switch against the state of Phase 20** (16 bits against 24 bits):
 
-| Lauf | gleiche Arbeit? | Phase 20, 16 Bit | Umstellung, 24 Bit |
+| Run | same work? | Phase 20, 16 bits | switch, 24 bits |
 |---|---|---|---|
-| Stresstest, 216.000 Ticks, µs je Tick im ersten Lauf (`SimTool stress`) | **ja** (Befehlsstrom und jede Ereigniszahl identisch) | 57,6 / 57,7 / 58,3 | **57,1 / 56,7 / 56,7** |
-| Stresstest gekürzt, 40.000 Ticks, vier Läufe | ja | 44,0 – 51,4 (Median 44,9) | 44,0 – 44,8 (Median 44,1) |
-| `MD_USA05`, 3.000 Ticks, sechs Läufe | ja (alle Zähler identisch) | 2.582 – 3.899, Mittel 3.233 | 2.820 – 3.894, Mittel 3.330 |
-| `MD_GLA05`, 3.000 Ticks, fünf Läufe | fast (564 statt 568 Schüsse) | 4.537 – 5.865, Mittel 4.957 | 4.261 – 6.068, Mittel 5.106 |
-| 8 Spieler, Twilight Flame, 12.000 Ticks, fünf Läufe | nein (ab Tick 2.773 ein anderes Gefecht) | 1.597 – 1.944, Mittel 1.765 | 1.612 – 1.940, Mittel 1.772 |
+| Stress test, 216,000 ticks, µs per tick in the first run (`SimTool stress`) | **yes** (command stream and every event count identical) | 57.6 / 57.7 / 58.3 | **57.1 / 56.7 / 56.7** |
+| Stress test shortened, 40,000 ticks, four runs | yes | 44.0 – 51.4 (median 44.9) | 44.0 – 44.8 (median 44.1) |
+| `MD_USA05`, 3,000 ticks, six runs | yes (all counters identical) | 2,582 – 3,899, mean 3,233 | 2,820 – 3,894, mean 3,330 |
+| `MD_GLA05`, 3,000 ticks, five runs | almost (564 instead of 568 shots) | 4,537 – 5,865, mean 4,957 | 4,261 – 6,068, mean 5,106 |
+| 8 players, Twilight Flame, 12,000 ticks, five runs | no (from tick 2,773 a different battle) | 1,597 – 1,944, mean 1,765 | 1,612 – 1,940, mean 1,772 |
 
-Der sauberste Vergleich ist der Stresstest: dieselbe Arbeit, drei abwechselnde Läufe in einem ruhigen Fenster, 24 Bit ein bis zwei Prozent **schneller**. In den Missionen und im Gefecht streuen die Läufe
-desselben Programms um ± 15 % (ein zweiter Agent rechnete zeitweise mit), die Mittel liegen bei + 0,4 % (Gefecht) und + 3 % (Missionen) – kleiner als die Streuung. **Belegt ist: kein messbarer Anstieg der
-Rechenkosten; nicht belegt ist eine Aussage auf wenige Prozent genau für Missionen.** Die Sichtphase kostet bei 24 Bit, was sie bei 16 Bit kostete (138 – 176 µs gegen 137 – 176 µs im selben Fenster).
-Voraussetzung dafür waren die für die Bitzahl hergeleiteten Routinen (§2.1): mit den Routinen der Phase 19 hätte bei 24 Bit jedes Abstandsquadrat über 181 Einheiten die 128-Bit-Softwarepfade genommen.
+The cleanest comparison is the stress test: the same work, three alternating runs in a quiet window, 24 bits one to two percent **faster**. In the missions and in the skirmish the runs
+of the same program scatter by ± 15 % (a second agent was computing at times), the means are at + 0.4 % (skirmish) and + 3 % (missions) – smaller than the scatter. **Verified is: no measurable increase of the
+computing costs; not verified is a statement accurate to a few percent for missions.** The vision phase costs at 24 bits what it cost at 16 bits (138 – 176 µs against 137 – 176 µs in the same window).
+The prerequisite for that were the routines derived for the number of bits (§2.1): with the routines of Phase 19 every squared distance above 181 units would have taken the 128-bit software paths at 24 bits.
 
-**Snapshotgröße:** über alle Snapshots des Manifests, die alt und neu im selben Tick liegen (Missionen, 8-Spieler-Läufe, Stresstest), 118.737.497 → 119.710.407 Byte, **+0,82 %**; Stresstest bei Tick 108.000
-11.862.560 → 12.095.586 Byte (+2,0 %), `mission_MD_GLA05` 9.038.371 → 9.071.782 Byte (+0,4 %). Die Zahlen werden länger, der Anteil der Festkommawerte an einem Snapshot ist klein.
+**Snapshot size:** over all snapshots of the manifest that lie in the same tick old and new (missions, 8-player runs, stress test), 118,737,497 → 119,710,407 bytes, **+0.82 %**; stress test at tick 108,000
+11,862,560 → 12,095,586 bytes (+2.0 %), `mission_MD_GLA05` 9,038,371 → 9,071,782 bytes (+0.4 %). The numbers get longer, the share of the fixed-point values in a snapshot is small.
 
-## 9. Golden-Hashes und Tests außerhalb der Simulation
+## 9. Golden hashes and tests outside the simulation
 
-- **Geändert, als Folge der einen Ursache** (im Umstellungs-Commit): der Golden-Hash der Knochentabelle der Retail-Flugfelder (`DeterminismTests.BoneTableGolden`, `93D5819B…F1DA47` → `EA1915EB…DAC858`; die
-  Tabelle wird als Rohwerte gehasht, die Posen sind dieselben Zahlen). Die Schranke des Fahrwerk-Tests (`ObjectTests.ChassisFollowsMotion`): das Wanken überschwingt seine Grenze um einen Schritt, drei Schritte von
-  4 · (1/30) sind exakt 0,4 = Grenze + 0,1; seit die Beschleunigung je Tick auf sieben Stellen 1/30 ist, trifft die Spitze diesen Wert auf das letzte Bit eines `float` (0,4000001), die Schranke lässt das jetzt zu.
-- **Unverändert:** alle übrigen Tests der Präsentation und der Spielschicht (UI-Golden-Hashes, Terrain, FX, Eingabe, HUD, Shell, Kampagne), die drei Szenen-Audits (`scripts/audit-scenarios.ps1`: `capture-building`,
-  `tank-duel`, `jet-strafe` – alle Prüfungen bestanden).
-- Kein Mensch hat eine Darstellung dieses Stands angesehen. Positionen sind feiner; dass nichts sichtbar anders ist, ist nicht belegt.
+- **Changed, as a consequence of the one cause** (in the switch commit): the golden hash of the bone table of the retail airfields (`DeterminismTests.BoneTableGolden`, `93D5819B…F1DA47` → `EA1915EB…DAC858`; the
+  table is hashed as raw values, the poses are the same numbers). The bound of the suspension test (`ObjectTests.ChassisFollowsMotion`): the roll overshoots its limit by one step, three steps of
+  4 · (1/30) are exactly 0.4 = limit + 0.1; since the acceleration per tick is 1/30 to seven places, the peak hits this value to the last bit of a `float` (0.4000001), the bound now allows that.
+- **Unchanged:** all other tests of the presentation and of the game layer (UI golden hashes, terrain, FX, input, HUD, shell, campaign), the three scene audits (`scripts/audit-scenarios.ps1`: `capture-building`,
+  `tank-duel`, `jet-strafe` – all checks passed).
+- No human has looked at a presentation of this state. Positions are finer; that nothing is visibly different is not verified.
 
-## 10. Prüfung am Ende
+## 10. Verification at the end
 
-Alles am Stand `d7fca91` (die Dokumentation kam danach und ändert keinen Code):
+Everything at the state `d7fca91` (the documentation came afterwards and changes no code):
 
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| `SimTool input-manifest check`, `reference-manifest check --set full` | identisch, zweimal hintereinander, dazu die Matrix (§8.1) |
-| Simulationstests (Debug) ohne und mit `--content-dir` | bestanden (407 Tests) |
-| Simulationstests `-c Release -- --long` (216.000 Ticks) | bestanden |
-| `SimTool stress` | Endhash `56882F763EABEF67`, Kette `754FA4DCB9A41DF7`, Lauf 2/3 und Fortsetzung identisch |
-| `CnCNew.Game.Tests` (Release, `--content-dir`) | bestanden (der erste volle Lauf scheiterte am Golden-Hash der Knochentabelle, §9; nach der Korrektur im Umstellungs-Commit voller Lauf bestanden) |
-| `CnCNew.Presentation.Tests` | bestanden (nach der Schranke aus §9) |
-| Archives, Content, Data (ohne und mit Inhalt), IO, Images, Formats, Import, Ui, W3D (mit Inhalt), Audio (mit Inhalt) | alle bestanden |
-| `IniTool compat-check … baselines/compatibility.json` | 751 Einträge, stimmt (die Definitionsschicht kennt `Fixed` nicht; der Definitions-Snapshot ist von der Umstellung nicht berührt) |
-| `SimTool audit-modules` / `audit-coverage` | 183 von 205 Modulen, 16.558 von 19.553 Verwendungen; 2.115 von 2.115 Objekten erzeugt |
-| `scripts/audit-scenarios.ps1` | alle drei Szenen bestanden |
-| `CampaignTool audit --ticks 900`, `drive --ticks 60000 --explain` je Karte (24), `reachability` | §7.1; keine Ausnahme, kein Zeitlimit |
-| Sauberer Build `dotnet build CnCNew.slnx` (`bin`/`obj` von `CnCNew.Client.Stride` gelöscht), `dotnet build tools/CnCNew.UiRenderTool` | je 0 Warnungen, 0 Fehler |
-| `scripts/audit-vulnerable.ps1` | keine bekannten Anfälligkeiten |
+| `SimTool input-manifest check`, `reference-manifest check --set full` | identical, twice in a row, plus the matrix (§8.1) |
+| Simulation tests (Debug) without and with `--content-dir` | passed (407 tests) |
+| Simulation tests `-c Release -- --long` (216,000 ticks) | passed |
+| `SimTool stress` | final hash `56882F763EABEF67`, chain `754FA4DCB9A41DF7`, run 2/3 and continuation identical |
+| `CnCNew.Game.Tests` (Release, `--content-dir`) | passed (the first full run failed on the golden hash of the bone table, §9; after the correction in the switch commit full run passed) |
+| `CnCNew.Presentation.Tests` | passed (after the bound from §9) |
+| Archives, Content, Data (without and with content), IO, Images, Formats, Import, Ui, W3D (with content), Audio (with content) | all passed |
+| `IniTool compat-check … baselines/compatibility.json` | 751 entries, matches (the definition layer does not know `Fixed`; the definition snapshot is not touched by the switch) |
+| `SimTool audit-modules` / `audit-coverage` | 183 of 205 modules, 16,558 of 19,553 uses; 2,115 of 2,115 objects created |
+| `scripts/audit-scenarios.ps1` | all three scenes passed |
+| `CampaignTool audit --ticks 900`, `drive --ticks 60000 --explain` per map (24), `reachability` | §7.1; no exception, no time limit |
+| Clean build `dotnet build CnCNew.slnx` (`bin`/`obj` of `CnCNew.Client.Stride` deleted), `dotnet build tools/CnCNew.UiRenderTool` | 0 warnings, 0 errors each |
+| `scripts/audit-vulnerable.ps1` | no known vulnerabilities |
 
-## 11. Probelauf bei 60 und 120 Hz
+## 11. Trial run at 60 and 120 Hz
 
-`SimTool rate-audit <content> --tick-rate N` am Stand der Vorarbeit (16 Bit, bestätigt die Zahlen der Phase 20) und am Stand der Umstellung (24 Bit):
+`SimTool rate-audit <content> --tick-rate N` at the state of the preparatory work (16 bits, confirms the numbers of Phase 20) and at the state of the switch (24 bits):
 
-| Zähler | 60 Hz, 16 Bit | 60 Hz, 24 Bit | 120 Hz, 16 Bit | 120 Hz, 24 Bit |
+| Counter | 60 Hz, 16 bits | 60 Hz, 24 bits | 120 Hz, 16 bits | 120 Hz, 24 bits |
 |---|---|---|---|---|
-| Umrechnungen beim Katalogbau, die auf null runden | 0 | **0** | 1 (`NapalmBombLocomotor`, 0,1/s²) | **0** |
-| Umrechnungen mit über 1 % / über 10 % Fehler | 5 / 0 | **0 / 0** | 39 / 1 | **0 / 0** |
-| schlechtester Fehler einer Umrechnung | 9,863 % | **0,007 %** | 100 % | **0,422 %** (dieselbe 0,1/s²: 117 Rohschritte) |
-| Katalogwerte: bei 30 Hz ≠ 0, bei der Rate 0 | 0 | 0 | 0 | 0 |
-| Katalogwerte mit über 1 % bis 10 % Fehler gegen den skalierten 30-Hz-Wert | 1 | **0** | 41 in 5 Feldern | **0** |
-| Katalogwerte mit über 10 % | 0 | 0 | 0 | 0 |
-| Katalogwerte unter acht signifikanten Bits | 46 in 5 Feldern | **0** | 321 in 7 Feldern | **0** |
+| conversions during the catalog build that round to zero | 0 | **0** | 1 (`NapalmBombLocomotor`, 0.1/s²) | **0** |
+| conversions with over 1 % / over 10 % error | 5 / 0 | **0 / 0** | 39 / 1 | **0 / 0** |
+| worst error of a conversion | 9.863 % | **0.007 %** | 100 % | **0.422 %** (the same 0.1/s²: 117 raw steps) |
+| catalog values: ≠ 0 at 30 Hz, 0 at the rate | 0 | 0 | 0 | 0 |
+| catalog values with over 1 % up to 10 % error against the scaled 30 Hz value | 1 | **0** | 41 in 5 fields | **0** |
+| catalog values with over 10 % | 0 | 0 | 0 | 0 |
+| catalog values below eight significant bits | 46 in 5 fields | **0** | 321 in 7 fields | **0** |
 
-Bei 30 Hz selbst: 16 Bit hatte zwei Umrechnungen über 1 % (4,912 % bei `DegreesPerSecondToRadiansPerTick`, 3,870 % bei `PerSecondSquaredToPerTickSquared`), 24 Bit hat keine (schlechtester Fall 0,007 %). Das Ziel
-der Phase – null Fälle bei 60 Hz – ist erreicht; bei 120 Hz ebenfalls.
+At 30 Hz itself: 16 bits had two conversions above 1 % (4.912 % with `DegreesPerSecondToRadiansPerTick`, 3.870 % with `PerSecondSquaredToPerTickSquared`), 24 bits has none (worst case 0.007 %). The goal
+of the phase – zero cases at 60 Hz – is reached; at 120 Hz likewise.
 
-Laufzeitzähler (`--time-probe`, erster Lauf jedes Befehls, 24 Bit):
+Runtime counters (`--time-probe`, first run of every command, 24 bits):
 
-Zwölf Läufe (Referenzmatch, zwei KI-Läufe auf Alpine Assault, `MD_USA05`, `MD_GLA05`, `GC_ChemGeneral`, je bei 60 und 120 Hz); die Tabelle steht in `docs/TICKRATE-MIGRATION.md` §11.5.
+Twelve runs (reference match, two AI runs on Alpine Assault, `MD_USA05`, `MD_GLA05`, `GC_ChemGeneral`, each at 60 and 120 Hz); the table is in `docs/TICKRATE-MIGRATION.md` §11.5.
 
-| Zähler | Summe der Aufrufe über die zwölf Läufe | Treffer |
+| Counter | Sum of the calls over the twelve runs | Hits |
 |---|---:|---:|
-| `RunTimeRoundedToZero` (Betrag je Tick wird null) | 579.635 | **0** |
-| `MinimumOneFrame` (Untergrenze „ein Bild“ greift) | 21.570 | 48 (dieselben Stellen wie in Phase 20: Dauer 0 wird ein Bild) |
-| `OffGrid` (Dauer abseits des Rasters) | 454.979 | **0** |
+| `RunTimeRoundedToZero` (amount per tick becomes zero) | 579,635 | **0** |
+| `MinimumOneFrame` (lower limit "one frame" takes effect) | 21,570 | 48 (the same places as in Phase 20: duration 0 becomes one frame) |
+| `OffGrid` (duration off the grid) | 454,979 | **0** |
 
-Jeder Lauf ist deterministisch (zweiter frischer Lauf und Fortsetzung gleich; beim Referenzmatch nur aufgenommen), keiner wirft. Sollwert und Ergebnis: **bei 60 Hz null Fälle von Rundung auf null** – beim
-Katalogbau und zur Laufzeit; es bleibt kein Fall zu benennen. Nicht gezählt bleibt, was Module ohne den Zeitdienst je Tick bilden.
+Every run is deterministic (second fresh run and continuation the same; with the reference match only recorded), none throws. Target and result: **at 60 Hz zero cases of rounding to zero** – during the
+catalog build and at runtime; no case remains to be named. Not counted remains what modules form per tick without the time service.
 
-## 12. Was nicht belegt ist
+## 12. What is not verified
 
-- Die Überlaufwege aus §5 sind behoben (§5a). Offen bleibt, was dort unter „nur berichtet“ steht: Abstände zwischen Positionen, die weiter als rund 524.000 Einheiten auseinanderliegen
-  (ein Befehl mit beliebigen Zielkoordinaten wird nicht geprüft), und zwei Stellvertreterwerte im Code.
-- Ein zweiter physischer Rechner, eine andere CPU, eine andere .NET-Version (wie in `docs/DETERMINISM.md`).
-- Ob die neuen KI-Ausgänge und das längere Referenzmatch die Balance verschieben; die Erhebung über 36 Startwerte schließt eine Verschiebung der Dauer um rund zehn Prozent nicht aus.
-- Jede Darstellung: kein Mensch hat diesen Stand gesehen oder gespielt.
-- Die Leistung ist im selben Zeitfenster verglichen, nicht auf einer nachweislich ruhigen Maschine.
+- The overflow paths from §5 are fixed (§5a). What stands there under "only reported" remains open: distances between positions that lie further apart than about 524,000 units
+  (a command with arbitrary target coordinates is not checked), and two placeholder values in the code.
+- A second physical machine, a different CPU, a different .NET version (as in `docs/DETERMINISM.md`).
+- Whether the new AI outcomes and the longer reference match shift the balance; the survey over 36 seeds does not rule out a shift of the duration by about ten percent.
+- Every presentation: no human has seen or played this state.
+- The performance is compared in the same time window, not on a demonstrably quiet machine.
 
-## 13. Fallstricke
+## 13. Pitfalls
 
-- **Die Simulation ist nicht `checked`.** Nur `Fixed` wirft. Wer auf `.Raw` rechnet, schreibt `checked(…)` oder rechnet in 128 Bit; ein Quadrat zweier Rohwerte passt bei 24 Bit schon für 180 Einheiten nicht mehr
-  in ein `long`.
-- **Eine Reichweite, ein Radius oder eine Grenze wird nie mit `*` quadriert**, sondern über `SquaredReach` verglichen (§5a); die Quelltextregel `Tests.SquaredReachSourceRules` hält das fest. Das Quadrat eines
-  Werts über 741.455 passt nicht. `SimTool rate-audit <content> --ranges` listet den größten Wert jedes Felds; Sentinels im Code („überall“ = 100.000) haben quadriert nur den Faktor 55 Abstand.
-- **`Fixed.ToDecimal()` ist über 65.536 Einheiten nicht mehr exakt** (24 Binärstellen brauchen 24 Dezimalstellen, ein `decimal` hat 28 bis 29 gültige); die Rundung liegt weit unter einem halben Rohschritt,
-  `FromDecimal(ToDecimal(x))` gibt weiter `x`.
-- **Szenarien mit gleich starken Seiten sind kein Maßstab für „nur Rundung“.** Ihr Ende ist eine Kippentscheidung; der Vergleich braucht eine Erhebung über Startwerte oder Größen, die vor dem Kippen liegen
-  (Befehlsstrom des Aufbaus, Ereignisraten).
-- Vergleich zweier Auflösungen oder Raten: `reference-manifest results --commands <dir>` auf beiden Ständen, dann die erste abweichende Zeile je Lauf – nicht die Hashes.
-- Ein Probe-Build mit anderer Bitzahl: die Konstante ändern, in ein eigenes Verzeichnis bauen (`dotnet build -o`), zurückstellen. Alte Replays und Snapshots liest ein solcher Build nicht (Versionen).
+- **The simulation is not `checked`.** Only `Fixed` throws. Whoever computes on `.Raw` writes `checked(…)` or computes in 128 bits; a square of two raw values at 24 bits no longer fits into a `long` already for 180 units.
+- **A range, a radius or a limit is never squared with `*`**, but compared via `SquaredReach` (§5a); the source rule `Tests.SquaredReachSourceRules` records that. The square of a
+  value above 741,455 does not fit. `SimTool rate-audit <content> --ranges` lists the largest value of every field; sentinels in the code ("everywhere" = 100,000) have, squared, only the factor 55 of margin.
+- **`Fixed.ToDecimal()` is no longer exact above 65,536 units** (24 binary places need 24 decimal places, a `decimal` has 28 to 29 significant ones); the rounding lies far below half a raw step,
+  `FromDecimal(ToDecimal(x))` still gives `x`.
+- **Scenarios with equally strong sides are not a yardstick for "only rounding".** Their end is a tipping decision; the comparison needs a survey over seeds or quantities that lie before the tipping
+  (command stream of the build-up, event rates).
+- Comparison of two resolutions or rates: `reference-manifest results --commands <dir>` on both states, then the first deviating line per run – not the hashes.
+- A trial build with a different number of bits: change the constant, build into a directory of its own (`dotnet build -o`), set it back. Such a build does not read old replays and snapshots (versions).
 
-## Anhang A: Ergebnisgrößen aller Läufe des Manifests, 16 Bit (`41c3bc0`) gegen 24 Bit (`d7fca91`)
+## Appendix A: result quantities of all runs of the manifest, 16 bits (`41c3bc0`) against 24 bits (`d7fca91`)
 
-`SimTool reference-manifest results`. „Ausgang“: Sieger@Siegtick, `stalemate` = kein Sieger im Tickbudget, `none` = Mission ohne Endskript in 3.000 Ticks bzw. Stresstest. Spieler in der Reihenfolge ihrer Ids
-(ohne den neutralen Spieler); Geld in ganzen Einheiten. „Schüsse (Skriptfeuer)“ ist der Zähler der Missionssitzung, die Ereigniszahl `WeaponFired` steht in der ersten Tabelle.
+`SimTool reference-manifest results`. "Outcome": winner@victory tick, `stalemate` = no winner in the tick budget, `none` = mission without an end script in 3,000 ticks, or stress test. Players in the order of their ids
+(without the neutral player); money in whole units. "Shots (script fire)" is the counter of the mission session, the event count `WeaponFired` is in the first table.
 
-| Lauf | Ausgang alt | Ausgang neu | Endtick alt | neu | Objekte alt | neu | Schüsse/Produktionen/Bauten/Tode alt | neu |
+| Run | Outcome old | Outcome new | End tick old | new | Objects old | new | Shots/productions/constructions/deaths old | new |
 |---|---|---|---:|---:|---:|---:|---|---|
 | AlpineAssault_America-China | America@16965 | America@16665 | 17266 | 16966 | 75 | 85 | 3197/135/16/92 | 5711/139/15/85 |
 | AlpineAssault_China-GLA | China@23370 | China@10710 | 23671 | 11011 | 65 | 56 | 5869/204/15/180 | 3668/77/13/60 |
@@ -644,7 +643,7 @@ Katalogbau und zur Laufzeit; es bleibt kein Fall zu benennen. Nicht gezählt ble
 | skirmish-sweep | 64 maps | same outcome 64, other 0 |  |  |  |  |  |  |
 | stress | none | none | 216000 | 216000 | 0 | 0 | 0/0/0/238273 | 0/0/0/238273 |
 
-| Lauf | Objekte je Spieler alt | neu | Geld je Spieler alt | neu |
+| Run | Objects per player old | new | Money per player old | new |
 |---|---|---|---|---|
 | AlpineAssault_America-China | 69/0 | 79/0 | 625/200 | 1350/200 |
 | AlpineAssault_China-GLA | 53/6 | 45/5 | 600/375 | 1500/300 |
@@ -696,7 +695,7 @@ Katalogbau und zur Laufzeit; es bleibt kein Fall zu benennen. Nicht gezählt ble
 | reference-match | 0/2/0/0/0/0/0/0/0/186/2/2/2 | 0/0/0/4/0/0/0/0/0/135/2/2/2 | 1800/0/69300/1600/43500/45000/44400/45000/16500/509/1725/600/1800 | 2000/400/87300/0/34500/32400/34500/23100/13500/468/5475/3825/2925 |
 | stress | 0/0 | 0/0 | 0/0 | 0/0 |
 
-| Mission | Skripte alt | neu | Aktionen alt | neu | Schüsse (Skriptfeuer) alt | neu | Endskript alt | neu |
+| Mission | Scripts old | new | Actions old | new | Shots (script fire) old | new | End script old | new |
 |---|---:|---:|---:|---:|---:|---:|---|---|
 | mission_GC_AirGeneral_AmericaLaserGeneral | 58 | 58 | 588 | 588 | 0 | 0 | - | - |
 | mission_GC_AirGeneral_ChinaInfantryGeneral | 58 | 58 | 588 | 588 | 0 | 0 | - | - |
@@ -726,7 +725,7 @@ Katalogbau und zur Laufzeit; es bleibt kein Fall zu benennen. Nicht gezählt ble
 | mission_MD_USA05 | 109 | 109 | 396 | 396 | 0 | 0 | - | - |
 | mission_Training01 | 46 | 46 | 48 | 48 | 181 | 181 | - | - |
 
-| Karte (Sweep) | Endtick alt | neu | Ausgang alt | neu | Schüsse alt | neu | Objekte alt | neu |
+| Map (sweep) | End tick old | new | Outcome old | new | Shots old | new | Objects old | new |
 |---|---:|---:|---|---|---:|---:|---:|---:|
 | skirmish-sweep Maps/Alpine Assault/Alpine Assault.map | 3000 | 3000 | stalemate | stalemate | 0 | 0 | 49 | 49 |
 | skirmish-sweep Maps/BarrenBadlands/BarrenBadlands.map | 3000 | 3000 | stalemate | stalemate | 0 | 0 | 50 | 50 |
@@ -793,12 +792,12 @@ Katalogbau und zur Laufzeit; es bleibt kein Fall zu benennen. Nicht gezählt ble
 | skirmish-sweep maps/Armored Fury/Armored Fury.map | 3000 | 3000 | stalemate | stalemate | 170 | 159 | 86 | 86 |
 | skirmish-sweep maps/Scorched Earth/Scorched Earth.map | 3000 | 3000 | stalemate | stalemate | 80 | 64 | 51 | 53 |
 
-## Anhang B: Endhash, Kette und Snapshotgröße je Lauf, 16 Bit (`41c3bc0`) gegen 24 Bit (`d7fca91`)
+## Appendix B: final hash, chain and snapshot size per run, 16 bits (`41c3bc0`) against 24 bits (`d7fca91`)
 
-Aus `baselines/reference-manifest.json` der beiden Stände. Die Snapshotgröße ist nur vergleichbar, wo der Snapshot im selben Tick liegt (Missionen, 8-Spieler-Läufe, Stresstest); bei den KI-Läufen und dem
-Referenzmatch liegt er in der Mitte eines anders langen Laufs.
+From `baselines/reference-manifest.json` of the two states. The snapshot size is comparable only where the snapshot lies in the same tick (missions, 8-player runs, stress test); with the AI runs and the
+reference match it lies in the middle of a run of a different length.
 
-| Lauf | Satz | Endhash 16 Bit | Endhash 24 Bit | Kette 16 Bit | Kette 24 Bit | Snapshot-Byte 16 Bit | 24 Bit |
+| Run | Set | Final hash 16 bits | Final hash 24 bits | Chain 16 bits | Chain 24 bits | Snapshot bytes 16 bits | 24 bits |
 |---|---|---|---|---|---|---:|---:|
 | `AlpineAssault_America-China` | full | `BA10AC1EB0EB8AC9` | `8FA1F3E86560055A` | `F669459C2FA6E39C` | `C07E2CACB84DFDA0` | 380668 | 386926 |
 | `AlpineAssault_China-GLA` | full | `0BD4FE5EEB2C37E7` | `BAABE02976F3F436` | `BF9939E5A3B45736` | `37763867679EF7A9` | 380984 | 380496 |
@@ -848,39 +847,39 @@ Referenzmatch liegt er in der Mitte eines anders langen Laufs.
 | `mission_MD_USA05` | quick | `1CB28E6AA923BDEF` | `F21A211382F17CD7` | `0816C3438CB7F689` | `628D7208A23B10AB` | 6549194 | 6580158 |
 | `mission_Training01` | full | `160EB89088698B16` | `F59CB7888AECB13C` | `315CAEABA92DD3C2` | `C370CEAEF084D019` | 3556152 | 3586245 |
 | `reference-match` | quick | `AE9C688309DA37E4` | `D0CA5F4EE456D6CE` | `FC6DFA759B1DCAF0` | `C5EE1090E1C24D7B` | 438099 | 357825 |
-| `skirmish-sweep` | full | `DB5B0EA0F386D5D7…` (SHA-256 über 64 Karten) | `CBB37B33A4F1ABD8…` | – | – | – | – |
+| `skirmish-sweep` | full | `DB5B0EA0F386D5D7…` (SHA-256 over 64 maps) | `CBB37B33A4F1ABD8…` | – | – | – | – |
 | `stress` | quick | `56882F763EABEF67` | `56882F763EABEF67` | `B8E663493F2C73D5` | `754FA4DCB9A41DF7` | 11862560 | 12095586 |
 
-## Anhang C: Zielfahrer je Kampagnenkarte, 16 Bit gegen 24 Bit
+## Appendix C: objective driver per campaign map, 16 bits against 24 bits
 
-`CampaignTool drive <content> --map "/NAME.map" --ticks 60000 --explain`, je Karte ein Prozess. In Klammern die Zahl der Eingriffe des Fahrers.
+`CampaignTool drive <content> --map "/NAME.map" --ticks 60000 --explain`, one process per map. In parentheses the number of interventions of the driver.
 
-| Karte | Sieg alt (Skript @Tick, Eingriffe) | Sieg neu | Niederlage alt | Niederlage neu |
+| Map | Victory old (script @tick, interventions) | Victory new | Defeat old | Defeat new |
 |---|---|---|---|---|
-| `Training01` | Player Wins @420 (1) | gleich | Player Loses @2655 (2) | gleich |
-| `GC_ChemGeneral` | END_Final_USA @270 (1) | gleich | Lose_END_Final_USA @150 (1) | gleich |
-| `GC_NukeGeneral` | END_Final_USA @240 (1) | gleich | Lose_END_Final_USA @150 (1) | gleich |
-| `GC_SuperWeaponsGeneral` | END_Final_USA @240 (1) | gleich | Lose_END_Final_USA @150 (1) | gleich |
-| `GC_TankGeneral` | END_Final_USA @240 (1) | gleich | Lose_END_Final_USA @150 (1) | gleich |
-| `GC_Stealth` | END_Final_USA @240 (2) | gleich | Lose_END_Final_USA @150 (1) | gleich |
-| `GC_LaserGeneral` | END_Final_USA @240 (1) | gleich | Lose_END_Final_USA @150 (1) | gleich |
-| `GC_ChinaBoss` | End the mission @360 (5) | gleich | Lose_END_Final_USA @2431 (2) | gleich |
-| `GC_AirGeneral` | END_Final_GLA @270 (1) | gleich | Lose_END_Final_GLA @150 (1) | gleich |
-| `MD_USA01` | END_Final_USA @785 (1) | gleich | Lose_END_Final_USA @211 (1) | gleich |
-| `MD_USA02` | END_Final_ @2718 (4) | gleich | Lose_END_Final_ @12361 (30) | gleich |
-| `MD_USA03` | CINE_AVVictory @1509 (3) | gleich | Lose_END_Final_ @241 (1) | gleich |
-| `MD_USA04` | END_Final_USA @303 (9) | gleich | Lose_END_Final_USA @617 (20) | gleich |
-| `MD_USA05` | END_Fade 04 @1443 (4) | gleich | Lose_END_Final_ @1280 (6) | gleich |
-| `MD_GLA01` | Cheer1Done @526 (3) | gleich | Lose_END_Final_ @241 (1) | gleich |
-| `MD_GLA02` | END_Final_ @240 (1) | gleich | Lose_END_Final_ @572 (5) | gleich |
-| `MD_GLA03` | CINE_ENDVictory @4033 (12) | gleich | Lose_END_Final_ @242 (1) | gleich |
-| `MD_GLA04` | CINE_END @1022 (1) | gleich | Lose_END_Final_ @241 (2) | gleich |
-| `MD_GLA05` | CINE_END04END @1394 (1) | gleich | Lose_END_Final_ @1036 (1) | gleich |
-| `MD_CHI01` | END_Final_ @301 (1) | gleich | Lose_END_Final_ @241 (1) | gleich |
-| `MD_CHI02` | END_Final_ @301 (4) | gleich | Lose_END_Final_ @301 (1) | gleich |
-| `MD_CHI03` | Cheer1Done @1722 (6) | gleich | Lose_END_Final_ @4471 (1) | gleich |
-| `MD_CHI04` | END_Final_ @48258 (10) | gleich | Lose_END_Final_ @273 (1) | gleich |
-| `MD_CHI05` | CINE_ENDVictory @2662 (23) | gleich | Lose_END_Final_ @241 (1) | gleich |
+| `Training01` | Player Wins @420 (1) | same | Player Loses @2655 (2) | same |
+| `GC_ChemGeneral` | END_Final_USA @270 (1) | same | Lose_END_Final_USA @150 (1) | same |
+| `GC_NukeGeneral` | END_Final_USA @240 (1) | same | Lose_END_Final_USA @150 (1) | same |
+| `GC_SuperWeaponsGeneral` | END_Final_USA @240 (1) | same | Lose_END_Final_USA @150 (1) | same |
+| `GC_TankGeneral` | END_Final_USA @240 (1) | same | Lose_END_Final_USA @150 (1) | same |
+| `GC_Stealth` | END_Final_USA @240 (2) | same | Lose_END_Final_USA @150 (1) | same |
+| `GC_LaserGeneral` | END_Final_USA @240 (1) | same | Lose_END_Final_USA @150 (1) | same |
+| `GC_ChinaBoss` | End the mission @360 (5) | same | Lose_END_Final_USA @2431 (2) | same |
+| `GC_AirGeneral` | END_Final_GLA @270 (1) | same | Lose_END_Final_GLA @150 (1) | same |
+| `MD_USA01` | END_Final_USA @785 (1) | same | Lose_END_Final_USA @211 (1) | same |
+| `MD_USA02` | END_Final_ @2718 (4) | same | Lose_END_Final_ @12361 (30) | same |
+| `MD_USA03` | CINE_AVVictory @1509 (3) | same | Lose_END_Final_ @241 (1) | same |
+| `MD_USA04` | END_Final_USA @303 (9) | same | Lose_END_Final_USA @617 (20) | same |
+| `MD_USA05` | END_Fade 04 @1443 (4) | same | Lose_END_Final_ @1280 (6) | same |
+| `MD_GLA01` | Cheer1Done @526 (3) | same | Lose_END_Final_ @241 (1) | same |
+| `MD_GLA02` | END_Final_ @240 (1) | same | Lose_END_Final_ @572 (5) | same |
+| `MD_GLA03` | CINE_ENDVictory @4033 (12) | same | Lose_END_Final_ @242 (1) | same |
+| `MD_GLA04` | CINE_END @1022 (1) | same | Lose_END_Final_ @241 (2) | same |
+| `MD_GLA05` | CINE_END04END @1394 (1) | same | Lose_END_Final_ @1036 (1) | same |
+| `MD_CHI01` | END_Final_ @301 (1) | same | Lose_END_Final_ @241 (1) | same |
+| `MD_CHI02` | END_Final_ @301 (4) | same | Lose_END_Final_ @301 (1) | same |
+| `MD_CHI03` | Cheer1Done @1722 (6) | same | Lose_END_Final_ @4471 (1) | same |
+| `MD_CHI04` | END_Final_ @48258 (10) | same | Lose_END_Final_ @273 (1) | same |
+| `MD_CHI05` | CINE_ENDVictory @2662 (23) | same | Lose_END_Final_ @241 (1) | same |
 
-Zielfahrer: alt Sieg 24/24, Niederlage 24/24; neu Sieg 24/24, Niederlage 24/24; unterschiedliche Zeilen: 0 (keine).
-Audit (900 Ticks): alt deterministisch 24/24, nach Speichern/Laden identisch 24/24, Endproben Sieg 13/24, Niederlage 15/24, Treffer auf fehlende Aktionen 0; neu 24/24, 24/24, Sieg 13/24, Niederlage 15/24, Treffer 0; Karten mit anderem Auditergebnis: 0 .
+Objective driver: old victory 24/24, defeat 24/24; new victory 24/24, defeat 24/24; differing rows: 0 (none).
+Audit (900 ticks): old deterministic 24/24, identical after save/load 24/24, end probes victory 13/24, defeat 15/24, hits on missing actions 0; new 24/24, 24/24, victory 13/24, defeat 15/24, hits 0; maps with a different audit result: 0 .
