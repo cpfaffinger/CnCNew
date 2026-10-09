@@ -142,12 +142,12 @@ Windows, im Release-Build, zweimal hintereinander.
 Braucht einen Menschen. Nichts davon wird committet; Originaldaten verlassen den eigenen Besitz nicht (lokal kopieren, kein Upload).
 
 1. Auf dem Entwicklungsrechner: `dotnet publish tools/CnCNew.SimTool -c Release -r win-x64 --self-contained true -o <ordner>\simtool` (für Linux `-r linux-x64`, für ARM `-r win-arm64`/`linux-arm64`).
-2. Auf einen Datenträger kopieren: `<ordner>\simtool`, das Verzeichnis `.local\phase2-import-a` (rund 25.682 Dateien) und `baselines\input-manifest.json`, `baselines\reference-manifest.json`.
+2. Auf einen Datenträger kopieren: `<ordner>\simtool`, das Verzeichnis `game\content` (rund 25.682 Dateien) und `baselines\input-manifest.json`, `baselines\reference-manifest.json`.
 3. Auf dem zweiten Rechner (kein .NET nötig), im Verzeichnis mit den drei Teilen:
    ```
-   simtool\CnCNew.SimTool input-manifest check phase2-import-a input-manifest.json
-   simtool\CnCNew.SimTool reference-manifest check phase2-import-a reference-manifest.json --set quick
-   simtool\CnCNew.SimTool reference-manifest check phase2-import-a reference-manifest.json --set full
+   simtool\CnCNew.SimTool input-manifest check content input-manifest.json
+   simtool\CnCNew.SimTool reference-manifest check content reference-manifest.json --set quick
+   simtool\CnCNew.SimTool reference-manifest check content reference-manifest.json --set full
    ```
 4. Ergebnis melden: die drei Schlusszeilen („identical“ oder die erste Abweichung je Lauf), dazu CPU-Modell, Betriebssystem und die Ausgabe von `simtool\CnCNew.SimTool --version`, falls vorhanden.
 5. Bei einer Abweichung zuerst das Eingangsmanifest ansehen: weicht es ab, liegt der Fehler in den Daten oder ihrer Aufbereitung; ist es gleich und ein Lauf weicht ab, liegt er in der Rechnung –
@@ -160,7 +160,11 @@ Das Ergebnis gehört in die Tabelle in §2 (Zeile „zweiter physischer Rechner�
 - Das Manifest ist die Messlatte (`docs/MULTIPLAYER-PLAN.md` §6 Punkt 2). Wer es ändert, tut das in einem eigenen Commit mit einer Ursache und Vorher/Nachher-Werten.
 - Neue Simulationseingänge laufen über die geprüften Wandlungsroutinen (`SingleBits.ToDecimal` für Fließkommawerte aus Dateien, `ExactBoneMath` für die Knochentabelle); `SourceRules` und `FeederSourceRules` erzwingen das.
 - Jede Zustandsänderung ruft `MarkDirty`; ein von Hand gesetztes `Dirty`-Flag ist verboten (Regel in `SourceRules`). Neue Module laufen einmal mit `--verify-incremental`.
-- Vor jedem Phasenabschluss: `input-manifest check`, `reference-manifest check --set full`, und bei Änderungen an Formaten oder Fingerabdrücken zusätzlich die Linux-Zeile.
+- Vor jedem Phasenabschluss: `input-manifest check`, `reference-manifest check --set full` – unter Windows; das ist die Abnahme.
+- **Die Linux-Zeile ist informativ, kein Abnahmekriterium** (Entscheidung des Projektinhabers vom 9. Oktober 2026, `docs/MULTIPLAYER-PLAN.md` §7): Zielplattform ist vorerst nur
+  Windows, Linux kommt später allein als Wirt des Dedicated Servers in Betracht. Die Linux-Zeilen der Matrizen in §2 bis §2b bleiben als Messung ihres Stands stehen; ein neuer
+  Linux-Lauf (WSL) ist bei Änderungen an Formaten oder Fingerabdrücken nützlich, aber keine Phase scheitert an ihm oder an seinem Fehlen. Wird der Server unter Linux Lieferziel
+  (Phase 28), wird die Zeile dort wieder Kriterium – für den Server, nicht für den Client.
 - **Golden-Hashes werden bei der Produktrate gehalten (60 Hz, seit Phase 23).** `check` läuft mit der Rate und in dem Schema, die **die Datei** nennt (`simulation.tickRate`); eine abweichende
   `--tick-rate` wird abgelehnt („A manifest is checked at the rate it was written at.“). `write` nimmt `--tick-rate` oder den Standard. 30 und 120 Hz haben keine eigenen Golden-Hashes; sie werden
   über die Raten-Äquivalenz-Suite gegen 30 Hz als Definition geprüft (`docs/SIMULATION-CORE.md` §39.7) und über Tests, die ihre Raten selbst nennen.

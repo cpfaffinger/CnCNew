@@ -1,6 +1,6 @@
 # Determinismus-Befunde D1–D9 (Phase 18, Punkt 4)
 
-Stand 6. Oktober 2026, Ausgangscommit `e5046b7`. Dieses Dokument hält zu jedem Befund des lesenden Suchlaufs (`docs/HANDOFF-PHASE18.md`, Tabelle „Befunde des Suchlaufs“) fest: bestätigt oder widerlegt, der Test, der es zeigt, die Korrektur, ob sich Referenzwerte geändert haben, und was offen bleibt. Der Prüfmodus des Referenzmanifests (`SimTool reference-manifest`) und die Determinismus-Matrix sind nicht Teil dieses Dokuments.
+Stand 6. Oktober 2026, Ausgangscommit `e5046b7`. Dieses Dokument hält zu jedem Befund des lesenden Suchlaufs (`docs/handoffs/HANDOFF-PHASE18.md`, Tabelle „Befunde des Suchlaufs“) fest: bestätigt oder widerlegt, der Test, der es zeigt, die Korrektur, ob sich Referenzwerte geändert haben, und was offen bleibt. Der Prüfmodus des Referenzmanifests (`SimTool reference-manifest`) und die Determinismus-Matrix sind nicht Teil dieses Dokuments.
 
 Regel der Phase: keine Verhaltensänderung der Simulation außer Determinismus-Korrekturen; jeder Befund zuerst durch einen Test bestätigt oder widerlegt, dann behoben; jede Korrektur, die einen Referenzwert ändert, allein in einem Commit.
 
@@ -230,7 +230,7 @@ Nachweise:
 |---|---|---|
 | `Determinism D3/D4/D5/D7/D8 …`, `Determinism rules …` | `tests/CnCNew.Simulation.Tests` (`Tests.Determinism.cs`, `Tests.SourceRules.cs`) | `dotnet run --project tests/CnCNew.Simulation.Tests [-- --only "Determinism"]` |
 | `SingleBitsMatchTheRuntimeCast`, `FingerprintEncodingIsPinned` | `tests/CnCNew.Data.Tests` | `dotnet run --project tests/CnCNew.Data.Tests` |
-| `DeterminismTests` (D1 synthetisch ohne Inhalt; D1 golden, D2/D7, D3, D4, D5, D8 auf echten Daten) | `tests/CnCNew.Game.Tests` | `dotnet build -c Release tests/CnCNew.Game.Tests`, dann `dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --only DeterminismTests --content-dir .local/phase2-import-a` |
+| `DeterminismTests` (D1 synthetisch ohne Inhalt; D1 golden, D2/D7, D3, D4, D5, D8 auf echten Daten) | `tests/CnCNew.Game.Tests` | `dotnet build -c Release tests/CnCNew.Game.Tests`, dann `dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --only DeterminismTests --content-dir game/content` |
 | dasselbe, volle Läufe (jede wiederhergestellte Welt bis zum Ende; alle 45 Kampagnen-/Challenge-Karten in jedem Tick geprüft) | | `… --determinism-full` (rund eine Stunde); `--determinism-only D8` wählt die Tests eines Befunds |
 
 ## 13. Was nach diesem Punkt offen ist
@@ -242,4 +242,4 @@ Nachweise:
 5. **D9:** eigenes Escaping (siehe oben).
 6. **D5:** Kennung des Codestands, Dateihash im Protokoll, Match-Beschreibung (Phase 25); schwacher Programm-Fingerabdruck der Skript-VM.
 7. **Nicht angefasst:** `LiveScenario` (Demo-Szenen über `float`), `Fixed.FromDecimal` über `System.Decimal`, Snapshot-JSON (`JsonStateWriter`) mit dem Standard-Encoder der Laufzeit (Format, kein Hash).
-8. **Doku-Folgen** (nicht Teil dieses Punkts, die Dateien waren gesperrt): die Referenzwerte der sechs Missionen und die Gelände-Fingerabdrücke in `CLAUDE.md`, `docs/HANDOFF-PHASE18.md`, `docs/SIMULATION-CORE.md` und im Referenz-/Eingangsmanifest (`baselines/`) sind nach dem Merge neu zu schreiben.
+8. **Doku-Folgen** (nicht Teil dieses Punkts, die Dateien waren gesperrt): die Referenzwerte der sechs Missionen und die Gelände-Fingerabdrücke in `CLAUDE.md`, `docs/handoffs/HANDOFF-PHASE18.md`, `docs/SIMULATION-CORE.md` und im Referenz-/Eingangsmanifest (`baselines/`) sind nach dem Merge neu zu schreiben.

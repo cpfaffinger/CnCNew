@@ -30,7 +30,7 @@ Bytes – alle deterministisch) und Zeiten **im Verhältnis innerhalb desselben 
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf-mission .local/phase2-import-a --map "Maps/MD_GLA05/MD_GLA05.map" --ticks 3000 --script-detail --top 30
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf-mission game/content --map "Maps/MD_GLA05/MD_GLA05.map" --ticks 3000 --script-detail --top 30
 ```
 
 ## 2. Gemessene Aufschlüsselung des Ausgangsstands (`74ccdde`)

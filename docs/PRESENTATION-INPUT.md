@@ -98,7 +98,7 @@ Frage des Projektinhabers: funktionieren die Tasten im Baumenü? Gemessen mit ec
 
 ```powershell
 .\scripts\check-build-hotkeys.ps1                 # echter Client, drei Fraktionen, je vier Einheiten per Taste und zwei Gebäude (eines platziert)
-dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --content-dir .local/phase2-import-a --only HotkeyTests   # jede Taste, mit Tabelle
+dotnet run -c Release --no-build --project tests/CnCNew.Game.Tests -- --content-dir game/content --only HotkeyTests   # jede Taste, mit Tabelle
 .\scripts\demo-factory-exits.ps1 -Faction America   # zum Selbstprobieren: Bauarbeiter wählen, R / B / F ...; Fabrik wählen, C / S ...
 ```
 
@@ -339,7 +339,7 @@ Abstand zu Versorgungslagern (`SupplyBuildBorder`), Kartenrandabstand, Linienbau
 * **HUD** (`Hud`): Geld, Energieerzeugung (Nettobilanz + Verbrauch, also inklusive Kraftwerksboni), Verbrauch (Summe negativer
   `EnergyProduction` fertiger Objekte), Kaufpunkte, Spezialkräfte des Spielers (mit Wissenschaft freigeschaltet, je Kraft das bereiteste Objekt).
 
-## 9. Gemessene Zahlen (Realdaten `.local/phase2-import-a`, 30.09.2026)
+## 9. Gemessene Zahlen (Realdaten `game/content`, 30.09.2026)
 
 * `Data/English/CommandMap.ini`: 96 Einträge, 0 Probleme, 0 Konflikte, 10 Felder ohne `=` (`Description` bei `VIEW_TEAM0..9`). `FromGraph`
   liefert dieselben 96 Bindungen; den 10 Einträgen fehlt dort die Beschreibung, weil der INI-Parser des Datenlayers eine Zeile ohne `=` als

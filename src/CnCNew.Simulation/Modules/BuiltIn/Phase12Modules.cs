@@ -369,7 +369,7 @@ public sealed class HordeUpdate(HordeData data) : SimModule, IUpdateModule
     {
         var reach = data.Radius;
         var near = new List<Entity>();
-        // Everybody is counted where the logic frame of the original it has begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3); at 30 Hz that is the position.
+        // Everybody is counted where the logic frame of the original it has begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3); at 30 Hz that is the position.
         var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
         foreach (var other in world.Entities)
         {

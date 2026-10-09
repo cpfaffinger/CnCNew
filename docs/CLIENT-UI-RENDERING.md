@@ -10,7 +10,7 @@ Zwei Schichten:
   bleibt als `UiFontBackend.FreeType` zum Vergleich), Texturcache für gemappte Bilder, Glyph-Atlas als GPU-Texturen, und
   `UiRenderer`, der `SpriteBatch` benutzt.
 
-Verifiziert mit `tools/CnCNew.UiRenderTool` (siehe Abschnitt 5): echte Menüs aus `.local/phase2-import-a` plus
+Verifiziert mit `tools/CnCNew.UiRenderTool` (siehe Abschnitt 5): echte Menüs aus `game/content` plus
 synthetische Szenen, gerendert in vier Auflösungen, als PNG in ein Scratchpad-Verzeichnis exportiert und über zwei
 unabhängige Läufe byteidentisch verglichen (SHA-256).
 
@@ -141,7 +141,7 @@ Client-Stride-Quellen (außer dessen `Program.cs`) direkt ein, da `UiRenderer` i
 Offscreen-`Texture`-Render-Target (kein sichtbares Fenster nötig) in vier Auflösungen (800×600, 1280×720, 1920×1080,
 2560×1080):
 
-- vier echte WND-Layouts aus `.local/phase2-import-a`: `Window/Menus/MainMenu.wnd`, `OptionsMenu.wnd`,
+- vier echte WND-Layouts aus `game/content`: `Window/Menus/MainMenu.wnd`, `OptionsMenu.wnd`,
   `SkirmishGameOptionsMenu.wnd`, `Window/ControlBar.wnd` (HUD-artige Szene);
 - vier synthetische Szenen (`SyntheticScenes.cs`): Umlaute/Fett/Schatten/nicht aufgelöstes Label/fehlender Glyph,
   verschachtelte Clips samt überzähligem Pop, getönte/deaktivierte/gedrückte/gespiegelte Bilder, sowie eine
@@ -173,7 +173,7 @@ unbalancedClips=4` (die vier zusätzlichen fehlenden Bilder sind `HardCodedWithC
 `controlbar-anchor`); zwei Läufe ergeben für alle 64 PNGs identische SHA-256-Summen. Die Zahlen des folgenden Absatzes
 gelten für den früheren Umfang.
 
-Letzter Lauf (32 PNGs, `.local/phase2-import-a`, neu messen): `commands=5778 sprites=12542 drawCalls=854 batches=361
+Letzter Lauf (32 PNGs, `game/content`, neu messen): `commands=5778 sprites=12542 drawCalls=854 batches=361
 missingImages=8 missingTextures=0 missingLabels=12 missingGlyphs=0 substitutedGlyphs=12 customDraws=28
 unbalancedClips=4`. Die acht fehlenden Bilder sind das eine absichtlich falsche pro Auflösung (`transform`-Szene, 4×)
 plus ein echtes fehlendes ControlBar-Bild (`HardCodedWithControlBarSchemeIni`, 4×; die Steuerleiste referenziert

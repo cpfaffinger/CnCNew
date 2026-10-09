@@ -33,7 +33,7 @@ die Simulation herausgibt, beim Einlesen um; im Rauchtest des Clients ist ein ge
 .\scripts\audit-scenarios.ps1                            # alle drei headless prüfen, Ausgaben unter %TEMP%\cncnew-scenarios
 .\scripts\audit-scenarios.ps1 -Scenario tank-duel -Every 10
 .\scripts\audit-scenarios.ps1 -TickRate 60                # dieselben Prüfungen mit 60 Simulationsticks je Sekunde; -Every und alle Ausgaben bleiben Originalbilder
-dotnet run -c Release --project tools/CnCNew.PresentationTool -- scenario-audit .local/phase2-import-a --name capture-building --debug-fire ranger,barracks
+dotnet run -c Release --project tools/CnCNew.PresentationTool -- scenario-audit game/content --name capture-building --debug-fire ranger,barracks
 ```
 
 `scripts/capture-world.ps1` enthält je Szene eine Aufnahme (`scenario-tank-duel`, `scenario-capture`, `scenario-jet`). `Game.Tests` (`ScenarioTests`) prüft mit echten Daten, dass jede Szene

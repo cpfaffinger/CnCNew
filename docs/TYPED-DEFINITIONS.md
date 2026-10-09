@@ -155,8 +155,8 @@ Zeitstempel und nicht deterministische Dictionaryreihenfolgen fehlen.
 ## Reproduzierbarkeit und Zahlen
 
 ```powershell
-dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a .local/phase4-a.json
-dotnet run --project tools/CnCNew.IniTool -- compile .local/phase2-import-a .local/phase4-b.json
+dotnet run --project tools/CnCNew.IniTool -- compile game/content .local/phase4-a.json
+dotnet run --project tools/CnCNew.IniTool -- compile game/content .local/phase4-b.json
 Get-FileHash -Algorithm SHA256 .local/phase4-a.json,.local/phase4-b.json
 ```
 
@@ -295,7 +295,7 @@ Kompatibilitätsbasislinie; Details der Semantik in `docs/GAME-RULES.md`):
 - **Kampf** (§6g): `FireWeaponUpdate` und `ReplaceObjectUpgrade` als Katalogschemata; `CrushDie` als Todesmodul mit dem gemeinsamen
   Todesfilter (`DieMuxData`) ohne eigene Felder.
 
-Neu gemessen (`IniTool compile .local/phase2-import-a`, Vollinventar mit allen Kartenoverlays): 228 geladene INI-Dateien (28 nach
+Neu gemessen (`IniTool compile game/content`, Vollinventar mit allen Kartenoverlays): 228 geladene INI-Dateien (28 nach
 Ladeplan ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module, 333.061 Schlüssel, 18.138/19.688 Referenzen aufgelöst
 (1.550 sichtbare Fallbacks); Kompatibilität: 518 `deferred-field`-Einträge (20.606 Verwendungen), 36 `definition` (2.590), 9
 `diagnostic` (4.617), 24 `duplicate-key` (120), 28 `excluded-file` (28), 131 `module` (4.151); die Basislinie hat **746 Einträge**.
@@ -315,7 +315,7 @@ Zahlen oben (`761 Einträge`, `144.745.050 Byte`) sind überholt.
 - **Kartenmodell:** `CnCNew.Data.World.MapData` (`MapModel.cs`) ist ein unveränderlicher Vertragstyp ohne Renderer-, Archiv- oder Dateisystembezug; er ist keine Definitionsdomäne und
   erscheint nicht im Definitionssnapshot (`SIMULATION-CORE.md` §13).
 
-Neu gemessen am 30. September 2026 (`IniTool compile .local/phase2-import-a`, Vollinventar): 228 geladene INI-Dateien (28 ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module,
+Neu gemessen am 30. September 2026 (`IniTool compile game/content`, Vollinventar): 228 geladene INI-Dateien (28 ausgeschlossen), 65.875 Blöcke, 12.574 Definitionen, 16.380 Module,
 333.061 Schlüssel, 18.138/19.688 Referenzen aufgelöst (1.550 sichtbare Fallbacks); Kompatibilität: 516 `deferred-field`-Einträge (20.401 Verwendungen), 36 `definition` (2.590),
 9 `diagnostic` (4.599), 24 `duplicate-key` (120), 28 `excluded-file` (28), 128 `module` (4.133); die Basislinie hat **741 Einträge** (`compat-check`: alle stimmen).
 Definitionssnapshot (Schema 2): 144.832.736 Byte, SHA-256 `AEB5108DDA27ABAC7445452AA2743B794AD0BF1102F2687F8D7D8F7B87D2ADB7`, zwei Läufe byteidentisch.

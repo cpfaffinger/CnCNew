@@ -2,7 +2,7 @@ namespace CnCNew.Simulation.Time;
 
 /// <summary>
 /// Further grid helpers (<see cref="FrameGrid"/>) for the "one tick where the original means one frame" cases of phase 23
-/// (<c>docs/RATE-INVARIANCE-TIMING.md</c>). Like those of <see cref="FrameGrid"/> each one is the former expression at 30 Hz, and none is for a per-tick path.
+/// (<c>docs/rate-invariance/RATE-INVARIANCE-TIMING.md</c>). Like those of <see cref="FrameGrid"/> each one is the former expression at 30 Hz, and none is for a per-tick path.
 /// </summary>
 public static class FrameGridTiming
 {

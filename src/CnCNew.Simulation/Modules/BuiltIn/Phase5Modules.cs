@@ -14,7 +14,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 
 /// <summary>
 /// The phase-5 module family: the upgrade system (<c>StealthUpdate</c>, <c>AutoHealBehavior</c> and the eleven
-/// <c>*Upgrade</c> modules, Block 0.2 of docs/HANDOFF-PHASE5.md) plus simple straight-line movement
+/// <c>*Upgrade</c> modules, Block 0.2 of docs/handoffs/HANDOFF-PHASE5.md) plus simple straight-line movement
 /// (<c>AIUpdateInterface</c>) and unit production (<c>ProductionUpdate</c>). See docs/GAME-RULES.md for the rules these
 /// modules implement and the simplifications each one documents inline.
 /// </summary>
@@ -786,7 +786,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public void OrderApproachGoal(IWorldServices world, Entity goal, bool fromPlayer)
     {
         if (Entity.Template.Locomotor is null) return;
-        // The goal is where the frame it has begun ends (rule 3 of docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3); 30 Hz: its position.
+        // The goal is where the frame it has begun ends (rule 3 of docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3); 30 Hz: its position.
         var (goalX, goalY, _) = goal.FrameEnd(world.Tick);
         OrderMove(world, goalX, goalY, fromPlayer);
         _goal = goal.Id;
@@ -968,7 +968,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (world.Time.TicksPerOriginalFrame != TickOrder.Next)
         {
             // Above 30 Hz the repair heals the slice of a logic frame of the original, once per frame of the builder (the escape "Originalraster" for a heal slice,
-            // docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md §3): a hit in the first tick of a frame meets the health the 30 Hz step leaves - with a share per tick it met only
+            // docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md §3): a hit in the first tick of a frame meets the health the 30 Hz step leaves - with a share per tick it met only
             // one share of that frame's repair, and a threshold of the body (the fear roll at a quarter of the health) was crossed in different frames.
             if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return;
             var slice = body.MaxHealth * data.RepairRatePerSecond / Fixed.FromInt(SimulationRate.OriginalFramesPerSecond);
@@ -1005,7 +1005,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     /// <summary>
     /// <see cref="StopInternalMove"/> for an observer that acts after the updates of the tick (the units' own target acquisition). At 30 Hz the object has taken the whole step
-    /// of this tick by then and its next step is a tick later. Above 30 Hz it is put where the frame it has begun ends first (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3,
+    /// of this tick by then and its next step is a tick later. Above 30 Hz it is put where the frame it has begun ends first (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3,
     /// rule 4), and whatever move it is given now starts with its next frame, not with the next tick. 30 Hz: <see cref="StopInternalMove"/>.
     /// </summary>
     internal void StopInternalMoveAtFrameEnd(IWorldServices world)
@@ -1098,7 +1098,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         else if (_frameTicksLeft > 0) Coast(world);
         // Above 30 Hz the second leg is ordered with the last tick of the unit's logic frame of the original, where the 30 Hz step that ends the first leg orders it
-        // (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3): an arrival ends there by itself, a first leg that ends in the first tick of a frame (no way out) waits for it.
+        // (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3): an arrival ends there by itself, a first leg that ends in the first tick of a frame (no way out) waits for it.
         if (_exitRallyPending && !Entity.HasMoveTarget && world.Time.BeginsFrameOf(Entity, world.Tick + TickOrder.Next))
         {
             // The first leg of the exit path is done (the unit is out of its factory): on to the rally point.
@@ -1196,7 +1196,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             // OpenContain::onCollide: an object whose enter target is this container is taken in as soon as the two touch; it does not have to reach the container's centre
             // (which another boarder, or a rider that found no room and stands there, may keep it from). A structure keeps the old rule (the walk ends at its wall): its
             // bounding circle reaches far beyond a box-shaped footprint, and nothing stands inside it.
-            // Decided where the 30 Hz step decides it (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md): in the tick that decided a
+            // Decided where the 30 Hz step decides it (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md): in the tick that decided a
             // logic frame's step, with both where that frame ends; the boarder is put there and goes in, in the first tick of the frame like a move that ends.
             if (container.Template.IsKindOf("STRUCTURE") || _frameTicksLeft != Math.Max(_stride, 1) - 1) return;
             var touch = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius;
@@ -1284,7 +1284,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
 
-        // Everything from here on is one decision of a logic frame of the original, in that frame's units (docs/RATE-INVARIANCE-GROUND.md): above 30 Hz the object decides once per
+        // Everything from here on is one decision of a logic frame of the original, in that frame's units (docs/rate-invariance/RATE-INVARIANCE-GROUND.md): above 30 Hz the object decides once per
         // frame and covers the step in shares, at 30 Hz the frame is the tick and these are the locomotor's own constants.
         FrameConstants(locomotor, out var topSpeed, out var acceleration, out var braking, out var turnRate, out var minSpeed);
         var arrivalRadius = Fixed.Max(locomotor.CloseEnoughDist, topSpeed);
@@ -1703,7 +1703,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>
     /// The arrival above 30 Hz. At 30 Hz the step that finds the object within its arrival radius puts it on the target and ends the move; that step is a logic frame of the
     /// original like every other. Here the move ends, with <c>MoveArrived</c>, in the first tick of that frame - the tick of the 30 Hz step, in which every decision of a
-    /// frame falls (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 1): whoever looks at the object in this tick finds it without a move order, as at 30 Hz - and the object
+    /// frame falls (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 1): whoever looks at the object in this tick finds it without a move order, as at 30 Hz - and the object
     /// covers the rest of the way (<paramref name="dx"/>, <paramref name="dy"/>) in that frame's shares (<see cref="Coast"/>); its position at the frame's end, which
     /// observers read (<see cref="Entity.FrameEnd"/>), is the target.
     /// </summary>
@@ -1787,7 +1787,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             return;
         }
         // Crush, topple and collide modules are tested where the 30 Hz step tests them: once per logic frame, at the end of the frame's step and with its whole displacement -
-        // and in the tick of the 30 Hz step, the frame's first, in which every decision of a frame falls (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 4).
+        // and in the tick of the 30 Hz step, the frame's first, in which every decision of a frame falls (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 4).
         if (covered == 0 && (world.Navigation is null || !air)) CollideWhereTheFrameEnds(world, air);
     }
 

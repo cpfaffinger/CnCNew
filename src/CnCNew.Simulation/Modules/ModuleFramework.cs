@@ -143,7 +143,7 @@ public interface IWorldServices
 
     /// <summary>
     /// <see cref="IsSignificantlyAboveTerrain"/> for whoever looks at another object to decide something: above 30 Hz the object is read where the logic frame of the original it
-    /// has begun ends (<see cref="Entity.FrameEnd"/>, docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3). 30 Hz: the same answer.
+    /// has begun ends (<see cref="Entity.FrameEnd"/>, docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3). 30 Hz: the same answer.
     /// </summary>
     bool IsSignificantlyAboveTerrainAtFrameEnd(Entity entity);
 

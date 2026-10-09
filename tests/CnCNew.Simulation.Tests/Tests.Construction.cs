@@ -428,7 +428,7 @@ static partial class Tests
         }
         bool Settled() => world.Entities.Where(value => value.Template.Name == "Grunt").All(value => !value.HasMoveTarget);
         // Above 30 Hz a move ends with the first tick of its last logic frame and the unit covers the rest of that frame's step afterwards
-        // (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md): where it stands is read once that frame is over, as every observer of the simulation reads it.
+        // (docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md): where it stands is read once that frame is over, as every observer of the simulation reads it.
         void FinishFrame()
         {
             for (var tick = TickOrder.Next; tick < world.Frames(1) && world.Entities.Any(value => value.Template.Name == "Grunt" && value.IsInsideFrameStep); tick++) world.Step();

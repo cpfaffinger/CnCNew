@@ -137,7 +137,7 @@ public sealed partial class SimulationWorld
         var dy = victim.Y - source.Y;
         if (_firstFrameTicks != TickOrder.Next)
         {
-            // Above 30 Hz both objects are read where the logic frame of the original they have begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the
+            // Above 30 Hz both objects are read where the logic frame of the original they have begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the
             // answer is the one the 30 Hz step gives after the whole step of both, in every tick of that frame, instead of flipping somewhere inside it.
             var (victimX, victimY, _) = victim.FrameEnd(_tick);
             var (sourceX, sourceY, _) = source.FrameEnd(_tick);

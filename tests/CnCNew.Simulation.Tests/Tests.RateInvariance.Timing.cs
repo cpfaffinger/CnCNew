@@ -7,7 +7,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, package TIMING (<c>docs/RATE-INVARIANCE-TIMING.md</c>): "one tick where the original means one frame". Every test stages one cause on a synthetic
+/// Phase 23, package TIMING (<c>docs/rate-invariance/RATE-INVARIANCE-TIMING.md</c>): "one tick where the original means one frame". Every test stages one cause on a synthetic
 /// fixture at 30, 60 and 120 Hz and compares game time, counted in 1/120 s (a whole number at each rate). The expectation is the 30 Hz value, written in logic
 /// frames of the original; a measurement starts on a frame boundary, as the rate-equivalence suite's do.
 /// </summary>

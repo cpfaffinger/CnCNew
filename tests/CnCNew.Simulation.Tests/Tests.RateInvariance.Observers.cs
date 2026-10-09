@@ -8,7 +8,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, round 3 (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md): whoever looks at another object to decide something reads it where the logic frame of the original it has begun
+/// Phase 23, round 3 (docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md): whoever looks at another object to decide something reads it where the logic frame of the original it has begun
 /// ends, a unit decides its attack in the ticks its own frames begin with, a move ends in the first tick of its last frame, and "the next tick" of the phases after the updates
 /// is the next frame. Together: a fight of two computer players' groups is, at the end of every logic frame, the 30 Hz fight.
 /// </summary>

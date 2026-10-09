@@ -3,7 +3,7 @@ using CnCNew.Simulation.Numerics;
 namespace CnCNew.Simulation.Time;
 
 /// <summary>
-/// The frame grid of things that fly (<c>docs/RATE-INVARIANCE-PROJECTILES.md</c>): a projectile takes its decisions once per logic frame of the original, on its own phase (counted
+/// The frame grid of things that fly (<c>docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md</c>): a projectile takes its decisions once per logic frame of the original, on its own phase (counted
 /// from its launch), exactly as it does at 30 Hz, and the step such a frame decides is flown in equal shares over the ticks of that frame. At 30 Hz a frame is one tick: the share is the
 /// step and every function returns its argument, which keeps 30 Hz bit-identical.
 /// </summary>

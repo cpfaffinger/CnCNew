@@ -1,7 +1,7 @@
 # 30-Hz-Fehler: die verlorene Weckbitte des langsamen Todes
 
 Stand 8. Oktober 2026, gemessen am Stand `71e41d7` (Korrektur) über `37b36b8` (`main`). Dritte Messrunde der Phase 23, Fall `timed` der
-Raten-Äquivalenz-Suite (`docs/RATE-INVARIANCE-TIMING.md` Abschnitt 5, `docs/RATE-INVARIANCE-CONSOLIDATION.md`, `docs/TICKRATE-MIGRATION.md` §15.4).
+Raten-Äquivalenz-Suite (`docs/rate-invariance/RATE-INVARIANCE-TIMING.md` Abschnitt 5, `docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md`, `docs/TICKRATE-MIGRATION.md` §15.4).
 Die Korrektur ändert das Verhalten bei 30 Hz und ist nach der Entscheidung des Projektinhabers vom 8. Oktober 2026 eine Ursache in einem eigenen Commit;
 das Referenzmanifest ist in diesem Zweig **nicht** neu geschrieben.
 

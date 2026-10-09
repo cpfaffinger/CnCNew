@@ -1,6 +1,6 @@
 # Leistungsprofil der Simulation
 
-Stand: Phase 18, Punkt 5 (`docs/HANDOFF-PHASE18.md`); Register `docs/MULTIPLAYER-PLAN.md` §4, E4 und E20.
+Stand: Phase 18, Punkt 5 (`docs/handoffs/HANDOFF-PHASE18.md`); Register `docs/MULTIPLAYER-PLAN.md` §4, E4 und E20.
 
 Dieses Dokument beschreibt das Messwerkzeug (`SimTool perf`, `SimTool perf-mission`, `scripts/perf-profile.ps1`), die
 Tickphasen, wie sie gemessen werden, und wie eine ruhige Messung abläuft. **Es wird hier nichts optimiert** – das ist
@@ -78,9 +78,9 @@ als 0,0 oder 0,1 µs; ihre Mittelwerte sind nur der Größenordnung nach zu lese
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf .local/phase2-import-a --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --replay --csv <datei.csv>
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf .local/phase2-import-a --map "Maps/Alpine Assault/Alpine Assault.map" --factions FactionChina,FactionGLA --ticks 54000 --replay
-dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf-mission .local/phase2-import-a --map "Maps/MD_USA05/MD_USA05.map" --ticks 3000 --csv <datei.csv>
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --replay --csv <datei.csv>
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf game/content --map "Maps/Alpine Assault/Alpine Assault.map" --factions FactionChina,FactionGLA --ticks 54000 --replay
+dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf-mission game/content --map "Maps/MD_USA05/MD_USA05.map" --ticks 3000 --csv <datei.csv>
 pwsh scripts/perf-profile.ps1 [-Ticks 54000] [-MissionTicks 3000,9000] [-Only 'large-*'] [-OutDir <verzeichnis>] [-TimeoutMinutes 60]
 ```
 
@@ -154,7 +154,7 @@ Tabelle nennt die tatsächlich gelaufenen.
 
 ## 5. Die drei Spuren des Handoffs
 
-Das Werkzeug kann jede der drei unbelegten Spuren aus `docs/HANDOFF-PHASE18.md` Punkt 5 bestätigen oder widerlegen:
+Das Werkzeug kann jede der drei unbelegten Spuren aus `docs/handoffs/HANDOFF-PHASE18.md` Punkt 5 bestätigen oder widerlegen:
 
 - **(a) Der Sicht-Hash wird alle drei Ticks über jede Zelle jedes Spielers neu berechnet.** Phase `VisionHash` (und
   `Vision` für das Löschen und Aufdecken) je Tick und je Auffrischung; dazu am Ende 20 direkte Aufrufe von
@@ -210,7 +210,7 @@ Gemessen am 6. Oktober 2026, Stand `b432fb7`, mit `scripts/perf-profile.ps1` (St
 3. **Sicht und Hash zusammen kosten ein Drittel** (large-8p: Vision 716 + VisionHash 379 + Hash 531 = 1.626 µs von 4.978). Alle drei wachsen mit Kartenfläche und Spielerzahl, nicht mit dem, was sich ändert.
 4. **Die drei Spuren des Handoffs:** (a) bestätigt – `VisionHash` 379 µs im Mittel auf Twilight Flame mit 8 Spielern, 822–841 µs auf `MD_GLA05`; (b) teilweise – die Hash-Phase kostet 135–531 µs in Gefechten und 1,6–2,3 ms in Missionen, der größere Hebel ist laut Vorabmessung (§7), dass die meisten Objekte jeden Tick als geändert gelten; (c) trifft zu, wirkt aber nicht auf den Tick (niemand ruft `MissionSession.StateHash()` je Tick).
 5. **Skripte:** in `MD_GLA05` 2,8–3,0 ms je Tick (22 % des Ticks) und 4 MB Allokation je Tick mit 1.435 Gen-0-Sammlungen in 3.000 Ticks; in `MD_USA05` 0,23–0,28 ms.
-6. **Hochrechnung auf 60 Hz** (Mittel × 60, ohne dass sich etwas am Code ändert): Gefecht mit 8 Spielern **30 % eines Kerns**, Aufholtempo **3,4-fach**; `MD_USA05` 33–36 % und rund 3-fach; `MD_GLA05` **76–81 %** und nur **1,2- bis 1,3-fach**. Die Sollwerte für Phase 19 (`docs/HANDOFF-PHASE19.md`) sind daran zu messen; die Quantile zählen mehr als das Mittel: das 99-%-Quantil des 8-Spieler-Laufs liegt bei 13,6 ms und damit nahe an einem ganzen 60-Hz-Tick (16,7 ms), das von `MD_GLA05` bei 36–37 ms darüber.
+6. **Hochrechnung auf 60 Hz** (Mittel × 60, ohne dass sich etwas am Code ändert): Gefecht mit 8 Spielern **30 % eines Kerns**, Aufholtempo **3,4-fach**; `MD_USA05` 33–36 % und rund 3-fach; `MD_GLA05` **76–81 %** und nur **1,2- bis 1,3-fach**. Die Sollwerte für Phase 19 (`docs/handoffs/HANDOFF-PHASE19.md`) sind daran zu messen; die Quantile zählen mehr als das Mittel: das 99-%-Quantil des 8-Spieler-Laufs liegt bei 13,6 ms und damit nahe an einem ganzen 60-Hz-Tick (16,7 ms), das von `MD_GLA05` bei 36–37 ms darüber.
 7. **Snapshot:** 3,2 MB für 155 Objekte auf Twilight Flame (der größte Teil ist nicht das Objekt, sondern Karte und Sicht), 9,0 MB für 2.249 Objekte in `MD_GLA05`; Schreiben 9–43 ms, Lesen 23–164 ms.
 
 Nicht gemessen: Streuung zwischen Läufen, ein zweiter Rechner, Server-GC, der Client (Darstellung) neben der Simulation, die Kosten des Beobachters selbst (der Lauf ohne Beobachter ist die Spalte „Wiedergabe ohne KI“; large-8p: 4.870 gegenüber 4.978 µs mit Beobachter und KI).
@@ -244,7 +244,7 @@ Dieselbe Liste, derselbe Rechner, dasselbe Skript wie §6 (`scripts/perf-profile
 | MD_USA05 (3.000) | 967,8 (2.179,5) | 25,3 (311,5) | 110,1 (921,3) | 237,5 (562,3) | 956,4 (1.681,2) | – | 153,6 (278,8) |
 | MD_GLA05 (3.000) | 1.111,0 (5.261,5) | 45,6 (540,8) | 301,8 (1.531,8) | 497,5 (841,2) | 1.245,1 (2.271,3) | – | 204,3 (2.999,7) |
 
-### 6a.3 Gegen die Sollwerte der Phase (`docs/HANDOFF-PHASE19.md`; 8 Spieler, 30 Spielminuten, große Karte)
+### 6a.3 Gegen die Sollwerte der Phase (`docs/handoffs/HANDOFF-PHASE19.md`; 8 Spieler, 30 Spielminuten, große Karte)
 
 | Größe | Soll | vorher | nachher | erreicht? |
 |---|---|---:|---:|---|
@@ -290,7 +290,7 @@ Phase 22 hat `Fixed` von 16 auf 24 Nachkommabits gestellt (`docs/FIXED-POINT-Q39
 
 ## 6c. Leistungstor der Phase 23 (9. Oktober 2026, ruhig gemessen)
 
-Phase 23 endet mit einem Tor: das Spiel läuft jetzt standardmäßig mit 60 Hz, also müssen die Sollwerte der Phase 19 (`docs/HANDOFF-PHASE19.md`; 8 Spieler, 30 Spielminuten, große Karte) **bei
+Phase 23 endet mit einem Tor: das Spiel läuft jetzt standardmäßig mit 60 Hz, also müssen die Sollwerte der Phase 19 (`docs/handoffs/HANDOFF-PHASE19.md`; 8 Spieler, 30 Spielminuten, große Karte) **bei
 60 Hz** gelten. Gemessen auf dem Entwicklungsrechner mit CPU-Last 0–11 % vor den Läufen, strikt nacheinander, mit `SimTool perf … --replay` aus kopierten Binärverzeichnissen; „alt“ ist der
 Ausgangsstand der Phase (`20ffce9`), „neu“ der Stand vor der Umstellung (`1b82e45`, alle vier Runden der Raten-Invarianz, Fabrikausfahrt und KI-Korrekturen; die Umstellung selbst ist danach eine
 Zeile und ändert keinen Rechenweg). Protokolle im Scratchpad der Sitzung (`perf-gate`). Ein bis drei Läufe je Zeile, keine Streuung über mehr erhoben. **`catchup` und `core_percent` werden seit
@@ -369,7 +369,7 @@ Rechner: AMD64 Family 25 Model 68, 16 logische Prozessoren, Windows 10.0.26200, 
 
 | Lauf | ohne Beobachter | mit Beobachter (`perf`) |
 |---|---|---|
-| `reference-match` (neuer Stand, kein Beobachter) | FactionGLA bei Tick 14.490, `23B4B25DF62765D8`, Kette `DE5849AF9F8493C4` – wie `docs/HANDOFF-PHASE18.md` | – |
+| `reference-match` (neuer Stand, kein Beobachter) | FactionGLA bei Tick 14.490, `23B4B25DF62765D8`, Kette `DE5849AF9F8493C4` – wie `docs/handoffs/HANDOFF-PHASE18.md` | – |
 | `stress` / `hash` der Stress-Wiedergabe (alter Stand `e5046b7` und neuer Stand, je 13 Läufe) | `56882F763EABEF67`, Kette `B8E663493F2C73D5` | – |
 | Scorched Earth, 2 Spieler, 18.000 Ticks | `ai-match` alter und neuer Stand: `7C4FC065EF2E3022`, Kette `D3754175A10F3630` | `7C4FC065EF2E3022`, Kette `D3754175A10F3630` |
 | Twilight Flame, 8 Spieler, 18.000 Ticks | Handoff (5. Oktober): `72CF0F846E0D9AA6`, Kette `5E446FE63C5BEF46`; `perf --no-observer`: dasselbe | `72CF0F846E0D9AA6`, Kette `5E446FE63C5BEF46` |
@@ -449,7 +449,7 @@ Base64 im Snapshot), weniger an der Objektzahl.
 
 Das Werkzeug vergleicht am Ende jedes Laufs den inkrementell geführten Hash der Welt mit einer vollen Neuberechnung.
 In `MD_GLA05` nach 3.000 Ticks weichen sie ab (inkrementell `406F4DD61EC777F3`, voll `0EB5EC8A435DBDD8`); nach 300
-Ticks und in den anderen Läufen sind sie gleich. Das ist ein Fall von Befund D8 aus `docs/HANDOFF-PHASE18.md`: eine
+Ticks und in den anderen Läufen sind sie gleich. Das ist ein Fall von Befund D8 aus `docs/handoffs/HANDOFF-PHASE18.md`: eine
 Zustandsänderung ohne `MarkDirty`. Folge: der dokumentierte Endhash `317B464E8BA98377` dieses Laufs ist der Hash eines
 veralteten Zwischenstands, und ein Speicherstand an dieser Stelle stellt eine Welt mit einem anderen Hash wieder her.
 Der Lauf mit und ohne Beobachter ist davon gleich betroffen (derselbe Endhash); gesucht und behoben ist die Ursache

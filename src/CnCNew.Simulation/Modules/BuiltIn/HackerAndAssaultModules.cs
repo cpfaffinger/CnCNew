@@ -276,7 +276,7 @@ public sealed class AssaultTransportAIUpdate(AssaultTransportData data) : AIUpda
         }
 
         // The group is kept once per logic frame of the original of the transport (the reference's update), in the ticks its frames begin with, and reads the transport, its
-        // members and the target where the frame each has begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 3): kept every tick it noticed a shot of the
+        // members and the target where the frame each has begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 3): kept every tick it noticed a shot of the
         // tick before "in the next update" one tick later instead of one frame, and its troops left a share of a frame early. The movement below runs every tick.
         if (!world.Time.BeginsFrameOf(Entity, world.Tick))
         {

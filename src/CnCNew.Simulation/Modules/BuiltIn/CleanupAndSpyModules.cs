@@ -98,7 +98,7 @@ public sealed class CleanupHazardUpdate(CleanupHazardData data) : SimModule, IUp
             return SimulationTiming.SleepNone;
         }
         // The module looks, orders and fires in the ticks its owner's logic frames of the original begin with, and reads the owner and its target where the frame each has begun
-        // ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 3; the form of PointDefenseLaserUpdate): deciding in every tick it found, lost and re-ordered its target
+        // ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rules 1 and 3; the form of PointDefenseLaserUpdate): deciding in every tick it found, lost and re-ordered its target
         // on ticks inside a frame, and its rescan countdown left the frame grid. The countdown falls every tick. 30 Hz: every tick, the positions.
         var decide = world.Time.BeginsFrameOf(Entity, world.Tick);
         _frameTick = world.Tick;

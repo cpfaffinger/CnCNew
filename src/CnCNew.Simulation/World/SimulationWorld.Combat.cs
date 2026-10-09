@@ -35,7 +35,7 @@ public sealed partial class SimulationWorld
     {
         if (!sourceId.IsValid) return Fixed.Zero;
         var bonuses = _templates.GlobalWeaponBonus;
-        // Above 30 Hz everybody is hit where the logic frame of the original it has begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the 30 Hz blast finds
+        // Above 30 Hz everybody is hit where the logic frame of the original it has begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the 30 Hz blast finds
         // an object that already had its turn in the tick after its whole step, not a share of the way there. Nobody is inside a frame's step at 30 Hz.
         var frameEnd = _firstFrameTicks != TickOrder.Next;
         if (primaryVictim is not null)

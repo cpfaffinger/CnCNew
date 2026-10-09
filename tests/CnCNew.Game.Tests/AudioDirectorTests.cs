@@ -140,7 +140,7 @@ internal static class AudioDirectorTests
     }
 
     /// <summary>
-    /// The announcer counts original frames, never ticks (docs/HANDOFF-PHASE21.md, item 9): an event without <c>TimeBetweenChecksMS</c> may be announced again after 900
+    /// The announcer counts original frames, never ticks (docs/handoffs/HANDOFF-PHASE21.md, item 9): an event without <c>TimeBetweenChecksMS</c> may be announced again after 900
     /// original frames (30 s) at every tick rate. The director is driven as the client drives it, once per tick of the fake world, with the event requested every tick.
     /// </summary>
     private static void EvaLockTimeIsGameTime()

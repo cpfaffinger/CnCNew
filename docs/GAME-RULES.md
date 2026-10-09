@@ -6,11 +6,11 @@ mit Flächenschaden, einfache Bewegung, Produktion, die Blockermodule aus §3/§
 Stealth-Erkennung, Garnison-Containment), das Spezialkraft-Subsystem (§6d), die Versorgungswirtschaft mit Andockmaschine
 und Spawnern (§6e), Reparatur (§6f), Erfahrung und Veteranenstufen (§6h) sowie Teams und Diplomatie (§7). Phase 5 gilt als
 abgeschlossen, weil Supply, Erfahrung und Teams stehen und der Referenzmatch auf Retail-Daten mit 0 übersprungenen
-Startobjekten läuft (§7a); die bewussten Grenzen stehen in §10, der Folgeauftrag stand in `docs/HANDOFF-PHASE7.md` (Phase 6 ist erledigt, der nächste Auftrag ist `docs/HANDOFF-PHASE8.md`).
+Startobjekten läuft (§7a); die bewussten Grenzen stehen in §10, der Folgeauftrag stand in `docs/handoffs/HANDOFF-PHASE7.md` (Phase 6 ist erledigt, der nächste Auftrag ist `docs/handoffs/HANDOFF-PHASE8.md`).
 
 **Einheit „Tick“ in diesem Dokument (Phase 20):** Die Tickrate ist ein Wert der Welt (`docs/SIMULATION-CORE.md` §1, `docs/TICKRATE-MIGRATION.md`). Jede Tickangabe hier – „alle 15 Ticks“, „nach 300 Ticks“, „3 Ticks“ – ist ein Wert **bei 30 Hz** und meint Bilder des Originals (1/30 s): bei 60 und 120 Hz sind es doppelt bzw. viermal so viele Ticks und dieselbe Spielzeit. Umrechnungen „Millisekunden mit 30 Ticks je Sekunde“ heißen genau: auf ganze Bilder des Originals aufgerundet, mal Rate/30. Namen im Code, die hier noch als `…Ticks` stehen, enden seit Phase 20 auf `Frames`, wo sie eine Konstante in Bildern sind (`SaleDurationFrames`, `UpdateRateFrames` …). Was sich bei 60 Hz anders verhält, steht nicht hier, sondern in `docs/TICKRATE-MIGRATION.md` §5.
 
-**Nachtrag Phase 23 (9. Oktober 2026):** Seit `e8632bb` läuft eine Sitzung standardmäßig mit **60 Hz**; die Rate bleibt ein Wert der Welt, 30 und 120 Hz bleiben unterstützt. Jede Tickangabe, jeder Siegtick und jeder Hash in diesem Dokument ist deshalb **historisch, 30 Hz**: als Zahl von Originalbildern gilt sie weiter (bei 60 Hz doppelt so viele Ticks, dieselbe Spielzeit), als Referenzwert nicht mehr – maßgeblich ist `baselines/reference-manifest.json` (60 Hz). Die Regeln selbst sind bei jeder Rate dieselben: oberhalb von 30 Hz wird der 30-Hz-Schritt unterteilt (entschieden im ersten Tick des Originalbilds eines Objekts, die Lage mit dem letzten erreicht; `docs/SIMULATION-CORE.md` §43), und die Raten-Äquivalenz-Suite misst das (§39.7 dort: 0 Größen außerhalb der Toleranz bei 60 und 120 Hz). Der Verbleib jeder Zeile aus `docs/TICKRATE-MIGRATION.md` §5 steht dort am Zeilenende. Drei Regeländerungen der Phase gelten auch bei 30 Hz und stehen nicht in den Abschnitten unten: produzierte Einheiten fahren auf dem Ausfahrtsweg aus ihrer Fabrik und jeder Befehl ersetzt ihn (`docs/SIMULATION-CORE.md` §42 – der Satz „entsteht die Einheit am `UnitCreatePoint`“ unten ist insoweit unvollständig); ein langsamer Tod von einem Bild Dauer endet (`docs/DEFECT-LOST-WAKE.md`); Einheiten, deren Ziel besetzt ist, nehmen einen freien Platz daneben, Einsteiger erreichen ihr Fahrzeug, und der Fallschirmabwurf der Spezialkraft setzt seine Soldaten ab (`docs/AI-OBSERVED-2026-10-08.md` §11, `docs/RATE-INVARIANCE-ROUND3-FLIGHT.md` §6).
+**Nachtrag Phase 23 (9. Oktober 2026):** Seit `e8632bb` läuft eine Sitzung standardmäßig mit **60 Hz**; die Rate bleibt ein Wert der Welt, 30 und 120 Hz bleiben unterstützt. Jede Tickangabe, jeder Siegtick und jeder Hash in diesem Dokument ist deshalb **historisch, 30 Hz**: als Zahl von Originalbildern gilt sie weiter (bei 60 Hz doppelt so viele Ticks, dieselbe Spielzeit), als Referenzwert nicht mehr – maßgeblich ist `baselines/reference-manifest.json` (60 Hz). Die Regeln selbst sind bei jeder Rate dieselben: oberhalb von 30 Hz wird der 30-Hz-Schritt unterteilt (entschieden im ersten Tick des Originalbilds eines Objekts, die Lage mit dem letzten erreicht; `docs/SIMULATION-CORE.md` §43), und die Raten-Äquivalenz-Suite misst das (§39.7 dort: 0 Größen außerhalb der Toleranz bei 60 und 120 Hz). Der Verbleib jeder Zeile aus `docs/TICKRATE-MIGRATION.md` §5 steht dort am Zeilenende. Drei Regeländerungen der Phase gelten auch bei 30 Hz und stehen nicht in den Abschnitten unten: produzierte Einheiten fahren auf dem Ausfahrtsweg aus ihrer Fabrik und jeder Befehl ersetzt ihn (`docs/SIMULATION-CORE.md` §42 – der Satz „entsteht die Einheit am `UnitCreatePoint`“ unten ist insoweit unvollständig); ein langsamer Tod von einem Bild Dauer endet (`docs/DEFECT-LOST-WAKE.md`); Einheiten, deren Ziel besetzt ist, nehmen einen freien Platz daneben, Einsteiger erreichen ihr Fahrzeug, und der Fallschirmabwurf der Spezialkraft setzt seine Soldaten ab (`docs/AI-OBSERVED-2026-10-08.md` §11, `docs/rate-invariance/RATE-INVARIANCE-ROUND3-FLIGHT.md` §6).
 
 Alle Regeln laufen innerhalb der bestehenden Tickphasen (`SIMULATION-CORE.md` §4): neue Befehle werden in Phase 1
 ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt keine zusätzliche Tickphase.
@@ -67,7 +67,7 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   erfordert eine nichtleere `TriggeredBy`-Maske im Schlüssel (alle oder irgendeine, je `RequiresAllTriggers`), keine
   gesetzte `ConflictsWith`-Maske und noch nicht ausgeführt; `AttemptUpgrade` entfernt zuerst die in `RemovesUpgrades`
   genannten Upgrades, wendet dann den Moduleffekt an und markiert sich als ausgeführt.
-- **Elf `*Upgrade`-Module**, alle gegen den echten Bestand (`.local/phase2-import-a`) geprüft:
+- **Elf `*Upgrade`-Module**, alle gegen den echten Bestand (`game/content`) geprüft:
 
   | Modul | Effekt | Quelle |
   |---|---|---|
@@ -100,7 +100,7 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
   Bedingungen: `Conditions = None` (Standard) und `Conditions = PLAYER_UPGRADE`. Seit Phase 10 kommen `VETERAN`/`ELITE`/`HERO` als weitere,
   je für sich stehende Bedingungen hinzu (`ObjectTemplate.VeteranArmor`/`VeteranWeapon`, ausgewählt nach `Entity.VeterancyLevel` in
   `SimulationWorld.ActiveArmor`/`ActiveWeaponIndex`); nicht modelliert bleibt die Kombination mehrerer gleichzeitiger Bedingungen (ein Satz, der
-  z. B. `PLAYER_UPGRADE` UND `VETERAN` zugleich verlangt) – geprüft gegen `.local/phase2-import-a`: **kein einziges `ArmorSet`/`WeaponSet` der
+  z. B. `PLAYER_UPGRADE` UND `VETERAN` zugleich verlangt) – geprüft gegen `game/content`: **kein einziges `ArmorSet`/`WeaponSet` der
   Retail-Zero-Hour-Daten kombiniert eine Bedingung mit der Veteranenstufe**, die Einschränkung hat also auf den echten Bestand keine Auswirkung.
   Die Veteranenstufe wirkte zuvor nur über Waffenbonus und Gesundheit (§6h), jetzt zusätzlich über die Satzauswahl selbst.
 - **`FireWeaponCommand`:** direkter, expliziter Schuss (kein automatisches Zielsuchen, keine Sichtlinie). Ablehnungen:
@@ -211,7 +211,7 @@ ausgeführt, neue Module ticken in Phase 3 wie jedes andere Updatemodul. Es gibt
 ### 6a. Containment (Garrison)
 
 Der größte Einzelblocker nach gemessenem Freischaltungsgewinn (167 von 200 Objekten mit `GarrisonContain` hingen nur
-noch an diesem Modul, siehe `docs/HANDOFF-PHASE5.md`). Neue Basisinfrastruktur, nicht nur ein weiteres Modul:
+noch an diesem Modul, siehe `docs/handoffs/HANDOFF-PHASE5.md`). Neue Basisinfrastruktur, nicht nur ein weiteres Modul:
 `Entity.ContainedBy`/`Entity.Container` (ein Container pro Entität, absichtlich eng gehalten – `IContainerModule` ist
 bewusst schmal, bis ein zweiter Implementierer, `TransportContain`, ihn tatsächlich erweitert) sowie
 `EnterContainerCommand`/`ExitContainerCommand` (`CommandTypes.Version` 3 → 4).
@@ -735,7 +735,7 @@ Lager, steht das als `supply note` im Bericht; der Generator zählt `SupplyDeliv
 Ersatzgebäude, weil ihre Startbasis ein ungebundenes Modul enthält), einer wegen fehlender Einheit ausgeschlossenen und einer
 unspielbaren Fraktion. Das Match endet mit einem Sieger, das Replay läuft durch Datei, zwei Läufe und Snapshot identisch.
 
-**Retail-Daten.** Neu gemessen (`SimTool reference-match .local/phase2-import-a`, Basisdaten ohne Kartenoverlays,
+**Retail-Daten.** Neu gemessen (`SimTool reference-match game/content`, Basisdaten ohne Kartenoverlays,
 Fingerabdruck `9F5307957A55CD46`): **alle 13 spielbaren Fraktionen nehmen teil**, jede mit ihrer **echten Kommandozentrale**
 (`AmericaCommandCenter`, `Infa_ChinaCommandCenter`, `GLACommandCenter`, …), und **kein Startobjekt wird übersprungen**
 (`StartObjectsSkipped` = 0, vom Realdatentest erzwungen; die früheren 13 Bauarbeiter-Fahrzeuge und GLA-Arbeiter sind seit `DozerAIUpdate`/`WorkerAIUpdate` instanziierbar).

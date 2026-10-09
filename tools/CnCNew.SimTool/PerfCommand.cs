@@ -178,7 +178,7 @@ internal static class PerfCommand
 
         Extrapolate(recorder, replayTicksPerSecond, summary);
         Console.WriteLine();
-        Console.WriteLine("Probes for the three suspicions of docs/HANDOFF-PHASE18.md item 5 (end state of this run):");
+        Console.WriteLine("Probes for the three suspicions of docs/handoffs/HANDOFF-PHASE18.md item 5 (end state of this run):");
         ProbeVision(world, recorder);
         ProbeDescribe(world, recorder);
         Console.WriteLine("  (c) MissionSession.StateHash: not part of a skirmish; use perf-mission.");
@@ -280,7 +280,7 @@ internal static class PerfCommand
 
         Extrapolate(recorder, null, summary);
         Console.WriteLine();
-        Console.WriteLine("Probes for the three suspicions of docs/HANDOFF-PHASE18.md item 5 (end state of this run):");
+        Console.WriteLine("Probes for the three suspicions of docs/handoffs/HANDOFF-PHASE18.md item 5 (end state of this run):");
         ProbeVision(world, recorder);
         ProbeDescribe(world, recorder);
         ProbeScriptHash(session, recorder);
@@ -449,7 +449,7 @@ internal static class PerfCommand
 
     /// <summary>
     /// The incrementally maintained hash against a full recomputation (which also refreshes the caches). A difference is a state change that did not mark its
-    /// entity dirty (docs/HANDOFF-PHASE18.md, finding D8): the run's hash is then not the hash of its state, and a snapshot restores to the full one.
+    /// entity dirty (docs/handoffs/HANDOFF-PHASE18.md, finding D8): the run's hash is then not the hash of its state, and a snapshot restores to the full one.
     /// </summary>
     private static bool CheckIncrementalHash(SimulationWorld world, SortedDictionary<string, string> summary)
     {

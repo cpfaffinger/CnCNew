@@ -289,7 +289,7 @@ mit der Kopie kostet heute 7.000–40.000 Bytes je Auffrischung, also wenige µs
 Slots) würde auch die obere Kette auf die geänderten Slots begrenzen. Hochgerechnet auf ruhige Werte bliebe vom Hash etwa ein Zehntel
 bis ein Zwanzigstel: rund 30–40 µs je Auffrischung auf Twilight Flame, rund 35–50 µs auf `MD_GLA05`.
 
-Preis: Der Wert ändert sich, also **jeder** Hash des Referenzmanifests (alle 50 Läufe) – nach `docs/HANDOFF-PHASE19.md` Punkt 4 ein
+Preis: Der Wert ändert sich, also **jeder** Hash des Referenzmanifests (alle 50 Läufe) – nach `docs/handoffs/HANDOFF-PHASE19.md` Punkt 4 ein
 eigener Commit mit einer Ursache, neu geschriebenem Manifest und dem Nachweis, dass die *Ergebnisse* (Sieger, Endtick, Objektlisten)
 aller Läufe gleich bleiben. Die Zellbytes und der Snapshot-Inhalt ändern sich nicht; eine Snapshot-Version muss nicht steigen, solange
 der Sicht-Hash dort nicht gespeichert wird (er wird beim Laden neu berechnet). Empfehlung: zusammen mit den anderen wertändernden

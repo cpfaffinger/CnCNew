@@ -23,7 +23,7 @@ static partial class Tests
         """;
 
     /// <summary>
-    /// Phase 10 (docs/HANDOFF-PHASE10.md part B point 9): <c>ToppleUpdate</c>, <c>StructureToppleUpdate</c>, <c>HeightDieUpdate</c>
+    /// Phase 10 (docs/handoffs/HANDOFF-PHASE10.md part B point 9): <c>ToppleUpdate</c>, <c>StructureToppleUpdate</c>, <c>HeightDieUpdate</c>
     /// and real footprint collision for <c>CrushDie</c>/<c>SquishCollide</c>, plus the bounded local avoidance added alongside them.
     /// </summary>
     private static IReadOnlyDictionary<string, string> CollisionFiles() => new Dictionary<string, string>(SyntheticFixture.Files)

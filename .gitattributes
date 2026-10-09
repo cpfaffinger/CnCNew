@@ -1,0 +1,10 @@
+# This repository deliberately keeps mixed line endings per file (most files are LF; README.md,
+# AGENTS.md, LICENSE.md, docs/ARCHITECTURE.md, docs/ROADMAP.md, docs/IMPLEMENTATION-PLAN.md and a few
+# others are CRLF). Golden hashes, source-rule tests and byte-identical artefacts depend on the bytes
+# in the working tree being the bytes in the index, so Git must never convert line endings on
+# checkout or commit, whatever core.autocrlf says on the machine.
+* -text
+
+# Better hunk headers in diffs; these do not change file contents.
+*.md diff=markdown
+*.cs diff=csharp

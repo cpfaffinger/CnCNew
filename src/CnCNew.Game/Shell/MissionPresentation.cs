@@ -1375,7 +1375,7 @@ public sealed class MissionPresentationDirector
 
 /// <summary>
 /// Bridges the human player's in-mission UI to the <see cref="ScriptEngine"/> feedback it reads
-/// (<c>docs/HANDOFF-PHASE10.md</c> item 7): selecting a named object calls <see cref="ScriptEngine.SelectNamed"/> so
+/// (<c>docs/handoffs/HANDOFF-PHASE10.md</c> item 7): selecting a named object calls <see cref="ScriptEngine.SelectNamed"/> so
 /// <c>NAMED_SELECTED</c> conditions resolve, and <see cref="NotifyUiInteraction"/> is a direct passthrough to
 /// <see cref="ScriptEngine.SignalUiInteraction"/> for whatever player-driven interaction a mission script waits on with a
 /// <c>FLAG</c> condition. This build does not model a table from a specific command-bar button to a specific mission's

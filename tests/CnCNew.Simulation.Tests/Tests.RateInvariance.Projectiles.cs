@@ -10,7 +10,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, package "projectiles" (<c>docs/RATE-INVARIANCE-PROJECTILES.md</c>): what flies takes its decisions once per logic frame of the original, on its own phase, exactly as at
+/// Phase 23, package "projectiles" (<c>docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md</c>): what flies takes its decisions once per logic frame of the original, on its own phase, exactly as at
 /// 30 Hz, and flies the step of that frame in equal shares over the ticks of the frame. Each test runs the same scene at 30, 60 and 120 Hz and compares the state at the frame
 /// boundaries with the 30 Hz run — positions bit for bit where the inputs are the same numbers, event times in logic frames.
 /// </summary>

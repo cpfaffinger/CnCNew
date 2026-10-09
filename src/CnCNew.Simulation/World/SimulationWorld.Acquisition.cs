@@ -134,7 +134,7 @@ public sealed partial class SimulationWorld
                 continue;
             }
 
-            // A unit decides in the ticks its logic frames of the original begin with (docs/RATE-INVARIANCE-ROUND3-OBSERVERS.md §2); it reads everything it looks at where
+            // A unit decides in the ticks its logic frames of the original begin with (docs/rate-invariance/RATE-INVARIANCE-ROUND3-OBSERVERS.md §2); it reads everything it looks at where
             // that frame ends, so the ticks in between have nothing to decide that the 30 Hz step decides. At 30 Hz every tick begins a frame.
             if (_firstFrameTicks != TickOrder.Next && (tick - entity.SpawnTick) % _firstFrameTicks != 0) continue;
             var before = AcquisitionStamp.Of(entity.Acquisition);
@@ -311,7 +311,7 @@ public sealed partial class SimulationWorld
         if (mode != AcquireMode.AttackMove || !MayChase(entity, aircraft)) return false;
         var leash = AcquireRadius(entity, true) * ChaseLeashFactor;
         // The chase is decided after the updates of the tick: at 30 Hz both objects have taken their whole step by then. Above 30 Hz they are read where the frame they have
-        // begun ends (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3), and the walk starts one logic frame of the original later, as "the next tick" does at 30 Hz.
+        // begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3), and the walk starts one logic frame of the original later, as "the next tick" does at 30 Hz.
         var (victimX, victimY, _) = victim.FrameEnd(tick);
         var (ownX, ownY, _) = entity.FrameEnd(tick);
         var dx = victimX - ownX;

@@ -18,7 +18,7 @@ internal enum VerifyMode
 }
 
 /// <summary>
-/// Finding D8 of <c>docs/HANDOFF-PHASE18.md</c>: the world keeps the hash of every object and re-hashes only the objects marked dirty. A state change
+/// Finding D8 of <c>docs/handoffs/HANDOFF-PHASE18.md</c>: the world keeps the hash of every object and re-hashes only the objects marked dirty. A state change
 /// that forgets <c>MarkDirty</c> leaves a stale hash that nobody notices until something recomputes all of them (a snapshot does). This class counts
 /// the ticks in which the incremental hash differs from a full recomputation and, in <see cref="VerifyMode.Explain"/>, names the object and the fields.
 /// <para>

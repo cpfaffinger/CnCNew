@@ -10,7 +10,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, third round (<c>docs/RATE-INVARIANCE-ROUND3-FLIGHT.md</c> §3): <c>DeployStyleAIUpdate</c>. A unit becomes ready to attack in its update; the fire command that finds it
+/// Phase 23, third round (<c>docs/rate-invariance/RATE-INVARIANCE-ROUND3-FLIGHT.md</c> §3): <c>DeployStyleAIUpdate</c>. A unit becomes ready to attack in its update; the fire command that finds it
 /// ready is the one a logic frame of the original later, at every rate, although commands arrive every tick. The tests name their rates and ignore <c>--tick-rate</c>.
 /// </summary>
 static partial class Tests

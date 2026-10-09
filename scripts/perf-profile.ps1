@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Leistungsprofil der Simulation (docs/PERFORMANCE.md, docs/HANDOFF-PHASE18.md Punkt 5): fuehrt die feste Liste der Messlaeufe strikt nacheinander aus.
+  Leistungsprofil der Simulation (docs/PERFORMANCE.md, docs/handoffs/HANDOFF-PHASE18.md Punkt 5): fuehrt die feste Liste der Messlaeufe strikt nacheinander aus.
 
 .DESCRIPTION
   Baut SimTool (Release), kopiert die Binaerdateien in das Ausgabeverzeichnis (damit ein spaeterer Build die laufende Messung nicht stoert) und startet

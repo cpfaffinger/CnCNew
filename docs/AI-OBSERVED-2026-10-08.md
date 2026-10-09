@@ -129,7 +129,7 @@ Bewegungsauftrag (kein Dock, keine Bauaufgabe, kein Einsteigeziel, kein Zielobje
 15. Logikbild der Welt, versetzt um die Kennung. Abweichungen vom Original: gefragt wird nahe am Ziel statt bei der Auftragserteilung (so fällt auch ein Platz auf, der unterwegs
 besetzt wurde); die Spirale liegt um den genauen Zielpunkt, nicht um die Zellmitte; „erreichbar“ ist die gerade Linie, nicht die Zonentabelle.
 
-**Bildkonvention (`docs/RATE-INVARIANCE-CONSOLIDATION.md` §1):** die Frage fällt in die eine Entscheidung je Logikbild; der Rhythmus ist die Bildnummer der Welt
+**Bildkonvention (`docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md` §1):** die Frage fällt in die eine Entscheidung je Logikbild; der Rhythmus ist die Bildnummer der Welt
 (`Time.FramesIn(Tick)`), also bei jeder Rate dasselbe Bild; eine Einheit, die bei über 30 Hz gerade den letzten Schritt ihres Weges zurücklegt, zählt wie beim 30-Hz-Schritt als auf
 ihrem Ziel stehend (Regel 3). Der Test schickt sechs Einheiten auf einen Punkt: alle kommen nach 193 Bildern an, genau eine steht auf dem Punkt, die anderen auf den Nachbarzellen
 (10,10), (−10,0), (−10,10), (10,0), (0,10), niemand steht in einem anderen – und Lage, Blickrichtung und Auftragszustand nach **jedem** Logikbild sind bei 30, 60 und 120 Hz
@@ -393,7 +393,7 @@ Der Test mit sechs Einheiten auf einen Punkt besteht bei 30, 60 und 120 Hz bildg
 
 Zu (b): der Fall der Gruppe `ai` war auf `main` nur gleich, weil dessen KI fast nur Infanterie baute. Die Mechanik von `main` mit **nur** dem Heereskauf dieses Branch (Regel aus)
 ergibt in der Gruppe 10 / 8 Größen außerhalb der Toleranz (gemessen: Export von `4d9d9e5` mit `SkirmishAi*.cs` darüber) – dort kreisen die Einheiten noch, und Kreisen verstärkt
-jeden Unterschied. `docs/RATE-INVARIANCE-PROJECTILES.md` §5.4 hatte den Laser bewusst gelassen („weniger als ein Bild früher, kein Fall schlägt fehl“); das stimmt nicht mehr,
+jeden Unterschied. `docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md` §5.4 hatte den Laser bewusst gelassen („weniger als ein Bild früher, kein Fall schlägt fehl“); das stimmt nicht mehr,
 sobald eine KI Avenger baut. Alle zehn Gruppen: locomotion, flight, weapons, projectiles, turrets, overtime, economy (34 Fälle), timed, scripts, ai je **0 / 0**.
 
 ### 11.4 Messungen (30 Hz, gemergter Stand)

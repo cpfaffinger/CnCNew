@@ -9,7 +9,7 @@ using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
 /// <summary>
-/// Phase 23, ground movement (<c>docs/RATE-INVARIANCE-GROUND.md</c>): above 30 Hz <c>AIUpdateInterface</c> decides once per logic frame of the original and covers that frame's step
+/// Phase 23, ground movement (<c>docs/rate-invariance/RATE-INVARIANCE-GROUND.md</c>): above 30 Hz <c>AIUpdateInterface</c> decides once per logic frame of the original and covers that frame's step
 /// in one share per tick. These tests hold the consequence on the synthetic fixture: after every logic frame a lone object is, to the bit, where the 30 Hz step puts it, at 60 and
 /// at 120 Hz; between two frames it is on the line between them; what ends a frame (arrival, crush, dock step) happens with the frame's last tick.
 /// </summary>

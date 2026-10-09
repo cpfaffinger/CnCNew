@@ -12,7 +12,7 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Modules.BuiltIn;
 
 /// <summary>
-/// Phase 10 (docs/HANDOFF-PHASE10.md, part B point 9): the three modules that fall over or die by height, none of which the
+/// Phase 10 (docs/handoffs/HANDOFF-PHASE10.md, part B point 9): the three modules that fall over or die by height, none of which the
 /// reference's collision system reached before (docs/SIMULATION-CORE.md §20). <see cref="ToppleUpdate"/> and
 /// <see cref="StructureToppleUpdate"/> are driven by the footprint collision added in
 /// <c>World/SimulationWorld.Collision.cs</c> and by ordinary damage respectively; <see cref="HeightDieUpdate"/> is a plain
@@ -465,7 +465,7 @@ public sealed record HeightDieData(Fixed TargetHeightAboveTerrain, bool TargetHe
 /// (<c>DestroyAttachedParticlesAtHeight</c>, pure presentation).
 /// <para>The height is looked at once per logic frame of the original, in the first tick of each of the object's frames (counted from its appearance): "moving
 /// down" compares with the height one frame of the original ago, and the object dies at the height it has at the end of the frame it has begun, as at 30 Hz
-/// (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3).</para>
+/// (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3).</para>
 /// </summary>
 public sealed class HeightDieUpdate(HeightDieData data) : SimModule, IUpdateModule
 {

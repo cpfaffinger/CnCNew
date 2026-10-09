@@ -1,6 +1,6 @@
 # Leistung der Spielschicht, Messzusammenfassungen und der Weg zu einem Simulations-Thread
 
-Stand: Phase 19, Punkte 6, 7 und 8 (`docs/HANDOFF-PHASE19.md`). Ergänzt `docs/PERFORMANCE.md` (Messwerkzeug der Simulation, ruhige
+Stand: Phase 19, Punkte 6, 7 und 8 (`docs/handoffs/HANDOFF-PHASE19.md`). Ergänzt `docs/PERFORMANCE.md` (Messwerkzeug der Simulation, ruhige
 Ausgangsmessung); dort steht, wie `SimTool perf` misst. Dieses Dokument beschreibt
 
 1. die maschinenlesbare Zusammenfassung der Messläufe und den Vergleich zweier Läufe (`--json`, `SimTool perf-compare`, §1 und §2),
@@ -67,7 +67,7 @@ pwsh scripts/perf-compare.ps1 <altesVerzeichnis> <neuesVerzeichnis> [-ThresholdP
   `--allow-different-hash` kommt die Tabelle trotzdem, unter einer Zeile `WARNING: DIFFERENT FINAL HASH: …`.
 - Eine andere Hardwarezeile ist eine Warnung (`not comparable`), kein Abbruch.
 - **Exitcode 0, sobald eine Tabelle gedruckt wurde – auch mit Verschlechterungen.** Es gibt bewusst keinen fehlschlagenden Test aus
-  Zeiten (`docs/HANDOFF-PHASE19.md` Punkt 8): sie hängen vom Rechner und seiner Last ab. Exitcode 1 nur bei unlesbarer Eingabe.
+  Zeiten (`docs/handoffs/HANDOFF-PHASE19.md` Punkt 8): sie hängen vom Rechner und seiner Last ab. Exitcode 1 nur bei unlesbarer Eingabe.
 
 Beispiel (zwei Läufe **desselben** Stands auf dem belasteten Rechner, gekürzt – so groß ist hier die Streuung):
 
@@ -103,8 +103,8 @@ vorigen Phase vergleichen.
 
 ```powershell
 dotnet build -c Release tools/CnCNew.PresentationTool
-dotnet run -c Release --no-build --project tools/CnCNew.PresentationTool -- sync-perf .local/phase2-import-a --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud --json <datei.json> --label "<commit>"
-dotnet run -c Release --no-build --project tools/CnCNew.PresentationTool -- sync-perf .local/phase2-import-a --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud --digest
+dotnet run -c Release --no-build --project tools/CnCNew.PresentationTool -- sync-perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud --json <datei.json> --label "<commit>"
+dotnet run -c Release --no-build --project tools/CnCNew.PresentationTool -- sync-perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud --digest
 ```
 
 Optionen: `--map`, `--players N` (die ersten N spielbaren Fraktionen, wie `SimTool perf`) oder `--factions A,B,…`, `--ticks`, `--seed`,
@@ -418,10 +418,10 @@ muss der Client ohnehin auf den Tick warten); ein eigener Thread hilft vor allem
 Für `CLAUDE.md` (Abschnitt „Build, Tests, Audits“):
 
 ```powershell
-dotnet run -c Release --project tools/CnCNew.SimTool -- perf .local/phase2-import-a --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --replay --json <datei.json> --label <commit>
-dotnet run -c Release --project tools/CnCNew.SimTool -- perf-mission .local/phase2-import-a --map "Maps/MD_USA05/MD_USA05.map" --ticks 3000 --json <datei.json> --label <commit>
+dotnet run -c Release --project tools/CnCNew.SimTool -- perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --replay --json <datei.json> --label <commit>
+dotnet run -c Release --project tools/CnCNew.SimTool -- perf-mission game/content --map "Maps/MD_USA05/MD_USA05.map" --ticks 3000 --json <datei.json> --label <commit>
 dotnet run -c Release --project tools/CnCNew.SimTool -- perf-compare <alt.json> <neu.json> [--threshold-percent N] [--min-us N] [--all] [--allow-different-hash] [--out <datei>]
-dotnet run -c Release --project tools/CnCNew.PresentationTool -- sync-perf .local/phase2-import-a --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud [--digest] [--json <datei.json>] [--label <commit>]
+dotnet run -c Release --project tools/CnCNew.PresentationTool -- sync-perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud [--digest] [--json <datei.json>] [--label <commit>]
 pwsh scripts/perf-profile.ps1 [-Label <commit>] [-OutDir <verzeichnis>] [-Ticks 54000] [-Only 'large-*']
 pwsh scripts/perf-compare.ps1 <altesVerzeichnis> <neuesVerzeichnis> [-ThresholdPercent 10] [-AllowDifferentHash]
 ```

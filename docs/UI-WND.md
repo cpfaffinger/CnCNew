@@ -199,7 +199,7 @@ zeichnen nichts; `W3DGameWinDefaultDraw` zeichnet den Standardhintergrund. Zusta
 Golden-Tests vergleichen `Dump()` mit literalen Erwartungen (Hintergrund, gedrückter Button, umbrochener Static Text,
 Check-Box, Custom-Draw; dreiteiliger Button mit Kacheln).
 
-## 6. Realdatenzahlen (`dotnet run --project tests/CnCNew.Ui.Tests -- --content-dir .local/phase2-import-a`)
+## 6. Realdatenzahlen (`dotnet run --project tests/CnCNew.Ui.Tests -- --content-dir game/content`)
 
 - `Window/`: 83 Dateien = 80 `*.wnd` + 3 Varianten (`OptionsMenu.wnd_hideip`, `NetworkDirectConnect.wnd_hideip`,
   `GameSpyLoginProfile.wnd_hidemail`), alle geparst; die Varianten lädt das Spiel nicht über ihren Namen.

@@ -1415,7 +1415,7 @@ public sealed partial class SimulationWorld : IWorldServices
     public void OnEntityDied(Entity entity, in DamageInfo info)
     {
         // Above 30 Hz an object that is killed inside the step of its logic frame dies where that step ends: the 30 Hz object has taken its whole step when a hit of the
-        // phases after the updates kills it (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 4, for every death). Nothing is inside a step at 30 Hz.
+        // phases after the updates kills it (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 4, for every death). Nothing is inside a step at 30 Hz.
         if (_firstFrameTicks != TickOrder.Next && (entity.IsInsideFrameStep || entity.HasAheadAngle))
         {
             if (AiOf(entity) is { } mover) mover.SettleFrame(_tick);
@@ -1559,7 +1559,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (pending.NotBefore > _tick) _spawnQueue.Insert(held++, pending);
             else SpawnEntity(pending);
         }
-        // "The next tick" is the next logic frame of the original (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): above 30 Hz an object requested while the spawn phase
+        // "The next tick" is the next logic frame of the original (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): above 30 Hz an object requested while the spawn phase
         // creates another appears one frame after it, not one tick. At 30 Hz nothing is marked (and nothing new is written to a snapshot).
         if (!endOfTick || _firstFrameTicks == TickOrder.Next) return;
         for (var index = held; index < _spawnQueue.Count; index++)
@@ -1689,7 +1689,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <summary>
     /// An order given to an object while it is created (its rally point, a delivery) wakes its module "now", and the module runs in the next update phase: at 30 Hz the next
     /// tick, which is the object's first logic frame of the original. Above 30 Hz that frame begins one frame after the tick the object appeared in
-    /// (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): a motion ordered in the spawn phase starts there, in phase with the frame of whoever created the object, and not
+    /// (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): a motion ordered in the spawn phase starts there, in phase with the frame of whoever created the object, and not
     /// one tick after the appearance. Modules that asked for a later tick themselves are not touched. Never called at 30 Hz.
     /// </summary>
     private void DeferSpawnPhaseOrders(Entity entity)

@@ -7,7 +7,7 @@ using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 
 /// <summary>
-/// Phase 23, round 4 (docs/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md): whole matches are the same game at 30, 60 and 120 Hz. The test names its rates itself.
+/// Phase 23, round 4 (docs/rate-invariance/RATE-INVARIANCE-ROUND4-FIRST-FRAME.md): whole matches are the same game at 30, 60 and 120 Hz. The test names its rates itself.
 /// </summary>
 static partial class Tests
 {

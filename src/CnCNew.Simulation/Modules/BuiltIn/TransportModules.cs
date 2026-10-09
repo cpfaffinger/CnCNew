@@ -81,7 +81,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     public override long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
-        // A new Chinook begins its first logic frame of the original one frame after it appeared (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): at 30 Hz the next tick.
+        // A new Chinook begins its first logic frame of the original one frame after it appeared (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): at 30 Hz the next tick.
         // Above 30 Hz a climb begun one tick after the appearance would end every frame of its flight in the first tick of a frame of whoever created it instead of the last.
         var stride = world.Time.TicksPerOriginalFrame;
         if (stride > 1 && world.Tick < Entity.SpawnTick + stride) return SimulationTiming.SleepNone;

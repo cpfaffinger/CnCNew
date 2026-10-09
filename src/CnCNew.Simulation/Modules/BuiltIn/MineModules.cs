@@ -305,7 +305,7 @@ public sealed class MinefieldBehavior(MinefieldData data) : SimModule, IUpdateMo
         {
             // The reference compares the distance moved once per logic frame. So does this: a mover reports its overlaps once per logic frame of the original, with the last
             // share of its frame's step (AIUpdateInterface.AdvanceFrame). The frame is the reporter's; the mine keeps no raster of its own, which could lie on other ticks
-            // than the mover's and leave the mine deaf (docs/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 8).
+            // than the mover's and leave the mine deaf (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 8).
             var dx = other.X - _detonators[index].X;
             var dy = other.Y - _detonators[index].Y;
             var dz = other.Z - _detonators[index].Z;

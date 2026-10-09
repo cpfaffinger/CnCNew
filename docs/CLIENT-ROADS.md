@@ -121,7 +121,7 @@ erlaubt (jeder andere unbekannte Name lässt beide fehlschlagen).
 - Debug: `CNCNEW_ROADS=0` schaltet die Straßen ab (Vergleich mit/ohne); `CNCNEW_TERRAIN_REVEAL=1` zeigt
   die ganze Karte (Straßen liegen meist außerhalb der Startsicht).
 
-## Messwerte (`PresentationTool road-audit .local/phase2-import-a`, Stand 4. Oktober 2026; neu messen)
+## Messwerte (`PresentationTool road-audit game/content`, Stand 4. Oktober 2026; neu messen)
 
 - 150 Karten gebaut, 0 Fehler, **130** Karten mit Straßen.
 - **40.960** Punktpaare → **40.801** Segmente (156 Doppelte verworfen, 7 unpaarige `POINT1`-Objekte, 3 mit
@@ -189,5 +189,5 @@ Mensch gegen die Bilder abhaken soll:
   (`MaxCellHeight`, Vertexnormalen gegen das Terrainmodell).
 - `RoadRealDataTests.cs` (mit `--content-dir`): 63 Vorlagen, alle 150 Karten bauen, jede Textur löst auf, goldene
   Zahlen (40.960 / 40.801 / 206.956), Determinismus an `Alpine Assault`.
-- `dotnet run -c Release --project tools/CnCNew.PresentationTool -- road-audit .local/phase2-import-a [--map "Maps/…"]`
+- `dotnet run -c Release --project tools/CnCNew.PresentationTool -- road-audit game/content [--map "Maps/…"]`
   (mit `--map` zusätzlich Knotenpositionen und Mesh-Bounds für Aufnahmen).
