@@ -1,147 +1,147 @@
-# Phase 23, Paket „Physik“: multiplikative Faktoren, gemischte Rekursionen, kleine Physik je Tick und Heilscheiben
+# Phase 23, package "Physics": multiplicative factors, mixed recursions, small per-tick physics and heal slices
 
-Stand 8. Oktober 2026, Zweig `worktree-agent-a1997b956694a9a6c`, Ausgang `7b54374`. Dieses Dokument gehört zu einem von sechs parallelen
-Korrekturpaketen der Phase 23 (`docs/handoffs/HANDOFF-PHASE23.md`, Schritt 3). Es beschreibt nur, was dieses Paket geändert und gemessen hat; die
-gemeinsamen Dokumente (`docs/TICKRATE-MIGRATION.md`, `docs/SIMULATION-CORE.md`) sind unberührt und werden beim Zusammenführen fortgeschrieben.
+As of 8 October 2026, branch `worktree-agent-a1997b956694a9a6c`, base `7b54374`. This document belongs to one of six parallel
+correction packages of Phase 23 (`docs/handoffs/HANDOFF-PHASE23.md`, step 3). It describes only what this package changed and measured; the
+shared documents (`docs/TICKRATE-MIGRATION.md`, `docs/SIMULATION-CORE.md`) are untouched and are updated when merging.
 
-**Nichts davon hat ein Mensch gesehen.** Alle Zahlen stammen aus Läufen dieses Tages (Release, Realdaten `game/content`).
+**No human has seen any of this.** All numbers come from runs of this day (Release, real data `game/content`).
 
-## 1. Prinzip
+## 1. Principle
 
-Der 30-Hz-Schritt ist die Definition. Eine Rekursion, die das Original einmal je Bild ausführt (Geschwindigkeit unter einem Faktor, Winkelgeschwindigkeit
-unter einer Beschleunigung, Fall unter Schwerkraft, Dämpfung), läuft **einmal je Bild des Originals in den Einheiten des Originals**; was sie bewegt
-(Lage, Winkel, Höhe), rückt **jeden Tick** um seinen Anteil des Bildschritts vor. An jeder Bildgrenze ist der Zustand der 30-Hz-Zustand, dazwischen die
-Gerade zwischen den beiden.
+The 30 Hz step is the definition. A recursion that the original executes once per frame (velocity under a factor, angular velocity
+under an acceleration, fall under gravity, damping) runs **once per original frame in the units of the original**; what it moves
+(position, angle, height) advances **every tick** by its share of the frame step. At every frame boundary the state is the 30 Hz state, in between the
+straight line between the two.
 
-- **Das Bild ist das des Objekts**, nicht das Raster der Welt: es beginnt mit dem Update, in dem die Bewegung begann (`FramePhase`, Zustand des Moduls,
-  nur geschrieben, solange es nicht null ist – bei 30 Hz nie; Snapshots und Hashes bei 30 Hz bleiben bytegleich).
-- **Anteile summieren exakt:** `FramePhysics.FrameShare(schritt, k)` = `floor(schritt · k / n) − floor(schritt · (k − 1) / n)` auf dem Rohwert; die
-  Anteile eines Bilds ergeben genau den Bildschritt. Wo das Ziel eines Bilds vorab feststeht (Lawine, Gerüst), rückt das Objekt je Tick um
-  „Rest geteilt durch verbleibende Ticks“ vor und steht mit dem letzten Tick genau am Ziel.
-- **Katalogwerte je Tick werden je Bild zurückgelesen** (`PerTickToPerOriginalFrame`, `PerTickSquaredToPerOriginalFrameSquared`): kein neues Feld an
-  einem Katalogtyp, das Eingangsmanifest ist identisch. Bei 60/120 Hz weichen die letzten Bits solcher Werte von 30 Hz ab (Schwerkraft je Tick² mal
-  4 bzw. 16); die Tests nennen dort eine Schranke von 0,001 Einheiten, sonst verlangen sie Bitgleichheit.
-- **Bei 30 Hz** ist ein Bild ein Tick, jeder Anteil der ganze Schritt, die Phase immer null: jeder Ausdruck ist der bisherige.
-- Neue Hilfsdatei nur dieses Pakets: `src/CnCNew.Simulation/Time/FrameGrid.Physics.cs` (`FramePhysics`, `FramePhase`).
+- **The frame is that of the object**, not the grid of the world: it begins with the update in which the movement began (`FramePhase`, state of the module,
+  only written as long as it is not zero – at 30 Hz never; snapshots and hashes at 30 Hz stay byte-identical).
+- **Shares sum exactly:** `FramePhysics.FrameShare(schritt, k)` = `floor(schritt · k / n) − floor(schritt · (k − 1) / n)` on the raw value; the
+  shares of a frame add up to exactly the frame step. Where the target of a frame is fixed in advance (avalanche, scaffold), the object advances per tick by
+  "remainder divided by remaining ticks" and is exactly at the target with the last tick.
+- **Catalogue values per tick are read back per frame** (`PerTickToPerOriginalFrame`, `PerTickSquaredToPerOriginalFrameSquared`): no new field on
+  a catalogue type, the input manifest is identical. At 60/120 Hz the last bits of such values deviate from 30 Hz (gravity per tick² times
+  4 or 16 respectively); the tests state a bound of 0.001 units there, otherwise they demand bit equality.
+- **At 30 Hz** a frame is one tick, every share the whole step, the phase always zero: every expression is the previous one.
+- New helper file of this package only: `src/CnCNew.Simulation/Time/FrameGrid.Physics.cs` (`FramePhysics`, `FramePhase`).
 
-**Gleicher Tick wie der Auslöser.** Fällt der erste Schritt einer Bewegung bei 30 Hz in denselben Tick wie ihr Auslöser, kann das erste Bild bei
-60/120 Hz erst `n − 1` Ticks später enden (ein Bild kann nicht vor seinem Auslöser beginnen). Wo der Beginn vorher bekannt ist, beginnt die Bewegung
-entsprechend früher (Flutwelle); wo der erste Schritt nichts bewegt, endet das Bild im auslösenden Update (Einsturz); sonst bleibt ein Versatz von
-weniger als einem Bild (Fähre, wenn das Dock im Tick der Anfrage zieht; Battle Bus, wenn der Tod auf einen Hüllen-Prüftick fällt).
+**Same tick as the trigger.** If the first step of a movement falls into the same tick as its trigger at 30 Hz, the first frame at
+60/120 Hz can only end `n − 1` ticks later (a frame cannot begin before its trigger). Where the beginning is known beforehand, the movement begins
+correspondingly earlier (flood wave); where the first step moves nothing, the frame ends in the triggering update (collapse); otherwise an offset of
+less than one frame remains (ferry, when the dock pulls in the tick of the request; Battle Bus, when the death falls on a hull check tick).
 
-## 2. Ursachen
+## 2. Causes
 
-Werte: 30 / 60 / 120 Hz. „Suite“ ist die Raten-Äquivalenz-Suite (`SimTool rate-compare`), „Test“ der neue Drei-Raten-Test in
+Values: 30 / 60 / 120 Hz. "Suite" is the rate-equivalence suite (`SimTool rate-compare`), "test" the new three-rate test in
 `tests/CnCNew.Simulation.Tests/Tests.RateInvariance.Physics.cs`.
 
-| § 5 (`TICKRATE-MIGRATION.md`) | Befund vorher | Korrektur (Datei, Symbol, Prinzip) | nachher | Commit |
+| § 5 (`TICKRATE-MIGRATION.md`) | Finding before | Correction (file, symbol, principle) | after | Commit |
 |---|---|---|---|---|
-| 5.1 `ToppleUpdateData.InitialAccelPercent`; 5.2 `ToppleUpdate.Update` | Suite: Fall „gestoßen bis liegend“ Baum und Statue 1,2000 / 0,8000 / 0,5667 s, Mauer 0,2667 / 0,2167 / 0,1667 s, Zaun 0,6000 / 0,4167 / 0,3000 s (4 von 4 gemessenen) | `ToppleAndFallModules.cs`, `ToppleUpdate.Update`, `ApplyTopplingSpeed`: Winkelgeschwindigkeit und -beschleunigung je Bild(²), Schritt eines Bilds mit dem ersten Tick festgelegt, Winkel je Tick anteilig, Abprall/Beschleunigung mit dem letzten Tick; Abprallgrenze je Bild. Eingang in Strecke je **Originalbild** | 1,2000 / 1,2000 / 1,2000; 0,2667 ×3; 0,6000 ×3; Winkel 1,52171 bei jeder Rate. Test: Winkel an jeder Bildgrenze bitgleich | `021b318` |
-| 5.1 `StructureToppleData.StructuralDecay`; 5.2 `StepToppling`, `ApplyCrushingDamage`, `_doneAtTick` | Suite (ein Retail-Objekt): liegt nach 4,3333 / 4,3000 / 4,3000 s (bestanden nur innerhalb der Toleranz) | `StructureToppleUpdate.StepToppling`: Beschleunigung und Zerfall mit dem ersten Tick des Bilds, Winkel je Tick anteilig (exakte Anteile des Feinwerts), Quetsch-Schuss und Ende mit dem letzten Tick, „Done“ ein Bild später (`>` statt `>=` gegen `Tick + n − 1`), ohne Verzögerung erstes Update ein Bild nach dem Tod; `Angle` am Viertelkreis gedeckelt | 4,3333 ×3. Test (zwei Gebäude): Winkel bitgleich, dieselben Schadensereignisse in denselben Bildern | `f8d0077` |
-| 5.1 `RailroadData.Acceleration`/`Braking`/`Friction`, `RailroadBehavior.PushStart`, Anfahrwert, Stillstandsschwelle, Schaden `Speed · 10`, `Collide`, „Wagen erst im nächsten Tick“ | Suite: Höchsttempo nach 2,4333 / 1,1000 / 1,0000 s; Bremsen ab 15,5000 / 14,4167 / 14,0500 s; steht nach 19,8000 / 16,1833 / 14,7417 s bei 2.703,3 / 2.617,9 / 2.578,3 | `RailroadModules.cs`, `RailroadBehavior`: jede Geschwindigkeit des Zustands ist Strecke je Bild; Schaffner und Reibung mit dem ersten Tick des Bilds der Lok bzw. des führenden Wagens, Streckenlage je Tick anteilig, `onCollide` und das Verlassen der Strecke mit dem letzten Tick; ein gezogener Wagen erfährt vom Zieher, ob das Bild offen ist; Wartezeit in Bildern, erstes Update ein Bild nach dem Erscheinen, Abkoppeln nach derselben Spielzeit | 2,4333 / 2,4167 / 2,4083; 15,5000 / 15,4833 / 15,4750; 19,8000 / 19,7833 / 19,7750; 2.703,328 ×3 (4 Fehlschläge je Rate → 0). Test: Lok, Wagen, gerammtes Fahrzeug, Tode bitgleich | `9871bc2` |
-| 5.1 `TensileFormationUpdate.Friction`, `NewShare`/`LinkShare`, `BaseSlope`; 5.2 Physikblock | Suite misst nichts (flache Karte). Test am Hang mit Ebene: Rutschweg 65,528 / 69,705 (60 Hz); letztes Bild mit Absinken 186 / 106; reiner Hang 90,31 / 184,73 | `FieldEffectModules.cs`, `TensileFormationUpdate.Update`, `PlaceOf`: Rekursion mit dem ersten Tick jedes Bilds der Rutschphase (Bildnummer aus `_life`), Ziel des Bilds im Zustand, je Tick gleicher Anteil des Rests; für Nachbarn steht ein Stein, der sein Bild begonnen hat, am Bildende | 65,528 ×3; 186 ×3; 90,31 ×3; alle Lagen bitgleich an 339 Bildgrenzen | `302e88a` |
-| 5.3 Art `Register` (erstes Update einen Tick nach dem Erscheinen) – hier: eigene `OnSpawn` von Lawine und Battle Bus | Suite: „Lawine bemerkt den Schaden“ 0,9667 / 0,9500 / 0,9417 s | `TensileFormationUpdate.OnSpawn`, `BattleBusSlowDeathBehavior.OnSpawn`: erstes Aufwachen ein Bild nach dem Erscheinen | 0,9667 ×3 | `29df2ba` |
-| – (Messung der Suite) | Fall „battle bus second life“: `KillCommand` tötet unaufhaltsam, kein zweites Leben, Wurf ungemessen | `RateCases.Timed.cs`, `MeasureBattleBus`: tödlicher Explosionsschaden über `DamageCommand` (der erste Tod, für den das Modul geschrieben ist); keine Toleranz, keine Größe geändert | misst jetzt: Scheitel 45,200 / 44,572 / 44,259 (Fehlschlag, vor der Korrektur) | `be4d800` |
-| 5.2 `BattleBusSlowDeathBehavior.Update` | Suite (nach `be4d800`): Scheitel 45,200 / 44,572 / 44,259; in der Luft 2,3667 / 2,3500 / 2,3500 s. Test: Landung in Bild 72 / 71 | `VehicleModules.cs`: Steiggeschwindigkeit je Bild, Höhe je Tick anteilig, Schwerkraft und Landung mit dem letzten Tick | 45,200 ×3; 2,3667 / 2,3667 / 2,3750 s; Landung Bild 72 ×3; Höhen innerhalb 0,001 | `d311db0` |
-| 5.2 `StructureCollapseUpdate.Update` | Suite bestanden; Ticks Tod/Beginn/unten 1/23/76 · 2/46/152 · 4/92/304 (2,5000 s bei jeder Rate, vorher wie nachher); Sichthöhe wich um die Euler-Ordnung ab (rund 0,9 Einheiten nach 53 Bildern bei 60 Hz, gerechnet) | `StructureModules.cs`: Sinkgeschwindigkeit je Bild, das auslösende Update beendet ein Bild (wie der erste Schritt des Originals), Höhe je Tick anteilig, Schwerkraft/Burst/Ende mit dem letzten Tick | Test: Ende und Effekte in denselben Bildern, Sichthöhe innerhalb 0,001 an 200 Bildgrenzen | `01535b0` |
-| 5.1 `BridgeScaffoldBehavior.Update`; 5.6 `PerOriginalFrameToPerTick` in `BridgeModules` | kein Suite-Fall; geometrisches Abklingen je Tick, eine `Fixed`-Division je Update | `BridgeModules.cs`, `FrameEnd`: Schritt des Originals mit dem ersten Tick des Bilds, je Tick gleicher Anteil des Rests, Ankunft und nächste Bewegung mit dem letzten Tick; keine Division durch den Ratenfaktor mehr im Update | Test: Lage und Bewegung bitgleich an jeder Bildgrenze bis zur Zerstörung | `501350c` |
-| 5.2 `RailedTransportDockUpdate.DoPullInDocking`, `DoPushOutDocking` | kein Suite-Fall. Test: drinnen bzw. frei nach 16 Bildern (30 Hz), bei 60 Hz nach 15 Bildern und einem Tick | `FerryModules.cs`: Ziehen/Schieben je Tick wie bisher, Ankunftsfrage (6 bzw. 3 Einheiten) mit dem letzten Tick jedes Bilds ab Beginn | 16 und 16 Bilder bei jeder Rate, Lage innerhalb 0,001 | `b53cbd3` |
-| 5.4 `WaveGuideUpdate.Update`/`Advance`/`DoDamage` | kein Suite-Fall. Test: Welle zerstört in Bild 164 (30 Hz), bei 60 Hz einen Tick in Bild 165 | `WorldEffectModules.cs`: Wegschritt je Tick, Front (Nässe, Umstoßen, Schaden) und Bahnende mit dem letzten Tick jedes Bilds; über 30 Hz setzt die Welle um die Ticks früher an, die ihr erstes Bild braucht; `ToppleForce` geht je Bild an `ApplyTopplingSpeed` | Bild 164 ×3; alle Schäden, Tode, Zerstörungen in denselben Bildern; Lage innerhalb 0,001 | `c333364` |
-| 5.6 `DynamicShroudClearingRangeUpdate.Update` | Suite bestanden (Raster 10 Einheiten). Test: erste übergebene Reichweite 3,333 / 1,667 | `WorldEffectModules.cs`: Zuwachs je Bild (30-Hz-Betrag) exakt auf die Ticks verteilt (Tick im Bild aus dem Zustandszähler), Übergabe mit dem letzten Tick eines Bilds | Reichweite bitgleich an 130 Bildgrenzen | `c5b43fa` |
-| 5.6 `GarrisonContain.HealOne`, `RepairDockUpdate.Action`, `HealContain.Update` | Suite: Reparaturdock „Bilder mit Heilung“ 150 / 151 / 151 (zwei Fälle); Kaserne 30 / 31 / 30 | `ContainModules.cs`, `RepairModules.cs`, `RetailMatchModules.cs`: die Scheibe des Originals (Betrag über die Dauer in Bildern) einmal je Bild, gezählt ab Eintritt bzw. erster Aktion | 150 ×3 (zweimal); 30 ×3; geheilte Menge in 60 s gleich. Test: Gesundheit bitgleich an jeder Bildgrenze | `b05da71` |
-| 5.2 `HeightDieUpdate.Update` (`_lastZ` des Vorticks) | Suite: „slow death AirF_AuroraBombGas“ 0,0000 / – / –. Test: Tod nach 1 / 0, 4 / 3, 21 / 20 ganzen Bildern (30 / 60 Hz) | `ToppleAndFallModules.cs`: Höhenprüfung mit dem letzten Tick jedes Bilds ab dem ersten Update | 0,0000 ×3; 1, 4, 21 Bilder bei jeder Rate | `5440888` |
-| – (Messung der Suite) | „collapse: start to down“ 2,4667 / 2,4833 / 2,4917 s, obwohl die Simulation exakt 75 / 150 / 300 Ticks braucht: zwei verkettete `StepUntil` verlieren einen Tick statt eines Bilds | `RateCases.Timed.cs`, `MeasureStructureCollapse`: Ergebnis des zweiten `StepUntil` plus eins | 2,5000 ×3 | `1f87669` |
+| 5.1 `ToppleUpdateData.InitialAccelPercent`; 5.2 `ToppleUpdate.Update` | Suite: case "pushed until lying" tree and statue 1.2000 / 0.8000 / 0.5667 s, wall 0.2667 / 0.2167 / 0.1667 s, fence 0.6000 / 0.4167 / 0.3000 s (4 of 4 measured) | `ToppleAndFallModules.cs`, `ToppleUpdate.Update`, `ApplyTopplingSpeed`: angular velocity and acceleration per frame(²), step of a frame fixed with the first tick, angle per tick in shares, bounce/acceleration with the last tick; bounce limit per frame. Input in distance per **original frame** | 1.2000 / 1.2000 / 1.2000; 0.2667 ×3; 0.6000 ×3; angle 1.52171 at every rate. Test: angle bit-identical at every frame boundary | `021b318` |
+| 5.1 `StructureToppleData.StructuralDecay`; 5.2 `StepToppling`, `ApplyCrushingDamage`, `_doneAtTick` | Suite (one retail object): lies after 4.3333 / 4.3000 / 4.3000 s (passed only within the tolerance) | `StructureToppleUpdate.StepToppling`: acceleration and decay with the first tick of the frame, angle per tick in shares (exact shares of the fine value), crush shot and end with the last tick, "Done" one frame later (`>` instead of `>=` against `Tick + n − 1`), without a delay first update one frame after the death; `Angle` capped at the quarter circle | 4.3333 ×3. Test (two buildings): angle bit-identical, the same damage events in the same frames | `f8d0077` |
+| 5.1 `RailroadData.Acceleration`/`Braking`/`Friction`, `RailroadBehavior.PushStart`, start-up value, standstill threshold, damage `Speed · 10`, `Collide`, "carriage only in the next tick" | Suite: top speed after 2.4333 / 1.1000 / 1.0000 s; braking from 15.5000 / 14.4167 / 14.0500 s; stands after 19.8000 / 16.1833 / 14.7417 s at 2,703.3 / 2,617.9 / 2,578.3 | `RailroadModules.cs`, `RailroadBehavior`: every velocity of the state is distance per frame; conductor and friction with the first tick of the frame of the locomotive or of the leading carriage respectively, track position per tick in shares, `onCollide` and leaving the track with the last tick; a pulled carriage learns from the puller whether the frame is open; waiting time in frames, first update one frame after appearing, uncoupling after the same game time | 2.4333 / 2.4167 / 2.4083; 15.5000 / 15.4833 / 15.4750; 19.8000 / 19.7833 / 19.7750; 2,703.328 ×3 (4 failures per rate → 0). Test: locomotive, carriage, rammed vehicle, deaths bit-identical | `9871bc2` |
+| 5.1 `TensileFormationUpdate.Friction`, `NewShare`/`LinkShare`, `BaseSlope`; 5.2 physics block | Suite measures nothing (flat map). Test on a slope with a plain: slide distance 65.528 / 69.705 (60 Hz); last frame with sinking 186 / 106; pure slope 90.31 / 184.73 | `FieldEffectModules.cs`, `TensileFormationUpdate.Update`, `PlaceOf`: recursion with the first tick of every frame of the slide phase (frame number from `_life`), target of the frame in the state, per tick an equal share of the remainder; for neighbours a stone that has begun its frame stands at the frame end | 65.528 ×3; 186 ×3; 90.31 ×3; all positions bit-identical at 339 frame boundaries | `302e88a` |
+| 5.3 kind `Register` (first update one tick after appearing) – here: own `OnSpawn` of avalanche and Battle Bus | Suite: "avalanche notices the damage" 0.9667 / 0.9500 / 0.9417 s | `TensileFormationUpdate.OnSpawn`, `BattleBusSlowDeathBehavior.OnSpawn`: first wake-up one frame after appearing | 0.9667 ×3 | `29df2ba` |
+| – (measurement of the suite) | Case "battle bus second life": `KillCommand` kills unstoppably, no second life, throw unmeasured | `RateCases.Timed.cs`, `MeasureBattleBus`: lethal explosion damage via `DamageCommand` (the first death, for which the module is written); no tolerance, no quantity changed | now measures: apex 45.200 / 44.572 / 44.259 (failure, before the correction) | `be4d800` |
+| 5.2 `BattleBusSlowDeathBehavior.Update` | Suite (after `be4d800`): apex 45.200 / 44.572 / 44.259; in the air 2.3667 / 2.3500 / 2.3500 s. Test: landing in frame 72 / 71 | `VehicleModules.cs`: climb velocity per frame, height per tick in shares, gravity and landing with the last tick | 45.200 ×3; 2.3667 / 2.3667 / 2.3750 s; landing frame 72 ×3; heights within 0.001 | `d311db0` |
+| 5.2 `StructureCollapseUpdate.Update` | Suite passed; ticks death/beginning/down 1/23/76 · 2/46/152 · 4/92/304 (2.5000 s at every rate, before as after); visual height deviated by the Euler order (about 0.9 units after 53 frames at 60 Hz, calculated) | `StructureModules.cs`: sink velocity per frame, the triggering update ends a frame (like the first step of the original), height per tick in shares, gravity/burst/end with the last tick | Test: end and effects in the same frames, visual height within 0.001 at 200 frame boundaries | `01535b0` |
+| 5.1 `BridgeScaffoldBehavior.Update`; 5.6 `PerOriginalFrameToPerTick` in `BridgeModules` | no suite case; geometric decay per tick, one `Fixed` division per update | `BridgeModules.cs`, `FrameEnd`: step of the original with the first tick of the frame, per tick an equal share of the remainder, arrival and next movement with the last tick; no division by the rate factor in the update any more | Test: position and movement bit-identical at every frame boundary until the destruction | `501350c` |
+| 5.2 `RailedTransportDockUpdate.DoPullInDocking`, `DoPushOutDocking` | no suite case. Test: inside or free respectively after 16 frames (30 Hz), at 60 Hz after 15 frames and one tick | `FerryModules.cs`: pulling/pushing per tick as before, arrival question (6 or 3 units respectively) with the last tick of every frame from the beginning | 16 and 16 frames at every rate, position within 0.001 | `b53cbd3` |
+| 5.4 `WaveGuideUpdate.Update`/`Advance`/`DoDamage` | no suite case. Test: wave destroyed in frame 164 (30 Hz), at 60 Hz one tick into frame 165 | `WorldEffectModules.cs`: path step per tick, front (wetness, toppling, damage) and end of the path with the last tick of every frame; above 30 Hz the wave starts earlier by the ticks that its first frame needs; `ToppleForce` goes to `ApplyTopplingSpeed` per frame | frame 164 ×3; all damage, deaths, destructions in the same frames; position within 0.001 | `c333364` |
+| 5.6 `DynamicShroudClearingRangeUpdate.Update` | Suite passed (grid 10 units). Test: first handed-over range 3.333 / 1.667 | `WorldEffectModules.cs`: growth per frame (30 Hz amount) distributed exactly over the ticks (tick within the frame from the state counter), hand-over with the last tick of a frame | range bit-identical at 130 frame boundaries | `c5b43fa` |
+| 5.6 `GarrisonContain.HealOne`, `RepairDockUpdate.Action`, `HealContain.Update` | Suite: repair dock "frames with healing" 150 / 151 / 151 (two cases); barracks 30 / 31 / 30 | `ContainModules.cs`, `RepairModules.cs`, `RetailMatchModules.cs`: the slice of the original (amount over the duration in frames) once per frame, counted from the entry or the first action respectively | 150 ×3 (twice); 30 ×3; healed amount in 60 s equal. Test: health bit-identical at every frame boundary | `b05da71` |
+| 5.2 `HeightDieUpdate.Update` (`_lastZ` of the previous tick) | Suite: "slow death AirF_AuroraBombGas" 0.0000 / – / –. Test: death after 1 / 0, 4 / 3, 21 / 20 whole frames (30 / 60 Hz) | `ToppleAndFallModules.cs`: height check with the last tick of every frame from the first update | 0.0000 ×3; 1, 4, 21 frames at every rate | `5440888` |
+| – (measurement of the suite) | "collapse: start to down" 2.4667 / 2.4833 / 2.4917 s, although the simulation needs exactly 75 / 150 / 300 ticks: two chained `StepUntil` lose one tick instead of one frame | `RateCases.Timed.cs`, `MeasureStructureCollapse`: result of the second `StepUntil` plus one | 2.5000 ×3 | `1f87669` |
 
-### Suite-Zahlen der beiden Gruppen (Größen außerhalb der Toleranz)
+### Suite numbers of the two groups (quantities outside the tolerance)
 
-| Gruppe | Größen | vorher bei 60 / 120 Hz | nachher bei 60 / 120 Hz | Fälle mit Fehlschlag vorher → nachher |
+| Group | Quantities | before at 60 / 120 Hz | after at 60 / 120 Hz | Cases with a failure before → after |
 |---|---|---|---|---|
 | `timed` | 383 | 53 / 56 | 43 / 46 | 33 → 27 |
 | `overtime` | 418 | 80 / 84 | 77 / 81 | 32 → 30 |
 
-„Vorher“ ist der erste vollständige Lauf (`docs/SIMULATION-CORE.md` §39.6). Der Battle-Bus-Fall hatte dort keinen Fehlschlag (ungemessen), mit der
-berichtigten Messung einen und nach der Korrektur keinen. Was in `timed` noch fehlschlägt, gehört nicht diesem Paket: Aufladen ab Entstehung (6),
-Tarnung/Enttarnung (17), Blitze der Übernahme (9), Hubschrauber-Absturz (7), Minen (3), zwei langsame Tode, eine Lebensdauer und „Befehl bis
-umgestoßen“ des Baums bei 120 Hz (6,4667 / 6,5000 / 6,5083 s: die Fahrt des Panzers). In `overtime`: Felder (59), Selbstheilung (4), Basisregeneration
-(2), Lautsprecherturm (4), Heilradius/Hospital/Reparaturbucht und die Wege in Kaserne und Tunnel (12, darunter `TunnelContain` 75 / 76 / 76).
+"Before" is the first complete run (`docs/SIMULATION-CORE.md` §39.6). The Battle Bus case had no failure there (unmeasured), with the
+corrected measurement one and after the correction none. What still fails in `timed` does not belong to this package: charging from creation (6),
+stealth/unstealth (17), flashes of the capture (9), helicopter crash (7), mines (3), two slow deaths, one lifetime and "command until
+toppled" of the tree at 120 Hz (6.4667 / 6.5000 / 6.5083 s: the drive of the tank). In `overtime`: fields (59), self-healing (4), base regeneration
+(2), speaker tower (4), heal radius/hospital/repair bay and the paths in barracks and tunnel (12, among them `TunnelContain` 75 / 76 / 76).
 
-## 3. Verwendungen des Auswegs „Originalraster“
+## 3. Uses of the escape "original grid" (Ausweg „Originalraster“)
 
-Jede Stelle läuft mit dem letzten (bzw. ersten) Tick eines Bilds **des Objekts**, nicht auf dem Weltraster; keine betrifft Bewegung, Befehlsannahme
-oder Zielerfassung.
+Every place runs with the last (or first) tick of a frame **of the object**, not on the world grid; none concerns movement, command acceptance
+or target acquisition.
 
-| Stelle | Was nur einmal je Originalbild läuft | Grund |
+| Place | What runs only once per original frame | Reason |
 |---|---|---|
-| `RailroadBehavior.Collide` | Kollisionsantwort des Zugs (Töten, Quetschschaden `Tempo · 10`, Wegschieben um ein Viertel der Überlappung), Zerstörung am Streckenende | Schaden und Schub sind Beträge je Bild; je Tick wären sie doppelt, und das Viertel der Überlappung klingt geometrisch ab |
-| `RailedTransportDockUpdate` (Ziehen, Schieben) | nur die Ankunftsfrage (6 bzw. 3 Einheiten) | das Original fragt einmal je Bild; die Bewegung läuft je Tick |
-| `WaveGuideUpdate.DoDamage`, Bahnende | Abtastung der Front, Ende der Bahn | eine dichtere Abtastung trifft Objekte, an denen eine gröbere vorbeigeht |
-| `HeightDieUpdate.Update` | Höhenprüfung, „bewegt sich abwärts“ | vergleicht mit der Höhe des vorigen Bilds; je Tick stirbt das Objekt in einer Höhe, die das Original nie sieht |
-| `HealContain.Update`, `GarrisonContain.HealOne`, `RepairDockUpdate.Action` | Heilscheibe | das Original heilt einmal je Bild; die Gesundheit an jeder Bildgrenze soll die von 30 Hz sein (Heilung ist keine Bewegung) |
+| `RailroadBehavior.Collide` | collision response of the train (killing, crush damage `speed · 10`, pushing away by a quarter of the overlap), destruction at the end of the track | damage and push are amounts per frame; per tick they would be doubled, and the quarter of the overlap decays geometrically |
+| `RailedTransportDockUpdate` (pulling, pushing) | only the arrival question (6 or 3 units respectively) | the original asks once per frame; the movement runs per tick |
+| `WaveGuideUpdate.DoDamage`, end of the path | sampling of the front, end of the path | a denser sampling hits objects that a coarser one passes by |
+| `HeightDieUpdate.Update` | height check, "moves downwards" | compares with the height of the previous frame; per tick the object dies at a height that the original never sees |
+| `HealContain.Update`, `GarrisonContain.HealOne`, `RepairDockUpdate.Action` | heal slice | the original heals once per frame; the health at every frame boundary is meant to be that of 30 Hz (healing is not movement) |
 
-Nicht der Ausweg, sondern das Unterteilungsprinzip (zweite Ordnung einmal je Bild, Lage je Tick): Umstürzen, Gebäudesturz, Zug (Schaffner, Reibung),
-Lawine, Battle Bus, Einsturz, Brückengerüst, dynamische Aufdeckung.
+Not the escape but the subdivision principle (second order once per frame, position per tick): toppling, structure topple, train (conductor, friction),
+avalanche, Battle Bus, collapse, bridge scaffold, dynamic shroud clearing.
 
-## 4. Für die Zusammenführung
+## 4. For the merge
 
-- **`ToppleUpdate.ApplyTopplingForce` rechnet einmal um** (eine markierte Zeile, `PHASE 23 MERGE`): es nimmt weiter ein Tempo je Tick, weil
-  `SimulationWorld.Collision.cs`, `TryTopple` (Paket GROUND) `Entity.Speed` übergibt. Sobald `TryTopple` Strecke je Originalbild übergibt: den Faktor
-  entfernen (sonst doppelte Umrechnung) und alle Aufrufer auf `ApplyTopplingSpeed` legen. `WaveGuideUpdate` ruft bereits `ApplyTopplingSpeed`.
-- **`AirWeaponModules.cs` Zeile 787 (Neutronenexplosion, nicht in diesem Paket)** ruft `ApplyTopplingForce` mit `blast.ToppleSpeed`, einem Wert je
-  Originalbild aus den Daten: bis zum Entfernen der markierten Zeile wird er bei 60/120 Hz mit 2 bzw. 4 multipliziert (vorher war dieselbe Stelle auf
-  andere Weise falsch: Beschleunigung je Tick² aus einem Wert je Bild). Bei 30 Hz unverändert.
-- **`tests/CnCNew.Simulation.Tests/Program.cs`**: zwölf neue Zeilen nach „Collision: HeightDieUpdate …“ (Konfliktstelle, falls andere Pakete dort
-  einfügen).
-- **`Tests.TickRate.ModulesAM.cs`** (`TickRateModulesAmTensileFormation`): die Phase der Ruheprüfung der Lawine steht jetzt in Bildern.
-- **`RateCases.Timed.cs`** (Suite, zwei Messkorrekturen in eigenen Commits): Battle Bus, Einsturz.
+- **`ToppleUpdate.ApplyTopplingForce` converts once** (one marked line, `PHASE 23 MERGE`): it still takes a speed per tick, because
+  `SimulationWorld.Collision.cs`, `TryTopple` (package GROUND) passes `Entity.Speed`. As soon as `TryTopple` passes distance per original frame: remove the
+  factor (otherwise double conversion) and put all callers on `ApplyTopplingSpeed`. `WaveGuideUpdate` already calls `ApplyTopplingSpeed`.
+- **`AirWeaponModules.cs` line 787 (neutron explosion, not in this package)** calls `ApplyTopplingForce` with `blast.ToppleSpeed`, a value per
+  original frame from the data: until the marked line is removed it is multiplied by 2 or 4 respectively at 60/120 Hz (before, the same place was wrong in
+  a different way: acceleration per tick² from a value per frame). Unchanged at 30 Hz.
+- **`tests/CnCNew.Simulation.Tests/Program.cs`**: twelve new lines after "Collision: HeightDieUpdate …" (conflict spot if other packages insert
+  there).
+- **`Tests.TickRate.ModulesAM.cs`** (`TickRateModulesAmTensileFormation`): the phase of the rest check of the avalanche is now in frames.
+- **`RateCases.Timed.cs`** (suite, two measurement corrections in commits of their own): Battle Bus, collapse.
 
-## 5. Offen, mit Grund
+## 5. Open, with reason
 
-- **Kein Suite-Fall für die Lawine am Hang.** `RateScene` kennt nur die flache Karte (`FlatMap`); ein Hang hätte die gemeinsame Szenendatei der
-  Suite geändert. Der Drei-Raten-Test am Hang deckt die Rekursion ab; die Suite prüft weiter nur Beginn und Dauer.
-- **Kein Suite-Fall** für Brückengerüst, Fähre, Flutwelle, `HeightDieUpdate` (außer mittelbar) und `GarrisonContain` – wie in §39.5 als „nicht
-  abgedeckt“ geführt; je ein Drei-Raten-Test auf dem synthetischen Bestand.
-- **Versatz unter einem Bild bei Auslöser im selben Tick** (§1): Fähre, wenn das Dock nach dem Andockenden im selben Tick läuft; Battle Bus, wenn der
-  erste Tod auf einen Hüllen-Prüftick fällt (Suite: in der Luft 2,3667 / 2,3667 / 2,3750 s). Innerhalb der Toleranz, nicht exakt.
-- **Letzte Bits bei Werten aus dem Katalog je Tick:** Schwerkraft (Battle Bus, Einsturz), Zieh-/Schubstrecke der Fähre, Wegschritt der Welle – die
-  Zustände sind an den Bildgrenzen innerhalb 0,001 Einheiten gleich, nicht bitgleich. Bitgleichheit bräuchte Werte je Bild im Katalog (ein neues Feld
-  ändert das Eingangsmanifest).
-- **Zug:** eine Station, die der Zug innerhalb eines Bilds vollständig überfährt, wird bei 60/120 Hz gesehen und bei 30 Hz nicht (Streckenstücke
-  kürzer als ein Bildweg; in den Retail-Daten nicht gesucht). Wagen in der Kulisse oder hinter dem Streckenende liegen bei 60/120 Hz für ein Bild an
-  einer anderen Stelle als bei 30 Hz (sie kollidieren dort mit nichts; die Ausrichtung hängt an der Zahl der Züge am Haken, nicht am Spiel).
-- **Flutwelle:** der Zufallszug des Platschens fällt über 30 Hz einen Tick früher (die Welle setzt früher an); Zahl und Folge der Züge sind gleich.
-- **Zustandsbetrag `_wantsToBeLead`, `_waitAtStationTimer`** (Zug) und `healthPerTick` (Dock) haben bei 60/120 Hz eine andere Einheit als ihr Name
-  (Bilder bzw. je Bild); die Namen sind Snapshot-Schlüssel und bleiben.
+- **No suite case for the avalanche on a slope.** `RateScene` only knows the flat map (`FlatMap`); a slope would have changed the shared scene file of the
+  suite. The three-rate test on the slope covers the recursion; the suite continues to check only beginning and duration.
+- **No suite case** for bridge scaffold, ferry, flood wave, `HeightDieUpdate` (except indirectly) and `GarrisonContain` – listed as "not
+  covered" in §39.5; one three-rate test each on the synthetic content.
+- **Offset below one frame with a trigger in the same tick** (§1): ferry, when the dock runs after the docking object in the same tick; Battle Bus, when the
+  first death falls on a hull check tick (suite: in the air 2.3667 / 2.3667 / 2.3750 s). Within the tolerance, not exact.
+- **Last bits for values from the catalogue per tick:** gravity (Battle Bus, collapse), pull/push distance of the ferry, path step of the wave – the
+  states are equal within 0.001 units at the frame boundaries, not bit-identical. Bit equality would need values per frame in the catalogue (a new field
+  changes the input manifest).
+- **Train:** a station that the train passes over completely within one frame is seen at 60/120 Hz and not at 30 Hz (track pieces
+  shorter than one frame distance; not searched for in the retail data). Carriages off-stage or behind the end of the track lie at 60/120 Hz for one frame at
+  a different place than at 30 Hz (they collide with nothing there; the alignment depends on the number of trains on the hook, not on the game).
+- **Flood wave:** the random draw of the splash falls one tick earlier above 30 Hz (the wave starts earlier); number and sequence of the draws are equal.
+- **State amount `_wantsToBeLead`, `_waitAtStationTimer`** (train) and `healthPerTick` (dock) have a different unit than their name at 60/120 Hz
+  (frames or per frame respectively); the names are snapshot keys and stay.
 
-## 6. Neue Befunde
+## 6. New findings
 
-- **Verkettete `StepUntil` der Suite verlieren einen Tick statt eines Bilds** (`RateScene.StepUntil` zählt ab dem Schritt, der einen Befehl ausführt;
-  ein zweiter Aufruf ohne Befehl beginnt schon einen Tick später). Berichtigt für den Einsturz; andere Fälle mit derselben Form (z. B. Tarnung,
-  Aufdeckung in `RateCases.Timed.cs`) sind nicht geprüft.
-- **„Schon wach“ im selben Tick:** `SimulationWorld.WakeAt` lässt ein Modul, das in diesem Tick ohnehin läuft, im selben Tick handeln statt im
-  nächsten. Ob ein Ereignis (erster Tod des Busses) im selben oder im nächsten Tick aufgenommen wird, hängt damit an der Phase eines periodischen
-  Updates – bei jeder Rate, aber mit anderem Gewicht (ein Tick ist ein halbes Bild).
-- **`HeightDieUpdate` beendet `AirF_AuroraBombGas` im ersten Bild** (Zielhöhe 40, Objekt am Boden): der Suite-Fall „slow death“ misst deshalb nur,
-  ob das Objekt eine Sekunde später noch da ist.
-- **Der Battle Bus ist 30 s nach dem ersten Tod bei jeder Rate tot** („alive after the first death“ 0 / 0 / 0): die Strafe für die leere Hülle;
-  kein Ratenunterschied.
-- **Zug am Streckenende:** ein Wagen, der die Strecke verlassen hat, wird an den vorletzten Streckenpunkt gesetzt (`FindPosition` liefert bei
-  „Abstand = Streckenlänge“ den Punkt davor) – bei jeder Rate, ohne Spielwirkung, im Test aufgefallen.
+- **Chained `StepUntil` of the suite lose one tick instead of one frame** (`RateScene.StepUntil` counts from the step that executes a command;
+  a second call without a command already begins one tick later). Corrected for the collapse; other cases of the same form (e.g. stealth,
+  shroud clearing in `RateCases.Timed.cs`) are not checked.
+- **"Already awake" in the same tick:** `SimulationWorld.WakeAt` lets a module that runs in this tick anyway act in the same tick instead of in the
+  next. Whether an event (first death of the bus) is picked up in the same or in the next tick thus depends on the phase of a periodic
+  update – at every rate, but with a different weight (one tick is half a frame).
+- **`HeightDieUpdate` ends `AirF_AuroraBombGas` in the first frame** (target height 40, object on the ground): the suite case "slow death" therefore only measures
+  whether the object is still there one second later.
+- **The Battle Bus is dead 30 s after the first death at every rate** ("alive after the first death" 0 / 0 / 0): the penalty for the empty hull;
+  no rate difference.
+- **Train at the end of the track:** a carriage that has left the track is put at the second-to-last track point (`FindPosition` returns, for
+  "distance = track length", the point before) – at every rate, without a gameplay effect, noticed in the test.
 
-## 7. Prüfstand
+## 7. Verification status
 
-- **30 Hz:** `input-manifest check` identisch und `reference-manifest check --set quick` 9 Läufe identisch je Commit, der die Simulation ändert – jeweils aus
-  einer Kopie der Binärdateien genau dieses Quellstands. Ohne eigenen Lauf: die beiden reinen Suite-Commits (`be4d800`, `1f87669`) und der Test-Commit
-  `a6da89c`. Am Ende `--set full`: **50 Läufe identisch**, einmal vor und einmal nach dem Aufräum-Commit `2dc46d9` (Endstand).
-- **Simulationstests bei 30 Hz:** Debug-Lauf `dotnet run --project tests/CnCNew.Simulation.Tests` 430 von 430 grün (418 vorher + 12 neue).
-  Zwischen `9871bc2` und `2dc46d9` schlug der Quelltexttest „Determinism rules hold in the simulation sources“ an fünf Zeilen dieses Pakets fehl
-  (nackte Tickzahlen, ein Konstantenname); `2dc46d9` behebt das ohne Verhaltensänderung. Der volle Testlauf lief nach dem ersten Commit und am Ende,
-  dazwischen nur die betroffenen Gruppen.
-- **`--tick-rate 60` / `120` (Release, ohne Realdaten):** 6 / 13 Fehlschläge (vorher 6 / 14). Weg ist Nr. 10 aus `TICKRATE-MIGRATION.md` §15.2
-  („Collision: ToppleUpdate push, kill, stump and mid-fall snapshot continuation“), ohne Änderung des Tests. Der Test „Repair: RepairDockUpdate
-  heals over TimeForFullHeal“ zählte Heilschritte je Tick und ist in `a6da89c` auf Bilder umgestellt (zwischen `b05da71` und `a6da89c` schlug er bei
-  60/120 Hz fehl). Die übrigen Fehlschläge gehören anderen Paketen (Geschosse, Türme, Blitze der Übernahme, Tarnung, Chinook, Bau/Verkauf, Referenzmatch).
-  Mit Realdaten bei 60 Hz: dieselben 6 und die zehn Gruppentests der Suite; der Lauf bei 120 Hz mit Realdaten war beim Schreiben nicht beendet.
-- **Sauberer Build:** `dotnet build CnCNew.slnx` 0 Warnungen, 0 Fehler (ohne vorheriges Löschen von `bin`/`obj`).
-- **Nicht gemessen:** Kosten je Tick bei 30 Hz (hinzugekommen sind je Update ein Zähler und ein Vergleich, keine Division im 30-Hz-Pfad außer
-  `ToOriginalFrames` in den Heil- und Aufdeckungsphasen); das Leistungstor bei 60 Hz.
-- Zwölf neue Drei-Raten-Tests „Rate invariance (physics): …“ (laufen immer bei 30, 60 und 120 Hz, unabhängig von `--tick-rate`).
+- **30 Hz:** `input-manifest check` identical and `reference-manifest check --set quick` 9 runs identical per commit that changes the simulation – each from
+  a copy of the binaries of exactly this source state. Without a run of their own: the two pure suite commits (`be4d800`, `1f87669`) and the test commit
+  `a6da89c`. At the end `--set full`: **50 runs identical**, once before and once after the clean-up commit `2dc46d9` (final state).
+- **Simulation tests at 30 Hz:** Debug run `dotnet run --project tests/CnCNew.Simulation.Tests` 430 of 430 green (418 before + 12 new).
+  Between `9871bc2` and `2dc46d9` the source test "Determinism rules hold in the simulation sources" failed on five lines of this package
+  (bare tick counts, one constant name); `2dc46d9` fixes that without a behaviour change. The full test run ran after the first commit and at the end,
+  in between only the affected groups.
+- **`--tick-rate 60` / `120` (Release, without real data):** 6 / 13 failures (before 6 / 14). Gone is no. 10 from `TICKRATE-MIGRATION.md` §15.2
+  ("Collision: ToppleUpdate push, kill, stump and mid-fall snapshot continuation"), without a change of the test. The test "Repair: RepairDockUpdate
+  heals over TimeForFullHeal" counted heal steps per tick and is converted to frames in `a6da89c` (between `b05da71` and `a6da89c` it failed at
+  60/120 Hz). The remaining failures belong to other packages (projectiles, turrets, flashes of the capture, stealth, Chinook, construction/sale, reference match).
+  With real data at 60 Hz: the same 6 and the ten group tests of the suite; the run at 120 Hz with real data was not finished at the time of writing.
+- **Clean build:** `dotnet build CnCNew.slnx` 0 warnings, 0 errors (without deleting `bin`/`obj` beforehand).
+- **Not measured:** cost per tick at 30 Hz (added per update are one counter and one comparison, no division in the 30 Hz path except
+  `ToOriginalFrames` in the heal and shroud-clearing phases); the performance gate at 60 Hz.
+- Twelve new three-rate tests "Rate invariance (physics): …" (always run at 30, 60 and 120 Hz, independent of `--tick-rate`).
