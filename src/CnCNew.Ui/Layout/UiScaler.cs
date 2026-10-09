@@ -68,6 +68,12 @@ public static class UiScaler
     public const int DefaultDisplayWidth = 800;
     public const int DefaultDisplayHeight = 600;
 
+    /// <summary>
+    /// How far (in units of the creation resolution) an edge may stay away from the creation area's edge and the window still counts as
+    /// reaching it: the layout editor wrote both <c>BOTTOMRIGHT: 800 600</c> and <c>BOTTOMRIGHT: 799 599</c> for a full-screen window.
+    /// </summary>
+    public const int FullExtentSlack = 1;
+
     /// <summary>The larger scale that fits the whole creation area into the viewport, as a fraction.</summary>
     public static (long Numerator, long Denominator) UniformScale(UiViewport viewport, int creationWidth, int creationHeight)
         => (long)viewport.Width * creationHeight <= (long)viewport.Height * creationWidth
@@ -98,11 +104,13 @@ public static class UiScaler
 
     /// <summary>
     /// Anchor of one axis of a top-level group: full extent stretches, otherwise the authored center decides
-    /// (first third: start, last third: end, else center).
+    /// (first third: start, last third: end, else center). "Full extent" allows one unit at either end
+    /// (<see cref="FullExtentSlack"/>): the retail layouts write a full-width window as often with the last pixel
+    /// (<c>0 .. 799</c> of 800: <c>ControlBar.wnd:ControlBarParent</c>, <c>OptionsMenu.wnd</c>, <c>MessageBox.wnd</c>) as with the size.
     /// </summary>
     public static UiAxisAnchor ClassifyAxis(int low, int high, int extent)
     {
-        if (low <= 0 && high >= extent) return UiAxisAnchor.Stretch;
+        if (low <= FullExtentSlack && high >= extent - FullExtentSlack) return UiAxisAnchor.Stretch;
         var twiceCenter = (long)low + high;
         if (twiceCenter * 3 < 2L * extent) return UiAxisAnchor.Start;
         if (twiceCenter * 3 > 4L * extent) return UiAxisAnchor.End;
@@ -130,7 +138,7 @@ public static class UiScaler
             var own = Create(viewport, cw, ch, group.AnchorX, group.AnchorY);
             return (own, own);
         }
-        if (rect.CoversCreationArea)
+        if (ClassifyAxis(rect.Left, rect.Right, cw) == UiAxisAnchor.Stretch && ClassifyAxis(rect.Top, rect.Bottom, ch) == UiAxisAnchor.Stretch)
             return (Create(viewport, cw, ch, UiAxisAnchor.Stretch, UiAxisAnchor.Stretch), null);
         var transform = Create(viewport, cw, ch, ClassifyAxis(rect.Left, rect.Right, cw), ClassifyAxis(rect.Top, rect.Bottom, ch));
         return (transform, transform);

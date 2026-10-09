@@ -5810,7 +5810,7 @@
     {
       "category": "definition",
       "name": "HeaderTemplate",
-      "count": 19,
+      "count": 15,
       "owners": [
         "top-level"
       ],
@@ -5846,7 +5846,7 @@
     {
       "category": "definition",
       "name": "MappedImage",
-      "count": 1486,
+      "count": 1369,
       "owners": [
         "top-level"
       ],
@@ -6295,96 +6295,6 @@
     },
     {
       "category": "excluded-file",
-      "name": "Data/Brazilian/HeaderTemplate.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Brazilian\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Brazilian/Language.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Brazilian\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Chinese/HeaderTemplate.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Chinese\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Chinese/HeaderTemplate9x.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "Windows 9x variant, not loaded on a current Windows"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Chinese/Language.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Chinese\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Chinese/Language9x.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "Windows 9x variant, not loaded on a current Windows"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/French/HeaderTemplate.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027French\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/French/Language.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027French\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/German/HeaderTemplate.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027German\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/German/Language.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027German\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
       "name": "Data/INI/CommandMapDebug.ini",
       "count": 1,
       "owners": [
@@ -6439,102 +6349,12 @@
     },
     {
       "category": "excluded-file",
-      "name": "Data/Italian/HeaderTemplate.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Italian\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Italian/Language.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Italian\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Korean/HeaderTemplate.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Korean\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Korean/HeaderTemplate9x.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "Windows 9x variant, not loaded on a current Windows"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Korean/Language.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Korean\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Korean/Language9x.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "Windows 9x variant, not loaded on a current Windows"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Polish/HeaderTemplate.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Polish\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Polish/Language.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Polish\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
       "name": "Data/Scripts/Scripts.ini",
       "count": 1,
       "owners": [
         "ToolOnly"
       ],
       "plannedTarget": "loaded only by the WorldBuilder tool (WorldBuilder.cpp)"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Spanish/HeaderTemplate.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Spanish\u0027 is not the selected language \u0027English\u0027"
-    },
-    {
-      "category": "excluded-file",
-      "name": "Data/Spanish/Language.ini",
-      "count": 1,
-      "owners": [
-        "LanguageVariant"
-      ],
-      "plannedTarget": "language \u0027Spanish\u0027 is not the selected language \u0027English\u0027"
     },
     {
       "category": "excluded-file",

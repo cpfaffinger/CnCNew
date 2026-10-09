@@ -39,6 +39,13 @@ public sealed class MessageBoxScreen : ShellScreen
         W("ButtonYes").SetHidden(buttons == ShellMessageBoxButtons.OkOnly);
         W("ButtonNo").SetHidden(buttons == ShellMessageBoxButtons.OkOnly);
         W("ButtonCancel").SetHidden(buttons != ShellMessageBoxButtons.YesNoCancel);
+
+        // GameWindowManager::gogoMessageBox: the layout holds three button places, those of ButtonOk, ButtonNo and ButtonCancel; ButtonYes is parked elsewhere.
+        // Yes takes the first place (Ok's); No takes the last (Cancel's) unless Cancel is shown as well, then it keeps the middle one.
+        var first = W("ButtonOk").DesignRect;
+        var last = W("ButtonCancel").DesignRect;
+        if (buttons != ShellMessageBoxButtons.OkOnly) W("ButtonYes").SetDesignPosition(first);
+        if (buttons == ShellMessageBoxButtons.YesNo) W("ButtonNo").SetDesignPosition(last);
     }
 
     private void OnSystem(UiWindowTree tree, UiEvent e)

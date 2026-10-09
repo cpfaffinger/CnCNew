@@ -58,11 +58,13 @@ public sealed class MatchController
     private long _superweaponTick = -1;
     private bool _superweaponEnabled = true;
 
+    private bool _showsSideLogo = true;
     private bool _uiOwnsMouse;
     private bool _minimapPanning;
     private bool _wasPausedBeforeMenu;
     private long _clockMs;
     private bool _matchEndedFired;
+    private readonly SortedSet<string> _missingSchemeImages = new(StringComparer.Ordinal);
 
     public MatchController(LiveGame match, GameSettings settings, string language = "English", IUiTextMeasure? textMeasure = null)
     {
@@ -103,6 +105,7 @@ public sealed class MatchController
         var humanParticipant = match.Data.Factions.FirstOrDefault(
             participant => participant.Faction.Name.Equals(match.HumanFaction, StringComparison.OrdinalIgnoreCase));
         if (humanParticipant is not null && _assets.Schemes.TryGetForSide(humanParticipant.Side, out var scheme)) _scheme = scheme;
+        ApplySchemeImages();
 
         var buttons = CommandButtonCatalog.Build(match.Data.Graph);
         var hotkeys = HotkeyMap.FromGraph(match.Data.Graph).WithEngineDefaults();
@@ -162,6 +165,12 @@ public sealed class MatchController
     /// owns the list then (it shares it with <c>DISPLAY_TEXT</c>, updates it on its own clock and draws it with the other mission texts, also while the control bar is hidden).
     /// </summary>
     public bool OwnsMessageList { get; set; } = true;
+
+    /// <summary>
+    /// Images the human side's control bar scheme names that the mapped image table does not have (sorted): the window or art part that wanted one is drawn without it,
+    /// as the original draws nothing for a null image, and the name is listed here instead of being dropped.
+    /// </summary>
+    public IReadOnlyCollection<string> MissingSchemeImages => _missingSchemeImages;
 
     /// <summary>The text scaling this HUD was built with (the display settings' UI scale and the accessibility text scale).</summary>
     public UiScaleOptions ScaleOptions => _scaleOptions;
@@ -625,9 +634,10 @@ public sealed class MatchController
         var baseList = _tree.BuildDrawList();
         var extra = BuildDynamicCommands();
         var viewportRect = new UiRect(0, 0, width, _controlBarRoot.Rect.Y);
-        // The scheme art is the control bar's own background (W3DCommandBarBackgroundDraw in the original): it lies under the window tree, whose windows draw their own chrome on top.
-        // The world-space feedback (selection rings, health bars, orders, rally points, placement ghost, healing icons) lies between the 3D scene and the control bar chrome.
-        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BuildSchemeBackground()).AddRange(ResolveHardCodedImages(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
+        // The scheme art is drawn by two marker windows of the control bar (W3DCommandBarBackgroundDraw, W3DCommandBarForegroundDraw): the background under the windows that
+        // follow the marker, the foreground over those before it. The world-space feedback (selection rings, health bars, orders, rally points, placement ghost, healing icons)
+        // lies between the 3D scene and the control bar chrome.
+        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(ResolveControlBarCallbacks(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
             .Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
         // InGameUI::postDraw: the message lines lie over the windows.
         if (OwnsMessageList && !Messages.Log.IsEmpty) commands = commands.AddRange(MissionTextOverlay.Messages(Messages.Log, TextStyle, _scaleOptions, _textMeasure, width, height));
@@ -654,30 +664,125 @@ public sealed class MatchController
     }
 
     /// <summary>
-    /// <c>ControlBar.wnd</c> names the right-hand portrait window\x27s image <c>HardCodedWithControlBarSchemeIni</c>: the original replaces it with the scheme\x27s <c>RightHUDImage</c> (the side logo).
+    /// The draw callbacks of <c>ControlBar.wnd</c> this HUD knows, replaced by what they draw (<c>W3DControlBar.cpp</c>):
+    /// <c>W3DCommandBarBackgroundDraw</c> and <c>W3DCommandBarForegroundDraw</c> draw the scheme's art parts (<c>ControlBarScheme::drawBackground</c>: layers 5 to 3,
+    /// <c>drawForeground</c>: layers 2 to 0), each at the place of its marker window in the window order; <c>W3DRightHUDDraw</c> draws the window's image while it has the
+    /// <c>IMAGE</c> status, which <c>ControlBar::setPortraitByObject</c> sets when nothing with a portrait is selected, so the scheme's <c>RightHUDImage</c> (the side's logo,
+    /// <c>ControlBar::updateRightHUDImage</c>) shows then. Every other callback stays a <see cref="UiCustomDraw"/> for the host, which counts what it does not draw.
     /// </summary>
-    private ImmutableArray<UiDrawCommand> ResolveHardCodedImages(ImmutableArray<UiDrawCommand> commands)
+    private ImmutableArray<UiDrawCommand> ResolveControlBarCallbacks(ImmutableArray<UiDrawCommand> commands)
     {
-        const string placeholder = "HardCodedWithControlBarSchemeIni";
-        if (_scheme is not { RightHudImage.Length: > 0 } scheme) return commands;
-        return [..commands.Select(command => command is UiImageDraw draw && draw.Image == placeholder ? draw with { Image = scheme.RightHudImage } : command)];
+        if (_scheme is not { } scheme) return commands;
+        var result = ImmutableArray.CreateBuilder<UiDrawCommand>(commands.Length + scheme.ImageParts.Length);
+        foreach (var command in commands)
+        {
+            switch (command)
+            {
+                case UiCustomDraw { Callback: "W3DCommandBarBackgroundDraw" }:
+                    AddSchemeParts(result, scheme, scheme.BackgroundParts);
+                    break;
+                case UiCustomDraw { Callback: "W3DCommandBarForegroundDraw" }:
+                    AddSchemeParts(result, scheme, scheme.ForegroundParts);
+                    break;
+                case UiCustomDraw { Callback: "W3DRightHUDDraw", Window: "ControlBar.wnd:RightHUD" } rightHud:
+                    if (_showsSideLogo && SchemeImage(scheme.RightHudImage) is { } logo) result.Add(new UiImageDraw(logo, rightHud.Rect, WndColor.White, false, false));
+                    break;
+                default:
+                    result.Add(command);
+                    break;
+            }
+        }
+        return result.ToImmutable();
+    }
+
+    private void AddSchemeParts(ImmutableArray<UiDrawCommand>.Builder commands, ControlBarSchemeInfo scheme, IEnumerable<ControlBarImagePart> parts)
+    {
+        foreach (var part in parts)
+        {
+            if (SchemeImage(part.ImageName) is not { } image) continue;
+            commands.Add(new UiImageDraw(image, SchemeRectOnScreen(scheme, new SchemeRect(part.X, part.Y, part.X + part.Width, part.Y + part.Height)), WndColor.White, false, false));
+        }
+    }
+
+    /// <summary>The image name if the table has it; an unknown name is listed in <see cref="MissingSchemeImages"/> and gives null (the original's null image), an empty one is no image.</summary>
+    private string? SchemeImage(string name)
+    {
+        if (name.Length == 0) return null;
+        if (_assets.Images.TryGet(name, out _)) return name;
+        _missingSchemeImages.Add(name);
+        return null;
     }
 
     /// <summary>
-    /// <c>ControlBarScheme::drawBackground</c>: the <c>ImagePart</c>s of the human side's scheme in layer order (the file draws layer 0 last, on top), each placed by the
-    /// same transform as the scheme's money and power rectangles; an image the table does not know is skipped (the scheme names a few art pieces this data set lacks).
+    /// <c>ControlBarScheme::init</c>: the scheme hands its state images to the control bar's own buttons (<c>GadgetButtonSetEnabledImage</c>, <c>...HiliteImage</c>,
+    /// <c>...HiliteSelectedImage</c>, <c>...DisabledImage</c>), the two images of the under-attack window, the experience bar's foreground and, through
+    /// <c>ControlBar::updateBuildQueueDisabledImages</c>, the picture of an empty queue place. The layout names no images for these windows.
     /// </summary>
-    private ImmutableArray<UiDrawCommand> BuildSchemeBackground()
+    private void ApplySchemeImages()
     {
-        if (_scheme is not { } scheme) return [];
-        var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
-        foreach (var part in scheme.ImageParts.Select((value, index) => (value, index)).OrderByDescending(item => item.value.Layer).ThenBy(item => item.index).Select(item => item.value))
+        if (_scheme is not { } scheme) return;
+        void Button(string name, SchemeButtonImages images, bool withDisabled = true)
         {
-            if (!_assets.Images.TryGet(part.ImageName, out _)) continue;
-            var rect = _controlBarRoot.Transform.Map(new WndScreenRect(part.X, part.Y, part.X + part.Width, part.Y + part.Height, 1920, 1080));
-            commands.Add(new UiImageDraw(part.ImageName, rect, WndColor.White, false, false));
+            if (_tree.FindByName(name) is not { } window) return;
+            window.SetDrawImage(WndDrawDataKind.Enabled, 0, SchemeImage(images.Enabled));
+            window.SetDrawImage(WndDrawDataKind.Hilite, 0, SchemeImage(images.Hilited));
+            window.SetDrawImage(WndDrawDataKind.Hilite, 1, SchemeImage(images.Pushed));
+            if (withDisabled) window.SetDrawImage(WndDrawDataKind.Disabled, 0, SchemeImage(images.Disabled));
         }
-        return commands.ToImmutable();
+        Button("ControlBar.wnd:ButtonOptions", scheme.OptionsImages);
+        Button("ControlBar.wnd:ButtonIdleWorker", scheme.WorkerImages);
+        Button("ControlBar.wnd:ButtonPlaceBeacon", scheme.BeaconImages);
+        Button("ControlBar.wnd:PopupCommunicator", scheme.ChatImages);
+        Button("ControlBar.wnd:ButtonGeneral", scheme.GeneralImages);
+        // ControlBar::setUpDownImages: the toggle of a control bar that is up shows the "down" images; it has no disabled image.
+        Button("ControlBar.wnd:ButtonLarge", scheme.ToggleDownImages, withDisabled: false);
+        if (_tree.FindByName("ControlBar.wnd:WinUAttack") is { } glow)
+        {
+            glow.SetDrawImage(WndDrawDataKind.Enabled, 0, SchemeImage(scheme.UnderAttackImages.Enabled));
+            glow.SetDrawImage(WndDrawDataKind.Disabled, 0, SchemeImage(scheme.UnderAttackImages.Hilited));
+        }
+        _tree.FindByName("ControlBar.wnd:ExpBarForeground")?.SetEnabledImage0(SchemeImage(scheme.ExpBarForegroundImage));
+        if (SchemeImage(scheme.QueueButtonImage) is { } emptyPlace)
+            for (var index = 1; index <= CommandBarModel.MaxQueueButtons; index++)
+                _tree.FindByName($"ControlBar.wnd:ButtonQueue{index:00}")?.SetDrawImage(WndDrawDataKind.Disabled, 0, emptyPlace);
+    }
+
+    /// <summary>
+    /// <c>ControlBarScheme::init</c> moves the windows the scheme has a rectangle for (<c>winSetPosition</c>/<c>winSetSize</c> with <c>resMultiplier</c>); the rectangles the
+    /// layout gives them are placeholders. Done again for every draw list, as the viewport may have changed.
+    /// </summary>
+    private void PlaceSchemeWindows(ControlBarSchemeInfo scheme)
+    {
+        void Place(string name, SchemeRect rect) => _tree.FindByName(name)?.SetScreenRect(SchemeRectOnScreen(scheme, rect));
+        Place("ControlBar.wnd:PopupCommunicator", scheme.Chat);
+        Place("ControlBar.wnd:ButtonIdleWorker", scheme.Worker);
+        Place("ControlBar.wnd:ButtonOptions", scheme.Options);
+        Place("ControlBar.wnd:ButtonPlaceBeacon", scheme.Beacon);
+        Place("ControlBar.wnd:MoneyDisplay", scheme.Money);
+        Place("ControlBar.wnd:PowerWindow", scheme.PowerBar);
+        Place("ControlBar.wnd:ButtonGeneral", scheme.General);
+        Place("ControlBar.wnd:ButtonLarge", scheme.MinMax);
+        Place("ControlBar.wnd:WinUAttack", scheme.UnderAttack);
+    }
+
+    /// <summary>
+    /// A rectangle of the scheme on the screen. The scheme carries the resolution it was written for (<c>ScreenCreationRes</c>) and the original scales every
+    /// position of it by display / creation resolution per axis (<c>resMultiplier</c> in <c>ControlBarScheme::init</c>, <c>m_multiplyer</c> in
+    /// <c>ControlBarSchemeManager::setControlBarSchemeByPlayer</c>), independently of the resolution <c>ControlBar.wnd</c> was written for. Here the scheme goes through the
+    /// same kind of transform as the control bar's windows, anchored like the control bar itself, so the art and the windows stay on each other in every scale mode.
+    /// </summary>
+    private UiRect SchemeRectOnScreen(ControlBarSchemeInfo scheme, SchemeRect rect)
+    {
+        var bar = _controlBarRoot.Transform;
+        var transform = UiScaler.Create(_tree.Viewport, scheme.CreationWidth, scheme.CreationHeight, bar.AnchorX, bar.AnchorY);
+        return transform.Map(new WndScreenRect(rect.Left, rect.Top, rect.Right, rect.Bottom, scheme.CreationWidth, scheme.CreationHeight));
+    }
+
+    /// <summary>The <c>SelectPortrait</c> of the single selected object, if the image table has it.</summary>
+    private string? SelectedPortrait()
+    {
+        if (Input.Selection.Selected.ToArray() is not [var only] || Match.World.FindEntity(only) is not { } entity) return null;
+        return Match.Data.Visuals.TryGet(entity.Template.Name, out var visual) && visual.SelectPortrait is { Length: > 0 } image && _assets.Images.TryGet(image, out _) ? image : null;
     }
 
     private void RefreshDynamicWindows()
@@ -685,15 +790,9 @@ public sealed class MatchController
         var view = CommandBar;
         // InGameUI::update: the money window shows "GUI:ControlBarMoneyDisplay" with the local player's money; ControlBarScheme::updateControlBarScheme
         // puts it at the scheme's money rectangle. The layout file keeps a placeholder text and a 100x100 rectangle at the top left.
-        if (_tree.FindByName("ControlBar.wnd:MoneyDisplay") is { } moneyWindow)
-        {
-            moneyWindow.SetText(_assets.Text.Format("GUI:ControlBarMoneyDisplay", (int)Hud.Money.ToDecimal()));
-            if (_scheme is { } moneyScheme)
-                moneyWindow.SetScreenRect(_controlBarRoot.Transform.Map(new WndScreenRect(moneyScheme.Money.Left, moneyScheme.Money.Top, moneyScheme.Money.Right, moneyScheme.Money.Bottom, 1920, 1080)));
-        }
-        // ControlBarScheme::init puts the power window at the scheme's power bar, too: the bar is drawn there, and its description pops up there.
-        if (_scheme is { } powerScheme && _tree.FindByName("ControlBar.wnd:PowerWindow") is { } powerWindow)
-            powerWindow.SetScreenRect(_controlBarRoot.Transform.Map(new WndScreenRect(powerScheme.PowerBar.Left, powerScheme.PowerBar.Top, powerScheme.PowerBar.Right, powerScheme.PowerBar.Bottom, 1920, 1080)));
+        _tree.FindByName("ControlBar.wnd:MoneyDisplay")?.SetText(_assets.Text.Format("GUI:ControlBarMoneyDisplay", (int)Hud.Money.ToDecimal()));
+        // ControlBarScheme::init puts the money window, the power window (the bar is drawn there, and its description pops up there) and the bar's own buttons at the scheme's rectangles.
+        if (_scheme is { } placed) PlaceSchemeWindows(placed);
         _tree.FindByName("ControlBar.wnd:CommandWindow")!.SetHidden(view.Context is not (CommandBarContext.Command or CommandBarContext.MultiSelect));
         _tree.FindByName("ControlBar.wnd:UnderConstructionWindow")!.SetHidden(view.Context != CommandBarContext.UnderConstruction);
         var underConstructionDesc = _tree.FindByName("ControlBar.wnd:UnderConstructionDesc");
@@ -707,11 +806,23 @@ public sealed class MatchController
             if (button is not null) window.SetEnabled(button.IsEnabled);
         }
 
+        // ControlBar::populateBuildQueue: a place of the queue nothing stands in is a disabled button, which shows the scheme's QueueButtonImage; without a scheme image the
+        // place stays hidden as before (a disabled button of the layout has no picture of its own).
+        var emptyPlaces = _scheme is { } queueScheme && SchemeImage(queueScheme.QueueButtonImage) is not null;
         _tree.FindByName("ControlBar.wnd:ProductionQueueWindow")!.SetHidden(view.Queue.IsEmpty);
         for (var index = 0; index < CommandBarModel.MaxQueueButtons; index++)
-            _tree.FindByName($"ControlBar.wnd:ButtonQueue{(index + 1):00}")!.SetHidden(index >= view.Queue.Length);
+        {
+            var place = _tree.FindByName($"ControlBar.wnd:ButtonQueue{(index + 1):00}")!;
+            place.SetHidden(index >= view.Queue.Length && !emptyPlaces);
+            place.SetEnabled(index < view.Queue.Length);
+        }
 
-        _tree.FindByName("ControlBar.wnd:WinUnitSelected")!.SetHidden(view.Context != CommandBarContext.Command);
+        // ControlBar::setPortraitByObject: one selected object shows its SelectPortrait in the cameo window and the right-hand window loses its image; with nothing (or
+        // several things) selected the unit window is hidden and the right-hand window shows the side's logo. The queue lies over both.
+        var portrait = view.Context == CommandBarContext.Command && view.Queue.IsEmpty ? SelectedPortrait() : null;
+        _tree.FindByName("ControlBar.wnd:WinUnitSelected")!.SetHidden(portrait is null);
+        _tree.FindByName("ControlBar.wnd:CameoWindow")?.SetEnabledImage0(portrait);
+        _showsSideLogo = portrait is null && view.Queue.IsEmpty;
     }
 
     /// <summary>The superweapon countdowns over the world view (see <see cref="SuperweaponTimers"/>); each owner's house colour, the names from the string table.</summary>
@@ -762,7 +873,7 @@ public sealed class MatchController
 
         if (_scheme is { } scheme)
         {
-            var powerRect = _controlBarRoot.Transform.Map(new WndScreenRect(scheme.PowerBar.Left, scheme.PowerBar.Top, scheme.PowerBar.Right, scheme.PowerBar.Bottom, 1920, 1080));
+            var powerRect = SchemeRectOnScreen(scheme, scheme.PowerBar);
             var powerColor = Hud.Underpowered ? new WndColor(220, 40, 40, 255) : new WndColor(40, 200, 60, 255);
             var ratio = Hud.EnergyConsumption <= 0 ? 1f : Math.Clamp(Hud.EnergyProduction / (float)Hud.EnergyConsumption, 0f, 1f);
             commands.Add(new UiFillRect(powerRect with { Width = (int)(powerRect.Width * ratio) }, powerColor));

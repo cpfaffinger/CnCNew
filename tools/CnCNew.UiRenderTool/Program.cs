@@ -141,8 +141,8 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
             }
         }
 
-        // The layouts authored at 1920x1080 (control bar, in-game quit menu) in the scale mode the HUD uses by default:
-        // their header template fonts and their window fonts scale by different bases (see UiScaler.ScaleFontSize).
+        // The control bar and the in-game quit menu in the scale mode the HUD uses by default (Anchor): the bar spans the width as in the original,
+        // the menu keeps its shape in the middle.
         foreach (var (name, file) in new[] { ("controlbar-anchor", "Window/ControlBar.wnd"), ("quitmenu-anchor", "Window/Menus/QuitMenu.wnd") })
         {
             var layout = WndParser.Parse(content.OpenRead(file), file);

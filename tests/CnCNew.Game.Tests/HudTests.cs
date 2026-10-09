@@ -21,10 +21,11 @@ internal static class HudTests
     {
         var contentDir = ContentDir(args);
         var harness = new TestHarness(nameof(HudTests));
+        harness.Run("Control bar scheme: the creation resolution is read from the scheme, a scheme without one is refused, unread keys are counted", SchemeCreationResolution);
         if (contentDir is null)
         {
-            Console.WriteLine("SKIP HudTests (pass --content-dir <dir> to run against real data)");
-            return 0;
+            Console.WriteLine("SKIP HudTests real data (pass --content-dir <dir> to run against real data)");
+            return harness.Failures;
         }
 
         var data = GameData.Load(contentDir, step => Console.WriteLine($"  loading: {step}"), rate: CnCNew.Tests.TestRate.Default);
@@ -576,6 +577,32 @@ internal static class HudTests
         TestHarness.Assert(controller.Input.Selection.Contains(dozer.Id), "1 recalls the group");
     }
 
+    /// <summary>
+    /// A scheme is written for the resolution it names (<c>ScreenCreationRes</c>); the HUD used to take 1920x1080 for granted, the resolution of a modified control bar.
+    /// Synthetic text in the file's grammar, no game data.
+    /// </summary>
+    private static void SchemeCreationResolution()
+    {
+        const string text = "ControlBarScheme Small\n  ScreenCreationRes X:800 Y:600\n  Side Blue\n  MoneyUL X:360 Y:438\n  MoneyLR X:439 Y:457\n  SomeColor R:1 G:2 B:3 A:4\n"
+            + "  AnimatingPart\n    ImagePart\n      Position X:1 Y:2\n      Size X:3 Y:4\n      ImageName Moving\n      Layer 1\n    End\n    Duration 5\n  End\n"
+            + "  ImagePart\n    Position X:0 Y:408\n    Size X:800 Y:191\n    ImageName Base\n    Layer 4\n  End\n"
+            + "  ImagePart\n    Position X:10 Y:500\n    Size X:20 Y:30\n    ImageName Top\n    Layer 0\n  End\nEnd\n"
+            + "ControlBarScheme Large\n  ScreenCreationRes X:1920 Y:1080\n  Side Red\n  SomeColor R:1 G:2 B:3 A:4\nEnd\n";
+        var table = ControlBarSchemeTable.Parse(text);
+        TestHarness.Assert(table.Schemes.Length == 2, $"two schemes ({table.Schemes.Length})");
+        var small = table.Schemes[0];
+        var large = table.Schemes[1];
+        TestHarness.Assert(small is { CreationWidth: 800, CreationHeight: 600 } && large is { CreationWidth: 1920, CreationHeight: 1080 }, "each scheme carries its own creation resolution");
+        TestHarness.Assert(small.Money == new SchemeRect(360, 438, 439, 457) && large.Money.IsEmpty, "a rectangle the scheme does not name is empty");
+        TestHarness.Assert(small.ImageParts.Length == 2 && small.BackgroundParts.Single().ImageName == "Base" && small.ForegroundParts.Single().ImageName == "Top",
+            "the statement after an AnimatingPart block is read, and layers 3 to 5 are background, 0 to 2 foreground");
+        TestHarness.Assert(table.UnreadKeys.Count == 2 && table.UnreadKeys["SomeColor"] == 2 && table.UnreadKeys["AnimatingPart"] == 1, $"unread keys are counted ({string.Join(", ", table.UnreadKeys)})");
+        var refused = false;
+        try { ControlBarSchemeTable.Parse("ControlBarScheme NoSize\n  Side Blue\nEnd\n"); }
+        catch (FormatException) { refused = true; }
+        TestHarness.Assert(refused, "a scheme without ScreenCreationRes is refused");
+    }
+
     private static void SchemeArt(GameData data)
     {
         var (match, controller) = NewMatch(data, new Vector2(1280, 720));
@@ -584,7 +611,66 @@ internal static class HudTests
         TestHarness.Assert(commands.Length > 0 && commands[0] is UiImageDraw, "the scheme's background parts come first, under the window tree");
         var backgroundParts = commands.TakeWhile(command => command is UiImageDraw).Count();
         TestHarness.Assert(backgroundParts >= 1, $"the human side scheme contributes background parts ({backgroundParts})");
-        TestHarness.Assert(!commands.OfType<UiImageDraw>().Any(draw => draw.Image == "HardCodedWithControlBarSchemeIni"), "the hard-coded portrait image is replaced by the scheme's own right-hand image");
+        // The scheme of the human side is placed by its own creation resolution: a part as wide as that resolution is as wide as the control bar at every size.
+        TestHarness.Assert(controller.Assets.Schemes.Schemes.All(scheme => scheme.CreationWidth > 0 && scheme.CreationHeight > 0), "every scheme of the data names its creation resolution");
+        TestHarness.Assert(controller.Assets.Schemes.TryGetForSide("America", out var america), "the data has a scheme for the side America");
+        var wide = america.BackgroundParts.First(part => part.X == 0 && part.Width == america.CreationWidth);
+        foreach (var (width, height) in Resolutions)
+        {
+            var (sizedMatch, sized) = NewMatch(data, new Vector2(width, height));
+            Advance(sizedMatch, sized, 1);
+            var art = sized.BuildDrawList(width, height).Commands.OfType<UiImageDraw>().First(draw => draw.Image == wide.ImageName);
+            var bar = sized.WindowRect("ControlBar.wnd:ControlBarParent")!.Value;
+            TestHarness.Assert(art.Destination.X == bar.X && Math.Abs(art.Destination.Right - bar.Right) <= width / 400 + 1 && art.Destination.Bottom <= height && art.Destination.Bottom >= height - 3,
+                $"{width}x{height}: the scheme's full-width art lies on the control bar ({art.Destination} on {bar})");
+        }
+        SchemeWindows(data, america);
+    }
+
+    /// <summary>
+    /// <c>ControlBarScheme::init</c> places the control bar's own buttons at the scheme's rectangles and gives them the scheme's images; the layout has neither (its buttons name
+    /// no image). The art is drawn by the two marker windows, the right-hand window shows the side's logo until one object is selected, then the object's portrait.
+    /// </summary>
+    private static void SchemeWindows(GameData data, ControlBarSchemeInfo america)
+    {
+        const int width = 1280, height = 720;
+        var (match, controller) = NewMatch(data, new Vector2(width, height));
+        TestHarness.Assert(match.HumanFaction.Contains("America", StringComparison.OrdinalIgnoreCase), $"the test match is played by America ({match.HumanFaction})");
+        Advance(match, controller, 1);
+        var commands = controller.BuildDrawList(width, height).Commands;
+        // Every scheme of the retail file names the QueueButtonImage "SCBigButton", which no mapped image file defines: the original gets a null image and leaves the empty
+        // queue places without a picture (ControlBar::updateBuildQueueDisabledImages returns). It is the one missing name, and it is listed, not dropped.
+        TestHarness.Assert(controller.MissingSchemeImages.SequenceEqual(["SCBigButton"]), $"the image table has every image the scheme names except the queue place ({string.Join(", ", controller.MissingSchemeImages)})");
+        var bar = controller.WindowRect("ControlBar.wnd:ControlBarParent")!.Value;
+        foreach (var (window, rect, images) in new[]
+                 {
+                     ("ButtonOptions", america.Options, america.OptionsImages), ("ButtonIdleWorker", america.Worker, america.WorkerImages),
+                     ("ButtonPlaceBeacon", america.Beacon, america.BeaconImages), ("PopupCommunicator", america.Chat, america.ChatImages),
+                     ("ButtonGeneral", america.General, america.GeneralImages),
+                 })
+        {
+            var onScreen = controller.WindowRect($"ControlBar.wnd:{window}")!.Value;
+            TestHarness.Assert(!rect.IsEmpty && onScreen.X == rect.Left * width / america.CreationWidth && onScreen.Right == rect.Right * width / america.CreationWidth && onScreen.Y >= bar.Y - height / 20 && onScreen.Bottom <= height,
+                $"{window} lies at the scheme's rectangle ({onScreen} for {rect})");
+            // The idle worker button is disabled in the layout: it shows its disabled image.
+            var expected = window == "ButtonIdleWorker" ? images.Disabled : images.Enabled;
+            TestHarness.Assert(expected.Length > 0 && commands.OfType<UiImageDraw>().Any(draw => draw.Image == expected && draw.Destination == onScreen), $"{window} shows the scheme's image");
+        }
+        TestHarness.Assert(!commands.OfType<UiCustomDraw>().Any(draw => draw.Callback is "W3DCommandBarBackgroundDraw" or "W3DCommandBarForegroundDraw" || draw is { Callback: "W3DRightHUDDraw", Window: "ControlBar.wnd:RightHUD" }),
+            "the scheme's draw callbacks are drawn here, not left to the host");
+        var rightHud = controller.WindowRect("ControlBar.wnd:RightHUD")!.Value;
+        TestHarness.Assert(america.RightHudImage.Length > 0 && commands.OfType<UiImageDraw>().Any(draw => draw.Image == america.RightHudImage && draw.Destination == rightHud), "with nothing selected the right-hand window shows the side's logo");
+
+        var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+        long time = 10_000;
+        Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+        Advance(match, controller, 1);
+        commands = controller.BuildDrawList(width, height).Commands;
+        var cameo = controller.WindowRect("ControlBar.wnd:CameoWindow")!.Value;
+        TestHarness.Assert(data.Visuals.TryGet(dozer.Template.Name, out var visual) && visual.SelectPortrait is { Length: > 0 }, "the dozer has a portrait in the data");
+        TestHarness.Assert(commands.OfType<UiImageDraw>().Any(draw => draw.Image == visual.SelectPortrait && draw.Destination == cameo), "one selected object shows its portrait in the cameo window");
+        TestHarness.Assert(!commands.OfType<UiImageDraw>().Any(draw => draw.Image == america.RightHudImage), "the logo is gone while a portrait shows");
+        TestHarness.Assert(!commands.OfType<UiFillRect>().Any(fill => fill.Rect == cameo), "the cameo window draws its image only, never a filled box");
     }
 
     /// <summary>
@@ -784,7 +870,7 @@ internal static class HudTests
         Click(controller, ref time, MouseButton.Left, refusedAt!.Value);
         Advance(match, controller, 1);
         var drawn = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(draw => draw.Text == "You can't build here").ToArray();
-        TestHarness.Assert(drawn is [{ X: 10, Y: 22 }], $"the click prints GUI:CantBuildThere at the message position ({string.Join(" | ", controller.Messages.Log.Lines.Select(line => line.Text))})");
+        TestHarness.Assert(drawn is [{ X: 10, Y: 10 }], $"the click prints GUI:CantBuildThere at the message position of the retail InGameUI.ini, 10,10 ({string.Join(" | ", controller.Messages.Log.Lines.Select(line => line.Text))})");
         TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.Placement, "and the placement stays on for another try");
     }
 

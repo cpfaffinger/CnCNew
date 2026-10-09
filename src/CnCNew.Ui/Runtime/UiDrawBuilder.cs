@@ -46,7 +46,13 @@ public sealed partial class UiWindowTree
                 _windows++;
                 if ((window.Status & WndStatus.Border) != 0) _border++;
                 var callback = window.Definition.Callbacks.Draw;
-                if (callback is null || callback == UiBuiltinCallbacks.PushButtonImageDraw) DrawGadget(window);
+                // W3DGadgetPushButtonImageDraw on a plain window (the portrait and upgrade cameos of ControlBar.wnd): the callback only ever draws images
+                // (W3DGadgetPushButtonImageDrawOne returns when the state has none), never the border and fill a window without the IMAGE status gets by default.
+                if (callback == UiBuiltinCallbacks.PushButtonImageDraw && !window.IsGadget)
+                {
+                    if (window.DrawImage(Set(window, WndDrawDataKind.Enabled), 0) is { } cameo) Image(cameo, Offset(window, window.Rect));
+                }
+                else if (callback is null || callback == UiBuiltinCallbacks.PushButtonImageDraw) DrawGadget(window);
                 else if (callback == UiBuiltinCallbacks.W3DDefaultDraw) DrawBackground(window, Set(window, WndDrawDataKind.Enabled), window.Rect);
                 else if (callback is not (UiBuiltinCallbacks.NoDraw or UiBuiltinCallbacks.DefaultDraw))
                 {

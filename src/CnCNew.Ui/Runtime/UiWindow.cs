@@ -136,6 +136,14 @@ public sealed class UiWindow
         Tree.Relayout();
     }
 
+    /// <summary><c>winSetPosition</c> in the units of the layout: moves the upper-left corner to that of <paramref name="place"/> (absolute, as <c>SCREENRECT</c> is), keeping the size.</summary>
+    public void SetDesignPosition(WndScreenRect place)
+    {
+        var rect = DesignRect;
+        _designRect = rect with { Left = place.Left, Top = place.Top, Right = place.Left + rect.Width, Bottom = place.Top + rect.Height };
+        Tree.Relayout();
+    }
+
     public void SetText(string text) => Text = UiTextValue.Plain(text);
 
     public void SetTextLabel(string label) => Text = UiTextValue.Label(label);

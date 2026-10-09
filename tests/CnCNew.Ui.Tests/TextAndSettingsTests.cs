@@ -664,7 +664,7 @@ public static class TextAndSettingsTests
         var settings = InGameUiSettings.FromGraph(graph);
         Console.WriteLine($"  InGameUI.ini: message {settings.MessagePosition} delay {settings.MessageDelayMilliseconds} ms, military caption {settings.MilitaryCaptionPosition}, superweapons {settings.SuperweaponPosition}, "
             + $"named timers {settings.NamedTimerPosition}, {settings.RadiusCursorSections.Length} radius cursor blocks, defaulted: {string.Join(", ", settings.DefaultedKeys)}");
-        Assert(settings.MessagePosition == new InGameUiPixelPoint(10, 22) && settings.MessageColor1 == new WndColor(255, 255, 255, 255) && settings.MessageColor2 == new WndColor(180, 180, 255, 255)
+        Assert(settings.MessagePosition == new InGameUiPixelPoint(10, 10) && settings.MessageColor1 == new WndColor(255, 255, 255, 255) && settings.MessageColor2 == new WndColor(180, 180, 255, 255)
             && settings.MessageDelayMilliseconds == 75000, "The retail message values.");
         Assert(settings.MilitaryCaptionPosition == new InGameUiPixelPoint(10, 340) && settings.MilitaryCaptionColor == new WndColor(255, 255, 255, 255) && settings.MilitaryCaptionRandomizeTyping, "The retail military caption values.");
         Assert(settings.SuperweaponPosition == new InGameUiFractionPoint(0.90m, 0.01m) && settings.SuperweaponFlashFrames == 15m && settings.SuperweaponFlashColor == new WndColor(255, 255, 255, 255), "The retail superweapon values.");
@@ -695,10 +695,10 @@ public static class TextAndSettingsTests
     /// </summary>
     private static readonly string[] KnownUnresolvedWndLabels =
     [
-        "ControlBar.wnd|[None]",
         "ChallengeLoadScreen.wnd|GUI:BioBirthplaceEntry", "ChallengeLoadScreen.wnd|GUI:BioNameEntry", "ChallengeLoadScreen.wnd|GUI:BioStrategyEntry",
         "ChallengeLoadScreen.wnd|Static Text", "ChallengeLoadScreen.wnd|Tooltip:LoadProgress",
         "GameSpyLoadScreen.wnd|Static Text", "GameSpyLoadScreen.wnd|Tooltip:LoadProgress",
+        "MainMenu.wnd|GUI:CustomMission",
         "MultiplayerLoadScreen.wnd|Static Text",
         "OptionsMenu.wnd|GUI:LanguageFilter", "OptionsMenu.wnd|Version",
         "ScoreScreen.wnd|##", "ScoreScreen.wnd|$$$", "ScoreScreen.wnd|Buidings Built", "ScoreScreen.wnd|Buildings Killed",

@@ -267,6 +267,16 @@ public static class WndTests
         // Right-anchored group at 21:9: scale 1.8, content 1440 wide, offset 2560 - 1440 = 1120.
         Check(anchored.Transform.Map(new WndScreenRect(600, 100, 780, 400, 800, 600)) == UiRect.FromEdges(2200, 180, 2524, 720) && anchored.Inherited is not null,
             $"Anchor mapping: {anchored.Transform.Map(new WndScreenRect(600, 100, 780, 400, 800, 600))}");
+        // A bar written with its last pixel (0..799 of 800) is as wide as the screen: it stretches like parseScreenRect does, it is not a centred 4:3 group.
+        var bar = UiScaler.ForWindow(new WndScreenRect(0, 416, 799, 599, 800, 600), null, new UiViewport(1280, 720), UiScaleMode.Anchor);
+        Check(bar.Transform.AnchorX == UiAxisAnchor.Stretch && bar.Transform.AnchorY == UiAxisAnchor.End && bar.Inherited is not null
+              && bar.Transform.Map(new WndScreenRect(0, 416, 799, 599, 800, 600)) == UiRect.FromEdges(0, 499, 1278, 718),
+            $"Anchor mapping of an inclusive full-width bar: {bar.Transform.Map(new WndScreenRect(0, 416, 799, 599, 800, 600))}");
+        Check(UiScaler.ClassifyAxis(0, 799, 800) == UiAxisAnchor.Stretch && UiScaler.ClassifyAxis(1, 800, 800) == UiAxisAnchor.Stretch
+              && UiScaler.ClassifyAxis(0, 798, 800) == UiAxisAnchor.Center && UiScaler.ClassifyAxis(2, 800, 800) == UiAxisAnchor.Center, "Full extent allows one unit at either end, not two.");
+        // A full-screen window written as 0,0-799,599 is a stretched canvas whose children anchor on their own.
+        var canvas = UiScaler.ForWindow(new WndScreenRect(0, 0, 799, 599, 800, 600), null, new UiViewport(1280, 720), UiScaleMode.Anchor);
+        Check(canvas.Inherited is null && canvas.Transform.AnchorX == UiAxisAnchor.Stretch && canvas.Transform.AnchorY == UiAxisAnchor.Stretch, "An inclusive full-screen window is a canvas.");
     }
 
     /// <summary>A menu-like fixture: a stretched background with a title, a right button column, a centered dialog and a bottom bar.</summary>
@@ -1289,7 +1299,7 @@ public static class WndTests
         var files = content.EnumerateFiles("Window/").OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
         var wnd = files.Count(path => path.EndsWith(".wnd", StringComparison.OrdinalIgnoreCase));
         Console.WriteLine($"Real data: {files.Length} files under Window/ ({wnd} *.wnd, {files.Length - wnd} variants: {string.Join(", ", files.Where(path => !path.EndsWith(".wnd", StringComparison.OrdinalIgnoreCase)))})");
-        Check(files.Length == 83, $"Expected 83 files under Window/, found {files.Length}.");
+        Check(files.Length == 80, $"Expected 80 files under Window/, found {files.Length}.");
 
         HeaderTemplates(content, out var templates);
         var parse = Stopwatch.StartNew();

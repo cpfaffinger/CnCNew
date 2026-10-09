@@ -75,6 +75,9 @@ public sealed class MainMenuScreen : ShellScreen
 
         // Multiplayer is out of scope for this build (see docs/GAME-SHELL.md); kept visible but inert.
         W("ButtonMultiplayer").SetEnabled(false);
+        // The retail MainMenu.wnd (PatchWindow.big) has a "custom mission" button between Skirmish and Back; this build has no such screen (the published source of the
+        // original has no handler for it either). Kept visible but inert, like Multiplayer; a layout without the button has nothing to disable.
+        Tree.FindByName("MainMenu.wnd:ButtonCustomMission")?.SetEnabled(false);
         var hasCampaigns = Shell.Campaigns is not null;
         W("ButtonUSA").SetEnabled(hasCampaigns && Shell.Campaigns!.Find("USA") is not null);
         W("ButtonGLA").SetEnabled(hasCampaigns && Shell.Campaigns!.Find("GLA") is not null);

@@ -2,5 +2,5 @@
 # middle of the screen, on the first command button and on the ground - must change nothing. Before the fix they reached
 # the world while the scripted camera moved underneath. Used by scripts/check-dozer-build.ps1.
 40   click left screen:640,344
-100  click left screen:474,640
+100  click left button:ControlBar.wnd:ButtonCommand01
 160  click left screen:1044,360
