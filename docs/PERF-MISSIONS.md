@@ -1,368 +1,368 @@
-# Leistung der Kampagnenmissionen (Phase 19, Teilauftrag Skripte, Zielerwerb, Suchmodule)
+# Performance of the campaign missions (Phase 19, sub-brief scripts, target acquisition, search modules)
 
-Stand 6. Oktober 2026. Gegenstand: was einen Missionstick teuer macht, soweit es nicht Bewegung/Wegsuche, Sicht oder der Zustands-Hash ist –
-die Skript-VM (`src/CnCNew.Simulation/Scripting`), der Zielerwerb (`SimulationWorld.Acquisition.cs`) und die Module, die je Update die Welt
-absuchen (`PointDefenseLaserUpdate`, `CheckpointUpdate`, `DemoTrapUpdate`, `StealthDetectorUpdate`, die Docksuche der Versorger).
+As of 6 October 2026. Subject: what makes a mission tick expensive, as far as it is not movement/pathfinding, vision or the state hash –
+the script VM (`src/CnCNew.Simulation/Scripting`), the target acquisition (`SimulationWorld.Acquisition.cs`) and the modules that search the
+world on every update (`PointDefenseLaserUpdate`, `CheckpointUpdate`, `DemoTrapUpdate`, `StealthDetectorUpdate`, the dock search of the supply units).
 
-**Regel der Arbeit:** kein Ergebnis ändert sich. Jeder Commit besteht `SimTool reference-manifest check … --set quick` unverändert
-(darin `mission_MD_USA05` und `mission_MD_GLA05`), der Endstand zusätzlich `--set full`, `input-manifest check`, die Prüfung des inkrementellen
-Hashs und Kampagnen-Audit und -Fahrer (§6). Die Manifestdateien sind nicht angefasst.
+**Rule of the work:** no result changes. Every commit passes `SimTool reference-manifest check … --set quick` unchanged
+(in it `mission_MD_USA05` and `mission_MD_GLA05`), the final state additionally `--set full`, `input-manifest check`, the check of the incremental
+hash and campaign audit and driver (§6). The manifest files are not touched.
 
-**Alle Zeiten in diesem Dokument sind nicht ruhig gemessen.** Der Rechner (AMD Ryzen 7 PRO 6850U, 16 logische Prozessoren) lief während der
-ganzen Arbeit mit vier weiteren Agenten; dieselbe Messung streut um den Faktor zwei bis drei (`AIUpdateInterface`, das hier nicht angefasst
-wurde, lag je Lauf zwischen 388 und 1.228 µs je Aufruf). Belastbar sind deshalb die **Zähler** (Aufrufe, ausgewertete Bedingungen, allozierte
-Bytes – alle deterministisch) und Zeiten **im Verhältnis innerhalb desselben Laufs**. Die ruhige Vergleichsmessung nach
-`docs/PERFORMANCE.md` §4 steht aus (§7).
+**All times in this document are not measured quietly.** The machine (AMD Ryzen 7 PRO 6850U, 16 logical processors) ran during the
+whole work with four further agents; the same measurement scatters by a factor of two to three (`AIUpdateInterface`, which was not touched
+here, lay between 388 and 1,228 µs per call depending on the run). What is reliable are therefore the **counters** (calls, evaluated conditions, allocated
+bytes – all deterministic) and times **in proportion within the same run**. The quiet comparison measurement according to
+`docs/PERFORMANCE.md` §4 is outstanding (§7).
 
-## 1. Messwerkzeug
+## 1. Measuring tool
 
-`SimTool perf-mission` (docs/PERFORMANCE.md §3) kann seit dieser Arbeit sagen, *wo* Zeit und Speicher bleiben:
+Since this work `SimTool perf-mission` (docs/PERFORMANCE.md §3) can say *where* time and memory go:
 
-- **Allokation je Tickphase** („Allocated bytes per tick by phase“) und **je Modultyp** (Spalten `bytes/tick`, `bytes/call` der Modultabelle):
-  `GC.GetAllocatedBytesForCurrentThread` an denselben Stellen, an denen schon die Uhr gelesen wird.
-- **`--script-detail`**: die Skript-VM meldet einem `IScriptObserver` (`Scripting/ScriptObserver.cs`, das Gegenstück zu `ITickPhaseObserver`)
-  die Abschnitte von `ScriptEngine.Update` (`ScriptSection`: Housekeeping, Scripts, Followers, ButtonHunts, TeamEvents, Sequences, TeamBuilds,
-  TeamQueues, WorldOrders) sowie Beginn und Ende jeder Bedingungsauswertung und jeder Aktion. Das Werkzeug (`ScriptRecorder.cs`) führt je
-  Bedingungs- und Aktionstyp Aufrufe, Eigenzeit, Maximum und Eigen-Bytes (verschachtelte Aufrufe abgezogen). Die Uhr steht im Werkzeug; die
-  Simulation hält keine (`SourceRules`). Der Beobachter ist kein Zustand; ohne ihn läuft die VM dieselben Aufrufe in derselben Reihenfolge.
-  Die Option ist nicht Standard, weil zwei Uhr- und zwei Zählerzugriffe je Bedingung sonst in jedem Profil der Phase `MissionScripts` stünden.
-- **Erster Schritt**: wie viel des ersten Ticks die Laufzeit mit dem Übersetzen von Methoden verbringt (`System.Runtime.JitInfo`).
+- **Allocation per tick phase** ("Allocated bytes per tick by phase") and **per module type** (columns `bytes/tick`, `bytes/call` of the module table):
+  `GC.GetAllocatedBytesForCurrentThread` at the same places at which the clock is already read.
+- **`--script-detail`**: the script VM reports to an `IScriptObserver` (`Scripting/ScriptObserver.cs`, the counterpart to `ITickPhaseObserver`)
+  the sections of `ScriptEngine.Update` (`ScriptSection`: Housekeeping, Scripts, Followers, ButtonHunts, TeamEvents, Sequences, TeamBuilds,
+  TeamQueues, WorldOrders) as well as the beginning and end of every condition evaluation and every action. The tool (`ScriptRecorder.cs`) keeps per
+  condition and action type calls, self time, maximum and self bytes (nested calls subtracted). The clock is in the tool; the
+  simulation holds none (`SourceRules`). The observer is not state; without it the VM runs the same calls in the same order.
+  The option is not the default, because two clock and two counter accesses per condition would otherwise be in every profile of the phase `MissionScripts`.
+- **First step**: how much of the first tick the runtime spends compiling methods (`System.Runtime.JitInfo`).
 
 ```powershell
 dotnet build -c Release tools/CnCNew.SimTool
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf-mission game/content --map "Maps/MD_GLA05/MD_GLA05.map" --ticks 3000 --script-detail --top 30
 ```
 
-## 2. Gemessene Aufschlüsselung des Ausgangsstands (`74ccdde`)
+## 2. Measured breakdown of the starting state (`74ccdde`)
 
-### 2.1 Die 4 MB je Tick sind nicht die Skripte
+### 2.1 The 4 MB per tick are not the scripts
 
-`docs/PERFORMANCE.md` §6.3 Punkt 5 schreibt die 4 MB Allokation je Tick von `MD_GLA05` den Skripten zu. Die Messung je Phase widerlegt das
-(`MD_GLA05`, 1.500 Ticks):
+`docs/PERFORMANCE.md` §6.3 item 5 attributes the 4 MB of allocation per tick of `MD_GLA05` to the scripts. The measurement per phase refutes that
+(`MD_GLA05`, 1,500 ticks):
 
-| Phase | Bytes je Tick |
+| Phase | Bytes per tick |
 |---|---:|
-| Updates | 5.174.216 |
-| davon `PointDefenseLaserUpdate` | 5.155.999 (191.090 je Aufruf) |
-| Acquisition | 232.842 |
-| MissionScripts | 97.321 |
-| alle anderen zusammen | 7.200 |
-| **Summe** | **5.511.603** |
+| Updates | 5,174,216 |
+| of which `PointDefenseLaserUpdate` | 5,155,999 (191,090 per call) |
+| Acquisition | 232,842 |
+| MissionScripts | 97,321 |
+| all others together | 7,200 |
+| **Sum** | **5,511,603** |
 
-Ursache im Laser: `ScanRate = 0` in den Retail-Daten (`AirforceGeneral.ini`), also sucht jeder der 27 Laser **jeden Tick** ein Ziel, und die
-Suche ging über alle rund 2.250 Objekte mit `PrimaryTargetTypes.Any(other.Template.IsKindOf)` – zwei Delegates und ein LINQ-Aufruf je Objekt,
-dazu vier Arrays je Suche. 40.473 Aufrufe in 1.500 Ticks, 110,8 µs je Aufruf, 28,1 % der Update-Phase.
+Cause in the laser: `ScanRate = 0` in the retail data (`AirforceGeneral.ini`), so each of the 27 lasers searches for a target **every tick**, and the
+search went over all of the about 2,250 objects with `PrimaryTargetTypes.Any(other.Template.IsKindOf)` – two delegates and one LINQ call per object,
+plus four arrays per search. 40,473 calls in 1,500 ticks, 110.8 µs per call, 28.1 % of the update phase.
 
-Die 233 KB im Zielerwerb waren die Skript-VM auf Umwegen: `IAcquisitionAdvisor.AttitudeOf` → `ScriptEngine.TeamOfEntity` baute beim ersten
-Aufruf jedes Ticks das Wörterbuch Objekt → Team neu auf und lief bei **jedem** Aufruf über alle Teams (Enumerator eines `SortedDictionary`).
+The 233 KB in the target acquisition were the script VM by a detour: `IAcquisitionAdvisor.AttitudeOf` → `ScriptEngine.TeamOfEntity` rebuilt the
+dictionary object → team on the first call of every tick and ran over all teams on **every** call (enumerator of a `SortedDictionary`).
 
-### 2.2 Skript-VM nach Abschnitt und Bedingungstyp
+### 2.2 Script VM by section and condition type
 
-`MD_GLA05`, 3.000 Ticks, `--script-detail`. 690.622 Bedingungsauswertungen (230,2 je Tick) in 33 Typen, 471 Aktionen (0,2 je Tick) in 66 Typen;
-102 Skripte führten ihre Aktionen aus.
+`MD_GLA05`, 3,000 ticks, `--script-detail`. 690,622 condition evaluations (230.2 per tick) in 33 types, 471 actions (0.2 per tick) in 66 types;
+102 scripts executed their actions.
 
-| Abschnitt von `ScriptEngine.Update` | µs je Tick | Bytes je Tick |
+| Section of `ScriptEngine.Update` | µs per tick | Bytes per tick |
 |---|---:|---:|
-| Scripts (alle Skriptlisten: Bedingungen und Aktionen) | 4.392,2 | 88.869 |
-| TeamEvents (Feind gesichtet/Entwarnung, Team zerstört, untätig) | 1.898,1 | 4.652 |
-| Housekeeping (`PruneTeams`, Zeitgeber) | 100,4 | 9.049 |
-| Followers (stehende Befehle: Pfade, Jagd, Angriff) | 50,1 | 6.101 |
-| ButtonHunts, Sequences, TeamBuilds, TeamQueues, WorldOrders | zusammen 4,9 | 0 |
+| Scripts (all script lists: conditions and actions) | 4,392.2 | 88,869 |
+| TeamEvents (enemy sighted/all clear, team destroyed, idle) | 1,898.1 | 4,652 |
+| Housekeeping (`PruneTeams`, timers) | 100.4 | 9,049 |
+| Followers (standing orders: paths, hunt, attack) | 50.1 | 6,101 |
+| ButtonHunts, Sequences, TeamBuilds, TeamQueues, WorldOrders | together 4.9 | 0 |
 
-| Bedingungstyp | Aufrufe je Tick | Eigenzeit µs je Tick | µs je Aufruf | Bytes je Aufruf |
+| Condition type | Calls per tick | Self time µs per tick | µs per call | Bytes per call |
 |---|---:|---:|---:|---:|
-| `PLAYER_HAS_COMPARISON_UNIT_TYPE_IN_TRIGGER_AREA` | 40,4 | 2.367,4 | 58,60 | 824 |
-| `BUILT_BY_PLAYER` | 5,0 | 401,6 | 80,33 | 1.699 |
-| `PLAYER_ALL_DESTROYED` | 4,2 | 236,8 | 56,91 | 336 |
-| `SKIRMISH_PLAYER_HAS_UNITS_IN_AREA` | 11,1 | 198,1 | 17,90 | 160 |
-| `PLAYER_LOST_OBJECT_TYPE` | 2,5 | 173,3 | 68,43 | 1.091 |
-| `PLAYER_HAS_OBJECT_COMPARISON` | 2,1 | 131,5 | 61,98 | 932 |
-| `SKIRMISH_SPECIAL_POWER_READY` | 2,0 | 130,7 | 65,32 | 1.171 |
-| `PLAYER_ALL_BUILDFACILITIES_DESTROYED` | 1,0 | 84,4 | 84,36 | 2.991 |
-| `PLAYER_HAS_N_OR_FEWER_BUILDINGS` | 1,0 | 62,2 | 62,24 | 881 |
-| `PLAYER_HAS_COMPARISON_UNIT_KIND_IN_TRIGGER_AREA` | 1,0 | 61,1 | 61,09 | 951 |
-| `TIMER_EXPIRED` | 67,9 | 38,0 | 0,56 | 64 |
-| `FLAG` | 33,7 | 18,5 | 0,55 | 64 |
-| `SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER` | 14,8 | 13,6 | 0,92 | 120 |
-| übrige 20 Typen | 43,5 | 86,4 | – | – |
-| **alle** | **230,2** | **4.003,6** | | 70.574 je Tick |
+| `PLAYER_HAS_COMPARISON_UNIT_TYPE_IN_TRIGGER_AREA` | 40.4 | 2,367.4 | 58.60 | 824 |
+| `BUILT_BY_PLAYER` | 5.0 | 401.6 | 80.33 | 1,699 |
+| `PLAYER_ALL_DESTROYED` | 4.2 | 236.8 | 56.91 | 336 |
+| `SKIRMISH_PLAYER_HAS_UNITS_IN_AREA` | 11.1 | 198.1 | 17.90 | 160 |
+| `PLAYER_LOST_OBJECT_TYPE` | 2.5 | 173.3 | 68.43 | 1,091 |
+| `PLAYER_HAS_OBJECT_COMPARISON` | 2.1 | 131.5 | 61.98 | 932 |
+| `SKIRMISH_SPECIAL_POWER_READY` | 2.0 | 130.7 | 65.32 | 1,171 |
+| `PLAYER_ALL_BUILDFACILITIES_DESTROYED` | 1.0 | 84.4 | 84.36 | 2,991 |
+| `PLAYER_HAS_N_OR_FEWER_BUILDINGS` | 1.0 | 62.2 | 62.24 | 881 |
+| `PLAYER_HAS_COMPARISON_UNIT_KIND_IN_TRIGGER_AREA` | 1.0 | 61.1 | 61.09 | 951 |
+| `TIMER_EXPIRED` | 67.9 | 38.0 | 0.56 | 64 |
+| `FLAG` | 33.7 | 18.5 | 0.55 | 64 |
+| `SKIRMISH_PLAYER_HAS_BEEN_ATTACKED_BY_PLAYER` | 14.8 | 13.6 | 0.92 | 120 |
+| remaining 20 types | 43.5 | 86.4 | – | – |
+| **all** | **230.2** | **4,003.6** | | 70,574 per tick |
 
-Befunde:
+Findings:
 
-1. **Alles über 50 µs je Aufruf ist dieselbe Stelle:** `PlayerEntities(player)` filterte je Bedingung alle Objekte der Welt mit einem LINQ-`Where`
-   über den geboxten Tabellen-Enumerator und sortierte das Ergebnis nach Id. Zehn Bedingungstypen, 60 bis 70 Aufrufe je Tick, 3,7 von 4,0 ms.
-2. **Jede Bedingung allozierte 64 Bytes**, auch `TIMER_EXPIRED` und `CONDITION_TRUE`: im großen `switch` von `EvaluateCondition` lesen Lambdas
-   die Parameterliste, also legt der Compiler das Closure-Objekt beim Eintritt in die Methode an – ob ein Lambda erreicht wird oder nicht.
-   Dasselbe in `ExecuteScriptBody` (einmal je Skript und Tick, auch für inaktive Skripte: die 38 KB je Tick des Abschnitts Scripts außerhalb
-   der Bedingungen) und im `switch` der `SKIRMISH_*`-Bedingungen (48 Bytes).
-3. **TeamEvents** ist fast so teuer wie die Hälfte aller Bedingungen: `EnemyInSight` lief für jedes lebende Mitglied jedes Teams mit einem
-   Feind-gesichtet- oder Entwarnungsskript über die ganze Welt, bis es einen Feind in Sichtweite fand – im Normalfall (keiner da) also ganz.
-4. **Aktionen kosten nichts** (33,8 µs je Tick im Mittel, fast alles im ersten Tick: Kartenaufdeckung 6 bis 13 ms je Aktion).
-5. **Housekeeping**: `PruneTeams` fragte jeden Tick für jedes benannte Objekt, ob sein Name in der sortierten Menge der je existierten Namen
-   steht, und baute vier gefilterte Arrays und ein Delegate je Team.
+1. **Everything above 50 µs per call is the same place:** `PlayerEntities(player)` filtered, per condition, all objects of the world with a LINQ `Where`
+   over the boxed table enumerator and sorted the result by id. Ten condition types, 60 to 70 calls per tick, 3.7 of 4.0 ms.
+2. **Every condition allocated 64 bytes**, `TIMER_EXPIRED` and `CONDITION_TRUE` too: in the large `switch` of `EvaluateCondition` lambdas read
+   the parameter list, so the compiler creates the closure object on entry into the method – whether a lambda is reached or not.
+   The same in `ExecuteScriptBody` (once per script and tick, for inactive scripts too: the 38 KB per tick of the section Scripts outside
+   the conditions) and in the `switch` of the `SKIRMISH_*` conditions (48 bytes).
+3. **TeamEvents** is almost as expensive as half of all conditions: `EnemyInSight` ran, for every living member of every team with an
+   enemy-sighted or all-clear script, over the whole world until it found an enemy within sight range – so in the normal case (none there) entirely.
+4. **Actions cost nothing** (33.8 µs per tick on average, almost all of it in the first tick: map reveal 6 to 13 ms per action).
+5. **Housekeeping**: `PruneTeams` asked every tick for every named object whether its name is in the sorted set of the names that ever existed,
+   and built four filtered arrays and one delegate per team.
 
-### 2.3 Module, die die Welt absuchen
+### 2.3 Modules that search the world
 
-| Modul | Karte | Aufrufe in 3.000 Ticks | µs je Aufruf | Bytes je Aufruf | Was es je Aufruf tut |
+| Module | Map | Calls in 3,000 ticks | µs per call | Bytes per call | What it does per call |
 |---|---|---:|---:|---:|---|
-| `PointDefenseLaserUpdate` | `MD_GLA05` | 80.973 (27 Laser) | 93,9 | 191.090 | alle Objekte, Arten über LINQ (§2.1) |
-| `CheckpointUpdate` | `MD_GLA05` | 2.999 (1 Posten) | 236,3 | 13.101 | zweimal alle Objekte; je Kandidat Randabstand = bis zu drei 128-Bit-Wurzeln |
-| `StealthDetectorUpdate` | `MD_GLA05` / `MD_USA05` | 6.081 / 12.608 | 68,0 / 72,9 | 356 / 104 | alle Objekte; je Objekt zuerst die Spielerbeziehung (drei Tabellenzugriffe), dann erst das Tarn-Bit |
-| `DemoTrapUpdate` | `MD_USA05` | 44.985 (15 Fallen) | 80,5 | 227 | alle Objekte, je Objekt zwei 128-Bit-Produkte für das Abstandsquadrat |
-| `WorkerAIUpdate` | `MD_USA05` | 11.992 | 190,7 | 956 | u. a. Docksuche über alle Objekte mit Modulsuche je Objekt; der Rest ist Bewegung |
+| `PointDefenseLaserUpdate` | `MD_GLA05` | 80,973 (27 lasers) | 93.9 | 191,090 | all objects, kinds via LINQ (§2.1) |
+| `CheckpointUpdate` | `MD_GLA05` | 2,999 (1 post) | 236.3 | 13,101 | all objects twice; per candidate edge distance = up to three 128-bit roots |
+| `StealthDetectorUpdate` | `MD_GLA05` / `MD_USA05` | 6,081 / 12,608 | 68.0 / 72.9 | 356 / 104 | all objects; per object first the player relationship (three table accesses), only then the stealth bit |
+| `DemoTrapUpdate` | `MD_USA05` | 44,985 (15 traps) | 80.5 | 227 | all objects, per object two 128-bit products for the squared distance |
+| `WorkerAIUpdate` | `MD_USA05` | 11,992 | 190.7 | 956 | among other things dock search over all objects with a module search per object; the rest is movement |
 
-Zwei Ursachen darunter gelten für die ganze Simulation:
+Two causes among these apply to the whole simulation:
 
-- **`ObjectTemplate.IsKindOf` allozierte 24 Bytes je Aufruf.** Es war `ImmutableArray<string>.Contains(kind, StringComparer.OrdinalIgnoreCase)`;
-  dieser Aufruf alloziert in .NET 10 und braucht rund viermal so lange wie eine Schleife über die Handvoll Namen (einzeln gemessen, Release:
-  24 B und 40–84 ns gegen 0 B und 9–17 ns). Gefunden über den Kontrollposten: seine 12,9 KB je Aufruf waren 540 solche Aufrufe.
-- **`Fixed.Sqrt` begann Newtons Iteration bei `max(raw, scale)`**, für ein Abstandsquadrat also beim Quadrat selbst, und brauchte etwa eine
-  128-Bit-Division je Bit, um das der Start zu groß war (einzeln gemessen: 80–225 ns je Wurzel).
+- **`ObjectTemplate.IsKindOf` allocated 24 bytes per call.** It was `ImmutableArray<string>.Contains(kind, StringComparer.OrdinalIgnoreCase)`;
+  this call allocates in .NET 10 and takes about four times as long as a loop over the handful of names (measured individually, Release:
+  24 B and 40–84 ns against 0 B and 9–17 ns). Found through the checkpoint: its 12.9 KB per call were 540 such calls.
+- **`Fixed.Sqrt` began Newton's iteration at `max(raw, scale)`**, so for a squared distance at the square itself, and needed about one
+  128-bit division per bit by which the start was too large (measured individually: 80–225 ns per root).
 
-### 2.4 Zielerwerb
+### 2.4 Target acquisition
 
-`StepAcquisition` läuft je Tick über alle Objekte, deren KI im Leerlauf Ziele sucht; ein Blick (`FindMoodTarget`) lief über **alle** Objekte der
-Welt und verwarf die eigenen und die des Systemspielers einzeln. Dazu die Team-Abfrage aus §2.1. Ruhig gemessen (PERFORMANCE.md §6.2):
-503–541 µs je Tick in `MD_GLA05`, 276–312 in `MD_USA05`; unter der Last dieser Arbeit 974–2.329 µs.
+`StepAcquisition` runs per tick over all objects whose AI searches for targets when idle; one look (`FindMoodTarget`) ran over **all** objects of the
+world and discarded the own ones and those of the system player individually. In addition the team query from §2.1. Measured quietly (PERFORMANCE.md §6.2):
+503–541 µs per tick in `MD_GLA05`, 276–312 in `MD_USA05`; under the load of this work 974–2,329 µs.
 
-### 2.5 Der erste Tick
+### 2.5 The first tick
 
-Der längste Tick einer Mission ist Tick 0 (ruhig 169 ms in `MD_GLA05`, davon 47 % Skripte). Gemessen am Endstand in `MD_USA05`: erster Schritt
-293,0 ms, **davon 218,0 ms Übersetzen von Methoden** (JIT) auf diesem Thread – die großen `switch`-Methoden der VM werden beim ersten Durchlauf
-übersetzt. Der Rest sind die Aktionen des ersten Ticks, voran die Kartenaufdeckung. Das ist eine Eigenschaft des Prozesses, nicht der Mission
-(ein zweiter Missionsstart im selben Prozess zahlt sie nicht), und hier nicht geändert (§7).
+The longest tick of a mission is tick 0 (quiet 169 ms in `MD_GLA05`, of which 47 % scripts). Measured at the final state in `MD_USA05`: first step
+293.0 ms, **of which 218.0 ms compiling methods** (JIT) on this thread – the large `switch` methods of the VM are compiled on the first pass.
+The rest are the actions of the first tick, above all the map reveal. That is a property of the process, not of the mission
+(a second mission start in the same process does not pay it), and not changed here (§7).
 
-Tick 4.657 von `MD_GLA05` (93 ms, 94 % Updates, 8 MB) liegt in der Update-Phase außerhalb dieses Teilauftrags; sein Speicheranteil war zum
-größten Teil der Laser (5 MB in jedem Tick).
+Tick 4,657 of `MD_GLA05` (93 ms, 94 % updates, 8 MB) lies in the update phase outside this sub-brief; its memory share was for the
+most part the laser (5 MB in every tick).
 
-## 3. Gemeinsames Mittel: Listen statt Suche über alle Objekte
+## 3. Common means: lists instead of a search over all objects
 
-`SimulationWorld.Indexes.cs` gibt drei Sichten auf die Objekttabelle, jeweils in aufsteigender Id-Reihenfolge und mit **genau den Mitgliedern,
-die eine Suche über `Entities` mit dem jeweiligen Filter besucht**:
+`SimulationWorld.Indexes.cs` gives three views of the object table, each in ascending id order and with **exactly the members
+that a search over `Entities` with the respective filter visits**:
 
-| Abfrage | Filter der ersetzten Suche |
+| Query | Filter of the replaced search |
 |---|---|
 | `EntitiesOwnedBy(PlayerId)` | `entity.Owner == owner` |
-| `EntitiesOfKind(string)` | `entity.Template.IsKindOf(kind)` (ohne Rücksicht auf Groß-/Kleinschreibung) |
-| `EntitiesWithModule<T>()` | ein Modul des Objekts ist ein `T` (Klasse oder Schnittstelle) |
+| `EntitiesOfKind(string)` | `entity.Template.IsKindOf(kind)` (without regard to case) |
+| `EntitiesWithModule<T>()` | a module of the object is a `T` (class or interface) |
 
-- **Kein Zustand:** weder gehasht noch gespeichert. Jede Liste wird beim ersten Fragen in einem Durchgang über die Tabelle gebaut – eine Welt,
-  die nie fragt (Stresstest), zahlt nichts, und eine wiederhergestellte Welt baut aus derselben Tabelle dieselben Listen.
-- **Exakte Pflege** an den drei Stellen, an denen sich die Antwort ändern kann: `Register` (Objekt kommt in die Tabelle), `ProcessDestroys`
-  (geht hinaus) und `SetOwner` – jetzt die eine Stelle, die `Entity.Owner` eines registrierten Objekts setzt (`TransferOwnership`,
-  `ExecuteCapture`). Arten und Module eines Objekts ändern sich nie.
-- **Reihenfolge:** die Tabelle zählt nach Id auf (`EntityTable`), die Listen auch. Wo ein Aufrufer mehrere Listen nacheinander liest (die Listen
-  der Feindspieler, die Listen mehrerer Arten), ist bei der jeweiligen Änderung begründet, warum das Ergebnis nicht von der Reihenfolge abhängt.
-- Wer eine Liste durchläuft, darf ihre Mitgliedschaft dabei nicht ändern; Skriptaktionen, die Objekte töten oder übertragen, bekommen wie
-  bisher eine eigene Kopie (`ScriptEngine.PlayerEntities`).
+- **Not state:** neither hashed nor saved. Every list is built on the first query in one pass over the table – a world
+  that never asks (stress test) pays nothing, and a restored world builds the same lists from the same table.
+- **Exact maintenance** at the three places at which the answer can change: `Register` (object comes into the table), `ProcessDestroys`
+  (goes out) and `SetOwner` – now the one place that sets `Entity.Owner` of a registered object (`TransferOwnership`,
+  `ExecuteCapture`). Kinds and modules of an object never change.
+- **Order:** the table enumerates by id (`EntityTable`), the lists too. Where a caller reads several lists one after the other (the lists
+  of the enemy players, the lists of several kinds), it is justified at the respective change why the result does not depend on the order.
+- Whoever iterates a list must not change its membership while doing so; script actions that kill or transfer objects get, as
+  before, a copy of their own (`ScriptEngine.PlayerEntities`).
 
-## 4. Die Änderungen
+## 4. The changes
 
-Jede Änderung ist ein Commit mit einer Ursache; „Manifest quick“ heißt `reference-manifest check --set quick` auf genau diesem Stand.
+Every change is one commit with one cause; "manifest quick" means `reference-manifest check --set quick` at exactly this state.
 
-| Nr. | Commit | Inhalt |
+| No. | Commit | Content |
 |---:|---|---|
-| 1 | `b4a0598` | Messwerkzeug: `IScriptObserver`, `--script-detail`, Allokation je Phase und Modul |
-| 2 | `432abae` | Listen nach Besitzer und Art; `PointDefenseLaserUpdate` liest die Listen seiner Zielarten |
-| 3 | `4b1c3a9` | Objektbedingungen der Skripte lesen die Besitzerliste |
-| 4 | `3426c0c` | `EnemyInSight` der Team-Ereignisse sieht nur die Objekte der Feindspieler an |
-| 5 | `c51b37d` | Tabelle Objekt → Team wird nur nach einer Änderung neu gefüllt (`TeamTable`, `TeamMembers`, `MembershipStamp`) |
-| 6 | `9c16bd1` | Zielerwerb: `FindMoodTarget` sieht nur die Objekte der Feindspieler an |
-| 7 | `0926b7f` | `WorldEffectModules.Closest` (Kontrollposten, `EnemyNearUpdate`): Spieler mit der gesuchten Beziehung, Reichweitentest vor den Wurzeln |
-| 8 | `cc39b54` | Skriptschleife und Housekeeping ohne Allokation |
-| 9 | `da6a4ed` | `Fixed.Sqrt`: Startwert nahe der Wurzel |
-| 10 | `9b1abf0` | `ObjectTemplate.IsKindOf` als Schleife |
-| 11 | `43f1370` | `DemoTrapUpdate`: Reichweitentest vor den Produkten |
-| 12 | `cde8162` | `StealthDetectorUpdate`: Tarn-Bit zuerst |
-| 13 | `66a2f07` | Tests (§5) |
-| 14 | `3c4fb10` | Liste nach Modultyp; Docksuche der Versorger und Sammelpunkt-Suche lesen Listen |
+| 1 | `b4a0598` | measuring tool: `IScriptObserver`, `--script-detail`, allocation per phase and module |
+| 2 | `432abae` | lists by owner and kind; `PointDefenseLaserUpdate` reads the lists of its target kinds |
+| 3 | `4b1c3a9` | object conditions of the scripts read the owner list |
+| 4 | `3426c0c` | `EnemyInSight` of the team events looks only at the objects of the enemy players |
+| 5 | `c51b37d` | table object → team is refilled only after a change (`TeamTable`, `TeamMembers`, `MembershipStamp`) |
+| 6 | `9c16bd1` | target acquisition: `FindMoodTarget` looks only at the objects of the enemy players |
+| 7 | `0926b7f` | `WorldEffectModules.Closest` (checkpoint, `EnemyNearUpdate`): players with the sought relationship, range test before the roots |
+| 8 | `cc39b54` | script loop and housekeeping without allocation |
+| 9 | `da6a4ed` | `Fixed.Sqrt`: start value near the root |
+| 10 | `9b1abf0` | `ObjectTemplate.IsKindOf` as a loop |
+| 11 | `43f1370` | `DemoTrapUpdate`: range test before the products |
+| 12 | `cde8162` | `StealthDetectorUpdate`: stealth bit first |
+| 13 | `66a2f07` | tests (§5) |
+| 14 | `3c4fb10` | list by module type; dock search of the supply units and rally-point search read lists |
 
-Warum jede davon das Ergebnis nicht ändert:
+Why each of them does not change the result:
 
-**2 – Laser.** Jede der vier Auswahlen (primär/sekundär, in/außer Reichweite) ist das Minimum von (Abstand, Id) über ihre Kandidaten – `Closer`
-bricht Gleichstände selbst nach Id –, und eine Auswahl außer Reichweite wird nur benutzt, wenn ihre Liste keinen Kandidaten in Reichweite hat;
-dann wurde sie auch nie übersprungen. Also hängt das Ergebnis nicht von der Reihenfolge ab, und ein Objekt mit zwei gelisteten Arten, das
-zweimal kommt, ändert beim zweiten Mal nichts. Ob eine Vorlage primär, sekundär oder keins ist, wird je Vorlage einmal nachgesehen (im Modul,
-nicht in den Moduldaten: der Katalog-Hash des Eingangsmanifests umfasst Felder). In der Suche wird keine Zufallszahl gezogen.
+**2 – Laser.** Each of the four selections (primary/secondary, in/out of range) is the minimum of (distance, id) over its candidates – `Closer`
+breaks ties itself by id –, and a selection out of range is used only if its list has no candidate in range;
+then it was never skipped either. So the result does not depend on the order, and an object with two listed kinds that
+comes twice changes nothing the second time. Whether a template is primary, secondary or neither is looked up once per template (in the module,
+not in the module data: the catalog hash of the input manifest covers fields). No random number is drawn in the search.
 
-**3 – Objektbedingungen.** `PlayerEntities` war `Entities.Where(Owner == p && CountsAsObject).OrderBy(Id)`; die Tabelle zählt schon nach Id auf,
-das Sortieren änderte die Reihenfolge nie. Die Bedingungen laufen jetzt über `EntitiesOwnedBy(p)` mit demselben Filter; dessen Vorlagenteil
-(nicht `PROJECTILE`/`INERT`/`MINE`, `STRUCTURE`, `MP_COUNT_FOR_VICTORY`, Baueinrichtung) wird je Vorlage einmal nachgesehen. Die Typliste einer
-Zählung (`objectTypesFromParam`) wird einmal je Zählung aufgelöst statt je Objekt – in der Zählung ändert sie sich nicht. Auswertungsreihenfolge,
-Zähler fehlender Typen, Flankengedächtnisse, Einmal-Abschaltung: unberührt. Dieselben 690.622 Auswertungen vorher und nachher.
+**3 – Object conditions.** `PlayerEntities` was `Entities.Where(Owner == p && CountsAsObject).OrderBy(Id)`; the table already enumerates by id,
+the sorting never changed the order. The conditions now run over `EntitiesOwnedBy(p)` with the same filter; its template part
+(not `PROJECTILE`/`INERT`/`MINE`, `STRUCTURE`, `MP_COUNT_FOR_VICTORY`, build facility) is looked up once per template. The type list of a
+count (`objectTypesFromParam`) is resolved once per count instead of per object – within the count it does not change. Evaluation order,
+counters of missing types, edge memories, one-shot deactivation: untouched. The same 690,622 evaluations before and after.
 
-**4 – Feind gesichtet.** Ohne Beziehungsüberschreibung eines Skripts ist „Feind“ die Beziehung der beiden Besitzer (`AreEnemies` →
-`RelationshipOf`); nur Objekte der Feindspieler des Mitglieds können antworten. Gefragt ist „gibt es eines“, die Reihenfolge ist gleichgültig.
-Der Systemspieler und unbekannte Besitzer sind niemandes Feind. Mit Überschreibung (`_world.RelationshipOverride`) bleibt die Suche je Objekt.
+**4 – Enemy sighted.** Without a relationship override of a script, "enemy" is the relationship of the two owners (`AreEnemies` →
+`RelationshipOf`); only objects of the enemy players of the member can answer. The question is "is there one", the order is irrelevant.
+The system player and unknown owners are nobody's enemy. With an override (`_world.RelationshipOverride`) the search stays per object.
 
-**5 – Objekt → Team.** Die Regel, *wann* die Tabelle aufgefrischt wird (anderer Tick oder andere Mitgliedersumme), ist unverändert – sie
-entscheidet, was ein Aufrufer nach einem Mitgliederwechsel innerhalb eines Ticks sieht, und eine „immer frische“ Tabelle wäre eine
-Verhaltensänderung. Gespart wird nur die Arbeit: jede Änderung einer Mitgliedschaft oder der Teammenge zählt einen Stempel hoch
-(`TeamMembers`, `TeamTable`); steht er noch, ergäbe Zählen dieselbe Summe und Füllen dieselbe Tabelle. `ScriptTeam.Members` ist dafür ein
-`TeamMembers` (`IReadOnlyList<uint>`) statt einer `List<uint>`; ändern kann es nur die VM.
+**5 – Object → team.** The rule *when* the table is refreshed (different tick or different member sum) is unchanged – it
+decides what a caller sees after a member change within a tick, and an "always fresh" table would be a
+behaviour change. Only the work is saved: every change of a membership or of the team set counts a stamp up
+(`TeamMembers`, `TeamTable`); if it still stands, counting would give the same sum and filling the same table. For this `ScriptTeam.Members` is a
+`TeamMembers` (`IReadOnlyList<uint>`) instead of a `List<uint>`; only the VM can change it.
 
-**6 – Zielerwerb.** Wie 4: ohne Überschreibung muss ein Opfer einem Feindspieler gehören (`IsAttackable` → `AreEnemies`). Die Prüfungen je
-Kandidat sind derselbe Code (`ConsiderMoodTarget`). Die Auswahl ist das Maximum einer strengen Ordnung – (wirksame Priorität, Priorität, näher,
-kleinere Id) für eine Einheit mit Angriffsprioritäten, sonst (näher, kleinere Id); welche gilt, hängt nur von der Einheit ab –, also
-reihenfolgeunabhängig. Keine Prüfung zieht eine Zufallszahl oder ändert Zustand.
+**6 – Target acquisition.** Like 4: without an override a victim must belong to an enemy player (`IsAttackable` → `AreEnemies`). The checks per
+candidate are the same code (`ConsiderMoodTarget`). The selection is the maximum of a strict order – (effective priority, priority, closer,
+smaller id) for a unit with attack priorities, otherwise (closer, smaller id); which one applies depends only on the unit –, so
+independent of order. No check draws a random number or changes state.
 
-**7 – Kontrollposten.** Die Beziehung ist eine der Besitzer; Kandidaten sind die Objekte der Spieler mit der gesuchten Beziehung. Auswahl =
-Minimum von (Randabstand, Id). Der Systemspieler ist nie Feind und für Verbündete ausgenommen; ein Besitzer, den die Welt nicht kennt, ist nur
-sein eigener Verbündeter (so sagt es `RelationshipOf`, und so ist es nachgebaut). Reichweitentest: liegt ein Kandidat auf einer Achse weiter
-weg als Reichweite + beide Radien (nach oben abgeschätzt: großer + kleiner Halbmesser + 1, ohne Wurzel) + 1 Einheit, dann ist sein Randabstand
-größer als die Reichweite, was die andere Achse auch sagt; die eine Einheit ist weit mehr, als die Rundung der Quadrate und der Wurzel wegnehmen
-kann (zusammen unter 2⁻¹⁵). Der Abstandstest selbst ist unverändert.
+**7 – Checkpoint.** The relationship is one of the owners; candidates are the objects of the players with the sought relationship. Selection =
+minimum of (edge distance, id). The system player is never an enemy and is excluded for allies; an owner that the world does not know is only
+its own ally (that is what `RelationshipOf` says, and that is how it is rebuilt). Range test: if a candidate lies on one axis farther
+away than range + both radii (estimated upwards: major + minor semi-axis + 1, without a root) + 1 unit, then its edge distance
+is greater than the range, whatever the other axis says; the one unit is far more than the rounding of the squares and of the root can take away
+(together below 2⁻¹⁵). The distance test itself is unchanged.
 
-**8 – Skriptschleife.** Team-Bedingungen sind Schleifen über die Mitglieds-Ids statt LINQ mit Lambdas (ein lebendes Mitglied ist wie in
-`LiveMembers` eines, das existiert und nicht zum Entfernen vorgemerkt ist). Die Skripte und Gruppen je Liste stehen als Arrays in
-Programmreihenfolge fest (das Programm ändert sich nie); ob ein Skript oder eine Gruppe aktiv ist, wird weiterhin erst gefragt, wenn sie an der
-Reihe ist. Die Instanzen des Bedingungsteams eines Skripts werden wie zuvor vor der ersten Auswertung in Id-Reihenfolge gesammelt, nur ohne
-Closure und ohne Array im Normalfall (keine oder eine). `PruneTeams` sieht nur noch die Namen an, die noch nicht als „hat existiert“ bekannt sind
-(eine aus den beiden Tabellen abgeleitete Menge, beim Laden neu gebaut). Gedächtnisschlüssel der Betreten/Verlassen-Bedingungen, das Argument
-eines stehenden Befehls und der Text einer „unknown …“-Diagnose sind Funktionen ihrer Eingabe und werden je Eingabe einmal gebaut; gezählt wird
-die Diagnose weiterhin bei jedem Lauf.
+**8 – Script loop.** Team conditions are loops over the member ids instead of LINQ with lambdas (a living member is, as in
+`LiveMembers`, one that exists and is not marked for removal). The scripts and groups per list are fixed as arrays in
+program order (the program never changes); whether a script or a group is active is still asked only when it is its
+turn. The instances of the condition team of a script are collected, as before, before the first evaluation in id order, only without a
+closure and without an array in the normal case (none or one). `PruneTeams` now looks only at the names that are not yet known as "has existed"
+(a set derived from the two tables, rebuilt on loading). Memory keys of the enter/leave conditions, the argument
+of a standing order and the text of an "unknown …" diagnostic are functions of their input and are built once per input; the diagnostic
+is still counted on every run.
 
-**9 – Wurzel.** Newtons Iteration über die ganzen Zahlen fällt von jedem Startwert ≥ Wurzel auf ⌊√Ziel⌋ und hält dort; der Startwert
-2^⌈Bits/2⌉ liegt über der Wurzel. Derselbe Wert für jede Eingabe, nur weniger Divisionen.
+**9 – Root.** Newton's iteration over the integers falls from every start value ≥ root to ⌊√target⌋ and stays there; the start value
+2^⌈bits/2⌉ lies above the root. The same value for every input, only fewer divisions.
 
-**10 – `IsKindOf`.** Dieselbe Vergleichsregel (`OrdinalIgnoreCase`) über dieselben Namen. Kein neues Feld an der Vorlage.
+**10 – `IsKindOf`.** The same comparison rule (`OrdinalIgnoreCase`) over the same names. No new field on the template.
 
-**11 – Sprengfalle.** Liegt ein Objekt auf einer Achse mehr als eine Einheit jenseits der Auslösereichweite, ist sein Abstandsquadrat mindestens
-Reichweite² + 2·Reichweite + 1; die Rundung der beiden Produkte (je eine halbe Rohwert-Einheit) bringt das nicht unter die Grenze. Der Kreistest,
-die nach Id sortierte Liste, die Reihenfolge der Prüfungen darauf und die frühe Rückkehr bei einem Freund in Reichweite sind unverändert.
+**11 – Demo trap.** If an object lies on one axis more than one unit beyond the trigger range, its squared distance is at least
+range² + 2·range + 1; the rounding of the two products (half a raw-value unit each) does not bring that below the limit. The circle test,
+the list sorted by id, the order of the checks on it and the early return for a friend in range are unchanged.
 
-**12 – Tarnerkennung.** Die Prüfungen sind voneinander unabhängig und wirkungslos; ihre Reihenfolge entscheidet nur, was vergeblich angesehen
-wird. Die Objekte, die bestehen, und die Reihenfolge, in der sie als entdeckt markiert werden, sind dieselben.
+**12 – Stealth detection.** The checks are independent of each other and have no side effects; their order decides only what is looked at in vain.
+The objects that pass, and the order in which they are marked as detected, are the same.
 
-**14 – Docksuche.** Nur ein Objekt mit einem Dock-Modul hat Kosten (`Cost` fragt zuerst `DockOf`); die Objekte mit einem `IDockModule` sind also
-alle Kandidaten, die es gibt (eine Obermenge, auf die derselbe Test angewandt wird). Auswahl = Minimum von (Kosten, Id). Die Sammelpunkt-Suche
-(`Closest` nach Art) läuft über die Artliste in derselben Id-Reihenfolge wie die Suche, die sie ersetzt.
+**14 – Dock search.** Only an object with a dock module has a cost (`Cost` first asks `DockOf`); the objects with an `IDockModule` are therefore
+all the candidates there are (a superset to which the same test is applied). Selection = minimum of (cost, id). The rally-point search
+(`Closest` by kind) runs over the kind list in the same id order as the search it replaces.
 
-**Nicht benutzt** (wie vom Auftrag ausgeschlossen): Skripte seltener auswerten, Staffeln, Budgets, geänderte Reihenfolge, Näherungen, Threads,
-Wandzeit, `float`.
+**Not used** (as excluded by the brief): evaluating scripts less often, staggering, budgets, changed order, approximations, threads,
+wall-clock time, `float`.
 
 ## 5. Tests
 
-`tests/CnCNew.Simulation.Tests/Tests.Indexes.cs`, alle über die öffentliche Schnittstelle, auf Welten, die mit festem Seed zufällig verändert
-werden (Erzeugen, Töten, Entfernen, Besitzerwechsel, Gefechte):
+`tests/CnCNew.Simulation.Tests/Tests.Indexes.cs`, all through the public interface, on worlds that are changed randomly with a fixed seed
+(creating, killing, removing, change of owner, combat):
 
-| Test | Vergleich |
+| Test | Comparison |
 |---|---|
-| `WorldEntityListsMatchScan` | Besitzer-, Art- und Modullisten gegen die gefilterte Suche über alle Objekte (Mitglieder und Reihenfolge): vom ersten Tick an gefragt, erst mitten im Lauf und erst am Ende gefragt, und in aus dem Snapshot wiederhergestellten Sitzungen (viermal im Lauf); Fragen ändert den Welt-Hash nicht |
-| `ScriptObjectQueriesMatchScan` | die Objektbedingungen der Skripte (über `ExplainScript` gelesen: alles zerstört, Baueinrichtungen, Gebäudezahlen, Zählung nach Typ und Typliste, im Gebiet nach Typ und Art, Einheiten und Wert im Gebiet, gebaut von Spieler) gegen die Suche mit dem alten Filter und Sortieren; auch direkt nach einem Töten oder Besitzerwechsel, den noch kein Tick verarbeitet hat, und nach dem Wiederherstellen |
-| `EnemyOwnerSearchesMatchPerObjectSearch` | Zielerwerb und „Feind gesichtet“ nach Feindspieler gegen die Suche je Objekt: eine zweite Sitzung bekommt eine Beziehungsüberschreibung, die keine Beziehung ändert, und muss Tick für Tick denselben Welt-Hash und dieselben Skriptzähler haben |
-| `CheckpointScanMatchesWorldScan` | was Kontrollposten beider Spieler und des Systemspielers sehen, gegen die Suche über die Welt mit Randabständen, in allen vier Lagen |
-| `FixedSqrtMatchesReferenceIteration` | über 40.000 Werte (Zweierpotenzen, Quadratzahlen und ihre Nachbarn, Kartenabstände, Zufallsmuster) gegen die alte Iteration und gegen die Definition der abgerundeten Wurzel |
-| `KindLookupMatchesComparerLookup` | `IsKindOf` gegen `ImmutableArray.Contains` mit dem Vergleicher |
+| `WorldEntityListsMatchScan` | owner, kind and module lists against the filtered search over all objects (members and order): asked from the first tick on, asked only in the middle of the run and only at the end, and in sessions restored from the snapshot (four times in the run); asking does not change the world hash |
+| `ScriptObjectQueriesMatchScan` | the object conditions of the scripts (read through `ExplainScript`: everything destroyed, build facilities, building counts, count by type and type list, in the area by type and kind, units and value in the area, built by player) against the search with the old filter and sorting; also directly after a kill or change of owner that no tick has processed yet, and after restoring |
+| `EnemyOwnerSearchesMatchPerObjectSearch` | target acquisition and "enemy sighted" by enemy player against the search per object: a second session gets a relationship override that changes no relationship, and must have the same world hash and the same script counters tick by tick |
+| `CheckpointScanMatchesWorldScan` | what checkpoints of both players and of the system player see, against the search over the world with edge distances, in all four situations |
+| `FixedSqrtMatchesReferenceIteration` | over 40,000 values (powers of two, square numbers and their neighbours, map distances, random patterns) against the old iteration and against the definition of the rounded-down root |
+| `KindLookupMatchesComparerLookup` | `IsKindOf` against `ImmutableArray.Contains` with the comparer |
 
-Die Sprengfalle, die Tarnerkennung, der Laser und die Docksuche haben keinen eigenen Vergleichstest gegen ihre alte Suche (ihre Suche ist nicht
-von außen aufrufbar); sie stehen unter ihren vorhandenen Verhaltenstests und unter dem Manifest (`MD_USA05`: 15 Fallen; `MD_GLA05`: 27 Laser).
+The demo trap, the stealth detection, the laser and the dock search have no comparison test of their own against their old search (their search is not
+callable from outside); they are under their existing behaviour tests and under the manifest (`MD_USA05`: 15 traps; `MD_GLA05`: 27 lasers).
 
-## 6. Ergebnis
+## 6. Result
 
-### 6.1 Vorher/Nachher (nicht ruhig gemessen)
+### 6.1 Before/after (not measured quietly)
 
-Stand `74ccdde` gegen den Endstand, `perf-mission`, 3.000 Ticks, je Karte abwechselnd alt, neu, alt, neu; während der Läufe liefen eigene
-Prüfläufe und die Arbeit von vier weiteren Agenten. Zeiten in µs. Der Maßstab für die Last ist `AIUpdateInterface` je Aufruf (hier nicht geändert).
+State `74ccdde` against the final state, `perf-mission`, 3,000 ticks, per map alternately old, new, old, new; during the runs our own
+check runs and the work of four further agents were running. Times in µs. The yardstick for the load is `AIUpdateInterface` per call (not changed here).
 
-**`MD_GLA05`** (589×589 Zellen, 12 Seiten, 2.249–2.304 Objekte; Endhash `826CCD82C8536DC2`, Kette `10330D7D179054FD` in allen vier Läufen)
+**`MD_GLA05`** (589×589 cells, 12 sides, 2,249–2,304 objects; end hash `826CCD82C8536DC2`, chain `10330D7D179054FD` in all four runs)
 
-| Größe | alt 1 | neu 1 | alt 2 | neu 2 |
+| Quantity | old 1 | new 1 | old 2 | new 2 |
 |---|---:|---:|---:|---:|
-| Tick, Mittel | 54.152 | 33.420 | 49.529 | 24.647 |
-| Tick, Median | 40.229 | 17.289 | 35.414 | 18.145 |
-| Phase `MissionScripts` je Tick | 13.469 | 953 | 12.130 | 962 |
-| Phase `Acquisition` je Tick | 2.325 | 208 | 2.015 | 229 |
-| Phase `Updates` je Tick | 21.167 | 16.007 | 20.255 | 11.243 |
-| `PointDefenseLaserUpdate` je Aufruf | 217,9 | 1,80 | 216,4 | 1,43 |
-| `CheckpointUpdate` je Aufruf | 522,5 | 66,4 | 461,8 | 60,6 |
-| `StealthDetectorUpdate` je Aufruf | 169,8 | 96,3 | 147,1 | 96,0 |
-| *Maßstab* `AIUpdateInterface` je Aufruf | 857,8 | 1.009,1 | 812,0 | 639,3 |
-| **Bytes je Tick** | **4.093.975** | **15.501** | 4.093.968 | 15.516 |
-| GC Gen 0/1/2 in 3.000 Ticks | 1.435/19/2 | 6/2/0 | 1.436/18/2 | 7/3/1 |
+| Tick, mean | 54,152 | 33,420 | 49,529 | 24,647 |
+| Tick, median | 40,229 | 17,289 | 35,414 | 18,145 |
+| Phase `MissionScripts` per tick | 13,469 | 953 | 12,130 | 962 |
+| Phase `Acquisition` per tick | 2,325 | 208 | 2,015 | 229 |
+| Phase `Updates` per tick | 21,167 | 16,007 | 20,255 | 11,243 |
+| `PointDefenseLaserUpdate` per call | 217.9 | 1.80 | 216.4 | 1.43 |
+| `CheckpointUpdate` per call | 522.5 | 66.4 | 461.8 | 60.6 |
+| `StealthDetectorUpdate` per call | 169.8 | 96.3 | 147.1 | 96.0 |
+| *Yardstick* `AIUpdateInterface` per call | 857.8 | 1,009.1 | 812.0 | 639.3 |
+| **Bytes per tick** | **4,093,975** | **15,501** | 4,093,968 | 15,516 |
+| GC Gen 0/1/2 in 3,000 ticks | 1,435/19/2 | 6/2/0 | 1,436/18/2 | 7/3/1 |
 
-**`MD_USA05`** (527×521 Zellen, 10 Seiten, 1.835–1.909 Objekte; Endhash `1CB28E6AA923BDEF`, Kette `0816C3438CB7F689` in allen vier Läufen)
+**`MD_USA05`** (527×521 cells, 10 sides, 1,835–1,909 objects; end hash `1CB28E6AA923BDEF`, chain `0816C3438CB7F689` in all four runs)
 
-| Größe | alt 1 | neu 1 | alt 2 | neu 2 |
+| Quantity | old 1 | new 1 | old 2 | new 2 |
 |---|---:|---:|---:|---:|
-| Tick, Mittel | 21.626 | 24.353 | 26.603 | 14.201 |
-| Tick, Median | 14.478 | 11.233 | 16.361 | 9.853 |
-| Phase `MissionScripts` je Tick | 1.901 | 725 | 1.521 | 527 |
-| Phase `Acquisition` je Tick | 1.340 | 133 | 1.520 | 106 |
-| Phase `Updates` je Tick | 8.811 | 10.481 | 10.928 | 5.384 |
-| `DemoTrapUpdate` je Aufruf | 139,6 | 64,5 | 196,6 | 41,0 |
-| `StealthDetectorUpdate` je Aufruf | 154,1 | 60,5 | 151,6 | 43,2 |
-| `WorkerAIUpdate` je Aufruf | 356,3 | 378,0 | 438,6 | 254,0 |
-| *Maßstab* `AIUpdateInterface` je Aufruf | 719,9 | 1.390,8 | 931,2 | 515,5 |
-| **Bytes je Tick** | **209.110** | **20.147** | 208.752 | 20.150 |
-| GC Gen 0/1/2 in 3.000 Ticks | 75/6/0 | 8/2/0 | 75/6/0 | 7/1/0 |
+| Tick, mean | 21,626 | 24,353 | 26,603 | 14,201 |
+| Tick, median | 14,478 | 11,233 | 16,361 | 9,853 |
+| Phase `MissionScripts` per tick | 1,901 | 725 | 1,521 | 527 |
+| Phase `Acquisition` per tick | 1,340 | 133 | 1,520 | 106 |
+| Phase `Updates` per tick | 8,811 | 10,481 | 10,928 | 5,384 |
+| `DemoTrapUpdate` per call | 139.6 | 64.5 | 196.6 | 41.0 |
+| `StealthDetectorUpdate` per call | 154.1 | 60.5 | 151.6 | 43.2 |
+| `WorkerAIUpdate` per call | 356.3 | 378.0 | 438.6 | 254.0 |
+| *Yardstick* `AIUpdateInterface` per call | 719.9 | 1,390.8 | 931.2 | 515.5 |
+| **Bytes per tick** | **209,110** | **20,147** | 208,752 | 20,150 |
+| GC Gen 0/1/2 in 3,000 ticks | 75/6/0 | 8/2/0 | 75/6/0 | 7/1/0 |
 
-Lesart: Der Rechner war in diesen Läufen etwa viermal langsamer als in der ruhigen Messung (alt: 49–54 ms je Tick gegen ruhig 12,6–13,5 ms),
-und die Last schwankte von Lauf zu Lauf (Maßstab 516 bis 1.391 µs). Aussagen, die das trägt:
+Reading: the machine was about four times slower in these runs than in the quiet measurement (old: 49–54 ms per tick against quiet 12.6–13.5 ms),
+and the load fluctuated from run to run (yardstick 516 to 1,391 µs). Statements that this supports:
 
-- Die **Allokation** ist deterministisch: `MD_GLA05` von 4,09 MB auf 15,5 KB je Tick (Faktor 264), `MD_USA05` von 209 KB auf 20 KB. Gen-0-Sammlungen
-  in 3.000 Ticks von 1.435 auf 6 bis 7.
-- **Skriptphase** `MD_GLA05`: rund ein Dreizehntel (13.469/953, 12.130/962), `MD_USA05`: rund 2,6 bis 2,9.
-- **Zielerwerb**: rund ein Neuntel bis ein Zwölftel auf beiden Karten.
-- Laser 1/120 bis 1/150, Kontrollposten rund 1/8, Sprengfalle 1/2 bis 1/5, Tarnerkennung `MD_USA05` 1/2,5 bis 1/3,5.
-- Der **ganze Tick** von `MD_GLA05` wird in beiden Paaren deutlich kürzer (Median 40 → 17 und 35 → 18 ms); wie viel davon ruhig übrig bleibt,
-  sagt erst die ruhige Messung. Rechnet man die ruhigen Ausgangswerte (PERFORMANCE.md §6.2: Skripte 2,8–3,0 ms, Zielerwerb 0,50–0,54 ms, Laser
-  30,6 % von 4,6–5,3 ms Updates) mit den Verhältnissen oben um, fallen in `MD_GLA05` etwa 4,5 bis 5 ms von 12,6–13,5 ms weg. Das ist eine
-  Rechnung, keine Messung.
+- The **allocation** is deterministic: `MD_GLA05` from 4.09 MB to 15.5 KB per tick (factor 264), `MD_USA05` from 209 KB to 20 KB. Gen 0 collections
+  in 3,000 ticks from 1,435 to 6 to 7.
+- **Script phase** `MD_GLA05`: about one thirteenth (13,469/953, 12,130/962), `MD_USA05`: about 2.6 to 2.9.
+- **Target acquisition**: about one ninth to one twelfth on both maps.
+- Laser 1/120 to 1/150, checkpoint about 1/8, demo trap 1/2 to 1/5, stealth detection `MD_USA05` 1/2.5 to 1/3.5.
+- The **whole tick** of `MD_GLA05` becomes clearly shorter in both pairs (median 40 → 17 and 35 → 18 ms); how much of that remains when quiet,
+  only the quiet measurement will say. If one converts the quiet starting values (PERFORMANCE.md §6.2: scripts 2.8–3.0 ms, target acquisition 0.50–0.54 ms, laser
+  30.6 % of 4.6–5.3 ms updates) with the ratios above, about 4.5 to 5 ms of 12.6–13.5 ms drop out in `MD_GLA05`. That is a
+  calculation, not a measurement.
 
-### 6.2 Prüfungen auf dem Endstand
+### 6.2 Checks on the final state
 
-| Prüfung | Ergebnis |
+| Check | Result |
 |---|---|
-| `reference-manifest check --set quick` nach jedem der Commits 1–12 (Tabelle §4), jeweils auf genau diesem Stand gebaut | 9 Läufe identisch, zwölfmal |
-| `reference-manifest check --set full` | 50 Läufe identisch (3.297 s unter Last, `--jobs 5`); zugleich die Prüfung des Commits 14 |
-| `input-manifest check` | identisch |
-| `reference-manifest check --set quick --verify-incremental` | 60.896 Ticks geprüft, 0 Abweichungen, 9 Läufe identisch |
-| `CampaignTool audit --ticks 900 --campaign CHALLENGE_0` | 7/7 deterministisch, 7/7 identisch nach Speichern/Laden; Ausgabe bis auf die Zeiten gleich der des Ausgangsstands; Endproben Sieg 7/7, Niederlage 6/7 (wie vorher) |
-| `CampaignTool audit --ticks 900 --campaign GLA` | 5/5 und 5/5; Ausgabe bis auf die Zeiten gleich der des Ausgangsstands; Endproben Sieg 1/5, Niederlage 2/5 (wie vorher) |
-| `CampaignTool drive --campaign CHALLENGE_0` (60.000 Ticks) | Sieg und Niederlage auf 7 von 7 Karten über das Skript der Mission |
-| `tests/CnCNew.Simulation.Tests` (Debug) | alle bestanden |
-| `tests/CnCNew.Simulation.Tests -c Release -- --long --content-dir …` | 370 Tests bestanden (368 im Lauf aus einer Kopie des Ausgabeverzeichnisses; die zwei Quelltextregel-Tests finden von dort die Repo-Wurzel nicht und wurden an Ort und Stelle wiederholt: bestanden) |
-| `tests/CnCNew.Game.Tests -c Release -- --only CampaignTests,CampaignShellTests,MissionPresentationTests,MissionHudTests,MissionEffectsTests,MissionTextTests` | bestanden (728 s) |
-| sauberer Solution-Build | `dotnet build CnCNew.slnx` nach Löschen von `bin`/`obj` des Clients: 0 Warnungen, 0 Fehler |
+| `reference-manifest check --set quick` after each of the commits 1–12 (table §4), each built at exactly this state | 9 runs identical, twelve times |
+| `reference-manifest check --set full` | 50 runs identical (3,297 s under load, `--jobs 5`); at the same time the check of commit 14 |
+| `input-manifest check` | identical |
+| `reference-manifest check --set quick --verify-incremental` | 60,896 ticks checked, 0 deviations, 9 runs identical |
+| `CampaignTool audit --ticks 900 --campaign CHALLENGE_0` | 7/7 deterministic, 7/7 identical after save/load; output equal to that of the starting state except for the times; end probes victory 7/7, defeat 6/7 (as before) |
+| `CampaignTool audit --ticks 900 --campaign GLA` | 5/5 and 5/5; output equal to that of the starting state except for the times; end probes victory 1/5, defeat 2/5 (as before) |
+| `CampaignTool drive --campaign CHALLENGE_0` (60,000 ticks) | victory and defeat on 7 of 7 maps through the script of the mission |
+| `tests/CnCNew.Simulation.Tests` (Debug) | all passed |
+| `tests/CnCNew.Simulation.Tests -c Release -- --long --content-dir …` | 370 tests passed (368 in the run from a copy of the output directory; the two source rule tests do not find the repo root from there and were repeated in place: passed) |
+| `tests/CnCNew.Game.Tests -c Release -- --only CampaignTests,CampaignShellTests,MissionPresentationTests,MissionHudTests,MissionEffectsTests,MissionTextTests` | passed (728 s) |
+| clean solution build | `dotnet build CnCNew.slnx` after deleting `bin`/`obj` of the client: 0 warnings, 0 errors |
 
-**Dauer des Kampagnen-Audits je Karte** (900 Ticks; nicht ruhig, alter und neuer Stand nacheinander unter verschiedener Last):
+**Duration of the campaign audit per map** (900 ticks; not quiet, old and new state one after the other under different load):
 
-| Kampagne | alt, s je Karte | neu, s je Karte |
+| Campaign | old, s per map | new, s per map |
 |---|---|---|
-| `CHALLENGE_0` (7 Karten) | 32, 67, 23, 30, 35, 108, 106 (Summe 401) | 15, 26, 10, 22, 13, 54, 59 (Summe 199) |
-| `GLA` (5 Karten) | 45, 41, 84, 122, 168 (Summe 460) | 76, 43, 98, 117, 146 (Summe 480) |
+| `CHALLENGE_0` (7 maps) | 32, 67, 23, 30, 35, 108, 106 (sum 401) | 15, 26, 10, 22, 13, 54, 59 (sum 199) |
+| `GLA` (5 maps) | 45, 41, 84, 122, 168 (sum 460) | 76, 43, 98, 117, 146 (sum 480) |
 
-Das Ziel „unter einer Minute je Karte“ ist für `CHALLENGE_0` auch unter Last erreicht. Für `GLA` zeigt diese Messung **keinen** Gewinn und
-drei von fünf Karten über einer Minute; der neue Lauf lief zusammen mit dem vollen Manifest. Ob die Karten ruhig unter einer Minute bleiben
-(der Handoff nennt 20–60 s als ruhigen Ausgangswert), ist nicht belegt.
+The goal "under one minute per map" is reached for `CHALLENGE_0` even under load. For `GLA` this measurement shows **no** gain and
+three of five maps above one minute; the new run ran together with the full manifest. Whether the maps stay under one minute when quiet
+(the handoff names 20–60 s as the quiet starting value) is not verified.
 
-## 7. Was bleibt und warum
+## 7. What remains and why
 
-Gemessen am Endstand (`MD_GLA05`, `--script-detail`, unter Last; Größenordnungen):
+Measured at the final state (`MD_GLA05`, `--script-detail`, under load; orders of magnitude):
 
-| Rest | Größe | Warum er bleibt |
+| Remainder | Size | Why it remains |
 |---|---|---|
-| Bedingungen: 230 Auswertungen je Tick | rund 260 µs je Tick unter Last, 1 µs je Auswertung | Das Original wertet jedes aktive Skript jeden Frame aus; seltener auswerten oder überspringen ist ausgeschlossen. Was noch ginge: `TIMER_EXPIRED`/`FLAG`/`COUNTER` (102 je Tick) suchen ihren Zähler über den Namen in einem sortierten Wörterbuch; den Zähler je Bedingung zu merken verlangt eine Entwertung bei `Load` und nach `ExplainScript` und bringt geschätzt 10–30 µs je Tick. Nicht gemacht. |
-| Abschnitt TeamEvents | 100–220 µs | Je Team mit Ereignisskript mehrere Durchgänge über die Mitglieder (lebend, beweglich, untätig) mit kleinen Arrays (3,1 KB je Tick). |
-| Abschnitt Followers | 60–150 µs, 5,5 KB je Tick | Stehende Befehle; die Jagd (`NearestEnemy`) sortiert noch alle Objekte, Befehle entstehen über Closures. |
-| Abschnitt Housekeeping | 55–105 µs | `PruneTeams` fragt je Tick für jedes Teammitglied, ob sein Objekt noch existiert. Überspringen ließe sich das nur mit einem Beweis, dass seit dem letzten Mal nichts entfernt und nichts hinzugefügt wurde (Zähler der Welt, Stempel der Mitgliedschaften, vier weitere Tabellen); der Gewinn steht in keinem Verhältnis zum Risiko. |
-| Zielerwerb | 105–230 µs je Tick unter Last | Der Sockel je Objekt, das Ziele sucht, und die Blicke über die Objekte der Feindspieler. |
-| `DemoTrapUpdate`, `CheckpointUpdate`, `StealthDetectorUpdate`, Suche der Team-Ereignisse | 41–96 µs je Aufruf | Sie gehen weiter über eine Liste von Objekten und verwerfen fast alle. Richtig abgestellt wird das erst mit einem **räumlichen Index** der Welt. Der fehlt, weil `Entity.X/Y` einfache Eigenschaften sind, die die Bewegung setzt – ein Index, der bei jeder Positionsänderung mitgeführt wird, greift in `Entity` und in die Bewegungsmodule ein, an denen parallel andere arbeiten. Vorschlag für danach: ein gleichmäßiges Gitter in `SimulationWorld`, gepflegt in einem Positions-Setter; die Aufrufer hier sind darauf vorbereitet (jeder begründet, warum sein Ergebnis nicht von der Reihenfolge der Kandidaten abhängt). |
-| `StealthDetectorUpdate` in `MD_GLA05` | 96 µs je Aufruf | Dort ist es die Höhen-Sichtlinie zu den getarnten Objekten in Reichweite (`TerrainMap.HasHeightLineOfSight`), Gebiet der Sicht. |
-| `WorkerAIUpdate`, `SupplyTruckAIUpdate`, `TransportAIUpdate` | 250–1.000 µs je Aufruf | Bewegung und Wegsuche, nicht Gegenstand dieses Teilauftrags. |
-| Erster Tick | 290–390 ms unter Last, davon 220–280 ms JIT | Eine Sache des Prozessstarts (ReadyToRun oder ein Aufwärmlauf wären Entscheidungen über die Auslieferung, keine Änderung der Simulation); der Rest sind die Aktionen des ersten Ticks, voran die Kartenaufdeckung (Sicht). |
-| `SimulationWorld.IsPlayerDefeated` | selten | Noch ein LINQ-Durchgang über alle Objekte je Aufruf (Siegprüfung, `MULTIPLAYER_*`-Bedingungen); kam in keinem Profil nach oben, und die Datei gehört in dieser Phase anderen. |
-| Hash, Sicht, Sicht-Hash, `AIUpdateInterface` | zusammen der größte Teil des Ticks | Andere Teilaufträge der Phase. |
+| Conditions: 230 evaluations per tick | about 260 µs per tick under load, 1 µs per evaluation | The original evaluates every active script every frame; evaluating less often or skipping is excluded. What would still be possible: `TIMER_EXPIRED`/`FLAG`/`COUNTER` (102 per tick) look up their counter by name in a sorted dictionary; remembering the counter per condition demands an invalidation on `Load` and after `ExplainScript` and brings an estimated 10–30 µs per tick. Not done. |
+| Section TeamEvents | 100–220 µs | Per team with an event script several passes over the members (living, mobile, idle) with small arrays (3.1 KB per tick). |
+| Section Followers | 60–150 µs, 5.5 KB per tick | Standing orders; the hunt (`NearestEnemy`) still sorts all objects, commands are created through closures. |
+| Section Housekeeping | 55–105 µs | `PruneTeams` asks per tick for every team member whether its object still exists. That could be skipped only with a proof that since the last time nothing was removed and nothing was added (counter of the world, stamps of the memberships, four further tables); the gain is out of all proportion to the risk. |
+| Target acquisition | 105–230 µs per tick under load | The base cost per object that searches for targets, and the looks over the objects of the enemy players. |
+| `DemoTrapUpdate`, `CheckpointUpdate`, `StealthDetectorUpdate`, search of the team events | 41–96 µs per call | They still go over a list of objects and discard almost all of them. That is properly remedied only with a **spatial index** of the world. It is missing because `Entity.X/Y` are simple properties that the movement sets – an index that is carried along on every position change intervenes in `Entity` and in the movement modules, on which others are working in parallel. Proposal for afterwards: a uniform grid in `SimulationWorld`, maintained in a position setter; the callers here are prepared for it (each justifies why its result does not depend on the order of the candidates). |
+| `StealthDetectorUpdate` in `MD_GLA05` | 96 µs per call | There it is the height line of sight to the stealthed objects in range (`TerrainMap.HasHeightLineOfSight`), territory of vision. |
+| `WorkerAIUpdate`, `SupplyTruckAIUpdate`, `TransportAIUpdate` | 250–1,000 µs per call | Movement and pathfinding, not subject of this sub-brief. |
+| First tick | 290–390 ms under load, of which 220–280 ms JIT | A matter of process start (ReadyToRun or a warm-up run would be decisions about delivery, not a change of the simulation); the rest are the actions of the first tick, above all the map reveal (vision). |
+| `SimulationWorld.IsPlayerDefeated` | rare | Still one LINQ pass over all objects per call (victory check, `MULTIPLAYER_*` conditions); did not come to the top in any profile, and the file belongs to others in this phase. |
+| Hash, vision, vision hash, `AIUpdateInterface` | together the largest part of the tick | Other sub-briefs of the phase. |
 
-Offen:
+Open:
 
-- **Die ruhige Messung** (`scripts/perf-profile.ps1`, PERFORMANCE.md §4) auf dem zusammengeführten Stand der Phase. Erst sie sagt, wie viel Kern
-  ein Missionstick bei 60 Hz noch braucht; alle Zeiten hier sind unter Last entstanden.
-- **Audit-Dauer der `GLA`-Kampagne** und der übrigen Kampagnen ruhig nachmessen (§6.2).
-- **Zusammenführen:** Diese Arbeit ändert außerhalb ihres Gebiets je eine Stelle in `ObjectTemplate.IsKindOf` (Schleife) und `Fixed.Sqrt`
-  (Startwert), fügt `SimulationWorld.Indexes.cs` hinzu, hängt vier Zeilen in `SimulationWorld.cs` (`Register`, `ProcessDestroys`) und je eine in
-  `SimulationWorld.Scripting.cs`/`.PowerAndCapture.cs` (`SetOwner`) ein und erweitert `IWorldServices` um vier Mitglieder. Mit den parallelen
-  Arbeiten an Bewegung, Sicht und Hash kann es dort Konflikte geben; `tools/CnCNew.SimTool/PerfCommand.cs` wird ebenfalls parallel bearbeitet.
-- `docs/PERFORMANCE.md` §6.3 Punkt 5 (4 MB den Skripten zugeschrieben) ist durch §2.1 überholt; das Dokument selbst ist in dieser Arbeit nicht
-  angefasst worden.
+- **The quiet measurement** (`scripts/perf-profile.ps1`, PERFORMANCE.md §4) on the merged state of the phase. Only it says how much of a core
+  a mission tick still needs at 60 Hz; all times here arose under load.
+- **Audit duration of the `GLA` campaign** and of the remaining campaigns to be re-measured quietly (§6.2).
+- **Merging:** outside its territory this work changes one place each in `ObjectTemplate.IsKindOf` (loop) and `Fixed.Sqrt`
+  (start value), adds `SimulationWorld.Indexes.cs`, inserts four lines in `SimulationWorld.cs` (`Register`, `ProcessDestroys`) and one each in
+  `SimulationWorld.Scripting.cs`/`.PowerAndCapture.cs` (`SetOwner`) and extends `IWorldServices` by four members. With the parallel
+  work on movement, vision and hash there can be conflicts there; `tools/CnCNew.SimTool/PerfCommand.cs` is likewise being edited in parallel.
+- `docs/PERFORMANCE.md` §6.3 item 5 (4 MB attributed to the scripts) is superseded by §2.1; the document itself has not been touched
+  in this work.
