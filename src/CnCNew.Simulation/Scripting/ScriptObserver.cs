@@ -17,8 +17,16 @@ public enum ScriptSection
     TeamQueues,
     /// <summary>Capture orders, pending structures, traps and bridge states.</summary>
     WorldOrders,
-    /// <summary>The players of the original skirmish AI (<c>Player::update</c>): base and team building, skills, the generic scripts of their teams. Runs between the scripts and the followers.</summary>
+    /// <summary>The players of the original skirmish AI (<c>Player::update</c>), between the scripts and the followers: what of it is in none of the four parts below.</summary>
     AiPlayers,
+    /// <summary><c>AISkirmishPlayer::doBaseBuilding</c> of every AI player.</summary>
+    AiBaseBuilding,
+    /// <summary><c>AISkirmishPlayer::doTeamBuilding</c> of every AI player: gatherers, production conditions, the choice of the next team.</summary>
+    AiTeamBuilding,
+    /// <summary><c>AIPlayer::doUpgradesAndSkills</c> of every AI player.</summary>
+    AiSkills,
+    /// <summary><c>Team::updateGenericScripts</c> for the teams of every AI player.</summary>
+    AiTeamScripts,
 }
 
 /// <summary>

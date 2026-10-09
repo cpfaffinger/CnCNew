@@ -95,10 +95,34 @@ public sealed partial class ScriptEngine
         // objectTypesFromParam, resolved once for the whole count: the list of that name if there is one, else the single template name.
         _objectLists.TryGetValue(typeParameter, out var list);
         var count = 0;
+        if (list is null)
+        {
+            // A single template name: an object has that name exactly when it is of that template of the catalogue (names are unique there), so nothing is counted for a name the
+            // catalogue does not know and the comparison is one of references.
+            if (!_world.Templates.TryGet(typeParameter, out var single) || !string.Equals(single.Name, typeParameter, StringComparison.Ordinal)) return CountOfNamedType(player, typeParameter, area);
+            foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
+            {
+                if (!ReferenceEquals(entity.Template, single) || !Counts(entity)) continue;
+                if (area is null || area.Contains(entity.X, entity.Y)) count++;
+            }
+            return count;
+        }
         foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
         {
             if (!Counts(entity)) continue;
-            if (list is not null ? !list.Contains(entity.Template.Name) : !string.Equals(entity.Template.Name, typeParameter, StringComparison.Ordinal)) continue;
+            if (!list.Contains(entity.Template.Name)) continue;
+            if (area is null || area.Contains(entity.X, entity.Y)) count++;
+        }
+        return count;
+    }
+
+    /// <summary>The count by comparing names, for a name the catalogue does not resolve to a template of exactly that spelling.</summary>
+    private int CountOfNamedType(PlayerId player, string typeName, ScriptArea? area)
+    {
+        var count = 0;
+        foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
+        {
+            if (!Counts(entity) || !string.Equals(entity.Template.Name, typeName, StringComparison.Ordinal)) continue;
             if (area is null || area.Contains(entity.X, entity.Y)) count++;
         }
         return count;

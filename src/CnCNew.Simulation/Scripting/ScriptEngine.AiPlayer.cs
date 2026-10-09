@@ -101,9 +101,16 @@ public sealed partial class ScriptEngine
         public int FlankDefense;
         // m_curFrontLeft/Right, m_curLeftFlankLeft/Right, m_curRightFlankLeft/Right defence angles.
         public readonly Fixed[] DefenseAngles = new Fixed[6];
+        // The side info of the data once it has been looked up; not state.
+        public AiSideInfo? Side;
+        public bool SideKnown;
     }
 
     private readonly List<AiPlayer> _ai = [];
+    private readonly List<ScriptTeam> _genericTeams = [];
+    // Per team prototype the scripts of its generic hooks, looked up once (a missing one stays null and is diagnosed when it is tried). Derived from the program, not state.
+    private readonly Dictionary<string, ScriptUnit?[]> _genericUnits = new(StringComparer.Ordinal);
+    private ScriptDifficulty[] _listDifficulty = [];
     private readonly SortedDictionary<string, long> _productionNextTick = new(StringComparer.Ordinal);
     /// <summary>Per team instance the generic script hooks that are done (bit per hook): <c>Team::m_shouldAttemptGenericScript</c>, inverted so that an untouched team stores nothing.</summary>
     private readonly SortedDictionary<int, int> _genericDone = [];
@@ -140,8 +147,11 @@ public sealed partial class ScriptEngine
 
     private void InitializeAi()
     {
-        if (_options.Ai is not { } setup) return;
-        foreach (var player in setup.Players.OrderBy(player => player.Player.Value)) _ai.Add(new AiPlayer(player));
+        if (_options.Ai is { } setup)
+            foreach (var player in setup.Players.OrderBy(player => player.Player.Value)) _ai.Add(new AiPlayer(player));
+        // The difficulty a script list is gated with is fixed by the options: looked up once per list instead of once per script and frame.
+        _listDifficulty = new ScriptDifficulty[_program.ListCount];
+        for (var list = 0; list < _listDifficulty.Length; list++) _listDifficulty[list] = DifficultyOfList(list);
     }
 
     private AiPlayer? AiOfPlayer(PlayerId player)
@@ -314,13 +324,36 @@ public sealed partial class ScriptEngine
             _aiCurrent = state;
             try
             {
-                DoBaseBuilding(state);
-                DoTeamBuilding(state);
-                DoUpgradesAndSkills(state);
-                UpdateGenericScripts(state);
+                if (Observer is { } observer) UpdateAiPlayerObserved(observer, state);
+                else
+                {
+                    DoBaseBuilding(state);
+                    DoTeamBuilding(state);
+                    DoUpgradesAndSkills(state);
+                    UpdateGenericScripts(state);
+                }
             }
             finally { _aiCurrent = null; }
         }
+    }
+
+    /// <summary>The same four calls in the same order, each reported to the observer (the section of the AI players is suspended meanwhile: sections do not nest).</summary>
+    private void UpdateAiPlayerObserved(IScriptObserver observer, AiPlayer state)
+    {
+        observer.SectionEnded(ScriptSection.AiPlayers);
+        observer.SectionStarted(ScriptSection.AiBaseBuilding);
+        DoBaseBuilding(state);
+        observer.SectionEnded(ScriptSection.AiBaseBuilding);
+        observer.SectionStarted(ScriptSection.AiTeamBuilding);
+        DoTeamBuilding(state);
+        observer.SectionEnded(ScriptSection.AiTeamBuilding);
+        observer.SectionStarted(ScriptSection.AiSkills);
+        DoUpgradesAndSkills(state);
+        observer.SectionEnded(ScriptSection.AiSkills);
+        observer.SectionStarted(ScriptSection.AiTeamScripts);
+        UpdateGenericScripts(state);
+        observer.SectionEnded(ScriptSection.AiTeamScripts);
+        observer.SectionStarted(ScriptSection.AiPlayers);
     }
 
     /// <summary><c>AIPlayer::onUnitProduced</c> / <c>onStructureProduced</c>: something of an AI player came into the world, so its queues are looked at again at once.</summary>
@@ -330,7 +363,7 @@ public sealed partial class ScriptEngine
         state.TeamCheckTick = _tick;
         if (entity.Template.IsKindOf("STRUCTURE")) return;
         // A unit that no team asked for belongs to the player's default team (every object of the reference has a team; recruiting takes from there).
-        if (_teams.Values.Any(team => team.Members.Contains(entity.Id.Value))) return;
+        if (FirstTeamOf(entity.Id.Value) is not null) return;
         if (PlayerById(state.Setup.Player) is { } owner && FindTeamInstance("team" + owner.Name) is { } defaultTeam) defaultTeam.Members.Add(entity.Id.Value);
     }
 
@@ -589,7 +622,7 @@ public sealed partial class ScriptEngine
         var factories = new List<(Entity Entity, ProductionUpdate Production)>();
         foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
         {
-            if (!Counts(entity) || entity.HasStatus(UnderConstructionBit) || entity.ModuleArray.OfType<ProductionUpdate>().FirstOrDefault() is not { } production) continue;
+            if (!Counts(entity) || entity.HasStatus(UnderConstructionBit) || ProductionOf(entity) is not { } production) continue;
             foreach (var item in production.Queue)
                 if (_world.Templates.Templates[item.TemplateIndex].IsKindOf(kind)) return false;
             if (production.HasRoom) factories.Add((entity, production));
@@ -622,14 +655,14 @@ public sealed partial class ScriptEngine
     /// <summary><c>AIPlayer::checkForSupplyCenter</c>: a finished supply centre wants the gatherers of its side for the player's difficulty, plus the one it comes with.</summary>
     private void CheckForSupplyCenter(AiPlayer state, AiBuildEntry entry, Entity building)
     {
-        if (!building.ModuleArray.OfType<SupplyCenterDockUpdate>().Any()) return;
+        if (ModuleOf<SupplyCenterDockUpdate>(building) is null) return;
         entry.IsSupply = true;
         entry.DesiredGatherers = GatherersWanted(state) + 1;
     }
 
     private int GatherersWanted(AiPlayer state)
     {
-        if (_options.Ai!.Data.FindSide(state.Setup.Side) is not { } side) return 0;
+        if (SideOf(state) is not { } side) return 0;
         return state.Setup.Difficulty switch
         {
             ScriptDifficulty.Easy => side.GatherersEasy,
@@ -651,7 +684,7 @@ public sealed partial class ScriptEngine
         var warehouses = new List<Entity>();
         foreach (var entity in _world.Entities)
         {
-            if (entity.EffectivelyDead || entity.DestroyRequested || entity.ModuleArray.OfType<SupplyWarehouseDockUpdate>().FirstOrDefault() is not { Boxes: > 0 }) continue;
+            if (entity.EffectivelyDead || entity.DestroyRequested || ModuleOf<SupplyWarehouseDockUpdate>(entity) is not { Boxes: > 0 }) continue;
             if (!entity.Owner.IsSystem && _world.AreEnemies(player, entity.Owner)) continue;
             warehouses.Add(entity);
         }
@@ -661,7 +694,7 @@ public sealed partial class ScriptEngine
         {
             if (!Counts(entity) || entity.HasStatus(UnderConstructionBit)) continue;
             if (entity.Template.IsKindOf("HARVESTER") && AiOf(entity) is ISupplyCarrier) harvesters.Add(entity);
-            if (!entity.ModuleArray.OfType<SupplyCenterDockUpdate>().Any() || entity.Template.IsKindOf("REBUILD_HOLE")) continue;
+            if (ModuleOf<SupplyCenterDockUpdate>(entity) is null || entity.Template.IsKindOf("REBUILD_HOLE")) continue;
             var reach = SquaredReach.Of(close + entity.Template.BoundingCircleRadius);
             if (warehouses.Any(warehouse => reach.Contains(Distance2(warehouse, entity.X, entity.Y)))) wanted += GatherersWanted(state) + 1;
         }
@@ -734,12 +767,17 @@ public sealed partial class ScriptEngine
     {
         if (!EvaluateProductionCondition(state, prototype)) return false;
         var instances = 0;
-        foreach (var team in _teams.Values)
+        foreach (var team in _teams.InstancesOf(prototype.Name))
         {
-            if (team.Prototype != prototype.Name) continue;
-            if (_teamQueue.Any(entry => entry.TeamId == team.Id && !entry.Ready)) return false;
+            var queued = false;
+            foreach (var entry in _teamQueue)
+            {
+                if (entry.TeamId != team.Id) continue;
+                if (!entry.Ready) return false;
+                queued = true;
+            }
             // An instance exists while it has members or is on its way through the queues; the engine keeps the empty shell of a single-instance prototype.
-            if (_teamQueue.Any(entry => entry.TeamId == team.Id) || LiveMembers(team).Any(CountsAsObject)) instances++;
+            if (queued || HasCountingMember(team)) instances++;
         }
         if (instances >= prototype.MaxInstances) return false;
         return IsPossibleToBuildTeam(state, prototype);
@@ -781,7 +819,7 @@ public sealed partial class ScriptEngine
             var factory = false;
             foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
             {
-                if (!Counts(entity) || entity.HasStatus(UnderConstructionBit) || entity.ModuleArray.OfType<ProductionUpdate>().FirstOrDefault() is not { } production) continue;
+                if (!Counts(entity) || entity.HasStatus(UnderConstructionBit) || ProductionOf(entity) is not { } production) continue;
                 if (!_world.CanQueueProductionTemplate(player, entity.Id, unit.Type)) continue;
                 factory = true;
                 if (production.Queue.Length == 0) { anyIdle = true; break; }
@@ -799,22 +837,25 @@ public sealed partial class ScriptEngine
     /// </summary>
     private void UpdateGenericScripts(AiPlayer state)
     {
-        ScriptTeam[]? teams = null;
+        // The teams as they are before the first script runs (a script may create or remove teams); the list is this method's own and nothing else touches it meanwhile.
+        var teams = _genericTeams;
+        teams.Clear();
         foreach (var team in _teams.Values)
         {
             if (team.Owner != state.Setup.Player || !team.Created) continue;
-            if (_program.FindTeam(team.Prototype) is not { GenericScripts.IsDefaultOrEmpty: false }) continue;
-            teams = [..(teams ?? []), team];
+            if (PrototypeOf(team) is not { GenericScripts.IsDefaultOrEmpty: false }) continue;
+            teams.Add(team);
         }
-        if (teams is null) return;
-        foreach (var team in teams)
+        for (var index = 0; index < teams.Count; index++)
         {
-            if (!_teams.TryGetValue(team.Id, out _) || _program.FindTeam(team.Prototype) is not { } prototype || !LiveMembers(team).Any()) continue;
+            var team = teams[index];
+            if (!_teams.TryGetValue(team.Id, out _) || PrototypeOf(team) is not { } prototype || !HasLiveMember(team)) continue;
             var done = _genericDone.GetValueOrDefault(team.Id);
+            var units = GenericUnitsOf(prototype);
             for (var hook = 0; hook < prototype.GenericScripts.Length; hook++)
             {
                 if ((done & (1 << hook)) != 0) continue;
-                if (_program.FindScript(prototype.GenericScripts[hook]) is not { } unit)
+                if (units[hook] is not { } unit)
                 {
                     Diagnose($"AI: generic script '{prototype.GenericScripts[hook]}' of team '{prototype.Name}' is missing");
                     done |= 1 << hook;
@@ -833,6 +874,42 @@ public sealed partial class ScriptEngine
             }
             if (done != 0) _genericDone[team.Id] = done;
         }
+    }
+
+    private ScriptUnit?[] GenericUnitsOf(ScriptTeamPrototype prototype)
+    {
+        if (_genericUnits.TryGetValue(prototype.Name, out var units)) return units;
+        units = new ScriptUnit?[prototype.GenericScripts.Length];
+        for (var hook = 0; hook < units.Length; hook++) units[hook] = _program.FindScript(prototype.GenericScripts[hook]);
+        _genericUnits[prototype.Name] = units;
+        return units;
+    }
+
+    /// <summary>The prototype of a team instance, looked up once per instance (the program never changes).</summary>
+    private ScriptTeamPrototype? PrototypeOf(ScriptTeam team)
+    {
+        if (!team.InfoKnown)
+        {
+            team.Info = _program.FindTeam(team.Prototype);
+            team.InfoKnown = true;
+        }
+        return team.Info;
+    }
+
+    /// <summary>Whether some member of <see cref="LiveMembers"/> counts as an object (<see cref="CountsAsObject"/>).</summary>
+    private bool HasCountingMember(ScriptTeam team)
+    {
+        foreach (var id in team.Members)
+            if (_world.FindEntity(new EntityId(id)) is { DestroyRequested: false } member && CountsAsObject(member)) return true;
+        return false;
+    }
+
+    /// <summary>Whether <see cref="LiveMembers"/> yields anything.</summary>
+    private bool HasLiveMember(ScriptTeam team)
+    {
+        foreach (var id in team.Members)
+            if (_world.FindEntity(new EntityId(id)) is { DestroyRequested: false }) return true;
+        return false;
     }
 
     /// <summary>
@@ -866,7 +943,10 @@ public sealed partial class ScriptEngine
         {
             var teamId = _teamBuilds[index].TeamId;
             if (!_teams.TryGetValue(teamId, out var team) || AiOfPlayer(team.Owner) is null) continue;
-            if (!_teamBuilds.Where(order => order.TeamId == teamId).All(order => order.Joined >= order.Total)) continue;
+            var finished = true;
+            foreach (var order in _teamBuilds)
+                if (order.TeamId == teamId && order.Joined < order.Total) { finished = false; break; }
+            if (!finished) continue;
             _teamBuilds.RemoveAll(order => order.TeamId == teamId);
             index = -1;
         }
@@ -893,7 +973,7 @@ public sealed partial class ScriptEngine
     private void DoUpgradesAndSkills(AiPlayer state)
     {
         var player = state.Setup.Player;
-        if (_tick < _world.Time.OriginalFrames(AiSkillStartFrames) || _world.SciencePointsOf(player) <= 0 || _options.Ai!.Data.FindSide(state.Setup.Side) is not { } side) return;
+        if (_tick < _world.Time.OriginalFrames(AiSkillStartFrames) || _world.SciencePointsOf(player) <= 0 || SideOf(state) is not { } side) return;
         if (state.SkillSet == AiNoSkillSet)
         {
             var limit = 0;
@@ -901,11 +981,28 @@ public sealed partial class ScriptEngine
             state.SkillSet = _world.LogicRandom.Range(0, limit);
         }
         foreach (var science in side.SkillSets[state.SkillSet])
+            if (_world.CanPurchaseScienceNow(player, science)) PurchaseScience(player, science);
+    }
+
+    private void PurchaseScience(PlayerId player, string science) => _issue(player, (sequence, tick) => new PurchaseScienceCommand(player, sequence, tick, science));
+
+    /// <summary>The <c>SideInfo</c> of the player's side, looked up once (the data never change).</summary>
+    private AiSideInfo? SideOf(AiPlayer state)
+    {
+        if (!state.SideKnown)
         {
-            if (!_world.CanPurchaseScienceNow(player, science)) continue;
-            var name = science;
-            _issue(player, (sequence, tick) => new PurchaseScienceCommand(player, sequence, tick, name));
+            state.Side = _options.Ai!.Data.FindSide(state.Setup.Side);
+            state.SideKnown = true;
         }
+        return state.Side;
+    }
+
+    /// <summary>The first module of that type on an object, if it has one.</summary>
+    private static TModule? ModuleOf<TModule>(Entity entity) where TModule : class
+    {
+        foreach (var module in entity.ModuleArray)
+            if (module is TModule found) return found;
+        return null;
     }
 
     /// <summary><c>AISkirmishPlayer::getAiEnemy</c>: the current enemy, reconsidered every five seconds.</summary>
@@ -962,7 +1059,7 @@ public sealed partial class ScriptEngine
         {
             if (!Counts(entity)) continue;
             if (!entity.Template.IsKindOf("STRUCTURE")) units = true;
-            if (entity.Template.IsKindOf("DOZER") || (entity.Template.IsKindOf("STRUCTURE") && entity.ModuleArray.OfType<ProductionUpdate>().Any())) facility = true;
+            if (entity.Template.IsKindOf("DOZER") || (entity.Template.IsKindOf("STRUCTURE") && ProductionOf(entity) is not null)) facility = true;
             if (units && facility) return false;
         }
         return true;

@@ -60,6 +60,10 @@ public sealed class ScriptTeam(int id, string prototype, PlayerId owner)
     internal bool WasIdle { get; set; }
 
     public bool Recruitable { get; set; }
+
+    // The prototype of this instance once the engine has looked it up (ScriptEngine.PrototypeOf); derived from the program, not state.
+    internal ScriptTeamPrototype? Info;
+    internal bool InfoKnown;
 }
 
 /// <summary>
@@ -145,8 +149,8 @@ public sealed partial class ScriptEngine
     private readonly ScriptUnit[][] _listScripts;
     private readonly ScriptGroupUnit[][] _listGroups;
 
-    private readonly SortedDictionary<string, Counter> _counters = new(StringComparer.Ordinal);
-    private readonly SortedDictionary<string, bool> _flags = new(StringComparer.Ordinal);
+    private readonly NamedTable<Counter> _counters = new();
+    private readonly NamedTable<bool> _flags = new();
     private readonly SortedDictionary<string, uint> _named = new(StringComparer.Ordinal);
     private readonly SortedSet<string> _everNamed = new(StringComparer.Ordinal);
 
@@ -396,7 +400,8 @@ public sealed partial class ScriptEngine
             foreach (var name in _pendingPresentation.Where(pair => pair.Value <= tick).Select(pair => pair.Key).ToArray()) _pendingPresentation.Remove(name);
 
         PruneTeams();
-        foreach (var counter in _counters.Values)
+        // Every timer is counted down once; the order does not matter, so the walk takes the cheap one.
+        foreach (var counter in _counters.Unordered)
             if (counter.IsTimer && counter.Value >= 0) counter.Value--;
         observer?.SectionEnded(ScriptSection.Housekeeping);
 
@@ -471,7 +476,10 @@ public sealed partial class ScriptEngine
 
     private void ExecuteScript(ScriptUnit unit)
     {
+        // The three tests the body begins with, asked before anything is set up: most scripts of a frame end here.
+        if (!_scriptActive[unit.Index] || _tick < _nextEvaluation[unit.Index]) return;
         var script = unit.Script;
+        if (!AllowedOn(script, _listDifficulty[unit.ListIndex])) return;
         var outerScript = _runningScript;
         _runningScript = script.Name;
         try { ExecuteScriptBody(unit, script); }
@@ -481,7 +489,7 @@ public sealed partial class ScriptEngine
     private void ExecuteScriptBody(ScriptUnit unit, MapScript script)
     {
         if (!_scriptActive[unit.Index]) return;
-        if (!AllowedOn(script, DifficultyOfList(unit.ListIndex))) return;
+        if (!AllowedOn(script, _listDifficulty[unit.ListIndex])) return;
         if (_tick < _nextEvaluation[unit.Index]) return;
         if (script.DelayEvaluationSeconds > 0) _nextEvaluation[unit.Index] = _tick + _world.Time.WholeSecondsToTicks((long)script.DelayEvaluationSeconds);
 
@@ -490,12 +498,11 @@ public sealed partial class ScriptEngine
         ScriptTeam? onlyInstance = null;
         List<ScriptTeam>? instances = null;
         if (_conditionTeam[unit.Index] is { } conditionTeam)
-            foreach (var team in _teams.Values)
-            {
-                if (team.Prototype != conditionTeam) continue;
-                if (onlyInstance is null && instances is null) onlyInstance = team;
-                else (instances ??= [onlyInstance!]).Add(team);
-            }
+        {
+            var existing = _teams.InstancesOf(conditionTeam);
+            if (existing.Count == 1) onlyInstance = existing[0];
+            else if (existing.Count > 1) instances = [..existing];
+        }
         if (instances is not null)
         {
             // One evaluation per instance; the actions of that round act for that instance.
@@ -737,9 +744,8 @@ public sealed partial class ScriptEngine
     /// <summary>The first instance of a prototype whatever its state: the lookup that creates, builds and recruits into a team (<c>TeamPrototype::getFirstItemIn_TeamInstanceList</c>).</summary>
     private ScriptTeam? FindTeamInstance(string name)
     {
-        foreach (var team in _teams.Values)
-            if (team.Prototype == name) return team;
-        return null;
+        var instances = _teams.InstancesOf(name);
+        return instances.Count > 0 ? instances[0] : null;
     }
 
     /// <summary>
@@ -798,7 +804,8 @@ public sealed partial class ScriptEngine
     {
         NoteNamedObjectsThatExist();
         _memberIsGone ??= IsGone;
-        foreach (var team in _teams.Values) team.Members.RemoveAll(_memberIsGone);
+        foreach (var team in _teams.Values)
+            if (team.Members.Count > 0) team.Members.RemoveAll(_memberIsGone);
         PruneGone(_lastDamage);
         PruneGone(_lastEntered);
         PruneGone(_prioritySetOf);

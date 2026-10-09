@@ -474,7 +474,7 @@ public static class SpecialPowerRouting
 
     public static ISpecialPowerModule? FindModule(Entity entity, int powerIndex)
     {
-        foreach (var module in entity.Modules)
+        foreach (var module in entity.ModuleArray)
             if (module is ISpecialPowerModule power && power.PowerIndex == powerIndex) return power;
         return null;
     }

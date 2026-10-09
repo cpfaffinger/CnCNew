@@ -375,9 +375,10 @@ public sealed partial class ScriptEngine
             if (AiHoldsUnitOrders(owner)) continue;
             Entity? best = null;
             var bestBusy = true;
-            foreach (var entity in PlayerEntities(owner))
+            // Nothing in this walk changes the world (the order is issued after it), so the owner's list is read in place.
+            foreach (var entity in _world.EntitiesOwnedBy(owner).AsSpan())
             {
-                if (entity.HasStatus(UnderConstructionBit) || entity.ModuleArray.OfType<ProductionUpdate>().FirstOrDefault() is not { HasRoom: true } production) continue;
+                if (!Counts(entity) || entity.HasStatus(UnderConstructionBit) || ProductionOf(entity) is not { HasRoom: true } production) continue;
                 if (!_world.CanQueueProductionTemplate(owner, entity.Id, order.Type)) continue;
                 var busy = production.Queue.Length > 0;
                 if (best is not null && (busy || !bestBusy)) continue;
@@ -396,6 +397,14 @@ public sealed partial class ScriptEngine
             var template = order.Type;
             if (_issue(owner, (sequence, tick) => new QueueProductionCommand(owner, sequence, tick, producer, template)).Accepted) order.Queued++;
         }
+    }
+
+    /// <summary>The first <see cref="ProductionUpdate"/> of an object, if it has one.</summary>
+    private static ProductionUpdate? ProductionOf(Entity entity)
+    {
+        foreach (var module in entity.ModuleArray)
+            if (module is ProductionUpdate production) return production;
+        return null;
     }
 
     /// <summary><c>AIPlayer::onUnitProduced</c>: a freshly produced unit of a building team's owner joins the team that still wants its type; the team activates (<c>setActive</c>) once every minimum is met.</summary>

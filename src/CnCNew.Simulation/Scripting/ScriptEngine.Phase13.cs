@@ -815,8 +815,8 @@ public sealed partial class ScriptEngine
     private (long Production, long Consumption) EnergyOf(PlayerId player)
     {
         long consumption = 0;
-        foreach (var entity in _world.Entities)
-            if (entity.Owner == player && !entity.EffectivelyDead && !entity.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction) && entity.Template.EnergyProduction < 0)
+        foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
+            if (!entity.EffectivelyDead && !entity.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction) && entity.Template.EnergyProduction < 0)
                 consumption -= entity.Template.EnergyProduction;
         return (_world.EnergyProductionOf(player) + consumption, consumption);
     }
@@ -936,7 +936,12 @@ public sealed partial class ScriptEngine
         }
     }
 
-    private static AIUpdateInterface? AiOf(Entity entity) => entity.Modules.OfType<AIUpdateInterface>().FirstOrDefault();
+    private static AIUpdateInterface? AiOf(Entity entity)
+    {
+        foreach (var module in entity.ModuleArray)
+            if (module is AIUpdateInterface ai) return ai;
+        return null;
+    }
 
     /// <summary>One tick of a team follower: the goal is the team waypoint plus the member's offset; the first member to arrive advances the team waypoint, the others switch to it.</summary>
     private void UpdateTeamFollower(Follower follower, Entity entity, ScriptWaypointPath path)

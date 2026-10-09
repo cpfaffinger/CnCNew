@@ -66,10 +66,16 @@ public sealed class TeamMembers : IReadOnlyList<uint>
 /// </summary>
 internal sealed class TeamTable(MembershipStamp stamp)
 {
+    private static readonly List<ScriptTeam> None = [];
     private readonly List<ScriptTeam> _teams = [];
+    // The same instances by the name of their prototype, each list in ascending id order: derived from _teams, kept in step with it.
+    private readonly Dictionary<string, List<ScriptTeam>> _byPrototype = new(StringComparer.Ordinal);
 
     /// <summary>The instances in ascending id order. Not to be changed by the caller; a walk must not add or remove teams (take a copy first).</summary>
     public List<ScriptTeam> Values => _teams;
+
+    /// <summary>The instances of one prototype in ascending id order - what a walk over <see cref="Values"/> that keeps the teams of that prototype yields. Not to be changed by the caller.</summary>
+    public List<ScriptTeam> InstancesOf(string prototype) => _byPrototype.TryGetValue(prototype, out var list) ? list : None;
 
     public bool TryGetValue(int id, [MaybeNullWhen(false)] out ScriptTeam team)
     {
@@ -83,8 +89,16 @@ internal sealed class TeamTable(MembershipStamp stamp)
         set
         {
             var index = Find(id);
-            if (index >= 0) _teams[index] = value;
+            if (index >= 0)
+            {
+                Unlist(_teams[index]);
+                _teams[index] = value;
+            }
             else _teams.Insert(~index, value);
+            if (!_byPrototype.TryGetValue(value.Prototype, out var list)) _byPrototype[value.Prototype] = list = [];
+            var at = list.Count;
+            while (at > 0 && list[at - 1].Id > value.Id) at--;
+            list.Insert(at, value);
             stamp.Version++;
         }
     }
@@ -93,6 +107,7 @@ internal sealed class TeamTable(MembershipStamp stamp)
     {
         var index = Find(id);
         if (index < 0) return false;
+        Unlist(_teams[index]);
         _teams.RemoveAt(index);
         stamp.Version++;
         return true;
@@ -101,7 +116,13 @@ internal sealed class TeamTable(MembershipStamp stamp)
     public void Clear()
     {
         _teams.Clear();
+        _byPrototype.Clear();
         stamp.Version++;
+    }
+
+    private void Unlist(ScriptTeam team)
+    {
+        if (_byPrototype.TryGetValue(team.Prototype, out var list)) list.Remove(team);
     }
 
     private int Find(int id)

@@ -278,6 +278,26 @@ public sealed partial class ScriptEngine
         return _entityTeams.GetValueOrDefault(entity);
     }
 
+    private Dictionary<uint, ScriptTeam>? _firstTeams;
+    private long _firstTeamsVersion = -1;
+
+    /// <summary>
+    /// The first team instance (by id) that lists the object, as the memberships are at this moment: what a walk over the teams in id order finds. The table behind it is filled again
+    /// whenever any membership changed since it was filled (<see cref="MembershipStamp"/>), so it never answers from an older state - unlike <see cref="TeamOfEntity"/>, whose refresh
+    /// rule is part of what its callers see.
+    /// </summary>
+    private ScriptTeam? FirstTeamOf(uint entity)
+    {
+        if (_firstTeams is null || _firstTeamsVersion != _membership.Version)
+        {
+            (_firstTeams ??= []).Clear();
+            foreach (var team in _teams.Values)
+                foreach (var id in team.Members) _firstTeams.TryAdd(id, team);
+            _firstTeamsVersion = _membership.Version;
+        }
+        return _firstTeams.GetValueOrDefault(entity);
+    }
+
     // ------------------------------------------------------------------------------------------------ command buttons on a team
 
     /// <summary>The <see cref="NameTables.KindOf"/> name of a KindOf parameter: the text when the map kept one, else the bit index the reference stores (<c>getInt</c>).</summary>

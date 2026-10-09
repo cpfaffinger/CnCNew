@@ -1,3 +1,4 @@
+using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.World;
 
@@ -33,10 +34,16 @@ public sealed partial class ScriptEngine
             foreach (var (teamId, script) in pending)
                 if (_teams.TryGetValue(teamId, out var team)) RunTeamScript(team, script);
         }
-        foreach (var team in _teams.Values.ToArray())
+        // The teams as they are now (a script may add or remove some); whether a team is looked at is asked when its turn comes. The two lists are this method's own.
+        var teams = _eventTeams;
+        teams.Clear();
+        teams.AddRange(_teams.Values);
+        var alive = _eventAlive;
+        for (var position = 0; position < teams.Count; position++)
         {
-            if (!team.Created || _program.FindTeam(team.Prototype) is not { HasEventScripts: true } prototype) continue;
-            var alive = LiveMembers(team).Where(member => !member.EffectivelyDead).ToArray();
+            var team = teams[position];
+            if (!team.Created || PrototypeOf(team) is not { HasEventScripts: true } prototype) continue;
+            AliveMembers(team, alive);
 
             if (!team.CreateHandled)
             {
@@ -45,8 +52,8 @@ public sealed partial class ScriptEngine
                 if (prototype.OnDestroyedScript.Length > 0)
                 {
                     // m_destroyThreshold = curUnits - (curUnits * threshold), clamped to 0..curUnits-1.
-                    alive = LiveMembers(team).Where(member => !member.EffectivelyDead).ToArray();
-                    team.CurUnits = alive.Length;
+                    AliveMembers(team, alive);
+                    team.CurUnits = alive.Count;
                     var threshold = (int)(Fixed.FromInt(team.CurUnits) - Fixed.FromInt(team.CurUnits) * prototype.DestroyedThreshold).Floor();
                     team.DestroyThreshold = Math.Clamp(threshold, 0, Math.Max(0, team.CurUnits - 1));
                 }
@@ -62,13 +69,16 @@ public sealed partial class ScriptEngine
                     team.SeeEnemy = true;
                     break;
                 }
-                if (alive.Length > 0 && previous != team.SeeEnemy) RunTeamScript(team, team.SeeEnemy ? prototype.EnemySightedScript : prototype.AllClearScript);
+                if (alive.Count > 0 && previous != team.SeeEnemy) RunTeamScript(team, team.SeeEnemy ? prototype.EnemySightedScript : prototype.AllClearScript);
             }
 
             if (prototype.OnDestroyedScript.Length > 0)
             {
                 var before = team.CurUnits;
-                team.CurUnits = LiveMembers(team).Count(member => !member.EffectivelyDead);
+                var units = 0;
+                foreach (var id in team.Members)
+                    if (_world.FindEntity(new EntityId(id)) is { DestroyRequested: false, EffectivelyDead: false }) units++;
+                team.CurUnits = units;
                 if (team.CurUnits != before && team.CurUnits <= team.DestroyThreshold)
                 {
                     RunTeamScript(team, prototype.OnDestroyedScript);
@@ -78,12 +88,29 @@ public sealed partial class ScriptEngine
 
             if (prototype.OnIdleScript.Length > 0)
             {
-                var mobile = LiveMembers(team).Where(member => !member.EffectivelyDead && member.Template.Locomotor is not null).ToArray();
-                var idle = mobile.All(IsIdle);
-                if (mobile.Length > 0 && idle && team.WasIdle) RunTeamScript(team, prototype.OnIdleScript);
+                var mobile = 0;
+                var idle = true;
+                foreach (var id in team.Members)
+                {
+                    if (_world.FindEntity(new EntityId(id)) is not { DestroyRequested: false, EffectivelyDead: false } member || member.Template.Locomotor is null) continue;
+                    mobile++;
+                    if (idle && !IsIdle(member)) idle = false;
+                }
+                if (mobile > 0 && idle && team.WasIdle) RunTeamScript(team, prototype.OnIdleScript);
                 team.WasIdle = idle;
             }
         }
+    }
+
+    private readonly List<ScriptTeam> _eventTeams = [];
+    private readonly List<Entity> _eventAlive = [];
+
+    /// <summary>The members of <see cref="LiveMembers"/> that are not dying, in member order.</summary>
+    private void AliveMembers(ScriptTeam team, List<Entity> into)
+    {
+        into.Clear();
+        foreach (var id in team.Members)
+            if (_world.FindEntity(new EntityId(id)) is { DestroyRequested: false, EffectivelyDead: false } member) into.Add(member);
     }
 
     /// <summary><c>getClosestObject(visionRange, ALLOW_ENEMIES, alive)</c> for one member: any enemy object inside its vision range.</summary>

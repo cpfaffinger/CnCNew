@@ -212,10 +212,10 @@ public sealed partial class ScriptEngine
     {
         Entity? recruit = null;
         var bestDistance = maxDistanceSquared;
-        foreach (var candidate in PlayerEntities(owner))
+        foreach (var candidate in _world.EntitiesOwnedBy(owner).AsSpan())
         {
-            if (candidate.Template.Name != template) continue;
-            var current = _teams.Values.FirstOrDefault(team => team.Members.Contains(candidate.Id.Value));
+            if (candidate.Template.Name != template || !Counts(candidate)) continue;
+            var current = FirstTeamOf(candidate.Id.Value);
             if (current is not null)
             {
                 if (ReferenceEquals(current, into) || !current.Created) continue;
