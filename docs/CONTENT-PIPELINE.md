@@ -1,87 +1,87 @@
-# Runtime-Contentvertrag und Formatmatrix
+# Runtime content contract and format matrix
 
-Stand: 27. September 2026
+As of: 27 September 2026
 
-## Schichtengrenzen
+## Layer boundaries
 
-`CnCNew.IO` und `CnCNew.Archives` bilden ausschließlich die Importseite. `CnCNew.Formats`,
-`CnCNew.Images`, `CnCNew.Data` und `CnCNew.W3D` validieren Dateisemantik ohne Engine-Typen.
-`CnCNew.Import` verbindet diese Reader, baut den Abhängigkeitsgraphen und veröffentlicht den
-materialisierten Bestand. `CnCNew.Content` kennt weder BIG noch das Import-VFS und öffnet zur
-Laufzeit nur normale Dateien aus einem veröffentlichten Schema-2-Manifest.
+`CnCNew.IO` and `CnCNew.Archives` form the import side exclusively. `CnCNew.Formats`,
+`CnCNew.Images`, `CnCNew.Data` and `CnCNew.W3D` validate file semantics without engine types.
+`CnCNew.Import` connects these readers, builds the dependency graph and publishes the
+materialised content. `CnCNew.Content` knows neither BIG nor the import VFS and at
+runtime opens only ordinary files from a published schema 2 manifest.
 
 ## Schema 2
 
-`content-manifest.json` ist kanonisches UTF-8-JSON. Es enthält die Schema-Version, den Namen und
-die Version des Importers sowie deterministisch sortierte Optionen und Assets. Jedes Asset trägt:
+`content-manifest.json` is canonical UTF-8 JSON. It contains the schema version, the name and
+the version of the importer as well as deterministically sorted options and assets. Each asset carries:
 
-- eine logische ID `asset://` plus ordinal kleingeschriebenen, normalisierten virtuellen Pfad;
-- den case-erhaltenden virtuellen Pfad und eine typisierte Formatklasse;
-- SHA-256 und Bytezahl der Quelle;
-- ausgewählte Overlayquelle, Priorität und alle verdrängten Kandidaten;
-- sortierte direkte Abhängigkeiten mit Status `resolved` oder `fallback`;
-- den sicheren relativen Pfad, Hash und die Größe jedes erzeugten Runtimeartefakts;
-- typisierte Diagnosen, insbesondere für erhaltene Dateien außerhalb des Produktscopes.
+- a logical ID `asset://` plus the ordinally lower-cased, normalised virtual path;
+- the case-preserving virtual path and a typed format class;
+- SHA-256 and byte count of the source;
+- the selected overlay source, priority and all displaced candidates;
+- sorted direct dependencies with status `resolved` or `fallback`;
+- the safe relative path, hash and size of every generated runtime artefact;
+- typed diagnostics, in particular for preserved files outside the product scope.
 
-Pfade verwenden `/`, sind relativ und dürfen keine leeren, `.`- oder `..`-Segmente enthalten.
-Vergleiche erfolgen ordinal ohne Groß-/Kleinschreibung; reine Case-Kollisionen sind ein harter
-Importfehler. Physische Windows-Segmente werden prozentkodiert, etwa `Data/*` als `Data/%2A`.
-Schema 1 bleibt lesbar und erhält eine sichtbare `legacy-manifest`-Diagnose. Neue Importe
-schreiben nur Schema 2; unbekannte Schema-Versionen werden abgewiesen.
+Paths use `/`, are relative and must not contain empty, `.` or `..` segments.
+Comparisons are ordinal and case-insensitive; pure case collisions are a hard
+import error. Physical Windows segments are percent-encoded, for example `Data/*` as `Data/%2A`.
+Schema 1 remains readable and receives a visible `legacy-manifest` diagnostic. New imports
+write schema 2 only; unknown schema versions are rejected.
 
-## Import, Cache und Veröffentlichung
+## Import, cache and publication
 
-`runtime-import` hasht und validiert jede gewählte Overlayquelle, extrahiert Referenzen und baut
-den Graphen. Ein unveränderter SHA-256-Eintrag wird aus dem publizierten Artefakt übernommen.
-Abhängigkeiten werden in jedem Lauf deterministisch neu berechnet. Maschinenpfade und Zeitstempel
-gehen nicht in das Ergebnis ein.
+`runtime-import` hashes and validates every selected overlay source, extracts references and builds
+the graph. An unchanged SHA-256 entry is taken over from the published artefact.
+Dependencies are recomputed deterministically in every run. Machine paths and timestamps
+do not enter the result.
 
-Der Lauf entsteht in einem eindeutigen Geschwister-Stagingverzeichnis. Erst nach erfolgreicher
-Format-, Referenz- und Manifestvalidierung wird das alte Ziel umbenannt und Staging atomar an
-seine Stelle gesetzt. Bei Fehlern wird das alte Ziel wiederhergestellt. Tests prüfen Cachetreffer,
-Invalidierung, gleiche Frischimporte und den unveränderten Bestand nach einem Importfehler.
+The run is created in a unique sibling staging directory. Only after successful
+format, reference and manifest validation is the old target renamed and staging atomically put in
+its place. On errors the old target is restored. Tests check cache hits,
+invalidation, identical fresh imports and the unchanged content after an import error.
 
-## Formatmatrix des ausgelieferten Bestands
+## Format matrix of the shipped content
 
-| Dateien | Formatklasse | Strategie und validierte Semantik |
+| Files | Format class | Strategy and validated semantics |
 | ---: | --- | --- |
-| 8.904 | W3D | Runtime-Decoder; Chunkbaum, Grenzen, Meshes, Materialien und Texturreferenzen; Animation, Hierarchie und HLOD bleiben als validierte Chunkdomäne für Phase 7 erhalten |
-| 8.475 | WAV | externer freier Runtime-Decoder; RIFF/WAVE-Länge, Chunkgrenzen, `fmt ` und `data` |
-| 6.602 | DDS | Runtime-Decoder; Header, Dimensionen, Mips, BC1/2/3 und RGB24/32 samt Payloadgröße |
-| 826 | TGA | Runtime-Decoder; 24/32 Bit, raw/RLE, Dimensionen, Orientierung und Pixelstrom |
-| 256 | INI | Runtime-Decoder; SAGE-Syntax und Dateireferenzen; typisierte Spieldaten folgen in Phase 3 |
-| 150 | MAP | Runtime-Decoder; 145 EAR/RefPack-, vier rohe CkMp- und eine ZL5/zlib-Variante; Dekompressionsgröße, Symboltabelle, Chunk-IDs, Versionen, Größen und Dateiende |
-| 104 | ANI | Runtime-Decoder; RIFF/ACON; der in allen Dateien identische Size-plus-8-Schreibfehler ist explizit zugelassen |
-| 80 | WND | Runtime-Decoder; `FILE_VERSION = 2`, Strukturklammern und Referenzen |
-| 70 | BIK | externer freier Decoderpfad (FFmpeg/libav); Version, Dateigröße, Frames, Dimensionen und Framerate |
-| 56 | MP3 | externer freier Decoderpfad; ID3-Version/-Größe und erster MPEG-Framesync |
-| 24 | WAK | Runtime-Decoder; 20-Byte-Recordlayout, Länge und endliche Koordinaten |
-| 12 | STR | Runtime-Decoder; Kommentare, Schlüssel, gequotete Werte, `END` und Duplikate |
-| 4 | SCB | Runtime-Decoder; CkMp-Signatur und plausible Objektanzahl |
+| 8,904 | W3D | runtime decoder; chunk tree, bounds, meshes, materials and texture references; animation, hierarchy and HLOD are preserved as a validated chunk domain for Phase 7 |
+| 8,475 | WAV | external free runtime decoder; RIFF/WAVE length, chunk bounds, `fmt ` and `data` |
+| 6,602 | DDS | runtime decoder; header, dimensions, mips, BC1/2/3 and RGB24/32 including payload size |
+| 826 | TGA | runtime decoder; 24/32 bit, raw/RLE, dimensions, orientation and pixel stream |
+| 256 | INI | runtime decoder; SAGE syntax and file references; typed game data follow in Phase 3 |
+| 150 | MAP | runtime decoder; 145 EAR/RefPack, four raw CkMp and one ZL5/zlib variant; decompression size, symbol table, chunk IDs, versions, sizes and end of file |
+| 104 | ANI | runtime decoder; RIFF/ACON; the size-plus-8 write error that is identical in all files is explicitly permitted |
+| 80 | WND | runtime decoder; `FILE_VERSION = 2`, structure brackets and references |
+| 70 | BIK | external free decoder path (FFmpeg/libav); version, file size, frames, dimensions and frame rate |
+| 56 | MP3 | external free decoder path; ID3 version/size and first MPEG frame sync |
+| 24 | WAK | runtime decoder; 20-byte record layout, length and finite coordinates |
+| 12 | STR | runtime decoder; comments, keys, quoted values, `END` and duplicates |
+| 4 | SCB | runtime decoder; CkMp signature and plausible object count |
 
-Partikel und FX liegen als INI-Definitionen mit W3D-, Textur- und Audioreferenzen vor. Die
-übrigen 119 Dateien sind klassifiziert: 31 Installations-/Miles-Binaries, 46 Dokumente, sieben
-Installerbilder, 18 opaque Installationsmetadaten, ein ungenutzter CSF-Katalog und 16
-Legacyshader. Sie bleiben zur Herkunftstreue erhalten, sind aber nicht Teil des Produktscopes.
-Keine Erweiterung bleibt unklassifiziert.
+Particles and FX are present as INI definitions with W3D, texture and audio references. The
+remaining 119 files are classified: 31 installation/Miles binaries, 46 documents, seven
+installer images, 18 opaque installation metadata files, one unused CSF catalogue and 16
+legacy shaders. They are preserved for fidelity of origin but are not part of the product scope.
+No extension remains unclassified.
 
-## Graph und Fallbacks
+## Graph and fallbacks
 
-Von 41.527 direkten Referenzen werden 41.308 aufgelöst. Die Suche prüft kanonischen Pfad,
-Besitzerordner, eindeutigen Dateinamen und für W3D `Art/Textures` samt DDS/TGA-Austausch. Echte
-Zyklen sind Fehler; WND-Selbsterwähnungen werden nicht als Abhängigkeit interpretiert.
+Of 41,527 direct references, 41,308 are resolved. The search checks the canonical path,
+owner folder, unique file name and, for W3D, `Art/Textures` including DDS/TGA exchange. Real
+cycles are errors; WND self-mentions are not interpreted as a dependency.
 
-219 Verwendungen in 128 Assets sind bewusst typisiert: 164 `visible-magenta-texture`, 51
-`silent-audio` und vier `disabled-missing-map` (nicht ausgelieferte Karten einschließlich der
-EA-Demokampagne). Video besitzt den dokumentierten `skip-video`-Fallback, falls der freie externe
-Decoder fehlt; im ausgelieferten Graphen wird er nicht benötigt. Es gibt keinen stillen Fallback.
+219 uses in 128 assets are deliberately typed: 164 `visible-magenta-texture`, 51
+`silent-audio` and four `disabled-missing-map` (maps not shipped, including the
+EA demo campaign). Video has the documented `skip-video` fallback in case the free external
+decoder is missing; in the shipped graph it is not needed. There is no silent fallback.
 
-## Reproduzierbare Abnahme
+## Reproducible acceptance
 
-> Historischer Abschnitt (Abnahme der Phase 2, 27. September 2026). Die hier genannten Verzeichnisse
-> `.local/game-original`, `.local/content` (damals Schema 1) und `.local/phase2-import-a`/`-b` gibt es nicht mehr.
-> Heute erzeugt `scripts/dev-content.ps1` den Entwicklerbestand aus der Steam-Installation nach `game/content`
-> (Schema 2, ignoriertes Verzeichnis `game/` in der Wurzel des Repositorys); der Weg für Anwender steht in
+> Historical section (acceptance of Phase 2, 27 September 2026). The directories named here,
+> `.local/game-original`, `.local/content` (schema 1 at the time) and `.local/phase2-import-a`/`-b`, no longer exist.
+> Today `scripts/dev-content.ps1` generates the developer content from the Steam installation into `game/content`
+> (schema 2, ignored directory `game/` in the root of the repository); the path for users is described in
 > `docs/INSTALLATION.md`.
 
 ```powershell
@@ -92,7 +92,7 @@ dotnet run --project tools/CnCNew.AssetTool -- runtime-import .local/game-origin
 dotnet run --project tools/CnCNew.AssetTool -- verify .local/phase2-import-a
 ```
 
-Beide Frischimporte erzeugten 25.682 Assets und denselben Manifest-SHA-256
-`ACDF0B6CF98538469AA05F62E23D2A83BD3E17A911433B4EA73373FFFB1245FF`. Der folgende Lauf traf
-25.682/25.682 Cacheeinträge. `verify` prüfte alle Artefakte ohne BIG-Zugriff. Lokale Importe und
-das 27.174.097 Byte große Manifest bleiben ignoriert und werden nicht committed.
+Both fresh imports produced 25,682 assets and the same manifest SHA-256
+`ACDF0B6CF98538469AA05F62E23D2A83BD3E17A911433B4EA73373FFFB1245FF`. The following run hit
+25,682/25,682 cache entries. `verify` checked all artefacts without BIG access. Local imports and
+the manifest of 27,174,097 bytes remain ignored and are not committed.
