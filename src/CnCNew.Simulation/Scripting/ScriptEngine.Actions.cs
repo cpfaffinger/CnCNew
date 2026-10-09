@@ -717,7 +717,8 @@ public sealed partial class ScriptEngine
         Entity? best = null;
         var bestPriority = int.MinValue;
         var bestDistance = Fixed.MaxValue;
-        foreach (var candidate in _world.Entities.OrderBy(value => value.Id.Value))
+        // The world enumerates in ascending id order (EntityTable), which is the order the tie between equal candidates is decided in; the walk only reads.
+        foreach (var candidate in _world.Entities)
         {
             if (candidate.Owner.IsSystem || !CountsAsObject(candidate) || !_world.AreEnemies(from, candidate)) continue;
             var priority = AttackPriority(from, candidate);
