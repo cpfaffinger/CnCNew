@@ -201,6 +201,7 @@ Check-Box, Custom-Draw; dreiteiliger Button mit Kacheln).
 
 ## 6. Realdatenzahlen (`dotnet run --project tests/CnCNew.Ui.Tests -- --content-dir game/content`)
 
+- *Stand 9. Oktober 2026 (Bestand aus der Steam-Vorlage, `docs/UI-VANILLA-FIT.md`): 80 Dateien, alle `*.wnd` und alle 800×600; die drei Varianten unten gab es nur im früheren, gemoddeten Bestand, und die Zahl 83 in diesem Dokument ist historisch.*
 - `Window/`: 83 Dateien = 80 `*.wnd` + 3 Varianten (`OptionsMenu.wnd_hideip`, `NetworkDirectConnect.wnd_hideip`,
   `GameSpyLoginProfile.wnd_hidemail`), alle geparst; die Varianten lädt das Spiel nicht über ihren Namen.
 - 1.814 Fenster (davon 1.675 in den 80 `*.wnd`): STATICTEXT 582, USER 450, PUSHBUTTON 440, COMBOBOX 123, CHECKBOX 66,
