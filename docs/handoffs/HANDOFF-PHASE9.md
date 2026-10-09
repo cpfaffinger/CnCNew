@@ -1,169 +1,169 @@
-# N+1-Handoff: Phase 9 – Skirmish, Missionen, Kampagnen und Savegames
+# N+1 handoff: Phase 9 – skirmish, missions, campaigns and savegames
 
-Du arbeitest autonom an diesem Repository (`<repo>` = Wurzel des Arbeitsverzeichnisses). Lies zuerst `CLAUDE.md`, `README.md`,
-`docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§7 „Status“, §8 „Status“ und §9), `docs/SIMULATION-CORE.md`
-(§12, §12a, §19–§21), `docs/GAME-RULES.md` §10/§11 sowie die Fachdokumente der Präsentations- und Eingabeschicht:
+You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`,
+`docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§7 "Status", §8 "Status" and §9), `docs/SIMULATION-CORE.md`
+(§12, §12a, §19–§21), `docs/GAME-RULES.md` §10/§11 as well as the specialist documents of the presentation and input layer:
 `docs/PRESENTATION-INPUT.md`, `docs/GAME-SHELL.md`, `docs/GAME-HUD.md`, `docs/GAME-AUDIO.md`, `docs/CLIENT-TERRAIN.md`,
-`docs/CLIENT-OBJECTS.md`, `docs/CLIENT-FX.md`, `docs/CLIENT-UI-RENDERING.md`. `docs/handoffs/HANDOFF-PHASE5.md` bis `docs/handoffs/HANDOFF-PHASE8.md`
-bleiben als Verlauf erhalten; ihre Zahlen sind veraltet.
+`docs/CLIENT-OBJECTS.md`, `docs/CLIENT-FX.md`, `docs/CLIENT-UI-RENDERING.md`. `docs/handoffs/HANDOFF-PHASE5.md` to `docs/handoffs/HANDOFF-PHASE8.md`
+are kept as history; their numbers are outdated.
 
-Die Nummerierung: Dieser Auftrag deckt Schritt 9 des Gesamtplans ab (`IMPLEMENTATION-PLAN.md` §9, „Skirmish, Missionen, Kampagnen und
-Savegames“). Er trägt zusätzlich die aus Phase 8 verschobenen Simulationsschulden-Punkte 9–11 aus `docs/handoffs/HANDOFF-PHASE8.md` (Kollision,
-Bau-/Regelgrenzen, Kartenskripte) sowie einen dokumentierten, nicht behobenen Determinismus-Fehler.
+The numbering: this brief covers step 9 of the overall plan (`IMPLEMENTATION-PLAN.md` §9, "Skirmish, missions, campaigns and
+savegames"). In addition it carries the simulation debt items 9–11 postponed from Phase 8 from `docs/handoffs/HANDOFF-PHASE8.md` (collision,
+build/rule limits, map scripts) as well as a documented, unfixed determinism error.
 
-## Ehrlicher Status von Phase 7/8 (Ausgangslage)
+## Honest status of Phase 7/8 (starting point)
 
-Phase 7 und Phase 8 sind abgeschlossen (Merge-Commits u. a. `4da086f`, `b90f861`, `05b5c0c`, `cf117b0`, `0344582`, `86ce4fd`, sowie
-`523525c`/`ae642e7`/`a948efb`; vollständige Liste mit `git log --oneline 034c5e6..472c65d`), aber mit bewussten Grenzen (vollständig:
-`IMPLEMENTATION-PLAN.md` §7/§8, jeweils Abschnitt „Bekannte Grenzen“):
+Phase 7 and Phase 8 are completed (merge commits among others `4da086f`, `b90f861`, `05b5c0c`, `cf117b0`, `0344582`, `86ce4fd`, as well as
+`523525c`/`ae642e7`/`a948efb`; complete list with `git log --oneline 034c5e6..472c65d`), but with deliberate limits (complete:
+`IMPLEMENTATION-PLAN.md` §7/§8, in each case the section "Known limits"):
 
-- **Abnahme erfüllt mit Einschränkungen:** Ein komplettes Skirmish-Match läuft headless-visualisierbar vom Hauptmenü bis zum
-  Ergebnisbildschirm und zurück (`CnCNew.Game/Shell` + `CnCNew.Game/Hud` + `CnCNew.Client.Stride`); alle vier Weltlayer (Terrain, Objekte,
-  FX, UI) und der Audiopfad liefern über wiederholte Läufe byteidentische SHA-256/Statistiken. Mehrspieler-, Lade-/Wiedergabe- und
-  Kampagnen-Einstieg sind im Menü sichtbar, aber deaktiviert (außerhalb des bisherigen Produktscopes) – **das ändert sich jetzt mit
-  Kampagne als Teil von Phase 9.**
-- **Nicht umgesetzt/bekannt unvollständig:** Türme rendern in Ruhepose (keine live gelesenen Turmwinkel), keine Kontaktschatten, manche
-  dünnen zweiseitigen W3D-Meshes schattieren auf der Rückseite schwarz (Stride-Pipeline-Grenze), kein Bink-Video-Decoder (keine SDK-Lizenz),
-  keine Formations-/Gruppenversatzlogik, kein Befehl „Feuer auf Position“, Entführen/Autobombe/Sabotage/Bergen/Gebäude
-  einnehmen/Hacken bleiben unübersetzt, Anzeigemodus/Sprache/Seitenverhältnis/Barrierefreiheits-Textskalierung sind in `GameSettings`
-  vorhanden, aber von der ausgelieferten `OptionsMenu.wnd` aus nicht erreichbar. Volle Liste: `IMPLEMENTATION-PLAN.md` §7/§8.
-- **Bekannter, nicht behobener Determinismus-Fehler (wichtig für Savegames!):** `SpecialPowerBase.SharedReadyFrame()`
-  (`src/CnCNew.Simulation/Modules/BuiltIn/SpecialPowerModules.cs:133`) legt den Bereitschafts-Tick einer geteilten Spezialkraft lesend an
-  (Seiteneffekt von `IsReady()`), statt ihn einmalig bei `OnSpawn`/`OnSpecialPowerCreation` zu setzen. Die Skirmish-KI fragt `IsReady()`
-  live in jedem Tick ab, ein reiner `ReplayRunner`-Lauf nie – dadurch kann `SkirmishMatchSession.Step()` (live) einen anderen
-  `World.StateHash` liefern als `ReplayRunner.Run` über den eigenen `Session.ToReplay()`-Mitschnitt, für `SharedSynced`-Spezialkräfte ohne
-  expliziten Gewährungsbefehl. Vollständige Diagnose in `docs/SIMULATION-CORE.md` §12/§12a. **Das betrifft nicht die bisherigen
-  Referenzzahlen** (die sind Live-gegen-Live-Vergleiche, siehe dort), **aber jedes künftige Savegame-/Replay-Format, das eine live
-  gelaufene Partie gegen eine wiederhergestellte vergleicht, muss diesen Fehler entweder vorher beheben oder explizit umschiffen** (z. B.
-  indem Savegames nur `WorldSnapshot`, nie `ReplayFile`, als Wahrheit behandeln – das tut `WorldSnapshot.Restore` bereits korrekt, siehe
-  §7 unten). Ein Fix ändert KI-Timing und damit jeden Referenzmatch-/Stress-/KI-Lauf-Hash; er gehört in eine eigene, gemessene
-  Simulationsphase, nicht beiläufig in diese.
-- Die Skirmish-KI ist eine eigene Neuentwicklung (`SkirmishAi`), kein Port der Originalskripte; Kartenskripte (`SidesList`/
-  `PlayerScriptsList`) werden von `SageMapDecoder` zwar dekodiert, aber vom Simulationskern nicht ausgeführt (siehe Teil B, Punkt 11).
+- **Acceptance met with restrictions:** a complete skirmish match runs, headless and visualisable, from the main menu to the
+  result screen and back (`CnCNew.Game/Shell` + `CnCNew.Game/Hud` + `CnCNew.Client.Stride`); all four world layers (terrain, objects,
+  FX, UI) and the audio path yield byte-identical SHA-256/statistics over repeated runs. Multiplayer, load/playback and
+  campaign entry are visible in the menu but disabled (outside the product scope so far) – **that changes now with the
+  campaign as part of Phase 9.**
+- **Not implemented/known to be incomplete:** turrets render in the rest pose (no turret angles read live), no contact shadows, some
+  thin two-sided W3D meshes shade black on the back side (Stride pipeline limit), no Bink video decoder (no SDK licence),
+  no formation/group offset logic, no command "fire at position", hijacking/car bomb/sabotage/salvaging/capturing
+  buildings/hacking remain untranslated, display mode/language/aspect ratio/accessibility text scaling are present in `GameSettings`
+  but not reachable from the shipped `OptionsMenu.wnd`. Full list: `IMPLEMENTATION-PLAN.md` §7/§8.
+- **Known, unfixed determinism error (important for savegames!):** `SpecialPowerBase.SharedReadyFrame()`
+  (`src/CnCNew.Simulation/Modules/BuiltIn/SpecialPowerModules.cs:133`) creates the ready tick of a shared special power while reading
+  (side effect of `IsReady()`) instead of setting it once at `OnSpawn`/`OnSpecialPowerCreation`. The skirmish AI queries `IsReady()`
+  live in every tick, a pure `ReplayRunner` run never – as a result `SkirmishMatchSession.Step()` (live) can yield a different
+  `World.StateHash` than `ReplayRunner.Run` over its own `Session.ToReplay()` recording, for `SharedSynced` special powers without
+  an explicit grant command. Complete diagnosis in `docs/SIMULATION-CORE.md` §12/§12a. **This does not affect the previous
+  reference numbers** (they are live-against-live comparisons, see there), **but every future savegame/replay format that compares a
+  game run live against a restored one must either fix this error beforehand or explicitly steer around it** (e.g.
+  by savegames treating only `WorldSnapshot`, never `ReplayFile`, as the truth – `WorldSnapshot.Restore` already does that correctly, see
+  §7 below). A fix changes the AI timing and with it every reference match/stress/AI run hash; it belongs in a separate, measured
+  simulation phase, not in passing into this one.
+- The skirmish AI is a new development of our own (`SkirmishAi`), not a port of the original scripts; map scripts (`SidesList`/
+  `PlayerScriptsList`) are decoded by `SageMapDecoder` but not executed by the simulation core (see Part B, item 11).
 
-## Reproduktionsbasis (Stand Ende Phase 8, 30. September 2026; vor dem Weiterarbeiten neu messen)
+## Reproduction basis (as of the end of Phase 8, 30 September 2026; re-measure before continuing to work)
 
-- Modulkatalog: 205 Typen, 85 implementiert (`SimTool audit-modules .local/phase2-import-a`); Instanziierbarkeit 1.470 von 2.115 Objekten
-  (69,5 %, `SimTool audit-coverage`); Modulverwendungen abgedeckt 15.543 von 19.553 (79,5 %); Kompatibilitätsbasislinie 749 Einträge
+- Module catalogue: 205 types, 85 implemented (`SimTool audit-modules .local/phase2-import-a`); instantiability 1,470 of 2,115 objects
+  (69.5 %, `SimTool audit-coverage`); module uses covered 15,543 of 19,553 (79.5 %); compatibility baseline 749 entries
   (`IniTool compat-check .local/phase2-import-a baselines/compatibility.json`).
-- Größte verbleibende Blocker (Objekte insgesamt / nur durch dieses Modul blockiert, `SimTool audit-coverage`):
-  `CommandButtonHuntUpdate` 79/18, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/3, `JetSlowDeathBehavior` 59/0 (Phase-7-Kategorie,
-  reine Präsentation), `HeightDieUpdate` 31/24, `StructureToppleUpdate` 6/4, `CountermeasuresBehavior` 40/0.
-- Befehlstabelle: `CommandTypes.Version = 9`; Snapshot Version 7, Replay-Format v7.
-- Retail-Referenzmatch (`SimTool reference-match`): 13 Fraktionen, Sieger FactionAmerica bei Tick 13.800, Endhash `4DCB46FE3D2E8214`.
-- Stresstest (216.000 Ticks, `SimTool stress`): unverändert seit Phase 6 (Module der Phase 5–6); mit den neuen Transport-/
-  Projektilmodulen neu messen, falls die Fixture sie berührt.
-- `MapTool audit`: unverändert 150/150 Karten seit Phase 6; **World-Builder-Skripte werden jetzt mit dekodiert** (siehe unten und
-  `docs/MAP-SCRIPTS.md`) – vorher schlugen 75 der 150 Karten an dieser Stelle fehl (25 Kampagnenkarten mit einem älteren
-  Condition-Chunk-Format, 50 an einer falschen Annahme über `NameKeyType`), jetzt 0.
-- **Neu: World-Builder-Skripte dekodiert** (`docs/MAP-SCRIPTS.md`, Commits `73b8ae8`/`ef6191e`/`bef2cd8`): 1.631 Skript-Listen, 23.906 Skripte,
-  2.294 Gruppen, 33.890 Bedingungen (82 von 109 Typen verwendet), 82.563 Aktionen (291 von 344 Typen verwendet) über alle 150
-  Retail-Karten – vollständige, nach Häufigkeit sortierte Verwendungstabelle in `MapTool audit`. **Nur die Dekodierung ist fertig;
-  keine Zeile davon wird ausgeführt** – das ist Teil A, Punkt 2 unten.
-- Weltpräsentation: Terrain 0,266 ms/Frame CPU-Mittel, 33–77 MiB GPU je Karte (`docs/CLIENT-TERRAIN.md`); Objekte 0,19–0,60 ms/Frame,
-  0 fehlende Modelle/Texturen/Animationen über die geprüften Gefechte (`docs/CLIENT-OBJECTS.md`); FX-Bench mit 10.000 aktiven Partikeln
-  1,735 ms je Build (`docs/CLIENT-FX.md`).
-- Eingabe/UI: `CommandMap.ini` 96 Einträge/0 Probleme; 820 Befehlsschaltflächen/472 Befehlssätze/0 Probleme; 8 Shell-Screens mit
-  54 Golden-Hashes über 6 Auflösungen; UI-Renderer-Verifikation über 32 PNGs byteidentisch (`docs/PRESENTATION-INPUT.md`,
+- Largest remaining blockers (objects in total / blocked only by this module, `SimTool audit-coverage`):
+  `CommandButtonHuntUpdate` 79/18, `ToppleUpdate` 76/66, `SpecialAbilityUpdate` 64/3, `JetSlowDeathBehavior` 59/0 (Phase 7 category,
+  pure presentation), `HeightDieUpdate` 31/24, `StructureToppleUpdate` 6/4, `CountermeasuresBehavior` 40/0.
+- Command table: `CommandTypes.Version = 9`; snapshot version 7, replay format v7.
+- Retail reference match (`SimTool reference-match`): 13 factions, winner FactionAmerica at tick 13,800, final hash `4DCB46FE3D2E8214`.
+- Stress test (216,000 ticks, `SimTool stress`): unchanged since Phase 6 (modules of Phases 5–6); re-measure with the new transport/
+  projectile modules if the fixture touches them.
+- `MapTool audit`: unchanged 150/150 maps since Phase 6; **World Builder scripts are now decoded as well** (see below and
+  `docs/MAP-SCRIPTS.md`) – before, 75 of the 150 maps failed at this point (25 campaign maps with an older
+  condition chunk format, 50 on a wrong assumption about `NameKeyType`), now 0.
+- **New: World Builder scripts decoded** (`docs/MAP-SCRIPTS.md`, commits `73b8ae8`/`ef6191e`/`bef2cd8`): 1,631 script lists, 23,906 scripts,
+  2,294 groups, 33,890 conditions (82 of 109 types used), 82,563 actions (291 of 344 types used) over all 150
+  retail maps – complete usage table sorted by frequency in `MapTool audit`. **Only the decoding is finished;
+  not a line of it is executed** – that is Part A, item 2 below.
+- World presentation: terrain 0.266 ms/frame CPU mean, 33–77 MiB GPU per map (`docs/CLIENT-TERRAIN.md`); objects 0.19–0.60 ms/frame,
+  0 missing models/textures/animations over the checked skirmishes (`docs/CLIENT-OBJECTS.md`); FX bench with 10,000 active particles
+  1.735 ms per build (`docs/CLIENT-FX.md`).
+- Input/UI: `CommandMap.ini` 96 entries/0 problems; 820 command buttons/472 command sets/0 problems; 8 shell screens with
+  54 golden hashes over 6 resolutions; UI renderer verification over 32 PNGs byte-identical (`docs/PRESENTATION-INPUT.md`,
   `docs/GAME-SHELL.md`, `docs/CLIENT-UI-RENDERING.md`).
-- Build: `dotnet build CnCNew.slnx` bei **sauberem** `bin`/`obj` von `CnCNew.Client.Stride` (sonst irreführend niedrig, da der
-  Stride-Asset-Compiler-Schritt inkrementell übersprungen wird): 21 Warnungen (10 bekannte `NU1901`/`NU1903` + 11 erklärte
-  Stride-Konsolennotizen, siehe `CLAUDE.md`), 0 Fehler.
+- Build: `dotnet build CnCNew.slnx` with a **clean** `bin`/`obj` of `CnCNew.Client.Stride` (otherwise misleadingly low, since the
+  Stride asset compiler step is skipped incrementally): 21 warnings (10 known `NU1901`/`NU1903` + 11 explained
+  Stride console notes, see `CLAUDE.md`), 0 errors.
 
-## Teil A – Skirmish, Missionen, Kampagnen, Savegames (Plan §9)
+## Part A – skirmish, missions, campaigns, savegames (plan §9)
 
-`CnCNew.Game/Shell` kennt Skirmish bereits vollständig (`MatchSetup`, `LiveMatch`, Ergebnisbildschirm); die Lücke ist Kampagne/Missionen
-und Speicherstände. **Die Dekodierung der World-Builder-Skripte ist seit diesem Durchgang fertig**
-(`MapData.PlayerScripts`, `docs/MAP-SCRIPTS.md`, `MapScriptCatalog` für die Typidentität) – lies dieses Dokument, bevor du Punkt 2
-beginnst, es erspart die erneute Reverse-Engineering-Arbeit am Binärformat und erklärt insbesondere, warum `NameKeyType` verworfen
-und stattdessen der rohe Enum-Index verwendet wird.
+`CnCNew.Game/Shell` already knows skirmish completely (`MatchSetup`, `LiveMatch`, result screen); the gap is campaign/missions
+and savegames. **The decoding of the World Builder scripts has been finished since this pass**
+(`MapData.PlayerScripts`, `docs/MAP-SCRIPTS.md`, `MapScriptCatalog` for the type identity) – read this document before you begin item 2,
+it saves the renewed reverse-engineering work on the binary format and explains in particular why `NameKeyType` is discarded
+and the raw enum index is used instead.
 
-1. **Skirmish abschließen:** Startpositionen/Teams/Regeln/KI-Profile aus `docs/handoffs/HANDOFF-PHASE8.md` Teil B Punkt 10 (Bau-/Regelgrenzen) und
-   Punkt 9 (Kollision) sind Voraussetzung für ein faires, vollständiges Skirmish – siehe Teil B unten, bevor du sie als „erledigt“ meldest.
-   Statistik (`MatchResult` existiert bereits in `CnCNew.Game/Hud`, siehe `docs/GAME-HUD.md`) auf dem Ergebnisbildschirm vervollständigen.
-2. **Skriptengine (Ausführung), Trigger, Counter, Kameraabläufe, Briefings, Zwischensequenzen:** Die Rohdaten stehen bereits in
+1. **Finish skirmish:** start positions/teams/rules/AI profiles from `docs/handoffs/HANDOFF-PHASE8.md` Part B item 10 (build/rule limits) and
+   item 9 (collision) are prerequisites for a fair, complete skirmish – see Part B below before you report them as "done".
+   Complete the statistics (`MatchResult` already exists in `CnCNew.Game/Hud`, see `docs/GAME-HUD.md`) on the result screen.
+2. **Script engine (execution), triggers, counters, camera sequences, briefings, cutscenes:** the raw data is already in
    `MapData.PlayerScripts` (`MapScript`/`MapScriptGroup`/`MapOrCondition`/`MapCondition`/`MapScriptAction`/`MapScriptParameter`,
-   `docs/MAP-SCRIPTS.md`). Zu tun bleibt die **Ausführung**: eine deterministische Skript-VM ohne Wandzeit/ambiente Zufallszahlen in
-   `CnCNew.Simulation` (Test `SourceRules` gilt auch hier), die pro Tick die aktiven Skripte einer Skriptliste auswertet
-   (ODER-von-UND-Bedingungsbaum, `IsOneShot`/`DelayEvaluationSeconds`/Schwierigkeitsgrad-Flags beachten) und bei Erfolg/Misserfolg die
-   Wahr-/Falsch-Aktionsliste ausführt. `docs/MAP-SCRIPTS.md` §5 nennt die Häufigkeitsverteilung aller 82 verwendeten Bedingungs- und
-   291 Aktionstypen als Priorisierungsgrundlage (die häufigsten sind `CONDITION_TRUE`, `TIMER_EXPIRED`, `FLAG`, `COUNTER` und
-   `ENABLE_SCRIPT`/`SET_FLAG`/`SET_COUNTER`/`SET_(MILLISECOND_)TIMER`/`CALL_SUBROUTINE`); nicht implementierte Typen brauchen eine
-   `MissingConditions`/`MissingActions`-Zählung nach demselben Muster wie `MissingModules` bei Objekten – nie einen stillen
-   Fehlschlag. Zwischensequenzen/Kameraabläufe/Briefings sind Präsentationssache (`CnCNew.Client.Stride`/`CnCNew.Game`), nicht
-   Simulation.
-3. **Missionsziele, Niederlagen-/Siegespfade, Kampagnenreihenfolge, Freischaltungen:** eigenes typisiertes Kampagnen-/Missionsmodell in
-   `CnCNew.Game` (nicht `CnCNew.Data`, das bleibt renderer-/engine-/archiv-/filesystemunabhängig – prüfen, ob ein neues Datenmodell
-   überhaupt in `CnCNew.Data` gehört oder besser in `CnCNew.Game`, weil es Fortschritt/Freischaltung mit dem lokalen Nutzerprofil verknüpft).
-4. **Savegameformat:** auf `WorldSnapshot` aufbauen (Version 7, siehe oben), **nicht** auf `ReplayFile` – der Determinismus-Fehler oben
-   betrifft nur Replays, `WorldSnapshot.Restore` ist die bereits korrekte, geprüfte Quelle der Wahrheit (siehe
-   `Tests.State.cs`/`Tests.ReferenceMatch.cs`: „Ein Snapshot, der mitten im Match genommen wird, setzt sich hash-identisch fort“). Ein
-   Savegame ist mindestens `WorldSnapshot` plus Kampagnenfortschritt plus Kartenreferenz; versionieren wie Snapshot/Replay (eigene
-   Versionsnummer, klare Ablehnungsmeldung bei Inkompatibilität).
-5. **Automatisierte Lade-/Headless-Prüfung jeder Karte/Mission:** `MapTool audit`-Muster auf Missionen erweitern; jede Kampagnenmission
-   muss ihre wesentlichen Erfolgs- und Fehlerpfade in einem Headless-Testlauf durchlaufen (kein manuelles Durchspielen als einziger Beleg).
+   `docs/MAP-SCRIPTS.md`). What remains to be done is the **execution**: a deterministic script VM without wall-clock time/ambient random numbers in
+   `CnCNew.Simulation` (the test `SourceRules` applies here too) that evaluates per tick the active scripts of a script list
+   (OR-of-AND condition tree, observe `IsOneShot`/`DelayEvaluationSeconds`/difficulty level flags) and on success/failure executes the
+   true/false action list. `docs/MAP-SCRIPTS.md` §5 names the frequency distribution of all 82 used condition and
+   291 action types as the basis for prioritisation (the most frequent are `CONDITION_TRUE`, `TIMER_EXPIRED`, `FLAG`, `COUNTER` and
+   `ENABLE_SCRIPT`/`SET_FLAG`/`SET_COUNTER`/`SET_(MILLISECOND_)TIMER`/`CALL_SUBROUTINE`); types not implemented need a
+   `MissingConditions`/`MissingActions` count following the same pattern as `MissingModules` for objects – never a silent
+   failure. Cutscenes/camera sequences/briefings are a matter of presentation (`CnCNew.Client.Stride`/`CnCNew.Game`), not of
+   simulation.
+3. **Mission objectives, defeat/victory paths, campaign order, unlocks:** a typed campaign/mission model of its own in
+   `CnCNew.Game` (not `CnCNew.Data`, which stays renderer/engine/archive/filesystem-independent – check whether a new data model
+   belongs in `CnCNew.Data` at all or rather in `CnCNew.Game`, because it links progress/unlocking with the local user profile).
+4. **Savegame format:** build on `WorldSnapshot` (version 7, see above), **not** on `ReplayFile` – the determinism error above
+   affects only replays, `WorldSnapshot.Restore` is the already correct, checked source of truth (see
+   `Tests.State.cs`/`Tests.ReferenceMatch.cs`: "A snapshot taken in the middle of the match continues hash-identically"). A
+   savegame is at least `WorldSnapshot` plus campaign progress plus map reference; version it like snapshot/replay (own
+   version number, clear rejection message on incompatibility).
+5. **Automated load/headless check of every map/mission:** extend the `MapTool audit` pattern to missions; every campaign mission
+   must run through its essential success and failure paths in a headless test run (no manual playthrough as the only evidence).
 
-**Abnahme von §9 (aus dem Plan, wörtlich):** Alle Skirmish-Karten sind start- und beendbar, jede Kampagnenmission besteht ihre
-wesentlichen Erfolgs- und Fehlerpfade, Speichern/Laden setzt einen identischen Simulationszustand fort. Bleiben Grenzen, benenne sie
-ehrlich in `IMPLEMENTATION-PLAN.md` §9.
+**Acceptance of §9 (from the plan, verbatim):** All skirmish maps can be started and ended, every campaign mission passes its
+essential success and failure paths, save/load continues an identical simulation state. If limits remain, name them
+honestly in `IMPLEMENTATION-PLAN.md` §9.
 
-## Teil B – Aus Phase 8 verschobene Simulationsschulden
+## Part B – simulation debt postponed from Phase 8
 
-Miss vor jedem Schritt mit `SimTool audit-coverage .local/phase2-import-a`, was ein Modul allein freischaltet (Zahlen oben, Stand Ende
-Phase 8 – neu messen).
+Before every step measure with `SimTool audit-coverage .local/phase2-import-a` what a module unlocks on its own (numbers above, as of the end of
+Phase 8 – re-measure).
 
-9. **Kollision:** `ToppleUpdate` (76 Objekte/66 nur dadurch blockiert), `StructureToppleUpdate` (6/4), echtes `CrushDie`/`SquishCollide`
-   (heute implementiert, aber ohne echte Kollisionsgeometrie – prüfen, was fehlt), `HeightDieUpdate` (31/24); ein Kollisions- oder
-   Vermeidungsmodell an `NavigationGrid` anbinden. Das ist Voraussetzung für ein faires Skirmish und für Missionsskripte, die auf
-   Einheiten-Zusammenstöße reagieren.
-10. **Bau- und Regelgrenzen:** Voraussetzungs- und Fähigkeitsprüfung in `QueueProduction`, `MaxSimultaneousOfType`, Reparaturkosten,
-    Kraftwerkseroberung, Overcharge-Befehl, `CommandSet`-/Radarwirkung, veteranenbasierte `ArmorSet`/`WeaponSet`,
-    `CommandButtonHuntUpdate` (79/18), `SpecialAbilityUpdate` (64/3), Detektoren, Höhen-Sichtlinie. `docs/PRESENTATION-INPUT.md` §10 und
-    `docs/GAME-HUD.md` listen konkrete fehlende Lese-/Schreib-APIs, die die Eingabeschicht bereits vermisst (Baukosten-Trockenlauf,
-    Produktionswarteschlangen-Lesezugriff, `SpecialPowerModuleBase.AvailableOnFrame`, `UpgradeMuxModule.Executed`, ein öffentlicher
-    Dock-Marker) – beim Schließen dieser Lücken direkt mit erledigen, sie sind kleine, klar spezifizierte Anbauten.
-11. **Kartenskripte** (`SidesList`/`PlayerScriptsList`): Die Dekodierung ist erledigt (`MapData.PlayerScripts`,
-    `docs/MAP-SCRIPTS.md`); offen bleibt die Ausführung – siehe Teil A, Punkt 2, das ist Teil des Hauptauftrags dieser Phase, nicht
+9. **Collision:** `ToppleUpdate` (76 objects/66 blocked only by it), `StructureToppleUpdate` (6/4), real `CrushDie`/`SquishCollide`
+   (implemented today, but without real collision geometry – check what is missing), `HeightDieUpdate` (31/24); connect a collision or
+   avoidance model to `NavigationGrid`. That is a prerequisite for a fair skirmish and for mission scripts that react to
+   unit collisions.
+10. **Build and rule limits:** prerequisite and ability check in `QueueProduction`, `MaxSimultaneousOfType`, repair cost,
+    power plant capture, overcharge command, `CommandSet`/radar effect, veteran-based `ArmorSet`/`WeaponSet`,
+    `CommandButtonHuntUpdate` (79/18), `SpecialAbilityUpdate` (64/3), detectors, height line of sight. `docs/PRESENTATION-INPUT.md` §10 and
+    `docs/GAME-HUD.md` list concrete missing read/write APIs that the input layer already misses (build cost dry run,
+    read access to production queues, `SpecialPowerModuleBase.AvailableOnFrame`, `UpgradeMuxModule.Executed`, a public
+    dock marker) – deal with them directly when closing these gaps, they are small, clearly specified additions.
+11. **Map scripts** (`SidesList`/`PlayerScriptsList`): the decoding is done (`MapData.PlayerScripts`,
+    `docs/MAP-SCRIPTS.md`); what remains open is the execution – see Part A, item 2, that is part of the main brief of this phase, not
     optional.
-12. **(Neu, aus Phase 7/8) `SharedReadyFrame`-Determinismus-Fehler beheben oder bewusst umschiffen** (siehe oben, „Ehrlicher Status“). —
-    **Erledigt** (30. September 2026, außerhalb des eigentlichen Phase-9-Hauptauftrags, als eigenständiger Fix nachgezogen): Der
-    Bereitschafts-Tick wird jetzt deterministisch bei `OnSpawn` (Objekte, die die Kraft bereits mitbringen) bzw. `OnSpecialPowerCreation`
-    (gewährte Kräfte) gesetzt, `IsReady()` liest ihn nur noch. Live-gegen-Replay-Hashvergleichstest ergänzt
-    (`Tests.Skirmish.cs` → `SkirmishLiveSessionMatchesItsOwnReplay`, schlägt auf dem unbehobenen Code nachweislich fehl). Retail-
-    Referenzmatch- und Stresstest-Hashes unverändert (berühren die Stelle nicht); ein Skirmish-KI-Lauf, der sie berührt, ändert sich wie
-    erwartet. Volle Diagnose, Messung und Commit-Referenzen in `docs/SIMULATION-CORE.md` §12/§12a und `CLAUDE.md`. **Nicht** in diesem
-    Durchgang gemacht: die 16-Karten-KI-Übersicht in `docs/SIMULATION-CORE.md` §19 neu vermessen (eigene Balance-Erhebung, nicht
-    Bestandteil der Determinismuskorrektur) – wer ihre Zahlen für eine andere Entscheidung braucht, muss sie neu laufen lassen. Der
-    übrige Hauptauftrag dieser Phase (Teil A: Skirmish-Abschluss, Skriptengine, Kampagne, Savegames; Teil B, Punkte 9–11) ist von diesem
-    Fix unberührt und steht weiterhin aus.
+12. **(New, from Phase 7/8) fix the `SharedReadyFrame` determinism error or deliberately steer around it** (see above, "Honest status"). —
+    **Done** (30 September 2026, outside the actual Phase 9 main brief, added afterwards as a standalone fix): the
+    ready tick is now set deterministically at `OnSpawn` (objects that already bring the power along) or `OnSpecialPowerCreation`
+    (granted powers), `IsReady()` only reads it. Live-against-replay hash comparison test added
+    (`Tests.Skirmish.cs` → `SkirmishLiveSessionMatchesItsOwnReplay`, demonstrably fails on the unfixed code). Retail
+    reference match and stress test hashes unchanged (they do not touch the place); a skirmish AI run that touches it changes as
+    expected. Full diagnosis, measurement and commit references in `docs/SIMULATION-CORE.md` §12/§12a and `CLAUDE.md`. **Not** done in this
+    pass: re-measuring the 16-map AI overview in `docs/SIMULATION-CORE.md` §19 (a balance survey of its own, not
+    part of the determinism correction) – whoever needs its numbers for another decision must run it again. The
+    remaining main brief of this phase (Part A: finishing skirmish, script engine, campaign, savegames; Part B, items 9–11) is untouched by this
+    fix and is still outstanding.
 
-## Nicht verhandelbare Regeln (unverändert, siehe `CLAUDE.md`)
+## Non-negotiable rules (unchanged, see `CLAUDE.md`)
 
-- Unbekannte Schlüssel/Module/Enums/Referenzen fallen nie still auf Standardwerte zurück; jeder Fall ist explizit, gezählt,
-  dokumentiert und gegen `baselines/compatibility.json` abgesichert.
-- Determinismus: kanonische Sortierung, keine Wandzeit, keine `Dictionary`-/`HashSet`-Reihenfolgeabhängigkeit; zwei unabhängige
-  Läufe byteidentisch. `CnCNew.Simulation` hängt nur von `CnCNew.Data` ab (`SourceRules`-Test); jedes `IUpdateModule` speichert `nextWake`.
-  Eine neue Skript-VM (Teil A, Punkt 2) unterliegt denselben Regeln – keine Ausnahme für „nur Kampagnenlogik“.
-- `TreatWarningsAsErrors=true`; die 21 erklärten Warnungen (Stand Phase 8, siehe `CLAUDE.md`) sind der Referenzwert bei einem
-  **sauberen** Build; jede andere neue Warnung ist ein Fehler, bis sie erklärt ist.
-- Bestandszahlen immer neu messen, nie aus Docs oder diesem Handoff übernehmen.
-- Fremder Code darf gelesen, nicht unbesehen kopiert werden; jeder portierte Algorithmus braucht einen Quellverweis (Datei, Funktion).
-  Das gilt besonders für Punkt 2 (Skript-VM): `references/.../GameLogic/ScriptEngine/ScriptActions.cpp` (7.568 Zeilen) und
-  `ScriptConditions.cpp` (2.992 Zeilen) sind die einzige verlässliche Referenz für die Semantik jeder Aktion/Bedingung, die die VM
-  implementiert – jede einzeln zitieren, nicht pauschal.
-- Neue Befehle erhöhen `CommandTypes.Version` (aktuell 9) und bekommen eigene Codes; bestehende ändern sich nie. Änderungen am
-  Snapshot- oder Replay-Format erhöhen deren Version (aktuell Snapshot 7, Replay 7); ältere werden mit klarer Meldung abgewiesen. Ein
-  neues Savegameformat bekommt eine eigene Versionsnummer nach demselben Muster.
-- Nur lokal arbeiten, kein Remote, nichts pushen; mehrere fachlich geschlossene Commits; Working Tree am Ende sauber;
-  am Ende dieses Durchlaufs `docs/handoffs/HANDOFF-PHASE10.md` (oder einen neuen Fortsetzungsauftrag) schreiben und committen.
-- Praktisch: Große Editskripte mit dem Write-Werkzeug in eine Datei im Scratchpad legen statt komplexer Heredocs; ein laufender
-  SimTool-Prozess sperrt die Release-DLL. `tools/CnCNew.UiRenderTool` ist absichtlich nicht in `CnCNew.slnx` (zwei Stride-`Game`-Exe-
-  Projekte in einer Solution lösen zusätzliche, aber harmlose Stride-Asset-Compiler-Konsolennotizen aus, siehe `CLAUDE.md`) – bei neuen
-  eigenständigen Stride-Tools genauso verfahren, oder die Konsequenz (höhere erklärte Warnungszahl) bewusst in Kauf nehmen und dokumentieren.
+- Unknown keys/modules/enums/references never fall back silently to defaults; every case is explicit, counted,
+  documented and secured against `baselines/compatibility.json`.
+- Determinism: canonical sorting, no wall-clock time, no dependency on `Dictionary`/`HashSet` order; two independent
+  runs byte-identical. `CnCNew.Simulation` depends only on `CnCNew.Data` (`SourceRules` test); every `IUpdateModule` stores `nextWake`.
+  A new script VM (Part A, item 2) is subject to the same rules – no exception for "only campaign logic".
+- `TreatWarningsAsErrors=true`; the 21 explained warnings (as of Phase 8, see `CLAUDE.md`) are the reference value for a
+  **clean** build; every other new warning is an error until it is explained.
+- Always re-measure inventory numbers, never adopt them from docs or this handoff.
+- Third-party code may be read, not copied unexamined; every ported algorithm needs a source reference (file, function).
+  That applies especially to item 2 (script VM): `references/.../GameLogic/ScriptEngine/ScriptActions.cpp` (7,568 lines) and
+  `ScriptConditions.cpp` (2,992 lines) are the only reliable reference for the semantics of every action/condition that the VM
+  implements – cite each one individually, not wholesale.
+- New commands increase `CommandTypes.Version` (currently 9) and get codes of their own; existing ones never change. Changes to the
+  snapshot or replay format increase its version (currently snapshot 7, replay 7); older ones are rejected with a clear message. A
+  new savegame format gets a version number of its own following the same pattern.
+- Work only locally, no remote, push nothing; several commits each closed in subject matter; working tree clean at the end;
+  at the end of this pass write and commit `docs/handoffs/HANDOFF-PHASE10.md` (or a new continuation brief).
+- In practice: put large edit scripts into a file in the scratchpad with the Write tool instead of complex heredocs; a running
+  SimTool process locks the Release DLL. `tools/CnCNew.UiRenderTool` is intentionally not in `CnCNew.slnx` (two Stride `Game` exe
+  projects in one solution trigger additional but harmless Stride asset compiler console notes, see `CLAUDE.md`) – proceed the same way with new
+  standalone Stride tools, or deliberately accept the consequence (higher explained warning count) and document it.
 
-## Abschlussbericht
+## Final report
 
-Zahlen (mit Commit-Hashes), implementierte Funktionen/Module, Determinismus-, Test-, Stress- und Replayergebnisse (inklusive: wurde der
-`SharedReadyFrame`-Fehler behoben oder bewusst umschifft?), Performance- und Golden-Image-Messungen, Modulabdeckung und
-Instanziierungsquote vorher/nachher mit Blockerliste, bekannte Grenzen und technische Schulden, `git status` und Bestätigung
-„kein Remote, nichts gepusht“.
+Numbers (with commit hashes), implemented functions/modules, determinism, test, stress and replay results (including: was the
+`SharedReadyFrame` error fixed or deliberately steered around?), performance and golden image measurements, module coverage and
+instantiation rate before/after with blocker list, known limits and technical debt, `git status` and the confirmation
+"no remote, nothing pushed".
