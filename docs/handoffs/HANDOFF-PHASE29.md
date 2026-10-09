@@ -1,45 +1,45 @@
-N+1-Handoff (Phase 29): Mehrspieler im Client – Shell, Lobby, Anzeigen im Spiel, Latenzwahrnehmung, Abnahme mit Menschen
+N+1 handoff (Phase 29): Multiplayer in the client – shell, lobby, in-game indicators, latency perception, acceptance with humans
 
-Du arbeitest autonom an diesem Repository (`<repo>` = Wurzel des Arbeitsverzeichnisses). Lies zuerst `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/GAME-SHELL.md`, `docs/GAME-HUD.md`, `docs/PRESENTATION-INPUT.md`, `docs/PRESENTATION-OBJECTS.md`, `docs/NETWORK-PROTOCOL.md`, `docs/DEDICATED-SERVER.md` und den Abschlussbericht der Phase 28.
-Voraussetzung: Phase 28 ist abgeschlossen. Diese Phase ist die erste des Programms, deren Abnahme **ohne Menschen nicht möglich** ist.
+You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/GAME-SHELL.md`, `docs/GAME-HUD.md`, `docs/PRESENTATION-INPUT.md`, `docs/PRESENTATION-OBJECTS.md`, `docs/NETWORK-PROTOCOL.md`, `docs/DEDICATED-SERVER.md` and the final report of Phase 28.
+Prerequisite: Phase 28 is completed. This phase is the first of the programme whose acceptance is **not possible without humans**.
 
-## Ehrlicher Status (Ausgangslage)
+## Honest status (starting point)
 
-Alles Bisherige ist headless belegt. Ein Mensch kann ein Netzwerkmatch noch nicht starten: der Knopf „Mehrspieler“ im Hauptmenü ist sichtbar, aber deaktiviert (`docs/GAME-SHELL.md`). Das Gefechtssetup zeigte am 5. Oktober 2026 Team- und Farbauswahl, gab sie aber nicht weiter (`MatchSetup` kannte nur Karte, eigene Fraktion und Gegnerliste); die Phasen 24 und 25 haben die Match-Beschreibung um Teams, Farben und Startpositionen erweitert und das Setup zum lokalen Raum gemacht – zuerst prüfen, was davon in der Oberfläche wirklich ankommt. Im Spiel gibt es keine Anzeige für Verbindungszustand, wartende Spieler, ausgeschiedene Spieler oder einen Desync.
+Everything so far is verified headless. A human cannot start a network match yet: the "Multiplayer" button in the main menu is visible but disabled (`docs/GAME-SHELL.md`). On 5 October 2026 the skirmish setup showed team and colour selection but did not pass them on (`MatchSetup` knew only map, own faction and opponent list); Phases 24 and 25 extended the match description by teams, colours and start positions and turned the setup into the local room – first check what of this really arrives in the user interface. In the game there is no indicator for connection state, waiting players, dropped players or a desync.
 
-Vorhandene Original-Layouts im importierten Bestand (`Window/Menus/`, nur lesen, nichts ins Repo): `LanLobbyMenu.wnd`, `LanGameOptionsMenu.wnd`, `LanMapSelectMenu.wnd`, `NetworkDirectConnect.wnd`, `DisconnectScreen.wnd`, `ObserverQuit.wnd` sowie die GameSpy-/WOL-Layouts (nicht verwenden: kein GameSpy im Scope).
+Existing original layouts in the imported content (`Window/Menus/`, read only, nothing into the repo): `LanLobbyMenu.wnd`, `LanGameOptionsMenu.wnd`, `LanMapSelectMenu.wnd`, `NetworkDirectConnect.wnd`, `DisconnectScreen.wnd`, `ObserverQuit.wnd` as well as the GameSpy/WOL layouts (do not use: no GameSpy in scope).
 
-Zur Latenz: der Befehl eines Spielers wird erst im Tick ausgeführt, den der Server zuteilt. Die Verzögerung ist in Phase 26 gemessen. Wie sie sich *anfühlt*, hängt davon ab, was der Client sofort zeigt – und das ist bisher an die Ausführung gekoppelt (Bestätigungston, Zielmarke und Ablehnung kamen mit der synchronen Antwort der Simulation; Phase 24 hat den Weg zweistufig gemacht).
+On latency: a player's command is executed only in the tick that the server assigns. The delay is measured in Phase 26. How it *feels* depends on what the client shows immediately – and so far that is coupled to the execution (acknowledgement sound, target marker and rejection came with the synchronous answer of the simulation; Phase 24 made the path two-stage).
 
-## Auftrag (in dieser Reihenfolge)
+## Brief (in this order)
 
-1. **Ausgangszustand reproduzieren**, Referenzwerte neu messen; mit dem Menschen klären, wann er für die Abnahme verfügbar ist und ob ein zweiter Rechner bereitsteht.
+1. **Reproduce the starting state**, re-measure the reference values; clarify with the human when he is available for the acceptance and whether a second machine is at hand.
 2. **Shell.**
-   - Hauptmenü → Mehrspieler → Direktverbindung (`NetworkDirectConnect.wnd`: Adresse, Port, Name, Passwort; Fingerabdruck des Servers beim ersten Kontakt) → Raumliste des Servers → Raum (`LanLobbyMenu.wnd`/`LanGameOptionsMenu.wnd`: Slots Mensch/KI/offen/geschlossen/Zuschauer, Fraktion, Team, Farbe, Startposition auf der Kartenvorschau, Karte, Startgeld, Bereit, Start durch den Raumersteller, Chat) → gemeinsamer Ladeschirm mit Fortschritt aller Spieler → Match → Ergebnis für alle Spieler → zurück in den Raum.
-   - „Spiel hosten“ startet den eingebetteten Server im Client (derselbe Code wie der Dedicated Server) und öffnet denselben Raum.
-   - Das lokale Gefecht bleibt derselbe Raum mit einem Menschen; es gibt keinen zweiten Setup-Bildschirm mit eigener Logik.
-   - Jede Abweichung beim Beitritt (Version, Fingerabdruck, voll, Passwort) wird dem Menschen mit Ursache gezeigt; jeder Fall ist gezählt und getestet. Fehlende Zeichenketten fallen nie still auf einen Standard zurück.
-   - Golden-Hashes der neuen Screens in allen sechs Auflösungen wie bei den bestehenden (`docs/GAME-SHELL.md`).
-3. **Anzeigen im Spiel.** Verbindungsqualität (Laufzeit, Puffer, Aufholen), „warte auf Spieler“ mit Namen und Restfrist, Spieler ausgeschieden/wieder da, Pause mit Anforderer, Desync-Bildschirm mit Hinweis auf das Diagnosepaket (`DisconnectScreen.wnd`), Chat an alle/Verbündete, Zuschaueransicht (kein eigener Spieler: Nebel wählbar je Spieler oder aufgedeckt, keine Befehle, `ObserverQuit.wnd`). `--net-stats` schreibt dieselben Werte in die Konsole.
-4. **Latenzwahrnehmung.**
-   - **Sofortige lokale Rückmeldung:** Auswahl, Mauszeiger, Zielmarke, Wegpunktlinie, Bestätigungsstimme und Platzier-Vorschau reagieren im Bild des Klicks. Die lokale Vorprüfung (Phase 24) entscheidet, ob sofort „geht nicht“ kommt; die endgültige Antwort der Simulation kommt mit der Ausführung und korrigiert nur im seltenen Abweichungsfall (gezählt).
-   - **Mehr Interpolation:** `FrameProjector` interpoliert heute nur Position und Drehung des Rumpfes. Turmwinkel, Rohrneigung, Baufortschritt, Lebensbalken und Federung zwischen zwei Ticks interpolieren, damit die Darstellung bei jeder Bildrate gleichmäßig ist.
-   - **Darstellungsverzug:** die Interpolation zeigt den Zustand bis zu einem Tick verspätet. Messen, ob eine Extrapolation eigener, sich bewegender Einheiten (ein Tick voraus, mit Rücknahme bei Abweichung) spürbar hilft; nur einbauen, wenn die Messung und der Mensch es bestätigen, und abschaltbar halten.
-   - **Messung:** Zeit von Klick bis Ausführung und von Klick bis erste sichtbare Reaktion als Histogramm im Client (`--net-stats`), für 0/20/40/80 ms Laufzeit über den Proxy, vor und nach diesem Punkt.
-5. **Abnahme mit Menschen** (Checkliste in `docs/MULTIPLAYER-FINDINGS.md`, Form wie `docs/DEMO-FINDINGS.md`: je Zeile „ging / ging nicht / ging mit Mängeln“ und Ursache):
-   - ein Mensch gegen KI über den eingebetteten Server (das neue lokale Gefecht) – fühlt es sich an wie vorher oder besser?
-   - zwei Menschen im LAN über „Spiel hosten“;
-   - zwei bis acht Menschen über einen Dedicated Server im Internet, mit KI-Slots gemischt;
-   - Trennen und Wiedereinstieg, Zuschauer, Pause, ein absichtlich langsamer Rechner.
-   Jeder Befund wird reproduziert, auf seine Ursache zurückgeführt und behoben oder mit Grund benannt.
-6. **Doku:** `docs/GAME-SHELL.md`, `docs/GAME-HUD.md`, `docs/PRESENTATION-INPUT.md`, `docs/PRESENTATION-OBJECTS.md`, `docs/MULTIPLAYER-FINDINGS.md`, `docs/MULTIPLAYER-PLAN.md` (Abschluss des Programms: was gemessen ist, was offen bleibt), README, ARCHITECTURE, ROADMAP, IMPLEMENTATION-PLAN, `CLAUDE.md`.
+   - Main menu → Multiplayer → direct connection (`NetworkDirectConnect.wnd`: address, port, name, password; fingerprint of the server on first contact) → room list of the server → room (`LanLobbyMenu.wnd`/`LanGameOptionsMenu.wnd`: slots human/AI/open/closed/spectator, faction, team, colour, start position on the map preview, map, starting money, ready, start by the room creator, chat) → shared loading screen with the progress of all players → match → result for all players → back into the room.
+   - "Host game" starts the embedded server in the client (the same code as the dedicated server) and opens the same room.
+   - The local skirmish remains the same room with one human; there is no second setup screen with its own logic.
+   - Every deviation when joining (version, fingerprint, full, password) is shown to the human with its cause; every case is counted and tested. Missing strings never fall back silently to a default.
+   - Golden hashes of the new screens in all six resolutions as for the existing ones (`docs/GAME-SHELL.md`).
+3. **In-game indicators.** Connection quality (round-trip time, buffer, catching up), "waiting for player" with names and remaining deadline, player dropped/back again, pause with requester, desync screen with a pointer to the diagnostics package (`DisconnectScreen.wnd`), chat to all/allies, spectator view (no own player: fog selectable per player or revealed, no commands, `ObserverQuit.wnd`). `--net-stats` writes the same values to the console.
+4. **Latency perception.**
+   - **Immediate local feedback:** selection, mouse cursor, target marker, waypoint line, acknowledgement voice and placement preview react in the frame of the click. The local pre-check (Phase 24) decides whether "cannot do that" comes immediately; the final answer of the simulation comes with the execution and corrects only in the rare case of a deviation (counted).
+   - **More interpolation:** today `FrameProjector` interpolates only position and rotation of the hull. Interpolate turret angle, barrel pitch, construction progress, health bar and suspension between two ticks so that the display is smooth at every frame rate.
+   - **Display lag:** the interpolation shows the state up to one tick late. Measure whether an extrapolation of own, moving units (one tick ahead, with rollback on deviation) helps noticeably; build it in only if the measurement and the human confirm it, and keep it switchable.
+   - **Measurement:** time from click to execution and from click to first visible reaction as a histogram in the client (`--net-stats`), for 0/20/40/80 ms round-trip time via the proxy, before and after this item.
+5. **Acceptance with humans** (checklist in `docs/MULTIPLAYER-FINDINGS.md`, form as in `docs/DEMO-FINDINGS.md`: per line "worked / did not work / worked with defects" and cause):
+   - one human against AI via the embedded server (the new local skirmish) – does it feel like before or better?
+   - two humans in the LAN via "Host game";
+   - two to eight humans via a dedicated server on the internet, mixed with AI slots;
+   - disconnect and rejoin, spectators, pause, a deliberately slow machine.
+   Every finding is reproduced, traced back to its cause and fixed or named with a reason.
+6. **Docs:** `docs/GAME-SHELL.md`, `docs/GAME-HUD.md`, `docs/PRESENTATION-INPUT.md`, `docs/PRESENTATION-OBJECTS.md`, `docs/MULTIPLAYER-FINDINGS.md`, `docs/MULTIPLAYER-PLAN.md` (completion of the programme: what is measured, what remains open), README, ARCHITECTURE, ROADMAP, IMPLEMENTATION-PLAN, `CLAUDE.md`.
 
-## Engstellen und Showstopper dieser Phase
+## Bottlenecks and showstoppers of this phase
 
-- **Präsentation liest die laufende Welt.** HUD und Eingabe fragen die Simulation direkt ab (`SimulationQueries`, `CommandModeController`). Sofortige Rückmeldung darf nie einen Zustand zeigen oder verändern, den nur die Ausführung kennen kann; sie ist reine Darstellung und beeinflusst keinen Hash (bei jeder Messung belegen).
-- **Stehende Befehle** (`StandingOrders`, Wegpunktfolgen) werden von der Präsentation Tick für Tick eingereicht; mit Verzögerung dürfen sie weder doppelt noch zu spät kommen (Test mit 6 Ticks Verzögerung).
-- **Rauchtests beweisen keine Bedienbarkeit.** Kein Punkt dieser Phase gilt als erledigt, weil ein `--smoke-test` grün ist.
+- **Presentation reads the running world.** HUD and input query the simulation directly (`SimulationQueries`, `CommandModeController`). Immediate feedback must never show or change a state that only the execution can know; it is pure display and influences no hash (prove it with every measurement).
+- **Standing orders** (`StandingOrders`, waypoint sequences) are submitted by the presentation tick by tick; with delay they must come neither twice nor too late (test with 6 ticks of delay).
+- **Smoke tests do not prove usability.** No item of this phase counts as done because a `--smoke-test` is green.
 
-## Abnahme
+## Acceptance
 
-Menschen haben die Zeilen der Checkliste abgearbeitet; die Befunde stehen in `docs/MULTIPLAYER-FINDINGS.md`; die Latenzhistogramme vor und nach Punkt 4 sind gemessen. Der Abschlussbericht nennt ausdrücklich, was kein Mensch gesehen hat. Am Ende `docs/handoffs/HANDOFF-PHASE30.md` prüfen und die „Ausgangslage“ aktualisieren.
+Humans have worked through the lines of the checklist; the findings are in `docs/MULTIPLAYER-FINDINGS.md`; the latency histograms before and after item 4 are measured. The final report names explicitly what no human has seen. At the end check `docs/handoffs/HANDOFF-PHASE30.md` and update the "starting point".

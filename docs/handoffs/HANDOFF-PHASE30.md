@@ -1,35 +1,35 @@
-N+1-Handoff (Phase 30): Patch-Integration, Qualität und auslieferbarer Abschluss (verschoben; ursprünglich der Schritt nach Phase 17)
+N+1 handoff (Phase 30): Patch integration, quality and shippable completion (postponed; originally the step after Phase 17)
 
-Du arbeitest autonom an diesem Repository (`<repo>` = Wurzel des Arbeitsverzeichnisses). Lies zuerst `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§11 „Patch-Integration, Qualität und auslieferbarer Abschluss“ samt „Reihenfolge und Änderungsregel“), `docs/MULTIPLAYER-PLAN.md`, `docs/MULTIPLAYER-FINDINGS.md`, `docs/DEMO-FINDINGS.md` und den Abschlussbericht der Phase 29.
+You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§11 "Patch integration, quality and shippable completion" together with "Order and change rule"), `docs/MULTIPLAYER-PLAN.md`, `docs/MULTIPLAYER-FINDINGS.md`, `docs/DEMO-FINDINGS.md` and the final report of Phase 29.
 
-## Warum dieser Auftrag hier steht
+## Why this brief is placed here
 
-Bis zum 5. Oktober 2026 war dies der Schritt unmittelbar nach Phase 17 (`IMPLEMENTATION-PLAN.md`, damals §10; `ROADMAP.md`, damals §5). Mit der Scope-Änderung vom 5. Oktober 2026 (Mehrspieler über Dedicated Server, 60 Hz, parametrisierte Tickrate) liegt das Programm der Phasen 18–29 davor: Tickrate, Festkomma-Auflösung und Formate ändern jeden Referenzwert und machen Speicherstände und Replays unlesbar. Ein Paket, das vor diesen Änderungen ausgeliefert würde, müsste danach gebrochen werden. Deshalb kommt der Abschluss zuletzt und umfasst jetzt auch den Server.
+Until 5 October 2026 this was the step immediately after Phase 17 (`IMPLEMENTATION-PLAN.md`, then §10; `ROADMAP.md`, then §5). With the scope change of 5 October 2026 (multiplayer via dedicated server, 60 Hz, parameterised tick rate) the programme of Phases 18–29 comes before it: tick rate, fixed-point resolution and formats change every reference value and make savegames and replays unreadable. A package shipped before these changes would have to be broken afterwards. That is why the completion comes last and now also covers the server.
 
-## Ehrlicher Status (Ausgangslage – beim Start dieser Phase neu erheben)
+## Honest status (starting point – re-measure when this phase starts)
 
-Dieser Abschnitt ist ein Platzhalter mit dem Wissen vom 5. Oktober 2026 und **wird von Phase 29 mit dem gemessenen Stand überschrieben**. Bekannt ist heute:
+This section is a placeholder with the knowledge of 5 October 2026 and **will be overwritten by Phase 29 with the measured state**. What is known today:
 
-- Aus Phase 15–17 ist vieles gebaut, aber nicht von einem Menschen abgenommen (Sichtprüfung der Welt, Ton, Mauszeiger, Texte, Durchklicken der Shell, Spielbarkeit der Missionen; Nur-Befehle-Agent 1 von 24). Was davon beim Start dieser Phase noch offen ist, gehört an den Anfang dieses Auftrags – ein auslieferbarer Abschluss setzt die Abnahme voraus.
-- Kein Community-Patch ist integriert; `references/` enthält GeneralsGameCode und GeneralsGamePatch nur zum Lesen.
-- Es gibt kein Installationspaket, kein Crash-Reporting, keine Lizenz-/Attributionsübersicht.
+- Much from Phases 15–17 is built but not accepted by a human (visual check of the world, sound, mouse cursor, texts, clicking through the shell, playability of the missions; commands-only agent 1 of 24). Whatever of this is still open when this phase starts belongs at the beginning of this brief – a shippable completion presupposes the acceptance.
+- No community patch is integrated; `references/` contains GeneralsGameCode and GeneralsGamePatch for reading only.
+- There is no installation package, no crash reporting, no licence/attribution overview.
 
-## Auftrag (in dieser Reihenfolge)
+## Brief (in this order)
 
-1. **Ausgangszustand reproduzieren** und diesen Abschnitt „Ausgangslage“ mit gemessenen Zahlen neu schreiben: Build (0 Warnungen), alle Testprogramme, alle Audits, die Referenzwerte bei 60 Hz, der Stand der Abnahmen durch Menschen (Einzelspieler *und* Mehrspieler).
-2. **Offene Abnahmen aus den Phasen 15–17 und 29 schließen** (mit dem Menschen): jede nicht abgehakte Zeile in `docs/CLIENT-OBJECTS.md`, `docs/DEMO-FINDINGS.md`, `docs/MULTIPLAYER-FINDINGS.md` wird abgenommen, behoben oder mit Grund als bekannte Grenze benannt.
-   Dazu gehört der „Rest der Phase 17“ am Ende von `docs/handoffs/HANDOFF-PHASE17.md` (Agent, der Gefechte gewinnt, KI-Wirtschaft und -Schwierigkeit, Durchklicken), soweit er nicht vor Phase 18 erledigt wurde.
-3. **GeneralsGameCode-Fixes** nach Subsystem katalogisieren (Simulation, KI, Pfadsuche, Skripte, Darstellung, UI); jeden übernommenen Fix verstehen, neu schreiben und mit Regressionstest und Quellverweis (Datei, Funktion) belegen. Jeder Fix, der die Simulation ändert, ist eine vermessene Hash-Änderung mit neuen Referenzwerten und – weil alle Mitspieler dieselbe Simulation brauchen – einer neuen Simulationsversion im Handshake.
-4. **GeneralsGamePatch als eigene Overlay-Schicht** importieren (über `CnCNew.Import`, eigener Definitions-Fingerabdruck); Balanceänderungen getrennt schaltbar. Im Mehrspieler ist die gewählte Schicht Teil der Match-Beschreibung: ein Raum nennt Original oder Patch, und nur Clients mit demselben Fingerabdruck treten bei.
-5. **Diagnose:** Crash-Bericht mit Diagnosepaket (Client und Server), strukturierte Protokolle, Profiler-Schalter, Support-Bündel. Nichts davon enthält Originaldaten oder verlässt den Rechner ohne ausdrückliche Handlung des Menschen.
-6. **Abhängigkeiten und Recht:** `scripts/audit-vulnerable.ps1` für alle Projekte einschließlich Server, Lizenzen und Attributionen dokumentieren, Trennung von Originaldaten, generierten Artefakten und eigenem Code im Paket belegen.
-7. **Reproduzierbarer Abschluss:** Clean-Room-Build auf frischem Rechner, frischer Assetimport, vollständige Testmatrix (einschließlich der Raten-Äquivalenz-Suite aus Phase 23 und der Netzmatrix aus Phase 26), Langzeitläufe, Paket für den Client (Windows) und den Dedicated Server (Windows, Linux) – automatisiert und dokumentiert.
-8. **Dokumentation für Menschen:** Installation, Import der eigenen Originalinstallation, Betrieb eines Servers, Fehlersuche (einschließlich „mein Match ist auseinandergelaufen“), Versions- und Kompatibilitätsregel für Speicherstände, Replays und das Netzprotokoll ab der ersten Veröffentlichung.
+1. **Reproduce the starting state** and rewrite this "starting point" section with measured numbers: build (0 warnings), all test programs, all audits, the reference values at 60 Hz, the state of the acceptances by humans (single player *and* multiplayer).
+2. **Close the open acceptances from Phases 15–17 and 29** (with the human): every unchecked line in `docs/CLIENT-OBJECTS.md`, `docs/DEMO-FINDINGS.md`, `docs/MULTIPLAYER-FINDINGS.md` is accepted, fixed or named as a known limit with a reason.
+   This includes the "Rest of Phase 17" at the end of `docs/handoffs/HANDOFF-PHASE17.md` (agent that wins skirmishes, AI economy and difficulty, clicking through), as far as it was not done before Phase 18.
+3. **Catalogue the GeneralsGameCode fixes** by subsystem (simulation, AI, pathfinding, scripts, rendering, UI); understand every adopted fix, rewrite it and back it with a regression test and a source reference (file, function). Every fix that changes the simulation is a measured hash change with new reference values and – because all players need the same simulation – a new simulation version in the handshake.
+4. **Import GeneralsGamePatch as its own overlay layer** (via `CnCNew.Import`, its own definition fingerprint); balance changes separately switchable. In multiplayer the chosen layer is part of the match description: a room names original or patch, and only clients with the same fingerprint join.
+5. **Diagnostics:** crash report with a diagnostics package (client and server), structured logs, profiler switches, support bundle. None of it contains original data or leaves the machine without an explicit action of the human.
+6. **Dependencies and legal matters:** `scripts/audit-vulnerable.ps1` for all projects including the server, document licences and attributions, prove the separation of original data, generated artefacts and own code in the package.
+7. **Reproducible completion:** clean-room build on a fresh machine, fresh asset import, complete test matrix (including the rate-equivalence suite from Phase 23 and the network matrix from Phase 26), long-duration runs, package for the client (Windows) and the dedicated server (Windows, Linux) – automated and documented.
+8. **Documentation for humans:** installation, import of one's own original installation, operating a server, troubleshooting (including "my match has diverged"), version and compatibility rule for savegames, replays and the network protocol from the first release on.
 
-## Nicht verhandelbare Regeln
+## Non-negotiable rules
 
-Unverändert `CLAUDE.md` und `docs/MULTIPLAYER-PLAN.md` §6. Zusätzlich: ab der ersten Veröffentlichung ist jede Änderung an Tickrate, Festkomma-Format, Snapshot-, Replay- oder Protokollformat ein Bruch für Spieler und braucht eine eigene, begründete Entscheidung des Projektinhabers.
+Unchanged `CLAUDE.md` and `docs/MULTIPLAYER-PLAN.md` §6. In addition: from the first release on, every change to tick rate, fixed-point format, snapshot, replay or protocol format is a break for players and needs its own, justified decision of the project owner.
 
-## Abnahme
+## Acceptance
 
-Ein frischer Rechner überführt aus dokumentierten Voraussetzungen Quellcode und lokale Originalinstallation reproduzierbar in ein startbares Client- und Serverpaket; die gesamte Testmatrix ist grün; keine ungeklärten hochprioren Defekte sind offen; Einzelspieler (Skirmish, Kampagne) und Mehrspieler (Skirmish über Dedicated Server, bis acht Spieler mit KI-Slots) sind von Menschen end-to-end abgenommen. Der Abschlussbericht nennt Zahlen mit Commit-Hashes und ausdrücklich, was nicht belegt ist.
+A fresh machine turns source code and a local original installation, from documented prerequisites, reproducibly into a startable client and server package; the whole test matrix is green; no unresolved high-priority defects are open; single player (skirmish, campaign) and multiplayer (skirmish via dedicated server, up to eight players with AI slots) are accepted end to end by humans. The final report names numbers with commit hashes and explicitly what is not verified.
