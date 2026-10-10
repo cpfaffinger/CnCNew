@@ -835,7 +835,10 @@ static partial class Tests
         Check.That(!ModuleOf<RiderChangeContain>(bike).IsScuttled && !bike.HasStatus(ObjectStatusBits.Index("UNSELECTABLE")), "A replaced rider does not scuttle the bike.");
 
         // The last rider gets off: the bike is scuttled and, 18 ticks later, dies.
+        // The door is busy for ExitDelay after the replaced rider left (TransportContain::onRemoving), so the worker gets off a few frames after the order.
         world.EvacuateContainer(bike);
+        Check.That(worker.ContainedBy == bike.Id, "The door is still busy with the rider that was replaced.");
+        for (var tick = 0; tick < world.Frames(30) && worker.ContainedBy.IsValid; tick++) world.Step();
         world.Step();
         Check.That(ModuleOf<RiderChangeContain>(bike).IsScuttled && bike.HasStatus(ObjectStatusBits.Index("UNSELECTABLE")) && bike.HasStatus(ObjectStatusBits.Index("IMMOBILE")), "A deserted bike is scuttled: unselectable and immobile.");
         Check.That(!world.TryEnterContainer(worker, bike), "Nobody boards a scuttled bike.");

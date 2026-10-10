@@ -215,10 +215,10 @@ internal sealed class AcceptanceAudit
                 Console.WriteLine($"  {name}: {tag} stands {apart:F1} from the Humvee's centre (radii {_radius[tag]:F1} and {_radius["humvee"]:F1}), speed {row.Speed:F1}");
                 if (apart > 90f) failures.Add($"{name}: {tag} stands {apart:F1} from the Humvee");
             }
-            // Known finding (docs/ACCEPTANCE.md, "Befunde fuer die Simulation" S1): evacuated riders are put on the transport's centre and stay there.
+            // Finding S1 of docs/ACCEPTANCE.md §6 (fixed, F-03): riders leave through the door one by one and walk to a place of their own (OpenContain::exitObjectViaDoor).
             var stacked = new List<string>();
             CheckApart(rangers.Append("humvee"), frame, name, stacked);
-            if (stacked.Count > 0) failures.Add($"KNOWN S1 {name}: {stacked.Count} pairs of Rangers and Humvee stand inside each other after the exit (first: {stacked[0]})");
+            if (stacked.Count > 0) failures.Add($"{name}: {stacked.Count} pairs of Rangers and Humvee stand inside each other after the exit (first: {stacked[0]})");
         }
         Boarding("first boarding", AcceptanceScenes.BoardFirst, AcceptanceScenes.BoardDrive);
         Leaving("first exit", AcceptanceScenes.BoardOut);

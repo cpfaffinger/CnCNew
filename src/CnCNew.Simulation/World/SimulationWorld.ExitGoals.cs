@@ -208,4 +208,43 @@ public sealed partial class SimulationWorld
         }
         return true;
     }
+
+    /// <summary><c>MAX_CELLS_TO_TRY</c> of <c>Pathfinder::adjustToPossibleDestination</c> and <c>adjustDestination</c> (AIPathfind.cpp).</summary>
+    private const int MaxCellsToTry = 400;
+
+    /// <inheritdoc cref="Modules.IWorldServices.FindPossibleDestination"/>
+    public bool FindPossibleDestination(Entity mover, ref Fixed x, ref Fixed y)
+    {
+        if (GoalIsFree(mover, x, y)) return true;
+        var i = TerrainMap.CellOf(x);
+        var j = TerrainMap.CellOf(y);
+        var limit = MaxCellsToTry;
+        var delta = 1;
+        while (limit > 0)
+        {
+            // One round of the reference's spiral: delta cells in +x, delta in +y, then delta + 1 in -x and in -y.
+            for (var leg = 0; leg < 4; leg++)
+            {
+                for (var count = delta; count > 0; count--)
+                {
+                    switch (leg)
+                    {
+                        case 0: i++; break;
+                        case 1: j++; break;
+                        case 2: i--; break;
+                        default: j--; break;
+                    }
+                    limit--;
+                    var cellX = TerrainMap.CellCenter(i);
+                    var cellY = TerrainMap.CellCenter(j);
+                    if (!GoalIsFree(mover, cellX, cellY)) continue;
+                    x = cellX;
+                    y = cellY;
+                    return true;
+                }
+                if (leg % 2 == 1) delta++;
+            }
+        }
+        return false;
+    }
 }

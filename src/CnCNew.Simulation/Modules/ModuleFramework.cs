@@ -295,6 +295,13 @@ public interface IWorldServices
     bool TryFreeGoalSpot(Entity mover, out Fixed x, out Fixed y);
 
     /// <summary>
+    /// <c>Pathfinder::adjustToPossibleDestination</c> (AIPathfind.cpp): the point itself when <paramref name="mover"/> could stand there, else the centre of the first free cell on
+    /// the reference's square spiral around it (at most 400 cells); false, with the point unchanged, when none is free. "Free" is this simulation's test (the cell can be
+    /// entered, no structure covers it, no other mobile object stands there or is heading there): there is no goal-cell table and no zone table here.
+    /// </summary>
+    bool FindPossibleDestination(Entity mover, ref Fixed x, ref Fixed y);
+
+    /// <summary>
     /// <c>SquishCollide.cpp onCollide</c> / <c>ToppleUpdate.cpp onCollide</c>: after <paramref name="mover"/>'s position
     /// changed this tick by (<paramref name="stepX"/>, <paramref name="stepY"/>) — the exact displacement just applied, used
     /// to tell a closing mover from a receding one without rebuilding velocity from <c>Angle</c>/<c>Speed</c> — checks every

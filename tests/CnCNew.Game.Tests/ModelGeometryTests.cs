@@ -58,6 +58,22 @@ internal static class ModelGeometryTests
             TestHarness.Assert(again.Fingerprint == data.Templates.Geometry.Fingerprint, "a second read gives the byte-identical table");
         });
 
+
+        harness.Run("Model geometry: the exit bones of the door containers (OpenContain::exitObjectViaDoor)", () =>
+        {
+            var exits = data.Templates.Geometry.ExitPaths;
+            var paths = exits.Values.Sum(value => value.Length);
+            var complete = exits.Values.Sum(value => value.Count(path => path.Start is not null && path.End is not null));
+            var none = exits.Where(pair => pair.Value.All(path => path.Start is null && path.End is null)).Select(pair => pair.Key).Order(StringComparer.Ordinal).ToArray();
+            Console.WriteLine($"       exit paths: {exits.Count} containers, {paths} paths, {complete} with both bones; {none.Length} containers without any exit bone ({string.Join(", ", none.Take(12))}{(none.Length > 12 ? ", ..." : "")})");
+            var humvee = exits["AmericaVehicleHumvee"];
+            Console.WriteLine($"       AmericaVehicleHumvee: {string.Join(" | ", humvee.Select(path => $"{path.Start} -> {path.End}"))}");
+            TestHarness.Assert(humvee.Length == 3 && humvee.All(path => path.Start is not null && path.End is not null), $"the Humvee has NumberOfExitPaths = 3 and the model AVHUMMER has ExitStart01..03 and ExitEnd01..03 ({humvee.Length})");
+            // AVHUMMER.W3D (tools/CnCNew.W3dTool bones): EXITSTART01 (-5.719, -0.006), EXITEND01 (-15.950, 0.001), EXITEND02 (-1.658, 10.989).
+            static bool Near(Fixed value, decimal expected) => Math.Abs(value.ToDecimal() - expected) <= 0.07m;
+            TestHarness.Assert(Near(humvee[0].Start!.Value.X, -5.719m) && Near(humvee[0].End!.Value.X, -15.950m) && Near(humvee[1].End!.Value.Y, 10.989m), "the Humvee's exit bones are the model's");
+            TestHarness.Assert(exits.Count == 100 && paths == 166 && complete == 82 && none.Length == 76, $"measured on the master installation: 100 door containers, 166 paths, 82 with both bones, 76 containers without any ({exits.Count}, {paths}, {complete}, {none.Length})");
+        });
         return harness.Failures;
     }
 }

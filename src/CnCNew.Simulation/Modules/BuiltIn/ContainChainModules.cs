@@ -259,6 +259,8 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
 
     public override long Update(IWorldServices world)
     {
+        // First the door (a rider that leaves in this update scuttles the bike, and the scuttle has to keep the module awake).
+        var sleep = base.Update(world);
         var waiting = false;
         if (_pendingPayload.Count > 0)
         {
@@ -271,7 +273,6 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
                 world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, body.MaxHealth, DamageTypes.Unresistable, ToppledDeath, true));
             else waiting = true;
         }
-        var sleep = base.Update(world);
         return waiting ? SimulationTiming.SleepNone : sleep;
     }
 

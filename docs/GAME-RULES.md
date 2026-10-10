@@ -857,3 +857,14 @@ The rules of Phase 6 are in `docs/SIMULATION-CORE.md` §13–§20 with numbers; 
   (`TOGGLE_OVERCHARGE`) and a reduced power plant capture (`CaptureCommand`, `SIMULATION-CORE.md` §23).
 - **Limits (as of Phase 9, see §23 for the Phase 10 state):** `QueueProduction` checked no prerequisite; `MaxSimultaneousOfType` unchecked; no capture behaviour for
   power plants; no collision; `ToppleUpdate`/`CrushDie` stay open.
+
+## 12. Additions of Phase 31 (fidelity package A, 10 October 2026)
+
+Rules of the original that the port did not follow and now does; the full description with tables, tests and what was left out is `docs/SIMULATION-CORE.md` §44.
+
+- **Leaving a transport or a garrisoned building (F-03, §44.1).** A rider of a living transport leaves through the door: one rider at a time, `ExitDelay` apart, lowest id first
+  (`AIExitState::update`, `TransportContain::isExitBusy`); it appears on the exit path's `ExitStart` bone facing the way the transport faces and walks to the `ExitEnd` bone, moved to the
+  nearest place it can stand on (`OpenContain::exitObjectViaDoor`, `Pathfinder::adjustToPossibleDestination`). `NumberOfExitPaths = 0` leaves the rider on the transport. An occupant
+  told to leave a building walks from its centre to the nearest place it can stand on (`GarrisonContain::exitObjectViaDoor`). Only the riders of a **destroyed** transport are
+  scattered, one to one and a half bounding radii away (`TransportContain::onRemoving`, `OpenContain::scatterToNearbyPosition`); `ScatterNearbyOnExit` is read by nothing, as in the
+  original. Keys now typed: `NumberOfExitPaths`, `ExitDelay`, `ScatterNearbyOnExit`.

@@ -311,7 +311,13 @@ static partial class Tests
         world.Step();
         Check.That(grunt.ContainedBy == truck.Id, "Nobody leaves while the truck drives.");
         for (var tick = 0; tick < world.Frames(300) && grunt.ContainedBy.IsValid; tick++) world.Step();
-        Check.That(!grunt.ContainedBy.IsValid && truck.X == Fixed.FromInt(200) && grunt.X == truck.X, "The grunt gets out at the destination.");
+        // OpenContain::exitObjectViaDoor: the rider is put out and walks to the nearest place it can stand on - beside the truck, not inside it.
+        Check.That(!grunt.ContainedBy.IsValid && truck.X == Fixed.FromInt(200), "The grunt gets out at the destination.");
+        for (var tick = 0; tick < world.Frames(90) && grunt.HasMoveTarget; tick++) world.Step();
+        var apartX = grunt.X - truck.X;
+        var apartY = grunt.Y - truck.Y;
+        var touching = truck.Template.BoundingCircleRadius + grunt.Template.BoundingCircleRadius;
+        Check.That(!grunt.HasMoveTarget && apartX * apartX + apartY * apartY > touching * touching, $"The grunt stands beside the truck, not inside it ({grunt.X}, {grunt.Y}).");
         Check.That(feeder.Evacuate(2, truck.Id.Value).Reason == CommandRejection.NotPermitted, "Only the owner may evacuate.");
     }
 

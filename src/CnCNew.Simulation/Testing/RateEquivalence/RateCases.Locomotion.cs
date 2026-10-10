@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
@@ -163,12 +164,87 @@ public static partial class RateCases
         }
         builder.Note(string.Create(CultureInfo.InvariantCulture,
             $"{candidates.Length} retail objects are driven by a move order on a non-winged locomotor; {chosen} distinct locomotors (30 Hz values), the first object by name stands for each, {candidates.Length - chosen} merged away"));
+        // Leaving a transport through its door (OpenContain::exitObjectViaDoor, docs/SIMULATION-CORE.md §44.1): one retail transport with ExitDelay and several exit paths.
+        builder.Add("leaving a transport: " + ExitTransport, scene => MeasureTransportExit(scene), ExitTransport, ExitRider);
+        builder.NotCovered("locomotion: leaving a transport with the exit bones of its model (the catalogs of the suite carry no model geometry: start and end are the transport's position)");
         builder.NotCovered("locomotion: objects whose locomotor changes with an upgrade or a locomotor set other than SET_NORMAL (only the normal set of each object is driven)");
         builder.NotCovered("locomotion: movement over slopes, water and cliffs (the map of the suite is flat)");
         return builder.Done();
     }
 
     private static readonly Fixed TurnMargin = Fixed.FromFraction(1, 50);
+
+    private const string ExitTransport = "AmericaVehicleHumvee", ExitRider = "AmericaInfantryRanger";
+    private const int ExitRiders = 5, ExitRiderSpacing = 40;
+
+    /// <summary>
+    /// Five riders are put into a transport and the transport is told to evacuate: when each rider is out and at rest, how far from the transport it stands, how far it walked,
+    /// and how many pairs of riders and transport stand inside each other at the end.
+    /// </summary>
+    private static ImmutableArray<RateQuantity> MeasureTransportExit(RateScene scene)
+    {
+        var quantities = new RateQuantities(scene);
+        var transport = scene.Spawn(ExitTransport, 1, 2000, 2000);
+        var riders = new Entity[ExitRiders];
+        for (var index = 0; index < ExitRiders; index++) riders[index] = scene.Spawn(ExitRider, 1, 2100 + ExitRiderSpacing * index, 2100);
+        scene.Align();
+        var aboard = 0;
+        foreach (var rider in riders)
+            if (scene.World.TryEnterContainer(rider, transport)) aboard++;
+        quantities.Count("riders aboard", aboard);
+        scene.StepFrames(2);
+        scene.Align();
+        scene.Order(1, (owner, sequence, now) => new EvacuateCommand(owner, sequence, now, transport.Id, false, Fixed.Zero, Fixed.Zero));
+        var budget = scene.Time.OriginalFrames(RateScene.Seconds(30));
+        var stride = scene.Rate.TicksPerOriginalFrame;
+        var outAt = Enumerable.Repeat(-1L, ExitRiders).ToArray();
+        var restAt = Enumerable.Repeat(-1L, ExitRiders).ToArray();
+        var walked = new Fixed[ExitRiders];
+        var lastX = new Fixed[ExitRiders];
+        var lastY = new Fixed[ExitRiders];
+        for (long step = 1; step <= budget; step++)
+        {
+            scene.Step();
+            // Read at the end of a logic frame of the original (docs/SIMULATION-CORE.md §43.4): inside a frame a rider is one share short of its 30 Hz position.
+            if (step % stride != 0) continue;
+            for (var index = 0; index < ExitRiders; index++)
+            {
+                var rider = riders[index];
+                if (rider.ContainedBy.IsValid) continue;
+                if (outAt[index] < 0)
+                {
+                    outAt[index] = step - stride;
+                    lastX[index] = rider.X;
+                    lastY[index] = rider.Y;
+                }
+                walked[index] += RateMeasure.Distance(lastX[index], lastY[index], rider.X, rider.Y);
+                lastX[index] = rider.X;
+                lastY[index] = rider.Y;
+                if (rider.HasMoveTarget) restAt[index] = -1;
+                else if (restAt[index] < 0) restAt[index] = step - stride;
+            }
+            if (restAt.All(value => value >= 0) && step - stride - restAt.Max() >= scene.Time.OriginalFrames(RateScene.Seconds(1))) break;
+        }
+        var stacked = 0;
+        var everybody = riders.Append(transport).ToArray();
+        for (var first = 0; first < everybody.Length; first++)
+            for (var second = first + 1; second < everybody.Length; second++)
+            {
+                var touching = everybody[first].Template.BoundingCircleRadius + everybody[second].Template.BoundingCircleRadius;
+                if (RateMeasure.Distance(everybody[first].X, everybody[first].Y, everybody[second].X, everybody[second].Y) < touching) stacked++;
+            }
+        for (var index = 0; index < ExitRiders; index++)
+        {
+            var label = string.Create(CultureInfo.InvariantCulture, $"rider {index + 1}: ");
+            var done = outAt[index] >= 0 && restAt[index] >= 0;
+            quantities.Exact(label + "out of the transport", outAt[index]);
+            quantities.Event(label + "at rest", restAt[index]);
+            quantities.Distance(label + "distance from the transport", RateMeasure.Distance(riders[index].X, riders[index].Y, transport.X, transport.Y), done);
+            quantities.Distance(label + "path length", walked[index], done);
+        }
+        quantities.Count("pairs standing inside each other", stacked);
+        return quantities.Done();
+    }
 
     private static ImmutableArray<RateQuantity> MeasureLocomotion(RateScene scene, string name)
     {

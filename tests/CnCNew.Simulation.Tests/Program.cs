@@ -453,6 +453,11 @@ run.Test("Tunnels: shared network, capacity, entry rules and exit through anothe
 run.Test("Tunnels: healing, hand-over on death and cave-in", Tests.TunnelHealingAndCaveIn);
 run.Test("Tunnels: selling the last tunnel lets the riders out", Tests.TunnelSaleEvacuates);
 run.Test("Transports: walk in, drive and unload at a position", Tests.TransportLoadAndUnloadAtPosition);
+run.Test("Container exit: riders leave a living transport one by one, ExitDelay apart, to places of their own", Tests.ContainerExitRidersLeaveOneByOne);
+run.Test("Container exit: ExitStart and ExitEnd bones, cycling through the exit paths", Tests.ContainerExitUsesTheExitBones);
+run.Test("Container exit: without exit paths the rider stays on the container", Tests.ContainerExitWithoutExitPathsStaysOnTheContainer);
+run.Test("Container exit: a destroyed transport scatters its riders", Tests.ContainerExitDeadTransportScattersItsRiders);
+run.Test("Container exit: the same frames and places at 30, 60 and 120 Hz, snapshot in mid-exit", Tests.ContainerExitIsTheSameAtEveryRate);
 run.Test("Chinook: flight height, supply trips, Supply Lines boost and landing to unload", Tests.ChinookSupplyFlightAndLanding);
 run.Test("Chinook: helicopter slow death falls, crashes and leaves a hull", Tests.HelicopterSlowDeathFall);
 run.Test("Helix: portable structure rides free, follows and dies with it", Tests.HelixPortableStructure);

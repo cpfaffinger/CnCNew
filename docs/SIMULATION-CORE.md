@@ -2766,3 +2766,57 @@ parallel packages that introduce helpers of the same name collide only when buil
 Spectre, parachute, flare, particle beam, shot-down jet and the gravity of the physics modules still compute `Wert je Tick × r`; `SlavedUpdate` and the regeneration of the occupants in
 `ContainModules.cs` still heal per tick; script VM, special abilities, bridges, water and cliffs have not been examined. The decision on the self-acquisition per frame of the unit and the
 three related places (§41.1 A) lies with the project owner.
+
+## 44. Phase 31: fidelity package A (10 October 2026)
+
+Three places where the port visibly behaved differently from the original (`docs/ACCEPTANCE.md` §6, fidelity register F-03, F-04, F-05 of `docs/plan/STAGE-1-PORT.md` §3), each one
+cause, one implementation commit and one manifest commit. Stage 1 work: the yardstick is the function of the original, read and rewritten. **No human has seen any of it**; the
+scenes are headless.
+
+### 44.1 F-03: leaving a container (`OpenContain::exitObjectViaDoor`)
+
+**What the original does – and what it does not.** The brief of the phase described the finding as "the riders are scattered when `ScatterNearbyOnExit` is set". The source says otherwise,
+in *Generals* and in *Zero Hour* alike (`GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/`):
+
+- `TransportContain::onRemoving` (`TransportContain.cpp`, line 330 ff.) calls `scatterToNearbyPosition(rider)` **only when the transport is effectively dead** (line 412). The key
+  `ScatterNearbyOnExit` (`m_scatterNearbyOnExit`, default yes) is parsed and read by nothing in `TransportContain`; only `MobNexusContain` consults a key of this name. The data set it to
+  `No` in 47 of 48 places – without effect.
+- A rider of a **living** transport leaves through `aiExit` → `AIExitState::update` (`AIStates.cpp`, line 6449): it waits while the door is busy (`TransportContain::isExitBusy`: the
+  frame of the last exit plus `ExitDelay`), then `OpenContain::exitObjectViaDoor` (`OpenContain.cpp`, line 939): `removeFromContain`, and with `NumberOfExitPaths > 0` (default 1) the rider
+  is set on the bone `ExitStart` with the container's heading and follows a path to the bone `ExitEnd` (`ExitStartNN`/`ExitEndNN`, cycling, when there are several paths), which
+  `Pathfinder::adjustToPossibleDestination` (`AIPathfind.cpp`, line 5534) moves to the nearest cell the rider can stand on – "so they don't stack up". The container is the ignored
+  obstacle of that walk and the rider ignores collisions for one second (`setIgnoreCollisionTime(LOGICFRAMES_PER_SECOND)`). With `NumberOfExitPaths = 0` the rider stays where
+  `removeFromContain` put it: on the container.
+- `GarrisonContain::exitObjectViaDoor` (`GarrisonContain.cpp`, line 1497) has no bones and no door: the occupant stands on the building's position and walks to the nearest possible
+  destination of that position (`EVAC_BURST_FROM_CENTER`), or leaves to the side (`EVAC_TO_LEFT`/`RIGHT`, already built).
+- `OpenContain::scatterToNearbyPosition` (`OpenContain.cpp`, line 688): a random angle, a random distance between one and one and a half bounding-circle radii of the container (two
+  draws of the logic stream, in this order), the rider faces that way, stands on the container's centre and walks to the point, ignoring the container.
+
+**What was built** (the source decides, not the brief's summary of it):
+
+| Piece | Where | Rule |
+|---|---|---|
+| Keys typed strictly | `ModuleCatalog.cs`: `NumberOfExitPaths` (integer), `ExitDelay` (duration), `ScatterNearbyOnExit` (bool) | the compatibility baseline shrinks from 731 to 719 entries (the twelve `…Contain/ExitDelay`, `/NumberOfExitPaths`, `/ScatterNearbyOnExit` entries); `ScatterNearbyOnExit` is typed and deliberately read by nothing |
+| Exit bones | `ModelGeometry.ExitPaths`, `ModelGeometryLoader.ReadExitPaths` | per object with `TransportContain`, `HelixContain`, `OverlordContain`, `RiderChangeContain` or `InternetHackContain`: `ExitStart`/`ExitEnd` per path from the model of the state without any condition, exact and rounded like the airfield bones; a missing bone is "no pose" (the original then answers with the object's position, `Object::getSingleLogicalBonePosition`). Measured on the master installation: 100 containers, 166 paths, 82 with both bones, 76 containers without any exit bone (Chinook, Overlord, Avenger, Spectre …). The table is part of the world fingerprint |
+| The door | `TransportContain.ExitViaDoor`, `ReleaseThroughDoor`, `ExitObjectViaDoor` (`ContainModules.cs`) | a rider that is told to leave (exit command, evacuation) is released at once when the door is free, else queued; of several waiting riders the lowest id goes first (the riders poll in the order of their updates); every removal keeps the door busy for `ExitDelay` (`onRemoving`). The rider is put on `ExitStart`, faces the way the container faces and walks to `ExitEnd`, adjusted by `SimulationWorld.FindPossibleDestination` |
+| Nearest possible destination | `SimulationWorld.FindPossibleDestination` (`SimulationWorld.ExitGoals.cs`) | the point itself when free, else the reference's square spiral over cell centres (`i++` × δ, `j++` × δ, δ + 1, `i--`, `j--`, δ + 1 …), at most 400 cells. "Free" is this simulation's test (`GoalIsFree`: cell enterable, no structure, no mobile object standing there or heading there) – there is no goal-cell table and no zone table here |
+| The rider's walk | `AIUpdateInterface.OrderExitContainer`, `IgnoredObstacle`, `IgnoresCollisions` (`Phase5Modules.cs`, `SimulationWorld.Collision.cs`) | a move with the container as the ignored obstacle; for one second of game time after a door exit the local avoidance does not shove the rider's step aside; the free-goal check every 15th frame does not touch the exit leg |
+| Garrison | `GarrisonContain.ExitViaDoor` | on an exit order of a living building the occupant walks from the building's position to its nearest possible destination; all occupants leave in the same frame ("Garrison doesn't have reserveDoor or exitDelay") |
+| Destroyed transport | `TransportContain.Remove` → `ScatterToNearbyPosition` | the riders of an effectively dead transport, and only they, are scattered; two draws per rider, dead riders included (they stay in the contain list until they are destroyed) |
+
+**State and formats.** New state is written only where it differs from an idle object's: `exitNotBusy`, `whichExitPath`, `exitWanted` of the container; `exitFrom`, `ignoreCollisionsUntil` of the
+rider's AI. `exitNotBusy` is set by every removal, so worlds in which a rider has left a transport differ; no format version changes (`WorldSnapshot` 10).
+
+**Frame convention.** The first rider leaves in the tick of the order (as before), the following ones `ExitDelay` later each – a duration on the original grid, so the exits fall into the
+same frames at every rate. The rider's walk is an ordinary move order. Three-rate test: the same exit frames (0, 8, 16, 24 after the order for `ExitDelay = 250`) and the same position of
+every rider at the end of every logic frame at 30, 60 and 120 Hz, with and without bones, and a snapshot taken while riders wait for the door continues identically.
+
+**Tests.** `Tests.ContainerExit.cs` (prefix "Container exit": one by one and apart; bones and cycling, a table that disagrees with the module is refused; no exit paths; destroyed transport;
+three rates and snapshot), `ModelGeometryTests` (the Humvee's six bones against `AVHUMMER.W3D`, the measured counts), and the scene `acc-board`, whose audit no longer knows a finding
+S1: after both evacuations the five Rangers stand 22.7 to 36.3 from the Humvee's centre (bounding radii 7.0 and 15.7), smallest margin between two bounding circles 2.3 and 1.5.
+
+**Deliberately not built, with reasons.** The door animation (`DoorOpenTime`, model states `DOOR_1_OPENING`/`CLOSING`); a rally point of a container (`OpenContain::m_rallyPoint` –
+no command sets one here); `GoAggressiveOnExit`, `ResetMoodCheckTimeOnExit`, `OrientLikeContainerOnExit`, `KeepContainerVelocityOnExit`, `ExitBone`, `ExitPitchRate`, `DelayExitInAir`
+(still opaque); the reachability test of the reference's spiral (zones); the front/back search of a bunker that stands in a cliff; the bones of a damaged model state (the table is
+read from the state without any condition). `HealContain` still puts a healed occupant on the building (entered into the fidelity register as F-34). The riders that
+`DeliverPayloadAIUpdate` and the ferry take out go their own ways as before (their calls of `Remove` are unchanged).

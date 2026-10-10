@@ -16,6 +16,8 @@ public sealed partial class SimulationWorld
         {
             var rider = FindEntity(riderId);
             if (rider is null) continue;
+            // A living transport lets its riders out through its door, one after the other (OpenContain::orderAllPassengersToExit -> aiExit of every rider).
+            if (contain.ExitViaDoor(this, rider)) continue;
             contain.Remove(this, rider, true);
             rider.ContainedBy = EntityId.Invalid;
             MarkDirty(rider);

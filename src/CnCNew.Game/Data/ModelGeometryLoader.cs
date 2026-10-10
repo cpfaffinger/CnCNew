@@ -42,7 +42,53 @@ public static class ModelGeometryLoader
             layouts[definition.OriginalName] = ReadLayout(library, definition.OriginalName, model, rows, cols);
         }
 
-        return new ModelGeometry(layouts);
+        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library));
+    }
+
+    /// <summary>The contain modules whose riders leave through <c>OpenContain::exitObjectViaDoor</c> (the garrison, the tunnel, the ferry and the parachute have exits of their own).</summary>
+    private static readonly string[] DoorContainers = ["TransportContain", "HelixContain", "OverlordContain", "RiderChangeContain", "InternetHackContain"];
+
+    /// <summary>
+    /// The exit bones of every object with a door container: <c>ExitStart</c>/<c>ExitEnd</c> for one path, <c>ExitStart01</c>..<c>ExitEndNN</c> for more (<c>OpenContain::exitObjectViaDoor</c>), read
+    /// from the model of the state without any condition. An object without a model, or a model without the bone, gets no pose for it: the original then uses the
+    /// object's position (<c>Object::getSingleLogicalBonePosition</c> returns it when the bone is not found). A model that is named and cannot be loaded is an error.
+    /// </summary>
+    private static SortedDictionary<string, ImmutableArray<ExitPath>> ReadExitPaths(CompiledDefinitionGraph graph, ObjectVisualCatalog visuals, W3dAssetLibrary library)
+    {
+        var exits = new SortedDictionary<string, ImmutableArray<ExitPath>>(StringComparer.Ordinal);
+        foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.OriginalName, StringComparer.Ordinal))
+        {
+            var module = definition.Modules.FirstOrDefault(value => DoorContainers.Contains(value.Name, StringComparer.Ordinal));
+            if (module is null) continue;
+            var count = module.Fields.Any(value => value.Name.Equals("NumberOfExitPaths", StringComparison.OrdinalIgnoreCase)) ? Count(definition, module, "NumberOfExitPaths") : 1;
+            if (count == 0) continue;
+            W3dSkeleton? skeleton = null;
+            if (visuals.TryGet(definition.OriginalName, out var visual))
+                foreach (var draw in visual.Draws)
+                    // The state a drawable without any condition shows (W3DModelDrawModuleData::findBestInfo of the empty set): the pristine bones of an undamaged, idle object.
+                    if (BestStateSelector.FindBest(draw, ModelConditionSet.Empty) is var state and >= 0 && state < draw.States.Length && draw.States[state].Model is { } model)
+                    {
+                        try
+                        {
+                            skeleton = library.GetModel(model).Skeleton;
+                        }
+                        catch (W3dMissingAssetException exception)
+                        {
+                            throw new InvalidDataException($"{definition.OriginalName}: model '{model}' cannot be loaded: {exception.Message}");
+                        }
+                        break;
+                    }
+            BonePose? Bone(string name) => skeleton is not null && skeleton.FindBone(name) is var index and >= 0 ? RestPose(skeleton, index) : null;
+            var paths = ImmutableArray.CreateBuilder<ExitPath>(count);
+            for (var path = 1; path <= count; path++)
+            {
+                var suffix = count > 1 ? path.ToString("00", CultureInfo.InvariantCulture) : string.Empty;
+                paths.Add(new ExitPath(Bone("ExitStart" + suffix), Bone("ExitEnd" + suffix)));
+            }
+            exits[definition.OriginalName] = paths.MoveToImmutable();
+        }
+
+        return exits;
     }
 
     private static int Count(ObjectDefinition definition, ModuleConfiguration module, string key)
@@ -51,7 +97,7 @@ public static class ModelGeometryLoader
         if (field is null) return 0;
         return int.TryParse(field.Value.OriginalText.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) && count >= 0
             ? count
-            : throw new InvalidDataException($"{definition.OriginalName}: ParkingPlaceBehavior {key} is not a count ('{field.Value.OriginalText.Trim()}').");
+            : throw new InvalidDataException($"{definition.OriginalName}: {module.Name} {key} is not a count ('{field.Value.OriginalText.Trim()}').");
     }
 
     private static string ModelOf(ObjectDefinition definition, ObjectVisualCatalog visuals)

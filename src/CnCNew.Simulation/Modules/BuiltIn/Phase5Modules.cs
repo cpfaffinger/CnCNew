@@ -731,6 +731,41 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     {
         _exitRallyPending = false;
         _viaPending = false;
+        _exitFrom = EntityId.Invalid;
+    }
+
+    // The container the object is walking out of (OpenContain::exitObjectViaDoor: aiFollowPath with the container as the ignored object); gone with the first leg or any other order.
+    private EntityId _exitFrom;
+
+    // OpenContain::exitObjectViaDoor, setIgnoreCollisionTime(LOGICFRAMES_PER_SECOND): "the units often come out at the same position, and need to ignore collisions briefly as they
+    // move out". The tick up to which the object's steps are not shoved aside by other units; zero when no exit is recent.
+    private long _ignoreCollisionsUntil;
+
+    /// <summary><c>AIUpdateInterface::getIgnoreCollisionsUntil</c>: the object left a container less than a second ago and walks through whoever stands at the door.</summary>
+    internal bool IgnoresCollisions(long tick) => tick < _ignoreCollisionsUntil;
+
+    /// <summary>
+    /// The rider's half of <c>OpenContain::exitObjectViaDoor</c> and of <c>OpenContain::scatterToNearbyPosition</c>: <c>aiFollowPath</c> / <c>aiMoveToPosition</c> to
+    /// (<paramref name="x"/>, <paramref name="y"/>) with <paramref name="container"/> as the ignored obstacle, then on to the container's rally point when it has one. With
+    /// <paramref name="viaDoor"/> the rider also ignores collisions with other units for one second of game time (<c>setIgnoreCollisionTime</c>), which the scatter of a dead
+    /// transport's riders does not ask for. A rider that already stands on the point gets no move (the original skips path points closer than one cell).
+    /// </summary>
+    public void OrderExitContainer(IWorldServices world, Entity container, Fixed x, Fixed y, bool viaDoor, bool hasRally = false, Fixed rallyX = default, Fixed rallyY = default)
+    {
+        if (Entity.Template.Locomotor is null) return;
+        if (viaDoor) _ignoreCollisionsUntil = world.Tick + world.Time.OriginalFrames(SimulationRate.OriginalFramesPerSecond);
+        var dx = x - Entity.X;
+        var dy = y - Entity.Y;
+        if (dx != Fixed.Zero || dy != Fixed.Zero)
+        {
+            OrderMove(world, x, y, false);
+            _exitFrom = container.Id;
+        }
+        else world.MarkDirty(Entity);
+        _exitRallyPending = hasRally;
+        _exitRallyX = rallyX;
+        _exitRallyY = rallyY;
+        if (hasRally) world.WakeAt(Entity, this, world.Tick);
     }
 
     /// <summary>The order of <see cref="OrderExitProduction"/> still stands and the unit has not been through the door yet; gives the door point.</summary>
@@ -776,7 +811,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <c>AIUpdateInterface::getIgnoredObstacleID</c>: the one object this unit's steps and detours do not treat as an obstacle, because the order ends inside it — the goal
     /// object of an approach, or the container of an enter order (<c>AIEnterState::onEnter</c>, AIStates.cpp: "tell the pathfinder to ignore the enterable object").
     /// </summary>
-    internal EntityId IgnoredObstacle => _goal.IsValid ? _goal : _enterTarget;
+    internal EntityId IgnoredObstacle => _goal.IsValid ? _goal : _enterTarget.IsValid ? _enterTarget : _exitFrom;
 
     /// <summary>
     /// The approach half of <c>aiEnter</c>/<c>aiHijack</c>-style orders that end in a collision instead of a container entry: moves to <paramref name="goal"/> (following
@@ -1127,6 +1162,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         {
             _returning = false;
             world.RequestDestroy(Entity.Id);
+        }
+        // AIFollowPathState::update, "we have exited whatever object we are leaving": the leg out of the container is over.
+        if (_exitFrom.IsValid && !Entity.HasMoveTarget && !_exitRallyPending)
+        {
+            _exitFrom = EntityId.Invalid;
+            world.MarkDirty(Entity);
         }
         return _dock is not null || Entity.HasMoveTarget || _frameTicksLeft > 0 || _task != BuilderTask.None || _evacuatePending || _returning || _goal.IsValid || _exitRallyPending ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
@@ -1528,7 +1569,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private bool GoalSpotCheckDue(IWorldServices world)
     {
         // Not on the way out of a factory either: the first leg ends at the place the exit path chose, and the rally point is adjusted when the second leg is ordered.
-        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending || _exitRallyPending || _viaPending) return false;
+        if (_dock is not null || _task != BuilderTask.None || _enterTarget.IsValid || _goal.IsValid || _returning || _evacuatePending || _exitRallyPending || _viaPending || _exitFrom.IsValid) return false;
         if ((world.Time.FramesIn(world.Tick) + Entity.Id.Value) % GoalSpotCheckFrames != 0) return false;
         // A slave or mob member is sent onto its master's place by its own module, again and again: it keeps the goal it is given.
         _follows ??= Entity.Modules.Any(module => module is ISlavedModule);
@@ -1975,6 +2016,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             writer.Fixed("viaX", _viaX);
             writer.Fixed("viaY", _viaY);
         }
+        if (_exitFrom.IsValid) writer.UInt("exitFrom", _exitFrom.Value);
+        if (_ignoreCollisionsUntil != 0) writer.Int("ignoreCollisionsUntil", _ignoreCollisionsUntil);
         if (_pathValid)
         {
             writer.Bool("pathValid", true);
@@ -2026,6 +2069,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _viaPending = reader.Has("viaX");
         _viaX = _viaPending ? reader.Fixed("viaX") : Fixed.Zero;
         _viaY = _viaPending ? reader.Fixed("viaY") : Fixed.Zero;
+        _exitFrom = reader.Has("exitFrom") ? new EntityId(checked((uint)reader.UInt("exitFrom"))) : EntityId.Invalid;
+        _ignoreCollisionsUntil = reader.Has("ignoreCollisionsUntil") ? reader.Int("ignoreCollisionsUntil") : 0;
         InvalidatePath();
         if (reader.Has("pathValid"))
         {

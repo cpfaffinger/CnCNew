@@ -23,9 +23,18 @@ public sealed record AirfieldLayout(int Rows, int Cols, ImmutableArray<BonePose>
 /// folded into the definition fingerprint a world, a replay and a save are checked against (<see cref="Combine"/>, <c>docs/SIM-JET-FLIGHT.md</c>). <see cref="None"/> (the synthetic test
 /// fixtures and the headless tools) keeps the computed airfield layout of <see cref="Modules.BuiltIn.ParkingPlaceBehavior"/>.
 /// </summary>
+/// <summary>
+/// One exit path of a container's model (<c>OpenContain::exitObjectViaDoor</c>): the bones <c>ExitStart</c>/<c>ExitEnd</c> (<c>ExitStartNN</c>/<c>ExitEndNN</c> when the module has more than one
+/// path) in the object's frame. A bone the model does not have is <see langword="null"/>: <c>Object::getSingleLogicalBonePosition</c> then answers with the object's own position.
+/// </summary>
+public sealed record ExitPath(BonePose? Start, BonePose? End);
+
 public sealed class ModelGeometry
 {
     public static ModelGeometry None { get; } = new([]);
+
+    /// <summary>The exit paths of container templates by name (case-insensitive), one entry per <c>NumberOfExitPaths</c>; a template without an entry has no model the table was read from.</summary>
+    public ImmutableDictionary<string, ImmutableArray<ExitPath>> ExitPaths { get; }
 
     /// <summary>Airfield templates by name (case-insensitive).</summary>
     public ImmutableDictionary<string, AirfieldLayout> Airfields { get; }
@@ -33,11 +42,14 @@ public sealed class ModelGeometry
     /// <summary>SHA-256 of the canonical text of the table; empty for <see cref="None"/>.</summary>
     public string Fingerprint { get; }
 
-    public bool IsEmpty => Airfields.IsEmpty;
+    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty;
 
-    public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields)
+    public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields) : this(airfields, []) { }
+
+    public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>> exitPaths)
     {
         Airfields = airfields.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
+        ExitPaths = exitPaths.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         Fingerprint = IsEmpty ? string.Empty : ComputeFingerprint();
     }
 
@@ -56,6 +68,12 @@ public sealed class ModelGeometry
             foreach (var (name, poses) in new[] { ("parking", layout.Parking), ("hangar", layout.Hangar), ("prep", layout.Prep), ("start", layout.RunwayStart), ("end", layout.RunwayEnd) })
                 text.Append(CultureInfo.InvariantCulture, $"  {name} {string.Join(";", poses.Select(Pose))}\n");
             text.Append(CultureInfo.InvariantCulture, $"  helipark {(layout.HeliPark is { } pad ? Pose(pad) : "-")}\n");
+        }
+        // Written only when the table has exit paths: a table of airfields alone keeps its fingerprint.
+        foreach (var pair in ExitPaths.OrderBy(value => value.Key.ToUpperInvariant(), StringComparer.Ordinal))
+        {
+            static string Bone(BonePose? pose) => pose is { } value ? Pose(value) : "-";
+            text.Append(CultureInfo.InvariantCulture, $"exits {pair.Key.ToUpperInvariant()} {string.Join(";", pair.Value.Select(path => Bone(path.Start) + ">" + Bone(path.End)))}\n");
         }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
     }

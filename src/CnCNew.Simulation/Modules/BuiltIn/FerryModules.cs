@@ -262,7 +262,7 @@ public sealed class RailedTransportContain(TransportContainData data) : Transpor
 
     public bool IsRiderFreeToExit(Entity rider) => DockModules.DockOf(Entity) is not { IsOpen: false };
 
-    public bool ExitViaDoor(IWorldServices world, Entity rider)
+    public override bool ExitViaDoor(IWorldServices world, Entity rider)
     {
         if (Entity.ModuleArray.OfType<RailedTransportDockUpdate>().FirstOrDefault() is not { } dock) return false;
         dock.UnloadSingleObject(world);

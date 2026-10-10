@@ -2884,24 +2884,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "HelixContain/ExitDelay",
-      "count": 6,
-      "owners": [
-        "HelixContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "HelixContain/NumberOfExitPaths",
-      "count": 6,
-      "owners": [
-        "HelixContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "HelixContain/PassengersAllowedToFire",
       "count": 13,
       "owners": [
@@ -2920,15 +2902,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "InternetHackContain/ExitDelay",
-      "count": 4,
-      "owners": [
-        "InternetHackContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "InternetHackContain/GoAggressiveOnExit",
       "count": 4,
       "owners": [
@@ -2938,25 +2911,7 @@
     },
     {
       "category": "deferred-field",
-      "name": "InternetHackContain/NumberOfExitPaths",
-      "count": 4,
-      "owners": [
-        "InternetHackContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "InternetHackContain/PassengersAllowedToFire",
-      "count": 4,
-      "owners": [
-        "InternetHackContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "InternetHackContain/ScatterNearbyOnExit",
       "count": 4,
       "owners": [
         "InternetHackContain"
@@ -4162,15 +4117,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "RailedTransportContain/ScatterNearbyOnExit",
-      "count": 1,
-      "owners": [
-        "RailedTransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "RailroadBehavior/BigMetalBounceSound",
       "count": 28,
       "owners": [
@@ -4243,34 +4189,7 @@
     },
     {
       "category": "deferred-field",
-      "name": "RiderChangeContain/ExitDelay",
-      "count": 11,
-      "owners": [
-        "RiderChangeContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "RiderChangeContain/GoAggressiveOnExit",
-      "count": 11,
-      "owners": [
-        "RiderChangeContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "RiderChangeContain/NumberOfExitPaths",
-      "count": 11,
-      "owners": [
-        "RiderChangeContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "RiderChangeContain/ScatterNearbyOnExit",
       "count": 11,
       "owners": [
         "RiderChangeContain"
@@ -5017,15 +4936,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "TransportContain/ExitDelay",
-      "count": 33,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "TransportContain/ExitPitchRate",
       "count": 23,
       "owners": [
@@ -5071,15 +4981,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "TransportContain/NumberOfExitPaths",
-      "count": 56,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "TransportContain/OrientLikeContainerOnExit",
       "count": 23,
       "owners": [
@@ -5091,15 +4992,6 @@
       "category": "deferred-field",
       "name": "TransportContain/PassengersAllowedToFire",
       "count": 26,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "TransportContain/ScatterNearbyOnExit",
-      "count": 32,
       "owners": [
         "TransportContain"
       ],

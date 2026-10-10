@@ -48,7 +48,10 @@ public sealed partial class SimulationWorld
     private (Fixed Dx, Fixed Dy) AvoidLocalBlockersCore(Entity mover, Fixed dx, Fixed dy)
     {
         // The object an approach order aims at is never an obstacle (the reference's AI ignores its goal object when it steers), or a hijacker could never touch its car.
-        var goal = AiOf(mover)?.IgnoredObstacle ?? EntityId.Invalid;
+        var ai = AiOf(mover);
+        // A rider that has just come out of its transport walks through whoever stands at the door (OpenContain::exitObjectViaDoor, setIgnoreCollisionTime).
+        if (ai is not null && ai.IgnoresCollisions(_tick)) return (dx, dy);
+        var goal = ai?.IgnoredObstacle ?? EntityId.Invalid;
         if (!StepBlocked(mover, dx, dy, goal)) return (dx, dy);
         foreach (var angle in AvoidanceAngles)
         {

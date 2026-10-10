@@ -7,6 +7,7 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -218,7 +219,7 @@ public sealed record GarrisonContainData(OpenContainData Base, int ContainMax, b
 /// change than this first cut justifies), firing from inside, garrison points/positions (art-derived, not INI data),
 /// the apparent-controlling-player/team-swap system (no team system), capture handling (no capture system).
 /// </summary>
-public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBase(data.Base), IDamageModule
+public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBase(data.Base), IDamageModule, IContainerModule
 {
     private readonly Dictionary<uint, long> _containedSinceTick = [];
 
@@ -251,6 +252,29 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         base.Remove(world, candidate, positionAtContainer);
         _containedSinceTick.Remove(candidate.Id.Value);
         if (positionAtContainer && EvacDisposition is 1 or 2) LeaveToTheSide(world, candidate);
+    }
+
+    /// <summary>
+    /// <c>GarrisonContain::exitObjectViaDoor</c> for an occupant that is told to leave a living building (<c>aiExit</c>). With the default disposition
+    /// (<c>EVAC_BURST_FROM_CENTER</c>) the occupant stands on the building's position, faces the way the building faces and walks to the nearest place it can stand on
+    /// (<c>Pathfinder::adjustToPossibleDestination</c> of that very position), ignoring the building: nobody stays inside the walls, and no two occupants take the same place.
+    /// "Garrison doesn't have reserveDoor or exitDelay": all leave in the same frame. The side exits are <see cref="LeaveToTheSide"/>, called by <see cref="Remove"/>. Not
+    /// modeled: the search for valid terrain in front of and behind a bunker that stands in a cliff.
+    /// </summary>
+    public bool ExitViaDoor(IWorldServices world, Entity rider)
+    {
+        if (Entity.EffectivelyDead || !Riders.Contains(rider.Id)) return false;
+        Remove(world, rider, true);
+        world.Emit(SimEventKind.EntityUncontained, rider.Id, Entity.Id, string.Empty, 0);
+        if (EvacDisposition is 1 or 2) return true;
+        rider.Angle = Entity.Angle;
+        world.MarkDirty(rider);
+        if (CrateModules.AiOf(rider) is not { } ai) return true;
+        var endX = rider.X;
+        var endY = rider.Y;
+        world.FindPossibleDestination(rider, ref endX, ref endY);
+        ai.OrderExitContainer(world, Entity, endX, endY, false);
+        return true;
     }
 
     /// <summary>
@@ -351,10 +375,27 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 /// </summary>
 public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed HealthRegenPercentPerSecond) : ModuleData
 {
+    /// <summary><c>OpenContainModuleData::m_numberOfExitPaths</c> (default 1): 0 lets a rider out on the container's own position, 1 uses the bones <c>ExitStart</c>/<c>ExitEnd</c>, more cycle through <c>ExitStart01</c>..<c>ExitEndNN</c>.</summary>
+    public int NumberOfExitPaths { get; init; } = 1;
+
+    /// <summary><c>TransportContainModuleData::m_exitDelay</c> in ticks (default 0): after a rider has left the door is busy that long (<c>isExitBusy</c>).</summary>
+    public long ExitDelayTicks { get; init; }
+
+    /// <summary>
+    /// <c>ScatterNearbyOnExit</c> (default yes). Typed and never read, as in the original: <c>TransportContain::onRemoving</c> scatters the riders of a transport that is
+    /// effectively dead, whatever this key says (only <c>MobNexusContain</c> consults its own key of this name).
+    /// </summary>
+    public bool ScatterNearbyOnExit { get; init; } = true;
+
     public static TransportContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "Slots", 0)),
-        ModuleConfigReader.Real(configuration, "HealthRegen%PerSec", Fixed.Zero));
+        ModuleConfigReader.Real(configuration, "HealthRegen%PerSec", Fixed.Zero))
+    {
+        NumberOfExitPaths = checked((int)ModuleConfigReader.Int(configuration, "NumberOfExitPaths", 1)),
+        ExitDelayTicks = ModuleConfigReader.Ticks(configuration, "ExitDelay", 0),
+        ScatterNearbyOnExit = ModuleConfigReader.Bool(configuration, "ScatterNearbyOnExit", true),
+    };
 }
 
 /// <summary>
@@ -422,11 +463,121 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         base.Remove(world, candidate, positionAtContainer);
         _usedSlots -= candidate.Template.TransportSlotCount;
         EnterPhases.Remove(candidate.Id.Value);
+        _exitWanted.Remove(candidate.Id);
+        // TransportContain::onRemoving: "m_frameExitNotBusy = TheGameLogic->getFrame() + d->m_exitDelay", for every rider that leaves, however it leaves.
+        _exitNotBusyTick = world.Tick + data.ExitDelayTicks;
+        // The same function: "if (getObject()->isEffectivelyDead()) scatterToNearbyPosition(rider)" - the riders of a destroyed transport, and only they, are scattered.
+        if (positionAtContainer && Entity.EffectivelyDead) ScatterToNearbyPosition(world, candidate);
+    }
+
+    // The riders that were told to leave and wait for the door (AIExitState of each of them), the tick from which the door is free again (TransportContain::m_frameExitNotBusy),
+    // and the exit path the next rider takes (OpenContain::m_whichExitPath, 1-based). Written only where they differ from an idle transport's values.
+    private readonly List<EntityId> _exitWanted = [];
+    private long _exitNotBusyTick;
+    private int _whichExitPath = 1;
+
+    /// <summary>A rider waits for the door, or the door is still busy after the last exit (<c>TransportContain::isExitBusy</c>).</summary>
+    public bool IsExitBusy(long tick) => tick < _exitNotBusyTick;
+
+    /// <summary>
+    /// <c>aiExit</c> of a rider of a living transport (<c>AIExitState</c>, AIStates.cpp): the rider waits until the door is free (<c>isExitBusy</c>) and then leaves through
+    /// <c>OpenContain::exitObjectViaDoor</c>. The riders poll in the order their updates run, so of several waiting riders the one with the lowest id goes first. A dead
+    /// transport has no door (false): its riders are removed in one step and scattered (<see cref="Remove"/>).
+    /// </summary>
+    public virtual bool ExitViaDoor(IWorldServices world, Entity rider)
+    {
+        if (Entity.EffectivelyDead || !Riders.Contains(rider.Id)) return false;
+        if (!_exitWanted.Contains(rider.Id)) _exitWanted.Add(rider.Id);
+        world.MarkDirty(Entity);
+        ReleaseThroughDoor(world);
+        return true;
+    }
+
+    private void ReleaseThroughDoor(IWorldServices world)
+    {
+        while (_exitWanted.Count > 0 && world.Tick >= _exitNotBusyTick)
+        {
+            var next = _exitWanted[0];
+            foreach (var id in _exitWanted)
+                if (id.Value < next.Value) next = id;
+            _exitWanted.Remove(next);
+            if (world.FindEntity(next) is not { EffectivelyDead: false, DestroyRequested: false } rider || !Riders.Contains(next)) continue;
+            ExitObjectViaDoor(world, rider);
+        }
+        if (_exitWanted.Count > 0) world.WakeAt(Entity, this, _exitNotBusyTick);
+    }
+
+    /// <summary>
+    /// <c>OpenContain::exitObjectViaDoor</c> (OpenContain.cpp): the rider is taken out (<c>removeFromContain</c>, which puts it on the container), and with at least one exit path
+    /// it is set on the path's <c>ExitStart</c> bone with the container's heading and walks to the <c>ExitEnd</c> bone, moved to the nearest place it can stand on
+    /// (<c>Pathfinder::adjustToPossibleDestination</c>) - the riders of one transport do not end on one spot. It ignores the container as an obstacle on that walk and other
+    /// units' collisions for a second. A model without the bone answers with the container's position (<c>Object::getSingleLogicalBonePosition</c>), which the adjustment then
+    /// moves off the container. Not modeled: the door animation (<c>DoorOpenTime</c>), a rally point of the container, the fall of a rider that leaves in the air.
+    /// </summary>
+    private void ExitObjectViaDoor(IWorldServices world, Entity rider)
+    {
+        Remove(world, rider, true);
+        world.Emit(SimEventKind.EntityUncontained, rider.Id, Entity.Id, string.Empty, 0);
+        if (data.NumberOfExitPaths <= 0) return;
+        var (centreX, centreY, _) = Entity.FrameEnd(world.Tick);
+        ExitPath? path = null;
+        if (world.Templates.Geometry.ExitPaths.TryGetValue(Entity.Template.Name, out var paths))
+        {
+            if (paths.Length != data.NumberOfExitPaths)
+                throw new InvalidDataException($"The model geometry of '{Entity.Template.Name}' has {paths.Length} exit paths, the module has {data.NumberOfExitPaths}.");
+            path = paths[data.NumberOfExitPaths > 1 ? _whichExitPath - 1 : 0];
+        }
+        // "To cycle from 1 to n": only a container with several paths counts.
+        if (data.NumberOfExitPaths > 1) _whichExitPath = _whichExitPath % data.NumberOfExitPaths + 1;
+        var cos = FixedTrig.Cos(Entity.Angle);
+        var sin = FixedTrig.Sin(Entity.Angle);
+        (Fixed X, Fixed Y) World(BonePose? bone) => bone is { } pose ? (centreX + pose.X * cos - pose.Y * sin, centreY + pose.X * sin + pose.Y * cos) : (centreX, centreY);
+        var (startX, startY) = World(path?.Start);
+        var (endX, endY) = World(path?.End);
+        rider.X = startX;
+        rider.Y = startY;
+        rider.Angle = Entity.Angle;
+        world.MarkDirty(rider);
+        if (CrateModules.AiOf(rider) is not { } ai) return;
+        world.FindPossibleDestination(rider, ref endX, ref endY);
+        ai.OrderExitContainer(world, Entity, endX, endY, true);
+    }
+
+    /// <summary>
+    /// <c>OpenContain::scatterToNearbyPosition</c> (OpenContain.cpp): a random angle, then a random distance between one and one and a half bounding-circle radii of the
+    /// container (two draws of the logic stream, in this order, for every rider); the rider faces that way, stands on the container's centre and walks to the point, ignoring
+    /// the container. A rider without AI is put on the point. A rider that is dead keeps the draws and the position, and walks nowhere.
+    /// </summary>
+    private void ScatterToNearbyPosition(IWorldServices world, Entity rider)
+    {
+        var angle = world.LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
+        var minRadius = Entity.Template.BoundingCircleRadius;
+        var distance = world.LogicRandom.Range(minRadius, minRadius + minRadius / Fixed.FromInt(2));
+        var (centreX, centreY, _) = Entity.FrameEnd(world.Tick);
+        var x = centreX + distance * FixedTrig.Cos(angle);
+        var y = centreY + distance * FixedTrig.Sin(angle);
+        rider.Angle = FixedTrig.Normalize(angle);
+        world.MarkDirty(rider);
+        if (rider.EffectivelyDead) return;
+        if (CrateModules.AiOf(rider) is { } ai && rider.Template.Locomotor is not null) ai.OrderExitContainer(world, Entity, x, y, false);
+        else
+        {
+            rider.X = x;
+            rider.Y = y;
+        }
     }
 
     public override long Update(IWorldServices world)
     {
         PruneDead(world);
+        var sleep = Regenerate(world);
+        if (_exitWanted.Count == 0) return sleep;
+        ReleaseThroughDoor(world);
+        return _exitWanted.Count == 0 ? sleep : Math.Min(sleep, _exitNotBusyTick - world.Tick);
+    }
+
+    private long Regenerate(IWorldServices world)
+    {
         if (data.HealthRegenPercentPerSecond > Fixed.Zero)
             foreach (var riderId in Riders.ToArray())
             {
@@ -448,11 +599,27 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     {
         DescribeContained(writer);
         writer.Int("usedSlots", _usedSlots);
+        if (_exitNotBusyTick != 0) writer.Int("exitNotBusy", _exitNotBusyTick);
+        if (_whichExitPath != 1) writer.Int("whichExitPath", _whichExitPath);
+        if (_exitWanted.Count == 0) return;
+        writer.BeginArray("exitWanted");
+        foreach (var id in _exitWanted)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", id.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
     }
 
     public override void Load(IStateReader reader)
     {
         LoadContained(reader);
         _usedSlots = checked((int)reader.Int("usedSlots"));
+        _exitNotBusyTick = reader.Has("exitNotBusy") ? reader.Int("exitNotBusy") : 0;
+        _whichExitPath = reader.Has("whichExitPath") ? checked((int)reader.Int("whichExitPath")) : 1;
+        _exitWanted.Clear();
+        if (!reader.Has("exitWanted")) return;
+        foreach (var entry in reader.Array("exitWanted")) _exitWanted.Add(new EntityId(checked((uint)entry.UInt("id"))));
     }
 }
