@@ -16,6 +16,11 @@ coding agents and humans alike); the licence situation is described in [NOTICE.m
 
 ## Building and testing
 
+Checks are chosen by what a change can break ([docs/TESTING.md](docs/TESTING.md)): the focused test while working,
+`pwsh scripts/test.ps1` before every commit (the test programs of the touched areas, minutes),
+`pwsh scripts/test.ps1 -Tier gate` before a push of code, `-Tier full` only at the completion of a phase and the other
+triggers named there. `-Plan` prints what a tier would run. The single commands:
+
 ```powershell
 dotnet build CnCNew.slnx
 dotnet run --project tests/CnCNew.Simulation.Tests

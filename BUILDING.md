@@ -74,6 +74,8 @@ dotnet run --project tools/CnCNew.AssetTool -- verify game/content
 dotnet run --project tools/CnCNew.IniTool -- compat-check game/content baselines/compatibility.json
 ```
 
+- Which checks a change needs is fixed in [docs/TESTING.md](docs/TESTING.md); `pwsh scripts/test.ps1` selects and runs
+  them from the changed paths (`-Tier affected|gate|full`, `-Plan` prints the commands).
 - Tests are standalone console programs (non-zero exit code on failure), no xUnit/NUnit. All test programs, audits,
   manifest checks and tool commands: [CLAUDE.md](CLAUDE.md), section "Build, tests, audits".
 - Long runs use the Release build; build a Release tool on its own before `--no-build`
