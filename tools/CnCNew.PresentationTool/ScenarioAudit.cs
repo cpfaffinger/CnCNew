@@ -216,7 +216,24 @@ internal static class ScenarioAudit
 
         CheckDuelTracking(history, events, live, failures);
         CheckSentinelScan(history, live, failures);
+        CheckWreck(events, live, failures);
         return failures;
+    }
+
+    /// <summary>
+    /// Finding S3 of docs/ACCEPTANCE.md §6 (fixed, F-05): the slow death of the loser plays its phases (<c>SlowDeathBehavior::doPhaseStuff</c>) - an effect list is requested
+    /// at the dying tank and its FINAL creation list leaves the hull. Debris pieces (<c>CreateDebris</c>) are not simulated and are printed as skipped creations.
+    /// </summary>
+    private static void CheckWreck(List<SimEvent> events, LiveScenario live, List<string> failures)
+    {
+        var death = events.FirstOrDefault(item => item.Kind == SimEventKind.EntityDied && live.Tags.Any(pair => pair.Value == item.Entity));
+        if (death.Kind != SimEventKind.EntityDied) return; // nobody died: the duel itself is checked above
+        var effects = events.Where(item => item.Kind == SimEventKind.FxRequested && item.Entity == death.Entity && item.Tick >= death.Tick).Select(item => item.Text).Distinct().ToArray();
+        var hulls = events.Where(item => item.Kind == SimEventKind.EntitySpawned && item.Tick >= death.Tick && item.Text.Contains("DeadHull", StringComparison.OrdinalIgnoreCase)).Select(item => item.Text).ToArray();
+        var skipped = events.Count(item => item.Kind == SimEventKind.CreationSkipped && item.Entity == death.Entity);
+        Console.WriteLine($"  death at tick {death.Tick}: effect lists requested by the dying tank [{string.Join(", ", effects)}], hull [{string.Join(", ", hulls)}], creations skipped {skipped}");
+        if (effects.Length == 0) failures.Add("the dying tank requested no effect list (no death explosion)");
+        if (hulls.Length == 0) failures.Add("the dying tank left no hull");
     }
 
     /// <summary>Everything the persistent attack and the recentre hold promise, measured in every tick and not only at the shots.</summary>

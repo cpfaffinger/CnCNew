@@ -242,22 +242,115 @@ public sealed class TransitionDamageFX(TransitionDamageFXData data) : SimModule,
 /// <summary>
 /// <c>SlowDeathBehavior.h</c>'s 13 keys. Mechanically modeled: the shared <c>DieMuxData</c> filter, the weighted
 /// sibling lottery (<c>ProbabilityModifier</c>) and the sink/destruction delay timers that end in an actual
-/// <c>RequestDestroy</c>. Not modeled (typed but Opaque/unapplied — all presentation or physics):
-/// <c>SinkRate</c>/<c>DestructionAltitude</c> (the visual sinking-into-ground animation), <c>FX</c>/<c>OCL</c>/<c>Weapon</c>
-/// (three more RNG-drawn, per-phase effect lists — <c>doPhaseStuff</c>), <c>FlingForce</c>/<c>FlingPitch</c> and their
+/// <c>RequestDestroy</c>, and the per-phase <c>FX</c>/<c>OCL</c>/<c>Weapon</c> lists (<see cref="SlowDeathPhases"/>, <c>doPhaseStuff</c>). Not modeled (typed but Opaque/unapplied — all presentation or physics):
+/// <c>SinkRate</c>/<c>DestructionAltitude</c> (the visual sinking-into-ground animation),
+/// <c>FlingForce</c>/<c>FlingPitch</c> and their
 /// variances (a physics impulse on death — no <c>PhysicsBehavior</c> yet). <c>ModifierBonusPerOverkillPercent</c> needs
 /// the actual damage dealt at the killing blow, which <see cref="IWorldServices.OnEntityDied"/> does not carry yet
 /// (phase 4's <c>IDieModule.OnDie</c> was never wired for it) — a further, explicitly deferred refinement.
 /// </summary>
 public sealed record SlowDeathData(DieMuxData Mux, int ProbabilityModifier, long SinkDelayTicks, long SinkDelayVarianceTicks, long DestructionDelayTicks, long DestructionDelayVarianceTicks) : DieData(Mux)
 {
+    /// <summary>The effect lists, creation lists and weapons of the three phases (<c>m_fx</c>, <c>m_ocls</c>, <c>m_weapons</c>); empty when the module names none.</summary>
+    public SlowDeathPhases Phases { get; init; } = SlowDeathPhases.None;
+
     public static SlowDeathData Parse(RatedModuleConfiguration configuration) => new(
         DieMuxData.Parse(configuration),
         checked((int)ModuleConfigReader.Int(configuration, "ProbabilityModifier", 0)),
         ModuleConfigReader.Ticks(configuration, "SinkDelay", 0),
         ModuleConfigReader.Ticks(configuration, "SinkDelayVariance", 0),
         ModuleConfigReader.Ticks(configuration, "DestructionDelay", 0),
-        ModuleConfigReader.Ticks(configuration, "DestructionDelayVariance", 0));
+        ModuleConfigReader.Ticks(configuration, "DestructionDelayVariance", 0))
+    {
+        Phases = SlowDeathPhases.Parse(configuration),
+    };
+}
+
+/// <summary><c>SlowDeathPhaseType</c> (SlowDeathBehavior.h): the beginning, the midpoint and the end of a slow death.</summary>
+public enum SlowDeathPhase : byte { Initial = 0, Midpoint = 1, Final = 2 }
+
+/// <summary>
+/// The per-phase lists of <c>SlowDeathBehaviorModuleData</c>: <c>FX</c>, <c>OCL</c> and <c>Weapon</c> lines, each <c>&lt;phase&gt; &lt;name&gt;...</c> and appended to the list
+/// of its phase (<c>parseFX</c>, <c>parseOCL</c>, <c>parseWeapon</c>). <c>NONE</c> stays in its list as an empty entry, as the reference pushes a null
+/// pointer ("could be null! this is OK!"): it takes part in the draw and does nothing. <see cref="HasAny"/> is <c>m_maskOfLoadedEffects</c>: without a single name
+/// <c>doPhaseStuff</c> returns before any draw.
+/// </summary>
+public sealed record SlowDeathPhases(ImmutableArray<ImmutableArray<string>> Fx, ImmutableArray<ImmutableArray<string>> Ocl, ImmutableArray<ImmutableArray<string>> Weapons, bool HasAny)
+{
+    private static readonly ImmutableArray<ImmutableArray<string>> Empty = [[], [], []];
+
+    public static SlowDeathPhases None { get; } = new(Empty, Empty, Empty, false);
+
+    public static SlowDeathPhases Parse(RatedModuleConfiguration configuration)
+    {
+        var any = false;
+        ImmutableArray<ImmutableArray<string>> Lists(string key)
+        {
+            var phases = new[] { ImmutableArray.CreateBuilder<string>(), ImmutableArray.CreateBuilder<string>(), ImmutableArray.CreateBuilder<string>() };
+            foreach (var field in ModuleConfigReader.All(configuration, key))
+            {
+                if (field.Value.Value is not Data.Definitions.TaggedReferenceList tagged) throw new UnsupportedModuleConfigurationException(key);
+                var phase = tagged.Tag switch { "INITIAL" => 0, "MIDPOINT" => 1, "FINAL" => 2, _ => throw new UnsupportedModuleConfigurationException(key) };
+                foreach (var reference in tagged.References)
+                {
+                    // "NONE" is the reference's null entry. A name no definition carries is one too in the reference; here it is told apart when it is used (an unknown
+                    // creation list or weapon is a counted CreationSkipped, an unknown effect list is counted by the presentation).
+                    var defined = !reference.IsNone;
+                    phases[phase].Add(defined ? reference.Name : string.Empty);
+                    any |= defined;
+                }
+            }
+            return [phases[0].ToImmutable(), phases[1].ToImmutable(), phases[2].ToImmutable()];
+        }
+
+        var fx = Lists("FX");
+        var ocl = Lists("OCL");
+        var weapons = Lists("Weapon");
+        return any ? new SlowDeathPhases(fx, ocl, weapons, true) : None;
+    }
+
+    /// <summary>
+    /// <c>SlowDeathBehavior::doPhaseStuff</c> (SlowDeathBehavior.cpp): of each non-empty list of the phase one entry is drawn (<c>GameLogicRandomValue(0, size - 1)</c>, in the
+    /// order effect, creation list, weapon, also for a list of one); the effect list is played at the object, the creation list creates at the object, the weapon is fired once
+    /// at the object's own position (<c>createAndFireTempWeapon</c>). What a creation list names and the simulation cannot create is counted by the creation itself
+    /// (<c>CreationSkipped</c> with its reason).
+    /// </summary>
+    public void Do(IWorldServices world, Entity entity, SlowDeathPhase phase)
+    {
+        if (!HasAny) return;
+        var index = (int)phase;
+        if (Fx[index].Length > 0 && Fx[index][world.LogicRandom.Range(0, Fx[index].Length - 1)] is { Length: > 0 } fx)
+            world.Emit(SimEventKind.FxRequested, entity.Id, EntityId.Invalid, fx, 0);
+        if (Ocl[index].Length > 0 && Ocl[index][world.LogicRandom.Range(0, Ocl[index].Length - 1)] is { Length: > 0 } ocl)
+            world.CreateFromList(entity, ocl, EntityId.Invalid, false);
+        if (Weapons[index].Length > 0 && Weapons[index][world.LogicRandom.Range(0, Weapons[index].Length - 1)] is { Length: > 0 } weapon)
+            world.FireTempWeapon(entity, weapon, entity.X, entity.Y, entity.Z);
+    }
+
+    /// <summary>
+    /// <c>GameLogicRandomValue(BEGIN_MIDPOINT_RATIO * m_destructionFrame, END_MIDPOINT_RATIO * m_destructionFrame)</c> with the ratios 0.35f and 0.65f: the bounds of the
+    /// midpoint draw for a destruction delay of <paramref name="frames"/> logic frames. The products are single-precision (the logic runs the FPU with 24 bits of precision,
+    /// <c>GameLogic.cpp setFPMode</c>) and are cut off to whole frames: 0.35f is 11744051 / 2^25 and 0.65f is 10905190 / 2^24, computed here with whole numbers.
+    /// </summary>
+    public static (int Low, int High) MidpointBounds(long frames) => (SingleProductTruncated(11744051, 25, frames), SingleProductTruncated(10905190, 24, frames));
+
+    private static int SingleProductTruncated(long mantissa, int shift, long factor)
+    {
+        if (factor <= 0) return 0;
+        var product = checked(mantissa * factor);
+        // Round to 24 significant bits, ties to even: the single-precision result of the multiplication.
+        var bits = 64 - System.Numerics.BitOperations.LeadingZeroCount((ulong)product);
+        if (bits > 24)
+        {
+            var drop = bits - 24;
+            var kept = product >> drop;
+            var rest = product & ((1L << drop) - 1);
+            var half = 1L << (drop - 1);
+            if (rest > half || (rest == half && (kept & 1) == 1)) kept++;
+            product = kept << drop;
+        }
+        return checked((int)(product >> shift));
+    }
 }
 
 /// <summary>
@@ -268,13 +361,15 @@ public sealed record SlowDeathData(DieMuxData Mux, int ProbabilityModifier, long
 /// alone schedules its destruction, guarded by <see cref="Entity.SlowDeathStarted"/> so the lottery runs at most once
 /// (the reference guards this per-object via "is my AI already in a dead state", which only works when the object has
 /// an <c>AIUpdateInterface</c> — the entity-level flag here is deliberately more robust, not a silent behavior gap).
-/// Both random delay draws happen unconditionally, even at zero variance, to keep logic-RNG consumption aligned with
+/// Both random delay draws and the midpoint draw happen unconditionally, even at zero variance, to keep logic-RNG consumption aligned with
 /// the reference's own unconditional <c>GameLogicRandomValue(0, variance)</c> calls.
 /// </summary>
 public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.Mux), IUpdateModule, ISlowDeathCandidate
 {
     private bool _activated;
     private long _destructionTick;
+    private long _midpointTick;
+    private bool _midpointDone;
     private long _nextWake = -1;
 
     public override string ModuleName => "SlowDeathBehavior";
@@ -293,17 +388,47 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         var sink = data.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.SinkDelayVarianceTicks);
         var destruction = data.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.DestructionDelayVarianceTicks);
         _ = sink; // the sinking-into-ground animation is presentation only; only the destruction timer is modeled.
+        // beginSlowDeath: the midpoint is drawn between 35 % and 65 % of the destruction delay, in logic frames of the original like the two variances - the third draw,
+        // made for every slow death whether or not a phase has anything to play.
+        var (low, high) = SlowDeathPhases.MidpointBounds(world.Time.ToOriginalFrames(destruction));
+        var midpoint = world.Time.DrawFrames(world.LogicRandom, world.Time.OriginalFrames(low), world.Time.OriginalFrames(high));
+        // The update that first looks at either timer is the one a frame after the death (the reference sleeps for the smallest of them, at least to the next frame).
         _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
-        world.WakeAt(Entity, this, _destructionTick);
+        _midpointTick = world.Tick + world.Time.AtLeastOneFrame(midpoint);
+        _midpointDone = false;
+        world.WakeAt(Entity, this, Math.Min(_midpointTick, _destructionTick));
+        data.Phases.Do(world, Entity, SlowDeathPhase.Initial);
     }
 
-    public long Update(IWorldServices world) => SlowDeathTimer.Update(world, Entity, _activated, _destructionTick);
+    /// <summary>
+    /// <c>SlowDeathBehavior::update</c>: the midpoint phase once its frame has come, then - at the destruction frame - the final phase and the removal of the object; both in
+    /// one update when they fall together. The module sleeps between the two (the sinking of the reference's update is presentation), and every answer is the rest of the
+    /// next timer (docs/DEFECT-LOST-WAKE.md).
+    /// </summary>
+    public long Update(IWorldServices world)
+    {
+        if (!_activated) return SimulationTiming.SleepForever;
+        if (!_midpointDone && world.Tick >= _midpointTick)
+        {
+            _midpointDone = true;
+            world.MarkDirty(Entity);
+            data.Phases.Do(world, Entity, SlowDeathPhase.Midpoint);
+        }
+        if (world.Tick < _destructionTick) return (_midpointDone ? _destructionTick : Math.Min(_midpointTick, _destructionTick)) - world.Tick;
+        data.Phases.Do(world, Entity, SlowDeathPhase.Final);
+        world.RequestDestroy(Entity.Id);
+        return SimulationTiming.SleepForever;
+    }
 
     public override void Describe(IStateWriter writer)
     {
         writer.Bool("activated", _activated);
         writer.Int("destructionTick", _destructionTick);
         writer.Int("nextWake", _nextWake);
+        // Written for a slow death that has begun only: an object that lives keeps the bytes it had.
+        if (!_activated) return;
+        writer.Int("midpointTick", _midpointTick);
+        if (_midpointDone) writer.Bool("midpointDone", true);
     }
 
     public override void Load(IStateReader reader)
@@ -311,6 +436,8 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
         _activated = reader.Bool("activated");
         _destructionTick = reader.Int("destructionTick");
         _nextWake = reader.Int("nextWake");
+        _midpointTick = reader.Has("midpointTick") ? reader.Int("midpointTick") : 0;
+        _midpointDone = reader.Has("midpointDone") && reader.Bool("midpointDone");
     }
 }
 

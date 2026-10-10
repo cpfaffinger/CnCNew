@@ -679,6 +679,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// </summary>
     public virtual void OrderMove(IWorldServices world, Fixed x, Fixed y, bool fromPlayer, bool attackMove = false)
     {
+        // AIUpdateInterface::privateMoveToPosition: "the dead don't listen very well".
+        if (Entity.EffectivelyDead && IsGroundMover) return;
         world.EndAttack(Entity);
         if (attackMove) world.BeginAttackMove(Entity, x, y);
         CancelDock(world);
@@ -866,6 +868,49 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
+        _evacuatePending = false;
+        _exitAfterEvacuate = false;
+        _returning = false;
+        StopInternalMove();
+        world.MarkDirty(Entity);
+    }
+
+    private bool IsGroundMover => Entity.Template.Locomotor is { } moves && (moves.Surfaces & LocomotorSurfaces.Air) == 0;
+
+    /// <summary>
+    /// <c>AIUpdateInterface::markAsDead</c> (called by <c>SlowDeathBehavior::onDie</c>) and <c>AIDeadState</c> (AIStates.cpp: <c>setLocomotorGoalNone</c> in every update): a
+    /// dying ground object heads nowhere any more - its move, dock, builder task and approach end where the logic frame it has begun ends, and it takes no further order.
+    /// What dies in the air is moved by its own death module (helicopter, jet) and is left alone. Not modeled: the coasting to a stop (a vehicle rolls out by its
+    /// physics, an infantryman loses a fifth of his speed per frame).
+    /// </summary>
+    internal void StopAtDeath(IWorldServices world, bool settled)
+    {
+        if (!IsGroundMover) return;
+        if (!Entity.HasMoveTarget && _dock is null && _task == BuilderTask.None && !_enterTarget.IsValid && !_goal.IsValid && !_evacuatePending && !_returning && !_exitRallyPending) return;
+        // Where it stops is the same at every tick rate: where the logic frame of the original ends in which it died. Above 30 Hz the world has put an object that was
+        // covering a frame's step on that frame's end (settled). An object that has not had its turn in this tick takes the step of this frame first - at 30 Hz the whole
+        // step of the tick, above the step of the frame its update begins now - and stops then (Update); one that has had it stops here.
+        if (!settled && Entity.HasMoveTarget && _turnTick != world.Tick)
+        {
+            _dyingSince = world.Tick;
+            world.WakeAt(Entity, this, world.Tick);
+            world.MarkDirty(Entity);
+            return;
+        }
+        StopForDeath(world);
+    }
+
+    // The tick the module last had its turn in (derived within a tick, not state), and the tick of a death whose stop waits for the step of that tick (written while it waits).
+    private long _turnTick = -1;
+    private long _dyingSince;
+
+    private void StopForDeath(IWorldServices world)
+    {
+        _dyingSince = 0;
+        CancelDock(world);
+        ClearTask();
+        _enterTarget = EntityId.Invalid;
+        _goal = EntityId.Invalid;
         _evacuatePending = false;
         _exitAfterEvacuate = false;
         _returning = false;
@@ -1107,6 +1152,20 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     }
 
     public virtual long Update(IWorldServices world)
+    {
+        // A death whose stop waits for this turn (StopAtDeath): the step of the frame the object died in is taken below, then it stands. A wait that was not
+        // answered in the tick of the death (the module did not run) ends without a step.
+        var dying = _dyingSince != 0;
+        var late = dying && _dyingSince != world.Tick;
+        _turnTick = world.Tick;
+        var sleep = late ? SimulationTiming.SleepForever : UpdateLiving(world);
+        if (!dying) return sleep;
+        if (_frameTicksLeft > 0) SettleFrame(world.Tick);
+        StopForDeath(world);
+        return SimulationTiming.SleepForever;
+    }
+
+    private long UpdateLiving(IWorldServices world)
     {
         if (Entity.EmpDisabledUntil > world.Tick || (Entity.ScriptDisableMask & Entity.ScriptHeld) != 0)
         {
@@ -2017,6 +2076,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             writer.Fixed("viaY", _viaY);
         }
         if (_exitFrom.IsValid) writer.UInt("exitFrom", _exitFrom.Value);
+        if (_dyingSince != 0) writer.Int("dyingSince", _dyingSince);
         if (_ignoreCollisionsUntil != 0) writer.Int("ignoreCollisionsUntil", _ignoreCollisionsUntil);
         if (_pathValid)
         {
@@ -2069,6 +2129,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _viaPending = reader.Has("viaX");
         _viaX = _viaPending ? reader.Fixed("viaX") : Fixed.Zero;
         _viaY = _viaPending ? reader.Fixed("viaY") : Fixed.Zero;
+        _dyingSince = reader.Has("dyingSince") ? reader.Int("dyingSince") : 0;
         _exitFrom = reader.Has("exitFrom") ? new EntityId(checked((uint)reader.UInt("exitFrom"))) : EntityId.Invalid;
         _ignoreCollisionsUntil = reader.Has("ignoreCollisionsUntil") ? reader.Int("ignoreCollisionsUntil") : 0;
         InvalidatePath();

@@ -27,6 +27,11 @@ public enum FieldType
     CountedReference,
     /// <summary><c>WeaponBonusSet::parseWeaponBonusSet</c>: <c>&lt;condition&gt; &lt;field&gt; &lt;percent&gt;</c>, both names from the reference tables.</summary>
     WeaponBonusEntry,
+    /// <summary>
+    /// <c>    WeaponBonusEntry,lt;tag    WeaponBonusEntry,gt;     WeaponBonusEntry,lt;name    WeaponBonusEntry,gt;...</c>: a member of <see cref="FieldSchema.Table"/> first, then at least one reference of <see cref="FieldSchema.ReferenceKind"/>
+    /// (<c>SlowDeathBehavior.cpp parseFX</c>/<c>parseOCL</c>/<c>parseWeapon</c>: a phase name, then every further token is looked up and pushed, found or not).
+    /// </summary>
+    TaggedReferenceList,
 }
 
 /// <summary>What a repeated key inside one definition means (derived from the reference parse functions).</summary>
@@ -79,7 +84,7 @@ public sealed record FieldSchema(
     {
         var value = text.Trim();
         var full = value;
-        var readsWholeText = Type is FieldType.IntegerList or FieldType.TextList or FieldType.RetailAlternatingNames or FieldType.CountedReference or FieldType.WeaponBonusEntry;
+        var readsWholeText = Type is FieldType.IntegerList or FieldType.TextList or FieldType.RetailAlternatingNames or FieldType.CountedReference or FieldType.WeaponBonusEntry or FieldType.TaggedReferenceList;
         if (IgnoredTokenCount(value) > 0 && !readsWholeText)
             value = ValueGrammar.Tokenize(value)[0];
         var result = ParseCore(value, location);
@@ -201,6 +206,15 @@ public sealed record FieldSchema(
                 var innerSchema = this with { Type = InnerType ?? throw new InvalidOperationException($"Schema '{Name}' has no InnerType."), Table = null };
                 var inner = innerSchema.ParseCore(coefficientTokens[1], location);
                 return new(DefinitionValueKind.Coefficient, new CoefficientValue(enumName, inner), value);
+            case FieldType.TaggedReferenceList:
+                var taggedTokens = ValueGrammar.Tokenize(value);
+                var tagTable = Table ?? throw new InvalidOperationException($"Schema '{Name}' has no table.");
+                if (taggedTokens.Length < 2 || !tagTable.TryIndexOf(taggedTokens[0], out var tagIndex))
+                    throw ValueGrammar.Error($"'{Name}' expects a member of {tagTable.Name} ({tagTable.Source}) and at least one name, got '{value}'.", location);
+                return new(DefinitionValueKind.Reference, new TaggedReferenceList(tagTable.Canonical(tagIndex),
+                    taggedTokens.Skip(1).Select(token => token.Equals("NONE", StringComparison.OrdinalIgnoreCase)
+                        ? new DefinitionReference(ReferenceKind!.Value, "NONE", true)
+                        : new DefinitionReference(ReferenceKind!.Value, token)).ToImmutableArray()), value);
             case FieldType.LocomotorSet:
                 var tokens = ValueGrammar.Tokenize(value);
                 if (tokens.Length == 0 || !NameTables.LocomotorSet.TryIndexOf(tokens[0], out var setIndex))

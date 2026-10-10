@@ -13,26 +13,8 @@
     },
     {
       "category": "deferred-field",
-      "name": "BattleBusSlowDeathBehavior/FX",
-      "count": 6,
-      "owners": [
-        "BattleBusSlowDeathBehavior"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "BattleBusSlowDeathBehavior/ModifierBonusPerOverkillPercent",
       "count": 6,
-      "owners": [
-        "BattleBusSlowDeathBehavior"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "BattleBusSlowDeathBehavior/OCL",
-      "count": 5,
       "owners": [
         "BattleBusSlowDeathBehavior"
       ],
@@ -3361,15 +3343,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "NeutronMissileSlowDeathBehavior/OCL",
-      "count": 3,
-      "owners": [
-        "NeutronMissileSlowDeathBehavior"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "OCLUpdate/FactionOCL",
       "count": 12,
       "owners": [
@@ -4243,15 +4216,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "SlowDeathBehavior/FX",
-      "count": 1401,
-      "owners": [
-        "SlowDeathBehavior"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "SlowDeathBehavior/FlingForce",
       "count": 150,
       "owners": [
@@ -4297,26 +4261,8 @@
     },
     {
       "category": "deferred-field",
-      "name": "SlowDeathBehavior/OCL",
-      "count": 945,
-      "owners": [
-        "SlowDeathBehavior"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "SlowDeathBehavior/SinkRate",
       "count": 614,
-      "owners": [
-        "SlowDeathBehavior"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "SlowDeathBehavior/Weapon",
-      "count": 49,
       "owners": [
         "SlowDeathBehavior"
       ],

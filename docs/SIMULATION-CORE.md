@@ -2897,3 +2897,44 @@ In both, and in `AlpineAssault_China-GLA` (same winner, end tick 17,791 → 81,6
 the timing of an order of the AI - a unit stands on another place than before, and the match diverges from there. **The balance is not assessed** (D-9). After the rewrite
 `input-manifest check` is identical, `reference-manifest check --set full` passes twice with 50 of 50 runs identical, and the rate-equivalence suite is 0 / 0 at 60 and 120 Hz in
 all ten groups with the new case "group order" (locomotion: 56 cases, 896 quantities).
+
+### 44.3 F-05: the slow death plays its phases (`SlowDeathBehavior::doPhaseStuff`)
+
+**What the original does.** `SlowDeathBehavior::beginSlowDeath` (`GameLogic/Object/Behavior/SlowDeathBehavior.cpp`, line 232 ff.) draws the sink delay and the destruction delay
+with their variances, then the midpoint `GameLogicRandomValue(BEGIN_MIDPOINT_RATIO * m_destructionFrame, END_MIDPOINT_RATIO * m_destructionFrame)` (0.35 and 0.65), and ends with
+`doPhaseStuff(SDPHASE_INITIAL)`. `update` (line 386 ff.) calls `doPhaseStuff(SDPHASE_MIDPOINT)` once the midpoint frame has come and `doPhaseStuff(SDPHASE_FINAL)` at the destruction
+frame, before the object is destroyed. `doPhaseStuff` (line 339 ff.) returns at once when the module names no list at all; else, for the phase, it draws one entry of the `FX` list
+and plays it at the object, one of the `OCL` list and creates it at the object, one of the `Weapon` list and fires it once at the object's own position
+(`createAndFireTempWeapon`) - three draws at most, in this order, also for a list of one. The keys are `<phase> <name>...` and append to the list of their phase
+(`parseFX`, `parseOCL`, `parseWeapon`).
+
+**What was built.**
+
+| Piece | Where | Rule |
+|---|---|---|
+| Keys typed strictly | `FieldType.TaggedReferenceList`, `NameTables.SlowDeathPhase`, `ModuleCatalog.cs` | `FX`, `OCL` and `Weapon` of `SlowDeathBehavior`, `HelicopterSlowDeathBehavior`, `JetSlowDeathBehavior`, `BattleBusSlowDeathBehavior` and `NeutronMissileSlowDeathBehavior`: a phase name (`INITIAL`, `MIDPOINT`, `FINAL`), then references to effect lists, creation lists or weapons. In the retail data: 1,210 `FX INITIAL`, 198 `FX FINAL`, 693 `OCL INITIAL`, 26 `OCL MIDPOINT`, 252 `OCL FINAL`, 1 `Weapon INITIAL`, 4 `Weapon MIDPOINT`, 43 `Weapon FINAL` lines, each with one name |
+| The lists | `SlowDeathPhases` (`Phase5BlockerModules.cs`) | three lists per phase; `NONE` is an empty entry that takes part in the draw and does nothing |
+| The midpoint | `SlowDeathBehavior.BeginSlowDeath`, `SlowDeathPhases.MidpointBounds` | the third draw of every slow death, between 0.35f and 0.65f of the destruction delay in logic frames. The bounds are the single-precision products cut off to whole frames (the logic runs the FPU with 24 bits of precision, `GameLogic.cpp`, line 215), computed with whole numbers: 20 frames give 7 to 13, 30 give 10 to 19 |
+| The phases | `SlowDeathPhases.Do`, `SlowDeathBehavior.Update` | INITIAL in the tick of the death, MIDPOINT and FINAL at their frames (both in one update when they fall together, FINAL before the removal). The effect list is an `FxRequested` event, the creation list goes through `CreateFromList`, the weapon through `FireTempWeapon`. An unknown creation list or weapon and a nugget the simulation does not create are counted `CreationSkipped` events with their reason - nothing is silent |
+
+**State and formats.** A slow death that has begun writes `midpointTick` and, once played, `midpointDone`; a living object writes what it wrote before. No format version changes.
+
+**Frame convention.** The delays and the midpoint are drawn in logic frames of the original and scaled (the same draws at every rate); the phases fall on the death tick plus whole
+frames. Three-rate test: every effect request, the hull, the weapon's damage and the removal in the same logic frame at 30, 60 and 120 Hz; a snapshot during the slow death continues
+identically.
+
+**Tests.** `Tests.SlowDeathPhases.cs` (prefix "Slow death phases": the three phases, a list of two drawn both ways over spread seeds, a death without lists, the bounds of the
+midpoint; three rates and snapshot), the rate-equivalence cases "slow death …" of the group of special powers and time modules, which now also measure what a dying object played
+and created and when, and the scene `tank-duel`: `scenario-audit --name tank-duel --drawables-at 390` lists the hull (`ChinaVehicleBattleMasterDeadHull`, model `nvbtmstr_d1`) where
+the Battlemaster died in frame 382 and went in frame 388.
+
+**Not built, counted or named.**
+
+- **The debris.** `OCL_ChinaTankBattleMasterDebris` creates the hull with a `CreateObject` nugget and the flying pieces with `CreateDebris` nuggets. `CreateFromList` does not create
+  debris (a physics object with a model of its own): each is a counted `CreationSkipped` (reason "nugget not simulated"), three in `tank-duel`. Entered as F-36.
+- **The subclasses.** `HelicopterSlowDeathBehavior`, `JetSlowDeathBehavior`, `BattleBusSlowDeathBehavior` and `NeutronMissileSlowDeathBehavior` extend the same behaviour in the
+  original and play the base lists too; here their keys are typed and their modules play only their own effect and creation keys, as before (the midpoint draw is not made for them).
+  Entered as F-37.
+- `SinkRate`, `DestructionAltitude` (the hull's sinking is presentation), `FlingForce`/`FlingPitch` (no physics impulse), `ModifierBonusPerOverkillPercent`, the time scale of
+  the game LOD (`getSlowDeathScale`: always 1 here).
+- Whether the presentation shows every requested effect list is its own count (`docs/CLIENT-FX.md`); **no human has seen a death explosion or a wreck**.

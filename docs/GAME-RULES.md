@@ -872,3 +872,6 @@ Rules of the original that the port did not follow and now does; the full descri
   (`MSG_DO_MOVETO` to an `AIGroup`): the units are taken nearest to the goal first, each keeps its offset from the nearest one up to six of its bounding-circle radii
   (`AIGroup::computeIndividualDestination`) and takes the nearest free place there (`Pathfinder::adjustDestination`); nobody is routed around a group that has already parked.
   Every single move of a ground unit is adjusted to the nearest free place when it is ordered (`AIInternalMoveToState::onEnter`). `CommandTypes.Version` 16, replay format 13.
+- **A slow death plays its phases (F-05, §44.3).** At the beginning, at a midpoint drawn between 35 % and 65 % of the destruction delay, and at the end of a
+  `SlowDeathBehavior` one entry of the phase's `FX`, `OCL` and `Weapon` lists is drawn and played, created and fired (`SlowDeathBehavior::doPhaseStuff`): death explosions,
+  wrecks and death weapons. Debris pieces (`CreateDebris` nuggets) are counted as skipped creations, not created. Keys now typed: `FX`, `OCL`, `Weapon` of the slow-death modules.

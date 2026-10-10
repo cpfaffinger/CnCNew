@@ -168,9 +168,33 @@ public static partial class RateCases
         scene.StepFrames(RateScene.Seconds(1));
         scene.Align();
         if (scene.Gone(thing)) return quantities.Exact("kill to removal", -1).Done();
+        var before = scene.Events.Count;
+        var executed = scene.World.Tick;
         scene.Kill(thing);
         var gone = scene.StepUntil(() => scene.World.FindEntity(thing.Id) != thing, RateScene.Seconds(300));
         quantities.Exact("kill to removal", gone);
+        // The phases of the slow death (SlowDeathBehavior::doPhaseStuff, docs/SIMULATION-CORE.md §44.3): what the dying object played and created, and when it did so last.
+        long effects = 0, created = 0, skipped = 0, lastEffect = -1, lastCreated = -1;
+        for (var index = before; index < scene.Events.Count; index++)
+        {
+            var item = scene.Events[index];
+            if (item.Kind == SimEventKind.FxRequested && item.Entity == thing.Id)
+            {
+                effects++;
+                lastEffect = item.Tick - executed;
+            }
+            else if (item.Kind == SimEventKind.CreationSkipped && item.Entity == thing.Id) skipped++;
+            else if (item.Kind == SimEventKind.EntitySpawned)
+            {
+                created++;
+                lastCreated = item.Tick - executed;
+            }
+        }
+        quantities.Count("death: effect lists requested", effects);
+        quantities.Count("death: objects created", created);
+        quantities.Count("death: creations skipped", skipped);
+        quantities.Exact("death: kill to the last effect list", lastEffect);
+        quantities.Exact("death: kill to the last object created", lastCreated);
         return quantities.Done();
     }
 

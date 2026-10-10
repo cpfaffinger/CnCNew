@@ -58,6 +58,9 @@ public static class NameTables
     public static NameTable Shadow { get; } = new("Shadow", "Shadow.h TheShadowNames", "SHADOW_DECAL", "SHADOW_VOLUME", "SHADOW_PROJECTION", "SHADOW_DYNAMIC_PROJECTION", "SHADOW_DIRECTIONAL_PROJECTION", "SHADOW_ALPHA_DECAL", "SHADOW_ADDITIVE_DECAL");
 
     /// <summary>AIUpdate.h TheLocomotorSetNames (8 entries).</summary>
+    /// <summary><c>SlowDeathBehavior.h TheSlowDeathPhaseNames</c>: the three moments of a slow death at which its effect, creation list and weapon lists are played.</summary>
+    public static NameTable SlowDeathPhase { get; } = new("SlowDeathPhase", "SlowDeathBehavior.h TheSlowDeathPhaseNames", "INITIAL", "MIDPOINT", "FINAL");
+
     public static NameTable LocomotorSet { get; } = new("LocomotorSet", "AIUpdate.h TheLocomotorSetNames", "SET_NORMAL", "SET_NORMAL_UPGRADED", "SET_FREEFALL", "SET_WANDER", "SET_PANIC", "SET_TAXIING", "SET_SUPERSONIC", "SET_SLUGGISH");
 
     public static ImmutableArray<NameTable> All { get; } =
