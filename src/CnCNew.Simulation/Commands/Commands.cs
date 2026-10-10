@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
@@ -14,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 15;
+    public const int Version = 16;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -82,7 +83,11 @@ public static class CommandTypes
     /// <summary><c>aiAttackMoveToPosition</c> (<c>AI_ATTACK_MOVE_TO</c>): moves to a point, engages what the unit meets on the way and marches on afterwards (docs/SIMULATION-CORE.md §33).</summary>
     public const ushort AttackMove = 32;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= AttackMove;
+    // --------------------------------------------------------------------------------------------------- group move (v16)
+    /// <summary><c>MSG_DO_MOVETO</c> / <c>MSG_DO_ATTACKMOVETO</c> to a group (<c>AIGroup::groupMoveToPosition</c>): several units are sent to one point and each gets a destination of its own (docs/SIMULATION-CORE.md §44.2).</summary>
+    public const ushort GroupMove = 33;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= GroupMove;
 }
 
 /// <summary>
@@ -158,6 +163,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
                 (WeaponLockKind)checked((byte)reader.Int("lock"))),
             CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), new EntityId(checked((uint)reader.UInt("victim"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"), reader.Bool("attack")),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -711,4 +717,39 @@ public readonly record struct SubmitResult(bool Accepted, CommandRejection Reaso
 {
     public static SubmitResult Ok => new(true, 0);
     public static SubmitResult Reject(CommandRejection reason) => new(false, reason);
+}
+
+/// <summary>
+/// <c>MSG_DO_MOVETO</c> / <c>MSG_DO_ATTACKMOVETO</c> for a selected group (<c>AIGroup::groupMoveToPosition</c>, <c>groupAttackMoveToPosition</c>): the units are sent to (X, Y)
+/// as one group. Each keeps its offset from the member nearest to the point, up to six of its bounding-circle radii, and takes the nearest free place there; with
+/// <see cref="Attack"/> the march is an attack-move. A single unit is ordered with <see cref="SetMoveTargetCommand"/> or <see cref="AttackMoveCommand"/>. Every unit has to be
+/// the player's and able to move when the order is given; a member that is gone when the order executes takes no part.
+/// </summary>
+public sealed record GroupMoveCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y, bool Attack) : SimCommand(Player, Sequence, Tick)
+{
+    /// <summary>Own limit: more units than this in one order are refused (a selection of the original holds far fewer; the bound keeps a hostile command small).</summary>
+    public const int MaxUnits = 1024;
+
+    public override ushort TypeCode => CommandTypes.GroupMove;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.BeginArray("units");
+        foreach (var unit in Units)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", unit.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+        writer.Bool("attack", Attack);
+    }
+
+    // The unit list is compared by content: two commands with the same members are the same command (a replay or a snapshot reads its own array).
+    public bool Equals(GroupMoveCommand? other)
+        => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && Attack == other.Attack && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
+
+    public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }

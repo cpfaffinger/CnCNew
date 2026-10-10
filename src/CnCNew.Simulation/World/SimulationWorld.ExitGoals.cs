@@ -179,13 +179,23 @@ public sealed partial class SimulationWorld
     /// Whether <paramref name="mover"/> could stand at the point: its cell can be entered with the mover's locomotor and is not covered by a structure, and no other mobile ground
     /// object stands there or is on its way there (its bounding circle around its position, or around its move target while it has one, does not reach the mover's).
     /// </summary>
-    private bool GoalIsFree(Entity mover, Fixed x, Fixed y)
+    private bool GoalIsFree(Entity mover, Fixed x, Fixed y) => GoalIsFree(mover, x, y, false);
+
+    /// <summary>
+    /// <see cref="GoalIsFree(Entity, Fixed, Fixed)"/>; with <paramref name="atOrder"/> as <c>Pathfinder::checkDestination</c> asks it when a move is ordered ("Don't usurp your allies goals"):
+    /// units of an enemy and aircraft claim nothing, and a member of the group being ordered whose place is not planned yet claims none
+    /// (<c>AIGroup::groupMoveToPosition</c> removes the goals of all members first).
+    /// </summary>
+    private bool GoalIsFree(Entity mover, Fixed x, Fixed y, bool atOrder, GoalGround ground = GoalGround.Enterable)
     {
         if (Navigation is { } navigation && mover.Template.Locomotor is { } locomotor)
         {
             var cellX = TerrainMap.CellOf(x);
             var cellY = TerrainMap.CellOf(y);
-            if (!navigation.IsPassable(cellX, cellY, locomotor.Surfaces) || navigation.IsBlockedByObstacle(cellX, cellY)) return false;
+            // The ordered point itself is refused for a structure on it or somebody's claim, not for ground the mover cannot enter (a boat sent to a point on land keeps the
+            // point and goes as far as the water does): checkDestination looks at obstacles and units, and checkForAdjust accepts the ordered cell without a path to it.
+            if (navigation.IsBlockedByObstacle(cellX, cellY) || !navigation.Terrain.IsInside(cellX, cellY)) return false;
+            if (ground != GoalGround.Any && navigation.IsPassable(cellX, cellY, locomotor.Surfaces) != (ground == GoalGround.Enterable)) return false;
         }
         var radius = CircleRadius(mover);
         foreach (var other in _mobiles)
@@ -200,6 +210,11 @@ public sealed partial class SimulationWorld
             var heading = other.HasMoveTarget && !ReferenceEquals(other, _claiming);
             var otherX = heading ? other.MoveTargetX : standsX;
             var otherY = heading ? other.MoveTargetY : standsY;
+            if (atOrder)
+            {
+                if ((other.Template.Locomotor!.Surfaces & CnCNew.Simulation.Templates.LocomotorSurfaces.Air) != 0 || AreEnemies(mover, other)) continue;
+                if (_groupPending.Contains(other.Id.Value)) continue;
+            }
             var limit = radius + CircleRadius(other);
             if (FurtherThan(otherX, x, limit) || FurtherThan(otherY, y, limit)) continue;
             var ox = otherX - x;
@@ -209,13 +224,22 @@ public sealed partial class SimulationWorld
         return true;
     }
 
+    /// <summary>What the ground of a goal has to be for the mover: enterable (the rule everywhere but at an order), anything (the ordered point itself), or not enterable.</summary>
+    private enum GoalGround : byte { Enterable, Any, NotEnterable }
+
     /// <summary><c>MAX_CELLS_TO_TRY</c> of <c>Pathfinder::adjustToPossibleDestination</c> and <c>adjustDestination</c> (AIPathfind.cpp).</summary>
     private const int MaxCellsToTry = 400;
 
     /// <inheritdoc cref="Modules.IWorldServices.FindPossibleDestination"/>
-    public bool FindPossibleDestination(Entity mover, ref Fixed x, ref Fixed y)
+    public bool FindPossibleDestination(Entity mover, ref Fixed x, ref Fixed y) => FindDestination(mover, ref x, ref y, false);
+
+    private bool FindDestination(Entity mover, ref Fixed x, ref Fixed y, bool atOrder)
     {
-        if (GoalIsFree(mover, x, y)) return true;
+        if (GoalIsFree(mover, x, y, atOrder, atOrder ? GoalGround.Any : GoalGround.Enterable)) return true;
+        // checkForAdjust: a cell is taken when a path leads there, or - for an ordered point the mover cannot reach - when it lies on the ordered point's side (a boat sent to a
+        // taken point on land gets a place on land beside it, and goes as far as the water does).
+        var ground = !atOrder || Navigation is not { } grid || mover.Template.Locomotor is not { } moves || grid.IsBlockedByObstacle(TerrainMap.CellOf(x), TerrainMap.CellOf(y))
+                     || grid.IsPassable(TerrainMap.CellOf(x), TerrainMap.CellOf(y), moves.Surfaces) ? GoalGround.Enterable : GoalGround.NotEnterable;
         var i = TerrainMap.CellOf(x);
         var j = TerrainMap.CellOf(y);
         var limit = MaxCellsToTry;
@@ -237,7 +261,7 @@ public sealed partial class SimulationWorld
                     limit--;
                     var cellX = TerrainMap.CellCenter(i);
                     var cellY = TerrainMap.CellCenter(j);
-                    if (!GoalIsFree(mover, cellX, cellY)) continue;
+                    if (!GoalIsFree(mover, cellX, cellY, atOrder, ground)) continue;
                     x = cellX;
                     y = cellY;
                     return true;

@@ -137,13 +137,13 @@ internal sealed class AcceptanceAudit
                 var path = PathLength(tag, start, end);
                 var arrival = Enumerable.Range((int)start, (int)(end - start + 1)).FirstOrDefault(frame => Enumerable.Range(frame, (int)Math.Min(15, end - frame + 1)).All(later => At(later)[tag].Speed <= 0.5f) && frame > start + 15);
                 Console.WriteLine($"  leg {leg + 1} {tag,-8} rests {offGoal,5:F1} from the goal, path {path,6:F1} for {straight,6:F1} straight, at rest from frame {arrival} (+{arrival - start})");
-                // Known finding S2 (below) for the soldiers, who arrive last; a vehicle that does not come to rest is a new failure.
-                var prefix = tag.StartsWith("ranger", StringComparison.Ordinal) ? "KNOWN S2 " : string.Empty;
+                // Finding S2 of docs/ACCEPTANCE.md §6 (fixed, F-04): every unit of the group has a destination of its own from the order on (AIGroup::computeIndividualDestination).
+                var prefix = string.Empty;
                 if (stillMoving > 0) failures.Add($"{prefix}leg {leg + 1}: {tag} still walks in {stillMoving} of the last 30 frames, {AcceptanceScenes.MarchLegFrames / 30} s after the order");
                 else if (turning > 0.05f) failures.Add($"leg {leg + 1}: {tag} still turns in the last 30 frames ({turning * 180 / MathF.PI:F0} degrees)");
                 if (offGoal > 110f) failures.Add($"leg {leg + 1}: {tag} rests {offGoal:F1} from the goal");
-                // Known finding (docs/ACCEPTANCE.md, "Befunde fuer die Simulation" S2): who arrives after the vehicles is routed around the parked group to a free place on its far side.
-                if (path > 1.4f * straight + 20f && arrival > 0) failures.Add($"KNOWN S2 leg {leg + 1}: {tag} walked {path:F1} for {straight:F1} straight and rests only {arrival - start} frames after the order (detour around the group)");
+                // Nobody walks around the group: at most 1.4 times the straight line (a vehicle that has to turn round on the way back needs its turning circle).
+                if (path > 1.4f * straight + 20f && arrival > 0) failures.Add($"leg {leg + 1}: {tag} walked {path:F1} for {straight:F1} straight and rests only {arrival - start} frames after the order (detour around the group)");
             }
             CheckApart(tags, end, $"end of leg {leg + 1}", failures);
         }

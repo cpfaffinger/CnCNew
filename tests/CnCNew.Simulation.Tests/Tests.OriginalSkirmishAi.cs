@@ -279,13 +279,19 @@ static partial class Tests
             $"SKIRMISH_BUILD_BUILDING makes the dozer build the listed structures (pending: {string.Join("; ", engine.AiPendingBuilds(new PlayerId(1)))}).");
         Check.That(engine.AiEnemyOf(new PlayerId(1)) is null || engine.AiEnemyOf(new PlayerId(1)) == new PlayerId(2), "The only enemy is the enemy.");
 
-        StepFrames(session, 900);
+        // The hunt is looked for once a second while the 30 seconds run: who hunts may have fallen by their end.
+        var sawHunt = false;
+        for (var second = 0; second < 30; second++)
+        {
+            StepFrames(session, 30);
+            sawHunt |= System.Text.Encoding.UTF8.GetString(session.Save()).Contains("\"path\":\"hunt\"", StringComparison.Ordinal);
+        }
         Check.That(engine.FlagValue("A Attacking0"), "A team whose production condition holds is selected, trained and, once complete, runs its create script.");
         Check.That(engine.FlagValue("A Marked0"), "The generic script hook of the team ran for its instance.");
         var attackers = engine.TeamInstances.Single(team => team.Prototype == "A Attack0");
         Check.That(attackers.Members.Count == 2 || CountOwned(session, 1, "AlphaSoldier") < 2, $"The team has both its soldiers: the start soldier, recruited, and a trained one - a start unit is not taken for a trained one ({attackers.Members.Count}).");
-        Check.That(System.Text.Encoding.UTF8.GetString(session.Save()).Contains("\"path\":\"hunt\"", StringComparison.Ordinal) || CountOwned(session, 1, "AlphaSoldier") == 0,
-            "The create script of the team is run with the team as <This Team>: its TEAM_HUNT sends the members hunting.");
+        Check.That(sawHunt || LiveTeamMembers(session, "A Attack0").Length == 0,
+            $"The create script of the team is run with the team as <This Team>: its TEAM_HUNT sends the members hunting (or all of them have fallen: {LiveTeamMembers(session, "A Attack0").Length} alive, {CountOwned(session, 1, "AlphaSoldier")} soldiers).");
         Check.That(engine.AiEnemyOf(new PlayerId(1)) == new PlayerId(2), "A front defence without an approach path looks towards the acquired enemy.");
         Check.That(engine.MissingActionHits.Count == 0 && engine.MissingConditionHits.Count == 0, $"No script type without implementation was hit ({string.Join(", ", engine.MissingActionHits.Keys)}).");
         Check.That(!engine.Diagnostics.Keys.Any(key => key.Contains("not run by the skirmish AI", StringComparison.Ordinal)), "Skirmish actions found their AI player.");

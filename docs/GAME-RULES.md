@@ -868,3 +868,7 @@ Rules of the original that the port did not follow and now does; the full descri
   told to leave a building walks from its centre to the nearest place it can stand on (`GarrisonContain::exitObjectViaDoor`). Only the riders of a **destroyed** transport are
   scattered, one to one and a half bounding radii away (`TransportContain::onRemoving`, `OpenContain::scatterToNearbyPosition`); `ScatterNearbyOnExit` is read by nothing, as in the
   original. Keys now typed: `NumberOfExitPaths`, `ExitDelay`, `ScatterNearbyOnExit`.
+- **A group order gives every unit its own destination (F-04, §44.2).** A player's move or attack-move order for several selected units is one `GroupMoveCommand`
+  (`MSG_DO_MOVETO` to an `AIGroup`): the units are taken nearest to the goal first, each keeps its offset from the nearest one up to six of its bounding-circle radii
+  (`AIGroup::computeIndividualDestination`) and takes the nearest free place there (`Pathfinder::adjustDestination`); nobody is routed around a group that has already parked.
+  Every single move of a ground unit is adjusted to the nearest free place when it is ordered (`AIInternalMoveToState::onEnter`). `CommandTypes.Version` 16, replay format 13.

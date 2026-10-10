@@ -962,8 +962,7 @@ static class InputTests
         Assert(controller.Hover(world, view, Screen(70.5f, 20.25f)) is { Action: ContextAction.Move, Cursor: CursorKind.Move }, "ground under two rangers: move");
         var move = Issued(() => controller.IssueContext(world, view, Screen(70.5f, 20.25f)));
         Assert(move.SequenceEqual<SimCommand>([
-            new SetMoveTargetCommand(Me, 1, world.Tick, r1.Id, Fixed.FromDecimal(70.5m), Fixed.FromDecimal(20.25m)),
-            new SetMoveTargetCommand(Me, 2, world.Tick, r2.Id, Fixed.FromDecimal(70.5m), Fixed.FromDecimal(20.25m))]), "one move per unit, id order, exact fixed-point target");
+            new GroupMoveCommand(Me, 1, world.Tick, [r1.Id, r2.Id], Fixed.FromDecimal(70.5m), Fixed.FromDecimal(20.25m), false)]), "one group order for the selection, id order, exact fixed-point target");
         Assert(controller.DrainFeedback() is [{ Kind: FeedbackKind.MoveMarker, DurationFrames: 40 } marker] && marker.Position == new Vector3(70.5f, 20.25f, 0), "a move marker at the destination");
 
         Assert(controller.Hover(world, view, Screen(120, 40)) is { Action: ContextAction.AttackObjectAfterMoving, Cursor: CursorKind.OutRange }, "an enemy out of range: attack after moving");
@@ -1388,11 +1387,9 @@ static class InputTests
 
         var mine = arena.Sink.Issued;
         Assert(mine.SequenceEqual<SimCommand>([
-            new SetMoveTargetCommand(Me, 1, start, r1.Id, Fixed.FromInt(100), Fixed.FromInt(20)),
-            new SetMoveTargetCommand(Me, 2, start, r2.Id, Fixed.FromInt(100), Fixed.FromInt(20)),
-            new ConstructCommand(Me, 3, start + 1, dozer.Id, "Plant", Fixed.FromInt(60), Fixed.FromInt(110), Fixed.Zero),
-            new SetMoveTargetCommand(Me, 4, start + 2, r1.Id, Fixed.FromInt(20), Fixed.FromInt(120)),
-            new SetMoveTargetCommand(Me, 5, start + 2, r2.Id, Fixed.FromInt(20), Fixed.FromInt(120))]),
+            new GroupMoveCommand(Me, 1, start, [r1.Id, r2.Id], Fixed.FromInt(100), Fixed.FromInt(20), false),
+            new ConstructCommand(Me, 2, start + 1, dozer.Id, "Plant", Fixed.FromInt(60), Fixed.FromInt(110), Fixed.Zero),
+            new GroupMoveCommand(Me, 3, start + 2, [r1.Id, r2.Id], Fixed.FromInt(20), Fixed.FromInt(120), false)]),
             $"the exact command stream: {string.Join(" | ", mine)}");
         Assert(world.RejectionCounts.Sum() == 0, "every command was accepted");
         Assert(world.Entities.Count(entity => entity.Template.Name == "Plant") == 2, "the site stands");

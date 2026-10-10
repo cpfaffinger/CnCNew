@@ -318,17 +318,28 @@ public sealed class CommandModeController
         return any;
     }
 
-    /// <summary>One move order per unit to the same point, in id order (no formation offsets: <c>groupMoveToPosition</c>'s spreading is not modelled).</summary>
+    /// <summary>
+    /// <c>MSG_DO_MOVETO</c> to the selection: one unit gets a move order, several get one group order (<see cref="GroupMoveCommand"/>, <c>AIGroup::groupMoveToPosition</c>), in
+    /// which the simulation gives every unit a destination of its own.
+    /// </summary>
     private bool MoveTo(SimulationWorld world, IEnumerable<Entity> units, Vector3 ground)
     {
-        var any = false;
-        foreach (var unit in units)
-        {
-            Orders.Clear(unit.Id);
-            any |= Move(world, unit, ground);
-        }
+        var list = units.ToArray();
+        foreach (var unit in list) Orders.Clear(unit.Id);
+        var any = MoveGroup(world, list, ground, false);
         if (any) Feedback(FeedbackKind.MoveMarker, world, ground, EntityId.Invalid, Settings.MoveHintFrames);
         return any;
+    }
+
+    /// <summary>The move or attack-move order of <paramref name="units"/> to one point: a single command for one unit, a group order for several (units that cannot move take no part).</summary>
+    private bool MoveGroup(SimulationWorld world, IReadOnlyList<Entity> units, Vector3 ground, bool attack)
+    {
+        var movable = units.Where(SimulationQueries.CanMove).ToArray();
+        if (movable.Length == 0) return false;
+        if (movable.Length == 1) return attack ? AttackMove(movable[0], ground) : Move(world, movable[0], ground);
+        var (x, y) = (SimulationQueries.ToFixed(ground.X), SimulationQueries.ToFixed(ground.Y));
+        ImmutableArray<EntityId> ids = [..movable.Select(unit => unit.Id)];
+        return Issue((sequence, tick) => new GroupMoveCommand(Player, sequence, tick, ids, x, y, attack)).Accepted;
     }
 
     private bool Move(SimulationWorld world, Entity unit, Vector3 ground)
@@ -563,13 +574,23 @@ public sealed class CommandModeController
                 if (ground is not { } point) { Feedback(FeedbackKind.InvalidOrder, world, Vector3.Zero, EntityId.Invalid, Settings.MarkerFrames); return false; }
                 var kind = Mode == CommandModeKind.AttackMove ? StandingOrderKind.AttackMove : StandingOrderKind.Guard;
                 var any = false;
-                foreach (var unit in sources)
+                if (kind == StandingOrderKind.AttackMove)
                 {
-                    Orders.Clear(unit.Id);
-                    if (!(kind == StandingOrderKind.AttackMove ? AttackMove(unit, point) : Move(world, unit, point))) continue;
-                    Orders.Set(unit.Id, new StandingOrder(kind, EntityId.Invalid, new Vector2(point.X, point.Y), [], world.Tick));
-                    any = true;
+                    // MSG_DO_ATTACKMOVETO to the selection: one group order, as for a plain move.
+                    foreach (var unit in sources) Orders.Clear(unit.Id);
+                    any = MoveGroup(world, sources, point, true);
+                    if (any)
+                        foreach (var unit in sources.Where(SimulationQueries.CanMove))
+                            Orders.Set(unit.Id, new StandingOrder(kind, EntityId.Invalid, new Vector2(point.X, point.Y), [], world.Tick));
                 }
+                else
+                    foreach (var unit in sources)
+                    {
+                        Orders.Clear(unit.Id);
+                        if (!Move(world, unit, point)) continue;
+                        Orders.Set(unit.Id, new StandingOrder(kind, EntityId.Invalid, new Vector2(point.X, point.Y), [], world.Tick));
+                        any = true;
+                    }
                 if (any) Feedback(FeedbackKind.MoveMarker, world, point, EntityId.Invalid, Settings.MoveHintFrames);
                 Cancel();
                 return any;

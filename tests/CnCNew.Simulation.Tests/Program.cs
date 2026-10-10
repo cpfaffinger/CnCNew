@@ -458,6 +458,7 @@ run.Test("Container exit: ExitStart and ExitEnd bones, cycling through the exit 
 run.Test("Container exit: without exit paths the rider stays on the container", Tests.ContainerExitWithoutExitPathsStaysOnTheContainer);
 run.Test("Container exit: a destroyed transport scatters its riders", Tests.ContainerExitDeadTransportScattersItsRiders);
 run.Test("Container exit: the same frames and places at 30, 60 and 120 Hz, snapshot in mid-exit", Tests.ContainerExitIsTheSameAtEveryRate);
+run.Test("Group move: every unit keeps its offset, shortened to six radii, and gets a place of its own", Tests.GroupMoveGivesEveryUnitItsOwnDestination);run.Test("Group move: coinciding places and an occupied goal are adjusted to the nearest free cell", Tests.GroupMoveAdjustsToFreePlaces);run.Test("Group move: the command is validated, saved in a snapshot and replayed", Tests.GroupMoveCommandIsValidatedSavedAndReplayed);run.Test("Group move: the same destinations and places at 30, 60 and 120 Hz", Tests.GroupMoveIsTheSameAtEveryRate);
 run.Test("Chinook: flight height, supply trips, Supply Lines boost and landing to unload", Tests.ChinookSupplyFlightAndLanding);
 run.Test("Chinook: helicopter slow death falls, crashes and leaves a hull", Tests.HelicopterSlowDeathFall);
 run.Test("Helix: portable structure rides free, follows and dies with it", Tests.HelixPortableStructure);

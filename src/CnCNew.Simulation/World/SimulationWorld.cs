@@ -736,6 +736,17 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!CanMove(marcher)) return CommandRejection.CannotMove;
                 break;
             }
+            case GroupMoveCommand group:
+            {
+                if (group.Units.IsDefaultOrEmpty || group.Units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
+                foreach (var id in group.Units)
+                {
+                    if (!_entities.TryGetValue(id.Value, out var member) || member.DestroyRequested) return CommandRejection.UnknownEntity;
+                    if (member.Owner != command.Player) return CommandRejection.NotPermitted;
+                    if (!CanMove(member)) return CommandRejection.CannotMove;
+                }
+                break;
+            }
             case PursueCommand pursue:
             {
                 if (!_entities.TryGetValue(pursue.Unit.Value, out var pursuer) || pursuer.DestroyRequested) return CommandRejection.UnknownEntity;
@@ -911,8 +922,9 @@ public sealed partial class SimulationWorld : IWorldServices
             var byPlayer = a.Player.Value.CompareTo(b.Player.Value);
             return byPlayer != 0 ? byPlayer : a.Sequence.CompareTo(b.Sequence);
         });
-        foreach (var command in list)
+        for (var index = 0; index < list.Count; index++)
         {
+            var command = list[index];
             _pendingCommandCount--;
             _commandSum = unchecked(_commandSum - HashCommand(command));
             Execute(command);
@@ -1044,7 +1056,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!CanMove(target)) { RecordRejection(command, CommandRejection.CannotMove); break; }
                 // GameLogicDispatch doMoveTo: a move order releases any temporary weapon lock.
                 ReleaseWeaponLock(target, WeaponLockKind.Temporary);
-                AiOf(target)!.OrderMove(this, move.X, move.Y, true);
+                var (moveX, moveY) = IndividualDestination(target, move.X, move.Y);
+                AiOf(target)!.OrderMove(this, moveX, moveY, true);
                 break;
             }
             case SetRelationshipCommand relationOrder:
@@ -1069,9 +1082,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (marcher.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
                 if (!CanMove(marcher)) { RecordRejection(command, CommandRejection.CannotMove); break; }
                 ReleaseWeaponLock(marcher, WeaponLockKind.Temporary);
-                AiOf(marcher)!.OrderMove(this, attackMove.X, attackMove.Y, true, attackMove: true);
+                var (marchX, marchY) = IndividualDestination(marcher, attackMove.X, attackMove.Y);
+                AiOf(marcher)!.OrderMove(this, marchX, marchY, true, attackMove: true);
                 break;
             }
+            case GroupMoveCommand group:
+                ExecuteGroupMove(group);
+                break;
             case PursueCommand pursue:
             {
                 var unit = FindEntity(pursue.Unit);

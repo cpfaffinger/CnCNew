@@ -38,6 +38,11 @@ public enum ScenarioOrderKind
     Build,
     /// <summary>Move to <see cref="ScenarioOrder.X"/>/<see cref="ScenarioOrder.Y"/> and attack whatever comes into range on the way.</summary>
     AttackMove,
+    /// <summary>
+    /// A player's order to a selected group: the actor and the units named in <see cref="ScenarioOrder.Target"/> (tags separated by commas) are sent to
+    /// <see cref="ScenarioOrder.X"/>/<see cref="ScenarioOrder.Y"/> as one group (<c>GroupMoveCommand</c>); each gets a destination of its own.
+    /// </summary>
+    MoveGroup,
 }
 
 /// <summary>
@@ -181,6 +186,17 @@ public sealed class LiveScenario : LiveGame
                     throw new InvalidOperationException($"Scenario '{Scenario.Name}': building '{order.Template}' with '{order.Actor}' was refused.");
                 _pendingProduction[index] = order.Target;
                 return true;
+            case ScenarioOrderKind.MoveGroup:
+            {
+                var members = ImmutableArray.CreateBuilder<EntityId>();
+                members.Add(actor);
+                foreach (var tag in (order.Target ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    members.Add(_tags.TryGetValue(tag, out var member) ? member : throw new InvalidOperationException($"Scenario '{Scenario.Name}': the group order names the unknown unit '{tag}'."));
+                foreach (var member in members) Book(player).Clear(member);
+                var units = members.ToImmutable();
+                Issue(player, (sequence, tick) => new GroupMoveCommand(player, sequence, tick, units, Fixed.FromDecimal((decimal)(Anchor.X + order.X)), Fixed.FromDecimal((decimal)(Anchor.Y + order.Y)), false));
+                return true;
+            }
             case ScenarioOrderKind.AttackMove:
                 Book(player).Clear(actor);
                 Issue(player, (sequence, tick) => new AttackMoveCommand(player, sequence, tick, actor, Fixed.FromDecimal((decimal)(Anchor.X + order.X)), Fixed.FromDecimal((decimal)(Anchor.Y + order.Y))));

@@ -36,7 +36,7 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 12;
+    public const int CurrentVersion = 13;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -159,6 +159,15 @@ public static class ReplayFormat
         var bytes = Encoding.UTF8.GetBytes(value);
         writer.Write(checked((ushort)bytes.Length));
         writer.Write(bytes);
+    }
+
+    private static ImmutableArray<EntityId> ReadUnits(BinaryReader reader)
+    {
+        var count = reader.ReadInt32();
+        if (count < 0 || count > GroupMoveCommand.MaxUnits) throw new ReplayFormatException($"A group move names {count} units.");
+        var units = ImmutableArray.CreateBuilder<EntityId>(count);
+        for (var index = 0; index < count; index++) units.Add(new EntityId(reader.ReadUInt32()));
+        return units.MoveToImmutable();
     }
 
     private static string ReadString(BinaryReader reader)
@@ -322,6 +331,13 @@ public static class ReplayFormat
                 writer.Write(pursue.X.Raw);
                 writer.Write(pursue.Y.Raw);
                 break;
+            case GroupMoveCommand group:
+                writer.Write(group.Units.Length);
+                foreach (var unit in group.Units) writer.Write(unit.Value);
+                writer.Write(group.X.Raw);
+                writer.Write(group.Y.Raw);
+                writer.Write(group.Attack);
+                break;
             case AttackMoveCommand attackMove:
                 writer.Write(attackMove.Unit.Value);
                 writer.Write(attackMove.X.Raw);
@@ -375,6 +391,7 @@ public static class ReplayFormat
             CommandTypes.Capture => new CaptureCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32())),
             CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadBoolean()),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
     }

@@ -2840,3 +2840,43 @@ matches diverge chaotically):
 Decided AI runs: 14 of the 16 pairings on shipped maps before and after (one stalemate became a win, one win a stalemate). **The balance is not assessed** (D-9). After the
 rewrite `input-manifest check` is identical and `reference-manifest check --set full` passes twice with 50 of 50 runs identical; the rate-equivalence suite is 0 / 0 at 60 and
 120 Hz in all ten groups with the new case "leaving a transport" (locomotion: 55 cases).
+
+### 44.2 F-04: a destination of its own for every unit (`AIGroup::computeIndividualDestination`, `Pathfinder::adjustDestination`)
+
+**What the original does.** A move order to a selected group is one message (`MSG_DO_MOVETO`) to an `AIGroup`. `AIGroup::groupMoveToPosition` (`GameLogic/AI/AIGroup.cpp`, line 1552)
+ends, for every group that is neither a formation nor led along a group path, in one loop: the members are sorted by their distance from the goal, nearest first ("works better if you
+let the near units get the first paths"), the nearest member's position becomes the centre, and `computeIndividualDestination` (line 480) gives each member the goal plus its own offset
+from that centre, shortened to six of its bounding-circle radii; for a ground mover `Pathfinder::adjustDestination` (`AIPathfind.cpp`, line 5355, with `checkForAdjust`, line 5201, and
+`checkDestination`, line 4924) moves it to the nearest free cell of the square spiral (at most 400 cells; "don't usurp your allies goals", "don't move to an occupied cell") and
+`updateGoal` reserves it. The goals the members held before are released first (`removeGoal`). A single unit's destination is adjusted in the same way when its move begins
+(`AIInternalMoveToState::onEnter`, `AIStates.cpp`, line 1662). A unit then walks one path to a place that is its own from the start.
+
+**What was built.**
+
+| Piece | Where | Rule |
+|---|---|---|
+| The group order | `GroupMoveCommand` (`Commands.cs`, type code 33) | several units, one point, optionally as an attack-move. Validated as a whole when it is submitted (every unit the player's and able to move; at most 1,024 units); a member that is gone when it executes takes no part. **`CommandTypes.Version` 15 → 16, replay format 12 → 13**: older replays and command tables are rejected by their version. `WorldSnapshot` stays 10 (a pending command is written by its own type) |
+| Individual destinations | `SimulationWorld.ExecuteGroupMove` (`SimulationWorld.GroupMoves.cs`) | the loop of `groupMoveToPosition` as described above: sorted near to far (ties by id), centre = the nearest member, offset shortened to six bounding radii, adjusted for ground movers, each member's order given at once so that its goal counts for the next; positions are read at the frame end (§43.2, rule 4) |
+| Adjustment of every move | `SimulationWorld.IndividualDestination` | `SetMoveTargetCommand` and `AttackMoveCommand` of a ground mover: the ordered point when free, else the nearest free cell of the spiral. A unit ordered onto the very point it stands on (this simulation's stop order) and an aircraft keep the point |
+| "Free" at an order | `GoalIsFree(…, atOrder)`, `FindDestination` (`SimulationWorld.ExitGoals.cs`) | no structure on the cell and no claim of a unit that is not the mover's enemy and does not fly (standing units claim their place, moving ones their goal). The ordered point itself is not refused for ground the mover cannot enter; a spiral cell has to be enterable when the ordered point is, and not enterable when it is not (`checkForAdjust` accepts a cell with a path to it, or - when the ordered point has none - one on the ordered point's side: a boat sent to a taken point on land gets a place on land and goes as far as the water does) |
+| Who gives the order | `CommandModeController.MoveGroup` (presentation), `ScenarioOrderKind.MoveGroup` (scenes) | a player's move or attack-move order for more than one selected unit is one `GroupMoveCommand`; one unit keeps the single commands. The scene `acc-march` gives one group order per leg |
+
+**Deliberately not a guess.** The first version derived a group from consecutive single commands with the same target. That also caught the script VM, which sends the members of a
+team to one waypoint with single commands and counts a member as arrived within 40 units of that waypoint (`ScriptEngine.UpdateFollowers`): with offsets of up to six radii such a
+member never arrives. The original distinguishes the cases by who gives the order, and so does the port now; the single commands of the VM and of the built-in `SkirmishAi` only get
+the adjustment every move gets. **Open, entered as F-35:** in the original the VM's team moves (`MOVE_TEAM_TO`, hunts) and the AI's team orders are group orders too.
+
+**Not built, with reasons.** The column moves of far-away infantry and vehicles along one group path (`friend_moveInfantryToPos`, `friend_moveVehicleToPos`), the tightening of a
+group ordered into its own bounds (`groupTightenToPosition`, `GroupMoveClickToGatherFactor`), formations the player set (`friend_moveFormationToPos`), the path-cost test of an
+adjusted cell against the group goal (`checkForAdjust` with `groupDest`, `tightenPath`), cliffs as refused destinations, the failure of a move for which no cell is free (the
+destination then stays as ordered), the delayed mood check of stealth units, the logical map extent for human players. The free-place check near the goal every 15th frame
+(`TryFreeGoalSpot`) stays for a goal that is taken after the order.
+
+**Frame convention.** The order is executed in the tick it is given for; the destinations depend on positions at the frame end and on nothing of the rate. Three-rate test: the same
+destinations and the same position of every unit at the end of every logic frame at 30, 60 and 120 Hz.
+
+**Tests.** `Tests.GroupMove.cs` (prefix "Group move": offsets, shortening and places of their own; coinciding places, an occupied goal of a single mover, the stop order; validation,
+snapshot with a pending order, replay round trip, attack group; three rates), `InputTests` (the selection gives one group order), the rate-equivalence case "group order" in the
+locomotion group, and the scene `acc-march`, whose audit no longer knows a finding S2 and fails on a detour: on the way out every unit drives 0.0 to 1.8 units more than the straight
+line (before: two Rangers 418 and 453 units for 234 and 244) and rests 0 to 80 from the goal on a place of its own; on the way back the six Rangers walk 145.4 for 145.3 and the three
+tanks 188 to 202 for 145 (they turn round first); smallest margin between two bounding circles 2.6 at the end of both legs.

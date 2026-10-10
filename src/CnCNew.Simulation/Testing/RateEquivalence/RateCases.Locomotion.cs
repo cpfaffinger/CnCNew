@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
+using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
@@ -166,6 +167,8 @@ public static partial class RateCases
             $"{candidates.Length} retail objects are driven by a move order on a non-winged locomotor; {chosen} distinct locomotors (30 Hz values), the first object by name stands for each, {candidates.Length - chosen} merged away"));
         // Leaving a transport through its door (OpenContain::exitObjectViaDoor, docs/SIMULATION-CORE.md §44.1): one retail transport with ExitDelay and several exit paths.
         builder.Add("leaving a transport: " + ExitTransport, scene => MeasureTransportExit(scene), ExitTransport, ExitRider);
+        // A group order (AIGroup::groupMoveToPosition, docs/SIMULATION-CORE.md §44.2): vehicles and infantry sent to one point, each to a destination of its own.
+        builder.Add("group order: " + GroupVehicle + " and " + ExitRider, scene => MeasureGroupMove(scene), GroupVehicle, ExitRider);
         builder.NotCovered("locomotion: leaving a transport with the exit bones of its model (the catalogs of the suite carry no model geometry: start and end are the transport's position)");
         builder.NotCovered("locomotion: objects whose locomotor changes with an upgrade or a locomotor set other than SET_NORMAL (only the normal set of each object is driven)");
         builder.NotCovered("locomotion: movement over slopes, water and cliffs (the map of the suite is flat)");
@@ -173,6 +176,66 @@ public static partial class RateCases
     }
 
     private static readonly Fixed TurnMargin = Fixed.FromFraction(1, 50);
+
+    private const string GroupVehicle = "AmericaTankCrusader";
+    private const int GroupVehicles = 3, GroupSoldiers = 6, GroupVehicleSpacing = 35, GroupSoldierSpacing = 20, GroupTravel = 400;
+
+    /// <summary>
+    /// Three tanks and six soldiers behind them are sent to one point as a group: per unit where its destination lies relative to the goal, when it is at rest and how far it
+    /// drove; and how many pairs stand inside each other at the end.
+    /// </summary>
+    private static ImmutableArray<RateQuantity> MeasureGroupMove(RateScene scene)
+    {
+        var quantities = new RateQuantities(scene);
+        var units = new List<Entity>();
+        for (var index = 0; index < GroupVehicles; index++) units.Add(scene.Spawn(GroupVehicle, 1, 2000, 2000 + GroupVehicleSpacing * index));
+        for (var index = 0; index < GroupSoldiers; index++) units.Add(scene.Spawn(ExitRider, 1, 1960, 1980 + GroupSoldierSpacing * index));
+        scene.Align();
+        var goalX = Fixed.FromInt(2000 + GroupTravel);
+        var goalY = Fixed.FromInt(2000 + GroupVehicleSpacing);
+        ImmutableArray<EntityId> ids = [..units.Select(unit => unit.Id)];
+        scene.Order(1, (owner, sequence, now) => new GroupMoveCommand(owner, sequence, now, ids, goalX, goalY, false));
+        var budget = scene.Time.OriginalFrames(RateScene.Seconds(120));
+        var stride = scene.Rate.TicksPerOriginalFrame;
+        var restAt = Enumerable.Repeat(-1L, units.Count).ToArray();
+        var driven = new Fixed[units.Count];
+        var lastX = units.Select(unit => unit.X).ToArray();
+        var lastY = units.Select(unit => unit.Y).ToArray();
+        var goals = new (Fixed X, Fixed Y)[units.Count];
+        for (long step = 1; step <= budget; step++)
+        {
+            scene.Step();
+            if (step == 1)
+                for (var index = 0; index < units.Count; index++) goals[index] = (units[index].MoveTargetX, units[index].MoveTargetY);
+            // Read at the end of a logic frame of the original (docs/SIMULATION-CORE.md §43.4).
+            if (step % stride != 0) continue;
+            for (var index = 0; index < units.Count; index++)
+            {
+                var unit = units[index];
+                driven[index] += RateMeasure.Distance(lastX[index], lastY[index], unit.X, unit.Y);
+                lastX[index] = unit.X;
+                lastY[index] = unit.Y;
+                if (unit.HasMoveTarget) restAt[index] = -1;
+                else if (restAt[index] < 0) restAt[index] = step - stride;
+            }
+            if (restAt.All(value => value >= 0)) break;
+        }
+        var stacked = 0;
+        for (var first = 0; first < units.Count; first++)
+            for (var second = first + 1; second < units.Count; second++)
+                if (RateMeasure.Distance(units[first], units[second]) < units[first].Template.BoundingCircleRadius + units[second].Template.BoundingCircleRadius) stacked++;
+        for (var index = 0; index < units.Count; index++)
+        {
+            var label = string.Create(CultureInfo.InvariantCulture, $"unit {index + 1}: ");
+            var done = restAt[index] >= 0;
+            quantities.Distance(label + "destination from the goal", RateMeasure.Distance(goals[index].X, goals[index].Y, goalX, goalY));
+            quantities.Event(label + "at rest", restAt[index]);
+            quantities.Distance(label + "rests from its destination", RateMeasure.Distance(units[index].X, units[index].Y, goals[index].X, goals[index].Y), done);
+            quantities.Distance(label + "path length", driven[index], done);
+        }
+        quantities.Count("pairs standing inside each other", stacked);
+        return quantities.Done();
+    }
 
     private const string ExitTransport = "AmericaVehicleHumvee", ExitRider = "AmericaInfantryRanger";
     private const int ExitRiders = 5, ExitRiderSpacing = 40;

@@ -30,9 +30,9 @@ public static class AcceptanceScenes
         };
         for (var index = 0; index < 6; index++) units.Add(new ScenarioUnit($"ranger{index + 1}", "AmericaInfantryRanger", 1, -125, -50 + 20 * index, 0f));
         var orders = new List<ScenarioOrder>();
+        // One order to the selected group per leg, as a player gives it (MSG_DO_MOVETO to a group).
         for (var leg = 0; leg < MarchLegs.Length; leg++)
-            foreach (var unit in units)
-                orders.Add(new ScenarioOrder(MarchLegs[leg], unit.Tag, ScenarioOrderKind.MoveTo, X: leg % 2 == 0 ? MarchEast : MarchWest, Y: 0));
+            orders.Add(new ScenarioOrder(MarchLegs[leg], units[0].Tag, ScenarioOrderKind.MoveGroup, string.Join(',', units.Skip(1).Select(unit => unit.Tag)), X: leg % 2 == 0 ? MarchEast : MarchWest, Y: 0));
         return new DemoScenario(
             "acc-march", "March to one point",
             "Three Crusaders, a Humvee and six Rangers are sent to the same point and back after 24 seconds. To see: starting, turning, braking, arriving without a twitch, and everybody ending on a place of his own beside the goal instead of circling the others.",
