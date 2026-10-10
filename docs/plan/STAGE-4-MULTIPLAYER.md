@@ -22,10 +22,41 @@ How the owner's requirements map onto it:
 
 | Requirement (10 October 2026) | In the architecture |
 |---|---|
-| "The client gets its data from the server" | The client gets the **tick bundles** (the commands of all humans and of the system per tick) from the server and computes the state itself. A state stream from an authoritative or co-simulating server was rejected for cost in §2.1 and is kept as a later option that nothing may obstruct. **Confirmation needed: D-11.** |
+| "The client gets its data from the server" | The client gets the **tick bundles** (the commands of all humans and of the system per tick) from the server and computes the state itself. **Decided (D-11, 10 October 2026):** commands stay the match path; the **hybrid** is a co-simulating server as an option (§1a, S4-M6) that uses its own state for rejoin, arbitration and spectating, never for driving the match. |
 | "The server does the lockstep so that a slow player does not hold up all the others" | Server-paced tick clock; a client that is behind catches up (measured catch-up speed 26-fold at 60 Hz); the rule for slow and disconnected clients (display up to 2 s, throttle up to 10 s, then disconnect – default, D-17) and the drop as a system command in the bundle. |
 | "Tick rates" | The rate is a value of the world and of the match description (Stage 2); 60 Hz is the product rate; two machines play together only with the same rate (§2.7). |
 | "Client-server architecture" | `CnCNew.Net` (messages, transport, lockstep driver), `CnCNew.Server` (room and relay logic, no game data), `tools/CnCNew.DedicatedServer`; layer rules in §2.4 and enforced by a source test. |
+
+### 1a. Commands, state or hybrid – the assessment behind D-11
+
+What an RTS of this size can carry: a match has hundreds to a few thousand objects (the stress test 13,220; `MD_GLA05`
+2,249), a world snapshot is 3.2 to 9.0 MB as JSON (Phase 18), and the product rate is 60 ticks per second. A **state
+stream** as the match path would mean the server computes the world and sends every client what changed per tick; even
+with delta encoding that is tens of kilobytes per tick for a late 8-player match, hundreds of kilobits per second per
+client, and the server must simulate every room with game data (and with it the legal and operational weight of
+original content on foreign machines). Every shipped RTS of this kind – the original included (`GameSpy`/LAN lockstep),
+Age of Empires, StarCraft, Supreme Commander – transmits **commands** and lets every machine compute the same world: a
+few hundred bytes per tick, no server simulation, and a replay is the command stream. The price is the one this plan
+pays anyway: strict determinism (Stage 2 has it, measured) and an input delay of one round trip plus buffer, mitigated by
+immediate local feedback (Phase 29). State transfer is a *shooter's* model (few objects, prediction and rollback per
+player), not an RTS's.
+
+What a **hybrid** can add, and why it is worth having as an option: a server that *also* simulates the match – not to
+drive it, but to *know* it – can (1) hand a **rejoining client a snapshot without a donor** (today Phase 27 takes it from a
+fellow player, which costs that player a checkpoint write and trusts his state until the hash check); (2) **arbitrate a
+desync** (with three or more machines the majority hash says who deviated; a co-simulating server says so with two and
+names the object); (3) serve **spectators authoritatively** and record a **replay with periodic state** so that a replay
+browser can seek without replaying from tick 0; (4) reject a command that the simulation would reject anyway before it
+reaches the bundle (a small, honest piece of what "anti-cheat" can mean in lockstep – map reveal stays impossible to
+prevent, §2.8). Its costs are known: the operator must equip the server with game data from his own copy (`install.ps1`
+exists), one room costs around one core share of 4 % at 60 Hz with eight AIs (Phase 23 gate: 0.7 ms per tick), the
+server loses the property "runs without game data" **only when the option is on**, and the Linux build must carry the
+simulation (pure .NET, no Stride – it already does in the tools). Nothing of this changes the protocol of Phases 25 and
+26: the server consumes the same bundles a client does.
+
+Decision D-11 therefore: the match path is commands (as planned); the co-simulating server is **S4-M6, an option after
+S4-M3**, switched on per server by configuration, and Phases 25 to 27 keep the seam open for it (the server logic
+consumes bundles through the same interface a client's lockstep driver does, so a simulation can be attached to a room).
 
 **Not in scope** (§1): networked campaign or co-op missions; accounts, ladder, player search, central server list; NAT
 traversal and connections between players (clients connect outbound to a server with an open port); GameSpy/WOL
@@ -133,6 +164,19 @@ compatibility with old mods and savegames.
 - **Bottlenecks:** the presentation reads the running world – immediate feedback must never show or change what only the
   execution knows and influences no hash; standing orders with delay come neither twice nor late; smoke tests prove no
   usability. The modern skin of these screens is S3-M5.
+
+### S4-M6 Co-simulating server as an option — open (hybrid, D-11)
+
+- **Deliverables:** a server mode (configuration, off by default) in which a room also runs the simulation from the
+  match description and consumes its own bundles through the lockstep driver's interface; the operator provides game
+  data from his own installation (`scripts/install.ps1`; the server refuses the mode without content and says so); with
+  the mode on: rejoin from the server's checkpoint snapshot (no donor), desync arbitration with the object named from the
+  server's state, authoritative spectating, a replay with periodic state for seeking; cost per room measured and in the
+  capacity table of S4-M4; the dependency rule "`CnCNew.Server` loads no game data" becomes "only in this mode, through
+  one named seam" and is enforced for the default mode by the source test.
+- **Acceptance:** the same match with the mode on and off is hash-identical on every client; a rejoin without a donor is
+  hash-identical afterwards; a built-in desync is named by the server; the room cost with the mode on is measured.
+- **Depends on:** S4-M3 (rejoin, diagnostics, server replay); the seam kept open in S4-M1 and S4-M2.
 
 ### R4 Multiplayer release — planned (Phase 30)
 

@@ -26,8 +26,9 @@ ordered by stage and milestone, in [../handoffs/README.md](../handoffs/README.md
 - **Milestone** (`S<stage>-M<n>`): a self-contained deliverable of a stage with its own acceptance. A milestone is built in
   one or more **phases**.
 - **Phase** (`Phase N`, brief `docs/handoffs/HANDOFF-PHASE<N>.md`): one unit of work with a brief, a starting state, a
-  final report and an N+1 brief. The numbering of the phases is historical and continues (the next free number is 31).
-  Phases 4 to 23 are worked off, 24 is current, 25 to 30 are planned.
+  final report and an N+1 brief. The numbering of the phases is historical and continues (the next free number is 32).
+  Phases 4 to 23 are worked off, 31 is current (it runs before 24 by decision D-12 – phase numbers are identities, not
+  an order), 24 follows, 25 to 30 are planned.
 - **Release gate** (`R1` to `R4`): the end of a stage as a human sees it: a package, an acceptance, documentation for
   humans. A stage is finished when its gate is passed, not when its last milestone is built.
 - **Status words** (the only ones used in the plan): **done** (built and measured, and accepted where only a human can
@@ -96,10 +97,10 @@ over the same path with an embedded server.
 client that rejoins hash-identically, and the acceptance by humans in a LAN and over the internet.
 
 The decided architecture is in `docs/MULTIPLAYER-PLAN.md` §2: what travels is commands, not state; every client computes
-the full world; the server orders and distributes. **One reading of the owner's wording needs confirmation** (decision
-D-11 below): "the client gets its data from the server" is, in this architecture, the tick bundle of commands – not a
-state stream. A server that also simulates and could send state (a co-simulating server) is a later option that nothing
-in Stage 4 may obstruct, not part of the plan.
+the full world; the server orders and distributes. "The client gets its data from the server" is, in this architecture,
+the tick bundle of commands – not a state stream (D-11, decided: the assessment is in `STAGE-4-MULTIPLAYER.md` §1a). The
+**hybrid** is a co-simulating server as an option (S4-M6): state on the server for rejoin, arbitration and spectating,
+never on the match path.
 
 ### Which stage does a piece of work belong to?
 
@@ -127,7 +128,7 @@ milestone status is updated in each stage document.
 | S1-M8 | World presentation (terrain, objects, effects) | 7, 8, 15 | built – not accepted |
 | S1-M9 | Input, shell, HUD, texts, original layouts | 8, 12, 16, publication | built – not accepted |
 | S1-M10 | Sound, cursor, waypoints, mission in the client | 16, 17 | built – not accepted (never heard) |
-| S1-M11 | Playability and acceptance by a human | 15, 16, 17, acceptance package | **open** – the acceptance goal of Stage 1 is not reached |
+| S1-M11 | Playability and acceptance by a human | 15, 16, 17, acceptance package, **31** (fidelity package A, current) | **open** – the acceptance goal of Stage 1 is not reached |
 | S1-M12 | Installer and clean content from the Steam master | publication (9 October) | built – not accepted |
 | S1-M13 | The skirmish AI of the original as a faithful computer opponent | 23 (side product) | built as an option, with named deviations |
 | S1-M14 | Tooling of the port | 1–23 | done, grows with every phase |
@@ -138,7 +139,7 @@ milestone status is updated in each stage document.
 | S2-M4 | Fixed point Q39.24 | 22 | done |
 | S2-M5 | Rate invariance and 60 Hz as the default | 23 | done with named limits |
 | S2-M6 | Test strategy in four tiers | – (10 October) | done |
-| S2-M7 | Session core: AI in the session state, skirmish savegame, match description, command path, tick source | 24 | **current** (starting state measured, not begun) |
+| S2-M7 | Session core: AI in the session state, skirmish savegame, match description, command path, tick source | 24 | next after Phase 31 (starting state measured, not begun) |
 | S2-M8 | Engine follow-ups (tick maximum, hash constructions, allocation, thread, formats, documentation) | – | open backlog, partly decisions |
 | **R2** | **Engine release:** 60 Hz seen by a human, determinism on a second machine, skirmish savegame | – | open |
 | S3-M1 | AI kinds, difficulty and tactics | 6, 17, 23 (built-in AI) | built-in AI exists and is the default; tactics and levels open |
@@ -154,6 +155,7 @@ milestone status is updated in each stage document.
 | S4-M3 | Desync diagnosis, rejoin, spectators, server replay | 27 | planned |
 | S4-M4 | Server operation and security | 28 | planned |
 | S4-M5 | Multiplayer in the client, latency perception, acceptance with humans | 29 | planned |
+| S4-M6 | Co-simulating server as an option (hybrid: rejoin without a donor, desync arbitration, authoritative spectating) | – | open; after S4-M3, optional (D-11) |
 | **R4** | **Multiplayer release:** server package (Windows, Linux), acceptance of LAN and internet matches | 30 | planned |
 
 ## 4. What was built in the "wrong" stage, and where it lives now
@@ -181,34 +183,41 @@ they belong, so that nobody looks for them in the wrong place or builds them twi
 | Test strategy in four tiers (`docs/TESTING.md`, `scripts/test.ps1`) | 10 October | S2-M6 | Cross-cutting, binding |
 | Patch integration and quality (the former Phase 30) | planned | S3-M7 (fixes, patch layer), R1/R4 (package, diagnostics, documentation) | The brief stays; its items are distributed |
 
-## 5. Execution order (proposal; decision D-1)
+## 5. Execution order (decided 10 October 2026, D-1)
 
 Dependencies that do not move: S2-M7 (Phase 24) before every Stage 4 phase; a second physical machine (S2-M1, E1)
 before S4-M2; the three simulation fidelity findings S1–S3 of the acceptance pre-check (`docs/ACCEPTANCE.md` §6) before
 Phase 24 records its reference values (each changes every hash); Stage 3 changes of the simulation after S2-M7, because
 they need the profile fingerprint in the match description to be safe for Stage 4.
 
-Proposed sequence from here:
+The sequence from here:
 
 1. **Now (Stage 1, small):** the fidelity package A – S1 passengers scattered on exit, S2 own destination per unit of a
    group, S3 slow-death phases with effect, creation list and weapon – one cause per commit, each with its manifest
-   (S1-M11, prerequisite of Phase 24). In parallel and at any time: the acceptance run by the project owner
-   (`pwsh scripts/acceptance.ps1`), whose findings feed S1-M8 to S1-M11.
+   (S1-M11, prerequisite of Phase 24; brief `docs/handoffs/HANDOFF-PHASE31.md`, decided D-12). In parallel and at any
+   time: the acceptance run by the project owner (`pwsh scripts/acceptance.ps1`), whose findings feed S1-M8 to S1-M11.
 2. **Phase 24** (S2-M7): session core. Closes the skirmish savegame debt and is the gate into Stage 4.
 3. **Phases 25 to 27** (S4-M1 to S4-M3): the network core up to rejoin and server replay. Needs the second machine from
    Phase 26 on.
-4. **Stage 3 as a block or interleaved** (D-1): replay browser and analysis profit from the server replay (27); the
-   spectator in the network (27) and the observer features of S3-M2 share one design; AI tactics and new pathfinding are
-   simulation changes with their own profile fingerprint and belong after S2-M7. Items that do not touch the simulation
-   (replay browser, analysis, modern UI) can run as parallel packages from Phase 24 on.
-5. **Phases 28 and 29** (S4-M4, S4-M5): operation, security, client, acceptance with humans.
+4. **Stage 3, split by whether it touches the simulation (D-1):**
+   - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
+     **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and
+     25) to be safe for the network, and every such change moves reference values that the desync search of 25 to 27
+     needs stable. Order inside: S3-M1 (the owner's visible wish, and the AI state is in the session since 24) → S3-M6
+     (also lowers the tick maximum, D-3) → S3-M7.
+   - **Stage 3 work outside the simulation** (S3-M2 acceptance and observer features, S3-M3 replay browser, S3-M4 analysis,
+     S3-M5 modern UI) runs as **parallel packages from Phase 24 on**, in its own worktrees, merged before every network
+     phase closes; the replay browser and the analysis take the server replay of Phase 27 as a further input when it exists.
+5. **Phases 28 and 29** (S4-M4, S4-M5): operation, security, client, acceptance with humans; the multiplayer screens get
+   their modern skin from S3-M5 where it is ready, the original layouts otherwise.
 6. **Release gates:** R1 as soon as the human acceptance of the single player is done (it does not wait for Stage 4),
    R2 with the second machine and the 60 Hz view, R3 and R4 with Phase 30 as the common package.
 
-The alternative is Stage 3 before the network core (the owner's enumeration names 3 before 4). Cost of that order: every
-Stage 3 change of the simulation moves reference values that the desync search of Stage 4 later needs stable, and the
-network briefs 25 to 29 already exist and are measured against the state after Phase 24. Cost of the proposed order:
-Stage 3 waits for 25 to 27. Default until decided: the proposed order.
+Why not Stage 3 as a block before the network core (the owner's enumeration names 3 before 4): every Stage 3 change of the
+simulation would move reference values that the desync search of Stage 4 later needs stable, and the network briefs 25 to 29
+already exist and are measured against the state after Phase 24; the Stage 3 items a player sees first (replay browser,
+analysis, spectator, UI) do not touch the simulation and therefore need not wait at all. Decided on 10 October 2026 by
+the agent on the owner's instruction.
 
 ## 6. Release gates
 
@@ -226,7 +235,6 @@ decision stays with the project owner. Decided items are kept for one month, the
 
 | ID | Question | Default in the plan | Due before | Stage |
 |---|---|---|---|---|
-| D-1 | Stage 3 before or after the network core (Phases 25 to 27)? | after (§5) | Phase 25 | – |
 | D-2 | Factory exit "always through the gate, even with an immediate command" – which behaviour has the original? (§7a no. 2 of the multiplayer plan: built, measured, not merged, shifts the balance) | unmerged: a unit with an immediate command leaves by the shortest route | R1 | 1 |
 | D-3 | Lowering the tick maximum (141–143 ms at 60 Hz) needs a behaviour change: shared group path, cell budget per tick or a different search (§7a no. 3) | not done | Phase 26 | 2 → built as S3-M6 |
 | D-4 | The two faster hash constructions (vision row by row; object hash with module hashes); change every reference value (§7a no. 4) | not implemented | – | 2 |
@@ -236,8 +244,6 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-8 | A standard skirmish ends after one hour of game time, also for a human (§7a no. 8) – the original has no such limit | unchanged | R1 | 1 |
 | D-9 | Assessing the balance after the AI corrections (ChinaTankGeneral 70 of 80 against AirForce) (§7a no. 10) | not assessed | – | 3 |
 | D-10 | The second physical machine with a different CPU (§7a no. 11, E1) | open; instructions in `docs/DETERMINISM.md` §4 | Phase 26 | 2 |
-| D-11 | "The client gets its data from the server": tick bundles of commands (decided architecture) or a state stream from a co-simulating server (rejected in `docs/MULTIPLAYER-PLAN.md` §2.1 for cost; kept as a later option)? | commands | Phase 25 | 4 |
-| D-12 | The fidelity package A (S1 scatter on exit, S2 own destination per unit, S3 slow-death phases) before Phase 24 – each changes every hash | yes, before Phase 24 | Phase 24 | 1 |
 | D-13 | Known 30 Hz findings, each a fidelity fix with its own manifest: `SupplyMachine` overwrites a player's command in one frame; a magazine without reload time fires once more through a second command in the same tick; `QuantityModifier` not applied (one Red Guard instead of two); the unit comes into being at completion, not when the gate opens | fix, one cause per commit | R1 | 1 |
 | D-14 | `<This Team>` in a team's create script: fixed for AI sessions, not in the mission VM (changes manifest runs) | fix | R1 | 1 |
 | D-15 | Rank system (skill points per kill, `Rank.ini`, purchase points per rank): the simulation gives one purchase point every 90 s instead | implement as a rule of the game | R1 | 1 |
@@ -249,10 +255,22 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-21 | `Display.UiScale = IntegerMultiple` as an alternative to the stretched command bar at 16:9 | stretched as in the original; integer scaling is an S3-M5 option | – | 3 |
 | D-22 | Should 120 Hz be selectable by a player in the finished game (30 Hz: no, test rate only – decided) | no, test rate | R2 | 2 |
 
-**Decided:** self-acquisition once per original frame of the unit stays (10 October 2026; `docs/SIMULATION-CORE.md`
-§43); the built-in `SkirmishAi` stays the default AI, the original AI an option (10 October 2026); the target platform is
-Windows, Linux later only as host of the dedicated server (9 October 2026); 60 Hz is the default and the abort criterion
-of Phase 23 was lifted (8 October 2026); 30 Hz stays a test rate (planned default, not contested).
+**Decided:**
+
+- **D-1 (10 October 2026, by the agent on the owner's instruction):** Stage 3 is split – work that touches the simulation
+  (S3-M1, S3-M6, S3-M7) after Phase 27; work outside the simulation (S3-M2 to S3-M5) as parallel packages from Phase 24 on
+  (§5).
+- **D-11 (10 October 2026, recommendation of the agent, confirmed by the owner's question "hybrid?"):** the data path
+  of a match stays **commands in tick bundles** (deterministic lockstep); **hybrid** means a **co-simulating server as an
+  option** (`STAGE-4-MULTIPLAYER.md` §1a and S4-M6): a server that an operator equips with game data runs the match
+  itself and uses its state for rejoin without a donor, arbitration of a desync, authoritative spectating and a replay
+  with state – nothing of it on the match path, nothing of it required. A state stream as the match path is excluded for
+  an RTS of this size (thousands of objects, 60 Hz; a snapshot is 3 to 9 MB).
+- **D-12 (10 October 2026, owner):** the fidelity package A before Phase 24 – yes (`docs/handoffs/HANDOFF-PHASE31.md`).
+- Self-acquisition once per original frame of the unit stays (10 October 2026; `docs/SIMULATION-CORE.md` §43); the
+  built-in `SkirmishAi` stays the default AI, the original AI an option (10 October 2026); the target platform is Windows,
+  Linux later only as host of the dedicated server (9 October 2026); 60 Hz is the default and the abort criterion of
+  Phase 23 was lifted (8 October 2026); 30 Hz stays a test rate (planned default, not contested).
 
 ## 8. Rules that carry over
 

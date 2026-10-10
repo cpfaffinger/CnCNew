@@ -2,7 +2,10 @@
 
 As of: 10 October 2026, state `2777a90`. Frame: [PROGRAMME.md](PROGRAMME.md). This stage is the least worked out of the
 four: its milestones are defined here with goal, what already exists, deliverables, acceptance and dependencies; a brief
-in the format of [BRIEF-FORMAT.md](BRIEF-FORMAT.md) is written when a milestone is scheduled (PROGRAMME.md §5, D-1).
+in the format of [BRIEF-FORMAT.md](BRIEF-FORMAT.md) is written when a milestone is scheduled. **Scheduling (D-1, decided
+10 October 2026):** the milestones that touch the simulation (S3-M1, S3-M6, S3-M7) come after Phase 27, in this order;
+the milestones outside the simulation (S3-M2, S3-M3, S3-M4, S3-M5) may run as parallel packages from Phase 24 on, in
+their own worktrees, merged before a network phase closes (PROGRAMME.md §5).
 
 ## 1. Goal, rule, yardstick
 

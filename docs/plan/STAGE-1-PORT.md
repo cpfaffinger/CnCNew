@@ -144,7 +144,8 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
   the visual checklist for 60 Hz (`docs/DEMO-FINDINGS.md`); the commands-only agent as the headless measure of
   playability (`CampaignTool drive --commands-only`); three viewings by a human so far (4 October twice, 8 October one AI
   match at 30 Hz), each with corrections (`docs/DEMO-FINDINGS.md`, `docs/AI-OBSERVED-2026-10-08.md`).
-- **Deliverables:** (a) the fidelity package A – F-03, F-04, F-05 – each one cause, one commit, one manifest (D-12);
+- **Deliverables:** (a) the fidelity package A – F-03, F-04, F-05 – each one cause, one commit, one manifest (D-12,
+  decided 10 October 2026; brief `docs/handoffs/HANDOFF-PHASE31.md`);
   (b) the acceptance run by the project owner with a verdict per item; every finding reproduced, fixed or named as a limit
   with a reason; (c) the click-through shell → campaign → mission → save/load → completion and skirmish setup → match →
   result, reported per screen "worked / did not work / worked with defects"; (d) a human hears music, EVA and effects;

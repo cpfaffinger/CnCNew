@@ -100,7 +100,7 @@ booked as a fidelity fix (Stage 1) or an option (Stage 3).
   tier that ran. `pwsh scripts/audit-publish.ps1` before every push is independent of the tiers.
 - **Open:** the step durations in `docs/TESTING.md` §2 are estimates until measured.
 
-### S2-M7 Session core — current (Phase 24)
+### S2-M7 Session core — next after Phase 31 (Phase 24)
 
 - **Brief:** `docs/handoffs/HANDOFF-PHASE24.md`. Starting state measured on 10 October 2026 at `8588905` on a fresh
   machine (tier 4 without scene audits, `--long`, campaign checks, performance profile).
