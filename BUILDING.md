@@ -15,6 +15,7 @@ complete command list are in [CLAUDE.md](CLAUDE.md), the short version for contr
 | Python 3 | 3.x (measured with 3.13.15) | only `scripts/audit-publish.ps1`, the check before every push |
 | NuGet source `nuget.org` | – | package restore (Stride 4.3 and its tooling) |
 | *Command & Conquer Generals – Zero Hour* | Steam app 2732960, fresh **English** installation without mods (`baselines/steam-master.json`) | `game/content`: real-data tests, audits, manifests, the client |
+| An active display | a Direct3D 11 adapter with a current screen mode | the client, also headless (`--smoke-test`): `scripts/check-*.ps1`, the capture and demo scripts. With the screen off or no monitor attached the client ends with "No screen modes found" |
 | Disk space | around 3 GB for `game/`, more for `references/` and build output | – |
 
 Without the game the solution still builds and the synthetic tests run; everything that takes `--content-dir game/content` does not.

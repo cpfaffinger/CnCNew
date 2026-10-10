@@ -27,7 +27,7 @@ where a late finding is expensive (everything that changes results of the simula
 | **1 focus** | while working, after every edit that should change a test result | the one test or suite of the changed code, called directly (§6) | seconds |
 | **2 affected** | before **every commit** | build with 0 warnings; the test programs of the touched areas and of what reads them directly | 1–5 min |
 | **3 gate** | before a **push** that contains a change of an area other than `docs` and `scripts`; before a merge of a parallel worktree | tier 2, plus the consumers further up, the other tick rates and – for everything that feeds the simulation – the determinism yardstick (input manifest, quick reference set) | 10–25 min |
-| **4 full** | the triggers of §4 | every step: all test programs at 30, 60 and 120 Hz, real data, both manifests in full, the client checks, the scene audits | around TOTAL |
+| **4 full** | the triggers of §4 | every step: all test programs at 30, 60 and 120 Hz, real data, both manifests in full, the client checks, the scene audits | around 1 h |
 
 ```powershell
 pwsh scripts/test.ps1                    # tier 2 for the changes against origin/master (committed or not, plus untracked files)
@@ -179,7 +179,42 @@ never claimed by a test run.
 
 ## 9. Measured durations
 
-DURATIONS
+One machine, 10 October 2026, state `2777a90` plus this strategy, Windows, nothing else running except where noted;
+re-measure. Seconds per step of `scripts/test.ps1` (a Release build of a test project or tool, once per run, is included
+in the first step that needs it):
+
+| Step | s | Step | s |
+|---|---|---|---|
+| `build` (incremental) | 49 | `sim` (60 Hz) | 74 |
+| `archives`, `io`, `content`, `images` | 1 each | `sim-30` / `sim-120` | 58 / 62 |
+| `formats`, `audio` | 2 each | `rate-suite` | 107 |
+| `import` | 3 | `sim-content` (contains the rate suite) | 376 |
+| `ui` | 4 | `sim-long` | 80 |
+| `presentation` | 7 | `inputs` | 22 |
+| `data` | 11 | `quick` (9 runs) | 158 |
+| `compat` | 6 | `reference` (50 runs) | 763 |
+| `verify` | 23 | `game` (60 Hz) | 406 |
+| `w3d` | 8 | `game-30` / `game-120` | 348 / 505 |
+| `data-content` | 14 | `game-sim` | 273 |
+| `vulnerable` | 24 | `game-focus` for `Hud` / `Shell` | 63 / 62 |
+| `presentation-content` | 123 | `audio-content` | 82 |
+| `presentation-30` / `-120` | 130 / 124 | `scenes` | 59 |
+
+Sums from these numbers: tier 2 for `simulation` around 2 min, for `data` around 1.5 min, for `ui`, `presentation`,
+`formats` or `import` under 1 min, for the folder `Hud` or `Shell` of `game` around 2 min (the other folders are not
+measured); tier 3 for `simulation` around 13 min, for
+`presentation`/`ui`/`audio` around 9 to 10 min, for `data` around 6 min; **tier 4 took 3,453 s (58 min)** in one run with
+`-KeepGoing`, in which the three client checks failed after 20 to 38 s each (below) – with them passing it takes longer
+by their run time, which is not measured on this machine.
+
+Result of that tier 4 run: 31 of 34 steps ok – among them the full reference manifest (50 of 50 runs identical), the
+input manifest, all test programs at 30, 60 and 120 Hz and the scene audits. **Failed: `check-spectator`, `check-dozer`,
+`check-hotkeys`**, all three with the same cause outside the code: the client ended with `InvalidOperationException: No
+screen modes found` (`Stride.Games.GraphicsDeviceManager.FindBestDevice`), because the machine had no active display
+mode at that moment (the graphics adapter reported no current resolution; the session was followed remotely). The
+client needs an active screen even for `--smoke-test`; these three steps – and every capture script – are run with a
+display switched on, and a run without one does not count as tier 4.
+
 
 ## 10. What this strategy does not cover
 
