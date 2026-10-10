@@ -402,6 +402,7 @@ run.Test("Air: a carrier's deployment creates the gunship at the map edge on a m
 run.Test("Scripts: team creation runs the production-condition start actions", Tests.FlightTeamCreationRunsStartActions);
 run.Test("Scripts: sequential scripts advance on idle, wait on timers, loop, stop and survive save/restore", Tests.ScriptSequentialScripts);
 run.Test("Scripts: save/restore continues hash-identically, two runs equal", Tests.ScriptEngineSnapshotContinuesIdentically);
+run.Test("Scripts: the members of a team are saved in the order they joined", Tests.ScriptTeamMemberOrderIsSaved);
 run.Test("Scripts: corrupt, truncated and foreign mission states are rejected", Tests.ScriptEngineSnapshotRejection);
 run.Test("Modules: CommandButtonHuntUpdate and LockWeaponCreate shells", Tests.MissionBlockerShellModules);
 run.Test("Power: PowerPlantUpgrade adds and removes the energy bonus", Tests.PowerPlantUpgradeAddsAndRemovesTheBonus);

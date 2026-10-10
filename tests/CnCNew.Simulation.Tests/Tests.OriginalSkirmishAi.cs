@@ -617,7 +617,39 @@ static partial class Tests
                     restored.Step();
                     if (!hashes.TryGetValue(restored.World.Tick, out var expected)) continue;
                     compared++;
-                    if (restored.StateHash() != expected) throw new InvalidOperationException($"{rate}: saved at tick {tick} (offset {tick % perFrame} inside its frame), restored and continued, the session differs at tick {restored.World.Tick}.");
+                    if (restored.StateHash() == expected) continue;
+                    // Where and when: an uninterrupted session is run to the save point again, a second copy is restored, and the two are stepped side by side until
+                    // their saved documents differ for the first time.
+                    var differsAt = restored.World.Tick;
+                    var again = Start();
+                    while (again.World.Tick < tick) again.Step();
+                    var copy = ScriptedSkirmishSession.Restore(document, catalog, print, terrain, map, library, data);
+                    static string Document(ScriptedSkirmishSession session) => System.Text.RegularExpressions.Regex.Replace(System.Text.Encoding.UTF8.GetString(session.Save()), "\"stateHash\":\"[0-9A-F]+\"", "\"stateHash\":\"\"");
+                    // Derived state the document does not carry: the footprints on the navigation grid, compared cell by cell at the save point.
+                    var gridNote = "the navigation grids agree at the save point";
+                    if (again.World.Navigation is { } liveGrid && copy.World.Navigation is { } copyGrid)
+                    {
+                        var (cells, firstCell) = (0, "");
+                        for (var cy = 0; cy < liveGrid.Terrain.CellsY; cy++)
+                            for (var cx = 0; cx < liveGrid.Terrain.CellsX; cx++)
+                                if (liveGrid.IsBlockedByObstacle(cx, cy) != copyGrid.IsBlockedByObstacle(cx, cy))
+                                {
+                                    if (cells++ == 0) firstCell = $"({cx}, {cy}) blocked in the {(liveGrid.IsBlockedByObstacle(cx, cy) ? "uninterrupted" : "restored")} session only";
+                                }
+                        if (cells > 0) gridNote = $"the navigation grids differ at the save point in {cells} cells, first {firstCell}";
+                    }
+                    var (live, other) = (Document(again), Document(copy));
+                    while (live == other && again.World.Tick < differsAt)
+                    {
+                        again.Step();
+                        copy.Step();
+                        (live, other) = (Document(again), Document(copy));
+                    }
+                    var at = 0;
+                    while (at < live.Length && at < other.Length && live[at] == other[at]) at++;
+                    var from = Math.Max(0, at - 400);
+                    throw new InvalidOperationException($"{rate}: saved at tick {tick} (offset {tick % perFrame} inside its frame), restored and continued, the session differs at tick {differsAt}. "
+                        + $"{gridNote}. The saved documents differ first at tick {again.World.Tick}, character {at}: uninterrupted '...{live[from..Math.Min(live.Length, at + 2600)]}' against restored '...{other[from..Math.Min(other.Length, at + 2600)]}'.");
                 }
                 Check.That(compared > 100, $"{rate}: saved at tick {tick}, restored and continued, the session is the uninterrupted one at {compared} compared ticks and at the end.");
             }

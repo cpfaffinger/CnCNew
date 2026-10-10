@@ -393,3 +393,28 @@ static partial class Tests
         Check.That(again.OutcomeTick == win.OutcomeTick && again.Log.SequenceEqual(win.Log), "A second run of the driver is identical.");
     }
 }
+
+internal static partial class Tests
+{
+    /// <summary>
+    /// The members of a team are saved in the order they joined, not sorted: the team gives its orders member by member, and since a move is given its destination when it
+    /// is ordered (docs/SIMULATION-CORE.md §44.2) the order decides who gets which place. Found by the real-data test of the original skirmish AI, which a restored session
+    /// failed 291 ticks after the save.
+    /// </summary>
+    public static void ScriptTeamMemberOrderIsSaved()
+    {
+        var session = StartMission([
+            Scr.Script("Merge", [Scr.And(Scr.If("FLAG", Scr.Flag("merge"), Scr.Bool(true)))], [Scr.Do("TEAM_MERGE_INTO_TEAM", Scr.Team("teamA"), Scr.Team("teamB"))], oneShot: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "S1"), Placed("AlphaSoldier", 500m, 300m, "teamB", "B1")]);
+        Run(session, session.Frames(2));
+        session.Engine.SignalUiInteraction("merge");
+        Run(session, session.Frames(2));
+        var (first, second) = (NamedIn(session, "B1")!.Id.Value, NamedIn(session, "S1")!.Id.Value);
+        Check.That(second < first, "Fixture: the unit that joins second has the lower id.");
+        var members = session.Engine.TeamInstances.First(team => team.Prototype == "teamB").Members;
+        Check.That(members.SequenceEqual(new[] { first, second }), $"The team lists its members in the order they joined ({string.Join(", ", members)}).");
+        var document = System.Text.Encoding.UTF8.GetString(MissionSnapshot.Write(session));
+        var expected = "\"members\":[{\"id\":" + first.ToString(System.Globalization.CultureInfo.InvariantCulture) + "},{\"id\":" + second.ToString(System.Globalization.CultureInfo.InvariantCulture) + "}]";
+        Check.That(document.Contains(expected, System.StringComparison.Ordinal), $"The saved mission carries the members in that order ({expected}).");
+    }
+}

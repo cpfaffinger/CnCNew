@@ -981,7 +981,9 @@ public sealed partial class ScriptEngine
                 writer.Bool("eventsWasIdle", team.WasIdle);
             }
             writer.BeginArray("members");
-            foreach (var member in team.Members.Order())
+            // In the order the members joined: the team acts in this order (orders to its members are given one after the other), so the order is state. Written
+            // sorted until phase 31, a restored session gave its orders in another order than the uninterrupted one.
+            foreach (var member in team.Members)
             {
                 writer.BeginObject(null);
                 writer.UInt("id", member);
