@@ -347,7 +347,10 @@ asked for near the goal, every 15th frame (`AIUpdateInterface.GoalSpotCheckDue`,
 with `checkDestination`, line 4924) moves it to the nearest free cell; the unit then walks one path to a place that is its own from the start
 (see also `docs/AI-OBSERVED-2026-10-08.md` §3.3). This is the "one stands, two walk around him" of 8 October in a player's group move.
 
-**S3 – A destroyed vehicle vanishes without explosion, debris or wreck.** Scene `tank-duel`, item FX-03. Seen: the Battlemaster dies in frame 382, is drawn dying
+**S3 – A destroyed vehicle vanishes without explosion, debris or wreck.** **Fixed in part (fidelity register F-05, implementation `94711fb`, `docs/SIMULATION-CORE.md` §44.3):** a
+slow death plays its phases (`SlowDeathBehavior::doPhaseStuff`) - the death effect is requested and the hull `ChinaVehicleBattleMasterDeadHull` is created; the audit of `tank-duel`
+requires both. **The two pieces of debris are not created** (`CreateDebris` nuggets are not simulated; counted as skipped creations, fidelity register F-36). Not seen by a human. The
+finding as recorded on 9 October: scene `tank-duel`, item FX-03. Seen: the Battlemaster dies in frame 382, is drawn dying
 for a few frames and is gone by frame 390; `scenario-audit --name tank-duel --drawables-at 390` lists no other object, no skipped creation and no second death.
 The data give its `SlowDeathBehavior` an effect and a creation list for the final phase (`FX = FINAL FX_BattleMasterExplosionOneFinal`,
 `OCL = FINAL OCL_ChinaTankBattleMasterDebris`: the hull `ChinaVehicleBattleMasterDeadHull`, which lies for 20 s and sinks after 14 s, and two pieces of debris).

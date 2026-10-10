@@ -2916,6 +2916,7 @@ and plays it at the object, one of the `OCL` list and creates it at the object, 
 | The lists | `SlowDeathPhases` (`Phase5BlockerModules.cs`) | three lists per phase; `NONE` is an empty entry that takes part in the draw and does nothing |
 | The midpoint | `SlowDeathBehavior.BeginSlowDeath`, `SlowDeathPhases.MidpointBounds` | the third draw of every slow death, between 0.35f and 0.65f of the destruction delay in logic frames. The bounds are the single-precision products cut off to whole frames (the logic runs the FPU with 24 bits of precision, `GameLogic.cpp`, line 215), computed with whole numbers: 20 frames give 7 to 13, 30 give 10 to 19 |
 | The phases | `SlowDeathPhases.Do`, `SlowDeathBehavior.Update` | INITIAL in the tick of the death, MIDPOINT and FINAL at their frames (both in one update when they fall together, FINAL before the removal). The effect list is an `FxRequested` event, the creation list goes through `CreateFromList`, the weapon through `FireTempWeapon`. An unknown creation list or weapon and a nugget the simulation does not create are counted `CreationSkipped` events with their reason - nothing is silent |
+| The dying object stops | `AIUpdateInterface.StopAtDeath`, called by `SimulationWorld.OnEntityDied` | `SlowDeathBehavior::onDie` calls `ai->markAsDead()`, and `AIDeadState` (`AIStates.cpp`, line 1477 ff.) clears the locomotor's goal in every update: a dying ground object's move, dock, builder task and approach end where the logic frame of the original ends in which it died - above 30 Hz the frame it was covering is completed, and an object that has not had its turn in the tick of its death takes that frame's step first, so that the place is the same at every tick rate (the first version stopped it at once and failed the AI group of the suite at 60 and 120 Hz) - and it takes no further order ("the dead don't listen very well"). Before, a dying vehicle drove on during its slow death - invisible as long as nothing was left behind; with a hull it lay at another place at another tick rate (found by the three-rate test of the original skirmish AI with real data). Not modelled: the rolling out by physics; what dies in the air is moved by its own death module |
 
 **State and formats.** A slow death that has begun writes `midpointTick` and, once played, `midpointDone`; a living object writes what it wrote before. No format version changes.
 
@@ -2924,7 +2925,7 @@ frames. Three-rate test: every effect request, the hull, the weapon's damage and
 identically.
 
 **Tests.** `Tests.SlowDeathPhases.cs` (prefix "Slow death phases": the three phases, a list of two drawn both ways over spread seeds, a death without lists, the bounds of the
-midpoint; three rates and snapshot), the rate-equivalence cases "slow death …" of the group of special powers and time modules, which now also measure what a dying object played
+midpoint; three rates and snapshot; a vehicle killed while driving stops, takes no order and leaves its hull where it died, at every rate), the rate-equivalence cases "slow death …" of the group of special powers and time modules, which now also measure what a dying object played
 and created and when, and the scene `tank-duel`: `scenario-audit --name tank-duel --drawables-at 390` lists the hull (`ChinaVehicleBattleMasterDeadHull`, model `nvbtmstr_d1`) where
 the Battlemaster died in frame 382 and went in frame 388.
 
@@ -2938,3 +2939,56 @@ the Battlemaster died in frame 382 and went in frame 388.
 - `SinkRate`, `DestructionAltitude` (the hull's sinking is presentation), `FlingForce`/`FlingPitch` (no physics impulse), `ModifierBonusPerOverkillPercent`, the time scale of
   the game LOD (`getSlowDeathScale`: always 1 here).
 - Whether the presentation shows every requested effect list is its own count (`docs/CLIENT-FX.md`); **no human has seen a death explosion or a wreck**.
+
+**Measured (10 October 2026, implementation `94711fb`, manifests rewritten in the commit after it; one cause).** Every slow death draws once more (the midpoint), plays its lists
+and leaves what its creation lists name; a dying ground unit stops; hulls lie where units died and death weapons hurt. Result quantities of the 50 runs before (after F-04 and the
+member-order fix of §44.5, which moved no quantity) and after: **23 runs unchanged** in every quantity (the stress test - end hash `9EE9F730D124C3BD` and chain `F338463BE66D99C0`
+as before, so no object of its synthetic fixture draws for a slow death -, the short eight-player run and 21 mission runs, whose counted quantities are the same), **48 with the
+same outcome**, 34 with the same end tick; **all 27 mission runs keep outcome and outcome tick**. The world fingerprint is `4E6F6F5623FE86DC` (before `05EDB8339FE38C53`: the typed
+keys are part of the catalogue), so `commandStreamSha256`/`snapshotSha256` change in every run that carries it.
+
+**New reference values:** retail reference match **winner FactionGLA at tick 32,520** (original frame 16,260; end tick 33,121), end hash `6052051714309B17`, chain
+`84077720F511C1ED`, 30,035 commands. Superseded: tick 28,260 / `CA05181C36C62C7A` / `21ACEDA63325A658` (Phase 23, unchanged through F-03 and F-04). In the reference match 1,969
+objects die instead of 1,871 and 12,963 come into being instead of 12,165 (the hulls and what the death lists create); 2,185 creations are skipped instead of 2,030 (among them the
+debris pieces).
+
+Of the sixteen pairings on shipped maps **14 are decided, as before**; two change their outcome:
+
+| Run | Before (after F-04) | After | First deviating command |
+|---|---|---|---|
+| `AlpineAssault_America-China` | winner FactionAmerica (end tick 46,141) | stalemate (90,000) | tick 7,768 of 90,000 (command 292 of 2,190) |
+| `BitterWinter_America-China` | stalemate (90,000) | winner FactionAmerica (end tick 61,381) | tick 8,816 (command 311 of 3,527) |
+
+Both deviate early in the match and diverge from there; which death list or which stopped unit moves which fight was not broken down. **The balance is not assessed** (D-9).
+After the rewrite `input-manifest check` is identical, `reference-manifest check --set full` passes twice with 50 of 50 runs identical, and the rate-equivalence suite is 0 / 0 at
+60 and 120 Hz in all ten groups (4,808 quantities; the slow-death cases now carry six quantities each).
+
+### 44.4 The steps side by side
+
+| Step | Implementation | Manifest | Runs unchanged / same outcome (of 50) | Pairings decided (of 16) | Reference match | Formats |
+|---|---|---|---|---|---|---|
+| start (`885896e`) | – | – | – | 14 | GLA, tick 28,260, `CA05181C36C62C7A` | `CommandTypes` 15, replay 12; world fingerprint `AC622E33080D89EB` |
+| F-03 door exit | `f9abff8` | `12533c6` | 38 / 47 | 14 | unchanged | world fingerprint `05EDB8339FE38C53` |
+| F-04 own destinations | `39a1656` | `1a191cd` | 22 / 48 | 14 | unchanged | `CommandTypes` 16, replay 13 |
+| member order of a team (§44.5) | `f41c851` | `2b34dba` | 50 / 50 in the quantities (one run in its hashes) | 14 | unchanged | – |
+| F-05 slow-death phases | `94711fb` | the commit after it | 23 / 48 | 14 | GLA, tick 32,520, `6052051714309B17` | world fingerprint `4E6F6F5623FE86DC` |
+
+`WorldSnapshot` 10, `MissionSnapshot` 3 and `SaveGame` 3 are unchanged through all steps; the compatibility baseline went from 731 to 713 entries (18 opaque keys typed).
+
+### 44.5 Found on the way: the member order of a script team is state (`f41c851`, manifest `2b34dba`)
+
+Not one of the three findings, but a defect they uncovered, fixed with a commit and a manifest commit of its own. The script VM keeps the members of a team in the order they
+joined and gives its orders member by member; it **wrote them sorted by id**, so a restored session gave the same orders in another order than the uninterrupted one. Until F-04 two
+move orders of one tick did not depend on their order. Since a move gets its destination when it is ordered (§44.2), the first member takes the free place and the second the next
+one: the real-data test "a session of the original skirmish AI saved inside a frame continues identically" failed on the state of F-04 - saved at tick 16,006, the restored session
+ordered two units in the other order at tick 16,294 and differed in the position of a tank from tick 16,297 on. The tier 3 gate of F-04 did not contain that test (it is part of
+`sim-content`, tier 4); the fix therefore comes with a synthetic test of its own ("Scripts: the members of a team are saved in the order they joined", tier 1/2), and the real-data
+test now reports the first tick at which the saved documents of the two sessions differ, the place in the document, and whether their navigation grids agree.
+
+The members are now written in their own order, and the state hash follows. Effect on the manifest: **one run of 50**, `mission_MD_USA05`, in its five hash fields (final hash
+`6C8132705A887217` → `48324DF5137AFF7F`); every result quantity of that run is unchanged, no other run moves, the input manifest is identical. A savegame or mission snapshot
+written before carries its teams in id order and is read as such - no format version changes, but a session restored from it continues with that order.
+
+**What this says about the tiers:** between `39a1656` and the fix, a restored session of the original AI could diverge from the uninterrupted one. The built-in `SkirmishAi`, the
+reference match and the missions of the manifest were not affected (their checks passed at every step), and savegames of skirmishes do not exist yet (Phase 24). Other collections
+of the VM that are written sorted (`.Order()` in `ScriptEngine.Describe`) were not examined for the same pattern - a point for step 2 of Phase 24 ("no field forgotten").
