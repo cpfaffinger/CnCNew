@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M10 Sound, cursor, waypoints, mission in the client (+ S1-M9 texts, shell) · **Phase:** 16
+> **Status:** built – not accepted; nothing of it heard or seen by a human (5 October 2026)
+> **Predecessor:** HANDOFF-PHASE15.md · **Successor:** HANDOFF-PHASE17.md · **Results in:** docs/GAME-AUDIO.md, docs/PRESENTATION-INPUT.md §11/§12, docs/TEXT-AUDIT.md, docs/GAME-SHELL.md §12/§13, docs/SCRIPT-ENGINE.md §7a
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 16): Tech demo readiness II – controls (sound, cursor, waypoints, text) and mission in the client
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, **`docs/DEMO-FINDINGS.md`** (this brief implements items 7–10 of it), `docs/GAME-AUDIO.md`, `docs/PRESENTATION-INPUT.md`, `docs/GAME-HUD.md`, `docs/GAME-SHELL.md`, `docs/CLIENT-UI-RENDERING.md`, `docs/SCRIPT-ENGINE.md` §6/§7 (host interface, mission session) and `docs/CAMPAIGN-AND-SAVEGAMES.md` §7.

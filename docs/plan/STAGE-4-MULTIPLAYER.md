@@ -1,0 +1,152 @@
+# Stage 4 – Multiplayer
+
+As of: 10 October 2026, state `2777a90`. Frame: [PROGRAMME.md](PROGRAMME.md). The technical frame – decisions, target
+architecture, latency model, register of bottlenecks E1 to E24, rules – is `docs/MULTIPLAYER-PLAN.md`; the briefs are
+`docs/handoffs/HANDOFF-PHASE25.md` to `-29.md` (planned, with their "Starting point" to be continued at the end of the
+respective previous phase). **Nothing of this stage is built.** Its preparatory work (measurement basis, performance,
+tick rate, fixed point, 60 Hz) is Stage 2 and is done; the session core (Phase 24) is the gate into this stage.
+
+## 1. Goal, architecture, the owner's wording
+
+Skirmishes with up to eight players (humans and AI slots mixed) through a dedicated server; the local skirmish runs over
+the same path with an embedded server; a slow player does not hold up the others.
+
+**Decided architecture (`docs/MULTIPLAYER-PLAN.md` §2):** lockstep through a **relay**. What travels is commands, not
+state; every client computes the full world; the server keeps the tick clock, assigns every command intent to the next
+open tick, sends one bundle per tick to everyone (also an empty one) and **waits for nobody when closing a tick**; it does
+not simulate and loads no game data (cheap, legally clean, portable). The AI runs in the simulation of every client and is
+part of the hashed session state; the server knows of an AI only that its slot is occupied. One match path: local
+skirmish = embedded server + loopback + one client, client-paced; network match = the same code with UDP, server-paced.
+
+How the owner's requirements map onto it:
+
+| Requirement (10 October 2026) | In the architecture |
+|---|---|
+| "The client gets its data from the server" | The client gets the **tick bundles** (the commands of all humans and of the system per tick) from the server and computes the state itself. A state stream from an authoritative or co-simulating server was rejected for cost in §2.1 and is kept as a later option that nothing may obstruct. **Confirmation needed: D-11.** |
+| "The server does the lockstep so that a slow player does not hold up all the others" | Server-paced tick clock; a client that is behind catches up (measured catch-up speed 26-fold at 60 Hz); the rule for slow and disconnected clients (display up to 2 s, throttle up to 10 s, then disconnect – default, D-17) and the drop as a system command in the bundle. |
+| "Tick rates" | The rate is a value of the world and of the match description (Stage 2); 60 Hz is the product rate; two machines play together only with the same rate (§2.7). |
+| "Client-server architecture" | `CnCNew.Net` (messages, transport, lockstep driver), `CnCNew.Server` (room and relay logic, no game data), `tools/CnCNew.DedicatedServer`; layer rules in §2.4 and enforced by a source test. |
+
+**Not in scope** (§1): networked campaign or co-op missions; accounts, ladder, player search, central server list; NAT
+traversal and connections between players (clients connect outbound to a server with an open port); GameSpy/WOL
+compatibility; protection against map reveal (not preventable in lockstep, §2.8); transfer of custom maps; binary
+compatibility with old mods and savegames.
+
+## 2. Prerequisites from the other stages
+
+| Prerequisite | From | State |
+|---|---|---|
+| Session core: AI in the session state, `MatchDescription`, two-stage command path, `ITickDriver`, lockstep probe | S2-M7 (Phase 24) | current, not begun |
+| Fidelity package A (F-03 to F-05) merged before Phase 24 records values | S1-M11 (D-12) | open |
+| A second physical machine with a different CPU passes the manifest | S2-M1 (D-10, E1) | open; due before Phase 26 |
+| Decisions D-11 (commands versus state), D-17 to D-20 | PROGRAMME.md §7 | defaults named |
+| Fellow players and a second machine for the acceptances | project owner | to be provided (Phases 26, 29) |
+| Nothing from Phases 15 to 17 is accepted by a human (E24): a network game on top of a game with unverified playability conceals causes | S1-M11 | open; R1 does not wait for Stage 4, but Phase 29 should not come before the single-player acceptance |
+
+## 3. Milestones
+
+### S4-M1 Protocol, room, relay in the process — planned (Phase 25)
+
+- **Deliverables (`HANDOFF-PHASE25.md`):** simulation version (commit hash and "modified" flag as assembly metadata) in
+  match description and handshake; `docs/NETWORK-PROTOCOL.md` first, then versioned binary messages with upper limits
+  (handshake, room, match: command intent, tick bundle, hash report, pause, drop, desync, end); `ITransport` and
+  `LoopbackTransport` with delay, jitter and reordering from a test seed; `CnCNew.Server` room → loading → match → end,
+  server-paced and client-paced, player ID stamped from the connection, intents limited per tick and player, hash reports
+  compared, bundles recorded; the lockstep driver of the client with a fixed playback buffer; the **local skirmish over the
+  network path** (the skirmish setup becomes the room; save/load kept); `NetTool loopback-match` with 2, 4 and 8 clients
+  and the mixes 1+7, 2+6, 4+4, 8+0 on three 8-player maps, with and without disturbance, twice each; the old direct path
+  removed (tools stay headless on the session).
+- **Acceptance:** the local skirmish runs exclusively over `CnCNew.Net`/`CnCNew.Server` with reference values identical to
+  Phase 24; the multi-client probe is hash-identical for all mixes; the server runs without game data; the dependency rules
+  are enforced by a test.
+- **Bottlenecks:** time of submission (pending commands enter the hash – a bundle enters the world only immediately before
+  its tick); order within a bundle (human from the bundle, AI local, one canonical order); start at tick 0 from the match
+  description alone; the local skirmish must not get worse (time from intent to execution, tick cost).
+
+### S4-M2 Dedicated server, UDP, clock synchronisation, eight clients — planned (Phase 26)
+
+- **Deliverables (`HANDOFF-PHASE26.md`):** UDP transport behind `ITransport` with a stateless cookie handshake, a reliable
+  ordered channel and an urgent channel that carries every unacknowledged bundle, fragmentation with limits, keep-alive and
+  timeout, a strict parser; `NetTool proxy` as the network simulator (delay, jitter, loss, duplication, reordering from a
+  seed); clock synchronisation (offset by moving median) and an adaptive playback buffer in milliseconds, corrected by a few
+  percent of playback rate, never by jumps; catching up; `tools/CnCNew.DedicatedServer` (one process, one port, several
+  rooms, JSON and command-line configuration, structured log lines, no `CnCNew.Content`/`Game`/presentation/Stride – source
+  test); the rule for slow and disconnected clients with the drop as a system command (`CommandTypes.Version` raised); the
+  measurement matrix (eight headless client processes through the proxy: delay 10/40/80/150 ms, jitter 0/10/30 ms, loss
+  0/1/3 %; hashes identical, intent-to-execution median/95 %/99 %, buffer level, stalls, bytes per second, retransmissions),
+  an endurance run of 60 game minutes, two machines in the LAN (needs the human), the comparison with the calculated
+  latency table of `docs/MULTIPLAYER-PLAN.md` §3; `docs/DEDICATED-SERVER.md`.
+- **Acceptance:** eight client processes play a complete match with mixed human and AI slots through the dedicated
+  server; all hashes identical over the whole matrix; the latency table measured; a slow and a disconnected client do not
+  slow down the others beyond the documented rule.
+- **Bottlenecks:** hash includes pending commands; garbage collection and long frames (a client catches up); clock drift
+  without oscillation; coarse `Thread.Sleep` under Windows (tick interval histogram in the report).
+
+### S4-M3 Desync diagnosis, rejoin, spectators, server replay — planned (Phase 27)
+
+- **Deliverables (`HANDOFF-PHASE27.md`):** hash reports with the partial sums of the world (objects, timers, pending
+  commands, random streams, AI state per player, script state); the diagnostics package on a desync (match description,
+  bundles as a replay, hash chain, snapshot, object hash table – nothing of it contains original data); `NetTool
+  desync-diff` down to tick, object and field (a built-in error is found exactly); the snapshot for transfer measured
+  (JSON raw and Brotli; limits ≤ 2 MB, write and compress ≤ 150 ms, read ≤ 1 s; otherwise a compact binary format with the
+  same hash); rejoin from a fellow player's checkpoint snapshot through the server, verified by hash, then catch-up over the
+  bundles since; a fallback from tick 0; the seat held for a configured time (D-19); spectators as clients without a seat
+  with a delayed bundle stream (default 120 s); the server replay at the end of every match (also after an abort), playable
+  by `SimTool` and the client to the same hashes; pause and votes as system commands; `docs/NETWORK-DIAGNOSTICS.md`.
+- **Acceptance:** a built-in desync found down to tick, object and field; a disconnected client rejoins and is
+  hash-identical afterwards; a spectator follows with a delay; the server replay reproduces the hashes.
+- **Bottlenecks:** completeness of the snapshot (the test "load at every checkpoint of a 60-minute match and continue,
+  hash identical" for all factions); cost of the checkpoint on the donor; hash report rhythm against bandwidth. D-5 (command
+  check against the map bounds) is decided here or in Phase 28.
+
+### S4-M4 Server operation and security — planned (Phase 28)
+
+- **Deliverables (`HANDOFF-PHASE28.md`):** the threat model in `docs/DEDICATED-SERVER.md`; limits and throttling (packets
+  per sender before the handshake, messages and bytes per connection, intents per tick and player, sizes, connections per
+  address, rooms and players per server, memory per room), every violation counted with a defined reaction; a fuzz suite
+  against both parsers with a regression corpus; authenticated and encrypted connections with BCL cryptography only (ECDH
+  session key, AEAD with the sequence as nonce, room password as challenge-response, server key pair with trust on first
+  use); administration (configuration, ban list, kick, structured log with retention, truncated IP storage by default);
+  `dotnet publish` self-contained for `win-x64` and `linux-x64` with the Linux run proven (D-20); capacity and a 24-hour
+  sustained run with restarts, disconnects and rejoins; the version rule in operation (no "join anyway");
+  `scripts/audit-vulnerable.ps1` covers the server.
+- **Acceptance:** no crash and no memory growth in the fuzz run; limits take effect; the connection is authenticated and
+  encrypted; the server runs as a standalone package under Windows and Linux; the capacity table and the 24-hour run are
+  measured.
+
+### S4-M5 Multiplayer in the client, latency perception, acceptance with humans — planned (Phase 29)
+
+- **Deliverables (`HANDOFF-PHASE29.md`):** shell: main menu → Multiplayer → direct connection (`NetworkDirectConnect.wnd`)
+  → room list → room (`LanLobbyMenu.wnd`/`LanGameOptionsMenu.wnd`: slots human/AI/open/closed/spectator, faction, team,
+  colour, start position, map, starting money, ready, start, chat) → shared loading screen → match → result → room;
+  "Host game" starts the embedded server; the local skirmish is the same room with one human; every join deviation shown
+  with its cause; golden hashes of the new screens; in-game indicators (connection quality, waiting for a player, dropped
+  and returned, pause with requester, desync screen pointing to the diagnostics package, chat, spectator view with
+  `ObserverQuit.wnd`); `--net-stats`; **latency perception**: immediate local feedback from the pre-check (Phase 24),
+  interpolation of turret angle, barrel pitch, construction progress, health bar and suspension, a measured and switchable
+  extrapolation of own moving units, histograms click → execution and click → first visible reaction for 0/20/40/80 ms;
+  acceptance with humans (`docs/MULTIPLAYER-FINDINGS.md`): one human against AI over the embedded server, two humans in the
+  LAN, two to eight over a dedicated server on the internet with AI slots, disconnect and rejoin, spectators, pause, a
+  deliberately slow machine.
+- **Acceptance:** humans have worked through the checklist; the findings are in `docs/MULTIPLAYER-FINDINGS.md`; the
+  latency histograms before and after are measured.
+- **Bottlenecks:** the presentation reads the running world – immediate feedback must never show or change what only the
+  execution knows and influences no hash; standing orders with delay come neither twice nor late; smoke tests prove no
+  usability. The modern skin of these screens is S3-M5.
+
+### R4 Multiplayer release — planned (Phase 30)
+
+Passed when (PROGRAMME.md §6): Phase 29's acceptance by humans; the server package for Windows and Linux; the version and
+compatibility rule for savegames, replays and the network protocol from the first release on (every later change of tick
+rate, fixed-point format, snapshot, replay or protocol is a break for players and a decision of its own); the clean-room
+build of client and server on a fresh machine; the complete test matrix including the rate-equivalence suite and the
+network matrix. `docs/handoffs/HANDOFF-PHASE30.md` is the brief; its single-player items are R1, its patch items S3-M7.
+
+## 4. Register of bottlenecks
+
+The measured state of E1 to E24 is in `docs/MULTIPLAYER-PLAN.md` §4. Still open and owned by this stage: E11 (AI state
+outside the hash – Phase 24), E12 and E13 (time of submission, synchronous command path – Phases 24/25), E14 (`LiveGame`
+owns the time – Phase 24), E15 (match input incomplete – Phases 24/25), E16 (no network code – Phases 25/26), E17 (snapshot
+transfer – Phase 27), E18 (desync tool – Phase 27), E19 (open UDP port – Phases 26/28), E23 (user interface – Phase 29),
+E24 (nothing from Phases 15 to 17 accepted by a human – Stage 1). Owned by Stage 2 and still open: E1 (second machine),
+E4/E20 (tick maximum, allocation).

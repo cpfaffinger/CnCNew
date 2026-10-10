@@ -1,3 +1,8 @@
+> **Stage:** 2 – Engine · **Milestone:** S2-M1 Measurement basis · **Phase:** 18
+> **Status:** done (6 October 2026, state `b432fb7`); second physical machine open (D-10)
+> **Predecessor:** HANDOFF-PHASE17.md · **Successor:** HANDOFF-PHASE19.md · **Results in:** docs/DETERMINISM.md, docs/DETERMINISM-FINDINGS.md, docs/PERFORMANCE.md, docs/TICKRATE-AUDIT.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 18): Measurement basis – reference manifest, determinism across machine boundaries, performance profile, checked tick-rate inventory
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, **`docs/MULTIPLAYER-PLAN.md`** (scope change of 5 October 2026, target architecture, register of bottlenecks, rules for all phases of the programme), `docs/TICKRATE-AUDIT.md` and `docs/SIMULATION-CORE.md` (state hash, snapshot, replay, reference values).

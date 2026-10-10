@@ -1,3 +1,8 @@
+> **Stage:** 4 – Multiplayer · **Milestone:** S4-M3 Desync diagnosis, rejoin, spectators, server replay · **Phase:** 27
+> **Status:** planned
+> **Predecessor:** HANDOFF-PHASE26.md · **Successor:** HANDOFF-PHASE28.md · **Results in:** docs/NETWORK-DIAGNOSTICS.md (new), docs/NETWORK-PROTOCOL.md, docs/DEDICATED-SERVER.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 27): Robustness on the network – desync diagnosis, rejoin, spectators, server replay
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/NETWORK-PROTOCOL.md`, `docs/DEDICATED-SERVER.md`, `docs/SIMULATION-CORE.md` (snapshot, state hash, replay) and the final report of Phase 26.

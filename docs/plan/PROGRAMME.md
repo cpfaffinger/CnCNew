@@ -1,0 +1,281 @@
+# Programme plan: the four stages
+
+As of: 10 October 2026, state `2777a90` (decision of the project owner of 10 October 2026 to order the whole programme by
+four stages). This document is the top of the plan. It replaces `docs/ROADMAP.md` and `docs/IMPLEMENTATION-PLAN.md` as
+the plan; both stay as the record of the acceptance statements and measured numbers of their time. The technical frame of
+the multiplayer and the register of bottlenecks stay in `docs/MULTIPLAYER-PLAN.md`. Numbers in this document are the
+measurements of their state and are re-measured before any statement is built on them; the yardstick for results is
+`baselines/reference-manifest.json`, not a number in a text.
+
+The four stage documents carry the milestones, deliverables and what is already done:
+
+| Stage | Document | One sentence |
+|---|---|---|
+| 1 – Port | [STAGE-1-PORT.md](STAGE-1-PORT.md) | The original, as it is, in a new engine: single player complete, no change of behaviour, with the tooling that turns a Steam installation into content |
+| 2 – Engine | [STAGE-2-ENGINE.md](STAGE-2-ENGINE.md) | The engine grows beyond the original (60/120 Hz, fixed point, structure, performance, determinism) while the game stays, by its data, the same game |
+| 3 – Changes | [STAGE-3-CHANGES.md](STAGE-3-CHANGES.md) | New things: AI kinds and tactics, spectator, replay browser, analysis, modern UI, new pathfinding, bug-fix and balance layers – every one of them selectable |
+| 4 – Multiplayer | [STAGE-4-MULTIPLAYER.md](STAGE-4-MULTIPLAYER.md) | Dedicated server, lockstep through a relay, up to eight players with AI slots, no one waits for the slowest |
+
+The format of the briefs and the status vocabulary are in [BRIEF-FORMAT.md](BRIEF-FORMAT.md); the briefs themselves,
+ordered by stage and milestone, in [../handoffs/README.md](../handoffs/README.md).
+
+## 1. Terms
+
+- **Stage** (1 to 4): a layer of the programme by *kind of work*. Stages are not time slices: work of several stages has
+  run and will run interleaved; the stage says what a piece of work must respect and against what it is measured.
+- **Milestone** (`S<stage>-M<n>`): a self-contained deliverable of a stage with its own acceptance. A milestone is built in
+  one or more **phases**.
+- **Phase** (`Phase N`, brief `docs/handoffs/HANDOFF-PHASE<N>.md`): one unit of work with a brief, a starting state, a
+  final report and an N+1 brief. The numbering of the phases is historical and continues (the next free number is 31).
+  Phases 4 to 23 are worked off, 24 is current, 25 to 30 are planned.
+- **Release gate** (`R1` to `R4`): the end of a stage as a human sees it: a package, an acceptance, documentation for
+  humans. A stage is finished when its gate is passed, not when its last milestone is built.
+- **Status words** (the only ones used in the plan): **done** (built and measured, and accepted where only a human can
+  accept) · **built – not accepted** (built and measured headless; what only a human can judge is outstanding) ·
+  **in progress** · **open** (defined, not begun) · **decision** (waits for the project owner) · **limit** (named,
+  not planned to change).
+
+## 2. The four stages
+
+### Stage 1 – Port
+
+**Goal:** the original game, ported into a new engine, with its full single-player function (campaign, missions,
+skirmish) and *no* intended or unintended change of behaviour; with the tooling that turns the user's own Steam
+installation into runtime content and checks it. The tools that the port needed (`SimTool`, `IniTool`, `MapTool`,
+`CampaignTool`, `AssetTool` and the rest) belong to this stage.
+
+**What belongs here:** every module, script action, rule, screen, sound and effect of the original; every fidelity defect
+(a place where the port behaves differently from the original); the installer; the acceptance by a human of look, sound
+and playability.
+
+**Yardstick:** the original – its source code (`references/`, read, not copied), its data, and the eye and hand of a
+human against the running original. Fidelity cannot be hashed, so the stage is measured by coverage (modules, objects,
+script types, screens, texts), by staged scenes with a known original behaviour, by the acceptance catalogue
+(`docs/ACCEPTANCE.md`, 85 items) and by the **fidelity debt register** in the stage document.
+
+**Rule:** a change in this stage makes the port *more like the original*. A change that makes the game *different from the
+original on purpose* is Stage 3, however small, and is built as an option there.
+
+### Stage 2 – Engine
+
+**Goal:** the engine evolves beyond the original – tick rate as a value of the world with 60 Hz as the product rate and
+120 Hz supported, finer fixed point, performance, determinism across machines, a session core that a network can drive –
+while the game stays, by its assets and data, *the same game*: times from the data lie on the 30 Hz grid of the original,
+balance does not move, and a match at 60 Hz is the match of the original.
+
+**What belongs here:** structure and patterns of the code, numerics, time, hashing, snapshot and replay formats, the test
+and measurement apparatus, the session core (`MatchDescription`, command path, tick source, AI state in the session).
+
+**Yardstick:** the reference manifest. A Stage 2 phase is result-identical (the manifest does not move) or it changes the
+manifest once, for one named cause, in a commit of its own (`docs/MULTIPLAYER-PLAN.md` §6). Between rates the
+rate-equivalence suite (4,388 game quantities, tolerances fixed before the first run) and the distribution comparison
+decide.
+
+**Rule:** no rule of the game changes here. Where an engine change forces a behaviour change (a lost wake request, a
+factory exit), it is a fidelity fix (Stage 1) or an option (Stage 3) and is booked there, even when it is built inside an
+engine phase.
+
+### Stage 3 – Changes
+
+**Goal:** what the original did not have: kinds of AI and their tactics (rush, bunker, balanced, eco …), the spectator
+mode, a replay browser, analysis of matches with graphics, a modern user interface, new movement and pathfinding, and the
+community's bug-fix and balance patches as layers.
+
+**Yardstick and rule:** every change is **selectable** – a profile, an option, a layer – and the "original" profile keeps
+the reference manifest unchanged. A change that touches the simulation gets its own fingerprint, which becomes part of the
+match description (Stage 4: only machines with the same profile play together). Balance effects are measured with the
+distribution comparison (`SimTool ai-survey`, `rate-distribution`), never asserted.
+
+### Stage 4 – Multiplayer
+
+**Goal:** skirmishes with up to eight players (humans and AI slots mixed) through a dedicated server, as lockstep through
+a relay that neither simulates nor loads game data; a slow player does not hold up the others; the local skirmish runs
+over the same path with an embedded server.
+
+**Yardstick:** hash-identical clients tick by tick under a disturbed network, a measured latency matrix, a disconnected
+client that rejoins hash-identically, and the acceptance by humans in a LAN and over the internet.
+
+The decided architecture is in `docs/MULTIPLAYER-PLAN.md` §2: what travels is commands, not state; every client computes
+the full world; the server orders and distributes. **One reading of the owner's wording needs confirmation** (decision
+D-11 below): "the client gets its data from the server" is, in this architecture, the tick bundle of commands – not a
+state stream. A server that also simulates and could send state (a co-simulating server) is a later option that nothing
+in Stage 4 may obstruct, not part of the plan.
+
+### Which stage does a piece of work belong to?
+
+1. Does it make the port behave *more* like the original (a missing module, a wrong formula, an unseen screen)? → **Stage 1.**
+2. Does it change the engine without changing what the game does by its data (rate, numerics, hash, snapshot, structure,
+   speed, determinism, session core)? → **Stage 2.** Proof: the manifest does not move, or moves once for one cause.
+3. Does it change what the game does, on purpose, beyond the original? → **Stage 3**, as an option with a fingerprint.
+4. Does it make several machines play one match? → **Stage 4.**
+5. Is it a package, an acceptance with humans, documentation for humans? → the **release gate** of the stage it closes.
+
+A phase may contain work of several stages (Phase 23 did). Then the final report books every item to its stage, and the
+milestone status is updated in each stage document.
+
+## 3. Milestone overview
+
+| ID | Milestone | Phases | Status (10 October 2026) |
+|---|---|---|---|
+| S1-M1 | Import, formats and runtime content (schema 2) | 1, 2 | done |
+| S1-M2 | Typed game data and compatibility baseline | 3, 4 (block 0) | done |
+| S1-M3 | Deterministic simulation core | 4 | done (numerics and rate later changed by Stage 2) |
+| S1-M4 | Game rules, combat, economy, production | 5, 6, 7, 10 | done, with a fidelity debt register |
+| S1-M5 | World, terrain, navigation, vision, construction | 6, 7, 10, 15 | done, with named limits |
+| S1-M6 | Module coverage: every object of the retail data | 7, 9–14 | done (183 of 183 simulation modules, 2,115 of 2,115 objects) |
+| S1-M7 | Script VM, missions, campaign, savegames | 9–14 | done headless; playability by a human → S1-M11 |
+| S1-M8 | World presentation (terrain, objects, effects) | 7, 8, 15 | built – not accepted |
+| S1-M9 | Input, shell, HUD, texts, original layouts | 8, 12, 16, publication | built – not accepted |
+| S1-M10 | Sound, cursor, waypoints, mission in the client | 16, 17 | built – not accepted (never heard) |
+| S1-M11 | Playability and acceptance by a human | 15, 16, 17, acceptance package | **open** – the acceptance goal of Stage 1 is not reached |
+| S1-M12 | Installer and clean content from the Steam master | publication (9 October) | built – not accepted |
+| S1-M13 | The skirmish AI of the original as a faithful computer opponent | 23 (side product) | built as an option, with named deviations |
+| S1-M14 | Tooling of the port | 1–23 | done, grows with every phase |
+| **R1** | **Port release:** single player accepted end to end, package, documentation for humans | 30 (items 1, 2, 5–8) | open |
+| S2-M1 | Measurement basis: reference manifest, determinism matrix, profile | 18 | done; second machine open |
+| S2-M2 | Performance of real matches | 19, 23 (gate) | done; maximum and allocation missed |
+| S2-M3 | Tick rate as a value of the world (simulation and everything outside) | 20, 21 | done |
+| S2-M4 | Fixed point Q39.24 | 22 | done |
+| S2-M5 | Rate invariance and 60 Hz as the default | 23 | done with named limits |
+| S2-M6 | Test strategy in four tiers | – (10 October) | done |
+| S2-M7 | Session core: AI in the session state, skirmish savegame, match description, command path, tick source | 24 | **current** (starting state measured, not begun) |
+| S2-M8 | Engine follow-ups (tick maximum, hash constructions, allocation, thread, formats, documentation) | – | open backlog, partly decisions |
+| **R2** | **Engine release:** 60 Hz seen by a human, determinism on a second machine, skirmish savegame | – | open |
+| S3-M1 | AI kinds, difficulty and tactics | 6, 17, 23 (built-in AI) | built-in AI exists and is the default; tactics and levels open |
+| S3-M2 | Spectator and observer | 23 (side product) | built – not accepted |
+| S3-M3 | Replay browser | – | open (replay format exists) |
+| S3-M4 | Match analysis with graphics | – | open (headless surveys exist) |
+| S3-M5 | Modern user interface | – | open (original layouts are the base) |
+| S3-M6 | Movement and pathfinding beyond the original | – | open (decision 3 reserved) |
+| S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | 30 (items 3, 4) | open |
+| **R3** | **Changes release:** every change selectable, measured and accepted | – | open |
+| S4-M1 | Protocol, room, relay in the process; local skirmish over the network path | 25 | planned |
+| S4-M2 | Dedicated server, UDP, clock synchronisation, eight clients | 26 | planned |
+| S4-M3 | Desync diagnosis, rejoin, spectators, server replay | 27 | planned |
+| S4-M4 | Server operation and security | 28 | planned |
+| S4-M5 | Multiplayer in the client, latency perception, acceptance with humans | 29 | planned |
+| **R4** | **Multiplayer release:** server package (Windows, Linux), acceptance of LAN and internet matches | 30 | planned |
+
+## 4. What was built in the "wrong" stage, and where it lives now
+
+**Rule of the project owner (10 October 2026): no work is thrown away.** Work that already exists and belongs to a later
+stage is **not rolled back** for the sake of the stages; the goal remains the state at the end of Stage 4, and the stages
+are the order of the plan, not a reason to undo anything. "No rollback" does **not** mean "frozen": existing work may be
+changed, optimised, restructured or rebuilt where that serves a clear path – given its option switch, its fingerprint, its
+place in the session state, its brief – under the rules of its stage (measured, one cause per reference change). The
+owner's decisions already made (the built-in AI as the default, self-acquisition per original frame) stand until the owner
+changes them.
+
+The stages were not the order of the work; several things came into being where a phase needed them. They are booked where
+they belong, so that nobody looks for them in the wrong place or builds them twice:
+
+| Built | In | Belongs to | Note |
+|---|---|---|---|
+| The built-in `SkirmishAi` (own development, not a port) | Phase 6, 17, 23 | S3-M1 | Default AI by decision of 10 October 2026; its tactics and levels are Stage 3 work; its state goes into the session in S2-M7 |
+| The skirmish AI of the original (`ScriptedSkirmishSession`, three levels) | Phase 23 | S1-M13 | The faithful computer opponent; optional, not default; deviations in `docs/SKIRMISH-AI-ORIGINAL.md` §6.2 |
+| Spectator mode (`--spectate`, observer HUD) | Phase 23 | S3-M2 | Not accepted by a human |
+| Acceptance catalogue and guided run (`scripts/acceptance.ps1`) | after Phase 23 | S1-M11 | Not used by a human |
+| Skirmish savegame (deliberately unsupported since Phase 10) | – | S1 debt, closed by S2-M7 | Phase 24 builds it |
+| Factory exits, scroll speed at the screen edge, mouse assignment, build keys | Phase 23 | S1-M9/M10 (fidelity) | From the owner's tasks of 7 October; not accepted |
+| Three behaviour changes at 30 Hz (lost wake, factory exit, AI after the first viewing) | Phase 23 | S1-M4 (fidelity) and S3-M1 (AI) | Each with its own manifest commit |
+| Test strategy in four tiers (`docs/TESTING.md`, `scripts/test.ps1`) | 10 October | S2-M6 | Cross-cutting, binding |
+| Patch integration and quality (the former Phase 30) | planned | S3-M7 (fixes, patch layer), R1/R4 (package, diagnostics, documentation) | The brief stays; its items are distributed |
+
+## 5. Execution order (proposal; decision D-1)
+
+Dependencies that do not move: S2-M7 (Phase 24) before every Stage 4 phase; a second physical machine (S2-M1, E1)
+before S4-M2; the three simulation fidelity findings S1–S3 of the acceptance pre-check (`docs/ACCEPTANCE.md` §6) before
+Phase 24 records its reference values (each changes every hash); Stage 3 changes of the simulation after S2-M7, because
+they need the profile fingerprint in the match description to be safe for Stage 4.
+
+Proposed sequence from here:
+
+1. **Now (Stage 1, small):** the fidelity package A – S1 passengers scattered on exit, S2 own destination per unit of a
+   group, S3 slow-death phases with effect, creation list and weapon – one cause per commit, each with its manifest
+   (S1-M11, prerequisite of Phase 24). In parallel and at any time: the acceptance run by the project owner
+   (`pwsh scripts/acceptance.ps1`), whose findings feed S1-M8 to S1-M11.
+2. **Phase 24** (S2-M7): session core. Closes the skirmish savegame debt and is the gate into Stage 4.
+3. **Phases 25 to 27** (S4-M1 to S4-M3): the network core up to rejoin and server replay. Needs the second machine from
+   Phase 26 on.
+4. **Stage 3 as a block or interleaved** (D-1): replay browser and analysis profit from the server replay (27); the
+   spectator in the network (27) and the observer features of S3-M2 share one design; AI tactics and new pathfinding are
+   simulation changes with their own profile fingerprint and belong after S2-M7. Items that do not touch the simulation
+   (replay browser, analysis, modern UI) can run as parallel packages from Phase 24 on.
+5. **Phases 28 and 29** (S4-M4, S4-M5): operation, security, client, acceptance with humans.
+6. **Release gates:** R1 as soon as the human acceptance of the single player is done (it does not wait for Stage 4),
+   R2 with the second machine and the 60 Hz view, R3 and R4 with Phase 30 as the common package.
+
+The alternative is Stage 3 before the network core (the owner's enumeration names 3 before 4). Cost of that order: every
+Stage 3 change of the simulation moves reference values that the desync search of Stage 4 later needs stable, and the
+network briefs 25 to 29 already exist and are measured against the state after Phase 24. Cost of the proposed order:
+Stage 3 waits for 25 to 27. Default until decided: the proposed order.
+
+## 6. Release gates
+
+| Gate | Passed when |
+|---|---|
+| **R1 Port** | A human has worked through the acceptance catalogue and clicked through shell → campaign → mission → save/load → completion and skirmish setup → match → result; every finding is fixed or named as a limit with a reason; the fidelity debt register has no entry without a disposition; the installer was run by a human from a Steam installation through `Start-CnCNew.cmd`; a client package for Windows and the documentation for humans (installation, troubleshooting) exist; tier 4 green at the state of the package. |
+| **R2 Engine** | A human has seen and heard the game at 60 Hz (checklist in `docs/DEMO-FINDINGS.md`); the reference manifest passes identically on a second physical machine with a different CPU; the skirmish savegame works (S2-M7); the performance targets are reached or every rest is named with its cost centre; the formats carry their versions and old states are rejected with a clear message. |
+| **R3 Changes** | Every change is selectable and off in the "original" profile; the original profile passes the unchanged manifest; every profile that touches the simulation has a fingerprint; balance effects are measured by the distribution comparison; a human has accepted each feature in the window. |
+| **R4 Multiplayer** | Phase 29 acceptance by humans (local skirmish over the embedded server, LAN match, internet match with AI slots, disconnect and rejoin, spectators); server package for Windows and Linux; the version and compatibility rule for savegames, replays and protocol from the first release on; Phase 30 clean-room build. |
+
+## 7. Decision register
+
+All open decisions of the project owner in one place. The briefs each name a default so that nobody is blocked; the
+decision stays with the project owner. Decided items are kept for one month, then moved to the stage document.
+
+| ID | Question | Default in the plan | Due before | Stage |
+|---|---|---|---|---|
+| D-1 | Stage 3 before or after the network core (Phases 25 to 27)? | after (§5) | Phase 25 | – |
+| D-2 | Factory exit "always through the gate, even with an immediate command" – which behaviour has the original? (§7a no. 2 of the multiplayer plan: built, measured, not merged, shifts the balance) | unmerged: a unit with an immediate command leaves by the shortest route | R1 | 1 |
+| D-3 | Lowering the tick maximum (141–143 ms at 60 Hz) needs a behaviour change: shared group path, cell budget per tick or a different search (§7a no. 3) | not done | Phase 26 | 2 → built as S3-M6 |
+| D-4 | The two faster hash constructions (vision row by row; object hash with module hashes); change every reference value (§7a no. 4) | not implemented | – | 2 |
+| D-5 | Command check against the map bounds (targets beyond around 524,000 units overflow the movement) (§7a no. 5) | not built | Phase 27/28 | 4 |
+| D-6 | Solo bonuses of the campaign on easy and hard (`SOLO_AI_EASY/HARD`, health bonus) – the original applies them, the port does not (§7a no. 6) | not implemented | R1 | 1 |
+| D-7 | The draw order of the roads depends on the rate (§7a no. 7) | unchanged | – | 2 |
+| D-8 | A standard skirmish ends after one hour of game time, also for a human (§7a no. 8) – the original has no such limit | unchanged | R1 | 1 |
+| D-9 | Assessing the balance after the AI corrections (ChinaTankGeneral 70 of 80 against AirForce) (§7a no. 10) | not assessed | – | 3 |
+| D-10 | The second physical machine with a different CPU (§7a no. 11, E1) | open; instructions in `docs/DETERMINISM.md` §4 | Phase 26 | 2 |
+| D-11 | "The client gets its data from the server": tick bundles of commands (decided architecture) or a state stream from a co-simulating server (rejected in `docs/MULTIPLAYER-PLAN.md` §2.1 for cost; kept as a later option)? | commands | Phase 25 | 4 |
+| D-12 | The fidelity package A (S1 scatter on exit, S2 own destination per unit, S3 slow-death phases) before Phase 24 – each changes every hash | yes, before Phase 24 | Phase 24 | 1 |
+| D-13 | Known 30 Hz findings, each a fidelity fix with its own manifest: `SupplyMachine` overwrites a player's command in one frame; a magazine without reload time fires once more through a second command in the same tick; `QuantityModifier` not applied (one Red Guard instead of two); the unit comes into being at completion, not when the gate opens | fix, one cause per commit | R1 | 1 |
+| D-14 | `<This Team>` in a team's create script: fixed for AI sessions, not in the mission VM (changes manifest runs) | fix | R1 | 1 |
+| D-15 | Rank system (skill points per kill, `Rank.ini`, purchase points per rank): the simulation gives one purchase point every 90 s instead | implement as a rule of the game | R1 | 1 |
+| D-16 | Completing the original AI's C++ half (bridge repair, rebuild hole, cluster mines, prerequisite-free build path, placement without shroud; `docs/SKIRMISH-AI-ORIGINAL.md` §6.2) | leave as named deviations of the option | R1 | 1 |
+| D-17 | Rule for slow clients: how long to display, throttle, disconnect | display up to 2 s, throttle up to 10 s, then disconnect | Phase 26 | 4 |
+| D-18 | What happens to the objects of a player who dropped out | look up the original, propose, decide | Phase 26 | 4 |
+| D-19 | How long a seat is held for rejoining; spectator delay | 5 minutes; 120 s | Phase 27 | 4 |
+| D-20 | Server under Linux as a delivery target | yes | Phase 28 | 4 |
+| D-21 | `Display.UiScale = IntegerMultiple` as an alternative to the stretched command bar at 16:9 | stretched as in the original; integer scaling is an S3-M5 option | – | 3 |
+| D-22 | Should 120 Hz be selectable by a player in the finished game (30 Hz: no, test rate only – decided) | no, test rate | R2 | 2 |
+
+**Decided:** self-acquisition once per original frame of the unit stays (10 October 2026; `docs/SIMULATION-CORE.md`
+§43); the built-in `SkirmishAi` stays the default AI, the original AI an option (10 October 2026); the target platform is
+Windows, Linux later only as host of the dedicated server (9 October 2026); 60 Hz is the default and the abort criterion
+of Phase 23 was lifted (8 October 2026); 30 Hz stays a test rate (planned default, not contested).
+
+## 8. Rules that carry over
+
+`CLAUDE.md` (layers, quality rules, git, procedure of a phase), `docs/TESTING.md` (which tier a change asks for),
+`docs/MULTIPLAYER-PLAN.md` §6 (measure first; one cause per reference change; determinism across machines; no wall-clock
+time in the simulation; nothing falls back silently; formats raise their version; verified headless is not accepted;
+continue existing briefs). New here:
+
+1. **Every brief names its stage and milestone** in its header (`BRIEF-FORMAT.md`); a final report books every item to
+   a stage and updates the milestone status in the stage document.
+2. **Stage 3 work is an option from its first commit.** No change beyond the original lands in the default profile
+   without the owner's decision; the "original" profile keeps the manifest. What is already the default by the owner's
+   decision (the built-in `SkirmishAi`) stays so; the rule binds new work, it does not undo old work.
+3. **Nothing is rolled back for the sake of the stages** (§4). Existing work of a later stage is kept; it may be changed,
+   optimised or rebuilt where that serves a clear path, under the rules of its stage – it is never thrown away because of
+   its stage.
+4. **The fidelity debt register** (`STAGE-1-PORT.md` §3) is the list of known deviations from the original. A new
+   deviation found anywhere is entered there with its source reference before it is fixed or left.
+5. **The decision register** (§7) is the one list of open decisions; `docs/MULTIPLAYER-PLAN.md` §7/§7a point here.
+
+## 9. Keeping this plan current
+
+At the end of every phase: milestone status in the stage document and in §3; new deviations into the fidelity register;
+new questions into §7; decided questions marked; the index `docs/handoffs/README.md`; the next brief in the format of
+`BRIEF-FORMAT.md`. Nothing in these documents is a measured value – the numbers are quoted from the documents that
+measured them, with their date and commit, and are re-measured before use.

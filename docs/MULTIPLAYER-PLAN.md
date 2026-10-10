@@ -178,6 +178,10 @@ Why the tick rate before the network: rate and fixed point change every hash and
 
 ## 7. Open decisions of the project owner
 
+Since 10 October 2026 the one consolidated list of the open decisions is `docs/plan/PROGRAMME.md` §7 (D-1 to D-22; it
+carries the items below and those of §7a with their defaults and due dates). This section and §7a are kept as the record of
+their origin and are not extended any more.
+
 The briefs each name a default so that nobody is blocked; the decision stays with the project owner.
 
 | Question | Default in the plan | due before |

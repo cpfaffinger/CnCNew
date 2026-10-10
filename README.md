@@ -46,7 +46,8 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   60 Hz); session core, protocol and server follow from Phase 24 on.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
-  with the project owner (`docs/MULTIPLAYER-PLAN.md` §7a). Roadmap: `docs/ROADMAP.md`.
+  with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,
+  engine, changes, multiplayer) with milestones, what is done, and what only a human can still accept.
 
 ## Legal matters in brief
 
@@ -103,6 +104,9 @@ dotnet run --project tests/CnCNew.Data.Tests -- --content-dir game/content
 dotnet run --project tools/CnCNew.IniTool -- compat-check game/content baselines/compatibility.json
 ```
 
+Which checks a change needs is fixed in [docs/TESTING.md](docs/TESTING.md): `pwsh scripts/test.ps1` runs the test programs
+of the touched areas before a commit, `-Tier gate` before a push of code, `-Tier full` at the completion of a phase.
+
 Tests are standalone console programs (non-zero exit code on failure), no xUnit/NUnit. The complete list
 of test programs, audits, manifest checks and tool commands is in [CLAUDE.md](CLAUDE.md), section "Build,
 tests, audits". Tech demos in a window (they build the client and need `game/content`):
@@ -133,13 +137,14 @@ Layers and dependency rules (import → runtime content → data models → simu
 ## Documentation
 
 The overview of all documents, ordered by topic, is in [docs/README.md](docs/README.md). First points of call:
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/ROADMAP.md](docs/ROADMAP.md),
-[docs/IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md), [docs/SIMULATION-CORE.md](docs/SIMULATION-CORE.md),
+[docs/plan/PROGRAMME.md](docs/plan/PROGRAMME.md) (the plan in four stages), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+[docs/SIMULATION-CORE.md](docs/SIMULATION-CORE.md),
 [docs/DEMO-FINDINGS.md](docs/DEMO-FINDINGS.md).
 
 ## How the project is made
 
-The work proceeds in phases: every phase has a self-contained brief (`docs/handoffs/`), begins with the
+The work proceeds in four stages (port, engine, changes, multiplayer; `docs/plan/PROGRAMME.md`) and in phases: every
+phase has a self-contained brief (`docs/handoffs/`, indexed by stage in `docs/handoffs/README.md`), begins with the
 reproduced starting state and ends with measurements, updated documentation and the brief of the next
 phase. The code is written predominantly by coding agents under the guidance of the project owner;
 [CLAUDE.md](CLAUDE.md) (with the pointer [AGENTS.md](AGENTS.md)) is their binding working instruction and at the same time

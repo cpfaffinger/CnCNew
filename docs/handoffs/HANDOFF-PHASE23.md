@@ -1,3 +1,9 @@
+> **Stage:** 2 – Engine · **Milestone:** S2-M5 Rate invariance and 60 Hz as the default · **Phase:** 23
+> **Status:** done with named limits (9 October 2026, state `f3acc2e`)
+> **Predecessor:** HANDOFF-PHASE22.md · **Successor:** HANDOFF-PHASE24.md · **Results in:** docs/TICKRATE-MIGRATION.md §15, docs/SIMULATION-CORE.md §39–§43, docs/rate-invariance/*.md
+> **Side items:** S3-M2 spectator mode, S1-M13 the original skirmish AI as an option, Stage 1 fidelity fixes at 30 Hz (lost wake, factory exit, AI after the first viewing)
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 23): Time-step invariance, newly designed acceptance tests and the switch to 60 Hz
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, **`docs/TICKRATE-AUDIT.md`** (§4 and §5 as well as the list "for Phase 23" kept in Phase 20), `docs/SIMULATION-CORE.md`, `docs/GAME-RULES.md`, `docs/SCRIPT-ENGINE.md`, `docs/SIM-TURRET-AIM.md`, `docs/SIM-JET-FLIGHT.md`, `docs/CAMPAIGN-AND-SAVEGAMES.md` and the final reports of Phases 20 to 22.

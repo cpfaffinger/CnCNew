@@ -1,3 +1,8 @@
+> **Stage:** 2 – Engine · **Milestone:** S2-M2 Performance of real matches · **Phase:** 19
+> **Status:** done (6 October 2026, state `16d337c`); tick maximum and allocation missed (D-3, D-4)
+> **Predecessor:** HANDOFF-PHASE18.md · **Successor:** HANDOFF-PHASE20.md · **Results in:** docs/PERFORMANCE.md §6a, docs/PERF-MOVEMENT.md, docs/PERF-VISION.md, docs/PERF-HASH.md, docs/PERF-MISSIONS.md, docs/PERF-GAME-LAYER.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 19): Performance – lower the tick cost of real matches without changing a result
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/DETERMINISM.md`, `docs/SIMULATION-CORE.md` (tick phases, state hash, vision, navigation, performance budget) and the final report of Phase 18 with the performance profile.

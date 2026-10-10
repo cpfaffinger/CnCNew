@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M6 Module coverage complete, S1-M7 · **Phase:** 14
+> **Status:** done (3 October 2026)
+> **Predecessor:** HANDOFF-PHASE13.md · **Successor:** HANDOFF-PHASE15.md · **Results in:** docs/SIMULATION-CORE.md §30, docs/SCRIPT-ENGINE.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff: Finish Phase 9 (continuation 4) – playability instead of world interventions, formations, weapon slots, path flight, remaining blocker modules
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§9 "Phase 13 state" and "Known limits (state after Phase 13)"), `docs/SCRIPT-ENGINE.md` (especially §5, §8 items 12–23, §9), `docs/CAMPAIGN-AND-SAVEGAMES.md` (§7), `docs/SIMULATION-CORE.md` (§27/§28), `docs/GAME-HUD.md` (§14/§15), `docs/GAME-RULES.md` (§9). `docs/handoffs/HANDOFF-PHASE9.md`–`docs/handoffs/HANDOFF-PHASE13.md` remain as history; their numbers are outdated.

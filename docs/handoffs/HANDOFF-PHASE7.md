@@ -1,3 +1,9 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M5 World, terrain, movement, vision, construction · **Phase:** 7
+> **Status:** done (30 September 2026)
+> **Predecessor:** HANDOFF-PHASE6.md · **Successor:** HANDOFF-PHASE8.md · **Results in:** docs/SIMULATION-CORE.md §13–§20, docs/GAME-RULES.md
+> **Side items:** S3-M1 the built-in `SkirmishAi` (own development, not a port)
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 # N+1 handoff: Phase 6 – world, terrain, movement, vision and skirmish AI
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`,

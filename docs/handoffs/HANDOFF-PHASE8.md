@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M8 World presentation, S1-M9 input and UI (+ S1-M6 simulation debt) · **Phase:** 8
+> **Status:** done (30 September 2026) for the libraries and smoke tests; visual acceptance by a human → S1-M11
+> **Predecessor:** HANDOFF-PHASE7.md · **Successor:** HANDOFF-PHASE9.md · **Results in:** docs/CLIENT-TERRAIN.md, docs/CLIENT-OBJECTS.md, docs/CLIENT-FX.md, docs/GAME-AUDIO.md, docs/PRESENTATION-INPUT.md, docs/GAME-SHELL.md, docs/GAME-HUD.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 # N+1 handoff: Phase 7 – world presentation and open simulation debt
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`,

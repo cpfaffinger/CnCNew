@@ -14,12 +14,15 @@ comes into consideration later only as host of the dedicated server (decision of
 The documentation is indexed in `docs/README.md`; phase briefs lie in `docs/handoffs/`, the package reports of Phase 23 in
 `docs/rate-invariance/`.
 
-The overall planning is in `docs/IMPLEMENTATION-PLAN.md`. The phase currently to be worked on is
+The overall planning is in `docs/plan/PROGRAMME.md` (since 10 October 2026: four stages – 1 port, 2 engine, 3 changes,
+4 multiplayer – with milestones, status, release gates and the decision register; per stage `docs/plan/STAGE-<n>-*.md`;
+the briefs are indexed by stage in `docs/handoffs/README.md` and follow `docs/plan/BRIEF-FORMAT.md`;
+`docs/IMPLEMENTATION-PLAN.md` and `docs/ROADMAP.md` are the historical record). The phase currently to be worked on is
 a complete brief in `docs/handoffs/HANDOFF-PHASE24.md` (programme tick rate/fixed point/multiplayer, `docs/MULTIPLAYER-PLAN.md`; Phases 18 to 23 are completed, the yardstick is `baselines/reference-manifest.json`). What is open from Phase 17 – above all everything that needs a human – is in the section "Rest of Phase 17" at the end of `docs/handoffs/HANDOFF-PHASE17.md` and in `docs/DEMO-FINDINGS.md`.
 After Phase 17 follows the programme tick rate/fixed point/multiplayer: frame `docs/MULTIPLAYER-PLAN.md`, briefs `docs/handoffs/HANDOFF-PHASE18.md` to `docs/handoffs/HANDOFF-PHASE29.md`
 (these briefs already exist – at the end of a phase continue the "Starting point" of the next one, do not rewrite it); the former follow-up step (patch integration, quality, package) is `docs/handoffs/HANDOFF-PHASE30.md`.
-Before every phase read `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`,
-`docs/IMPLEMENTATION-PLAN.md` as well as the subject documents of the touched domain
+Before every phase read `README.md`, `docs/plan/PROGRAMME.md` and the stage document of the phase, `docs/ARCHITECTURE.md`,
+`docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` as well as the subject documents of the touched domain
 (`CONTENT-PIPELINE.md`, `TYPED-DEFINITIONS.md`, `PHASE3-COMPATIBILITY.md`, `SIMULATION-CORE.md`, `W3D-MATERIALS.md`).
 
 ## Layers and hard dependency rules
@@ -84,6 +87,28 @@ Test fixtures are small, synthetic and legally unobjectionable (no excerpts from
 Temporary outputs belong in the scratchpad of the session, not in the repo.
 
 ## Build, tests, audits
+
+**Test strategy (binding since 10 October 2026, `docs/TESTING.md`): checks are chosen by what a change can break, in four tiers –
+the whole run is not run for every change.**
+
+- **Tier 1 focus** while working: the one test or suite of the changed code (`Simulation.Tests -- --only "<part of the name>"`,
+  `Game.Tests -- --only <Suite>[,<Suite>]`, `reference-manifest check … --only <id>`).
+- **Tier 2 affected** before **every commit**: `pwsh scripts/test.ps1` – build with 0 warnings and the test programs of the touched
+  areas, selected from the changed paths (minutes).
+- **Tier 3 gate** before a **push** that contains more than documentation or scripts, and before merging a parallel worktree:
+  `pwsh scripts/test.ps1 -Tier gate` – adds the consumers, the other tick rates and, for everything that feeds the simulation, the
+  input manifest and the quick reference set.
+- **Tier 4 full** only at its triggers: `pwsh scripts/test.ps1 -Tier full` – completion of a phase; a commit that writes a manifest
+  under `baselines/`; a cross-cutting change of the simulation (`Numerics`, `Random`, `Time`, state hash, snapshot, replay, command
+  versions, enumeration order, any format version); a change of the build (SDK, packages, `Directory.Build.*`); a deviation of the
+  quick set that was not intended; before a tag or package; at the latest after ten pushed commits that touched simulation, data or formats.
+- Rules: a failure is fixed at the tier that found it and that tier is run again; a manifest deviation is a finding, never a number to
+  adopt; an unknown path counts as "everything"; a defect that escaped its tier 2 gets a focused test with its fix; every report
+  names the tier that ran and what was not run – "all tests green" is said only after tier 4; a step skipped for lack of
+  `game/content` is not a pass. `pwsh scripts/test.ps1 -Plan [-Tier …]` prints the steps and their commands.
+- `pwsh scripts/audit-publish.ps1` before every push is independent of the tiers and unchanged.
+
+The single commands (the script calls these; use them directly for tier 1 and for the checks chosen by hand, `docs/TESTING.md` §3):
 
 ```powershell
 dotnet build CnCNew.slnx
@@ -276,6 +301,8 @@ reinforcement transport/formations, a mission HUD and the Generals' Challenge ge
   check on 9 October 2026: 4,605 blobs, 0 binary, 0 equal to a game file.
 - Several commits per phase, each self-contained in subject matter (implementation, tests, docs separate where
   sensible). Before every commit check `git status` and stage selectively (`git add <files>`).
+- Before every commit of code `pwsh scripts/test.ps1` (tier 2), before every push of code `pwsh scripts/test.ps1 -Tier gate`
+  (tier 3); a documentation-only or script-only change needs neither (`docs/TESTING.md`).
 - No destructive commands (`reset --hard`, `clean`, `checkout .`, force operations). Preserve foreign or
   unexpected changes. Published history is not rewritten.
 - No `--no-verify`. Working tree clean at the end of a phase.
@@ -286,12 +313,18 @@ reinforcement transport/formations, a mission HUD and the Generals' Challenge ge
 
 ## Procedure of a phase
 
-1. Reproduce the starting state: `git status`, build, all eight test programs, relevant audits.
+1. Reproduce the starting state: `git status`, then tier 4 (`pwsh scripts/test.ps1 -Tier full`) unless the previous phase ended with
+   it on the same commit; relevant audits.
 2. Check subject-matter assumptions against real data (`game/content`) and the reference sources.
-3. Implement, each time with tests; full-content audit; compare two independent runs.
+3. Implement, each time with tests: tier 1 while working, tier 2 before every commit, tier 3 before every push of code
+   (`docs/TESTING.md`); the full run only at its triggers and at the completion (step 5).
 4. Update the docs (README, ARCHITECTURE, ROADMAP, IMPLEMENTATION-PLAN + subject document).
-5. Commits, clean working tree, final report with numbers and commit hashes.
-6. Write and commit a self-contained N+1 handoff to `docs/handoffs/HANDOFF-PHASE<N+1>.md`; enter new documents in `docs/README.md`.
+5. Tier 4 and the completion checklist of `docs/TESTING.md` §8; commits, clean working tree, final report with numbers, commit
+   hashes and the tier that ran.
+6. Write and commit a self-contained N+1 handoff to `docs/handoffs/HANDOFF-PHASE<N+1>.md` in the format of
+   `docs/plan/BRIEF-FORMAT.md` (header block with stage, milestone, status); update the milestone status in the stage
+   document, the index `docs/handoffs/README.md`, the fidelity and decision registers of `docs/plan/`; enter new documents
+   in `docs/README.md`.
 
 Phase 11 (as of 1 October 2026; re-measure; `docs/SCRIPT-ENGINE.md` §4–§9, `docs/GAME-HUD.md` §14, `docs/SIMULATION-CORE.md` §26): the script VM now executes 80 of 109 condition types and 131 of
 344 action types (129 passed on, 2 recorded – `ScriptSupport.Recorded`: value stored, but without a consumer in the simulation –, 82 missing), among them the `SKIRMISH_*` conditions
@@ -376,3 +409,5 @@ Publication and clean content (9 October 2026, state `e5863a8`; re-measure; `doc
 After the publication (9 October 2026, state after the merge of the translation, AI and acceptance packages; re-measure; `docs/ACCEPTANCE.md`, `docs/SKIRMISH-AI-ORIGINAL.md`, second addendum of `docs/handoffs/HANDOFF-PHASE24.md`): **everything is English** (all documents translated in place, section numbers unchanged; the class codes of `docs/TICKRATE-AUDIT.md` such as `daten`, `tick`, `wand` stay German identifiers). **A fresh machine:** `pwsh scripts/setup-dev.ps1` (prerequisites, `scripts/get-references.ps1 [-Shallow] [-Only <name>]` for the four upstream repositories at the recorded full commit ids, `scripts/dev-content.ps1`, build, `AssetTool verify`, input manifest, quick reference set; options `-ShallowReferences -GameDir <path> -SkipReferences -SkipContent -SkipBuild -SkipCheck`). **Acceptance by a human** is driven by `pwsh scripts/acceptance.ps1` (`-List`, `-Capture -All`, `-Stills`, no option for the window part, `-Report`, `-Item <ID>`, `-IncludeOptional`, `-Compare -SideBySide`, `-SelfTest`; catalogue `scripts/acceptance/catalogue.json`, 85 items in 13 groups); the client takes `--caption` and `--loop`, `scenario-audit` takes `--drawables-at N` and prints documented findings as `KNOWN`; seven staged scenes `acc-*`. **The original skirmish AI is selectable** in client, shell and spectator: `--ai builtin|original`, `--difficulty easy|medium|hard` (one value or a comma list per slot), `scripts/demo-spectator.ps1 -Ai original -DifficultyA hard -DifficultyB easy`, `SimTool perf … --ai original`, `ai-census --ai original`, `ai-match … --library-for-missing-sides`; the default stays the built-in `SkirmishAi` (recommendation and measurements in the decision basis of `docs/SKIRMISH-AI-ORIGINAL.md`: 110–119 µs per tick for 8 players at 60 Hz against 36 µs, medium against medium 202 of 320 decided against 301, the faction fixes the outcome). **Closing measurements of Phase 23** are in `docs/TICKRATE-MIGRATION.md` §15.7.4 (objective driver 24/24 and 24/24 at 30/60/120 Hz, audit 24/24, survey 39 of 39 checks). **Measured on the merged state:** `dotnet build CnCNew.slnx` 0 warnings (incremental) and `audit-publish` without a hit; **the test programs, both manifests and the scene audits were run by the packages on their own branches, not again on the merged state** – run them first when work continues (`reference-manifest check --set full`, `input-manifest check`, `Simulation.Tests` at 30/60/120 Hz, `Game.Tests` Release, `Presentation.Tests`, `Ui.Tests`, `scripts/audit-scenarios.ps1`). **Reported, not changed (each changes reference values):** passengers stand inside their transport after getting out (`ScatterNearbyOnExit` unread), group moves to one point take detours, `SlowDeathBehavior` runs no per-phase effects (`docs/ACCEPTANCE.md` §6); `<This Team>` in a team's create script is fixed for AI sessions only, not in the mission VM. **Not verified:** no human has used the acceptance script, seen the original AI in the window or run `setup-dev.ps1` on a second machine (only the reference step and a shallow restore of two references were exercised); the translators' lists of contradictions inside older documents (historical layers, e.g. `SaveGame` version 2 against 3, "eleven corrections" with twelve commit ids in `docs/SIMULATION-CORE.md` §39.7) are not worked off. Pitfalls: an agent that ends its turn while its sub-agents still run loses its unchanged worktree, and the sub-agents' shells with it – keep results in the scratchpad; a CRLF document edited on two branches conflicts over the whole file (take the `master` version and apply the hunk by hand); a Bash heredoc swallows backslashes – write edit scripts with the file tool.
 
 Fresh machine and decisions (10 October 2026, state `8588905`; re-measure; `BUILDING.md`, third addendum of `docs/handoffs/HANDOFF-PHASE24.md`): build requirements, install commands and the pitfalls of a fresh machine are in `BUILDING.md` (Git, .NET SDK, PowerShell 7, Python 3, the `nuget.org` source - a missing one fails the restore with `NU1101` -, the Windows `python` alias). **Decided by the project owner:** no. 1 - self-acquisition stays once per original frame of the unit (no longer provisional); no. 9 - the built-in `SkirmishAi` stays the default AI, Phase 24 lifts its state into the session state. Nos. 2 to 8, 10 and 11 are open unchanged. **Measured on the merged state**, which the paragraph above left open: `setup-dev.ps1` all steps ok, input manifest identical, `reference-manifest check --set full` 50 of 50 identical, compat-check 731, `Simulation.Tests` at 30/60/120 Hz and with real data, `Game.Tests` (Release), `Presentation.Tests`, `Ui.Tests` and the other test programs green, 0 warnings. **Not run:** scene audits, `--long`, `Game.Tests`/`Presentation.Tests` at 30 and 120 Hz, the campaign checks, the performance profile. Pitfall: the Windows PowerShell 5.1 that ships with Windows runs none of the scripts (`pwsh` is PowerShell 7); a shell opened before the installation does not have `pwsh`/`python` on `PATH`.
+
+**Four-stage plan (10 October 2026, state after `2777a90`; `docs/plan/PROGRAMME.md`):** the project owner ordered the whole programme by four stages – **1 Port** (the original, as it is, in a new engine; single player complete; no change of behaviour; the installer and the tooling), **2 Engine** (tick rate, fixed point, performance, determinism, session core; the game stays, by its data, the same game; yardstick: the reference manifest), **3 Changes** (AI kinds and tactics, spectator, replay browser, analysis with graphics, modern UI, pathfinding beyond the original, bug-fix and balance layers; every change an option with a profile fingerprint, the original profile keeps the manifest), **4 Multiplayer** (relay lockstep through a dedicated server, `docs/MULTIPLAYER-PLAN.md`). Milestones `S<stage>-M<n>`, release gates R1 to R4, the historical phase numbers continue (next free: 31). **Nothing is rolled back for the sake of the stages:** work that belongs to a later stage (the built-in `SkirmishAi` as the default AI, the spectator mode, the original AI as an option) stays and is booked where it belongs (§4 there); the goal remains the state at the end of Stage 4. Stage 1 is not finished (its acceptance by a human is open, S1-M11; the fidelity debt register `docs/plan/STAGE-1-PORT.md` §3 has 33 entries); Stage 2 is done except the session core (Phase 24, current) and a backlog; Stage 3 has milestones but no brief; Stage 4 is planned (Phases 25 to 29). Proposed order (`PROGRAMME.md` §5, decision D-1): fidelity package A (the three simulation findings of the acceptance pre-check, one cause per commit) → Phase 24 → Phases 25 to 27 → Stage 3 → Phases 28, 29 → release gates; the owner's open decisions are consolidated in `PROGRAMME.md` §7 (D-1 to D-22). Every brief carries a header block (`docs/plan/BRIEF-FORMAT.md`); the briefs are indexed by stage in `docs/handoffs/README.md`; `HANDOFF-PHASE24.md` has its three addenda consolidated into one starting point. The test strategy in four tiers (`docs/TESTING.md`, `scripts/test.ps1`) is committed with this state.

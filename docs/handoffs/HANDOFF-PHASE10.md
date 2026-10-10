@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M7 (+ S1-M4 build and rule limits, S1-M5 collision) · **Phase:** 10
+> **Status:** done (1 October 2026)
+> **Predecessor:** HANDOFF-PHASE9.md · **Successor:** HANDOFF-PHASE11.md · **Results in:** docs/SCRIPT-ENGINE.md, docs/SIMULATION-CORE.md §23–§25, docs/CAMPAIGN-AND-SAVEGAMES.md §7
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 # N+1 handoff: Finish Phase 9 – skirmish, shell connection, playability of the missions
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`,

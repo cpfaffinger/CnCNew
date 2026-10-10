@@ -1,3 +1,8 @@
+> **Stage:** 2 – Engine · **Milestone:** S2-M4 Fixed point Q39.24 · **Phase:** 22
+> **Status:** done (7 October 2026, state `8d74ef8`; the change `d7fca91`)
+> **Predecessor:** HANDOFF-PHASE21.md · **Successor:** HANDOFF-PHASE23.md · **Results in:** docs/FIXED-POINT-Q39-24.md, docs/SIMULATION-CORE.md §38
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 22): Fixed-point resolution – from Q47.16 to Q39.24 (first planned change of all reference values, at 30 Hz)
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/SIMULATION-CORE.md` (numerics, snapshot, replay, reference values), `docs/DETERMINISM.md` and the final reports of Phases 20 and 21 (in particular the counters "rounded to zero" from the trial run at 60 and 120 Hz).

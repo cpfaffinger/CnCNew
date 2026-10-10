@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M4 Game rules, combat, economy, production · **Phase:** 5
+> **Status:** done; superseded by HANDOFF-PHASE6.md and HANDOFF-PHASE7.md (29 September 2026)
+> **Predecessor:** HANDOFF-PHASE4.md · **Successor:** HANDOFF-PHASE6.md · **Results in:** docs/GAME-RULES.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 # N+1 handoff: Phase 5 – continuation (game rules, combat, economy and production)
 
 > **Superseded by `docs/handoffs/HANDOFF-PHASE6.md` and `docs/handoffs/HANDOFF-PHASE7.md`** (29 September 2026, after the special power subsystem). This document is kept as

@@ -1,3 +1,8 @@
+> **Stage:** 2 – Engine · **Milestone:** S2-M3 Tick rate as a value of the world · **Phase:** 21
+> **Status:** done (7 October 2026, state `2a0a6f5`)
+> **Predecessor:** HANDOFF-PHASE20.md · **Successor:** HANDOFF-PHASE22.md · **Results in:** docs/TICKRATE-MIGRATION.md §14
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 21): Tick rate as a parameter – presentation, game layer, UI, sound, client, tools and tests (frame-identical at 30 Hz)
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, **`docs/TICKRATE-AUDIT.md`** (§2, §3, §4, §6, §7), `docs/PRESENTATION-OBJECTS.md`, `docs/PRESENTATION-FX.md`, `docs/CLIENT-FX.md`, `docs/GAME-AUDIO.md`, `docs/GAME-HUD.md`, `docs/GAME-SHELL.md`, `docs/SCRIPT-ENGINE.md` §7a and the final report of Phase 20.

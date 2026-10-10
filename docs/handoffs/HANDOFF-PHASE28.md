@@ -1,3 +1,8 @@
+> **Stage:** 4 – Multiplayer · **Milestone:** S4-M4 Server operation and security · **Phase:** 28
+> **Status:** planned
+> **Predecessor:** HANDOFF-PHASE27.md · **Successor:** HANDOFF-PHASE29.md · **Results in:** docs/DEDICATED-SERVER.md, docs/NETWORK-PROTOCOL.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 28): Server operation and security – open port, abuse limits, encryption, package, sustained load
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/NETWORK-PROTOCOL.md`, `docs/DEDICATED-SERVER.md`, `docs/NETWORK-DIAGNOSTICS.md` and the final report of Phase 27.

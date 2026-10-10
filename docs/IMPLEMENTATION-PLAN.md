@@ -1,5 +1,11 @@
 # Implementation plan up to the completed first scope
 
+> **Superseded as the plan on 10 October 2026** by `docs/plan/PROGRAMME.md` (four stages: port, engine, changes,
+> multiplayer). The steps 1 to 11 below map onto the milestones of `docs/plan/STAGE-1-PORT.md` (steps 1 to 9),
+> `docs/plan/STAGE-2-ENGINE.md` and `docs/plan/STAGE-4-MULTIPLAYER.md` (step 10) and the release gates (step 11). This
+> document is kept as the record of the scope, acceptance statements and known limits of every step at the time it was
+> measured; the fidelity debt register in `docs/plan/STAGE-1-PORT.md` §3 carries the known limits forward.
+
 As of: 30 September 2026 (Phase 6 completed)
 
 ## Goal and delimitation

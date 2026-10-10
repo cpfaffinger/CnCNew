@@ -1,3 +1,8 @@
+> **Stage:** 2 – Engine · **Milestone:** S2-M3 Tick rate as a value of the world · **Phase:** 20
+> **Status:** done (6 October 2026, state `9299a2d`)
+> **Predecessor:** HANDOFF-PHASE19.md · **Successor:** HANDOFF-PHASE21.md · **Results in:** docs/TICKRATE-MIGRATION.md §1–§13
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 20): Tick rate as a parameter of the world – simulation (same results at 30 Hz)
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, **`docs/TICKRATE-AUDIT.md`** (checked version from Phase 18), `docs/SIMULATION-CORE.md` (time and units, catalogues, snapshot, replay), `docs/GAME-RULES.md` and the final report of Phase 19.

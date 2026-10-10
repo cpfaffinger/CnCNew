@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M4 rest of the game rules, S1-M5 world and terrain · **Phase:** 6
+> **Status:** done; superseded by HANDOFF-PHASE7.md (29 September 2026)
+> **Predecessor:** HANDOFF-PHASE5.md · **Successor:** HANDOFF-PHASE7.md · **Results in:** docs/GAME-RULES.md, docs/SIMULATION-CORE.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 # N+1 handoff: Phase 5 – remaining scope, then Phase 6 (world, terrain, movement, vision, skirmish AI)
 
 > **Superseded by `docs/handoffs/HANDOFF-PHASE7.md`** (29 September 2026, completion of Phase 5). Part A of this document is done (supply,

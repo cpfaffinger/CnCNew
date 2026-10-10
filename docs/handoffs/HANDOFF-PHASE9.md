@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M7 Script VM, missions, campaign, savegames · **Phase:** 9
+> **Status:** done headless (1 October 2026)
+> **Predecessor:** HANDOFF-PHASE8.md · **Successor:** HANDOFF-PHASE10.md · **Results in:** docs/SCRIPT-ENGINE.md, docs/CAMPAIGN-AND-SAVEGAMES.md, docs/MAP-SCRIPTS.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 # N+1 handoff: Phase 9 – skirmish, missions, campaigns and savegames
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`,

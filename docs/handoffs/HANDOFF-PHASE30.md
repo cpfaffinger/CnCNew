@@ -1,3 +1,8 @@
+> **Stage:** release gates · **Milestone:** R4 Multiplayer release (and R1 for its single-player items 1, 2, 5–8; items 3 and 4 are S3-M7) · **Phase:** 30
+> **Status:** planned, postponed behind Stage 4; its items are distributed to R1, S3-M7 and R4 (`docs/plan/PROGRAMME.md` §4, §6)
+> **Predecessor:** HANDOFF-PHASE29.md · **Results in:** docs/INSTALLATION.md, docs/DEDICATED-SERVER.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 30): Patch integration, quality and shippable completion (postponed; originally the step after Phase 17)
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§11 "Patch integration, quality and shippable completion" together with "Order and change rule"), `docs/MULTIPLAYER-PLAN.md`, `docs/MULTIPLAYER-FINDINGS.md`, `docs/DEMO-FINDINGS.md` and the final report of Phase 29.

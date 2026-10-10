@@ -1,3 +1,8 @@
+> **Stage:** 4 – Multiplayer · **Milestone:** S4-M1 Protocol, room, relay in the process · **Phase:** 25
+> **Status:** planned
+> **Predecessor:** HANDOFF-PHASE24.md · **Successor:** HANDOFF-PHASE26.md · **Results in:** docs/NETWORK-PROTOCOL.md (new), docs/GAME-SHELL.md, docs/ARCHITECTURE.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 25): Protocol, room (lobby) and relay server in the same process – the local skirmish runs via the network path, AI slots included
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`** (decisions, target architecture, register of bottlenecks, rules for all phases), `docs/ARCHITECTURE.md`, `docs/SIMULATION-CORE.md` (session state, replay), `docs/PRESENTATION-INPUT.md` (command intent), `docs/GAME-SHELL.md` (skirmish setup) and the final report of Phase 24.

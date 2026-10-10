@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M7, S1-M6 module coverage · **Phase:** 13
+> **Status:** done (3 October 2026)
+> **Predecessor:** HANDOFF-PHASE12.md · **Successor:** HANDOFF-PHASE14.md · **Results in:** docs/SIMULATION-CORE.md §28, docs/SCRIPT-ENGINE.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff: Finish Phase 9 (continuation 3) – reinforcement with transport, the two open victory missions, playability instead of world interventions, VM semantics gaps
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§9 "Phase 12 state" and "Known limits (state after Phase 12)"), `docs/SCRIPT-ENGINE.md` (especially §5, §8 items 17–23, §9), `docs/CAMPAIGN-AND-SAVEGAMES.md` (§7), `docs/SIMULATION-CORE.md` (§27), `docs/GAME-HUD.md` (§14/§15), `docs/GAME-RULES.md` (§9). `docs/handoffs/HANDOFF-PHASE9.md`–`docs/handoffs/HANDOFF-PHASE12.md` remain as history; their numbers are outdated.

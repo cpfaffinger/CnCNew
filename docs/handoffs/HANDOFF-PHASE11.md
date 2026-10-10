@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M7 Script VM, missions, campaign, savegames · **Phase:** 11
+> **Status:** done (1 October 2026)
+> **Predecessor:** HANDOFF-PHASE10.md · **Successor:** HANDOFF-PHASE12.md · **Results in:** docs/SCRIPT-ENGINE.md §4–§9, docs/GAME-HUD.md §14
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 # N+1 handoff: Finish Phase 9 (continuation) – remaining script families, campaign shell polish, mission HUD
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`,

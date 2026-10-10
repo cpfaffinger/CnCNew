@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M3 Deterministic simulation core (+ S1-M2 block 0) · **Phase:** 4
+> **Status:** done (28 September 2026)
+> **Successor:** HANDOFF-PHASE5.md · **Results in:** docs/SIMULATION-CORE.md, docs/TYPED-DEFINITIONS.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 # N+1 handoff: Phase 4 – deterministic simulation core
 
 > **Status: completed on 28 September 2026** (results in `docs/SIMULATION-CORE.md`, `docs/TYPED-DEFINITIONS.md`,

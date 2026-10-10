@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M7 (+ S1-M9 client wiring) · **Phase:** 12
+> **Status:** done (2 October 2026)
+> **Predecessor:** HANDOFF-PHASE11.md · **Successor:** HANDOFF-PHASE13.md · **Results in:** docs/SCRIPT-ENGINE.md §9, docs/SIMULATION-CORE.md §27, docs/GAME-HUD.md §15
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff: Finish Phase 9 (continuation 2) – objective driver for the missions, remaining script families, reinforcement transport, client wiring
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§9 "Phase 11 state" and "Known limits"), `docs/SCRIPT-ENGINE.md` (especially §5a–§5c, §8, §9), `docs/CAMPAIGN-AND-SAVEGAMES.md` (§7), `docs/MAP-SCRIPTS.md` (§5a), `docs/SIMULATION-CORE.md` (§26), `docs/GAME-HUD.md` (§14), `docs/GAME-SHELL.md`. `docs/handoffs/HANDOFF-PHASE9.md`–`docs/handoffs/HANDOFF-PHASE11.md` remain as history; their numbers are outdated.

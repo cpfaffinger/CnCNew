@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M11 Playability and acceptance by a human · **Phase:** 17
+> **Status:** ended without its acceptance goal (6 October 2026); the rest is in the section "Rest of Phase 17" at the end
+> **Predecessor:** HANDOFF-PHASE16.md · **Successor:** HANDOFF-PHASE18.md · **Results in:** docs/SIMULATION-CORE.md §33–§36, docs/SCRIPT-ENGINE.md §9, docs/GAME-HUD.md, docs/DEMO-FINDINGS.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 17): Finish Phase 9 (continuation 7) – playability by humans, commands-only agent, clicking through the client, performance, approximations of the new modules
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md` (§9 "Phase 9" together with "Known limits"), `docs/SCRIPT-ENGINE.md` (§5, §8, §9), `docs/SIMULATION-CORE.md` (§29, §30), `docs/CAMPAIGN-AND-SAVEGAMES.md` and `docs/GAME-HUD.md` §14/§15.

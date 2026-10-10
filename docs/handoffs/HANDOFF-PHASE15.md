@@ -1,3 +1,8 @@
+> **Stage:** 1 – Port · **Milestone:** S1-M8 World presentation · **Phase:** 15
+> **Status:** built – visual acceptance by a human open (4 October 2026)
+> **Predecessor:** HANDOFF-PHASE14.md · **Successor:** HANDOFF-PHASE16.md · **Results in:** docs/DEMO-FINDINGS.md, docs/CLIENT-OBJECTS.md, docs/CLIENT-ROADS.md, docs/DEMO-SCENARIOS.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 15): Tech demo readiness I – world rendering (models, bones, states, map angles, fog) and security of the dependencies
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, `README.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/IMPLEMENTATION-PLAN.md`, **`docs/DEMO-FINDINGS.md`** (the feedback of the first human who started the demos – this brief implements items 1–6 of it), `docs/CLIENT-OBJECTS.md`, `docs/CLIENT-TERRAIN.md`, `docs/W3D-MATERIALS.md`, `docs/MAP-SCRIPTS.md` (map format) and `docs/CLIENT-FX.md`.

@@ -1,5 +1,9 @@
 # Roadmap
 
+> **Superseded as the plan on 10 October 2026** by `docs/plan/PROGRAMME.md` (four stages: port, engine, changes,
+> multiplayer; milestones and status in `docs/plan/STAGE-*.md`). This document is kept as the record of the phase states
+> and acceptance statements of its time; its numbers are those of their state and are not updated any more.
+
 ## 0. Reproducible starting basis
 
 - Copy the installation unchanged and inventory it by SHA-256.

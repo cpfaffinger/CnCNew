@@ -1,3 +1,8 @@
+> **Stage:** 4 – Multiplayer · **Milestone:** S4-M5 Multiplayer in the client, latency perception, acceptance with humans · **Phase:** 29
+> **Status:** planned; the first phase whose acceptance needs humans
+> **Predecessor:** HANDOFF-PHASE28.md · **Successor:** HANDOFF-PHASE30.md · **Results in:** docs/MULTIPLAYER-FINDINGS.md (new), docs/GAME-SHELL.md, docs/GAME-HUD.md, docs/PRESENTATION-OBJECTS.md
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 29): Multiplayer in the client – shell, lobby, in-game indicators, latency perception, acceptance with humans
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`**, `docs/GAME-SHELL.md`, `docs/GAME-HUD.md`, `docs/PRESENTATION-INPUT.md`, `docs/PRESENTATION-OBJECTS.md`, `docs/NETWORK-PROTOCOL.md`, `docs/DEDICATED-SERVER.md` and the final report of Phase 28.

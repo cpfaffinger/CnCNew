@@ -1,3 +1,8 @@
+> **Stage:** 4 – Multiplayer · **Milestone:** S4-M2 Dedicated server, UDP, clock synchronisation, eight clients · **Phase:** 26
+> **Status:** planned; needs the second physical machine (D-10)
+> **Predecessor:** HANDOFF-PHASE25.md · **Successor:** HANDOFF-PHASE27.md · **Results in:** docs/NETWORK-PROTOCOL.md, docs/DEDICATED-SERVER.md (new)
+> **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
+
 N+1 handoff (Phase 26): Dedicated server and real transport – UDP, clock synchronisation, adaptive buffers, eight clients over the network
 
 You work autonomously on this repository (`<repo>` = root of the working directory). First read `CLAUDE.md`, **`docs/MULTIPLAYER-PLAN.md`** (decisions, target architecture, register of bottlenecks, rules for all phases of the programme), `docs/ARCHITECTURE.md`, `docs/NETWORK-PROTOCOL.md` (created in Phase 25) and the final report of Phase 25.
