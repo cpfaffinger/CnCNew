@@ -174,7 +174,7 @@ templates by name only), each with a headless audit (`tools/CnCNew.PresentationT
 | --- | --- | --- |
 | `acc-march` | three Crusaders, a Humvee and six Rangers sent to one point and back | every vehicle at rest and not turning at the end of a leg, everybody within 110 of the goal, no two bounding circles inside each other, drawn in every frame; detours and soldiers still walking are reported as known finding S2 |
 | `acc-wheels` | a Humvee on a zig-zag, a dozer there and back | every corner reached, wheels turned with the distance, the Humvee's wheels steer and return to straight, the dozer's body nods and settles |
-| `acc-board` | five Rangers board a Humvee, are driven, let out, and again | everybody inside before the drive, path to the vehicle not longer than 1.5 times the straight line, everybody outside and alive after the evacuation; riders inside each other afterwards are reported as known finding S1 |
+| `acc-board` | five Rangers board a Humvee, are driven, let out, and again | everybody inside before the drive, path to the vehicle not longer than 1.5 times the straight line, everybody outside and alive after the evacuation, nobody inside the vehicle or inside each other afterwards (finding S1, fixed) |
 | `acc-artillery` | a Tomahawk launcher and an Inferno Cannon shell a command centre | both fire at least twice, the target is damaged, a projectile is drawn at least 15 above the ground |
 | `acc-repair` | a dozer repairs a power plant at 48 % health | damaged model state after the hit, undamaged state again from half health, whole at the end, the wrench shown from the first repair step and gone when whole |
 | `acc-firefight` | a Gattling tank and three Rangers against six Rebels | shots on both sides, deaths, the Gattling drawn in firing states but not all the time |
@@ -321,7 +321,10 @@ None of these touches `src/CnCNew.Simulation` or `src/CnCNew.Data`.
 
 Not changed here (the rule of this package: no change of simulation behaviour). Each is reproduced by a scene without a window.
 
-**S1 – Passengers stand inside their transport after getting out.** Scene `acc-board`, items UNIT-06. Seen: after the evacuation order all five Rangers stand exactly
+**S1 – Passengers stand inside their transport after getting out.** **Fixed (fidelity register F-03, implementation `f9abff8`, `docs/SIMULATION-CORE.md` §44.1):** riders leave a living
+transport through its door one by one (`OpenContain::exitObjectViaDoor`: `ExitStart`/`ExitEnd` bones, `ExitDelay`, nearest possible destination); the audit of `acc-board` now fails on
+riders inside each other and measures them 22.7 to 36.3 from the Humvee's centre. The source differs from the description below in one point: a living transport never scatters its
+riders (`ScatterNearbyOnExit` is read by nothing in `TransportContain`), only a destroyed one does. Not seen by a human. The finding as recorded on 9 October: scene `acc-board`, item UNIT-06. Seen: after the evacuation order all five Rangers stand exactly
 on the Humvee's centre – distance 0.0 to the vehicle and to each other (audit: "smallest margin between two bounding circles −20.4") – and stay there. Cause:
 `OpenContain`-style removal in `src/CnCNew.Simulation/Modules/BuiltIn/ContainModules.cs` (`Remove(…, positionAtContainer)`) puts the rider on the container's position
 and nothing moves him; `SimulationWorld.EvacuateContainer` (`World/SimulationWorld.Containers.cs`) does no more; the key `ScatterNearbyOnExit` is typed as opaque

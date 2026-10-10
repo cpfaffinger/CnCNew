@@ -2820,3 +2820,23 @@ no command sets one here); `GoAggressiveOnExit`, `ResetMoodCheckTimeOnExit`, `Or
 (still opaque); the reachability test of the reference's spiral (zones); the front/back search of a bunker that stands in a cliff; the bones of a damaged model state (the table is
 read from the state without any condition). `HealContain` still puts a healed occupant on the building (entered into the fidelity register as F-34). The riders that
 `DeliverPayloadAIUpdate` and the ferry take out go their own ways as before (their calls of `Remove` are unchanged).
+
+**Measured (10 October 2026, implementation `f9abff8`, manifests rewritten in the commit after it; one cause).** Result quantities of the 50 manifest runs before and after
+(`SimTool reference-manifest results`): **38 runs unchanged** in every quantity, **47 with the same outcome**, 41 with the same end tick. 26 of the 27 mission runs, the stress test, the
+skirmish overview and the reference match are unchanged (reference match: winner FactionGLA at tick 28,260, end hash `CA05181C36C62C7A`, chain `21ACEDA63325A658` – none of them
+evacuates a living transport or building); their `commandStreamSha256`/`snapshotSha256` change with the world fingerprint (`05EDB8339FE38C53`, before `AC622E33080D89EB`: the exit bones are part
+of it). Twelve runs differ: `mission_MD_USA02` (same outcome and end tick; the same number of exits, but 81 instead of 63 shots and 79 instead of 60 deaths in its 6,000 ticks - which of
+its exits makes the difference was not broken down further), two eight-player runs (stalemates before and after) and nine of the sixteen
+pairings, all nine with an American side, whose AI loads and evacuates transports. Three outcomes change, and in each the first deviating
+command follows the first `EvacuateCommand` of the run by 30 to 150 ticks (the riders now stand beside their transport one by one instead of on its centre at once; from there the
+matches diverge chaotically):
+
+| Run | Before | After | First evacuation | First deviating command |
+|---|---|---|---|---|
+| `AlpineAssault_America-China` | stalemate (tick 90,000) | winner FactionAmerica (end tick 37,441) | tick 14,908 | tick 14,966 |
+| `ArmoredFury_America-China` | winner FactionAmerica (74,701) | stalemate (90,000) | tick 12,838 | tick 12,986 |
+| `BitterWinter_America-China` | winner FactionChina (44,611) | winner FactionAmerica (55,501) | tick 17,458 | tick 17,488 |
+
+Decided AI runs: 14 of the 16 pairings on shipped maps before and after (one stalemate became a win, one win a stalemate). **The balance is not assessed** (D-9). After the
+rewrite `input-manifest check` is identical and `reference-manifest check --set full` passes twice with 50 of 50 runs identical; the rate-equivalence suite is 0 / 0 at 60 and
+120 Hz in all ten groups with the new case "leaving a transport" (locomotion: 55 cases).
