@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port · **Milestone:** S1-M11 Playability and acceptance by a human (fidelity package A: F-03, F-04, F-05) · **Phase:** 31
-> **Status:** **current** – runs before Phase 24 by decision D-12 of the project owner (10 October 2026); not begun
+> **Status:** **done** (10 October 2026) – ran before Phase 24 by decision D-12; implementation / manifest commits `f9abff8`/`12533c6` (F-03), `39a1656`/`1a191cd` (F-04), `94711fb`/`bab51c3` (F-05), and a defect found on the way, `f41c851`/`2b34dba`; result and what differs from this brief: `docs/SIMULATION-CORE.md` §44 (F-03: the original does not scatter the riders of a living transport – built is `OpenContain::exitObjectViaDoor`; F-05: the debris is counted, not created). Built and measured headless, not seen by a human
 > **Predecessor:** HANDOFF-PHASE23.md (last completed phase) · **Successor:** HANDOFF-PHASE24.md · **Results in:** docs/SIMULATION-CORE.md, docs/GAME-RULES.md, docs/ACCEPTANCE.md §6, docs/plan/STAGE-1-PORT.md §3
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 

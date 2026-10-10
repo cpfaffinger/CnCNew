@@ -3,12 +3,12 @@
 As of: 10 October 2026, state `2777a90`. The plan is [`../plan/PROGRAMME.md`](../plan/PROGRAMME.md); the format of a brief
 is [`../plan/BRIEF-FORMAT.md`](../plan/BRIEF-FORMAT.md). Every brief carries a header block with stage, milestone and
 status; the worked-off briefs keep their text as documents of their time (their numbers are outdated – the yardstick is
-`baselines/reference-manifest.json`). Phases 4 to 23 are worked off, **Phase 31 is current** (before 24, D-12), 24 follows, 25 to 30 are planned. The
+`baselines/reference-manifest.json`). Phases 4 to 23 and 31 are worked off (31 ran before 24, D-12), **Phase 24 is current**, 25 to 30 are planned. The
 briefs of Phases 1 to 3 were never written as files (their scope and acceptance are in `docs/IMPLEMENTATION-PLAN.md`
 §1–§3).
 
-**The next brief to work on:** [HANDOFF-PHASE31.md](HANDOFF-PHASE31.md) – the fidelity package A of Stage 1 (decided
-D-12); then [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md). Phase numbers are identities, not an order: 31 runs before 24 by
+**The next brief to work on:** [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md) – the session core (S2-M7); its "Starting point" was continued with the state
+measured at the end of Phase 31 (the fidelity package A of Stage 1, [HANDOFF-PHASE31.md](HANDOFF-PHASE31.md), done on 10 October 2026). Phase numbers are identities, not an order: 31 ran before 24 by
 decision of the project owner.
 
 ## Stage 1 – Port (`../plan/STAGE-1-PORT.md`)
@@ -29,7 +29,7 @@ decision of the project owner.
 | 15 | [HANDOFF-PHASE15.md](HANDOFF-PHASE15.md) | S1-M8 | Tech-demo maturity I: world rendering, security of the dependencies | built – visual acceptance by a human open |
 | 16 | [HANDOFF-PHASE16.md](HANDOFF-PHASE16.md) | S1-M10, S1-M9 | Tech-demo maturity II: sound, cursor, waypoints, texts, mission in the client | built – not accepted (never heard) |
 | 17 | [HANDOFF-PHASE17.md](HANDOFF-PHASE17.md) | S1-M11 | Playability by humans, commands-only agent | ended without its acceptance goal; "Rest of Phase 17" at its end |
-| **31** | [HANDOFF-PHASE31.md](HANDOFF-PHASE31.md) | **S1-M11** | Fidelity package A: scatter on exit, own destination per unit of a group, slow-death phases (F-03 to F-05) | **current** – runs before Phase 24 (D-12) |
+| **31** | [HANDOFF-PHASE31.md](HANDOFF-PHASE31.md) | **S1-M11** | Fidelity package A: scatter on exit, own destination per unit of a group, slow-death phases (F-03 to F-05) | **done** (10 October 2026: `f9abff8`/`12533c6`, `39a1656`/`1a191cd`, `94711fb`/`bab51c3`, and the member-order fix `f41c851`/`2b34dba`; `docs/SIMULATION-CORE.md` §44) – built and measured headless, not seen by a human |
 | – | `docs/ACCEPTANCE.md`, `scripts/acceptance.ps1` | S1-M11 | Acceptance catalogue and guided run (85 items) | built – not used by a human |
 | – | `docs/INSTALLATION.md`, `docs/UI-VANILLA-FIT.md` | S1-M12, S1-M9 | Publication: installer from the Steam master, original layouts | built – not accepted |
 | – | `docs/SKIRMISH-AI-ORIGINAL.md` | S1-M13 | The skirmish AI of the original as an option (side product of Phase 23) | built as an option |
@@ -45,7 +45,7 @@ decision of the project owner.
 | 22 | [HANDOFF-PHASE22.md](HANDOFF-PHASE22.md) | S2-M4 | Fixed point Q39.24 | done 7 October 2026 |
 | 23 | [HANDOFF-PHASE23.md](HANDOFF-PHASE23.md) | S2-M5 (+ S3-M2, S1-M13, Stage 1 fidelity fixes) | Time-step invariance, 60 Hz as the default | done 9 October 2026 with named limits |
 | – | `docs/TESTING.md`, `scripts/test.ps1` | S2-M6 | Test strategy in four tiers | done 10 October 2026 |
-| **24** | [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md) | **S2-M7** | Session core: AI in the state, skirmish savegame, match description, command path, tick source | **next after Phase 31** – starting state measured, not begun |
+| **24** | [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md) | **S2-M7** | Session core: AI in the state, skirmish savegame, match description, command path, tick source | **current** – starting state measured after Phase 31, not begun |
 | – | – | S2-M8 | Engine follow-ups (tick maximum, hash constructions, allocation, thread, formats, documentation) | open backlog; briefs when scheduled |
 
 ## Stage 3 – Changes (`../plan/STAGE-3-CHANGES.md`)

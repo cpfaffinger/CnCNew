@@ -1,6 +1,6 @@
 # Stage 1 – Port
 
-As of: 10 October 2026, state `2777a90`. Frame: [PROGRAMME.md](PROGRAMME.md). Numbers are quoted from the documents that
+As of: 10 October 2026, state `2777a90`; the fidelity package A (Phase 31) entered at `bab51c3`. Frame: [PROGRAMME.md](PROGRAMME.md). Numbers are quoted from the documents that
 measured them (date and commit given there) and are re-measured before use.
 
 ## 1. Goal, rule, yardstick
@@ -33,7 +33,7 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
   strict value grammar, name tables from the reference); module catalogue of 205 types without factories; every unknown key,
   module, enum or reference is a counted compatibility case in `baselines/compatibility.json` (`IniTool compat-check`).
   Documents: `docs/TYPED-DEFINITIONS.md`, `docs/PHASE3-COMPATIBILITY.md`.
-- **Numbers (9 October 2026):** 12,435 definitions of the retail base, 2,115 objects, compatibility baseline 731 entries.
+- **Numbers (9 October 2026):** 12,435 definitions of the retail base, 2,115 objects, compatibility baseline 731 entries (713 since Phase 31: 18 opaque keys of the containers and the slow deaths typed).
 - **Open:** none.
 
 ### S1-M3 Deterministic simulation core — done
@@ -144,8 +144,8 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
   the visual checklist for 60 Hz (`docs/DEMO-FINDINGS.md`); the commands-only agent as the headless measure of
   playability (`CampaignTool drive --commands-only`); three viewings by a human so far (4 October twice, 8 October one AI
   match at 30 Hz), each with corrections (`docs/DEMO-FINDINGS.md`, `docs/AI-OBSERVED-2026-10-08.md`).
-- **Deliverables:** (a) the fidelity package A – F-03, F-04, F-05 – each one cause, one commit, one manifest (D-12,
-  decided 10 October 2026; brief `docs/handoffs/HANDOFF-PHASE31.md`);
+- **Deliverables:** (a) **done (Phase 31)** the fidelity package A – F-03, F-04, F-05 – each one cause, one commit, one manifest (D-12,
+  decided 10 October 2026; brief `docs/handoffs/HANDOFF-PHASE31.md`; result `docs/SIMULATION-CORE.md` §44; follow-ups F-34 to F-37);
   (b) the acceptance run by the project owner with a verdict per item; every finding reproduced, fixed or named as a limit
   with a reason; (c) the click-through shell → campaign → mission → save/load → completion and skirmish setup → match →
   result, reported per screen "worked / did not work / worked with defects"; (d) a human hears music, EVA and effects;
@@ -206,9 +206,9 @@ planned to change. New deviations are entered here before they are fixed or left
 |---|---|---|---|---|
 | F-01 | The RNG sequence was never compared against a compiled original; golden masters are derived from the source code | `RandomValue.cpp` | Phase 4/5 | limit until an original can be compiled or recorded |
 | F-02 | No Bink video decoder; movies are counted (`Stats.SkippedMovies`) and skipped | Bink SDK (proprietary) | Phase 7 | limit; substitute display (still image, text) is R1 work |
-| F-03 | Passengers stand inside their transport after getting out | `OpenContain::exitObjectViaDoor`, `AIExitState::update`, `TransportContain::onRemoving` (scatter only for a destroyed transport), `GarrisonContain::exitObjectViaDoor` | acceptance S1 | **done** (Phase 31: implementation `f9abff8`, manifest in the commit after it; `docs/SIMULATION-CORE.md` §44.1). Left out, named there: door animation, container rally point, `GoAggressiveOnExit` and the other exit keys, bones of damaged model states |
-| F-04 | A group sent to one point gets no own destination per unit; late units walk around the parked group | `AIGroup::groupMoveToPosition`, `computeIndividualDestination`, `Pathfinder::adjustDestination`, `AIInternalMoveToState::onEnter` | acceptance S2 | **done** (Phase 31: implementation `39a1656`, manifest in the commit after it; `docs/SIMULATION-CORE.md` §44.2; `CommandTypes.Version` 16, replay 13). Left out, named there: column moves along a group path, tightening, player formations, path-cost test |
-| F-05 | `SlowDeathBehavior` runs no per-phase effect, creation list or weapon: no death explosion, debris or wreck | `SlowDeathBehavior::beginSlowDeath`, `doPhaseStuff`, `update` | acceptance S3 | **done** (Phase 31: implementation `94711fb`, manifest in the commit after it; `docs/SIMULATION-CORE.md` §44.3) for effect list, creation list, weapon and the midpoint draw of `SlowDeathBehavior`; the debris is F-36, the subclasses F-37 |
+| F-03 | Passengers stand inside their transport after getting out | `OpenContain::exitObjectViaDoor`, `AIExitState::update`, `TransportContain::onRemoving` (scatter only for a destroyed transport), `GarrisonContain::exitObjectViaDoor` | acceptance S1 | **done** (Phase 31: implementation `f9abff8`, manifest `12533c6`; `docs/SIMULATION-CORE.md` §44.1). Left out, named there: door animation, container rally point, `GoAggressiveOnExit` and the other exit keys, bones of damaged model states |
+| F-04 | A group sent to one point gets no own destination per unit; late units walk around the parked group | `AIGroup::groupMoveToPosition`, `computeIndividualDestination`, `Pathfinder::adjustDestination`, `AIInternalMoveToState::onEnter` | acceptance S2 | **done** (Phase 31: implementation `39a1656`, manifest `1a191cd`; `docs/SIMULATION-CORE.md` §44.2; `CommandTypes.Version` 16, replay 13). Left out, named there: column moves along a group path, tightening, player formations, path-cost test |
+| F-05 | `SlowDeathBehavior` runs no per-phase effect, creation list or weapon: no death explosion, debris or wreck | `SlowDeathBehavior::beginSlowDeath`, `doPhaseStuff`, `update` | acceptance S3 | **done** (Phase 31: implementation `94711fb`, manifest `bab51c3`; `docs/SIMULATION-CORE.md` §44.3) for effect list, creation list, weapon and the midpoint draw of `SlowDeathBehavior`; the debris is F-36, the subclasses F-37 |
 | F-06 | `SupplyMachine` overwrites a player's command that arrives in the frame between "wants to deliver" and the dock command | – | Phase 23 (`RATE-INVARIANCE-GROUND.md` §6) | fix (D-13) |
 | F-07 | A magazine without reload time fires once more through a second command in the same tick | – | Phase 23 | fix (D-13) |
 | F-08 | `QuantityModifier` is not applied (one Red Guard instead of two) | `ProductionUpdate` | Phase 23 | fix (D-13) |

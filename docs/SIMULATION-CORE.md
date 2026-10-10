@@ -2971,7 +2971,7 @@ After the rewrite `input-manifest check` is identical, `reference-manifest check
 | F-03 door exit | `f9abff8` | `12533c6` | 38 / 47 | 14 | unchanged | world fingerprint `05EDB8339FE38C53` |
 | F-04 own destinations | `39a1656` | `1a191cd` | 22 / 48 | 14 | unchanged | `CommandTypes` 16, replay 13 |
 | member order of a team (§44.5) | `f41c851` | `2b34dba` | 50 / 50 in the quantities (one run in its hashes) | 14 | unchanged | – |
-| F-05 slow-death phases | `94711fb` | the commit after it | 23 / 48 | 14 | GLA, tick 32,520, `6052051714309B17` | world fingerprint `4E6F6F5623FE86DC` |
+| F-05 slow-death phases | `94711fb` | `bab51c3` | 23 / 48 | 14 | GLA, tick 32,520, `6052051714309B17` | world fingerprint `4E6F6F5623FE86DC` |
 
 `WorldSnapshot` 10, `MissionSnapshot` 3 and `SaveGame` 3 are unchanged through all steps; the compatibility baseline went from 731 to 713 entries (18 opaque keys typed).
 
@@ -2992,3 +2992,29 @@ written before carries its teams in id order and is read as such - no format ver
 **What this says about the tiers:** between `39a1656` and the fix, a restored session of the original AI could diverge from the uninterrupted one. The built-in `SkirmishAi`, the
 reference match and the missions of the manifest were not affected (their checks passed at every step), and savegames of skirmishes do not exist yet (Phase 24). Other collections
 of the VM that are written sorted (`.Order()` in `ScriptEngine.Describe`) were not examined for the same pattern - a point for step 2 of Phase 24 ("no field forgotten").
+
+### 44.6 Closing measurements (10 October 2026, state `bab51c3`, Windows, Release)
+
+**Tier 4** (`pwsh scripts/test.ps1 -Tier full -KeepGoing`, 4,111 s): 34 of 34 steps ok - clean build 0 warnings; every test program; compat-check 713; content against its manifest;
+known vulnerabilities; `Simulation.Tests` at 30, 60 and 120 Hz, with real data (including the rate-equivalence suite, 0 / 0 in ten groups, 689 cases, 4,808 quantities) and the long
+run; `Game.Tests` and `Presentation.Tests` with real data at 30, 60 and 120 Hz; `input-manifest check` identical; `reference-manifest check --set full` 50 of 50 identical; the three
+client checks (`check-spectator`, `check-dozer-build -Quick`, `check-build-hotkeys`; they need a display, which the machine has had since this day through a virtual monitor); the
+three staged scenes. **Campaign** (60 Hz): `CampaignTool reachability` victory clean 24 and defeat clean 24; `audit` 24 of 24 identical on a second run and after save/restore, end
+probes victory 13/24 and defeat 15/24 (the 25th map of the list, `CampEADemo`, is missing in the retail content, as before); `drive` (120,000 ticks) victory 24/24 and defeat 24/24
+through the missions' own scripts. All four are the values of before the phase (`docs/TICKRATE-MIGRATION.md` §15.7.4).
+
+**Performance, direct switch** between the binaries of the starting state (`885896e`) and of this state, the same period, two runs each, one after another
+(`SimTool perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 36000`, 60 Hz; not `scripts/perf-profile.ps1`, and the machine was not measured for
+quietness):
+
+| | mean per tick | 99 % | maximum | allocation per tick | collections gen 0/1/2 | objects (max) |
+|---|---|---|---|---|---|---|
+| start, run 1 / 2 | 943 / 953 µs | 2.58 / 2.59 ms | 44.4 / 51.7 ms | 10.66 KB | 147/17/0, 147/16/1 | 243 |
+| after Phase 31, run 1 / 2 | 951 / 959 µs | 2.39 / 2.34 ms | 43.7 / 45.0 ms | 12.07 KB | 169/18/0, 168/19/0 | 249 |
+
+The two states do not play the same match (end hash `A192D2CAF6D15B10` against `370CA4B95D688B3E`), so the comparison is one of typical cost, not of the same work: the mean is
+within one percent, the allocation is 13 % higher (not broken down; hulls and the objects of the death lists are more objects, and a group order and a door exit search free cells).
+
+**Not run:** `scripts/perf-profile.ps1` (the quiet profile with its comparison), the mission performance runs, the determinism matrix and the Linux run at this state, the survey
+over 320 matches and the distribution comparison 30 against 60 Hz, the commands-only agent, the 16 pairings at 120 Hz, `scripts/acceptance.ps1`. **No human has seen any of it:**
+riders walking out of a transport, a group spreading at its destination, a death explosion with its hull - the scene audits measure positions, events and objects, not the picture.

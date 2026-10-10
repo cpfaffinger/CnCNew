@@ -145,7 +145,7 @@ Of this, the preparatory work is built (Phases 18 to 23); the multiplayer part i
 Every brief is written to be self-contained and carries a header block with stage, milestone and status
 ([plan/BRIEF-FORMAT.md](plan/BRIEF-FORMAT.md)). The index ordered by stage and milestone is
 [handoffs/README.md](handoffs/README.md). The briefs of Phases 4 to 23 are worked off and remain as documents of their
-time; current is Phase 31 (fidelity package A of Stage 1, before Phase 24 by decision D-12), then Phase 24; the briefs 25
+time; Phase 31 (fidelity package A of Stage 1, before Phase 24 by decision D-12) is done, current is Phase 24; the briefs 25
 to 30 are prepared and are continued at the end of the respective previous phase in their section "Starting point"; the
 milestones of Stage 3 have no brief yet (`plan/STAGE-3-CHANGES.md`).
 

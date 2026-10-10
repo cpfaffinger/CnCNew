@@ -27,7 +27,7 @@ ordered by stage and milestone, in [../handoffs/README.md](../handoffs/README.md
   one or more **phases**.
 - **Phase** (`Phase N`, brief `docs/handoffs/HANDOFF-PHASE<N>.md`): one unit of work with a brief, a starting state, a
   final report and an N+1 brief. The numbering of the phases is historical and continues (the next free number is 32).
-  Phases 4 to 23 are worked off, 31 is current (it runs before 24 by decision D-12 – phase numbers are identities, not
+  Phases 4 to 23 and 31 are worked off (31 ran before 24 by decision D-12 – phase numbers are identities, not
   an order), 24 follows, 25 to 30 are planned.
 - **Release gate** (`R1` to `R4`): the end of a stage as a human sees it: a package, an acceptance, documentation for
   humans. A stage is finished when its gate is passed, not when its last milestone is built.
@@ -128,7 +128,7 @@ milestone status is updated in each stage document.
 | S1-M8 | World presentation (terrain, objects, effects) | 7, 8, 15 | built – not accepted |
 | S1-M9 | Input, shell, HUD, texts, original layouts | 8, 12, 16, publication | built – not accepted |
 | S1-M10 | Sound, cursor, waypoints, mission in the client | 16, 17 | built – not accepted (never heard) |
-| S1-M11 | Playability and acceptance by a human | 15, 16, 17, acceptance package, **31** (fidelity package A, current) | **open** – the acceptance goal of Stage 1 is not reached |
+| S1-M11 | Playability and acceptance by a human | 15, 16, 17, acceptance package, 31 (fidelity package A, done 10 October 2026) | **open** – the acceptance goal of Stage 1 is not reached; the three simulation findings of the pre-check are fixed (F-03, F-04, F-05; debris and four follow-ups entered as F-34 to F-37) |
 | S1-M12 | Installer and clean content from the Steam master | publication (9 October) | built – not accepted |
 | S1-M13 | The skirmish AI of the original as a faithful computer opponent | 23 (side product) | built as an option, with named deviations |
 | S1-M14 | Tooling of the port | 1–23 | done, grows with every phase |
@@ -139,7 +139,7 @@ milestone status is updated in each stage document.
 | S2-M4 | Fixed point Q39.24 | 22 | done |
 | S2-M5 | Rate invariance and 60 Hz as the default | 23 | done with named limits |
 | S2-M6 | Test strategy in four tiers | – (10 October) | done |
-| S2-M7 | Session core: AI in the session state, skirmish savegame, match description, command path, tick source | 24 | next after Phase 31 (starting state measured, not begun) |
+| S2-M7 | Session core: AI in the session state, skirmish savegame, match description, command path, tick source | 24 | **current** (starting state measured after Phase 31, not begun) |
 | S2-M8 | Engine follow-ups (tick maximum, hash constructions, allocation, thread, formats, documentation) | – | open backlog, partly decisions |
 | **R2** | **Engine release:** 60 Hz seen by a human, determinism on a second machine, skirmish savegame | – | open |
 | S3-M1 | AI kinds, difficulty and tactics | 6, 17, 23 (built-in AI) | built-in AI exists and is the default; tactics and levels open |
@@ -192,11 +192,11 @@ they need the profile fingerprint in the match description to be safe for Stage 
 
 The sequence from here:
 
-1. **Now (Stage 1, small):** the fidelity package A – S1 passengers scattered on exit, S2 own destination per unit of a
+1. **Done (Stage 1, Phase 31, 10 October 2026):** the fidelity package A – S1 riders leave through the door, S2 own destination per unit of a
    group, S3 slow-death phases with effect, creation list and weapon – one cause per commit, each with its manifest
-   (S1-M11, prerequisite of Phase 24; brief `docs/handoffs/HANDOFF-PHASE31.md`, decided D-12). In parallel and at any
+   (S1-M11, prerequisite of Phase 24; brief `docs/handoffs/HANDOFF-PHASE31.md`, D-12; `docs/SIMULATION-CORE.md` §44). In parallel and at any
    time: the acceptance run by the project owner (`pwsh scripts/acceptance.ps1`), whose findings feed S1-M8 to S1-M11.
-2. **Phase 24** (S2-M7): session core. Closes the skirmish savegame debt and is the gate into Stage 4.
+2. **Now: Phase 24** (S2-M7): session core. Closes the skirmish savegame debt and is the gate into Stage 4.
 3. **Phases 25 to 27** (S4-M1 to S4-M3): the network core up to rejoin and server replay. Needs the second machine from
    Phase 26 on.
 4. **Stage 3, split by whether it touches the simulation (D-1):**
@@ -266,7 +266,7 @@ decision stays with the project owner. Decided items are kept for one month, the
   itself and uses its state for rejoin without a donor, arbitration of a desync, authoritative spectating and a replay
   with state – nothing of it on the match path, nothing of it required. A state stream as the match path is excluded for
   an RTS of this size (thousands of objects, 60 Hz; a snapshot is 3 to 9 MB).
-- **D-12 (10 October 2026, owner):** the fidelity package A before Phase 24 – yes (`docs/handoffs/HANDOFF-PHASE31.md`).
+- **D-12 (10 October 2026, owner):** the fidelity package A before Phase 24 – yes (`docs/handoffs/HANDOFF-PHASE31.md`). **Done on 10 October 2026** (`docs/SIMULATION-CORE.md` §44).
 - Self-acquisition once per original frame of the unit stays (10 October 2026; `docs/SIMULATION-CORE.md` §43); the
   built-in `SkirmishAi` stays the default AI, the original AI an option (10 October 2026); the target platform is Windows,
   Linux later only as host of the dedicated server (9 October 2026); 60 Hz is the default and the abort criterion of
