@@ -2880,3 +2880,20 @@ snapshot with a pending order, replay round trip, attack group; three rates), `I
 locomotion group, and the scene `acc-march`, whose audit no longer knows a finding S2 and fails on a detour: on the way out every unit drives 0.0 to 1.8 units more than the straight
 line (before: two Rangers 418 and 453 units for 234 and 244) and rests 0 to 80 from the goal on a place of its own; on the way back the six Rangers walk 145.4 for 145.3 and the three
 tanks 188 to 202 for 145 (they turn round first); smallest margin between two bounding circles 2.6 at the end of both legs.
+
+**Measured (10 October 2026, implementation `39a1656`, manifests rewritten in the commit after it; one cause).** No run of the manifest gives a group order (only the presentation
+and the scenes do); what moves the runs is the adjustment of every single move at its order - the AI's attack-moves, its builders' and collectors' moves, the moves of the script VM.
+Result quantities of the 50 runs before (after F-03) and after: **22 runs unchanged** in every quantity, **48 with the same outcome**, 35 with the same end tick. The reference match
+(winner FactionGLA at tick 28,260, `CA05181C36C62C7A` / `21ACEDA63325A658`), the stress test and 20 of the 27 mission runs are unchanged; seven mission runs keep their outcome and
+differ in counts (`MD_USA02`: 57 instead of 81 shots; `MD_GLA05`: 620 instead of 642). The skirmish overview still starts and ends all 64 of its maps. The four eight-player runs stay
+stalemates. All sixteen pairings on shipped maps keep being decided 14 times; fifteen end at another tick, two change their outcome:
+
+| Run | Before (after F-03) | After | First deviating command |
+|---|---|---|---|
+| `ArmoredFury_America-China` | stalemate (tick 90,000) | winner FactionAmerica (end tick 42,991) | tick 5,216: an attack-move 30 ticks later and to another point |
+| `BitterWinter_America-China` | winner FactionAmerica (55,501) | stalemate (90,000) | tick 1,798: a construction order 30 ticks earlier |
+
+In both, and in `AlpineAssault_China-GLA` (same winner, end tick 17,791 → 81,631), the command streams are equal up to a point after the first moves of the run and then differ in
+the timing of an order of the AI - a unit stands on another place than before, and the match diverges from there. **The balance is not assessed** (D-9). After the rewrite
+`input-manifest check` is identical, `reference-manifest check --set full` passes twice with 50 of 50 runs identical, and the rate-equivalence suite is 0 / 0 at 60 and 120 Hz in
+all ten groups with the new case "group order" (locomotion: 56 cases, 896 quantities).

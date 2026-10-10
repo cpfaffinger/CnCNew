@@ -172,7 +172,7 @@ templates by name only), each with a headless audit (`tools/CnCNew.PresentationT
 
 | Scene | Shows | What the audit checks |
 | --- | --- | --- |
-| `acc-march` | three Crusaders, a Humvee and six Rangers sent to one point and back | every vehicle at rest and not turning at the end of a leg, everybody within 110 of the goal, no two bounding circles inside each other, drawn in every frame; detours and soldiers still walking are reported as known finding S2 |
+| `acc-march` | three Crusaders, a Humvee and six Rangers sent to one point and back | every vehicle at rest and not turning at the end of a leg, everybody within 110 of the goal, no two bounding circles inside each other, drawn in every frame, nobody walks more than 1.4 times the straight line or is still walking at the end of a leg (finding S2, fixed) |
 | `acc-wheels` | a Humvee on a zig-zag, a dozer there and back | every corner reached, wheels turned with the distance, the Humvee's wheels steer and return to straight, the dozer's body nods and settles |
 | `acc-board` | five Rangers board a Humvee, are driven, let out, and again | everybody inside before the drive, path to the vehicle not longer than 1.5 times the straight line, everybody outside and alive after the evacuation, nobody inside the vehicle or inside each other afterwards (finding S1, fixed) |
 | `acc-artillery` | a Tomahawk launcher and an Inferno Cannon shell a command centre | both fire at least twice, the target is damaged, a projectile is drawn at least 15 above the ground |
@@ -333,7 +333,10 @@ line 330 ff.) calls `scatterToNearbyPosition(rider)` when `m_scatterNearbyOnExit
 (`OpenContain.cpp`, line 688 ff.) draws a random angle and a distance between one and one and a half bounding radii of the container, puts the rider on the
 container's centre, tells him to ignore the container as an obstacle and to walk to that point (`aiMoveToPosition`).
 
-**S2 – Soldiers who arrive after the vehicles walk around the parked group.** Scene `acc-march`, item UNIT-04. Seen (identical at 30 and 60 Hz): ten units are sent
+**S2 – Soldiers who arrive after the vehicles walk around the parked group.** **Fixed (fidelity register F-04, implementation `39a1656`, `docs/SIMULATION-CORE.md` §44.2):** a player's
+order to several units is one group order (`GroupMoveCommand`), in which every unit gets its own destination when the order is given (`AIGroup::computeIndividualDestination`,
+`Pathfinder::adjustDestination`); the audit of `acc-march` now fails on a detour and measures at most 1.8 units more than the straight line on the way out. Not seen by a human. The
+finding as recorded on 9 October: scene `acc-march`, item UNIT-04. Seen (identical at 30 and 60 Hz): ten units are sent
 to one point. The vehicles arrive first and stop 0 to 82 from the goal. Of the six Rangers two leave the straight line 44 units before the goal, walk 70 units
 south or north, around the group and back in: 418 and 453 units for a trip of 234 and 244, at rest 636 and 688 frames after the order where the others need 360 to
 386. On the way back one Ranger is still walking after 720 frames (24 s, 470 units for 222) and another needs 564. Cause: the free place beside an occupied goal is
