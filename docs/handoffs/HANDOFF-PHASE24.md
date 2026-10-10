@@ -65,6 +65,12 @@ Order of the phases (`docs/MULTIPLAYER-PLAN.md` §5): unchanged 23 → 24 → 25
 
 **Recommended order before the brief below:** (1) the project owner's acceptance run and his decisions no. 1 and no. 9 – both change what this phase records; (2) the three simulation findings S1–S3, because they are visible in every match and change every hash; (3) then this phase. Nothing in this addendum has been seen, heard or played by a human.
 
+### Third addendum (10 October 2026, state `8588905`; re-measure)
+
+**Decisions no. 1 and no. 9 are made** (project owner, 10 October 2026): self-acquisition stays once per original frame of the unit (no hash above 30 Hz changes), and the built-in `SkirmishAi` stays the default AI – step 2 of the brief lifts *its* state into the session state; the original AI remains an option. Nos. 2 to 8, 10 and 11 are open unchanged. The project owner's acceptance run and the three simulation findings S1–S3 of the second addendum were **not** done before this phase.
+
+**The developer state was restored on a fresh machine** (requirements and pitfalls: `BUILDING.md`) and step 1 of the brief was measured there at `8588905`, Windows: clean build 0 warnings; `setup-dev.ps1` all five steps ok; `input-manifest check` identical; `reference-manifest check --set full` 50 of 50 runs identical at 60 Hz; compat-check 731; `Simulation.Tests` (Release) green at 30, 60 and 120 Hz and with real data at 60 Hz; `Game.Tests` (Release, real data), `Presentation.Tests`, `Ui.Tests` and the other eight test programs green (Data, W3D, Audio also with real data). **Not run:** `scripts/audit-scenarios.ps1`, `Simulation.Tests -- --long`, `Game.Tests`/`Presentation.Tests` at 30 and 120 Hz, the campaign checks (`CampaignTool drive`/`audit`/`reachability`), the performance profile; `references/` is a shallow clone on this machine.
+
 ## Decisions that are fixed (`docs/MULTIPLAYER-PLAN.md` §2)
 
 - **The AI runs deterministically in the simulation of every client** and is part of the hashed, saved session state. Its commands are not transmitted. (Justification and rejected alternatives in the plan.)

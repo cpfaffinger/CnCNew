@@ -2027,3 +2027,5 @@ The same list is in `docs/MULTIPLAYER-PLAN.md` §7, in `CLAUDE.md` (paragraph "P
 9. **The original skirmish AI (three difficulty levels) as the default AI** and its selection in the client and in spectator mode: it costs around 27 times the built-in AI per tick (1.1 ms for 8 players), and it lacks parts of the C++ core; the default is the built-in AI.
 10. **The balance after the AI corrections is not evaluated** (ChinaTankGeneral wins 70 of 80 matches against AirForce in the 30 Hz survey of round 3).
 11. **The second physical machine** (before Phase 26) – unchanged, open.
+
+**Decided by the project owner on 10 October 2026:** no. 1 – self-acquisition stays **once per original frame of the unit**; the state on `master` is no longer provisional, and whole matches staying equal between the rates is the intended property (the late start of the target search by up to 1 tick at 60 Hz and 3 ticks at 120 Hz is accepted). No. 9 – the **built-in `SkirmishAi` stays the default AI**; the original skirmish AI remains a selectable option, and Phase 24 builds the session core with the AI state as an opaque hashed block. Nos. 2 to 8, 10 and 11 are open unchanged.

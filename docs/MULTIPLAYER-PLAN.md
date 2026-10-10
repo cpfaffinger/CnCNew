@@ -221,6 +221,8 @@ The same list is in `docs/TICKRATE-MIGRATION.md` §15.7.7, in `CLAUDE.md` (parag
 10. **The balance after the AI corrections is not assessed** (ChinaTankGeneral wins 70 of 80 matches against AirForce in the 30 Hz survey of round 3).
 11. **The second physical machine** (before Phase 26) – open unchanged.
 
+**Decided by the project owner on 10 October 2026:** no. 1 – self-acquisition stays **once per original frame of the unit**; the state on `master` is no longer provisional, and whole matches staying equal between the rates is the intended property (the late start of the target search by up to 1 tick at 60 Hz and 3 ticks at 120 Hz is accepted). No. 9 – the **built-in `SkirmishAi` stays the default AI**; the original skirmish AI remains a selectable option, and Phase 24 builds the session core with the AI state as an opaque hashed block. Nos. 2 to 8, 10 and 11 are open unchanged.
+
 ## 8. Terms
 
 - **Tick:** one step of the simulation; duration 1/rate.
