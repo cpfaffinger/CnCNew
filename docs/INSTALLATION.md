@@ -41,7 +41,8 @@ It never does:
 - Owning the game on Steam and having it installed: Steam app **2732960**, **English** language version,
   fresh installation without mods. That is the one known master version: 350 files, 2,939,721,100 bytes.
 - The .NET SDK from `global.json`: **10.0.401** (`rollForward: latestFeature`). The SDK is needed because
-  tool and client are built from the source code.
+  tool and client are built from the source code. Install commands and the pitfalls of a fresh machine (missing
+  `nuget.org` source, the Windows `python` alias) are in [`../BUILDING.md`](../BUILDING.md).
 - Around 2.9 GB of free space at the target (measured: `content` 2,763,982,961 bytes in 25,609 files, `bin`
   67,793,031 bytes in 172 files); during a repair briefly twice the size of `content`, because the
   new content is created next to the old one and only takes its place after a successful check.

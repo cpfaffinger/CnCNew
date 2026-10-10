@@ -62,7 +62,8 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
 ## Prerequisites
 
 - Windows (the only target platform; Linux comes into consideration later only for the dedicated server)
-- .NET SDK 10.0.401 or a newer feature band of the same major version (`global.json`), PowerShell 7 (`pwsh`)
+- .NET SDK 10.0.401 or a newer feature band of the same major version (`global.json`), PowerShell 7 (`pwsh`);
+  for development also Git and Python 3 – the full list with install commands is in [BUILDING.md](BUILDING.md)
 - a fresh **English Steam installation** of *Command & Conquer Generals – Zero Hour* – the one supported
   source version; it is described in `baselines/steam-master.json` by paths, sizes and SHA-256
 

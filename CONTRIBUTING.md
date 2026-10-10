@@ -5,7 +5,8 @@ coding agents and humans alike); the licence situation is described in [NOTICE.m
 
 ## Prerequisites and data
 
-- Windows, .NET SDK 10.0.401 or a newer feature band (`global.json`), PowerShell 7 (`pwsh`).
+- Windows, Git, .NET SDK 10.0.401 or a newer feature band (`global.json`), PowerShell 7 (`pwsh`), Python 3 (only for the
+  check before a push). The full list with install commands and pitfalls is in [BUILDING.md](BUILDING.md).
 - Your own fresh English Steam installation of *Command & Conquer Generals – Zero Hour*. The repository
   contains no game data.
 - A new machine: `pwsh scripts/setup-dev.ps1` after the clone restores everything that is not in the repository (reference

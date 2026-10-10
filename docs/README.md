@@ -24,6 +24,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 
 | Document | Content |
 |---|---|
+| [../BUILDING.md](../BUILDING.md) | Build requirements (SDK, PowerShell 7, Python, NuGet source, game), install commands, setting up a developer machine |
 | [INSTALLATION.md](INSTALLATION.md) | Patcher: installation from your own Steam copy, uninstallation, developer content |
 | [CONTENT-PIPELINE.md](CONTENT-PIPELINE.md) | Runtime content contract (schema 2) and format matrix |
 | [W3D-MATERIALS.md](W3D-MATERIALS.md) | W3D material contract: passes, shader states, mappers |
