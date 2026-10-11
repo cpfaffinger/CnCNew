@@ -19,6 +19,12 @@ public sealed record UdpOptions
     public int MaxRetransmitMs { get; init; } = 2_000;
     public int WindowSegments { get; init; } = 256;
     public int UrgentRedundancyBytes { get; init; } = UdpFormat.MaxUrgentFragmentBytes;
+    /// <summary>
+    /// How many times an unacknowledged urgent message rides along with newer ones before only the retransmission time repeats it. Three copies after the first survive
+    /// any loss a playable line has (at 3 % loss all four are lost once in a million); without the bound a long round trip makes every datagram carry everything sent
+    /// during it.
+    /// </summary>
+    public int UrgentRedundantSends { get; init; } = 3;
     public int UrgentWindow { get; init; } = 1_024;
     public int MaxMessageBytes { get; init; } = Protocol.MaxResumeBytes + Protocol.MaxMessageBytes;
     public int MaxConnections { get; init; } = 256;

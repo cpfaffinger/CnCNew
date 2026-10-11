@@ -63,7 +63,7 @@ those of `scripts/test.ps1`; the commands are printed by `-Plan`.
 | `presentation` | `CnCNew.Presentation`, its tests, `PresentationTool` | `presentation` | `presentation-content`, `game` |
 | `ui` | `CnCNew.Ui`, its tests, `UiRenderTool` | `ui` | `game` |
 | `audio` | `CnCNew.Audio`, its tests | `audio` | `audio-content`, `game` |
-| `net` | `CnCNew.Net`, `CnCNew.Server`, `Net.Tests`, `NetTool` | `net` (`Net.Tests`, 60 Hz) | `net-30`, `net-120`, `net-probe` (four clients and four computer players on a real map with delay and jitter), `game` |
+| `net` | `CnCNew.Net`, `CnCNew.Server`, `Net.Tests`, `NetTool`, `DedicatedServer` | `net` (`Net.Tests`, 60 Hz) | `net-30`, `net-120`, `net-probe` (four clients and four computer players on a real map with delay and jitter, in one process), `net-match` (the dedicated server, the UDP proxy and four client processes: a match with delay, jitter and loss, and one with a client that vanishes), `game` |
 | `game` | `CnCNew.Game`, its tests, `CampaignTool` | `game-focus`: the suites of the touched folder (below) | `game` (all suites), `net` |
 | `client` | `CnCNew.Client.Stride` | – (build) | `check-spectator`, `check-dozer`, `check-hotkeys` |
 | `scripts` | `scripts/` | – : run the script you changed | – |
@@ -183,6 +183,13 @@ path, the session hash, the session state, the match description or the replay i
 Since Phase 25 the area `net` exists (table in §3), `simulation` and `game` ask for `net` in their gate, and tier 4 contains `net`, `net-30`, `net-120` and `net-probe`.
 **The protocol, the relay, the lockstep driver and everything of §8's cross-cutting list need tier 4 before a push.** The whole multi-client matrix
 (`NetTool probe-suite`, 48 runs, around ten minutes with two jobs) is a check by hand at the completion of a phase that touched the network layers.
+
+Since Phase 26 the gate of `net` and tier 4 contain `net-match` (`scripts/check-net-match.ps1`, around two and a half minutes): real processes on real sockets of the
+loopback interface - `CnCNew.DedicatedServer`, `NetTool proxy` and four `NetTool client` processes on an eight-player map; every client must report the same hash chain, the
+server must agree on every tick, and in the second match the server must drop the client whose process vanished while the others play on in step. It builds the two tools
+in Release itself. **Do not write source files while a tier runs:** the steps build their Release projects when they reach them, and a half-written file fails a later
+step. The measurement matrix (`NetTool net-matrix`: 36 lines with eight client processes, around an hour and a half) and the endurance match are checks by hand at the
+completion of a phase that touched the transport, the playback control or the relay's pacing; they need a quiet machine, because they measure real time.
 
 What needs a human (pictures, sound, playability) is driven by `scripts/acceptance.ps1` (`docs/ACCEPTANCE.md`) and is
 never claimed by a test run.

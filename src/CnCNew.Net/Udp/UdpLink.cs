@@ -430,7 +430,7 @@ public sealed class UdpLink : IConnection
             {
                 if (urgent.Sends > 0 && nowMs - urgent.LastSentMs < retransmit)
                 {
-                    if (!_urgentNew) continue;
+                    if (!_urgentNew || urgent.Sends > _options.UrgentRedundantSends) continue;
                     var size = urgent.Fragments[0].Length + UdpFormat.UrgentOverhead;
                     if (urgent.Fragments.Length > 1 || size > redundancy)
                     {

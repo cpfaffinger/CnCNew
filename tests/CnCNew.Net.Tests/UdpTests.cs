@@ -288,6 +288,24 @@ static class UdpTests
         Check.That(server.Statistics.UrgentRepeated >= 1 && server.Statistics.SegmentsRetransmitted == 0, "it came as a repetition on the urgent channel");
         Check.That(wire.Until(() => server.UrgentBacklog == 0, 1_000), "every urgent message is acknowledged");
 
+        // On a long line a message rides along three more times, not for the whole round trip: the datagrams stay small.
+        var far = new Wire(new Impairment(DelayMs: 150));
+        var distant = far.Connect();
+        Check.That(far.Until(() => distant.State == UdpClientState.Connected && far.Accepted.Count == 1, 5_000), "connected over the long line");
+        far.Step(1_000);
+        var sentBefore = far.Accepted[0].Statistics.BytesSent;
+        var got = 0;
+        for (var index = 0; index < 120; index++)
+        {
+            far.Accepted[0].SendUrgent(Payload(index, 30));
+            far.Step(16);
+            while (distant.Connection.TryReceive(out _)) got++;
+        }
+        far.Until(() => { while (distant.Connection.TryReceive(out _)) got++; return got == 120; }, 2_000);
+        var perMessage = (far.Accepted[0].Statistics.BytesSent - sentBefore) / 120.0;
+        Check.That(got == 120 && far.Accepted[0].Statistics.UrgentRepeated is >= 340 and <= 380, $"every message was sent four times ({far.Accepted[0].Statistics.UrgentRepeated} repetitions of 120)");
+        Check.That(perMessage < 34 + 4 * 41 + 20, $"a datagram carries four messages, not the eighteen of a round trip ({perMessage:F0} bytes per message)");
+
         // The last message is lost and nothing follows: the retransmission time brings it.
         wire.Network.Impair(ServerAddress, wire.Addresses[0], new Impairment(LossPerMille: 1000));
         server.SendUrgent(Payload(60, 40));

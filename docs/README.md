@@ -128,7 +128,8 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 
 | Document | Content |
 |---|---|
-| [NETWORK-PROTOCOL.md](NETWORK-PROTOCOL.md) | Protocol version 1 (Phase 25): versions and build identity, the 25 messages and their limits, room and relay, pacing, the lockstep client, the local skirmish over the embedded server, checks and measurements |
+| [NETWORK-PROTOCOL.md](NETWORK-PROTOCOL.md) | Protocol version 2 (Phases 25 and 26): versions and build identity, the 29 messages and their limits, room and relay, pacing, the lockstep client, the local skirmish over the embedded server; the UDP transport (datagram layout, cookie handshake, reliable and urgent channel, time limits), clock synchronisation and the adaptive playback delay, the server's pacing, the rule for members that fall behind, a player leaving, the tools for real processes, the measured latency table |
+| [DEDICATED-SERVER.md](DEDICATED-SERVER.md) | `tools/CnCNew.DedicatedServer` (Phase 26): start, configuration (file and command line), rooms and rules, builds, the loop and the system timer, the output line by line, trying it on one machine |
 | [MULTIPLAYER-PLAN.md](MULTIPLAYER-PLAN.md) | Programme tick rate, fixed point, multiplayer (Phases 18–29): decisions, target architecture, bottlenecks, open decisions of the project owner |
 
 Of this, the preparatory work is built (Phases 18 to 23); the multiplayer part itself (Phases 24 to 29) is planned.

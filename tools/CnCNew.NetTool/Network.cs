@@ -211,6 +211,13 @@ static partial class NetTool
             return map;
         }
 
+        // The code of a tick is compiled before the match, not during its first second: a throw-away match of this map, played for a few game seconds.
+        if (!args.Contains("--cold"))
+        {
+            var warm = SkirmishMatchSession.Start(settings.ToDescription(string.Empty, data.Fingerprint.ToUpperInvariant(), 1, 2), data.Templates, loaded.Terrain, loaded.Map.Objects);
+            for (var tick = 0; tick < 10 * rate.TicksPerSecond; tick++) warm.Step();
+        }
+
         var clock = new SystemNetClock();
         using var timer = new FineTimer();
         using var socket = new UdpSocketChannel(new IPEndPoint(server.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0));
@@ -232,6 +239,7 @@ static partial class NetTool
         int gen0 = 0, gen1 = 0, gen2 = 0;
         double managedStart = 0, workingStart = 0;
         var lastPhase = client.Phase;
+        var frozenAtMicros = -1L;
         var lastLoop = clock.Microseconds;
         var statusAt = 10_000L;
 
@@ -325,6 +333,7 @@ static partial class NetTool
                 if (freezeAt >= 0 && headless.Tick >= freezeAt)
                 {
                     frozen = true;
+                    frozenAtMicros = now;
                     Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=freezing name={name} tick={headless.Tick}"));
                 }
                 if (headless.Tick >= target && !endReported && client.Phase == ClientPhase.InMatch)
@@ -345,7 +354,7 @@ static partial class NetTool
             // The others have not all reported their end (one was dropped, or is behind): this client has played what it was asked to.
             if (endReported && now - endReportedAt > 20_000_000) break;
             if (now > timeoutSeconds * 1_000_000) { problem = $"timeout in phase {client.Phase} at tick {headless.Tick}"; break; }
-            if (frozen && now - lastLoop > 0 && clock.Milliseconds > statusAt + 30_000) break;
+            if (frozen && frozenAtMicros >= 0 && now - frozenAtMicros > 30_000_000) break;
             if (clock.Milliseconds >= statusAt)
             {
                 statusAt += 10_000;
@@ -555,7 +564,15 @@ static partial class NetTool
                 }
                 var limit = (int)Math.Min(int.MaxValue, (target / rate.TicksPerSecond * 4 + 400) * 1000);
                 var waiting = Stopwatch.StartNew();
-                while (clients.Any(client => !client.HasExited) && waiting.ElapsedMilliseconds < limit) Thread.Sleep(200);
+                var disturbed = disturbances.Where(parts => parts.Length >= 3 && parts[1] != "hitch").Select(parts => int.Parse(parts[0], CultureInfo.InvariantCulture)).ToHashSet();
+                long othersDoneAt = -1;
+                while (clients.Any(client => !client.HasExited) && waiting.ElapsedMilliseconds < limit)
+                {
+                    Thread.Sleep(200);
+                    // A client that was frozen or made too slow may never end by itself: when all the others are done it is given ten seconds and then stopped.
+                    if (othersDoneAt < 0 && Enumerable.Range(0, clients.Count).All(index => disturbed.Contains(index) || clients[index].HasExited)) othersDoneAt = waiting.ElapsedMilliseconds;
+                    if (othersDoneAt >= 0 && waiting.ElapsedMilliseconds - othersDoneAt > 10_000) break;
+                }
             }
             finally
             {

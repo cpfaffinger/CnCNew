@@ -319,8 +319,9 @@ that is cut into numbered segments; a large message (the match description, a sa
 channel.
 
 - **Sender:** at most `WindowSegments` (256) segments are unacknowledged at a time. A segment is sent again when it is unacknowledged for the retransmission time
-  (`srtt + 4 · rttvar`, between `MinRetransmitMs` 30 and `MaxRetransmitMs` 2,000; `InitialRetransmitMs` 200 before the first measurement; doubled per repetition of the same
-  segment, at most 16-fold), or at once - one time per gap - when the acknowledgement mask shows two later segments arrived (fast retransmission).
+  (`srtt` plus the largest of `4 · rttvar`, a quarter of `srtt` and 15 ms - on a line without jitter the variance goes to zero, and a timer equal to the round trip fires
+  just before every acknowledgement -, between `MinRetransmitMs` 30 and `MaxRetransmitMs` 2,000; `InitialRetransmitMs` 200 before the first measurement; doubled per
+  repetition of the same segment, at most 16-fold), or at once - one time per gap - when the acknowledgement mask shows two later segments arrived (fast retransmission).
 - **Receiver:** segments are accepted up to `WindowSegments` ahead of the next expected one, held until the gap closes, and appended to the stream in order; a duplicate is
   counted and ignored. From the stream the receiver takes whole messages. A length prefix above the connection's message limit (64 MiB + 64 KiB, the protocol's largest message)
   is a violation: the connection is closed. The buffer grows with the bytes that actually arrive, never with what a prefix announces.
@@ -329,9 +330,12 @@ channel.
 ### 12.6 The urgent channel
 
 Everything `IConnection.SendUrgent` is given - in this protocol exactly the **tick bundles**, server to client. An urgent message is numbered; it is delivered in number order,
-once, like a reliable one, but it is sent differently: **every datagram that carries a new urgent message also carries every urgent message the peer has not acknowledged
-yet**, oldest first, as far as the datagram has room (`UrgentRedundancyBytes`, default: the rest of one datagram; what does not fit is counted in `UrgentOmitted` and follows
-with the next datagram or the retransmission timer). A single lost datagram therefore costs no waiting: the next one, one tick later, brings the missing bundle. A message
+once, like a reliable one, but it is sent differently: **every datagram that carries a new urgent message also carries the urgent messages the peer has not acknowledged
+yet**, oldest first - each at most `UrgentRedundantSends` (3) more times, and as far as the datagram has room (`UrgentRedundancyBytes`, default: the rest of one datagram;
+what does not fit is counted in `UrgentOmitted` and follows with the next datagram or the retransmission timer). A single lost datagram therefore costs no waiting: the
+next one, one tick later, brings the missing bundle. Three more copies survive every loss a playable line has (at 3 % all four are lost once in a million, and then the
+retransmission time repeats the message); without the bound a datagram carried everything sent during a round trip - measured with eight clients, 8.7 KB/s down per
+client at 10 ms delay and 39.7 KB/s at 150 ms. A message
 larger than one datagram is cut into fragments (at most 64, so 73,920 bytes) that are sent once in consecutive datagrams and again by the retransmission timer. Without new
 messages (pause, the last tick) unacknowledged urgent messages are repeated by the same retransmission time as segments.
 
@@ -351,7 +355,7 @@ one per flush; the peer closes at the first it receives. A closed end takes noth
 ### 12.8 Numbers
 
 All of them are fields of `UdpOptions` with these defaults: `ConnectRetryMs` 250, `ConnectTimeoutMs` 5,000, `CookieLifetimeMs` 10,000, `KeepAliveMs` 1,000, `TimeoutMs` 10,000,
-`LingerMs` 2,000, `InitialRetransmitMs` 200, `MinRetransmitMs` 30, `MaxRetransmitMs` 2,000, `WindowSegments` 256, `UrgentRedundancyBytes` 1,155, `UrgentWindow` 1,024 (urgent messages
+`LingerMs` 2,000, `InitialRetransmitMs` 200, `MinRetransmitMs` 30, `MaxRetransmitMs` 2,000, `WindowSegments` 256, `UrgentRedundancyBytes` 1,155, `UrgentRedundantSends` 3, `UrgentWindow` 1,024 (urgent messages
 unacknowledged or ahead; beyond it the connection is closed - the peer has not acknowledged for 17 s at 60 Hz), `MaxMessageBytes` 67,174,400, `MaxConnections` 256 (server).
 
 ### 12.9 Counters
@@ -392,12 +396,16 @@ bundle is there (`LockstepDriver.IsDue`).
 - **The position is steered by rate, never by a jump.** It advances with the local clock times the game speed times (1 + adjustment); the adjustment is the deviation from
   the target divided by `CorrectionTimeMs` (1 s) plus a slowly accumulated share (time constant `IntegralTimeMs`, 5 s) that takes up what stays - a local clock that runs
   fast needs a lasting correction -, capped at `MaxRateAdjustPerMille` (50: five percent). The second term is slow against the first, so the control settles instead of
-  swinging (tested with a clock skewed by 1 %, a hundred times a bad crystal).
+  swinging (tested with a clock skewed by 1 %, a hundred times a bad crystal). It works only on deviations below `IntegralBandMs` (20) and contributes at most
+  `MaxIntegralPerMille` (15): a large correction - the delay changed - is the first term's work and must not be remembered to overshoot when it is over (the first
+  measurement with eight processes showed exactly that: the position ran ahead for seconds after the start-up, and 4.7 % of the ticks waited for their bundle).
 - **Two exceptions set the position directly:** the first time there is an estimate *and* `MinArrivals` (8) measured arrivals - a delay taken from nothing would be wrong for
   the first second -, and a deviation beyond `ResyncMs` (1 s: the way changed, the process was suspended), which is counted (`Resyncs`).
 - **Without an estimate** (no clock, the first moments of a match, after a change of speed) a tick is due as soon as its bundle is there.
-- **The client's own hitches are not the network's jitter.** A bundle the client takes in after it stood still itself for more than `HitchMs` (50: a long frame, a garbage
-  collection) is played but not measured - when it arrived is unknown within that time.
+- **The client's own frames are not the network's jitter.** A client looks for messages once per frame, so a bundle is noticed up to a frame after it arrived. The usual
+  frame (the median of the last 31 times between two looks) is part of what the delay has to cover and stays in the lateness; what a longer frame adds beyond twice the
+  usual one - a long tick of the client's own simulation - is taken off; and a bundle taken in after the client stood still for more than `HitchMs` (50: a garbage
+  collection, a very long frame) is played but not measured at all.
 - **Catching up.** The position is a clock: it goes on while the client stands. After a hitch several ticks are due at once and are played in one frame, up to the frame's
   limit (`LiveGame`'s ticks per frame; 8 in the client without a window), until the client is back at the position. Nothing is dropped and nobody else is slowed; a client
   that stays behind is the business of §14.
