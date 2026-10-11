@@ -382,7 +382,7 @@ static class UdpTests
             random ^= random << 13;
             random ^= random >> 7;
             random ^= random << 17;
-            return (byte)(random >> 24);
+            return (byte)(random >> 32);
         }
         // Noise from a stranger: random bytes, and random bodies behind a correct header of every kind.
         for (var index = 0; index < 5_000; index++)
