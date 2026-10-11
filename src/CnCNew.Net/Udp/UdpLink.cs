@@ -82,6 +82,8 @@ public sealed class UdpLink : IConnection
     private int _rttVar;
     private int _closesToSend;
     private long _order;
+    private bool _draining;
+    private long _drainUntilMs = long.MinValue;
 
     public UdpLink(UdpOptions options, long nowMs)
     {
@@ -98,7 +100,7 @@ public sealed class UdpLink : IConnection
     public bool IsOpen => CloseReason == UdpCloseReason.None;
 
     /// <summary>Whether everything this end had to say has gone out (the close datagrams of a closed link included): the owner may forget the link.</summary>
-    public bool IsFinished => !IsOpen && _closesToSend == 0;
+    public bool IsFinished => !IsOpen && !_draining && _closesToSend == 0;
 
     /// <summary>Bytes of the reliable stream not yet acknowledged or not yet sent, and urgent messages not yet acknowledged.</summary>
     public long ReliableBacklogBytes => _outgoing.Count + _inFlight.Sum(segment => (long)segment.Bytes.Length);
@@ -162,6 +164,8 @@ public sealed class UdpLink : IConnection
         CloseReason = reason;
         // The peer is told unless it is the one that closed, or there is no connection to speak of.
         _closesToSend = reason is UdpCloseReason.Peer or UdpCloseReason.Refused || Token == 0 ? 0 : 3;
+        // Closed by this end: what was sent before the close still goes out (and is repeated until acknowledged) before the goodbye.
+        _draining = reason == UdpCloseReason.Local && Token != 0;
     }
 
     // ---------------------------------------------------------------------------------------------------------- receive
@@ -169,10 +173,16 @@ public sealed class UdpLink : IConnection
     /// <summary>Takes a data datagram of this connection (magic, version, kind and token already checked by the endpoint).</summary>
     public void Receive(ReadOnlySpan<byte> datagram, long nowMs)
     {
-        if (!IsOpen) return;
+        if (!IsOpen && !_draining) return;
         if (!UdpFormat.TryReadDataHeader(datagram, out var header) || !UdpFormat.SectionsAreValid(datagram))
         {
             Statistics.Malformed++;
+            return;
+        }
+        if (!IsOpen)
+        {
+            // Draining: only the acknowledgements matter any more.
+            Acknowledge(header);
             return;
         }
         Statistics.DatagramsReceived++;
@@ -341,14 +351,19 @@ public sealed class UdpLink : IConnection
         if (Token == 0) return;
         if (!IsOpen)
         {
-            if (_closesToSend > 0)
+            if (_drainUntilMs == long.MinValue) _drainUntilMs = nowMs + _options.LingerMs;
+            if (!_draining || (_outgoing.Count == 0 && _inFlight.Count == 0) || nowMs >= _drainUntilMs)
             {
-                _closesToSend--;
-                Emit(UdpFormat.Close(Token), send);
+                _draining = false;
+                if (_closesToSend > 0)
+                {
+                    _closesToSend--;
+                    Emit(UdpFormat.Close(Token), send);
+                }
+                return;
             }
-            return;
         }
-        if (nowMs - _lastReceivedMs >= _options.TimeoutMs)
+        else if (nowMs - _lastReceivedMs >= _options.TimeoutMs)
         {
             CloseWith(UdpCloseReason.Timeout);
             return;
@@ -396,6 +411,12 @@ public sealed class UdpLink : IConnection
             if (segment.Sends > 0) Statistics.SegmentsRetransmitted++;
             segment.Sends++;
             segment.LastSentMs = nowMs;
+        }
+
+        if (!IsOpen)
+        {
+            if (began) End();
+            return;
         }
 
         // Urgent: what is new goes now; what the peer has not acknowledged rides along with it, oldest first, as far as the redundancy budget reaches; and whatever has

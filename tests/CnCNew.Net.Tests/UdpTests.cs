@@ -367,6 +367,27 @@ static class UdpTests
         Check.That(!polite.Accepted[0].IsOpen && polite.Accepted[0].CloseReason == UdpCloseReason.Peer, "the peer learns of a close at once");
         Check.That(polite.Accepted[0].TryReceive(out var last) && last.Length == 100, "a closed connection still hands out what arrived before");
         Check.That(polite.Server.Connections == 0 && leaving.State == UdpClientState.Closed, "both ends are done");
+
+        // What was sent immediately before a close still arrives - a rejection is of no use otherwise - even when the network loses every third datagram.
+        var lossy = new Wire(new Impairment(DelayMs: 10, LossPerMille: 330), 4);
+        var turnedAway = lossy.Connect();
+        Check.That(lossy.Until(() => turnedAway.State == UdpClientState.Connected && lossy.Accepted.Count == 1, 20_000), "connected through the lossy network");
+        lossy.Accepted[0].Send(Payload(5, 3_000));
+        lossy.Accepted[0].Close();
+        Check.That(!lossy.Accepted[0].IsOpen, "the closing end is closed for its owner at once");
+        var got = Array.Empty<byte>();
+        Check.That(lossy.Until(() => turnedAway.Connection.TryReceive(out got) || turnedAway.State == UdpClientState.Closed, 5_000) && got.AsSpan().SequenceEqual(Payload(5, 3_000)),
+            "the last message before a close arrives");
+        Check.That(lossy.Until(() => turnedAway.State == UdpClientState.Closed && lossy.Server.Connections == 0, 5_000), "and then the close, and the server forgets the connection");
+        // A peer that never acknowledges does not keep a closed connection alive beyond the linger time.
+        var mute = new Wire();
+        var deaf = mute.Connect();
+        mute.Until(() => deaf.State == UdpClientState.Connected && mute.Accepted.Count == 1, 2_000);
+        mute.Network.Cut(ServerAddress, mute.Addresses[0]);
+        mute.Accepted[0].Send(Payload(1, 100));
+        mute.Accepted[0].Close();
+        mute.Step(UdpOptions.Default.LingerMs + 50);
+        Check.That(mute.Server.Connections == 0, "a closed connection is given up after the linger time");
     }
 
     public static void Garbage()
@@ -488,9 +509,13 @@ static class UdpTests
         client.Connection.Close();
         client.Flush();
         var closing = Stopwatch.StartNew();
-        while (closing.Elapsed.TotalSeconds < 2 && accepted!.IsOpen)
+        while (closing.Elapsed.TotalSeconds < 4 && accepted!.IsOpen)
         {
+            // The closing end goes on until what it sent before is acknowledged, then says goodbye.
+            client.Pump();
+            client.Flush();
             server.Pump();
+            server.Flush();
             serverSocket.WaitReadable(1_000);
         }
         Check.That(!accepted!.IsOpen, "the close arrives over real sockets");

@@ -39,6 +39,15 @@ run.Test("UDP time limits: keep-alive, measured round trip, timeout of a cut lin
 run.Test("UDP garbage: noise, damaged datagrams, a lying length prefix and a wrong token are counted and change nothing", UdpTests.Garbage);
 run.Test("UDP on real sockets of the loopback interface with the real clock, bounded to ten seconds", UdpTests.RealSockets);
 run.Test("Real clock: monotonic in micro- and milliseconds; the fine timer", UdpTests.RealClock);
+run.Test("Clock synchronisation: the median of ping samples gives the server's game time; a lopsided exchange moves nothing; a change of speed empties the window", NetTests.ClockSynchronisation);
+run.Test("Playback control: the delay follows way, jitter and loss in milliseconds; a skewed clock and a worsening line are followed by rate, never by a jump", NetTests.PlaybackControlFollowsTheServer);
+run.Test("Members that fall behind: shown from 500 ms, the game slowed above 2 s, dropped after 10 s slowed; the leave is a command of the next bundle; a watcher slows nobody", NetTests.MembersThatFallBehind);
+run.Test("Leaving: by choice an ally inherits, a lost connection kills; a leave is never a client's intent; ping and pong", NetTests.LeavingAndPings);
+run.Test("Match over lossy UDP: bundles arrive in any order and at any time, the session hashes stay equal in every tick, the recording replays", NetTests.MatchOverLossyUdp);
+run.Test("Match with members that leave, lose their line, freeze or are too slow: the others stay in step and are slowed no longer than the rule says", NetTests.MatchWithMembersThatVanish);
+run.Test("Rooms of one server: a connection belongs to the room its hello names; full server, no hello, two matches at once, an empty room is removed", NetTests.RoomsOfOneServer);
+run.Test("Match over real sockets: server endpoint, directory and three clients on the loopback interface by the real clock, bounded to twenty seconds", NetTests.MatchOverRealSockets);
+run.Test("Dedicated server: references the protocol and the room only; no game data, no game layer, no renderer", NetTests.DedicatedServerReferences);
 run.Test("Layer rules: project references, no game data in the server, no clock but the injected one", NetTests.LayerRules);
 return run.Finish();
 
@@ -78,7 +87,7 @@ static class Check
     }
 }
 
-static class NetTests
+static partial class NetTests
 {
     private const string Definitions = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF";
     private static readonly BuildIdentity Released = new("1111111111111111111111111111111111111111", false);
@@ -96,19 +105,22 @@ static class NetTests
         public LoopbackNetwork Network { get; }
         public RelayServer Server { get; }
         public List<LockstepClient> Clients { get; } = [];
+        /// <summary>Per client, the first tick it has not reported as completed yet (the tests of the rule for members that fall behind).</summary>
+        public Dictionary<int, long> Reported { get; } = [];
         private uint _seed = 77;
 
         public Net(RelayOptions? options = null, uint networkSeed = 1)
         {
             Network = new LoopbackNetwork(Clock, networkSeed);
-            Server = new RelayServer(Clock, options ?? new RelayOptions(SeedSource: () => ++_seed));
+            // The clients of this fixture play no ticks: the rule for members that fall behind is off unless a test sets it.
+            Server = new RelayServer(Clock, options ?? new RelayOptions(SeedSource: () => ++_seed, LagReportMs: 0, LagThrottleMs: 0));
         }
 
-        public LockstepClient Join(BuildIdentity? identity = null, string definitions = Definitions, LinkQuality toServer = default, LinkQuality toClient = default)
+        public LockstepClient Join(BuildIdentity? identity = null, string definitions = Definitions, LinkQuality toServer = default, LinkQuality toClient = default, bool clocked = false)
         {
             var (client, server) = Network.Connect(toServer, toClient);
             Server.Attach(server);
-            var joined = new LockstepClient(client, $"client {Clients.Count + 1}", definitions, identity ?? Released);
+            var joined = new LockstepClient(client, $"client {Clients.Count + 1}", definitions, identity ?? Released, clock: clocked ? Clock : null);
             Clients.Add(joined);
             return joined;
         }
@@ -172,7 +184,8 @@ static class NetTests
         var resume = new ResumeState(1234, 0xFEEDFACECAFEBEEF, [(1, 17UL), (2, 3UL)], [1, 2, 3, 4, 5]);
         return
         [
-            new HelloMessage(Protocol.Version, "abc+modified", 16, 14, 10, 2, Definitions, "Näme"),
+            new HelloMessage(Protocol.Version, "abc+modified", 16, 14, 10, 2, Definitions, "Näme", "a room"),
+            new PingMessage(123_456_789_012, 77), new PongMessage(123_456_789_012, 9_876_543_210, 50), new LagStateMessage(3, 2_500, true), new LeaveMessage(),
             new WelcomeMessage(7, true),
             new RejectMessage(RejectReason.SimulationVersion, "other build"),
             new RoomConfigMessage(settings),
@@ -640,7 +653,7 @@ static class NetTests
             Check.That(repeated.Ok && repeated.FinalSessionHash == plain.FinalSessionHash, $"{humans}+{computers}: the same run twice ends in the same hash");
 
             // Delay and jitter: bundles reach the clients at different times; a tick still runs only with its bundle, so the hashes stay equal.
-            var jitter = new LoopbackProbeOptions(ticks, new LinkQuality(30, 40), new LinkQuality(25, 60), NetworkSeed: 9, PlaybackBufferTicks: 2);
+            var jitter = new LoopbackProbeOptions(ticks, new LinkQuality(30, 40), new LinkQuality(25, 60), NetworkSeed: 9);
             var delayed = fixture.Probe().Run(settings, jitter);
             Check.That(delayed.Ok, $"{humans}+{computers} with delay and jitter: {delayed.Problem}");
             Check.That(delayed.MaxIntentLatencyTicks >= 3 && delayed.ReplayedSessionHash == delayed.FinalSessionHash, $"orders arrive ticks later (up to {delayed.MaxIntentLatencyTicks}) and the match still replays");

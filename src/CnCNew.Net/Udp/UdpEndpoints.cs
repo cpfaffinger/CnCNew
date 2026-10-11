@@ -81,10 +81,11 @@ public sealed class UdpClientEndpoint
                     _link.CloseWith(UdpCloseReason.Refused);
                     State = UdpClientState.Failed;
                     break;
-                case UdpKind.Data when State == UdpClientState.Connected && UdpFormat.TryReadDataHeader(datagram, out var header) && header.Token == _link.Token:
+                // A closed connection still takes the acknowledgements of what it sent before it closed, and ignores the rest: datagrams on their way are not a violation.
+                case UdpKind.Data when State is UdpClientState.Connected or UdpClientState.Closed && UdpFormat.TryReadDataHeader(datagram, out var header) && header.Token == _link.Token:
                     _link.Receive(datagram, now);
                     break;
-                case UdpKind.Close when State == UdpClientState.Connected && UdpFormat.TryReadClose(datagram, out var token) && token == _link.Token:
+                case UdpKind.Close when State is UdpClientState.Connected or UdpClientState.Closed && UdpFormat.TryReadClose(datagram, out var token) && token == _link.Token:
                     _link.CloseWith(UdpCloseReason.Peer);
                     break;
                 // A repeated challenge or accept after the handshake went on is the network's doing, not a violation.
@@ -137,6 +138,7 @@ public sealed class UdpServerEndpoint
     private readonly Dictionary<IPEndPoint, (UdpLink Link, ulong Nonce)> _links = [];
     private readonly Queue<(UdpLink Link, IPEndPoint Address)> _accepted = new();
     private readonly List<IPEndPoint> _finished = [];
+    private readonly Queue<(UdpLink Link, IPEndPoint Address)> _closed = new();
     private readonly byte[] _buffer = new byte[UdpFormat.MaxDatagramBytes + 1];
 
     /// <param name="secret">The key of the cookies: at least 16 bytes only this server knows, drawn by the host from a cryptographic source (a test names them).</param>
@@ -162,6 +164,19 @@ public sealed class UdpServerEndpoint
         if (_accepted.Count > 0)
         {
             (link, address) = _accepted.Dequeue();
+            return true;
+        }
+        link = null!;
+        address = null!;
+        return false;
+    }
+
+    /// <summary>A connection this endpoint has forgotten (closed and done), with its counters, for a host's log; only the newest are kept.</summary>
+    public bool TryTakeClosed(out UdpLink link, out IPEndPoint address)
+    {
+        if (_closed.Count > 0)
+        {
+            (link, address) = _closed.Dequeue();
             return true;
         }
         link = null!;
@@ -216,6 +231,8 @@ public sealed class UdpServerEndpoint
                         }
                         // Another attempt from the same address: the client started anew.
                         known.Link.CloseWith(UdpCloseReason.Replaced);
+                        if (_closed.Count >= 1_024) _closed.Dequeue();
+                        _closed.Enqueue((known.Link, from));
                         _links.Remove(from);
                     }
                     if (_links.Count >= _options.MaxConnections)
@@ -256,7 +273,12 @@ public sealed class UdpServerEndpoint
             entry.Link.Flush(now, datagram => _channel.Send(datagram, to));
             if (entry.Link.IsFinished) _finished.Add(address);
         }
-        foreach (var address in _finished) _links.Remove(address);
+        foreach (var address in _finished)
+        {
+            if (_closed.Count >= 1_024) _closed.Dequeue();
+            _closed.Enqueue((_links[address].Link, address));
+            _links.Remove(address);
+        }
         _finished.Clear();
     }
 }

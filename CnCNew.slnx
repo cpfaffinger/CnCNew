@@ -25,6 +25,7 @@
     <Project Path="tools/CnCNew.ImageTool/CnCNew.ImageTool.csproj" />
     <Project Path="tools/CnCNew.SimTool/CnCNew.SimTool.csproj" />
     <Project Path="tools/CnCNew.NetTool/CnCNew.NetTool.csproj" />
+    <Project Path="tools/CnCNew.DedicatedServer/CnCNew.DedicatedServer.csproj" />
     <Project Path="tools/CnCNew.PresentationTool/CnCNew.PresentationTool.csproj" />
     <Project Path="tools/CnCNew.W3dTool/CnCNew.W3dTool.csproj" />
   </Folder>

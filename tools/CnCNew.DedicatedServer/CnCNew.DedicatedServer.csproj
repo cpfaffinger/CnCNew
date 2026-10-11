@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <!-- The dedicated server is a relay: it references the protocol and the room, and nothing that holds game data or draws (a test of CnCNew.Net.Tests enforces it). -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/CnCNew.Net/CnCNew.Net.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Server/CnCNew.Server.csproj" />
+  </ItemGroup>
+</Project>

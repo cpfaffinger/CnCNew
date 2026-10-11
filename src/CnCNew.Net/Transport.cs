@@ -16,6 +16,7 @@ public interface INetClock
 public sealed class ManualNetClock : INetClock
 {
     public long Milliseconds { get; private set; }
+    public long Microseconds => Milliseconds * 1000;
 
     public void Advance(long milliseconds)
     {

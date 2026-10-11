@@ -3226,3 +3226,43 @@ The protocol, the relay and the client are `docs/NETWORK-PROTOCOL.md`. The simul
 
 The rule of §45.5 holds across machines: the sequence number of a command is assigned by the session at submission. On the wire it is 0; the relay's order number says in
 which order a player's commands are submitted, and that order - the bundle's - is the same on every client.
+
+## 47. Phase 26: a player leaves a running match (11 October 2026)
+
+A multiplayer match must go on when one of its players is gone, and what "gone" means for the world has to happen in the same tick on every machine. It is therefore a
+**command**: `PlayerLeaveCommand(Player, Sequence, Tick, TransferToAlly)`, command type 34 (`CommandTypes.PlayerLeave`). **Command table 17, replay format 15** (a bool after
+the command header); the reference manifest was rewritten for this one cause (`4cbf535`: the two version fields and the `commandStreamSha256` of the 22 runs that record a
+stream - of 1,925 fields 24 -, no result quantity). `WorldSnapshot` 10, `MissionSnapshot` 3, `SaveGame` 3 and the skirmish session state 2 are unchanged: a pending command is
+described by its fields, as every command is.
+
+**Source.** `GameLogic::logicMessageDispatcher`, case `MSG_SELF_DESTRUCT` (`GameLogicDispatch.cpp`); `Player::killPlayer` and `Player::transferAssetsFromThat`
+(`Player.cpp`); `Team::killTeam` and `Team::evacuateTeam` (`Team.cpp`); the two senders: `Network::quitGame` (the menu; argument TRUE) and
+`Network::processDestroyPlayerCommand` (a disconnected player; argument FALSE).
+
+**What it does** (`SimulationWorld.PlayerLeave.cs`):
+
+- *With* `TransferToAlly` (the original's quit through the menu): the players are walked in list order for the first one that is **allied with the leaver in both
+  directions** and **not defeated** (`IsPlayerDefeated`, the original's `hasSinglePlayerBeenDefeated`). It takes over every object of the leaver (`TransferOwnership`, the
+  path a script's transfer and a capture use: energy and battle-plan bonuses move with the object) and **all its money**. Then `killPlayer` runs "just to be safe", as in the
+  original - on what is left, which is nothing unless an object could not change hands.
+- *Without* it (the original's destroyed player after a disconnect), or when no such ally lives: `Player::killPlayer` - first every living object of the player that holds
+  riders puts **all of them out at once** (`Team::evacuateTeam` → `removeAllContained`; not through the door, which is for a living transport's order), then **every object
+  that is still the player's and not already dead is killed** (`Object::kill`: unresistable damage with the kill flag, so die modules, slow deaths and death weapons run). A
+  **`TECH_BUILDING`** is not killed but handed to the neutral player. The leaver's money stays where it is.
+- The command is **the leaving player's own** - the original sets the message's player index to the destroyed player. So it takes the next sequence number of that player,
+  a replay feeds it like any order of a human, and the system's own sequence (science points) is untouched. The system player cannot leave (`NotPermitted`); an unknown
+  player is `UnknownPlayer`.
+
+**Who gives it.** In a network match only the relay, inside a tick bundle (`docs/NETWORK-PROTOCOL.md` §14.2); a client's intent of this type is refused. Nothing in a local
+game gives it: the local skirmish has one member, and when it leaves the room is abandoned. The quit menu of the client does not send it yet (Phase 29).
+
+**Deviations and what is not modelled.** The original keeps beacons out of the transfer and destroys them directly in `killTeam` (they are "effectively dead"); this
+simulation has no beacons. `m_isPlayerDead` ("OCLs don't ever again spawn useful units for us") has no state of its own here: creation lists that require a living player
+ask `IsPlayerDefeated`, which is true once everything is dead. The original's `becomingLocalPlayer`/control-bar part of `killPlayer` is presentation and belongs to the client
+(Phase 29: what a player sees whose own seat was dropped).
+
+**Tests** (`Tests.PlayerLeave.cs`): riders are put out and everything of the player dies, a tech building stands and belongs to nobody, the others and the leaver's money are
+untouched, the pending command survives a snapshot and the live and the restored world agree tick by tick, the command round-trips through the replay format; with the
+transfer the first living two-way ally owns everything and has the money, a one-way "ally" gets nothing, a rider that changed hands stays in its transport; with a dead ally
+everything dies and the last player with objects has won. In the network tests the same command arrives through a bundle after a leave, a lost line, a frozen and a too slow
+client, and the relay's recording with it replays into the same session hash (`docs/NETWORK-PROTOCOL.md` §15).

@@ -21,6 +21,11 @@ try
         "probe-suite" => NetTool.ProbeSuite(args),
         "local-cost" => NetTool.LocalCost(args),
         "identity" => NetTool.Identity(),
+        "proxy" => NetTool.Proxy(args),
+        "client" => NetTool.Client(args),
+        "net-match" => NetTool.NetMatch(args),
+        "net-matrix" => NetTool.NetMatrix(args),
+        "pacing" => NetTool.Pacing(args),
         _ => Fail(NetTool.Usage),
     };
 }
@@ -35,11 +40,11 @@ static int Fail(string text)
     return 2;
 }
 
-static class NetTool
+static partial class NetTool
 {
     public const string Usage = """
         Usage: CnCNew.NetTool <command> <content-dir> [options]
-          loopback-match <content-dir> --map <map> --humans H --ais A [--ticks T | --seconds S | --minutes M] [--delay MS] [--jitter MS] [--buffer TICKS]
+          loopback-match <content-dir> --map <map> --humans H --ais A [--ticks T | --seconds S | --minutes M] [--delay MS] [--jitter MS]
                          [--net-seed N] [--salt N] [--tick-rate 30|60|120]
               H clients, each with its own world, against one relay over the loopback; the humans are command generators. After every tick the session hashes
               of all worlds are compared; at the end the relay's recording is played as a replay.
@@ -49,6 +54,18 @@ static class NetTool
               the tick cost of a local skirmish with and without the network path, and the memory of n worlds in one process
           identity
               the build identity of this process
+          proxy --listen PORT --server HOST:PORT [--delay MS] [--jitter MS] [--loss-percent P] [--dup-percent P] [--reorder-percent P] [--seed N] [--run-seconds S]
+              a UDP intermediary: every client that sends to the listen port gets its own way to the server, delayed, lost, duplicated and reordered per direction,
+              reproducibly from the seed
+          client <content-dir> --server HOST:PORT --map <map> --humans H --ais A --members M --seat I [--room NAME] [--name N] [--ticks T | --seconds S | --minutes M]
+                 [--result FILE] [--leave-at-tick T] [--vanish-at-tick T] [--freeze-at-tick T] [--slow-ms MS] [--hitch-at-tick T --hitch-ms MS]
+              a client without a window as a process of its own: joins the room, takes its seat (-1: watches), plays with a command generator, writes what it measured
+          net-match <content-dir> --map <map> --humans H --ais A [--watchers W] [--minutes M] [--delay MS] [--jitter MS] [--loss-percent P] --out DIR [--disturb seat:kind:tick[:arg]]
+              one match of real processes: the dedicated server, the proxy and one client process per member, on this machine; compares what the clients report
+          net-matrix <content-dir> --map <map> --humans H --ais A [--watchers W] [--minutes M] --out DIR [--delays 10,40,80,150] [--jitters 0,10,30] [--losses 0,1,3] [--lines d/j/l,...]
+              net-match for every line of the matrix; writes the table
+          pacing [--seconds S]
+              how evenly this machine wakes a loop that waits for a tick: sleep, socket wait, socket wait with the fine timer
         """;
 
     private static readonly string[] EightPlayerMaps =
@@ -61,7 +78,7 @@ static class NetTool
         "FactionBossGeneral", "FactionChina", "FactionChinaInfantryGeneral", "FactionChinaNukeGeneral",
     ];
 
-    private static string? Option(string[] args, string name)
+    internal static string? Option(string[] args, string name)
     {
         var index = Array.IndexOf(args, name);
         return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
@@ -121,8 +138,7 @@ static class NetTool
         var settings = Settings(loaded, (int)Number(args, "--humans", 2), (int)Number(args, "--ais", 0), Math.Max(ticks, SkirmishMatchOptions.StandardAt(rate).MaxTicks));
         var delay = (int)Number(args, "--delay", 0);
         var jitter = (int)Number(args, "--jitter", 0);
-        var options = new LoopbackProbeOptions(ticks, new LinkQuality(delay, jitter), new LinkQuality(delay, jitter), (uint)Number(args, "--net-seed", 1), (int)Number(args, "--buffer", delay + jitter > 0 ? 2 : 0),
-            GeneratorSeedSalt: (uint)Number(args, "--salt", 0));
+        var options = new LoopbackProbeOptions(ticks, new LinkQuality(delay, jitter), new LinkQuality(delay, jitter), (uint)Number(args, "--net-seed", 1), GeneratorSeedSalt: (uint)Number(args, "--salt", 0));
         var watch = Stopwatch.StartNew();
         var result = new LoopbackProbe(data.Templates, data.Fingerprint, loaded.Terrain, loaded.Map.Objects).Run(settings, options);
         Console.WriteLine($"{(result.Ok ? "ok  " : "FAIL")} {mapPath}: {Describe(result, watch.Elapsed.TotalSeconds)}");
@@ -138,7 +154,7 @@ static class NetTool
         var jobs = (int)Number(args, "--jobs", 2);
         var maps = Option(args, "--maps")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? EightPlayerMaps;
         (int Humans, int Ais)[] mixes = [(1, 7), (2, 6), (4, 4), (8, 0)];
-        (string Name, LinkQuality Link, int Buffer)[] networks = [("plain", default, 0), ("delay 40 ms, jitter 60 ms", new LinkQuality(40, 60), 3)];
+        (string Name, LinkQuality Link)[] networks = [("plain", default), ("delay 40 ms, jitter 60 ms", new LinkQuality(40, 60))];
         var runs = (from map in maps from mix in mixes from network in networks from repeat in new[] { 1, 2 } select (Map: map, Mix: mix, Network: network, Repeat: repeat)).ToArray();
         var rows = new (bool Ok, string Text, ulong Hash)[runs.Length];
         var next = -1;
@@ -162,7 +178,7 @@ static class NetTool
                     data ??= GameData.Load(args[1], modelGeometry: true, rate: rate);
                     if (!loadedMaps.TryGetValue(run.Map, out var loaded)) loadedMaps[run.Map] = loaded = Load(data, run.Map);
                     var settings = Settings(loaded, run.Mix.Humans, run.Mix.Ais, Math.Max(ticks, SkirmishMatchOptions.StandardAt(rate).MaxTicks));
-                    var options = new LoopbackProbeOptions(ticks, run.Network.Link, run.Network.Link, NetworkSeed: 7, PlaybackBufferTicks: run.Network.Buffer);
+                    var options = new LoopbackProbeOptions(ticks, run.Network.Link, run.Network.Link, NetworkSeed: 7);
                     var result = new LoopbackProbe(data.Templates, data.Fingerprint, loaded.Terrain, loaded.Map.Objects).Run(settings, options);
                     row = (result.Ok, $"{Describe(result, watch.Elapsed.TotalSeconds)}{(result.Ok ? string.Empty : " :: " + result.Problem)}", result.FinalSessionHash);
                 }

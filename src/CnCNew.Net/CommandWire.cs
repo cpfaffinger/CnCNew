@@ -35,8 +35,18 @@ public static class CommandWire
             error = $"unknown command type {type}";
             return false;
         }
+        if (type == CommandTypes.PlayerLeave)
+        {
+            // A client leaves by saying so (LeaveMessage) or by vanishing; the command is the relay's to put into a bundle.
+            error = "a leave command as an intent";
+            return false;
+        }
         return true;
     }
+
+    /// <summary>The command the relay puts into a bundle when a player has left: the leaving player's own, stamped like any other.</summary>
+    public static byte[] Leave(int player, long tick, bool transferToAlly)
+        => ReplayFormat.EncodeCommand(new PlayerLeaveCommand(new PlayerId(player), 0, tick, transferToAlly));
 
     /// <summary>The command with the player of its connection and the tick of its bundle written into its header.</summary>
     public static byte[] Stamp(ReadOnlySpan<byte> command, int player, long tick)

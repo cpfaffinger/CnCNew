@@ -8,7 +8,51 @@ namespace CnCNew.Server;
 /// <param name="HostMayChooseSeeds">Take the seeds the host states in its room settings instead of choosing them here (the embedded server of a local game: a savegame and a test name their seeds).</param>
 /// <param name="HashInterval">Every how many ticks a client reports its session hash.</param>
 /// <param name="SeedSource">Where the server takes a seed from when it chooses; required unless the host may choose.</param>
-public sealed record RelayOptions(bool AllowModifiedBuilds = false, bool HostMayChooseSeeds = false, ushort HashInterval = 1, Func<uint>? SeedSource = null);
+/// <param name="MaxConnections">Members a room admits (players and watchers), at most <see cref="Protocol.MaxConnections"/>.</param>
+/// <param name="LagReportMs">From this lag on (game time a member is behind the server's ticks) the server tells everybody who is behind; 0: never.</param>
+/// <param name="LagThrottleMs">Above this lag of a player the game runs at <paramref name="ThrottleSpeedPercent"/> for everybody; 0: the server neither throttles nor drops for lag.</param>
+/// <param name="ThrottleLimitMs">A member that stays above <paramref name="LagThrottleMs"/> for this long (time of the server's clock) is dropped.</param>
+/// <param name="ThrottleSpeedPercent">The share of the set game speed while the game is slowed for somebody.</param>
+public sealed record RelayOptions(bool AllowModifiedBuilds = false, bool HostMayChooseSeeds = false, ushort HashInterval = 1, Func<uint>? SeedSource = null, int MaxConnections = Protocol.MaxConnections,
+    int LagReportMs = 500, int LagThrottleMs = 2_000, int ThrottleLimitMs = 10_000, int ThrottleSpeedPercent = 50, int DefaultTickRate = 60);
+
+/// <summary>
+/// How evenly a room closed its ticks (docs/NETWORK-PROTOCOL.md section 13.4): the time between two closings on the server's clock, as its deviation from the tick length, in
+/// classes. A tick closed in the same pump as the one before it (the host woke late and had more than one to close) counts as a burst.
+/// </summary>
+public sealed class TickIntervalHistogram
+{
+    private static readonly int[] LimitsMicros = [250, 500, 1_000, 2_000, 4_000, 8_000, 16_000];
+    private readonly long[] _counts = new long[LimitsMicros.Length + 1];
+
+    public long Ticks { get; private set; }
+    public long Bursts { get; private set; }
+    public long MaxDeviationMicros { get; private set; }
+
+    /// <summary>Counts per class: deviation below 0.25, 0.5, 1, 2, 4, 8, 16 ms, and from 16 ms on.</summary>
+    public IReadOnlyList<long> Counts => _counts;
+
+    internal void Add(long intervalMicros, long tickMicros)
+    {
+        Ticks++;
+        if (intervalMicros == 0)
+        {
+            Bursts++;
+            return;
+        }
+        var deviation = Math.Abs(intervalMicros - tickMicros);
+        MaxDeviationMicros = Math.Max(MaxDeviationMicros, deviation);
+        var index = 0;
+        while (index < LimitsMicros.Length && deviation >= LimitsMicros[index]) index++;
+        _counts[index]++;
+    }
+
+    public override string ToString()
+        => string.Create(System.Globalization.CultureInfo.InvariantCulture, $"ticks={Ticks};bursts={Bursts};maxDeviationUs={MaxDeviationMicros};below0.25/0.5/1/2/4/8/16ms/above={string.Join('/', _counts)}");
+}
+
+/// <summary>Something that happened in a room, for the log of a host: a name and its details as key and value.</summary>
+public sealed record RelayEvent(string Name, IReadOnlyList<(string Key, string Value)> Details);
 
 /// <summary>What the server recorded of a match: the description it started and every bundle it sent, in order. Enough to play the match again (docs/NETWORK-PROTOCOL.md section 6).</summary>
 public sealed class RelayRecording
@@ -42,7 +86,19 @@ public sealed class RelayServer
         public (long Tick, int Winner)? EndReport { get; set; }
         public Queue<IntentMessage> Intents { get; } = new();
         public long Discarded { get; set; }
+        /// <summary>The last tick this member's simulation has completed, as it said (ping, hash report).</summary>
+        public long CompletedTick { get; set; } = -1;
+        public long ThrottledMicros { get; set; }
+        public int LagReported { get; set; }
+        public bool LagThrottling { get; set; }
+        /// <summary>Above the throttle limit, and since then not yet back below half of it: the game does not flicker between slow and fast at the limit.</summary>
+        public bool LagOver { get; set; }
+        public long LagReportedAtMicros { get; set; }
+        public bool Leaving { get; set; }
     }
+
+    private const int EventLimit = 1_024;
+    private const long LagRepeatMicros = 250_000;
 
     private const int IntentQueueLimit = Protocol.MaxIntentsPerTick * 4;
 
@@ -57,7 +113,10 @@ public sealed class RelayServer
     private string _definitionFingerprint = string.Empty;
     private FormatVersions _formats;
     private bool _roomHasIdentity;
-    private long _lastMs;
+    private readonly List<(int Player, bool TransferToAlly)> _leaves = [];
+    private readonly Queue<RelayEvent> _events = new();
+    private long _lastMicros;
+    private long _lastCloseMicros = long.MinValue;
     private long _tickMicroseconds;
     private long _accumulatedMicroseconds;
 
@@ -67,8 +126,23 @@ public sealed class RelayServer
         _options = options ?? new RelayOptions();
         if (!_options.HostMayChooseSeeds && _options.SeedSource is null) throw new ArgumentException("A server that chooses the seeds needs a seed source.", nameof(options));
         if (_options.HashInterval == 0) throw new ArgumentException("The hash interval is at least 1.", nameof(options));
-        _lastMs = clock.Milliseconds;
+        if (_options.MaxConnections is < 1 or > Protocol.MaxConnections) throw new ArgumentException($"A room admits 1 to {Protocol.MaxConnections} members.", nameof(options));
+        if (_options.ThrottleSpeedPercent is < 1 or > 100) throw new ArgumentException("The throttle speed is 1 to 100 percent.", nameof(options));
+        if (_options.DefaultTickRate is not (30 or 60 or 120)) throw new ArgumentException("The default tick rate is 30, 60 or 120.", nameof(options));
+        Settings = RoomSettings.Empty with { TickRate = _options.DefaultTickRate };
+        _lastMicros = clock.Microseconds;
     }
+
+    /// <summary>The next event of this room for a host's log, oldest first; a room nobody listens to keeps the newest only.</summary>
+    public bool TryTakeEvent(out RelayEvent relayEvent) => _events.TryDequeue(out relayEvent!);
+
+    private void Log(string name, params (string Key, string Value)[] details)
+    {
+        if (_events.Count >= EventLimit) _events.Dequeue();
+        _events.Enqueue(new RelayEvent(name, details));
+    }
+
+    private static string Text(long value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     public RoomPhase Phase { get; private set; } = RoomPhase.Room;
     public RoomSettings Settings { get; private set; } = RoomSettings.Empty;
@@ -80,6 +154,32 @@ public sealed class RelayServer
     public bool Paused { get; private set; }
     public int SpeedPercent { get; private set; } = 100;
     public int Connections => _peers.Count;
+    public int Members => _peers.Count(peer => peer.Hello is not null);
+
+    /// <summary>Whether the game runs slowed because a player is too far behind (docs/NETWORK-PROTOCOL.md section 14).</summary>
+    public bool Throttling { get; private set; }
+    /// <summary>The time of the server's clock the game has run slowed so far, in microseconds, and the members dropped for being too slow.</summary>
+    public long ThrottledMicros { get; private set; }
+    public long DroppedForLag { get; private set; }
+
+    /// <summary>The speed the tick clock advances at, in percent: the set speed, slowed while <see cref="Throttling"/>; 0 while nothing runs.</summary>
+    public int EffectiveSpeedPercent => Phase != RoomPhase.Match || Paused || Pacing != Pacing.Server ? 0 : Math.Max(1, SpeedPercent * (Throttling ? _options.ThrottleSpeedPercent : 100) / 100);
+
+    /// <summary>Server-paced matches: how evenly the ticks were closed, at set speed 100 and unslowed (other speeds have another tick length on the clock).</summary>
+    public TickIntervalHistogram TickIntervals { get; } = new();
+
+    /// <summary>Microseconds of the clock until the next tick closes; -1 when no tick is closed by the clock now.</summary>
+    public long MicrosUntilNextTick
+    {
+        get
+        {
+            var speed = EffectiveSpeedPercent;
+            return speed <= 0 || NextTick >= Settings.MaxTicks ? -1 : Math.Max(0, (_tickMicroseconds - _accumulatedMicroseconds) * 100 / speed);
+        }
+    }
+
+    /// <summary>The server's game time in microseconds: ticks closed times the tick length, plus what has accumulated toward the next.</summary>
+    public long GameMicros => Phase == RoomPhase.Match ? NextTick * _tickMicroseconds + _accumulatedMicroseconds : 0;
     public MatchEndMessage? End { get; private set; }
     public DesyncMessage? Desync { get; private set; }
 
@@ -134,7 +234,18 @@ public sealed class RelayServer
             }
         }
         for (var index = _peers.Count - 1; index >= 0; index--)
-            if (!_peers[index].Connection.IsOpen) Drop(_peers[index], DropReason.ConnectionLost);
+        {
+            var peer = _peers[index];
+            if (peer.Leaving)
+            {
+                peer.Connection.Close();
+                Drop(peer, DropReason.Left);
+            }
+            else if (!peer.Connection.IsOpen)
+            {
+                Drop(peer, DropReason.ConnectionLost);
+            }
+        }
         AdvanceClock();
     }
 
@@ -175,6 +286,13 @@ public sealed class RelayServer
             case ChatRequestMessage chat:
                 Broadcast(new ChatMessage(peer.Id, chat.Text));
                 break;
+            case PingMessage ping:
+                if (Phase == RoomPhase.Match) peer.CompletedTick = Math.Max(peer.CompletedTick, Math.Min(ping.CompletedTick, NextTick - 1));
+                Send(peer, new PongMessage(ping.ClientMicros, GameMicros, (ushort)EffectiveSpeedPercent));
+                break;
+            case LeaveMessage:
+                peer.Leaving = true;
+                break;
             case IntentMessage intent when Phase == RoomPhase.Match:
                 TakeIntent(peer, intent);
                 break;
@@ -190,7 +308,8 @@ public sealed class RelayServer
                 if (pace.SpeedPercent is < Protocol.MinSpeedPercent or > Protocol.MaxSpeedPercent) { Discard(peer, $"a speed of {pace.SpeedPercent} percent"); break; }
                 Paused = pace.Paused;
                 SpeedPercent = pace.SpeedPercent;
-                Broadcast(new PaceStateMessage(Paused, pace.SpeedPercent, peer.Id));
+                // What everybody is told is the speed the ticks really close at (a client-paced room has no clock: there it is the speed as set).
+                Broadcast(new PaceStateMessage(Paused, (ushort)(Pacing == Pacing.Server && Throttling ? Math.Max(1, SpeedPercent * _options.ThrottleSpeedPercent / 100) : SpeedPercent), peer.Id));
                 break;
             case EndReportMessage report when Phase == RoomPhase.Match:
                 peer.EndReport = (report.Tick, report.Winner);
@@ -210,7 +329,7 @@ public sealed class RelayServer
         var identity = BuildIdentity.Parse(hello.SimulationId);
         if (hello.ProtocolVersion != Protocol.Version) reject = new RejectMessage(RejectReason.ProtocolVersion, $"The server speaks protocol {Protocol.Version}, the client {hello.ProtocolVersion}.");
         else if (Phase != RoomPhase.Room) reject = new RejectMessage(RejectReason.MatchRunning, "The match has started.");
-        else if (_peers.Count(other => other.Hello is not null) >= Protocol.MaxConnections) reject = new RejectMessage(RejectReason.RoomFull, "The room is full.");
+        else if (_peers.Count(other => other.Hello is not null) >= _options.MaxConnections) reject = new RejectMessage(RejectReason.RoomFull, "The room is full.");
         else if (identity.Modified && !_options.AllowModifiedBuilds) reject = new RejectMessage(RejectReason.ModifiedBuild, "The client is a modified development build; this server admits released builds only.");
         else if (_roomHasIdentity)
         {
@@ -221,6 +340,7 @@ public sealed class RelayServer
         }
         if (reject is not null)
         {
+            Log("rejected", ("connection", Text(peer.Id)), ("reason", reject.Reason.ToString()));
             Send(peer, reject);
             peer.Connection.Close();
             _peers.Remove(peer);
@@ -235,6 +355,7 @@ public sealed class RelayServer
             _host = peer.Id;
         }
         peer.Hello = hello;
+        Log("joined", ("connection", Text(peer.Id)), ("name", hello.Name), ("host", peer.Id == _host ? "true" : "false"), ("build", hello.SimulationId));
         Send(peer, new WelcomeMessage(peer.Id, peer.Id == _host));
         BroadcastRoom();
     }
@@ -343,8 +464,17 @@ public sealed class RelayServer
         Recording.StartTick = NextTick;
         Recording.Resume = resume;
         Recording.Bundles.Clear();
+        _leaves.Clear();
+        Throttling = false;
+        Log("match-started", ("map", Settings.MapPath), ("tickRate", Text(Settings.TickRate)), ("participants", Text(Settings.Slots.Count(slot => slot.TakesPart))), ("members", Text(members.Count)),
+            ("pacing", Pacing.ToString()), ("startTick", Text(NextTick)));
         foreach (var peer in members)
         {
+            peer.CompletedTick = NextTick - 1;
+            peer.ThrottledMicros = 0;
+            peer.LagReported = 0;
+            peer.LagThrottling = false;
+            peer.LagOver = false;
             peer.Player = peer.Slot >= 0 ? playerOfSlot[peer.Slot] : 0;
             peer.Loaded = false;
             peer.EndReport = null;
@@ -366,8 +496,10 @@ public sealed class RelayServer
             return;
         }
         Phase = RoomPhase.Match;
-        _lastMs = _clock.Milliseconds;
+        _lastCloseMicros = long.MinValue;
+        _lastMicros = _clock.Microseconds;
         _accumulatedMicroseconds = 0;
+        Log("match-running", ("members", Text(members.Count)));
         Broadcast(new AllLoadedMessage(NextTick));
         BroadcastRoom();
     }
@@ -397,17 +529,82 @@ public sealed class RelayServer
 
     private void AdvanceClock()
     {
-        var now = _clock.Milliseconds;
-        var elapsed = now - _lastMs;
-        _lastMs = now;
-        if (Phase != RoomPhase.Match || Pacing != Pacing.Server || Paused || elapsed <= 0) return;
-        _accumulatedMicroseconds += elapsed * 1000 * SpeedPercent / 100;
+        var now = _clock.Microseconds;
+        var elapsed = now - _lastMicros;
+        _lastMicros = now;
+        if (Phase != RoomPhase.Match || Pacing != Pacing.Server || elapsed <= 0) return;
+        ApplyLagRule(now, elapsed);
+        if (Phase != RoomPhase.Match || Paused) return;
+        if (Throttling) ThrottledMicros += elapsed;
+        var speed = EffectiveSpeedPercent;
+        _accumulatedMicroseconds += elapsed * speed / 100;
+        if (_accumulatedMicroseconds >= _tickMicroseconds && NextTick < Settings.MaxTicks)
+        {
+            // How evenly the host lets this room close its ticks: the first of a pump against the last one before, every further one of the same pump as a burst.
+            if (speed == 100 && _lastCloseMicros != long.MinValue)
+            {
+                TickIntervals.Add(now - _lastCloseMicros, _tickMicroseconds);
+                for (var more = _accumulatedMicroseconds / _tickMicroseconds - 1; more > 0; more--) TickIntervals.Add(0, _tickMicroseconds);
+            }
+            _lastCloseMicros = now;
+        }
         // The server closes its ticks by its clock and waits for nobody.
         while (Phase == RoomPhase.Match && _accumulatedMicroseconds >= _tickMicroseconds && NextTick < Settings.MaxTicks)
         {
             _accumulatedMicroseconds -= _tickMicroseconds;
             CloseTick();
         }
+    }
+
+    /// <summary>
+    /// The rule for members that fall behind (docs/NETWORK-PROTOCOL.md section 14): the server closes its ticks by its clock and waits for nobody; a lag is told to everybody
+    /// from <see cref="RelayOptions.LagReportMs"/> on; above <see cref="RelayOptions.LagThrottleMs"/> of a player the game is slowed for everybody; a member that stays above
+    /// it for <see cref="RelayOptions.ThrottleLimitMs"/> is dropped. Once slowed, the game stays slowed until the member is back below half the limit, and the time counts on
+    /// until it is back below the report limit - a member that hovers at the limit is dropped, not carried. A watcher slows nobody, it is only dropped.
+    /// </summary>
+    private void ApplyLagRule(long now, long elapsed)
+    {
+        if (_options.LagReportMs <= 0 && _options.LagThrottleMs <= 0) return;
+        var throttle = false;
+        for (var index = _peers.Count - 1; index >= 0; index--)
+        {
+            var peer = _peers[index];
+            if (peer.Hello is null) continue;
+            var lagMs = (int)Math.Clamp((NextTick - 1 - peer.CompletedTick) * _tickMicroseconds / 1000, 0, int.MaxValue);
+            var over = _options.LagThrottleMs > 0 && (lagMs > _options.LagThrottleMs || (peer.LagOver && lagMs > _options.LagThrottleMs / 2));
+            peer.LagOver = over;
+            if (over && !Paused)
+            {
+                peer.ThrottledMicros += elapsed;
+                if (peer.ThrottledMicros > _options.ThrottleLimitMs * 1000L)
+                {
+                    DroppedForLag++;
+                    peer.Connection.Close();
+                    Drop(peer, DropReason.TooSlow);
+                    continue;
+                }
+            }
+            else if (lagMs < Math.Max(1, _options.LagReportMs))
+            {
+                peer.ThrottledMicros = 0;
+            }
+            var slows = over && peer.Player > 0;
+            throttle |= slows;
+            var reported = _options.LagReportMs > 0 && lagMs >= _options.LagReportMs ? lagMs : 0;
+            if ((reported == 0) != (peer.LagReported == 0) || slows != peer.LagThrottling || (reported != 0 && now - peer.LagReportedAtMicros >= LagRepeatMicros))
+            {
+                if ((reported == 0) != (peer.LagReported == 0) || slows != peer.LagThrottling)
+                    Log(reported == 0 ? "caught-up" : "behind", ("connection", Text(peer.Id)), ("player", Text(peer.Player)), ("lagMs", Text(lagMs)), ("slowsTheGame", slows ? "true" : "false"));
+                peer.LagReported = reported;
+                peer.LagThrottling = slows;
+                peer.LagReportedAtMicros = now;
+                Broadcast(new LagStateMessage(peer.Id, reported, slows));
+            }
+        }
+        if (throttle == Throttling) return;
+        Throttling = throttle;
+        Log(throttle ? "throttled" : "full-speed", ("tick", Text(NextTick)), ("speedPercent", Text(EffectiveSpeedPercent)));
+        Broadcast(new PaceStateMessage(Paused, (ushort)Math.Max(1, SpeedPercent * (Throttling ? _options.ThrottleSpeedPercent : 100) / 100), 0));
     }
 
     private void CloseTick()
@@ -428,6 +625,20 @@ public sealed class RelayServer
             }
             IntentsDeferred += peer.Intents.Count;
         }
+        if (_leaves.Count > 0)
+        {
+            // A player that left: its leave is a command of this tick like any other - the last one of that player - so that every simulation executes it in the same tick.
+            foreach (var (player, transfer) in _leaves)
+            {
+                var order = _orders.GetValueOrDefault(player) + 1;
+                _orders[player] = order;
+                commands.Add(new BundleCommand(player, order, 0, 0, CommandWire.Leave(player, tick, transfer)));
+            }
+            _leaves.Clear();
+            var sorted = commands.OrderBy(command => command.Player).ToList();
+            commands.Clear();
+            commands.AddRange(sorted);
+        }
         var bundle = new TickBundleMessage(tick, commands.ToImmutable());
         IntentsRelayed += bundle.Commands.Length;
         Recording.Bundles.Add(bundle);
@@ -446,6 +657,7 @@ public sealed class RelayServer
             return;
         }
         HashReports++;
+        peer.CompletedTick = Math.Max(peer.CompletedTick, report.Tick);
         if (!_hashReports.TryGetValue(report.Tick, out var reports)) _hashReports[report.Tick] = reports = [];
         reports[peer.Id] = report.SessionHash;
         var members = _peers.Where(other => other.Hello is not null).ToList();
@@ -462,6 +674,7 @@ public sealed class RelayServer
     private void ReportDesync(long tick, ImmutableArray<(uint, ulong)> reports)
     {
         Desync = new DesyncMessage(tick, reports);
+        Log("desync", ("tick", Text(tick)), ("reports", string.Join(' ', reports.Select(report => $"{report.Item1}:{report.Item2:X16}"))));
         Broadcast(Desync);
         Finish(new MatchEndMessage(tick, 0, EndReason.Desync));
     }
@@ -481,6 +694,8 @@ public sealed class RelayServer
         if (Phase == RoomPhase.Ended) return;
         End = end;
         Phase = RoomPhase.Ended;
+        Throttling = false;
+        Log("match-ended", ("tick", Text(end.Tick)), ("winner", Text(end.Winner)), ("reason", end.Reason.ToString()), ("lastAgreedTick", Text(LastAgreedTick)), ("throttledMs", Text(ThrottledMicros / 1000)));
         Broadcast(end);
     }
 
@@ -488,7 +703,18 @@ public sealed class RelayServer
     {
         _peers.Remove(peer);
         if (peer.Hello is null) return;
+        Log("left", ("connection", Text(peer.Id)), ("player", Text(peer.Player)), ("reason", reason.ToString()), ("phase", Phase.ToString()), ("tick", Text(NextTick)));
         Broadcast(new PlayerDroppedMessage(peer.Player, peer.Id, reason));
+        // What the leave means for the simulation is a command in the next bundle (PlayerLeaveCommand): by choice a living ally inherits, otherwise everything of the player dies.
+        if (Phase is RoomPhase.Loading or RoomPhase.Match && peer.Player > 0) _leaves.Add((peer.Player, reason == DropReason.Left));
+        // The hash reports of ticks it never reported must not wait for it.
+        foreach (var tick in _hashReports.Keys.ToArray())
+        {
+            var reports = _hashReports[tick];
+            if (_peers.Where(other => other.Hello is not null).Any(other => !reports.ContainsKey(other.Id))) continue;
+            _hashReports.Remove(tick);
+            if (reports.Values.Distinct().Count() <= 1 && tick > LastAgreedTick) LastAgreedTick = tick;
+        }
         var members = _peers.Where(other => other.Hello is not null).ToList();
         if (members.Count == 0)
         {

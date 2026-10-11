@@ -71,7 +71,7 @@ $areaOfPath = @(
     @('tools/CnCNew.PresentationTool/', 'presentation'),
     @('src/CnCNew.Ui/', 'ui'), @('tests/CnCNew.Ui.Tests/', 'ui'), @('tools/CnCNew.UiRenderTool/', 'ui'),
     @('src/CnCNew.Audio/', 'audio'), @('tests/CnCNew.Audio.Tests/', 'audio'),
-    @('src/CnCNew.Net/', 'net'), @('src/CnCNew.Server/', 'net'), @('tests/CnCNew.Net.Tests/', 'net'), @('tools/CnCNew.NetTool/', 'net'),
+    @('src/CnCNew.Net/', 'net'), @('src/CnCNew.Server/', 'net'), @('tests/CnCNew.Net.Tests/', 'net'), @('tools/CnCNew.NetTool/', 'net'), @('tools/CnCNew.DedicatedServer/', 'net'),
     @('tests/Shared/', 'simulation'),
     @('src/CnCNew.Game/', 'game'), @('tests/CnCNew.Game.Tests/', 'game'), @('tools/CnCNew.CampaignTool/', 'game'),
     @('src/CnCNew.Client.Stride/', 'client'),
@@ -102,7 +102,7 @@ $stepsOfArea = @{
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
     ui           = @{ affected = 'ui';                                      gate = 'game' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
-    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'game' }
+    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'game' }
     game         = @{ affected = 'game-focus';                              gate = 'game', 'net' }
     client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys' }
     scripts      = @{ affected = @();                                       gate = @() }
@@ -209,6 +209,7 @@ $steps = @(
     New-Step 'check-match'  'Match description in three processes'            ((Script-Run 'check-match-description') + '-NoBuild') -Content -Release $simTool
     New-Step 'session-check' 'Skirmish sessions saved and continued (AI table, eight players)' ((Release-Run $simTool) + 'session-check' + $ContentDir + '--jobs' + '3') -Content -Release $simTool
     New-Step 'net-probe'    'Four clients and four computer players over the relay with delay and jitter' ((Release-Run 'tools/CnCNew.NetTool') + 'loopback-match' + $ContentDir + '--map' + 'Maps/Twilight Flame/Twilight Flame.map' + '--humans' + '4' + '--ais' + '4' + '--seconds' + '60' + '--delay' + '40' + '--jitter' + '60') -Content -Release 'tools/CnCNew.NetTool'
+    New-Step 'net-match'    'Server, proxy and four client processes: a match with delay, jitter and loss, and one with a vanishing client' (Script-Run 'check-net-match') -Content
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content
     New-Step 'game-30'      'Game.Tests (real data, 30 Hz)'                   ((Release-Run $gameTests) + $content + '--tick-rate' + '30') -Content -Release $gameTests

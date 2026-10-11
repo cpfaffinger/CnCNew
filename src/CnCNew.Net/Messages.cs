@@ -31,6 +31,11 @@ public enum MessageType : ushort
     Desync = 23,
     EndReport = 24,
     MatchEnd = 25,
+    // Protocol version 2 (phase 26).
+    Ping = 26,
+    Pong = 27,
+    LagState = 28,
+    Leave = 29,
 }
 
 /// <summary>Why the server turned a connection or a request away.</summary>
@@ -46,6 +51,8 @@ public enum RejectReason : ushort
     NotHost = 8,
     InvalidRequest = 9,
     NotReady = 10,
+    /// <summary>The server has no room left for another room (version 2).</summary>
+    ServerFull = 11,
 }
 
 public enum RoomPhase : byte
@@ -69,6 +76,8 @@ public enum DropReason : byte
     ConnectionLost = 1,
     ProtocolViolation = 2,
     Desync = 3,
+    /// <summary>The client fell behind beyond what the server's rule allows (version 2; docs/NETWORK-PROTOCOL.md section 14).</summary>
+    TooSlow = 4,
 }
 
 public enum EndReason : byte
@@ -81,7 +90,9 @@ public enum EndReason : byte
 /// <summary>The limits of the protocol. A message above its limit is discarded and counted, and so is one of an unknown type.</summary>
 public static class Protocol
 {
-    public const ushort Version = 1;
+    /// <summary>Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave, the drop reason "too slow", the reject reason "server full".</summary>
+    public const ushort Version = 2;
+    public const int MaxRoomBytes = 64;
     /// <summary>Upper limit of every message except <see cref="MatchStartMessage"/> and <see cref="StartRequestMessage"/>, which may carry a session state.</summary>
     public const int MaxMessageBytes = 64 * 1024;
     public const int MaxResumeBytes = 64 * 1024 * 1024;
@@ -108,7 +119,7 @@ public abstract record NetMessage
 
 /// <summary>Client to server, first message of a connection: who is this, and can it play with the others at all.</summary>
 public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, int CommandTableVersion, int ReplayFormatVersion, int WorldStateVersion, int DescriptionEncoding,
-    string DefinitionFingerprint, string Name) : NetMessage
+    string DefinitionFingerprint, string Name, string Room = "") : NetMessage
 {
     public override MessageType Type => MessageType.Hello;
 
@@ -122,10 +133,24 @@ public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, i
         writer.I32(DescriptionEncoding);
         writer.Text(DefinitionFingerprint, Protocol.MaxIdBytes);
         writer.Text(Name, Protocol.MaxNameBytes);
+        writer.Text(Room, Protocol.MaxRoomBytes);
     }
 
+    /// <summary>
+    /// A hello of another protocol version is read as far as every version has it - the version number comes first - so that the server can say which version it speaks
+    /// instead of dropping the message as malformed.
+    /// </summary>
     internal static HelloMessage Read(ref WireReader reader)
-        => new(reader.U16(), reader.Text(Protocol.MaxIdBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.Text(Protocol.MaxIdBytes), reader.Text(Protocol.MaxNameBytes));
+    {
+        var version = reader.U16();
+        if (version != Protocol.Version)
+        {
+            reader.Raw(reader.Remaining);
+            return new HelloMessage(version, string.Empty, 0, 0, 0, 0, string.Empty, string.Empty);
+        }
+        return new HelloMessage(version, reader.Text(Protocol.MaxIdBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.Text(Protocol.MaxIdBytes), reader.Text(Protocol.MaxNameBytes),
+            reader.Text(Protocol.MaxRoomBytes));
+    }
 }
 
 public sealed record WelcomeMessage(uint ConnectionId, bool IsHost) : NetMessage
@@ -550,7 +575,7 @@ public sealed record PlayerDroppedMessage(int Player, uint ConnectionId, DropRea
         var player = reader.I32();
         var connection = reader.U32();
         var reason = reader.U8();
-        if (reason > (byte)DropReason.Desync) throw new ProtocolException($"Unknown drop reason {reason}.");
+        if (reason > (byte)DropReason.TooSlow) throw new ProtocolException($"Unknown drop reason {reason}.");
         return new PlayerDroppedMessage(player, connection, (DropReason)reason);
     }
 }
@@ -615,6 +640,74 @@ public sealed record MatchEndMessage(long Tick, int Winner, EndReason Reason) : 
         if (reason > (byte)EndReason.Abandoned) throw new ProtocolException($"Unknown end reason {reason}.");
         return new MatchEndMessage(tick, winner, (EndReason)reason);
     }
+}
+
+/// <summary>
+/// Client to server, at an interval: "what does your tick clock read?" - with the client's own clock, which the answer returns, and the last tick this client has completed,
+/// from which the server knows how far behind it is (docs/NETWORK-PROTOCOL.md sections 13 and 14).
+/// </summary>
+public sealed record PingMessage(long ClientMicros, long CompletedTick) : NetMessage
+{
+    public override MessageType Type => MessageType.Ping;
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.I64(ClientMicros);
+        writer.I64(CompletedTick);
+    }
+
+    internal static PingMessage Read(ref WireReader reader) => new(reader.I64(), reader.I64());
+}
+
+/// <summary>
+/// The answer to a ping: the client's clock as it sent it, and the server's game time - ticks closed times the tick length plus what has accumulated toward the next, in
+/// microseconds - with the speed it advances at, in percent (0: it stands - no match, or a pause).
+/// </summary>
+public sealed record PongMessage(long ClientMicros, long GameMicros, ushort SpeedPercent) : NetMessage
+{
+    public override MessageType Type => MessageType.Pong;
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.I64(ClientMicros);
+        writer.I64(GameMicros);
+        writer.U16(SpeedPercent);
+    }
+
+    internal static PongMessage Read(ref WireReader reader)
+    {
+        var message = new PongMessage(reader.I64(), reader.I64(), reader.U16());
+        if (message.SpeedPercent > Protocol.MaxSpeedPercent) throw new ProtocolException($"A speed of {message.SpeedPercent} percent.");
+        return message;
+    }
+}
+
+/// <summary>Server to every client: a member is this far behind the server's ticks, in milliseconds of game time (0: it has caught up), and whether the game is slowed for it.</summary>
+public sealed record LagStateMessage(uint ConnectionId, int LagMs, bool Throttling) : NetMessage
+{
+    public override MessageType Type => MessageType.LagState;
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.U32(ConnectionId);
+        writer.I32(LagMs);
+        writer.Bool(Throttling);
+    }
+
+    internal static LagStateMessage Read(ref WireReader reader)
+    {
+        var message = new LagStateMessage(reader.U32(), reader.I32(), reader.Bool());
+        if (message.LagMs < 0) throw new ProtocolException("A negative lag.");
+        return message;
+    }
+}
+
+/// <summary>Client to server: this client leaves the match by choice (the original's quit through the menu: a living ally inherits what its player owns).</summary>
+public sealed record LeaveMessage : NetMessage
+{
+    public override MessageType Type => MessageType.Leave;
+    internal override void Write(WireWriter writer) { }
+    internal static LeaveMessage Read(ref WireReader reader) => new();
 }
 
 /// <summary>
@@ -687,6 +780,10 @@ public static class MessageCodec
                 MessageType.Desync => DesyncMessage.Read(ref reader),
                 MessageType.EndReport => EndReportMessage.Read(ref reader),
                 MessageType.MatchEnd => MatchEndMessage.Read(ref reader),
+                MessageType.Ping => PingMessage.Read(ref reader),
+                MessageType.Pong => PongMessage.Read(ref reader),
+                MessageType.LagState => LagStateMessage.Read(ref reader),
+                MessageType.Leave => LeaveMessage.Read(ref reader),
                 _ => throw new ProtocolException($"No decoder for {type}."),
             };
             reader.End();

@@ -12,6 +12,8 @@ public sealed record UdpOptions
     public int CookieLifetimeMs { get; init; } = 10_000;
     public int KeepAliveMs { get; init; } = 1_000;
     public int TimeoutMs { get; init; } = 10_000;
+    /// <summary>How long a closed connection goes on delivering what was sent before the close (a rejection, the end of a match) before it says goodbye.</summary>
+    public int LingerMs { get; init; } = 2_000;
     public int InitialRetransmitMs { get; init; } = 200;
     public int MinRetransmitMs { get; init; } = 30;
     public int MaxRetransmitMs { get; init; } = 2_000;

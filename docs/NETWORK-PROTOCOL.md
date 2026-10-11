@@ -1,9 +1,14 @@
-# Network protocol (version 1)
+# Network protocol (version 2)
 
-Phase 25 (11 October 2026). Frame: `docs/MULTIPLAYER-PLAN.md` §2 (lockstep through a relay), `docs/SIMULATION-CORE.md` §45 (session core), `docs/PRESENTATION-INPUT.md` §13
-(command path, tick source). Code: `src/CnCNew.Net` (messages, transport interface, loopback, client), `src/CnCNew.Server` (room and relay), `src/CnCNew.Game/Lockstep`
-(lockstep driver, embedded server). **There is no socket in this phase**: the only transport is the loopback inside one process; UDP, clock synchronisation and the standalone
-server are Phase 26.
+Phase 25 (11 October 2026: the protocol, the room, the relay, the local skirmish through it - §1 to §11) and Phase 26 (11 October 2026: the UDP transport, clock
+synchronisation and the adaptive playback delay, the rule for members that fall behind, a player leaving, the standalone server - §12 to §16). Frame:
+`docs/MULTIPLAYER-PLAN.md` §2 (lockstep through a relay), `docs/SIMULATION-CORE.md` §45 to §47 (session core, the leave command), `docs/PRESENTATION-INPUT.md` §13 (command
+path, tick source), `docs/DEDICATED-SERVER.md` (the server as a program). Code: `src/CnCNew.Net` (messages, transport interface, loopback, client, clock synchronisation and
+playback control), `src/CnCNew.Net/Udp` (the UDP transport), `src/CnCNew.Server` (room and relay, the directory of rooms), `src/CnCNew.Game/Lockstep` (lockstep driver,
+embedded server, the client without a window, the multi-client probe), `tools/CnCNew.DedicatedServer`, `tools/CnCNew.NetTool`.
+
+**What version 2 added to version 1:** the room name in the hello; `Ping`/`Pong`, `LagState`, `Leave` (messages 26 to 29); the drop reason "too slow" and the reject reason
+"server full"; the leave of a player as a command inside a bundle (command table 17, replay format 15). A version 1 client is rejected with the reason "protocol version".
 
 ## 1. Model
 
@@ -23,9 +28,10 @@ Two builds can play together only if all of this is equal; the handshake compare
 
 | What | Where | Value now |
 |---|---|---|
-| Protocol version | `Protocol.Version` | 1 |
-| Command table | `CommandTypes.Version` | 16 |
-| Replay format (the command codec) | `ReplayFormat.CurrentVersion` | 14 |
+| Protocol version | `Protocol.Version` | 2 |
+| Transport version (UDP datagrams, §12) | `UdpFormat.Version` | 1 |
+| Command table | `CommandTypes.Version` | 17 |
+| Replay format (the command codec) | `ReplayFormat.CurrentVersion` | 15 |
 | World state | `WorldSnapshot.Version` | 10 |
 | Match description encoding | `MatchDescription.EncodingVersion` | 2 |
 | Definition fingerprint | of the client's game data | 64 hex digits |
@@ -38,7 +44,7 @@ Two builds can play together only if all of this is equal; the handshake compare
 - The **first** member of a room defines what the room plays with (identity, format versions, definitions); every later member must be equal in all of them or is rejected
   with the reason.
 - A **modified** build is a development state: the server admits it only when it is told to (`RelayOptions.AllowModifiedBuilds`). The embedded server of a local game does;
-  a public server does not unless a developer switches it on. In this phase the only server is the embedded one.
+  a public server does not unless a developer switches it on (`CnCNew.DedicatedServer --allow-modified-builds`, `docs/DEDICATED-SERVER.md`).
 - The identity of the room goes into the match description (`MatchDescription.SimulationId`, encoding 2). A client that is handed a description with another identity than
   its own refuses it (`MatchDescription.Resolve`). **An empty identity means "not stated"**: a match that never leaves its process (tools, tests, the runs of the reference
   manifest) states none, which is why a recorded description - and with it the manifest - does not change with every commit.
@@ -52,7 +58,7 @@ one player per tick.
 
 | No. | Message | Direction | Fields |
 |---|---|---|---|
-| 1 | `Hello` | client → server | protocol version, simulation identity, command table, replay format, world state, description encoding, definition fingerprint, name |
+| 1 | `Hello` | client → server | protocol version, simulation identity, command table, replay format, world state, description encoding, definition fingerprint, name, room name (64 bytes; a server with one room ignores it). A hello of another protocol version is read up to its version number, so that it can be rejected with the reason |
 | 2 | `Welcome` | server → client | connection id, host flag |
 | 3 | `Reject` | server → client | reason (`RejectReason`), text. After a hello the connection is closed; later it refuses one request and the connection stays |
 | 4 | `RoomConfig` | host → server | room settings: tick rate, map path, terrain fingerprint, max ticks, start money, grace and science interval (original frames), optionally seeds, slots (kind, faction, team, colour, start position, AI strength, AI composition) |
@@ -70,12 +76,16 @@ one player per tick.
 | 18 | `TickBundle` | server → all | tick, commands: player, order number, origin connection, receipt, command bytes. Also empty |
 | 19 | `HashReport` | client → server | tick, session hash |
 | 20 / 21 | `PaceRequest` / `PaceState` | client → server / server → all | paused, speed in percent (25 to 800) / the same and who asked |
-| 22 | `PlayerDropped` | server → all | player, connection, reason |
+| 22 | `PlayerDropped` | server → all | player, connection, reason (left, connection lost, protocol violation, desync, too slow). A notice for the people; what it means for the simulation is a command in a bundle (§14) |
 | 23 | `Desync` | server → all | tick, the hash of every connection that reported |
 | 24 / 25 | `EndReport` / `MatchEnd` | client → server / server → all | tick, winner / tick, winner, reason |
+| 26 / 27 | `Ping` / `Pong` | client → server / server → client | the client's clock in microseconds, the last tick it completed / the client's clock as sent, the server's game time in microseconds, the speed it advances at in percent (0: it stands) (§13) |
+| 28 | `LagState` | server → all | connection, how far it is behind in milliseconds of game time (0: caught up), whether the game is slowed for it (§14) |
+| 29 | `Leave` | client → server | none: this client leaves the match by choice (§14) |
 
 **A command on the wire** is the simulation's own command codec (`ReplayFormat.EncodeCommand`: `i64 tick, u16 type, i32 player, u64 sequence`, then the fields of the type) -
-the protocol invents no second encoding. A client sends an intent with tick 0 and sequence 0. The server checks the header (length, a known command type), writes the
+the protocol invents no second encoding. A client sends an intent with tick 0 and sequence 0. The server checks the header (length, a known command type that is not the
+leave command, which is the server's to give), writes the
 **player of the connection** and the tick of the bundle into it (`CommandWire.Stamp`) and passes the rest on untouched: nobody can give a command for somebody else. The
 sequence number stays 0 on the wire. The server counts an **order number** per player; the simulation's sequence number is assigned by every client's session when the
 command is submitted, in the order of the bundle (`docs/SIMULATION-CORE.md` §45.5) - which is the same on every client because the bundle is.
@@ -84,7 +94,8 @@ command is submitted, in the order of the bundle (`docs/SIMULATION-CORE.md` §45
 
 State machine **room → loading → match → ended**; the server is authoritative, a client shows the `RoomState` it was sent, never what it asked for.
 
-- **Host** is the first member (the next one when it leaves). Only the host sets the room and starts the match.
+- **Host** is the first member (the next one when it leaves). Only the host sets the room and starts the match. A room nobody has set yet states the server's default tick
+  rate (`RelayOptions.DefaultTickRate`, 60) and no slots; it admits at most `RelayOptions.MaxConnections` members (16, the protocol's limit).
 - **Slots.** A `Human` slot is a seat: a member takes it with `SlotRequest` and brings faction, team, colour and start position; a taken seat and a taken start position are
   refused. `Computer`, `Closed` and `Spectator` slots are set by the host. A member without a seat watches.
 - **Start.** Every human slot must have a member and every seated member but the host must be ready. The server builds the `MatchDescription` from the settings, the
@@ -123,14 +134,15 @@ there and equal the tick is agreed (`LastAgreedTick`); two that differ are a **d
 match. Which object and field differ is the diagnosis of Phase 27.
 
 **The end.** A client whose simulation says the match is over reports tick and winner; when all reports agree the server ends the match. A member that leaves is announced
-(`PlayerDropped`); when nobody is left the match is abandoned. What becomes of a dropped player's units is Phase 27.
+(`PlayerDropped`), and the leave of its player is a command of the next bundle (§14); when nobody is left the match is abandoned.
 
 **The recording** (`RelayServer.Recording`): the description and every bundle. It is enough to play the match again without any client: the commands of the humans come
 from the bundles, the computer players decide again (`SkirmishReplay.Play`, §8).
 
 ## 6. The client (`LockstepClient`, `LockstepDriver`)
 
-`LockstepClient` (in `CnCNew.Net`) is the protocol's client end: handshake, room, and in a match the bundles in order. It owns no simulation and no clock.
+`LockstepClient` (in `CnCNew.Net`) is the protocol's client end: handshake, room, and in a match the bundles in order. It owns no simulation. Given a clock it asks the
+server for its tick clock at an interval and keeps the estimate (§13); without one - the local game - it asks nothing.
 
 `LockstepDriver` (in `CnCNew.Game.Lockstep`) is the game's **tick source and command scheduler in one** - `ITickDriver` and `ICommandScheduler` of
 `docs/PRESENTATION-INPUT.md` §13 -, because here they are one thing: a tick may run when its bundle has arrived, and the bundle is what the scheduler hands out.
@@ -139,8 +151,9 @@ from the bundles, the computer players decide again (`SkirmishReplay.Play`, §8)
   submitted from there and answered by receipt number (`CommandResolution`). A command of another machine has no receipt here and no pre-check to deviate from.
 - Client-paced: the accumulator is the driver's own; when a tick is due it sends the held orders, asks for the tick and steps as soon as the bundle is there. Pause and
   speed are granted at once.
-- Server-paced: a tick is released when its bundle has arrived and the newest bundle is at least `PlaybackBufferTicks` ahead - a **fixed** buffer against jitter in this
-  phase (the adaptive one is Phase 26). Pause and speed are requests to the server; any player may ask, and the answer goes to everybody.
+- Server-paced: a tick is released when its bundle has arrived **and its playback time is reached** (§13): the playback position follows the server's tick clock by a delay
+  measured from the arrivals, in milliseconds. A client that fell behind finds several ticks due and plays them in one frame, up to the frame's limit. Pause and speed are
+  requests to the server; any player may ask, and the answer goes to everybody.
 - The lockstep probe (`--input-delay-ticks N`) is part of the driver: it holds every order N ticks before it sends it.
 
 ## 7. The local skirmish
@@ -167,9 +180,10 @@ starts.
 
 ## 9. Limits of this version
 
-No socket, no encryption, no authentication, no flood protection beyond the per-tick limit (Phase 26 and 28); no clock synchronisation and no adaptive buffer (26); no
-rejoin, no spectator joining a running match, no desync diagnosis below "this tick" (27); a dropped player's units stay as they are (27); pause and speed in a server-paced
-room may be asked by any player without a rule (29); the setup screen is not yet a room others can join (29).
+No encryption, no authentication beyond the cookie of §12.3, no flood protection beyond the per-tick limit and the connection limit, no congestion control (Phase 28); no
+rejoin, no spectator joining a running match, no desync diagnosis below "this tick" (27); pause and speed in a server-paced room may be asked by any player without a rule
+(29); the setup screen is not yet a room others can join, and the window client has no entry to a foreign server - only the client without a window joins one (29); a
+room's listing does not exist: a client must know the name of its room (29).
 
 ## 10. Measured (11 October 2026, 60 Hz, build `0b93f31`)
 
@@ -328,13 +342,16 @@ bundle (§14). The loopback transport has the same two lanes, so the probes in o
 ### 12.7 Keep-alive, timeout, close
 
 A connection that has sent nothing for `KeepAliveMs` (1,000) sends an empty data datagram; one that has received nothing for `TimeoutMs` (10,000) is closed (`IsOpen` false; the
-relay drops the member with `ConnectionLost`). `Close()` sends the close datagram three times, one per flush; the peer closes at the first it receives. Acknowledgements go out
-with the next flush of the host loop.
+relay drops the member with `ConnectionLost`). Acknowledgements go out with the next flush of the host loop.
+
+`Close()` closes the connection for its owner at once, but **what was sent before the close is still delivered**: the reliable channel goes on sending and repeating until
+everything is acknowledged or `LingerMs` (2,000) have passed - a rejection or the end of a match would be of no use otherwise. Then the close datagram goes out three times,
+one per flush; the peer closes at the first it receives. A closed end takes nothing in any more except the acknowledgements it waits for.
 
 ### 12.8 Numbers
 
 All of them are fields of `UdpOptions` with these defaults: `ConnectRetryMs` 250, `ConnectTimeoutMs` 5,000, `CookieLifetimeMs` 10,000, `KeepAliveMs` 1,000, `TimeoutMs` 10,000,
-`InitialRetransmitMs` 200, `MinRetransmitMs` 30, `MaxRetransmitMs` 2,000, `WindowSegments` 256, `UrgentRedundancyBytes` 1,155, `UrgentWindow` 1,024 (urgent messages
+`LingerMs` 2,000, `InitialRetransmitMs` 200, `MinRetransmitMs` 30, `MaxRetransmitMs` 2,000, `WindowSegments` 256, `UrgentRedundancyBytes` 1,155, `UrgentWindow` 1,024 (urgent messages
 unacknowledged or ahead; beyond it the connection is closed - the peer has not acknowledged for 17 s at 60 Hz), `MaxMessageBytes` 67,174,400, `MaxConnections` 256 (server).
 
 ### 12.9 Counters
@@ -342,3 +359,136 @@ unacknowledged or ahead; beyond it the connection is closed - the peer has not a
 Per connection (`UdpLinkStatistics`): datagrams and bytes sent and received, segments sent and retransmitted, urgent messages sent, urgent repetitions, urgent omissions,
 duplicates received, malformed datagrams, smoothed round-trip time. Per server endpoint: requests, challenges, connects accepted, cookies rejected, connections refused,
 datagrams from unknown peers, malformed datagrams.
+
+## 13. Clock synchronisation, playback and pacing (Phase 26)
+
+In a server-paced room the server closes ticks by its clock and waits for nobody. Three things follow: a client has to know the server's tick clock, it has to decide when to
+play a tick whose bundle has arrived, and the server's host has to wake up when a tick is due.
+
+### 13.1 The server's clock (`Ping`, `Pong`, `ClockSync`)
+
+The server's **game time** is the number of ticks it has closed times the tick length (in whole microseconds: 16,666 at 60 Hz, as the server counts) plus what has
+accumulated toward the next tick; it advances with the game speed - the set speed, halved while the game is slowed (§14), zero in a pause. A client sends a `Ping` with its
+own clock every `PingIntervalMs` (200; every 50 ms while it has no estimate in a match); the `Pong` returns that clock and states the game time and the speed.
+
+One exchange gives one sample: the local time halfway between sending and receiving, and the game time stated. The estimate of the game time at a local time is the
+**median** of what the last `SyncSamples` (9) samples say for that time - each extrapolated with the stated speed -, so one exchange with a lopsided way moves nothing. A
+change of the stated speed empties the window: samples of another speed say nothing about this one, and until three new ones are there the client has no estimate. The
+median of the round-trip times of the window is the client's ping.
+
+A constant error of the estimate does not matter (§13.2 measures against the same estimate it steers by); only its noise does, which the median bounds to a fraction of the
+jitter.
+
+### 13.2 When a tick is played (`PlaybackControl`)
+
+The server closes tick N at game time (N + 1) tick lengths; the bundle arrives after the way and its jitter. The client keeps a **playback position** - a clock of its own in
+game time - that follows the server's clock by the **playback delay**: tick N is due when the position has reached (N + 1) tick lengths. It runs when it is due *and* its
+bundle is there (`LockstepDriver.IsDue`).
+
+- **The delay is measured, in microseconds, not set in ticks.** For every bundle the client notes its *lateness*: the estimated game time at its arrival minus the game time
+  the server closed it at. Over the last `JitterWindowMs` (10 s) the delay is the `JitterPerMille` (990) quantile of the lateness plus `MarginMs` (4). On a quiet line that
+  is the way plus the margin; with jitter it covers 99 % of the arrivals; with loss it grows by about a tick, because the bundle of a lost datagram comes with the next one
+  (§12.6).
+- **The position is steered by rate, never by a jump.** It advances with the local clock times the game speed times (1 + adjustment); the adjustment is the deviation from
+  the target divided by `CorrectionTimeMs` (1 s) plus a slowly accumulated share (time constant `IntegralTimeMs`, 5 s) that takes up what stays - a local clock that runs
+  fast needs a lasting correction -, capped at `MaxRateAdjustPerMille` (50: five percent). The second term is slow against the first, so the control settles instead of
+  swinging (tested with a clock skewed by 1 %, a hundred times a bad crystal).
+- **Two exceptions set the position directly:** the first time there is an estimate *and* `MinArrivals` (8) measured arrivals - a delay taken from nothing would be wrong for
+  the first second -, and a deviation beyond `ResyncMs` (1 s: the way changed, the process was suspended), which is counted (`Resyncs`).
+- **Without an estimate** (no clock, the first moments of a match, after a change of speed) a tick is due as soon as its bundle is there.
+- **The client's own hitches are not the network's jitter.** A bundle the client takes in after it stood still itself for more than `HitchMs` (50: a long frame, a garbage
+  collection) is played but not measured - when it arrived is unknown within that time.
+- **Catching up.** The position is a clock: it goes on while the client stands. After a hitch several ticks are due at once and are played in one frame, up to the frame's
+  limit (`LiveGame`'s ticks per frame; 8 in the client without a window), until the client is back at the position. Nothing is dropped and nobody else is slowed; a client
+  that stays behind is the business of §14.
+- **Interpolation.** The fraction a frame interpolates with is the position between the last tick played and the next (`LockstepDriver.Fraction`).
+- **A wait** (`LockstepDriver.Stalls`) is a tick whose playback time was reached before its bundle: by construction about one tick in a hundred on a line with jitter. The
+  tick is played as soon as the bundle arrives, a few milliseconds late, and its lateness is in the window.
+- `LockstepDriver.DelayTicks` - how many ticks after the next an order given now is expected to execute - is the playback delay plus half the round trip, in ticks, plus the
+  tick the server has open: an estimate that moves with the line. The tick an order really gets is the server's decision.
+
+### 13.3 What that costs an order
+
+From the order to its execution on the client that gave it: the way to the server, the wait for the tick the server has open (half a tick on average), the way back, and
+the playback delay minus the way back - in sum **the way up, half a tick, and the playback delay**. The measured table is §16.
+
+### 13.4 The server's loop and the operating system's timer
+
+A host loop (`CnCNew.DedicatedServer`) takes in datagrams, pumps the rooms, sends, and then **waits on its socket** until the next tick of any room is due, at most
+`IdleWaitMicros` (2 ms): an arriving datagram wakes it at once, and nothing depends on a sleep being exact - a room closes its ticks by the clock, so a loop that wakes late
+closes the tick late, or two at once (a *burst*), and the clients' playback delay absorbs it as jitter.
+
+How late the loop wakes is the operating system's timer. **Windows wakes a waiting thread on its timer interrupt, every 15.6 ms by default** - nearly a whole tick at 60 Hz.
+While a `FineTimer` is held the process asks for 1 ms (`timeBeginPeriod(1)`); Linux needs nothing. Measured on the development machine (Windows 11, `NetTool pacing`, a wake-up
+every 16,666 µs for 3 s per way):
+
+| Way of waiting | late by: mean | median | 95 % | 99 % | max |
+|---|---|---|---|---|---|
+| `Thread.Sleep` | 7.89 ms | 7.81 | 15.03 | 15.77 | 16.23 |
+| wait on the socket (`select` with a timeout) | 8.04 ms | 7.92 | 15.32 | 16.07 | 16.14 |
+| wait on the socket, fine timer held | 0.37 ms | 0.29 | 0.97 | 1.25 | 1.32 |
+| the same in steps of at most 2 ms (the server's loop) | 0.49 ms | 0.43 | 1.02 | 1.23 | 1.24 |
+
+The server holds the fine timer by default (`"fineTimer": true`; the `listening` line says whether it was granted). Every room keeps a histogram of the time between two
+closings as deviation from the tick length (`RelayServer.TickIntervals`: below 0.25, 0.5, 1, 2, 4, 8, 16 ms and above, the bursts, the maximum); the server writes it with
+every status line and when the room closes, and the measurements of §16 report it. `SystemNetClock` (a monotonic stopwatch) and `FineTimer` are the content of
+`src/CnCNew.Net/RealTime.cs`, the one file of the two network layers that reads real time - the layer rule of `Net.Tests` names it as its only exception.
+
+## 14. Members that fall behind, and a player that leaves (Phase 26)
+
+### 14.1 The rule
+
+The server knows how far every member is: the last tick it completed, from its hash reports and its pings. **Lag** is the game time between that tick and the last one the
+server closed. A healthy client is behind by its playback delay plus the way of its reports - 100 to 400 ms on the lines of §16.
+
+| Lag of a member | What the server does | Option (default) |
+|---|---|---|
+| from 500 ms | tells everybody (`LagState`: who, how far), repeated every 250 ms while it lasts - **only shown** | `LagReportMs` (500) |
+| above 2 s, a player | the game runs at **half speed for everybody** (`PaceState` states the speed the ticks really close at); it stays slowed until that player is below half the limit | `LagThrottleMs` (2,000), `ThrottleSpeedPercent` (50) |
+| above 2 s for 10 s of the server's clock | the member is **dropped** (`PlayerDropped`, reason "too slow"; the connection is closed) | `ThrottleLimitMs` (10,000) |
+
+- The 10 s count on until the member is back below the report limit: one that hovers at the limit is dropped, not carried forever.
+- A **watcher** slows nobody; it is only dropped after the same time.
+- A **lost connection** is noticed by the transport after `TimeoutMs` (10 s without a datagram) and dropped with "connection lost" - until then it is a member that falls
+  behind and the rule applies to it: shown, then the game slowed.
+- **What the others lose is bounded:** per incident at most `ThrottleLimitMs` × (1 − `ThrottleSpeedPercent`) = 5 s of game time, spread over 10 s. A client's own hitch of
+  half a second - the tick maximum of the eight-player profile is 140 ms (decision D-3) - is far below every limit and slows nobody (tested).
+- Every number is configuration (`RelayOptions`, the server's file and command line); with `LagThrottleMs` 0 the server neither slows nor drops for lag.
+
+**The numbers are a proposal** (`docs/MULTIPLAYER-PLAN.md` §7: "2 s shown, then slowed for up to 10 s, then disconnected"); the decision is the project owner's. What is
+built is the mechanism with these defaults.
+
+### 14.2 The leave is a command
+
+`PlayerDropped` is a notice for the people. For the simulation the server puts a **leave command** of that player into the next bundle it closes
+(`PlayerLeaveCommand`, command type 34; `CommandWire.Leave`): the player's own last command, with the next order number of that player and no origin connection, so every
+client executes it in the same tick, a replay of the recording contains it, and nobody has to agree on anything outside the bundles. A client can never give it - as an intent
+it is refused and counted.
+
+What it does is the original's `MSG_SELF_DESTRUCT` (`docs/SIMULATION-CORE.md` §47): after `Leave` (the client said it leaves) the first living player allied with it in both
+directions inherits its objects and its money, and what is left dies; after a lost connection, a drop for lag, or without such an ally, everything of the player dies -
+riders are put out of its containers first, a tech building goes to the neutral player. A player that vanishes while the match loads leaves in the first tick.
+
+## 15. Real sockets and real processes (Phase 26)
+
+- **`tools/CnCNew.DedicatedServer`** - the relay as a program: one process, one UDP port, several rooms (`docs/DEDICATED-SERVER.md`).
+- **`RoomDirectory`** (`CnCNew.Server`) - several rooms behind one transport endpoint: a connection belongs to the room its hello names; the first hello that names a room
+  opens it, the room is removed with its last connection; a hello for one room more than `MaxRooms` is rejected ("server full"); a connection that says no hello within
+  `HelloTimeoutMs` (5 s), or something else first, is closed.
+- **`HeadlessClient`** (`CnCNew.Game.Lockstep`) - a client without a window: the protocol client, its own world, the lockstep driver, the command path; its "human" is a
+  command generator. The multi-client probe, the tests and `NetTool client` host it.
+- **`NetTool proxy`** - the network simulator for real sockets: clients send to the proxy as to the server; per client it opens a socket of its own toward the server, and
+  both directions pass the same disturbance the tests use in memory (`DatagramImpairer`: delay, jitter, loss, duplication, reordering from a seed).
+- **`NetTool client`** - a client process: joins a room of a server, takes its seat or watches, plays to a tick, writes what it measured as JSON: hash chain, order-to-execution
+  times, playback delay, waits, bytes, repetitions, memory. It can be told to leave, to vanish without a word, to freeze, to be too slow, or to hitch.
+- **`NetTool net-match`** - the harness: starts the server, the proxy and one client process per member on this machine, waits, and compares: every undisturbed client played
+  to the end, **all hash chains are equal**, the server agreed on every tick and reported no desync, no client discarded anything. **`NetTool net-matrix`** runs it for every
+  line of a matrix and writes the table. **`scripts/check-net-match.ps1`** is the short form in the gate (`net-match` in `scripts/test.ps1`): one match with delay, jitter and
+  loss, one with a client process that vanishes.
+- **`NetTool pacing`** - the measurement of §13.4.
+
+Tests (`tests/CnCNew.Net.Tests`, 34 at 30, 60 and 120 Hz): the datagram layout and its refusals; the cookie handshake; both channels under loss, duplication and reordering,
+reproducibly from a seed; time limits, a clean close that still delivers; noise and damaged datagrams; the transport on real loopback sockets; clock synchronisation and
+playback control against a simulated line (way, jitter, loss, a skewed clock, a line that gets worse); the rule for members that fall behind; leaving; **a match over lossy
+UDP in memory - bundles arrive in any order and at any time, the session hashes stay equal in every tick**; matches in which a client leaves, loses its line, freezes, is
+too slow or hitches; the rooms of one server; **a match over real sockets with the server stack as the program runs it**; the references of the dedicated server.
