@@ -231,3 +231,114 @@ catches up afterwards (not measured over a real network).
 **Not run:** the determinism matrix and Linux; the survey over 320 matches; the commands-only agent; the multi-client probe at 30 and 120 Hz and for more than two game
 minutes; `sync-perf` of the game layer; `scripts/acceptance.ps1`. **The second physical machine (register E1, decision D-10) is still open.** **No human has seen** a match
 through the relay, a team set in the setup screen, or a skirmish resumed through a room.
+
+## 12. The UDP transport (Phase 26; `CnCNew.Net.Udp`)
+
+The protocol of §3 assumes whole messages, reliable and ordered per connection. Over UDP that guarantee is this layer's own. It is written with `System.Net.Sockets` alone; nothing
+above `IConnection` knows which transport carries it. Every multi-byte value is little-endian. A datagram that violates anything stated here is **dropped as a whole and
+counted** (`Malformed`); nothing in it is applied.
+
+### 12.1 Size
+
+A datagram carries at most **1,200 bytes** (`UdpFormat.MaxDatagramBytes`). IPv6 guarantees 1,280 bytes per packet; minus 40 bytes of IPv6 header and 8 of UDP that leaves 1,232,
+and the remaining 32 bytes are room for a tunnel on the way. IPv4 paths below 1,228 bytes of MTU exist but are rare; the number is the one QUIC uses for the same reason. Nothing
+here relies on IP fragmentation.
+
+### 12.2 Datagram header
+
+| Offset | Field | |
+|---|---|---|
+| 0 | `u16` magic `0xC2CE` | anything else is not ours |
+| 2 | `u8` transport version, **1** | another version is dropped and counted |
+| 3 | `u8` kind | 1 request, 2 challenge, 3 connect, 4 accept, 5 data, 6 close, 7 refuse |
+
+### 12.3 Connection setup with a stateless cookie
+
+| Kind | Direction | Body | Length |
+|---|---|---|---|
+| request | client → server | `u64` client nonce, 20 zero bytes | 32 |
+| challenge | server → client | `u64` client nonce, `u32` time slot, 16 bytes cookie | 32 |
+| connect | client → server | `u64` client nonce, `u32` time slot, 16 bytes cookie | 32 |
+| accept | server → client | `u64` client nonce, `u64` connection token | 20 |
+| refuse | server → client | `u64` client nonce, `u8` reason (1: the server is full) | 13 |
+| close | both | `u64` connection token | 12 |
+
+- The **cookie** is the first 16 bytes of HMAC-SHA-256 over (`0x01`, the sender's address bytes, its port, the client nonce, the time slot) with a secret only the server
+  knows. The time slot is the server's clock divided by the cookie lifetime (default 10 s); a cookie of the current or the previous slot is valid.
+- The server keeps **no state** for a request: it answers with a challenge of the same length as the request (no amplification) and forgets. Only a connect with a valid cookie
+  - which proves that the sender receives at the address it claims - creates a connection. A connect with an invalid or expired cookie is answered with a fresh challenge.
+- The **connection token** is the first 8 bytes of the same HMAC with the prefix `0x02`; every later datagram of the connection carries it, and a datagram from the right address
+  with the wrong token is dropped. A repeated connect (its accept was lost) derives the same token and is answered again; a connect with another nonce from the same address
+  replaces the old connection (the client restarted).
+- The client repeats request and connect every `ConnectRetryMs` (250) and gives up after `ConnectTimeoutMs` (5,000). Messages sent before the connection stands wait in the
+  reliable channel.
+- A request is exactly 32 bytes with zero padding; every other length, or a non-zero padding byte, is malformed.
+
+### 12.4 Data datagrams
+
+After the 4-byte header:
+
+| Field | |
+|---|---|
+| `u64` connection token | |
+| `u32` send time | the sender's clock in milliseconds, low 32 bits |
+| `u32` echo time | the newest send time received from the peer |
+| `u16` echo hold | milliseconds between receiving that datagram and sending this one; `0xFFFF`: nothing to echo |
+| `u32` reliable acknowledgement | the next segment number expected (everything below it has arrived) |
+| `u32` acknowledgement mask | bit *i*: segment (acknowledgement + 1 + *i*) has arrived |
+| `u32` urgent acknowledgement | the next urgent message number expected |
+
+34 bytes in all; then sections until the datagram ends:
+
+| Section | Layout | Limits |
+|---|---|---|
+| `u8` 1: reliable segment | `u32` segment number, `u16` length, bytes | length 1 to 1,159 |
+| `u8` 2: urgent fragment | `u32` message number, `u16` fragment index, `u16` fragment count, `u16` length, bytes | count 1 to 64, index below count, length 1 to 1,155 |
+
+An unknown section kind, a length of 0 or beyond the datagram, or trailing bytes make the datagram malformed. A datagram with no section is an acknowledgement or a keep-alive.
+The round-trip time of a connection is measured from the echo fields (now − echo time − echo hold) and smoothed as TCP does (`srtt`, `rttvar`).
+
+### 12.5 The reliable channel
+
+Everything `IConnection.Send` is given: lobby, control, command intents, hash reports. The messages form **one byte stream** - each message preceded by its `u32` length -
+that is cut into numbered segments; a large message (the match description, a saved state for a resumed match) simply spans many segments, which is the fragmentation of this
+channel.
+
+- **Sender:** at most `WindowSegments` (256) segments are unacknowledged at a time. A segment is sent again when it is unacknowledged for the retransmission time
+  (`srtt + 4 · rttvar`, between `MinRetransmitMs` 30 and `MaxRetransmitMs` 2,000; `InitialRetransmitMs` 200 before the first measurement; doubled per repetition of the same
+  segment, at most 16-fold), or at once - one time per gap - when the acknowledgement mask shows two later segments arrived (fast retransmission).
+- **Receiver:** segments are accepted up to `WindowSegments` ahead of the next expected one, held until the gap closes, and appended to the stream in order; a duplicate is
+  counted and ignored. From the stream the receiver takes whole messages. A length prefix above the connection's message limit (64 MiB + 64 KiB, the protocol's largest message)
+  is a violation: the connection is closed. The buffer grows with the bytes that actually arrive, never with what a prefix announces.
+- There is no congestion control beyond the fixed window (a match is a few kilobytes per second; operating an open port is Phase 28).
+
+### 12.6 The urgent channel
+
+Everything `IConnection.SendUrgent` is given - in this protocol exactly the **tick bundles**, server to client. An urgent message is numbered; it is delivered in number order,
+once, like a reliable one, but it is sent differently: **every datagram that carries a new urgent message also carries every urgent message the peer has not acknowledged
+yet**, oldest first, as far as the datagram has room (`UrgentRedundancyBytes`, default: the rest of one datagram; what does not fit is counted in `UrgentOmitted` and follows
+with the next datagram or the retransmission timer). A single lost datagram therefore costs no waiting: the next one, one tick later, brings the missing bundle. A message
+larger than one datagram is cut into fragments (at most 64, so 73,920 bytes) that are sent once in consecutive datagrams and again by the retransmission timer. Without new
+messages (pause, the last tick) unacknowledged urgent messages are repeated by the same retransmission time as segments.
+
+**Order holds per channel, not between the two.** The protocol tolerates it: a client takes bundles in the loading phase as well as in the match, and everything else the server
+sends (room state, pace, lag, drop notice, end) does not depend on its position between two bundles - what a dropped player means for the simulation is a command *inside* a
+bundle (§14). The loopback transport has the same two lanes, so the probes in one process exercise the overtaking too.
+
+### 12.7 Keep-alive, timeout, close
+
+A connection that has sent nothing for `KeepAliveMs` (1,000) sends an empty data datagram; one that has received nothing for `TimeoutMs` (10,000) is closed (`IsOpen` false; the
+relay drops the member with `ConnectionLost`). `Close()` sends the close datagram three times, one per flush; the peer closes at the first it receives. Acknowledgements go out
+with the next flush of the host loop.
+
+### 12.8 Numbers
+
+All of them are fields of `UdpOptions` with these defaults: `ConnectRetryMs` 250, `ConnectTimeoutMs` 5,000, `CookieLifetimeMs` 10,000, `KeepAliveMs` 1,000, `TimeoutMs` 10,000,
+`InitialRetransmitMs` 200, `MinRetransmitMs` 30, `MaxRetransmitMs` 2,000, `WindowSegments` 256, `UrgentRedundancyBytes` 1,155, `UrgentWindow` 1,024 (urgent messages
+unacknowledged or ahead; beyond it the connection is closed - the peer has not acknowledged for 17 s at 60 Hz), `MaxMessageBytes` 67,174,400, `MaxConnections` 256 (server).
+
+### 12.9 Counters
+
+Per connection (`UdpLinkStatistics`): datagrams and bytes sent and received, segments sent and retransmitted, urgent messages sent, urgent repetitions, urgent omissions,
+duplicates received, malformed datagrams, smoothed round-trip time. Per server endpoint: requests, challenges, connects accepted, cookies rejected, connections refused,
+datagrams from unknown peers, malformed datagrams.

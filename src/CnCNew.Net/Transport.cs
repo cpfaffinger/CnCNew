@@ -7,6 +7,9 @@ namespace CnCNew.Net;
 public interface INetClock
 {
     long Milliseconds { get; }
+
+    /// <summary>The same clock in microseconds, for whoever measures finer than a tick (clock synchronisation, playback control); a clock that only knows milliseconds scales them.</summary>
+    long Microseconds => Milliseconds * 1000;
 }
 
 /// <summary>A clock that stands until it is told to move: tests, tools and the embedded server of a local game.</summary>
@@ -21,11 +24,17 @@ public sealed class ManualNetClock : INetClock
     }
 }
 
-/// <summary>One end of a connection: whole messages, delivered reliably and in the order they were sent on this connection.</summary>
+/// <summary>
+/// One end of a connection: whole messages, delivered reliably, once, and in the order they were sent - per channel. There are two channels (docs/NETWORK-PROTOCOL.md
+/// section 12): the ordinary one, and the urgent one for what must not wait behind a lost packet (the tick bundles). Order holds within a channel, not between them.
+/// </summary>
 public interface IConnection
 {
     bool IsOpen { get; }
     void Send(ReadOnlySpan<byte> message);
+
+    /// <summary>Sends on the urgent channel: delivered like any message, but a transport over a lossy network repeats it with everything that follows until it is acknowledged.</summary>
+    void SendUrgent(ReadOnlySpan<byte> message);
 
     /// <summary>The next message that has arrived, if any. A closed connection still hands out what arrived before it closed.</summary>
     bool TryReceive(out byte[] message);
@@ -42,8 +51,8 @@ public readonly record struct LinkQuality(int DelayMs = 0, int JitterMs = 0)
 }
 
 /// <summary>
-/// Connections inside one process. Every connection is reliable and ordered in itself; <b>between</b> connections, delay and jitter make messages overtake each other, as on a
-/// real network. The jitter is drawn from the network's own generator, seeded by the test - never from a stream of the simulation. With <see cref="LinkQuality.Instant"/> a
+/// Connections inside one process. Every connection is reliable and ordered per channel; <b>between</b> connections, and between the two channels of one, delay and jitter
+/// make messages overtake each other, as on a real network. The jitter is drawn from the network's own generator, seeded by the test - never from a stream of the simulation. With <see cref="LinkQuality.Instant"/> a
 /// message is there as soon as it is sent.
 /// </summary>
 public sealed class LoopbackNetwork(INetClock clock, uint seed = 1)
@@ -76,29 +85,39 @@ public sealed class LoopbackNetwork(INetClock clock, uint seed = 1)
 
     private sealed class End(LoopbackNetwork network, LinkQuality outgoing) : IConnection
     {
-        private readonly Queue<(long DueMs, byte[] Message)> _incoming = new();
-        private long _lastDue;
+        // One lane per channel; a message is handed out by due time, and among equals in the order of sending - so an instant link keeps the order across both.
+        private readonly Queue<(long DueMs, long Order, byte[] Message)>[] _incoming = [new(), new()];
+        private readonly long[] _lastDue = new long[2];
         private bool _closed;
 
         public End Peer { get; set; } = null!;
         public bool IsOpen => !_closed;
 
-        public void Send(ReadOnlySpan<byte> message)
+        public void Send(ReadOnlySpan<byte> message) => Send(message, 0);
+        public void SendUrgent(ReadOnlySpan<byte> message) => Send(message, 1);
+
+        private void Send(ReadOnlySpan<byte> message, int lane)
         {
             if (_closed || Peer._closed) return;
-            // Ordered per connection: a message is never due before the one sent before it.
-            var due = Math.Max(Peer._lastDue, network.Clock + outgoing.DelayMs + network.Jitter(outgoing.JitterMs));
-            Peer._lastDue = due;
-            Peer._incoming.Enqueue((due, message.ToArray()));
+            // Ordered per channel: a message is never due before the one sent before it on its lane.
+            var due = Math.Max(Peer._lastDue[lane], network.Clock + outgoing.DelayMs + network.Jitter(outgoing.JitterMs));
+            Peer._lastDue[lane] = due;
+            Peer._incoming[lane].Enqueue((due, network._sent, message.ToArray()));
             network._sent++;
             network.BytesSent += message.Length;
         }
 
         public bool TryReceive(out byte[] message)
         {
-            if (_incoming.Count > 0 && _incoming.Peek().DueMs <= network.Clock)
+            var lane = -1;
+            for (var index = 0; index < 2; index++)
             {
-                message = _incoming.Dequeue().Message;
+                if (_incoming[index].Count == 0 || _incoming[index].Peek().DueMs > network.Clock) continue;
+                if (lane < 0 || (_incoming[index].Peek().DueMs, _incoming[index].Peek().Order).CompareTo((_incoming[lane].Peek().DueMs, _incoming[lane].Peek().Order)) < 0) lane = index;
+            }
+            if (lane >= 0)
+            {
+                message = _incoming[lane].Dequeue().Message;
                 return true;
             }
             message = [];

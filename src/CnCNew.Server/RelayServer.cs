@@ -432,7 +432,10 @@ public sealed class RelayServer
         IntentsRelayed += bundle.Commands.Length;
         Recording.Bundles.Add(bundle);
         NextTick = tick + 1;
-        Broadcast(bundle);
+        // The urgent channel: a bundle must not wait behind a lost packet.
+        var bytes = MessageCodec.Encode(bundle);
+        foreach (var peer in _peers)
+            if (peer.Hello is not null) peer.Connection.SendUrgent(bytes);
     }
 
     private void TakeHash(Peer peer, HashReportMessage report)

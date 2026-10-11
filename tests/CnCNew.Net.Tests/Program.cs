@@ -31,6 +31,14 @@ run.Test("Match of one client and one computer player over the relay equals the 
 run.Test("Match of two and three clients with a computer player: session hashes equal in every tick, with and without delay and jitter, the recording replays", NetTests.SeveralClients);
 run.Test("A client whose world differs is found: at loading, before the first tick", NetTests.DifferingWorldIsFound);
 run.Test("Local relay: the room of a local game, and a saved state whose hash does not match is refused", NetTests.LocalRelayRoom);
+run.Test("UDP layout: every datagram kind survives its bytes; wrong magic, version, kind, length, padding and sections are refused", UdpTests.Layout);
+run.Test("UDP handshake: requests create no state and are answered in their own size; only a returned cookie connects; repeat, replace, expiry, full, timeout", UdpTests.Handshake);
+run.Test("UDP reliable channel: every message once and in order under delay, jitter, loss, duplication and reordering; the same from the same seed", UdpTests.ReliableChannel);
+run.Test("UDP urgent channel: a lost datagram costs no retransmission time; once and in order under loss; fragments; beside the reliable channel", UdpTests.UrgentChannel);
+run.Test("UDP time limits: keep-alive, measured round trip, timeout of a cut line, clean close", UdpTests.TimeLimits);
+run.Test("UDP garbage: noise, damaged datagrams, a lying length prefix and a wrong token are counted and change nothing", UdpTests.Garbage);
+run.Test("UDP on real sockets of the loopback interface with the real clock, bounded to ten seconds", UdpTests.RealSockets);
+run.Test("Real clock: monotonic in micro- and milliseconds; the fine timer", UdpTests.RealClock);
 run.Test("Layer rules: project references, no game data in the server, no clock but the injected one", NetTests.LayerRules);
 return run.Finish();
 
@@ -748,6 +756,8 @@ static class NetTests
         foreach (var project in new[] { "CnCNew.Net", "CnCNew.Server" })
             foreach (var (file, line, text) in CodeLines(root, project))
             {
+                // The one file that reads the real clock and asks the operating system for a finer timer.
+                if (file.EndsWith("CnCNew.Net/RealTime.cs", StringComparison.Ordinal)) continue;
                 if (clocks.IsMatch(text)) problems.Add($"{file}({line}): a clock, a timer or a thread of its own: {text.Trim()}");
                 if (lockstep.IsMatch(text)) problems.Add($"{file}({line}): a random source that is not the layer's own: {text.Trim()}");
             }
