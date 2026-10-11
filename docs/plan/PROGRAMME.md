@@ -28,7 +28,7 @@ ordered by stage and milestone, in [../handoffs/README.md](../handoffs/README.md
 - **Phase** (`Phase N`, brief `docs/handoffs/HANDOFF-PHASE<N>.md`): one unit of work with a brief, a starting state, a
   final report and an N+1 brief. The numbering of the phases is historical and continues (the next free number is 32).
   Phases 4 to 24 and 31 are worked off (31 ran before 24 by decision D-12 – phase numbers are identities, not
-  an order), 25 follows, 26 to 30 are planned.
+  an order), 26 follows, 27 to 30 are planned.
 - **Release gate** (`R1` to `R4`): the end of a stage as a human sees it: a package, an acceptance, documentation for
   humans. A stage is finished when its gate is passed, not when its last milestone is built.
 - **Status words** (the only ones used in the plan): **done** (built and measured, and accepted where only a human can
@@ -150,8 +150,8 @@ milestone status is updated in each stage document.
 | S3-M6 | Movement and pathfinding beyond the original | – | open (decision 3 reserved) |
 | S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | 30 (items 3, 4) | open |
 | **R3** | **Changes release:** every change selectable, measured and accepted | – | open |
-| S4-M1 | Protocol, room, relay in the process; local skirmish over the network path | 25 | **current** (starting point continued after Phase 24, not begun) |
-| S4-M2 | Dedicated server, UDP, clock synchronisation, eight clients | 26 | planned |
+| S4-M1 | Protocol, room, relay in the process; local skirmish over the network path | 25 | **done** (11 October 2026; `docs/NETWORK-PROTOCOL.md`) |
+| S4-M2 | Dedicated server, UDP, clock synchronisation, eight clients | 26 | **current** (starting point continued after Phase 25, not begun; needs the second physical machine) |
 | S4-M3 | Desync diagnosis, rejoin, spectators, server replay | 27 | planned |
 | S4-M4 | Server operation and security | 28 | planned |
 | S4-M5 | Multiplayer in the client, latency perception, acceptance with humans | 29 | planned |
@@ -197,7 +197,7 @@ The sequence from here:
    (S1-M11, prerequisite of Phase 24; brief `docs/handoffs/HANDOFF-PHASE31.md`, D-12; `docs/SIMULATION-CORE.md` §44). In parallel and at any
    time: the acceptance run by the project owner (`pwsh scripts/acceptance.ps1`), whose findings feed S1-M8 to S1-M11.
 2. **Done (Phase 24, 11 October 2026):** the session core (S2-M7). The skirmish savegame debt is closed; the gate into Stage 4 is open.
-3. **Now: Phase 25**, then 26 and 27 (S4-M1 to S4-M3): the network core up to rejoin and server replay. Needs the second machine from
+3. **Phase 25 done (11 October 2026); now Phase 26**, then 27 (S4-M1 to S4-M3): the network core up to rejoin and server replay. Needs the second machine from
    Phase 26 on.
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes

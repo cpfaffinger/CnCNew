@@ -226,7 +226,10 @@ UTF-8 JSON document with a fixed property order, like `SaveGame`:
 other definitions, another terrain or with a changed byte is refused with a message fit to show (`SaveGameException`).
 
 - `LiveMatch.Save(title)` writes the save of a running match; `LiveMatch.Restore(data, bytes, viewport)` loads the map the save names, restores the session and puts a fresh
-  presentation in front of it. Camera, selection, control groups and effects are not saved: the viewer starts at his start position with nothing selected.
+  presentation in front of it. Since Phase 25 the restored match is a room of the embedded relay that **starts from the saved state** (`docs/NETWORK-PROTOCOL.md` §4, §7):
+  the start request carries the state, its tick, its session hash and the commands every human has given so far; the relay starts its tick count there and compares the hash
+  the client reports after loading with the saved one. The session state inside a save is version 2 (its match description has encoding 2); a save written in Phase 24 is
+  refused with a message. Camera, selection, control groups and effects are not saved: the viewer starts at his start position with nothing selected.
 - **Shell:** the main menu's load list (`LoadGameScreen`) lists skirmish saves beside mission saves; loading one goes straight to `ShellPhase.InMatch` and hands the host a
   `ResumeMatchOutput`.
 - **Client:** the "Save/Load" button of the in-game menu (`QuitMenu.wnd`, Escape) saves a running skirmish to the slot `skirmish` and prints a line on the console. There

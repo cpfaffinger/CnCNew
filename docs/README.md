@@ -128,6 +128,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 
 | Document | Content |
 |---|---|
+| [NETWORK-PROTOCOL.md](NETWORK-PROTOCOL.md) | Protocol version 1 (Phase 25): versions and build identity, the 25 messages and their limits, room and relay, pacing, the lockstep client, the local skirmish over the embedded server, checks and measurements |
 | [MULTIPLAYER-PLAN.md](MULTIPLAYER-PLAN.md) | Programme tick rate, fixed point, multiplayer (Phases 18–29): decisions, target architecture, bottlenecks, open decisions of the project owner |
 
 Of this, the preparatory work is built (Phases 18 to 23); the multiplayer part itself (Phases 24 to 29) is planned.
@@ -145,7 +146,7 @@ Of this, the preparatory work is built (Phases 18 to 23); the multiplayer part i
 Every brief is written to be self-contained and carries a header block with stage, milestone and status
 ([plan/BRIEF-FORMAT.md](plan/BRIEF-FORMAT.md)). The index ordered by stage and milestone is
 [handoffs/README.md](handoffs/README.md). The briefs of Phases 4 to 23 are worked off and remain as documents of their
-time; Phase 31 (fidelity package A of Stage 1, before Phase 24 by decision D-12) and Phase 24 (the session core) are done, current is Phase 25; the briefs 25
+time; Phase 31 (fidelity package A of Stage 1, before Phase 24 by decision D-12) Phase 24 (the session core) and Phase 25 (protocol, room and relay in the process) are done, current is Phase 26; the briefs 26
 to 30 are prepared and are continued at the end of the respective previous phase in their section "Starting point"; the
 milestones of Stage 3 have no brief yet (`plan/STAGE-3-CHANGES.md`).
 

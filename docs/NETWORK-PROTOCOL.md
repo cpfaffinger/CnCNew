@@ -170,3 +170,64 @@ starts.
 No socket, no encryption, no authentication, no flood protection beyond the per-tick limit (Phase 26 and 28); no clock synchronisation and no adaptive buffer (26); no
 rejoin, no spectator joining a running match, no desync diagnosis below "this tick" (27); a dropped player's units stay as they are (27); pause and speed in a server-paced
 room may be asked by any player without a rule (29); the setup screen is not yet a room others can join (29).
+
+## 10. Measured (11 October 2026, 60 Hz, build `0b93f31`)
+
+**The multi-client probe** (`NetTool probe-suite game/content --minutes 2 --jobs 2`, 591 s): three eight-player maps (Twilight Flame, Fortress Avalanche, Iron Dragon) x the
+mixes 1+7, 2+6, 4+4, 8+0 (clients + computer players) x (no delay | 40 ms delay and up to 60 ms jitter each way, playback buffer 3 ticks) x twice = **48 runs of 7,200
+ticks, 48 of 48** with the session hashes of all clients equal after every tick, every tick agreed by the server, nothing discarded on either end, and the server's
+recording played as a replay ending in the clients' session hash. The two repeats of every run end in the same hash (0 of 24 pairs differ).
+
+| Mix (clients + computer players) | Pacing | Commands relayed in 2 game minutes (three maps) | Order to execution, no delay | with delay and jitter | Messages per run |
+|---|---|---|---|---|---|
+| 1 + 7 | client | 80 to 147 | 0 ticks | 0 ticks (the one client paces: a delayed bundle delays the tick, not the order) | 21,700 |
+| 2 + 6 | server | 246 to 388 | 1 tick | mean 13.0, at most 15 ticks | 29,100 |
+| 4 + 4 | server | 518 to 641 | 1 tick | mean 13.2, at most 15 ticks | 58,200 |
+| 8 + 0 | server | 918 to 1,141 | 1 tick | mean 13.1, at most 15 ticks | 116,400 |
+
+With a server-paced room an order is executed in the tick after it was given at best (it reaches the server while that tick is open); 40 ms each way, up to 60 ms of
+jitter and three ticks of buffer make it 13 ticks, around 217 ms. With delay and jitter a match is another match than without (the orders arrive in other ticks) - equal
+between its clients and between its repeats, not equal to the plain one. A match of eight clients for two game minutes takes 46 to 48 s of one core (eight worlds).
+
+**The cost of the network path in a local skirmish** (`NetTool local-cost`, Twilight Flame, eight players, 18,000 ticks, three alternating rounds): 621.7 µs per tick
+stepped directly, 644.1 µs through the relay (medians) - **+22 µs per tick, 3.6 %**, for three messages and 40 bytes per tick (tick request, empty bundle, hash report) and
+the session hash of every tick. Both end in the same session hash. **Order to execution in a local game: the same tick**, as before the phase (test *Match of one client*:
+largest distance 0 ticks; `HudTests`: replay bytes and session hash of a real match through the relay equal direct submission).
+
+**Memory of n worlds in one process:** 10.8 MB of managed memory per world of that match after one game minute (1, 2, 4 and 8 worlds: 10.8, 21.7, 43.4, 86.8 MB); catalogue
+and terrain are shared and not counted.
+
+**Not measured:** anything over a real network; more than two game minutes per probe run; the probe at 30 and 120 Hz on real maps (the synthetic matches of `Net.Tests` run
+at all three rates); the behaviour of a client that cannot keep up with a server-paced room.
+
+## 11. Closing measurements of Phase 25 (11 October 2026, state `71f477e`, Windows, Release)
+
+**Tier 4** (`pwsh scripts/test.ps1 -Tier full -KeepGoing`, 4,615 s): 40 of 40 steps ok - clean build 0 warnings; every test program; compat-check 713; `Simulation.Tests`
+at 30, 60 and 120 Hz, with real data (rate-equivalence suite 0 / 0) and the long run; `Game.Tests` and `Presentation.Tests` with real data at 30, 60 and 120 Hz - every
+skirmish of them through the embedded relay; `Net.Tests` at 30, 60 and 120 Hz; `input-manifest check` identical; `reference-manifest check --set full` 50 of 50
+identical (a second time in the tier 2 run after the manifest was written); the three client checks (`check-spectator`, `check-dozer-build -Quick`,
+`check-build-hotkeys`), which play through the relay; `check-match`; `session-check` 19 of 19; `net-probe` (four clients and four computer players with delay and jitter);
+the staged scenes. **Campaign** (missions stay local): reachability clean 24/24 and 24/24, `audit` 24 of 24 identical on a second run and after save/restore with end
+probes 13/24 and 15/24, `drive` victory 24/24 and defeat 24/24.
+
+**Performance of the simulation** (`scripts/perf-profile.ps1`, the whole profile with the binaries of `e96d93f` and of this state one after the other in the same hour;
+the profile steps sessions directly, so it measures whether the phase touched the tick, not the network path - that is §10): every run ends in the same final hash on both
+sides.
+
+| Run | Mean per tick before / after | Change | Maximum before / after |
+|---|---|---|---|
+| small, 2 players | 216.0 / 210.7 µs | -2.4 % | 44.5 / 44.1 ms |
+| medium, 2 players | 265.2 / 260.7 µs | -1.7 % | 45.9 / 44.6 ms |
+| medium, 4 players | 491.4 / 495.3 µs | +0.8 % | 48.7 / 45.7 ms |
+| large, 4 players | 366.6 / 360.2 µs | -1.7 % | 45.8 / 45.7 ms |
+| large, 8 players | 839.1 / 847.0 µs | +0.9 % | 140.4 / 145.2 ms |
+| `MD_USA05`, 100 s / 300 s | 2,060 / 2,054 and 1,808 / 1,838 µs | -0.3 % / +1.6 % | 132 / 127 and 126 / 125 ms |
+| `MD_GLA05`, 100 s / 300 s | 2,917 / 2,938 and 2,607 / 2,598 µs | +0.7 % / -0.3 % | 148 / 127 and 128 / 125 ms |
+
+The means lie within -2.4 % and +1.6 % with both signs: the phase is not measurable in the tick of the simulation. The tick maximum of the eight-player run (140 to
+145 ms, decision D-3) is unchanged; a client-paced room simply takes that long for that tick, a server-paced one closes eight to nine ticks meanwhile and the client
+catches up afterwards (not measured over a real network).
+
+**Not run:** the determinism matrix and Linux; the survey over 320 matches; the commands-only agent; the multi-client probe at 30 and 120 Hz and for more than two game
+minutes; `sync-perf` of the game layer; `scripts/acceptance.ps1`. **The second physical machine (register E1, decision D-10) is still open.** **No human has seen** a match
+through the relay, a team set in the setup screen, or a skirmish resumed through a room.

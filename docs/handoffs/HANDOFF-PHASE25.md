@@ -1,5 +1,5 @@
 > **Stage:** 4 – Multiplayer · **Milestone:** S4-M1 Protocol, room, relay in the process · **Phase:** 25
-> **Status:** current – starting point continued on 11 October 2026 after Phase 24 (section "Starting point after Phase 24"), not begun
+> **Status:** done on 11 October 2026 – `84a9459` (simulation identifier in the description) with manifest `e0d6e01`, `64d632b` (protocol, loopback, client, relay server), `5f2406a` (lockstep driver, embedded server, local skirmish over the relay, multi-client probe), `0b93f31` (the setup as room, direct path removed); result in `docs/NETWORK-PROTOCOL.md`
 > **Predecessor:** HANDOFF-PHASE24.md · **Successor:** HANDOFF-PHASE26.md · **Results in:** docs/NETWORK-PROTOCOL.md (new), docs/GAME-SHELL.md, docs/ARCHITECTURE.md
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 

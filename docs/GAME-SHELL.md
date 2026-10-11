@@ -485,3 +485,22 @@ For this `tools/CnCNew.UiRenderTool` draws `flow-skirmish-after-map-back`, `flow
 * The **map selection**: which fields of the setup stay visible (only the name column and the lower fields) is read from `showSkirmishGameOptionsUnderlyingGUIElements`, not seen.
 * The **challenge medallions** (size, highlight, selected medallion) and the positions on the world map.
 * How conspicuous the black behind it appears without the 3D shell map of the original.
+
+## 14. The skirmish setup is a room (Phase 25)
+
+Since Phase 25 a local skirmish runs through the relay like a network match (`docs/NETWORK-PROTOCOL.md` §7): `LiveMatch.Create` opens an embedded server, the setup becomes
+the settings of its room, the viewer takes his seat, and the server starts the match and hands back the match description. The setup screen is that room's face, for one
+human:
+
+| Box of `SkirmishGameOptionsMenu.wnd` | Travels as | Effect |
+|---|---|---|
+| `ComboBoxPlayerTemplate<n>` (army) | slot faction; "Random" as an empty name | "Random" is decided by the seed of the description on every machine alike, not by the screen |
+| `ComboBoxTeam<n>` | slot team (0: none, 1 to 4) | slots of one team are allies in the simulation (they do not attack each other and win together) |
+| `ComboBoxColor<n>` | slot colour index | **carried, not drawn**: the presentation still takes a player's colour from his faction (`TeamColors.Resolve`) |
+| `ComboBoxPlayer<n>` (open, closed, computer army) | whether the slot takes part | open and closed slots take no part; with the original AI the three armies are its strengths |
+| `ComboBoxStartingCash` | start money | as before |
+| (no box) | start position | the slots that take part take the map's start positions in their order; the layout's start position markers stay hidden |
+
+`MatchSetup.Details` holds team, colour and start position per slot; `MatchSetup.LocalSlot` names the viewer's slot (0 from the screen). Nobody else can join this room:
+the screen for joining over a network is Phase 29. Test: `ShellTests` (the team and colour boxes arrive in the setup), `LiveMatchTests` (a viewer in the second slot, team
+and colour in the description, allies in the simulation). Not seen by a human.

@@ -76,7 +76,15 @@ compatibility with old mods and savegames.
 
 ## 3. Milestones
 
-### S4-M1 Protocol, room, relay in the process — planned (Phase 25)
+### S4-M1 Protocol, room, relay in the process — done (Phase 25, 11 October 2026)
+
+- **Result** (`docs/NETWORK-PROTOCOL.md`): every deliverable below is built. Acceptance as measured: the local skirmish runs through the embedded relay only (a layer
+  rule forbids the client any other way), with the replay bytes and the session hash of direct submission and every order executed in the tick it was given; the
+  reference manifest is unchanged in every result quantity (one manifest commit for the description's encoding: 20 of 1,925 fields); the multi-client probe is
+  hash-identical in 48 of 48 runs (1, 2, 4 and 8 clients; 1+7, 2+6, 4+4, 8+0; three eight-player maps; with and without delay and jitter; twice each) and every recording
+  replays into the clients' session hash; the dependency rules are a test; the server runs without game data. **Named rests:** no socket and no second process (S4-M2);
+  the playback buffer is fixed; the colour of a slot is carried, not drawn; AI strength is counted, not obeyed; a client slower than a server-paced room falls behind
+  unmeasured; nobody has seen a match through the relay in a window.
 
 - **Deliverables (`HANDOFF-PHASE25.md`):** simulation version (commit hash and "modified" flag as assembly metadata) in
   match description and handshake; `docs/NETWORK-PROTOCOL.md` first, then versioned binary messages with upper limits

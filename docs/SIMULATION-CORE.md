@@ -3206,3 +3206,23 @@ restore 49 ms.
 16 pairings at 120 Hz; `session-check` at 30 and 120 Hz (the synthetic session tests run at all three rates); `scripts/acceptance.ps1`; the performance of the game layer
 (`sync-perf`) with the command path in it. **No human has seen or done any of it:** saved a skirmish from the menu, loaded one from the load list, or played with
 `--input-delay-ticks`.
+
+## 46. Phase 25: what the network layers needed from the simulation (11 October 2026)
+
+The protocol, the relay and the client are `docs/NETWORK-PROTOCOL.md`. The simulation changed in four small places, none of them behaviour:
+
+- **`MatchDescription.SimulationId` (encoding 2).** The description states the build it was opened for: the commit and "modified" flag of whoever opened the match
+  (`CnCNew.Net.BuildIdentity`; the simulation does not know its own build). `Resolve(..., simulationId)` refuses a stated identifier other than the caller's. **Empty means
+  "not stated"** - a match that never leaves its process -, which is what `SkirmishMatchSession.Describe` writes for tools, tests and the reference manifest; otherwise every
+  recorded description, and with it `commandStreamSha256` of 20 manifest runs, would change with every commit. Encoding 1 is refused; the session state (`Save`) is version 2.
+  **Manifest (`e0d6e01`, one cause):** 20 of 1,925 fields, the `commandStreamSha256` of the runs whose replay carries a description; every result quantity of all 50 runs
+  unchanged.
+- **One command on its own:** `ReplayFormat.DecodeCommand` and the offsets of tick, type, player and sequence in the bytes of a command - the relay stamps player and tick
+  there without decoding (`CnCNew.Net.CommandWire`).
+- **`SkirmishReplay.Play(audit: false)`** for a recording that holds the humans' commands only (the relay's: it never sees a computer player or a system command); the
+  playback then produces system and computer players without comparing them, and its final session hash is what is compared.
+- **`SkirmishMatchSession.AiOptionsOf`** (the options of the computer player of a slot, also what a command generator of the multi-client probe takes) and
+  **`HumanCommandCounts`** (what a relay continues its order numbers from when a saved match is resumed).
+
+The rule of §45.5 holds across machines: the sequence number of a command is assigned by the session at submission. On the wire it is 0; the relay's order number says in
+which order a player's commands are submitted, and that order - the bundle's - is the same on every client.

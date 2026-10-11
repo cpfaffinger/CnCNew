@@ -45,7 +45,9 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
 - **Multiplayer:** planned only. Built is the preparatory work (measurement basis, performance, tick rate as a value of the world, fixed point,
   60 Hz) and, since Phase 24, the session core: the computer players are part of the hashed and saved session state, a running skirmish can be saved and
   continued, a match is started from one description, orders pass a two-stage command path and a tick driver releases the ticks
-  (`docs/SIMULATION-CORE.md` §45, `docs/PRESENTATION-INPUT.md` §13). Protocol and server follow from Phase 25 on.
+  (`docs/SIMULATION-CORE.md` §45, `docs/PRESENTATION-INPUT.md` §13). Since Phase 25 there is a protocol, a relay server as a library and a lockstep client
+  (`docs/NETWORK-PROTOCOL.md`), and **the local skirmish already runs through them**: an embedded server, a connection inside the process, one client. Several
+  clients with a world each stay hash-identical in one process. No byte has left a machine yet: sockets and the standalone server follow in Phase 26.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

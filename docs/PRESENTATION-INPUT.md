@@ -564,3 +564,17 @@ way of a networked campaign, which is not in scope.
 `SimulationWorld.LogicRandom` is public and nothing outside the simulation draws from it; in lockstep a single draw from the presentation would be a desync. The source test of
 the game layer (`Game.Tests`, `SourceRuleTests`) now forbids the name in `CnCNew.Game`, `CnCNew.Presentation`, `CnCNew.Ui` and `CnCNew.Client.Stride`; the tools that read its
 state to compare two runs are outside those projects.
+
+### 13.6 Since Phase 25: the scheduler and the driver of a skirmish are the relay's
+
+A skirmish no longer uses the local scheduler and the local driver: `LockstepDriver` (`CnCNew.Game.Lockstep`) is both, on top of the relay's client
+(`docs/NETWORK-PROTOCOL.md` §6). What changed in this document's terms:
+
+- `ITickDriver.IsDue(tick)` is asked first; then the per-tick bookkeeping runs (`BeforeTick`, **once per tick**); then `TryReleaseTick` closes or awaits the tick. So the
+  commands standing orders give in a tick still reach that tick's bundle, and a tick that has to wait for its bundle does not get its bookkeeping twice.
+  `ITickDriver.TickCompleted(tick)` follows the step (the hash report).
+- A bundle carries the commands of every player. `CommandPath` submits them all; a command of another machine has receipt 0 and no pre-check to deviate from, and
+  `LiveGame` raises `CommandIssued` and `CommandResolved` for the viewer's own commands only.
+- The lockstep probe of a skirmish (`LiveMatch.UseInputDelay`, `--input-delay-ticks`) lives in the driver: it holds every order N ticks before it sends it.
+- `SkirmishSessionCommandSink` and `MissionCommandSink` are removed. A mission, a staged scene and a headless test use `CommandPath` with the local scheduler and
+  `LocalTickDriver`, or submit to the session themselves.

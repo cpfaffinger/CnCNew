@@ -63,7 +63,8 @@ those of `scripts/test.ps1`; the commands are printed by `-Plan`.
 | `presentation` | `CnCNew.Presentation`, its tests, `PresentationTool` | `presentation` | `presentation-content`, `game` |
 | `ui` | `CnCNew.Ui`, its tests, `UiRenderTool` | `ui` | `game` |
 | `audio` | `CnCNew.Audio`, its tests | `audio` | `audio-content`, `game` |
-| `game` | `CnCNew.Game`, its tests, `CampaignTool` | `game-focus`: the suites of the touched folder (below) | `game` (all suites) |
+| `net` | `CnCNew.Net`, `CnCNew.Server`, `Net.Tests`, `NetTool` | `net` (`Net.Tests`, 60 Hz) | `net-30`, `net-120`, `net-probe` (four clients and four computer players on a real map with delay and jitter), `game` |
+| `game` | `CnCNew.Game`, its tests, `CampaignTool` | `game-focus`: the suites of the touched folder (below) | `game` (all suites), `net` |
 | `client` | `CnCNew.Client.Stride` | – (build) | `check-spectator`, `check-dozer`, `check-hotkeys` |
 | `scripts` | `scripts/` | – : run the script you changed | – |
 | `docs` | `docs/`, `*.md` in the root | – | – |
@@ -178,6 +179,10 @@ Since Phase 24 tier 4 contains two steps of the session core: `check-match` (`sc
 one description; also in the gate of `simulation`) and `session-check` (`SimTool session-check`: the 16 pairings and three eight-player maps of the manifest as sessions that
 are saved, restored and continued, and whose replay is played with the computer players deciding again; around 5 to 6 minutes with three jobs). **A change of the command
 path, the session hash, the session state, the match description or the replay is cross-cutting (§4): tier 4 before its push.**
+
+Since Phase 25 the area `net` exists (table in §3), `simulation` and `game` ask for `net` in their gate, and tier 4 contains `net`, `net-30`, `net-120` and `net-probe`.
+**The protocol, the relay, the lockstep driver and everything of §8's cross-cutting list need tier 4 before a push.** The whole multi-client matrix
+(`NetTool probe-suite`, 48 runs, around ten minutes with two jobs) is a check by hand at the completion of a phase that touched the network layers.
 
 What needs a human (pictures, sound, playability) is driven by `scripts/acceptance.ps1` (`docs/ACCEPTANCE.md`) and is
 never claimed by a test run.
