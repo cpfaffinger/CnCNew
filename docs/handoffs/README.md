@@ -3,12 +3,12 @@
 As of: 10 October 2026, state `2777a90`. The plan is [`../plan/PROGRAMME.md`](../plan/PROGRAMME.md); the format of a brief
 is [`../plan/BRIEF-FORMAT.md`](../plan/BRIEF-FORMAT.md). Every brief carries a header block with stage, milestone and
 status; the worked-off briefs keep their text as documents of their time (their numbers are outdated – the yardstick is
-`baselines/reference-manifest.json`). Phases 4 to 23 and 31 are worked off (31 ran before 24, D-12), **Phase 24 is current**, 25 to 30 are planned. The
+`baselines/reference-manifest.json`). Phases 4 to 24 and 31 are worked off (31 ran before 24, D-12), **Phase 25 is current**, 26 to 30 are planned. The
 briefs of Phases 1 to 3 were never written as files (their scope and acceptance are in `docs/IMPLEMENTATION-PLAN.md`
 §1–§3).
 
-**The next brief to work on:** [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md) – the session core (S2-M7); its "Starting point" was continued with the state
-measured at the end of Phase 31 (the fidelity package A of Stage 1, [HANDOFF-PHASE31.md](HANDOFF-PHASE31.md), done on 10 October 2026). Phase numbers are identities, not an order: 31 ran before 24 by
+**The next brief to work on:** [HANDOFF-PHASE25.md](HANDOFF-PHASE25.md) – protocol, room and relay in the process (S4-M1); its "Starting point" was continued with the state
+measured at the end of Phase 24 (the session core, [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md), done on 11 October 2026; before it Phase 31, the fidelity package A of Stage 1, [HANDOFF-PHASE31.md](HANDOFF-PHASE31.md), done on 10 October 2026). Phase numbers are identities, not an order: 31 ran before 24 by
 decision of the project owner.
 
 ## Stage 1 – Port (`../plan/STAGE-1-PORT.md`)
@@ -45,7 +45,7 @@ decision of the project owner.
 | 22 | [HANDOFF-PHASE22.md](HANDOFF-PHASE22.md) | S2-M4 | Fixed point Q39.24 | done 7 October 2026 |
 | 23 | [HANDOFF-PHASE23.md](HANDOFF-PHASE23.md) | S2-M5 (+ S3-M2, S1-M13, Stage 1 fidelity fixes) | Time-step invariance, 60 Hz as the default | done 9 October 2026 with named limits |
 | – | `docs/TESTING.md`, `scripts/test.ps1` | S2-M6 | Test strategy in four tiers | done 10 October 2026 |
-| **24** | [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md) | **S2-M7** | Session core: AI in the state, skirmish savegame, match description, command path, tick source | **current** – starting state measured after Phase 31, not begun |
+| **24** | [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md) | **S2-M7** | Session core: AI in the state, skirmish savegame, match description, command path, tick source | done (11 October 2026): `8acde11`, `6ba4197`, `177c952`, manifest `63ac97c`, `e128cc3`; `docs/SIMULATION-CORE.md` §45 |
 | – | – | S2-M8 | Engine follow-ups (tick maximum, hash constructions, allocation, thread, formats, documentation) | open backlog; briefs when scheduled |
 
 ## Stage 3 – Changes (`../plan/STAGE-3-CHANGES.md`)
@@ -68,7 +68,7 @@ phase number is 32.
 
 | Phase | Brief | Milestone | Topic | Status |
 |---|---|---|---|---|
-| 25 | [HANDOFF-PHASE25.md](HANDOFF-PHASE25.md) | S4-M1 | Protocol, room, relay in the process; local skirmish over the network path | planned |
+| **25** | [HANDOFF-PHASE25.md](HANDOFF-PHASE25.md) | **S4-M1** | Protocol, room, relay in the process; local skirmish over the network path | **current** – starting point continued after Phase 24, not begun |
 | 26 | [HANDOFF-PHASE26.md](HANDOFF-PHASE26.md) | S4-M2 | Dedicated server, UDP, clock synchronisation, eight clients | planned |
 | 27 | [HANDOFF-PHASE27.md](HANDOFF-PHASE27.md) | S4-M3 | Desync diagnosis, rejoin, spectators, server replay | planned |
 | 28 | [HANDOFF-PHASE28.md](HANDOFF-PHASE28.md) | S4-M4 | Server operation and security | planned |

@@ -1063,6 +1063,9 @@ thus, via the deterministic cascade, the entire further course of the game – h
 
 ### Skirmish savegame: decision (item 6)
 
+> **Superseded by Phase 24 (§45.1 and §45.3):** the state of `SkirmishAi` is part of the session state, `SkirmishMatchSession.Save`/`Restore` exist and `CreateSave()` is gone.
+> What follows is the decision of Phase 10 as it stood.
+
 **Decision: no saving of a running skirmish session as a resumable live game in this phase; `SkirmishMatchSession.CreateSave()` refuses this loudly and documented,
 instead of writing a silently incomplete savegame.**
 
@@ -3018,3 +3021,188 @@ within one percent, the allocation is 13 % higher (not broken down; hulls and th
 **Not run:** `scripts/perf-profile.ps1` (the quiet profile with its comparison), the mission performance runs, the determinism matrix and the Linux run at this state, the survey
 over 320 matches and the distribution comparison 30 against 60 Hz, the commands-only agent, the 16 pairings at 120 Hz, `scripts/acceptance.ps1`. **No human has seen any of it:**
 riders walking out of a transport, a group spreading at its destination, a death explosion with its hull - the scene audits measure positions, events and objects, not the picture.
+
+## 45. Phase 24: the session core (11 October 2026)
+
+Stage 2, milestone S2-M7 (`docs/plan/STAGE-2-ENGINE.md`), brief `docs/handoffs/HANDOFF-PHASE24.md`. The phase builds no network. It makes a skirmish session something that can be
+handed to another machine: its whole state - the computer players included - is hashed and saved, its initial state follows from one value, its recording can be played with the
+computer players deciding again, and its commands pass through a path that does not care in which tick they are executed. §45.1 to §45.4 are the simulation's part; the command
+path and the tick source are `docs/PRESENTATION-INPUT.md` §13, the savegame of the game layer `docs/CAMPAIGN-AND-SAVEGAMES.md` §8.
+
+**No behaviour changes.** The world hash, the world snapshot and every run of the reference manifest are what they were (end ticks, winners, end hashes, chains, command counts
+of all 50 runs); the one manifest commit of the phase changes 23 of 1,925 fields - the 22 `commandStreamSha256` values and `replayFormatVersion` -, because the replay container
+carries one more header field (§45.4). New next to the world hash is the session hash (§45.1).
+
+### 45.1 The computer players are session state (`SkirmishAi.State.cs`, `SkirmishMatchSession.StateHash`)
+
+`SkirmishAi` kept around fifty fields of its own outside every snapshot and hash (register E11 of `docs/MULTIPLAYER-PLAN.md`). `SkirmishAi.Describe(IStateWriter)` now writes
+every one of them, `Load(IStateReader)` reads them into an AI that was constructed with the same options over the restored world, and `StateHash()` is the hash over the same
+description - one routine for both, like every module of the world, so what is hashed and what is saved cannot drift apart.
+
+- **What is state:** the random stream; the sequence counter; budget, reserve and the placement counter; the army's state (attacking, wave, thresholds, rally point, army
+  goal, objective, standing army order); the memories (enemies, warehouses, sightings); the timers and tables (retry, power and science back-off, orders, idle since, site
+  watch, boarding, rally set, in-flight production, cleared hints, given-up objectives, bad spots); the scouting state (target, seen cells, unreachable cells); the owner's
+  settings (`Objectives`, `CommitEverything`, `ObjectiveReserve`); the counters of `Stats`. **Also state, although they are remembered answers:** what a producer offers and
+  which structures a role may build (`_producible`, `_structureCandidates`, `_builderTemplates`) - they are asked of the world when first needed, and
+  `SimulationWorld.BuildableOf` can be overridden by a script, so a restored AI must go on with the answer it had.
+- **What is not state** is listed in `SkirmishAi.NotState` with its reason (21 entries): the world, catalogue, options and what follows from them; `_tick` (set at the start of
+  every update); the five lists an observation rebuilds before a think reads them; three caches that are pure functions of templates; the cache of the hash.
+- **Order.** A map or a set is written sorted by its key - nothing acts in its order. A list (`_badSpots`, `_inFlight`) is written in its own order. The one place that
+  enumerated a hash table (`_boarding`, to drop expired entries) is now an ordered table; no decision depended on it, and no hash of an AI run changed.
+- **Two source tests** keep this true when the class grows (model: "every `IUpdateModule` stores `nextWake`"): *the state of SkirmishAi names every field* - every instance
+  field is written by `Describe` and read by `Load`, or it is in `NotState`; an entry that names no field fails - and *SkirmishAi never acts in the order of a hash table* - a
+  `Dictionary` or `HashSet` field may only be used through its keyed members and `Count`.
+- **The hash is kept** between the updates that observe (every fifth original frame per AI): asking for it in every tick costs a comparison.
+
+`SkirmishMatchSession.StateHash()` is the **session hash**: the world hash, the hash of every computer player in player order (0 for a human), the victory tick, the winner, the
+end tick, the system's sequence counter and every human's. It is what two machines compare; the world hash alone would notice a deviation in an AI only when the worlds have
+drifted apart. The world hash itself is unchanged and stays what the reference manifest records.
+
+**The other sorted writes of the script VM** (the open point of §44.5) were examined: `ScriptEngine.Describe` and the descriptions of its parts contain no `.Order()` or
+`OrderBy` any more - every collection is written in its own enumeration order, and all of them are ordered collections or lists. The member order of a team was the only case.
+
+**Thinking times.** An AI observes every 5 original frames and thinks every 15, shifted by `player mod 5` frames. With eight players at most two think in the same frame
+(players 1 and 6, 2 and 7, 3 and 8); never all. A shift by `player mod 15` would separate them all and changes every run with more than four players; it was not made
+(measured cost in §45.6).
+
+### 45.2 The match description (`MatchDescription`)
+
+An immutable value with **one binary encoding** (`Encode`/`Decode`, little endian, magic `CNCMATCH`, encoding version 1) and a fingerprint (SHA-256 over the bytes). It holds
+everything a machine needs to build tick 0 and nothing else:
+
+| Field | Meaning |
+|---|---|
+| `CommandTableVersion`, `WorldStateVersion` | the simulation version; a machine with another one refuses the match |
+| `TickRate` | 30, 60 or 120; the catalogue must be built for it |
+| `MapPath`, `TerrainFingerprint` | the map; the fingerprint covers heights, cells, water, waypoints and every map object and is what is checked |
+| `DefinitionFingerprint` | the definitions; checked against the fingerprint the caller passes |
+| `Seed`, `AiSeed` | the world's streams and every "random" choice of the description; the computer players' own streams (`AiSeed + (player - 1) * 7919`) |
+| `MaxTicks` | the length of the match in ticks of `TickRate` |
+| `StartMoney`, `GraceFrames`, `SciencePointIntervalFrames` | the rules; the two times in logic frames of the original, the same game time at every rate |
+| `Slots` | per slot: kind (closed, human, computer, spectator), faction or empty for "random", team, colour or -1, start position or -1, AI strength (0 to 2), army composition or -1 |
+
+`Resolve(catalog, terrain, definitionFingerprint)` decides what the description leaves open and returns a `ResolvedMatch`: **random factions and start positions are drawn from
+a stream seeded by the description's seed** (factions first, then positions, in slot order) - never by the caller; a random colour is the lowest free index (no draw: only that
+every machine shows the same one matters). The slots that take part are numbered from player 1 in slot order; a closed slot and a spectator take no number and no start position.
+A computer slot that asks for a strength other than medium is **counted** (`ResolvedMatch.AiStrengthsIgnored`, a note of the session), not obeyed: the built-in AI has one
+strength. **The local player is not part of the description** - who plays at this machine is a matter of the presentation.
+
+`SkirmishMatchSession.Start(description, catalog, terrain, mapObjects, checkpointInterval, definitionFingerprint)` is the entry. The older call with options and slots
+(`Start(options, catalog, fingerprint, terrain, mapObjects, slots)`) is kept as a shorthand for tools and tests: it writes the description (`Describe`: slot `i` is player
+`i + 1` at start position `i`) and starts from it, and it refuses a participant that is not the one the catalogue offers for its faction.
+
+**Deviation from the brief:** `MaxTicks` is a tick count, not game time. The description names its rate, so the value is unambiguous, and the budgets of the tools and of the
+reference manifest are exact tick counts that a value in frames could not express at 60 Hz. And the description carries two seeds, not one, because the existing runs use two
+independent ones; deriving one from the other would change every AI run.
+
+**Tests:** *Match description* (two tests: encoding and decoding, each of twenty field changes changes the fingerprint; two sessions from the same bytes agree in the session
+hash at tick 0 and over 600 ticks, random choices by the seed, numbering, refusals) and `scripts/check-match-description.ps1` (tier 3): one process writes the bytes of a match
+with a random faction and random start positions (`SimTool match-describe`), **three further processes** build it from the 292 bytes and print the resolved slots and the
+session hash at tick 0 and tick 1,800 (`SimTool match-start`) - one of them started with another tick rate on its command line; the outputs are equal line for line.
+
+### 45.3 The session state (`SkirmishMatchSession.Save` / `Restore`)
+
+`Save()` writes one canonical document (format `cncnew-skirmish-state`, version 1): the tick rate and the two fingerprints, the match description (its bytes and its
+fingerprint), the session's counters (winner, victory tick, end tick, the system's and the humans' sequence counters, notes), one state block per computer player, the
+**recording so far** (so the continued match still yields its whole replay) and the world snapshot, with the session hash over all of it. `Restore` rebuilds the session and
+refuses a document of another version, rate, definitions or terrain, and one whose restored state does not hash to the recorded session hash. `CreateSave()`, which threw since
+Phase 10 (§18, "Skirmish savegame: decision"), is gone; that decision is superseded.
+
+**Tests.** *Session state: a skirmish saved at any tick continues identically* (synthetic match, save points at frame boundaries, inside a frame, in a think tick and the tick
+before it): every restored session writes the bytes it was read from, has the session hash of the uninterrupted one after every tick, ends alike and yields the same replay
+bytes. *The session hash covers the AI*: one remembered value changed in the saved AI block is refused by the integrity check. A check by mutation: leaving one field out of
+`Load` makes the continuation test fail at the first restore.
+
+**The acceptance run** is `SimTool session-check` (tier 4): the 16 pairings of the manifest's AI table and its three eight-player maps (five minutes each) as live sessions,
+saved at up to six ticks (600 to 66,671; three of the six lie inside a frame at 60 Hz), every save restored and continued to the end of the match.
+
+| | Result (11 October 2026, 60 Hz) |
+|---|---|
+| runs | 19 of 19 continue identically from every save |
+| saves | 77 |
+| continued ticks compared | 2.56 million, every one with the session hash of the uninterrupted session |
+| largest save | 3.5 MB (eight players on Twilight Flame); two players: 0.4 to 0.8 MB |
+| replay of every continued session | byte-identical to the uninterrupted one |
+
+A session of the original AI (`ScriptedSkirmishSession`) had its state in hash and savegame from the beginning and is untouched; one of its slots played by the built-in AI
+still makes it refuse to save (not converted - the built-in AI could now be written there too).
+
+### 45.4 The replay (`ReplayFormat` 14, `SkirmishReplay`)
+
+**Format 14:** the header of a replay carries the match description (after the checkpoint interval: u32 length, then the canonical bytes; length 0 for a recording of a bare
+world such as the reference match and the stress test). Version 13 is refused.
+
+The content of the file is unchanged: every command, the rejected ones included, ordered by (tick, player, sequence). What changed is what a playback can do with it:
+
+- `ReplayRunner.Run` stays the playback of the **bare world**: it submits every recorded command and needs no AI. It is what the reference manifest verifies.
+- `SkirmishReplay.Play(replay, catalog, definitionFingerprint, terrain, mapObjects)` plays the replay **as a match**: the description builds the session, the commands of
+  the human players are fed in at their ticks, and the system and the computer players run along and decide again. Their recorded commands are not fed in - they are the
+  **audit trail**: what the playback produces in a tick is compared with what the recording holds for it, command by command, by their encoded bytes
+  (`ReplayFormat.EncodeCommand`; a command with a list compares by reference otherwise). The first difference is reported with tick, player, the recorded and the played
+  command (`ReplayDeviation`), and the playback stops there unless told otherwise.
+
+**Deviation from the brief:** the brief names the commands "of the humans and of the system" as the content that is fed in. The system's commands (start money, start objects,
+warehouses, science points) follow from the description and are produced by the session itself, so they are audited like the AI's, not fed in.
+
+**Tests.** *Skirmish replay* (synthetic match of a human who gives group orders against a computer player): the playback produces every recorded command of system and AI,
+ends in the world hash and session hash of the recorded match and in the world of the bare playback; with one recorded AI order removed the audit names its tick and player
+and stops in that tick; with one human order removed the match is another match; a replay without a description and one for other definitions are refused.
+`SimTool session-check` plays the replay of each of its 19 runs this way: no deviation, between 814 and 3,823 commands audited per run.
+
+### 45.5 The pre-check of a command (`SimulationWorld.Check`)
+
+`Check(command)` answers what `Submit` would answer for a command against the world as it is now, without its tick and its sequence number (`Validate` with the envelope left
+out: late, sequence zero, duplicate, out of order). It changes nothing - no counter, no event, no pending command, no draw. It is the first stage of the two-stage command
+path (`docs/PRESENTATION-INPUT.md` §13); only the answer at submission counts. Test (*Command path: a pre-check changes nothing*): state hash and snapshot bytes are the
+same before and after 10,000 pre-checks of accepted and rejected commands, and the pre-check gives the reason the submission gives.
+
+**The order inside a tick.** The world executes a tick's commands sorted by (player, sequence), whatever the order of submission; validation of one command does not depend
+on the pending commands of other players. What must be the same on every machine is therefore *which* commands are submitted for a tick, and each player's own order - the
+bundle of the command path guarantees both. That the order is not free is shown by a control in the test *the order of two players' commands inside a tick*: two group orders
+to one point, executed in the other order, end in another world (a group order takes its free places when it is executed, §44.2).
+
+**Sequence numbers** are assigned at submission by the session, per player, in the order of submission. Every player has one source - a human's orders arrive through the
+bundle, a computer player's from its AI, the system's from the session -, so the rule "strictly increasing per player" holds without separate number ranges; in a mission the
+human shares the session's counter with the scripts and is numbered at submission like them. Test: *sequence numbers rise strictly per player whatever the sources and the delay*.
+
+### 45.6 Closing measurements (11 October 2026, state `e96d93f`, Windows, Release)
+
+**Tier 4** (`pwsh scripts/test.ps1 -Tier full -KeepGoing`, 4,192 s): 36 of 36 steps ok - clean build 0 warnings; every test program; compat-check 713; content against its
+manifest; known vulnerabilities; `Simulation.Tests` at 30, 60 and 120 Hz, with real data (with the rate-equivalence suite, 0 / 0 in ten groups) and the long run; `Game.Tests`
+and `Presentation.Tests` with real data at 30, 60 and 120 Hz; `input-manifest check` identical; `reference-manifest check --set full` 50 of 50 identical (a second time in the
+tier 2 run after the manifest was written); the three client checks through the new command path (`check-spectator`, `check-dozer-build -Quick`, `check-build-hotkeys`); the
+two new steps `check-match` and `session-check`; the three staged scenes. A first tier 4 run was stopped after it found a defect of a new test at 30 Hz (its save points were
+tick numbers; `e96d93f` makes them game time) - the tier that found it was run again in full. **Campaign** (60 Hz): reachability victory clean 24 and defeat clean 24;
+`audit` 24 of 24 identical on a second run and after save/restore, end probes 13/24 and 15/24; `drive` (120,000 ticks) victory 24/24 and defeat 24/24 - the values of before
+the phase (§44.6).
+
+**Performance: `scripts/perf-profile.ps1`**, the whole profile once with the binaries of the state before the phase (`bab51c3`) and once with this state, one after the other
+in the same hour, CPU load 2 % before every run, nothing else running (`scripts/perf-compare.ps1`; 60 Hz; matches of 30 game minutes with their replay, missions of 100 and
+300 game seconds). **Every run ends in the same final hash on both sides**, so the two columns measure the same work:
+
+| Run | Mean per tick before / after | Change | 99 % before / after | Maximum before / after | Allocation per tick |
+|---|---|---|---|---|---|
+| small, 2 players | 214.6 / 215.9 µs | +0.6 % | 0.66 / 0.66 ms | 43.9 / 44.9 ms | 2.4 KB |
+| medium, 2 players | 266.9 / 266.2 µs | -0.2 % | 0.88 / 0.88 ms | 43.4 / 45.0 ms | 2.4 KB |
+| medium, 4 players | 495.7 / 496.9 µs | +0.2 % | 1.18 / 1.23 ms | 44.0 / 45.6 ms | 5.3 / 5.2 KB |
+| large, 2 players | 164.4 / 169.4 µs | +3.0 % | 0.72 / 0.59 ms | 43.5 / 45.7 ms | 1.8 KB |
+| large, 4 players | 363.9 / 369.9 µs | +1.6 % | 1.03 / 1.05 ms | 43.9 / 46.0 ms | 3.6 KB |
+| large, 8 players | 849.7 / 837.2 µs | -1.5 % | 2.22 / 2.12 ms | 140.1 / 148.7 ms | 8.5 KB |
+| `MD_USA05`, 100 s / 300 s | 2,030 / 2,086 and 1,831 / 1,845 µs | +2.8 % / +0.7 % | 7.9 / 8.3 and 4.2 / 4.2 ms | 127 / 139 and 126 / 126 ms | 3.1 / 2.4 KB |
+| `MD_GLA05`, 100 s / 300 s | 2,951 / 2,956 and 2,619 / 2,623 µs | +0.2 % / +0.2 % | 11.6 / 11.7 and 7.1 / 7.0 ms | 146 / 139 and 127 / 129 ms | 2.8 / 2.2 KB |
+
+The phase is not measurable in the tick: the means lie within -1.5 % and +3.0 % of each other, with both signs, which is the scatter between two runs of the same binary
+(§44.6 measured the same run twice at 943 and 953 µs). The tick maximum of the eight-player run (140 to 149 ms, decision D-3) is unchanged and is what a tick driver that
+waits for bundles has to withstand.
+
+**The cost of the computer players with eight of them** (the bottleneck named by the brief; the large eight-player run above): the AI phase of the session takes 32.8 µs
+per tick on average for all eight (3.9 % of the tick; before the phase 33.2 µs), median 9.3 µs, 95 % 137 µs, 99 % 219 µs, **maximum 33.7 ms** in one tick, and allocates
+4.0 KB per tick - the largest single share of the run's 8.5 KB. An AI observes in one tick of ten and thinks in one of thirty at 60 Hz; at most two of the eight think in
+the same frame (§45.1). **The session hash** costs nothing measurable beside this: every AI keeps its hash between its observations. **Saving and restoring** (measured inside
+`session-check` with three runs in parallel, so upper bounds): the slowest save of a two-player match took 25 ms, of an eight-player match 12 ms (3.5 MB); the slowest
+restore 49 ms.
+
+**Not run:** the determinism matrix and a Linux run at this state; the survey over 320 matches and the distribution comparison 30 against 60 Hz; the commands-only agent; the
+16 pairings at 120 Hz; `session-check` at 30 and 120 Hz (the synthetic session tests run at all three rates); `scripts/acceptance.ps1`; the performance of the game layer
+(`sync-perf`) with the command path in it. **No human has seen or done any of it:** saved a skirmish from the menu, loaded one from the load list, or played with
+`--input-delay-ticks`.

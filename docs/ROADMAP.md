@@ -90,7 +90,7 @@
 - **Phase 20 and 21 – Tick rate as a parameter:** first the simulation (byte-identical at 30 Hz), then presentation, game layer, UI, sound, tools and tests (image-identical at 30 Hz).
 - **Phase 22 – Fixed point Q39.24** instead of Q47.16 (first planned change of all reference values, at 30 Hz).
 - **Phase 23 – 60 Hz:** time-step invariance, newly designed acceptance tests (rate equivalence at 30/60/120 Hz), change of the default, new survey of all reference values. **Done on 9 October 2026** (`e8632bb`, manifests `ea52f87`); rest and open decisions: `docs/TICKRATE-MIGRATION.md` §15.7.
-- **Phase 24 – Session core (next):** AI in the hashed and saved state, skirmish savegame, match description, two-stage command path, tick source.
+- **Phase 24 – Session core:** AI in the hashed and saved state, skirmish savegame, match description, two-stage command path, tick source. **Done on 11 October 2026** (`docs/SIMULATION-CORE.md` §45, `docs/PRESENTATION-INPUT.md` §13): no result quantity of the reference manifest moved; 19 of 19 AI runs continue identically from every save; the replay is played with the AI deciding again; the lockstep probe runs with 4 and 12 ticks of input delay. Nothing of it seen or played by a human. Next: Phase 25.
 - **Phase 25 – Protocol and relay in the process:** the local skirmish runs over the network path; multi-client sample with AI slots.
 - **Phase 26 – Dedicated server and UDP:** time synchronisation, adaptive buffers, eight clients, measured latency.
 - **Phase 27 – Robustness:** desync diagnosis, rejoining, spectators, server replay.

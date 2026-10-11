@@ -588,3 +588,18 @@ The HUD no longer assumes anywhere that a tick lasts 1/30 s. The values from `In
 Smoke test and input scripts (§17): one drawn frame is one original frame of game time at every rate; the frame numbers of a script stay valid when the client runs with `--tick-rate 60`.
 
 **Open:** the saved-game lists (`MissionPauseMenu`, `LoadGameScreen`) still show the raw tick ("tick N"), and `SaveGame` (version 1) writes no rate; a saved game of another rate is rejected through the definition fingerprint (which contains the rate) and the embedded mission state, not through a field of its own. **Not verified:** look and operation at 60 Hz – no human has seen it.
+
+## 20. Phase 24: orders are answered twice
+
+Since Phase 24 an order of the viewer passes the two-stage command path (`docs/PRESENTATION-INPUT.md` §13): it is pre-checked when it is given and submitted to the simulation
+immediately before the step of the tick its scheduler gave it. The HUD hangs on both answers.
+
+| Event of `LiveGame` | When | Who listens |
+|---|---|---|
+| `CommandPreChecked(command, receipt)` | when the order is given; the command has no sequence number yet | immediate display: the controller adds `Rejected` feedback for a refused pre-check (message list, `NoCanDoSound`), the placement mode ends |
+| `CommandIssued(command, result)` | when the order is submitted, with the final answer | statistics, the expected-upgrade message, the client's input report (`--input-script`) |
+| `CommandResolved(resolution)` | the same moment, with receipt number, pre-check and final answer | `CommandModeController.OnResolved`: an order refused only now gets its `Rejected` feedback now; `LateRejections` and `LateAcceptances` count the answers that differ from their pre-check |
+
+With no input delay the final answer comes with the next step after the order, and the two answers agree unless the world changed in between. `MatchController` wires
+`CommandResolved` to the controller; a mission uses the same events. Tests: `HudTests`, the three "Lockstep probe" tests (real clicks at 0, 4 and 12 ticks of delay; the late
+refusal of an order whose unit was destroyed on the way is shown and counted).

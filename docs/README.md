@@ -17,7 +17,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 |---|---|
 | [plan/PROGRAMME.md](plan/PROGRAMME.md) | **The plan:** four stages (port, engine, changes, multiplayer), milestone overview, what was built in another stage, execution order, release gates, decision register |
 | [plan/STAGE-1-PORT.md](plan/STAGE-1-PORT.md) | Stage 1 – Port: milestones S1-M1 to S1-M14, the fidelity debt register, the human acceptance backlog |
-| [plan/STAGE-2-ENGINE.md](plan/STAGE-2-ENGINE.md) | Stage 2 – Engine: milestones S2-M1 to S2-M8 (session core is current), engine backlog |
+| [plan/STAGE-2-ENGINE.md](plan/STAGE-2-ENGINE.md) | Stage 2 – Engine: milestones S2-M1 to S2-M8 (the session core is done since Phase 24), engine backlog |
 | [plan/STAGE-3-CHANGES.md](plan/STAGE-3-CHANGES.md) | Stage 3 – Changes: AI tactics, spectator, replay browser, analysis, modern UI, pathfinding, patch layers – each as an option |
 | [plan/STAGE-4-MULTIPLAYER.md](plan/STAGE-4-MULTIPLAYER.md) | Stage 4 – Multiplayer: the owner's requirements against the architecture, prerequisites, milestones S4-M1 to S4-M5 |
 | [plan/BRIEF-FORMAT.md](plan/BRIEF-FORMAT.md) | The format of a phase brief: header block, sections, status vocabulary, rules |
@@ -145,7 +145,7 @@ Of this, the preparatory work is built (Phases 18 to 23); the multiplayer part i
 Every brief is written to be self-contained and carries a header block with stage, milestone and status
 ([plan/BRIEF-FORMAT.md](plan/BRIEF-FORMAT.md)). The index ordered by stage and milestone is
 [handoffs/README.md](handoffs/README.md). The briefs of Phases 4 to 23 are worked off and remain as documents of their
-time; Phase 31 (fidelity package A of Stage 1, before Phase 24 by decision D-12) is done, current is Phase 24; the briefs 25
+time; Phase 31 (fidelity package A of Stage 1, before Phase 24 by decision D-12) and Phase 24 (the session core) are done, current is Phase 25; the briefs 25
 to 30 are prepared and are continued at the end of the respective previous phase in their section "Starting point"; the
 milestones of Stage 3 have no brief yet (`plan/STAGE-3-CHANGES.md`).
 

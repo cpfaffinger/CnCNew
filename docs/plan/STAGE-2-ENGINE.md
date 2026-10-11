@@ -100,7 +100,15 @@ booked as a fidelity fix (Stage 1) or an option (Stage 3).
   tier that ran. `pwsh scripts/audit-publish.ps1` before every push is independent of the tiers.
 - **Open:** the step durations in `docs/TESTING.md` §2 are estimates until measured.
 
-### S2-M7 Session core — current (Phase 24)
+### S2-M7 Session core — done (Phase 24, 11 October 2026)
+
+- **Result** (`docs/SIMULATION-CORE.md` §45, `docs/PRESENTATION-INPUT.md` §13, `docs/CAMPAIGN-AND-SAVEGAMES.md` §8): every deliverable below is built. Acceptance as
+  measured: no result quantity of the reference manifest moved (one manifest commit for the replay format: 23 of 1,925 fields); 19 of 19 runs of the AI table and the
+  eight-player maps continue identically from 77 saves (2.56 million ticks compared by the session hash); the replay of each is played with the computer players deciding
+  again without a deviation; three processes build the same match from the 292 bytes of one description; with no input delay a match with a human's orders has the replay
+  bytes of direct submission, with 4 and 12 ticks of delay match, mission and the click path run and a late refusal is shown and counted. **Named rests:** AI strength is
+  counted, not obeyed; `MaxTicks` of the description is a tick count; the system's commands are audited, not fed in, by the replay; the setup screen does not read its team,
+  colour and position boxes; the thinking times of eight AIs are not fully offset; nobody has saved a skirmish or played with a delay in a window.
 
 - **Brief:** `docs/handoffs/HANDOFF-PHASE24.md`. Starting state measured on 10 October 2026 at `8588905` on a fresh
   machine (tier 4 without scene audits, `--long`, campaign checks, performance profile).

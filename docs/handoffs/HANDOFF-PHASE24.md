@@ -1,5 +1,5 @@
 > **Stage:** 2 – Engine · **Milestone:** S2-M7 Session core (the gate into Stage 4) · **Phase:** 24
-> **Status:** current – starting state measured 10 October 2026 at `bab51c3` after Phase 31 (section "Starting point after Phase 31"), not begun; the fidelity package A of Stage 1 (`HANDOFF-PHASE31.md`, D-12) is done
+> **Status:** done on 11 October 2026 – `8acde11` (AI state, match description, session state), `6ba4197` (game layer, skirmish savegame), `177c952` (replay 14 with the AI audit) with manifest `63ac97c`, `e128cc3` (command path, tick driver, lockstep probe), `e96d93f` (test at three rates); result in `docs/SIMULATION-CORE.md` §45, `docs/PRESENTATION-INPUT.md` §13, `docs/CAMPAIGN-AND-SAVEGAMES.md` §8
 > **Predecessor:** HANDOFF-PHASE23.md · **Successor:** HANDOFF-PHASE25.md · **Results in:** docs/SIMULATION-CORE.md, docs/PRESENTATION-INPUT.md, docs/CAMPAIGN-AND-SAVEGAMES.md (to be written)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 

@@ -57,7 +57,7 @@ those of `scripts/test.ps1`; the commands are printed by `-Plan`.
 | `formats` | `CnCNew.Formats`, its tests, `MapTool` | `formats`, `import` | `inputs`, `quick`, `presentation-content` |
 | `w3d` | `CnCNew.W3D`, its tests, `W3dTool` | `w3d` | `presentation-content`, `game` |
 | `data` | `CnCNew.Data`, its tests, `IniTool`, `baselines/compatibility.json` | `data`, `data-content`, `compat` | `ui`, `audio`, `sim`, `inputs`, `quick` |
-| `simulation` | `CnCNew.Simulation`, its tests | `sim` (60 Hz) | `sim-30`, `sim-120`, `presentation`, `inputs`, `quick`, `rate-suite`, `game-sim` |
+| `simulation` | `CnCNew.Simulation`, its tests | `sim` (60 Hz) | `sim-30`, `sim-120`, `presentation`, `inputs`, `quick`, `rate-suite`, `game-sim`, `check-match` |
 | `simtool` | `SimTool`, `baselines/input-manifest.json` | – (build) | `inputs`, `quick` |
 | `manifest` | `baselines/reference-manifest.json` | `inputs`, `reference` (the full set) | – |
 | `presentation` | `CnCNew.Presentation`, its tests, `PresentationTool` | `presentation` | `presentation-content`, `game` |
@@ -173,6 +173,11 @@ Tier 4 (`pwsh scripts/test.ps1 -Tier full`) and, in addition, what the script do
   when the simulation changed);
 - `scripts/perf-profile.ps1` on a quiet machine with a comparison against the previous profile;
 - `scripts/audit-publish.ps1`, a clean working tree, the documents and the next handoff (`CLAUDE.md`, "Procedure of a phase").
+
+Since Phase 24 tier 4 contains two steps of the session core: `check-match` (`scripts/check-match-description.ps1`: three processes build the same match from the bytes of
+one description; also in the gate of `simulation`) and `session-check` (`SimTool session-check`: the 16 pairings and three eight-player maps of the manifest as sessions that
+are saved, restored and continued, and whose replay is played with the computer players deciding again; around 5 to 6 minutes with three jobs). **A change of the command
+path, the session hash, the session state, the match description or the replay is cross-cutting (§4): tier 4 before its push.**
 
 What needs a human (pictures, sound, playability) is driven by `scripts/acceptance.ps1` (`docs/ACCEPTANCE.md`) and is
 never claimed by a test run.

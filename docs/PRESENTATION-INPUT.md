@@ -493,3 +493,74 @@ Reference sources: `GameEngineDevice/Source/W3DDevice/GameClient/W3dWaypointBuff
 * **Tests** (`CursorTests`): three Alt-clicks → one command to the simulation, path with start and three stations, three marker feedbacks; not selected or Alt released →
   no path; arrival at station 1 → two stations, start at the unit; a further Alt-click appends, a simple command removes the path, after the last station
   it is gone; no rejected commands. Markers: lifetime 1333 ms, age 0.5 at half time, expiry per marker, rally point marker, rejections are not markers, ring of 256.
+
+## 13. Command intent, pre-check, result; the tick source (Phase 24)
+
+Until Phase 24 an order was a command: the input layer asked the sink, the sink submitted it in the current tick and returned the simulation's answer. On a network both are
+wrong - the server assigns the tick an order is executed in, and whether it is accepted is only known there. Since Phase 24 the game has **one command path in two stages and one
+tick source**, for a skirmish, a mission and a staged scene alike; what differs between "local" and "network" lies behind two interfaces.
+
+### 13.1 The two stages (`CommandPath`)
+
+| Stage | When | What happens |
+|---|---|---|
+| 1 `Issue` | the moment the order is given | the input layer hands over a **command intent**: the command without its tick and its sequence number, as the function that builds it once both are known. It gets a `CommandReceipt` back at once: a number, and the result of the **local pre-check** - `SimulationWorld.Check`, the simulation's own validation against the world as it is now, which changes nothing (`docs/SIMULATION-CORE.md` §45.5). The intent goes to the scheduler |
+| 2 `SubmitDue` | immediately before the step of the tick the scheduler gave the order | the commands of that tick - its **bundle** - are submitted to the session in the bundle's order (by player, then by receipt number); the session assigns tick and sequence number and records the command. The simulation's answer is final and is reported with the receipt number (`CommandResolution`) |
+
+- `ICommandSink.Issue` returns the receipt. A caller that only asks "did it go through so far" reads `Accepted` and `Reason` as before (the receipt converts to a
+  `SubmitResult`); `ICommandSink.DelayTicks` tells how long an order is on its way.
+- `ICommandScheduler` decides the tick: `LocalCommandScheduler(delayTicks)` executes an order given at tick T at tick T + delay; with a delay of 0 that is the tick it was
+  given in. On the network the server takes this place (Phase 25). `IsPresent(tick)` says whether a tick's bundle is complete - locally always.
+- **Display, sound and statistics hang on both answers.** The pre-check drives what the player sees and hears at once (`LiveGame.CommandPreChecked`; the controller's
+  `Rejected` feedback for a refused pre-check, the placement mode that ends). The final answer drives what counts (`LiveGame.CommandIssued` with the command as submitted,
+  `CommandResolved` with the resolution). **An answer that differs from its pre-check is counted** (`CommandPath.Deviations`,
+  `CommandModeController.LateRejections`/`LateAcceptances`) and, when it is a refusal, shown: the order gets the `Rejected` feedback it would have got at once.
+- `SkirmishSessionCommandSink` and `MissionCommandSink` remain as the sinks **without a scheduler** for headless drivers that step a session themselves (tests, tools): the
+  order is submitted in the tick it is given and the receipt's pre-check is the final answer. A game does not use them.
+- A spectator's sink refuses every order without building it (receipt number 0), as before.
+
+**Standing orders** (`StandingOrders`, the attack on a named victim and waypoint paths, which give commands from what the world shows once per original frame) go the same way
+and know the delay: while a unit's command from there is on its way (`delayTicks`), or the order that set the standing order has not been executed yet, the unit is not judged
+again - the world would still show the state the command was given for, and the order would give it a second time. With a delay of 0 nothing waits. The mutation check: without
+this rule the test counts 62 repeated commands at a delay of 4 ticks.
+
+### 13.2 The tick source (`ITickDriver`)
+
+`LiveGame.Advance` no longer owns the time. It tells the driver how much wall time passed and asks it, tick by tick, whether the next one may run:
+`TryReleaseTick(tick, bundlePresent)`. **A tick whose command bundle is not present does not run**, however much time has passed (counted in `Stalls`). For every released
+tick: `BeforeTick` (the HUD's bookkeeping, standing orders), then `CommandPath.SubmitDue()`, then the step.
+
+- `LocalTickDriver` is the accumulator the game always had (at most eight original frames per drawn frame, the backlog dropped beyond one tick).
+- **Pause and speed are requests.** `LiveGame.Paused` and `LiveGame.Speed` keep their names; setting them calls `RequestPause`/`RequestSpeed`, reading them gives what the
+  driver granted. The local driver grants at once; a networked one need not. The spectator's speed keys and the in-game menu's pause go through the same two properties.
+- `LiveGame.TickDriver` can be replaced by a host that takes its ticks from somewhere else (Phase 25).
+
+### 13.3 The lockstep probe (`--input-delay-ticks N`)
+
+`LiveGame.UseInputDelay(n)` (client option `--input-delay-ticks N`, 0 to 600) plays the game as if every order travelled to a server and back: an order is executed N ticks
+after it was given; 4 and 12 ticks are around 67 and 200 ms at 60 Hz. The client prints a line for every order whose final answer differs from its pre-check.
+
+| What | Checked by | Result |
+|---|---|---|
+| d = 0 changes nothing | *with no delay the path records the bytes of immediate submission* (replay bytes and end hash); *the tick driver and the command path record the match of direct submission* (a real match with a human's group orders: replay bytes and session hash); the reference manifest (no run has a human) | identical |
+| the order inside a tick | *the order of two players' commands inside a tick is the bundle's*: two players order groups to one point in opposite order of giving, d = 0 and d = 4 | the same world; the control (executed in the other order) gives another |
+| delay | *a delayed order is executed d ticks later and answered with its receipt* (d = 0, 4, 12): pre-check and receipt at once, nothing submitted before its tick, every order answered once in the order given | passes |
+| late refusal | the unit of an order dies while the order is on its way: the pre-check had passed, the execution refuses; counted as a deviation, the HUD shows the refusal (*the click path with every order executed 0, 4 and 12 ticks after it was given*, through `MatchController` and real clicks) | passes |
+| standing orders | *standing orders give no command twice while one is on its way* (d = 0, 4, 12): the attack destroys its target, each waypoint is ordered once, no command arrives late | passes |
+| mission | *a mission runs with orders executed 4 and 12 ticks later* (`GC_ChemGeneral`): every order answered at tick + d, the human shares the session's sequence counter with the scripts without a refused number | passes |
+| a missing bundle | *a tick whose bundle is missing does not run*; a driver that releases nothing holds the game | passes |
+
+**Not claimed:** how the game feels with 67 or 200 ms between click and reaction. That needs a human (`--input-delay-ticks 4`, `--input-delay-ticks 12`); nobody has tried it.
+
+### 13.4 What stays local in a mission
+
+A mission uses the same path and the same tick source, with the local scheduler and the local driver. One thing in it is input into the simulation that no bundle carries: the
+presentation reports back to the script VM (a camera move or a speech has ended, `PresentationLatencyTicks`, the selection, UI signals; register E21 of
+`docs/MULTIPLAYER-PLAN.md`). That feedback depends on what one machine showed and when, so it stays restricted to local missions - and it is exactly what would stand in the
+way of a networked campaign, which is not in scope.
+
+### 13.5 The logic random stream
+
+`SimulationWorld.LogicRandom` is public and nothing outside the simulation draws from it; in lockstep a single draw from the presentation would be a desync. The source test of
+the game layer (`Game.Tests`, `SourceRuleTests`) now forbids the name in `CnCNew.Game`, `CnCNew.Presentation`, `CnCNew.Ui` and `CnCNew.Client.Stride`; the tools that read its
+state to compare two runs are outside those projects.

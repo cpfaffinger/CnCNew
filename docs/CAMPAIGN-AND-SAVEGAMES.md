@@ -96,7 +96,7 @@ the rate). Since version 2 `tickRate` (ticks per second: 30, 60 or 120) stands d
   the same text for the same point in time at every rate. Load screen (`LoadGameScreen`) and pause menu (`MissionPauseMenu`) show
   "Title (m:ss)" instead of "Title (tick N)". No checked-in screen hash contains a load list with entries; the 54 screen hashes are unchanged.
 
-**Deliberately outside the format:** skirmish matches. The skirmish AI keeps state outside the world that this format does not carry;
+**Outside this format:** skirmish matches - since Phase 24 they have a format of their own (§8). What follows is the reason as it stood until then: the skirmish AI kept state outside the world that this format does not carry;
 a skirmish savegame would therefore not continue identically. A savegame never corresponds to a `ReplayFile` (the bug
 `SharedReadyFrame` is fixed, but missions are not reproducible as a replay anyway, `docs/SCRIPT-ENGINE.md` §3).
 
@@ -202,3 +202,41 @@ and end probes: `docs/SCRIPT-ENGINE.md` §9). The size of a mission state is aro
   `Campaign = unimplemented` and campaigns with their own `PlayerFaction` stay unchanged), `GameShell` reads `Data/INI/ChallengeMode.ini` at start. Measurement: `GC_LaserGeneral` now has its own
   human side and can be won and lost on the script path (objective driver, `docs/SCRIPT-ENGINE.md` §9); `CampaignTool drive|audit` pass the persona through.
   Measured: `CampaignTool playthrough --campaign CHALLENGE_0` wins Mission01–05 by annihilation (victory after 330–360 ticks).
+
+## 8. Skirmish savegame (Phase 24)
+
+Since Phase 24 a running skirmish can be saved and continued. The statement of §4 and of `docs/SIMULATION-CORE.md` §18 that it is "deliberately not supported" is superseded:
+the built-in computer player's state is part of the session state (`docs/SIMULATION-CORE.md` §45.1), and the session writes and restores itself (§45.3).
+
+### `SkirmishSaveGame` (Game, format `cncnew-skirmish-savegame`, version 1)
+
+A format of its own, so that a mission save and a skirmish save cannot be taken for each other (`SaveGame.ReadHeader` refuses a skirmish save and the other way round). One
+UTF-8 JSON document with a fixed property order, like `SaveGame`:
+
+| Field | Content |
+|---|---|
+| `format`, `version` | `cncnew-skirmish-savegame`, 1 |
+| `title`, `mapPath`, `tick`, `tickRate` | what the load list shows (game time, not ticks) and what is needed to load the map |
+| `definitionFingerprint`, `stateHash` | the definitions the save belongs to; the session hash at the moment of saving |
+| `session` | `builtin` (a `SkirmishMatchSession`) or `original` (a `ScriptedSkirmishSession` with the original AI) |
+| `viewer` | who the local viewer was: player, auto-play or spectator - a matter of this machine, not of the match |
+| `stateSha256`, `state` | checksum and the session state: match description, counters, every computer player, the recording so far, the world |
+
+`SaveGameHeader.Kind` tells the two kinds apart (`Mission`, the default, or `Skirmish`); `SaveGameStore.List` reads either. A file of another version, another tick rate,
+other definitions, another terrain or with a changed byte is refused with a message fit to show (`SaveGameException`).
+
+- `LiveMatch.Save(title)` writes the save of a running match; `LiveMatch.Restore(data, bytes, viewport)` loads the map the save names, restores the session and puts a fresh
+  presentation in front of it. Camera, selection, control groups and effects are not saved: the viewer starts at his start position with nothing selected.
+- **Shell:** the main menu's load list (`LoadGameScreen`) lists skirmish saves beside mission saves; loading one goes straight to `ShellPhase.InMatch` and hands the host a
+  `ResumeMatchOutput`.
+- **Client:** the "Save/Load" button of the in-game menu (`QuitMenu.wnd`, Escape) saves a running skirmish to the slot `skirmish` and prints a line on the console. There
+  is no dialog for a name or a slot, and no loading from inside a running match - both are the main menu's.
+
+**Test** (`CampaignShellTests`, real data): a skirmish with a human slot at start position 1, a chosen colour and a computer player of a random faction is played for 45
+seconds, saved, listed by the store as a skirmish, loaded through `Main menu -> Load -> select -> confirm` and continued; the same group order is given to both. The loaded
+match has the session hash of the uninterrupted one in every tick of the next 20 seconds, its computer player goes on giving orders, and its replay equals the uninterrupted
+one. A changed byte, another tick rate and the mission reader are refused.
+
+**Limits.** A match of the original AI with a slot played by the built-in one still cannot be saved (`ScriptedSkirmishSession.Save` refuses; not converted). A save holds the
+whole recording, so its size grows with the match (0.4 to 0.8 MB for two players, 3.5 MB for eight after five minutes, `docs/SIMULATION-CORE.md` §45.3). Nobody has pressed
+the button or loaded a skirmish in a window.

@@ -43,7 +43,9 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   playability**, and at 60 Hz nobody has yet seen or heard the game; the viewings so far
   found defects (`docs/DEMO-FINDINGS.md`). Smoke tests and checksums verify reproducibility, not correctness.
 - **Multiplayer:** planned only. Built is the preparatory work (measurement basis, performance, tick rate as a value of the world, fixed point,
-  60 Hz); session core, protocol and server follow from Phase 24 on.
+  60 Hz) and, since Phase 24, the session core: the computer players are part of the hashed and saved session state, a running skirmish can be saved and
+  continued, a match is started from one description, orders pass a two-stage command path and a tick driver releases the ticks
+  (`docs/SIMULATION-CORE.md` §45, `docs/PRESENTATION-INPUT.md` §13). Protocol and server follow from Phase 25 on.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

@@ -57,7 +57,7 @@ Keys (each is also on its button; `SpectatorController.KeyTable`):
 | Arrow keys, screen edge, right drag | scroll (the camera control of the player; the step grows with the height); dragging the middle button: rotate; click on the radar: go there |
 | `Esc` | quit |
 
-**Speed and pause** are the existing switches of `LiveGame` (`Speed`, `Paused`): `Advance` accumulates `seconds × Speed` and catches up at most eight
+**Speed and pause** are the existing switches of `LiveGame` (`Speed`, `Paused`) - since Phase 24 requests to the game's tick driver (`ITickDriver`, `docs/PRESENTATION-INPUT.md` §13.2), which the local driver grants at once: `Advance` accumulates `seconds × Speed` and catches up at most eight
 original frames per call. At 60 frames per second, 8× is four original frames per frame, so within the budget; a machine that cannot manage the ticks falls
 behind instead of jumping. The speed is not an input of the simulation.
 

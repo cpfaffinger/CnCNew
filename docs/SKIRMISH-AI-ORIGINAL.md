@@ -156,7 +156,7 @@ prepared, but a change of its own that needs review.
 
 `src/CnCNew.Simulation/Skirmish/SkirmishAi.cs` is a development of its own: a thinking step every 15 frames in a fixed order, roles from modules and `KindOf`,
 planning only with what was seen and remembered. Its state (memory, order tables, own random stream) lies **outside** snapshot and hash (register E11 in
-`docs/MULTIPLAYER-PLAN.md`), `SkirmishMatchSession.CreateSave()` throws. Since the first viewing by the project owner (`docs/AI-OBSERVED-2026-10-08.md`) it saves for vehicles,
+`docs/MULTIPLAYER-PLAN.md`), `SkirmishMatchSession.CreateSave()` threw (until Phase 24: since then its state is in the session hash and the savegame, `docs/SIMULATION-CORE.md` §45). Since the first viewing by the project owner (`docs/AI-OBSERVED-2026-10-08.md`) it saves for vehicles,
 composes its army by exchange value and decides 305 of 320 matches of the survey at 30 Hz and 301 of 320 at 60 Hz. No difficulty levels. The commands-only agent of the missions
 uses it as well.
 
@@ -527,7 +527,7 @@ every demo and the multiplayer slots use.
 | **Balance between factions** | not assessed; ChinaTank beats AirForce 70 of 80 (30 Hz, round 3) | **decided by the faction**: GLA wins 84 % of its matches, China 1 %, AirForce 0 % |
 | **Strength** | between the easy and the medium army | medium beats the built-in AI 45 : 22, hard 51 : 13, easy loses 0 : 199 |
 | **Cost** (8 players, 60 Hz, scripts/AI per tick) | 36 µs mean, 245 µs at 99 %; 7.9 KB allocated per tick | 110 to 119 µs mean, 564 to 603 µs at 99 %; 11.1 KB per tick - **3.1 to 3.3 times** the built-in AI, within the budget of 150 µs |
-| **State in hash and savegame** | **no** (register E11): memory, order tables and its random stream are outside; `CreateSave()` throws. Phase 24 has to build this | **yes**, tested at every tick and inside a frame at 60 and 120 Hz; nothing to build |
+| **State in hash and savegame** | **yes since Phase 24** (`docs/SIMULATION-CORE.md` §45.1; register E11 closed). At the time of this comparison: no - memory, order tables and its random stream were outside and `CreateSave()` threw | **yes**, tested at every tick and inside a frame at 60 and 120 Hz; nothing to build |
 | **Replay** | a match is a command replay | no: scripts write into the world; the truth is the state (as for a mission). A lockstep session has to run the scripts on every machine, which they do deterministically |
 | **Rate equality** (same seed at 30 and 60 Hz: same outcome / end within 1 s, of 320) | 317 / 287 | 291 / 212; `rate-distribution` 36 passed, 0 failed |
 | **Knowledge** | only what it has seen and remembers | everything (the original knows no fog) |
