@@ -184,7 +184,44 @@ static partial class NetTests
         playback.Arrived(3_000, 31_000, sync, sinceLastLookMicros: 400_000);
         Check.That(playback.LatenessSamples == measured, "an arrival after a hitch of the client is not a sample");
         playback.Arrived(3_000, 31_000, sync, sinceLastLookMicros: 4_000);
-        Check.That(playback.LatenessSamples == measured + 1, "an arrival in a normal frame is");
+        Check.That(playback.LatenessSamples == measured + 1 && playback.TypicalLookMicros == 4_000, "an arrival in a normal frame is, and the frame is remembered");
+
+        // A long tick of the client's own simulation (30 ms where its frame is 4) must not raise the delay: what exceeds twice the usual frame is taken off the lateness.
+        (double Delay, long Stalls) Frames(bool longFrames)
+        {
+            var clockSync = new ClockSync(9);
+            var control = new PlaybackControl(PlaybackOptions.Default, 16_666);
+            long local = 0, last = 0, nextBundle = 0, nextTick = 0, stalls = 0, stalled = -1;
+            var held = new HashSet<long>();
+            for (var frame = 0; local < 40_000_000; frame++)
+            {
+                // The line is perfect: 40 ms each way, no jitter. Every 50th frame takes 30 ms instead of 4.
+                local += longFrames && frame % 50 == 49 ? 30_000 : 4_000;
+                if (frame % 50 == 0) clockSync.Take(local - 80_000, local, local - 40_000, 100);
+                for (; (nextBundle + 1) * 16_666 + 40_000 <= local; nextBundle++)
+                {
+                    held.Add(nextBundle);
+                    control.Arrived(nextBundle, local, clockSync, local - last);
+                }
+                last = local;
+                control.Advance(local, clockSync);
+                while (control.Synced && control.TimeReached(nextTick))
+                {
+                    if (!held.Remove(nextTick))
+                    {
+                        if (stalled != nextTick && local > 15_000_000) stalls++;
+                        stalled = nextTick;
+                        break;
+                    }
+                    nextTick++;
+                }
+            }
+            return (control.DelayMicros / 1000.0, stalls);
+        }
+        var even = Frames(false);
+        var uneven = Frames(true);
+        Check.That(even.Delay is >= 44 and <= 50 && even.Stalls == 0, $"frames of 4 ms on a perfect line: the delay is the way, the frame and the margin ({even.Delay:F1} ms, {even.Stalls} waits)");
+        Check.That(uneven.Delay <= even.Delay + 6 && uneven.Stalls <= 2, $"a long frame now and then does not raise the delay and makes no tick wait for its bundle ({uneven.Delay:F1} ms, {uneven.Stalls} waits)");
     }
 
     // ----------------------------------------------------------------------------------------------------------- the rule

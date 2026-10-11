@@ -22,6 +22,12 @@ public sealed record PlaybackOptions
     /// that the position settles on the target instead of beside it. Several times the correction time: the control does not swing.
     /// </summary>
     public int IntegralTimeMs { get; init; } = 5_000;
+    /// <summary>
+    /// The slow term only works on small deviations (below <see cref="IntegralBandMs"/>) and never contributes more than this many thousandths: it is there for a clock
+    /// that runs fast, not to remember a large correction that is long over and then overshoot.
+    /// </summary>
+    public int MaxIntegralPerMille { get; init; } = 15;
+    public int IntegralBandMs { get; init; } = 20;
     /// <summary>The position is set for the first time when this many bundle arrivals have been measured: a delay taken from nothing would be wrong for the first second.</summary>
     public int MinArrivals { get; init; } = 8;
     /// <summary>
@@ -109,6 +115,22 @@ public sealed class PlaybackControl(PlaybackOptions options, long tickMicros)
     private long _delayComputedAt = long.MinValue;
     private long _fraction;
     private long _accumulated;
+    private readonly long[] _gaps = new long[31];
+    private readonly long[] _gapScratch = new long[31];
+    private int _gapCount;
+    private int _gapNext;
+
+    /// <summary>The usual time between two looks of the client for messages (the median of the last ones), in microseconds: its frame.</summary>
+    public long TypicalLookMicros
+    {
+        get
+        {
+            if (_gapCount == 0) return 0;
+            Array.Copy(_gaps, _gapScratch, _gapCount);
+            Array.Sort(_gapScratch, 0, _gapCount);
+            return _gapScratch[_gapCount / 2];
+        }
+    }
 
     public long TickMicros => tickMicros;
     public bool Synced { get; private set; }
@@ -130,8 +152,18 @@ public sealed class PlaybackControl(PlaybackOptions options, long tickMicros)
     /// </summary>
     public void Arrived(long tick, long localMicros, ClockSync sync, long sinceLastLookMicros = 0)
     {
-        if (!sync.HasEstimate || sinceLastLookMicros > options.HitchMs * 1000L) return;
-        _lateness.Enqueue((localMicros, sync.GameMicrosAt(localMicros) - (tick + 1) * tickMicros));
+        if (sinceLastLookMicros > options.HitchMs * 1000L) return;
+        if (sinceLastLookMicros > 0)
+        {
+            _gaps[_gapNext] = sinceLastLookMicros;
+            _gapNext = (_gapNext + 1) % _gaps.Length;
+            _gapCount = Math.Min(_gapCount + 1, _gaps.Length);
+        }
+        if (!sync.HasEstimate) return;
+        // The bundle arrived some time since the last look. The client's usual frame is part of what the delay has to cover; what a longer frame adds is the client's
+        // own doing and is taken off (within twice the usual frame nothing is).
+        var excess = Math.Max(0, sinceLastLookMicros - 2 * TypicalLookMicros);
+        _lateness.Enqueue((localMicros, sync.GameMicrosAt(localMicros) - excess * sync.SpeedPercent / 100 - (tick + 1) * tickMicros));
         LatenessSamples++;
         while (_lateness.Count > 0 && localMicros - _lateness.Peek().LocalMicros > options.JitterWindowMs * 1000L) _lateness.Dequeue();
     }
@@ -177,9 +209,11 @@ public sealed class PlaybackControl(PlaybackOptions options, long tickMicros)
             _accumulated = 0;
             return;
         }
-        // The deviation over time, in microseconds squared; bounded so that its share alone never exceeds the rate limit (and does not wind up while the limit caps).
+        // The deviation over time, in microseconds squared - only while it is small, and bounded: a large correction (the delay changed) is the first term's work, and
+        // must not be remembered here to overshoot when it is over.
         var unit = (long)options.CorrectionTimeMs * options.IntegralTimeMs * 1000;
-        _accumulated = Math.Clamp(_accumulated + error * elapsed, -options.MaxRateAdjustPerMille * unit, options.MaxRateAdjustPerMille * unit);
+        if (Math.Abs(error) <= options.IntegralBandMs * 1000L)
+            _accumulated = Math.Clamp(_accumulated + error * elapsed, -options.MaxIntegralPerMille * unit, options.MaxIntegralPerMille * unit);
         var adjust = (int)Math.Clamp(error / options.CorrectionTimeMs + _accumulated / unit, -options.MaxRateAdjustPerMille, options.MaxRateAdjustPerMille);
         RateAdjustPerMille = adjust;
         // elapsed * speed/100 * (1000 + adjust)/1000, with the remainder carried so that nothing is lost to rounding over an hour.

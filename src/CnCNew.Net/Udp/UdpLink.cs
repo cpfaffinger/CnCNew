@@ -237,7 +237,9 @@ public sealed class UdpLink : IConnection
         Statistics.RoundTripMs = _srtt;
     }
 
-    private int RetransmitMs => _srtt < 0 ? _options.InitialRetransmitMs : Math.Clamp(_srtt + 4 * _rttVar, _options.MinRetransmitMs, _options.MaxRetransmitMs);
+    // The margin above the round trip is never less than a quarter of it or 15 ms: on a line without jitter the variance goes to zero, and a timer that equals the
+    // round trip fires just before every acknowledgement.
+    private int RetransmitMs => _srtt < 0 ? _options.InitialRetransmitMs : Math.Clamp(_srtt + Math.Max(4 * _rttVar, Math.Max(_srtt / 4, 15)), _options.MinRetransmitMs, _options.MaxRetransmitMs);
 
     private void Acknowledge(in UdpDataHeader header)
     {
