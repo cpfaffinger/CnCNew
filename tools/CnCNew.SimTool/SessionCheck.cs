@@ -90,9 +90,16 @@ internal static class SessionCheck
         var saveTicks = SaveFrames.Select((frames, index) => time.OriginalFrames(frames) + index).ToArray();
         var saves = new SortedDictionary<long, byte[]>();
         var hashes = new List<ulong>();
+        double saveMs = 0;
+        double restoreMs = 0;
         while (!session.IsOver)
         {
-            if (Array.IndexOf(saveTicks, session.World.Tick) >= 0) saves[session.World.Tick] = session.Save();
+            if (Array.IndexOf(saveTicks, session.World.Tick) >= 0)
+            {
+                var watch = Stopwatch.StartNew();
+                saves[session.World.Tick] = session.Save();
+                saveMs = Math.Max(saveMs, watch.Elapsed.TotalMilliseconds);
+            }
             session.Step();
             hashes.Add(session.StateHash());
         }
@@ -106,7 +113,9 @@ internal static class SessionCheck
         foreach (var (tick, save) in saves)
         {
             bytes = Math.Max(bytes, save.Length);
+            var restoreWatch = Stopwatch.StartNew();
             var restored = SkirmishMatchSession.Restore(save, context.Catalog, context.Fingerprint, terrain);
+            restoreMs = Math.Max(restoreMs, restoreWatch.Elapsed.TotalMilliseconds);
             while (!restored.IsOver)
             {
                 var at = restored.World.Tick;
@@ -121,7 +130,7 @@ internal static class SessionCheck
         }
         if (saves.Count == 0) return new Row(id, false, "the match ended before the first save point");
         var outcome = session.Winner is { } winner ? $"winner {session.Players.First(player => player.Id == winner).Faction} at {session.VictoryTick}" : "no winner";
-        return new Row(id, true, $"{outcome}, end {session.EndTick}; {saves.Count} saves (ticks {string.Join(", ", saves.Keys)}), {continued} continued ticks identical, largest save {bytes / 1024} KB; replay played with the AI: {audit.AuditedCommands} commands audited, no deviation");
+        return new Row(id, true, $"{outcome}, end {session.EndTick}; {saves.Count} saves (ticks {string.Join(", ", saves.Keys)}), {continued} continued ticks identical, largest save {bytes / 1024} KB (slowest save {saveMs.ToString("F0", CultureInfo.InvariantCulture)} ms, slowest restore {restoreMs.ToString("F0", CultureInfo.InvariantCulture)} ms); replay played with the AI: {audit.AuditedCommands} commands audited, no deviation");
     }
 
     /// <summary>For the report of a deviation only: the world hash of the uninterrupted session after <paramref name="tick"/>, by playing it once more.</summary>

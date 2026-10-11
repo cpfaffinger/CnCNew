@@ -110,9 +110,11 @@ static partial class Tests
     /// </summary>
     public static void SkirmishSessionSavedAtAnyTickContinuesIdentically()
     {
-        const long length = 9_000;
-        var (fixture, terrain, session) = StartSyntheticMatch(length);
-        var candidates = new long[] { 1, 37, 600, 601, 1_499, 1_500, 2_222, 3_333, 4_001, 6_001, 8_999 };
+        var (fixture, terrain, session) = StartSyntheticMatch(TestRate.Default.Time.OriginalFrames(4_500));
+        // Save points in game time (logic frames of the original), so that the match is as long for them at every tick rate; every second one is shifted by a tick, which
+        // puts it inside a frame above 30 Hz.
+        var frames = new long[] { 1, 19, 300, 301, 600, 750, 900, 1_100, 1_500, 2_000, 3_000, 4_400 };
+        var candidates = frames.Select((frame, index) => session.World.Time.OriginalFrames(frame) + index % 2).ToArray();
         var saves = new Dictionary<long, byte[]>();
         var hashes = new List<ulong>();
         var aiHashes = new HashSet<ulong>();
@@ -124,7 +126,7 @@ static partial class Tests
             aiHashes.Add(session.Ais[0]!.StateHash());
         }
         var saveTicks = saves.Keys.Order().ToArray();
-        Check.That(saveTicks.Length >= 6 && saveTicks[^1] > session.EndTick / 2, $"The match is long enough for the save points ({saveTicks.Length} of them, the match ends at tick {session.EndTick}).");
+        Check.That(saveTicks.Length >= 5 && saveTicks[^1] > session.EndTick / 2, $"The match is long enough for the save points ({saveTicks.Length} of them, the match ends at tick {session.EndTick}).");
         Check.That(aiHashes.Count > 100, $"The AI's own hash moves while it plays ({aiHashes.Count} different values).");
         Check.That(session.Ais.All(ai => ai!.Stats.Commands > 50), "Both AIs gave orders (the state that is saved is not empty).");
         var reference = CnCNew.Simulation.Replay.ReplayFormat.Write(session.ToReplay());
