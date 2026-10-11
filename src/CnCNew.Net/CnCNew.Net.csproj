@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\CnCNew.Simulation\CnCNew.Simulation.csproj" />
+  </ItemGroup>
+
+  <!--
+    The build identity of the simulation code (docs/NETWORK-PROTOCOL.md section 2): the commit the tree was built from and whether the tree differed from it.
+    It is written as assembly metadata of this assembly only; CnCNew.Net.BuildIdentity reads it. Without git (a source archive) the identity is "unknown"
+    and counts as modified. The file is rewritten only when its content changes, so an unchanged tree does not rebuild.
+  -->
+  <Target Name="CnCNewWriteBuildIdentity" BeforeTargets="CoreCompile">
+    <Exec Command="git rev-parse HEAD" WorkingDirectory="$(MSBuildProjectDirectory)" ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="CnCNewCommit" />
+      <Output TaskParameter="ExitCode" PropertyName="CnCNewCommitExit" />
+    </Exec>
+    <Exec Command="git status --porcelain --untracked-files=no -- src Directory.Build.props Directory.Build.targets Directory.Packages.props build" WorkingDirectory="$(MSBuildProjectDirectory)\..\.." ConsoleToMSBuild="true" IgnoreExitCode="true" StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="CnCNewDirty" />
+      <Output TaskParameter="ExitCode" PropertyName="CnCNewDirtyExit" />
+    </Exec>
+    <PropertyGroup>
+      <CnCNewCommit Condition="'$(CnCNewCommitExit)' != '0'">unknown</CnCNewCommit>
+      <CnCNewModified>false</CnCNewModified>
+      <CnCNewModified Condition="'$(CnCNewDirty)' != '' Or '$(CnCNewDirtyExit)' != '0' Or '$(CnCNewCommitExit)' != '0'">true</CnCNewModified>
+      <CnCNewIdentityFile>$(IntermediateOutputPath)BuildIdentity.g.cs</CnCNewIdentityFile>
+    </PropertyGroup>
+    <ItemGroup>
+      <CnCNewIdentityLine Include="[assembly: System.Reflection.AssemblyMetadata(&quot;CnCNewCommit&quot;, &quot;$(CnCNewCommit)&quot;)]" />
+      <CnCNewIdentityLine Include="[assembly: System.Reflection.AssemblyMetadata(&quot;CnCNewModified&quot;, &quot;$(CnCNewModified)&quot;)]" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(CnCNewIdentityFile)" Lines="@(CnCNewIdentityLine)" Overwrite="true" WriteOnlyWhenDifferent="true" />
+    <ItemGroup>
+      <Compile Include="$(CnCNewIdentityFile)" />
+      <FileWrites Include="$(CnCNewIdentityFile)" />
+    </ItemGroup>
+  </Target>
+
+</Project>

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Room and relay logic as a library. It references CnCNew.Net only and never loads game data (docs/ARCHITECTURE.md; enforced by Net.Tests). -->
+  <ItemGroup>
+    <ProjectReference Include="..\CnCNew.Net\CnCNew.Net.csproj" />
+  </ItemGroup>
+
+</Project>
