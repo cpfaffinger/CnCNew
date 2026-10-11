@@ -718,9 +718,29 @@ public sealed class CommandModeController
     /// <summary>Once per logic tick, before the world steps: prunes the selection and advances the standing orders.</summary>
     public void Update(SimulationWorld world)
     {
-        Orders.Update(world, Player, Issue);
+        Orders.Update(world, Player, Issue, _sink.DelayTicks);
         if (Mode == CommandModeKind.Placement && world.FindEntity(_builder) is not { } builder || Mode == CommandModeKind.Placement && !SimulationQueries.IsAlive(world.FindEntity(_builder)!))
             Cancel();
+    }
+
+    /// <summary>Orders that were refused only when they were executed (their pre-check had passed), and orders that passed although their pre-check had refused them.</summary>
+    public int LateRejections { get; private set; }
+    public int LateAcceptances { get; private set; }
+
+    /// <summary>
+    /// The final answer to an order of this player (<see cref="CommandPath.Resolved"/>). The display followed the pre-check when the order was given; only an answer that
+    /// differs from it changes anything: an order refused after all gets the feedback it would have got at once.
+    /// </summary>
+    public void OnResolved(CommandResolution resolution)
+    {
+        if (resolution.Player != Player || !resolution.Deviates) return;
+        if (resolution.Result.Accepted)
+        {
+            LateAcceptances++;
+            return;
+        }
+        LateRejections++;
+        _feedback.Add(new CommandFeedback(FeedbackKind.Rejected, Vector3.Zero, EntityId.Invalid, resolution.Command.Tick, Settings.MarkerFrames, resolution.Result.Reason, resolution.Command.GetType().Name));
     }
 
     private SubmitResult Issue(Func<ulong, long, SimCommand> make)

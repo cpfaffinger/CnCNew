@@ -11,9 +11,9 @@ public sealed class SpectatorCommandSink : ICommandSink
 {
     public int Refused { get; private set; }
 
-    public SubmitResult Issue(Func<ulong, long, SimCommand> make)
+    public CommandReceipt Issue(Func<ulong, long, SimCommand> make)
     {
         Refused++;
-        return SubmitResult.Reject(CommandRejection.NotPermitted);
+        return new CommandReceipt(0, SubmitResult.Reject(CommandRejection.NotPermitted));
     }
 }

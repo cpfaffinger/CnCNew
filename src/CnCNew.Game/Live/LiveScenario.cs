@@ -80,7 +80,6 @@ public sealed record DemoScenario(
 /// </summary>
 public sealed class LiveScenario : LiveGame
 {
-    private readonly ICommandSink _commands;
     private readonly Dictionary<string, EntityId> _tags = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<int, StandingOrders> _books = [];
     private readonly Dictionary<int, ulong> _sequence = [];
@@ -94,7 +93,6 @@ public sealed class LiveScenario : LiveGame
         Scenario = scenario;
         Anchor = anchor;
         _players = players;
-        _commands = new ScenarioCommandSink(this, new PlayerId(1));
     }
 
     public DemoScenario Scenario { get; }
@@ -112,7 +110,7 @@ public sealed class LiveScenario : LiveGame
     public long LengthTicks => World.Time.OriginalFrames(Scenario.Frames);
     public override PlayerId? Winner => null;
     public override ImmutableArray<PlayerConfiguration> Players => _players;
-    protected override ICommandSink CreateCommandSink() => _commands;
+    protected override SubmitResult IssueNow(PlayerId player, Func<ulong, long, SimCommand> make) => Issue(player, make);
 
     /// <summary>Submits a command of <paramref name="player"/> with that player's next sequence number.</summary>
     public SubmitResult Issue(PlayerId player, Func<ulong, long, SimCommand> make)
@@ -273,8 +271,4 @@ public sealed class LiveScenario : LiveGame
                     if (module is ISpecialPowerModule power) power.SetReadyFrame(World.Tick);
     }
 
-    private sealed class ScenarioCommandSink(LiveScenario scenario, PlayerId player) : ICommandSink
-    {
-        public SubmitResult Issue(Func<ulong, long, SimCommand> make) => scenario.Issue(player, make);
-    }
 }

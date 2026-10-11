@@ -71,7 +71,7 @@ public sealed class LiveMission : LiveGame, IMissionObjectEffects
 
     public override ImmutableArray<PlayerConfiguration> Players => _players;
 
-    protected override ICommandSink CreateCommandSink() => new MissionCommandSink(Session, Human);
+    protected override CnCNew.Simulation.Commands.SubmitResult IssueNow(PlayerId player, Func<ulong, long, CnCNew.Simulation.Commands.SimCommand> make) => Session.Issue(player, make);
 
     /// <summary>One tick: the director completes due presentations, the mission steps (scripts, combat, world), the director applies what the scripts asked for.</summary>
     protected override TickResult StepSimulation()

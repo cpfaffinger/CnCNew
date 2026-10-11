@@ -655,13 +655,28 @@ public sealed partial class SimulationWorld : IWorldServices
         return SubmitResult.Ok;
     }
 
-    private CommandRejection Validate(SimCommand command)
+    /// <summary>
+    /// The pre-check of a command intent: what <see cref="Submit"/> would answer for <paramref name="command"/> against the world as it is now, without its tick and its sequence
+    /// number (the intent has neither yet - whoever schedules it assigns both). It changes nothing: no state, no counter, no event, no draw from a random stream; the answer is
+    /// advice for the one who gave the order, and only the answer at submission counts.
+    /// </summary>
+    public SubmitResult Check(SimCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        var reason = Validate(command, envelope: false);
+        return reason != 0 ? SubmitResult.Reject(reason) : SubmitResult.Ok;
+    }
+
+    private CommandRejection Validate(SimCommand command, bool envelope = true)
     {
         if (!_players.TryGetValue(command.Player.Value, out var player)) return CommandRejection.UnknownPlayer;
-        if (command.Tick < _tick) return CommandRejection.Late;
-        if (command.Sequence == 0) return CommandRejection.InvalidArguments;
-        if (command.Sequence == player.LastSequence) return CommandRejection.Duplicate;
-        if (command.Sequence < player.LastSequence) return CommandRejection.OutOfOrder;
+        if (envelope)
+        {
+            if (command.Tick < _tick) return CommandRejection.Late;
+            if (command.Sequence == 0) return CommandRejection.InvalidArguments;
+            if (command.Sequence == player.LastSequence) return CommandRejection.Duplicate;
+            if (command.Sequence < player.LastSequence) return CommandRejection.OutOfOrder;
+        }
         if (command.RequiresSystem && !command.Player.IsSystem) return CommandRejection.NotPermitted;
         switch (command)
         {

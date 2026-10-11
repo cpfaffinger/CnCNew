@@ -178,16 +178,9 @@ public sealed class LiveMatch : LiveGame
     public long MissingScriptTypeHits => Scripted is { } scripted ? scripted.Engine.MissingActionHits.Values.Sum() + scripted.Engine.MissingConditionHits.Values.Sum() : 0;
 
     /// <summary>Command sink of the human player: everything the human changes goes through the session (for the simulation's own AI so that <see cref="SkirmishMatchSession.ToReplay"/> reproduces the match).</summary>
-    protected override ICommandSink CreateCommandSink()
-    {
-        if (Setup.Spectator) return SpectatorSink = new CnCNew.Game.Spectator.SpectatorCommandSink();
-        return Scripted is { } scripted ? new ScriptedSink(scripted, Human) : new SkirmishSessionCommandSink(Session, Human);
-    }
+    protected override ICommandSink CreateCommandSink() => Setup.Spectator ? SpectatorSink = new CnCNew.Game.Spectator.SpectatorCommandSink() : base.CreateCommandSink();
 
-    private sealed class ScriptedSink(ScriptedSkirmishSession session, PlayerId player) : ICommandSink
-    {
-        public SubmitResult Issue(Func<ulong, long, SimCommand> make) => session.Issue(player, make);
-    }
+    protected override SubmitResult IssueNow(PlayerId player, Func<ulong, long, SimCommand> make) => Scripted?.Issue(player, make) ?? Session.Issue(player, make);
 
     /// <summary>The refusing sink of a spectator's match once <see cref="LiveGame.Commands"/> was asked for; null in a match somebody plays.</summary>
     public CnCNew.Game.Spectator.SpectatorCommandSink? SpectatorSink { get; private set; }
@@ -202,7 +195,7 @@ public sealed class LiveMatch : LiveGame
 
         var humanPlays = !setup.AutoPlay && !setup.Spectator;
         var description = setup.Describe(data, terrain);
-        var match = description.Resolve(data.Templates, terrain);
+        var match = description.Resolve(data.Templates, terrain, data.Fingerprint);
         if (setup.UsesOriginalAi) return CreateScripted(data, setup, viewport, map, terrain, match, humanPlays);
         var session = SkirmishMatchSession.Start(description, data.Templates, terrain, map.Objects, setup.Options.CheckpointInterval);
         return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport);

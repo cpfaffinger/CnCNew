@@ -36,6 +36,8 @@ if (scenario is not null) matchMap = scenario.Map;
 var missionMap = GetArgument(args, "--mission");
 // --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §17); fixed time steps only.
 var inputScriptPath = GetArgument(args, "--input-script");
+CnCNew.Client.Stride.ClientRuntime.InputDelayTicks = int.Parse(GetArgument(args, "--input-delay-ticks") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+if (CnCNew.Client.Stride.ClientRuntime.InputDelayTicks is < 0 or > 600) throw new ArgumentException("--input-delay-ticks expects 0 to 600.");
 // --tick-rate N: the simulation rate of the session (30, 60 or 120 Hz; the default is the game layer's, 30 Hz until the product rate changes). Everything shown and heard
 // lasts the same game time at every rate; an unsupported rate is refused by the simulation's own message.
 var tickRate = GetArgument(args, "--tick-rate") is { } rateText

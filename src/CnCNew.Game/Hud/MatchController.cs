@@ -115,6 +115,7 @@ public sealed class MatchController
         Input.UiRequest += OnInputUiRequest;
 
         match.BeforeTick = world => Input.Tick(world);
+        match.CommandResolved += Input.Commands.OnResolved;
         match.TickStepped += OnTickStepped;
         match.CommandIssued += (command, result) =>
         {

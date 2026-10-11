@@ -545,12 +545,12 @@ static class InputTests
         private ulong _sequence;
         public List<SimCommand> Issued { get; } = [];
 
-        public SubmitResult Issue(Func<ulong, long, SimCommand> make)
+        public CommandReceipt Issue(Func<ulong, long, SimCommand> make)
         {
             var command = make(++_sequence, world.Tick);
             Issued.Add(command);
             log.Add(command);
-            return world.Submit(command);
+            return new CommandReceipt((long)_sequence, world.Submit(command));
         }
     }
 

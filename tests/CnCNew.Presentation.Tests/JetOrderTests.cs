@@ -148,7 +148,7 @@ internal static class JetOrderTests
 
         public void Tick()
         {
-            Orders.Update(World, Me, _sink.Issue);
+            Orders.Update(World, Me, make => _sink.Issue(make));
             World.Step();
         }
     }

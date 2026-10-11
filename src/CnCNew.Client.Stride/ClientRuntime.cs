@@ -369,6 +369,13 @@ internal sealed class ClientRuntime : IDisposable
 
     private RunningGame Start(LiveGame game, StartMissionOutput? mission)
     {
+        // The lockstep probe (--input-delay-ticks N): every order of the viewer is executed N ticks after it was given.
+        if (InputDelayTicks > 0) game.UseInputDelay(InputDelayTicks);
+        game.CommandResolved += resolution =>
+        {
+            if (resolution.Deviates)
+                Console.WriteLine($"[input] order {resolution.Receipt} ({resolution.Command.GetType().Name}) was answered differently at tick {resolution.Command.Tick} than its pre-check at tick {resolution.IssuedTick}: {(resolution.Result.Accepted ? "accepted" : $"rejected ({resolution.Result.Reason})")}");
+        };
         var host = new LiveMatchHost(_game, _data, game);
         var running = game switch
         {
@@ -384,6 +391,12 @@ internal sealed class ClientRuntime : IDisposable
         if (game is LiveMission scripted) scripted.Director.AudioControl = _audio.Game;
         return running;
     }
+
+    /// <summary>
+    /// Artificial input delay in ticks for every game this process starts (<c>--input-delay-ticks N</c>, the lockstep probe of docs/PRESENTATION-INPUT.md): 0, the default,
+    /// executes an order in the tick it is given; 4 and 12 are around 67 and 200 ms at 60 Hz.
+    /// </summary>
+    public static int InputDelayTicks { get; set; }
 
     /// <summary>The slot the in-game menu saves a skirmish to.</summary>
     public const string SkirmishSaveSlot = "skirmish";

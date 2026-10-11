@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CnCNew.Ui.Runtime;
 using CnCNew.Ui.Wnd;
 using System.Numerics;
@@ -32,6 +33,9 @@ internal static class HudTests
 
         harness.Run("Select dozer, construct a structure, queue a unit, move and attack-move", () => ScriptedSession(data));
         harness.Run("Replay of the human player's commands is internally deterministic", () => ReplayMatches(data));
+        harness.Run("Lockstep probe: the click path with every order executed 0, 4 and 12 ticks after it was given; a late refusal is shown and counted", () => InputDelayThroughTheClickPath(data));
+        harness.Run("Lockstep probe: with no delay the tick driver and the command path record the match of direct submission; pause and speed are requests to the driver", () => TickDriverAndPathChangeNothing(data));
+        harness.Run("Lockstep probe: a mission runs with orders executed 4 and 12 ticks later", () => MissionWithInputDelay(data));
         harness.Run("Mouse setups: by default the left button selects and the right button orders; with AlternateMouse off the left button orders as in the original; the scroll slider is the original's factor", () => MouseSetups(data));
         harness.Run("HUD draw lists at several resolutions contain the expected buttons", () => ResolutionSweep(data));
         harness.Run("Minimap click moves the camera", () => MinimapClickMovesCamera(data));
@@ -355,6 +359,211 @@ internal static class HudTests
     }
 
     // ------------------------------------------------------------------------------------------------------------ scenarios
+
+    /// <summary>
+    /// Step 8 of phase 24 through the real click path: select the dozer, choose a building, place it, order a unit about - each order pre-checked at once and executed
+    /// <c>d</c> ticks later. Then the delayed refusal: a unit is destroyed while its order is on its way; the order's pre-check had passed, its execution is refused, and the
+    /// HUD gets the refusal it would have shown at once.
+    /// </summary>
+    private static void InputDelayThroughTheClickPath(GameData data)
+    {
+        foreach (var delay in new[] { 0, 4, 12 })
+        {
+            var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+            match.UseInputDelay(delay);
+            var human = match.Human;
+            long time = 10_000;
+            var issued = new List<(Simulation.Commands.SimCommand Command, bool Accepted)>();
+            var preChecked = new List<(Simulation.Commands.SimCommand Command, CommandReceipt Receipt)>();
+            var resolved = new List<CommandResolution>();
+            var rejectedFeedback = 0;
+            match.CommandIssued += (command, result) => issued.Add((command, result.Accepted));
+            match.CommandPreChecked += (command, receipt) => preChecked.Add((command, receipt));
+            match.CommandResolved += resolved.Add;
+            controller.CommandFeedbackObserved += feedback => { if (feedback.Kind == FeedbackKind.Rejected) rejectedFeedback++; };
+            Advance(match, controller, 1);
+
+            var dozer = match.World.Entities.First(entity => entity.Owner == human && entity.Template.IsKindOf("DOZER"));
+            Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+            Advance(match, controller, 1);
+            Refresh(controller);
+            var slot = FindConstructSlot(match, controller.CommandBar);
+            var rect = controller.WindowRect($"ControlBar.wnd:ButtonCommand{slot:00}") ?? throw new InvalidOperationException("button window missing");
+            Click(controller, ref time, MouseButton.Left, new Vector2(rect.CenterX, rect.CenterY));
+            Advance(match, controller, 1);
+            var buildTemplate = controller.Input.Commands.PendingButton!.Object;
+            var dozerGround = SimulationQueries.GroundOf(dozer);
+            PlacementGhost? ghost = null;
+            foreach (var offset in (ReadOnlySpan<Vector2>)[new(300, 0), new(-300, 0), new(0, 300), new(0, -300), new(220, 220), new(-220, -220)])
+            {
+                var candidate = dozerGround + offset;
+                controller.Process(new MouseMoveEvent(time += 16, Screen(match, new Vector3(candidate.X, candidate.Y, 0f))));
+                if (controller.Input.Commands.Ghost is { IsValid: true } valid) { ghost = valid; break; }
+            }
+            TestHarness.Assert(ghost is not null, "a buildable spot exists near the dozer");
+            var before = match.Tick;
+            Click(controller, ref time, MouseButton.Left, Screen(match, ghost!.Position));
+            TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.None, $"delay {delay}: the click leaves the placement mode at once (the pre-check passed)");
+            TestHarness.Assert(preChecked.Any(entry => entry.Command is Simulation.Commands.ConstructCommand && entry.Receipt.Accepted) && !issued.Any(entry => entry.Command is Simulation.Commands.ConstructCommand),
+                $"delay {delay}: the order is pre-checked when it is given and not yet submitted");
+            Advance(match, controller, 30);
+            var construct = resolved.Single(resolution => resolution.Command is Simulation.Commands.ConstructCommand);
+            TestHarness.Assert(construct.Result.Accepted && !construct.Deviates && construct.Command.Tick == before + delay, $"delay {delay}: the construction is executed {delay} ticks after the click (tick {construct.Command.Tick}, given at {before})");
+            Advance(match, controller, 60);
+            TestHarness.Assert(match.World.Entities.Any(entity => entity.Owner == human && entity.Template.Name == buildTemplate), $"delay {delay}: the construction site exists");
+
+            // The dozer is ordered about and destroyed while its order is on its way.
+            var victim = dozer;
+            Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(victim)));
+            Advance(match, controller, 1);
+            TestHarness.Assert(controller.Input.Selection.Contains(victim.Id), "the dozer is selected");
+            var ground = SimulationQueries.GroundOf(victim);
+            var feedbackBefore = rejectedFeedback;
+            Click(controller, ref time, MouseButton.Right, Screen(match, new Vector3(ground.X + 60, ground.Y + 40, 0f)));
+            var orders = preChecked.Count(entry => entry.Receipt.Accepted && entry.Command is Simulation.Commands.GroupMoveCommand or Simulation.Commands.SetMoveTargetCommand);
+            TestHarness.Assert(orders >= 1, $"delay {delay}: the move order passes its pre-check");
+            if (delay > 0)
+            {
+                // The system's own number range is far below this one in a test of this length.
+                TestHarness.Assert(match.Session.World.Submit(new Simulation.Commands.DestroyCommand(Simulation.Ids.PlayerId.System, 1_000_000_000UL + (ulong)delay, match.Tick, victim.Id)).Accepted, "the unit is destroyed by the system");
+                Advance(match, controller, 20);
+                TestHarness.Assert(controller.Input.Commands.LateRejections >= 1 && rejectedFeedback > feedbackBefore && match.CommandPath.Deviations >= 1,
+                    $"delay {delay}: the order of the destroyed unit is refused at execution; the refusal is counted ({controller.Input.Commands.LateRejections}) and shown ({rejectedFeedback - feedbackBefore} feedback)");
+            }
+            else
+            {
+                Advance(match, controller, 20);
+                TestHarness.Assert(controller.Input.Commands.LateRejections == 0 && match.CommandPath.Deviations == 0, "with no delay no answer differs from its pre-check");
+            }
+            TestHarness.Assert(match.CommandPath.Issued == match.CommandPath.ResolvedCount && issued.Count == resolved.Count && issued.Count == preChecked.Count, $"delay {delay}: every order given was answered exactly once");
+            Advance(match, controller, 30 * 20);
+            TestHarness.Assert(match.World.RejectionCounts[(int)Simulation.Commands.CommandRejection.Late] == 0 && match.World.RejectionCounts[(int)Simulation.Commands.CommandRejection.OutOfOrder] == 0, $"delay {delay}: no order arrives late or out of order");
+        }
+    }
+
+    /// <summary>
+    /// The proof for d = 0 on a match with a human: the same orders once submitted straight to the session before each step (as the game did before phase 24) and once through
+    /// LiveGame - tick driver, command path, bundle of the tick - give the same replay, byte for byte, and the same session hash. And the driver: pause and speed are requests
+    /// it grants; a driver that releases nothing holds the game.
+    /// </summary>
+    private static void TickDriverAndPathChangeNothing(GameData data)
+    {
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard);
+        var viewport = new Vector2(1280, 720);
+        const int ticks = 1_500;
+
+        Func<ulong, long, Simulation.Commands.SimCommand>? OrderAt(LiveMatch match, long tick)
+        {
+            if (tick == 0 || tick % 113 != 0) return null;
+            var human = match.Human;
+            var units = match.World.Entities.Where(entity => entity.Owner == human && !entity.Template.IsKindOf("STRUCTURE") && !entity.EffectivelyDead).Select(entity => entity.Id).ToImmutableArray();
+            if (units.IsEmpty) return null;
+            var home = match.Terrain.StartPositions[0];
+            var x = home.X + Simulation.Numerics.Fixed.FromInt(80 + (int)(tick % 7) * 20);
+            return (sequence, at) => new Simulation.Commands.GroupMoveCommand(human, sequence, at, units, x, home.Y + Simulation.Numerics.Fixed.FromInt(60), false);
+        }
+
+        var direct = LiveMatch.Create(data, setup, viewport);
+        while (direct.Tick < ticks)
+        {
+            if (OrderAt(direct, direct.Tick) is { } order) direct.Session.Issue(direct.Human, order);
+            direct.Session.Step();
+        }
+
+        var live = LiveMatch.Create(data, setup, viewport);
+        var tickSeconds = 1.0 / live.World.Time.TicksPerSecond;
+        while (live.Tick < ticks)
+        {
+            if (OrderAt(live, live.Tick) is { } order) live.Commands.Issue(order);
+            var before = live.Tick;
+            live.Advance(tickSeconds);
+            TestHarness.Assert(live.Tick == before + 1, "one tick of wall time releases one tick");
+        }
+        TestHarness.Assert(live.Session.RecordedCommands.Count(command => command.Player == live.Human) >= 10, "the human gave orders");
+        TestHarness.Assert(Simulation.Replay.ReplayFormat.Write(live.Session.ToReplay()).AsSpan().SequenceEqual(Simulation.Replay.ReplayFormat.Write(direct.Session.ToReplay())),
+            "the match through tick driver and command path has the replay bytes of the match with direct submission");
+        TestHarness.Assert(live.Session.StateHash() == direct.Session.StateHash(), "and the same session hash");
+
+        live.Paused = true;
+        TestHarness.Assert(live.TickDriver.Paused && live.Paused, "a pause is a request the local driver grants");
+        var paused = live.Tick;
+        live.Advance(1);
+        TestHarness.Assert(live.Tick == paused, "a paused driver releases no tick");
+        live.Paused = false;
+        live.Speed = 2;
+        live.Advance(tickSeconds * 2);
+        TestHarness.Assert(live.TickDriver.Speed == 2 && live.Tick == paused + 4, "double speed releases two ticks per tick of wall time");
+        live.Speed = 1;
+
+        var holding = new HoldingDriver();
+        live.TickDriver = holding;
+        var held = live.Tick;
+        live.Advance(1);
+        TestHarness.Assert(live.Tick == held && holding.Asked > 0, "a driver that releases nothing holds the game however much time passes");
+        holding.Release = 3;
+        live.Advance(0);
+        TestHarness.Assert(live.Tick == held + 3, "the ticks the driver releases run, and no more");
+    }
+
+    /// <summary>A driver that knows no clock: it releases the ticks it is told to (the shape of a networked driver).</summary>
+    private sealed class HoldingDriver : ITickDriver
+    {
+        public int Release { get; set; }
+        public int Asked { get; private set; }
+        public bool Paused { get; private set; }
+        public double Speed { get; private set; } = 1;
+        public long Stalls => 0;
+        public double Fraction => 0;
+        public void RequestPause(bool paused) => Paused = paused;
+        public void RequestSpeed(double speed) => Speed = speed;
+        public void AddTime(double seconds) { }
+        public void LimitBacklog() { }
+
+        public bool TryReleaseTick(long tick, bool bundlePresent)
+        {
+            Asked++;
+            if (Release <= 0 || !bundlePresent) return false;
+            Release--;
+            return true;
+        }
+    }
+
+    private static void MissionWithInputDelay(GameData data)
+    {
+        foreach (var delay in new[] { 4, 12 })
+        {
+            var run = CnCNew.Game.Campaign.MissionRun.Load(CnCNew.Game.Campaign.MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", Simulation.Mission.MissionOptions.Standard);
+            var live = LiveMission.Create(data, run, new Vector2(1280, 720));
+            live.UseInputDelay(delay);
+            var resolved = new List<CommandResolution>();
+            live.CommandResolved += resolved.Add;
+            var frame = CnCNew.Tests.TestTime.FrameSeconds;
+            for (var index = 0; index < 30 * 5; index++) live.Advance(frame);
+            var given = new List<long>();
+            for (var index = 0; index < 30 * 20; index++)
+            {
+                if (index % 45 == 0)
+                {
+                    var units = live.World.Entities.Where(entity => entity.Owner == live.Human && !entity.Template.IsKindOf("STRUCTURE") && !entity.EffectivelyDead && entity.Template.Locomotor is not null)
+                        .Select(entity => entity.Id).Take(4).ToImmutableArray();
+                    if (!units.IsEmpty)
+                    {
+                        var anchor = live.World.FindEntity(units[0])!;
+                        var x = anchor.X + Simulation.Numerics.Fixed.FromInt(40);
+                        given.Add(live.Tick);
+                        live.Commands.Issue((sequence, tick) => new Simulation.Commands.GroupMoveCommand(live.Human, sequence, tick, units, x, anchor.Y, false));
+                    }
+                }
+                live.Advance(frame);
+            }
+            TestHarness.Assert(given.Count >= 5 && resolved.Count == given.Count, $"delay {delay}: every order of the human in the mission was answered ({resolved.Count} of {given.Count})");
+            TestHarness.Assert(resolved.Select(resolution => resolution.Command.Tick).SequenceEqual(given.Select(tick => tick + delay)), $"delay {delay}: each order is executed {delay} ticks after it was given");
+            TestHarness.Assert(resolved.All(resolution => resolution.Result.Accepted), $"delay {delay}: the orders are accepted at execution");
+            TestHarness.Assert(live.World.RejectionCounts[(int)Simulation.Commands.CommandRejection.Late] == 0 && live.World.RejectionCounts[(int)Simulation.Commands.CommandRejection.OutOfOrder] == 0
+                && live.World.RejectionCounts[(int)Simulation.Commands.CommandRejection.Duplicate] == 0, $"delay {delay}: the human shares the session's sequence counter with the scripts without a refused number");
+        }
+    }
 
     private static void ScriptedSession(GameData data)
     {

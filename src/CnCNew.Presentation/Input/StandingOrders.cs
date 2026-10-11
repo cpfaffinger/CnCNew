@@ -44,6 +44,12 @@ public sealed class StandingOrders
     /// <summary>The point an attacking aircraft flies out to after it overflew its target: it cannot stop to turn, so it leaves far enough to turn around and come in for the next pass.</summary>
     private readonly Dictionary<uint, Vector2> _egress = [];
 
+    /// <summary>
+    /// Until which tick a unit's last command from here is on its way to the simulation (only with a command delay): until then the world does not show its effect, and judging
+    /// the unit again would repeat the command.
+    /// </summary>
+    private readonly Dictionary<uint, long> _inFlightUntil = [];
+
     public int Count => _orders.Count;
 
     public bool TryGet(EntityId unit, out StandingOrder order) => _orders.TryGetValue(unit.Value, out order!);
@@ -64,6 +70,7 @@ public sealed class StandingOrders
         _chaseGoal.Remove(unit.Value);
         _egress.Remove(unit.Value);
         _standing.Remove(unit.Value);
+        _inFlightUntil.Remove(unit.Value);
     }
 
     /// <summary>Appends a waypoint; a unit without a waypoint order starts one (the first point is ordered by the caller).</summary>
@@ -77,10 +84,16 @@ public sealed class StandingOrders
     /// <summary>
     /// Call once per simulation tick, before the world steps. The orders are examined, and their commands issued, once per original frame (on the ticks that begin one:
     /// every tick at 30 Hz, every second one at 60 Hz), so the commands a standing order produces - and with them the replay - follow game time, not the tick rate.
+    /// <para>
+    /// <paramref name="delayTicks"/> is the command delay of the sink (<see cref="ICommandSink.DelayTicks"/>; 0 in a local game): a command given now is executed that many
+    /// ticks later. While a unit's command is on its way the unit is not judged again - the world would still show the state the command was given for, and the order would
+    /// give it a second time. With a delay of 0 nothing waits and nothing differs.
+    /// </para>
     /// </summary>
-    public void Update(SimulationWorld world, PlayerId player, Func<Func<ulong, long, SimCommand>, SubmitResult> issue)
+    public void Update(SimulationWorld world, PlayerId player, Func<Func<ulong, long, SimCommand>, SubmitResult> issue, int delayTicks = 0)
     {
         if (!world.Time.IsOriginalFrameBoundary(world.Tick)) return;
+        var submit = issue;
         foreach (var (id, order) in _orders.ToArray())
         {
             var unit = world.FindEntity(new EntityId(id));
@@ -89,8 +102,20 @@ public sealed class StandingOrders
                 Clear(new EntityId(id));
                 continue;
             }
-            // The order's own first move executes in the tick it was issued; before that the unit cannot show a move target yet.
-            var settled = world.Tick > order.IssuedTick + 1;
+            if (delayTicks > 0)
+            {
+                // The command that set the order, or the last one given from here, has not reached the simulation yet.
+                if (world.Tick <= order.IssuedTick + delayTicks) continue;
+                if (_inFlightUntil.TryGetValue(id, out var until) && world.Tick <= until) continue;
+                var unitId = id;
+                issue = make =>
+                {
+                    _inFlightUntil[unitId] = world.Tick + delayTicks;
+                    return submit(make);
+                };
+            }
+            // The order's own first move executes in the tick it was issued (or the delay later); before that the unit cannot show a move target yet.
+            var settled = world.Tick > order.IssuedTick + 1 + delayTicks;
             switch (order.Kind)
             {
                 case StandingOrderKind.Attack:

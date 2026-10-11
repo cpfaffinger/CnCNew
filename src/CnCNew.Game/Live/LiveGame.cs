@@ -39,7 +39,7 @@ public abstract class LiveGame
     private readonly FrameProjectorOptions _projectorOptions;
     private readonly SimulationFxWorldView _fxView;
     private readonly List<SoundCue> _soundCues = [];
-    private double _accumulator;
+    private ITickDriver _driver;
     private double _fraction;
     private IPresentationPhaseObserver? _phaseObserver;
 
@@ -58,6 +58,7 @@ public abstract class LiveGame
         Human = human;
         // One tick of this world in seconds, and the catch-up budget in its ticks: both follow the rate of the world, never a constant of the game layer.
         _tickSeconds = 1.0 / world.Time.TicksPerSecond;
+        _driver = new LocalTickDriver(_tickSeconds);
         _maxTicksPerFrame = world.Time.OriginalFrames(MaxCatchUpFrames);
 
         var renderOptions = TerrainRenderOptions.FromDefinitions(graph);
@@ -134,10 +135,35 @@ public abstract class LiveGame
         Frame = _projector.Project(1f);
     }
 
-    public bool Paused { get; set; }
+    /// <summary>
+    /// Who releases the ticks (<see cref="ITickDriver"/>): locally the wall-time accumulator. Replaced by a host that takes its ticks from somewhere else; pause and speed
+    /// asked for so far go to the new driver as requests.
+    /// </summary>
+    public ITickDriver TickDriver
+    {
+        get => _driver;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            value.RequestPause(_driver.Paused);
+            value.RequestSpeed(_driver.Speed);
+            _driver = value;
+        }
+    }
 
-    /// <summary>Simulation speed factor: 1 is real time.</summary>
-    public double Speed { get; set; } = 1;
+    /// <summary>Whether the game stands still. Setting it is a request to the tick driver; reading it gives what the driver granted.</summary>
+    public bool Paused
+    {
+        get => _driver.Paused;
+        set => _driver.RequestPause(value);
+    }
+
+    /// <summary>Simulation speed factor: 1 is real time. Setting it is a request to the tick driver.</summary>
+    public double Speed
+    {
+        get => _driver.Speed;
+        set => _driver.RequestSpeed(value);
+    }
 
     public RenderFrame Frame { get; private set; }
 
@@ -179,26 +205,54 @@ public abstract class LiveGame
     /// Command sink of the human player: everything the human changes in the world goes through it, so the simulation's recording (a skirmish's replay, a mission's
     /// per-player sequence counter) sees every order. Created lazily; one instance per game.
     /// </summary>
-    public ICommandSink Commands => _observedCommands ??= new ObservedCommandSink(this, CreateCommandSink());
+    public ICommandSink Commands => _commands ??= CreateCommandSink();
 
-    /// <summary>The sink of the simulation behind this game (a skirmish session, a mission session, a staged scene); called once.</summary>
-    protected abstract ICommandSink CreateCommandSink();
+    /// <summary>The sink the viewer's input is given: the viewer's end of <see cref="CommandPath"/>. A game nobody plays overrides it with one that refuses.</summary>
+    protected virtual ICommandSink CreateCommandSink() => CommandPath.For(Human);
 
-    /// <summary>Raised for every order the human submitted through <see cref="Commands"/>, with the simulation's answer (accepted, or why not): for sound, diagnostics and the client's input replay report.</summary>
-    public event Action<CnCNew.Simulation.Commands.SimCommand, CnCNew.Simulation.Commands.SubmitResult>? CommandIssued;
-
-    private ICommandSink? _observedCommands;
-
-    private sealed class ObservedCommandSink(LiveGame game, ICommandSink inner) : ICommandSink
+    /// <summary>
+    /// The two-stage command path of this game (docs/PRESENTATION-INPUT.md, "Command intent, pre-check, result"): orders are handed over as intents, pre-checked at once and
+    /// submitted to the simulation immediately before the step of the tick their scheduler gave them. One path for a skirmish, a mission and a staged scene.
+    /// </summary>
+    public CommandPath CommandPath
     {
-        public CnCNew.Simulation.Commands.SubmitResult Issue(Func<ulong, long, CnCNew.Simulation.Commands.SimCommand> make)
+        get
         {
-            CnCNew.Simulation.Commands.SimCommand? made = null;
-            var result = inner.Issue((sequence, tick) => made = make(sequence, tick));
-            if (made is not null) game.CommandIssued?.Invoke(made, result);
-            return result;
+            if (_commandPath is not null) return _commandPath;
+            _commandPath = new CommandPath(World, IssueNow);
+            _commandPath.PreChecked += (command, receipt) => CommandPreChecked?.Invoke(command, receipt);
+            _commandPath.Resolved += resolution =>
+            {
+                CommandIssued?.Invoke(resolution.Command, resolution.Result);
+                CommandResolved?.Invoke(resolution);
+            };
+            return _commandPath;
         }
     }
+
+    /// <summary>
+    /// The lockstep probe: every order of the viewer is executed <paramref name="ticks"/> ticks after it was given, as if it had travelled to a server and back (0: in the tick
+    /// it was given, the default). Only while no order is on its way.
+    /// </summary>
+    public void UseInputDelay(int ticks) => CommandPath.UseScheduler(new LocalCommandScheduler(ticks));
+
+    /// <summary>The submission of the simulation behind this game: builds the command of <paramref name="player"/> at the current tick with that player's next sequence number and submits it.</summary>
+    protected abstract CnCNew.Simulation.Commands.SubmitResult IssueNow(PlayerId player, Func<ulong, long, CnCNew.Simulation.Commands.SimCommand> make);
+
+    /// <summary>
+    /// Raised for every order of the viewer when it is submitted to the simulation, with the command as submitted and the final answer (accepted, or why not): for statistics,
+    /// diagnostics and the client's input report. With no input delay that is the next step after the order was given.
+    /// </summary>
+    public event Action<CnCNew.Simulation.Commands.SimCommand, CnCNew.Simulation.Commands.SubmitResult>? CommandIssued;
+
+    /// <summary>Raised when an order is given, with the command as the local pre-check saw it (no sequence number yet) and its receipt: what immediate display and sound hang on.</summary>
+    public event Action<CnCNew.Simulation.Commands.SimCommand, CommandReceipt>? CommandPreChecked;
+
+    /// <summary>Raised with the final answer to an order (<see cref="CommandResolution.Deviates"/>: it differs from the pre-check).</summary>
+    public event Action<CommandResolution>? CommandResolved;
+
+    private ICommandSink? _commands;
+    private CommandPath? _commandPath;
 
     /// <summary>Invoked immediately before every simulation step of <see cref="Advance"/> (per-tick input bookkeeping).</summary>
     public Action<SimulationWorld>? BeforeTick { get; set; }
@@ -239,15 +293,18 @@ public abstract class LiveGame
     /// <summary>Steps the simulation for <paramref name="seconds"/> of wall time (respecting pause and speed) and refreshes every derived layer.</summary>
     public void Advance(double seconds)
     {
-        if (!Paused && !IsOver)
+        if (!IsOver)
         {
-            _accumulator += seconds * Speed;
+            _driver.AddTime(seconds);
             var steps = 0;
-            while (_accumulator >= _tickSeconds && steps < _maxTicksPerFrame && !IsOver)
+            // The driver releases the ticks: time must be due and the tick's command bundle present.
+            while (steps < _maxTicksPerFrame && !IsOver && _driver.TryReleaseTick(World.Tick, _commandPath?.CanStep ?? true))
             {
                 var observer = _phaseObserver;
                 observer?.PhaseStarted(PresentationPhase.BeforeTick);
                 BeforeTick?.Invoke(World);
+                // The commands of this tick are submitted immediately before its step, in the order of the bundle.
+                _commandPath?.SubmitDue();
                 observer?.PhaseEnded(PresentationPhase.BeforeTick);
                 observer?.PhaseStarted(PresentationPhase.StepSimulation);
                 var result = StepSimulation();
@@ -258,10 +315,9 @@ public abstract class LiveGame
                 observer?.PhaseStarted(PresentationPhase.TickStepped);
                 TickStepped?.Invoke(result);
                 observer?.PhaseEnded(PresentationPhase.TickStepped);
-                _accumulator -= _tickSeconds;
                 steps++;
             }
-            if (steps == _maxTicksPerFrame) _accumulator = Math.Min(_accumulator, _tickSeconds);
+            if (steps == _maxTicksPerFrame) _driver.LimitBacklog();
         }
         var frameObserver = _phaseObserver;
         frameObserver?.PhaseStarted(PresentationPhase.FogAdvance);
@@ -271,7 +327,7 @@ public abstract class LiveGame
         OnAdvanced(Paused ? 0 : seconds * Speed);
         frameObserver?.PhaseEnded(PresentationPhase.OnAdvanced);
         frameObserver?.PhaseStarted(PresentationPhase.Project);
-        var alpha = Paused ? 1f : (float)Math.Clamp(_accumulator / _tickSeconds, 0, 1);
+        var alpha = Paused ? 1f : (float)_driver.Fraction;
         if (!Paused) _fraction = alpha;
         Frame = _projector.Project(alpha);
         frameObserver?.PhaseEnded(PresentationPhase.Project);

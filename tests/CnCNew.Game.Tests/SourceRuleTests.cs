@@ -27,6 +27,9 @@ internal static class SourceRuleTests
             "define it from CnCNew.Data.OriginalFrame.PerSecond (original frame) or read world.Time (simulation rate)"),
         new("the literal 30 used as a rate", new Regex(@"1(\.0)?[dfm]?\s*/\s*30(\.0)?[dfm]?\b|[/*]\s*30(\.0)?[fdm]?\b|\b30(\.0)?[fdmL]?\s*[*/]|1000\s*/\s*30|/\s*33\b|33\.33|0\.0333"),
             "write OriginalFrame.PerSecond for the original frame, or convert with world.Time"),
+        // Phase 24: in lockstep a single draw from the logic stream outside the simulation is a desync.
+        new("the logic random stream of the simulation used outside it", new Regex(@"\bLogicRandom\b|\.Streams\b"),
+            "the stream belongs to the simulation: draw from a stream of your own (FxRandom) and never from the world's"),
         new("the literal 60 or 120 used as a rate", new Regex(@"1(\.0)?[dfm]?\s*/\s*(60|120)(\.0)?[dfm]?\b|/\s*(60|120)(\.0)?d\b"), "read the rate from the world (world.Time.TicksPerSecond)"),
     ];
 
@@ -44,7 +47,7 @@ internal static class SourceRuleTests
     public static int Run(string[] args)
     {
         var harness = new TestHarness(nameof(SourceRuleTests));
-        harness.Run("No rate constant outside the simulation except the original frame (CnCNew.Data.OriginalFrame.PerSecond)", NoRateConstants);
+        harness.Run("No rate constant outside the simulation except the original frame (CnCNew.Data.OriginalFrame.PerSecond), and no use of its logic random stream", NoRateConstants);
         harness.Run("The rules find what they forbid and the exceptions are narrow", RulesAreSharp);
         return harness.Failures;
     }
@@ -146,6 +149,8 @@ internal static class SourceRuleTests
             "var step = 1.0 / 60;",
             "public const float RiverVScrollPerSecond = 0.002f * 30f;",
             "var frames = ms * 30 / 1000m;",
+            "var roll = match.World.LogicRandom.Range(0, 99);",
+            "world.Streams.Logic.NextUInt32();",
         ];
         foreach (var line in forbidden)
             TestHarness.Assert(Rules.Any(rule => rule.Pattern.IsMatch(CodeOf(line))), $"the rules catch: {line}");
