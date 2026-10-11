@@ -162,9 +162,8 @@ public sealed class SkirmishSetupScreen : ShellScreen
     private string ResolveFaction(int slot)
     {
         var index = _factionIndex[slot];
-        if (index < _factionChoices.Length - 1) return _factionChoices[index];
-        var real = _factionChoices[..^1];
-        return real[new Random(unchecked(0xC0FFEE + slot)).Next(real.Length)];
+        // "Random" is not decided here: the match description carries it and its seed decides, the same on every machine (docs/SIMULATION-CORE.md section 45.2).
+        return index < _factionChoices.Length - 1 ? _factionChoices[index] : MatchSetup.RandomFaction;
     }
 
     private void TryStart()

@@ -19,6 +19,9 @@ public sealed class SaveGameException(string message, Exception? inner = null) :
 public sealed record SaveGameHeader(
     string Title, string MapPath, string Campaign, string Mission, ScriptDifficulty Difficulty, long Tick, int TickRate, string DefinitionFingerprint, string StateHash)
 {
+    /// <summary>A mission (the default) or a running skirmish; a skirmish save has no campaign, mission or difficulty.</summary>
+    public SaveGameKind Kind { get; init; } = SaveGameKind.Mission;
+
     /// <summary>Whole seconds of game time the saved world had run.</summary>
     public long GameSeconds => SimulationRate.FromTicksPerSecond(TickRate).Time.ToWholeSeconds(Tick);
 
@@ -35,7 +38,7 @@ public sealed record LoadedSave(SaveGameHeader Header, MissionRun Run, CampaignP
 /// snapshot is the source of truth, never a replay) with what the world cannot know: the map to rebuild the terrain and script program from, the
 /// campaign progress and a title. <see cref="Version"/> is this format's own; a file of another version, of another tick rate (the header names the
 /// rate its ticks count; a save is never reinterpreted at another one), of other game definitions (fingerprint) or with a flipped byte (checksum over the state, plus the simulation's own state hash) is refused with a <see cref="SaveGameException"/>.
-/// <para>Scope: missions (campaign or single map with scripts). A skirmish keeps AI state outside the world that this format does not carry.</para>
+/// <para>Scope: missions (campaign or single map with scripts). A running skirmish is saved by <see cref="SkirmishSaveGame"/>, a format of its own.</para>
 /// </summary>
 public static class SaveGame
 {

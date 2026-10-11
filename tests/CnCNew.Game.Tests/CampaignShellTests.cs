@@ -31,6 +31,7 @@ internal static class CampaignShellTests
         var harness = new TestHarness(nameof(CampaignShellTests));
         harness.Run("Mission conclusion: victory continues to the next mission, defeat retries", () => MissionConclusionScreens(args));
         harness.Run("A scripted mission save continues identically after a shell load", () => SaveLoadThroughShellContinuesIdentically(args));
+        harness.Run("A skirmish save continues identically after a shell load, computer players included", () => SkirmishSaveThroughShellContinuesIdentically(args));
 
         var contentDir = ContentDir(args);
         if (contentDir is null) Console.WriteLine("SKIP CampaignShellTests real-campaign flow (pass --content-dir <dir>)");
@@ -253,6 +254,77 @@ internal static class CampaignShellTests
             chainLoaded = StateHash.Mix(chainLoaded, loaded.Run.Session.Step().StateHash);
         }
         TestHarness.Assert(chainOriginal == chainLoaded, "the mission loaded through the shell continues byte-for-byte identically to the original");
+    }
+
+    /// <summary>
+    /// Phase 24: a running skirmish - a human slot and a computer player - is saved, listed by the store as a skirmish, loaded through the main menu's load list and continued.
+    /// The continued match has the session hash (world and AI) of the uninterrupted one in every tick, and an order of the human is taken by both alike. A save of another tick
+    /// rate, of other definitions or with a changed byte is refused.
+    /// </summary>
+    private static void SkirmishSaveThroughShellContinuesIdentically(string[] args)
+    {
+        var contentDir = ContentDir(args);
+        if (contentDir is null) { Console.WriteLine("  SKIP: needs real content (pass --content-dir <dir>)"); return; }
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
+        var options = SkirmishMatchOptions.StandardAt(data.Rate);
+        var setup = new CnCNew.Game.Live.MatchSetup(mapPath, "FactionAmerica", [CnCNew.Game.Live.MatchSetup.RandomFaction], options)
+        {
+            Details = [new CnCNew.Game.Live.MatchSlotDetails(Team: 0, Color: 2, StartPosition: 1), new CnCNew.Game.Live.MatchSlotDetails(Team: 0, Color: -1, StartPosition: 0)],
+        };
+        var viewport = new Vector2(1280, 720);
+        var live = CnCNew.Game.Live.LiveMatch.Create(data, setup, viewport);
+        TestHarness.Assert(live.Match.Slots[0].StartPosition == 1 && live.Match.Slots[1].StartPosition == 0 && live.Match.Slots[0].Color == 2, "the setup's start positions and colours reach the match description");
+        TestHarness.Assert(live.Match.Slots[1].Participant.Faction.Name.Length > 0 && live.Players[1].Faction == live.Match.Slots[1].Participant.Faction.Name, "a random faction is decided by the description, not by the screen");
+        var frame = CnCNew.Tests.TestTime.FrameSeconds;
+        for (var index = 0; index < 30 * 45; index++) live.Advance(frame);
+        var tickAtSave = live.Tick;
+        var bytes = live.Save("mid-match save");
+        shell.Saves!.Save("skirmish", bytes);
+        var slot = shell.Saves.List().Single();
+        TestHarness.Assert(slot.Header is { Kind: SaveGameKind.Skirmish } header && header.Tick == tickAtSave && header.MapPath == mapPath && header.Title == "mid-match save",
+            "the store lists the skirmish save with its kind, tick and map");
+
+        ShellTestInput.Click(shell, "MainMenu.wnd:ButtonLoadReplay");
+        ShellTestInput.Click(shell, "MainMenu.wnd:ButtonLoadGame");
+        var list = shell.CurrentScreen.Tree.FindByName("SaveLoad.wnd:ListboxGames")!;
+        ShellTestInput.ClickAt(shell, list.Rect.X + 20, list.Rect.Y + 8);
+        ShellTestInput.Click(shell, "SaveLoad.wnd:ButtonLoad");
+        ShellTestInput.Click(shell, "SaveLoad.wnd:ButtonLoadConfirm");
+        TestHarness.Assert(shell.Phase == ShellPhase.InMatch, "loading a skirmish save goes straight to InMatch");
+        var resume = shell.DrainOutputs().OfType<ResumeMatchOutput>().Single();
+        var loaded = CnCNew.Game.Live.LiveMatch.Restore(data, resume.Save, viewport);
+        TestHarness.Assert(loaded.Tick == tickAtSave && loaded.Session.StateHash() == live.Session.StateHash(), "the loaded skirmish resumes at the saved tick with the saved session hash");
+        TestHarness.Assert(loaded.HumanFaction == live.HumanFaction && loaded.Players.SequenceEqual(live.Players) && loaded.Match.Slots[0].StartPosition == 1 && !loaded.Setup.AutoPlay,
+            "the loaded skirmish has the players, the start positions and the viewer of the saved one");
+
+        // An order of the human in both, then ten seconds of play: the continuation takes orders and its computer player goes on deciding like the uninterrupted one.
+        foreach (var match in new[] { live, loaded })
+        {
+            var units = match.World.Entities.Where(entity => entity.Owner == match.Human && !entity.Template.IsKindOf("STRUCTURE") && !entity.EffectivelyDead).Select(entity => entity.Id).Take(3).ToArray();
+            TestHarness.Assert(units.Length > 0, "the human has a unit to order");
+            var home = match.Terrain.StartPositions[1];
+            match.Commands.Issue((sequence, tick) => new CnCNew.Simulation.Commands.GroupMoveCommand(match.Human, sequence, tick, [..units], home.X + CnCNew.Simulation.Numerics.Fixed.FromInt(120), home.Y, false));
+        }
+        var aiCommandsBefore = loaded.Session.Ais[1]!.Stats.Commands;
+        for (var index = 0; index < 30 * 20; index++)
+        {
+            live.Advance(frame);
+            loaded.Advance(frame);
+            if (live.Tick != loaded.Tick || live.Session.StateHash() != loaded.Session.StateHash())
+                throw new InvalidOperationException($"the loaded skirmish differs from the uninterrupted one at tick {live.Tick} (loaded: {loaded.Tick})");
+        }
+        TestHarness.Assert(loaded.Session.Ais[1]!.Stats.Commands > aiCommandsBefore, "the computer player of the loaded skirmish goes on giving orders");
+        TestHarness.Assert(CnCNew.Simulation.Replay.ReplayFormat.Write(loaded.Session.ToReplay()).AsSpan().SequenceEqual(CnCNew.Simulation.Replay.ReplayFormat.Write(live.Session.ToReplay())),
+            "the loaded skirmish yields the whole replay of the match");
+
+        var text = System.Text.Encoding.UTF8.GetString(bytes);
+        var tampered = System.Text.Encoding.UTF8.GetBytes(text.Replace("\"endTick\":", "\"endTick\":1", StringComparison.Ordinal));
+        TestHarness.Throws<SaveGameException>(() => CnCNew.Game.Live.LiveMatch.Restore(data, tampered, viewport), "a skirmish save with a changed byte is refused");
+        var otherRate = GameData.Load(contentDir, rate: data.Rate.TicksPerSecond == 30 ? SimulationRate.Hz60 : SimulationRate.Hz30);
+        TestHarness.Throws<SaveGameException>(() => CnCNew.Game.Live.LiveMatch.Restore(otherRate, bytes, viewport), "a skirmish save of another tick rate is refused");
+        TestHarness.Throws<SaveGameException>(() => SaveGame.ReadHeader(bytes), "a skirmish save is not taken for a mission save");
     }
 }
 

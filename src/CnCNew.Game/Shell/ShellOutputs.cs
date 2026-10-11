@@ -14,6 +14,9 @@ public abstract record ShellOutput;
 /// <summary>The setup screen produced a valid match; the host should construct and run a <c>LiveMatch</c> from it.</summary>
 public sealed record StartMatchOutput(MatchSetup Setup) : ShellOutput;
 
+/// <summary>A skirmish savegame was chosen in the load list; the host should restore it (<c>LiveMatch.Restore</c>) and run it like a started match.</summary>
+public sealed record ResumeMatchOutput(byte[] Save, string Slot) : ShellOutput;
+
 /// <summary>
 /// A campaign mission is ready to run (a fresh start past its briefing, or a save just loaded): the host should step
 /// <see cref="MissionRun.Session"/> every tick (<see cref="CnCNew.Simulation.Mission.MissionSession.Step"/>), drain its

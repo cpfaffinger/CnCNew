@@ -59,7 +59,7 @@ public sealed class SaveGameStore
         {
             var name = Path.GetFileNameWithoutExtension(file);
             var bytes = File.ReadAllBytes(file);
-            try { slots.Add(new SaveSlot(name, bytes.Length, SaveGame.ReadHeader(bytes), null)); }
+            try { slots.Add(new SaveSlot(name, bytes.Length, SkirmishSaveGame.IsSkirmishSave(bytes) ? SkirmishSaveGame.ReadHeader(bytes) : SaveGame.ReadHeader(bytes), null)); }
             catch (SaveGameException exception) { slots.Add(new SaveSlot(name, bytes.Length, null, exception.Message)); }
         }
         return slots.ToImmutable();

@@ -323,6 +323,11 @@ internal sealed class ClientRuntime : IDisposable
                 _running = Start(LiveMatch.Create(_data, start.Setup, size), null);
                 break;
             }
+            case ResumeMatchOutput resume:
+            {
+                _running = Start(LiveMatch.Restore(_data, resume.Save, BackBufferSize()), null);
+                break;
+            }
             case StartMissionOutput mission:
             {
                 var text = _data.LoadText("English");
@@ -371,10 +376,38 @@ internal sealed class ClientRuntime : IDisposable
             _ => new RunningGame(host, new MatchController(game, GameplaySettings, "English", _ui.TextMeasure), null, null),
         };
         running.Attach();
+        // The in-game menu's "Save/Load" button saves a running skirmish to one slot; the main menu's load list continues it (docs/CAMPAIGN-AND-SAVEGAMES.md, skirmish savegame).
+        if (game is LiveMatch saved && running.Match is { } controller)
+            controller.MenuActionRequested += action => { if (action == MenuAction.SaveLoad) LastSkirmishSave = SaveSkirmish(saved); };
         _audio.Game.Attach(game, running.Hud);
         // The mission scripts' speech, sounds, music and volumes go to the same director as everything else.
         if (game is LiveMission scripted) scripted.Director.AudioControl = _audio.Game;
         return running;
+    }
+
+    /// <summary>The slot the in-game menu saves a skirmish to.</summary>
+    public const string SkirmishSaveSlot = "skirmish";
+
+    /// <summary>What the last save of a skirmish from the in-game menu did: the slot it wrote, or why it could not (shown on the console; the menu has no message line).</summary>
+    public string? LastSkirmishSave { get; private set; }
+
+    private string SaveSkirmish(LiveMatch match)
+    {
+        if (_shell?.Saves is not { } store) return "no save directory";
+        try
+        {
+            var seconds = match.World.Time.ToWholeSeconds(match.World.Tick);
+            var title = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Skirmish, {Path.GetFileNameWithoutExtension(match.Setup.MapPath)}");
+            store.Save(SkirmishSaveSlot, match.Save(title));
+            var text = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"saved to slot '{SkirmishSaveSlot}' at {seconds / 60}:{seconds % 60:D2}");
+            Console.WriteLine($"[save] skirmish {text}");
+            return text;
+        }
+        catch (CnCNew.Game.Save.SaveGameException exception)
+        {
+            Console.WriteLine($"[save] the skirmish cannot be saved: {exception.Message}");
+            return exception.Message;
+        }
     }
 
     /// <summary>The match or mission is over: tell the shell (which shows the score or the banner and result screens), drop the world and show the shell again.</summary>

@@ -40,6 +40,11 @@ public readonly record struct MatchAi(SkirmishAiKind Kind, ScriptDifficulty Diff
     public override string ToString() => Kind == SkirmishAiKind.Builtin ? "builtin" : "original/" + Difficulty switch { ScriptDifficulty.Easy => "easy", ScriptDifficulty.Hard => "hard", _ => "medium" };
 }
 
+/// <param name="Team">Alliance number (0: none).</param>
+/// <param name="Color">Index of the player colour, -1 for a random one.</param>
+/// <param name="StartPosition">Index of the map's start position, -1 for a random one.</param>
+public readonly record struct MatchSlotDetails(int Team = 0, int Color = -1, int StartPosition = -1);
+
 /// <param name="MapPath">Virtual path of the <c>.map</c> file.</param>
 /// <param name="HumanFaction">Faction name of the human slot (player 1).</param>
 /// <param name="Opponents">One computer slot per entry, in order (players 2..).</param>
@@ -64,6 +69,39 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
     /// </summary>
     public ImmutableArray<MatchAi> Ai { get; init; } = [];
 
+    /// <summary>
+    /// Team, colour and start position per slot in slot order (entry 0 the first slot, entry <c>i</c> opponent <c>i</c>); a missing entry is "no team, random colour, the slot's
+    /// own start position". They go into the <see cref="MatchDescription"/> as they are.
+    /// </summary>
+    public ImmutableArray<MatchSlotDetails> Details { get; init; } = [];
+
+    /// <summary>The details of a slot (<see cref="Details"/>).</summary>
+    public MatchSlotDetails DetailsOf(int slot) => !Details.IsDefault && slot < Details.Length ? Details[slot] : new MatchSlotDetails(StartPosition: slot);
+
+    /// <summary>A faction the seed of the match chooses: what the setup screen calls "Random".</summary>
+    public const string RandomFaction = "";
+
+    /// <summary>
+    /// The match as the simulation is given it. The first slot is a human or, when the computer plays it, a computer slot; who watches locally is not part of it. An AI of the
+    /// original kind is described as a computer slot with its strength - which session plays it is this layer's choice (<see cref="UsesOriginalAi"/>).
+    /// </summary>
+    public MatchDescription Describe(GameData data, TerrainMap terrain)
+    {
+        var options = Options;
+        if (Seed != 0) options = options with { AiSeed = unchecked((uint)Seed), WorldSeed = unchecked((uint)Seed) ^ 0xC0FFEE06 };
+        var slots = ImmutableArray.CreateBuilder<MatchSlotDescription>();
+        for (var slot = 0; slot <= Opponents.Length; slot++)
+        {
+            var details = DetailsOf(slot);
+            var human = slot == 0 && !AutoPlay && !Spectator;
+            var ai = AiOf(slot);
+            slots.Add(new MatchSlotDescription(human ? MatchSlotKind.Human : MatchSlotKind.Computer, slot == 0 ? HumanFaction : Opponents[slot - 1], details.Team, details.Color, details.StartPosition,
+                ai.Kind == SkirmishAiKind.Original ? ai.Difficulty switch { ScriptDifficulty.Easy => 0, ScriptDifficulty.Hard => 2, _ => 1 } : MatchSlotDescription.MediumStrength));
+        }
+        return new MatchDescription(data.Rate.TicksPerSecond, MapPath, terrain.Fingerprint, data.Fingerprint.ToUpperInvariant(), options.WorldSeed, options.AiSeed, options.MaxTicks, options.StartMoney,
+            options.GraceTicks, options.SciencePointInterval, slots.ToImmutable());
+    }
+
     /// <summary>The AI of a slot (<see cref="Ai"/>).</summary>
     public MatchAi AiOf(int slot) => !Ai.IsDefault && slot < Ai.Length ? Ai[slot] : MatchAi.Builtin;
 
@@ -79,26 +117,39 @@ public sealed class LiveMatch : LiveGame
 {
     private readonly SkirmishMatchSession? _session;
 
-    private LiveMatch(GameData data, MatchSetup setup, SkirmishMatchSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
-        : base(data, session.World, map, setup.MapPath, terrain, session.Players, new PlayerId(1), fxSeed, viewport,
-            new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(terrain.StartPositions[0].X), CnCNew.Presentation.FixedConvert.ToSingle(terrain.StartPositions[0].Y)))
+    private LiveMatch(GameData data, MatchSetup setup, ResolvedMatch match, SkirmishMatchSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
+        : base(data, session.World, map, setup.MapPath, terrain, session.Players, new PlayerId(1), fxSeed, viewport, HomeOf(match, terrain))
     {
         Setup = setup;
+        Match = match;
         _session = session;
     }
 
-    private LiveMatch(GameData data, MatchSetup setup, ScriptedSkirmishSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
-        : base(data, session.World, map, setup.MapPath, terrain, session.Players, new PlayerId(1), fxSeed, viewport,
-            new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(terrain.StartPositions[0].X), CnCNew.Presentation.FixedConvert.ToSingle(terrain.StartPositions[0].Y)))
+    private LiveMatch(GameData data, MatchSetup setup, ResolvedMatch match, ScriptedSkirmishSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
+        : base(data, session.World, map, setup.MapPath, terrain, session.Players, new PlayerId(1), fxSeed, viewport, HomeOf(match, terrain))
     {
         Setup = setup;
+        Match = match;
         Scripted = session;
         _scriptedPlayers = session.Players;
+    }
+
+    /// <summary>Where the local viewer starts to look: the start position of the first slot.</summary>
+    private static Vector2 HomeOf(ResolvedMatch match, TerrainMap terrain)
+    {
+        var start = terrain.StartPositions[match.Slots[0].StartPosition];
+        return new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(start.X), CnCNew.Presentation.FixedConvert.ToSingle(start.Y));
     }
 
     private readonly ImmutableArray<PlayerConfiguration> _scriptedPlayers;
 
     public MatchSetup Setup { get; }
+
+    /// <summary>The description of the match with everything "random" decided (factions, start positions, colours); the same on every machine that holds the description.</summary>
+    public ResolvedMatch Match { get; }
+
+    /// <summary>The description the match was built from.</summary>
+    public MatchDescription Description => Match.Description;
 
     /// <summary>The session of a match of the simulation's own AI. A match with the original AI has none: ask <see cref="Scripted"/> (or the members of this class, which serve both).</summary>
     public SkirmishMatchSession Session => _session ?? throw new InvalidOperationException("This match runs the original AI in a ScriptedSkirmishSession; it has no SkirmishMatchSession.");
@@ -106,7 +157,7 @@ public sealed class LiveMatch : LiveGame
     /// <summary>The session of a match with the original AI in some slot, else <see langword="null"/>.</summary>
     public ScriptedSkirmishSession? Scripted { get; }
 
-    public override string HumanFaction => Setup.HumanFaction;
+    public override string HumanFaction => Match.Slots[0].Participant.Faction.Name;
     public override bool IsOver => Scripted?.IsOver ?? Session.IsOver;
     public override PlayerId? Winner => Scripted is { } scripted ? scripted.Winner : Session.Winner;
     public override ImmutableArray<PlayerConfiguration> Players => Scripted is null ? Session.Players : _scriptedPlayers;
@@ -149,37 +200,114 @@ public sealed class LiveMatch : LiveGame
         using (var stream = data.Content.OpenRead(setup.MapPath)) map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, setup.MapPath);
 
-        MatchParticipant Find(string name) => data.Factions.FirstOrDefault(value => value.Faction.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
-            ?? throw new ArgumentException($"Unknown or unplayable faction '{name}'.");
         var humanPlays = !setup.AutoPlay && !setup.Spectator;
-        if (setup.UsesOriginalAi) return CreateScripted(data, setup, viewport, map, terrain, Find, humanPlays);
+        var description = setup.Describe(data, terrain);
+        var match = description.Resolve(data.Templates, terrain);
+        if (setup.UsesOriginalAi) return CreateScripted(data, setup, viewport, map, terrain, match, humanPlays);
+        var session = SkirmishMatchSession.Start(description, data.Templates, terrain, map.Objects, setup.Options.CheckpointInterval);
+        return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport);
+    }
 
-        var slots = ImmutableArray.CreateBuilder<SkirmishSlot>();
-        slots.Add(new SkirmishSlot(Find(setup.HumanFaction), IsHuman: humanPlays));
-        foreach (var opponent in setup.Opponents) slots.Add(new SkirmishSlot(Find(opponent)));
-        var options = setup.Options;
-        if (setup.Seed != 0) options = options with { AiSeed = unchecked((uint)setup.Seed), WorldSeed = unchecked((uint)setup.Seed) ^ 0xC0FFEE06 };
-        var session = SkirmishMatchSession.Start(options, data.Templates, data.Fingerprint, terrain, map.Objects, slots.ToImmutable());
-        return new LiveMatch(data, setup, session, terrain, map, options.WorldSeed, viewport);
+    /// <summary>
+    /// The running match as a savegame (<see cref="CnCNew.Game.Save.SkirmishSaveGame"/>): the session state with every computer player, the match description and the recording so
+    /// far. What the viewer sees (camera, selection, effects) is not part of it. A match of the original AI with a slot played by the built-in one cannot be saved.
+    /// </summary>
+    public byte[] Save(string title)
+    {
+        var viewer = Setup.Spectator ? CnCNew.Game.Save.SkirmishViewer.Spectator : Setup.AutoPlay ? CnCNew.Game.Save.SkirmishViewer.AutoPlay : CnCNew.Game.Save.SkirmishViewer.Player;
+        var hash = (Scripted?.StateHash() ?? Session.StateHash()).ToString("X16", System.Globalization.CultureInfo.InvariantCulture);
+        byte[] state;
+        try
+        {
+            state = Scripted?.Save() ?? Session.Save();
+        }
+        catch (NotSupportedException exception)
+        {
+            throw new CnCNew.Game.Save.SaveGameException(exception.Message, exception);
+        }
+        return CnCNew.Game.Save.SkirmishSaveGame.Write(title, Setup.MapPath, World.Tick, World.Rate.TicksPerSecond, World.Configuration.DefinitionFingerprint, hash, state, Scripted is not null, viewer);
+    }
+
+    /// <summary>
+    /// Continues a saved skirmish: the map of the save is loaded, the session restored (the simulation checks definitions, terrain and its own state hash) and a fresh
+    /// presentation put in front of it. Throws <see cref="CnCNew.Game.Save.SaveGameException"/> with a message fit to show when the file does not load.
+    /// </summary>
+    public static LiveMatch Restore(GameData data, ReadOnlySpan<byte> save, Vector2 viewport)
+    {
+        var loaded = CnCNew.Game.Save.SkirmishSaveGame.Load(save, data.Rate.TicksPerSecond, data.Fingerprint);
+        var mapPath = loaded.Header.MapPath;
+        if (!data.Content.Exists(mapPath)) throw new CnCNew.Game.Save.SaveGameException($"The savegame was played on '{mapPath}', which this game does not have.");
+        MapData map;
+        using (var stream = data.Content.OpenRead(mapPath)) map = SageMapDecoder.Decode(stream);
+        var terrain = TerrainMap.Build(map, mapPath);
+        try
+        {
+            LiveMatch match;
+            if (loaded.OriginalAi)
+            {
+                var original = data.LoadOriginalAi();
+                var session = ScriptedSkirmishSession.Restore(loaded.State, data.Templates, data.Fingerprint, terrain, map, original.Library, original.Data);
+                session.RecordCommands();
+                var setup = SetupOf(mapPath, session, loaded.Viewer);
+                match = new LiveMatch(data, setup, setup.Describe(data, terrain).Resolve(data.Templates, terrain), session, terrain, map, session.World.Configuration.Seed, viewport);
+            }
+            else
+            {
+                var session = SkirmishMatchSession.Restore(loaded.State, data.Templates, data.Fingerprint, terrain);
+                match = new LiveMatch(data, SetupOf(session.Description, session.Match, loaded.Viewer), session.Match, session, terrain, map, session.Description.Seed, viewport);
+            }
+            if (match.World.Tick != loaded.Header.Tick) throw new CnCNew.Game.Save.SaveGameException("The savegame's state does not match its header (the file is damaged).");
+            return match;
+        }
+        catch (CnCNew.Simulation.Snapshots.SnapshotFormatException exception)
+        {
+            throw new CnCNew.Game.Save.SaveGameException($"The savegame cannot be restored: {exception.Message}", exception);
+        }
+    }
+
+    /// <summary>The setup a restored match shows itself with: what the description says, and who the viewer was.</summary>
+    private static MatchSetup SetupOf(MatchDescription description, ResolvedMatch match, CnCNew.Game.Save.SkirmishViewer viewer)
+    {
+        var options = new SkirmishMatchOptions(description.Seed, description.AiSeed, description.MaxTicks, description.GraceFrames, 0, description.StartMoney, checked((int)description.SciencePointIntervalFrames));
+        return new MatchSetup(description.MapPath, match.Slots[0].Participant.Faction.Name, [..match.Slots.Skip(1).Select(slot => slot.Participant.Faction.Name)], options)
+        {
+            AutoPlay = viewer == CnCNew.Game.Save.SkirmishViewer.AutoPlay,
+            Spectator = viewer == CnCNew.Game.Save.SkirmishViewer.Spectator,
+            Details = [..match.Slots.Select(slot => new MatchSlotDetails(slot.Description.Team, slot.Color, slot.StartPosition))],
+        };
+    }
+
+    private static MatchSetup SetupOf(string mapPath, ScriptedSkirmishSession session, CnCNew.Game.Save.SkirmishViewer viewer)
+    {
+        var slots = session.Slots;
+        var options = SkirmishMatchOptions.Standard with { WorldSeed = session.World.Configuration.Seed, MaxTicks = session.EndTick };
+        return new MatchSetup(mapPath, slots[0].Participant.Faction.Name, [..slots.Skip(1).Select(slot => slot.Participant.Faction.Name)], options)
+        {
+            AutoPlay = viewer == CnCNew.Game.Save.SkirmishViewer.AutoPlay,
+            Spectator = viewer == CnCNew.Game.Save.SkirmishViewer.Spectator,
+            Ai = [..slots.Select(slot => new MatchAi(slot.Kind, slot.Difficulty))],
+            Details = [..slots.Select((slot, index) => new MatchSlotDetails(slot.Team, -1, index))],
+        };
     }
 
     /// <summary>
     /// The match as a scripted skirmish: the script library and the AI data come from the content (the game layer may read it, the simulation may not); budget, start money and the
     /// science stand-in are the ones of the setup's options, so that a match of either AI is set up alike.
     /// </summary>
-    private static LiveMatch CreateScripted(GameData data, MatchSetup setup, Vector2 viewport, MapData map, TerrainMap terrain, Func<string, MatchParticipant> find, bool humanPlays)
+    private static LiveMatch CreateScripted(GameData data, MatchSetup setup, Vector2 viewport, MapData map, TerrainMap terrain, ResolvedMatch match, bool humanPlays)
     {
         var original = data.LoadOriginalAi();
+        // The scripted session places slot i at start position i and knows no teams or colours of its own; the factions are the resolved ones of the description.
         var slots = ImmutableArray.CreateBuilder<ScriptedSkirmishSlot>();
         var first = setup.AiOf(0);
-        slots.Add(new ScriptedSkirmishSlot(find(setup.HumanFaction), first.Difficulty, IsHuman: humanPlays, Kind: first.Kind));
+        slots.Add(new ScriptedSkirmishSlot(match.Slots[0].Participant, first.Difficulty, IsHuman: humanPlays, Team: match.Slots[0].Description.Team, Kind: first.Kind));
         for (var index = 0; index < setup.Opponents.Length; index++)
         {
             var ai = setup.AiOf(index + 1);
-            slots.Add(new ScriptedSkirmishSlot(find(setup.Opponents[index]), ai.Difficulty, Kind: ai.Kind));
+            slots.Add(new ScriptedSkirmishSlot(match.Slots[index + 1].Participant, ai.Difficulty, Team: match.Slots[index + 1].Description.Team, Kind: ai.Kind));
         }
         var standard = ScriptedSkirmishOptions.Standard;
-        var seed = setup.Seed != 0 ? unchecked((uint)setup.Seed) ^ 0xC0FFEE06 : setup.Options.WorldSeed;
+        var seed = match.Description.Seed;
         var options = standard with
         {
             Seed = seed, MaxTicks = setup.Options.MaxTicks, StartMoney = setup.Options.StartMoney,
@@ -188,6 +316,6 @@ public sealed class LiveMatch : LiveGame
         };
         var session = ScriptedSkirmishSession.Start(options, data.Templates, data.Fingerprint, terrain, map, original.Library, original.Data, slots.ToImmutable());
         session.RecordCommands();
-        return new LiveMatch(data, setup, session, terrain, map, seed, viewport);
+        return new LiveMatch(data, setup, match, session, terrain, map, seed, viewport);
     }
 }

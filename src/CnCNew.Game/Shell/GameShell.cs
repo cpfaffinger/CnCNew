@@ -414,6 +414,14 @@ public sealed class GameShell
     internal void LoadSaveAndContinue(string slot)
     {
         var bytes = Saves!.Read(slot);
+        if (SkirmishSaveGame.IsSkirmishSave(bytes))
+        {
+            // Checked here, so that a file that does not fit is refused in the load screen; the host restores the session with the map.
+            SkirmishSaveGame.Load(bytes, Data.Rate.TicksPerSecond, Data.Fingerprint);
+            Phase = ShellPhase.InMatch;
+            _outputs.Add(new ResumeMatchOutput(bytes, slot));
+            return;
+        }
         var loaded = SaveGame.Load(bytes, MissionContext, Campaigns);
         CampaignController? controller = null;
         if (loaded.Progress is { } progress && Campaigns?.Find(progress.Campaign) is { } campaign) controller = new CampaignController(MissionContext, campaign, progress);
