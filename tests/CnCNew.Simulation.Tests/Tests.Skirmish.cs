@@ -295,23 +295,4 @@ static partial class Tests
         Check.That(replayResult.FinalHash == liveHash,
             $"A live session's own StateHash ({liveHash:X16}) matches a fresh ReplayRunner.Run of its own ToReplay() recording ({replayResult.FinalHash:X16}).");
     }
-
-    /// <summary>
-    /// Phase 10 decision (docs/SIMULATION-CORE.md §18, see <see cref="SkirmishMatchSession.CreateSave"/>'s doc comment for the full
-    /// reasoning): a live skirmish session cannot be saved and resumed as a continuing live game, because <see cref="SkirmishAi"/> holds
-    /// state no snapshot carries. The guard fails loudly instead of a routine silently writing a world-only save that would resume with
-    /// every AI's memory erased. A finished/partial match's actual save path, replay plus a snapshot checkpoint, needs no AI state and is
-    /// already covered by every ai-match/reference-match "snapshot continuation" check.
-    /// </summary>
-    public static void SkirmishSessionRefusesToSave()
-    {
-        var fixture = new SyntheticFixture(TestRate.Default, files: SkirmishFiles());
-        var map = SyntheticMaps.Build(60, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
-        var terrain = TerrainMap.Build(map, "skirmish");
-        var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
-        var options = new SkirmishMatchOptions(0xC0FFEE06, 7, 500, 60, 500, 500, 0);
-        var session = SkirmishMatchSession.Start(options, fixture.Templates, fixture.Fingerprint, terrain, map.Objects, [.. participants.Select(participant => new SkirmishSlot(participant))]);
-        for (var i = 0; i < session.Frames(5); i++) session.Step();
-        Check.Throws<NotSupportedException>(() => session.CreateSave(), "cannot be saved");
-    }
 }

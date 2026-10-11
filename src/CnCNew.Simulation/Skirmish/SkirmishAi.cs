@@ -188,7 +188,7 @@ public sealed partial class SkirmishAi
     private readonly Dictionary<int, long> _seenAt = [];
     private readonly HashSet<int> _unreachable = [];
     private const long RevisitFrames = 3600;
-    private readonly Dictionary<uint, long> _boarding = [];
+    private readonly SortedDictionary<uint, long> _boarding = [];
     private (Fixed X, Fixed Y)? _armyGoal;
 
     /// <summary>
@@ -230,16 +230,19 @@ public sealed partial class SkirmishAi
     /// Places the army is to attack before anything it would pick itself (a mission's objectives, as the briefing and the objective markers tell a player); empty for the AI's own
     /// choice. A skirmish match never sets it.
     /// </summary>
-    public ImmutableArray<(Fixed X, Fixed Y)> Objectives { get; set; } = [];
+    public ImmutableArray<(Fixed X, Fixed Y)> Objectives { get => _objectives; set { _objectives = value; StateChanged(); } }
+    private ImmutableArray<(Fixed X, Fixed Y)> _objectives = [];
 
     /// <summary>
     /// The army attacks with whatever it has and does not fall back to mass again: for a side that cannot produce (a mission that hands the player a fixed force) waiting for the
     /// attack threshold would wait forever. A skirmish match never sets it.
     /// </summary>
-    public bool CommitEverything { get; set; }
+    public bool CommitEverything { get => _commitEverything; set { _commitEverything = value; StateChanged(); } }
+    private bool _commitEverything;
 
     /// <summary>Money the AI leaves untouched (a purchase the mission's objective needs, e.g. the capture upgrade); zero in a skirmish match.</summary>
-    public Fixed ObjectiveReserve { get; set; }
+    public Fixed ObjectiveReserve { get => _objectiveReserve; set { _objectiveReserve = value; StateChanged(); } }
+    private Fixed _objectiveReserve;
 
     /// <summary>Whether this AI gives <paramref name="unit"/> its marching orders (it counts it as army).</summary>
     public bool LeadsUnit(Entity unit) => unit.Owner == _player && (RoleOf(unit.Template) & Role.Army) != 0 && AiOf(unit) is not null;
@@ -261,6 +264,7 @@ public sealed partial class SkirmishAi
         _tick = _world.Tick;
         if (_tick == 0 || (_tick + _phase) % _fireInterval != 0) return;
         if (_world.IsPlayerDefeated(_player)) return;
+        StateChanged();
         Observe();
         if ((_tick + _phase) % _thinkInterval != 0) return;
         Think();

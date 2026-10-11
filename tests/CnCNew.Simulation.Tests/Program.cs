@@ -430,7 +430,12 @@ run.Test("Original skirmish AI: a team attacks one victim together, except on th
 run.Test("Original skirmish AI: a team in the field is reinforced", Tests.OriginalAiReinforcesATeamInTheField);
 run.Test("Original skirmish AI: saved at any tick, also inside a frame at 60 and 120 Hz, the session continues identically", Tests.OriginalAiSessionContinuesFromAnyTick);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
-run.Test("Skirmish: a live session refuses to be saved (explicit, loud guard)", Tests.SkirmishSessionRefusesToSave);
+run.Test("Session state: the state of SkirmishAi names every field", Tests.SkirmishAiStateNamesEveryField);
+run.Test("Session state: SkirmishAi never acts in the order of a hash table", Tests.SkirmishAiNeverActsInTheOrderOfAHashTable);
+run.Test("Session state: a skirmish saved at any tick continues identically, AI included", Tests.SkirmishSessionSavedAtAnyTickContinuesIdentically);
+run.Test("Session state: the session hash covers the AI, a save is checked against it", Tests.SkirmishSessionHashCoversTheAi);
+run.Test("Match description: one encoding, every field in the fingerprint", Tests.MatchDescriptionIsCanonicalAndEveryFieldCounts);
+run.Test("Match description: the same bytes build the same match, random choices included", Tests.MatchDescriptionBuildsTheSameMatchEverywhere);
 run.Test("Projectiles: straight shell flight time, impact event and detonation effect", Tests.ProjectileStraightShellFlightTime);
 run.Test("Projectiles: ballistic arc path points and flight time", Tests.ProjectileBallisticArc);
 run.Test("Projectiles: missile flight time (instant acceleration)", Tests.ProjectileMissileFlightTime);

@@ -84,7 +84,7 @@ internal static class ReferenceManifest
 
     // The budgets of the runs are game time, written in logic frames of the original (1/30 s): a run at rate R gets Time.OriginalFrames(n) ticks, so every
     // run covers the same game time at every rate and at 30 Hz every number is the tick count it always was.
-    private const long AiMatchFrames = 45_000;          // 25 min
+    internal const long AiMatchFrames = 45_000;          // 25 min
     private const long EightPlayerFrames = 9_000;       // 5 min
     private const long EightPlayerQuickFrames = 3_000;  // 100 s
     private const long SweepFrames = 3_000;             // 100 s per map
@@ -108,6 +108,12 @@ internal static class ReferenceManifest
         foreach (var (name, map) in AiMaps)
             foreach (var pairing in AiPairings)
                 yield return ($"{name}_{string.Join("-", pairing.Select(Short))}", map, pairing);
+    }
+
+    /// <summary>The eight-player runs of the manifest: id, map and factions (<c>session-check</c> plays them as live sessions).</summary>
+    internal static IEnumerable<(string Id, string Map, string[] Factions)> EightPlayerRuns()
+    {
+        foreach (var (name, map) in EightPlayerMaps) yield return ($"ai8_{name}", map, EightPlayerFactions);
     }
 
     private static string Short(string faction) => faction.StartsWith("Faction", StringComparison.Ordinal) ? faction["Faction".Length..] : faction;

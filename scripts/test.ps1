@@ -94,7 +94,7 @@ $stepsOfArea = @{
     formats      = @{ affected = 'formats', 'import';                       gate = 'inputs', 'quick', 'presentation-content' }
     w3d          = @{ affected = 'w3d';                                     gate = 'presentation-content', 'game' }
     data         = @{ affected = 'data', 'data-content', 'compat';          gate = 'ui', 'audio', 'sim', 'inputs', 'quick' }
-    simulation   = @{ affected = 'sim';                                     gate = 'sim-30', 'sim-120', 'presentation', 'inputs', 'quick', 'rate-suite', 'game-sim' }
+    simulation   = @{ affected = 'sim';                                     gate = 'sim-30', 'sim-120', 'presentation', 'inputs', 'quick', 'rate-suite', 'game-sim', 'check-match' }
     simtool      = @{ affected = @();                                       gate = 'inputs', 'quick' }
     manifest     = @{ affected = 'inputs', 'reference';                     gate = @() }
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
@@ -199,6 +199,8 @@ $steps = @(
     New-Step 'check-hotkeys' 'Build keys through the client'                  (Script-Run 'check-build-hotkeys') -Content
     New-Step 'sim-content'  'Simulation.Tests (real data, with the rate suite)' ((Release-Run $simTests) + $content) -Content -Release $simTests
     New-Step 'reference'    'Reference manifest, full set'                    ((Release-Run $simTool) + 'reference-manifest' + 'check' + $ContentDir + 'baselines/reference-manifest.json' + '--set' + 'full') -Content -Release $simTool
+    New-Step 'check-match'  'Match description in three processes'            ((Script-Run 'check-match-description') + '-NoBuild') -Content -Release $simTool
+    New-Step 'session-check' 'Skirmish sessions saved and continued (AI table, eight players)' ((Release-Run $simTool) + 'session-check' + $ContentDir + '--jobs' + '3') -Content -Release $simTool
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content
     New-Step 'game-30'      'Game.Tests (real data, 30 Hz)'                   ((Release-Run $gameTests) + $content + '--tick-rate' + '30') -Content -Release $gameTests
