@@ -64,12 +64,21 @@ public sealed record MatchDescription(
     int TickRate, string MapPath, string TerrainFingerprint, string DefinitionFingerprint, uint Seed, uint AiSeed, long MaxTicks, int StartMoney, long GraceFrames,
     long SciencePointIntervalFrames, ImmutableArray<MatchSlotDescription> Slots)
 {
-    public const int EncodingVersion = 1;
+    /// <summary>2 (phase 25): the simulation identifier follows the two format versions. Version 1 is refused.</summary>
+    public const int EncodingVersion = 2;
     private static ReadOnlySpan<byte> Magic => "CNCMATCH"u8;
 
     /// <summary>The version of the simulation the description was made for: the command table and the world state. A machine with another one must refuse the match.</summary>
     public int CommandTableVersion { get; init; } = CommandTypes.Version;
     public int WorldStateVersion { get; init; } = WorldSnapshot.Version;
+
+    /// <summary>
+    /// The identifier of the simulation code the match is to be played with: the build identity of whoever opened the match (commit and "modified" flag; the simulation itself
+    /// does not know its build - <c>CnCNew.Net.BuildIdentity</c> reads it). Two machines with the same data and the same format versions but other simulation code are certain to
+    /// diverge, so a machine that is given a non-empty identifier other than its own refuses the match (<see cref="Resolve"/>). <b>Empty</b> means "not stated": a match that
+    /// never leaves its process (tools, tests, the runs of the reference manifest) - which is why a recorded description does not change with every commit.
+    /// </summary>
+    public string SimulationId { get; init; } = string.Empty;
 
     public SimulationRate Rate => SimulationRate.FromTicksPerSecond(TickRate);
 
@@ -83,7 +92,7 @@ public sealed record MatchDescription(
     public string Fingerprint => Convert.ToHexString(SHA256.HashData(Encode()));
 
     /// <summary>
-    /// The canonical bytes, little endian: <c>"CNCMATCH"</c>, u32 encoding version, u32 command table version, u32 world state version, u32 tick rate, string map path, string terrain
+    /// The canonical bytes, little endian: <c>"CNCMATCH"</c>, u32 encoding version, u32 command table version, u32 world state version, string simulation identifier, u32 tick rate, string map path, string terrain
     /// fingerprint, string definition fingerprint, u32 seed, u32 AI seed, i64 max ticks, i32 start money, i64 grace frames, i64 science point interval frames, u16 slot count
     /// (u8 kind, string faction, i32 team, i32 colour, i32 start position, i32 AI strength, i32 AI composition). Strings are u16-length-prefixed UTF-8.
     /// </summary>
@@ -96,6 +105,7 @@ public sealed record MatchDescription(
             writer.Write((uint)EncodingVersion);
             writer.Write((uint)CommandTableVersion);
             writer.Write((uint)WorldStateVersion);
+            WriteString(writer, SimulationId);
             writer.Write((uint)TickRate);
             WriteString(writer, MapPath);
             WriteString(writer, TerrainFingerprint);
@@ -132,6 +142,7 @@ public sealed record MatchDescription(
             if (encoding != EncodingVersion) throw new FormatException($"Unsupported match description version {encoding} (expected {EncodingVersion}).");
             var commandTable = ReadInt32(data, ref position);
             var worldState = ReadInt32(data, ref position);
+            var simulationId = ReadString(data, ref position);
             var tickRate = ReadInt32(data, ref position);
             var mapPath = ReadString(data, ref position);
             var terrain = ReadString(data, ref position);
@@ -156,7 +167,7 @@ public sealed record MatchDescription(
             if (position != data.Length) throw new FormatException("Trailing bytes after the match description.");
             return new MatchDescription(tickRate, mapPath, terrain, definitions, seed, aiSeed, maxTicks, startMoney, grace, science, slots.MoveToImmutable())
             {
-                CommandTableVersion = commandTable, WorldStateVersion = worldState,
+                CommandTableVersion = commandTable, WorldStateVersion = worldState, SimulationId = simulationId,
             };
         }
         catch (Exception exception) when (exception is ArgumentOutOfRangeException or IndexOutOfRangeException or DecoderFallbackException)
@@ -170,8 +181,11 @@ public sealed record MatchDescription(
     /// stream of their own that is seeded by <see cref="Seed"/> - never by the caller -, factions first, then positions, both in slot order.
     /// </summary>
     /// <param name="definitionFingerprint">The fingerprint of the definitions <paramref name="catalog"/> was built from; when given, a description for other definitions is refused.</param>
-    public ResolvedMatch Resolve(TemplateCatalog catalog, TerrainMap terrain, string? definitionFingerprint = null)
+    /// <param name="simulationId">The build identity of this machine; when given, a description that states another one is refused (one that states none is not).</param>
+    public ResolvedMatch Resolve(TemplateCatalog catalog, TerrainMap terrain, string? definitionFingerprint = null, string? simulationId = null)
     {
+        if (simulationId is not null && SimulationId.Length > 0 && !string.Equals(SimulationId, simulationId, StringComparison.Ordinal))
+            throw new ArgumentException($"The match was opened with simulation '{SimulationId}'; this build is '{simulationId}'.");
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(terrain);
         if (definitionFingerprint is not null && !string.Equals(DefinitionFingerprint, definitionFingerprint, StringComparison.OrdinalIgnoreCase))

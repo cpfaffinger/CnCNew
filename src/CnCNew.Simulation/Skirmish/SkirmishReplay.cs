@@ -39,7 +39,10 @@ public static class SkirmishReplay
         => header.MatchDescription.Length == 0 ? null : MatchDescription.Decode(Convert.FromBase64String(header.MatchDescription));
 
     /// <param name="stopAtFirstDeviation">Stop where the first difference shows (the default); otherwise the playback runs to the end of the recording regardless.</param>
-    public static SkirmishReplayResult Play(ReplayFile replay, TemplateCatalog catalog, string definitionFingerprint, TerrainMap terrain, ImmutableArray<MapObject> mapObjects, bool stopAtFirstDeviation = true)
+    /// <param name="audit">Compare what system and computer players produce with the recording (the default). A recording that holds the humans' commands only - a relay's,
+    /// which never sees a computer player - is played without the comparison.</param>
+    public static SkirmishReplayResult Play(ReplayFile replay, TemplateCatalog catalog, string definitionFingerprint, TerrainMap terrain, ImmutableArray<MapObject> mapObjects, bool stopAtFirstDeviation = true,
+        bool audit = true)
     {
         ArgumentNullException.ThrowIfNull(replay);
         var description = DescriptionOf(replay.Header) ?? throw new ReplayRejectedException("The replay has no match description in its header; it can only be run on a bare world (ReplayRunner).");
@@ -105,10 +108,10 @@ public static class SkirmishReplay
                 }
             }
             session.Step();
-            Audit(tick);
+            if (audit) Audit(tick);
         }
         // What the recording still holds after its own end tick would be a recording that does not fit its header.
-        if (deviation is null && index < recorded.Length && recorded[index..].Any(command => !humans.Contains(command.Player.Value)))
+        if (audit && deviation is null && index < recorded.Length && recorded[index..].Any(command => !humans.Contains(command.Player.Value)))
         {
             var left = recorded[index..].First(command => !humans.Contains(command.Player.Value));
             deviation = new ReplayDeviation(left.Tick, left.Player, left, null);

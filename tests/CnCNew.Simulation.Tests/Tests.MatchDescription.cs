@@ -35,6 +35,7 @@ static partial class Tests
             ("science point interval", description with { SciencePointIntervalFrames = description.SciencePointIntervalFrames + 1 }),
             ("command table version", description with { CommandTableVersion = description.CommandTableVersion + 1 }),
             ("world state version", description with { WorldStateVersion = description.WorldStateVersion + 1 }),
+            ("simulation identifier", description with { SimulationId = "0123456789abcdef0123456789abcdef01234567" }),
             ("slot count", description with { Slots = description.Slots.Add(new MatchSlotDescription(MatchSlotKind.Closed)) }),
             ("slot kind", description with { Slots = description.Slots.SetItem(0, slot with { Kind = MatchSlotKind.Human }) }),
             ("slot faction", description with { Slots = description.Slots.SetItem(0, slot with { Faction = string.Empty }) }),
@@ -54,6 +55,11 @@ static partial class Tests
         Check.Throws<FormatException>(() => MatchDescription.Decode([..bytes, 0]), "Trailing bytes");
         Check.Throws<ArgumentException>(() => (description with { CommandTableVersion = description.CommandTableVersion + 1 }).Resolve(fixture.Templates, terrain), "simulation version");
         Check.Throws<ArgumentException>(() => (description with { TerrainFingerprint = "other" }).Resolve(fixture.Templates, terrain), "different terrain");
+        Check.That(MatchDescription.EncodingVersion == 2 && description.SimulationId.Length == 0, "A description made in the process states no simulation identifier (encoding 2).");
+        var stated = description with { SimulationId = "abc" };
+        Check.That(stated.Resolve(fixture.Templates, terrain, simulationId: "abc").Slots.Length == 2 && stated.Resolve(fixture.Templates, terrain).Slots.Length == 2
+                   && description.Resolve(fixture.Templates, terrain, simulationId: "abc").Slots.Length == 2, "A stated identifier is accepted by the same build; none stated or none asked is not checked.");
+        Check.Throws<ArgumentException>(() => stated.Resolve(fixture.Templates, terrain, simulationId: "abd+modified"), "this build is");
     }
 
     /// <summary>

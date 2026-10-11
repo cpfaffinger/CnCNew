@@ -40,7 +40,8 @@ public sealed class SkirmishMatchSession
 
     /// <summary>Format of <see cref="Save"/>: the match description, the session's counters, one state block per computer player, the recording so far and the world.</summary>
     public const string SaveFormat = "cncnew-skirmish-state";
-    public const int SaveVersion = 1;
+    /// <summary>2 (phase 25): the embedded match description has encoding 2 (simulation identifier). Version 1 is refused.</summary>
+    public const int SaveVersion = 2;
 
     private readonly MatchDescription _description;
     private readonly List<SimCommand> _commands = [];
@@ -120,10 +121,10 @@ public sealed class SkirmishMatchSession
     /// the catalog was built from: a machine that was handed the description passes its own, and a description for other definitions is refused.
     /// </summary>
     public static SkirmishMatchSession Start(MatchDescription description, TemplateCatalog catalog, TerrainMap terrain, ImmutableArray<MapObject> mapObjects, int checkpointInterval = 0,
-        string? definitionFingerprint = null)
+        string? definitionFingerprint = null, string? simulationId = null)
     {
         ArgumentNullException.ThrowIfNull(description);
-        var match = description.Resolve(catalog, terrain, definitionFingerprint);
+        var match = description.Resolve(catalog, terrain, definitionFingerprint, simulationId);
         var session = Create(match, catalog, terrain, checkpointInterval, world: null);
         var notes = ImmutableArray.CreateBuilder<string>();
         session.SpawnStartingObjects(catalog, terrain, notes);
@@ -143,6 +144,22 @@ public sealed class SkirmishMatchSession
             { MatchDescription = Convert.ToBase64String(description.Encode()) };
     }
 
+    /// <summary>
+    /// The options of the computer player that plays <paramref name="slot"/> of <paramref name="match"/>: its seed from the description, its base at its start position, the
+    /// other start positions as public map knowledge. Also what a command generator that stands in for a human takes (the multi-client probe).
+    /// </summary>
+    public static SkirmishAiOptions AiOptionsOf(ResolvedMatch match, ResolvedSlot slot, TerrainMap terrain)
+    {
+        var starts = terrain.StartPositions;
+        var hints = ImmutableArray.CreateBuilder<(Fixed X, Fixed Y)>();
+        foreach (var other in match.Slots)
+            if (other != slot) hints.Add((starts[other.StartPosition].X, starts[other.StartPosition].Y));
+        var index = slot.Player.Value - 1;
+        return new SkirmishAiOptions(slot.Player, unchecked(match.Description.AiSeed + (uint)index * 7919u), starts[slot.StartPosition].X, starts[slot.StartPosition].Y,
+            slot.Participant.Side, FamilyPrefix(slot.Participant.Faction), hints.ToImmutable(),
+            Composition: slot.Description.AiComposition >= 0 ? (ArmyComposition)slot.Description.AiComposition : null);
+    }
+
     /// <summary>The session without its objects: the world (a fresh one, or the restored one) and one AI per computer slot.</summary>
     private static SkirmishMatchSession Create(ResolvedMatch match, TemplateCatalog catalog, TerrainMap terrain, int checkpointInterval, SimulationWorld? world)
     {
@@ -150,7 +167,6 @@ public sealed class SkirmishMatchSession
         var header = HeaderOf(match, checkpointInterval);
         world ??= ReplayRunner.CreateWorld(header, catalog, terrain);
         var session = new SkirmishMatchSession(match, header, world) { Players = header.Players };
-        var starts = terrain.StartPositions;
         var ais = ImmutableArray.CreateBuilder<SkirmishAi?>();
         foreach (var slot in match.Slots)
         {
@@ -159,14 +175,7 @@ public sealed class SkirmishMatchSession
                 ais.Add(null);
                 continue;
             }
-            var hints = ImmutableArray.CreateBuilder<(Fixed X, Fixed Y)>();
-            foreach (var other in match.Slots)
-                if (other != slot) hints.Add((starts[other.StartPosition].X, starts[other.StartPosition].Y));
-            var index = slot.Player.Value - 1;
-            var aiOptions = new SkirmishAiOptions(slot.Player, unchecked(description.AiSeed + (uint)index * 7919u), starts[slot.StartPosition].X, starts[slot.StartPosition].Y,
-                slot.Participant.Side, FamilyPrefix(slot.Participant.Faction), hints.ToImmutable(),
-                Composition: slot.Description.AiComposition >= 0 ? (ArmyComposition)slot.Description.AiComposition : null);
-            ais.Add(new SkirmishAi(world, catalog, aiOptions, session.Submit));
+            ais.Add(new SkirmishAi(world, catalog, AiOptionsOf(match, slot, terrain), session.Submit));
         }
         session.Ais = ais.ToImmutable();
         return session;
@@ -210,6 +219,10 @@ public sealed class SkirmishMatchSession
         if (IsHumanPlayer(command.Player) && command.Sequence > _humanSequence.GetValueOrDefault(command.Player.Value)) _humanSequence[command.Player.Value] = command.Sequence;
         return World.Submit(command);
     }
+
+    /// <summary>How many commands each human player has submitted so far (the player's sequence counter): what a relay continues its order numbers from when a saved match is resumed.</summary>
+    public ImmutableArray<(int Player, ulong Commands)> HumanCommandCounts
+        => [..Match.Slots.Where(slot => slot.Description.Kind == MatchSlotKind.Human).Select(slot => (slot.Player.Value, _humanSequence.GetValueOrDefault(slot.Player.Value)))];
 
     private bool IsHumanPlayer(PlayerId player)
     {

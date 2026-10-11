@@ -200,6 +200,33 @@ public static class ReplayFormat
         return stream.ToArray();
     }
 
+    /// <summary>
+    /// Offsets inside the bytes of one command (<see cref="EncodeCommand"/>): <c>i64 tick, u16 type, i32 player, u64 sequence</c>, then the fields of the type. A relay that
+    /// never decodes a command stamps tick and player at these places.
+    /// </summary>
+    public const int CommandTickOffset = 0;
+    public const int CommandTypeOffset = 8;
+    public const int CommandPlayerOffset = 10;
+    public const int CommandSequenceOffset = 14;
+    public const int CommandHeaderLength = 22;
+
+    /// <summary>One command from its bytes (<see cref="EncodeCommand"/>); a truncated, oversized or unknown one is refused with <see cref="ReplayFormatException"/>.</summary>
+    public static SimCommand DecodeCommand(ReadOnlySpan<byte> data)
+    {
+        try
+        {
+            using var stream = new MemoryStream(data.ToArray());
+            using var reader = new BinaryReader(stream, Encoding.UTF8);
+            var command = ReadCommand(reader);
+            if (stream.Position != stream.Length) throw new ReplayFormatException("Trailing bytes after the command.");
+            return command;
+        }
+        catch (EndOfStreamException exception)
+        {
+            throw new ReplayFormatException($"The command is truncated: {exception.Message}");
+        }
+    }
+
     private static void WriteCommand(BinaryWriter writer, SimCommand command)
     {
         writer.Write(command.Tick);

@@ -10,6 +10,8 @@
     <Compile Include="../../tools/CnCNew.SimTool/RateDistribution.cs" Link="Linked/RateDistribution.cs" />
     <!-- The product's default rate is defined once, in the game layer; this project does not reference that layer and takes the definition as source. -->
     <Compile Include="../../src/CnCNew.Game/Data/ProductRate.cs" Link="Linked/ProductRate.cs" />
+    <!-- The synthetic skirmish fixture is shared with the network tests. -->
+    <Compile Include="../Shared/SkirmishFixtureFiles.cs" Link="Shared/SkirmishFixtureFiles.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
