@@ -75,6 +75,7 @@ public sealed class UdpLink : IConnection
     private long _lastSentMs;
     private long _lastReceivedMs;
     private bool _ackPending;
+    private long _ackPendingSinceMs;
     private bool _urgentNew;
     private uint _echoTime;
     private long _echoReceivedMs = long.MinValue;
@@ -262,9 +263,15 @@ public sealed class UdpLink : IConnection
         if (urgentAcked > 0 && urgentAcked <= _urgentOut.Count) _urgentOut.RemoveRange(0, urgentAcked);
     }
 
+    private void NoteAckPending()
+    {
+        if (!_ackPending) _ackPendingSinceMs = _lastReceivedMs;
+        _ackPending = true;
+    }
+
     private void TakeSegment(uint number, ReadOnlySpan<byte> bytes)
     {
-        _ackPending = true;
+        NoteAckPending();
         var distance = unchecked((int)(number - _expectedSegment));
         if (distance < 0 || _heldSegments.ContainsKey(number))
         {
@@ -303,7 +310,7 @@ public sealed class UdpLink : IConnection
 
     private void TakeUrgent(uint number, int index, int count, ReadOnlySpan<byte> bytes)
     {
-        _ackPending = true;
+        NoteAckPending();
         var distance = unchecked((int)(number - _expectedUrgent));
         if (distance < 0)
         {
@@ -421,16 +428,20 @@ public sealed class UdpLink : IConnection
             return;
         }
 
-        // Urgent: what is new goes now; what the peer has not acknowledged rides along with it, oldest first, as far as the redundancy budget reaches; and whatever has
-        // waited a retransmission time goes regardless (pause, the last tick, a message too large to ride along).
+        // An acknowledgement that has waited long enough gets a datagram of its own; one that has not rides with whatever goes.
+        var ackDue = _ackPending && nowMs - _ackPendingSinceMs >= _options.AckDelayMs;
+        // Urgent: what is new goes now; what the peer has not acknowledged rides along - with a new urgent message and with any other datagram that goes out anyway -,
+        // oldest first, a few times, as far as the redundancy budget reaches; and whatever has waited a retransmission time goes regardless (a pause, the last tick, a
+        // message too large to ride along).
         if (_urgentOut.Count > 0)
         {
             var redundancy = _options.UrgentRedundancyBytes;
+            var carrying = _urgentNew || began || ackDue;
             foreach (var urgent in _urgentOut)
             {
                 if (urgent.Sends > 0 && nowMs - urgent.LastSentMs < retransmit)
                 {
-                    if (!_urgentNew || urgent.Sends > _options.UrgentRedundantSends) continue;
+                    if (!carrying || urgent.Sends > _options.UrgentRedundantSends || nowMs - urgent.LastSentMs < _options.UrgentRepeatSpacingMs) continue;
                     var size = urgent.Fragments[0].Length + UdpFormat.UrgentOverhead;
                     if (urgent.Fragments.Length > 1 || size > redundancy)
                     {
@@ -459,7 +470,7 @@ public sealed class UdpLink : IConnection
             _urgentNew = false;
         }
 
-        if (!began && (_ackPending || nowMs - _lastSentMs >= _options.KeepAliveMs)) Begin();
+        if (!began && (ackDue || nowMs - _lastSentMs >= _options.KeepAliveMs)) Begin();
         if (began) End();
     }
 

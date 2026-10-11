@@ -153,6 +153,7 @@ static partial class NetTool
         public long DuplicatesReceived { get; init; }
         public long Malformed { get; init; }
         public long Discarded { get; init; }
+        public string LastDiscard { get; init; } = string.Empty;
         public int MaxLagSeenMs { get; init; }
         public int MinSpeedSeenPercent { get; init; } = 100;
         public string[] Drops { get; init; } = [];
@@ -217,6 +218,10 @@ static partial class NetTool
             var warm = SkirmishMatchSession.Start(settings.ToDescription(string.Empty, data.Fingerprint.ToUpperInvariant(), 1, 2), data.Templates, loaded.Terrain, loaded.Map.Objects);
             for (var tick = 0; tick < 10 * rate.TicksPerSecond; tick++) warm.Step();
         }
+        // What loading and warming left behind is collected now, not during the match.
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
 
         var clock = new SystemNetClock();
         using var timer = new FineTimer();
@@ -289,7 +294,6 @@ static partial class NetTool
                     matchStartMicros = now;
                     bytesSentAtStart = endpoint.Link.Statistics.BytesSent;
                     bytesReceivedAtStart = endpoint.Link.Statistics.BytesReceived;
-                    GC.Collect();
                     gen0 = GC.CollectionCount(0);
                     gen1 = GC.CollectionCount(1);
                     gen2 = GC.CollectionCount(2);
@@ -390,7 +394,7 @@ static partial class NetTool
             RoundTripMs = client.Sync.RoundTripMicros / 1000.0, MatchSeconds = seconds,
             BytesSentPerSecond = seconds > 0 ? (statistics.BytesSent - bytesSentAtStart) / seconds : 0, BytesReceivedPerSecond = seconds > 0 ? (statistics.BytesReceived - bytesReceivedAtStart) / seconds : 0,
             DatagramsSent = statistics.DatagramsSent, DatagramsReceived = statistics.DatagramsReceived, SegmentsRetransmitted = statistics.SegmentsRetransmitted, DuplicatesReceived = statistics.DuplicatesReceived,
-            Malformed = statistics.Malformed + endpoint.Malformed, Discarded = client.Discarded, MaxLagSeenMs = maxLag, MinSpeedSeenPercent = minSpeed,
+            Malformed = statistics.Malformed + endpoint.Malformed, Discarded = client.Discarded, LastDiscard = client.LastDiscard, MaxLagSeenMs = maxLag, MinSpeedSeenPercent = minSpeed,
             Drops = [..client.Dropped.Select(drop => Invariant($"player {drop.Player} ({drop.Reason})"))], MaxFrameMs = maxFrame, MaxTicksInFrame = maxTicksInFrame,
             Gen0 = GC.CollectionCount(0) - gen0, Gen1 = GC.CollectionCount(1) - gen1, Gen2 = GC.CollectionCount(2) - gen2, ManagedMbAtStart = managedStart, ManagedMbAtEnd = GC.GetTotalMemory(false) / (1024.0 * 1024.0),
             WorkingSetMbAtStart = workingStart, WorkingSetMbAtEnd = self.WorkingSet64 / (1024.0 * 1024.0), Build = client.Identity.Id,

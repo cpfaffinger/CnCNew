@@ -25,6 +25,13 @@ public sealed record UdpOptions
     /// during it.
     /// </summary>
     public int UrgentRedundantSends { get; init; } = 3;
+    /// <summary>The least time between two copies of the same urgent message: copies sent in one breath share the fate of a burst of loss.</summary>
+    public int UrgentRepeatSpacingMs { get; init; } = 8;
+    /// <summary>
+    /// How long an acknowledgement may wait for a datagram that goes out anyway before it gets one of its own. An end that sends every tick acknowledges for free; the
+    /// delay halves the datagrams of the other.
+    /// </summary>
+    public int AckDelayMs { get; init; } = 20;
     public int UrgentWindow { get; init; } = 1_024;
     public int MaxMessageBytes { get; init; } = Protocol.MaxResumeBytes + Protocol.MaxMessageBytes;
     public int MaxConnections { get; init; } = 256;
