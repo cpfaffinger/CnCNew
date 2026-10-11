@@ -113,6 +113,12 @@ public sealed class LockstepClient
 
     private void Send(NetMessage message) => _connection.Send(MessageCodec.Encode(message));
 
+    /// <summary>
+    /// What a match must not wait for behind a lost packet goes on the urgent channel: orders, hash reports, pings, the report of the end (docs/NETWORK-PROTOCOL.md
+    /// section 12.6). They keep their order among themselves; nothing depends on their order against the room's messages.
+    /// </summary>
+    private void SendUrgent(NetMessage message) => _connection.SendUrgent(MessageCodec.Encode(message));
+
     private void Discard(string reason)
     {
         Discarded++;
@@ -143,7 +149,7 @@ public sealed class LockstepClient
         var interval = (Sync.HasEstimate || Phase != ClientPhase.InMatch ? _playback.PingIntervalMs : Math.Max(1, _playback.PingIntervalMs / 4)) * 1000L;
         if (_lastPingMicros != long.MinValue && now - _lastPingMicros < interval) return;
         _lastPingMicros = now;
-        Send(new PingMessage(now, CompletedTick));
+        SendUrgent(new PingMessage(now, CompletedTick));
     }
 
     private void Handle(NetMessage message)
@@ -202,6 +208,9 @@ public sealed class LockstepClient
                 BundlesReceived++;
                 BundleArrived?.Invoke(bundle.Tick, Clock?.Microseconds ?? 0);
                 break;
+            // The two channels are not ordered against each other: a bundle that was on its way when the end arrived is not a violation.
+            case TickBundleMessage when Phase == ClientPhase.Ended:
+                break;
             case PongMessage pong:
                 if (Clock is not null) Sync.Take(pong.ClientMicros, Clock.Microseconds, pong.GameMicros, pong.SpeedPercent);
                 break;
@@ -248,12 +257,12 @@ public sealed class LockstepClient
     /// <summary>Sends a command intent (the bytes of <see cref="CommandWire.EncodeIntent"/>) under the client's own receipt number.</summary>
     public void SendIntent(ulong receipt, byte[] command)
     {
-        Send(new IntentMessage(receipt, command));
+        SendUrgent(new IntentMessage(receipt, command));
         IntentsSent++;
     }
 
     /// <summary>Client-paced rooms: asks the server to close <paramref name="tick"/>.</summary>
-    public void RequestTick(long tick) => Send(new TickRequestMessage(tick));
+    public void RequestTick(long tick) => SendUrgent(new TickRequestMessage(tick));
 
     public bool HasBundle(long tick) => _bundles.ContainsKey(tick);
 
@@ -261,12 +270,12 @@ public sealed class LockstepClient
     public TickBundleMessage TakeBundle(long tick)
         => _bundles.Remove(tick, out var bundle) ? bundle : throw new InvalidOperationException($"The bundle of tick {tick} has not arrived.");
 
-    public void ReportHash(long tick, ulong sessionHash) => Send(new HashReportMessage(tick, sessionHash));
+    public void ReportHash(long tick, ulong sessionHash) => SendUrgent(new HashReportMessage(tick, sessionHash));
 
     /// <summary>Leaves the match by choice: the server puts the leave of this client's player into the next bundle (a living ally inherits) and closes the connection.</summary>
     public void Leave() => Send(new LeaveMessage());
     public void RequestPace(bool paused, int speedPercent) => Send(new PaceRequestMessage(paused, checked((ushort)Math.Clamp(speedPercent, Protocol.MinSpeedPercent, Protocol.MaxSpeedPercent))));
-    public void ReportEnd(long tick, int winner) => Send(new EndReportMessage(tick, winner));
+    public void ReportEnd(long tick, int winner) => SendUrgent(new EndReportMessage(tick, winner));
 
     public void Close() => _connection.Close();
 }

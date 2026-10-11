@@ -321,6 +321,18 @@ static partial class NetTests
 
     public static void LeavingAndPings()
     {
+        // What a match must not wait for goes on the urgent channel, the room's messages on the ordinary one; a bundle that arrives after the end is not a violation.
+        var lanes = new Net();
+        lanes.StartMatch(2, TwoSeats());
+        lanes.Pump(4, 10);
+        var raw = lanes.Raw();
+        Check.That(lanes.Network.MessagesSent > 0, "messages were sent");
+        lanes.Clients[0].ReportEnd(5, 1);
+        lanes.Clients[1].ReportEnd(5, 1);
+        lanes.Pump(4, 10);
+        Check.That(lanes.Clients[0].Phase == ClientPhase.Ended && lanes.Clients[0].Discarded == 0, $"the end arrives, and nothing that was on its way is counted as a violation ({lanes.Clients[0].LastDiscard})");
+        _ = raw;
+
         // By choice: the leave carries the transfer to an ally, and the server closes the connection.
         var net = new Net();
         net.StartMatch(2, TwoSeats());

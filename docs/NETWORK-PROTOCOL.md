@@ -329,13 +329,21 @@ channel.
 
 ### 12.6 The urgent channel
 
-Everything `IConnection.SendUrgent` is given - in this protocol exactly the **tick bundles**, server to client. An urgent message is numbered; it is delivered in number order,
-once, like a reliable one, but it is sent differently: **every datagram that carries a new urgent message also carries the urgent messages the peer has not acknowledged
-yet**, oldest first - each at most `UrgentRedundantSends` (3) more times, and as far as the datagram has room (`UrgentRedundancyBytes`, default: the rest of one datagram;
+Everything `IConnection.SendUrgent` is given: **what a running match must not wait for behind a lost packet** - server to client the tick bundles and the pongs; client to
+server the command intents, the hash reports, the pings, the tick requests of a client-paced room and the report of the end. Everything else (hello, room, start, loading,
+chat, pace, lag and drop notices, leave, desync, end) goes the reliable way. An urgent message is numbered; it is delivered in number order, once, like a reliable one, but
+it is sent differently: **every datagram that goes out - with a new urgent message, with reliable segments, or as an acknowledgement - also carries the urgent messages
+the peer has not acknowledged yet**, oldest first - each at most `UrgentRedundantSends` (3) more times, not more often than every `UrgentRepeatSpacingMs` (8; copies sent in
+one breath share the fate of a burst of loss), and as far as the datagram has room (`UrgentRedundancyBytes`, default: the rest of one datagram;
 what does not fit is counted in `UrgentOmitted` and follows with the next datagram or the retransmission timer). A single lost datagram therefore costs no waiting: the
 next one, one tick later, brings the missing bundle. Three more copies survive every loss a playable line has (at 3 % all four are lost once in a million, and then the
 retransmission time repeats the message); without the bound a datagram carried everything sent during a round trip - measured with eight clients, 8.7 KB/s down per
-client at 10 ms delay and 39.7 KB/s at 150 ms. A message
+client at 10 ms delay and 39.7 KB/s at 150 ms.
+
+**Why the client's reports are urgent too.** The first measurement had them on the reliable channel, where a lost packet holds back everything behind it for a
+retransmission time: at 150 ms delay and 1 % loss the server saw healthy clients fall behind by seconds (517 lag notices in 100 s, the game slowed for 4 s), an order
+took up to 2.8 s, and the clients' clock samples were wrong. With intents, hash reports and pings on the urgent channel the same line has 8 notices, no slowing, and
+the 99 % value of an order is 362 ms instead of 2,760. A message
 larger than one datagram is cut into fragments (at most 64, so 73,920 bytes) that are sent once in consecutive datagrams and again by the retransmission timer. Without new
 messages (pause, the last tick) unacknowledged urgent messages are repeated by the same retransmission time as segments.
 
@@ -346,7 +354,8 @@ bundle (§14). The loopback transport has the same two lanes, so the probes in o
 ### 12.7 Keep-alive, timeout, close
 
 A connection that has sent nothing for `KeepAliveMs` (1,000) sends an empty data datagram; one that has received nothing for `TimeoutMs` (10,000) is closed (`IsOpen` false; the
-relay drops the member with `ConnectionLost`). Acknowledgements go out with the next flush of the host loop.
+relay drops the member with `ConnectionLost`). An acknowledgement rides with the next datagram that goes out anyway; when none has gone for `AckDelayMs` (20) it gets one
+of its own. An end that sends every tick therefore acknowledges for free.
 
 `Close()` closes the connection for its owner at once, but **what was sent before the close is still delivered**: the reliable channel goes on sending and repeating until
 everything is acknowledged or `LingerMs` (2,000) have passed - a rejection or the end of a match would be of no use otherwise. Then the close datagram goes out three times,
@@ -355,7 +364,7 @@ one per flush; the peer closes at the first it receives. A closed end takes noth
 ### 12.8 Numbers
 
 All of them are fields of `UdpOptions` with these defaults: `ConnectRetryMs` 250, `ConnectTimeoutMs` 5,000, `CookieLifetimeMs` 10,000, `KeepAliveMs` 1,000, `TimeoutMs` 10,000,
-`LingerMs` 2,000, `InitialRetransmitMs` 200, `MinRetransmitMs` 30, `MaxRetransmitMs` 2,000, `WindowSegments` 256, `UrgentRedundancyBytes` 1,155, `UrgentRedundantSends` 3, `UrgentWindow` 1,024 (urgent messages
+`LingerMs` 2,000, `InitialRetransmitMs` 200, `MinRetransmitMs` 30, `MaxRetransmitMs` 2,000, `WindowSegments` 256, `AckDelayMs` 20, `UrgentRedundancyBytes` 1,155, `UrgentRedundantSends` 3, `UrgentRepeatSpacingMs` 8, `UrgentWindow` 1,024 (urgent messages
 unacknowledged or ahead; beyond it the connection is closed - the peer has not acknowledged for 17 s at 60 Hz), `MaxMessageBytes` 67,174,400, `MaxConnections` 256 (server).
 
 ### 12.9 Counters
@@ -446,12 +455,13 @@ every status line and when the room closes, and the measurements of §16 report 
 
 ### 14.1 The rule
 
-The server knows how far every member is: the last tick it completed, from its hash reports and its pings. **Lag** is the game time between that tick and the last one the
-server closed. A healthy client is behind by its playback delay plus the way of its reports - 100 to 400 ms on the lines of §16.
+The server knows how far every member is: the last tick it completed, from its hash reports and its pings. The game time between that tick and the last one the server
+closed is not yet lag: a healthy client is behind by its playback delay plus the way of its reports all the time - 50 to 500 ms on the lines of §16. **Lag is what goes
+beyond the least that member showed in the last two windows of 5 s** (at most a second is taken off: a member that is always further behind than that is behind).
 
 | Lag of a member | What the server does | Option (default) |
 |---|---|---|
-| from 500 ms | tells everybody (`LagState`: who, how far), repeated every 250 ms while it lasts - **only shown** | `LagReportMs` (500) |
+| from 500 ms | tells everybody (`LagState`: who, how far), repeated every 250 ms while it lasts, withdrawn below half the limit - **only shown** | `LagReportMs` (500) |
 | above 2 s, a player | the game runs at **half speed for everybody** (`PaceState` states the speed the ticks really close at); it stays slowed until that player is below half the limit | `LagThrottleMs` (2,000), `ThrottleSpeedPercent` (50) |
 | above 2 s for 10 s of the server's clock | the member is **dropped** (`PlayerDropped`, reason "too slow"; the connection is closed) | `ThrottleLimitMs` (10,000) |
 

@@ -93,12 +93,18 @@ public sealed class RelayServer
         public bool LagThrottling { get; set; }
         /// <summary>Above the throttle limit, and since then not yet back below half of it: the game does not flicker between slow and fast at the limit.</summary>
         public bool LagOver { get; set; }
+        /// <summary>The least lag of this member in the current and in the previous window: what its line and its playback delay cost when nothing is wrong.</summary>
+        public int LagFloorNow { get; set; } = int.MaxValue;
+        public int LagFloorBefore { get; set; } = int.MaxValue;
+        public long LagWindowStartMicros { get; set; }
         public long LagReportedAtMicros { get; set; }
         public bool Leaving { get; set; }
     }
 
     private const int EventLimit = 1_024;
     private const long LagRepeatMicros = 250_000;
+    private const long LagWindowMicros = 5_000_000;
+    private const int MaxLagFloorMs = 1_000;
 
     private const int IntentQueueLimit = Protocol.MaxIntentsPerTick * 4;
 
@@ -288,7 +294,8 @@ public sealed class RelayServer
                 break;
             case PingMessage ping:
                 if (Phase == RoomPhase.Match) peer.CompletedTick = Math.Max(peer.CompletedTick, Math.Min(ping.CompletedTick, NextTick - 1));
-                Send(peer, new PongMessage(ping.ClientMicros, GameMicros, (ushort)EffectiveSpeedPercent));
+                // On the urgent channel like the bundles: a clock sample that waited behind a lost packet would be a wrong one.
+                peer.Connection.SendUrgent(MessageCodec.Encode(new PongMessage(ping.ClientMicros, GameMicros, (ushort)EffectiveSpeedPercent)));
                 break;
             case LeaveMessage:
                 peer.Leaving = true;
@@ -475,6 +482,9 @@ public sealed class RelayServer
             peer.LagReported = 0;
             peer.LagThrottling = false;
             peer.LagOver = false;
+            peer.LagFloorNow = int.MaxValue;
+            peer.LagFloorBefore = int.MaxValue;
+            peer.LagWindowStartMicros = _clock.Microseconds;
             peer.Player = peer.Slot >= 0 ? playerOfSlot[peer.Slot] : 0;
             peer.Loaded = false;
             peer.EndReport = null;
@@ -570,7 +580,18 @@ public sealed class RelayServer
         {
             var peer = _peers[index];
             if (peer.Hello is null) continue;
-            var lagMs = (int)Math.Clamp((NextTick - 1 - peer.CompletedTick) * _tickMicroseconds / 1000, 0, int.MaxValue);
+            var rawLagMs = (int)Math.Clamp((NextTick - 1 - peer.CompletedTick) * _tickMicroseconds / 1000, 0, int.MaxValue);
+            // A member on a long line is "behind" by its way and its playback delay all the time. That is not lag: the rule counts what goes beyond the least it showed
+            // in the last windows (at most a second of it - a member that is always further behind than that is behind).
+            if (now - peer.LagWindowStartMicros >= LagWindowMicros)
+            {
+                peer.LagFloorBefore = peer.LagFloorNow;
+                peer.LagFloorNow = int.MaxValue;
+                peer.LagWindowStartMicros = now;
+            }
+            peer.LagFloorNow = Math.Min(peer.LagFloorNow, rawLagMs);
+            var floor = Math.Min(peer.LagFloorBefore, peer.LagFloorNow);
+            var lagMs = rawLagMs - Math.Min(floor, MaxLagFloorMs);
             var over = _options.LagThrottleMs > 0 && (lagMs > _options.LagThrottleMs || (peer.LagOver && lagMs > _options.LagThrottleMs / 2));
             peer.LagOver = over;
             if (over && !Paused)
@@ -590,7 +611,8 @@ public sealed class RelayServer
             }
             var slows = over && peer.Player > 0;
             throttle |= slows;
-            var reported = _options.LagReportMs > 0 && lagMs >= _options.LagReportMs ? lagMs : 0;
+            // Told from the report limit on, and withdrawn below half of it: the notice does not flicker at the limit.
+            var reported = _options.LagReportMs > 0 && (lagMs >= _options.LagReportMs || (peer.LagReported != 0 && lagMs >= _options.LagReportMs / 2)) ? Math.Max(1, lagMs) : 0;
             if ((reported == 0) != (peer.LagReported == 0) || slows != peer.LagThrottling || (reported != 0 && now - peer.LagReportedAtMicros >= LagRepeatMicros))
             {
                 if ((reported == 0) != (peer.LagReported == 0) || slows != peer.LagThrottling)
