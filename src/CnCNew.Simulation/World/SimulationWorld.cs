@@ -751,6 +751,9 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!CanMove(marcher)) return CommandRejection.CannotMove;
                 break;
             }
+            case PlayerLeaveCommand:
+                if (command.Player.IsSystem) return CommandRejection.NotPermitted;
+                break;
             case GroupMoveCommand group:
             {
                 if (group.Units.IsDefaultOrEmpty || group.Units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
@@ -1103,6 +1106,9 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             case GroupMoveCommand group:
                 ExecuteGroupMove(group);
+                break;
+            case PlayerLeaveCommand leave:
+                ExecutePlayerLeave(leave.Player, leave.TransferToAlly);
                 break;
             case PursueCommand pursue:
             {

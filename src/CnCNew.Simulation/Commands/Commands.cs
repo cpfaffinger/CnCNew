@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 16;
+    public const int Version = 17;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -87,7 +87,11 @@ public static class CommandTypes
     /// <summary><c>MSG_DO_MOVETO</c> / <c>MSG_DO_ATTACKMOVETO</c> to a group (<c>AIGroup::groupMoveToPosition</c>): several units are sent to one point and each gets a destination of its own (docs/SIMULATION-CORE.md §44.2).</summary>
     public const ushort GroupMove = 33;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= GroupMove;
+    // ------------------------------------------------------------------------------------------------- player leaves (v17)
+    /// <summary><c>MSG_SELF_DESTRUCT</c>: a player leaves a running match - by losing the connection (everything it owns dies) or by choice (a living ally inherits) (docs/SIMULATION-CORE.md §47).</summary>
+    public const ushort PlayerLeave = 34;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= PlayerLeave;
 }
 
 /// <summary>
@@ -164,6 +168,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), new EntityId(checked((uint)reader.UInt("victim"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"), reader.Bool("attack")),
+            CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -725,6 +730,19 @@ public readonly record struct SubmitResult(bool Accepted, CommandRejection Reaso
 /// <see cref="Attack"/> the march is an attack-move. A single unit is ordered with <see cref="SetMoveTargetCommand"/> or <see cref="AttackMoveCommand"/>. Every unit has to be
 /// the player's and able to move when the order is given; a member that is gone when the order executes takes no part.
 /// </summary>
+/// <summary>
+/// <c>MSG_SELF_DESTRUCT</c> (<c>GameLogicDispatch.cpp</c>): the player of the command leaves the match. With <see cref="TransferToAlly"/> (the original's quit through the menu)
+/// the first living player allied with it in both directions takes over everything it owns and its money, and what cannot change hands dies; without it (the original's
+/// <c>NetCommandType DestroyPlayer</c> for a lost connection), or when no such ally lives, <c>Player::killPlayer</c> runs: every container of the player lets its riders out,
+/// then every object of the player is killed - a tech building goes to the neutral player instead. In a network match only the relay gives this command, inside a tick bundle,
+/// so every simulation executes it in the same tick.
+/// </summary>
+public sealed record PlayerLeaveCommand(PlayerId Player, ulong Sequence, long Tick, bool TransferToAlly) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.PlayerLeave;
+    protected override void DescribeBody(IStateWriter writer) => writer.Bool("transfer", TransferToAlly);
+}
+
 public sealed record GroupMoveCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y, bool Attack) : SimCommand(Player, Sequence, Tick)
 {
     /// <summary>Own limit: more units than this in one order are refused (a selection of the original holds far fewer; the bound keeps a hostile command small).</summary>

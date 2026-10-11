@@ -40,7 +40,7 @@ static partial class Tests
     public static void SkirmishReplayPlaysTheMatchAndAuditsTheAi()
     {
         var (fixture, terrain, map, session, replay) = RecordHumanAgainstAi(6_000);
-        Check.That(ReplayFormat.CurrentVersion == 14, "The replay format with the match description in its header is version 14.");
+        Check.That(ReplayFormat.CurrentVersion >= 14, "The replay format carries the match description in its header since version 14.");
         var description = SkirmishReplay.DescriptionOf(replay.Header);
         Check.That(description is not null && description.Equals(session.Description), "The header of a skirmish replay is the match description, byte for byte.");
         var humanCommands = replay.Commands.Count(command => command.Player == session.Players[0].Id);

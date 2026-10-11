@@ -468,7 +468,7 @@ static partial class Tests
         Check.That(file.Commands.SequenceEqual(ordered), "PursueCommand survives the replay file.");
         var again = ReplayRunner.Run(file, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
         Check.That(again.TickHashes.AsSpan().SequenceEqual(probe.TickHashes) && again.VerifiedCheckpoints == file.Checkpoints.Length, "The replay reproduces itself tick by tick.");
-        Check.That(CommandTypes.IsKnown(CommandTypes.Pursue) && CommandTypes.IsKnown(CommandTypes.AttackMove) && CommandTypes.IsKnown(CommandTypes.GroupMove) && !CommandTypes.IsKnown(CommandTypes.GroupMove + 1) && CommandTypes.Version == 16 && ReplayFormat.CurrentVersion == 14, "Command table 16 and replay format 13 carry the pursuit (and the attack-move and the group move after it).");
+        Check.That(CommandTypes.IsKnown(CommandTypes.Pursue) && CommandTypes.IsKnown(CommandTypes.AttackMove) && CommandTypes.IsKnown(CommandTypes.GroupMove) && CommandTypes.IsKnown(CommandTypes.PlayerLeave) && !CommandTypes.IsKnown(CommandTypes.PlayerLeave + 1) && CommandTypes.Version == 17 && ReplayFormat.CurrentVersion == 15, "Command table 17 and replay format 15 carry the pursuit (and the attack-move, the group move and the player-leave command after it).");
         Check.That(ordered.OfType<PursueCommand>().Single().TypeCode == CommandTypes.Pursue, "The command has its own type code.");
     }
 
