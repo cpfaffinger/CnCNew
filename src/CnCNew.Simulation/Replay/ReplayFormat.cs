@@ -18,7 +18,14 @@ public sealed class ReplayFormatException(string message) : FormatException(mess
 /// </summary>
 public sealed record ReplayHeader(
     int FormatVersion, int CommandTableVersion, int TickRate, string DefinitionFingerprint, string FixtureId, uint Seed, WorldId WorldId,
-    ImmutableArray<PlayerConfiguration> Players, long EndTick, int CheckpointInterval, string TerrainFingerprint = "");
+    ImmutableArray<PlayerConfiguration> Players, long EndTick, int CheckpointInterval, string TerrainFingerprint = "")
+{
+    /// <summary>
+    /// The canonical bytes of the match description the recording was started from (<c>MatchDescription.Encode</c>), as Base64 text; empty for a recording that has none (a fixture
+    /// run on a bare world). With it a replay of a skirmish can be played as a match, its computer players deciding again (<c>SkirmishReplay.Play</c>).
+    /// </summary>
+    public string MatchDescription { get; init; } = string.Empty;
+}
 
 /// <summary>State hash after executing <see cref="Tick"/>.</summary>
 public readonly record struct ReplayCheckpoint(long Tick, ulong Hash);
@@ -32,11 +39,12 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// u32 command count (i64 tick, u16 type, i32 player, u64 sequence, type-specific payload), u32 checkpoint count (i64 tick, u64 hash),
 /// and a trailing SHA-256 over everything before it. Strings are u16-length-prefixed UTF-8.
 /// Commands are stored ordered by (tick, player, sequence). Truncated, corrupted (hash mismatch) and version-foreign files are rejected.
+/// Version 14 (phase 24): after the checkpoint interval the header carries the match description (u32 length, then the canonical bytes; length 0 = none); version 13 is rejected.
 /// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 13;
+    public const int CurrentVersion = 14;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -67,6 +75,9 @@ public static class ReplayFormat
             }
             writer.Write(header.EndTick);
             writer.Write((uint)header.CheckpointInterval);
+            var description = Convert.FromBase64String(header.MatchDescription);
+            writer.Write((uint)description.Length);
+            writer.Write(description);
             writer.Write((uint)replay.Commands.Length);
             foreach (var command in replay.Commands.OrderBy(value => value.Tick).ThenBy(value => value.Player.Value).ThenBy(value => value.Sequence))
                 WriteCommand(writer, command);
@@ -119,6 +130,9 @@ public static class ReplayFormat
             }
             var endTick = reader.ReadInt64();
             var interval = (int)reader.ReadUInt32();
+            var descriptionLength = reader.ReadUInt32();
+            if (descriptionLength > stream.Length - stream.Position) throw new ReplayFormatException("The match description exceeds the file size.");
+            var description = Convert.ToBase64String(reader.ReadBytes((int)descriptionLength));
             var commandCount = reader.ReadUInt32();
             if (commandCount > stream.Length - stream.Position) throw new ReplayFormatException("Command count exceeds the file size.");
             var commands = ImmutableArray.CreateBuilder<SimCommand>((int)commandCount);
@@ -138,8 +152,8 @@ public static class ReplayFormat
                     : previous.Sequence < current.Sequence;
                 if (!ordered) throw new ReplayFormatException("Commands are not ordered by (tick, player, sequence).");
             }
-            return new ReplayFile(new ReplayHeader(formatVersion, commandTableVersion, tickRate, fingerprint, fixture, seed, worldId, players.ToImmutable(), endTick, interval, terrainFingerprint),
-                built, checkpoints.MoveToImmutable());
+            return new ReplayFile(new ReplayHeader(formatVersion, commandTableVersion, tickRate, fingerprint, fixture, seed, worldId, players.ToImmutable(), endTick, interval, terrainFingerprint)
+                { MatchDescription = description }, built, checkpoints.MoveToImmutable());
         }
         catch (EndOfStreamException exception)
         {
@@ -176,6 +190,14 @@ public static class ReplayFormat
         var bytes = reader.ReadBytes(length);
         if (bytes.Length != length) throw new EndOfStreamException();
         return Encoding.UTF8.GetString(bytes);
+    }
+
+    /// <summary>The bytes of one command as the container stores it: what two commands are compared by (a command with a list compares by reference otherwise).</summary>
+    public static byte[] EncodeCommand(SimCommand command)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true)) WriteCommand(writer, command);
+        return stream.ToArray();
     }
 
     private static void WriteCommand(BinaryWriter writer, SimCommand command)

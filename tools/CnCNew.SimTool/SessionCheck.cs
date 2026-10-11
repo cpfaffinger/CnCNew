@@ -11,7 +11,8 @@ namespace CnCNew.SimTool;
 /// <summary>
 /// <c>session-check</c> (phase 24): the runs of the reference manifest's AI table and its eight-player runs as live sessions that are saved at several ticks; every save is
 /// restored into a fresh session and continued to the end of the match, and the session hash (world plus every computer player) is compared with the uninterrupted session in
-/// every tick. The replay of every continued session is compared with the uninterrupted one byte for byte.
+/// every tick. The replay of every continued session is compared with the uninterrupted one byte for byte, and the replay of the match is played as a match
+/// (<see cref="SkirmishReplay.Play"/>): the computer players decide again and every command they give is compared with the recorded one.
 /// </summary>
 internal static class SessionCheck
 {
@@ -96,6 +97,10 @@ internal static class SessionCheck
             hashes.Add(session.StateHash());
         }
         var reference = ReplayFormat.Write(session.ToReplay());
+        // The replay of the match played as a match: the computer players decide again and are compared with their recorded commands.
+        var audit = SkirmishReplay.Play(ReplayFormat.Read(reference), context.Catalog, context.Fingerprint, terrain, map.Objects);
+        if (audit.FirstDeviation is { } deviation) return new Row(id, false, $"the playback of the replay deviates from the recording: {deviation}");
+        if (audit.FinalSessionHash != session.StateHash() || audit.EndTick != session.World.Tick) return new Row(id, false, "the playback of the replay ends in another state than the match");
         long continued = 0;
         long bytes = 0;
         foreach (var (tick, save) in saves)
@@ -116,7 +121,7 @@ internal static class SessionCheck
         }
         if (saves.Count == 0) return new Row(id, false, "the match ended before the first save point");
         var outcome = session.Winner is { } winner ? $"winner {session.Players.First(player => player.Id == winner).Faction} at {session.VictoryTick}" : "no winner";
-        return new Row(id, true, $"{outcome}, end {session.EndTick}; {saves.Count} saves (ticks {string.Join(", ", saves.Keys)}), {continued} continued ticks identical, largest save {bytes / 1024} KB");
+        return new Row(id, true, $"{outcome}, end {session.EndTick}; {saves.Count} saves (ticks {string.Join(", ", saves.Keys)}), {continued} continued ticks identical, largest save {bytes / 1024} KB; replay played with the AI: {audit.AuditedCommands} commands audited, no deviation");
     }
 
     /// <summary>For the report of a deviation only: the world hash of the uninterrupted session after <paramref name="tick"/>, by playing it once more.</summary>

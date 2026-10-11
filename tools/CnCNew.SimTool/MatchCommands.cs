@@ -65,7 +65,7 @@ internal static class MatchCommands
         using var stream = context.Content.OpenRead(description.MapPath);
         var map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, description.MapPath);
-        var session = SkirmishMatchSession.Start(description, context.Catalog, terrain, map.Objects);
+        var session = SkirmishMatchSession.Start(description, context.Catalog, terrain, map.Objects, definitionFingerprint: context.Fingerprint);
         Console.WriteLine($"description {description.Fingerprint}");
         foreach (var slot in session.Match.Slots)
             Console.WriteLine($"player {slot.Player.Value}: slot {slot.Slot}, {slot.Description.Kind}, {slot.Participant.Faction.Name}, start position {slot.StartPosition}, team {slot.Description.Team}, colour {slot.Color}");

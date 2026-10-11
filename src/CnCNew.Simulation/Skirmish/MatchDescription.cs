@@ -169,10 +169,13 @@ public sealed record MatchDescription(
     /// Decides everything the description leaves open and checks it against the definitions and the map of this machine. "Random" factions and start positions are drawn from a
     /// stream of their own that is seeded by <see cref="Seed"/> - never by the caller -, factions first, then positions, both in slot order.
     /// </summary>
-    public ResolvedMatch Resolve(TemplateCatalog catalog, TerrainMap terrain)
+    /// <param name="definitionFingerprint">The fingerprint of the definitions <paramref name="catalog"/> was built from; when given, a description for other definitions is refused.</param>
+    public ResolvedMatch Resolve(TemplateCatalog catalog, TerrainMap terrain, string? definitionFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(terrain);
+        if (definitionFingerprint is not null && !string.Equals(DefinitionFingerprint, definitionFingerprint, StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("The match is described for different definitions (fingerprint mismatch).");
         if (CommandTableVersion != CommandTypes.Version || WorldStateVersion != WorldSnapshot.Version)
             throw new ArgumentException($"The match was described for simulation version {CommandTableVersion}/{WorldStateVersion}; this build is {CommandTypes.Version}/{WorldSnapshot.Version}.");
         if (!SimulationRate.IsSupported(TickRate) || catalog.Rate.TicksPerSecond != TickRate)

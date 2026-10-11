@@ -107,7 +107,7 @@ public sealed class SkirmishMatchSession
     {
         if (slots.Length < 2) throw new ArgumentException("A match needs at least two participants.", nameof(slots));
         if (slots.Length > terrain.StartPositions.Length) throw new ArgumentException($"The map has {terrain.StartPositions.Length} start positions for {slots.Length} participants.", nameof(slots));
-        var session = Start(Describe(options, catalog, fingerprint, terrain, slots), catalog, terrain, mapObjects, options.CheckpointInterval);
+        var session = Start(Describe(options, catalog, fingerprint, terrain, slots), catalog, terrain, mapObjects, options.CheckpointInterval, fingerprint);
         for (var index = 0; index < slots.Length; index++)
             if (session.Match.Slots[index].Participant != slots[index].Participant)
                 throw new ArgumentException($"Slot {index} is not the participant the catalog offers for faction '{slots[index].Participant.Faction.Name}'.", nameof(slots));
@@ -116,12 +116,14 @@ public sealed class SkirmishMatchSession
 
     /// <summary>
     /// Builds tick 0 of the described match. <paramref name="mapObjects"/> are the objects of the described map (they are part of the terrain fingerprint the description names);
-    /// <paramref name="checkpointInterval"/> is a property of the recording, not of the match.
+    /// <paramref name="checkpointInterval"/> is a property of the recording, not of the match. <paramref name="definitionFingerprint"/> is the fingerprint of the definitions
+    /// the catalog was built from: a machine that was handed the description passes its own, and a description for other definitions is refused.
     /// </summary>
-    public static SkirmishMatchSession Start(MatchDescription description, TemplateCatalog catalog, TerrainMap terrain, ImmutableArray<MapObject> mapObjects, int checkpointInterval = 0)
+    public static SkirmishMatchSession Start(MatchDescription description, TemplateCatalog catalog, TerrainMap terrain, ImmutableArray<MapObject> mapObjects, int checkpointInterval = 0,
+        string? definitionFingerprint = null)
     {
         ArgumentNullException.ThrowIfNull(description);
-        var match = description.Resolve(catalog, terrain);
+        var match = description.Resolve(catalog, terrain, definitionFingerprint);
         var session = Create(match, catalog, terrain, checkpointInterval, world: null);
         var notes = ImmutableArray.CreateBuilder<string>();
         session.SpawnStartingObjects(catalog, terrain, notes);
@@ -137,7 +139,8 @@ public sealed class SkirmishMatchSession
         var players = ImmutableArray.CreateRange(match.Slots.Select(slot =>
             new PlayerConfiguration(slot.Player, slot.Participant.Faction.Name, slot.Participant.Faction.Name, slot.Description.Team, IsComputer: slot.Description.Kind == MatchSlotKind.Computer)));
         return new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, description.TickRate, description.DefinitionFingerprint,
-            FixtureId, description.Seed, new WorldId(1), players, description.MaxTicks, checkpointInterval, description.TerrainFingerprint);
+            FixtureId, description.Seed, new WorldId(1), players, description.MaxTicks, checkpointInterval, description.TerrainFingerprint)
+            { MatchDescription = Convert.ToBase64String(description.Encode()) };
     }
 
     /// <summary>The session without its objects: the world (a fresh one, or the restored one) and one AI per computer slot.</summary>
@@ -203,16 +206,21 @@ public sealed class SkirmishMatchSession
     public SubmitResult Submit(SimCommand command)
     {
         _commands.Add(command);
+        // The counter of a human player follows whatever is submitted for it: an order issued here, or a recorded one fed in by a playback.
+        if (IsHumanPlayer(command.Player) && command.Sequence > _humanSequence.GetValueOrDefault(command.Player.Value)) _humanSequence[command.Player.Value] = command.Sequence;
         return World.Submit(command);
+    }
+
+    private bool IsHumanPlayer(PlayerId player)
+    {
+        foreach (var slot in Match.Slots)
+            if (slot.Player == player) return slot.Description.Kind == MatchSlotKind.Human;
+        return false;
     }
 
     /// <summary>Issues a command of a human player at the current tick; the sequence number is assigned here (per player, strictly increasing).</summary>
     public SubmitResult Issue(PlayerId player, Func<ulong, long, SimCommand> make)
-    {
-        var sequence = _humanSequence.GetValueOrDefault(player.Value) + 1;
-        _humanSequence[player.Value] = sequence;
-        return Submit(make(sequence, World.Tick));
-    }
+        => Submit(make(_humanSequence.GetValueOrDefault(player.Value) + 1, World.Tick));
 
     /// <summary>The recorded commands (unchecked, no checkpoints) as a replay ending at the current tick, or <see cref="EndTick"/> once the match is over.</summary>
     public ReplayFile ToReplay()
@@ -337,7 +345,7 @@ public sealed class SkirmishMatchSession
             ResolvedMatch match;
             try
             {
-                match = description.Resolve(catalog, terrain);
+                match = description.Resolve(catalog, terrain, expectedDefinitionFingerprint);
             }
             catch (ArgumentException exception)
             {
