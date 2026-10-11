@@ -426,6 +426,10 @@ internal static class ShellTests
             TestHarness.Assert(shell.Phase != ShellPhase.MatchLoading && shell.CurrentScreen is SkirmishSetupScreen, $"slot entry '{Entries("ComboBoxPlayer1")[empty]}' is no opponent: Start does nothing");
         }
         tree.Post(UiEventKind.ComboSelected, slotOne, value: 2);
+        // The room: the team and colour boxes of the two slots travel into the match (phase 25).
+        tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxTeam0")!, value: 2);
+        tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxTeam1")!, value: 2);
+        tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxColor1")!, value: 5);
         tree.Dispatch();
         Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
         TestHarness.Assert(shell.Phase == ShellPhase.MatchLoading, "the computer army entry is an opponent: Start loads the match");
@@ -433,6 +437,8 @@ internal static class ShellTests
         shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var started =shell.DrainOutputs().OfType<StartMatchOutput>().Single();
         TestHarness.Assert(started.Setup.Opponents.Length == 1, $"one computer army entry starts one computer player, got {started.Setup.Opponents.Length}");
+        TestHarness.Assert(started.Setup.Details.Length == 2 && started.Setup.Details[0] is { Team: 2, Color: 0, StartPosition: 0 } && started.Setup.Details[1] is { Team: 2, Color: 5, StartPosition: 1 },
+            "the setup carries team, colour and start position of every slot that takes part");
 
         shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
         Click(shell, "MainMenu.wnd:ButtonOptions");

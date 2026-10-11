@@ -118,7 +118,11 @@ public sealed class CommandPath
         Scheduler = scheduler ?? new LocalCommandScheduler();
     }
 
-    /// <summary>The sink of one player on this path: what the input layer of that player is given.</summary>
+    /// <summary>
+    /// The sink of one player on this path: what the input layer of that player is given. There is no sink that goes around the path (the direct sinks of a skirmish and a
+    /// mission session were removed in phase 25): a headless driver that wants an order executed in the tick it gives it uses a path with the local scheduler and calls
+    /// <see cref="SubmitDue"/> before its step, or submits to the session itself.
+    /// </summary>
     public ICommandSink For(PlayerId player) => new PlayerSink(this, player);
 
     private sealed class PlayerSink(CommandPath path, PlayerId player) : ICommandSink

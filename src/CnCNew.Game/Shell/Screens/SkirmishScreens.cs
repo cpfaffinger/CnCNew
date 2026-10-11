@@ -37,6 +37,9 @@ public sealed class SkirmishSetupScreen : ShellScreen
     private int DefaultArmyEntry => _originalAi ? ComputerArmyEntry + 1 : ComputerArmyEntry;
     private string? _selectedMapPath;
     private int _startMoney;
+    // The room of the local game (docs/NETWORK-PROTOCOL.md section 4): what the team and colour boxes of a slot say travels into the match description.
+    private readonly int[] _team = new int[Slots];
+    private readonly int[] _color = new int[Slots];
 
     public SkirmishSetupScreen(GameShell shell) : base(shell, ShellLayoutNames.SkirmishGameOptionsMenu)
     {
@@ -61,6 +64,7 @@ public sealed class SkirmishSetupScreen : ShellScreen
             var color = W($"ComboBoxColor{slot}");
             foreach (var colorName in colors) color.AddComboEntry(colorName);
             color.SetComboSelection(Math.Min(slot, colors.Length - 1));
+            _color[slot] = colors.Length == 0 ? -1 : Math.Min(slot, colors.Length - 1);
             var team = W($"ComboBoxTeam{slot}");
             for (var index = 0; index <= 4; index++) team.AddComboEntry(names.Team(index));
             team.SetComboSelection(0);
@@ -173,15 +177,19 @@ public sealed class SkirmishSetupScreen : ShellScreen
         // The AI of each slot in slot order; the first slot is the human's.
         var ai = ImmutableArray.CreateBuilder<MatchAi>();
         ai.Add(MatchAi.Builtin);
+        // Team and colour of every slot that takes part, in the order of the match's slots; the start positions follow that order (the layout has no box for them).
+        var details = ImmutableArray.CreateBuilder<MatchSlotDetails>();
+        details.Add(new MatchSlotDetails(_team[0], _color[0], StartPosition: 0));
         for (var slot = 1; slot < _startPositionCount; slot++)
         {
             if (!_computer[slot]) continue;
+            details.Add(new MatchSlotDetails(_team[slot], _color[slot], StartPosition: details.Count));
             opponents.Add(ResolveFaction(slot));
             ai.Add(new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original, _difficulty[slot]));
         }
         if (opponents.Count == 0) return;
         var options = SkirmishMatchOptions.StandardAt(Shell.Data.Rate) with { StartMoney = _startMoney };
-        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = _originalAi ? ai.ToImmutable() : [] };
+        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = _originalAi ? ai.ToImmutable() : [], Details = details.ToImmutable() };
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });
         Shell.BeginMatchLoading(setup);
@@ -210,6 +218,8 @@ public sealed class SkirmishSetupScreen : ShellScreen
         for (var slot = 0; slot < Slots; slot++)
         {
             if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayerTemplate{slot}") { _factionIndex[slot] = e.Value; return; }
+            if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxTeam{slot}") { _team[slot] = Math.Clamp(e.Value, 0, 4); return; }
+            if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxColor{slot}") { _color[slot] = e.Value; return; }
             if (slot > 0 && e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayer{slot}")
             {
                 _computer[slot] = _originalAi ? e.Value >= ComputerArmyEntry : e.Value == ComputerArmyEntry;

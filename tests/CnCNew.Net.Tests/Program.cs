@@ -751,7 +751,17 @@ static class NetTests
                 if (clocks.IsMatch(text)) problems.Add($"{file}({line}): a clock, a timer or a thread of its own: {text.Trim()}");
                 if (lockstep.IsMatch(text)) problems.Add($"{file}({line}): a random source that is not the layer's own: {text.Trim()}");
             }
+        // One match path: the client starts and steps no session itself, and in the game layer only LiveMatch (behind the relay) and the lockstep code build one.
+        var direct = new Regex(@"\b(SkirmishMatchSession|ScriptedSkirmishSession)\.(Start|Restore)\(|\bSkirmishSessionCommandSink\b|\.Session\.(Step|Issue|Submit)\(|\bnew RelayServer\(");
+        foreach (var (file, line, text) in CodeLines(root, "CnCNew.Client.Stride"))
+            if (direct.IsMatch(text)) problems.Add($"{file}({line}): the client starts, steps or commands a session around the relay: {text.Trim()}");
+        var starts = new Regex(@"\b(SkirmishMatchSession|ScriptedSkirmishSession)\.(Start|Restore)\(|\bSkirmishSessionCommandSink\b");
+        foreach (var (file, line, text) in CodeLines(root, "CnCNew.Game"))
+            if (starts.IsMatch(text) && !file.EndsWith("/Live/LiveMatch.cs", StringComparison.Ordinal) && !file.Contains("/Lockstep/", StringComparison.Ordinal))
+                problems.Add($"{file}({line}): a skirmish session is built outside LiveMatch and the lockstep code: {text.Trim()}");
         Check.That(problems.Count == 0, "the network layers keep their rules: " + string.Join("; ", problems));
+        Check.That(direct.IsMatch("var session = SkirmishMatchSession.Start(description, catalog, terrain, objects);") && direct.IsMatch("match.Session.Step();") && starts.IsMatch("new SkirmishSessionCommandSink(session, player)"),
+            "the rule of the one match path finds what it forbids");
         Check.That(clocks.IsMatch("var now = DateTime.UtcNow;") && clocks.IsMatch("Thread.Sleep(5);") && serverForbidden.IsMatch("using CnCNew.Simulation.World;") && serverForbidden.IsMatch("var text = File.ReadAllText(path);")
                    && !serverForbidden.IsMatch("using CnCNew.Simulation.Skirmish;") && lockstep.IsMatch("world.LogicRandom.Range(0, 1)"), "the rules find what they forbid");
     }
