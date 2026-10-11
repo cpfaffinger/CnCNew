@@ -102,7 +102,7 @@ $stepsOfArea = @{
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
     ui           = @{ affected = 'ui';                                      gate = 'game' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
-    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'game' }
+    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'game' }
     game         = @{ affected = 'game-focus';                              gate = 'game', 'net' }
     client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys' }
     scripts      = @{ affected = @();                                       gate = @() }
@@ -208,6 +208,7 @@ $steps = @(
     New-Step 'reference'    'Reference manifest, full set'                    ((Release-Run $simTool) + 'reference-manifest' + 'check' + $ContentDir + 'baselines/reference-manifest.json' + '--set' + 'full') -Content -Release $simTool
     New-Step 'check-match'  'Match description in three processes'            ((Script-Run 'check-match-description') + '-NoBuild') -Content -Release $simTool
     New-Step 'session-check' 'Skirmish sessions saved and continued (AI table, eight players)' ((Release-Run $simTool) + 'session-check' + $ContentDir + '--jobs' + '3') -Content -Release $simTool
+    New-Step 'net-probe'    'Four clients and four computer players over the relay with delay and jitter' ((Release-Run 'tools/CnCNew.NetTool') + 'loopback-match' + $ContentDir + '--map' + 'Maps/Twilight Flame/Twilight Flame.map' + '--humans' + '4' + '--ais' + '4' + '--seconds' + '60' + '--delay' + '40' + '--jitter' + '60') -Content -Release 'tools/CnCNew.NetTool'
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content
     New-Step 'game-30'      'Game.Tests (real data, 30 Hz)'                   ((Release-Run $gameTests) + $content + '--tick-rate' + '30') -Content -Release $gameTests
