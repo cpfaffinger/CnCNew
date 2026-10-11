@@ -71,6 +71,8 @@ $areaOfPath = @(
     @('tools/CnCNew.PresentationTool/', 'presentation'),
     @('src/CnCNew.Ui/', 'ui'), @('tests/CnCNew.Ui.Tests/', 'ui'), @('tools/CnCNew.UiRenderTool/', 'ui'),
     @('src/CnCNew.Audio/', 'audio'), @('tests/CnCNew.Audio.Tests/', 'audio'),
+    @('src/CnCNew.Net/', 'net'), @('src/CnCNew.Server/', 'net'), @('tests/CnCNew.Net.Tests/', 'net'), @('tools/CnCNew.NetTool/', 'net'),
+    @('tests/Shared/', 'simulation'),
     @('src/CnCNew.Game/', 'game'), @('tests/CnCNew.Game.Tests/', 'game'), @('tools/CnCNew.CampaignTool/', 'game'),
     @('src/CnCNew.Client.Stride/', 'client'),
     @('scripts/', 'scripts'),
@@ -94,17 +96,18 @@ $stepsOfArea = @{
     formats      = @{ affected = 'formats', 'import';                       gate = 'inputs', 'quick', 'presentation-content' }
     w3d          = @{ affected = 'w3d';                                     gate = 'presentation-content', 'game' }
     data         = @{ affected = 'data', 'data-content', 'compat';          gate = 'ui', 'audio', 'sim', 'inputs', 'quick' }
-    simulation   = @{ affected = 'sim';                                     gate = 'sim-30', 'sim-120', 'presentation', 'inputs', 'quick', 'rate-suite', 'game-sim', 'check-match' }
+    simulation   = @{ affected = 'sim';                                     gate = 'sim-30', 'sim-120', 'presentation', 'inputs', 'quick', 'rate-suite', 'game-sim', 'check-match', 'net' }
     simtool      = @{ affected = @();                                       gate = 'inputs', 'quick' }
     manifest     = @{ affected = 'inputs', 'reference';                     gate = @() }
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
     ui           = @{ affected = 'ui';                                      gate = 'game' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
-    game         = @{ affected = 'game-focus';                              gate = 'game' }
+    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'game' }
+    game         = @{ affected = 'game-focus';                              gate = 'game', 'net' }
     client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys' }
     scripts      = @{ affected = @();                                       gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
-    build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'presentation', 'sim'
+    build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'presentation', 'sim', 'net'
                       gate     = 'data-content', 'compat', 'verify', 'presentation-content', 'inputs', 'quick', 'game' }
 }
 
@@ -113,6 +116,7 @@ $gameSuites = @{
     Audio     = 'AudioDirectorTests'
     Campaign  = 'CampaignTests', 'CampaignShellTests'
     Hud       = 'HudTests', 'MissionHudTests', 'HotkeyTests'
+    Lockstep  = 'LiveMatchTests', 'HudTests', 'CampaignShellTests', 'SpectatorTests'
     Live      = 'LiveMatchTests', 'DeterminismTests', 'TimeScaleTests', 'ScenarioTests', 'MissionPresentationTests', 'MissionEffectsTests', 'MissionTextTests'
     Save      = 'CampaignTests', 'CampaignShellTests'
     Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests'
@@ -183,6 +187,7 @@ $steps = @(
     New-Step 'w3d'          'W3D.Tests (real data)'                           ((Test-Program 'W3D') + '--' + $content) -Content
     New-Step 'data-content' 'Data.Tests (real data)'                          ((Test-Program 'Data') + '--' + $content) -Content
     New-Step 'vulnerable'   'Known vulnerabilities of the packages'           (Script-Run 'audit-vulnerable')
+    New-Step 'net'          'Net.Tests (60 Hz)'                               (Test-Program 'Net')
     New-Step 'presentation-content' 'Presentation.Tests (real data)'          ((Test-Program 'Presentation') + '--' + $content) -Content
     New-Step 'sim'          'Simulation.Tests (60 Hz)'                        (Release-Run $simTests) -Release $simTests
     New-Step 'game-focus'   "Game.Tests ($($focus -join ', '))"               ((Release-Run $gameTests) + $content + '--only' + ($focus -join ',')) -Content -Release $gameTests
@@ -190,6 +195,8 @@ $steps = @(
     New-Step 'inputs'       'Input manifest'                                  ((Release-Run $simTool) + 'input-manifest' + 'check' + $ContentDir + 'baselines/input-manifest.json') -Content -Release $simTool
     New-Step 'sim-30'       'Simulation.Tests (30 Hz)'                        ((Release-Run $simTests) + '--tick-rate' + '30') -Release $simTests
     New-Step 'sim-120'      'Simulation.Tests (120 Hz)'                       ((Release-Run $simTests) + '--tick-rate' + '120') -Release $simTests
+    New-Step 'net-30'       'Net.Tests (30 Hz)'                               ((Test-Program 'Net') + '--' + '--tick-rate' + '30')
+    New-Step 'net-120'      'Net.Tests (120 Hz)'                              ((Test-Program 'Net') + '--' + '--tick-rate' + '120')
     New-Step 'audio-content' 'Audio.Tests (real data)'                        ((Test-Program 'Audio') + '--' + $content) -Content
     New-Step 'quick'        'Reference manifest, quick set'                   ((Release-Run $simTool) + 'reference-manifest' + 'check' + $ContentDir + 'baselines/reference-manifest.json' + '--set' + 'quick') -Content -Release $simTool
     New-Step 'rate-suite'   'Rate-equivalence suite (30/60/120 Hz)'           ((Release-Run $simTests) + $content + '--only' + 'RateEquivalence') -Content -Release $simTests

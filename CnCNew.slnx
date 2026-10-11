@@ -10,6 +10,8 @@
     <Project Path="src/CnCNew.Images/CnCNew.Images.csproj" />
     <Project Path="src/CnCNew.Import/CnCNew.Import.csproj" />
     <Project Path="src/CnCNew.Simulation/CnCNew.Simulation.csproj" />
+    <Project Path="src/CnCNew.Net/CnCNew.Net.csproj" />
+    <Project Path="src/CnCNew.Server/CnCNew.Server.csproj" />
     <Project Path="src/CnCNew.Presentation/CnCNew.Presentation.csproj" />
     <Project Path="src/CnCNew.Ui/CnCNew.Ui.csproj" />
     <Project Path="src/CnCNew.Audio/CnCNew.Audio.csproj" />
@@ -22,6 +24,7 @@
     <Project Path="tools/CnCNew.MapTool/CnCNew.MapTool.csproj" />
     <Project Path="tools/CnCNew.ImageTool/CnCNew.ImageTool.csproj" />
     <Project Path="tools/CnCNew.SimTool/CnCNew.SimTool.csproj" />
+    <Project Path="tools/CnCNew.NetTool/CnCNew.NetTool.csproj" />
     <Project Path="tools/CnCNew.PresentationTool/CnCNew.PresentationTool.csproj" />
     <Project Path="tools/CnCNew.W3dTool/CnCNew.W3dTool.csproj" />
   </Folder>
@@ -38,6 +41,7 @@
     <Project Path="tests/CnCNew.Presentation.Tests/CnCNew.Presentation.Tests.csproj" />
     <Project Path="tests/CnCNew.Ui.Tests/CnCNew.Ui.Tests.csproj" />
     <Project Path="tests/CnCNew.Audio.Tests/CnCNew.Audio.Tests.csproj" />
+    <Project Path="tests/CnCNew.Net.Tests/CnCNew.Net.Tests.csproj" />
     <Project Path="tests/CnCNew.Game.Tests/CnCNew.Game.Tests.csproj" />
   </Folder>
 </Solution>

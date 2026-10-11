@@ -20,6 +20,12 @@ public interface ITickDriver
     void AddTime(double seconds);
 
     /// <summary>
+    /// Whether <paramref name="tick"/> is due as far as time goes. The game asks this first and then does its per-tick bookkeeping (standing orders give their commands) -
+    /// before <see cref="TryReleaseTick"/>, so that those commands still reach the bundle of this tick when the driver closes it.
+    /// </summary>
+    bool IsDue(long tick);
+
+    /// <summary>
     /// Whether tick <paramref name="tick"/> may run now. <paramref name="bundlePresent"/> says whether its command bundle is there; a driver must not release a tick without
     /// it. A released tick is consumed: the next call asks for the next tick.
     /// </summary>
@@ -33,6 +39,9 @@ public interface ITickDriver
 
     /// <summary>Ticks that were due but not released because their bundle was missing (a local game never counts one).</summary>
     long Stalls { get; }
+
+    /// <summary>The step of <paramref name="tick"/> is done; a driver that reports the state to somebody does it here.</summary>
+    void TickCompleted(long tick) { }
 }
 
 /// <summary>The local driver: the wall-time accumulator <see cref="LiveGame"/> always had, with pause and speed granted as they are asked for.</summary>
@@ -51,6 +60,8 @@ public sealed class LocalTickDriver(double tickSeconds) : ITickDriver
     {
         if (!Paused) _accumulator += seconds * Speed;
     }
+
+    public bool IsDue(long tick) => !Paused && _accumulator >= tickSeconds;
 
     public bool TryReleaseTick(long tick, bool bundlePresent)
     {

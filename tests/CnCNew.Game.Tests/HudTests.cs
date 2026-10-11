@@ -496,7 +496,7 @@ internal static class HudTests
         TestHarness.Assert(live.TickDriver.Speed == 2 && live.Tick == paused + 4, "double speed releases two ticks per tick of wall time");
         live.Speed = 1;
 
-        var holding = new HoldingDriver();
+        var holding = new HoldingDriver(live.TickDriver);
         live.TickDriver = holding;
         var held = live.Tick;
         live.Advance(1);
@@ -506,24 +506,30 @@ internal static class HudTests
         TestHarness.Assert(live.Tick == held + 3, "the ticks the driver releases run, and no more");
     }
 
-    /// <summary>A driver that knows no clock: it releases the ticks it is told to (the shape of a networked driver).</summary>
-    private sealed class HoldingDriver : ITickDriver
+    /// <summary>A driver in front of the game's own that lets a tick through only when it is told to: the game's time is no longer its own.</summary>
+    private sealed class HoldingDriver(ITickDriver inner) : ITickDriver
     {
         public int Release { get; set; }
         public int Asked { get; private set; }
-        public bool Paused { get; private set; }
-        public double Speed { get; private set; } = 1;
-        public long Stalls => 0;
-        public double Fraction => 0;
-        public void RequestPause(bool paused) => Paused = paused;
-        public void RequestSpeed(double speed) => Speed = speed;
-        public void AddTime(double seconds) { }
-        public void LimitBacklog() { }
+        public bool Paused => inner.Paused;
+        public double Speed => inner.Speed;
+        public long Stalls => inner.Stalls;
+        public double Fraction => inner.Fraction;
+        public void RequestPause(bool paused) => inner.RequestPause(paused);
+        public void RequestSpeed(double speed) => inner.RequestSpeed(speed);
+        public void AddTime(double seconds) => inner.AddTime(seconds);
+        public void LimitBacklog() => inner.LimitBacklog();
+        public void TickCompleted(long tick) => inner.TickCompleted(tick);
+
+        public bool IsDue(long tick)
+        {
+            Asked++;
+            return Release > 0 && inner.IsDue(tick);
+        }
 
         public bool TryReleaseTick(long tick, bool bundlePresent)
         {
-            Asked++;
-            if (Release <= 0 || !bundlePresent) return false;
+            if (Release <= 0 || !inner.TryReleaseTick(tick, bundlePresent)) return false;
             Release--;
             return true;
         }

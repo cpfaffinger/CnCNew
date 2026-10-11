@@ -3,6 +3,7 @@ using System.Numerics;
 using CnCNew.Data.World;
 using CnCNew.Formats;
 using CnCNew.Game.Data;
+using CnCNew.Net;
 using CnCNew.Presentation.Input;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
@@ -78,6 +79,12 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
     /// <summary>The details of a slot (<see cref="Details"/>).</summary>
     public MatchSlotDetails DetailsOf(int slot) => !Details.IsDefault && slot < Details.Length ? Details[slot] : new MatchSlotDetails(StartPosition: slot);
 
+    /// <summary>
+    /// The slot of the viewer at this machine: whose orders the input gives, whose fog is shown, where the camera starts. 0 by default (the first slot, whose faction is
+    /// <see cref="HumanFaction"/>). The match description does not say who is local; this does. A match with the original AI knows only slot 0.
+    /// </summary>
+    public int LocalSlot { get; init; }
+
     /// <summary>A faction the seed of the match chooses: what the setup screen calls "Random".</summary>
     public const string RandomFaction = "";
 
@@ -93,7 +100,7 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
         for (var slot = 0; slot <= Opponents.Length; slot++)
         {
             var details = DetailsOf(slot);
-            var human = slot == 0 && !AutoPlay && !Spectator;
+            var human = slot == LocalSlot && !AutoPlay && !Spectator;
             var ai = AiOf(slot);
             slots.Add(new MatchSlotDescription(human ? MatchSlotKind.Human : MatchSlotKind.Computer, slot == 0 ? HumanFaction : Opponents[slot - 1], details.Team, details.Color, details.StartPosition,
                 ai.Kind == SkirmishAiKind.Original ? ai.Difficulty switch { ScriptDifficulty.Easy => 0, ScriptDifficulty.Hard => 2, _ => 1 } : MatchSlotDescription.MediumStrength));
@@ -118,7 +125,7 @@ public sealed class LiveMatch : LiveGame
     private readonly SkirmishMatchSession? _session;
 
     private LiveMatch(GameData data, MatchSetup setup, ResolvedMatch match, SkirmishMatchSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
-        : base(data, session.World, map, setup.MapPath, terrain, session.Players, new PlayerId(1), fxSeed, viewport, HomeOf(match, terrain))
+        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain))
     {
         Setup = setup;
         Match = match;
@@ -126,7 +133,7 @@ public sealed class LiveMatch : LiveGame
     }
 
     private LiveMatch(GameData data, MatchSetup setup, ResolvedMatch match, ScriptedSkirmishSession session, TerrainMap terrain, MapData map, uint fxSeed, Vector2 viewport)
-        : base(data, session.World, map, setup.MapPath, terrain, session.Players, new PlayerId(1), fxSeed, viewport, HomeOf(match, terrain))
+        : base(data, session.World, map, setup.MapPath, terrain, session.Players, LocalOf(setup, match).Player, fxSeed, viewport, HomeOf(setup, match, terrain))
     {
         Setup = setup;
         Match = match;
@@ -135,9 +142,12 @@ public sealed class LiveMatch : LiveGame
     }
 
     /// <summary>Where the local viewer starts to look: the start position of the first slot.</summary>
-    private static Vector2 HomeOf(ResolvedMatch match, TerrainMap terrain)
+    private static ResolvedSlot LocalOf(MatchSetup setup, ResolvedMatch match)
+        => match.Slots.FirstOrDefault(slot => slot.Slot == setup.LocalSlot) ?? throw new ArgumentException($"The viewer's slot {setup.LocalSlot} takes no part in the match.");
+
+    private static Vector2 HomeOf(MatchSetup setup, ResolvedMatch match, TerrainMap terrain)
     {
-        var start = terrain.StartPositions[match.Slots[0].StartPosition];
+        var start = terrain.StartPositions[LocalOf(setup, match).StartPosition];
         return new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(start.X), CnCNew.Presentation.FixedConvert.ToSingle(start.Y));
     }
 
@@ -157,7 +167,33 @@ public sealed class LiveMatch : LiveGame
     /// <summary>The session of a match with the original AI in some slot, else <see langword="null"/>.</summary>
     public ScriptedSkirmishSession? Scripted { get; }
 
-    public override string HumanFaction => Match.Slots[0].Participant.Faction.Name;
+    public override string HumanFaction => LocalOf(Setup, Match).Participant.Faction.Name;
+
+    /// <summary>
+    /// The embedded server this match runs through (docs/NETWORK-PROTOCOL.md section 7): the local skirmish takes its ticks and its commands from a relay like a network
+    /// match, with one client and no delay.
+    /// </summary>
+    public CnCNew.Game.Lockstep.LocalRelay Relay { get; private set; } = null!;
+
+    /// <summary>The lockstep driver of this match: its tick source and its command scheduler.</summary>
+    public CnCNew.Game.Lockstep.LockstepDriver Lockstep { get; private set; } = null!;
+
+    private bool _endReported;
+
+    /// <summary>The match is built: tell the relay, and from now on take every tick and every command from it.</summary>
+    private LiveMatch Join(CnCNew.Game.Lockstep.LocalRelay relay)
+    {
+        Func<ulong> hash = Scripted is { } scripted ? scripted.StateHash : Session.StateHash;
+        relay.ReportLoaded(hash());
+        Relay = relay;
+        Lockstep = new CnCNew.Game.Lockstep.LockstepDriver(relay.Client, 1.0 / World.Rate.TicksPerSecond, relay.Pump, hash, Match.Description.MaxTicks - 1);
+        TickDriver = Lockstep;
+        CommandPath.UseScheduler(Lockstep);
+        return this;
+    }
+
+    /// <summary>The lockstep probe of a match: the driver holds every order for <paramref name="ticks"/> ticks before it sends it to the relay.</summary>
+    public override void UseInputDelay(int ticks) => Lockstep.InputDelayTicks = ticks;
     public override bool IsOver => Scripted?.IsOver ?? Session.IsOver;
     public override PlayerId? Winner => Scripted is { } scripted ? scripted.Winner : Session.Winner;
     public override ImmutableArray<PlayerConfiguration> Players => Scripted is null ? Session.Players : _scriptedPlayers;
@@ -185,7 +221,16 @@ public sealed class LiveMatch : LiveGame
     /// <summary>The refusing sink of a spectator's match once <see cref="LiveGame.Commands"/> was asked for; null in a match somebody plays.</summary>
     public CnCNew.Game.Spectator.SpectatorCommandSink? SpectatorSink { get; private set; }
 
-    protected override TickResult StepSimulation() => Scripted?.Step() ?? Session.Step();
+    protected override TickResult StepSimulation()
+    {
+        var result = Scripted?.Step() ?? Session.Step();
+        if (IsOver && !_endReported)
+        {
+            _endReported = true;
+            Relay.Client.ReportEnd(World.Tick, Winner?.Value ?? 0);
+        }
+        return result;
+    }
 
     public static LiveMatch Create(GameData data, MatchSetup setup, Vector2 viewport)
     {
@@ -194,11 +239,15 @@ public sealed class LiveMatch : LiveGame
         var terrain = TerrainMap.Build(map, setup.MapPath);
 
         var humanPlays = !setup.AutoPlay && !setup.Spectator;
-        var description = setup.Describe(data, terrain);
-        var match = description.Resolve(data.Templates, terrain, data.Fingerprint);
-        if (setup.UsesOriginalAi) return CreateScripted(data, setup, viewport, map, terrain, match, humanPlays);
-        var session = SkirmishMatchSession.Start(description, data.Templates, terrain, map.Objects, setup.Options.CheckpointInterval);
-        return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport);
+        if (setup.UsesOriginalAi && setup.LocalSlot != 0) throw new ArgumentException("A match with the original AI is viewed from its first slot.");
+        // The room: the setup becomes the settings of a local server, the viewer takes his seat (or none), the server starts the match and hands back its description.
+        var relay = CnCNew.Game.Lockstep.LocalRelay.Open(data.Fingerprint);
+        relay.StartMatch(setup.Describe(data, terrain).ToRoomSettings(withSeed: true), humanPlays ? setup.LocalSlot : -1);
+        var description = relay.Client.Description!;
+        var match = description.Resolve(data.Templates, terrain, data.Fingerprint, CnCNew.Net.BuildIdentity.Current.Id);
+        if (setup.UsesOriginalAi) return CreateScripted(data, setup, viewport, map, terrain, match, humanPlays).Join(relay);
+        var session = SkirmishMatchSession.Start(description, data.Templates, terrain, map.Objects, setup.Options.CheckpointInterval, data.Fingerprint, CnCNew.Net.BuildIdentity.Current.Id);
+        return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport).Join(relay);
     }
 
     /// <summary>
@@ -242,12 +291,16 @@ public sealed class LiveMatch : LiveGame
                 var session = ScriptedSkirmishSession.Restore(loaded.State, data.Templates, data.Fingerprint, terrain, map, original.Library, original.Data);
                 session.RecordCommands();
                 var setup = SetupOf(mapPath, session, loaded.Viewer);
-                match = new LiveMatch(data, setup, setup.Describe(data, terrain).Resolve(data.Templates, terrain), session, terrain, map, session.World.Configuration.Seed, viewport);
+                var described = setup.Describe(data, terrain);
+                var relay = Resume(data, described, setup, new CnCNew.Net.ResumeState(session.World.Tick, session.StateHash(), [], loaded.State));
+                match = new LiveMatch(data, setup, described.Resolve(data.Templates, terrain), session, terrain, map, session.World.Configuration.Seed, viewport).Join(relay);
             }
             else
             {
                 var session = SkirmishMatchSession.Restore(loaded.State, data.Templates, data.Fingerprint, terrain);
-                match = new LiveMatch(data, SetupOf(session.Description, session.Match, loaded.Viewer), session.Match, session, terrain, map, session.Description.Seed, viewport);
+                var setup = SetupOf(session.Description, session.Match, loaded.Viewer);
+                var relay = Resume(data, session.Description, setup, new CnCNew.Net.ResumeState(session.World.Tick, session.StateHash(), [..session.HumanCommandCounts], loaded.State));
+                match = new LiveMatch(data, setup, session.Match, session, terrain, map, session.Description.Seed, viewport).Join(relay);
             }
             if (match.World.Tick != loaded.Header.Tick) throw new CnCNew.Game.Save.SaveGameException("The savegame's state does not match its header (the file is damaged).");
             return match;
@@ -256,6 +309,17 @@ public sealed class LiveMatch : LiveGame
         {
             throw new CnCNew.Game.Save.SaveGameException($"The savegame cannot be restored: {exception.Message}", exception);
         }
+    }
+
+    /// <summary>
+    /// The room of a match that starts from a saved state: the settings of the saved description, the viewer's seat, and the state itself with its tick and its session hash
+    /// (docs/NETWORK-PROTOCOL.md section 7). The server compares the hash every client reports after loading with the saved one.
+    /// </summary>
+    private static CnCNew.Game.Lockstep.LocalRelay Resume(GameData data, MatchDescription description, MatchSetup setup, CnCNew.Net.ResumeState resume)
+    {
+        var relay = CnCNew.Game.Lockstep.LocalRelay.Open(data.Fingerprint);
+        relay.StartMatch(description.ToRoomSettings(withSeed: true), !setup.AutoPlay && !setup.Spectator ? setup.LocalSlot : -1, resume);
+        return relay;
     }
 
     /// <summary>The setup a restored match shows itself with: what the description says, and who the viewer was.</summary>

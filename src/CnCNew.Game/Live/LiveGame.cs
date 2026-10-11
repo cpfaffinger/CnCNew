@@ -40,6 +40,7 @@ public abstract class LiveGame
     private readonly SimulationFxWorldView _fxView;
     private readonly List<SoundCue> _soundCues = [];
     private ITickDriver _driver;
+    private long _beforeTickDoneFor = -1;
     private double _fraction;
     private IPresentationPhaseObserver? _phaseObserver;
 
@@ -223,6 +224,8 @@ public abstract class LiveGame
             _commandPath.PreChecked += (command, receipt) => CommandPreChecked?.Invoke(command, receipt);
             _commandPath.Resolved += resolution =>
             {
+                // A bundle carries the commands of every player; the viewer's display and statistics hang on the viewer's own.
+                if (resolution.Player != Human) return;
                 CommandIssued?.Invoke(resolution.Command, resolution.Result);
                 CommandResolved?.Invoke(resolution);
             };
@@ -234,7 +237,7 @@ public abstract class LiveGame
     /// The lockstep probe: every order of the viewer is executed <paramref name="ticks"/> ticks after it was given, as if it had travelled to a server and back (0: in the tick
     /// it was given, the default). Only while no order is on its way.
     /// </summary>
-    public void UseInputDelay(int ticks) => CommandPath.UseScheduler(new LocalCommandScheduler(ticks));
+    public virtual void UseInputDelay(int ticks) => CommandPath.UseScheduler(new LocalCommandScheduler(ticks));
 
     /// <summary>The submission of the simulation behind this game: builds the command of <paramref name="player"/> at the current tick with that player's next sequence number and submits it.</summary>
     protected abstract CnCNew.Simulation.Commands.SubmitResult IssueNow(PlayerId player, Func<ulong, long, CnCNew.Simulation.Commands.SimCommand> make);
@@ -298,16 +301,29 @@ public abstract class LiveGame
             _driver.AddTime(seconds);
             var steps = 0;
             // The driver releases the ticks: time must be due and the tick's command bundle present.
-            while (steps < _maxTicksPerFrame && !IsOver && _driver.TryReleaseTick(World.Tick, _commandPath?.CanStep ?? true))
+            while (steps < _maxTicksPerFrame && !IsOver && _driver.IsDue(World.Tick))
             {
                 var observer = _phaseObserver;
                 observer?.PhaseStarted(PresentationPhase.BeforeTick);
-                BeforeTick?.Invoke(World);
+                // Once per tick, before the driver closes the tick: what the bookkeeping orders now still belongs to this tick's bundle. A tick that then has to wait
+                // for its bundle does not get it a second time.
+                if (_beforeTickDoneFor != World.Tick)
+                {
+                    _beforeTickDoneFor = World.Tick;
+                    BeforeTick?.Invoke(World);
+                }
+                if (!_driver.TryReleaseTick(World.Tick, _commandPath?.CanStep ?? true))
+                {
+                    observer?.PhaseEnded(PresentationPhase.BeforeTick);
+                    break;
+                }
                 // The commands of this tick are submitted immediately before its step, in the order of the bundle.
                 _commandPath?.SubmitDue();
                 observer?.PhaseEnded(PresentationPhase.BeforeTick);
                 observer?.PhaseStarted(PresentationPhase.StepSimulation);
+                var steppedTick = World.Tick;
                 var result = StepSimulation();
+                _driver.TickCompleted(steppedTick);
                 observer?.PhaseEnded(PresentationPhase.StepSimulation);
                 observer?.PhaseStarted(PresentationPhase.SyncAfterTick);
                 SyncAfterTick(result);

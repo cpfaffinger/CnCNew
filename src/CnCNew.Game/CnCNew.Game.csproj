@@ -8,6 +8,8 @@
     <ProjectReference Include="../CnCNew.Formats/CnCNew.Formats.csproj" />
     <ProjectReference Include="../CnCNew.Images/CnCNew.Images.csproj" />
     <ProjectReference Include="../CnCNew.Simulation/CnCNew.Simulation.csproj" />
+    <ProjectReference Include="../CnCNew.Net/CnCNew.Net.csproj" />
+    <ProjectReference Include="../CnCNew.Server/CnCNew.Server.csproj" />
     <ProjectReference Include="../CnCNew.Presentation/CnCNew.Presentation.csproj" />
     <ProjectReference Include="../CnCNew.Ui/CnCNew.Ui.csproj" />
     <ProjectReference Include="../CnCNew.Audio/CnCNew.Audio.csproj" />

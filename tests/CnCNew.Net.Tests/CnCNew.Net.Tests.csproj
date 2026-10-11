@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Shared/TestTime.cs" Link="Shared/TestTime.cs" />
+    <Compile Include="../Shared/TestRateOption.cs" Link="Shared/TestRateOption.cs" />
+    <Compile Include="../Shared/SkirmishFixtureFiles.cs" Link="Shared/SkirmishFixtureFiles.cs" />
+    <Compile Include="../../src/CnCNew.Game/Data/ProductRate.cs" Link="Shared/ProductRate.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/CnCNew.Net/CnCNew.Net.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Server/CnCNew.Server.csproj" />
+    <ProjectReference Include="../../src/CnCNew.Game/CnCNew.Game.csproj" />
+  </ItemGroup>
+</Project>

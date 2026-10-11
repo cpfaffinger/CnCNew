@@ -9,7 +9,8 @@ namespace CnCNew.Presentation.Input;
 /// (<see cref="SimulationWorld.Check"/>). The pre-check is advice - the order is executed later, at the tick its scheduler gives it, and only the answer there counts
 /// (<see cref="CommandResolution"/>).
 /// </summary>
-/// <param name="Number">Unique per command path, counted from 1; 0 for an order that was refused without being scheduled (a spectator's).</param>
+/// <param name="Number">Unique per command path, counted from 1; 0 for an order that was refused without being scheduled (a spectator's) and for a command that came from
+/// another machine in a bundle.</param>
 public readonly record struct CommandReceipt(long Number, SubmitResult PreCheck)
 {
     public bool Accepted => PreCheck.Accepted;
@@ -175,7 +176,8 @@ public sealed class CommandPath
             ResolvedCount++;
             if (made is null) continue;
             var resolution = new CommandResolution(scheduled.Receipt, scheduled.Player, made, scheduled.PreCheck, result, scheduled.IssuedTick);
-            if (resolution.Deviates) Deviations++;
+            // A command of another machine (receipt 0) has no pre-check here to deviate from.
+            if (resolution.Deviates && scheduled.Receipt != 0) Deviations++;
             Resolved?.Invoke(resolution);
         }
     }
