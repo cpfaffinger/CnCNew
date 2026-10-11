@@ -239,6 +239,19 @@ static class UdpTests
         var first = Exchange(bad, 5, 400);
         Check.That(first.Lost > 0 && first.Retransmitted > 0 && first.Duplicates > 0, $"loss, duplication and reordering were really there ({first})");
         Check.That(Exchange(bad, 5, 400) == first, "the same seed gives the same run");
+        // Jitter lets the server's first datagram overtake its accept: that is the network's doing, counted as such, and nothing is lost by it.
+        long early = 0, malformed = 0;
+        for (var seed = 1UL; seed <= 40; seed++)
+        {
+            var wire = new Wire(new Impairment(DelayMs: 5, JitterMs: 40), seed);
+            var client = wire.Connect();
+            Check.That(wire.Until(() => client.State == UdpClientState.Connected && wire.Accepted.Count == 1, 5_000), "connected under jitter");
+            wire.Accepted[0].Send(Payload(1, 50));
+            Check.That(wire.Until(() => client.Connection.TryReceive(out _), 5_000), "the first message arrives whatever overtook what");
+            early += client.Early;
+            malformed += client.Malformed;
+        }
+        Check.That(early > 0 && malformed == 0, $"a datagram ahead of its accept is counted as early, not as malformed ({early}, {malformed})");
         Check.That(Exchange(bad, 6, 400) != first, "another seed gives another run");
     }
 

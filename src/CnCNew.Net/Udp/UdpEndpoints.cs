@@ -56,6 +56,9 @@ public sealed class UdpClientEndpoint
     /// <summary>Datagrams that were not ours, not from the server, or did not follow the layout.</summary>
     public long Malformed { get; private set; }
 
+    /// <summary>Datagrams that were in order but out of place in time: a handshake answer repeated, a datagram of the connection ahead of its accept.</summary>
+    public long Early { get; private set; }
+
     public void Pump()
     {
         var now = _clock.Milliseconds;
@@ -88,8 +91,11 @@ public sealed class UdpClientEndpoint
                 case UdpKind.Close when State is UdpClientState.Connected or UdpClientState.Closed && UdpFormat.TryReadClose(datagram, out var token) && token == _link.Token:
                     _link.CloseWith(UdpCloseReason.Peer);
                     break;
-                // A repeated challenge or accept after the handshake went on is the network's doing, not a violation.
+                // A repeated challenge or accept after the handshake went on is the network's doing, not a violation - and so is a datagram of the connection that
+                // overtook the accept: what it carried is repeated.
                 case UdpKind.Challenge or UdpKind.Accept when State != UdpClientState.Connecting:
+                case UdpKind.Data or UdpKind.Close when State == UdpClientState.Connecting && _connect is not null:
+                    Early++;
                     break;
                 default:
                     Malformed++;
