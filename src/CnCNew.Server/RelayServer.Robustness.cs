@@ -11,7 +11,7 @@ public sealed partial class RelayServer
 
     /// <summary>How far ahead of what a member has completed the server sends bundles: a member that plays nothing is not sent the whole match.</summary>
     private const int FeedWindowTicks = 512;
-    private const long SnapshotWaitMicros = 10_000_000;
+    private const long SnapshotWaitMicros = 30_000_000;
     private const long LoadWaitMicros = 180_000_000;
 
     private readonly SortedDictionary<int, HeldSeat> _held = [];

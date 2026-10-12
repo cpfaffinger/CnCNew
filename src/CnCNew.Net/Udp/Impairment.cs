@@ -8,10 +8,13 @@ namespace CnCNew.Net.Udp;
 /// <param name="LossPerMille">How many of a thousand datagrams are lost.</param>
 /// <param name="DuplicatePerMille">How many of a thousand are delivered twice.</param>
 /// <param name="ReorderPerMille">How many of a thousand are held back by <paramref name="ReorderExtraMs"/> on top.</param>
-public readonly record struct Impairment(int DelayMs = 0, int JitterMs = 0, int LossPerMille = 0, int DuplicatePerMille = 0, int ReorderPerMille = 0, int ReorderExtraMs = 50)
+/// <param name="RateKbps">A narrow line: so many kilobits per second pass, one datagram after the other; 0 is no limit.</param>
+/// <param name="QueueBytes">What waits before the narrow line at most; a datagram that finds the queue full is dropped, as a router does.</param>
+public readonly record struct Impairment(int DelayMs = 0, int JitterMs = 0, int LossPerMille = 0, int DuplicatePerMille = 0, int ReorderPerMille = 0, int ReorderExtraMs = 50,
+    int RateKbps = 0, int QueueBytes = 64_000)
 {
     public static Impairment None => default;
-    public bool IsNone => DelayMs == 0 && JitterMs == 0 && LossPerMille == 0 && DuplicatePerMille == 0 && ReorderPerMille == 0;
+    public bool IsNone => DelayMs == 0 && JitterMs == 0 && LossPerMille == 0 && DuplicatePerMille == 0 && ReorderPerMille == 0 && RateKbps == 0;
 }
 
 /// <summary>
@@ -28,7 +31,11 @@ public sealed class DatagramImpairer<T>(INetClock clock, Impairment impairment, 
     public long Lost { get; private set; }
     public long Duplicated { get; private set; }
     public long Reordered { get; private set; }
+
+    /// <summary>Datagrams dropped because the queue before the narrow line was full.</summary>
+    public long Overflowed { get; private set; }
     public int Queued => _queue.Count;
+    private long _lineFreeMicros;
 
     private int Draw(int bound)
     {
@@ -55,6 +62,19 @@ public sealed class DatagramImpairer<T>(INetClock clock, Impairment impairment, 
         }
         var bytes = datagram.ToArray();
         var due = clock.Milliseconds + impairment.DelayMs + jitter;
+        if (impairment.RateKbps > 0)
+        {
+            // The line sends one datagram after the other; what is offered while it is busy waits, and what would wait behind a full queue is dropped.
+            var now = clock.Microseconds;
+            var free = Math.Max(_lineFreeMicros, now);
+            if ((free - now) * impairment.RateKbps / 8_000 > impairment.QueueBytes)
+            {
+                Overflowed++;
+                return;
+            }
+            _lineFreeMicros = free + bytes.Length * 8_000L / impairment.RateKbps;
+            due += (_lineFreeMicros - now) / 1000;
+        }
         if (reorder < impairment.ReorderPerMille)
         {
             Reordered++;

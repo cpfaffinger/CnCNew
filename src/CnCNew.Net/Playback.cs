@@ -145,6 +145,7 @@ public sealed class PlaybackControl(PlaybackOptions options, long tickMicros)
     public int RateAdjustPerMille { get; private set; }
     public long Resyncs { get; private set; }
     public long LatenessSamples { get; private set; }
+    private long _backlogBeforeGameMicros = long.MinValue;
 
     /// <summary>
     /// A bundle arrived: its lateness against the estimated server clock enters the window - unless the client could not have noticed it earlier
@@ -164,7 +165,11 @@ public sealed class PlaybackControl(PlaybackOptions options, long tickMicros)
         // own doing and is taken off (within twice the usual frame nothing is).
         var excess = Math.Max(0, sinceLastLookMicros - 2 * TypicalLookMicros);
         var lateness = sync.GameMicrosAt(localMicros) - excess * sync.SpeedPercent / 100 - (tick + 1) * tickMicros;
-        // A bundle that is later than the resync limit is not jitter: it is the backlog of a client that joined a running match, sent all at once.
+        // The first bundle this client is sent may come with a backlog - everything the server closed before it began to send to somebody who joined a running match.
+        // What was closed before that moment says nothing about the way a bundle takes; counting it would raise the delay for the length of the window.
+        if (_backlogBeforeGameMicros == long.MinValue) _backlogBeforeGameMicros = sync.GameMicrosAt(localMicros);
+        if ((tick + 1) * tickMicros <= _backlogBeforeGameMicros) return;
+        // A bundle that is later than the resync limit is not jitter either.
         if (lateness > options.ResyncMs * 1000L) return;
         _lateness.Enqueue((localMicros, lateness));
         LatenessSamples++;
