@@ -17,10 +17,11 @@ public readonly record struct RoomInfo(string Name, RelayServer Room);
 /// </summary>
 public sealed class RoomDirectory
 {
-    private sealed class Pending(IConnection connection, long sinceMs)
+    private sealed class Pending(IConnection connection, long sinceMs, string origin)
     {
         public IConnection Connection { get; } = connection;
         public long SinceMs { get; } = sinceMs;
+        public string Origin { get; } = origin;
     }
 
     /// <summary>A connection whose first message was already read: the room reads it again as its own first message.</summary>
@@ -74,7 +75,8 @@ public sealed class RoomDirectory
     /// <summary>Connections turned away before they reached a room: no room left, no hello in time, something else than a hello first.</summary>
     public long TurnedAway { get; private set; }
 
-    public void Attach(IConnection connection) => _pending.Add(new Pending(connection, _clock.Milliseconds));
+    /// <param name="origin">Where the connection comes from, as far as the rooms should know (an address without its port): what a kick remembers. Never logged here.</param>
+    public void Attach(IConnection connection, string origin = "") => _pending.Add(new Pending(connection, _clock.Milliseconds, origin));
 
     public bool TryTakeEvent(out string room, out RelayEvent relayEvent)
     {
@@ -134,7 +136,7 @@ public sealed class RoomDirectory
                 Log(hello.Room, "room-opened", ("rooms", Text(_rooms.Count)));
             }
             _pending.RemoveAt(index--);
-            room.Attach(new Replayed(pending.Connection, bytes));
+            room.Attach(new Replayed(pending.Connection, bytes), pending.Origin);
         }
         foreach (var (name, room) in _rooms)
         {
@@ -156,7 +158,9 @@ public sealed class RoomDirectory
             RoomsClosed++;
             Log(name, "room-closed", ("phase", room.Phase.ToString()), ("ticks", Text(room.NextTick)), ("lastAgreedTick", Text(room.LastAgreedTick)), ("intents", Text(room.IntentsRelayed)),
                 ("discarded", Text(room.Discarded)), ("throttledMs", Text(room.ThrottledMicros / 1000)), ("droppedForLag", Text(room.DroppedForLag)), ("desync", room.Desync is null ? "false" : "true"),
-                ("tickIntervals", room.TickIntervals.ToString()), ("rooms", Text(_rooms.Count)));
+                ("tickIntervals", room.TickIntervals.ToString()), ("recordingBytes", Text(room.RecordingBytes)), ("kicks", Text(room.Kicks)), ("badPasswords", Text(room.BadPasswords)),
+                ("floodDrops", Text(room.FloodDrops)), ("hashStalls", Text(room.HashStallDrops)), ("loadTimeouts", Text(room.LoadTimeouts)), ("helloTimeouts", Text(room.HelloTimeouts)),
+                ("statesRefused", Text(room.StatesRefusedForSize)), ("joinsRateLimited", Text(room.JoinsRateLimited)), ("rooms", Text(_rooms.Count)));
         }
         _empty.Clear();
     }

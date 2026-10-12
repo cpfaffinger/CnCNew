@@ -155,7 +155,11 @@ static partial class NetTests
         // A watcher whose state differs is found by its late report.
         watcher.ReportHash(watcher.NewestBundleTick, 1234);
         Play(net, 50, 0, 1);
-        Check.That(net.Server.Desync is { } found && found.Reports.Any(report => report.ConnectionId == 0 && report.SessionHash == 7), "a watcher that diverged is found against the hash the players agreed on");
+        Check.That(watcher.Desync is { } found && found.Reports.Any(report => report.ConnectionId == 0 && report.SessionHash == 7), "a watcher that diverged is found against the hash the players agreed on");
+        // Its divergence is its own (version 4, section 20.6): it is told and dropped, and the match of the players goes on.
+        Play(net, 200, 0, 1);
+        Check.That(net.Server.WatcherDesyncs == 1 && net.Server.Desync is null && net.Server.Phase == RoomPhase.Match && !watcher.IsOpen,
+            $"and the players' match goes on without it ({net.Server.WatcherDesyncs}; {net.Server.Phase})");
 
         // A server that admits nobody to a running match says so.
         var closed = new Net(new RelayOptions(SeedSource: () => 3, LagReportMs: 0, LagThrottleMs: 0));

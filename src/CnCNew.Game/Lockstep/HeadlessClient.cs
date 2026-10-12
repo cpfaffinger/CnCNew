@@ -31,14 +31,14 @@ public sealed class HeadlessClient
     /// <param name="loadMap">Hands out the map of a path; a client learns the path from the match description.</param>
     /// <param name="clock">The local clock: clock synchronisation and the latency in real time. Null in a client-paced room (the local game).</param>
     public HeadlessClient(IConnection connection, string name, TemplateCatalog catalog, string definitionFingerprint, Func<string, MatchMap> loadMap, string room = "", INetClock? clock = null,
-        PlaybackOptions? playback = null, uint generatorSalt = 0, BuildIdentity? identity = null, ulong rejoinToken = 0, bool watch = false)
+        PlaybackOptions? playback = null, uint generatorSalt = 0, BuildIdentity? identity = null, ulong rejoinToken = 0, bool watch = false, string roomPassword = "")
     {
         _catalog = catalog;
         _fingerprint = definitionFingerprint;
         _loadMap = loadMap;
         _generatorSalt = generatorSalt;
         Clock = clock;
-        Client = new LockstepClient(connection, name, definitionFingerprint, identity, room, clock, playback, rejoinToken, watch);
+        Client = new LockstepClient(connection, name, definitionFingerprint, identity, room, clock, playback, rejoinToken, watch, roomPassword);
         Client.SnapshotRequested = request => _snapshotRequest = request;
         Client.DesyncReceived = OnDesync;
     }

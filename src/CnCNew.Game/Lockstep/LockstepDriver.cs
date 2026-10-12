@@ -80,6 +80,9 @@ public sealed class LockstepDriver : ITickDriver, ICommandScheduler
 
     public long HashesReported { get; private set; }
 
+    /// <summary>A test's switch: this client plays along and reports no hash - the member a server must not wait for (docs/NETWORK-PROTOCOL.md section 20.4).</summary>
+    public bool WithholdHashes { get; set; }
+
     /// <summary>Commands of bundles that did not decode and were left out (docs/NETWORK-PROTOCOL.md section 20.6), and what the last one was.</summary>
     public long UndecodableCommands { get; private set; }
     public string LastUndecodable { get; private set; } = string.Empty;
@@ -170,7 +173,7 @@ public sealed class LockstepDriver : ITickDriver, ICommandScheduler
         _nextTick = tick + 1;
         _client.ReportCompleted(tick);
         var interval = _client.Start!.HashInterval;
-        if ((tick - _client.StartTick + 1) % interval != 0) return;
+        if ((tick - _client.StartTick + 1) % interval != 0 || WithholdHashes) return;
         _client.ReportHash(tick, _sessionHash());
         HashesReported++;
     }

@@ -40,16 +40,23 @@ public sealed class LockstepClient
     /// <param name="rejoinToken">The token of an earlier welcome of this room: this client wants its held seat back in the running match (0: a new member).</param>
     /// <param name="watch">This client wants to watch a match that may already run.</param>
     public LockstepClient(IConnection connection, string name, string definitionFingerprint, BuildIdentity? identity = null, string room = "", INetClock? clock = null, PlaybackOptions? playback = null,
-        ulong rejoinToken = 0, bool watch = false)
+        ulong rejoinToken = 0, bool watch = false, string roomPassword = "")
     {
         _connection = connection;
+        _roomVerifier = RoomPassword.Verifier(roomPassword, room);
         Clock = clock;
         _playback = playback ?? PlaybackOptions.Default;
         Sync = new ClockSync(_playback.SyncSamples);
         Identity = identity ?? BuildIdentity.Current;
         Send(new HelloMessage(Protocol.Version, Identity.Id, CommandTypes.Version, ReplayFormat.CurrentVersion, WorldSnapshot.Version, MatchDescription.EncodingVersion,
-            definitionFingerprint.ToUpperInvariant(), name, room, rejoinToken, watch));
+            definitionFingerprint.ToUpperInvariant(), name, room, rejoinToken, watch, _roomVerifier));
     }
+
+    /// <summary>What this client knows of the room's password: sent with the hello (it becomes the room's if this client opens the room) and answered challenges with.</summary>
+    private readonly string _roomVerifier;
+
+    /// <summary>The host removes a member from the room (docs/NETWORK-PROTOCOL.md section 20.5).</summary>
+    public void Kick(uint connectionId) => Send(new KickMessage(connectionId));
 
     /// <summary>What this client presents to take its seat again after it lost its connection; 0 when the server holds no seats.</summary>
     public ulong RejoinToken { get; private set; }
@@ -184,6 +191,9 @@ public sealed class LockstepClient
                 RejoinToken = welcome.RejoinToken;
                 Phase = ClientPhase.InRoom;
                 break;
+            case PasswordChallengeMessage challenge when Phase == ClientPhase.Connecting:
+                Send(new PasswordResponseMessage(RoomPassword.Answer(_roomVerifier, challenge.Nonce)));
+                break;
             case RejectMessage reject when Phase == ClientPhase.Connecting:
                 Rejection = reject;
                 Phase = ClientPhase.Rejected;
@@ -284,6 +294,9 @@ public sealed class LockstepClient
     public void SetReady(bool ready) => Send(new ReadyMessage(ready));
     public void RequestStart(ResumeState? resume = null) => Send(new StartRequestMessage(resume));
     public void SendChat(string text) => Send(new ChatRequestMessage(text));
+
+    /// <summary>Sends bytes as they are, as a message of this connection: what a test of the other end's parser sends (docs/DEDICATED-SERVER.md section 9.4).</summary>
+    public void SendRaw(byte[] message) => _connection.Send(message);
     public void ReportLoadProgress(int percent) => Send(new LoadProgressMessage(checked((byte)Math.Clamp(percent, 0, 100))));
 
     /// <summary>The match is built; <paramref name="sessionHash"/> is its session hash at the start tick.</summary>

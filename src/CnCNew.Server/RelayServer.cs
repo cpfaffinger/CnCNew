@@ -18,6 +18,28 @@ public sealed record RelayOptions(bool AllowModifiedBuilds = false, bool HostMay
     int SeatHoldMs = 0, int SpectatorDelayMs = 0, bool AllowLateWatchers = false, long CatchUpLimitTicks = 432_000, int CatchUpLimitMs = 300_000, int PausesPerPlayer = 3,
     int MaxPauseMs = 60_000, bool HostSetsSpeed = true)
 {
+    // Phase 28 (docs/NETWORK-PROTOCOL.md section 20.4): what a member may cost a room. 0 switches a limit off (the embedded server of a local game has none).
+
+    /// <summary>Messages a member may send per second in the long run, and at once; beyond it the member is dropped (a client-paced room is not measured).</summary>
+    public int MessagesPerSecond { get; init; } = 500;
+    public int MessageBurst { get; init; } = 4_000;
+    /// <summary>The largest session state the room takes: with a start from a saved match and from a member for a joiner.</summary>
+    public int MaxStateBytes { get; init; } = 4 * 1024 * 1024;
+    /// <summary>The longest match a host may set, in seconds of game time.</summary>
+    public int MaxMatchSeconds { get; init; } = 7_200;
+    /// <summary>The most the commands of a match may add up to in the recording; a match that reaches it is ended.</summary>
+    public long MaxRecordingBytes { get; init; } = 64L * 1024 * 1024;
+    /// <summary>How long a member may take to build the match before it is dropped.</summary>
+    public int LoadLimitMs { get; init; } = 180_000;
+    /// <summary>How far behind the hash of a tick may stay, in game time, before the members that have not reported it are dropped.</summary>
+    public int HashReportLimitMs { get; init; } = 20_000;
+    /// <summary>How often per minute the room asks a member for its state on behalf of somebody who joins.</summary>
+    public int SnapshotsPerMinute { get; init; } = 6;
+    /// <summary>How long a room may stand in its lobby, or after its match, before everybody in it is sent home.</summary>
+    public int RoomIdleLimitMs { get; init; } = 3_600_000;
+    /// <summary>How long a connection of a room may take to say its hello or to answer the password challenge.</summary>
+    public int HelloLimitMs { get; init; } = 10_000;
+
     // Phase 27 (docs/NETWORK-PROTOCOL.md section 18). LagRecoveryMs: a member's count of slowed time starts again only after it was below the report limit for this long
     // (0: at once, the rule of phase 26). SeatHoldMs: how long the seat of a player that lost its connection is kept free before the player leaves the match (0: not at
     // all). SpectatorDelayMs: how far behind the players a member without a seat is sent the bundles. AllowLateWatchers: admit somebody without a seat to a running match.
@@ -121,6 +143,8 @@ public sealed partial class RelayServer
         public long CatchingUpSinceMicros { get; set; }
         /// <summary>A member without a seat on a server that delays watchers.</summary>
         public bool Delayed { get; set; }
+        /// <summary>Hashes of somebody who does not decide, for ticks the deciding members have not agreed on yet (bounded; compared when they have).</summary>
+        public Dictionary<long, ulong> PendingHashes { get; } = [];
         public long SeatUntilMicros { get; set; }
         public long JoinDeadlineMicros { get; set; }
         public uint SnapshotRequest { get; set; }
@@ -132,6 +156,16 @@ public sealed partial class RelayServer
         public int PausesUsed { get; set; }
         /// <summary>The end of the match, kept back until a delayed watcher has been sent all of it.</summary>
         public MatchEndMessage? PendingEnd { get; set; }
+        /// <summary>Where the connection comes from, as its host says (an address without its port; empty: unknown): what a kick remembers.</summary>
+        public string Origin { get; init; } = string.Empty;
+        public long AttachedMicros { get; init; }
+        /// <summary>A hello that waits for the answer to the room's password challenge.</summary>
+        public HelloMessage? PendingHello { get; set; }
+        public string Nonce { get; set; } = string.Empty;
+        public bool PasswordPassed { get; set; }
+        public long MessageTokens { get; set; }
+        public long MessageAtMicros { get; set; }
+        public bool Flooding { get; set; }
     }
 
     private const int EventLimit = 1_024;
@@ -238,7 +272,10 @@ public sealed partial class RelayServer
     public long IntentsRelayed { get; private set; }
 
     /// <summary>A new connection; it becomes a member of the room once its hello is accepted.</summary>
-    public void Attach(IConnection connection) => _peers.Add(new Peer(++_nextConnection, connection));
+    /// <param name="origin">Where the connection comes from, as far as the host wants the room to know (an address without its port): a member the host of the room
+    /// kicked cannot come back from there. Empty: unknown.</param>
+    public void Attach(IConnection connection, string origin = "")
+        => _peers.Add(new Peer(++_nextConnection, connection) { Origin = origin, AttachedMicros = _clock.Microseconds, MessageTokens = _options.MessageBurst * TokenScale, MessageAtMicros = _clock.Microseconds });
 
     private static void Send(Peer peer, NetMessage message) => peer.Connection.Send(MessageCodec.Encode(message));
 
@@ -264,8 +301,13 @@ public sealed partial class RelayServer
         for (var index = 0; index < _peers.Count; index++)
         {
             var peer = _peers[index];
-            while (peer.Connection.TryReceive(out var bytes))
+            while (!peer.Flooding && peer.Connection.TryReceive(out var bytes))
             {
+                if (!MessageAllowed(peer))
+                {
+                    peer.Flooding = true;
+                    break;
+                }
                 if (!MessageCodec.TryDecode(bytes, out var message, out var error))
                 {
                     Discard(peer, error);
@@ -274,12 +316,20 @@ public sealed partial class RelayServer
                 Handle(peer, message!);
             }
         }
+        EnforceLimits(_clock.Microseconds);
         for (var index = _peers.Count - 1; index >= 0; index--)
         {
             // A drop can take more than one member with it (a joiner whose donor is gone is asked again, not dropped - but be safe against a list that shrank).
             if (index >= _peers.Count) continue;
             var peer = _peers[index];
-            if (peer.Leaving)
+            if (peer.Flooding)
+            {
+                FloodDrops++;
+                Log("flood", ("connection", Text(peer.Id)), ("player", Text(peer.Player)));
+                peer.Connection.Close();
+                Drop(peer, DropReason.Flood);
+            }
+            else if (peer.Leaving)
             {
                 peer.Connection.Close();
                 Drop(peer, DropReason.Left);
@@ -301,7 +351,8 @@ public sealed partial class RelayServer
     {
         if (peer.Hello is null)
         {
-            if (message is HelloMessage hello) Admit(peer, hello);
+            if (message is HelloMessage hello && peer.PendingHello is null) Admit(peer, hello);
+            else if (message is PasswordResponseMessage response && peer.PendingHello is { } pending) TakePassword(peer, pending, response);
             else Discard(peer, $"a {message.Type} message before the hello");
             return;
         }
@@ -346,6 +397,9 @@ public sealed partial class RelayServer
                 break;
             case ChatRequestMessage chat:
                 Broadcast(new ChatMessage(peer.Id, chat.Text));
+                break;
+            case KickMessage kick:
+                Kick(peer, kick.ConnectionId);
                 break;
             case PingMessage ping:
                 if (Phase == RoomPhase.Match && !peer.Joining) peer.CompletedTick = Math.Max(peer.CompletedTick, Math.Min(ping.CompletedTick, NextTick - 1));
@@ -408,6 +462,15 @@ public sealed partial class RelayServer
             else if (!string.Equals(hello.SimulationId, _simulationId, StringComparison.Ordinal)) reject = new RejectMessage(RejectReason.SimulationVersion, $"The room plays simulation {_simulationId}, the client is {hello.SimulationId}.");
             else if (!string.Equals(hello.DefinitionFingerprint, _definitionFingerprint, StringComparison.OrdinalIgnoreCase)) reject = new RejectMessage(RejectReason.Definitions, "The client has other game definitions than the room.");
         }
+        if (reject is null && peer.Origin.Length > 0 && _kicked.Contains(peer.Origin)) reject = new RejectMessage(RejectReason.Kicked, "The host of this room removed this client from it.");
+        // A room with a password asks everybody but the one who opened it - and but a player that proves by its token that it was let in before.
+        if (reject is null && _verifier.Length > 0 && !peer.PasswordPassed && !(late && hello.RejoinToken != 0 && TokenIsKnown(hello.RejoinToken)))
+        {
+            peer.PendingHello = hello;
+            peer.Nonce = NewNonce();
+            Send(peer, new PasswordChallengeMessage(peer.Nonce));
+            return;
+        }
         if (reject is null && late) reject = AdmitLate(peer, hello);
         if (reject is null && late) return;
         if (reject is not null)
@@ -425,6 +488,9 @@ public sealed partial class RelayServer
             _simulationId = hello.SimulationId;
             _definitionFingerprint = hello.DefinitionFingerprint.ToUpperInvariant();
             _host = peer.Id;
+            // Whoever opens the room sets its password - as a verifier, the password itself never comes here.
+            _verifier = hello.RoomVerifier;
+            if (_verifier.Length > 0) Log("room-locked");
         }
         peer.Hello = hello;
         peer.Token = NewToken();
@@ -439,6 +505,11 @@ public sealed partial class RelayServer
             || settings.MapPath.Length == 0 || settings.TerrainFingerprint.Length == 0 || settings.GraceFrames < 0 || settings.SciencePointIntervalFrames < 0)
         {
             Refuse(host, RejectReason.InvalidRequest, "The room settings are not valid.");
+            return;
+        }
+        if (_options.MaxMatchSeconds > 0 && settings.MaxTicks > (long)_options.MaxMatchSeconds * settings.TickRate)
+        {
+            Refuse(host, RejectReason.InvalidRequest, $"This server plays matches of at most {_options.MaxMatchSeconds / 60} minutes of game time.");
             return;
         }
         if (settings.HasSeed && !_options.HostMayChooseSeeds)
@@ -512,6 +583,12 @@ public sealed partial class RelayServer
             Refuse(host, RejectReason.NotReady, "Not every player is ready.");
             return;
         }
+        if (resume is not null && _options.MaxStateBytes > 0 && resume.State.Length > _options.MaxStateBytes)
+        {
+            StatesRefusedForSize++;
+            Refuse(host, RejectReason.InvalidRequest, $"The saved match is larger than the {_options.MaxStateBytes / 1024} KiB this server takes.");
+            return;
+        }
         var chosen = Settings.HasSeed && _options.HostMayChooseSeeds;
         var seed = chosen ? Settings.Seed : _options.SeedSource!();
         var aiSeed = chosen ? Settings.AiSeed : _options.SeedSource!();
@@ -545,6 +622,8 @@ public sealed partial class RelayServer
         _delayTicks = (long)_options.SpectatorDelayMs * Settings.TickRate / 1000;
         _pauseUntilMicros = 0;
         Throttling = false;
+        RecordingBytes = 0;
+        _loadingSinceMicros = _clock.Microseconds;
         Log("match-started", ("map", Settings.MapPath), ("tickRate", Text(Settings.TickRate)), ("participants", Text(Settings.Slots.Count(slot => slot.TakesPart))), ("members", Text(members.Count)),
             ("pacing", Pacing.ToString()), ("startTick", Text(NextTick)));
         foreach (var peer in members)
@@ -624,6 +703,8 @@ public sealed partial class RelayServer
         var elapsed = now - _lastMicros;
         _lastMicros = now;
         if (Phase != RoomPhase.Match || Pacing != Pacing.Server || elapsed <= 0) return;
+        CheckHashStall();
+        if (Phase != RoomPhase.Match) return;
         ExpireSeats(now);
         EndOverlongPause(now);
         ApplyLagRule(now, elapsed);
@@ -773,7 +854,17 @@ public sealed partial class RelayServer
         var bundle = new TickBundleMessage(tick, commands.ToImmutable());
         IntentsRelayed += bundle.Commands.Length;
         Recording.Bundles.Add(bundle);
+        foreach (var command in bundle.Commands) RecordingBytes += command.Command.Length + 32;
+        RecordingBytes += 16;
         NextTick = tick + 1;
+        if (_options.MaxRecordingBytes > 0 && RecordingBytes > _options.MaxRecordingBytes)
+        {
+            // The room must not grow without end, whoever feeds it: the match is over, and everybody is told why.
+            Log("recording-limit", ("bytes", Text(RecordingBytes)), ("tick", Text(tick)));
+            FeedAll();
+            Finish(new MatchEndMessage(NextTick, 0, EndReason.ServerLimit));
+            return;
+        }
         if (NextTick >= Settings.MaxTicks) _lastTickAtMicros = _clock.Microseconds;
         FeedAll();
     }
@@ -787,16 +878,23 @@ public sealed partial class RelayServer
         }
         HashReports++;
         peer.CompletedTick = Math.Max(peer.CompletedTick, report.Tick);
-        if (report.Tick <= LastAgreedTick || !ReportsInTime(peer))
+        if (report.Tick <= LastAgreedTick || !Decides(peer))
         {
-            // Somebody who plays behind the others - a member that catches up, a delayed watcher - reports ticks the others have long agreed on. Its hash is compared
-            // with theirs; a tick the server no longer remembers is past comparing.
+            // Somebody who plays behind the others - a member that catches up, a delayed watcher - reports ticks the others have long agreed on, and somebody who only
+            // watches decides nothing. Its hash is compared with theirs; a tick the server no longer remembers is past comparing.
             if (_agreed.TryGetValue(report.Tick, out var agreed))
             {
-                if (agreed != report.SessionHash) ReportDesync(report.Tick, [(peer.Id, report.SessionHash), (0, agreed)]);
+                if (agreed != report.SessionHash) Diverged(peer, report.Tick, report.SessionHash, agreed);
                 return;
             }
             if (report.Tick <= LastAgreedTick) return;
+            if (!Decides(peer))
+            {
+                // Not agreed yet: kept until it is. Somebody who reports far ahead of the players keeps the newest few thousand.
+                if (peer.PendingHashes.Count >= MaxPendingHashes) peer.PendingHashes.Remove(peer.PendingHashes.Keys.Min());
+                peer.PendingHashes[report.Tick] = report.SessionHash;
+                return;
+            }
         }
         if (!_hashReports.TryGetValue(report.Tick, out var reports)) _hashReports[report.Tick] = reports = [];
         reports[peer.Id] = report.SessionHash;
@@ -805,7 +903,7 @@ public sealed partial class RelayServer
             ReportDesync(report.Tick, [..reports.Select(pair => (pair.Key, pair.Value))]);
             return;
         }
-        if (_peers.Any(other => ReportsInTime(other) && !reports.ContainsKey(other.Id))) return;
+        if (_peers.Any(other => Decides(other) && !reports.ContainsKey(other.Id))) return;
         _hashReports.Remove(report.Tick);
         Agree(report.Tick, report.SessionHash);
     }
@@ -820,8 +918,8 @@ public sealed partial class RelayServer
 
     private void CheckEnd()
     {
-        // The end is what those say who play along in time; a delayed watcher gets there later.
-        var members = _peers.Where(ReportsInTime).ToList();
+        // The end is what those say who decide: the players that play along in time. A watcher's word is not waited for, and a delayed one gets there later.
+        var members = _peers.Where(Decides).ToList();
         if (members.Count == 0 || members.Any(peer => peer.EndReport is null)) return;
         var first = members[0].EndReport!.Value;
         // Clients that disagree about the end disagree about the state; the hash reports will say where.
@@ -875,7 +973,8 @@ public sealed partial class RelayServer
         foreach (var tick in _hashReports.Keys.ToArray())
         {
             var reports = _hashReports[tick];
-            if (_peers.Any(other => ReportsInTime(other) && !reports.ContainsKey(other.Id))) continue;
+            foreach (var id in reports.Keys.Where(id => !_peers.Any(other => other.Id == id && Decides(other))).ToList()) MoveToPending(id, tick, reports);
+            if (_peers.Any(other => Decides(other) && !reports.ContainsKey(other.Id))) continue;
             _hashReports.Remove(tick);
             if (reports.Count > 0 && reports.Values.Distinct().Count() <= 1 && tick > LastAgreedTick) Agree(tick, reports.Values.First());
         }

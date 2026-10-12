@@ -40,6 +40,42 @@ sealed record ServerConfig
     public bool HostSetsSpeed { get; init; } = true;
     /// <summary>Where the recording of every match is written as a replay file when it is over; empty: nowhere.</summary>
     public string ReplayDir { get; init; } = string.Empty;
+
+    // Phase 28: limits (docs/DEDICATED-SERVER.md section 9) and operation (section 10).
+
+    /// <summary>Connections one address may hold at a time.</summary>
+    public int MaxConnectionsPerAddress { get; init; } = 8;
+    /// <summary>Handshake datagrams answered per address and second, how many at once, and per second for all senders together.</summary>
+    public int HandshakesPerAddressPerSecond { get; init; } = 10;
+    public int HandshakeBurst { get; init; } = 20;
+    public int HandshakesPerSecond { get; init; } = 2_000;
+    /// <summary>Bytes a connection may send the server per second in the long run, and at once.</summary>
+    public int InboundBytesPerSecond { get; init; } = 256 * 1024;
+    public int InboundBurstBytes { get; init; } = 8 * 1024 * 1024;
+    /// <summary>Messages a member may send per second in the long run, and at once.</summary>
+    public int MessagesPerSecond { get; init; } = 500;
+    public int MessageBurst { get; init; } = 4_000;
+    /// <summary>The largest session state the server passes on or starts a match from, in bytes.</summary>
+    public int MaxStateBytes { get; init; } = 4 * 1024 * 1024;
+    /// <summary>The longest match a host may set, in seconds of game time.</summary>
+    public int MaxMatchSeconds { get; init; } = 7_200;
+    /// <summary>What the commands of one match may add up to in memory, in bytes; a match that reaches it is ended.</summary>
+    public long MaxRecordingBytes { get; init; } = 64L * 1024 * 1024;
+    public int LoadLimitMs { get; init; } = 180_000;
+    public int HashReportLimitMs { get; init; } = 20_000;
+    public int SnapshotsPerMinute { get; init; } = 6;
+    public int RoomIdleLimitMs { get; init; } = 3_600_000;
+    /// <summary>The file of the server's permanent key (PEM); made on the first start. Empty: a key that lasts as long as the process.</summary>
+    public string KeyFile { get; init; } = string.Empty;
+    /// <summary>A text file of addresses and networks that get no answer; read again when it changes. Empty: nobody is banned.</summary>
+    public string BanFile { get; init; } = string.Empty;
+    /// <summary>A directory for one log file per day, besides standard output. Empty: standard output only.</summary>
+    public string LogDir { get; init; } = string.Empty;
+    /// <summary>Days a log file is kept, and days a replay file is kept (0: for ever).</summary>
+    public int LogRetentionDays { get; init; } = 14;
+    public int ReplayRetentionDays { get; init; }
+    /// <summary>Write addresses in full, with their ports. Without it an address is written as its network: it is personal data.</summary>
+    public bool LogFullAddresses { get; init; }
     public int ConnectionTimeoutMs { get; init; } = 10_000;
     public int KeepAliveMs { get; init; } = 1_000;
     public int MaxConnections { get; init; } = 256;
@@ -63,6 +99,9 @@ static class DedicatedServer
                                       [--throttle-speed N] [--lag-recovery-ms N] [--seat-hold-ms N] [--spectator-delay-ms N] [--allow-late-watchers]
                                       [--pauses-per-player N] [--max-pause-ms N] [--anyone-sets-speed] [--replay-dir DIR]
                                       [--timeout-ms N] [--no-fine-timer] [--status-seconds N] [--exit-after-rooms N] [--run-seconds N]
+                                      [--key-file FILE] [--ban-file FILE] [--log-dir DIR] [--log-full-addresses] [--max-connections-per-address N]
+                                      [--set key=value ...]
+          --set names any key of the configuration file (docs/DEDICATED-SERVER.md section 2); an unknown key is an error.
           A relay for multiplayer matches: one UDP port, several rooms; a client names its room in its hello. Port 0 takes a free port (see the 'listening' line).
           Every line it writes is 'ts=<ms> event=<name> key=value ...'. Stop it with Ctrl+C.
         """;
@@ -82,6 +121,7 @@ static class DedicatedServer
         for (var index = 0; index < args.Length; index++)
         {
             int Number() => index + 1 < args.Length ? int.Parse(args[++index], CultureInfo.InvariantCulture) : throw new ArgumentException($"{args[index]} needs a number.");
+            string Word() => index + 1 < args.Length ? args[++index] : throw new ArgumentException($"{args[index]} needs a value.");
             config = args[index] switch
             {
                 "--config" => Skip(ref index, config),
@@ -109,6 +149,12 @@ static class DedicatedServer
                 "--status-seconds" => config with { StatusSeconds = Number() },
                 "--exit-after-rooms" => config with { ExitAfterRooms = Number() },
                 "--run-seconds" => config with { RunSeconds = Number() },
+                "--key-file" => config with { KeyFile = Word() },
+                "--ban-file" => config with { BanFile = Word() },
+                "--log-dir" => config with { LogDir = Word() },
+                "--log-full-addresses" => config with { LogFullAddresses = true },
+                "--max-connections-per-address" => config with { MaxConnectionsPerAddress = Number() },
+                "--set" => Set(config, Word()),
                 _ => throw new ArgumentException($"Unknown option {args[index]}.\n{Usage}"),
             };
         }
@@ -116,6 +162,23 @@ static class DedicatedServer
         if (config.HashInterval is < 1 or > ushort.MaxValue) throw new ArgumentException("The hash interval is 1 to 65535.");
         if (config.IdleWaitMicros < 100) throw new ArgumentException("The idle wait is at least 100 microseconds.");
         return config;
+    }
+
+    /// <summary>One key of the configuration by its name, as the file would state it: the key must exist and the value must fit its type.</summary>
+    private static ServerConfig Set(ServerConfig config, string assignment)
+    {
+        var at = assignment.IndexOf('=', StringComparison.Ordinal);
+        if (at <= 0) throw new ArgumentException("--set takes key=value.");
+        var (key, value) = (assignment[..at], assignment[(at + 1)..]);
+        var node = System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(config))!.AsObject();
+        var name = node.Select(pair => pair.Key).FirstOrDefault(known => known.Equals(key, StringComparison.OrdinalIgnoreCase)) ?? throw new ArgumentException($"Unknown configuration key '{key}'.");
+        node[name] = node[name]!.GetValueKind() switch
+        {
+            JsonValueKind.String => value,
+            JsonValueKind.True or JsonValueKind.False => bool.Parse(value),
+            _ => long.Parse(value, CultureInfo.InvariantCulture),
+        };
+        return node.Deserialize<ServerConfig>(Json) ?? config;
     }
 
     private static ServerConfig Skip(ref int index, ServerConfig config)
@@ -175,36 +238,64 @@ static class DedicatedServer
 
         var clock = new SystemNetClock();
         var output = new StringBuilder();
+        ServerLog log;
+        try
+        {
+            log = new ServerLog(config.LogDir, config.LogRetentionDays, config.LogFullAddresses);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Console.Error.WriteLine($"The log directory cannot be used: {exception.Message}");
+            return 2;
+        }
         void Line(string name, string room, IEnumerable<(string Key, string Value)> details)
         {
             output.Clear();
             output.Append("ts=").Append(clock.Milliseconds.ToString(CultureInfo.InvariantCulture)).Append(" event=").Append(name);
             if (room.Length > 0 || name.StartsWith("room", StringComparison.Ordinal)) output.Append(" room=").Append(Value(room));
             foreach (var (key, value) in details) output.Append(' ').Append(key).Append('=').Append(Value(value));
-            Console.WriteLine(output.ToString());
+            log.Write(output.ToString());
         }
         static string Text(long value) => value.ToString(CultureInfo.InvariantCulture);
 
         UdpSocketChannel socket;
         RoomDirectory directory;
         UdpServerEndpoint endpoint;
+        UdpIdentity key;
+        BanList bans;
+        bool keyCreated;
         try
         {
+            key = ServerKey.Load(config.KeyFile, out keyCreated);
+            bans = new BanList(config.BanFile);
+            // A ban file with a line that is no entry stops the server at its start: half a list is worse than none.
+            if (bans.Problem.Length > 0) throw new ArgumentException(bans.Problem);
             socket = new UdpSocketChannel(new IPEndPoint(IPAddress.Parse(config.Address), config.Port));
             var relay = new RelayOptions(config.AllowModifiedBuilds, false, (ushort)config.HashInterval, null, config.MaxMembersPerRoom, config.LagReportMs, config.LagThrottleMs, config.ThrottleLimitMs,
                 config.ThrottleSpeedPercent, config.DefaultTickRate)
             {
                 LagRecoveryMs = config.LagRecoveryMs, SeatHoldMs = config.SeatHoldMs, SpectatorDelayMs = config.SpectatorDelayMs, AllowLateWatchers = config.AllowLateWatchers,
                 PausesPerPlayer = config.PausesPerPlayer, MaxPauseMs = config.MaxPauseMs, HostSetsSpeed = config.HostSetsSpeed,
+                MessagesPerSecond = config.MessagesPerSecond, MessageBurst = config.MessageBurst, MaxStateBytes = config.MaxStateBytes, MaxMatchSeconds = config.MaxMatchSeconds,
+                MaxRecordingBytes = config.MaxRecordingBytes, LoadLimitMs = config.LoadLimitMs, HashReportLimitMs = config.HashReportLimitMs, SnapshotsPerMinute = config.SnapshotsPerMinute,
+                RoomIdleLimitMs = config.RoomIdleLimitMs, HelloLimitMs = config.HelloTimeoutMs,
             };
             // Seeds and the cookie key come from the system's cryptographic source: nobody can predict a match's seed or forge a cookie.
             directory = new RoomDirectory(clock, () => BitConverter.ToUInt32(RandomNumberGenerator.GetBytes(4)), new DirectoryOptions(config.MaxRooms, config.HelloTimeoutMs, relay));
             // The room is checked once here, so that a wrong value stops the server at its start and not at the first hello.
             _ = new RelayServer(clock, relay with { SeedSource = () => 0 });
+            // The transport takes no message larger than the largest state the rooms take: a longer one closes its connection before it is kept.
+            var stateBytes = config.MaxStateBytes > 0 ? config.MaxStateBytes : Protocol.MaxResumeBytes;
             endpoint = new UdpServerEndpoint(socket, clock, RandomNumberGenerator.GetBytes(32),
-                new UdpOptions { TimeoutMs = config.ConnectionTimeoutMs, KeepAliveMs = config.KeepAliveMs, MaxConnections = config.MaxConnections });
+                new UdpOptions
+                {
+                    TimeoutMs = config.ConnectionTimeoutMs, KeepAliveMs = config.KeepAliveMs, MaxConnections = config.MaxConnections, MaxConnectionsPerAddress = config.MaxConnectionsPerAddress,
+                    HandshakesPerAddressPerSecond = config.HandshakesPerAddressPerSecond, HandshakeBurst = config.HandshakeBurst, HandshakesPerSecond = config.HandshakesPerSecond,
+                    InboundBytesPerSecond = config.InboundBytesPerSecond, InboundBurstBytes = config.InboundBurstBytes, MaxMessageBytes = stateBytes + Protocol.MaxMessageBytes,
+                    MaxReliableBacklogBytes = 2L * (stateBytes + Protocol.MaxMessageBytes),
+                }, key, bans.Contains);
         }
-        catch (Exception exception) when (exception is ArgumentException or FormatException or System.Net.Sockets.SocketException)
+        catch (Exception exception) when (exception is ArgumentException or FormatException or System.Net.Sockets.SocketException or IOException or UnauthorizedAccessException)
         {
             Console.Error.WriteLine($"The server cannot start: {exception.Message}");
             return 2;
@@ -221,7 +312,22 @@ static class DedicatedServer
             ("allowLateWatchers", config.AllowLateWatchers ? "true" : "false"), ("pausesPerPlayer", Text(config.PausesPerPlayer)), ("maxPauseMs", Text(config.MaxPauseMs)),
             ("hostSetsSpeed", config.HostSetsSpeed ? "true" : "false"), ("replayDir", config.ReplayDir), ("fineTimer", timer?.Held == true ? "true" : "false"),
             ("os", System.Runtime.InteropServices.RuntimeInformation.OSDescription), ("runtime", System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription),
+            ("key", key.Fingerprint), ("keyPersistent", config.KeyFile.Length > 0 ? "true" : "false"), ("keyCreated", keyCreated ? "true" : "false"), ("bans", Text(bans.Count)),
+            ("maxConnections", Text(config.MaxConnections)), ("maxConnectionsPerAddress", Text(config.MaxConnectionsPerAddress)), ("handshakesPerAddressPerSecond", Text(config.HandshakesPerAddressPerSecond)),
+            ("handshakesPerSecond", Text(config.HandshakesPerSecond)), ("inboundBytesPerSecond", Text(config.InboundBytesPerSecond)), ("inboundBurstBytes", Text(config.InboundBurstBytes)),
+            ("messagesPerSecond", Text(config.MessagesPerSecond)), ("messageBurst", Text(config.MessageBurst)), ("maxStateBytes", Text(config.MaxStateBytes)),
+            ("maxMatchSeconds", Text(config.MaxMatchSeconds)), ("maxRecordingBytes", Text(config.MaxRecordingBytes)), ("loadLimitMs", Text(config.LoadLimitMs)),
+            ("hashReportLimitMs", Text(config.HashReportLimitMs)), ("snapshotsPerMinute", Text(config.SnapshotsPerMinute)), ("roomIdleLimitMs", Text(config.RoomIdleLimitMs)),
+            ("logDir", config.LogDir), ("logRetentionDays", Text(config.LogRetentionDays)), ("replayRetentionDays", Text(config.ReplayRetentionDays)),
+            ("fullAddresses", config.LogFullAddresses ? "true" : "false"),
         ]);
+        if (config.KeyFile.Length == 0)
+            Line("warning", string.Empty, [("text", "no keyFile is set: the server's key lasts as long as this process, and clients that remembered it will refuse the server after a restart")]);
+        if (config.ReplayDir.Length > 0 && log.Expire(config.ReplayDir, "*.replay*", config.ReplayRetentionDays) is > 0 and var expired)
+            Line("replays-expired", string.Empty, [("files", Text(expired))]);
+        var nextBanCheck = 5_000L;
+        var nextExpiry = 3_600_000L;
+        using var self = System.Diagnostics.Process.GetCurrentProcess();
         var replaysWritten = 0;
 
         var running = true;
@@ -238,8 +344,9 @@ static class DedicatedServer
             endpoint.Pump();
             while (endpoint.TryAccept(out var link, out var address))
             {
-                directory.Attach(link);
-                Line("connected", string.Empty, [("from", address.ToString()), ("connections", Text(endpoint.Connections))]);
+                // The room is told the address without its port - what a kick remembers; the log gets what the configuration allows.
+                directory.Attach(link, address.Address.ToString());
+                Line("connected", string.Empty, [("from", log.Shown(address)), ("connections", Text(endpoint.Connections))]);
             }
             directory.Pump();
             while (directory.TryTakeEvent(out var room, out var relayEvent)) Line(relayEvent.Name, room, relayEvent.Details);
@@ -267,11 +374,24 @@ static class DedicatedServer
                 var counted = closed.Statistics;
                 Line("disconnected", string.Empty,
                 [
-                    ("from", from.ToString()), ("reason", closed.CloseReason.ToString()), ("datagramsSent", Text(counted.DatagramsSent)), ("datagramsReceived", Text(counted.DatagramsReceived)),
+                    ("from", log.Shown(from)), ("reason", closed.CloseReason.ToString()), ("datagramsSent", Text(counted.DatagramsSent)), ("datagramsReceived", Text(counted.DatagramsReceived)),
                     ("bytesSent", Text(counted.BytesSent)), ("bytesReceived", Text(counted.BytesReceived)), ("segmentsSent", Text(counted.SegmentsSent)), ("segmentsRetransmitted", Text(counted.SegmentsRetransmitted)),
                     ("urgentSent", Text(counted.UrgentSent)), ("urgentRepeated", Text(counted.UrgentRepeated)), ("urgentOmitted", Text(counted.UrgentOmitted)), ("duplicatesReceived", Text(counted.DuplicatesReceived)),
-                    ("malformed", Text(counted.Malformed)), ("roundTripMs", Text(counted.RoundTripMs)),
+                    ("malformed", Text(counted.Malformed)), ("policed", Text(counted.Policed)), ("roundTripMs", Text(counted.RoundTripMs)),
                 ]);
+            }
+            if (clock.Milliseconds >= nextBanCheck)
+            {
+                nextBanCheck = clock.Milliseconds + 5_000;
+                var changed = bans.Reload(out var problem);
+                if (problem.Length > 0) Line("ban-file-error", string.Empty, [("error", problem)]);
+                if (changed) Line("bans-loaded", string.Empty, [("entries", Text(bans.Count)), ("connectionsClosed", Text(endpoint.CloseWhere(bans.Contains)))]);
+            }
+            if (clock.Milliseconds >= nextExpiry)
+            {
+                nextExpiry = clock.Milliseconds + 3_600_000;
+                if (config.ReplayDir.Length > 0 && log.Expire(config.ReplayDir, "*.replay*", config.ReplayRetentionDays) is > 0 and var gone)
+                    Line("replays-expired", string.Empty, [("files", Text(gone))]);
             }
 
             var now = clock.Milliseconds;
@@ -283,13 +403,16 @@ static class DedicatedServer
                     ("rooms", Text(directory.RoomCount)), ("connections", Text(endpoint.Connections)), ("pending", Text(directory.PendingConnections)), ("requests", Text(endpoint.Requests)),
                     ("cookiesRejected", Text(endpoint.CookiesRejected)), ("refused", Text(endpoint.Refused)), ("unknownPeer", Text(endpoint.UnknownPeer)), ("malformed", Text(endpoint.Malformed)),
                     ("turnedAway", Text(directory.TurnedAway)), ("sendFailures", Text(socket.SendFailures)), ("managedKb", Text(GC.GetTotalMemory(false) / 1024)), ("gen2", Text(GC.CollectionCount(2))),
-                    ("loops", Text(loops)),
+                    ("loops", Text(loops)), ("rateLimited", Text(endpoint.RateLimited)), ("banned", Text(endpoint.Banned)), ("forged", Text(endpoint.Forged)), ("replayed", Text(endpoint.Replayed)),
+                    ("workingSetKb", Text(Refreshed(self).WorkingSet64 / 1024)), ("handles", Text(OperatingSystem.IsWindows() ? self.HandleCount : 0)), ("threads", Text(self.Threads.Count)),
+                    ("roomsOpened", Text(directory.RoomsOpened)), ("roomsClosed", Text(directory.RoomsClosed)), ("connectsAccepted", Text(endpoint.ConnectsAccepted)),
                 ]);
                 foreach (var info in directory.Rooms)
                     Line("room-status", info.Name,
                     [
                         ("phase", info.Room.Phase.ToString()), ("members", Text(info.Room.Members)), ("tick", Text(info.Room.NextTick)), ("lastAgreedTick", Text(info.Room.LastAgreedTick)),
-                        ("speedPercent", Text(info.Room.EffectiveSpeedPercent)), ("throttledMs", Text(info.Room.ThrottledMicros / 1000)), ("tickIntervals", info.Room.TickIntervals.ToString()),
+                        ("speedPercent", Text(info.Room.EffectiveSpeedPercent)), ("throttledMs", Text(info.Room.ThrottledMicros / 1000)), ("recordingBytes", Text(info.Room.RecordingBytes)),
+                        ("tickIntervals", info.Room.TickIntervals.ToString()),
                     ]);
             }
             if (config.ExitAfterRooms > 0 && directory.RoomsClosed >= config.ExitAfterRooms && directory.RoomCount == 0) break;
@@ -302,6 +425,15 @@ static class DedicatedServer
         }
         Line("stopped", string.Empty, [("roomsOpened", Text(directory.RoomsOpened)), ("roomsClosed", Text(directory.RoomsClosed)), ("loops", Text(loops))]);
         socket.Dispose();
+        endpoint.Dispose();
+        key.Dispose();
+        log.Dispose();
         return 0;
+    }
+
+    private static System.Diagnostics.Process Refreshed(System.Diagnostics.Process process)
+    {
+        process.Refresh();
+        return process;
     }
 }

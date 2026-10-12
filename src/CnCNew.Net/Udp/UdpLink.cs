@@ -17,6 +17,8 @@ public sealed class UdpLinkStatistics
     public long UrgentOmitted { get; internal set; }
     public long DuplicatesReceived { get; internal set; }
     public long Malformed { get; internal set; }
+    /// <summary>Datagrams dropped because the peer sent more than a connection may receive (docs/NETWORK-PROTOCOL.md section 20.4).</summary>
+    public long Policed { get; internal set; }
     /// <summary>The smoothed round-trip time in milliseconds; -1 before the first measurement.</summary>
     public int RoundTripMs { get; internal set; } = -1;
 }
@@ -30,6 +32,10 @@ public enum UdpCloseReason
     Violation,
     Refused,
     Replaced,
+    /// <summary>The server's identity key is not the one this client knows for it, or its signature is wrong.</summary>
+    Untrusted,
+    /// <summary>The peer sent more than a connection may, or left too much unacknowledged, for too long.</summary>
+    Flood,
 }
 
 /// <summary>
@@ -67,7 +73,10 @@ public sealed class UdpLink : IConnection
     private readonly SortedDictionary<uint, byte[]?[]> _heldUrgent = [];
     private readonly ByteQueue _stream = new();
     private readonly Queue<(long Order, byte[] Message)> _delivered = new();
-    private readonly byte[] _datagram = new byte[UdpFormat.MaxDatagramBytes];
+    private readonly byte[] _datagram = new byte[UdpFormat.MaxPlainBytes];
+    private long _allowance;
+    private long _allowanceAtMs;
+    private long _policedSinceMs = long.MinValue;
     private uint _nextSegment;
     private uint _nextUrgent;
     private uint _expectedSegment;
@@ -91,6 +100,8 @@ public sealed class UdpLink : IConnection
         _options = options;
         _lastSentMs = nowMs;
         _lastReceivedMs = nowMs;
+        _allowance = options.InboundBurstBytes;
+        _allowanceAtMs = nowMs;
     }
 
     public UdpLinkStatistics Statistics { get; } = new();
@@ -123,6 +134,8 @@ public sealed class UdpLink : IConnection
         BinaryPrimitives.WriteUInt32LittleEndian(length, (uint)message.Length);
         _outgoing.Append(length);
         _outgoing.Append(message);
+        // A peer that does not acknowledge must not make this end keep everything it was ever told.
+        if (_outgoing.Count > _options.MaxReliableBacklogBytes) CloseWith(UdpCloseReason.Flood);
     }
 
     public void SendUrgent(ReadOnlySpan<byte> message)
@@ -186,8 +199,21 @@ public sealed class UdpLink : IConnection
             Acknowledge(header);
             return;
         }
+        // What a connection may receive: the allowance refills at the long-run rate up to the burst; a datagram beyond it is lost like one the network dropped.
+        _allowance = Math.Min(_options.InboundBurstBytes, _allowance + Math.Max(0, nowMs - _allowanceAtMs) * _options.InboundBytesPerSecond / 1000);
+        _allowanceAtMs = nowMs;
+        var cost = datagram.Length + UdpFormat.SealBytes;
+        if (_allowance < cost)
+        {
+            Statistics.Policed++;
+            if (_policedSinceMs == long.MinValue) _policedSinceMs = nowMs;
+            else if (nowMs - _policedSinceMs >= _options.PoliceLimitMs) CloseWith(UdpCloseReason.Flood);
+            return;
+        }
+        _allowance -= cost;
+        if (_allowance >= _options.InboundBurstBytes / 2) _policedSinceMs = long.MinValue;
         Statistics.DatagramsReceived++;
-        Statistics.BytesReceived += datagram.Length;
+        Statistics.BytesReceived += cost;
         _lastReceivedMs = nowMs;
         if (_echoReceivedMs == long.MinValue || unchecked((int)(header.SendTime - _echoTime)) > 0)
         {
@@ -400,7 +426,7 @@ public sealed class UdpLink : IConnection
         }
         void Room(int bytes)
         {
-            if (began && position + bytes > UdpFormat.MaxDatagramBytes) End();
+            if (began && position + bytes > UdpFormat.MaxPlainBytes) End();
             if (!began) Begin();
         }
 
@@ -488,7 +514,7 @@ public sealed class UdpLink : IConnection
     private void Emit(ReadOnlySpan<byte> datagram, Action<ReadOnlySpan<byte>> send)
     {
         Statistics.DatagramsSent++;
-        Statistics.BytesSent += datagram.Length;
+        Statistics.BytesSent += datagram.Length + UdpFormat.SealBytes;
         send(datagram);
     }
 }

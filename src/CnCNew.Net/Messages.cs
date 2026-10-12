@@ -42,6 +42,10 @@ public enum MessageType : ushort
     SnapshotRequest = 32,
     SnapshotOffer = 33,
     SeatState = 34,
+    // Protocol version 4 (phase 28).
+    PasswordChallenge = 35,
+    PasswordResponse = 36,
+    Kick = 37,
 }
 
 /// <summary>Why the server turned a connection or a request away.</summary>
@@ -63,6 +67,10 @@ public enum RejectReason : ushort
     SeatNotHeld = 12,
     /// <summary>The match cannot be joined now: no member could hand over its state, and the match is too long to be played again from its start (version 3).</summary>
     CannotCatchUp = 13,
+    /// <summary>The room has a password and the answer to its challenge was wrong (version 4).</summary>
+    BadPassword = 14,
+    /// <summary>The host of the room removed this client, and it may not come back to this room (version 4).</summary>
+    Kicked = 15,
 }
 
 public enum RoomPhase : byte
@@ -88,6 +96,10 @@ public enum DropReason : byte
     Desync = 3,
     /// <summary>The client fell behind beyond what the server's rule allows (version 2; docs/NETWORK-PROTOCOL.md section 14).</summary>
     TooSlow = 4,
+    /// <summary>The host of the room removed the member (version 4).</summary>
+    Kicked = 5,
+    /// <summary>The member sent more than a connection may (version 4; docs/NETWORK-PROTOCOL.md section 20.4).</summary>
+    Flood = 6,
 }
 
 public enum EndReason : byte
@@ -95,16 +107,22 @@ public enum EndReason : byte
     Finished = 0,
     Desync = 1,
     Abandoned = 2,
+    /// <summary>The match reached a limit of the server - the size of its recording (version 4).</summary>
+    ServerLimit = 3,
 }
 
 /// <summary>The limits of the protocol. A message above its limit is discarded and counted, and so is one of an unknown type.</summary>
 public static class Protocol
 {
     /// <summary>
-    /// Version 3 (phase 27): the rejoin token and the watch flag in the hello, the token in the welcome, the detail and the report of a desync, the request and the
+    /// Version 4 (phase 28): the verifier of a room password in the hello, the challenge and the response for it, the kick; the drop reasons "kicked" and "flood", the
+    /// end reason "server limit". Version 3 (phase 27): the rejoin token and the watch flag in the hello, the token in the welcome, the detail and the report of a desync, the request and the
     /// offer of a snapshot, the state of a held seat. Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave.
     /// </summary>
-    public const ushort Version = 3;
+    public const ushort Version = 4;
+    /// <summary>A verifier, a nonce and a response of the room password, as hexadecimal text.</summary>
+    public const int VerifierChars = 64;
+    public const int NonceChars = 32;
     public const int MaxPartNameBytes = 48;
     public const int MaxHashParts = 32;
     public const int MaxRoomBytes = 64;
@@ -134,7 +152,7 @@ public abstract record NetMessage
 
 /// <summary>Client to server, first message of a connection: who is this, and can it play with the others at all.</summary>
 public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, int CommandTableVersion, int ReplayFormatVersion, int WorldStateVersion, int DescriptionEncoding,
-    string DefinitionFingerprint, string Name, string Room = "", ulong RejoinToken = 0, bool Watch = false) : NetMessage
+    string DefinitionFingerprint, string Name, string Room = "", ulong RejoinToken = 0, bool Watch = false, string RoomVerifier = "") : NetMessage
 {
     public override MessageType Type => MessageType.Hello;
 
@@ -151,6 +169,7 @@ public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, i
         writer.Text(Room, Protocol.MaxRoomBytes);
         writer.U64(RejoinToken);
         writer.Bool(Watch);
+        writer.Text(RoomVerifier, Protocol.VerifierChars);
     }
 
     /// <summary>
@@ -166,8 +185,66 @@ public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, i
             return new HelloMessage(version, string.Empty, 0, 0, 0, 0, string.Empty, string.Empty);
         }
         return new HelloMessage(version, reader.Text(Protocol.MaxIdBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.Text(Protocol.MaxIdBytes), reader.Text(Protocol.MaxNameBytes),
-            reader.Text(Protocol.MaxRoomBytes), reader.U64(), reader.Bool());
+            reader.Text(Protocol.MaxRoomBytes), reader.U64(), reader.Bool(), RoomPassword.CheckedHex(reader.Text(Protocol.VerifierChars), Protocol.VerifierChars, allowEmpty: true));
     }
+}
+
+/// <summary>
+/// The password of a room (docs/NETWORK-PROTOCOL.md section 20.5). The password itself is never sent: whoever opens the room states a <b>verifier</b> - an HMAC of the
+/// room name under the password -, the server keeps that and challenges everybody else with a nonce, and the answer is an HMAC of the nonce under the verifier.
+/// </summary>
+public static class RoomPassword
+{
+    private static readonly byte[] Label = "CnCNew room password 1\0"u8.ToArray();
+
+    /// <summary>The verifier of a password for a room; empty for no password.</summary>
+    public static string Verifier(string password, string room)
+    {
+        if (password.Length == 0) return string.Empty;
+        var name = System.Text.Encoding.UTF8.GetBytes(room);
+        byte[] labelled = [..Label, ..name];
+        return Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(System.Text.Encoding.UTF8.GetBytes(password), labelled));
+    }
+
+    /// <summary>The answer to a challenge. Without a verifier (the client was given no password) the answer is one that cannot be right.</summary>
+    public static string Answer(string verifier, string nonce)
+        => verifier.Length != Protocol.VerifierChars ? new string('0', Protocol.VerifierChars)
+            : Convert.ToHexString(System.Security.Cryptography.HMACSHA256.HashData(Convert.FromHexString(verifier), Convert.FromHexString(nonce)));
+
+    /// <summary>Whether an answer is the one the verifier gives for the nonce; compared in constant time.</summary>
+    public static bool Matches(string verifier, string nonce, string answer)
+        => verifier.Length == Protocol.VerifierChars && answer.Length == Protocol.VerifierChars
+           && System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(Convert.FromHexString(Answer(verifier, nonce)), Convert.FromHexString(answer));
+
+    internal static string CheckedHex(string text, int chars, bool allowEmpty = false)
+    {
+        if (allowEmpty && text.Length == 0) return text;
+        if (text.Length != chars || text.AsSpan().ContainsAnyExcept("0123456789ABCDEF")) throw new ProtocolException($"Expected {chars} hexadecimal digits in capitals.");
+        return text;
+    }
+}
+
+/// <summary>Server to a client whose hello names a room with a password: answer this nonce (<see cref="PasswordResponseMessage"/>), then the hello counts.</summary>
+public sealed record PasswordChallengeMessage(string Nonce) : NetMessage
+{
+    public override MessageType Type => MessageType.PasswordChallenge;
+    internal override void Write(WireWriter writer) => writer.Text(Nonce, Protocol.NonceChars);
+    internal static PasswordChallengeMessage Read(ref WireReader reader) => new(RoomPassword.CheckedHex(reader.Text(Protocol.NonceChars), Protocol.NonceChars));
+}
+
+public sealed record PasswordResponseMessage(string Answer) : NetMessage
+{
+    public override MessageType Type => MessageType.PasswordResponse;
+    internal override void Write(WireWriter writer) => writer.Text(Answer, Protocol.VerifierChars);
+    internal static PasswordResponseMessage Read(ref WireReader reader) => new(RoomPassword.CheckedHex(reader.Text(Protocol.VerifierChars), Protocol.VerifierChars));
+}
+
+/// <summary>Host to server: remove this member from the room; it may not come back to it.</summary>
+public sealed record KickMessage(uint ConnectionId) : NetMessage
+{
+    public override MessageType Type => MessageType.Kick;
+    internal override void Write(WireWriter writer) => writer.U32(ConnectionId);
+    internal static KickMessage Read(ref WireReader reader) => new(reader.U32());
 }
 
 /// <param name="RejoinToken">What this client presents in a later hello to take its seat again after it lost its connection (0: this server holds no seats).</param>
@@ -594,7 +671,7 @@ public sealed record PlayerDroppedMessage(int Player, uint ConnectionId, DropRea
         var player = reader.I32();
         var connection = reader.U32();
         var reason = reader.U8();
-        if (reason > (byte)DropReason.TooSlow) throw new ProtocolException($"Unknown drop reason {reason}.");
+        if (reason > (byte)DropReason.Flood) throw new ProtocolException($"Unknown drop reason {reason}.");
         return new PlayerDroppedMessage(player, connection, (DropReason)reason);
     }
 }
@@ -656,7 +733,7 @@ public sealed record MatchEndMessage(long Tick, int Winner, EndReason Reason) : 
         var tick = reader.I64();
         var winner = reader.I32();
         var reason = reader.U8();
-        if (reason > (byte)EndReason.Abandoned) throw new ProtocolException($"Unknown end reason {reason}.");
+        if (reason > (byte)EndReason.ServerLimit) throw new ProtocolException($"Unknown end reason {reason}.");
         return new MatchEndMessage(tick, winner, (EndReason)reason);
     }
 }
@@ -929,6 +1006,9 @@ public static class MessageCodec
                 MessageType.SnapshotRequest => SnapshotRequestMessage.Read(ref reader),
                 MessageType.SnapshotOffer => SnapshotOfferMessage.Read(ref reader),
                 MessageType.SeatState => SeatStateMessage.Read(ref reader),
+                MessageType.PasswordChallenge => PasswordChallengeMessage.Read(ref reader),
+                MessageType.PasswordResponse => PasswordResponseMessage.Read(ref reader),
+                MessageType.Kick => KickMessage.Read(ref reader),
                 _ => throw new ProtocolException($"No decoder for {type}."),
             };
             reader.End();

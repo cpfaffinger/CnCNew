@@ -119,6 +119,9 @@ public sealed class MemoryDatagramNetwork(INetClock clock, ulong seed = 1)
     public long Datagrams { get; private set; }
     public long Bytes { get; private set; }
 
+    /// <summary>Somebody who reads along: called with every datagram as it is sent (from, to, bytes) - what an eavesdropper on the line would have.</summary>
+    public Action<IPEndPoint, IPEndPoint, byte[]>? Tap { get; set; }
+
     public IDatagramChannel Open(IPEndPoint address)
     {
         var channel = new Channel(this, address);
@@ -155,6 +158,7 @@ public sealed class MemoryDatagramNetwork(INetClock clock, ulong seed = 1)
         {
             network.Datagrams++;
             network.Bytes += datagram.Length;
+            network.Tap?.Invoke(address, to, datagram.ToArray());
             network.Path(address, to).Offer(datagram, address);
         }
 

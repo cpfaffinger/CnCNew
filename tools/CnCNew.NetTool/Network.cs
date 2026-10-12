@@ -257,8 +257,12 @@ static partial class NetTool
         HeadlessClient Connect(ulong token)
         {
             socket = new UdpSocketChannel(new IPEndPoint(server.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0));
-            endpoint = new UdpClientEndpoint(socket, server, clock, BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8)));
-            return new HeadlessClient(endpoint.Connection, name, data.Templates, data.Fingerprint, LoadMap, room, clock, generatorSalt: (uint)Number(args, "--salt", 0), rejoinToken: token, watch: watch)
+            // --server-key: the key the server must show (the harness reads it from the server's first line); any other ends the attempt.
+            var pinned = (Option(args, "--server-key") ?? string.Empty).ToUpperInvariant();
+            endpoint = new UdpClientEndpoint(socket, server, clock, BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8)),
+                trust: pinned.Length == 0 ? null : key => UdpCrypto.FingerprintOf(key) == pinned);
+            return new HeadlessClient(endpoint.Connection, name, data.Templates, data.Fingerprint, LoadMap, room, clock, generatorSalt: (uint)Number(args, "--salt", 0), rejoinToken: token, watch: watch,
+                roomPassword: Option(args, "--room-password") ?? string.Empty)
             {
                 KeepHashes = false, CorruptAtTick = corruptAt, DiagnosticsDirectory = diagnostics,
             };
@@ -433,7 +437,11 @@ static partial class NetTool
 
             if (headless.Problem.Length > 0) { problem = headless.Problem; break; }
             if (client.Phase == ClientPhase.Rejected) { problem = $"rejected ({client.Rejection!.Reason}): {client.Rejection.Text}"; break; }
-            if (endpoint.State == UdpClientState.Failed) { problem = "no connection to the server"; break; }
+            if (endpoint.State == UdpClientState.Failed)
+            {
+                problem = endpoint.Link.CloseReason == UdpCloseReason.Untrusted ? $"the server shows the key {endpoint.ServerFingerprint}, not the one this client was told to expect" : "no connection to the server";
+                break;
+            }
             // After a desync the relay still names the parts the clients differ in: this client waits a few seconds for that.
             if (client.Desync is not null && desyncAtMicros < 0) desyncAtMicros = now;
             if (client.Phase == ClientPhase.Ended && (client.Desync is null || client.DesyncReport is not null || now - desyncAtMicros > 5_000_000)) break;
@@ -670,7 +678,8 @@ static partial class NetTool
         var target = Ticks(args, rate, 120);
         var mapPath = Option(args, "--map") ?? throw new ArgumentException(Usage);
         var disturbances = (Option(args, "--disturb") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(text => text.Split(':')).ToArray();
-        var serverArguments = new List<string> { "--port", "0", "--allow-modified-builds", "--exit-after-rooms", "1", "--status-seconds", "10" };
+        // All clients of a harness come from one address: more than a server lets one address hold by default.
+        var serverArguments = new List<string> { "--port", "0", "--allow-modified-builds", "--exit-after-rooms", "1", "--status-seconds", "10", "--max-connections-per-address", "64" };
         serverArguments.AddRange((Option(args, "--server-args") ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries));
         var watch = Stopwatch.StartNew();
         MatchRow Failed(string problem) => new(label, impairment, false, problem, members, 0, target, string.Empty, Spread.Of([]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, 0, 0, 0, 0, watch.Elapsed.TotalSeconds);
@@ -692,6 +701,8 @@ static partial class NetTool
 
         using var server = new Child(ServerDll(args), serverArguments, Path.Combine(outDirectory, "server.log"), serverInLinux ? linux : null);
         if (server.WaitForValue("event=listening", "port", 40_000) is not { } serverPort) return Failed("the server did not start");
+        // Every client is told the key the server said it has, and takes no other: a harness run is a check of the pinned key too.
+        var serverKey = server.WaitForValue("event=listening", "key", 1_000) ?? string.Empty;
         Child? proxy = null;
         var port = serverPort;
         try
@@ -724,8 +735,9 @@ static partial class NetTool
                     {
                         "client", linuxClients.Contains(index) ? LinuxHost.PathOf(Path.GetFullPath(args[1])) : args[1], "--server", $"{AddressFor(linuxClients.Contains(index))}:{port}", "--room", label, "--name", $"c{index + 1}", "--seat", Invariant($"{(index < humans ? index : -1)}"), "--members", Invariant($"{members}"),
                         "--map", mapPath, "--humans", Invariant($"{humans}"), "--ais", Invariant($"{ais}"), "--ticks", Invariant($"{target}"), "--tick-rate", Invariant($"{rate.TicksPerSecond}"),
-                        "--result", Path.GetFullPath(Path.Combine(outDirectory, $"client-{index + 1}.json")),
+                        "--result", Path.GetFullPath(Path.Combine(outDirectory, $"client-{index + 1}.json")), "--server-key", Option(args, "--client-server-key") ?? serverKey,
                     };
+                    if (Option(args, "--room-password") is { } password) arguments.AddRange(["--room-password", password]);
                     if (index >= members) arguments.Add("--watch");
                     if (expectDesync) arguments.AddRange(["--diagnostics", Path.GetFullPath(Path.Combine(outDirectory, "packages", $"client-{index + 1}"))]);
                     foreach (var disturbance in disturbances.Where(parts => parts.Length >= 3 && int.Parse(parts[0], CultureInfo.InvariantCulture) == index))

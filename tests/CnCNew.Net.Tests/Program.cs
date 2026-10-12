@@ -53,6 +53,17 @@ run.Test("Rejoin: a damaged state is turned away by the joiner and the relay; a 
 run.Test("Watchers: sent the bundles on a delay, a late one plays the match from its start, their orders are discarded, a watcher that diverged is found", NetTests.WatchersOnADelayAndLateOnes);
 run.Test("Desync diagnosis: the relay names the tick and the part, the packages name the object and the field; the hash interval against the time to notice", NetTests.DesyncIsNamedDownToTheField);
 run.Test("Recording as a replay file; the rules of the pace; the recovery time of the lag rule; a close after the end", NetTests.RecordingAsAFileAndTheRulesOfThePace);
+run.Test("Sealed transport: nothing readable on the line, a number per datagram, repetitions and forgeries refused, a changed or unknown server key refused, the key file", UdpTests.SealedTransport);
+run.Test("Transport limits: handshakes per address and overall, connections per address, a ban, bytes per connection, the backlog of a peer that does not acknowledge", UdpTests.TransportLimits);
+run.Test("Relay limits: a flood of messages, a silent connection, a member that never loads or never reports a hash, match length, state size, joins per minute, the recording, an idle lobby", NetTests.RelayLimits);
+run.Test("Room password and kick: the opener sets a verifier, everybody else answers a challenge; the host removes a member, which does not come back from its address", NetTests.PasswordAndKick);
+run.Test("Hostile members: garbage commands are left out by every client alike, system commands never pass the relay; a flood, withheld hashes and a kick leave the others in step", NetTests.HostileMembers);
+run.Test("Secrets stay off the wire: no rejoin token, name, room, password, verifier or chat is readable in any datagram of a room on the sealed transport", NetTests.SecretsStayOffTheWire);
+run.Test("Fuzz, messages: changed and random messages never throw, a refusal names its reason, what decodes encodes again to the same bytes", NetTests.FuzzMessages);
+run.Test("Fuzz, transport: changed datagrams never throw in the format, a link or a server endpoint, open no connection, deliver nothing, and the real client is still heard", NetTests.FuzzTransport);
+run.Test("Fuzz, relay: changed messages of a member, a stranger and a player never throw in the room and leave the match of the honest clients in step; a client survives a hostile server", NetTests.FuzzRelay);
+run.Test("Fuzz, commands: real orders with changed bytes are refused by the wire, rejected by the simulation or simulated - no exception in the pre-check, the submission or the ticks after", NetTests.FuzzCommands);
+run.Test("Fuzz, states: a damaged or rewritten session state is refused in the words a client understands, never with another exception", NetTests.FuzzStates);
 run.Test("Layer rules: project references, no game data in the server, no clock but the injected one", NetTests.LayerRules);
 return run.Finish();
 
@@ -61,8 +72,13 @@ sealed class Runner
     private int _failed;
     private int _passed;
 
+    /// <summary>--only TEXT: run the tests whose name contains the text (a focused run while working; the tiers run everything).</summary>
+    private static readonly string? Only = Array.IndexOf(Environment.GetCommandLineArgs(), "--only") is var at and >= 0 && at + 1 < Environment.GetCommandLineArgs().Length
+        ? Environment.GetCommandLineArgs()[at + 1] : null;
+
     public void Test(string name, Action test)
     {
+        if (Only is not null && !name.Contains(Only, StringComparison.OrdinalIgnoreCase)) return;
         try
         {
             test();
@@ -194,7 +210,11 @@ static partial class NetTests
             new DesyncDetailMessage(900, [new HashPart("world.objects", 1), new HashPart("ai.player3", ulong.MaxValue)]), new DesyncDetailMessage(900, []),
             new DesyncReportMessage(900, [new DesyncPart("world.objects", 1, 5), new DesyncPart("world.objects", 2, 6)]), new SnapshotRequestMessage(4),
             new SnapshotOfferMessage(4, new ResumeState(901, 0xAABB, [(1, 12UL), (2, 0UL)], [1, 2, 3, 4, 5])), new SeatStateMessage(3, SeatHold.Held, 300_000),
-            new SeatStateMessage(3, SeatHold.GivenUp, 0),
+            new SeatStateMessage(3, SeatHold.GivenUp, 0), new PasswordChallengeMessage("00112233445566778899AABBCCDDEEFF"),
+            new PasswordResponseMessage(RoomPassword.Answer(RoomPassword.Verifier("p", "r"), "00112233445566778899AABBCCDDEEFF")), new KickMessage(7),
+            new HelloMessage(Protocol.Version, "id", 1, 2, 3, 4, "F", "n", "room", 0, false, RoomPassword.Verifier("secret", "room")),
+            new PlayerDroppedMessage(2, 4, DropReason.Kicked), new PlayerDroppedMessage(2, 4, DropReason.Flood), new MatchEndMessage(9, 0, EndReason.ServerLimit),
+            new RejectMessage(RejectReason.BadPassword, "no"), new RejectMessage(RejectReason.Kicked, "out"),
             new PingMessage(123_456_789_012, 77), new PongMessage(123_456_789_012, 9_876_543_210, 50), new LagStateMessage(3, 2_500, true), new LeaveMessage(),
             new WelcomeMessage(7, true),
             new RejectMessage(RejectReason.SimulationVersion, "other build"),

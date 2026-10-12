@@ -56,6 +56,11 @@ public sealed partial class RelayServer
         if (tick > LastAgreedTick) LastAgreedTick = tick;
         _agreed[tick] = hash;
         _agreedOrder.Enqueue(tick);
+        // What those who do not decide said about this tick is compared now.
+        foreach (var peer in _peers.Where(peer => peer.PendingHashes.Count > 0).ToList())
+        {
+            if (peer.PendingHashes.Remove(tick, out var said) && said != hash) Diverged(peer, tick, said, hash);
+        }
         // Long enough for the report of a delayed watcher and for a snapshot that waits for its tick to be agreed.
         var keep = _delayTicks + 30L * Settings.TickRate + FeedWindowTicks;
         while (_agreedOrder.Count > keep) _agreed.Remove(_agreedOrder.Dequeue());
@@ -63,6 +68,43 @@ public sealed partial class RelayServer
 
     /// <summary>Who has to report a tick before it counts as agreed: the members that play along in time - not one that is still catching up, not a delayed watcher.</summary>
     private static bool ReportsInTime(Peer peer) => peer.Hello is not null && !peer.Joining && !peer.CatchingUp && !peer.Delayed;
+
+    private const int MaxPendingHashes = 4_096;
+
+    /// <summary>
+    /// Whose hash and whose end report decide (docs/NETWORK-PROTOCOL.md section 20.6): the players that play along in time. Somebody who watches has no part in the
+    /// game, so its word must not be able to end or to stall one - it is only compared. A match nobody plays (computer players only) is decided by those who watch.
+    /// </summary>
+    private bool Decides(Peer peer) => ReportsInTime(peer) && (peer.Player > 0 || !_peers.Any(other => other.Player > 0 && ReportsInTime(other)));
+
+    /// <summary>Watchers whose state differed from what the players agreed on (each was told and dropped; the match went on).</summary>
+    public long WatcherDesyncs { get; private set; }
+
+    /// <summary>
+    /// Somebody's hash differs from the agreed one. A player's is a desync of the match, as before. A watcher's is the watcher's own: it is told (so that it writes
+    /// its package) and dropped, and the match of the players goes on.
+    /// </summary>
+    private void Diverged(Peer peer, long tick, ulong said, ulong agreed)
+    {
+        if (peer.Player > 0)
+        {
+            ReportDesync(tick, [(peer.Id, said), (0, agreed)]);
+            return;
+        }
+        WatcherDesyncs++;
+        Log("watcher-desync", ("connection", Text(peer.Id)), ("tick", Text(tick)), ("said", said.ToString("X16", System.Globalization.CultureInfo.InvariantCulture)),
+            ("agreed", agreed.ToString("X16", System.Globalization.CultureInfo.InvariantCulture)));
+        peer.Connection.Send(MessageCodec.Encode(new DesyncMessage(tick, [(peer.Id, said), (0, agreed)])));
+        peer.Connection.Close();
+        Drop(peer, DropReason.Desync);
+    }
+
+    /// <summary>A report that was taken while its sender decided, and the sender decides no longer (a player joined a match only watchers decided).</summary>
+    private void MoveToPending(uint id, long tick, SortedDictionary<uint, ulong> reports)
+    {
+        reports.Remove(id, out var said);
+        if (_peers.FirstOrDefault(other => other.Id == id) is { } peer && peer.PendingHashes.Count < MaxPendingHashes) peer.PendingHashes[tick] = said;
+    }
 
     /// <summary>The newest tick a member may be sent: everything closed, minus the delay of a watcher.</summary>
     private long StreamHead(Peer peer)
@@ -129,6 +171,9 @@ public sealed partial class RelayServer
     /// <summary>A hello while the match runs: a player that presents the token of a held seat, or somebody who wants to watch. Returns the rejection, or null when admitted.</summary>
     private RejectMessage? AdmitLate(Peer peer, HelloMessage hello)
     {
+        // Whoever will be handed the state of a member (everybody but a watcher on a delay) costs that member a moment of its game: not more often than the room allows.
+        if ((hello.RejoinToken != 0 || _delayTicks == 0) && !SnapshotAllowed())
+            return new RejectMessage(RejectReason.CannotCatchUp, "Too many have joined this match within a minute; try again shortly.");
         if (hello.RejoinToken != 0)
         {
             // The player is back before the server noticed that its old connection is dead (a restarted client, a new address): the token is the proof, the old
@@ -226,6 +271,14 @@ public sealed partial class RelayServer
         if (peer is null || offer.RequestId == 0)
         {
             Discard(donor, $"a snapshot nobody asked for (request {offer.RequestId})");
+            return;
+        }
+        if (_options.MaxStateBytes > 0 && offer.State.State.Length > _options.MaxStateBytes)
+        {
+            Discard(donor, $"a snapshot of {offer.State.State.Length} bytes");
+            StatesRefusedForSize++;
+            SnapshotsRefused++;
+            RequestSnapshot(peer);
             return;
         }
         if (offer.State.Tick <= Recording.StartTick || offer.State.Tick > NextTick)

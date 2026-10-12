@@ -20,12 +20,19 @@ public static class RecordingFile
     {
         var decoded = MatchDescription.Decode(description);
         var commands = ImmutableArray.CreateBuilder<SimCommand>();
+        var sequences = new Dictionary<int, ulong>();
         foreach (var bundle in bundles)
         {
             if (bundle.Tick >= endTick) break;
-            // What no client could decode was left out by every client alike, and is left out here.
+            // What no client could decode was left out by every client alike, and is left out here - and like a client's session this file numbers a player's
+            // commands as they are submitted, so a command that was left out takes no number (the relay's order number counted it).
             foreach (var entry in bundle.Commands)
-                if (CommandWire.TryDecodeIntent(entry, out var intent, out _)) commands.Add(intent(entry.Order, bundle.Tick));
+            {
+                if (!CommandWire.TryDecodeIntent(entry, out var intent, out _)) continue;
+                var sequence = sequences.GetValueOrDefault(entry.Player) + 1;
+                sequences[entry.Player] = sequence;
+                commands.Add(intent(sequence, bundle.Tick));
+            }
         }
         // The players of the header are what the description resolves to on whoever plays the file; a relay does not know the factions a "random" stands for.
         var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, decoded.TickRate, decoded.DefinitionFingerprint, FixtureId, decoded.Seed, new WorldId(1), [], endTick, 0,

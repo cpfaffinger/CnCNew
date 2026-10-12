@@ -50,7 +50,11 @@ public sealed class LocalRelay
     {
         var clock = new ManualNetClock();
         var network = new LoopbackNetwork(clock);
-        var server = new RelayServer(clock, new RelayOptions(AllowModifiedBuilds: true, HostMayChooseSeeds: true, HashInterval: hashInterval));
+        var server = new RelayServer(clock, new RelayOptions(AllowModifiedBuilds: true, HostMayChooseSeeds: true, HashInterval: hashInterval)
+        {
+            // The server of one player on its own machine: nobody to protect it from, and a saved match of any length may be continued.
+            MessagesPerSecond = 0, MaxStateBytes = 0, MaxMatchSeconds = 0, MaxRecordingBytes = 0, LoadLimitMs = 0, HashReportLimitMs = 0, RoomIdleLimitMs = 0, HelloLimitMs = 0,
+        });
         var (clientEnd, serverEnd) = network.Connect();
         server.Attach(serverEnd);
         var relay = new LocalRelay(server, new LockstepClient(clientEnd, name, definitionFingerprint), network);

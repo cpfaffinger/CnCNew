@@ -50,7 +50,14 @@ if (joinServer is not null)
         GetArgument(args, "--player-name") ?? Environment.UserName,
         long.Parse(GetArgument(args, "--join-until-tick") ?? "-1", System.Globalization.CultureInfo.InvariantCulture),
         int.Parse(GetArgument(args, "--join-order-every") ?? "0", System.Globalization.CultureInfo.InvariantCulture),
-        GetArgument(args, "--join-result"), GetArgument(args, "--diagnostics"));
+        GetArgument(args, "--join-result"), GetArgument(args, "--diagnostics"))
+    {
+        // --server-key FINGERPRINT: the key the operator of the server published - any other is refused. Without it the client remembers the key of every server it
+        // meets (--known-servers FILE, by default known-servers.json under %LOCALAPPDATA%\CnCNew) and refuses a server whose key changed. --room-password TEXT.
+        ServerKey = GetArgument(args, "--server-key") ?? string.Empty,
+        KnownServersFile = GetArgument(args, "--known-servers") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CnCNew", "known-servers.json"),
+        RoomPassword = GetArgument(args, "--room-password") ?? string.Empty,
+    };
     matchMap = JoinOptions.Placeholder;
 }
 // --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §17); fixed time steps only.
@@ -196,6 +203,9 @@ static string? GetArgument(string[] arguments, string name)
 /// <param name="OrderEvery">A check's stand-in for a player: every so many ticks the viewer orders one of his units to move, through the command sink the HUD uses; 0: never.</param>
 internal sealed record JoinOptions(System.Net.IPEndPoint Server, string Room, int Seat, string Name, long UntilTick, int OrderEvery, string? ResultFile, string? Diagnostics)
 {
+    public string ServerKey { get; init; } = string.Empty;
+    public string KnownServersFile { get; init; } = string.Empty;
+    public string RoomPassword { get; init; } = string.Empty;
     public const string Placeholder = "(joined match)";
 }
 
@@ -289,8 +299,13 @@ internal sealed class CnCNewGame(
 
     private void LoadJoinedMatch(GameData data, JoinOptions join, LiveOptions options)
     {
-        var remote = CnCNew.Game.Lockstep.RemoteRelay.Connect(join.Server, data.Fingerprint, join.Name, join.Room, watch: join.Seat < 0);
+        var known = new CnCNew.Game.Lockstep.KnownServers(join.KnownServersFile.Length > 0 ? join.KnownServersFile : null);
+        var remote = CnCNew.Game.Lockstep.RemoteRelay.Connect(join.Server, data.Fingerprint, join.Name, join.Room, watch: join.Seat < 0, known: known, serverKey: join.ServerKey,
+            roomPassword: join.RoomPassword);
         Console.WriteLine($"join: server {join.Server}, room \"{join.Room}\", connection {remote.Client.ConnectionId}, build {remote.Client.Identity.Id}");
+        Console.WriteLine(remote.Trust == CnCNew.Game.Lockstep.ServerTrust.New
+            ? $"join: first meeting with this server - its key {remote.ServerFingerprint} is remembered ({join.KnownServersFile}); compare it with what the operator published"
+            : $"join: server key {remote.ServerFingerprint} is the known one");
         // Somebody who came to a running match is past the room already: the next thing is the state of a member.
         if (join.Seat >= 0 && remote.Client.Phase == CnCNew.Net.ClientPhase.InRoom) remote.TakeSeat(join.Seat);
         remote.WaitForStart();

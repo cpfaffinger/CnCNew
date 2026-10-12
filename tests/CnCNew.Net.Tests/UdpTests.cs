@@ -6,10 +6,16 @@ using CnCNew.Net.Udp;
 
 // Phase 26: the UDP transport - layout, cookie handshake, the reliable and the urgent channel, time limits - on a network in memory with a clock set by hand, and once on
 // real sockets of the loopback interface.
-static class UdpTests
+static partial class UdpTests
 {
     private static readonly byte[] Secret = [..Enumerable.Range(1, 32).Select(value => (byte)value)];
     private static readonly IPEndPoint ServerAddress = new(IPAddress.Parse("10.0.0.1"), 4000);
+
+    /// <summary>The transport as it is, without the bounds on what one address may ask for: these tests put many clients behind one address and send in bursts.</summary>
+    internal static readonly UdpOptions Unbounded = new() { HandshakeBurst = 1_000_000, HandshakesPerAddressPerSecond = 1_000_000, HandshakesPerSecond = 1_000_000, MaxConnectionsPerAddress = 256 };
+
+    /// <summary>A key of an exchange, as a client would send it.</summary>
+    private static readonly byte[] SomeKey = new UdpKeyExchange().PublicKey;
 
     private sealed class Wire
     {
@@ -19,20 +25,24 @@ static class UdpTests
         public List<UdpClientEndpoint> Clients { get; } = [];
         public List<UdpLink> Accepted { get; } = [];
         public List<IPEndPoint> Addresses { get; } = [];
+        /// <summary>The channel of every client: a test that plays an attacker at a client's address sends through it.</summary>
+        public List<IDatagramChannel> Channels { get; } = [];
         private readonly UdpOptions _options;
 
-        public Wire(Impairment impairment = default, ulong seed = 1, UdpOptions? options = null)
+        public Wire(Impairment impairment = default, ulong seed = 1, UdpOptions? options = null, UdpIdentity? identity = null, Func<IPAddress, bool>? isBanned = null)
         {
-            _options = options ?? UdpOptions.Default;
+            _options = options ?? Unbounded;
             Network = new MemoryDatagramNetwork(Clock, seed) { Default = impairment };
-            Server = new UdpServerEndpoint(Network.Open(ServerAddress), Clock, Secret, _options);
+            Server = new UdpServerEndpoint(Network.Open(ServerAddress), Clock, Secret, _options, identity, isBanned);
         }
 
-        public UdpClientEndpoint Connect(ulong nonce = 0)
+        public UdpClientEndpoint Connect(ulong nonce = 0, IPEndPoint? address = null, Func<byte[], bool>? trust = null, Func<IDatagramChannel, IDatagramChannel>? wrap = null)
         {
-            var address = new IPEndPoint(IPAddress.Parse("10.0.0.2"), 5000 + Clients.Count);
+            address ??= new IPEndPoint(IPAddress.Parse("10.0.0.2"), 5000 + Clients.Count);
             Addresses.Add(address);
-            var client = new UdpClientEndpoint(Network.Open(address), ServerAddress, Clock, nonce == 0 ? 0xABCD0000UL + (ulong)Clients.Count : nonce, _options);
+            var channel = Network.Open(address);
+            Channels.Add(channel);
+            var client = new UdpClientEndpoint(wrap is null ? channel : wrap(channel), ServerAddress, Clock, nonce == 0 ? 0xABCD0000UL + (ulong)Clients.Count : nonce, _options, trust);
             Clients.Add(client);
             return client;
         }
@@ -79,17 +89,23 @@ static class UdpTests
         var challenge = UdpFormat.Cookie(UdpKind.Challenge, 77, 9, cookie);
         Check.That(challenge.Length == request.Length, "a challenge is as long as the request it answers (no amplification)");
         Check.That(UdpFormat.TryReadCookie(challenge, out nonce, out var slot, out var read) && nonce == 77 && slot == 9 && read.SequenceEqual(cookie), "a challenge survives its bytes");
-        Check.That(UdpFormat.TryReadAccept(UdpFormat.Accept(77, 0x1122334455667788), out nonce, out var token) && nonce == 77 && token == 0x1122334455667788, "an accept survives its bytes");
+        var (keyA, keyB, signed) = (Enumerable.Range(0, 64).Select(value => (byte)value).ToArray(), Enumerable.Range(0, 64).Select(value => (byte)(value + 64)).ToArray(), Enumerable.Range(0, 64).Select(value => (byte)(value + 128)).ToArray());
+        Check.That(UdpFormat.TryReadAccept(UdpFormat.Accept(77, 0x1122334455667788, keyA, keyB, signed), out nonce, out var token, out var readA, out var readB, out var readSigned) && nonce == 77
+                   && token == 0x1122334455667788 && readA.SequenceEqual(keyA) && readB.SequenceEqual(keyB) && readSigned.SequenceEqual(signed), "an accept survives its bytes");
+        var connect = UdpFormat.Connect(77, 9, cookie, keyA);
+        Check.That(connect.Length == 96 && UdpFormat.TryReadConnect(connect, out nonce, out slot, out read, out readA) && nonce == 77 && slot == 9 && read.SequenceEqual(cookie) && readA.SequenceEqual(keyA)
+                   && !UdpFormat.TryReadConnect(challenge, out _, out _, out _, out _), "a connect carries the cookie and the client's key of the exchange");
         Check.That(UdpFormat.TryReadClose(UdpFormat.Close(5), out token) && token == 5 && UdpFormat.TryReadRefuse(UdpFormat.Refuse(77, UdpFormat.RefuseFull), out nonce, out var reason) && reason == 1, "close and refuse survive their bytes");
 
         // What does not follow the layout is refused: magic, version, kind, length, padding.
         byte[] Changed(byte[] source, int offset, byte value) { var copy = (byte[])source.Clone(); copy[offset] = value; return copy; }
-        Check.That(!UdpFormat.TryReadKind(Changed(request, 0, 0), out _) && !UdpFormat.TryReadKind(Changed(request, 2, 2), out _) && !UdpFormat.TryReadKind(Changed(request, 3, 0), out _)
+        Check.That(!UdpFormat.TryReadKind(Changed(request, 0, 0), out _) && !UdpFormat.TryReadKind(Changed(request, 2, 1), out _) && !UdpFormat.TryReadKind(Changed(request, 3, 0), out _)
                    && !UdpFormat.TryReadKind(Changed(request, 3, 8), out _) && !UdpFormat.TryReadKind(request.AsSpan(0, 3), out _) && !UdpFormat.TryReadKind(new byte[1201], out _),
             "wrong magic, version, kind and size are not datagrams of this transport");
         Check.That(!UdpFormat.TryReadRequest(Changed(request, 20, 1), out _) && !UdpFormat.TryReadRequest(request.AsSpan(0, 31), out _) && !UdpFormat.TryReadRequest([..request, 0], out _),
             "a request with padding that is not zero, or of another length, is malformed");
-        Check.That(!UdpFormat.TryReadAccept(UdpFormat.Accept(1, 0), out _, out _) && !UdpFormat.TryReadRefuse(UdpFormat.Refuse(1, 9), out _, out _), "a token of 0 and an unknown refusal are malformed");
+        Check.That(!UdpFormat.TryReadAccept(UdpFormat.Accept(1, 0, keyA, keyB, signed), out _, out _, out _, out _, out _) && !UdpFormat.TryReadRefuse(UdpFormat.Refuse(1, 9), out _, out _)
+                   && UdpFormat.TryReadRefuse(UdpFormat.Refuse(1, UdpFormat.RefuseAddressFull), out _, out _), "a token of 0 and an unknown refusal are malformed");
 
         // Sections: every length and range is checked before anything is applied.
         var datagram = new byte[UdpFormat.DataHeaderBytes + 64];
@@ -107,7 +123,8 @@ static class UdpTests
         Check.That(!UdpFormat.SectionsAreValid(WithSections(2, 0, 0, 0, 0, 0, 0, 65, 0, 1, 0, 9)), "more fragments than a message may have");
         Check.That(!UdpFormat.SectionsAreValid(WithSections(2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 9)), "a fragment count of 0");
         Check.That(!UdpFormat.SectionsAreValid(WithSections(1, 0, 0)), "a truncated section header");
-        Check.That(UdpFormat.MaxSegmentBytes == 1159 && UdpFormat.MaxUrgentFragmentBytes == 1155 && UdpFormat.MaxDatagramBytes == 1200, "the sizes are the documented ones");
+        Check.That(UdpFormat.MaxSegmentBytes == 1135 && UdpFormat.MaxUrgentFragmentBytes == 1131 && UdpFormat.MaxDatagramBytes == 1200 && UdpFormat.MaxPlainBytes == 1176 && UdpFormat.SealBytes == 24
+                   && UdpFormat.AcceptBytes == 212 && UdpFormat.Version == 2, "the sizes are the documented ones");
     }
 
     // -------------------------------------------------------------------------------------------------------- handshake
@@ -131,10 +148,10 @@ static class UdpTests
         Check.That(answers == 1000 && wire.Server.Requests == 1000 && wire.Server.Connections == 0 && wire.Accepted.Count == 0, $"requests create no state ({answers} answers, {wire.Server.Connections} connections)");
 
         // A connect with a made-up cookie, and one with a cookie issued to another address: no connection, a fresh challenge.
-        channel.Send(UdpFormat.Cookie(UdpKind.Connect, 5, 0, new byte[16]), ServerAddress);
+        channel.Send(UdpFormat.Connect(5, 0, new byte[16], SomeKey), ServerAddress);
         Span<byte> foreign = stackalloc byte[16];
         UdpFormat.Mac(Secret, 1, new IPEndPoint(IPAddress.Parse("10.0.0.8"), 9), 5, 0, foreign);
-        channel.Send(UdpFormat.Cookie(UdpKind.Connect, 5, 0, foreign), ServerAddress);
+        channel.Send(UdpFormat.Connect(5, 0, foreign, SomeKey), ServerAddress);
         wire.Step(2);
         Check.That(wire.Server.CookiesRejected == 2 && wire.Server.Connections == 0, "a cookie that is not this sender's creates no connection");
         while (channel.TryReceive(buffer, out _, out _)) { }
@@ -148,30 +165,31 @@ static class UdpTests
         Span<byte> cookie = stackalloc byte[16];
         var slot = unchecked((uint)(wire.Clock.Milliseconds / UdpOptions.Default.CookieLifetimeMs));
         UdpFormat.Mac(Secret, 1, forged, 42, slot, cookie);
-        channel.Send(UdpFormat.Cookie(UdpKind.Connect, 42, slot, cookie), ServerAddress);
+        channel.Send(UdpFormat.Connect(42, slot, cookie, SomeKey), ServerAddress);
         wire.Step(2);
         ulong NextAccept()
         {
             // The connection that now exists sends its own datagrams too; the accept is among them.
             while (channel.TryReceive(buffer, out var size, out _))
-                if (buffer[3] == (byte)UdpKind.Accept && UdpFormat.TryReadAccept(buffer.AsSpan(0, size), out _, out var accepted)) return accepted;
+                if (buffer[3] == (byte)UdpKind.Accept && UdpFormat.TryReadAccept(buffer.AsSpan(0, size), out _, out var accepted, out var exchangeKey, out _, out _))
+                    return accepted ^ BinaryPrimitives.ReadUInt64LittleEndian(exchangeKey);
             return 0;
         }
         var first = NextAccept();
         Check.That(first != 0, "a valid cookie is accepted");
-        channel.Send(UdpFormat.Cookie(UdpKind.Connect, 42, slot, cookie), ServerAddress);
+        channel.Send(UdpFormat.Connect(42, slot, cookie, SomeKey), ServerAddress);
         wire.Step(2);
         Check.That(NextAccept() == first && wire.Server.Connections == 2,
-            "a repeated connect gets the same answer and no second connection");
+            "a repeated connect gets the same answer - the same token and the same key of the exchange - and no second connection");
         // Another nonce from the same address replaces the connection.
         UdpFormat.Mac(Secret, 1, forged, 43, slot, cookie);
-        channel.Send(UdpFormat.Cookie(UdpKind.Connect, 43, slot, cookie), ServerAddress);
+        channel.Send(UdpFormat.Connect(43, slot, cookie, SomeKey), ServerAddress);
         wire.Step(2);
         Check.That(wire.Server.Connections == 2 && wire.Accepted.Count == 3 && wire.Accepted[1].CloseReason == UdpCloseReason.Replaced, "a new attempt from the same address replaces the old connection");
 
         // An expired cookie: two lifetimes later it is worth a new challenge only.
         UdpFormat.Mac(Secret, 1, forged, 44, slot, cookie);
-        var expired = UdpFormat.Cookie(UdpKind.Connect, 44, slot, cookie);
+        var expired = UdpFormat.Connect(44, slot, cookie, SomeKey);
         wire.Step(2 * UdpOptions.Default.CookieLifetimeMs);
         var rejectedBefore = wire.Server.CookiesRejected;
         channel.Send(expired, ServerAddress);
@@ -179,7 +197,7 @@ static class UdpTests
         Check.That(wire.Server.CookiesRejected == rejectedBefore + 1, "an expired cookie is rejected");
 
         // A full server refuses - only somebody who returned a cookie.
-        var small = new Wire(options: new UdpOptions { MaxConnections = 1 });
+        var small = new Wire(options: Unbounded with { MaxConnections = 1 });
         var one = small.Connect();
         var two = small.Connect();
         Check.That(small.Until(() => one.State == UdpClientState.Connected && two.State == UdpClientState.Failed, 2_000) && small.Server.Refused >= 1 && !two.Connection.IsOpen, "the second client of a server for one is refused");
@@ -304,7 +322,7 @@ static class UdpTests
         far.Until(() => { while (distant.Connection.TryReceive(out _)) got++; return got == 120; }, 2_000);
         var perMessage = (far.Accepted[0].Statistics.BytesSent - sentBefore) / 120.0;
         Check.That(got == 120 && far.Accepted[0].Statistics.UrgentRepeated is >= 340 and <= 380, $"every message was sent four times ({far.Accepted[0].Statistics.UrgentRepeated} repetitions of 120)");
-        Check.That(perMessage < 34 + 4 * 41 + 20, $"a datagram carries four messages, not the eighteen of a round trip ({perMessage:F0} bytes per message)");
+        Check.That(perMessage < 34 + 24 + 4 * 41 + 20, $"a datagram carries four messages, not the eighteen of a round trip ({perMessage:F0} bytes per message)");
 
         // The last message is lost and nothing follows: the retransmission time brings it.
         wire.Network.Impair(ServerAddress, wire.Addresses[0], new Impairment(LossPerMille: 1000));
@@ -320,7 +338,7 @@ static class UdpTests
         var roughServer = rough.Accepted[0];
         int sent = 0, urgentGot = 0, reliableGot = 0;
         const int Count = 500;
-        int Size(int index) => index % 50 == 7 ? 5_000 : index % 9 == 0 ? 1_155 : 20 + index % 300;
+        int Size(int index) => index % 50 == 7 ? 5_000 : index % 9 == 0 ? UdpFormat.MaxUrgentFragmentBytes : 20 + index % 300;
         var finished = rough.Until(() =>
         {
             if (sent < Count && rough.Clock.Milliseconds % 8 == 0)
@@ -486,7 +504,7 @@ static class UdpTests
 
         // A datagram for the connection with the wrong token, from the right address, is not the connection's.
         var before = server.Statistics.DatagramsReceived;
-        var wrong = new byte[UdpFormat.DataHeaderBytes];
+        var wrong = new byte[UdpFormat.DataHeaderBytes + UdpFormat.SealBytes];
         UdpFormat.WriteDataHeader(wrong, new UdpDataHeader(client.Link.Token ^ 1, 0, 0, UdpFormat.NoEcho, 0, 0, 0));
         var unknownBefore = wire.Server.UnknownPeer;
         wire.Network.Open(new IPEndPoint(IPAddress.Parse("10.0.0.6"), 6)).Send(wrong, ServerAddress);
@@ -503,8 +521,8 @@ static class UdpTests
         var clock = new SystemNetClock();
         using var serverSocket = new UdpSocketChannel(new IPEndPoint(IPAddress.Loopback, 0));
         using var clientSocket = new UdpSocketChannel(new IPEndPoint(IPAddress.Loopback, 0));
-        var server = new UdpServerEndpoint(serverSocket, clock, Secret);
-        var client = new UdpClientEndpoint(clientSocket, serverSocket.LocalEndPoint, clock, 0x5EED);
+        using var server = new UdpServerEndpoint(serverSocket, clock, Secret);
+        using var client = new UdpClientEndpoint(clientSocket, serverSocket.LocalEndPoint, clock, 0x5EED);
         UdpLink? accepted = null;
         const int Count = 300;
         int sent = 0, gotUp = 0, gotDown = 0, gotUrgent = 0;

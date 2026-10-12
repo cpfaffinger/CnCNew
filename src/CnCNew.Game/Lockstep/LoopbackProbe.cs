@@ -41,6 +41,17 @@ public enum ProbeDisturbanceKind
     Corrupt,
     /// <summary>The next state this client hands over to a joiner is damaged on its way.</summary>
     DamageSnapshot,
+    /// <summary>
+    /// The client sends what a hostile one would (docs/NETWORK-PROTOCOL.md section 20.6): an order with garbage behind a plausible header, which the relay passes on
+    /// unread and every client must leave out alike, and a command only the system may give, which the relay must not let through.
+    /// </summary>
+    Garbage,
+    /// <summary>The client sends more messages at once than a connection may: the relay must drop it and the others must play on.</summary>
+    Flood,
+    /// <summary>From here on the client plays along and reports no hash: the relay must drop it instead of waiting for it.</summary>
+    WithholdHashes,
+    /// <summary>The host of the room (member 0) removes this member.</summary>
+    Kick,
 }
 
 /// <param name="Member">Which client, in slot order of the seats (watchers after them).</param>
@@ -74,7 +85,8 @@ public sealed record LoopbackProbeResult(bool Ok, string Problem, int Clients, P
     long MaxIntentLatencyTicks, double MeanIntentLatencyTicks, long Rounds, ImmutableArray<(int Member, int Player, DropReason Reason)> Dropped = default, long ThrottledMs = 0, long ClockMs = 0,
     long Retransmissions = 0, long DatagramsLost = 0, long Resyncs = 0, double MeanPlaybackDelayMs = 0, long LateJoins = 0, long LateJoinsRefused = 0, long SnapshotsRelayed = 0,
     long SnapshotsRefused = 0, int SnapshotStateBytes = 0, int SnapshotPackedBytes = 0, long DesyncTick = -1, string DesyncParts = "", string Corrupted = "",
-    ImmutableArray<(int Member, long Tick)> JoinedAt = default, ImmutableArray<string> ServerEvents = default, ImmutableArray<string> Packages = default);
+    ImmutableArray<(int Member, long Tick)> JoinedAt = default, ImmutableArray<string> ServerEvents = default, ImmutableArray<string> Packages = default,
+    long UndecodableCommands = 0, long FloodDrops = 0, long HashStallDrops = 0, long Kicks = 0);
 
 /// <summary>
 /// The multi-client probe (docs/NETWORK-PROTOCOL.md section 8): H clients (<see cref="HeadlessClient"/>), each with a world of its own, against one relay, in one process and
@@ -257,7 +269,8 @@ public sealed class LoopbackProbe
                 server.LateJoinsRefused, server.SnapshotsRelayed, server.SnapshotsRefused, snapshot.State, snapshot.Packed, server.Desync?.Tick ?? -1,
                 server.DesyncParts is { } named ? string.Join("; ", named.Parts.GroupBy(part => part.Name).Select(group => group.Key)) : string.Empty,
                 string.Join("; ", members.Select(member => member.Client.Corrupted).Where(text => text.Length > 0)), joinedAt.ToImmutable(), [..events],
-                [..members.Select(member => member.Client.PackageWritten).Where(path => path is not null).Select(path => path!)]);
+                [..members.Select(member => member.Client.PackageWritten).Where(path => path is not null).Select(path => path!)],
+                members.Where(member => !member.Gone).Select(member => member.Client.Driver?.UndecodableCommands ?? 0).DefaultIfEmpty(0).Max(), server.FloodDrops, server.HashStallDrops, server.Kicks);
 
         if (Wait(() => members.All(member => member.Client.Client.Phase == ClientPhase.InRoom), "admit the clients") is { } admit) return Fail(admit);
         var host = members.First(member => member.Client.Client.IsHost).Client.Client;
@@ -337,6 +350,32 @@ public sealed class LoopbackProbe
                     case ProbeDisturbanceKind.DamageSnapshot:
                         member.Client.DamageNextSnapshot = true;
                         break;
+                    case ProbeDisturbanceKind.Garbage:
+                    {
+                        var player = new CnCNew.Simulation.Ids.PlayerId(member.Client.Client.Player);
+                        var order = CommandWire.EncodeIntent((sequence, tick) => new CnCNew.Simulation.Commands.SetMoveTargetCommand(player, sequence, tick, new CnCNew.Simulation.Ids.EntityId(1),
+                            CnCNew.Simulation.Numerics.Fixed.One, CnCNew.Simulation.Numerics.Fixed.One));
+                        // The header of a move, and a body that is none.
+                        member.Client.Client.SendIntent(9_000_001, order.AsSpan(0, order.Length - 3).ToArray());
+                        member.Client.Client.SendIntent(9_000_002, [..order, 0xEE, 0xEE]);
+                        member.Client.Client.SendIntent(9_000_003, CommandWire.EncodeIntent((sequence, tick) => new CnCNew.Simulation.Commands.SpawnCommand(player, sequence, tick, "Grunt", player,
+                            CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero, CnCNew.Simulation.Numerics.Fixed.Zero)));
+                        member.Client.Client.SendIntent(9_000_004, CommandWire.EncodeIntent((sequence, tick) => new CnCNew.Simulation.Commands.GiveMoneyCommand(player, sequence, tick, player,
+                            CnCNew.Simulation.Numerics.Fixed.FromInt(1_000_000))));
+                        break;
+                    }
+                    case ProbeDisturbanceKind.Flood:
+                        for (var index = 0; index < 20_000; index++) member.Client.Client.SendChat("flood");
+                        member.Gone = true;
+                        break;
+                    case ProbeDisturbanceKind.WithholdHashes:
+                        member.Client.Driver!.WithholdHashes = true;
+                        member.Gone = true;
+                        break;
+                    case ProbeDisturbanceKind.Kick:
+                        members[0].Client.Client.Kick(member.Client.Client.ConnectionId);
+                        member.Gone = true;
+                        break;
                 }
             }
             for (var index = 0; index < members.Count; index++)
@@ -415,7 +454,9 @@ public sealed class LoopbackProbe
             dropped.Add((members.FindIndex(member => member.Client.Client.ConnectionId == notice.ConnectionId), notice.Player, notice.Reason));
         if (server.Desync is { } late) return Fail($"the server reported a desync at tick {late.Tick}", compared, late.Tick);
         var clientDiscarded = members.Where(Playing).Sum(member => member.Client.Client.Discarded);
-        if (server.Discarded > 0 || clientDiscarded > 0)
+        // A member that was made to send what a hostile one would has its messages discarded by design; everybody else's must all have counted.
+        var hostile = disturbances.Any(disturbance => disturbance.Kind is ProbeDisturbanceKind.Garbage or ProbeDisturbanceKind.Flood or ProbeDisturbanceKind.WithholdHashes or ProbeDisturbanceKind.Kick);
+        if ((server.Discarded > 0 && !hostile) || clientDiscarded > 0)
             return Fail($"messages were discarded (server {server.Discarded}: {server.LastDiscard}; clients {clientDiscarded}: {members.Where(Playing).Select(member => member.Client.Client.LastDiscard).FirstOrDefault(text => text.Length > 0)})", compared);
         if (server.LastAgreedTick < lastReported) return Fail($"the server agreed on the hashes only up to tick {server.LastAgreedTick} of {lastReported}", compared);
 

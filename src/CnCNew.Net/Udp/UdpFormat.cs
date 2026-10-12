@@ -36,6 +36,27 @@ public sealed record UdpOptions
     public int MaxMessageBytes { get; init; } = Protocol.MaxResumeBytes + Protocol.MaxMessageBytes;
     public int MaxConnections { get; init; } = 256;
 
+    // Phase 28 (docs/NETWORK-PROTOCOL.md section 20.4): what a stranger may cost a server, and what a connection may take.
+
+    /// <summary>Connections one address may hold at a time (people behind one router share theirs); one more is refused.</summary>
+    public int MaxConnectionsPerAddress { get; init; } = 8;
+    /// <summary>Handshake datagrams (requests and connects) answered per address and second, and how many may come at once; what is beyond is dropped unanswered.</summary>
+    public int HandshakesPerAddressPerSecond { get; init; } = 10;
+    public int HandshakeBurst { get; init; } = 20;
+    /// <summary>Handshake datagrams answered per second whatever their sender says it is: the bound for forged senders.</summary>
+    public int HandshakesPerSecond { get; init; } = 2_000;
+    /// <summary>Addresses whose handshake rate is remembered; when the table is full it starts anew (the bound for all of them still holds).</summary>
+    public int MaxTrackedAddresses { get; init; } = 4_096;
+    /// <summary>
+    /// What a connection may receive: bytes per second in the long run, and how much at once (a session state is sent as fast as the line carries it). A datagram
+    /// beyond is dropped as the network would drop it; a peer that keeps it up for <see cref="PoliceLimitMs"/> is closed.
+    /// </summary>
+    public int InboundBytesPerSecond { get; init; } = 256 * 1024;
+    public int InboundBurstBytes { get; init; } = 8 * 1024 * 1024;
+    public int PoliceLimitMs { get; init; } = 10_000;
+    /// <summary>The most that may wait in the reliable channel for a peer that does not acknowledge; beyond it the connection is closed instead of growing.</summary>
+    public long MaxReliableBacklogBytes { get; init; } = 2L * (Protocol.MaxResumeBytes + Protocol.MaxMessageBytes);
+
     public static UdpOptions Default { get; } = new();
 }
 
@@ -57,24 +78,36 @@ public readonly record struct UdpDataHeader(ulong Token, uint SendTime, uint Ech
 public static class UdpFormat
 {
     public const ushort Magic = 0xC2CE;
-    public const byte Version = 1;
+    public const byte Version = 2;
     public const int MaxDatagramBytes = 1_200;
     public const int HeaderBytes = 4;
     public const int HandshakeBytes = 32;
-    public const int AcceptBytes = 20;
+    /// <summary>A connect: the cookie fields and the client's key of the exchange.</summary>
+    public const int ConnectBytes = HandshakeBytes + UdpIdentity.PublicKeyBytes;
+    /// <summary>An accept: nonce, token, the server's key of the exchange, its identity key and its signature.</summary>
+    public const int AcceptBytes = 20 + 2 * UdpIdentity.PublicKeyBytes + UdpIdentity.SignatureBytes;
     public const int RefuseBytes = 13;
     public const int CloseBytes = 12;
+    /// <summary>What of a sealed datagram stays readable: magic, version, kind and the token of the connection.</summary>
+    public const int ClearBytes = 12;
+    public const int TagBytes = 16;
+    /// <summary>What sealing adds to a datagram: its number and its tag.</summary>
+    public const int SealBytes = 8 + TagBytes;
+    /// <summary>The largest datagram of a connection before it is sealed.</summary>
+    public const int MaxPlainBytes = MaxDatagramBytes - SealBytes;
     public const int DataHeaderBytes = 34;
     public const int SegmentOverhead = 7;
     public const int UrgentOverhead = 11;
-    public const int MaxSegmentBytes = MaxDatagramBytes - DataHeaderBytes - SegmentOverhead;
-    public const int MaxUrgentFragmentBytes = MaxDatagramBytes - DataHeaderBytes - UrgentOverhead;
+    public const int MaxSegmentBytes = MaxPlainBytes - DataHeaderBytes - SegmentOverhead;
+    public const int MaxUrgentFragmentBytes = MaxPlainBytes - DataHeaderBytes - UrgentOverhead;
     public const int MaxUrgentFragments = 64;
     public const int CookieBytes = 16;
     public const ushort NoEcho = 0xFFFF;
     public const byte SectionSegment = 1;
     public const byte SectionUrgent = 2;
     public const byte RefuseFull = 1;
+    /// <summary>The address already holds as many connections as one address may.</summary>
+    public const byte RefuseAddressFull = 2;
 
     public static void WriteHeader(Span<byte> datagram, UdpKind kind)
     {
@@ -133,22 +166,63 @@ public static class UdpFormat
         return true;
     }
 
-    public static byte[] Accept(ulong nonce, ulong token)
+    public static byte[] Connect(ulong nonce, uint slot, ReadOnlySpan<byte> cookie, ReadOnlySpan<byte> clientKey)
+    {
+        var datagram = new byte[ConnectBytes];
+        WriteHeader(datagram, UdpKind.Connect);
+        BinaryPrimitives.WriteUInt64LittleEndian(datagram.AsSpan(4), nonce);
+        BinaryPrimitives.WriteUInt32LittleEndian(datagram.AsSpan(12), slot);
+        cookie.CopyTo(datagram.AsSpan(16));
+        clientKey.CopyTo(datagram.AsSpan(HandshakeBytes));
+        return datagram;
+    }
+
+    public static bool TryReadConnect(ReadOnlySpan<byte> datagram, out ulong nonce, out uint slot, out ReadOnlySpan<byte> cookie, out ReadOnlySpan<byte> clientKey)
+    {
+        nonce = 0;
+        slot = 0;
+        cookie = clientKey = default;
+        if (datagram.Length != ConnectBytes) return false;
+        nonce = BinaryPrimitives.ReadUInt64LittleEndian(datagram[4..]);
+        slot = BinaryPrimitives.ReadUInt32LittleEndian(datagram[12..]);
+        cookie = datagram.Slice(16, CookieBytes);
+        clientKey = datagram.Slice(HandshakeBytes, UdpIdentity.PublicKeyBytes);
+        return true;
+    }
+
+    public static byte[] Accept(ulong nonce, ulong token, ReadOnlySpan<byte> serverKey, ReadOnlySpan<byte> identity, ReadOnlySpan<byte> signature)
     {
         var datagram = new byte[AcceptBytes];
         WriteHeader(datagram, UdpKind.Accept);
         BinaryPrimitives.WriteUInt64LittleEndian(datagram.AsSpan(4), nonce);
         BinaryPrimitives.WriteUInt64LittleEndian(datagram.AsSpan(12), token);
+        serverKey.CopyTo(datagram.AsSpan(20));
+        identity.CopyTo(datagram.AsSpan(20 + UdpIdentity.PublicKeyBytes));
+        signature.CopyTo(datagram.AsSpan(20 + 2 * UdpIdentity.PublicKeyBytes));
         return datagram;
     }
 
-    public static bool TryReadAccept(ReadOnlySpan<byte> datagram, out ulong nonce, out ulong token)
+    public static bool TryReadAccept(ReadOnlySpan<byte> datagram, out ulong nonce, out ulong token, out ReadOnlySpan<byte> serverKey, out ReadOnlySpan<byte> identity,
+        out ReadOnlySpan<byte> signature)
     {
         nonce = token = 0;
+        serverKey = identity = signature = default;
         if (datagram.Length != AcceptBytes) return false;
         nonce = BinaryPrimitives.ReadUInt64LittleEndian(datagram[4..]);
         token = BinaryPrimitives.ReadUInt64LittleEndian(datagram[12..]);
+        serverKey = datagram.Slice(20, UdpIdentity.PublicKeyBytes);
+        identity = datagram.Slice(20 + UdpIdentity.PublicKeyBytes, UdpIdentity.PublicKeyBytes);
+        signature = datagram.Slice(20 + 2 * UdpIdentity.PublicKeyBytes, UdpIdentity.SignatureBytes);
         return token != 0;
+    }
+
+    /// <summary>The token of a sealed datagram of a connection (data or close), read from what stays in the clear; false when it is too short to be one.</summary>
+    public static bool TryReadSealedToken(ReadOnlySpan<byte> datagram, out ulong token)
+    {
+        token = 0;
+        if (datagram.Length < ClearBytes + SealBytes) return false;
+        token = BinaryPrimitives.ReadUInt64LittleEndian(datagram[4..]);
+        return true;
     }
 
     public static byte[] Refuse(ulong nonce, byte reason)
@@ -164,7 +238,7 @@ public static class UdpFormat
     {
         nonce = 0;
         reason = 0;
-        if (datagram.Length != RefuseBytes || datagram[12] != RefuseFull) return false;
+        if (datagram.Length != RefuseBytes || datagram[12] is not (RefuseFull or RefuseAddressFull)) return false;
         nonce = BinaryPrimitives.ReadUInt64LittleEndian(datagram[4..]);
         reason = datagram[12];
         return true;
