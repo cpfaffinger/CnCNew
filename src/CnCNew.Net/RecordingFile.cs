@@ -23,7 +23,9 @@ public static class RecordingFile
         foreach (var bundle in bundles)
         {
             if (bundle.Tick >= endTick) break;
-            foreach (var entry in bundle.Commands) commands.Add(CommandWire.DecodeIntent(entry)(entry.Order, bundle.Tick));
+            // What no client could decode was left out by every client alike, and is left out here.
+            foreach (var entry in bundle.Commands)
+                if (CommandWire.TryDecodeIntent(entry, out var intent, out _)) commands.Add(intent(entry.Order, bundle.Tick));
         }
         // The players of the header are what the description resolves to on whoever plays the file; a relay does not know the factions a "random" stands for.
         var header = new ReplayHeader(ReplayFormat.CurrentVersion, CommandTypes.Version, decoded.TickRate, decoded.DefinitionFingerprint, FixtureId, decoded.Seed, new WorldId(1), [], endTick, 0,

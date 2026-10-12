@@ -667,6 +667,37 @@ public sealed partial class SimulationWorld : IWorldServices
         return reason != 0 ? SubmitResult.Reject(reason) : SubmitResult.Ok;
     }
 
+    /// <summary>
+    /// The farthest a player's command may point from the origin, on either axis (docs/SIMULATION-CORE.md section 49). The largest map is a few thousand units wide;
+    /// beyond about 524,000 units the square of a distance leaves the range of <see cref="Fixed"/> and a movement toward the point ends in an overflow - on every
+    /// machine alike, so not a desync, but an exception in every simulation of a match. A command that points farther is rejected like any other invalid one. With
+    /// both ends of a distance inside this limit its square stays a factor of sixteen below the range.
+    /// </summary>
+    public static readonly Fixed CommandCoordinateLimit = Fixed.FromInt(131_072);
+
+    /// <summary>The largest angle a player's command may state, in radians either way: far more than any turn, far less than what arithmetic on it could overflow.</summary>
+    public static readonly Fixed CommandAngleLimit = Fixed.FromInt(1_024);
+
+    private static bool InReach(Fixed value, Fixed limit) => value.Raw >= -limit.Raw && value.Raw <= limit.Raw;
+
+    private static bool CoordinatesInReach(SimCommand command)
+    {
+        var limit = CommandCoordinateLimit;
+        return command switch
+        {
+            SetMoveTargetCommand move => InReach(move.X, limit) && InReach(move.Y, limit),
+            AttackMoveCommand march => InReach(march.X, limit) && InReach(march.Y, limit),
+            GroupMoveCommand group => InReach(group.X, limit) && InReach(group.Y, limit),
+            PursueCommand pursue => InReach(pursue.X, limit) && InReach(pursue.Y, limit),
+            UseSpecialPowerCommand power => InReach(power.X, limit) && InReach(power.Y, limit),
+            ConstructCommand construct => InReach(construct.X, limit) && InReach(construct.Y, limit) && InReach(construct.Angle, CommandAngleLimit),
+            SetRallyPointCommand rally => InReach(rally.X, limit) && InReach(rally.Y, limit),
+            EvacuateCommand evacuate => InReach(evacuate.X, limit) && InReach(evacuate.Y, limit),
+            SpawnCommand spawn => InReach(spawn.X, limit) && InReach(spawn.Y, limit) && InReach(spawn.Z, limit) && InReach(spawn.Angle, CommandAngleLimit),
+            _ => true,
+        };
+    }
+
     private CommandRejection Validate(SimCommand command, bool envelope = true)
     {
         if (!_players.TryGetValue(command.Player.Value, out var player)) return CommandRejection.UnknownPlayer;
@@ -678,6 +709,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (command.Sequence < player.LastSequence) return CommandRejection.OutOfOrder;
         }
         if (command.RequiresSystem && !command.Player.IsSystem) return CommandRejection.NotPermitted;
+        if (!command.Player.IsSystem && !CoordinatesInReach(command)) return CommandRejection.InvalidArguments;
         switch (command)
         {
             case SpawnCommand spawn:

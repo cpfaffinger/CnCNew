@@ -79,6 +79,10 @@ public sealed class LockstepDriver : ITickDriver, ICommandScheduler
     }
 
     public long HashesReported { get; private set; }
+
+    /// <summary>Commands of bundles that did not decode and were left out (docs/NETWORK-PROTOCOL.md section 20.6), and what the last one was.</summary>
+    public long UndecodableCommands { get; private set; }
+    public string LastUndecodable { get; private set; } = string.Empty;
     public long Stalls { get; private set; }
 
     // ------------------------------------------------------------------------------------------------------- tick driver
@@ -213,7 +217,14 @@ public sealed class LockstepDriver : ITickDriver, ICommandScheduler
         var commands = new List<ScheduledCommand>(bundle.Commands.Length);
         foreach (var entry in bundle.Commands)
         {
-            var intent = CommandWire.DecodeIntent(entry);
+            if (!CommandWire.TryDecodeIntent(entry, out var intent, out var error))
+            {
+                // Garbage behind a plausible header: every client leaves it out, in the same place, and plays on.
+                UndecodableCommands++;
+                LastUndecodable = error;
+                if (entry.Origin == _client.ConnectionId) _own.Remove(entry.Receipt);
+                continue;
+            }
             // An own order comes back under its receipt; a command of another machine has no receipt and no pre-check here.
             if (entry.Origin == _client.ConnectionId && _own.Remove(entry.Receipt, out var own))
                 commands.Add(new ScheduledCommand(own.Receipt, new PlayerId(entry.Player), intent, own.PreCheck, own.IssuedTick));

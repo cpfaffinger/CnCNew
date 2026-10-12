@@ -41,6 +41,12 @@ public static class CommandWire
             error = "a leave command as an intent";
             return false;
         }
+        if (!CommandTypes.IsPlayerOrder(type))
+        {
+            // Told by the type alone, without decoding: a command only the system may give, or one that exists for fixtures (a spawn would be a free army).
+            error = $"command type {type} is not an order of a player";
+            return false;
+        }
         return true;
     }
 
@@ -62,6 +68,27 @@ public static class CommandWire
     /// A command of a bundle as an intent: the decoded command, given the tick and the sequence number its session assigns at submission. A command whose bytes do not decode,
     /// or that claims another player than the bundle says, is a violation of the protocol.
     /// </summary>
+    /// <summary>
+    /// <see cref="DecodeIntent"/> without the exception: false, and why, for a command of a bundle that is not one. The relay passes command bytes on unread, so a
+    /// member can put garbage behind a plausible header; every client sees the same bytes and must do the same with them - leave the command out and count it -
+    /// instead of ending its match (docs/NETWORK-PROTOCOL.md section 20.6).
+    /// </summary>
+    public static bool TryDecodeIntent(BundleCommand entry, out Func<ulong, long, SimCommand> intent, out string error)
+    {
+        try
+        {
+            intent = DecodeIntent(entry);
+            error = string.Empty;
+            return true;
+        }
+        catch (ProtocolException exception)
+        {
+            intent = null!;
+            error = exception.Message;
+            return false;
+        }
+    }
+
     public static Func<ulong, long, SimCommand> DecodeIntent(BundleCommand entry)
     {
         SimCommand decoded;
@@ -75,6 +102,9 @@ public static class CommandWire
         }
         if (decoded.Player != new PlayerId(entry.Player)) throw new ProtocolException("A command of a bundle names another player than its entry.");
         if (decoded.RequiresSystem) throw new ProtocolException("A bundle carries a command only the system may give.");
+        // The leave comes from the relay itself (origin 0); nothing else that is not a player's order belongs in a bundle.
+        if (!CommandTypes.IsPlayerOrder(decoded.TypeCode) && !(decoded is PlayerLeaveCommand && entry.Origin == 0))
+            throw new ProtocolException("A bundle carries a command that is not an order of a player.");
         return (sequence, tick) => decoded with { Sequence = sequence, Tick = tick };
     }
 }

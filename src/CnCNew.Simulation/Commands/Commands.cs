@@ -92,6 +92,14 @@ public static class CommandTypes
     public const ushort PlayerLeave = 34;
 
     public static bool IsKnown(ushort code) => code is >= Spawn and <= PlayerLeave;
+
+    /// <summary>
+    /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
+    /// the commands only the system may give, the leave of a player (the relay's to put into a bundle), and the two commands that exist for fixtures and tools
+    /// (<see cref="Spawn"/>, <see cref="Destroy"/>): a session accepts those from a player for its own objects, which is fine in a test and a free army over a wire.
+    /// </summary>
+    public static bool IsPlayerOrder(ushort code)
+        => IsKnown(code) && code is not (Spawn or Destroy or Damage or Kill or SetTimer or CancelTimer or GiveMoney or GiveSciencePoints or SetRelationship or PlayerLeave);
 }
 
 /// <summary>
