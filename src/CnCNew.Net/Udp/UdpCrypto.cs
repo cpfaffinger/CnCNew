@@ -113,6 +113,13 @@ public static class UdpCrypto
         return ofClient is null || ofServer is null ? throw new CryptographicException("The exchange keys are not points of the curve.") : (ofClient, ofServer);
     }
 
+    /// <summary>
+    /// What importing or using a key that is not a point of the curve throws. The platforms differ: most such keys are a <see cref="CryptographicException"/>, but
+    /// Windows answers the point (0, 0) with "the specified curve or its parameters are not valid for this platform" - a <see cref="PlatformNotSupportedException"/>.
+    /// A key from the wire must never be able to throw past this layer, whatever a platform calls it.
+    /// </summary>
+    private static bool IsBadKey(Exception exception) => exception is CryptographicException or PlatformNotSupportedException or ArgumentException or NotSupportedException;
+
     /// <summary>What the server signs and both ends derive their keys from: everything the two said to each other in the handshake.</summary>
     internal static byte[] Transcript(ulong nonce, ulong token, ReadOnlySpan<byte> clientKey, ReadOnlySpan<byte> serverKey, ReadOnlySpan<byte> serverIdentity)
     {
@@ -135,7 +142,7 @@ public static class UdpCrypto
             using var key = ECDsa.Create(ImportPublic(identity));
             return key.VerifyData(transcript, signature, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
         }
-        catch (CryptographicException)
+        catch (Exception exception) when (IsBadKey(exception))
         {
             return false;
         }
@@ -153,7 +160,7 @@ public static class UdpCrypto
             using var peer = ECDiffieHellman.Create(ImportPublic(peerKey));
             secret = own.Key.DeriveRawSecretAgreement(peer.PublicKey);
         }
-        catch (CryptographicException)
+        catch (Exception exception) when (IsBadKey(exception))
         {
             return null;
         }

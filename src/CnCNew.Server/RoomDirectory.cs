@@ -96,6 +96,9 @@ public sealed class RoomDirectory
     /// </summary>
     public bool TryTakeFinished(out RoomInfo room) => _finished.TryDequeue(out room);
 
+    /// <summary>The ban list changed: the members of every room whose proved player key is banned now leave (docs/DEDICATED-SERVER.md section 10.3). Returns how many.</summary>
+    public int DropWhereKey(Func<string, bool> banned) => _rooms.Values.Sum(room => room.DropWhereKey(banned));
+
     private void Log(string room, string name, params (string Key, string Value)[] details) => _events.Enqueue((room, new RelayEvent(name, details)));
 
     private static string Text(long value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);

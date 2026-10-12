@@ -262,7 +262,9 @@ static partial class NetTool
             endpoint = new UdpClientEndpoint(socket, server, clock, BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8)),
                 trust: pinned.Length == 0 ? null : key => UdpCrypto.FingerprintOf(key) == pinned);
             return new HeadlessClient(endpoint.Connection, name, data.Templates, data.Fingerprint, LoadMap, room, clock, generatorSalt: (uint)Number(args, "--salt", 0), rejoinToken: token, watch: watch,
-                roomPassword: Option(args, "--room-password") ?? string.Empty)
+                roomPassword: Option(args, "--room-password") ?? string.Empty,
+                // --player-key FILE: the permanent key this client states and proves (made when the file does not exist).
+                playerKey: Option(args, "--player-key") is { } keyFile ? PlayerKeyFile.Load(keyFile) : null)
             {
                 KeepHashes = false, CorruptAtTick = corruptAt, DiagnosticsDirectory = diagnostics,
             };

@@ -316,4 +316,163 @@ static partial class NetTests
         // What an eavesdropper has left is guessing: a token nobody was given opens no seat (the test of the rejoin shows the refusal), and a guess costs a connection each.
         foreach (var end in ends) end.Dispose();
     }
+
+    // ------------------------------------------------------------------------------------------------------- player keys
+
+    public static void PlayerKeys()
+    {
+        using var alice = CnCNew.Net.Udp.UdpIdentity.Create();
+        using var mallory = CnCNew.Net.Udp.UdpIdentity.Create();
+        var banned = new HashSet<string>(StringComparer.Ordinal);
+        var net = new Net(Bare() with { IsKeyBanned = banned.Contains });
+        LockstepClient Come(Net to, string name, CnCNew.Net.Udp.UdpIdentity? key, string origin)
+        {
+            var (client, server) = to.Network.Connect();
+            to.Server.Attach(server, origin);
+            var joined = new LockstepClient(client, name, Definitions, Released, playerKey: key);
+            to.Clients.Add(joined);
+            to.Pump(8);
+            return joined;
+        }
+        HelloMessage Hello(string name, string key) => new(Protocol.Version, Released.Id, CommandTypes.Version, CnCNew.Simulation.Replay.ReplayFormat.CurrentVersion,
+            CnCNew.Simulation.Snapshots.WorldSnapshot.Version, CnCNew.Simulation.Skirmish.MatchDescription.EncodingVersion, Definitions, name, PlayerKey: key);
+        static NetMessage? Next(IConnection connection) => connection.TryReceive(out var bytes) && MessageCodec.TryDecode(bytes, out var message, out _) ? message : null;
+
+        // ---- A member that states a key proves it; the server knows the player by the key's fingerprint. A member without one is a member like before.
+        var host = Come(net, "host", null, "10.0.0.1");
+        var member = Come(net, "alice", alice, "10.0.0.2");
+        Check.That(host.Phase == ClientPhase.InRoom && member.Phase == ClientPhase.InRoom && net.Server.KeyOf(member.ConnectionId) == alice.Fingerprint && net.Server.KeyOf(host.ConnectionId).Length == 0,
+            $"a stated and proved key is the member's ({member.Phase}; {member.Rejection?.Text})");
+        Check.That(alice.Fingerprint.Length == 64 && PlayerKey.FingerprintOf(PlayerKey.PublicOf(alice)) == alice.Fingerprint && alice.Fingerprint != mallory.Fingerprint, "the fingerprint is the key's, and another key has another");
+
+        // ---- Somebody states alice's key and signs with its own: turned away.
+        var thief = net.Raw();
+        thief.Send(MessageCodec.Encode(Hello("mallory", PlayerKey.PublicOf(alice))));
+        net.Pump();
+        var asked = Next(thief) as PasswordChallengeMessage;
+        Check.That(asked is { Nonce.Length: 32 }, "a hello that states a key is answered with a challenge");
+        thief.Send(MessageCodec.Encode(new PasswordResponseMessage(new string('0', 64), PlayerKey.Sign(mallory, asked!.Nonce, string.Empty))));
+        net.Pump();
+        Check.That(Next(thief) is RejectMessage { Reason: RejectReason.BadIdentity } && net.Server.BadIdentities == 1 && net.Server.Members == 2, "a signature of another key does not prove the stated one");
+
+        // ---- Somebody recorded an answer of alice (for one nonce) and gives it to another challenge: turned away. So is an answer without a signature.
+        var recorded = PlayerKey.Sign(alice, asked.Nonce, string.Empty);
+        var replayer = net.Raw();
+        replayer.Send(MessageCodec.Encode(Hello("replay", PlayerKey.PublicOf(alice))));
+        net.Pump();
+        var second = Next(replayer) as PasswordChallengeMessage;
+        Check.That(second is not null && second.Nonce != asked.Nonce, "every challenge has a nonce of its own");
+        replayer.Send(MessageCodec.Encode(new PasswordResponseMessage(new string('0', 64), recorded)));
+        var silent = net.Raw();
+        silent.Send(MessageCodec.Encode(Hello("unsigned", PlayerKey.PublicOf(alice))));
+        net.Pump();
+        Next(silent);
+        silent.Send(MessageCodec.Encode(new PasswordResponseMessage(new string('0', 64))));
+        net.Pump();
+        Check.That(Next(replayer) is RejectMessage { Reason: RejectReason.BadIdentity } && Next(silent) is RejectMessage { Reason: RejectReason.BadIdentity } && net.Server.BadIdentities == 3,
+            "an answer to another nonce is refused, and so is none");
+        Check.That(PlayerKey.Verify(PlayerKey.PublicOf(alice), asked.Nonce, string.Empty, recorded) && !PlayerKey.Verify(PlayerKey.PublicOf(alice), asked.Nonce, "another room", recorded)
+                   && !PlayerKey.Verify(new string('0', 128), asked.Nonce, string.Empty, recorded), "a signature holds for one nonce in one room, and a key that is no point of the curve proves nothing");
+
+        // ---- The key is banned while its owner is in the room: the member leaves; and it does not get in again, whatever address it comes from.
+        banned.Add(alice.Fingerprint);
+        Check.That(net.Server.DropWhereKey(banned.Contains) == 1, "the ban finds the member by its key");
+        net.Pump(8);
+        Check.That(!member.IsOpen && net.Server.Members == 1 && host.Room!.Members.Length == 1, "a member whose key is banned leaves the room");
+        var again = Come(net, "alice again", alice, "10.9.9.9");
+        Check.That(again.Rejection is { Reason: RejectReason.Banned } && net.Server.KeysBanned == 2 && net.Server.Members == 1, $"and is turned away when it comes again from elsewhere ({again.Rejection?.Reason})");
+        var other = Come(net, "bob", mallory, "10.0.0.2");
+        Check.That(other.Phase == ClientPhase.InRoom, "another key from the same address is another player");
+
+        // ---- A server that requires a key admits nobody without one.
+        var strict = new Net(Bare() with { RequirePlayerKey = true });
+        var nameless = Come(strict, "nameless", null, "10.0.0.1");
+        var named = Come(strict, "named", alice, "10.0.0.1");
+        Check.That(nameless.Rejection is { Reason: RejectReason.BadIdentity } && named.Phase == ClientPhase.InRoom && named.IsHost, "a server that requires a player key turns a client without one away");
+
+        // ---- A kicked member's key may not come back to the room from another address either.
+        var room = new Net(Bare());
+        var owner = Come(room, "owner", null, "10.1.1.1");
+        var guest = Come(room, "guest", alice, "10.2.2.2");
+        owner.Kick(guest.ConnectionId);
+        room.Pump(8);
+        var back = Come(room, "guest again", alice, "10.3.3.3");
+        var stranger = Come(room, "stranger", mallory, "10.3.3.3");
+        Check.That(back.Rejection is { Reason: RejectReason.Kicked } && stranger.Phase == ClientPhase.InRoom && room.Server.Kicks == 1, "the kicked player's key is refused from a new address; somebody else from there is not");
+
+        // ---- A room with a password and a member with a key: one exchange answers both, and each can fail on its own.
+        var locked = new Net(Bare());
+        Enter(locked, "opener", "sesam");
+        locked.Pump(8);
+        LockstepClient Both(string name, string password, CnCNew.Net.Udp.UdpIdentity key)
+        {
+            var (client, server) = locked.Network.Connect();
+            locked.Server.Attach(server, "10.4.4.4");
+            var joined = new LockstepClient(client, name, Definitions, Released, roomPassword: password, playerKey: key);
+            locked.Clients.Add(joined);
+            locked.Pump(8);
+            return joined;
+        }
+        var good = Both("good", "sesam", alice);
+        var wrongWord = Both("wrong word", "Sesam", mallory);
+        Check.That(good.Phase == ClientPhase.InRoom && locked.Server.KeyOf(good.ConnectionId) == alice.Fingerprint && wrongWord.Rejection is { Reason: RejectReason.BadPassword },
+            "password and key are answered together; a proved key does not open a locked room");
+    }
+
+    // --------------------------------------------------------------------------------------- just below every limit
+
+    public static void MaliciouslySlowClient()
+    {
+        // The rule for members that fall behind counts what goes beyond the least a member showed lately, at most a second of it (section 14.1). A member that plays
+        // 2.9 s behind for good is therefore 1.9 s "behind" - just below the 2 s that would slow the game. It must cost the others nothing.
+        var net = new Net(new RelayOptions(SeedSource: () => 5) { HashReportLimitMs = 20_000 });
+        net.StartMatch(2, TwoSeats());
+        var (honest, slow) = (net.Clients[0], net.Clients[1]);
+        long honestDone = 0, slowDone = 0;
+        void Run(Net on, LockstepClient first, LockstepClient second, int ms, long behindTicks, long from = -1, bool claims = false)
+        {
+            for (var elapsed = 0; elapsed < ms; elapsed += 5)
+            {
+                on.Clock.Advance(5);
+                on.Server.Pump();
+                first.Pump();
+                second.Pump();
+                // "I have played this tick", ten times a second, as a client's ping says it - whatever its hashes say.
+                if (claims && second.IsOpen && elapsed % 100 == 0) second.SendRaw(MessageCodec.Encode(new PingMessage(on.Clock.Microseconds, second.NewestBundleTick)));
+                for (; honestDone <= first.NewestBundleTick; honestDone++) first.ReportHash(honestDone, 7);
+                if (!second.IsOpen || behindTicks < 0) continue;
+                // With a start value the distance grows to its end by a tick every 100 ms: slowly enough that the rule never sees it jump.
+                var behind = from < 0 ? behindTicks : Math.Min(behindTicks, from + elapsed / 100);
+                for (; slowDone <= second.NewestBundleTick - behind; slowDone++) second.ReportHash(slowDone, 7);
+            }
+        }
+        Run(net, honest, slow, 20_000, 174, from: 0);
+        Check.That(net.Server.ThrottledMicros == 0 && slow.IsOpen, $"it gets there without ever crossing the limit ({net.Server.ThrottledMicros / 1000} ms slowed)");
+        var startedAt = net.Server.NextTick;
+        Run(net, honest, slow, 60_000, 174);
+        Check.That(net.Server.ThrottledMicros == 0 && !net.Server.Throttling && Math.Abs(net.Server.NextTick - startedAt - 3_600) <= 6 && slow.IsOpen && net.Server.DroppedForLag == 0,
+            $"a member 2.9 s behind for a minute: nobody was slowed, nobody dropped ({net.Server.ThrottledMicros / 1000} ms slowed, {net.Server.NextTick} ticks)");
+        Check.That(net.Server.LastAgreedTick >= net.Server.NextTick - 174 - 6 && honest.Lag.ContainsKey(slow.ConnectionId), $"the ticks are agreed on as far as it has reported, and everybody is told it is behind ({net.Server.NextTick - net.Server.LastAgreedTick} ticks)");
+        // It crosses the line - 3.5 s behind: now the game is slowed for it, for ten seconds in all, and then it is gone and the match runs at full speed.
+        Run(net, honest, slow, 25_000, 210);
+        var slowed = net.Server.ThrottledMicros;
+        Check.That(!slow.IsOpen && net.Server.DroppedForLag == 1 && honest.Dropped.Any(drop => drop.Reason == DropReason.TooSlow) && slowed is >= 9_500_000 and <= 11_500_000 && !net.Server.Throttling,
+            $"above the limit it is carried for ten seconds and dropped ({slowed / 1000} ms slowed, dropped {net.Server.DroppedForLag})");
+        var before = net.Server.NextTick;
+        Run(net, honest, slow, 2_000, 0);
+        Check.That(Math.Abs(net.Server.NextTick - before - 120) <= 3 && net.Server.LastAgreedTick >= net.Server.NextTick - 4 && net.Server.ThrottledMicros == slowed, "and the match of the others runs at full speed, agreed tick by tick");
+
+        // The other limit: a member that says it keeps up (its pings name the tick it has played) and reports its hashes as late as the limit allows - 19 of 20 s. The
+        // lag rule is off here, as if it were blind to it. The ticks are agreed on that much later and no later, and when it stops reporting it is dropped.
+        var late = new Net(Bare() with { HashReportLimitMs = 20_000 });
+        late.StartMatch(2, TwoSeats());
+        (honestDone, slowDone) = (0, 0);
+        Run(late, late.Clients[0], late.Clients[1], 60_000, 1_140, claims: true);
+        Check.That(late.Server.HashStallDrops == 0 && late.Clients[1].IsOpen && late.Server.LastAgreedTick >= late.Server.NextTick - 1_140 - 6 && Math.Abs(late.Server.NextTick - 3_600) <= 6,
+            $"hashes 19 s late for a minute: the member stays, the ticks are agreed 19 s late and no later ({late.Server.NextTick - late.Server.LastAgreedTick} ticks behind; {late.Server.HashStallDrops} dropped)");
+        Run(late, late.Clients[0], late.Clients[1], 22_000, -1, claims: true);
+        Check.That(late.Server.HashStallDrops == 1 && !late.Clients[1].IsOpen, $"when it stops reporting it is dropped after the limit ({late.Server.HashStallDrops})");
+        Run(late, late.Clients[0], late.Clients[1], 1_000, -1);
+        Check.That(late.Server.LastAgreedTick >= late.Server.NextTick - 4 && late.Server.Phase == RoomPhase.Match, "and the others' ticks are agreed at once again");
+    }
 }

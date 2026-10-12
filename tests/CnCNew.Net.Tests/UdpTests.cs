@@ -156,6 +156,23 @@ static partial class UdpTests
         Check.That(wire.Server.CookiesRejected == 2 && wire.Server.Connections == 0, "a cookie that is not this sender's creates no connection");
         while (channel.TryReceive(buffer, out _, out _)) { }
 
+        // A connect with a cookie that is this sender's and a key that is no point of the curve - the point (0, 0), which one platform answers with another exception
+        // than the rest; bytes of all ones; a real X with a wrong Y: nothing throws, no connection, each counted.
+        Span<byte> own = stackalloc byte[16];
+        var slotNow = unchecked((uint)(wire.Clock.Milliseconds / UdpOptions.Default.CookieLifetimeMs));
+        var wrongY = (byte[])SomeKey.Clone();
+        wrongY[63] ^= 1;
+        byte[][] badKeys = [new byte[64], Enumerable.Repeat((byte)0xFF, 64).ToArray(), wrongY];
+        var malformedBefore = wire.Server.Malformed;
+        for (var index = 0; index < badKeys.Length; index++)
+        {
+            UdpFormat.Mac(Secret, 1, forged, (ulong)(900 + index), slotNow, own);
+            channel.Send(UdpFormat.Connect((ulong)(900 + index), slotNow, own, badKeys[index]), ServerAddress);
+        }
+        wire.Step(2);
+        Check.That(wire.Server.Malformed == malformedBefore + 3 && wire.Server.Connections == 0, $"a connect with a key that is no point of the curve creates no connection and is counted ({wire.Server.Malformed - malformedBefore} of 3)");
+        while (channel.TryReceive(buffer, out _, out _)) { }
+
         // The real thing.
         var client = wire.Connect();
         Check.That(wire.Until(() => client.State == UdpClientState.Connected, 2_000), "the client connects");

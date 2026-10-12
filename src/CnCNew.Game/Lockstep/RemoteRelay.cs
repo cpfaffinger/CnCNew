@@ -76,7 +76,7 @@ public sealed class RemoteRelay : IDisposable
     /// <param name="serverKey">The fingerprint the operator published: any other key is refused, whatever the list says. Empty: the list decides.</param>
     /// <param name="roomPassword">The password of the room: set by whoever opens the room, answered by everybody else. Empty: none.</param>
     public static RemoteRelay Connect(IPEndPoint server, string definitionFingerprint, string name, string room, int timeoutMs = 10_000, ulong rejoinToken = 0, bool watch = false,
-        KnownServers? known = null, string serverKey = "", string roomPassword = "")
+        KnownServers? known = null, string serverKey = "", string roomPassword = "", UdpIdentity? playerKey = null)
     {
         var clock = new SystemNetClock();
         var socket = new UdpSocketChannel(new IPEndPoint(server.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0));
@@ -96,7 +96,7 @@ public sealed class RemoteRelay : IDisposable
         }
         var endpoint = new UdpClientEndpoint(socket, server, clock, BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8)), trust: Judge);
         relay = new RemoteRelay(socket, endpoint, new LockstepClient(endpoint.Connection, name, definitionFingerprint, room: room, clock: clock, rejoinToken: rejoinToken, watch: watch,
-            roomPassword: roomPassword), clock, server);
+            roomPassword: roomPassword, playerKey: playerKey), clock, server);
         try
         {
             // Somebody who joins a running match is not shown the room first: the next thing it gets is the start of the match, with the state.

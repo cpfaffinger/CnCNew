@@ -20,6 +20,11 @@ public sealed record RelayOptions(bool AllowModifiedBuilds = false, bool HostMay
 {
     // Phase 28 (docs/NETWORK-PROTOCOL.md section 20.4): what a member may cost a room. 0 switches a limit off (the embedded server of a local game has none).
 
+    /// <summary>Whether a player key (its fingerprint) is banned from this server; asked when a member has proved its key (docs/NETWORK-PROTOCOL.md section 20.5).</summary>
+    public Func<string, bool>? IsKeyBanned { get; init; }
+    /// <summary>Admit only clients that state a player key and prove it: without it a ban by key keeps nobody out.</summary>
+    public bool RequirePlayerKey { get; init; }
+
     /// <summary>Messages a member may send per second in the long run, and at once; beyond it the member is dropped (a client-paced room is not measured).</summary>
     public int MessagesPerSecond { get; init; } = 500;
     public int MessageBurst { get; init; } = 4_000;
@@ -161,6 +166,9 @@ public sealed partial class RelayServer
         public long AttachedMicros { get; init; }
         /// <summary>A hello that waits for the answer to the room's password challenge.</summary>
         public HelloMessage? PendingHello { get; set; }
+        /// <summary>The fingerprint of the player key this member proved; empty when it stated none.</summary>
+        public string Key { get; set; } = string.Empty;
+        public bool KeyProved { get; set; }
         public string Nonce { get; set; } = string.Empty;
         public bool PasswordPassed { get; set; }
         public long MessageTokens { get; set; }
@@ -462,14 +470,26 @@ public sealed partial class RelayServer
             else if (!string.Equals(hello.SimulationId, _simulationId, StringComparison.Ordinal)) reject = new RejectMessage(RejectReason.SimulationVersion, $"The room plays simulation {_simulationId}, the client is {hello.SimulationId}.");
             else if (!string.Equals(hello.DefinitionFingerprint, _definitionFingerprint, StringComparison.OrdinalIgnoreCase)) reject = new RejectMessage(RejectReason.Definitions, "The client has other game definitions than the room.");
         }
+        if (reject is null && _options.RequirePlayerKey && hello.PlayerKey.Length == 0)
+            reject = new RejectMessage(RejectReason.BadIdentity, "This server admits only clients that state a player key.");
         if (reject is null && peer.Origin.Length > 0 && _kicked.Contains(peer.Origin)) reject = new RejectMessage(RejectReason.Kicked, "The host of this room removed this client from it.");
-        // A room with a password asks everybody but the one who opened it - and but a player that proves by its token that it was let in before.
-        if (reject is null && _verifier.Length > 0 && !peer.PasswordPassed && !(late && hello.RejoinToken != 0 && TokenIsKnown(hello.RejoinToken)))
+        // A room with a password asks everybody but the one who opened it - and but a player that proves by its token that it was let in before. Whoever states a
+        // player key is asked to prove it, in the same exchange.
+        if (reject is null && ((AsksPassword(hello, late) && !peer.PasswordPassed) || (hello.PlayerKey.Length > 0 && !peer.KeyProved)))
         {
             peer.PendingHello = hello;
             peer.Nonce = NewNonce();
             Send(peer, new PasswordChallengeMessage(peer.Nonce));
             return;
+        }
+        if (reject is null && peer.Key.Length > 0)
+        {
+            if (_kickedKeys.Contains(peer.Key)) reject = new RejectMessage(RejectReason.Kicked, "The host of this room removed this player from it.");
+            else if (_options.IsKeyBanned?.Invoke(peer.Key) == true)
+            {
+                KeysBanned++;
+                reject = new RejectMessage(RejectReason.Banned, "This player key is banned from this server.");
+            }
         }
         if (reject is null && late) reject = AdmitLate(peer, hello);
         if (reject is null && late) return;
@@ -494,7 +514,7 @@ public sealed partial class RelayServer
         }
         peer.Hello = hello;
         peer.Token = NewToken();
-        Log("joined", ("connection", Text(peer.Id)), ("name", hello.Name), ("host", peer.Id == _host ? "true" : "false"), ("build", hello.SimulationId));
+        Log("joined", ("connection", Text(peer.Id)), ("name", hello.Name), ("host", peer.Id == _host ? "true" : "false"), ("build", hello.SimulationId), ("key", peer.Key.Length > 0 ? peer.Key : "none"));
         Send(peer, new WelcomeMessage(peer.Id, peer.Id == _host, peer.Token));
         BroadcastRoom();
     }

@@ -40,17 +40,23 @@ public sealed class LockstepClient
     /// <param name="rejoinToken">The token of an earlier welcome of this room: this client wants its held seat back in the running match (0: a new member).</param>
     /// <param name="watch">This client wants to watch a match that may already run.</param>
     public LockstepClient(IConnection connection, string name, string definitionFingerprint, BuildIdentity? identity = null, string room = "", INetClock? clock = null, PlaybackOptions? playback = null,
-        ulong rejoinToken = 0, bool watch = false, string roomPassword = "")
+        ulong rejoinToken = 0, bool watch = false, string roomPassword = "", Udp.UdpIdentity? playerKey = null)
     {
         _connection = connection;
         _roomVerifier = RoomPassword.Verifier(roomPassword, room);
+        _playerKey = playerKey;
+        _room = room;
         Clock = clock;
         _playback = playback ?? PlaybackOptions.Default;
         Sync = new ClockSync(_playback.SyncSamples);
         Identity = identity ?? BuildIdentity.Current;
         Send(new HelloMessage(Protocol.Version, Identity.Id, CommandTypes.Version, ReplayFormat.CurrentVersion, WorldSnapshot.Version, MatchDescription.EncodingVersion,
-            definitionFingerprint.ToUpperInvariant(), name, room, rejoinToken, watch, _roomVerifier));
+            definitionFingerprint.ToUpperInvariant(), name, room, rejoinToken, watch, _roomVerifier, playerKey is null ? string.Empty : PlayerKey.PublicOf(playerKey)));
     }
+
+    /// <summary>The permanent key of this player, if it has one: stated in the hello and proved by a signature when the server asks (section 20.5).</summary>
+    private readonly Udp.UdpIdentity? _playerKey;
+    private readonly string _room;
 
     /// <summary>What this client knows of the room's password: sent with the hello (it becomes the room's if this client opens the room) and answered challenges with.</summary>
     private readonly string _roomVerifier;
@@ -192,7 +198,7 @@ public sealed class LockstepClient
                 Phase = ClientPhase.InRoom;
                 break;
             case PasswordChallengeMessage challenge when Phase == ClientPhase.Connecting:
-                Send(new PasswordResponseMessage(RoomPassword.Answer(_roomVerifier, challenge.Nonce)));
+                Send(new PasswordResponseMessage(RoomPassword.Answer(_roomVerifier, challenge.Nonce), _playerKey is null ? string.Empty : PlayerKey.Sign(_playerKey, challenge.Nonce, _room)));
                 break;
             case RejectMessage reject when Phase == ClientPhase.Connecting:
                 Rejection = reject;

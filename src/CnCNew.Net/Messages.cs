@@ -71,6 +71,10 @@ public enum RejectReason : ushort
     BadPassword = 14,
     /// <summary>The host of the room removed this client, and it may not come back to this room (version 4).</summary>
     Kicked = 15,
+    /// <summary>The client stated a player key and did not prove it, or the server admits only clients that state one (version 4).</summary>
+    BadIdentity = 16,
+    /// <summary>The player key is on the server's ban list (version 4).</summary>
+    Banned = 17,
 }
 
 public enum RoomPhase : byte
@@ -123,6 +127,8 @@ public static class Protocol
     /// <summary>A verifier, a nonce and a response of the room password, as hexadecimal text.</summary>
     public const int VerifierChars = 64;
     public const int NonceChars = 32;
+    /// <summary>A public key or a signature of P-256 in hexadecimal: two numbers of 32 bytes.</summary>
+    public const int KeyChars = 128;
     public const int MaxPartNameBytes = 48;
     public const int MaxHashParts = 32;
     public const int MaxRoomBytes = 64;
@@ -152,7 +158,7 @@ public abstract record NetMessage
 
 /// <summary>Client to server, first message of a connection: who is this, and can it play with the others at all.</summary>
 public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, int CommandTableVersion, int ReplayFormatVersion, int WorldStateVersion, int DescriptionEncoding,
-    string DefinitionFingerprint, string Name, string Room = "", ulong RejoinToken = 0, bool Watch = false, string RoomVerifier = "") : NetMessage
+    string DefinitionFingerprint, string Name, string Room = "", ulong RejoinToken = 0, bool Watch = false, string RoomVerifier = "", string PlayerKey = "") : NetMessage
 {
     public override MessageType Type => MessageType.Hello;
 
@@ -170,6 +176,7 @@ public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, i
         writer.U64(RejoinToken);
         writer.Bool(Watch);
         writer.Text(RoomVerifier, Protocol.VerifierChars);
+        writer.Text(PlayerKey, Protocol.KeyChars);
     }
 
     /// <summary>
@@ -185,7 +192,8 @@ public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, i
             return new HelloMessage(version, string.Empty, 0, 0, 0, 0, string.Empty, string.Empty);
         }
         return new HelloMessage(version, reader.Text(Protocol.MaxIdBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.Text(Protocol.MaxIdBytes), reader.Text(Protocol.MaxNameBytes),
-            reader.Text(Protocol.MaxRoomBytes), reader.U64(), reader.Bool(), RoomPassword.CheckedHex(reader.Text(Protocol.VerifierChars), Protocol.VerifierChars, allowEmpty: true));
+            reader.Text(Protocol.MaxRoomBytes), reader.U64(), reader.Bool(), RoomPassword.CheckedHex(reader.Text(Protocol.VerifierChars), Protocol.VerifierChars, allowEmpty: true),
+            RoomPassword.CheckedHex(reader.Text(Protocol.KeyChars), Protocol.KeyChars, allowEmpty: true));
     }
 }
 
@@ -224,7 +232,38 @@ public static class RoomPassword
     }
 }
 
-/// <summary>Server to a client whose hello names a room with a password: answer this nonce (<see cref="PasswordResponseMessage"/>), then the hello counts.</summary>
+/// <summary>
+/// The key of a player (docs/NETWORK-PROTOCOL.md section 20.5): a permanent key pair a client may have, so that a server can know "the same player as before" without an
+/// account - and keep a player out by it. The hello states the public half; the server challenges with a nonce, and the answer carries a signature over the nonce and
+/// the room's name, so a stated key is a proven one and an answer cannot be used a second time.
+/// </summary>
+public static class PlayerKey
+{
+    private static readonly byte[] Label = "CnCNew player key 1\0"u8.ToArray();
+
+    private static byte[] Said(string nonce, string room) => [..Label, ..Convert.FromHexString(nonce), ..System.Text.Encoding.UTF8.GetBytes(room)];
+
+    /// <summary>The public half as the hello states it.</summary>
+    public static string PublicOf(Udp.UdpIdentity key) => Convert.ToHexString(key.PublicKey);
+
+    public static string Sign(Udp.UdpIdentity key, string nonce, string room)
+    {
+        Span<byte> signature = stackalloc byte[Udp.UdpIdentity.SignatureBytes];
+        key.Sign(Said(nonce, room), signature);
+        return Convert.ToHexString(signature);
+    }
+
+    public static bool Verify(string publicKey, string nonce, string room, string signature)
+        => publicKey.Length == Protocol.KeyChars && signature.Length == Protocol.KeyChars && nonce.Length == Protocol.NonceChars
+           && Udp.UdpCrypto.Verify(Convert.FromHexString(publicKey), Said(nonce, room), Convert.FromHexString(signature));
+
+    /// <summary>What a log shows and a ban list names: SHA-256 of the public key, in hexadecimal. Empty for no key.</summary>
+    public static string FingerprintOf(string publicKey) => publicKey.Length == Protocol.KeyChars ? Udp.UdpCrypto.FingerprintOf(Convert.FromHexString(publicKey)) : string.Empty;
+}
+
+/// <summary>
+/// Server to a client whose hello names a room with a password or states a player key: answer this nonce (<see cref="PasswordResponseMessage"/>), then the hello counts.
+/// </summary>
 public sealed record PasswordChallengeMessage(string Nonce) : NetMessage
 {
     public override MessageType Type => MessageType.PasswordChallenge;
@@ -232,11 +271,20 @@ public sealed record PasswordChallengeMessage(string Nonce) : NetMessage
     internal static PasswordChallengeMessage Read(ref WireReader reader) => new(RoomPassword.CheckedHex(reader.Text(Protocol.NonceChars), Protocol.NonceChars));
 }
 
-public sealed record PasswordResponseMessage(string Answer) : NetMessage
+/// <param name="Answer">The answer of the room's password to the nonce.</param>
+/// <param name="Signature">The signature of the stated player key over the nonce and the room's name; empty when the hello stated no key.</param>
+public sealed record PasswordResponseMessage(string Answer, string Signature = "") : NetMessage
 {
     public override MessageType Type => MessageType.PasswordResponse;
-    internal override void Write(WireWriter writer) => writer.Text(Answer, Protocol.VerifierChars);
-    internal static PasswordResponseMessage Read(ref WireReader reader) => new(RoomPassword.CheckedHex(reader.Text(Protocol.VerifierChars), Protocol.VerifierChars));
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.Text(Answer, Protocol.VerifierChars);
+        writer.Text(Signature, Protocol.KeyChars);
+    }
+
+    internal static PasswordResponseMessage Read(ref WireReader reader)
+        => new(RoomPassword.CheckedHex(reader.Text(Protocol.VerifierChars), Protocol.VerifierChars), RoomPassword.CheckedHex(reader.Text(Protocol.KeyChars), Protocol.KeyChars, allowEmpty: true));
 }
 
 /// <summary>Host to server: remove this member from the room; it may not come back to it.</summary>

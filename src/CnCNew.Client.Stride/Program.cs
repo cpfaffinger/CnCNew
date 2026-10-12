@@ -57,6 +57,9 @@ if (joinServer is not null)
         ServerKey = GetArgument(args, "--server-key") ?? string.Empty,
         KnownServersFile = GetArgument(args, "--known-servers") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CnCNew", "known-servers.json"),
         RoomPassword = GetArgument(args, "--room-password") ?? string.Empty,
+        // --player-key FILE: the permanent key of this player (made on the first use; by default player-key.pem under %LOCALAPPDATA%\\CnCNew). --no-player-key: state none -
+        // a server that requires one will then turn this client away.
+        PlayerKeyFile = args.Contains("--no-player-key") ? string.Empty : GetArgument(args, "--player-key") ?? CnCNew.Game.Lockstep.PlayerKeyFile.DefaultPath,
     };
     matchMap = JoinOptions.Placeholder;
 }
@@ -206,6 +209,7 @@ internal sealed record JoinOptions(System.Net.IPEndPoint Server, string Room, in
     public string ServerKey { get; init; } = string.Empty;
     public string KnownServersFile { get; init; } = string.Empty;
     public string RoomPassword { get; init; } = string.Empty;
+    public string PlayerKeyFile { get; init; } = string.Empty;
     public const string Placeholder = "(joined match)";
 }
 
@@ -300,8 +304,10 @@ internal sealed class CnCNewGame(
     private void LoadJoinedMatch(GameData data, JoinOptions join, LiveOptions options)
     {
         var known = new CnCNew.Game.Lockstep.KnownServers(join.KnownServersFile.Length > 0 ? join.KnownServersFile : null);
+        using var playerKey = join.PlayerKeyFile.Length > 0 ? CnCNew.Game.Lockstep.PlayerKeyFile.Load(join.PlayerKeyFile) : null;
         var remote = CnCNew.Game.Lockstep.RemoteRelay.Connect(join.Server, data.Fingerprint, join.Name, join.Room, watch: join.Seat < 0, known: known, serverKey: join.ServerKey,
-            roomPassword: join.RoomPassword);
+            roomPassword: join.RoomPassword, playerKey: playerKey);
+        if (playerKey is not null) Console.WriteLine($"join: this client states the player key {playerKey.Fingerprint} ({join.PlayerKeyFile})");
         Console.WriteLine($"join: server {join.Server}, room \"{join.Room}\", connection {remote.Client.ConnectionId}, build {remote.Client.Identity.Id}");
         Console.WriteLine(remote.Trust == CnCNew.Game.Lockstep.ServerTrust.New
             ? $"join: first meeting with this server - its key {remote.ServerFingerprint} is remembered ({join.KnownServersFile}); compare it with what the operator published"

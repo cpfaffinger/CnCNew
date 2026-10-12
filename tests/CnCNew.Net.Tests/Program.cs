@@ -57,6 +57,8 @@ run.Test("Sealed transport: nothing readable on the line, a number per datagram,
 run.Test("Transport limits: handshakes per address and overall, connections per address, a ban, bytes per connection, the backlog of a peer that does not acknowledge", UdpTests.TransportLimits);
 run.Test("Relay limits: a flood of messages, a silent connection, a member that never loads or never reports a hash, match length, state size, joins per minute, the recording, an idle lobby", NetTests.RelayLimits);
 run.Test("Room password and kick: the opener sets a verifier, everybody else answers a challenge; the host removes a member, which does not come back from its address", NetTests.PasswordAndKick);
+run.Test("Player keys: a stated key is proved by a signature over the room's nonce, a wrong or replayed one refused; a banned key, a required key, a kicked key from another address", NetTests.PlayerKeys);
+run.Test("A member that stays just below every limit holds nobody up: behind but under the rule, late with its hashes but inside the limit - and gone when it crosses either", NetTests.MaliciouslySlowClient);
 run.Test("Hostile members: garbage commands are left out by every client alike, system commands never pass the relay; a flood, withheld hashes and a kick leave the others in step", NetTests.HostileMembers);
 run.Test("Secrets stay off the wire: no rejoin token, name, room, password, verifier or chat is readable in any datagram of a room on the sealed transport", NetTests.SecretsStayOffTheWire);
 run.Test("Fuzz, messages: changed and random messages never throw, a refusal names its reason, what decodes encodes again to the same bytes", NetTests.FuzzMessages);
@@ -212,6 +214,8 @@ static partial class NetTests
             new SnapshotOfferMessage(4, new ResumeState(901, 0xAABB, [(1, 12UL), (2, 0UL)], [1, 2, 3, 4, 5])), new SeatStateMessage(3, SeatHold.Held, 300_000),
             new SeatStateMessage(3, SeatHold.GivenUp, 0), new PasswordChallengeMessage("00112233445566778899AABBCCDDEEFF"),
             new PasswordResponseMessage(RoomPassword.Answer(RoomPassword.Verifier("p", "r"), "00112233445566778899AABBCCDDEEFF")), new KickMessage(7),
+            new PasswordResponseMessage(new string('0', 64), new string('A', 128)),
+            new HelloMessage(Protocol.Version, "id", 1, 2, 3, 4, "F", "n", "room", 0, false, string.Empty, new string('B', 128)),
             new HelloMessage(Protocol.Version, "id", 1, 2, 3, 4, "F", "n", "room", 0, false, RoomPassword.Verifier("secret", "room")),
             new PlayerDroppedMessage(2, 4, DropReason.Kicked), new PlayerDroppedMessage(2, 4, DropReason.Flood), new MatchEndMessage(9, 0, EndReason.ServerLimit),
             new RejectMessage(RejectReason.BadPassword, "no"), new RejectMessage(RejectReason.Kicked, "out"),

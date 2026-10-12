@@ -10,6 +10,7 @@ public sealed partial class RelayServer
     private const long TokenScale = 1_000_000;
 
     private readonly HashSet<string> _kicked = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _kickedKeys = new(StringComparer.Ordinal);
     private string _verifier = string.Empty;
     private ulong _nonces;
     private long _loadingSinceMicros;
@@ -25,6 +26,31 @@ public sealed partial class RelayServer
     /// <summary>Wrong answers to the password challenge, members the host removed, and origins that may not come back.</summary>
     public long BadPasswords { get; private set; }
     public long Kicks { get; private set; }
+    /// <summary>Clients that stated a player key and did not prove it, and members turned away or dropped because their key is banned.</summary>
+    public long BadIdentities { get; private set; }
+    public long KeysBanned { get; private set; }
+
+    /// <summary>The fingerprint of the player key a member proved; empty when it stated none.</summary>
+    public string KeyOf(uint connectionId) => _peers.FirstOrDefault(peer => peer.Id == connectionId)?.Key ?? string.Empty;
+
+    private bool AsksPassword(HelloMessage hello, bool late) => _verifier.Length > 0 && !(late && hello.RejoinToken != 0 && TokenIsKnown(hello.RejoinToken));
+
+    /// <summary>The ban list changed: every member whose proved key is on it now is told, and leaves as a kicked member does. Returns how many.</summary>
+    public int DropWhereKey(Func<string, bool> banned)
+    {
+        var dropped = 0;
+        foreach (var peer in _peers.Where(peer => peer.Key.Length > 0 && banned(peer.Key)).ToList())
+        {
+            dropped++;
+            KeysBanned++;
+            Log("banned", ("connection", Text(peer.Id)), ("player", Text(peer.Player)), ("key", peer.Key));
+            Send(peer, new RejectMessage(RejectReason.Banned, "This player key is banned from this server."));
+            peer.Connection.Close();
+            if (peer.Hello is null) _peers.Remove(peer);
+            else Drop(peer, DropReason.Kicked);
+        }
+        return dropped;
+    }
     public int KickedOrigins => _kicked.Count;
 
     /// <summary>Members dropped because they sent more messages than a connection may.</summary>
@@ -151,17 +177,35 @@ public sealed partial class RelayServer
     private void TakePassword(Peer peer, HelloMessage hello, PasswordResponseMessage response)
     {
         peer.PendingHello = null;
-        if (RoomPassword.Matches(_verifier, peer.Nonce, response.Answer))
+        var late = Phase == RoomPhase.Match && Pacing == Pacing.Server && (hello.RejoinToken != 0 || hello.Watch);
+        var asked = AsksPassword(hello, late);
+        if (asked && !RoomPassword.Matches(_verifier, peer.Nonce, response.Answer))
         {
-            peer.PasswordPassed = true;
-            Admit(peer, hello);
+            BadPasswords++;
+            Log("bad-password", ("connection", Text(peer.Id)));
+            Send(peer, new RejectMessage(RejectReason.BadPassword, "The password of the room is another one."));
+            peer.Connection.Close();
+            _peers.Remove(peer);
             return;
         }
-        BadPasswords++;
-        Log("bad-password", ("connection", Text(peer.Id)));
-        Send(peer, new RejectMessage(RejectReason.BadPassword, "The password of the room is another one."));
-        peer.Connection.Close();
-        _peers.Remove(peer);
+        if (hello.PlayerKey.Length > 0)
+        {
+            // The signature is over this connection's nonce and the room's name: whoever only recorded an answer of the key's owner cannot give this one.
+            if (!PlayerKey.Verify(hello.PlayerKey, peer.Nonce, hello.Room, response.Signature))
+            {
+                BadIdentities++;
+                Log("bad-identity", ("connection", Text(peer.Id)));
+                Send(peer, new RejectMessage(RejectReason.BadIdentity, "The signature does not prove the player key the hello states."));
+                peer.Connection.Close();
+                _peers.Remove(peer);
+                return;
+            }
+            peer.KeyProved = true;
+            peer.Key = PlayerKey.FingerprintOf(hello.PlayerKey);
+        }
+        // Only an answer that was asked for and was right counts as the password: a room that got its password while this client proved its key asks again.
+        if (asked) peer.PasswordPassed = true;
+        Admit(peer, hello);
     }
 
     private void Kick(Peer host, uint connectionId)
@@ -179,6 +223,7 @@ public sealed partial class RelayServer
         }
         Kicks++;
         if (target.Origin.Length > 0) _kicked.Add(target.Origin);
+        if (target.Key.Length > 0) _kickedKeys.Add(target.Key);
         Log("kicked", ("connection", Text(target.Id)), ("player", Text(target.Player)), ("by", Text(host.Id)), ("phase", Phase.ToString()));
         Send(target, new RejectMessage(RejectReason.Kicked, "The host of the room removed you."));
         target.Connection.Close();

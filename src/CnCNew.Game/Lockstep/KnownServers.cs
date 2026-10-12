@@ -72,3 +72,21 @@ public sealed class KnownServers
         File.WriteAllText(_file, JsonSerializer.Serialize(_known, Json));
     }
 }
+
+/// <summary>
+/// The permanent key of the player on this machine (docs/NETWORK-PROTOCOL.md section 20.5): a file, made the first time it is asked for. A server sees its public half
+/// and can know the same player again, or keep it out; whoever deletes the file is somebody new to every server.
+/// </summary>
+public static class PlayerKeyFile
+{
+    public static string DefaultPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CnCNew", "player-key.pem");
+
+    public static CnCNew.Net.Udp.UdpIdentity Load(string file)
+    {
+        if (File.Exists(file)) return CnCNew.Net.Udp.UdpIdentity.ImportPem(File.ReadAllText(file));
+        var key = CnCNew.Net.Udp.UdpIdentity.Create();
+        if (Path.GetDirectoryName(Path.GetFullPath(file)) is { Length: > 0 } directory) Directory.CreateDirectory(directory);
+        File.WriteAllText(file, key.ExportPem());
+        return key;
+    }
+}

@@ -17,6 +17,7 @@ sealed class BanList
 
     private readonly string _file;
     private List<Network> _networks = [];
+    private HashSet<string> _keys = new(StringComparer.Ordinal);
     private DateTime _stamp = DateTime.MinValue;
 
     public BanList(string file)
@@ -29,7 +30,10 @@ sealed class BanList
     /// <summary>What was wrong with the file when the server started; empty when nothing was.</summary>
     public string Problem { get; }
 
-    public int Count => _networks.Count;
+    public int Count => _networks.Count + _keys.Count;
+
+    /// <summary>Whether a player key (its fingerprint, 64 hexadecimal digits) is on the list: a line "key:&lt;fingerprint&gt;".</summary>
+    public bool ContainsKey(string fingerprint) => _keys.Contains(fingerprint);
 
     public static bool TryParse(string text, out byte[] address, out int bits)
     {
@@ -50,14 +54,16 @@ sealed class BanList
         if (_file.Length == 0) return false;
         if (!File.Exists(_file))
         {
-            var had = _networks.Count > 0;
+            var had = Count > 0;
             _networks = [];
+            _keys = new HashSet<string>(StringComparer.Ordinal);
             _stamp = DateTime.MinValue;
             return had;
         }
         var stamp = File.GetLastWriteTimeUtc(_file);
         if (stamp == _stamp) return false;
         var networks = new List<Network>();
+        var keys = new HashSet<string>(StringComparer.Ordinal);
         var number = 0;
         try
         {
@@ -67,6 +73,18 @@ sealed class BanList
                 var hash = raw.IndexOf('#', StringComparison.Ordinal);
                 var line = (hash < 0 ? raw : raw[..hash]).Trim();
                 if (line.Length == 0) continue;
+                if (line.StartsWith("key:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var fingerprint = line[4..].Trim().ToUpperInvariant();
+                    if (fingerprint.Length != 64 || fingerprint.AsSpan().ContainsAnyExcept("0123456789ABCDEF"))
+                    {
+                        problem = $"line {number} of {_file} is not a player key (key: and 64 hexadecimal digits): '{line}'";
+                        _stamp = stamp;
+                        return false;
+                    }
+                    keys.Add(fingerprint);
+                    continue;
+                }
                 if (!TryParse(line, out var address, out var bits))
                 {
                     // The list as it was stays in force: a typing error must not open the door to everybody on it.
@@ -84,6 +102,7 @@ sealed class BanList
         }
         _stamp = stamp;
         _networks = networks;
+        _keys = keys;
         return true;
     }
 

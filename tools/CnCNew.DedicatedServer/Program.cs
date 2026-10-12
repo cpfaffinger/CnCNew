@@ -72,6 +72,8 @@ sealed record ServerConfig
     public string KeyFile { get; init; } = string.Empty;
     /// <summary>A text file of addresses and networks that get no answer; read again when it changes. Empty: nobody is banned.</summary>
     public string BanFile { get; init; } = string.Empty;
+    /// <summary>Admit only clients that state a player key and prove it (docs/DEDICATED-SERVER.md section 10.3): what makes a ban by key hold.</summary>
+    public bool RequirePlayerKey { get; init; }
     /// <summary>A directory for one log file per day, besides standard output. Empty: standard output only.</summary>
     public string LogDir { get; init; } = string.Empty;
     /// <summary>Days a log file is kept, and days a replay file is kept (0: for ever).</summary>
@@ -102,7 +104,7 @@ static class DedicatedServer
                                       [--throttle-speed N] [--lag-recovery-ms N] [--seat-hold-ms N] [--spectator-delay-ms N] [--allow-late-watchers]
                                       [--pauses-per-player N] [--max-pause-ms N] [--anyone-sets-speed] [--replay-dir DIR]
                                       [--timeout-ms N] [--no-fine-timer] [--status-seconds N] [--exit-after-rooms N] [--run-seconds N]
-                                      [--key-file FILE] [--ban-file FILE] [--log-dir DIR] [--log-full-addresses] [--max-connections-per-address N]
+                                      [--key-file FILE] [--ban-file FILE] [--require-player-key] [--log-dir DIR] [--log-full-addresses] [--max-connections-per-address N]
                                       [--set key=value ...]
           --set names any key of the configuration file (docs/DEDICATED-SERVER.md section 2); an unknown key is an error.
           A relay for multiplayer matches: one UDP port, several rooms; a client names its room in its hello. Port 0 takes a free port (see the 'listening' line).
@@ -134,6 +136,7 @@ static class DedicatedServer
                 "--max-members" => config with { MaxMembersPerRoom = Number() },
                 "--tick-rate" => config with { DefaultTickRate = Number() },
                 "--allow-modified-builds" => config with { AllowModifiedBuilds = true },
+                "--require-player-key" => config with { RequirePlayerKey = true },
                 "--hash-interval" => config with { HashInterval = Number() },
                 "--lag-report-ms" => config with { LagReportMs = Number() },
                 "--lag-throttle-ms" => config with { LagThrottleMs = Number() },
@@ -279,6 +282,7 @@ static class DedicatedServer
             {
                 LagRecoveryMs = config.LagRecoveryMs, SeatHoldMs = config.SeatHoldMs, SpectatorDelayMs = config.SpectatorDelayMs, AllowLateWatchers = config.AllowLateWatchers,
                 PausesPerPlayer = config.PausesPerPlayer, MaxPauseMs = config.MaxPauseMs, HostSetsSpeed = config.HostSetsSpeed,
+                IsKeyBanned = bans.ContainsKey, RequirePlayerKey = config.RequirePlayerKey,
                 MessagesPerSecond = config.MessagesPerSecond, MessageBurst = config.MessageBurst, MaxStateBytes = config.MaxStateBytes, MaxMatchSeconds = config.MaxMatchSeconds,
                 MaxRecordingBytes = config.MaxRecordingBytes, LoadLimitMs = config.LoadLimitMs, HashReportLimitMs = config.HashReportLimitMs, SnapshotsPerMinute = config.SnapshotsPerMinute,
                 RoomIdleLimitMs = config.RoomIdleLimitMs, HelloLimitMs = config.HelloTimeoutMs,
@@ -316,7 +320,7 @@ static class DedicatedServer
             ("allowLateWatchers", config.AllowLateWatchers ? "true" : "false"), ("pausesPerPlayer", Text(config.PausesPerPlayer)), ("maxPauseMs", Text(config.MaxPauseMs)),
             ("hostSetsSpeed", config.HostSetsSpeed ? "true" : "false"), ("replayDir", config.ReplayDir), ("fineTimer", timer?.Held == true ? "true" : "false"),
             ("os", System.Runtime.InteropServices.RuntimeInformation.OSDescription), ("runtime", System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription),
-            ("key", key.Fingerprint), ("keyPersistent", config.KeyFile.Length > 0 ? "true" : "false"), ("keyCreated", keyCreated ? "true" : "false"), ("bans", Text(bans.Count)),
+            ("key", key.Fingerprint), ("keyPersistent", config.KeyFile.Length > 0 ? "true" : "false"), ("keyCreated", keyCreated ? "true" : "false"), ("bans", Text(bans.Count)), ("requirePlayerKey", config.RequirePlayerKey ? "true" : "false"),
             ("maxConnections", Text(config.MaxConnections)), ("maxConnectionsPerAddress", Text(config.MaxConnectionsPerAddress)), ("handshakesPerAddressPerSecond", Text(config.HandshakesPerAddressPerSecond)),
             ("handshakesPerSecond", Text(config.HandshakesPerSecond)), ("keyExchangesPerSecond", Text(config.KeyExchangesPerSecond)), ("inboundBytesPerSecond", Text(config.InboundBytesPerSecond)), ("inboundBurstBytes", Text(config.InboundBurstBytes)),
             ("messagesPerSecond", Text(config.MessagesPerSecond)), ("messageBurst", Text(config.MessageBurst)), ("maxStateBytes", Text(config.MaxStateBytes)),
@@ -395,7 +399,7 @@ static class DedicatedServer
                 nextBanCheck = clock.Milliseconds + 5_000;
                 var changed = bans.Reload(out var problem);
                 if (problem.Length > 0) Line("ban-file-error", string.Empty, [("error", problem)]);
-                if (changed) Line("bans-loaded", string.Empty, [("entries", Text(bans.Count)), ("connectionsClosed", Text(endpoint.CloseWhere(bans.Contains)))]);
+                if (changed) Line("bans-loaded", string.Empty, [("entries", Text(bans.Count)), ("connectionsClosed", Text(endpoint.CloseWhere(bans.Contains))), ("membersDropped", Text(directory.DropWhereKey(bans.ContainsKey)))]);
             }
             if (clock.Milliseconds >= nextExpiry)
             {
