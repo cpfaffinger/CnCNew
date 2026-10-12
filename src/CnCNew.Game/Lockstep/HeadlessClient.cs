@@ -211,7 +211,8 @@ public sealed class HeadlessClient
         }
         var session = Session;
         var driver = Driver!;
-        if (_snapshotRequest != 0 && Client.Phase == ClientPhase.InMatch) OfferSnapshot();
+        // A state is handed over where the tick before it was reported: the relay passes it on by the hash the clients agreed on for that tick.
+        if (_snapshotRequest != 0 && Client.Phase == ClientPhase.InMatch && (session.World.Tick - Client.StartTick) % Client.Start!.HashInterval == 0) OfferSnapshot();
         driver.AddTime(seconds);
         if (SlowEvery > 1 && ++_slowCounter % SlowEvery != 0) return 0;
         if (SkipUpdates > 0)

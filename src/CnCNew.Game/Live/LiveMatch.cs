@@ -266,9 +266,10 @@ public sealed class LiveMatch : LiveGame
 
     protected override TickResult StepSimulation()
     {
-        if (_snapshotRequest != 0 && Remote is { } asked)
+        if (_snapshotRequest != 0 && Remote is { } asked && (World.Tick - asked.Client.StartTick) % asked.Client.Start!.HashInterval == 0)
         {
-            // Between two ticks: the state after the last step, with nothing of the next bundle in it yet (docs/NETWORK-PROTOCOL.md section 18.2).
+            // Between two ticks: the state after the last step, with nothing of the next bundle in it yet (docs/NETWORK-PROTOCOL.md section 18.2) - and where the
+            // tick before it was reported, so that the relay knows the hash the state must have.
             var request = _snapshotRequest;
             _snapshotRequest = 0;
             asked.Client.OfferSnapshot(request, new CnCNew.Net.ResumeState(World.Tick, Session.StateHash(), Session.HumanCommandCounts, CnCNew.Game.Lockstep.SessionTransfer.Pack(Session.Save())));

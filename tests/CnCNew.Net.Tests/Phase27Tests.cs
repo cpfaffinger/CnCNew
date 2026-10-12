@@ -45,6 +45,11 @@ static partial class NetTests
             Check.That(result.Resyncs == 0, $"{transport}: the backlog of the joiner was not taken for jitter ({result.Resyncs} resyncs)");
         }
 
+        // A server that asks for a hash only every fourth tick: the state is handed over at a tick whose hash was agreed on, not at any tick.
+        var sparse = fixture.Probe().Run(settings, new LoopbackProbeOptions(ticks, Disturbances: [new ProbeDisturbance(1, rate * 5 + 1, ProbeDisturbanceKind.Reconnect, 400)], Relay: hold with { HashInterval = 4 }));
+        Check.That(sparse.Ok && sparse.LateJoins == 1 && sparse.SnapshotsRelayed == 1 && sparse.SnapshotsRefused == 0 && sparse.JoinedAt.Length == 1,
+            $"with a hash every fourth tick the state of a reported tick is handed over ({sparse.Problem}; relayed {sparse.SnapshotsRelayed}, refused {sparse.SnapshotsRefused}, at {string.Join(", ", sparse.JoinedAt)})");
+
         // Too late: the seat is given up after its time, the player leaves the match by a command, and the client that comes back then is told so.
         var late = fixture.Probe().Run(settings, new LoopbackProbeOptions(ticks, Disturbances: [new ProbeDisturbance(1, rate * 5, ProbeDisturbanceKind.Reconnect, 800)], Relay: new RelayOptions(SeatHoldMs: 1_500)));
         Check.That(late.Ok, $"a client comes back too late: {late.Problem}");
