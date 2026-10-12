@@ -1,5 +1,5 @@
 > **Stage:** 4 – Multiplayer · **Milestone:** S4-M3 Desync diagnosis, rejoin, spectators, server replay · **Phase:** 27
-> **Status:** planned
+> **Status:** current – starting point continued on 12 October 2026 after Phase 26 (section "Starting point after Phase 26"), not begun
 > **Predecessor:** HANDOFF-PHASE26.md · **Successor:** HANDOFF-PHASE28.md · **Results in:** docs/NETWORK-DIAGNOSTICS.md (new), docs/NETWORK-PROTOCOL.md, docs/DEDICATED-SERVER.md
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
@@ -17,6 +17,66 @@ After Phase 26 a match runs as long as nothing goes wrong. For the three cases t
 - **Spectators and recording.** The server has all tick bundles but does not write them as a replay; spectators do not exist.
 
 Verified numbers on the snapshot (old, re-measure): the world snapshot is JSON (`JsonState`), around 485–776 bytes per object, in the stress test 10–12 MB with 13,220 objects, restore 0.7 s (`docs/SIMULATION-CORE.md`). For the transfer to a rejoining client this is unmeasured.
+
+### Starting point after Phase 26 (12 October 2026, state `f25fa7a`; re-measure)
+
+This section continues the starting point above with what Phase 26 left; where the two differ, this one is newer. Log of Phase 26: `docs/NETWORK-PROTOCOL.md` §12 (the UDP
+transport), §13 (clock synchronisation, playback, pacing), §14 (members that fall behind, leaving), §15 (the tools), §16 and §17 (measurements); `docs/DEDICATED-SERVER.md`;
+`docs/SIMULATION-CORE.md` §47 (the leave command); register E1, E16, E19, E20 in `docs/MULTIPLAYER-PLAN.md` §4.
+
+**The prerequisite holds on one machine:** eight client processes played whole matches through the dedicated server and a UDP proxy with identical hashes on every line of
+the matrix, and the latency table is measured. **It does not hold across machines:** no second physical machine has taken part (E1, D-10), nothing has crossed a cable, and
+no client with a window has joined a server.
+
+**What exists, by name** (so that this phase builds on it instead of beside it):
+
+- **`CnCNew.Net.Udp`**: `UdpFormat` (the datagram layout), `UdpLink` (one connection as a state machine without a socket: the reliable byte stream of framed messages and the
+  urgent messages that ride along until acknowledged; `IConnection`), `UdpClientEndpoint` and `UdpServerEndpoint` (the stateless cookie handshake; `TryAccept`,
+  `TryTakeClosed`), `UdpSocketChannel`, `DatagramImpairer` and `MemoryDatagramNetwork` (loss, duplication, reordering from a seed - for tests and the proxy). **A large
+  message is simply a long stretch of the reliable stream** (window 256 segments of 1,159 bytes, no congestion control): a snapshot for a rejoin goes that way, and its
+  transfer time on a slow line is unmeasured. `UdpOptions.MaxMessageBytes` is 64 MiB.
+- **Which channel:** urgent are bundles and pongs downward, intents, hash reports, pings, tick requests and the end report upward; everything else is reliable. **Order
+  holds per channel only** - whatever this phase adds must not depend on its position between two bundles unless it travels in a bundle (the leave of a player does).
+- **`CnCNew.Net`**: protocol **version 2** (29 messages; `Hello` carries the room name), `ClockSync` (median of ping samples of the server's game time), `PlaybackControl`
+  (the playback position follows the server's clock by a measured delay; steered by rate), `LockstepClient` (given a clock it pings; `Sync`, `CompletedTick`, `Lag`,
+  `Leave()`), `SystemNetClock` and `FineTimer` in `RealTime.cs`, the one file of the network layers that reads real time.
+- **`CnCNew.Server`**: `RelayServer` (the lag rule: `RelayOptions.LagReportMs`/`LagThrottleMs`/`ThrottleLimitMs`/`ThrottleSpeedPercent`; `TryTakeEvent`; `TickIntervals`;
+  `GameMicros`, `EffectiveSpeedPercent`; a leave becomes a `PlayerLeaveCommand` of the next bundle with origin connection 0), `RoomDirectory` (rooms by name behind one
+  endpoint). **A dropped member is gone:** its `Peer` is removed and its player leaves the match by command - a seat held for a rejoin (this phase) has to change exactly
+  that: when the leave command is issued, and what the room remembers of the member.
+- **`CnCNew.Game.Lockstep`**: `HeadlessClient` (protocol client, world, driver, command path, command generator; `KeepHashes`/`HashChain`), `LoopbackProbe` (loopback or UDP
+  in memory; `ProbeDisturbance`: leave, cut, freeze, slow, hitch), `LockstepDriver` (server-paced: `Playback`, `BehindTicks`, `Stalls`; without a clock a tick is due when its
+  bundle is there). **A watcher is a member without a seat** (player 0): it receives the same bundles at the same time as the players - the delayed spectator of this phase
+  is new.
+- **`tools/CnCNew.DedicatedServer`** (one port, rooms by name, JSON and command line, one line per event) and **`tools/CnCNew.NetTool`**: `proxy`, `client` (a client
+  process; can leave, vanish, freeze, be slow, hitch), `net-match` and `net-matrix` (the harness), `pacing`; `scripts/check-net-match.ps1` is the step `net-match` of the
+  gate. **The server records every bundle in memory** (`RelayServer.Recording`) and writes nothing: the server replay of this phase is a file of what is already there.
+
+**For this phase in particular:**
+
+- **Hash reports** are one per tick and client (14 bytes, three copies: about 6 KB/s upward). The partial sums of the brief make every report larger; the interval
+  (`RelayOptions.HashInterval`, the server's `hashInterval`) is the lever, and its effect on how late a desync is noticed is to be measured.
+- **The desync path as it is:** the relay ends the match at the first tick two reports differ for and sends every reported hash of that tick (`Desync`); nothing more.
+- **The rule's open points** (D-17): a client that can only keep up with the slowed game was carried for 14.4 s in three incidents; a clean close after the end of a match
+  is logged as `ConnectionLost`.
+- **The window client cannot join a server:** `LiveMatch.Create` opens its own embedded relay. A second entry (`LiveMatch.Join` over a `UdpClientEndpoint`, with the driver
+  given a `SystemNetClock`) is small - `HeadlessClient` shows every step - and is needed at the latest for Phase 29.
+- **Tests that measure real time** belong in `NetTool` (they need a quiet machine); `Net.Tests` run on a clock set by hand, except two tests on loopback sockets with hard
+  time limits. Do not write source files while a tier of `scripts/test.ps1` runs: its steps build when they are reached.
+
+**Measured at this state** (`docs/NETWORK-PROTOCOL.md` §16 and §17): the matrix 36 of 36 lines hash-identical (eight client processes, 100 s each; delay 10/40/80/150 ms,
+jitter 0/10/30 ms, loss 0/1/3 %); order to execution twice the delay plus 7 to 19 ms on a quiet line, up to plus 65 ms with 30 ms of jitter; 6 to 10 KB/s per client and
+direction; the server's ticks 98.7 % within 1 ms. A whole standard match of 60 game minutes (216,000 ticks, eight client processes, 40 ms / 10 ms / 1 %): one hash chain on all clients, the server agreed on every tick, 90,631 orders, order to execution median 116 / 99 % 166 ms, never slowed, nobody dropped; the server's memory grows by about 20 MB per hour (it keeps the recording). Tier 4 with 41 of 41 steps ok (4,573 s; 0 warnings; all test programs; simulation, game, presentation and network tests at 30, 60 and 120 Hz; both manifests identical; the rate-equivalence suite 0 / 0; the long run; the client checks; `check-match`; `session-check`; `net-probe`; `net-match`; the staged scenes) - on the second run: the first found a test that assumed 60 Hz (`f25fa7a`). `NetTool probe-suite` 48 of 48. Campaign at 60 Hz (missions stay local): reachability clean 24/24 and 24/24, audit 24 of 24 identical on a second run and after save/restore with end probes 13/24 and 15/24, objective driver victory 24/24 and defeat 24/24 - as before the phase. Performance of the simulation, the whole `scripts/perf-profile.ps1` before (`71f477e`) and after: the same final hashes, means within -1.0 % and +1.2 % (8 players: 849 against 841 µs per tick, maximum 137 against 139 ms).
+
+**The yardstick** (`baselines/reference-manifest.json` at `4cbf535`, 60 Hz): unchanged in every result quantity since Phase 31 - retail reference match FactionGLA at tick
+32,520, final hash `6052051714309B17`, chain `84077720F511C1ED`; stress test `9EE9F730D124C3BD` / `F338463BE66D99C0`; 16 pairings 14 decided. Changed by Phase 26: the two
+version fields and 22 `commandStreamSha256` values (one cause: command table 17 and replay format 15 for the leave command). Versions: protocol **2**, transport **1**;
+`CommandTypes.Version` **17**, replay **15**; match description encoding 2, skirmish session state 2, `WorldSnapshot` 10, `MissionSnapshot` 3, `SaveGame` 3,
+`SkirmishSaveGame` 1. Compatibility baseline 713.
+
+**Still open from before:** the second physical machine with a different CPU and .NET version (E1, D-10). A machine-only substitute for part of it is a second runtime
+environment on the same hardware: the Windows-built binaries run unchanged under Linux, so a server or a client under WSL can take part in a match with Windows clients -
+it needs the .NET 10 runtime in the WSL distribution (a download; the owner's word).
 
 ## Brief (in this order)
 

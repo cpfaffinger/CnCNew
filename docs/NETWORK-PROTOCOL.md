@@ -510,3 +510,130 @@ reproducibly from a seed; time limits, a clean close that still delivers; noise 
 playback control against a simulated line (way, jitter, loss, a skewed clock, a line that gets worse); the rule for members that fall behind; leaving; **a match over lossy
 UDP in memory - bundles arrive in any order and at any time, the session hashes stay equal in every tick**; matches in which a client leaves, loses its line, freezes, is
 too slow or hitches; the rooms of one server; **a match over real sockets with the server stack as the program runs it**; the references of the dedicated server.
+
+## 16. Measured over real sockets (Phase 26, 12 October 2026, 60 Hz, build `1844afa`, Windows, Release)
+
+Everything here is **one machine** (the development machine: 8 processors, Windows 11): the dedicated server, the proxy and every client are processes of their own that
+talk over UDP sockets of the loopback interface, and the proxy does to the datagrams what a line would. **No byte has crossed a cable**, and no second machine with another
+CPU has taken part - register E1 of `docs/MULTIPLAYER-PLAN.md` is as open as before. What is measured is the protocol, the transport, the control and the processes, not a
+real network's burst losses or route changes.
+
+**Set-up of every match:** `Maps/Twilight Flame`, eight participants - **six players, each a client process with a command generator, and two computer players** that
+every client simulates -, plus **two watching client processes**: eight client processes in all. The clients are warmed up (a throw-away match of ten game seconds before
+they connect) and look for messages every 4 ms. Delay and jitter are per direction; loss is per datagram and direction.
+
+### 16.1 The matrix (`NetTool net-matrix`, 100 s of game time per line: 6,000 ticks on each of eight clients)
+
+| Delay | Jitter | Loss | Hashes identical | Order to execution: median | 95 % | 99 % | Round trip | Playback delay | Waits (of 48,000 ticks) | Up B/s | Down B/s | Repetitions client / server segments / server bundles |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 10 ms | 0 ms | 0 % | yes (8 of 8) | 33 ms | 36 | 116 | 20 ms | 15 ms | 614 | 6,031 | 6,003 | 0 / 57 / 54,010 |
+| 10 ms | 0 ms | 1 % | yes (8 of 8) | 43 ms | 54 | 65 | 18 ms | 24 ms | 464 | 6,254 | 6,312 | 0 / 43 / 60,473 |
+| 10 ms | 0 ms | 3 % | yes (8 of 8) | 50 ms | 55 | 86 | 20 ms | 30 ms | 149 | 6,241 | 6,050 | 0 / 44 / 60,097 |
+| 10 ms | 10 ms | 0 % | yes (8 of 8) | 49 ms | 53 | 58 | 30 ms | 24 ms | 110 | 7,680 | 7,573 | 0 / 36 / 99,360 |
+| 10 ms | 10 ms | 1 % | yes (8 of 8) | 50 ms | 64 | 70 | 31 ms | 30 ms | 381 | 7,543 | 7,608 | 1 / 35 / 95,059 |
+| 10 ms | 10 ms | 3 % | yes (8 of 8) | 63 ms | 69 | 87 | 28 ms | 37 ms | 278 | 7,464 | 7,399 | 0 / 41 / 92,723 |
+| 10 ms | 30 ms | 0 % | yes (8 of 8) | 77 ms | 87 | 101 | 52 ms | 44 ms | 119 | 9,187 | 9,011 | 1 / 18 / 140,480 |
+| 10 ms | 30 ms | 1 % | yes (8 of 8) | 81 ms | 93 | 108 | 50 ms | 45 ms | 244 | 9,236 | 9,349 | 2 / 21 / 140,260 |
+| 10 ms | 30 ms | 3 % | yes (8 of 8) | 82 ms | 100 | 113 | 52 ms | 50 ms | 388 | 9,175 | 9,052 | 0 / 18 / 138,791 |
+| 40 ms | 0 ms | 0 % | yes (8 of 8) | 99 ms | 107 | 129 | 80 ms | 45 ms | 248 | 9,911 | 10,046 | 1 / 39 / 156,070 |
+| 40 ms | 0 ms | 1 % | yes (8 of 8) | 100 ms | 116 | 134 | 80 ms | 54 ms | 546 | 9,845 | 9,427 | 0 / 35 / 156,099 |
+| 40 ms | 0 ms | 3 % | yes (8 of 8) | 107 ms | 119 | 168 | 80 ms | 60 ms | 166 | 9,879 | 9,496 | 0 / 33 / 156,078 |
+| 40 ms | 10 ms | 0 % | yes (8 of 8) | 107 ms | 118 | 119 | 90 ms | 54 ms | 67 | 9,916 | 10,103 | 1 / 13 / 156,118 |
+| 40 ms | 10 ms | 1 % | yes (8 of 8) | 114 ms | 121 | 134 | 92 ms | 60 ms | 387 | 9,890 | 9,800 | 1 / 25 / 156,126 |
+| 40 ms | 10 ms | 3 % | yes (8 of 8) | 116 ms | 128 | 137 | 90 ms | 66 ms | 285 | 9,879 | 9,507 | 0 / 16 / 156,201 |
+| 40 ms | 30 ms | 0 % | yes (8 of 8) | 135 ms | 150 | 154 | 95 ms | 74 ms | 107 | 9,877 | 9,773 | 0 / 13 / 156,214 |
+| 40 ms | 30 ms | 1 % | yes (8 of 8) | 134 ms | 152 | 164 | 70 ms | 75 ms | 266 | 9,872 | 9,665 | 0 / 17 / 156,212 |
+| 40 ms | 30 ms | 3 % | yes (8 of 8) | 145 ms | 155 | 182 | 96 ms | 79 ms | 377 | 9,912 | 9,789 | 0 / 18 / 156,274 |
+| 80 ms | 0 ms | 0 % | yes (8 of 8) | 167 ms | 182 | 187 | 160 ms | 86 ms | 189 | 9,910 | 10,022 | 1 / 12 / 156,288 |
+| 80 ms | 0 ms | 1 % | yes (8 of 8) | 182 ms | 189 | 250 | 160 ms | 94 ms | 413 | 9,853 | 9,491 | 0 / 16 / 156,348 |
+| 80 ms | 0 ms | 3 % | yes (8 of 8) | 183 ms | 193 | 213 | 160 ms | 100 ms | 160 | 9,841 | 9,189 | 1 / 17 / 156,377 |
+| 80 ms | 10 ms | 0 % | yes (8 of 8) | 184 ms | 198 | 201 | 171 ms | 94 ms | 71 | 9,918 | 10,091 | 1 / 12 / 156,325 |
+| 80 ms | 10 ms | 1 % | yes (8 of 8) | 194 ms | 202 | 219 | 170 ms | 100 ms | 387 | 9,911 | 9,914 | 1 / 14 / 156,353 |
+| 80 ms | 10 ms | 3 % | yes (8 of 8) | 200 ms | 206 | 222 | 172 ms | 107 ms | 276 | 9,882 | 9,458 | 2 / 23 / 156,324 |
+| 80 ms | 30 ms | 0 % | yes (8 of 8) | 215 ms | 233 | 237 | 166 ms | 114 ms | 145 | 9,907 | 10,021 | 6 / 7 / 156,389 |
+| 80 ms | 30 ms | 1 % | yes (8 of 8) | 217 ms | 235 | 247 | 192 ms | 116 ms | 239 | 9,908 | 9,934 | 5 / 16 / 156,431 |
+| 80 ms | 30 ms | 3 % | yes (8 of 8) | 224 ms | 238 | 256 | 193 ms | 120 ms | 389 | 9,857 | 9,297 | 7 / 17 / 156,413 |
+| 150 ms | 0 ms | 0 % | yes (8 of 8) | 316 ms | 320 | 331 | 300 ms | 155 ms | 300 | 9,891 | 9,794 | 8 / 5 / 156,618 |
+| 150 ms | 0 ms | 1 % | yes (8 of 8) | 325 ms | 335 | 340 | 300 ms | 164 ms | 476 | 9,849 | 9,439 | 8 / 1 / 156,641 |
+| 150 ms | 0 ms | 3 % | yes (8 of 8) | 333 ms | 343 | 382 | 300 ms | 170 ms | 152 | 9,878 | 9,456 | 10 / 8 / 156,689 |
+| 150 ms | 10 ms | 0 % | yes (8 of 8) | 331 ms | 335 | 341 | 311 ms | 164 ms | 107 | 9,877 | 9,714 | 8 / 24 / 156,632 |
+| 150 ms | 10 ms | 1 % | yes (8 of 8) | 333 ms | 341 | 578 | 312 ms | 172 ms | 367 | 9,868 | 9,528 | 9 / 14 / 157,124 |
+| 150 ms | 10 ms | 3 % | yes (8 of 8) | 335 ms | 351 | 364 | 311 ms | 177 ms | 293 | 9,891 | 9,537 | 10 / 26 / 156,734 |
+| 150 ms | 30 ms | 0 % | yes (8 of 8) | 353 ms | 368 | 372 | 332 ms | 184 ms | 113 | 9,911 | 10,049 | 8 / 7 / 156,738 |
+| 150 ms | 30 ms | 1 % | yes (8 of 8) | 358 ms | 369 | 382 | 288 ms | 186 ms | 283 | 9,892 | 9,787 | 9 / 17 / 156,748 |
+| 150 ms | 30 ms | 3 % | yes (8 of 8) | 363 ms | 382 | 400 | 333 ms | 190 ms | 386 | 9,871 | 9,422 | 9 / 18 / 156,771 |
+
+- **Hashes: 36 of 36 lines identical on all eight clients** - every client reported the same chain over the session hashes of all 6,000 ticks, and the server agreed on
+  every tick. 15,763 orders went through the relay. No desync, no discarded message, no malformed datagram, no resynchronisation of a playback position, the game never
+  slowed.
+- **Order to execution** (from the moment a client gives an order to the tick its own simulation executes it in): the median is **twice the delay plus 7 to 19 ms** on a
+  line without jitter and loss, plus 20 to 43 ms with 1 to 3 % loss or 10 ms of jitter, plus 53 to 65 ms with 30 ms of jitter - the way up, on average half a tick until
+  the server closes one, and the playback delay, which is the way back plus what jitter and loss need. The 99 % value lies within 60 ms of the median on 32 of the 36
+  lines; on three it is 62 to 83 ms above it, and on one (150/10/1) 245 ms - single orders in the first seconds.
+- **The playback delay** follows the line in milliseconds, the same at every delay: the way plus 5 ms on a quiet line, plus 14 ms with 10 ms of jitter or 1 % loss, plus
+  20 ms with 3 % loss, plus 27 ms with 10 ms of jitter and 3 % loss, plus 34 to 40 ms with 30 ms of jitter.
+- **Waits** (a tick whose playback time came before its bundle; it is played a few milliseconds later): 9,942 of 1,728,000 ticks, 0.58 %; the worst line 1.3 %.
+- **Bandwidth per client: 6 to 10 KB/s in each direction** (UDP payload; 60 datagrams per second each way), independent of delay and loss. Upward it is the hash report of
+  every tick with its three copies; downward the bundles with theirs. The interval of the hash reports is a parameter of the server (`hashInterval`); nothing here is tuned
+  for a narrow line.
+- **Repetitions:** on the reliable channel the eight clients together repeated 0 to 10 segments per line and the server 1 to 57; every bundle rode along three more times
+  as designed (the last number of the table).
+- **The server's ticks** (216,355 closings over the 36 matches): 98.7 % within 1 ms of the tick length, 99.9 % within 2 ms, the worst 12.2 ms, no burst.
+- **The clients:** no gen-2 collection in any match; the longest frame of any client 139 ms - the tick maximum of the eight-player simulation (decision D-3), which the
+  playback absorbs: the client plays the ticks it missed in the next frames.
+
+### 16.2 Against the calculation of `docs/MULTIPLAYER-PLAN.md` §3
+
+The plan estimated, for a round trip of 30 ms at 60 Hz: round trip 30 + wait for the open tick 8 + playback buffer of one tick 17 + display lag of the interpolation 17 =
+72 ms. Measured without the display (a client without a window has none): **33 ms at a round trip of 20 ms, 49 ms at 30 ms with 10 ms of jitter**. The calculation's 55 ms
+without the display term were too high on a quiet line, because the buffer is not a whole tick but the measured jitter plus 4 ms; they are about right when the line
+jitters by 10 ms; and they are too low for a line with 30 ms of jitter (77 ms at a round trip of 52 ms), where the buffer has to be two ticks. The display lag of the
+window client is Phase 29.
+
+### 16.3 A client that hitches, leaves, vanishes, freezes or is too slow (120 s of game time, 40 ms / 10 ms / 1 %, the rule's defaults)
+
+| What happens to one client at tick 1,800 | The other seven | The server | The game ran slowed for |
+|---|---|---|---|
+| it stands still for 500 ms once | in step to the end, all eight | one lag notice, nobody dropped | 0 ms |
+| it says it leaves (`Leave`) | in step to the end | `left ... reason=Left` at tick 1,806; the leave is in that tick's bundle | 0 ms |
+| its process vanishes without a word | in step to the end | shown as behind; slowed from 2 s on; `ConnectionLost` at tick 2,164 when the transport's 10 s without a datagram are over | 7,997 ms |
+| its process freezes (the socket stays open) | in step to the end | the same: `ConnectionLost` at tick 2,166 | 8,005 ms |
+| a player's client needs 25 ms more per tick than it has | in step to the end | slowed three times (the client catches up at half speed and falls behind again at full speed); dropped as `TooSlow` at tick 2,992, 20 s of game time after it began | 14,358 ms in three incidents |
+| a watcher's client needs 25 ms more per tick | in step to the end | never slowed; the watcher dropped as `TooSlow` at tick 2,737 | 0 ms |
+
+In every case the seven others reported one hash chain and the server agreed on every tick: the leave of the player - everything it owned died in the same tick on every
+client - is part of what they agree on. What the others lost is what the rule says: nothing for a hitch and a leave, 8 s at half speed (4 s of game time) for a lost
+connection, and for a client that cannot keep up 14.4 s at half speed in three incidents: after the first it had caught up below the report limit and the count of 10 s
+began again, the second and the third together reached it. That is the rule as documented - and a point to look at when the decision is made: a client that can only
+keep up with the slowed game costs the others more than one that is simply gone.
+
+### 16.4 A whole standard match (`NetTool net-match --minutes 60`, 40 ms / 10 ms / 1 %)
+
+Eight client processes (six players, two watchers; two computer players), **60 minutes of game time - the whole length of a standard match, 216,000 ticks** - through the server and the proxy: **all eight clients reported the same hash chain**, the server agreed on every tick (`lastAgreedTick=215999`, no desync, nothing discarded), 90,631 orders went through the relay. Order to execution: median 116 ms, 95 % 120 ms, 99 % 166 ms (the worst single order 241 ms) at a round trip of 91 ms; playback delay 59 ms on average; 14,275 of 1,728,000 ticks (0.83 %) waited a few milliseconds for their bundle; no resynchronisation; the game never slowed, nobody was shown as behind, nobody dropped. 10.6 KB/s up and 15.4 KB/s down per client (the late match has more commands in its bundles). The server closed 215,999 ticks: 99.2 % within 1 ms of the tick length, the worst 6.7 ms late, no burst.
+
+**Memory:** every client's managed memory went from 207 MB to 237 to 240 MB in the hour (the world of a long match has more objects; the tool also keeps its samples) and its working set from about 345 MB to 317 MB - nothing grows without bound; 14 to 16 gen-2 collections per client in the hour, the longest client frame 135 ms. **The server's managed memory grew from 1 MB to 22 MB**, linearly: it keeps every bundle of the match as its recording (`RelayServer.Recording`) - by design until Phase 27 writes it out, and the reason an hour-long match costs the server about 20 MB.
+
+### 16.5 What these measurements do not show
+
+- **A second machine.** Two computers with different CPUs and .NET versions have not played together; whether their simulations agree is what the reference manifest on
+  such a machine would show first (E1, D-10). The Linux runtime under WSL was not available in this phase (no .NET in the distribution; installing it is a download that
+  needs the owner's word).
+- **A real network:** burst loss, route changes, an asymmetric line, a NAT, the MTU of a tunnel.
+- **A window.** No client with a renderer has joined a server; the display lag, the interpolation against the playback position and what a player sees when the game is
+  slowed are Phase 29.
+- **Other tick rates and maps.** The matrix ran at 60 Hz on one map; `Net.Tests` run at 30, 60 and 120 Hz on a synthetic fixture.
+- **More than an hour, more than one room at a time under load, and hostile clients** (Phase 28).
+
+## 17. Closing measurements of Phase 26 (12 October 2026, state `f25fa7a`, Windows, Release)
+
+**Tier 4** (`pwsh scripts/test.ps1 -Tier full -KeepGoing`): 41 of 41 steps ok (4,573 s) on `f25fa7a` - clean build 0 warnings; every test program; compat-check 713; `Simulation.Tests` at 30, 60 and 120 Hz, with real data (rate-equivalence suite 0 / 0) and the long run; `Game.Tests` and `Presentation.Tests` with real data at 30, 60 and 120 Hz; `Net.Tests` (34 tests) at 30, 60 and 120 Hz; `input-manifest check` identical; `reference-manifest check --set full` 50 of 50 identical; the three client checks; `check-match`; `session-check`; `net-probe`; **`net-match`** (the dedicated server, the proxy and four client processes: a match with delay, jitter and loss, and one with a client that vanishes); the staged scenes. The first run of the tier, on `1844afa`, had 40 of 41 steps ok: `net-30` failed in a test whose "too slow" client was 25 ms per tick at every rate - too slow at 60 and 120 Hz, fast enough at 30 Hz, where a tick is 33 ms; the test was corrected (`f25fa7a`) and the whole tier run again.
+
+**The probes of Phase 25, re-measured** (one process, the loopback): `NetTool probe-suite` 48 of 48 runs hash-identical on all clients in every tick and equal to their replay (1+7, 2+6, 4+4, 8+0 on three eight-player maps, with and without delay and jitter, twice each; 562 s) - now with the adaptive playback delay on the probe's clock: an order of a server-paced run without delay is executed one tick after it was given, with 40 ms delay and 60 ms jitter 11.9 ticks on average (13 with the fixed buffer of Phase 25). `NetTool local-cost` (eight players, five game minutes, three rounds): the local skirmish through the embedded relay costs 653 µs per tick against 621 µs directly (+32 µs; +22 µs in Phase 25), both ending in the same session hash; an order of the local game is still executed in the tick it was given.
+
+**Campaign** (missions stay local): Campaign at 60 Hz (missions stay local): reachability clean 24/24 and 24/24, audit 24 of 24 identical on a second run and after save/restore with end probes 13/24 and 15/24, objective driver victory 24/24 and defeat 24/24 - as before the phase.
+
+**Performance of the simulation** (`scripts/perf-profile.ps1` with the binaries of `71f477e` and of this state one after the other): every run ends in the same final hash on both sides; the means lie within -1.0 % and +1.2 % (eight players, 30 game minutes: 849.1 against 841.1 µs per tick, 99 % 2.1 ms on both sides, maximum 137 against 139 ms, allocation 8.4 KB per tick; `MD_GLA05` 2,605 against 2,587 µs). The phase is not measurable in the tick of the simulation; the tick maximum (decision D-3) is unchanged.
+
+**Not run:** the determinism matrix; the survey over 320 matches; the commands-only agent; `sync-perf` of the game layer; `scripts/acceptance.ps1`; the matrix at 30 and
+120 Hz and on other maps. **Not possible in this phase:** a second physical machine (E1, D-10) and with it the LAN measurement; Linux as a second environment (the WSL
+distribution of the development machine has no .NET runtime). **No human has seen** a match through the dedicated server.

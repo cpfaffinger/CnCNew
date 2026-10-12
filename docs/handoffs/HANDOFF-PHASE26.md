@@ -1,5 +1,5 @@
 > **Stage:** 4 – Multiplayer · **Milestone:** S4-M2 Dedicated server, UDP, clock synchronisation, eight clients · **Phase:** 26
-> **Status:** current – starting point continued on 11 October 2026 after Phase 25 (section "Starting point after Phase 25"), not begun; needs the second physical machine (D-10)
+> **Status:** done on one machine (12 October 2026; `docs/NETWORK-PROTOCOL.md` §12 to §17, `docs/DEDICATED-SERVER.md`, `docs/SIMULATION-CORE.md` §47) – everything built and measured with eight client processes on one machine; **not done: the second physical machine (D-10) and the measurement in a LAN**
 > **Predecessor:** HANDOFF-PHASE25.md · **Successor:** HANDOFF-PHASE27.md · **Results in:** docs/NETWORK-PROTOCOL.md, docs/DEDICATED-SERVER.md (new)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 

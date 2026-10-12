@@ -69,7 +69,7 @@ compatibility with old mods and savegames.
 |---|---|---|
 | Session core: AI in the session state, `MatchDescription`, two-stage command path, `ITickDriver`, lockstep probe | S2-M7 (Phase 24) | current, not begun |
 | Fidelity package A (F-03 to F-05) merged before Phase 24 records values | S1-M11 (D-12) | open |
-| A second physical machine with a different CPU passes the manifest | S2-M1 (D-10, E1) | open; due before Phase 26 |
+| A second physical machine with a different CPU passes the manifest | S2-M1 (D-10, E1) | open; Phase 26 ran without it and claims nothing that needs it |
 | Decisions D-11 (commands versus state), D-17 to D-20 | PROGRAMME.md §7 | defaults named |
 | Fellow players and a second machine for the acceptances | project owner | to be provided (Phases 26, 29) |
 | Nothing from Phases 15 to 17 is accepted by a human (E24): a network game on top of a game with unverified playability conceals causes | S1-M11 | open; R1 does not wait for Stage 4, but Phase 29 should not come before the single-player acceptance |
@@ -102,7 +102,17 @@ compatibility with old mods and savegames.
   its tick); order within a bundle (human from the bundle, AI local, one canonical order); start at tick 0 from the match
   description alone; the local skirmish must not get worse (time from intent to execution, tick cost).
 
-### S4-M2 Dedicated server, UDP, clock synchronisation, eight clients — planned (Phase 26)
+### S4-M2 Dedicated server, UDP, clock synchronisation, eight clients — done on one machine (Phase 26, 12 October 2026)
+
+- **Result** (`docs/NETWORK-PROTOCOL.md` §12 to §17, `docs/DEDICATED-SERVER.md`, `docs/SIMULATION-CORE.md` §47): every deliverable below is built except the measurement on
+  two machines. Acceptance as measured, on one machine with real processes and real sockets of the loopback interface: eight client processes (six players, two watchers;
+  two computer players in every simulation) played whole matches through the dedicated server and a UDP proxy - **36 of 36 lines of the matrix hash-identical on all
+  clients**, a standard match of an hour of game time (216,000 ticks on every client, one hash chain, 90,631 orders, never slowed), the latency table measured (order to execution: twice the delay plus 7 to 65 ms depending on
+  jitter and loss); a client that hitches or leaves slows nobody, a lost connection slows the others for 8 s at half speed, a client that cannot keep up is dropped. The
+  rule's numbers are the plan's proposal as configuration (D-17), the leave of a player is the original's behaviour as a command of the bundle (D-18); both decisions stay
+  the owner's. **Named rests:** no second physical machine and no LAN (E1, D-10); nothing measured on a real network; the window client cannot join a server yet (S4-M5);
+  a client that can only keep up with the slowed game costs the others more than the rule's 10 s (three incidents, 14.4 s); bandwidth is 6 to 10 KB/s per client and
+  direction, untuned; nobody has seen a match through the server in a window.
 
 - **Deliverables (`HANDOFF-PHASE26.md`):** UDP transport behind `ITransport` with a stateless cookie handshake, a reliable
   ordered channel and an urgent channel that carries every unacknowledged bundle, fragmentation with limits, keep-alive and

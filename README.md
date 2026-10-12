@@ -47,7 +47,10 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   continued, a match is started from one description, orders pass a two-stage command path and a tick driver releases the ticks
   (`docs/SIMULATION-CORE.md` §45, `docs/PRESENTATION-INPUT.md` §13). Since Phase 25 there is a protocol, a relay server as a library and a lockstep client
   (`docs/NETWORK-PROTOCOL.md`), and **the local skirmish already runs through them**: an embedded server, a connection inside the process, one client. Several
-  clients with a world each stay hash-identical in one process. No byte has left a machine yet: sockets and the standalone server follow in Phase 26.
+  clients with a world each stay hash-identical in one process. Since Phase 26 there is a UDP transport of its own, clock synchronisation with an adaptive playback
+  delay, a rule for clients that fall behind, and a **dedicated server** as a program (`docs/DEDICATED-SERVER.md`): eight client processes without a window play whole
+  matches through it and a UDP proxy with identical hashes on every line of a matrix of delay, jitter and loss (`docs/NETWORK-PROTOCOL.md` §16). All of it on one
+  machine: no second computer has taken part, and the window client cannot join a server yet.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,
