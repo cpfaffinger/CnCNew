@@ -138,6 +138,22 @@ static partial class NetTool
             rows.Add(row);
             Console.WriteLine(Invariant($"{(row.Equal ? "ok  " : "FAIL")} minute {row.GameMinutes,3:F0} (tick {row.Tick}): {row.Objects} objects; state {row.StateBytes / 1024.0:F0} KB, packed {row.PackedBytes / 1024.0:F0} KB; write {row.WriteMs:F1} ms + pack {row.PackMs:F1} ms on the giver; unpack {row.UnpackMs:F1} ms + build {row.RestoreMs:F1} ms on the joiner"));
         }
+        // What a client pays every tick to be able to say, at a desync, which part and which object differed: the parts of the hash and the table of object hashes.
+        var diagnostics = new SessionDiagnostics();
+        var (plain, recorded) = (new List<double>(), new List<double>());
+        for (var round = 0; round < 6; round++)
+        {
+            var watch = Stopwatch.StartNew();
+            for (var tick = 0; tick < 600; tick++)
+            {
+                var at = session.World.Tick;
+                session.Step();
+                var hash = session.StateHash();
+                if (round % 2 == 1) diagnostics.Record(at, session, hash);
+            }
+            (round % 2 == 1 ? recorded : plain).Add(watch.Elapsed.TotalMilliseconds * 1000 / 600);
+        }
+        Console.WriteLine(Invariant($"a tick with its session hash: {Median(plain):F0} us; with the diagnosis record (parts of the hash, object table): {Median(recorded):F0} us - {Median(recorded) - Median(plain):F0} us more"));
         if (Option(args, "--out") is { } file) File.WriteAllText(file, JsonSerializer.Serialize(rows, ResultJson));
         return rows.All(row => row.Equal) ? 0 : 1;
     }

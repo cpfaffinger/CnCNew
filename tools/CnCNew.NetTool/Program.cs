@@ -57,7 +57,8 @@ static partial class NetTool
               the tick cost of a local skirmish with and without the network path, and the memory of n worlds in one process
           identity
               the build identity of this process
-          proxy --listen PORT --server HOST:PORT [--delay MS] [--jitter MS] [--loss-percent P] [--dup-percent P] [--reorder-percent P] [--seed N] [--run-seconds S]
+          proxy --listen PORT --server HOST:PORT [--delay MS] [--jitter MS] [--loss-percent P] [--dup-percent P] [--reorder-percent P] [--rate-kbps N --queue-kb N]
+                [--seed N] [--run-seconds S]
               a UDP intermediary: every client that sends to the listen port gets its own way to the server, delayed, lost, duplicated and reordered per direction,
               reproducibly from the seed
           client <content-dir> --server HOST:PORT --map <map> --humans H --ais A --members M --seat I [--room NAME] [--name N] [--ticks T | --seconds S | --minutes M]

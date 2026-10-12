@@ -102,9 +102,9 @@ $stepsOfArea = @{
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
     ui           = @{ affected = 'ui';                                      gate = 'game' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
-    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'game' }
+    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'game' }
     game         = @{ affected = 'game-focus';                              gate = 'game', 'net' }
-    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys' }
+    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join' }
     scripts      = @{ affected = @();                                       gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'presentation', 'sim', 'net'
@@ -213,6 +213,7 @@ $steps = @(
     New-Step 'net-probe'    'Four clients and four computer players over the relay with delay and jitter' ((Release-Run 'tools/CnCNew.NetTool') + 'loopback-match' + $ContentDir + '--map' + 'Maps/Twilight Flame/Twilight Flame.map' + '--humans' + '4' + '--ais' + '4' + '--seconds' + '60' + '--delay' + '40' + '--jitter' + '60') -Content -Release 'tools/CnCNew.NetTool'
     New-Step 'net-match'    'Server, proxy and four client processes: a match with delay, jitter and loss, and one with a vanishing client' (Script-Run 'check-net-match') -Content
     New-Step 'net-robust'   'Rejoin, late and delayed watchers, the server replay and the desync diagnosis with real processes' (Script-Run 'check-net-robustness') -Content
+    New-Step 'net-join'     'The window client joins a match on a dedicated server; a client without a window is the other player' (Script-Run 'check-net-join') -Content
     New-Step 'net-cross-os' 'A match across Windows and Linux (WSL): server and two clients under Linux, two under Windows' (Script-Run 'check-net-cross-os') -Content -Environment
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content

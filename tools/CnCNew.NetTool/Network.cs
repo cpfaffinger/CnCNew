@@ -28,7 +28,7 @@ static partial class NetTool
 
     private static Impairment ImpairmentOf(string[] args)
         => new((int)Number(args, "--delay", 0), (int)Number(args, "--jitter", 0), (int)Math.Round(Real(args, "--loss-percent", 0) * 10), (int)Math.Round(Real(args, "--dup-percent", 0) * 10),
-            (int)Math.Round(Real(args, "--reorder-percent", 0) * 10));
+            (int)Math.Round(Real(args, "--reorder-percent", 0) * 10), RateKbps: (int)Number(args, "--rate-kbps", 0), QueueBytes: (int)Number(args, "--queue-kb", 64) * 1000);
 
     private static string Invariant(FormattableString text) => text.ToString(CultureInfo.InvariantCulture);
 
@@ -95,16 +95,17 @@ static partial class NetTool
             if (busy) Thread.SpinWait(200);
             else listen.WaitReadable(1_000);
         }
-        long offered = 0, lost = 0, duplicated = 0, reordered = 0;
+        long offered = 0, lost = 0, duplicated = 0, reordered = 0, overflowed = 0;
         foreach (var session in sessions.Values)
         {
             offered += session.Up.Offered + session.Down.Offered;
             lost += session.Up.Lost + session.Down.Lost;
             duplicated += session.Up.Duplicated + session.Down.Duplicated;
             reordered += session.Up.Reordered + session.Down.Reordered;
+            overflowed += session.Up.Overflowed + session.Down.Overflowed;
             session.Upstream.Dispose();
         }
-        Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=stopped clients={sessions.Count} datagrams={offered} lost={lost} duplicated={duplicated} reordered={reordered}"));
+        Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=stopped clients={sessions.Count} datagrams={offered} lost={lost} duplicated={duplicated} reordered={reordered} overflowed={overflowed}"));
         return 0;
     }
 
@@ -369,8 +370,8 @@ static partial class NetTool
                         stateBytes = client.Start?.Resume?.State.Length ?? 0;
                         Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=rejoin-loaded name={name} tick={headless.JoinedAtTick} wireBytes={stateBytes} ms={loadedMs:F0}"));
                     }
-                    // At the head of the match again: no more than a quarter of a second of bundles waits to be played.
-                    if (loadedSeen && !caughtUp && headless.Driver is { Playback.Synced: true } && client.NewestBundleTick - headless.Tick <= rate.TicksPerSecond / 4)
+                    // At the head of the match again: the playback position is reached, nothing is left to catch up.
+                    if (loadedSeen && !caughtUp && headless.Driver is { Playback.Synced: true, BehindTicks: <= 1 })
                     {
                         caughtUp = true;
                         caughtUpMs = (now - backAtMicros) / 1000.0;
@@ -701,7 +702,7 @@ static partial class NetTool
                 [
                     "proxy", "--listen", "0", "--server", $"127.0.0.1:{serverPort}", "--delay", Invariant($"{impairment.DelayMs}"), "--jitter", Invariant($"{impairment.JitterMs}"),
                     "--loss-percent", Invariant($"{impairment.LossPerMille / 10.0}"), "--dup-percent", Invariant($"{impairment.DuplicatePerMille / 10.0}"), "--reorder-percent", Invariant($"{impairment.ReorderPerMille / 10.0}"),
-                    "--seed", Option(args, "--seed") ?? "1",
+                    "--seed", Option(args, "--seed") ?? "1", "--rate-kbps", Invariant($"{impairment.RateKbps}"), "--queue-kb", Invariant($"{impairment.QueueBytes / 1000}"),
                 ], Path.Combine(outDirectory, "proxy.log"), serverInLinux ? linux : null);
                 if (proxy.WaitForValue("event=listening", "port", 40_000) is not { } proxyPort) return Failed("the proxy did not start");
                 port = proxyPort;
@@ -808,6 +809,17 @@ static partial class NetTool
         {
             notes.Add(Invariant($"{result.Name} lost its connection at tick {result.RejoinGoneAtTick} and joined again at tick {result.JoinedAtTick}: state {result.RejoinStateBytes} B on the wire, loaded after {result.RejoinLoadedMs:F0} ms, at the head of the match after {result.RejoinCaughtUpMs:F0} ms"));
             if (result.Ok && result.JoinedAtTick == 0) problems.Add($"{result.Name} did not join the running match again");
+        }
+        // The same as the server saw it: from the token to the state being passed on, to the joiner standing at it, to the joiner playing in time again.
+        foreach (var returned in serverLines.Where(line => line.Contains(" event=seat-returned ", StringComparison.Ordinal)))
+        {
+            var connection = ValueOf(returned, "connection");
+            long At(string line) => long.TryParse(ValueOf(" " + line, "ts"), CultureInfo.InvariantCulture, out var ts) ? ts : 0;
+            var from = At(returned);
+            var relayed = serverLines.FirstOrDefault(line => line.Contains(" event=snapshot-relayed ", StringComparison.Ordinal) && ValueOf(line, "to") == connection);
+            var joined = serverLines.FirstOrDefault(line => line.Contains(" event=joined-late ", StringComparison.Ordinal) && ValueOf(line, "connection") == connection);
+            var caught = serverLines.FirstOrDefault(line => line.Contains(" event=caught-up ", StringComparison.Ordinal) && ValueOf(line, "connection") == connection && At(line) >= (joined is null ? from : At(joined)));
+            notes.Add(Invariant($"server: player {ValueOf(returned, "player")} back at tick {ValueOf(returned, "tick")}; state passed on after {(relayed is null ? -1 : At(relayed) - from)} ms, joiner at that state after {(joined is null ? -1 : At(joined) - from)} ms ({(joined is null ? "?" : (long.Parse(ValueOf(joined, "tick")!, CultureInfo.InvariantCulture) - long.Parse(ValueOf(joined, "fromTick")!, CultureInfo.InvariantCulture)).ToString(CultureInfo.InvariantCulture))} ticks behind), in time again after {(caught is null ? -1 : At(caught) - from)} ms"));
         }
         foreach (var result in results.Where(result => result.RejoinGoneAtTick < 0 && result.JoinedAtTick > 0))
             notes.Add(Invariant($"{result.Name} joined the running match at tick {result.JoinedAtTick}"));
