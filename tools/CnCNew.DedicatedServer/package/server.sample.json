@@ -26,6 +26,8 @@
 
   // Addresses and networks that get no answer: one per line, "#" starts a comment; read again when the file changes.
   "banFile": "bans.txt",
+  // Admit only clients that state a player key and prove it (a line "key:<fingerprint>" in the ban file then keeps that key out).
+  "requirePlayerKey": false,
 
   // Limits (docs/DEDICATED-SERVER.md section 9). These are the defaults.
   "maxConnectionsPerAddress": 8,

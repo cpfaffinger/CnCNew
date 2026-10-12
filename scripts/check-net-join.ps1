@@ -14,6 +14,7 @@
         so this is the comparison of the window client's world with the headless one's - and reported no desync;
       - the window client's own orders went to the server, came back in bundles and were executed;
       - the client without a window played to the end without a problem; the window client left with a goodbye (the server logs a leave, not a lost connection);
+      - the window client states a player key (a file of this run, never the user's own) and proves it to the server (section 20.5);
       - the server's key (docs/NETWORK-PROTOCOL.md section 20.2): the client without a window is told the key the server printed and takes no other; a third
         client that is told another key refuses the server and never says hello; the window client meets the server for the first time and remembers its key
         in a file of this run (never the user's own file).
@@ -92,7 +93,7 @@ try {
     if (-not (Wait-Line 'server' ' event=joined .*name=headless' 180)) { Write-Host 'FAIL: the client without a window did not reach the server.'; exit 1 }
     Write-Host "== The window client joins, takes the second seat and plays $Seconds s of game time"
     $window = Start-Logged 'window' @($clientDll.FullName, '--smoke-test', '--content-dir', (Quote $ContentDir), '--join', "127.0.0.1:$port", '--room', 'join', '--seat', '2', '--player-name', 'window',
-        '--join-until-tick', "$ticks", '--join-order-every', '300', '--join-result', (Quote (Join-Path $OutDir 'window.json')), '--mute', '--known-servers', (Quote $knownFile))
+        '--join-until-tick', "$ticks", '--join-order-every', '300', '--join-result', (Quote (Join-Path $OutDir 'window.json')), '--mute', '--known-servers', (Quote $knownFile), '--player-key', (Quote (Join-Path $OutDir 'player-key.pem')))
     if (-not $window.WaitForExit($TimeoutSeconds * 1000)) { Fail 'the window client did not end in time' }
     if (-not $headless.WaitForExit(120000)) { Fail 'the client without a window did not end in time' }
     $server.WaitForExit(20000) | Out-Null
@@ -115,6 +116,9 @@ if ($stranger.HasExited -and $stranger.ExitCode -eq 0) { Fail 'a client that was
 elseif ($strangerText -notmatch 'not the one this client was told to expect') { Fail "a client that was told another key did not say why it refused the server ($($strangerText | Select-Object -Last 1))" }
 elseif ($log | Where-Object { $_ -match ' event=joined .*name=stranger' }) { Fail 'a client that was told another key said hello to the server' }
 else { Write-Host "     a client that was told another key refused the server (key $($serverKey.Substring(0, 16))...) and said nothing to it" }
+if (-not ($log | Where-Object { $_ -match ' event=joined .*name=window .*key=[0-9A-F]{64}' })) { Fail 'the window client did not state and prove a player key' }
+elseif (-not ($log | Where-Object { $_ -match ' event=joined .*name=headless .*key=none' })) { Fail 'the client without a window was not admitted without a player key' }
+else { Write-Host '     the window client stated a player key of its own and proved it; the client without a window has none and is a member all the same' }
 if (-not (Test-Path $knownFile) -or (Get-Content $knownFile -Raw) -notmatch $serverKey) { Fail 'the window client did not remember the key of the server it met for the first time' }
 else { Write-Host '     the window client remembered the key of the server it met for the first time' }
 

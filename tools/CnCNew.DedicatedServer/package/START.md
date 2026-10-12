@@ -75,3 +75,6 @@ protocol version is turned away with a message that names both versions (docs/DE
 - The host of a room can remove a member of that room.
 - Add an address or a network (`203.0.113.7`, `203.0.113.0/24`, `2001:db8::/48`) to the `banFile`, one per line; the server reads the file
   again within seconds, closes the connections from there and answers nothing from there any more.
+- Add a player key to the same file as `key:<fingerprint>` - the 64 digits behind `key=` on the player's `joined` line. The player is dropped and
+  turned away from then on. This holds against somebody who keeps the key: set `"requirePlayerKey": true` so that nobody enters without one,
+  and know that a new key, like a new address, costs a banned person nothing.

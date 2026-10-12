@@ -947,11 +947,11 @@ and beside the simulation; of the simulation's formats only the command check ch
 
 | | |
 |---|---|
-| `Hello` | one more field at its end: the room verifier, 64 hexadecimal digits or empty (§20.5) |
+| `Hello` | two more fields at its end: the room verifier, 64 hexadecimal digits or empty, and the player key, 128 hexadecimal digits or empty (§20.5) |
 | 35 `PasswordChallenge` | server → client: a nonce of 32 hexadecimal digits |
-| 36 `PasswordResponse` | client → server: the answer, 64 hexadecimal digits |
+| 36 `PasswordResponse` | client → server: the answer of the password, 64 hexadecimal digits, and the signature of the player key, 128 hexadecimal digits or empty |
 | 37 `Kick` | host → server: the connection id of the member to remove |
-| reject reasons | 14 `BadPassword`, 15 `Kicked` |
+| reject reasons | 14 `BadPassword`, 15 `Kicked`, 16 `BadIdentity`, 17 `Banned` |
 | drop reasons | 5 `Kicked`, 6 `Flood` |
 | end reason | 3 `ServerLimit` - the server ended the match because it reached a limit of the room (§20.4) |
 
@@ -1021,7 +1021,7 @@ The room's:
   asked of members at most 6 times a minute (a join beyond is refused with `CannotCatchUp` and may try again).
 - Everything the embedded relay of a local game (`LocalRelay`) does is exempt: its limits are 0.
 
-### 20.5 A room with a password, and removing a member
+### 20.5 A room with a password, a player with a key, and removing a member
 
 - The **password never travels**, not even inside the sealed connection, and the server never has it. The client derives a **verifier**: HMAC-SHA-256 with the
   password as the key over a label and the room's name. The member that opens a room states the verifier in its hello, and the room keeps it.
@@ -1031,9 +1031,18 @@ The room's:
 - A client with a known **rejoin token** is not asked: the token was handed out inside the sealed connection to a member that had passed.
 - What it is and is not: a way to keep a room among people who know a word. The server sees the verifier and could enter the room itself; a verifier is as strong
   as the password it was made from (somebody who has the verifier can try passwords against it without the server).
+- **A player key** is a permanent key pair a client may have (ECDSA P-256; the window client keeps it in `player-key.pem` beside its settings and makes it on the
+  first join, `--no-player-key` states none). It is what lets a server know "the same player as before" without an account - and keep that player out. The hello
+  states the public half. The server then sends the same challenge as for a password, and the answer carries a **signature over a label, the nonce and the room's
+  name**: a stated key is a proved one, and an answer somebody recorded fits no other challenge. A wrong or missing signature is rejected with `BadIdentity` and
+  counted. The server knows the member by the key's **fingerprint** (SHA-256 of the public half), logs it with the join, refuses a fingerprint on its ban list with
+  `Banned` - at the hello, and for members already in a room when the list changes - and, with `requirePlayerKey`, admits nobody who states none.
+- What a player key is not: an account. A new key costs nothing, so a ban by key keeps out only who does not make one - on a server that requires keys a banned
+  player is a stranger again with a new one, as with a new address. And it is a **permanent pseudonym**: every server a player joins sees the same fingerprint
+  (personal data in the server's log, `docs/DEDICATED-SERVER.md` §10.4); whoever deletes the file is somebody new everywhere.
 - **`Kick`:** the host names a connection; the member is told (`Reject` with `Kicked`), its connection is closed, the others see it dropped with `Kicked`, and in a
-  running match its player leaves as after a lost connection (§14.2) - its seat is not held. The **origin** of the connection (its address without the port) may not
-  enter the room again as long as the room exists. Somebody else's kick request is refused with `NotHost`.
+  running match its player leaves as after a lost connection (§14.2) - its seat is not held. The **origin** of the connection (its address without the port) and the
+  member's **player key**, if it proved one, may not enter the room again as long as the room exists. Somebody else's kick request is refused with `NotHost`.
 
 ### 20.6 Orders nobody can give, and who decides
 
@@ -1074,6 +1083,8 @@ The room's:
 | `Net.Tests` "Transport limits" | handshakes per address and in all, the ration of key exchanges, connections per address, a ban, bytes per connection, the backlog of a peer that does not acknowledge |
 | `Net.Tests` "Relay limits" | a flood of messages, a silent connection, a member that never loads or never reports a hash, the match length, the state size, joins per minute, the recording, an idle lobby - each with its counter and its reaction |
 | `Net.Tests` "Room password and kick" | the challenge and its answer, a wrong and a replayed answer, the rejoin without the question, the kick and the origin that may not come back |
+| `Net.Tests` "Player keys" | a stated key is proved by its signature; a signature of another key, one for another nonce and none are refused; a banned key leaves the room and does not come back from another address; a server that requires a key; a kicked key from another address |
+| `Net.Tests` "A member that stays just below every limit" | 2.9 s behind for a minute: nobody is slowed; hashes 19 s late for a minute: agreed 19 s late and no later; across either limit the member is dropped and the others run on |
 | `Net.Tests` "Hostile members" | whole matches (the multi-client probe, UDP in memory) in which a member sends garbage orders and system commands, floods, withholds its hashes or is kicked: the others end in the same state and the replay plays to it |
 | `Net.Tests` suite "Fuzz" | `docs/DEDICATED-SERVER.md` §9.4 |
 | `scripts/check-net-join.ps1` | real processes: a client told another key refuses the server and says nothing to it; the window client remembers the key of its first meeting |

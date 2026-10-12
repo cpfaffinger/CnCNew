@@ -7,7 +7,8 @@
       - builds the win-x64 and the linux-x64 package with scripts/package-server.ps1 into a directory outside the repository;
       - checks what is in them: the server, the protocol, the room and the two libraries those reference - and nothing of the game layer, the
         client, the importer or Stride, and no Windows-only library in the Linux package; the start guide, the sample configuration and the
-        licence are there, and the sample configuration is one the server accepts;
+        licence are there, and the sample configuration is one the server accepts; a ban file is read, and one with a line that is no entry
+        stops the server at its start with the number of the line;
       - starts the server of the win-x64 package (its own program, not "dotnet <dll>") and plays a match of three client processes and five
         computer players on it through the proxy; every client must end with the same hash chain, and the server must have agreed on every tick.
     -Platform linux:
@@ -97,6 +98,19 @@ if ($Platform -eq 'windows') {
     if (-not ($lines | Where-Object { $_ -match ' event=listening .* key=[0-9A-F]{64}' })) { Fail "the server did not start with the sample configuration ($(Get-Content (Join-Path $work 'server.err') -ErrorAction SilentlyContinue | Select-Object -First 2))" }
     elseif (-not (Test-Path (Join-Path $work 'server-key.pem')) -or -not (Test-Path (Join-Path $work 'logs'))) { Fail 'the sample configuration made no key file or no log directory' }
     else { Write-Host '     the server of the win-x64 package starts with the sample configuration, makes its key file and writes its log' }
+
+    # ---- A ban file with a line that is no entry stops the server at its start (a typing mistake must not unban everybody); a good one is read.
+    Set-Content (Join-Path $work 'bans.txt') @('# test', '203.0.113.7', '2001:db8::/48', 'not an address')
+    $bad = Start-Process -FilePath $exe -ArgumentList @('--config', 'server.json', '--port', '0', '--address', '127.0.0.1', '--run-seconds', '2') -WorkingDirectory $work -NoNewWindow -PassThru `
+        -RedirectStandardOutput (Join-Path $work 'bad-bans.log') -RedirectStandardError (Join-Path $work 'bad-bans.err')
+    if (-not $bad.WaitForExit(30000)) { $bad.Kill($true); Fail 'the server with a bad ban file did not stop' }
+    elseif ($bad.ExitCode -ne 2 -or -not ((Get-Content (Join-Path $work 'bad-bans.err') -Raw) -match 'line 4')) { Fail "a ban file with a line that is no entry did not stop the server with its line number (exit code $($bad.ExitCode))" }
+    Set-Content (Join-Path $work 'bans.txt') @('# test', '203.0.113.7', '2001:db8::/48')
+    $good = Start-Process -FilePath $exe -ArgumentList @('--config', 'server.json', '--port', '0', '--address', '127.0.0.1', '--run-seconds', '2') -WorkingDirectory $work -NoNewWindow -PassThru `
+        -RedirectStandardOutput (Join-Path $work 'good-bans.log') -RedirectStandardError (Join-Path $work 'good-bans.err')
+    if (-not $good.WaitForExit(30000)) { $good.Kill($true); Fail 'the server with a ban file did not stop' }
+    elseif (-not (Get-Content (Join-Path $work 'good-bans.log') | Where-Object { $_ -match ' event=listening .* bans=2 ' })) { Fail 'the server did not read a ban file of two entries' }
+    elseif ($failed -eq 0) { Write-Host '     a ban file of two entries is read; one with a line that is no entry stops the server at its start, naming the line' }
 
     Write-Host "== The server of the win-x64 package, a proxy and four client processes: $Seconds s of game time"
     dotnet $tool net-match $ContentDir --map $map --humans 3 --ais 5 --watchers 1 --seconds $Seconds --delay 40 --jitter 10 --loss-percent 1 --server-package (Join-Path $packages 'win-x64') `
