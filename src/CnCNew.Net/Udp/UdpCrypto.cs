@@ -96,6 +96,23 @@ public static class UdpCrypto
 
     public static string FingerprintOf(ReadOnlySpan<byte> publicKey) => Convert.ToHexString(SHA256.HashData(publicKey));
 
+    /// <summary>
+    /// The cryptography of one handshake, both ends in one place: two exchange keys, the server's signature over the transcript, the client's check of it, and the
+    /// keys of both directions. For measuring what a connection costs (NetTool seal-cost) and for tests; the endpoints do the same steps over the wire.
+    /// </summary>
+    public static (UdpCipher Client, UdpCipher Server) Exchange(UdpIdentity identity, ulong nonce, ulong token)
+    {
+        using var client = new UdpKeyExchange();
+        using var server = new UdpKeyExchange();
+        var transcript = Transcript(nonce, token, client.PublicKey, server.PublicKey, identity.PublicKey);
+        Span<byte> signature = stackalloc byte[UdpIdentity.SignatureBytes];
+        identity.Sign(transcript, signature);
+        if (!Verify(identity.PublicKey, transcript, signature)) throw new CryptographicException("The signature of the transcript does not verify.");
+        var ofClient = Derive(client, server.PublicKey, transcript, isClient: true);
+        var ofServer = Derive(server, client.PublicKey, transcript, isClient: false);
+        return ofClient is null || ofServer is null ? throw new CryptographicException("The exchange keys are not points of the curve.") : (ofClient, ofServer);
+    }
+
     /// <summary>What the server signs and both ends derive their keys from: everything the two said to each other in the handshake.</summary>
     internal static byte[] Transcript(ulong nonce, ulong token, ReadOnlySpan<byte> clientKey, ReadOnlySpan<byte> serverKey, ReadOnlySpan<byte> serverIdentity)
     {

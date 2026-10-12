@@ -45,6 +45,12 @@ public sealed record UdpOptions
     public int HandshakeBurst { get; init; } = 20;
     /// <summary>Handshake datagrams answered per second whatever their sender says it is: the bound for forged senders.</summary>
     public int HandshakesPerSecond { get; init; } = 2_000;
+    /// <summary>
+    /// Key exchanges the server does per second for all senders together, and how many at once (0: no bound). A key exchange is the one answer that costs the
+    /// server milliseconds of a core (docs/NETWORK-PROTOCOL.md section 21.2); a sender must have returned its cookie to get one, so it cannot hide its address.
+    /// </summary>
+    public int KeyExchangesPerSecond { get; init; } = 100;
+    public int KeyExchangeBurst { get; init; } = 400;
     /// <summary>Addresses whose handshake rate is remembered; when the table is full it starts anew (the bound for all of them still holds).</summary>
     public int MaxTrackedAddresses { get; init; } = 4_096;
     /// <summary>

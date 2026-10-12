@@ -325,6 +325,21 @@ public sealed class UdpServerEndpoint : IDisposable
         return true;
     }
 
+    private long _exchangeTokens = long.MinValue;
+    private long _exchangeAtMs;
+
+    /// <summary>Whether a key exchange is done now: thousandths of a token, refilled by the clock, at most the burst.</summary>
+    private bool KeyExchangeAllowed(long now)
+    {
+        if (_options.KeyExchangesPerSecond <= 0) return true;
+        var full = (long)_options.KeyExchangeBurst * 1000;
+        _exchangeTokens = _exchangeTokens == long.MinValue ? full : Math.Min(full, _exchangeTokens + Math.Max(0, now - _exchangeAtMs) * _options.KeyExchangesPerSecond);
+        _exchangeAtMs = now;
+        if (_exchangeTokens < 1000) return false;
+        _exchangeTokens -= 1000;
+        return true;
+    }
+
     private void Forget(IPEndPoint address, Entry entry)
     {
         _forgedGone += entry.Cipher.Forged;
@@ -394,6 +409,13 @@ public sealed class UdpServerEndpoint : IDisposable
                     {
                         Refused++;
                         _channel.Send(UdpFormat.Refuse(nonce, _links.Count >= _options.MaxConnections ? UdpFormat.RefuseFull : UdpFormat.RefuseAddressFull), from);
+                        break;
+                    }
+                    // The arithmetic of a key exchange is the one expensive answer this endpoint gives (milliseconds of one core): it is rationed for all senders
+                    // together. Whoever is not served now sends its connect again, as it would after a lost datagram.
+                    if (!KeyExchangeAllowed(now))
+                    {
+                        RateLimited++;
                         break;
                     }
                     // Only now, for an address that answered: a key of this exchange, the signature of the identity over everything said, the keys of the connection.

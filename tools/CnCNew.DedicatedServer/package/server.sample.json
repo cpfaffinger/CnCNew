@@ -31,6 +31,7 @@
   "maxConnectionsPerAddress": 8,
   "handshakesPerAddressPerSecond": 10,
   "handshakesPerSecond": 2000,
+  "keyExchangesPerSecond": 100,
   "inboundBytesPerSecond": 262144,
   "messagesPerSecond": 500,
   "maxStateBytes": 4194304,

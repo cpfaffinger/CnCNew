@@ -49,6 +49,9 @@ sealed record ServerConfig
     public int HandshakesPerAddressPerSecond { get; init; } = 10;
     public int HandshakeBurst { get; init; } = 20;
     public int HandshakesPerSecond { get; init; } = 2_000;
+    /// <summary>Key exchanges (new connections) per second for all senders together, and how many at once.</summary>
+    public int KeyExchangesPerSecond { get; init; } = 100;
+    public int KeyExchangeBurst { get; init; } = 400;
     /// <summary>Bytes a connection may send the server per second in the long run, and at once.</summary>
     public int InboundBytesPerSecond { get; init; } = 256 * 1024;
     public int InboundBurstBytes { get; init; } = 8 * 1024 * 1024;
@@ -291,6 +294,7 @@ static class DedicatedServer
                 {
                     TimeoutMs = config.ConnectionTimeoutMs, KeepAliveMs = config.KeepAliveMs, MaxConnections = config.MaxConnections, MaxConnectionsPerAddress = config.MaxConnectionsPerAddress,
                     HandshakesPerAddressPerSecond = config.HandshakesPerAddressPerSecond, HandshakeBurst = config.HandshakeBurst, HandshakesPerSecond = config.HandshakesPerSecond,
+                    KeyExchangesPerSecond = config.KeyExchangesPerSecond, KeyExchangeBurst = config.KeyExchangeBurst,
                     InboundBytesPerSecond = config.InboundBytesPerSecond, InboundBurstBytes = config.InboundBurstBytes, MaxMessageBytes = stateBytes + Protocol.MaxMessageBytes,
                     MaxReliableBacklogBytes = 2L * (stateBytes + Protocol.MaxMessageBytes),
                 }, key, bans.Contains);
@@ -314,7 +318,7 @@ static class DedicatedServer
             ("os", System.Runtime.InteropServices.RuntimeInformation.OSDescription), ("runtime", System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription),
             ("key", key.Fingerprint), ("keyPersistent", config.KeyFile.Length > 0 ? "true" : "false"), ("keyCreated", keyCreated ? "true" : "false"), ("bans", Text(bans.Count)),
             ("maxConnections", Text(config.MaxConnections)), ("maxConnectionsPerAddress", Text(config.MaxConnectionsPerAddress)), ("handshakesPerAddressPerSecond", Text(config.HandshakesPerAddressPerSecond)),
-            ("handshakesPerSecond", Text(config.HandshakesPerSecond)), ("inboundBytesPerSecond", Text(config.InboundBytesPerSecond)), ("inboundBurstBytes", Text(config.InboundBurstBytes)),
+            ("handshakesPerSecond", Text(config.HandshakesPerSecond)), ("keyExchangesPerSecond", Text(config.KeyExchangesPerSecond)), ("inboundBytesPerSecond", Text(config.InboundBytesPerSecond)), ("inboundBurstBytes", Text(config.InboundBurstBytes)),
             ("messagesPerSecond", Text(config.MessagesPerSecond)), ("messageBurst", Text(config.MessageBurst)), ("maxStateBytes", Text(config.MaxStateBytes)),
             ("maxMatchSeconds", Text(config.MaxMatchSeconds)), ("maxRecordingBytes", Text(config.MaxRecordingBytes)), ("loadLimitMs", Text(config.LoadLimitMs)),
             ("hashReportLimitMs", Text(config.HashReportLimitMs)), ("snapshotsPerMinute", Text(config.SnapshotsPerMinute)), ("roomIdleLimitMs", Text(config.RoomIdleLimitMs)),

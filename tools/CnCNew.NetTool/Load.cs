@@ -76,6 +76,81 @@ static partial class NetTool
     }
 
     /// <summary>
+    /// seal-cost [--datagrams N] [--handshakes N]: what the sealed transport costs this machine (docs/NETWORK-PROTOCOL.md section 21.2) - the cryptography of a
+    /// handshake (both ends), and sealing and opening a datagram at the sizes a match sends, against copying the same bytes.
+    /// </summary>
+    public static int SealCost(string[] args)
+    {
+        var datagrams = (int)Number(args, "--datagrams", 400_000);
+        var handshakes = (int)Number(args, "--handshakes", 2_000);
+        using var identity = UdpIdentity.Create();
+        for (var index = 0; index < 50; index++)
+        {
+            var (warmClient, warmServer) = UdpCrypto.Exchange(identity, 1, 2);
+            warmClient.Dispose();
+            warmServer.Dispose();
+        }
+        var watch = Stopwatch.StartNew();
+        for (var index = 0; index < handshakes; index++)
+        {
+            var (one, other) = UdpCrypto.Exchange(identity, (ulong)index, 99);
+            one.Dispose();
+            other.Dispose();
+        }
+        var perHandshake = watch.Elapsed.TotalMilliseconds * 1000 / handshakes;
+        Console.WriteLine(Invariant($"handshake: {perHandshake:F0} us of cryptography for both ends together (two key pairs, a signature, its check, two agreements; {handshakes} handshakes) - {1_000_000 / perHandshake:F0} per second on one core"));
+
+        // The server's share of it, with the same calls of the base class library: a key pair of its own, the agreement with the client's key, its signature.
+        using (var signer = ECDsa.Create(ECCurve.NamedCurves.nistP256))
+        using (var peer = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256))
+        {
+            var said = new byte[226];
+            var signature = new byte[64];
+            watch.Restart();
+            for (var index = 0; index < handshakes; index++)
+            {
+                using var own = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);
+                var secret = own.DeriveRawSecretAgreement(peer.PublicKey);
+                HKDF.DeriveKey(HashAlgorithmName.SHA256, secret, new byte[64], SHA256.HashData(said), said.AsSpan(0, 18));
+                signer.TrySignData(said, signature, HashAlgorithmName.SHA256, DSASignatureFormat.IeeeP1363FixedFieldConcatenation, out _);
+            }
+            var perServer = watch.Elapsed.TotalMilliseconds * 1000 / handshakes;
+            Console.WriteLine(Invariant($"handshake, the server's share: {perServer:F0} us (a key pair, an agreement, a signature) - {1_000_000 / perServer:F0} connections per second would take one core"));
+        }
+
+        var (client, server) = UdpCrypto.Exchange(identity, 5, 6);
+        var plain = new byte[UdpFormat.MaxPlainBytes];
+        RandomNumberGenerator.Fill(plain);
+        var wire = new byte[UdpFormat.MaxDatagramBytes];
+        var opened = new byte[UdpFormat.MaxDatagramBytes];
+        Console.WriteLine("plain_bytes\twire_bytes\tseal_us\topen_us\tcopy_us\tseal_and_open_us");
+        foreach (var size in new[] { 40, 80, 160, 320, 640, UdpFormat.MaxPlainBytes })
+        {
+            double Measure(Action<int> body)
+            {
+                for (var index = 0; index < 20_000; index++) body(index);
+                var time = Stopwatch.StartNew();
+                for (var index = 0; index < datagrams; index++) body(index);
+                return time.Elapsed.TotalMilliseconds * 1000 / datagrams;
+            }
+            var sealedLength = 0;
+            var seal = Measure(_ => sealedLength = client.Seal(plain.AsSpan(0, size), wire));
+            // Every datagram is opened once: sealed afresh for that, and the sealing taken off.
+            var both = Measure(_ =>
+            {
+                var length = client.Seal(plain.AsSpan(0, size), wire);
+                if (!server.TryOpen(wire.AsSpan(0, length), opened, out var got) || got != size) throw new InvalidOperationException("A sealed datagram did not open.");
+            });
+            var copy = Measure(_ => plain.AsSpan(0, size).CopyTo(wire));
+            Console.WriteLine(Invariant($"{size}\t{sealedLength}\t{seal:F3}\t{both - seal:F3}\t{copy:F4}\t{both:F3}"));
+        }
+        Console.WriteLine(Invariant($"every datagram is {UdpFormat.SealBytes} bytes longer (an 8-byte number and a 16-byte tag); forged {server.Forged}, replayed {server.Replayed}"));
+        client.Dispose();
+        server.Dispose();
+        return 0;
+    }
+
+    /// <summary>
     /// load --server HOST:PORT [--server-key FINGERPRINT] --rooms N [--members 8] [--watchers 0] [--seconds S] [--match-seconds M] [--orders-per-second R]
     /// [--churn-percent P] [--state-kb K] [--threads T] [--tick-rate 60] [--seed N] [--label TEXT] [--out file.json] [--room-password TEXT]
     /// </summary>

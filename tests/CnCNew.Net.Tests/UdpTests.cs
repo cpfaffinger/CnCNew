@@ -12,7 +12,7 @@ static partial class UdpTests
     private static readonly IPEndPoint ServerAddress = new(IPAddress.Parse("10.0.0.1"), 4000);
 
     /// <summary>The transport as it is, without the bounds on what one address may ask for: these tests put many clients behind one address and send in bursts.</summary>
-    internal static readonly UdpOptions Unbounded = new() { HandshakeBurst = 1_000_000, HandshakesPerAddressPerSecond = 1_000_000, HandshakesPerSecond = 1_000_000, MaxConnectionsPerAddress = 256 };
+    internal static readonly UdpOptions Unbounded = new() { HandshakeBurst = 1_000_000, HandshakesPerAddressPerSecond = 1_000_000, HandshakesPerSecond = 1_000_000, MaxConnectionsPerAddress = 256, KeyExchangesPerSecond = 0 };
 
     /// <summary>A key of an exchange, as a client would send it.</summary>
     private static readonly byte[] SomeKey = new UdpKeyExchange().PublicKey;

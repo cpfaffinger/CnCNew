@@ -27,6 +27,7 @@ try
         "net-matrix" => NetTool.NetMatrix(args),
         "pacing" => NetTool.Pacing(args),
         "load" => NetTool.Load(args),
+        "seal-cost" => NetTool.SealCost(args),
         "desync-diff" => NetTool.DesyncDiff(args),
         "replay-check" => NetTool.ReplayCheck(args),
         "snapshot-cost" => NetTool.SnapshotCost(args),
@@ -81,6 +82,8 @@ static partial class NetTool
               the state of a running match: size written and packed, time to write, pack, unpack and build it
           pacing [--seconds S]
               how evenly this machine wakes a loop that waits for a tick: sleep, socket wait, socket wait with the fine timer
+          seal-cost [--datagrams N] [--handshakes N]
+              what the sealed transport costs this machine: the cryptography of a handshake, sealing and opening a datagram at the sizes a match sends
           load --server HOST:PORT [--server-key FINGERPRINT] --rooms N [--members 8] [--watchers 0] [--seconds S] [--match-seconds M] [--orders-per-second R]
                [--churn-percent P] [--state-kb K] [--threads T] [--tick-rate 60] [--seed N] [--label TEXT] [--out FILE] [--room-password TEXT]
               rooms of members that speak the whole protocol through the sealed transport and simulate nothing (needs no game data): match after match in every
