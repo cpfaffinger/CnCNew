@@ -7,8 +7,8 @@ repository (https://github.com/cpfaffinger/CnCNew); the licence is in `LICENSE.m
 ## What the machine needs
 
 - **Windows x64** (package `win-x64`): Windows 10 or later. Nothing else.
-- **Linux x64** (package `linux-x64`): a distribution with glibc 2.31 or later and OpenSSL 3 or 1.1 (`libssl`) - the cryptography of the
-  connection uses it. No ICU library is needed. Make the program executable once: `chmod +x CnCNew.DedicatedServer`.
+- **Linux x64** (package `linux-x64`): a distribution .NET 10 supports, with OpenSSL (`libssl`) - the cryptography of the connection uses it.
+  It was run on Debian 12 (glibc 2.36, OpenSSL 3.0). No ICU library is needed. Make the program executable once: `chmod +x CnCNew.DedicatedServer`.
 - One UDP port reachable from the players (default 27960). No TCP port, no outgoing connection.
 - Per room of eight: see the capacity table in `docs/DEDICATED-SERVER.md` section 11 - it was measured on one machine and is a starting point,
   not a promise.

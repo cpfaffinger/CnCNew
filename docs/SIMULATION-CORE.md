@@ -3287,3 +3287,36 @@ is turned away" feeds it one.
 
 **Not built for it:** no second, binary state format (measured and not needed, `docs/NETWORK-DIAGNOSTICS.md` §7); no script state among the parts (a
 `ScriptedSkirmishSession` is not played by several clients yet).
+
+## 49. Phase 28: what a player's command may say (12 October 2026)
+
+Phase 28 opens the server's port to everybody (`docs/NETWORK-PROTOCOL.md` §20, `docs/DEDICATED-SERVER.md` §9), and with it the simulation is handed commands by
+somebody who means harm. Two small rules of the simulation follow; **no reference value, no format version and no hash moved** (`CommandTypes.Version` 17, replay 15,
+`WorldSnapshot` 10, skirmish session state 2; input manifest identical, quick reference set 9 of 9 at commit `6cc6501`, the full set and the rate suite with tier 4
+at the end of the phase).
+
+**A coordinate limit (decision D-5, open since Phase 22).** `Fixed` has a range of about ±5.5 · 10¹¹, and a distance is compared by its square: a command whose
+target lay farther than about 524,000 units away made the movement end with an `OverflowException` - on every machine alike, so not a desync but an exception in
+every simulation of a match (reported in §38, never fixed). `SimulationWorld.Check` and `Submit` now reject, with `CommandRejection.InvalidArguments`, a command of a
+player that states a point beyond `SimulationWorld.CommandCoordinateLimit` = **131,072 units** on any axis, either way, or an angle beyond
+`CommandAngleLimit` = **1,024 radians**. With both ends of a distance inside the limit its square stays a factor of sixteen below the range. The largest map of
+the game is a few thousand units wide; no order a client can give by a click comes near the limit, and an order *to* the limit is an order like any other (it is
+then the map's edge that stops the unit). Checked are the points of `SetMoveTarget`, `AttackMove`, `GroupMove`, `Pursue`, `UseSpecialPower`, `Construct` (and its
+angle), `SetRallyPoint`, `Evacuate` and `Spawn` (and its height and angle). **The limit binds players, not the system:** scripts and fixtures place objects where
+they like, and no manifest run gives such an order - which is why nothing moved. The check is part of the pre-check (`docs/PRESENTATION-INPUT.md` §13), so the
+client's receipt already says no.
+
+**Which commands are orders.** `CommandTypes.IsPlayerOrder(code)` is true for the 24 of 34 command types a player gives and false for the ten that are the
+system's or a fixture's: `Spawn`, `Destroy`, `Damage`, `Kill`, `SetTimer`, `CancelTimer`, `GiveMoney`, `GiveSciencePoints`, `SetRelationship` and `PlayerLeave`.
+The simulation itself still accepts `Spawn` and `Destroy` from a player for its own objects - tests and tools build their scenes that way -, which over a wire
+would be a free army; so the list is asked where commands arrive from outside: `CommandWire.IsPlausible` refuses an intent of another type, and
+`CommandWire.TryDecodeIntent` is how a client decodes the commands of a bundle - one that does not decode is skipped by every client alike and counted
+(`LockstepDriver.UndecodableCommands`), instead of throwing in the middle of a tick.
+
+**Tests** (`Tests.CommandLimits.cs`, "Command limits"): each of the nine commands beyond the limit is rejected in the pre-check and at submission and changes
+nothing; a move to the limit itself is accepted and one step beyond it is not; the system may spawn beyond it; exactly 24 types are orders and the ten named ones
+are not. In the network tests ("Hostile members", "Fuzz, commands") a member sends such commands through a relay: 4.5 million changed real orders, of which 77,028
+were accepted and simulated, without an exception in the pre-check, the submission or the ticks after.
+
+**Not examined:** values of a command that are no coordinates (a template name, a count, an option) are the handler's to reject as before, and the fuzzing reaches
+the handlers only through orders it can still make valid; script actions and the system's commands are not bounded - they are not reachable from a wire.

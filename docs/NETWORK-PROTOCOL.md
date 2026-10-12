@@ -1,9 +1,10 @@
-# Network protocol (version 3)
+# Network protocol (version 4)
 
 Phase 25 (11 October 2026: the protocol, the room, the relay, the local skirmish through it - §1 to §11) and Phase 26 (11 October 2026: the UDP transport, clock
 synchronisation and the adaptive playback delay, the rule for members that fall behind, a player leaving, the standalone server - §12 to §17) and Phase 27 (12 October
 2026: a held seat and the rejoin, watchers on a delay and late ones, the recording as a replay file, the rules of the pace, the window client joining a server, a desync
-named by its parts - §18 and §19; `docs/NETWORK-DIAGNOSTICS.md`). Frame:
+named by its parts - §18 and §19; `docs/NETWORK-DIAGNOSTICS.md`) and Phase 28 (12 October 2026: the sealed transport and the server's key, limits with counted
+reactions, a room password, removing a member, orders nobody can give, who decides - §20 and §21; `docs/DEDICATED-SERVER.md` §9 to §13). Frame:
 `docs/MULTIPLAYER-PLAN.md` §2 (lockstep through a relay), `docs/SIMULATION-CORE.md` §45 to §47 (session core, the leave command), `docs/PRESENTATION-INPUT.md` §13 (command
 path, tick source), `docs/DEDICATED-SERVER.md` (the server as a program). Code: `src/CnCNew.Net` (messages, transport interface, loopback, client, clock synchronisation and
 playback control), `src/CnCNew.Net/Udp` (the UDP transport), `src/CnCNew.Server` (room and relay, the directory of rooms), `src/CnCNew.Game/Lockstep` (lockstep driver,
@@ -15,6 +16,11 @@ embedded server, the client without a window, the multi-client probe), `tools/Cn
 **What version 3 added to version 2** (§18): a rejoin token and a watch flag in the hello, the token in the welcome; `DesyncDetail`, `DesyncReport`, `SnapshotRequest`,
 `SnapshotOffer`, `SeatState` (messages 30 to 34); the reject reasons "seat not held" and "cannot catch up". No format of the simulation changed: command table 17,
 replay format 15 and every reference value are those of Phase 26. A version 2 client is rejected with the reason "protocol version".
+
+**What version 4 added to version 3** (§20), together with **transport version 2**: every datagram after the handshake is sealed, and the handshake carries a key
+exchange signed by the server's permanent key; the room verifier in the hello, `PasswordChallenge`, `PasswordResponse`, `Kick` (messages 35 to 37); the reject reasons
+"bad password" and "kicked", the drop reasons "kicked" and "flood", the end reason "server limit". No format of the simulation changed. A version 3 client is
+rejected with the reason "protocol version"; a datagram of transport version 1 is dropped and counted.
 
 ## 1. Model
 
@@ -270,10 +276,13 @@ here relies on IP fragmentation.
 | Offset | Field | |
 |---|---|---|
 | 0 | `u16` magic `0xC2CE` | anything else is not ours |
-| 2 | `u8` transport version, **1** | another version is dropped and counted |
+| 2 | `u8` transport version, **1** (Phase 26) - **2 since Phase 28** (§20.1) | another version is dropped and counted |
 | 3 | `u8` kind | 1 request, 2 challenge, 3 connect, 4 accept, 5 data, 6 close, 7 refuse |
 
 ### 12.3 Connection setup with a stateless cookie
+
+*(Transport version 1. Version 2 keeps the cookie and adds a key exchange to connect and accept, a second refuse reason, and seals data and close: the table of
+§20.1 replaces the one below; the rules under it hold unchanged.)*
 
 | Kind | Direction | Body | Length |
 |---|---|---|---|
@@ -913,3 +922,160 @@ run with real processes (5 s was); no human took part, and the window client's j
 ### 19.6 Closing measurements of Phase 27 (state `8f6f94f`)
 
 **Tier 4 with 44 of 44 steps ok** at `8f6f94f` (5,194 s; 0 warnings; all test programs; simulation, game, presentation and network tests at 30, 60 and 120 Hz; both manifests identical; the rate-equivalence suite; the long run; the client checks; `check-match`; `session-check`; `net-probe`; `net-match`; the new `net-robust`, `net-join` and `net-cross-os`; the staged scenes). `NetTool probe-suite` 48 of 48. Campaign at 60 Hz (missions stay local): reachability clean 24/24 and 24/24, audit 24 of 24 identical on a second run and after save/restore with end probes 13/24 and 15/24, objective driver victory 24/24 and defeat 24/24 - as before the phase. Performance of the simulation, the whole `scripts/perf-profile.ps1` before (`f25fa7a`) and after: the same final hashes, means within -2.4 % and +2.2 % (8 players: 832 against 834 µs per tick, maximum 139 against 146 ms). The reference manifest is untouched: Phase 27 has no manifest commit.
+
+## 20. An open port (Phase 28)
+
+A server that anybody can reach is sent everything: datagrams that are not ours, floods, old datagrams sent again, messages a client would never send, orders no
+player can give - and it is watched by whoever sits on the way. This section is what changed on the wire and in the room for that. The threat model, line by line with
+measure, test and residual risk, is `docs/DEDICATED-SERVER.md` §9; the server's configuration and operation are §10 to §13 there. Everything here is in the layers below
+and beside the simulation; of the simulation's formats only the command check changed (§20.6, `docs/SIMULATION-CORE.md` §49).
+
+### 20.1 What is new on the wire
+
+**Transport version 2** (it replaces §12.2 to §12.4 where they differ; a version 1 datagram is dropped and counted like any other datagram that is not ours):
+
+| Kind | Direction | Body after the 4-byte header (§12.2, version **2**) | Length |
+|---|---|---|---|
+| request | client → server | `u64` client nonce, 20 zero bytes | 32 |
+| challenge | server → client | `u64` client nonce, `u32` time slot, 16 bytes cookie | 32 |
+| connect | client → server | `u64` client nonce, `u32` time slot, 16 bytes cookie, 64 bytes exchange key of the client | 96 |
+| accept | server → client | `u64` client nonce, `u64` connection token, 64 bytes exchange key of the server, 64 bytes identity key of the server, 64 bytes signature | 212 |
+| refuse | server → client | `u64` client nonce, `u8` reason (1: the server is full, 2: this address holds as many connections as it may) | 13 |
+| data, close | both | `u64` connection token, `u64` datagram number, the sealed body, 16 bytes tag | 28 + body |
+
+**Protocol version 4** (a version 3 client is rejected with the reason "protocol version" and a text that names both versions):
+
+| | |
+|---|---|
+| `Hello` | one more field at its end: the room verifier, 64 hexadecimal digits or empty (§20.5) |
+| 35 `PasswordChallenge` | server → client: a nonce of 32 hexadecimal digits |
+| 36 `PasswordResponse` | client → server: the answer, 64 hexadecimal digits |
+| 37 `Kick` | host → server: the connection id of the member to remove |
+| reject reasons | 14 `BadPassword`, 15 `Kicked` |
+| drop reasons | 5 `Kicked`, 6 `Flood` |
+| end reason | 3 `ServerLimit` - the server ended the match because it reached a limit of the room (§20.4) |
+
+No format of the simulation changed: command table 17, replay format 15, world snapshot 10, match description encoding 2, session state 2, desync package 1.
+
+### 20.2 The key exchange, and who the server is
+
+- With its connect the client sends the public half of a key pair it made for this connection (ECDH on the curve P-256, X and Y as 32 bytes each). The server
+  makes one of its own - only now, for a sender that returned its cookie (§12.3) - and answers with it, with the public half of its **identity key** and with a
+  signature of the identity key (ECDSA P-256 with SHA-256, 64 bytes) over the **transcript**: a label, the client nonce, the connection token, both exchange keys and
+  the identity key. The client checks the signature before anything else; an accept whose signature does not verify is counted (`Malformed`) and ignored, and the client
+  goes on waiting for the real one.
+- Both ends compute the shared secret and derive from it, with HKDF-SHA-256 salted with the hash of the transcript, **two keys of 256 bits: one per direction**. The
+  two ends therefore never seal under the same key and number. The exchange keys are thrown away; a recording of the traffic cannot be opened later with the server's
+  identity key (forward secrecy).
+- **The identity key is the server.** `CnCNew.DedicatedServer` keeps it in a file (`keyFile`, PEM, made on the first start; without one the key lasts as long as the
+  process, with a warning) and prints its **fingerprint** - SHA-256 of the 64 public bytes, in hexadecimal - on its first line. An operator publishes the fingerprint
+  with the address.
+- **Whom a client trusts** is the decision of the client's host, which the transport asks with the identity key before it uses the connection:
+  a **pinned** fingerprint (`--server-key`; the harnesses pin the key their server printed) admits that key and no other; without one the client **trusts on first
+  use** - `CnCNew.Game.Lockstep.KnownServers`, a file of address and fingerprint (default `%LOCALAPPDATA%\CnCNew\known-servers.json`), remembers the key of the first
+  meeting and refuses the server when the key is another one later, with a message that names both fingerprints and says what to do. A refused server is told
+  nothing: the client closes with `UdpCloseReason.Untrusted` before it sends its hello.
+- What this is not: there is no certificate and nobody who vouches for a key. The first meeting of a client without a pinned fingerprint can be met by somebody
+  else (§20.7).
+
+### 20.3 A sealed datagram
+
+- Everything after the handshake - data and close - is sealed with **AES-256-GCM**: the 12 clear bytes in front (magic, version, kind, connection token) are
+  authenticated, everything behind the datagram number is encrypted and authenticated, the tag is 16 bytes. A datagram is **24 bytes longer** than in version 1; the
+  sizes follow (`MaxPlainBytes` 1,176; a reliable segment carries up to 1,135 bytes, an urgent fragment up to 1,131).
+- The **datagram number** counts from 1 per direction and is the nonce of the cipher (never twice under one key: a connection ends long before 2^64 datagrams). The
+  receiver keeps a **window of 1,024 numbers** behind the highest it has seen: a number it has seen, or one older than the window, is a repetition - counted
+  (`Replayed`) and dropped before anything of it is used. A datagram whose tag does not verify is counted (`Forged`) and dropped; **it does not even keep the
+  connection alive**, and it cannot close it: a close is sealed like data, so only the two ends of a connection can end it before its timeout.
+- The acknowledgement, the urgent messages and the segments of §12.4 are inside the sealed body, unchanged.
+- **What travels sealed** is therefore everything of the protocol of §3: the hello with the rejoin token and the room verifier, the welcome with the token, chat,
+  orders, hashes, states. **What somebody on the way still sees:** that the two addresses talk, when, and how many bytes; the 12 clear bytes; the handshake with the
+  server's public identity key.
+- All of it is the base class library (`ECDiffieHellman`, `ECDsa`, `AesGcm`, `HKDF`, `HMACSHA256`); the project wrote no cipher and added no package.
+
+### 20.4 What a stranger and a member may cost
+
+Every bound is an option with the default named here (transport: `UdpOptions`; room: `RelayOptions`; the server's configuration keys are in
+`docs/DEDICATED-SERVER.md` §9, with the reaction and the counter of each). The transport's:
+
+- **Handshake datagrams** are answered at most 10 a second per address (20 at once) and 2,000 a second for all senders together - the bound for senders that forge
+  their address; what is beyond is dropped unanswered and counted (`RateLimited`). The table of addresses holds 4,096 and starts anew when it is full.
+- **Key exchanges** - the one answer that costs the server milliseconds of a core (§21.2) - are done at most 100 a second for all senders together (400 at once).
+  A sender that is put off sends its connect again, as after a lost datagram.
+- **Connections per address:** 8 (people behind one router share an address); one more is refused with reason 2. **Connections in all:** 256.
+- **Bytes a connection may send the server:** 256 KiB a second in the long run and 8 MiB at once (a session state is sent as fast as the line carries it, §21.3). A
+  datagram beyond is dropped as the network would drop it; a peer that keeps that up for 10 s is closed (`UdpCloseReason.Flood`).
+- **What waits for a peer that does not acknowledge** is bounded (twice the largest message); beyond it the connection is closed instead of growing.
+- A **banned** address (the server's ban list) gets no answer at all, and its connections are closed when the ban is read.
+
+The room's:
+
+- **Messages per member:** 500 a second in the long run, 4,000 at once (a client at 120 Hz sends about 250 a second); a member beyond is dropped with `Flood`. The
+  one client of a local, client-paced match is exempt - there is nobody to protect from it.
+- **Time limits:** 10 s for the hello and for the answer to a password challenge; 180 s for loading (a member that does not finish is dropped with `TooSlow`, the
+  others start); 20 s of game time without the hash of a tick from a member that plays along (dropped with `ProtocolViolation` - the others' reports must not wait for
+  it for ever); 60 min for a lobby that never starts and for a room whose match is over.
+- **Memory of a room:** a session state is at most 4 MiB (measured: at most 775 KB, §19; the wire format still allows 64 MiB, the room does not); a match is at most
+  2 h of game time (a host that sets more is refused); the recording is at most 64 MiB of commands - a match that reaches it is ended with `ServerLimit` (a standard
+  match of an hour with six busy players is 3.3 MB); the agreed hashes are kept for the window of §18 only; at most 64 intents per player and tick (§5); states are
+  asked of members at most 6 times a minute (a join beyond is refused with `CannotCatchUp` and may try again).
+- Everything the embedded relay of a local game (`LocalRelay`) does is exempt: its limits are 0.
+
+### 20.5 A room with a password, and removing a member
+
+- The **password never travels**, not even inside the sealed connection, and the server never has it. The client derives a **verifier**: HMAC-SHA-256 with the
+  password as the key over a label and the room's name. The member that opens a room states the verifier in its hello, and the room keeps it.
+- Whoever enters later is sent a `PasswordChallenge` with a nonce the room never used before, and answers with HMAC-SHA-256 with the verifier as the key over the
+  nonce. The room compares in constant time. A wrong answer is rejected with `BadPassword`, counted, and the connection closed; an answer cannot be used again
+  because the nonce is new every time.
+- A client with a known **rejoin token** is not asked: the token was handed out inside the sealed connection to a member that had passed.
+- What it is and is not: a way to keep a room among people who know a word. The server sees the verifier and could enter the room itself; a verifier is as strong
+  as the password it was made from (somebody who has the verifier can try passwords against it without the server).
+- **`Kick`:** the host names a connection; the member is told (`Reject` with `Kicked`), its connection is closed, the others see it dropped with `Kicked`, and in a
+  running match its player leaves as after a lost connection (§14.2) - its seat is not held. The **origin** of the connection (its address without the port) may not
+  enter the room again as long as the room exists. Somebody else's kick request is refused with `NotHost`.
+
+### 20.6 Orders nobody can give, and who decides
+
+- **A command on the wire is an order of a player or it is nothing.** `CommandTypes.IsPlayerOrder` names the 24 of 34 command types a player gives; the other ten
+  (spawn, destroy, damage, kill, the timers, give money, give science points, set relationship, the leave) are the system's. `CommandWire.IsPlausible` - asked by the
+  relay for every intent before it is put into a bundle - refuses them like a command that is too long or has no header; the relay still decodes nothing.
+- **A command that does not decode is left out by every client alike.** The relay passes the bytes on unread, so an order with a plausible header and garbage behind
+  it reaches every client; each one fails to decode it in the same way, counts it (`LockstepDriver.UndecodableCommands`) and plays the tick without it. The server's
+  replay file leaves it out the same way, so it still plays to the agreed hash.
+- **A command with coordinates no map has is rejected by every simulation alike** (`docs/SIMULATION-CORE.md` §49): a point beyond 131,072 units or an angle beyond
+  1,024 radians in an order of a player is `InvalidArguments` at submission - before it could make the movement overflow (decision D-5).
+- **Somebody who watches decides nothing.** The hash of a tick is agreed, and the end of a match is declared, by the players that play along in time. A watcher's
+  report is compared with what they agreed on; a watcher whose hash differs is told (`Desync`, so that it writes its package), counted (`WatcherDesyncs`), logged
+  (`watcher-desync`) and dropped with `Desync`, and the match of the players goes on. A watcher that reports nothing, or never says the match is over, is waited for
+  by nobody. A match that only computer players play is decided by those who watch it.
+- **A player that lies about its hash still ends the match** - for everybody, as a desync: with two players nobody can say which one lies, and the relay cannot
+  check. This is the residual risk of a relay that does not simulate (§20.7; a proposal is decision D-24).
+
+### 20.7 What this does not protect
+
+- **The first meeting.** A client without a pinned fingerprint that meets a server for the first time believes whoever answers. From then on that key is the server.
+- **A server that is not honest.** The relay sees every order and every state in clear - it is one end of every sealed connection. It could withhold, delay or
+  reorder the orders of a player (it cannot forge the result: every client simulates, and a server-made command of a player's type is still checked by every
+  simulation), and it could hand a joiner a state of its own making only if the members' reported hashes matched it - they are the members' word, and the relay
+  compares them.
+- **A player that lies** (§20.6), and **cheats that need no lie**: every client holds the whole state of the match, so a changed client can show its user what the
+  fog hides. Lockstep does not prevent that, and this project has no anti-cheat (out of scope, `CLAUDE.md`).
+- **Volume.** The limits bound what one address and all senders together may make the server compute and remember; they do not make a line wider. A flood that
+  fills the server's line is the network's to stop.
+- **Traffic analysis**, and the handshake: somebody on the way sees that a client talks to this server, and for how long.
+
+### 20.8 Checks
+
+| Check | What it proves |
+|---|---|
+| `Net.Tests` "Sealed transport" | two ends derive the same keys and others do not; a tampered, truncated or replayed datagram is counted and changes nothing; a forged close does not close; a forged accept is ignored; a server with another key is refused before the hello; **somebody who records every datagram of a member can neither take its held seat nor displace its standing connection** |
+| `Net.Tests` "Secrets stay off the wire" | no datagram of a whole session - handshake, hello, welcome, rejoin - contains the rejoin token, the room verifier, the password answer, the chat text or an order in clear |
+| `Net.Tests` "Transport limits" | handshakes per address and in all, the ration of key exchanges, connections per address, a ban, bytes per connection, the backlog of a peer that does not acknowledge |
+| `Net.Tests` "Relay limits" | a flood of messages, a silent connection, a member that never loads or never reports a hash, the match length, the state size, joins per minute, the recording, an idle lobby - each with its counter and its reaction |
+| `Net.Tests` "Room password and kick" | the challenge and its answer, a wrong and a replayed answer, the rejoin without the question, the kick and the origin that may not come back |
+| `Net.Tests` "Hostile members" | whole matches (the multi-client probe, UDP in memory) in which a member sends garbage orders and system commands, floods, withholds its hashes or is kicked: the others end in the same state and the replay plays to it |
+| `Net.Tests` suite "Fuzz" | `docs/DEDICATED-SERVER.md` §9.4 |
+| `scripts/check-net-join.ps1` | real processes: a client told another key refuses the server and says nothing to it; the window client remembers the key of its first meeting |
+| `scripts/check-net-match.ps1`, `check-net-robustness.ps1`, `check-net-cross-os.ps1` | the checks of Phases 26 and 27, unchanged, now over the sealed transport with the server's key pinned |
+| `scripts/check-net-load.ps1` | eight rooms at once with members that vanish, leave and come back; the server ends empty (`docs/DEDICATED-SERVER.md` §11) |
