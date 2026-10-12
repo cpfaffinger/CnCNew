@@ -63,7 +63,7 @@ those of `scripts/test.ps1`; the commands are printed by `-Plan`.
 | `presentation` | `CnCNew.Presentation`, its tests, `PresentationTool` | `presentation` | `presentation-content`, `game` |
 | `ui` | `CnCNew.Ui`, its tests, `UiRenderTool` | `ui` | `game` |
 | `audio` | `CnCNew.Audio`, its tests | `audio` | `audio-content`, `game` |
-| `net` | `CnCNew.Net`, `CnCNew.Server`, `Net.Tests`, `NetTool`, `DedicatedServer` | `net` (`Net.Tests`, 60 Hz) | `net-30`, `net-120`, `net-probe` (four clients and four computer players on a real map with delay and jitter, in one process), `net-match` (the dedicated server, the UDP proxy and four client processes: a match with delay, jitter and loss, and one with a client that vanishes), `game` |
+| `net` | `CnCNew.Net`, `CnCNew.Server`, `Net.Tests`, `NetTool`, `DedicatedServer` | `net` (`Net.Tests`, 60 Hz) | `net-30`, `net-120`, `net-probe` (four clients and four computer players on a real map with delay and jitter, in one process), `net-match` (the dedicated server, the UDP proxy and four client processes: a match with delay, jitter and loss, and one with a client that vanishes), `net-robust` (a rejoin, a late and a delayed watcher, the server's replay played again, a desync named down to the field), `net-join` (the window client joins a match on a dedicated server; also in the gate of `client`), `game` |
 | `game` | `CnCNew.Game`, its tests, `CampaignTool` | `game-focus`: the suites of the touched folder (below) | `game` (all suites), `net` |
 | `client` | `CnCNew.Client.Stride` | – (build) | `check-spectator`, `check-dozer`, `check-hotkeys` |
 | `scripts` | `scripts/` | – : run the script you changed | – |
@@ -190,6 +190,23 @@ server must agree on every tick, and in the second match the server must drop th
 in Release itself. **Do not write source files while a tier runs:** the steps build their Release projects when they reach them, and a half-written file fails a later
 step. The measurement matrix (`NetTool net-matrix`: 36 lines with eight client processes, around an hour and a half) and the endurance match are checks by hand at the
 completion of a phase that touched the transport, the playback control or the relay's pacing; they need a quiet machine, because they measure real time.
+
+Since Phase 27 the gate of `net` and tier 4 contain two more checks with real processes, and tier 4 a third:
+
+- `net-robust` (`scripts/check-net-robustness.ps1`, around four minutes): three matches through the proxy - a player's connection dies and the player is back three
+  seconds later with its token, a watcher comes when the match runs, and the replay file the server wrote, played again, must arrive at the hash the clients agreed on;
+  a watcher on a delay of five seconds; a client that changes one object on purpose, where the server must report the desync and name the parts and
+  `NetTool desync-diff` must name tick, object and field from two packages.
+- `net-join` (`scripts/check-net-join.ps1`, around two minutes; also in the gate of `client`): the Release window client joins a room on the dedicated server as the
+  second player (`--smoke-test --join`), a client without a window is the host; the server must agree on the hashes of both in every tick, and orders of the window
+  client must go through the server and be executed. It needs a display, like the other client checks.
+- `net-cross-os` (`scripts/check-net-cross-os.ps1`, tier 4 only, around three minutes): the server and two clients run under Linux in the WSL distribution `Debian`,
+  two clients under Windows (`docs/DETERMINISM.md` §2d). **It needs something that is not a requirement of the repository** - a WSL distribution with the .NET runtime.
+  Where that is missing the script ends with exit code 3 and the tier shows the step as **NOT RUN**, with a warning under the table: not failed, and never passed. A
+  report of such a run names the step as not run. (`SKIPPED` remains what it was: a step without `game/content`.)
+
+The matrix and the endurance match stay checks by hand; since Phase 27 the endurance match is run with rejoins at three points in time and a late watcher
+(`docs/NETWORK-PROTOCOL.md` §19).
 
 What needs a human (pictures, sound, playability) is driven by `scripts/acceptance.ps1` (`docs/ACCEPTANCE.md`) and is
 never claimed by a test run.

@@ -1,12 +1,15 @@
 # The dedicated server
 
-Phase 26 (11 October 2026). `tools/CnCNew.DedicatedServer`: the relay of `docs/NETWORK-PROTOCOL.md` as a program of its own - **one process, one UDP port, several rooms**.
+Phase 26 (11 October 2026), extended by Phase 27 (12 October 2026: held seats, watchers on a delay and late ones, the replay file, the rules of the pace - §2, §3, §6,
+§8). `tools/CnCNew.DedicatedServer`: the relay of `docs/NETWORK-PROTOCOL.md` as a program of its own - **one process, one UDP port, several rooms**.
 It relays and nothing else: it loads no game data, simulates nothing and does not decode a command. It references `CnCNew.Net` and `CnCNew.Server` only (through them the
 simulation's command codec and match description); a test of `Net.Tests` enforces that it reaches neither `CnCNew.Content` nor `CnCNew.Game`, `CnCNew.Presentation` or a
 renderer, and that its source names none of them.
 
-**Not yet:** encryption, authentication, bans, rate limits beyond the connection and room limits, a listing of rooms, operation as a service, Linux as a host
-(`docs/MULTIPLAYER-PLAN.md`, Phases 27 to 29). The port of this version is for a LAN or a test, not for the open internet.
+**Not yet:** encryption, authentication, bans, rate limits beyond the connection and room limits, a listing of rooms, operation as a service
+(`docs/MULTIPLAYER-PLAN.md`, Phases 28 and 29). The port of this version is for a LAN or a test, not for the open internet. **Linux as a host** is not set up as a
+product (no package, no service unit), but the server built under Windows runs unchanged under Linux with the .NET runtime, and a check plays matches against it that
+way (`scripts/check-net-cross-os.ps1`, `docs/DETERMINISM.md` §2d).
 
 ## 1. Start
 
@@ -36,6 +39,14 @@ A JSON file (`--config`), overridden by the command line. **An unknown key in th
 | `lagThrottleMs` | `--lag-throttle-ms` | 2,000 | above this lag of a player the game is slowed for everybody; 0: the server neither slows nor drops for lag |
 | `throttleLimitMs` | `--throttle-limit-ms` | 10,000 | a member that stays above the limit this long is dropped |
 | `throttleSpeedPercent` | `--throttle-speed` | 50 | the share of the set game speed while the game is slowed |
+| `lagRecoveryMs` | `--lag-recovery-ms` | 30,000 | a member's used share of `throttleLimitMs` is forgotten only after it kept up for this long; 0: at once (the rule of Phase 26) |
+| `seatHoldMs` | `--seat-hold-ms` | 0 | how long the seat of a player whose connection was lost is kept for it to come back; 0: it leaves the match at once. Proposal for operation: 300,000 (five minutes) |
+| `spectatorDelayMs` | `--spectator-delay-ms` | 0 | how far behind the players somebody without a seat is sent the match; 0: at the same time. Proposal for operation: 120,000 |
+| `allowLateWatchers` | `--allow-late-watchers` | false | admit somebody without a seat to a match that already runs |
+| `pausesPerPlayer` | `--pauses-per-player` | 3 | how often a player may pause a match |
+| `maxPauseMs` | `--max-pause-ms` | 60,000 | a pause ends by itself after this time; 0: never |
+| `hostSetsSpeed` | `--anyone-sets-speed` | true | only the host sets the game speed (the option turns it off) |
+| `replayDir` | `--replay-dir` | (none) | where the recording of every match is written as a replay file when it is over (§8); empty: nowhere |
 | `connectionTimeoutMs` | `--timeout-ms` | 10,000 | a connection without a datagram for this long is lost |
 | `keepAliveMs` | | 1,000 | a silent connection sends a datagram this often |
 | `maxConnections` | | 256 | connections of the port; one more is refused |
@@ -58,7 +69,16 @@ The seeds of every match and the key of the connection cookies come from the sys
   `docs/MULTIPLAYER-PLAN.md` §7; the decision is the project owner's.
 - **A player that leaves, is dropped or loses its connection** leaves the match by a command in the next tick's bundle: by choice a living ally inherits, otherwise
   everything of the player dies (`docs/SIMULATION-CORE.md` §47). The match goes on for the others; when nobody is left it is abandoned.
-- Two clients that report different session hashes for a tick end the match as a desync; the server tells every reported hash.
+- **With `seatHoldMs`** a player whose connection is *lost* keeps its seat for that time and may come back with the token its client was given: it is handed the state
+  of another member, checked against the hash all agreed on, and plays on (`docs/NETWORK-PROTOCOL.md` §18.2). Only when the time is over does the player leave the
+  match. A player that leaves by choice or is dropped by the rule gets no held seat. The defaults of this version hold no seat and delay nobody: what a public server
+  should do is the owner's decision (D-19), and the proposals stand in the table.
+- **Somebody without a seat watches**: with `spectatorDelayMs` behind the players by that time, with `allowLateWatchers` also when the match already runs (§18.3 there).
+  A watcher's orders are discarded and counted.
+- **Pause and speed** of a match of several clients: only players ask; a player has `pausesPerPlayer` pauses, a pause ends when any player ends it or after
+  `maxPauseMs`; the speed is the host's (§18.5 there). There are no votes.
+- Two clients that report different session hashes for a tick end the match as a desync; the server tells every reported hash, and then in which parts of the hash
+  the clients differ (`docs/NETWORK-DIAGNOSTICS.md`).
 
 ## 4. Builds
 
@@ -78,15 +98,22 @@ One line per event on standard output: `ts=<milliseconds since the start> event=
 
 | Event | When | Details |
 |---|---|---|
-| `listening` | the port is bound | address, port, protocol and transport version, build, the limits and the rule's numbers, whether the fine timer is held |
+| `listening` | the port is bound | address, port, protocol and transport version, build, the limits and the rule's numbers, whether the fine timer is held, the operating system and runtime |
 | `connected` / `disconnected` | a client passed the cookie handshake / its connection is forgotten | address; at the end the reason and the connection's counters (datagrams, bytes, repetitions, round trip) |
 | `turned-away` | a connection never reached a room | reason: `no-hello`, `not-a-hello`, `server-full` |
 | `room-opened` / `room-closed` | first hello of a name / last connection gone | at the end: phase, ticks, last agreed tick, intents, discarded messages, slowed time, members dropped for lag, desync, tick intervals |
-| `joined` / `rejected` / `left` | a member of a room | connection, name, build / reason / player, reason, phase, tick |
+| `joined` / `rejected` / `left` | a member of a room | connection, name, build / reason / player, reason (`Closed`: after the end of the match), phase, tick |
+| `seat-held` / `seat-returned` / `seat-given-up` | a player's connection was lost / the player is back with its token / the time is over and the player leaves | player, name, time left / connection / tick |
+| `superseded` | a token arrived whose old connection still stood: the old one is closed as lost | connection, player, the new connection |
+| `snapshot-relayed` / `snapshot-refused` / `snapshot-late` | a member's state was passed on to a joiner / had another hash than the agreed one / did not come in time | to, from, tick, bytes / stated and agreed hash |
+| `joined-late` / `join-refused` | somebody stands at a state of the running match and is sent the bundles since / was turned away | connection, player, name, the state's tick, the server's tick, whether on a delay / reason |
+| `paused` / `resumed` | a player paused / somebody resumed, or the pause reached its limit | by, tick, pauses left |
 | `match-started` / `match-running` / `match-ended` | the host started / all have loaded / the end | map, tick rate, participants, members, pacing / tick, winner, reason, last agreed tick |
 | `behind` / `caught-up` | a member crosses the report or the slowing limit | connection, player, lag, whether it slows the game |
 | `throttled` / `full-speed` | the game is slowed / runs at the set speed again | tick, speed |
 | `desync` | two session hashes of one tick differ | tick, every reported hash |
+| `desync-parts` | clients have sent the parts of their hash at that tick | tick, every part that differs with each connection's value (`docs/NETWORK-DIAGNOSTICS.md` §3) |
+| `replay-written` / `replay-skipped` / `replay-failed` | a match is over and `replayDir` is set | file, bytes, ticks, last agreed tick and hash / why not / the error |
 | `status` / `room-status` | every `statusSeconds` | rooms, connections, handshake counters, memory / phase, members, tick, last agreed tick, speed, tick intervals |
 | `stopped` | the loop ends | rooms opened and closed |
 
@@ -97,5 +124,25 @@ One line per event on standard output: `ts=<milliseconds since the start> event=
 
 ```powershell
 pwsh scripts/check-net-match.ps1
+pwsh scripts/check-net-robustness.ps1   # a rejoin, a late and a delayed watcher, the replay file played again, a desync named down to the field
+pwsh scripts/check-net-join.ps1         # the window client joins a match on the server
+pwsh scripts/check-net-cross-os.ps1     # server and two clients under Linux in WSL, two clients under Windows
 dotnet run -c Release --project tools/CnCNew.NetTool -- net-match game/content --map "Maps/Twilight Flame/Twilight Flame.map" --humans 6 --ais 2 --watchers 2 --minutes 5 --delay 40 --jitter 10 --loss-percent 1 --out <directory outside the repository>
 ```
+
+## 8. The replay file of a match
+
+With `replayDir` the server writes, when a match is over - ended, broken by a desync, or left by everybody -, two files: `<room>-<number>.replay` and
+`<room>-<number>.replay.json`. The first is the match in the simulation's replay format (`docs/NETWORK-PROTOCOL.md` §18.4): the match description and every command
+the server sent, in the bundles' order; the computer players' commands are not in it, they decide again when the file is played. The second is a note: room, ticks,
+the **last tick the clients agreed on and its hash**, whether the match broke and at which tick, the server's build and protocol. The room name in the file name is
+reduced to letters, digits, `-` and `_`; the number counts the files of this run and skips names that exist. An hour of an eight-player match is a file of a few
+megabytes at most (the 60 s of the check: 5 KB).
+
+```powershell
+dotnet run -c Release --project tools/CnCNew.NetTool -- replay-check game/content <file.replay>
+```
+
+plays the file and compares the session hash with the note's: the server did not simulate, and that its file arrives at the hash the clients agreed on is what makes
+it the record of the match. A match that was continued from a saved state gets no file (`replay-skipped`): its recording does not begin at tick 0. The server keeps
+the recording in memory while the room exists (about 20 MB per hour of match); the memory is released with the room.

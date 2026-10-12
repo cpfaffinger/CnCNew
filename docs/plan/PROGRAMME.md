@@ -152,8 +152,8 @@ milestone status is updated in each stage document.
 | **R3** | **Changes release:** every change selectable, measured and accepted | – | open |
 | S4-M1 | Protocol, room, relay in the process; local skirmish over the network path | 25 | **done** (11 October 2026; `docs/NETWORK-PROTOCOL.md`) |
 | S4-M2 | Dedicated server, UDP, clock synchronisation, eight clients | 26 | **done on one machine** (12 October 2026; `docs/NETWORK-PROTOCOL.md` §12 to §17, `docs/DEDICATED-SERVER.md`); the second physical machine and the LAN are open |
-| S4-M3 | Desync diagnosis, rejoin, spectators, server replay | 27 | **current** (starting point continued after Phase 26, not begun) |
-| S4-M4 | Server operation and security | 28 | planned |
+| S4-M3 | Desync diagnosis, rejoin, spectators, server replay | 27 | **done on one machine** (12 October 2026; `docs/NETWORK-PROTOCOL.md` §18 and §19, `docs/NETWORK-DIAGNOSTICS.md`); votes not built (D-23); the second physical machine is open |
+| S4-M4 | Server operation and security | 28 | **current** (starting point continued after Phase 27, not begun) |
 | S4-M5 | Multiplayer in the client, latency perception, acceptance with humans | 29 | planned |
 | S4-M6 | Co-simulating server as an option (hybrid: rejoin without a donor, desync arbitration, authoritative spectating) | – | open; after S4-M3, optional (D-11) |
 | **R4** | **Multiplayer release:** server package (Windows, Linux), acceptance of LAN and internet matches | 30 | planned |
@@ -197,8 +197,9 @@ The sequence from here:
    (S1-M11, prerequisite of Phase 24; brief `docs/handoffs/HANDOFF-PHASE31.md`, D-12; `docs/SIMULATION-CORE.md` §44). In parallel and at any
    time: the acceptance run by the project owner (`pwsh scripts/acceptance.ps1`), whose findings feed S1-M8 to S1-M11.
 2. **Done (Phase 24, 11 October 2026):** the session core (S2-M7). The skirmish savegame debt is closed; the gate into Stage 4 is open.
-3. **Phases 25 and 26 done (11 and 12 October 2026); now Phase 27** (S4-M3): the network core up to rejoin and server replay. The second machine is still missing;
-   Phase 26 measured with separate processes on one machine and says so.
+3. **Phases 25, 26 and 27 done (11 and 12 October 2026)** (S4-M1 to S4-M3): the network core up to rejoin, watchers, desync diagnosis and server replay. The second
+   machine is still missing; Phases 26 and 27 measured with separate processes on one machine - Phase 27 also across Windows and Linux on it - and say so. **Next by
+   this order: the Stage 3 work that touches the simulation (item 4), then Phase 28;** the brief that is ready to be worked on is `HANDOFF-PHASE28.md`.
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and
@@ -243,17 +244,18 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-7 | The draw order of the roads depends on the rate (§7a no. 7) | unchanged | – | 2 |
 | D-8 | A standard skirmish ends after one hour of game time, also for a human (§7a no. 8) – the original has no such limit | unchanged | R1 | 1 |
 | D-9 | Assessing the balance after the AI corrections (ChinaTankGeneral 70 of 80 against AirForce) (§7a no. 10) | not assessed | – | 3 |
-| D-10 | The second physical machine with a different CPU (§7a no. 11, E1) | open; instructions in `docs/DETERMINISM.md` §4. Phase 26 ran without it (eight client processes on one machine); a second runtime environment that needs no hardware - Linux under WSL - needs the .NET runtime installed there | Phase 27 | 2 |
+| D-10 | The second physical machine with a different CPU (§7a no. 11, E1) | open; instructions in `docs/DETERMINISM.md` §4. Phase 26 ran without it (eight client processes on one machine); a second runtime environment that needs no hardware - Linux under WSL - needs the .NET runtime installed there | Phase 27 | 2 **Phase 27:** the runtime was installed in the WSL distribution with the owner's word; Linux and Windows agree on the manifest and in one match on this CPU (`docs/DETERMINISM.md` §2d). The second machine itself is open; the machine-only substitute is exhausted with this. |
 | D-13 | Known 30 Hz findings, each a fidelity fix with its own manifest: `SupplyMachine` overwrites a player's command in one frame; a magazine without reload time fires once more through a second command in the same tick; `QuantityModifier` not applied (one Red Guard instead of two); the unit comes into being at completion, not when the gate opens | fix, one cause per commit | R1 | 1 |
 | D-14 | `<This Team>` in a team's create script: fixed for AI sessions, not in the mission VM (changes manifest runs) | fix | R1 | 1 |
 | D-15 | Rank system (skill points per kill, `Rank.ini`, purchase points per rank): the simulation gives one purchase point every 90 s instead | implement as a rule of the game | R1 | 1 |
 | D-16 | Completing the original AI's C++ half (bridge repair, rebuild hole, cluster mines, prerequisite-free build path, placement without shroud; `docs/SKIRMISH-AI-ORIGINAL.md` §6.2) | leave as named deviations of the option | R1 | 1 |
-| D-17 | Rule for slow clients: how long to display, throttle, disconnect | display up to 2 s, throttle up to 10 s, then disconnect - **built with these defaults as configuration (Phase 26, `docs/NETWORK-PROTOCOL.md` §14); measured: a lost connection slows the others for 8 s at half speed, a client that only keeps up with the slowed game for 14.4 s in three incidents. Open: the numbers, the speed while slowed (50 %), and whether the count starts again after a recovery** | Phase 27 | 4 |
+| D-17 | Rule for slow clients: how long to display, throttle, disconnect | display up to 2 s, throttle up to 10 s, then disconnect - **built with these defaults as configuration (Phase 26, `docs/NETWORK-PROTOCOL.md` §14); measured: a lost connection slows the others for 8 s at half speed, a client that only keeps up with the slowed game for 14.4 s in three incidents. Open: the numbers, the speed while slowed (50 %), and whether the count starts again after a recovery** | Phase 27 | 4 **Phase 27: the restart of the count is configuration now (`lagRecoveryMs`, default 30 s: a member's used time is forgotten only after it kept up that long); a close after the end is logged as a close. The numbers stay a proposal.** |
 | D-18 | What happens to the objects of a player who dropped out | look up the original, propose, decide - **looked up (`MSG_SELF_DESTRUCT`) and built that way (Phase 26, `docs/SIMULATION-CORE.md` §47): a lost connection or a drop kills everything of the player (a tech building becomes neutral), leaving by choice hands objects and money to the first living ally. Open: whether that is wanted, above all once a seat can be held for a rejoin (D-19)** | Phase 27 | 4 |
-| D-19 | How long a seat is held for rejoining; spectator delay | 5 minutes; 120 s | Phase 27 | 4 |
+| D-19 | How long a seat is held for rejoining; spectator delay | 5 minutes; 120 s | Phase 27 | 4 **Phase 27: both built as configuration of the server (`seatHoldMs`, `spectatorDelayMs`, also `allowLateWatchers`); the defaults are 0 / 0 / off until decided, 5 minutes and 120 s stay the proposal. Measured: a rejoin after seconds on any line of 1 Mbit/s or more (`docs/NETWORK-PROTOCOL.md` §19.1). Also open here: whether a held seat should end the D-18 rule's killing of a lost player's objects earlier or later than the hold - today the objects stand until the hold is over.** |
 | D-20 | Server under Linux as a delivery target | yes | Phase 28 | 4 |
 | D-21 | `Display.UiScale = IntegerMultiple` as an alternative to the stretched command bar at 16:9 | stretched as in the original; integer scaling is an S3-M5 option | – | 3 |
 | D-22 | Should 120 Hz be selectable by a player in the finished game (30 Hz: no, test rate only – decided) | no, test rate | R2 | 2 |
+| D-23 | Votes in a multiplayer match (kick a player, end the match, change the speed): whether, and what they decide | not built; pause is limited per player and in length, the speed is the host's (`docs/NETWORK-PROTOCOL.md` §18.5). A further proposal of Phase 27: the server's hash interval 4 instead of 1 (6 KB/s less upstream per client, a desync noticed at most three ticks later; `docs/NETWORK-DIAGNOSTICS.md` §6) | Phase 29 | 4 |
 
 **Decided:**
 

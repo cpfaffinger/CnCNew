@@ -127,6 +127,35 @@ In addition, with the same binary (default 60 Hz) against the last 30 Hz files (
 phase, too, are checked only under Windows in the Release build, not across the matrix and not under Linux. Until the rows have been added, the following holds for 60 Hz: deterministic on one machine, under
 Windows, in the Release build, twice in a row.
 
+## 2d. Linux at 60 Hz, and a match across the two systems (Phase 27, 12 October 2026)
+
+The Linux row of §2c is measured, and a second kind of comparison exists: not one program run twice, but processes of two systems in **one** match.
+
+**The environment** (the project owner allowed it for this purpose): the WSL distribution `Debian` of the development machine (kernel 5.15.167.4-microsoft-standard-WSL2,
+x86_64) with the .NET runtime 10.0.12 installed by Microsoft's `dotnet-install.sh` into `~/.dotnet` - the runtime only, no SDK. The binaries are the ones built under
+Windows (`dotnet build -c Release`); a framework-dependent build is the same files on both systems, so nothing is built twice. Windows runs the same runtime version
+10.0.12. The machine is one AMD Ryzen 3 PRO 4350GE.
+
+| Row | How | Result |
+|---|---|---|
+| **Linux (WSL2), inputs** | `SimTool input-manifest check game/content baselines/input-manifest.json` under Linux, binaries of `4f7d5ca` | **identical** |
+| **Linux (WSL2), computation** | `SimTool reference-manifest check … --set full --jobs 6` under Linux, the same binaries | **50 of 50 runs identical** (60 Hz, schema 2) |
+| **One match, two systems** | `scripts/check-net-cross-os.ps1` (`NetTool net-match --linux server,2,4`): the dedicated server, its proxy and clients 2 and 4 are Linux processes, clients 1 and 3 Windows processes; three players, five computer players, a watcher, 45 s of game time through the proxy with 40 ms delay, 10 ms jitter, 1 % loss | **one hash chain** on all four clients (2,700 ticks), the server agreed on every tick |
+| **A state across the boundary** | the same, and the Linux client 2 loses its connection and joins again with the state the Windows client 1 wrote | the state loaded under Linux hashes to what the clients agreed on; all four end in the same state |
+
+Every process states its operating system itself (`Os` in a client's result, `os=` in the server's `listening` line), and the check fails if one ran elsewhere than
+asked. Without the WSL distribution or its runtime the check ends with exit code 3 and the tier shows the step as **NOT RUN** - never as passed
+(`docs/TESTING.md`).
+
+**What this proves.** The simulation, the command codec, the session state and its packing, the protocol and the transport give the same result under Windows and
+under Linux: two operating systems, two builds of the runtime with their own JIT back ends and libraries, a different C library, different sockets and a different
+timer. A state written under one system is read under the other. What §2 measured in 2026 for 30 Hz holds for the 60 Hz manifests.
+
+**What it does not prove.** It is the same CPU, and under WSL2 the same physical cores behind a virtual machine. Whether another vendor's or another generation's CPU,
+or ARM, computes the same is exactly as open as before: E1 stays open, and only §4 closes it. It is also the same runtime version on both sides; "a different .NET
+patch version" stays open. The switch and culture rows of §2c (tiered compilation, PGO, ReadyToRun, intrinsics, AVX2, server GC, the three cultures, the debug build)
+are **still not measured** at 60 Hz.
+
 ## 3. What follows from this and what does not
 
 - **Verified:** on one machine (AMD Ryzen 7 PRO 6850U, x64) the result is independent of JIT tier, PGO, ReadyToRun, hardware intrinsics, GC kind, culture, Debug/Release (quick set) and operating system

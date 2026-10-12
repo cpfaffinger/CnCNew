@@ -137,7 +137,7 @@ Not scheduled; each item is a phase of its own when the project owner picks it, 
 | Faster hash constructions (vision row by row; object hash with module hashes) | documented in `docs/PERF-VISION.md` §7.1, `docs/PERF-HASH.md` §6–§7; change every reference value | D-4 |
 | Allocation 8 KB per tick (target close to 0) | 3.7 KB of it in the AI | open |
 | The simulation on its own thread in the client | not in scope of Phase 19; what stands in the way is recorded: the presentation reads the running world through `SimulationQueries` and `FrameProjector` | open; a consequence of the two-stage command path (S2-M7) |
-| Snapshot format for transfer (E17): JSON 3.2 MB with 155 objects, 9.0 MB with 2,249; a compact binary format if the Brotli-compressed JSON exceeds the limits | measured in Phase 18; decided in Phase 27 | S4-M3 |
+| Snapshot format for transfer (E17): JSON 3.2 MB with 155 objects, 9.0 MB with 2,249; a compact binary format if the Brotli-compressed JSON exceeds the limits | measured in Phase 18; decided in Phase 27 | S4-M3 **Decided in Phase 27: the format stays** - packed with Brotli it is 82 to 775 KB and within every limit (`docs/NETWORK-DIAGNOSTICS.md` §7). |
 | Rate-dependent leftovers (`docs/TICKRATE-MIGRATION.md` §15.7.6): movers `× r`, healing slices, first frame, readers; 120 Hz survey | named | open |
 | Road draw order depends on the rate | named | D-7 |
 | 120 Hz as a player option | 30 Hz is a test rate (decided) | D-22 |

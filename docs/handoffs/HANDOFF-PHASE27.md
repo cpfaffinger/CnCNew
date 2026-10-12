@@ -1,5 +1,5 @@
 > **Stage:** 4 – Multiplayer · **Milestone:** S4-M3 Desync diagnosis, rejoin, spectators, server replay · **Phase:** 27
-> **Status:** current – starting point continued on 12 October 2026 after Phase 26 (section "Starting point after Phase 26"), not begun
+> **Status:** done on one machine on 12 October 2026 (`a8aa667`, `9875e18`, `2e74381`, `9d680fc`, `c0440ee`, `d42886f`, `db5a236`, `90b20ec`, `6ea31ae`, `8f6f94f`); votes not built; results in `docs/NETWORK-PROTOCOL.md` §18 and §19 and `docs/NETWORK-DIAGNOSTICS.md`; what it left is the "Starting point after Phase 27" of `HANDOFF-PHASE28.md`
 > **Predecessor:** HANDOFF-PHASE26.md · **Successor:** HANDOFF-PHASE28.md · **Results in:** docs/NETWORK-DIAGNOSTICS.md (new), docs/NETWORK-PROTOCOL.md, docs/DEDICATED-SERVER.md
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 

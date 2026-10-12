@@ -3266,3 +3266,24 @@ untouched, the pending command survives a snapshot and the live and the restored
 transfer the first living two-way ally owns everything and has the money, a one-way "ally" gets nothing, a rider that changed hands stays in its transport; with a dead ally
 everything dies and the last player with objects has won. In the network tests the same command arrives through a bundle after a leave, a lost line, a frozen and a too slow
 client, and the relay's recording with it replays into the same session hash (`docs/NETWORK-PROTOCOL.md` §15).
+
+## 48. Phase 27: the state hash taken apart (12 October 2026)
+
+Phase 27 (`docs/NETWORK-PROTOCOL.md` §18, `docs/NETWORK-DIAGNOSTICS.md`) needed two things from the simulation, and neither changes a result: no reference value, no
+format version and no hash moved (`CommandTypes.Version` 17, replay 15, `WorldSnapshot` 10, skirmish session state 2).
+
+**The parts of the hash** (`SimulationWorld.Diagnostics.cs`). The world composes its state hash from three sums it keeps up to date incrementally - objects, timers,
+pending commands (§37) - and the hash of everything else. `SimulationWorld.StateHashParts()` returns exactly these four values by name (`world.objects`,
+`world.timers`, `world.commands`, `world.global`); `SkirmishMatchSession.StateHashParts()` adds one part per computer player (`ai.player<N>`, the AI's own state hash of
+§45.1) and `session.counters` (victory tick, winner, end tick, the sequence counters). `SimulationWorld.CopyObjectHashes` copies the hash every object contributes, in
+id order. All three only read; the state hash is composed as before. Two sessions whose hash differs differ in at least one part - that is what the relay names at a
+desync, and the object table is what `NetTool desync-diff` names the object by.
+
+**A state that travels.** A member that joins a running match is handed the session state of another member: `SkirmishMatchSession.Save` and `Restore`, the pair of
+the skirmish savegame (§45.3), unchanged. What is new is who checks it: the relay passes the state on only when its stated session hash is the one all clients reported
+for the tick before it, and the receiver's `Restore` checks definitions, terrain and the state's own hash as it does for a file. The state is taken between two ticks.
+`Restore` therefore must reject every damaged document with one of its named exceptions - a client must not crash on a state from the wire; the test "a damaged state
+is turned away" feeds it one.
+
+**Not built for it:** no second, binary state format (measured and not needed, `docs/NETWORK-DIAGNOSTICS.md` §7); no script state among the parts (a
+`ScriptedSkirmishSession` is not played by several clients yet).

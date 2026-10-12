@@ -131,7 +131,25 @@ compatibility with old mods and savegames.
 - **Bottlenecks:** hash includes pending commands; garbage collection and long frames (a client catches up); clock drift
   without oscillation; coarse `Thread.Sleep` under Windows (tick interval histogram in the report).
 
-### S4-M3 Desync diagnosis, rejoin, spectators, server replay — planned (Phase 27)
+### S4-M3 Desync diagnosis, rejoin, spectators, server replay — done on one machine (Phase 27, 12 October 2026)
+
+- **Result** (commits `a8aa667`, `9875e18`, `2e74381`, `9d680fc`, `c0440ee`, `d42886f`, `db5a236`, `90b20ec`, `6ea31ae`, `8f6f94f`; `docs/NETWORK-PROTOCOL.md` §18 and §19, `docs/NETWORK-DIAGNOSTICS.md`, `docs/DEDICATED-SERVER.md`): protocol version 3. A desync is
+  named by the relay down to the parts of the hash and by `NetTool desync-diff` down to tick, object and field (a built-in error, on the fixture and with real
+  processes). A lost player keeps its seat for a configured time and comes back with a token; the state comes from a member through the server, which passes it on
+  only with the hash all agreed on; three rejoins in a match of an hour (minute 10, 30, 55: in time again after 0.6, 1.2 and 1.6 s), nine of nine clients in the same
+  state. Watchers on a delay and into a running match. The server writes every match as a replay file that plays to the clients' hash. Pause limited per player and
+  in length, the speed the host's. The window client joins a server (`LiveMatch.Join`, checked against a client without a window). The 60 Hz matrix again 36 of 36
+  lines identical (median +0.3 ms against Phase 26), 12 of 12 at 30 and 120 Hz and on a second map. Linux under WSL: the manifest 50 of 50, and one match of
+  Windows and Linux processes.
+- **Deviations from the brief, named:** the partial sums are not in every hash report but asked for after a desync (a client keeps them for its last 1,024 ticks);
+  the state format stays JSON packed with Brotli (measured: within every limit); the replay is played by `NetTool replay-check` and `SkirmishReplay.Play`, the
+  client has no replay viewer (S3-M3); **votes are not built** (D-23); the script state has no part of its own.
+- **Named rests:** the second physical machine and a real network (E1, D-10); no lobby screen - the window client is told its room on the command line (S4-M5); the
+  server's defaults hold no seat and delay nobody until D-19 is decided; no congestion control, so a state on a line of 256 kbit/s takes 15 s and delays the
+  orders of both ends meanwhile (S4-M4); D-5 (command check against the map bounds) was not touched and goes to Phase 28.
+
+*The plan as it stood:*
+
 
 - **Deliverables (`HANDOFF-PHASE27.md`):** hash reports with the partial sums of the world (objects, timers, pending
   commands, random streams, AI state per player, script state); the diagnostics package on a desync (match description,
@@ -148,7 +166,7 @@ compatibility with old mods and savegames.
   hash identical" for all factions); cost of the checkpoint on the donor; hash report rhythm against bandwidth. D-5 (command
   check against the map bounds) is decided here or in Phase 28.
 
-### S4-M4 Server operation and security — planned (Phase 28)
+### S4-M4 Server operation and security — current (Phase 28)
 
 - **Deliverables (`HANDOFF-PHASE28.md`):** the threat model in `docs/DEDICATED-SERVER.md`; limits and throttling (packets
   per sender before the handshake, messages and bytes per connection, intents per tick and player, sizes, connections per

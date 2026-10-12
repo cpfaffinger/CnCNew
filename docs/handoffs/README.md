@@ -7,8 +7,9 @@ status; the worked-off briefs keep their text as documents of their time (their 
 briefs of Phases 1 to 3 were never written as files (their scope and acceptance are in `docs/IMPLEMENTATION-PLAN.md`
 §1–§3).
 
-**The next brief to work on:** [HANDOFF-PHASE27.md](HANDOFF-PHASE27.md) – desync diagnosis, rejoin, spectators, server replay (S4-M3); its "Starting point" was continued with the state
-measured at the end of Phase 26 (dedicated server, UDP, clock synchronisation, eight client processes, [HANDOFF-PHASE26.md](HANDOFF-PHASE26.md), done on one machine on 12 October 2026; before it Phase 25, protocol, room and relay in the process, [HANDOFF-PHASE25.md](HANDOFF-PHASE25.md), done on 11 October 2026; before it Phase 24, the session core, [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md), done on 11 October 2026; before it Phase 31, the fidelity package A of Stage 1, [HANDOFF-PHASE31.md](HANDOFF-PHASE31.md), done on 10 October 2026). Phase numbers are identities, not an order: 31 ran before 24 by
+**The next brief to work on:** [HANDOFF-PHASE28.md](HANDOFF-PHASE28.md) – server operation and security (S4-M4); its "Starting point" was continued with the state measured
+at the end of Phase 27 (desync diagnosis, rejoin, watchers, server replay, the window client joining a server, [HANDOFF-PHASE27.md](HANDOFF-PHASE27.md), done on one machine on 12 October
+2026; before it Phase 26, dedicated server, UDP, clock synchronisation, eight client processes, [HANDOFF-PHASE26.md](HANDOFF-PHASE26.md), done on one machine on 12 October 2026; before it Phase 25, protocol, room and relay in the process, [HANDOFF-PHASE25.md](HANDOFF-PHASE25.md), done on 11 October 2026; before it Phase 24, the session core, [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md), done on 11 October 2026; before it Phase 31, the fidelity package A of Stage 1, [HANDOFF-PHASE31.md](HANDOFF-PHASE31.md), done on 10 October 2026). Phase numbers are identities, not an order: 31 ran before 24 by
 decision of the project owner.
 
 ## Stage 1 – Port (`../plan/STAGE-1-PORT.md`)
@@ -70,8 +71,8 @@ phase number is 32.
 |---|---|---|---|---|
 | **25** | [HANDOFF-PHASE25.md](HANDOFF-PHASE25.md) | **S4-M1** | Protocol, room, relay in the process; local skirmish over the network path | done (11 October 2026): `84a9459`, manifest `e0d6e01`, `64d632b`, `5f2406a`, `0b93f31`; `docs/NETWORK-PROTOCOL.md` |
 | **26** | [HANDOFF-PHASE26.md](HANDOFF-PHASE26.md) | **S4-M2** | Dedicated server, UDP, clock synchronisation, eight clients | done on one machine (12 October 2026): `3135af4`, `703c7f2`, manifest `4cbf535`, `41c5272`, `66428bf`, `4c2f372`, `b5443a6`, `02be419`, `1844afa`; `docs/NETWORK-PROTOCOL.md` §12 to §17, `docs/DEDICATED-SERVER.md`; the second machine and the LAN are open |
-| **27** | [HANDOFF-PHASE27.md](HANDOFF-PHASE27.md) | **S4-M3** | Desync diagnosis, rejoin, spectators, server replay | **current** – starting point continued after Phase 26, not begun |
-| 28 | [HANDOFF-PHASE28.md](HANDOFF-PHASE28.md) | S4-M4 | Server operation and security | planned |
+| **27** | [HANDOFF-PHASE27.md](HANDOFF-PHASE27.md) | **S4-M3** | Desync diagnosis, rejoin, spectators, server replay | done on one machine (12 October 2026): `a8aa667`, `9875e18`, `2e74381`, `9d680fc`, `c0440ee`, `d42886f`, `db5a236`, `90b20ec`, `6ea31ae`, `8f6f94f`; `docs/NETWORK-PROTOCOL.md` §18 and §19, `docs/NETWORK-DIAGNOSTICS.md`; votes not built, the second machine open |
+| **28** | [HANDOFF-PHASE28.md](HANDOFF-PHASE28.md) | **S4-M4** | Server operation and security | **current** – starting point continued after Phase 27, not begun |
 | 29 | [HANDOFF-PHASE29.md](HANDOFF-PHASE29.md) | S4-M5 | Multiplayer in the client, latency perception, acceptance with humans | planned |
 | – | – | S4-M6 | Co-simulating server as an option (hybrid, D-11) | open; after Phase 27 |
 

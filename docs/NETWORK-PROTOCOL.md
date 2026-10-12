@@ -1,7 +1,9 @@
-# Network protocol (version 2)
+# Network protocol (version 3)
 
 Phase 25 (11 October 2026: the protocol, the room, the relay, the local skirmish through it - §1 to §11) and Phase 26 (11 October 2026: the UDP transport, clock
-synchronisation and the adaptive playback delay, the rule for members that fall behind, a player leaving, the standalone server - §12 to §16). Frame:
+synchronisation and the adaptive playback delay, the rule for members that fall behind, a player leaving, the standalone server - §12 to §17) and Phase 27 (12 October
+2026: a held seat and the rejoin, watchers on a delay and late ones, the recording as a replay file, the rules of the pace, the window client joining a server, a desync
+named by its parts - §18 and §19; `docs/NETWORK-DIAGNOSTICS.md`). Frame:
 `docs/MULTIPLAYER-PLAN.md` §2 (lockstep through a relay), `docs/SIMULATION-CORE.md` §45 to §47 (session core, the leave command), `docs/PRESENTATION-INPUT.md` §13 (command
 path, tick source), `docs/DEDICATED-SERVER.md` (the server as a program). Code: `src/CnCNew.Net` (messages, transport interface, loopback, client, clock synchronisation and
 playback control), `src/CnCNew.Net/Udp` (the UDP transport), `src/CnCNew.Server` (room and relay, the directory of rooms), `src/CnCNew.Game/Lockstep` (lockstep driver,
@@ -9,6 +11,10 @@ embedded server, the client without a window, the multi-client probe), `tools/Cn
 
 **What version 2 added to version 1:** the room name in the hello; `Ping`/`Pong`, `LagState`, `Leave` (messages 26 to 29); the drop reason "too slow" and the reject reason
 "server full"; the leave of a player as a command inside a bundle (command table 17, replay format 15). A version 1 client is rejected with the reason "protocol version".
+
+**What version 3 added to version 2** (§18): a rejoin token and a watch flag in the hello, the token in the welcome; `DesyncDetail`, `DesyncReport`, `SnapshotRequest`,
+`SnapshotOffer`, `SeatState` (messages 30 to 34); the reject reasons "seat not held" and "cannot catch up". No format of the simulation changed: command table 17,
+replay format 15 and every reference value are those of Phase 26. A version 2 client is rejected with the reason "protocol version".
 
 ## 1. Model
 
@@ -28,7 +34,7 @@ Two builds can play together only if all of this is equal; the handshake compare
 
 | What | Where | Value now |
 |---|---|---|
-| Protocol version | `Protocol.Version` | 2 |
+| Protocol version | `Protocol.Version` | 3 |
 | Transport version (UDP datagrams, §12) | `UdpFormat.Version` | 1 |
 | Command table | `CommandTypes.Version` | 17 |
 | Replay format (the command codec) | `ReplayFormat.CurrentVersion` | 15 |
@@ -82,6 +88,7 @@ one player per tick.
 | 26 / 27 | `Ping` / `Pong` | client → server / server → client | the client's clock in microseconds, the last tick it completed / the client's clock as sent, the server's game time in microseconds, the speed it advances at in percent (0: it stands) (§13) |
 | 28 | `LagState` | server → all | connection, how far it is behind in milliseconds of game time (0: caught up), whether the game is slowed for it (§14) |
 | 29 | `Leave` | client → server | none: this client leaves the match by choice (§14) |
+| 30 to 34 | `DesyncDetail`, `DesyncReport`, `SnapshotRequest`, `SnapshotOffer`, `SeatState` | | version 3: §18.1, with the two fields it added to `Hello` and the one it added to `Welcome` |
 
 **A command on the wire** is the simulation's own command codec (`ReplayFormat.EncodeCommand`: `i64 tick, u16 type, i32 player, u64 sequence`, then the fields of the type) -
 the protocol invents no second encoding. A client sends an intent with tick 0 and sequence 0. The server checks the header (length, a known command type that is not the
@@ -180,10 +187,10 @@ starts.
 
 ## 9. Limits of this version
 
-No encryption, no authentication beyond the cookie of §12.3, no flood protection beyond the per-tick limit and the connection limit, no congestion control (Phase 28); no
-rejoin, no spectator joining a running match, no desync diagnosis below "this tick" (27); pause and speed in a server-paced room may be asked by any player without a rule
-(29); the setup screen is not yet a room others can join, and the window client has no entry to a foreign server - only the client without a window joins one (29); a
-room's listing does not exist: a client must know the name of its room (29).
+No encryption, no authentication beyond the cookie of §12.3 and the rejoin token of §18.2, no flood protection beyond the per-tick limit and the connection limit, no
+congestion control (Phase 28); no votes (§18.5); the setup screen is not yet a room others can join, and the window client reaches a foreign server only by its command
+line - there is no lobby screen (29); a room's listing does not exist: a client must know the name of its room (29). *Closed by Phase 27 (§18):* rejoin, a watcher
+joining a running match, the desync diagnosis below "this tick", a rule for pause and speed, the window client's entry to a foreign server.
 
 ## 10. Measured (11 October 2026, 60 Hz, build `0b93f31`)
 
@@ -637,3 +644,272 @@ Eight client processes (six players, two watchers; two computer players), **60 m
 **Not run:** the determinism matrix; the survey over 320 matches; the commands-only agent; `sync-perf` of the game layer; `scripts/acceptance.ps1`; the matrix at 30 and
 120 Hz and on other maps. **Not possible in this phase:** a second physical machine (E1, D-10) and with it the LAN measurement; Linux as a second environment (the WSL
 distribution of the development machine has no .NET runtime). **No human has seen** a match through the dedicated server.
+
+## 18. When something goes wrong, and when somebody comes late (Phase 27)
+
+Phase 26 ran a match as long as nothing went wrong. This section is what the protocol does about the three things that are certain to happen in operation: a client's
+state diverges, a connection is lost, somebody wants to watch. **Protocol version 3.** The transport is unchanged (version 1).
+
+### 18.1 What is new on the wire
+
+| No. | Message | Direction | Fields |
+|---|---|---|---|
+| 1 | `Hello` | client → server | as before, and: **rejoin token** (`u64`; 0: none), **watch** flag (ask to watch a match that already runs) |
+| 2 | `Welcome` | server → client | as before, and: the **rejoin token** of this connection (0: this server hands out none) |
+| 30 | `DesyncDetail` | client → server | tick, the parts of this client's session hash at that tick: name (48 bytes) and value, at most 32. Sent once, after a `Desync` |
+| 31 | `DesyncReport` | server → all | tick, the parts in which the clients differ, with the value of every connection that sent its detail |
+| 32 | `SnapshotRequest` | server → one client | request number: hand over the state of your session, for somebody who joins |
+| 33 | `SnapshotOffer` | client → server | request number, a resume state (as in a start request: tick, session hash, orders so far per human player, the state) |
+| 34 | `SeatState` | server → all | player, what became of its seat (held, returned, given up), milliseconds it is held for |
+
+`RejectReason` 12 `SeatNotHeld` (the token opens no seat: never in this match, or the time is over) and 13 `CannotCatchUp` (no member could hand over a state and the match
+is too long to play again; the state built does not hash to the match; the match was not built in time). All seven travel on the reliable channel; none depends on its
+place between two bundles. A snapshot offer may carry a state of up to 64 MiB like a start request.
+
+### 18.2 A seat that is held, and the way back into a running match
+
+**The token.** A server that holds seats (`RelayOptions.SeatHoldMs` > 0) or admits latecomers gives every connection a token in its `Welcome`, drawn from the server's
+seed source (the dedicated server: the system's cryptographic generator). It is the only proof of "I am the client that sat here"; it is 64 bits, sent once in each
+direction, and never to another member.
+
+**Held.** In a server-paced match a player whose connection is **lost** (transport timeout; superseded, see below) does not leave the match: its seat is held for
+`SeatHoldMs`. The room tells everybody (`SeatState` held) and logs `seat-held`; the simulation is told nothing - the player's units stand and fight as units without
+orders do, and nobody else is slowed (a held seat has no member that could be behind). A player that **leaves by choice** (`Leave`), is dropped for a protocol violation
+or for being too slow gets no held seat. When the time is over the room logs `seat-given-up`, tells everybody, and only now issues the `PlayerLeaveCommand` in the next
+bundle (§14.2) - "seat held" changes *when* that command comes, not what it does.
+
+**Back.** A hello with a token while the match runs: if the token is that of a held seat, the connection gets the seat's player number (`seat-returned`). If the token is
+that of a connection that still stands - the client was restarted, or came back on another address before the transport noticed the old one is dead - the old connection
+is closed as lost and its seat held and returned in the same step (`superseded`); the first rejoin over real sockets found that case. A token nobody was given is turned
+away with `SeatNotHeld`. The joiner is `Joining`: it is sent no bundles, is not asked for hashes and is not measured by the lag rule.
+
+**The state comes from a member, checked by the server without simulating.** The room asks one member that plays in time for its state (`SnapshotRequest`; the first by
+connection number that was not asked yet). The member writes the state of its session between two ticks - at a tick whose predecessor it reported a hash for - and
+sends it with that tick and its session hash (`SnapshotOffer`). The server never looks into the state. It waits until **every** member that plays in time has reported
+the tick before the state's tick, and passes the state on only if the stated hash is the one they agreed on. A state with another hash - damaged on its way, made up,
+or written by a client that has itself diverged - goes nowhere (`snapshot-refused`), and the next member is asked; so is the next one when a member does not answer
+within 30 s (`snapshot-late`) or disconnects. The joiner gets an ordinary `MatchStart` with the description, its player number and the state as resume state, builds
+the session, and reports `Loaded` with the hash of what it built. If that is not the agreed hash the joiner is turned away (`join-refused`, `CannotCatchUp`) and the
+seat is held again for the rest of its time: nobody plays on a state that does not hash to the match. A client that cannot even read the state reports hash 0, which is
+the same refusal.
+
+**Catching up.** After a correct `Loaded` the room sends `AllLoaded` with the state's tick (`joined-late`) and then every bundle since, from its recording, at most 512
+ticks ahead of what the joiner has completed. The joiner plays them as fast as its frame allows (bundles of the past are due at once) and is `CatchingUp` until it is
+less than the report limit behind: until then it is not waited for in the agreement of hashes (what it reports is still compared with the hash the others agreed on,
+and a difference is a desync like any other) and does not slow the game. A joiner that has not caught up after `CatchUpLimitMs` (five minutes) is dropped as too slow.
+The bundles a server closed before it began to send to the joiner are not counted as late arrivals by the joiner's playback (§13.2); before that was so, a joiner
+played a second behind the others for half a minute.
+
+**Without a member that can give its state** (none is left that plays in time, or all were refused) the joiner is sent the match as it began and every bundle since -
+the fallback of the brief. It is allowed up to `CatchUpLimitTicks` (432,000: two hours at 60 Hz) and refused beyond (`CannotCatchUp`). At the catch-up speed measured in
+Phase 23 (26-fold at 60 Hz for eight players) an hour of match is a little over two minutes.
+
+**The order numbers** of a player continue: the state carries, per human player, how many commands the session has taken from it, as a saved match does (§5).
+
+### 18.3 Watchers: on a delay, and late
+
+A watcher is a member without a seat, as before; what it sends as orders is discarded and counted, as before.
+
+**Delay** (`RelayOptions.SpectatorDelayMs`): in a server-paced match every bundle goes to a member without a seat that much later than to the players - the room keeps a
+position per member in its recording (`NextBundle`) and sends up to the tick that was closed the delay ago. The watcher's clock answer (`Pong`) is behind by the same
+time, so its playback follows the delayed stream like any stream. Its hash reports arrive late and are compared with the hash the players agreed on for that tick, which
+the room remembers for the delay and thirty seconds more: a watcher that diverges is found like a player. A delayed watcher is not part of the agreement, of the end of
+the match or of the lag rule. When the match ends the players are told at once; a delayed watcher is told when it has been sent the last bundle, and the room stays
+until it has. A local game (one member, client-paced) has no delay.
+
+**Late** (`RelayOptions.AllowLateWatchers`): a hello with the watch flag while the match runs is admitted without a seat. Without a delay it joins exactly as a
+returning player does, by the state of a member. **With a delay it must not be handed the present** - the state of a member is the match as it is now, which is what
+the delay withholds - so it is sent the match as it began and plays the recording up to its delayed position (the catch-up limit applies). A server that does not admit
+latecomers answers `MatchRunning`, as before.
+
+### 18.4 The recording as a file
+
+`RelayServer.Recording` holds the description and every bundle, as since Phase 25. `CnCNew.Net.RecordingFile.ToReplay` writes them in the simulation's own replay
+format (version 15): the description in the header, the commands of the bundles each with its player's order number as sequence, no computer players' commands - they
+are slots of the description and decide again when the file is played (`SkirmishReplay.Play`). A leave is a command of a bundle and therefore in the file. The room
+writes nothing itself (the layer rule: `CnCNew.Server` opens no file); `RoomDirectory.TryTakeFinished` hands a finished room to its host once - when the match ended,
+or when everybody walked away from it - and the dedicated server writes the file and a note beside it (`docs/DEDICATED-SERVER.md` §8). The server's memory still grows
+with the match (about 20 MB an hour, §16.4); it is released when the room is closed, and the file is what stays. A match that was continued from a saved state does not
+begin at tick 0 and gets no file.
+
+`CnCNew.NetTool replay-check <content> <file>` plays the file and compares the session hash with the last one the clients of that match agreed on, from the note. The
+relay never simulated; that its file leads to the clients' hash is what makes it the record of the match.
+
+### 18.5 The pace: pause, speed, and the rule for members that fall behind
+
+**In a server-paced match** only players may ask for a pause or a speed (`PaceRequest` of a watcher is refused, `InvalidRequest`). A player may **pause**
+`PausesPerPlayer` times a match (3); a pause ends when any player ends it or after `MaxPauseMs` (60 s; 0: no limit), whichever is first (`paused`, `resumed` in the
+log). The **speed** is the host's to set unless `HostSetsSpeed` is off. A local game keeps its own pause and speed without limits. None of it is a command: pause and
+speed are the server's clock, and the simulation sees ticks.
+
+**Votes are not built.** The brief names them next to the pause; nothing in this phase needs one, and what a vote would decide (kick a player, end a match, change the
+speed) is the owner's to say (D-23). The place for it is here: a request, a state the server broadcasts, a result that is either server state (speed, pause) or a
+command of a bundle (a leave).
+
+**The lag rule** (§14.1) had two weak points on record (D-17). (1) A member that can only keep up with the slowed game recovered whenever the game was slowed, its count
+of slowed time began again, and three incidents carried it for 14.4 s instead of 10. Now a member's count is forgotten only after it has been below the report limit
+for `LagRecoveryMs` (30 s; 0 restores the rule of Phase 26): a member that falls behind again within that time uses up the rest of the same 10 s. (2) A connection that
+closed after the match had ended was logged as `ConnectionLost`; it is logged as `Closed` and told to the others as a leave. The numbers stay a proposal.
+
+### 18.6 The window client joins a server
+
+`CnCNew.Game.Lockstep.RemoteRelay` is what `LocalRelay` is for the embedded server: a UDP socket, the transport, the protocol client and the system's clock
+(`SystemNetClock`). `LiveMatch.Join(data, remote, viewport)` builds the match the server describes - or loads the state a member handed over -, reports its hash, and
+from then on takes every tick and every command from the server through the same `LockstepDriver` as a local match; the driver is server-paced and follows the server's
+clock (§13.2). A joined match hands over its own state when the server asks, answers a desync with the parts of its hash and writes its package (§18.7). There is **no
+lobby screen**: the client is told the room on its command line (`--join ADDRESS:PORT --room NAME --seat N` or `--watch`), enters it, takes the seat as the host set it
+and waits for the host's start. The lobby is Phase 29.
+
+### 18.7 A desync, named
+
+The relay ends the match at the first tick two hash reports differ for and tells everybody (`Desync`), as before. New: every client then sends the **parts** of its
+session hash at that tick (`DesyncDetail`), the relay compares them and tells everybody in which parts the clients differ (`DesyncReport`; `desync-parts` in the log,
+repeated as further details arrive), and every client writes a **package** from which `CnCNew.NetTool desync-diff` names the tick, the objects and the fields. The parts
+are not in every hash report - that would have made every report several times larger for the one tick in a million that needs them; a client keeps the parts of its
+last 1,024 ticks instead and is asked when it matters. The parts, the package, the tool and the procedure are `docs/NETWORK-DIAGNOSTICS.md`.
+
+### 18.8 Checks
+
+`tests/CnCNew.Net.Tests/Phase27Tests.cs` (five tests, on a clock set by hand; at 30, 60 and 120 Hz): a lost client takes its held seat again over the loopback and over
+the UDP transport in memory with loss, and plays on in step; with a hash every fourth tick; too late, the seat is given up; a damaged state is turned away by the one
+who loads it and by the relay; a state with another hash than the agreed one goes nowhere; a made-up token opens no seat; a token whose connection still stands takes
+the seat over; watchers on a delay and late ones play the same states, their orders are discarded, one that diverged is found; a desync is named by the relay down to
+the part and by the packages down to object and field; the recording as a file replays into the clients' hash; the rules of the pace; the recovery time of the lag
+rule; a close after the end.
+
+With real processes on real sockets (`docs/TESTING.md`): `scripts/check-net-robustness.ps1` (step `net-robust`: a rejoin, a late watcher and the server's replay played
+again; a watcher on a delay; a desync and `desync-diff`), `scripts/check-net-join.ps1` (step `net-join`: the window client against a client without a window on a
+dedicated server), `scripts/check-net-cross-os.ps1` (step `net-cross-os`: server and two clients under Linux in WSL, two under Windows; a rejoin across the boundary).
+
+## 19. Measured in Phase 27 (12 October 2026, 60 Hz unless stated, build `8f6f94f`, Windows, Release)
+
+One machine (AMD Ryzen 3 PRO 4350GE, four cores), every process its own: the dedicated server, the UDP proxy, one `NetTool client` per member, on the loopback
+interface; quiet machine, warmed-up processes. As in §16, nothing here crossed a cable.
+
+### 19.1 A rejoin on five lines (`net-match --disturb 1:rejoin:18000:3000`)
+
+Three players and five computer players on Twilight Flame. In minute five (tick 18,000) the connection of player 2 dies without a word; three seconds later the same
+process is back with its token, before the server's timeout noticed the dead connection. The state it is handed is 3.4 MB of JSON, packed 84 to 97 KB; the giver
+needs 36 to 47 ms to write and pack it. Times are from the moment the server has the token.
+
+| Line (delay / jitter / loss, rate) | State passed on by the server after | Joiner stands at the state after | then behind by | Joiner plays in time again after | All clients in the same state at the end |
+|---|---|---|---|---|---|
+| 40 ms / 10 ms / 1 % | 0.15 s | 0.36 s | 24 ticks | 0.36 s | yes |
+| 150 ms / 30 ms / 3 % | 0.80 s | 1.67 s | 107 ticks | 2.07 s | yes |
+| 80 ms / 30 ms / 10 % | 0.48 s | 1.40 s | 89 ticks | 1.69 s | yes |
+| 40 ms / 10 ms / 1 %, 1 Mbit/s | 1.69 s | 4.37 s | 265 ticks | 4.76 s | yes |
+| 40 ms / 10 ms / 1 %, 256 kbit/s | 6.04 s | 15.06 s | 844 ticks | 21.36 s | yes |
+
+- **On a line of a megabit or more a player is back in the match two to five seconds after its client connects again**, on a good line in under half a second. The
+  time is the state travelling twice (member to server, server to joiner) over the reliable channel, which has no congestion control: on a narrow line the state
+  fills the queue of the line and is partly sent again.
+- **At 256 kbit/s it takes 15 s to load and 21 s to be in time**, and for that time the line is busy with the state: the joiner's orders are executed 2 to 3 s late
+  until it has caught up, and the member that gives the state has its own orders delayed while it sends (95 % of its orders within 0.83 s instead of 0.2 s). It
+  works, and nobody else is slowed for it. That is why the wait for a member's state is 30 s (it was 10 s before this measurement). A state of a late match is 230 KB
+  packed (`docs/NETWORK-DIAGNOSTICS.md` §7) - two and a half times this one.
+- The first measurement of this table found the joiner playing a second behind for half a minute on the lossy lines (in time only after 12.7 s and 7.7 s): its
+  playback counted the backlog as late arrivals. With the backlog left out (§18.2) it is 2.1 s and 1.7 s.
+- While the dead connection still stood, the lag rule slowed the others for 1.2 to 3.3 s (§14.1) - the price of a client that vanishes, not of the rejoin: the
+  slowing ends the moment the token arrives.
+
+### 19.2 The matrix again (`NetTool net-matrix`, as §16.1: eight client processes, 100 s per line)
+
+The protocol, the relay's sending (a position per member) and the playback changed in this phase; the matrix is the comparison with Phase 26.
+
+| Delay | Jitter | Loss | Hashes identical | Order to execution: median | 95 % | 99 % | Phase 26: median / 99 % | Playback delay | Waits (of 48,000 ticks) | Up B/s | Down B/s | Phase 26: up / down |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 10 ms | 0 ms | 0 % | yes (8 of 8) | 33 ms | 39 | 60 | 33 / 116 | 15 ms | 712 | 6,051 | 6,218 | 6,031 / 6,003 |
+| 10 ms | 0 ms | 1 % | yes (8 of 8) | 44 ms | 51 | 70 | 43 / 65 | 24 ms | 442 | 6,271 | 6,344 | 6,254 / 6,312 |
+| 10 ms | 0 ms | 3 % | yes (8 of 8) | 50 ms | 53 | 69 | 50 / 86 | 30 ms | 157 | 6,261 | 6,145 | 6,241 / 6,050 |
+| 10 ms | 10 ms | 0 % | yes (8 of 8) | 49 ms | 53 | 60 | 49 / 58 | 24 ms | 158 | 7,685 | 7,712 | 7,680 / 7,573 |
+| 10 ms | 10 ms | 1 % | yes (8 of 8) | 50 ms | 66 | 83 | 50 / 70 | 30 ms | 399 | 7,554 | 7,658 | 7,543 / 7,608 |
+| 10 ms | 10 ms | 3 % | yes (8 of 8) | 64 ms | 70 | 102 | 63 / 87 | 37 ms | 304 | 7,507 | 7,483 | 7,464 / 7,399 |
+| 10 ms | 30 ms | 0 % | yes (8 of 8) | 79 ms | 92 | 103 | 77 / 101 | 44 ms | 113 | 9,248 | 9,380 | 9,187 / 9,011 |
+| 10 ms | 30 ms | 1 % | yes (8 of 8) | 80 ms | 90 | 101 | 81 / 108 | 46 ms | 254 | 9,189 | 8,959 | 9,236 / 9,349 |
+| 10 ms | 30 ms | 3 % | yes (8 of 8) | 83 ms | 100 | 103 | 82 / 113 | 50 ms | 378 | 9,180 | 9,074 | 9,175 / 9,052 |
+| 40 ms | 0 ms | 0 % | yes (8 of 8) | 99 ms | 102 | 108 | 99 / 129 | 45 ms | 288 | 9,880 | 9,783 | 9,911 / 10,046 |
+| 40 ms | 0 ms | 1 % | yes (8 of 8) | 100 ms | 116 | 146 | 100 / 134 | 54 ms | 434 | 9,859 | 9,532 | 9,845 / 9,427 |
+| 40 ms | 0 ms | 3 % | yes (8 of 8) | 106 ms | 117 | 135 | 107 / 168 | 60 ms | 143 | 9,857 | 9,318 | 9,879 / 9,496 |
+| 40 ms | 10 ms | 0 % | yes (8 of 8) | 107 ms | 118 | 122 | 107 / 119 | 54 ms | 59 | 9,882 | 9,827 | 9,916 / 10,103 |
+| 40 ms | 10 ms | 1 % | yes (8 of 8) | 115 ms | 119 | 125 | 114 / 134 | 59 ms | 398 | 9,879 | 9,688 | 9,890 / 9,800 |
+| 40 ms | 10 ms | 3 % | yes (8 of 8) | 117 ms | 131 | 135 | 116 / 137 | 67 ms | 281 | 9,863 | 9,378 | 9,879 / 9,507 |
+| 40 ms | 30 ms | 0 % | yes (8 of 8) | 139 ms | 151 | 162 | 135 / 154 | 74 ms | 110 | 9,891 | 9,907 | 9,877 / 9,773 |
+| 40 ms | 30 ms | 1 % | yes (8 of 8) | 141 ms | 158 | 186 | 134 / 164 | 76 ms | 233 | 9,870 | 9,631 | 9,872 / 9,665 |
+| 40 ms | 30 ms | 3 % | yes (8 of 8) | 145 ms | 158 | 170 | 145 / 182 | 79 ms | 391 | 9,882 | 9,519 | 9,912 / 9,789 |
+| 80 ms | 0 ms | 0 % | yes (8 of 8) | 167 ms | 182 | 189 | 167 / 187 | 86 ms | 239 | 9,898 | 9,891 | 9,910 / 10,022 |
+| 80 ms | 0 ms | 1 % | yes (8 of 8) | 181 ms | 187 | 204 | 182 / 250 | 95 ms | 407 | 9,898 | 9,794 | 9,853 / 9,491 |
+| 80 ms | 0 ms | 3 % | yes (8 of 8) | 183 ms | 198 | 206 | 183 / 213 | 100 ms | 164 | 9,911 | 9,709 | 9,841 / 9,189 |
+| 80 ms | 10 ms | 0 % | yes (8 of 8) | 183 ms | 199 | 202 | 184 / 201 | 94 ms | 65 | 9,901 | 9,891 | 9,918 / 10,091 |
+| 80 ms | 10 ms | 1 % | yes (8 of 8) | 192 ms | 201 | 204 | 194 / 219 | 99 ms | 382 | 9,861 | 9,537 | 9,911 / 9,914 |
+| 80 ms | 10 ms | 3 % | yes (8 of 8) | 200 ms | 211 | 227 | 200 / 222 | 107 ms | 288 | 9,885 | 9,547 | 9,882 / 9,458 |
+| 80 ms | 30 ms | 0 % | yes (8 of 8) | 216 ms | 232 | 242 | 215 / 237 | 115 ms | 95 | 9,908 | 10,032 | 9,907 / 10,021 |
+| 80 ms | 30 ms | 1 % | yes (8 of 8) | 215 ms | 233 | 246 | 217 / 247 | 115 ms | 252 | 9,871 | 9,605 | 9,908 / 9,934 |
+| 80 ms | 30 ms | 3 % | yes (8 of 8) | 222 ms | 237 | 250 | 224 / 256 | 119 ms | 388 | 9,897 | 9,607 | 9,857 / 9,297 |
+| 150 ms | 0 ms | 0 % | yes (8 of 8) | 316 ms | 320 | 331 | 316 / 331 | 155 ms | 603 | 9,921 | 10,033 | 9,891 / 9,794 |
+| 150 ms | 0 ms | 1 % | yes (8 of 8) | 326 ms | 335 | 352 | 325 / 340 | 164 ms | 422 | 9,868 | 9,515 | 9,849 / 9,439 |
+| 150 ms | 0 ms | 3 % | yes (8 of 8) | 333 ms | 336 | 369 | 333 / 382 | 170 ms | 155 | 9,891 | 9,551 | 9,878 / 9,456 |
+| 150 ms | 10 ms | 0 % | yes (8 of 8) | 332 ms | 337 | 339 | 331 / 341 | 164 ms | 175 | 9,845 | 9,469 | 9,877 / 9,714 |
+| 150 ms | 10 ms | 1 % | yes (8 of 8) | 332 ms | 343 | 352 | 333 / 578 | 170 ms | 382 | 9,924 | 10,032 | 9,868 / 9,528 |
+| 150 ms | 10 ms | 3 % | yes (8 of 8) | 336 ms | 350 | 354 | 335 / 364 | 177 ms | 265 | 9,921 | 9,836 | 9,891 / 9,537 |
+| 150 ms | 30 ms | 0 % | yes (8 of 8) | 355 ms | 368 | 380 | 353 / 372 | 184 ms | 73 | 9,883 | 9,796 | 9,911 / 10,049 |
+| 150 ms | 30 ms | 1 % | yes (8 of 8) | 356 ms | 369 | 381 | 358 / 382 | 186 ms | 269 | 9,886 | 9,701 | 9,892 / 9,787 |
+| 150 ms | 30 ms | 3 % | yes (8 of 8) | 364 ms | 380 | 416 | 363 / 400 | 190 ms | 378 | 9,893 | 9,600 | 9,871 / 9,422 |
+
+**36 of 36 lines hash-identical on all clients**, the server agreed on every tick; 16,195 orders, no resync, never slowed, no gen-2 collection. Against Phase 26,
+over the 36 lines: the median of order to execution +0.3 ms, the 99 % value -10 ms, upstream +5 B/s, downstream +17 B/s per client - the same within what two runs
+of one line differ by.
+
+**Other rates and another map** (four lines each, the same eight processes):
+
+| Rate, map | Line | Hashes identical | Order to execution: median / 95 % / 99 % | Playback delay | Waits | Up / down B/s |
+|---|---|---|---|---|---|---|
+| 30 Hz, Twilight Flame | 10 / 0 / 0 | yes (8 of 8) | 33 / 35 / 67 ms | 16 ms | 100 | 2,473 / 2,664 |
+| | 40 / 10 / 1 | yes | 132 / 150 / 168 ms | 68 ms | 248 | 5,519 / 6,206 |
+| | 80 / 30 / 1 | yes | 232 / 246 / 270 ms | 120 ms | 197 | 5,733 / 6,147 |
+| | 150 / 30 / 3 | yes | 394 / 408 / 434 ms | 203 ms | 224 | 5,753 / 6,302 |
+| 120 Hz, Twilight Flame | 10 / 0 / 0 | yes (8 of 8) | 30 / 50 / 124 ms | 16 ms | 457 | 14,144 / 14,777 |
+| | 40 / 10 / 1 | yes | 105 / 111 / 117 ms | 55 ms | 523 | 18,830 / 17,156 |
+| | 80 / 30 / 1 | yes | 210 / 223 / 227 ms | 113 ms | 279 | 18,817 / 17,036 |
+| | 150 / 30 / 3 | yes | 353 / 368 / 374 ms | 192 ms | 372 | 18,870 / 17,162 |
+| 60 Hz, Fortress Avalanche | 10 / 0 / 0 | yes (8 of 8) | 33 / 36 / 56 ms | 15 ms | 193 | 6,087 / 6,318 |
+| | 40 / 10 / 1 | yes | 118 / 122 / 136 ms | 60 ms | 373 | 9,957 / 10,276 |
+| | 80 / 30 / 1 | yes | 222 / 279 / 453 ms | 118 ms | 253 | 9,940 / 10,070 |
+| | 150 / 30 / 3 | yes | 362 / 379 / 386 ms | 190 ms | 366 | 9,918 / 9,781 |
+
+All twelve lines are hash-identical. An order waits for a tick to end: at 30 Hz it is executed 15 to 30 ms later than at 60 Hz on the same line, at 120 Hz about
+10 ms earlier; the bandwidth follows the number of bundles (about half at 30 Hz, about twice at 120 Hz). The second map behaves like the first.
+
+### 19.3 A whole standard match with three rejoins (`NetTool net-match --minutes 60`, 40 ms / 10 ms / 1 %)
+
+As §16.4 - six players, two watchers, two computer players, 216,000 ticks - and: the connections of players 2, 3 and 4 die at minute 10, 30 and 55 and come back
+five seconds later with their tokens; a third watcher joins the running match at minute 20; the server holds seats for five minutes and writes its replay.
+
+| | Minute 10 | Minute 30 | Minute 55 |
+|---|---|---|---|
+| State on the wire (packed) | 198 KB | 469 KB | 775 KB (7.9 MB of JSON) |
+| State passed on by the server after | 0.31 s | 0.47 s | 0.59 s |
+| Joiner stands at the state after | 0.59 s | 1.07 s | 1.42 s |
+| Joiner plays in time again after | 0.59 s | 1.20 s | 1.58 s |
+
+**Nine of nine clients end in the same state** (the six that played from the start with one hash chain over all 216,000 ticks, the three that rejoined and the late
+watcher with the same final session hash), the server agreed on every tick, 63,282 orders, order to execution median 116 / 95 % 120 / 99 % 187 ms, no resync, no
+desync. The others were slowed for 9.6 s in total - three times about three seconds while a dead connection still stood (§19.1). Per client 10.4 KB/s up and
+14.2 KB/s down (the three states and the backlog of four joiners included). **The server's replay file** is 3.3 MB for the hour; `NetTool replay-check` plays it in
+250 s and arrives at the hash the clients agreed on for the last tick. The server's managed memory was 23 MB at the end.
+
+### 19.4 Two operating systems in one match
+
+`scripts/check-net-cross-os.ps1` (`docs/DETERMINISM.md` §2d): the server, its proxy and two clients as Linux processes under WSL, two clients as Windows processes,
+through the proxy with 40 ms / 10 ms / 1 % - one hash chain on all four over 2,700 ticks; and with a rejoin, where the Linux client loads the state a Windows client
+wrote (13.6 KB packed, loaded after 0.41 s). Order to execution median 115 ms, as between Windows processes. The Linux reference manifest: 50 of 50 runs identical.
+
+### 19.5 What these measurements do not show
+
+Everything of §16.5 still holds: one machine, the loopback interface, a proxy instead of a network - and under WSL a virtual switch instead of a cable. In addition:
+a rejoin was measured with a client that comes back after three or five seconds, not after minutes (the catch-up from the start of a long match is covered by a
+test on the synthetic fixture only); the narrow line is a model (one queue, tail drop), not a measured DSL or mobile line; a watcher on a delay of 120 s was not
+run with real processes (5 s was); no human took part, and the window client's joined match was played in a smoke test (§18.6).
+
+### 19.6 Closing measurements of Phase 27 (state `8f6f94f`)
+
+**Tier 4 with 44 of 44 steps ok** at `8f6f94f` (5,194 s; 0 warnings; all test programs; simulation, game, presentation and network tests at 30, 60 and 120 Hz; both manifests identical; the rate-equivalence suite; the long run; the client checks; `check-match`; `session-check`; `net-probe`; `net-match`; the new `net-robust`, `net-join` and `net-cross-os`; the staged scenes). `NetTool probe-suite` 48 of 48. Campaign at 60 Hz (missions stay local): reachability clean 24/24 and 24/24, audit 24 of 24 identical on a second run and after save/restore with end probes 13/24 and 15/24, objective driver victory 24/24 and defeat 24/24 - as before the phase. Performance of the simulation, the whole `scripts/perf-profile.ps1` before (`f25fa7a`) and after: the same final hashes, means within -2.4 % and +2.2 % (8 players: 832 against 834 µs per tick, maximum 139 against 146 ms). The reference manifest is untouched: Phase 27 has no manifest commit.

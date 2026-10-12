@@ -578,3 +578,24 @@ A skirmish no longer uses the local scheduler and the local driver: `LockstepDri
 - The lockstep probe of a skirmish (`LiveMatch.UseInputDelay`, `--input-delay-ticks`) lives in the driver: it holds every order N ticks before it sends it.
 - `SkirmishSessionCommandSink` and `MissionCommandSink` are removed. A mission, a staged scene and a headless test use `CommandPath` with the local scheduler and
   `LocalTickDriver`, or submit to the session themselves.
+
+### 13.7 Since Phase 27: a match on a server somewhere else
+
+`LiveMatch.Join(data, remote, viewport)` is the third entry of a skirmish beside `Create` and `Restore` (`docs/NETWORK-PROTOCOL.md` §18.6). Nothing of the command path
+or the tick source is new: the same `LockstepDriver` is `ITickDriver` and `ICommandScheduler`, only its client talks to a `RemoteRelay` (a UDP socket and the system's
+clock) instead of the embedded `LocalRelay`. What differs for the viewer follows from the room being server-paced:
+
+- A tick is released when its bundle has arrived **and** its playback time is reached (`PlaybackControl`); the seconds a frame hands to `Advance` are not what moves
+  the match. A smoke test, whose frames are fixed steps, therefore plays a joined match in real time; `--join-until-tick T` ends it by the tick instead of by `--frames`.
+- An order is executed some ticks after it was given (`ICommandSink.DelayTicks`: the playback delay plus the way to the server); `StandingOrders` wait that long, as
+  with the lockstep probe of §13.3.
+- Pause and speed are requests the server may refuse (§18.5 there); `LiveGame.Paused` and `Speed` show what the server says.
+- What a frame produced - orders, hash reports - is sent at the end of `Advance` (`LiveGame.OnAdvanced`), not with the next frame.
+- The viewer plays the seat the room gave the client (`MatchSetup.LocalSlot`); without a seat the match is a spectator's (`MatchSetup.Spectator`), with the spectator's
+  sink that refuses orders.
+
+The client's options: `--join ADDRESS:PORT [--room NAME] [--seat N | --watch] [--player-name NAME]`, and for the check `scripts/check-net-join.ps1`
+`--join-until-tick T`, `--join-order-every N` (every N ticks one unit of the viewer is ordered to move, through `LiveGame.Commands` - the sink the HUD uses),
+`--join-result FILE`, `--diagnostics DIR`. Exit code 4 and one line on standard error when the server is not there, the room turns the client away or the match cannot
+be built here. **There is no screen for any of it** - no server address field, no list of rooms, no lobby with other people's names; the shell's skirmish setup still
+opens the embedded server. That is Phase 29. **Not verified:** a human has not seen a joined match; the check plays it in a smoke test.

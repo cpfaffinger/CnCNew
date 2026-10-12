@@ -49,8 +49,11 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   (`docs/NETWORK-PROTOCOL.md`), and **the local skirmish already runs through them**: an embedded server, a connection inside the process, one client. Several
   clients with a world each stay hash-identical in one process. Since Phase 26 there is a UDP transport of its own, clock synchronisation with an adaptive playback
   delay, a rule for clients that fall behind, and a **dedicated server** as a program (`docs/DEDICATED-SERVER.md`): eight client processes without a window play whole
-  matches through it and a UDP proxy with identical hashes on every line of a matrix of delay, jitter and loss (`docs/NETWORK-PROTOCOL.md` §16). All of it on one
-  machine: no second computer has taken part, and the window client cannot join a server yet.
+  matches through it and a UDP proxy with identical hashes on every line of a matrix of delay, jitter and loss (`docs/NETWORK-PROTOCOL.md` §16). Since Phase 27 a
+  match survives what goes wrong (`docs/NETWORK-PROTOCOL.md` §18, `docs/NETWORK-DIAGNOSTICS.md`): a player whose connection is lost keeps its seat and comes back
+  with the state of another member, somebody can watch on a delay or join a running match, the server writes every match as a replay file, a desync is named down
+  to tick, object and field, and the window client can join a server (`--join`, no lobby screen yet). All of it on one machine: no second computer has taken part -
+  only a second operating system on the same one (Linux under WSL plays in one match with Windows).
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,
