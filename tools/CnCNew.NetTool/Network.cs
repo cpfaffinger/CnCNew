@@ -167,6 +167,26 @@ static partial class NetTool
         public double WorkingSetMbAtStart { get; init; }
         public double WorkingSetMbAtEnd { get; init; }
         public string Build { get; init; } = string.Empty;
+        /// <summary>The operating system and runtime the process ran on: what a match across the boundary of two systems is checked by.</summary>
+        public string Os { get; init; } = string.Empty;
+        public string Runtime { get; init; } = string.Empty;
+        /// <summary>The tick this client's session began at: 0, or the tick of the state it joined the running match with.</summary>
+        public long JoinedAtTick { get; init; }
+        /// <summary>A rejoin: the tick the connection was dropped at, the bytes of the state as it came over the wire, milliseconds from the new connection to the state
+        /// being loaded and to the client playing at the head of the match again.</summary>
+        public long RejoinGoneAtTick { get; init; } = -1;
+        public int RejoinStateBytes { get; init; }
+        public double RejoinLoadedMs { get; init; }
+        public double RejoinCaughtUpMs { get; init; }
+        /// <summary>States this client handed over to a joiner, and what the last one cost.</summary>
+        public int SnapshotsOffered { get; init; }
+        public int SnapshotStateBytes { get; init; }
+        public int SnapshotPackedBytes { get; init; }
+        public double SnapshotMs { get; init; }
+        public long DesyncTick { get; init; } = -1;
+        public string DesyncParts { get; init; } = string.Empty;
+        public string Corrupted { get; init; } = string.Empty;
+        public string Package { get; init; } = string.Empty;
     }
 
     private static readonly JsonSerializerOptions ResultJson = new() { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
@@ -194,7 +214,12 @@ static partial class NetTool
         var slowFrom = Number(args, "--slow-from-tick", 0);
         var hitchAt = Number(args, "--hitch-at-tick", -1);
         var hitchMs = (int)Number(args, "--hitch-ms", 500);
-        var disturbance = leaveAt >= 0 ? $"leave@{leaveAt}" : vanishAt >= 0 ? $"vanish@{vanishAt}" : freezeAt >= 0 ? $"freeze@{freezeAt}" : slowMs > 0 ? $"slow {slowMs} ms from {slowFrom}" : hitchAt >= 0 ? $"hitch {hitchMs} ms @{hitchAt}" : string.Empty;
+        var watch = args.Contains("--watch");
+        var rejoinAt = Number(args, "--rejoin-at-tick", -1);
+        var rejoinAfterMs = (int)Number(args, "--rejoin-after-ms", 2_000);
+        var corruptAt = Number(args, "--corrupt-at-tick", -1);
+        var diagnostics = Option(args, "--diagnostics");
+        var disturbance = rejoinAt >= 0 ? $"rejoin@{rejoinAt}" : corruptAt >= 0 ? $"corrupt@{corruptAt}" : leaveAt >= 0 ? $"leave@{leaveAt}" : vanishAt >= 0 ? $"vanish@{vanishAt}" : freezeAt >= 0 ? $"freeze@{freezeAt}" : slowMs > 0 ? $"slow {slowMs} ms from {slowFrom}" : hitchAt >= 0 ? $"hitch {hitchMs} ms @{hitchAt}" : string.Empty;
 
         var data = GameData.Load(args[1], modelGeometry: true, rate: rate);
         var loaded = Load(data, mapPath);
@@ -225,13 +250,28 @@ static partial class NetTool
 
         var clock = new SystemNetClock();
         using var timer = new FineTimer();
-        using var socket = new UdpSocketChannel(new IPEndPoint(server.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0));
-        var endpoint = new UdpClientEndpoint(socket, server, clock, BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8)));
-        var headless = new HeadlessClient(endpoint.Connection, name, data.Templates, data.Fingerprint, LoadMap, room, clock, generatorSalt: (uint)Number(args, "--salt", 0)) { KeepHashes = false };
+        UdpSocketChannel socket = null!;
+        UdpClientEndpoint endpoint = null!;
+        // A connection of its own and a client on it; with a token the client asks for the seat it had (docs/NETWORK-PROTOCOL.md section 18.2).
+        HeadlessClient Connect(ulong token)
+        {
+            socket = new UdpSocketChannel(new IPEndPoint(server.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0));
+            endpoint = new UdpClientEndpoint(socket, server, clock, BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8)));
+            return new HeadlessClient(endpoint.Connection, name, data.Templates, data.Fingerprint, LoadMap, room, clock, generatorSalt: (uint)Number(args, "--salt", 0), rejoinToken: token, watch: watch)
+            {
+                KeepHashes = false, CorruptAtTick = corruptAt, DiagnosticsDirectory = diagnostics,
+            };
+        }
+        var headless = Connect(0);
         var client = headless.Client;
         Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=started name={name} seat={seat} server={server} room=\"{room}\" build={client.Identity.Id} targetTick={target}"));
 
-        bool configured = false, seated = false, endReported = false, left = false, frozen = false, hitched = false;
+        bool configured = false, seated = false, endReported = false, left = false, frozen = false, hitched = false, rejoined = false, loadedSeen = false, caughtUp = false;
+        long goneAtTick = -1, backAtMicros = -1, desyncAtMicros = -1;
+        double loadedMs = 0, caughtUpMs = 0;
+        var stateBytes = 0;
+        var ticksBefore = 0L;
+        var offered = (Count: 0, StateBytes: 0, PackedBytes: 0, Micros: 0L);
         long lastStartRequest = long.MinValue, matchStartMicros = -1, matchEndMicros = -1, bytesSentAtStart = 0, bytesReceivedAtStart = 0, endReportedAt = 0;
         var problem = string.Empty;
         var bufferSamples = new List<double>();
@@ -315,6 +355,46 @@ static partial class NetTool
                 foreach (var lag in client.Lag.Values) maxLag = Math.Max(maxLag, lag.LagMs);
                 if (client.Phase == ClientPhase.InMatch) minSpeed = Math.Min(minSpeed, client.Paused ? 0 : client.SpeedPercent);
 
+                if (headless.SnapshotsOffered > offered.Count)
+                {
+                    offered = (headless.SnapshotsOffered, headless.LastSnapshot.StateBytes, headless.LastSnapshot.PackedBytes, headless.LastSnapshot.Micros);
+                    Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=snapshot-offered name={name} tick={headless.Tick} stateBytes={offered.StateBytes} packedBytes={offered.PackedBytes} ms={offered.Micros / 1000.0:F1}"));
+                }
+                if (rejoined && backAtMicros >= 0)
+                {
+                    if (!loadedSeen && headless.Session is not null)
+                    {
+                        loadedSeen = true;
+                        loadedMs = (now - backAtMicros) / 1000.0;
+                        stateBytes = client.Start?.Resume?.State.Length ?? 0;
+                        Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=rejoin-loaded name={name} tick={headless.JoinedAtTick} wireBytes={stateBytes} ms={loadedMs:F0}"));
+                    }
+                    // At the head of the match again: no more than a quarter of a second of bundles waits to be played.
+                    if (loadedSeen && !caughtUp && headless.Driver is { Playback.Synced: true } && client.NewestBundleTick - headless.Tick <= rate.TicksPerSecond / 4)
+                    {
+                        caughtUp = true;
+                        caughtUpMs = (now - backAtMicros) / 1000.0;
+                        Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=rejoin-caught-up name={name} tick={headless.Tick} ms={caughtUpMs:F0}"));
+                    }
+                }
+                // The connection is gone without a word, and after a while the same player is back with its token.
+                if (rejoinAt >= 0 && !rejoined && headless.Tick >= rejoinAt && client.Phase == ClientPhase.InMatch)
+                {
+                    rejoined = true;
+                    goneAtTick = headless.Tick;
+                    ticksBefore = headless.TicksPlayed;
+                    var token = client.RejoinToken;
+                    Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=connection-dropped name={name} tick={goneAtTick} token={(token != 0 ? "yes" : "none")}"));
+                    socket.Dispose();
+                    Thread.Sleep(rejoinAfterMs);
+                    headless = Connect(token);
+                    client = headless.Client;
+                    lastPhase = client.Phase;
+                    backAtMicros = clock.Microseconds;
+                    lastLoop = backAtMicros;
+                    matchStartMicros = -1;
+                    continue;
+                }
                 // What the harness asked this client to do to the match.
                 if (hitchAt >= 0 && !hitched && headless.Tick >= hitchAt)
                 {
@@ -353,7 +433,10 @@ static partial class NetTool
             if (headless.Problem.Length > 0) { problem = headless.Problem; break; }
             if (client.Phase == ClientPhase.Rejected) { problem = $"rejected ({client.Rejection!.Reason}): {client.Rejection.Text}"; break; }
             if (endpoint.State == UdpClientState.Failed) { problem = "no connection to the server"; break; }
-            if (client.Phase == ClientPhase.Ended) break;
+            // After a desync the relay still names the parts the clients differ in: this client waits a few seconds for that.
+            if (client.Desync is not null && desyncAtMicros < 0) desyncAtMicros = now;
+            if (client.Phase == ClientPhase.Ended && (client.Desync is null || client.DesyncReport is not null || now - desyncAtMicros > 5_000_000)) break;
+            if (client.Phase == ClientPhase.Ended) { socket.WaitReadable(frameMicros); continue; }
             if (!frozen && endpoint.State == UdpClientState.Closed) { if (!left && !endReported) problem = $"the connection was closed ({endpoint.Link.CloseReason}) at tick {headless.Tick}"; break; }
             // The others have not all reported their end (one was dropped, or is behind): this client has played what it was asked to.
             if (endReported && now - endReportedAt > 20_000_000) break;
@@ -383,10 +466,16 @@ static partial class NetTool
         var seconds = matchStartMicros < 0 ? 0 : (matchEndMicros - matchStartMicros) / 1_000_000.0;
         var statistics = endpoint.Link.Statistics;
         using var self = Process.GetCurrentProcess();
-        var disturbed = disturbance.Length > 0 && !disturbance.StartsWith("hitch", StringComparison.Ordinal);
+        var disturbed = disturbance.Length > 0 && !disturbance.StartsWith("hitch", StringComparison.Ordinal) && !disturbance.StartsWith("rejoin", StringComparison.Ordinal);
+        if (client.Desync is not null && problem.Length == 0) problem = Invariant($"the server reported a desync at tick {client.Desync.Tick}");
         var result = new ClientResult
         {
-            Name = name, Seat = seat, Player = client.Player, Problem = problem, Phase = client.Phase.ToString(), Disturbance = disturbance, TargetTick = target, TicksPlayed = headless.TicksPlayed,
+            Name = name, Seat = seat, Player = client.Player, Problem = problem, Phase = client.Phase.ToString(), Disturbance = disturbance, TargetTick = target, TicksPlayed = ticksBefore + headless.TicksPlayed,
+            Os = System.Runtime.InteropServices.RuntimeInformation.OSDescription, Runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+            JoinedAtTick = headless.JoinedAtTick, RejoinGoneAtTick = goneAtTick, RejoinStateBytes = stateBytes, RejoinLoadedMs = loadedMs, RejoinCaughtUpMs = caughtUpMs,
+            SnapshotsOffered = offered.Count, SnapshotStateBytes = offered.StateBytes, SnapshotPackedBytes = offered.PackedBytes, SnapshotMs = offered.Micros / 1000.0,
+            DesyncTick = client.Desync?.Tick ?? -1, DesyncParts = client.DesyncReport is { } report ? string.Join("; ", report.Parts.Select(part => part.Name)) : string.Empty,
+            Corrupted = headless.Corrupted, Package = headless.PackageWritten ?? string.Empty,
             Ok = problem.Length == 0 && headless.Tick >= target && !disturbed,
             HashChain = headless.HashChain.ToString("X16", CultureInfo.InvariantCulture), FinalSessionHash = (headless.Session?.StateHash() ?? 0).ToString("X16", CultureInfo.InvariantCulture),
             IntentsSent = client.IntentsSent, LatencyMs = Spread.Of(headless.LatencyMicros.Select(value => value / 1000.0)), LatencyTicks = Spread.Of(headless.LatencyTicks.Select(value => (double)value)),
@@ -400,6 +489,7 @@ static partial class NetTool
             WorkingSetMbAtStart = workingStart, WorkingSetMbAtEnd = self.WorkingSet64 / (1024.0 * 1024.0), Build = client.Identity.Id,
         };
         if (resultFile is not null) File.WriteAllText(resultFile, JsonSerializer.Serialize(result, ResultJson));
+        socket.Dispose();
         Console.WriteLine(Invariant($"ts={clock.Milliseconds} event=finished name={name} ok={(result.Ok ? "true" : "false")} ticks={result.TicksPlayed} hashChain={result.HashChain} latencyMsMedian={result.LatencyMs.Median:F1} p99={result.LatencyMs.P99:F1} stalls={result.Stalls} problem=\"{problem}\""));
         return result.Ok || disturbed ? 0 : 1;
     }
@@ -542,7 +632,14 @@ static partial class NetTool
 
     private sealed record MatchRow(string Label, Impairment Impairment, bool Identical, string Problem, int Clients, int Finished, long Ticks, string HashChain, Spread LatencyMs, double BufferMs, double BufferMinMs,
         double PlaybackDelayMs, long Stalls, long Resyncs, double BytesUpPerSecond, double BytesDownPerSecond, long ClientRetransmissions, long ServerRetransmissions, long ServerUrgentRepeated,
-        long ServerUrgentOmitted, double RoundTripMs, string TickIntervals, long ThrottledMs, string Drops, double MaxFrameMs, int Gen2, double ManagedGrowthMb, double WorkingSetGrowthMb, double Seconds);
+        long ServerUrgentOmitted, double RoundTripMs, string TickIntervals, long ThrottledMs, string Drops, double MaxFrameMs, int Gen2, double ManagedGrowthMb, double WorkingSetGrowthMb, double Seconds)
+    {
+        /// <summary>What does not fit the table: where the processes ran, a rejoin and its times, the states handed over, a desync and its parts.</summary>
+        public string Notes { get; init; } = string.Empty;
+    }
+
+    /// <summary>A disturbance that leaves its client in the match: it must play to the end like everybody else.</summary>
+    private static bool StaysInMatch(string kind) => kind is "hitch" or "rejoin";
 
     private static string SelfDll => Path.Combine(AppContext.BaseDirectory, "CnCNew.NetTool.dll");
 
@@ -565,6 +662,10 @@ static partial class NetTool
         var ais = (int)Number(args, "--ais", 0);
         var watchers = (int)Number(args, "--watchers", 0);
         var members = humans + watchers;
+        // Watchers that come when the match is running (the server must admit them: --server-args "--allow-late-watchers").
+        var lateWatchers = (int)Number(args, "--late-watchers", 0);
+        var lateAfterMs = (int)(Real(args, "--late-after-seconds", 10) * 1000);
+        var expectDesync = args.Contains("--expect-desync");
         var target = Ticks(args, rate, 120);
         var mapPath = Option(args, "--map") ?? throw new ArgumentException(Usage);
         var disturbances = (Option(args, "--disturb") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(text => text.Split(':')).ToArray();
@@ -608,14 +709,24 @@ static partial class NetTool
             var clients = new List<Child>();
             try
             {
-                for (var index = 0; index < members; index++)
+                var startedAt = Stopwatch.StartNew();
+                for (var index = 0; index < members + lateWatchers; index++)
                 {
+                    if (index == members)
+                    {
+                        // The match must be running before a latecomer knocks.
+                        var until = startedAt.ElapsedMilliseconds + 60_000;
+                        while (startedAt.ElapsedMilliseconds < until && !server.Lines.Any(line => line.Contains(" event=match-running ", StringComparison.Ordinal))) Thread.Sleep(50);
+                        Thread.Sleep(lateAfterMs);
+                    }
                     var arguments = new List<string>
                     {
                         "client", linuxClients.Contains(index) ? LinuxHost.PathOf(Path.GetFullPath(args[1])) : args[1], "--server", $"{AddressFor(linuxClients.Contains(index))}:{port}", "--room", label, "--name", $"c{index + 1}", "--seat", Invariant($"{(index < humans ? index : -1)}"), "--members", Invariant($"{members}"),
                         "--map", mapPath, "--humans", Invariant($"{humans}"), "--ais", Invariant($"{ais}"), "--ticks", Invariant($"{target}"), "--tick-rate", Invariant($"{rate.TicksPerSecond}"),
                         "--result", Path.GetFullPath(Path.Combine(outDirectory, $"client-{index + 1}.json")),
                     };
+                    if (index >= members) arguments.Add("--watch");
+                    if (expectDesync) arguments.AddRange(["--diagnostics", Path.GetFullPath(Path.Combine(outDirectory, "packages", $"client-{index + 1}"))]);
                     foreach (var disturbance in disturbances.Where(parts => parts.Length >= 3 && int.Parse(parts[0], CultureInfo.InvariantCulture) == index))
                     {
                         switch (disturbance[1])
@@ -625,7 +736,9 @@ static partial class NetTool
                             case "freeze": arguments.AddRange(["--freeze-at-tick", disturbance[2]]); break;
                             case "slow": arguments.AddRange(["--slow-from-tick", disturbance[2], "--slow-ms", disturbance.Length > 3 ? disturbance[3] : "25"]); break;
                             case "hitch": arguments.AddRange(["--hitch-at-tick", disturbance[2], "--hitch-ms", disturbance.Length > 3 ? disturbance[3] : "500"]); break;
-                            default: throw new ArgumentException($"Unknown disturbance '{disturbance[1]}' (leave, vanish, freeze, slow, hitch).");
+                            case "rejoin": arguments.AddRange(["--rejoin-at-tick", disturbance[2], "--rejoin-after-ms", disturbance.Length > 3 ? disturbance[3] : "2000"]); break;
+                            case "corrupt": arguments.AddRange(["--corrupt-at-tick", disturbance[2]]); break;
+                            default: throw new ArgumentException($"Unknown disturbance '{disturbance[1]}' (leave, vanish, freeze, slow, hitch, rejoin, corrupt).");
                         }
                     }
                     clients.Add(new Child(SelfDll, arguments, Path.Combine(outDirectory, $"client-{index + 1}.log"), linuxClients.Contains(index) ? linux : null));
@@ -634,7 +747,7 @@ static partial class NetTool
                 }
                 var limit = (int)Math.Min(int.MaxValue, (target / rate.TicksPerSecond * 4 + 400) * 1000);
                 var waiting = Stopwatch.StartNew();
-                var disturbed = disturbances.Where(parts => parts.Length >= 3 && parts[1] != "hitch").Select(parts => int.Parse(parts[0], CultureInfo.InvariantCulture)).ToHashSet();
+                var disturbed = disturbances.Where(parts => parts.Length >= 3 && !StaysInMatch(parts[1])).Select(parts => int.Parse(parts[0], CultureInfo.InvariantCulture)).ToHashSet();
                 long othersDoneAt = -1;
                 while (clients.Any(client => !client.HasExited) && waiting.ElapsedMilliseconds < limit)
                 {
@@ -656,7 +769,7 @@ static partial class NetTool
         }
 
         var results = new List<ClientResult>();
-        for (var index = 0; index < members; index++)
+        for (var index = 0; index < members + lateWatchers; index++)
         {
             var file = Path.Combine(outDirectory, $"client-{index + 1}.json");
             if (File.Exists(file) && JsonSerializer.Deserialize<ClientResult>(File.ReadAllText(file), ResultJson) is { } result) results.Add(result);
@@ -664,17 +777,57 @@ static partial class NetTool
         var serverLines = server.Lines;
         long Sum(string name, string key) => serverLines.Where(line => line.Contains(" event=" + name + " ", StringComparison.Ordinal)).Sum(line => long.TryParse(ValueOf(line, key), CultureInfo.InvariantCulture, out var value) ? value : 0);
         var closed = serverLines.LastOrDefault(line => line.Contains(" event=room-closed ", StringComparison.Ordinal)) ?? string.Empty;
-        var undisturbed = Enumerable.Range(0, members).Where(index => !disturbances.Any(parts => parts.Length >= 3 && int.Parse(parts[0], CultureInfo.InvariantCulture) == index && parts[1] != "hitch")).ToArray();
+        var undisturbed = Enumerable.Range(0, members + lateWatchers).Where(index => !disturbances.Any(parts => parts.Length >= 3 && int.Parse(parts[0], CultureInfo.InvariantCulture) == index && !StaysInMatch(parts[1]))).ToArray();
+        members += lateWatchers;
         var finished = results.Where(result => result.Ok).ToList();
         var problems = new List<string>();
         if (results.Count < members) problems.Add($"{members - results.Count} client(s) wrote no result");
         foreach (var result in results.Where(result => !result.Ok && result.Disturbance.Length == 0)) problems.Add($"{result.Name}: {(result.Problem.Length > 0 ? result.Problem : $"played {result.TicksPlayed} of {result.TargetTick}")}");
         if (finished.Count < undisturbed.Length) problems.Add($"only {finished.Count} of {undisturbed.Length} undisturbed clients played to the end");
-        if (finished.Select(result => result.HashChain).Distinct().Count() > 1) problems.Add("the clients' hash chains differ: " + string.Join(" ", finished.Select(result => $"{result.Name}={result.HashChain}")));
-        if (serverLines.Any(line => line.Contains(" event=desync ", StringComparison.Ordinal))) problems.Add("the server reported a desync");
+        // The chain is over every tick from the first: whoever joined a running match has a chain of its own, and is compared by the state at the end.
+        var fromStart = finished.Where(result => result.JoinedAtTick == 0 && result.RejoinGoneAtTick < 0).ToList();
+        if (fromStart.Select(result => result.HashChain).Distinct().Count() > 1) problems.Add("the clients' hash chains differ: " + string.Join(" ", fromStart.Select(result => $"{result.Name}={result.HashChain}")));
+        if (finished.Select(result => result.FinalSessionHash).Distinct().Count() > 1) problems.Add("the clients' final session hashes differ: " + string.Join(" ", finished.Select(result => $"{result.Name}={result.FinalSessionHash}")));
+        var desyncLine = serverLines.FirstOrDefault(line => line.Contains(" event=desync ", StringComparison.Ordinal));
+        if (desyncLine is not null && !expectDesync) problems.Add("the server reported a desync");
+        var notes = new List<string>();
+        // Where every process ran, by what it says itself.
+        var serverOs = ValueOf(serverLines.FirstOrDefault(line => line.Contains(" event=listening ", StringComparison.Ordinal)) ?? string.Empty, "os") ?? string.Empty;
+        if (linux is not null)
+        {
+            static bool IsLinux(string os) => os.Contains("Linux", StringComparison.OrdinalIgnoreCase);
+            if (IsLinux(serverOs) != serverInLinux) problems.Add($"the server ran on '{serverOs}'");
+            foreach (var result in results)
+            {
+                var index = int.Parse(result.Name[1..], CultureInfo.InvariantCulture) - 1;
+                if (IsLinux(result.Os) != linuxClients.Contains(index)) problems.Add($"{result.Name} ran on '{result.Os}'");
+            }
+            notes.Add($"server on {(IsLinux(serverOs) ? "Linux" : "Windows")}; clients " + string.Join(' ', results.Select(result => $"{result.Name}:{(IsLinux(result.Os) ? "Linux" : "Windows")}")));
+        }
+        foreach (var result in results.Where(result => result.RejoinGoneAtTick >= 0))
+        {
+            notes.Add(Invariant($"{result.Name} lost its connection at tick {result.RejoinGoneAtTick} and joined again at tick {result.JoinedAtTick}: state {result.RejoinStateBytes} B on the wire, loaded after {result.RejoinLoadedMs:F0} ms, at the head of the match after {result.RejoinCaughtUpMs:F0} ms"));
+            if (result.Ok && result.JoinedAtTick == 0) problems.Add($"{result.Name} did not join the running match again");
+        }
+        foreach (var result in results.Where(result => result.RejoinGoneAtTick < 0 && result.JoinedAtTick > 0))
+            notes.Add(Invariant($"{result.Name} joined the running match at tick {result.JoinedAtTick}"));
+        foreach (var result in results.Where(result => result.SnapshotsOffered > 0))
+            notes.Add(Invariant($"{result.Name} handed over {result.SnapshotsOffered} state(s): {result.SnapshotStateBytes} B, packed {result.SnapshotPackedBytes} B, in {result.SnapshotMs:F1} ms"));
+        if (expectDesync)
+        {
+            // The match is meant to break: the server must say so at the tick of the change, name the parts, and every client must have written its package.
+            problems.Clear();
+            var corrupted = results.FirstOrDefault(result => result.Corrupted.Length > 0);
+            var partsLine = serverLines.LastOrDefault(line => line.Contains(" event=desync-parts ", StringComparison.Ordinal));
+            if (desyncLine is null) problems.Add("the server reported no desync");
+            if (corrupted is null) problems.Add("no client changed its state");
+            if (partsLine is null) problems.Add("the server named no parts");
+            if (results.Count(result => result.Package.Length > 0) < results.Count) problems.Add($"only {results.Count(result => result.Package.Length > 0)} of {results.Count} clients wrote a package");
+            notes.Add($"changed: {corrupted?.Corrupted}; desync reported at tick {ValueOf(desyncLine ?? string.Empty, "tick")}; parts: {ValueOf(partsLine ?? string.Empty, "parts")}");
+        }
         if (finished.Any(result => result.Discarded > 0 || result.Malformed > 0)) problems.Add("a client discarded messages or datagrams");
         var lastAgreed = long.TryParse(ValueOf(closed, "lastAgreedTick"), CultureInfo.InvariantCulture, out var agreed) ? agreed : -1;
-        if (finished.Count > 0 && lastAgreed < target - 1) problems.Add($"the server agreed on the hashes only up to tick {lastAgreed} of {target - 1}");
+        if (finished.Count > 0 && lastAgreed < target - 1 && !expectDesync) problems.Add($"the server agreed on the hashes only up to tick {lastAgreed} of {target - 1}");
         // Over the clients that gave orders: the mean of their medians and 95 % values, the worst of their 99 % values.
         var ordering = finished.Where(result => result.LatencyMs.Count > 0).ToList();
         var pooled = ordering.Count == 0 ? Spread.Of([]) : new Spread(ordering.Sum(result => result.LatencyMs.Count), ordering.Average(result => result.LatencyMs.Mean), ordering.Min(result => result.LatencyMs.Min),
@@ -687,7 +840,7 @@ static partial class NetTool
             long.TryParse(ValueOf(closed, "throttledMs"), CultureInfo.InvariantCulture, out var throttled) ? throttled : 0,
             string.Join(" ", serverLines.Where(line => line.Contains(" event=left ", StringComparison.Ordinal) && ValueOf(line, "phase") == "Match").Select(line => $"player{ValueOf(line, "player")}:{ValueOf(line, "reason")}@{ValueOf(line, "tick")}")),
             finished.Count == 0 ? 0 : finished.Max(result => result.MaxFrameMs), finished.Sum(result => result.Gen2), finished.Count == 0 ? 0 : finished.Max(result => result.ManagedMbAtEnd - result.ManagedMbAtStart),
-            finished.Count == 0 ? 0 : finished.Max(result => result.WorkingSetMbAtEnd - result.WorkingSetMbAtStart), watch.Elapsed.TotalSeconds);
+            finished.Count == 0 ? 0 : finished.Max(result => result.WorkingSetMbAtEnd - result.WorkingSetMbAtStart), watch.Elapsed.TotalSeconds) { Notes = string.Join("\n", notes) };
     }
 
     private static string Describe(MatchRow row)
@@ -698,6 +851,7 @@ static partial class NetTool
         if (args.Length < 2) throw new ArgumentException(Usage);
         var outDirectory = Option(args, "--out") ?? throw new ArgumentException("--out names the directory for logs and results.");
         var row = RunMatch(args, Option(args, "--label") ?? "match", ImpairmentOf(args), outDirectory);
+        foreach (var note in row.Notes.Split('\n', StringSplitOptions.RemoveEmptyEntries)) Console.WriteLine("     " + note);
         Console.WriteLine(Describe(row));
         File.WriteAllText(Path.Combine(outDirectory, "row.json"), JsonSerializer.Serialize(row, ResultJson));
         // 3: the match could not be set up as asked (no Linux environment) - not run, which is neither passed nor failed.

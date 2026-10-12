@@ -26,6 +26,9 @@ try
         "net-match" => NetTool.NetMatch(args),
         "net-matrix" => NetTool.NetMatrix(args),
         "pacing" => NetTool.Pacing(args),
+        "desync-diff" => NetTool.DesyncDiff(args),
+        "replay-check" => NetTool.ReplayCheck(args),
+        "snapshot-cost" => NetTool.SnapshotCost(args),
         _ => Fail(NetTool.Usage),
     };
 }
@@ -59,12 +62,21 @@ static partial class NetTool
               reproducibly from the seed
           client <content-dir> --server HOST:PORT --map <map> --humans H --ais A --members M --seat I [--room NAME] [--name N] [--ticks T | --seconds S | --minutes M]
                  [--result FILE] [--leave-at-tick T] [--vanish-at-tick T] [--freeze-at-tick T] [--slow-ms MS] [--hitch-at-tick T --hitch-ms MS]
+                 [--rejoin-at-tick T --rejoin-after-ms MS] [--corrupt-at-tick T] [--diagnostics DIR] [--watch]
               a client without a window as a process of its own: joins the room, takes its seat (-1: watches), plays with a command generator, writes what it measured
           net-match <content-dir> --map <map> --humans H --ais A [--watchers W] [--minutes M] [--delay MS] [--jitter MS] [--loss-percent P] --out DIR [--disturb seat:kind:tick[:arg]] [--linux server,2,5]
               one match of real processes: the dedicated server, the proxy and one client process per member, on this machine; compares what the clients report
               (--linux: the server with its proxy and the named clients run under Linux in WSL, with the same binaries; exit code 3 when there is no such environment)
           net-matrix <content-dir> --map <map> --humans H --ais A [--watchers W] [--minutes M] --out DIR [--delays 10,40,80,150] [--jitters 0,10,30] [--losses 0,1,3] [--lines d/j/l,...]
               net-match for every line of the matrix; writes the table
+              (--disturb kinds: leave, vanish, freeze, slow, hitch, rejoin (tick[:ms away]), corrupt; --late-watchers N --late-after-seconds S: watchers that come
+              when the match runs; --expect-desync: the match is meant to break - the server must report it and name the parts, every client must write its package)
+          desync-diff <content-dir> <package A> <package B> [--out FILE]
+              the packages two clients wrote at a desync: the first differing tick, the parts of the hash, the objects, and the fields of the client that diverged
+          replay-check <content-dir> <file.replay> [--agreed-tick T --agreed-hash H]
+              plays the file a server wrote and compares the session hash with the last one the clients agreed on (from the note beside the file)
+          snapshot-cost <content-dir> --map <map> [--players 8] [--minutes 20] [--every-minutes 5] [--out FILE]
+              the state of a running match: size written and packed, time to write, pack, unpack and build it
           pacing [--seconds S]
               how evenly this machine wakes a loop that waits for a tick: sleep, socket wait, socket wait with the fine timer
         """;

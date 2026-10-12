@@ -26,6 +26,20 @@ sealed record ServerConfig
     public int LagThrottleMs { get; init; } = 2_000;
     public int ThrottleLimitMs { get; init; } = 10_000;
     public int ThrottleSpeedPercent { get; init; } = 50;
+    /// <summary>How long a member counts as recovered before the lag rule forgets what it used of the limit (0: at once).</summary>
+    public int LagRecoveryMs { get; init; } = 30_000;
+    /// <summary>How long the seat of a member whose connection was lost is held for it to come back (0: the player leaves the match at once).</summary>
+    public int SeatHoldMs { get; init; }
+    /// <summary>How far behind the players somebody without a seat is sent the match (0: at the same time).</summary>
+    public int SpectatorDelayMs { get; init; }
+    /// <summary>Admit somebody without a seat to a match that is running.</summary>
+    public bool AllowLateWatchers { get; init; }
+    public int PausesPerPlayer { get; init; } = 3;
+    public int MaxPauseMs { get; init; } = 60_000;
+    /// <summary>Only the host sets the speed of a match; otherwise every player may.</summary>
+    public bool HostSetsSpeed { get; init; } = true;
+    /// <summary>Where the recording of every match is written as a replay file when it is over; empty: nowhere.</summary>
+    public string ReplayDir { get; init; } = string.Empty;
     public int ConnectionTimeoutMs { get; init; } = 10_000;
     public int KeepAliveMs { get; init; } = 1_000;
     public int MaxConnections { get; init; } = 256;
@@ -46,7 +60,9 @@ static class DedicatedServer
     private const string Usage = """
         Usage: CnCNew.DedicatedServer [--config <file.json>] [--port N] [--address A] [--max-rooms N] [--max-members N] [--tick-rate 30|60|120]
                                       [--allow-modified-builds] [--hash-interval N] [--lag-report-ms N] [--lag-throttle-ms N] [--throttle-limit-ms N]
-                                      [--throttle-speed N] [--timeout-ms N] [--no-fine-timer] [--status-seconds N] [--exit-after-rooms N] [--run-seconds N]
+                                      [--throttle-speed N] [--lag-recovery-ms N] [--seat-hold-ms N] [--spectator-delay-ms N] [--allow-late-watchers]
+                                      [--pauses-per-player N] [--max-pause-ms N] [--anyone-sets-speed] [--replay-dir DIR]
+                                      [--timeout-ms N] [--no-fine-timer] [--status-seconds N] [--exit-after-rooms N] [--run-seconds N]
           A relay for multiplayer matches: one UDP port, several rooms; a client names its room in its hello. Port 0 takes a free port (see the 'listening' line).
           Every line it writes is 'ts=<ms> event=<name> key=value ...'. Stop it with Ctrl+C.
         """;
@@ -80,6 +96,14 @@ static class DedicatedServer
                 "--lag-throttle-ms" => config with { LagThrottleMs = Number() },
                 "--throttle-limit-ms" => config with { ThrottleLimitMs = Number() },
                 "--throttle-speed" => config with { ThrottleSpeedPercent = Number() },
+                "--lag-recovery-ms" => config with { LagRecoveryMs = Number() },
+                "--seat-hold-ms" => config with { SeatHoldMs = Number() },
+                "--spectator-delay-ms" => config with { SpectatorDelayMs = Number() },
+                "--allow-late-watchers" => config with { AllowLateWatchers = true },
+                "--pauses-per-player" => config with { PausesPerPlayer = Number() },
+                "--max-pause-ms" => config with { MaxPauseMs = Number() },
+                "--anyone-sets-speed" => config with { HostSetsSpeed = false },
+                "--replay-dir" => config with { ReplayDir = index + 1 < args.Length ? args[++index] : throw new ArgumentException("--replay-dir needs a directory.") },
                 "--timeout-ms" => config with { ConnectionTimeoutMs = Number() },
                 "--no-fine-timer" => config with { FineTimer = false },
                 "--status-seconds" => config with { StatusSeconds = Number() },
@@ -102,6 +126,34 @@ static class DedicatedServer
 
     private static string Value(string text)
         => text.Length > 0 && !text.AsSpan().ContainsAny(" \"=\t") ? text : "\"" + text.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
+
+    /// <summary>
+    /// The recording of a finished match as a replay file and a note beside it (docs/DEDICATED-SERVER.md): what the server sent, and the last tick and hash the clients
+    /// agreed on - whoever plays the file must arrive at that hash. The relay did not simulate; the file is written by this host, not by the room.
+    /// </summary>
+    private static (string File, int Bytes)? WriteReplay(string directory, RoomInfo info, ref int written)
+    {
+        var room = info.Room;
+        // A match that was continued from a saved state does not begin at tick 0: its recording alone is no replay.
+        if (room.Recording.Description.Length == 0 || room.Recording.Resume is not null || room.Recording.Bundles.Count == 0) return null;
+        Directory.CreateDirectory(directory);
+        var safe = new string([..info.Name.Select(letter => char.IsAsciiLetterOrDigit(letter) || letter is '-' or '_' ? letter : '_')]);
+        if (safe.Length == 0) safe = "room";
+        if (safe.Length > 40) safe = safe[..40];
+        string file;
+        do file = Path.Combine(directory, string.Create(CultureInfo.InvariantCulture, $"{safe}-{++written:D4}.replay"));
+        while (File.Exists(file));
+        var bytes = RecordingFile.ToReplay(room.Recording.Description, room.Recording.Bundles, room.NextTick);
+        File.WriteAllBytes(file, bytes);
+        var agreed = room.TryGetAgreedHash(room.LastAgreedTick, out var hash) ? hash.ToString("X16", CultureInfo.InvariantCulture) : string.Empty;
+        var note = new Dictionary<string, object>
+        {
+            ["room"] = info.Name, ["ticks"] = room.NextTick, ["lastAgreedTick"] = room.LastAgreedTick, ["lastAgreedHash"] = agreed, ["desync"] = room.Desync is not null,
+            ["desyncTick"] = room.Desync?.Tick ?? -1, ["build"] = BuildIdentity.Current.Id, ["protocol"] = Protocol.Version,
+        };
+        File.WriteAllText(file + ".json", JsonSerializer.Serialize(note, new JsonSerializerOptions { WriteIndented = true }));
+        return (file, bytes.Length);
+    }
 
     public static int Run(string[] args)
     {
@@ -140,7 +192,11 @@ static class DedicatedServer
         {
             socket = new UdpSocketChannel(new IPEndPoint(IPAddress.Parse(config.Address), config.Port));
             var relay = new RelayOptions(config.AllowModifiedBuilds, false, (ushort)config.HashInterval, null, config.MaxMembersPerRoom, config.LagReportMs, config.LagThrottleMs, config.ThrottleLimitMs,
-                config.ThrottleSpeedPercent, config.DefaultTickRate);
+                config.ThrottleSpeedPercent, config.DefaultTickRate)
+            {
+                LagRecoveryMs = config.LagRecoveryMs, SeatHoldMs = config.SeatHoldMs, SpectatorDelayMs = config.SpectatorDelayMs, AllowLateWatchers = config.AllowLateWatchers,
+                PausesPerPlayer = config.PausesPerPlayer, MaxPauseMs = config.MaxPauseMs, HostSetsSpeed = config.HostSetsSpeed,
+            };
             // Seeds and the cookie key come from the system's cryptographic source: nobody can predict a match's seed or forge a cookie.
             directory = new RoomDirectory(clock, () => BitConverter.ToUInt32(RandomNumberGenerator.GetBytes(4)), new DirectoryOptions(config.MaxRooms, config.HelloTimeoutMs, relay));
             // The room is checked once here, so that a wrong value stops the server at its start and not at the first hello.
@@ -161,8 +217,12 @@ static class DedicatedServer
             ("address", socket.LocalEndPoint.Address.ToString()), ("port", Text(socket.LocalEndPoint.Port)), ("protocol", Text(Protocol.Version)), ("transport", Text(UdpFormat.Version)),
             ("build", identity.Id), ("maxRooms", Text(config.MaxRooms)), ("maxMembersPerRoom", Text(config.MaxMembersPerRoom)), ("allowModifiedBuilds", config.AllowModifiedBuilds ? "true" : "false"),
             ("lagReportMs", Text(config.LagReportMs)), ("lagThrottleMs", Text(config.LagThrottleMs)), ("throttleLimitMs", Text(config.ThrottleLimitMs)), ("throttleSpeedPercent", Text(config.ThrottleSpeedPercent)),
-            ("fineTimer", timer?.Held == true ? "true" : "false"),
+            ("lagRecoveryMs", Text(config.LagRecoveryMs)), ("seatHoldMs", Text(config.SeatHoldMs)), ("spectatorDelayMs", Text(config.SpectatorDelayMs)),
+            ("allowLateWatchers", config.AllowLateWatchers ? "true" : "false"), ("pausesPerPlayer", Text(config.PausesPerPlayer)), ("maxPauseMs", Text(config.MaxPauseMs)),
+            ("hostSetsSpeed", config.HostSetsSpeed ? "true" : "false"), ("replayDir", config.ReplayDir), ("fineTimer", timer?.Held == true ? "true" : "false"),
+            ("os", System.Runtime.InteropServices.RuntimeInformation.OSDescription), ("runtime", System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription),
         ]);
+        var replaysWritten = 0;
 
         var running = true;
         Console.CancelKeyPress += (_, cancel) =>
@@ -184,6 +244,24 @@ static class DedicatedServer
             directory.Pump();
             while (directory.TryTakeEvent(out var room, out var relayEvent)) Line(relayEvent.Name, room, relayEvent.Details);
             endpoint.Flush();
+            while (directory.TryTakeFinished(out var finished))
+            {
+                if (config.ReplayDir.Length == 0) continue;
+                try
+                {
+                    if (WriteReplay(config.ReplayDir, finished, ref replaysWritten) is { } replay)
+                        Line("replay-written", finished.Name,
+                        [
+                            ("file", replay.File), ("bytes", Text(replay.Bytes)), ("ticks", Text(finished.Room.NextTick)), ("lastAgreedTick", Text(finished.Room.LastAgreedTick)),
+                            ("lastAgreedHash", finished.Room.TryGetAgreedHash(finished.Room.LastAgreedTick, out var agreedHash) ? agreedHash.ToString("X16", CultureInfo.InvariantCulture) : string.Empty),
+                        ]);
+                    else Line("replay-skipped", finished.Name, [("reason", finished.Room.Recording.Resume is not null ? "continued-from-a-state" : "no-match")]);
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+                {
+                    Line("replay-failed", finished.Name, [("error", exception.Message)]);
+                }
+            }
             while (endpoint.TryTakeClosed(out var closed, out var from))
             {
                 var counted = closed.Statistics;
