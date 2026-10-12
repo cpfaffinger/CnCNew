@@ -297,8 +297,9 @@ here relies on IP fragmentation.
   knows. The time slot is the server's clock divided by the cookie lifetime (default 10 s); a cookie of the current or the previous slot is valid.
 - The server keeps **no state** for a request: it answers with a challenge of the same length as the request (no amplification) and forgets. Only a connect with a valid cookie
   - which proves that the sender receives at the address it claims - creates a connection. A connect with an invalid or expired cookie is answered with a fresh challenge.
-- The **connection token** is the first 8 bytes of the same HMAC with the prefix `0x02`; every later datagram of the connection carries it, and a datagram from the right address
-  with the wrong token is dropped. A repeated connect (its accept was lost) derives the same token and is answered again; a connect with another nonce from the same address
+- The **connection token** is the first 8 bytes of the same HMAC with the prefix `0x02` - **since Phase 28 over the address and the client nonce only, not the time
+  slot** (§21.6: with the slot in it, a client that held the cookies of two slots was replaced by its own second connect); every later datagram of the connection
+  carries it, and a datagram from the right address with the wrong token is dropped. A repeated connect (its accept was lost) derives the same token and is answered again; a connect with another nonce from the same address
   replaces the old connection (the client restarted).
 - The client repeats request and connect every `ConnectRetryMs` (250) and gives up after `ConnectTimeoutMs` (5,000). Messages sent before the connection stands wait in the
   reliable channel.
@@ -350,8 +351,9 @@ server the command intents, the hash reports, the pings, the tick requests of a 
 chat, pace, lag and drop notices, leave, desync, end) goes the reliable way. An urgent message is numbered; it is delivered in number order, once, like a reliable one, but
 it is sent differently: **every datagram that goes out - with a new urgent message, with reliable segments, or as an acknowledgement - also carries the urgent messages
 the peer has not acknowledged yet**, oldest first - each at most `UrgentRedundantSends` (3) more times, not more often than every `UrgentRepeatSpacingMs` (8; copies sent in
-one breath share the fate of a burst of loss), and as far as the datagram has room (`UrgentRedundancyBytes`, default: the rest of one datagram;
-what does not fit is counted in `UrgentOmitted` and follows with the next datagram or the retransmission timer). A single lost datagram therefore costs no waiting: the
+one breath share the fate of a burst of loss), and within a budget of bytes per flush (`UrgentRedundancyBytes`: one datagram in Phases 26 and 27, **four
+datagrams' worth and whole messages of several fragments since Phase 28**, §21.5; what does not fit is counted in `UrgentOmitted` and follows with the next
+datagram or the retransmission timer). A single lost datagram therefore costs no waiting: the
 next one, one tick later, brings the missing bundle. Three more copies survive every loss a playable line has (at 3 % all four are lost once in a million, and then the
 retransmission time repeats the message); without the bound a datagram carried everything sent during a round trip - measured with eight clients, 8.7 KB/s down per
 client at 10 ms delay and 39.7 KB/s at 150 ms.
@@ -360,7 +362,8 @@ client at 10 ms delay and 39.7 KB/s at 150 ms.
 retransmission time: at 150 ms delay and 1 % loss the server saw healthy clients fall behind by seconds (517 lag notices in 100 s, the game slowed for 4 s), an order
 took up to 2.8 s, and the clients' clock samples were wrong. With intents, hash reports and pings on the urgent channel the same line has 8 notices, no slowing, and
 the 99 % value of an order is 362 ms instead of 2,760. A message
-larger than one datagram is cut into fragments (at most 64, so 73,920 bytes) that are sent once in consecutive datagrams and again by the retransmission timer. Without new
+larger than one datagram is cut into fragments (at most 64) that are sent in consecutive datagrams; since Phase 28 such a message is repeated early like a small one
+when all of it fits the budget, and otherwise by the retransmission timer (before, always by the timer - §21.5 is what that cost). Without new
 messages (pause, the last tick) unacknowledged urgent messages are repeated by the same retransmission time as segments.
 
 **Order holds per channel, not between the two.** The protocol tolerates it: a client takes bundles in the loading phase as well as in the match, and everything else the server
