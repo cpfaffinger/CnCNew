@@ -430,9 +430,11 @@ static partial class NetTests
         // The rule with short limits, so that a test of a few game seconds sees all of it.
         var rule = new RelayOptions(LagReportMs: 300, LagThrottleMs: 1_000, ThrottleLimitMs: 3_000);
         var udpOptions = new UdpOptions { TimeoutMs = 2_000 };
-        LoopbackProbeOptions Options(ProbeDisturbanceKind kind, ProbeTransport transport, int member = 1, int slowEvery = 5)
+        // "Too slow" is one and a half tick lengths per tick, whatever the rate: in rounds of the probe's clock (5 ms each).
+        var tooSlow = (int)Math.Ceiling(1.5 * 1000.0 / rate / 5);
+        LoopbackProbeOptions Options(ProbeDisturbanceKind kind, ProbeTransport transport, int member = 1)
             => new(ticks, Transport: transport, Impairment: transport == ProbeTransport.Udp ? new Impairment(DelayMs: 20, JitterMs: 10, LossPerMille: 10) : default,
-                Disturbances: [new ProbeDisturbance(member, rate * 5, kind, slowEvery)], Relay: rule, Udp: udpOptions);
+                Disturbances: [new ProbeDisturbance(member, rate * 5, kind, tooSlow)], Relay: rule, Udp: udpOptions);
 
         // Leaves by choice: no slowing at all.
         var left = fixture.Probe().Run(settings, Options(ProbeDisturbanceKind.Leave, ProbeTransport.Udp));
@@ -455,7 +457,7 @@ static partial class NetTests
         var expected = ticks * 1000 / rate;
         Check.That(frozen.ClockMs - expected is >= 1_300 and <= 2_000, $"what the others lost is bounded by the rule ({frozen.ClockMs - expected} ms over {expected} ms)");
 
-        // A client that plays slower than the tick rate (one tick per 25 ms where 16.7 are needed): it falls behind, the game is slowed, it hovers - and is dropped.
+        // A client that plays slower than the tick rate (one tick per 25 ms where 16.7 are needed at 60 Hz): it falls behind, the game is slowed, it hovers - and is dropped.
         var slow = fixture.Probe().Run(settings, Options(ProbeDisturbanceKind.Slow, ProbeTransport.Udp, member: 0));
         Check.That(slow.Ok, $"a client is too slow: {slow.Problem}");
         Check.That(slow.Dropped.Length == 1 && slow.Dropped[0] is { Member: 0, Reason: DropReason.TooSlow } && slow.ThrottledMs is >= 2_900 and <= 3_300,
