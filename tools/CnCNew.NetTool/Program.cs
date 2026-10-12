@@ -60,8 +60,9 @@ static partial class NetTool
           client <content-dir> --server HOST:PORT --map <map> --humans H --ais A --members M --seat I [--room NAME] [--name N] [--ticks T | --seconds S | --minutes M]
                  [--result FILE] [--leave-at-tick T] [--vanish-at-tick T] [--freeze-at-tick T] [--slow-ms MS] [--hitch-at-tick T --hitch-ms MS]
               a client without a window as a process of its own: joins the room, takes its seat (-1: watches), plays with a command generator, writes what it measured
-          net-match <content-dir> --map <map> --humans H --ais A [--watchers W] [--minutes M] [--delay MS] [--jitter MS] [--loss-percent P] --out DIR [--disturb seat:kind:tick[:arg]]
+          net-match <content-dir> --map <map> --humans H --ais A [--watchers W] [--minutes M] [--delay MS] [--jitter MS] [--loss-percent P] --out DIR [--disturb seat:kind:tick[:arg]] [--linux server,2,5]
               one match of real processes: the dedicated server, the proxy and one client process per member, on this machine; compares what the clients report
+              (--linux: the server with its proxy and the named clients run under Linux in WSL, with the same binaries; exit code 3 when there is no such environment)
           net-matrix <content-dir> --map <map> --humans H --ais A [--watchers W] [--minutes M] --out DIR [--delays 10,40,80,150] [--jitters 0,10,30] [--losses 0,1,3] [--lines d/j/l,...]
               net-match for every line of the matrix; writes the table
           pacing [--seconds S]

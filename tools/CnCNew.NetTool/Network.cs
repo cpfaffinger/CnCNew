@@ -412,10 +412,18 @@ static partial class NetTool
         private readonly StreamWriter _log;
         private readonly List<string> _lines = [];
 
-        public Child(string dll, IEnumerable<string> arguments, string logFile)
+        /// <param name="linux">Null: a process of this system. Otherwise the process runs in that Linux environment (WSL) with the same binaries; paths are handed over in its form.</param>
+        public Child(string dll, IEnumerable<string> arguments, string logFile, LinuxHost? linux = null)
         {
             _log = new StreamWriter(logFile, false, new UTF8Encoding(false)) { AutoFlush = true };
-            var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            var start = new ProcessStartInfo(linux is null ? "dotnet" : "wsl.exe") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            if (linux is not null)
+            {
+                // --exec: no shell in between, the arguments arrive as they are.
+                foreach (var argument in new[] { "-d", linux.Distribution, "--exec", linux.Dotnet }) start.ArgumentList.Add(argument);
+                dll = LinuxHost.PathOf(dll);
+                arguments = arguments.Select(LinuxHost.PathOf);
+            }
             start.ArgumentList.Add(dll);
             foreach (var argument in arguments) start.ArgumentList.Add(argument);
             _process = new Process { StartInfo = start };
@@ -475,6 +483,49 @@ static partial class NetTool
         }
     }
 
+    /// <summary>
+    /// A second runtime environment on this machine: a WSL distribution with the .NET runtime. The binaries built under Windows run there unchanged, so a server or a client
+    /// under Linux can take part in a match with Windows processes - another operating system and another JIT target on the same CPU.
+    /// </summary>
+    private sealed record LinuxHost(string Distribution, string Dotnet, string Address)
+    {
+        /// <summary>A Windows path as the Linux side sees it (C:\a\b becomes /mnt/c/a/b); anything else unchanged.</summary>
+        public static string PathOf(string text)
+            => text.Length > 2 && char.IsAsciiLetter(text[0]) && text[1] == ':' && text[2] is '\\' or '/' ? $"/mnt/{char.ToLowerInvariant(text[0])}{text[2..].Replace('\\', '/')}" : text;
+
+        private static string? Run(string distribution, params string[] command)
+        {
+            try
+            {
+                var start = new ProcessStartInfo("wsl.exe") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+                foreach (var argument in new[] { "-d", distribution, "--exec" }.Concat(command)) start.ArgumentList.Add(argument);
+                using var process = Process.Start(start)!;
+                var output = process.StandardOutput.ReadToEnd();
+                return process.WaitForExit(20_000) && process.ExitCode == 0 ? output.Replace("\0", string.Empty).Trim() : null;
+            }
+            catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>The environment, or null with the reason when it is not there (no WSL, no such distribution, no .NET runtime in it).</summary>
+        public static LinuxHost? Find(string distribution, out string why)
+        {
+            why = string.Empty;
+            if (!OperatingSystem.IsWindows()) { why = "this is not Windows"; return null; }
+            if (Run(distribution, "/bin/sh", "-c", "echo $HOME") is not { Length: > 0 } home) { why = $"the WSL distribution '{distribution}' does not answer"; return null; }
+            var dotnet = home + "/.dotnet/dotnet";
+            if (Run(distribution, dotnet, "--list-runtimes") is not { } runtimes || !runtimes.Contains("Microsoft.NETCore.App 10.", StringComparison.Ordinal))
+            {
+                why = $"no .NET 10 runtime at {dotnet} in '{distribution}'";
+                return null;
+            }
+            if (Run(distribution, "/bin/hostname", "-I") is not { Length: > 0 } addresses) { why = "the distribution has no network address"; return null; }
+            return new LinuxHost(distribution, dotnet, addresses.Split(' ', StringSplitOptions.RemoveEmptyEntries)[0]);
+        }
+    }
+
     private static string? ValueOf(string line, string key)
     {
         var at = line.IndexOf(" " + key + "=", StringComparison.Ordinal);
@@ -522,8 +573,23 @@ static partial class NetTool
         var watch = Stopwatch.StartNew();
         MatchRow Failed(string problem) => new(label, impairment, false, problem, members, 0, target, string.Empty, Spread.Of([]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, 0, 0, 0, 0, watch.Elapsed.TotalSeconds);
 
-        using var server = new Child(ServerDll(args), serverArguments, Path.Combine(outDirectory, "server.log"));
-        if (server.WaitForValue("event=listening", "port", 20_000) is not { } serverPort) return Failed("the server did not start");
+        // --linux server,2,5: the server (and with it the proxy) and the clients 2 and 5 run under Linux (WSL); everything else here.
+        var linuxParts = (Option(args, "--linux") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        LinuxHost? linux = null;
+        if (linuxParts.Length > 0)
+        {
+            linux = LinuxHost.Find(Option(args, "--linux-distribution") ?? "Debian", out var why);
+            if (linux is null) return Failed($"NOT RUN: no Linux environment ({why})");
+        }
+        var serverInLinux = linuxParts.Contains("server");
+        var linuxClients = linuxParts.Where(part => part != "server").Select(part => int.Parse(part, CultureInfo.InvariantCulture) - 1).ToHashSet();
+        // Where the server (or its proxy) is reached: from the side it runs on by the loopback address, from the other side by the address of the Linux environment.
+        // A server under Windows is not reachable from the Linux side this way, so Linux clients need the server under Linux.
+        if (linuxClients.Count > 0 && !serverInLinux) return Failed("clients under Linux need the server under Linux (--linux server,...)");
+        string AddressFor(bool clientInLinux) => serverInLinux && !clientInLinux ? linux!.Address : "127.0.0.1";
+
+        using var server = new Child(ServerDll(args), serverArguments, Path.Combine(outDirectory, "server.log"), serverInLinux ? linux : null);
+        if (server.WaitForValue("event=listening", "port", 40_000) is not { } serverPort) return Failed("the server did not start");
         Child? proxy = null;
         var port = serverPort;
         try
@@ -535,8 +601,8 @@ static partial class NetTool
                     "proxy", "--listen", "0", "--server", $"127.0.0.1:{serverPort}", "--delay", Invariant($"{impairment.DelayMs}"), "--jitter", Invariant($"{impairment.JitterMs}"),
                     "--loss-percent", Invariant($"{impairment.LossPerMille / 10.0}"), "--dup-percent", Invariant($"{impairment.DuplicatePerMille / 10.0}"), "--reorder-percent", Invariant($"{impairment.ReorderPerMille / 10.0}"),
                     "--seed", Option(args, "--seed") ?? "1",
-                ], Path.Combine(outDirectory, "proxy.log"));
-                if (proxy.WaitForValue("event=listening", "port", 20_000) is not { } proxyPort) return Failed("the proxy did not start");
+                ], Path.Combine(outDirectory, "proxy.log"), serverInLinux ? linux : null);
+                if (proxy.WaitForValue("event=listening", "port", 40_000) is not { } proxyPort) return Failed("the proxy did not start");
                 port = proxyPort;
             }
             var clients = new List<Child>();
@@ -546,9 +612,9 @@ static partial class NetTool
                 {
                     var arguments = new List<string>
                     {
-                        "client", args[1], "--server", $"127.0.0.1:{port}", "--room", label, "--name", $"c{index + 1}", "--seat", Invariant($"{(index < humans ? index : -1)}"), "--members", Invariant($"{members}"),
+                        "client", linuxClients.Contains(index) ? LinuxHost.PathOf(Path.GetFullPath(args[1])) : args[1], "--server", $"{AddressFor(linuxClients.Contains(index))}:{port}", "--room", label, "--name", $"c{index + 1}", "--seat", Invariant($"{(index < humans ? index : -1)}"), "--members", Invariant($"{members}"),
                         "--map", mapPath, "--humans", Invariant($"{humans}"), "--ais", Invariant($"{ais}"), "--ticks", Invariant($"{target}"), "--tick-rate", Invariant($"{rate.TicksPerSecond}"),
-                        "--result", Path.Combine(outDirectory, $"client-{index + 1}.json"),
+                        "--result", Path.GetFullPath(Path.Combine(outDirectory, $"client-{index + 1}.json")),
                     };
                     foreach (var disturbance in disturbances.Where(parts => parts.Length >= 3 && int.Parse(parts[0], CultureInfo.InvariantCulture) == index))
                     {
@@ -562,7 +628,7 @@ static partial class NetTool
                             default: throw new ArgumentException($"Unknown disturbance '{disturbance[1]}' (leave, vanish, freeze, slow, hitch).");
                         }
                     }
-                    clients.Add(new Child(SelfDll, arguments, Path.Combine(outDirectory, $"client-{index + 1}.log")));
+                    clients.Add(new Child(SelfDll, arguments, Path.Combine(outDirectory, $"client-{index + 1}.log"), linuxClients.Contains(index) ? linux : null));
                     // The first one opens the room and is its host; the others follow at once.
                     if (index == 0) Thread.Sleep(300);
                 }
@@ -634,7 +700,8 @@ static partial class NetTool
         var row = RunMatch(args, Option(args, "--label") ?? "match", ImpairmentOf(args), outDirectory);
         Console.WriteLine(Describe(row));
         File.WriteAllText(Path.Combine(outDirectory, "row.json"), JsonSerializer.Serialize(row, ResultJson));
-        return row.Identical ? 0 : 1;
+        // 3: the match could not be set up as asked (no Linux environment) - not run, which is neither passed nor failed.
+        return row.Identical ? 0 : row.Problem.StartsWith("NOT RUN", StringComparison.Ordinal) ? 3 : 1;
     }
 
     public static int NetMatrix(string[] args)
