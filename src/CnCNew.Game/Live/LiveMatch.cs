@@ -173,7 +173,24 @@ public sealed class LiveMatch : LiveGame
     /// The embedded server this match runs through (docs/NETWORK-PROTOCOL.md section 7): the local skirmish takes its ticks and its commands from a relay like a network
     /// match, with one client and no delay.
     /// </summary>
-    public CnCNew.Game.Lockstep.LocalRelay Relay { get; private set; } = null!;
+    public CnCNew.Game.Lockstep.LocalRelay Relay => _relay ?? throw new InvalidOperationException("This match runs on a server somewhere else (Remote); it has no embedded one.");
+    private CnCNew.Game.Lockstep.LocalRelay? _relay;
+
+    /// <summary>The connection to the server of a match that was joined (<see cref="Join(GameData, CnCNew.Game.Lockstep.RemoteRelay, Vector2)"/>); null for a local game.</summary>
+    public CnCNew.Game.Lockstep.RemoteRelay? Remote { get; private set; }
+
+    /// <summary>A joined match: what this client remembers of its last ticks for the diagnosis of a desync, and where it writes its package (null: nowhere).</summary>
+    public CnCNew.Game.Lockstep.SessionDiagnostics? Diagnostics { get; private set; }
+    public string? DiagnosticsDirectory { get; set; }
+
+    /// <summary>A joined match: all session hashes so far folded into one value, as a client without a window folds them - two clients in step agree in it.</summary>
+    public ulong HashChain { get; private set; } = 0xCBF29CE484222325UL;
+
+    /// <summary>A joined match: the desync the server reported, if it did.</summary>
+    public CnCNew.Net.DesyncMessage? Desync => _client?.Desync;
+
+    private CnCNew.Net.LockstepClient? _client;
+    private uint _snapshotRequest;
 
     /// <summary>The lockstep driver of this match: its tick source and its command scheduler.</summary>
     public CnCNew.Game.Lockstep.LockstepDriver Lockstep { get; private set; } = null!;
@@ -185,12 +202,38 @@ public sealed class LiveMatch : LiveGame
     {
         Func<ulong> hash = Scripted is { } scripted ? scripted.StateHash : Session.StateHash;
         relay.ReportLoaded(hash());
-        Relay = relay;
+        _relay = relay;
+        _client = relay.Client;
         Lockstep = new CnCNew.Game.Lockstep.LockstepDriver(relay.Client, 1.0 / World.Rate.TicksPerSecond, relay.Pump, hash, Match.Description.MaxTicks - 1);
         TickDriver = Lockstep;
         CommandPath.UseScheduler(Lockstep);
         return this;
     }
+
+    /// <summary>
+    /// The match is built from what a server sent: tell it, and take every tick and every command from it. Unlike the embedded server this one runs by its own clock,
+    /// compares this client's hashes with the others', may ask this client for its state (somebody joins the running match) and may report a desync.
+    /// </summary>
+    private LiveMatch Join(CnCNew.Game.Lockstep.RemoteRelay remote)
+    {
+        remote.ReportLoaded(Session.StateHash());
+        Remote = remote;
+        _client = remote.Client;
+        Diagnostics = new CnCNew.Game.Lockstep.SessionDiagnostics();
+        Lockstep = new CnCNew.Game.Lockstep.LockstepDriver(remote.Client, 1.0 / World.Rate.TicksPerSecond, remote.Pump, Session.StateHash, Match.Description.MaxTicks - 1);
+        TickDriver = Lockstep;
+        CommandPath.UseScheduler(Lockstep);
+        remote.Client.SnapshotRequested = request => _snapshotRequest = request;
+        remote.Client.DesyncReceived = desync =>
+        {
+            remote.Client.SendDesyncDetail(desync.Tick, Diagnostics.TryGetParts(desync.Tick, out var parts) ? parts : []);
+            if (DiagnosticsDirectory is { } directory) Diagnostics.WritePackage(directory, Session, remote.Client, desync);
+        };
+        return this;
+    }
+
+    /// <summary>What the frame produced - orders, hash reports - goes to the server now, not with the next frame.</summary>
+    protected override void OnAdvanced(double gameSeconds) => Remote?.Flush();
 
     /// <summary>The lockstep probe of a match: the driver holds every order for <paramref name="ticks"/> ticks before it sends it to the relay.</summary>
     public override void UseInputDelay(int ticks) => Lockstep.InputDelayTicks = ticks;
@@ -223,11 +266,25 @@ public sealed class LiveMatch : LiveGame
 
     protected override TickResult StepSimulation()
     {
+        if (_snapshotRequest != 0 && Remote is { } asked)
+        {
+            // Between two ticks: the state after the last step, with nothing of the next bundle in it yet (docs/NETWORK-PROTOCOL.md section 18.2).
+            var request = _snapshotRequest;
+            _snapshotRequest = 0;
+            asked.Client.OfferSnapshot(request, new CnCNew.Net.ResumeState(World.Tick, Session.StateHash(), Session.HumanCommandCounts, CnCNew.Game.Lockstep.SessionTransfer.Pack(Session.Save())));
+        }
+        var tick = World.Tick;
         var result = Scripted?.Step() ?? Session.Step();
+        if (Remote is not null)
+        {
+            var hash = Session.StateHash();
+            Diagnostics?.Record(tick, Session, hash);
+            HashChain = unchecked((HashChain ^ hash) * 0x100000001B3UL);
+        }
         if (IsOver && !_endReported)
         {
             _endReported = true;
-            Relay.Client.ReportEnd(World.Tick, Winner?.Value ?? 0);
+            _client!.ReportEnd(World.Tick, Winner?.Value ?? 0);
         }
         return result;
     }
@@ -248,6 +305,43 @@ public sealed class LiveMatch : LiveGame
         if (setup.UsesOriginalAi) return CreateScripted(data, setup, viewport, map, terrain, match, humanPlays).Join(relay);
         var session = SkirmishMatchSession.Start(description, data.Templates, terrain, map.Objects, setup.Options.CheckpointInterval, data.Fingerprint, CnCNew.Net.BuildIdentity.Current.Id);
         return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport).Join(relay);
+    }
+
+    /// <summary>
+    /// Joins the match of a room on a server somewhere else (docs/NETWORK-PROTOCOL.md section 18.6). The room must have started its match
+    /// (<see cref="CnCNew.Game.Lockstep.RemoteRelay.WaitForStart"/>): the description the server sent builds the same tick 0 as on every other member - or, for
+    /// somebody who joins a running match, the state a member handed over is loaded. The viewer plays the seat the room gave this client; without a seat it watches.
+    /// Throws <see cref="CnCNew.Game.Lockstep.RemoteRelayException"/> with a message fit to show when the match cannot be built here.
+    /// </summary>
+    public static LiveMatch Join(GameData data, CnCNew.Game.Lockstep.RemoteRelay remote, Vector2 viewport)
+    {
+        var client = remote.Client;
+        var start = client.Start ?? throw new InvalidOperationException("The room has not started its match.");
+        var description = client.Description!;
+        if (description.TickRate != data.Rate.TicksPerSecond)
+            throw new CnCNew.Game.Lockstep.RemoteRelayException($"The match runs at {description.TickRate} Hz; this game was started at {data.Rate.TicksPerSecond} Hz (--tick-rate {description.TickRate}).");
+        if (!data.Content.Exists(description.MapPath)) throw new CnCNew.Game.Lockstep.RemoteRelayException($"The match is played on '{description.MapPath}', which this game does not have.");
+        MapData map;
+        using (var stream = data.Content.OpenRead(description.MapPath)) map = SageMapDecoder.Decode(stream);
+        var terrain = TerrainMap.Build(map, description.MapPath);
+        SkirmishMatchSession session;
+        try
+        {
+            session = start.Resume is { } resume
+                ? SkirmishMatchSession.Restore(CnCNew.Game.Lockstep.SessionTransfer.Unpack(resume.State), data.Templates, data.Fingerprint, terrain)
+                : SkirmishMatchSession.Start(description, data.Templates, terrain, map.Objects, 0, data.Fingerprint, client.Identity.Id);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidDataException or CnCNew.Simulation.Snapshots.SnapshotFormatException)
+        {
+            // A state that cannot be read is told to the server as one that does not match: it turns this client away and holds the seat again.
+            if (start.Resume is not null) client.ReportLoaded(0);
+            remote.Pump();
+            throw new CnCNew.Game.Lockstep.RemoteRelayException($"The match cannot be built here: {exception.Message}");
+        }
+        var match = session.Match;
+        var seat = match.Slots.FirstOrDefault(slot => slot.Player.Value == client.Player);
+        var setup = SetupOf(description, match, seat is null ? CnCNew.Game.Save.SkirmishViewer.Spectator : CnCNew.Game.Save.SkirmishViewer.Player) with { LocalSlot = seat?.Slot ?? 0 };
+        return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport).Join(remote);
     }
 
     /// <summary>

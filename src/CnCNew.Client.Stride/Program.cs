@@ -34,6 +34,25 @@ var scenario = scenarioName is null ? null : CnCNew.Game.Live.DemoScenarios.Find
 if (scenario is not null) Console.WriteLine($"scenario {scenario.Name}: {scenario.Title}. {scenario.Description}");
 if (scenario is not null) matchMap = scenario.Map;
 var missionMap = GetArgument(args, "--mission");
+// --join HOST:PORT [--room NAME] [--seat N | --watch] [--player-name NAME]: the match of a room on a dedicated server (docs/NETWORK-PROTOCOL.md section 18.6). The client
+// enters the room, takes the seat (the first without the option; --watch: none), waits for the host's start and plays the match the server describes. The check of this
+// path (scripts/check-net-join.ps1): --join-until-tick T ends a smoke test at that tick instead of after --frames, --join-order-every N gives an order of the viewer
+// every N ticks, --join-result FILE writes what the client played, --diagnostics DIR is where it writes its package at a desync.
+var joinServer = GetArgument(args, "--join");
+if (joinServer is not null)
+{
+    if (matchMap is not null || missionMap is not null) throw new ArgumentException("--join excludes --match, --mission and --scenario.");
+    var colon = joinServer.LastIndexOf(':');
+    if (colon <= 0 || !System.Net.IPAddress.TryParse(joinServer[..colon].Trim('[', ']'), out var joinAddress) || !int.TryParse(joinServer[(colon + 1)..], out var joinPort))
+        throw new ArgumentException("--join takes ADDRESS:PORT (an IP address).");
+    CnCNewGame.Join = new JoinOptions(new System.Net.IPEndPoint(joinAddress, joinPort), GetArgument(args, "--room") ?? string.Empty,
+        args.Contains("--watch", StringComparer.OrdinalIgnoreCase) ? -1 : int.Parse(GetArgument(args, "--seat") ?? "1", System.Globalization.CultureInfo.InvariantCulture) - 1,
+        GetArgument(args, "--player-name") ?? Environment.UserName,
+        long.Parse(GetArgument(args, "--join-until-tick") ?? "-1", System.Globalization.CultureInfo.InvariantCulture),
+        int.Parse(GetArgument(args, "--join-order-every") ?? "0", System.Globalization.CultureInfo.InvariantCulture),
+        GetArgument(args, "--join-result"), GetArgument(args, "--diagnostics"));
+    matchMap = JoinOptions.Placeholder;
+}
 // --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §17); fixed time steps only.
 var inputScriptPath = GetArgument(args, "--input-script");
 CnCNew.Client.Stride.ClientRuntime.InputDelayTicks = int.Parse(GetArgument(args, "--input-delay-ticks") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
@@ -133,6 +152,8 @@ if (contentDirectory is not null)
     }
 }
 
+try
+{
 using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),
     audioOptions, GetArgument(args, "--filmstrip"), int.Parse(GetArgument(args, "--every") ?? "30"), GetArgument(args, "--cursor-at"), GetArgument(args, "--waypoints"),
     inputScriptPath is null ? null : CnCNew.Client.Stride.Testing.InputScript.Load(inputScriptPath), int.Parse(GetArgument(args, "--mission-journal") ?? "0"),
@@ -140,6 +161,14 @@ using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capture
 {
     game.Run();
     if (game.UnresolvedInputSteps > 0) Environment.ExitCode = 3;
+    game.LeaveJoinedMatch();
+}
+}
+catch (CnCNew.Game.Lockstep.RemoteRelayException exception)
+{
+    // The server is not there, the room is full, the match cannot be built here: said in one line, not as a crash.
+    Console.Error.WriteLine($"join: {exception.Message}");
+    Environment.ExitCode = 4;
 }
 
 if (capturePath is not null)
@@ -159,6 +188,15 @@ static string? GetArgument(string[] arguments, string name)
     return index + 1 < arguments.Length
         ? arguments[index + 1]
         : throw new ArgumentException($"{name} requires a value.");
+}
+
+/// <summary>The match of a room on a dedicated server that this client joins (<c>--join</c>).</summary>
+/// <param name="Seat">The seat to take, counted from 0; -1 watches.</param>
+/// <param name="UntilTick">Smoke test: the run ends when the match has played this tick (instead of after a number of frames); -1: by the frames.</param>
+/// <param name="OrderEvery">A check's stand-in for a player: every so many ticks the viewer orders one of his units to move, through the command sink the HUD uses; 0: never.</param>
+internal sealed record JoinOptions(System.Net.IPEndPoint Server, string Room, int Seat, string Name, long UntilTick, int OrderEvery, string? ResultFile, string? Diagnostics)
+{
+    public const string Placeholder = "(joined match)";
 }
 
 /// <param name="Map">Virtual map path or a unique part of it (for example "Alpine Assault").</param>
@@ -239,6 +277,81 @@ internal sealed class CnCNewGame(
     private const double SmokeStepSeconds = 1.0 / CnCNew.Data.OriginalFrame.PerSecond;
 
     public int UnresolvedInputSteps { get; private set; }
+
+    /// <summary>The match to join (<c>--join</c>); null for everything else.</summary>
+    public static JoinOptions? Join { get; set; }
+
+    private LiveMatch? _joined;
+    private long _joinedOrders;
+    private long _joinedOrdersAccepted;
+    private long _lastJoinOrderTick = -1;
+    private long _joinDeadlineMs;
+
+    private void LoadJoinedMatch(GameData data, JoinOptions join, LiveOptions options)
+    {
+        var remote = CnCNew.Game.Lockstep.RemoteRelay.Connect(join.Server, data.Fingerprint, join.Name, join.Room, watch: join.Seat < 0);
+        Console.WriteLine($"join: server {join.Server}, room \"{join.Room}\", connection {remote.Client.ConnectionId}, build {remote.Client.Identity.Id}");
+        // Somebody who came to a running match is past the room already: the next thing is the state of a member.
+        if (join.Seat >= 0 && remote.Client.Phase == CnCNew.Net.ClientPhase.InRoom) remote.TakeSeat(join.Seat);
+        remote.WaitForStart();
+        var back = GraphicsDevice.Presenter.BackBuffer;
+        var match = LiveMatch.Join(data, remote, new System.Numerics.Vector2(back.Width, back.Height));
+        match.DiagnosticsDirectory = join.Diagnostics;
+        _joined = match;
+        _joinDeadlineMs = remote.Clock.Milliseconds + (join.UntilTick < 0 ? 0 : join.UntilTick * 1000 / data.Rate.TicksPerSecond * 4 + 120_000);
+        Console.WriteLine($"join: match on {match.Description.MapPath}, {match.Description.TickRate} Hz, player {remote.Client.Player}, pacing {remote.Client.Pacing}, from tick {match.World.Tick}");
+        ApplyCamera(match.Camera, options);
+        if (match.Setup.Spectator)
+        {
+            _runtime = ClientRuntime.ForSpectator(this, data, match, audioOptions, new CnCNew.Game.Spectator.SpectatorOptions(options.SpectatorMaxZoom, options.SpectatorSpeed, options.Seed));
+            Window.Title = $"CnCNew — watching {join.Room} on {join.Server}";
+            return;
+        }
+        _runtime = ClientRuntime.ForMatch(this, data, match, audioOptions, alternateMouse);
+        Window.Title = $"CnCNew — {match.Description.MapPath} — {join.Room} on {join.Server}";
+    }
+
+    /// <summary>One frame of a joined match in a check: the stand-in order of the viewer, and whether the run is over (the tick is reached, the match ended, or the time is up).</summary>
+    private bool JoinedMatchDone(JoinOptions join, LiveMatch match)
+    {
+        var tick = match.World.Tick;
+        if (join.OrderEvery > 0 && !match.Setup.Spectator && tick / join.OrderEvery != _lastJoinOrderTick && match.Remote!.Client.Phase == CnCNew.Net.ClientPhase.InMatch)
+        {
+            _lastJoinOrderTick = tick / join.OrderEvery;
+            var step = CnCNew.Simulation.Numerics.Fixed.FromDecimal(_lastJoinOrderTick % 2 == 0 ? 60 : -60);
+            // The first unit of the viewer that takes the order: the pre-check says which can move.
+            foreach (var unit in match.World.Entities.Where(entity => entity.Owner == match.Human && !entity.EffectivelyDead).OrderBy(entity => entity.Id.Value))
+            {
+                var (id, x, y) = (unit.Id, unit.X + step, unit.Y);
+                var receipt = match.Commands.Issue((sequence, at) => new CnCNew.Simulation.Commands.AttackMoveCommand(match.Human, sequence, at, id, x, y));
+                if (!receipt.Accepted) continue;
+                _joinedOrders++;
+                break;
+            }
+        }
+        if (join.UntilTick < 0) return ++_renderedFrames >= smokeFrames;
+        _renderedFrames++;
+        return tick >= join.UntilTick || match.Remote!.Client.Phase != CnCNew.Net.ClientPhase.InMatch || match.Remote.Clock.Milliseconds > _joinDeadlineMs;
+    }
+
+    /// <summary>Says goodbye to the server of a joined match and writes what this client played (<c>--join-result</c>).</summary>
+    public void LeaveJoinedMatch()
+    {
+        if (_joined is not { Remote: { } remote } match || Join is not { } join) return;
+        var client = remote.Client;
+        var hash = match.Session.StateHash();
+        var result = new Dictionary<string, object>
+        {
+            ["name"] = join.Name, ["player"] = client.Player, ["tick"] = match.World.Tick, ["joinedAtTick"] = client.StartTick, ["hashChain"] = match.HashChain.ToString("X16", System.Globalization.CultureInfo.InvariantCulture),
+            ["finalSessionHash"] = hash.ToString("X16", System.Globalization.CultureInfo.InvariantCulture), ["phase"] = client.Phase.ToString(), ["intentsSent"] = client.IntentsSent,
+            ["ordersGiven"] = _joinedOrders, ["ordersResolved"] = _joinedOrdersAccepted, ["desyncTick"] = client.Desync?.Tick ?? -1, ["stalls"] = match.Lockstep.Stalls,
+            ["discarded"] = client.Discarded, ["frames"] = _renderedFrames, ["build"] = client.Identity.Id,
+        };
+        Console.WriteLine($"join: left at tick {match.World.Tick}, hash chain {result["hashChain"]}, session hash {result["finalSessionHash"]}, {client.IntentsSent} order(s) sent, {_joinedOrdersAccepted} executed, phase {client.Phase}");
+        if (join.ResultFile is { } file) File.WriteAllText(file, System.Text.Json.JsonSerializer.Serialize(result, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+        remote.Close();
+        remote.Dispose();
+    }
 
     /// <summary>The AI the shell's skirmish setup offers (--ai in shell mode); the simulation's own AI unless the option says otherwise.</summary>
     public static CnCNew.Simulation.Skirmish.Original.SkirmishAiKind ShellSkirmishAi { get; set; }
@@ -370,6 +483,12 @@ internal sealed class CnCNewGame(
     {
         var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate);
         Console.WriteLine($"session: simulation rate {data.Rate}");
+        if (Join is { } join)
+        {
+            LoadJoinedMatch(data, join, options);
+            _joined!.CommandPath.Resolved += resolution => { if (resolution.Receipt != 0 && resolution.Result.Accepted) _joinedOrdersAccepted++; };
+            return;
+        }
         var mapPath = data.Maps.FirstOrDefault(path => path.Equals(options.Map, StringComparison.OrdinalIgnoreCase))
             ?? data.Maps.SingleOrDefault(path => path.Contains(options.Map, StringComparison.OrdinalIgnoreCase))
             ?? throw new ArgumentException($"Map '{options.Map}' was not found or is ambiguous.");
@@ -479,7 +598,7 @@ internal sealed class CnCNewGame(
                 GraphicsDeviceManager.PreferredBackBufferHeight = resolution.Height;
                 GraphicsDeviceManager.ApplyChanges();
             }
-            if (_runtime.ExitRequested || (smokeTest && ++_renderedFrames >= smokeFrames && (capturePath is null || _captured)))
+            if (_runtime.ExitRequested || (smokeTest && (_joined is { } joined && Join is { } join ? JoinedMatchDone(join, joined) : ++_renderedFrames >= smokeFrames) && (capturePath is null || _captured)))
             {
                 if (smokeTest) Console.WriteLine($"ui: {_runtime.LastFrame.Format()}; missing images [{string.Join(", ", _runtime.LastFrame.MissingImageNames.Take(12))}]; missing textures [{string.Join(", ", _runtime.LastFrame.MissingTextureFiles.Take(12))}]");
                 if (smokeTest) Console.WriteLine($"cursor: {_runtime.CursorReport}");
