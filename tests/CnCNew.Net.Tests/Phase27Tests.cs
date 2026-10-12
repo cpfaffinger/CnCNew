@@ -111,6 +111,14 @@ static partial class NetTests
         net.Clients.Add(stranger);
         Play(net, 100, 0, 2);
         Check.That(stranger.Phase == ClientPhase.Rejected && stranger.Rejection!.Reason == RejectReason.SeatNotHeld, "a token nobody was given opens no seat");
+        // A player that is back before the relay noticed its old connection is dead: the token is the proof, the old connection gives way.
+        var (againEnd, againServerEnd) = net.Network.Connect();
+        net.Server.Attach(againServerEnd);
+        var again = new LockstepClient(againEnd, "again", Definitions, Released, rejoinToken: net.Clients[0].RejoinToken);
+        net.Clients.Add(again);
+        Play(net, 100, 2, 5);
+        Check.That(again.Phase == ClientPhase.InRoom && !net.Clients[0].IsOpen && net.Server.HeldSeats.SequenceEqual([2]),
+            $"the token of a connection that still stands takes its seat over ({again.Phase}, {again.Rejection?.Reason})");
     }
 
     // ---------------------------------------------------------------------------------------------------------- watchers

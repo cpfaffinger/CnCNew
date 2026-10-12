@@ -53,6 +53,8 @@ public sealed class RoomDirectory
     private readonly HashSet<string> _inhabited = new(StringComparer.Ordinal);
     private readonly Queue<(string Room, RelayEvent Event)> _events = new();
     private readonly List<string> _empty = [];
+    private readonly Queue<RoomInfo> _finished = new();
+    private readonly HashSet<RelayServer> _reported = [];
 
     /// <param name="seedSource">Where the rooms take their seeds from: a cryptographic source of the host (a test names a sequence).</param>
     public RoomDirectory(INetClock clock, Func<uint> seedSource, DirectoryOptions? options = null)
@@ -85,6 +87,12 @@ public sealed class RoomDirectory
         relayEvent = null!;
         return false;
     }
+
+    /// <summary>
+    /// A room whose match is over - ended, or abandoned by everybody: handed out once, for a host that keeps the recording (docs/DEDICATED-SERVER.md). The directory itself
+    /// writes nothing.
+    /// </summary>
+    public bool TryTakeFinished(out RoomInfo room) => _finished.TryDequeue(out room);
 
     private void Log(string room, string name, params (string Key, string Value)[] details) => _events.Enqueue((room, new RelayEvent(name, details)));
 
@@ -132,6 +140,7 @@ public sealed class RoomDirectory
         {
             room.Pump();
             while (room.TryTakeEvent(out var relayEvent)) _events.Enqueue((name, relayEvent));
+            if (room.Phase == RoomPhase.Ended && _reported.Add(room)) _finished.Enqueue(new RoomInfo(name, room));
             if (room.Members > 0) _inhabited.Add(name);
             // Empty: everybody left, or the one who opened it was rejected.
             if (room.Connections == 0) _empty.Add(name);
@@ -141,6 +150,9 @@ public sealed class RoomDirectory
             var room = _rooms[name];
             _rooms.Remove(name);
             _inhabited.Remove(name);
+            // A match everybody walked away from was still a match.
+            if (room.Recording.Bundles.Count > 0 && _reported.Add(room)) _finished.Enqueue(new RoomInfo(name, room));
+            _reported.Remove(room);
             RoomsClosed++;
             Log(name, "room-closed", ("phase", room.Phase.ToString()), ("ticks", Text(room.NextTick)), ("lastAgreedTick", Text(room.LastAgreedTick)), ("intents", Text(room.IntentsRelayed)),
                 ("discarded", Text(room.Discarded)), ("throttledMs", Text(room.ThrottledMicros / 1000)), ("droppedForLag", Text(room.DroppedForLag)), ("desync", room.Desync is null ? "false" : "true"),

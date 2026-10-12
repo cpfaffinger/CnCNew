@@ -131,6 +131,15 @@ public sealed partial class RelayServer
     {
         if (hello.RejoinToken != 0)
         {
+            // The player is back before the server noticed that its old connection is dead (a restarted client, a new address): the token is the proof, the old
+            // connection is the lost one, and its seat is held for exactly this.
+            if (_options.SeatHoldMs > 0 && _peers.FirstOrDefault(other => other != peer && other.Token == hello.RejoinToken && other.Player > 0 && !other.Joining) is { } stale)
+            {
+                Log("superseded", ("connection", Text(stale.Id)), ("player", Text(stale.Player)), ("by", Text(peer.Id)));
+                stale.Connection.Close();
+                Drop(stale, DropReason.ConnectionLost);
+                if (Phase != RoomPhase.Match) return new RejectMessage(RejectReason.SeatNotHeld, "The match ended when this player's connection was lost.");
+            }
             var seat = _held.FirstOrDefault(pair => pair.Value.Token == hello.RejoinToken);
             if (seat.Value is null) return new RejectMessage(RejectReason.SeatNotHeld, "No seat is held for this client: it was never in this match, or its time is over.");
             _held.Remove(seat.Key);
