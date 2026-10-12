@@ -13,7 +13,10 @@
       - the server agreed on the session hash of every tick up to the last one of the check - the server compares the hash reports of both clients tick by tick,
         so this is the comparison of the window client's world with the headless one's - and reported no desync;
       - the window client's own orders went to the server, came back in bundles and were executed;
-      - the client without a window played to the end without a problem; the window client left with a goodbye (the server logs a leave, not a lost connection).
+      - the client without a window played to the end without a problem; the window client left with a goodbye (the server logs a leave, not a lost connection);
+      - the server's key (docs/NETWORK-PROTOCOL.md section 20.2): the client without a window is told the key the server printed and takes no other; a third
+        client that is told another key refuses the server and never says hello; the window client meets the server for the first time and remembers its key
+        in a file of this run (never the user's own file).
     What this does not show: a lobby screen (the client is told the room on its command line), and what a human sees.
 
     The window client needs a display (as scripts/check-spectator.ps1 does). Logs and results go to a directory outside the repository.
@@ -66,27 +69,37 @@ function Wait-Line([string]$name, [string]$pattern, [int]$seconds) {
 }
 function Quote([string]$text) { if ($text -match '\s') { '"' + $text + '"' } else { $text } }
 
-$server = Start-Logged 'server' @('tools/CnCNew.DedicatedServer/bin/Release/net10.0/CnCNew.DedicatedServer.dll', '--port', '0', '--address', '127.0.0.1', '--allow-modified-builds', '--exit-after-rooms', '1', '--status-seconds', '10')
+$knownFile = Join-Path $OutDir 'known-servers.json'
+Remove-Item $knownFile, (Join-Path $OutDir 'server-key.pem') -ErrorAction SilentlyContinue
+$server = Start-Logged 'server' @('tools/CnCNew.DedicatedServer/bin/Release/net10.0/CnCNew.DedicatedServer.dll', '--port', '0', '--address', '127.0.0.1', '--allow-modified-builds', '--exit-after-rooms', '1', '--status-seconds', '10',
+    '--key-file', (Quote (Join-Path $OutDir 'server-key.pem')))
 $headless = $null
 $window = $null
+$stranger = $null
 try {
     $listening = Wait-Line 'server' ' event=listening ' 40
     if (-not $listening -or $listening -notmatch ' port=(\d+)') { Write-Host 'FAIL: the server did not start.'; exit 1 }
     $port = $Matches[1]
+    if ($listening -notmatch ' key=([0-9A-F]{64})') { Write-Host 'FAIL: the server did not print the fingerprint of its key.'; exit 1 }
+    $serverKey = $Matches[1]
     Write-Host "== The server listens on 127.0.0.1:$port; a client without a window opens the room 'join' and is its host"
     $headless = Start-Logged 'headless' @('tools/CnCNew.NetTool/bin/Release/net10.0/CnCNew.NetTool.dll', 'client', (Quote $ContentDir), '--server', "127.0.0.1:$port", '--room', 'join', '--name', 'headless',
-        '--seat', '0', '--humans', '2', '--ais', '2', '--members', '2', '--map', (Quote $Map), '--ticks', "$ticks", '--result', (Quote (Join-Path $OutDir 'headless.json')))
+        '--seat', '0', '--humans', '2', '--ais', '2', '--members', '2', '--map', (Quote $Map), '--ticks', "$ticks", '--result', (Quote (Join-Path $OutDir 'headless.json')), '--server-key', $serverKey)
+    # Somebody who was told another key: it must refuse the server before it says a word.
+    $stranger = Start-Logged 'stranger' @('tools/CnCNew.NetTool/bin/Release/net10.0/CnCNew.NetTool.dll', 'client', (Quote $ContentDir), '--server', "127.0.0.1:$port", '--room', 'join', '--name', 'stranger',
+        '--seat', '1', '--humans', '2', '--ais', '2', '--members', '2', '--map', (Quote $Map), '--ticks', "$ticks", '--result', (Quote (Join-Path $OutDir 'stranger.json')), '--server-key', ('AB' * 32))
     # The room must be the headless client's before the window client knocks: whoever names a room first is its host.
     if (-not (Wait-Line 'server' ' event=joined .*name=headless' 180)) { Write-Host 'FAIL: the client without a window did not reach the server.'; exit 1 }
     Write-Host "== The window client joins, takes the second seat and plays $Seconds s of game time"
     $window = Start-Logged 'window' @($clientDll.FullName, '--smoke-test', '--content-dir', (Quote $ContentDir), '--join', "127.0.0.1:$port", '--room', 'join', '--seat', '2', '--player-name', 'window',
-        '--join-until-tick', "$ticks", '--join-order-every', '300', '--join-result', (Quote (Join-Path $OutDir 'window.json')), '--mute')
+        '--join-until-tick', "$ticks", '--join-order-every', '300', '--join-result', (Quote (Join-Path $OutDir 'window.json')), '--mute', '--known-servers', (Quote $knownFile))
     if (-not $window.WaitForExit($TimeoutSeconds * 1000)) { Fail 'the window client did not end in time' }
     if (-not $headless.WaitForExit(120000)) { Fail 'the client without a window did not end in time' }
     $server.WaitForExit(20000) | Out-Null
+    if (-not $stranger.WaitForExit(20000)) { Fail 'the client that was told another key did not end' }
 }
 finally {
-    foreach ($process in $window, $headless, $server) { if ($process -and -not $process.HasExited) { $process.Kill($true) } }
+    foreach ($process in $window, $headless, $stranger, $server) { if ($process -and -not $process.HasExited) { $process.Kill($true) } }
 }
 
 $log = Get-Content (Join-Path $OutDir 'server.log')
@@ -96,6 +109,14 @@ if (-not $closed -or $closed -notmatch 'lastAgreedTick=(-?\d+)') { Fail 'the ser
 elseif ([long]$Matches[1] -lt $ticks - 1) { Fail "the server agreed on the hashes of both clients only up to tick $($Matches[1]) of $($ticks - 1)" }
 else { Write-Host "     the server compared the session hash of both clients in every tick up to tick $($Matches[1]): equal" }
 if (-not ($log | Where-Object { $_ -match ' event=left .*reason=Left' -or $_ -match ' event=left .*reason=Closed' })) { Fail 'the window client did not leave with a goodbye' }
+
+$strangerText = (Get-Content (Join-Path $OutDir 'stranger.log'), (Join-Path $OutDir 'stranger.err'), (Join-Path $OutDir 'stranger.json') -ErrorAction SilentlyContinue) -join "`n"
+if ($stranger.HasExited -and $stranger.ExitCode -eq 0) { Fail 'a client that was told another key played on this server' }
+elseif ($strangerText -notmatch 'not the one this client was told to expect') { Fail "a client that was told another key did not say why it refused the server ($($strangerText | Select-Object -Last 1))" }
+elseif ($log | Where-Object { $_ -match ' event=joined .*name=stranger' }) { Fail 'a client that was told another key said hello to the server' }
+else { Write-Host "     a client that was told another key refused the server (key $($serverKey.Substring(0, 16))...) and said nothing to it" }
+if (-not (Test-Path $knownFile) -or (Get-Content $knownFile -Raw) -notmatch $serverKey) { Fail 'the window client did not remember the key of the server it met for the first time' }
+else { Write-Host '     the window client remembered the key of the server it met for the first time' }
 
 $windowFile = Join-Path $OutDir 'window.json'
 if (-not (Test-Path $windowFile)) { Fail "the window client wrote no result ($(Get-Content (Join-Path $OutDir 'window.err') -ErrorAction SilentlyContinue | Select-Object -Last 3))" }
