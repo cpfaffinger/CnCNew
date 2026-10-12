@@ -102,7 +102,7 @@ $stepsOfArea = @{
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
     ui           = @{ affected = 'ui';                                      gate = 'game' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
-    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'game' }
+    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'game' }
     game         = @{ affected = 'game-focus';                              gate = 'game', 'net' }
     client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys' }
     scripts      = @{ affected = @();                                       gate = @() }
@@ -163,8 +163,10 @@ $needsBuild = @($areas | Where-Object { $_ -notin 'docs', 'scripts' }).Count -gt
 
 # ---- The steps, from cheap to expensive. Release = the project that is built in Release before the step.
 $simTests = 'tests/CnCNew.Simulation.Tests'; $gameTests = 'tests/CnCNew.Game.Tests'; $simTool = 'tools/CnCNew.SimTool'
-function New-Step([string]$Id, [string]$Title, [string[]]$Command, [switch]$Content, [string]$Release) {
-    [pscustomobject]@{ Id = $Id; Title = $Title; Command = $Command; Content = [bool]$Content; Release = $Release }
+# -Environment: the step needs something of the machine that is not part of the repository's requirements (a Linux environment); it says so with exit code 3, and the
+# step is then shown as NOT RUN - never as passed.
+function New-Step([string]$Id, [string]$Title, [string[]]$Command, [switch]$Content, [string]$Release, [switch]$Environment) {
+    [pscustomobject]@{ Id = $Id; Title = $Title; Command = $Command; Content = [bool]$Content; Release = $Release; Environment = [bool]$Environment }
 }
 function Test-Program([string]$name) { , @('dotnet', 'run', '--no-build', '--project', "tests/CnCNew.$name.Tests") }
 function Release-Run([string]$project) { , @('dotnet', 'run', '-c', 'Release', '--no-build', '--project', $project, '--') }
@@ -210,6 +212,8 @@ $steps = @(
     New-Step 'session-check' 'Skirmish sessions saved and continued (AI table, eight players)' ((Release-Run $simTool) + 'session-check' + $ContentDir + '--jobs' + '3') -Content -Release $simTool
     New-Step 'net-probe'    'Four clients and four computer players over the relay with delay and jitter' ((Release-Run 'tools/CnCNew.NetTool') + 'loopback-match' + $ContentDir + '--map' + 'Maps/Twilight Flame/Twilight Flame.map' + '--humans' + '4' + '--ais' + '4' + '--seconds' + '60' + '--delay' + '40' + '--jitter' + '60') -Content -Release 'tools/CnCNew.NetTool'
     New-Step 'net-match'    'Server, proxy and four client processes: a match with delay, jitter and loss, and one with a vanishing client' (Script-Run 'check-net-match') -Content
+    New-Step 'net-robust'   'Rejoin, late and delayed watchers, the server replay and the desync diagnosis with real processes' (Script-Run 'check-net-robustness') -Content
+    New-Step 'net-cross-os' 'A match across Windows and Linux (WSL): server and two clients under Linux, two under Windows' (Script-Run 'check-net-cross-os') -Content -Environment
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content
     New-Step 'game-30'      'Game.Tests (real data, 30 Hz)'                   ((Release-Run $gameTests) + $content + '--tick-rate' + '30') -Content -Release $gameTests
@@ -217,6 +221,7 @@ $steps = @(
     New-Step 'sim-long'     'Simulation.Tests (long run)'                     ((Release-Run $simTests) + '--long' + '--only' + 'Long run') -Release $simTests
     New-Step 'scenes'       'Staged scenes'                                   (Script-Run 'audit-scenarios') -Content
 )
+# 'net-cross-os' is selected by no area: it runs at 'full' only.
 # Not part of 'full': what a wider step already contains.
 $contained = 'game-focus', 'game-sim', 'quick', 'rate-suite'
 if ($Tier -eq 'full') { $selected = @($steps | Where-Object { $_.Id -notin $contained }) }
@@ -267,9 +272,9 @@ try {
         $log = Join-Path $OutDir "$($step.Id).log"
         $last = (Test-Path -LiteralPath $log) ? (Get-Content -LiteralPath $log | Where-Object { $_.Trim() } | Select-Object -Last 1) : ''
         # The build counts its warnings itself: a build with warnings fails through TreatWarningsAsErrors.
-        $state = $exit -eq 0 ? 'ok' : 'FAILED'
+        $state = $exit -eq 0 ? 'ok' : ($exit -eq 3 -and $step.Environment) ? 'NOT RUN' : 'FAILED'
         Write-Host ("   {0} in {1:n0} s  {2}" -f $state, $watch.Elapsed.TotalSeconds, $last)
-        if ($exit -ne 0) {
+        if ($state -eq 'FAILED') {
             $failed = $true
             Write-Host "   log: $log" -ForegroundColor Red
             Get-Content -LiteralPath $log -ErrorAction SilentlyContinue | Where-Object { $_ -match 'FAIL|error|Error|differ|mismatch' } | Select-Object -First 15 | ForEach-Object { Write-Host "   $_" -ForegroundColor Red }
@@ -283,4 +288,6 @@ Write-Host "== Result: tier $Tier, $([int]$total.Elapsed.TotalSeconds) s, logs i
 $results | Format-Table -AutoSize | Out-String | Write-Host
 $skipped = @($results | Where-Object State -eq 'SKIPPED').Count
 if ($skipped -gt 0) { Write-Warning "$skipped step(s) skipped for lack of $ContentDir (scripts/dev-content.ps1): this run does not count as the tier." }
+$absent = @($results | Where-Object { $_.State -eq 'NOT RUN' -and $_.Seconds -ne '' })
+if ($absent.Count -gt 0) { Write-Warning "$($absent.Count) step(s) did not run because this machine lacks what they need ($(($absent | ForEach-Object Step) -join ', ')): they are not passed, and a report names them as not run." }
 exit ($failed ? 1 : 0)
