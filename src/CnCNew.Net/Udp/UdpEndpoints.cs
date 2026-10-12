@@ -392,7 +392,7 @@ public sealed class UdpServerEndpoint : IDisposable
                         _channel.Send(UdpFormat.Cookie(UdpKind.Challenge, nonce, current, cookie), from);
                         break;
                     }
-                    var token = UdpFormat.Token(_secret, from, nonce, slot);
+                    var token = UdpFormat.Token(_secret, from, nonce);
                     if (_links.TryGetValue(from, out var known))
                     {
                         if (known.Link.Token == token)

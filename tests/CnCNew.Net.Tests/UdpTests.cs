@@ -178,7 +178,11 @@ static partial class UdpTests
         Check.That(wire.Until(() => client.State == UdpClientState.Connected, 2_000), "the client connects");
         Check.That(wire.Accepted.Count == 1 && wire.Accepted[0].Token == client.Link.Token && client.Link.Token != 0, "both ends hold the same token");
 
-        // The same connect again (its accept was lost): the same token, no second connection.
+        // The same connect again (its accept was lost): the same token, no second connection. (The clock is first brought to ten milliseconds before the turn of a
+        // cookie's time slot, for what follows.)
+        var lifetime = UdpOptions.Default.CookieLifetimeMs;
+        var untilTurn = lifetime - wire.Clock.Milliseconds % lifetime;
+        if (untilTurn != 10) wire.Step((int)((untilTurn + lifetime - 10) % lifetime));
         Span<byte> cookie = stackalloc byte[16];
         var slot = unchecked((uint)(wire.Clock.Milliseconds / UdpOptions.Default.CookieLifetimeMs));
         UdpFormat.Mac(Secret, 1, forged, 42, slot, cookie);
@@ -198,6 +202,15 @@ static partial class UdpTests
         wire.Step(2);
         Check.That(NextAccept() == first && wire.Server.Connections == 2,
             "a repeated connect gets the same answer - the same token and the same key of the exchange - and no second connection");
+        // The same client with the cookie of the next time slot: on a slow line its request went out twice, across the turn of a slot, and it answered both
+        // challenges. Both connects are the same connection - the second must not replace the first, which the client already stands on.
+        wire.Step(20);
+        Check.That(unchecked((uint)(wire.Clock.Milliseconds / lifetime)) == slot + 1, "the clock is in the next time slot");
+        UdpFormat.Mac(Secret, 1, forged, 42, slot + 1, cookie);
+        channel.Send(UdpFormat.Connect(42, slot + 1, cookie, SomeKey), ServerAddress);
+        wire.Step(2);
+        Check.That(NextAccept() == first && wire.Server.Connections == 2 && wire.Accepted.All(link => link.CloseReason != UdpCloseReason.Replaced),
+            "a connect with the cookie of another time slot is the same connection: the same token, the same key, nothing replaced");
         // Another nonce from the same address replaces the connection.
         UdpFormat.Mac(Secret, 1, forged, 43, slot, cookie);
         channel.Send(UdpFormat.Connect(43, slot, cookie, SomeKey), ServerAddress);

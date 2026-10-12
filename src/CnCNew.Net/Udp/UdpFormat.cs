@@ -342,10 +342,15 @@ public static class UdpFormat
         mac[..destination.Length].CopyTo(destination);
     }
 
-    public static ulong Token(ReadOnlySpan<byte> secret, IPEndPoint address, ulong nonce, uint slot)
+    /// <summary>
+    /// The token of a connection: of the address and the client's nonce, and of nothing else. Not of the cookie's time slot - a client on a slow line that sent its
+    /// request twice across the turn of a slot holds two valid cookies and answers both, and both connects must mean the same connection (found in Phase 28: with the
+    /// slot in the token the second connect replaced the first, and the client stood on a connection the server had forgotten).
+    /// </summary>
+    public static ulong Token(ReadOnlySpan<byte> secret, IPEndPoint address, ulong nonce)
     {
         Span<byte> bytes = stackalloc byte[8];
-        Mac(secret, 2, address, nonce, slot, bytes);
+        Mac(secret, 2, address, nonce, 0, bytes);
         var token = BinaryPrimitives.ReadUInt64LittleEndian(bytes);
         return token == 0 ? 1 : token;
     }
