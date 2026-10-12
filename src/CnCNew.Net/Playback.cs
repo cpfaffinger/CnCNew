@@ -163,7 +163,10 @@ public sealed class PlaybackControl(PlaybackOptions options, long tickMicros)
         // The bundle arrived some time since the last look. The client's usual frame is part of what the delay has to cover; what a longer frame adds is the client's
         // own doing and is taken off (within twice the usual frame nothing is).
         var excess = Math.Max(0, sinceLastLookMicros - 2 * TypicalLookMicros);
-        _lateness.Enqueue((localMicros, sync.GameMicrosAt(localMicros) - excess * sync.SpeedPercent / 100 - (tick + 1) * tickMicros));
+        var lateness = sync.GameMicrosAt(localMicros) - excess * sync.SpeedPercent / 100 - (tick + 1) * tickMicros;
+        // A bundle that is later than the resync limit is not jitter: it is the backlog of a client that joined a running match, sent all at once.
+        if (lateness > options.ResyncMs * 1000L) return;
+        _lateness.Enqueue((localMicros, lateness));
         LatenessSamples++;
         while (_lateness.Count > 0 && localMicros - _lateness.Peek().LocalMicros > options.JitterWindowMs * 1000L) _lateness.Dequeue();
     }

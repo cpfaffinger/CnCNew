@@ -31,15 +31,76 @@ public sealed class HeadlessClient
     /// <param name="loadMap">Hands out the map of a path; a client learns the path from the match description.</param>
     /// <param name="clock">The local clock: clock synchronisation and the latency in real time. Null in a client-paced room (the local game).</param>
     public HeadlessClient(IConnection connection, string name, TemplateCatalog catalog, string definitionFingerprint, Func<string, MatchMap> loadMap, string room = "", INetClock? clock = null,
-        PlaybackOptions? playback = null, uint generatorSalt = 0, BuildIdentity? identity = null)
+        PlaybackOptions? playback = null, uint generatorSalt = 0, BuildIdentity? identity = null, ulong rejoinToken = 0, bool watch = false)
     {
         _catalog = catalog;
         _fingerprint = definitionFingerprint;
         _loadMap = loadMap;
         _generatorSalt = generatorSalt;
         Clock = clock;
-        Client = new LockstepClient(connection, name, definitionFingerprint, identity, room, clock, playback);
+        Client = new LockstepClient(connection, name, definitionFingerprint, identity, room, clock, playback, rejoinToken, watch);
+        Client.SnapshotRequested = request => _snapshotRequest = request;
+        Client.DesyncReceived = OnDesync;
     }
+
+    private uint _snapshotRequest;
+
+    /// <summary>What this client remembers of its session for the diagnosis of a desync; null: nothing (the hash of a tick is then all it can say).</summary>
+    public SessionDiagnostics? Diagnostics { get; set; } = new();
+
+    /// <summary>Where this client writes its package when the server reports a desync (docs/NETWORK-DIAGNOSTICS.md); null: nowhere.</summary>
+    public string? DiagnosticsDirectory { get; set; }
+    public string? PackageWritten { get; private set; }
+
+    /// <summary>The test switch of the diagnosis: before this tick one object of this client's world takes a point of damage nobody else's takes (-1: never).</summary>
+    public long CorruptAtTick { get; set; } = -1;
+    public string Corrupted { get; private set; } = string.Empty;
+
+    /// <summary>The test switch of the rejoin: the next state this client hands over is damaged on its way (one byte of the packed state).</summary>
+    public bool DamageNextSnapshot { get; set; }
+
+    /// <summary>Snapshots this client handed over, and what the last one cost: bytes of the state, bytes packed, microseconds to write and pack it.</summary>
+    public int SnapshotsOffered { get; private set; }
+    public (int StateBytes, int PackedBytes, long Micros) LastSnapshot { get; private set; }
+
+    /// <summary>The tick this client's session began at: 0, or the tick of the state it joined a running match with.</summary>
+    public long JoinedAtTick { get; private set; }
+
+    private void OnDesync(DesyncMessage desync)
+    {
+        if (Session is null) return;
+        Client.SendDesyncDetail(desync.Tick, Diagnostics is not null && Diagnostics.TryGetParts(desync.Tick, out var parts) ? parts : []);
+        if (Diagnostics is null || DiagnosticsDirectory is null) return;
+        try
+        {
+            Diagnostics.WritePackage(DiagnosticsDirectory, Session, Client, desync);
+            PackageWritten = DiagnosticsDirectory;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Problem = $"the diagnostics package could not be written: {exception.Message}";
+        }
+    }
+
+    private void OfferSnapshot()
+    {
+        var request = _snapshotRequest;
+        _snapshotRequest = 0;
+        var session = Session!;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var state = session.Save();
+        var packed = SessionTransfer.Pack(state);
+        LastSnapshot = (state.Length, packed.Length, (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMicroseconds);
+        SnapshotsOffered++;
+        if (DamageNextSnapshot)
+        {
+            DamageNextSnapshot = false;
+            packed[packed.Length / 2] ^= 0x5A;
+        }
+        // Between two ticks: the state after the last step, with nothing of the next bundle in it yet.
+        Client.OfferSnapshot(request, new ResumeState(session.World.Tick, session.StateHash(), session.HumanCommandCounts, packed));
+    }
+
 
     public LockstepClient Client { get; }
     public INetClock? Clock { get; }
@@ -97,11 +158,17 @@ public sealed class HeadlessClient
         try
         {
             map = _loadMap(description.MapPath);
-            Session = SkirmishMatchSession.Start(description, _catalog, map.Terrain, map.Objects, 0, _fingerprint, Client.Identity.Id);
+            // A running match is joined at the state a member handed over (or a saved match is continued); otherwise the match begins.
+            Session = Client.Start!.Resume is { } resume
+                ? SkirmishMatchSession.Restore(SessionTransfer.Unpack(resume.State), _catalog, _fingerprint, map.Terrain)
+                : SkirmishMatchSession.Start(description, _catalog, map.Terrain, map.Objects, 0, _fingerprint, Client.Identity.Id);
+            JoinedAtTick = Session.World.Tick;
         }
-        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidDataException)
+        catch (Exception exception) when (exception is ArgumentException or IOException or InvalidDataException or CnCNew.Simulation.Snapshots.SnapshotFormatException)
         {
             Problem = $"the match cannot be built here: {exception.Message}";
+            // A state that was handed over and cannot be read is told to the relay as a state that does not match: it turns this client away and holds the seat again.
+            if (Client.Start!.Resume is not null) Client.ReportLoaded(0);
             return;
         }
         var session = Session;
@@ -144,6 +211,7 @@ public sealed class HeadlessClient
         }
         var session = Session;
         var driver = Driver!;
+        if (_snapshotRequest != 0 && Client.Phase == ClientPhase.InMatch) OfferSnapshot();
         driver.AddTime(seconds);
         if (SlowEvery > 1 && ++_slowCounter % SlowEvery != 0) return 0;
         if (SkipUpdates > 0)
@@ -163,6 +231,13 @@ public sealed class HeadlessClient
                 _generator?.Update();
             }
             if (!driver.TryReleaseTick(tick, Path!.CanStep)) break;
+            if (tick == CorruptAtTick)
+            {
+                var victim = session.World.Entities.Where(entity => entity.Body is not null && !entity.EffectivelyDead && !entity.DestroyRequested).OrderBy(entity => entity.Id.Value).First();
+                session.World.Damage(victim.Id, new CnCNew.Simulation.World.DamageInfo(CnCNew.Simulation.Ids.EntityId.Invalid, CnCNew.Simulation.Numerics.Fixed.One,
+                    CnCNew.Simulation.World.DamageTypes.Unresistable, CnCNew.Simulation.World.DeathTypes.Normal, false));
+                Corrupted = FormattableString.Invariant($"object {victim.Id.Value} ({victim.Template.Name}) at tick {tick}");
+            }
             try
             {
                 Path.SubmitDue();
@@ -175,6 +250,7 @@ public sealed class HeadlessClient
             session.Step();
             driver.TickCompleted(tick);
             var hash = session.StateHash();
+            Diagnostics?.Record(tick, session, hash);
             if (KeepHashes) Hashes.Add(hash);
             HashChain = unchecked((HashChain ^ hash) * 0x100000001B3UL);
             TicksPlayed++;

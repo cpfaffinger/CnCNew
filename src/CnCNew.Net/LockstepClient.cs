@@ -37,7 +37,10 @@ public sealed class LockstepClient
 
     /// <param name="room">The room of the server this client wants to be in; a server with one room ignores it.</param>
     /// <param name="clock">The local clock for clock synchronisation; null: no pings, no estimate.</param>
-    public LockstepClient(IConnection connection, string name, string definitionFingerprint, BuildIdentity? identity = null, string room = "", INetClock? clock = null, PlaybackOptions? playback = null)
+    /// <param name="rejoinToken">The token of an earlier welcome of this room: this client wants its held seat back in the running match (0: a new member).</param>
+    /// <param name="watch">This client wants to watch a match that may already run.</param>
+    public LockstepClient(IConnection connection, string name, string definitionFingerprint, BuildIdentity? identity = null, string room = "", INetClock? clock = null, PlaybackOptions? playback = null,
+        ulong rejoinToken = 0, bool watch = false)
     {
         _connection = connection;
         Clock = clock;
@@ -45,8 +48,27 @@ public sealed class LockstepClient
         Sync = new ClockSync(_playback.SyncSamples);
         Identity = identity ?? BuildIdentity.Current;
         Send(new HelloMessage(Protocol.Version, Identity.Id, CommandTypes.Version, ReplayFormat.CurrentVersion, WorldSnapshot.Version, MatchDescription.EncodingVersion,
-            definitionFingerprint.ToUpperInvariant(), name, room));
+            definitionFingerprint.ToUpperInvariant(), name, room, rejoinToken, watch));
     }
+
+    /// <summary>What this client presents to take its seat again after it lost its connection; 0 when the server holds no seats.</summary>
+    public ulong RejoinToken { get; private set; }
+
+    /// <summary>The server asks for the state of this client's session, for somebody who joins the running match: answer with <see cref="OfferSnapshot"/>.</summary>
+    public Action<uint>? SnapshotRequested { get; set; }
+
+    /// <summary>Called when the server reports a desync, once.</summary>
+    public Action<DesyncMessage>? DesyncReceived { get; set; }
+
+    /// <summary>In which parts of the session hash the clients differed, once the server could tell.</summary>
+    public DesyncReportMessage? DesyncReport { get; private set; }
+
+    /// <summary>The seats the server keeps free for players that lost their connection, by player.</summary>
+    public IReadOnlyDictionary<int, SeatStateMessage> HeldSeats => _heldSeats;
+    private readonly SortedDictionary<int, SeatStateMessage> _heldSeats = [];
+
+    public void OfferSnapshot(uint requestId, ResumeState state) => Send(new SnapshotOfferMessage(requestId, state));
+    public void SendDesyncDetail(long tick, ImmutableArray<HashPart> parts) => Send(new DesyncDetailMessage(tick, parts));
 
     public INetClock? Clock { get; }
     public PlaybackOptions Playback => _playback;
@@ -159,6 +181,7 @@ public sealed class LockstepClient
             case WelcomeMessage welcome when Phase == ClientPhase.Connecting:
                 ConnectionId = welcome.ConnectionId;
                 IsHost = welcome.IsHost;
+                RejoinToken = welcome.RejoinToken;
                 Phase = ClientPhase.InRoom;
                 break;
             case RejectMessage reject when Phase == ClientPhase.Connecting:
@@ -227,7 +250,21 @@ public sealed class LockstepClient
                 _lag.Remove(dropped.ConnectionId);
                 break;
             case DesyncMessage desync:
-                Desync ??= desync;
+                if (Desync is null)
+                {
+                    Desync = desync;
+                    DesyncReceived?.Invoke(desync);
+                }
+                break;
+            case DesyncReportMessage report:
+                DesyncReport = report;
+                break;
+            case SnapshotRequestMessage request when Phase == ClientPhase.InMatch:
+                SnapshotRequested?.Invoke(request.RequestId);
+                break;
+            case SeatStateMessage seat:
+                if (seat.State == SeatHold.Held) _heldSeats[seat.Player] = seat;
+                else _heldSeats.Remove(seat.Player);
                 break;
             case MatchEndMessage end:
                 End = end;

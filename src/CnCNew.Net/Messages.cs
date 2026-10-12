@@ -36,6 +36,12 @@ public enum MessageType : ushort
     Pong = 27,
     LagState = 28,
     Leave = 29,
+    // Protocol version 3 (phase 27).
+    DesyncDetail = 30,
+    DesyncReport = 31,
+    SnapshotRequest = 32,
+    SnapshotOffer = 33,
+    SeatState = 34,
 }
 
 /// <summary>Why the server turned a connection or a request away.</summary>
@@ -53,6 +59,10 @@ public enum RejectReason : ushort
     NotReady = 10,
     /// <summary>The server has no room left for another room (version 2).</summary>
     ServerFull = 11,
+    /// <summary>The hello names a seat that is not held for it: the token is unknown or its time is over (version 3).</summary>
+    SeatNotHeld = 12,
+    /// <summary>The match cannot be joined now: no member could hand over its state, and the match is too long to be played again from its start (version 3).</summary>
+    CannotCatchUp = 13,
 }
 
 public enum RoomPhase : byte
@@ -90,8 +100,13 @@ public enum EndReason : byte
 /// <summary>The limits of the protocol. A message above its limit is discarded and counted, and so is one of an unknown type.</summary>
 public static class Protocol
 {
-    /// <summary>Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave, the drop reason "too slow", the reject reason "server full".</summary>
-    public const ushort Version = 2;
+    /// <summary>
+    /// Version 3 (phase 27): the rejoin token and the watch flag in the hello, the token in the welcome, the detail and the report of a desync, the request and the
+    /// offer of a snapshot, the state of a held seat. Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave.
+    /// </summary>
+    public const ushort Version = 3;
+    public const int MaxPartNameBytes = 48;
+    public const int MaxHashParts = 32;
     public const int MaxRoomBytes = 64;
     /// <summary>Upper limit of every message except <see cref="MatchStartMessage"/> and <see cref="StartRequestMessage"/>, which may carry a session state.</summary>
     public const int MaxMessageBytes = 64 * 1024;
@@ -119,7 +134,7 @@ public abstract record NetMessage
 
 /// <summary>Client to server, first message of a connection: who is this, and can it play with the others at all.</summary>
 public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, int CommandTableVersion, int ReplayFormatVersion, int WorldStateVersion, int DescriptionEncoding,
-    string DefinitionFingerprint, string Name, string Room = "") : NetMessage
+    string DefinitionFingerprint, string Name, string Room = "", ulong RejoinToken = 0, bool Watch = false) : NetMessage
 {
     public override MessageType Type => MessageType.Hello;
 
@@ -134,6 +149,8 @@ public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, i
         writer.Text(DefinitionFingerprint, Protocol.MaxIdBytes);
         writer.Text(Name, Protocol.MaxNameBytes);
         writer.Text(Room, Protocol.MaxRoomBytes);
+        writer.U64(RejoinToken);
+        writer.Bool(Watch);
     }
 
     /// <summary>
@@ -149,11 +166,12 @@ public sealed record HelloMessage(ushort ProtocolVersion, string SimulationId, i
             return new HelloMessage(version, string.Empty, 0, 0, 0, 0, string.Empty, string.Empty);
         }
         return new HelloMessage(version, reader.Text(Protocol.MaxIdBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.Text(Protocol.MaxIdBytes), reader.Text(Protocol.MaxNameBytes),
-            reader.Text(Protocol.MaxRoomBytes));
+            reader.Text(Protocol.MaxRoomBytes), reader.U64(), reader.Bool());
     }
 }
 
-public sealed record WelcomeMessage(uint ConnectionId, bool IsHost) : NetMessage
+/// <param name="RejoinToken">What this client presents in a later hello to take its seat again after it lost its connection (0: this server holds no seats).</param>
+public sealed record WelcomeMessage(uint ConnectionId, bool IsHost, ulong RejoinToken = 0) : NetMessage
 {
     public override MessageType Type => MessageType.Welcome;
 
@@ -161,9 +179,10 @@ public sealed record WelcomeMessage(uint ConnectionId, bool IsHost) : NetMessage
     {
         writer.U32(ConnectionId);
         writer.Bool(IsHost);
+        writer.U64(RejoinToken);
     }
 
-    internal static WelcomeMessage Read(ref WireReader reader) => new(reader.U32(), reader.Bool());
+    internal static WelcomeMessage Read(ref WireReader reader) => new(reader.U32(), reader.Bool(), reader.U64());
 }
 
 public sealed record RejectMessage(RejectReason Reason, string Text) : NetMessage
@@ -642,6 +661,126 @@ public sealed record MatchEndMessage(long Tick, int Winner, EndReason Reason) : 
     }
 }
 
+/// <summary>One part of a session hash: its name (<c>world.objects</c>, <c>ai.player3</c>, ...) and its value.</summary>
+public readonly record struct HashPart(string Name, ulong Hash);
+
+/// <summary>
+/// Client to server, after a <see cref="DesyncMessage"/>: the session hash of that tick taken apart, as this client had it (docs/NETWORK-DIAGNOSTICS.md). A client that no
+/// longer holds the tick sends no parts.
+/// </summary>
+public sealed record DesyncDetailMessage(long Tick, ImmutableArray<HashPart> Parts) : NetMessage
+{
+    public override MessageType Type => MessageType.DesyncDetail;
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.I64(Tick);
+        writer.U8((byte)Parts.Length);
+        foreach (var part in Parts)
+        {
+            writer.Text(part.Name, Protocol.MaxPartNameBytes);
+            writer.U64(part.Hash);
+        }
+    }
+
+    internal static DesyncDetailMessage Read(ref WireReader reader)
+    {
+        var tick = reader.I64();
+        var count = reader.U8();
+        if (count > Protocol.MaxHashParts) throw new ProtocolException("A desync detail names more parts than a session hash has.");
+        var parts = ImmutableArray.CreateBuilder<HashPart>(count);
+        for (var index = 0; index < count; index++) parts.Add(new HashPart(reader.Text(Protocol.MaxPartNameBytes), reader.U64()));
+        return new DesyncDetailMessage(tick, parts.MoveToImmutable());
+    }
+}
+
+/// <summary>One line of a <see cref="DesyncReportMessage"/>: a part in which the clients differ, and what one connection had there.</summary>
+public readonly record struct DesyncPart(string Name, uint ConnectionId, ulong Hash);
+
+/// <summary>Server to every client: in which parts of the session hash of that tick the clients differ, with the value of every connection that sent its detail.</summary>
+public sealed record DesyncReportMessage(long Tick, ImmutableArray<DesyncPart> Parts) : NetMessage
+{
+    public override MessageType Type => MessageType.DesyncReport;
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.I64(Tick);
+        writer.U16((ushort)Parts.Length);
+        foreach (var part in Parts)
+        {
+            writer.Text(part.Name, Protocol.MaxPartNameBytes);
+            writer.U32(part.ConnectionId);
+            writer.U64(part.Hash);
+        }
+    }
+
+    internal static DesyncReportMessage Read(ref WireReader reader)
+    {
+        var tick = reader.I64();
+        var count = reader.U16();
+        if (count > Protocol.MaxHashParts * Protocol.MaxConnections) throw new ProtocolException("A desync report lists more parts than the connections of a room can have.");
+        var parts = ImmutableArray.CreateBuilder<DesyncPart>(count);
+        for (var index = 0; index < count; index++) parts.Add(new DesyncPart(reader.Text(Protocol.MaxPartNameBytes), reader.U32(), reader.U64()));
+        return new DesyncReportMessage(tick, parts.MoveToImmutable());
+    }
+}
+
+/// <summary>Server to one client: hand over the state of your session after the tick you complete next, for somebody who joins the running match.</summary>
+public sealed record SnapshotRequestMessage(uint RequestId) : NetMessage
+{
+    public override MessageType Type => MessageType.SnapshotRequest;
+    internal override void Write(WireWriter writer) => writer.U32(RequestId);
+    internal static SnapshotRequestMessage Read(ref WireReader reader) => new(reader.U32());
+}
+
+/// <summary>
+/// Client to server: the state asked for - the tick the match continues at, the session hash of that state, and the state itself, which the server passes on unread. The
+/// server compares the hash with what all clients reported for the tick before; the one who loads it compares again.
+/// </summary>
+public sealed record SnapshotOfferMessage(uint RequestId, ResumeState State) : NetMessage
+{
+    public override MessageType Type => MessageType.SnapshotOffer;
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.U32(RequestId);
+        State.Write(writer);
+    }
+
+    internal static SnapshotOfferMessage Read(ref WireReader reader) => new(reader.U32(), ResumeState.Read(ref reader));
+}
+
+public enum SeatHold : byte
+{
+    /// <summary>The player lost its connection; its seat is kept free for <see cref="SeatStateMessage.HoldMs"/>.</summary>
+    Held = 0,
+    /// <summary>The player is back in its seat.</summary>
+    Returned = 1,
+    /// <summary>The time is over: the player leaves the match with the next bundle.</summary>
+    GivenUp = 2,
+}
+
+/// <summary>Server to every client: what became of the seat of a player that lost its connection.</summary>
+public sealed record SeatStateMessage(int Player, SeatHold State, int HoldMs) : NetMessage
+{
+    public override MessageType Type => MessageType.SeatState;
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.I32(Player);
+        writer.U8((byte)State);
+        writer.I32(HoldMs);
+    }
+
+    internal static SeatStateMessage Read(ref WireReader reader)
+    {
+        var player = reader.I32();
+        var state = reader.U8();
+        if (state > (byte)SeatHold.GivenUp) throw new ProtocolException($"Unknown seat state {state}.");
+        return new SeatStateMessage(player, (SeatHold)state, reader.I32());
+    }
+}
+
 /// <summary>
 /// Client to server, at an interval: "what does your tick clock read?" - with the client's own clock, which the answer returns, and the last tick this client has completed,
 /// from which the server knows how far behind it is (docs/NETWORK-PROTOCOL.md sections 13 and 14).
@@ -728,7 +867,8 @@ public static class MessageCodec
     }
 
     /// <summary>The upper limit of a message of this type in bytes, type field included.</summary>
-    public static int LimitOf(MessageType type) => type is MessageType.MatchStart or MessageType.StartRequest ? Protocol.MaxResumeBytes + Protocol.MaxMessageBytes : Protocol.MaxMessageBytes;
+    public static int LimitOf(MessageType type)
+        => type is MessageType.MatchStart or MessageType.StartRequest or MessageType.SnapshotOffer ? Protocol.MaxResumeBytes + Protocol.MaxMessageBytes : Protocol.MaxMessageBytes;
 
     public static bool TryDecode(ReadOnlySpan<byte> data, out NetMessage? message, out string error)
     {
@@ -784,6 +924,11 @@ public static class MessageCodec
                 MessageType.Pong => PongMessage.Read(ref reader),
                 MessageType.LagState => LagStateMessage.Read(ref reader),
                 MessageType.Leave => LeaveMessage.Read(ref reader),
+                MessageType.DesyncDetail => DesyncDetailMessage.Read(ref reader),
+                MessageType.DesyncReport => DesyncReportMessage.Read(ref reader),
+                MessageType.SnapshotRequest => SnapshotRequestMessage.Read(ref reader),
+                MessageType.SnapshotOffer => SnapshotOfferMessage.Read(ref reader),
+                MessageType.SeatState => SeatStateMessage.Read(ref reader),
                 _ => throw new ProtocolException($"No decoder for {type}."),
             };
             reader.End();

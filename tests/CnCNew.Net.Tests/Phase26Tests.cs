@@ -181,9 +181,9 @@ static partial class NetTests
         Check.That(new PlaybackControl(PlaybackOptions.Default, 16_666).TimeReached(1_000_000), "without an estimate every tick is due when its bundle is there");
         // Bundles the client took in after standing still itself are played, not measured: its own hitch is not the network's jitter.
         var measured = playback.LatenessSamples;
-        playback.Arrived(3_000, 31_000, sync, sinceLastLookMicros: 400_000);
+        playback.Arrived(3_150, 31_000, sync, sinceLastLookMicros: 400_000);
         Check.That(playback.LatenessSamples == measured, "an arrival after a hitch of the client is not a sample");
-        playback.Arrived(3_000, 31_000, sync, sinceLastLookMicros: 4_000);
+        playback.Arrived(3_150, 31_000, sync, sinceLastLookMicros: 4_000);
         Check.That(playback.LatenessSamples == measured + 1 && playback.TypicalLookMicros == 4_000, "an arrival in a normal frame is, and the frame is remembered");
 
         // A long tick of the client's own simulation (30 ms where its frame is 4) must not raise the delay: what exceeds twice the usual frame is taken off the lateness.
@@ -226,7 +226,8 @@ static partial class NetTests
 
     // ----------------------------------------------------------------------------------------------------------- the rule
 
-    private static RelayOptions Rule(uint seed = 5) => new(SeedSource: () => seed);
+    // The rule as phase 26 built it: the count of slowed time starts again as soon as a member is back below the report limit (the recovery time is phase 27's).
+    private static RelayOptions Rule(uint seed = 5) => new(SeedSource: () => seed, LagRecoveryMs: 0);
 
     /// <summary>Lets the clock run; every listed client reports each tick it has a bundle for as completed (with one hash for all).</summary>
     private static void Play(Net net, int ms, params int[] reporting)

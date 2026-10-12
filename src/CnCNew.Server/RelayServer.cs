@@ -14,7 +14,16 @@ namespace CnCNew.Server;
 /// <param name="ThrottleLimitMs">A member that stays above <paramref name="LagThrottleMs"/> for this long (time of the server's clock) is dropped.</param>
 /// <param name="ThrottleSpeedPercent">The share of the set game speed while the game is slowed for somebody.</param>
 public sealed record RelayOptions(bool AllowModifiedBuilds = false, bool HostMayChooseSeeds = false, ushort HashInterval = 1, Func<uint>? SeedSource = null, int MaxConnections = Protocol.MaxConnections,
-    int LagReportMs = 500, int LagThrottleMs = 2_000, int ThrottleLimitMs = 10_000, int ThrottleSpeedPercent = 50, int DefaultTickRate = 60);
+    int LagReportMs = 500, int LagThrottleMs = 2_000, int ThrottleLimitMs = 10_000, int ThrottleSpeedPercent = 50, int DefaultTickRate = 60, int LagRecoveryMs = 30_000,
+    int SeatHoldMs = 0, int SpectatorDelayMs = 0, bool AllowLateWatchers = false, long CatchUpLimitTicks = 432_000, int CatchUpLimitMs = 300_000, int PausesPerPlayer = 3,
+    int MaxPauseMs = 60_000, bool HostSetsSpeed = true)
+{
+    // Phase 27 (docs/NETWORK-PROTOCOL.md section 18). LagRecoveryMs: a member's count of slowed time starts again only after it was below the report limit for this long
+    // (0: at once, the rule of phase 26). SeatHoldMs: how long the seat of a player that lost its connection is kept free before the player leaves the match (0: not at
+    // all). SpectatorDelayMs: how far behind the players a member without a seat is sent the bundles. AllowLateWatchers: admit somebody without a seat to a running match.
+    // CatchUpLimitTicks: the longest match a joiner is let play again from its start. CatchUpLimitMs: how long a joiner may take to catch up before it is dropped.
+    // PausesPerPlayer, MaxPauseMs, HostSetsSpeed: the rules of the pace in a server-paced match.
+}
 
 /// <summary>
 /// How evenly a room closed its ticks (docs/NETWORK-PROTOCOL.md section 13.4): the time between two closings on the server's clock, as its deviation from the tick length, in
@@ -70,7 +79,7 @@ public sealed class RelayRecording
 /// <b>client-paced</b> (exactly one client: the local game) when that client asks, so a single-player game has no added delay and keeps pause, speed and fast forward.
 /// <para>Single-threaded: <see cref="Attach"/> and <see cref="Pump"/> are called by one driver. Nothing here reads a clock but the injected one.</para>
 /// </summary>
-public sealed class RelayServer
+public sealed partial class RelayServer
 {
     private sealed class Peer(uint id, IConnection connection)
     {
@@ -99,6 +108,30 @@ public sealed class RelayServer
         public long LagWindowStartMicros { get; set; }
         public long LagReportedAtMicros { get; set; }
         public bool Leaving { get; set; }
+        /// <summary>Since when this member has been below the report limit again (0: it is not).</summary>
+        public long RecoveredSinceMicros { get; set; }
+        /// <summary>What this client presents to take its seat again.</summary>
+        public ulong Token { get; set; }
+        /// <summary>The next bundle this member has not been sent yet.</summary>
+        public long NextBundle { get; set; }
+        /// <summary>Admitted to a running match, not yet standing at a state of it: it waits for a snapshot or builds the match.</summary>
+        public bool Joining { get; set; }
+        /// <summary>Joined a running match and still playing what it missed: the rule for members that fall behind does not apply yet, and no tick waits for its report.</summary>
+        public bool CatchingUp { get; set; }
+        public long CatchingUpSinceMicros { get; set; }
+        /// <summary>A member without a seat on a server that delays watchers.</summary>
+        public bool Delayed { get; set; }
+        public long SeatUntilMicros { get; set; }
+        public long JoinDeadlineMicros { get; set; }
+        public uint SnapshotRequest { get; set; }
+        public uint SnapshotDonor { get; set; }
+        public long SnapshotDeadlineMicros { get; set; }
+        public ResumeState? Offer { get; set; }
+        public ulong ExpectedHash { get; set; }
+        public HashSet<uint> TriedDonors { get; } = [];
+        public int PausesUsed { get; set; }
+        /// <summary>The end of the match, kept back until a delayed watcher has been sent all of it.</summary>
+        public MatchEndMessage? PendingEnd { get; set; }
     }
 
     private const int EventLimit = 1_024;
@@ -135,6 +168,8 @@ public sealed class RelayServer
         if (_options.MaxConnections is < 1 or > Protocol.MaxConnections) throw new ArgumentException($"A room admits 1 to {Protocol.MaxConnections} members.", nameof(options));
         if (_options.ThrottleSpeedPercent is < 1 or > 100) throw new ArgumentException("The throttle speed is 1 to 100 percent.", nameof(options));
         if (_options.DefaultTickRate is not (30 or 60 or 120)) throw new ArgumentException("The default tick rate is 30, 60 or 120.", nameof(options));
+        if (_options.SeatHoldMs < 0 || _options.SpectatorDelayMs < 0 || _options.LagRecoveryMs < 0 || _options.PausesPerPlayer < 0 || _options.MaxPauseMs < 0 || _options.CatchUpLimitTicks < 0)
+            throw new ArgumentException("A time or a count of the room's rules is negative.", nameof(options));
         Settings = RoomSettings.Empty with { TickRate = _options.DefaultTickRate };
         _lastMicros = clock.Microseconds;
     }
@@ -241,6 +276,8 @@ public sealed class RelayServer
         }
         for (var index = _peers.Count - 1; index >= 0; index--)
         {
+            // A drop can take more than one member with it (a joiner whose donor is gone is asked again, not dropped - but be safe against a list that shrank).
+            if (index >= _peers.Count) continue;
             var peer = _peers[index];
             if (peer.Leaving)
             {
@@ -253,6 +290,11 @@ public sealed class RelayServer
             }
         }
         AdvanceClock();
+        if (Phase is RoomPhase.Match or RoomPhase.Ended)
+        {
+            if (Phase == RoomPhase.Match) DeliverSnapshots(_clock.Microseconds);
+            FeedAll();
+        }
     }
 
     private void Handle(Peer peer, NetMessage message)
@@ -284,6 +326,19 @@ public sealed class RelayServer
                 peer.LoadPercent = progress.Percent;
                 Broadcast(new LoadProgressStateMessage(peer.Id, progress.Percent));
                 break;
+            case LoadedMessage loaded when Phase == RoomPhase.Match && peer.Joining && peer.SnapshotRequest == 0:
+                LateLoaded(peer, loaded);
+                break;
+            case SnapshotOfferMessage offer when Phase == RoomPhase.Match:
+                TakeSnapshot(peer, offer);
+                break;
+            case DesyncDetailMessage detail when Phase == RoomPhase.Ended:
+                TakeDetail(peer, detail);
+                break;
+            // What a client of a finished match still had on its way is not a violation: the two channels are not ordered against each other.
+            case HashReportMessage or PingMessage or IntentMessage or EndReportMessage or SnapshotOfferMessage or LoadProgressMessage when Phase == RoomPhase.Ended:
+                if (message is PingMessage late) peer.Connection.SendUrgent(MessageCodec.Encode(new PongMessage(late.ClientMicros, 0, 0)));
+                break;
             case LoadedMessage loaded when Phase == RoomPhase.Loading && !peer.Loaded:
                 peer.Loaded = true;
                 peer.LoadedHash = loaded.SessionHash;
@@ -293,9 +348,11 @@ public sealed class RelayServer
                 Broadcast(new ChatMessage(peer.Id, chat.Text));
                 break;
             case PingMessage ping:
-                if (Phase == RoomPhase.Match) peer.CompletedTick = Math.Max(peer.CompletedTick, Math.Min(ping.CompletedTick, NextTick - 1));
-                // On the urgent channel like the bundles: a clock sample that waited behind a lost packet would be a wrong one.
-                peer.Connection.SendUrgent(MessageCodec.Encode(new PongMessage(ping.ClientMicros, GameMicros, (ushort)EffectiveSpeedPercent)));
+                if (Phase == RoomPhase.Match && !peer.Joining) peer.CompletedTick = Math.Max(peer.CompletedTick, Math.Min(ping.CompletedTick, NextTick - 1));
+                // On the urgent channel like the bundles: a clock sample that waited behind a lost packet would be a wrong one. A delayed watcher is told the clock of
+                // the stream it is sent: the server's, less the delay.
+                peer.Connection.SendUrgent(MessageCodec.Encode(new PongMessage(ping.ClientMicros, peer.Delayed ? Math.Max(0, GameMicros - _delayTicks * _tickMicroseconds) : GameMicros,
+                    (ushort)EffectiveSpeedPercent)));
                 break;
             case LeaveMessage:
                 peer.Leaving = true;
@@ -313,6 +370,7 @@ public sealed class RelayServer
                 break;
             case PaceRequestMessage pace when Phase == RoomPhase.Match:
                 if (pace.SpeedPercent is < Protocol.MinSpeedPercent or > Protocol.MaxSpeedPercent) { Discard(peer, $"a speed of {pace.SpeedPercent} percent"); break; }
+                if (CheckPace(peer, pace) is { } notGranted) { Send(peer, notGranted); break; }
                 Paused = pace.Paused;
                 SpeedPercent = pace.SpeedPercent;
                 // What everybody is told is the speed the ticks really close at (a client-paced room has no clock: there it is the speed as set).
@@ -321,6 +379,9 @@ public sealed class RelayServer
             case EndReportMessage report when Phase == RoomPhase.Match:
                 peer.EndReport = (report.Tick, report.Winner);
                 CheckEnd();
+                break;
+            // A member that is not yet in the match says nothing that counts.
+            case HashReportMessage or IntentMessage or EndReportMessage when peer.Joining:
                 break;
             default:
                 Discard(peer, $"a {message.Type} message in phase {Phase}");
@@ -334,8 +395,10 @@ public sealed class RelayServer
     {
         RejectMessage? reject = null;
         var identity = BuildIdentity.Parse(hello.SimulationId);
+        // A running match takes in a player that comes back to its held seat, and - where the server allows it - somebody who watches.
+        var late = Phase == RoomPhase.Match && Pacing == Pacing.Server && (hello.RejoinToken != 0 || hello.Watch);
         if (hello.ProtocolVersion != Protocol.Version) reject = new RejectMessage(RejectReason.ProtocolVersion, $"The server speaks protocol {Protocol.Version}, the client {hello.ProtocolVersion}.");
-        else if (Phase != RoomPhase.Room) reject = new RejectMessage(RejectReason.MatchRunning, "The match has started.");
+        else if (Phase != RoomPhase.Room && !late) reject = new RejectMessage(RejectReason.MatchRunning, "The match has started.");
         else if (_peers.Count(other => other.Hello is not null) >= _options.MaxConnections) reject = new RejectMessage(RejectReason.RoomFull, "The room is full.");
         else if (identity.Modified && !_options.AllowModifiedBuilds) reject = new RejectMessage(RejectReason.ModifiedBuild, "The client is a modified development build; this server admits released builds only.");
         else if (_roomHasIdentity)
@@ -345,6 +408,8 @@ public sealed class RelayServer
             else if (!string.Equals(hello.SimulationId, _simulationId, StringComparison.Ordinal)) reject = new RejectMessage(RejectReason.SimulationVersion, $"The room plays simulation {_simulationId}, the client is {hello.SimulationId}.");
             else if (!string.Equals(hello.DefinitionFingerprint, _definitionFingerprint, StringComparison.OrdinalIgnoreCase)) reject = new RejectMessage(RejectReason.Definitions, "The client has other game definitions than the room.");
         }
+        if (reject is null && late) reject = AdmitLate(peer, hello);
+        if (reject is null && late) return;
         if (reject is not null)
         {
             Log("rejected", ("connection", Text(peer.Id)), ("reason", reject.Reason.ToString()));
@@ -362,8 +427,9 @@ public sealed class RelayServer
             _host = peer.Id;
         }
         peer.Hello = hello;
+        peer.Token = NewToken();
         Log("joined", ("connection", Text(peer.Id)), ("name", hello.Name), ("host", peer.Id == _host ? "true" : "false"), ("build", hello.SimulationId));
-        Send(peer, new WelcomeMessage(peer.Id, peer.Id == _host));
+        Send(peer, new WelcomeMessage(peer.Id, peer.Id == _host, peer.Token));
         BroadcastRoom();
     }
 
@@ -472,6 +538,12 @@ public sealed class RelayServer
         Recording.Resume = resume;
         Recording.Bundles.Clear();
         _leaves.Clear();
+        _held.Clear();
+        _agreed.Clear();
+        _agreedOrder.Clear();
+        _details.Clear();
+        _delayTicks = (long)_options.SpectatorDelayMs * Settings.TickRate / 1000;
+        _pauseUntilMicros = 0;
         Throttling = false;
         Log("match-started", ("map", Settings.MapPath), ("tickRate", Text(Settings.TickRate)), ("participants", Text(Settings.Slots.Count(slot => slot.TakesPart))), ("members", Text(members.Count)),
             ("pacing", Pacing.ToString()), ("startTick", Text(NextTick)));
@@ -486,6 +558,14 @@ public sealed class RelayServer
             peer.LagFloorBefore = int.MaxValue;
             peer.LagWindowStartMicros = _clock.Microseconds;
             peer.Player = peer.Slot >= 0 ? playerOfSlot[peer.Slot] : 0;
+            peer.NextBundle = NextTick;
+            peer.Joining = false;
+            peer.CatchingUp = false;
+            peer.RecoveredSinceMicros = 0;
+            peer.PausesUsed = 0;
+            peer.PendingEnd = null;
+            // Only where ticks are closed by the clock is there a delay to speak of: the one member of a local game watches its own match as it runs.
+            peer.Delayed = peer.Player == 0 && _delayTicks > 0 && Pacing == Pacing.Server;
             peer.Loaded = false;
             peer.EndReport = null;
             peer.Intents.Clear();
@@ -505,6 +585,7 @@ public sealed class RelayServer
             ReportDesync(NextTick - 1, [..members.Select(peer => (peer.Id, peer.LoadedHash))]);
             return;
         }
+        _startHash = expected;
         Phase = RoomPhase.Match;
         _lastCloseMicros = long.MinValue;
         _lastMicros = _clock.Microseconds;
@@ -543,6 +624,8 @@ public sealed class RelayServer
         var elapsed = now - _lastMicros;
         _lastMicros = now;
         if (Phase != RoomPhase.Match || Pacing != Pacing.Server || elapsed <= 0) return;
+        ExpireSeats(now);
+        EndOverlongPause(now);
         ApplyLagRule(now, elapsed);
         if (Phase != RoomPhase.Match || Paused) return;
         if (Throttling) ThrottledMicros += elapsed;
@@ -579,8 +662,27 @@ public sealed class RelayServer
         for (var index = _peers.Count - 1; index >= 0; index--)
         {
             var peer = _peers[index];
-            if (peer.Hello is null) continue;
-            var rawLagMs = (int)Math.Clamp((NextTick - 1 - peer.CompletedTick) * _tickMicroseconds / 1000, 0, int.MaxValue);
+            if (peer.Hello is null || peer.Joining) continue;
+            var rawLagMs = (int)Math.Clamp((StreamHead(peer) - peer.CompletedTick) * _tickMicroseconds / 1000, 0, int.MaxValue);
+            if (peer.CatchingUp)
+            {
+                // A member that joined the running match plays what it missed as fast as it can; the rule begins when it has arrived - or it is given up.
+                if (peer.CatchingUpSinceMicros == 0) peer.CatchingUpSinceMicros = now;
+                if (rawLagMs < 1_000)
+                {
+                    peer.CatchingUp = false;
+                    peer.CatchingUpSinceMicros = 0;
+                    peer.LagWindowStartMicros = now;
+                    Log("caught-up", ("connection", Text(peer.Id)), ("player", Text(peer.Player)), ("lagMs", Text(rawLagMs)), ("slowsTheGame", "false"));
+                }
+                else if (_options.CatchUpLimitMs > 0 && now - peer.CatchingUpSinceMicros > _options.CatchUpLimitMs * 1000L)
+                {
+                    DroppedForLag++;
+                    peer.Connection.Close();
+                    Drop(peer, DropReason.TooSlow);
+                }
+                continue;
+            }
             // A member on a long line is "behind" by its way and its playback delay all the time. That is not lag: the rule counts what goes beyond the least it showed
             // in the last windows (at most a second of it - a member that is always further behind than that is behind).
             if (now - peer.LagWindowStartMicros >= LagWindowMicros)
@@ -605,9 +707,16 @@ public sealed class RelayServer
                     continue;
                 }
             }
-            else if (lagMs < Math.Max(1, _options.LagReportMs))
+            // The count of slowed time starts again only when the member has stayed below the report limit for the recovery time: one that catches up at the slowed
+            // speed and falls behind again at full speed is one incident, not many.
+            if (lagMs < Math.Max(1, _options.LagReportMs))
             {
-                peer.ThrottledMicros = 0;
+                if (peer.RecoveredSinceMicros == 0) peer.RecoveredSinceMicros = now;
+                if (now - peer.RecoveredSinceMicros >= _options.LagRecoveryMs * 1000L) peer.ThrottledMicros = 0;
+            }
+            else
+            {
+                peer.RecoveredSinceMicros = 0;
             }
             var slows = over && peer.Player > 0;
             throttle |= slows;
@@ -665,32 +774,40 @@ public sealed class RelayServer
         IntentsRelayed += bundle.Commands.Length;
         Recording.Bundles.Add(bundle);
         NextTick = tick + 1;
-        // The urgent channel: a bundle must not wait behind a lost packet.
-        var bytes = MessageCodec.Encode(bundle);
-        foreach (var peer in _peers)
-            if (peer.Hello is not null) peer.Connection.SendUrgent(bytes);
+        if (NextTick >= Settings.MaxTicks) _lastTickAtMicros = _clock.Microseconds;
+        FeedAll();
     }
 
     private void TakeHash(Peer peer, HashReportMessage report)
     {
-        if (report.Tick < Recording.StartTick || report.Tick >= NextTick || report.Tick <= LastAgreedTick)
+        if (report.Tick < Recording.StartTick || report.Tick >= NextTick)
         {
             Discard(peer, $"a hash report for tick {report.Tick}");
             return;
         }
         HashReports++;
         peer.CompletedTick = Math.Max(peer.CompletedTick, report.Tick);
+        if (report.Tick <= LastAgreedTick || !ReportsInTime(peer))
+        {
+            // Somebody who plays behind the others - a member that catches up, a delayed watcher - reports ticks the others have long agreed on. Its hash is compared
+            // with theirs; a tick the server no longer remembers is past comparing.
+            if (_agreed.TryGetValue(report.Tick, out var agreed))
+            {
+                if (agreed != report.SessionHash) ReportDesync(report.Tick, [(peer.Id, report.SessionHash), (0, agreed)]);
+                return;
+            }
+            if (report.Tick <= LastAgreedTick) return;
+        }
         if (!_hashReports.TryGetValue(report.Tick, out var reports)) _hashReports[report.Tick] = reports = [];
         reports[peer.Id] = report.SessionHash;
-        var members = _peers.Where(other => other.Hello is not null).ToList();
         if (reports.Values.Distinct().Count() > 1)
         {
             ReportDesync(report.Tick, [..reports.Select(pair => (pair.Key, pair.Value))]);
             return;
         }
-        if (members.Any(other => !reports.ContainsKey(other.Id))) return;
+        if (_peers.Any(other => ReportsInTime(other) && !reports.ContainsKey(other.Id))) return;
         _hashReports.Remove(report.Tick);
-        if (report.Tick > LastAgreedTick) LastAgreedTick = report.Tick;
+        Agree(report.Tick, report.SessionHash);
     }
 
     private void ReportDesync(long tick, ImmutableArray<(uint, ulong)> reports)
@@ -703,7 +820,8 @@ public sealed class RelayServer
 
     private void CheckEnd()
     {
-        var members = _peers.Where(peer => peer.Hello is not null).ToList();
+        // The end is what those say who play along in time; a delayed watcher gets there later.
+        var members = _peers.Where(ReportsInTime).ToList();
         if (members.Count == 0 || members.Any(peer => peer.EndReport is null)) return;
         var first = members[0].EndReport!.Value;
         // Clients that disagree about the end disagree about the state; the hash reports will say where.
@@ -717,27 +835,51 @@ public sealed class RelayServer
         End = end;
         Phase = RoomPhase.Ended;
         Throttling = false;
-        Log("match-ended", ("tick", Text(end.Tick)), ("winner", Text(end.Winner)), ("reason", end.Reason.ToString()), ("lastAgreedTick", Text(LastAgreedTick)), ("throttledMs", Text(ThrottledMicros / 1000)));
-        Broadcast(end);
+        _endedAtMicros = NextTick >= Settings.MaxTicks && Recording.Bundles.Count > 0 ? Math.Min(_lastTickAtMicros, _clock.Microseconds) : _clock.Microseconds;
+        _held.Clear();
+        Log("match-ended", ("tick", Text(end.Tick)), ("winner", Text(end.Winner)), ("reason", end.Reason.ToString()), ("lastAgreedTick", Text(LastAgreedTick)),
+            ("lastAgreedHash", _agreed.TryGetValue(LastAgreedTick, out var hash) ? hash.ToString("X16", System.Globalization.CultureInfo.InvariantCulture) : "none"), ("throttledMs", Text(ThrottledMicros / 1000)));
+        var bytes = MessageCodec.Encode(end);
+        foreach (var peer in _peers)
+        {
+            if (peer.Hello is null) continue;
+            // A delayed watcher that has not been sent all of the match yet is told the end when it has (a desync or an abandoned match ends for everybody at once).
+            if (peer.Delayed && end.Reason == EndReason.Finished && peer.NextBundle < NextTick) peer.PendingEnd = end;
+            else peer.Connection.Send(bytes);
+        }
     }
 
     private void Drop(Peer peer, DropReason reason)
     {
         _peers.Remove(peer);
         if (peer.Hello is null) return;
-        Log("left", ("connection", Text(peer.Id)), ("player", Text(peer.Player)), ("reason", reason.ToString()), ("phase", Phase.ToString()), ("tick", Text(NextTick)));
-        Broadcast(new PlayerDroppedMessage(peer.Player, peer.Id, reason));
-        // What the leave means for the simulation is a command in the next bundle (PlayerLeaveCommand): by choice a living ally inherits, otherwise everything of the player dies.
-        if (Phase is RoomPhase.Loading or RoomPhase.Match && peer.Player > 0) _leaves.Add((peer.Player, reason == DropReason.Left));
+        // After the end a connection that closes is a client that went home, whatever the transport calls it.
+        var said = Phase == RoomPhase.Ended ? DropReason.Left : reason;
+        Log("left", ("connection", Text(peer.Id)), ("player", Text(peer.Player)), ("reason", Phase == RoomPhase.Ended ? "Closed" : reason.ToString()), ("phase", Phase.ToString()), ("tick", Text(NextTick)));
+        Broadcast(new PlayerDroppedMessage(peer.Player, peer.Id, said));
+        if (Phase == RoomPhase.Match && peer.Player > 0 && Pacing == Pacing.Server && peer.Token != 0
+            && ((reason == DropReason.ConnectionLost && _options.SeatHoldMs > 0 && !peer.Joining) || (peer.Joining && peer.SeatUntilMicros > _clock.Microseconds)))
+        {
+            // A lost connection is not yet a player that left: the seat is kept free for a while, and the player's units stand where they are. (A joiner that did not
+            // make it gives its seat back for the rest of that time.)
+            HoldSeat(peer);
+        }
+        else if (Phase is RoomPhase.Loading or RoomPhase.Match && peer.Player > 0)
+        {
+            // What the leave means for the simulation is a command in the next bundle (PlayerLeaveCommand): by choice a living ally inherits, otherwise everything of the player dies.
+            _leaves.Add((peer.Player, reason == DropReason.Left));
+        }
+        // A joiner that waited for this member's snapshot asks the next one.
+        foreach (var waiting in _peers.Where(other => other.Joining && other.SnapshotRequest != 0 && other.SnapshotDonor == peer.Id).ToList()) RequestSnapshot(waiting);
         // The hash reports of ticks it never reported must not wait for it.
         foreach (var tick in _hashReports.Keys.ToArray())
         {
             var reports = _hashReports[tick];
-            if (_peers.Where(other => other.Hello is not null).Any(other => !reports.ContainsKey(other.Id))) continue;
+            if (_peers.Any(other => ReportsInTime(other) && !reports.ContainsKey(other.Id))) continue;
             _hashReports.Remove(tick);
-            if (reports.Values.Distinct().Count() <= 1 && tick > LastAgreedTick) LastAgreedTick = tick;
+            if (reports.Count > 0 && reports.Values.Distinct().Count() <= 1 && tick > LastAgreedTick) Agree(tick, reports.Values.First());
         }
-        var members = _peers.Where(other => other.Hello is not null).ToList();
+        var members = _peers.Where(other => other.Hello is not null && !other.Joining).ToList();
         if (members.Count == 0)
         {
             if (Phase is RoomPhase.Loading or RoomPhase.Match) Finish(new MatchEndMessage(NextTick, 0, EndReason.Abandoned));

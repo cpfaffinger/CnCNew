@@ -48,6 +48,11 @@ run.Test("Match with members that leave, lose their line, freeze or are too slow
 run.Test("Rooms of one server: a connection belongs to the room its hello names; full server, no hello, two matches at once, an empty room is removed", NetTests.RoomsOfOneServer);
 run.Test("Match over real sockets: server endpoint, directory and three clients on the loopback interface by the real clock, bounded to twenty seconds", NetTests.MatchOverRealSockets);
 run.Test("Dedicated server: references the protocol and the room only; no game data, no game layer, no renderer", NetTests.DedicatedServerReferences);
+run.Test("Rejoin: a lost client takes its held seat again with the state of a member and plays on in step; too late, the seat is given up; no seat held unless told", NetTests.ReconnectAndTakeTheSeatAgain);
+run.Test("Rejoin: a damaged state is turned away by the joiner and the relay; a state with another hash than the agreed one goes nowhere; a made-up token opens no seat", NetTests.DamagedSnapshotIsTurnedAway);
+run.Test("Watchers: sent the bundles on a delay, a late one plays the match from its start, their orders are discarded, a watcher that diverged is found", NetTests.WatchersOnADelayAndLateOnes);
+run.Test("Desync diagnosis: the relay names the tick and the part, the packages name the object and the field; the hash interval against the time to notice", NetTests.DesyncIsNamedDownToTheField);
+run.Test("Recording as a replay file; the rules of the pace; the recovery time of the lag rule; a close after the end", NetTests.RecordingAsAFileAndTheRulesOfThePace);
 run.Test("Layer rules: project references, no game data in the server, no clock but the injected one", NetTests.LayerRules);
 return run.Finish();
 
@@ -185,6 +190,11 @@ static partial class NetTests
         return
         [
             new HelloMessage(Protocol.Version, "abc+modified", 16, 14, 10, 2, Definitions, "Näme", "a room"),
+            new HelloMessage(Protocol.Version, "abc", 17, 15, 10, 2, Definitions, "back", "a room", 0xFEDCBA9876543210, true), new WelcomeMessage(7, false, 0x1122334455667788),
+            new DesyncDetailMessage(900, [new HashPart("world.objects", 1), new HashPart("ai.player3", ulong.MaxValue)]), new DesyncDetailMessage(900, []),
+            new DesyncReportMessage(900, [new DesyncPart("world.objects", 1, 5), new DesyncPart("world.objects", 2, 6)]), new SnapshotRequestMessage(4),
+            new SnapshotOfferMessage(4, new ResumeState(901, 0xAABB, [(1, 12UL), (2, 0UL)], [1, 2, 3, 4, 5])), new SeatStateMessage(3, SeatHold.Held, 300_000),
+            new SeatStateMessage(3, SeatHold.GivenUp, 0),
             new PingMessage(123_456_789_012, 77), new PongMessage(123_456_789_012, 9_876_543_210, 50), new LagStateMessage(3, 2_500, true), new LeaveMessage(),
             new WelcomeMessage(7, true),
             new RejectMessage(RejectReason.SimulationVersion, "other build"),
