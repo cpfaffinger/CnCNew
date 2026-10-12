@@ -257,6 +257,25 @@ public sealed class SkirmishMatchSession
     }
 
     /// <summary>
+    /// The session hash taken apart (docs/NETWORK-DIAGNOSTICS.md): the world's parts, every computer player by its player number, and the session's own counters. Two
+    /// sessions whose <see cref="StateHash"/> differs differ in at least one part; the names say where to look.
+    /// </summary>
+    public ImmutableArray<(string Name, ulong Hash)> StateHashParts()
+    {
+        var parts = ImmutableArray.CreateBuilder<(string, ulong)>();
+        parts.AddRange(World.StateHashParts());
+        for (var index = 0; index < Ais.Length; index++)
+            if (Ais[index] is { } ai) parts.Add((Scripting.InvariantText.Format($"ai.player{Players[index].Id.Value}"), ai.StateHash()));
+        var counters = State.StateHash.Mix(State.StateHash.Seed, unchecked((ulong)VictoryTick));
+        counters = State.StateHash.Mix(counters, unchecked((ulong)(Winner?.Value ?? -1)));
+        counters = State.StateHash.Mix(counters, unchecked((ulong)_endTick));
+        counters = State.StateHash.Mix(counters, _systemSequence);
+        foreach (var player in Players) counters = State.StateHash.Mix(counters, _humanSequence.GetValueOrDefault(player.Id.Value));
+        parts.Add(("session.counters", counters));
+        return parts.ToImmutable();
+    }
+
+    /// <summary>
     /// The running match as one document (<see cref="SaveFormat"/>): <see cref="Restore"/> continues it tick for tick like the uninterrupted session, computer players included.
     /// The recording so far is part of it, so the continued match still yields its whole replay.
     /// </summary>
