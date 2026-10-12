@@ -18,7 +18,11 @@ public sealed record UdpOptions
     public int MinRetransmitMs { get; init; } = 30;
     public int MaxRetransmitMs { get; init; } = 2_000;
     public int WindowSegments { get; init; } = 256;
-    public int UrgentRedundancyBytes { get; init; } = UdpFormat.MaxUrgentFragmentBytes;
+    /// <summary>
+    /// How many bytes of unacknowledged urgent messages ride along with what a flush sends anyway: four datagrams' worth. A message larger than that - the bundle of
+    /// a tick with more than about sixty orders - waits for the retransmission time when it is lost.
+    /// </summary>
+    public int UrgentRedundancyBytes { get; init; } = 4 * (UdpFormat.MaxUrgentFragmentBytes + UdpFormat.UrgentOverhead);
     /// <summary>
     /// How many times an unacknowledged urgent message rides along with newer ones before only the retransmission time repeats it. Three copies after the first survive
     /// any loss a playable line has (at 3 % loss all four are lost once in a million); without the bound a long round trip makes every datagram carry everything sent

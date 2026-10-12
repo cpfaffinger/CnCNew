@@ -324,6 +324,43 @@ static partial class UdpTests
         Check.That(got == 120 && far.Accepted[0].Statistics.UrgentRepeated is >= 340 and <= 380, $"every message was sent four times ({far.Accepted[0].Statistics.UrgentRepeated} repetitions of 120)");
         Check.That(perMessage < 34 + 24 + 4 * 41 + 20, $"a datagram carries four messages, not the eighteen of a round trip ({perMessage:F0} bytes per message)");
 
+        // A message larger than a datagram - the bundle of a tick in which a player sent an army - is brought along like a small one when it is lost: on a line with
+        // 300 ms of round trip the next message brings it, one interval later. With a budget of one datagram (the rule before phase 28) it waited for the
+        // retransmission time, a third of a second.
+        long LostArmy(UdpOptions options)
+        {
+            var army = new Wire(new Impairment(DelayMs: 150), options: options);
+            // What the server sends in the millisecond of the large message never arrives: both of its datagrams, and nothing else.
+            long lostFrom = long.MaxValue;
+            var armyClient = army.Connect(wrap: channel => new Tampered(channel, datagram => army.Clock.Milliseconds >= lostFrom + 150 && army.Clock.Milliseconds <= lostFrom + 152 ? [] : datagram));
+            Check.That(army.Until(() => armyClient.State == UdpClientState.Connected && army.Accepted.Count == 1, 5_000), "connected over the long line");
+            army.Step(1_000);
+            var arrived = new List<(int Index, int Bytes, long AtMs)>();
+            void Take()
+            {
+                while (armyClient.Connection.TryReceive(out var message)) arrived.Add((BinaryPrimitives.ReadInt32LittleEndian(message), message.Length, army.Clock.Milliseconds));
+            }
+            for (var index = 0; index < 40; index++)
+            {
+                for (var ms = 0; ms < 15; ms++)
+                {
+                    army.Step(1);
+                    Take();
+                }
+                if (index == 20) lostFrom = army.Clock.Milliseconds;
+                army.Accepted[0].SendUrgent(Payload(index, index == 20 ? 1_500 : 40));
+                army.Step(1);
+            }
+            army.Until(() => { Take(); return arrived.Count == 40; }, 3_000);
+            Check.That(arrived.Select(item => item.Index).SequenceEqual(Enumerable.Range(0, 40)) && arrived[20].Bytes == 1_500, "every message arrives once and in order, the large one whole");
+            Check.That(arrived[19].AtMs < lostFrom + 150, $"the message before it came in time ({arrived[19].AtMs - lostFrom} ms)");
+            return arrived[20].AtMs - lostFrom;
+        }
+        var withBudget = LostArmy(Unbounded);
+        var withoutBudget = LostArmy(Unbounded with { UrgentRedundancyBytes = UdpFormat.MaxUrgentFragmentBytes });
+        Check.That(withBudget is >= 150 and <= 200, $"a lost message of two fragments arrives with the next one ({withBudget} ms after it was sent on a line of 150 ms)");
+        Check.That(withoutBudget >= withBudget + 150, $"with a budget of one datagram it waits for the retransmission time ({withoutBudget} ms)");
+
         // The last message is lost and nothing follows: the retransmission time brings it.
         wire.Network.Impair(ServerAddress, wire.Addresses[0], new Impairment(LossPerMille: 1000));
         server.SendUrgent(Payload(60, 40));

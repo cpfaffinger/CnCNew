@@ -468,8 +468,11 @@ public sealed class UdpLink : IConnection
                 if (urgent.Sends > 0 && nowMs - urgent.LastSentMs < retransmit)
                 {
                     if (!carrying || urgent.Sends > _options.UrgentRedundantSends || nowMs - urgent.LastSentMs < _options.UrgentRepeatSpacingMs) continue;
-                    var size = urgent.Fragments[0].Length + UdpFormat.UrgentOverhead;
-                    if (urgent.Fragments.Length > 1 || size > redundancy)
+                    // A message of several fragments rides along like a small one as long as the budget holds all of it: the bundle of a tick in which a player
+                    // sent an army is larger than a datagram, and it is exactly the bundle nobody should wait a retransmission time for.
+                    var size = 0;
+                    foreach (var fragment in urgent.Fragments) size += fragment.Length + UdpFormat.UrgentOverhead;
+                    if (size > redundancy)
                     {
                         Statistics.UrgentOmitted++;
                         continue;
