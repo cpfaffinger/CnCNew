@@ -505,25 +505,86 @@ static partial class NetTool
 
     // ---------------------------------------------------------------------------------------------------------- harness
 
-    private sealed class Child : IDisposable
+    /// <summary>The server of a harness run, as the harness needs it: its lines, and the end of its part in the run.</summary>
+    private interface IServerProcess : IDisposable
+    {
+        string[] Lines { get; }
+        string? WaitForValue(string contains, string key, int timeoutMs);
+        bool WaitForExit(int timeoutMs);
+    }
+
+    /// <summary>
+    /// A server that runs already and goes on running (--server HOST:PORT --server-log FILE): the harness plays one room on it. Its lines are the lines of the log
+    /// that name this room, and its first line; its "exit" is the line that closes the room.
+    /// </summary>
+    private sealed class ExternalServer(string logFile, string room, string port) : IServerProcess
+    {
+        private readonly long _from = File.Exists(logFile) ? new FileInfo(logFile).Length : 0;
+
+        private static IEnumerable<string> Read(string file, long from)
+        {
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            stream.Seek(Math.Min(from, stream.Length), SeekOrigin.Begin);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            while (reader.ReadLine() is { } line) yield return line;
+        }
+
+        public string[] Lines
+        {
+            get
+            {
+                var mark = $" room={room} ";
+                var listening = Read(logFile, 0).FirstOrDefault(line => line.Contains(" event=listening ", StringComparison.Ordinal));
+                var mine = Read(logFile, _from).Where(line => line.Contains(mark, StringComparison.Ordinal) || line.EndsWith(mark.TrimEnd(), StringComparison.Ordinal));
+                return listening is null ? [..mine] : [listening, ..mine];
+            }
+        }
+
+        public string? WaitForValue(string contains, string key, int timeoutMs)
+        {
+            if (contains == "event=listening" && key == "port") return port;
+            var watch = Stopwatch.StartNew();
+            do
+            {
+                foreach (var line in Lines)
+                    if (line.Contains(contains, StringComparison.Ordinal) && ValueOf(line, key) is { } value) return value;
+                Thread.Sleep(50);
+            }
+            while (watch.ElapsedMilliseconds < timeoutMs);
+            return null;
+        }
+
+        public bool WaitForExit(int timeoutMs) => WaitForValue(" event=room-closed ", "room", timeoutMs) is not null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class Child : IServerProcess
     {
         private readonly Process _process;
         private readonly StreamWriter _log;
         private readonly List<string> _lines = [];
 
         /// <param name="linux">Null: a process of this system. Otherwise the process runs in that Linux environment (WSL) with the same binaries; paths are handed over in its form.</param>
-        public Child(string dll, IEnumerable<string> arguments, string logFile, LinuxHost? linux = null)
+        /// <param name="executable">
+        /// The file is a program of its own (a self-contained package), not an assembly for "dotnet". Under Linux it is started with an empty environment - no
+        /// DOTNET_ROOT, a PATH of the system's directories only - so that it cannot lean on a .NET runtime that happens to be installed for the user.
+        /// </param>
+        public Child(string dll, IEnumerable<string> arguments, string logFile, LinuxHost? linux = null, bool executable = false)
         {
             _log = new StreamWriter(logFile, false, new UTF8Encoding(false)) { AutoFlush = true };
-            var start = new ProcessStartInfo(linux is null ? "dotnet" : "wsl.exe") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            var start = new ProcessStartInfo(linux is not null ? "wsl.exe" : executable ? dll : "dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
             if (linux is not null)
             {
                 // --exec: no shell in between, the arguments arrive as they are.
-                foreach (var argument in new[] { "-d", linux.Distribution, "--exec", linux.Dotnet }) start.ArgumentList.Add(argument);
+                string[] launcher = executable ? ["/usr/bin/env", "-i", "PATH=/usr/sbin:/usr/bin:/sbin:/bin", "HOME=/tmp"] : [linux.Dotnet];
+                foreach (var argument in new[] { "-d", linux.Distribution, "--exec" }.Concat(launcher)) start.ArgumentList.Add(argument);
                 dll = LinuxHost.PathOf(dll);
                 arguments = arguments.Select(LinuxHost.PathOf);
             }
-            start.ArgumentList.Add(dll);
+            if (linux is not null || !executable) start.ArgumentList.Add(dll);
             foreach (var argument in arguments) start.ArgumentList.Add(argument);
             _process = new Process { StartInfo = start };
             _process.OutputDataReceived += (_, line) => Take(line.Data);
@@ -609,13 +670,14 @@ static partial class NetTool
         }
 
         /// <summary>The environment, or null with the reason when it is not there (no WSL, no such distribution, no .NET runtime in it).</summary>
-        public static LinuxHost? Find(string distribution, out string why)
+        public static LinuxHost? Find(string distribution, out string why, bool needRuntime = true)
         {
             why = string.Empty;
             if (!OperatingSystem.IsWindows()) { why = "this is not Windows"; return null; }
             if (Run(distribution, "/bin/sh", "-c", "echo $HOME") is not { Length: > 0 } home) { why = $"the WSL distribution '{distribution}' does not answer"; return null; }
             var dotnet = home + "/.dotnet/dotnet";
-            if (Run(distribution, dotnet, "--list-runtimes") is not { } runtimes || !runtimes.Contains("Microsoft.NETCore.App 10.", StringComparison.Ordinal))
+            // A self-contained package brings its runtime: the environment is enough.
+            if (needRuntime && (Run(distribution, dotnet, "--list-runtimes") is not { } runtimes || !runtimes.Contains("Microsoft.NETCore.App 10.", StringComparison.Ordinal)))
             {
                 why = $"no .NET 10 runtime at {dotnet} in '{distribution}'";
                 return null;
@@ -689,7 +751,7 @@ static partial class NetTool
         LinuxHost? linux = null;
         if (linuxParts.Length > 0)
         {
-            linux = LinuxHost.Find(Option(args, "--linux-distribution") ?? "Debian", out var why);
+            linux = LinuxHost.Find(Option(args, "--linux-distribution") ?? "Debian", out var why, needRuntime: Option(args, "--server-package") is null || linuxParts.Any(part => part != "server"));
             if (linux is null) return Failed($"NOT RUN: no Linux environment ({why})");
         }
         var serverInLinux = linuxParts.Contains("server");
@@ -699,7 +761,17 @@ static partial class NetTool
         if (linuxClients.Count > 0 && !serverInLinux) return Failed("clients under Linux need the server under Linux (--linux server,...)");
         string AddressFor(bool clientInLinux) => serverInLinux && !clientInLinux ? linux!.Address : "127.0.0.1";
 
-        using var server = new Child(ServerDll(args), serverArguments, Path.Combine(outDirectory, "server.log"), serverInLinux ? linux : null);
+        // --server HOST:PORT --server-log FILE: a server that runs already (its log is read for this room's lines); --server-package DIR: the server of a
+        // self-contained package instead of the built assembly (scripts/package-server.ps1).
+        var external = Option(args, "--server");
+        var package = Option(args, "--server-package");
+        if (external is not null && (serverInLinux || Option(args, "--server-log") is null)) return Failed("--server needs --server-log FILE and a server on this side");
+        using IServerProcess server = external is not null
+            ? new ExternalServer(Option(args, "--server-log")!, label, external[(external.LastIndexOf(':') + 1)..])
+            : package is not null
+                ? new Child(Path.Combine(Path.GetFullPath(package), serverInLinux ? "CnCNew.DedicatedServer" : "CnCNew.DedicatedServer.exe"), serverArguments, Path.Combine(outDirectory, "server.log"),
+                    serverInLinux ? linux : null, executable: true)
+                : new Child(ServerDll(args), serverArguments, Path.Combine(outDirectory, "server.log"), serverInLinux ? linux : null);
         if (server.WaitForValue("event=listening", "port", 40_000) is not { } serverPort) return Failed("the server did not start");
         // Every client is told the key the server said it has, and takes no other: a harness run is a check of the pinned key too.
         var serverKey = server.WaitForValue("event=listening", "key", 1_000) ?? string.Empty;
@@ -774,7 +846,7 @@ static partial class NetTool
             {
                 foreach (var client in clients) client.Dispose();
             }
-            server.WaitForExit(15_000);
+            server.WaitForExit(external is null ? 15_000 : 40_000);
         }
         finally
         {

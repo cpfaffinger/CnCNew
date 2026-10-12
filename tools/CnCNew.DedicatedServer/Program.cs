@@ -336,6 +336,12 @@ static class DedicatedServer
             cancel.Cancel = true;
             running = false;
         };
+        // SIGTERM is how a service manager stops a process; it is taken like Ctrl+C (the registration does nothing where the platform has no such signal).
+        using var terminate = System.Runtime.InteropServices.PosixSignalRegistration.Create(System.Runtime.InteropServices.PosixSignal.SIGTERM, signal =>
+        {
+            signal.Cancel = true;
+            running = false;
+        });
         var nextStatus = config.StatusSeconds > 0 ? config.StatusSeconds * 1000L : long.MaxValue;
         var loops = 0L;
         while (running)
@@ -404,7 +410,7 @@ static class DedicatedServer
                     ("cookiesRejected", Text(endpoint.CookiesRejected)), ("refused", Text(endpoint.Refused)), ("unknownPeer", Text(endpoint.UnknownPeer)), ("malformed", Text(endpoint.Malformed)),
                     ("turnedAway", Text(directory.TurnedAway)), ("sendFailures", Text(socket.SendFailures)), ("managedKb", Text(GC.GetTotalMemory(false) / 1024)), ("gen2", Text(GC.CollectionCount(2))),
                     ("loops", Text(loops)), ("rateLimited", Text(endpoint.RateLimited)), ("banned", Text(endpoint.Banned)), ("forged", Text(endpoint.Forged)), ("replayed", Text(endpoint.Replayed)),
-                    ("workingSetKb", Text(Refreshed(self).WorkingSet64 / 1024)), ("handles", Text(OperatingSystem.IsWindows() ? self.HandleCount : 0)), ("threads", Text(self.Threads.Count)),
+                    ("workingSetKb", Text(Refreshed(self).WorkingSet64 / 1024)), ("cpuMs", Text((long)self.TotalProcessorTime.TotalMilliseconds)), ("bytesIn", Text(socket.BytesReceived)), ("bytesOut", Text(socket.BytesSent)), ("datagramsIn", Text(socket.DatagramsReceived)), ("datagramsOut", Text(socket.DatagramsSent)), ("handles", Text(Handles(self))), ("threads", Text(self.Threads.Count)),
                     ("roomsOpened", Text(directory.RoomsOpened)), ("roomsClosed", Text(directory.RoomsClosed)), ("connectsAccepted", Text(endpoint.ConnectsAccepted)),
                 ]);
                 foreach (var info in directory.Rooms)
@@ -423,12 +429,35 @@ static class DedicatedServer
             var wait = until < 0 ? config.IdleWaitMicros : (int)Math.Min(until, config.IdleWaitMicros);
             if (wait > 0) socket.WaitReadable(wait);
         }
-        Line("stopped", string.Empty, [("roomsOpened", Text(directory.RoomsOpened)), ("roomsClosed", Text(directory.RoomsClosed)), ("loops", Text(loops))]);
+        // Everybody who is connected is told that the connection ends, instead of finding out by a timeout ten seconds later.
+        var told = endpoint.CloseWhere(_ => true);
+        var toldUntil = clock.Milliseconds + (told > 0 ? 300 : 0);
+        while (clock.Milliseconds < toldUntil)
+        {
+            endpoint.Pump();
+            endpoint.Flush();
+            socket.WaitReadable(5_000);
+        }
+        Line("stopped", string.Empty, [("roomsOpened", Text(directory.RoomsOpened)), ("roomsClosed", Text(directory.RoomsClosed)), ("loops", Text(loops)), ("connectionsClosed", Text(told))]);
         socket.Dispose();
         endpoint.Dispose();
         key.Dispose();
         log.Dispose();
         return 0;
+    }
+
+    /// <summary>Open handles of the process: the handle count under Windows, the open file descriptors under Linux (a leak shows in either).</summary>
+    private static int Handles(System.Diagnostics.Process process)
+    {
+        if (OperatingSystem.IsWindows()) return process.HandleCount;
+        try
+        {
+            return Directory.Exists("/proc/self/fd") ? Directory.GetFileSystemEntries("/proc/self/fd").Length : 0;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
     }
 
     private static System.Diagnostics.Process Refreshed(System.Diagnostics.Process process)

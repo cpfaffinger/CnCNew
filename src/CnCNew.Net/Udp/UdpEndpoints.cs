@@ -477,6 +477,11 @@ public sealed class UdpSocketChannel : IDatagramChannel, IDisposable
 
     public IPEndPoint LocalEndPoint => (IPEndPoint)_socket.LocalEndPoint!;
     public long SendFailures { get; private set; }
+    /// <summary>What went through this socket, as payload of datagrams (the headers of UDP and IP come on top: 28 bytes a datagram with IPv4).</summary>
+    public long BytesSent { get; private set; }
+    public long BytesReceived { get; private set; }
+    public long DatagramsSent { get; private set; }
+    public long DatagramsReceived { get; private set; }
 
     /// <summary>Waits until a datagram can be read or the time has passed; the pacing of a host loop (docs/NETWORK-PROTOCOL.md section 13.4).</summary>
     public bool WaitReadable(int microseconds) => _socket.Poll(Math.Max(0, microseconds), SelectMode.SelectRead);
@@ -491,6 +496,8 @@ public sealed class UdpSocketChannel : IDatagramChannel, IDisposable
             {
                 length = _socket.ReceiveFrom(buffer, SocketFlags.None, ref _from);
                 from = (IPEndPoint)_from;
+                BytesReceived += length;
+                DatagramsReceived++;
                 return true;
             }
             catch (SocketException exception) when (exception.SocketErrorCode is SocketError.MessageSize or SocketError.ConnectionReset or SocketError.WouldBlock)
@@ -507,6 +514,8 @@ public sealed class UdpSocketChannel : IDatagramChannel, IDisposable
         try
         {
             _socket.SendTo(datagram, SocketFlags.None, to);
+            BytesSent += datagram.Length;
+            DatagramsSent++;
         }
         catch (SocketException)
         {

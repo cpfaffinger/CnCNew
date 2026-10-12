@@ -26,6 +26,7 @@ try
         "net-match" => NetTool.NetMatch(args),
         "net-matrix" => NetTool.NetMatrix(args),
         "pacing" => NetTool.Pacing(args),
+        "load" => NetTool.Load(args),
         "desync-diff" => NetTool.DesyncDiff(args),
         "replay-check" => NetTool.ReplayCheck(args),
         "snapshot-cost" => NetTool.SnapshotCost(args),
@@ -80,6 +81,13 @@ static partial class NetTool
               the state of a running match: size written and packed, time to write, pack, unpack and build it
           pacing [--seconds S]
               how evenly this machine wakes a loop that waits for a tick: sleep, socket wait, socket wait with the fine timer
+          load --server HOST:PORT [--server-key FINGERPRINT] --rooms N [--members 8] [--watchers 0] [--seconds S] [--match-seconds M] [--orders-per-second R]
+               [--churn-percent P] [--state-kb K] [--threads T] [--tick-rate 60] [--seed N] [--label TEXT] [--out FILE] [--room-password TEXT]
+              rooms of members that speak the whole protocol through the sealed transport and simulate nothing (needs no game data): match after match in every
+              room; with churn one player of a match vanishes, leaves, or vanishes and comes back with its token. For the capacity and the endurance of a server.
+          (net-match also takes --server HOST:PORT --server-log FILE: a server that runs already; --server-package DIR: the server of a self-contained package;
+           --room-password TEXT; --client-server-key FINGERPRINT: what the clients are told to expect instead of the key the server printed.
+           client also takes --server-key FINGERPRINT and --room-password TEXT.)
         """;
 
     private static readonly string[] EightPlayerMaps =

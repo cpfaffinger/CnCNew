@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!-- A relay formats numbers and nothing else: without the culture data a self-contained package needs no ICU library on the machine it runs on. -->
+    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
   <!-- The dedicated server is a relay: it references the protocol and the room, and nothing that holds game data or draws (a test of CnCNew.Net.Tests enforces it). -->
   <ItemGroup>

@@ -1,0 +1,44 @@
+{
+  // A configuration to start from (docs/DEDICATED-SERVER.md section 2). Every key is optional and has the default shown in the documentation;
+  // an unknown key is an error, not a default. Start with:  CnCNew.DedicatedServer --config server.json
+
+  "address": "0.0.0.0",
+  "port": 27960,
+  "maxRooms": 16,
+  "maxConnections": 256,
+
+  // Only clients of the same released build may share a room. A build with local changes is admitted only with "allowModifiedBuilds": true.
+  "allowModifiedBuilds": false,
+
+  // The server's permanent key: made on the first start, kept for good. Its fingerprint is on the "listening" line - publish it with the address.
+  // Whoever has this file can pretend to be this server: keep it readable for the server's account only, and do not put it into a backup others can read.
+  "keyFile": "server-key.pem",
+
+  // One log file per day besides standard output, and how long they are kept. Addresses are written as their network (a.b.c.0/24, the /48 of an
+  // IPv6 address) unless "logFullAddresses" is true: an address is personal data.
+  "logDir": "logs",
+  "logRetentionDays": 14,
+  "logFullAddresses": false,
+
+  // The recording of every match as a replay file, and how long they are kept (0: for ever). They hold the orders of the players, no addresses.
+  "replayDir": "replays",
+  "replayRetentionDays": 30,
+
+  // Addresses and networks that get no answer: one per line, "#" starts a comment; read again when the file changes.
+  "banFile": "bans.txt",
+
+  // Limits (docs/DEDICATED-SERVER.md section 9). These are the defaults.
+  "maxConnectionsPerAddress": 8,
+  "handshakesPerAddressPerSecond": 10,
+  "handshakesPerSecond": 2000,
+  "inboundBytesPerSecond": 262144,
+  "messagesPerSecond": 500,
+  "maxStateBytes": 4194304,
+  "maxMatchSeconds": 7200,
+  "maxRecordingBytes": 67108864,
+
+  // Proposals that wait for a decision of the project (D-17, D-19): off by default.
+  "seatHoldMs": 0,
+  "spectatorDelayMs": 0,
+  "allowLateWatchers": false
+}
