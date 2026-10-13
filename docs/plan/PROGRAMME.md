@@ -153,7 +153,7 @@ milestone status is updated in each stage document.
 | S4-M1 | Protocol, room, relay in the process; local skirmish over the network path | 25 | **done** (11 October 2026; `docs/NETWORK-PROTOCOL.md`) |
 | S4-M2 | Dedicated server, UDP, clock synchronisation, eight clients | 26 | **done on one machine** (12 October 2026; `docs/NETWORK-PROTOCOL.md` §12 to §17, `docs/DEDICATED-SERVER.md`); the second physical machine and the LAN are open |
 | S4-M3 | Desync diagnosis, rejoin, spectators, server replay | 27 | **done on one machine** (12 October 2026; `docs/NETWORK-PROTOCOL.md` §18 and §19, `docs/NETWORK-DIAGNOSTICS.md`); votes not built (D-23); the second physical machine is open |
-| S4-M4 | Server operation and security | 28 | **current** (starting point continued after Phase 27, not begun) |
+| S4-M4 | Server operation and security | 28 | **done on one machine** (13 October 2026; `docs/NETWORK-PROTOCOL.md` §20 and §21, `docs/DEDICATED-SERVER.md` §9 to §13); a hostile load from outside, a real network and the second physical machine are open |
 | S4-M5 | Multiplayer in the client, latency perception, acceptance with humans | 29 | planned |
 | S4-M6 | Co-simulating server as an option (hybrid: rejoin without a donor, desync arbitration, authoritative spectating) | – | open; after S4-M3, optional (D-11) |
 | **R4** | **Multiplayer release:** server package (Windows, Linux), acceptance of LAN and internet matches | 30 | planned |
@@ -200,6 +200,9 @@ The sequence from here:
 3. **Phases 25, 26 and 27 done (11 and 12 October 2026)** (S4-M1 to S4-M3): the network core up to rejoin, watchers, desync diagnosis and server replay. The second
    machine is still missing; Phases 26 and 27 measured with separate processes on one machine - Phase 27 also across Windows and Linux on it - and say so. **Next by
    this order: the Stage 3 work that touches the simulation (item 4), then Phase 28;** the brief that is ready to be worked on is `HANDOFF-PHASE28.md`.
+   **Phase 28 done (13 October 2026)** (S4-M4), on the owner's instruction before the Stage 3 work of item 4: the open port - a sealed and authenticated
+   connection, limits, fuzzing, the server as a package for Windows and Linux, capacity and endurance on one machine. The brief that is ready to be worked on
+   is `HANDOFF-PHASE29.md`; the Stage 3 work that touches the simulation is still to come.
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and
@@ -239,7 +242,6 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-2 | Factory exit "always through the gate, even with an immediate command" – which behaviour has the original? (§7a no. 2 of the multiplayer plan: built, measured, not merged, shifts the balance) | unmerged: a unit with an immediate command leaves by the shortest route | R1 | 1 |
 | D-3 | Lowering the tick maximum (141–143 ms at 60 Hz) needs a behaviour change: shared group path, cell budget per tick or a different search (§7a no. 3) | not done | Phase 26 | 2 → built as S3-M6 |
 | D-4 | The two faster hash constructions (vision row by row; object hash with module hashes); change every reference value (§7a no. 4) | not implemented | – | 2 |
-| D-5 | Command check against the map bounds (targets beyond around 524,000 units overflow the movement) (§7a no. 5) | not built | Phase 27/28 | 4 |
 | D-6 | Solo bonuses of the campaign on easy and hard (`SOLO_AI_EASY/HARD`, health bonus) – the original applies them, the port does not (§7a no. 6) | not implemented | R1 | 1 |
 | D-7 | The draw order of the roads depends on the rate (§7a no. 7) | unchanged | – | 2 |
 | D-8 | A standard skirmish ends after one hour of game time, also for a human (§7a no. 8) – the original has no such limit | unchanged | R1 | 1 |
@@ -252,12 +254,20 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-17 | Rule for slow clients: how long to display, throttle, disconnect | display up to 2 s, throttle up to 10 s, then disconnect - **built with these defaults as configuration (Phase 26, `docs/NETWORK-PROTOCOL.md` §14); measured: a lost connection slows the others for 8 s at half speed, a client that only keeps up with the slowed game for 14.4 s in three incidents. Open: the numbers, the speed while slowed (50 %), and whether the count starts again after a recovery** | Phase 27 | 4 **Phase 27: the restart of the count is configuration now (`lagRecoveryMs`, default 30 s: a member's used time is forgotten only after it kept up that long); a close after the end is logged as a close. The numbers stay a proposal.** |
 | D-18 | What happens to the objects of a player who dropped out | look up the original, propose, decide - **looked up (`MSG_SELF_DESTRUCT`) and built that way (Phase 26, `docs/SIMULATION-CORE.md` §47): a lost connection or a drop kills everything of the player (a tech building becomes neutral), leaving by choice hands objects and money to the first living ally. Open: whether that is wanted, above all once a seat can be held for a rejoin (D-19)** | Phase 27 | 4 |
 | D-19 | How long a seat is held for rejoining; spectator delay | 5 minutes; 120 s | Phase 27 | 4 **Phase 27: both built as configuration of the server (`seatHoldMs`, `spectatorDelayMs`, also `allowLateWatchers`); the defaults are 0 / 0 / off until decided, 5 minutes and 120 s stay the proposal. Measured: a rejoin after seconds on any line of 1 Mbit/s or more (`docs/NETWORK-PROTOCOL.md` §19.1). Also open here: whether a held seat should end the D-18 rule's killing of a lost player's objects earlier or later than the hold - today the objects stand until the hold is over.** |
-| D-20 | Server under Linux as a delivery target | yes | Phase 28 | 4 |
+| D-20 | Server under Linux as a delivery target | yes | Phase 28 | 4 **Phase 28: the self-contained `linux-x64` package exists (`scripts/package-server.ps1`) and its server played a match in WSL without a .NET runtime in its environment (`docs/DEDICATED-SERVER.md` §13). Open: whether it is handed out, and on which distributions it is to be tried** |
 | D-21 | `Display.UiScale = IntegerMultiple` as an alternative to the stretched command bar at 16:9 | stretched as in the original; integer scaling is an S3-M5 option | – | 3 |
 | D-22 | Should 120 Hz be selectable by a player in the finished game (30 Hz: no, test rate only – decided) | no, test rate | R2 | 2 |
-| D-23 | Votes in a multiplayer match (kick a player, end the match, change the speed): whether, and what they decide | not built; pause is limited per player and in length, the speed is the host's (`docs/NETWORK-PROTOCOL.md` §18.5). A further proposal of Phase 27: the server's hash interval 4 instead of 1 (6 KB/s less upstream per client, a desync noticed at most three ticks later; `docs/NETWORK-DIAGNOSTICS.md` §6) | Phase 29 | 4 |
+| D-23 | Votes in a multiplayer match (kick a player, end the match, change the speed): whether, and what they decide | not built; pause is limited per player and in length, the speed is the host's (`docs/NETWORK-PROTOCOL.md` §18.5). A further proposal of Phase 27: the server's hash interval 4 instead of 1 (6 KB/s less upstream per client, a desync noticed at most three ticks later; `docs/NETWORK-DIAGNOSTICS.md` §6) | Phase 29 | 4 **Phase 28: the host of a room removes a member (`Kick`, `docs/NETWORK-PROTOCOL.md` §20.5) - the first thing of that kind; no vote** |
+| D-24 | A player that reports a wrong hash ends the match for everybody as a desync - the relay does not simulate and cannot tell who lies. Proposal: with three or more players the majority's hash is the match's and the minority is dropped; with two the match ends as today. (A watcher's wrong hash already drops only the watcher, Phase 28.) | not built; the match ends | Phase 29 | 4 |
+| D-25 | The player key - a permanent pseudonym a server sees: does the window client state one by default (it does), and does a public server require one (`requirePlayerKey`, default false) | stated by default, not required | Phase 29 | 4 |
+| D-26 | The limits of a public server (`docs/DEDICATED-SERVER.md` §9.2): the defaults are proposals from measurements on one machine - above all 8 connections per address, 100 key exchanges a second, 500 messages a second per member, 20 s without a hash report, a match of at most 2 h, a recording of at most 64 MiB | the defaults of §9.2 | R4 | 4 |
 
 **Decided:**
+
+- **D-5 (13 October 2026, built in Phase 28 as the brief of that phase asked):** a command of a player may not state a point beyond 131,072 units on any axis
+  or an angle beyond 1,024 radians; `SimulationWorld.Check` and `Submit` reject it with `InvalidArguments` - on every machine alike, before it could overflow the
+  movement. It is a coordinate limit, not the map's bounds: an order to the limit is accepted and the map stops the unit (`docs/SIMULATION-CORE.md` §49). No
+  reference value moved.
 
 - **D-1 (10 October 2026, by the agent on the owner's instruction):** Stage 3 is split – work that touches the simulation
   (S3-M1, S3-M6, S3-M7) after Phase 27; work outside the simulation (S3-M2 to S3-M5) as parallel packages from Phase 24 on

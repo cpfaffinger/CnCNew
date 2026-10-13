@@ -264,10 +264,12 @@ wire.
    player key did. `UdpCrypto` now treats every exception a bad key can raise as a bad key ("UDP handshake": three keys that are no points of the curve).
 5. The bundle of a busy tick, larger than a datagram, was not repeated early when it was lost (`docs/NETWORK-PROTOCOL.md` §21.5) - found by the matrix.
 6. A client that held the cookies of two time slots was replaced by its own second connect (`docs/NETWORK-PROTOCOL.md` §21.6) - found by the rejoin measurement.
+7. A server that had run for an hour closed every new room at once: the idle limit of a room counted from the start of the server's clock (§11.3) - found by the
+   endurance run, after exactly one hour.
 
 What the fuzzing does not show: inputs it did not generate - finding 4 is the proof. It is mutation from valid samples with a fixed budget, not coverage-guided;
 the simulation's command handlers are reached only through orders the generator can still make valid (1.7 % of them). The 33 million inputs ran at state `10e6ab0`,
-before the player key and the fixes 4 to 6; every `Net.Tests` run since repeats the default seed (485,000 inputs) on the current code.
+before the player key and the fixes 4 to 7; every `Net.Tests` run since repeats the default seed (485,000 inputs) on the current code.
 
 ## 10. Operation (Phase 28)
 
@@ -322,6 +324,103 @@ New events besides §6: `warning`, `bans-loaded`, `ban-file-error`, `room-locked
 Ctrl+C and SIGTERM stop the loop: every connection is told at once that it ends (the clients do not wait for a timeout), then `stopped`. The recording of a match
 that was still running is not written - stop when `status` shows `rooms=0` if the replays matter. A restart with the same `keyFile` is the same server to its
 clients; the rooms are gone (a match does not survive its server, and held seats are held in memory).
+
+## 11. Capacity and endurance (Phase 28)
+
+**Everything in this section was measured on one machine** - an AMD Ryzen 3 PRO 4350GE (four cores, eight threads, 3.5 GHz), Windows 11, the server of the
+`win-x64` package, the load on the same machine over the loopback interface. It is the capacity of *this* computer with its load generator beside it; another
+processor, a real network card and a real line will give other numbers, and nothing here was run on a second computer.
+
+### 11.1 What a connection and a room cost
+
+`NetTool seal-cost` and `NetTool load` (build `057c3a9`). The load generator fills N rooms with eight members each that speak the whole protocol through the sealed
+transport - handshake, hello, seats, loading, a hash report for every tick, 1.5 orders a second per player, pings, the end - and simulate nothing; the relay does
+not simulate either, so to the server such a member is a client. One match of 120 s per room, all rooms at once, no churn; the server's numbers are from its own
+`status` lines while every room was in its match.
+
+| Rooms of eight | Members | Server CPU (share of one core) | per room | Working set | Managed heap | Datagrams in + out / s | Order to bundle: median / 95 % / 99 % | Largest deviation of a tick | Load generator (cores) |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 8 | 4.4 % | 4.4 % | 51 MB | 3 MB | 1,034 | 16.7 / 18.3 / 18.6 ms | 10.1 ms | 0.06 |
+| 8 | 64 | 16.6 % | 2.1 % | 55 MB | 8 MB | 8,264 | 17.0 / 18.1 / 18.7 ms | 8.8 ms | 0.22 |
+| 16 | 128 | 28.7 % | 1.8 % | 65 MB | 13 MB | 16,533 | 16.7 / 18.7 / 19.8 ms | 8.8 ms | 0.49 |
+| 32 | 256 | 42.6 % | 1.3 % | 75 MB | 24 MB | 33,047 | 16.8 / 19.0 / 20.0 ms | 9.6 ms | 0.99 |
+| 64 | 512 | 73.7 % | 1.2 % | 97 MB | 46 MB | 65,794 | 17.0 / 20.8 / 22.5 ms | 20.8 ms | 1.63 |
+
+- **CPU:** an empty server idles at about 2 % of a core (the loop wakes every 2 ms); every room of eight at 60 Hz adds **about 1.1 % of one core** (1.2 % up to
+  32 rooms). All 64 rooms finished their match with every tick agreed; at 64 rooms the server stood at three quarters of its one core, 39 of 7,199 ticks of a room
+  were more than 2 ms off their time (14 at 32 rooms) and one by 21 ms, and the 99 % value of an order's way to its bundle rose from 19 to 22 ms - with the load generator taking 1.6 of the
+  machine's four cores beside it. **The server is one thread:** a second core does not help it, and the room count where it stops keeping its ticks on this
+  processor is somewhere above 64 and was not searched for.
+- **Memory:** 51 MB for the process, and **about 0.7 MB per room** while a match of two minutes runs (garbage included: after the 64 rooms had closed the
+  process still held 98 MB until the next collection; §11.3 is what it does over hours). A room's recording grows with its match: 3.3 MB for an hour
+  of six busy players (`docs/NETWORK-PROTOCOL.md` §19.3), bounded at 64 MiB (§9.2).
+- **Bandwidth per room of eight:** on the loopback interface, where nothing is lost and every datagram is acknowledged at once, **46 KB/s in and 50 KB/s out**
+  (5.8 and 6.2 KB/s per member). On a line with delay and loss a client's traffic is about twice that, because unacknowledged bundles and reports ride along
+  (`docs/NETWORK-PROTOCOL.md` §21.1: 10.9 KB/s up and 10.7 KB/s down per client on average over the matrix, 11.4 KB/s at 40 ms and more) - plan with
+  **about 90 KB/s in each direction per room of eight at 60 Hz**, half of it at 30 Hz, twice at 120 Hz, plus 28 bytes of UDP and IP header on each of about 1,000
+  datagrams a second per room. A state for a joiner is a burst of 0.1 to 0.8 MB on top.
+- **A new connection** costs the server 1.7 to 2.0 ms of its core (the key exchange and the signature); sealing and opening the datagrams of a room of eight costs
+  0.3 ms per second (`docs/NETWORK-PROTOCOL.md` §21.2).
+- **The defaults** - 16 rooms, 256 connections - are far inside this on this machine: 16 rooms of eight took 29 % of a core. They are defaults for a first server,
+  not the machine's limit; raise `maxRooms` and `maxConnections` together.
+
+What the load generator does not show: clients (its members report a constant hash), a network (loopback), and a hostile load - the limits of §9.2 were shown by
+tests, not by a flood from outside.
+
+### 11.2 How the endurance of a server is run here
+
+The brief asks for 24 hours. A run of this project's agent ends after two hours, so the run is built from pieces - and that is also how anybody can repeat it:
+
+1. **The server is started detached** from the shell that starts it (under Windows through WMI: `Invoke-CimMethod Win32_Process Create` with the command line
+   `cmd /c "<package>\CnCNew.DedicatedServer.exe ... > server.out 2> server.err"`; a process started with `Start-Process` still belongs to the shell's job and
+   ends with it). It gets `--run-seconds` so that it stops by itself with a `stopped` line, a key file, a log directory, a replay directory, held seats
+   (`--seat-hold-ms 60000`), and the limits per address raised - all load comes from one address. Its `status` line once a minute is the intermediate result.
+2. **The load is driven in pieces of under two hours**, each two things at once against that one server: `NetTool load` - eight rooms of eight members that
+   simulate nothing, match after match of four minutes, in seven of ten matches a player that vanishes, says it leaves, or vanishes and comes back with its token -
+   and, beside it, **real matches** one after another (`NetTool net-match --server 127.0.0.1:PORT --server-log server.out`): three client processes that simulate,
+   five computer players and a watcher, through the proxy at 40 ms / 10 ms / 1 %, 90 s each, in turn with a rejoin, a vanished process, a leave, or nothing. Every
+   real match must end with one hash chain on its clients and the server's agreement on every tick.
+3. **The log is read at the end** (and in between): memory, handles, threads and CPU over time, the counters, and every room that hung - a room whose tick stood
+   still over two status lines, or that was open for more than twenty minutes.
+
+### 11.3 The endurance run of Phase 28 (13 October 2026, build `c1946aa`, the server of the `win-x64` package)
+
+**The server ran for 9.00 hours and stopped by itself; 8 hours 25 minutes of that under load, in five pieces.**
+
+| Hour | Rooms | Connections | Working set | Managed heap | Handles | Threads | CPU seconds | Rooms opened / closed | Connections accepted |
+|---|---|---|---|---|---|---|---|---|---|
+| 0.02 | 9 | 68 | 54 MB | 6.9 MB | 273 | 5 | 9 | 9 / 0 | 69 |
+| 1.02 | 9 | 67 | 79 MB | 17.6 MB | 273 | 5 | 575 | 163 / 154 | 1,206 |
+| 2.02 | 9 | 65 | 71 MB | 12.7 MB | 270 | 4 | 1,131 | 308 / 299 | 2,270 |
+| 3.02 | 9 | 62 | 70 MB | 12.2 MB | 270 | 4 | 1,705 | 462 / 453 | 3,399 |
+| 4.02 | 9 | 65 | 68 MB | 12.5 MB | 270 | 5 | 2,264 | 615 / 606 | 4,527 |
+| 5.02 | 8 | 61 | 64 MB | 10.1 MB | 273 | 5 | 2,831 | 768 / 760 | 5,648 |
+| 6.02 | 8 | 63 | 76 MB | 10.6 MB | 273 | 5 | 3,386 | 921 / 913 | 6,782 |
+| 7.02 | 9 | 67 | 65 MB | 7.1 MB | 270 | 4 | 3,939 | 1,074 / 1,065 | 7,902 |
+| 8.02 | 9 | 68 | 64 MB | 6.0 MB | 273 | 5 | 4,503 | 1,228 / 1,219 | 9,031 |
+| 8.98 (idle) | 0 | 0 | 54 MB | 3.1 MB | 270 | 4 | 4,752 | 1,280 / 1,280 | 9,414 |
+
+- **No growth:** the working set moved between 54 and 83 MB with the garbage collector (mean of the first quarter of the run 68.8 MB, of the last 65.7 MB) and was
+  54 MB again when the last room had closed - what it was after the first minute. Handles 269 to 276 throughout, four to six threads.
+- **No hanging room, no crash:** 1,280 rooms opened and 1,280 closed; 1,280 matches started, ran and ended as finished; no room's tick stood still over two status lines and none was
+  open for more than twenty minutes (a match is four); the server wrote 1,280 replay files (119 MB) and stopped with its `stopped` line.
+- **The load:** 1,000 matches of members that simulate nothing (1,000 finished; 459 members vanished, 231 said they left, 224 of 224 that came back played on)
+  and **280 real matches** of client processes (70 each with a rejoin, a vanished process, a leave and nothing): **280 of 280 ended with one hash chain on their
+  clients and every tick agreed by the server.** In all 9,414 connections, 599 lost ones whose seat was held, 294 rejoins - each handed a state and each playing
+  on -, 235 seats given up when their time was over, 301 leaves; no desync, no forged, malformed or rate-limited datagram, nobody refused; 5,243
+  datagrams of connections the server no longer knew - the old connection of a client that had come back, the last datagrams of a member after its close - were
+  counted (`unknownPeer`) and dropped.
+- **CPU:** 4,742 s in 8.97 h - 14.7 % of one core on average for nine rooms (eight of them at 60 Hz with eight members each); about 367 KB/s in and 417 KB/s out.
+
+**What the first attempt found.** The first run was started with build `057c3a9` and stopped after 78 minutes: at 60 minutes and 23 seconds of the server's
+life every new room was closed the moment its first member entered it (`room-idle`), and it went on so. The limit for a lobby that never starts
+(`roomIdleLimitMs`, an hour) measured from a time that was never set for a new room, so it measured from the start of the server's clock: **after an hour of
+running, a server with the default limits admitted nobody.** No test had seen it, because the clock of every test started at zero. Fixed in `c1946aa`; the
+clocks of the test fixtures of `Net.Tests` now start at three hours, and a test opens a room on a server that has run for two. The run above is the second one.
+
+**What this run does not show:** 24 hours (9 were run; the first hour boundary, where the first attempt failed, is inside, a day's boundary - the daily log file,
+the expiry of logs and replays - is not); more than nine rooms at a time for hours (the capacity runs of §11.1 lasted two minutes); a second computer, a real
+network, or a hostile load; and members that simulate were three per real match - the eight-client matches are `docs/NETWORK-PROTOCOL.md` §21.
 
 ## 12. Versions in operation (Phase 28)
 

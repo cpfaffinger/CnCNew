@@ -1266,3 +1266,15 @@ nonce only, both connects are the same connection and get the same answer; the h
 - **Somebody on the line.** That a recorded datagram cannot be replayed and a forged one changes nothing is tested with a tap in memory; no capture of a real
   interface was analysed.
 - **The window client** joined a sealed server in a smoke test with a pinned-by-first-use key and a player key (`scripts/check-net-join.ps1`); nobody saw it.
+
+### 21.8 Closing measurements of Phase 28 (state `c1946aa`)
+
+- **Tier 4:** 47 of 47 steps ok at `c1946aa` (5,502 s; 0 warnings; all test programs; simulation, game, presentation and network tests at 30, 60 and 120 Hz; both manifests identical; the rate-equivalence suite; the long run; the client checks; `check-match`; `session-check`; `net-probe`; `net-match`, `net-robust`, `net-join` and `net-cross-os`, now over the sealed transport; the new `net-load`, `server-package` and `server-package-linux`; the vulnerability audit; the staged scenes). It had passed with 47 of 47 at `42fc0f8` before the endurance run found the defect of `docs/DEDICATED-SERVER.md` §11.3, and was run again after its fix.
+- `NetTool probe-suite` (three eight-player maps x 1+7, 2+6, 4+4, 8+0 x with and without delay and jitter x twice, in one process): 48 of 48 runs hash-identical on
+  all clients after every tick and equal to their replay.
+- Campaign at 60 Hz (missions stay local): reachability clean 24/24 and 24/24; audit 24 of 24 identical on a second run and after save/restore, end probes 13/24
+  and 15/24; objective driver victory 24/24 and defeat 24/24 - as before the phase.
+- Performance of the simulation, the whole `scripts/perf-profile.ps1` with the binaries of `8f6f94f` and of this state in the same hour: the same final hashes in
+  every run, means within -7.0 % and +0.9 % (8 players, 30 game minutes: 833 against 834 µs per tick, 99 % 2.1 ms on both sides, maximum 148 against 143 ms). The
+  phase did not touch the simulation's tick.
+- Endurance of the server: `docs/DEDICATED-SERVER.md` §11.3.

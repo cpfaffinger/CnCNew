@@ -52,8 +52,12 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   matches through it and a UDP proxy with identical hashes on every line of a matrix of delay, jitter and loss (`docs/NETWORK-PROTOCOL.md` §16). Since Phase 27 a
   match survives what goes wrong (`docs/NETWORK-PROTOCOL.md` §18, `docs/NETWORK-DIAGNOSTICS.md`): a player whose connection is lost keeps its seat and comes back
   with the state of another member, somebody can watch on a delay or join a running match, the server writes every match as a replay file, a desync is named down
-  to tick, object and field, and the window client can join a server (`--join`, no lobby screen yet). All of it on one machine: no second computer has taken part -
-  only a second operating system on the same one (Linux under WSL plays in one match with Windows).
+  to tick, object and field, and the window client can join a server (`--join`, no lobby screen yet). Since Phase 28 the server can stand on an open port
+  (`docs/NETWORK-PROTOCOL.md` §20, `docs/DEDICATED-SERVER.md` §9 to §13): the connection is authenticated by the server's permanent key and encrypted, what a
+  stranger or a member may cost is bounded and counted, a room can have a password, a player a key of its own, an operator a ban list, and the server is a
+  self-contained package for Windows and Linux (`scripts/package-server.ps1`). All of it on one machine: no second computer has taken part - only a second
+  operating system on the same one (Linux under WSL plays in one match with Windows, and runs the packaged server) -, nothing has crossed a cable, and no
+  hostile load came from outside.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

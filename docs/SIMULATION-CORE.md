@@ -3292,8 +3292,8 @@ is turned away" feeds it one.
 
 Phase 28 opens the server's port to everybody (`docs/NETWORK-PROTOCOL.md` §20, `docs/DEDICATED-SERVER.md` §9), and with it the simulation is handed commands by
 somebody who means harm. Two small rules of the simulation follow; **no reference value, no format version and no hash moved** (`CommandTypes.Version` 17, replay 15,
-`WorldSnapshot` 10, skirmish session state 2; input manifest identical, quick reference set 9 of 9 at commit `6cc6501`, the full set and the rate suite with tier 4
-at the end of the phase).
+`WorldSnapshot` 10, skirmish session state 2; input manifest identical, quick reference set 9 of 9 at commit `6cc6501`; the full set of 50 runs, the input manifest and the
+rate-equivalence suite identical in tier 4 at the end of the phase).
 
 **A coordinate limit (decision D-5, open since Phase 22).** `Fixed` has a range of about ±5.5 · 10¹¹, and a distance is compared by its square: a command whose
 target lay farther than about 524,000 units away made the movement end with an `OverflowException` - on every machine alike, so not a desync but an exception in

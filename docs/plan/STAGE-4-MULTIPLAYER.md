@@ -166,7 +166,25 @@ compatibility with old mods and savegames.
   hash identical" for all factions); cost of the checkpoint on the donor; hash report rhythm against bandwidth. D-5 (command
   check against the map bounds) is decided here or in Phase 28.
 
-### S4-M4 Server operation and security — current (Phase 28)
+### S4-M4 Server operation and security — done on one machine (Phase 28, 13 October 2026)
+
+- **Result** (commits `6cc6501`, `10e6ab0`, `98796a6`, `26f20bd`, `e76e19b`, `43c4a0e`, `6e2f951`, `c1946aa`; `docs/NETWORK-PROTOCOL.md` §20 and §21, `docs/DEDICATED-SERVER.md` §9 to §13,
+  `docs/SIMULATION-CORE.md` §49): protocol version 4, transport version 2. Every datagram after the handshake is sealed (AES-256-GCM, keys from an ECDH exchange
+  signed by the server's permanent key, a replay window); a client pins the server's fingerprint or trusts on first use; the rejoin token travels sealed only. What
+  a stranger or a member may cost is bounded, counted and has a defined reaction (handshakes, key exchanges, connections per address, bytes and messages per
+  connection, the state, the match length, the recording, time limits). A room password as challenge and response, a player key proved by a signature, bans by
+  address, network and key, the host's kick, logs with retention and shortened addresses. A player's command may not point beyond a coordinate limit (D-5 closed);
+  only orders of a player pass a wire; somebody who watches decides nothing. The threat model has 15 lines with measure, test and residual risk. The suite "Fuzz":
+  33 million changed inputs without an exception. The server as a self-contained package for `win-x64` and `linux-x64`, the Linux one run in WSL without a .NET
+  runtime in its environment.
+- **Measured on one machine:** the matrix over the sealed transport 36 of 36 lines hash-identical with order to execution unchanged and +1.5 KB/s per client and
+  direction; sealing 0.3 to 0.6 µs per datagram, a handshake 1.7 to 2.0 ms of the server's core; a rejoin on five lines as before, with the limits in force; a
+  match of an hour with three rejoins; capacity about 1.1 % of one core and 0.7 MB per room of eight, 64 rooms at 74 %; the packaged server, started detached, ran for nine hours, 8 h 25 min of it under load in five pieces - 1,280 rooms opened and closed, 1,000 of 1,000 load matches and 280 of 280 real matches finished in step, 294 of 294 rejoins, the working set at 54 MB at the end as at the start, no hanging room (its first attempt found a server that closed every new room after an hour of running, fixed in `c1946aa`); tier 4 with 47 of 47 steps ok at `c1946aa`.
+- **Found on the way and fixed:** the server's replay file after a skipped command; a watcher's wrong hash ending the match; a lost bundle larger than a datagram
+  waiting a retransmission time; a key of the point (0, 0) throwing out of the handshake; a client replaced by its own second connect at the turn of a cookie's
+  time slot.
+- **Open:** a hostile load from outside, a real network and the second physical machine (E1, D-10); the 24-hour run in one piece; D-24 (a player that lies about
+  its hash), D-25 (the player key by default), D-26 (the limits' numbers); a listing of rooms and a host in the client (S4-M5).
 
 - **Deliverables (`HANDOFF-PHASE28.md`):** the threat model in `docs/DEDICATED-SERVER.md`; limits and throttling (packets
   per sender before the handshake, messages and bytes per connection, intents per tick and player, sizes, connections per
@@ -227,6 +245,6 @@ network matrix. `docs/handoffs/HANDOFF-PHASE30.md` is the brief; its single-play
 The measured state of E1 to E24 is in `docs/MULTIPLAYER-PLAN.md` §4. Still open and owned by this stage: E11 (AI state
 outside the hash – Phase 24), E12 and E13 (time of submission, synchronous command path – Phases 24/25), E14 (`LiveGame`
 owns the time – Phase 24), E15 (match input incomplete – Phases 24/25), E16 (no network code – Phases 25/26), E17 (snapshot
-transfer – Phase 27), E18 (desync tool – Phase 27), E19 (open UDP port – Phases 26/28), E23 (user interface – Phase 29),
+transfer – Phase 27), E18 (desync tool – Phase 27), E19 (open UDP port – Phases 26/28; closed as far as one machine can in Phase 28), E23 (user interface – Phase 29),
 E24 (nothing from Phases 15 to 17 accepted by a human – Stage 1). Owned by Stage 2 and still open: E1 (second machine),
 E4/E20 (tick maximum, allocation).

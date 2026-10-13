@@ -1,5 +1,5 @@
 > **Stage:** 4 – Multiplayer · **Milestone:** S4-M4 Server operation and security · **Phase:** 28
-> **Status:** current – starting point continued on 12 October 2026 after Phase 27 (section "Starting point after Phase 27"), not begun
+> **Status:** done on one machine (13 October 2026, state `c1946aa`): `docs/NETWORK-PROTOCOL.md` §20 and §21, `docs/DEDICATED-SERVER.md` §9 to §13. Not run: a second computer, a real network, a hostile load from outside; the 24-hour run of item 8 as nine hours in five pieces against one detached server (8 h 25 min under load)
 > **Predecessor:** HANDOFF-PHASE27.md · **Successor:** HANDOFF-PHASE29.md · **Results in:** docs/DEDICATED-SERVER.md, docs/NETWORK-PROTOCOL.md
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 

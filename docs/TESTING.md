@@ -208,6 +208,25 @@ Since Phase 27 the gate of `net` and tier 4 contain two more checks with real pr
 The matrix and the endurance match stay checks by hand; since Phase 27 the endurance match is run with rejoins at three points in time and a late watcher
 (`docs/NETWORK-PROTOCOL.md` §19).
 
+Since Phase 28 `Net.Tests` contains the suite "Fuzz" (five targets, 485,624 changed inputs from a fixed seed in about 25 s; `--fuzz-seed N --fuzz-cases N` for a
+longer run with another seed, `--only "Fuzz, relay"` for one target; an input that throws is printed as hexadecimal and belongs into the corpus in
+`FuzzTests.cs`), and the gate of `net` and tier 4 contain two more checks, tier 4 a third:
+
+- `net-load` (`scripts/check-net-load.ps1`, around two and a half minutes; **needs no game data**): the dedicated server and `NetTool load` - eight rooms of eight
+  members that speak the whole protocol through the sealed transport and simulate nothing, match after match, in every match a player that vanishes, leaves or comes
+  back with its token; every match must finish, the members that came back must play on, and the server must end with no room and no connection.
+- `server-package` (`scripts/check-server-package.ps1`, around three minutes): builds the self-contained `win-x64` and `linux-x64` packages into a directory outside
+  the repository, checks what is in them (five assemblies of the project, nothing of the client, the game layer, the importer or Stride), starts the packaged
+  Windows server with the sample configuration and with a good and a bad ban file, and plays a match of real client processes on it.
+- `server-package-linux` (the same script with `-Platform linux`, tier 4 only): the server of the `linux-x64` package in the WSL distribution with an empty
+  environment, clients under Windows. Like `net-cross-os` it needs something that is not a requirement of the repository: without WSL it ends with exit code 3 and
+  is shown as **NOT RUN**.
+
+Checks by hand at the completion of a phase that touched the transport or the server, on a quiet machine: the matrix and the endurance match as before;
+`NetTool seal-cost`; the capacity runs (`NetTool load --rooms N` against the packaged server, `docs/DEDICATED-SERVER.md` §11.1); and the endurance of the server -
+a server started detached from the shell and loaded in pieces of under two hours (§11.3 there says how). `scripts/audit-vulnerable.ps1` now also checks the
+dedicated server as it is packaged and fails if it references any NuGet package.
+
 What needs a human (pictures, sound, playability) is driven by `scripts/acceptance.ps1` (`docs/ACCEPTANCE.md`) and is
 never claimed by a test run.
 

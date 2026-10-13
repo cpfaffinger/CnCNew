@@ -8,6 +8,10 @@ A lockstep match is the same on every machine because every machine computes it;
 question is **which object, on which machine, from which tick on**. Before this phase the server could say "the hashes of tick 51,203 differ" and nothing more. This
 document is what exists now: the parts of the hash, what a client remembers, the package it writes, the tool that reads two packages, and what to do with a report.
 
+**Since Phase 28** (`docs/NETWORK-PROTOCOL.md` §20.6): a desync of the match is what the *players* disagree about. A watcher whose hash differs from what the players
+agreed on is told so with the same `Desync` message - it writes its package like anybody - and is then dropped (`watcher-desync` in the server's log,
+`WatcherDesyncs`), and the match goes on; the procedure below applies to its package and one of a player. Everything here travels inside the sealed connection.
+
 ## 1. The parts of the session hash
 
 The session hash (`docs/SIMULATION-CORE.md` §45.1) is one number over the world, every computer player and the session's counters. The world already keeps three sums

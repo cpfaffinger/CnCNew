@@ -599,3 +599,11 @@ The client's options: `--join ADDRESS:PORT [--room NAME] [--seat N | --watch] [-
 `--join-result FILE`, `--diagnostics DIR`. Exit code 4 and one line on standard error when the server is not there, the room turns the client away or the match cannot
 be built here. **There is no screen for any of it** - no server address field, no list of rooms, no lobby with other people's names; the shell's skirmish setup still
 opens the embedded server. That is Phase 29. **Not verified:** a human has not seen a joined match; the check plays it in a smoke test.
+
+**Since Phase 28** the connection to a server is sealed and the server has a key (`docs/NETWORK-PROTOCOL.md` §20.2 and §20.5): `--server-key FINGERPRINT` admits
+that server and no other; without it the client remembers the key of every server it meets (`--known-servers FILE`, by default `known-servers.json` under
+`%LOCALAPPDATA%\CnCNew`) and refuses a server whose key changed, with a message that names both fingerprints; `--room-password TEXT` answers a room's challenge;
+`--player-key FILE` is the client's own permanent key (by default `player-key.pem` in the same place, made on the first join), stated and proved to the server,
+`--no-player-key` states none. The client prints what it did (`join: first meeting with this server - its key ... is remembered`, `join: this client states the
+player key ...`). All of it is options and console lines; the dialogs a human needs - "this is a new server, its fingerprint is ...", "the server's key has
+changed", a password field, "you were removed from the room" - are Phase 29.
