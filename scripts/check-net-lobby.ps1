@@ -19,7 +19,8 @@
       - both gave orders (--net-order-every: one unit of the viewer is ordered to move every two seconds through the command sink the HUD uses), and the match
         ended by its own rules - no message of a lost connection or a desync;
       - both stood in the room again afterwards;
-      - the files of the visit (known servers, player key, host key, recent addresses) lie in the directories of this run and nowhere else.
+      - the files of the visit (known servers, player key, host key, recent addresses) lie in the directories of this run; the options and the last map of the
+        menus are kept in directories of the run too (--settings-dir), never in the user's.
     What this does not show: what a human sees. The pictures of every state are pinned by NetScreenTests; this check is the same screens in the real client with
     real sockets, its text measure and its frame loop.
 
@@ -72,7 +73,7 @@ function Write-Script([string]$name, [string[]]$lines) {
     $path
 }
 function Start-Client([string]$name, [string]$script, [string[]]$extra) {
-    $arguments = @($clientDll.FullName, '--content-dir', $ContentDir, '--size', '1024x768', '--mute', '--net-dir', (Join-Path $OutDir $name), '--net-port', "$port",
+    $arguments = @($clientDll.FullName, '--content-dir', $ContentDir, '--size', '1024x768', '--mute', '--net-dir', (Join-Path $OutDir $name), '--settings-dir', (Join-Path $OutDir "$name-settings"), '--net-port', "$port",
         '--shell-script', $script, '--shell-seconds', "$($TimeoutSeconds - 60)") + $extra
     Start-Process -FilePath 'dotnet' -ArgumentList ($arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -NoNewWindow -PassThru `
         -RedirectStandardOutput (Join-Path $OutDir "$name.log") -RedirectStandardError (Join-Path $OutDir "$name.err")

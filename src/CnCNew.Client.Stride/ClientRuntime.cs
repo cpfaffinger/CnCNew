@@ -87,7 +87,11 @@ internal sealed class ClientRuntime : IDisposable
         // animateTransitions: the menu animates like the original (Data/INI/WindowTransitions.ini, docs/GAME-SHELL.md section 11); --no-transitions switches to hard cuts.
         var runtime = new ClientRuntime(game, data, GameSettings.Default,
             ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions, network), audio) { _alternateMouse = alternateMouse, _shellScript = shellScript };
-        if (shellScript is not null) shellScript.MatchProbe = runtime.ProbeMatch;
+        if (shellScript is not null)
+        {
+            shellScript.MatchProbe = runtime.ProbeMatch;
+            shellScript.Trace = Console.WriteLine;
+        }
         // --ai original: the skirmish setup offers the three armies of the original and its matches run the original AI (the default is unchanged).
         if (runtime._shell is { } shell) shell.SkirmishAi = skirmishAi;
         runtime._audio.Game.EnterShell();
@@ -219,8 +223,113 @@ internal sealed class ClientRuntime : IDisposable
     private long _lastNetOrder = -1;
     private long _netOrders;
 
+    /// <summary>
+    /// <c>--net-stats</c>: the stand-in for a person clicks instead of calling the command sink - the camera is put over one unit of the viewer, the unit selected, and
+    /// the mouse button that gives orders pressed on the ground beside it - and <see cref="CnCNew.Game.Lockstep.NetStats"/> measures from that click to the first
+    /// frame that shows its marker, to the tick the order runs in and to the frame after it, and how evenly the picture moves. Also for a local match (the embedded
+    /// server): the line without a network.
+    /// </summary>
+    public static bool NetStatsEnabled { get; set; }
+    /// <summary><c>--net-stats-trace</c>: every stand-in click with where it went, on the console.</summary>
+    public static bool NetStatsTrace { get; set; }
+    private CnCNew.Game.Lockstep.NetStats? _netStats;
+    private int _clickPhase;
+    private (CnCNew.Presentation.Input.MouseButton Button, Vector2 At) _clickHeld;
+    private readonly Queue<Vector2> _clickCandidates = new();
+
+    /// <summary>The report of <c>--net-stats</c> for the console; empty without it. A match that ended printed its own; this is for the one still running at exit.</summary>
+    public IReadOnlyList<string> FinishNetStats()
+    {
+        var lines = _netStats?.Report() ?? [];
+        _netStats = null;
+        return lines;
+    }
+
+    private void GiveStandInClick(RunningGame running, LiveMatch match, List<CnCNew.Presentation.Input.InputEvent> events)
+    {
+        if (_netStats is not { } stats || NetOrderEvery <= 0 || match.Setup.Spectator || running.Match is not { } hud) return;
+        if (match.Remote is { } relay && relay.Client.Phase != CnCNew.Net.ClientPhase.InMatch) return;
+        switch (_clickPhase)
+        {
+            case 2:
+                // The click is complete when the button comes up: that is the moment the HUD gives the order, and the moment the measurement starts at.
+                events.Add(new CnCNew.Presentation.Input.MouseButtonEvent(_clockMs, _clickHeld.Button, false, _clickHeld.At));
+                _clickPhase = 0;
+                _netOrders++;
+                stats.ClickGiven();
+                return;
+            case 1:
+            {
+                _clickPhase = 0;
+                if (hud.Input.Selection.OwnSelected(match.World).FirstOrDefault(SimulationQueries.CanMove) is not { } mover)
+                {
+                    Console.WriteLine($"net-stats: tick {match.World.Tick}: nothing selected that can move");
+                    return;
+                }
+                var ground = SimulationQueries.GroundOf(mover);
+                // Open ground a person would click on: towards the middle of the map (a start position lies near its edge), turned to one side and the other, and
+                // not onto something that stands there - a click on a building is another order.
+                var middle = new Vector2((float)match.Terrain.ExtentX.ToDecimal() / 2, (float)match.Terrain.ExtentY.ToDecimal() / 2);
+                var inward = middle - ground;
+                inward = inward.LengthSquared() < 1 ? Vector2.UnitX : Vector2.Normalize(inward);
+                var screen = BackBufferSize();
+                _clickCandidates.Clear();
+                foreach (var degrees in _lastNetOrder % 2 == 0 ? new[] { 50f, 25f, 0f, -25f, 90f, -90f, 130f, -130f, 180f } : [-50f, -25f, 0f, 25f, -90f, 90f, -130f, 130f, 180f])
+                {
+                    var (sine, cosine) = MathF.SinCos(degrees * MathF.PI / 180);
+                    var at = ground + new Vector2(inward.X * cosine - inward.Y * sine, inward.X * sine + inward.Y * cosine) * 180;
+                    if (match.World.Entities.Any(entity => !entity.EffectivelyDead && Vector2.Distance(SimulationQueries.GroundOf(entity), at) < 90)) continue;
+                    // On the world, not on the control bar that covers the lower part of the screen.
+                    if (!match.Camera.TryWorldToScreen(new System.Numerics.Vector3(at.X, at.Y, 0f), out var pixel) || pixel.X < 40 || pixel.X > screen.X - 40 || pixel.Y < 40 || pixel.Y > screen.Y * 0.6f) continue;
+                    _clickCandidates.Enqueue(pixel);
+                }
+                if (!_clickCandidates.TryDequeue(out var first))
+                {
+                    if (NetStatsTrace) Console.WriteLine($"net-stats: tick {match.World.Tick}: no open ground on the screen beside {mover.Template.Name}#{mover.Id.Value}");
+                    return;
+                }
+                // The pointer goes there first; the HUD says in the next frame whether a click there would be a move.
+                events.Add(new CnCNew.Presentation.Input.MouseMoveEvent(_clockMs, first));
+                _clickHeld = (CnCNew.Presentation.Input.MouseButton.Left, first);
+                _clickPhase = 3;
+                return;
+            }
+            case 3:
+            {
+                var button = MatchController.MapMouseScheme(GameplaySettings) == MouseScheme.RightClickCommands ? CnCNew.Presentation.Input.MouseButton.Right : CnCNew.Presentation.Input.MouseButton.Left;
+                if (hud.Cursor.Kind == CursorKind.Move)
+                {
+                    events.Add(new CnCNew.Presentation.Input.MouseButtonEvent(_clockMs, button, true, _clickHeld.At));
+                    _clickHeld = (button, _clickHeld.At);
+                    _clickPhase = 2;
+                    if (NetStatsTrace) Console.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"net-stats: tick {match.World.Tick}: click {button} at pixel {_clickHeld.At.X:F0},{_clickHeld.At.Y:F0}"));
+                    return;
+                }
+                // Something stands there, or nothing can go there: a person moves the pointer on.
+                if (_clickCandidates.TryDequeue(out var next))
+                {
+                    events.Add(new CnCNew.Presentation.Input.MouseMoveEvent(_clockMs, next));
+                    _clickHeld = (button, next);
+                    return;
+                }
+                _clickPhase = 0;
+                if (NetStatsTrace) Console.WriteLine($"net-stats: tick {match.World.Tick}: the pointer found no place where a click would be a move (cursor {hud.Cursor.Kind})");
+                return;
+            }
+        }
+        var slice = match.World.Tick / NetOrderEvery;
+        if (slice == _lastNetOrder) return;
+        _lastNetOrder = slice;
+        if (match.World.Entities.Where(entity => entity.Owner == match.Human && !entity.EffectivelyDead && SimulationQueries.CanMove(entity)).OrderBy(entity => SimulationQueries.IsBuilder(entity) ? 0 : 1).ThenBy(entity => entity.Id.Value).FirstOrDefault() is not { } unit) return;
+        hud.Input.Selection.Replace([unit.Id]);
+        var over = SimulationQueries.GroundOf(unit);
+        match.Camera.CenterOn(new Vector2(over.X, over.Y));
+        _clickPhase = 1;
+    }
+
     private void GiveStandInOrder(LiveMatch match)
     {
+        if (_netStats is not null) return;
         if (NetOrderEvery <= 0 || match.Setup.Spectator || match.Remote is not { } relay || relay.Client.Phase != CnCNew.Net.ClientPhase.InMatch) return;
         var slice = match.World.Tick / NetOrderEvery;
         if (slice == _lastNetOrder) return;
@@ -335,6 +444,7 @@ internal sealed class ClientRuntime : IDisposable
         if (_script is not null && _running is not null) events.AddRange(_script.EventsFor(_frame, _clockMs));
         if (_running is { } running)
         {
+            if (running.Host.Match is LiveMatch clicked) GiveStandInClick(running, clicked, events);
             running.Step(events, seconds, width, height, gameTime, _game.GraphicsContext.CommandList, fixedSeconds);
             _script?.Observe();
             ApplyPendingSelection();
@@ -490,6 +600,19 @@ internal sealed class ClientRuntime : IDisposable
                 leaving.Flush();
                 _leaveRequested = true;
             };
+        if (NetStatsEnabled && game is LiveMatch measured && running.Match is { } measuredHud)
+        {
+            var stats = _netStats = new CnCNew.Game.Lockstep.NetStats();
+            _clickPhase = 0;
+            _lastNetOrder = -1;
+            measuredHud.CommandFeedbackObserved += feedback =>
+            {
+                if (feedback.Kind is not (FeedbackKind.InvalidOrder or FeedbackKind.Unsupported or FeedbackKind.Rejected)) stats.FeedbackSeen();
+                else Console.WriteLine($"net-stats: tick {measured.World.Tick}: the HUD answered {feedback.Kind} {feedback.Rejection} {feedback.Detail}");
+            };
+            measured.CommandPath.PreChecked += (_, receipt) => stats.ReceiptOfClick(receipt.Number);
+            measured.CommandResolved += resolution => stats.Resolved(resolution, measured.World.Rate.TicksPerSecond);
+        }
         _audio.Game.Attach(game, running.Hud);
         // The mission scripts' speech, sounds, music and volumes go to the same director as everything else.
         if (game is LiveMission scripted) scripted.Director.AudioControl = _audio.Game;
@@ -545,6 +668,7 @@ internal sealed class ClientRuntime : IDisposable
                 _netOrders = 0;
                 _lastNetOrder = -1;
                 Console.WriteLine(LastNetMatch);
+                foreach (var line in FinishNetStats()) Console.WriteLine(line);
                 relay.Close();
                 relay.Dispose();
                 _leaveRequested = false;
@@ -592,6 +716,7 @@ internal sealed class ClientRuntime : IDisposable
         // The cursor lies on top of everything: the shell and the in-game menu show the arrow, a running game its context cursor.
         if (_pointer is { } pointer) _cursor.Draw(_ui, _running is { Spectator: null } playing ? playing.Hud.Cursor : CursorState.Arrow, pointer, _clockMs);
         _ui.End();
+        _netStats?.FrameDrawn(_running?.Host.Match.Frame);
     }
 
     public void Dispose()

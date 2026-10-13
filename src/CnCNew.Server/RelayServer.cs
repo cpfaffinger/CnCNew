@@ -543,10 +543,12 @@ public sealed partial class RelayServer
             return;
         }
         Settings = settings;
-        // A new layout empties the seats: what a member sat in may not exist any more.
+        // A member keeps its seat when the new layout still has it as a seat for a player; a seat that is gone or no longer a player's is left. Nobody's "ready"
+        // survives: it was given for other settings. (A host changes the money or a computer slot while people sit in the room; they shall not be thrown out of
+        // their seats for it, and they shall see the change before the match starts.)
         foreach (var peer in _peers)
         {
-            peer.Slot = -1;
+            if (peer.Slot >= settings.Slots.Length || (peer.Slot >= 0 && settings.Slots[peer.Slot].Kind != MatchSlotKind.Human)) peer.Slot = -1;
             peer.Ready = false;
         }
         BroadcastRoom();

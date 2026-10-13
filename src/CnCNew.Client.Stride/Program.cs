@@ -83,9 +83,15 @@ CnCNewGame.Shell = new ShellRunOptions(
     GetArgument(args, "--net-dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CnCNew"),
     int.Parse(GetArgument(args, "--net-port") ?? CnCNew.Game.Shell.ShellNetwork.StandardPort.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture),
     int.Parse(GetArgument(args, "--net-match-seconds") ?? "0", System.Globalization.CultureInfo.InvariantCulture),
-    !args.Contains("--no-player-key"), shellScript, double.Parse(GetArgument(args, "--shell-seconds") ?? "600", System.Globalization.CultureInfo.InvariantCulture));
+    !args.Contains("--no-player-key"), shellScript, double.Parse(GetArgument(args, "--shell-seconds") ?? "600", System.Globalization.CultureInfo.InvariantCulture),
+    // --settings-dir DIR: where the menus keep the options, the last map and the savegames (default: %APPDATA%\CnCNew). A check names a directory of its run.
+    GetArgument(args, "--settings-dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"));
 // --net-order-every N: in a match of a server started from the menus, one unit of the viewer is ordered to move every N ticks (a check's stand-in for a person).
 CnCNew.Client.Stride.ClientRuntime.NetOrderEvery = int.Parse(GetArgument(args, "--net-order-every") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+// --net-stats: with --net-order-every N the stand-in clicks like a person (camera over a unit, the order button on the ground beside it), and the client measures
+// from the click to the first frame that shows it, to the execution and to the frame after it, and how evenly the picture moves (docs/MULTIPLAYER-FINDINGS.md section 2).
+CnCNew.Client.Stride.ClientRuntime.NetStatsEnabled = args.Contains("--net-stats", StringComparer.OrdinalIgnoreCase);
+CnCNew.Client.Stride.ClientRuntime.NetStatsTrace = args.Contains("--net-stats-trace", StringComparer.OrdinalIgnoreCase);
 // --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §17); fixed time steps only.
 var inputScriptPath = GetArgument(args, "--input-script");
 CnCNew.Client.Stride.ClientRuntime.InputDelayTicks = int.Parse(GetArgument(args, "--input-delay-ticks") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
@@ -287,7 +293,7 @@ internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<st
 }
 
 /// <summary>What the menus' way to a server takes from the command line (<c>--net-dir</c>, <c>--net-port</c>, <c>--net-match-seconds</c>, <c>--no-player-key</c>, <c>--shell-script</c>, <c>--shell-seconds</c>).</summary>
-internal sealed record ShellRunOptions(string NetDirectory, int NetPort, int NetMatchSeconds, bool UsePlayerKey, CnCNew.Game.Shell.ShellScript? Script, double ScriptSeconds);
+internal sealed record ShellRunOptions(string NetDirectory, int NetPort, int NetMatchSeconds, bool UsePlayerKey, CnCNew.Game.Shell.ShellScript? Script, double ScriptSeconds, string SettingsDirectory);
 
 internal sealed class CnCNewGame(
     bool smokeTest,
@@ -470,7 +476,7 @@ internal sealed class CnCNewGame(
             var back = GraphicsDevice.Presenter.BackBuffer;
             var shellRun = Shell;
             var network = shellRun is null ? null : new CnCNew.Game.Shell.ShellNetwork(data.Fingerprint, shellRun.NetDirectory, shellRun.NetPort, shellRun.UsePlayerKey) { MatchSeconds = shellRun.NetMatchSeconds };
-            _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse,
+            _runtime = ClientRuntime.ForShell(this, data, shellRun?.SettingsDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse,
                 ShellSkirmishAi, network, shellRun?.Script);
             if (shellRun?.Script is not null) _shellWatch.Start();
             Window.Title = "CnCNew";
@@ -622,6 +628,7 @@ internal sealed class CnCNewGame(
             foreach (var line in _runtime.FinishAudio()) Console.WriteLine(line);
             foreach (var line in _runtime.FinishMission(missionJournalLines)) Console.WriteLine(line);
             foreach (var line in _runtime.FinishInputScript()) Console.WriteLine(line);
+            foreach (var line in _runtime.FinishNetStats()) Console.WriteLine(line);
             foreach (var line in _runtime.FinishSpectator()) Console.WriteLine(line);
             UnresolvedInputSteps = _runtime.UnresolvedInputSteps;
         }
@@ -658,7 +665,7 @@ internal sealed class CnCNewGame(
             }
             if (_runtime.ShellScript is { } shellScript && Shell is { } shellOptions && (shellScript.IsFinished || _shellWatch.Elapsed.TotalSeconds > shellOptions.ScriptSeconds))
             {
-                foreach (var line in shellScript.Report()) Console.WriteLine(line);
+                Console.WriteLine(shellScript.Summary);
                 if (!shellScript.IsFinished) Console.WriteLine($"shell-script: FAILED: not finished within {shellOptions.ScriptSeconds} s of real time (step {shellScript.StepsDone + 1} of {shellScript.StepCount})");
                 ShellScriptFailed = shellScript.Failed || !shellScript.IsFinished;
                 Exit();

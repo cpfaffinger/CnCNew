@@ -45,6 +45,8 @@ public sealed class ShellScript
     public IReadOnlyList<string> Log => _log;
     /// <summary>What a match in progress tells the script (the tick, whether it is over); the host sets it while it owns a match, the shell knows nothing of it.</summary>
     public Func<string, string?>? MatchProbe { get; set; }
+    /// <summary>Called with every line of the log as it is written: the client prints them as they happen, so that a check can wait for a step of another process.</summary>
+    public Action<string>? Trace { get; set; }
 
     public static ShellScript Load(string path) => Parse(File.ReadAllLines(path), path);
 
@@ -87,7 +89,7 @@ public sealed class ShellScript
                 return;
             }
             if (outcome == Outcome.Failed) return;
-            _log.Add($"shell-script: step {step.Line} ok after {_waited.ToString("0.00", CultureInfo.InvariantCulture)} s: {step.Text}");
+            Write($"shell-script: step {step.Line} ok after {_waited.ToString("0.00", CultureInfo.InvariantCulture)} s: {step.Text}");
             _next++;
             _waited = 0;
             if (outcome == Outcome.DoneWithInput) return;
@@ -108,7 +110,7 @@ public sealed class ShellScript
         switch (step.Verb)
         {
             case "note":
-                _log.Add($"shell-script: note: {Expand(step.Rest)}");
+                Write($"shell-script: note: {Expand(step.Rest)}");
                 return Outcome.Done;
             case "limit":
                 if (words.Length != 2 || !double.TryParse(words[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var limit) || limit <= 0) return Fail(shell, step, "expected 'limit SECONDS'");
@@ -302,10 +304,20 @@ public sealed class ShellScript
             if (window.ListBox is { } list) seen += $", rows [{string.Join(" | ", list.Rows.Select(row => string.Join(" ", row.Cells)))}]";
             if (window.ComboBox is { } combo) seen += $", entries [{string.Join(" | ", combo.Entries)}] selected {combo.SelectedIndex}";
         }
+        // What the lists of the screen said last (a room's chat list carries the server's refusals).
+        if (shell.Phase is not (ShellPhase.InMatch or ShellPhase.InMission) && shell.Stack.Count > 0)
+            foreach (var listed in shell.CurrentScreen.Tree.AllWindows.Where(candidate => candidate.IsVisible && candidate.ListBox is { Rows.Count: > 0 }).Take(4))
+                seen += $"; {listed.Name} ends with [{string.Join(" | ", listed.ListBox!.Rows.TakeLast(3).Select(row => string.Join(" ", row.Cells)))}]";
         // A message over the screen is usually the reason: say what it says.
         if (shell.Stack.Count > 0 && shell.CurrentScreen is Screens.MessageBoxScreen box) seen += $"; a message is open: '{box.Title}' - '{box.Message.Replace('\n', ' ')}'";
-        _log.Add($"shell-script: FAILED step {step.Line} ({step.Text}): {why} - {where}{seen}");
+        Write($"shell-script: FAILED step {step.Line} ({step.Text}): {why} - {where}{seen}");
         return Outcome.Failed;
+    }
+
+    private void Write(string line)
+    {
+        _log.Add(line);
+        Trace?.Invoke(line);
     }
 
     private long Now() => (long)_clock + ++_events;
@@ -320,7 +332,10 @@ public sealed class ShellScript
         Send(shell, new MouseButtonEvent(Now(), MouseButton.Left, false, at));
     }
 
-    /// <summary>The lines for the console at the end of a run: every step done, the failure if there was one, and a summary a check reads.</summary>
+    /// <summary>The summary line a check reads.</summary>
+    public string Summary => $"shell-script summary: steps={_steps.Count} done={_next} failed={(Failed ? 1 : 0)} finished={(IsFinished && !Failed ? 1 : 0)}";
+
+    /// <summary>The lines for the console at the end of a run: every step done, the failure if there was one, and the summary.</summary>
     public IReadOnlyList<string> Report()
         => [.. _log, $"shell-script summary: steps={_steps.Count} done={_next} failed={(Failed ? 1 : 0)} finished={(IsFinished && !Failed ? 1 : 0)}"];
 }
