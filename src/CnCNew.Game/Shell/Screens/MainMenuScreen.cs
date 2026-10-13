@@ -34,7 +34,7 @@ namespace CnCNew.Game.Shell.Screens;
 /// </summary>
 public sealed class MainMenuScreen : ShellScreen
 {
-    private enum Submenu { Main, SinglePlayer, LoadReplay, Difficulty }
+    private enum Submenu { Main, SinglePlayer, LoadReplay, Difficulty, Multiplayer }
 
     /// <summary>
     /// One of the four buttons of the single-player submenu that lead to the difficulty question (<c>MainMenu.cpp</c>, <c>buttonUSAID</c>/<c>buttonGLAID</c>/
@@ -73,8 +73,10 @@ public sealed class MainMenuScreen : ShellScreen
         // Entry group visible, every submenu hidden (W3DMainMenuInit equivalent).
         ResetToMain();
 
-        // Multiplayer is out of scope for this build (see docs/GAME-SHELL.md); kept visible but inert.
-        W("ButtonMultiplayer").SetEnabled(false);
+        // Multiplayer leads to the submenu with "Network" (the address of a server, docs/GAME-SHELL.md section 15) when the shell was given a network; "Online" was the
+        // original's matchmaking service, which this build does not have: visible, inert.
+        W("ButtonMultiplayer").SetEnabled(Shell.Network is not null);
+        W("ButtonOnline").SetEnabled(false);
         // The retail MainMenu.wnd (PatchWindow.big) has a "custom mission" button between Skirmish and Back; this build has no such screen (the published source of the
         // original has no handler for it either). Kept visible but inert, like Multiplayer; a layout without the button has nothing to disable.
         Tree.FindByName("MainMenu.wnd:ButtonCustomMission")?.SetEnabled(false);
@@ -132,6 +134,7 @@ public sealed class MainMenuScreen : ShellScreen
         W("MapBorder1").SetHidden(true);
         W("MapBorder3").SetHidden(true);
         W("MapBorder4").SetHidden(true);
+        W("MapBorder1").SetHidden(true);
         // initialHide(): every faction logo window in all three sizes starts hidden (the logos of the single-player submenu are shown by its transition group).
         foreach (var logo in FactionLogos)
             foreach (var size in LogoSizes) W(logo + size).SetHidden(true);
@@ -187,22 +190,25 @@ public sealed class MainMenuScreen : ShellScreen
             W("MapBorder2").SetHidden(target != Submenu.Main);
             W("MapBorder").SetHidden(target != Submenu.SinglePlayer);
             W("MapBorder3").SetHidden(target != Submenu.LoadReplay);
+            W("MapBorder1").SetHidden(target != Submenu.Multiplayer);
             // The single-player submenu shows the five faction logos along its bottom (WINSCALEUP leaves them shown in the original).
             foreach (var logo in FactionLogos) W(logo).SetHidden(target != Submenu.SinglePlayer);
             return;
         }
         _dontAllow = true;
-        W(target switch { Submenu.SinglePlayer => "MapBorder", Submenu.LoadReplay => "MapBorder3", _ => "MapBorder2" }).SetHidden(false);
+        W(target switch { Submenu.SinglePlayer => "MapBorder", Submenu.LoadReplay => "MapBorder3", Submenu.Multiplayer => "MapBorder1", _ => "MapBorder2" }).SetHidden(false);
         var (leave, back) = from switch
         {
             Submenu.SinglePlayer => ("MainMenuSinglePlayerMenu", "MainMenuSinglePlayerMenuBack"),
             Submenu.LoadReplay => ("MainMenuLoadReplayMenu", "MainMenuLoadReplayMenuBack"),
+            Submenu.Multiplayer => ("MainMenuMultiPlayerMenu", "MainMenuMultiPlayerMenuReverse"),
             _ => ("MainMenuDefaultMenu", "MainMenuDefaultMenuBack"),
         };
         var enter = target switch
         {
             Submenu.SinglePlayer => "MainMenuSinglePlayerMenu",
             Submenu.LoadReplay => "MainMenuLoadReplayMenu",
+            Submenu.Multiplayer => "MainMenuMultiPlayerMenu",
             _ => "MainMenuDefaultMenu",
         };
         transitions.Remove(leave);
@@ -344,6 +350,12 @@ public sealed class MainMenuScreen : ShellScreen
             case "MainMenu.wnd:ButtonMedium": ChooseDifficulty(ScriptDifficulty.Normal); break;
             case "MainMenu.wnd:ButtonHard": ChooseDifficulty(ScriptDifficulty.Hard); break;
             case "MainMenu.wnd:ButtonDiffBack": Shell.PlaySound(ShellUiSounds.ButtonClick); CloseDifficulty(); break;
+            case "MainMenu.wnd:ButtonMultiplayer": if (Shell.Network is null) break; Shell.PlaySound(ShellUiSounds.ButtonClick); SwitchTo(Submenu.Multiplayer); break;
+            case "MainMenu.wnd:ButtonMultiBack": Shell.PlaySound(ShellUiSounds.ButtonClick); SwitchTo(Submenu.Main); break;
+            case "MainMenu.wnd:ButtonNetwork":
+                Shell.PlaySound(ShellUiSounds.ButtonClick);
+                LeaveFor(Shell.OpenMultiplayer, null, "MainMenuMultiPlayerMenuTransitionToNext");
+                break;
             case "MainMenu.wnd:ButtonLoadReplay": Shell.PlaySound(ShellUiSounds.ButtonClick); SwitchTo(Submenu.LoadReplay); break;
             case "MainMenu.wnd:ButtonLoadReplayBack": Shell.PlaySound(ShellUiSounds.ButtonClick); SwitchTo(Submenu.Main); break;
             case "MainMenu.wnd:ButtonLoadGame":
@@ -388,7 +400,7 @@ public sealed class MainMenuScreen : ShellScreen
         {
             if (!_dontAllow) CloseDifficulty();
         }
-        else if (SinglePlayerSubmenuOpen || LoadReplaySubmenuOpen)
+        else if (SinglePlayerSubmenuOpen || LoadReplaySubmenuOpen || _submenu == Submenu.Multiplayer)
         {
             if (!_dontAllow && !_campaignSelected) SwitchTo(Submenu.Main);
         }

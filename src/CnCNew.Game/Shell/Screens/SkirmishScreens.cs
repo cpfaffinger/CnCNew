@@ -16,7 +16,7 @@ namespace CnCNew.Game.Shell.Screens;
 /// is listed as a request to <c>LiveMatch</c>/the AI in <c>docs/GAME-SHELL.md</c>. A map is always preselected as in the original; Start does
 /// nothing (no inline validation message, just no output) until at least one computer opponent is chosen.
 /// </summary>
-public sealed class SkirmishSetupScreen : ShellScreen
+public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
 {
     private const int Slots = 8;
     private static readonly ImmutableArray<int> MoneyChoices = [5_000, 10_000, 15_000, 20_000, 30_000, 40_000, 50_000];
@@ -118,7 +118,7 @@ public sealed class SkirmishSetupScreen : ShellScreen
         ["MapWindow", "StaticTextTeam", "StaticTextFaction", "StaticTextColor", "TextEntryMapDisplay", "ButtonSelectMap", "ButtonStart", "StaticTextMapPreview"];
 
     /// <summary><c>showSkirmishGameOptionsUnderlyingGUIElements(!open)</c>; Reset and Back are disabled while the picker is open (<c>winEnable(show)</c>).</summary>
-    internal void SetMapPickerOpen(bool open)
+    public void SetMapPickerOpen(bool open)
     {
         _mapPickerOpen = open;
         foreach (var name in HiddenWhileMapPicker) W(name).SetHidden(open);
@@ -243,7 +243,7 @@ public sealed class SkirmishSetupScreen : ShellScreen
 }
 
 /// <summary>
-/// <c>SkirmishMapSelectMenu.wnd</c>. <c>RadioButtonUserMaps</c> has no backing directory in this build (no user-map
+/// <c>SkirmishMapSelectMenu.wnd</c>, and <c>LanMapSelectMenu.wnd</c> for the room of a server (the same windows under the other file's name). <c>RadioButtonUserMaps</c> has no backing directory in this build (no user-map
 /// import yet), so switching to it simply empties the list; this is documented, not a silent failure. The list only
 /// shows maps <c>Maps/MapCache.ini</c> flags <c>isMultiplayer = yes</c>.
 /// </summary>
@@ -252,15 +252,15 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
     /// <summary>The original creates the map picker as a layout of its own on top of the skirmish setup (<c>SkirmishGameOptionsMenu.cpp</c>: <c>winCreateLayout</c>, <c>hide(FALSE)</c>), not by <c>Shell::push</c>; the setup stays visible behind it.</summary>
     public override bool HidesScreensBelow => false;
 
-    private readonly SkirmishSetupScreen _owner;
+    private readonly IMapPickerOwner _owner;
     private ImmutableArray<string> _mapPaths = [];
     private int _selectedIndex = -1;
 
-    public SkirmishMapSelectScreen(GameShell shell, SkirmishSetupScreen owner) : base(shell, ShellLayoutNames.SkirmishMapSelectMenu)
+    public SkirmishMapSelectScreen(GameShell shell, IMapPickerOwner owner, string layoutName = ShellLayoutNames.SkirmishMapSelectMenu) : base(shell, layoutName)
     {
         _owner = owner;
-        Tree.Register("SkirmishMapSelectMenuSystem", OnSystem);
-        Tree.Register("SkirmishMapSelectMenuInput", OnInput);
+        Tree.Register($"{layoutName}System", OnSystem);
+        Tree.Register($"{layoutName}Input", OnInput);
         W("RadioButtonSystemMaps").SetChecked(true);
         PopulateSystemMaps();
         SkirmishSetupScreen.HideStartPositionMarkers(this);
@@ -286,15 +286,15 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
     {
         switch (e.Kind)
         {
-            case UiEventKind.ListSelected when e.Source == "SkirmishMapSelectMenu.wnd:ListboxMap": _selectedIndex = e.Value; break;
-            case UiEventKind.ListDoubleClicked when e.Source == "SkirmishMapSelectMenu.wnd:ListboxMap": _selectedIndex = e.Value; Accept(); break;
-            case UiEventKind.ButtonSelected when e.Source == "SkirmishMapSelectMenu.wnd:ButtonOK": Accept(); break;
-            case UiEventKind.ButtonSelected when e.Source == "SkirmishMapSelectMenu.wnd:ButtonBack":
+            case UiEventKind.ListSelected when e.Source == $"{LayoutName}.wnd:ListboxMap": _selectedIndex = e.Value; break;
+            case UiEventKind.ListDoubleClicked when e.Source == $"{LayoutName}.wnd:ListboxMap": _selectedIndex = e.Value; Accept(); break;
+            case UiEventKind.ButtonSelected when e.Source == $"{LayoutName}.wnd:ButtonOK": Accept(); break;
+            case UiEventKind.ButtonSelected when e.Source == $"{LayoutName}.wnd:ButtonBack":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 Shell.CloseTop();
                 break;
-            case UiEventKind.ButtonSelected when e.Source == "SkirmishMapSelectMenu.wnd:RadioButtonSystemMaps": PopulateSystemMaps(); break;
-            case UiEventKind.ButtonSelected when e.Source == "SkirmishMapSelectMenu.wnd:RadioButtonUserMaps":
+            case UiEventKind.ButtonSelected when e.Source == $"{LayoutName}.wnd:RadioButtonSystemMaps": PopulateSystemMaps(); break;
+            case UiEventKind.ButtonSelected when e.Source == $"{LayoutName}.wnd:RadioButtonUserMaps":
                 W("ListboxMap").ClearList();
                 _mapPaths = [];
                 _selectedIndex = -1;

@@ -19,7 +19,7 @@ public sealed record HostedServerOptions(int Port = 0, string Address = "0.0.0.0
 /// ticks by the clock whatever the hosting game's frames do; the hosting game talks to it through a socket like every other client. The network layers themselves
 /// start no thread and read no clock - this class is the host that does both.
 /// </summary>
-public sealed class HostedServer : IDisposable
+public sealed class HostedServer : CnCNew.Game.Shell.IShellHost
 {
     private readonly UdpSocketChannel _socket;
     private readonly ServerCore _core;

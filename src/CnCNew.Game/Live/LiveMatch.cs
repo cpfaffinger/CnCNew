@@ -214,9 +214,14 @@ public sealed class LiveMatch : LiveGame
     /// The match is built from what a server sent: tell it, and take every tick and every command from it. Unlike the embedded server this one runs by its own clock,
     /// compares this client's hashes with the others', may ask this client for its state (somebody joins the running match) and may report a desync.
     /// </summary>
-    private LiveMatch Join(CnCNew.Game.Lockstep.RemoteRelay remote)
+    private LiveMatch Join(CnCNew.Game.Lockstep.RemoteRelay remote, bool wait)
     {
-        remote.ReportLoaded(Session.StateHash());
+        if (wait) remote.ReportLoaded(Session.StateHash());
+        else
+        {
+            remote.Client.ReportLoaded(Session.StateHash());
+            remote.Pump();
+        }
         Remote = remote;
         _client = remote.Client;
         Diagnostics = new CnCNew.Game.Lockstep.SessionDiagnostics();
@@ -321,10 +326,30 @@ public sealed class LiveMatch : LiveGame
         var description = client.Description!;
         if (description.TickRate != data.Rate.TicksPerSecond)
             throw new CnCNew.Game.Lockstep.RemoteRelayException($"The match runs at {description.TickRate} Hz; this game was started at {data.Rate.TicksPerSecond} Hz (--tick-rate {description.TickRate}).");
+        var (map, terrain) = MapOf(data, description);
+        return Build(data, remote, map, terrain, viewport, wait: true);
+    }
+
+    /// <summary>The first half of <see cref="Join(GameData, CnCNew.Game.Lockstep.RemoteRelay, Vector2)"/>: the map the description names, decoded, and its terrain.</summary>
+    internal static (MapData Map, TerrainMap Terrain) MapOf(GameData data, MatchDescription description)
+    {
+        if (description.TickRate != data.Rate.TicksPerSecond)
+            throw new CnCNew.Game.Lockstep.RemoteRelayException($"The match runs at {description.TickRate} Hz; this game was started at {data.Rate.TicksPerSecond} Hz (--tick-rate {description.TickRate}).");
         if (!data.Content.Exists(description.MapPath)) throw new CnCNew.Game.Lockstep.RemoteRelayException($"The match is played on '{description.MapPath}', which this game does not have.");
         MapData map;
         using (var stream = data.Content.OpenRead(description.MapPath)) map = SageMapDecoder.Decode(stream);
-        var terrain = TerrainMap.Build(map, description.MapPath);
+        return (map, TerrainMap.Build(map, description.MapPath));
+    }
+
+    /// <summary>
+    /// The second half: the session is built from the description (or a member's state) and the server is told. With <paramref name="wait"/> the call returns when
+    /// the server let the match begin; without it at once - the caller pumps the connection until the client is in the match (<see cref="NetMatchLoad"/>).
+    /// </summary>
+    internal static LiveMatch Build(GameData data, CnCNew.Game.Lockstep.RemoteRelay remote, MapData map, TerrainMap terrain, Vector2 viewport, bool wait)
+    {
+        var client = remote.Client;
+        var start = client.Start ?? throw new InvalidOperationException("The room has not started its match.");
+        var description = client.Description!;
         SkirmishMatchSession session;
         try
         {
@@ -342,7 +367,7 @@ public sealed class LiveMatch : LiveGame
         var match = session.Match;
         var seat = match.Slots.FirstOrDefault(slot => slot.Player.Value == client.Player);
         var setup = SetupOf(description, match, seat is null ? CnCNew.Game.Save.SkirmishViewer.Spectator : CnCNew.Game.Save.SkirmishViewer.Player) with { LocalSlot = seat?.Slot ?? 0 };
-        return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport).Join(remote);
+        return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport).Join(remote, wait);
     }
 
     /// <summary>

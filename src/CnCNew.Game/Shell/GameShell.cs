@@ -124,6 +124,18 @@ public sealed class GameShell
     /// <summary>Savegame files under <see cref="IShellEnvironment.SaveDirectory"/>; <see langword="null"/> only while still booting.</summary>
     public SaveGameStore? Saves { get; private set; }
 
+    /// <summary>
+    /// What the multiplayer screens reach the machine through (docs/GAME-SHELL.md section 15); null leaves the main menu's Multiplayer button inert, as in every
+    /// shell that was not given one (the headless tests of the other screens).
+    /// </summary>
+    public IShellNetwork? Network { get; private set; }
+    private Func<GameData, IShellNetwork>? _networkFactory;
+
+    /// <summary>The visit to a server that is under way: from the address screen until the person leaves the server again, across matches.</summary>
+    public ShellNetSession? Net { get; private set; }
+    private ShellNetSession? _pendingNet;
+    private bool _netStartSent;
+
     private MissionContext MissionContext => _missionContext ??= MissionContext.From(Data);
     private MissionContext? _missionContext;
 
@@ -142,16 +154,19 @@ public sealed class GameShell
     /// from these widths, so the synthetic <see cref="ShellTextMeasure"/> (the default, for headless tests) puts every
     /// label off centre under a real rasterizer.
     /// </summary>
-    public static GameShell Create(GameData data, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false)
+    public static GameShell Create(GameData data, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false,
+        IShellNetwork? network = null)
     {
         var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure, animateTransitions);
         if (viewport is null) shell.Viewport = FitViewport(environment, shell.Settings);
+        shell.Network = network;
         shell.FinishLoading(data);
         return shell;
     }
 
     /// <summary>Starts in <see cref="ShellPhase.Boot"/>: <see cref="GameData.Load"/> runs on a worker thread while the boot load screen shows its stage.</summary>
-    public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false, CnCNew.Simulation.Time.SimulationRate? rate = null)
+    public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false, CnCNew.Simulation.Time.SimulationRate? rate = null,
+        Func<GameData, IShellNetwork>? network = null)
     {
         var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure, animateTransitions);
         if (viewport is null) shell.Viewport = FitViewport(environment, shell.Settings);
@@ -161,6 +176,7 @@ public sealed class GameShell
         shell.RawText = GameData.LoadText(bootContent, language);
         shell.TextSource = new ShellTextSource(shell.RawText);
         shell.TreeServices = new UiTreeServices(shell._textMeasure) { Text = shell.TextSource, HeaderTemplates = shell.Layouts.HeaderTemplates };
+        shell._networkFactory = network;
         shell.Phase = ShellPhase.Boot;
         shell.Push(new LoadingScreen(shell, ShellLayoutNames.ShellGameLoadScreen));
         shell._loadTask = Task.Run(() => GameData.Load(contentDirectory, stage => shell._loadStage = stage, rate: rate));
@@ -214,6 +230,7 @@ public sealed class GameShell
             }
         }
         Saves = new SaveGameStore(Environment.SaveDirectory);
+        Network ??= _networkFactory?.Invoke(data);
         Phase = ShellPhase.Menus;
         Replace(new MainMenuScreen(this));
         _bootContent = null;
@@ -280,6 +297,21 @@ public sealed class GameShell
             }
             else if (_stack.Count > 0) ((LoadingScreen)CurrentScreen).SetProgress(LoadProgressPercent);
         }
+        else if (Phase == ShellPhase.MatchLoading && _pendingNet is { } loading)
+        {
+            // The shared load screen: the host of the shell builds the match (after the screen was drawn once); the connection is moved here, and the bars show
+            // what every member's game reported.
+            if (_loadingFrameShown && !_netStartSent)
+            {
+                _netStartSent = true;
+                _outputs.Add(new StartNetMatchOutput(loading));
+            }
+            if (loading.Relay is { } relay)
+            {
+                relay.Pump();
+                (CurrentScreen as NetLoadingScreen)?.SetProgress(relay.Client.LoadProgress);
+            }
+        }
         else if (Phase == ShellPhase.MatchLoading && _loadingFrameShown)
         {
             var setup = _pendingMatchSetup!;
@@ -300,6 +332,7 @@ public sealed class GameShell
                 _outputs.Add(new StartMissionOutput(run, controller));
             }
         }
+        if (Phase is ShellPhase.Menus or ShellPhase.Results) Net?.Lobby.Pump();
         foreach (var screen in _stack.ToArray()) screen.Update(dtSeconds);
         if (_stack.Count > 0 && CurrentScreen.ExitFinished) Pop();
         if (_stack.Count > 0) CurrentScreen.Tree.AdvanceTo((long)_clockMs);
@@ -359,10 +392,97 @@ public sealed class GameShell
     public void MatchFinished(SkirmishMatchSession session, MatchStatistics? statistics = null) => MatchFinished(MatchResult.From(session, statistics));
 
     /// <summary>The same for a result the host has put together itself (a match with the original AI has no <c>SkirmishMatchSession</c>).</summary>
-    public void MatchFinished(MatchResult result)
+    public void MatchFinished(MatchResult result) => MatchFinished(result, null);
+
+    /// <summary>
+    /// The same, with what a server said when the match did not end by its own rules (<paramref name="netNote"/>: the connection was lost, the games were out of
+    /// sync, the server reached a limit) - shown as a message over the score screen. After a match of a server the score screen leads back to its room.
+    /// </summary>
+    public void MatchFinished(MatchResult result, string? netNote)
     {
+        if (Net is { } net) net.Relay = null;
+        _pendingNet = null;
         Phase = ShellPhase.Results;
         Replace(new ScoreScreenScreen(this, result));
+        if (netNote is { Length: > 0 }) Tell(NetText.TitleMatchEnded, netNote, CloseTop);
+    }
+
+    // ------------------------------------------------------------------------------------------------- multiplayer (docs/GAME-SHELL.md section 15)
+
+    internal void OpenMultiplayer() => Push(new NetworkDirectConnectScreen(this));
+
+    internal void OpenNetLobby(ShellNetSession session)
+    {
+        Net?.Dispose();
+        Net = session;
+        Push(new NetLobbyScreen(this, session));
+    }
+
+    internal void OpenNetRoom(ShellNetSession session) => Push(new NetRoomScreen(this, session));
+    internal void OpenNetHostPopup(NetLobbyScreen owner, string playerName) => Push(new NetHostPopupScreen(this, owner, playerName));
+    internal void OpenNetJoinPopup(NetLobbyScreen owner, string room) => Push(new NetJoinPopupScreen(this, owner, room));
+    internal void OpenNetMapSelect(NetRoomScreen owner) => Push(new SkirmishMapSelectScreen(this, owner, ShellLayoutNames.LanMapSelectMenu));
+
+    /// <summary>A question in our own words over the current screen (<c>MessageBox.wnd</c>, Yes and No); the callbacks close it.</summary>
+    internal void AskYesNo(string title, string message, Action yes, Action no)
+        => Push(new MessageBoxScreen(this, ShellLayoutNames.MessageBox, title, message, plainMessage: true, ShellMessageBoxButtons.YesNo, yes, no));
+
+    /// <summary>A message in our own words over the current screen (<c>MessageBox.wnd</c>, OK only); the callback closes it.</summary>
+    internal void Tell(string title, string message, Action ok)
+        => Push(new MessageBoxScreen(this, ShellLayoutNames.MessageBox, title, message, plainMessage: true, ShellMessageBoxButtons.OkOnly, ok));
+
+    /// <summary>Ends the visit to a server: the connection (and a server this game hosted for it) is closed and the address screen is the top again.</summary>
+    internal void CloseNet()
+    {
+        Net?.Dispose();
+        Net = null;
+        _pendingNet = null;
+        while (_stack.Count > 1 && CurrentScreen is not NetworkDirectConnectScreen) Pop(reveal: false);
+        if (_stack.Count > 0) CurrentScreen.OnRevealed();
+    }
+
+    /// <summary>The host of the room started the match: the connection leaves the lobby and the shared load screen stands until the host of the shell reports.</summary>
+    internal void BeginNetMatch(ShellNetSession session)
+    {
+        var room = session.Lobby.Room;
+        var rows = room is null ? [] : NetLoadingScreen.RowsOf(room);
+        var mapPath = room?.Settings.MapPath ?? string.Empty;
+        var mapName = mapPath.Length == 0 ? string.Empty : MapCatalog.ContainsKey(mapPath) ? MapNames.DisplayName(mapPath, MapCatalog, TextSource) : Path.GetFileNameWithoutExtension(mapPath);
+        session.Relay = session.Lobby.TakeRelay();
+        _pendingNet = session;
+        _netStartSent = false;
+        _loadingFrameShown = false;
+        Phase = ShellPhase.MatchLoading;
+        Replace(new NetLoadingScreen(this, rows, mapName));
+    }
+
+    /// <summary>The host of the shell built the match and the server let it begin: the shell draws nothing until <see cref="MatchFinished(MatchResult, string?)"/>.</summary>
+    public void NetMatchStarted()
+    {
+        if (Phase != ShellPhase.MatchLoading || _pendingNet is null) throw new InvalidOperationException("No match of a server is loading.");
+        _pendingNet = null;
+        Phase = ShellPhase.InMatch;
+    }
+
+    /// <summary>The match could not be built or begun here: back in front of the server's rooms, with the reason.</summary>
+    public void NetMatchFailed(string message)
+    {
+        if (_pendingNet is not { } session) throw new InvalidOperationException("No match of a server is loading.");
+        _pendingNet = null;
+        session.Relay?.Dispose();
+        session.Relay = null;
+        ReturnToNet(session);
+        Tell(NetText.TitleCannotEnter, message, CloseTop);
+    }
+
+    /// <summary>After a match of a server: main menu, address screen and the server's front are stacked again, and the lobby enters the room it came from.</summary>
+    private void ReturnToNet(ShellNetSession session)
+    {
+        Phase = ShellPhase.Menus;
+        Replace(new MainMenuScreen(this));
+        Push(new NetworkDirectConnectScreen(this));
+        session.Lobby.ReturnToRoom();
+        Push(new NetLobbyScreen(this, session));
     }
 
     /// <summary>
@@ -463,6 +583,11 @@ public sealed class GameShell
 
     internal void ReturnToMainMenuFromResults()
     {
+        if (Net is { } net && Network is not null)
+        {
+            ReturnToNet(net);
+            return;
+        }
         Phase = ShellPhase.Menus;
         Replace(new MainMenuScreen(this));
     }

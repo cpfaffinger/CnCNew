@@ -183,6 +183,13 @@ public sealed class UiWindow
 
     public void SetEntryText(string text) => (TextEntry ?? throw NotA("text entry")).SetText(text);
 
+    /// <summary>Sets how many characters a text entry or an editable combo box takes, in place of the layout's <c>MAXLEN</c>/<c>MAXCHARS</c>.</summary>
+    public void SetEditLimit(int maxCharacters)
+    {
+        var edit = TextEntry ?? (ComboBox is { Data.IsEditable: true } combo ? combo.Edit : null) ?? throw NotA("text entry or editable combo box");
+        edit.MaxLength = Math.Max(0, maxCharacters);
+    }
+
     public void SelectTab(int index)
     {
         var tabs = TabControl ?? throw NotA("tab control");

@@ -97,7 +97,8 @@ public sealed class UiTextEditState(int maxLength, bool secret, bool numericalOn
 {
     private readonly StringBuilder _text = new();
 
-    public int MaxLength { get; } = maxLength;
+    /// <summary>The most characters the field takes; 0 is no limit. The layout's value unless a screen sets another (<c>UiWindow.SetEditLimit</c>).</summary>
+    public int MaxLength { get; internal set; } = maxLength;
     public bool Secret { get; } = secret;
     public string Text => _text.ToString();
     public int Caret { get; private set; }

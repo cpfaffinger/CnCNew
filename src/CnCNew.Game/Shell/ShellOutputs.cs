@@ -14,6 +14,13 @@ public abstract record ShellOutput;
 /// <summary>The setup screen produced a valid match; the host should construct and run a <c>LiveMatch</c> from it.</summary>
 public sealed record StartMatchOutput(MatchSetup Setup) : ShellOutput;
 
+/// <summary>
+/// The host of a room started its match (docs/GAME-SHELL.md section 15.5): the shell shows the shared load screen; the host of the shell should build the match the
+/// server described from <see cref="ShellNetSession.Relay"/> (<c>NetMatchLoad</c>), report how far it is, and tell the shell when the match runs
+/// (<see cref="GameShell.NetMatchStarted"/>) or cannot be built (<see cref="GameShell.NetMatchFailed"/>).
+/// </summary>
+public sealed record StartNetMatchOutput(ShellNetSession Session) : ShellOutput;
+
 /// <summary>A skirmish savegame was chosen in the load list; the host should restore it (<c>LiveMatch.Restore</c>) and run it like a started match.</summary>
 public sealed record ResumeMatchOutput(byte[] Save, string Slot) : ShellOutput;
 

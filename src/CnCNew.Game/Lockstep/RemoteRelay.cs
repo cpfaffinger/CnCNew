@@ -42,6 +42,8 @@ public sealed class RemoteRelay : IDisposable
     public ServerTrust Trust { get; private set; } = ServerTrust.Known;
     private string _expected = string.Empty;
     public UdpLinkStatistics Statistics => _endpoint.Link.Statistics;
+    /// <summary>Why the connection ended, once it has.</summary>
+    public UdpCloseReason CloseReason => _endpoint.Link.CloseReason;
 
     /// <summary>One round: what arrived on the socket is taken in and handed to the protocol client, what is due is sent.</summary>
     public void Pump()

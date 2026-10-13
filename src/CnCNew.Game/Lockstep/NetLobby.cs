@@ -71,7 +71,8 @@ public interface INetLobby
     /// <summary>The last request the room refused (somebody else's seat, a start that is not the host's, settings the server does not take).</summary>
     RejectMessage? LastRefusal { get; }
 
-    void Connect(IPEndPoint server);
+    /// <param name="serverKey">A fingerprint the caller knows to be the server's (the server this game hosts): that key and no other, and no question.</param>
+    void Connect(IPEndPoint server, string serverKey = "");
     void AcceptServer();
     void RefreshRooms();
     void Enter(string room, string password = "", bool watch = false);
@@ -86,6 +87,10 @@ public interface INetLobby
     void LeaveRoom();
     void Disconnect();
     void Pump();
+    /// <summary>The host started the match: the connection goes to the game. Null when this lobby has no connection to hand over (a scripted one).</summary>
+    RemoteRelay? TakeRelay();
+    /// <summary>After a match: the same server, the same room by name.</summary>
+    void ReturnToRoom();
 }
 
 /// <param name="Known">The servers this client has met; null keeps the list for the life of the lobby.</param>
@@ -117,6 +122,7 @@ public sealed class NetLobby : INetLobby, IDisposable
     private RoomBrowser? _browser;
     private LockstepClient? _client;
     private string _accepted = string.Empty;
+    private string _pinned = string.Empty;
     private string _expected = string.Empty;
     private bool _keyChanged;
     private bool _question;
@@ -168,9 +174,10 @@ public sealed class NetLobby : INetLobby, IDisposable
     public int Reconnects { get; private set; }
     public UdpLinkStatistics? Statistics => _endpoint?.Link.Statistics;
 
-    public void Connect(IPEndPoint server)
+    public void Connect(IPEndPoint server, string serverKey = "")
     {
         Server = server;
+        _pinned = serverKey.Length > 0 ? serverKey : _options.ServerKey;
         _accepted = string.Empty;
         _lastRooms = null;
         ListingRefused = false;
@@ -184,7 +191,7 @@ public sealed class NetLobby : INetLobby, IDisposable
         _keyChanged = false;
         _question = false;
         var server = Server ?? throw new InvalidOperationException("No server was named.");
-        var pinned = _options.ServerKey.ToUpperInvariant();
+        var pinned = _pinned.ToUpperInvariant();
         _socket = new UdpSocketChannel(new IPEndPoint(server.AddressFamily == AddressFamily.InterNetworkV6 ? IPAddress.IPv6Any : IPAddress.Any, 0));
         _endpoint = new UdpClientEndpoint(_socket, server, _clock, BitConverter.ToUInt64(RandomNumberGenerator.GetBytes(8)), new UdpOptions { ConnectTimeoutMs = _options.ConnectTimeoutMs }, key =>
         {
@@ -467,7 +474,7 @@ public sealed class NetLobby : INetLobby, IDisposable
     /// <summary>After a match: the same server, the same room by name (whoever is back first opens it again and is its host).</summary>
     public void ReturnToRoom()
     {
-        if (Server is null || RoomName.Length == 0 && Stage != LobbyStage.Idle) return;
+        if (Server is null || RoomName.Length == 0) return;
         _enterWhenConnected = (RoomName, _password, _watch);
         Open();
     }

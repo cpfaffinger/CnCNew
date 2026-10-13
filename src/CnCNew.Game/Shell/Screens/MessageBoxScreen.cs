@@ -16,6 +16,11 @@ public sealed class MessageBoxScreen : ShellScreen
     /// <summary>A message box is a modal popup (<c>MessageBoxOk</c>/<c>QuitMessageBoxYesNo</c> create their own layout), not a shell push: the screen below stays visible behind it.</summary>
     public override bool HidesScreensBelow => false;
 
+    /// <summary>Title and message as given (labels or plain text) and which buttons the box shows.</summary>
+    public string Title { get; }
+    public string Message { get; }
+    public ShellMessageBoxButtons Buttons { get; }
+
     private readonly Action _onAccept;
     private readonly Action? _onDecline;
 
@@ -32,6 +37,9 @@ public sealed class MessageBoxScreen : ShellScreen
     {
         _onAccept = onAccept;
         _onDecline = onDecline;
+        Title = titleLabel;
+        Message = messageLabel;
+        Buttons = buttons;
         Tree.Register(layoutName == ShellLayoutNames.QuitMessageBox ? "QuitMessageBoxSystem" : "MessageBoxSystem", OnSystem);
         if (plainMessage) { W("StaticTextTitle").SetText(titleLabel); W("StaticTextMessage").SetText(messageLabel); }
         else { W("StaticTextTitle").SetTextLabel(titleLabel); W("StaticTextMessage").SetTextLabel(messageLabel); }

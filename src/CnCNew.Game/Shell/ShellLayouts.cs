@@ -70,10 +70,20 @@ public static class ShellLayoutNames
     /// <summary><c>Window/Menus/Defeat.wnd</c>: the defeat banner shown behind the mission result screen.</summary>
     public const string Defeat = "Defeat";
 
+    /// <summary>The multiplayer screens (docs/GAME-SHELL.md section 15): address, rooms of a server, the two popups, the room, its map picker, the shared load screen.</summary>
+    public const string NetworkDirectConnect = "NetworkDirectConnect";
+    public const string LanLobbyMenu = "LanLobbyMenu";
+    public const string PopupHostGame = "PopupHostGame";
+    public const string PopupJoinGame = "PopupJoinGame";
+    public const string LanGameOptionsMenu = "LanGameOptionsMenu";
+    public const string LanMapSelectMenu = "LanMapSelectMenu";
+    public const string MultiplayerLoadScreen = "MultiplayerLoadScreen";
+
     public static readonly ImmutableArray<string> All =
     [
         MainMenu, OptionsMenu, SkirmishGameOptionsMenu, SkirmishMapSelectMenu, ScoreScreen, CreditsMenu,
         ShellGameLoadScreen, SinglePlayerLoadScreen, MessageBox, QuitMessageBox,
         ChallengeMenu, SaveLoad, Victorious, Defeat,
+        NetworkDirectConnect, LanLobbyMenu, PopupHostGame, PopupJoinGame, LanGameOptionsMenu, LanMapSelectMenu, MultiplayerLoadScreen,
     ];
 }
