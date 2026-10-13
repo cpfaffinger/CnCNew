@@ -59,6 +59,8 @@ run.Test("Relay limits: a flood of messages, a silent connection, a member that 
 run.Test("Room password and kick: the opener sets a verifier, everybody else answers a challenge; the host removes a member, which does not come back from its address", NetTests.PasswordAndKick);
 run.Test("Player keys: a stated key is proved by a signature over the room's nonce, a wrong or replayed one refused; a banned key, a required key, a kicked key from another address", NetTests.PlayerKeys);
 run.Test("A member that stays just below every limit holds nobody up: behind but under the rule, late with its hashes but inside the limit - and gone when it crosses either", NetTests.MaliciouslySlowClient);
+run.Test("Room list: rooms by name with phase, counts, map and lock, nothing about people; the browsing connection enters a room; too soon, too often, not at all, another version; more rooms than a list names", NetTests.RoomList);
+run.Test("Server core: the server as a library - two clients find and enter a room of a hosted server through the sealed transport, play a paced match, and are told when the host stops", NetTests.ServerCoreHostsRooms);
 run.Test("Hostile members: garbage commands are left out by every client alike, system commands never pass the relay; a flood, withheld hashes and a kick leave the others in step", NetTests.HostileMembers);
 run.Test("Secrets stay off the wire: no rejoin token, name, room, password, verifier or chat is readable in any datagram of a room on the sealed transport", NetTests.SecretsStayOffTheWire);
 run.Test("Fuzz, messages: changed and random messages never throw, a refusal names its reason, what decodes encodes again to the same bytes", NetTests.FuzzMessages);
@@ -220,6 +222,8 @@ static partial class NetTests
             new SeatStateMessage(3, SeatHold.GivenUp, 0), new PasswordChallengeMessage("00112233445566778899AABBCCDDEEFF"),
             new PasswordResponseMessage(RoomPassword.Answer(RoomPassword.Verifier("p", "r"), "00112233445566778899AABBCCDDEEFF")), new KickMessage(7),
             new PasswordResponseMessage(new string('0', 64), new string('A', 128)),
+            new RoomListRequestMessage(Protocol.Version), new RoomListMessage(0, 16, []),
+            new RoomListMessage(3, 16, [new ListedRoom("a room", RoomPhase.Match, 5, 3, 4, true, "Maps/Test/Test.map", 60, "abc+modified"), new ListedRoom("", RoomPhase.Room, 1, 0, 0, false, "", 0, "")]),
             new HelloMessage(Protocol.Version, "id", 1, 2, 3, 4, "F", "n", "room", 0, false, string.Empty, new string('B', 128)),
             new HelloMessage(Protocol.Version, "id", 1, 2, 3, 4, "F", "n", "room", 0, false, RoomPassword.Verifier("secret", "room")),
             new PlayerDroppedMessage(2, 4, DropReason.Kicked), new PlayerDroppedMessage(2, 4, DropReason.Flood), new MatchEndMessage(9, 0, EndReason.ServerLimit),
@@ -799,7 +803,7 @@ static partial class NetTests
 
         var problems = new List<string>();
         // The server never loads game data and does not simulate: of the simulation it may name the match description's namespace and nothing else.
-        var serverForbidden = new Regex(@"using CnCNew\.(?!Net;|Simulation\.Skirmish;)|\b(TemplateCatalog|SimulationWorld|SkirmishMatchSession|SkirmishAi|TerrainMap|ContentFileSystem|CompiledDefinitionGraph|WorldSnapshot)\b|System\.IO\.|\bFile\.|\bDirectory\.");
+        var serverForbidden = new Regex(@"using CnCNew.(?!Net;|Net.Udp;|Simulation.Skirmish;)|\b(TemplateCatalog|SimulationWorld|SkirmishMatchSession|SkirmishAi|TerrainMap|ContentFileSystem|CompiledDefinitionGraph|WorldSnapshot)\b|System\.IO\.|\bFile\.|\bDirectory\.");
         foreach (var (file, line, text) in CodeLines(root, "CnCNew.Server"))
             if (serverForbidden.IsMatch(text)) problems.Add($"{file}({line}): the server names game data or the simulation: {text.Trim()}");
         // Wall-clock time is read through the injected INetClock only.

@@ -5,7 +5,18 @@ namespace CnCNew.Server;
 /// <param name="MaxRooms">How many rooms exist at a time; a hello for another one is rejected.</param>
 /// <param name="HelloTimeoutMs">A connection that has not said its hello after this time is closed.</param>
 /// <param name="Room">The options of every room (seeds come from the directory's source).</param>
-public sealed record DirectoryOptions(int MaxRooms = 16, int HelloTimeoutMs = 5_000, RelayOptions? Room = null);
+public sealed record DirectoryOptions(int MaxRooms = 16, int HelloTimeoutMs = 5_000, RelayOptions? Room = null)
+{
+    /// <summary>
+    /// Answer a request for the list of rooms (docs/NETWORK-PROTOCOL.md section 22.1). A list names rooms, their phase, counts, map and whether they have a password -
+    /// never who is in them. Off: the request is refused with a reason, and whoever wants to play together agrees on a room's name as before.
+    /// </summary>
+    public bool ListRooms { get; init; } = true;
+    /// <summary>The least time between two lists for one connection; a request that comes sooner is counted and not answered.</summary>
+    public int ListIntervalMs { get; init; } = 1_000;
+    /// <summary>Lists one connection may ask for before it says its hello; after the last one it is turned away. Each answered list gives it the hello time again.</summary>
+    public int ListsPerConnection { get; init; } = 120;
+}
 
 /// <summary>A room of the directory as a host sees it.</summary>
 public readonly record struct RoomInfo(string Name, RelayServer Room);
@@ -20,8 +31,10 @@ public sealed class RoomDirectory
     private sealed class Pending(IConnection connection, long sinceMs, string origin)
     {
         public IConnection Connection { get; } = connection;
-        public long SinceMs { get; } = sinceMs;
+        public long SinceMs { get; set; } = sinceMs;
         public string Origin { get; } = origin;
+        public long LastListMs { get; set; } = long.MinValue;
+        public int Lists { get; set; }
     }
 
     /// <summary>A connection whose first message was already read: the room reads it again as its own first message.</summary>
@@ -75,6 +88,58 @@ public sealed class RoomDirectory
     /// <summary>Connections turned away before they reached a room: no room left, no hello in time, something else than a hello first.</summary>
     public long TurnedAway { get; private set; }
 
+    /// <summary>Lists of rooms sent, and requests for one that were not answered: too soon after the last, or the server lists nothing.</summary>
+    public long ListsServed { get; private set; }
+    public long ListsRefused { get; private set; }
+
+    private RoomListMessage List()
+    {
+        var rooms = _rooms.OrderBy(pair => pair.Key, StringComparer.Ordinal).Take(Protocol.MaxListedRooms)
+            .Select(pair => new ListedRoom(pair.Key, pair.Value.Phase, Math.Min(pair.Value.Members, Protocol.MaxConnections), pair.Value.SeatedPlayers,
+                pair.Value.Settings.Slots.IsDefault ? 0 : pair.Value.Settings.Slots.Count(slot => slot.Kind == CnCNew.Simulation.Skirmish.MatchSlotKind.Human), pair.Value.HasPassword,
+                pair.Value.Settings.MapPath, pair.Value.Settings.TickRate, pair.Value.SimulationId));
+        return new RoomListMessage(_rooms.Count, _options.MaxRooms, [..rooms]);
+    }
+
+    /// <summary>A request for the list on a connection that has not said its hello. True: the connection stays and waits for its hello (or its next request).</summary>
+    private bool AnswerList(Pending pending, RoomListRequestMessage request, long now, out string why, out RejectMessage? reject)
+    {
+        why = string.Empty;
+        reject = null;
+        if (request.ProtocolVersion != Protocol.Version)
+        {
+            why = "protocol-version";
+            reject = new RejectMessage(RejectReason.ProtocolVersion, $"The server speaks protocol {Protocol.Version}, the client {request.ProtocolVersion}.");
+            return false;
+        }
+        if (!_options.ListRooms)
+        {
+            ListsRefused++;
+            why = "no-listing";
+            reject = new RejectMessage(RejectReason.InvalidRequest, "This server does not list its rooms: name the room you want to enter.");
+            return false;
+        }
+        if (pending.Lists >= _options.ListsPerConnection)
+        {
+            ListsRefused++;
+            why = "list-limit";
+            reject = new RejectMessage(RejectReason.InvalidRequest, "This connection has asked for the list of rooms as often as a connection may.");
+            return false;
+        }
+        if (pending.LastListMs != long.MinValue && now - pending.LastListMs < _options.ListIntervalMs)
+        {
+            // Too soon: not answered, and it buys no time.
+            ListsRefused++;
+            return true;
+        }
+        pending.Lists++;
+        pending.LastListMs = now;
+        pending.SinceMs = now;
+        ListsServed++;
+        pending.Connection.Send(MessageCodec.Encode(List()));
+        return true;
+    }
+
     /// <param name="origin">Where the connection comes from, as far as the rooms should know (an address without its port): what a kick remembers. Never logged here.</param>
     public void Attach(IConnection connection, string origin = "") => _pending.Add(new Pending(connection, _clock.Milliseconds, origin));
 
@@ -120,6 +185,11 @@ public sealed class RoomDirectory
             {
                 if (now - pending.SinceMs < _options.HelloTimeoutMs) continue;
                 TurnAway(index--, "no-hello", null);
+                continue;
+            }
+            if (MessageCodec.TryDecode(bytes, out var asked, out _) && asked is RoomListRequestMessage request)
+            {
+                if (!AnswerList(pending, request, now, out var why, out var refusal)) TurnAway(index--, why, refusal);
                 continue;
             }
             if (!MessageCodec.TryDecode(bytes, out var message, out _) || message is not HelloMessage hello)

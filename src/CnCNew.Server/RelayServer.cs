@@ -240,6 +240,9 @@ public sealed partial class RelayServer
     public int SpeedPercent { get; private set; } = 100;
     public int Connections => _peers.Count;
     public int Members => _peers.Count(peer => peer.Hello is not null);
+    /// <summary>Members that sit on a seat, and the build the room plays (what a list of rooms shows, docs/NETWORK-PROTOCOL.md section 22.1).</summary>
+    public int SeatedPlayers => _peers.Count(peer => peer.Hello is not null && peer.Slot >= 0);
+    public string SimulationId => _simulationId;
 
     /// <summary>Whether the game runs slowed because a player is too far behind (docs/NETWORK-PROTOCOL.md section 14).</summary>
     public bool Throttling { get; private set; }

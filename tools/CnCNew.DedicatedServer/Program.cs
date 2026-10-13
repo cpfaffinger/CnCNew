@@ -16,6 +16,8 @@ sealed record ServerConfig
     public string Address { get; init; } = "0.0.0.0";
     public int Port { get; init; } = 27_960;
     public int MaxRooms { get; init; } = 16;
+    /// <summary>Answer a request for the list of rooms (names, phase, counts, map, whether locked - never who is in them); false: rooms are entered by name only.</summary>
+    public bool ListRooms { get; init; } = true;
     /// <summary>Members a room admits: the players (at most 8 seats, by the protocol) and those who watch.</summary>
     public int MaxMembersPerRoom { get; init; } = Protocol.MaxConnections;
     public int DefaultTickRate { get; init; } = 60;
@@ -100,7 +102,7 @@ static class DedicatedServer
 {
     private const string Usage = """
         Usage: CnCNew.DedicatedServer [--config <file.json>] [--port N] [--address A] [--max-rooms N] [--max-members N] [--tick-rate 30|60|120]
-                                      [--allow-modified-builds] [--hash-interval N] [--lag-report-ms N] [--lag-throttle-ms N] [--throttle-limit-ms N]
+                                      [--allow-modified-builds] [--no-room-list] [--hash-interval N] [--lag-report-ms N] [--lag-throttle-ms N] [--throttle-limit-ms N]
                                       [--throttle-speed N] [--lag-recovery-ms N] [--seat-hold-ms N] [--spectator-delay-ms N] [--allow-late-watchers]
                                       [--pauses-per-player N] [--max-pause-ms N] [--anyone-sets-speed] [--replay-dir DIR]
                                       [--timeout-ms N] [--no-fine-timer] [--status-seconds N] [--exit-after-rooms N] [--run-seconds N]
@@ -136,6 +138,7 @@ static class DedicatedServer
                 "--max-members" => config with { MaxMembersPerRoom = Number() },
                 "--tick-rate" => config with { DefaultTickRate = Number() },
                 "--allow-modified-builds" => config with { AllowModifiedBuilds = true },
+                "--no-room-list" => config with { ListRooms = false },
                 "--require-player-key" => config with { RequirePlayerKey = true },
                 "--hash-interval" => config with { HashInterval = Number() },
                 "--lag-report-ms" => config with { LagReportMs = Number() },
@@ -265,6 +268,7 @@ static class DedicatedServer
         static string Text(long value) => value.ToString(CultureInfo.InvariantCulture);
 
         UdpSocketChannel socket;
+        ServerCore core;
         RoomDirectory directory;
         UdpServerEndpoint endpoint;
         UdpIdentity key;
@@ -288,12 +292,10 @@ static class DedicatedServer
                 RoomIdleLimitMs = config.RoomIdleLimitMs, HelloLimitMs = config.HelloTimeoutMs,
             };
             // Seeds and the cookie key come from the system's cryptographic source: nobody can predict a match's seed or forge a cookie.
-            directory = new RoomDirectory(clock, () => BitConverter.ToUInt32(RandomNumberGenerator.GetBytes(4)), new DirectoryOptions(config.MaxRooms, config.HelloTimeoutMs, relay));
-            // The room is checked once here, so that a wrong value stops the server at its start and not at the first hello.
-            _ = new RelayServer(clock, relay with { SeedSource = () => 0 });
             // The transport takes no message larger than the largest state the rooms take: a longer one closes its connection before it is kept.
             var stateBytes = config.MaxStateBytes > 0 ? config.MaxStateBytes : Protocol.MaxResumeBytes;
-            endpoint = new UdpServerEndpoint(socket, clock, RandomNumberGenerator.GetBytes(32),
+            // The server itself is the library a hosting game runs too (docs/DEDICATED-SERVER.md section 14); this program is its host.
+            core = new ServerCore(socket, clock, RandomNumberGenerator.GetBytes(32), key, () => BitConverter.ToUInt32(RandomNumberGenerator.GetBytes(4)),
                 new UdpOptions
                 {
                     TimeoutMs = config.ConnectionTimeoutMs, KeepAliveMs = config.KeepAliveMs, MaxConnections = config.MaxConnections, MaxConnectionsPerAddress = config.MaxConnectionsPerAddress,
@@ -301,7 +303,9 @@ static class DedicatedServer
                     KeyExchangesPerSecond = config.KeyExchangesPerSecond, KeyExchangeBurst = config.KeyExchangeBurst,
                     InboundBytesPerSecond = config.InboundBytesPerSecond, InboundBurstBytes = config.InboundBurstBytes, MaxMessageBytes = stateBytes + Protocol.MaxMessageBytes,
                     MaxReliableBacklogBytes = 2L * (stateBytes + Protocol.MaxMessageBytes),
-                }, key, bans.Contains);
+                }, new DirectoryOptions(config.MaxRooms, config.HelloTimeoutMs, relay) { ListRooms = config.ListRooms }, bans.Contains);
+            directory = core.Rooms;
+            endpoint = core.Endpoint;
         }
         catch (Exception exception) when (exception is ArgumentException or FormatException or System.Net.Sockets.SocketException or IOException or UnauthorizedAccessException)
         {
@@ -314,7 +318,7 @@ static class DedicatedServer
         Line("listening", string.Empty,
         [
             ("address", socket.LocalEndPoint.Address.ToString()), ("port", Text(socket.LocalEndPoint.Port)), ("protocol", Text(Protocol.Version)), ("transport", Text(UdpFormat.Version)),
-            ("build", identity.Id), ("maxRooms", Text(config.MaxRooms)), ("maxMembersPerRoom", Text(config.MaxMembersPerRoom)), ("allowModifiedBuilds", config.AllowModifiedBuilds ? "true" : "false"),
+            ("build", identity.Id), ("maxRooms", Text(config.MaxRooms)), ("listRooms", config.ListRooms ? "true" : "false"), ("maxMembersPerRoom", Text(config.MaxMembersPerRoom)), ("allowModifiedBuilds", config.AllowModifiedBuilds ? "true" : "false"),
             ("lagReportMs", Text(config.LagReportMs)), ("lagThrottleMs", Text(config.LagThrottleMs)), ("throttleLimitMs", Text(config.ThrottleLimitMs)), ("throttleSpeedPercent", Text(config.ThrottleSpeedPercent)),
             ("lagRecoveryMs", Text(config.LagRecoveryMs)), ("seatHoldMs", Text(config.SeatHoldMs)), ("spectatorDelayMs", Text(config.SpectatorDelayMs)),
             ("allowLateWatchers", config.AllowLateWatchers ? "true" : "false"), ("pausesPerPlayer", Text(config.PausesPerPlayer)), ("maxPauseMs", Text(config.MaxPauseMs)),
@@ -355,16 +359,10 @@ static class DedicatedServer
         while (running)
         {
             loops++;
-            endpoint.Pump();
-            while (endpoint.TryAccept(out var link, out var address))
-            {
-                // The room is told the address without its port - what a kick remembers; the log gets what the configuration allows.
-                directory.Attach(link, address.Address.ToString());
-                Line("connected", string.Empty, [("from", log.Shown(address)), ("connections", Text(endpoint.Connections))]);
-            }
-            directory.Pump();
+            core.Pump();
+            // The log gets of an address what the configuration allows.
+            while (core.TryTakeConnected(out var address)) Line("connected", string.Empty, [("from", log.Shown(address)), ("connections", Text(endpoint.Connections))]);
             while (directory.TryTakeEvent(out var room, out var relayEvent)) Line(relayEvent.Name, room, relayEvent.Details);
-            endpoint.Flush();
             while (directory.TryTakeFinished(out var finished))
             {
                 if (config.ReplayDir.Length == 0) continue;
@@ -419,7 +417,7 @@ static class DedicatedServer
                     ("turnedAway", Text(directory.TurnedAway)), ("sendFailures", Text(socket.SendFailures)), ("managedKb", Text(GC.GetTotalMemory(false) / 1024)), ("gen2", Text(GC.CollectionCount(2))),
                     ("loops", Text(loops)), ("rateLimited", Text(endpoint.RateLimited)), ("banned", Text(endpoint.Banned)), ("forged", Text(endpoint.Forged)), ("replayed", Text(endpoint.Replayed)),
                     ("workingSetKb", Text(Refreshed(self).WorkingSet64 / 1024)), ("cpuMs", Text((long)self.TotalProcessorTime.TotalMilliseconds)), ("bytesIn", Text(socket.BytesReceived)), ("bytesOut", Text(socket.BytesSent)), ("datagramsIn", Text(socket.DatagramsReceived)), ("datagramsOut", Text(socket.DatagramsSent)), ("handles", Text(Handles(self))), ("threads", Text(self.Threads.Count)),
-                    ("roomsOpened", Text(directory.RoomsOpened)), ("roomsClosed", Text(directory.RoomsClosed)), ("connectsAccepted", Text(endpoint.ConnectsAccepted)),
+                    ("listsServed", Text(directory.ListsServed)), ("listsRefused", Text(directory.ListsRefused)), ("roomsOpened", Text(directory.RoomsOpened)), ("roomsClosed", Text(directory.RoomsClosed)), ("connectsAccepted", Text(endpoint.ConnectsAccepted)),
                 ]);
                 foreach (var info in directory.Rooms)
                     Line("room-status", info.Name,

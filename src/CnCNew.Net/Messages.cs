@@ -46,6 +46,9 @@ public enum MessageType : ushort
     PasswordChallenge = 35,
     PasswordResponse = 36,
     Kick = 37,
+    // Protocol version 5 (phase 29).
+    RoomListRequest = 38,
+    RoomList = 39,
 }
 
 /// <summary>Why the server turned a connection or a request away.</summary>
@@ -119,11 +122,14 @@ public enum EndReason : byte
 public static class Protocol
 {
     /// <summary>
+    /// Version 5 (phase 29): the request for the list of a server's rooms and the list - asked on a connection before its hello.
     /// Version 4 (phase 28): the verifier of a room password in the hello, the challenge and the response for it, the kick; the drop reasons "kicked" and "flood", the
     /// end reason "server limit". Version 3 (phase 27): the rejoin token and the watch flag in the hello, the token in the welcome, the detail and the report of a desync, the request and the
     /// offer of a snapshot, the state of a held seat. Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave.
     /// </summary>
-    public const ushort Version = 4;
+    public const ushort Version = 5;
+    /// <summary>Rooms one list names at most; a server with more names the first ones in the order of their names.</summary>
+    public const int MaxListedRooms = 64;
     /// <summary>A verifier, a nonce and a response of the room password, as hexadecimal text.</summary>
     public const int VerifierChars = 64;
     public const int NonceChars = 32;
@@ -285,6 +291,76 @@ public sealed record PasswordResponseMessage(string Answer, string Signature = "
 
     internal static PasswordResponseMessage Read(ref WireReader reader)
         => new(RoomPassword.CheckedHex(reader.Text(Protocol.VerifierChars), Protocol.VerifierChars), RoomPassword.CheckedHex(reader.Text(Protocol.KeyChars), Protocol.KeyChars, allowEmpty: true));
+}
+
+/// <summary>
+/// Client to server, on a connection that has not said its hello yet: which rooms are there (version 5, docs/NETWORK-PROTOCOL.md section 22.1)? Carries the protocol
+/// version, so that a server of another one can say so instead of answering with something the client cannot read.
+/// </summary>
+public sealed record RoomListRequestMessage(ushort ProtocolVersion) : NetMessage
+{
+    public override MessageType Type => MessageType.RoomListRequest;
+    internal override void Write(WireWriter writer) => writer.U16(ProtocolVersion);
+    internal static RoomListRequestMessage Read(ref WireReader reader) => new(reader.U16());
+}
+
+/// <summary>
+/// One room as a list shows it: what somebody needs to choose a room, and nothing about who is in it - no names, no addresses, no keys.
+/// </summary>
+/// <param name="Seats">Seats for players the room's settings have; 0 while its host has set none.</param>
+public sealed record ListedRoom(string Name, RoomPhase Phase, int Members, int Players, int Seats, bool HasPassword, string MapPath, int TickRate, string SimulationId);
+
+/// <summary>Server to client: the rooms of the server, in the order of their names (at most <see cref="Protocol.MaxListedRooms"/>), and how many there are in all.</summary>
+public sealed record RoomListMessage(int TotalRooms, int MaxRooms, ImmutableArray<ListedRoom> Rooms) : NetMessage
+{
+    public override MessageType Type => MessageType.RoomList;
+
+    public bool Equals(RoomListMessage? other) => other is not null && TotalRooms == other.TotalRooms && MaxRooms == other.MaxRooms && Rooms.SequenceEqual(other.Rooms);
+    public override int GetHashCode() => HashCode.Combine(TotalRooms, MaxRooms, Rooms.Length);
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.U16(checked((ushort)TotalRooms));
+        writer.U16(checked((ushort)MaxRooms));
+        writer.U8(checked((byte)Rooms.Length));
+        foreach (var room in Rooms)
+        {
+            writer.Text(room.Name, Protocol.MaxRoomBytes);
+            writer.U8((byte)room.Phase);
+            writer.U8(checked((byte)room.Members));
+            writer.U8(checked((byte)room.Players));
+            writer.U8(checked((byte)room.Seats));
+            writer.Bool(room.HasPassword);
+            writer.Text(room.MapPath, Protocol.MaxPathBytes);
+            writer.U8(checked((byte)room.TickRate));
+            writer.Text(room.SimulationId, Protocol.MaxIdBytes);
+        }
+    }
+
+    internal static RoomListMessage Read(ref WireReader reader)
+    {
+        var total = reader.U16();
+        var max = reader.U16();
+        var count = reader.U8();
+        if (count > Protocol.MaxListedRooms || count > total) throw new ProtocolException($"A room list names at most {Protocol.MaxListedRooms} rooms and no more than there are.");
+        var rooms = ImmutableArray.CreateBuilder<ListedRoom>(count);
+        for (var index = 0; index < count; index++)
+        {
+            var name = reader.Text(Protocol.MaxRoomBytes);
+            var phase = reader.U8();
+            if (phase > (byte)RoomPhase.Ended) throw new ProtocolException("A listed room is in no phase a room has.");
+            var members = reader.U8();
+            var players = reader.U8();
+            var seats = reader.U8();
+            if (members > Protocol.MaxConnections || seats > Protocol.MaxSlots || players > seats) throw new ProtocolException("A listed room has more members or players than a room can have.");
+            var locked = reader.Bool();
+            var map = reader.Text(Protocol.MaxPathBytes);
+            var rate = reader.U8();
+            if (rate is not (0 or 30 or 60 or 120)) throw new ProtocolException("A listed room states no tick rate a room has.");
+            rooms.Add(new ListedRoom(name, (RoomPhase)phase, members, players, seats, locked, map, rate, reader.Text(Protocol.MaxIdBytes)));
+        }
+        return new RoomListMessage(total, max, rooms.MoveToImmutable());
+    }
 }
 
 /// <summary>Host to server: remove this member from the room; it may not come back to it.</summary>
@@ -1057,6 +1133,8 @@ public static class MessageCodec
                 MessageType.PasswordChallenge => PasswordChallengeMessage.Read(ref reader),
                 MessageType.PasswordResponse => PasswordResponseMessage.Read(ref reader),
                 MessageType.Kick => KickMessage.Read(ref reader),
+                MessageType.RoomListRequest => RoomListRequestMessage.Read(ref reader),
+                MessageType.RoomList => RoomListMessage.Read(ref reader),
                 _ => throw new ProtocolException($"No decoder for {type}."),
             };
             reader.End();
