@@ -29,6 +29,10 @@ public sealed class RemoteRelay : IDisposable
         Server = server;
     }
 
+    /// <summary>The connection a lobby made, with the protocol client that is in the room on it (<see cref="NetLobby.TakeRelay"/>): from here on it is the match's.</summary>
+    internal static RemoteRelay Adopt(UdpSocketChannel socket, UdpClientEndpoint endpoint, LockstepClient client, SystemNetClock clock, IPEndPoint server)
+        => new(socket, endpoint, client, clock, server);
+
     public LockstepClient Client { get; }
     public SystemNetClock Clock { get; }
     public IPEndPoint Server { get; }

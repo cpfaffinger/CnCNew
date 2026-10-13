@@ -56,6 +56,17 @@ public sealed class KnownServers
         return ServerTrust.New;
     }
 
+    /// <summary>Judges a fingerprint without remembering it: what a lobby asks before it puts the question to a person.</summary>
+    public ServerTrust Peek(IPEndPoint server, string fingerprint)
+        => _known.TryGetValue(server.ToString(), out var known) ? known == fingerprint.ToUpperInvariant() ? ServerTrust.Known : ServerTrust.Changed : ServerTrust.New;
+
+    /// <summary>The person said yes to a new server's key: from now on it is the one this server must show.</summary>
+    public void Remember(IPEndPoint server, string fingerprint)
+    {
+        _known[server.ToString()] = fingerprint.ToUpperInvariant();
+        Save();
+    }
+
     /// <summary>Forgets a server: the next key it shows is taken as new. For a person who knows why the key changed.</summary>
     public bool Forget(IPEndPoint server)
     {

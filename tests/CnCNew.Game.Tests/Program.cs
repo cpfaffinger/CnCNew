@@ -25,6 +25,7 @@ CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame
     (nameof(ModelGeometryTests), ModelGeometryTests.Run),
     (nameof(DeterminismTests), DeterminismTests.Run),
     (nameof(SpectatorTests), SpectatorTests.Run),
+    (nameof(NetLobbyTests), NetLobbyTests.Run),
 ];
 
 // --suite is accepted as another spelling of --only.

@@ -62,6 +62,8 @@ public sealed class UdpClientEndpoint : IDisposable
     public IConnection Connection => _link;
     public UdpLink Link => _link;
     public UdpClientState State { get; private set; } = UdpClientState.Connecting;
+    /// <summary>Why the server refused the connect (<see cref="UdpFormat.RefuseFull"/>, <see cref="UdpFormat.RefuseAddressFull"/>); 0 when it did not.</summary>
+    public byte RefuseReason { get; private set; }
 
     /// <summary>The identity key the server proved to hold in the handshake (X and Y, 32 bytes each); null before the accept.</summary>
     public byte[]? ServerKey { get; private set; }
@@ -124,7 +126,8 @@ public sealed class UdpClientEndpoint : IDisposable
                 case UdpKind.Accept when State == UdpClientState.Connecting:
                     TakeAccept(datagram, now);
                     break;
-                case UdpKind.Refuse when State == UdpClientState.Connecting && UdpFormat.TryReadRefuse(datagram, out var nonce, out _) && nonce == _nonce:
+                case UdpKind.Refuse when State == UdpClientState.Connecting && UdpFormat.TryReadRefuse(datagram, out var nonce, out var why) && nonce == _nonce:
+                    RefuseReason = why;
                     _link.CloseWith(UdpCloseReason.Refused);
                     State = UdpClientState.Failed;
                     break;
