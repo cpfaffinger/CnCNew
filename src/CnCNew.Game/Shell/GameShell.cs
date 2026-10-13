@@ -441,6 +441,14 @@ public sealed class GameShell
         if (_stack.Count > 0) CurrentScreen.OnRevealed();
     }
 
+    /// <summary>The game ends: a visit to a server that is under way is closed (the room is told; a server this game hosts stops).</summary>
+    public void Shutdown()
+    {
+        Net?.Dispose();
+        Net = null;
+        _pendingNet = null;
+    }
+
     /// <summary>The host of the room started the match: the connection leaves the lobby and the shared load screen stands until the host of the shell reports.</summary>
     internal void BeginNetMatch(ShellNetSession session)
     {

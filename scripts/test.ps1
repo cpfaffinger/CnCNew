@@ -102,9 +102,9 @@ $stepsOfArea = @{
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
     ui           = @{ affected = 'ui';                                      gate = 'game' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
-    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-load', 'server-package', 'game' }
-    game         = @{ affected = 'game-focus';                              gate = 'game', 'net' }
-    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join' }
+    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-load', 'server-package', 'game' }
+    game         = @{ affected = 'game-focus';                              gate = 'game', 'net', 'net-lobby' }
+    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby' }
     scripts      = @{ affected = @();                                       gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'presentation', 'sim', 'net'
@@ -116,10 +116,10 @@ $gameSuites = @{
     Audio     = 'AudioDirectorTests'
     Campaign  = 'CampaignTests', 'CampaignShellTests'
     Hud       = 'HudTests', 'MissionHudTests', 'HotkeyTests'
-    Lockstep  = 'LiveMatchTests', 'HudTests', 'CampaignShellTests', 'SpectatorTests'
+    Lockstep  = 'LiveMatchTests', 'HudTests', 'CampaignShellTests', 'SpectatorTests', 'NetLobbyTests', 'NetShellTests'
     Live      = 'LiveMatchTests', 'DeterminismTests', 'TimeScaleTests', 'ScenarioTests', 'MissionPresentationTests', 'MissionEffectsTests', 'MissionTextTests'
     Save      = 'CampaignTests', 'CampaignShellTests'
-    Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests'
+    Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests', 'NetScreenTests', 'NetShellTests'
     Spectator = 'SpectatorTests'
 }
 $gameSuitesOfSimulation = 'DeterminismTests', 'LiveMatchTests', 'SourceRuleTests'
@@ -214,6 +214,7 @@ $steps = @(
     New-Step 'net-match'    'Server, proxy and four client processes: a match with delay, jitter and loss, and one with a vanishing client' (Script-Run 'check-net-match') -Content
     New-Step 'net-robust'   'Rejoin, late and delayed watchers, the server replay and the desync diagnosis with real processes' (Script-Run 'check-net-robustness') -Content
     New-Step 'net-join'     'The window client joins a match on a dedicated server; a client without a window is the other player' (Script-Run 'check-net-join') -Content
+    New-Step 'net-lobby'    'The menus in the window client by script: host game, a changed key, join with a password, a match, back into the room; a local skirmish' (Script-Run 'check-net-lobby') -Content -Environment
     New-Step 'net-cross-os' 'A match across Windows and Linux (WSL): server and two clients under Linux, two under Windows' (Script-Run 'check-net-cross-os') -Content -Environment
     New-Step 'net-load'     'Eight rooms at once on one server, with members that vanish, leave and come back' (Script-Run 'check-net-load')
     New-Step 'server-package' 'The self-contained server packages: their contents, the sample configuration, a match on the win-x64 server' (Script-Run 'check-server-package') -Content

@@ -82,11 +82,12 @@ internal sealed class ClientRuntime : IDisposable
 
     /// <summary>The shell (main menu and everything behind it); it starts matches and missions itself.</summary>
     public static ClientRuntime ForShell(global::Stride.Engine.Game game, GameData data, string settingsDirectory, int width, int height, ClientAudioOptions audio, bool animateTransitions = true, bool? alternateMouse = null,
-        CnCNew.Simulation.Skirmish.Original.SkirmishAiKind skirmishAi = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin)
+        CnCNew.Simulation.Skirmish.Original.SkirmishAiKind skirmishAi = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, IShellNetwork? network = null, ShellScript? shellScript = null)
     {
         // animateTransitions: the menu animates like the original (Data/INI/WindowTransitions.ini, docs/GAME-SHELL.md section 11); --no-transitions switches to hard cuts.
         var runtime = new ClientRuntime(game, data, GameSettings.Default,
-            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions), audio) { _alternateMouse = alternateMouse };
+            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions, network), audio) { _alternateMouse = alternateMouse, _shellScript = shellScript };
+        if (shellScript is not null) shellScript.MatchProbe = runtime.ProbeMatch;
         // --ai original: the skirmish setup offers the three armies of the original and its matches run the original AI (the default is unchanged).
         if (runtime._shell is { } shell) shell.SkirmishAi = skirmishAi;
         runtime._audio.Game.EnterShell();
@@ -190,6 +191,54 @@ internal sealed class ClientRuntime : IDisposable
     private CnCNew.Client.Stride.Testing.InputScript? _script;
     private int _frame;
 
+    // ---- a match of a server, started from the menus (docs/GAME-SHELL.md section 15.5)
+    private ShellScript? _shellScript;
+    private NetMatchLoad? _netLoad;
+    private RunningGame? _prepared;
+    private bool _leaveRequested;
+
+    /// <summary>The person at the menus as a file (<c>--shell-script</c>); null without one.</summary>
+    public ShellScript? ShellScript => _shellScript;
+
+    /// <summary>What the last match of a server came to, for a check that compares the games of several processes: its last tick and the session hash there.</summary>
+    public string? LastNetMatch { get; private set; }
+
+    private string? ProbeMatch(string name) => _running?.Host.Match is not { } game ? null : name.ToLowerInvariant() switch
+    {
+        "tick" => game.Tick.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        "over" => game.IsOver ? "yes" : "no",
+        "units" => game.World.Entities.Count(entity => entity.Owner == game.Human && !entity.EffectivelyDead).ToString(System.Globalization.CultureInfo.InvariantCulture),
+        _ => null,
+    };
+
+    /// <summary>
+    /// A check's stand-in for a person in a match of a server (<c>--net-order-every N</c>): every N ticks one unit of the viewer is ordered to move, through the
+    /// command sink the HUD uses, so that orders of this client travel to the server, come back in bundles and are executed on every member. 0: none.
+    /// </summary>
+    public static int NetOrderEvery { get; set; }
+    private long _lastNetOrder = -1;
+    private long _netOrders;
+
+    private void GiveStandInOrder(LiveMatch match)
+    {
+        if (NetOrderEvery <= 0 || match.Setup.Spectator || match.Remote is not { } relay || relay.Client.Phase != CnCNew.Net.ClientPhase.InMatch) return;
+        var slice = match.World.Tick / NetOrderEvery;
+        if (slice == _lastNetOrder) return;
+        _lastNetOrder = slice;
+        var step = CnCNew.Simulation.Numerics.Fixed.FromDecimal(slice % 2 == 0 ? 60 : -60);
+        // The first unit of the viewer that takes the order: the pre-check says which can move.
+        foreach (var unit in match.World.Entities.Where(entity => entity.Owner == match.Human && !entity.EffectivelyDead).OrderBy(entity => entity.Id.Value))
+        {
+            var (id, x, y) = (unit.Id, unit.X + step, unit.Y);
+            if (!match.Commands.Issue((sequence, at) => new CnCNew.Simulation.Commands.AttackMoveCommand(match.Human, sequence, at, id, x, y)).Accepted) continue;
+            _netOrders++;
+            break;
+        }
+    }
+
+    private bool NetMatchEnded(RunningGame running)
+        => running.Host.Match is LiveMatch { Remote: { } relay } && _shell?.Net is not null && (_leaveRequested || relay.Client.End is not null || !relay.Client.IsOpen);
+
     /// <summary>Replays a scripted input sequence into the running game (<c>--input-script</c>, a test facility; see <see cref="CnCNew.Client.Stride.Testing.InputScript"/>).</summary>
     public void UseInputScript(CnCNew.Client.Stride.Testing.InputScript script)
     {
@@ -263,7 +312,12 @@ internal sealed class ClientRuntime : IDisposable
         _clockMs += (long)Math.Round(seconds * 1000);
         // A fixed-step run (smoke test, captures) takes no device input: wherever the real mouse happens to be must not scroll the camera, or neither the
         // picture nor the sound (the listener follows the camera) of two runs would be the same.
-        var events = fixedSeconds is null && (input.HasMouse || input.Events.Count > 0) ? _input.Poll(input, _clockMs, width, height) : [];
+        // A scripted person at the menus (--shell-script) is the only one at them: the device's pointer must not move a combo box under the script's click.
+        var events = fixedSeconds is null && _shellScript is null && (input.HasMouse || input.Events.Count > 0) ? _input.Poll(input, _clockMs, width, height) : [];
+        if (_shell is not null) _shellScript?.Advance(_shell, seconds);
+        // The events of a server this game hosts, as the dedicated program would log them: on the console, where a check reads them.
+        if (_shell?.Net?.Host is CnCNew.Game.Lockstep.HostedServer hosted)
+            while (hosted.TryTakeLine(out var line)) Console.WriteLine($"host-server: {line}");
         _frame++;
         if (fixedSeconds is null)
         {
@@ -295,7 +349,8 @@ internal sealed class ClientRuntime : IDisposable
                         dots.Add(new CnCNew.Presentation.Minimap.MinimapDot(new Vector2(blip.X, blip.Y), new CnCNew.Presentation.Terrain.Rgba32(255, 255, 255, 255)));
                 running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, dots);
             }
-            if (running.TakeFinished() && _shell is not null) FinishRunning(running);
+            if (_shell is not null && running.Host.Match is LiveMatch ordered) GiveStandInOrder(ordered);
+            if (_shell is not null && (running.TakeFinished() || NetMatchEnded(running))) FinishRunning(running);
             RestartScenarioWhenOver(seconds);
             _audio.Update(seconds);
             return;
@@ -306,8 +361,44 @@ internal sealed class ClientRuntime : IDisposable
             foreach (var inputEvent in events) _shell.HandleInput(inputEvent);
             _shell.Update(seconds);
             foreach (var output in _shell.DrainOutputs()) Carry(output);
+            StepNetLoad();
         }
         _audio.Update(seconds);
+    }
+
+    /// <summary>
+    /// Behind the shared load screen: one stage of building the match per frame, so the screen is drawn and the connection moved between them. When the server lets
+    /// the match begin the world takes the screen; a match that cannot be built here goes back to the shell with its reason.
+    /// </summary>
+    private void StepNetLoad()
+    {
+        if (_netLoad is not { } load || _shell is null) return;
+        try
+        {
+            var ready = load.Step();
+            // The world's layers are built before the server is told that this game is ready: its clock starts with its go.
+            if (load.Built is { } built && _prepared is null) _prepared = Start(built, null);
+            if (!ready) return;
+            _netLoad = null;
+            _leaveRequested = false;
+            _running = _prepared;
+            _prepared = null;
+            _shell.NetMatchStarted();
+        }
+        catch (CnCNew.Game.Lockstep.RemoteRelayException exception)
+        {
+            _netLoad = null;
+            if (_prepared is { } prepared)
+            {
+                _prepared = null;
+                _game.SceneSystem.SceneInstance = null;
+                _game.SceneSystem.GraphicsCompositor = null;
+                prepared.Dispose();
+                _audio.Game.EnterShell();
+            }
+            Console.WriteLine($"net-match: cannot be built: {exception.Message}");
+            _shell.NetMatchFailed(exception.Message);
+        }
     }
 
     /// <summary>Closes an audio capture and returns the audio report of the run (output, sources, mixer, everything that could not be played) for the console; call at exit.</summary>
@@ -323,6 +414,9 @@ internal sealed class ClientRuntime : IDisposable
                 _running = Start(LiveMatch.Create(_data, start.Setup, size), null);
                 break;
             }
+            case StartNetMatchOutput net:
+                _netLoad = new NetMatchLoad(_data, net.Session.Relay ?? throw new InvalidOperationException("The lobby handed no connection over."), BackBufferSize());
+                break;
             case ResumeMatchOutput resume:
             {
                 _running = Start(LiveMatch.Restore(_data, resume.Save, BackBufferSize()), null);
@@ -386,6 +480,16 @@ internal sealed class ClientRuntime : IDisposable
         // The in-game menu's "Save/Load" button saves a running skirmish to one slot; the main menu's load list continues it (docs/CAMPAIGN-AND-SAVEGAMES.md, skirmish savegame).
         if (game is LiveMatch saved && running.Match is { } controller)
             controller.MenuActionRequested += action => { if (action == MenuAction.SaveLoad) LastSkirmishSave = SaveSkirmish(saved); };
+        // "Exit" of the in-game menu in a match of a server: this player leaves by choice (its objects go to an ally or die, as the server's rules say), and the
+        // score screen leads back to the room.
+        if (game is LiveMatch { Remote: { } leaving } && running.Match is { } netController && _shell?.Net is not null)
+            netController.MenuActionRequested += action =>
+            {
+                if (action != MenuAction.Exit || _leaveRequested) return;
+                leaving.Client.Leave();
+                leaving.Flush();
+                _leaveRequested = true;
+            };
         _audio.Game.Attach(game, running.Hud);
         // The mission scripts' speech, sounds, music and volumes go to the same director as everything else.
         if (game is LiveMission scripted) scripted.Director.AudioControl = _audio.Game;
@@ -431,8 +535,25 @@ internal sealed class ClientRuntime : IDisposable
         if (running.Mission is not null && running.Start is { } start)
             _shell!.MissionFinished(start.Run, start.Controller);
         else if (game is LiveMatch match)
-            _shell!.MatchFinished(CnCNew.Game.Shell.MatchResult.From(match.Players, match.Winner, match.World, match.EndTick, running.Statistics));
+        {
+            string? note = null;
+            if (match.Remote is { } relay && _shell!.Net is not null)
+            {
+                note = _leaveRequested ? null : NetText.MatchEndNote(relay, match.IsOver);
+                LastNetMatch = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                    $"net-match: end tick {match.World.Tick} hash {match.Session.StateHash():X16} chain {match.HashChain:X16} player {relay.Client.Player} winner {match.Winner?.Value ?? 0} over {(match.IsOver ? "yes" : "no")} left {(_leaveRequested ? "yes" : "no")} orders {_netOrders} intents {relay.Client.IntentsSent} stalls {match.Lockstep.Stalls} note {note ?? "none"}");
+                _netOrders = 0;
+                _lastNetOrder = -1;
+                Console.WriteLine(LastNetMatch);
+                relay.Close();
+                relay.Dispose();
+                _leaveRequested = false;
+            }
+            _shell!.MatchFinished(CnCNew.Game.Shell.MatchResult.From(match.Players, match.Winner, match.World, match.EndTick, running.Statistics), note);
+        }
+        // The compositor goes with the scene: left in place it collects the lights of a scene that is no longer there, and the first frame of the score screen throws.
         _game.SceneSystem.SceneInstance = null;
+        _game.SceneSystem.GraphicsCompositor = null;
         running.Dispose();
         _audio.Game.EnterShell();
     }
@@ -475,6 +596,8 @@ internal sealed class ClientRuntime : IDisposable
 
     public void Dispose()
     {
+        // A visit to a server ends with the game: the room is told, and a server this game hosts stops and tells its members.
+        _shell?.Shutdown();
         _running?.Dispose();
         _running = null;
         _audio.Dispose();

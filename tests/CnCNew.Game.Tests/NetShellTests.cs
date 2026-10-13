@@ -157,7 +157,9 @@ internal static class NetShellTests
             "click ScoreScreen.wnd:ButtonOk",
             "limit 20",
             "wait screen NetRoomScreen",
-            "wait list LanGameOptionsMenu.wnd:ListboxChatWindowLanGame lacks never said",
+            "wait combo LanGameOptionsMenu.wnd:ComboBoxPlayer0 shows Alice|Bob",
+            "wait combo LanGameOptionsMenu.wnd:ComboBoxPlayer1 shows Alice|Bob",
+            "wait seconds 2",
         ];
         using var host = new Player(data, "host", RunDirectory("host"), port,
         [

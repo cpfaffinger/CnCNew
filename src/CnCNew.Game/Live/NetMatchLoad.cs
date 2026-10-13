@@ -10,8 +10,10 @@ namespace CnCNew.Game.Live;
 /// <summary>
 /// The match of a room, built behind the shared load screen (docs/GAME-SHELL.md section 15.5): what <see cref="LiveMatch.Join(GameData, RemoteRelay, Vector2)"/>
 /// does in one blocking call, in stages of one call each, so that between two stages a frame is drawn, the connection is pumped and the server is told how far this
-/// game is - the percentage every member's load screen shows. The stages are the work there is: the map and its terrain, the session, and then the wait for the
-/// server's go, which comes when every member has built the same tick 0. Whoever calls <see cref="Step"/> pumps the connection between the calls.
+/// game is - the percentage every member's load screen shows. The stages are the work there is: the map and its terrain, the session, the word to the server, and
+/// then the wait for its go, which comes when every member has built the same tick 0. Between the session and the word to the server the caller finds the match in
+/// <see cref="Built"/> and prepares what it shows of it (a window client its world layers): the server's clock starts with the go, and whatever a game still has
+/// to do then is time it is behind. Whoever calls <see cref="Step"/> pumps the connection between the calls.
 /// </summary>
 public sealed class NetMatchLoad(GameData data, RemoteRelay remote, Vector2 viewport)
 {
@@ -20,11 +22,14 @@ public sealed class NetMatchLoad(GameData data, RemoteRelay remote, Vector2 view
     private TerrainMap? _terrain;
     private LiveMatch? _match;
 
-    /// <summary>What this game last reported to the server: 0, 10, 60 or 100.</summary>
+    /// <summary>What this game last reported to the server: 0, 10, 60, 90 or 100.</summary>
     public int Percent { get; private set; }
 
+    /// <summary>The match as soon as its session is built, before the server is told; null before.</summary>
+    public LiveMatch? Built => _match;
+
     /// <summary>The match once the server let it begin; null before.</summary>
-    public LiveMatch? Match => _stage == 4 ? _match : null;
+    public LiveMatch? Match => _stage == 5 ? _match : null;
 
     /// <summary>
     /// One stage. True when the match runs (<see cref="Match"/>). Throws <see cref="RemoteRelayException"/> with a message fit to show when the match cannot be
@@ -46,16 +51,21 @@ public sealed class NetMatchLoad(GameData data, RemoteRelay remote, Vector2 view
                 _stage = 2;
                 return false;
             case 2:
-                _match = LiveMatch.Build(data, remote, _map!, _terrain!, viewport, wait: false);
-                Percent = 100;
+                _match = LiveMatch.Build(data, remote, _map!, _terrain!, viewport, wait: false, report: false);
+                Report(90);
                 _stage = 3;
                 return false;
             case 3:
+                _match!.ReportLoaded();
+                Percent = 100;
+                _stage = 4;
+                return false;
+            case 4:
                 if (client.Phase == ClientPhase.Ended)
                     throw new RemoteRelayException(client.Desync is not null ? "The server ended the match before it began: the games did not build the same start."
                         : "The server ended the match before it began.");
                 if (client.Phase != ClientPhase.InMatch) return false;
-                _stage = 4;
+                _stage = 5;
                 return true;
             default:
                 return true;

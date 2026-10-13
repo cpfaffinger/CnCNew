@@ -63,6 +63,29 @@ if (joinServer is not null)
     };
     matchMap = JoinOptions.Placeholder;
 }
+// The menus' way to a server (docs/GAME-SHELL.md sections 15 and 16). --net-dir DIR: where the game keeps the servers it met, the player's key, the key it shows when
+// it hosts and the addresses typed before (default: %LOCALAPPDATA%\CnCNew, the files --join uses). --net-port N: the port "Host game" listens on and an address
+// without a port means (27960). --no-player-key: state no player key. --net-match-seconds N: a host of this game sets matches of that length (a check).
+// --shell-script FILE [--shell-var NAME=VALUE ...] [--shell-seconds N]: a person at the menus as a file (CnCNew.Game.Shell.ShellScript); the run ends when the script
+// is through (exit code 0), a step failed or the N seconds of real time are over (exit code 1). The device's mouse and keyboard are ignored while a script runs.
+var shellScriptPath = GetArgument(args, "--shell-script");
+if (shellScriptPath is not null && (matchMap is not null || missionMap is not null || smokeTest)) throw new ArgumentException("--shell-script drives the menus: it excludes --match, --mission, --scenario, --join and --smoke-test.");
+var shellScript = shellScriptPath is null ? null : CnCNew.Game.Shell.ShellScript.Load(shellScriptPath);
+for (var index = 0; index + 1 < args.Length; index++)
+{
+    if (!args[index].Equals("--shell-var", StringComparison.OrdinalIgnoreCase)) continue;
+    var pair = args[index + 1];
+    var equals = pair.IndexOf('=');
+    if (shellScript is null || equals <= 0) throw new ArgumentException("--shell-var takes NAME=VALUE and needs --shell-script.");
+    shellScript.Variables[pair[..equals]] = pair[(equals + 1)..];
+}
+CnCNewGame.Shell = new ShellRunOptions(
+    GetArgument(args, "--net-dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CnCNew"),
+    int.Parse(GetArgument(args, "--net-port") ?? CnCNew.Game.Shell.ShellNetwork.StandardPort.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture),
+    int.Parse(GetArgument(args, "--net-match-seconds") ?? "0", System.Globalization.CultureInfo.InvariantCulture),
+    !args.Contains("--no-player-key"), shellScript, double.Parse(GetArgument(args, "--shell-seconds") ?? "600", System.Globalization.CultureInfo.InvariantCulture));
+// --net-order-every N: in a match of a server started from the menus, one unit of the viewer is ordered to move every N ticks (a check's stand-in for a person).
+CnCNew.Client.Stride.ClientRuntime.NetOrderEvery = int.Parse(GetArgument(args, "--net-order-every") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
 // --input-script FILE replays scripted pointer/key input through the real client path (a test facility, docs/GAME-HUD.md §17); fixed time steps only.
 var inputScriptPath = GetArgument(args, "--input-script");
 CnCNew.Client.Stride.ClientRuntime.InputDelayTicks = int.Parse(GetArgument(args, "--input-delay-ticks") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
@@ -171,6 +194,7 @@ using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capture
 {
     game.Run();
     if (game.UnresolvedInputSteps > 0) Environment.ExitCode = 3;
+    if (game.ShellScriptFailed) Environment.ExitCode = 1;
     game.LeaveJoinedMatch();
 }
 }
@@ -262,6 +286,9 @@ internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<st
     public double SpectatorSpeed { get; init; } = 1;
 }
 
+/// <summary>What the menus' way to a server takes from the command line (<c>--net-dir</c>, <c>--net-port</c>, <c>--net-match-seconds</c>, <c>--no-player-key</c>, <c>--shell-script</c>, <c>--shell-seconds</c>).</summary>
+internal sealed record ShellRunOptions(string NetDirectory, int NetPort, int NetMatchSeconds, bool UsePlayerKey, CnCNew.Game.Shell.ShellScript? Script, double ScriptSeconds);
+
 internal sealed class CnCNewGame(
     bool smokeTest,
     string? contentDirectory,
@@ -294,6 +321,13 @@ internal sealed class CnCNewGame(
 
     /// <summary>The match to join (<c>--join</c>); null for everything else.</summary>
     public static JoinOptions? Join { get; set; }
+
+    /// <summary>The options of the menus' way to a server; set before the game is created.</summary>
+    public static ShellRunOptions? Shell { get; set; }
+
+    /// <summary>A shell script ran and did not come through: a step failed, or it was not finished when its real time was over.</summary>
+    public bool ShellScriptFailed { get; private set; }
+    private readonly System.Diagnostics.Stopwatch _shellWatch = new();
 
     private LiveMatch? _joined;
     private long _joinedOrders;
@@ -434,8 +468,11 @@ internal sealed class CnCNewGame(
         {
             var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate);
             var back = GraphicsDevice.Presenter.BackBuffer;
+            var shellRun = Shell;
+            var network = shellRun is null ? null : new CnCNew.Game.Shell.ShellNetwork(data.Fingerprint, shellRun.NetDirectory, shellRun.NetPort, shellRun.UsePlayerKey) { MatchSeconds = shellRun.NetMatchSeconds };
             _runtime = ClientRuntime.ForShell(this, data, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"), back.Width, back.Height, audioOptions, animateShell, alternateMouse,
-                ShellSkirmishAi);
+                ShellSkirmishAi, network, shellRun?.Script);
+            if (shellRun?.Script is not null) _shellWatch.Start();
             Window.Title = "CnCNew";
             _runtime.Caption = caption;
             ApplyStaging();
@@ -618,6 +655,14 @@ internal sealed class CnCNewGame(
                 GraphicsDeviceManager.PreferredBackBufferWidth = resolution.Width;
                 GraphicsDeviceManager.PreferredBackBufferHeight = resolution.Height;
                 GraphicsDeviceManager.ApplyChanges();
+            }
+            if (_runtime.ShellScript is { } shellScript && Shell is { } shellOptions && (shellScript.IsFinished || _shellWatch.Elapsed.TotalSeconds > shellOptions.ScriptSeconds))
+            {
+                foreach (var line in shellScript.Report()) Console.WriteLine(line);
+                if (!shellScript.IsFinished) Console.WriteLine($"shell-script: FAILED: not finished within {shellOptions.ScriptSeconds} s of real time (step {shellScript.StepsDone + 1} of {shellScript.StepCount})");
+                ShellScriptFailed = shellScript.Failed || !shellScript.IsFinished;
+                Exit();
+                return;
             }
             if (_runtime.ExitRequested || (smokeTest && (_joined is { } joined && Join is { } join ? JoinedMatchDone(join, joined) : ++_renderedFrames >= smokeFrames) && (capturePath is null || _captured)))
             {

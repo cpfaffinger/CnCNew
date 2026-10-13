@@ -243,12 +243,15 @@ internal static class NetScreenTests
         Step(shell);
         Capture(shell, "Net-Lobby-NoRooms", baselines, updating);
         var settings = FourSeats(shell, out var mapPath);
-        lobby.Rooms = new RoomListMessage(3, 16,
+        // The pictures do not depend on the rate this test runs at: the rooms of the hashed list run at this game's rate (what a room at another rate says is checked below).
+        var ownRate = shell.Data.Rate.TicksPerSecond;
+        RoomListMessage ThreeRooms(int tournamentRate) => new(3, 16,
         [
-            new ListedRoom("Friday night", RoomPhase.Room, 2, 2, 4, false, mapPath, shell.Data.Rate.TicksPerSecond, BuildIdentity.Current.Id),
+            new ListedRoom("Friday night", RoomPhase.Room, 2, 2, 4, false, mapPath, ownRate, BuildIdentity.Current.Id),
             new ListedRoom("Locked", RoomPhase.Room, 1, 0, 0, true, string.Empty, 0, "another-build"),
-            new ListedRoom("Tournament", RoomPhase.Match, 8, 6, 8, true, "Maps/Unknown Map/Unknown Map.map", 30, "another-build"),
+            new ListedRoom("Tournament", RoomPhase.Match, 8, 6, 8, true, "Maps/Unknown Map/Unknown Map.map", tournamentRate, "another-build"),
         ]);
+        lobby.Rooms = ThreeRooms(ownRate);
         Step(shell);
         var games = shell.CurrentScreen.Tree.FindByName("LanLobbyMenu.wnd:ListboxGames")!;
         TestHarness.Assert(games.ListBox!.Rows.Count == 3 && games.ListBox.Rows[1].Cells[0].StartsWith("[locked] Locked", StringComparison.Ordinal) && games.ListBox.Rows[2].Cells[0].Contains("match running", StringComparison.Ordinal),
@@ -257,9 +260,15 @@ internal static class NetScreenTests
         Capture(shell, "Net-Lobby-Rooms", baselines, updating);
         ClickRow(shell, "LanLobbyMenu.wnd:ListboxGames", 2);
         var info = shell.CurrentScreen.Tree.FindByName("LanLobbyMenu.wnd:StaticTextGameInfo")!.Text!.Value;
-        TestHarness.Assert(info.Contains("Unknown Map", StringComparison.Ordinal) && info.Contains("Needs a password", StringComparison.Ordinal) && info.Contains("Runs at 30 Hz", StringComparison.Ordinal)
+        TestHarness.Assert(info.Contains("Unknown Map", StringComparison.Ordinal) && info.Contains("Needs a password", StringComparison.Ordinal) && !info.Contains(" Hz", StringComparison.Ordinal)
                            && info.Contains("another build", StringComparison.Ordinal), $"a chosen room says what would keep this game out ({info.Replace('\n', '|')})");
         Capture(shell, "Net-Lobby-RoomChosen", baselines, updating);
+        lobby.Rooms = ThreeRooms(ownRate * 2);
+        Step(shell);
+        info = shell.CurrentScreen.Tree.FindByName("LanLobbyMenu.wnd:StaticTextGameInfo")!.Text!.Value;
+        TestHarness.Assert(info.Contains($"Runs at {ownRate * 2} Hz - this game runs at {ownRate} Hz", StringComparison.Ordinal), $"a room at another rate says both rates ({info.Replace('\n', '|')})");
+        lobby.Rooms = ThreeRooms(ownRate);
+        Step(shell);
 
         // A locked room asks for its password; Enter in the field enters.
         ClickRow(shell, "LanLobbyMenu.wnd:ListboxGames", 1);

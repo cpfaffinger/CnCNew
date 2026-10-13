@@ -63,8 +63,8 @@ public sealed class ShellNetSession(INetLobby lobby, IShellHost? host, string pl
 
 /// <summary>
 /// The game's own <see cref="IShellNetwork"/>: lobbies over UDP, a hosted server, and four small files in one directory of the person's settings - the servers met
-/// (<c>known-servers.txt</c>), the player's key (<c>player-key.pem</c>), the key this game shows when it hosts (<c>host-key.pem</c>) and the name and addresses typed
-/// before (<c>recent.txt</c>). A check hands in a directory of its run; nothing here touches another place.
+/// (<c>known-servers.json</c>), the player's key (<c>player-key.pem</c>), the key this game shows when it hosts (<c>host-key.pem</c>) and the name and addresses typed
+/// before (<c>recent-servers.txt</c>). A check hands in a directory of its run; nothing here touches another place.
 /// </summary>
 public sealed class ShellNetwork : IShellNetwork
 {
@@ -86,8 +86,8 @@ public sealed class ShellNetwork : IShellNetwork
         DefaultPort = port;
         UsePlayerKey = usePlayerKey;
         Directory.CreateDirectory(directory);
-        _known = new KnownServers(Path.Combine(directory, "known-servers.txt"));
-        var recent = Path.Combine(directory, "recent.txt");
+        _known = new KnownServers(Path.Combine(directory, "known-servers.json"));
+        var recent = Path.Combine(directory, "recent-servers.txt");
         if (File.Exists(recent))
         {
             var lines = File.ReadAllLines(recent);
@@ -131,7 +131,7 @@ public sealed class ShellNetwork : IShellNetwork
             _recent.Insert(0, server);
             if (_recent.Count > MaxRecent) _recent.RemoveRange(MaxRecent, _recent.Count - MaxRecent);
         }
-        File.WriteAllLines(Path.Combine(_directory, "recent.txt"), [playerName, .. _recent]);
+        File.WriteAllLines(Path.Combine(_directory, "recent-servers.txt"), [playerName, .. _recent]);
     }
 
     public IPEndPoint? Resolve(string text) => ParseAddress(text, DefaultPort);

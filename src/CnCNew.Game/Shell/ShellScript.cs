@@ -19,7 +19,8 @@ namespace CnCNew.Game.Shell;
 /// at once; <c>click WINDOW</c> (waits until the window can be clicked), <c>type WINDOW TEXT</c> (replaces what the field holds; <c>""</c> empties it),
 /// <c>enter WINDOW</c> (the Enter key in a field), <c>select WINDOW TEXT</c> (an entry of a combo box, by a part of its text), <c>pick WINDOW TEXT</c> (a row of a list),
 /// <c>key KEYCODE</c>, <c>limit SECONDS</c> (the time limit of the steps that follow), <c>note TEXT</c>. <c>$NAME</c> in a text is replaced by the variable of that
-/// name (<see cref="Variables"/>; the client fills them from <c>--shell-var NAME=VALUE</c>).
+/// name (<see cref="Variables"/>; the client fills them from <c>--shell-var NAME=VALUE</c>). The text of <c>contains</c> and <c>shows</c> may name alternatives,
+/// separated by <c>|</c>: one of them is enough (who is back in a room first is not the script's to decide).
 /// </para>
 /// </summary>
 public sealed class ShellScript
@@ -252,7 +253,7 @@ public sealed class ShellScript
                 var shown = (window.TextEntry?.Text ?? (window.ComboBox is { Data.IsEditable: true } combo ? combo.Edit.Text : null) ?? TextOf(shell, window)).Replace('\n', ' ');
                 return relation switch
                 {
-                    "contains" => shown.Contains(expected, StringComparison.Ordinal),
+                    "contains" => Any(expected, shown.Contains),
                     "lacks" => !shown.Contains(expected, StringComparison.Ordinal),
                     "equals" => shown.Equals(expected, StringComparison.Ordinal),
                     _ => Unknown(relation, out problem),
@@ -261,19 +262,21 @@ public sealed class ShellScript
             case "list":
             {
                 if (window.ListBox is not { } list) { problem = "is not a list"; return false; }
-                var any = list.Rows.Any(row => string.Join(" ", row.Cells).Contains(expected, StringComparison.Ordinal));
+                var any = list.Rows.Any(row => Any(expected, string.Join(" ", row.Cells).Contains));
                 return relation switch { "contains" => any, "lacks" => !any, _ => Unknown(relation, out problem) };
             }
             case "combo":
             {
                 if (window.ComboBox is not { } box) { problem = "is not a combo box"; return false; }
                 var current = box.SelectedIndex >= 0 && box.SelectedIndex < box.Entries.Count ? box.Entries[box.SelectedIndex] : string.Empty;
-                return relation switch { "shows" => current.Contains(expected, StringComparison.Ordinal), _ => Unknown(relation, out problem) };
+                return relation switch { "shows" => Any(expected, current.Contains), _ => Unknown(relation, out problem) };
             }
         }
         problem = $"unknown condition '{words[1]}'";
         return false;
     }
+
+    private static bool Any(string alternatives, Func<string, bool> holds) => alternatives.Split('|').Any(holds);
 
     private static bool Unknown(string relation, out string? problem)
     {

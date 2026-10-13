@@ -214,10 +214,18 @@ public sealed class LiveMatch : LiveGame
     /// The match is built from what a server sent: tell it, and take every tick and every command from it. Unlike the embedded server this one runs by its own clock,
     /// compares this client's hashes with the others', may ask this client for its state (somebody joins the running match) and may report a desync.
     /// </summary>
-    private LiveMatch Join(CnCNew.Game.Lockstep.RemoteRelay remote, bool wait)
+    /// <summary>Tells the server that this game has built the match (the hash of its tick 0); for a match built with <c>report: false</c>.</summary>
+    public void ReportLoaded()
+    {
+        var remote = Remote ?? throw new InvalidOperationException("This match has no server.");
+        remote.Client.ReportLoaded(Session.StateHash());
+        remote.Pump();
+    }
+
+    private LiveMatch Join(CnCNew.Game.Lockstep.RemoteRelay remote, bool wait, bool report)
     {
         if (wait) remote.ReportLoaded(Session.StateHash());
-        else
+        else if (report)
         {
             remote.Client.ReportLoaded(Session.StateHash());
             remote.Pump();
@@ -343,9 +351,11 @@ public sealed class LiveMatch : LiveGame
 
     /// <summary>
     /// The second half: the session is built from the description (or a member's state) and the server is told. With <paramref name="wait"/> the call returns when
-    /// the server let the match begin; without it at once - the caller pumps the connection until the client is in the match (<see cref="NetMatchLoad"/>).
+    /// the server let the match begin; without it at once - the caller pumps the connection until the client is in the match (<see cref="NetMatchLoad"/>). Without
+    /// <paramref name="report"/> the server is not told yet: the caller does what else it has to do before the first tick (the world's pictures) and then calls
+    /// <see cref="ReportLoaded"/>, so that the server's clock does not start while this game is still busy.
     /// </summary>
-    internal static LiveMatch Build(GameData data, CnCNew.Game.Lockstep.RemoteRelay remote, MapData map, TerrainMap terrain, Vector2 viewport, bool wait)
+    internal static LiveMatch Build(GameData data, CnCNew.Game.Lockstep.RemoteRelay remote, MapData map, TerrainMap terrain, Vector2 viewport, bool wait, bool report = true)
     {
         var client = remote.Client;
         var start = client.Start ?? throw new InvalidOperationException("The room has not started its match.");
@@ -367,7 +377,7 @@ public sealed class LiveMatch : LiveGame
         var match = session.Match;
         var seat = match.Slots.FirstOrDefault(slot => slot.Player.Value == client.Player);
         var setup = SetupOf(description, match, seat is null ? CnCNew.Game.Save.SkirmishViewer.Spectator : CnCNew.Game.Save.SkirmishViewer.Player) with { LocalSlot = seat?.Slot ?? 0 };
-        return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport).Join(remote, wait);
+        return new LiveMatch(data, setup, match, session, terrain, map, description.Seed, viewport).Join(remote, wait, report);
     }
 
     /// <summary>
