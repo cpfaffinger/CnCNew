@@ -1093,3 +1093,176 @@ The room's:
 | `scripts/check-net-join.ps1` | real processes: a client told another key refuses the server and says nothing to it; the window client remembers the key of its first meeting |
 | `scripts/check-net-match.ps1`, `check-net-robustness.ps1`, `check-net-cross-os.ps1` | the checks of Phases 26 and 27, unchanged, now over the sealed transport with the server's key pinned |
 | `scripts/check-net-load.ps1` | eight rooms at once with members that vanish, leave and come back; the server ends empty (`docs/DEDICATED-SERVER.md` §11) |
+
+## 21. Measured in Phase 28 (13 October 2026, 60 Hz unless stated, Windows, Release)
+
+One machine (AMD Ryzen 3 PRO 4350GE, four cores), every process its own: the dedicated server, the UDP proxy, one `NetTool client` per member, on the loopback
+interface; quiet machine, warmed-up processes, the server's key pinned in every client. As in §16 and §19, nothing here crossed a cable. The matrix of §21.1 ran at
+build `3edc72c`, everything else at `057c3a9` (which added the player key to the hello and the fix of §21.6 to the handshake, and changed nothing a running
+match sends).
+
+### 21.1 The matrix over the sealed transport (`NetTool net-matrix`, as §16.1 and §19.2: eight client processes, 100 s per line)
+
+Six players, two watchers and two computer players on Twilight Flame; the columns "Phase 27" are §19.2, measured with transport version 1 on the same machine.
+
+| Delay | Jitter | Loss | Hashes identical | Order to execution: median | 95 % | 99 % | Phase 27: median / 99 % | Playback delay | Waits (of 48,000 ticks) | Up B/s | Down B/s | Phase 27: up / down |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 10 ms | 0 ms | 0 % | yes (8 of 8) | 33 ms | 37 | 66 | 33 / 60 | 15 ms | 329 | 7,569 | 7,591 | 6,051 / 6,218 |
+| 10 ms | 0 ms | 1 % | yes (8 of 8) | 39 ms | 51 | 55 | 44 / 70 | 24 ms | 425 | 7,781 | 7,806 | 6,271 / 6,344 |
+| 10 ms | 0 ms | 3 % | yes (8 of 8) | 49 ms | 57 | 79 | 50 / 69 | 30 ms | 152 | 7,760 | 7,492 | 6,261 / 6,145 |
+| 10 ms | 10 ms | 0 % | yes (8 of 8) | 49 ms | 52 | 58 | 49 / 60 | 24 ms | 84 | 9,266 | 9,528 | 7,685 / 7,712 |
+| 10 ms | 10 ms | 1 % | yes (8 of 8) | 50 ms | 66 | 82 | 50 / 83 | 30 ms | 388 | 9,033 | 8,962 | 7,554 / 7,658 |
+| 10 ms | 10 ms | 3 % | yes (8 of 8) | 65 ms | 73 | 86 | 64 / 102 | 37 ms | 289 | 9,037 | 9,036 | 7,507 / 7,483 |
+| 10 ms | 30 ms | 0 % | yes (8 of 8) | 79 ms | 92 | 119 | 79 / 103 | 44 ms | 109 | 10,724 | 10,624 | 9,248 / 9,380 |
+| 10 ms | 30 ms | 1 % | yes (8 of 8) | 82 ms | 94 | 104 | 80 / 101 | 45 ms | 235 | 10,757 | 10,858 | 9,189 / 8,959 |
+| 10 ms | 30 ms | 3 % | yes (8 of 8) | 82 ms | 100 | 114 | 83 / 103 | 50 ms | 362 | 10,670 | 10,271 | 9,180 / 9,074 |
+| 40 ms | 0 ms | 0 % | yes (8 of 8) | 99 ms | 102 | 104 | 99 / 108 | 45 ms | 199 | 11,432 | 11,523 | 9,880 / 9,783 |
+| 40 ms | 0 ms | 1 % | yes (8 of 8) | 100 ms | 116 | 128 | 100 / 146 | 54 ms | 472 | 11,402 | 11,178 | 9,859 / 9,532 |
+| 40 ms | 0 ms | 3 % | yes (8 of 8) | 108 ms | 122 | 151 | 106 / 135 | 60 ms | 146 | 11,390 | 10,926 | 9,857 / 9,318 |
+| 40 ms | 10 ms | 0 % | yes (8 of 8) | 104 ms | 122 | 152 | 107 / 122 | 54 ms | 126 | 11,440 | 11,689 | 9,882 / 9,827 |
+| 40 ms | 10 ms | 1 % | yes (8 of 8) | 115 ms | 122 | 135 | 115 / 125 | 60 ms | 377 | 11,424 | 11,396 | 9,879 / 9,688 |
+| 40 ms | 10 ms | 3 % | yes (8 of 8) | 116 ms | 133 | 151 | 117 / 135 | 67 ms | 289 | 11,406 | 11,066 | 9,863 / 9,378 |
+| 40 ms | 30 ms | 0 % | yes (8 of 8) | 133 ms | 151 | 154 | 139 / 162 | 74 ms | 120 | 11,375 | 11,083 | 9,891 / 9,907 |
+| 40 ms | 30 ms | 1 % | yes (8 of 8) | 136 ms | 152 | 160 | 141 / 186 | 76 ms | 258 | 11,402 | 11,199 | 9,870 / 9,631 |
+| 40 ms | 30 ms | 3 % | yes (8 of 8) | 141 ms | 157 | 174 | 145 / 170 | 79 ms | 366 | 11,439 | 11,303 | 9,882 / 9,519 |
+| 80 ms | 0 ms | 0 % | yes (8 of 8) | 167 ms | 183 | 200 | 167 / 189 | 86 ms | 402 | 11,387 | 11,178 | 9,898 / 9,891 |
+| 80 ms | 0 ms | 1 % | yes (8 of 8) | 182 ms | 186 | 190 | 181 / 204 | 94 ms | 442 | 11,376 | 10,974 | 9,898 / 9,794 |
+| 80 ms | 0 ms | 3 % | yes (8 of 8) | 184 ms | 199 | 203 | 183 / 206 | 100 ms | 152 | 11,417 | 11,096 | 9,911 / 9,709 |
+| 80 ms | 10 ms | 0 % | yes (8 of 8) | 183 ms | 196 | 202 | 183 / 202 | 94 ms | 60 | 11,416 | 11,396 | 9,901 / 9,891 |
+| 80 ms | 10 ms | 1 % | yes (8 of 8) | 195 ms | 202 | 217 | 192 / 204 | 100 ms | 399 | 11,376 | 10,999 | 9,861 / 9,537 |
+| 80 ms | 10 ms | 3 % | yes (8 of 8) | 199 ms | 209 | 217 | 200 / 227 | 107 ms | 296 | 11,423 | 11,133 | 9,885 / 9,547 |
+| 80 ms | 30 ms | 0 % | yes (8 of 8) | 216 ms | 234 | 246 | 216 / 242 | 114 ms | 108 | 11,414 | 11,411 | 9,908 / 10,032 |
+| 80 ms | 30 ms | 1 % | yes (8 of 8) | 216 ms | 234 | 241 | 215 / 246 | 115 ms | 242 | 11,409 | 11,243 | 9,871 / 9,605 |
+| 80 ms | 30 ms | 3 % | yes (8 of 8) | 222 ms | 235 | 251 | 222 / 250 | 120 ms | 369 | 11,405 | 10,965 | 9,897 / 9,607 |
+| 150 ms | 0 ms | 0 % | yes (8 of 8) | 316 ms | 319 | 334 | 316 / 331 | 155 ms | 874 | 11,435 | 11,554 | 9,921 / 10,033 |
+| 150 ms | 0 ms | 1 % | yes (8 of 8) | 324 ms | 335 | 340 | 326 / 352 | 164 ms | 371 | 11,410 | 11,173 | 9,868 / 9,515 |
+| 150 ms | 0 ms | 3 % | yes (8 of 8) | 333 ms | 341 | 367 | 333 / 369 | 170 ms | 148 | 11,395 | 10,840 | 9,891 / 9,551 |
+| 150 ms | 10 ms | 0 % | yes (8 of 8) | 331 ms | 335 | 339 | 332 / 339 | 164 ms | 160 | 11,381 | 11,103 | 9,845 / 9,469 |
+| 150 ms | 10 ms | 1 % | yes (8 of 8) | 333 ms | 341 | 352 | 332 / 352 | 170 ms | 382 | 11,394 | 11,064 | 9,924 / 10,032 |
+| 150 ms | 10 ms | 3 % | yes (8 of 8) | 337 ms | 351 | 366 | 336 / 354 | 177 ms | 275 | 11,450 | 11,311 | 9,921 / 9,836 |
+| 150 ms | 30 ms | 0 % | yes (8 of 8) | 358 ms | 369 | 380 | 355 / 380 | 184 ms | 83 | 11,447 | 11,652 | 9,883 / 9,796 |
+| 150 ms | 30 ms | 1 % | yes (8 of 8) | 358 ms | 369 | 382 | 356 / 381 | 185 ms | 226 | 11,403 | 11,159 | 9,886 / 9,701 |
+| 150 ms | 30 ms | 3 % | yes (8 of 8) | 364 ms | 377 | 401 | 364 / 416 | 189 ms | 370 | 11,415 | 11,022 | 9,893 / 9,600 |
+
+- **36 of 36 lines hash-identical on all eight clients**, the server agreed on every tick of every line; 15,346 orders; no resynchronisation, nobody slowed, no
+  generation-2 collection in a client.
+- **Order to execution did not change:** over the 36 lines the median is 0.4 ms lower than in Phase 27 on average, the 95 % value 0.3 ms higher, the 99 % value
+  0.4 ms higher - all inside what two runs of the same build differ by (single lines differ by up to 30 ms in their 99 % value in either direction). The playback
+  delay is the same to a tenth of a millisecond.
+- **Bandwidth: +1.52 KB/s up and +1.50 KB/s down per client**, the same on every line - 24 bytes on each of about 64 datagrams a second in each direction. That is
+  10.9 KB/s up and 10.7 KB/s down per client on average over the matrix (9.3 and 9.2 before), 16 % more.
+
+### 21.2 What sealing costs (`NetTool seal-cost`)
+
+| Plain bytes | On the wire | Seal | Open | (copying the same bytes) |
+|---|---|---|---|---|
+| 40 | 64 | 0.34 µs | 0.34 µs | 0.02 µs |
+| 160 | 184 | 0.29 µs | 0.34 µs | 0.007 µs |
+| 320 | 344 | 0.32 µs | 0.39 µs | 0.008 µs |
+| 640 | 664 | 0.42 µs | 0.48 µs | 0.011 µs |
+| 1,176 | 1,200 | 0.54 µs | 0.62 µs | 0.015 µs |
+
+- A datagram of a match is 170 bytes on average (§21.1), and a client sends and receives about 64 a second: **sealing and opening cost a client 40 µs of one core
+  per second of match, and a server 0.3 ms per second for a room of eight** (1,024 datagrams a second) - three ten-thousandths of a core. The bottleneck the brief
+  asked about ("eight clients and 60 bundles per second") is not one: AES-GCM is a processor instruction here. The cost that shows is the 24 bytes.
+- **A handshake is the expensive thing:** 5.3 ms of cryptography for both ends together, of which the server's share - a key pair, an agreement, a signature - is
+  **1.7 to 2.0 ms** (three runs). 600 new connections a second would take one core; the ration of §20.4 (100 a second, 400 at once) keeps that to a sixth of a
+  core however many ask. A client pays the rest (a key pair, the check of the signature, the agreement: about 3.6 ms) once per connection.
+- On a machine without AES instructions the per-datagram cost would be many times higher; that was not measured.
+
+### 21.3 A rejoin on five lines, with the limits in force (`net-match --disturb 1:rejoin:18000:3000`, build `057c3a9`)
+
+The measurement of §19.1 again: three players and five computer players on Twilight Flame, the connection of player 2 dies in minute five and the process is back
+three seconds later with its token. The server runs with its default limits - 256 KiB a second and 8 MiB at once per connection, a state of at most 4 MiB, six
+states a minute. The state is 3.4 to 3.6 MB of JSON, 85 to 101 KB packed.
+
+| Line (delay / jitter / loss, rate) | State passed on by the server after | Joiner stands at the state after | then behind by | Joiner plays in time again after | Phase 27 (§19.1) | All clients in the same state at the end |
+|---|---|---|---|---|---|---|
+| 40 ms / 10 ms / 1 % | 0.14 s | 0.34 s | 23 ticks | 0.34 s | 0.15 / 0.36 / 0.36 s | yes |
+| 150 ms / 30 ms / 3 % | 1.13 s | 1.99 s | 126 ticks | 2.37 s | 0.80 / 1.67 / 2.07 s | yes |
+| 80 ms / 30 ms / 10 % | 0.63 s | 1.55 s | 98 ticks | 1.80 s | 0.48 / 1.40 / 1.69 s | yes |
+| 40 ms / 10 ms / 1 %, 1 Mbit/s | 1.72 s | 4.41 s | 268 ticks | 4.80 s | 1.69 / 4.37 / 4.76 s | yes |
+| 40 ms / 10 ms / 1 %, 256 kbit/s | 6.04 s | 11.65 s | 638 ticks | 20.73 s | 6.04 / 15.06 / 21.36 s | yes |
+
+- **The byte limit does not touch a rejoin.** A state is a third of a megabyte at most on these lines and three quarters at the end of an hour (§19.3): all of it is
+  inside the 8 MiB a connection may send at once, so nothing of it is ever dropped by the limit, and no connection was policed (`policed=0` on every line). The
+  times are those of Phase 27 within what two runs differ by on a line that loses packets (the two lossy lines are 0.1 to 0.3 s slower here, the narrow ones equal
+  or faster); what makes a rejoin slow on a narrow line is still that the reliable channel has no congestion control (§19.1), not a limit.
+- The sealed transport carries the token only inside the sealed hello: the same rejoin, and nobody on the line can use it (§20.8, "Sealed transport").
+- The first attempt at the line of 150 ms / 30 ms / 3 % did not start: §21.6.
+
+### 21.4 Other rates, another map, and a whole standard match
+
+Four lines each with the eight processes of §21.1 (build `057c3a9`):
+
+| Rate, map | Line | Hashes identical | Order to execution: median / 95 % / 99 % | Playback delay | Waits | Up / down B/s |
+|---|---|---|---|---|---|---|
+| 30 Hz, Twilight Flame | 10 / 0 / 0 | yes (8 of 8) | 33 / 52 / 94 ms | 16 ms | 88 | 3,332 / 3,469 |
+| | 40 / 10 / 1 | yes | 132 / 140 / 174 ms | 68 ms | 251 | 6,602 / 7,078 |
+| | 80 / 30 / 1 | yes | 233 / 252 / 270 ms | 121 ms | 190 | 6,781 / 7,197 |
+| | 150 / 30 / 3 | yes | 396 / 408 / 433 ms | 203 ms | 229 | 6,817 / 7,445 |
+| 120 Hz, Twilight Flame | 10 / 0 / 0 | yes (8 of 8) | 32 / 39 / 62 ms | 16 ms | 364 | 17,212 / 18,299 |
+| | 40 / 10 / 1 | yes | 104 / 112 / 144 ms | 55 ms | 509 | 21,779 / 20,239 |
+| | 80 / 30 / 1 | yes | 212 / 224 / 230 ms | 113 ms | 315 | 21,811 / 20,612 |
+| | 150 / 30 / 3 | yes | 352 / 368 / 375 ms | 184 ms | 420 | 21,751 / 19,641 |
+| 60 Hz, Fortress Avalanche | 10 / 0 / 0 | yes (8 of 8) | 33 / 39 / 52 ms | 15 ms | 153 | 7,599 / 7,813 |
+| | 40 / 10 / 1 | yes | 115 / 119 / 133 ms | 59 ms | 381 | 11,454 / 11,620 |
+| | 80 / 30 / 1 | yes | 216 / 234 / 246 ms | 115 ms | 252 | 11,518 / 12,130 |
+| | 150 / 30 / 3 | yes | 362 / 378 / 384 ms | 190 ms | 369 | 11,426 / 11,112 |
+
+**12 of 12 lines hash-identical.** The latencies are those of §19.2 (the medians differ by at most 6 ms); the bandwidth is higher by the 24 bytes of every
+datagram: about 1 KB/s at 30 Hz, 1.5 at 60 Hz, 3 KB/s at 120 Hz per client and direction.
+
+**A whole standard match with three rejoins** (`NetTool net-match --minutes 60`, 40 ms / 10 ms / 1 %; as §19.3: six players, two watchers, two computer
+players, 216,000 ticks; the connections of players 2, 3 and 4 die at minute 10, 30 and 55 and come back five seconds later; a third watcher joins at minute 20;
+the server holds seats for five minutes and writes its replay):
+
+| | Minute 10 | Minute 30 | Minute 55 |
+|---|---|---|---|
+| State on the wire (packed) | 119 KB | 330 KB | 347 KB (4.9 MB of JSON) |
+| State passed on by the server after | 0.26 s | 0.25 s | 0.25 s |
+| Joiner stands at the state after | 0.46 s | 0.75 s | 0.70 s |
+| Joiner plays in time again after | 0.46 s | 0.75 s | 0.70 s |
+
+- **Nine of nine clients ended in the same state**, the six from the start with one hash chain; the server agreed on every tick up to the last; 11,228 orders,
+  order to execution median 115 / 95 % 119 / 99 % 135 ms; no resynchronisation. The seeds of a match are the server's, so this is another match than the one of
+  §19.3 (fewer orders, smaller states) - the comparison is of the mechanism, not of the numbers.
+- The server's replay (772 KB, 16,614 commands of the players) played to the hash the clients agreed on for the last tick (`NetTool replay-check`).
+- The server: 105 s of CPU in the hour (2.9 % of a core for the one room), working set 46 MB at the start and 58 MB at the end (the recording: 4.8 MB of
+  commands), 281 to 284 handles throughout; 99.2 % of its ticks within 1 ms of their time, the largest deviation 12.6 ms.
+- While each dead connection still stood, the lag rule slowed the others, 9.6 s in all - the price of a client that vanishes (§19.1), unchanged.
+- Every client had one frame of 0.5 to 0.7 s in this match (the longest in §19.3 was 0.14 s). All nine had it, the server's ticks did not: it is the machine or
+  the simulation of this match, not the connection; it was not looked into.
+
+### 21.5 A finding of the measurement: a bundle larger than a datagram
+
+The first run of the matrix with the sealed transport (build `26f20bd`) was hash-identical on all 36 lines with an unchanged median, and on **four of the 24 lines
+with loss** one client had a block of orders exactly one retransmission time late (99 % value +93 to +351 ms: 705 instead of 352 ms at 150 ms / 10 ms / 3 %).
+The cause was older than the sealing: the urgent channel repeated a lost message early only when it fitted **one** datagram (§12.6). The bundle of a tick in which
+a player sends an army its orders is larger than that; a client that lost one of its two datagrams waited for the server's retransmission time, and executed that
+tick - its own orders in it - that much later. A sealed datagram carries 24 bytes less, which moved the typical bundle of an attack wave of the command generator
+from "just fits" to "two datagrams": the weakness had been there since Phase 26 and the sealing made it show. Since `e76e19b` the budget of early repetition is four
+datagrams' worth per flush and counts whole messages; a test shows both rules side by side (a lost message of two fragments arrives 150 to 200 ms after it was sent
+on a line of 150 ms, against more than 300 ms later with the old budget). The table of §21.1 is the run after the fix: the largest difference of a 99 % value to
+Phase 27 is +30 ms, the mean +0.4 ms. A bundle of more than about sixty orders (four datagrams) still waits for the timer when it is lost.
+
+### 21.6 A second finding: two cookies at the turn of a time slot
+
+The rejoin measurement of §21.3 failed to start once on the line of 150 ms / 30 ms / 3 %: one of three clients connected, was "replaced" by the server 205 ms
+later, and stood on a connection the server no longer knew until its timeout. The server's clock had been at 10.2 s. A client repeats its request every 250 ms;
+on a line with 330 ms of round trip two requests are under way before the first challenge arrives, and here they had reached the server on either side of the turn
+of the cookie's ten-second time slot. The client held two valid cookies and answered both. The connection token was derived from address, nonce **and time slot**
+(§12.3), so the second connect looked like a new attempt of a restarted client and replaced the connection the client had already begun to use. The defect is as
+old as the transport (Phase 26); it needs a round trip above the retry time and a start within a few hundred milliseconds of a multiple of ten seconds of the
+server's clock - the harness starts its clients about ten seconds after its server, which is how it was met. Since `6e2f951` the token is derived from address and
+nonce only, both connects are the same connection and get the same answer; the handshake test crosses the turn of a slot on purpose and fails without the fix.
+
+### 21.7 What these measurements do not show
+
+- **A second computer and a real network** (E1, D-10): every process ran on one machine, on the loopback interface, through a proxy that models a line. The
+  sealing was measured on a processor with AES instructions.
+- **A hostile sender.** The limits of §20.4 are shown by tests in a process (`docs/DEDICATED-SERVER.md` §9); no flood was sent at the server from outside, and
+  what an operating system does with a full receive buffer was not measured.
+- **Somebody on the line.** That a recorded datagram cannot be replayed and a forged one changes nothing is tested with a tap in memory; no capture of a real
+  interface was analysed.
+- **The window client** joined a sealed server in a smoke test with a pinned-by-first-use key and a player key (`scripts/check-net-join.ps1`); nobody saw it.

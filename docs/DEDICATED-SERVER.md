@@ -21,7 +21,19 @@ dotnet run -c Release --no-build --project tools/CnCNew.DedicatedServer -- --por
 dotnet run -c Release --no-build --project tools/CnCNew.DedicatedServer -- --config server.json --allow-modified-builds
 ```
 
-Port 0 takes a free port; the first line says which. Stop it with Ctrl+C. Exit code 2: the configuration or the port is unusable (the reason is on standard error).
+Port 0 takes a free port; the first line says which. Stop it with Ctrl+C or SIGTERM (§10.5). Exit code 2: the configuration, the ban file or the port is unusable
+(the reason is on standard error).
+
+**Without a development environment** (Phase 28): `pwsh scripts/package-server.ps1 -Zip` builds a self-contained package for Windows and for Linux (§13). In it:
+
+```
+CnCNew.DedicatedServer.exe --config server.json        (Windows)
+./CnCNew.DedicatedServer --config server.json          (Linux, after chmod +x)
+```
+
+with `server.sample.json` as the configuration to start from and `START.md` as the guide for whoever runs it: the first start, the key and the fingerprint to
+publish (§10.2), the firewall, a systemd unit, what to keep private, how to remove somebody (§10.3). A server for players needs four keys of the configuration
+besides the defaults: `keyFile`, `logDir`, `replayDir` if the matches are to be kept, and `banFile`.
 
 ## 2. Configuration
 
@@ -129,6 +141,8 @@ pwsh scripts/check-net-match.ps1
 pwsh scripts/check-net-robustness.ps1   # a rejoin, a late and a delayed watcher, the replay file played again, a desync named down to the field
 pwsh scripts/check-net-join.ps1         # the window client joins a match on the server
 pwsh scripts/check-net-cross-os.ps1     # server and two clients under Linux in WSL, two clients under Windows
+pwsh scripts/check-net-load.ps1         # eight rooms at once with members that vanish, leave and come back; needs no game data (§11)
+pwsh scripts/check-server-package.ps1   # the self-contained packages, the sample configuration, the ban file, a match on the packaged server (§13)
 dotnet run -c Release --project tools/CnCNew.NetTool -- net-match game/content --map "Maps/Twilight Flame/Twilight Flame.map" --humans 6 --ais 2 --watchers 2 --minutes 5 --delay 40 --jitter 10 --loss-percent 1 --out <directory outside the repository>
 ```
 
@@ -237,16 +251,23 @@ Run on 12 October 2026 (state `10e6ab0`, Debug, Windows): the default seed in ev
 unbounded growth.** Of the 4.5 million changed orders 77,028 were accepted and simulated, 2.64 million rejected by the simulation and 1.78 million refused by the
 wire.
 
-**Found while the suite was written** (each fixed, each with its test):
+**Found while the suite was written, and by the tests and measurements of the phase** (each fixed, each with its test):
 
 1. The server's replay file numbered a player's commands by the relay's order number. An order that no client could decode was skipped by the clients and counted
    by the file, so the file no longer played to the agreed hash (`RecordingFile`; "Hostile members").
 2. A watcher's wrong hash ended the match of the players, and a watcher that never said "the match is over" kept a finished match open (`RelayServer`: only the
    players that play along decide; "Watchers", "Fuzz, relay").
 3. A command of a type only the system gives (spawn, give money) passed the relay like an order (`CommandWire.IsPlausible`; "Hostile members").
+4. **A key that is no point of the curve could throw out of the handshake.** Most such keys make the base class library throw a `CryptographicException`, which
+   the transport caught; the point (0, 0) makes Windows throw a `PlatformNotSupportedException`, which it did not. A connect with a valid cookie and 64 zero bytes
+   as its key would have ended the server's loop. Neither the fuzzing (which changes bytes of valid keys) nor the first tests produced that key; the test of the
+   player key did. `UdpCrypto` now treats every exception a bad key can raise as a bad key ("UDP handshake": three keys that are no points of the curve).
+5. The bundle of a busy tick, larger than a datagram, was not repeated early when it was lost (`docs/NETWORK-PROTOCOL.md` §21.5) - found by the matrix.
+6. A client that held the cookies of two time slots was replaced by its own second connect (`docs/NETWORK-PROTOCOL.md` §21.6) - found by the rejoin measurement.
 
-What the fuzzing does not show: inputs it did not generate. It is mutation from valid samples with a fixed budget, not coverage-guided; the simulation's command
-handlers are reached only through orders the generator can still make valid (1.7 % of them).
+What the fuzzing does not show: inputs it did not generate - finding 4 is the proof. It is mutation from valid samples with a fixed budget, not coverage-guided;
+the simulation's command handlers are reached only through orders the generator can still make valid (1.7 % of them). The 33 million inputs ran at state `10e6ab0`,
+before the player key and the fixes 4 to 6; every `Net.Tests` run since repeats the default seed (485,000 inputs) on the current code.
 
 ## 10. Operation (Phase 28)
 
@@ -301,3 +322,56 @@ New events besides §6: `warning`, `bans-loaded`, `ban-file-error`, `room-locked
 Ctrl+C and SIGTERM stop the loop: every connection is told at once that it ends (the clients do not wait for a timeout), then `stopped`. The recording of a match
 that was still running is not written - stop when `status` shows `rooms=0` if the replays matter. A restart with the same `keyFile` is the same server to its
 clients; the rooms are gone (a match does not survive its server, and held seats are held in memory).
+
+## 12. Versions in operation (Phase 28)
+
+Three things must agree before a player can play on a server, and each failure has its own message - none ends in a timeout or a desync:
+
+| What | Who compares | Stated where | A mismatch |
+|---|---|---|---|
+| **Transport version** (2) | every datagram | `listening transport=` | the datagram is dropped and counted; the client reports "no connection to the server" after its connect timeout (5 s). A client and a server of different transport versions cannot say more to each other than that - the version is the first thing that would have to be understood |
+| **Protocol version** (4) | the room, on the hello | `listening protocol=` | `Reject` with `ProtocolVersion` and a text that names the server's and the client's version; the window client shows it and exits with code 4 |
+| **Build identity, format versions, definition fingerprint** | the room, against its host's | `joined build=`, the hello | `Reject` with `SimulationVersion`, `ModifiedBuild`, `FormatVersion` or `Definitions`, naming both values: the members of one room must be the same build with the same game data |
+
+Rules for an operator:
+
+- **The server need not be the players' build.** It has to speak their transport and protocol versions; rooms of different client builds can run side by side on
+  one server, because each room compares its members with its own host.
+- **A change of the transport or protocol version is a new server for old clients.** Announce it; run the old and the new server on two ports for the time of the
+  change if the players should not all update at once. Nothing in the protocol negotiates a version down - a mixed room would be two games.
+- **A released build is one commit.** A build from a changed tree states `<commit>+modified` and is admitted only with `allowModifiedBuilds`, which is a developer's
+  switch: two modified builds of the same commit are not known to be the same code. `scripts/package-server.ps1` says so when the tree is not clean.
+- **A change of the server's key is a new server to every client that remembered the old one** (§10.2).
+- A replay file states the build and the format versions it was recorded with; it plays with a client of that build (`docs/NETWORK-PROTOCOL.md` §18.4).
+
+The history of the versions: protocol 1 (Phase 25), 2 (Phase 26), 3 (Phase 27), 4 (Phase 28); transport 1 (Phase 26), 2 (Phase 28). What each added is at the top
+of `docs/NETWORK-PROTOCOL.md`.
+
+## 13. The package (Phase 28)
+
+```powershell
+pwsh scripts/package-server.ps1 -Zip          # artifacts/server/win-x64, artifacts/server/linux-x64, and a zip of each
+pwsh scripts/check-server-package.ps1         # builds both, checks their contents, plays a match on the win-x64 server
+pwsh scripts/check-server-package.ps1 -Platform linux   # the linux-x64 server under WSL with an empty environment
+```
+
+- **Self-contained:** each package brings the .NET runtime it was published with (about 81 and 83 MB, 204 files) and needs none on the machine. Of this
+  repository it holds five assemblies - `CnCNew.DedicatedServer`, `CnCNew.Server`, `CnCNew.Net`, and the two those reference for the command codec and the match
+  description, `CnCNew.Simulation` and `CnCNew.Data` - and nothing of the client, the game layer, the importer or Stride; the check fails if another one appears.
+  No NuGet package (`scripts/audit-vulnerable.ps1`).
+- **Windows:** `CnCNew.DedicatedServer.exe`, Windows 10 or later, x64.
+- **Linux:** `CnCNew.DedicatedServer` (`chmod +x` after unpacking a zip), x64, a distribution .NET 10 supports (run here: Debian 12 with glibc 2.36), and OpenSSL (`libssl`; run here: 3.0) for the cryptography of the
+  connection. Built without culture data, so no ICU library is needed. SIGTERM stops it like Ctrl+C.
+- Beside the program: `START.md` (the start guide: first start, the key and its fingerprint, firewall, a systemd unit to adapt, what to keep private),
+  `server.sample.json`, `LICENSE.md`, `NOTICE.md`. Their sources are `tools/CnCNew.DedicatedServer/package/`.
+- The packages are build results and are never committed (`artifacts/` is ignored). They contain no game data - the server never reads any.
+
+**What was run** (12 October 2026, this machine): both packages built under Windows; the win-x64 server started as its own program with the sample configuration
+(it made its key file and its log directory) and a match of three client processes, five computer players and a watcher played on it through the proxy with one
+hash chain; the linux-x64 server started in the WSL distribution `Debian` (Debian 12, glibc 2.36, OpenSSL 3.0) **with an empty environment** - `env -i`, a `PATH`
+of the system's directories, `HOME=/tmp`, no `DOTNET_ROOT`; the distribution has no system-wide .NET, and the runtime in the user's `~/.dotnet` is on no path the
+process sees - and a match of three client processes under Windows played on it over the distribution's address, again with one hash chain.
+
+**What that does not show:** the Windows package on a machine without a .NET installation (this machine has the SDK; a self-contained program does not look for
+it, but that was not observed on a bare machine), another Linux distribution or an older glibc, a real network between the two sides (the WSL network is a virtual
+switch on the same computer), and D-20 is a delivery decision of the owner - the package exists and runs, whether it is handed out is not decided here.
