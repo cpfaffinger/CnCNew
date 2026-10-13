@@ -158,6 +158,27 @@ static partial class NetTests
         Check.That(idle.Clients.All(client => client.IsOpen), "a lobby may stand for a while");
         Play(idle, 1_500);
         Check.That(idle.Clients.All(client => !client.IsOpen) && idle.Server.Connections == 0, "and then everybody is sent home");
+        // The time counts from the room's own beginning, not from the server's: a room opened when the server has run for two hours is as new as the first one.
+        // (The endurance run of phase 28 found it: after an hour of running, a server with the default limit closed every new room at once.)
+        var lateClock = new ManualNetClock();
+        lateClock.Advance(2 * 3_600_000);
+        var lateRoom = new RelayServer(lateClock, Bare() with { RoomIdleLimitMs = 30_000 });
+        var (lateEnd, lateServerEnd) = new LoopbackNetwork(lateClock).Connect();
+        lateRoom.Attach(lateServerEnd);
+        var lateClient = new LockstepClient(lateEnd, "late", Definitions, Released);
+        void Late(int ms)
+        {
+            for (var elapsed = 0; elapsed < ms; elapsed += 100)
+            {
+                lateClock.Advance(100);
+                lateRoom.Pump();
+                lateClient.Pump();
+            }
+        }
+        Late(29_000);
+        Check.That(lateClient.IsOpen && lateClient.Phase == ClientPhase.InRoom && lateRoom.Connections == 1, $"a room opened on a server that has run for two hours is not idle ({lateClient.Phase}, {lateRoom.Connections} connection(s))");
+        Late(1_500);
+        Check.That(!lateClient.IsOpen && lateRoom.Connections == 0, "and it is, half a minute later");
     }
 
     public static void PasswordAndKick()

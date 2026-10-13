@@ -214,6 +214,8 @@ public sealed partial class RelayServer
             throw new ArgumentException("A time or a count of the room's rules is negative.", nameof(options));
         Settings = RoomSettings.Empty with { TickRate = _options.DefaultTickRate };
         _lastMicros = clock.Microseconds;
+        // A room's times count from its own beginning: the clock is the server's, and that may have run for days.
+        _phaseSinceMicros = clock.Microseconds;
     }
 
     /// <summary>The next event of this room for a host's log, oldest first; a room nobody listens to keeps the newest only.</summary>

@@ -266,12 +266,13 @@ static partial class UdpTests
         // ---- The expensive answer is rationed for all senders together: of many that returned their cookie at once a few get their key exchange, the others
         // send their connect again and get it when their turn comes.
         var crowd = new Wire(options: Unbounded with { KeyExchangesPerSecond = 10, KeyExchangeBurst = 5 });
+        var crowdBegan = crowd.Clock.Milliseconds;
         var many = Enumerable.Range(0, 20).Select(index => crowd.Connect(address: new IPEndPoint(new IPAddress([10, 9, 0, (byte)(index + 1)]), 9))).ToArray();
         crowd.Step(50);
         Check.That(many.Count(client => client.State == UdpClientState.Connected) is >= 5 and <= 6 && crowd.Server.RateLimited >= 14,
             $"of 20 that connect at once five get a key exchange at once ({many.Count(client => client.State == UdpClientState.Connected)}; {crowd.Server.RateLimited} put off)");
-        Check.That(crowd.Until(() => many.All(client => client.State == UdpClientState.Connected), 5_000) && crowd.Clock.Milliseconds >= 1_200,
-            $"and all of them are connected when their turn came ({crowd.Clock.Milliseconds} ms)");
+        Check.That(crowd.Until(() => many.All(client => client.State == UdpClientState.Connected), 5_000) && crowd.Clock.Milliseconds - crowdBegan >= 1_200,
+            $"and all of them are connected when their turn came ({crowd.Clock.Milliseconds - crowdBegan} ms)");
 
         // ---- One address holds as many connections as it may, and not one more.
         var household = new Wire(options: Unbounded with { MaxConnectionsPerAddress = 2 });

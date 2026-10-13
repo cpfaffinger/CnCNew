@@ -122,6 +122,9 @@ static partial class NetTests
             [new MatchSlotDescription(MatchSlotKind.Human, "Alpha", StartPosition: 0), new MatchSlotDescription(MatchSlotKind.Human, "Beta", StartPosition: 1),
              new MatchSlotDescription(MatchSlotKind.Computer, "Alpha", StartPosition: 2)], withSeed, 11, 22);
 
+    /// <summary>Where the clocks of the fixtures stand when a test begins: three hours and a bit, not zero (a server's clock has usually run for long).</summary>
+    internal const long ClockStartMs = 3 * 3_600_000 + 7_321;
+
     private sealed class Net
     {
         public ManualNetClock Clock { get; } = new();
@@ -134,6 +137,8 @@ static partial class NetTests
 
         public Net(RelayOptions? options = null, uint networkSeed = 1)
         {
+            // Every room of these tests is opened on a server that has run for a while: nothing may count a time from the start of the clock.
+            Clock.Advance(ClockStartMs);
             Network = new LoopbackNetwork(Clock, networkSeed);
             // The clients of this fixture play no ticks: the rule for members that fall behind is off unless a test sets it.
             Server = new RelayServer(Clock, options ?? new RelayOptions(SeedSource: () => ++_seed, LagReportMs: 0, LagThrottleMs: 0));

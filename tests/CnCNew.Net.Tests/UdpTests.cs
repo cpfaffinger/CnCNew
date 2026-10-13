@@ -32,6 +32,8 @@ static partial class UdpTests
         public Wire(Impairment impairment = default, ulong seed = 1, UdpOptions? options = null, UdpIdentity? identity = null, Func<IPAddress, bool>? isBanned = null)
         {
             _options = options ?? Unbounded;
+            // A server's clock has usually run for long when a client knocks: nothing may count a time from the start of the clock.
+            Clock.Advance(NetTests.ClockStartMs);
             Network = new MemoryDatagramNetwork(Clock, seed) { Default = impairment };
             Server = new UdpServerEndpoint(Network.Open(ServerAddress), Clock, Secret, _options, identity, isBanned);
         }
