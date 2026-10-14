@@ -222,6 +222,29 @@ longer run with another seed, `--only "Fuzz, relay"` for one target; an input th
   environment, clients under Windows. Like `net-cross-os` it needs something that is not a requirement of the repository: without WSL it ends with exit code 3 and
   is shown as **NOT RUN**.
 
+Since Phase 29 the menus' way to a server is checked by programs that stand in for a person (`docs/MULTIPLAYER-FINDINGS.md` section 1):
+
+- Suites of `Game.Tests`: `NetLobbyTests` (the lobby and a hosted server on loopback sockets; needs no game data), `NetShellTests` (two shells in one process
+  walked by `ShellScript` - host, join, a match, back into the room; chat and pause through the HUD of both), `NetScreenTests` (a scripted lobby puts the screens
+  into every state: 336 hashes in `baselines/net-screens.txt`; with window transitions the same way is walked by a script), `NetHudTests` (the in-match
+  indicators: 138 hashes in `baselines/net-hud.txt`), and in `HudTests` "Standing orders with delay". The two baseline files are recorded like `screens.txt`
+  (`CNCNEW_UPDATE_BASELINES=1`, then review the diff); they hold checksums, no pictures. `scripts/test.ps1` selects these suites for changes under
+  `src/CnCNew.Game/Shell`, `Lockstep` and `Hud`.
+- `Net.Tests`: "Room list", "Server core", "In the room and in the match", "Fuzz, directory" (now six fuzz targets).
+- `net-lobby` (`scripts/check-net-lobby.ps1`, about a minute; gate of `net`, `game` and `client`, tier 4): four window clients driven by `--shell-script` - host
+  game, a client that knows another key, a guest with a wrong and the right password, a match with orders and one hash chain, back into the room; a local skirmish.
+- `net-acceptance` (`scripts/check-net-acceptance.ps1`, about three minutes; gate of `net` and `client`, tier 4): a dedicated server behind 40 ms, jitter and
+  loss, two window clients through the menus, three clients without a window, a watcher, two computer players; a lost connection that returns, a stall, a client
+  that vanishes, a pause - one hash chain, and the indicators of both window clients name each event.
+- Both need a display and end with exit code 3 (**NOT RUN**) without one.
+
+Measurements by hand (real time; a quiet machine, nothing built meanwhile): `scripts/measure-net-latency.ps1 -Label NAME [-ClientArguments ...]` (a local match
+and four lines through a proxy, about twelve minutes; the table of `docs/MULTIPLAYER-FINDINGS.md` section 3), `PresentationTool smoothness` (the steps of what is
+interpolated, without a window), `scripts/check-net-endurance.ps1 -Minutes 65` (one hosted server for more than an hour, cycle after cycle).
+
+A pitfall of these checks: all processes of a run must be built from the same state of the tree. `CnCNew.Net` states the commit and whether the tree was changed;
+a client built after an edit refuses a tool built before it (`SimulationVersion`) - build all of them together, or pass `-NoBuild` only when they were.
+
 Checks by hand at the completion of a phase that touched the transport or the server, on a quiet machine: the matrix and the endurance match as before;
 `NetTool seal-cost`; the capacity runs (`NetTool load --rooms N` against the packaged server, `docs/DEDICATED-SERVER.md` §11.1); and the endurance of the server -
 a server started detached from the shell and loaded in pieces of under two hours (§11.3 there says how). `scripts/audit-vulnerable.ps1` now also checks the

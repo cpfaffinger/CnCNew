@@ -127,4 +127,101 @@ reports are on their way when the match ends). No desync, no deviation between a
 
 ## 4. The acceptance lines of the brief
 
-(Filled in at the end of the phase.)
+Each line of item 5 of the brief, as the scenario that stands in for it. "Checked by a program" is what ran and passed on 14 October 2026 on one machine; "not
+checked" is what is left for a human or for hardware that was not there.
+
+### 4.1 One human against the computer through the embedded server (the local skirmish)
+
+- **Checked by a program** (`scripts/check-net-lobby.ps1`, client `local`): the window client is driven from the main menu through Single Player, Skirmish and Start
+  into a match; the ticks advance (600 and more) and the viewer has its units. The match runs through the server embedded in the game (since Phase 25), with no
+  added delay: on the local line of section 3 an order is executed in the frame of the click (median 0.3 ms) and the marker stands 2.2 ms after it.
+  `scripts/check-dozer-build.ps1` and `scripts/check-build-hotkeys.ps1` (unchanged) click through building in such a match.
+- **Not checked:** "does it feel like before or better" - nobody played it. A whole match to its end in the window (the standard match is an hour).
+
+### 4.2 Two humans through "Host game"
+
+- **Checked by a program** (`scripts/check-net-lobby.ps1`, clients `host`, `guest`, `wary`; headless the same way in `NetShellTests`): two window clients on the
+  loopback interface. The host goes Multiplayer > Network > Host, opens a locked room; the guest types the address, is asked about the server's key with the
+  fingerprint and says yes, sees the room in the list marked as locked, is refused with a wrong password and told so, enters with the right one, takes the open
+  seat, the two exchange a chat line, the guest accepts, the host starts; both show the load screen with both names, play twenty seconds with eleven orders each
+  (22 intents through the server), end at the same tick with the same session hash and the same hash chain over every tick, stand on the score screen and are in
+  the room again. A third client that knows another key for the address refuses the server with both fingerprints and says nothing to it. The files of the visit
+  lie in the run's directories. 62 s for the whole check.
+- **Not checked:** two machines and a cable or a wireless network between them - both games ran on one computer, so nothing about a firewall, a router or a
+  second CPU (E1, D-10) is shown; how the screens look to a person (the hashes of `NetScreenTests` pin them, they do not judge them); a human typing.
+
+### 4.3 Two to eight humans through a dedicated server, mixed with computer players
+
+- **Checked by a program** (`scripts/check-net-acceptance.ps1`): a dedicated server behind a proxy with 40 ms each way, 10 ms of jitter and 1 % loss; window
+  clients Alice (opens the room through the menus, picks Twilight Flame, makes two seats computer armies, starts) and Bob (finds the room in the list, enters,
+  accepts); three clients without a window as the players Carol, Dave and Erin; one as a watcher; 120 s of game time. Alice, Bob, Dave and the watcher end with
+  one hash chain over all 7,200 ticks; the server agreed on every tick through 7,198 and reported no desync; both window clients gave 59 orders that went through
+  the server. 179 s for the whole check. The matrix of Phases 26 to 28 (36 lines of delay, jitter and loss with eight client processes) still passes with
+  protocol 5 (section 6).
+- **Not checked:** the internet - every line is a proxy on the loopback interface; eight *window* clients at once (two were run; six of the eight participants
+  simulate without a window or are computer players); people.
+
+### 4.4 Disconnect and rejoin, spectators, pause, a deliberately slow machine
+
+- **Checked by a program** (the same scenario; both window clients print what their indicators show, and the check reads it by name):
+  - *a lost connection that comes back*: Carol's process drops its connection at tick 1500 and returns after 14 s with its token. Both window clients show
+    `Carol is 2.0 s behind - dropped in 10 s` with `The game runs at half speed until everybody has caught up`, then `Carol lost the connection - the seat is held
+    for 20 s`, then the notice `Carol is back.`;
+  - *a slow machine*: Dave's process stands still for 1.5 s at tick 2700 - both show `Dave is 0.5 s behind`, and it catches up;
+  - *a player who is gone for good*: Erin's process vanishes at tick 3600 - both show her seat held for 20 s and then the notice `Erin did not come back in time.`;
+  - *pause*: Alice's stand-in asks for a pause at tick 5400 and ends it two seconds later - Bob's screen says `Paused by Alice`, hers `Paused by you`;
+  - *a spectator*: a client without a window watches from the room on and ends in the same state as the players.
+  Headless, with the HUD of both games (`NetShellTests` "In the match"): the connection line, a chat line to all that both message lists show, a line to the
+  allies that only its sender's shows, the pause with its requester. A rejoin by token, a late watcher, a delayed watcher and the desync diagnosis with real
+  processes: `scripts/check-net-robustness.ps1` (Phase 27, unchanged and passing).
+- **Not checked:** a **window** client that comes back into a running match - the menus cannot do it (section 5); a spectator in a window that entered through
+  the menus; what a slow *graphics* machine does (the slow client was slow in its simulation loop); whether the indicators are readable and in the right place.
+
+### 4.5 Time limits, for an hour
+
+- **Checked by a program** (`scripts/check-net-endurance.ps1 -Minutes 65`): see section 6.
+
+## 5. What was found on the way, what is not built, what nobody has seen
+
+**Found by the frameworks** (each fixed, each with the check that found it):
+
+| Finding | Found by | Since |
+| --- | --- | --- |
+| The client threw in the first frame after a match that was started from the menus (the Stride compositor outlived the scene). Every match that ended in the shell, local ones too | the first run of two scripted window clients | the shell's match path (Phase 12); no check had played a match to its end in a window |
+| Both games were half a second behind the server at tick 0: the world's layers were built after the server had started its clock | the hosted server's `behind` events in the same run | new in this phase; the layers are now built before the server is told "loaded" |
+| A host that changed anything in its room threw everybody out of their seats; a start that closed an empty seat took everybody's "ready" back and was refused | the measurement script (a client without a window sat down while the host picked a map) and the acceptance scenario (eight seats, seven taken) | the relay's rule since Phase 25; now seats survive a change, and closing empty seats keeps "ready" |
+| A lobby that browsed a server which lists nothing tried to enter on a connection the server was already closing | `NetLobbyTests` | new in this phase |
+| The stand-in's clicks hit the control bar, a building, a tree - and gave no order | `--net-stats` (clicks answered: 4 of 14) | the instrument itself; it now looks for a place where the cursor says "move", as a person does |
+| On the HUD a held seat stayed "held for 0 s" for the rest of the match, and a return was never told | the acceptance scenario | new in this phase (`LockstepClient` dropped the end of a hold; it now keeps every change) |
+
+**Not built** (each named where a person would look for it):
+
+- **A window client cannot come back into a running match.** The server holds a seat and the protocol has the token (Phase 27); clients without a window use it.
+  The menus do not: after a lost connection the score screen leads back to the room's name, and a room whose match runs takes nobody (`MatchRunning`). A person
+  who lost the connection cannot rejoin from the window.
+- **No watcher's way through the menus.** A member without a seat watches (the room's last row can be left); there is no "watch" button, no choice of whose fog
+  to see, and `ObserverQuit.wnd` is not used. `--join --watch` on the command line is unchanged.
+- **No button to remove a member** (the lobby can; the screen has no control for it). **No start position box.** **No votes** (D-23).
+- **No list of servers and no discovery**: a server is an address somebody was given. "Online" of the main menu stays inert.
+- **The original's `DisconnectScreen.wnd`** is not used (it is built around votes); the waiting panel of the HUD says what it would.
+- **Texts are English only** and this project's own; the game's language files have no words for a relay.
+- **`select` of the script scrolls with the wheel**; a person can also drag the scroll bar - not scripted.
+
+**Not verified - what no human has seen, heard or played, and what no machine here could show:**
+
+- Every screen of section 15 of `docs/GAME-SHELL.md` and every indicator of section 21 of `docs/GAME-HUD.md`: whether they look right, are readable, sit where
+  one expects them. The hashes pin what was recorded; the tests read texts and states.
+- How a match with delay *feels*. Measured: the marker comes in the frame of the click, the unit turns twice the delay and a tick or two later.
+- A second physical machine, another CPU, a real network, a NAT, a firewall prompt of the operating system when "Host" opens its port (E1, D-10).
+- Sound in the menus of the new screens (the click sounds are requested; nobody heard them).
+- A window on a display faster than 60 frames a second (the interpolation was measured without a window at 144).
+
+**Decisions that are the project owner's** (built as an option or a default with its reason, none taken as decided):
+
+| | Question | What is built |
+| --- | --- | --- |
+| D-27 | Shall a server list its rooms to anybody who asks? | yes by default (`listRooms`), `--no-room-list` turns it off; the list names no person (threat T16) |
+| D-28 | Which builds may enter a hosted game? | the build that hosts, changed or not; a dedicated server stays with released builds unless told otherwise |
+| D-29 | Shall the late-tick extrapolation be on? | off (`--extrapolate`): measured without effect |
+| D-30 | Chat to the allies when a seat is in no team | reaches the sender only |
+| D-17, D-19, D-23 to D-26 | unchanged | the indicators show what the server's rule does (deadline, held seat); the rules themselves were not touched |
