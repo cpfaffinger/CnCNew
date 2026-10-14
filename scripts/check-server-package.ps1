@@ -81,6 +81,9 @@ foreach ($rid in $runtimes) {
     }
     foreach ($file in 'START.md', 'server.sample.json', 'LICENSE.md', 'NOTICE.md') { if ($file -notin $names) { Fail "$rid lacks $file" } }
     if ($failed -eq 0) { Write-Host "     ${rid}: $($names.Count) files; of the project only $($own -join ', '); nothing of the client, the game layer or the importer" }
+    # No original data in the package (Phase 30): every file classified, none a file of the game or of a game data format.
+    pwsh -NoLogo -NoProfile -File (Join-Path $PSScriptRoot 'check-separation.ps1') -Directory $directory
+    if ($LASTEXITCODE -ne 0) { Fail "$rid holds original data or a file of a game data format" }
 }
 
 $tool = 'tools/CnCNew.NetTool/bin/Release/net10.0/CnCNew.NetTool.dll'

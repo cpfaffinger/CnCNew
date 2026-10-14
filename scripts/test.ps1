@@ -104,7 +104,7 @@ $stepsOfArea = @{
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
     net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'diagnostics', 'game' }
     game         = @{ affected = 'game-focus';                              gate = 'game', 'net', 'net-lobby', 'diagnostics' }
-    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'diagnostics' }
+    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'diagnostics', 'client-package' }
     scripts      = @{ affected = @();                                       gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'presentation', 'sim', 'net'
@@ -189,6 +189,8 @@ $steps = @(
     New-Step 'w3d'          'W3D.Tests (real data)'                           ((Test-Program 'W3D') + '--' + $content) -Content
     New-Step 'data-content' 'Data.Tests (real data)'                          ((Test-Program 'Data') + '--' + $content) -Content
     New-Step 'vulnerable'   'Known vulnerabilities of the packages'           (Script-Run 'audit-vulnerable')
+    New-Step 'licences'     'The third-party list is the packages'' declared licences; the server has none' ((Script-Run 'licence-report') + '-Check')
+    New-Step 'ggc-catalogue' 'The GeneralsGameCode fix catalogue is current (needs the reference checkout)' @('python', 'scripts/ggc-fix-catalogue.py', '--check') -Environment
     New-Step 'net'          'Net.Tests (60 Hz)'                               (Test-Program 'Net')
     New-Step 'presentation-content' 'Presentation.Tests (real data)'          ((Test-Program 'Presentation') + '--' + $content) -Content
     New-Step 'sim'          'Simulation.Tests (60 Hz)'                        (Release-Run $simTests) -Release $simTests
@@ -221,6 +223,7 @@ $steps = @(
     New-Step 'server-package' 'The self-contained server packages: their contents, the sample configuration, a match on the win-x64 server' (Script-Run 'check-server-package') -Content
     New-Step 'server-package-linux' 'The linux-x64 server package under Linux (WSL) with an empty environment, clients under Windows' ((Script-Run 'check-server-package') + '-Platform' + 'linux') -Content -Environment
     New-Step 'diagnostics'  'Crash reports, run logs and support bundles of the client and the server: what they hold and what they never hold' (Script-Run 'check-diagnostics')
+    New-Step 'client-package' 'The self-contained Windows package: layout, no original data, the packaged patcher and client run' (Script-Run 'check-client-package') -Content -Environment
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content
     New-Step 'game-30'      'Game.Tests (real data, 30 Hz)'                   ((Release-Run $gameTests) + $content + '--tick-rate' + '30') -Content -Release $gameTests
