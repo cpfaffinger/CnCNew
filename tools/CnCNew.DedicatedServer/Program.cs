@@ -8,7 +8,15 @@ using CnCNew.Net.Udp;
 using CnCNew.Server;
 
 // CnCNew.DedicatedServer (phase 26, docs/DEDICATED-SERVER.md): one process, one UDP port, several rooms. It relays - it loads no game data and simulates nothing.
-return DedicatedServer.Run(args);
+// A failure nothing caught leaves a crash report beside the logs (docs/DEDICATED-SERVER.md section 15).
+try
+{
+    return DedicatedServer.Run(args);
+}
+catch (Exception exception)
+{
+    return ServerDiagnostics.Crashed(args, exception);
+}
 
 /// <summary>The configuration of the server: a JSON file, overridden by the command line. Every value has the documented default.</summary>
 sealed record ServerConfig
@@ -107,13 +115,20 @@ static class DedicatedServer
                                       [--pauses-per-player N] [--max-pause-ms N] [--anyone-sets-speed] [--replay-dir DIR]
                                       [--timeout-ms N] [--no-fine-timer] [--status-seconds N] [--exit-after-rooms N] [--run-seconds N]
                                       [--key-file FILE] [--ban-file FILE] [--require-player-key] [--log-dir DIR] [--log-full-addresses] [--max-connections-per-address N]
-                                      [--set key=value ...]
+                                      [--set key=value ...] [--support-bundle FILE]
           --set names any key of the configuration file (docs/DEDICATED-SERVER.md section 2); an unknown key is an error.
           A relay for multiplayer matches: one UDP port, several rooms; a client names its room in its hello. Port 0 takes a free port (see the 'listening' line).
           Every line it writes is 'ts=<ms> event=<name> key=value ...'. Stop it with Ctrl+C.
         """;
 
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true, ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true, UnmappedMemberHandling = System.Text.Json.Serialization.JsonUnmappedMemberHandling.Disallow };
+
+    /// <summary>The configuration <paramref name="args"/> name, or null when they name none that can be read (for a crash report and a support bundle).</summary>
+    public static ServerConfig? TryConfigure(string[] args)
+    {
+        try { return Configure(args); }
+        catch (Exception exception) when (exception is ArgumentException or FormatException or JsonException or IOException or UnauthorizedAccessException) { return null; }
+    }
 
     private static ServerConfig Configure(string[] args)
     {
@@ -234,6 +249,16 @@ static class DedicatedServer
             Console.WriteLine(Usage);
             return 0;
         }
+        // --support-bundle FILE: pack the logs and crash reports of the configured log directory and the configuration into FILE, and stop. Nothing is sent.
+        if (Array.IndexOf(args, "--support-bundle") is var bundle and >= 0)
+        {
+            if (bundle + 1 >= args.Length) { Console.Error.WriteLine("--support-bundle needs a file."); return 2; }
+            var rest = args.Where((_, index) => index != bundle && index != bundle + 1).ToArray();
+            return ServerDiagnostics.Bundle(args[bundle + 1], rest);
+        }
+        // --crash-test: fail on purpose after the configuration was read (scripts/check-diagnostics.ps1 proves the crash report with it).
+        var crashTest = args.Contains("--crash-test");
+        args = args.Where(arg => arg != "--crash-test").ToArray();
         ServerConfig config;
         try
         {
@@ -244,6 +269,7 @@ static class DedicatedServer
             Console.Error.WriteLine(exception.Message);
             return 2;
         }
+        if (crashTest) throw new InvalidOperationException("A failure on purpose (--crash-test).");
 
         var clock = new SystemNetClock();
         var output = new StringBuilder();

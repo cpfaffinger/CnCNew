@@ -2,6 +2,9 @@ using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using CnCNew.Net;
 using CnCNew.Net.Udp;
 
 // What an operator of the server works with (docs/DEDICATED-SERVER.md section 10): the ban list, the log files and how long they are kept, the server's key.
@@ -237,5 +240,94 @@ static class ServerKey
         if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite);
         created = true;
         return identity;
+    }
+}
+
+/// <summary>
+/// What the server leaves behind when it fails, and what its operator may hand on (docs/DEDICATED-SERVER.md section 15): a crash report beside the logs, and on request
+/// a support bundle. Both stay on the machine; neither holds the server's key, the ban list (addresses are personal data) or a replay.
+/// </summary>
+static class ServerDiagnostics
+{
+    /// <summary>An exception nothing caught: written as <c>crash-&lt;UTC time&gt;.txt</c> into the log directory (or the working directory), and said in one line.</summary>
+    public static int Crashed(string[] args, Exception exception)
+    {
+        var config = DedicatedServer.TryConfigure(args.Where(arg => arg != "--crash-test").ToArray());
+        var directory = config?.LogDir is { Length: > 0 } logs ? logs : Directory.GetCurrentDirectory();
+        string? path = null;
+        try
+        {
+            Directory.CreateDirectory(directory);
+            path = Path.Combine(directory, string.Create(CultureInfo.InvariantCulture, $"crash-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Environment.ProcessId}.txt"));
+            var text = new StringBuilder();
+            text.AppendLine("CnCNew dedicated server crash report");
+            text.AppendLine(string.Create(CultureInfo.InvariantCulture, $"time (UTC): {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}"));
+            text.AppendLine($"build: {BuildIdentity.Current.Id}");
+            text.AppendLine(string.Create(CultureInfo.InvariantCulture, $"protocol: {Protocol.Version}, transport: {UdpFormat.Version}"));
+            text.AppendLine($"os: {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
+            text.AppendLine($"runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+            text.AppendLine($"arguments: {string.Join(' ', args)}");
+            text.AppendLine("configuration:");
+            text.AppendLine(config is null ? "(could not be read)" : JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }));
+            text.AppendLine();
+            text.AppendLine("exception:");
+            text.AppendLine(exception.ToString());
+            File.WriteAllText(path, text.ToString(), new UTF8Encoding(false));
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        {
+            path = null;
+        }
+        Console.Error.WriteLine($"event=crash type={exception.GetType().Name} report={(path ?? "(not written)")}");
+        Console.Error.WriteLine(exception);
+        return 70;
+    }
+
+    /// <summary>
+    /// <c>--support-bundle FILE</c>: a ZIP of the log directory's logs and crash reports, the configuration and a list of what it holds. Made when the operator asks,
+    /// written where they say, sent nowhere.
+    /// </summary>
+    public static int Bundle(string output, string[] args)
+    {
+        var config = DedicatedServer.TryConfigure(args) ?? new ServerConfig();
+        var target = Path.GetFullPath(output);
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+        var listing = new StringBuilder();
+        var count = 0;
+        using (var zip = System.IO.Compression.ZipFile.Open(target, System.IO.Compression.ZipArchiveMode.Create))
+        {
+            if (config.LogDir.Length > 0 && Directory.Exists(config.LogDir))
+                foreach (var file in Directory.EnumerateFiles(config.LogDir).Order(StringComparer.Ordinal))
+                {
+                    var name = Path.GetFileName(file);
+                    if (!(name.StartsWith("server-", StringComparison.Ordinal) && name.EndsWith(".log", StringComparison.Ordinal)) &&
+                        !(name.StartsWith("crash-", StringComparison.Ordinal) && name.EndsWith(".txt", StringComparison.Ordinal))) continue;
+                    var entry = zip.CreateEntry("logs/" + name, System.IO.Compression.CompressionLevel.Optimal);
+                    using var input = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    using var stream = entry.Open();
+                    input.CopyTo(stream);
+                    listing.AppendLine("logs/" + name);
+                    count++;
+                }
+            Text(zip, "configuration.json", JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true }));
+            var about = new StringBuilder();
+            about.AppendLine("CnCNew dedicated server support bundle");
+            about.AppendLine(string.Create(CultureInfo.InvariantCulture, $"made (UTC): {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}"));
+            about.AppendLine($"build: {BuildIdentity.Current.Id}");
+            about.AppendLine(string.Create(CultureInfo.InvariantCulture, $"protocol: {Protocol.Version}, transport: {UdpFormat.Version}"));
+            about.AppendLine($"os: {System.Runtime.InteropServices.RuntimeInformation.OSDescription}");
+            about.AppendLine($"runtime: {System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
+            about.AppendLine("not included: the server's key file, the ban file, replays");
+            Text(zip, "ABOUT.txt", about.ToString());
+            Text(zip, "CONTENTS.txt", "Files in this bundle (besides ABOUT.txt, configuration.json and this list):\n" + listing);
+        }
+        Console.WriteLine($"Wrote the support bundle {target}: {count} log file(s), the configuration and a description. It is not sent anywhere.");
+        return 0;
+    }
+
+    private static void Text(System.IO.Compression.ZipArchive zip, string name, string text)
+    {
+        using var writer = new StreamWriter(zip.CreateEntry(name).Open(), new UTF8Encoding(false));
+        writer.Write(text);
     }
 }

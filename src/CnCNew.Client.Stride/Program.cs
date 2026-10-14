@@ -201,6 +201,28 @@ if (contentDirectory is not null)
     }
 }
 
+// Diagnostics (docs/TROUBLESHOOTING.md): the log of this run, a crash report when something fails, and on request a support bundle - all of it in the directory
+// of --net-dir (default %LOCALAPPDATA%\CnCNew), none of it sent anywhere. --support-bundle FILE packs logs, crash reports and desync packages into FILE and stops.
+if (GetArgument(args, "--support-bundle") is { } bundleFile)
+{
+    var (bundlePath, bundled) = CnCNew.Game.Diagnostics.SupportBundle.Write(bundleFile, CnCNewGame.Shell.NetDirectory,
+        [("program", "client"), ("build", CnCNew.Net.BuildIdentity.Current.Id), ("rules", CnCNewGame.Rules.Name), ("tick rate", tickRate.ToString())], contentDirectory);
+    Console.WriteLine($"Wrote the support bundle {bundlePath}: {bundled} file(s) and a description. It is not sent anywhere; look into it before you hand it on.");
+    return;
+}
+// --no-log: no log file of this run (standard output and error as before).
+var runLog = args.Contains("--no-log", StringComparer.OrdinalIgnoreCase) ? null : CnCNew.Game.Diagnostics.RunLog.Start(CnCNewGame.Shell.NetDirectory, "client");
+AppDomain.CurrentDomain.UnhandledException += (_, failure) =>
+{
+    if (failure.ExceptionObject is not Exception exception) return;
+    var report = CnCNew.Game.Diagnostics.CrashReport.Write(CnCNewGame.Shell.NetDirectory, "client", exception,
+        [("build", CnCNew.Net.BuildIdentity.Current.Id), ("rules", CnCNewGame.Rules.Name), ("tick rate", tickRate.ToString()), ("content", contentDirectory ?? "(none)"),
+         ("map", matchMap ?? missionMap ?? "(none)")], args);
+    Console.Error.WriteLine($"crash: {exception.GetType().Name}: {exception.Message}");
+    Console.Error.WriteLine($"crash report: {report ?? "(could not be written)"}");
+};
+// --crash-test: fail on purpose here, before any window (scripts/check-diagnostics.ps1 proves the crash report with it).
+if (args.Contains("--crash-test", StringComparer.OrdinalIgnoreCase)) throw new InvalidOperationException("A failure on purpose (--crash-test).");
 try
 {
 using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capturePath, liveOptions, shellMode, GetArgument(args, "--size") ?? "1280x720", int.Parse(GetArgument(args, "--frames") ?? "90"),

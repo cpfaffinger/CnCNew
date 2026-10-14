@@ -102,9 +102,9 @@ $stepsOfArea = @{
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
     ui           = @{ affected = 'ui';                                      gate = 'game' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
-    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'game' }
-    game         = @{ affected = 'game-focus';                              gate = 'game', 'net', 'net-lobby' }
-    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance' }
+    net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'diagnostics', 'game' }
+    game         = @{ affected = 'game-focus';                              gate = 'game', 'net', 'net-lobby', 'diagnostics' }
+    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'diagnostics' }
     scripts      = @{ affected = @();                                       gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'presentation', 'sim', 'net'
@@ -220,6 +220,7 @@ $steps = @(
     New-Step 'net-load'     'Eight rooms at once on one server, with members that vanish, leave and come back' (Script-Run 'check-net-load')
     New-Step 'server-package' 'The self-contained server packages: their contents, the sample configuration, a match on the win-x64 server' (Script-Run 'check-server-package') -Content
     New-Step 'server-package-linux' 'The linux-x64 server package under Linux (WSL) with an empty environment, clients under Windows' ((Script-Run 'check-server-package') + '-Platform' + 'linux') -Content -Environment
+    New-Step 'diagnostics'  'Crash reports, run logs and support bundles of the client and the server: what they hold and what they never hold' (Script-Run 'check-diagnostics')
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content
     New-Step 'game-30'      'Game.Tests (real data, 30 Hz)'                   ((Release-Run $gameTests) + $content + '--tick-rate' + '30') -Content -Release $gameTests
