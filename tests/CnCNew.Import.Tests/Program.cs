@@ -35,6 +35,26 @@ try
     await using (var afterStream = File.OpenRead(Path.Combine(first, "content-manifest.json")))
         afterFailure = await SHA256.HashDataAsync(afterStream);
     Assert(beforeFailure.SequenceEqual(afterFailure), "Failed import changed published content.");
+
+    // A content layer (docs/PATCH-LAYER.md): the patch's file replaces the installation's, the manifest records both candidates and names the layer.
+    await File.WriteAllBytesAsync(Path.Combine(source, "Art", "Textures", "Test.dds"), CreateDds(1));
+    var patchRoot = Path.Combine(root, "patch"); var patched = Path.Combine(root, "patched");
+    Directory.CreateDirectory(Path.Combine(patchRoot, GeneralsGamePatchLayer.EditedFolder, "Window"));
+    Directory.CreateDirectory(Path.Combine(patchRoot, GeneralsGamePatchLayer.EditedFolder, "Art", "Textures", "GenerateMip"));
+    await File.WriteAllTextAsync(Path.Combine(patchRoot, GeneralsGamePatchLayer.EditedFolder, "Window", "Test.wnd"), "FILE_VERSION = 2;\nWINDOW { IMAGE = Art/Textures/Test.dds; }\n");
+    await File.WriteAllBytesAsync(Path.Combine(patchRoot, GeneralsGamePatchLayer.EditedFolder, "Art", "Textures", "GenerateMip", "Source.psd"), [1, 2, 3]);
+    var layer = GeneralsGamePatchLayer.Open(patchRoot, "test patch");
+    Assert(layer.Files.Count == 1 && layer.Excluded.Values.Sum() == 1 && layer.Excluded.Keys.Single().StartsWith("texture source", StringComparison.Ordinal),
+        "The layer takes the window layout and counts the texture source it cannot take.");
+    var layered = await RuntimeContentImporter.ImportAsync(source, patched, layer: layer);
+    var window = layered.Manifest.Assets.Single(asset => asset.Type == "sage/window-layout");
+    Assert(window.Origin.SelectedSource == "overlay:generals-game-patch-core:Window/Test.wnd" && window.Origin.Candidates.Count == 2, "The patch's layout is selected over the installation's.");
+    Assert(layered.Manifest.Importer.Options["layer"] == GeneralsGamePatchLayer.Name && layered.Manifest.Importer.Options["layerSha256"] == layer.Fingerprint
+        && layered.Manifest.Importer.Options["layerFiles"] == "1", "The manifest names the layer and its fingerprint.");
+    Assert(!firstResult.Manifest.Importer.Options.ContainsKey("layer"), "A manifest without a layer is unchanged.");
+    Assert(GeneralsGamePatchLayer.Classify("Data/INI/Object/Test.ini") is null && GeneralsGamePatchLayer.Classify("Maps/A/map.str") is null
+        && GeneralsGamePatchLayer.Classify("Data/generals.str") is not null && GeneralsGamePatchLayer.Classify("Art/Models/Mesh/a.blend") is not null,
+        "The layer takes INI and map strings, not string sources and Blender scenes.");
     Console.WriteLine("All runtime content importer tests passed.");
 }
 finally { if (Directory.Exists(root)) Directory.Delete(root, true); }

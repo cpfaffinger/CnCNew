@@ -62,6 +62,39 @@ internal static class InstallCommands
         return Report(result, watch);
     }
 
+    /// <summary>
+    /// Imports the game directory with a community patch's layer above it into a content directory of its own (docs/PATCH-LAYER.md). The game directory must be
+    /// the master, as for an installation; the patch is read only. The result is a runtime content whose manifest names the layer.
+    /// </summary>
+    public static async Task<int> ImportLayerAsync(string gameDirectory, string contentDirectory, string[] options)
+    {
+        if (!TryParse(options, ["--master", "--patch", "--patch-source"], [], out var values, out _) || !values.TryGetValue("--patch", out var patch)) return Usage();
+        var master = LoadMaster(values);
+        var game = Path.GetFullPath(gameDirectory);
+        var target = Path.GetFullPath(contentDirectory);
+        if (target.StartsWith(Path.TrimEndingDirectorySeparator(game) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || target.Equals(game, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine($"error: the target '{target}' lies in the game directory, which is never written to.");
+            return Failed;
+        }
+        var watch = Stopwatch.StartNew();
+        var check = await InstallationInspector.CheckAsync(game, master, new StepProgress<InstallationCheckProgress>("check", value => (value.ProcessedFiles, value.TotalFiles)));
+        if (!check.IsIdentical)
+        {
+            Console.Write(check.FormatReport());
+            return Different;
+        }
+        var layer = GeneralsGamePatchLayer.Open(patch, values.GetValueOrDefault("--patch-source") ?? "GeneralsGamePatch (Patch104pZH), source not stated");
+        Console.WriteLine($"Layer {layer.Name}: {layer.Files.Count} files from {layer.Source}; SHA-256 {layer.Fingerprint}.");
+        foreach (var (reason, count) in layer.Excluded) Console.WriteLine($"  not taken: {count,5}  {reason}");
+        var result = await RuntimeContentImporter.ImportAsync(game, target, new StepProgress<ImportProgress>("import", value => (value.Processed, value.Total)), layer: layer);
+        var replaced = result.Manifest.Assets.Count(asset => asset.Origin.SelectedSource.StartsWith("overlay:", StringComparison.Ordinal) && asset.Origin.Candidates.Count > 1);
+        var added = result.Manifest.Assets.Count(asset => asset.Origin.SelectedSource.StartsWith("overlay:", StringComparison.Ordinal) && asset.Origin.Candidates.Count == 1);
+        Console.WriteLine($"Imported {result.Manifest.Assets.Count} runtime files into {target}: {replaced} replaced by the layer, {added} added by it " +
+                          $"({watch.Elapsed.TotalSeconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s).");
+        return 0;
+    }
+
     public static async Task<int> CheckExportAsync(string contentDirectory, string[] options)
     {
         if (!TryParse(options, ["--master"], [], out var values, out _)) return Usage();
@@ -98,6 +131,7 @@ internal static class InstallCommands
         Console.Error.WriteLine("  CnCNew.AssetTool describe-install <game-directory> <out.json> [--name <name>] [--id <id>]");
         Console.Error.WriteLine("  CnCNew.AssetTool install <game-directory> <target-directory> [--master <steam-master.json>]");
         Console.Error.WriteLine("  CnCNew.AssetTool check-export <content-directory> [--master <steam-master.json>]");
+        Console.Error.WriteLine("  CnCNew.AssetTool import-layer <game-directory> <content-directory> --patch <Patch104pZH directory> [--patch-source <text>] [--master <steam-master.json>]");
         Console.Error.WriteLine("  CnCNew.AssetTool uninstall <target-directory> --yes");
     }
 

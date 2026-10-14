@@ -69,11 +69,12 @@ public static class RuntimeContentImporter
     public static async Task<RuntimeContentManifest> DescribeAsync(
         string sourceDirectory,
         IProgress<ImportProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        ContentLayer? layer = null)
     {
-        using var source = GameFileSystem.OpenInstallation(sourceDirectory);
+        using var source = GameFileSystem.OpenInstallation(sourceDirectory, layer?.Overlay);
         var (drafts, _) = await ScanAsync(source, null, null, null, null, progress, cancellationToken);
-        return BuildManifest(drafts);
+        return BuildManifest(drafts, layer);
     }
 
     /// <summary>
@@ -85,7 +86,8 @@ public static class RuntimeContentImporter
         string destinationDirectory,
         IProgress<ImportProgress>? progress = null,
         CancellationToken cancellationToken = default,
-        Predicate<RuntimeArtifact>? trustPublishedArtifact = null)
+        Predicate<RuntimeArtifact>? trustPublishedArtifact = null,
+        ContentLayer? layer = null)
     {
         var destination = Path.GetFullPath(destinationDirectory);
         var parent = Path.GetDirectoryName(destination) ?? throw new InvalidDataException("Import destination has no parent.");
@@ -94,11 +96,11 @@ public static class RuntimeContentImporter
         Directory.CreateDirectory(staging);
         try
         {
-            using var source = GameFileSystem.OpenInstallation(sourceDirectory);
+            using var source = GameFileSystem.OpenInstallation(sourceDirectory, layer?.Overlay);
             var old = TryReadManifest(destination);
             var oldById = old?.Assets.ToDictionary(asset => asset.Id, StringComparer.Ordinal);
             var (drafts, cacheHits) = await ScanAsync(source, staging, destination, oldById, trustPublishedArtifact, progress, cancellationToken);
-            var manifest = BuildManifest(drafts);
+            var manifest = BuildManifest(drafts, layer);
             await File.WriteAllBytesAsync(Path.Combine(staging, "content-manifest.json"), RuntimeManifestSerializer.WriteCanonical(manifest), cancellationToken);
             Publish(staging, destination);
             staging = string.Empty;
@@ -206,7 +208,7 @@ public static class RuntimeContentImporter
         }
     }
 
-    private static RuntimeContentManifest BuildManifest(IReadOnlyList<Draft> drafts)
+    private static RuntimeContentManifest BuildManifest(IReadOnlyList<Draft> drafts, ContentLayer? layer = null)
     {
         var byPath = drafts.ToDictionary(value => value.Path, StringComparer.OrdinalIgnoreCase);
         var byName = drafts.GroupBy(value => Path.GetFileName(value.Path), StringComparer.OrdinalIgnoreCase)
@@ -246,7 +248,7 @@ public static class RuntimeContentImporter
                 ["bink"] = "copy-original; FFmpeg/libav external decoder fallback",
                 ["caseSemantics"] = "ordinal-ignore-case",
                 ["hash"] = "sha256",
-            }), assets));
+            }.WithLayer(layer)), assets));
     }
 
     private static Draft? ResolveReference(string owner, string reference, IReadOnlyDictionary<string, Draft> byPath, IReadOnlyDictionary<string, Draft[]> byName)

@@ -21,7 +21,12 @@ public sealed class GameFileSystem : IDisposable
     public int UniqueFileCount => _files.Count;
     public int ArchiveCount => _archives.Count;
 
-    public static GameFileSystem OpenInstallation(string rootDirectory)
+    /// <summary>
+    /// Opens an installation as the original's file system sees it: loose files before every archive instance, archives in ascending name order.
+    /// <paramref name="overlay"/> (optional) is a layer above everything - a community patch's files, by virtual path - that becomes instance zero of each of its
+    /// paths; the installation's own candidates stay behind it, so the content manifest records what the layer replaced (<c>overlay:NAME:PATH</c>).
+    /// </summary>
+    public static GameFileSystem OpenInstallation(string rootDirectory, GameFileOverlay? overlay = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootDirectory);
         var root = Path.GetFullPath(rootDirectory);
@@ -34,6 +39,14 @@ public sealed class GameFileSystem : IDisposable
         var archives = new List<BigArchive>();
         try
         {
+            if (overlay is not null)
+                foreach (var (virtualPath, physicalPath) in overlay.Files.OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase))
+                {
+                    var normalized = NormalizeVirtualPath(virtualPath);
+                    if (files.ContainsKey(normalized)) throw new InvalidDataException($"The overlay '{overlay.Name}' names '{normalized}' twice.");
+                    Add(files, normalized, FileRecord.ForOverlayFile(normalized, overlay.Name, Path.GetFullPath(physicalPath)));
+                }
+
             // The original FileSystem checks loose files before every archive instance.
             foreach (var physicalPath in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
                          .Order(StringComparer.OrdinalIgnoreCase))
@@ -190,6 +203,9 @@ public sealed class GameFileSystem : IDisposable
             return new FileRecord(virtualPath, $"loose:{virtualPath}", info.Length, physicalPath, null, null);
         }
 
+        public static FileRecord ForOverlayFile(string virtualPath, string overlayName, string physicalPath)
+            => new(virtualPath, $"overlay:{overlayName}:{virtualPath}", new FileInfo(physicalPath).Length, physicalPath, null, null);
+
         public static FileRecord ForArchiveEntry(
             string virtualPath,
             string archiveName,
@@ -204,3 +220,8 @@ public sealed class GameFileSystem : IDisposable
     }
 }
 
+/// <summary>
+/// A layer of files above an installation (<see cref="GameFileSystem.OpenInstallation"/>): a name for the provenance and, per virtual path, the physical file that
+/// replaces or adds it.
+/// </summary>
+public sealed record GameFileOverlay(string Name, IReadOnlyDictionary<string, string> Files);
