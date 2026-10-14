@@ -253,6 +253,22 @@ dedicated server as it is packaged and fails if it references any NuGet package.
 What needs a human (pictures, sound, playability) is driven by `scripts/acceptance.ps1` (`docs/ACCEPTANCE.md`) and is
 never claimed by a test run.
 
+Since Phase 30 tier 4 has four more steps, and the gates of `client`, `game` and `net` one or two of them:
+
+- `diagnostics` (`scripts/check-diagnostics.ps1`, about half a minute, gate of `client`, `game` and `net`): the client and the server fail on purpose
+  (`--crash-test`) and must leave a crash report and a log; their support bundles must hold the report, the log, the desync package and the configuration and
+  never a key, a saved game, the ban file or a file of the game (every file compared with the 24,870 files of the master installation and its export).
+- `client-package` (`scripts/check-client-package.ps1`, about four minutes, gate of `client`): the self-contained Windows package - its layout, the separation
+  check (no original data, every file classified), the packaged patcher finds Steam and checks it, the packaged client runs two smoke tests. NOT RUN (exit code 3)
+  without Steam or content.
+- `licences` (`scripts/licence-report.ps1 -Check`): `docs/THIRD-PARTY.md` is what the packages declare, no licence unknown, the server uses no package.
+- `ggc-catalogue` (`python scripts/ggc-fix-catalogue.py --check`): the catalogue of the GeneralsGameCode fixes is the one the reference checkout gives; NOT RUN
+  without the checkout.
+
+The **clean room** (`scripts/clean-room.ps1`, BUILDING.md) is a check by hand at the completion of a phase and before a release: a clone of the commit, empty
+caches, build, fresh import from the master, the input manifest, the quick reference set, two test programs with the fresh content, both packages and the
+separation of each; its report goes with the final report of the phase.
+
 ## 9. Measured durations
 
 One machine, 10 October 2026, state `2777a90` plus this strategy, Windows, nothing else running except where noted;

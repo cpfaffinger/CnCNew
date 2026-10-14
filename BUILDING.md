@@ -84,3 +84,25 @@ dotnet run --project tools/CnCNew.IniTool -- compat-check game/content baselines
 - `tools/CnCNew.UiRenderTool` is deliberately not in `CnCNew.slnx` and is built on its own
   (`dotnet build tools/CnCNew.UiRenderTool`).
 - Before every push: `pwsh scripts/audit-publish.ps1` (needs Python 3 and `game/`).
+
+## Clean room
+
+`pwsh scripts/clean-room.ps1 [-OutDir DIR] [-Commit REV] [-GameDir auto|DIR] [-Tier none|gate]` proves that a commit builds and runs from nothing but its
+source and the documented requirements: it clones the commit into a fresh directory (what is not committed is not in it), points `NUGET_PACKAGES`,
+`NUGET_HTTP_CACHE_PATH` and `DOTNET_CLI_HOME` at empty directories of the run (every package is fetched again from nuget.org), builds the solution and the render
+tool (0 warnings), exports the content afresh from the Steam installation (`AssetTool install auto`) into the clone's `game/` and verifies it against the master,
+checks the input manifest and the quick reference set, runs `Simulation.Tests` and `Data.Tests` with that content, builds the client and server packages and
+runs the separation check on each. It writes `clean-room-report.md` with every step's state and time. Without nuget.org it ends with exit code 3 (NOT RUN), and the
+import part is NOT RUN without a Steam installation.
+
+What it does not show: another machine (it runs on the one you start it on) and a machine without the SDK (the packages are self-contained and run from their
+own directory, but the SDK is installed here).
+
+## Packages
+
+- `pwsh scripts/package-client.ps1 [-OutDir artifacts/client] [-Zip]`: the game for players - client and patcher, self-contained for win-x64, with
+  `Install-CnCNew.cmd`, `Start-CnCNew.cmd`, the licence, the notice, `docs/THIRD-PARTY.md` and the licence files of the packages. It holds no file of the game
+  (`scripts/check-client-package.ps1` proves it).
+- `pwsh scripts/package-server.ps1 [-Runtime win-x64,linux-x64] [-Zip]`: the dedicated server (`docs/DEDICATED-SERVER.md` §13).
+- `pwsh scripts/licence-report.ps1`: writes `docs/THIRD-PARTY.md` after a package change; `-Check` is a step of tier 4.
+

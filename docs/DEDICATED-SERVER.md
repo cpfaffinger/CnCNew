@@ -496,3 +496,15 @@ The hosting player's own game is a client of that server like every other, throu
 address and the port must be reachable - no NAT traversal, as before), and not a place for long-running operation (no bans, no logs, no replay).
 
 Configuration added in Phase 29: `listRooms` (default true), option `--no-room-list`; the status line counts `listsServed` and `listsRefused`.
+
+## 15. When something goes wrong (Phase 30)
+
+- **A crash.** An exception nothing caught ends the server with exit code 70 and leaves `crash-<UTC time>-<process>.txt` in the log directory (the working
+  directory without one): the build, the protocol and transport versions, the system, the arguments, the configuration (it holds no secret; the key and the ban
+  list are files it only names) and the exception. Standard error gets `event=crash type=... report=<file>`. A service manager restarts the server; the report
+  stays.
+- **The support bundle.** `CnCNew.DedicatedServer --support-bundle FILE --config server.json` packs the log files and crash reports of the configured log
+  directory, the configuration and a description into a ZIP and stops - the server is not started. It never holds the key file, the ban file (addresses are
+  personal data) or replays; `CONTENTS.txt` lists what it holds. It is sent nowhere.
+- `scripts/check-diagnostics.ps1` proves both on every gate of `net` (`docs/TESTING.md` §8). Troubleshooting for players and operators, including a match that
+  diverged: `docs/TROUBLESHOOTING.md`.

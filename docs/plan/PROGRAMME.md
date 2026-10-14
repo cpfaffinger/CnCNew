@@ -268,6 +268,9 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-28 | Which builds may enter a game somebody hosts from the menus? | the build that hosts, changed or not; a dedicated server stays with released builds unless `allowModifiedBuilds` | R4 | 4 |
 | D-29 | The extrapolation of at most one tick when the next tick is late (`--extrapolate`): on or off? Measured without effect - a tick was late in 0 to 5 of 7,178 frames | off | R4 | 4 |
 | D-30 | A chat line "to the allies" from a seat in no team | reaches its sender only | R4 | 4 |
+| D-31 | From the first release on: is every change of tick rate, fixed point, snapshot, replay, command table, match description or network protocol a break that needs its own decision; are old saves and replays converted; how long are old builds kept for old replays (`docs/COMPATIBILITY.md` §3)? | proposal in `docs/COMPATIBILITY.md` §3; today every version change is refused with its reason | R1/R4 | all |
+| D-32 | Which adopted GeneralsGameCode fixes a release offers, and may a rule profile other than the original ever become the default (it changes every reference value) (`docs/GGC-FIXES.md`)? | the original is the default; `--rules` is opt-in; three fixes adopted | R1 | 3 |
+| D-33 | The patch layer: may it ship as a choice of the installer, and does a room of a server show "original" or "patch" by name (today only by the definition fingerprint) (`docs/PATCH-LAYER.md`)? | not offered to players until its definitions compile | R1/R4 | 3 |
 | D-26 | The limits of a public server (`docs/DEDICATED-SERVER.md` §9.2): the defaults are proposals from measurements on one machine - above all 8 connections per address, 100 key exchanges a second, 500 messages a second per member, 20 s without a hash report, a match of at most 2 h, a recording of at most 64 MiB | the defaults of §9.2 | R4 | 4 |
 
 **Decided:**

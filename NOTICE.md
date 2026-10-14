@@ -55,7 +55,11 @@ that originates from Electronic Arts: it is an implementation newly written in a
 to that source code and marks itself as a modified or derived work in the sense of the additional terms.
 Where an algorithm follows the original, documentation and comments name the source (file, function).
 In addition, the community projects GeneralsGameCode and GeneralsGamePatch (TheSuperHackers) were read; no code
-has been taken over from them.
+has been taken over from them. Since Phase 30 some corrections of GeneralsGameCode are adopted as **behaviour**: understood and written anew, each behind
+an option of the rule profile and with the file and function it comes from (`docs/GGC-FIXES.md`); the generated catalogue `docs/GGC-FIXES-CATALOGUE.md`
+names every fix of that source with its place, its author and date and the first line of its comment. GeneralsGamePatch is never part of this repository or of
+a package: the patch layer (`docs/PATCH-LAYER.md`) is made by the import on the user's machine from a checkout of the patch the user fetched. The
+third-party packages the programs use and their licences are listed in `docs/THIRD-PARTY.md`; the game package carries their licence files.
 
 The additional terms of the EA release require that they are passed on with every conveyance. In the original
 they read (from `LICENSE.md` of the EA release, unmodified):

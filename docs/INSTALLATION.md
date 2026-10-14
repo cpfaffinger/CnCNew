@@ -199,6 +199,22 @@ touched. Nothing is asked; without `-Yes` nothing happens.
 | Real-data test `Import.Tests -- --game-dir …` | 37 s |
 | Client from the installed directory, smoke test of a skirmish with 300 frames | 23 s, exit code 0 |
 
+## The package (Phase 30)
+
+For players there is a package that needs neither the source code nor .NET: `pwsh scripts/package-client.ps1 -Zip` makes `cncnew-win-x64` (about 990 files,
+320 MB) with the client and the patcher, both self-contained, and
+
+| File | What it does |
+| --- | --- |
+| `Install-CnCNew.cmd [<game directory>]` | finds the Steam installation by itself (as `install.ps1` does; or takes the directory named), checks it file by file against the master and exports the content into `game\` beside it. The Steam installation is only read. |
+| `Start-CnCNew.cmd` | starts the client with that content |
+| `README-FIRST.txt`, `LICENSE.md`, `NOTICE.md`, `THIRD-PARTY.md`, `licences\` | what it is, the licence, the third-party packages and their licence files |
+
+The package holds no file of the game: `scripts/check-client-package.ps1` compares every file with the 24,870 files of the master installation and its export, and
+runs the packaged patcher (`check-install auto`) and the packaged client (two smoke tests). Measured on 14 October 2026 on the development machine: 992 files,
+321 MB, no file of the game, the patcher found the installation at the default path and found it to be the master, both smoke tests ended with exit code 0.
+Not shown: a machine without .NET (this one has the SDK), a machine where Steam keeps the game in another library, and a person running it.
+
 ## Limits
 
 - A script, no GUI. The logic is testable as a library and prepared for a GUI.
@@ -206,8 +222,8 @@ touched. Nothing is asked; without `-Yes` nothing happens.
   master description; there is no developer switch for unchecked installations. Whoever deliberately wants to import
   different content uses `AssetTool runtime-import` as before – that writes no
   `install.json`, so the result cannot pass itself off as a checked installation.
-- The client is published from the source code: that needs the SDK and, because the publishing
-  is not self-contained, .NET 10 on the machine at run time.
+- `install.ps1` publishes the client from the source code: that needs the SDK and, because that publishing
+  is not self-contained, .NET 10 on the machine at run time. The package of the section above is self-contained.
 - The export takes over the whole content of the installation, including files outside the product scope
   (program files, manuals, installation metadata of the original – marked in the manifest as
   `out-of-product-scope`). The client does not need them.
