@@ -17,6 +17,16 @@ Assert(file.Chunks[0].IsContainer, "Container flag was not decoded.");
 Assert(file.Chunks[0].Children.Single().Type == 0x101, "Nested chunk type mismatch.");
 Assert(file.AllChunks.Count() == 3, "Recursive chunk count mismatch.");
 
+Assert(file.TrailingBytes == 0, "A file without a remainder has no trailing bytes.");
+
+// The original's loader (ChunkLoadClass::Open_Chunk) stops when fewer bytes than a chunk header are left at the end of the file; one model of the community
+// patch ends with one such byte. Counted, not refused - but only at the top level: inside a chunk the same remainder stays an error (malformedContainer below).
+using var trailingByte = new MemoryStream();
+WriteHeader(trailingByte, 0x100, 2, container: false);
+trailingByte.Write([1, 2, 0]);
+var withTrailing = W3dChunkReader.Read(trailingByte);
+Assert(withTrailing.Chunks.Count == 1 && withTrailing.TrailingBytes == 1 && withTrailing.Length == 11, "A remainder shorter than a chunk header at the end of the file is counted.");
+
 using var truncated = new MemoryStream();
 WriteHeader(truncated, 1, 5, container: false);
 truncated.Write([1, 2]);

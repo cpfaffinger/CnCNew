@@ -19,17 +19,22 @@ public static class W3dChunkReader
 
         stream.Position = 0;
         var length = stream.Length;
-        var chunks = ReadChunks(stream, length, 0);
-        if (stream.Position != length)
+        var chunks = ReadChunks(stream, length, 0, out var trailing);
+        if (stream.Position + trailing != length)
         {
             throw new InvalidDataException($"W3D parsing stopped at {stream.Position} of {length} bytes.");
         }
 
-        return new W3dFile(length, chunks);
+        return new W3dFile(length, chunks) { TrailingBytes = trailing };
     }
 
-    private static IReadOnlyList<W3dChunk> ReadChunks(Stream stream, long boundary, int depth)
+    private static IReadOnlyList<W3dChunk> ReadChunks(Stream stream, long boundary, int depth) => ReadChunks(stream, boundary, depth, out _);
+
+    // trailing: at the top level only, fewer bytes than a chunk header after the last chunk. The original's loader (ChunkLoadClass::Open_Chunk, WWLib chunkio.cpp)
+    // stops there because its read of the next header comes back short; inside a chunk the same remainder is an error here as there.
+    private static IReadOnlyList<W3dChunk> ReadChunks(Stream stream, long boundary, int depth, out int trailing)
     {
+        trailing = 0;
         if (depth > MaximumDepth)
         {
             throw new InvalidDataException($"W3D chunk nesting exceeds {MaximumDepth} levels.");
@@ -40,6 +45,12 @@ public static class W3dChunkReader
         while (stream.Position < boundary)
         {
             var headerOffset = stream.Position;
+            if (depth == 0 && boundary - headerOffset < HeaderSize && boundary == stream.Length)
+            {
+                trailing = checked((int)(boundary - headerOffset));
+                break;
+            }
+
             if (boundary - headerOffset < HeaderSize)
             {
                 throw new InvalidDataException(
@@ -73,7 +84,7 @@ public static class W3dChunkReader
             chunks.Add(new W3dChunk(type, headerOffset, dataOffset, size, isContainer, children));
         }
 
-        if (stream.Position != boundary)
+        if (stream.Position + trailing != boundary)
         {
             throw new InvalidDataException(
                 $"W3D chunk sequence ended at {stream.Position}, expected boundary {boundary}.");
