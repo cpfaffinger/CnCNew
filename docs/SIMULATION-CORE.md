@@ -3320,3 +3320,18 @@ were accepted and simulated, without an exception in the pre-check, the submissi
 
 **Not examined:** values of a command that are no coordinates (a template name, a count, an option) are the handler's to reject as before, and the fuzzing reaches
 the handlers only through orders it can still make valid; script actions and the system's commands are not bounded - they are not reachable from a wire.
+
+## 50. Phase 32: two modules for the patch layer (15 October 2026)
+
+Two engine modules of the original that the shipped data never uses, implemented because the community patch GeneralsGamePatch uses them (`docs/PATCH-LAYER.md`).
+The module catalogue has 207 types since (205 before); the original content's objects, manifests and reference values are unchanged by them.
+
+- **`StatusBitsUpgrade`** (`StatusBitsUpgrade.cpp`, `StatusBitsUpgrade::upgradeImplementation`): an upgrade module with the masks `StatusToSet` and `StatusToClear`
+  (object status names, `NameTables.ObjectStatus`). When its upgrade arrives the object's status gets the first mask and then loses the second - a bit in both
+  ends cleared, as in the reference. Nothing is undone when the upgrade goes away (the reference has no downgrade). The patch uses it to make drones
+  unselectable and to mark riders (`STATUS_RIDER1`). Test: `PatchModuleStatusBitsUpgrade`.
+- **`SabotageSupplyDropzoneCrateCollide`** (`SabotageSupplyDropzoneCrateCollide.cpp`, `isValidToExecute`, `executeCrateBehavior`): a saboteur entering an enemy
+  `FS_SUPPLY_DROPZONE` restarts the zone's `OCLUpdate` timer (`OCLUpdate::resetTimer`, new `OCLUpdate.ResetTimer`: the next drop is a whole new delay away) and
+  moves up to `StealCashAmount` from the owner to its own player, clamped to what the owner has; radar blip, EVA and floating texts are presentation. It shares
+  the common sabotage checks of this port (alive, enemy, the unit's goal object) and the adopted fix `no-sabotage-of-unfinished-or-sold` (`docs/GGC-FIXES.md`).
+  Test: `PatchModuleSabotageSupplyDropzone`.

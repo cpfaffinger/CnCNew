@@ -169,6 +169,8 @@ run.Test("Game fixes: the rule profile and its fingerprint", Tests.GameFixProfil
 run.Test("Game fixes: a kill by poison credits the poisoner", Tests.GameFixPoisonKillCredit);
 run.Test("Game fixes: a kill by fire credits the source of the flame", Tests.GameFixFlameKillCredit);
 run.Test("Game fixes: no sabotage of an unfinished or sold building", Tests.GameFixNoSabotageOfUnfinishedOrSold);
+run.Test("Patch modules: StatusBitsUpgrade sets and clears status bits", Tests.PatchModuleStatusBitsUpgrade);
+run.Test("Patch modules: a saboteur at a supply drop zone", Tests.PatchModuleSabotageSupplyDropzone);
 run.Test("Phase 5: BaseRegenerateUpdate delay, bursts and stop at full health", Tests.Phase5BaseRegenerate);
 run.Test("Phase 5: PhysicsBehavior, SquishCollide and GenerateMinefieldBehavior", Tests.MatchMinefieldAndPhysics);
 run.Test("Phase 5: BaseRegenerateUpdate wake tick survives a snapshot", Tests.MatchBaseRegenerateSnapshot);

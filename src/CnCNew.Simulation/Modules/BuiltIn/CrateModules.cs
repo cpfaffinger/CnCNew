@@ -32,6 +32,7 @@ internal static class CrateModules
         new ModuleBinding<SabotageDurationData>("SabotageMilitaryFactoryCrateCollide", ModuleOwnerKind.Object, (configuration, _) => SabotageDurationData.Parse(configuration, "SabotageDuration"), data => new SabotageMilitaryFactoryCrateCollide(data)),
         new ModuleBinding<SabotageDurationData>("SabotagePowerPlantCrateCollide", ModuleOwnerKind.Object, (configuration, _) => SabotageDurationData.Parse(configuration, "SabotagePowerDuration"), data => new SabotagePowerPlantCrateCollide(data)),
         new ModuleBinding<SabotageSupplyCenterData>("SabotageSupplyCenterCrateCollide", ModuleOwnerKind.Object, (configuration, _) => SabotageSupplyCenterData.Parse(configuration), data => new SabotageSupplyCenterCrateCollide(data)),
+        new ModuleBinding<SabotageSupplyCenterData>("SabotageSupplyDropzoneCrateCollide", ModuleOwnerKind.Object, (configuration, _) => SabotageSupplyCenterData.Parse(configuration), data => new SabotageSupplyDropzoneCrateCollide(data)),
         new ModuleBinding<PilotFindVehicleData>("PilotFindVehicleUpdate", ModuleOwnerKind.Object, (configuration, _) => PilotFindVehicleData.Parse(configuration), data => new PilotFindVehicleUpdate(data)),
     ];
 
@@ -575,6 +576,33 @@ public sealed class SabotageSupplyCenterCrateCollide(SabotageSupplyCenterData da
 
     protected override long Sabotage(IWorldServices world, Entity building)
     {
+        var cash = Fixed.Min(Fixed.FromInt(data.StealCashAmount), world.MoneyOf(building.Owner));
+        if (cash <= Fixed.Zero) return 0;
+        var stolen = world.WithdrawMoney(building.Owner, cash);
+        world.AddMoney(Entity.Owner, stolen);
+        return (long)stolen.Floor();
+    }
+}
+
+/// <summary>
+/// <c>SabotageSupplyDropzoneCrateCollide::executeCrateBehavior</c>: a saboteur that reaches an enemy supply drop zone (<c>FS_SUPPLY_DROPZONE</c>) restarts the zone's
+/// <c>OCLUpdate</c> timer (the next drop is a whole delay away again) and moves up to <c>StealCashAmount</c> from the owner's balance to its own. The radar
+/// infiltration blip, EVA line and floating texts are presentation. The shipped data never uses the module; the community patch does (Phase 32).
+/// </summary>
+public sealed class SabotageSupplyDropzoneCrateCollide(SabotageSupplyCenterData data) : SabotageCollideBase(data.Crate)
+{
+    public override string ModuleName => "SabotageSupplyDropzoneCrateCollide";
+    protected override bool IsTargetKind(Entity building) => building.Template.IsKindOf("FS_SUPPLY_DROPZONE");
+
+    protected override long Sabotage(IWorldServices world, Entity building)
+    {
+        foreach (var module in building.Modules)
+            if (module is OCLUpdate update)
+            {
+                update.ResetTimer(world);
+                world.MarkDirty(building);
+                break;
+            }
         var cash = Fixed.Min(Fixed.FromInt(data.StealCashAmount), world.MoneyOf(building.Owner));
         if (cash <= Fixed.Zero) return 0;
         var stolen = world.WithdrawMoney(building.Owner, cash);

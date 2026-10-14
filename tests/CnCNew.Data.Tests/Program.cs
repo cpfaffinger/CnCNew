@@ -204,7 +204,7 @@ static void SnapshotsAreDeterministic()
 static void ModuleCatalogIsExplicitAndConsistent()
 {
     var catalog = ModuleRegistry.Default.Descriptors.ToArray();
-    Assert(catalog.Length == 205, $"Expected 205 catalogued module types, found {catalog.Length}.");
+    Assert(catalog.Length == 207, $"Expected 207 catalogued module types, found {catalog.Length}.");
     Assert(catalog.Select(value => value.Name).SequenceEqual(catalog.Select(value => value.Name).Order(StringComparer.OrdinalIgnoreCase)),
         "The catalog must be sorted.");
     Assert(catalog.Select(value => value.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == catalog.Length, "Duplicate catalog names.");
@@ -276,6 +276,8 @@ static void ModuleCatalogIsExplicitAndConsistent()
         // the last nine (docs/SIMULATION-CORE.md): salvage and unit crates, the fake-building and Internet-Center saboteurs, the MOAB's homing, the crippled warehouse and the ferry
         "SalvageCrateCollide", "UnitCrateCollide", "SabotageFakeBuildingCrateCollide", "SabotageInternetCenterCrateCollide", "SmartBombTargetHomingUpdate", "SupplyWarehouseCripplingBehavior",
         "RailedTransportAIUpdate", "RailedTransportContain", "RailedTransportDockUpdate",
+        // phase 32: two engine modules the shipped data never uses and the community patch does (docs/PATCH-LAYER.md)
+        "StatusBitsUpgrade", "SabotageSupplyDropzoneCrateCollide",
     ];
     Assert(catalog.Where(value => value.CompatibilityOnly && value.Category == ModuleCategory.Simulation).Count() == 0, "Every simulation module of the catalog is implemented.");
     Assert(implemented.SequenceEqual(expected.Order(StringComparer.Ordinal)), "The implemented module set changed unexpectedly: " + string.Join(", ", implemented));
@@ -420,6 +422,13 @@ static void ObjectHeaderIsSchemaTyped()
     var q = quirks.Definitions.OfType<ObjectDefinition>().Single();
     Assert(q.Fields.Single(field => field.Name == "GeometryMajorRadius").Value.Value is CompatibilityValue { Code: "shipped-double-decimal-radius", NormalizedValue: "18.5" }, "18.5.0 compatibility value.");
     Assert(q.Fields.Single(field => field.Name == "GeometryHeight").Value.Value is CompatibilityValue { Code: "shipped-real-trailing-text", NormalizedValue: "40" }, "40v.0 compatibility value.");
+    // ParticleSystemTemplate::parseRGBColorKeyframe reads the colour and one frame; tokens after the frame (four lines of the community patch) are counted, never silent.
+    var keyframes = DefinitionCompiler.Compile(One("ParticleSystem P\n  Color1 = R:1 G:2 B:3 7\n  Color2 = R:255 G:150 B:255 0 5\nEnd\n"));
+    var colors = keyframes.Definitions.Single().Fields;
+    Assert(colors.Single(field => field.Name == "Color2").Value.Value is ColorKeyframeValue { Frame: 0, Color.Red: 255 } && colors.Single(field => field.Name == "Color1").Value.Value is ColorKeyframeValue { Frame: 7 },
+        "A colour keyframe keeps colour and frame, also with a token after the frame.");
+    Assert(keyframes.Diagnostics.Count(value => value.Code == "compatibility-ignored-tokens") == 1, "The token after the frame is diagnosed once; a plain keyframe is not.");
+    Throws<FormatException>(() => DefinitionCompiler.Compile(One("ParticleSystem P\n  Color1 = R:1 G:2 B:3 X\nEnd\n")), "Unexpected trailing text");
 }
 
 static void ModuleFieldsAreStrictlyTyped()
@@ -802,7 +811,11 @@ static void RealDataCatalogMatchesObservedModules(string directory)
     var source = new ContentSource(content);
     var graph = DefinitionCompiler.Compile(source, ModuleRegistry.Default, DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true });
     var observed = graph.Definitions.SelectMany(value => value.Modules).Select(value => value.Name).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal).ToArray();
-    var catalog = ModuleRegistry.Default.Descriptors.Select(value => value.Name).Order(StringComparer.Ordinal).ToArray();
+    // Phase 32: two modules of the original engine that the shipped data never uses and the community patch does (docs/PATCH-LAYER.md); named, so that
+    // nothing else may join them unseen.
+    string[] onlyForThePatch = ["SabotageSupplyDropzoneCrateCollide", "StatusBitsUpgrade"];
+    Assert(onlyForThePatch.All(name => !observed.Contains(name, StringComparer.OrdinalIgnoreCase)), "A module named as used by the patch only is used by the shipped data.");
+    var catalog = ModuleRegistry.Default.Descriptors.Select(value => value.Name).Where(name => !onlyForThePatch.Contains(name, StringComparer.Ordinal)).Order(StringComparer.Ordinal).ToArray();
     Assert(observed.SequenceEqual(catalog), $"Catalog ({catalog.Length}) and observed module set ({observed.Length}) differ: "
         + string.Join(",", catalog.Except(observed).Concat(observed.Except(catalog))));
     Assert(graph.Audit.Compatibility.All(value => !(value.Category == "module" && value.PlannedTarget == "unknown-module-not-in-catalog")), "No module may be uncatalogued.");

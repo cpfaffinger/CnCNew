@@ -37,6 +37,7 @@ internal static class Phase5Modules
         BindUpgrade<UpgradeMuxOnlyData>("WeaponBonusUpgrade", ModuleOwnerKind.Object, UpgradeMuxOnlyData.Parse, data => new WeaponBonusUpgrade(data)),
         BindUpgrade<UpgradeMuxOnlyData>("LocomotorSetUpgrade", ModuleOwnerKind.Object, UpgradeMuxOnlyData.Parse, data => new LocomotorSetUpgrade(data)),
         BindUpgrade<UpgradeMuxOnlyData>("StealthUpgrade", ModuleOwnerKind.Object, UpgradeMuxOnlyData.Parse, data => new StealthUpgrade(data)),
+        BindUpgrade<StatusBitsUpgradeData>("StatusBitsUpgrade", ModuleOwnerKind.Object, StatusBitsUpgradeData.Parse, data => new StatusBitsUpgrade(data)),
         BindUpgrade<MaxHealthUpgradeData>("MaxHealthUpgrade", ModuleOwnerKind.Object, MaxHealthUpgradeData.Parse, data => new MaxHealthUpgrade(data)),
         BindUpgrade<RadarUpgradeData>("RadarUpgrade", ModuleOwnerKind.Object, RadarUpgradeData.Parse, data => new RadarUpgrade(data)),
         BindUpgrade<UpgradeMuxOnlyData>("PowerPlantUpgrade", ModuleOwnerKind.Object, UpgradeMuxOnlyData.Parse, data => new PowerPlantUpgrade(data)),
@@ -384,6 +385,29 @@ public sealed class LocomotorSetUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxMod
 {
     public override string ModuleName => "LocomotorSetUpgrade";
     protected override void Activate(IWorldServices world) { }
+}
+
+/// <summary><c>StatusBitsUpgradeModuleData</c>: <c>StatusToSet</c> and <c>StatusToClear</c>, two masks of object status bits (default empty).</summary>
+public sealed record StatusBitsUpgradeData(UpgradeMuxData Mux, ulong StatusToSet, ulong StatusToClear) : ModuleData
+{
+    public static StatusBitsUpgradeData Parse(RatedModuleConfiguration configuration, UpgradeCatalog catalog) => new(UpgradeMuxData.Parse(configuration, catalog),
+        ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "StatusToSet"), NameTables.ObjectStatus),
+        ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "StatusToClear"), NameTables.ObjectStatus));
+}
+
+/// <summary>
+/// <c>StatusBitsUpgrade::upgradeImplementation</c>: when its upgrade arrives the object's status gets <c>StatusToSet</c> and loses <c>StatusToClear</c> (set first, then clear, as the
+/// reference does). Nothing is undone when the upgrade is removed - the reference has no downgrade. The shipped data never uses the module; the community patch does (Phase 32).
+/// </summary>
+public sealed class StatusBitsUpgrade(StatusBitsUpgradeData data) : UpgradeMuxModule(data.Mux)
+{
+    public override string ModuleName => "StatusBitsUpgrade";
+    protected override void Activate(IWorldServices world)
+    {
+        Entity.Status |= data.StatusToSet;
+        Entity.Status &= ~data.StatusToClear;
+        world.MarkDirty(Entity);
+    }
 }
 
 /// <summary><c>StealthUpgrade</c>: grants the object the ability to cloak (<c>CAN_STEALTH</c> status bit).</summary>

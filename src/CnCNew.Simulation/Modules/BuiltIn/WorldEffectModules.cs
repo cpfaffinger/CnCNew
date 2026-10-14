@@ -183,6 +183,9 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
         return SimulationTiming.SleepNone;
     }
 
+    /// <summary><c>OCLUpdate::resetTimer</c>: the next creation is a whole new delay away (a saboteur at a supply drop zone).</summary>
+    public void ResetTimer(IWorldServices world) => SetNextCreation(world);
+
     private void SetNextCreation(IWorldServices world)
     {
         var delay = world.Time.DrawFrames(world.LogicRandom, data.MinDelay, data.MaxDelay);

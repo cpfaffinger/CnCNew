@@ -191,6 +191,13 @@ public static class ModuleCatalog
         Add("WeaponBonusUpgrade", UpgradeMux());
         Add("LocomotorSetUpgrade", UpgradeMux());
         Add("StealthUpgrade", UpgradeMux());
+        // Phase 32: never used by the shipped data; the community patch uses it (docs/PATCH-LAYER.md).
+        Add("StatusBitsUpgrade",
+        [
+            ..UpgradeMux(),
+            new("StatusToSet", FieldType.Flags, Table: NameTables.ObjectStatus, Source: "StatusBitsUpgrade.cpp"),
+            new("StatusToClear", FieldType.Flags, Table: NameTables.ObjectStatus, Source: "StatusBitsUpgrade.cpp"),
+        ]);
         Add("MaxHealthUpgrade",
         [
             ..UpgradeMux(),
@@ -1485,6 +1492,8 @@ public static class ModuleCatalog
         Add("SabotageMilitaryFactoryCrateCollide", [..CrateCollide(), new("SabotageDuration", FieldType.DurationMs, Source: "SabotageMilitaryFactoryCrateCollide.h")]);
         Add("SabotagePowerPlantCrateCollide", [..CrateCollide(), new("SabotagePowerDuration", FieldType.DurationMs, Source: "SabotagePowerPlantCrateCollide.h")]);
         Add("SabotageSupplyCenterCrateCollide", [..CrateCollide(), new("StealCashAmount", FieldType.Integer, Min: 0, Source: "SabotageSupplyCenterCrateCollide.h")]);
+        // Phase 32: never used by the shipped data; the community patch uses it (docs/PATCH-LAYER.md).
+        Add("SabotageSupplyDropzoneCrateCollide", [..CrateCollide(), new("StealCashAmount", FieldType.Integer, Min: 0, Source: "SabotageSupplyDropzoneCrateCollide.h")]);
         Add("PilotFindVehicleUpdate",
         [
             new("ScanRate", FieldType.DurationMs, Source: "PilotFindVehicleUpdate.cpp"),
@@ -1958,6 +1967,7 @@ public static class ModuleCatalog
         ("SabotagePowerPlantCrateCollide", ModuleBlockKind.Behavior, "L"),
         ("SabotageSuperweaponCrateCollide", ModuleBlockKind.Behavior, "L"),
         ("SabotageSupplyCenterCrateCollide", ModuleBlockKind.Behavior, "L"),
+        ("SabotageSupplyDropzoneCrateCollide", ModuleBlockKind.Behavior, "L"),
         ("SalvageCrateCollide", ModuleBlockKind.Behavior, "L"),
         ("SlavedUpdate", ModuleBlockKind.Behavior, "U"),
         ("SlowDeathBehavior", ModuleBlockKind.Behavior, "UD"),
@@ -1973,6 +1983,7 @@ public static class ModuleCatalog
         ("SpyVisionSpecialPower", ModuleBlockKind.Behavior, "S"),
         ("SpyVisionUpdate", ModuleBlockKind.Behavior, "UG"),
         ("SquishCollide", ModuleBlockKind.Behavior, "L"),
+        ("StatusBitsUpgrade", ModuleBlockKind.Behavior, "G"),
         ("StealthDetectorUpdate", ModuleBlockKind.Behavior, "U"),
         ("StealthUpdate", ModuleBlockKind.Behavior, "U"),
         ("StealthUpgrade", ModuleBlockKind.Behavior, "G"),
