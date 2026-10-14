@@ -356,6 +356,33 @@ internal sealed class ClientRuntime : IDisposable
         }
     }
 
+    /// <summary>
+    /// A match of a server is over here: the server ends it when the players have told it so, a moment later. The connection is kept until then - closed at once,
+    /// the server would count a player who lost the connection in a running match. At most <see cref="ServerEndWaitMs"/>, counted from the frame the match was
+    /// over here. True while the wait goes on.
+    /// </summary>
+    private bool AwaitServerEnd(RunningGame running)
+    {
+        if (running.Host.Match is not LiveMatch { Remote: { } relay } match || _shell?.Net is null || _leaveRequested || !match.IsOver || relay.Client.End is not null || !relay.Client.IsOpen)
+        {
+            _awaitingServerEnd = false;
+            return false;
+        }
+        if (!_awaitingServerEnd)
+        {
+            _awaitingServerEnd = true;
+            _serverEndDeadlineMs = _clockMs + ServerEndWaitMs;
+        }
+        relay.Pump();
+        if (_clockMs < _serverEndDeadlineMs) return true;
+        _awaitingServerEnd = false;
+        return false;
+    }
+
+    public const int ServerEndWaitMs = 3_000;
+    private bool _awaitingServerEnd;
+    private long _serverEndDeadlineMs;
+
     private bool NetMatchEnded(RunningGame running)
         => running.Host.Match is LiveMatch { Remote: { } relay } && _shell?.Net is not null && (_leaveRequested || relay.Client.End is not null || !relay.Client.IsOpen);
 
@@ -493,7 +520,7 @@ internal sealed class ClientRuntime : IDisposable
                 _nextNetStatus = _clockMs + 5_000;
                 Console.WriteLine($"{indicators.StatusLine()}; tick {running.Host.Match.Tick}");
             }
-            if (_shell is not null && (running.TakeFinished() || NetMatchEnded(running))) FinishRunning(running);
+            if (_shell is not null && (running.TakeFinished() || NetMatchEnded(running) || _awaitingServerEnd) && !AwaitServerEnd(running)) FinishRunning(running);
             RestartScenarioWhenOver(seconds);
             _audio.Update(seconds);
             return;

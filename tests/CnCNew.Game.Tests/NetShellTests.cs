@@ -64,6 +64,7 @@ internal static class NetShellTests
         public void Key(CnCNew.Presentation.Input.KeyCode key) => Hud!.Process(new CnCNew.Presentation.Input.KeyEvent(++_inputClock, key, IsDown: true));
         public void Type(string text) { foreach (var character in text) Hud!.Process(new CnCNew.Presentation.Input.TextInputEvent(++_inputClock, character)); }
         private long _inputClock;
+        private double _overFor;
 
         public void Frame(double seconds)
         {
@@ -79,6 +80,14 @@ internal static class NetShellTests
                 }
                 var relay = match.Remote!;
                 if (!match.IsOver && relay.Client.End is null && relay.Client.IsOpen) return;
+                // Over here; the server says so a moment later. As the client does: keep the connection until then, three seconds at most.
+                if (match.IsOver && relay.Client.End is null && relay.Client.IsOpen)
+                {
+                    _overFor += seconds;
+                    relay.Pump();
+                    if (_overFor < 3) return;
+                }
+                _overFor = 0;
                 Hud = null;
                 Played.Add((match.World.Tick, match.Session.StateHash(), NetText.MatchEndNote(relay, match.IsOver)));
                 LastHash = match.Session.StateHash();
@@ -331,8 +340,9 @@ internal static class NetShellTests
     {
         var port = FreePort();
         const int matchSeconds = 15, longBrowseSeconds = 330;
-        // One cycle is about 45 s of real time; the script holds more cycles than fit, and the run ends at a cycle's end once the time is up.
-        var cycles = Math.Max(3, minutes * 60 / 30);
+        // One cycle is about 27 s of real time (measured); the script holds more cycles than fit - one for every 15 s - and the run ends at a cycle's end once
+        // the time is up.
+        var cycles = Math.Max(3, minutes * 60 / 15);
         var hostScript = new List<string>(HostToRoom("Endurance")) { "limit 900" };
         var guestScript = new List<string>(ToAddress) { "limit 900", "type NetworkDirectConnect.wnd:EditPlayerName Bob", $"type NetworkDirectConnect.wnd:ComboboxRemoteIP 127.0.0.1:{port}", "wait seconds 3" };
         for (var cycle = 0; cycle < cycles; cycle++)
@@ -379,7 +389,8 @@ internal static class NetShellTests
                 while (server.TryTakeLine(out var line))
                 {
                     var name = line.Split(' ')[0];
-                    if (name == "event=left") name += line.Contains("reason=Left", StringComparison.Ordinal) ? " (said goodbye)" : line.Contains("reason=Closed", StringComparison.Ordinal) ? " (closed)" : " (other)";
+                    // How a member went and in which phase of its room: after a match (the room has ended), out of a room by its own choice, or otherwise.
+                    if (name == "event=left") name += " " + string.Join(' ', line.Split(' ').Where(part => part.StartsWith("reason=", StringComparison.Ordinal) || part.StartsWith("phase=", StringComparison.Ordinal)));
                     if (name == "event=turned-away") name += " " + line.Split(' ').FirstOrDefault(part => part.StartsWith("reason=", StringComparison.Ordinal));
                     events[name] = events.GetValueOrDefault(name) + 1;
                 }
@@ -387,7 +398,7 @@ internal static class NetShellTests
             if (now >= nextReport)
             {
                 nextReport += 300;
-                Console.WriteLine($"  endurance: {now / 60:F0} min, {done} cycles, {guest.Matches} matches, managed memory {GC.GetTotalMemory(false) / 1024 / 1024} MB");
+                Console.WriteLine(FormattableString.Invariant($"  endurance: {now / 60:F0} min, {done} cycles, {guest.Matches} matches, managed memory {GC.GetTotalMemory(true) / 1024 / 1024} MB after a collection"));
             }
             // The time is up and the cycle is through: the guest stands on the address screen, the host alone in its room.
             if (now >= minutes * 60 && guest.Shell.CurrentScreen is NetworkDirectConnectScreen && guest.Match is null && host.Match is null && done == guest.Matches) break;
@@ -397,12 +408,14 @@ internal static class NetShellTests
         var uptime = watch.Elapsed.TotalMinutes;
         foreach (var player in new[] { host, guest })
             if (player.Script.Failed) foreach (var line in player.Script.Report().TakeLast(3)) Console.WriteLine($"  [{player.Name}] {line}");
-        Console.WriteLine($"  endurance: server up {uptime:F1} min; {done} cycles; matches host {host.Matches} guest {guest.Matches}; server events: {string.Join(", ", events.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key[6..]}={pair.Value}"))}; managed memory {memoryAtStart / 1024 / 1024} -> {GC.GetTotalMemory(true) / 1024 / 1024} MB");
+        Console.WriteLine(FormattableString.Invariant($"  endurance: server up {uptime:F1} min; {done} cycles; matches host {host.Matches} guest {guest.Matches}; server events: {string.Join(", ", events.OrderBy(pair => pair.Key, StringComparer.Ordinal).Select(pair => $"{pair.Key[6..]}={pair.Value}"))}; managed memory {memoryAtStart / 1024 / 1024} -> {GC.GetTotalMemory(true) / 1024 / 1024} MB"));
         TestHarness.Assert(!host.Script.Failed && !guest.Script.Failed, "no step of either script failed");
-        TestHarness.Assert(uptime >= minutes, $"the hosted server was up for {uptime:F1} of {minutes} minutes");
+        TestHarness.Assert(uptime >= minutes, FormattableString.Invariant($"the hosted server was up for {uptime:F1} of {minutes} minutes"));
         TestHarness.Assert(done >= 3 && host.Matches == done && guest.Matches == done, $"every cycle was a match on both ({done} cycles, {host.Matches} / {guest.Matches} matches)");
         TestHarness.Assert(host.Played.SequenceEqual(guest.Played) && host.Played.All(match => match.Tick == matchSeconds * data.Rate.TicksPerSecond && match.Note is null),
             "every match ended by its rules, at the same tick and in the same state on both");
+        TestHarness.Assert(!events.Keys.Any(name => name.StartsWith("event=left", StringComparison.Ordinal) && name.Contains("phase=Match", StringComparison.Ordinal)),
+            $"nobody left a running match: both games keep their connection until the server has ended it ({string.Join(", ", events.Keys.Where(name => name.StartsWith("event=left", StringComparison.Ordinal)))})");
         TestHarness.Assert(events.GetValueOrDefault("event=desync") == 0 && events.GetValueOrDefault("event=match-ended") == done && events.GetValueOrDefault("event=room-opened") == done + 1,
             $"the server ended {events.GetValueOrDefault("event=match-ended")} matches in {events.GetValueOrDefault("event=room-opened")} rooms and reported no desync");
         TestHarness.Assert(done < 2 || events.Keys.Any(name => name.StartsWith("event=turned-away", StringComparison.Ordinal)), "the long wait in front of the rooms was longer than the server lets a connection browse, and the lobby came back by itself");
