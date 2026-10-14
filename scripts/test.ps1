@@ -95,7 +95,7 @@ $stepsOfArea = @{
     images       = @{ affected = 'images', 'import', 'presentation';        gate = 'presentation-content', 'game' }
     formats      = @{ affected = 'formats', 'import';                       gate = 'inputs', 'quick', 'presentation-content' }
     w3d          = @{ affected = 'w3d';                                     gate = 'presentation-content', 'game' }
-    data         = @{ affected = 'data', 'data-content', 'compat';          gate = 'ui', 'audio', 'sim', 'inputs', 'quick' }
+    data         = @{ affected = 'data', 'data-content', 'compat';          gate = 'ui', 'audio', 'sim', 'inputs', 'quick', 'patch-layer' }
     simulation   = @{ affected = 'sim';                                     gate = 'sim-30', 'sim-120', 'presentation', 'inputs', 'quick', 'rate-suite', 'game-sim', 'check-match', 'net' }
     simtool      = @{ affected = @();                                       gate = 'inputs', 'quick' }
     manifest     = @{ affected = 'inputs', 'reference';                     gate = @() }
@@ -224,6 +224,7 @@ $steps = @(
     New-Step 'server-package-linux' 'The linux-x64 server package under Linux (WSL) with an empty environment, clients under Windows' ((Script-Run 'check-server-package') + '-Platform' + 'linux') -Content -Environment
     New-Step 'diagnostics'  'Crash reports, run logs and support bundles of the client and the server: what they hold and what they never hold' (Script-Run 'check-diagnostics')
     New-Step 'client-package' 'The self-contained Windows package: layout, no original data, the packaged patcher and client run' (Script-Run 'check-client-package') -Content -Environment
+    New-Step 'patch-layer'  'The patch layer: its own compatibility baseline, a deterministic match, two layer clients on a server and an original client refused' (Script-Run 'check-patch-layer') -Content -Environment
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content
     New-Step 'game-30'      'Game.Tests (real data, 30 Hz)'                   ((Release-Run $gameTests) + $content + '--tick-rate' + '30') -Content -Release $gameTests
