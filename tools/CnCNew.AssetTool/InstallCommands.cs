@@ -27,8 +27,9 @@ internal static class InstallCommands
     {
         if (!TryParse(options, ["--master"], [], out var values, out _)) return Usage();
         var master = LoadMaster(values);
+        if (Locate(gameDirectory, master) is not { } game) return Different;
         var watch = Stopwatch.StartNew();
-        var result = await InstallationInspector.CheckAsync(gameDirectory, master, new StepProgress<InstallationCheckProgress>("check", value => (value.ProcessedFiles, value.TotalFiles)));
+        var result = await InstallationInspector.CheckAsync(game, master, new StepProgress<InstallationCheckProgress>("check", value => (value.ProcessedFiles, value.TotalFiles)));
         Console.Write(result.FormatReport());
         Console.WriteLine($"Checked in {watch.Elapsed.TotalSeconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s.");
         return result.IsIdentical ? 0 : Different;
@@ -57,8 +58,9 @@ internal static class InstallCommands
     {
         if (!TryParse(options, ["--master"], [], out var values, out _)) return Usage();
         var master = LoadMaster(values);
+        if (Locate(gameDirectory, master) is not { } game) return Different;
         var watch = Stopwatch.StartNew();
-        var result = await GameInstaller.InstallAsync(gameDirectory, targetDirectory, master, InstallSteps());
+        var result = await GameInstaller.InstallAsync(game, targetDirectory, master, InstallSteps());
         return Report(result, watch);
     }
 
@@ -70,7 +72,8 @@ internal static class InstallCommands
     {
         if (!TryParse(options, ["--master", "--patch", "--patch-source"], [], out var values, out _) || !values.TryGetValue("--patch", out var patch)) return Usage();
         var master = LoadMaster(values);
-        var game = Path.GetFullPath(gameDirectory);
+        if (Locate(gameDirectory, master) is not { } located) return Different;
+        var game = Path.GetFullPath(located);
         var target = Path.GetFullPath(contentDirectory);
         if (target.StartsWith(Path.TrimEndingDirectorySeparator(game) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || target.Equals(game, StringComparison.OrdinalIgnoreCase))
         {
@@ -93,6 +96,22 @@ internal static class InstallCommands
         Console.WriteLine($"Imported {result.Manifest.Assets.Count} runtime files into {target}: {replaced} replaced by the layer, {added} added by it " +
                           $"({watch.Elapsed.TotalSeconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s).");
         return 0;
+    }
+
+    /// <summary>The game directory a command names, or with <c>auto</c> the one Steam knows for the master's app (<see cref="SteamLocator"/>); null when none is found.</summary>
+    private static string? Locate(string gameDirectory, InstallationMaster master)
+    {
+        if (!gameDirectory.Equals("auto", StringComparison.OrdinalIgnoreCase)) return gameDirectory;
+        var found = SteamLocator.FindGame(master.SteamAppId, "Command & Conquer Generals - Zero Hour", out var searched);
+        if (found is not null)
+        {
+            Console.WriteLine($"Found the game through Steam: {found}");
+            return found;
+        }
+        Console.Error.WriteLine($"No Steam installation of \"{master.Name}\" (app {master.SteamAppId}) was found. Searched:");
+        foreach (var place in searched) Console.Error.WriteLine($"  {place}");
+        Console.Error.WriteLine("Install the game in Steam (English), or name its directory instead of 'auto'.");
+        return null;
     }
 
     public static async Task<int> CheckExportAsync(string contentDirectory, string[] options)
@@ -127,6 +146,7 @@ internal static class InstallCommands
 
     public static void PrintUsage()
     {
+        Console.Error.WriteLine("  <game-directory> may be 'auto': the directory Steam knows for the game.");
         Console.Error.WriteLine("  CnCNew.AssetTool check-install <game-directory> [--master <steam-master.json>]");
         Console.Error.WriteLine("  CnCNew.AssetTool describe-install <game-directory> <out.json> [--name <name>] [--id <id>]");
         Console.Error.WriteLine("  CnCNew.AssetTool install <game-directory> <target-directory> [--master <steam-master.json>]");
