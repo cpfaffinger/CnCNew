@@ -28,6 +28,8 @@ param(
     [int]$MatchSeconds = 60,
     [string]$Label = 'run',
     [string]$Map = 'Alpine Assault',
+    # The army of the window client on every line: the stand-in orders its builder about, and how a unit starts and stops is part of what is measured.
+    [string]$Army = 'USA',
     [string]$OutDir = (Join-Path ([IO.Path]::GetTempPath()) 'cncnew-test/net-latency'),
     [string[]]$ClientArguments = @(),
     [switch]$NoBuild,
@@ -107,7 +109,7 @@ if (-not $SkipLocal) {
     Write-Host "== local: a skirmish through the embedded server, $MatchSeconds s"
     $script = Write-Script 'local' @('wait screen MainMenuScreen', 'click MainMenu.wnd:ButtonSinglePlayer', 'click MainMenu.wnd:ButtonSkirmish', 'wait screen SkirmishSetupScreen',
         'click SkirmishGameOptionsMenu.wnd:ButtonSelectMap', 'wait screen SkirmishMapSelectScreen', "pick SkirmishMapSelectMenu.wnd:ListboxMap $Map", 'click SkirmishMapSelectMenu.wnd:ButtonOK',
-        'wait screen SkirmishSetupScreen', 'click SkirmishGameOptionsMenu.wnd:ButtonStart', "limit $($MatchSeconds + 120)", 'wait phase InMatch', "wait match tick atleast $ticks")
+        'wait screen SkirmishSetupScreen', "select SkirmishGameOptionsMenu.wnd:ComboBoxPlayerTemplate0 $Army", "select SkirmishGameOptionsMenu.wnd:ComboBoxPlayerTemplate1 $Army", 'click SkirmishGameOptionsMenu.wnd:ButtonStart', "limit $($MatchSeconds + 120)", 'wait phase InMatch', "wait match tick atleast $ticks")
     $local = Start-Logged 'local' (Client-Arguments 'local' $script @())
     if (-not $local.WaitForExit(($MatchSeconds + 300) * 1000)) { $local.Kill($true); Fail 'local: the client did not end in time' }
     elseif ($local.ExitCode -ne 0) { Fail "local: exit code $($local.ExitCode)" }
@@ -139,7 +141,8 @@ try {
             'wait enabled LanLobbyMenu.wnd:ButtonHost', 'click LanLobbyMenu.wnd:ButtonHost', 'wait screen NetHostPopupScreen', "type PopupHostGame.wnd:TextEntryGameName $room",
             'click PopupHostGame.wnd:ButtonCreateGame', 'wait screen NetRoomScreen', 'wait combo LanGameOptionsMenu.wnd:ComboBoxPlayer0 shows Alice',
             'click LanGameOptionsMenu.wnd:ButtonSelectMap', 'wait screen SkirmishMapSelectScreen', "pick LanMapSelectMenu.wnd:ListboxMap $Map", 'click LanMapSelectMenu.wnd:ButtonOK',
-            'wait screen NetRoomScreen', "wait text LanGameOptionsMenu.wnd:TextEntryMapDisplay contains $Map", 'wait combo LanGameOptionsMenu.wnd:ComboBoxPlayer0 shows Alice', 'note room-ready',
+            'wait screen NetRoomScreen', "wait text LanGameOptionsMenu.wnd:TextEntryMapDisplay contains $Map", 'wait combo LanGameOptionsMenu.wnd:ComboBoxPlayer0 shows Alice',
+            "select LanGameOptionsMenu.wnd:ComboBoxPlayerTemplate0 $Army", 'wait seconds 1', "wait combo LanGameOptionsMenu.wnd:ComboBoxPlayerTemplate0 shows $Army", 'note room-ready',
             'limit 240', 'wait combo LanGameOptionsMenu.wnd:ComboBoxPlayer1 shows Bob', 'wait shown LanGameOptionsMenu.wnd:ButtonAccept1', 'click LanGameOptionsMenu.wnd:ButtonStart',
             "limit $($MatchSeconds + 120)", 'wait screen NetLoadingScreen', 'wait phase InMatch', 'wait phase Results', 'wait screen ScoreScreenScreen')
         $window = Start-Logged $line (Client-Arguments $line $script @('--net-match-seconds', "$MatchSeconds"))

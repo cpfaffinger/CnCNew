@@ -300,14 +300,18 @@ public static class NetText
     /// <summary>
     /// What to tell the person when a match of a server is over: nothing when it ended by its own rules, otherwise what the server or the connection said.
     /// </summary>
-    public static string? MatchEndNote(RemoteRelay relay, bool sessionOver)
+    public static string? MatchEndNote(RemoteRelay relay, bool sessionOver, string? diagnosticsDirectory = null)
     {
         var client = relay.Client;
-        if (client.Desync is not null) return End(EndReason.Desync);
+        if (client.Desync is not null) return diagnosticsDirectory is { Length: > 0 } ? $"{End(EndReason.Desync)}\nA diagnostics package was written to\n{diagnosticsDirectory}" : End(EndReason.Desync);
         if (client.End is { Reason: not EndReason.Finished } end) return End(end.Reason);
         if (sessionOver || client.End is not null) return null;
         return client.IsOpen ? null : Close(relay.CloseReason);
     }
+
+    /// <summary>The line of the HUD when the server says the games are out of sync; with where this game wrote what it knows of it.</summary>
+    public static string DesyncNotice(long tick, string? diagnosticsDirectory)
+        => diagnosticsDirectory is { Length: > 0 } ? $"The games are out of sync since tick {tick}. A diagnostics package is written to {diagnosticsDirectory}" : $"The games are out of sync since tick {tick}.";
 
     public static string RoomLine(ListedRoom room, string mapName)
     {

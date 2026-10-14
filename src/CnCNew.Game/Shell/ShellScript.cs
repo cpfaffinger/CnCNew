@@ -170,11 +170,18 @@ public sealed class ShellScript
                     Click(shell, button.X + button.Width / 2, button.Y + button.Height / 2);
                 }
                 if (!combo.IsOpen) return Fail(shell, step, "did not open");
-                var row = index - combo.TopIndex;
                 var height = UiGadgetGeometry.RowHeight(window);
                 var drop = UiGadgetGeometry.ComboDropDown(window);
+                // An entry the open box does not show is scrolled to with the wheel over the box, a notch at a time, as a person would.
+                for (var notch = 0; notch < 64 && (index < combo.TopIndex || window.Rect.Bottom + (index - combo.TopIndex) * height + height / 2 >= drop.Bottom); notch++)
+                {
+                    var top = combo.TopIndex;
+                    Send(shell, new MouseWheelEvent(Now(), index < combo.TopIndex ? 1 : -1, new Vector2(drop.X + drop.Width / 3, drop.Y + drop.Height / 2)));
+                    if (combo.TopIndex == top) break;
+                }
+                var row = index - combo.TopIndex;
                 var y = window.Rect.Bottom + row * height + height / 2;
-                if (row < 0 || y >= drop.Bottom) return Fail(shell, step, $"entry {index} is not among the rows the open box shows");
+                if (row < 0 || y >= drop.Bottom) return Fail(shell, step, $"entry {index} is not among the rows the open box shows, and the wheel does not bring it there");
                 Click(shell, drop.X + drop.Width / 3, y);
                 if (combo.SelectedIndex != index) return Fail(shell, step, $"shows entry {combo.SelectedIndex} afterwards");
                 return Outcome.DoneWithInput;
@@ -186,8 +193,14 @@ public sealed class ShellScript
                 if (index < 0) return Outcome.Wait;
                 var content = UiGadgetGeometry.ListContent(window);
                 var height = UiGadgetGeometry.RowHeight(window);
+                for (var notch = 0; notch < 256 && (index < list.TopIndex || content.Y + (index - list.TopIndex) * height + height / 2 >= content.Bottom); notch++)
+                {
+                    var top = list.TopIndex;
+                    Send(shell, new MouseWheelEvent(Now(), index < list.TopIndex ? 1 : -1, new Vector2(content.X + content.Width / 2, content.Y + content.Height / 2)));
+                    if (list.TopIndex == top) break;
+                }
                 var y = content.Y + (index - list.TopIndex) * height + height / 2;
-                if (index < list.TopIndex || y >= content.Bottom) return Fail(shell, step, $"row {index} is not among the rows the list shows");
+                if (index < list.TopIndex || y >= content.Bottom) return Fail(shell, step, $"row {index} is not among the rows the list shows, and the wheel does not bring it there");
                 Click(shell, content.X + Math.Min(20, content.Width / 2), y);
                 if (list.SelectedIndex != index) return Fail(shell, step, $"has row {list.SelectedIndex} selected afterwards");
                 return Outcome.DoneWithInput;

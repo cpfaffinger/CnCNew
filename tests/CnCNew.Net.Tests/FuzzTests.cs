@@ -344,6 +344,80 @@ static partial class NetTests
 
     // ---------------------------------------------------------------------------------------------------------- commands
 
+    public static void FuzzDirectory()
+    {
+        // The front of a server (docs/NETWORK-PROTOCOL.md section 22.1): whatever a connection sends before it is a member - a request for the list of rooms, a
+        // hello, or neither - is answered, turned away or routed to a room, and nothing of it throws, holds a room for ever or disturbs the people in one.
+        var seed = FuzzSeed + 5;
+        var fuzzer = new Fuzzer(seed);
+        var cases = FuzzCases(40_000);
+        var samples = EveryMessage().Select(MessageCodec.Encode).ToArray();
+        var clock = new ManualNetClock();
+        clock.Advance(ClockStartMs);
+        var network = new LoopbackNetwork(clock);
+        var seeds = 1u;
+        var directory = new RoomDirectory(clock, () => ++seeds, new DirectoryOptions(MaxRooms: 6, HelloTimeoutMs: 200, Room: Bare()) { ListIntervalMs = 5, ListsPerConnection = 4 });
+        var (honestEnd, honestServerEnd) = network.Connect();
+        directory.Attach(honestServerEnd, "10.0.0.1");
+        var honest = new LockstepClient(honestEnd, "honest", Definitions, Released, "the honest room");
+        for (var round = 0; round < 8; round++) { directory.Pump(); honest.Pump(); }
+        Check.That(honest.Phase == ClientPhase.InRoom && directory.RoomCount == 1, "an honest member sits in its room");
+        var before = GC.GetTotalMemory(true);
+        var number = 0;
+        var mostRooms = 0;
+        IConnection? stranger = null;
+        for (var index = 0; index < cases; index++)
+        {
+            var input = fuzzer.Mutate(samples[fuzzer.Below(samples.Length)], samples[fuzzer.Below(samples.Length)]);
+            Guard("directory", seed, number++, input, () =>
+            {
+                // Most strangers send one thing and go; some stay and send more on the same connection (a list, then something else).
+                if (stranger is null || !stranger.IsOpen || fuzzer.Below(4) != 0)
+                {
+                    stranger?.Close();
+                    var (end, serverEnd) = network.Connect();
+                    directory.Attach(serverEnd, $"10.0.{fuzzer.Below(4)}.{fuzzer.Below(200)}");
+                    stranger = end;
+                }
+                stranger.Send(input);
+                if (index % 4 == 0) clock.Advance(3);
+                directory.Pump();
+                honest.Pump();
+                while (stranger.TryReceive(out _)) { }
+            });
+            mostRooms = Math.Max(mostRooms, directory.RoomCount);
+        }
+        stranger?.Close();
+        for (var round = 0; round < 400; round++) { clock.Advance(1); directory.Pump(); honest.Pump(); }
+        var grown = GC.GetTotalMemory(true) - before;
+        Check.That(honest.Phase == ClientPhase.InRoom && honest.IsOpen, $"the honest member still sits in its room ({honest.Phase})");
+        Check.That(mostRooms <= 6 && directory.RoomCount == 1 && directory.PendingConnections == 0, $"never more rooms than the server holds ({mostRooms}); the strangers' rooms and connections are gone ({directory.RoomCount} room, {directory.PendingConnections} pending)");
+        Check.That(directory.TurnedAway + directory.ListsServed + directory.ListsRefused + directory.RoomsOpened > number / 2,
+            $"what arrived was answered, turned away or became a room, and counted ({directory.TurnedAway} turned away, {directory.ListsServed} lists, {directory.ListsRefused} refused, {directory.RoomsOpened} rooms of {number})");
+        Check.That(grown < 64 * 1024 * 1024, $"the directory holds on to {grown / 1024} KB after {number} inputs");
+
+        // ---- The other direction: somebody who asked for the list is sent changed messages; it counts them and survives.
+        var (browserEnd, hostileEnd) = new LoopbackNetwork(new ManualNetClock()).Connect();
+        var browser = new RoomBrowser(browserEnd);
+        var lists = 0;
+        for (var index = 0; index < cases; index++)
+        {
+            var input = fuzzer.Mutate(samples[fuzzer.Below(samples.Length)], samples[fuzzer.Below(samples.Length)]);
+            Guard("browser", seed, number++, input, () =>
+            {
+                hostileEnd.Send(input);
+                browser.Pump();
+                if (browser.List is { } list)
+                {
+                    lists++;
+                    if (list.Rooms.Length > Protocol.MaxListedRooms) throw new InvalidOperationException($"A list of {list.Rooms.Length} rooms was taken.");
+                }
+            });
+        }
+        Check.That(browser.Discarded > 0 && lists > 0, $"a browser takes lists and discards the rest ({browser.Discarded} discarded)");
+        Console.WriteLine($"       directory: {number} inputs from seed {seed}: no exception; {directory.TurnedAway} turned away, {directory.ListsServed} lists served, {directory.ListsRefused} refused, {directory.RoomsOpened} rooms opened and closed again; the browser discarded {browser.Discarded}");
+    }
+
     public static void FuzzCommands()
     {
         var seed = FuzzSeed + 3;

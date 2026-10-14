@@ -236,6 +236,12 @@ public sealed class PlaybackControl(PlaybackOptions options, long tickMicros)
     /// <summary>How far the position stands between the end of the tick before <paramref name="nextTick"/> and its own, 0 to 1: what a frame interpolates with.</summary>
     public double Fraction(long nextTick) => !Synced ? 1 : Math.Clamp((PositionMicros - nextTick * tickMicros) / (double)tickMicros, 0, 1);
 
+    /// <summary>
+    /// How far the position stands beyond the time <paramref name="nextTick"/> was due, in ticks, 0 to 1: the tick is late (its bundle has not arrived, or the game
+    /// could not play it yet), and a frame that extrapolates draws that much ahead of the last tick it has.
+    /// </summary>
+    public double Ahead(long nextTick) => !Synced ? 0 : Math.Clamp((PositionMicros - (nextTick + 1) * tickMicros) / (double)tickMicros, 0, 1);
+
     /// <summary>The bundles that have arrived ahead of the position, in milliseconds of game time: the buffer level.</summary>
     public double BufferMs(long newestBundleTick) => Synced ? ((newestBundleTick + 1) * tickMicros - PositionMicros) / 1000.0 : 0;
 }

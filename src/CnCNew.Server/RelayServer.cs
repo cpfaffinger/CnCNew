@@ -409,7 +409,20 @@ public sealed partial class RelayServer
                 CheckAllLoaded();
                 break;
             case ChatRequestMessage chat:
-                Broadcast(new ChatMessage(peer.Id, chat.Text));
+                // A line to the allies exists once a match has teams: the members whose seats are in the sender's team, or - from somebody who watches - the
+                // others who watch. A seat in no team has no allies but itself.
+                if (!chat.AlliesOnly || Phase == RoomPhase.Room) Broadcast(new ChatMessage(peer.Id, chat.Text));
+                else
+                {
+                    var team = peer.Slot >= 0 && peer.Slot < Settings.Slots.Length ? Settings.Slots[peer.Slot].Team : -1;
+                    var line = MessageCodec.Encode(new ChatMessage(peer.Id, chat.Text, true));
+                    foreach (var other in _peers)
+                    {
+                        var allied = other == peer || (team < 0 ? other.Slot < 0 : team > 0 && other.Slot >= 0 && other.Slot < Settings.Slots.Length && Settings.Slots[other.Slot].Team == team);
+                        if (allied) other.Connection.Send(line);
+                    }
+                    AlliedChatLines++;
+                }
                 break;
             case KickMessage kick:
                 Kick(peer, kick.ConnectionId);
@@ -524,6 +537,9 @@ public sealed partial class RelayServer
         BroadcastRoom();
     }
 
+    /// <summary>Chat lines that went to a sender's allies only.</summary>
+    public long AlliedChatLines { get; private set; }
+
     private void Configure(Peer host, RoomSettings settings)
     {
         if (settings.TickRate is not (30 or 60 or 120) || settings.Slots.Length is < 2 or > Protocol.MaxSlots || settings.MaxTicks <= 0 || settings.StartMoney < 0
@@ -542,14 +558,23 @@ public sealed partial class RelayServer
             Refuse(host, RejectReason.InvalidRequest, "This server chooses the seeds.");
             return;
         }
+        // The one change that takes nobody's word back: seats nobody sits in are closed and nothing else differs. It is what a host does before it starts - the
+        // match is the one everybody said "ready" to, without the empty seats.
+        var before = Settings;
+        var onlyClosesEmptySeats = before.Slots.Length == settings.Slots.Length && (before with { Slots = settings.Slots }).SameAs(settings);
+        for (var slot = 0; onlyClosesEmptySeats && slot < settings.Slots.Length; slot++)
+        {
+            if (before.Slots[slot] == settings.Slots[slot]) continue;
+            onlyClosesEmptySeats = before.Slots[slot].Kind == MatchSlotKind.Human && settings.Slots[slot] == before.Slots[slot] with { Kind = MatchSlotKind.Closed } && _peers.All(peer => peer.Slot != slot);
+        }
         Settings = settings;
         // A member keeps its seat when the new layout still has it as a seat for a player; a seat that is gone or no longer a player's is left. Nobody's "ready"
-        // survives: it was given for other settings. (A host changes the money or a computer slot while people sit in the room; they shall not be thrown out of
-        // their seats for it, and they shall see the change before the match starts.)
+        // survives any other change: it was given for other settings. (A host changes the money or a computer slot while people sit in the room; they shall not
+        // be thrown out of their seats for it, and they shall see the change before the match starts.)
         foreach (var peer in _peers)
         {
             if (peer.Slot >= settings.Slots.Length || (peer.Slot >= 0 && settings.Slots[peer.Slot].Kind != MatchSlotKind.Human)) peer.Slot = -1;
-            peer.Ready = false;
+            if (!onlyClosesEmptySeats) peer.Ready = false;
         }
         BroadcastRoom();
     }
@@ -837,7 +862,7 @@ public sealed partial class RelayServer
                 peer.LagReported = reported;
                 peer.LagThrottling = slows;
                 peer.LagReportedAtMicros = now;
-                Broadcast(new LagStateMessage(peer.Id, reported, slows));
+                Broadcast(new LagStateMessage(peer.Id, reported, slows, slows ? (int)Math.Max(0, _options.ThrottleLimitMs - peer.ThrottledMicros / 1000) : -1));
             }
         }
         if (throttle == Throttling) return;

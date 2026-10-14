@@ -603,3 +603,32 @@ immediately before the step of the tick its scheduler gave it. The HUD hangs on 
 With no input delay the final answer comes with the next step after the order, and the two answers agree unless the world changed in between. `MatchController` wires
 `CommandResolved` to the controller; a mission uses the same events. Tests: `HudTests`, the three "Lockstep probe" tests (real clicks at 0, 4 and 12 ticks of delay; the late
 refusal of an order whose unit was destroyed on the way is shown and counted).
+
+## 21. Phase 29: the indicators of a match of a server (`NetHud`)
+
+`src/CnCNew.Game/Hud/NetHud.cs`. A match that runs through a server somewhere else (`LiveMatch.Remote`) has a `NetHud` in its `MatchController` (`Net`); a local
+match has none. It reads the protocol client of the connection and the playback of the lockstep driver through `INetMatchSource` (`LiveMatchNetSource`; a test hands
+in its own) and never the simulation. Everything it shows is this project's own English (`NetText`). No human has seen it.
+
+| Where | What | From |
+| --- | --- | --- |
+| top right | `Ping 42 ms, buffer 18 ms`, with `, catching up` or `, slowing down` while the game runs more than 2 % off the server's clock to get to its place; green below 120 ms of round trip, yellow below 250 ms, red from there and whenever the server waits for this game | the clock's round trip, the playback delay and its rate adjustment |
+| top left | `Observing - this game gives no orders` | a viewer without a seat |
+| panel under the top edge | **Waiting for players**: `Bob is 1.2 s behind`; once the game is slowed for him `Bob is 2.6 s behind - dropped in 8 s` (the deadline is the server's, counted down here between two of its messages); `Carol lost the connection - the seat is held for 255 s` | `LagState` with `DropInMs` (docs/NETWORK-PROTOCOL.md section 22.3), `SeatState` |
+| banner under it | `Paused by Alice` / `Paused by you`; `The game runs at half speed until everybody has caught up`; `Game speed 150 %` | `PaceState`, `LagState.Throttling` |
+| the HUD's message list | what happens once: `Bob lost the connection.` and the other six drop reasons in their own words; `Carol is back.`; `Carol did not come back in time.`; `The games are out of sync since tick N. A diagnostics package is written to DIR`; chat lines `Bob: gl hf`, `Carol (to allies): north` | `PlayerDropped`, `SeatState`, `Desync`, `ChatMessage` |
+| above the control bar, left | the chat line being typed: `To all: ...` / `To allies: ...` | Enter opens a line to everybody, Backspace one to the allies (as in the original); Enter sends, Escape drops it; while it is open the keys are letters, not hotkeys |
+
+A desync ends the match: the score screen then carries the server's words and where the diagnostics package was written (`<net-dir>/diagnostics`,
+docs/NETWORK-DIAGNOSTICS.md) as a message over it (docs/GAME-SHELL.md section 15.4). The original's `DisconnectScreen.wnd` and `ObserverQuit.wnd` are not used: the
+first is built around votes to kick a player, which this server does not have (decision D-23); what it would show - who is waited for and for how long - is the
+panel. A match that is watched through `--join --watch` uses the spectator's own HUD and has no `NetHud`.
+
+`--net-stats` prints the same on the console: `net-status:` (the connection line, the quality, the panel, the banner) every five seconds and whenever what the panel
+or the banner says changes, and `net-notice:` for every line that went to the message list.
+
+Tests: `NetHudTests` - every state from a scripted source, its words, and with game data its picture in six resolutions (23 states, 138 hashes in
+`baselines/net-hud.txt`, no two alike; every `DropReason` is a line of the message list with a hash of its own); `NetShellTests` "In the match" - two games on a
+hosted server: the connection line, a chat line to all and one to the allies, a pause that names who asked, read from the HUD of both;
+`scripts/check-net-acceptance.ps1` - two window clients name a held seat, a return, a stalled client, a seat given up and a pause in their `net-status` and
+`net-notice` lines.

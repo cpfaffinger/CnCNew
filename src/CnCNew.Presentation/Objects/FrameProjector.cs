@@ -30,6 +30,13 @@ public sealed record FrameProjectorOptions
 
     /// <summary>A move longer than this within one tick is a teleport and is not interpolated.</summary>
     public float SnapDistance { get; init; } = 100f;
+
+    /// <summary>
+    /// Between two ticks the health bar, the construction progress, the travel of the wheels and treads and the pose of the chassis (pitch, roll, lift, steering,
+    /// springs) are drawn where they are on their way, as position, heading and turret always were (docs/PRESENTATION-OBJECTS.md section 12). Off: they step with
+    /// the tick, as before Phase 29 - for a comparison, and for whoever wants the steps. A frame drawn exactly at a tick is the same either way.
+    /// </summary>
+    public bool InterpolateValues { get; init; } = true;
 }
 
 /// <summary>
@@ -242,9 +249,15 @@ public sealed class FrameProjector
     /// <summary>Scenery items hidden because the viewer has not explored their ground (0 without a viewer).</summary>
     public int ShroudedScenery => _options.Viewer is null ? 0 : _options.Scenery.Count(item => !_claimed[item.Index] && !_explored[item.Index]);
 
-    public RenderFrame Project(float alpha)
+    /// <param name="ahead">
+    /// 0 to 1: the next tick is late by this much of a tick (a match of a server whose bundle has not arrived). What moved in the last tick is drawn on along that
+    /// step instead of standing still - an extrapolation of at most one tick. Nothing is remembered of it: the frame after the tick arrived is drawn from the tick's
+    /// own state, so a unit that did not go on as assumed (it stopped, it turned) is simply drawn where it is.
+    /// </param>
+    public RenderFrame Project(float alpha, float ahead = 0f)
     {
         alpha = Math.Clamp(alpha, 0f, 1f);
+        ahead = alpha >= 1f ? Math.Clamp(ahead, 0f, 1f) : 0f;
         var drawables = ImmutableArray.CreateBuilder<DrawableInstance>(_currentOrdered.Length + _ghosts.Count + _options.Scenery.Length);
         var ghosts = _ghosts.Values.ToArray();
         var nextGhost = 0;
@@ -258,6 +271,7 @@ public sealed class FrameProjector
             {
                 position = Vector3.Lerp(previous.Position, capture.Position, alpha);
                 yaw = LerpAngle(previous.Yaw, capture.Yaw, alpha);
+                if (ahead > 0f) position += (capture.Position - previous.Position) * ahead;
             }
             drawables.Add(ToDrawable(capture, position, yaw, false, _previous.GetValueOrDefault(capture.Id), alpha));
         }
@@ -270,7 +284,7 @@ public sealed class FrameProjector
             drawables.Add(new DrawableInstance(EntityId.Invalid, item.Index, item.Visual, item.Position, item.Yaw, PlayerId.System, TeamColors.Neutral,
                 1f, 1f, baseConditions, _scenerySelections[item.Index], null, null, true, false, Fogged: _options.Viewer is not null && _sceneryFogged[item.Index]));
         }
-        return new RenderFrame(Tick, alpha, _options.Viewer, drawables.ToImmutable());
+        return new RenderFrame(Tick, alpha, _options.Viewer, drawables.ToImmutable()) { Ahead = ahead };
     }
 
     /// <summary>Shortest-arc interpolation of two angles in radians.</summary>
@@ -350,13 +364,24 @@ public sealed class FrameProjector
 
     private DrawableInstance ToDrawable(Capture capture, Vector3 position, float yaw, bool ghost, Capture? previous = null, float alpha = 1f) => new(
         new EntityId(capture.Id), -1, capture.Visual, position, yaw, capture.Owner, _houseColors.TryGetValue(capture.Id, out var scripted) ? scripted : _options.Colors?.Of(capture.Owner) ?? TeamColors.Neutral,
-        capture.Health01, capture.Construction01, capture.Conditions, capture.Selections,
+        Mix(previous?.Health01, capture.Health01, alpha), Mix(previous?.Construction01, capture.Construction01, alpha), capture.Conditions, capture.Selections,
         Blend(previous?.TurretYaw, capture.TurretYaw, alpha), Blend(previous?.TurretPitch, capture.TurretPitch, alpha), false, ghost,
-        Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), capture.Travel, capture.FiredSlots,
+        Blend(previous?.AltTurretYaw, capture.AltTurretYaw, alpha), Blend(previous?.AltTurretPitch, capture.AltTurretPitch, alpha), Mix(previous?.Travel, capture.Travel, alpha), capture.FiredSlots,
         capture.HealedAtTick >= 0 && Tick - capture.HealedAtTick <= _healingIconTicks && capture.Health01 < 1f && Tick > _healingIconTicks && !capture.Visual.IsKindOf("NO_HEAL_ICON") && !capture.Conditions.Contains(ModelConditions.Sold),
-        ghost, capture.Chassis, ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame));
+        ghost, Mix(previous?.Chassis, capture.Chassis, alpha), ghost ? Vector3.Zero : _flashes.TintAt(capture.Id, _frame));
 
     private static float? Blend(float? from, float? to, float alpha) => to is null ? null : from is null ? to : LerpAngle(from.Value, to.Value, alpha);
+
+    /// <summary>A value on its way from the last tick's to this tick's; this tick's when there was none before, at the tick itself, or when the option is off.</summary>
+    private float Mix(float? from, float to, float alpha) => from is null || alpha >= 1f || !_options.InterpolateValues ? to : from.Value + (to - from.Value) * alpha;
+
+    private ChassisPose Mix(ChassisPose? from, ChassisPose to, float alpha)
+    {
+        if (from is not { } before || alpha >= 1f || !_options.InterpolateValues) return to;
+        float Part(float a, float b) => a + (b - a) * alpha;
+        return new ChassisPose(Part(before.Pitch, to.Pitch), Part(before.Roll, to.Roll), Part(before.LiftZ, to.LiftZ), LerpAngle(before.WheelAngle, to.WheelAngle, alpha),
+            Part(before.FrontLeft, to.FrontLeft), Part(before.FrontRight, to.FrontRight), Part(before.RearLeft, to.RearLeft), Part(before.RearRight, to.RearRight));
+    }
 
     internal static ImmutableArray<DrawModuleSelection> Select(ObjectVisual visual, ModelConditionSet conditions)
     {

@@ -77,4 +77,7 @@ public sealed record DrawableInstance(
 public sealed record RenderFrame(long Tick, float Alpha, PlayerId? Viewer, ImmutableArray<DrawableInstance> Drawables)
 {
     public static RenderFrame Empty { get; } = new(-1, 1f, null, []);
+
+    /// <summary>How far beyond its tick the frame was drawn, 0 to 1 (<see cref="FrameProjector.Project"/>): the next tick was late and what moved was drawn on.</summary>
+    public float Ahead { get; init; }
 }

@@ -33,6 +33,7 @@ try
         case "scenario-audit": return CnCNew.PresentationTool.ScenarioAudit.Run(args[1..]);
         case "road-audit": return CnCNew.PresentationTool.RoadAudit.Run(args[1..]);
         case "sync-perf": return CnCNew.PresentationTool.SyncPerfCommand.Run(args[1..]);
+        case "smoothness": return CnCNew.PresentationTool.SmoothnessCommand.Run(args[1..]);
         default:
             Console.Error.WriteLine(Usage);
             return 2;

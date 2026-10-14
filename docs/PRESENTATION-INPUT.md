@@ -607,3 +607,17 @@ that server and no other; without it the client remembers the key of every serve
 `--no-player-key` states none. The client prints what it did (`join: first meeting with this server - its key ... is remembered`, `join: this client states the
 player key ...`). All of it is options and console lines; the dialogs a human needs - "this is a new server, its fingerprint is ...", "the server's key has
 changed", a password field, "you were removed from the room" - are Phase 29.
+
+### 13.8 Since Phase 29: the feedback of a click on a line with delay
+
+The HUD answers a click in the frame it is given in - the marker of the order, the acknowledgement, the "cannot do that" - from the local pre-check
+(`SimulationWorld.Check`, section 13.1); the simulation's own answer comes with the execution, after the way to the server and back, and corrects the pre-check only
+when the two differ (counted as a deviation). Phase 29 measured this instead of assuming it (`NetStats`, the client's `--net-stats`; docs/MULTIPLAYER-FINDINGS.md
+section 3): from the release of a synthetic click to the end of the first drawn frame that shows the HUD's answer, to the tick the order runs in, and to the first
+frame after that - on a local match and through a proxy with 0, 20, 40 and 80 ms each way. The stand-in is a person as far as the HUD can tell: the camera is put
+over a unit of the viewer, the unit is selected, the pointer looks for ground where the cursor says "move", and the mouse button that gives orders is pressed and
+released there. The other player of each line is a client without a window, without pictures and without feedback; the two report the same session hash for every
+tick - the feedback is display, and no hash depends on it.
+
+**Standing orders with delay.** `StandingOrders` judges a unit again only when its last command has arrived (Phase 24). `HudTests` ("Standing orders with delay") gives a waypoint path of three stations through the HUD with an input
+delay of 6 ticks and checks that a standing order is neither given twice nor late.

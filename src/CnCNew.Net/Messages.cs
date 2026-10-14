@@ -654,14 +654,22 @@ public sealed record AllLoadedMessage(long StartTick) : NetMessage
     internal static AllLoadedMessage Read(ref WireReader reader) => new(reader.I64());
 }
 
-public sealed record ChatRequestMessage(string Text) : NetMessage
+/// <param name="AlliesOnly">In a match: only for the members whose seats are in the sender's team (a watcher's line: only for the other watchers). Before a match a room has no teams yet - the line goes to everybody.</param>
+public sealed record ChatRequestMessage(string Text, bool AlliesOnly = false) : NetMessage
 {
     public override MessageType Type => MessageType.Chat;
-    internal override void Write(WireWriter writer) => writer.Text(Text, Protocol.MaxChatBytes);
-    internal static ChatRequestMessage Read(ref WireReader reader) => new(reader.Text(Protocol.MaxChatBytes));
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.Text(Text, Protocol.MaxChatBytes);
+        writer.Bool(AlliesOnly);
+    }
+
+    internal static ChatRequestMessage Read(ref WireReader reader) => new(reader.Text(Protocol.MaxChatBytes), reader.Bool());
 }
 
-public sealed record ChatMessage(uint ConnectionId, string Text) : NetMessage
+/// <param name="AlliesOnly">The server sent this line only to the sender's allies.</param>
+public sealed record ChatMessage(uint ConnectionId, string Text, bool AlliesOnly = false) : NetMessage
 {
     public override MessageType Type => MessageType.ChatMessage;
 
@@ -669,9 +677,10 @@ public sealed record ChatMessage(uint ConnectionId, string Text) : NetMessage
     {
         writer.U32(ConnectionId);
         writer.Text(Text, Protocol.MaxChatBytes);
+        writer.Bool(AlliesOnly);
     }
 
-    internal static ChatMessage Read(ref WireReader reader) => new(reader.U32(), reader.Text(Protocol.MaxChatBytes));
+    internal static ChatMessage Read(ref WireReader reader) => new(reader.U32(), reader.Text(Protocol.MaxChatBytes), reader.Bool());
 }
 
 /// <summary>
@@ -1023,7 +1032,8 @@ public sealed record PongMessage(long ClientMicros, long GameMicros, ushort Spee
 }
 
 /// <summary>Server to every client: a member is this far behind the server's ticks, in milliseconds of game time (0: it has caught up), and whether the game is slowed for it.</summary>
-public sealed record LagStateMessage(uint ConnectionId, int LagMs, bool Throttling) : NetMessage
+/// <param name="DropInMs">While the game is slowed for this member: how long the server will still slow it before it drops the member, in milliseconds; -1 otherwise. What a client shows as the deadline.</param>
+public sealed record LagStateMessage(uint ConnectionId, int LagMs, bool Throttling, int DropInMs = -1) : NetMessage
 {
     public override MessageType Type => MessageType.LagState;
 
@@ -1032,12 +1042,14 @@ public sealed record LagStateMessage(uint ConnectionId, int LagMs, bool Throttli
         writer.U32(ConnectionId);
         writer.I32(LagMs);
         writer.Bool(Throttling);
+        writer.I32(DropInMs);
     }
 
     internal static LagStateMessage Read(ref WireReader reader)
     {
-        var message = new LagStateMessage(reader.U32(), reader.I32(), reader.Bool());
+        var message = new LagStateMessage(reader.U32(), reader.I32(), reader.Bool(), reader.I32());
         if (message.LagMs < 0) throw new ProtocolException("A negative lag.");
+        if (message.DropInMs < -1) throw new ProtocolException("A negative deadline.");
         return message;
     }
 }

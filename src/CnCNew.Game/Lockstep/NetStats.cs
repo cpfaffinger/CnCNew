@@ -32,6 +32,7 @@ public sealed class NetStats
     private readonly Series _speed = new(), _turret = new(), _health = new(), _construction = new(), _travel = new();
     private long _movingFrames, _jumps, _holds, _pictures;
     private double _fastest;
+    private long _aheadFrames, _fullFrames;
 
     private sealed class Track
     {
@@ -93,7 +94,8 @@ public sealed class NetStats
     }
 
     /// <summary>A frame was drawn and handed to the display: whatever waited for "the first frame that shows it" is closed, and the frame's picture is measured.</summary>
-    public void FrameDrawn(RenderFrame? frame)
+    /// <param name="frameMilliseconds">The time since the last frame when the caller draws on a clock of its own (a recorded match at a fixed frame rate); null measures it.</param>
+    public void FrameDrawn(RenderFrame? frame, double? frameMilliseconds = null)
     {
         var now = Stopwatch.GetTimestamp();
         // The HUD answers a click in the frame it is given in, or not at all.
@@ -103,11 +105,13 @@ public sealed class NetStats
         _awaitFeedbackFrame.Clear();
         foreach (var click in _awaitExecutionFrame) _executionFrameMs.Add(Stopwatch.GetElapsedTime(click, now).TotalMilliseconds);
         _awaitExecutionFrame.Clear();
-        var milliseconds = _lastFrame < 0 ? 0 : Stopwatch.GetElapsedTime(_lastFrame, now).TotalMilliseconds;
+        var milliseconds = frameMilliseconds ?? (_lastFrame < 0 ? 0 : Stopwatch.GetElapsedTime(_lastFrame, now).TotalMilliseconds);
         if (_lastFrame >= 0) _frameMs.Add(milliseconds);
         _lastFrame = now;
         if (frame is null || milliseconds <= 0) return;
         _pictures++;
+        if (frame.Ahead > 0f) _aheadFrames++;
+        if (frame.Alpha >= 1f && frame.Ahead <= 0f) _fullFrames++;
         var number = _frameMs.Count;
         foreach (var drawable in frame.Drawables)
         {
@@ -189,7 +193,7 @@ public sealed class NetStats
         lines.Add(Histogram("order-delay-in-game-time", "ms", _executionTicks));
         lines.Add(Histogram("frame-time", "ms", _frameMs));
         lines.Add(string.Create(CultureInfo.InvariantCulture,
-            $"net-stats: motion: pictures={_pictures} objects={_tracks.Count} fastest={_fastest:F1} movingUnitFrames={_movingFrames} jumps={_jumps} jumpShare={(_movingFrames == 0 ? 0 : 100.0 * _jumps / _movingFrames):F3}% holds={_holds} holdShare={(_movingFrames == 0 ? 0 : 100.0 * _holds / _movingFrames):F3}%"));
+            $"net-stats: motion: pictures={_pictures} drawnAhead={_aheadFrames} atTheTick={_fullFrames} objects={_tracks.Count} fastest={_fastest:F1} movingUnitFrames={_movingFrames} jumps={_jumps} jumpShare={(_movingFrames == 0 ? 0 : 100.0 * _jumps / _movingFrames):F3}% holds={_holds} holdShare={(_movingFrames == 0 ? 0 : 100.0 * _holds / _movingFrames):F3}%"));
         lines.Add(Steps("speed-change", _speed, 100, "% of the previous frame's speed"));
         lines.Add(Steps("turret", _turret, 180 / Math.PI, "degrees"));
         lines.Add(Steps("health", _health, 100, "% of full"));

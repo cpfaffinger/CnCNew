@@ -78,6 +78,9 @@ public sealed class LockstepClient
 
     /// <summary>The seats the server keeps free for players that lost their connection, by player.</summary>
     public IReadOnlyDictionary<int, SeatStateMessage> HeldSeats => _heldSeats;
+    /// <summary>Every change of a seat's hold the server told of, in the order it came: held, returned, given up. What a client turns into notices.</summary>
+    public IReadOnlyList<SeatStateMessage> SeatEvents => _seatEvents;
+    private readonly List<SeatStateMessage> _seatEvents = [];
     private readonly SortedDictionary<int, SeatStateMessage> _heldSeats = [];
 
     public void OfferSnapshot(uint requestId, ResumeState state) => Send(new SnapshotOfferMessage(requestId, state));
@@ -129,6 +132,8 @@ public sealed class LockstepClient
     public long StartTick => Start?.Resume?.Tick ?? 0;
 
     public bool Paused { get; private set; }
+    /// <summary>The connection whose request the room's pace last followed (who paused); 0 before any.</summary>
+    public uint PausedBy { get; private set; }
     public int SpeedPercent { get; private set; } = 100;
     public DesyncMessage? Desync { get; private set; }
     public MatchEndMessage? End { get; private set; }
@@ -260,6 +265,7 @@ public sealed class LockstepClient
             case PaceStateMessage pace:
                 Paused = pace.Paused;
                 SpeedPercent = pace.SpeedPercent;
+                PausedBy = pace.RequestedBy;
                 break;
             case PlayerDroppedMessage dropped:
                 _dropped.Add(dropped);
@@ -279,6 +285,7 @@ public sealed class LockstepClient
                 SnapshotRequested?.Invoke(request.RequestId);
                 break;
             case SeatStateMessage seat:
+                _seatEvents.Add(seat);
                 if (seat.State == SeatHold.Held) _heldSeats[seat.Player] = seat;
                 else _heldSeats.Remove(seat.Player);
                 break;
@@ -299,7 +306,7 @@ public sealed class LockstepClient
     public void LeaveSlot() => Send(new SlotRequestMessage(SlotRequestMessage.Leave, string.Empty, 0, -1, -1));
     public void SetReady(bool ready) => Send(new ReadyMessage(ready));
     public void RequestStart(ResumeState? resume = null) => Send(new StartRequestMessage(resume));
-    public void SendChat(string text) => Send(new ChatRequestMessage(text));
+    public void SendChat(string text, bool alliesOnly = false) => Send(new ChatRequestMessage(text, alliesOnly));
 
     /// <summary>Sends bytes as they are, as a message of this connection: what a test of the other end's parser sends (docs/DEDICATED-SERVER.md section 9.4).</summary>
     public void SendRaw(byte[] message) => _connection.Send(message);

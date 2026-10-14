@@ -37,6 +37,9 @@ public interface ITickDriver
     /// <summary>How far the present is between the last tick and the next one, 0 to 1: the interpolation fraction of the frame.</summary>
     double Fraction { get; }
 
+    /// <summary>How far, in ticks (0 to 1), the time of the next tick has passed without the tick being played: 0 for a driver whose ticks are never late (a local game).</summary>
+    double Ahead => 0;
+
     /// <summary>Ticks that were due but not released because their bundle was missing (a local game never counts one).</summary>
     long Stalls { get; }
 

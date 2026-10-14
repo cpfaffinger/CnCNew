@@ -1278,3 +1278,44 @@ nonce only, both connects are the same connection and get the same answer; the h
   every run, means within -7.0 % and +0.9 % (8 players, 30 game minutes: 833 against 834 µs per tick, 99 % 2.1 ms on both sides, maximum 148 against 143 ms). The
   phase did not touch the simulation's tick.
 - Endurance of the server: `docs/DEDICATED-SERVER.md` §11.3.
+
+## 22. The client's menus on the wire (Phase 29) - protocol version 5
+
+Protocol version **5**. Transport version 2, `CommandTypes.Version` 17, replay 15, match description encoding 2, session state 2 and every other format of the
+simulation are unchanged; there is no manifest commit.
+
+### 22.1 The list of a server's rooms
+
+| Message | Direction | Content |
+| --- | --- | --- |
+| `RoomListRequest` (38) | client to server, **before** the hello | the protocol version |
+| `RoomList` (39) | server to client | how many rooms there are and how many the server holds; per room (at most `Protocol.MaxListedRooms` = 64, in the order of their names): name, phase, connected members, seated players, seats, whether it has a password, map path, tick rate, the build that opened it |
+
+A connection may ask for the list as long as it has not said hello; each answered request renews its time for the hello. The same connection then says its hello and
+is a member like any other (`RoomBrowser` on the client, `RoomDirectory.AnswerList` on the server). Limits (`DirectoryOptions`): a list at most once a second
+(`ListIntervalMs`; a request that comes sooner is not answered and buys no time - counted in `ListsRefused`), at most 120 lists per connection (`ListsPerConnection`;
+then the connection is turned away - a client that browses for minutes connects again), and `ListRooms` (server configuration `listRooms`, option `--no-room-list`):
+a server that lists nothing answers `InvalidRequest` and a room is entered by its name. A request of another protocol version is answered with both versions.
+**A list says nothing about people:** no name, no address, no key. What it does tell a stranger - which rooms exist, how full they are, which map, which build - is
+line T16 of the threat model (docs/DEDICATED-SERVER.md section 9.1); the default is to list, because a server whose rooms cannot be found needs a second channel for
+every match, and the room names are the operator's users' own choice.
+
+### 22.2 The server as a library
+
+`CnCNew.Server.ServerCore` is the transport endpoint, the directory of rooms and the one round of work that moves both. The dedicated server program and "Host game"
+in the client (`CnCNew.Game.Lockstep.HostedServer`) run this class; what differs is the host around it (docs/DEDICATED-SERVER.md section 14). The layer rules hold:
+the core starts no thread, opens no file and reads no clock but the injected one.
+
+### 22.3 For the room screen and the in-match indicators
+
+- **Seats survive the host's changes.** `RoomConfig` used to empty every seat. Now a member keeps its seat when the new settings still have it as a seat for a
+  player; a seat that is gone or closed is left. Nobody's "ready" survives a change - it was given for other settings.
+- **`LagState`** has a fourth field, `DropInMs`: while the game is slowed for a member, how long the server will still slow it before it drops the member
+  (`ThrottleLimitMs` less what was used); -1 otherwise. It is what a client shows as the deadline, and counts down itself between two messages.
+- **Chat** (`Chat`, `ChatMessage`) has a flag `AlliesOnly`. In a match such a line goes to the members whose seats are in the sender's team (a team of 0 has no
+  allies but itself), from a watcher to the other watchers; the server counts them (`AlliedChatLines`). Before a match a room has no teams: the line goes to
+  everybody and says so.
+- `LockstepClient.PausedBy`: the connection the room's pace last followed (`PaceState.RequestedBy` was sent since Phase 27 and not kept).
+
+Tests: "Room list", "Server core", "In the room and in the match" (`tests/CnCNew.Net.Tests/Phase29Tests.cs`), "Fuzz, directory" (whatever a connection sends before
+it is a member; a browser against a hostile server).

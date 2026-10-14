@@ -193,4 +193,123 @@ static partial class NetTests
         Step(300);
         Check.That(!hostEnd.Connection.IsOpen && !guestEnd.Connection.IsOpen, "and both know before any timeout");
     }
+
+    public static void RoomAndMatchIndicators()
+    {
+        // What the client's indicators are fed by (docs/NETWORK-PROTOCOL.md section 22.3): a seat that survives the host's changes, a chat line for the allies only,
+        // a pause that names who asked, and - for a member the game is slowed for - how long the server will still wait.
+        var clock = new ManualNetClock();
+        clock.Advance(ClockStartMs);
+        var network = new LoopbackNetwork(clock);
+        var seed = 1u;
+        var server = new RelayServer(clock, new RelayOptions(SeedSource: () => ++seed, LagReportMs: 200, LagThrottleMs: 600, ThrottleLimitMs: 3_000, LagRecoveryMs: 30_000));
+        var clients = new List<LockstepClient>();
+        LockstepClient Join(string name)
+        {
+            var (client, relay) = network.Connect();
+            server.Attach(relay);
+            var joined = new LockstepClient(client, name, Definitions, Released);
+            clients.Add(joined);
+            return joined;
+        }
+        var keepsUp = new HashSet<LockstepClient>();
+        void Step(int ms)
+        {
+            for (var elapsed = 0; elapsed < ms; elapsed++)
+            {
+                clock.Advance(1);
+                server.Pump();
+                foreach (var client in clients)
+                {
+                    client.Pump();
+                    // A member that plays along: it completes every tick it was sent and says the hash everybody says.
+                    if (!keepsUp.Contains(client) || client.Phase != ClientPhase.InMatch) continue;
+                    while (client.CompletedTick < client.NewestBundleTick)
+                    {
+                        var tick = client.CompletedTick + 1;
+                        if (client.HasBundle(tick)) client.TakeBundle(tick);
+                        client.ReportHash(tick, 99);
+                        client.ReportCompleted(tick);
+                    }
+                }
+            }
+        }
+        var (host, ally, enemy, watcher) = (Join("host"), Join("ally"), Join("enemy"), Join("watcher"));
+        Step(20);
+        var settings = new RoomSettings(60, "Maps/Test/Test.map", "TERRAIN", 100_000, 500, 60, 0,
+            [new MatchSlotDescription(MatchSlotKind.Human, "Alpha", Team: 1, StartPosition: 0), new MatchSlotDescription(MatchSlotKind.Human, "Beta", Team: 1, StartPosition: 1),
+             new MatchSlotDescription(MatchSlotKind.Human, "Alpha", Team: 2, StartPosition: 2), new MatchSlotDescription(MatchSlotKind.Human, "Beta", Team: 0, StartPosition: 3)]);
+        host.Configure(settings);
+        Step(10);
+        host.RequestSlot(0, "Alpha", 1, -1, 0);
+        ally.RequestSlot(1, "Beta", 1, -1, 1);
+        enemy.RequestSlot(2, "Alpha", 2, -1, 2);
+        ally.SetReady(true);
+        enemy.SetReady(true);
+        Step(10);
+        Check.That(host.Room!.Members.Count(member => member.Slot >= 0) == 3 && host.Room.Members.Count(member => member.Ready) == 2, "three sit, two said ready");
+
+        // ---- The host changes the money: everybody keeps the seat, nobody stays ready. It closes a seat somebody sits in: that member stands up.
+        host.Configure(settings with { StartMoney = 20_000 });
+        Step(10);
+        Check.That(host.Room!.Settings.StartMoney == 20_000 && host.Room.Members.Count(member => member.Slot >= 0) == 3 && !host.Room.Members.Any(member => member.Ready),
+            $"a change of the settings keeps the seats and takes back every 'ready' ({string.Join(", ", host.Room.Members.Select(member => $"{member.Name}@{member.Slot}{(member.Ready ? " ready" : string.Empty)}"))})");
+        host.Configure(settings with { Slots = settings.Slots.SetItem(2, settings.Slots[2] with { Kind = MatchSlotKind.Closed }) });
+        Step(10);
+        Check.That(host.Room!.Members.Single(member => member.Name == "enemy").Slot == -1 && host.Room.Members.Count(member => member.Slot >= 0) == 2, "a seat that is closed is left by who sat in it; the others stay");
+        host.Configure(settings);
+        Step(10);
+        enemy.RequestSlot(2, "Alpha", 2, -1, 2);
+        ally.SetReady(true);
+        enemy.SetReady(true);
+        Step(10);
+
+        // ---- Before the match a line "to the allies" goes to everybody: a room has no teams yet.
+        ally.SendChat("in the room", alliesOnly: true);
+        Step(10);
+        Check.That(clients.All(client => client.Chat.Count == 1 && client.Chat[0] is { Text: "in the room", AlliesOnly: false }), "in the room a line reaches everybody and is marked so");
+
+        // The host closes the seat nobody took - what a start does: nobody's word is taken back by that.
+        host.Configure(settings with { Slots = settings.Slots.SetItem(3, settings.Slots[3] with { Kind = MatchSlotKind.Closed }) });
+        Step(10);
+        Check.That(host.Room!.Settings.Slots[3].Kind == MatchSlotKind.Closed && host.Room.Members.Count(member => member.Ready) == 2, "closing a seat nobody sits in leaves everybody ready");
+        host.RequestStart();
+        Step(10);
+        foreach (var client in clients) client.ReportLoaded(42);
+        foreach (var client in clients) keepsUp.Add(client);
+        Step(200);
+        Check.That(clients.All(client => client.Phase == ClientPhase.InMatch), $"the match runs ({string.Join(", ", clients.Select(client => client.Phase))}; {host.LastRefusal})");
+
+        // ---- In the match: to all, to the allies (the team of the seat), and from a watcher to the watchers.
+        host.SendChat("to everybody");
+        host.SendChat("to my team", alliesOnly: true);
+        enemy.SendChat("alone in my team", alliesOnly: true);
+        watcher.SendChat("we who watch", alliesOnly: true);
+        Step(50);
+        string Heard(LockstepClient client) => string.Join(" | ", client.Chat.Skip(1).Select(line => $"{line.Text}{(line.AlliesOnly ? "*" : string.Empty)}"));
+        Check.That(Heard(host) == "to everybody | to my team*" && Heard(ally) == "to everybody | to my team*", $"host and ally hear the team's line ({Heard(host)}; {Heard(ally)})");
+        Check.That(Heard(enemy) == "to everybody | alone in my team*" && Heard(watcher) == "to everybody | we who watch*", $"the other team and a watcher hear only their own ({Heard(enemy)}; {Heard(watcher)})");
+        Check.That(server.AlliedChatLines == 3, "the server counts the lines it did not send to everybody");
+
+        // ---- A pause names who asked for it.
+        ally.RequestPace(true, 100);
+        Step(50);
+        Check.That(clients.All(client => client.Paused && client.PausedBy == ally.ConnectionId), "everybody is told who paused");
+        ally.RequestPace(false, 100);
+        Step(50);
+        Check.That(clients.All(client => !client.Paused), "and that the pause is over");
+
+        // ---- A member that falls behind: everybody is told how far, and - once the game is slowed for it - how long the server will still wait.
+        keepsUp.Remove(enemy);
+        Step(500);
+        Check.That(host.Lag.TryGetValue(enemy.ConnectionId, out var behind) && behind is { LagMs: >= 200, Throttling: false, DropInMs: -1 }, $"behind but not yet slowing: no deadline ({(host.Lag.TryGetValue(enemy.ConnectionId, out var shown) ? shown : null)})");
+        Step(700);
+        Check.That(host.Lag[enemy.ConnectionId] is { Throttling: true, DropInMs: > 1_500 and <= 3_000 } first, $"slowed for it: the deadline is what is left of the server's limit ({host.Lag[enemy.ConnectionId]})");
+        var before = host.Lag[enemy.ConnectionId].DropInMs;
+        Step(1_500);
+        Check.That(host.Lag[enemy.ConnectionId] is { Throttling: true } later && later.DropInMs < before - 500, $"and it runs down ({before} -> {host.Lag[enemy.ConnectionId].DropInMs})");
+        Step(4_000);
+        Check.That(host.Dropped.Any(dropped => dropped.ConnectionId == enemy.ConnectionId && dropped.Reason == DropReason.TooSlow) && !host.Lag.ContainsKey(enemy.ConnectionId),
+            "when it is over the member is dropped, with the reason, and no longer waited for");
+    }
 }

@@ -42,7 +42,88 @@ roughly 180 ms; one tick is a tenth of that. It could only pay if the interpolat
 
 ## 3. Latency: the numbers
 
-(Filled in by the measurement: `scripts/measure-net-latency.ps1`.)
+14 October 2026, one machine (AMD Ryzen 3 PRO 4350GE, Windows 11, Release), `pwsh scripts/measure-net-latency.ps1 -MatchSeconds 120`: 60 Hz, a display at 60
+frames a second (frame time median 16.7 ms, 99 % 19.1 to 19.8 ms on every line), Alpine Assault, the window client plays USA and its stand-in clicks every two
+seconds - 59 clicks a line, all 59 answered by the HUD and all 59 executed, no deviation between pre-check and execution, none refused. Times in milliseconds.
+"Before" and "after" are the same binaries with `--no-value-interpolation` and without (the interpolation of section T4 off and on); "held" and "ahead" are the
+same binaries without and with `--extrapolate`.
+
+### 3.1 From the click to the first frame that shows it (T1)
+
+| Line | before: median / 95 % / 99 % | after | held | ahead |
+| --- | --- | --- | --- | --- |
+| local (embedded server) | 2.2 / 3.6 / 27.2 | 2.2 / 4.1 / 21.0 | 2.4 / 3.8 / 19.9 | 2.2 / 3.3 / 19.3 |
+| 0 ms each way | 1.9 / 3.7 / 20.5 | 2.1 / 5.2 / 20.5 | 2.1 / 3.6 / 20.2 | 2.1 / 9.0 / 23.3 |
+| 20 ms | 1.7 / 3.0 / 19.3 | 2.1 / 4.2 / 25.0 | 2.0 / 3.6 / 22.6 | 2.0 / 3.3 / 22.3 |
+| 40 ms | 1.9 / 5.1 / 23.3 | 1.9 / 9.3 / 22.7 | 2.0 / 3.4 / 19.1 | 2.0 / 3.8 / 22.6 |
+| 80 ms | 1.9 / 3.3 / 19.7 | 1.9 / 3.1 / 19.7 | 2.1 / 3.7 / 23.3 | 1.9 / 8.9 / 24.5 |
+
+**T1 holds** in all twenty measurements: the 99 % value is at most 27.2 ms (limit 34), and every median lies within 0.5 ms of the local line's (limit 5). The
+marker of an order stands in the frame of the click whatever the line. With 59 clicks the 99 % value is the largest one measured; it is one frame that took longer.
+What the number is: from the input event inside the client to the end of the draw of the frame that carries the HUD's answer - not the device's own delay before
+the event, and not the display's after the draw.
+
+### 3.2 From the click to the execution (T2)
+
+| Line | Click to execution: median / 99 % (after) | Order delay in game time: median | For comparison: twice the delay |
+| --- | --- | --- | --- |
+| local | 0.3 / 27.5 | 0 | 0 |
+| 0 ms | 17.1 / 35.1 | 16.7 | 0 |
+| 20 ms | 50.5 / 68.7 | 50.0 | 40 |
+| 40 ms | 100.3 / 119.2 | 100.0 | 80 |
+| 80 ms | 183.5 / 202.0 | 183.3 | 160 |
+
+An order is executed twice the delay plus one or two ticks later (17 to 33 ms: the tick it is put into and the playback delay; between two runs of the same line
+the median moved by one tick, 16.7 ms, on three lines). This is what the network costs; the frame after the execution follows 2 ms later. The feedback of T1 is what
+bridges it - on the 80 ms line the marker stands 181 ms before the unit turns.
+
+### 3.3 How evenly units move (T3) - **the threshold was not met, and the remedy it prescribed does nothing**
+
+| Line | Jumps: before / after / held / ahead | Holds: before / after / held / ahead | Frames in which a unit moved (held) |
+| --- | --- | --- | --- |
+| local | 2.28 / 2.58 / 2.66 / 2.10 % | 0.63 / 0.62 / 0.62 / 0.63 % | 5,119 of 7,161 |
+| 0 ms | 4.98 / 5.30 / 4.48 / 5.49 % | 1.44 / 1.44 / 1.44 / 1.44 % | 3,548 of 7,180 |
+| 20 ms | 4.28 / 4.80 / 4.91 / 4.37 % | 1.44 / 1.44 / 1.44 / 1.44 % | |
+| 40 ms | 4.81 / 4.86 / 4.71 / 4.55 % | 1.44 / 1.44 / 1.44 / 1.44 % | |
+| 80 ms | 4.10 / 4.45 / 4.31 / 4.53 % | 1.22 / 1.22 / 1.21 / 1.22 % | 3,874 of 7,176 |
+
+By the letter of T3 the jumps exceed the local line by more than 2 percentage points on three of the four network lines (by 2.0 to 2.7 points; the holds stay
+within 0.8, the frame time within 0.2 ms). The consequence written down beforehand was carried out: **an extrapolation was built, switchable**
+(`FrameProjector.Project(alpha, ahead)`, `LiveGame.Extrapolate`, the client's `--extrapolate`: when the next tick is late, what moved in the last tick is drawn on
+along that step for up to one tick; nothing is remembered, so the frame after the tick arrived is drawn from the tick's own state) and all lines were measured
+again with and without it.
+
+**It changes nothing**: jumps 4.3 to 5.5 % with it against 4.3 to 4.9 % without, the holds identical to the hundredth. And the measurement says why: a frame was
+drawn ahead in **0 to 5 of 7,178 frames** a line. The playback delay does what it was built for (docs/NETWORK-PROTOCOL.md section 15) - the next tick is there
+when its time comes - so there is next to nothing for an extrapolation to bridge. It is therefore **off by default** and stays in the code as an option.
+
+What the excess over the local line is, read from the same numbers (an interpretation made after the measurement, named as one): the local line is not the same
+match. Against the computer player the stand-in's unit moves in 71 % of the frames, in the two-player matches of the network lines in 49 to 54 %; the number of
+holds is the number of times the unit stopped to turn (32 locally, 47 to 51 on the lines, of 59 orders each), and a share of fewer moving frames is larger. The
+comparison that isolates the network is among the network lines: from 0 to 80 ms neither jumps (4.5 / 4.9 / 4.7 / 4.3 % held) nor holds (1.44 / 1.44 / 1.44 /
+1.21 %) grow with the delay. **A local line as the yardstick for evenness was a mistake of the set-up; T3 as written is reported as not met, not as passed.** What
+a human would have to judge: whether a unit that turns on the spot before it drives reads as stutter - it is the same with and without a network.
+
+### 3.4 The newly interpolated quantities (T4) - holds
+
+`PresentationTool smoothness` (no window): two computer players on Alpine Assault, 240 s at 60 Hz, drawn at 144 frames a second, every object visible.
+
+| Quantity | Frames in which it changed: stepped / interpolated | Ratio | Median step: stepped / interpolated | 99 % step | Largest step |
+| --- | --- | --- | --- | --- | --- |
+| health, % of full | 6,831 / 17,088 | 2.50 | 0.166 / 0.069 | 13.9 / 5.0 | 100 / 41.7 |
+| construction, % of done | 5,933 / 14,246 | 2.40 | 0.167 / 0.069 | 0.167 / 0.069 | 0.333 / 0.139 |
+| wheel travel, world units | 129,264 / 310,739 | 2.40 | 0.333 / 0.139 | 3.75 / 1.56 | 7.27 / 3.03 |
+
+A quantity that changes every tick changes in 60 of 144 frames when it steps with the tick (42 %); 2.40 times as many frames is every frame in which it is on its
+way (100 %, limit 90 %). The steps fall by the same factor. The hash over all frames drawn exactly at a tick (2,880 of 34,561) is the same in both runs
+(`57E1055BCB023F00`), and so is the session hash at the end (`A25B297D4EA516BA`). The pose of the chassis is interpolated by the same rule and was not measured on
+its own. On the latency lines (60 frames a second at 60 Hz, where a frame usually is a tick) "before" and "after" do not differ beyond their scatter, as expected.
+
+### 3.5 No influence on the simulation (T5) - holds
+
+On every one of the sixteen network lines the window client (HUD, feedback, statistics, pictures, with and without interpolation and extrapolation) and the client
+without a window ended with the same hash chain over all 7,200 ticks, and the server agreed on the session hash of both through tick 7,198 or 7,199 (the last
+reports are on their way when the match ends). No desync, no deviation between a pre-check and its execution in 944 orders.
 
 ## 4. The acceptance lines of the brief
 

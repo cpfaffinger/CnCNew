@@ -61,11 +61,13 @@ run.Test("Player keys: a stated key is proved by a signature over the room's non
 run.Test("A member that stays just below every limit holds nobody up: behind but under the rule, late with its hashes but inside the limit - and gone when it crosses either", NetTests.MaliciouslySlowClient);
 run.Test("Room list: rooms by name with phase, counts, map and lock, nothing about people; the browsing connection enters a room; too soon, too often, not at all, another version; more rooms than a list names", NetTests.RoomList);
 run.Test("Server core: the server as a library - two clients find and enter a room of a hosted server through the sealed transport, play a paced match, and are told when the host stops", NetTests.ServerCoreHostsRooms);
+run.Test("In the room and in the match: seats survive the host's changes and nobody stays ready; chat to all, to the allies, among watchers; a pause names who asked; the deadline of a member the game waits for", NetTests.RoomAndMatchIndicators);
 run.Test("Hostile members: garbage commands are left out by every client alike, system commands never pass the relay; a flood, withheld hashes and a kick leave the others in step", NetTests.HostileMembers);
 run.Test("Secrets stay off the wire: no rejoin token, name, room, password, verifier or chat is readable in any datagram of a room on the sealed transport", NetTests.SecretsStayOffTheWire);
 run.Test("Fuzz, messages: changed and random messages never throw, a refusal names its reason, what decodes encodes again to the same bytes", NetTests.FuzzMessages);
 run.Test("Fuzz, transport: changed datagrams never throw in the format, a link or a server endpoint, open no connection, deliver nothing, and the real client is still heard", NetTests.FuzzTransport);
 run.Test("Fuzz, relay: changed messages of a member, a stranger and a player never throw in the room and leave the match of the honest clients in step; a client survives a hostile server", NetTests.FuzzRelay);
+run.Test("Fuzz, directory: whatever a connection sends before it is a member - a list request, a hello or neither - never throws at the front of a server, holds no room for ever and leaves the people in a room alone; a browser survives a hostile server", NetTests.FuzzDirectory);
 run.Test("Fuzz, commands: real orders with changed bytes are refused by the wire, rejected by the simulation or simulated - no exception in the pre-check, the submission or the ticks after", NetTests.FuzzCommands);
 run.Test("Fuzz, states: a damaged or rewritten session state is refused in the words a client understands, never with another exception", NetTests.FuzzStates);
 run.Test("Layer rules: project references, no game data in the server, no clock but the injected one", NetTests.LayerRules);
@@ -228,7 +230,7 @@ static partial class NetTests
             new HelloMessage(Protocol.Version, "id", 1, 2, 3, 4, "F", "n", "room", 0, false, RoomPassword.Verifier("secret", "room")),
             new PlayerDroppedMessage(2, 4, DropReason.Kicked), new PlayerDroppedMessage(2, 4, DropReason.Flood), new MatchEndMessage(9, 0, EndReason.ServerLimit),
             new RejectMessage(RejectReason.BadPassword, "no"), new RejectMessage(RejectReason.Kicked, "out"),
-            new PingMessage(123_456_789_012, 77), new PongMessage(123_456_789_012, 9_876_543_210, 50), new LagStateMessage(3, 2_500, true), new LeaveMessage(),
+            new PingMessage(123_456_789_012, 77), new PongMessage(123_456_789_012, 9_876_543_210, 50), new LagStateMessage(3, 2_500, true, 7_500), new LagStateMessage(3, 600, false), new LeaveMessage(),
             new WelcomeMessage(7, true),
             new RejectMessage(RejectReason.SimulationVersion, "other build"),
             new RoomConfigMessage(settings),
@@ -243,8 +245,8 @@ static partial class NetTests
             new LoadProgressStateMessage(3, 100),
             new LoadedMessage(0x0123456789ABCDEF),
             new AllLoadedMessage(1234),
-            new ChatRequestMessage("hello"),
-            new ChatMessage(2, "hello"),
+            new ChatRequestMessage("hello"), new ChatRequestMessage("north", true),
+            new ChatMessage(2, "hello"), new ChatMessage(2, "north", true),
             new IntentMessage(99, MoveIntent()),
             new TickRequestMessage(77),
             new TickBundleMessage(77, []),

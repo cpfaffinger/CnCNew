@@ -86,6 +86,13 @@ CnCNewGame.Shell = new ShellRunOptions(
     !args.Contains("--no-player-key"), shellScript, double.Parse(GetArgument(args, "--shell-seconds") ?? "600", System.Globalization.CultureInfo.InvariantCulture),
     // --settings-dir DIR: where the menus keep the options, the last map and the savegames (default: %APPDATA%\CnCNew). A check names a directory of its run.
     GetArgument(args, "--settings-dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"));
+CnCNew.Client.Stride.ClientRuntime.NetDiagnosticsDirectory = Path.Combine(CnCNewGame.Shell.NetDirectory, "diagnostics");
+// --no-value-interpolation: health, construction progress, wheel travel and chassis pose step with the tick instead of being drawn on their way between two ticks.
+CnCNew.Game.Live.LiveGame.InterpolateValues = !args.Contains("--no-value-interpolation", StringComparer.OrdinalIgnoreCase);
+CnCNew.Client.Stride.ClientRuntime.NetPauseAtTick = long.Parse(GetArgument(args, "--net-pause-at-tick") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+// --extrapolate: when the next tick of a match of a server is late, what moved is drawn on along its last step for up to a tick instead of standing still until the
+// tick arrives (off by default: docs/MULTIPLAYER-FINDINGS.md section 3).
+CnCNew.Game.Live.LiveGame.Extrapolate = args.Contains("--extrapolate", StringComparer.OrdinalIgnoreCase);
 // --net-order-every N: in a match of a server started from the menus, one unit of the viewer is ordered to move every N ticks (a check's stand-in for a person).
 CnCNew.Client.Stride.ClientRuntime.NetOrderEvery = int.Parse(GetArgument(args, "--net-order-every") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
 // --net-stats: with --net-order-every N the stand-in clicks like a person (camera over a unit, the order button on the ground beside it), and the client measures

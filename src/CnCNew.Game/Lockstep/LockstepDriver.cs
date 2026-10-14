@@ -168,6 +168,9 @@ public sealed class LockstepDriver : ITickDriver, ICommandScheduler
     /// <summary>Client-paced: the fraction of the accumulator. Server-paced: where the playback position stands between the last tick played and the next.</summary>
     public double Fraction => ClientPaced ? Math.Clamp(_accumulator / _tickSeconds, 0, 1) : Playback.Fraction(_nextTick);
 
+    /// <summary>Server-paced: how far the playback position stands beyond the time the next tick was due (its bundle is late), in ticks, 0 to 1.</summary>
+    public double Ahead => ClientPaced ? 0 : Playback.Ahead(_nextTick);
+
     public void TickCompleted(long tick)
     {
         _nextTick = tick + 1;

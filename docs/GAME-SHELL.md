@@ -504,3 +504,109 @@ human:
 `MatchSetup.Details` holds team, colour and start position per slot; `MatchSetup.LocalSlot` names the viewer's slot (0 from the screen). Nobody else can join this room:
 the screen for joining over a network is Phase 29. Test: `ShellTests` (the team and colour boxes arrive in the setup), `LiveMatchTests` (a viewer in the second slot, team
 and colour in the description, allies in the simulation). Not seen by a human.
+
+## 15. Multiplayer in the menus (Phase 29)
+
+The way from the main menu to a match on a server and back, on the original's own layouts. Nothing of it was seen by a human; what checks it is in section 16 and in
+`docs/MULTIPLAYER-FINDINGS.md`.
+
+```
+MainMenu.wnd  Multiplayer > Network          (Online: the original's matchmaking service - visible, inert)
+  NetworkDirectConnect.wnd                   name, address; "Join" or "Host"
+    MessageBox.wnd                           a server never met: its address and key, Yes / No
+    LanLobbyMenu.wnd                         the front of a server: its rooms; "Host" (PopupHostGame.wnd), "Join" (PopupJoinGame.wnd for a locked room)
+      LanGameOptionsMenu.wnd                 a room: seats, army, colour, team, map (LanMapSelectMenu.wnd), money, accept, chat, start
+        MultiplayerLoadScreen.wnd            the shared load screen: every participant's progress
+          the match                          the HUD with its indicators (docs/GAME-HUD.md section 21)
+            ScoreScreen.wnd                  the score; over it, if the match did not end by its rules, what the server or the connection said
+              back into the room             the same server, the same room by its name
+```
+
+The original goes from "Network" to the LAN lobby and from there to the direct connection; here the address comes first, because there is no LAN discovery - a server
+is an address somebody was given. The classes: `NetworkDirectConnectScreen`, `NetLobbyScreen`, `NetHostPopupScreen`, `NetJoinPopupScreen`, `NetRoomScreen`,
+`NetLoadingScreen` (`src/CnCNew.Game/Shell/Screens/NetScreens.cs`); the map picker is the skirmish setup's (`SkirmishMapSelectScreen` with the other layout's name).
+
+### 15.1 What the screens stand on
+
+- **`INetLobby`** (`src/CnCNew.Game/Lockstep/NetLobby.cs`) is everything a screen knows of a server: a stage (`Connecting`, `TrustQuestion`, `Browsing`, `Entering`,
+  `InRoom`, `Starting`, `Failed`), what the server said last (the rooms, the room, the chat, the last refusal, the failure) and requests. A screen decides nothing; it
+  shows the state and asks. `NetLobby` is the real one - a non-blocking UDP connection moved once a frame; the tests of the screens hand in a scripted one.
+- **`IShellNetwork`** (`ShellNetwork`) is what the screens need of the machine: a lobby, a server of its own (`IShellHost`), the addresses and the name typed before.
+  A shell without one leaves the Multiplayer button inert (the headless tests of the other screens). The files of the game's own implementation lie in one directory
+  (`--net-dir`, by default `%LOCALAPPDATA%\CnCNew`, the files `--join` uses): `known-servers.json`, `player-key.pem`, `host-key.pem`, `recent-servers.txt`.
+- **`ShellNetSession`** is one visit: the lobby, the hosted server if this game hosts, the name, the room for the way back. `GameShell.Net` holds it across matches;
+  the shell pumps the lobby once per update.
+- **`HostedServer`** ("Host") is the dedicated server's `ServerCore` on a thread of the game (docs/DEDICATED-SERVER.md section 14). The hosting game enters it through
+  a socket like everybody else, with the key it just made pinned - no question about its own server. It admits the build that hosts (a game built from changed
+  sources hosts for games of the same build), on the port of `--net-port` (27960).
+
+### 15.2 The server's key (ServerTrust)
+
+Before anything is said to a server its key is judged (docs/NETWORK-PROTOCOL.md section 20.2): a server met before with the same key is entered without a word; a
+server **never met** is a question (`MessageBox.wnd`, Yes / No) with its address and the fingerprint in groups of four - No ends the visit and nothing was sent to the
+server, Yes remembers the key; a server whose key **changed** is a refusal with both fingerprints, and nothing is sent to it. A person who knows that the operator
+changed the key removes the line from `known-servers.json`.
+
+### 15.3 The room
+
+A row is a slot of the room's settings: open for a player, closed, a computer army, or taken - then the member's name stands there. The host sets map, money and what
+every slot is; a member takes the first open seat when it enters (or another one through the seat's box), sets army, colour and team of its own seat, and accepts.
+As in the original the one button is "Start" for the host and "Accept" for everybody else (`GUI:Accept`), and the lamp beside a seat (`ButtonAcceptN`, which takes no
+input) is lit when its member accepted. The host's start closes the seats nobody took. Every box is a request to the server, sent at the lobby's pace (20 a second,
+the latest value of a box wins, chat beyond a queue of eight lines is counted as dropped - a server drops a member above 500 messages a second); what the screen
+shows is what the server said last, and a request the server refuses is a line in the chat list with the server's reason. When the host changes the settings
+everybody keeps the seat (if it still is a player's) and nobody stays ready (docs/NETWORK-PROTOCOL.md section 22.3).
+
+Not there: a box for the start position (the slots take the map's places in their order, as in the skirmish setup); the superweapon limit; a way to remove a member
+from the screen (`INetLobby.Kick` exists and is tested; no button asks for it); a list of the people on a server (a list of rooms says nothing about people).
+
+### 15.4 Every "no" has words
+
+`NetText` holds the words of the screens for everything a server, a room or a connection can say: every `RejectReason`, `DropReason`, `EndReason`, every way a
+connection ends (`UdpCloseReason`) and every `LobbyFailureKind`. They are this project's own English - the original has no text for a relay's reasons. A value without
+a text throws; `NetScreenTests` asks for every value, checks that no two share their words, and shows each one on its screen. On the way to a room a refusal is a
+message over the server's front: after a room's refusal (full, running, wrong password, removed) the other rooms are still there; a refusal of the server itself
+(another protocol version, banned, a player key it could not verify, no room left) and a connection that ended lead back to the address screen. In a room: removed by
+the host - back to the rooms; the connection lost - the visit is over.
+
+### 15.5 Load screen, match, the way back
+
+When the host starts, the lobby hands its connection to the game (`INetLobby.TakeRelay`), the shell shows `NetLoadingScreen` and - after the screen was drawn once -
+asks its host for the match (`StartNetMatchOutput`). The client builds it in stages (`NetMatchLoad`: map and terrain, the session, the word to the server), one per
+frame, reporting 10, 60, 90 and 100 percent; the shell moves the connection and shows what every member reported. The world's layers are built before the server is
+told that this game is ready: the server's clock starts with its go, and what a game still has to do then is time it is behind (measured: two clients each 0.5 s
+behind at tick 0 before this order, none after). `GameShell.NetMatchStarted` hands the screen to the world; `NetMatchFailed` goes back to the server's front with the
+reason. After the match the score screen leads back: main menu, address screen and the server's front are stacked again and the lobby enters the room by its name -
+whoever is back first opens it again and is its host. "Exit" of the in-game menu leaves a match of a server by choice.
+
+Fixed with this path: when a match that was started from the shell ended, the client threw in the first frame of the score screen - the Stride compositor outlived
+the scene (`ClientRuntime.FinishRunning`). It hit every match that ended in the shell, local ones too; no check had ever played one to its end in a window.
+
+## 16. A person at the menus, as a script (`ShellScript`, Phase 29)
+
+`src/CnCNew.Game/Shell/ShellScript.cs`; the client's `--shell-script FILE [--shell-var NAME=VALUE ...] [--shell-seconds N]`. A sequence of steps that each wait for
+what a person would wait for and then do what a person would do, through input events handed to `GameShell.HandleInput` the way the device's are: the pointer moves
+onto a window and clicks, characters are typed into a field, an entry of a box or a row of a list is clicked (scrolled into view with the wheel first). It never
+calls a screen. Unlike the frame-numbered `--input-script` of a running match the steps are conditions, because what a server answers and when is not a frame number.
+
+| Step | Meaning |
+| --- | --- |
+| `wait screen NAME`, `wait phase NAME` | the top screen (its class name) or the shell's phase; a screen counts when no transition plays |
+| `wait enabled|disabled|shown|hidden WINDOW` | what a person sees of a window |
+| `wait text WINDOW contains|equals|lacks TEXT` | the text of a window or of a field |
+| `wait list WINDOW contains|lacks TEXT`, `wait combo WINDOW shows TEXT` | a row of a list, the chosen entry of a box; `A|B` is "one of" |
+| `wait match NAME equals|atleast VALUE` | what the host says of the running match (`tick`, `over`, `units`) |
+| `wait seconds N` | a person who waits |
+| `expect ...` | the same conditions, but they must hold at once |
+| `click WINDOW`, `type WINDOW TEXT`, `enter WINDOW`, `select WINDOW TEXT`, `pick WINDOW TEXT`, `key KEYCODE` | waits until the window can be used, then acts |
+| `limit SECONDS`, `note TEXT` | the time limit of the steps that follow (default 20 s); a line in the log |
+
+A step whose condition does not come true within its limit ends the script as failed and says what the shell showed instead: the phase, the screen, the window's
+state and text, the entries of a box, the last rows of the screen's lists (a room's chat list carries the server's refusals), and the message that lies over the
+screen. The client prints every step as it happens, ends with exit code 0 when the script is through and 1 when a step failed or the real time is over, and ignores
+the device's mouse and keyboard while a script runs. `--settings-dir DIR` keeps the menus' options and last map in a directory of the run.
+
+Checks that use it: `NetShellTests` (two shells in one process, real loopback sockets: host, join, a match, back into the room; chat and pause through the HUD of
+both; `--endurance-minutes N`), `NetScreenTests` (with window transitions), `scripts/check-net-lobby.ps1`, `scripts/check-net-acceptance.ps1`,
+`scripts/measure-net-latency.ps1`. The pictures: `NetScreenTests` puts a scripted lobby into every state - 56 states in six resolutions, 336 hashes in
+`tests/CnCNew.Game.Tests/baselines/net-screens.txt`, no two alike.

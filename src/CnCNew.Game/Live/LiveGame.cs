@@ -81,7 +81,7 @@ public abstract class LiveGame
         Colors = TeamColors.Resolve(players, graph);
         var scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
         FogViewer = human;
-        _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph) };
+        _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues };
         _projector = new FrameProjector(data.Visuals, _projectorOptions);
         Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
         _fxView = new SimulationFxWorldView(world);
@@ -94,6 +94,20 @@ public abstract class LiveGame
     public GameData Data { get; }
     public SimulationWorld World { get; }
     public TerrainMap Terrain { get; }
+
+    /// <summary>
+    /// Whether the games created from now on draw health, construction progress, wheel travel and chassis pose on their way between two ticks
+    /// (<see cref="FrameProjectorOptions.InterpolateValues"/>); the client's <c>--no-value-interpolation</c> turns it off.
+    /// </summary>
+    public static bool InterpolateValues { get; set; } = true;
+
+    /// <summary>
+    /// When the next tick of a match of a server is late, moving objects are drawn on along their last step for up to one tick instead of standing still until the
+    /// tick arrives (<see cref="FrameProjector.Project"/>, docs/PRESENTATION-OBJECTS.md section 12). Off by default: measured, it has next to nothing to act on
+    /// (a tick was late in 0 to 5 of 7,178 frames) and changes nothing that was measured (docs/MULTIPLAYER-FINDINGS.md section 3). The client's
+    /// <c>--extrapolate</c> turns it on.
+    /// </summary>
+    public static bool Extrapolate { get; set; }
     public MapData Map { get; }
     public TerrainRenderModel TerrainModel { get; }
     public TerrainHeightSampler Heights { get; }
@@ -345,7 +359,7 @@ public abstract class LiveGame
         frameObserver?.PhaseStarted(PresentationPhase.Project);
         var alpha = Paused ? 1f : (float)_driver.Fraction;
         if (!Paused) _fraction = alpha;
-        Frame = _projector.Project(alpha);
+        Frame = _projector.Project(alpha, Extrapolate && !Paused ? (float)_driver.Ahead : 0f);
         frameObserver?.PhaseEnded(PresentationPhase.Project);
     }
 

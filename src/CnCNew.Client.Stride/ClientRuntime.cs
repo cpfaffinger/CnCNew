@@ -230,6 +230,13 @@ internal sealed class ClientRuntime : IDisposable
     /// server): the line without a network.
     /// </summary>
     public static bool NetStatsEnabled { get; set; }
+    /// <summary>Where a match of a server started from the menus writes its desync package (a directory under <c>--net-dir</c>); null: none is written.</summary>
+    public static string? NetDiagnosticsDirectory { get; set; }
+    private long _nextNetStatus;
+    /// <summary><c>--net-pause-at-tick T</c>: a check's stand-in pauses a match of a server at that tick for two seconds. 0: never.</summary>
+    public static long NetPauseAtTick { get; set; }
+    private long _pauseUntilMs;
+    private bool _pauseEnded;
     /// <summary><c>--net-stats-trace</c>: every stand-in click with where it went, on the console.</summary>
     public static bool NetStatsTrace { get; set; }
     private CnCNew.Game.Lockstep.NetStats? _netStats;
@@ -274,15 +281,17 @@ internal sealed class ClientRuntime : IDisposable
                 inward = inward.LengthSquared() < 1 ? Vector2.UnitX : Vector2.Normalize(inward);
                 var screen = BackBufferSize();
                 _clickCandidates.Clear();
-                foreach (var degrees in _lastNetOrder % 2 == 0 ? new[] { 50f, 25f, 0f, -25f, 90f, -90f, 130f, -130f, 180f } : [-50f, -25f, 0f, 25f, -90f, 90f, -130f, 130f, 180f])
-                {
-                    var (sine, cosine) = MathF.SinCos(degrees * MathF.PI / 180);
-                    var at = ground + new Vector2(inward.X * cosine - inward.Y * sine, inward.X * sine + inward.Y * cosine) * 180;
-                    if (match.World.Entities.Any(entity => !entity.EffectivelyDead && Vector2.Distance(SimulationQueries.GroundOf(entity), at) < 90)) continue;
-                    // On the world, not on the control bar that covers the lower part of the screen.
-                    if (!match.Camera.TryWorldToScreen(new System.Numerics.Vector3(at.X, at.Y, 0f), out var pixel) || pixel.X < 40 || pixel.X > screen.X - 40 || pixel.Y < 40 || pixel.Y > screen.Y * 0.6f) continue;
-                    _clickCandidates.Enqueue(pixel);
-                }
+                // Places around the unit, the ones towards the middle of the map first; whether a click there is a move the pointer finds out (a tree, a rock, a
+                // building or water under it is not).
+                foreach (var distance in new[] { 180f, 110f })
+                    foreach (var degrees in _lastNetOrder % 2 == 0 ? new[] { 50f, 25f, 0f, -25f, 90f, -90f, 130f, -130f, 180f } : [-50f, -25f, 0f, 25f, -90f, 90f, -130f, 130f, 180f])
+                    {
+                        var (sine, cosine) = MathF.SinCos(degrees * MathF.PI / 180);
+                        var at = ground + new Vector2(inward.X * cosine - inward.Y * sine, inward.X * sine + inward.Y * cosine) * distance;
+                        // On the world, not on the control bar that covers the lower part of the screen.
+                        if (!match.Camera.TryWorldToScreen(new System.Numerics.Vector3(at.X, at.Y, 0f), out var pixel) || pixel.X < 40 || pixel.X > screen.X - 40 || pixel.Y < 40 || pixel.Y > screen.Y * 0.6f) continue;
+                        _clickCandidates.Enqueue(pixel);
+                    }
                 if (!_clickCandidates.TryDequeue(out var first))
                 {
                     if (NetStatsTrace) Console.WriteLine($"net-stats: tick {match.World.Tick}: no open ground on the screen beside {mover.Template.Name}#{mover.Id.Value}");
@@ -297,7 +306,8 @@ internal sealed class ClientRuntime : IDisposable
             case 3:
             {
                 var button = MatchController.MapMouseScheme(GameplaySettings) == MouseScheme.RightClickCommands ? CnCNew.Presentation.Input.MouseButton.Right : CnCNew.Presentation.Input.MouseButton.Left;
-                if (hud.Cursor.Kind == CursorKind.Move)
+                // A click that orders: the selected unit moves there - or, when the HUD reads the selection as something that sends its units somewhere, they do.
+                if (hud.Cursor.Kind is CursorKind.Move or CursorKind.SetRallyPoint)
                 {
                     events.Add(new CnCNew.Presentation.Input.MouseButtonEvent(_clockMs, button, true, _clickHeld.At));
                     _clickHeld = (button, _clickHeld.At);
@@ -320,8 +330,9 @@ internal sealed class ClientRuntime : IDisposable
         var slice = match.World.Tick / NetOrderEvery;
         if (slice == _lastNetOrder) return;
         _lastNetOrder = slice;
-        if (match.World.Entities.Where(entity => entity.Owner == match.Human && !entity.EffectivelyDead && SimulationQueries.CanMove(entity)).OrderBy(entity => SimulationQueries.IsBuilder(entity) ? 0 : 1).ThenBy(entity => entity.Id.Value).FirstOrDefault() is not { } unit) return;
+        if (match.World.Entities.Where(entity => entity.Owner == match.Human && !entity.EffectivelyDead && SimulationQueries.CanMove(entity) && !entity.Template.IsKindOf("STRUCTURE")).OrderBy(entity => SimulationQueries.IsBuilder(entity) ? 0 : 1).ThenBy(entity => entity.Id.Value).FirstOrDefault() is not { } unit) return;
         hud.Input.Selection.Replace([unit.Id]);
+        if (NetStatsTrace) Console.WriteLine($"net-stats: tick {match.World.Tick}: the stand-in selects {unit.Template.Name}#{unit.Id.Value}");
         var over = SimulationQueries.GroundOf(unit);
         match.Camera.CenterOn(new Vector2(over.X, over.Y));
         _clickPhase = 1;
@@ -460,6 +471,28 @@ internal sealed class ClientRuntime : IDisposable
                 running.Host.UpdateMinimap(_game.GraphicsContext.CommandList, dots);
             }
             if (_shell is not null && running.Host.Match is LiveMatch ordered) GiveStandInOrder(ordered);
+            // --net-pause-at-tick T: the stand-in asks for a pause at that tick and ends it two seconds later.
+            if (NetPauseAtTick > 0 && running.Host.Match is LiveMatch { Remote: not null } pausing)
+            {
+                if (_pauseUntilMs == 0 && pausing.World.Tick >= NetPauseAtTick)
+                {
+                    pausing.Paused = true;
+                    _pauseUntilMs = _clockMs + 2_000;
+                    Console.WriteLine($"net-match: the stand-in asks for a pause at tick {pausing.World.Tick}");
+                }
+                else if (_pauseUntilMs > 0 && _clockMs >= _pauseUntilMs && !_pauseEnded)
+                {
+                    _pauseEnded = true;
+                    pausing.Paused = false;
+                    Console.WriteLine($"net-match: the stand-in ends its pause at tick {pausing.World.Tick}");
+                }
+            }
+            // --net-stats: what the indicators show, every five seconds on the console.
+            if (NetStatsEnabled && running.Match?.Net is { } indicators && _clockMs >= _nextNetStatus)
+            {
+                _nextNetStatus = _clockMs + 5_000;
+                Console.WriteLine($"{indicators.StatusLine()}; tick {running.Host.Match.Tick}");
+            }
             if (_shell is not null && (running.TakeFinished() || NetMatchEnded(running))) FinishRunning(running);
             RestartScenarioWhenOver(seconds);
             _audio.Update(seconds);
@@ -487,7 +520,12 @@ internal sealed class ClientRuntime : IDisposable
         {
             var ready = load.Step();
             // The world's layers are built before the server is told that this game is ready: its clock starts with its go.
-            if (load.Built is { } built && _prepared is null) _prepared = Start(built, null);
+            if (load.Built is { } built && _prepared is null)
+            {
+                // Where this game writes what it knows when the server reports a desync; the HUD's notice and the message over the score screen name the place.
+                built.DiagnosticsDirectory = NetDiagnosticsDirectory;
+                _prepared = Start(built, null);
+            }
             if (!ready) return;
             _netLoad = null;
             _leaveRequested = false;
@@ -611,6 +649,7 @@ internal sealed class ClientRuntime : IDisposable
                 else Console.WriteLine($"net-stats: tick {measured.World.Tick}: the HUD answered {feedback.Kind} {feedback.Rejection} {feedback.Detail}");
             };
             measured.CommandPath.PreChecked += (_, receipt) => stats.ReceiptOfClick(receipt.Number);
+            if (measuredHud.Net is { } traced) traced.Trace = line => Console.WriteLine($"{line}; tick {measured.World.Tick}");
             measured.CommandResolved += resolution => stats.Resolved(resolution, measured.World.Rate.TicksPerSecond);
         }
         _audio.Game.Attach(game, running.Hud);
@@ -662,7 +701,7 @@ internal sealed class ClientRuntime : IDisposable
             string? note = null;
             if (match.Remote is { } relay && _shell!.Net is not null)
             {
-                note = _leaveRequested ? null : NetText.MatchEndNote(relay, match.IsOver);
+                note = _leaveRequested ? null : NetText.MatchEndNote(relay, match.IsOver, match.DiagnosticsDirectory);
                 LastNetMatch = string.Create(System.Globalization.CultureInfo.InvariantCulture,
                     $"net-match: end tick {match.World.Tick} hash {match.Session.StateHash():X16} chain {match.HashChain:X16} player {relay.Client.Player} winner {match.Winner?.Value ?? 0} over {(match.IsOver ? "yes" : "no")} left {(_leaveRequested ? "yes" : "no")} orders {_netOrders} intents {relay.Client.IntentsSent} stalls {match.Lockstep.Stalls} note {note ?? "none"}");
                 _netOrders = 0;

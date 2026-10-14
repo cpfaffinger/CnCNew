@@ -122,6 +122,10 @@ public sealed class MatchController
             if (result.Accepted && command is CnCNew.Simulation.Commands.PurchaseUpgradeCommand purchase) Messages.ExpectUpgrade(purchase.Upgrade);
         };
 
+        // A match of a server: its indicators (docs/GAME-HUD.md section 21). What happens once goes to the message list as a line of its own.
+        if (match is LiveMatch { Remote: not null } served)
+            Net = new NetHud(new LiveMatchNetSource(served), line => Messages.Log.Add(line, Messages.Clock())) { DiagnosticsDirectory = served.DiagnosticsDirectory };
+
         CommandBar = Input.CommandBar!.Build(match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(match.World, match.Human);
         Overlay = HudOverlay.Empty;
@@ -161,6 +165,9 @@ public sealed class MatchController
     /// </summary>
     public HudMessageFeed Messages { get; }
 
+    /// <summary>The indicators of a match of a server (connection, waiting, pause, chat); null in every other game.</summary>
+    public NetHud? Net { get; }
+
     /// <summary>
     /// <see langword="true"/> (a skirmish): this HUD fades the message lines once per logic step and draws them. A mission sets it to <see langword="false"/>: its presentation director
     /// owns the list then (it shares it with <c>DISPLAY_TEXT</c>, updates it on its own clock and draws it with the other mission texts, also while the control bar is hidden).
@@ -197,6 +204,8 @@ public sealed class MatchController
     public void Process(InputEvent inputEvent)
     {
         ArgumentNullException.ThrowIfNull(inputEvent);
+        // The chat line of a match of a server takes the keys while it is open, and opens on Enter (to all) and Backspace (to the allies).
+        if (Net is { } net && WorldInputEnabled && net.HandleInput(inputEvent, IsMenuOpen)) return;
         if (!WorldInputEnabled && !IsMenuOpen && inputEvent is not KeyEvent { Key: KeyCode.Escape }) return;
         switch (inputEvent)
         {
@@ -381,6 +390,7 @@ public sealed class MatchController
     /// rendered frame, after <see cref="LiveMatch.Advance"/> has stepped the simulation.</summary>
     public void Update(double deltaSeconds)
     {
+        Net?.Update();
         if (!IsMenuOpen)
         {
             var intent = Input.UpdateCamera(Match.Camera, (float)deltaSeconds);
@@ -642,6 +652,8 @@ public sealed class MatchController
             .Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
         // InGameUI::postDraw: the message lines lie over the windows.
         if (OwnsMessageList && !Messages.Log.IsEmpty) commands = commands.AddRange(MissionTextOverlay.Messages(Messages.Log, TextStyle, _scaleOptions, _textMeasure, width, height));
+        // The indicators of a match of a server lie over the HUD.
+        if (Net is { } net) commands = commands.AddRange(net.Build(width, height, _textMeasure));
         // Mouse::drawTooltip lies over everything, the window tree's own tooltips (TOOLTIPTEXT) and the command button descriptions alike.
         if (_tree.Tooltip is { } tooltip) commands = commands.AddRange(_tooltips.Build(tooltip, _tree.Viewport, _scaleOptions, _tree.Services.TextMeasure));
         return baseList with { Commands = commands };

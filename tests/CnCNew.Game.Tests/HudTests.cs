@@ -36,6 +36,7 @@ internal static class HudTests
         harness.Run("Lockstep probe: the click path with every order executed 0, 4 and 12 ticks after it was given; a late refusal is shown and counted", () => InputDelayThroughTheClickPath(data));
         harness.Run("Lockstep probe: with no delay the tick driver and the command path record the match of direct submission; pause and speed are requests to the driver", () => TickDriverAndPathChangeNothing(data));
         harness.Run("Lockstep probe: a mission runs with orders executed 4 and 12 ticks later", () => MissionWithInputDelay(data));
+        harness.Run("Standing orders with delay: a waypoint path given through the HUD is walked with orders executed 6 ticks later - no station ordered twice, none late", () => StandingOrdersWithDelay(data));
         harness.Run("Mouse setups: by default the left button selects and the right button orders; with AlternateMouse off the left button orders as in the original; the scroll slider is the original's factor", () => MouseSetups(data));
         harness.Run("HUD draw lists at several resolutions contain the expected buttons", () => ResolutionSweep(data));
         harness.Run("Minimap click moves the camera", () => MinimapClickMovesCamera(data));
@@ -533,6 +534,56 @@ internal static class HudTests
             Release--;
             return true;
         }
+    }
+
+    /// <summary>
+    /// docs/handoffs/HANDOFF-PHASE29.md, bottlenecks: the presentation submits a waypoint path station by station (<c>StandingOrders</c>); with a delay between an
+    /// order and its execution a station must be ordered neither twice (the book judging the unit before its last order arrived) nor late.
+    /// </summary>
+    private static void StandingOrdersWithDelay(GameData data)
+    {
+        (int Orders, long ArrivedAt, float Left, int Refused) Walk(int delay)
+        {
+            var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+            match.UseInputDelay(delay);
+            long time = 10_000;
+            Advance(match, controller, 30);
+            var dozer = match.World.Entities.First(entity => entity.Owner == match.Human && entity.Template.IsKindOf("DOZER"));
+            var origin = SimulationQueries.GroundOf(dozer);
+            Vector2 Ground(float dx, float dy) => Screen(match, new Vector3(origin.X + dx, origin.Y + dy, match.Heights.HeightAt(origin.X + dx, origin.Y + dy)));
+            var orders = 0;
+            var refused = 0;
+            match.CommandIssued += (command, result) =>
+            {
+                if (command.Player != match.Human) return;
+                if (result.Accepted) orders++;
+                else refused++;
+            };
+            Click(controller, ref time, MouseButton.Left, Screen(match, EntityPicker.CenterOf(dozer)));
+            Advance(match, controller, 1);
+            controller.Process(new KeyEvent(time += 16, KeyCode.LeftAlt, true));
+            var stations = new[] { new Vector2(-10, -60), new Vector2(-90, -70), new Vector2(-170, -90) };
+            foreach (var station in stations) Click(controller, ref time, MouseButton.Right, Ground(station.X, station.Y));
+            controller.Process(new KeyEvent(time += 16, KeyCode.LeftAlt, false));
+            var last = origin + stations[^1];
+            var arrivedAt = -1L;
+            // At most a minute of game time for a walk of some 180 units.
+            for (var frame = 0; frame < 30 * 60 && arrivedAt < 0; frame++)
+            {
+                Advance(match, controller, 1);
+                if (Vector2.Distance(SimulationQueries.GroundOf(dozer), last) < 12f && controller.Overlay.WaypointPaths.IsEmpty) arrivedAt = match.Tick;
+            }
+            return (orders, arrivedAt, Vector2.Distance(SimulationQueries.GroundOf(dozer), last), refused + (int)match.World.RejectionCounts[(int)Simulation.Commands.CommandRejection.Late]
+                + (int)match.World.RejectionCounts[(int)Simulation.Commands.CommandRejection.Duplicate] + (int)match.World.RejectionCounts[(int)Simulation.Commands.CommandRejection.OutOfOrder]);
+        }
+        var direct = Walk(0);
+        var delayed = Walk(6);
+        TestHarness.Assert(direct.ArrivedAt > 0 && direct.Orders >= 3 && direct.Refused == 0, $"without delay the path of three stations is walked ({direct})");
+        TestHarness.Assert(delayed.ArrivedAt > 0, $"with 6 ticks of delay the unit reaches the last station too ({delayed})");
+        TestHarness.Assert(delayed.Orders == direct.Orders && delayed.Refused == 0, $"and the same orders were given - no station twice, none refused ({delayed.Orders} against {direct.Orders}, {delayed.Refused} refused)");
+        // Not late: each of the orders may cost its delay and the frame the book needs to see that the last one arrived (two ticks at 60 Hz), no more.
+        var allowance = direct.Orders * (6 + 2 * data.Rate.Time.TicksPerOriginalFrame);
+        TestHarness.Assert(delayed.ArrivedAt - direct.ArrivedAt <= allowance, $"it arrives at tick {delayed.ArrivedAt}, not later than {allowance} ticks after the walk without delay ({direct.ArrivedAt})");
     }
 
     private static void MissionWithInputDelay(GameData data)

@@ -321,3 +321,29 @@ The object presentation no longer assumes anywhere that a tick lasts 1/30 s. Two
 **Time-scale test** (`tests/CnCNew.Presentation.Tests/ObjectTests.TimeScale.cs`, each at 30, 60 and 120 Hz on the synthetic fixture of the rate, tolerance one original frame): muzzle flash after a shot, `FIRING_A` (exactly 1/30 s at every rate), healing icon after the last healing (3.0333 / 3.0167 / 3.0083 s), script flash (four flashes, end of the last one 1.6667 s after the request, one flash 0.1667 s), settling of the suspension.
 
 **Not verified:** whether muzzle flash, flash and suspension *look* right at 60 Hz. Durations are measured, no human has seen it (visual check list: `docs/TICKRATE-MIGRATION.md` §14.7).
+
+## 12. Between two ticks (Phase 29)
+
+`FrameProjector.Project(alpha)` always drew position, heading and the turret's angles (yaw and pitch, of both turrets) on their way from the last tick's value to
+this tick's. Since Phase 29 it does the same for the **health bar**, the **construction progress**, the **travel of wheels and treads** and the **pose of the
+chassis** (pitch, roll, lift, steering angle, the four springs): `FrameProjectorOptions.InterpolateValues`, on by default; the client's `--no-value-interpolation`
+(`LiveGame.InterpolateValues`) steps them with the tick as before. A frame drawn exactly at a tick (alpha 1) is the same either way, and nothing of it reaches the
+simulation.
+
+Measured without a window (`PresentationTool smoothness`: a match of two computer players on Alpine Assault, 240 s at 60 Hz, drawn at 144 frames a second, every
+object visible; `NetStats` counts in how many frames a quantity changes and by how much):
+
+| Quantity | Frames in which it changed: stepped / interpolated | Median step: stepped / interpolated | 99 % step | Largest step |
+| --- | --- | --- | --- | --- |
+| health, % of full | 6,831 / 17,088 | 0.166 / 0.069 | 13.9 / 5.0 | 100 / 41.7 |
+| construction, % of done | 5,933 / 14,246 | 0.167 / 0.069 | 0.167 / 0.069 | 0.333 / 0.139 |
+| wheel travel, world units | 129,264 / 310,739 | 0.333 / 0.139 | 3.75 / 1.56 | 7.27 / 3.03 |
+
+Stepped, a quantity that changes every tick changes in 60 of 144 frames (42 %); interpolated it changes 2.40, 2.50 and 2.40 times as often - 144 / 60 is 2.40 - so
+in every frame in which it is on its way, and its steps are that much smaller. The hash over all frames drawn exactly at a tick (2,880 of 34,561) is the same in
+both runs (`57E1055BCB023F00`), and so is the session hash at the end (`A25B297D4EA516BA`). The chassis pose is interpolated by the same rule and not measured on its
+own. At 60 frames a second and 60 Hz a frame usually is a tick and the difference does not show; it shows on a faster display, on a slower tick rate and whenever
+frames and ticks drift against each other.
+
+**No extrapolation.** Interpolation shows a state at most one tick old (16.7 ms at 60 Hz). Whether drawing the viewer's own moving units one tick ahead would pay
+was decided by a measurement against thresholds fixed beforehand (docs/MULTIPLAYER-FINDINGS.md sections 2 and 3): it is not built.

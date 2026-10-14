@@ -191,6 +191,7 @@ named; the residual risks are meant as stated, none is hidden behind a default.
 | T13 | **Entering a room one is not wanted in** | the room password as challenge and response (the password never travels); the host removes a member, and neither its origin nor its player key may come back to the room; the operator's ban list of addresses, networks and **player keys** (a key is proved by a signature over the room's nonce); `requirePlayerKey` | "Room password and kick" (wrong and replayed answers, the kick, the origin), "Transport limits" (a banned address gets no answer and its connection is closed), `check-server-package` (a ban file with a line that is no entry stops the server at its start), "Player keys" (a banned key leaves and does not come back from another address; a stolen or replayed proof is refused) | a kicked or banned person comes back from another address and with a new key - both cost nothing; there are no accounts. The server could enter a room itself (it holds the verifier) |
 | T14 | **Personal data in the logs** | addresses are written as their network (`/24`, `/48`) and without port unless `logFullAddresses`; logs are deleted after `logRetentionDays` (14); replay files hold no addresses; chat is relayed and never logged | the address form: the server's own lines in `check-net-load` and `check-net-join` | player names and the fingerprints of player keys appear in `joined` lines - a fingerprint is a permanent pseudonym of a player across servers; a network of 256 addresses can still identify a household together with a time |
 | T15 | **The supply chain** | no NuGet package in the server (base class library only); `scripts/audit-vulnerable.ps1` fails if the server references any package, and checks the solution for known advisories | the script; "Layer rules" (the server references `CnCNew.Net` and `CnCNew.Server` only) | the .NET runtime inside a package is as old as the SDK that built it: a package is rebuilt when a runtime update is published |
+| T16 | **The list of rooms tells a stranger who plays** (Phase 29): which rooms exist, how many sit in them, the map, the build, whether a room is locked - and asking for it costs the server an answer | a list names no person, address or key; at most 64 rooms a list; a connection gets a list at most once a second and at most 120 times, then it is turned away; a browsing connection counts against the connections per address; `listRooms: false` (`--no-room-list`) lists nothing | "Room list" (nothing about people in the bytes; too soon, too often, not at all); "Fuzz, directory" | room names are chosen by the people who open them and are shown to everybody who asks - a name is not a secret; a locked room is still listed (with its lock) |
 
 ### 9.2 Limits and what happens at each
 
@@ -474,3 +475,24 @@ process sees - and a match of three client processes under Windows played on it 
 **What that does not show:** the Windows package on a machine without a .NET installation (this machine has the SDK; a self-contained program does not look for
 it, but that was not observed on a bare machine), another Linux distribution or an older glibc, a real network between the two sides (the WSL network is a virtual
 switch on the same computer), and D-20 is a delivery decision of the owner - the package exists and runs, whether it is handed out is not decided here.
+
+## 14. The server as a library, and "Host game" (Phase 29)
+
+`CnCNew.Server.ServerCore` holds what a server is between its socket and its rooms: the transport endpoint (`UdpServerEndpoint`), the directory of rooms
+(`RoomDirectory`) and one round of work (`Pump`: datagrams in, new connections to the directory, every room moved, datagrams out), `WaitMicros` (how long a host may
+sleep), `CloseAll` (everybody is told that the server stops). `tools/CnCNew.DedicatedServer` runs it since Phase 29; so does a game that hosts.
+
+| | The dedicated program | "Host game" (`CnCNew.Game.Lockstep.HostedServer`) |
+| --- | --- | --- |
+| runs in | a process of its own | a thread of the game, so its rooms close their ticks by the clock whatever the game's frames do |
+| key | `keyFile`, made on the first start | `host-key.pem` in the game's network directory, made on the first hosting |
+| builds admitted | released ones, unless `allowModifiedBuilds` | the build that hosts (a room compares everybody with its host) |
+| rooms | `maxRooms` (16) | 4 |
+| limits of transport and room | section 9.2 | the same defaults - a hosted game is a server with an open port |
+| bans, logs, replay files, status lines | section 10 | none: no file is written; the events are kept as lines the game can read (`TryTakeLine`; the client prints them as `host-server:`) |
+| stops | SIGTERM, `exitAfter...` | with the visit or the game; every connection is told |
+
+The hosting player's own game is a client of that server like every other, through a socket. What "Host game" is not: a way to be found (the others need the
+address and the port must be reachable - no NAT traversal, as before), and not a place for long-running operation (no bans, no logs, no replay).
+
+Configuration added in Phase 29: `listRooms` (default true), option `--no-room-list`; the status line counts `listsServed` and `listsRefused`.
