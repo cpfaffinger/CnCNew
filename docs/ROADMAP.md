@@ -101,6 +101,8 @@
 
 **Postponed on 5 October 2026:** this section was the step after Phase 17 and now lies behind the programme from section 5 (`docs/handoffs/HANDOFF-PHASE30.md`).
 
+**Done by machine on one machine on 14 October 2026** (`docs/ACCEPTANCE-MACHINE.md`, `docs/GGC-FIXES.md`, `docs/PATCH-LAYER.md`, `docs/TROUBLESHOOTING.md`, `docs/COMPATIBILITY.md`): the fix catalogue (354 markers, 96 CRC-gated, 3 adopted behind the rule profile, 83 not yet reviewed); the patch layer imports but does not compile yet; crash reports, run logs and support bundles for client and server; the client package, the licence list and the proof that no package holds original data; the clean-room build; the documentation for humans. Every acceptance by a human was replaced by a machine check; what only a human can judge is named per item. The work list continues in `docs/handoffs/HANDOFF-PHASE32.md`.
+
 - Catalogue GeneralsGameCode fixes by subsystem and adopt them with regression tests.
 - Import GeneralsGamePatch as an overlay layer of its own; keep controversial balance changes configurable.
 - Prioritise crash, memory, pathfinding, AI, graphics and UI defects.

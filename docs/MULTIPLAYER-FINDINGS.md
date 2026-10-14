@@ -239,3 +239,9 @@ checked" is what is left for a human or for hardware that was not there.
 - **Performance of the simulation** (`scripts/perf-profile.ps1`, the binaries of `c1946aa` and of this phase in the same hours): every one of the ten runs with the same final hash on both sides; means within -1.5 % and +3.8 % (8 players: 826.5 against 830.9 µs per tick; maximum 148 against 138 ms; bytes per tick 8,550 against 8,551) - the multiplayer client changes nothing of the simulation's cost.
 - **Not run:** the determinism matrix's switch and culture rows; the long standard match of an hour with rejoins (Phase 28's run was not repeated - the
   endurance of this phase is the hosted server's); a second machine.
+
+## 7. Phase 30
+
+Unchanged lines; Phase 30 adds what a player can hand on when a match goes wrong - the crash report, the run log and the support bundle with the desync
+packages ([TROUBLESHOOTING.md](TROUBLESHOOTING.md)) - and keeps `net-lobby` and `net-acceptance` in the gate. The single-player items are in
+[ACCEPTANCE-MACHINE.md](ACCEPTANCE-MACHINE.md).

@@ -33,7 +33,14 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 | Document | Content |
 |---|---|
 | [../BUILDING.md](../BUILDING.md) | Build requirements (SDK, PowerShell 7, Python, NuGet source, game), install commands, setting up a developer machine |
-| [INSTALLATION.md](INSTALLATION.md) | Patcher: installation from your own Steam copy, uninstallation, developer content |
+| [INSTALLATION.md](INSTALLATION.md) | Patcher: installation from your own Steam copy, uninstallation, developer content, the self-contained package (Phase 30) |
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Phase 30: where logs, crash reports and desync packages are, the support bundle, "my match has diverged", the server's refusals, profiler switches |
+| [COMPATIBILITY.md](COMPATIBILITY.md) | Phase 30: every format and protocol version and what refuses what; the proposed rule for the first release (decision D-31) |
+| [THIRD-PARTY.md](THIRD-PARTY.md) | Phase 30, generated: every NuGet package of every project with its declared licence and the programs that carry it |
+| [ACCEPTANCE-MACHINE.md](ACCEPTANCE-MACHINE.md) | Phase 30: the 85 acceptance items, each with the check that proves what a program can, and what only a human can judge; the named limits |
+| [GGC-FIXES.md](GGC-FIXES.md) | Phase 30: the fixes of GeneralsGameCode - catalogue, the rule profile, the adopted and rejected fixes, the work list |
+| [GGC-FIXES-CATALOGUE.md](GGC-FIXES-CATALOGUE.md) | Phase 30, generated: every `@bugfix`/`@fix` of Zero Hour and the shared code by subsystem, CRC-gated or not, and its review |
+| [PATCH-LAYER.md](PATCH-LAYER.md) | Phase 30: GeneralsGamePatch as a layer of the import - how it is built, what was measured, why it does not compile yet |
 | [CONTENT-PIPELINE.md](CONTENT-PIPELINE.md) | Runtime content contract (schema 2) and format matrix |
 | [W3D-MATERIALS.md](W3D-MATERIALS.md) | W3D material contract: passes, shader states, mappers |
 | [W3D-SKELETONS.md](W3D-SKELETONS.md) | W3D hierarchies, animations and models |
@@ -181,4 +188,5 @@ milestones of Stage 3 have no brief yet (`plan/STAGE-3-CHANGES.md`).
 | [HANDOFF-PHASE27.md](handoffs/HANDOFF-PHASE27.md) | Desync diagnosis, rejoining, spectators, server replay | planned |
 | [HANDOFF-PHASE28.md](handoffs/HANDOFF-PHASE28.md) | Server operation and security | planned |
 | [HANDOFF-PHASE29.md](handoffs/HANDOFF-PHASE29.md) | Multiplayer in the client, acceptance with humans | done on one machine, without a human (14 October 2026) |
-| [HANDOFF-PHASE30.md](handoffs/HANDOFF-PHASE30.md) | Patch integration, quality, shippable completion | planned (postponed) |
+| [HANDOFF-PHASE30.md](handoffs/HANDOFF-PHASE30.md) | Patch integration, quality, shippable completion | done by machine (14 October 2026) |
+| [HANDOFF-PHASE32.md](handoffs/HANDOFF-PHASE32.md) | S3-M7: the patch layer playable, the review of the logic fixes | next |

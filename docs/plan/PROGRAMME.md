@@ -132,7 +132,7 @@ milestone status is updated in each stage document.
 | S1-M12 | Installer and clean content from the Steam master | publication (9 October) | built – not accepted |
 | S1-M13 | The skirmish AI of the original as a faithful computer opponent | 23 (side product) | built as an option, with named deviations |
 | S1-M14 | Tooling of the port | 1–23 | done, grows with every phase |
-| **R1** | **Port release:** single player accepted end to end, package, documentation for humans | 30 (items 1, 2, 5–8) | open |
+| **R1** | **Port release:** single player accepted end to end, package, documentation for humans | 30 (items 1, 2, 5–8) | **open** - Phase 30 built the package, the diagnostics and the documentation and replaced every acceptance by a machine check (`docs/ACCEPTANCE-MACHINE.md`, 14 October 2026); the gate's "a human has worked through" is not met |
 | S2-M1 | Measurement basis: reference manifest, determinism matrix, profile | 18 | done; second machine open |
 | S2-M2 | Performance of real matches | 19, 23 (gate) | done; maximum and allocation missed |
 | S2-M3 | Tick rate as a value of the world (simulation and everything outside) | 20, 21 | done |
@@ -148,7 +148,7 @@ milestone status is updated in each stage document.
 | S3-M4 | Match analysis with graphics | – | open (headless surveys exist) |
 | S3-M5 | Modern user interface | – | open (original layouts are the base) |
 | S3-M6 | Movement and pathfinding beyond the original | – | open (decision 3 reserved) |
-| S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | 30 (items 3, 4) | open |
+| S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | 30 (items 3, 4), 32 | **in progress** - the rule profile, three adopted fixes, the catalogue (83 CRC-gated fixes not reviewed) and the patch layer's import exist; its definitions do not compile yet (Phase 30); brief `HANDOFF-PHASE32.md` |
 | **R3** | **Changes release:** every change selectable, measured and accepted | – | open |
 | S4-M1 | Protocol, room, relay in the process; local skirmish over the network path | 25 | **done** (11 October 2026; `docs/NETWORK-PROTOCOL.md`) |
 | S4-M2 | Dedicated server, UDP, clock synchronisation, eight clients | 26 | **done on one machine** (12 October 2026; `docs/NETWORK-PROTOCOL.md` §12 to §17, `docs/DEDICATED-SERVER.md`); the second physical machine and the LAN are open |
@@ -207,6 +207,10 @@ The sequence from here:
    inside the game, the match shows what the connection does, and what a person would feel is measured. The owner replaced the acceptance by humans with
    frameworks (`docs/MULTIPLAYER-FINDINGS.md`); what only a human or a second machine can show is named there and stays open for R4. The brief that follows is
    `HANDOFF-PHASE30.md`.
+   **Phase 30 done (14 October 2026)** (R1/R4 items, S3-M7 begun): by machine on one machine - the fix catalogue and the rule profile, the patch layer's
+   import, diagnostics, the client package, the licence list, the separation proof, the clean room, the documentation for humans; every acceptance replaced by a
+   machine check (`docs/ACCEPTANCE-MACHINE.md`). The brief that follows is `HANDOFF-PHASE32.md` (S3-M7 completion); by the order of item 4 S3-M1 would come
+   first - the owner decides.
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and

@@ -63,6 +63,13 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   is, whom the match waits for and until when, who paused, and carries the chat. What a click costs on a line with delay is measured (the marker in the frame
   of the click, the order twice the delay and a tick or two later). **No human has seen or played any of it:** the acceptance was done by programs that stand
   in for a person - scripted clicks through the real client, pinned pictures of every state, a latency measurement.
+- **Shippable completion (Phase 30, by machine, on one machine):** a self-contained Windows package of the game (`scripts/package-client.ps1`: client and
+  patcher, `Install-CnCNew.cmd` finds the Steam installation by itself), the server packages, a proof that no package holds original data
+  (`scripts/check-separation.ps1`), the list of third-party licences (`docs/THIRD-PARTY.md`), crash reports, run logs and support bundles that never leave the
+  machine by themselves (`docs/TROUBLESHOOTING.md`), a clean-room build from empty caches (`scripts/clean-room.ps1`), the version rule as a proposal for the
+  owner (`docs/COMPATIBILITY.md`), and every acceptance item with what a program checked and what only a human can judge (`docs/ACCEPTANCE-MACHINE.md`).
+  Fixes of the community source GeneralsGameCode are adopted as options of a rule profile (`--rules fixes`; the original stays the default and the yardstick,
+  `docs/GGC-FIXES.md`); GeneralsGamePatch imports as a layer of its own whose definitions do not compile yet (`docs/PATCH-LAYER.md`).
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

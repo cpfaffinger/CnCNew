@@ -315,3 +315,8 @@ cause analysis above (buffer, winding, light), not a number.
   no more material builds after the first frame. `SolidOpacity = 100` is the state without a variant.
 * **Counter:** `translucent=` in the line `object layer:` (parts of the frame drawn translucently).
 * All of this does not apply to shadows (the layer draws none for the preview) and not to parts that the hide mechanism hides via the zero matrix (those stay invisible).
+
+## Phase 30: the visual check by machine (14 October 2026)
+
+The lines of the visual check above are items WORLD-01 to WORLD-07, UNIT-10 to UNIT-17 and FX-01 to FX-04 of [ACCEPTANCE-MACHINE.md](ACCEPTANCE-MACHINE.md), each
+with the check that proves what a program can and what only a human can judge; no human has ticked them off.

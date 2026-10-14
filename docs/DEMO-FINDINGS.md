@@ -160,3 +160,9 @@ the rate equivalence suite, equal frame numbers of the exits, equal command stre
 - The state after phase 14 was **not** a "playable product": simulation and scripts are proven, the presentation is not. The phase 14 handoff did not have the client in its scope; that 21 warnings stood there as "explained" was true of the number of warnings, not of the security.
 - The presentation and control points now stand **before** the measurement of playability: phase 15 (world: models, bones, states, map angles, fog, security), phase 16 (controls: sound, cursor, waypoints, text, mission in the client), phase 17 (formerly 15: playability, performance, approximations).
 - Each of these points needs a **yardstick outside our own tests**: reference pictures of the original game are not in the repository (copyright), so per point a reproducible `--capture` plus a checklist for the visual check by the human (`scripts/demo-*.ps1`); "smoke test green" does not count as acceptance.
+
+## Phase 30: acceptance by machine (14 October 2026)
+
+On the owner's instruction no human accepted anything in Phase 30; every line of this document and of the acceptance catalogue has its machine state in
+[ACCEPTANCE-MACHINE.md](ACCEPTANCE-MACHINE.md): which check proves what a program can, what only a human can judge, and the named limits (no shadows, no sky in
+`MD_USA01`'s intro, no debris of creation lists, the model viewer's Crusader).

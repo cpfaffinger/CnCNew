@@ -128,6 +128,11 @@ the surveys. Nothing is rebuilt.
 
 ### S3-M7 Bug-fix and balance layers
 
+- **State after Phase 30 (14 October 2026):** (a) the catalogue exists (`docs/GGC-FIXES-CATALOGUE.md`, 354 markers, 96 CRC-gated); three fixes adopted behind
+  the rule profile with tests, four rejected with reasons, 83 CRC-gated not reviewed; (b) the patch layer imports (`AssetTool import-layer`, 366 files, its own
+  manifest options) but its definitions do not compile (`docs/PATCH-LAYER.md` §2); (c) the profile is part of the definition fingerprint and so of every match
+  description and room. Balance changes are not separately switchable - the patch does not separate them. Next: `HANDOFF-PHASE32.md`.
+
 - **Already there:** `references/` contains GeneralsGameCode and GeneralsGamePatch for reading
   (`scripts/get-references.ps1`); `CnCNew.Import` builds overlays and fingerprints; `baselines/compatibility.json`
   counts every compatibility case. Nothing of the patches is integrated (the former Phase 30, items 3 and 4).

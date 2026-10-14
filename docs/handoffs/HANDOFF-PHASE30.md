@@ -1,6 +1,6 @@
 > **Stage:** release gates · **Milestone:** R4 Multiplayer release (and R1 for its single-player items 1, 2, 5–8; items 3 and 4 are S3-M7) · **Phase:** 30
-> **Status:** planned, postponed behind Stage 4; its items are distributed to R1, S3-M7 and R4 (`docs/plan/PROGRAMME.md` §4, §6)
-> **Predecessor:** HANDOFF-PHASE29.md · **Results in:** docs/INSTALLATION.md, docs/DEDICATED-SERVER.md
+> **Status:** done by machine on one machine (14 October 2026, `dfcd72e`); the acceptance by humans is not met - replaced by `docs/ACCEPTANCE-MACHINE.md`; S3-M7 continues in HANDOFF-PHASE32.md
+> **Predecessor:** HANDOFF-PHASE29.md · **Successor:** HANDOFF-PHASE32.md · **Results in:** docs/ACCEPTANCE-MACHINE.md, docs/GGC-FIXES.md, docs/PATCH-LAYER.md, docs/TROUBLESHOOTING.md, docs/COMPATIBILITY.md, docs/THIRD-PARTY.md, docs/INSTALLATION.md, docs/DEDICATED-SERVER.md
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
 N+1 handoff (Phase 30): Patch integration, quality and shippable completion (postponed; originally the step after Phase 17)
