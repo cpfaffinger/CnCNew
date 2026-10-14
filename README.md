@@ -57,7 +57,12 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   stranger or a member may cost is bounded and counted, a room can have a password, a player a key of its own, an operator a ban list, and the server is a
   self-contained package for Windows and Linux (`scripts/package-server.ps1`). All of it on one machine: no second computer has taken part - only a second
   operating system on the same one (Linux under WSL plays in one match with Windows, and runs the packaged server) -, nothing has crossed a cable, and no
-  hostile load came from outside.
+  hostile load came from outside. Since Phase 29 the menus lead there (`docs/GAME-SHELL.md` §15, `docs/GAME-HUD.md` §21, `docs/MULTIPLAYER-FINDINGS.md`):
+  Multiplayer > Network takes an address, asks about a server never met with its key, shows its rooms and a room with seats, map, chat and start, the shared
+  load screen and - after the match - the way back into the room; "Host" runs the same server inside the game; in the match the HUD says how the connection
+  is, whom the match waits for and until when, who paused, and carries the chat. What a click costs on a line with delay is measured (the marker in the frame
+  of the click, the order twice the delay and a tick or two later). **No human has seen or played any of it:** the acceptance was done by programs that stand
+  in for a person - scripted clicks through the real client, pinned pictures of every state, a latency measurement.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

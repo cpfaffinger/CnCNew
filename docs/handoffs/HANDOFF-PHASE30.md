@@ -11,13 +11,32 @@ You work autonomously on this repository (`<repo>` = root of the working directo
 
 Until 5 October 2026 this was the step immediately after Phase 17 (`IMPLEMENTATION-PLAN.md`, then §10; `ROADMAP.md`, then §5). With the scope change of 5 October 2026 (multiplayer via dedicated server, 60 Hz, parameterised tick rate) the programme of Phases 18–29 comes before it: tick rate, fixed-point resolution and formats change every reference value and make savegames and replays unreadable. A package shipped before these changes would have to be broken afterwards. That is why the completion comes last and now also covers the server.
 
-## Honest status (starting point – re-measure when this phase starts)
+## Honest status (starting point after Phase 29, 14 October 2026 – re-measure when this phase starts)
 
-This section is a placeholder with the knowledge of 5 October 2026 and **will be overwritten by Phase 29 with the measured state**. What is known today:
+**State:** `origin/master` = `a3cfef6` and the documentation commits after it; working tree clean. Tier 4 with 49 of 49 steps ok at the state of `a3cfef6` (5,678 s; 0 warnings; all test programs; simulation, game, presentation and network tests at 30, 60 and 120 Hz; both manifests identical; the rate-equivalence suite; the long run; the client checks; `check-match`; `session-check`; `net-probe`; `net-match`, `net-robust`, `net-join`, `net-cross-os`, `net-load`, `server-package`, `server-package-linux`; the new `net-lobby` and `net-acceptance`; the staged scenes) - the second run: the first stopped at the audit of the packages, which found five advisories published since Phase 28 against `System.Security.Cryptography.Xml` and `.Pkcs` 10.0.12 of the Stride tooling (pinned to 10.0.13 in `a3cfef6`). Versions: protocol **5**, transport 2;
+`CommandTypes.Version` 17, replay 15, match description encoding 2, skirmish session state 2, `WorldSnapshot` 10, `MissionSnapshot` 3, `SaveGame` 3,
+`SkirmishSaveGame` 1, desync package 1. The yardstick (`baselines/reference-manifest.json`, 60 Hz) is untouched since `4cbf535`: retail reference match FactionGLA
+at tick 32,520, final hash `6052051714309B17`, chain `84077720F511C1ED`; stress test `9EE9F730D124C3BD` / `F338463BE66D99C0`; 16 pairings 14 decided.
+Compatibility baseline 713.
 
-- Much from Phases 15–17 is built but not accepted by a human (visual check of the world, sound, mouse cursor, texts, clicking through the shell, playability of the missions; commands-only agent 1 of 24). Whatever of this is still open when this phase starts belongs at the beginning of this brief – a shippable completion presupposes the acceptance.
-- No community patch is integrated; `references/` contains GeneralsGameCode and GeneralsGamePatch for reading only.
-- There is no installation package, no crash reporting, no licence/attribution overview.
+**What exists for multiplayer** (all of it on one machine): the dedicated server as a package for Windows and Linux (Phase 28); the menus' way to a room on a
+server and back, "Host game", the in-match indicators, the latency measurement (Phase 29, `docs/MULTIPLAYER-FINDINGS.md`).
+
+**The acceptances by humans are all open.** Nothing of Phases 15 to 17 (world, sound, cursor, texts, shell, missions), nothing of Phase 23 (60 Hz) and nothing
+of Phase 29 (the multiplayer screens, the indicators, how delay feels, a match between two people) has been seen, heard or played by a human. For Phase 29 the
+owner replaced the acceptance by frameworks; `docs/MULTIPLAYER-FINDINGS.md` says per line what a program checked and what only a human could judge (sections 4
+and 5). Item 2 of this brief ("close the open acceptances ... with the human") therefore starts from zero on the human side - or, if the owner keeps the rule of
+Phase 29, is done the same way: `scripts/acceptance.ps1` for the single-player items, `scripts/check-net-lobby.ps1`, `scripts/check-net-acceptance.ps1`,
+`scripts/check-net-endurance.ps1` and `scripts/measure-net-latency.ps1` for multiplayer.
+
+**Still open from before:** the second physical machine with a different CPU and a real network (E1, D-10); the decisions D-17 to D-20 and D-23 to D-30; no
+community patch is integrated (`references/` is read only); no installation package for the client beyond `scripts/install.ps1`, no crash reporting. From
+Phase 29: a window client cannot come back into a running match (the server and the protocol can); no watcher's way through the menus; no button to remove a
+member; no start position box; the texts of the multiplayer screens and indicators are English only.
+
+**What the frameworks of Phase 29 found** and will find again when something breaks: a match that ended in the shell threw in the client (fixed); a client that
+closed its connection before the server had ended the match was counted as lost in a running match (fixed: it waits up to three seconds for the server's end).
+A shippable completion should keep `net-lobby` and `net-acceptance` in its gate: they are the only checks that play a match through the menus in the real client.
 
 ## Brief (in this order)
 

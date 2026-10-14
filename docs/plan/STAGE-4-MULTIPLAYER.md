@@ -199,7 +199,19 @@ compatibility with old mods and savegames.
   encrypted; the server runs as a standalone package under Windows and Linux; the capacity table and the 24-hour run are
   measured.
 
-### S4-M5 Multiplayer in the client, latency perception, acceptance with humans — planned (Phase 29)
+### S4-M5 Multiplayer in the client, latency perception, acceptance with humans — done on one machine, without a human (Phase 29, 14 October 2026)
+
+- **Result** (commits `36b4d8f`, `be78648`, `48207f5`, `59797fc`, `9c653af`, `4d138a4`, `a143952`, `a3cfef6`; `docs/MULTIPLAYER-FINDINGS.md`, `docs/GAME-SHELL.md` §15 and §16,
+  `docs/GAME-HUD.md` §21, `docs/PRESENTATION-OBJECTS.md` §12, `docs/NETWORK-PROTOCOL.md` §22 and §23, `docs/DEDICATED-SERVER.md` §14): protocol version 5 (the list
+  of a server's rooms, the deadline in `LagState`, chat to the allies); the server's core as a library the dedicated program and "Host game" both run; the menus
+  from the address of a server through the question about its key, its rooms, a room and the shared load screen into a match and back; the indicators of a match
+  of a server; health, construction progress, wheel travel and chassis pose drawn on their way between two ticks. The acceptance by humans was replaced, on the
+  owner's instruction, by frameworks: scripted persons at the menus (`ShellScript`), pinned pictures of every state (474 hashes), and a measurement of what a
+  click costs (`NetStats`). Thresholds T1 to T5 were committed before the measurement: T1, T4 and T5 hold, T3 was not met and the extrapolation it prescribed is
+  built, measured without effect and off by default.
+- **Named rests:** no human has seen, heard or played any of it; the second physical machine and a real network (E1, D-10); a window client cannot come back
+  into a running match; no watcher's way and no fog choice through the menus; no button to remove a member, no start position box; English texts only; decisions
+  D-27 to D-30 are the owner's. The planned deliverables below are kept for reference.
 
 - **Deliverables (`HANDOFF-PHASE29.md`):** shell: main menu → Multiplayer → direct connection (`NetworkDirectConnect.wnd`)
   → room list → room (`LanLobbyMenu.wnd`/`LanGameOptionsMenu.wnd`: slots human/AI/open/closed/spectator, faction, team,

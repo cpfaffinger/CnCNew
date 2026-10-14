@@ -619,5 +619,6 @@ over a unit of the viewer, the unit is selected, the pointer looks for ground wh
 released there. The other player of each line is a client without a window, without pictures and without feedback; the two report the same session hash for every
 tick - the feedback is display, and no hash depends on it.
 
-**Standing orders with delay.** `StandingOrders` judges a unit again only when its last command has arrived (Phase 24). `HudTests` ("Standing orders with delay") gives a waypoint path of three stations through the HUD with an input
-delay of 6 ticks and checks that a standing order is neither given twice nor late.
+**Standing orders with delay.** `StandingOrders` judges a unit again only when its last command has arrived (Phase 24). `HudTests` ("Standing orders with delay")
+gives a waypoint path of three stations through the HUD - once without delay, once with every order executed 6 ticks later - and checks that the same orders
+are given (no station twice, none refused) and that the unit reaches the last station no later than the delay and two ticks per order allow.

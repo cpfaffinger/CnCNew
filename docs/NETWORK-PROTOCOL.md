@@ -1319,3 +1319,13 @@ the core starts no thread, opens no file and reads no clock but the injected one
 
 Tests: "Room list", "Server core", "In the room and in the match" (`tests/CnCNew.Net.Tests/Phase29Tests.cs`), "Fuzz, directory" (whatever a connection sends before
 it is a member; a browser against a hostile server).
+
+## 23. Measured in Phase 29 (14 and 15 October 2026, 60 Hz, one machine, Windows, Release)
+
+What a click costs on a line with delay, and how evenly the picture moves, is in `docs/MULTIPLAYER-FINDINGS.md` section 3 (the client's `--net-stats`): the HUD
+answers in the frame of the click on every line (median about 2 ms, 99 % at most 27 ms), an order is executed twice the delay plus one or two ticks later, and
+the next tick was late in 0 to 5 of 7,178 frames - the playback delay of section 15 does what it was built for.
+
+The matrix of section 21 again, with protocol 5 (the list of rooms, the deadline in `LagState`, the flag on chat): 36 of 36 lines hash-identical on all eight clients; against Phase 28 the median over the lines of the change of order to execution is -0.1 ms (median), +0.1 ms (95 %) and +0.8 ms (99 %), of the bandwidth +9 B/s up and +38 B/s down (10.9 and 10.7 KB/s per client and direction on average).
+
+Endurance of a hosted server: one hosted server for 82.0 minutes of the final code (62 asked; the run ends at the end of a cycle): 188 cycles, each a guest that connected (the first time asked about the key), stood in front of the rooms (once for five and a half minutes - longer than a server lets a connection browse; the lobby came back by itself), entered, accepted, played 15 s, returned and left; 188 matches on both games, every one ended by its rules at the same tick and in the same state, 376 departures after the server had ended the match and none from a running one, 188 departures from the room by choice, no desync, managed memory 162 to 163 MB. A first run of 82 minutes before the end-of-match fix had the same result except one departure from the running match in every match (section 5 of docs/MULTIPLAYER-FINDINGS.md); the one before it ended after 58.4 minutes because its script held too few cycles.

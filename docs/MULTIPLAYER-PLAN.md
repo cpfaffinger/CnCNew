@@ -249,3 +249,24 @@ The same list is in `docs/TICKRATE-MIGRATION.md` §15.7.7, in `CLAUDE.md` (parag
 - **Reference manifest:** file with the target results of fixed runs; replaces the hashes in the documentation as the yardstick.
 - **Rate equivalence:** the same scene yields the same game quantities at 30, 60 and 120 Hz within declared tolerances.
 - **Catch-up speed:** how much faster than real time a client can compute; limits rejoining and recovery after a stall.
+
+## 9. Completion of the programme (Phase 29, 14 October 2026)
+
+The programme of Phases 18 to 29 is worked off. What it set out to build exists and is measured **on one machine**: a simulation whose tick rate is a value
+(60 Hz by default), fixed point with 24 fractional bits, a session a network can carry, a relay protocol (version 5) over a sealed UDP transport, a dedicated
+server as a package for Windows and Linux, robustness (rejoin, watchers, desync diagnosis), limits against an open port, and - since this phase - the client: the
+menus' way to a room and back, "Host game", the in-match indicators, and a measurement of what delay costs a click.
+
+**Measured against the latency model of section 3** (calculated then, measured now, `docs/MULTIPLAYER-FINDINGS.md` section 3): the marker of an order stands in
+the frame of the click on every line (median about 2 ms); the order is executed twice the one-way delay plus one or two ticks later - 17 ms without delay, 50 ms
+at 20 ms each way, 100 ms at 40 ms, 183 ms at 80 ms; a tick is late in less than one frame of a thousand.
+
+**What remains open, by its kind:**
+
+| Open | Why it could not be closed here |
+| --- | --- |
+| E1 / D-10: a second physical machine with another CPU; a real network, a NAT, a firewall | hardware that was not there; everything ran on one computer, across two operating systems at most |
+| Every judgement of a human: how the screens and indicators look, how delay feels, sound, playing a match against another person | the owner replaced the acceptance by frameworks for this phase; `docs/MULTIPLAYER-FINDINGS.md` names per line what a program checked and what it cannot |
+| A window client coming back into a running match; a watcher's way through the menus; removing a member; start positions | not built (`docs/MULTIPLAYER-FINDINGS.md` section 5) |
+| D-17, D-19, D-23 to D-30 | the owner's decisions; each is built as a default or an option with its reason |
+| A hostile load from outside; a 24-hour run | as after Phase 28 |

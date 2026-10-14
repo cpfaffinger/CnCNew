@@ -154,7 +154,7 @@ milestone status is updated in each stage document.
 | S4-M2 | Dedicated server, UDP, clock synchronisation, eight clients | 26 | **done on one machine** (12 October 2026; `docs/NETWORK-PROTOCOL.md` §12 to §17, `docs/DEDICATED-SERVER.md`); the second physical machine and the LAN are open |
 | S4-M3 | Desync diagnosis, rejoin, spectators, server replay | 27 | **done on one machine** (12 October 2026; `docs/NETWORK-PROTOCOL.md` §18 and §19, `docs/NETWORK-DIAGNOSTICS.md`); votes not built (D-23); the second physical machine is open |
 | S4-M4 | Server operation and security | 28 | **done on one machine** (13 October 2026; `docs/NETWORK-PROTOCOL.md` §20 and §21, `docs/DEDICATED-SERVER.md` §9 to §13); a hostile load from outside, a real network and the second physical machine are open |
-| S4-M5 | Multiplayer in the client, latency perception, acceptance with humans | 29 | planned |
+| S4-M5 | Multiplayer in the client, latency perception, acceptance with humans | 29 | **done on one machine, without a human** (14 October 2026; `docs/MULTIPLAYER-FINDINGS.md`, `docs/GAME-SHELL.md` §15 and §16, `docs/GAME-HUD.md` §21): the menus' way to a server and back, the in-match indicators and the latency measurement are built and checked by programs that stand in for a person; no human has seen, heard or played any of it, and no second machine took part |
 | S4-M6 | Co-simulating server as an option (hybrid: rejoin without a donor, desync arbitration, authoritative spectating) | – | open; after S4-M3, optional (D-11) |
 | **R4** | **Multiplayer release:** server package (Windows, Linux), acceptance of LAN and internet matches | 30 | planned |
 
@@ -203,6 +203,10 @@ The sequence from here:
    **Phase 28 done (13 October 2026)** (S4-M4), on the owner's instruction before the Stage 3 work of item 4: the open port - a sealed and authenticated
    connection, limits, fuzzing, the server as a package for Windows and Linux, capacity and endurance on one machine. The brief that is ready to be worked on
    is `HANDOFF-PHASE29.md`; the Stage 3 work that touches the simulation is still to come.
+   **Phase 29 done (14 October 2026)** (S4-M5): multiplayer in the client - the menus lead to a room on a server and back, "Host game" runs the server's core
+   inside the game, the match shows what the connection does, and what a person would feel is measured. The owner replaced the acceptance by humans with
+   frameworks (`docs/MULTIPLAYER-FINDINGS.md`); what only a human or a second machine can show is named there and stays open for R4. The brief that follows is
+   `HANDOFF-PHASE30.md`.
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and
@@ -260,6 +264,10 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-23 | Votes in a multiplayer match (kick a player, end the match, change the speed): whether, and what they decide | not built; pause is limited per player and in length, the speed is the host's (`docs/NETWORK-PROTOCOL.md` §18.5). A further proposal of Phase 27: the server's hash interval 4 instead of 1 (6 KB/s less upstream per client, a desync noticed at most three ticks later; `docs/NETWORK-DIAGNOSTICS.md` §6) | Phase 29 | 4 **Phase 28: the host of a room removes a member (`Kick`, `docs/NETWORK-PROTOCOL.md` §20.5) - the first thing of that kind; no vote** |
 | D-24 | A player that reports a wrong hash ends the match for everybody as a desync - the relay does not simulate and cannot tell who lies. Proposal: with three or more players the majority's hash is the match's and the minority is dropped; with two the match ends as today. (A watcher's wrong hash already drops only the watcher, Phase 28.) | not built; the match ends | Phase 29 | 4 |
 | D-25 | The player key - a permanent pseudonym a server sees: does the window client state one by default (it does), and does a public server require one (`requirePlayerKey`, default false) | stated by default, not required | Phase 29 | 4 |
+| D-27 | Shall a server list its rooms to anybody who asks (`docs/NETWORK-PROTOCOL.md` §22.1, threat T16)? A list names rooms, counts, map, build and lock, and no person | listed by default (`listRooms`); `--no-room-list` | R4 | 4 |
+| D-28 | Which builds may enter a game somebody hosts from the menus? | the build that hosts, changed or not; a dedicated server stays with released builds unless `allowModifiedBuilds` | R4 | 4 |
+| D-29 | The extrapolation of at most one tick when the next tick is late (`--extrapolate`): on or off? Measured without effect - a tick was late in 0 to 5 of 7,178 frames | off | R4 | 4 |
+| D-30 | A chat line "to the allies" from a seat in no team | reaches its sender only | R4 | 4 |
 | D-26 | The limits of a public server (`docs/DEDICATED-SERVER.md` §9.2): the defaults are proposals from measurements on one machine - above all 8 connections per address, 100 key exchanges a second, 500 messages a second per member, 20 s without a hash report, a match of at most 2 h, a recording of at most 64 MiB | the defaults of §9.2 | R4 | 4 |
 
 **Decided:**
