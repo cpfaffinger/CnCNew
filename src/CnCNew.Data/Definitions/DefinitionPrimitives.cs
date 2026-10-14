@@ -192,9 +192,22 @@ public static class ValueGrammar
                 throw Error($"Color component '{values[i]}' in '{text}' must be an integer from 0 to 255.", location);
         var color = new ColorValue(bytes[0], bytes[1], bytes[2], bytes.Length == 4 ? bytes[3] : (byte)255);
         if (rest.Length == 0 || rest[0].StartsWith("//", StringComparison.Ordinal)) return new(DefinitionValueKind.Color, color, text);
-        if (bytes.Length == 3 && rest.Length == 1 && long.TryParse(rest[0], NumberStyles.None, CultureInfo.InvariantCulture, out var frame))
+        // ParticleSystemTemplate::parseRGBColorKeyframe reads the colour and one frame and never looks at the rest of the line; tokens after the frame are
+        // accepted only behind it and counted by the compiler (ColorKeyframeIgnoredTokens, diagnostic compatibility-ignored-tokens), never silently.
+        if (bytes.Length == 3 && rest.Length >= 1 && !rest[0].StartsWith("//", StringComparison.Ordinal)
+            && long.TryParse(rest[0], NumberStyles.None, CultureInfo.InvariantCulture, out var frame))
             return new(DefinitionValueKind.ColorKeyframe, new ColorKeyframeValue(color, frame), text);
         throw Error($"Unexpected trailing text '{string.Join(' ', rest)}' after color in '{text}'.", location);
+    }
+
+    /// <summary>The tokens after the frame of a colour keyframe (<c>R:r G:g B:b frame ...</c>) that the reference parser never reads; 0 for anything else.</summary>
+    public static int ColorKeyframeIgnoredTokens(string text)
+    {
+        if (!text.TrimStart().StartsWith("R:", StringComparison.OrdinalIgnoreCase)) return 0;
+        if (!TryLabeled(text, ["R", "G", "B"], ["A"], out var values, out var rest) || values.Length != 3 || rest.Length < 2) return 0;
+        var comment = Array.FindIndex(rest, token => token.StartsWith("//", StringComparison.Ordinal));
+        var meaningful = comment < 0 ? rest.Length : comment;
+        return Math.Max(0, meaningful - 1);
     }
 
     public static DefinitionValue ParseVectorForm(string text, IniSourceLocation location)
