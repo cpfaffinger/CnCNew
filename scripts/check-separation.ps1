@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     For every file of -Directory:
-      - its SHA-256 is compared with every file of the master installation (baselines/steam-master.json) and, when this machine has it, every file of the
+      - its SHA-256 is compared (an empty file carries no data and is only counted) with every file of the master installation (baselines/steam-master.json) and, when this machine has it, every file of the
         exported content (game/content/content-manifest.json): an equal hash is a finding;
       - its extension is compared with the formats of the game's data (.big .w3d .map .csf .str .wnd .ini .scb .tga .dds .wav .mp3 .bik .wak .ani): a file of such a
         format is a finding unless the table of known files below names it with its origin;
@@ -38,6 +38,7 @@ $knownFormatFiles = @{}
 $runtimeNames = '^(System\.|Microsoft\.(?!.*Stride)|mscorlib|netstandard|WindowsBase|PresentationCore|coreclr|clrjit|clrgc|hostfxr|hostpolicy|clretwrc|mscordaccore|mscordbi|mscorrc|createdump|api-ms-|ucrtbase|Microsoft\.DiaSymReader|libclrjit|libcoreclr|libhostfxr|libhostpolicy|libSystem\.|libmscordaccore|libmscordbi|libclrgc)'
 
 $findings = 0
+$empty = 0
 $classes = [ordered]@{ own = @(0, 0L); runtime = @(0, 0L); 'third-party' = @(0, 0L); document = @(0, 0L) }
 $lines = New-Object System.Collections.Generic.List[string]
 foreach ($file in Get-ChildItem -LiteralPath $Directory -Recurse -File | Sort-Object FullName) {
@@ -51,10 +52,12 @@ foreach ($file in Get-ChildItem -LiteralPath $Directory -Recurse -File | Sort-Ob
     $classes[$class][0]++
     $classes[$class][1] += $file.Length
     $lines.Add("$class`t$hash`t$($file.Length)`t$relative")
-    if ($gameHashes.Contains($hash)) { Write-Host "FOUND: $relative is a file of the game (SHA-256 $hash)"; $findings++ }
+    # An empty file carries no data; its hash is the hash of every empty file (the game has some, so do packages): counted, not compared.
+    if ($file.Length -eq 0) { $empty++ }
+    elseif ($gameHashes.Contains($hash)) { Write-Host "FOUND: $relative is a file of the game (SHA-256 $hash)"; $findings++ }
     if ($gameFormats -contains $file.Extension.ToLowerInvariant() -and -not $knownFormatFiles.ContainsKey($relative)) { Write-Host "FOUND: $relative has a format of the game's data"; $findings++ }
 }
-Write-Host ("{0}: {1} files compared with {2:N0} files of the game ({3})" -f $Directory, $lines.Count, $gameHashes.Count, $(if ($withContent) { 'master installation and its export' } else { 'master installation only; no game/content here' }))
+Write-Host ("{0}: {1} files ({4} empty, not compared) compared with {2:N0} files of the game ({3})" -f $Directory, $lines.Count, $gameHashes.Count, $(if ($withContent) { 'master installation and its export' } else { 'master installation only; no game/content here' }), $empty)
 foreach ($entry in $classes.GetEnumerator()) { Write-Host ("  {0,-12} {1,6} files {2,10:N1} MB" -f $entry.Key, $entry.Value[0], ($entry.Value[1] / 1MB)) }
 if ($List) { [IO.File]::WriteAllLines([IO.Path]::GetFullPath($List), $lines) }
 if ($findings -gt 0) { Write-Host "check-separation: $findings finding(s)"; exit 1 }
