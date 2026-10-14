@@ -476,7 +476,12 @@ public abstract class SabotageCollideBase(CrateCollideData crate) : CrateCollide
     protected abstract bool IsTargetKind(Entity building);
 
     protected override bool IsValidToExecute(IWorldServices world, Entity other)
-        => base.IsValidToExecute(world, other) && !other.EffectivelyDead && IsTargetKind(other) && world.RelationshipOf(Entity.Owner, other.Owner) == Relationship.Enemies;
+        => base.IsValidToExecute(world, other) && !other.EffectivelyDead && IsTargetKind(other) && !UnfinishedOrSold(world, other)
+           && world.RelationshipOf(Entity.Owner, other.Owner) == Relationship.Enemies;
+
+    /// <summary>The adopted fix <see cref="Rules.GameFix.NoSabotageOfUnfinishedOrSold"/>: a building under construction or being sold cannot be entered. The original allows it.</summary>
+    private static bool UnfinishedOrSold(IWorldServices world, Entity building)
+        => world.Templates.Rules.Has(Rules.GameFix.NoSabotageOfUnfinishedOrSold) && (building.HasStatus(ObjectStatusBits.UnderConstruction) || building.HasStatus(ObjectStatusBits.Sold));
 
     protected override bool ExecuteCrateBehavior(IWorldServices world, Entity other)
     {

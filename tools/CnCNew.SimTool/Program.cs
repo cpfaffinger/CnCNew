@@ -77,6 +77,7 @@ const string Usage = """
     Every command that creates a world takes --tick-rate N (30, 60 or 120; default: the product rate): the catalog is built for that rate and the world runs at it.
     A budget given as --ticks/--max-ticks is a raw tick count of that rate; --seconds S or --minutes M state it as game time instead, and the
     default budgets are game time (the same at every rate). The stress test counts steps (--ticks only). A manifest is checked at the rate its file records.
+    The commands that load the shipped content take --rules original|fixes|NAME,... (docs/GGC-FIXES.md; default original); a manifest is checked with the original rules only.
     reference-match, ai-match and mission-run take --time-probe: counters of the time service over the first run (per-tick amounts that round to
     zero at run time, the one-frame minimum engaging, durations off the grid), by place in the source. Diagnostics, not state.
     """;
@@ -326,8 +327,8 @@ static (CompiledDefinitionGraph Graph, TemplateCatalog Catalog, string Fingerpri
     var graph = DefinitionCompiler.Compile(source, ModuleRegistry.Default, options);
     // The same world the client simulates (GameData.Load): the airfields' parking and runway points come from the draw models' bones and are part of the fingerprint.
     var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
-    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.SimTool.ToolRate.Current, geometry);
-    return (graph, catalog, catalog.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256)));
+    var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.SimTool.ToolRate.Current, geometry, CnCNew.SimTool.ToolRate.Rules);
+    return (graph, catalog, catalog.Rules.Combine(catalog.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256))));
 }
 
 static int AuditCoverage(string directory, string[] args)

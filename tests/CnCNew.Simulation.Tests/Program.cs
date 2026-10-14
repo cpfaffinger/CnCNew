@@ -165,6 +165,10 @@ run.Test("Phase 5: FireWeaponWhenDeadBehavior activation and conflict re-check",
 run.Test("Phase 5: StealthDetectorUpdate marks and expires DETECTED", Tests.Phase5StealthDetector);
 run.Test("Phase 10: StealthDetectorUpdate respects height line of sight", Tests.Phase5StealthDetectorHeightLineOfSight);
 run.Test("Phase 5: PoisonedBehavior periodic damage, re-poison and healing", Tests.Phase5Poisoned);
+run.Test("Game fixes: the rule profile and its fingerprint", Tests.GameFixProfile);
+run.Test("Game fixes: a kill by poison credits the poisoner", Tests.GameFixPoisonKillCredit);
+run.Test("Game fixes: a kill by fire credits the source of the flame", Tests.GameFixFlameKillCredit);
+run.Test("Game fixes: no sabotage of an unfinished or sold building", Tests.GameFixNoSabotageOfUnfinishedOrSold);
 run.Test("Phase 5: BaseRegenerateUpdate delay, bursts and stop at full health", Tests.Phase5BaseRegenerate);
 run.Test("Phase 5: PhysicsBehavior, SquishCollide and GenerateMinefieldBehavior", Tests.MatchMinefieldAndPhysics);
 run.Test("Phase 5: BaseRegenerateUpdate wake tick survives a snapshot", Tests.MatchBaseRegenerateSnapshot);

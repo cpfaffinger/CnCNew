@@ -4,6 +4,7 @@ using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Rules;
 using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.Templates;
@@ -364,7 +365,8 @@ public sealed class TemplateCatalog
     /// <paramref name="geometry"/>: the model-derived constants (airfield bones) the client layer read from the draw models; omitted, the airfields keep their computed layout.
     /// A table that names an airfield this catalog does not know is refused.
     /// </summary>
-    public static TemplateCatalog Build(CompiledDefinitionGraph graph, ModuleBindingTable bindings, SimulationRate rate, ModelGeometry? geometry = null)
+    /// <param name="rules">The rules the worlds of this catalog follow (<see cref="RuleProfile"/>); the original's when omitted.</param>
+    public static TemplateCatalog Build(CompiledDefinitionGraph graph, ModuleBindingTable bindings, SimulationRate rate, ModelGeometry? geometry = null, RuleProfile? rules = null)
     {
         ArgumentNullException.ThrowIfNull(graph);
         ArgumentNullException.ThrowIfNull(bindings);
@@ -447,6 +449,7 @@ public sealed class TemplateCatalog
             MaxTunnelCapacity = ResolveMaxTunnelCapacity(graph),
             Geometry = geometry ?? ModelGeometry.None,
             Rate = rate,
+            Rules = rules ?? RuleProfile.Original,
         };
         foreach (var name in catalog.Geometry.Airfields.Keys)
             if (!catalog.TryGet(name, out _)) throw new TemplateBuildException($"Model geometry names '{name}', which is not an Object definition.");
@@ -490,6 +493,12 @@ public sealed class TemplateCatalog
     /// carry no rate; one definition graph yields one catalog per rate.
     /// </summary>
     public required SimulationRate Rate { get; init; }
+
+    /// <summary>
+    /// The rules the worlds of this catalog follow: the original's, or the original with adopted fixes. Part of the catalog's identity like <see cref="Rate"/> - the host
+    /// folds it into the definition fingerprint (<see cref="RuleProfile.Combine"/>).
+    /// </summary>
+    public RuleProfile Rules { get; private init; } = RuleProfile.Original;
 
     /// <summary>The conversions of <see cref="Rate"/>.</summary>
     public SimulationTime Time => Rate.Time;

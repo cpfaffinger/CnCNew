@@ -155,13 +155,14 @@ public sealed class SyntheticFixture
     };
 
     /// <param name="rate">The tick rate the catalog is built for; worlds created from this fixture must be configured for the same rate.</param>
-    public SyntheticFixture(SimulationRate rate, ModuleBindingTable? bindings = null, IReadOnlyDictionary<string, string>? files = null)
+    /// <param name="rules">The rules of the catalog (<see cref="Rules.RuleProfile"/>); the original's when omitted. Folded into <see cref="Fingerprint"/>.</param>
+    public SyntheticFixture(SimulationRate rate, ModuleBindingTable? bindings = null, IReadOnlyDictionary<string, string>? files = null, Rules.RuleProfile? rules = null)
     {
         Bindings = bindings ?? ModuleBindingTable.Default;
         Graph = DefinitionCompiler.Compile(new InMemoryDefinitionSource(files ?? Files), Bindings.Registry,
             DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, StrictReferences = true });
-        Fingerprint = rate.Combine(DefinitionSnapshotWriter.ComputeFingerprint(Graph).Sha256);
-        Templates = TemplateCatalog.Build(Graph, Bindings, rate);
+        Templates = TemplateCatalog.Build(Graph, Bindings, rate, rules: rules);
+        Fingerprint = Templates.Rules.Combine(rate.Combine(DefinitionSnapshotWriter.ComputeFingerprint(Graph).Sha256));
     }
 
     public ModuleBindingTable Bindings { get; }

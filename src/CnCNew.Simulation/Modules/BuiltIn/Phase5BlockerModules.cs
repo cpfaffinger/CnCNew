@@ -76,6 +76,12 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
     private Fixed _flameDamageLimit;
     private long _lastFlameDamageTick = long.MinValue / 2; // half MinValue: "- FlameDamageExpirationTicks" below can never overflow.
     private long _nextWake = -1;
+    /// <summary>
+    /// The source of the last flame, in whose name the burning damage is dealt - only with the adopted fix <see cref="Rules.GameFix.FlameKillCredit"/>. The original
+    /// remembers the burning object itself (<c>m_flameSource = getObject()->getID()</c>), which credits no one; this port deals it in nobody's name, the same outcome.
+    /// Written to the state only when set.
+    /// </summary>
+    private EntityId _flameSource;
 
     public override string ModuleName => "FlammableUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -91,6 +97,7 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
         if (info.DamageType != DamageTypes.Flame && info.DamageType != DamageTypes.ParticleBeam) return;
         if (world.Tick - data.FlameDamageExpirationTicks > _lastFlameDamageTick) _flameDamageLimit = data.FlameDamageLimit;
         _lastFlameDamageTick = world.Tick;
+        if (world.Templates.Rules.Has(Rules.GameFix.FlameKillCredit)) _flameSource = info.Source;
         // Once aflame or already burned, no further ignition bookkeeping (matches the reference's status-bit guard).
         if (_aflame || Entity.HasStatus(BurnedBit)) return;
         _flameDamageLimit -= actualDamageDealt;
@@ -128,7 +135,7 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
         if (_damageEndTick != 0 && now >= _damageEndTick)
         {
             _damageEndTick = now + world.Time.AtLeastOneFrame(data.AflameDamageDelayTicks);
-            world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, data.AflameDamageAmount, DamageTypes.Flame, DeathTypes.Burned, false));
+            world.Damage(Entity.Id, new DamageInfo(_flameSource, data.AflameDamageAmount, DamageTypes.Flame, DeathTypes.Burned, false));
         }
         if (_burnedEndTick != 0 && now >= _burnedEndTick)
         {
@@ -163,6 +170,7 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
         writer.Fixed("flameDamageLimit", _flameDamageLimit);
         writer.Int("lastFlameDamageTick", _lastFlameDamageTick);
         writer.Int("nextWake", _nextWake);
+        if (_flameSource.IsValid) writer.UInt("flameSource", _flameSource.Value);
     }
 
     public override void Load(IStateReader reader)
@@ -173,6 +181,7 @@ public sealed class FlammableUpdate(FlammableData data) : SimModule, IUpdateModu
         _damageEndTick = reader.Int("damageEndTick");
         _flameDamageLimit = reader.Fixed("flameDamageLimit");
         _lastFlameDamageTick = reader.Int("lastFlameDamageTick");
+        _flameSource = reader.Has("flameSource") ? new EntityId(checked((uint)reader.UInt("flameSource"))) : EntityId.Invalid;
         _nextWake = reader.Int("nextWake");
     }
 }
@@ -680,6 +689,11 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
     private long _poisonStopTick = long.MaxValue;
     private Fixed _poisonDamageAmount = Fixed.Zero;
     private int _deathType = DeathTypes.Poisoned;
+    /// <summary>
+    /// The poisoner, in whose name the periodic damage is dealt - only with the adopted fix <see cref="Rules.GameFix.PoisonKillCredit"/>; the original deals it in
+    /// nobody's name (<c>m_poisonSource</c> stays invalid), so a kill by poison counts for nobody. Written to the state only when set.
+    /// </summary>
+    private EntityId _poisonSource;
 
     public override string ModuleName => "PoisonedBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -690,6 +704,7 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
     {
         if (info.DamageType != DamageTypes.Poison) return;
         _poisonDamageAmount = actualDamageDealt;
+        if (world.Templates.Rules.Has(Rules.GameFix.PoisonKillCredit)) _poisonSource = info.Source;
         _poisonStopTick = world.Tick + world.Time.AtLeastOneFrame(data.PoisonDurationTicks);
         var freshDamageTick = world.Tick + world.Time.AtLeastOneFrame(data.PoisonDamageIntervalTicks);
         _poisonDamageTick = _poisonDamageTick == long.MaxValue ? freshDamageTick : Math.Min(_poisonDamageTick, freshDamageTick);
@@ -710,7 +725,7 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
 
         if (_poisonDamageTick != long.MaxValue && world.Tick >= _poisonDamageTick)
         {
-            world.Damage(Entity.Id, new DamageInfo(EntityId.Invalid, _poisonDamageAmount, DamageTypes.Unresistable, _deathType, false));
+            world.Damage(Entity.Id, new DamageInfo(_poisonSource, _poisonDamageAmount, DamageTypes.Unresistable, _deathType, false));
             _poisonDamageTick = world.Tick + world.Time.AtLeastOneFrame(data.PoisonDamageIntervalTicks);
         }
         // Unless the poison killed us: then we stay a pulsating toxic pus ball forever (no more ticks to schedule).
@@ -727,6 +742,7 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
         _poisonDamageTick = long.MaxValue;
         _poisonStopTick = long.MaxValue;
         _poisonDamageAmount = Fixed.Zero;
+        _poisonSource = EntityId.Invalid;
     }
 
     public override void Describe(IStateWriter writer)
@@ -736,6 +752,7 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
         writer.Int("poisonStopTick", _poisonStopTick);
         writer.Fixed("poisonDamageAmount", _poisonDamageAmount);
         writer.Int("deathType", _deathType);
+        if (_poisonSource.IsValid) writer.UInt("poisonSource", _poisonSource.Value);
     }
 
     public override void Load(IStateReader reader)
@@ -745,5 +762,6 @@ public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModu
         _poisonStopTick = reader.Int("poisonStopTick");
         _poisonDamageAmount = reader.Fixed("poisonDamageAmount");
         _deathType = checked((int)reader.Int("deathType"));
+        _poisonSource = reader.Has("poisonSource") ? new EntityId(checked((uint)reader.UInt("poisonSource"))) : EntityId.Invalid;
     }
 }

@@ -21,8 +21,17 @@ internal static class ToolRate
     /// <summary>True when <c>--tick-rate</c> was given.</summary>
     public static bool Given { get; private set; }
 
+    /// <summary><c>--rules original|fixes|NAME,...</c>: the rules this run simulates with (docs/GGC-FIXES.md); the original's without the option.</summary>
+    public static CnCNew.Simulation.Rules.RuleProfile Rules { get; private set; } = CnCNew.Simulation.Rules.RuleProfile.Original;
+
     public static void Read(string[] args)
     {
+        var rules = Array.IndexOf(args, "--rules");
+        if (rules >= 0)
+        {
+            if (rules + 1 >= args.Length) throw new ArgumentException("--rules needs a value: original, fixes or the names of fixes.");
+            Rules = CnCNew.Simulation.Rules.RuleProfile.Parse(args[rules + 1]);
+        }
         var index = Array.IndexOf(args, Option);
         if (index < 0) return;
         if (index + 1 >= args.Length) throw new ArgumentException($"{Option} needs a value: 30, 60 or 120.");
@@ -36,6 +45,8 @@ internal static class ToolRate
     /// </summary>
     public static void UseRecorded(long recordedTicksPerSecond, string file)
     {
+        if (!Rules.IsOriginal)
+            throw new ArgumentException($"{file} is measured with the original rules; --rules {Rules.Name} is refused. The original profile is the yardstick.");
         var recorded = SimulationRate.FromTicksPerSecond(recordedTicksPerSecond);
         if (Given && Current != recorded)
             throw new ArgumentException($"{file} records {recorded}; {Option} {Current.TicksPerSecond} is refused. A manifest is checked at the rate it was written at.");

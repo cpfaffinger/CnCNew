@@ -108,6 +108,9 @@ if (CnCNew.Client.Stride.ClientRuntime.InputDelayTicks is < 0 or > 600) throw ne
 var tickRate = GetArgument(args, "--tick-rate") is { } rateText
     ? CnCNew.Simulation.Time.SimulationRate.FromTicksPerSecond(int.Parse(rateText, System.Globalization.CultureInfo.InvariantCulture))
     : GameData.DefaultSessionRate;
+// --rules original|fixes|NAME[,NAME...]: the rules of the sessions (docs/GGC-FIXES.md): the original's by default, or the original with adopted fixes of the community
+// source. The choice is part of the definition fingerprint - a server or a save made with other rules is refused.
+CnCNewGame.Rules = GetArgument(args, "--rules") is { } rulesText ? CnCNew.Simulation.Rules.RuleProfile.Parse(rulesText) : CnCNew.Simulation.Rules.RuleProfile.Original;
 // --mouse classic|alternate: the mouse setup of this run (alternate, the default: left selects, right orders; classic: the original's default, left selects and orders).
 bool? alternateMouse = GetArgument(args, "--mouse")?.ToLowerInvariant() switch
 {
@@ -324,6 +327,9 @@ internal sealed class CnCNewGame(
     string? caption = null,
     bool loopScenario = false) : Game
 {
+    /// <summary>The rules of the sessions (<c>--rules</c>, docs/GGC-FIXES.md).</summary>
+    public static CnCNew.Simulation.Rules.RuleProfile Rules { get; set; } = CnCNew.Simulation.Rules.RuleProfile.Original;
+
     /// <summary>
     /// The fixed step of a smoke test: every rendered frame advances the game by one original frame (1/30 s), whatever the tick rate - one tick at 30 Hz, two at 60 Hz.
     /// So <c>--frames</c>, <c>--every</c> and the frame numbers of an input script mean the same game time at every rate, and a capture at frame N shows the same moment.
@@ -479,7 +485,7 @@ internal sealed class CnCNewGame(
 
         if (shellMode)
         {
-            var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate);
+            var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate, rules: Rules);
             var back = GraphicsDevice.Presenter.BackBuffer;
             var shellRun = Shell;
             var network = shellRun is null ? null : new CnCNew.Game.Shell.ShellNetwork(data.Fingerprint, shellRun.NetDirectory, shellRun.NetPort, shellRun.UsePlayerKey) { MatchSeconds = shellRun.NetMatchSeconds };
@@ -552,7 +558,7 @@ internal sealed class CnCNewGame(
 
     private void LoadLiveMatch(LiveOptions options)
     {
-        var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate);
+        var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate, rules: Rules);
         Console.WriteLine($"session: simulation rate {data.Rate}");
         if (Join is { } join)
         {
