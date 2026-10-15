@@ -32,7 +32,7 @@ internal static class RateCompare
         }
         if (args.Contains(ToolRate.Option)) Console.WriteLine($"note: {ToolRate.Option} is ignored; every case runs at 30, 60 and 120 Hz.");
 
-        var catalogs = new RateCatalogs(compile(directory));
+        var catalogs = new RateCatalogs(compile(directory), ToolRate.Rules);
         Console.WriteLine("note: the catalogs are built without model geometry (airfield and runway points from the template geometry), exactly as the test suite builds them, so both print the same numbers.");
 
         if (list)
@@ -88,7 +88,7 @@ internal static class RateCompare
     {
         var rates = (Value(args, "--rates") ?? "30,60").Split(',').Select(text => SimulationRate.FromTicksPerSecond(int.Parse(text, CultureInfo.InvariantCulture))).ToArray();
         var frames = long.Parse(Value(args, "--frames") ?? "14400", CultureInfo.InvariantCulture);
-        var catalogs = new RateCatalogs(graph);
+        var catalogs = new RateCatalogs(graph, ToolRate.Rules);
         RateCompareFields.Match Of(SimulationRate rate)
         {
             var catalog = catalogs.Of(rate);
@@ -190,7 +190,7 @@ internal static class RateCompare
             Console.Error.WriteLine(Syntax);
             return 2;
         }
-        var catalogs = new RateCatalogs(graph);
+        var catalogs = new RateCatalogs(graph, ToolRate.Rules);
         if (args.Contains("--fields")) return RateCompareFields.Run(args, pairing, catalogs, rates[0], rates[1], context);
         if (args.Contains("--state"))
         {

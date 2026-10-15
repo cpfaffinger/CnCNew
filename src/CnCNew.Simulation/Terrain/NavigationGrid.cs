@@ -1110,4 +1110,4 @@ public sealed class NavigationGrid
 }
 
 /// <summary>A path question as the world's queue keeps it (the movement profile): start, goal, surfaces, the temporary blockers, and whether only a path that arrives counts.</summary>
-public sealed record PathQuery(Fixed StartX, Fixed StartY, Fixed GoalX, Fixed GoalY, LocomotorSurfaces Surfaces, ImmutableArray<(Fixed X, Fixed Y, Fixed Radius)> Blocks, bool ArrivingOnly);
+public sealed record PathQuery(Fixed StartX, Fixed StartY, Fixed GoalX, Fixed GoalY, LocomotorSurfaces Surfaces, ImmutableArray<(Fixed X, Fixed Y, Fixed Radius)> Blocks, bool ArrivingOnly, ulong Group = 0);

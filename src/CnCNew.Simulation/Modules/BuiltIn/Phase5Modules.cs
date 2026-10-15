@@ -622,6 +622,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     private enum PathWait : byte { None = 0, Plan = 1, Detour = 2 }
 
+    // The group order the current move belongs to (the movement profile shares one search among its members, SimulationWorld.PathQueue.cs); 0 for any other move.
+    private ulong _pathGroup;
+
+    /// <summary>Marks the move just ordered as part of the group order <paramref name="group"/> (<see cref="SimulationWorld"/>'s <c>GroupMoveCommand</c>); any later order clears it.</summary>
+    internal void MarkGroupOrder(ulong group) => _pathGroup = group;
+
     /// <summary>Whether the object waits for an answer of the world's path queue (the movement profile): it keeps the path it has, or stands, and keeps its order.</summary>
     public bool WaitingForPath => _pathWait != PathWait.None;
     private BuilderTask _task;
@@ -712,6 +718,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     {
         // AIUpdateInterface::privateMoveToPosition: "the dead don't listen very well".
         if (Entity.EffectivelyDead && IsGroundMover) return;
+        _pathGroup = 0;
         world.EndAttack(Entity);
         if (attackMove) world.BeginAttackMove(Entity, x, y);
         CancelDock(world);
@@ -2032,7 +2039,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (_pathWait == PathWait.None && (!_pathValid || _pathObstacles != navigation.ObstacleSum))
         {
             if (!_pathValid) { _path.Clear(); _pathIndex = 0; }
-            world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [], false));
+            world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [], false, _pathGroup));
             _pathWait = PathWait.Plan;
             _pathValid = true;
             _pathObstacles = navigation.ObstacleSum;
@@ -2206,6 +2213,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (_dyingSince != 0) writer.Int("dyingSince", _dyingSince);
         if (_ignoreCollisionsUntil != 0) writer.Int("ignoreCollisionsUntil", _ignoreCollisionsUntil);
         if (_pathWait != PathWait.None) writer.Int("pathWait", (int)_pathWait);
+        if (_pathGroup != 0) writer.UInt("pathGroup", _pathGroup);
         if (_pathValid)
         {
             writer.Bool("pathValid", true);
@@ -2270,6 +2278,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             foreach (var item in reader.Array("path")) _path.Add(new PathPoint(item.Fixed("x"), item.Fixed("y")));
         }
         _pathWait = reader.Has("pathWait") ? (PathWait)checked((int)reader.Int("pathWait")) : PathWait.None;
+        _pathGroup = reader.Has("pathGroup") ? reader.UInt("pathGroup") : 0;
         _frameArriving = reader.Has("frameArriving") && reader.Bool("frameArriving");
         _dock = reader.Bool("docking") ? DockMachine.Load(reader) : null;
     }

@@ -15,23 +15,23 @@ namespace CnCNew.Simulation.World;
 /// <para>
 /// A ground unit that needs a path asks the world (<see cref="RequestPath"/>) instead of searching itself, and takes the answer in a later update (<see cref="TryTakePath"/>); while
 /// it waits it is <see cref="IsPathPending">pending</see> - it keeps a path it still has, or stands, and its order is never dropped. The world works through the queue once per
-/// logic frame of the original, at the end of the update phase of the frame's last tick, with a budget of <see cref="PathCellBudget"/> expanded cells (counted work, never
+/// logic frame of the original, at the end of the update phase of the tick on a frame boundary (the tick in which every object's frame that began before it ends), with a budget of <see cref="PathCellBudget"/> expanded cells (counted work, never
 /// time): a search that does not fit pauses and continues in the next frame (<see cref="NavigationGrid.Slice"/>), and begins again when a footprint changed meanwhile.
 /// </para>
 /// <para>
-/// <b>The same at every rate:</b> at the frame's last tick every update of the frame has run, so the queue sees the grid and the requests a 30 Hz world sees after its one
-/// tick; the requests of a frame are worked in the order of their requester's id (not in the order they came, which above 30 Hz follows the phases of the objects' frames);
+/// <b>The same at every rate:</b> by then every decision of the frame has been made (<see cref="DecisionFrame"/>), so the queue sees the requests a 30 Hz world sees after
+/// its one tick; the requests of a frame are worked in the order of their requester's id (not in the order they came, which above 30 Hz follows the phases of the objects' frames);
 /// and an answer is taken at the requester's next decision, which is in the next frame at every rate.
 /// </para>
 /// <para>
-/// <b>The shared group path:</b> among the requests of one frame, one with the same surfaces as an earlier one (by id) of that frame, a goal within <see cref="ShareGoalCells"/>
-/// cells and a start within <see cref="ShareStartCells"/> cells does not search: it follows the other one's path from the first of its points a straight walk reaches, and
+/// <b>The shared group path:</b> among the requests of one frame, one of a unit of the same group order (<see cref="PathQuery.Group"/>, from <c>GroupMoveCommand</c>) as an
+/// earlier one (by id) of that frame, with the same surfaces, a goal within <see cref="ShareGoalCells"/> cells and a start within <see cref="ShareStartCells"/> cells does not search: it follows the other one's path from the first of its points a straight walk reaches, and
 /// leaves it for its own goal by a straight walk. When the walks are not clear, or the leader's path does not arrive, the follower is queued with a search of its own.
 /// </para>
 /// </summary>
 public sealed partial class SimulationWorld
 {
-    /// <summary>The cells the queue may expand per logic frame of the original, all in the frame's last tick: at about 75 ns a cell, 4.5 ms of that tick.</summary>
+    /// <summary>The cells the queue may expand per logic frame of the original, all in one tick: at about 75 ns a cell, 4.5 ms of that tick.</summary>
     public const int PathCellBudget = 60_000;
 
     /// <summary>A follower's goal may lie this many cells (Chebyshev) from the leader's.</summary>
@@ -76,9 +76,9 @@ public sealed partial class SimulationWorld
         if (Navigation is null) return;
         // The grid's memory of answers is not asked: it is not state (a restored world has none), and here it would decide when an answer comes, not only how fast.
         var request = new PathRequest(requester.Id.Value, query, _tick);
-        var frame = Time.ToOriginalFrames(_tick);
+        var frame = DecisionFrame(_tick);
         var at = _pathQueue.Count;
-        while (at > 0 && !_pathQueue[at - 1].Begun && Time.ToOriginalFrames(_pathQueue[at - 1].Tick) == frame && _pathQueue[at - 1].Requester > request.Requester) at--;
+        while (at > 0 && !_pathQueue[at - 1].Begun && DecisionFrame(_pathQueue[at - 1].Tick) == frame && _pathQueue[at - 1].Requester > request.Requester) at--;
         _pathQueue.Insert(at, request);
     }
 
@@ -88,17 +88,17 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < _pathQueue.Count; index++)
         {
             var request = _pathQueue[index];
-            if (request.Grouped || request.Begun || Time.ToOriginalFrames(request.Tick) != frame) continue;
+            if (request.Grouped || request.Begun || DecisionFrame(request.Tick) != frame) continue;
             request.Grouped = true;
             var query = request.Query;
-            if (!query.Blocks.IsDefaultOrEmpty || query.ArrivingOnly) continue;
+            if (query.Group == 0 || !query.Blocks.IsDefaultOrEmpty || query.ArrivingOnly) continue;
             var start = (TerrainMap.CellOf(query.StartX), TerrainMap.CellOf(query.StartY));
             var goal = (TerrainMap.CellOf(query.GoalX), TerrainMap.CellOf(query.GoalY));
             for (var leaderIndex = 0; leaderIndex < index; leaderIndex++)
             {
                 var leader = _pathQueue[leaderIndex];
                 var other = leader.Query;
-                if (leader.Begun || Time.ToOriginalFrames(leader.Tick) != frame || other.Surfaces != query.Surfaces || !other.Blocks.IsDefaultOrEmpty || other.ArrivingOnly) continue;
+                if (leader.Begun || DecisionFrame(leader.Tick) != frame || other.Group != query.Group || other.Surfaces != query.Surfaces || !other.Blocks.IsDefaultOrEmpty || other.ArrivingOnly) continue;
                 if (Chebyshev(goal, (TerrainMap.CellOf(other.GoalX), TerrainMap.CellOf(other.GoalY))) > ShareGoalCells) continue;
                 if (Chebyshev(start, (TerrainMap.CellOf(other.StartX), TerrainMap.CellOf(other.StartY))) > ShareStartCells) continue;
                 leader.Followers.Add((request.Requester, query));
@@ -108,6 +108,13 @@ public sealed partial class SimulationWorld
             }
         }
     }
+
+    /// <summary>
+    /// The logic frame of the original a decision in <paramref name="tick"/> belongs to: an object decides in the first tick of its own frame, which above 30 Hz need not be
+    /// the world frame's first tick; its frame ends - and the 30 Hz step it subdivides is - at the next frame boundary. At 60 Hz the decisions of ticks 2f - 1 and 2f are
+    /// those of frame f, worked at the end of tick 2f.
+    /// </summary>
+    private long DecisionFrame(long tick) => Time.ToOriginalFrames(tick + Time.TicksPerOriginalFrame - TickOrder.Next);
 
     private static int Chebyshev((int X, int Y) a, (int X, int Y) b) => Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
 
@@ -146,11 +153,11 @@ public sealed partial class SimulationWorld
         }
     }
 
-    /// <summary>The queue's work of a logic frame of the original, at the end of the update phase of its last tick: searches in their order until the frame's budget is spent.</summary>
+    /// <summary>The queue's work of a logic frame of the original, at the end of the update phase of the tick on the frame boundary: searches in their order until the frame's budget is spent.</summary>
     private void ProcessPathQueue()
     {
         if (Navigation is not { } grid) return;
-        if (!Time.IsOriginalFrameBoundary(_tick + TickOrder.Next)) return;
+        if (!Time.IsOriginalFrameBoundary(_tick)) return;
         // A requester that left the world asks nothing any more; nor does an answer wait for it.
         for (var index = _pathQueue.Count - 1; index >= 0; index--)
         {
@@ -164,7 +171,7 @@ public sealed partial class SimulationWorld
         }
         if (_pathAnswers.Count > 0)
             foreach (var gone in _pathAnswers.Keys.Where(id => FindEntity(new EntityId(id)) is null).ToList()) _pathAnswers.Remove(gone);
-        GroupRequests(Time.ToOriginalFrames(_tick));
+        GroupRequests(DecisionFrame(_tick));
         var budget = PathCellBudget;
         while (_pathQueue.Count > 0 && budget > 0)
         {
@@ -281,6 +288,7 @@ public sealed partial class SimulationWorld
         writer.Fixed("goalY", query.GoalY);
         writer.Int("surfaces", (int)query.Surfaces);
         writer.Bool("arrivingOnly", query.ArrivingOnly);
+        if (query.Group != 0) writer.UInt("group", query.Group);
         writer.BeginArray("blocks");
         if (!query.Blocks.IsDefaultOrEmpty)
             foreach (var (x, y, radius) in query.Blocks)
@@ -296,7 +304,8 @@ public sealed partial class SimulationWorld
 
     private static PathQuery LoadQuery(IStateReader reader)
         => new(reader.Fixed("startX"), reader.Fixed("startY"), reader.Fixed("goalX"), reader.Fixed("goalY"), (LocomotorSurfaces)checked((int)reader.Int("surfaces")),
-            [..reader.Array("blocks").Select(block => (block.Fixed("x"), block.Fixed("y"), block.Fixed("radius")))], reader.Bool("arrivingOnly"));
+            [..reader.Array("blocks").Select(block => (block.Fixed("x"), block.Fixed("y"), block.Fixed("radius")))], reader.Bool("arrivingOnly"),
+            reader.Has("group") ? reader.UInt("group") : 0);
 
     private void LoadPathQueue(IStateReader state)
     {

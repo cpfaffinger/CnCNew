@@ -87,7 +87,10 @@ public sealed partial class SimulationWorld
             if (IsGroundMover(unit)) FindDestination(unit, ref x, ref y, true);
             // GameLogicDispatch doMoveTo: a move order releases any temporary weapon lock.
             ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
-            AiOf(unit)!.OrderMove(this, x, y, true, attackMove: order.Attack);
+            var ai = AiOf(unit)!;
+            ai.OrderMove(this, x, y, true, attackMove: order.Attack);
+            // The movement profile's shared group path: the members of one order, named by its player and sequence number.
+            if (PathsQueued) ai.MarkGroupOrder(((ulong)(uint)order.Player.Value << 48) ^ order.Sequence ^ 1UL << 63);
         }
         members.Clear();
         _groupPending.Clear();

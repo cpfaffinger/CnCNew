@@ -135,7 +135,7 @@ static partial class Tests
 
     /// <summary>
     /// The queue under the movement profile: eight long searches in one frame do not fit the budget of a frame; the queue works through them over several frames, never more than
-    /// the budget in one and only in a frame's last tick, the runners that wait stand and keep their orders, and every runner arrives. The original profile does not use the queue.
+    /// the budget in one and only in a tick on a frame boundary, the runners that wait stand and keep their orders, and every runner arrives. The original profile does not use the queue.
     /// </summary>
     public static void MovementBudgetQueuesWaitsAndArrives()
     {
@@ -152,8 +152,8 @@ static partial class Tests
             var result = world.Step();
             foreach (var simEvent in result.Events) if (simEvent.Kind == SimEventKind.MoveArrived) arrived.Add(simEvent.Entity.Value);
             maxCells = Math.Max(maxCells, world.PathStats.Cells - lastCells);
-            // The queue works only in the last tick of a logic frame of the original (the tick just stepped is world.Tick - 1).
-            if (world.PathStats.Cells != lastCells && !world.Time.IsOriginalFrameBoundary(world.Tick)) offFrameWork++;
+            // The queue works only in a tick on a frame boundary (the tick just stepped is world.Tick - 1).
+            if (world.PathStats.Cells != lastCells && !world.Time.IsOriginalFrameBoundary(world.Tick - 1)) offFrameWork++;
             lastCells = world.PathStats.Cells;
             foreach (var runner in runners)
             {
@@ -189,7 +189,7 @@ static partial class Tests
 
     /// <summary>
     /// The queue is the same at every rate: eight runners whose searches do not fit one frame, and a group sharing a path, arrive in the same logic frame of the original at
-    /// 30, 60 and 120 Hz (the queue works once per frame, in its last tick, in the order of the requesters' ids).
+    /// 30, 60 and 120 Hz (the queue works once per frame, in the order of the requesters' ids).
     /// </summary>
     public static void MovementBudgetSameAtEveryRate()
     {
