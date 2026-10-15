@@ -356,3 +356,25 @@ from a fixed seed:
 | `MovementScansMatchTheFullScan` | `AvoidLocalBlockers`, `StationaryBlockersAhead` and the stored bounding circle with the full scan over all objects |
 | `PathSearchMatchesTheOriginalSearch` | 24,000 paths (with repetitions, footprint changes, blockers, `FindPathToGoal`) with the original search |
 | `PathSearchAtTheBudgetMatchesTheOriginalSearch` | searches at the budget, long detours, goals where nobody can stand, on a map with 520 × 440 cells; checks via the probe that the early ends occur |
+
+## 9. Phase 34: the movement profile - where the maximum comes from, and the thresholds
+
+**Measured before any change** (15 October 2026, binaries of `d8039f7`, `SimTool perf ... --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --minutes 30
+--movement` at 60 Hz, 108,000 ticks, final hash `E56ADB8935486752`): mean 880.9 µs per tick, 99 % 2,240.6 µs, **longest tick 165.1 ms** (tick 71,278, 98 % in the
+update phase, the same tick after the first 300). In that tick **31 units of one army plan a path across the map at once** - 22 of them `TransportAIUpdate`
+(Humvees, medics), 9 tanks - each search expands 35,000 to 102,000 cells for a path of 250 to 390 cells, 2.55 million cells in all, 160 ms. The next four ticks are
+the same kind (69 to 75 searches, 1.4 to 1.7 million cells, 87 to 103 ms). Over the run: 49,897 searches, 68.0 million cells, 74 ns per cell; 245 single searches
+expand 50,000 to 199,999 cells - one of them alone costs up to about 15 ms, so a budget that only holds whole searches back cannot reach 8 ms. Other maxima of
+the run, for the record: `Spawns` 73 ms and `Hash` 26 ms (the first ticks), `DozerAIUpdate` 22 ms, `AIUpdateInterface` 15 ms (single searches).
+
+**The thresholds of Phase 34, fixed and committed before the first change** (the gate run above, 60 Hz, the same binaries for both profiles, quiet machine, direct
+switch):
+
+| Threshold | Holds when |
+| --- | --- |
+| M1 | with the movement profile, the longest tick after the first 300 ticks is at most 8 ms |
+| M2 | with the movement profile, the mean per tick is at most 5 % above the original profile's mean of the same binaries |
+| M3 | the original profile keeps the reference manifest and the input manifest (`reference-manifest check --set full`, `input-manifest check`) |
+
+Reported, not thresholds: the longest tick including the first 300; the expanded cells and searches under both profiles; the waiting of units for their path
+(how many ticks, how often); for the shared group path the length of a member's path against the search of its own.
