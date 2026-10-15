@@ -1266,7 +1266,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _exitFrom = EntityId.Invalid;
             world.MarkDirty(Entity);
         }
-        return _dock is not null || Entity.HasMoveTarget || _frameTicksLeft > 0 || _task != BuilderTask.None || _evacuatePending || _returning || _goal.IsValid || _exitRallyPending ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return _dock is not null || Entity.HasMoveTarget || _frameTicksLeft > 0 || _task != BuilderTask.None || _evacuatePending || _returning || _goal.IsValid || _exitRallyPending || _enterTarget.IsValid ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     /// <summary>
