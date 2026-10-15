@@ -78,6 +78,8 @@ public sealed partial class SkirmishAi
         writer.Bool("attacking", _attacking);
         writer.Int("threshold", _threshold);
         writer.Int("maxThreshold", _maxThreshold);
+        writer.Int("stagnantPeak", _stagnantPeak);
+        writer.Int("stagnantSince", _stagnantSince);
         DescribePoint(writer, "rally", _rally);
         DescribePoint(writer, "scout", _scout);
         writer.Int("scoutAt", _scoutAt);
@@ -266,6 +268,8 @@ public sealed partial class SkirmishAi
         _attacking = reader.Bool("attacking");
         _threshold = checked((int)reader.Int("threshold"));
         _maxThreshold = checked((int)reader.Int("maxThreshold"));
+        _stagnantPeak = checked((int)reader.Int("stagnantPeak"));
+        _stagnantSince = reader.Int("stagnantSince");
         _rally = LoadPoint(reader, "rally");
         _scout = LoadPoint(reader, "scout");
         _scoutAt = reader.Int("scoutAt");

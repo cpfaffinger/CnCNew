@@ -96,6 +96,30 @@ static partial class Tests
     }
 
     /// <summary>
+    /// The rule "no standing still" (docs/SKIRMISH-AI.md): with the fixture's 500 credits two turtles' armies stop growing far below their threshold of twenty; after four
+    /// minutes without growth each marches with what it has instead of waiting for ever.
+    /// </summary>
+    public static void SkirmishArmyDoesNotStandStill()
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: SkirmishFiles());
+        var map = SyntheticMaps.Build(200, 40, 1, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 1900m, 200m, 0m)]);
+        var terrain = TerrainMap.Build(map, "skirmish-long");
+        var turtle = new AiSlotChoice(Tactics: AiTactics.Turtle);
+        // 5 min of game time.
+        var session = ProfileMatch(fixture, terrain, map.Objects, turtle, turtle, 9_000);
+        var frames = fixture.Templates.Rate.TicksPerOriginalFrame;
+        var waveAt = -1L;
+        while (!session.IsOver)
+        {
+            session.Step();
+            if (waveAt < 0 && session.Ais[0]!.Stats.StagnantWaves > 0) waveAt = session.World.Tick / frames;
+        }
+        var army = session.World.Entities.Count(entity => entity.Owner == session.Players[0].Id && !entity.EffectivelyDead && entity.Template.Name == "AlphaSoldier");
+        Check.That(waveAt >= 7_200, $"The army waits at least four minutes before it marches below its threshold (first such wave at frame {waveAt}).");
+        Check.That(waveAt > 0 && session.Ais[0]!.Stats.Waves >= 1, $"An army that stopped growing marches with what it has (first such wave at frame {waveAt}, {army} soldiers at the end).");
+    }
+
+    /// <summary>
     /// The strengths of the built-in AI: they differ by how often the AI decides (easy every second, medium every half second, hard every third of a second - the same game time at
     /// every rate) and by what it may know (easy never weighs its army against the force it has seen); the same match is otherwise the same at every strength.
     /// </summary>

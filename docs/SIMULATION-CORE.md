@@ -3335,3 +3335,24 @@ The module catalogue has 207 types since (205 before); the original content's ob
   moves up to `StealCashAmount` from the owner to its own player, clamped to what the owner has; radar blip, EVA and floating texts are presentation. It shares
   the common sabotage checks of this port (alive, enemy, the unit's goal object) and the adopted fix `no-sabotage-of-unfinished-or-sold` (`docs/GGC-FIXES.md`).
   Test: `PatchModuleSabotageSupplyDropzone`.
+
+## 51. Phase 33: tactics profiles and strengths of the built-in AI (15 October 2026)
+
+The built-in `SkirmishAi` takes two options per computer slot, both part of the match description (encoding 3) and of the AI's session state:
+
+- **A tactics profile** (`AiTactics`: balanced, rush, turtle, eco; `SkirmishAi.Profiles.cs`, `TacticsPlan`) - the numbers of §35, §36 and §42 that were constants: the army size
+  of the first wave and its growth after a wave falls apart, supply carriers per center, from which army size a second and a third supply center are planned, the
+  money above which a second barracks is planned, the base defences wanted, the radius of the defence reaction, and for rush the army drawn among the cheap
+  candidates (at most twice the cheapest price). **Balanced is exactly the old constants**: a slot without a profile and a balanced slot play the same match.
+- **A strength** (`AiStrength`: easy, medium, hard; `StrengthPlan`) - how often the AI decides (every 30, 15 or 10 frames of the original), how long it remembers a
+  mobile enemy out of sight (10, 30, 60 s) and a sighting toward the enemy's force (1, 3, 6 min), whether it weighs its army against that force (easy: no, a
+  uniform draw), and whether the map's start positions are attack targets before anything has been seen (easy: no). **No strength changes a rule of the
+  simulation** - no money, damage, build time or vision a human does not get. Medium is exactly the old values.
+
+`MatchSlotDescription.AiStrength` is obeyed since this phase (it was counted and not obeyed, §45); an unknown strength or profile is refused by
+`MatchDescription.Resolve`. The AI writes `tactics` and `strength` into its state only when they are set and refuses a state written for others; the skirmish
+session state is version 3. Tests: `SkirmishTacticsProfilesBehave` (with the same money and seed rush marches first, then balanced, eco and turtle; only the turtle
+raises base defences before it has an army), `SkirmishStrengthsDecideAtTheirPace` (20, 40 and 60 decisions in 20 s of game time at every rate; easy never weighs its
+army), `SkirmishProfilesTravelWithTheMatch` (balanced = no profile; a restored session continues hash-identically), each at 30, 60 and 120 Hz. The reference
+manifest moved in the command-stream hash of its 20 AI runs only (the description's encoding), no result quantity. The survey and its thresholds:
+`docs/SKIRMISH-AI.md`.

@@ -48,15 +48,16 @@ public sealed partial class SkirmishAi
     /// <param name="DefenseBase">Base defences wanted before the army counts; then one more per <see cref="DefensesPerArmy"/> army units, at most <see cref="MaxDefenses"/>.</param>
     /// <param name="DefenseRadius">How near to an own structure a visible enemy unit has to come for the army to drop its plans and defend.</param>
     /// <param name="CheapArmy">The army is drawn among the units that cost at most twice the cheapest candidate.</param>
+    /// <param name="StagnationFrames">How long an army at rest may stop growing before it marches with what it has (the rule "no standing still"), in frames of the original.</param>
     internal readonly record struct TacticsPlan(int AttackThreshold, int MaxAttackThreshold, int ThresholdStep, int CarriersPerCenter, int MaxCarriers, int SecondCenterArmy,
-        int ThirdCenterArmy, int SecondBarracksBudget, int DefenseBase, int DefensesPerArmy, int MaxDefenses, Fixed DefenseRadius, bool CheapArmy)
+        int ThirdCenterArmy, int SecondBarracksBudget, int DefenseBase, int DefensesPerArmy, int MaxDefenses, Fixed DefenseRadius, bool CheapArmy, long StagnationFrames)
     {
         public static TacticsPlan Of(AiTactics tactics) => tactics switch
         {
-            AiTactics.Balanced => new(SkirmishAi.MinAttackThreshold, SkirmishAi.MaxAttackThreshold, 2, 2, 6, 10, int.MaxValue, 1200, 0, 6, 4, BalancedDefenseRadius, false),
-            AiTactics.Rush => new(4, 12, 1, 2, 4, int.MaxValue, int.MaxValue, 600, 0, 6, 0, BalancedDefenseRadius, true),
-            AiTactics.Turtle => new(20, 40, 2, 2, 6, 10, int.MaxValue, 1200, 2, 3, 8, Fixed.FromInt(650), false),
-            AiTactics.Eco => new(12, 30, 2, 3, 12, 0, 8, 1200, 0, 6, 4, BalancedDefenseRadius, false),
+            AiTactics.Balanced => new(SkirmishAi.MinAttackThreshold, SkirmishAi.MaxAttackThreshold, 2, 2, 6, 10, int.MaxValue, 1200, 0, 6, 4, BalancedDefenseRadius, false, 3600),
+            AiTactics.Rush => new(4, 12, 1, 2, 4, int.MaxValue, int.MaxValue, 600, 0, 6, 0, BalancedDefenseRadius, true, 1800),
+            AiTactics.Turtle => new(20, 40, 2, 2, 6, 10, int.MaxValue, 1200, 2, 3, 8, Fixed.FromInt(650), false, 7200),
+            AiTactics.Eco => new(12, 30, 2, 3, 12, 0, 8, 1200, 0, 6, 4, BalancedDefenseRadius, false, 3600),
             _ => throw new ArgumentOutOfRangeException(nameof(tactics), tactics, "Unknown tactics profile."),
         };
     }

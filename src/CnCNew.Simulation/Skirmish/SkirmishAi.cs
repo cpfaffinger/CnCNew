@@ -40,6 +40,8 @@ public sealed class SkirmishAiStats
     public int Repairs { get; internal set; }
     public int DockOrders { get; internal set; }
     public int Waves { get; internal set; }
+    /// <summary>Waves started by the rule "no standing still" (an army that stopped growing marches with what it has).</summary>
+    public int StagnantWaves { get; internal set; }
     public int IdleThinks { get; internal set; }
     /// <summary>Decisions taken (thinks); how often depends on the strength (<see cref="AiStrength"/>).</summary>
     public int Thinks { get; internal set; }
@@ -185,6 +187,9 @@ public sealed partial class SkirmishAi
     private readonly SortedSet<uint> _wave = [];
     private int _threshold;
     private int _maxThreshold;
+    // The rule "no standing still": the largest army since the last wave and the tick it was reached.
+    private int _stagnantPeak;
+    private long _stagnantSince;
     private (Fixed X, Fixed Y)? _rally;
     private (Fixed X, Fixed Y)? _scout;
     private long _scoutAt = -1;
@@ -1186,10 +1191,21 @@ public sealed partial class SkirmishAi
         if (threat is not null) goal = threat;
         else
         {
-            if (!_attacking && (army.Count >= _threshold || CommitEverything))
+            // The rule "no standing still" (Phase 33): an army at rest that has not grown for the profile's patience marches with what it has, as long as it is a
+            // third of the threshold. Without it two AIs whose thresholds outgrew what their drained economies can buy stood at home until the budget ran out.
+            var stagnant = false;
+            if (!_attacking && !CommitEverything)
+            {
+                if (army.Count > _stagnantPeak) { _stagnantPeak = army.Count; _stagnantSince = _tick; }
+                else stagnant = army.Count >= Math.Max(3, _threshold / 3) && _tick - _stagnantSince >= _time.OriginalFrames(_plan.StagnationFrames);
+            }
+            if (!_attacking && (army.Count >= _threshold || CommitEverything || stagnant))
             {
                 _attacking = true;
                 Stats.Waves++;
+                if (stagnant) Stats.StagnantWaves++;
+                _stagnantPeak = 0;
+                _stagnantSince = _tick;
                 foreach (var unit in army) _wave.Add(unit.Id.Value);
             }
             else if (_attacking && waiting >= Math.Max(3, _threshold / 2))
