@@ -21,17 +21,21 @@ public enum AiTactics : byte
     Eco = 3,
 }
 
-/// <summary>The strength of a <see cref="SkirmishAi"/>: how much it may know and how fast it decides. Never a rule bonus in the simulation that a human does not get.</summary>
+/// <summary>
+/// The strength of a <see cref="SkirmishAi"/>: how much it may know and how fast it decides. Never a rule bonus in the simulation that a human does not get. Which way each
+/// factor works was measured, not assumed (docs/SKIRMISH-AI.md section 2): this AI plays weaker the more often it decides, and stronger when it weighs its army against the
+/// force it has seen.
+/// </summary>
 public enum AiStrength : byte
 {
-    /// <summary>Decides every second (instead of every half second), forgets a unit it has lost sight of after 10 s (instead of 30 s), does not weigh its army against the enemy's force it has seen,
-    /// and does not use the map's start positions as attack targets - it has to find the enemy.</summary>
+    /// <summary>Hasty and uninformed: decides every third of a second (instead of every half second), forgets a unit it has lost sight of after 10 s (instead of 30 s), does
+    /// not weigh its army against the enemy's force it has seen, and does not use the map's start positions as attack targets - it has to find the enemy.</summary>
     Easy = 0,
 
-    /// <summary>The built-in AI as it was.</summary>
+    /// <summary>The default AI.</summary>
     Medium = 1,
 
-    /// <summary>Decides every third of a second, remembers a unit it has lost sight of for 60 s and the enemy's force it has seen for 6 min (instead of 3 min).</summary>
+    /// <summary>Deliberate: decides every second, remembers a unit it has lost sight of for 60 s and the enemy's force it has seen for 6 min (instead of 3 min).</summary>
     Hard = 2,
 }
 
@@ -72,10 +76,10 @@ public sealed partial class SkirmishAi
     {
         public static StrengthPlan Of(AiStrength strength) => strength switch
         {
-            AiStrength.Easy => new(30, 300, 1800, false, false),
+            AiStrength.Easy => new(10, 300, 1800, false, false),
             // The values the AI had as constants before the levels: a think every 15 frames, a mobile enemy remembered for 30 s, a sighting counted for 3 min.
             AiStrength.Medium => new(15, 900, 5400, true, true),
-            AiStrength.Hard => new(10, 1800, 10800, true, true),
+            AiStrength.Hard => new(30, 1800, 10800, true, true),
             _ => throw new ArgumentOutOfRangeException(nameof(strength), strength, "Unknown AI strength."),
         };
     }

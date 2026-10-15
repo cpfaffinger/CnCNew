@@ -5,12 +5,14 @@ Stage 3, milestone S3-M1 (`docs/plan/STAGE-3-CHANGES.md`), Phase 33. The built-i
 description, so every machine of a match decides alike, and into the AI's session state. The original AI (`docs/SKIRMISH-AI-ORIGINAL.md`) is not touched; its own three
 armies stay what they were.
 
-**The original profile.** A slot that names no profile at medium strength is the AI as it was before this phase: the reference manifest keeps its result quantities. The
-profile "balanced" is only the name of the old values - a match of two balanced AIs is the match of two AIs without a profile (test "balanced is the AI as it was").
+**The default.** A slot that names no profile at medium strength is the default AI; the profile "balanced" is its name - a match of two balanced AIs is the match of two
+AIs without a profile (test "balanced is the AI as it was"). Adding the profiles and strengths changed no result quantity of the reference manifest; the one change of
+the default itself in this phase is the rule "no standing still" (section 4a), with its own manifest commit (`80fb676`).
 
 ## 1. Tactics profiles
 
-`AiTactics` (`SkirmishAi.Profiles.cs`, `TacticsPlan`). Every number the profile changes was a constant of the AI before; "balanced" holds those constants.
+`AiTactics` (`SkirmishAi.Profiles.cs`, `TacticsPlan`). Every number the profile changes was a constant of the AI before; "balanced" holds those constants, and the
+patience of the rule "no standing still" (section 4a), which is new.
 
 | | balanced | rush | turtle | eco |
 | --- | --- | --- | --- | --- |
@@ -32,13 +34,27 @@ it. The composition rule (exchange value, §36.3 and `SkirmishAi.Composition.cs`
 `AiStrength` (`StrengthPlan`): what the AI may know and how fast it decides. **No strength changes a rule of the simulation**: no money, no damage, no build time, no vision a
 human does not get - the AI plays through the same commands with the same pre-check.
 
-| | easy | medium | hard |
+| | easy (hasty, uninformed) | medium | hard (deliberate) |
 | --- | --- | --- | --- |
-| decides every | 1 s (30 frames of the original) | 0.5 s (15 frames) | 0.33 s (10 frames) |
+| decides every | 0.33 s (10 frames of the original) | 0.5 s (15 frames) | 1 s (30 frames) |
 | a mobile enemy out of sight is remembered for | 10 s | 30 s | 60 s |
 | a sighting counts toward the enemy's force for | 1 min | 3 min | 6 min |
 | weighs its army against the force it has seen | no (uniform draw) | yes | yes |
 | attacks the map's start positions before it has seen anything | no - it has to find the enemy | yes | yes |
+
+**Which way each factor works was measured, not assumed.** The first design (easy every second, hard every third of a second) failed its thresholds the wrong way
+round: easy won 60.0 %, hard 42.7 % against the default (section 5). One factor at a time (each 128 matches against the default, the survey of section 4):
+
+| Variant (only this changed against medium) | Win rate |
+| --- | ---: |
+| decides every 0.33 s | 45.9 % |
+| decides every 1 s | 58.6 % |
+| remembers 60 s / 6 min | 50.0 % |
+| does not use the start positions | 51.7 % |
+| does not weigh its army against the force seen | 39.8 % |
+
+This AI plays weaker the more often it decides (why is not analysed - the deadlines of its build and production rules are in game time, the money it spends per
+decision is not), and stronger when it weighs its army; memory and start positions hardly matter. The strengths were set by these measurements.
 
 The AI observes every five frames at every strength (what it sees is the player's vision); the strength decides how often it acts on it. An easy AI draws its army
 uniformly even when its slot names the exchange-value composition.
@@ -59,7 +75,7 @@ uniformly even when its slot names the exchange-value composition.
 ## 4. The survey and its thresholds
 
 `SimTool ai-profiles <content> --subject S --side a|b --out <tsv> [--seeds N] [--minutes M] [--jobs N]`: the subject S - a profile at medium strength (`rush`, `turtle`, `eco`),
-a strength without a profile (`easy`, `hard`), or `default` (the AI as it was, the yardstick) - plays one side of each of the 16 two-player pairings of the reference manifest
+a strength without a profile (`easy`, `hard`), or `default` (the default AI, the yardstick) - plays one side of each of the 16 two-player pairings of the reference manifest
 (four maps, four pairings of factions) against the AI without a profile at medium strength, once per seed, 25 game minutes at 60 Hz. Played on both sides, every subject meets
 every faction of the pairings and plays each of them. Per match it writes the outcome, the first attack of both sides (the first wave), the army value of both sides at minute
 5, 10, 15 and 20 (the price of every infantry, vehicle and aircraft alive, harvesters and dozers not counted) and the subject's base defences and supply centers at minute 10

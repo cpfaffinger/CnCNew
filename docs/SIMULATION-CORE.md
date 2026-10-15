@@ -3343,8 +3343,8 @@ The built-in `SkirmishAi` takes two options per computer slot, both part of the 
 - **A tactics profile** (`AiTactics`: balanced, rush, turtle, eco; `SkirmishAi.Profiles.cs`, `TacticsPlan`) - the numbers of §35, §36 and §42 that were constants: the army size
   of the first wave and its growth after a wave falls apart, supply carriers per center, from which army size a second and a third supply center are planned, the
   money above which a second barracks is planned, the base defences wanted, the radius of the defence reaction, and for rush the army drawn among the cheap
-  candidates (at most twice the cheapest price). **Balanced is exactly the old constants**: a slot without a profile and a balanced slot play the same match.
-- **A strength** (`AiStrength`: easy, medium, hard; `StrengthPlan`) - how often the AI decides (every 30, 15 or 10 frames of the original), how long it remembers a
+  candidates (at most twice the cheapest price). **Balanced holds the old constants** and is the default: a slot without a profile and a balanced slot play the same match.
+- **A strength** (`AiStrength`: easy, medium, hard; `StrengthPlan`) - how often the AI decides (every 10, 15 or 30 frames of the original: easy is hasty, hard deliberate - measured, this AI plays weaker the more often it decides), how long it remembers a
   mobile enemy out of sight (10, 30, 60 s) and a sighting toward the enemy's force (1, 3, 6 min), whether it weighs its army against that force (easy: no, a
   uniform draw), and whether the map's start positions are attack targets before anything has been seen (easy: no). **No strength changes a rule of the
   simulation** - no money, damage, build time or vision a human does not get. Medium is exactly the old values.
@@ -3352,7 +3352,11 @@ The built-in `SkirmishAi` takes two options per computer slot, both part of the 
 `MatchSlotDescription.AiStrength` is obeyed since this phase (it was counted and not obeyed, §45); an unknown strength or profile is refused by
 `MatchDescription.Resolve`. The AI writes `tactics` and `strength` into its state only when they are set and refuses a state written for others; the skirmish
 session state is version 3. Tests: `SkirmishTacticsProfilesBehave` (with the same money and seed rush marches first, then balanced, eco and turtle; only the turtle
-raises base defences before it has an army), `SkirmishStrengthsDecideAtTheirPace` (20, 40 and 60 decisions in 20 s of game time at every rate; easy never weighs its
+raises base defences before it has an army), `SkirmishStrengthsDecideAtTheirPace` (60, 40 and 20 decisions of easy, medium and hard in 20 s of game time at every rate; easy never weighs its
 army), `SkirmishProfilesTravelWithTheMatch` (balanced = no profile; a restored session continues hash-identically), each at 30, 60 and 120 Hz. The reference
-manifest moved in the command-stream hash of its 20 AI runs only (the description's encoding), no result quantity. The survey and its thresholds:
-`docs/SKIRMISH-AI.md`.
+manifest moved in the command-stream hash of its 20 AI runs only (the description's encoding), no result quantity.
+
+**The rule "no standing still"** (`131f590`, manifest `80fb676`): an army at rest that has not grown for the profile's patience (2 min balanced and eco, 1 min rush,
+4 min turtle) marches with what it has, as long as that is a third of its threshold. It changes the default AI: in the 320-match survey 307 instead of 290 matches
+are decided, and in the manifest the two stalemated pairings end with a winner (16 of 16 decided); no winner of a decided pairing changed. The survey and its
+thresholds: `docs/SKIRMISH-AI.md`.

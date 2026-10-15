@@ -120,8 +120,8 @@ static partial class Tests
     }
 
     /// <summary>
-    /// The strengths of the built-in AI: they differ by how often the AI decides (easy every second, medium every half second, hard every third of a second - the same game time at
-    /// every rate) and by what it may know (easy never weighs its army against the force it has seen); the same match is otherwise the same at every strength.
+    /// The strengths of the built-in AI: they differ by how often the AI decides (easy every third of a second, medium every half second, hard every second - the same game time
+    /// at every rate) and by what it may know (easy never weighs its army against the force it has seen).
     /// </summary>
     public static void SkirmishStrengthsDecideAtTheirPace()
     {
@@ -141,8 +141,8 @@ static partial class Tests
             if (strength == AiStrength.Easy) Check.That(ai.Stats.InformedDraws == 0, "An easy AI never weighs its army against what it has seen.");
         }
         var report = string.Join(", ", thinks.Select(pair => $"{pair.Key} {pair.Value}"));
-        Check.That(Math.Abs(thinks[AiStrength.Easy] - 20) <= 1 && Math.Abs(thinks[AiStrength.Medium] - 40) <= 1 && Math.Abs(thinks[AiStrength.Hard] - 60) <= 1,
-            $"Easy decides once a second, medium twice, hard three times in 20 s of game time ({report}).");
+        Check.That(Math.Abs(thinks[AiStrength.Easy] - 60) <= 1 && Math.Abs(thinks[AiStrength.Medium] - 40) <= 1 && Math.Abs(thinks[AiStrength.Hard] - 20) <= 1,
+            $"Easy decides three times a second, medium twice, hard once in 20 s of game time ({report}).");
     }
 
     /// <summary>
