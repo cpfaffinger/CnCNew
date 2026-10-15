@@ -132,6 +132,7 @@ try
         "perf-mission" when args.Length >= 2 => CnCNew.SimTool.PerfCommand.Mission(args, CompileShipped),
         "perf-compare" => CnCNew.SimTool.PerfCompareCommand.Run(args),
         "path-bench" when args.Length >= 2 => CnCNew.SimTool.PathBench.Run(args),
+        "group-march" when args.Length >= 2 => CnCNew.SimTool.GroupMarch.Run(args, CompileGraph),
         "catalog-cost" when args.Length >= 2 => CnCNew.SimTool.CatalogCost.Run(args),
         "rate-audit" when args.Length >= 2 => CnCNew.SimTool.RateAudit.Run(args),
         "range-audit" when args.Length >= 2 => CnCNew.SimTool.RangeAudit.Run(args, CompileShipped),
