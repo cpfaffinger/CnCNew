@@ -5,6 +5,7 @@ using CnCNew.Simulation.Rules;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
+using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
 
@@ -13,20 +14,25 @@ namespace CnCNew.Simulation.World;
 /// nothing of it is written.
 /// <para>
 /// A ground unit that needs a path asks the world (<see cref="RequestPath"/>) instead of searching itself, and takes the answer in a later update (<see cref="TryTakePath"/>); while
-/// it waits it is <see cref="IsPathPending">pending</see> - it keeps a path it still has, or stands, and its order is never dropped. At the end of the update phase the world
-/// works through the queue in the order the requests came, with a budget of <see cref="PathCellBudget"/> expanded cells per logic frame of the original (counted work,
-/// never time): a search that does not fit pauses and continues in the next tick (<see cref="NavigationGrid.Slice"/>), and begins again when a footprint changed meanwhile.
+/// it waits it is <see cref="IsPathPending">pending</see> - it keeps a path it still has, or stands, and its order is never dropped. The world works through the queue once per
+/// logic frame of the original, at the end of the update phase of the frame's last tick, with a budget of <see cref="PathCellBudget"/> expanded cells (counted work, never
+/// time): a search that does not fit pauses and continues in the next frame (<see cref="NavigationGrid.Slice"/>), and begins again when a footprint changed meanwhile.
 /// </para>
 /// <para>
-/// <b>The shared group path:</b> a request that arrives in the same tick as a queued one with the same surfaces, a goal within <see cref="ShareGoalCells"/> cells and a start
-/// within <see cref="ShareStartCells"/> cells does not search: it follows the other one's path from the first of its points a straight walk reaches, and leaves it for its own
-/// goal by a straight walk. When the walks are not clear, or the leader's path does not arrive, the follower is queued with a search of its own.
+/// <b>The same at every rate:</b> at the frame's last tick every update of the frame has run, so the queue sees the grid and the requests a 30 Hz world sees after its one
+/// tick; the requests of a frame are worked in the order of their requester's id (not in the order they came, which above 30 Hz follows the phases of the objects' frames);
+/// and an answer is taken at the requester's next decision, which is in the next frame at every rate.
+/// </para>
+/// <para>
+/// <b>The shared group path:</b> among the requests of one frame, one with the same surfaces as an earlier one (by id) of that frame, a goal within <see cref="ShareGoalCells"/>
+/// cells and a start within <see cref="ShareStartCells"/> cells does not search: it follows the other one's path from the first of its points a straight walk reaches, and
+/// leaves it for its own goal by a straight walk. When the walks are not clear, or the leader's path does not arrive, the follower is queued with a search of its own.
 /// </para>
 /// </summary>
 public sealed partial class SimulationWorld
 {
-    /// <summary>The cells the queue may expand per logic frame of the original (two ticks at 60 Hz, so 60,000 a tick there): at about 75 ns a cell, 4.5 ms of a 60 Hz tick.</summary>
-    public const int PathCellBudget = 120_000;
+    /// <summary>The cells the queue may expand per logic frame of the original, all in the frame's last tick: at about 75 ns a cell, 4.5 ms of that tick.</summary>
+    public const int PathCellBudget = 60_000;
 
     /// <summary>A follower's goal may lie this many cells (Chebyshev) from the leader's.</summary>
     public const int ShareGoalCells = 8;
@@ -39,6 +45,8 @@ public sealed partial class SimulationWorld
         public uint Requester { get; } = requester;
         public PathQuery Query { get; } = query;
         public long Tick { get; } = tick;
+        /// <summary>Grouped with the other requests of its frame (shares a path, or leads): done once, when the frame's queue is worked for the first time.</summary>
+        public bool Grouped { get; set; }
         /// <summary>The footprints the search began on, and how many expansions it has done (a paused search).</summary>
         public ulong Obstacles { get; set; }
         public int Done { get; set; }
@@ -57,28 +65,48 @@ public sealed partial class SimulationWorld
     /// <summary>Counters of the queue for tools and tests (not state): requests, of them answered by a shared group path, cells worked, restarts, ticks that ended with work left.</summary>
     public PathQueueStats PathStats { get; } = new();
 
-    /// <summary>Queues a path question of <paramref name="requester"/>; an earlier question of the same requester that is still open is replaced.</summary>
+    /// <summary>
+    /// Queues a path question of <paramref name="requester"/>; an earlier question of the same requester that is still open is replaced. The queue is kept in the order it is
+    /// worked in: by the frame of the request, and within a frame by the requester's id.
+    /// </summary>
     public void RequestPath(Entity requester, PathQuery query)
     {
         CancelPath(requester);
         PathStats.Requests++;
         if (Navigation is null) return;
         // The grid's memory of answers is not asked: it is not state (a restored world has none), and here it would decide when an answer comes, not only how fast.
-        if (query.Blocks.IsDefaultOrEmpty && !query.ArrivingOnly)
+        var request = new PathRequest(requester.Id.Value, query, _tick);
+        var frame = Time.ToOriginalFrames(_tick);
+        var at = _pathQueue.Count;
+        while (at > 0 && !_pathQueue[at - 1].Begun && Time.ToOriginalFrames(_pathQueue[at - 1].Tick) == frame && _pathQueue[at - 1].Requester > request.Requester) at--;
+        _pathQueue.Insert(at, request);
+    }
+
+    /// <summary>The shared group path: the requests of <paramref name="frame"/>, in their order, each joined to the first earlier one it may follow.</summary>
+    private void GroupRequests(long frame)
+    {
+        for (var index = 0; index < _pathQueue.Count; index++)
         {
+            var request = _pathQueue[index];
+            if (request.Grouped || request.Begun || Time.ToOriginalFrames(request.Tick) != frame) continue;
+            request.Grouped = true;
+            var query = request.Query;
+            if (!query.Blocks.IsDefaultOrEmpty || query.ArrivingOnly) continue;
             var start = (TerrainMap.CellOf(query.StartX), TerrainMap.CellOf(query.StartY));
             var goal = (TerrainMap.CellOf(query.GoalX), TerrainMap.CellOf(query.GoalY));
-            foreach (var queued in _pathQueue)
+            for (var leaderIndex = 0; leaderIndex < index; leaderIndex++)
             {
-                var other = queued.Query;
-                if (queued.Tick != _tick || other.Surfaces != query.Surfaces || !other.Blocks.IsDefaultOrEmpty || other.ArrivingOnly) continue;
+                var leader = _pathQueue[leaderIndex];
+                var other = leader.Query;
+                if (leader.Begun || Time.ToOriginalFrames(leader.Tick) != frame || other.Surfaces != query.Surfaces || !other.Blocks.IsDefaultOrEmpty || other.ArrivingOnly) continue;
                 if (Chebyshev(goal, (TerrainMap.CellOf(other.GoalX), TerrainMap.CellOf(other.GoalY))) > ShareGoalCells) continue;
                 if (Chebyshev(start, (TerrainMap.CellOf(other.StartX), TerrainMap.CellOf(other.StartY))) > ShareStartCells) continue;
-                queued.Followers.Add((requester.Id.Value, query));
-                return;
+                leader.Followers.Add((request.Requester, query));
+                _pathQueue.RemoveAt(index);
+                index--;
+                break;
             }
         }
-        _pathQueue.Add(new PathRequest(requester.Id.Value, query, _tick));
     }
 
     private static int Chebyshev((int X, int Y) a, (int X, int Y) b) => Math.Max(Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
@@ -110,7 +138,7 @@ public sealed partial class SimulationWorld
             request.Followers.RemoveAll(follower => follower.Requester == id);
             if (request.Requester != id) continue;
             // Its followers become questions of their own, in their order, where it stood.
-            var replacement = request.Followers.Select(follower => new PathRequest(follower.Requester, follower.Query, request.Tick)).ToList();
+            var replacement = request.Followers.Select(follower => new PathRequest(follower.Requester, follower.Query, request.Tick) { Grouped = true }).ToList();
             if (index == 0 && request.Begun) Navigation?.DropSlice();
             _pathQueue.RemoveAt(index);
             _pathQueue.InsertRange(index, replacement);
@@ -118,24 +146,26 @@ public sealed partial class SimulationWorld
         }
     }
 
-    /// <summary>The queue's work of a tick, at the end of the update phase: searches in the order they came until the budget of the tick is spent.</summary>
+    /// <summary>The queue's work of a logic frame of the original, at the end of the update phase of its last tick: searches in their order until the frame's budget is spent.</summary>
     private void ProcessPathQueue()
     {
         if (Navigation is not { } grid) return;
+        if (!Time.IsOriginalFrameBoundary(_tick + TickOrder.Next)) return;
         // A requester that left the world asks nothing any more; nor does an answer wait for it.
         for (var index = _pathQueue.Count - 1; index >= 0; index--)
         {
             var request = _pathQueue[index];
             request.Followers.RemoveAll(follower => FindEntity(new EntityId(follower.Requester)) is null);
             if (FindEntity(new EntityId(request.Requester)) is not null) continue;
-            var replacement = request.Followers.Select(follower => new PathRequest(follower.Requester, follower.Query, request.Tick)).ToList();
+            var replacement = request.Followers.Select(follower => new PathRequest(follower.Requester, follower.Query, request.Tick) { Grouped = true }).ToList();
             if (index == 0 && request.Begun) grid.DropSlice();
             _pathQueue.RemoveAt(index);
             _pathQueue.InsertRange(index, replacement);
         }
         if (_pathAnswers.Count > 0)
             foreach (var gone in _pathAnswers.Keys.Where(id => FindEntity(new EntityId(id)) is null).ToList()) _pathAnswers.Remove(gone);
-        var budget = Math.Max(1, PathCellBudget / Time.TicksPerOriginalFrame);
+        GroupRequests(Time.ToOriginalFrames(_tick));
+        var budget = PathCellBudget;
         while (_pathQueue.Count > 0 && budget > 0)
         {
             var request = _pathQueue[0];
@@ -170,7 +200,7 @@ public sealed partial class SimulationWorld
                 PathStats.Shared++;
                 _pathAnswers[follower] = shared;
             }
-            else requeue.Add(new PathRequest(follower, query, request.Tick));
+            else requeue.Add(new PathRequest(follower, query, request.Tick) { Grouped = true });
         }
         // A follower that cannot share asks again, at the front: it waited as long as the one it followed.
         _pathQueue.InsertRange(0, requeue);
@@ -204,6 +234,7 @@ public sealed partial class SimulationWorld
             DescribeQuery(writer, request.Query);
             writer.Int("tick", request.Tick);
             writer.Bool("begun", request.Begun);
+            if (request.Grouped) writer.Bool("grouped", true);
             writer.UInt("obstacles", request.Obstacles);
             writer.Int("done", request.Done);
             writer.BeginArray("followers");
@@ -276,7 +307,7 @@ public sealed partial class SimulationWorld
         {
             var request = new PathRequest(checked((uint)item.UInt("requester")), LoadQuery(item), item.Int("tick"))
             {
-                Begun = item.Bool("begun"), Obstacles = item.UInt("obstacles"), Done = checked((int)item.Int("done")),
+                Begun = item.Bool("begun"), Obstacles = item.UInt("obstacles"), Done = checked((int)item.Int("done")), Grouped = item.Has("grouped"),
             };
             foreach (var follower in item.Array("followers")) request.Followers.Add((checked((uint)follower.UInt("requester")), LoadQuery(follower)));
             _pathQueue.Add(request);

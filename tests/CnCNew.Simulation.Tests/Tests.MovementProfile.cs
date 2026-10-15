@@ -57,10 +57,13 @@ static partial class Tests
     }
 
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, TerrainMap Terrain, Entity[] Runners) MovementWorld(RuleProfile rules, params (int X, int Y)[] places)
+        => MovementWorldAt(TestRate.Default, rules, places);
+
+    private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, TerrainMap Terrain, Entity[] Runners) MovementWorldAt(SimulationRate rate, RuleProfile rules, params (int X, int Y)[] places)
     {
         var terrain = WalledTerrain();
-        var fixture = new SyntheticFixture(TestRate.Default, files: MovementProfileFiles(), rules: rules);
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var fixture = new SyntheticFixture(rate, files: MovementProfileFiles(), rules: rules);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
         var feeder = new Feeder(world);
         foreach (var (x, y) in places) feeder.Spawn(1, "Runner", owner: 1, x: x, y: y);
         world.Step();
@@ -131,14 +134,15 @@ static partial class Tests
     }
 
     /// <summary>
-    /// The queue under the movement profile: eight long searches in one tick do not fit the budget of a tick; the queue works through them over several ticks, never more than the
-    /// budget in one, the runners that wait stand and keep their orders, and every runner arrives. The original profile does not use the queue.
+    /// The queue under the movement profile: eight long searches in one frame do not fit the budget of a frame; the queue works through them over several frames, never more than
+    /// the budget in one and only in a frame's last tick, the runners that wait stand and keep their orders, and every runner arrives. The original profile does not use the queue.
     /// </summary>
     public static void MovementBudgetQueuesWaitsAndArrives()
     {
         var (world, _, _, _, runners) = MovementWorld(MovementBudget, ApartStarts);
         OrderAcross(world, runners);
-        var budget = SimulationWorld.PathCellBudget / world.Time.TicksPerOriginalFrame;
+        var budget = SimulationWorld.PathCellBudget;
+        var offFrameWork = 0;
         var arrived = new HashSet<uint>();
         var waited = 0;
         var maxCells = 0L;
@@ -148,6 +152,8 @@ static partial class Tests
             var result = world.Step();
             foreach (var simEvent in result.Events) if (simEvent.Kind == SimEventKind.MoveArrived) arrived.Add(simEvent.Entity.Value);
             maxCells = Math.Max(maxCells, world.PathStats.Cells - lastCells);
+            // The queue works only in the last tick of a logic frame of the original (the tick just stepped is world.Tick - 1).
+            if (world.PathStats.Cells != lastCells && !world.Time.IsOriginalFrameBoundary(world.Tick)) offFrameWork++;
             lastCells = world.PathStats.Cells;
             foreach (var runner in runners)
             {
@@ -158,7 +164,8 @@ static partial class Tests
             }
         }
         Check.That(world.PathStats.TicksWithWorkLeft > 0 && waited > 0, $"The searches did not fit one tick: {world.PathStats.TicksWithWorkLeft} ticks ended with work left, {waited} runner-ticks of waiting.");
-        Check.That(maxCells <= budget, $"No tick worked more cells than its budget ({maxCells} of {budget}).");
+        Check.That(maxCells <= budget, $"No frame worked more cells than its budget ({maxCells} of {budget}).");
+        Check.That(offFrameWork == 0, $"The queue worked only in the last tick of a frame ({offFrameWork} other ticks).");
         Check.That(arrived.Count == runners.Length, $"Every runner arrived ({arrived.Count} of {runners.Length}).");
 
         var (original, _, _, _, others) = MovementWorld(RuleProfile.Original, ApartStarts);
@@ -178,6 +185,32 @@ static partial class Tests
             foreach (var simEvent in world.Step().Events) if (simEvent.Kind == SimEventKind.MoveArrived) arrived.Add(simEvent.Entity.Value);
         Check.That(world.PathStats.Shared >= 4, $"The followers share the leader's search ({world.PathStats.Shared} shared of {world.PathStats.Requests} requests).");
         Check.That(arrived.Count == runners.Length, $"Every runner of the group arrived ({arrived.Count} of {runners.Length}).");
+    }
+
+    /// <summary>
+    /// The queue is the same at every rate: eight runners whose searches do not fit one frame, and a group sharing a path, arrive in the same logic frame of the original at
+    /// 30, 60 and 120 Hz (the queue works once per frame, in its last tick, in the order of the requesters' ids).
+    /// </summary>
+    public static void MovementBudgetSameAtEveryRate()
+    {
+        (int X, int Y)[] together = [(50, 50), (62, 50), (74, 50), (50, 62), (62, 62), (74, 62)];
+        string? reference = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, _, _, _, runners) = MovementWorldAt(rate, MovementBudget, [..ApartStarts, ..together.Select(place => (place.X + 600, place.Y + 400))]);
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            OrderAcross(world, runners[..ApartStarts.Length]);
+            Check.That(world.Submit(new GroupMoveCommand(new PlayerId(1), 2000, world.Tick, [..runners[ApartStarts.Length..].Select(runner => runner.Id)], Fixed.FromInt(2000), Fixed.FromInt(1400), false)).Accepted, "The group order is accepted.");
+            var start = world.Tick;
+            var arrived = new SortedDictionary<uint, long>();
+            for (var tick = 0; tick < world.Frames(1200) && arrived.Count < runners.Length; tick++)
+                foreach (var simEvent in world.Step().Events)
+                    if (simEvent.Kind == SimEventKind.MoveArrived && !arrived.ContainsKey(simEvent.Entity.Value)) arrived[simEvent.Entity.Value] = world.Time.ToOriginalFrames(world.Tick - 1 - start);
+            Check.That(arrived.Count == runners.Length, $"{rate}: every runner arrived ({arrived.Count} of {runners.Length}).");
+            var text = string.Join(", ", arrived.Values);
+            if (reference is null) reference = text;
+            else Check.That(text == reference, $"{rate}: the runners arrive in the frames of 30 Hz ({text} against {reference}).");
+        }
     }
 
     /// <summary>A world saved while a search is paused in the queue continues hash-identically: the restored world runs the search again up to where it was.</summary>

@@ -2040,9 +2040,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         if (_pathWait != PathWait.None && _path.Count == 0)
         {
-            // Waiting without a path: the object stands, and keeps its order.
+            // Waiting without a path: the object stands for this logic frame of the original, and keeps its order; it decides again in its next frame (above 30 Hz not
+            // in the next tick, which would be in the middle of the frame).
             Entity.Speed = Fixed.Zero;
             ClearFrameSpeed();
+            if (_stride > 1) _moveHoldUntil = world.Tick + _stride;
             return false;
         }
         return true;

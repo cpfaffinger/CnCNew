@@ -17,10 +17,15 @@ namespace CnCNew.Simulation.Testing;
 /// <summary>
 /// The catalogs of one compiled definition graph at 30, 60 and 120 Hz, built on first use, and the flat maps of the scenes. The suite names its rates
 /// itself; neither a tool's nor a test's default rate reaches it. The catalogs are built without model geometry (airfield points fall back to the
-/// template geometry), so the test and the tool measure the same numbers.
+/// template geometry), so the test and the tool measure the same numbers. A rule profile other than the original (a fix, the movement profile) is folded into every
+/// catalog and fingerprint, so the suite can measure the rates under it.
 /// </summary>
-public sealed class RateCatalogs(CompiledDefinitionGraph graph)
+public sealed class RateCatalogs(CompiledDefinitionGraph graph, Rules.RuleProfile? rules = null)
 {
+    private readonly Rules.RuleProfile _rules = rules ?? Rules.RuleProfile.Original;
+
+    public Rules.RuleProfile RulesProfile => _rules;
+
     public static ImmutableArray<SimulationRate> Rates { get; } = [SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120];
 
     private readonly TemplateCatalog?[] _catalogs = new TemplateCatalog?[Rates.Length];
@@ -36,10 +41,10 @@ public sealed class RateCatalogs(CompiledDefinitionGraph graph)
     {
         var index = Rates.IndexOf(rate);
         if (index < 0) throw new ArgumentException("The suite runs at 30, 60 and 120 Hz.", nameof(rate));
-        return _catalogs[index] ??= TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate);
+        return _catalogs[index] ??= TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, null, _rules);
     }
 
-    public string FingerprintOf(SimulationRate rate) => rate.Combine(_fingerprint);
+    public string FingerprintOf(SimulationRate rate) => _rules.Combine(rate.Combine(_fingerprint));
 
     /// <summary>
     /// A flat square map of <paramref name="cells"/> pathfinding cells (ten world units each) with named waypoints; <paramref name="links"/> join waypoints

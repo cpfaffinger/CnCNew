@@ -26,12 +26,21 @@ static partial class Tests
         if (_rateCatalogs is not null && _rateCatalogsDirectory == directory) return _rateCatalogs;
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
-        _rateCatalogs = new RateCatalogs(DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options));
+        _rateCatalogs = new RateCatalogs(DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options), RateSuiteRules());
         _rateCatalogsDirectory = directory;
         return _rateCatalogs;
     }
 
     /// <summary>The file the full table is written to as tab-separated text (<c>--rate-report FILE</c> or <c>CNCNEW_RATE_REPORT</c>); it must lie outside the repository.</summary>
+    /// <summary>The rule profile the suite measures under: <c>--rules NAME</c> (or <c>CNCNEW_TEST_RULES</c>), the original without it - e.g. the movement profile of Phase 34.</summary>
+    private static CnCNew.Simulation.Rules.RuleProfile RateSuiteRules()
+    {
+        var arguments = Environment.GetCommandLineArgs();
+        var index = Array.IndexOf(arguments, "--rules");
+        var text = index >= 0 && index + 1 < arguments.Length ? arguments[index + 1] : Environment.GetEnvironmentVariable("CNCNEW_TEST_RULES");
+        return string.IsNullOrEmpty(text) ? CnCNew.Simulation.Rules.RuleProfile.Original : CnCNew.Simulation.Rules.RuleProfile.Parse(text);
+    }
+
     private static string? RateReportPath()
     {
         var arguments = Environment.GetCommandLineArgs();
