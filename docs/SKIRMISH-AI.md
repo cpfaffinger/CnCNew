@@ -83,6 +83,24 @@ attack that never came counts as the end of the budget; "default" is the subject
 A threshold that is missed is reported as missed, whatever the explanation. **Balance is reported, not judged**: a profile that loses more often than the default is not
 a defect of this phase.
 
+## 4a. A stronger default AI: the rule "no standing still" and its thresholds
+
+The two manifest pairings that end in a stalemate (Alpine Assault America against China, Armored Fury China against GLA; the eight-player runs have a budget of
+five minutes only) were traced (`SimTool ai-match --trace 7200 --trace-army`): both sides attack early, a wave falls apart at the enemy base, the threshold grows
+after every such wave (8 to 18), and once the supply runs low the army no longer reaches its threshold - both sides stand at home until the budget ends.
+
+**The rule "no standing still"** (`SkirmishAi.CommandArmy`, Phase 33): an army at rest that has not grown for the profile's patience (`TacticsPlan.StagnationFrames`:
+2 min for balanced and eco, 1 min for rush, 4 min for turtle) marches with what it has, as long as that is a third of its threshold (at least three units). It
+changes the default AI, so it moves the manifest's AI runs (its own manifest commit). Its state (`stagnantPeak`, `stagnantSince`) is part of the AI's state.
+
+**Thresholds, fixed and committed before the survey of the new rule was read** (`SimTool ai-survey`, the 16 pairings x 20 seeds at 60 Hz, 25 game minutes, the
+AI before the rule - binaries of `1259dee` - against the AI with it):
+
+| Threshold | Holds when |
+| --- | --- |
+| G1 | the new AI decides at least 16 more of the 320 matches than the old one (5 % of all) |
+| G2 | the two stalemated pairings of the reference manifest end with a winner |
+
 ## 5. Results
 
 Not yet measured.
