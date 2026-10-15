@@ -68,8 +68,8 @@ public sealed class NavigationGrid
     private readonly int _cellsY;
     private readonly ushort[] _obstacles;
     private readonly byte[] _state;
-    private readonly SearchCell[] _search;
-    private readonly bool[] _open = new bool[CellStates];
+    private SearchCell[] _search;
+    private bool[] _open = new bool[CellStates];
     private int _currentStamp;
     private int[] _marked = new int[256];
     private int _markedCount;
@@ -80,8 +80,8 @@ public sealed class NavigationGrid
     private PathPoint[] _points = new PathPoint[32];
     // The open list: one heap of cell indices per total cost (see Push).
     private const int RingSize = 128;
-    private readonly int[][] _buckets = new int[RingSize][];
-    private readonly int[] _bucketCounts = new int[RingSize];
+    private int[][] _buckets = new int[RingSize][];
+    private int[] _bucketCounts = new int[RingSize];
     private int _currentTotal;
     private int _queued;
     // The flood from the goal of a search that only wants a path that arrives (FindPathToGoal).
@@ -465,12 +465,42 @@ public sealed class NavigationGrid
 
     private PathResult? Search(int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, bool arrivingOnly)
     {
+        if (BeginSearch(startCellX, startCellY, goalCellX, goalCellY, goalX, goalY, surfaces, arrivingOnly, out var early)) return early;
+        ContinueSearch(int.MaxValue);
+        return FinishSearch();
+    }
+
+    // The state of the running search between its slices (BeginSearch, ContinueSearch, FinishSearch). A search that runs in one piece passes through the same steps with the same
+    // values: the slices only decide where it pauses, never what it does.
+    private int _sStartIndex;
+    private int _sGoalIndex;
+    private int _sGoalCellX;
+    private int _sGoalCellY;
+    private Fixed _sGoalX;
+    private Fixed _sGoalY;
+    private int _sStamp;
+    private bool _sReverse;
+    private int _sBest;
+    private int _sBestHeuristic;
+    private int _sBestCost;
+    private bool _sReached;
+    private int _sExpansions;
+    private int _sNextClosestCheck;
+    // How the loop ended: 0 running, 1 ended (queue empty, budget, closest cell final or goal reached), -1 the goal was proved unreachable (no result).
+    private int _sOutcome;
+
+    /// <summary>The search's set-up; <see langword="true"/> with <paramref name="early"/> when it is decided before the loop (start in the goal cell, a goal the search may not enter).</summary>
+    private bool BeginSearch(int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, bool arrivingOnly, out PathResult? early)
+    {
+        early = null;
         var cellsX = _cellsX;
-        var cellsY = _cellsY;
         var startIndex = startCellY * cellsX + startCellX;
         var goalIndex = goalCellY * cellsX + goalCellX;
         if (startIndex == goalIndex)
-            return new PathResult(PathStatus.Found, [new PathPoint(goalX, goalY)]);
+        {
+            early = new PathResult(PathStatus.Found, [new PathPoint(goalX, goalY)]);
+            return true;
+        }
 
         if (++_currentStamp == int.MaxValue)
         {
@@ -484,14 +514,12 @@ public sealed class NavigationGrid
         CollectEscapeCells(startCellX, startCellY, EscapeRadius, surfaces);
         CollectEscapeCells(goalCellX, goalCellY, GoalEscapeRadius, surfaces);
         PrepareOpenTable(surfaces);
-        var open = _open;
-        var state = _state;
         var search = _search;
         // A search that only counts when it arrives: the goal must be a cell the search may enter, and the flood from the goal must not run dry (see FindPathToGoal).
         var reverse = arrivingOnly;
         if (reverse)
         {
-            if (!open[state[goalIndex]]) return null;
+            if (!_open[_state[goalIndex]]) return true;
             _reverseStamp ??= new int[search.Length];
             _reverseStamp[goalIndex] = stamp;
             _reverseHead = _reverseTail = 0;
@@ -503,15 +531,52 @@ public sealed class NavigationGrid
         startCell.Stamp = stamp;
         Push(Heuristic(startCellX, startCellY, goalCellX, goalCellY), startIndex);
 
-        var best = startIndex;
-        var bestHeuristic = Heuristic(startCellX, startCellY, goalCellX, goalCellY);
-        var bestCost = 0;
+        _sStartIndex = startIndex;
+        _sGoalIndex = goalIndex;
+        _sGoalCellX = goalCellX;
+        _sGoalCellY = goalCellY;
+        _sGoalX = goalX;
+        _sGoalY = goalY;
+        _sStamp = stamp;
+        _sReverse = reverse;
+        _sBest = startIndex;
+        _sBestHeuristic = Heuristic(startCellX, startCellY, goalCellX, goalCellY);
+        _sBestCost = 0;
+        _sReached = false;
+        _sExpansions = 0;
+        _sNextClosestCheck = ClosestCheckFirst;
+        _sOutcome = 0;
+        return false;
+    }
+
+    /// <summary>
+    /// Runs the loop of the search until it ends or until it has counted <paramref name="stopAt"/> expansions (a cell taken from the open list, the budget's unit); returns whether it
+    /// ended. A search paused at a count and continued later does exactly what a search run in one piece does from that count on.
+    /// </summary>
+    private bool ContinueSearch(int stopAt)
+    {
+        var cellsX = _cellsX;
+        var cellsY = _cellsY;
+        var open = _open;
+        var state = _state;
+        var search = _search;
+        var startIndex = _sStartIndex;
+        var goalIndex = _sGoalIndex;
+        var goalCellX = _sGoalCellX;
+        var goalCellY = _sGoalCellY;
+        var stamp = _sStamp;
+        var reverse = _sReverse;
+        var best = _sBest;
+        var bestHeuristic = _sBestHeuristic;
+        var bestCost = _sBestCost;
         var reached = false;
-        var expansions = 0;
-        var nextClosestCheck = ClosestCheckFirst;
+        var expansions = _sExpansions;
+        var nextClosestCheck = _sNextClosestCheck;
+        var ended = true;
         // A cell taken from the heap a second time (it was pushed again with a lower cost before it was expanded) counts toward the budget like an expansion; it always did.
         for (; _queued > 0 && expansions < ExpansionBudget; expansions++)
         {
+            if (expansions >= stopAt) { ended = false; break; }
             if (expansions == nextClosestCheck)
             {
                 // The search has not arrived and its closest cell lies near the goal: if nothing it could still expand can be closer, that cell is the answer already. Every cell
@@ -533,7 +598,9 @@ public sealed class NavigationGrid
                 if (verdict < 0)
                 {
                     _probeExpansions = expansions;
-                    return null;
+                    _sExpansions = expansions;
+                    _sOutcome = -1;
+                    return true;
                 }
                 if (verdict > 0) reverse = false;
             }
@@ -568,9 +635,28 @@ public sealed class NavigationGrid
             if (west && north && open[state[current - cellsX - 1]]) Relax(search, state, stamp, current, current - cellsX - 1, currentCost, DiagonalCost, cx - 1, cy - 1, goalCellX, goalCellY);
         }
 
-        _probeExpansions = expansions;
-        _probeEndDistance = reached ? 0 : bestHeuristic;
-        var end = reached ? goalIndex : best;
+        _sReverse = reverse;
+        _sBest = best;
+        _sBestHeuristic = bestHeuristic;
+        _sBestCost = bestCost;
+        _sReached = reached;
+        _sExpansions = expansions;
+        _sNextClosestCheck = nextClosestCheck;
+        if (ended) _sOutcome = 1;
+        return ended;
+    }
+
+    /// <summary>The result of an ended search: the path to the goal or to the closest cell, or <see langword="null"/> when the goal was proved unreachable.</summary>
+    private PathResult? FinishSearch()
+    {
+        if (_sOutcome < 0) return null;
+        var cellsX = _cellsX;
+        var search = _search;
+        var reached = _sReached;
+        var startIndex = _sStartIndex;
+        _probeExpansions = _sExpansions;
+        _probeEndDistance = reached ? 0 : _sBestHeuristic;
+        var end = reached ? _sGoalIndex : _sBest;
         if (end == startIndex) return new PathResult(PathStatus.Blocked, []);
 
         // The cells from the end back to the start, then walked forward: a waypoint is the last cell of the chain that a straight grid walk from the previous waypoint still reaches.
@@ -592,7 +678,7 @@ public sealed class NavigationGrid
             _points[points++] = new PathPoint(TerrainMap.CellCenter(cells[to] % cellsX), TerrainMap.CellCenter(cells[to] / cellsX));
             from = to;
         }
-        if (reached) _points[points - 1] = new PathPoint(goalX, goalY);
+        if (reached) _points[points - 1] = new PathPoint(_sGoalX, _sGoalY);
         return new PathResult(reached ? PathStatus.Found : PathStatus.Partial, ImmutableArray.Create(_points, 0, points));
     }
 
@@ -806,4 +892,222 @@ public sealed class NavigationGrid
         }
         return top;
     }
+
+    // ------------------------------------------------------------------------------------------------------- a search in slices (the movement profile)
+
+    /// <summary>
+    /// The working memory of a search that pauses between ticks (<see cref="Slice"/>). The grid's own fields are the memory of whatever search runs now; a sliced search swaps
+    /// its memory in for its slice and out again, so a search run in one piece in between (another unit's, the AI's reachability test) finds its usual memory untouched.
+    /// </summary>
+    private sealed class SearchMemory
+    {
+        public SearchCell[] Search = [];
+        public int CurrentStamp;
+        public bool[] Open = new bool[CellStates];
+        public int[] Marked = new int[256];
+        public int MarkedCount;
+        public int EscapeCount;
+        public int TemporaryCount;
+        public byte[] MarkedBits = new byte[256];
+        public int[] Queue = new int[256];
+        public int[] PathCells = new int[256];
+        public PathPoint[] Points = new PathPoint[32];
+        public int[][] Buckets = new int[RingSize][];
+        public int[] BucketCounts = new int[RingSize];
+        public int CurrentTotal;
+        public int Queued;
+        public int[]? ReverseStamp;
+        public int ReverseHead;
+        public int ReverseTail;
+        public int ReverseCells;
+        public int[]? ClosestSeen;
+        public int ClosestStamp;
+        public int[] ClosestQueue = new int[256];
+        public int ClosestChecks;
+        public bool ClosestFinal;
+        public int ProbeExpansions;
+        public int ProbePushes;
+        public int ProbePathCells;
+        public int ProbeEndDistance;
+        public int SStartIndex, SGoalIndex, SGoalCellX, SGoalCellY, SStamp, SBest, SBestHeuristic, SBestCost, SExpansions, SNextClosestCheck, SOutcome;
+        public Fixed SGoalX, SGoalY;
+        public bool SReverse, SReached;
+
+        // Which query the memory holds, and how far it got.
+        public PathQuery? Query;
+        public bool Running;
+        public int EscapeAtBegin;
+        public int TemporaryAtBegin;
+    }
+
+    private SearchMemory? _sliceMemory;
+
+    /// <summary>Exchanges the grid's search memory with <paramref name="memory"/>: called once to enter a slice and once to leave it.</summary>
+    private void Swap(SearchMemory memory)
+    {
+        (_search, memory.Search) = (memory.Search, _search);
+        (_currentStamp, memory.CurrentStamp) = (memory.CurrentStamp, _currentStamp);
+        (_open, memory.Open) = (memory.Open, _open);
+        (_marked, memory.Marked) = (memory.Marked, _marked);
+        (_markedCount, memory.MarkedCount) = (memory.MarkedCount, _markedCount);
+        (_escapeCount, memory.EscapeCount) = (memory.EscapeCount, _escapeCount);
+        (_temporaryCount, memory.TemporaryCount) = (memory.TemporaryCount, _temporaryCount);
+        (_queue, memory.Queue) = (memory.Queue, _queue);
+        (_pathCells, memory.PathCells) = (memory.PathCells, _pathCells);
+        (_points, memory.Points) = (memory.Points, _points);
+        (_buckets, memory.Buckets) = (memory.Buckets, _buckets);
+        (_bucketCounts, memory.BucketCounts) = (memory.BucketCounts, _bucketCounts);
+        (_currentTotal, memory.CurrentTotal) = (memory.CurrentTotal, _currentTotal);
+        (_queued, memory.Queued) = (memory.Queued, _queued);
+        (_reverseStamp, memory.ReverseStamp) = (memory.ReverseStamp, _reverseStamp);
+        (_reverseHead, memory.ReverseHead) = (memory.ReverseHead, _reverseHead);
+        (_reverseTail, memory.ReverseTail) = (memory.ReverseTail, _reverseTail);
+        (_reverseCells, memory.ReverseCells) = (memory.ReverseCells, _reverseCells);
+        (_closestSeen, memory.ClosestSeen) = (memory.ClosestSeen, _closestSeen);
+        (_closestStamp, memory.ClosestStamp) = (memory.ClosestStamp, _closestStamp);
+        (_closestQueue, memory.ClosestQueue) = (memory.ClosestQueue, _closestQueue);
+        (_closestChecks, memory.ClosestChecks) = (memory.ClosestChecks, _closestChecks);
+        (_closestFinal, memory.ClosestFinal) = (memory.ClosestFinal, _closestFinal);
+        (_probeExpansions, memory.ProbeExpansions) = (memory.ProbeExpansions, _probeExpansions);
+        (_probePushes, memory.ProbePushes) = (memory.ProbePushes, _probePushes);
+        (_probePathCells, memory.ProbePathCells) = (memory.ProbePathCells, _probePathCells);
+        (_probeEndDistance, memory.ProbeEndDistance) = (memory.ProbeEndDistance, _probeEndDistance);
+        (_sStartIndex, memory.SStartIndex) = (memory.SStartIndex, _sStartIndex);
+        (_sGoalIndex, memory.SGoalIndex) = (memory.SGoalIndex, _sGoalIndex);
+        (_sGoalCellX, memory.SGoalCellX) = (memory.SGoalCellX, _sGoalCellX);
+        (_sGoalCellY, memory.SGoalCellY) = (memory.SGoalCellY, _sGoalCellY);
+        (_sGoalX, memory.SGoalX) = (memory.SGoalX, _sGoalX);
+        (_sGoalY, memory.SGoalY) = (memory.SGoalY, _sGoalY);
+        (_sStamp, memory.SStamp) = (memory.SStamp, _sStamp);
+        (_sReverse, memory.SReverse) = (memory.SReverse, _sReverse);
+        (_sBest, memory.SBest) = (memory.SBest, _sBest);
+        (_sBestHeuristic, memory.SBestHeuristic) = (memory.SBestHeuristic, _sBestHeuristic);
+        (_sBestCost, memory.SBestCost) = (memory.SBestCost, _sBestCost);
+        (_sReached, memory.SReached) = (memory.SReached, _sReached);
+        (_sExpansions, memory.SExpansions) = (memory.SExpansions, _sExpansions);
+        (_sNextClosestCheck, memory.SNextClosestCheck) = (memory.SNextClosestCheck, _sNextClosestCheck);
+        (_sOutcome, memory.SOutcome) = (memory.SOutcome, _sOutcome);
+    }
+
+    /// <summary>The marks of a paused search leave the cell bytes (another search may run before it continues) and come back when it continues.</summary>
+    private void LiftMarks(SearchMemory memory)
+    {
+        if (memory.MarkedBits.Length < _markedCount) Array.Resize(ref memory.MarkedBits, _marked.Length);
+        for (var index = 0; index < _markedCount; index++)
+        {
+            var cell = _marked[index];
+            memory.MarkedBits[index] = (byte)(_state[cell] & (EscapeBit | TemporaryBit));
+            _state[cell] &= unchecked((byte)~(EscapeBit | TemporaryBit));
+        }
+    }
+
+    private void RestoreMarks(SearchMemory memory)
+    {
+        for (var index = 0; index < _markedCount; index++) _state[_marked[index]] |= memory.MarkedBits[index];
+    }
+
+    /// <summary>
+    /// One slice of the search for <paramref name="query"/>: the search begins (or begins again, with <paramref name="restart"/>), silently runs up to <paramref name="resumeAt"/>
+    /// expansions when its memory was lost (a restored world), and then runs until it ends or has counted <paramref name="stopAt"/> expansions. Returns whether it ended; then
+    /// <paramref name="result"/> is what <see cref="FindPath(Fixed, Fixed, Fixed, Fixed, LocomotorSurfaces, IReadOnlyList{ValueTuple{Fixed, Fixed, Fixed}})"/> would have
+    /// returned (or, for an arriving-only query, <see cref="FindPathToGoal"/>). <paramref name="done"/> is the count of expansions so far and <paramref name="spent"/> the cells this
+    /// slice worked on (expansions and the cells of the flood from the goal).
+    /// </summary>
+    public bool Slice(PathQuery query, bool restart, int resumeAt, int stopAt, out PathResult? result, out int done, out int spent)
+    {
+        result = null;
+        var memory = _sliceMemory ??= new SearchMemory { Search = new SearchCell[_search.Length] };
+        var probe = Probe;
+        probe?.Started(MovementWork.PathSearch);
+        Swap(memory);
+        var reverseBefore = 0;
+        try
+        {
+            if (restart || !memory.Running || !ReferenceEquals(memory.Query, query))
+            {
+                memory.Running = false;
+                memory.Query = query;
+                _probeExpansions = _probePushes = _probePathCells = _probeEndDistance = 0;
+                _reverseCells = 0;
+                _closestChecks = 0;
+                _closestFinal = false;
+                ClearMarks();
+                var start = ClampedCell(query.StartX, query.StartY);
+                var goal = ClampedCell(query.GoalX, query.GoalY);
+                if (!query.Blocks.IsDefaultOrEmpty) MarkTemporary(start.X, start.Y, goal.X, goal.Y, query.Blocks);
+                memory.TemporaryAtBegin = _temporaryCount;
+                if (BeginSearch(start.X, start.Y, goal.X, goal.Y, query.GoalX, query.GoalY, query.Surfaces, query.ArrivingOnly, out var early))
+                {
+                    memory.EscapeAtBegin = _escapeCount;
+                    ClearMarks();
+                    result = early;
+                    done = 0;
+                    spent = 0;
+                    Report(probe, query, result, memory);
+                    return true;
+                }
+                memory.EscapeAtBegin = _escapeCount;
+                memory.Running = true;
+                if (resumeAt > 0) ContinueSearch(resumeAt);
+            }
+            else RestoreMarks(memory);
+
+            var before = _sExpansions;
+            reverseBefore = _reverseCells;
+            var ended = ContinueSearch(stopAt);
+            done = _sExpansions;
+            spent = _sExpansions - before + (_reverseCells - reverseBefore);
+            if (!ended)
+            {
+                LiftMarks(memory);
+                return false;
+            }
+            result = FinishSearch();
+            // An arriving-only question has no use for a path that ends short (FindPathToGoal).
+            if (query.ArrivingOnly && result is not { Status: PathStatus.Found }) result = null;
+            ClearMarks();
+            memory.Running = false;
+            Report(probe, query, result, memory);
+            return true;
+        }
+        finally
+        {
+            Swap(memory);
+            probe?.Ended(MovementWork.PathSearch);
+        }
+    }
+
+    /// <summary>Forgets a paused search (its requester is gone, or another search takes the slices).</summary>
+    public void DropSlice()
+    {
+        if (_sliceMemory is { Running: true } memory)
+        {
+            memory.Running = false;
+            memory.Query = null;
+        }
+    }
+
+    private void Report(IMovementProbe? probe, PathQuery query, PathResult? result, SearchMemory memory)
+    {
+        if (probe is null) return;
+        var start = ClampedCell(query.StartX, query.StartY);
+        var goal = ClampedCell(query.GoalX, query.GoalY);
+        probe.PathSearched(new PathSearchInfo(start.Y * _cellsX + start.X, goal.Y * _cellsX + goal.X, query.Surfaces, result?.Status ?? PathStatus.Partial, _probeExpansions, _probePushes,
+            memory.EscapeAtBegin, memory.TemporaryAtBegin, _probePathCells, result?.Points.Length ?? 0, false, result is null, _reverseCells, _probeEndDistance, _closestFinal, _closestChecks));
+    }
+
+    /// <summary>
+    /// Whether a straight grid walk between the cells of two points stays on cells <paramref name="surfaces"/> may enter (no footprint, no marks of a search): what a member of a
+    /// group needs to join the group's path and to leave it for its own goal.
+    /// </summary>
+    public bool StraightWalkClear(Fixed fromX, Fixed fromY, Fixed toX, Fixed toY, LocomotorSurfaces surfaces)
+    {
+        PrepareOpenTable(surfaces);
+        var from = ClampedCell(fromX, fromY);
+        var to = ClampedCell(toX, toY);
+        return LineClear(from.Y * _cellsX + from.X, to.Y * _cellsX + to.X);
+    }
 }
+
+/// <summary>A path question as the world's queue keeps it (the movement profile): start, goal, surfaces, the temporary blockers, and whether only a path that arrives counts.</summary>
+public sealed record PathQuery(Fixed StartX, Fixed StartY, Fixed GoalX, Fixed GoalY, LocomotorSurfaces Surfaces, ImmutableArray<(Fixed X, Fixed Y, Fixed Radius)> Blocks, bool ArrivingOnly);
