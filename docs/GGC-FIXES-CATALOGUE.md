@@ -11,58 +11,58 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 
 | Subsystem | Markers | CRC-gated | Reviewed here |
 | --- | ---: | ---: | ---: |
-| AI | 37 | 24 | 1 |
+| AI | 37 | 24 | 25 |
 | UI | 30 | 0 | 0 |
-| engine | 56 | 8 | 0 |
-| network | 9 | 1 | 0 |
-| pathfinding | 11 | 7 | 0 |
-| rendering | 97 | 1 | 0 |
+| engine | 56 | 8 | 8 |
+| network | 9 | 1 | 1 |
+| pathfinding | 11 | 7 | 7 |
+| rendering | 97 | 1 | 1 |
 | scripts | 2 | 0 | 0 |
-| simulation | 109 | 55 | 15 |
+| simulation | 109 | 55 | 57 |
 | tools | 3 | 0 | 0 |
-| **all** | **354** | **96** | **16** |
+| **all** | **354** | **96** | **99** |
 
 ## AI
 
 | Place | Function | Tag | Author, date | CRC-gated | Description (community) | This port |
 | --- | --- | --- | --- | --- | --- | --- |
-| `GameLogic/AI/AIGroup.cpp:2179` | `AIGroup::groupAttackObjectPrivate` | bugfix | Stubbjax 2025-08-03 | yes | This logic block erroneously prevents the |  |
+| `GameLogic/AI/AIGroup.cpp:2179` | `AIGroup::groupAttackObjectPrivate` | bugfix | Stubbjax 2025-08-03 | yes | This logic block erroneously prevents the | not applicable - the port has no group attack that orders garrisoned occupants |
 | `GameLogic/AI/AIGroup.cpp:2845` | `AIGroup::groupSell` | bugfix | Mauller 2025-06-26 |  | when sellObject is called, the member list objects in this AIGroup get removed from it. This happens within the Object::deselectObject() fun... |  |
-| `GameLogic/AI/AIGuard.cpp:186` | `AIGuardMachine::AIGuardMachine` | bugfix |  | yes | 09/04/2026 The attack aggressors conditions for AI_GUARD_INNER and AI_GUARD_RETURN |  |
-| `GameLogic/AI/AIGuardRetaliate.cpp:190` | `AIGuardRetaliateMachine::AIGuardRetaliateMachine` | bugfix |  | yes | 09/04/2026 The attack aggressors conditions for AI_GUARD_RETALIATE_RETURN |  |
-| `GameLogic/AI/AIPlayer.cpp:125` | `AIPlayer::onStructureProduced` | bugfix | bobtista 2025-10-31 | yes | Preserve scaffold health when AI building construction completes instead of resetting to initial health. |  |
-| `GameLogic/AI/AIPlayer.cpp:468` | `AIPlayer::clearTeamsInQueue` | bugfix | bobtista 2025-10-31 | yes | Preserve scaffold health when AI building construction completes instead of resetting to initial health. |  |
+| `GameLogic/AI/AIGuard.cpp:186` | `AIGuardMachine::AIGuardMachine` | bugfix |  | yes | 09/04/2026 The attack aggressors conditions for AI_GUARD_INNER and AI_GUARD_RETURN | not applicable - the guard state machine is not simulated (guard orders become standing orders) |
+| `GameLogic/AI/AIGuardRetaliate.cpp:190` | `AIGuardRetaliateMachine::AIGuardRetaliateMachine` | bugfix |  | yes | 09/04/2026 The attack aggressors conditions for AI_GUARD_RETALIATE_RETURN | not applicable - the guard-retaliate state machine is not simulated |
+| `GameLogic/AI/AIPlayer.cpp:125` | `AIPlayer::onStructureProduced` | bugfix | bobtista 2025-10-31 | yes | Preserve scaffold health when AI building construction completes instead of resetting to initial health. | equivalent - the AI player's built structure keeps its health (ScriptEngine.AiPlayer.cs) |
+| `GameLogic/AI/AIPlayer.cpp:468` | `AIPlayer::clearTeamsInQueue` | bugfix | bobtista 2025-10-31 | yes | Preserve scaffold health when AI building construction completes instead of resetting to initial health. | equivalent - the AI player spawns a structure at full health (ScriptEngine.AiPlayer.cs) |
 | `GameLogic/AI/AIPlayer.cpp:1057` | `AIPlayer::onUnitProduced` | fix | Mauller 2025-04-26 |  | Fixes uninitialized variable. |  |
-| `GameLogic/AI/AIStates.cpp:2693` | `AIAttackApproachTargetState::updateInternal` | bugfix | Stubbjax 2025-11-19 | yes | Except when disarming stealthed mines or traps. |  |
-| `GameLogic/AI/AIStates.cpp:6379` | `AIEnterState::update` | bugfix | Stubbjax 2025-11-05 | yes | Check for vertical overlap when entering containers. |  |
-| `GameLogic/AI/AIStates.cpp:6498` | `AIExitState::update` | bugfix | Stubbjax 2026-05-03 | yes | Stop trying to exit if the container is dead, as we are already ejected. |  |
+| `GameLogic/AI/AIStates.cpp:2693` | `AIAttackApproachTargetState::updateInternal` | bugfix | Stubbjax 2025-11-19 | yes | Except when disarming stealthed mines or traps. | not decided - whether a disarming unit can ever hold a stealthed mine as its victim in the port is not established (SimulationWorld.Acquisition.cs) |
+| `GameLogic/AI/AIStates.cpp:6379` | `AIEnterState::update` | bugfix | Stubbjax 2025-11-05 | yes | Check for vertical overlap when entering containers. | candidate, not adopted in Phase 32 - entering is decided in 2-D (AIUpdateInterface.UpdateEnter); the vertical overlap needs the geometry heights |
+| `GameLogic/AI/AIStates.cpp:6498` | `AIExitState::update` | bugfix | Stubbjax 2026-05-03 | yes | Stop trying to exit if the container is dead, as we are already ejected. | not applicable - an exit is immediate in the port; there is no exit state that retries on a busy door |
 | `GameLogic/AI/TurretAI.cpp:152` | `TurretStateMachine::crc` | bugfix | bobtista 2026-07-19 |  | Serialize the base StateMachine state. |  |
 | `GameLogic/Object/Update/AIUpdate.cpp:3220` | `AIUpdateInterface::privateMoveAwayFromUnit` | bugfix | Mauller 2025-05-26 |  | Fix dereferencing a nullptr when a delayed ai command refers to a deleted object. |  |
-| `GameLogic/Object/Update/AIUpdate.cpp:3560` | `AIUpdateInterface::privateAttackPosition` | bugfix | Stubbjax 2026-08-23 | yes | Only find a new position if the target is not within the attack range of the weapon. |  |
-| `GameLogic/Object/Update/AIUpdate.cpp:3838` | `AIUpdateInterface::privateExit` | bugfix | Caball009 / Okladnoj 2026-08-10 | yes | Don't process invalid exit commands, |  |
-| `GameLogic/Object/Update/AIUpdate.cpp:3876` | `AIUpdateInterface::privateExitInstantly` | bugfix | Caball009 / Okladnoj 2026-08-10 | yes | Don't process invalid exit commands, |  |
+| `GameLogic/Object/Update/AIUpdate.cpp:3560` | `AIUpdateInterface::privateAttackPosition` | bugfix | Stubbjax 2026-08-23 | yes | Only find a new position if the target is not within the attack range of the weapon. | not applicable - the port has no attack-position command |
+| `GameLogic/Object/Update/AIUpdate.cpp:3838` | `AIUpdateInterface::privateExit` | bugfix | Caball009 / Okladnoj 2026-08-10 | yes | Don't process invalid exit commands, | not applicable - the container to leave is always the one holding the rider |
+| `GameLogic/Object/Update/AIUpdate.cpp:3876` | `AIUpdateInterface::privateExitInstantly` | bugfix | Caball009 / Okladnoj 2026-08-10 | yes | Don't process invalid exit commands, | not applicable - as above |
 | `GameLogic/Object/Update/AIUpdate.cpp:4829` | `AIUpdateInterface::evaluateNationalismBonusClassic` | bugfix |  |  | The fixed Nationalism Bonus implementation. |  |
 | `GameLogic/Object/Update/AIUpdate.cpp:5088` | `AIUpdateInterface::crc` | fix |  |  | Fixed out-of-bounds xfer of m_guardTargetType |  |
 | `GameLogic/Object/Update/AIUpdate.cpp:5118` | `AIUpdateInterface::xfer` | fix |  |  | The original code effectively accessed m_guardTargetType[0], [1], [1], [2]. | not applicable - this port's saves are its own format (state writers per module), not the original's xfer |
 | `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:603` | `` | bugfix |  |  | 03/01/2026 Bypass door reservation as rappellers are always |  |
-| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1088` | `ChinookAIUpdate::update` | bugfix | Stubbjax 2025-11-03 | yes | Prevent Chinooks from taking off while there are still units wanting to enter or exit. |  |
-| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1099` | `ChinookAIUpdate::update` | bugfix | arcticdolphin 2026-03-02 | yes | Move healed Chinook to rally point if present. |  |
-| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1294` | `ChinookAIUpdate::aiDoCommand` | bugfix | Stubbjax 2025-10-31 | yes | Don't leave healing state for evacuation commands. |  |
-| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1326` | `ChinookAIUpdate::aiDoCommand` | bugfix | Stubbjax 2026-08-12 | yes | Ignore the command if we are told to enter ourselves (we can be in the same group). |  |
-| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1330` | `ChinookAIUpdate::aiDoCommand` | bugfix | Stubbjax 2026-08-12 | yes | Ignore the command if we are told to enter something we cannot (we can be in the same group). |  |
-| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1345` | `ChinookAIUpdate::aiDoCommand` | bugfix | Stubbjax 2025-11-04 | yes | Passengers are no longer all dumped in a single frame. |  |
-| `GameLogic/Object/Update/AIUpdate/DeployStyleAIUpdate.cpp:146` | `DeployStyleAIUpdate::update` | bugfix | Caball009 2026-07-27 | yes | The pathfinding code may use a stricter attack range check than used |  |
+| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1088` | `ChinookAIUpdate::update` | bugfix | Stubbjax 2025-11-03 | yes | Prevent Chinooks from taking off while there are still units wanting to enter or exit. | not applicable - healing of a Chinook at an airfield is not simulated |
+| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1099` | `ChinookAIUpdate::update` | bugfix | arcticdolphin 2026-03-02 | yes | Move healed Chinook to rally point if present. | not applicable - as above |
+| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1294` | `ChinookAIUpdate::aiDoCommand` | bugfix | Stubbjax 2025-10-31 | yes | Don't leave healing state for evacuation commands. | not applicable - as above |
+| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1326` | `ChinookAIUpdate::aiDoCommand` | bugfix | Stubbjax 2026-08-12 | yes | Ignore the command if we are told to enter ourselves (we can be in the same group). | equivalent - entering oneself is refused in the pre-check (SimulationWorld.cs, CheckMoveAndEnter) |
+| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1330` | `ChinookAIUpdate::aiDoCommand` | bugfix | Stubbjax 2026-08-12 | yes | Ignore the command if we are told to enter something we cannot (we can be in the same group). | equivalent - an enter order the container cannot take is refused in the pre-check |
+| `GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1345` | `ChinookAIUpdate::aiDoCommand` | bugfix | Stubbjax 2025-11-04 | yes | Passengers are no longer all dumped in a single frame. | equivalent - the port lands the Chinook and lets riders out one by one through the door |
+| `GameLogic/Object/Update/AIUpdate/DeployStyleAIUpdate.cpp:146` | `DeployStyleAIUpdate::update` | bugfix | Caball009 2026-07-27 | yes | The pathfinding code may use a stricter attack range check than used | equivalent - deploying starts only from a fire attempt that passed the range check |
 | `GameLogic/Object/Update/AIUpdate/DozerAIUpdate.cpp:838` | `DozerActionStateMachine::crc` | bugfix | bobtista 2026-07-19 |  | Serialize the base StateMachine state. |  |
 | `GameLogic/Object/Update/AIUpdate/DozerAIUpdate.cpp:1618` | `DozerAIUpdate::update` | bugfix | Stubbjax 2025-11-16 |  | Invalidate the task when the build scaffold is destroyed. |  |
-| `GameLogic/Object/Update/AIUpdate/DozerAIUpdate.cpp:2358` | `DozerAIUpdate::onDisabledEdge` | bugfix | Stubbjax 2025-11-17 | yes | Resume previous task when re-enabled. |  |
-| `GameLogic/Object/Update/AIUpdate/HackInternetAIUpdate.cpp:132` | `HackInternetAIUpdate::aiDoCommand` | bugfix | andrew-2e128 / Mauller 2025-07-14 | yes | prevent hacking hackers packing and unpacking when commanded to hack the internet |  |
+| `GameLogic/Object/Update/AIUpdate/DozerAIUpdate.cpp:2358` | `DozerAIUpdate::onDisabledEdge` | bugfix | Stubbjax 2025-11-17 | yes | Resume previous task when re-enabled. | equivalent - a builder keeps its task over a disable in the port |
+| `GameLogic/Object/Update/AIUpdate/HackInternetAIUpdate.cpp:132` | `HackInternetAIUpdate::aiDoCommand` | bugfix | andrew-2e128 / Mauller 2025-07-14 | yes | prevent hacking hackers packing and unpacking when commanded to hack the internet | not applicable - the port has no hack command for a unit that is already hacking |
 | `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:1467` | `JetAIUpdate::isOutOfSpecialReloadAmmo` | bugfix |  |  | Reimplements the update to wait for another Jet on another runway. |  |
-| `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2026` | `JetAIUpdate::update` | bugfix | arcticdolphin 2026-03-02 | yes | Move healed helicopter to rally point if present. |  |
-| `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2150` | `JetAIUpdate::update` | bugfix | arcticdolphin 2026-03-04 | yes | Reset locomotor when attack locomotor timer expires. |  |
+| `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2026` | `JetAIUpdate::update` | bugfix | arcticdolphin 2026-03-02 | yes | Move healed helicopter to rally point if present. | candidate, not adopted in Phase 32 - a healed helipad helicopter takes off without going to the producer's rally point (JetAIUpdate.cs) |
+| `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2150` | `JetAIUpdate::update` | bugfix | arcticdolphin 2026-03-04 | yes | Reset locomotor when attack locomotor timer expires. | equivalent - the attack locomotor ends with its timer (JetAIUpdate.cs) |
 | `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2745` | `JetAIUpdate::crc` | bugfix |  |  | Save landing position. |  |
-| `GameLogic/Object/Update/AIUpdate/MissileAIUpdate.cpp:557` | `MissileAIUpdate::doAttackState` | bugfix | Stubbjax 2026-08-23 | yes | Diving missiles now use their target's position to determine distance |  |
+| `GameLogic/Object/Update/AIUpdate/MissileAIUpdate.cpp:557` | `MissileAIUpdate::doAttackState` | bugfix | Stubbjax 2026-08-23 | yes | Diving missiles now use their target's position to determine distance | not applicable - the port has no diving-missile distance logic |
 | `GameLogic/Object/Update/AIUpdate/WorkerAIUpdate.cpp:279` | `WorkerAIUpdate::update` | bugfix | Stubbjax 2025-11-16 |  | Invalidate the task when the build scaffold is destroyed. |  |
-| `GameLogic/Object/Update/AIUpdate/WorkerAIUpdate.cpp:981` | `WorkerAIUpdate::onDisabledEdge` | bugfix | Stubbjax 2025-11-17 | yes | Resume previous task when re-enabled. |  |
+| `GameLogic/Object/Update/AIUpdate/WorkerAIUpdate.cpp:981` | `WorkerAIUpdate::onDisabledEdge` | bugfix | Stubbjax 2025-11-17 | yes | Resume previous task when re-enabled. | equivalent - a worker keeps its task over a disable |
 
 ## UI
 
@@ -127,22 +127,22 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 | `Common/GameEngine.cpp:808` | `GameEngine::resetSubsystems` | fix | xezon 2025-06-09 |  | Reset GameLogic first to purge all world objects early. |  |
 | `Common/GameLOD.cpp:740` | `GameLODManager::getRecommendedTextureLODLevel` | bugfix | xezon 2025-09-24 |  | Disables the recommended static LOD level for texture reduction |  |
 | `Common/GlobalData.cpp:1353` | `GlobalData::BuildUserDataPathFromRegistry` | bugfix | Mauller 2026-03-20 |  | Fix the handling of folder redirection |  |
-| `Common/NameKeyGenerator.cpp:128` | `NameKeyGenerator::keyToName` | bugfix | Caball009 2026-02-24 | yes | Originally the game would hash three files |  |
+| `Common/NameKeyGenerator.cpp:128` | `NameKeyGenerator::keyToName` | bugfix | Caball009 2026-02-24 | yes | Originally the game would hash three files | not applicable - CRC or save bookkeeping of the C++ engine; the port hashes and saves its own state |
 | `Common/NameKeyGenerator.cpp:178` | `NameKeyGenerator::nameToLowercaseKey` | fix | CryoTheRenegade 2026-08-08 |  | Store the canonical lowercase name |  |
 | `Common/NameKeyGenerator.cpp:216` | `NameKeyGenerator::nameToLowercaseKey` | fix | CryoTheRenegade 2026-08-08 |  | Store the canonical lowercase name |  |
-| `Common/RTS/ActionManager.cpp:462` | `ActionManager::canResumeConstructionOf` | bugfix | Stubbjax 2026-01-06 | yes | Ensure only the owner of the construction can resume it. |  |
-| `Common/RTS/ActionManager.cpp:493` | `ActionManager::canResumeConstructionOf` | bugfix | Stubbjax 2025-11-18 | yes | Allow scaffold to be immediately resumed after builder death. |  |
+| `Common/RTS/ActionManager.cpp:462` | `ActionManager::canResumeConstructionOf` | bugfix | Stubbjax 2026-01-06 | yes | Ensure only the owner of the construction can resume it. | equivalent - resuming construction needs the same owner (SimulationWorld.Construction.cs, CheckResume) |
+| `Common/RTS/ActionManager.cpp:493` | `ActionManager::canResumeConstructionOf` | bugfix | Stubbjax 2025-11-18 | yes | Allow scaffold to be immediately resumed after builder death. | not applicable - the port lets any own builder resume at once (no wait for the dead builder); a fidelity gap of its own, not this defect |
 | `Common/RTS/ActionManager.cpp:1446` | `ActionManager::canSnipeVehicle` | bugfix | Caball009 2025-09-04 |  | Disabled bikes may not have a rider to snipe. |  |
 | `Common/RTS/ActionManager.cpp:1590` | `ActionManager::canDoSpecialPowerAtLocation` | fix | stephanmeesters 2026-04-04 |  | Some special powers can spawn a building. |  |
-| `Common/RTS/Energy.cpp:212` | `Energy::removePowerBonus` | bugfix | Caball009 2025-11-14 | yes | Don't remove power bonus for disabled power plants. |  |
+| `Common/RTS/Energy.cpp:212` | `Energy::removePowerBonus` | bugfix | Caball009 2025-11-14 | yes | Don't remove power bonus for disabled power plants. | not applicable - the port has no power loss of disabled power plants, so no double removal; a fidelity gap of its own |
 | `Common/RTS/Player.cpp:434` | `Player::init` | bugfix |  |  | Now correctly deposits the money and fixes its audio and academy issues. |  |
-| `Common/RTS/Player.cpp:720` | `Player::update` | bugfix | Stubbjax 2025-09-26 | yes | The Tunnel System now heals |  |
+| `Common/RTS/Player.cpp:720` | `Player::update` | bugfix | Stubbjax 2025-09-26 | yes | The Tunnel System now heals | candidate, not adopted in Phase 32 - the port heals a tunnel network once per tunnel as the original does (TunnelContain.Update); the fix needs a heal step per player |
 | `Common/RTS/Player.cpp:1616` | `Player::preTeamDestroy` | bugfix | Mauller/Xezon 2025-05-03 |  | Clear the default team to prevent dangling pointer usage |  |
 | `Common/RTS/Player.cpp:2052` | `Player::killPlayer` | bugfix | helmutbuhler 2025-03-29 |  |  |  |
-| `Common/RTS/Player.cpp:2139` | `Player::transferAssetsFromThat` | bugfix | Stubbjax 2026-02-03 | yes | Cancel any in-progress player upgrades 'that' |  |
+| `Common/RTS/Player.cpp:2139` | `Player::transferAssetsFromThat` | bugfix | Stubbjax 2026-02-03 | yes | Cancel any in-progress player upgrades 'that' | not applicable - upgrades are bought and completed at once in the port; there is no upgrade in progress to transfer |
 | `Common/RTS/Player.cpp:2160` | `Player::transferAssetsFromThat` | bugfix | Stubbjax 2026-02-03 |  | Ensure the in-progress upgrade mask is copied from 'that' |  |
-| `Common/RTS/Player.cpp:2471` | `Player::doBountyForKill` | bugfix | Stubbjax 2026-02-20 | yes | Subtract epsilon to ensure bounty is rounded up correctly. |  |
-| `Common/RTS/Player.cpp:3688` | `Player::applyBattlePlanBonusesForPlayerObjects` | bugfix | Stubbjax 2026-02-05 | yes | Apply all bonuses the player has rather than just the most recent. |  |
+| `Common/RTS/Player.cpp:2471` | `Player::doBountyForKill` | bugfix | Stubbjax 2026-02-20 | yes | Subtract epsilon to ensure bounty is rounded up correctly. | adopted - GameFix.BountyRounding |
+| `Common/RTS/Player.cpp:3688` | `Player::applyBattlePlanBonusesForPlayerObjects` | bugfix | Stubbjax 2026-02-05 | yes | Apply all bonuses the player has rather than just the most recent. | candidate, not adopted in Phase 32 - the port applies only the newest battle plan's switches to existing objects (SimulationWorld.BattlePlan.cs); the fix needs the aggregate |
 | `Common/RTS/PlayerList.cpp:116` | `PlayerList::reset` | bugfix | xezon 2025-03-20 |  | Delete the Player AI before purging the dependent teams in the factory. |  |
 | `Common/RTS/Team.cpp:1403` | `Team::setControllingPlayer` | fix | xezon 2025-12-07 |  | Now does onCapture on everyone. |  |
 | `Common/RTS/Team.cpp:2442` | `Team::killTeam` | bugfix | Mauller 2025-07-20 |  | the neutral player has no player template so we need to check for a null template |  |
@@ -172,7 +172,7 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 | `GameNetwork/LANAPIhandlers.cpp:383` | `LANAPI::handleRequestJoin` | bugfix | Stubbjax 2025-09-26 |  | Players can now join open slots regardless of starting spots on the map. |  |
 | `GameNetwork/NetCommandList.cpp:130` | `NetCommandList::reset` | bugfix | Caball009 2026-06-14 |  | Ensure messages are sorted |  |
 | `GameNetwork/NetCommandList.cpp:200` | `NetCommandList::addMessage` | bugfix | CryoTheRenegade 2026-08-03 |  | Keep both cached |  |
-| `GameNetwork/Network.cpp:587` | `Network::RelayCommandsToCommandList` | fix | stephanmeesters 2026-05-14 | yes | Verify accepted type of incoming game messages |  |
+| `GameNetwork/Network.cpp:587` | `Network::RelayCommandsToCommandList` | fix | stephanmeesters 2026-05-14 | yes | Verify accepted type of incoming game messages | not applicable - network message validation; the port's relay protocol admits only player orders (CommandTypes.IsPlayerOrder) |
 
 ## pathfinding
 
@@ -180,15 +180,15 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 | --- | --- | --- | --- | --- | --- | --- |
 | `GameLogic/AI/AIPathfind.cpp:1110` | `Pathfinder::forceCleanCells` | bugfix | Mauller/DrGoldFish 2026-01-20 |  | when pathfinding resources cannot be allocated to a pathfindCell, |  |
 | `GameLogic/AI/AIPathfind.cpp:1383` | `PathfindCell::releaseInfo` | bugfix | Mauller/SkyAero 2025-06-05 |  | Parent cell links need clearing to prevent dangling pointers on starting points that can link them to an invalid parent cell. |  |
-| `GameLogic/AI/AIPathfind.cpp:4204` | `Pathfinder::classifyFence` | fix | Mauller 2025-06-16 | yes | Fixes uninitialized variables. |  |
+| `GameLogic/AI/AIPathfind.cpp:4204` | `Pathfinder::classifyFence` | fix | Mauller 2025-06-16 | yes | Fixes uninitialized variables. | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
 | `GameLogic/AI/AIPathfind.cpp:5498` | `Pathfinder::adjustDestination` | bugfix | stephanmeesters 2026-06-15 |  | Destination adjustment always snaps to the nearest grid cell |  |
-| `GameLogic/AI/AIPathfind.cpp:7187` | `Pathfinder::moveAlliesAwayFromDestination` | fix |  | yes | helmutbuhler This was originally uninitialized and in the loop below. |  |
-| `GameLogic/AI/AIPathfind.cpp:7265` | `Pathfinder::moveAlliesAwayFromDestination` | fix | Mauller 2025-05-23 | yes | Fixes uninitialized variable. |  |
-| `GameLogic/AI/AIPathfind.cpp:7333` | `Pathfinder::moveAlliesAwayFromDestination` | fix | helmutbuhler 2025-06-11 | yes | The indentation was wrong on retail here. |  |
+| `GameLogic/AI/AIPathfind.cpp:7187` | `Pathfinder::moveAlliesAwayFromDestination` | fix |  | yes | helmutbuhler This was originally uninitialized and in the loop below. | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
+| `GameLogic/AI/AIPathfind.cpp:7265` | `Pathfinder::moveAlliesAwayFromDestination` | fix | Mauller 2025-05-23 | yes | Fixes uninitialized variable. | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
+| `GameLogic/AI/AIPathfind.cpp:7333` | `Pathfinder::moveAlliesAwayFromDestination` | fix | helmutbuhler 2025-06-11 | yes | The indentation was wrong on retail here. | not applicable - the port has no moveAlliesAwayFromDestination search (allies step to the nearest free place, SimulationWorld.ExitGoals.cs) |
 | `GameLogic/AI/AIPathfind.cpp:7506` | `Pathfinder::processHierarchicalCell` | bugfix | Caball009 2026-09-14 |  | Check newCell->m_info before accessing it to prevent a possible crash. |  |
-| `GameLogic/AI/AIPathfind.cpp:8368` | `Pathfinder::clip` | bugfix | Caball009 2026-02-27 | yes | This was originally uninitialized. |  |
-| `GameLogic/AI/AIPathfind.cpp:9492` | `Pathfinder::isAttackViewBlockedByObstacle` | bugfix | Stubbjax 2026-08-23 | yes | Don't consider the attack blocked if it is a contact weapon. |  |
-| `GameLogic/AI/AIPathfind.cpp:11282` | `Pathfinder::crc` | fix |  | yes | The original code effectively accessed m_numWallPieces 128 times, |  |
+| `GameLogic/AI/AIPathfind.cpp:8368` | `Pathfinder::clip` | bugfix | Caball009 2026-02-27 | yes | This was originally uninitialized. | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
+| `GameLogic/AI/AIPathfind.cpp:9492` | `Pathfinder::isAttackViewBlockedByObstacle` | bugfix | Stubbjax 2026-08-23 | yes | Don't consider the attack blocked if it is a contact weapon. | not applicable - the port never refuses an attack because obstacles block the view (no isAttackViewBlockedByObstacle) |
+| `GameLogic/AI/AIPathfind.cpp:11282` | `Pathfinder::crc` | fix |  | yes | The original code effectively accessed m_numWallPieces 128 times, | not applicable - CRC or save bookkeeping of the C++ engine; the port hashes and saves its own state |
 
 ## rendering
 
@@ -238,7 +238,7 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 | `W3DDevice/GameClient/W3DTreeBuffer.cpp:708` | `W3DTreeBuffer::loadTreesInVertexAndIndexBuffers` | bugfix |  |  | Reset bufferNdx so updateVertexBuffer skips trees absent from this rebuild. |  |
 | `W3DDevice/GameClient/W3DView.cpp:216` | `W3DView::setHeight` | bugfix |  |  | Now recalculates the camera constraints because |  |
 | `W3DDevice/GameClient/W3DView.cpp:454` | `W3DView::zoomCameraToDesiredHeight` | bugfix |  |  | New logic responsible for moving the camera pivot to the terrain ground. |  |
-| `W3DDevice/GameClient/W3DView.cpp:743` | `W3DView::updateCameraTransform` | fix |  | yes | Moves the camera above the terrain. |  |
+| `W3DDevice/GameClient/W3DView.cpp:743` | `W3DView::updateCameraTransform` | fix |  | yes | Moves the camera above the terrain. | not applicable - camera (presentation) |
 | `W3DDevice/GameClient/W3DView.cpp:848` | `W3DView::setCameraTransform` | fix |  |  | Notify the Radar about the changed view always. |  |
 | `W3DDevice/GameClient/W3DView.cpp:1595` | `W3DView::update` | bugfix |  |  | The camera terrain height adjustment now also works in replay playback. |  |
 | `W3DDevice/GameClient/W3DView.cpp:1596` | `W3DView::update` | bugfix | xezon 2025-10-26 |  | The camera area constraints are now recalculated when |  |
@@ -304,34 +304,34 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 | Place | Function | Tag | Author, date | CRC-gated | Description (community) | This port |
 | --- | --- | --- | --- | --- | --- | --- |
 | `GameLogic/System/GameLogicDispatch.cpp:821` | `GameLogic::logicMessageDispatcher` | bugfix | xezon/Caball009 2026-05-14 |  | This fix avoids crashing when players are selected during Replay playback. |  |
-| `GameLogic/System/GameLogicDispatch.cpp:859` | `GameLogic::onNewGame` | fix | stephanmeesters 2026-03-11 | yes |  |  |
-| `GameLogic/System/GameLogicDispatch.cpp:962` | `GameLogic::onSetRallyPoint` | fix | stephanmeesters 2026-03-11 | yes | Validate the owner of the source object |  |
+| `GameLogic/System/GameLogicDispatch.cpp:859` | `GameLogic::onNewGame` | fix | stephanmeesters 2026-03-11 | yes |  | not applicable - a guard of the C++ game flow against a new-game message during a game; the port starts a match from its description |
+| `GameLogic/System/GameLogicDispatch.cpp:962` | `GameLogic::onSetRallyPoint` | fix | stephanmeesters 2026-03-11 | yes | Validate the owner of the source object | equivalent - a rally point is only set by the producer's owner (SimulationWorld.Construction.cs, MayCommand) |
 | `GameLogic/System/GameLogicDispatch.cpp:1103` | `GameLogic::onEnableRetaliationMode` | fix | stephanmeesters 2026-03-08 |  | Ensure that players can only set their own retaliation mode. |  |
-| `GameLogic/System/GameLogicDispatch.cpp:1142` | `GameLogic::onDoSpecialPower` | fix | stephanmeesters 2026-03-01 | yes | Validate the origin of the source object |  |
-| `GameLogic/System/GameLogicDispatch.cpp:1202` | `GameLogic::onDoSpecialPowerAtLocation` | fix | stephanmeesters 2026-03-01 | yes | Validate the origin of the source object |  |
-| `GameLogic/System/GameLogicDispatch.cpp:1258` | `GameLogic::onDoSpecialPowerAtObject` | fix | stephanmeesters 2026-03-01 | yes | Validate the origin of the source object |  |
-| `GameLogic/System/GameLogicDispatch.cpp:1668` | `GameLogic::onDoSpecialPowerOverrideDestination` | fix | stephanmeesters 2026-03-01 | yes | Validate the origin of the source object |  |
+| `GameLogic/System/GameLogicDispatch.cpp:1142` | `GameLogic::onDoSpecialPower` | fix | stephanmeesters 2026-03-01 | yes | Validate the origin of the source object | equivalent - a special power is only used by its source's owner (SimulationWorld.cs, UseSpecialPowerCommand check) |
+| `GameLogic/System/GameLogicDispatch.cpp:1202` | `GameLogic::onDoSpecialPowerAtLocation` | fix | stephanmeesters 2026-03-01 | yes | Validate the origin of the source object | equivalent - as for the special power at a location (same check) |
+| `GameLogic/System/GameLogicDispatch.cpp:1258` | `GameLogic::onDoSpecialPowerAtObject` | fix | stephanmeesters 2026-03-01 | yes | Validate the origin of the source object | equivalent - as for the special power at an object (same check) |
+| `GameLogic/System/GameLogicDispatch.cpp:1668` | `GameLogic::onDoSpecialPowerOverrideDestination` | fix | stephanmeesters 2026-03-01 | yes | Validate the origin of the source object | not applicable - the port has no command that overrides a delivery destination |
 | `GameLogic/System/GameLogicDispatch.cpp:2178` | `GameLogic::onRemoveBeacon` | bugfix |  |  | Prevent runtime crashing when a beacon is no longer associated with an initialized player. |  |
 | `GameLogic/System/GameLogicDispatch.cpp:2324` | `GameLogic::onSetReplayCamera` | fix |  |  | Make sure there is no scrolling ever. |  |
 | `GameLogic/System/GameLogicDispatch.cpp:2342` | `GameLogic::onSetReplayCamera` | fix |  |  | Lock the new location to avoid user input from changing the camera in this frame. |  |
 | `GameLogic/Module/HordeUpdate.h:44` | `` | bugfix | xezon 2025-09-15 |  | Adds a new horde action to select a fixed implementation. |  |
 | `GameLogic/Object/Behavior/AutoHealBehavior.cpp:182` | `AutoHealBehavior::update` | bugfix | stephanmeesters 2026-04-18 |  | Delay emitter creation until update, to ensure that the particle |  |
-| `GameLogic/Object/Behavior/BunkerBusterBehavior.cpp:169` | `BunkerBusterBehavior::onDie` | bugfix | Stubbjax 2026-02-17 | yes | Only bust the bunker if the missile kills itself |  |
+| `GameLogic/Object/Behavior/BunkerBusterBehavior.cpp:169` | `BunkerBusterBehavior::onDie` | bugfix | Stubbjax 2026-02-17 | yes | Only bust the bunker if the missile kills itself | adopted - GameFix.BunkerBusterOnlyWhenKillingSelf |
 | `GameLogic/Object/Behavior/CountermeasuresBehavior.cpp:155` | `CountermeasuresBehavior::calculateCountermeasureToDivertTo` | bugfix | Mauller/Stubbjax 2025-07-27 |  | Fix unsafe iterator handling and correct the countermeasures behavior |  |
 | `GameLogic/Object/Behavior/DumbProjectileBehavior.cpp:655` | `DumbProjectileBehavior::update` | bugfix | Caball009 2026-01-10 |  | Check vector size before accessing the second element to prevent out of bounds access. |  |
 | `GameLogic/Object/Behavior/DumbProjectileBehavior.cpp:751` | `DumbProjectileBehavior::crc` | bugfix |  |  | Added m_currentFlightPathStep for mid-flight save/load. |  |
 | `GameLogic/Object/Behavior/FlightDeckBehavior.cpp:1704` | `FlightDeckBehavior::xfer` | bugfix | bobtista 2026-07-22 |  | Index the ramp state by runway instead of reading and writing one element past the array. |  |
 | `GameLogic/Object/Behavior/GrantStealthBehavior.cpp:125` | `GrantStealthBehavior::update` | bugfix | stephanmeesters 2026-04-18 |  | Delay emitter creation until update, to ensure that the particle |  |
-| `GameLogic/Object/Behavior/InstantDeathBehavior.cpp:163` | `InstantDeathBehavior::onDie` | bugfix | Stubbjax 2026-07-23 | yes | Prevent firing weapons when a scaffold is cancelled |  |
-| `GameLogic/Object/Behavior/InstantDeathBehavior.cpp:183` | `InstantDeathBehavior::onDie` | bugfix | Stubbjax 2026-07-21 | yes | Allow multiple InstantDeathBehaviors to be processed. |  |
+| `GameLogic/Object/Behavior/InstantDeathBehavior.cpp:163` | `InstantDeathBehavior::onDie` | bugfix | Stubbjax 2026-07-23 | yes | Prevent firing weapons when a scaffold is cancelled | adopted - GameFix.NoDeathWeaponFromScaffold |
+| `GameLogic/Object/Behavior/InstantDeathBehavior.cpp:183` | `InstantDeathBehavior::onDie` | bugfix | Stubbjax 2026-07-21 | yes | Allow multiple InstantDeathBehaviors to be processed. | equivalent - every InstantDeathBehavior of an object runs in the port (no dead-state guard) |
 | `GameLogic/Object/Behavior/PoisonedBehavior.cpp:163` | `PoisonedBehavior::startPoisonedEffects` | bugfix | Stubbjax 2025-09-03 | yes | Allow poison damage to award xp to the poison source. | adopted - GameFix.PoisonKillCredit |
-| `GameLogic/Object/Behavior/PropagandaTowerBehavior.cpp:212` | `PropagandaTowerBehavior::update` | bugfix |  | yes | If our container or any parent containers are enclosing, we turn the heck off. |  |
+| `GameLogic/Object/Behavior/PropagandaTowerBehavior.cpp:212` | `PropagandaTowerBehavior::update` | bugfix |  | yes | If our container or any parent containers are enclosing, we turn the heck off. | candidate, not adopted in Phase 32 - the port turns a propaganda tower off only when its direct container encloses (FieldEffectModules.cs); the fix walks every container and needs an enclosing flag |
 | `GameLogic/Object/Behavior/SpawnBehavior.cpp:1072` | `SpawnBehavior::crc` | bugfix | Stubbjax 2026-02-16 |  | Added m_initialBurstCountdown. |  |
 | `GameLogic/Object/Body/ActiveBody.cpp:408` | `ActiveBody::attemptDamage` | bugfix | Caball009 2025-09-04 |  | Check whether a bike still has a rider. |  |
 | `GameLogic/Object/Body/ActiveBody.cpp:500` | `ActiveBody::attemptDamage` | bugfix | Stubbjax 2025-09-20 |  | The isSubdued() function now directly checks status instead |  |
 | `GameLogic/Object/Body/ActiveBody.cpp:1269` | `ActiveBody::internalAddSubdualDamage` | bugfix | Stubbjax 2026-01-25 | yes | Subdual damage can no longer go negative, which | not applicable - this port does not simulate subdual damage (a body reports it as no effect, docs/SIMULATION-CORE.md) |
-| `GameLogic/Object/Body/UndeadBody.cpp:87` | `UndeadBody::attemptDamage` | bugfix | Stubbjax 2025-09-20 | yes | Battle Buses now correctly apply damage modifiers when calculating lethal damage |  |
-| `GameLogic/Object/Collide/CrateCollide/CrateCollide.cpp:170` | `CrateCollide::isValidToExecute` | bugfix | Stubbjax 2026-02-09 | yes | Prevent the crate from being collected multiple times in a single frame. |  |
+| `GameLogic/Object/Body/UndeadBody.cpp:87` | `UndeadBody::attemptDamage` | bugfix | Stubbjax 2025-09-20 | yes | Battle Buses now correctly apply damage modifiers when calculating lethal damage | rejected - the port applies the armour before the body (SimulationWorld.Combat.cs, DealWeaponDamage), so UndeadBody already compares the armour-adjusted amount for weapon damage; the fix would apply the armour twice |
+| `GameLogic/Object/Collide/CrateCollide/CrateCollide.cpp:170` | `CrateCollide::isValidToExecute` | bugfix | Stubbjax 2026-02-09 | yes | Prevent the crate from being collected multiple times in a single frame. | equivalent - a collision stops on a destroyed crate (SimulationWorld.Collision.cs) |
 | `GameLogic/Object/Collide/CrateCollide/SabotageCommandCenterCrateCollide.cpp:103` | `SabotageCommandCenterCrateCollide::isValidToExecute` | bugfix | Stubbjax 2025-08-03 | yes | Can't enter something being sold or under construction. | adopted - GameFix.NoSabotageOfUnfinishedOrSold |
 | `GameLogic/Object/Collide/CrateCollide/SabotageFakeBuilding.cpp:98` | `SabotageFakeBuildingCrateCollide::isValidToExecute` | bugfix | Stubbjax 2025-08-03 | yes | Can't enter something being sold or under construction. | adopted - GameFix.NoSabotageOfUnfinishedOrSold |
 | `GameLogic/Object/Collide/CrateCollide/SabotageInternetCenterCrateCollide.cpp:104` | `SabotageInternetCenterCrateCollide::isValidToExecute` | bugfix | Stubbjax 2025-08-03 | yes | Can't enter something being sold or under construction. | adopted - GameFix.NoSabotageOfUnfinishedOrSold |
@@ -340,67 +340,67 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 | `GameLogic/Object/Collide/CrateCollide/SabotageSuperweaponCrateCollide.cpp:103` | `SabotageSuperweaponCrateCollide::isValidToExecute` | bugfix | Stubbjax 2025-08-03 | yes | Can't enter something being sold or under construction. | adopted - GameFix.NoSabotageOfUnfinishedOrSold |
 | `GameLogic/Object/Collide/CrateCollide/SabotageSupplyCenterCrateCollide.cpp:102` | `SabotageSupplyCenterCrateCollide::isValidToExecute` | bugfix | Stubbjax 2025-08-03 | yes | Can't enter something being sold or under construction. | adopted - GameFix.NoSabotageOfUnfinishedOrSold |
 | `GameLogic/Object/Collide/CrateCollide/SabotageSupplyDropzoneCrateCollide.cpp:102` | `SabotageSupplyDropzoneCrateCollide::isValidToExecute` | bugfix | Stubbjax 2025-08-03 | yes | Can't enter something being sold or under construction. | adopted - GameFix.NoSabotageOfUnfinishedOrSold |
-| `GameLogic/Object/Contain/OpenContain.cpp:181` | `OpenContain::~OpenContain` | bugfix | Caball009 2026-08-18 | yes | Due to a potential use-after-free bug that cannot be fixed |  |
-| `GameLogic/Object/Contain/OpenContain.cpp:305` | `OpenContain::addToContain` | bugfix | Caball009 2026-05-25 | yes | Ensure the occupant is only added to a non-destroyed |  |
+| `GameLogic/Object/Contain/OpenContain.cpp:181` | `OpenContain::~OpenContain` | bugfix | Caball009 2026-08-18 | yes | Due to a potential use-after-free bug that cannot be fixed | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
+| `GameLogic/Object/Contain/OpenContain.cpp:305` | `OpenContain::addToContain` | bugfix | Caball009 2026-05-25 | yes | Ensure the occupant is only added to a non-destroyed | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
 | `GameLogic/Object/Contain/OpenContain.cpp:315` | `OpenContain::addToContain` | bugfix | Stubbjax 2026-02-06 |  | Ensure the rider is not destroyed to prevent a |  |
-| `GameLogic/Object/Contain/OpenContain.cpp:385` | `OpenContain::addToContain` | fix | Skyaero 2025-07-10 | yes | Now (re)deploys the occupants after the garrison points |  |
-| `GameLogic/Object/Contain/OpenContain.cpp:449` | `OpenContain::removeFromContain` | bugfix | Caball009 2026-08-18 | yes | Due to a potential use-after-free bug that cannot be fixed |  |
+| `GameLogic/Object/Contain/OpenContain.cpp:385` | `OpenContain::addToContain` | fix | Skyaero 2025-07-10 | yes | Now (re)deploys the occupants after the garrison points | not applicable - garrison points are not modelled |
+| `GameLogic/Object/Contain/OpenContain.cpp:449` | `OpenContain::removeFromContain` | bugfix | Caball009 2026-08-18 | yes | Due to a potential use-after-free bug that cannot be fixed | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
 | `GameLogic/Object/Contain/OpenContain.cpp:488` | `OpenContain::killAllContained` | bugfix | Caball009 2026-03-11 |  | The contain list must be updated while iterating over it, |  |
-| `GameLogic/Object/Contain/OpenContain.cpp:1554` | `OpenContain::processDamageToContained` | bugfix | Caball009 2026-03-11 | yes | Use a temporary copy of the contain list to iterate over, |  |
+| `GameLogic/Object/Contain/OpenContain.cpp:1554` | `OpenContain::processDamageToContained` | bugfix | Caball009 2026-03-11 | yes | Use a temporary copy of the contain list to iterate over, | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
 | `GameLogic/Object/Contain/OpenContain.cpp:1575` | `OpenContain::processDamageToContained` | bugfix | xezon 2025-06-05 |  | Temporarily empty the m_containList |  |
-| `GameLogic/Object/Contain/OpenContain.cpp:1676` | `OpenContain::setRallyPoint` | bugfix | arcticdolphin 2026-03-02 | yes | Use primary exit interface rally point if available. |  |
-| `GameLogic/Object/Contain/RiderChangeContain.cpp:250` | `RiderChangeContain::onContaining` | bugfix | Stubbjax 2025-12-15 | yes | Copy trainable flag from the rider to prevent |  |
-| `GameLogic/Object/Contain/TransportContain.cpp:477` | `TransportContain::update` | bugfix | Caball009 2026-05-25 | yes | Don't create payload |  |
-| `GameLogic/Object/Contain/TransportContain.cpp:582` | `TransportContain::isSpecificRiderFreeToExit` | bugfix | Stubbjax/bobtista 2026-08-01 | yes | If our container is itself contained, |  |
-| `GameLogic/Object/Contain/TransportContain.cpp:675` | `TransportContain::onCapture` | bugfix | Stubbjax 2025-11-20 | yes | Only eject passengers if the new owner is not allied with the old owner. |  |
+| `GameLogic/Object/Contain/OpenContain.cpp:1676` | `OpenContain::setRallyPoint` | bugfix | arcticdolphin 2026-03-02 | yes | Use primary exit interface rally point if available. | candidate, not adopted in Phase 32 - riders leaving a container get no rally point in the port, as in the original; the fix needs the producer's exit rally point |
+| `GameLogic/Object/Contain/RiderChangeContain.cpp:250` | `RiderChangeContain::onContaining` | bugfix | Stubbjax 2025-12-15 | yes | Copy trainable flag from the rider to prevent | candidate, not adopted in Phase 32 - the bike ranks up by its own template; the fix needs a per-object trainability in the saved state |
+| `GameLogic/Object/Contain/TransportContain.cpp:477` | `TransportContain::update` | bugfix | Caball009 2026-05-25 | yes | Don't create payload | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
+| `GameLogic/Object/Contain/TransportContain.cpp:582` | `TransportContain::isSpecificRiderFreeToExit` | bugfix | Stubbjax/bobtista 2026-08-01 | yes | If our container is itself contained, | adopted - GameFix.NoExitFromContainedTransport |
+| `GameLogic/Object/Contain/TransportContain.cpp:675` | `TransportContain::onCapture` | bugfix | Stubbjax 2025-11-20 | yes | Only eject passengers if the new owner is not allied with the old owner. | not applicable - the port never ejects passengers on capture; a fidelity gap of its own (the original ejects on a non-allied capture) |
 | `GameLogic/Object/Contain/TunnelContain.cpp:152` | `TunnelContain::killAllContained` | bugfix | xezon 2025-06-04 |  | Empty the TunnelSystem's Contained Items List |  |
 | `GameLogic/Object/Contain/TunnelContain.cpp:252` | `TunnelContain::onRemoving` | bugfix |  |  | Now correctly adds the objects to the world without issues with shrouded portable structures. |  |
-| `GameLogic/Object/Damage/TransitionDamageFX.cpp:391` | `TransitionDamageFX::onBodyDamageStateChange` | fix |  | yes | The particle system is now decoupled from the logic crc |  |
+| `GameLogic/Object/Damage/TransitionDamageFX.cpp:391` | `TransitionDamageFX::onBodyDamageStateChange` | fix |  | yes | The particle system is now decoupled from the logic crc | not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects |
 | `GameLogic/Object/Die/CreateObjectDie.cpp:146` | `CreateObjectDie::onDie` | bugfix | Stubbjax 2025-10-02 |  | If the old object was selected, select the new one. |  |
 | `GameLogic/Object/GhostObject.cpp:43` | `GhostObject::GhostObject` | bugfix | tomsons26 2025-04-26 |  | Change initialization of m_parentGeometryIsSmall from 0.0f. |  |
 | `GameLogic/Object/Object.cpp:500` | `Object::Object` | bugfix | Mauller/xezon 2025-08-02 |  | sendObjectCreated needs calling before CreateModule's are initialized to prevent drawable related crashes |  |
-| `GameLogic/Object/Object.cpp:3137` | `Object::onVeterancyLevelChanged` | bugfix | Stubbjax 2025-12-10 | yes | Do not apply veterancy bonuses and animations for dead units. |  |
+| `GameLogic/Object/Object.cpp:3137` | `Object::onVeterancyLevelChanged` | bugfix | Stubbjax 2025-12-10 | yes | Do not apply veterancy bonuses and animations for dead units. | adopted - GameFix.NoVeterancyEffectsWhenDead |
 | `GameLogic/Object/Object.cpp:3896` | `Object::onDisabledEdge` | bugfix | Caball009 2025-07-18 | yes | Don't adjust the power for power plants that are still under construction. | not applicable - this port has no disabled-power path of power plants (energy follows ownership and construction only) |
 | `GameLogic/Object/Object.cpp:5544` | `Object::doCommandButton` | bugfix | Caball009 2025-08-09 |  | Position should be irrelevant, but aiAttackPosition requires a valid position pointer to avoid a crash. |  |
 | `GameLogic/Object/ObjectCreationList.cpp:1014` | `ObjectCreationNugget::create` | bugfix | Caball009 2026-04-22 |  | Disable audiovisual cues for a veterancy level change because this object was just created. |  |
 | `GameLogic/Object/ObjectCreationList.cpp:1393` | `ObjectCreationNugget::create` | bugfix | Caball009 2026-01-12 |  | Position variable needs to be initialized before use. |  |
-| `GameLogic/Object/PartitionManager.cpp:2128` | `PartitionData::updateCellsTouched` | bugfix | Stubbjax 2026-01-29 | yes | Use precise circle fill to improve |  |
+| `GameLogic/Object/PartitionManager.cpp:2128` | `PartitionData::updateCellsTouched` | bugfix | Stubbjax 2026-01-29 | yes | Use precise circle fill to improve | not applicable - collisions use exact footprints, not a coarse fill of partition cells |
 | `GameLogic/Object/SpecialPower/FireWeaponPower.cpp:112` | `FireWeaponPower::doSpecialPower` | bugfix | Caball009 2025-08-09 |  | Position should be irrelevant, but aiAttackPosition requires a valid position pointer to avoid a crash. |  |
-| `GameLogic/Object/Update/BattlePlanUpdate.cpp:255` | `BattlePlanUpdate::onCapture` | bugfix | Stubbjax 2025-11-04 | yes | Transfer battle plan bonuses on capture. |  |
-| `GameLogic/Object/Update/BattlePlanUpdate.cpp:380` | `BattlePlanUpdate::update` | bugfix | Stubbjax 2026-02-19 | yes | Prevent using the turret while it recenters. |  |
+| `GameLogic/Object/Update/BattlePlanUpdate.cpp:255` | `BattlePlanUpdate::onCapture` | bugfix | Stubbjax 2025-11-04 | yes | Transfer battle plan bonuses on capture. | candidate, not adopted in Phase 32 - a captured strategy center keeps its old owner's battle plan bonuses (BattlePlanModule.cs); the fix needs an owner-change handler |
+| `GameLogic/Object/Update/BattlePlanUpdate.cpp:380` | `BattlePlanUpdate::update` | bugfix | Stubbjax 2026-02-19 | yes | Prevent using the turret while it recenters. | not applicable - the bombardment turret is not enabled by the plan in the port |
 | `GameLogic/Object/Update/DockUpdate/DockUpdate.cpp:517` | `DockUpdate::loadDockPositions` | fix | helmutbuhler 2025-04-19 |  | Zero initialize array to prevent uninitialized memory reads. |  |
-| `GameLogic/Object/Update/DockUpdate/SupplyCenterDockUpdate.cpp:82` | `SupplyCenterDockUpdate::~SupplyCenterDockUpdate` | bugfix | arcticdolphin 2026-03-12 | yes | Scale supply bonus proportionally to delivered boxes. |  |
-| `GameLogic/Object/Update/EMPUpdate.cpp:308` | `EMPUpdate::doDisableAttack` | fix |  | yes | The particle system is now decoupled from the logic crc |  |
+| `GameLogic/Object/Update/DockUpdate/SupplyCenterDockUpdate.cpp:82` | `SupplyCenterDockUpdate::~SupplyCenterDockUpdate` | bugfix | arcticdolphin 2026-03-12 | yes | Scale supply bonus proportionally to delivered boxes. | adopted - GameFix.ProportionalSupplyBoost |
+| `GameLogic/Object/Update/EMPUpdate.cpp:308` | `EMPUpdate::doDisableAttack` | fix |  | yes | The particle system is now decoupled from the logic crc | not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects |
 | `GameLogic/Object/Update/FlammableUpdate.cpp:114` | `FlammableUpdate::onDamage` | bugfix | Stubbjax 2025-09-03 | yes | Allow flame damage to award xp to the flame source. | adopted - GameFix.FlameKillCredit |
-| `GameLogic/Object/Update/HordeUpdate.cpp:84` | `` | bugfix | Stubbjax 2026-08-07 | yes | Prevent dead units from being considered for horde membership. |  |
-| `GameLogic/Object/Update/MissileLauncherBuildingUpdate.cpp:205` | `MissileLauncherBuildingUpdate::initiateIntentToDoSpecialPower` | bugfix | Mauller 2025-06-29 | yes | prevent a game crash when told to launch before ready to do so |  |
-| `GameLogic/Object/Update/NeutronMissileSlowDeathUpdate.cpp:366` | `NeutronMissileSlowDeathBehavior::doBlast` | bugfix | xezon 2026-08-16 | yes | From FROM_CENTER_2D, |  |
-| `GameLogic/Object/Update/OCLUpdate.cpp:129` | `OCLUpdate::update` | bugfix | dizzyj/Caball009/Mauller 2025-07-14 | yes | prevent triggering supply drop when subdued while under construction |  |
+| `GameLogic/Object/Update/HordeUpdate.cpp:84` | `` | bugfix | Stubbjax 2026-08-07 | yes | Prevent dead units from being considered for horde membership. | equivalent - dead units are not horde members (Phase12Modules.cs) |
+| `GameLogic/Object/Update/MissileLauncherBuildingUpdate.cpp:205` | `MissileLauncherBuildingUpdate::initiateIntentToDoSpecialPower` | bugfix | Mauller 2025-06-29 | yes | prevent a game crash when told to launch before ready to do so | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
+| `GameLogic/Object/Update/NeutronMissileSlowDeathUpdate.cpp:366` | `NeutronMissileSlowDeathBehavior::doBlast` | bugfix | xezon 2026-08-16 | yes | From FROM_CENTER_2D, | adopted - GameFix.NeutronBlastBoundingSphere |
+| `GameLogic/Object/Update/OCLUpdate.cpp:129` | `OCLUpdate::update` | bugfix | dizzyj/Caball009/Mauller 2025-07-14 | yes | prevent triggering supply drop when subdued while under construction | not applicable - the port has no disabled-timer shift of OCLUpdate |
 | `GameLogic/Object/Update/ParticleUplinkCannonUpdate.cpp:61` | `` | fix | Mirelle 2026-02-04 |  | Raised from 500.0f so that |  |
 | `GameLogic/Object/Update/ParticleUplinkCannonUpdate.cpp:64` | `` | fix |  |  | The positional audio is now decoupled from the beam origin. |  |
 | `GameLogic/Object/Update/ParticleUplinkCannonUpdate.cpp:605` | `ParticleUplinkCannonUpdate::update` | bugfix | Caball009 2025-06-27 |  | Check if the last way point has been reached before attempting to access the next way point. |  |
 | `GameLogic/Object/Update/ParticleUplinkCannonUpdate.cpp:987` | `ParticleUplinkCannonUpdate::createGroundToOrbitLaser` | fix | helmutbuhler 2025-04-19 |  | Invalidate the relevant drawable ID. |  |
 | `GameLogic/Object/Update/ParticleUplinkCannonUpdate.cpp:1563` | `ParticleUplinkCannonUpdate::loadPostProcess` | bugfix | stephanmeesters 2026-02-13 |  |  |  |
-| `GameLogic/Object/Update/PhysicsUpdate.cpp:1382` | `PhysicsBehavior::onCollide` | bugfix | Stubbjax 2026-05-17 | yes | Prevent building collisions from dealing collateral damage to other objects. |  |
-| `GameLogic/Object/Update/PhysicsUpdate.cpp:1411` | `PhysicsBehavior::onCollide` | bugfix | Stubbjax 2026-04-19 | yes | Prevent non-building collisions from repeatedly dealing collateral damage to other objects. |  |
+| `GameLogic/Object/Update/PhysicsUpdate.cpp:1382` | `PhysicsBehavior::onCollide` | bugfix | Stubbjax 2026-05-17 | yes | Prevent building collisions from dealing collateral damage to other objects. | not applicable - collision damage of physics is not simulated |
+| `GameLogic/Object/Update/PhysicsUpdate.cpp:1411` | `PhysicsBehavior::onCollide` | bugfix | Stubbjax 2026-04-19 | yes | Prevent non-building collisions from repeatedly dealing collateral damage to other objects. | not applicable - as above |
 | `GameLogic/Object/Update/ProductionUpdate.cpp:213` | `ProductionUpdate::~ProductionUpdate` | fix | Mauller 2025-04-13 |  | Delete instance of production item |  |
-| `GameLogic/Object/Update/ProductionUpdate.cpp:1091` | `ProductionUpdate::cancelUnitCreate` | bugfix | arcticdolphin 2026-09-07 | yes | No cancel once the batch has started producing. |  |
-| `GameLogic/Object/Update/SpecialAbilityUpdate.cpp:1404` | `SpecialAbilityUpdate::triggerAbilityEffect` | fix |  | yes | The particle system is now decoupled from the logic crc |  |
+| `GameLogic/Object/Update/ProductionUpdate.cpp:1091` | `ProductionUpdate::cancelUnitCreate` | bugfix | arcticdolphin 2026-09-07 | yes | No cancel once the batch has started producing. | not applicable - one unit per production entry; there are no batches |
+| `GameLogic/Object/Update/SpecialAbilityUpdate.cpp:1404` | `SpecialAbilityUpdate::triggerAbilityEffect` | fix |  | yes | The particle system is now decoupled from the logic crc | not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects |
 | `GameLogic/Object/Update/SpectreGunshipDeploymentUpdate.cpp:238` | `SpectreGunshipDeploymentUpdate::initiateIntentToDoSpecialPower` | bugfix | arcticdolphin 2026-03-04 |  | Only select the gunship on the local client that controls the unit. |  |
-| `GameLogic/Object/Update/SpectreGunshipUpdate.cpp:619` | `SpectreGunshipUpdate::update` | fix |  | yes | The particle system is now decoupled from the logic crc |  |
+| `GameLogic/Object/Update/SpectreGunshipUpdate.cpp:619` | `SpectreGunshipUpdate::update` | fix |  | yes | The particle system is now decoupled from the logic crc | not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects |
 | `GameLogic/Object/Update/StealthUpdate.cpp:668` | `StealthUpdate::update` | fix | Skyaero 2025-05-06 |  | obtain the new drawable |  |
 | `GameLogic/Object/Update/StealthUpdate.cpp:1054` | `StealthUpdate::changeVisualDisguise` | fix | helmutbuhler 2025-04-13 |  | Fixes missing pointer assignment for the new drawable. |  |
-| `GameLogic/Object/Update/StickyBombUpdate.cpp:290` | `StickyBombUpdate::onDelete` | bugfix | Stubbjax 2026-08-05 | yes | Clear booby trap status when destroyed, not just when detonated. |  |
+| `GameLogic/Object/Update/StickyBombUpdate.cpp:290` | `StickyBombUpdate::onDelete` | bugfix | Stubbjax 2026-08-05 | yes | Clear booby trap status when destroyed, not just when detonated. | adopted - GameFix.BoobyTrapClearedOnRemoval |
 | `GameLogic/Object/Upgrade/ReplaceObjectUpgrade.cpp:121` | `ReplaceObjectUpgrade::upgradeImplementation` | bugfix | Stubbjax 2025-05-26 |  | If the old object was selected, select the new one. |  |
 | `GameLogic/Object/Upgrade/ReplaceObjectUpgrade.cpp:130` | `ReplaceObjectUpgrade::upgradeImplementation` | bugfix | Stubbjax 2025-05-26 |  | If the old object was grouped, group the new one. |  |
-| `GameLogic/Object/Weapon.cpp:611` | `WeaponTemplate::estimateWeaponTemplateDamage` | bugfix | Stubbjax 2026-06-22 | yes | Only allow targeting Stinger Sites when they contain Soldiers. |  |
+| `GameLogic/Object/Weapon.cpp:611` | `WeaponTemplate::estimateWeaponTemplateDamage` | bugfix | Stubbjax 2026-06-22 | yes | Only allow targeting Stinger Sites when they contain Soldiers. | not applicable - the port has no sniper-against-empty-structure check; a fidelity gap of its own |
 | `GameLogic/Object/WeaponSet.cpp:211` | `WeaponSet::crc` | bugfix | bobtista 2026-08-14 |  | Now serialize m_hasPitchLimit instead of m_hasDamageWeapon twice |  |
 | `GameLogic/Object/WeaponSet.cpp:243` | `WeaponSet::xfer` | fix | bobtista 2026-01-27 |  | Use the same final override as Object. |  |
 | `GameLogic/System/GameLogic.cpp:311` | `GameLogic::destroyAllObjectsImmediate` | bugfix | xezon 2025-05-22 |  | Set all remaining objects effectively dead to avoid triggering their |  |
 | `GameLogic/System/GameLogic.cpp:1294` | `GameLogic::tryStartNewGame` | fix | Caball009 2026-03-19 |  | Random color, position and faction are based on the logical seed. For improved determinism, | equivalent - random colour, position and faction are drawn from the match description's own seed (MatchDescription.Resolve) |
 | `GameLogic/System/GameLogic.cpp:2669` | `GameLogic::processCommandList` | bugfix | Caball009 2026-06-14 |  | Check if player is still connected, |  |
-| `GameLogic/System/GameLogic.cpp:3813` | `GameLogic::update` | bugfix | Stubbjax 2026-03-15 | yes | The disabled-types-to-process mask is now exclusive. |  |
-| `GameLogic/System/GameLogic.cpp:3861` | `GameLogic::update` | bugfix | Stubbjax 2026-03-15 | yes | The disabled-types-to-process mask is now exclusive. |  |
+| `GameLogic/System/GameLogic.cpp:3813` | `GameLogic::update` | bugfix | Stubbjax 2026-03-15 | yes | The disabled-types-to-process mask is now exclusive. | not decided - needs an audit of every module's disabled checks for objects with several disable kinds at once |
+| `GameLogic/System/GameLogic.cpp:3861` | `GameLogic::update` | bugfix | Stubbjax 2026-03-15 | yes | The disabled-types-to-process mask is now exclusive. | not decided - as above |
 | `GameLogic/System/GameLogic.cpp:4004` | `GameLogic::removeObjectFromLookupTable` | fix | Mauller/Xezon 2025-04-24 |  | Prevent out of range access to vector lookup table |  |
 | `GameLogic/System/GameLogic.cpp:4272` | `GameLogic::exitGame` | fix |  |  | The logic update must not be halted to process the game exit message. |  |
 | `GameLogic/System/GameLogic.cpp:4996` | `GameLogic::prepareLogicForObjectLoad` | fix |  |  | Save objects in reverse order so they load in correct order |  |

@@ -53,6 +53,93 @@ REVIEW = {
         'not applicable - this port\'s saves are its own format, not the original\'s xfer',
 }
 
+# Phase 32: the review of the CRC-gated markers, one entry per place (file:line) - by line, because several markers share a function.
+REVIEW_BY_LINE = {
+    'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:4204': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:7187': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:7265': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:7333': 'not applicable - the port has no moveAlliesAwayFromDestination search (allies step to the nearest free place, SimulationWorld.ExitGoals.cs)',
+    'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:8368': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:9492': 'not applicable - the port never refuses an attack because obstacles block the view (no isAttackViewBlockedByObstacle)',
+    'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:11282': 'not applicable - CRC or save bookkeeping of the C++ engine; the port hashes and saves its own state',
+    'Core/GameEngine/Source/GameLogic/System/GameLogicDispatch.cpp:859': 'not applicable - a guard of the C++ game flow against a new-game message during a game; the port starts a match from its description',
+    'Core/GameEngine/Source/GameLogic/System/GameLogicDispatch.cpp:962': "equivalent - a rally point is only set by the producer's owner (SimulationWorld.Construction.cs, MayCommand)",
+    'Core/GameEngine/Source/GameLogic/System/GameLogicDispatch.cpp:1142': "equivalent - a special power is only used by its source's owner (SimulationWorld.cs, UseSpecialPowerCommand check)",
+    'Core/GameEngine/Source/GameLogic/System/GameLogicDispatch.cpp:1202': 'equivalent - as for the special power at a location (same check)',
+    'Core/GameEngine/Source/GameLogic/System/GameLogicDispatch.cpp:1258': 'equivalent - as for the special power at an object (same check)',
+    'Core/GameEngine/Source/GameLogic/System/GameLogicDispatch.cpp:1668': 'not applicable - the port has no command that overrides a delivery destination',
+    'Core/GameEngine/Source/GameNetwork/Network.cpp:587': "not applicable - network message validation; the port's relay protocol admits only player orders (CommandTypes.IsPlayerOrder)",
+    'Core/GameEngineDevice/Source/W3DDevice/GameClient/W3DView.cpp:743': 'not applicable - camera (presentation)',
+    'GeneralsMD/Code/GameEngine/Source/Common/NameKeyGenerator.cpp:128': 'not applicable - CRC or save bookkeeping of the C++ engine; the port hashes and saves its own state',
+    'GeneralsMD/Code/GameEngine/Source/Common/RTS/ActionManager.cpp:462': 'equivalent - resuming construction needs the same owner (SimulationWorld.Construction.cs, CheckResume)',
+    'GeneralsMD/Code/GameEngine/Source/Common/RTS/ActionManager.cpp:493': 'not applicable - the port lets any own builder resume at once (no wait for the dead builder); a fidelity gap of its own, not this defect',
+    'GeneralsMD/Code/GameEngine/Source/Common/RTS/Energy.cpp:212': 'not applicable - the port has no power loss of disabled power plants, so no double removal; a fidelity gap of its own',
+    'GeneralsMD/Code/GameEngine/Source/Common/RTS/Player.cpp:720': 'candidate, not adopted in Phase 32 - the port heals a tunnel network once per tunnel as the original does (TunnelContain.Update); the fix needs a heal step per player',
+    'GeneralsMD/Code/GameEngine/Source/Common/RTS/Player.cpp:2139': 'not applicable - upgrades are bought and completed at once in the port; there is no upgrade in progress to transfer',
+    'GeneralsMD/Code/GameEngine/Source/Common/RTS/Player.cpp:2471': 'adopted - GameFix.BountyRounding',
+    'GeneralsMD/Code/GameEngine/Source/Common/RTS/Player.cpp:3688': "candidate, not adopted in Phase 32 - the port applies only the newest battle plan's switches to existing objects (SimulationWorld.BattlePlan.cs); the fix needs the aggregate",
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIGroup.cpp:2179': 'not applicable - the port has no group attack that orders garrisoned occupants',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIGuard.cpp:186': 'not applicable - the guard state machine is not simulated (guard orders become standing orders)',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIGuardRetaliate.cpp:190': 'not applicable - the guard-retaliate state machine is not simulated',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIPlayer.cpp:125': "equivalent - the AI player's built structure keeps its health (ScriptEngine.AiPlayer.cs)",
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIPlayer.cpp:468': 'equivalent - the AI player spawns a structure at full health (ScriptEngine.AiPlayer.cs)',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIStates.cpp:2693': 'not decided - whether a disarming unit can ever hold a stealthed mine as its victim in the port is not established (SimulationWorld.Acquisition.cs)',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIStates.cpp:6379': 'candidate, not adopted in Phase 32 - entering is decided in 2-D (AIUpdateInterface.UpdateEnter); the vertical overlap needs the geometry heights',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIStates.cpp:6498': 'not applicable - an exit is immediate in the port; there is no exit state that retries on a busy door',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/BunkerBusterBehavior.cpp:169': 'adopted - GameFix.BunkerBusterOnlyWhenKillingSelf',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/InstantDeathBehavior.cpp:163': 'adopted - GameFix.NoDeathWeaponFromScaffold',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/InstantDeathBehavior.cpp:183': 'equivalent - every InstantDeathBehavior of an object runs in the port (no dead-state guard)',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/PropagandaTowerBehavior.cpp:212': 'candidate, not adopted in Phase 32 - the port turns a propaganda tower off only when its direct container encloses (FieldEffectModules.cs); the fix walks every container and needs an enclosing flag',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Body/UndeadBody.cpp:87': 'rejected - the port applies the armour before the body (SimulationWorld.Combat.cs, DealWeaponDamage), so UndeadBody already compares the armour-adjusted amount for weapon damage; the fix would apply the armour twice',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Collide/CrateCollide/CrateCollide.cpp:170': 'equivalent - a collision stops on a destroyed crate (SimulationWorld.Collision.cs)',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/OpenContain.cpp:181': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/OpenContain.cpp:305': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/OpenContain.cpp:385': 'not applicable - garrison points are not modelled',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/OpenContain.cpp:449': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/OpenContain.cpp:1554': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/OpenContain.cpp:1676': "candidate, not adopted in Phase 32 - riders leaving a container get no rally point in the port, as in the original; the fix needs the producer's exit rally point",
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/RiderChangeContain.cpp:250': 'candidate, not adopted in Phase 32 - the bike ranks up by its own template; the fix needs a per-object trainability in the saved state',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/TransportContain.cpp:477': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/TransportContain.cpp:582': 'adopted - GameFix.NoExitFromContainedTransport',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/TransportContain.cpp:675': 'not applicable - the port never ejects passengers on capture; a fidelity gap of its own (the original ejects on a non-allied capture)',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Damage/TransitionDamageFX.cpp:391': 'not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Object.cpp:3137': 'adopted - GameFix.NoVeterancyEffectsWhenDead',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/PartitionManager.cpp:2128': 'not applicable - collisions use exact footprints, not a coarse fill of partition cells',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate.cpp:3560': 'not applicable - the port has no attack-position command',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate.cpp:3838': 'not applicable - the container to leave is always the one holding the rider',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate.cpp:3876': 'not applicable - as above',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1088': 'not applicable - healing of a Chinook at an airfield is not simulated',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1099': 'not applicable - as above',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1294': 'not applicable - as above',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1326': 'equivalent - entering oneself is refused in the pre-check (SimulationWorld.cs, CheckMoveAndEnter)',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1330': 'equivalent - an enter order the container cannot take is refused in the pre-check',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1345': 'equivalent - the port lands the Chinook and lets riders out one by one through the door',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/DeployStyleAIUpdate.cpp:146': 'equivalent - deploying starts only from a fire attempt that passed the range check',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/DozerAIUpdate.cpp:2358': 'equivalent - a builder keeps its task over a disable in the port',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/HackInternetAIUpdate.cpp:132': 'not applicable - the port has no hack command for a unit that is already hacking',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2026': "candidate, not adopted in Phase 32 - a healed helipad helicopter takes off without going to the producer's rally point (JetAIUpdate.cs)",
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2150': 'equivalent - the attack locomotor ends with its timer (JetAIUpdate.cs)',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/MissileAIUpdate.cpp:557': 'not applicable - the port has no diving-missile distance logic',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/WorkerAIUpdate.cpp:981': 'equivalent - a worker keeps its task over a disable',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/BattlePlanUpdate.cpp:255': "candidate, not adopted in Phase 32 - a captured strategy center keeps its old owner's battle plan bonuses (BattlePlanModule.cs); the fix needs an owner-change handler",
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/BattlePlanUpdate.cpp:380': 'not applicable - the bombardment turret is not enabled by the plan in the port',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/DockUpdate/SupplyCenterDockUpdate.cpp:82': 'adopted - GameFix.ProportionalSupplyBoost',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/EMPUpdate.cpp:308': 'not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/HordeUpdate.cpp:84': 'equivalent - dead units are not horde members (Phase12Modules.cs)',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/MissileLauncherBuildingUpdate.cpp:205': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/NeutronMissileSlowDeathUpdate.cpp:366': 'adopted - GameFix.NeutronBlastBoundingSphere',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/OCLUpdate.cpp:129': 'not applicable - the port has no disabled-timer shift of OCLUpdate',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/PhysicsUpdate.cpp:1382': 'not applicable - collision damage of physics is not simulated',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/PhysicsUpdate.cpp:1411': 'not applicable - as above',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/ProductionUpdate.cpp:1091': 'not applicable - one unit per production entry; there are no batches',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/SpecialAbilityUpdate.cpp:1404': 'not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/SpectreGunshipUpdate.cpp:619': 'not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/StickyBombUpdate.cpp:290': 'adopted - GameFix.StickyBombClearsTrapOnRemoval',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Weapon.cpp:611': 'not applicable - the port has no sniper-against-empty-structure check; a fidelity gap of its own',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/System/GameLogic.cpp:3813': "not decided - needs an audit of every module's disabled checks for objects with several disable kinds at once",
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/System/GameLogic.cpp:3861': 'not decided - as above',
+}
+
 
 def subsystem(path):
     p = path.replace('\\', '/')
@@ -134,7 +221,7 @@ def collect():
                     rows.append({
                         'path': relative, 'line': index + 1, 'tag': found.group(1), 'function': function, 'author': author, 'date': date,
                         'subsystem': subsystem(relative), 'gated': gated(lines, index), 'summary': summary(lines, index),
-                        'review': REVIEW.get(f'{relative}#{function}', ''),
+                        'review': REVIEW_BY_LINE.get(f'{relative}:{index + 1}') or REVIEW.get(f'{relative}#{function}', ''),
                     })
     rows.sort(key=lambda row: (row['path'], row['line']))
     return rows
@@ -193,7 +280,7 @@ def main():
         return 3
     rows = collect()
     text = render(rows) + '\n'
-    unmatched = sorted(set(REVIEW) - {f"{row['path']}#{row['function']}" for row in rows})
+    unmatched = sorted((set(REVIEW) - {f"{row['path']}#{row['function']}" for row in rows}) | (set(REVIEW_BY_LINE) - {f"{row['path']}:{row['line']}" for row in rows}))
     if unmatched:
         print('A reviewed place matches no marker (the function is named differently):\n  ' + '\n  '.join(unmatched), file=sys.stderr)
         return 1

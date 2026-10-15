@@ -38,12 +38,29 @@ and only clients with the same one join.
      module.
   What follows after these is not known: the compiler stops at the first error.
 
-## 3. What is therefore not done
+## 2a. Phase 32: the layer compiles and plays (15 October 2026)
 
-- A match with the patch layer: not played, not measured; the layer's definition fingerprint is not known yet (it follows from the compiled definitions).
+- **The colour lines** (`477c15e`): a colour keyframe with tokens after its frame keeps colour and the first frame, as the original's parser reads it, and the
+  compiler writes `compatibility-ignored-tokens` for it - counted, never silent.
+- **The two modules** (`a3834a8`, `docs/SIMULATION-CORE.md` section 50): `StatusBitsUpgrade` and `SabotageSupplyDropzoneCrateCollide`, written from the original's
+  source with tests.
+- **Nothing else was found**: after these the layer's definitions compile to the end. Its compatibility inventory is `baselines/compatibility-patch.json`
+  (706 entries; the original's has 713), checked by `IniTool compat-check game/content-patch baselines/compatibility-patch.json`.
+- **Played** (60 Hz, Release, the definition fingerprint of the layer `AC16ECF6B2454A24` against `4E6F6F5623FE86DC`): `SimTool reference-manifest results` over
+  the 50 runs of the reference manifest, twice on the layer with byte-identical results. Against the original: all **27 mission runs end the same way**; the
+  **16 AI pairings** are decided 14 times in both, **11 of 16 with the same outcome** - ChinaTankGeneral against AirForce goes to AirForce on Alpine Assault,
+  Bitter Winter and Death Valley, Alpine Assault America against China becomes an America win, Armored Fury GLA against America a stalemate; the four
+  eight-player runs stay stalemates within their budget; the **retail reference match** finds no winner in 432,000 ticks (two runs and a continuation from the
+  snapshot identical) where the original ends with FactionGLA at tick 32,520. **Balance is not assessed** - the patch changes balance on purpose.
+- **On a server** (`scripts/check-patch-layer.ps1`, step `patch-layer`): two clients of the layer play 30 s with every tick agreed; a client of the original
+  content asking for a seat in their room is refused with `Definitions`. An AI match on the layer ends with the same final hash twice.
+
+## 3. What is still not done (after Phase 32)
+
 - "Balance changes separately switchable": the patch itself does not separate them - its core INI files carry bug fixes and balance changes together. A
   finer switch would need the patch's changes split per change; not done. The layer is switchable as a whole (original or patch).
-- A compatibility baseline of its own for the layer (`baselines/compatibility.json` is the original's).
-- The converted parts (textures from Photoshop sources, models from Blender scenes, the string table) and the language and audio bundles.
-
-The work list for S3-M7 (b) is section 2 in its order.
+- The converted parts (textures from Photoshop sources, models from Blender scenes, the string table) and the language and audio bundles: a patched object
+  that names a texture of those parts draws without it (the renderer counts a missing texture).
+- No human has seen or played a match on the layer; the layer is not offered by the installer (decision D-33). A room shows "original" or "patch" only by its
+  definition fingerprint.
+- The 50 runs were measured at 60 Hz only; the layer at 30 and 120 Hz is not measured.

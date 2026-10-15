@@ -70,6 +70,34 @@ tick 32,520, chain `84077720F511C1ED` in both profiles; the definition fingerpri
 the three cases happens in that match (no kill by poison or fire whose source can gain experience, no sabotage of an unfinished building). The AI match of
 section 3.2 shows where the profile does change a match.
 
+### 3.1b Adopted (Phase 32)
+
+The review of all 83 CRC-gated markers that Phase 30 left open (three research passes that read both branches of each fix and the port's code, then each
+candidate checked again by hand; one candidate failed that check, see 3.2) gave eight more fixes:
+
+| Fix | Community source (file, function) | Original | With the fix | Test |
+| --- | --- | --- | --- | --- |
+| `bunker-buster-only-when-killing-self` (4) | `BunkerBusterBehavior.cpp`, `BunkerBusterBehavior::onDie` | a bunker buster busts its bunker however it dies, also when shot down on its way | only when its missile kills itself at the target | `GameFixBunkerBusterOnlyWhenKillingSelf` |
+| `no-death-weapon-from-scaffold` (5) | `InstantDeathBehavior.cpp`, `InstantDeathBehavior::onDie` | a building site that dies draws and fires its death weapon | it fires none (as `FireWeaponWhenDeadBehavior` already does not) | `GameFixNoDeathWeaponFromScaffold` |
+| `no-exit-from-contained-transport` (6) | `TransportContain.cpp`, `TransportContain::isSpecificRiderFreeToExit` | a rider may leave a transport that is itself inside another container | it may not | `GameFixNoExitFromContainedTransport` |
+| `no-veterancy-effects-when-dead` (7) | `Object.cpp`, `Object::onVeterancyLevelChanged` | an object that dies and reaches a level in the same moment gets the level's health, weapon bonus and upgrade | it keeps the level and gets none of them | `GameFixNoVeterancyEffectsWhenDead` |
+| `proportional-supply-boost` (8) | `SupplyCenterDockUpdate.cpp`, `SupplyCenterDockUpdate::action` (`getUpgradedSupplyBoostValue`) | Supply Lines and Worker Shoes pay their whole boost for every delivery, however few boxes it brings | the boost in proportion to the boxes delivered (`boost * boxes / maximum`) | `GameFixBountyAndSupplyArithmetic` |
+| `neutron-blast-bounding-sphere` (9) | `NeutronMissileSlowDeathUpdate.cpp`, `NeutronMissileSlowDeathBehavior::doBlast` | the nuclear blast hits objects whose centre lies in its outer radius (2-D) | every object whose bounding sphere reaches into it | `GameFixNeutronBlastBoundingSphere` |
+| `sticky-bomb-clears-trap-on-removal` (10) | `StickyBombUpdate.cpp`, `StickyBombUpdate::onDelete` | a booby trap destroyed before it goes off leaves its victim marked as booby-trapped | the mark goes with the trap | `GameFixStickyBombClearsTrapOnRemoval` |
+| `bounty-rounding` (11) | `Player.cpp`, `Player::doBountyForKill` | a bounty that is a whole number of credits pays one more (5 % is a hair above 0.05) | that whole number (an epsilon of 0.0001, `WWMATH_EPSILON`, before rounding up) | `GameFixBountyAndSupplyArithmetic` |
+
+Every test runs the scene under the original profile and under a profile that names the fix, at 30, 60 and 120 Hz. **Measured** (60 Hz, Release, two AI
+pairings on Alpine Assault, 25 game minutes, each fix alone and all eleven together against the original profile; `SimTool ai-match --rules NAME`):
+
+| Pairing | Original | Changed by | Not changed by |
+| --- | --- | --- | --- |
+| FactionGLAToxinGeneral against FactionChinaInfantryGeneral | stalemate, final hash `3C7D25C4459BD941`, 1,264 commands | `poison-kill-credit` and `fixes`: `86D86CDFDEA40971`, the same 1,264 commands, still a stalemate | the other ten fixes alone: the original's hash |
+| FactionAmerica against FactionGLA | FactionAmerica at tick 20,370, `A60F2D9740C78670`, 1,439 commands | none | all eleven alone and together: the original's hash |
+
+So in these two matches only the poison credit happens; the eight fixes of Phase 32 change nothing there - their cases (a shot-down bunker buster, a dying
+building site with a death weapon, a carried transport, a dead unit reaching a level, a delivery with the supply boost, a neutron blast, a removed booby trap, a
+bounty) do not occur in them. Their effect is shown by their tests, not by these matches; a survey that provokes each case in real matches is not made.
+
 ### 3.2 Reviewed and not adopted
 
 | Fix | Why not |
@@ -78,11 +106,23 @@ section 3.2 shows where the profile does change a match.
 | `Object::onDisabledEdge` - a power plant under construction does not change the power when it is disabled | this port has no disabled-power path for power plants (energy follows ownership and construction only); nothing to correct. |
 | `GameLogic::tryStartNewGame` - random colour, position and faction from the logical seed | this port already draws them from the match description's own seed (`MatchDescription.Resolve`). |
 | `AIUpdateInterface::xfer`, `GameLogic::xfer` - save order and an out-of-range field of the save | this port's saves are its own format; the original's `xfer` is not ported. |
+| `UndeadBody::attemptDamage` - the Battle Bus decides by the armour-adjusted damage (Phase 32) | **rejected after the check by hand**: this port applies the armour before the body (`SimulationWorld.Combat.cs`, `DealWeaponDamage`), so the Battle Bus already compares the armour-adjusted amount for weapon damage; the fix would apply the armour twice. Damage that is not a weapon's reaches a body without armour in this port - a fidelity gap of its own. |
+
+The other 74 CRC-gated markers that are not adopted are, by the review column of the catalogue: **17 equivalent** (this port already behaves as the fix makes the
+original behave, e.g. the owner checks of rally points and special powers, an exit that is immediate), **49 not applicable** (C++ memory and crash defects,
+CRC and save bookkeeping, effects decoupled from the logic CRC, code paths this port does not have - guard state machines, collision damage, batches), and
+**8 candidates not adopted in Phase 32**, each with the reason in the catalogue: the tunnel network healed per tunnel, the newest battle plan's switches instead
+of the aggregate, entering without a vertical overlap, a propaganda tower inside nested containers, the rally point of riders leaving a container, a bike's
+trainability from its rider, a healed helicopter's rally point, battle plan bonuses on capture. Each needs state or a mechanism this port does not have yet.
+**3 are not decided** (a disarming unit and stealthed mines; the exclusive disabled mask, twice): their decision needs an audit of the disabled checks of every
+module. Several "not applicable" entries name fidelity gaps of this port found on the way (no power loss of disabled power plants, no ejection of passengers on
+capture, no wait for a dead builder before a resume, no sniper check against empty structures) - they are Stage 1 debts, not fixes.
 
 ### 3.3 Not yet reviewed
 
-Of the 96 CRC-gated markers, 13 are reviewed (the adopted and rejected ones above; the eight sabotage modules count one each) and **83 are not reviewed** one by one (the review column of the catalogue is empty); of the ungated markers in simulation, AI, pathfinding and scripts, 70 are not reviewed either (by the community's judgement they change no match). They are the work list of S3-M7 (a): each is
-either a defect this port reproduces (then a candidate for the profile, with the procedure above) or one it does not have. **The choice of which fixes a release
+Since Phase 32 every one of the 96 CRC-gated markers has a review entry (`python scripts/ggc-fix-catalogue.py`; entries by file and line where several markers
+share a function). The 258 ungated markers are not reviewed one by one - by the community's judgement they change no match; the 70 of them in simulation, AI,
+pathfinding and scripts are the next list if that judgement is to be checked. **The choice of which fixes a release
 offers, and whether a profile other than the original may ever become the default, is the owner's** (it changes every reference value and is a break for every
 recorded match; `docs/plan/PROGRAMME.md` §7).
 
