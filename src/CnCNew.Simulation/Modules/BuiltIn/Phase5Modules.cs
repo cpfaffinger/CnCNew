@@ -617,6 +617,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private bool _pathValid;
     private bool _pathComplete;
     private ulong _pathObstacles;
+    // The movement profile (SimulationWorld.PathQueue.cs): what this object asked the world's path queue for and is waiting for - none, a plan, or a detour around blockers.
+    private PathWait _pathWait;
+
+    private enum PathWait : byte { None = 0, Plan = 1, Detour = 2 }
+
+    /// <summary>Whether the object waits for an answer of the world's path queue (the movement profile): it keeps the path it has, or stands, and keeps its order.</summary>
+    public bool WaitingForPath => _pathWait != PathWait.None;
     private BuilderTask _task;
     private EntityId _taskTarget;
     private bool _approaching;
@@ -1146,6 +1153,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _pathComplete = false;
         _pathIndex = 0;
         _path.Clear();
+        _pathWait = PathWait.None;
     }
 
     private void CancelDock(IWorldServices world)
@@ -1397,7 +1405,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             Entity.MoveTargetY = freeY;
             InvalidatePath();
         }
-        if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum)) PlanPath(navigation, locomotor, air);
+        if (!air && !_viaPending && world.PathsQueued)
+        {
+            if (!QueuedPath(world, navigation, locomotor)) return;
+        }
+        else if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum)) PlanPath(navigation, locomotor, air);
         if (_path.Count == 0)
         {
             // Blocked: no cell next to the object can be entered. The order ends without an arrival.
@@ -1466,11 +1478,22 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         SetFrameSpeed(speed);
         // Standing units on the way (a dozer at work, a halted group) are unknown to the static path: plan once around them instead of rubbing along them while the local avoidance
         // below shoves the step aside (docs/DEMO-FINDINGS.md #12). At most once per second; a plan that no longer reaches the goal is dropped and the old path kept.
-        if (!air && world.Tick - _blockerReplanTick >= _blockerReplanInterval && speed > Fixed.Zero)
+        if (!air && world.Tick - _blockerReplanTick >= _blockerReplanInterval && speed > Fixed.Zero && _pathWait == PathWait.None)
         {
             // Look-ahead: the travel of about 25 logic frames of the original (a walking infantry sees 17 units, a fast vehicle 60).
             var ahead = world.StationaryBlockersAhead(Entity, FixedTrig.Cos(Entity.Angle) * speed * BlockerLookAhead, FixedTrig.Sin(Entity.Angle) * speed * BlockerLookAhead);
-            if (ahead.Count > 0) ReplanAround(navigation, locomotor, ahead, world.Tick);
+            if (ahead.Count > 0)
+            {
+                if (world.PathsQueued && !_viaPending)
+                {
+                    // The movement profile: the detour is a question to the world's path queue; the path the object has stays until the answer comes.
+                    _blockerReplanTick = world.Tick;
+                    world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [..ahead], true));
+                    _pathWait = PathWait.Detour;
+                    world.MarkDirty(Entity);
+                }
+                else ReplanAround(navigation, locomotor, ahead, world.Tick);
+            }
         }
 
         // phase 10 (docs/SIMULATION-CORE.md, CnCNew.Simulation/World/SimulationWorld.Collision.cs): bounded local avoidance
@@ -1947,6 +1970,55 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (angle != _frameAngle) Entity.SetAheadAngle(_frameAngle);
     }
 
+    /// <summary>
+    /// The movement profile's planning: asks the world's path queue when the object has no valid path or the footprints changed, takes the answer once it is there, and keeps a
+    /// path it still has while it waits. Returns <see langword="false"/> when the object has to stand this tick (it waits and has no path to follow).
+    /// </summary>
+    private bool QueuedPath(IWorldServices world, NavigationGrid navigation, LocomotorInfo locomotor)
+    {
+        if (_pathWait != PathWait.None)
+        {
+            if (world.TryTakePath(Entity, out var answer))
+            {
+                var detour = _pathWait == PathWait.Detour;
+                _pathWait = PathWait.None;
+                world.MarkDirty(Entity);
+                if (!detour || answer is { Status: PathStatus.Found, Points.IsDefaultOrEmpty: false })
+                {
+                    _path.Clear();
+                    if (answer is not null) _path.AddRange(answer.Points);
+                    _pathIndex = 0;
+                    _pathValid = true;
+                    _pathComplete = detour || answer is { Status: PathStatus.Found };
+                    _pathObstacles = navigation.ObstacleSum;
+                }
+            }
+            else if (!world.IsPathPending(Entity))
+            {
+                // The question is gone (its answer was taken by an order in between): ask again.
+                _pathWait = PathWait.None;
+                _pathValid = false;
+            }
+        }
+        if (_pathWait == PathWait.None && (!_pathValid || _pathObstacles != navigation.ObstacleSum))
+        {
+            if (!_pathValid) { _path.Clear(); _pathIndex = 0; }
+            world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [], false));
+            _pathWait = PathWait.Plan;
+            _pathValid = true;
+            _pathObstacles = navigation.ObstacleSum;
+            world.MarkDirty(Entity);
+        }
+        if (_pathWait != PathWait.None && _path.Count == 0)
+        {
+            // Waiting without a path: the object stands, and keeps its order.
+            Entity.Speed = Fixed.Zero;
+            ClearFrameSpeed();
+            return false;
+        }
+        return true;
+    }
+
     private void ReplanAround(NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)
     {
         _blockerReplanTick = tick;
@@ -2102,6 +2174,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (_exitFrom.IsValid) writer.UInt("exitFrom", _exitFrom.Value);
         if (_dyingSince != 0) writer.Int("dyingSince", _dyingSince);
         if (_ignoreCollisionsUntil != 0) writer.Int("ignoreCollisionsUntil", _ignoreCollisionsUntil);
+        if (_pathWait != PathWait.None) writer.Int("pathWait", (int)_pathWait);
         if (_pathValid)
         {
             writer.Bool("pathValid", true);
@@ -2165,6 +2238,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _pathObstacles = reader.UInt("pathObstacles");
             foreach (var item in reader.Array("path")) _path.Add(new PathPoint(item.Fixed("x"), item.Fixed("y")));
         }
+        _pathWait = reader.Has("pathWait") ? (PathWait)checked((int)reader.Int("pathWait")) : PathWait.None;
         _frameArriving = reader.Has("frameArriving") && reader.Bool("frameArriving");
         _dock = reader.Bool("docking") ? DockMachine.Load(reader) : null;
     }

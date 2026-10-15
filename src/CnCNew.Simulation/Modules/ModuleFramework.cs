@@ -215,6 +215,18 @@ public interface IWorldServices
     /// <summary><c>Object::setTeam</c> for a controlling-player change: the object (and the power it supplies or consumes) now belongs to <paramref name="newOwner"/>; false when nothing changed.</summary>
     bool TransferOwnership(EntityId id, PlayerId newOwner);
 
+    /// <summary>Whether ground units ask the world's path queue instead of searching themselves (the movement profile, <see cref="SimulationWorld.PathsQueued"/>).</summary>
+    bool PathsQueued { get; }
+
+    /// <inheritdoc cref="SimulationWorld.RequestPath"/>
+    void RequestPath(Entity requester, PathQuery query);
+
+    /// <inheritdoc cref="SimulationWorld.TryTakePath"/>
+    bool TryTakePath(Entity requester, out PathResult? result);
+
+    /// <inheritdoc cref="SimulationWorld.IsPathPending"/>
+    bool IsPathPending(Entity requester);
+
     /// <summary><c>Player::getPlayerType() == PLAYER_COMPUTER</c>.</summary>
     bool IsComputerPlayer(PlayerId player);
 

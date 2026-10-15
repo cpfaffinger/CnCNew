@@ -109,6 +109,7 @@ public sealed partial class SimulationWorld
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
         LoadExitClaims(state);
+        LoadPathQueue(state);
 
         foreach (var item in state.Array("entityList")) LoadEntity(item);
         foreach (var player in state.Array("players")) _players[checked((int)player.Int("id"))].EnergyProduction = checked((int)player.Int("energyProduction"));

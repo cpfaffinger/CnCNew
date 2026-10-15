@@ -1907,6 +1907,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ExecuteCommands(tick);
         FireTimers(tick);
         RunUpdates(tick);
+        if (_pathQueue.Count > 0 || _pathAnswers.Count > 0) ProcessPathQueue();
         StepAcquisition(tick);
         StepTurrets(tick);
         StepFiringTrackers(tick);
@@ -1942,6 +1943,7 @@ public sealed partial class SimulationWorld : IWorldServices
         observer.PhaseEnded(TickPhase.Timers);
         observer.PhaseStarted(TickPhase.Updates);
         RunUpdates(tick);
+        if (_pathQueue.Count > 0 || _pathAnswers.Count > 0) ProcessPathQueue();
         observer.PhaseEnded(TickPhase.Updates);
         observer.PhaseStarted(TickPhase.Acquisition);
         StepAcquisition(tick);
@@ -2250,5 +2252,6 @@ public sealed partial class SimulationWorld : IWorldServices
         foreach (var simEvent in _events) simEvent.Describe(writer);
         writer.EndArray();
         DescribeExitClaims(writer);
+        DescribePathQueue(writer);
     }
 }

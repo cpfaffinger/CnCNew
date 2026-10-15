@@ -176,6 +176,10 @@ run.Test("Game fixes: the neutron blast reaches bounding spheres", Tests.GameFix
 run.Test("Game fixes: a removed booby trap unmarks its victim", Tests.GameFixStickyBombClearsTrapOnRemoval);
 run.Test("Game fixes: a shot-down bunker buster busts nothing", Tests.GameFixBunkerBusterOnlyWhenKillingSelf);
 run.Test("Game fixes: bounty rounding and proportional supply boost", Tests.GameFixBountyAndSupplyArithmetic);
+run.Test("Movement profile: a search run in slices equals the search in one piece", Tests.MovementBudgetSlicedSearchEqualsTheWholeSearch);
+run.Test("Movement profile: the path queue keeps its budget, waiting units keep their orders, all arrive", Tests.MovementBudgetQueuesWaitsAndArrives);
+run.Test("Movement profile: a group shares one search", Tests.MovementBudgetSharesTheGroupPath);
+run.Test("Movement profile: a world saved in the middle of a paused search continues identically", Tests.MovementBudgetContinuesFromASnapshotMidSearch);
 run.Test("Game fixes (phase 33): tunnel-heal-once-per-player", Tests.GameFixTunnelHealOncePerPlayer);
 run.Test("Game fixes (phase 33): battle-plan-aggregate", Tests.GameFixBattlePlanAggregate);
 run.Test("Game fixes (phase 33): battle-plan-follows-capture", Tests.GameFixBattlePlanFollowsCapture);
