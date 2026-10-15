@@ -180,6 +180,7 @@ public sealed partial class SimulationWorld
         };
         if (reader.Has("shroudScalar")) entity.ShroudScalar = reader.Fixed("shroudScalar");
         if (reader.Has("crateWeaponLevel")) entity.CrateWeaponLevel = checked((int)reader.Int("crateWeaponLevel"));
+        if (reader.Has("trainable")) entity.TrainableOverride = reader.Bool("trainable");
         if (reader.Has("crateArmorLevel")) entity.CrateArmorLevel = checked((int)reader.Int("crateArmorLevel"));
         if (entity.CrateWeaponLevel is < 0 or > 2 || entity.CrateArmorLevel is < 0 or > 2) throw new InvalidDataException("Crate upgrade level out of range.");
         if (reader.Has("aheadX")) entity.SetAhead(reader.Int("aheadTick"), reader.Fixed("aheadX"), reader.Fixed("aheadY"), reader.Fixed("aheadZ"));

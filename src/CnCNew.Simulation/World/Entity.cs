@@ -129,6 +129,12 @@ public sealed class Entity
     /// <summary><c>ExperienceTracker::m_currentExperience</c>: raised by enemy kills of trainable objects, set to the level's requirement by explicit level changes.</summary>
     public int Experience { get; internal set; }
 
+    /// <summary><c>ExperienceTracker::isTrainable</c>: the template's <c>IsTrainable</c>, unless something set it (<see cref="TrainableOverride"/>).</summary>
+    public bool IsTrainable => TrainableOverride ?? Template.IsTrainable;
+
+    /// <summary><c>ExperienceTracker::setTrainable</c> when it differs from the template's (the rule fix <c>bike-trainable-from-rider</c>); saved only when set.</summary>
+    internal bool? TrainableOverride { get; set; }
+
     /// <summary><c>ExperienceTracker::m_experienceScalar</c>: multiplier of every experience gain (raised by <c>ExperienceScalarUpgrade</c>).</summary>
     public Fixed ExperienceScalar { get; internal set; } = Fixed.One;
 
@@ -335,6 +341,7 @@ public sealed class Entity
         writer.Int("sellCompleteTick", SellCompleteTick);
         if (ShroudScalar != Fixed.One) writer.Fixed("shroudScalar", ShroudScalar);
         if (CrateWeaponLevel != 0) writer.Int("crateWeaponLevel", CrateWeaponLevel);
+        if (TrainableOverride is { } trainable) writer.Bool("trainable", trainable);
         if (CrateArmorLevel != 0) writer.Int("crateArmorLevel", CrateArmorLevel);
         if (IsInsideFrameStep)
         {

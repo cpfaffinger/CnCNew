@@ -98,7 +98,7 @@ public sealed class SalvageCrateCollide(SalvageCrateData data) : CrateCollideBas
 
     private static bool EligibleForArmorSet(Entity other) => other.Template.IsKindOf("ARMOR_SALVAGER") && other.CrateArmorLevel < 2;
 
-    private static bool EligibleForLevel(Entity other) => other.VeterancyLevel < 3 && other.Template.IsTrainable;
+    private static bool EligibleForLevel(Entity other) => other.VeterancyLevel < 3 && other.IsTrainable;
 
     /// <summary><c>testWeaponChance</c>/<c>testLevelChance</c>: "don't waste a random number for a 100%".</summary>
     private static bool Chance(IWorldServices world, Fixed chance) => chance == Fixed.One || world.LogicRandom.Range(Fixed.Zero, Fixed.One) < chance;

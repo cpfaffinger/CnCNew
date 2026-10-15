@@ -178,7 +178,7 @@ public sealed class VeterancyGainCreate(VeterancyGainCreateData data) : SimModul
 
     public override void OnSpawn(IWorldServices world)
     {
-        if (!Entity.Template.IsTrainable) return;
+        if (!Entity.IsTrainable) return;
         if (data.ScienceRequired.Length > 0)
         {
             if (!world.Sciences.TryGet(data.ScienceRequired, out var science) || !world.PlayerSciences(Entity.Owner).Has(science.Index)) return;

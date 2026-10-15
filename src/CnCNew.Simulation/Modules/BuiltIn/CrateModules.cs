@@ -213,7 +213,7 @@ public sealed class VeterancyCrateCollide(VeterancyCrateData data) : CrateCollid
     {
         if (!base.IsValidToExecute(world, other) || other.EffectivelyDead || world.IsSignificantlyAboveTerrain(other)) return false;
         var levels = LevelsToGain;
-        if (levels <= 0 || !other.Template.IsTrainable) return false;
+        if (levels <= 0 || !other.IsTrainable) return false;
         if (Math.Min(other.VeterancyLevel + levels, 3) <= other.VeterancyLevel) return false; // canGainExpForLevel
         if (!data.IsPilot) return true;
         return other.Owner == Entity.Owner && !CrateModules.UsesAirborneLocomotor(other);

@@ -58,6 +58,15 @@ public enum GameFix
 
     /// <summary>A helicopter that has healed on its pad takes off and flies to its airfield's rally point (<c>JetAIUpdate::update</c>).</summary>
     HealedHelicopterToRally = 16,
+
+    /// <summary>A rider that leaves a container through its door walks on to the rally point of the object's production exit when the container has none of its own (<c>OpenContain::getRallyPoint</c>).</summary>
+    DoorExitToRally = 17,
+
+    /// <summary>A combat bike takes its rider's trainability, so an untrainable rider (a worker) cannot gain levels through the bike (<c>RiderChangeContain::onContaining</c>).</summary>
+    BikeTrainableFromRider = 18,
+
+    /// <summary>A boarder goes into a container only when the two overlap in height, not merely when the container stands on the ground (<c>AIEnterState::update</c>).</summary>
+    EnterNeedsVerticalOverlap = 19,
 }
 
 /// <summary>
@@ -147,6 +156,15 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.HealedHelicopterToRally, "healed-helicopter-to-rally",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp, JetAIUpdate::update",
             "a helicopter that took off again after healing on its pad flies on to its airfield's rally point instead of hovering over the pad"),
+        new(GameFix.DoorExitToRally, "door-exit-to-rally",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/OpenContain.cpp, OpenContain::getRallyPoint",
+            "a rider leaving a container through its door - an infantryman healed in a barracks - walks on to the rally point of the building's production exit"),
+        new(GameFix.BikeTrainableFromRider, "bike-trainable-from-rider",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/RiderChangeContain.cpp, RiderChangeContain::onContaining",
+            "a combat bike is trainable only while its rider is, so a worker on a bike cannot rank up through the bike's kills"),
+        new(GameFix.EnterNeedsVerticalOverlap, "enter-needs-vertical-overlap",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIStates.cpp, AIEnterState::update (hasVerticalOverlap)",
+            "a boarder at the end of its approach goes in only when it and the container overlap in height: a landing transport is boarded once it is low enough, a hovering boarder does not enter a container below it"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

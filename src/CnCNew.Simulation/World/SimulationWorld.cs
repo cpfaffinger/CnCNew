@@ -302,7 +302,7 @@ public sealed partial class SimulationWorld : IWorldServices
     /// </summary>
     public void SetExperienceAndLevel(Entity entity, int experience)
     {
-        if (!entity.Template.IsTrainable) return;
+        if (!entity.IsTrainable) return;
         entity.Experience = experience;
         var level = 0;
         while (level + 1 < 4 && entity.Experience >= entity.Template.ExperienceRequired[level + 1]) level++;
@@ -329,7 +329,7 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private void AddExperience(Entity entity, int amount)
     {
-        if (!entity.Template.IsTrainable) return;
+        if (!entity.IsTrainable) return;
         entity.Experience = checked(entity.Experience + (int)(Fixed.FromInt(amount) * entity.ExperienceScalar).Floor());
         var level = 0;
         while (level + 1 < 4 && entity.Experience >= entity.Template.ExperienceRequired[level + 1]) level++;

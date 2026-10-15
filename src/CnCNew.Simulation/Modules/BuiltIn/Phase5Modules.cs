@@ -1331,8 +1331,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         // AIEnterState::update (fidelity finding F-38): a boarder on the ground gives up on a container that is itself carried by something in the air (rangers that were to
         // board a humvee the Chinook has taken up), and waits at the end of its approach while its container is in the air - it goes in only once the container is down.
-        var waitForLanding = AboveTerrain(world, container) && !AboveTerrain(world, Entity);
-        if (container.ContainedBy.IsValid && waitForLanding)
+        var carriedAway = container.ContainedBy.IsValid && AboveTerrain(world, container) && !AboveTerrain(world, Entity);
+        // The rule fix enter-needs-vertical-overlap (the community source): the wait is for an overlap in height, not for the container to be on the ground.
+        var waitForLanding = world.Templates.Rules.Has(Rules.GameFix.EnterNeedsVerticalOverlap) ? !VerticalOverlap(Entity, container)
+            : AboveTerrain(world, container) && !AboveTerrain(world, Entity);
+        if (carriedAway)
         {
             _enterTarget = EntityId.Invalid;
             if (Entity.HasMoveTarget && _frameTicksLeft > 0) SettleFrame(world.Tick);

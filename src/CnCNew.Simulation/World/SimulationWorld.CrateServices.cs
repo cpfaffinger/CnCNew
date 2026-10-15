@@ -23,7 +23,7 @@ public sealed partial class SimulationWorld
     {
         var newLevel = Math.Min(entity.VeterancyLevel + levels, 3);
         if (newLevel <= entity.VeterancyLevel) return false;
-        if (!entity.Template.IsTrainable) return true; // addExperiencePoints: "if (!isTrainable()) return; //safety"
+        if (!entity.IsTrainable) return true; // addExperiencePoints: "if (!isTrainable()) return; //safety"
         var needed = entity.Template.ExperienceRequired[newLevel] - entity.Experience;
         var gain = scaleForBonus ? checked((int)(Fixed.FromInt(needed) * entity.ExperienceScalar).Floor()) : needed;
         entity.Experience = checked(entity.Experience + gain);

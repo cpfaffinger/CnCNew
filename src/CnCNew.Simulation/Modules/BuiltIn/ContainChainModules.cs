@@ -228,6 +228,12 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         {
             _riderIndex = line;
             Entity.Status |= 1UL << data.Riders[line].StatusBit;
+            // The rule fix bike-trainable-from-rider (the community source): the bike is trainable when its rider is.
+            if (world.Templates.Rules.Has(Rules.GameFix.BikeTrainableFromRider))
+            {
+                Entity.TrainableOverride = candidate.IsTrainable == Entity.Template.IsTrainable ? null : candidate.IsTrainable;
+                world.MarkDirty(Entity);
+            }
             // Transfer experience from the rider to the bike (RiderChangeContain::onContaining, fidelity finding F-39): the bike takes the rider's level, the rider's
             // experience goes to nothing - it rides with the bike's.
             world.SetVeterancyLevelOf(Entity, candidate.VeterancyLevel);

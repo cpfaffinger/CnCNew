@@ -106,7 +106,14 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         world.MarkDirty(rider);
         if (CrateModules.AiOf(rider) is not { } ai) return;
         world.FindPossibleDestination(rider, ref endX, ref endY);
-        ai.OrderExitContainer(world, Entity, endX, endY, true);
+        // The container has no rally point of its own here (OpenContain::m_rallyPointExists is never set). The rule fix door-exit-to-rally (the community source) takes
+        // the rally point of the object's production exit instead: an infantryman healed in a barracks walks on to the barracks' rally point.
+        var hasRally = false;
+        Fixed rallyX = Fixed.Zero, rallyY = Fixed.Zero;
+        if (world.Templates.Rules.Has(Rules.GameFix.DoorExitToRally) && Entity.Modules.OfType<IProductionExit>().Any())
+            foreach (var module in Entity.Modules)
+                if (module is ProductionUpdate production && production.TryGetRally(out rallyX, out rallyY)) { hasRally = true; break; }
+        ai.OrderExitContainer(world, Entity, endX, endY, true, hasRally, rallyX, rallyY);
     }
 
     public int ContainCount => Riders.Count;
