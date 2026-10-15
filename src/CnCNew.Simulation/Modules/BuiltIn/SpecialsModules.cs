@@ -130,6 +130,15 @@ public sealed class StickyBombUpdate(StickyBombData data) : SimModule, IUpdateMo
         return SimulationTiming.SleepNone;
     }
 
+    /// <summary>The adopted fix sticky-bomb-clears-trap-on-removal (<c>StickyBombUpdate::onDelete</c>, docs/GGC-FIXES.md): a booby trap that goes away takes its mark from its victim.</summary>
+    public override void OnRemove(IWorldServices world)
+    {
+        if (!world.Templates.Rules.Has(Rules.GameFix.BoobyTrapClearedOnRemoval) || !IsBoobyTrap || !_target.IsValid) return;
+        if (world.FindEntity(_target) is not { } victim || !victim.HasStatus(BoobyTrappedBit)) return;
+        victim.Status &= ~(1UL << BoobyTrappedBit);
+        world.MarkDirty(victim);
+    }
+
     /// <summary><c>StickyBombUpdate::detonate</c>.</summary>
     public void Detonate(IWorldServices world)
     {

@@ -347,6 +347,8 @@ public sealed class BunkerBusterBehavior(BunkerBusterData data) : SimModule, IUp
 
     public void OnDie(IWorldServices world, in DamageInfo info)
     {
+        // The adopted fix bunker-buster-only-when-killing-self (docs/GGC-FIXES.md): only a bomb whose missile kills itself at the target busts.
+        if (world.Templates.Rules.Has(Rules.GameFix.BunkerBusterOnlyWhenKillingSelf) && Entity.ModuleArray.OfType<MissileAIUpdate>().FirstOrDefault() is not { IsKillingSelf: true }) return;
         if (data.UpgradeRequired.Length > 0)
         {
             if (!world.Upgrades.TryGet(data.UpgradeRequired, out var upgrade) || !world.PlayerUpgrades(Entity.Owner).Has(upgrade.Index)) return;
@@ -822,7 +824,11 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
             if (other == Entity || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
             var dx = other.X - Entity.X;
             var dy = other.Y - Entity.Y;
-            if (!outerSquared.Contains(dx * dx + dy * dy)) continue;
+            // The adopted fix neutron-blast-bounding-sphere (docs/GGC-FIXES.md): FROM_BOUNDINGSPHERE_3D instead of the original's FROM_CENTER_2D.
+            var inReach = world.Templates.Rules.Has(Rules.GameFix.NeutronBlastBoundingSphere)
+                ? AirWeaponModules.WithinSphere3D(other, Entity.X, Entity.Y, Entity.Z, blast.OuterRadius)
+                : outerSquared.Contains(dx * dx + dy * dy);
+            if (!inReach) continue;
             var dz = other.Z - Entity.Z;
             if (Array.Find(other.ModuleArray, module => module is ToppleUpdate) is ToppleUpdate topple) topple.ApplyTopplingForce(world, dx, dy, blast.ToppleSpeed);
             var distance = AirWeaponModules.Length(dx, dy, dz);

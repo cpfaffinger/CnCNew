@@ -38,6 +38,9 @@ internal interface ISupplyCarrier
     /// <summary><c>getUpgradedSupplyBoost</c>: extra money per deposit.</summary>
     long UpgradedSupplyBoost(IWorldServices world);
 
+    /// <summary><c>getMaxBoxes</c>.</summary>
+    int MaxBoxes { get; }
+
     /// <summary><c>getActionDelayForDock</c>.</summary>
     long ActionDelayFor(IDockModule dock);
 
@@ -235,6 +238,7 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
     private EntityId _preferredDock;
 
     public int Boxes => _boxes;
+    public int MaxBoxes => data.MaxBoxes;
     public Fixed WarehouseScanDistance => data.ScanDistance;
     public EntityId PreferredDock => _preferredDock;
 

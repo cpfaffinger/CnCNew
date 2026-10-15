@@ -296,6 +296,13 @@ public sealed partial class SimulationWorld : IWorldServices
         OnVeterancyLevelChanged(entity, level);
     }
 
+    /// <summary>
+    /// <c>ContainModuleInterface::isSpecificRiderFreeToExit</c> as an exit command asks it, with the adopted fix no-exit-from-contained-transport
+    /// (<c>TransportContain::isSpecificRiderFreeToExit</c>): a transport that is itself contained lets nobody out.
+    /// </summary>
+    private bool RiderMayExit(Entity container, IContainerModule door, Entity actor)
+        => door.IsRiderFreeToExit(actor) && !(_templates.Rules.Has(Rules.GameFix.NoExitFromContainedTransport) && door is Modules.BuiltIn.TransportContain && container.ContainedBy.IsValid);
+
     /// <summary><c>ExperienceTracker::addExperiencePoints</c>: a trainable object gains <c>(int)(amount * scalar)</c> and takes the highest level whose requirement it meets.</summary>
     public void AddExperiencePoints(Entity entity, int amount) => AddExperience(entity, amount);
 
@@ -320,6 +327,12 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         var oldLevel = entity.VeterancyLevel;
         entity.VeterancyLevel = newLevel;
+        // The adopted fix no-veterancy-effects-when-dead (docs/GGC-FIXES.md): the level is kept, its effects are not applied to the dead.
+        if (_templates.Rules.Has(Rules.GameFix.NoVeterancyEffectsWhenDead) && entity.EffectivelyDead)
+        {
+            MarkDirty(entity);
+            return;
+        }
         var bonus = _templates.HealthBonus;
         if (entity.Body is IMaxHealthAdjustable adjustable && bonus[oldLevel] > Fixed.Zero && bonus[newLevel] != bonus[oldLevel])
         {
@@ -853,7 +866,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 var byContainer = _entities.GetValueOrDefault(actor.ContainedBy.Value);
                 if (!command.Player.IsSystem && actor.Owner != command.Player && (byContainer is null || byContainer.Owner != command.Player))
                     return CommandRejection.NotPermitted;
-                if (byContainer?.Container is { } door && !door.IsRiderFreeToExit(actor)) return CommandRejection.NotPermitted;
+                if (byContainer?.Container is { } door && !RiderMayExit(byContainer, door, actor)) return CommandRejection.NotPermitted;
                 break;
             }
             case SetRelationshipCommand relation:
@@ -1229,7 +1242,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 var previousContainer = actor.ContainedBy;
                 if (byContainer?.Container is { } door)
                 {
-                    if (!door.IsRiderFreeToExit(actor)) { RecordRejection(command, CommandRejection.NotPermitted); break; }
+                    if (!RiderMayExit(byContainer, door, actor)) { RecordRejection(command, CommandRejection.NotPermitted); break; }
                     if (door.ExitViaDoor(this, actor)) break; // the container runs its own exit sequence (the ferry's dock)
                 }
                 byContainer?.Container?.Remove(this, actor, true);
@@ -1520,7 +1533,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (victim.Template.IsKindOf("IGNORED_IN_GUI") || victim.HasStatus(ObjectStatusBits.UnderConstruction)) return;
         AddExperience(killer, victim.Template.ExperienceValue[victim.VeterancyLevel]);
         if (!_players.TryGetValue(killer.Owner.Value, out var payee) || payee.CashBounty.Raw == 0) return;
-        var bounty = (victim.Template.BuildCost * payee.CashBounty).Ceiling();
+        var bounty = Rules.GameFixRules.CashBounty(victim.Template.BuildCost * payee.CashBounty, _templates.Rules.Has(Rules.GameFix.BountyRounding));
         if (bounty > 0) payee.Money += Fixed.FromInt(bounty);
     }
 

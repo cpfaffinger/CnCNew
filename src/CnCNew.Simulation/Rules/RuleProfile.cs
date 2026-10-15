@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
+using CnCNew.Simulation.Numerics;
 
 namespace CnCNew.Simulation.Rules;
 
@@ -18,6 +19,30 @@ public enum GameFix
 
     /// <summary>A building that is under construction or being sold cannot be sabotaged (<c>Sabotage*CrateCollide::isValidToExecute</c>).</summary>
     NoSabotageOfUnfinishedOrSold = 3,
+
+    /// <summary>A bunker buster busts only when its missile kills itself at the target, not when it is shot down (<c>BunkerBusterBehavior::onDie</c>).</summary>
+    BunkerBusterOnlyWhenKillingSelf = 4,
+
+    /// <summary>A building site that dies fires no death weapon of its <c>InstantDeathBehavior</c> (<c>InstantDeathBehavior::onDie</c>).</summary>
+    NoDeathWeaponFromScaffold = 5,
+
+    /// <summary>Nobody leaves a transport that is itself inside a container (<c>TransportContain::isSpecificRiderFreeToExit</c>).</summary>
+    NoExitFromContainedTransport = 6,
+
+    /// <summary>An object that is already dead gets no health, weapon bonus or upgrade from a new veterancy level (<c>Object::onVeterancyLevelChanged</c>).</summary>
+    NoVeterancyEffectsWhenDead = 7,
+
+    /// <summary>The upgraded supply boost is paid in proportion to the boxes delivered (<c>SupplyCenterDockUpdate</c>, <c>getUpgradedSupplyBoostValue</c>).</summary>
+    ProportionalSupplyBoost = 8,
+
+    /// <summary>The neutron missile's blast reaches every object whose bounding sphere is in its outer radius, not only those whose centre is (<c>NeutronMissileSlowDeathBehavior::doBlast</c>).</summary>
+    NeutronBlastBoundingSphere = 9,
+
+    /// <summary>A booby trap that is destroyed before it goes off takes its mark from its victim (<c>StickyBombUpdate::onDelete</c>).</summary>
+    BoobyTrapClearedOnRemoval = 10,
+
+    /// <summary>A cash bounty that is a whole number is paid as that number, not one more (<c>Player::doBountyForKill</c>).</summary>
+    BountyRounding = 11,
 }
 
 /// <summary>One adopted fix: where the community source made it, and what it changes.</summary>
@@ -43,6 +68,30 @@ public sealed class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.NoSabotageOfUnfinishedOrSold, "no-sabotage-of-unfinished-or-sold",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Collide/CrateCollide/Sabotage*CrateCollide.cpp, Sabotage*CrateCollide::isValidToExecute",
             "a saboteur cannot enter a building that is still under construction or is being sold"),
+        new(GameFix.BunkerBusterOnlyWhenKillingSelf, "bunker-buster-only-when-killing-self",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/BunkerBusterBehavior.cpp, BunkerBusterBehavior::onDie",
+            "a bunker buster that is shot down on its way (by a point-defence laser, for one) no longer busts the bunker it was aimed at"),
+        new(GameFix.NoDeathWeaponFromScaffold, "no-death-weapon-from-scaffold",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/InstantDeathBehavior.cpp, InstantDeathBehavior::onDie",
+            "a building site that is cancelled or destroyed fires no death weapon, as FireWeaponWhenDeadBehavior already does not"),
+        new(GameFix.NoExitFromContainedTransport, "no-exit-from-contained-transport",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/TransportContain.cpp, TransportContain::isSpecificRiderFreeToExit",
+            "riders of a transport that is itself inside another container cannot get out"),
+        new(GameFix.NoVeterancyEffectsWhenDead, "no-veterancy-effects-when-dead",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Object.cpp, Object::onVeterancyLevelChanged",
+            "an object that dies and gains a level in the same moment keeps the level but gets no health, weapon bonus or veterancy upgrade from it"),
+        new(GameFix.ProportionalSupplyBoost, "proportional-supply-boost",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/DockUpdate/SupplyCenterDockUpdate.cpp, SupplyCenterDockUpdate::action (getUpgradedSupplyBoostValue)",
+            "the upgraded supply boost (Supply Lines, Worker Shoes) is paid in proportion to the boxes delivered instead of in full for every delivery"),
+        new(GameFix.NeutronBlastBoundingSphere, "neutron-blast-bounding-sphere",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/NeutronMissileSlowDeathUpdate.cpp, NeutronMissileSlowDeathBehavior::doBlast",
+            "the nuclear blast hits every object whose bounding sphere reaches into its outer radius, not only those whose centre lies in it (2-D)"),
+        new(GameFix.BoobyTrapClearedOnRemoval, "sticky-bomb-clears-trap-on-removal",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/StickyBombUpdate.cpp, StickyBombUpdate::onDelete",
+            "a booby trap that is destroyed before it goes off no longer leaves its victim marked as booby-trapped"),
+        new(GameFix.BountyRounding, "bounty-rounding",
+            "GeneralsMD/Code/GameEngine/Source/Common/RTS/Player.cpp, Player::doBountyForKill",
+            "a cash bounty that is a whole number of credits pays that number; the rounding up no longer adds one for the last bit of the percentage"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.
@@ -105,4 +154,20 @@ public sealed class RuleProfile : IEquatable<RuleProfile>
     public override int GetHashCode() => Name.GetHashCode(StringComparison.Ordinal);
 
     public override string ToString() => Name;
+}
+
+/// <summary>The arithmetic of adopted fixes that more than one place, or a test, needs.</summary>
+public static class GameFixRules
+{
+    /// <summary><c>WWMATH_EPSILON</c> (WWMath <c>wwmath.h</c>): 0.0001.</summary>
+    public static Fixed BountyEpsilon { get; } = Fixed.FromDecimal(0.0001m);
+
+    /// <summary>
+    /// <c>Player::doBountyForKill</c>: the bounty is the cost times the percentage, rounded up; with the fix <c>bounty-rounding</c> an epsilon is taken off first, so a
+    /// product that is a whole number in exact arithmetic but lies a hair above it in the fixed point (5 % is not exact in binary) pays that whole number.
+    /// </summary>
+    public static long CashBounty(Fixed product, bool fixRounding) => (fixRounding ? product - BountyEpsilon : product).Ceiling();
+
+    /// <summary><c>getUpgradedSupplyBoostValue</c> with the fix: <c>boost * delivered / maximum</c> in whole numbers, 0 for a carrier without boxes.</summary>
+    public static long ProportionalSupplyBoost(long boost, int deliveredBoxes, int maximumBoxes) => maximumBoxes > 0 ? boost * deliveredBoxes / maximumBoxes : 0;
 }

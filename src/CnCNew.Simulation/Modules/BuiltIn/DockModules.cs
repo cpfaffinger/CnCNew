@@ -339,8 +339,11 @@ internal sealed class SupplyCenterDockUpdate(SupplyCenterDockData data) : DockUp
     {
         if (SupplyNetwork.CarrierOf(docker) is not { } carrier) return false;
         long value = 0;
+        // The adopted fix proportional-supply-boost (docs/GGC-FIXES.md): the boost by the boxes on board, read before they are unloaded.
+        var proportional = world.Templates.Rules.Has(Rules.GameFix.ProportionalSupplyBoost);
+        if (proportional) value += Rules.GameFixRules.ProportionalSupplyBoost(carrier.UpgradedSupplyBoost(world), carrier.Boxes, carrier.MaxBoxes);
         while (carrier.LoseOneBox()) value += world.ValuePerSupplyBox;
-        value += carrier.UpgradedSupplyBoost(world);
+        if (!proportional) value += carrier.UpgradedSupplyBoost(world);
         if (value <= 0) return false;
         world.AddMoney(Entity.Owner, Fixed.FromInt(value));
         world.Emit(SimEventKind.SupplyDeposited, docker.Id, Entity.Id, string.Empty, value);

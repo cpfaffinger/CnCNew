@@ -463,9 +463,9 @@ static partial class Tests
         """,
     };
 
-    private static SimulationWorld AirWeaponWorld(out SyntheticFixture fixture, out Feeder feeder, bool terrain = false)
+    private static SimulationWorld AirWeaponWorld(out SyntheticFixture fixture, out Feeder feeder, bool terrain = false, CnCNew.Simulation.Rules.RuleProfile? rules = null)
     {
-        fixture = new SyntheticFixture(TestRate.Default, files: AirWeaponFixtureFiles);
+        fixture = new SyntheticFixture(TestRate.Default, files: AirWeaponFixtureFiles, rules: rules);
         var map = terrain ? CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(200, 200, 1, (_, _) => 0), "airweapons") : null;
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 13, AirPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map?.Fingerprint ?? string.Empty), fixture.Templates, map);
         feeder = new Feeder(world);
@@ -558,9 +558,9 @@ static partial class Tests
         Check.That(Named(world, "AirEmpWall", 2).EmpDisabledUntil == 0 && Named(world, "AirEmpInfantry", 3).EmpDisabledUntil == 0, "A structure and an ally are not.");
     }
 
-    private static (int Alive, int Fx, int Shock) BusterRun(bool upgraded)
+    private static (int Alive, int Fx, int Shock) BusterRun(bool upgraded, CnCNew.Simulation.Rules.RuleProfile? rules = null, bool shootDown = false)
     {
-        var world = AirWeaponWorld(out _, out var feeder);
+        var world = AirWeaponWorld(out _, out var feeder, rules: rules);
         feeder.Spawn(2, "AirBunker", owner: 2, x: 600, y: 100);
         feeder.Spawn(2, "AirRebel", owner: 2, x: 590, y: 100);
         feeder.Spawn(2, "AirRebel", owner: 2, x: 610, y: 100);
@@ -577,6 +577,8 @@ static partial class Tests
         int fx = 0, shock = 0;
         for (var i = 0; i < world.Frames(120); i++)
         {
+            // shootDown: the bomb is killed on its way, as a point-defence laser would (docs/GGC-FIXES.md, bunker-buster-only-when-killing-self).
+            if (shootDown && i == world.Frames(4) && world.Entities.FirstOrDefault(value => value.Modules.OfType<BunkerBusterBehavior>().Any()) is { } bomb) world.Kill(bomb.Id);
             var result = world.Step();
             foreach (var value in result.Events)
             {

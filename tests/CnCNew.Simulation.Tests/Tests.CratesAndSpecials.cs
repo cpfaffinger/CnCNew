@@ -590,9 +590,9 @@ static partial class Tests
         """,
     };
 
-    private static SimulationWorld CratesWorld(out Feeder feeder, bool computerAlpha = false, uint seed = 1)
+    private static SimulationWorld CratesWorld(out Feeder feeder, bool computerAlpha = false, uint seed = 1, CnCNew.Simulation.Rules.RuleProfile? rules = null)
     {
-        var fixture = new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles());
+        var fixture = new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles(), rules: rules);
         ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha", IsComputer: computerAlpha), new(new PlayerId(2), "Beta")];
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, seed, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         feeder = new Feeder(world);

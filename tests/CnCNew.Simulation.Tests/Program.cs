@@ -169,6 +169,13 @@ run.Test("Game fixes: the rule profile and its fingerprint", Tests.GameFixProfil
 run.Test("Game fixes: a kill by poison credits the poisoner", Tests.GameFixPoisonKillCredit);
 run.Test("Game fixes: a kill by fire credits the source of the flame", Tests.GameFixFlameKillCredit);
 run.Test("Game fixes: no sabotage of an unfinished or sold building", Tests.GameFixNoSabotageOfUnfinishedOrSold);
+run.Test("Game fixes: a building site fires no death weapon", Tests.GameFixNoDeathWeaponFromScaffold);
+run.Test("Game fixes: no exit from a carried transport", Tests.GameFixNoExitFromContainedTransport);
+run.Test("Game fixes: no veterancy effects for the dead", Tests.GameFixNoVeterancyEffectsWhenDead);
+run.Test("Game fixes: the neutron blast reaches bounding spheres", Tests.GameFixNeutronBlastBoundingSphere);
+run.Test("Game fixes: a removed booby trap unmarks its victim", Tests.GameFixStickyBombClearsTrapOnRemoval);
+run.Test("Game fixes: a shot-down bunker buster busts nothing", Tests.GameFixBunkerBusterOnlyWhenKillingSelf);
+run.Test("Game fixes: bounty rounding and proportional supply boost", Tests.GameFixBountyAndSupplyArithmetic);
 run.Test("Patch modules: StatusBitsUpgrade sets and clears status bits", Tests.PatchModuleStatusBitsUpgrade);
 run.Test("Patch modules: a saboteur at a supply drop zone", Tests.PatchModuleSabotageSupplyDropzone);
 run.Test("Phase 5: BaseRegenerateUpdate delay, bursts and stop at full health", Tests.Phase5BaseRegenerate);
