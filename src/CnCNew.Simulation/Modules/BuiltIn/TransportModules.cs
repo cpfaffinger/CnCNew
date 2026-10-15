@@ -101,7 +101,9 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         var locomotor = Entity.Template.Locomotor;
         // The height is kept over the ground where the frame's movement ends: at 30 Hz the Chinook has made its whole step when it looks at the ground below it.
         var ground = world.GroundHeightAt(Entity.X + moving.X, Entity.Y + moving.Y);
-        var target = _landing ? ground : ground + (locomotor?.PreferredHeight ?? Fixed.Zero);
+        // ChinookAIUpdate::update: an idle Chinook lands while somebody wants to enter it and takes off again when nobody does (fidelity finding F-38: the boarders wait for it).
+        var forBoarders = !_landing && !Entity.HasMoveTarget && !IsInsideDock && SupplyIdle && HasBoarders(world);
+        var target = _landing || forBoarders ? ground : ground + (locomotor?.PreferredHeight ?? Fixed.Zero);
         var climb = FlightFrames.PerFrame(world.Time, locomotor?.Speed ?? Fixed.Zero);
         if (Entity.Z != target && climb > Fixed.Zero)
         {
@@ -111,7 +113,19 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
             world.MarkDirty(Entity);
         }
         _climb.Publish(world.Time, world.Tick, Entity, moving.X, moving.Y);
-        return Entity.Z != target ? SimulationTiming.SleepNone : sleep;
+        return Entity.Z != target || forBoarders ? SimulationTiming.SleepNone : sleep;
+    }
+
+    /// <summary><c>OpenContain::hasObjectsWantingToEnterOrExit</c> for entering: a living object whose enter order aims at this Chinook.</summary>
+    private bool HasBoarders(IWorldServices world)
+    {
+        foreach (var other in world.Entities)
+        {
+            if (other.EffectivelyDead || other.DestroyRequested) continue;
+            foreach (var module in other.Modules)
+                if (module is AIUpdateInterface ai && ai.EnterTarget == Entity.Id) return true;
+        }
+        return false;
     }
 
     public override void Describe(IStateWriter writer)

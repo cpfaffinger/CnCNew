@@ -364,13 +364,28 @@ static partial class Tests
         var grunt = new PlayerId(1);
         // The orders below follow the third deposit by whole logic frames (one step each at 30 Hz), so that they meet the supply machine in the same state at every rate.
         while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
-        feeder.Spawn(1, "Grunt", x: 0, y: 0);
+        // A second Chinook, idle at its height (the first is busy ferrying supplies: a busy Chinook does not land for boarders, ChinookAIUpdate::update asks isIdle).
+        feeder.Spawn(1, "Rotorcraft", x: 150, y: 150);
+        for (var tick = 0; tick < world.Frames(22); tick++) world.Step();
+        chinook = world.Entities.Single(value => value.Template.Name == "Rotorcraft" && value.Id != chinook.Id);
+        Check.That(chinook.Z == Fixed.FromInt(100), "Setup: the second Chinook hovers at its height.");
+        while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+        feeder.Spawn(1, "Grunt", x: 120, y: 150);
         for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
         var passenger = world.Entities.Single(value => value.Template.Name == "Grunt");
-        Check.That(feeder.EnterContainer(1, passenger.Id.Value, chinook.Id.Value).Accepted, "A grunt boards the Chinook.");
-        // Boarding is the arrival of a move: it takes the logic frame of the order (one tick at 30 Hz).
-        for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
-        Check.That(passenger.ContainedBy == chinook.Id, "The grunt is aboard one logic frame after the order.");
+        Check.That(feeder.MoveAndEnter(1, passenger.Id.Value, chinook.Id.Value).Accepted, "A grunt is ordered into the Chinook.");
+        // The grunt stands under the hovering Chinook and waits; the Chinook lands for it (ChinookAIUpdate::update, AIEnterState::update - fidelity finding F-38).
+        long touchedDown = -1;
+        for (var tick = 0; tick < world.Frames(60) && !passenger.ContainedBy.IsValid; tick++)
+        {
+            world.Step();
+            if (touchedDown < 0 && chinook.Z == world.GroundHeightAt(chinook.X, chinook.Y)) touchedDown = world.Tick;
+            if (passenger.ContainedBy.IsValid) break;
+            Check.That(chinook.Z > world.GroundHeightAt(chinook.X, chinook.Y) || touchedDown >= 0, "The grunt does not board a Chinook in the air.");
+        }
+        Check.That(passenger.ContainedBy == chinook.Id && touchedDown >= 0, $"The Chinook landed for the grunt and the grunt is aboard (landed at {touchedDown}).");
+        for (var tick = 0; tick < world.Frames(3); tick++) world.Step();
+        Check.That(chinook.Z > world.GroundHeightAt(chinook.X, chinook.Y), "With nobody left wanting in, the Chinook takes off again.");
         Check.That(feeder.Evacuate(1, chinook.Id.Value).Accepted, "Evacuation is ordered in the air.");
         long landedAt = -1;
         for (var tick = 0; tick < world.Frames(200) && passenger.ContainedBy.IsValid; tick++)

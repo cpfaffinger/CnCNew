@@ -238,6 +238,9 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
     private EntityId _preferredDock;
 
     public int Boxes => _boxes;
+
+    /// <summary>The supply machine is idle (<c>SupplyTruckAIUpdate::isIdle</c>'s half of the question).</summary>
+    protected bool SupplyIdle => _machine.Sleeps;
     public int MaxBoxes => data.MaxBoxes;
     public Fixed WarehouseScanDistance => data.ScanDistance;
     public EntityId PreferredDock => _preferredDock;

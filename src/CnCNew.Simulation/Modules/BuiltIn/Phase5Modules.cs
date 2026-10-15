@@ -832,7 +832,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var (containerX, containerY, _) = container.FrameEnd(world.Tick);
         OrderMove(world, containerX, containerY, fromPlayer);
         _enterTarget = container.Id;
+        // AIEnterState::onEnter tells the container that somebody wants to enter (onObjectWantsToEnterOrExit): a Chinook lands for its boarders (ChinookAIUpdate.HasBoarders).
+        foreach (var module in container.Modules)
+            if (module is ChinookAIUpdate chinook) world.WakeAt(container, chinook, world.Tick + SimulationTiming.SleepNone);
     }
+
+    /// <summary>The container this object is on its way into (<c>AIEnterState</c>'s goal object), or none.</summary>
+    public EntityId EnterTarget => _enterTarget;
 
     /// <summary>
     /// <c>AIUpdateInterface::getGoalObject</c>: the object the current order aims at (a hijacker's car, a saboteur's building, a pilot's vehicle).
@@ -1323,6 +1329,16 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             StopInternalMove();
             return;
         }
+        // AIEnterState::update (fidelity finding F-38): a boarder on the ground gives up on a container that is itself carried by something in the air (rangers that were to
+        // board a humvee the Chinook has taken up), and waits at the end of its approach while its container is in the air - it goes in only once the container is down.
+        var waitForLanding = AboveTerrain(world, container) && !AboveTerrain(world, Entity);
+        if (container.ContainedBy.IsValid && waitForLanding)
+        {
+            _enterTarget = EntityId.Invalid;
+            if (Entity.HasMoveTarget && _frameTicksLeft > 0) SettleFrame(world.Tick);
+            StopInternalMove();
+            return;
+        }
         if (Entity.HasMoveTarget)
         {
             // OpenContain::onCollide: an object whose enter target is this container is taken in as soon as the two touch; it does not have to reach the container's centre
@@ -1337,9 +1353,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             var tx = insideX - endX;
             var ty = insideY - endY;
             if (!SquaredReach.Of(touch).Contains(tx * tx + ty * ty)) return;
+            // The partition manager's collision is three-dimensional (PartitionManager.cpp, the height test of the geometries): a container hovering above the boarder is not
+            // touched, the approach goes on to its end.
+            if (!VerticalOverlap(Entity, container)) return;
             if (_frameTicksLeft > 0) SettleFrame(world.Tick);
             StopInternalMove();
         }
+        if (waitForLanding) return;
         _enterTarget = EntityId.Invalid;
         // The approach may end short (a partial path): only an object that actually reached the container gets in.
         var reach = container.Template.BoundingCircleRadius + Entity.Template.BoundingCircleRadius + Fixed.FromInt(2 * TerrainMap.CellSize);
@@ -1350,6 +1370,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy)) return;
         world.TryEnterContainer(Entity, container);
     }
+
+    /// <summary><c>Object::isAboveTerrain</c>: the object's position lies above the ground under it.</summary>
+    private static bool AboveTerrain(IWorldServices world, Entity entity) => entity.Z > world.GroundHeightAt(entity.X, entity.Y);
+
+    private static bool VerticalOverlap(Entity a, Entity b)
+        => a.Z + ToppleAndFallModules.MaxHeightAbovePosition(a.Template) >= b.Z && a.Z <= b.Z + ToppleAndFallModules.MaxHeightAbovePosition(b.Template);
 
     private void Move(IWorldServices world, LocomotorInfo locomotor)
     {
