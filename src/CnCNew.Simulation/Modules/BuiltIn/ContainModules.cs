@@ -72,6 +72,43 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
     public abstract int ContainMax { get; }
+
+    /// <summary>
+    /// <c>OpenContain::exitObjectViaDoor</c> (OpenContain.cpp): the rider is taken out (<c>removeFromContain</c>, which puts it on the container), and with at least one exit path
+    /// it is set on the path's <c>ExitStart</c> bone with the container's heading and walks to the <c>ExitEnd</c> bone, moved to the nearest place it can stand on
+    /// (<c>Pathfinder::adjustToPossibleDestination</c>) - the riders of one transport do not end on one spot. It ignores the container as an obstacle on that walk and other
+    /// units' collisions for a second. A model without the bone answers with the container's position (<c>Object::getSingleLogicalBonePosition</c>), which the adjustment then
+    /// moves off the container. Not modeled: the door animation (<c>DoorOpenTime</c>), a rally point of the container, the fall of a rider that leaves in the air.
+    /// </summary>
+    protected void ExitObjectViaDoor(IWorldServices world, Entity rider, int numberOfExitPaths, ref int whichExitPath)
+    {
+        Remove(world, rider, true);
+        world.Emit(SimEventKind.EntityUncontained, rider.Id, Entity.Id, string.Empty, 0);
+        if (numberOfExitPaths <= 0) return;
+        var (centreX, centreY, _) = Entity.FrameEnd(world.Tick);
+        ExitPath? path = null;
+        if (world.Templates.Geometry.ExitPaths.TryGetValue(Entity.Template.Name, out var paths))
+        {
+            if (paths.Length != numberOfExitPaths)
+                throw new InvalidDataException($"The model geometry of '{Entity.Template.Name}' has {paths.Length} exit paths, the module has {numberOfExitPaths}.");
+            path = paths[numberOfExitPaths > 1 ? whichExitPath - 1 : 0];
+        }
+        // "To cycle from 1 to n": only a container with several paths counts.
+        if (numberOfExitPaths > 1) whichExitPath = whichExitPath % numberOfExitPaths + 1;
+        var cos = FixedTrig.Cos(Entity.Angle);
+        var sin = FixedTrig.Sin(Entity.Angle);
+        (Fixed X, Fixed Y) World(BonePose? bone) => bone is { } pose ? (centreX + pose.X * cos - pose.Y * sin, centreY + pose.X * sin + pose.Y * cos) : (centreX, centreY);
+        var (startX, startY) = World(path?.Start);
+        var (endX, endY) = World(path?.End);
+        rider.X = startX;
+        rider.Y = startY;
+        rider.Angle = Entity.Angle;
+        world.MarkDirty(rider);
+        if (CrateModules.AiOf(rider) is not { } ai) return;
+        world.FindPossibleDestination(rider, ref endX, ref endY);
+        ai.OrderExitContainer(world, Entity, endX, endY, true);
+    }
+
     public int ContainCount => Riders.Count;
     public IReadOnlyList<EntityId> Contained => Riders;
 
@@ -507,41 +544,7 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         if (_exitWanted.Count > 0) world.WakeAt(Entity, this, _exitNotBusyTick);
     }
 
-    /// <summary>
-    /// <c>OpenContain::exitObjectViaDoor</c> (OpenContain.cpp): the rider is taken out (<c>removeFromContain</c>, which puts it on the container), and with at least one exit path
-    /// it is set on the path's <c>ExitStart</c> bone with the container's heading and walks to the <c>ExitEnd</c> bone, moved to the nearest place it can stand on
-    /// (<c>Pathfinder::adjustToPossibleDestination</c>) - the riders of one transport do not end on one spot. It ignores the container as an obstacle on that walk and other
-    /// units' collisions for a second. A model without the bone answers with the container's position (<c>Object::getSingleLogicalBonePosition</c>), which the adjustment then
-    /// moves off the container. Not modeled: the door animation (<c>DoorOpenTime</c>), a rally point of the container, the fall of a rider that leaves in the air.
-    /// </summary>
-    private void ExitObjectViaDoor(IWorldServices world, Entity rider)
-    {
-        Remove(world, rider, true);
-        world.Emit(SimEventKind.EntityUncontained, rider.Id, Entity.Id, string.Empty, 0);
-        if (data.NumberOfExitPaths <= 0) return;
-        var (centreX, centreY, _) = Entity.FrameEnd(world.Tick);
-        ExitPath? path = null;
-        if (world.Templates.Geometry.ExitPaths.TryGetValue(Entity.Template.Name, out var paths))
-        {
-            if (paths.Length != data.NumberOfExitPaths)
-                throw new InvalidDataException($"The model geometry of '{Entity.Template.Name}' has {paths.Length} exit paths, the module has {data.NumberOfExitPaths}.");
-            path = paths[data.NumberOfExitPaths > 1 ? _whichExitPath - 1 : 0];
-        }
-        // "To cycle from 1 to n": only a container with several paths counts.
-        if (data.NumberOfExitPaths > 1) _whichExitPath = _whichExitPath % data.NumberOfExitPaths + 1;
-        var cos = FixedTrig.Cos(Entity.Angle);
-        var sin = FixedTrig.Sin(Entity.Angle);
-        (Fixed X, Fixed Y) World(BonePose? bone) => bone is { } pose ? (centreX + pose.X * cos - pose.Y * sin, centreY + pose.X * sin + pose.Y * cos) : (centreX, centreY);
-        var (startX, startY) = World(path?.Start);
-        var (endX, endY) = World(path?.End);
-        rider.X = startX;
-        rider.Y = startY;
-        rider.Angle = Entity.Angle;
-        world.MarkDirty(rider);
-        if (CrateModules.AiOf(rider) is not { } ai) return;
-        world.FindPossibleDestination(rider, ref endX, ref endY);
-        ai.OrderExitContainer(world, Entity, endX, endY, true);
-    }
+    private void ExitObjectViaDoor(IWorldServices world, Entity rider) => ExitObjectViaDoor(world, rider, data.NumberOfExitPaths, ref _whichExitPath);
 
     /// <summary>
     /// <c>OpenContain::scatterToNearbyPosition</c> (OpenContain.cpp): a random angle, then a random distance between one and one and a half bounding-circle radii of the

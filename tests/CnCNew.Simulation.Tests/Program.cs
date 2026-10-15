@@ -233,6 +233,7 @@ run.Test("Teams: container gating by relationship", Tests.TeamsContainRelationsh
 run.Test("Repair: RepairDockUpdate heals over TimeForFullHeal", Tests.RepairDockHealsOverTime);
 run.Test("Repair: RepairDockUpdate snapshot mid-repair", Tests.RepairDockSnapshot);
 run.Test("Repair: AutoFindHealingUpdate walks a hurt computer unit into a pad", Tests.AutoFindHealingWalksToPad);
+run.Test("Healing: a healed occupant leaves a heal pad through its door (F-34)", Tests.HealContainReleasesThroughTheDoor);
 run.Test("Repair: AutoFindHealingUpdate refusals", Tests.AutoFindHealingRefusals);
 run.Test("Repair: AutoFindHealingUpdate picks the closest pad", Tests.AutoFindHealingPicksClosestPad);
 run.Test("Repair: computer flag in the replay header", Tests.RepairPlayerTypeReplayHeader);

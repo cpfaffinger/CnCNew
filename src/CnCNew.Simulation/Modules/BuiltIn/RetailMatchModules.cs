@@ -39,23 +39,28 @@ internal static class RetailMatchModules
 // ============================================================================================================ HealContain
 
 /// <summary><c>OpenContainModuleData</c> plus the two <c>HealContainModuleData</c> keys. <c>ContainMax</c> below zero means unlimited, as in <see cref="GarrisonContain"/>.</summary>
-public sealed record HealContainData(OpenContainData Base, int ContainMax, long TimeForFullHealTicks) : ModuleData
+/// <param name="NumberOfExitPaths"><c>OpenContainModuleData::m_numberOfExitPaths</c> (default 1): the healed occupants leave through these (see <see cref="TransportContainData.NumberOfExitPaths"/>).</param>
+public sealed record HealContainData(OpenContainData Base, int ContainMax, long TimeForFullHealTicks, int NumberOfExitPaths = 1) : ModuleData
 {
     public static HealContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, []),
         checked((int)ModuleConfigReader.Int(configuration, "ContainMax", -1)),
-        ModuleConfigReader.Ticks(configuration, "TimeForFullHeal", 0));
+        ModuleConfigReader.Ticks(configuration, "TimeForFullHeal", 0),
+        checked((int)ModuleConfigReader.Int(configuration, "NumberOfExitPaths", 1)));
 }
 
 /// <summary>
 /// <c>HealContain.cpp</c>: every logic frame of the original each occupant is healed <c>MaxHealth / TimeForFullHeal</c> (the duration in frames); once it
 /// has been inside for the whole duration it is set to full health and leaves the building. The frames are counted from the tick the occupant came in,
-/// so its health is that of 30 Hz at every frame boundary (30 Hz: every tick). The reference lets the occupant walk out through the building's own exit
-/// interface; without AI it is placed at the container (<c>Remove(positionAtContainer)</c>).
+/// so its health is that of 30 Hz at every frame boundary (30 Hz: every tick). A healed occupant leaves through the door (<c>reserveDoorForExit</c>, then
+/// <c>OpenContain::exitObjectViaDoor</c>, which an <c>OpenContain</c> always grants): it is set on the exit path and walks to its end, as a rider of a transport does
+/// (fidelity finding F-34, Phase 34; before it was put on the building's position).
 /// </summary>
 public sealed class HealContain(HealContainData data) : ContainModuleBase(data.Base)
 {
     private readonly Dictionary<uint, long> _containedSinceTick = [];
+    // OpenContain::m_whichExitPath of the healed occupants' exits (1-based); written only when it is not the first.
+    private int _whichExitPath = 1;
 
     public override string ModuleName => "HealContain";
     public override int ContainMax => data.ContainMax;
@@ -91,7 +96,7 @@ public sealed class HealContain(HealContainData data) : ContainModuleBase(data.B
             var done = data.TimeForFullHealTicks <= 0 || world.Tick - since >= data.TimeForFullHealTicks;
             var amount = done ? rider.Body.MaxHealth : world.Time.SharePerTick(rider.Body.MaxHealth, Fixed.FromInt(world.Time.ToOriginalFrames(data.TimeForFullHealTicks)));
             world.Damage(rider.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Healing, DeathTypes.None, false));
-            if (done) Remove(world, rider, true);
+            if (done) ExitObjectViaDoor(world, rider, data.NumberOfExitPaths, ref _whichExitPath);
         }
         return ContainCount > 0 ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
@@ -99,6 +104,7 @@ public sealed class HealContain(HealContainData data) : ContainModuleBase(data.B
     public override void Describe(IStateWriter writer)
     {
         writer.Int("nextWake", NextWake);
+        if (_whichExitPath != 1) writer.Int("whichExitPath", _whichExitPath);
         writer.BeginArray("contained");
         foreach (var riderId in Riders)
         {
@@ -113,6 +119,7 @@ public sealed class HealContain(HealContainData data) : ContainModuleBase(data.B
     public override void Load(IStateReader reader)
     {
         NextWake = reader.Int("nextWake");
+        _whichExitPath = reader.Has("whichExitPath") ? checked((int)reader.Int("whichExitPath")) : 1;
         Riders.Clear();
         _containedSinceTick.Clear();
         foreach (var entry in reader.Array("contained"))

@@ -299,3 +299,61 @@ static partial class Tests
         Check.That(read.Header.Players.Select(value => value.IsComputer).SequenceEqual([true, false, true]), "The flags are read back in order.");
     }
 }
+
+static partial class Tests
+{
+    /// <summary>
+    /// F-34 (<c>HealContain::update</c>, <c>OpenContain::exitObjectViaDoor</c>): a healed occupant leaves the pad through its door and walks to the end of the exit path,
+    /// instead of being put on the pad's centre.
+    /// </summary>
+    public static void HealContainReleasesThroughTheDoor()
+    {
+        var files = new Dictionary<string, string>(RepairFiles());
+        files["Data/INI/Object/HealDoorFixture.ini"] = """
+        Object WidePad
+          KindOf = STRUCTURE HEAL_PAD
+          Geometry = BOX
+          GeometryMajorRadius = 20.0
+          GeometryMinorRadius = 20.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = HealContain Heal01
+            ContainMax = 2
+            TimeForFullHeal = 300
+            AllowInsideKindOf = INFANTRY
+            AllowAlliesInside = Yes
+          End
+        End
+        """;
+        var fixture = new SyntheticFixture(TestRate.Default, files: files);
+        // The pad's model has one exit path: from its centre to 40 units in front of it.
+        var geometry = new CnCNew.Simulation.Templates.ModelGeometry([], [new KeyValuePair<string, ImmutableArray<CnCNew.Simulation.Templates.ExitPath>>("WidePad",
+            [new CnCNew.Simulation.Templates.ExitPath(new CnCNew.Simulation.Templates.BonePose(Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero),
+                new CnCNew.Simulation.Templates.BonePose(Fixed.FromInt(40), Fixed.Zero, Fixed.Zero, Fixed.Zero))])]);
+        var templates = CnCNew.Simulation.Templates.TemplateCatalog.Build(fixture.Graph, fixture.Bindings, TestRate.Default, geometry);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, RepairPlayers, SyntheticFixture.FixtureId, geometry.Combine(fixture.Fingerprint), string.Empty), templates, null);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "WidePad", x: 200, y: 200);
+        feeder.Spawn(1, "Patient", x: 150, y: 200);
+        world.Step();
+        var patient = Get(world, "Patient");
+        var pad = Get(world, "WidePad");
+        feeder.Damage(patient.Id.Value, 20);
+        world.Step();
+        Check.That(feeder.EnterContainer(1, patient.Id.Value, pad.Id.Value).Accepted, "The patient is sent into the pad.");
+        RunUntilContained(world, patient, 400);
+        Check.That(patient.ContainedBy == pad.Id, "The patient is inside the pad.");
+        for (var i = 0; i < world.Frames(100) && patient.ContainedBy.IsValid; i++) world.Step();
+        Check.That(!patient.ContainedBy.IsValid && patient.Body!.Health == patient.Body.MaxHealth, "The pad healed the patient and released it.");
+        for (var i = 0; i < world.Frames(60); i++) world.Step();
+        var dx = (patient.X - pad.X).Abs();
+        var dy = (patient.Y - pad.Y).Abs();
+        Check.That(dx > Fixed.FromInt(20) || dy > Fixed.FromInt(20), $"The healed patient walked off the pad through its door ({patient.X}, {patient.Y}; pad at {pad.X}, {pad.Y}).");
+    }
+}
