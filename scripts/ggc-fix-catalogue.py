@@ -134,7 +134,7 @@ REVIEW_BY_LINE = {
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/ProductionUpdate.cpp:1091': 'not applicable - one unit per production entry; there are no batches',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/SpecialAbilityUpdate.cpp:1404': 'not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/SpectreGunshipUpdate.cpp:619': 'not applicable - decouples particle effects from the logic CRC; the port draws no logic random number for effects',
-    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/StickyBombUpdate.cpp:290': 'adopted - GameFix.StickyBombClearsTrapOnRemoval',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/StickyBombUpdate.cpp:290': 'adopted - GameFix.BoobyTrapClearedOnRemoval',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Weapon.cpp:611': 'not applicable - the port has no sniper-against-empty-structure check; a fidelity gap of its own',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/System/GameLogic.cpp:3813': "not decided - needs an audit of every module's disabled checks for objects with several disable kinds at once",
     'GeneralsMD/Code/GameEngine/Source/GameLogic/System/GameLogic.cpp:3861': 'not decided - as above',
