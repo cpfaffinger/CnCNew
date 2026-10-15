@@ -20,10 +20,11 @@ internal static class AiSurvey
 {
     private const string UsageText = """
         Usage: CnCNew.SimTool ai-survey <content-dir> --out <tsv> [--seeds N] [--first-seed N] [--tick-rate 30|60|120] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
-               [--composition uniform|exchange|default,uniform|exchange|default]
+               [--composition uniform|exchange|default,..] [--tactics balanced|rush|turtle|eco|default,..] [--strength easy|medium|hard,..]
           plays every AI-vs-AI pairing of the reference manifest once per seed (default 20 seeds from 1), record only, with a budget of M game
           minutes (default 25: 45,000 ticks at 30 Hz); the seed is applied like `ai-match --seed N`. One line per match, sorted by pairing and seed.
-          --composition names how the first and the second player's AI chooses its army units (the built-in AI only).
+          --composition names how the first and the second player's AI chooses its army units, --tactics their profile, --strength what they may know
+          and how fast they decide (the built-in AI only; one value applies to the first player only).
         """;
 
     public static int Run(string[] args)
@@ -81,7 +82,7 @@ internal static class AiSurvey
                     }
                     row = OriginalAi.Requested(args)
                         ? OriginalAi.Survey(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks, args)
-                        : Play(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks, Compositions(args));
+                        : Play(context, pairing.Id, pairing.Map, pairing.Factions, seed, maxTicks, Choices(args));
                 }
                 catch (Exception exception) when (exception is not OutOfMemoryException)
                 {
@@ -112,20 +113,31 @@ internal static class AiSurvey
         return failed == 0 ? 0 : 1;
     }
 
-    /// <summary><c>--composition a,b</c>: how the AI of the first and of the second slot chooses its army units (<c>uniform</c>, <c>exchange</c>, <c>default</c>); absent: the default for both.</summary>
-    internal static ArmyComposition?[]? Compositions(string[] args)
+    /// <summary>
+    /// How the AI of each slot plays: <c>--composition a,b</c> (<c>uniform</c>, <c>exchange</c>, <c>default</c>), <c>--tactics a,b</c> (<c>balanced</c>, <c>rush</c>, <c>turtle</c>, <c>eco</c>,
+    /// <c>default</c>), <c>--strength a,b</c> (<c>easy</c>, <c>medium</c>, <c>hard</c>); absent: the default for every slot.
+    /// </summary>
+    internal static AiSlotChoice[]? Choices(string[] args)
     {
-        if (ManifestCommands.Option(args, "--composition") is not { } text) return null;
-        return [..text.Split(',', StringSplitOptions.TrimEntries).Select(value => value switch
-        {
-            "uniform" => ArmyComposition.Uniform,
-            "exchange" => ArmyComposition.ExchangeValue,
-            "default" => (ArmyComposition?)null,
-            _ => throw new ArgumentException($"Unknown composition '{value}' (uniform, exchange, default)."),
-        })];
+        static string[] List(string[] args, string name) => ManifestCommands.Option(args, name) is { } text ? text.Split(',', StringSplitOptions.TrimEntries) : [];
+        var compositions = List(args, "--composition");
+        var tactics = List(args, "--tactics");
+        var strengths = List(args, "--strength");
+        var count = Math.Max(compositions.Length, Math.Max(tactics.Length, strengths.Length));
+        if (count == 0) return null;
+        return [..Enumerable.Range(0, count).Select(index => new AiSlotChoice(
+            index < compositions.Length ? compositions[index] switch
+            {
+                "uniform" => ArmyComposition.Uniform,
+                "exchange" => ArmyComposition.ExchangeValue,
+                "default" => (ArmyComposition?)null,
+                var value => throw new ArgumentException($"Unknown composition '{value}' (uniform, exchange, default)."),
+            } : null,
+            index < tactics.Length ? AiSlotChoice.ParseTactics(tactics[index]) : null,
+            index < strengths.Length ? AiSlotChoice.ParseStrength(strengths[index]) : AiStrength.Medium))];
     }
 
-    private static SurveyRow Play(SimContext context, string id, string mapPath, string[] factions, uint seed, long maxTicks, ArmyComposition?[]? compositions)
+    private static SurveyRow Play(SimContext context, string id, string mapPath, string[] factions, uint seed, long maxTicks, AiSlotChoice[]? choices)
     {
         using var stream = context.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
@@ -152,7 +164,7 @@ internal static class AiSurvey
                         break;
                     }
             }
-        }, compositions);
+        }, choices);
         var rate = context.Catalog.Rate.TicksPerSecond;
         for (var side = 0; side < 2; side++)
             if (scenario.Players[side].Faction != factions[side]) throw new InvalidOperationException($"Player {side + 1} plays {scenario.Players[side].Faction}, not {factions[side]}.");

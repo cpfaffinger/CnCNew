@@ -433,6 +433,9 @@ run.Test("Skirmish: two AIs play a match, replay, determinism and snapshot conti
 run.Test("Skirmish: the AI knows no enemy structure before it has seen one", Tests.SkirmishAiOnlyUsesWhatItSees);
 run.Test("Skirmish: the AI saves for the army unit it drew, so the factory builds", Tests.SkirmishAiSavesForItsArmyOrder);
 run.Test("Skirmish: the composition rule builds what hurts the enemy the AI has seen", Tests.SkirmishAiComposesItsArmyAgainstWhatItSees);
+run.Test("Skirmish profiles: rush, balanced, eco and turtle march and defend by their plans", Tests.SkirmishTacticsProfilesBehave);
+run.Test("Skirmish profiles: easy, medium and hard decide at their pace and know what they may", Tests.SkirmishStrengthsDecideAtTheirPace);
+run.Test("Skirmish profiles: balanced is the AI as it was; profiles and strengths travel with description and savegame", Tests.SkirmishProfilesTravelWithTheMatch);
 run.Test("Original skirmish AI: AIData is read strictly", Tests.OriginalAiDataIsReadStrictly);
 run.Test("Original skirmish AI: the script library is attached to the slots like the reference does", Tests.OriginalAiScriptLibraryIsAttachedLikeTheReference);
 run.Test("Original skirmish AI: base, teams, difficulty per player, determinism and save/restore", Tests.OriginalAiPlaysASkirmishFromItsScripts);

@@ -402,12 +402,12 @@ internal static class ShellTests
         var colors = Entries("ComboBoxColor0");
         TestHarness.Assert(colors.Length == 8 && colors.SequenceEqual(["Gold", "Red", "Blue", "Green", "Orange", "Cyan", "Purple", "Pink"]), $"the colors are the multiplayer color names in file order: {string.Join(", ", colors)}");
         TestHarness.Assert(Entries("ComboBoxTeam0").SequenceEqual(["None", "1", "2", "3", "4"]), "the teams are Team:0..Team:4");
-        // SkirmishGameOptionsMenuInit lists GUI:Open, GUI:Closed, GUI:EasyAI, GUI:MediumAI, GUI:HardAI. This build has one computer player strength and no difficulty effect that
-        // applies in a skirmish, so a slot offers one army (GUI:MediumAI) and never a choice it cannot honour; the second slot starts as that army, the name field holds GUI:Player.
+        // SkirmishGameOptionsMenuInit lists GUI:Open, GUI:Closed, GUI:EasyAI, GUI:MediumAI, GUI:HardAI; the built-in AI plays the three armies by its strength (Phase 33,
+        // docs/SKIRMISH-AI.md) and adds its three tactics profiles. The second slot starts as the medium army, the name field holds GUI:Player.
         for (var slot = 1; slot <= 7; slot++)
-            TestHarness.Assert(Entries($"ComboBoxPlayer{slot}").SequenceEqual(["Open", "Closed", "Medium Army"]), $"opponent slot {slot} offers open, closed and one computer army: {string.Join(", ", Entries($"ComboBoxPlayer{slot}"))}");
-        TestHarness.Assert(tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer1")!.ComboBox!.SelectedIndex == 2 && tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer2")!.ComboBox!.SelectedIndex == 0, "the second slot starts as the computer army, the others open");
-        TestHarness.Assert(!shell.BuildDrawList().Commands.OfType<UiTextDraw>().Any(text => text.Text.Contains("Easy Army", StringComparison.Ordinal) || text.Text.Contains("Hard Army", StringComparison.Ordinal)), "no difficulty the simulation does not have is on the screen");
+            TestHarness.Assert(Entries($"ComboBoxPlayer{slot}").SequenceEqual(["Open", "Closed", "Easy Army", "Medium Army", "Hard Army", "Rush Army", "Turtle Army", "Eco Army"]),
+                $"opponent slot {slot} offers open, closed, the three armies and the three profiles: {string.Join(", ", Entries($"ComboBoxPlayer{slot}"))}");
+        TestHarness.Assert(tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer1")!.ComboBox!.SelectedIndex == 3 && tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxPlayer2")!.ComboBox!.SelectedIndex == 0, "the second slot starts as the medium army, the others open");
         TestHarness.Assert(tree.FindByName("SkirmishGameOptionsMenu.wnd:TextEntryPlayerName")!.TextEntry!.Text == "Player", "the player name is GUI:Player");
         // getPreferredMap / getDefaultMap: without a remembered map the first multiplayer map of the catalog (lower-case path order) is chosen; the setup never says "no map".
         var expectedMap = shell.MapCatalog.Values.Where(entry => entry.IsMultiplayer).Select(entry => entry.VirtualPath).OrderBy(path => path.Replace('/', '\\').ToLowerInvariant(), StringComparer.Ordinal).First();
@@ -425,7 +425,8 @@ internal static class ShellTests
             Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
             TestHarness.Assert(shell.Phase != ShellPhase.MatchLoading && shell.CurrentScreen is SkirmishSetupScreen, $"slot entry '{Entries("ComboBoxPlayer1")[empty]}' is no opponent: Start does nothing");
         }
-        tree.Post(UiEventKind.ComboSelected, slotOne, value: 2);
+        // The turtle profile (entry 6): a computer army whose tactics travel into the setup.
+        tree.Post(UiEventKind.ComboSelected, slotOne, value: 6);
         // The room: the team and colour boxes of the two slots travel into the match (phase 25).
         tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxTeam0")!, value: 2);
         tree.Post(UiEventKind.ComboSelected, tree.FindByName("SkirmishGameOptionsMenu.wnd:ComboBoxTeam1")!, value: 2);
@@ -437,6 +438,8 @@ internal static class ShellTests
         shell.Update(CnCNew.Tests.TestTime.FrameSeconds);
         var started =shell.DrainOutputs().OfType<StartMatchOutput>().Single();
         TestHarness.Assert(started.Setup.Opponents.Length == 1, $"one computer army entry starts one computer player, got {started.Setup.Opponents.Length}");
+        TestHarness.Assert(started.Setup.AiOf(1) is { Kind: CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, Difficulty: CnCNew.Simulation.Scripting.ScriptDifficulty.Normal, Tactics: CnCNew.Simulation.Skirmish.AiTactics.Turtle },
+            $"the turtle entry is the built-in AI with the turtle profile at medium strength ({started.Setup.AiOf(1)})");
         TestHarness.Assert(started.Setup.Details.Length == 2 && started.Setup.Details[0] is { Team: 2, Color: 0, StartPosition: 0 } && started.Setup.Details[1] is { Team: 2, Color: 5, StartPosition: 1 },
             "the setup carries team, colour and start position of every slot that takes part");
 

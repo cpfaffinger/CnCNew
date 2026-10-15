@@ -147,6 +147,7 @@ var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
     Spectate = args.Contains("--spectate", StringComparer.OrdinalIgnoreCase),
     Ai = GetArgument(args, "--ai"),
     Difficulty = GetArgument(args, "--difficulty"),
+    Tactics = GetArgument(args, "--tactics"),
     SpectatorMaxZoom = GetArgument(args, "--spectator-max-zoom") is { } maxZoom ? float.Parse(maxZoom, System.Globalization.CultureInfo.InvariantCulture) : null,
     SpectatorSpeed = GetArgument(args, "--spectator-speed") is { } speed ? double.Parse(speed, System.Globalization.CultureInfo.InvariantCulture) : 1,
 };
@@ -291,15 +292,24 @@ internal sealed record LiveOptions(string Map, string Faction, ImmutableArray<st
     /// <summary><c>--difficulty easy|medium|hard</c>: the army of the original AI, one value for all slots or a comma list per slot. Giving it without --ai selects the original AI.</summary>
     public string? Difficulty { get; init; }
 
+    /// <summary>
+    /// <c>--tactics balanced|rush|turtle|eco|default</c>: the tactics profile of the built-in AI, one value for all slots or a comma list per slot (docs/SKIRMISH-AI.md). Giving it
+    /// without --ai selects the built-in AI; with it, --difficulty is the built-in AI's strength.
+    /// </summary>
+    public string? Tactics { get; init; }
+
     /// <summary>The AI of every slot of a match with <paramref name="slots"/> slots from --ai and --difficulty; empty when neither was given.</summary>
     public ImmutableArray<MatchAi> AiSlots(int slots)
     {
-        if (Ai is null && Difficulty is null) return [];
-        var kinds = (Ai ?? "original").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (Ai is null && Difficulty is null && Tactics is null) return [];
+        var kinds = (Ai ?? (Tactics is null ? "original" : "builtin")).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var profiles = (Tactics ?? "default").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (profiles.Length is not 1 && profiles.Length != slots) throw new ArgumentException($"--tactics takes one value or one per slot ({slots}), not {profiles.Length}.");
         var levels = (Difficulty ?? "medium").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (kinds.Length is not 1 && kinds.Length != slots) throw new ArgumentException($"--ai takes one value or one per slot ({slots}), not {kinds.Length}.");
         if (levels.Length is not 1 && levels.Length != slots) throw new ArgumentException($"--difficulty takes one value or one per slot ({slots}), not {levels.Length}.");
-        return [..Enumerable.Range(0, slots).Select(slot => new MatchAi(MatchAi.ParseKind(kinds[kinds.Length == 1 ? 0 : slot]), MatchAi.ParseDifficulty(levels[levels.Length == 1 ? 0 : slot])))];
+        return [..Enumerable.Range(0, slots).Select(slot => new MatchAi(MatchAi.ParseKind(kinds[kinds.Length == 1 ? 0 : slot]), MatchAi.ParseDifficulty(levels[levels.Length == 1 ? 0 : slot]),
+            CnCNew.Simulation.Testing.AiSlotChoice.ParseTactics(profiles[profiles.Length == 1 ? 0 : slot])))];
     }
 
     /// <summary>The map is a campaign mission played by its own scripts (--mission) instead of a skirmish (--match).</summary>

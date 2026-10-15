@@ -31,10 +31,10 @@ public enum MatchSlotKind : byte
 /// <param name="Team">Alliance number (same non-zero team: allies; 0: everybody else is an enemy).</param>
 /// <param name="Color">Index of the player colour, or -1 for "random". Carried for the presentation; the simulation does not read it.</param>
 /// <param name="StartPosition">Index of the map's start position, or -1 for "random" (the seed chooses among the free ones).</param>
-/// <param name="AiStrength">Strength of a computer slot: 0 easy, 1 medium, 2 hard. The built-in AI knows one strength; a value other than 1 is counted
-/// (<see cref="ResolvedMatch.AiStrengthsIgnored"/>), not obeyed.</param>
+/// <param name="AiStrength">Strength of a computer slot as a value of <see cref="Skirmish.AiStrength"/>: 0 easy, 1 medium, 2 hard (what the AI may know and how fast it decides).</param>
 /// <param name="AiComposition">How a computer slot chooses its army units as a value of <see cref="ArmyComposition"/>, or -1 for the AI's default.</param>
-public sealed record MatchSlotDescription(MatchSlotKind Kind, string Faction = "", int Team = 0, int Color = -1, int StartPosition = -1, int AiStrength = 1, int AiComposition = -1)
+/// <param name="AiTactics">The tactics profile of a computer slot as a value of <see cref="Skirmish.AiTactics"/>, or -1 for none (the AI as it was, <see cref="Skirmish.AiTactics.Balanced"/>).</param>
+public sealed record MatchSlotDescription(MatchSlotKind Kind, string Faction = "", int Team = 0, int Color = -1, int StartPosition = -1, int AiStrength = 1, int AiComposition = -1, int AiTactics = -1)
 {
     public const int MediumStrength = 1;
     public bool TakesPart => Kind is MatchSlotKind.Human or MatchSlotKind.Computer;
@@ -45,8 +45,7 @@ public sealed record MatchSlotDescription(MatchSlotKind Kind, string Faction = "
 /// <param name="Player">The player number: the slots that take part are numbered from 1 in slot order.</param>
 public sealed record ResolvedSlot(int Slot, PlayerId Player, MatchSlotDescription Description, MatchParticipant Participant, int StartPosition, int Color);
 
-/// <param name="AiStrengthsIgnored">Computer slots that asked for a strength the built-in AI does not have.</param>
-public sealed record ResolvedMatch(MatchDescription Description, ImmutableArray<ResolvedSlot> Slots, int AiStrengthsIgnored);
+public sealed record ResolvedMatch(MatchDescription Description, ImmutableArray<ResolvedSlot> Slots);
 
 /// <summary>
 /// Everything a machine needs to build the initial state of a match, and nothing else: an immutable value with one canonical encoding. Two machines that hold the same bytes build
@@ -64,8 +63,8 @@ public sealed record MatchDescription(
     int TickRate, string MapPath, string TerrainFingerprint, string DefinitionFingerprint, uint Seed, uint AiSeed, long MaxTicks, int StartMoney, long GraceFrames,
     long SciencePointIntervalFrames, ImmutableArray<MatchSlotDescription> Slots)
 {
-    /// <summary>2 (phase 25): the simulation identifier follows the two format versions. Version 1 is refused.</summary>
-    public const int EncodingVersion = 2;
+    /// <summary>3 (phase 33): the tactics profile of a slot. 2 (phase 25): the simulation identifier follows the two format versions. Older versions are refused.</summary>
+    public const int EncodingVersion = 3;
     private static ReadOnlySpan<byte> Magic => "CNCMATCH"u8;
 
     /// <summary>The version of the simulation the description was made for: the command table and the world state. A machine with another one must refuse the match.</summary>
@@ -94,7 +93,7 @@ public sealed record MatchDescription(
     /// <summary>
     /// The canonical bytes, little endian: <c>"CNCMATCH"</c>, u32 encoding version, u32 command table version, u32 world state version, string simulation identifier, u32 tick rate, string map path, string terrain
     /// fingerprint, string definition fingerprint, u32 seed, u32 AI seed, i64 max ticks, i32 start money, i64 grace frames, i64 science point interval frames, u16 slot count
-    /// (u8 kind, string faction, i32 team, i32 colour, i32 start position, i32 AI strength, i32 AI composition). Strings are u16-length-prefixed UTF-8.
+    /// (u8 kind, string faction, i32 team, i32 colour, i32 start position, i32 AI strength, i32 AI composition, i32 AI tactics). Strings are u16-length-prefixed UTF-8.
     /// </summary>
     public byte[] Encode()
     {
@@ -126,6 +125,7 @@ public sealed record MatchDescription(
                 writer.Write(slot.StartPosition);
                 writer.Write(slot.AiStrength);
                 writer.Write(slot.AiComposition);
+                writer.Write(slot.AiTactics);
             }
         }
         return stream.ToArray();
@@ -162,7 +162,7 @@ public sealed record MatchDescription(
                 if (kind > (byte)MatchSlotKind.Spectator) throw new FormatException($"Unknown slot kind {kind}.");
                 var faction = ReadString(data, ref position);
                 slots.Add(new MatchSlotDescription((MatchSlotKind)kind, faction, ReadInt32(data, ref position), ReadInt32(data, ref position), ReadInt32(data, ref position),
-                    ReadInt32(data, ref position), ReadInt32(data, ref position)));
+                    ReadInt32(data, ref position), ReadInt32(data, ref position), ReadInt32(data, ref position)));
             }
             if (position != data.Length) throw new FormatException("Trailing bytes after the match description.");
             return new MatchDescription(tickRate, mapPath, terrain, definitions, seed, aiSeed, maxTicks, startMoney, grace, science, slots.MoveToImmutable())
@@ -243,14 +243,14 @@ public sealed record MatchDescription(
 
         var usedColors = new SortedSet<int>(Slots.Where(slot => slot.TakesPart && slot.Color >= 0).Select(slot => slot.Color));
         var resolved = ImmutableArray.CreateBuilder<ResolvedSlot>();
-        var ignored = 0;
         var player = 0;
         var nextColor = 0;
         for (var index = 0; index < Slots.Length; index++)
         {
             var slot = Slots[index];
             if (!slot.TakesPart) continue;
-            if (slot.Kind == MatchSlotKind.Computer && slot.AiStrength != MatchSlotDescription.MediumStrength) ignored++;
+            if (!Enum.IsDefined((AiStrength)slot.AiStrength) || slot.AiStrength < 0) throw new ArgumentException($"Slot {index} names the unknown AI strength {slot.AiStrength}.");
+            if (slot.AiTactics < -1 || slot.AiTactics >= 0 && !Enum.IsDefined((AiTactics)slot.AiTactics)) throw new ArgumentException($"Slot {index} names the unknown tactics profile {slot.AiTactics}.");
             if (slot.AiComposition >= 0 && !Enum.IsDefined((ArmyComposition)slot.AiComposition)) throw new ArgumentException($"Slot {index} names the unknown army composition {slot.AiComposition}.");
             var color = slot.Color;
             if (color < 0)
@@ -262,7 +262,7 @@ public sealed record MatchDescription(
             }
             resolved.Add(new ResolvedSlot(index, new PlayerId(++player), slot, participants[index]!, positions[index], color));
         }
-        return new ResolvedMatch(this, resolved.ToImmutable(), ignored);
+        return new ResolvedMatch(this, resolved.ToImmutable());
     }
 
     private static void WriteString(BinaryWriter writer, string value)

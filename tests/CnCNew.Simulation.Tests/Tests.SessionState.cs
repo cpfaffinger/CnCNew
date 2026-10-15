@@ -18,7 +18,7 @@ static partial class Tests
     {
         var fields = new List<(string, string)>();
         var declaration = new Regex(@"^    private (?:readonly )?(?<type>[^=;]+?) (?<name>_\w+)(?: = [^;]*)?;\s*$", RegexOptions.Multiline);
-        foreach (var file in new[] { "SkirmishAi.cs", "SkirmishAi.Composition.cs", "SkirmishAi.State.cs" })
+        foreach (var file in new[] { "SkirmishAi.cs", "SkirmishAi.Composition.cs", "SkirmishAi.Profiles.cs", "SkirmishAi.State.cs" })
             foreach (Match match in declaration.Matches(SkirmishAiSource(file).Replace("\r", string.Empty)))
                 if (!match.Groups["type"].Value.StartsWith("static ", StringComparison.Ordinal) && !match.Groups["type"].Value.StartsWith("const ", StringComparison.Ordinal))
                     fields.Add((match.Groups["name"].Value, match.Groups["type"].Value));

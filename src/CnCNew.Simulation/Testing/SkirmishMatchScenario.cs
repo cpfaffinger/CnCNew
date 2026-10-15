@@ -56,12 +56,11 @@ public sealed class SkirmishMatchScenario
 
     public static string FamilyPrefix(FactionInfo faction) => SkirmishMatchSession.FamilyPrefix(faction);
 
-    /// <summary>Plays the match and returns the recorded replay (without checkpoints). <paramref name="compositions"/> names per slot how its AI chooses army units (null or absent: the default).</summary>
+    /// <summary>Plays the match and returns the recorded replay (without checkpoints). <paramref name="choices"/> names per slot how its AI plays (null or absent: the default).</summary>
     public ReplayFile Record(TemplateCatalog catalog, string fingerprint, TerrainMap terrain, ImmutableArray<MapObject> mapObjects, ImmutableArray<MatchParticipant> participants,
-        Action<SkirmishMatchSession>? afterTick = null, IReadOnlyList<ArmyComposition?>? compositions = null)
+        Action<SkirmishMatchSession>? afterTick = null, IReadOnlyList<AiSlotChoice>? choices = null)
     {
-        var session = SkirmishMatchSession.Start(_options, catalog, fingerprint, terrain, mapObjects,
-            [..participants.Select((participant, index) => new SkirmishSlot(participant, Composition: compositions is not null && index < compositions.Count ? compositions[index] : null))]);
+        var session = SkirmishMatchSession.Start(_options, catalog, fingerprint, terrain, mapObjects, [..participants.Select((participant, index) => AiSlotChoice.At(choices, index).Slot(participant))]);
         while (!session.IsOver)
         {
             session.Step();

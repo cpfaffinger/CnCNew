@@ -122,12 +122,13 @@ public enum EndReason : byte
 public static class Protocol
 {
     /// <summary>
+    /// Version 6 (phase 33): the tactics profile of a slot in the room's settings.
     /// Version 5 (phase 29): the request for the list of a server's rooms and the list - asked on a connection before its hello.
     /// Version 4 (phase 28): the verifier of a room password in the hello, the challenge and the response for it, the kick; the drop reasons "kicked" and "flood", the
     /// end reason "server limit". Version 3 (phase 27): the rejoin token and the watch flag in the hello, the token in the welcome, the detail and the report of a desync, the request and the
     /// offer of a snapshot, the state of a held seat. Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave.
     /// </summary>
-    public const ushort Version = 5;
+    public const ushort Version = 6;
     /// <summary>Rooms one list names at most; a server with more names the first ones in the order of their names.</summary>
     public const int MaxListedRooms = 64;
     /// <summary>A verifier, a nonce and a response of the room password, as hexadecimal text.</summary>
@@ -436,6 +437,7 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
             writer.I32(slot.StartPosition);
             writer.I32(slot.AiStrength);
             writer.I32(slot.AiComposition);
+            writer.I32(slot.AiTactics);
         }
     }
 
@@ -458,7 +460,7 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
         {
             var kind = reader.U8();
             if (kind > (byte)MatchSlotKind.Spectator) throw new ProtocolException($"Unknown slot kind {kind}.");
-            slots.Add(new MatchSlotDescription((MatchSlotKind)kind, reader.Text(Protocol.MaxNameBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32()));
+            slots.Add(new MatchSlotDescription((MatchSlotKind)kind, reader.Text(Protocol.MaxNameBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32()));
         }
         return new RoomSettings(tickRate, map, terrain, maxTicks, money, grace, science, slots.MoveToImmutable(), hasSeed, seed, aiSeed);
     }

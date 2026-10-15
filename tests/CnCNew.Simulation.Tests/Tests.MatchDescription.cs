@@ -44,6 +44,7 @@ static partial class Tests
             ("slot start position", description with { Slots = description.Slots.SetItem(0, slot with { StartPosition = -1 }) }),
             ("slot AI strength", description with { Slots = description.Slots.SetItem(0, slot with { AiStrength = 2 }) }),
             ("slot AI composition", description with { Slots = description.Slots.SetItem(0, slot with { AiComposition = 0 }) }),
+            ("slot AI tactics", description with { Slots = description.Slots.SetItem(0, slot with { AiTactics = (int)AiTactics.Rush }) }),
         };
         var seen = new HashSet<string>(StringComparer.Ordinal) { description.Fingerprint };
         foreach (var (field, changed) in variants)
@@ -55,7 +56,9 @@ static partial class Tests
         Check.Throws<FormatException>(() => MatchDescription.Decode([..bytes, 0]), "Trailing bytes");
         Check.Throws<ArgumentException>(() => (description with { CommandTableVersion = description.CommandTableVersion + 1 }).Resolve(fixture.Templates, terrain), "simulation version");
         Check.Throws<ArgumentException>(() => (description with { TerrainFingerprint = "other" }).Resolve(fixture.Templates, terrain), "different terrain");
-        Check.That(MatchDescription.EncodingVersion == 2 && description.SimulationId.Length == 0, "A description made in the process states no simulation identifier (encoding 2).");
+        Check.That(MatchDescription.EncodingVersion == 3 && description.SimulationId.Length == 0, "A description made in the process states no simulation identifier (encoding 3).");
+        Check.Throws<ArgumentException>(() => (description with { Slots = description.Slots.SetItem(0, slot with { AiStrength = 3 }) }).Resolve(fixture.Templates, terrain), "unknown AI strength");
+        Check.Throws<ArgumentException>(() => (description with { Slots = description.Slots.SetItem(0, slot with { AiTactics = 9 }) }).Resolve(fixture.Templates, terrain), "unknown tactics profile");
         var stated = description with { SimulationId = "abc" };
         Check.That(stated.Resolve(fixture.Templates, terrain, simulationId: "abc").Slots.Length == 2 && stated.Resolve(fixture.Templates, terrain).Slots.Length == 2
                    && description.Resolve(fixture.Templates, terrain, simulationId: "abc").Slots.Length == 2, "A stated identifier is accepted by the same build; none stated or none asked is not checked.");
@@ -94,7 +97,7 @@ static partial class Tests
             "Closed and spectator slots take no player number; the others are numbered in slot order.");
         Check.That(match.Slots[1].StartPosition == 1 && match.Slots[0].StartPosition != 1 && match.Slots[0].StartPosition >= 0, "A named start position is obeyed, a random one takes a free one.");
         Check.That(match.Slots[1].Color == 0 && match.Slots[0].Color == 1, "A random colour is the lowest free one.");
-        Check.That(match.AiStrengthsIgnored == 1 && first.Notes.Any(note => note.Contains("strength", StringComparison.Ordinal)), "A strength the built-in AI does not have is counted and noted, not obeyed.");
+        Check.That(first.Ais[0] is { Strength: AiStrength.Hard } && !first.Notes.Any(note => note.Contains("strength", StringComparison.Ordinal)), "The strength of a computer slot is obeyed, not counted.");
         Check.That(second.Match.Slots[0].Participant.Faction.Name == match.Slots[0].Participant.Faction.Name && second.Match.Slots[0].StartPosition == match.Slots[0].StartPosition,
             "The random faction and the random start position are the same in both sessions.");
         var picks = new HashSet<string>(StringComparer.Ordinal);

@@ -19,7 +19,11 @@ namespace CnCNew.Simulation.Skirmish;
 /// <param name="FamilyPrefix">Name prefix of the faction's own object variants (<c>AirF_America</c>); such variants are preferred over the shared ones of the side.</param>
 /// <param name="Composition">How the army's next unit is chosen; null for <see cref="SkirmishAi.DefaultComposition"/>.</param>
 /// <param name="HintPositions">Start positions of the other players; public map knowledge the AI may attack before it has seen anything.</param>
-public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions, int AttackThreshold = 0, int MaxAttackThreshold = 0, bool EconomyFirst = false, ArmyComposition? Composition = null);
+/// <param name="AttackThreshold">Army size of the first wave; 0 for the profile's. A mission's agent sets it; a skirmish slot does not.</param>
+/// <param name="Tactics">The tactics profile; null for <see cref="AiTactics.Balanced"/>.</param>
+/// <param name="Strength">What the AI may know and how fast it decides.</param>
+public sealed record SkirmishAiOptions(PlayerId Player, uint Seed, Fixed HomeX, Fixed HomeY, string Side, string FamilyPrefix, ImmutableArray<(Fixed X, Fixed Y)> HintPositions, int AttackThreshold = 0, int MaxAttackThreshold = 0, bool EconomyFirst = false, ArmyComposition? Composition = null,
+    AiTactics? Tactics = null, AiStrength Strength = AiStrength.Medium);
 
 /// <summary>Counters an AI keeps about itself; the match report and the tests read them.</summary>
 public sealed class SkirmishAiStats
@@ -37,6 +41,8 @@ public sealed class SkirmishAiStats
     public int DockOrders { get; internal set; }
     public int Waves { get; internal set; }
     public int IdleThinks { get; internal set; }
+    /// <summary>Decisions taken (thinks); how often depends on the strength (<see cref="AiStrength"/>).</summary>
+    public int Thinks { get; internal set; }
     /// <summary>Units sent into an own tunnel network (to heal or to travel).</summary>
     public int TunnelEntries { get; internal set; }
     /// <summary>Evacuation orders to tunnels and transports.</summary>
@@ -79,11 +85,9 @@ public sealed class SkirmishAiStats
 public sealed partial class SkirmishAi
 {
     // Own rhythms and deadlines of the AI, all in logic frames of the original (1/30 s) and scaled once per use through the world's time service, so the AI
-    // observes, thinks and waits at the same moments of game time at every tick rate. ThinkIntervalFrames must stay a multiple of FireIntervalFrames.
+    // observes, thinks and waits at the same moments of game time at every tick rate. The think interval of every strength (StrengthPlan) must stay a multiple of FireIntervalFrames.
     private const long FireIntervalFrames = 5;
-    private const long ThinkIntervalFrames = 15;
     private const long RetryFrames = 300;
-    private const long MemoryFrames = 900;
     private const long OrderRefreshFrames = 150;
     /// <summary>Back-off of a worker order per producer and template, of the first supply center's placement, of a transport's unload order and the shortest time between two resumes of a site or two different marching orders (2 s).</summary>
     private const long ShortRetryFrames = 60;
@@ -106,7 +110,7 @@ public sealed partial class SkirmishAi
     private const int MinAttackThreshold = 8;
     private const int MaxAttackThreshold = 30;
     private const int PlacementChecksPerThink = 400;
-    private static readonly Fixed DefenseRadius = Fixed.FromInt(450);
+    private static readonly Fixed BalancedDefenseRadius = Fixed.FromInt(450);
     private static readonly Fixed EngageRadius = Fixed.FromInt(260);
     /// <summary>How far from the rally point a unit at rest still counts as gathered: the reach of the world's search for a free place around a taken goal (ten cells) plus one.</summary>
     private static readonly Fixed GatherRadius = Fixed.FromInt(11 * TerrainMap.CellSize);
@@ -179,8 +183,8 @@ public sealed partial class SkirmishAi
     private List<Entity> _enemyTargets = [];
     private bool _attacking;
     private readonly SortedSet<uint> _wave = [];
-    private int _threshold = MinAttackThreshold;
-    private int _maxThreshold = MaxAttackThreshold;
+    private int _threshold;
+    private int _maxThreshold;
     private (Fixed X, Fixed Y)? _rally;
     private (Fixed X, Fixed Y)? _scout;
     private long _scoutAt = -1;
@@ -214,11 +218,16 @@ public sealed partial class SkirmishAi
         _random = new SageRandom(options.Seed);
         _time = world.Time;
         _fireInterval = _time.OriginalFrames(FireIntervalFrames);
-        _thinkInterval = _time.OriginalFrames(ThinkIntervalFrames);
+        _plan = TacticsPlan.Of(options.Tactics ?? AiTactics.Balanced);
+        _strength = StrengthPlan.Of(options.Strength);
+        _thinkInterval = _time.OriginalFrames(_strength.ThinkFrames);
         // The stagger between the players is drawn in frames of the original and then scaled like the intervals: at every rate the same players share a frame.
         _phase = _time.OriginalFrames(options.Player.Value % FireIntervalFrames);
         _side = options.Side;
-        _composition = options.Composition ?? DefaultComposition;
+        // An AI that may not weigh its army against the force it has seen draws uniformly, whatever the slot names.
+        _composition = _strength.KnowsForce ? options.Composition ?? DefaultComposition : ArmyComposition.Uniform;
+        _threshold = _plan.AttackThreshold;
+        _maxThreshold = _plan.MaxAttackThreshold;
         if (options.AttackThreshold > 0) _threshold = options.AttackThreshold;
         if (options.MaxAttackThreshold > 0) _maxThreshold = Math.Max(options.MaxAttackThreshold, _threshold);
     }
@@ -276,6 +285,7 @@ public sealed partial class SkirmishAi
         _inFlight.RemoveAll(value => value.Until <= _tick);
         foreach (var expired in _boarding.Where(pair => pair.Value <= _tick).Select(pair => pair.Key).ToList()) _boarding.Remove(expired);
         var before = Stats.Commands;
+        Stats.Thinks++;
         ProduceWorkers();
         BuildStructures();
         ManageSites();
@@ -365,7 +375,7 @@ public sealed partial class SkirmishAi
         foreach (var (id, entry) in memory)
         {
             if (seen.Contains(id)) continue;
-            var stale = !entry.IsStructure && !entry.Owner.IsSystem && _tick - entry.Seen > _time.OriginalFrames(MemoryFrames);
+            var stale = !entry.IsStructure && !entry.Owner.IsSystem && _tick - entry.Seen > _time.OriginalFrames(_strength.MemoryFrames);
             if (stale || _world.IsPositionVisibleTo(_player, entry.X, entry.Y)) (drop ??= []).Add(id);
         }
         if (drop is not null)
@@ -472,7 +482,7 @@ public sealed partial class SkirmishAi
         var wantBuilders = supply > 0 || _structures.Count > 1 ? 2 : 1;
         if (builders < wantBuilders) QueueWorker(Role.Builder);
         var carriers = CountAlive(Role.Carrier, false) + InFlight(Role.Carrier);
-        var wantCarriers = _warehouses.Count == 0 && CountAlive(Role.Carrier, false) > 0 ? 0 : Math.Min(6, 2 * Math.Max(0, supply));
+        var wantCarriers = _warehouses.Count == 0 && CountAlive(Role.Carrier, false) > 0 ? 0 : Math.Min(_plan.MaxCarriers, _plan.CarriersPerCenter * Math.Max(0, supply));
         if (carriers < wantCarriers) QueueWorker(Role.Carrier);
     }
 
@@ -570,11 +580,12 @@ public sealed partial class SkirmishAi
         if (CountAlive(Role.Power, true) < 1) goals.Add(Role.Power);
         if (CountAlive(Role.Barracks, true) < 1) goals.Add(Role.Barracks);
         if (CountAlive(Role.Factory, true) < 1) goals.Add(Role.Factory);
-        if (CountAlive(Role.SupplyCenter, true) < 2 && army >= 10 && FindSupplySource() is not null) goals.Add(Role.SupplyCenter);
+        if (CountAlive(Role.SupplyCenter, true) < 2 && army >= _plan.SecondCenterArmy && FindSupplySource() is not null) goals.Add(Role.SupplyCenter);
+        else if (CountAlive(Role.SupplyCenter, true) < 3 && army >= _plan.ThirdCenterArmy && FindSupplySource() is not null) goals.Add(Role.SupplyCenter);
         if (CountAlive(Role.Power, true) < 2 && producers >= 3) goals.Add(Role.Power);
-        if (CountAlive(Role.Barracks, true) < 2 && _budget > Fixed.FromInt(1200)) goals.Add(Role.Barracks);
+        if (CountAlive(Role.Barracks, true) < 2 && _budget > Fixed.FromInt(_plan.SecondBarracksBudget)) goals.Add(Role.Barracks);
         if (CountAlive(Role.Factory, true) < 2 && _budget > Fixed.FromInt(1500)) goals.Add(Role.Factory);
-        if (CountAlive(Role.Defense, true) < Math.Min(4, army / 6)) goals.Add(Role.Defense);
+        if (CountAlive(Role.Defense, true) < Math.Min(_plan.MaxDefenses, _plan.DefenseBase + army / _plan.DefensesPerArmy)) goals.Add(Role.Defense);
         return [..goals];
     }
 
@@ -1065,8 +1076,22 @@ public sealed partial class SkirmishAi
             }
         }
         if (units.Count == 0) return null;
+        if (_plan.CheapArmy) KeepCheap(units, producers);
         var index = _composition == ArmyComposition.ExchangeValue ? DrawByExchangeValue(units) : _random.Range(0, units.Count - 1);
         return new ArmyOrder(producers[index].Id, units[index], _tick);
+    }
+
+    /// <summary>The rule of <see cref="AiTactics.Rush"/>: only the candidates that cost at most twice the cheapest one stay, with their producers.</summary>
+    private static void KeepCheap(List<ObjectTemplate> units, List<Entity> producers)
+    {
+        var cheapest = units.Min(unit => unit.BuildCost);
+        var limit = Fixed.Max(cheapest, Fixed.One) * Fixed.FromInt(2);
+        for (var index = units.Count - 1; index >= 0; index--)
+        {
+            if (units[index].BuildCost <= limit) continue;
+            units.RemoveAt(index);
+            producers.RemoveAt(index);
+        }
     }
 
     private void SetRallyPoints()
@@ -1175,7 +1200,7 @@ public sealed partial class SkirmishAi
             {
                 _attacking = false;
                 _wave.Clear();
-                _threshold = Math.Min(_maxThreshold, _threshold + 2);
+                _threshold = Math.Min(_maxThreshold, _threshold + _plan.ThresholdStep);
             }
             goal = _attacking ? AttackTarget(army.Where(unit => _wave.Contains(unit.Id.Value)).ToList()) : _rally;
         }
@@ -1297,7 +1322,7 @@ public sealed partial class SkirmishAi
     private (Fixed X, Fixed Y)? FindThreat()
     {
         Entity? nearest = null;
-        var limit = SquaredReach.Of(DefenseRadius);
+        var limit = SquaredReach.Of(_plan.DefenseRadius);
         var best = Fixed.Zero;
         foreach (var enemy in _enemyTargets)
         {
@@ -1369,7 +1394,7 @@ public sealed partial class SkirmishAi
         }
         if (target is { } unitEntry) return (unitEntry.X, unitEntry.Y);
 
-        foreach (var hint in _options.HintPositions)
+        foreach (var hint in _strength.UsesStartPositions ? _options.HintPositions : ImmutableArray<(Fixed X, Fixed Y)>.Empty)
         {
             if (_clearedHints.TryGetValue(hint, out var clearedAt) && _tick - clearedAt < _time.OriginalFrames(RevisitFrames)) continue;
             if (_world.IsPositionVisibleTo(_player, hint.X, hint.Y) && DistanceSquared(hint.X, hint.Y, cx, cy) < Fixed.FromInt(90_000)) { _clearedHints[hint] = _tick; continue; }

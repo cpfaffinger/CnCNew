@@ -43,9 +43,6 @@ public sealed partial class SkirmishAi
     /// <summary>The composition a computer player uses when its options name none.</summary>
     public const ArmyComposition DefaultComposition = ArmyComposition.ExchangeValue;
 
-    /// <summary>How long a sighting of an enemy object counts toward the enemy's force (3 min).</summary>
-    private const long SightingMemoryFrames = 5400;
-
     /// <summary>The lifetime the exposure never goes beyond, in logic frames of the original (60 s): a unit nobody seen so far can hurt is not worth infinitely much.</summary>
     private const int LifetimeFrames = 1800;
 
@@ -72,7 +69,7 @@ public sealed partial class SkirmishAi
     {
         List<uint>? stale = null;
         var force = new SortedDictionary<int, int>();
-        var memory = _time.OriginalFrames(SightingMemoryFrames);
+        var memory = _time.OriginalFrames(_strength.SightingFrames);
         foreach (var (id, sighting) in _sightings)
         {
             if (_tick - sighting.Seen > memory) (stale ??= []).Add(id);

@@ -16,8 +16,11 @@ using CnCNew.Simulation.World;
 
 namespace CnCNew.Game.Live;
 
-/// <summary>Who plays a computer slot: the simulation's own AI (the default) or the original one with its script library, and for that one the army (easy, medium, hard).</summary>
-public readonly record struct MatchAi(SkirmishAiKind Kind, ScriptDifficulty Difficulty = ScriptDifficulty.Normal)
+/// <summary>
+/// Who plays a computer slot: the simulation's own AI (the default) or the original one with its script library; the army (easy, medium, hard) - for the built-in AI its
+/// strength - and, for the built-in AI, its tactics profile (none: the AI as it was).
+/// </summary>
+public readonly record struct MatchAi(SkirmishAiKind Kind, ScriptDifficulty Difficulty = ScriptDifficulty.Normal, AiTactics? Tactics = null)
 {
     public static MatchAi Builtin { get; } = new(SkirmishAiKind.Builtin);
 
@@ -38,7 +41,12 @@ public readonly record struct MatchAi(SkirmishAiKind Kind, ScriptDifficulty Diff
         _ => throw new ArgumentException($"A difficulty is 'easy', 'medium' or 'hard', not '{text}'."),
     };
 
-    public override string ToString() => Kind == SkirmishAiKind.Builtin ? "builtin" : "original/" + Difficulty switch { ScriptDifficulty.Easy => "easy", ScriptDifficulty.Hard => "hard", _ => "medium" };
+    /// <summary>The strength of the slot in the match description: 0 easy, 1 medium, 2 hard.</summary>
+    public int Strength => Difficulty switch { ScriptDifficulty.Easy => 0, ScriptDifficulty.Hard => 2, _ => MatchSlotDescription.MediumStrength };
+
+    public override string ToString() => Kind == SkirmishAiKind.Builtin
+        ? "builtin" + (Tactics switch { AiTactics.Balanced => "/balanced", AiTactics.Rush => "/rush", AiTactics.Turtle => "/turtle", AiTactics.Eco => "/eco", _ => string.Empty }) + (Difficulty == ScriptDifficulty.Normal ? string.Empty : "/" + (Difficulty == ScriptDifficulty.Easy ? "easy" : "hard"))
+        : "original/" + Difficulty switch { ScriptDifficulty.Easy => "easy", ScriptDifficulty.Hard => "hard", _ => "medium" };
 }
 
 /// <param name="Team">Alliance number (0: none).</param>
@@ -102,8 +110,9 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
             var details = DetailsOf(slot);
             var human = slot == LocalSlot && !AutoPlay && !Spectator;
             var ai = AiOf(slot);
+            // A human slot states the medium strength and no profile, whatever the list says: only a computer slot is played by an AI.
             slots.Add(new MatchSlotDescription(human ? MatchSlotKind.Human : MatchSlotKind.Computer, slot == 0 ? HumanFaction : Opponents[slot - 1], details.Team, details.Color, details.StartPosition,
-                ai.Kind == SkirmishAiKind.Original ? ai.Difficulty switch { ScriptDifficulty.Easy => 0, ScriptDifficulty.Hard => 2, _ => 1 } : MatchSlotDescription.MediumStrength));
+                human ? MatchSlotDescription.MediumStrength : ai.Strength, AiTactics: !human && ai.Kind == SkirmishAiKind.Builtin && ai.Tactics is { } tactics ? (int)tactics : -1));
         }
         return new MatchDescription(data.Rate.TicksPerSecond, MapPath, terrain.Fingerprint, data.Fingerprint.ToUpperInvariant(), options.WorldSeed, options.AiSeed, options.MaxTicks, options.StartMoney,
             options.GraceTicks, options.SciencePointInterval, slots.ToImmutable());

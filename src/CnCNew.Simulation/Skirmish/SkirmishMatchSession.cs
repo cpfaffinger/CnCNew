@@ -20,7 +20,9 @@ namespace CnCNew.Simulation.Skirmish;
 /// <param name="IsHuman">A human slot has no <see cref="SkirmishAi"/>; its commands come from <see cref="SkirmishMatchSession.Issue"/>.</param>
 /// <param name="Composition">How a computer slot chooses its army units; null for <see cref="SkirmishAi.DefaultComposition"/>.</param>
 /// <param name="Team">Alliance number (same non-zero team: allies; 0: everybody else is an enemy).</param>
-public sealed record SkirmishSlot(MatchParticipant Participant, bool IsHuman = false, int Team = 0, ArmyComposition? Composition = null);
+/// <param name="Tactics">The tactics profile of a computer slot; null for none.</param>
+/// <param name="Strength">What a computer slot may know and how fast it decides.</param>
+public sealed record SkirmishSlot(MatchParticipant Participant, bool IsHuman = false, int Team = 0, ArmyComposition? Composition = null, AiTactics? Tactics = null, AiStrength Strength = AiStrength.Medium);
 
 /// <summary>
 /// One running skirmish: the world, the map's warehouses, the faction start objects and one <see cref="SkirmishAi"/> per computer slot.
@@ -40,8 +42,8 @@ public sealed class SkirmishMatchSession
 
     /// <summary>Format of <see cref="Save"/>: the match description, the session's counters, one state block per computer player, the recording so far and the world.</summary>
     public const string SaveFormat = "cncnew-skirmish-state";
-    /// <summary>2 (phase 25): the embedded match description has encoding 2 (simulation identifier). Version 1 is refused.</summary>
-    public const int SaveVersion = 2;
+    /// <summary>3 (phase 33): the embedded match description has encoding 3 (tactics profile). 2 (phase 25): encoding 2 (simulation identifier). Older versions are refused.</summary>
+    public const int SaveVersion = 3;
 
     private readonly MatchDescription _description;
     private readonly List<SimCommand> _commands = [];
@@ -98,7 +100,7 @@ public sealed class SkirmishMatchSession
         => new(catalog.Rate.TicksPerSecond, mapPath, terrain.Fingerprint, fingerprint.ToUpperInvariant(), options.WorldSeed, options.AiSeed, options.MaxTicks, options.StartMoney, options.GraceTicks,
             options.SciencePointInterval,
             [..slots.Select((slot, index) => new MatchSlotDescription(slot.IsHuman ? MatchSlotKind.Human : MatchSlotKind.Computer, slot.Participant.Faction.Name, slot.Team, StartPosition: index,
-                AiComposition: slot.Composition is { } composition ? (int)composition : -1))]);
+                AiStrength: (int)slot.Strength, AiComposition: slot.Composition is { } composition ? (int)composition : -1, AiTactics: slot.Tactics is { } tactics ? (int)tactics : -1))]);
 
     /// <summary>
     /// Starts the match of options and slots: a shorthand that writes the <see cref="MatchDescription"/> (<see cref="Describe"/>) and starts from it. A slot must name a faction as
@@ -129,7 +131,6 @@ public sealed class SkirmishMatchSession
         var notes = ImmutableArray.CreateBuilder<string>();
         session.SpawnStartingObjects(catalog, terrain, notes);
         session.SpawnWarehouses(catalog, mapObjects, notes);
-        if (match.AiStrengthsIgnored > 0) notes.Add($"{match.AiStrengthsIgnored} computer slot(s) asked for a strength other than medium; the built-in AI has one strength");
         session.Notes = notes.ToImmutable();
         return session;
     }
@@ -157,7 +158,8 @@ public sealed class SkirmishMatchSession
         var index = slot.Player.Value - 1;
         return new SkirmishAiOptions(slot.Player, unchecked(match.Description.AiSeed + (uint)index * 7919u), starts[slot.StartPosition].X, starts[slot.StartPosition].Y,
             slot.Participant.Side, FamilyPrefix(slot.Participant.Faction), hints.ToImmutable(),
-            Composition: slot.Description.AiComposition >= 0 ? (ArmyComposition)slot.Description.AiComposition : null);
+            Composition: slot.Description.AiComposition >= 0 ? (ArmyComposition)slot.Description.AiComposition : null,
+            Tactics: slot.Description.AiTactics >= 0 ? (AiTactics)slot.Description.AiTactics : null, Strength: (AiStrength)slot.Description.AiStrength);
     }
 
     /// <summary>The session without its objects: the world (a fresh one, or the restored one) and one AI per computer slot.</summary>

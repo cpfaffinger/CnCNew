@@ -137,9 +137,9 @@ internal static class AiCensus
         var terrain = TerrainMap.Build(map, mapPath);
         var options = SkirmishMatchOptions.Standard with { MaxTicks = maxTicks, AiSeed = seed, WorldSeed = seed ^ 0xC0FFEE06 };
         var participants = ReferenceManifest.Participants(context, factions);
-        var compositions = AiSurvey.Compositions(args);
+        var choices = AiSurvey.Choices(args);
         var session = SkirmishMatchSession.Start(options, context.Catalog, context.Fingerprint, terrain, map.Objects,
-            [..participants.Select((participant, index) => new SkirmishSlot(participant, Composition: compositions is not null && index < compositions.Length ? compositions[index] : null))]);
+            [..participants.Select((participant, index) => AiSlotChoice.At(choices, index).Slot(participant))]);
         var world = session.World;
         var slotOf = new Dictionary<int, int>();
         for (var slot = 0; slot < session.Players.Length; slot++) slotOf[session.Players[slot].Id.Value] = slot;

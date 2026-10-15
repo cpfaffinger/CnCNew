@@ -35,9 +35,14 @@ public sealed class ShellSkirmishText
     /// </summary>
     public string ComputerArmy => Resolve("GUI:MediumAI", "Medium Army");
 
-    /// <summary><c>GUI:EasyAI</c> and <c>GUI:HardAI</c>: the two other armies of the original, offered when the match runs the original AI (<c>GameShell.SkirmishAi</c>).</summary>
+    /// <summary><c>GUI:EasyAI</c> and <c>GUI:HardAI</c>: the two other armies of the original. The original AI plays them by its scripts, the built-in AI by its strength.</summary>
     public string EasyArmy => Resolve("GUI:EasyAI", "Easy Army");
     public string HardArmy => Resolve("GUI:HardAI", "Hard Army");
+
+    /// <summary>The tactics profiles of the built-in AI (Stage 3, S3-M1), at medium strength. The original has no such entries and no text for them; English only.</summary>
+    public static string RushArmy => "Rush Army";
+    public static string TurtleArmy => "Turtle Army";
+    public static string EcoArmy => "Eco Army";
 
     /// <summary><c>GUI:Player</c>: the name the original puts into the player name field when the preferences hold none.</summary>
     public string Player => Resolve("GUI:Player", "Player");

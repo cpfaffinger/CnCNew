@@ -104,9 +104,11 @@ static partial class NetTests
         Pump(silent, refused);
         Check.That(refused.List is null && refused.Rejection is { Reason: RejectReason.InvalidRequest } && silent.ListsRefused == 1 && silent.ListsServed == 0, "a server that lists nothing refuses with a reason");
         var (old, oldConnection) = Browse(directory);
-        oldConnection.Send(MessageCodec.Encode(new RoomListRequestMessage(4)));
+        var older = (ushort)(Protocol.Version - 1);
+        oldConnection.Send(MessageCodec.Encode(new RoomListRequestMessage(older)));
         Pump(directory, old);
-        Check.That(old.Rejection is { Reason: RejectReason.ProtocolVersion } rejected && rejected.Text.Contains('5') && rejected.Text.Contains('4'), "a request of another protocol version is answered with both versions");
+        Check.That(old.Rejection is { Reason: RejectReason.ProtocolVersion } rejected && rejected.Text.Contains(Protocol.Version.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal)
+                   && rejected.Text.Contains(older.ToString(System.Globalization.CultureInfo.InvariantCulture), StringComparison.Ordinal), "a request of another protocol version is answered with both versions");
 
         // ---- More rooms than a list names: the first ones by name, and the count of all.
         var crowded = Directory(new DirectoryOptions(MaxRooms: 100, HelloTimeoutMs: 1_000, Room: new RelayOptions(LagReportMs: 0, LagThrottleMs: 0)));

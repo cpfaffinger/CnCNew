@@ -37,7 +37,8 @@ const string Usage = """
       reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--world-seed HEX] [--driver-seed HEX] [--record-only] [--out replay.bin] [--diagnose]
                                                            headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
       ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin] [--trace N [--trace-army]]
-                                                           skirmish AIs on a real map: record, two fresh runs, snapshot continuation
+                                                           skirmish AIs on a real map: record, two fresh runs, snapshot continuation;
+                                                           [--tactics balanced|rush|turtle|eco|default,..] [--strength easy|medium|hard,..] [--composition ..] per slot
       skirmish-sweep <content-dir> [--max-ticks N]        starts a short two-AI skirmish on every map with >= 2 start positions;
                                                            reports which start and end (by victory or the tick budget) without crashing
       mission-run <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N]
@@ -68,6 +69,9 @@ const string Usage = """
       ai-census <content-dir> --out <tsv> [--orbits <txt>] [--seeds N] [--first-seed N] [--minutes M] [--pairings all|<id>,<id>] [--jobs N]
                                                            the same matches observed: what each AI built and produced (by producer), how every look of its army
                                                            production ended, money, damage by attacker type and victim kind, losses, and units that walk in circles
+      ai-profiles <content-dir> --subject default|rush|turtle|eco|easy|hard --side a|b --out <tsv> [--seeds N] [--minutes M] [--jobs N]
+                                                           the survey of the built-in AI's profiles and strengths against the AI as it was (docs/SKIRMISH-AI.md)
+      ai-profiles-report <tsv> [<tsv> ..] [--out <report.md>]  medians, win rates and the thresholds fixed before the survey
       composition-test --rule-first <tsv> --rule-second <tsv> --symmetric <tsv> --baseline <decided>/<matches> [--out <report.md>]
                                                            the acceptance test of an army composition rule from three surveys (`ai-survey --composition a,b`): exact
                                                            binomial test of the paired survey, decided share of the symmetric one against the baseline
@@ -133,6 +137,8 @@ try
         "range-audit" when args.Length >= 2 => CnCNew.SimTool.RangeAudit.Run(args, CompileShipped),
         "ai-survey" => CnCNew.SimTool.AiSurvey.Run(args),
         "ai-census" => CnCNew.SimTool.AiCensus.Run(args),
+        "ai-profiles" => CnCNew.SimTool.AiProfiles.Run(args),
+        "ai-profiles-report" => CnCNew.SimTool.AiProfiles.Report(args),
         "session-check" => CnCNew.SimTool.SessionCheck.Run(args),
         "match-describe" => CnCNew.SimTool.MatchCommands.Describe(args),
         "match-start" => CnCNew.SimTool.MatchCommands.Start(args),
@@ -514,7 +520,7 @@ static int AiMatch(string directory, string[] args)
             }
             if (session.Ais[index] is { } ai) Console.WriteLine($"      {player.Faction?.Replace("Faction", string.Empty)} AI: {ai.DescribeState()}");
         }
-    });
+    }, CnCNew.SimTool.AiSurvey.Choices(args));
     CnCNew.SimTool.TimeProbeReport.Detach(timeProbe, catalog.Rate, recorded.Header.EndTick);
     Console.WriteLine($"Recorded {recorded.Commands.Length} commands over {recorded.Header.EndTick} ticks in {watch.Elapsed.TotalSeconds:F1} s; {scenario.WarehousesSpawned} map warehouses spawned.");
     foreach (var note in scenario.Notes) Console.WriteLine($"  note: {note}");

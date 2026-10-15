@@ -10,10 +10,10 @@ namespace CnCNew.Game.Shell.Screens;
 /// map's start position count), and starting cash feed a <see cref="MatchSetup"/>. Everything else the layout shows
 /// (game speed, superweapon limit, battle-honor list, per-slot color/team) has no counterpart in <c>LiveMatch</c> or
 /// <see cref="Simulation.Skirmish.SkirmishMatchOptions"/> yet: the gadgets are populated and stay interactive so the
-/// screen looks authentic, but their values are not read at Start time. The opponent slots offer <c>GUI:Open</c>, <c>GUI:Closed</c> and one
-/// computer army (<c>GUI:MediumAI</c>) instead of the original's three: the skirmish AI of this build has one strength, and nothing the shipped data
-/// ties to difficulty applies to a skirmish computer player (<see cref="ShellSkirmishText.ComputerArmy"/>). All of this
-/// is listed as a request to <c>LiveMatch</c>/the AI in <c>docs/GAME-SHELL.md</c>. A map is always preselected as in the original; Start does
+/// screen looks authentic, but their values are not read at Start time. The opponent slots offer <c>GUI:Open</c>, <c>GUI:Closed</c> and the original's
+/// three armies (<c>GUI:EasyAI</c>, <c>GUI:MediumAI</c>, <c>GUI:HardAI</c>): the original AI plays them by its scripts, the built-in AI by its strength (<c>docs/SKIRMISH-AI.md</c>).
+/// With the built-in AI three more entries follow - its tactics profiles rush, turtle and eco at medium strength (English names; the original has none). All of this
+/// is listed in <c>docs/GAME-SHELL.md</c>. A map is always preselected as in the original; Start does
 /// nothing (no inline validation message, just no output) until at least one computer opponent is chosen.
 /// </summary>
 public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
@@ -26,15 +26,19 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     private readonly int[] _factionIndex = new int[Slots];
     private int _startPositionCount = Slots;
 
-    /// <summary>The entries of an opponent slot: <c>GUI:Open</c>, <c>GUI:Closed</c> as <c>SkirmishGameOptionsMenuInit</c> fills them, then the computer army.</summary>
-    private const int ComputerArmyEntry = 2;
     /// <summary>
-    /// With the original AI (<see cref="GameShell.SkirmishAi"/>) the entries after open and closed are the original's three: easy, medium, hard
-    /// (<c>SLOT_EASY_AI</c>, <c>SLOT_MED_AI</c>, <c>SLOT_BRUTAL_AI</c>), and the medium army is the entry after the easy one.
+    /// The entries of an opponent slot: <c>GUI:Open</c>, <c>GUI:Closed</c> as <c>SkirmishGameOptionsMenuInit</c> fills them, then the original's three armies easy, medium, hard
+    /// (<c>SLOT_EASY_AI</c>, <c>SLOT_MED_AI</c>, <c>SLOT_BRUTAL_AI</c>) - the medium army is the entry after the easy one -, and with the built-in AI its three tactics profiles.
     /// </summary>
+    private const int ComputerArmyEntry = 2;
+    private const int ProfileEntry = ComputerArmyEntry + 3;
+    private static readonly ImmutableArray<CnCNew.Simulation.Skirmish.AiTactics> ProfileEntries =
+        [CnCNew.Simulation.Skirmish.AiTactics.Rush, CnCNew.Simulation.Skirmish.AiTactics.Turtle, CnCNew.Simulation.Skirmish.AiTactics.Eco];
+    /// <summary>Whether the computer slots are played by the original AI (<see cref="GameShell.SkirmishAi"/>); it has no tactics profiles.</summary>
     private readonly bool _originalAi;
     private readonly CnCNew.Simulation.Scripting.ScriptDifficulty[] _difficulty = new CnCNew.Simulation.Scripting.ScriptDifficulty[Slots];
-    private int DefaultArmyEntry => _originalAi ? ComputerArmyEntry + 1 : ComputerArmyEntry;
+    private readonly CnCNew.Simulation.Skirmish.AiTactics?[] _tactics = new CnCNew.Simulation.Skirmish.AiTactics?[Slots];
+    private const int DefaultArmyEntry = ComputerArmyEntry + 1;
     private string? _selectedMapPath;
     private int _startMoney;
     // The room of the local game (docs/NETWORK-PROTOCOL.md section 4): what the team and colour boxes of a slot say travels into the match description.
@@ -72,12 +76,18 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             var player = W($"ComboBoxPlayer{slot}");
             player.AddComboEntry(names.Open);
             player.AddComboEntry(names.Closed);
-            if (_originalAi) player.AddComboEntry(names.EasyArmy);
+            player.AddComboEntry(names.EasyArmy);
             player.AddComboEntry(computerArmy);
-            if (_originalAi) player.AddComboEntry(names.HardArmy);
+            player.AddComboEntry(names.HardArmy);
+            if (!_originalAi)
+            {
+                player.AddComboEntry(ShellSkirmishText.RushArmy);
+                player.AddComboEntry(ShellSkirmishText.TurtleArmy);
+                player.AddComboEntry(ShellSkirmishText.EcoArmy);
+            }
             player.SetComboSelection(0);
         }
-        // SkirmishGameOptionsMenuInit: the second slot starts as a computer army (the original picks easy, medium or hard by the battle honors; this build has one).
+        // SkirmishGameOptionsMenuInit: the second slot starts as a computer army (the original picks easy, medium or hard by the battle honors; this build starts with medium).
         _computer[1] = true;
         W("ComboBoxPlayer1").SetComboSelection(DefaultArmyEntry);
 
@@ -185,11 +195,12 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             if (!_computer[slot]) continue;
             details.Add(new MatchSlotDetails(_team[slot], _color[slot], StartPosition: details.Count));
             opponents.Add(ResolveFaction(slot));
-            ai.Add(new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original, _difficulty[slot]));
+            ai.Add(new MatchAi(_originalAi ? CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original : CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, _difficulty[slot],
+                _originalAi ? null : _tactics[slot]));
         }
         if (opponents.Count == 0) return;
         var options = SkirmishMatchOptions.StandardAt(Shell.Data.Rate) with { StartMoney = _startMoney };
-        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = _originalAi ? ai.ToImmutable() : [], Details = details.ToImmutable() };
+        var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable() };
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });
         Shell.BeginMatchLoading(setup);
@@ -222,8 +233,11 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             if (e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxColor{slot}") { _color[slot] = e.Value; return; }
             if (slot > 0 && e.Source == $"SkirmishGameOptionsMenu.wnd:ComboBoxPlayer{slot}")
             {
-                _computer[slot] = _originalAi ? e.Value >= ComputerArmyEntry : e.Value == ComputerArmyEntry;
-                if (_originalAi && _computer[slot]) _difficulty[slot] = (CnCNew.Simulation.Scripting.ScriptDifficulty)Math.Clamp(e.Value - ComputerArmyEntry, 0, 2);
+                _computer[slot] = e.Value >= ComputerArmyEntry;
+                // An army entry is a strength; a profile entry is its profile at medium strength.
+                _difficulty[slot] = e.Value >= ProfileEntry ? CnCNew.Simulation.Scripting.ScriptDifficulty.Normal
+                    : (CnCNew.Simulation.Scripting.ScriptDifficulty)Math.Clamp(e.Value - ComputerArmyEntry, 0, 2);
+                _tactics[slot] = e.Value >= ProfileEntry ? ProfileEntries[Math.Min(e.Value - ProfileEntry, ProfileEntries.Length - 1)] : null;
                 W($"ComboBoxPlayerTemplate{slot}").SetEnabled(_computer[slot]);
                 return;
             }

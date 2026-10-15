@@ -26,6 +26,8 @@ public sealed partial class SkirmishAi
         ("_options", "construction options; they follow from the match description"),
         ("_side", "from the options"),
         ("_composition", "from the options"),
+        ("_plan", "from the options' tactics profile"),
+        ("_strength", "from the options' strength"),
         ("_time", "the world's time service"),
         ("_fireInterval", "from the rate"),
         ("_thinkInterval", "from the rate"),
@@ -65,6 +67,9 @@ public sealed partial class SkirmishAi
     public void Describe(IStateWriter writer)
     {
         writer.Int("player", _player.Value);
+        // Written only when set, so the state of an AI without a profile and at medium strength is what it was before the profiles.
+        if (NamedTactics is { } tactics) writer.Int("tactics", (int)tactics);
+        if (Strength != AiStrength.Medium) writer.Int("strength", (int)Strength);
         _random.Describe(writer, "random");
         writer.UInt("sequence", _sequence);
         writer.Fixed("budget", _budget);
@@ -249,6 +254,10 @@ public sealed partial class SkirmishAi
     public void Load(IStateReader reader)
     {
         if (reader.Int("player") != _player.Value) throw new InvalidDataException($"The AI state belongs to player {reader.Int("player")}, not to player {_player.Value}.");
+        var tactics = reader.Has("tactics") ? (int?)reader.Int("tactics") : null;
+        var strength = reader.Has("strength") ? (int)reader.Int("strength") : (int)AiStrength.Medium;
+        if (tactics != (int?)NamedTactics || strength != (int)Strength)
+            throw new InvalidDataException($"The AI state was written for tactics {tactics?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"} and strength {strength}, this AI plays {NamedTactics?.ToString() ?? "none"} at {Strength}.");
         _random.Load(reader, "random");
         _sequence = reader.UInt("sequence");
         _budget = reader.Fixed("budget");
