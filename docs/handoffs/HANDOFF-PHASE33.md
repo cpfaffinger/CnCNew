@@ -1,6 +1,6 @@
 > **Stage:** 3 – Changes · **Milestone:** S3-M1 AI kinds, difficulty and tactics · **Phase:** 33
-> **Status:** current (starting state measured 15 October 2026 at `8d57fb7`; not begun)
-> **Predecessor:** HANDOFF-PHASE32.md · **Results in:** docs/SKIRMISH-AI.md (new), docs/SIMULATION-CORE.md, docs/SKIRMISH-AI-ORIGINAL.md, docs/GGC-FIXES.md
+> **Status:** done by machine (15 October 2026, `6c60147`); "a human has watched one match per profile" is not met
+> **Predecessor:** HANDOFF-PHASE32.md · **Successor:** HANDOFF-PHASE34.md · **Results in:** docs/SKIRMISH-AI.md (new), docs/SIMULATION-CORE.md, docs/SKIRMISH-AI-ORIGINAL.md, docs/GGC-FIXES.md
 > **Side items:** S3-M7 rest – the eight candidate fixes and the three undecided markers of `docs/GGC-FIXES-CATALOGUE.md`
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 

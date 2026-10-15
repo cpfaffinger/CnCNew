@@ -45,6 +45,10 @@ the surveys. Nothing is rebuilt.
   (no tactics option set) keeps the manifest.
 - **Depends on:** S2-M7 (AI state in the session; profile fingerprint). Scope note: making the AI win the challenge maps is
   the same work from the mission side (`CampaignTool drive --commands-only` as the measure).
+- **State after Phase 33 (15 October 2026, by machine):** (a) the four profiles and (b) the three strengths are options of a slot in the match description and the
+  session state (`docs/SKIRMISH-AI.md`); (c) the rule "no standing still" decides the manifest's stalemates (16 of 16 pairings; 307 instead of 290 of 320 survey
+  matches) - composition by combat value and teams instead of single purchases were not built; (d) the survey: 12 of 13 thresholds met (rush's first attack
+  missed), balance reported, not judged; (e) the state of the profiles is in the session state. "A human has watched one match per profile and names it" is not met.
 
 ### S3-M2 Spectator and observer
 
@@ -136,6 +140,8 @@ the surveys. Nothing is rebuilt.
   3 undecided; (b) the layer compiles (`baselines/compatibility-patch.json`) and plays deterministically - against the original all 27 missions end the same way,
   11 of 16 pairings, the reference match finds no winner; (c) on a server a client without the layer is refused (`Definitions`). The acceptance's "a human plays
   one skirmish per layer" is not met. Rest: `HANDOFF-PHASE33.md`, side item.
+- **State after Phase 33 (15 October 2026):** every CRC-gated marker decided - 23 adopted (16 fixes), 17 equivalent, 51 not applicable, 5 rejected; three of the
+  rejected ones wait for fidelity fixes of the original first (F-34, F-38, F-39).
 
 - **Already there:** `references/` contains GeneralsGameCode and GeneralsGamePatch for reading
   (`scripts/get-references.ps1`); `CnCNew.Import` builds overlays and fingerprints; `baselines/compatibility.json`

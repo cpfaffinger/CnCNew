@@ -142,7 +142,7 @@ milestone status is updated in each stage document.
 | S2-M7 | Session core: AI in the session state, skirmish savegame, match description, command path, tick source | 24 | **done** (11 October 2026; `docs/SIMULATION-CORE.md` §45) |
 | S2-M8 | Engine follow-ups (tick maximum, hash constructions, allocation, thread, formats, documentation) | – | open backlog, partly decisions |
 | **R2** | **Engine release:** 60 Hz seen by a human, determinism on a second machine, skirmish savegame | – | open |
-| S3-M1 | AI kinds, difficulty and tactics | 6, 17, 23 (built-in AI) | built-in AI exists and is the default; tactics and levels open |
+| S3-M1 | AI kinds, difficulty and tactics | 6, 17, 23 (built-in AI), 33 | **built by machine** (15 October 2026): four tactics profiles and three strengths per slot, the rule "no standing still", the survey against thresholds (12 of 13 met); no human has watched a profile |
 | S3-M2 | Spectator and observer | 23 (side product) | built – not accepted |
 | S3-M3 | Replay browser | – | open (replay format exists) |
 | S3-M4 | Match analysis with graphics | – | open (headless surveys exist) |
@@ -213,6 +213,8 @@ The sequence from here:
    first - the owner decides.
    **Phase 32 done (15 October 2026)** (S3-M7): the patch layer compiles and plays, every CRC-gated fix of GeneralsGameCode is reviewed, eleven are adopted.
    The brief that follows is `HANDOFF-PHASE33.md` (S3-M1: AI tactics and difficulty, with the rest of S3-M7 as a side item).
+   **Phase 33 done (15 October 2026)** (S3-M1, S3-M7 rest): tactics profiles and strengths of the built-in AI, a stronger default AI, every CRC-gated fix decided.
+   The brief that follows is `HANDOFF-PHASE34.md` (S3-M6: the movement profile, the home of D-3).
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and

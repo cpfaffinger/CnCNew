@@ -74,6 +74,10 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   their own (`baselines/compatibility-patch.json`), two engine modules the original data never used are implemented, and a match on the layer is deterministic;
   on a server a client without the layer is refused. Every CRC-gated fix of GeneralsGameCode has a review entry; eleven are adopted as options of the rule
   profile (`--rules fixes`), the original stays the default and the yardstick.
+- **The built-in AI gets profiles and strengths (Phase 33, by machine):** every computer slot names a tactics profile (balanced, rush, turtle, eco) and a strength
+  (easy, medium, hard - what the AI may know and how fast it decides, never a rule bonus); a new rule makes the default AI attack instead of standing still, so all
+  16 AI pairings of the reference manifest are decided. A survey of 768 matches shows each profile and strength apart by thresholds fixed beforehand (12 of 13 met).
+  Every CRC-gated fix of GeneralsGameCode is decided: sixteen adopted behind the rule profile, none open (`docs/SKIRMISH-AI.md`, `docs/GGC-FIXES.md`).
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

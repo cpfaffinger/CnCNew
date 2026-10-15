@@ -67,6 +67,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 | [SIM-STAGED-CAPTURE.md](SIM-STAGED-CAPTURE.md) | Staged building capture |
 | [SIM-TURRET-AIM.md](SIM-TURRET-AIM.md) | Turrets: aiming, attack state, idle scanning |
 | [SKIRMISH-AI-ORIGINAL.md](SKIRMISH-AI-ORIGINAL.md) | The skirmish AI of the original as a selectable session |
+| [SKIRMISH-AI.md](SKIRMISH-AI.md) | The built-in skirmish AI: tactics profiles, strengths, the rule "no standing still", the survey and its thresholds |
 | [AI-OBSERVED-2026-10-08.md](AI-OBSERVED-2026-10-08.md) | First observation of the built-in AI by a human: findings, corrections, measurement |
 | [DEFECT-LOST-WAKE.md](DEFECT-LOST-WAKE.md) | 30 Hz defect: the lost wake request of the slow death |
 
@@ -190,4 +191,5 @@ milestones of Stage 3 have no brief yet (`plan/STAGE-3-CHANGES.md`).
 | [HANDOFF-PHASE29.md](handoffs/HANDOFF-PHASE29.md) | Multiplayer in the client, acceptance with humans | done on one machine, without a human (14 October 2026) |
 | [HANDOFF-PHASE30.md](handoffs/HANDOFF-PHASE30.md) | Patch integration, quality, shippable completion | done by machine (14 October 2026) |
 | [HANDOFF-PHASE32.md](handoffs/HANDOFF-PHASE32.md) | S3-M7: the patch layer playable, the review of the logic fixes | done by machine (15 October 2026) |
-| [HANDOFF-PHASE33.md](handoffs/HANDOFF-PHASE33.md) | S3-M1: AI tactics profiles and difficulty levels, the rest of S3-M7 | next |
+| [HANDOFF-PHASE33.md](handoffs/HANDOFF-PHASE33.md) | S3-M1: AI tactics profiles and difficulty levels, the rest of S3-M7 | done by machine (15 October 2026) |
+| [HANDOFF-PHASE34.md](handoffs/HANDOFF-PHASE34.md) | S3-M6: a shared group path and a cell budget per tick as a movement profile | next |
