@@ -228,9 +228,11 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         {
             _riderIndex = line;
             Entity.Status |= 1UL << data.Riders[line].StatusBit;
+            // Transfer experience from the rider to the bike (RiderChangeContain::onContaining, fidelity finding F-39): the bike takes the rider's level, the rider's
+            // experience goes to nothing - it rides with the bike's.
+            world.SetVeterancyLevelOf(Entity, candidate.VeterancyLevel);
+            world.SetExperienceAndLevel(candidate, 0);
         }
-        // Transfer experience from the rider to the bike.
-        world.SetMinVeterancyLevel(Entity, candidate.VeterancyLevel);
     }
 
     public override void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
@@ -238,7 +240,8 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         var wasRider = Riders.Contains(candidate.Id);
         base.Remove(world, candidate, positionAtContainer);
         if (!wasRider) return;
-        if (_riderIndex >= 0)
+        var matched = _riderIndex >= 0;
+        if (matched)
         {
             Entity.Status &= ~(1UL << data.Riders[_riderIndex].StatusBit);
             _riderIndex = -1;
@@ -248,6 +251,12 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         {
             world.RequestDestroy(candidate.Id);
             return;
+        }
+        // And back (RiderChangeContain::onRemoving, after its death check): the rider takes the bike's level, the bike's experience goes to nothing.
+        if (matched)
+        {
+            world.SetVeterancyLevelOf(candidate, Entity.VeterancyLevel);
+            world.SetExperienceAndLevel(Entity, 0);
         }
         if (_replacing) return;
         // Finally, scuttle the bike so nobody else can use it.

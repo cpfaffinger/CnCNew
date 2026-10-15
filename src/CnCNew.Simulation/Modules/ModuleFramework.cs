@@ -123,6 +123,12 @@ public interface IWorldServices
     /// <summary><c>ExperienceTracker::setMinVeterancyLevel</c>: raises the entity's veterancy level to at least <paramref name="level"/> and runs the level-change effects (also valid during <c>OnSpawn</c>).</summary>
     void SetMinVeterancyLevel(Entity entity, int level);
 
+    /// <inheritdoc cref="SimulationWorld.SetVeterancyLevelOf"/>
+    void SetVeterancyLevelOf(Entity entity, int level);
+
+    /// <inheritdoc cref="SimulationWorld.SetExperienceAndLevel"/>
+    void SetExperienceAndLevel(Entity entity, int experience);
+
     /// <summary><c>ExperienceTracker::addExperiencePoints</c>: a trainable object gains <c>amount</c> scaled by its experience scalar and takes the level its experience earns.</summary>
     void AddExperiencePoints(Entity entity, int amount);
 

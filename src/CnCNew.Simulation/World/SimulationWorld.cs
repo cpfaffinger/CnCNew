@@ -289,6 +289,27 @@ public sealed partial class SimulationWorld : IWorldServices
         if (entity.VeterancyLevel < level) SetVeterancyLevel(entity, level);
     }
 
+    /// <summary><c>ExperienceTracker::setVeterancyLevel</c>: the level becomes <paramref name="level"/>, also a lower one; the experience becomes that level's requirement.</summary>
+    public void SetVeterancyLevelOf(Entity entity, int level)
+    {
+        if (level is < 0 or > 3) throw new ArgumentOutOfRangeException(nameof(level));
+        SetVeterancyLevel(entity, level);
+    }
+
+    /// <summary>
+    /// <c>ExperienceTracker::setExperienceAndLevel</c>: a trainable object's experience becomes <paramref name="experience"/> and its level the highest whose requirement it meets
+    /// (an untrainable one keeps both).
+    /// </summary>
+    public void SetExperienceAndLevel(Entity entity, int experience)
+    {
+        if (!entity.Template.IsTrainable) return;
+        entity.Experience = experience;
+        var level = 0;
+        while (level + 1 < 4 && entity.Experience >= entity.Template.ExperienceRequired[level + 1]) level++;
+        MarkDirty(entity);
+        if (level != entity.VeterancyLevel) OnVeterancyLevelChanged(entity, level);
+    }
+
     private void SetVeterancyLevel(Entity entity, int level)
     {
         if (entity.VeterancyLevel == level) return;

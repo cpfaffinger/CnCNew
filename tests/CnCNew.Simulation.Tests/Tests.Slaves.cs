@@ -300,6 +300,8 @@ static partial class Tests
 
         Object SvBike
           KindOf = VEHICLE SELECTABLE
+          IsTrainable = Yes
+          ExperienceRequired = 0 100 200 400
           Locomotor = SET_NORMAL TestLocomotor
           Body = ActiveBody Body01
             MaxHealth = 100.0
@@ -338,6 +340,8 @@ static partial class Tests
         End
         Object SvBikeWorker
           KindOf = INFANTRY SELECTABLE
+          IsTrainable = Yes
+          ExperienceRequired = 0 50 150 300
           TransportSlotCount = 1
           Locomotor = SET_NORMAL TestLocomotor
           Body = ActiveBody Body01
@@ -853,6 +857,34 @@ static partial class Tests
         world.Kill(second.Id);
         StepN(world, 3);
         Check.That(passenger.EffectivelyDead || world.FindEntity(passenger.Id) is null, "The rider of a destroyed bike is destroyed with it.");
+    }
+
+    /// <summary>
+    /// RiderChangeContain swaps the levels (RiderChangeContain::onContaining/onRemoving, fidelity finding F-39): the bike takes its rider's level and the rider's experience goes
+    /// to nothing; when the rider gets off it takes the bike's level - also one the bike earned - and the bike's experience goes to nothing.
+    /// </summary>
+    public static void RiderChangeContainSwapsLevels()
+    {
+        var world = SlaveWorld(out var fixture, out var feeder);
+        feeder.Spawn(1, "SvBike", x: 100, y: 100);
+        feeder.Spawn(1, "SvBikeWorker", x: 100, y: 100);
+        StepN(world, 6);
+        var bike = SlaveEntity(world, "SvBike");
+        var worker = SlaveEntity(world, "SvBikeWorker");
+        world.SetVeterancyLevelOf(worker, 2);
+        Check.That(worker.VeterancyLevel == 2 && worker.Experience == 150, "The worker is a veteran of level 2.");
+        Check.That(world.TryEnterContainer(worker, bike), "The worker boards.");
+        Check.That(bike.VeterancyLevel == 2 && bike.Experience == 200, $"The bike takes the rider's level and that level's experience (level {bike.VeterancyLevel}, {bike.Experience}).");
+        Check.That(worker.VeterancyLevel == 0 && worker.Experience == 0, $"The rider's experience goes to nothing (level {worker.VeterancyLevel}, {worker.Experience}).");
+        SnapshotContinues(world, fixture);
+
+        world.AddExperiencePoints(bike, 250);
+        Check.That(bike.VeterancyLevel == 3, "The bike earns a level of its own.");
+        world.EvacuateContainer(bike);
+        for (var tick = 0; tick < world.Frames(60) && worker.ContainedBy.IsValid; tick++) world.Step();
+        Check.That(!worker.ContainedBy.IsValid, "The worker got off.");
+        Check.That(worker.VeterancyLevel == 3 && worker.Experience == 300, $"The rider takes the bike's level (level {worker.VeterancyLevel}, {worker.Experience}).");
+        Check.That(bike.VeterancyLevel == 0 && bike.Experience == 0, $"The bike's experience goes to nothing (level {bike.VeterancyLevel}, {bike.Experience}).");
     }
 
     /// <summary>OverlordContain: the payload structure is created inside, passes queries to its own container, follows the Overlord and dies with it.</summary>
