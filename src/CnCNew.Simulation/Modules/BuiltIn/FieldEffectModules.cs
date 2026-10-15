@@ -49,6 +49,31 @@ public sealed record PropagandaTowerData(Fixed Radius, long ScanDelayTicks, Fixe
 /// </summary>
 public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModule, IUpdateModule, IDieModule
 {
+    /// <summary>
+    /// <c>Object::getEnclosingContainedBy</c>: whether any container up the chain encloses the object below it (<c>ContainModuleInterface::isEnclosingContainerFor</c>). A Helix does not
+    /// enclose its portable structure, an Overlord not its first rider, a parachute nothing; every other container encloses. A garrison's <c>IsEnclosingContainer</c> is not typed
+    /// (it is a compatibility value): a garrison counts as enclosing, the original's default - the four shipped garrisons that say No hold infantry only, and no carrier of a tower
+    /// is infantry.
+    /// </summary>
+    private bool EnclosedAnywhere(IWorldServices world)
+    {
+        var child = Entity;
+        for (var depth = 0; depth < 8 && child.ContainedBy.IsValid && world.FindEntity(child.ContainedBy) is { } container; depth++)
+        {
+            var encloses = true;
+            foreach (var module in container.Modules)
+                switch (module)
+                {
+                    case HelixContain helix when helix.PortableStructure == child.Id: encloses = false; break;
+                    case OverlordContain overlord when overlord.FirstRider == child.Id: encloses = false; break;
+                    case ParachuteContain: encloses = false; break;
+                }
+            if (encloses) return true;
+            child = container;
+        }
+        return false;
+    }
+
     private static readonly int EnthusiasticBit = SlaveSupport.WeaponBonusBit("ENTHUSIASTIC");
     private static readonly int SubliminalBit = SlaveSupport.WeaponBonusBit("SUBLIMINAL");
 
@@ -82,7 +107,7 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
             return SimulationTiming.SleepNone;
         }
         var carrier = Entity.ContainedBy.IsValid ? world.FindEntity(Entity.ContainedBy) : null;
-        if (carrier is not null && carrier.ContainedBy.IsValid)
+        if (world.Templates.Rules.Has(Rules.GameFix.PropagandaTowerEnclosingContainer) ? EnclosedAnywhere(world) : carrier is not null && carrier.ContainedBy.IsValid)
         {
             // "If our container is contained, we turn the heck off."
             RemoveAllInfluence(world);

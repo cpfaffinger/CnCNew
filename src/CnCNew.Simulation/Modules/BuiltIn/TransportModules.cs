@@ -585,24 +585,43 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
     {
         var tracker = world.TunnelSystemOf(Entity.Owner);
         if (tracker.ContainCount == 0) return SimulationTiming.SleepNone;
+        // GameFix.TunnelHealOncePerPlayer: the network is healed once, by its first tunnel, with the shortest full-heal time of all its tunnels (Player::update,
+        // TunnelTracker::updateFullHealTime); the other tunnels only clear dead riders. Without the fix every tunnel heals, as in the reference.
+        var oncePerPlayer = world.Templates.Rules.Has(Rules.GameFix.TunnelHealOncePerPlayer);
+        var heals = !oncePerPlayer || tracker.Tunnels.Count == 0 || tracker.Tunnels[0] == Entity.Id;
+        var fullHeal = oncePerPlayer && heals ? ShortestFullHeal(world, tracker) : data.TicksForFullHeal;
         foreach (var riderId in tracker.Riders.ToArray())
         {
             var rider = world.FindEntity(riderId);
             if (rider is null || rider.DestroyRequested || rider.EffectivelyDead) { tracker.RemoveRider(riderId); continue; }
-            if (rider.Body is null) continue;
+            if (rider.Body is null || !heals) continue;
             // One slice per logic frame of the original, counted from the tick the rider entered (Originalraster: the reference heals once per frame; slices per tick are
             // smaller numbers that do not add up to the slice of a frame, and a rider that enters between two frames would be healed in one frame more).
             var ticksInside = world.Tick - tracker.EnteredAt(riderId);
             if (!world.Time.IsOriginalFrameBoundary(ticksInside)) continue;
             var inside = world.Time.ToOriginalFrames(ticksInside);
-            var amount = data.TicksForFullHeal <= Fixed.Zero || Fixed.FromInt(inside) >= data.TicksForFullHeal
+            var amount = fullHeal <= Fixed.Zero || Fixed.FromInt(inside) >= fullHeal
                 ? rider.Body.MaxHealth
-                : world.Time.SharePerTick(rider.Body.MaxHealth, data.TicksForFullHeal);
+                : world.Time.SharePerTick(rider.Body.MaxHealth, fullHeal);
             if (rider.Body.Health < rider.Body.MaxHealth)
                 world.Damage(rider.Id, new DamageInfo(EntityId.Invalid, amount, DamageTypes.Healing, DeathTypes.None, false));
         }
         return SimulationTiming.SleepNone;
     }
+
+    /// <summary>The full-heal time of the network: the shortest of its tunnels' (<c>TunnelTracker::updateFullHealTime</c>).</summary>
+    private Fixed ShortestFullHeal(IWorldServices world, TunnelTracker tracker)
+    {
+        var shortest = data.TicksForFullHeal;
+        foreach (var id in tracker.Tunnels)
+            if (world.FindEntity(id) is { } tunnel)
+                foreach (var module in tunnel.Modules)
+                    if (module is TunnelContain other && other.FullHealTicks < shortest) shortest = other.FullHealTicks;
+        return shortest;
+    }
+
+    /// <summary><c>TimeForFullHeal</c> in ticks of the catalog's rate.</summary>
+    public Fixed FullHealTicks => data.TicksForFullHeal;
 
     public void OnDie(IWorldServices world, in DamageInfo info)
     {

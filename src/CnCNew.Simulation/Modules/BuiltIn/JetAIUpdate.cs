@@ -531,6 +531,14 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
                 // a healed helicopter takes off again by itself
                 parking.SetHealee(world, Entity, false);
                 BeginTakeoff();
+                // GameFix.HealedHelicopterToRally: and flies to its airfield's rally point, as a move stored for after the take-off (aiDoCommand during TAKEOFF_IN_PROGRESS).
+                if (world.Templates.Rules.Has(Rules.GameFix.HealedHelicopterToRally) && world.FindEntity(_airfield) is { } producer)
+                    foreach (var module in producer.Modules)
+                        if (module is ProductionUpdate production && production.TryGetRally(out var rallyX, out var rallyY))
+                        {
+                            Store(PendingKind.Move, rallyX, rallyY, fromPlayer: false, EntityId.Invalid);
+                            break;
+                        }
                 return;
             }
             parking.SetHealee(world, Entity, !_allowAir);

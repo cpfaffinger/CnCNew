@@ -334,6 +334,9 @@ public sealed class OverlordContain(OverlordContainData data) : TransportContain
         => _redirectionActivated && Riders.Count > 0 && _world?.FindEntity(Riders[0]) is { DestroyRequested: false } rider ? rider.Container : null;
 
     public override int ContainMax => Redirected?.ContainMax ?? base.ContainMax;
+    /// <summary>The Overlord's own first rider (its portable structure): <c>OverlordContain::isEnclosingContainerFor</c> does not enclose it.</summary>
+    public EntityId FirstRider => Riders.Count > 0 ? Riders[0] : EntityId.Invalid;
+
     int IContainerModule.ContainCount => Redirected?.ContainCount ?? Riders.Count;
     IReadOnlyList<EntityId> IContainerModule.Contained => Redirected?.Contained ?? Riders;
 

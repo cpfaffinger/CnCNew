@@ -62,10 +62,10 @@ public sealed record BattlePlanUpdateData(
 /// scalar (see <c>SimulationWorld.BattlePlan.cs</c>), the center itself gets its own bonus (double maximum health for hold the line, a wider shroud and active stealth detection for search and
 /// destroy). Choosing another plan makes it pack: the bonuses are removed again and every qualifying troop of the player is <em>paralyzed</em> for <c>BattlePlanChangeParalyzeTime</c> (it
 /// neither moves nor fires). Removing the center removes its plan. The bombardment turret (<c>InitiallyDisabled</c>, enabled by <c>BattlePlanUpdate::setTurretEnabled</c> in the reference) is not switched by the plan here: a disabled turret takes no part in aiming (docs/SIM-TURRET-AIM.md), so it is always "centred" and the pack-up never waits for it.
-/// Not modelled: the radar blip, messages, sounds and door animations; the unit sight <em>range</em> (only the shroud clearing range is scaled, the simulation has no per-object vision range);
-/// the move of a plan's bonuses to a new owner when the center is captured.
+/// Not modelled: the radar blip, messages, sounds and door animations; the unit sight <em>range</em> (only the shroud clearing range is scaled, the simulation has no per-object vision range).
+/// A capture leaves the plan's bonuses with the old owner, as in the reference; with <see cref="Rules.GameFix.BattlePlanFollowsCapture"/> they move to the new one.
 /// </summary>
-public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUpdateModule, ISpecialPowerHandler
+public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUpdateModule, ISpecialPowerHandler, IOwnerChangeReceiver
 {
     /// <summary><c>TransitionStatus</c>.</summary>
     public enum TransitionStatus : byte { Idle = 0, Unpacking = 1, Active = 2, Packing = 3 }
@@ -234,6 +234,14 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
     {
         foreach (var module in Entity.Modules)
             if (module is StealthDetectorUpdate detector) { detector.SetEnabled(world, enabled); return; }
+    }
+
+    /// <summary><c>BattlePlanUpdate::onCapture</c> of the community source: the running plan leaves the old owner's army and joins the new owner's. Only with the fix.</summary>
+    public void OnOwnerChanged(IWorldServices world, Ids.PlayerId oldOwner, Ids.PlayerId newOwner)
+    {
+        if (!world.Templates.Rules.Has(Rules.GameFix.BattlePlanFollowsCapture) || _planAffectingArmy == BattlePlanKind.None) return;
+        if (!oldOwner.IsSystem) world.ChangeBattlePlan(oldOwner, _planAffectingArmy, -1, Bonus());
+        if (!newOwner.IsSystem) world.ChangeBattlePlan(newOwner, _planAffectingArmy, 1, Bonus());
     }
 
     public override void OnRemove(IWorldServices world)

@@ -176,6 +176,11 @@ run.Test("Game fixes: the neutron blast reaches bounding spheres", Tests.GameFix
 run.Test("Game fixes: a removed booby trap unmarks its victim", Tests.GameFixStickyBombClearsTrapOnRemoval);
 run.Test("Game fixes: a shot-down bunker buster busts nothing", Tests.GameFixBunkerBusterOnlyWhenKillingSelf);
 run.Test("Game fixes: bounty rounding and proportional supply boost", Tests.GameFixBountyAndSupplyArithmetic);
+run.Test("Game fixes (phase 33): tunnel-heal-once-per-player", Tests.GameFixTunnelHealOncePerPlayer);
+run.Test("Game fixes (phase 33): battle-plan-aggregate", Tests.GameFixBattlePlanAggregate);
+run.Test("Game fixes (phase 33): battle-plan-follows-capture", Tests.GameFixBattlePlanFollowsCapture);
+run.Test("Game fixes (phase 33): propaganda-tower-enclosing-container", Tests.GameFixPropagandaTowerEnclosingContainer);
+run.Test("Game fixes (phase 33): healed-helicopter-to-rally", Tests.GameFixHealedHelicopterToRally);
 run.Test("Patch modules: StatusBitsUpgrade sets and clears status bits", Tests.PatchModuleStatusBitsUpgrade);
 run.Test("Patch modules: a saboteur at a supply drop zone", Tests.PatchModuleSabotageSupplyDropzone);
 run.Test("Phase 5: BaseRegenerateUpdate delay, bursts and stop at full health", Tests.Phase5BaseRegenerate);

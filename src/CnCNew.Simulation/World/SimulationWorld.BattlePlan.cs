@@ -136,8 +136,15 @@ public sealed partial class SimulationWorld
             state.AggregateHoldTheLine = Math.Max(0, state.AggregateHoldTheLine + bonus.HoldTheLine);
             state.AggregateSearchAndDestroy = Math.Max(0, state.AggregateSearchAndDestroy + bonus.SearchAndDestroy);
         }
+        // GameFix.BattlePlanAggregate: the objects get the switches of every plan the player still runs (the aggregate, with the kinds it was made with); the reference hands
+        // them only the incoming bonus, whose zero switches clear the other plans' bits.
+        var aggregate = Templates.Rules.Has(Rules.GameFix.BattlePlanAggregate);
         foreach (var entity in _entities.Values)
-            if (entity.Owner == owner.Id) ApplyBattlePlanBonusToEntity(entity, bonus.Bombardment, bonus.HoldTheLine, bonus.SearchAndDestroy, bonus.ValidKindOf, bonus.InvalidKindOf);
+            if (entity.Owner == owner.Id)
+            {
+                if (aggregate) ApplyBattlePlanBonusToEntity(entity, state.AggregateBombardment, state.AggregateHoldTheLine, state.AggregateSearchAndDestroy, state.ValidKindOf, state.InvalidKindOf);
+                else ApplyBattlePlanBonusToEntity(entity, bonus.Bombardment, bonus.HoldTheLine, bonus.SearchAndDestroy, bonus.ValidKindOf, bonus.InvalidKindOf);
+            }
     }
 
     /// <summary><c>localApplyBattlePlanBonusesToObject</c>: a qualifying object gets each <c>BATTLEPLAN_*</c> weapon bonus set while its switch is positive and cleared otherwise.</summary>

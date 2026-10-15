@@ -2288,6 +2288,14 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         _queue.Clear();
     }
 
+    /// <summary>The rally point, when one is set (<c>ExitInterface::getRallyPoint</c>).</summary>
+    public bool TryGetRally(out Fixed x, out Fixed y)
+    {
+        x = _rallyX;
+        y = _rallyY;
+        return _hasRally;
+    }
+
     /// <summary>Units leaving the producer walk there.</summary>
     public void SetRally(Fixed x, Fixed y)
     {

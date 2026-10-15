@@ -43,6 +43,21 @@ public enum GameFix
 
     /// <summary>A cash bounty that is a whole number is paid as that number, not one more (<c>Player::doBountyForKill</c>).</summary>
     BountyRounding = 11,
+
+    /// <summary>A player's tunnel network heals its riders once per frame, not once per tunnel (<c>Player::update</c>).</summary>
+    TunnelHealOncePerPlayer = 12,
+
+    /// <summary>A change of battle plan hands every object all the plans the player runs, not only the newest one (<c>Player::applyBattlePlanBonusesForPlayerObjects</c>).</summary>
+    BattlePlanAggregate = 13,
+
+    /// <summary>A captured strategy center takes its plan's bonuses from the old owner to the new one (<c>BattlePlanUpdate::onCapture</c>).</summary>
+    BattlePlanFollowsCapture = 14,
+
+    /// <summary>A propaganda tower falls silent inside any enclosing container of its chain, not only when its container is itself contained (<c>PropagandaTowerBehavior::update</c>).</summary>
+    PropagandaTowerEnclosingContainer = 15,
+
+    /// <summary>A helicopter that has healed on its pad takes off and flies to its airfield's rally point (<c>JetAIUpdate::update</c>).</summary>
+    HealedHelicopterToRally = 16,
 }
 
 /// <summary>One adopted fix: where the community source made it, and what it changes.</summary>
@@ -92,6 +107,21 @@ public sealed class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.BountyRounding, "bounty-rounding",
             "GeneralsMD/Code/GameEngine/Source/Common/RTS/Player.cpp, Player::doBountyForKill",
             "a cash bounty that is a whole number of credits pays that number; the rounding up no longer adds one for the last bit of the percentage"),
+        new(GameFix.TunnelHealOncePerPlayer, "tunnel-heal-once-per-player",
+            "GeneralsMD/Code/GameEngine/Source/Common/RTS/Player.cpp, Player::update (TunnelTracker::healObjects)",
+            "the riders of a tunnel network are healed once per frame by the player, with the shortest full-heal time of its tunnels, instead of once per frame by every tunnel"),
+        new(GameFix.BattlePlanAggregate, "battle-plan-aggregate",
+            "GeneralsMD/Code/GameEngine/Source/Common/RTS/Player.cpp, Player::applyBattlePlanBonusesForPlayerObjects",
+            "a plan that starts or ends hands the player's objects the switches of every plan the player still runs, so a second strategy center no longer wipes the first one's bonus"),
+        new(GameFix.BattlePlanFollowsCapture, "battle-plan-follows-capture",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/BattlePlanUpdate.cpp, BattlePlanUpdate::onCapture",
+            "a captured strategy center takes its running plan from the old owner's army to the new owner's"),
+        new(GameFix.PropagandaTowerEnclosingContainer, "propaganda-tower-enclosing-container",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/PropagandaTowerBehavior.cpp, PropagandaTowerBehavior::update (Object::getEnclosingContainedBy)",
+            "a propaganda tower (an Emperor's, an Overlord's) falls silent as soon as any container of its chain encloses it, e.g. an Emperor carried by a Helix"),
+        new(GameFix.HealedHelicopterToRally, "healed-helicopter-to-rally",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp, JetAIUpdate::update",
+            "a helicopter that took off again after healing on its pad flies on to its airfield's rally point instead of hovering over the pad"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.
