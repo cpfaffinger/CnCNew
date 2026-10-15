@@ -98,6 +98,30 @@ So in these two matches only the poison credit happens; the eight fixes of Phase
 building site with a death weapon, a carried transport, a dead unit reaching a level, a delivery with the supply boost, a neutron blast, a removed booby trap, a
 bounty) do not occur in them. Their effect is shown by their tests, not by these matches; a survey that provokes each case in real matches is not made.
 
+### 3.1c Adopted (Phase 33)
+
+The eight candidates and three undecided markers that Phase 32 left were read again, each against the community source and the port's code (two research passes,
+every result checked by hand before a line was written). Five more fixes:
+
+| Fix | Community source (file, function) | Original | With the fix | Test |
+| --- | --- | --- | --- | --- |
+| `tunnel-heal-once-per-player` (12) | `Player.cpp`, `Player::update` (`TunnelTracker::healObjects`) | every tunnel of a player heals the whole network: with two tunnels a rider heals twice as fast | the network heals once per frame, by its first tunnel, with the shortest full-heal time of its tunnels | `GameFixTunnelHealOncePerPlayer` |
+| `battle-plan-aggregate` (13) | `Player.cpp`, `Player::applyBattlePlanBonusesForPlayerObjects` | a plan that starts or ends hands the objects only its own switches, so a second center's plan clears the first one's bits | the objects get the switches of every plan the player still runs | `GameFixBattlePlanAggregate` |
+| `battle-plan-follows-capture` (14) | `BattlePlanUpdate.cpp`, `BattlePlanUpdate::onCapture` | a captured strategy center leaves its plan with the old owner's army (for ever, since a later change acts on the new owner) | the plan leaves the old owner and joins the new one | `GameFixBattlePlanFollowsCapture` |
+| `propaganda-tower-enclosing-container` (15) | `PropagandaTowerBehavior.cpp`, `PropagandaTowerBehavior::update` (`Object::getEnclosingContainedBy`) | a tower falls silent only when its container is itself contained - an Emperor inside a Helix keeps buffing and healing the units it last scanned | silent inside any enclosing container of its chain (a Helix does not enclose its portable structure, an Overlord not its first rider, a parachute nothing) | `GameFixPropagandaTowerEnclosingContainer` |
+| `healed-helicopter-to-rally` (16) | `JetAIUpdate.cpp`, `JetAIUpdate::update` | a helicopter that healed on its pad takes off and hovers over the pad | it flies on to its airfield's rally point | `GameFixHealedHelicopterToRally` |
+
+None writes new state; each test runs its scene under the original profile and under a profile that names the fix, at 30, 60 and 120 Hz. The two battle plan fixes
+belong together: without the aggregate, the capture's +1 for the new owner clears that player's other plans' switches. A garrison's `IsEnclosingContainer` is still
+an untyped compatibility value; the propaganda tower fix counts a garrison as enclosing (the original's default) - the four shipped garrisons that say No hold
+infantry, and no carrier of a tower is infantry.
+
+**Not adopted in Phase 33, with the reason** (each now a review entry of the catalogue): entering without a vertical overlap, the rally point of riders leaving a
+container and a bike's trainability from its rider wait for a fidelity fix of the original's own behaviour first (F-38, F-34, F-39 in `docs/plan/STAGE-1-PORT.md`
+section 3); the approach on a stealthed mine is no switch in this port, which checks every later attack order against the player's sight (F-40); the exclusive
+disabled mask is not applicable - the port has no disabled mask and no central update gate, every module stops on any disable kind it knows, which is the fix's
+behaviour.
+
 ### 3.2 Reviewed and not adopted
 
 | Fix | Why not |
@@ -111,16 +135,13 @@ bounty) do not occur in them. Their effect is shown by their tests, not by these
 The other 74 CRC-gated markers that are not adopted are, by the review column of the catalogue: **17 equivalent** (this port already behaves as the fix makes the
 original behave, e.g. the owner checks of rally points and special powers, an exit that is immediate), **49 not applicable** (C++ memory and crash defects,
 CRC and save bookkeeping, effects decoupled from the logic CRC, code paths this port does not have - guard state machines, collision damage, batches), and
-**8 candidates not adopted in Phase 32**, each with the reason in the catalogue: the tunnel network healed per tunnel, the newest battle plan's switches instead
-of the aggregate, entering without a vertical overlap, a propaganda tower inside nested containers, the rally point of riders leaving a container, a bike's
-trainability from its rider, a healed helicopter's rally point, battle plan bonuses on capture. Each needs state or a mechanism this port does not have yet.
-**3 are not decided** (a disarming unit and stealthed mines; the exclusive disabled mask, twice): their decision needs an audit of the disabled checks of every
-module. Several "not applicable" entries name fidelity gaps of this port found on the way (no power loss of disabled power plants, no ejection of passengers on
+the 11 markers Phase 32 left as candidates or undecided, decided in Phase 33 (section 3.1c): 5 adopted, 4 rejected with the reason, 2 more not applicable.
+**Since Phase 33 the 96 CRC-gated markers are: 23 adopted (16 fixes), 17 equivalent, 51 not applicable, 5 rejected; none open.** Several "not applicable" entries name fidelity gaps of this port found on the way (no power loss of disabled power plants, no ejection of passengers on
 capture, no wait for a dead builder before a resume, no sniper check against empty structures) - they are Stage 1 debts, not fixes.
 
 ### 3.3 Not yet reviewed
 
-Since Phase 32 every one of the 96 CRC-gated markers has a review entry (`python scripts/ggc-fix-catalogue.py`; entries by file and line where several markers
+Since Phase 32 every one of the 96 CRC-gated markers has a review entry, and since Phase 33 every entry is a decision (`python scripts/ggc-fix-catalogue.py`; entries by file and line where several markers
 share a function). The 258 ungated markers are not reviewed one by one - by the community's judgement they change no match; the 70 of them in simulation, AI,
 pathfinding and scripts are the next list if that judgement is to be checked. **The choice of which fixes a release
 offers, and whether a profile other than the original may ever become the default, is the owner's** (it changes every reference value and is a break for every
