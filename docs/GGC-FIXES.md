@@ -111,7 +111,12 @@ every result checked by hand before a line was written). Five more fixes:
 | `propaganda-tower-enclosing-container` (15) | `PropagandaTowerBehavior.cpp`, `PropagandaTowerBehavior::update` (`Object::getEnclosingContainedBy`) | a tower falls silent only when its container is itself contained - an Emperor inside a Helix keeps buffing and healing the units it last scanned | silent inside any enclosing container of its chain (a Helix does not enclose its portable structure, an Overlord not its first rider, a parachute nothing) | `GameFixPropagandaTowerEnclosingContainer` |
 | `healed-helicopter-to-rally` (16) | `JetAIUpdate.cpp`, `JetAIUpdate::update` | a helicopter that healed on its pad takes off and hovers over the pad | it flies on to its airfield's rally point | `GameFixHealedHelicopterToRally` |
 
-None writes new state; each test runs its scene under the original profile and under a profile that names the fix, at 30, 60 and 120 Hz. The two battle plan fixes
+None writes new state; each test runs its scene under the original profile and under a profile that names the fix, at 30, 60 and 120 Hz. **Measured** (60 Hz,
+Release, Alpine Assault, 25 game minutes, the default AI with the rule "no standing still" of this phase, `SimTool ai-match --rules NAME`): FactionGLAToxinGeneral against
+FactionChinaInfantryGeneral ends with FactionChinaInfantryGeneral at tick 36,480, `F9A552ECD40E8208`, 786 commands, under the original profile and under each of the
+five fixes alone; with all sixteen (`fixes`) at tick 39,000, `4C5539CB59055D1A` (the poison credit). FactionAmerica against FactionGLA ends with FactionAmerica at tick
+20,370, `A60F2D9740C78670`, under the original profile, each fix alone and all sixteen. So none of the five occurs in these two matches; their effect is shown by their
+tests. The two battle plan fixes
 belong together: without the aggregate, the capture's +1 for the new owner clears that player's other plans' switches. A garrison's `IsEnclosingContainer` is still
 an untyped compatibility value; the propaganda tower fix counts a garrison as enclosing (the original's default) - the four shipped garrisons that say No hold
 infantry, and no carrier of a tower is infantry.

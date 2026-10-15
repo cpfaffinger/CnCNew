@@ -117,9 +117,52 @@ AI before the rule - binaries of `1259dee` - against the AI with it):
 | G1 | the new AI decides at least 16 more of the 320 matches than the old one (5 % of all) |
 | G2 | the two stalemated pairings of the reference manifest end with a winner |
 
-## 5. Results
+## 5. Results (15 October 2026, 60 Hz, Release, one machine)
 
-Not yet measured.
+**The rule "no standing still"** (`131f590`; `ai-survey`, 16 pairings x 20 seeds, binaries of `1259dee` against those of the rule): 307 of 320 matches decided instead
+of 290 - **G1 met** (at least 306); median time to victory 8.5 instead of 8.3 game minutes. In the reference manifest (`80fb676`) both stalemated pairings end with a
+winner (Alpine Assault America-China: FactionAmerica at tick 53,640; Armored Fury China-GLA: FactionGLA at tick 76,470) - **G2 met** (two single trial matches had
+shown it before the thresholds were committed; the survey had not been read). 16 of 16 pairings decided; no winner of a decided pairing changed.
+
+**The profiles and strengths** (`ai-profiles`, every subject on both sides of the 16 pairings, 4 seeds, 128 matches per subject, 25 game minutes; the strengths in their
+second design, `dbdb252` - the first one is in section 2):
+
+| Subject | Decided | Won | Win rate against the default | First attack (s, median) | Army value at 5 / 10 / 15 / 20 min (median) | Defences at 10 min | Supply centers at 10 min |
+| --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |
+| default | 120 | 60 | 50.0 % | 80 | 1,888 / 2,175 / 2,338 / 1,900 | 1 | 1 |
+| rush | 127 | 40 | 31.5 % | 60 | 700 / 550 / 300 / 300 | 0 | 0 |
+| turtle | 108 | 62 | 57.4 % | 315.5 | 3,550 / 4,800 / 3,825 / 4,613 | 5 | 2 |
+| eco | 121 | 74 | 61.2 % | 147.5 | 2,800 / 4,000 / 3,713 / 3,713 | 0 | 2 |
+| easy | 115 | 44 | 38.3 % | 80 | 3,450 / 2,588 / 2,138 / 1,825 | 0 | 1 |
+| hard | 116 | 69 | 59.5 % | 81 | 2,950 / 4,375 / 3,788 / 4,075 | 1 | 2 |
+
+| Threshold | Verdict |
+| --- | --- |
+| R1 rush: first attack at most 70 % of the default's | **NOT MET** - 60 s against 80 s (75 %) |
+| R2 rush: no base defences at minute 10 | met |
+| T1 turtle: first attack at least 150 % | met (315.5 s) |
+| T2 turtle: defences at least the default's + 2 | met (5 against 1) |
+| E1 eco: supply centers at least the default's + 1 | met (2 against 1) |
+| E2 eco: army value at minute 20 at least 110 % | met (3,713 against 1,900) |
+| S1 easy: at most 40 % of its decided matches | met (38.3 %) - in the first design **NOT MET** (60.0 %) |
+| S2 hard: at least 55 % | met (59.5 %) - in the first design **NOT MET** (42.7 %) |
+| D-rush, D-turtle, D-eco, D-easy, D-hard: differs from the default | all met - D-hard in the first design **NOT MET** |
+
+Won of decided matches per subject and the faction it played (both sides together):
+
+| Subject | America | China | GLA | ChinaTankGeneral | AmericaAirForceGeneral |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| default | 19/28 | 19/28 | 6/32 | 12/16 | 4/16 |
+| rush | 15/32 | 11/32 | 3/31 | 8/16 | 3/16 |
+| turtle | 20/25 | 22/29 | 5/29 | 12/15 | 3/10 |
+| eco | 22/30 | 21/29 | 15/32 | 12/16 | 4/14 |
+| easy | 17/27 | 10/27 | 4/30 | 10/15 | 3/16 |
+| hard | 23/30 | 21/27 | 7/28 | 15/16 | 3/15 |
+
+**Balance is reported, not judged.** What the numbers say without judging: the rusher loses most of its matches (its army is spent early and its economy stays
+small); eco and turtle beat the default more often than not; GLA and the AirForce general lose most matches under every subject, as in the surveys of Phases 17
+and 23. Not surveyed: profiles at other strengths than medium (the shell does not offer them together), 30 and 120 Hz, the eight-player maps, a profile against
+another profile.
 
 ## 6. What only a human can judge
 
