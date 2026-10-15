@@ -148,7 +148,7 @@ milestone status is updated in each stage document.
 | S3-M4 | Match analysis with graphics | – | open (headless surveys exist) |
 | S3-M5 | Modern user interface | – | open (original layouts are the base) |
 | S3-M6 | Movement and pathfinding beyond the original | – | open (decision 3 reserved) |
-| S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | 30 (items 3, 4), 32 | **in progress** - the rule profile, three adopted fixes, the catalogue (83 CRC-gated fixes not reviewed) and the patch layer's import exist; its definitions do not compile yet (Phase 30); brief `HANDOFF-PHASE32.md` |
+| S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | 30 (items 3, 4), 32 | **built by machine** (15 October 2026): the patch layer compiles and plays, every CRC-gated fix reviewed, eleven adopted behind the rule profile; eight candidates and three undecided markers are a side item of `HANDOFF-PHASE33.md`; no human has played a layer |
 | **R3** | **Changes release:** every change selectable, measured and accepted | – | open |
 | S4-M1 | Protocol, room, relay in the process; local skirmish over the network path | 25 | **done** (11 October 2026; `docs/NETWORK-PROTOCOL.md`) |
 | S4-M2 | Dedicated server, UDP, clock synchronisation, eight clients | 26 | **done on one machine** (12 October 2026; `docs/NETWORK-PROTOCOL.md` §12 to §17, `docs/DEDICATED-SERVER.md`); the second physical machine and the LAN are open |
@@ -211,6 +211,8 @@ The sequence from here:
    import, diagnostics, the client package, the licence list, the separation proof, the clean room, the documentation for humans; every acceptance replaced by a
    machine check (`docs/ACCEPTANCE-MACHINE.md`). The brief that follows is `HANDOFF-PHASE32.md` (S3-M7 completion); by the order of item 4 S3-M1 would come
    first - the owner decides.
+   **Phase 32 done (15 October 2026)** (S3-M7): the patch layer compiles and plays, every CRC-gated fix of GeneralsGameCode is reviewed, eleven are adopted.
+   The brief that follows is `HANDOFF-PHASE33.md` (S3-M1: AI tactics and difficulty, with the rest of S3-M7 as a side item).
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and

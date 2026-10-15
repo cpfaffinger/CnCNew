@@ -132,6 +132,10 @@ the surveys. Nothing is rebuilt.
   the rule profile with tests, four rejected with reasons, 83 CRC-gated not reviewed; (b) the patch layer imports (`AssetTool import-layer`, 366 files, its own
   manifest options) but its definitions do not compile (`docs/PATCH-LAYER.md` §2); (c) the profile is part of the definition fingerprint and so of every match
   description and room. Balance changes are not separately switchable - the patch does not separate them. Next: `HANDOFF-PHASE32.md`.
+- **State after Phase 32 (15 October 2026):** (a) every CRC-gated marker has a review entry: 11 fixes adopted, 8 candidates deferred with reasons, 1 rejected,
+  3 undecided; (b) the layer compiles (`baselines/compatibility-patch.json`) and plays deterministically - against the original all 27 missions end the same way,
+  11 of 16 pairings, the reference match finds no winner; (c) on a server a client without the layer is refused (`Definitions`). The acceptance's "a human plays
+  one skirmish per layer" is not met. Rest: `HANDOFF-PHASE33.md`, side item.
 
 - **Already there:** `references/` contains GeneralsGameCode and GeneralsGamePatch for reading
   (`scripts/get-references.ps1`); `CnCNew.Import` builds overlays and fingerprints; `baselines/compatibility.json`

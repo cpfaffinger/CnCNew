@@ -1,6 +1,6 @@
 > **Stage:** 3 – Changes · **Milestone:** S3-M7 Bug-fix and balance layers (completion) · **Phase:** 32
-> **Status:** current (starting state measured 14 October 2026 at `dfcd72e`; not begun)
-> **Predecessor:** HANDOFF-PHASE30.md · **Results in:** docs/PATCH-LAYER.md, docs/GGC-FIXES.md, docs/GGC-FIXES-CATALOGUE.md, docs/SIMULATION-CORE.md, baselines/compatibility-patch.json (new)
+> **Status:** done by machine (15 October 2026, `8d57fb7`); the acceptance's human part is not met; the rest is a side item of HANDOFF-PHASE33.md
+> **Predecessor:** HANDOFF-PHASE30.md · **Successor:** HANDOFF-PHASE33.md · **Results in:** docs/PATCH-LAYER.md, docs/GGC-FIXES.md, docs/GGC-FIXES-CATALOGUE.md, docs/SIMULATION-CORE.md, baselines/compatibility-patch.json (new)
 > **Side items:** R1/R4 – the machine acceptance of `docs/ACCEPTANCE-MACHINE.md` kept green
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 

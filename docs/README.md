@@ -189,4 +189,5 @@ milestones of Stage 3 have no brief yet (`plan/STAGE-3-CHANGES.md`).
 | [HANDOFF-PHASE28.md](handoffs/HANDOFF-PHASE28.md) | Server operation and security | planned |
 | [HANDOFF-PHASE29.md](handoffs/HANDOFF-PHASE29.md) | Multiplayer in the client, acceptance with humans | done on one machine, without a human (14 October 2026) |
 | [HANDOFF-PHASE30.md](handoffs/HANDOFF-PHASE30.md) | Patch integration, quality, shippable completion | done by machine (14 October 2026) |
-| [HANDOFF-PHASE32.md](handoffs/HANDOFF-PHASE32.md) | S3-M7: the patch layer playable, the review of the logic fixes | next |
+| [HANDOFF-PHASE32.md](handoffs/HANDOFF-PHASE32.md) | S3-M7: the patch layer playable, the review of the logic fixes | done by machine (15 October 2026) |
+| [HANDOFF-PHASE33.md](handoffs/HANDOFF-PHASE33.md) | S3-M1: AI tactics profiles and difficulty levels, the rest of S3-M7 | next |

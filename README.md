@@ -69,7 +69,11 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   machine by themselves (`docs/TROUBLESHOOTING.md`), a clean-room build from empty caches (`scripts/clean-room.ps1`), the version rule as a proposal for the
   owner (`docs/COMPATIBILITY.md`), and every acceptance item with what a program checked and what only a human can judge (`docs/ACCEPTANCE-MACHINE.md`).
   Fixes of the community source GeneralsGameCode are adopted as options of a rule profile (`--rules fixes`; the original stays the default and the yardstick,
-  `docs/GGC-FIXES.md`); GeneralsGamePatch imports as a layer of its own whose definitions do not compile yet (`docs/PATCH-LAYER.md`).
+  `docs/GGC-FIXES.md`); GeneralsGamePatch imports as a layer of its own (`docs/PATCH-LAYER.md`).
+- **The patch layer plays, the fixes are reviewed (Phase 32, by machine):** the community patch's definitions compile with a counted compatibility baseline of
+  their own (`baselines/compatibility-patch.json`), two engine modules the original data never used are implemented, and a match on the layer is deterministic;
+  on a server a client without the layer is refused. Every CRC-gated fix of GeneralsGameCode has a review entry; eleven are adopted as options of the rule
+  profile (`--rules fixes`), the original stays the default and the yardstick.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

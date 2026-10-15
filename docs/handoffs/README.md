@@ -3,12 +3,12 @@
 As of: 10 October 2026, state `2777a90`. The plan is [`../plan/PROGRAMME.md`](../plan/PROGRAMME.md); the format of a brief
 is [`../plan/BRIEF-FORMAT.md`](../plan/BRIEF-FORMAT.md). Every brief carries a header block with stage, milestone and
 status; the worked-off briefs keep their text as documents of their time (their numbers are outdated – the yardstick is
-`baselines/reference-manifest.json`). Phases 4 to 31 are worked off (31 ran before 24, D-12), **Phase 32 is next**. The
+`baselines/reference-manifest.json`). Phases 4 to 32 are worked off (31 ran before 24, D-12), **Phase 33 is next**. The
 briefs of Phases 1 to 3 were never written as files (their scope and acceptance are in `docs/IMPLEMENTATION-PLAN.md`
 §1–§3).
 
-**The next brief to work on:** [HANDOFF-PHASE32.md](HANDOFF-PHASE32.md) – S3-M7 completion: the patch layer playable and the review of the community's logic fixes; written
-at the end of Phase 30 (patch integration, quality, shippable completion by machine, [HANDOFF-PHASE30.md](HANDOFF-PHASE30.md), done on 14 October 2026; before it Phase 29 (multiplayer in the client: the menus' way to a server, the in-match indicators, the latency
+**The next brief to work on:** [HANDOFF-PHASE33.md](HANDOFF-PHASE33.md) – S3-M1: tactics profiles and difficulty levels of the built-in AI, with the rest of S3-M7; written at the end
+of Phase 32 (the patch layer plays, every CRC-gated fix reviewed, [HANDOFF-PHASE32.md](HANDOFF-PHASE32.md), done on 15 October 2026; before it Phase 30 (patch integration, quality, shippable completion by machine, [HANDOFF-PHASE30.md](HANDOFF-PHASE30.md), done on 14 October 2026; before it Phase 29 (multiplayer in the client: the menus' way to a server, the in-match indicators, the latency
 measurement, checked by frameworks in place of humans, [HANDOFF-PHASE29.md](HANDOFF-PHASE29.md), done on one machine on 14 October 2026; before it Phase 28 (server operation and security: the sealed transport, limits, fuzzing, the packaged server, capacity and endurance, [HANDOFF-PHASE28.md](HANDOFF-PHASE28.md), done on one machine on 13 October 2026; before it Phase 27, desync diagnosis, rejoin, watchers, server replay, the window client joining a server, [HANDOFF-PHASE27.md](HANDOFF-PHASE27.md), done on one machine on 12 October
 2026; before it Phase 26, dedicated server, UDP, clock synchronisation, eight client processes, [HANDOFF-PHASE26.md](HANDOFF-PHASE26.md), done on one machine on 12 October 2026; before it Phase 25, protocol, room and relay in the process, [HANDOFF-PHASE25.md](HANDOFF-PHASE25.md), done on 11 October 2026; before it Phase 24, the session core, [HANDOFF-PHASE24.md](HANDOFF-PHASE24.md), done on 11 October 2026; before it Phase 31, the fidelity package A of Stage 1, [HANDOFF-PHASE31.md](HANDOFF-PHASE31.md), done on 10 October 2026). Phase numbers are identities, not an order: 31 ran before 24 by
 decision of the project owner.
@@ -65,7 +65,8 @@ phase number is 32.
 | – | – | S3-M5 | Modern user interface | open |
 | – | – | S3-M6 | Movement and pathfinding beyond the original (D-3) | open |
 | – | [HANDOFF-PHASE30.md](HANDOFF-PHASE30.md) items 3 and 4 | S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | begun in Phase 30 (rule profile, catalogue, layer import) |
-| **32** | [HANDOFF-PHASE32.md](HANDOFF-PHASE32.md) | **S3-M7** | The patch layer playable, the review of the logic fixes | **next** – not begun |
+| 32 | [HANDOFF-PHASE32.md](HANDOFF-PHASE32.md) | S3-M7 | The patch layer playable, the review of the logic fixes | done by machine (15 October 2026): `477c15e`, `a3834a8`, `34fc5e8`, `1ff635d`, `417e51a` |
+| **33** | [HANDOFF-PHASE33.md](HANDOFF-PHASE33.md) | **S3-M1** (+ S3-M7 rest) | AI tactics profiles and difficulty levels, a stronger default AI | **next** – not begun |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 
