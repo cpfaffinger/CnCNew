@@ -358,6 +358,21 @@ tight – missions stay local). The maximum of all mission runs is at 101–128 
   AI alone, roughly 27 times the built-in one); 120 Hz; the scatter over more than two runs; a second machine.
 - The 8-player runs of the gate were measured at the state `1b82e45` at 60 Hz (`tick_rate=60` in the summary), not with the binaries after the switch; the difference is the one line `ProductRate`.
 
+## 6d. Phase 34 (16 October 2026, measured quietly): the movement profile in the gate, and the profile against `d8039f7`
+
+**The gate under both profiles** (8 players, Twilight Flame, 30 game minutes at 60 Hz, one set of binaries at `ed12ad0`, alternating, twice; details and the
+thresholds in `docs/PERF-MOVEMENT.md` §9 and §10): original 856.4 / 845.0 µs per tick, longest tick 123.4 / 128.1 ms; `movement-budget` 718.6 / 724.3 µs (-15 %),
+longest tick after the first 300 13.8 / 13.7 ms - **the target of at most 8 ms is missed**; what fills the remaining long ticks (the computer players' placement
+checks, the command phase, the queue's own 4.5 ms) is in `docs/PERF-MOVEMENT.md` §10. 99 % about 2.2 ms on both sides, allocation 10.4 against 7.7 KB per tick, no
+gen-2 collection.
+
+**`scripts/perf-profile.ps1` against the binaries of `d8039f7`** (the original profile, the same hours, old first): F-34 changes the skirmish matches (a healed
+infantryman leaves its barracks through the door), so the six skirmish runs end with other hashes and `perf-compare` refuses them - they are other matches, not
+other speeds. The runs with equal final hashes: `medium-2p` 264.0 -> 268.7 µs (+1.8 %), `MD_USA05` 100 s 2,136 -> 2,110 µs (-1.3 %), 300 s 1,817 -> 1,809 µs
+(-0.5 %), `MD_GLA05` 100 s 2,893 -> 2,997 µs (+3.6 %), 300 s 2,656 -> 2,580 µs (-2.8 %) - within the scatter of earlier phases. `SimTool path-bench` on Twilight Flame:
+the same 400 searches and the same checksum of the paths (`8661CB620181BEC5`, 9,280,831 cells), 58.2 ns per cell at `d8039f7` and 54.3 ns at `ed12ad0` - the search
+that can pause costs nothing in one piece.
+
 ## 7. Preliminary, not measured quietly
 
 Everything in this section dates from 6 October 2026, state `b6b7454` plus tool, **from a machine on which

@@ -3360,3 +3360,58 @@ manifest moved in the command-stream hash of its 20 AI runs only (the descriptio
 4 min turtle) marches with what it has, as long as that is a third of its threshold. It changes the default AI: in the 320-match survey 307 instead of 290 matches
 are decided, and in the manifest the two stalemated pairings end with a winner (16 of 16 decided); no winner of a decided pairing changed. The survey and its
 thresholds: `docs/SKIRMISH-AI.md`.
+
+## 52. Phase 34: the movement profile, and the fidelity corrections F-34, F-38, F-39 (16 October 2026)
+
+### 52.1 The movement profile `movement-budget`
+
+An option of the rule profile (`RuleProfile.Movement`, `MovementProfile.Budgeted`, name `movement-budget`, `--rules movement-budget`, combinable with fixes), folded into
+the definition fingerprint like a fix - so a match description, a replay, a save and a room carry it, and a machine with the other profile refuses them. The original
+profile is the default (D-3 open) and keeps the reference and input manifests: the profile is a field-less subtype of `RuleProfile`, so the input manifest, which
+describes the catalog field by field, is unchanged for the original. Under the profile:
+
+- **The path queue** (`SimulationWorld.PathQueue.cs`): a ground unit asks the world for its path (`RequestPath`) instead of searching itself, and takes the answer at
+  its next decision (`TryTakePath`); while it waits it is `WaitingForPath` - it keeps a path it still has, or stands for its whole frame (it decides again in its next
+  frame, not in the middle of it), and its order is never dropped. A detour around stationary blockers is an arriving-only question; the old path stays until it
+  comes. The queue is worked once per logic frame of the original, at the end of the update phase of the tick on the frame boundary, with **60,000 expanded cells per
+  frame** (`PathCellBudget`; counted work, never time; about 4.5 ms at 75 ns a cell). A search that does not fit pauses (`NavigationGrid.Slice`: begin, continue to a
+  number of expansions, finish) and continues in the next frame; when a footprint changed meanwhile (`ObstacleSum`) it begins again; a restored world, which has no
+  search memory, runs the paused search silently up to where it was. Queue, answers and paused searches are state, written only when the queue is not empty.
+- **The same at every rate:** a decision above 30 Hz belongs to the frame whose boundary ends the object's own frame (`DecisionFrame`: at 60 Hz ticks 2f - 1 and 2f
+  are frame f); the requests of a frame are worked in the order of their requester's id, not in the order they came (which above 30 Hz follows the phases of the
+  objects' frames); at the boundary every decision of the frame has been made, as after the one 30 Hz tick.
+- **The shared group path:** among the requests of one frame, a member of the same group order (`PathQuery.Group`, set by `GroupMoveCommand`) as an earlier member,
+  with the same surfaces, a goal within 8 cells and a start within 24 cells does not search: it walks straight to the first point of the leader's path it can reach,
+  follows it, and leaves it straight for its own goal. When either straight walk is not clear, or the leader's search does not arrive, it is queued with a search of its
+  own. Units that are not of one group order never share (a first version shared among any units near each other; it made an AI match differ between the rates).
+- Not queued: aircraft, the first leg of a factory exit (`_viaPending`), and the computer player's placement check (`SkirmishAi.Reachable`, which asks the grid
+  directly for an arriving-only path - the same answer, no state).
+
+Tests, each at 30, 60 and 120 Hz: `MovementBudgetSlicedSearchEqualsTheWholeSearch` (2,160 searches on six random maps in slices of 1 to 400 expansions, a quarter
+with the memory lost between slices, equal to the search in one piece), `MovementBudgetQueuesWaitsAndArrives` (eight searches that do not fit a frame: no frame works
+more than the budget, work only on a frame boundary, waiting units keep their orders, all arrive; the original profile does not use the queue),
+`MovementBudgetSharesTheGroupPath`, `MovementBudgetSameAtEveryRate` (eight searches and a group order arrive in the same frames at 30, 60 and 120 Hz),
+`MovementBudgetContinuesFromASnapshotMidSearch` (a world saved while a search is paused continues hash-identically for 600 frames).
+
+### 52.2 The fidelity corrections of the original profile
+
+Each a change of the original's own behaviour, with its manifest commit when the manifest moved:
+
+- **F-34** (`c2e48e2`, manifest `3d0d276`): `HealContain` lets a healed occupant out through its door like every `OpenContain` rider (`HealContain::update` ->
+  `removeFromContain` -> `OpenContain::exitObjectViaDoor`), cycling through `NumberOfExitPaths` (parsed, default 1); `ExitObjectViaDoor` moved into
+  `ContainModuleBase`. The input manifest moved in two entries (the new field), the reference manifest in 43 fields of 5 runs (four AI pairings end earlier, the same
+  winners; the eight-player run gives other commands). Test `HealContainReleasesThroughTheDoor`.
+- **F-38** (`f3c4009`, `d58d9d0`, manifest `3b6fa80`): entering a container is no longer decided in two dimensions (`AIEnterState::update`): a boarder on the ground
+  gives up on a container that something airborne carries; at the end of its approach it waits while the container is above the terrain and the boarder is not, and
+  stays awake while it waits; the touch on the way in needs an overlap in height (the partition manager's collision is three-dimensional). `AIEnterState::onEnter`
+  tells the container that somebody wants in, and an idle Chinook (no move, not docked, supply machine idle) lands while a living object's enter order aims at it and
+  takes off again when none does (`ChinookAIUpdate::update`, `OpenContain::hasObjectsWantingToEnterOrExit`) - the port lacked that as well; the wanters are read from
+  the boarders' enter orders, not kept. The reference manifest moved in the chain hashes of two mission runs (`MD_CHI05`, `MD_USA01`; end state, outcome and tick
+  unchanged). The Chinook test now orders a grunt into an idle hovering Chinook.
+- **F-39** (`a13d5de`): rider and combat bike exchange their levels both ways (`RiderChangeContain::onContaining`/`onRemoving`): the bike takes its rider's level - also
+  a lower one - and the rider's experience goes to nothing; when the rider leaves, after the death check, it takes the bike's level and the bike's experience goes to
+  nothing; both only for a rider that a rider line names. New world services `SetVeterancyLevelOf`, `SetExperienceAndLevel`. **Neither manifest moved** (measured:
+  the full set written with a SimTool at `d58d9d0` equals the one at `3b6fa80` field for field). Test `RiderChangeContainSwapsLevels`.
+
+After them the three community fixes they blocked are adopted behind the rule profile (`3bd8ceb`, `docs/GGC-FIXES.md` 3.1d): `door-exit-to-rally` (17),
+`bike-trainable-from-rider` (18; `Entity.IsTrainable`, an override saved only when set), `enter-needs-vertical-overlap` (19).

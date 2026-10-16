@@ -378,3 +378,64 @@ switch):
 
 Reported, not thresholds: the longest tick including the first 300; the expanded cells and searches under both profiles; the waiting of units for their path
 (how many ticks, how often); for the shared group path the length of a member's path against the search of its own.
+
+## 10. Phase 34: the result against the thresholds
+
+The profile as built is described in `docs/SIMULATION-CORE.md` §52.1. **Measured** (16 October 2026, quiet machine, AMD Ryzen 3 PRO 4350GE; one set of binaries
+at `ed12ad0` for both profiles, runs alternating original / profile, twice; `SimTool perf ... --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --minutes 30
+--rules original|movement-budget`, 60 Hz, 108,000 ticks):
+
+| | original | movement-budget |
+| --- | --- | --- |
+| mean per tick | 856.4 / 845.0 µs | **718.6 / 724.3 µs** (-15 %) |
+| 99 % | 2.28 / 2.14 ms | 2.24 / 2.29 ms |
+| longest tick | 123.4 / 128.1 ms (tick 107,250, 95 % in the updates) | 61.3 / 51.8 ms (tick 0 and 22, the match's setup) |
+| **longest tick after the first 300** | 123.4 / 128.1 ms | **13.8 / 13.7 ms** |
+| allocation per tick | 10.4 KB | 7.7 KB |
+| final hash | `07D2C91F45A79E6F` (both runs) | `4B27C55C8EFA4793` (both runs) |
+
+| Threshold | Result |
+| --- | --- |
+| M1 longest tick after 300 with the profile ≤ 8 ms | **missed** (13.7 / 13.8 ms) |
+| M2 the profile's mean at most 5 % above the original's | **holds** (15 % below) |
+| M3 the original profile keeps the reference manifest and the input manifest | **holds** (the full set, 50 of 50 runs, and the input manifest identical at `3b6fa80` plus the queue changes, and again at the end of the phase) |
+
+**What the long ticks of the profile are** (two more runs with one row per tick, `--csv --sample 1`; the ticks above 8 ms are the same in both runs - 14 in each, 11
+of them in both - so they are work, not the machine): the computer players' placement of buildings (`SkirmishAi`, up to 9.6 ms in one tick: up to
+`PlacementChecksPerThink` reachability checks of a builder, each an arriving-only search outside the queue), the command phase (up to 6 ms: the commands a computer
+player issues in one tick, among them group orders whose destinations are planned by `FindDestination`), and the update phase (up to 10 ms, of it at most 60,000
+cells of the queue, about 4.5 ms). The many simultaneous long searches - the cause of the 123 ms - are gone: the queue never works more than its budget.
+What would take the maximum under 8 ms: the computer player's placement checks under the same kind of budget (a change of the AI's behaviour within the profile), a
+smaller queue budget (30,000 cells take about 2.2 ms off the update ticks, and units wait longer), and a look at the command phase; none is built.
+
+**The rate-equivalence suite under the profile** (`Simulation.Tests -- --content-dir game/content --only RateEquivalence --rules movement-budget`): 9 of 10 groups
+pass; in the group "locomotion" one case of 689 is outside: `Boss_InfantryAngryMobNexus` walks its course 31 units longer at 30 Hz (25.03 s against 23.18 s at 60 Hz and
+23.19 s at 120 Hz; course time, course length, braking time and distance - 4 quantities); 60 and 120 Hz agree with the original. The cause is not found. Two
+other cases the first runs found are fixed (`a63b52d`: a waiting unit decided again in the middle of its frame; `ed12ad0`: the frame a decision belongs to, and
+sharing only within a group order).
+
+**What a person would judge by watching a group march, measured instead** (`SimTool group-march game/content --map "Maps/Twilight Flame/Twilight Flame.map"
+--groups 8 --group 12 --seconds 300`: eight groups of twelve Crusaders at the eight start positions, all ordered at once, as one group order each, to the next start
+position; terrain only, no map objects; 60 Hz, `ed12ad0`):
+
+| | original | movement-budget |
+| --- | --- | --- |
+| arrived | 95 of 96 | 95 of 96 |
+| arrival, median | 53.7 s | 53.9 s |
+| spread of the arrivals within a group, median / largest | 3.7 / 14.4 s | 3.3 / 14.5 s |
+| walked length against a search of the unit's own, median / 95 % / largest | 1.000 / 1.034 / 1.051 | 1.000 / 1.034 / 1.052 |
+| searches / cells expanded | 406 / 1,185,368 | 332 / 292,361 |
+| unit-ticks spent waiting for a path | 0 | 1,046 (0.18 s per unit on average) |
+| longest tick (this tool, not the gate) | 10.3 ms | 9.4 ms |
+
+The members of a group arrive as together as in the original, by paths as long as their own search would give, with a quarter of the expanded cells. Whether a group
+"marches well" when watched - its shape on the way, whether a follower's straight walk to the leader's path looks right - is not measured and stays a judgement of a
+human.
+
+**The AI survey under both profiles, reported, not judged** (`SimTool ai-survey game/content --seeds 5 [--rules movement-budget]`: the 16 pairings of the
+reference manifest x 5 seeds, 25 game minutes, 60 Hz, `e6232ce`): original 76 of 80 matches decided, median 8.3 game minutes; movement-budget 74 of 80, median
+8.1 minutes; the same seed has the same winner in 54 of 80 matches. Wins by faction, original / profile: America 24 / 27, China 23 / 25, ChinaTankGeneral 16 / 18, GLA 9 /
+2, AirForceGeneral 4 / 2. `SimTool rate-distribution` over the two surveys (the comparison of Phase 23, here between profiles instead of rates): 39 of 39 checks pass -
+no difference of the sizes it can detect. `SimTool ai-profiles --subject rush --side a --seeds 2`: the rush profile wins 10 of 32 matches under both. The fall of the
+GLA's wins from 9 to 2 is a shift the owner may want to look at before D-3; the sample is small. (A first run of both surveys was void: the tools' `SimContext`
+built its catalog without the rule profile, `e6232ce`.)
