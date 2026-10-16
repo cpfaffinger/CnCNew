@@ -57,9 +57,9 @@ internal sealed class SimContext
             var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
             var graph = DefinitionCompiler.Compile(new ContentDefinitionSource(content), ModuleRegistry.Default, options);
             var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
-            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate ?? ToolRate.Current, geometry);
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate ?? ToolRate.Current, geometry, ToolRate.Rules);
             var (sha256, length) = DefinitionSnapshotWriter.ComputeFingerprint(graph);
-            return new SimContext(content, catalog, catalog.Rate.Combine(geometry.Combine(sha256)), sha256, length, graph.Audit.Definitions, geometry)
+            return new SimContext(content, catalog, catalog.Rules.Combine(catalog.Rate.Combine(geometry.Combine(sha256))), sha256, length, graph.Audit.Definitions, geometry)
             {
                 AiData = CnCNew.Simulation.Skirmish.Original.AiData.TryBuild(graph),
             };
