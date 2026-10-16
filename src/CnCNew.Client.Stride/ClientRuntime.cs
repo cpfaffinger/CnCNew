@@ -91,7 +91,10 @@ internal sealed class ClientRuntime : IDisposable
         {
             shellScript.MatchProbe = runtime.ProbeMatch;
             shellScript.Trace = Console.WriteLine;
+            // A key of the script while a match or a playback runs goes where the device's keys go then: to the running game.
+            shellScript.MatchInput = runtime._scriptMatchEvents.Add;
         }
+        if (runtime._shell is { } timed) timed.SkirmishMatchSeconds = SkirmishSeconds;
         // --ai original: the skirmish setup offers the three armies of the original and its matches run the original AI (the default is unchanged).
         if (runtime._shell is { } shell) shell.SkirmishAi = skirmishAi;
         runtime._audio.Game.EnterShell();
@@ -212,8 +215,100 @@ internal sealed class ClientRuntime : IDisposable
         "tick" => game.Tick.ToString(System.Globalization.CultureInfo.InvariantCulture),
         "over" => game.IsOver ? "yes" : "no",
         "units" => game.World.Entities.Count(entity => entity.Owner == game.Human && !entity.EffectivelyDead).ToString(System.Globalization.CultureInfo.InvariantCulture),
+        // A playback (docs/REPLAY-BROWSER.md): how many seeks were made, and how many recorded hashes it compared and found different so far.
+        "seeks" => _replaySeeks.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        "hashes" => (_running?.Playback?.HashesChecked ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+        "mismatches" => (_running?.Playback?.HashMismatches ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
         _ => null,
     };
+
+    // ---- replays (docs/REPLAY-BROWSER.md)
+
+    /// <summary>
+    /// Where a match started without the menus (<c>--match</c>, <c>--spectate</c>, <c>--join</c>) writes its replay (<c>--replay-dir DIR</c>); null: it writes none. A match of the
+    /// menus writes into the shell's store (<c>Replays</c> under <c>--settings-dir</c>).
+    /// </summary>
+    public static string? ReplayDirectory { get; set; }
+
+    /// <summary>How far apart the checkpoints of a playback lie, in seconds of game time (<c>--replay-checkpoint-seconds N</c>, a check's choice).</summary>
+    public static int ReplayCheckpointSeconds { get; set; } = CnCNew.Game.Replays.ReplayPlayback.DefaultCheckpointSeconds;
+
+    private int _replaySeeks;
+    private readonly List<CnCNew.Presentation.Input.InputEvent> _scriptMatchEvents = [];
+
+    /// <summary><c>--skirmish-seconds N</c>: the skirmish setup of the menus gives matches of N seconds of game time (a check's short match); 0: the standard length.</summary>
+    public static int SkirmishSeconds { get; set; }
+
+    /// <summary>The name the last finished match was recorded under, for a check (the console prints it too); null when nothing was recorded.</summary>
+    public string? LastRecordedReplay { get; private set; }
+
+    private CnCNew.Game.Replays.ReplayStore? RecordingStore => _shell?.Replays ?? (ReplayDirectory is { } directory ? new CnCNew.Game.Replays.ReplayStore(directory) : null);
+
+    /// <summary>Ends the recording of a running match and writes its replay (once): how it ended is read from the match and its server.</summary>
+    private void FinishRecording(RunningGame running)
+    {
+        if (running.Recorder is not { Finished: false } recorder || running.Host.Match is not LiveMatch match || RecordingStore is not { } store) return;
+        try
+        {
+            var ending = CnCNew.Game.Replays.MatchRecorder.EndingOf(match, _leaveRequested);
+            var name = recorder.Finish(store, ending, DateTimeOffset.UtcNow);
+            LastRecordedReplay = name;
+            Console.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"replay: recorded '{name}' in {store.Directory}: {CnCNew.Game.Replays.MatchRecordingFormat.KindName(ending.Kind)} at tick {match.World.Tick}, session hash {match.Session.StateHash():X16}"));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            Console.WriteLine($"replay: the match could not be recorded: {exception.Message}");
+        }
+    }
+
+    /// <summary>A replay of the list is played: its playback in the spectator's view, with the seek buttons of a replay.</summary>
+    private RunningGame StartReplay(CnCNew.Game.Replays.ReplayPlayback playback, CnCNew.Game.Spectator.SpectatorController? previous)
+    {
+        var running = Start(playback.Match, null);
+        running.Playback = playback;
+        running.Spectator = new CnCNew.Game.Spectator.SpectatorController(playback.Match, running.Hud, new CnCNew.Game.Spectator.SpectatorOptions(), _ui.TextMeasure);
+        if (previous is not null) running.Spectator.TakeViewFrom(previous);
+        return running;
+    }
+
+    /// <summary>A playback started from the command line (<c>--replay FILE</c>): the file is played in the spectator's view; Escape ends the program.</summary>
+    public static ClientRuntime ForReplay(global::Stride.Engine.Game game, GameData data, CnCNew.Game.Replays.ReplayPlayback playback, ClientAudioOptions audio)
+    {
+        var runtime = new ClientRuntime(game, data, GameSettings.Default, null, audio);
+        runtime._running = runtime.StartReplay(playback, null);
+        return runtime;
+    }
+
+    /// <summary>A seek of the playback, asked for by a key or a button of its controller: the playback goes there and the scene is built again for its new presentation.</summary>
+    private void SeekReplay(RunningGame running, long target)
+    {
+        var playback = running.Playback!;
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var seek = playback.SeekTo(target);
+        var milliseconds = watch.Elapsed.TotalMilliseconds;
+        var previous = running.Spectator;
+        _game.SceneSystem.SceneInstance = null;
+        _game.SceneSystem.GraphicsCompositor = null;
+        running.Dispose();
+        _running = StartReplay(playback, previous);
+        _replaySeeks++;
+        Console.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"replay: seek {_replaySeeks} to tick {seek.Tick} (asked {target}) {(seek.Restored ? "from a checkpoint" : "onwards")}, {seek.SteppedTicks} ticks stepped in {milliseconds:0} ms, session hash {seek.SessionHash:X16}, recorded {(seek.RecordedHash is { } recorded ? recorded.ToString("X16", System.Globalization.CultureInfo.InvariantCulture) : "none")}, {(seek.HashMatches ? "same" : "DIFFERENT")}"));
+    }
+
+    /// <summary>What a playback came to, for the console and the message over the score screen.</summary>
+    private static (string Line, string Note) ReplayOutcome(CnCNew.Game.Replays.ReplayPlayback playback)
+    {
+        var same = playback.ResultMatchesRecorded(out var difference);
+        var final = playback.FinalHashMatches;
+        var line = string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"replay: end tick {playback.Match.Tick} of {playback.EndTick}, session hash {playback.Match.Session.StateHash():X16}, recorded {playback.Info.FinalSessionHash:X16}, final hash {(final ? "same" : "DIFFERENT")}, result {(same ? "same" : "DIFFERENT (" + difference + ")")}, hashes checked {playback.HashesChecked}, mismatches {playback.HashMismatches}, checkpoints {playback.CheckpointTicks.Count}");
+        var note = same && final && playback.HashMismatches == 0
+            ? $"The playback reached the recorded end: {CnCNew.Game.Replays.ReplayText.EndingLine(playback.Info)}."
+            : $"The playback did not reach the recorded match: {(same ? "the session differs" : difference)} ({playback.HashMismatches} of {playback.HashesChecked} recorded hashes differ).";
+        return (line, note);
+    }
 
     /// <summary>
     /// A check's stand-in for a person in a match of a server (<c>--net-order-every N</c>): every N ticks one unit of the viewer is ordered to move, through the
@@ -480,13 +575,37 @@ internal sealed class ClientRuntime : IDisposable
         }
         // Scripted input enters exactly where the device's does, so it meets the same HUD layout, text measure and update/draw order.
         if (_script is not null && _running is not null) events.AddRange(_script.EventsFor(_frame, _clockMs));
+        if (_running is not null) events.AddRange(_scriptMatchEvents);
+        _scriptMatchEvents.Clear();
         if (_running is { } running)
         {
             if (running.Host.Match is LiveMatch clicked) GiveStandInClick(running, clicked, events);
             running.Step(events, seconds, width, height, gameTime, _game.GraphicsContext.CommandList, fixedSeconds);
             _script?.Observe();
             ApplyPendingSelection();
-            if (running.Spectator is { QuitRequested: true }) ExitRequested = true;
+            if (running.Playback is not null && running.Spectator?.TakeSeekRequest() is { } seekTo)
+            {
+                SeekReplay(running, seekTo);
+                _audio.Update(seconds);
+                return;
+            }
+            if (running.Spectator is { QuitRequested: true })
+            {
+                // Escape in a playback of the menus leads back to the replay list; everywhere else it ends the program, as before.
+                if (running.Playback is not null && _shell is not null)
+                {
+                    _running = null;
+                    _game.SceneSystem.SceneInstance = null;
+                    _game.SceneSystem.GraphicsCompositor = null;
+                    running.Dispose();
+                    _audio.Game.EnterShell();
+                    Console.WriteLine($"replay: left at tick {running.Host.Match.Tick}");
+                    _shell.ReplayStopped();
+                    _audio.Update(seconds);
+                    return;
+                }
+                ExitRequested = true;
+            }
             if (_clockMs >= _nextDots)
             {
                 _nextDots = _clockMs + 250;
@@ -597,6 +716,23 @@ internal sealed class ClientRuntime : IDisposable
                 _running = Start(LiveMatch.Restore(_data, resume.Save, BackBufferSize()), null);
                 break;
             }
+            case StartReplayOutput replay:
+            {
+                try
+                {
+                    var playback = CnCNew.Game.Replays.ReplayPlayback.Open(_data, replay.File, BackBufferSize(), new CnCNew.Game.Replays.ReplayPlaybackOptions(ReplayCheckpointSeconds));
+                    _running = StartReplay(playback, null);
+                    _replaySeeks = 0;
+                    Console.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                        $"replay: playing '{replay.Name}': {playback.Info.MapPath}, {playback.Info.TickRate} Hz, {playback.EndTick} ticks, checkpoints every {playback.CheckpointInterval} ticks, {CnCNew.Game.Replays.ReplayText.EndingLine(playback.Info)}"));
+                }
+                catch (CnCNew.Game.Replays.ReplayRefusedException refusal)
+                {
+                    Console.WriteLine($"replay: '{replay.Name}' cannot be played: {refusal.Message}");
+                    _shell!.ReplayFailed(refusal.Message);
+                }
+                break;
+            }
             case StartMissionOutput mission:
             {
                 var text = _data.LoadText("English");
@@ -652,6 +788,8 @@ internal sealed class ClientRuntime : IDisposable
             _ => new RunningGame(host, new MatchController(game, GameplaySettings, "English", _ui.TextMeasure), null, null),
         };
         running.Attach();
+        // Every skirmish of the simulation's own AI is recorded while it runs and written when it ends (docs/REPLAY-BROWSER.md); a playback is not.
+        if (game is LiveMatch recorded && RecordingStore is not null) running.Recorder = CnCNew.Game.Replays.MatchRecorder.Attach(recorded);
         // The in-game menu's "Save/Load" button saves a running skirmish to one slot; the main menu's load list continues it (docs/CAMPAIGN-AND-SAVEGAMES.md, skirmish savegame).
         if (game is LiveMatch saved && running.Match is { } controller)
             controller.MenuActionRequested += action => { if (action == MenuAction.SaveLoad) LastSkirmishSave = SaveSkirmish(saved); };
@@ -721,7 +859,14 @@ internal sealed class ClientRuntime : IDisposable
     {
         _running = null;
         var game = running.Host.Match;
-        if (running.Mission is not null && running.Start is { } start)
+        FinishRecording(running);
+        if (running.Playback is { } playback)
+        {
+            var (line, note) = ReplayOutcome(playback);
+            Console.WriteLine(line);
+            _shell!.ReplayFinished(CnCNew.Game.Shell.MatchResult.From(playback.Match.Players, playback.Match.Winner, playback.Match.World, playback.Match.Tick, playback.Statistics), note);
+        }
+        else if (running.Mission is not null && running.Start is { } start)
             _shell!.MissionFinished(start.Run, start.Controller);
         else if (game is LiveMatch match)
         {
@@ -788,6 +933,7 @@ internal sealed class ClientRuntime : IDisposable
     public void Dispose()
     {
         // A visit to a server ends with the game: the room is told, and a server this game hosts stops and tells its members.
+        if (_running is { } closing) FinishRecording(closing);
         _shell?.Shutdown();
         _running?.Dispose();
         _running = null;
@@ -819,6 +965,12 @@ internal sealed class ClientRuntime : IDisposable
 
         /// <summary>Set for a match nobody plays: the spectator takes the input and draws the HUD instead of <see cref="Match"/>.</summary>
         public CnCNew.Game.Spectator.SpectatorController? Spectator { get; set; }
+
+        /// <summary>The recording of a skirmish while it runs (docs/REPLAY-BROWSER.md); null for a mission, a staged scene and a playback.</summary>
+        public CnCNew.Game.Replays.MatchRecorder? Recorder { get; set; }
+
+        /// <summary>Set when this game shows the playback of a replay.</summary>
+        public CnCNew.Game.Replays.ReplayPlayback? Playback { get; set; }
 
         /// <summary>The per-player counts the score screen shows, fed by every simulated tick of a skirmish match.</summary>
         public MatchStatistics Statistics { get; } = new();

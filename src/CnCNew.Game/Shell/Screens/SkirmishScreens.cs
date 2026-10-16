@@ -200,6 +200,8 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         }
         if (opponents.Count == 0) return;
         var options = SkirmishMatchOptions.StandardAt(Shell.Data.Rate) with { StartMoney = _startMoney };
+        // A check's short match (the client's --skirmish-seconds): the length of the match in game time instead of the standard one.
+        if (Shell.SkirmishMatchSeconds > 0) options = options with { MaxTicks = Shell.Data.Rate.Time.WholeSecondsToTicks(Shell.SkirmishMatchSeconds) };
         var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable() };
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });

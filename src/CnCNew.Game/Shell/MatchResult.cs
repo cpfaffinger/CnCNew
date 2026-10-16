@@ -53,6 +53,19 @@ public sealed class MatchStatistics
     }
 
     public PlayerTally? TryGet(PlayerId player) => _tallies.TryGetValue(player.Value, out var tally) ? tally : null;
+
+    /// <summary>A copy that counts on independently (what a replay's checkpoint keeps of the counters so far).</summary>
+    public MatchStatistics Clone()
+    {
+        var copy = new MatchStatistics { HasData = HasData };
+        foreach (var (player, tally) in _tallies)
+            copy._tallies[player] = new PlayerTally
+            {
+                UnitsBuilt = tally.UnitsBuilt, UnitsLost = tally.UnitsLost, UnitsDestroyed = tally.UnitsDestroyed,
+                BuildingsBuilt = tally.BuildingsBuilt, BuildingsLost = tally.BuildingsLost, Resources = tally.Resources,
+            };
+        return copy;
+    }
 }
 
 /// <summary>What the score screen needs about one player row.</summary>

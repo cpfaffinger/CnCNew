@@ -230,6 +230,7 @@ public sealed class GameShell
             }
         }
         Saves = new SaveGameStore(Environment.SaveDirectory);
+        Replays = new CnCNew.Game.Replays.ReplayStore(Environment.ReplayDirectory);
         Network ??= _networkFactory?.Invoke(data);
         Phase = ShellPhase.Menus;
         Replace(new MainMenuScreen(this));
@@ -400,6 +401,7 @@ public sealed class GameShell
     /// </summary>
     public void MatchFinished(MatchResult result, string? netNote)
     {
+        _returnToReplays = false;
         if (Net is { } net) net.Relay = null;
         _pendingNet = null;
         Phase = ShellPhase.Results;
@@ -426,6 +428,14 @@ public sealed class GameShell
     /// <summary>A question in our own words over the current screen (<c>MessageBox.wnd</c>, Yes and No); the callbacks close it.</summary>
     internal void AskYesNo(string title, string message, Action yes, Action no)
         => Push(new MessageBoxScreen(this, ShellLayoutNames.MessageBox, title, message, plainMessage: true, ShellMessageBoxButtons.YesNo, yes, no));
+
+    /// <summary>A question of the original's own words over the current screen (<c>MessageBox.wnd</c>, Yes and No, CSF labels); the callbacks close it.</summary>
+    internal void AskYesNoLabels(string titleLabel, string messageLabel, Action yes, Action no)
+        => Push(new MessageBoxScreen(this, ShellLayoutNames.MessageBox, titleLabel, messageLabel, ShellMessageBoxButtons.YesNo, yes, no));
+
+    /// <summary>A message of the original's own words over the current screen (<c>MessageBox.wnd</c>, OK only, CSF labels); OK closes it.</summary>
+    internal void TellLabels(string titleLabel, string messageLabel)
+        => Push(new MessageBoxScreen(this, ShellLayoutNames.MessageBox, titleLabel, messageLabel, ShellMessageBoxButtons.OkOnly, CloseTop));
 
     /// <summary>A message in our own words over the current screen (<c>MessageBox.wnd</c>, OK only); the callback closes it.</summary>
     internal void Tell(string title, string message, Action ok)
@@ -520,6 +530,89 @@ public sealed class GameShell
     internal void OpenChallengeSelect(ScriptDifficulty difficulty) => Push(new ChallengeSelectScreen(this, difficulty));
     internal void OpenLoadGame() => Push(new LoadGameScreen(this));
 
+    // ------------------------------------------------------------------------------------------------- replays (docs/REPLAY-BROWSER.md)
+
+    /// <summary>The replay files the client records after every skirmish and the replay list shows (beside the savegames); null before the content is loaded.</summary>
+    public CnCNew.Game.Replays.ReplayStore? Replays { get; private set; }
+
+    /// <summary>
+    /// What this game is when a replay is judged: its definitions, rate, rule profile and build. A test of the screens sets a fixed one, so that a reason naming a build
+    /// does not change with every commit.
+    /// </summary>
+    public CnCNew.Game.Replays.ReplayMachine ReplayMachine
+    {
+        get => _replayMachine ?? CnCNew.Game.Replays.ReplayMachine.Of(Data);
+        set => _replayMachine = value;
+    }
+
+    private CnCNew.Game.Replays.ReplayMachine? _replayMachine;
+
+    /// <summary>
+    /// A check's short skirmish (the client's <c>--skirmish-seconds N</c>): the setup screen gives a match this length of game time instead of the standard one (0, the
+    /// default: the standard length). Nothing else changes.
+    /// </summary>
+    public int SkirmishMatchSeconds { get; set; }
+
+    // Set while a replay runs or its score screen stands: the way back leads to the replay list, not to the bare main menu.
+    private bool _returnToReplays;
+
+    internal void OpenReplayMenu() => Push(new ReplayMenuScreen(this));
+    internal void OpenReplayRename(ReplayMenuScreen owner, string name) => Push(new ReplayRenameScreen(this, owner, name));
+
+    /// <summary>
+    /// Plays a replay of the list: a file this game cannot play is refused here with its reason (over the list); otherwise the shell hands the host the file
+    /// (<see cref="StartReplayOutput"/>) and draws nothing until the playback ends.
+    /// </summary>
+    internal void BeginReplay(string name)
+    {
+        byte[] bytes;
+        CnCNew.Game.Replays.MatchRecording recording;
+        try
+        {
+            bytes = Replays!.Read(name);
+            recording = CnCNew.Game.Replays.MatchRecordingFormat.Read(bytes);
+        }
+        catch (CnCNew.Game.Replays.ReplayRefusedException refusal)
+        {
+            ShowError(CnCNew.Game.Replays.ReplayText.CannotPlayTitle, refusal.Message);
+            return;
+        }
+        var judged = CnCNew.Game.Replays.ReplayCompatibility.Judge(recording.Info, ReplayMachine);
+        if (!judged.IsPlayable)
+        {
+            ShowError(CnCNew.Game.Replays.ReplayText.CannotPlayTitle, judged.Reason);
+            return;
+        }
+        _returnToReplays = true;
+        Phase = ShellPhase.InMatch;
+        _outputs.Add(new StartReplayOutput(name, bytes));
+    }
+
+    /// <summary>The host's playback reached the end of the recording: the score screen with the playback's result, and over it what the playback found (<paramref name="note"/>).</summary>
+    public void ReplayFinished(MatchResult result, string? note)
+    {
+        _returnToReplays = true;
+        Phase = ShellPhase.Results;
+        Replace(new ScoreScreenScreen(this, result));
+        if (note is { Length: > 0 }) Tell(CnCNew.Game.Replays.ReplayText.PlaybackTitle, note, CloseTop);
+    }
+
+    /// <summary>The viewer left a playback before its end: back to the replay list.</summary>
+    public void ReplayStopped()
+    {
+        _returnToReplays = false;
+        Phase = ShellPhase.Menus;
+        Replace(new MainMenuScreen(this));
+        Push(new ReplayMenuScreen(this));
+    }
+
+    /// <summary>The host could not open the replay the shell handed it (the map's terrain differs, the file changed since it was listed): back to the list, with the reason.</summary>
+    public void ReplayFailed(string message)
+    {
+        ReplayStopped();
+        ShowError(CnCNew.Game.Replays.ReplayText.CannotPlayTitle, message);
+    }
+
     /// <summary>Starts (or restarts) the current mission of <paramref name="controller"/> and shows its briefing
     /// (<see cref="ShellPhase.MissionBriefing"/>); <c>VoiceLengthSeconds</c> sets how long the briefing holds (floor of 2 s so
     /// a mission that does not set it is still readable, no Bink decoder so the intro movie stays a placeholder).</summary>
@@ -591,6 +684,11 @@ public sealed class GameShell
 
     internal void ReturnToMainMenuFromResults()
     {
+        if (_returnToReplays)
+        {
+            ReplayStopped();
+            return;
+        }
         if (Net is { } net && Network is not null)
         {
             ReturnToNet(net);

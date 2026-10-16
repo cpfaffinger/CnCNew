@@ -25,6 +25,12 @@ public sealed record StartNetMatchOutput(ShellNetSession Session) : ShellOutput;
 public sealed record ResumeMatchOutput(byte[] Save, string Slot) : ShellOutput;
 
 /// <summary>
+/// A replay was chosen in the replay list and judged playable (docs/REPLAY-BROWSER.md); the host should open it (<c>ReplayPlayback.Open</c>), show its playback and tell the
+/// shell when it ended (<see cref="GameShell.ReplayFinished"/>), was left (<see cref="GameShell.ReplayStopped"/>) or could not be opened (<see cref="GameShell.ReplayFailed"/>).
+/// </summary>
+public sealed record StartReplayOutput(string Name, byte[] File) : ShellOutput;
+
+/// <summary>
 /// A campaign mission is ready to run (a fresh start past its briefing, or a save just loaded): the host should step
 /// <see cref="MissionRun.Session"/> every tick (<see cref="CnCNew.Simulation.Mission.MissionSession.Step"/>), drain its
 /// <c>ScriptEngine.DrainOutputs()</c> for presentation, and call <see cref="GameShell.MissionFinished"/> once

@@ -125,7 +125,17 @@ var audioOptions = new CnCNew.Client.Stride.Audio.ClientAudioOptions(smokeTest, 
 // --loop: a staged scene (--scenario) starts again when it has run its length; not in a smoke test, whose frame numbers must stay those of one run.
 var caption = GetArgument(args, "--caption");
 var loopScenario = args.Contains("--loop", StringComparer.OrdinalIgnoreCase);
-var shellMode = args.Contains("--shell", StringComparer.OrdinalIgnoreCase) || (contentDirectory is not null && modelPath is null && matchMap is null && missionMap is null);
+// Replays (docs/REPLAY-BROWSER.md). --replay FILE: plays a replay file in the spectator's view (Escape ends the program). --replay-dir DIR: a match started without the
+// menus (--match, --spectate, --join) writes its replay there (the menus write theirs beside the savegames, under --settings-dir). --replay-checkpoint-seconds N: how far
+// apart a playback keeps the states it seeks to (default 30). --skirmish-seconds N: the skirmish setup of the menus gives matches of N seconds of game time (a check).
+var replayFile = GetArgument(args, "--replay");
+CnCNew.Client.Stride.ClientRuntime.ReplayDirectory = GetArgument(args, "--replay-dir");
+CnCNew.Client.Stride.ClientRuntime.ReplayCheckpointSeconds = int.Parse(GetArgument(args, "--replay-checkpoint-seconds") ?? CnCNew.Game.Replays.ReplayPlayback.DefaultCheckpointSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
+CnCNew.Client.Stride.ClientRuntime.SkirmishSeconds = int.Parse(GetArgument(args, "--skirmish-seconds") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+if (replayFile is not null && (matchMap is not null || missionMap is not null || modelPath is not null || shellScriptPath is not null || contentDirectory is null))
+    throw new ArgumentException("--replay plays a file: it needs --content-dir and excludes --match, --mission, --scenario, --join, --model-path and --shell-script.");
+CnCNewGame.ReplayFile = replayFile;
+var shellMode = args.Contains("--shell", StringComparer.OrdinalIgnoreCase) || (contentDirectory is not null && modelPath is null && matchMap is null && missionMap is null && replayFile is null);
 var liveOptions = (matchMap ?? missionMap) is null ? null : new LiveOptions(
     (matchMap ?? missionMap)!,
     GetArgument(args, "--faction") ?? "FactionAmerica",
@@ -233,6 +243,7 @@ using (var game = new CnCNewGame(smokeTest, contentDirectory, modelPath, capture
 {
     game.Run();
     if (game.UnresolvedInputSteps > 0) Environment.ExitCode = 3;
+    if (game.ReplayRefused) Environment.ExitCode = 2;
     if (game.ShellScriptFailed) Environment.ExitCode = 1;
     game.LeaveJoinedMatch();
 }
@@ -373,6 +384,12 @@ internal sealed class CnCNewGame(
     /// <summary>The match to join (<c>--join</c>); null for everything else.</summary>
     public static JoinOptions? Join { get; set; }
 
+    /// <summary>The replay file to play (<c>--replay</c>); null for everything else.</summary>
+    public static string? ReplayFile { get; set; }
+
+    /// <summary>The replay of <c>--replay</c> could not be played here (the console says why).</summary>
+    public bool ReplayRefused { get; private set; }
+
     /// <summary>The options of the menus' way to a server; set before the game is created.</summary>
     public static ShellRunOptions? Shell { get; set; }
 
@@ -512,6 +529,27 @@ internal sealed class CnCNewGame(
             _runtime!.Caption = caption;
             ApplyStaging();
             if (inputScript is not null) _runtime!.UseInputScript(inputScript);
+            return;
+        }
+
+        if (ReplayFile is { } replayPath)
+        {
+            var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate, rules: Rules);
+            var back = GraphicsDevice.Presenter.BackBuffer;
+            try
+            {
+                var playback = CnCNew.Game.Replays.ReplayPlayback.Open(data, File.ReadAllBytes(replayPath), new System.Numerics.Vector2(back.Width, back.Height),
+                    new CnCNew.Game.Replays.ReplayPlaybackOptions(ClientRuntime.ReplayCheckpointSeconds));
+                _runtime = ClientRuntime.ForReplay(this, data, playback, audioOptions);
+                Console.WriteLine($"replay: playing {replayPath}: {playback.Info.MapPath}, {playback.Info.TickRate} Hz, {playback.EndTick} ticks, {CnCNew.Game.Replays.ReplayText.EndingLine(playback.Info)}");
+                Window.Title = $"CnCNew — replay — {Path.GetFileNameWithoutExtension(replayPath)}";
+            }
+            catch (CnCNew.Game.Replays.ReplayRefusedException refusal)
+            {
+                Console.Error.WriteLine($"replay: {replayPath} cannot be played: {refusal.Message}");
+                ReplayRefused = true;
+                Exit();
+            }
             return;
         }
 

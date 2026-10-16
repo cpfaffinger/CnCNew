@@ -86,6 +86,8 @@ public sealed class MainMenuScreen : ShellScreen
         W("ButtonChina").SetEnabled(hasCampaigns && Shell.Campaigns!.Find("China") is not null);
         W("ButtonChallenge").SetEnabled(hasCampaigns && Shell.Campaigns!.Campaigns.Any(campaign => campaign.IsChallenge));
         W("ButtonLoadReplay").SetEnabled(true);
+        // "Replay" of the load/replay submenu opens the replay list (ReplayMenu.wnd, docs/REPLAY-BROWSER.md) when the shell has a directory of replays.
+        W("ButtonReplay").SetEnabled(Shell.Replays is not null);
         // The campaign "recent save"/"load game" shortcuts sit directly on the root, left of the button column, and are
         // not Hidden in the WND file: MainMenuInit hides all six (showSelectiveButtons(SHOW_NONE)) and the original only
         // shows one pair while its faction button is hovered. This build has no "most recent save per faction" (saves are
@@ -361,6 +363,12 @@ public sealed class MainMenuScreen : ShellScreen
             case "MainMenu.wnd:ButtonLoadGame":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 LeaveFor(Shell.OpenLoadGame, null, "MainMenuLoadReplayMenuBackTransition");
+                break;
+            case "MainMenu.wnd:ButtonReplay":
+                // MainMenu.cpp, buttonReplayID: the submenu plays MainMenuLoadReplayMenuBackTransition backwards and the shell pushes Menus/ReplayMenu.wnd.
+                if (Shell.Replays is null) break;
+                Shell.PlaySound(ShellUiSounds.ButtonClick);
+                LeaveFor(Shell.OpenReplayMenu, null, "MainMenuLoadReplayMenuBackTransition");
                 break;
             case "MainMenu.wnd:ButtonOptions": Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.OpenOptions(); break;
             case "MainMenu.wnd:ButtonCredits":

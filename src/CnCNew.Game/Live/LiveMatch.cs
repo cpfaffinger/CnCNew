@@ -258,8 +258,29 @@ public sealed class LiveMatch : LiveGame
     protected override void OnAdvanced(double gameSeconds) => Remote?.Flush();
 
     /// <summary>The lockstep probe of a match: the driver holds every order for <paramref name="ticks"/> ticks before it sends it to the relay.</summary>
-    public override void UseInputDelay(int ticks) => Lockstep.InputDelayTicks = ticks;
-    public override bool IsOver => Scripted?.IsOver ?? Session.IsOver;
+    public override void UseInputDelay(int ticks)
+    {
+        if (Replay is null) Lockstep.InputDelayTicks = ticks;
+    }
+
+    public override bool IsOver => Replay is { } replay ? replay.Ends(Session) : Scripted?.IsOver ?? Session.IsOver;
+
+    /// <summary>
+    /// The playback this match shows (docs/REPLAY-BROWSER.md), or null for a match that is played. A playback has no server: its ticks come from the local tick driver
+    /// (pause and speed are the presentation's), the commands of the humans from the recording, and nobody gives orders.
+    /// </summary>
+    public CnCNew.Game.Replays.ReplayPlayback? Replay { get; private init; }
+
+    /// <summary>
+    /// A presentation of <paramref name="session"/> as the playback of a replay: a spectator's match whose camera starts at the base of <paramref name="localPlayer"/> (the player
+    /// the recording game played; 0 for none), with no relay behind it.
+    /// </summary>
+    internal static LiveMatch ForPlayback(GameData data, CnCNew.Game.Replays.ReplayPlayback playback, SkirmishMatchSession session, MapData map, TerrainMap terrain, Vector2 viewport, int localPlayer)
+    {
+        var seat = session.Match.Slots.FirstOrDefault(slot => slot.Player.Value == localPlayer) ?? session.Match.Slots[0];
+        var setup = SetupOf(session.Description, session.Match, CnCNew.Game.Save.SkirmishViewer.Spectator) with { LocalSlot = seat.Slot };
+        return new LiveMatch(data, setup, session.Match, session, terrain, map, session.Description.Seed, viewport) { Replay = playback };
+    }
     public override PlayerId? Winner => Scripted is { } scripted ? scripted.Winner : Session.Winner;
     public override ImmutableArray<PlayerConfiguration> Players => Scripted is null ? Session.Players : _scriptedPlayers;
 
@@ -297,6 +318,13 @@ public sealed class LiveMatch : LiveGame
             asked.Client.OfferSnapshot(request, new CnCNew.Net.ResumeState(World.Tick, Session.StateHash(), Session.HumanCommandCounts, CnCNew.Game.Lockstep.SessionTransfer.Pack(Session.Save())));
         }
         var tick = World.Tick;
+        if (Replay is { } replay)
+        {
+            replay.BeforeStep(Session);
+            var played = Session.Step();
+            replay.AfterStep(Session, played);
+            return played;
+        }
         var result = Scripted?.Step() ?? Session.Step();
         if (Remote is not null)
         {

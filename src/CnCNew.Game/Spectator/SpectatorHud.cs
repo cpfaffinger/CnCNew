@@ -44,6 +44,12 @@ public sealed class SpectatorHud
         (SpectatorAction.CycleFog, "Fog"), (SpectatorAction.Pause, "Pause"), (SpectatorAction.Speed1, "1x"), (SpectatorAction.Speed2, "2x"), (SpectatorAction.Speed4, "4x"), (SpectatorAction.Speed8, "8x"),
     ];
 
+    /// <summary>The third row of a replay's button bar: seeking to the checkpoints the playback keeps.</summary>
+    private static readonly (SpectatorAction Action, string Label)[] ReplayButtonTable =
+    [
+        (SpectatorAction.SeekStart, "Start"), (SpectatorAction.SeekBack, "<< Back"), (SpectatorAction.SeekForward, "Next >>"),
+    ];
+
     private readonly LiveMatch _match;
     private readonly MappedImageTable _images;
     private readonly IUiTextMeasure _measure;
@@ -175,13 +181,15 @@ public sealed class SpectatorHud
         var buttonHeight = S(34);
         var gap = S(4);
         var perRow = ButtonTable.Length / 2;
+        var table = controller.Replay is null ? ButtonTable : [.. ButtonTable, .. ReplayButtonTable];
+        var rows = (table.Length + perRow - 1) / perRow;
         var barWidth = perRow * buttonWidth + (perRow - 1) * gap;
         var barLeft = Math.Max(radarFrame.Right + S(12), (width - barWidth) / 2);
-        var barTop = height - 2 * buttonHeight - gap - S(8);
-        Box(new UiRect(barLeft - gap, barTop - gap, barWidth + 2 * gap, 2 * buttonHeight + 3 * gap), Plate);
-        for (var index = 0; index < ButtonTable.Length; index++)
+        var barTop = height - rows * buttonHeight - (rows - 1) * gap - S(8);
+        Box(new UiRect(barLeft - gap, barTop - gap, barWidth + 2 * gap, rows * buttonHeight + (rows + 1) * gap), Plate);
+        for (var index = 0; index < table.Length; index++)
         {
-            var (action, label) = ButtonTable[index];
+            var (action, label) = table[index];
             var rect = new UiRect(barLeft + index % perRow * (buttonWidth + gap), barTop + index / perRow * (buttonHeight + gap), buttonWidth, buttonHeight);
             _buttons.Add((rect, action));
             Box(rect, IsOn(controller, action) ? ButtonOn : ButtonBack);
@@ -189,7 +197,25 @@ public sealed class SpectatorHud
             Centered(caption, small, Text, rect.CenterX, rect.Y + S(4));
             Centered($"[{SpectatorController.KeyHint(action)}]", small, Accent, rect.CenterX, rect.Y + S(18));
         }
-        var hints = $"seed {controller.Options.Seed}   [J]/[K] jump to AI 1/2   [Tab] next tab   [H] panels   wheel: zoom   arrows, screen edge, right drag: scroll   [Esc] quit";
+        if (controller.Replay is { } replay)
+        {
+            // The replay's own line beside its seek buttons: where the playback stands in the recording, and how the recording ended.
+            var rate = _match.World.Time;
+            var at = rate.ToWholeSeconds(_match.Tick);
+            var total = rate.ToWholeSeconds(replay.EndTick);
+            var checkpoint = (int)(_match.Tick / replay.CheckpointInterval) + 1;
+            var checkpoints = (int)((replay.EndTick + replay.CheckpointInterval - 1) / replay.CheckpointInterval);
+            var line = string.Create(CultureInfo.InvariantCulture,
+                $"REPLAY {at / 60}:{at % 60:00} / {total / 60}:{total % 60:00}   checkpoint {Math.Min(checkpoint, checkpoints)} of {checkpoints}   {CnCNew.Game.Replays.ReplayText.EndingLine(replay.Info)}");
+            var row = barTop + (rows - 1) * (buttonHeight + gap);
+            var left = barLeft + ReplayButtonTable.Length * (buttonWidth + gap) + S(6);
+            Label(line, normal, Accent, left, row + S(4));
+            Label(replay.HashMismatches == 0 ? $"{replay.HashesChecked} recorded hashes matched" : $"{replay.HashMismatches} of {replay.HashesChecked} recorded hashes differ (first at tick {replay.FirstMismatchTick})",
+                small, replay.HashMismatches == 0 ? Dim : new WndColor(255, 96, 80, 255), left, row + S(20));
+        }
+        var hints = controller.Replay is null
+            ? $"seed {controller.Options.Seed}   [J]/[K] jump to AI 1/2   [Tab] next tab   [H] panels   wheel: zoom   arrows, screen edge, right drag: scroll   [Esc] quit"
+            : "[F] fog: all or one player   [Tab] next tab   [H] panels   wheel: zoom   arrows, screen edge, right drag: scroll   [Esc] back to the replays";
         commands.Add(new UiFillRect(new UiRect(barLeft - gap, barTop - gap - S(16), Math.Min(barWidth + 2 * gap, _measure.MeasureWidth(hints, small) + S(12)), S(16)), Plate));
         Label(hints, small, Dim, barLeft + S(2), barTop - gap - S(14));
 

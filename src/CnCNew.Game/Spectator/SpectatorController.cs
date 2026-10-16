@@ -45,6 +45,12 @@ public enum SpectatorAction
     Speed8,
     TogglePanels,
     Quit,
+    /// <summary>A replay: back to the start of the recording.</summary>
+    SeekStart,
+    /// <summary>A replay: back to the previous checkpoint.</summary>
+    SeekBack,
+    /// <summary>A replay: on to the next checkpoint.</summary>
+    SeekForward,
 }
 
 /// <param name="MaxZoomHeight">The spectator's zoom-out limit as a height above ground; <see langword="null"/>: the height from which the whole map is on screen.</param>
@@ -80,6 +86,7 @@ public sealed class SpectatorController
         (KeyCode.O, SpectatorAction.Overview), (KeyCode.F, SpectatorAction.CycleFog),
         (KeyCode.Space, SpectatorAction.Pause), (KeyCode.D1, SpectatorAction.Speed1), (KeyCode.D2, SpectatorAction.Speed2), (KeyCode.D4, SpectatorAction.Speed4), (KeyCode.D8, SpectatorAction.Speed8),
         (KeyCode.H, SpectatorAction.TogglePanels), (KeyCode.Escape, SpectatorAction.Quit),
+        (KeyCode.Home, SpectatorAction.SeekStart), (KeyCode.PageUp, SpectatorAction.SeekBack), (KeyCode.PageDown, SpectatorAction.SeekForward),
     ];
 
     private readonly MatchController _hud;
@@ -258,7 +265,56 @@ public sealed class SpectatorController
             case SpectatorAction.Speed8: SetSpeed(8); break;
             case SpectatorAction.TogglePanels: PanelsVisible = !PanelsVisible; break;
             case SpectatorAction.Quit: QuitRequested = true; break;
+            case SpectatorAction.SeekStart: if (Replay is not null) SeekRequest = 0; break;
+            case SpectatorAction.SeekBack: if (Replay is { } back) SeekRequest = back.PreviousCheckpoint(); break;
+            case SpectatorAction.SeekForward: if (Replay is { } forward) SeekRequest = forward.NextCheckpoint(); break;
         }
+    }
+
+    /// <summary>The playback this spectator watches, or null for a match that is played by computer players now.</summary>
+    public CnCNew.Game.Replays.ReplayPlayback? Replay => Match.Replay;
+
+    /// <summary>
+    /// The tick a seek key or button asked for, until the host takes it (<see cref="TakeSeekRequest"/>): the host seeks the playback, builds its scene for the new presentation
+    /// and gives it a new controller that takes over this one's view (<see cref="TakeViewFrom"/>).
+    /// </summary>
+    public long? SeekRequest { get; private set; }
+
+    public long? TakeSeekRequest()
+    {
+        var request = SeekRequest;
+        SeekRequest = null;
+        return request;
+    }
+
+    /// <summary>
+    /// After a seek: the view of the controller of the previous presentation - tab, panels, the camera, which simulated camera is followed, the fog and the speed - goes on
+    /// here, so that a seek moves the match and nothing else.
+    /// </summary>
+    public void TakeViewFrom(SpectatorController previous)
+    {
+        ArgumentNullException.ThrowIfNull(previous);
+        Tab = previous.Tab;
+        PanelsVisible = previous.PanelsVisible;
+        _tabsShown.UnionWith(previous._tabsShown);
+        _fogModes.UnionWith(previous._fogModes);
+        _speeds.UnionWith(previous._speeds);
+        ActionsTaken = previous.ActionsTaken;
+        _fogIndex = previous._fogIndex;
+        Match.ShowWorldAs(FogViewer);
+        Match.Speed = previous.Match.Speed;
+        Match.Paused = previous.Match.Paused;
+        var from = previous.Match.Camera;
+        var camera = Match.Camera;
+        camera.SetMaxHeightAboveGround(from.MaxHeightAboveGround);
+        camera.SetPitch(from.Pitch);
+        camera.SetAngle(from.Angle);
+        camera.SetHeightAboveGround(from.HeightAboveGround);
+        camera.SettleZoom();
+        camera.CenterOn(from.Pivot);
+        _beforeOverview = previous._beforeOverview;
+        Followed = previous.Followed;
+        HighestReached = previous.HighestReached;
     }
 
     private void ShowTab(SpectatorTab tab)

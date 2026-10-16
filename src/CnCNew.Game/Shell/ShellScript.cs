@@ -45,6 +45,12 @@ public sealed class ShellScript
     public IReadOnlyList<string> Log => _log;
     /// <summary>What a match in progress tells the script (the tick, whether it is over); the host sets it while it owns a match, the shell knows nothing of it.</summary>
     public Func<string, string?>? MatchProbe { get; set; }
+    /// <summary>
+    /// Where a <c>key</c> step goes while a match or a playback runs (the shell's phase is <see cref="ShellPhase.InMatch"/>): the host hands it to the running game as the
+    /// device's keys go there (a replay's seek keys, its pause and speed). Without it the key goes to the shell, as before.
+    /// </summary>
+    public Action<InputEvent>? MatchInput { get; set; }
+
     /// <summary>Called with every line of the log as it is written: the client prints them as they happen, so that a check can wait for a step of another process.</summary>
     public Action<string>? Trace { get; set; }
 
@@ -126,6 +132,12 @@ public sealed class ShellScript
             }
             case "key":
                 if (words.Length != 2 || !Enum.TryParse<KeyCode>(words[1], true, out var key)) return Fail(shell, step, "expected 'key KEYCODE'");
+                if (shell.Phase == ShellPhase.InMatch && MatchInput is { } match)
+                {
+                    match(new KeyEvent(Now(), key, IsDown: true));
+                    match(new KeyEvent(Now(), key, IsDown: false));
+                    return Outcome.DoneWithInput;
+                }
                 Send(shell, new KeyEvent(Now(), key, IsDown: true));
                 Send(shell, new KeyEvent(Now(), key, IsDown: false));
                 return Outcome.DoneWithInput;

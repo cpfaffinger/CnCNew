@@ -79,11 +79,16 @@ public static class ShellLayoutNames
     public const string LanMapSelectMenu = "LanMapSelectMenu";
     public const string MultiplayerLoadScreen = "MultiplayerLoadScreen";
 
+    /// <summary>The replay browser (docs/REPLAY-BROWSER.md): the list of replays, and the original's popup that names a replay, here the one that renames it.</summary>
+    public const string ReplayMenu = "ReplayMenu";
+    public const string PopupReplay = "PopupReplay";
+
     public static readonly ImmutableArray<string> All =
     [
         MainMenu, OptionsMenu, SkirmishGameOptionsMenu, SkirmishMapSelectMenu, ScoreScreen, CreditsMenu,
         ShellGameLoadScreen, SinglePlayerLoadScreen, MessageBox, QuitMessageBox,
         ChallengeMenu, SaveLoad, Victorious, Defeat,
         NetworkDirectConnect, LanLobbyMenu, PopupHostGame, PopupJoinGame, LanGameOptionsMenu, LanMapSelectMenu, MultiplayerLoadScreen,
+        ReplayMenu, PopupReplay,
     ];
 }
