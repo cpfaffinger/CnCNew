@@ -59,6 +59,9 @@ internal static class NetShellTests
         /// <summary>Called every frame of a running match, after the HUD's update: the test is the person in the match.</summary>
         public Action<Player>? InMatch { get; set; }
         public bool WithHud { get; init; }
+        /// <summary>The replays of the matches this game played, as the client records them (docs/REPLAY-BROWSER.md).</summary>
+        public List<byte[]> Replays { get; } = [];
+        private CnCNew.Game.Replays.MatchRecorder? _recorder;
         private NetMatchLoad? _load;
 
         public void Key(CnCNew.Presentation.Input.KeyCode key) => Hud!.Process(new CnCNew.Presentation.Input.KeyEvent(++_inputClock, key, IsDown: true));
@@ -89,6 +92,8 @@ internal static class NetShellTests
                 }
                 _overFor = 0;
                 Hud = null;
+                if (_recorder is { } recorder) Replays.Add(recorder.Build(CnCNew.Game.Replays.MatchRecorder.EndingOf(match, leftByChoice: false), new DateTimeOffset(2026, 10, 16, 20, 0, 0, TimeSpan.Zero)));
+                _recorder = null;
                 Played.Add((match.World.Tick, match.Session.StateHash(), NetText.MatchEndNote(relay, match.IsOver)));
                 LastHash = match.Session.StateHash();
                 LastTick = match.World.Tick;
@@ -109,6 +114,7 @@ internal static class NetShellTests
             {
                 if (!load.Step()) return;
                 Match = load.Match;
+                _recorder = CnCNew.Game.Replays.MatchRecorder.Attach(load.Match!);
                 if (WithHud) Hud = new CnCNew.Game.Hud.MatchController(load.Match!, CnCNew.Ui.Settings.GameSettings.Default);
                 Shell.NetMatchStarted();
             }
@@ -256,6 +262,22 @@ internal static class NetShellTests
             $"both games played the same match to the same state (tick {host.LastTick}/{guest.LastTick}, hash {host.LastHash:X16}/{guest.LastHash:X16})");
         TestHarness.Assert(host.EndNote is null && guest.EndNote is null, $"the match ended by its own rules ({host.EndNote}; {guest.EndNote})");
         TestHarness.Assert(host.Shell.Net is { Lobby.Stage: LobbyStage.InRoom } && guest.Shell.Net is { Lobby.Stage: LobbyStage.InRoom }, "both are back in the room");
+        // Both games recorded the match from the bundles they played (docs/REPLAY-BROWSER.md): each replay names the people and plays to the end both games reached.
+        TestHarness.Assert(host.Replays.Count == 1 && guest.Replays.Count == 1, "each game recorded the match it played");
+        foreach (var (player, file) in new[] { (host, host.Replays[0]), (guest, guest.Replays[0]) })
+        {
+            var info = CnCNew.Game.Replays.MatchRecordingFormat.Read(file).Info;
+            TestHarness.Assert(info.Source == "network" && info.Ending.Kind == CnCNew.Game.Replays.ReplayEndingKind.Completed && info.FinalSessionHash == host.LastHash,
+                $"{player.Name}: the replay of a match of a server, ended by its rules, at the hash both games reached");
+            TestHarness.Assert(info.Players.Any(entry => entry.Name == "Alice") && info.Players.Any(entry => entry.Name == "Bob"), $"{player.Name}: the replay names the people of the room");
+            var playback = CnCNew.Game.Replays.ReplayPlayback.Open(data, file, new Vector2(Width, Height));
+            for (var frame = 0; frame < 100_000 && !playback.IsOver; frame++) playback.Match.Advance(0.25);
+            TestHarness.Assert(playback.FinalHashMatches && playback.HashMismatches == 0 && playback.ResultMatchesRecorded(out _), $"{player.Name}: the replay plays to the recorded end ({playback.HashesChecked} hashes)");
+        }
+        var hostCommands = CnCNew.Simulation.Replay.ReplayFormat.Read(CnCNew.Game.Replays.MatchRecordingFormat.Read(host.Replays[0]).Replay).Commands.Select(CnCNew.Simulation.Replay.ReplayFormat.EncodeCommand);
+        var guestCommands = CnCNew.Simulation.Replay.ReplayFormat.Read(CnCNew.Game.Replays.MatchRecordingFormat.Read(guest.Replays[0]).Replay).Commands.Select(CnCNew.Simulation.Replay.ReplayFormat.EncodeCommand);
+        TestHarness.Assert(hostCommands.Zip(guestCommands).All(pair => pair.First.AsSpan().SequenceEqual(pair.Second)) && hostCommands.Count() == guestCommands.Count(),
+            "the two games recorded the same commands");
         TestHarness.Assert(host.Shell.Stack.All(screen => screen.Tree.UnregisteredCallbacks.Count == 0) && guest.Shell.Stack.All(screen => screen.Tree.UnregisteredCallbacks.Count == 0),
             "every callback of the multiplayer layouts is wired");
     }

@@ -103,8 +103,8 @@ $stepsOfArea = @{
     ui           = @{ affected = 'ui';                                      gate = 'game' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
     net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'diagnostics', 'game' }
-    game         = @{ affected = 'game-focus';                              gate = 'game', 'net', 'net-lobby', 'diagnostics' }
-    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'diagnostics', 'client-package' }
+    game         = @{ affected = 'game-focus';                              gate = 'game', 'net', 'net-lobby', 'replay-browser', 'diagnostics' }
+    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package' }
     scripts      = @{ affected = @();                                       gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'presentation', 'sim', 'net'
@@ -117,10 +117,11 @@ $gameSuites = @{
     Campaign  = 'CampaignTests', 'CampaignShellTests'
     Hud       = 'HudTests', 'MissionHudTests', 'HotkeyTests', 'NetHudTests'
     Lockstep  = 'LiveMatchTests', 'HudTests', 'CampaignShellTests', 'SpectatorTests', 'NetLobbyTests', 'NetShellTests'
-    Live      = 'LiveMatchTests', 'DeterminismTests', 'TimeScaleTests', 'ScenarioTests', 'MissionPresentationTests', 'MissionEffectsTests', 'MissionTextTests'
+    Live      = 'LiveMatchTests', 'DeterminismTests', 'TimeScaleTests', 'ScenarioTests', 'MissionPresentationTests', 'MissionEffectsTests', 'MissionTextTests', 'ReplayBrowserTests'
+    Replays   = 'ReplayBrowserTests', 'NetShellTests'
     Save      = 'CampaignTests', 'CampaignShellTests'
-    Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests', 'NetScreenTests', 'NetShellTests'
-    Spectator = 'SpectatorTests'
+    Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests', 'NetScreenTests', 'NetShellTests', 'ReplayBrowserTests'
+    Spectator = 'SpectatorTests', 'ReplayBrowserTests'
 }
 $gameSuitesOfSimulation = 'DeterminismTests', 'LiveMatchTests', 'SourceRuleTests'
 
@@ -217,6 +218,7 @@ $steps = @(
     New-Step 'net-robust'   'Rejoin, late and delayed watchers, the server replay and the desync diagnosis with real processes' (Script-Run 'check-net-robustness') -Content
     New-Step 'net-join'     'The window client joins a match on a dedicated server; a client without a window is the other player' (Script-Run 'check-net-join') -Content
     New-Step 'net-lobby'    'The menus in the window client by script: host game, a changed key, join with a password, a match, back into the room; a local skirmish' (Script-Run 'check-net-lobby') -Content -Environment
+    New-Step 'replay-browser' 'The replay browser in the window client by script: a skirmish recorded, listed, a damaged file refused, played with three seeks to the recorded end, renamed, deleted' (Script-Run 'check-replay-browser') -Content -Environment
     New-Step 'net-acceptance' 'Two window clients, three clients without a window, a watcher and two computer players on a dedicated server with delay and loss: a rejoin, a stall, a vanished client, a pause - and what the indicators said' (Script-Run 'check-net-acceptance') -Content -Environment
     New-Step 'net-cross-os' 'A match across Windows and Linux (WSL): server and two clients under Linux, two under Windows' (Script-Run 'check-net-cross-os') -Content -Environment
     New-Step 'net-load'     'Eight rooms at once on one server, with members that vanish, leave and come back' (Script-Run 'check-net-load')
