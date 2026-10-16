@@ -161,8 +161,7 @@ public sealed class ReplayPlayback
         }
     }
 
-    private SkirmishMatchSession Start()
-        => SkirmishMatchSession.Start(_description, _data.Templates, _terrain, _map.Objects, Replay.Header.CheckpointInterval, _data.Fingerprint, _simulationId);
+    private SkirmishMatchSession Start() => LiveMatch.StartPlayback(_data, _description, _terrain, _map, Replay.Header.CheckpointInterval, _simulationId);
 
     private LiveMatch Present(SkirmishMatchSession session)
     {
@@ -247,7 +246,7 @@ public sealed class ReplayPlayback
         {
             var checkpoint = _checkpoints[best];
             session = checkpoint.PackedState is { } packed
-                ? SkirmishMatchSession.Restore(SessionTransfer.Unpack(packed, int.MaxValue), _data.Templates, _data.Fingerprint, _terrain)
+                ? LiveMatch.RestorePlayback(_data, SessionTransfer.Unpack(packed, int.MaxValue), _terrain)
                 : Start();
             if (session.StateHash() != checkpoint.Hash) throw new InvalidOperationException($"The checkpoint at tick {best} does not restore to the state it was taken from.");
             Statistics = checkpoint.Statistics.Clone();

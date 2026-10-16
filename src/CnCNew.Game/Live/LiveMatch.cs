@@ -277,6 +277,7 @@ public sealed class LiveMatch : LiveGame
     /// </summary>
     internal static LiveMatch ForPlayback(GameData data, CnCNew.Game.Replays.ReplayPlayback playback, SkirmishMatchSession session, MapData map, TerrainMap terrain, Vector2 viewport, int localPlayer)
     {
+        ArgumentNullException.ThrowIfNull(session);
         var seat = session.Match.Slots.FirstOrDefault(slot => slot.Player.Value == localPlayer) ?? session.Match.Slots[0];
         var setup = SetupOf(session.Description, session.Match, CnCNew.Game.Save.SkirmishViewer.Spectator) with { LocalSlot = seat.Slot };
         return new LiveMatch(data, setup, session.Match, session, terrain, map, session.Description.Seed, viewport) { Replay = playback };
@@ -477,6 +478,17 @@ public sealed class LiveMatch : LiveGame
             throw new CnCNew.Game.Save.SaveGameException($"The savegame cannot be restored: {exception.Message}", exception);
         }
     }
+
+    /// <summary>
+    /// The session of a playback at tick 0, built from the match description of the replay (docs/REPLAY-BROWSER.md). The game layer builds its sessions here and in the
+    /// lockstep code only (the layer rule of the one match path); a playback plays a recording and is not played around a relay - it has no relay at all.
+    /// </summary>
+    internal static SkirmishMatchSession StartPlayback(GameData data, MatchDescription description, TerrainMap terrain, MapData map, int checkpointInterval, string simulationId)
+        => SkirmishMatchSession.Start(description, data.Templates, terrain, map.Objects, checkpointInterval, data.Fingerprint, simulationId);
+
+    /// <summary>A checkpoint of a playback restored: the session state the playback kept on its way (<see cref="CnCNew.Game.Replays.ReplayPlayback"/>).</summary>
+    internal static SkirmishMatchSession RestorePlayback(GameData data, ReadOnlySpan<byte> state, TerrainMap terrain)
+        => SkirmishMatchSession.Restore(state, data.Templates, data.Fingerprint, terrain);
 
     /// <summary>
     /// The room of a match that starts from a saved state: the settings of the saved description, the viewer's seat, and the state itself with its tick and its session hash
