@@ -129,6 +129,10 @@ the surveys. Nothing is rebuilt.
 - **Acceptance:** `path-bench` and the 60 Hz performance gate with the new profile; the distribution comparison shows no
   systematic shift of win rates the owner did not want; a human watches a group march in the spectator.
 - **Depends on:** S2-M7 (profile fingerprint). This is the home of D-3.
+- **Status (Phase 34, 16 October 2026): built by machine.** (a) and (c) as the option `movement-budget` of the rule profile (`docs/SIMULATION-CORE.md` §52); (b) not
+  built; (d) **missed**: 13.7 / 13.8 ms in the 60 Hz gate after the first 300 ticks (the original 123 / 128 ms), the mean 15 % lower (`docs/PERF-MOVEMENT.md` §10). The
+  distribution comparison under both profiles passes 39 of 39 checks, the GLA wins 2 instead of 9 of 80 matches (reported, not judged). The march of a group is measured
+  (`SimTool group-march`: the same arrival and spread as the original, the same path lengths), not watched by a human.
 
 ### S3-M7 Bug-fix and balance layers
 

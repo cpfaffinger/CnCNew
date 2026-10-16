@@ -147,7 +147,7 @@ milestone status is updated in each stage document.
 | S3-M3 | Replay browser | – | open (replay format exists) |
 | S3-M4 | Match analysis with graphics | – | open (headless surveys exist) |
 | S3-M5 | Modern user interface | – | open (original layouts are the base) |
-| S3-M6 | Movement and pathfinding beyond the original | – | open (decision 3 reserved) |
+| S3-M6 | Movement and pathfinding beyond the original | 34 | **built by machine** (16 October 2026): the movement profile `movement-budget` (path queue, cell budget per frame, one search per group order) as an option; the tick maximum target missed (13.7 ms with the profile, 123 ms in the original); not the default (D-3); no human has watched a group march |
 | S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | 30 (items 3, 4), 32 | **built by machine** (15 October 2026): the patch layer compiles and plays, every CRC-gated fix reviewed, eleven adopted behind the rule profile; eight candidates and three undecided markers are a side item of `HANDOFF-PHASE33.md`; no human has played a layer |
 | **R3** | **Changes release:** every change selectable, measured and accepted | – | open |
 | S4-M1 | Protocol, room, relay in the process; local skirmish over the network path | 25 | **done** (11 October 2026; `docs/NETWORK-PROTOCOL.md`) |
@@ -215,6 +215,9 @@ The sequence from here:
    The brief that follows is `HANDOFF-PHASE33.md` (S3-M1: AI tactics and difficulty, with the rest of S3-M7 as a side item).
    **Phase 33 done (15 October 2026)** (S3-M1, S3-M7 rest): tactics profiles and strengths of the built-in AI, a stronger default AI, every CRC-gated fix decided.
    The brief that follows is `HANDOFF-PHASE34.md` (S3-M6: the movement profile, the home of D-3).
+   **Phase 34 done (16 October 2026)** (S3-M6, with the fidelity corrections F-34, F-38, F-39): the movement profile as an option of the rule profile, measured against
+   thresholds committed beforehand - the mean 15 % lower, the longest tick 13.7 instead of 123 ms, the target of 8 ms missed. With S3-M1, S3-M6 and S3-M7 the
+   simulation-touching Stage 3 work is built; the brief that follows is `HANDOFF-PHASE35.md` (S3-M3: the replay browser).
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and
@@ -252,7 +255,7 @@ decision stays with the project owner. Decided items are kept for one month, the
 | ID | Question | Default in the plan | Due before | Stage |
 |---|---|---|---|---|
 | D-2 | Factory exit "always through the gate, even with an immediate command" – which behaviour has the original? (§7a no. 2 of the multiplayer plan: built, measured, not merged, shifts the balance) | unmerged: a unit with an immediate command leaves by the shortest route | R1 | 1 |
-| D-3 | Lowering the tick maximum (141–143 ms at 60 Hz) needs a behaviour change: shared group path, cell budget per tick or a different search (§7a no. 3) | not done | Phase 26 | 2 → built as S3-M6 |
+| D-3 | Lowering the tick maximum (141–143 ms at 60 Hz) needs a behaviour change: shared group path, cell budget per tick or a different search (§7a no. 3) | built as the option `movement-budget` (Phase 34; 13.7 ms, the target of 8 ms missed); the original movement stays the default - whether the profile becomes the default is the owner's | Phase 26 | 2 → built as S3-M6 |
 | D-4 | The two faster hash constructions (vision row by row; object hash with module hashes); change every reference value (§7a no. 4) | not implemented | – | 2 |
 | D-6 | Solo bonuses of the campaign on easy and hard (`SOLO_AI_EASY/HARD`, health bonus) – the original applies them, the port does not (§7a no. 6) | not implemented | R1 | 1 |
 | D-7 | The draw order of the roads depends on the rate (§7a no. 7) | unchanged | – | 2 |

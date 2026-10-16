@@ -78,6 +78,10 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   (easy, medium, hard - what the AI may know and how fast it decides, never a rule bonus); a new rule makes the default AI attack instead of standing still, so all
   16 AI pairings of the reference manifest are decided. A survey of 768 matches shows each profile and strength apart by thresholds fixed beforehand (12 of 13 met).
   Every CRC-gated fix of GeneralsGameCode is decided: sixteen adopted behind the rule profile, none open (`docs/SKIRMISH-AI.md`, `docs/GGC-FIXES.md`).
+- **A movement profile (Phase 34, by machine):** `--rules movement-budget` gives ground units a path queue with a cell budget per frame and one search per group
+  order - an option, not the default. In the 60 Hz gate the mean falls by 15 % and the longest tick from 123 ms to 14 ms; the target of 8 ms is missed and what is
+  left is named (`docs/PERF-MOVEMENT.md` §10). Three fidelity corrections of the original (a heal pad's door, boarding a hovering transport, the combat bike's
+  levels) and the three community fixes they blocked (`docs/GGC-FIXES.md` 3.1d).
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

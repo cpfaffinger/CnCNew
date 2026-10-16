@@ -1,5 +1,5 @@
 > **Stage:** 3 – Changes · **Milestone:** S3-M6 Movement and pathfinding beyond the original · **Phase:** 34
-> **Status:** current (starting state measured 15 October 2026 at `6c60147`; not begun)
+> **Status:** done by machine (16 October 2026, at `b6b5764`); the tick maximum target missed (`docs/PERF-MOVEMENT.md` §10) · **Successor:** HANDOFF-PHASE35.md
 > **Predecessor:** HANDOFF-PHASE33.md · **Results in:** docs/PERF-MOVEMENT.md, docs/PERFORMANCE.md, docs/SIMULATION-CORE.md, docs/plan/STAGE-3-CHANGES.md
 > **Side items:** the fidelity debts the fix review of Phase 33 named (F-34, F-38, F-39), each before the community fix it blocks
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`

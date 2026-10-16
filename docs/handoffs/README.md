@@ -60,14 +60,13 @@ phase number is 32.
 |---|---|---|---|---|
 | – | – | S3-M1 | AI kinds, difficulty and tactics (built-in `SkirmishAi` exists and is the default) | open |
 | – | `docs/SPECTATOR-MODE.md` | S3-M2 | Spectator and observer (built in Phase 23) | built – not accepted |
-| – | – | S3-M3 | Replay browser | open |
+| **35** | [HANDOFF-PHASE35.md](HANDOFF-PHASE35.md) | **S3-M3** | Replay browser: recording, list, playback | **next** – not begun |
 | – | – | S3-M4 | Match analysis with graphics | open |
 | – | – | S3-M5 | Modern user interface | open |
-| – | – | S3-M6 | Movement and pathfinding beyond the original (D-3) | open |
 | – | [HANDOFF-PHASE30.md](HANDOFF-PHASE30.md) items 3 and 4 | S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | begun in Phase 30 (rule profile, catalogue, layer import) |
 | 32 | [HANDOFF-PHASE32.md](HANDOFF-PHASE32.md) | S3-M7 | The patch layer playable, the review of the logic fixes | done by machine (15 October 2026): `477c15e`, `a3834a8`, `34fc5e8`, `1ff635d`, `417e51a` |
 | 33 | [HANDOFF-PHASE33.md](HANDOFF-PHASE33.md) | S3-M1 (+ S3-M7 rest) | AI tactics profiles and difficulty levels, a stronger default AI | done by machine (15 October 2026): `1259dee`, `55ef111`, `beea7e2`, `e386095`, `11e61ca`, `131f590`, `80fb676`, `dbdb252`, `6c60147` |
-| **34** | [HANDOFF-PHASE34.md](HANDOFF-PHASE34.md) | **S3-M6** | A shared group path and a cell budget per tick as a movement profile | **next** – not begun |
+| 34 | [HANDOFF-PHASE34.md](HANDOFF-PHASE34.md) | S3-M6 (+ F-34, F-38, F-39) | A shared group path and a cell budget per tick as a movement profile | done by machine (16 October 2026), the tick maximum target missed: `2d2c602`, `34a0301`, `61f293d`, `c2e48e2`, `3d0d276`, `f3c4009`, `d58d9d0`, `3b6fa80`, `a13d5de`, `3bd8ceb`, `a63b52d`, `ed12ad0`, `e6232ce` |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 
