@@ -179,6 +179,46 @@ outputs (lists in creation order, sorted dictionaries). Two runs with the same s
 
 All skipped or approximated cases are counted by `FxExecutor.Counters` (sorted).
 
+## Attached effects (Phase 35, `AttachedEffects`, `AttachedEffectCatalog`)
+
+**The finding (16 October 2026, the project owner, by watching):** the Chinese Dragon tanks showed no flames - only "some fake projectile" came out of them -, nothing
+smoked, and units did not burn. The cause was general: every effect an object **carries continuously** - as opposed to the FX list an event plays once - had no
+implementation. The simulation keeps `BoneFXUpdate` and `BoneFXDamage` as stateless shells ("effects on model bones are presentation", `docs/SIMULATION-CORE.md`),
+`TransitionDamageFX` there plays only its creation lists, and the presentation parsed `ParticleSysBone` of the model states without ever creating a system from it. The
+Dragon tank's flame is entirely such an effect: its projectile `DragonTankFlameProjectile` has `Model = NULL` and six particle systems of `BoneFXUpdate`
+(`FlameThrowerTrail01`..`06`, `FlameThrowerSmoke01`), its weapon a projectile stream (`FlamethrowerProjectileStream`, `W3DProjectileStreamDraw`), and `Model = NULL` was
+taken for a model name and drawn as the placeholder box - the "fake projectile". No check found it: `fx-audit` checks the references of FX lists, and the machine acceptance
+line FX-04 named it as checked (`docs/ACCEPTANCE-MACHINE.md`, corrected).
+
+**What is built** (`src/CnCNew.Presentation/Fx/AttachedEffects.cs`; the original's mechanisms read in the sources of Zero Hour and rewritten):
+
+| Mechanism | In the original | Here |
+| --- | --- | --- |
+| `ParticleSysBone = <bone> <system>` of a condition state | `W3DModelDraw::setModelState`, `recalcBonesForClientParticleSystems`, `stopClientParticleSystems` | every system of the selected state of every draw module, at the bone of the state's model; all destroyed when another state is selected or the object is no longer shown; a bone the model lacks is the origin (as `Get_Bone_Index` 0) |
+| the body's fire and smoke (`GameData.ini` `AutoFireParticle*`, `AutoSmokeParticle*`, `AutoAflameParticle*`) | `ActiveBody::updateBodyParticleSystems` on a change of the damage state or of `setAflame` | rebuilt on such a change for every object with an `ActiveBody` (or one of its kinds): at the bones PREFIX01 .. up to 16 of the current model, picked at random up to the category's maximum; aflame: fire one size up, smoke becomes small fire, every maximum doubled, the aflame category added; no bones, no systems |
+| `BoneFXUpdate` / `BoneFXDamage` | `changeBodyDamageState`, `update`, `doParticleSystemAtBone` | the particle systems and FX lists of the slots of the current damage state, each after a random delay (min .. max, milliseconds in the file), once (`OnlyOnce:Yes`) or again and again; the systems end when the state changes |
+| `TransitionDamageFX` particle systems and FX lists | `onBodyDamageStateChange` | on a worse damage state, at the bone, a random numbered bone (`RandomBone:Yes`) or the location; the systems of a state end when the object leaves it |
+| a missile's exhaust (`ProjectileExhaust`, `VeterancyProjectileExhaust`) | `MissileAIUpdate::doIgnitionState` | attached to the projectile of a `MissileAIUpdate` after its `IgnitionDelay`, of the launcher's veterancy |
+| projectile streams (`ProjectileStreamName`, `W3DProjectileStreamDraw`) | `ProjectileStreamUpdate`, `W3DProjectileStreamDraw::doDrawModule` | per launcher and weapon the projectiles in flight (at most 20), a hole where the aim changed, the newest `MaxSegments` points; handed to the renderer as `FxFrame.ProjectileStreams` |
+| dust of a moving truck, tread debris of a moving tank (`Dust`, `TreadDebrisLeft/Right`) | `W3DTruckDraw`, `W3DTankDraw::doDrawModule` | a system attached to the vehicle while it moves, destroyed when it stands (the original pauses the same one); `DirtSpray`, `PowerslideSpray` and the speed scaling are not reproduced; the shipped tanks name no tread debris |
+| `Model = NULL` | W3D's null render object | no model (like `NONE`) |
+
+Every system is attached to its object with the bone as a local offset (`ParticleSpawn.LocalOffset`, the original's `setPosition` before `attachToObject`) and ends with
+it. **Bones and muzzles:** `LiveGame` now answers `IFxWorldView.GetBonePosition` and `GetWeaponMuzzle` (before: always null, every shot's effect stood at the object's
+origin): the rest-pose bone of the object's current model (`ModelBoneTable`, read from the W3D file when first asked for), scaled by the object's scale and turned with it;
+the muzzle is the `WeaponFireFXBone` of the slot the object fires from now (the event names the weapon, not the slot). **Not reproduced (named):** bone rotations and
+animated bones (`ParticlesAttachedToAnimatedBones`, `AnimatedParticleSysBoneClientUpdate`); the damage-type filters of `BoneFXUpdate` and `TransitionDamageFX`
+(`DamageParticleTypes` - the presentation does not know the damage type of a change); a missile's exhaust ends with the missile, not when its fuel runs out; the texture
+scroll of a stream; pausing an attached system while its object is shrouded (an object that is not shown loses its model-state and body systems and gets them again).
+The other attached emitters of the original - `HelicopterSlowDeathBehavior`'s `AttachParticle`, the stealth detector's IR systems, the EMP's sparks, `OCL`
+`CreateObject ... ParticleSystem` on debris (which is not created, F-36) - are not built.
+
+**Test:** `Game.Tests` suite `AttachedEffectsTests` (staged scenes on Alpine Assault): the catalog of the shipped data (every slot read, every system it names exists, the
+flame projectile's six pristine systems); a Dragon tank against infantry - the flame's trail in more than ten frames, its smoke, its stream through the projectiles; a
+power plant damaged twice - fire and smoke at its bones; a barracks set on fire by the flame - fire at its bones in most of the frames it burns; a Tank Hunter's missiles -
+their exhaust; `Model = NULL` loads no model; a rocket buggy - dust only once it drives. Counters: `AttachedEffects.Stats`, `MissingBoneNames` (the power plant's damaged
+models lack bones their states name - the original then puts those systems at the origin too). **Not seen by a human.**
+
 ## Sound cues
 
 `SoundCue(Tick, EventName, Kind, Position?, Entity, Player, Volume, Priority, Origin)` with `Kind` Effect, Voice, Eva,
@@ -261,7 +301,7 @@ camera shake, decal buffer, sound cue rules and rate limiter. With `--content-di
 - DRAWABLE particles (1 system) are output as instances with `ParticleKind.Drawable`; the reference does not draw
   them. SMUDGE textures (`SMUD…`, 2 systems) need a heat-haze renderer (opacity from alpha, size);
   VOLUME_PARTICLE (4) is rendered by the reference with depth 1, i.e. like normal particles.
-- No bone matrices: muzzles and bones are supplied by the object layer as positions; orientation = object.
+- No bone matrices: muzzles and bones are the rest-pose positions of the current model's bones (since Phase 35 supplied by `LiveGame`, "Attached effects" above); orientation = object.
 - Shroud/fog: only as a hook; `SimulationFxWorldView.IsShrouded` is always false. The shroud test for attached
   systems when emitting is missing.
 - DamageFX uses only the unconditional ArmorSet; `DamageFXOverride` and upgrade-dependent ArmorSets are missing, because the

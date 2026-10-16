@@ -93,7 +93,7 @@ known limit, with its reason; **fixed** - a defect found by the pre-check, corre
 | FX-01 muzzle flashes | machine | world (`fx-audit`, flash only after a shot) | duration against the original |
 | FX-02 tracers and hits | machine | world (`fx-audit`) | look |
 | FX-03 explosions, smoke, wreck | **fixed, with a limit** (Phase 31, F-05) | sim (slow-death phases play effect, creation list and weapon) | **debris of creation lists is counted and skipped** (F-36): a dying tank leaves no flying turret; the look |
-| FX-04 smoke trails, fire at the impact | machine | world (`fx-audit`) | look |
+| FX-04 smoke trails, fire at the impact | **corrected** (Phase 35) | `fx-audit` checked only the references of the FX lists; the effects objects carry - flame trails, missile exhaust, the fire and smoke of damaged and burning objects, model-state systems, projectile streams - were not built at all (the owner saw it on 16 October 2026). Now `AttachedEffectsTests` (`docs/PRESENTATION-FX.md` "Attached effects") | look; bone rotations and animated bones not followed |
 | SND-01 shot and impact sounds | **fixed** | sound (one detonation sound per shot, clipped samples 181 to 62) | how it sounds |
 | SND-02 many sounds at once | machine | sound (cue counts of `acc-firefight`) | how it sounds |
 | SND-03 tick of the capture | machine | scenes (ticks counted at every rate) | how it sounds |

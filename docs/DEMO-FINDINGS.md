@@ -166,3 +166,9 @@ the rate equivalence suite, equal frame numbers of the exits, equal command stre
 On the owner's instruction no human accepted anything in Phase 30; every line of this document and of the acceptance catalogue has its machine state in
 [ACCEPTANCE-MACHINE.md](ACCEPTANCE-MACHINE.md): which check proves what a program can, what only a human can judge, and the named limits (no shadows, no sky in
 `MD_USA01`'s intro, no debris of creation lists, the model viewer's Crusader).
+
+## Fourth feedback of the project owner: flames, smoke, burning (16 October 2026, Phase 35)
+
+| No. | Finding | Cause | State |
+| --- | --- | --- | --- |
+| 30 | The Chinese Dragon tanks show no flames, only "some fake projectile" comes out of them; nothing smokes; units do not burn - "surely not only the flame tanks" | general: every effect an object carries continuously was missing - `BoneFXUpdate` (the flame's trail), `ParticleSysBone` of the model states, the body's fire and smoke by damage state and while aflame (`ActiveBody`), `TransitionDamageFX` particle systems, missile exhaust, projectile streams, vehicle dust; bone and muzzle positions were never supplied in a game; `Model = NULL` (the flame projectile) was drawn as the placeholder box | fixed, not seen by a human: `docs/PRESENTATION-FX.md` "Attached effects", test `AttachedEffectsTests`; bone rotations, animated bones and the stream's texture scroll are not reproduced |

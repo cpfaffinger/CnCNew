@@ -104,6 +104,7 @@ reference in gamma space. The table is built once per `FxBuilder`.
 | `LightPulseInstance` | No pooled point lights in this package; the number of active pulses is counted, not drawn | `NotDrawnLights` |
 | `RayEffectRequest` | 0 uses in the retail content (`docs/PRESENTATION-FX.md`); beam drawables are not part of this package | `NotDrawnRays` |
 | FX models | `FxFrame` delivers none (no FxNuggetKind for them); muzzle flashes are particle systems and are drawn regularly | – |
+| scroll of a projectile stream | `FxFrame.ProjectileStreams` (Phase 35, `docs/PRESENTATION-FX.md` "Attached effects") are drawn as additive bands of the stream's width through the projectiles, the texture once per tile (`TileFactor` quads per segment - the effect sampler clamps); `ScrollRate` is not reproduced | – |
 
 `FxExecutor.Capture` delivers `RayEffects` and `ViewShakes` once (they are cleared afterwards). `FxLayer` is the
 only caller of `Capture` in the Stride client layer and keeps the most recently captured `FxFrame`
