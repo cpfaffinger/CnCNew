@@ -243,3 +243,11 @@ one. A changed byte, another tick rate and the mission reader are refused.
 **Limits.** A match of the original AI with a slot played by the built-in one still cannot be saved (`ScriptedSkirmishSession.Save` refuses; not converted). A save holds the
 whole recording, so its size grows with the match (0.4 to 0.8 MB for two players, 3.5 MB for eight after five minutes, `docs/SIMULATION-CORE.md` §45.3). Nobody has pressed
 the button or loaded a skirmish in a window.
+
+## 9. Replays beside the savegames (Phase 35)
+
+The client records every skirmish it plays as a replay file (`.cncreplay`) in the directory `Replays` beside `Saves` (`docs/REPLAY-BROWSER.md`). A replay is not a
+savegame: it holds the match description and every command, and is played from tick 0 with the computer players deciding again; a savegame holds the state and is continued.
+The two meet in the playback - its checkpoints are the session state of `SkirmishMatchSession.Save` (§8), kept in memory while a replay is played, and a seek restores one.
+A skirmish continued from a savegame is recorded from the tick it was saved at; its replay holds the whole match (the session's recording is part of the save) and plays from
+tick 0, and its recorded hashes and counters begin at the saved tick. Missions are not recorded (their truth is the state, §4).

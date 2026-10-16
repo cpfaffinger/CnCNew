@@ -304,3 +304,12 @@ Start: `pwsh scripts/demo-spectator.ps1 -Seed 7 -Map "Alpine Assault" -FactionA 
   both AIs commanded, no spectator command was recorded, all panels, fog visions and speeds were on, the AI cameras found focus points and the camera reached the
   overview height; stores ten named PNGs under `%TEMP%\cncnew-spectator-check`.
 - Unchanged: `SimTool input-manifest check` and `reference-manifest check --set quick` (the simulation computes nothing differently), the golden hashes of the existing screens.
+
+## 13. The playback of a replay (Phase 35)
+
+A replay is played in this mode (`docs/REPLAY-BROWSER.md` §5): the same observer HUD, the same keys, and the fog switch `F` runs through every player of the recording.
+When the controller shows a playback (`SpectatorController.Replay`) the button bar has a third row - Start (`Home`), << Back (`PageUp`), Next >> (`PageDown`) - and the
+replay's line: where the playback stands in the recording, the checkpoint, how the recording ended and how many recorded hashes matched. A seek is asked for by the
+controller (`SeekRequest`) and carried out by the host, which builds the scene again for the playback's new presentation and gives it a new controller that takes over the
+view of the old one (`TakeViewFrom`: tab, panels, camera, followed camera, fog, speed, pause). Escape in a playback of the menus leads back to the replay list. Not seen by a
+human.

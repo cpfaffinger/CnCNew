@@ -236,7 +236,12 @@ Since Phase 29 the menus' way to a server is checked by programs that stand in f
 - `net-acceptance` (`scripts/check-net-acceptance.ps1`, about three minutes; gate of `net` and `client`, tier 4): a dedicated server behind 40 ms, jitter and
   loss, two window clients through the menus, three clients without a window, a watcher, two computer players; a lost connection that returns, a stall, a client
   that vanishes, a pause - one hash chain, and the indicators of both window clients name each event.
-- Both need a display and end with exit code 3 (**NOT RUN**) without one.
+- `replay-browser` (`scripts/check-replay-browser.ps1`, about a minute; gate of `game` and `client`, tier 4; Phase 35, `docs/REPLAY-BROWSER.md`): one window client
+  driven by `--shell-script` - a 40-second skirmish recorded, the replay list with a damaged file beside it, the damaged file refused, the recording played with two
+  seeks back and one forward, each at the hash the recording kept, to the recorded end; renamed and deleted. The suite `ReplayBrowserTests` of `Game.Tests` (selected
+  for changes under `src/CnCNew.Game/Replays`, `Shell`, `Live`, `Spectator`) is the same without a window, at every rate, with the list's 54 hashes in
+  `baselines/replay-screens.txt`; `--replay-measure-minutes N` adds a measured eight-player match.
+- All three need a display and end with exit code 3 (**NOT RUN**) without one.
 
 Measurements by hand (real time; a quiet machine, nothing built meanwhile): `scripts/measure-net-latency.ps1 -Label NAME [-ClientArguments ...]` (a local match
 and four lines through a proxy, about twelve minutes; the table of `docs/MULTIPLAYER-FINDINGS.md` section 3), `PresentationTool smoothness` (the steps of what is

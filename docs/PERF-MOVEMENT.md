@@ -410,7 +410,14 @@ smaller queue budget (30,000 cells take about 2.2 ms off the update ticks, and u
 
 **The rate-equivalence suite under the profile** (`Simulation.Tests -- --content-dir game/content --only RateEquivalence --rules movement-budget`): 9 of 10 groups
 pass; in the group "locomotion" one case of 689 is outside: `Boss_InfantryAngryMobNexus` walks its course 31 units longer at 30 Hz (25.03 s against 23.18 s at 60 Hz and
-23.19 s at 120 Hz; course time, course length, braking time and distance - 4 quantities); 60 and 120 Hz agree with the original. The cause is not found. Two
+23.19 s at 120 Hz; course time, course length, braking time and distance - 4 quantities); 60 and 120 Hz agree with the original. The cause is not found.
+**Narrowed in Phase 35** (`SimTool rate-compare game/content "Boss_InfantryAngryMobNexus" [--rules movement-budget]`, 16 October 2026): under the original all three
+rates agree (course 23.07 / 23.05 / 23.06 s, 400.06 / 400.08 / 400.08 units); under the profile 60 and 120 Hz walk the course as the original does (23.18 s, 400.08 units -
+the queue's frame of waiting per leg), and only 30 Hz differs - already on the straight run, whose braking ends after one frame with 0.52 units instead of three to four
+frames with 1.3 to 1.6 units, and on every corner of the course by about 0.46 s and 7.7 units. Unlike an ordinary unit of the group's 56 cases the nexus brings
+company: its `SpawnBehavior` puts five mob members (`InitialBurst = 5`) around it at once, infantry that stands and walks beside it. The likely place is therefore the
+profile's detour question (`StationaryBlockersAhead` then `PathWait.Detour`, an answer that comes at the end of the decision frame) together with the members' own questions,
+whose order within a frame differs at 30 Hz, where every tick is a frame boundary - a hypothesis, not traced tick by tick; nothing was changed. Two
 other cases the first runs found are fixed (`a63b52d`: a waiting unit decided again in the middle of its frame; `ed12ad0`: the frame a decision belongs to, and
 sharing only within a group order).
 

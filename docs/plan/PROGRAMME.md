@@ -144,7 +144,7 @@ milestone status is updated in each stage document.
 | **R2** | **Engine release:** 60 Hz seen by a human, determinism on a second machine, skirmish savegame | – | open |
 | S3-M1 | AI kinds, difficulty and tactics | 6, 17, 23 (built-in AI), 33 | **built by machine** (15 October 2026): four tactics profiles and three strengths per slot, the rule "no standing still", the survey against thresholds (12 of 13 met); no human has watched a profile |
 | S3-M2 | Spectator and observer | 23 (side product) | built – not accepted |
-| S3-M3 | Replay browser | – | open (replay format exists) |
+| S3-M3 | Replay browser | 35 | **built by machine** (16 October 2026): every skirmish recorded beside the savegames, the list on `ReplayMenu.wnd` with the state of every file, playback with pause, speed, seeking to checkpoints and the choice of view; every build plays only its own replays (no migration, D-31); no human has used it |
 | S3-M4 | Match analysis with graphics | – | open (headless surveys exist) |
 | S3-M5 | Modern user interface | – | open (original layouts are the base) |
 | S3-M6 | Movement and pathfinding beyond the original | 34 | **built by machine** (16 October 2026): the movement profile `movement-budget` (path queue, cell budget per frame, one search per group order) as an option; the tick maximum target missed (13.7 ms with the profile, 123 ms in the original); not the default (D-3); no human has watched a group march |
@@ -218,6 +218,8 @@ The sequence from here:
    **Phase 34 done (16 October 2026)** (S3-M6, with the fidelity corrections F-34, F-38, F-39): the movement profile as an option of the rule profile, measured against
    thresholds committed beforehand - the mean 15 % lower, the longest tick 13.7 instead of 123 ms, the target of 8 ms missed. With S3-M1, S3-M6 and S3-M7 the
    simulation-touching Stage 3 work is built; the brief that follows is `HANDOFF-PHASE35.md` (S3-M3: the replay browser).
+   **Phase 35 done (16 October 2026)** (S3-M3): the replay browser by machine - every skirmish recorded, the list with the state of every file, playback to the
+   recorded hashes with seeking; no simulation change. The brief that follows is `HANDOFF-PHASE36.md` (S3-M4: match analysis, which takes the replays as its input).
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and

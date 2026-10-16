@@ -82,6 +82,9 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   order - an option, not the default. In the 60 Hz gate the mean falls by 15 % and the longest tick from 123 ms to 14 ms; the target of 8 ms is missed and what is
   left is named (`docs/PERF-MOVEMENT.md` §10). Three fidelity corrections of the original (a heal pad's door, boarding a hovering transport, the combat bike's
   levels) and the three community fixes they blocked (`docs/GGC-FIXES.md` 3.1d).
+- **A replay browser (Phase 35, by machine):** every skirmish the client plays - locally or on a server - is recorded beside the savegames; main menu > Load/Replay >
+  Replay lists the files with the state of each against this game (and why one does not play), plays one back with pause, speed, seeking to checkpoints and the view of
+  one player or everything, to the recorded result. Every build plays only its own replays (`docs/REPLAY-BROWSER.md`).
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

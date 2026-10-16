@@ -32,6 +32,7 @@ picture **looks like the original**, that motion **feels right** or that a sound
 | match | `check-match`, `check-spectator`, `session-check`, the 16 AI pairings of the manifest | tier 4 |
 | campaign | `CampaignTool reachability`, `audit`, `drive` (objective driver), `outputs` (script outputs shown) | completion of a phase |
 | perf | `scripts/perf-profile.ps1`, client `--net-stats`, `PresentationTool smoothness` | completion of a phase |
+| replay | `Game.Tests` `ReplayBrowserTests` (the file, the store, every compatibility reason, a recorded match played to every recorded hash, seeks, the server's file, refusals, 54 screen hashes, a scripted person) and `NetShellTests` (both games of a match of a server record it), `check-replay-browser` (the same in the real client) - docs/REPLAY-BROWSER.md | tier 2/3/4 |
 
 ## 3. Every line
 
@@ -112,6 +113,11 @@ known limit, with its reason; **fixed** - a defect found by the pre-check, corre
 | PERF-01 smoothness | machine | perf (`PresentationTool smoothness`, `--net-stats`: the next tick late in 0 to 5 of 7,178 frames) | feel |
 | PERF-02 loading time | machine | perf (load steps logged by the client; `GameData.Load` measured in the smoke tests) | whether it is acceptable |
 | PERF-03 spectator at eight times speed | machine | perf (catch-up speed 26.5-fold at 60 Hz) | feel |
+| REPLAY-01 every skirmish is recorded | machine | replay (local, a match of a server on both games, a spectator's match; the ending of each kind by its facts) | - |
+| REPLAY-02 the list and the state of each file | machine | replay (nine states in six resolutions; every reason with words of its own) | **whether the list is easy to read** |
+| REPLAY-03 playback to the recorded result | machine | replay (every recorded session hash, the final hash and the score, at 30, 60 and 120 Hz; in the window client) | how the playback looks |
+| REPLAY-04 pause, speed, seek, view | machine | replay (three seeks at the recorded hash, pause, speed and view kept; in the window client 0.1 to 0.3 s per seek) | **whether the controls feel right** |
+| REPLAY-05 an incompatible file says why | machine | replay (another build, rule profile, rate, map; a changed byte; a header that does not describe its match) | whether the words are understood |
 
 ## 4. The findings lists
 

@@ -218,8 +218,8 @@ of them new.
 
 * Campaign selection, briefing, load list, saving in the game and mission completion have been connected since Phase 10
   (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7, `src/CnCNew.Game/Shell/Screens/CampaignScreens.cs`,
-  `src/CnCNew.Game/Shell/MissionPresentation.cs`, `src/CnCNew.Game/Hud/MissionPauseMenu.cs`); only multiplayer and
-  playback (replays) remain outside the product scope (buttons visible, disabled).
+  `src/CnCNew.Game/Shell/MissionPresentation.cs`, `src/CnCNew.Game/Hud/MissionPauseMenu.cs`); multiplayer since Phase 29 (§15) and the replay list and its
+  playback since Phase 35 (§17, `docs/REPLAY-BROWSER.md`).
 * `RadioButtonUserMaps` delivers an empty list (no import path for own maps in this state).
 * No mouse click ends the credits (only Escape) – `WinTextDraw` is a simple `USER` window, and this runtime
   routes only gadget and keyboard messages (see `docs/UI-WND.md`); an "any mouse click on a non-
@@ -610,3 +610,28 @@ Checks that use it: `NetShellTests` (two shells in one process, real loopback so
 both; `--endurance-minutes N`), `NetScreenTests` (with window transitions), `scripts/check-net-lobby.ps1`, `scripts/check-net-acceptance.ps1`,
 `scripts/measure-net-latency.ps1`. The pictures: `NetScreenTests` puts a scripted lobby into every state - 56 states in six resolutions, 336 hashes in
 `tests/CnCNew.Game.Tests/baselines/net-screens.txt`, no two alike.
+
+## 17. The replay list (Phase 35)
+
+Main menu > Load/Replay > **Replay** opens `ReplayMenu.wnd` (`ReplayMenuScreen`); the button follows `MainMenu.cpp` (`buttonReplayID`: the submenu plays
+`MainMenuLoadReplayMenuBackTransition` backwards, the shell pushes `Menus/ReplayMenu.wnd`), the screen plays `ReplayMenuFade` in and out. Everything about the replays
+themselves - the file, the compatibility, the playback - is `docs/REPLAY-BROWSER.md`; here what the screens are:
+
+| Screen (file) | Callbacks | What it does |
+| --- | --- | --- |
+| `ReplayMenuScreen` (`ReplayMenu.wnd`) | `ReplayMenuSystem`, `ReplayMenuInput` | the list in the layout's four columns (name, date, **state**, map; a file that does not play in the original's grey), the first row chosen; the details of the chosen file in a window of this project's own laid over the layout (`ReplayMenuScreen.DetailsLayout`, `ReplayDetails.wnd:StaticTextDetails`, in the free part of the button column); Load Replay (or a double click), Delete Replay (with the original's question), the third button - the original's "Copy Replay" - relabelled "Rename"; Back and Escape |
+| `ReplayRenameScreen` (`PopupReplay.wnd`) | `PopupReplaySystem`, `PopupReplayInput` | over the list (`HidesScreensBelow` false): the replays that exist, a click copies a name into the field, Enter or the button renames; a refused name is a message over the popup |
+
+The shell's side of a playback: `GameShell.BeginReplay` judges the chosen file (a file that does not play is a message over the list, and nothing starts) and hands
+the host the file (`StartReplayOutput`); the host reports `ReplayFinished` (the score screen with what the playback found over it), `ReplayStopped` (Escape: back to the
+list) or `ReplayFailed` (the file could not be opened after all: back to the list with the reason). After the score screen of a playback the way back leads to the replay
+list, not to the bare main menu. `GameShell.Replays` is the store (`Replays` beside `Saves`, `IShellEnvironment.ReplayDirectory`), `GameShell.ReplayMachine` what a file is
+judged against (a test of the screens sets a fixed one). `GameShell.SkirmishMatchSeconds` (the client's `--skirmish-seconds N`) gives the setup screen's matches a length of N
+seconds of game time - a check's short match.
+
+`ShellScript` (§16): a `key` step while a match or a playback runs goes to the running game (`ShellScript.MatchInput`), as the device's keys do then - a script seeks a
+playback with `key PageUp`. The probes of the client add `seeks`, `hashes` and `mismatches` (`wait match seeks equals 2`).
+
+Pictures: `ReplayBrowserTests` draws nine states of the list - empty, a list of four files, a file of another build chosen, the refusal, a damaged file chosen, the rename
+popup, a name taken, the delete question, the score of a playback - in six resolutions: 54 hashes in `tests/CnCNew.Game.Tests/baselines/replay-screens.txt`, no two alike,
+the same at 30, 60 and 120 Hz. Not seen by a human.

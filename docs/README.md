@@ -99,6 +99,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 | [TEXT-AUDIT.md](TEXT-AUDIT.md) | Text rendering: font path, sentence wrapping, findings |
 | [UI-VANILLA-FIT.md](UI-VANILLA-FIT.md) | UI against the unmodified layouts of the Steam master |
 | [SPECTATOR-MODE.md](SPECTATOR-MODE.md) | Spectator mode: AI against AI in a window |
+| [REPLAY-BROWSER.md](REPLAY-BROWSER.md) | The replay browser: every skirmish recorded, the list with the state of each file, playback with pause, speed, seeking and the choice of view |
 
 ## Performance and determinism
 
@@ -193,4 +194,5 @@ milestones of Stage 3 have no brief yet (`plan/STAGE-3-CHANGES.md`).
 | [HANDOFF-PHASE32.md](handoffs/HANDOFF-PHASE32.md) | S3-M7: the patch layer playable, the review of the logic fixes | done by machine (15 October 2026) |
 | [HANDOFF-PHASE33.md](handoffs/HANDOFF-PHASE33.md) | S3-M1: AI tactics profiles and difficulty levels, the rest of S3-M7 | done by machine (15 October 2026) |
 | [HANDOFF-PHASE34.md](handoffs/HANDOFF-PHASE34.md) | S3-M6: a shared group path and a cell budget per tick as a movement profile | done by machine (16 October 2026), the tick maximum target missed |
-| [HANDOFF-PHASE35.md](handoffs/HANDOFF-PHASE35.md) | S3-M3: the replay browser - recording, list, playback | next |
+| [HANDOFF-PHASE35.md](handoffs/HANDOFF-PHASE35.md) | S3-M3: the replay browser - recording, list, playback | done by machine (16 October 2026) |
+| [HANDOFF-PHASE36.md](handoffs/HANDOFF-PHASE36.md) | S3-M4: match analysis with graphics - from a replay or a running match | next |

@@ -99,6 +99,8 @@
 
 **Stage 3, S3-M6 (Phase 34, 16 October 2026, by machine):** the movement profile `movement-budget` - a path queue with a cell budget per frame and one search per group order, an option of the rule profile; the tick maximum target of 8 ms is missed (13.7 ms after the first 300 ticks, 123 ms in the original); the fidelity corrections F-34, F-38, F-39 and three more fixes of the community source (`docs/PERF-MOVEMENT.md` §10, `docs/SIMULATION-CORE.md` §52). Next: S3-M3, the replay browser (`docs/handoffs/HANDOFF-PHASE35.md`).
 
+**Stage 3, S3-M3 (Phase 35, 16 October 2026, by machine):** the replay browser - every skirmish of the built-in AI recorded beside the savegames (local, on a server, a spectator's), the list on `ReplayMenu.wnd` with the state of every file and its reason, delete and rename, playback with pause, speed, seeking to checkpoints and the view of one player or everything, checked against the hashes the recording kept; no simulation change (`docs/REPLAY-BROWSER.md`). Next: S3-M4, match analysis (`docs/handoffs/HANDOFF-PHASE36.md`).
+
 ## 6. Patch integration and quality (Phase 30)
 
 **Postponed on 5 October 2026:** this section was the step after Phase 17 and now lies behind the programme from section 5 (`docs/handoffs/HANDOFF-PHASE30.md`).

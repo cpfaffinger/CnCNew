@@ -81,6 +81,12 @@ the surveys. Nothing is rebuilt.
 - **Acceptance:** a human records a match, finds it in the list, plays it back to the end with the same result, seeks,
   and is told clearly why an incompatible file does not play.
 - **Depends on:** S2-M7 (match description, replay header). Presentation and game layer only.
+- **Status (Phase 35, 16 October 2026): built by machine** (`docs/REPLAY-BROWSER.md`). (a) every skirmish of the built-in AI - local, of a server (both games),
+  a spectator's - is recorded beside the savegames with a header the list reads; (b) `ReplayMenu.wnd` behind the main menu's Replay button with the state of every
+  file and the reason, delete and rename; (c) pause, speed, seek to checkpoints the playback keeps every 30 s of game time, the view of one player or everything,
+  the score screen against the recorded result; (d) a replay is bound to its build, rate, rule profile and data - every build plays only its own replays, no migration
+  (D-31). No simulation code, format or reference value changed. A match of the original AI is not recorded. "A human records, finds, plays, seeks and is told" is
+  replaced by machine checks (a scripted person in `Game.Tests` and in the window client, hashes at every seek, screen hashes); it is not met by a human.
 
 ### S3-M4 Match analysis with graphics
 
