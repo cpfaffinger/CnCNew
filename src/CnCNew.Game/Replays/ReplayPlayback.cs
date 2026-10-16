@@ -105,6 +105,9 @@ public sealed class ReplayPlayback
     /// <summary>The ticks the playback holds a checkpoint for, in order.</summary>
     public IReadOnlyCollection<long> CheckpointTicks => _checkpoints.Keys;
 
+    /// <summary>The memory the kept checkpoints take: their packed states.</summary>
+    public long CheckpointBytes => _checkpoints.Values.Sum(checkpoint => (long)(checkpoint.PackedState?.Length ?? 0));
+
     public bool IsOver => Match.IsOver;
 
     // ------------------------------------------------------------------------------------------------------------ open

@@ -71,6 +71,10 @@ internal static class ReplayBrowserTests
             $"{baselines.Count} hashes, {baselines.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
         if (updating) SaveBaselines(baselines);
         harness.Run("A person at the menus: a skirmish recorded, found in the list, played to the end with seeks back and forth, renamed and deleted", () => PersonAtTheMenus(data));
+        // --replay-measure-minutes N (docs/REPLAY-BROWSER.md section 7): an eight-player match of computer players, recorded and played with seeks, measured in real time.
+        var minutesAt = Array.IndexOf(args, "--replay-measure-minutes");
+        if (minutesAt >= 0 && minutesAt + 1 < args.Length && int.TryParse(args[minutesAt + 1], out var minutes) && minutes > 0)
+            harness.Run($"Measured: an eight-player match of {minutes} game minutes recorded, played and sought", () => Measure(data, minutes));
         return harness.Failures;
     }
 
@@ -526,6 +530,47 @@ internal static class ReplayBrowserTests
         var directory = Path.Combine(Path.GetTempPath(), "cncnew-replay-tests-" + Guid.NewGuid().ToString("N"), name);
         Directory.CreateDirectory(directory);
         return directory;
+    }
+
+    // ------------------------------------------------------------------------------------------------- a measurement
+
+    private static void Measure(GameData data, int minutes)
+    {
+        var mapPath = data.Maps.First(path => path.Contains("Twilight Flame", StringComparison.OrdinalIgnoreCase));
+        var options = SkirmishMatchOptions.StandardAt(data.Rate) with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(minutes * 60L) };
+        string[] factions = ["FactionAmerica", "FactionChina", "FactionGLA", "FactionAmericaAirForceGeneral", "FactionChinaTankGeneral", "FactionGLAToxinGeneral", "FactionAmericaLaserGeneral", "FactionChinaNukeGeneral"];
+        var setup = new MatchSetup(mapPath, factions[0], [.. factions[1..]], options) { Seed = 11, Spectator = true };
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var live = LiveMatch.Create(data, setup, Viewport);
+        var recorder = MatchRecorder.Attach(live)!;
+        while (!live.IsOver) live.Advance(0.25);
+        var recordSeconds = watch.Elapsed.TotalSeconds;
+        watch.Restart();
+        var bytes = recorder.Build(MatchRecorder.EndingOf(live, false), RecordedAt);
+        var buildMs = watch.Elapsed.TotalMilliseconds;
+        var commands = ReplayFormat.Read(MatchRecordingFormat.Read(bytes).Replay).Commands.Length;
+        watch.Restart();
+        var playback = ReplayPlayback.Open(data, bytes, Viewport);
+        var openMs = watch.Elapsed.TotalMilliseconds;
+        watch.Restart();
+        PlayToEnd(playback);
+        var playSeconds = watch.Elapsed.TotalSeconds;
+        TestHarness.Assert(playback.FinalHashMatches && playback.HashMismatches == 0, $"the playback of the measured match reaches its recorded end ({playback.HashMismatches} of {playback.HashesChecked} differ)");
+        var seeks = new List<string>();
+        var interval = playback.CheckpointInterval;
+        var last = (playback.EndTick - 1) / interval * interval;
+        foreach (var target in new[] { last / 2 / interval * interval, interval, last, last / 2 / interval * interval + data.Rate.Time.WholeSecondsToTicks(20) })
+        {
+            watch.Restart();
+            var seek = playback.SeekTo(target);
+            seeks.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{seek.Tick / data.Rate.TicksPerSecond} s {(seek.Restored ? "restored" : "onwards")} +{seek.SteppedTicks} ticks {watch.Elapsed.TotalMilliseconds:0} ms {(seek.HashMatches ? "same" : "DIFFERENT")}"));
+            TestHarness.Assert(seek.HashMatches, $"the seek to tick {target} lands at the recorded hash");
+        }
+        Console.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"       measured: {minutes} min, 8 players, {data.Rate.TicksPerSecond} Hz, {live.Tick} ticks; recorded in {recordSeconds:0.0} s (with the presentation), file {bytes.Length:N0} bytes, {commands:N0} commands, written in {buildMs:0} ms"));
+        Console.WriteLine(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"       measured: opened in {openMs:0} ms, played to the end in {playSeconds:0.0} s, {playback.CheckpointTicks.Count} checkpoints in {playback.CheckpointBytes:N0} bytes, {playback.HashesChecked} recorded hashes, {playback.HashMismatches} differ"));
+        Console.WriteLine($"       measured seeks: {string.Join("; ", seeks)}");
     }
 
     // ------------------------------------------------------------------------------------------------- a person at the menus
