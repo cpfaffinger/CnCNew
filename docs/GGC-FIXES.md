@@ -127,6 +127,25 @@ section 3); the approach on a stealthed mine is no switch in this port, which ch
 disabled mask is not applicable - the port has no disabled mask and no central update gate, every module stops on any disable kind it knows, which is the fix's
 behaviour.
 
+### 3.1d Adopted (Phase 34)
+
+The three fixes that Phase 33 held back waited for a fidelity correction of the original's own behaviour first. Each correction is a change of the original profile with a
+manifest commit of its own (`docs/SIMULATION-CORE.md` §52): F-34 (`c2e48e2`, manifest `3d0d276`: a healed occupant leaves `HealContain` through its door), F-38 (`f3c4009`,
+`d58d9d0`: a boarder waits at the end of its approach while its container is in the air and the boarder is not, gives up on a container something airborne carries, takes a
+touch on the way only with an overlap in height - the partition manager's collision is three-dimensional - and an idle Chinook lands while somebody wants in), F-39
+(`a13d5de`: rider and combat bike exchange their levels both ways). Then the three fixes (`3bd8ceb`):
+
+| Fix | Community source (file, function) | Original | With the fix | Test |
+| --- | --- | --- | --- | --- |
+| `door-exit-to-rally` (17) | `OpenContain.cpp`, `OpenContain::getRallyPoint` | a rider that leaves a container through its door stops in front of the door unless the container has a rally point of its own - which a barracks never has, its rally point belongs to its production exit | a container without a rally point of its own uses its object's production exit's: an infantryman healed in a barracks walks on to the barracks' rally point | `GameFixDoorExitToRally` |
+| `bike-trainable-from-rider` (18) | `RiderChangeContain.cpp`, `RiderChangeContain::onContaining` | a combat bike is trainable by its template whoever rides it: a worker on a bike ranks up through the bike's kills and takes the level with it | the bike takes its rider's trainability (`ExperienceTracker::setTrainable`); the override is saved only when set | `GameFixBikeTrainableFromRider` |
+| `enter-needs-vertical-overlap` (19) | `AIStates.cpp`, `AIEnterState::update` (`hasVerticalOverlap`) | at the end of its approach a boarder waits while the container is above the terrain and the boarder is not | it waits until the two overlap in height: a landing transport is boarded as soon as it is low enough, a hovering boarder does not go into a container below it | `GameFixEnterNeedsVerticalOverlap` |
+
+Each test runs its scene under the original profile and under the fix, at 30, 60 and 120 Hz. None of the three changes anything under the original profile; the
+original's trainability is still read from the template unless the fix set it (`Entity.IsTrainable`, which every experience check now asks, as the original asks its
+tracker). The shipped objects the first fix reaches: the fifteen barracks with `HealContain` and a production exit (America, China, GLA and their generals) - the twelve
+tunnel networks also carry a production exit, but their riders leave by `TunnelContain`'s own way, not through a door.
+
 ### 3.2 Reviewed and not adopted
 
 | Fix | Why not |
@@ -141,7 +160,7 @@ The other 74 CRC-gated markers that are not adopted are, by the review column of
 original behave, e.g. the owner checks of rally points and special powers, an exit that is immediate), **49 not applicable** (C++ memory and crash defects,
 CRC and save bookkeeping, effects decoupled from the logic CRC, code paths this port does not have - guard state machines, collision damage, batches), and
 the 11 markers Phase 32 left as candidates or undecided, decided in Phase 33 (section 3.1c): 5 adopted, 4 rejected with the reason, 2 more not applicable.
-**Since Phase 33 the 96 CRC-gated markers are: 23 adopted (16 fixes), 17 equivalent, 51 not applicable, 5 rejected; none open.** Several "not applicable" entries name fidelity gaps of this port found on the way (no power loss of disabled power plants, no ejection of passengers on
+**Since Phase 34 the 96 CRC-gated markers are: 26 adopted (19 fixes), 17 equivalent, 51 not applicable, 2 rejected; none open** (Phase 33: 23 adopted, 16 fixes, 5 rejected - three of the rejected waited for F-34, F-38 and F-39, section 3.1d). Several "not applicable" entries name fidelity gaps of this port found on the way (no power loss of disabled power plants, no ejection of passengers on
 capture, no wait for a dead builder before a resume, no sniper check against empty structures) - they are Stage 1 debts, not fixes.
 
 ### 3.3 Not yet reviewed
