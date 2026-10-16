@@ -1,5 +1,5 @@
 > **Stage:** 3 – Changes · **Milestone:** S3-M3 Replay browser · **Phase:** 35
-> **Status:** done by machine (16 October 2026, at `STATE35`); the side items not done (`docs/REPLAY-BROWSER.md`, `docs/PERF-MOVEMENT.md` §10) · **Successor:** HANDOFF-PHASE36.md
+> **Status:** done by machine (16 October 2026, at `55274ba`); the side items not done (`docs/REPLAY-BROWSER.md`, `docs/PERF-MOVEMENT.md` §10) · **Successor:** HANDOFF-PHASE36.md
 > **Predecessor:** HANDOFF-PHASE34.md · **Results in:** docs/GAME-SHELL.md, docs/CAMPAIGN-AND-SAVEGAMES.md, docs/REPLAY-BROWSER.md (new), docs/plan/STAGE-3-CHANGES.md
 > **Side items:** the residue of S3-M6 (the rate-equivalence case of the angry mob under `movement-budget`; the tick maximum of the profile)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
