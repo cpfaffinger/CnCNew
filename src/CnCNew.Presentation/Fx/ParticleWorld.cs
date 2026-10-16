@@ -18,6 +18,12 @@ public sealed record ParticleSpawn(Vector3 Position)
 
     /// <summary><c>setEmissionVolumeSphereRadius</c>/<c>setEmissionVolumeCylinderRadius</c> (<c>UseCallersRadius</c>); 0 or null keeps the template.</summary>
     public float? EmissionRadius { get; init; }
+
+    /// <summary>
+    /// For a system attached to an entity: <c>setPosition</c> before <c>attachToObject</c> - an offset in the entity's model space that turns with it (a bone of its
+    /// model: <c>W3DModelDraw</c>'s <c>ParticleSysBone</c>, <c>BoneFXUpdate</c>, <c>ActiveBody</c>'s fire and smoke). Null: the entity's origin.
+    /// </summary>
+    public Vector3? LocalOffset { get; init; }
 }
 
 /// <summary>One renderable particle. <see cref="Color"/> is RGBA in 0..1; <see cref="Batch"/> indexes <see cref="ParticleFrame.Batches"/>.</summary>
@@ -84,7 +90,15 @@ public sealed class ParticleWorld
             system.Local = orientation with { M41 = 0f, M42 = 0f, M43 = 0f };
             system.LocalIdentity = false;
         }
-        if (spawn.AttachTo.IsValid) system.Attached = spawn.AttachTo;
+        if (spawn.AttachTo.IsValid)
+        {
+            system.Attached = spawn.AttachTo;
+            if (spawn.LocalOffset is { } offset && offset != Vector3.Zero)
+            {
+                system.Local.Translation = offset;
+                system.LocalIdentity = false;
+            }
+        }
         else
         {
             system.Local.Translation = spawn.Position;
@@ -95,6 +109,25 @@ public sealed class ParticleWorld
             && system.Template.VolumeType is EmissionVolumeType.Sphere or EmissionVolumeType.Cylinder)
             system.Volume[0] = radius;
         return system.Id;
+    }
+
+    /// <summary>The template names of the systems that run now, in creation order (a check of what is shown).</summary>
+    public ImmutableArray<string> RunningTemplates => [.. _systems.Where(system => !system.Removed).Select(system => system.Template.Name)];
+
+    /// <summary>The template name of a running system, or null.</summary>
+    public string? TemplateNameOf(int systemId)
+    {
+        foreach (var system in _systems)
+            if (system.Id == systemId && !system.Removed) return system.Template.Name;
+        return null;
+    }
+
+    /// <summary>Whether a system of this id still runs (it may have ended by its lifetime, or with the entity it was attached to).</summary>
+    public bool IsRunning(int systemId)
+    {
+        foreach (var system in _systems)
+            if (system.Id == systemId) return !system.Removed;
+        return false;
     }
 
     /// <summary><c>ParticleSystem::destroy</c>: stop emitting, disappear once the particles are gone.</summary>

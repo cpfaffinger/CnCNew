@@ -142,4 +142,14 @@ public sealed record FxFrame(
     ImmutableArray<LightPulseInstance> Lights,
     ImmutableArray<DecalInstance> Decals,
     ImmutableArray<RayEffectRequest> RayEffects,
-    ImmutableArray<ViewShakeRequest> ViewShakes);
+    ImmutableArray<ViewShakeRequest> ViewShakes)
+{
+    /// <summary>The projectile streams (<c>W3DProjectileStreamDraw</c>): textured bands through the flying projectiles of one weapon, oldest first.</summary>
+    public ImmutableArray<StreamInstance> ProjectileStreams { get; init; } = [];
+}
+
+/// <summary>
+/// One run of a projectile stream (<c>W3DProjectileStreamDraw::doDrawModule</c>, a <c>SegmentedLineClass</c>): the points of the projectiles in flight, oldest first; the
+/// texture tiled <see cref="TileFactor"/> times per segment, <see cref="Width"/> world units wide, drawn additive.
+/// </summary>
+public sealed record StreamInstance(ImmutableArray<Vector3> Points, string Texture, float Width, float TileFactor);

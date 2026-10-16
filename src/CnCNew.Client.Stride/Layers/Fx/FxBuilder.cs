@@ -49,7 +49,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
 
     private enum BatchClass : byte { Skip, Ground, AlphaTest, Billboard, Streak }
 
-    private enum ItemKind : byte { Particle, Streak, Tracer }
+    private enum ItemKind : byte { Particle, Streak, Tracer, Stream }
 
     private struct Item
     {
@@ -397,6 +397,15 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             Add(ref count, new Item { Kind = ItemKind.Tracer, Material = tracerMaterial, A = index }, Depth(middle));
         }
 
+        // Projectile streams (W3DProjectileStreamDraw): one additive band per run of projectiles, sorted by its middle like every other item.
+        for (var index = 0; index < frame.ProjectileStreams.Length; index++)
+        {
+            var stream = frame.ProjectileStreams[index];
+            if (stream.Points.Length < 2 || stream.Texture.Length == 0 || stream.Width <= 0f) continue;
+            var middle = (stream.Points[0] + stream.Points[^1]) * 0.5f;
+            Add(ref count, new Item { Kind = ItemKind.Stream, Material = MaterialId(new FxMaterialKey(stream.Texture, FxBlend.Additive)), A = index }, Depth(middle));
+        }
+
         if (count == 0)
         {
             return;
@@ -500,6 +509,10 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             case ItemKind.Streak:
                 EmitStreak(frame.Particles.Particles, item.A, item.B);
                 _particlesDrawn += item.B;
+                _streaks++;
+                break;
+            case ItemKind.Stream:
+                EmitStream(frame.ProjectileStreams[item.A]);
                 _streaks++;
                 break;
             default:
@@ -617,6 +630,34 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             previousRight = right;
             previousColor = color;
             previousU = u;
+        }
+    }
+
+    /// <summary>
+    /// A projectile stream (<c>W3DProjectileStreamDraw</c>, a <c>SegmentedLineClass</c> with <c>TILED_TEXTURE_MAP</c>): a camera-facing band of the stream's width through its
+    /// points, the texture repeated <see cref="StreamInstance.TileFactor"/> times per segment (here one quad per repetition: the effect sampler clamps). The scroll of the
+    /// texture (<c>ScrollRate</c>) is not reproduced.
+    /// </summary>
+    private void EmitStream(StreamInstance stream)
+    {
+        var color = Pack(Vector3.One, 1f);
+        var tiles = Math.Max(1, (int)MathF.Round(stream.TileFactor));
+        for (var segment = 0; segment + 1 < stream.Points.Length; segment++)
+        {
+            var from = stream.Points[segment];
+            var to = stream.Points[segment + 1];
+            var side = SideVector(to - from, (from + to) * 0.5f, stream.Width * 0.5f);
+            for (var tile = 0; tile < tiles; tile++)
+            {
+                var start = Vector3.Lerp(from, to, tile / (float)tiles);
+                var end = Vector3.Lerp(from, to, (tile + 1) / (float)tiles);
+                var quad = geometry.NextQuad();
+                if (quad.IsEmpty) return;
+                quad[0] = new FxVertex { Position = start - side, Color = color, Uv = new Vector2(0f, 0f) };
+                quad[1] = new FxVertex { Position = start + side, Color = color, Uv = new Vector2(0f, 1f) };
+                quad[2] = new FxVertex { Position = end + side, Color = color, Uv = new Vector2(1f, 1f) };
+                quad[3] = new FxVertex { Position = end - side, Color = color, Uv = new Vector2(1f, 0f) };
+            }
         }
     }
 

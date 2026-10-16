@@ -84,6 +84,15 @@ public sealed class FrameProjector
     private Dictionary<uint, Capture> _previous = [];
     private Dictionary<uint, Capture> _current = [];
     private ImmutableArray<Capture> _currentOrdered = [];
+
+    /// <summary>The objects the last <see cref="Advance"/> captured, in the order of their ids: what the attached effects follow (<see cref="Fx.AttachedEffects"/>).</summary>
+    public IEnumerable<Fx.ProjectedEntity> Projected
+    {
+        get
+        {
+            foreach (var capture in _currentOrdered) yield return new Fx.ProjectedEntity(new EntityId(capture.Id), capture.Visual, capture.Conditions, capture.Selections);
+        }
+    }
     // The durations above in ticks of the world last captured, and the original frame the projector's tick lies in (all three equal the frame numbers at 30 Hz).
     private long _healingIconTicks = HealingIconFrames;
     private long _frame = -1;

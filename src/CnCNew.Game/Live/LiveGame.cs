@@ -84,7 +84,12 @@ public abstract class LiveGame
         _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues };
         _projector = new FrameProjector(data.Visuals, _projectorOptions);
         Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
-        _fxView = new SimulationFxWorldView(world);
+        Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed);
+        Fx.ProjectileStreams = () => Attached.ProjectileStreams;
+        // Bones and muzzles are those of the object's current model (the attached effects know which state every object shows).
+        _fxView = new SimulationFxWorldView(world,
+            (entity, bone) => _fxView!.GetPose(entity) is { } pose ? Attached.BonePosition(entity, bone, pose) : null,
+            (entity, _) => _fxView!.GetPose(entity) is { } pose ? Attached.MuzzlePosition(entity, world.FindEntity(entity)?.CurrentWeaponSlot ?? 0, pose) : null);
         Frame = RenderFrame.Empty;
         SyncAfterTick(default);
         Fog.Snap();
@@ -115,6 +120,9 @@ public abstract class LiveGame
     public FogOfWarGrid Fog { get; }
     public MinimapImage Minimap { get; }
     public FxExecutor Fx { get; }
+
+    /// <summary>The continuous effects of the objects shown: model-state particle systems, the body's fire and smoke, bone effects, damage transitions, missile exhaust.</summary>
+    public AttachedEffects Attached { get; }
     public TeamColors Colors { get; }
     public IFxWorldView FxView => _fxView;
 
@@ -377,6 +385,8 @@ public abstract class LiveGame
         observer?.PhaseEnded(PresentationPhase.ProjectorAdvance);
         observer?.PhaseStarted(PresentationPhase.FxViewRefresh);
         _fxView.Refresh();
+        if (result.Events is not null) Attached.Observe(result.Events, World);
+        Attached.Update(World, _projector.Projected, _fxView, World.Tick / World.Time.TicksPerOriginalFrame);
         observer?.PhaseEnded(PresentationPhase.FxViewRefresh);
         observer?.PhaseStarted(PresentationPhase.FxExecuteEvents);
         if (result.Events is not null) Fx.ExecuteEvents(result.Events, _fxView);

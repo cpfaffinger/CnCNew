@@ -33,7 +33,15 @@ public sealed class GameData
         Images = images;
         Factions = factions;
         Maps = maps;
+        AttachedEffects = CnCNew.Presentation.Fx.AttachedEffectCatalog.Build(graph);
+        ModelBones = new ModelBoneTable(content);
     }
+
+    /// <summary>The continuous effects objects carry outside the FX lists of events (docs/PRESENTATION-FX.md, "Attached effects").</summary>
+    public CnCNew.Presentation.Fx.AttachedEffectCatalog AttachedEffects { get; }
+
+    /// <summary>The rest-pose bones of the draw models, read when first asked for.</summary>
+    public ModelBoneTable ModelBones { get; }
 
     public ContentFileSystem Content { get; }
     public CompiledDefinitionGraph Graph { get; }

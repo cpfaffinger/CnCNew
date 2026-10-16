@@ -432,15 +432,16 @@ internal static class TimeScaleTests
             // A particle system with a finite life, spawned by hand at the camera target: how long until nothing of it is left.
             var template = data.Fx.ParticleSystems.Values.OrderBy(value => value.Name, StringComparer.Ordinal)
                 .First(value => value.SystemLifetime is > 0 and < 120 && value.Lifetime.High is > 0 and < 120 && value.BurstCount.High > 0);
-            TestHarness.Assert(live.Fx.Particles.SystemCount == 0, $"at {rate} the scene has no effect of its own yet");
-            TestHarness.Assert(live.Fx.Particles.Spawn(template, new ParticleSpawn(new Vector3(live.Anchor.X, live.Anchor.Y, 20f))) != 0, $"the system {template.Name} is created");
+            // The scene's own objects carry effects of their own (the attached effects of their model states and bodies): the system is followed by its id.
+            var system = live.Fx.Particles.Spawn(template, new ParticleSpawn(new Vector3(live.Anchor.X, live.Anchor.Y, 20f)));
+            TestHarness.Assert(system != 0, $"the system {template.Name} is created");
             long ticks = 0;
             var peak = 0;
-            while (live.Fx.Particles.SystemCount > 0 || live.Fx.Particles.ParticleCount > 0)
+            while (live.Fx.Particles.IsRunning(system))
             {
                 live.Advance(step);
                 ticks++;
-                peak = Math.Max(peak, live.Fx.Particles.ParticleCount);
+                peak = Math.Max(peak, live.Fx.Particles.Capture().Particles.Count(particle => particle.SystemId == system));
                 TestHarness.Assert(ticks < 20 * rate.TicksPerSecond, $"at {rate} the particle system {template.Name} never ended");
             }
             TestHarness.Assert(peak > 0, $"at {rate} the system {template.Name} emitted particles");

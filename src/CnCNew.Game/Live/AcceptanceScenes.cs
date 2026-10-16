@@ -9,7 +9,7 @@ namespace CnCNew.Game.Live;
 /// </summary>
 public static class AcceptanceScenes
 {
-    public static ImmutableArray<DemoScenario> All => [March, Wheels, Board, Artillery, Repair, Firefight, Build];
+    public static ImmutableArray<DemoScenario> All => [March, Wheels, Board, Artillery, Repair, Firefight, Build, Flames];
 
     /// <summary>The two ends of the march and the frames its two legs start at; the audit reads them.</summary>
     public const float MarchEast = 90f, MarchWest = -90f;
@@ -134,6 +134,32 @@ public static class AcceptanceScenes
             ..Enumerable.Range(0, FirefightRebels).Select(index => new ScenarioOrder(20, $"rebel{index + 1}", ScenarioOrderKind.Attack, index < 3 ? "gattling" : $"ranger{index - 2}")),
         ],
         75, 0, 0f, 40f, 240f);
+
+    /// <summary>
+    /// The effects objects carry (docs/PRESENTATION-FX.md, "Attached effects"): a Dragon tank burns a barracks and three Rangers, a power plant beside them is damaged twice,
+    /// a rocket buggy drives past.
+    /// </summary>
+    public static DemoScenario Flames { get; } = new(
+        "acc-flames", "Flames, smoke, burning",
+        "A Dragon tank sets a barracks on fire and burns three Rangers; a power plant is damaged twice; a rocket buggy drives past. To see: a flame stream and flame trail from the Dragon tank to its target (no box flying), fire on the barracks while it burns, smoke and fire at the damaged power plant, dust behind the buggy and the exhaust of rockets.",
+        720,
+        [
+            new("dragon", "ChinaTankDragon", 1, 0, 0, 0f),
+            new("barracks", "AmericaBarracks", 2, 100, 30, 180f),
+            ..Enumerable.Range(0, 3).Select(index => new ScenarioUnit($"ranger{index + 1}", "AmericaInfantryRanger", 2, 80, -40 + 12 * index, 180f)),
+            new("plant", "AmericaPowerPlant", 2, 60, -140, 180f),
+            new("buggy", "GLAVehicleRocketBuggy", 1, -60, 80, 0f),
+            new("hunter", "ChinaInfantryTankHunter", 1, -20, -60, 0f),
+        ],
+        [
+            new(20, "dragon", ScenarioOrderKind.Attack, "ranger1"),
+            new(220, "dragon", ScenarioOrderKind.Attack, "barracks"),
+            new(30, "plant", ScenarioOrderKind.Damage, X: 45f),
+            new(200, "plant", ScenarioOrderKind.Damage, X: 30f),
+            new(60, "buggy", ScenarioOrderKind.MoveTo, X: 160f, Y: 80f),
+            new(40, "hunter", ScenarioOrderKind.Attack, "plant"),
+        ],
+        40, -20, 20f, 42f, 330f);
 
     /// <summary>Frames the two construction orders of the build scene are given at.</summary>
     public const long BuildFirstOrder = 20, BuildSecondOrder = 420;

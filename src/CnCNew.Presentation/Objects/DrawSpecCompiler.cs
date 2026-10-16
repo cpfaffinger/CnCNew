@@ -200,7 +200,8 @@ public static class DrawSpecCompiler
             case "Model":
                 if (tokens.Length == 0) { c.Error("invalid-value", canonical, "Model needs a name.", location); break; }
                 s.ModelGiven = true;
-                s.Model = tokens[0].Equals("NONE", StringComparison.OrdinalIgnoreCase) ? null : tokens[0].ToLowerInvariant();
+                // NONE and NULL draw nothing: NULL is W3D's null render object (the asset manager's NULL prototype), which the effect projectiles use - not a model to load.
+                s.Model = tokens[0].Equals("NONE", StringComparison.OrdinalIgnoreCase) || tokens[0].Equals("NULL", StringComparison.OrdinalIgnoreCase) ? null : tokens[0].ToLowerInvariant();
                 Extra(c, canonical, tokens, 1, location);
                 break;
             case "Turret": s.Turrets[0].AngleBone = Bone(tokens); Extra(c, canonical, tokens, 1, location); break;
