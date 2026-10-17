@@ -168,3 +168,11 @@ another profile.
 
 Whether a profile "plays like a rusher" (or a turtle, or an economist) when watched in the spectator, and whether the strengths feel easy, medium and hard to a human
 player. The survey's numbers replace the watching; they are not a verdict on how it feels.
+
+## 7. Seen by the match analysis (Phase 36)
+
+The analysis of a match (`docs/MATCH-ANALYSIS.md`) shows what a computer player did over the whole match. On its first eight-player match (Twilight Flame, 10 game minutes,
+60 Hz, the factions of the replay measurement of `docs/REPLAY-BROWSER.md` section 7) **both GLA computer players collected nothing**: each built two barracks and never a
+supply stash, spent its 10,000 starting credits within three minutes and was defeated. Reported, not investigated: whether the supply stash's placement beside a
+warehouse fails on that map for GLA (`FindSupplyPlacement`, `SupplyPlacementPatience`) or its plan never asks for one. The survey of Phase 34 had already seen GLA win
+rarely (9 and 2 of 80 matches).

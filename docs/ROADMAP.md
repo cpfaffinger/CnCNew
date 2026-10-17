@@ -99,7 +99,14 @@
 
 **Stage 3, S3-M6 (Phase 34, 16 October 2026, by machine):** the movement profile `movement-budget` - a path queue with a cell budget per frame and one search per group order, an option of the rule profile; the tick maximum target of 8 ms is missed (13.7 ms after the first 300 ticks, 123 ms in the original); the fidelity corrections F-34, F-38, F-39 and three more fixes of the community source (`docs/PERF-MOVEMENT.md` §10, `docs/SIMULATION-CORE.md` §52). Next: S3-M3, the replay browser (`docs/handoffs/HANDOFF-PHASE35.md`).
 
-**Stage 3, S3-M3 (Phase 35, 16 October 2026, by machine):** the replay browser - every skirmish of the built-in AI recorded beside the savegames (local, on a server, a spectator's), the list on `ReplayMenu.wnd` with the state of every file and its reason, delete and rename, playback with pause, speed, seeking to checkpoints and the view of one player or everything, checked against the hashes the recording kept; no simulation change (`docs/REPLAY-BROWSER.md`). In the same phase the project owner's finding of 16 October 2026 - no flames from the Dragon tank, no smoke, nothing burns - was traced to a general gap and closed: the effects objects carry continuously (`docs/PRESENTATION-FX.md`, "Attached effects"). Next: S3-M4, match analysis (`docs/handoffs/HANDOFF-PHASE36.md`).
+**Stage 3, S3-M3 (Phase 35, 16 October 2026, by machine):** the replay browser - every skirmish of the built-in AI recorded beside the savegames (local, on a server, a spectator's), the list on `ReplayMenu.wnd` with the state of every file and its reason, delete and rename, playback with pause, speed, seeking to checkpoints and the view of one player or everything, checked against the hashes the recording kept; no simulation change (`docs/REPLAY-BROWSER.md`). In the same phase the project owner's finding of 16 October 2026 - no flames from the Dragon tank, no smoke, nothing burns - was traced to a general gap and closed: the effects objects carry continuously (`docs/PRESENTATION-FX.md`, "Attached effects").
+
+**Stage 3, S3-M4 (Phase 36, 17 October 2026, by machine):** the analysis of a match - one core for a running match and for a replay played again without a picture, the
+statistics of every player over game time with events and their places, the export as JSON and TSV with the same bytes on every run, an HTML report, the screen after a
+match and from the replay list, one field comparison for `rate-compare --fields` and `desync-diff`; no simulation change of results (`docs/MATCH-ANALYSIS.md`). The analysis
+found the score screen's counters counting nothing but buildings (fixed; F-42 the rest) and a double click across a covered screen (fixed). Side items: the computer
+players' placement checks measured - the cost was footprint checks, made faster without a change of results; the tick maximum under `movement-budget` still misses 8 ms.
+Next: S3-M2, the observer features (`docs/handoffs/HANDOFF-PHASE37.md`).
 
 ## 6. Patch integration and quality (Phase 30)
 

@@ -145,7 +145,7 @@ milestone status is updated in each stage document.
 | S3-M1 | AI kinds, difficulty and tactics | 6, 17, 23 (built-in AI), 33 | **built by machine** (15 October 2026): four tactics profiles and three strengths per slot, the rule "no standing still", the survey against thresholds (12 of 13 met); no human has watched a profile |
 | S3-M2 | Spectator and observer | 23 (side product) | built – not accepted |
 | S3-M3 | Replay browser | 35 | **built by machine** (16 October 2026): every skirmish recorded beside the savegames, the list on `ReplayMenu.wnd` with the state of every file, playback with pause, speed, seeking to checkpoints and the choice of view; every build plays only its own replays (no migration, D-31); no human has used it |
-| S3-M4 | Match analysis with graphics | – | open (headless surveys exist) |
+| S3-M4 | Match analysis with graphics | 36 | **built by machine** (17 October 2026): one analysis core for a running match and a replay, the export (JSON, TSV) the same bytes on every run, an HTML report, the screen after a match and from the replay list, one field comparison for the diagnosis tools; no human has read a report |
 | S3-M5 | Modern user interface | – | open (original layouts are the base) |
 | S3-M6 | Movement and pathfinding beyond the original | 34 | **built by machine** (16 October 2026): the movement profile `movement-budget` (path queue, cell budget per frame, one search per group order) as an option; the tick maximum target missed (13.7 ms with the profile, 123 ms in the original); not the default (D-3); no human has watched a group march |
 | S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | 30 (items 3, 4), 32 | **built by machine** (15 October 2026): the patch layer compiles and plays, every CRC-gated fix reviewed, eleven adopted behind the rule profile; eight candidates and three undecided markers are a side item of `HANDOFF-PHASE33.md`; no human has played a layer |
@@ -220,6 +220,10 @@ The sequence from here:
    simulation-touching Stage 3 work is built; the brief that follows is `HANDOFF-PHASE35.md` (S3-M3: the replay browser).
    **Phase 35 done (16 October 2026)** (S3-M3): the replay browser by machine - every skirmish recorded, the list with the state of every file, playback to the
    recorded hashes with seeking; no simulation change. The brief that follows is `HANDOFF-PHASE36.md` (S3-M4: match analysis, which takes the replays as its input).
+   **Phase 36 done (17 October 2026)** (S3-M4, with the S3-M6 residue): the match analysis by machine - one core for a running match and a replay, the export the same
+   bytes on every run, an HTML report, the screen after a match and from the replay list, one field comparison for the diagnosis tools; the score screen's counters
+   fixed; the computer players' placement checks under a budget in the movement profile. The brief that follows is `HANDOFF-PHASE37.md` (S3-M2: the spectator and
+   observer features, which take the replays and the analysis' events as their input).
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and

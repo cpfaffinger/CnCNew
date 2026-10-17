@@ -165,6 +165,12 @@ A seek costs the restore of a state (a quarter of a second for eight players) an
 interval (30 s, 1,800 ticks at 60 Hz) past its checkpoint - about 2.5 s for eight players late in a match. In the window the scene is built again on top (measured 116 to 279
 ms per seek for two players, section 6, including the restore). The checkpoints of an hour of eight players take 38 MB of memory; they are dropped when the playback ends.
 
+## 7a. The analysis of a replay (Phase 36)
+
+The list's fifth button, "Analysis" (below "Back"), and the score screen's "Analysis" after a playback open the analysis of the replay (`docs/MATCH-ANALYSIS.md`): the
+replay is checked as for a playback (`ReplayPlayback.Prepare`), played again without a picture, every recorded hash compared - a replay that leaves its recorded match
+gives no analysis - and shown on six pages. `SimTool match-analysis <content> <file.cncreplay> --out <directory>` writes the same analysis as JSON, TSV and an HTML page.
+
 ## 8. Deviations, named
 
 - The list's third column shows the state of the file instead of the version of the game; the third button renames instead of copying to the desktop; the details window is

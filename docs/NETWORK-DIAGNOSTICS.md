@@ -81,7 +81,8 @@ It needs the game content, because it plays the match again. From the two packag
 2. **the parts** that differ at that tick;
 3. **the objects** whose hashes differ at that tick, or that only one side has (when both object rings still hold the tick);
 4. **the fields**: for each package it plays the package's own `replay.bin` to the tick `state.bin` stands at and compares the two states field by field (JSON paths;
-   lists of things with an id are matched by id). The client that is in step shows no difference: its state *is* the match played again. The client that diverged shows
+   lists of things with an id are matched by id). Since Phase 36 the comparison is the one `SimTool rate-compare --fields` uses as well (`CnCNew.Game.Diagnostics.StateFields`,
+   `docs/MATCH-ANALYSIS.md` section 5): the differences are listed in ordinal order of their paths, a list element only one side has as its paths with "(missing)". The client that is in step shows no difference: its state *is* the match played again. The client that diverged shows
    what diverged - by then possibly more than the first field, because a difference spreads.
 
 Step 4 is the one that names the field, and it works for one package alone (`DesyncPackageDiff.FieldsAgainstReplay`): a single player's package against the match

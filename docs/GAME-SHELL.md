@@ -161,14 +161,14 @@ Not wired because `LiveMatch`/`SkirmishMatchOptions` do not support it (requests
 
 ## 7. Result screen (`MatchResult`, `MatchStatistics`)
 
-`LiveMatch` exposes no tick events; the host therefore has to keep a `MatchStatistics` itself (`Record`
-once per `TickResult`, as `SkirmishMatchSession.Step()` delivers them) and hand it to `GameShell.MatchFinished`.
-Without a tracker (`statistics: null`) or if `HasData` never became true, every number column shows `-` instead of an
-invented zero. Only `SimEventKind` values with an unambiguous player reference are counted: `ProductionCompleted` →
-units built, `EntityDied`/`EntityDestroyed` → units lost/destroyed, `ConstructionCompleted` → buildings
-built, `StructureSold` → buildings lost, `SupplyDeposited` → resources. **`BuildingsDestroyed` is not
-counted** – there is no event that distinguishes a destroyed building from a destroyed unit (request to
-the simulation for a future `SimEventKind.StructureDestroyed` or an `IsBuilding` flag on `EntityDestroyed`).
+The host keeps a `MatchStatistics` (`Begin` with the world the counting starts from, then `Record(TickResult, SimulationWorld)` once per tick) and hands it to
+`GameShell.MatchFinished`. Without a tracker (`statistics: null`) or if `HasData` never became true, every number column shows `-` instead of an invented zero. **Since
+Phase 36 (`31b03c2`) the counters count by the owner of an object:** most events name only their object - `ProductionCompleted` the factory, `SupplyDeposited` the
+truck, `EntityDied` the victim and its killer - and carry no player; the owner is read from the world, or remembered from when the object appeared. Units built,
+units lost, units destroyed (a kill of somebody else's unit), buildings built, buildings lost (a structure that died - a sale is no loss), **buildings destroyed** (now
+counted and shown) and resources. Until Phase 36 only events with a player were counted, and the screen showed 0 units and 0 resources for everybody. Not as the
+original: its `ScoreKeeper` counts only objects of the kinds `SCORE`, `SCORE_CREATE` and the scoring building masks (F-42). The save-replay button says "Analysis"
+(§18).
 Observers are not modelled in `LiveMatch`; `StaticTextObserverN` stays hidden for every row.
 
 ## 8. Focus, keyboard, accessibility
@@ -635,3 +635,27 @@ playback with `key PageUp`. The probes of the client add `seeks`, `hashes` and `
 Pictures: `ReplayBrowserTests` draws nine states of the list - empty, a list of four files, a file of another build chosen, the refusal, a damaged file chosen, the rename
 popup, a name taken, the delete question, the score of a playback - in six resolutions: 54 hashes in `tests/CnCNew.Game.Tests/baselines/replay-screens.txt`, no two alike,
 the same at 30, 60 and 120 Hz. Not seen by a human.
+
+## 18. The analysis of a match (Phase 36)
+
+`MatchAnalysisScreen` (docs/MATCH-ANALYSIS.md section 4) lies on `ScoreScreen.wnd`: the backdrop, the header line `ChallengeWinLossText` (the page and its title, the
+map, the length, the winner), the save-replay button as "Previous page", the buddy button as "Next page", OK back; the rows, the chat and the portraits are hidden. The
+charts are drawn by the screen into the backdrop (`BuildDrawList` adds fill rectangles, lines and texts to the layout's draw list): six pages - economy, army, spending
+and losses, composition and exchange, the map, activity. Left and Right turn the pages, Up and Down scroll the events, Escape leads back.
+
+| Screen | Callbacks | Opened by |
+| --- | --- | --- |
+| `MatchAnalysisScreen` (`ScoreScreen.wnd`) | `ScoreScreenSystem`, `ScoreScreenInput` | the score screen's "Analysis" (`ButtonSaveReplay`: the analysis the host made while the match ran - `MatchResult.Analysis` - or after a playback the analysis of the replay played, `GameShell.PlayedReplay`); the replay list's "Analysis" |
+
+The replay list's "Analysis" button (`ReplayAnalysis.wnd:ButtonAnalysis`, callback `ReplayAnalysisSystem`) is the shipped definition of the list's third button with
+another name, its place below "Back" (563, 452 to 735, 488 of 800 x 600) and its own system callback - made when the screen opens (`ReplayMenuScreen.AnalysisLayoutOf`),
+so no line of the original layout is copied into the source. `GameShell.OpenReplayAnalysis` checks the file as for a playback (a file that does not play is a message,
+"Cannot Analyse Replay") and opens the screen, which computes the analysis `MatchAnalysisScreen.TicksPerUpdate` (600) ticks a frame while the header shows how far it has
+come.
+
+A screen shown again (`GameShell.Pop`) takes the shell's time and forgets its last click (`UiWindowTree.ForgetLastClick`, `f0371ee`): only the top screen reads the clock,
+and a click before a screen was covered paired with one after it was shown again as a double click.
+
+Pictures: `MatchAnalysisTests` draws the score screen with its button, the six pages, the computing state and the replay list with its button in six resolutions: 54
+hashes in `tests/CnCNew.Game.Tests/baselines/analysis-screens.txt`, no two alike (the analysis of the replay draws the same first page as the analysis of the match - the
+test compares them). The score screen's, the replay list's and the network end screens' hashes changed with the button. Not seen by a human.

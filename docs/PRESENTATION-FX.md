@@ -257,6 +257,24 @@ carries no location), production-start withdrawals (no event), unit announcement
 per 10 ticks), at most `MaxPerTick` (48) per tick, positioned Effect/Voice cues beyond `CutoffDistance` (2D,
 0 = off) from the listener are dropped. Dependent purely on order and ticks; a counter for every kind of rejection.
 
+### What the attached effects cost (Phase 36)
+
+Measured with `PresentationTool sync-perf game/content --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ticks 18000 --hud` (60 Hz, eight computer players,
+the binaries of `1d45cfd` - before the attached effects - and of `31b03c2`, alternating, two runs each, quiet machine, 17 October 2026); the same final world hash
+`A4824DCBC874258B` in all four runs:
+
+| per tick, mean | before | with the attached effects |
+| --- | --- | --- |
+| `SyncAfterTick` (the game layer's work after a tick) | 253.4 / 251.5 µs | 319.6 / 309.0 µs |
+| of it `FxViewRefresh` (where `AttachedEffects.Observe` and `Update` run) | 17.2 / 17.4 µs | 45.0 µs (run 2) |
+| of it `FxUpdate` (the particle systems) | 13.4 / 13.4 µs | 36.0 / 35.1 µs |
+| the game layer alone (the tick without the simulation step) | 481.7 / 477.2 µs | 570.2 / 531.0 µs |
+| at 60 Hz with one projection per tick | 2.9 % of one core | 3.4 / 3.2 % of one core |
+| particles at most / at the end | 1,090 / 225 | 1,936 / 421 |
+
+The attached effects cost about 55 to 65 µs per tick of eight players' match, a quarter of the game layer's work after a tick; the drawing of the particles in the
+window is not part of this measurement.
+
 ## Audit (`PresentationTool fx-audit <content-dir>`)
 
 Compiles the retail content (`--maps exclude`), builds the catalog and prints deterministically: counts of the FXLists,

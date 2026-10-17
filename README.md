@@ -88,6 +88,10 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
 - **Flames, smoke and burning (Phase 35, the project owner's finding):** the effects objects carry continuously were missing altogether - the Dragon tank's flame,
   the fire and smoke of damaged and burning objects, missile exhaust, projectile streams, vehicle dust. They are built after the original's mechanisms
   (`docs/PRESENTATION-FX.md`, "Attached effects"); not yet seen by a human.
+- **The analysis of a match (Phase 36, by machine):** money, income, spending, army value and composition, losses and kills, buildings, upgrades, sciences, superweapons,
+  commands per minute, the regions held and heat maps of movement and fights - after a match from the score screen's "Analysis" and for every replay from the list,
+  computed from the replay with the same numbers on every run; `SimTool match-analysis` writes it as JSON, TSV and an HTML report (`docs/MATCH-ANALYSIS.md`). The score
+  screen's counters, which showed 0 units and 0 resources for everybody, count by the owner of an object since then.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

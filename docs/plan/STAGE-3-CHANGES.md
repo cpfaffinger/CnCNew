@@ -103,6 +103,13 @@ the surveys. Nothing is rebuilt.
 - **Acceptance:** a human reads the report of a match they played and recognises its course; two runs of the tool over the
   same replay produce byte-identical exports.
 - **Depends on:** S3-M3 for replays as the input. Tools and presentation only.
+- **Status (Phase 36, 17 October 2026): built by machine** (`docs/MATCH-ANALYSIS.md`). (a) `MatchAnalyzer`: one core told every tick of a running match
+  (`LiveMatchAnalysis`) or of a replay played again without a picture (`ReplayAnalysis`, which refuses a replay that leaves its recorded hashes); the same match gives the
+  same bytes from both; samples every five seconds of game time on the frame grid; what cannot be had without a change of the simulation is named (the money a player
+  really paid, money from other sources than supply). (b) `analysis.json` (schema 1) and three TSV tables, `SimTool match-analysis` (two runs the same SHA-256),
+  `report.html` (inline SVG), and `MatchAnalysisScreen` on `ScoreScreen.wnd` after a match and from the replay list. (c) `StateFields`: one field comparison for
+  `rate-compare --fields` and `desync-diff`. The analysis found that the score screen counted nothing but buildings built (fixed, `31b03c2`; F-42 the rest) and a
+  double click across a covered screen (fixed, `f0371ee`). **Not accepted by a human**: whether a person recognises the course of a match.
 
 ### S3-M5 Modern user interface
 

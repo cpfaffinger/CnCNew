@@ -32,6 +32,7 @@ picture **looks like the original**, that motion **feels right** or that a sound
 | match | `check-match`, `check-spectator`, `session-check`, the 16 AI pairings of the manifest | tier 4 |
 | campaign | `CampaignTool reachability`, `audit`, `drive` (objective driver), `outputs` (script outputs shown) | completion of a phase |
 | perf | `scripts/perf-profile.ps1`, client `--net-stats`, `PresentationTool smoothness` | completion of a phase |
+| analysis | `Game.Tests` `MatchAnalysisTests` (the field comparison, the export format under three cultures, a match analysed live and from its replay with the same bytes, the contents against the score screen, refusals, the report, 54 screen hashes, a scripted person), `check-replay-browser` (the analysis from the score screen and from the list in the real client), `SimTool match-analysis` (two runs the same SHA-256) - docs/MATCH-ANALYSIS.md | tier 2/3/4 |
 | replay | `Game.Tests` `ReplayBrowserTests` (the file, the store, every compatibility reason, a recorded match played to every recorded hash, seeks, the server's file, refusals, 54 screen hashes, a scripted person) and `NetShellTests` (both games of a match of a server record it), `check-replay-browser` (the same in the real client) - docs/REPLAY-BROWSER.md | tier 2/3/4 |
 
 ## 3. Every line
@@ -118,6 +119,11 @@ known limit, with its reason; **fixed** - a defect found by the pre-check, corre
 | REPLAY-03 playback to the recorded result | machine | replay (every recorded session hash, the final hash and the score, at 30, 60 and 120 Hz; in the window client) | how the playback looks |
 | REPLAY-04 pause, speed, seek, view | machine | replay (three seeks at the recorded hash, pause, speed and view kept; in the window client 0.1 to 0.3 s per seek) | **whether the controls feel right** |
 | REPLAY-05 an incompatible file says why | machine | replay (another build, rule profile, rate, map; a changed byte; a header that does not describe its match) | whether the words are understood |
+| ANALYSIS-01 the statistics of a match | machine | analysis (live and from the replay the same bytes; collected, built and lost equal to the score screen's counters; every sample on the frame grid at 30, 60 and 120 Hz) | **whether the numbers tell the course of the match a person remembers** |
+| ANALYSIS-02 the export | machine | analysis (schema and version, the same bytes twice and under three cultures; the tool prints the same SHA-256 twice) | - |
+| ANALYSIS-03 the report | machine | analysis (one page, the same bytes twice, every chart and both heat maps in it, no script, no address) | **whether the report is readable; whether the colours can be told apart** |
+| ANALYSIS-04 the screen after a match and from the list | machine | analysis (six pages in six resolutions pinned; a scripted person and the window client open it from the score screen and from the list) | **how the screen looks and reads** |
+| ANALYSIS-05 the score screen's counters | machine | analysis, `ShellTests` (the counters count by the owner of an object; F-42: not yet only the `SCORE` kinds of the original) | whether the numbers are the original's |
 
 ## 4. The findings lists
 
