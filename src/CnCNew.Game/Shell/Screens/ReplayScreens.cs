@@ -171,7 +171,8 @@ public sealed class ReplayMenuScreen : ShellScreen
           HEADERTEMPLATE = "[NONE]";
           TOOLTIPDELAY = -1;
           TEXT = "";
-          TEXTCOLOR = ENABLED:  255 255 255 255, ENABLEDBORDER:  0 0 0 255,
+          TEXTCOLOR = ENABLED:  255 255 255 255,
+                      ENABLEDBORDER:  0 0 0 255,
                       DISABLED: 192 192 192 255, DISABLEDBORDER: 64 64 64 255,
                       HILITE:   255 255 255 255, HILITEBORDER:   0 0 0 255;
           STATICTEXTDATA = CENTERED: 0;
