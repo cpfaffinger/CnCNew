@@ -464,3 +464,35 @@ is not counted as a failure of its spot. The original profile has no such bound 
 | B2 | the profile's mean per tick with the budget at most 5 % above the profile's without it |
 | B3 | the AI survey under the profile (`ai-survey --seeds 5 --rules movement-budget`, 80 matches): at least 70 decided (Phase 34: 74) |
 | B4 | the original profile keeps both manifests (the full reference set and the input manifest identical) |
+
+**What was measured, and what was built instead** (17 October 2026, AMD Ryzen 3 PRO 4350GE, 60 Hz, the binaries of `29468aa` and of the change):
+
+- **The budget of search cells never engaged.** With it, the eight-player gate run ends with the same final hash as without it (`4B27C55C8EFA4793`, the hash of
+  Phase 34's profile, both runs on both sides) - no check ever reached 20,000 cells in a think. A probe in a throwaway build (a clock in the computer player's think, not
+  committed) showed why: the reachability searches of the placement are tiny (5 to 82 cells, at most 0.1 ms; only the very first think of a player at tick 22 searched
+  for 5.5 ms), and the cost of the placement is the **footprint checks** of a supply centre's spot beside its warehouse (`FindSupplyPlacement`: 146 to 225
+  `NavigationGrid.IsFootprintLegal` calls per think at about 20 µs each, 3.1 to 4.8 ms). The budget was withdrawn; nothing of it is committed.
+- **Built instead, without a change of results:** `IsFootprintLegal` looks at the cell first (outside the map, cliff, water, an obstacle) and asks the footprint's geometry
+  only for a cell that forbids - the answer, whether any cell of the footprint forbids, does not depend on the order. The same 170 checks cost 1.2 to 1.3 ms instead of 3.2
+  to 3.4 ms, 199 checks 2.8 instead of 3.5 to 3.9 ms (the spots beside a warehouse lie among its obstacle cells, where the geometry is still asked). The quick reference set
+  is identical; the full set runs at the end of the phase (tier 4).
+- **The long ticks are elsewhere.** The thinks of 6 to 11 ms that remain are other parts of the think than the placement (at ticks 2,154 to 2,454 and 8,188 to 8,788 of
+  the gate run the placement took 0 to 1.6 ms of them); they are not broken down further.
+
+| run (`--rules movement-budget`, 108,000 ticks) | mean after 300 ticks | longest tick after 300 | final hash |
+| --- | --- | --- | --- |
+| before (`29468aa`), 1 / 2 | 748.8 / 759.4 µs | 16.5 / 19.6 ms | `4B27C55C8EFA4793` |
+| with the faster footprint check, 1 / 2 | 751.7 / 746.2 µs | 23.9 / 13.8 ms (both at tick 2,454: a think) | `4B27C55C8EFA4793` |
+
+| Threshold | Result |
+| --- | --- |
+| B1 longest tick after 300 at most 8 ms | **missed** (13.8 to 23.9 ms; the machine scattered more than in Phase 34, whose 13.7 / 13.8 ms the same binaries of `29468aa` did not reproduce: 16.5 / 19.6 ms) |
+| B2 mean at most 5 % above | holds (within -1.7 % and +0.4 %) |
+| B3 the AI survey under the profile | not run - the budget was withdrawn and the footprint check changes no result |
+| B4 the original keeps both manifests | the quick set identical; the full set and the input manifest at tier 4 |
+
+**The angry-mob case, narrowed further in Phase 36** (`Boss_InfantryAngryMobNexus` under the profile, section 10; a throwaway build that prints the objects at every
+corner of the course): the nexus starts the course alone - its five mob members appear during the first leg and follow it - and at every later corner the members stand at
+30 and at 60 Hz within a unit of the same places; the 30 Hz run is nevertheless 1.85 s and 31 units longer. With the members removed before every leg the nexus does not
+finish the course at any rate (the case becomes unmeasured), so the members cannot simply be taken away to test the hypothesis of section 10. The cause is still not
+found; the case stays the one quantity group of the suite outside its tolerance under the profile.

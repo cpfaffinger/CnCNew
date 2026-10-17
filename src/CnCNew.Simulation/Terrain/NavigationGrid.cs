@@ -235,10 +235,10 @@ public sealed class NavigationGrid
         for (var cy = footprint.Y0; cy <= footprint.Y1; cy++)
             for (var cx = footprint.X0; cx <= footprint.X1; cx++)
             {
-                if (!footprint.Contains(cx, cy)) continue;
-                if (!Terrain.IsInside(cx, cy)) return false;
-                if ((Terrain.CellAt(cx, cy) & (CellFlags.Cliff | CellFlags.Water)) != 0) return false;
-                if (_obstacles[cy * Terrain.CellsX + cx] > 0) return false;
+                // The answer is whether any cell of the footprint forbids it, whatever the order: the cheap look at the cell comes first, and the footprint's geometry is
+                // asked only for a cell that forbids (a computer player checks hundreds of spots per think, most of them on open ground).
+                var forbids = !Terrain.IsInside(cx, cy) || (Terrain.CellAt(cx, cy) & (CellFlags.Cliff | CellFlags.Water)) != 0 || _obstacles[cy * Terrain.CellsX + cx] > 0;
+                if (forbids && footprint.Contains(cx, cy)) return false;
             }
         return true;
     }
