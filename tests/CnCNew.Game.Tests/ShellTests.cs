@@ -49,6 +49,7 @@ internal static class ShellTests
         // is bounded in game time), so the walk runs on the suite's data.
         harness.Run("Menu shell walks every screen and draws cleanly", () => WalkScreens(data, baselines, updating));
         harness.Run("Options persist and reload", () => OptionsPersist(data));
+        harness.Run("The score counters count by the owner of an object: units built, supplies collected, losses and kills", () => ScoreCountersByOwner(data));
         harness.Run("Boot loading screen reaches the main menu", () => BootFlow(contentDir));
         harness.Run("Main menu shows only what MainMenuInit leaves visible", () => MainMenuInitialState(data));
         harness.Run("Buttons draw hilite and pushed images under the pointer and drop them when it leaves", () => ButtonStates(data));
@@ -112,7 +113,7 @@ internal static class ShellTests
         var setup = startMatch!.Setup with { Options = startMatch.Setup.Options with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(20) } };
         var live = LiveMatch.Create(data, setup, new Vector2(NavWidth, NavHeight));
         var stats = new MatchStatistics();
-        while (!live.Session.IsOver) stats.Record(live.Session.Step());
+        while (!live.Session.IsOver) stats.Record(live.Session.Step(), live.Session.World);
         shell.MatchFinished(live.Session, stats);
         TestHarness.Assert(shell.CurrentScreen is ScoreScreenScreen, "MatchFinished shows the score screen");
         Capture(shell, "ScoreScreen", baselines, updating);
@@ -626,6 +627,25 @@ internal static class ShellTests
     }
 
     // ------------------------------------------------------------------------------------------------- options persistence
+
+    /// <summary>
+    /// Most events of the simulation name only their object - a finished unit its factory, a deposit the truck, a death the victim and the killer - and carry no player; the
+    /// counters must read the owner from the world. They did not, and showed 0 units built, 0 lost and 0 resources for everybody.
+    /// </summary>
+    private static void ScoreCountersByOwner(GameData data)
+    {
+        var setup = new MatchSetup("Maps/Alpine Assault/Alpine Assault.map", "FactionAmerica", ["FactionChina"],
+            SkirmishMatchOptions.StandardAt(data.Rate) with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(150) }) { Seed = 3 };
+        var live = LiveMatch.Create(data, setup, new Vector2(NavWidth, NavHeight));
+        var stats = new MatchStatistics();
+        stats.Begin(live.Session.World);
+        while (!live.Session.IsOver) stats.Record(live.Session.Step(), live.Session.World);
+        var computer = stats.TryGet(live.Session.Players[1].Id);
+        TestHarness.Assert(computer is { UnitsBuilt: > 0, Resources: > 0, BuildingsBuilt: > 0 },
+            $"the computer player built units and collected supplies ({computer?.UnitsBuilt} units, {computer?.Resources} credits, {computer?.BuildingsBuilt} buildings)");
+        var counted = live.Session.World.Entities.Count(entity => entity.Owner == live.Session.Players[1].Id && CnCNew.Game.Spectator.SpectatorStats.Classify(entity.Template) is CnCNew.Game.Spectator.SpectatorUnitClass.Army or CnCNew.Game.Spectator.SpectatorUnitClass.Worker && !entity.EffectivelyDead);
+        TestHarness.Assert(computer!.UnitsBuilt <= counted + computer.UnitsLost + 2, $"no more units built than it has and lost, beside the ones it started with ({computer.UnitsBuilt}, {counted}, {computer.UnitsLost})");
+    }
 
     private static void OptionsPersist(GameData data)
     {

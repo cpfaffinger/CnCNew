@@ -436,7 +436,7 @@ internal static class ShellTransitionTests
         var setup = new MatchSetup("Maps/Alpine Assault/Alpine Assault.map", "FactionAmerica", ["FactionChina"], CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(20) }); // twenty seconds of game time
         var live = LiveMatch.Create(data, setup, new Vector2(Width, Height));
         var stats = new MatchStatistics();
-        while (!live.Session.IsOver) stats.Record(live.Session.Step());
+        while (!live.Session.IsOver) stats.Record(live.Session.Step(), live.Session.World);
 
         var plain = NewShell(data, animate: false);
         plain.MatchFinished(live.Session, stats);

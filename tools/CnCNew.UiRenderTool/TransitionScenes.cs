@@ -86,7 +86,7 @@ internal static class TransitionScenes
         var setup = new MatchSetup("Maps/Alpine Assault/Alpine Assault.map", "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.Standard with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(30) });
         var live = LiveMatch.Create(data, setup, new Vector2(Width, Height));
         var statistics = new MatchStatistics();
-        while (!live.Session.IsOver) statistics.Record(live.Session.Step());
+        while (!live.Session.IsOver) statistics.Record(live.Session.Step(), live.Session.World);
         var score = NewShell();
         Settle(score);
         score.MatchFinished(live.Session, statistics);

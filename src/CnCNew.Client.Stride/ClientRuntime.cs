@@ -951,7 +951,11 @@ internal sealed class ClientRuntime : IDisposable
 
         public void Attach()
         {
-            if (Host.Match is LiveMatch) Host.Match.TickStepped += result => Statistics.Record(result);
+            if (Host.Match is LiveMatch)
+            {
+                Statistics.Begin(Host.Match.World);
+                Host.Match.TickStepped += result => Statistics.Record(result, Host.Match.World);
+            }
             if (Host.Match is LiveMission) Host.Match.TickStepped += _ => MissionSteps++;
         }
 

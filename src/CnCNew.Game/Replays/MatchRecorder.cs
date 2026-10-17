@@ -33,6 +33,7 @@ public sealed class MatchRecorder
         StartTick = match.World.Tick;
         _source = match.Remote is null ? "local" : "network";
         Statistics = new MatchStatistics();
+        Statistics.Begin(match.World);
         if (StartTick % _hashInterval == 0) _hashes.Add((StartTick, match.Session.StateHash()));
         match.TickStepped += OnTick;
     }
@@ -61,7 +62,7 @@ public sealed class MatchRecorder
     private void OnTick(TickResult result)
     {
         if (Finished) return;
-        Statistics.Record(result);
+        Statistics.Record(result, _match.World);
         if (_match.World.Tick % _hashInterval == 0) _hashes.Add((_match.World.Tick, _match.Session.StateHash()));
     }
 

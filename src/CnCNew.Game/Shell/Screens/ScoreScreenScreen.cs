@@ -36,7 +36,7 @@ public sealed class ScoreScreenScreen : ShellScreen
             W($"StaticTextUnitsDestroyed{row}").SetText(tally is null ? "-" : tally.UnitsDestroyed.ToString());
             W($"StaticTextBuildingsBuilt{row}").SetText(tally is null ? "-" : tally.BuildingsBuilt.ToString());
             W($"StaticTextBuildingsLost{row}").SetText(tally is null ? "-" : tally.BuildingsLost.ToString());
-            W($"StaticTextBuildingsDestroyed{row}").SetText("-"); // no event distinguishes a destroyed building from a destroyed unit yet.
+            W($"StaticTextBuildingsDestroyed{row}").SetText(tally is null ? "-" : tally.BuildingsDestroyed.ToString());
             W($"StaticTextResources{row}").SetText(tally is null ? "-" : tally.Resources.ToString());
             W($"StaticTextObserver{row}").SetHidden(true);
             W($"GameWindowWinner{row}").SetHidden(!entry.IsWinner);

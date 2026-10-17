@@ -70,6 +70,7 @@ public sealed class ReplayPlayback
         if (CheckpointInterval % hashInterval != 0) CheckpointInterval = (CheckpointInterval / hashInterval + 1) * hashInterval;
         Statistics = new MatchStatistics();
         var session = Start();
+        Statistics.Begin(session.World);
         var humans = session.Match.Slots.Where(slot => slot.Description.Kind == MatchSlotKind.Human).Select(slot => slot.Player.Value).ToHashSet();
         _humanCommands = [.. replay.Commands.Where(command => humans.Contains(command.Player.Value))];
         _checkpoints[0] = new Checkpoint(0, null, Statistics.Clone(), session.StateHash());
@@ -185,7 +186,7 @@ public sealed class ReplayPlayback
     /// <summary>After a step: the counters, the recorded hash of this tick if there is one, and a checkpoint on the interval.</summary>
     internal void AfterStep(SkirmishMatchSession session, TickResult result)
     {
-        Statistics.Record(result);
+        Statistics.Record(result, session.World);
         CheckHash(session);
         var tick = session.World.Tick;
         if (tick % CheckpointInterval == 0 && !_checkpoints.ContainsKey(tick))

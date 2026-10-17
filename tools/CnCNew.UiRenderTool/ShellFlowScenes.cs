@@ -65,7 +65,7 @@ internal static class ShellFlowScenes
             var setup = start.Setup with { Options = start.Setup.Options with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(20) } };
             var live = LiveMatch.Create(data, setup, new Vector2(width, height));
             var stats = new MatchStatistics();
-            while (!live.Session.IsOver) stats.Record(live.Session.Step());
+            while (!live.Session.IsOver) stats.Record(live.Session.Step(), live.Session.World);
             shell.MatchFinished(live.Session, stats);
             Shot(shell, "score");
             Click(shell, "ScoreScreen.wnd:ButtonOk");
