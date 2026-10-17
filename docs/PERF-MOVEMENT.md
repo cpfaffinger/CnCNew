@@ -446,3 +446,21 @@ reference manifest x 5 seeds, 25 game minutes, 60 Hz, `e6232ce`): original 76 of
 no difference of the sizes it can detect. `SimTool ai-profiles --subject rush --side a --seeds 2`: the rush profile wins 10 of 32 matches under both. The fall of the
 GLA's wins from 9 to 2 is a shift the owner may want to look at before D-3; the sample is small. (A first run of both surveys was void: the tools' `SimContext`
 built its catalog without the rule profile, `e6232ce`.)
+
+## 11. Phase 36: the computer player's placement checks under a budget - the thresholds
+
+Phase 34 left the computer players' placement checks as the largest remaining part of the tick maximum under the profile (up to 9.6 ms: up to
+`PlacementChecksPerThink` reachability checks of a builder per think, each an arriving-only search outside the queue). Phase 36 puts them under a budget of cells, within
+the profile only (`SkirmishAi.PlacementCellBudget` = 20,000 cells per think; `NavigationGrid.LastSearchCells` tells the cells a search worked on, 0 for a remembered
+answer): once the checks of a think have spent it, no further check begins - a check that has begun runs to its end - and the building is placed at a later think; that
+is not counted as a failure of its spot. The original profile has no such bound and does not change.
+
+**Thresholds, written down before the first measurement** (the same measurement as section 10: `SimTool perf ... --map "Maps/Twilight Flame/Twilight Flame.map"
+--players 8 --minutes 30 --rules movement-budget`, 60 Hz, quiet machine, two runs each of the binaries before and after, alternating):
+
+| | Threshold |
+| --- | --- |
+| B1 | longest tick after the first 300 under the profile with the budget at most 8 ms (M1 of Phase 34) |
+| B2 | the profile's mean per tick with the budget at most 5 % above the profile's without it |
+| B3 | the AI survey under the profile (`ai-survey --seeds 5 --rules movement-budget`, 80 matches): at least 70 decided (Phase 34: 74) |
+| B4 | the original profile keeps both manifests (the full reference set and the input manifest identical) |
