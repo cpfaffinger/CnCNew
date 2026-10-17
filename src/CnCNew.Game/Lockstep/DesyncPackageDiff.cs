@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Text.Json;
 using CnCNew.Data.World;
+using CnCNew.Game.Diagnostics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Skirmish;
 using CnCNew.Simulation.Templates;
@@ -61,68 +62,6 @@ public static class DesyncPackageDiff
         return info.RootElement.GetProperty("stateTick").GetInt64();
     }
 
-    /// <summary>The paths at which two JSON values differ. Arrays of objects with an "id" are matched by it, others by position; the embedded recording is not compared.</summary>
-    private static void Diff(JsonElement expected, JsonElement actual, string path, List<string> into, int limit)
-    {
-        if (into.Count >= limit) return;
-        if (expected.ValueKind != actual.ValueKind)
-        {
-            into.Add($"{path}: {Short(expected)} -> {Short(actual)}");
-            return;
-        }
-        switch (expected.ValueKind)
-        {
-            case JsonValueKind.Object:
-                var seen = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var property in expected.EnumerateObject())
-                {
-                    seen.Add(property.Name);
-                    if (property.Name == "recording") continue;
-                    if (actual.TryGetProperty(property.Name, out var other)) Diff(property.Value, other, path.Length == 0 ? property.Name : path + "." + property.Name, into, limit);
-                    else into.Add($"{path}.{property.Name}: {Short(property.Value)} -> (missing)");
-                }
-                foreach (var property in actual.EnumerateObject())
-                    if (!seen.Contains(property.Name) && property.Name != "recording") into.Add($"{path}.{property.Name}: (missing) -> {Short(property.Value)}");
-                break;
-            case JsonValueKind.Array:
-                var keyed = expected.GetArrayLength() > 0 && expected[0].ValueKind == JsonValueKind.Object && expected[0].TryGetProperty("id", out _);
-                if (keyed)
-                {
-                    var others = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-                    foreach (var item in actual.EnumerateArray())
-                        if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty("id", out var id)) others[id.GetRawText()] = item;
-                    foreach (var item in expected.EnumerateArray())
-                    {
-                        var id = item.GetProperty("id").GetRawText();
-                        if (others.Remove(id, out var other)) Diff(item, other, $"{path}[id={id}]", into, limit);
-                        else into.Add($"{path}[id={id}]: (present) -> (missing)");
-                    }
-                    foreach (var id in others.Keys) into.Add($"{path}[id={id}]: (missing) -> (present)");
-                }
-                else
-                {
-                    if (expected.GetArrayLength() != actual.GetArrayLength()) into.Add($"{path}: {expected.GetArrayLength()} entries -> {actual.GetArrayLength()} entries");
-                    var index = 0;
-                    using var right = actual.EnumerateArray();
-                    foreach (var item in expected.EnumerateArray())
-                    {
-                        if (!right.MoveNext()) break;
-                        Diff(item, right.Current, $"{path}[{index++}]", into, limit);
-                    }
-                }
-                break;
-            default:
-                if (expected.GetRawText() != actual.GetRawText()) into.Add($"{path}: {Short(expected)} -> {Short(actual)}");
-                break;
-        }
-    }
-
-    private static string Short(JsonElement value)
-    {
-        var text = value.GetRawText();
-        return text.Length <= 60 ? text : text[..57] + "...";
-    }
-
     /// <summary>Where the state of a package differs from the match played again from the package's own recording, at the tick the state stands at.</summary>
     public static ImmutableArray<string> FieldsAgainstReplay(string directory, TemplateCatalog catalog, string definitionFingerprint, Func<string, MatchMap> loadMap, int limit = 200)
     {
@@ -132,9 +71,9 @@ public static class DesyncPackageDiff
         var played = SkirmishReplay.Play(replay, catalog, definitionFingerprint, map.Terrain, map.Objects, stopAtFirstDeviation: false, audit: false);
         using var expected = JsonDocument.Parse(played.Session.Save());
         using var actual = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(directory, "state.bin")));
-        var fields = new List<string>();
-        Diff(expected.RootElement, actual.RootElement, string.Empty, fields, limit);
-        return [..fields];
+        // The shared field comparison of the diagnosis tools (docs/MATCH-ANALYSIS.md section 5); the embedded recording is not compared.
+        static bool Recording(string name) => name == "recording";
+        return [..StateFields.Compare(StateFields.OfJson(expected.RootElement, Recording), StateFields.OfJson(actual.RootElement, Recording), limit: limit).Select(field => field.ToString())];
     }
 
     public static DesyncDiffResult Compare(string directoryA, string directoryB, TemplateCatalog catalog, string definitionFingerprint, Func<string, MatchMap> loadMap)

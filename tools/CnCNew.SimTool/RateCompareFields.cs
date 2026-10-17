@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using CnCNew.Game.Diagnostics;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Skirmish;
 using CnCNew.Simulation.State;
@@ -18,6 +19,8 @@ namespace CnCNew.SimTool;
 /// Fields are compared in game units: an integer or a fixed-point value of the faster rate counts as equal when it is the slower rate's value times the ratio of the rates (a tick,
 /// a duration in ticks, a value per tick). Fields that exist only above 30 Hz (the bookkeeping of a frame's shares) are skipped unless <c>--strict</c> is given.
 /// </para>
+/// <para>The fields and their comparison are the shared ones of the diagnosis tools (<see cref="StateFields"/>, docs/MATCH-ANALYSIS.md section 5); this tool adds its rule of
+/// equality between two rates.</para>
 /// </summary>
 internal static class RateCompareFields
 {
@@ -51,7 +54,7 @@ internal static class RateCompareFields
         var traceFrom = long.Parse(Value(args, "--trace-from") ?? "9223372036854775807", CultureInfo.InvariantCulture);
         var traceTo = long.Parse(Value(args, "--trace-to") ?? "9223372036854775807", CultureInfo.InvariantCulture);
         var ratio = rateB.TicksPerOriginalFrame / rateA.TicksPerOriginalFrame;
-        var last = new Dictionary<(int, uint), Dictionary<string, Field>>();
+        var last = new Dictionary<(int, uint), Dictionary<string, StateField>>();
         // A difference counts once it has lasted this many frames: a state that one rate reaches a share of a frame earlier and the other catches up with is no divergence.
         var persist = int.Parse(Value(args, "--persist") ?? "3", CultureInfo.InvariantCulture);
         // --slack N: fixed-point values up to N raw steps apart count as equal (a diagnosis of what parts beyond a known rounding difference; the default 0 is the measurement).
@@ -117,17 +120,14 @@ internal static class RateCompareFields
                 var building = entity.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction);
                 var left = Fields(entity, a.World.Tick, atFirst);
                 var right = Fields(other, b.World.Tick, atFirst);
-                foreach (var path in left.Keys.Union(right.Keys).Order(StringComparer.Ordinal))
-                {
-                    if (ignore.IsMatch(path)) continue;
-                    // A construction site is half a frame of work ahead above 30 Hz by design (the first work step counts a whole frame, so the building is complete in the tick of the 30 Hz step).
-                    if (building && (path.EndsWith(".health", StringComparison.Ordinal) || path.EndsWith(".previousHealth", StringComparison.Ordinal) || path == ".constructionWork")) continue;
-                    var hasLeft = left.TryGetValue(path, out var x);
-                    var hasRight = right.TryGetValue(path, out var y);
-                    if (hasLeft && hasRight && (Same(x, y, ratio) || (slack > 0 && x.Kind == 'f' && y.Kind == 'f' && Math.Abs(x.Number - y.Number) <= slack))) continue;
-                    if (!hasLeft && !strict) continue;
-                    found[$"{entity.Id.Value} {entity.Template.Name} owner {entity.Owner.Value} {path}"] = $"{rateA.TicksPerSecond} Hz {(hasLeft ? x.ToString() : "<absent>")} | {rateB.TicksPerSecond} Hz {(hasRight ? y.ToString() : "<absent>")}";
-                }
+                // A construction site is half a frame of work ahead above 30 Hz by design (the first work step counts a whole frame, so the building is complete in the tick of the 30 Hz step).
+                var rules = new StateFieldRules(
+                    Ignore: path => ignore.IsMatch(path) || (building && (path.EndsWith(".health", StringComparison.Ordinal) || path.EndsWith(".previousHealth", StringComparison.Ordinal) || path == ".constructionWork")),
+                    Equal: (x, y) => Same(x, y, ratio) || (slack > 0 && x.Kind == StateFieldKind.Fixed && y.Kind == StateFieldKind.Fixed && Math.Abs(x.Number - y.Number) <= slack),
+                    LeftOnly: true, RightOnly: strict);
+                foreach (var difference in StateFields.Compare(left, right, rules))
+                    found[$"{entity.Id.Value} {entity.Template.Name} owner {entity.Owner.Value} {difference.Path}"] =
+                        $"{rateA.TicksPerSecond} Hz {(difference.Left is { } x ? x.ToString() : "<absent>")} | {rateB.TicksPerSecond} Hz {(difference.Right is { } y ? y.ToString() : "<absent>")}";
             }
             foreach (var entity in others.Values) found[$"{entity.Id.Value} {entity.Template.Name}"] = $"exists only at {rateB.TicksPerSecond} Hz";
             foreach (var key in streaks.Keys.Where(key => !found.ContainsKey(key)).ToArray()) streaks.Remove(key);
@@ -152,7 +152,7 @@ internal static class RateCompareFields
         return 0;
     }
 
-    private static void StepFrame(Match session, SimulationRate rate, long frame, bool tracing, uint[] trace, Dictionary<(int, uint), Dictionary<string, Field>> last, int side, int fromTick, int toTick, bool events = false)
+    private static void StepFrame(Match session, SimulationRate rate, long frame, bool tracing, uint[] trace, Dictionary<(int, uint), Dictionary<string, StateField>> last, int side, int fromTick, int toTick, bool events = false)
     {
         for (var tick = fromTick; tick < toTick; tick++)
         {
@@ -213,40 +213,28 @@ internal static class RateCompareFields
         public void UpdateEnded(CnCNew.Simulation.Modules.SimModule module) => Report($"{module.ModuleName} of {module.Entity.Id.Value} {module.Entity.Template.Name}");
     }
 
-    private readonly record struct Field(char Kind, long Number, string Text)
-    {
-        public override string ToString() => Kind switch
-        {
-            'f' => $"{Fixed.FromRaw(Number)} (raw {Number.ToString(CultureInfo.InvariantCulture)})",
-            'i' => Number.ToString(CultureInfo.InvariantCulture),
-            _ => Text,
-        };
-    }
-
-    private static bool Same(Field x, Field y, int ratio)
+    private static bool Same(StateField x, StateField y, int ratio)
     {
         if (x.Kind != y.Kind) return false;
-        if (x.Kind == 't') return x.Text == y.Text;
+        if (x.Kind == StateFieldKind.Text) return x.Text == y.Text;
         if (x.Number == y.Number) return true;
         // A tick: the faster rate's value lies in the same logic frame of the original (tick t of the slower rate is the ticks ratio * t … ratio * t + ratio - 1). A countdown in
         // ticks: it ends in the first tick of the frame the slower rate's ends in (ratio * d - (ratio - 1) … ratio * d). The two cannot be told apart here.
-        if (x.Kind == 'i') return y.Number > (x.Number - 1) * ratio && y.Number < x.Number * ratio + ratio;
+        if (x.Kind == StateFieldKind.Integer) return y.Number > (x.Number - 1) * ratio && y.Number < x.Number * ratio + ratio;
         // A value per tick: the faster rate's value times the ratio, up to the bits a division loses.
         return Math.Abs(y.Number * ratio - x.Number) <= 2 * ratio;
     }
 
-    private static Dictionary<string, Field> Fields(Entity entity, long worldTick, bool frameEnd)
+    private static Dictionary<string, StateField> Fields(Entity entity, long worldTick, bool frameEnd)
     {
-        var writer = new FieldWriter();
-        entity.Describe(writer);
-        var fields = writer.Fields;
+        var fields = StateFields.Of(entity.Describe);
         if (!frameEnd) return fields;
         // What an observer of the tick just stepped reads: the position and the heading at the end of the frame the object has begun, a turret at the end of its frame's step.
         var (x, y, z) = entity.FrameEnd(worldTick - 1);
-        fields[".x"] = new Field('f', x.Raw, string.Empty);
-        fields[".y"] = new Field('f', y.Raw, string.Empty);
-        fields[".z"] = new Field('f', z.Raw, string.Empty);
-        fields[".angle"] = new Field('f', entity.FrameEndAngle(worldTick - 1).Raw, string.Empty);
+        fields[".x"] = StateField.FixedRaw(x.Raw);
+        fields[".y"] = StateField.FixedRaw(y.Raw);
+        fields[".z"] = StateField.FixedRaw(z.Raw);
+        fields[".angle"] = StateField.FixedRaw(entity.FrameEndAngle(worldTick - 1).Raw);
         foreach (var key in fields.Keys.Where(key => key.EndsWith(".goalAngle", StringComparison.Ordinal) || key.EndsWith(".goalPitch", StringComparison.Ordinal)).ToArray())
             fields[key[..^10] + (key.EndsWith("Angle", StringComparison.Ordinal) ? ".angle" : ".pitch")] = fields[key];
         return fields;
@@ -256,65 +244,5 @@ internal static class RateCompareFields
     {
         var index = Array.IndexOf(args, name);
         return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
-    }
-
-    /// <summary>Collects a description as path → value. Elements of an array are addressed by the first text they contain when they have one, else by position.</summary>
-    private sealed class FieldWriter : IStateWriter
-    {
-        public Dictionary<string, Field> Fields { get; } = new(StringComparer.Ordinal);
-        private readonly List<string> _path = [];
-        private readonly List<int> _counters = [];
-        private readonly List<int> _labelAt = [];
-
-        public void BeginObject(string? name)
-        {
-            if (name is null && _counters.Count > 0)
-            {
-                _path.Add($"[{_counters[^1]++}]");
-                _labelAt.Add(_path.Count - 1);
-            }
-            else
-            {
-                _path.Add(name ?? string.Empty);
-                _labelAt.Add(-1);
-            }
-            _counters.Add(-1);
-        }
-
-        public void EndObject()
-        {
-            _counters.RemoveAt(_counters.Count - 1);
-            _path.RemoveAt(_path.Count - 1);
-            _labelAt.RemoveAt(_labelAt.Count - 1);
-        }
-
-        public void BeginArray(string name)
-        {
-            _path.Add(name);
-            _labelAt.Add(-1);
-            _counters.Add(0);
-        }
-
-        public void EndArray() => EndObject();
-
-        public void Bool(string name, bool value) => Add(name, new Field('t', 0, value ? "true" : "false"));
-        public void Int(string name, long value) => Add(name, new Field('i', value, string.Empty));
-        public void UInt(string name, ulong value) => Add(name, new Field('t', 0, value.ToString(CultureInfo.InvariantCulture)));
-        public void Fixed(string name, Fixed value) => Add(name, new Field('f', value.Raw, string.Empty));
-
-        public void Text(string name, string value)
-        {
-            if (_labelAt.Count > 0 && _labelAt[^1] is >= 0 and var index && _path[index].EndsWith(']') && !_path[index].Contains(' '))
-                _path[index] = _path[index][..^1] + " " + value + "]";
-            Add(name, new Field('t', 0, value));
-        }
-
-        private void Add(string name, Field value)
-        {
-            if (_counters.Count > 0 && _counters[^1] >= 0) name = $"{name}[{_counters[^1]++}]";
-            var path = string.Join('.', _path.Where(part => part.Length > 0)) + "." + name;
-            var unique = path;
-            for (var copy = 2; !Fields.TryAdd(unique, value); copy++) unique = $"{path}#{copy}";
-        }
     }
 }

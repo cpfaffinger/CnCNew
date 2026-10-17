@@ -16,11 +16,19 @@ namespace CnCNew.Game.Shell.Screens;
 /// One window of this project's own is laid over the layout (<see cref="DetailsLayout"/>): the details of the chosen file - date, map, length, outcome, players and why it does
 /// not play - in the free part of the button column. The original showed none of it; it is named in docs/REPLAY-BROWSER.md.
 /// </para>
+/// <para>
+/// A fifth button, "Analysis", below "Back" (<see cref="AnalysisButton"/>, docs/MATCH-ANALYSIS.md) opens the analysis of the chosen file. It is a copy of the list's third
+/// button, made from the shipped layout when the screen opens (<see cref="AnalysisLayoutOf"/>): its pictures and font are the original's, its place and text are this
+/// project's.
+/// </para>
 /// </summary>
 public sealed class ReplayMenuScreen : ShellScreen
 {
     /// <summary>The name of the details window of <see cref="DetailsLayout"/>.</summary>
     public const string DetailsWindow = "ReplayDetails.wnd:StaticTextDetails";
+
+    /// <summary>The name of the analysis button (<see cref="AnalysisLayoutOf"/>).</summary>
+    public const string AnalysisButton = "ReplayAnalysis.wnd:ButtonAnalysis";
 
     /// <summary>The colours of <c>PopulateReplayFileListbox</c>: white for a file of this game, grey for one of another version.</summary>
     internal static readonly WndColor PlayableColor = new(255, 255, 255, 255);
@@ -34,6 +42,9 @@ public sealed class ReplayMenuScreen : ShellScreen
         Tree.Register("ReplayMenuSystem", OnSystem);
         Tree.Register("ReplayMenuInput", OnInput);
         Tree.AddLayout(DetailsLayout);
+        Tree.Register("ReplayAnalysisSystem", OnSystem);
+        Tree.AddLayout(AnalysisLayoutOf(W("ButtonCopyReplay").Definition));
+        Tree.FindByName(AnalysisButton)!.SetText(ReplayText.AnalysisButton);
         W("ButtonCopyReplay").SetText(ReplayText.RenameButton);
         Refresh(null);
         // ReplayMenuInit/Update: the gadgets fade in (ReplayMenuFade, reversed on shutdown).
@@ -128,6 +139,11 @@ public sealed class ReplayMenuScreen : ShellScreen
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 Shell.CloseTop();
                 break;
+            case AnalysisButton:
+                Shell.PlaySound(ShellUiSounds.ButtonClick);
+                if (Chosen is not { } analysed) { NothingChosen(); break; }
+                Shell.OpenReplayAnalysis(analysed.Name);
+                break;
         }
     }
 
@@ -148,6 +164,24 @@ public sealed class ReplayMenuScreen : ShellScreen
     /// The details window of the list as a layout of this project's own (no file of the original): a static text in the free part of the button column of
     /// <c>ReplayMenu.wnd</c>, between the third button and "Back", in the layout's 800 x 600 coordinates; it takes no input.
     /// </summary>
+    /// <summary>
+    /// The analysis button as a layout of its own: the shipped definition of the list's third button (<paramref name="copyButton"/>) with another name, the place below
+    /// "Back" in the button column (563, 452 to 735, 488 of the layout's 800 x 600 - the same width and height, the gap between the buttons) and a system callback of its own,
+    /// because it stands outside the list's parent window.
+    /// </summary>
+    public static WndLayout AnalysisLayoutOf(WndWindow copyButton)
+    {
+        ArgumentNullException.ThrowIfNull(copyButton);
+        var rect = copyButton.Rect;
+        var button = copyButton with
+        {
+            Name = AnalysisButton,
+            Rect = rect with { Left = 563, Top = 452, Right = 563 + rect.Width, Bottom = 452 + rect.Height },
+            Callbacks = copyButton.Callbacks with { System = "ReplayAnalysisSystem" },
+        };
+        return new WndLayout("ReplayAnalysis.wnd", 2, new WndLayoutCallbacks(null, null, null), WndDefaults.None, [button], [], ImmutableSortedDictionary<string, int>.Empty);
+    }
+
     public static WndLayout DetailsLayout { get; } = WndParser.Parse(new MemoryStream(Encoding.ASCII.GetBytes("""
         FILE_VERSION = 2;
         STARTLAYOUTBLOCK

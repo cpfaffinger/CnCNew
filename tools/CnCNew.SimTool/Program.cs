@@ -82,6 +82,9 @@ const string Usage = """
     A budget given as --ticks/--max-ticks is a raw tick count of that rate; --seconds S or --minutes M state it as game time instead, and the
     default budgets are game time (the same at every rate). The stress test counts steps (--ticks only). A manifest is checked at the rate its file records.
     The commands that load the shipped content take --rules original|fixes|NAME,... (docs/GGC-FIXES.md; default original); a manifest is checked with the original rules only.
+      match-analysis <content-dir> <file.cncreplay> --out <directory> [--title TEXT]
+                                                           the analysis of a replay of the replay browser (docs/MATCH-ANALYSIS.md): analysis.json,
+                                                           players.tsv, samples.tsv, events.tsv and report.html, with the SHA-256 of each
     reference-match, ai-match and mission-run take --time-probe: counters of the time service over the first run (per-tick amounts that round to
     zero at run time, the one-frame minimum engaging, durations off the grid), by place in the source. Diagnostics, not state.
     """;
@@ -142,6 +145,7 @@ try
         "ai-profiles-report" => CnCNew.SimTool.AiProfiles.Report(args),
         "session-check" => CnCNew.SimTool.SessionCheck.Run(args),
         "match-describe" => CnCNew.SimTool.MatchCommands.Describe(args),
+        "match-analysis" => CnCNew.SimTool.MatchAnalysisCommand.Run(args),
         "match-start" => CnCNew.SimTool.MatchCommands.Start(args),
         "composition-test" => CnCNew.SimTool.CompositionTest.Run(args),
         "ai-data" when args.Length >= 2 => CnCNew.SimTool.OriginalAi.Data(args, CompileGraph),

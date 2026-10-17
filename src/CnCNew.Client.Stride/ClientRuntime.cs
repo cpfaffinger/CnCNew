@@ -790,6 +790,8 @@ internal sealed class ClientRuntime : IDisposable
         running.Attach();
         // Every skirmish of the simulation's own AI is recorded while it runs and written when it ends (docs/REPLAY-BROWSER.md); a playback is not.
         if (game is LiveMatch recorded && RecordingStore is not null) running.Recorder = CnCNew.Game.Replays.MatchRecorder.Attach(recorded);
+        // ... and analysed while it runs, for the score screen's "Analysis" (docs/MATCH-ANALYSIS.md).
+        if (game is LiveMatch analysed) running.Analysis = CnCNew.Game.Analysis.LiveMatchAnalysis.Attach(analysed);
         // The in-game menu's "Save/Load" button saves a running skirmish to one slot; the main menu's load list continues it (docs/CAMPAIGN-AND-SAVEGAMES.md, skirmish savegame).
         if (game is LiveMatch saved && running.Match is { } controller)
             controller.MenuActionRequested += action => { if (action == MenuAction.SaveLoad) LastSkirmishSave = SaveSkirmish(saved); };
@@ -871,6 +873,7 @@ internal sealed class ClientRuntime : IDisposable
         else if (game is LiveMatch match)
         {
             string? note = null;
+            var analysis = running.Analysis?.Finish(CnCNew.Game.Replays.MatchRecordingFormat.KindName(CnCNew.Game.Replays.MatchRecorder.EndingOf(match, _leaveRequested).Kind));
             if (match.Remote is { } relay && _shell!.Net is not null)
             {
                 note = _leaveRequested ? null : NetText.MatchEndNote(relay, match.IsOver, match.DiagnosticsDirectory);
@@ -884,7 +887,7 @@ internal sealed class ClientRuntime : IDisposable
                 relay.Dispose();
                 _leaveRequested = false;
             }
-            _shell!.MatchFinished(CnCNew.Game.Shell.MatchResult.From(match.Players, match.Winner, match.World, match.EndTick, running.Statistics), note);
+            _shell!.MatchFinished(CnCNew.Game.Shell.MatchResult.From(match.Players, match.Winner, match.World, match.EndTick, running.Statistics) with { Analysis = analysis }, note);
         }
         // The compositor goes with the scene: left in place it collects the lights of a scene that is no longer there, and the first frame of the score screen throws.
         _game.SceneSystem.SceneInstance = null;
@@ -972,6 +975,7 @@ internal sealed class ClientRuntime : IDisposable
 
         /// <summary>The recording of a skirmish while it runs (docs/REPLAY-BROWSER.md); null for a mission, a staged scene and a playback.</summary>
         public CnCNew.Game.Replays.MatchRecorder? Recorder { get; set; }
+        public CnCNew.Game.Analysis.LiveMatchAnalysis? Analysis { get; set; }
 
         /// <summary>Set when this game shows the playback of a replay.</summary>
         public CnCNew.Game.Replays.ReplayPlayback? Playback { get; set; }

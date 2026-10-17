@@ -1,16 +1,18 @@
 <#
 .SYNOPSIS
     The replay browser in the window client, driven by a script (docs/REPLAY-BROWSER.md): a skirmish is played and recorded, found in the replay list, played back
-    with seeks back and forth to the recorded end, renamed and deleted; a damaged file is refused with its reason.
+    with seeks back and forth to the recorded end, renamed and deleted; a damaged file is refused with its reason. The analysis of the match (docs/MATCH-ANALYSIS.md)
+    is opened from the score screen and from the list.
 
 .DESCRIPTION
     Starts the Release window client once with --shell-script (CnCNew.Game.Shell.ShellScript: every step waits for what a person would see and then clicks, types or
     presses a key; the device's mouse and keyboard are ignored). The client keeps its options, savegames and replays in a directory of this run (--settings-dir),
     never in the user's. Before it starts, a damaged replay file is put into that directory.
 
-      main menu > Single Player > Skirmish > Start: a match of -MatchSeconds of game time against the computer (--skirmish-seconds); the score screen; back.
+      main menu > Single Player > Skirmish > Start: a match of -MatchSeconds of game time against the computer (--skirmish-seconds); the score screen; its "Analysis"
+      opens the analysis, "Next page" turns a page, OK leads back; back.
       main menu > Load/Replay > Replay: the list shows the recording as playable and the damaged file as damaged; "Load Replay" on the damaged one is refused with
-      the reason; the recording is played at 8x, sought back twice and forward once (PageUp, PageUp, PageDown), and played to its end; the message over the score
+      the reason; "Analysis" computes the analysis of the recording and shows its first page, Right turns a page, Escape leads back; the recording is played at 8x, sought back twice and forward once (PageUp, PageUp, PageDown), and played to its end; the message over the score
       screen says it reached the recorded end; the file is renamed and deleted.
 
     and checks from the client's console
@@ -77,6 +79,14 @@ $script = Join-Path $OutDir 'replay.script.txt'
     'wait phase Results',
     'limit 30',
     'wait screen ScoreScreenScreen',
+    'expect text ScoreScreen.wnd:ButtonSaveReplay equals Analysis',
+    'click ScoreScreen.wnd:ButtonSaveReplay',
+    'wait screen MatchAnalysisScreen',
+    'expect text ScoreScreen.wnd:ChallengeWinLossText contains page 1 of 6: Economy',
+    'click ScoreScreen.wnd:ButtonBuddy',
+    'expect text ScoreScreen.wnd:ChallengeWinLossText contains page 2 of 6: Army',
+    'click ScoreScreen.wnd:ButtonOk',
+    'wait screen ScoreScreenScreen',
     'click ScoreScreen.wnd:ButtonOk',
     'wait screen MainMenuScreen',
     'click MainMenu.wnd:ButtonLoadReplay',
@@ -90,6 +100,16 @@ $script = Join-Path $OutDir 'replay.script.txt'
     'wait screen MessageBoxScreen',
     'expect text MessageBox.wnd:StaticTextMessage contains damaged',
     'click MessageBox.wnd:ButtonOk',
+    'wait screen ReplayMenuScreen',
+    'pick ReplayMenu.wnd:ListboxReplayFiles Playable',
+    'click ReplayAnalysis.wnd:ButtonAnalysis',
+    'wait screen MatchAnalysisScreen',
+    'limit 120',
+    'wait text ScoreScreen.wnd:ChallengeWinLossText contains page 1 of 6',
+    'limit 30',
+    'key Right',
+    'expect text ScoreScreen.wnd:ChallengeWinLossText contains page 2 of 6: Army',
+    'key Escape',
     'wait screen ReplayMenuScreen',
     'pick ReplayMenu.wnd:ListboxReplayFiles Playable',
     'click ReplayMenu.wnd:ButtonLoadReplay',

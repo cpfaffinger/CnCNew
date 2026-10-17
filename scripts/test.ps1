@@ -113,14 +113,15 @@ $stepsOfArea = @{
 
 # ---- The suites of Game.Tests a folder of CnCNew.Game asks for at 'affected' (a file outside these folders asks for all of them).
 $gameSuites = @{
+    Analysis  = 'MatchAnalysisTests', 'ReplayBrowserTests'
     Audio     = 'AudioDirectorTests'
     Campaign  = 'CampaignTests', 'CampaignShellTests'
     Hud       = 'HudTests', 'MissionHudTests', 'HotkeyTests', 'NetHudTests'
     Lockstep  = 'LiveMatchTests', 'HudTests', 'CampaignShellTests', 'SpectatorTests', 'NetLobbyTests', 'NetShellTests'
-    Live      = 'LiveMatchTests', 'DeterminismTests', 'TimeScaleTests', 'ScenarioTests', 'MissionPresentationTests', 'MissionEffectsTests', 'MissionTextTests', 'ReplayBrowserTests', 'AttachedEffectsTests'
-    Replays   = 'ReplayBrowserTests', 'NetShellTests'
+    Live      = 'LiveMatchTests', 'DeterminismTests', 'TimeScaleTests', 'ScenarioTests', 'MissionPresentationTests', 'MissionEffectsTests', 'MissionTextTests', 'ReplayBrowserTests', 'AttachedEffectsTests', 'MatchAnalysisTests'
+    Replays   = 'ReplayBrowserTests', 'NetShellTests', 'MatchAnalysisTests'
     Save      = 'CampaignTests', 'CampaignShellTests'
-    Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests', 'NetScreenTests', 'NetShellTests', 'ReplayBrowserTests'
+    Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests', 'NetScreenTests', 'NetShellTests', 'ReplayBrowserTests', 'MatchAnalysisTests'
     Spectator = 'SpectatorTests', 'ReplayBrowserTests'
 }
 $gameSuitesOfSimulation = 'DeterminismTests', 'LiveMatchTests', 'SourceRuleTests'

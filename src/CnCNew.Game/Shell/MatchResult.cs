@@ -124,6 +124,8 @@ public sealed record MatchResultRow(PlayerConfiguration Player, bool IsWinner, b
 /// <summary>A finished (or aborted) skirmish, prepared for the score screen: player rows in slot order plus optional per-player tallies.</summary>
 public sealed record MatchResult(ImmutableArray<MatchResultRow> Rows, long EndTick)
 {
+    /// <summary>The analysis of the match (docs/MATCH-ANALYSIS.md), when the host analysed it while it ran; the score screen then offers it.</summary>
+    public CnCNew.Game.Analysis.MatchAnalysis? Analysis { get; init; }
 
     public static MatchResult From(SkirmishMatchSession session, MatchStatistics? statistics)
         => From(session.Players, session.Winner, session.World, session.EndTick, statistics);

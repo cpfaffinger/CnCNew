@@ -402,6 +402,7 @@ public sealed class GameShell
     public void MatchFinished(MatchResult result, string? netNote)
     {
         _returnToReplays = false;
+        PlayedReplay = null;
         if (Net is { } net) net.Relay = null;
         _pendingNet = null;
         Phase = ShellPhase.Results;
@@ -557,6 +558,31 @@ public sealed class GameShell
     private bool _returnToReplays;
 
     internal void OpenReplayMenu() => Push(new ReplayMenuScreen(this));
+
+    /// <summary>The replay whose playback the score screen shows, by its name in the store; null after any other match.</summary>
+    public string? PlayedReplay { get; private set; }
+
+    /// <summary>The analysis of a match that is complete (docs/MATCH-ANALYSIS.md), over the screen that offered it.</summary>
+    internal void OpenAnalysis(CnCNew.Game.Analysis.MatchAnalysis analysis) => Push(new MatchAnalysisScreen(this, analysis));
+
+    /// <summary>
+    /// The analysis of a replay of the store: the file is checked as for a playback - a file this game cannot play is refused here with its reason - and the screen computes
+    /// the analysis while it shows how far it has come.
+    /// </summary>
+    internal void OpenReplayAnalysis(string name)
+    {
+        CnCNew.Game.Analysis.ReplayAnalysis job;
+        try
+        {
+            job = CnCNew.Game.Analysis.ReplayAnalysis.Open(Data, Replays!.Read(name), name + CnCNew.Game.Replays.MatchRecordingFormat.Extension, ReplayMachine);
+        }
+        catch (CnCNew.Game.Replays.ReplayRefusedException refusal)
+        {
+            ShowError(CnCNew.Game.Replays.ReplayText.CannotAnalyseTitle, refusal.Message);
+            return;
+        }
+        Push(new MatchAnalysisScreen(this, job));
+    }
     internal void OpenReplayRename(ReplayMenuScreen owner, string name) => Push(new ReplayRenameScreen(this, owner, name));
 
     /// <summary>
@@ -584,6 +610,7 @@ public sealed class GameShell
             return;
         }
         _returnToReplays = true;
+        PlayedReplay = name;
         Phase = ShellPhase.InMatch;
         _outputs.Add(new StartReplayOutput(name, bytes));
     }
@@ -601,6 +628,7 @@ public sealed class GameShell
     public void ReplayStopped()
     {
         _returnToReplays = false;
+        PlayedReplay = null;
         Phase = ShellPhase.Menus;
         Replace(new MainMenuScreen(this));
         Push(new ReplayMenuScreen(this));

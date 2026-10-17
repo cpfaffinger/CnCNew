@@ -9,16 +9,24 @@ namespace CnCNew.Game.Shell.Screens;
 /// (<c>ButtonBuddy</c>, <c>ButtonSaveReplay</c>, the chat entry/list) are disabled/hidden; observers are not modeled by
 /// <c>LiveMatch</c> yet, so <c>StaticTextObserverN</c> stays hidden for every row (documented request to the simulation
 /// layer in <c>docs/GAME-SHELL.md</c>).
+/// <para>
+/// <c>ButtonSaveReplay</c> - the original saved the replay of the match there, which this game does by itself - says "Analysis" and opens the analysis of the match
+/// (docs/MATCH-ANALYSIS.md): the one the host made while the match ran, or, after a playback, the analysis of the replay that was played. Without either it stays disabled.
+/// </para>
 /// </summary>
 public sealed class ScoreScreenScreen : ShellScreen
 {
+    private readonly MatchResult _result;
+
     public ScoreScreenScreen(GameShell shell, MatchResult result) : base(shell, ShellLayoutNames.ScoreScreen)
     {
+        _result = result;
         Tree.Register("ScoreScreenSystem", OnSystem);
         Tree.Register("ScoreScreenInput", OnInput);
 
         W("ButtonBuddy").SetEnabled(false);
-        W("ButtonSaveReplay").SetEnabled(false);
+        W("ButtonSaveReplay").SetText(CnCNew.Game.Replays.ReplayText.AnalysisButton);
+        W("ButtonSaveReplay").SetEnabled(result.Analysis is not null || shell.PlayedReplay is not null);
         W("TextEntryChat").SetHidden(true);
         W("ButtonEmote").SetHidden(true);
         W("ListboxChatWindowScoreScreen").SetHidden(true);
@@ -62,6 +70,11 @@ public sealed class ScoreScreenScreen : ShellScreen
         if (e.Kind != UiEventKind.ButtonSelected) return;
         switch (e.Source)
         {
+            case "ScoreScreen.wnd:ButtonSaveReplay":
+                Shell.PlaySound(ShellUiSounds.ButtonClick);
+                if (_result.Analysis is { } analysis) Shell.OpenAnalysis(analysis);
+                else if (Shell.PlayedReplay is { } replay) Shell.OpenReplayAnalysis(replay);
+                break;
             case "ScoreScreen.wnd:ButtonOk" or "ScoreScreen.wnd:ButtonContinue":
                 Shell.PlaySound(ShellUiSounds.ButtonClick);
                 Shell.ReturnToMainMenuFromResults();

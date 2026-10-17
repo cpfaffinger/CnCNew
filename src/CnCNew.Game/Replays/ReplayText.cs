@@ -22,6 +22,8 @@ public static class ReplayText
 
     /// <summary>The label of the list's third button: the original copied a replay to the desktop, here it renames it.</summary>
     public const string RenameButton = "Rename";
+    public const string AnalysisButton = "Analysis";
+    public const string CannotAnalyseTitle = "Cannot Analyse Replay";
 
     /// <summary>A length of game time as <c>m:ss</c> (or <c>h:mm:ss</c> from an hour on).</summary>
     public static string Duration(long seconds)

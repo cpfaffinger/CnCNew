@@ -75,7 +75,12 @@ internal static class ReplayBrowserTests
         // --replay-measure-minutes N (docs/REPLAY-BROWSER.md section 7): an eight-player match of computer players, recorded and played with seeks, measured in real time.
         var minutesAt = Array.IndexOf(args, "--replay-measure-minutes");
         if (minutesAt >= 0 && minutesAt + 1 < args.Length && int.TryParse(args[minutesAt + 1], out var minutes) && minutes > 0)
-            harness.Run($"Measured: an eight-player match of {minutes} game minutes recorded, played and sought", () => Measure(data, minutes));
+        {
+            // --replay-measure-out FILE: the measured match's replay as a file (outside the repository), for the tools (docs/MATCH-ANALYSIS.md section 7).
+            var outAt = Array.IndexOf(args, "--replay-measure-out");
+            var output = outAt >= 0 && outAt + 1 < args.Length ? args[outAt + 1] : null;
+            harness.Run($"Measured: an eight-player match of {minutes} game minutes recorded, played and sought", () => Measure(data, minutes, output));
+        }
         return harness.Failures;
     }
 
@@ -553,7 +558,7 @@ internal static class ReplayBrowserTests
 
     // ------------------------------------------------------------------------------------------------- a measurement
 
-    private static void Measure(GameData data, int minutes)
+    private static void Measure(GameData data, int minutes, string? output)
     {
         var mapPath = data.Maps.First(path => path.Contains("Twilight Flame", StringComparison.OrdinalIgnoreCase));
         var options = SkirmishMatchOptions.StandardAt(data.Rate) with { MaxTicks = data.Rate.Time.WholeSecondsToTicks(minutes * 60L) };
@@ -568,6 +573,7 @@ internal static class ReplayBrowserTests
         var bytes = recorder.Build(MatchRecorder.EndingOf(live, false), RecordedAt);
         var buildMs = watch.Elapsed.TotalMilliseconds;
         var commands = ReplayFormat.Read(MatchRecordingFormat.Read(bytes).Replay).Commands.Length;
+        if (output is not null) File.WriteAllBytes(output, bytes);
         watch.Restart();
         var playback = ReplayPlayback.Open(data, bytes, Viewport);
         var openMs = watch.Elapsed.TotalMilliseconds;
@@ -594,12 +600,14 @@ internal static class ReplayBrowserTests
 
     // ------------------------------------------------------------------------------------------------- a person at the menus
 
-    /// <summary>What the client does around the shell, without a window: the match with its recorder, the playback with its spectator and its seeks.</summary>
-    private sealed class Host(GameData data, GameShell shell, ShellScript script)
+    /// <summary>What the client does around the shell, without a window: the match with its recorder and its analysis, the playback with its spectator and its seeks.</summary>
+    internal sealed class Host(GameData data, GameShell shell, ShellScript script)
     {
         private readonly List<InputEvent> _matchInput = [];
         private LiveMatch? _match;
         private MatchRecorder? _recorder;
+        private CnCNew.Game.Analysis.LiveMatchAnalysis? _analysis;
+        public CnCNew.Game.Analysis.MatchAnalysis? LastAnalysis { get; private set; }
         private SpectatorController? _spectator;
         public ReplayPlayback? Playback { get; private set; }
         public string? Recorded { get; private set; }
@@ -625,8 +633,10 @@ internal static class ReplayBrowserTests
             {
                 match.Advance(seconds);
                 if (!match.IsOver) return;
-                Recorded = _recorder!.Finish(shell.Replays!, MatchRecorder.EndingOf(match, leftByChoice: false), RecordedAt);
-                shell.MatchFinished(MatchResult.From(match.Players, match.Winner, match.World, match.Tick, _recorder.Statistics), null);
+                var ending = MatchRecorder.EndingOf(match, leftByChoice: false);
+                Recorded = _recorder!.Finish(shell.Replays!, ending, RecordedAt);
+                LastAnalysis = _analysis?.Finish(MatchRecordingFormat.KindName(ending.Kind));
+                shell.MatchFinished(MatchResult.From(match.Players, match.Winner, match.World, match.Tick, _recorder.Statistics) with { Analysis = LastAnalysis }, null);
                 _match = null;
                 return;
             }
@@ -661,6 +671,7 @@ internal static class ReplayBrowserTests
                 {
                     _match = LiveMatch.Create(data, start.Setup, Viewport);
                     _recorder = MatchRecorder.Attach(_match);
+                    _analysis = CnCNew.Game.Analysis.LiveMatchAnalysis.Attach(_match);
                 }
                 else if (output is StartReplayOutput replay)
                 {
