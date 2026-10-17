@@ -146,6 +146,9 @@ the surveys. Nothing is rebuilt.
   built; (d) **missed**: 13.7 / 13.8 ms in the 60 Hz gate after the first 300 ticks (the original 123 / 128 ms), the mean 15 % lower (`docs/PERF-MOVEMENT.md` §10). The
   distribution comparison under both profiles passes 39 of 39 checks, the GLA wins 2 instead of 9 of 80 matches (reported, not judged). The march of a group is measured
   (`SimTool group-march`: the same arrival and spread as the original, the same path lengths), not watched by a human.
+  **Phase 36:** the computer players' placement checks measured under the profile - their searches are 5 to 82 cells, a budget of search cells never engaged and was
+  withdrawn; the cost was the footprint checks beside a warehouse, now faster without a change of results (`0f4388d`); the longest tick after 300 still 13.8 to 23.9 ms,
+  in other parts of the think (`docs/PERF-MOVEMENT.md` §11); the angry-mob case narrowed, not solved.
 
 ### S3-M7 Bug-fix and balance layers
 

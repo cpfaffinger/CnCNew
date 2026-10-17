@@ -61,7 +61,8 @@ phase number is 32.
 | – | – | S3-M1 | AI kinds, difficulty and tactics (built-in `SkirmishAi` exists and is the default) | open |
 | – | `docs/SPECTATOR-MODE.md` | S3-M2 | Spectator and observer (built in Phase 23) | built – not accepted |
 | 35 | [HANDOFF-PHASE35.md](HANDOFF-PHASE35.md) | S3-M3 | Replay browser: recording, list, playback | done by machine (16 October 2026): `caa7941`, `e3d5184`, `022014c`, `236ff86`, `1d45cfd`, `4e081b2`, `8f6dc49`, `55274ba` – `docs/REPLAY-BROWSER.md`; the attached effects on the owner's finding; the side items not done |
-| **36** | [HANDOFF-PHASE36.md](HANDOFF-PHASE36.md) | **S3-M4** | Match analysis with graphics, from a replay or a running match | **next** – not begun (starting state measured at `55274ba`) |
+| 36 | [HANDOFF-PHASE36.md](HANDOFF-PHASE36.md) | S3-M4 | Match analysis with graphics, from a replay or a running match | done by machine (17 October 2026): `f0371ee`, `31b03c2`, `29468aa`, `b289185`, `0f4388d`, `c2dcc4f` – `docs/MATCH-ANALYSIS.md`; the score screen's counters fixed; the tick maximum under the profile still above 8 ms |
+| **37** | [HANDOFF-PHASE37.md](HANDOFF-PHASE37.md) | **S3-M2** | Spectator and observer: free camera, views, panels, event ticker, a human match from its replay | **next** – not begun (starting state measured at `c2dcc4f`) |
 | – | – | S3-M5 | Modern user interface | open |
 | – | [HANDOFF-PHASE30.md](HANDOFF-PHASE30.md) items 3 and 4 | S3-M7 | Bug-fix and balance layers (GeneralsGameCode, GeneralsGamePatch) | begun in Phase 30 (rule profile, catalogue, layer import) |
 | 32 | [HANDOFF-PHASE32.md](HANDOFF-PHASE32.md) | S3-M7 | The patch layer playable, the review of the logic fixes | done by machine (15 October 2026): `477c15e`, `a3834a8`, `34fc5e8`, `1ff635d`, `417e51a` |

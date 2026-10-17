@@ -1,5 +1,5 @@
 > **Stage:** 3 – Changes · **Milestone:** S3-M4 Match analysis with graphics · **Phase:** 36
-> **Status:** current (starting state measured 16 October 2026 at `55274ba`; not begun)
+> **Status:** done by machine (17 October 2026, at `c2dcc4f`); the placement side item measured and replaced by a faster footprint check, the angry-mob case narrowed (`docs/PERF-MOVEMENT.md` §11) · **Successor:** HANDOFF-PHASE37.md
 > **Predecessor:** HANDOFF-PHASE35.md · **Results in:** docs/MATCH-ANALYSIS.md (new), docs/REPLAY-BROWSER.md, docs/GAME-SHELL.md, docs/plan/STAGE-3-CHANGES.md
 > **Side items:** the residue of S3-M6 that Phase 35 did not take (the rate-equivalence case of the angry mob under `movement-budget`; the computer players' placement checks under a budget)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
