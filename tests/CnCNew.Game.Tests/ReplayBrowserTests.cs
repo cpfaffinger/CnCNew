@@ -67,6 +67,7 @@ internal static class ReplayBrowserTests
         var baselines = LoadBaselines();
         var updating = Environment.GetEnvironmentVariable("CNCNEW_UPDATE_BASELINES") == "1";
         harness.Run("The replay list in six resolutions: empty, a list, a file that does not play, the reason, rename, a name taken, delete, the score of a playback", () => Screens(data, baselines, updating));
+        harness.Run("A row chosen before a popup and chosen again right after it is closed is two clicks, not a double click that plays the file", () => NoDoubleClickAcrossAPopup(data));
         harness.Run("No two states of the list share a picture", () => TestHarness.Assert(baselines.Count >= 48 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count,
             $"{baselines.Count} hashes, {baselines.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
         if (updating) SaveBaselines(baselines);
@@ -454,6 +455,24 @@ internal static class ReplayBrowserTests
         ShellTestInput.Click(shell, "MessageBox.wnd:ButtonOk");
         ShellTestInput.Click(shell, "ScoreScreen.wnd:ButtonOk");
         TestHarness.Assert(shell.CurrentScreen is ReplayMenuScreen && shell.Phase == ShellPhase.Menus, "after the score of a playback the way back leads to the replay list");
+        Directory.Delete(directory, recursive: true);
+    }
+
+    private static void NoDoubleClickAcrossAPopup(GameData data)
+    {
+        var directory = RunDirectory("double-click");
+        var shell = NewShell(data, directory);
+        shell.ReplayMachine = new ReplayMachine(data.Fingerprint, data.Rate.TicksPerSecond, data.Rules.Name, TestBuild, data.Content.Exists);
+        shell.Replays!.Save("One", MatchRecordingFormat.Write(SyntheticInfo(tickRate: data.Rate.TicksPerSecond, fingerprint: data.Fingerprint.ToUpperInvariant()), [1]));
+        shell.Replays!.Save("Two", MatchRecordingFormat.Write(SyntheticInfo(tickRate: data.Rate.TicksPerSecond, fingerprint: data.Fingerprint.ToUpperInvariant(), recorded: "2026-10-01T09:00:00Z"), [2]));
+        OpenList(shell);
+        Pick(shell, 0);
+        // The covered list's clock stands still while the popup is open: without forgetting the click, the next one on the same row was a double click.
+        ShellTestInput.Click(shell, "ReplayMenu.wnd:ButtonCopyReplay");
+        TestHarness.Assert(shell.CurrentScreen is ReplayRenameScreen, "the popup is open");
+        ShellTestInput.Click(shell, "PopupReplay.wnd:ButtonBack");
+        Pick(shell, 0);
+        TestHarness.Assert(shell.Phase == ShellPhase.Menus && shell.CurrentScreen is ReplayMenuScreen && !shell.DrainOutputs().OfType<StartReplayOutput>().Any(), "the second click only chooses the row");
         Directory.Delete(directory, recursive: true);
     }
 

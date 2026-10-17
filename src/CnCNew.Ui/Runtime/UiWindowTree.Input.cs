@@ -209,6 +209,13 @@ public sealed partial class UiWindowTree
     /// message and loses hilite and pressed state, a drag ends without a value message. The original sends
     /// <c>GWM_MOUSE_LEAVING</c> to the old mouse region as soon as a modal window takes the pointer.
     /// </summary>
+    /// <summary>Forgets the last click: the next click is never the second of a double click (the tree's screen was covered and shown again meanwhile).</summary>
+    public void ForgetLastClick()
+    {
+        _lastClickWindow = null;
+        _lastClickRow = -1;
+    }
+
     public void PointerLeft()
     {
         if (_grab?.Slider is { } slider) slider.Dragging = false;

@@ -730,7 +730,11 @@ public sealed class GameShell
         var top = _stack[^1];
         _stack.RemoveAt(_stack.Count - 1);
         top.OnClosed();
-        if (reveal && _stack.Count > 0) CurrentScreen.OnRevealed();
+        if (_stack.Count == 0) return;
+        // A covered screen's clock stood still; brought up again it reads the shell's time, and a click before it was covered is not the first of a double click.
+        CurrentScreen.Tree.AdvanceTo((long)_clockMs);
+        CurrentScreen.Tree.ForgetLastClick();
+        if (reveal) CurrentScreen.OnRevealed();
     }
 
     private void Replace(ShellScreen screen)
