@@ -47,7 +47,7 @@ const string Usage = """
                                                            AI skirmish; samples every 15 ticks: units standing inside a structure footprint, units with a move order that do not move (stuck), longest stalls
       stress [--ticks N] [--population N] [--out replay.bin]
                                                            record + two fresh runs + snapshot continuation, leak and budget checks
-      perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--replay] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
+      perf <content-dir> --map <virtual-map-path> (--players N | --factions A,B,..) [--ticks N] [--replay] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer] [--warm-up]
       perf-mission <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--csv FILE] [--json FILE] [--label TEXT] [--top K] [--sample N] [--no-modules] [--no-observer]
                                                            time per tick and tick phase, module updates, allocations, replay catch-up speed, snapshot cost (docs/PERFORMANCE.md)
       catalog-cost <content-dir> [--rounds N]              time of TemplateCatalog.Build for 30, 60 and 120 Hz (the catalog is built per tick rate)

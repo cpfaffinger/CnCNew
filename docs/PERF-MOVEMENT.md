@@ -512,3 +512,20 @@ machine, the original and the profile alternating, twice):
 | --- | --- |
 | W1 | under the profile, warmed up: the longest tick after the first 300 at most 8 ms (M1 of Phase 34) |
 | W2 | under the original, warmed up: reported, no threshold (the original's maximum is its many simultaneous long searches, section 6) |
+
+**Measured** (18 October 2026, AMD Ryzen 3 PRO 4350GE, the binaries of the working state after `42bdec6`; a first series without the collection after the warm-up is
+void: the warm-up's match became garbage that was collected (gen 2) inside the measured run - 32 and 34 ms "longest ticks" at ticks that differed between the runs; the
+tool now collects before the measured stretch):
+
+| run (108,000 ticks, `--warm-up`) | mean after 300 ticks | longest tick after 300 | final hash |
+| --- | --- | --- | --- |
+| original, 1 / 2 | 866.7 / 869.4 µs | 125.1 / 127.4 ms (tick 107,250, the updates: the many long searches) | `07D2C91F45A79E6F` |
+| movement-budget, 1 / 2 | 736.6 / 730.7 µs | **11.2 / 10.1 ms** (ticks 101,610 / 101,790: the command phase 6.1 ms, the updates 5.0 ms) | `4B27C55C8EFA4793` |
+
+| Threshold | Result |
+| --- | --- |
+| W1 longest tick after 300 under the profile, warmed up, at most 8 ms | **missed** (11.2 / 10.1 ms) - the first calls are out of the way (13.8 to 23.9 ms cold); what remains lies late in the match, in the command phase and the updates of one tick, not in a think of the computer players |
+| W2 the original, warmed up | 125.1 / 127.4 ms, as before |
+
+What would take the profile under 8 ms is now a question of that late tick's commands (the commands the computer players give in one tick, among them group orders)
+and updates - not broken down further in Phase 37.

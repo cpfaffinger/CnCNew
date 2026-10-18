@@ -99,6 +99,20 @@ internal static class PerfCommand
         Console.WriteLine($"Perf on {common.MapPath} ({terrain.CellsX}x{terrain.CellsY} cells, {terrain.StartPositions.Length} start positions, terrain {terrain.Fingerprint[..16]}), definitions {fingerprint[..16]}; {chosen.Length} computer players: {string.Join(", ", chosen.Select(value => value.Faction.Name))}.");
         Console.WriteLine($"Setup (definitions, model geometry, map): {setup.Elapsed.TotalSeconds:F1} s. Budget {common.Ticks} ticks; observer {(common.Observe ? "attached" : "ABSENT (--no-observer): only the whole tick is timed")}; per-module timing {(common.Observe && common.Modules ? "on" : "off")}.");
 
+        if (args.Contains("--warm-up"))
+        {
+            // --warm-up: the same match once before, not measured, so that the measured run does not pay the first call of every code path (the JIT); the longest tick of a
+            // run is otherwise one of those first calls (docs/PERF-MOVEMENT.md section 12).
+            var warm = Stopwatch.StartNew();
+            var first = SkirmishMatchSession.Start(options, catalog, fingerprint, terrain, map.Objects, [..chosen.Select(participant => new SkirmishSlot(participant))]);
+            while (!first.IsOver) first.Step();
+            Console.WriteLine($"Warm-up: the same match once, not measured, in {warm.Elapsed.TotalSeconds:F1} s; final hash {first.World.StateHash:X16}.");
+            // The warm-up's match is garbage now: collected here, before the measured stretch, or its collection (gen 2) falls into the measured run.
+            first = null!;
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
         var session = SkirmishMatchSession.Start(options, catalog, fingerprint, terrain, map.Objects, [..chosen.Select(participant => new SkirmishSlot(participant))]);
         var world = session.World;
         var recorder = new TickRecorder(world, common.Modules) { VisionProbe = common.VisionProbe, PrefixProbe = args.Contains("--prefix-probe") };
