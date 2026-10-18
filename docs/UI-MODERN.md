@@ -188,7 +188,7 @@ Sections 1 to 9 are the decision as it was committed (`8464d5c`) before any code
 | **R3 (b)** smallest text (modern) | **met:** 13 / 16 / 24 px at 800 x 600 / 1280 x 720 / 1920 x 1080. The original: 11 / 12 / 19 px |
 | **R3 (c)** contrast | **met** (`Ui.Tests`, `SkinTests`): text 7.35:1 to 16.31:1 on every surface, muted 6.35 to 8.80, accent 7.17 to 9.94, good and bad at least 5.23 on canvas, panel and control, disabled 3.42 and 4.21 |
 | **R4** a scripted person | **met:** `scripts/shell/skin-person.txt` (51 steps: options > More options > Modern > Accept > Single Player > Skirmish > a match > the score screen > the analysis, two pages > the replay list > the playback to the recorded end), without a window in `Game.Tests` (`SkinTests`) and in the window client (`scripts/check-skins.ps1`, step `skins`); the settings keep `"skin": "modern"` and the next start is in the modern skin |
-| **R5** no change of the game | both manifests unchanged (tier 4 at the end of the phase, section 14) |
+| **R5** no change of the game | **met:** both manifests unchanged (tier 4 at the end of the phase, section 14) |
 
 **Reported, not a threshold:** 21 labels of the modern skin are **taller** than their window - the seven column headings of the score screen ("Units Created" and
 the like) wrap to two lines of the caption size in windows 32 units high: 34 / 42 / 64 px in 32 / 39 / 58, the lines reach 1 to 3 px above and below the window, into
@@ -215,3 +215,14 @@ empty space. The original: 1 (this project's own "More options" label at 800 x 6
 - The modern skin's tooltips, message list and superweapon clocks (the original's style).
 - Integer scaling of the original skin (D-21), offered nowhere.
 - Display mode and sound device are applied by the client; a change of either was not observed by a person (the full screen, a second sound device).
+
+## 14. The completion of Phase 38 (R5)
+
+- **Tier 4 with 56 of 56 steps ok at `89490f5`** (7,282 s; 0 warnings; all test programs; simulation, game, presentation and network tests at 30, 60 and 120 Hz; the
+  reference manifest 50 of 50 runs identical and the input manifest identical - the skin touches no simulation; the rate-equivalence suite; the long run; the client
+  checks; every network step; `replay-browser`; the new `skins`; `patch-layer`; the staged scenes). The gate (16 of 16) ran before the first push.
+- Campaign at 60 Hz: reachability clean 24/24 and 24/24; audit 24 of 24 identical on a second run and after save/restore, end probes 13/24 and 15/24; objective driver
+  victory 24/24 and defeat 24/24 - as before the phase.
+- `scripts/perf-profile.ps1` with the binaries of `d718187` and of `89490f5`: every one of the ten runs with the same final hash on both sides, means within -5.9 % and
+  +0.3 % (the simulation is unchanged).
+- Clean room of `89490f5` (`C:\cr38`): every step ok - 0 warnings, the known export, input manifest identical, the quick set 9 of 9, the packages free of original data.

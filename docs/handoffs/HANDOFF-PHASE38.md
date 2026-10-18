@@ -1,6 +1,6 @@
 > **Stage:** 3 – Changes · **Milestone:** S3-M5 Modern user interface · **Phase:** 38
-> **Status:** current (starting state measured 18 October 2026 at `7574bd4`; not begun)
-> **Predecessor:** HANDOFF-PHASE37.md · **Results in:** docs/UI-MODERN.md (new), docs/GAME-SHELL.md, docs/GAME-HUD.md, docs/SPECTATOR-MODE.md, docs/MATCH-ANALYSIS.md, docs/plan/STAGE-3-CHANGES.md
+> **Status:** done by machine (18 October 2026, the code at `c50b725`, the phase closed at the commit after `89490f5`); the side items: the late long tick broken down (`docs/PERF-MOVEMENT.md` §13), D-34 prepared as a measured proposal (`docs/SKIRMISH-AI.md` §7a, §7b); no human has used the modern skin
+> **Predecessor:** HANDOFF-PHASE37.md · **Successor:** HANDOFF-PHASE39.md · **Results in:** docs/UI-MODERN.md (new), docs/GAME-SHELL.md, docs/GAME-HUD.md, docs/SPECTATOR-MODE.md, docs/MATCH-ANALYSIS.md, docs/plan/STAGE-3-CHANGES.md
 > **Side items:** the late long tick under `movement-budget` (the command phase and the updates of one tick, `docs/PERF-MOVEMENT.md` §12); D-34 prepared for the owner (the GLA fix as a measured proposal, not adopted)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
