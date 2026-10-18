@@ -23,7 +23,7 @@ public sealed class MoreOptionsScreen : ShellScreen
     /// <summary>The rows of choices in their order (the suffix of the label's and the combo box's name, and the label's words).</summary>
     public static readonly ImmutableArray<(string Row, string Label)> Rows =
     [
-        ("Skin", "Interface skin"), ("DisplayMode", "Display mode"), ("Aspect", "3D view in a wide window"), ("TextScale", "Text size"), ("AudioDevice", "Sound device"),
+        ("Skin", "Interface skin"), ("DisplayMode", "Display mode"), ("Aspect", "Wide-screen view"), ("TextScale", "Text size"), ("AudioDevice", "Sound device"),
     ];
 
     public static readonly ImmutableArray<(UiSkinName Value, string Text)> SkinChoices = [(UiSkinName.Original, "Original"), (UiSkinName.Modern, "Modern")];
