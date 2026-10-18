@@ -661,3 +661,25 @@ and a click before a screen was covered paired with one after it was shown again
 Pictures: `MatchAnalysisTests` draws the score screen with its button, the six pages, the computing state and the replay list with its button in six resolutions: 54
 hashes in `tests/CnCNew.Game.Tests/baselines/analysis-screens.txt`, no two alike (the analysis of the replay draws the same first page as the analysis of the match - the
 test compares them). The score screen's, the replay list's and the network end screens' hashes changed with the button. Not seen by a human.
+
+## 19. Two skins, and "More options" (Phase 38)
+
+The menus are drawn in one of two skins (`docs/UI-MODERN.md`): the **original** (the default, D-21) or the **modern** one. `GameShell.Skin` is the host's choice for the
+run (`SkinOverride`, the client's `--skin original|modern`) or else the settings' `display.skin`; every screen takes its layout through `GameShell.Layout(name)`, which
+is the shipped layout itself in the original skin and, in the modern skin, the layout derived from it at run time (`CnCNew.Ui.Skins.ModernLayout`), once per skin. The
+screens find the same windows by the same names in both skins, so every screen, `ShellScript` and test runs unchanged. The menus lay out uniformly with borders in the
+original skin (as before) and anchored in the modern one; the accessibility text scale of the settings applies in both (100 % changes nothing). A change of the skin or
+the text size in the options rebuilds the screens (`RebuildScreens`). Saving settings for another reason (the skirmish setup's last map) keeps the run's skin; only a
+skin chosen in the options replaces it.
+
+**"More options"** (`MoreOptionsScreen`): the options gain one button, "More options" - a copy of their Defaults button made when the screen opens, at the free place right
+of the title (`OptionsScreen.MoreOptionsButton`, `OptionsMore.wnd:ButtonMoreOptions`). It opens a screen made at run time from the shipped `OptionsMenu.wnd` (its parent,
+panel, title, line, Accept and Back) with rows copied from its resolution label and combo box and a hotkey list copied from the skirmish map list: interface skin, display
+mode (window, window without frame, full screen - the client applies it), wide-screen view (`display.aspect`: the original's view, or wider to the sides - the camera
+draws it), text size (100, 125, 150 %), sound device (the system's default or a device the client lists - the client opens it), and every hotkey of `CommandMap.ini` with
+its key, read only. Accept saves; with a new skin or text size the main menu and the options are built again in the new look. Back or Escape leaves without saving. No
+line of a layout is written down for it.
+
+**Pinned:** every screen hash of the shell is pinned once more in the modern skin (`baselines/screens-modern.txt`, 54), the options and More options in both skins in
+`baselines/skin-screens.txt`; a scripted person (`scripts/shell/skin-person.txt`) switches the skin and walks the shell without a window (`SkinTests`) and in the window
+client (`scripts/check-skins.ps1`). Not judged by a human: whether the modern menus are better to read and use.

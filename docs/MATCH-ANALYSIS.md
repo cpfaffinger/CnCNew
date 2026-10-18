@@ -182,3 +182,11 @@ building that dies and is removed within one tick has its place in the event and
 - A match of the original AI is neither recorded nor analysed (it has no replay that plays).
 - The analysis is kept in memory with the score screen; it is not written beside the replay - the list computes it again from the file.
 - The modern skin of the screens is S3-M5.
+
+## 8b. Phase 38: the header line, the chart titles, and the modern skin
+
+Drawing the analysis screen in both skins for the readability check of `docs/UI-MODERN.md` found two defects of Phase 36, each fixed in a commit of its own with its hashes:
+the screen never showed its header line - `ScoreScreen.wnd` hides `ChallengeWinLossText`, the screen set its text without showing it, so no page title, map or winner
+was drawn (`7e6458c`; the tests and the window check had read the text, not the picture); and a timeline's title ran into its top axis label ("Money" over "10 000",
+`5ce44a2`: the plot begins below the title line, measured with the font it is drawn in). 42 of the 54 hashes of `baselines/analysis-screens.txt` changed with them. In the
+modern skin the pages are drawn with the skin's palette and type scale (`baselines/analysis-screens-modern.txt`, 54).

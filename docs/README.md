@@ -98,6 +98,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 | [GAME-AUDIO.md](GAME-AUDIO.md) | AudioDirector, EVA, music, device output |
 | [TEXT-AUDIT.md](TEXT-AUDIT.md) | Text rendering: font path, sentence wrapping, findings |
 | [UI-VANILLA-FIT.md](UI-VANILLA-FIT.md) | UI against the unmodified layouts of the Steam master |
+| [UI-MODERN.md](UI-MODERN.md) | Phase 38 (S3-M5): the modern skin beside the original's - the design decision before any picture, the skin layer, More options, both skins pinned, the readability check |
 | [SPECTATOR-MODE.md](SPECTATOR-MODE.md) | Spectator mode: AI against AI in a window |
 | [MATCH-ANALYSIS.md](MATCH-ANALYSIS.md) | The analysis of a match: one core for a running match and a replay, the export (JSON, TSV), the HTML report, the screen, the shared field comparison |
 | [REPLAY-BROWSER.md](REPLAY-BROWSER.md) | The replay browser: every skirmish recorded, the list with the state of each file, playback with pause, speed, seeking and the choice of view |

@@ -531,3 +531,27 @@ What would take the profile under 8 ms is now a question of that late tick's com
 and updates - not broken down further in Phase 37.
 
 **The angry-mob case** (section 11) was not taken further in Phase 37; its cause is still not found.
+
+## 13. Phase 38: the late long tick, broken down
+
+A throwaway probe (a clock around every command of the command phase and around the path queue, in a build outside the repository, never committed) over the run of
+section 12 (`SimTool perf ... --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --minutes 30 --warm-up --rules movement-budget`, 60 Hz, quiet machine, the binaries
+of `5ce44a2`, four runs; the final hash `4B27C55C8EFA4793` in every run, as in section 12 - the probe changes nothing):
+
+| run | longest tick after 300 | what it was |
+| --- | --- | --- |
+| 1 | 8.41 ms at tick 101,610 | the computer players' 40 attack-move orders 4.43 ms, the path queue 3.42 ms |
+| 2 | 9.20 ms at tick 60,753 | one `ProductionUpdate` call of 7.37 ms, 968 bytes allocated in the whole tick |
+| 3 | 9.63 ms at tick 101,610 | the 40 attack-move orders 5.14 ms, the path queue 3.51 ms |
+| 4 | 16.61 ms at tick 11,662 | the hash phase 15.1 ms |
+
+**What it shows:** the one long tick that every run has is tick 101,610 - a wave of the computer players: 40 `AttackMoveCommand`s of one unit each, 110 to 130 µs
+apiece, and in the same tick the path queue's work of one original frame (its budget of 60,000 cells, section 10). The maxima of runs 2 and 4 are single ticks that are
+short in the other runs (a production call that allocates nothing for 7.4 ms, a hash phase of 15 ms) - the machine, not the match; a warmed-up maximum on this machine
+scatters by several milliseconds from run to run.
+
+**What would take the profile under 8 ms** (none of it built): (1) a wave as one group order - the computer players order the units of a wave one by one, each order
+searching its own free place at the goal (F-04's single-move adjustment); one attack-move for a group would share that work, but it is a new command type
+(`CommandTypes.Version`, the replay format and every command-stream hash of the manifest), not a side item; (2) the path queue's budget per frame (60,000 cells, about
+3.5 ms on this machine) lower - a shorter maximum for a later path, a behaviour change of the profile with its own thresholds; (3) both. W1 stays missed; the original
+movement stays the default (D-3).

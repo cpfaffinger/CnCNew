@@ -351,3 +351,11 @@ research tab in the real client and finds them kept across its three seeks.
 **What only a human can judge** (S3-M2's acceptance): whether a person names the players' intentions from the display alone; whether the ticker's words, the view
 buttons and the research tab are readable; whether a jump to an event shows what happened there. Not built: following or jumping to the simulated camera of players
 3 to 8 (`F1`/`F2`, `J`/`K` serve the first two); a picture-in-picture view; the network spectator beyond Phases 27 and 29; localised names (template names, as before).
+
+## 15. The observer in the modern skin (Phase 38)
+
+The observer HUD (`SpectatorHud`) is drawn in the skin of its `MatchController` (`docs/UI-MODERN.md`): in the original skin with the colours and fonts it always had (the 144
+hashes of `baselines/observer-screens.txt` unchanged), in the modern skin with the palette (panel, border, text, muted, accent, good, bad) and the type scale (Segoe UI;
+caption, body, control and title steps scaled with the viewport) and no drop shadow. The same eight states at 30, 60 and 120 Hz are pinned in the modern skin
+(`baselines/observer-screens-modern.txt`, 144). A replay's observer takes the skin of the menus that opened it. Not judged by a human: whether the modern panels read
+better over the battlefield.

@@ -145,3 +145,73 @@ By machine, each a test or a check of a tier of `scripts/test.ps1`:
 **Only a human can judge** - and nothing here counts it as passed: whether the modern skin is easier to read and to use than the original
 (the acceptance of S3-M5), whether it looks good, whether the colours and the type fit the game, whether the proportional command bar plays
 better than the stretched one.
+
+## 10. What was built (Phase 38, 18 October 2026)
+
+Sections 1 to 9 are the decision as it was committed (`8464d5c`) before any code; this section and the following ones say what was built and where it departs from them.
+
+| Commit | What |
+|---|---|
+| `8464d5c` | this document's sections 1 to 9 |
+| `2ee9a2d` | the skin layer (`CnCNew.Ui.Skins`: `UiSkin`, `ModernLayout`, `UiReadability`), the shell, the HUD, the self-drawn screens through it, settings schema 2, "More options", the client's `--skin`, display mode and sound device, `UiRenderTool --skins` |
+| `7e6458c`, `5ce44a2` | two defects of the analysis screen found by drawing it in both skins (section 12) |
+| `7f32642` | both skins pinned, the scripted person, `scripts/check-skins.ps1` |
+| `c50b725` | "More options": the label of the wide-screen view shortened (it wrapped at 800 x 600 in the original skin) |
+
+**Where it departs from sections 1 to 9:**
+
+- **The type scale** (section 4) was measured before it was pinned and changed once: the first scale (10, 11, 12, 15, 20) overflowed the original's windows 33 times in
+  the readability check (a line of Segoe UI is about 1.19 times as high as one of Arial at the same size, and the windows were made for Arial: headings and titles
+  in windows 24 and 36 units high, "Starting Cash" wrapped in its box). The built scale is **caption 10, body 10, control 11, heading 12, title 17** points at 600
+  lines. The smallest sizes of R3 (b) are the caption's and did not change: 13, 16 and 24 pixels at 800 x 600, 1280 x 720 and 1920 x 1080.
+- **The way to "More options"** (section 7): the original's hidden `ButtonKeyboardOptions` has a font (Times New Roman 14) and a place (beyond the right edge) of its
+  own; the button is instead a copy of the options' Defaults button made when the screen opens, at the free place right of the title (476 to 632, 21 to 53 of the
+  layout), as the replay list's "Analysis" button of Phase 36 is a copy of a shipped button. It is still the one window this project adds to the original's options.
+- **The rows of "More options"** (section 7): interface skin, display mode, "wide-screen view" (the 3D view at a window wider than 4:3), text size, sound device and the
+  hotkey list. The UI scaling of the original skin (D-21's integer scaling) is **not** offered: it is the owner's open decision, and `IntegerMultiple` is not integer
+  scaling in the HUD (it maps to uniform). Schema 1's three aspect values (expand, pillarbox, stretch) were never applied by any client; schema 2 has the two the
+  camera draws: the original's horizontal field of view (the default, what the client always drew) and the vertical field of view of 4:3 (more to the sides).
+  A file of schema 1 migrates to the default.
+- **Check boxes** (not in section 2): the modern derivation lets a check box's window reach to its right neighbour (or its parent's edge), 4 units short; the original
+  draws a longer label unclipped beyond the window, and with Segoe UI more labels are longer than their box.
+- **Drop shadows** (section 5): the modern skin draws none; text over pictures keeps the original's only where the art is kept (the command bar).
+- **Tooltips and the message list** keep the original's style (`Mouse.ini`, `InGameUI.ini`) in both skins; the in-game message lines and the superweapon clocks are not
+  restyled.
+
+## 11. Measured (thresholds of section 9)
+
+| Threshold | Result |
+|---|---|
+| **R1** the original unchanged | **met, with one named exception:** every hash recorded before the phase passes - the shell 54, the replay list 54, the network screens 336, the network HUD 138, the observer 144 at 30, 60 and 120 Hz, the HUD draw list - except 42 of the 54 analysis hashes, re-recorded by the two fixes of section 12 (`7e6458c`: 42, `5ce44a2`: 24 of those 42). The update run that wrote the modern files rewrote every original file byte-identically. A test (`SkinTests`, R1) checks that the original skin's layout of each of the 23 shell layouts is the shipped object itself and that the menus lay out uniformly as before |
+| **R2** both skins pinned | **met:** 780 hashes of the modern skin beside the original's (`screens-modern.txt` 54, `replay-screens-modern.txt` 54, `analysis-screens-modern.txt` 54, `net-screens-modern.txt` 336, `net-hud-modern.txt` 138, `observer-screens-modern.txt` 144 = 48 at each of 30, 60, 120 Hz) and 36 in `skin-screens.txt` (the options, "More options" and the HUD of a match, in both skins, six resolutions); the modern files hold at 30 and 120 Hz like the original's |
+| **R3 (a)** no label wider than its window (modern) | **met:** 0 in 45 pictures (15 screens at 800 x 600, 1280 x 720, 1920 x 1080), measured with the GDI font of the renderer (`UiRenderTool --skins`, `skin-audit.txt`). The original skin, the comparison: 3 (the options' "Alternate Mouse Setup" in every size) |
+| **R3 (b)** smallest text (modern) | **met:** 13 / 16 / 24 px at 800 x 600 / 1280 x 720 / 1920 x 1080. The original: 11 / 12 / 19 px |
+| **R3 (c)** contrast | **met** (`Ui.Tests`, `SkinTests`): text 7.35:1 to 16.31:1 on every surface, muted 6.35 to 8.80, accent 7.17 to 9.94, good and bad at least 5.23 on canvas, panel and control, disabled 3.42 and 4.21 |
+| **R4** a scripted person | **met:** `scripts/shell/skin-person.txt` (51 steps: options > More options > Modern > Accept > Single Player > Skirmish > a match > the score screen > the analysis, two pages > the replay list > the playback to the recorded end), without a window in `Game.Tests` (`SkinTests`) and in the window client (`scripts/check-skins.ps1`, step `skins`); the settings keep `"skin": "modern"` and the next start is in the modern skin |
+| **R5** no change of the game | both manifests unchanged (tier 4 at the end of the phase, section 14) |
+
+**Reported, not a threshold:** 21 labels of the modern skin are **taller** than their window - the seven column headings of the score screen ("Units Created" and
+the like) wrap to two lines of the caption size in windows 32 units high: 34 / 42 / 64 px in 32 / 39 / 58, the lines reach 1 to 3 px above and below the window, into
+empty space. The original: 1 (this project's own "More options" label at 800 x 600, shortened afterwards).
+
+## 12. Found on the way
+
+- **The analysis screen showed no header line** since Phase 36 in either skin: `ScoreScreen.wnd` hides `ChallengeWinLossText`, and the screen set its text without
+  showing it, so no page title, map or winner was drawn (`7e6458c`). The tests read the header's text, not the picture; the window check of Phase 36 waited for the
+  text too.
+- **A chart title ran into its top axis label** ("Money" over "10 000") in both skins (`5ce44a2`).
+- **The run's `--skin` was dropped when the skirmish setup saved its last map:** the shell cleared its override whenever the saved skin differed from the drawn one;
+  it now does so only when the saved skin changes (`2ee9a2d`, tested in `SkinTests`).
+- **The client applied a pending resolution in every frame** after the options were accepted (`ApplyChanges` each frame since the options screen existed); it is now
+  taken once (`2ee9a2d`).
+
+## 13. Not done, not verified
+
+- **Everything a human judges:** whether the modern skin is easier to read and to use than the original (the acceptance of S3-M5), whether it looks good, whether the
+  palette and the type fit the game, whether the proportional command bar plays better than the stretched one, whether the hotkey list is useful. The pictures were
+  looked at by the agent while the skin was built (PNG of `UiRenderTool --skins`), which is not an acceptance.
+- Geometry of its own for single screens (section 2, way (a)); the modern skin's screens keep the original's proportions.
+- The campaign screens and the mission HUD are derived like every layout, but neither pinned in the modern skin nor walked by the scripted person.
+- The modern skin's tooltips, message list and superweapon clocks (the original's style).
+- Integer scaling of the original skin (D-21), offered nowhere.
+- Display mode and sound device are applied by the client; a change of either was not observed by a person (the full screen, a second sound device).

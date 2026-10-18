@@ -133,6 +133,14 @@ the surveys. Nothing is rebuilt.
   result without a developer argument and judges it against the original one.
 - **Depends on:** nothing of the simulation. Note F-24 (Stage 1) closes the original options first where the original has
   them.
+- **Status (Phase 38, 18 October 2026): (a) to (e) built by machine** (`docs/UI-MODERN.md`): the design decision committed before any picture (derived native layouts,
+  the command bar in proportion at 16:9, Segoe UI on a type scale, a palette with its contrast ratios); the modern skin as a profile beside the original's - `--skin`,
+  the setting `display.skin`, a choice in the options' new "More options" (also display mode, wide-screen view, text size, sound device, the hotkey list); the shell,
+  the HUD, the lobby and the network indicators, the replay list, the analysis and the observer in the modern skin; 816 hashes of the modern skin beside the
+  original's 780, which stay (except 42 analysis pages fixed by two defects found on the way); a scripted person switches the skin and walks shell, skirmish, score,
+  analysis and replay without a developer argument, headless and in the window; the readability check with the GDI font (modern: no label wider than its window,
+  the smallest text 13 / 16 / 24 px; the original 11 / 12 / 19). Not offered: language (only English is supported) and integer scaling (D-21). **The acceptance - a
+  human uses the modern skin and judges it against the original - is open.**
 
 ### S3-M6 Movement and pathfinding beyond the original
 

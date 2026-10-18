@@ -112,7 +112,7 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
 
 ## Settings
 
-`GameSettings` (schema 1) with sub-records and value ranges:
+`GameSettings` (schema 2 since Phase 38; schema 1 migrates) with sub-records and value ranges:
 
 | JSON path | Type, range | Default |
 |---|---|---|
@@ -120,8 +120,10 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
 | `display.width`/`height` | 800..16384 / 600..16384 (clamped) | 1280 × 720 |
 | `display.vsync` | bool | `true` |
 | `display.uiScale` | `uniform`, `stretch`, `integerMultiple` | `uniform` |
-| `display.aspect` | `expandHorizontal`, `pillarbox`, `stretch` | `expandHorizontal` |
+| `display.aspect` | `keepHorizontal` (the original's horizontal field of view at every aspect, what the client always drew), `keepVertical` (the vertical field of view of 4:3: more to the sides of a wide window) | `keepHorizontal` |
+| `display.skin` | `original`, `modern` (docs/UI-MODERN.md) | `original` (D-21) |
 | `audio.master/music/effects/voice/ambient` | 0..1 (clamped, NaN replaced) | 1 / 0.55 / 0.8 / 0.7 / 0.8 (`AudioSettings.ini`) |
+| `audio.device` | the name of a sound output device as waveOut lists it, at most 255 characters, no control characters; empty is the system's default (a name that is not there any more plays on the default, said once) | empty |
 | `controls.scrollSpeed`/`cameraRotateSpeed` | 0..1 | 0.5 / 0.5 |
 | `controls.edgeScrolling` | bool | `true` |
 | `accessibility.highContrastUi` | bool | `false` |
@@ -146,8 +148,9 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
   message `corrupt` (`RecoveredFromCorruptFile`). A UTF-8 BOM is accepted.
 - Newer schema version: `SettingsVersionException`, the file stays unchanged. Older version: the chain
   `SettingsMigration` (JSON object → JSON object, one step each) runs, every step is reported as `migrated`,
-  a gap is a `SettingsVersionException`. Schema 1 is the first, so `SettingsStore.Migrations` is empty;
-  tests inject a migration through the constructor.
+  a gap is a `SettingsVersionException`. `SettingsStore.Migrations` holds the one step from schema 1 to 2 (Phase 38): `display.skin` = `original`,
+  `audio.device` = empty, and `display.aspect` = `keepHorizontal` - schema 1's three aspect values were never applied by any client; tests inject further steps
+  through the constructor.
 - Binding without guessing: missing sections/properties (`missing`), wrong types (`invalid-type`), unknown
   properties (`unknown-property`), after that `SettingsValidator.Normalize` with `clamped`, `snapped`, `invalid-value`.
   `Save` stores the normalised values and returns the messages.

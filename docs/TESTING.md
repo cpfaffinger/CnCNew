@@ -241,7 +241,13 @@ Since Phase 29 the menus' way to a server is checked by programs that stand in f
   seeks back and one forward, each at the hash the recording kept, to the recorded end; renamed and deleted. The suite `ReplayBrowserTests` of `Game.Tests` (selected
   for changes under `src/CnCNew.Game/Replays`, `Shell`, `Live`, `Spectator`) is the same without a window, at every rate, with the list's 54 hashes in
   `baselines/replay-screens.txt`; `--replay-measure-minutes N` adds a measured eight-player match.
-- All three need a display and end with exit code 3 (**NOT RUN**) without one.
+- `skins` (`scripts/check-skins.ps1`, about two minutes; gate of `ui`, `game` and `client`, tier 4; Phase 38, `docs/UI-MODERN.md`): the window client starts in the
+  original skin with fresh settings and is driven by `scripts/shell/skin-person.txt` - options > More options > Modern > Accept, then a skirmish of 30 s, the score
+  screen, two pages of the analysis, the replay list and the playback to the recorded end; the settings must keep `"skin": "modern"`. Then `UiRenderTool --skins`
+  draws 15 screens of both skins in three sizes with the renderer's GDI font and checks the modern skin against R3 (no label wider than its window; the smallest text
+  13, 16, 24 px). The suite `SkinTests` of `Game.Tests` walks the same script without a window and pins the options, More options and the HUD in both skins; every
+  suite that pins pictures walks a second time in the modern skin against `baselines/*-modern.txt`.
+- All four need a display and end with exit code 3 (**NOT RUN**) without one.
 
 Measurements by hand (real time; a quiet machine, nothing built meanwhile): `scripts/measure-net-latency.ps1 -Label NAME [-ClientArguments ...]` (a local match
 and four lines through a proxy, about twelve minutes; the table of `docs/MULTIPLAYER-FINDINGS.md` section 3), `PresentationTool smoothness` (the steps of what is
