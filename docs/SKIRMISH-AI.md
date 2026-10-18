@@ -173,6 +173,12 @@ player. The survey's numbers replace the watching; they are not a verdict on how
 
 The analysis of a match (`docs/MATCH-ANALYSIS.md`) shows what a computer player did over the whole match. On its first eight-player match (Twilight Flame, 10 game minutes,
 60 Hz, the factions of the replay measurement of `docs/REPLAY-BROWSER.md` section 7) **both GLA computer players collected nothing**: each built two barracks and never a
-supply stash, spent its 10,000 starting credits within three minutes and was defeated. Reported, not investigated: whether the supply stash's placement beside a
-warehouse fails on that map for GLA (`FindSupplyPlacement`, `SupplyPlacementPatience`) or its plan never asks for one. The survey of Phase 34 had already seen GLA win
-rarely (9 and 2 of 80 matches).
+supply stash, spent its 10,000 starting credits within three minutes and was defeated. The survey of Phase 34 had already seen GLA win rarely (9 and 2 of 80 matches).
+
+**The cause, found in Phase 37** (a trace in a throwaway build of the same match, `SimTool ai-match ... --players 8 --seed 11`): the supply stash's spot beside the warehouse
+lies in ground the player has not explored yet, so `FindSupplyPlacement` sends the builder to look (tick 24) - and the next think (tick 54) gives the same builder the
+barracks: a GLA worker is a builder and a supply carrier, and `PickBuilder` takes a carrier even while it walks. The look is abandoned, the spot stays unexplored, and the
+same happens at every retry (ticks 864, 1,464 ...); the arms dealer needs the stash, so nothing else is built either. America's and China's dozers are not carriers and keep
+walking. **A fix was measured, not adopted:** the builder sent to look is not picked for 60 s of game time - both GLA players then build their stash (the Toxin general at
+60 s, GLA at 120 s) and survive the ten minutes. It changes the default AI and so the reference values (every pairing with GLA) - a decision of the project owner (D-34
+in `docs/plan/PROGRAMME.md` §7), not taken here.

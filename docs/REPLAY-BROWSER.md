@@ -171,6 +171,13 @@ The list's fifth button, "Analysis" (below "Back"), and the score screen's "Anal
 replay is checked as for a playback (`ReplayPlayback.Prepare`), played again without a picture, every recorded hash compared - a replay that leaves its recorded match
 gives no analysis - and shown on six pages. `SimTool match-analysis <content> <file.cncreplay> --out <directory>` writes the same analysis as JSON, TSV and an HTML page.
 
+## 7b. The observer of a replay (Phase 37)
+
+A playback has the observer features of S3-M2 (docs/SPECTATOR-MODE.md §14): the view of every player (`F4`, `F5` to `F12`), the research tab (`R`) and the event ticker.
+The ticker belongs to the playback (`ReplayPlayback.Ticker`): it is told every tick the playback steps, also the ticks a seek steps without drawing, and only ticks it has
+not seen - so after any seek it shows the lines of the straight playback up to the frame the playback stands at, none twice. The client's line at the end of a playback
+names its lines (`replay: end ..., ticker lines N`).
+
 ## 8. Deviations, named
 
 - The list's third column shows the state of the file instead of the version of the game; the third button renames instead of copying to the desktop; the details window is

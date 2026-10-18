@@ -313,3 +313,41 @@ replay's line: where the playback stands in the recording, the checkpoint, how t
 controller (`SeekRequest`) and carried out by the host, which builds the scene again for the playback's new presentation and gives it a new controller that takes over the
 view of the old one (`TakeViewFrom`: tab, panels, camera, followed camera, fog, speed, pause). Escape in a playback of the menus leads back to the replay list. Not seen by a
 human.
+
+## 14. The observer features of S3-M2 (Phase 37)
+
+**The views.** `F4` shows everything, `F5` to `F12` the view of player 1 to 8 (their fog; a number the match does not have changes nothing); a row of small buttons above
+the button bar does the same ("All", "P1" ... with the player's colour). `F` still cycles. The view is a matter of the presentation (`LiveGame.ShowWorldAs`), never of the
+simulation. A seek of a replay keeps it (`TakeViewFrom`), with the tab and the ticker's switch. The free camera is the one of Phase 23 (`F3`, scrolling, the radar).
+
+**The research tab** (`R`): per player the upgrades it holds (player-wide, in the catalogue's order; the engine's veterancy upgrades left out), how many upgrades its objects
+hold, its sciences - read from the world (`SimulationWorld.PlayerUpgrades`, `Entity.CompletedUpgrades`, `PlayerSciences`). Nothing is shown as "in research": the
+simulation completes an upgrade when it is bought (`SimulationWorld.CompleteUpgrade`), where the original takes its build time in the production queue
+(`ProductionUpdate::queueUpgrade`) - fidelity register F-43; showing a research in progress needs that change of the simulation first. The production tab (`P`) shows the
+queues and constructions as before.
+
+**The event ticker** (`MatchTicker`, top right under the bar): the moments that matter, from the core of the match analysis (`MatchAnalyzer`, docs/MATCH-ANALYSIS.md)
+read while the match runs - the **first blood** (the first unit or building of a player killed by another player), a **building lost** (and to whom), a **superweapon**
+fired (a power of a building of the kind `FS_SUPERWEAPON`; the place is its target), a building **captured** (from whom), a player **defeated**. Each line has its game time
+(a frame of the original) and, but for a defeat, its place: a click on a line, or `G` for the latest one, moves the camera there (free camera, the overview ends); `T` hides
+the ticker. The HUD shows the latest six lines up to the frame the match stands at.
+
+- A playback owns its ticker (`ReplayPlayback.Ticker`): it is told every tick the playback steps - the ticks a seek steps without drawing as well - and only ticks it has
+  not seen. A seek back therefore shows exactly the lines up to the frame sought, a seek forward the lines up to there, and no line twice: the lines are a function of the
+  match, not of the viewer's seeking.
+- A building that dies and is removed within one tick still has its place: the analysis core notes where a building stands when it appears (Phase 37; it also puts these
+  losses into the analysis' heat map of the fights).
+- A match of the original AI gets a ticker as well (the core reads the world and the events, not the session) - built for it, not tested with it.
+
+**Measured** (`ObserverTests`, a match of two built-in computer players with the rush profile on Alpine Assault, seed 11, 420 s): 9 lines - the first blood at 1:40,
+then eight buildings of America lost to China between 3:22 and 4:44, all with places; the same lines on two runs; **the same nine lines at 30, 60 and 120 Hz, in the same
+frames**; the replay of the match has the same ticker, and after seeks to 300, 60, 390, 30, 0 and 210 s it shows the lines of the straight playback up to there. The HUD
+is pinned in six resolutions for eight states (the five tabs, a player's view, after a jump to an event, the ticker off) at each of the three rates: 144 hashes in
+`tests/CnCNew.Game.Tests/baselines/observer-screens.txt` (per rate, because the match is the same game at every rate, not the same bits), no two alike at a rate. A
+`ShellScript` person opens the replay from the list, chooses the view of player 1 and the research tab, plays at 8x until the ticker has two lines, goes to the latest
+event, seeks back and finds the view and the tab kept, chooses everything again and leaves. The window check of the replay browser chooses the view of player 1 and the
+research tab in the real client and finds them kept across its three seeks.
+
+**What only a human can judge** (S3-M2's acceptance): whether a person names the players' intentions from the display alone; whether the ticker's words, the view
+buttons and the research tab are readable; whether a jump to an event shows what happened there. Not built: following or jumping to the simulated camera of players
+3 to 8 (`F1`/`F2`, `J`/`K` serve the first two); a picture-in-picture view; the network spectator beyond Phases 27 and 29; localised names (template names, as before).

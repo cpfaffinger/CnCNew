@@ -604,6 +604,11 @@ With no input delay the final answer comes with the next step after the order, a
 `CommandResolved` to the controller; a mission uses the same events. Tests: `HudTests`, the three "Lockstep probe" tests (real clicks at 0, 4 and 12 ticks of delay; the late
 refusal of an order whose unit was destroyed on the way is shown and counted).
 
+## 20a. Phase 37: the observer's HUD
+
+The observer's HUD (`SpectatorHud`) is drawn by the game layer as a draw list of its own, not on a layout of the original; since Phase 37 it has a research tab, a row of
+view buttons (everything, players 1 to 8) and the event ticker with clickable lines - docs/SPECTATOR-MODE.md §14.
+
 ## 21. Phase 29: the indicators of a match of a server (`NetHud`)
 
 `src/CnCNew.Game/Hud/NetHud.cs`. A match that runs through a server somewhere else (`LiveMatch.Remote`) has a `NetHud` in its `MatchController` (`Net`); a local

@@ -108,6 +108,12 @@ found the score screen's counters counting nothing but buildings (fixed; F-42 th
 players' placement checks measured - the cost was footprint checks, made faster without a change of results; the tick maximum under `movement-budget` still misses 8 ms.
 Next: S3-M2, the observer features (`docs/handoffs/HANDOFF-PHASE37.md`).
 
+**Stage 3, S3-M2 (Phase 37, 18 October 2026, by machine):** the observer's event ticker from the analysis core, the view of every player and of everything, a research tab,
+the camera at an event - for a match of computer players and for every replay, the same lines at every rate and however a replay is sought (`docs/SPECTATOR-MODE.md` §14).
+Side items: the score screen counts as the original's `ScoreKeeper` (F-42), the GLA AI's missing supply stash diagnosed (a fix measured, not adopted: D-34), the remaining
+long ticks under `movement-budget` shown to be first calls (`SimTool perf --warm-up`; 10.1 / 11.2 ms warmed up, still above 8 ms). Next: S3-M5, the modern user interface
+(`docs/handoffs/HANDOFF-PHASE38.md`).
+
 ## 6. Patch integration and quality (Phase 30)
 
 **Postponed on 5 October 2026:** this section was the step after Phase 17 and now lies behind the programme from section 5 (`docs/handoffs/HANDOFF-PHASE30.md`).

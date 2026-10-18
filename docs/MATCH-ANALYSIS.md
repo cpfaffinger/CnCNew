@@ -117,7 +117,8 @@ tick), `NetTool desync-diff` compares a client's saved state with the match play
 - the field comparison, the charts' numbers and the export format without game data (the same bytes under three other cultures);
 - a skirmish of 240 s (a human with group orders against the built-in AI with the rush profile on Alpine Assault) analysed while it runs and from its replay: the same
   export byte for byte; two analyses of the replay the same bytes in every file; every sample on the frame grid;
-- what the analysis holds agrees with the match: collected, units and buildings built equal to the score screen's counters, the money of the last sample equal to the
+- what the analysis holds agrees with the match: collected equal to the score screen's resources, and the units and buildings built and lost at least the score
+  screen's (which counts, since Phase 37, only the original's `SCORE` kinds - F-42), the money of the last sample equal to the
   world's, the human's commands equal to the replay's, every loss an event, no more kills than losses, the movement map counting every army unit of every sample;
 - a replay whose recorded hash the match does not reach gives no analysis; a replay of another build is refused;
 - the report: the same page twice, every chart and both heat maps in it, no script, no address;
@@ -165,6 +166,13 @@ The window check (`check-replay-browser`, 65 s): the analysis opened from the sc
   (S3-M1, `docs/SKIRMISH-AI.md`) - reported, not investigated; the survey of Phase 34 had already seen GLA win rarely.
 - The colours of the players come from the factions' `PreferredColor` (`TeamColors`): in an eight-player match two blues and two reds are hard to tell apart - a person
   would judge it.
+
+## 8a. Phase 37: the ticker reads the core, and a building keeps its place
+
+The observer's event ticker (`MatchTicker`, docs/SPECTATOR-MODE.md §14) is this core read while a match runs: `MatchAnalyzer.EventCount`/`EventAt` give the events so
+far, and `PlacePowers` gives a power aimed at a place its command's target at once instead of at the end. The core now notes where a building stands when it appears: a
+building that dies and is removed within one tick has its place in the event and in the heat map of the fights (before, such a loss had no place - in the 420 s match of
+`ObserverTests` all eight buildings lost). The analysis screen's map page changed with it (`baselines/analysis-screens.txt`, six hashes).
 
 ## 9. Limits and what is open
 

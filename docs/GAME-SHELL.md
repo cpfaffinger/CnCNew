@@ -166,9 +166,11 @@ The host keeps a `MatchStatistics` (`Begin` with the world the counting starts f
 Phase 36 (`31b03c2`) the counters count by the owner of an object:** most events name only their object - `ProductionCompleted` the factory, `SupplyDeposited` the
 truck, `EntityDied` the victim and its killer - and carry no player; the owner is read from the world, or remembered from when the object appeared. Units built,
 units lost, units destroyed (a kill of somebody else's unit), buildings built, buildings lost (a structure that died - a sale is no loss), **buildings destroyed** (now
-counted and shown) and resources. Until Phase 36 only events with a player were counted, and the screen showed 0 units and 0 resources for everybody. Not as the
-original: its `ScoreKeeper` counts only objects of the kinds `SCORE`, `SCORE_CREATE` and the scoring building masks (F-42). The save-replay button says "Analysis"
-(§18).
+counted and shown) and resources. Until Phase 36 only events with a player were counted, and the screen showed 0 units and 0 resources for everybody. **Since Phase 37
+(`da2168b`, F-42) what counts is the original's `ScoreKeeper`:** a unit of the kind `INFANTRY` or `VEHICLE` with `SCORE` or `SCORE_CREATE` when its factory finishes it, a
+`STRUCTURE` with `SCORE` or `SCORE_CREATE` when its construction completes; a loss only with a causer (`ActiveBody` calls `scoreTheKill` of the damage's source), of an object
+that is not `IGNORED_IN_GUI` and not under construction, with `SCORE` or `SCORE_DESTROY`; a kill only against an enemy. Resources are the supply deposits; the original adds
+crates, bounties, the cash hack, oil derricks and prisoners, which raise no event here. The save-replay button says "Analysis" (§18).
 Observers are not modelled in `LiveMatch`; `StaticTextObserverN` stays hidden for every row.
 
 ## 8. Focus, keyboard, accessibility

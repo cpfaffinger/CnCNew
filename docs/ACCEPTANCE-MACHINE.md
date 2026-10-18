@@ -32,6 +32,7 @@ picture **looks like the original**, that motion **feels right** or that a sound
 | match | `check-match`, `check-spectator`, `session-check`, the 16 AI pairings of the manifest | tier 4 |
 | campaign | `CampaignTool reachability`, `audit`, `drive` (objective driver), `outputs` (script outputs shown) | completion of a phase |
 | perf | `scripts/perf-profile.ps1`, client `--net-stats`, `PresentationTool smoothness` | completion of a phase |
+| observer | `Game.Tests` `ObserverTests` (the ticker on two runs, at three rates, in the replay and across seeks; views; the camera at an event; the research tab; 144 screen hashes; a scripted person), `check-replay-browser` (a view and the research tab in the real client, kept across seeks) - docs/SPECTATOR-MODE.md §14 | tier 2/3/4 |
 | analysis | `Game.Tests` `MatchAnalysisTests` (the field comparison, the export format under three cultures, a match analysed live and from its replay with the same bytes, the contents against the score screen, refusals, the report, 54 screen hashes, a scripted person), `check-replay-browser` (the analysis from the score screen and from the list in the real client), `SimTool match-analysis` (two runs the same SHA-256) - docs/MATCH-ANALYSIS.md | tier 2/3/4 |
 | replay | `Game.Tests` `ReplayBrowserTests` (the file, the store, every compatibility reason, a recorded match played to every recorded hash, seeks, the server's file, refusals, 54 screen hashes, a scripted person) and `NetShellTests` (both games of a match of a server record it), `check-replay-browser` (the same in the real client) - docs/REPLAY-BROWSER.md | tier 2/3/4 |
 
@@ -119,11 +120,16 @@ known limit, with its reason; **fixed** - a defect found by the pre-check, corre
 | REPLAY-03 playback to the recorded result | machine | replay (every recorded session hash, the final hash and the score, at 30, 60 and 120 Hz; in the window client) | how the playback looks |
 | REPLAY-04 pause, speed, seek, view | machine | replay (three seeks at the recorded hash, pause, speed and view kept; in the window client 0.1 to 0.3 s per seek) | **whether the controls feel right** |
 | REPLAY-05 an incompatible file says why | machine | replay (another build, rule profile, rate, map; a changed byte; a header that does not describe its match) | whether the words are understood |
-| ANALYSIS-01 the statistics of a match | machine | analysis (live and from the replay the same bytes; collected, built and lost equal to the score screen's counters; every sample on the frame grid at 30, 60 and 120 Hz) | **whether the numbers tell the course of the match a person remembers** |
+| ANALYSIS-01 the statistics of a match | machine | analysis (live and from the replay the same bytes; collected equal to the score screen's resources, built and lost at least its counters; every sample on the frame grid at 30, 60 and 120 Hz) | **whether the numbers tell the course of the match a person remembers** |
 | ANALYSIS-02 the export | machine | analysis (schema and version, the same bytes twice and under three cultures; the tool prints the same SHA-256 twice) | - |
 | ANALYSIS-03 the report | machine | analysis (one page, the same bytes twice, every chart and both heat maps in it, no script, no address) | **whether the report is readable; whether the colours can be told apart** |
 | ANALYSIS-04 the screen after a match and from the list | machine | analysis (six pages in six resolutions pinned; a scripted person and the window client open it from the score screen and from the list) | **how the screen looks and reads** |
-| ANALYSIS-05 the score screen's counters | machine | analysis, `ShellTests` (the counters count by the owner of an object; F-42: not yet only the `SCORE` kinds of the original) | whether the numbers are the original's |
+| ANALYSIS-05 the score screen's counters | machine | analysis, `ShellTests` (the counters count by the owner of an object and, since Phase 37, as the original's `ScoreKeeper`: the `SCORE` kinds, a loss with a causer, a kill of an enemy - the rule computed from the events and compared) | whether the numbers are the original's in a match a person remembers |
+| OBSERVER-01 the event ticker | machine | observer (`ObserverTests`: the same lines on two runs, at 30, 60 and 120 Hz in the same frames, in the replay and after six seeks) | **whether a person follows the match by it** |
+| OBSERVER-02 views of every player and of everything | machine | observer (by key and button; kept across a seek; in the window client) | how the fog of one player looks |
+| OBSERVER-03 the camera at an event | machine | observer (`G` and a click on a line put the camera at the line's place) | whether one sees there what happened |
+| OBSERVER-04 the research tab | machine | observer (upgrades and sciences against the world; nothing "in research" - F-43) | - |
+| OBSERVER-05 the observer HUD | machine | observer (eight states in six resolutions at three rates pinned, 144 hashes; a scripted person; the window check) | **whether a person names the players' intentions from the display alone** (S3-M2's acceptance) |
 
 ## 4. The findings lists
 

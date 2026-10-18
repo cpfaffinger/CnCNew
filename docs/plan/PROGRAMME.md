@@ -143,7 +143,7 @@ milestone status is updated in each stage document.
 | S2-M8 | Engine follow-ups (tick maximum, hash constructions, allocation, thread, formats, documentation) | – | open backlog, partly decisions |
 | **R2** | **Engine release:** 60 Hz seen by a human, determinism on a second machine, skirmish savegame | – | open |
 | S3-M1 | AI kinds, difficulty and tactics | 6, 17, 23 (built-in AI), 33 | **built by machine** (15 October 2026): four tactics profiles and three strengths per slot, the rule "no standing still", the survey against thresholds (12 of 13 met); no human has watched a profile |
-| S3-M2 | Spectator and observer | 23 (side product) | built – not accepted |
+| S3-M2 | Spectator and observer | 23 (side product), 37 | **built by machine** (18 October 2026): views of every player, the research tab, the event ticker with the camera at an event, for a match and a replay; not accepted - no human has watched |
 | S3-M3 | Replay browser | 35 | **built by machine** (16 October 2026): every skirmish recorded beside the savegames, the list on `ReplayMenu.wnd` with the state of every file, playback with pause, speed, seeking to checkpoints and the choice of view; every build plays only its own replays (no migration, D-31); no human has used it |
 | S3-M4 | Match analysis with graphics | 36 | **built by machine** (17 October 2026): one analysis core for a running match and a replay, the export (JSON, TSV) the same bytes on every run, an HTML report, the screen after a match and from the replay list, one field comparison for the diagnosis tools; no human has read a report |
 | S3-M5 | Modern user interface | – | open (original layouts are the base) |
@@ -224,6 +224,10 @@ The sequence from here:
    bytes on every run, an HTML report, the screen after a match and from the replay list, one field comparison for the diagnosis tools; the score screen's counters
    fixed; the computer players' placement checks under a budget in the movement profile. The brief that follows is `HANDOFF-PHASE37.md` (S3-M2: the spectator and
    observer features, which take the replays and the analysis' events as their input).
+   **Phase 37 done (18 October 2026)** (S3-M2 (b) and (c), with side items): the observer's event ticker from the analysis core, views of every player, the research
+   tab, all of it for a replay; the score screen counts as the original's `ScoreKeeper` (F-42); the GLA AI's missing supply stash diagnosed (D-34); the remaining long ticks
+   under `movement-budget` shown to be first calls (`perf --warm-up`: 10.1 / 11.2 ms warmed up). The brief that follows is `HANDOFF-PHASE38.md` (S3-M5: the modern user
+   interface, the last milestone of Stage 3 outside the simulation).
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and
@@ -288,6 +292,7 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-31 | From the first release on: is every change of tick rate, fixed point, snapshot, replay, command table, match description or network protocol a break that needs its own decision; are old saves and replays converted; how long are old builds kept for old replays (`docs/COMPATIBILITY.md` §3)? | proposal in `docs/COMPATIBILITY.md` §3; today every version change is refused with its reason | R1/R4 | all |
 | D-32 | Which adopted GeneralsGameCode fixes a release offers, and may a rule profile other than the original ever become the default (it changes every reference value) (`docs/GGC-FIXES.md`)? | the original is the default; `--rules` is opt-in; three fixes adopted | R1 | 3 |
 | D-33 | The patch layer: may it ship as a choice of the installer, and does a room of a server show "original" or "patch" by name (today only by the definition fingerprint) (`docs/PATCH-LAYER.md`)? | not offered to players until its definitions compile | R1/R4 | 3 |
+| D-34 | The built-in AI's GLA builds no supply stash when the stash's spot is unexplored: its only worker is sent to look and taken for the next building before it arrives (`docs/SKIRMISH-AI.md` §7, Phase 37). The fix - the worker sent to look is not picked for 60 s - is measured, not adopted: it changes the default AI and every reference value of a pairing with GLA | not adopted; the reference values stay | before the next AI survey | 3 |
 | D-26 | The limits of a public server (`docs/DEDICATED-SERVER.md` §9.2): the defaults are proposals from measurements on one machine - above all 8 connections per address, 100 key exchanges a second, 500 messages a second per member, 20 s without a hash report, a match of at most 2 h, a recording of at most 64 MiB | the defaults of §9.2 | R4 | 4 |
 
 **Decided:**

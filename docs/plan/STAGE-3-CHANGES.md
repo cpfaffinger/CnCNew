@@ -63,6 +63,11 @@ the surveys. Nothing is rebuilt.
 - **Acceptance:** a human follows an AI match and a replayed human match in the spectator and names the players' intentions
   from the display alone.
 - **Depends on:** S3-M3 for replays; S4-M3 for network spectators. Presentation only – does not touch the manifest.
+- **Status (Phase 37, 18 October 2026): (b) and (c) built by machine** (docs/SPECTATOR-MODE.md §14): the views of every player and of everything by key and button, kept
+  across a seek; the research tab (nothing "in research": F-43); the event ticker from the analysis core - the first blood, buildings lost, superweapons, captures,
+  defeats - with the camera at a line's place, the same at 30, 60 and 120 Hz and in the replay however it is sought; all of it for a replay of a human match. Not built:
+  following the simulated camera of players 3 to 8, picture-in-picture, the network spectator beyond Phases 27 and 29. (a) and the milestone's acceptance - **a person names
+  the players' intentions from the display alone** - are open: no human has watched.
 
 ### S3-M3 Replay browser
 

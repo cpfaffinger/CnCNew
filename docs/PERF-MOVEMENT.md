@@ -529,3 +529,5 @@ tool now collects before the measured stretch):
 
 What would take the profile under 8 ms is now a question of that late tick's commands (the commands the computer players give in one tick, among them group orders)
 and updates - not broken down further in Phase 37.
+
+**The angry-mob case** (section 11) was not taken further in Phase 37; its cause is still not found.
