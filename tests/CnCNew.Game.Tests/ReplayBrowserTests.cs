@@ -622,6 +622,11 @@ internal static class ReplayBrowserTests
                 "tick" => game.Tick.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 "over" => game.IsOver ? "yes" : "no",
                 "seeks" => Seeks.Count.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                // The observer (ObserverTests): whose view, which tab, the ticker lines shown so far, the camera's jumps to a line.
+                "view" => _spectator is null ? null : _spectator.FogViewer is { } viewer ? viewer.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "all",
+                "tab" => _spectator?.Tab.ToString(),
+                "ticker" => _spectator is { } watching ? watching.Ticker.UpTo(watching.Ticker.FrameOf(watching.Match.Tick)).Count().ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
+                "jumps" => _spectator?.TickerJumps.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 _ => null,
             };
         }

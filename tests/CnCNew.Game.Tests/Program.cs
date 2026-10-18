@@ -31,6 +31,7 @@ CnCNew.Tests.TestRateOption.Announce("Tests about one rate (time scale, savegame
     (nameof(NetHudTests), NetHudTests.Run),
     (nameof(ReplayBrowserTests), ReplayBrowserTests.Run),
     (nameof(MatchAnalysisTests), MatchAnalysisTests.Run),
+    (nameof(ObserverTests), ObserverTests.Run),
     (nameof(AttachedEffectsTests), AttachedEffectsTests.Run),
 ];
 

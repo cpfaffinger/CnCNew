@@ -219,6 +219,11 @@ internal sealed class ClientRuntime : IDisposable
         "seeks" => _replaySeeks.ToString(System.Globalization.CultureInfo.InvariantCulture),
         "hashes" => (_running?.Playback?.HashesChecked ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
         "mismatches" => (_running?.Playback?.HashMismatches ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture),
+        // The observer (docs/SPECTATOR-MODE.md section 14): whose view, which tab, how many ticker lines are shown so far and how often the camera went to one.
+        "view" => _running?.Spectator is not { } viewing ? null : viewing.FogViewer is { } viewer ? viewer.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "all",
+        "tab" => _running?.Spectator?.Tab.ToString(),
+        "ticker" => _running?.Spectator is { } watching ? watching.Ticker.UpTo(watching.Ticker.FrameOf(watching.Match.Tick)).Count().ToString(System.Globalization.CultureInfo.InvariantCulture) : null,
+        "jumps" => _running?.Spectator?.TickerJumps.ToString(System.Globalization.CultureInfo.InvariantCulture),
         _ => null,
     };
 
@@ -303,7 +308,7 @@ internal sealed class ClientRuntime : IDisposable
         var same = playback.ResultMatchesRecorded(out var difference);
         var final = playback.FinalHashMatches;
         var line = string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"replay: end tick {playback.Match.Tick} of {playback.EndTick}, session hash {playback.Match.Session.StateHash():X16}, recorded {playback.Info.FinalSessionHash:X16}, final hash {(final ? "same" : "DIFFERENT")}, result {(same ? "same" : "DIFFERENT (" + difference + ")")}, hashes checked {playback.HashesChecked}, mismatches {playback.HashMismatches}, checkpoints {playback.CheckpointTicks.Count}");
+            $"replay: end tick {playback.Match.Tick} of {playback.EndTick}, session hash {playback.Match.Session.StateHash():X16}, recorded {playback.Info.FinalSessionHash:X16}, final hash {(final ? "same" : "DIFFERENT")}, result {(same ? "same" : "DIFFERENT (" + difference + ")")}, hashes checked {playback.HashesChecked}, mismatches {playback.HashMismatches}, checkpoints {playback.CheckpointTicks.Count}, ticker lines {playback.Ticker.Lines.Count}");
         var note = same && final && playback.HashMismatches == 0
             ? $"The playback reached the recorded end: {CnCNew.Game.Replays.ReplayText.EndingLine(playback.Info)}."
             : $"The playback did not reach the recorded match: {(same ? "the session differs" : difference)} ({playback.HashMismatches} of {playback.HashesChecked} recorded hashes differ).";

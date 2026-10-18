@@ -55,6 +55,8 @@ public sealed class MatchAnalyzer
     private readonly HashSet<uint> _dead = [];
     // Who owned what, noted when it appeared: an object that dies and is removed within one tick is gone from the world when its death is read.
     private readonly Dictionary<uint, (PlayerId Owner, ObjectTemplate Template)> _known = [];
+    // Where a building stands, noted when it appeared: a building does not move, and one that dies and is removed within one tick has its place still (Phase 37).
+    private readonly Dictionary<uint, (Fixed X, Fixed Y)> _buildingPlaces = [];
     private readonly List<AnalysisSample> _samples = [];
     private readonly List<Pending> _events = [];
     private readonly int[] _fights = new int[MatchAnalysis.HeatGridSize * MatchAnalysis.HeatGridSize];
@@ -81,7 +83,7 @@ public sealed class MatchAnalyzer
         _extentY = world.Terrain?.ExtentY ?? Fixed.One;
         StartTick = world.Tick;
         foreach (var player in players) RowOf(new PlayerId(player.Player));
-        foreach (var entity in world.Entities) _known[entity.Id.Value] = (entity.Owner, entity.Template);
+        foreach (var entity in world.Entities) Know(entity);
         if (world.Tick % _sampleTicks == 0) Sample(world);
     }
 
@@ -92,6 +94,41 @@ public sealed class MatchAnalyzer
 
     /// <summary>The ticks told so far.</summary>
     public long TicksObserved { get; private set; }
+
+    /// <summary>The events noted so far, in the order the simulation raised them (a power aimed at a place has its place once <see cref="PlacePowers"/> or <see cref="Finish"/> gave it).</summary>
+    public int EventCount => _events.Count;
+
+    public AnalysisEvent EventAt(int index) => _events[index].Event;
+
+    /// <summary>
+    /// Gives the powers of tick <paramref name="tick"/> that were aimed at a place the target of their command now, instead of when the analysis ends - for a reader of the
+    /// events while the match runs (the observer's ticker). <paramref name="commands"/> are the commands of that tick; a power's command is matched by player and power, in order.
+    /// </summary>
+    public void PlacePowers(long tick, IEnumerable<SimCommand> commands)
+    {
+        ArgumentNullException.ThrowIfNull(commands);
+        Queue<UseSpecialPowerCommand>? uses = null;
+        for (var index = _events.Count - 1; index >= 0 && _events[index].Tick >= tick; index--)
+        {
+            var pending = _events[index];
+            if (pending.Tick != tick || pending.PowerIndex < 0) continue;
+            uses ??= new Queue<UseSpecialPowerCommand>(commands.OfType<UseSpecialPowerCommand>().Where(use => use.Tick == tick));
+        }
+        if (uses is null) return;
+        var start = _events.Count;
+        while (start > 0 && _events[start - 1].Tick >= tick) start--;
+        var taken = new HashSet<UseSpecialPowerCommand>(ReferenceEqualityComparer.Instance);
+        for (var index = start; index < _events.Count; index++)
+        {
+            var pending = _events[index];
+            if (pending.Tick != tick || pending.PowerIndex < 0) continue;
+            var use = uses.FirstOrDefault(candidate => !taken.Contains(candidate) && candidate.Player.Value == pending.Event.Player && candidate.SpecialPower == pending.Event.Name);
+            if (use is null) continue;
+            taken.Add(use);
+            var placed = use.TargetKind == SpecialPowerTargetKind.Location ? pending.Event with { X = (int)use.X.Floor(), Y = (int)use.Y.Floor() } : pending.Event;
+            _events[index] = new Pending(pending.Tick, placed, -1);
+        }
+    }
 
     /// <summary>The colours of the players as the presentation draws them (<see cref="TeamColors"/>), as 0xRRGGBB.</summary>
     public static IReadOnlyDictionary<int, int> ColorsOf(IEnumerable<PlayerConfiguration> players, CnCNew.Data.Definitions.CompiledDefinitionGraph? graph)
@@ -141,8 +178,17 @@ public sealed class MatchAnalyzer
     }
 
     private void Note(long tick, string kind, PlayerId player, PlayerId other, string name, long value, Entity? at, int powerIndex = -1)
+        => NoteAt(tick, kind, player, other, name, value, at is null ? null : (at.X, at.Y), powerIndex);
+
+    private void NoteAt(long tick, string kind, PlayerId player, PlayerId other, string name, long value, (Fixed X, Fixed Y)? at, int powerIndex = -1)
         => _events.Add(new Pending(tick, new AnalysisEvent(Frame(tick), kind, player.Value, other.Value, name, value,
-            at is null ? -1 : (int)at.X.Floor(), at is null ? -1 : (int)at.Y.Floor()), powerIndex));
+            at is { } place ? (int)place.X.Floor() : -1, at is { } placeY ? (int)placeY.Y.Floor() : -1), powerIndex));
+
+    private void Know(Entity entity)
+    {
+        _known[entity.Id.Value] = (entity.Owner, entity.Template);
+        if (entity.Template.IsKindOf("STRUCTURE")) _buildingPlaces[entity.Id.Value] = (entity.X, entity.Y);
+    }
 
     private (PlayerId Owner, ObjectTemplate Template)? Identify(SimulationWorld world, EntityId id)
     {
@@ -165,10 +211,11 @@ public sealed class MatchAnalyzer
         switch (ev.Kind)
         {
             case SimEventKind.EntitySpawned:
-                if (world.FindEntity(ev.Entity) is { } spawned) _known[ev.Entity.Value] = (spawned.Owner, spawned.Template);
+                if (world.FindEntity(ev.Entity) is { } spawned) Know(spawned);
                 break;
             case SimEventKind.EntityDestroyed:
                 _known.Remove(ev.Entity.Value);
+                _buildingPlaces.Remove(ev.Entity.Value);
                 break;
             case SimEventKind.SupplyDeposited:
             {
@@ -224,7 +271,7 @@ public sealed class MatchAnalyzer
             {
                 // Emitted with the new owner as the player and the old one as the value (SimulationWorld.PowerAndCapture).
                 if (world.FindEntity(ev.Entity) is not { } captured) { Unresolved++; break; }
-                _known[ev.Entity.Value] = (captured.Owner, captured.Template);
+                Know(captured);
                 if (Counted(ev.Player)) Note(ev.Tick, "captured", ev.Player, new PlayerId((int)ev.Value), captured.Template.Name, captured.Template.BuildCost.Floor(), captured);
                 break;
             }
@@ -274,8 +321,9 @@ public sealed class MatchAnalyzer
                     RowOf(killer).KillsValue += value;
                 }
                 else killer = PlayerId.System;
-                if (found is not null) _fights[Cell(found.X, found.Y)]++;
-                Note(ev.Tick, kind == SpectatorUnitClass.Structure ? "structure-lost" : "unit-lost", victim.Owner, killer, victim.Template.Name, value, found);
+                (Fixed X, Fixed Y)? place = found is not null ? (found.X, found.Y) : _buildingPlaces.TryGetValue(ev.Entity.Value, out var standing) ? standing : null;
+                if (place is { } where) _fights[Cell(where.X, where.Y)]++;
+                NoteAt(ev.Tick, kind == SpectatorUnitClass.Structure ? "structure-lost" : "unit-lost", victim.Owner, killer, victim.Template.Name, value, place);
                 break;
             }
         }

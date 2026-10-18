@@ -21,6 +21,8 @@ public enum SpectatorTab
     Units,
     Losses,
     Economy,
+    /// <summary>The upgrades and sciences every player has (Phase 37).</summary>
+    Research,
 }
 
 /// <summary>What the spectator can do; every key and every button of the observer HUD is one of these.</summary>
@@ -51,6 +53,22 @@ public enum SpectatorAction
     SeekBack,
     /// <summary>A replay: on to the next checkpoint.</summary>
     SeekForward,
+    TabResearch,
+    /// <summary>The view of everything (no fog).</summary>
+    ViewAll,
+    /// <summary>The view of player 1 to 8 (their fog), in player order.</summary>
+    ViewPlayer1,
+    ViewPlayer2,
+    ViewPlayer3,
+    ViewPlayer4,
+    ViewPlayer5,
+    ViewPlayer6,
+    ViewPlayer7,
+    ViewPlayer8,
+    /// <summary>The event ticker on or off.</summary>
+    ToggleTicker,
+    /// <summary>The camera to the place of the latest line of the ticker that has one.</summary>
+    GoToEvent,
 }
 
 /// <param name="MaxZoomHeight">The spectator's zoom-out limit as a height above ground; <see langword="null"/>: the height from which the whole map is on screen.</param>
@@ -87,7 +105,15 @@ public sealed class SpectatorController
         (KeyCode.Space, SpectatorAction.Pause), (KeyCode.D1, SpectatorAction.Speed1), (KeyCode.D2, SpectatorAction.Speed2), (KeyCode.D4, SpectatorAction.Speed4), (KeyCode.D8, SpectatorAction.Speed8),
         (KeyCode.H, SpectatorAction.TogglePanels), (KeyCode.Escape, SpectatorAction.Quit),
         (KeyCode.Home, SpectatorAction.SeekStart), (KeyCode.PageUp, SpectatorAction.SeekBack), (KeyCode.PageDown, SpectatorAction.SeekForward),
+        (KeyCode.R, SpectatorAction.TabResearch),
+        (KeyCode.F4, SpectatorAction.ViewAll), (KeyCode.F5, SpectatorAction.ViewPlayer1), (KeyCode.F6, SpectatorAction.ViewPlayer2), (KeyCode.F7, SpectatorAction.ViewPlayer3),
+        (KeyCode.F8, SpectatorAction.ViewPlayer4), (KeyCode.F9, SpectatorAction.ViewPlayer5), (KeyCode.F10, SpectatorAction.ViewPlayer6), (KeyCode.F11, SpectatorAction.ViewPlayer7),
+        (KeyCode.F12, SpectatorAction.ViewPlayer8),
+        (KeyCode.T, SpectatorAction.ToggleTicker), (KeyCode.G, SpectatorAction.GoToEvent),
     ];
+
+    /// <summary>The lines of the ticker the HUD shows: the latest ones up to the frame the match stands at.</summary>
+    public const int TickerRows = 6;
 
     private readonly MatchController _hud;
     private readonly SpectatorHud _renderer;
@@ -134,6 +160,10 @@ public sealed class SpectatorController
         _tabsShown.Add(Tab.ToString());
         // The HUD of a player registered before this one: its per-tick bookkeeping stays, this adds the spectator's.
         match.TickStepped += OnTickStepped;
+        // The ticker of a playback belongs to the playback (it outlives the presentations a seek replaces); a match played now has one of its own.
+        if (match.Replay is null)
+            _ownTicker = new MatchTicker(match.World, [..match.Players.Select((player, index) => new CnCNew.Game.Replays.ReplayPlayer(player.Id.Value, index, player.Faction ?? player.Name,
+                string.Empty, player.Team, -1, player.IsComputer, string.Empty))], CnCNew.Game.Analysis.MatchAnalyzer.ColorsOf(match.Players, match.Data.Graph));
         Panels = Stats.Build(match.World, match.Players, match.Colors, match.Winner, match.IsOver);
         _panelTick = match.Tick;
     }
@@ -150,6 +180,26 @@ public sealed class SpectatorController
 
     public SpectatorTab Tab { get; private set; } = SpectatorTab.Production;
     public bool PanelsVisible { get; private set; } = true;
+
+    private readonly MatchTicker? _ownTicker;
+
+    /// <summary>The event ticker of the match: the playback's for a replay, else the spectator's own.</summary>
+    public MatchTicker Ticker => Replay?.Ticker ?? _ownTicker!;
+
+    public bool TickerVisible { get; private set; } = true;
+
+    /// <summary>The lines the ticker shows now: the latest <see cref="TickerRows"/> up to the frame the match stands at.</summary>
+    public IReadOnlyList<TickerLine> TickerShown
+    {
+        get
+        {
+            var lines = Ticker.UpTo(Ticker.FrameOf(Match.Tick)).ToList();
+            return lines.Count <= TickerRows ? lines : lines.GetRange(lines.Count - TickerRows, TickerRows);
+        }
+    }
+
+    /// <summary>The place the camera was last sent to from the ticker (a line clicked, or <see cref="SpectatorAction.GoToEvent"/>), for a check.</summary>
+    public TickerLine? WentTo { get; private set; }
 
     /// <summary>Index into <see cref="Cameras"/> of the simulated camera the main view follows, or null for the free camera.</summary>
     public int? Followed { get; private set; }
@@ -198,6 +248,7 @@ public sealed class SpectatorController
                 _pointer = button.Position;
                 if (!button.IsDown) { _minimapPanning = false; return; }
                 if (_renderer.ActionAt(button.Position) is { } clicked) Do(clicked);
+                else if (_renderer.TickerLineAt(button.Position) is { } line) GoTo(line);
                 else if (_renderer.TryMinimapWorld(button.Position, out var world)) { CenterFree(world); _minimapPanning = true; }
                 return;
             case MouseButtonEvent button:
@@ -215,6 +266,17 @@ public sealed class SpectatorController
     }
 
     private void Forward(InputEvent inputEvent) => _hud.Input.Process(inputEvent, Match.World, Match.Camera);
+
+    /// <summary>The action that shows a tab.</summary>
+    public static SpectatorAction ActionOfTab(SpectatorTab tab) => tab switch
+    {
+        SpectatorTab.Production => SpectatorAction.TabProduction,
+        SpectatorTab.Units => SpectatorAction.TabUnits,
+        SpectatorTab.Losses => SpectatorAction.TabLosses,
+        SpectatorTab.Economy => SpectatorAction.TabEconomy,
+        SpectatorTab.Research => SpectatorAction.TabResearch,
+        _ => throw new ArgumentOutOfRangeException(nameof(tab), tab, "A tab without an action."),
+    };
 
     public static SpectatorAction? ActionOf(KeyCode key)
     {
@@ -246,6 +308,13 @@ public sealed class SpectatorController
             case SpectatorAction.TabUnits: ShowTab(SpectatorTab.Units); break;
             case SpectatorAction.TabLosses: ShowTab(SpectatorTab.Losses); break;
             case SpectatorAction.TabEconomy: ShowTab(SpectatorTab.Economy); break;
+            case SpectatorAction.TabResearch: ShowTab(SpectatorTab.Research); break;
+            case SpectatorAction.ViewAll: View(-1); break;
+            case >= SpectatorAction.ViewPlayer1 and <= SpectatorAction.ViewPlayer8: View(action - SpectatorAction.ViewPlayer1); break;
+            case SpectatorAction.ToggleTicker: TickerVisible = !TickerVisible; break;
+            case SpectatorAction.GoToEvent:
+                if (TickerShown.LastOrDefault(line => line.HasPlace) is { } latest) GoTo(latest);
+                break;
             case SpectatorAction.NextTab: ShowTab((SpectatorTab)(((int)Tab + 1) % Enum.GetValues<SpectatorTab>().Length)); break;
             case SpectatorAction.FollowFirst: Follow(0); break;
             case SpectatorAction.FollowSecond: Follow(1); break;
@@ -253,11 +322,7 @@ public sealed class SpectatorController
             case SpectatorAction.JumpFirst: Jump(0); break;
             case SpectatorAction.JumpSecond: Jump(1); break;
             case SpectatorAction.Overview: ToggleOverview(); break;
-            case SpectatorAction.CycleFog:
-                _fogIndex = _fogIndex + 1 >= Match.Players.Length ? -1 : _fogIndex + 1;
-                Match.ShowWorldAs(FogViewer);
-                _fogModes.Add(FogLabel);
-                break;
+            case SpectatorAction.CycleFog: View(_fogIndex + 1 >= Match.Players.Length ? -1 : _fogIndex + 1); break;
             case SpectatorAction.Pause: Match.Paused = !Match.Paused; NoteSpeed(); break;
             case SpectatorAction.Speed1: SetSpeed(1); break;
             case SpectatorAction.Speed2: SetSpeed(2); break;
@@ -296,6 +361,9 @@ public sealed class SpectatorController
         ArgumentNullException.ThrowIfNull(previous);
         Tab = previous.Tab;
         PanelsVisible = previous.PanelsVisible;
+        TickerVisible = previous.TickerVisible;
+        WentTo = previous.WentTo;
+        TickerJumps = previous.TickerJumps;
         _tabsShown.UnionWith(previous._tabsShown);
         _fogModes.UnionWith(previous._fogModes);
         _speeds.UnionWith(previous._speeds);
@@ -316,6 +384,28 @@ public sealed class SpectatorController
         Followed = previous.Followed;
         HighestReached = previous.HighestReached;
     }
+
+    /// <summary>The view of player <paramref name="index"/> (in player order), or of everything for -1; a player the match does not have changes nothing.</summary>
+    private void View(int index)
+    {
+        if (index >= Match.Players.Length) return;
+        _fogIndex = index;
+        Match.ShowWorldAs(FogViewer);
+        _fogModes.Add(FogLabel);
+    }
+
+    /// <summary>The camera to the place of a ticker line (the free camera: following stops, the overview ends).</summary>
+    public void GoTo(TickerLine line)
+    {
+        ArgumentNullException.ThrowIfNull(line);
+        if (!line.HasPlace) return;
+        LeaveOverview();
+        CenterFree(new Vector2(line.X, line.Y));
+        WentTo = line;
+        TickerJumps++;
+    }
+
+    public int TickerJumps { get; private set; }
 
     private void ShowTab(SpectatorTab tab)
     {
@@ -453,6 +543,7 @@ public sealed class SpectatorController
     {
         var world = Match.World;
         Stats.Observe(result, world);
+        _ownTicker?.Observe(result, world, Match.RecordedCommands);
         var recorded = Match.RecordedCommands;
         _tickCommands.Clear();
         _tickOrders.Clear();
@@ -503,6 +594,9 @@ public sealed class SpectatorController
 
     public UiDrawList BuildDrawList(int width, int height) => _renderer.Build(this, width, height);
 
+    /// <summary>The rectangle of the <paramref name="index"/>-th ticker line with a place, for a test or a script that clicks it.</summary>
+    public UiRect? TickerLineRect(int index, int width, int height) => _renderer.TickerLineRect(this, index, width, height);
+
     /// <summary>The window rectangle of an action's button in the last layout, for a test or a script that clicks it.</summary>
     public UiRect? ButtonRect(SpectatorAction action, int width, int height) => _renderer.ButtonRect(this, action, width, height);
 
@@ -522,6 +616,8 @@ public sealed class SpectatorController
             lines.Add(string.Create(CultureInfo.InvariantCulture, $"spectator ai-camera {index + 1}: player={camera.Player.Value}, orders={camera.OrdersSeen}, interests={camera.Switches}, cuts={camera.Cuts}, now={camera.Interest.Kind}, position={camera.Position.X:F0};{camera.Position.Y:F0}, kinds=[{string.Join(" ", camera.SwitchesByKind.Select(pair => $"{pair.Key}:{pair.Value}"))}]"));
         }
         lines.Add($"spectator view: actions={ActionsTaken}, tabs=[{string.Join(" ", _tabsShown)}], fog=[{string.Join(" ", _fogModes)}], speeds=[{string.Join(" ", _speeds)}], panelRebuilds={PanelRebuilds}, events={Stats.EventsSeen}, unresolvedEvents={Stats.Unresolved}");
+        lines.Add(string.Create(CultureInfo.InvariantCulture, $"spectator ticker: lines={Ticker.UpTo(Ticker.FrameOf(Match.Tick)).Count()}, jumps={TickerJumps}, wentTo={(WentTo is { } went ? went.ToString() : "-")}"));
+        foreach (var line in Ticker.UpTo(Ticker.FrameOf(Match.Tick))) lines.Add($"spectator ticker line: {line}");
         foreach (var line in Panels.Dump().Split('\n', StringSplitOptions.RemoveEmptyEntries)) lines.Add($"spectator panel: {line}");
         return lines;
     }

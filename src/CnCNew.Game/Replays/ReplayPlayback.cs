@@ -71,6 +71,7 @@ public sealed class ReplayPlayback
         Statistics = new MatchStatistics();
         var session = Start();
         Statistics.Begin(session.World);
+        Ticker = new CnCNew.Game.Spectator.MatchTicker(session.World, recording.Info.Players, CnCNew.Game.Analysis.MatchAnalyzer.ColorsOf(session.Players, data.Graph));
         var humans = session.Match.Slots.Where(slot => slot.Description.Kind == MatchSlotKind.Human).Select(slot => slot.Player.Value).ToHashSet();
         _humanCommands = [.. replay.Commands.Where(command => humans.Contains(command.Player.Value))];
         _checkpoints[0] = new Checkpoint(0, null, Statistics.Clone(), session.StateHash());
@@ -93,6 +94,12 @@ public sealed class ReplayPlayback
 
     /// <summary>Counts the presentations: a host that shows <see cref="Match"/> builds its scene again when this changed.</summary>
     public int Generation { get; private set; }
+
+    /// <summary>
+    /// The observer's event ticker of the recorded match (docs/SPECTATOR-MODE.md §14): told every tick the playback steps - also the ticks a seek steps without drawing - and
+    /// only ticks it has not seen, so it holds the lines of the match up to the furthest tick played, whatever was sought.
+    /// </summary>
+    public CnCNew.Game.Spectator.MatchTicker Ticker { get; }
 
     /// <summary>The score screen's counters of the playback so far (kept with every checkpoint, so they stay whole across a seek).</summary>
     public MatchStatistics Statistics { get; private set; }
@@ -202,6 +209,7 @@ public sealed class ReplayPlayback
     internal void AfterStep(SkirmishMatchSession session, TickResult result)
     {
         Statistics.Record(result, session.World);
+        Ticker.Observe(result, session.World, session.RecordedCommands);
         CheckHash(session);
         var tick = session.World.Tick;
         if (tick % CheckpointInterval == 0 && !_checkpoints.ContainsKey(tick))

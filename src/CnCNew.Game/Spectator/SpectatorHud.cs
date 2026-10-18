@@ -41,7 +41,9 @@ public sealed class SpectatorHud
     [
         (SpectatorAction.TabProduction, "Production"), (SpectatorAction.TabUnits, "Units"), (SpectatorAction.TabLosses, "Losses"), (SpectatorAction.TabEconomy, "Economy"),
         (SpectatorAction.FollowFirst, "Follow AI 1"), (SpectatorAction.FollowSecond, "Follow AI 2"), (SpectatorAction.FreeCamera, "Free cam"), (SpectatorAction.Overview, "Overview"),
+        (SpectatorAction.TabResearch, "Research"),
         (SpectatorAction.CycleFog, "Fog"), (SpectatorAction.Pause, "Pause"), (SpectatorAction.Speed1, "1x"), (SpectatorAction.Speed2, "2x"), (SpectatorAction.Speed4, "4x"), (SpectatorAction.Speed8, "8x"),
+        (SpectatorAction.ToggleTicker, "Ticker"),
     ];
 
     /// <summary>The third row of a replay's button bar: seeking to the checkpoints the playback keeps.</summary>
@@ -55,6 +57,7 @@ public sealed class SpectatorHud
     private readonly IUiTextMeasure _measure;
     private readonly Dictionary<string, string> _cameos = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<(UiRect Rect, SpectatorAction Action)> _buttons = [];
+    private readonly List<(UiRect Rect, TickerLine Line)> _tickerLines = [];
     private UiRect _minimap;
 
     public SpectatorHud(LiveMatch match, MappedImageTable images, IUiTextMeasure measure)
@@ -77,6 +80,21 @@ public sealed class SpectatorHud
         foreach (var (rect, action) in _buttons)
             if (rect.Contains((int)screen.X, (int)screen.Y)) return action;
         return null;
+    }
+
+    /// <summary>The ticker line under a screen position in the last layout.</summary>
+    public TickerLine? TickerLineAt(Vector2 screen)
+    {
+        foreach (var (rect, line) in _tickerLines)
+            if (rect.Contains((int)screen.X, (int)screen.Y)) return line;
+        return null;
+    }
+
+    /// <summary>The rectangle of the <paramref name="index"/>-th line the ticker shows, for a test or a script that clicks it.</summary>
+    public UiRect? TickerLineRect(SpectatorController controller, int index, int width, int height)
+    {
+        Build(controller, width, height);
+        return index >= 0 && index < _tickerLines.Count ? _tickerLines[index].Rect : null;
     }
 
     public UiRect? ButtonRect(SpectatorController controller, SpectatorAction action, int width, int height)
@@ -187,6 +205,21 @@ public sealed class SpectatorHud
         var barLeft = Math.Max(radarFrame.Right + S(12), (width - barWidth) / 2);
         var barTop = height - rows * buttonHeight - (rows - 1) * gap - S(8);
         Box(new UiRect(barLeft - gap, barTop - gap, barWidth + 2 * gap, rows * buttonHeight + (rows + 1) * gap), Plate);
+        // The views (Phase 37): everything, or one player's - a row of small buttons above the bar, the player's colour beside its number.
+        var viewWidth = S(46);
+        var viewHeight = S(20);
+        var viewTop = barTop - gap - S(16) - viewHeight - gap;
+        var viewCount = 1 + Math.Min(8, controller.Match.Players.Length);
+        commands.Add(new UiFillRect(new UiRect(barLeft - gap, viewTop - gap, viewCount * (viewWidth + gap) + gap, viewHeight + 2 * gap), Plate));
+        for (var index = 0; index < viewCount; index++)
+        {
+            var action = index == 0 ? SpectatorAction.ViewAll : SpectatorAction.ViewPlayer1 + (index - 1);
+            var rect = new UiRect(barLeft + index * (viewWidth + gap), viewTop, viewWidth, viewHeight);
+            _buttons.Add((rect, action));
+            Box(rect, IsOn(controller, action) ? ButtonOn : ButtonBack);
+            if (index > 0) commands.Add(new UiFillRect(new UiRect(rect.X + 2, rect.Y + 2, S(4), rect.Height - 4), ColorOf(controller.Match.Players[index - 1].Id)));
+            Centered(index == 0 ? $"All [{SpectatorController.KeyHint(action)}]" : $"P{index} [{SpectatorController.KeyHint(action)}]", small, Text, rect.CenterX + (index > 0 ? S(2) : 0), rect.Y + S(4));
+        }
         for (var index = 0; index < table.Length; index++)
         {
             var (action, label) = table[index];
@@ -214,8 +247,8 @@ public sealed class SpectatorHud
                 small, replay.HashMismatches == 0 ? Dim : new WndColor(255, 96, 80, 255), left, row + S(20));
         }
         var hints = controller.Replay is null
-            ? $"seed {controller.Options.Seed}   [J]/[K] jump to AI 1/2   [Tab] next tab   [H] panels   wheel: zoom   arrows, screen edge, right drag: scroll   [Esc] quit"
-            : "[F] fog: all or one player   [Tab] next tab   [H] panels   wheel: zoom   arrows, screen edge, right drag: scroll   [Esc] back to the replays";
+            ? $"seed {controller.Options.Seed}   [J]/[K] jump to AI 1/2   [G] go to the latest event   [Tab] next tab   [H] panels   wheel: zoom   arrows, screen edge, right drag: scroll   [Esc] quit"
+            : "[F] fog: all or one player   [G] go to the latest event   [Tab] next tab   [H] panels   wheel: zoom   arrows, screen edge, right drag: scroll   [Esc] back to the replays";
         commands.Add(new UiFillRect(new UiRect(barLeft - gap, barTop - gap - S(16), Math.Min(barWidth + 2 * gap, _measure.MeasureWidth(hints, small) + S(12)), S(16)), Plate));
         Label(hints, small, Dim, barLeft + S(2), barTop - gap - S(14));
 
@@ -261,6 +294,36 @@ public sealed class SpectatorHud
             Label(value, normal, color ?? Text, x, S(31));
         }
 
+        // ---- the event ticker, top right under the bar (Phase 37): the latest lines up to the frame the match stands at; a click on a line with a place moves the camera there.
+        _tickerLines.Clear();
+        if (controller.TickerVisible)
+        {
+            var shown = controller.TickerShown;
+            var tickerWidth = Math.Min(S(360), width / 3);
+            var tickerLeft = width - tickerWidth - S(8);
+            var tickerTop = topHeight + S(8) + Math.Max(0, players.Length - 2) * S(16);
+            var lineHeight = S(16);
+            var tickerHeight = S(20) + Math.Max(1, shown.Count) * lineHeight + S(4);
+            Box(new UiRect(tickerLeft, tickerTop, tickerWidth, tickerHeight), Plate);
+            Label($"Events [{SpectatorController.KeyHint(SpectatorAction.ToggleTicker)}]   go to the latest [{SpectatorController.KeyHint(SpectatorAction.GoToEvent)}]", small, Accent, tickerLeft + S(8), tickerTop + S(3));
+            var clip = new UiRect(tickerLeft + 2, tickerTop, tickerWidth - 4, tickerHeight);
+            commands.Add(new UiPushClip(clip));
+            if (shown.Count == 0) Label("nothing yet", small, Dim, tickerLeft + S(8), tickerTop + S(20));
+            for (var index = 0; index < shown.Count; index++)
+            {
+                var item = shown[index];
+                var top = tickerTop + S(20) + index * lineHeight;
+                var rect = new UiRect(tickerLeft + 2, top, tickerWidth - 4, lineHeight);
+                if (item.HasPlace) _tickerLines.Add((rect, item));
+                var player = controller.Match.Players.FirstOrDefault(value => value.Id.Value == item.Player);
+                commands.Add(new UiFillRect(new UiRect(tickerLeft + S(6), top + S(3), S(4), lineHeight - S(6)), player is null ? Edge : ColorOf(player.Id)));
+                var stamp = string.Create(CultureInfo.InvariantCulture, $"{item.Second / 60}:{item.Second % 60:00}");
+                Label(stamp, small, Dim, tickerLeft + S(14), top + S(2));
+                Label(item.Text, small, controller.WentTo == item ? Accent : Text, tickerLeft + S(50), top + S(2));
+            }
+            commands.Add(new UiPopClip());
+        }
+
         // ---- the result.
         if (panels.IsOver)
         {
@@ -288,7 +351,7 @@ public sealed class SpectatorHud
             var tabX = x + S(8);
             foreach (var tab in Enum.GetValues<SpectatorTab>())
             {
-                var caption = $"[{SpectatorController.KeyHint(SpectatorAction.TabProduction + (int)tab)}] {tab}";
+                var caption = $"[{SpectatorController.KeyHint(SpectatorController.ActionOfTab(tab))}] {tab}";
                 Label(caption, small, tab == controller.Tab ? Accent : Dim, tabX, y + S(6));
                 tabX += _measure.MeasureWidth(caption, small) + S(10);
             }
@@ -304,6 +367,7 @@ public sealed class SpectatorHud
                     SpectatorTab.Production => ProductionRows(player, cursor),
                     SpectatorTab.Units => CountRows(player.Army, cursor, $"army {player.ArmyUnits}, value {Number(player.ArmyValue)}, workers {player.Workers}"),
                     SpectatorTab.Losses => LossRows(player, cursor),
+                    SpectatorTab.Research => ResearchRows(player, cursor),
                     _ => EconomyRows(player, cursor),
                 };
                 cursor += S(6);
@@ -360,6 +424,15 @@ public sealed class SpectatorHud
                 return CountRows([..player.StructuresLost.Take(ListRows / 2)], top, $"structures lost {player.StructuresLostCount}, value {Number(player.StructuresLostValue)}");
             }
 
+            int ResearchRows(SpectatorPlayerPanel player, int top)
+            {
+                top = Note($"upgrades {player.Upgrades.Length} (and {player.ObjectUpgrades} of its objects), sciences {player.Sciences.Length}", top);
+                foreach (var name in player.Upgrades.Take(ListRows / 2)) top = Note("  " + Short(name, 34), top);
+                if (player.Upgrades.Length > ListRows / 2) top = Note($"  ... {player.Upgrades.Length - ListRows / 2} more upgrades", top);
+                foreach (var name in player.Sciences.Take(ListRows / 2)) top = Note("  " + Short(name, 34), top);
+                return player.Sciences.Length > ListRows / 2 ? Note($"  ... {player.Sciences.Length - ListRows / 2} more sciences", top) : top;
+            }
+
             int EconomyRows(SpectatorPlayerPanel player, int top)
             {
                 foreach (var (caption, value) in new[]
@@ -388,6 +461,11 @@ public sealed class SpectatorHud
         SpectatorAction.TabUnits => controller.PanelsVisible && controller.Tab == SpectatorTab.Units,
         SpectatorAction.TabLosses => controller.PanelsVisible && controller.Tab == SpectatorTab.Losses,
         SpectatorAction.TabEconomy => controller.PanelsVisible && controller.Tab == SpectatorTab.Economy,
+        SpectatorAction.TabResearch => controller.PanelsVisible && controller.Tab == SpectatorTab.Research,
+        SpectatorAction.ViewAll => controller.FogViewer is null,
+        >= SpectatorAction.ViewPlayer1 and <= SpectatorAction.ViewPlayer8 => controller.FogViewer is { } viewer && controller.Match.Players.Length > action - SpectatorAction.ViewPlayer1
+            && controller.Match.Players[action - SpectatorAction.ViewPlayer1].Id == viewer,
+        SpectatorAction.ToggleTicker => controller.TickerVisible,
         SpectatorAction.FollowFirst => controller.Followed == 0,
         SpectatorAction.FollowSecond => controller.Followed == 1,
         SpectatorAction.FreeCamera => controller.Followed is null && !controller.Overview,

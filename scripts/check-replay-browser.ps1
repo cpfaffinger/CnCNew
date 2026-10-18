@@ -2,7 +2,8 @@
 .SYNOPSIS
     The replay browser in the window client, driven by a script (docs/REPLAY-BROWSER.md): a skirmish is played and recorded, found in the replay list, played back
     with seeks back and forth to the recorded end, renamed and deleted; a damaged file is refused with its reason. The analysis of the match (docs/MATCH-ANALYSIS.md)
-    is opened from the score screen and from the list.
+    is opened from the score screen and from the list. The observer's view of player 1 and the research tab (docs/SPECTATOR-MODE.md section 14) are chosen by key
+    and kept across the seeks.
 
 .DESCRIPTION
     Starts the Release window client once with --shell-script (CnCNew.Game.Shell.ShellScript: every step waits for what a person would see and then clicks, types or
@@ -115,6 +116,10 @@ $script = Join-Path $OutDir 'replay.script.txt'
     'click ReplayMenu.wnd:ButtonLoadReplay',
     'limit 240',
     'wait phase InMatch',
+    'key F5',
+    'wait match view equals 1',
+    'key R',
+    'wait match tab equals Research',
     'key D8',
     "wait match tick atleast `$SEEKFROM",
     'key PageUp',
@@ -123,6 +128,10 @@ $script = Join-Path $OutDir 'replay.script.txt'
     'wait match seeks equals 2',
     'key PageDown',
     'wait match seeks equals 3',
+    'wait match view equals 1',
+    'wait match tab equals Research',
+    'key F4',
+    'wait match view equals all',
     'key D8',
     'wait phase Results',
     'limit 30',
