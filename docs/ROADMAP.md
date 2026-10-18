@@ -114,6 +114,13 @@ Side items: the score screen counts as the original's `ScoreKeeper` (F-42), the 
 long ticks under `movement-budget` shown to be first calls (`SimTool perf --warm-up`; 10.1 / 11.2 ms warmed up, still above 8 ms). Next: S3-M5, the modern user interface
 (`docs/handoffs/HANDOFF-PHASE38.md`).
 
+**Stage 3, S3-M5 (Phase 38, 18 October 2026, by machine):** the design decision as a document before any picture, then the modern skin as a profile beside the original's
+(`docs/UI-MODERN.md`): every layout derived at run time, the command bar in proportion at 16:9, the screens of Stages 3 and 4 in it, "More options" for display mode,
+wide-screen view, text size, sound device and the hotkeys; 816 hashes of the modern skin beside the original's, which stay; a scripted person switches the skin and walks
+the shell; the readability check with the GDI font. Side items: the late long tick under `movement-budget` broken down (a wave of 40 single attack-move orders and the
+path queue of one frame, `docs/PERF-MOVEMENT.md` §13); D-34 prepared as a measured proposal, not adopted (`docs/SKIRMISH-AI.md` §7a). With S3-M5 every milestone of
+Stage 3 is built by machine; none is accepted by a human. Next: `docs/handoffs/HANDOFF-PHASE39.md`.
+
 ## 6. Patch integration and quality (Phase 30)
 
 **Postponed on 5 October 2026:** this section was the step after Phase 17 and now lies behind the programme from section 5 (`docs/handoffs/HANDOFF-PHASE30.md`).

@@ -1,0 +1,37 @@
+diff --git a/src/CnCNew.Simulation/Skirmish/SkirmishAi.cs b/src/CnCNew.Simulation/Skirmish/SkirmishAi.cs
+index d403324..5443153 100644
+--- a/src/CnCNew.Simulation/Skirmish/SkirmishAi.cs
++++ b/src/CnCNew.Simulation/Skirmish/SkirmishAi.cs
+@@ -97,6 +97,15 @@ public sealed partial class SkirmishAi
+     private const long InFlightMarginFrames = 30;
+     /// <summary>Back-off of the builder's walk to an unexplored supply source (5 s).</summary>
+     private const long SupplyLookRetryFrames = 150;
++
++    /// <summary>
++    /// D-34 (a proposal, not adopted): how long a builder sent to look at the ground of a supply center is not given another building - 60 s of game time. Without it a
++    /// GLA worker, which is a builder and a supply carrier, is taken for the next building at the next think, the look is abandoned and the stash is never built.
++    /// </summary>
++    private const long ScoutKeepFrames = 1800;
++
++    /// <summary>The key of <see cref="_retryAt"/> under which a builder sent to look stays reserved.</summary>
++    private static uint ScoutKey(Entity builder) => unchecked(0x49000000u + builder.Id.Value);
+     /// <summary>Back-off per science after a purchase attempt (60 s).</summary>
+     private const long ScienceRetryFrames = 1800;
+     /// <summary>Back-off per special power after a refusal for a missing science (100 s) and after any other refusal (30 s).</summary>
+@@ -707,6 +716,7 @@ private void BuildStructures()
+         foreach (var entity in _units)
+         {
+             if ((RoleOf(entity.Template) & Role.Builder) == 0 || used.Contains(entity.Id.Value) || AiOf(entity) is not { } ai || ai.IsBuilding) continue;
++            if (_retryAt.TryGetValue(ScoutKey(entity), out var scoutUntil) && scoutUntil > _tick) continue;
+             if (!ai.IsIdle && !ai.IsOnUnorderedMove && (RoleOf(entity.Template) & Role.Carrier) == 0) continue;
+             var distance = near is null ? Fixed.Zero : DistanceSquared(entity.X, entity.Y, near.X, near.Y);
+             if (best is null || distance < bestDistance) { best = entity; bestDistance = distance; }
+@@ -812,6 +822,8 @@ private void BuildStructures()
+             {
+                 used.Add(builder.Id.Value);
+                 Stats.MoveOrders++;
++                // Only a builder that is also a supply carrier (the GLA worker) is taken while it walks (PickBuilder); a dozer on its way is not idle and is never taken.
++                if ((RoleOf(builder.Template) & Role.Carrier) != 0) _retryAt[ScoutKey(builder)] = _tick + _time.OriginalFrames(ScoutKeepFrames);
+             }
+             return null;
+         }

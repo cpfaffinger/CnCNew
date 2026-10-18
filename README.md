@@ -95,6 +95,10 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
 - **The observer (Phase 37, by machine):** an event ticker - the first blood, buildings lost, superweapons, captures, defeats - with the camera at the place of a line,
   the view of every player or of everything, a research tab; for a match of computer players and for every replay, the same lines however a replay is sought and at every
   rate (`docs/SPECTATOR-MODE.md` §14). The score screen now counts as the original does (only the `SCORE` kinds, a loss with a causer).
+- **A modern skin beside the original's (Phase 38, by machine):** the menus, the HUD, the lobby, the replay list, the analysis and the observer drawn from the original's
+  layouts derived at run time - Segoe UI on a type scale, flat chrome, the command bar in proportion at 16:9 - chosen in the options' new "More options" (also display
+  mode, wide-screen view, text size, sound device, the hotkey list) or with `--skin modern`; the original skin stays the default and its pictures stay as they were
+  (`docs/UI-MODERN.md`). Whether the modern skin is better to read and use is a human's judgement, not yet made.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

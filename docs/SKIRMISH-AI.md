@@ -182,3 +182,48 @@ same happens at every retry (ticks 864, 1,464 ...); the arms dealer needs the st
 walking. **A fix was measured, not adopted:** the builder sent to look is not picked for 60 s of game time - both GLA players then build their stash (the Toxin general at
 60 s, GLA at 120 s) and survive the ten minutes. It changes the default AI and so the reference values (every pairing with GLA) - a decision of the project owner (D-34
 in `docs/plan/PROGRAMME.md` §7), not taken here.
+
+## 7a. D-34 as a measured proposal (Phase 38) - not adopted
+
+The fix of section 7 was built in two variants in a worktree outside the repository (base `5ce44a2`, the simulation unchanged since Phase 37) and measured; the default AI
+is unchanged, and so are the reference values. The variant proposed is in `docs/proposals/D-34-scout-reserved.patch` (applies to `SkirmishAi.cs` at `5ce44a2`).
+
+- **Variant A** (Phase 37's fix as written): a builder sent to look at the ground of a supply center is not picked for another building for 60 s of game time
+  (`_retryAt` under a key of its own, which is already session state - no new field, no new version).
+- **Variant B** (proposed): the same, but only for a builder that is also a supply carrier - the GLA worker, the one `PickBuilder` takes while it walks. A dozer on its
+  way is not idle and is never taken, so America and China keep their behaviour.
+
+**Measured** (`SimTool reference-manifest results` over the 50 runs of the reference manifest, against the same of the base; `ai-match` of the case of section 7:
+Twilight Flame, the eight factions of the replay measurement, seed 11, 10 game minutes, 60 Hz):
+
+| | Variant A | Variant B (proposed) |
+| --- | --- | --- |
+| manifest runs whose result quantities change | 18 of 50: 13 of the 16 pairings (also America against China), the four eight-player runs, the skirmish sweep | **7 of 50: only pairings with GLA** (7 of the 8) |
+| pairings decided | 15 of 16 (BitterWinter China-GLA a stalemate) | 14 of 16 (BitterWinter and DeathValley China-GLA stalemates) |
+| winners changed | 5 (China-GLA twice to GLA, GLA-America on Armored Fury to GLA, ChinaTank-AirForce twice) | 1 (BitterWinter GLA-America to GLA) |
+| the case of section 7 | both GLA players build their stash and are alive after 10 minutes (final hash `50713576CDA1FBA1`; base `7DF4A6C5584FEAC2`: both defeated, no stash) | the Toxin general builds its stash and is alive; GLA builds 6 structures instead of 2 and is defeated before the 10 minutes (`A17BB6195757D55F`) |
+
+Variant A changes America's and China's games because a dozer that has arrived at the unexplored spot stays reserved for the rest of the 60 s; variant B touches only
+the faction whose builder is taken while it walks. Adopting either changes the default AI and so the reference manifest (one manifest commit, the 7 or 18 runs above) -
+the owner's decision D-34. The distribution of GLA's wins over many seeds is measured in section 7b.
+
+## 7b. D-34: the distribution over seeds (Phase 38)
+
+`SimTool ai-survey` over the eight pairings with GLA of the reference manifest, ten seeds each (80 matches per build, 60 Hz, 25 game minutes, the binaries of the base and
+of variant B):
+
+| | base | variant B |
+| --- | --- | --- |
+| decided within 25 minutes | 78 of 80 | **61 of 80** |
+| won by GLA | 15 | 12 |
+| won by the opponent | 63 | 49 |
+| median length of a decided match | 384 s | 644 s |
+| the same match (final hash) in both | 17 of 80 | |
+
+By pairing (GLA / opponent / undecided), base against variant B: Alpine Assault China-GLA 6/4/0 against 0/7/3, GLA-America 0/10/0 against 2/7/1; Armored Fury China-GLA
+1/7/2 against 1/6/3, GLA-America 2/8/0 against 2/8/0; Bitter Winter China-GLA 5/5/0 against 2/3/5, GLA-America 0/10/0 against 0/6/4; Death Valley China-GLA 1/9/0
+against 5/2/3, GLA-America 0/10/0 against 0/10/0.
+
+**What it says:** with the fix GLA builds its economy and lasts - a quarter of its matches now reach the 25-minute limit undecided - but it wins no more often (12
+against 15); where the base GLA won, it won early (on Alpine Assault against China six times) before its missing economy mattered. The fix corrects a defect of the AI's
+builder choice; whether its balance is wanted is the owner's question with D-34 (and D-9). Not measured: 30 and 120 Hz, the eight-player maps beyond the one case.
