@@ -59,6 +59,8 @@ public sealed class MatchAnalysisScreen : ShellScreen
             if (!needed.Contains(window) && window.Parent is { } parent && needed.Contains(parent)) window.SetHidden(true);
         W("ButtonSaveReplay").SetText("Previous page");
         W("ButtonBuddy").SetText("Next page");
+        // The layout hides the header line (ScoreScreen.wnd shows it only in the Generals' Challenge); the analysis writes its page, map and winner there.
+        W(HeaderWindow).SetHidden(false);
         Refresh();
     }
 
