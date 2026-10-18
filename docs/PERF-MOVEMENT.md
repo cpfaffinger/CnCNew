@@ -496,3 +496,19 @@ corner of the course): the nexus starts the course alone - its five mob members 
 30 and at 60 Hz within a unit of the same places; the 30 Hz run is nevertheless 1.85 s and 31 units longer. With the members removed before every leg the nexus does not
 finish the course at any rate (the case becomes unmeasured), so the members cannot simply be taken away to test the hypothesis of section 10. The cause is still not
 found; the case stays the one quantity group of the suite outside its tolerance under the profile.
+
+## 12. Phase 37: where the remaining long ticks come from - the thresholds
+
+A probe in a throwaway build (a clock around each part of the computer player's think, not committed) over the eight-player gate run under the profile: in 30 game minutes
+only seven thinks took more than 3 ms, each in another part (the very first think at tick 22, the first use of the powers, of the army production, of the supply
+placement ...), and `SimTool ai-match`, which plays the same match three times in one process, shows them in its first run only - from the second on no think takes more
+than 3 ms. The long ticks that remain are the first calls of code paths (the JIT), not work of the computer players. `SimTool perf --warm-up` (Phase 37) plays the same
+match once, not measured, before the measured run.
+
+**Thresholds, written down before the measurement** (`SimTool perf ... --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --minutes 30 --warm-up`, 60 Hz, quiet
+machine, the original and the profile alternating, twice):
+
+| | Threshold |
+| --- | --- |
+| W1 | under the profile, warmed up: the longest tick after the first 300 at most 8 ms (M1 of Phase 34) |
+| W2 | under the original, warmed up: reported, no threshold (the original's maximum is its many simultaneous long searches, section 6) |
