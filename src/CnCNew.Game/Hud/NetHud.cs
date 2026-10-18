@@ -216,17 +216,21 @@ public sealed class NetHud
         Trace(StatusLine());
     }
 
-    private static readonly WndColor Shadow = new(0, 0, 0, 255);
-    private static readonly WndColor Panel = new(0, 0, 0, 170);
-    private static readonly WndColor White = new(255, 255, 255, 255);
-    private static readonly WndColor Yellow = new(255, 220, 90, 255);
+    /// <summary>The skin the indicators are drawn in (docs/UI-MODERN.md); the original's colours and font are the ones they always had.</summary>
+    public CnCNew.Ui.Skins.UiSkin Skin { get; init; } = CnCNew.Ui.Skins.UiSkin.Original;
 
-    private static WndColor ColorOf(NetQuality quality) => quality switch
+    private CnCNew.Ui.Skins.UiSkinPalette Palette => Skin.Style.Palette;
+    private WndColor Shadow => Skin.IsModern ? Palette.Shadow : new(0, 0, 0, 255);
+    private WndColor Panel => Skin.IsModern ? Palette.Panel with { A = 235 } : new(0, 0, 0, 170);
+    private WndColor White => Skin.IsModern ? Palette.Text : new(255, 255, 255, 255);
+    private WndColor Yellow => Skin.IsModern ? Palette.Accent : new(255, 220, 90, 255);
+
+    private WndColor ColorOf(NetQuality quality) => quality switch
     {
-        NetQuality.Good => new WndColor(120, 230, 120, 255),
-        NetQuality.Fair => new WndColor(255, 220, 90, 255),
-        NetQuality.Poor => new WndColor(255, 110, 90, 255),
-        _ => new WndColor(200, 200, 200, 255),
+        NetQuality.Good => Skin.IsModern ? Palette.Good : new WndColor(120, 230, 120, 255),
+        NetQuality.Fair => Skin.IsModern ? Palette.Accent : new WndColor(255, 220, 90, 255),
+        NetQuality.Poor => Skin.IsModern ? Palette.Bad : new WndColor(255, 110, 90, 255),
+        _ => Skin.IsModern ? Palette.Muted : new WndColor(200, 200, 200, 255),
     };
 
     /// <summary>The draw commands of the indicators for a screen of this size; they lie over the HUD and under the pointer.</summary>
@@ -236,7 +240,7 @@ public sealed class NetHud
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
         // The texts scale with the height of the screen like the HUD's own (600 is the height the layouts were made for).
         var size = Math.Max(9, (int)Math.Round(10.0 * height / 600));
-        var font = new UiFont("Arial", size, true);
+        var font = Skin.IsModern ? Skin.Style.Font(CnCNew.Ui.Skins.UiTypeStep.Body, new UiViewport(width, height)) with { Bold = true } : new UiFont("Arial", size, true);
         var line = measure.LineHeight(font) + 2;
         var clip = new UiRect(0, 0, width, height);
         var margin = Math.Max(6, width / 100);

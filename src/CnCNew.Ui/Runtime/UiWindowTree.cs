@@ -333,7 +333,7 @@ public sealed partial class UiWindowTree
     private void Place(UiWindow window, UiTransform? inherited)
     {
         var rect = window.DesignRect;
-        var (transform, forChildren) = UiScaler.ForWindow(rect, inherited, Viewport, Options.Mode);
+        var (transform, forChildren) = UiScaler.ForWindow(rect, inherited, Viewport, Options.Mode, Options.KeepBandAspect);
         window.Transform = transform;
         window.Rect = window.ScreenRectOverride ?? transform.Map(rect);
         window.HitRect = Options.MinimumHitTarget > 0 && window.IsInteractive ? window.Rect.ExpandTo(Options.MinimumHitTarget) : window.Rect;

@@ -31,25 +31,29 @@ public static class ShellCustomDraw
     private static readonly WndColor CreditsTitle = new(161, 179, 255, 255);
     private static readonly WndColor CreditsNormal = new(209, 218, 255, 255);
 
-    public static UiDrawList ExpandMapPreview(UiDrawList list, ShellMapPreviewContext context, IUiTextMeasure measure)
-        => Rebuild(list, command => command.Callback == "W3DDrawMapPreview" ? MapPreview(command, context, measure) : null);
+    public static UiDrawList ExpandMapPreview(UiDrawList list, ShellMapPreviewContext context, IUiTextMeasure measure, CnCNew.Ui.Skins.UiSkin? skin = null, UiViewport? viewport = null)
+        => Rebuild(list, command => command.Callback == "W3DDrawMapPreview" ? MapPreview(command, context, measure, skin ?? CnCNew.Ui.Skins.UiSkin.Original, viewport) : null);
 
     public static UiDrawList ExpandCredits(UiDrawList list, ShellCreditsContext context, IUiTextMeasure measure)
         => Rebuild(list, command => command.Callback == "W3DCreditsMenuDraw" ? Credits(command, context, measure) : null);
 
-    private static ImmutableArray<UiDrawCommand> MapPreview(UiCustomDraw command, ShellMapPreviewContext context, IUiTextMeasure measure)
+    private static ImmutableArray<UiDrawCommand> MapPreview(UiCustomDraw command, ShellMapPreviewContext context, IUiTextMeasure measure, CnCNew.Ui.Skins.UiSkin skin, UiViewport? viewport)
     {
         var rect = command.Rect;
         var builder = ImmutableArray.CreateBuilder<UiDrawCommand>();
-        builder.Add(new UiFillRect(rect, PreviewBackground));
-        builder.Add(new UiBorderRect(rect, PreviewBorder));
-        var font = new UiFont("Arial", Math.Max(8, rect.Height / 12), false);
+        // The modern skin draws the preview in its palette and type, at least at the size of its body text (docs/UI-MODERN.md).
+        var modern = skin.IsModern;
+        builder.Add(new UiFillRect(rect, modern ? skin.Style.Palette.Canvas : PreviewBackground));
+        builder.Add(new UiBorderRect(rect, modern ? skin.Style.Palette.Border : PreviewBorder));
+        var font = modern
+            ? skin.Style.Font(CnCNew.Ui.Skins.UiTypeStep.Body, viewport ?? new UiViewport(800, 600)) is var body && body.Size >= rect.Height / 12 ? body : body with { Size = rect.Height / 12 }
+            : new UiFont("Arial", Math.Max(8, rect.Height / 12), false);
         // Without a map the original's preview window shows nothing (W3DDrawMapPreview has no image to draw).
         if (context.MapDisplayName is not { Length: > 0 } text) return builder.ToImmutable();
         var width = measure.MeasureWidth(text, font);
         var x = rect.X + Math.Max(0, (rect.Width - width) / 2);
         var y = rect.Y + rect.Height / 2 - measure.LineHeight(font) / 2;
-        builder.Add(new UiTextDraw(text, null, font, PreviewText, WndColor.Undefined, x, y, UiTextAlignment.Center, rect));
+        builder.Add(new UiTextDraw(text, null, font, modern ? skin.Style.Palette.Text : PreviewText, WndColor.Undefined, x, y, UiTextAlignment.Center, rect));
         return builder.ToImmutable();
     }
 

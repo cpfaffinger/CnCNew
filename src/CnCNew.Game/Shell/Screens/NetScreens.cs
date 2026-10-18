@@ -781,7 +781,7 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
     }
 
     public override UiDrawList BuildDrawList()
-        => ShellCustomDraw.ExpandMapPreview(Tree.BuildDrawList(), new ShellMapPreviewContext(Settings.MapPath.Length == 0 ? null : MapName(Settings.MapPath)), Tree.Services.TextMeasure);
+        => ShellCustomDraw.ExpandMapPreview(Tree.BuildDrawList(), new ShellMapPreviewContext(Settings.MapPath.Length == 0 ? null : MapName(Settings.MapPath)), Tree.Services.TextMeasure, Shell.Skin, Tree.Viewport);
 }
 
 /// <summary>What the shared loading screen shows of one participant.</summary>

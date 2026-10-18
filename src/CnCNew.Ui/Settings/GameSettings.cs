@@ -15,24 +15,32 @@ public enum UiScaleMode
     IntegerMultiple,
 }
 
-/// <summary>How the 3D view uses aspect ratios wider than 4:3.</summary>
+/// <summary>
+/// How the 3D view uses a window wider (or narrower) than 4:3. Schema 1 named three ways that the client never applied (its camera always kept the horizontal field
+/// of view); schema 2 names the two the camera draws (docs/UI-MODERN.md section 7).
+/// </summary>
 public enum AspectHandling
 {
-    /// <summary>Keep the vertical field of view and widen the horizontal one.</summary>
-    ExpandHorizontal,
-    /// <summary>Render a 4:3 view with side bars.</summary>
-    Pillarbox,
-    /// <summary>Stretch a 4:3 projection over the full width like the original.</summary>
-    Stretch,
+    /// <summary>The horizontal field of view is the original's at every aspect; a wide window shows less of the ground from top to bottom (what the client always drew).</summary>
+    KeepHorizontal,
+    /// <summary>The vertical field of view is the original's at 4:3; a wide window shows more of the ground to the left and right.</summary>
+    KeepVertical,
 }
+
+/// <summary>
+/// The interface skin (docs/UI-MODERN.md): the original's pictures, or the modern skin derived from the original's layouts at run time. A presentation
+/// choice only; the original is the default until the owner decides (D-21).
+/// </summary>
+public enum UiSkinName { Original, Modern }
 
 /// <summary>Skirmish AI difficulty of the original (<c>GameDifficulty</c>: easy, normal, hard).</summary>
 public enum AiDifficulty { Easy, Medium, Hard }
 
-public sealed record DisplaySettings(DisplayMode Mode, int Width, int Height, bool VSync, UiScaleMode UiScale, AspectHandling Aspect);
+public sealed record DisplaySettings(DisplayMode Mode, int Width, int Height, bool VSync, UiScaleMode UiScale, AspectHandling Aspect, UiSkinName Skin = UiSkinName.Original);
 
 /// <summary>Linear volumes from 0 (silent) to 1 (full).</summary>
-public sealed record AudioSettings(float Master, float Music, float Effects, float Voice, float Ambient);
+/// <param name="Device">The name of the sound device to play on, as the system lists it; empty is the system's default device.</param>
+public sealed record AudioSettings(float Master, float Music, float Effects, float Voice, float Ambient, string Device = "");
 
 /// <summary>Scroll and rotate speeds are slider positions from 0 to 1 (the original options slider runs 0..100).</summary>
 /// <param name="AlternateMouse">The original's "alternate mouse setup" (<c>GlobalData::m_useAlternateMouse</c>): the left button only selects, the right
@@ -80,14 +88,14 @@ public sealed record GameSettings(
     SkirmishMemory Skirmish)
 {
     /// <summary>Schema version written to the settings file.</summary>
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
     /// <summary>
     /// First-run values. Volumes follow the retail <c>AudioSettings.ini</c> defaults (sound 80 %, speech 70 %, music
     /// 55 %; ambient uses the 3D sound default of 80 %), the start money follows <c>GameData.ini DefaultStartingCash</c>.
     /// </summary>
     public static GameSettings Default { get; } = new(
-        new DisplaySettings(DisplayMode.Windowed, 1280, 720, VSync: true, UiScaleMode.Uniform, AspectHandling.ExpandHorizontal),
+        new DisplaySettings(DisplayMode.Windowed, 1280, 720, VSync: true, UiScaleMode.Uniform, AspectHandling.KeepHorizontal),
         new AudioSettings(Master: 1f, Music: 0.55f, Effects: 0.8f, Voice: 0.7f, Ambient: 0.8f),
         new ControlSettings(ScrollSpeed: 0.5f, CameraRotateSpeed: 0.5f, EdgeScrolling: true, AlternateMouse: true),
         new AccessibilitySettings(HighContrastUi: false, UiTextScalePercent: 100, ColorBlindSafeTeamColors: false),

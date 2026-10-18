@@ -58,8 +58,28 @@ internal sealed class AudioOutput : IDisposable
     /// <summary>Detected starvations of the stream (every queued buffer had already finished when the pump looked); 0 before <see cref="Start"/> or while unavailable.</summary>
     public long Underruns => Interlocked.Read(ref _underruns);
 
+    /// <summary>
+    /// The names of the system's sound output devices in the order waveOut numbers them (<c>waveOutGetNumDevs</c>, <c>waveOutGetDevCapsW</c>); empty when there are none
+    /// or the system is not Windows. The options list them (docs/UI-MODERN.md section 7).
+    /// </summary>
+    public static IReadOnlyList<string> DeviceNames()
+    {
+        if (!OperatingSystem.IsWindows()) return [];
+        var names = new List<string>();
+        var count = WaveOutGetNumDevs();
+        for (var index = 0; index < count; index++)
+            if (WaveOutGetDevCaps((IntPtr)index, out var caps, Marshal.SizeOf<WaveOutCaps>()) == 0 && caps.Name is { Length: > 0 } name) names.Add(name);
+        return names;
+    }
+
+    /// <summary>The device the stream plays on: the named one, or the system's default (empty) when none was named or the name is not a device any more.</summary>
+    public string DeviceName { get; private set; } = string.Empty;
+
     /// <summary>Opens the default audio device and starts streaming; safe to call once, a no-op if already started or already failed.</summary>
-    public void Start()
+    public void Start() => Start(string.Empty);
+
+    /// <summary>Opens the device of this name (empty: the system's default; a name that is not a device any more: the default, said once) and starts streaming.</summary>
+    public void Start(string deviceName)
     {
         if (_disposed || _running || _device != IntPtr.Zero) return;
         try
@@ -75,7 +95,14 @@ internal sealed class AudioOutput : IDisposable
                 AverageBytesPerSecond = (uint)_mixer.SampleRate * 4,
                 ExtraSize = 0,
             };
-            var result = WaveOutOpen(out _device, WaveMapper, ref format, IntPtr.Zero, IntPtr.Zero, CallbackNull);
+            var deviceId = WaveMapper;
+            if (deviceName.Length > 0)
+            {
+                var index = DeviceNames().ToList().IndexOf(deviceName);
+                if (index >= 0) (deviceId, DeviceName) = (index, deviceName);
+                else Console.WriteLine($"warning: the sound device '{deviceName}' of the settings is not there; the system's default device plays.");
+            }
+            var result = WaveOutOpen(out _device, deviceId, ref format, IntPtr.Zero, IntPtr.Zero, CallbackNull);
             if (result != 0) throw new InvalidOperationException($"waveOutOpen failed with MMSYSERR {result}.");
             var headerSize = Marshal.SizeOf<WaveHeader>();
             for (var index = 0; index < BufferCount; index++)
@@ -202,6 +229,26 @@ internal sealed class AudioOutput : IDisposable
         public IntPtr Next;
         public IntPtr Reserved;
     }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WaveOutCaps
+    {
+        public ushort ManufacturerId;
+        public ushort ProductId;
+        public uint DriverVersion;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string Name;
+        public uint Formats;
+        public ushort Channels;
+        public ushort Reserved;
+        public uint Support;
+    }
+
+    [DllImport("winmm.dll", EntryPoint = "waveOutGetNumDevs")]
+    private static extern int WaveOutGetNumDevs();
+
+    [DllImport("winmm.dll", EntryPoint = "waveOutGetDevCapsW", CharSet = CharSet.Unicode)]
+    private static extern int WaveOutGetDevCaps(IntPtr deviceId, out WaveOutCaps caps, int size);
 
     [DllImport("winmm.dll", EntryPoint = "waveOutOpen")]
     private static extern int WaveOutOpen(out IntPtr device, int deviceId, ref WaveFormat format, IntPtr callback, IntPtr instance, uint flags);

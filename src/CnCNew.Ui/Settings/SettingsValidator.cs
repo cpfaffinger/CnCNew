@@ -33,6 +33,7 @@ public static class SettingsValidator
             Height = Clamp(issues, "display.height", display.Height, Resolutions.Minimum.Height, Resolutions.Maximum.Height),
             UiScale = Enum(issues, "display.uiScale", display.UiScale, defaults.Display.UiScale),
             Aspect = Enum(issues, "display.aspect", display.Aspect, defaults.Display.Aspect),
+            Skin = Enum(issues, "display.skin", display.Skin, defaults.Display.Skin),
         };
 
         var audio = settings.Audio ?? Replace(issues, "audio", defaults.Audio);
@@ -41,7 +42,8 @@ public static class SettingsValidator
             Unit(issues, "audio.music", audio.Music, defaults.Audio.Music),
             Unit(issues, "audio.effects", audio.Effects, defaults.Audio.Effects),
             Unit(issues, "audio.voice", audio.Voice, defaults.Audio.Voice),
-            Unit(issues, "audio.ambient", audio.Ambient, defaults.Audio.Ambient));
+            Unit(issues, "audio.ambient", audio.Ambient, defaults.Audio.Ambient),
+            Device(issues, audio.Device));
 
         var controls = settings.Controls ?? Replace(issues, "controls", defaults.Controls);
         controls = controls with
@@ -101,6 +103,18 @@ public static class SettingsValidator
     public static bool IsVirtualPath(string value)
         => value.Length > 0 && !value.Contains('\\') && !value.StartsWith('/') && !value.Contains(':')
             && value.Split('/').All(segment => segment.Length > 0 && segment is not ("." or ".."));
+
+    /// <summary>The longest sound device name kept (the system's own names are at most 31 characters through waveOut, 255 elsewhere).</summary>
+    public const int MaximumDeviceNameLength = 255;
+
+    /// <summary>A device name is kept as written when it has no control characters and fits; otherwise the system's default device (empty) is used.</summary>
+    private static string Device(List<SettingsIssue> issues, string? value)
+    {
+        value ??= "";
+        if (value.Length <= MaximumDeviceNameLength && !value.Any(char.IsControl)) return value;
+        issues.Add(new SettingsIssue("audio.device", "invalid-value", "The sound device name is longer than 255 characters or has control characters; the system's default device is used."));
+        return "";
+    }
 
     private static T Replace<T>(List<SettingsIssue> issues, string path, T fallback)
     {

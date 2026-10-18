@@ -16,6 +16,8 @@ var outputDirectory = GetArgument(args, "--out-dir") ?? throw new ArgumentExcept
 Directory.CreateDirectory(outputDirectory);
 
 var fontAudit = args.Contains("--font-audit", StringComparer.OrdinalIgnoreCase);
+// --skins: only the scenes of both interface skins and their readability check (docs/UI-MODERN.md section 9, R3); exit code 1 when the modern skin misses a threshold.
+var skins = args.Contains("--skins", StringComparer.OrdinalIgnoreCase);
 var backend = (GetArgument(args, "--font-backend") ?? "gdi").ToLowerInvariant() switch
 {
     "gdi" => UiFontBackend.Gdi,
@@ -27,7 +29,7 @@ var backend = (GetArgument(args, "--font-backend") ?? "gdi").ToLowerInvariant() 
 var rate = GetArgument(args, "--tick-rate") is { } rateText
     ? SimulationRate.FromTicksPerSecond(int.Parse(rateText, CultureInfo.InvariantCulture))
     : GameData.DefaultSessionRate;
-using var game = new CaptureGame(contentDirectory, outputDirectory, fontAudit, backend, rate);
+using var game = new CaptureGame(contentDirectory, outputDirectory, fontAudit, backend, rate) { SkinsOnly = skins };
 game.Run();
 return game.Failures == 0 ? 0 : 1;
 
@@ -55,6 +57,8 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
     private bool _done;
 
     public int Failures { get; private set; }
+
+    public bool SkinsOnly { get; init; }
 
     protected override void Initialize()
     {
@@ -88,6 +92,13 @@ internal sealed class CaptureGame(string contentDirectory, string outputDirector
         try
         {
             if (fontAudit) FontAudit.Run(_data!, _text!.Text, _templates, outputDirectory);
+            else if (SkinsOnly)
+            {
+                var manifest = new List<string>();
+                Failures += SkinScenes.Capture(_data!, _renderer!.TextMeasure, outputDirectory, (list, width, height, name) => Capture(_renderer, list, width, height, name, manifest));
+                File.WriteAllLines(Path.Combine(outputDirectory, "manifest.txt"), manifest);
+                Console.WriteLine($"Font substitutions: {(_renderer.FontSubstitutions.Count == 0 ? "none" : string.Join(", ", _renderer.FontSubstitutions.Select(pair => $"{pair.Key} -> {pair.Value}")))}");
+            }
             else RunCaptures();
         }
         catch (Exception exception)

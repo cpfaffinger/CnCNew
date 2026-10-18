@@ -22,17 +22,10 @@ namespace CnCNew.Game.Spectator;
 /// </summary>
 public sealed class SpectatorHud
 {
-    private static readonly WndColor Plate = new(8, 12, 18, 205);
-    private static readonly WndColor PlateStrong = new(8, 12, 18, 235);
-    private static readonly WndColor Edge = new(96, 108, 124, 255);
-    private static readonly WndColor Text = new(236, 238, 242, 255);
-    private static readonly WndColor Dim = new(160, 168, 180, 255);
-    private static readonly WndColor Accent = new(255, 208, 84, 255);
-    private static readonly WndColor Shadow = new(0, 0, 0, 255);
-    private static readonly WndColor BarBack = new(40, 46, 56, 255);
-    private static readonly WndColor BarFill = new(96, 200, 110, 255);
-    private static readonly WndColor ButtonBack = new(30, 36, 46, 235);
-    private static readonly WndColor ButtonOn = new(70, 92, 130, 245);
+    // The colours of the original skin are the ones this HUD always had; the modern skin takes its palette (docs/UI-MODERN.md section 5).
+    private readonly WndColor Plate, PlateStrong, Edge, Text, Dim, Accent, Shadow, BarBack, BarFill, ButtonBack, ButtonOn;
+    private readonly CnCNew.Ui.Skins.UiSkin _skin;
+    private WndColor Warning => _skin.IsModern ? _skin.Style.Palette.Bad : new WndColor(255, 96, 80, 255);
 
     private const string FontName = "Arial";
     private const int ListRows = 8;
@@ -60,8 +53,21 @@ public sealed class SpectatorHud
     private readonly List<(UiRect Rect, TickerLine Line)> _tickerLines = [];
     private UiRect _minimap;
 
-    public SpectatorHud(LiveMatch match, MappedImageTable images, IUiTextMeasure measure)
+    public SpectatorHud(LiveMatch match, MappedImageTable images, IUiTextMeasure measure, CnCNew.Ui.Skins.UiSkin? skin = null)
     {
+        _skin = skin ?? CnCNew.Ui.Skins.UiSkin.Original;
+        if (_skin.IsModern)
+        {
+            var p = _skin.Style.Palette;
+            (Plate, PlateStrong, Edge, Text, Dim, Accent, Shadow) = (p.Panel with { A = 230 }, p.Panel with { A = 245 }, p.Border, p.Text, p.Muted, p.Accent, p.Shadow);
+            (BarBack, BarFill, ButtonBack, ButtonOn) = (p.Control, p.Good, p.Control, p.Selected);
+        }
+        else
+        {
+            (Plate, PlateStrong, Edge, Text, Dim, Accent, Shadow) = (new(8, 12, 18, 205), new(8, 12, 18, 235), new(96, 108, 124, 255), new(236, 238, 242, 255), new(160, 168, 180, 255),
+                new(255, 208, 84, 255), new(0, 0, 0, 255));
+            (BarBack, BarFill, ButtonBack, ButtonOn) = (new(40, 46, 56, 255), new(96, 200, 110, 255), new(30, 36, 46, 235), new(70, 92, 130, 245));
+        }
         _match = match;
         _images = images;
         _measure = measure;
@@ -136,10 +142,12 @@ public sealed class SpectatorHud
         if (width < 1 || height < 1) throw new ArgumentOutOfRangeException(nameof(width), "The viewport needs at least 1x1 pixels.");
         var scale = MathF.Max(0.75f, height / 720f);
         int S(float value) => (int)MathF.Round(value * scale);
-        var small = new UiFont(FontName, Math.Max(8, S(9)), false);
-        var normal = new UiFont(FontName, Math.Max(9, S(10)), false);
-        var bold = new UiFont(FontName, Math.Max(9, S(11)), true);
-        var large = new UiFont(FontName, Math.Max(12, S(18)), true);
+        var viewport = new UiViewport(width, height);
+        var style = _skin.Style;
+        var small = _skin.IsModern ? style.Font(CnCNew.Ui.Skins.UiTypeStep.Caption, viewport) : new UiFont(FontName, Math.Max(8, S(9)), false);
+        var normal = _skin.IsModern ? style.Font(CnCNew.Ui.Skins.UiTypeStep.Body, viewport) : new UiFont(FontName, Math.Max(9, S(10)), false);
+        var bold = _skin.IsModern ? style.Font(CnCNew.Ui.Skins.UiTypeStep.Control, viewport) with { Bold = true } : new UiFont(FontName, Math.Max(9, S(11)), true);
+        var large = _skin.IsModern ? style.Font(CnCNew.Ui.Skins.UiTypeStep.Title, viewport) : new UiFont(FontName, Math.Max(12, S(18)), true);
         var screen = new UiRect(0, 0, width, height);
         var commands = ImmutableArray.CreateBuilder<UiDrawCommand>();
         var panels = controller.Panels;
@@ -244,7 +252,7 @@ public sealed class SpectatorHud
             var left = barLeft + ReplayButtonTable.Length * (buttonWidth + gap) + S(6);
             Label(line, normal, Accent, left, row + S(4));
             Label(replay.HashMismatches == 0 ? $"{replay.HashesChecked} recorded hashes matched" : $"{replay.HashMismatches} of {replay.HashesChecked} recorded hashes differ (first at tick {replay.FirstMismatchTick})",
-                small, replay.HashMismatches == 0 ? Dim : new WndColor(255, 96, 80, 255), left, row + S(20));
+                small, replay.HashMismatches == 0 ? Dim : Warning, left, row + S(20));
         }
         var hints = controller.Replay is null
             ? $"seed {controller.Options.Seed}   [J]/[K] jump to AI 1/2   [G] go to the latest event   [Tab] next tab   [H] panels   wheel: zoom   arrows, screen edge, right drag: scroll   [Esc] quit"
@@ -276,7 +284,7 @@ public sealed class SpectatorHud
             TopValue("Income/min", "+" + Number(player.IncomePerMinute), x + column);
             TopValue("Army value", Number(player.ArmyValue), x + 2 * column);
             TopValue("Units", $"{player.Units} ({player.ArmyUnits} army)", x + 3 * column);
-            TopValue("Power", $"{player.PowerProduction}/{player.PowerConsumption}", x + 4 * column, player.PowerProduction < player.PowerConsumption ? new WndColor(255, 96, 80, 255) : Text);
+            TopValue("Power", $"{player.PowerProduction}/{player.PowerConsumption}", x + 4 * column, player.PowerProduction < player.PowerConsumption ? Warning : Text);
         }
         // More than two players: the others as plain rows under the bar.
         for (var index = 2; index < players.Length; index++)

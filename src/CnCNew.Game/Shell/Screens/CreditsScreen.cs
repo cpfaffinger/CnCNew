@@ -36,9 +36,13 @@ public sealed class CreditsScreen : ShellScreen
     private CreditsFonts Fonts()
     {
         _languageFonts ??= LanguageFonts.FromGraph(Shell.Data.Graph);
-        return new CreditsFonts(_languageFonts.Resolve("CreditsTitleFont", Shell.Viewport, Shell.ScaleOptions),
-            _languageFonts.Resolve("CreditsMinorTitleFont", Shell.Viewport, Shell.ScaleOptions),
-            _languageFonts.Resolve("CreditsNormalFont", Shell.Viewport, Shell.ScaleOptions));
+        // The modern skin draws the credits in its own family at the sizes the original gives them (docs/UI-MODERN.md section 4).
+        UiFont Font(string slot)
+        {
+            var font = _languageFonts.Resolve(slot, Shell.Viewport, Shell.ScaleOptions);
+            return Shell.Skin.IsModern ? font with { Name = Shell.Skin.Style.FontFamily } : font;
+        }
+        return new CreditsFonts(Font("CreditsTitleFont"), Font("CreditsMinorTitleFont"), Font("CreditsNormalFont"));
     }
 
     private LanguageFonts? _languageFonts;

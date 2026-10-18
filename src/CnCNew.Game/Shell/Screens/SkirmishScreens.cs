@@ -204,7 +204,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         if (Shell.SkirmishMatchSeconds > 0) options = options with { MaxTicks = Shell.Data.Rate.Time.WholeSecondsToTicks(Shell.SkirmishMatchSeconds) };
         var setup = new MatchSetup(_selectedMapPath, ResolveFaction(0), opponents.ToImmutable(), options) { Ai = ai.ToImmutable(), Details = details.ToImmutable() };
         Shell.PlaySound(ShellUiSounds.ButtonClick);
-        Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });
+        _ = Shell.ApplySettings(Shell.Settings with { Skirmish = Shell.Settings.Skirmish with { LastMap = _selectedMapPath, LastStartMoney = _startMoney } });
         Shell.BeginMatchLoading(setup);
     }
 
@@ -255,7 +255,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     public override UiDrawList BuildDrawList()
         => ShellCustomDraw.ExpandMapPreview(Tree.BuildDrawList(),
             new ShellMapPreviewContext(_selectedMapPath is null ? null : Shell.MapNames.DisplayName(_selectedMapPath, Shell.MapCatalog, Shell.TextSource)),
-            Tree.Services.TextMeasure);
+            Tree.Services.TextMeasure, Shell.Skin, Tree.Viewport);
 }
 
 /// <summary>
@@ -334,5 +334,5 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
     public override UiDrawList BuildDrawList()
         => ShellCustomDraw.ExpandMapPreview(Tree.BuildDrawList(),
             new ShellMapPreviewContext(_selectedIndex >= 0 && _selectedIndex < _mapPaths.Length ? Shell.MapNames.DisplayName(_mapPaths[_selectedIndex], Shell.MapCatalog, Shell.TextSource) : null),
-            Tree.Services.TextMeasure);
+            Tree.Services.TextMeasure, Shell.Skin, Tree.Viewport);
 }

@@ -79,7 +79,6 @@ public sealed class GameShell
         _settingsStore = new SettingsStore(environment.SettingsDirectory);
         var loaded = _settingsStore.Load();
         Settings = loaded.Settings;
-        ScaleOptions = UiScaleOptions.Original with { Mode = LayoutScaleMode.Uniform };
     }
 
     public GameData Data { get; private set; } = null!;
@@ -88,7 +87,42 @@ public sealed class GameShell
     public ShellPhase Phase { get; private set; }
     public GameSettings Settings { get; private set; }
     public UiViewport Viewport { get; private set; }
-    public UiScaleOptions ScaleOptions { get; }
+
+    /// <summary>
+    /// The scale options of the menus: uniform with borders in the original skin (as before skins existed), anchored in the modern one; the accessibility text
+    /// scale of the settings in both (100 % changes nothing).
+    /// </summary>
+    public UiScaleOptions ScaleOptions => Skin.ShellScale(UiScaleOptions.Original with { Mode = LayoutScaleMode.Uniform, TextScale = Settings.Accessibility.UiTextScalePercent / 100m });
+
+    /// <summary>
+    /// The skin the menus are drawn in (docs/UI-MODERN.md): the host's choice for this run (the client's <c>--skin</c>) if it made one, otherwise the settings'
+    /// <c>display.skin</c>. A skin chosen in the options replaces the host's choice and rebuilds the screens.
+    /// </summary>
+    public CnCNew.Ui.Skins.UiSkin Skin => SkinOverride ?? CnCNew.Ui.Skins.UiSkin.For(Settings.Display.Skin);
+
+    /// <summary>The host's skin for this run; null: the settings decide. Set it before the first screen is drawn (or call <see cref="RebuildScreens"/>).</summary>
+    public CnCNew.Ui.Skins.UiSkin? SkinOverride { get; set; }
+
+    private readonly Dictionary<(CnCNew.Ui.Settings.UiSkinName Skin, string Name), CnCNew.Ui.Wnd.WndLayout> _derivedLayouts = [];
+
+    /// <summary>A shipped layout as the current skin draws it (derived once per skin at run time; the original skin's is the shipped layout itself).</summary>
+    public CnCNew.Ui.Wnd.WndLayout Layout(string name)
+    {
+        var key = (Skin.Name, name);
+        if (!_derivedLayouts.TryGetValue(key, out var layout)) _derivedLayouts[key] = layout = Skin.Derive(Layouts.Get(name), Layouts.HeaderTemplates);
+        return layout;
+    }
+
+    /// <summary>
+    /// Builds the menus again in the current skin: the main menu, and over it the options when <paramref name="withOptions"/> (where a skin chosen in the options
+    /// leaves the person). Only while the menus are shown.
+    /// </summary>
+    public void RebuildScreens(bool withOptions = false)
+    {
+        if (Phase != ShellPhase.Menus) return;
+        Replace(new MainMenuScreen(this));
+        if (withOptions) Push(new OptionsScreen(this));
+    }
     public UiTreeServices TreeServices { get; private set; } = null!;
     public ShellLayouts Layouts { get; private set; } = null!;
     public ShellTextSource? TextSource { get; private set; }
@@ -155,9 +189,10 @@ public sealed class GameShell
     /// label off centre under a real rasterizer.
     /// </summary>
     public static GameShell Create(GameData data, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false,
-        IShellNetwork? network = null)
+        IShellNetwork? network = null, CnCNew.Ui.Skins.UiSkin? skin = null)
     {
         var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure, animateTransitions);
+        shell.SkinOverride = skin;
         if (viewport is null) shell.Viewport = FitViewport(environment, shell.Settings);
         shell.Network = network;
         shell.FinishLoading(data);
@@ -166,9 +201,10 @@ public sealed class GameShell
 
     /// <summary>Starts in <see cref="ShellPhase.Boot"/>: <see cref="GameData.Load"/> runs on a worker thread while the boot load screen shows its stage.</summary>
     public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false, CnCNew.Simulation.Time.SimulationRate? rate = null,
-        Func<GameData, IShellNetwork>? network = null)
+        Func<GameData, IShellNetwork>? network = null, CnCNew.Ui.Skins.UiSkin? skin = null)
     {
         var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure, animateTransitions);
+        shell.SkinOverride = skin;
         if (viewport is null) shell.Viewport = FitViewport(environment, shell.Settings);
         var bootContent = ContentFileSystem.Open(contentDirectory);
         shell._bootContent = bootContent;
@@ -697,6 +733,7 @@ public sealed class GameShell
     internal void PlaySound(string eventName) => _outputs.Add(new PlayUiSoundOutput(eventName));
 
     internal void OpenOptions() => Push(new OptionsScreen(this));
+    internal void OpenMoreOptions() => Push(new MoreOptionsScreen(this));
     internal void OpenSkirmishSetup() => Push(new SkirmishSetupScreen(this));
     internal void OpenSkirmishMapSelect(SkirmishSetupScreen owner) => Push(new SkirmishMapSelectScreen(this, owner));
     internal void OpenCredits() => Push(new CreditsScreen(this));
@@ -726,13 +763,22 @@ public sealed class GameShell
         Replace(new MainMenuScreen(this));
     }
 
-    internal void ApplySettings(GameSettings settings)
+    /// <summary>Saves the settings and tells the host; returns whether the look of the menus changed (the skin or the text scale), which asks for <see cref="RebuildScreens"/>.</summary>
+    internal bool ApplySettings(GameSettings settings)
     {
+        var skinBefore = Skin;
+        var savedSkinBefore = Settings.Display.Skin;
+        var textScaleBefore = Settings.Accessibility.UiTextScalePercent;
         Settings = settings;
+        // A skin chosen in the options is the person's choice; it replaces the one the host started with. Settings saved for another reason (the skirmish setup's
+        // memory) leave the host's choice alone.
+        if (settings.Display.Skin != savedSkinBefore) SkinOverride = null;
+        var lookChanged = Skin != skinBefore || settings.Accessibility.UiTextScalePercent != textScaleBefore;
         var issues = _settingsStore.Save(settings);
         _outputs.Add(new SettingsChangedOutput(settings));
         _outputs.Add(new ApplyResolutionOutput(settings.Display.Mode, settings.Display.Width, settings.Display.Height, settings.Display.VSync));
         _ = issues; // validation issues are informational only; Normalize() already applied them to what was saved.
+        return lookChanged;
     }
 
     internal void BeginMatchLoading(MatchSetup setup)

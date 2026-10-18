@@ -19,9 +19,9 @@ internal sealed class ClientAudio : IDisposable
 {
     public const string CaptureFileName = "audio.wav";
 
-    private readonly AudioOutput? _device;
-    private readonly OfflineAudioRenderer? _offline;
-    private readonly string _output;
+    private AudioOutput? _device;
+    private OfflineAudioRenderer? _offline;
+    private string _output;
     private bool _disposed;
 
     public ClientAudio(GameData data, AudioSettings settings, ClientAudioOptions options)
@@ -42,8 +42,8 @@ internal sealed class ClientAudio : IDisposable
         else
         {
             _device = new AudioOutput(Game.Mixer);
-            _device.Start();
-            if (_device.IsAvailable) _output = "device";
+            _device.Start(settings.Device);
+            if (_device.IsAvailable) _output = DeviceLine(_device);
             else
             {
                 Console.WriteLine($"warning: no audio device available, the game runs silently ({_device.FailureReason ?? "unknown reason"}).");
@@ -56,6 +56,30 @@ internal sealed class ClientAudio : IDisposable
     }
 
     public GameAudio Game { get; }
+
+    private static string DeviceLine(AudioOutput device) => device.DeviceName.Length == 0 ? "device" : $"device '{device.DeviceName}'";
+
+    /// <summary>
+    /// The options chose another sound device: the stream is closed and opened again on it (empty: the system's default). A run without a device (capture, smoke test, a device
+    /// that failed) keeps what it has.
+    /// </summary>
+    public void SwitchDevice(string deviceName)
+    {
+        if (_disposed || _device is null || _device.DeviceName == deviceName) return;
+        _device.Dispose();
+        _device = new AudioOutput(Game.Mixer);
+        _device.Start(deviceName);
+        if (_device.IsAvailable)
+        {
+            _output = DeviceLine(_device);
+            return;
+        }
+        Console.WriteLine($"warning: the sound device '{deviceName}' did not open, the game runs silently ({_device.FailureReason ?? "unknown reason"}).");
+        _output = $"none (device failed: {_device.FailureReason ?? "unknown reason"}; rendered and discarded)";
+        _device.Dispose();
+        _device = null;
+        _offline = new OfflineAudioRenderer(Game.Mixer);
+    }
 
     /// <summary>Once per rendered frame, after the game advanced; without a device this also renders the frame's audio.</summary>
     public void Update(double seconds)

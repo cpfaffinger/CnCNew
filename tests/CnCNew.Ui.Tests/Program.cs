@@ -12,6 +12,7 @@ Func<string[], int>[] suites =
     TransitionTests.Run,
     UiRenderingTests.Run,
     SentenceLayoutTests.Run,
+    SkinTests.Run,
 ];
 
 var failures = 0;

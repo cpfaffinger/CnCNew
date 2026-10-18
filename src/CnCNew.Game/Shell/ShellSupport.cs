@@ -22,11 +22,15 @@ public interface IShellEnvironment
 
     /// <summary>Where <see cref="CnCNew.Game.Replays.ReplayStore"/> keeps the <c>.cncreplay</c> files the client records: a <c>Replays</c> subdirectory beside the savegames.</summary>
     string ReplayDirectory => Path.Combine(SettingsDirectory, "Replays");
+
+    /// <summary>The names of the machine's sound output devices the options offer beside the system's default (docs/UI-MODERN.md section 7); none by default.</summary>
+    IReadOnlyList<string> AudioDevices => [];
 }
 
 /// <summary>A fixed-size desktop backed by a caller-chosen directory (used by tests and by any host that already knows its screen size).</summary>
-public sealed class FixedShellEnvironment(string settingsDirectory, int desktopWidth = 1920, int desktopHeight = 1080, string? saveDirectory = null) : IShellEnvironment
+public sealed class FixedShellEnvironment(string settingsDirectory, int desktopWidth = 1920, int desktopHeight = 1080, string? saveDirectory = null, IReadOnlyList<string>? audioDevices = null) : IShellEnvironment
 {
+    public IReadOnlyList<string> AudioDevices { get; } = audioDevices ?? [];
     public string SettingsDirectory { get; } = settingsDirectory;
     public int DesktopWidth { get; } = desktopWidth;
     public int DesktopHeight { get; } = desktopHeight;

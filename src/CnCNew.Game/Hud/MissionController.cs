@@ -130,7 +130,7 @@ public sealed class MissionController : IMissionHudControl
         var viewport = new UiViewport(Math.Max(1, (int)Mission.Camera.ViewportSize.X), Math.Max(1, (int)Mission.Camera.ViewportSize.Y));
         if (_popup is null)
         {
-            _popup = new MissionPopupWindow(Hud.Assets, _textMeasure, Hud.ScaleOptions, viewport);
+            _popup = new MissionPopupWindow(Hud.Assets, _textMeasure, Hud.ScaleOptions, viewport, Hud.Skin);
             _popup.Closed += () => { ClosePopupState(); Director.DismissPopup(); };
         }
         _popup.Show(wanted, viewport);

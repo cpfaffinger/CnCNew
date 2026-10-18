@@ -41,7 +41,7 @@ public sealed class ReplayMenuScreen : ShellScreen
     {
         Tree.Register("ReplayMenuSystem", OnSystem);
         Tree.Register("ReplayMenuInput", OnInput);
-        Tree.AddLayout(DetailsLayout);
+        Tree.AddLayout(shell.Skin.Derive(DetailsLayout, shell.Layouts.HeaderTemplates));
         Tree.Register("ReplayAnalysisSystem", OnSystem);
         Tree.AddLayout(AnalysisLayoutOf(W("ButtonCopyReplay").Definition));
         Tree.FindByName(AnalysisButton)!.SetText(ReplayText.AnalysisButton);

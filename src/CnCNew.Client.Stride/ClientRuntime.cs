@@ -37,7 +37,19 @@ internal sealed class ClientRuntime : IDisposable
     private GameSettings _settings;
     // --mouse classic|alternate: overrides the mouse setup of the settings for every game this run starts (null: the settings decide).
     private bool? _alternateMouse;
-    private GameSettings GameplaySettings => _alternateMouse is { } alternate ? _settings with { Controls = _settings.Controls with { AlternateMouse = alternate } } : _settings;
+    private GameSettings GameplaySettings
+    {
+        get
+        {
+            var settings = _alternateMouse is { } alternate ? _settings with { Controls = _settings.Controls with { AlternateMouse = alternate } } : _settings;
+            // The HUD of a game is drawn in the skin of the menus that started it; without menus in the skin of --skin (docs/UI-MODERN.md).
+            var skin = _shell?.Skin.Name ?? Skin ?? settings.Display.Skin;
+            return settings with { Display = settings.Display with { Skin = skin } };
+        }
+    }
+
+    /// <summary>The skin of this run (<c>--skin original|modern</c>); null: the settings decide. With the menus, a skin chosen in the options replaces it.</summary>
+    public static UiSkinName? Skin { get; set; }
     private RunningGame? _running;
     private long _clockMs;
     private double _nextDots;
@@ -86,7 +98,8 @@ internal sealed class ClientRuntime : IDisposable
     {
         // animateTransitions: the menu animates like the original (Data/INI/WindowTransitions.ini, docs/GAME-SHELL.md section 11); --no-transitions switches to hard cuts.
         var runtime = new ClientRuntime(game, data, GameSettings.Default,
-            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height), "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions, network), audio) { _alternateMouse = alternateMouse, _shellScript = shellScript };
+            ui => GameShell.Create(data, new FixedShellEnvironment(settingsDirectory, width, height, audioDevices: audio.DeviceFree || audio.CaptureDirectory is not null ? [] : AudioOutput.DeviceNames()),
+                "English", new CnCNew.Ui.Layout.UiViewport(width, height), ui.TextMeasure, animateTransitions, network, Skin is { } skin ? CnCNew.Ui.Skins.UiSkin.For(skin) : null), audio) { _alternateMouse = alternateMouse, _shellScript = shellScript };
         if (shellScript is not null)
         {
             shellScript.MatchProbe = runtime.ProbeMatch;
@@ -547,8 +560,16 @@ internal sealed class ClientRuntime : IDisposable
     /// <summary>The running game's world host, or <see langword="null"/> while the shell is showing (lets the caller title the window).</summary>
     public LiveGame? Game => _running?.Host.Match;
 
-    /// <summary>Why the display should change (a new resolution chosen in the options screen), or <see langword="null"/>.</summary>
-    public (int Width, int Height)? PendingResolution { get; private set; }
+    /// <summary>Why the display should change (a resolution or display mode chosen in the options), or <see langword="null"/>; <see cref="TakePendingResolution"/> clears it.</summary>
+    public (int Width, int Height, CnCNew.Ui.Settings.DisplayMode Mode)? PendingResolution { get; private set; }
+
+    /// <summary>The display change the options asked for, once: the host applies it and the request is gone (before, it was applied again every frame).</summary>
+    public (int Width, int Height, CnCNew.Ui.Settings.DisplayMode Mode)? TakePendingResolution()
+    {
+        var pending = PendingResolution;
+        PendingResolution = null;
+        return pending;
+    }
 
     /// <summary>The overlay text a headless run can read (smoke tests): how many UI commands the last frame drew and how many custom draws were left to the host.</summary>
     public UiRenderStats LastFrame => _ui.LastFrame;
@@ -751,12 +772,13 @@ internal sealed class ClientRuntime : IDisposable
             case SettingsChangedOutput changed:
                 _settings = changed.Settings;
                 _audio.Game.ApplySettings(changed.Settings.Audio);
+                _audio.SwitchDevice(changed.Settings.Audio.Device);
                 break;
             case PlayUiSoundOutput sound:
                 _audio.Game.PlayUi(sound.EventName);
                 break;
             case ApplyResolutionOutput resolution:
-                PendingResolution = (resolution.Width, resolution.Height);
+                PendingResolution = (resolution.Width, resolution.Height, resolution.Mode);
                 break;
         }
     }

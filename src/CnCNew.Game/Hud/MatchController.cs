@@ -17,6 +17,8 @@ using CnCNew.Ui.Wnd;
 using UiScaleMode = CnCNew.Ui.Layout.UiScaleMode;
 using SettingsScaleMode = CnCNew.Ui.Settings.UiScaleMode;
 using GameSettings = CnCNew.Ui.Settings.GameSettings;
+using AspectHandling = CnCNew.Ui.Settings.AspectHandling;
+using CnCNew.Ui.Skins;
 
 namespace CnCNew.Game.Hud;
 
@@ -80,16 +82,19 @@ public sealed class MatchController
         TextStyle = InGameUiStyle.FromGraph(match.Data.Graph);
         Messages = new HudMessageFeed(new UiMessageLog(TextStyle.Settings), _assets.Text, match.Data.Graph) { Clock = () => Match.Clock.OriginalFrames };
         var services = _assets.BuildTreeServices(textMeasure ?? new MonospaceTextMeasure());
-        _scaleOptions = new UiScaleOptions
+        Skin = UiSkin.For(settings.Display.Skin);
+        _scaleOptions = Skin.HudScale(new UiScaleOptions
         {
             Mode = MapScaleMode(settings.Display.UiScale),
             TextScale = settings.Accessibility.UiTextScalePercent / 100m,
-        };
+        });
+        match.Camera.KeepVerticalView = settings.Display.Aspect == AspectHandling.KeepVertical;
         var viewport = new UiViewport(Math.Max(1, (int)match.Camera.ViewportSize.X), Math.Max(1, (int)match.Camera.ViewportSize.Y));
         _tree = new UiWindowTree(viewport, _scaleOptions, services);
         _tree.TooltipOverride = CommandButtonTooltip;
 
-        var controlBarRoots = _tree.AddLayout(_assets.ControlBar);
+        // The modern skin keeps the bar's art and changes its type (docs/UI-MODERN.md section 3); the in-game menu is drawn like the shell's dialogs.
+        var controlBarRoots = _tree.AddLayout(Skin.Derive(_assets.ControlBar, _assets.HeaderTemplates, keepArt: true));
         _controlBarRoot = controlBarRoots.Single(window => window.Name == "ControlBar.wnd:ControlBarParent");
         _leftHud = _tree.FindByName("ControlBar.wnd:LeftHUD") ?? throw new InvalidOperationException("ControlBar.wnd has no LeftHUD window.");
         // The retail file leaves the observer panels visible; this HUD is for the human player only.
@@ -97,7 +102,7 @@ public sealed class MatchController
         _tree.FindByName("ControlBar.wnd:ObserverPlayerListWindow")?.SetHidden(true);
         _tree.Register("ControlBarSystem", OnControlBarSystem);
 
-        var quitMenuRoots = _tree.AddLayout(_assets.QuitMenu);
+        var quitMenuRoots = _tree.AddLayout(Skin.Derive(_assets.QuitMenu, _assets.HeaderTemplates));
         _quitMenuRoot = quitMenuRoots.Single(window => window.Name == "QuitMenu.wnd:QuitMenuParent");
         _quitMenuRoot.SetHidden(true);
         _tree.Register("QuitMenuSystem", OnQuitMenuSystem);
@@ -124,7 +129,7 @@ public sealed class MatchController
 
         // A match of a server: its indicators (docs/GAME-HUD.md section 21). What happens once goes to the message list as a line of its own.
         if (match is LiveMatch { Remote: not null } served)
-            Net = new NetHud(new LiveMatchNetSource(served), line => Messages.Log.Add(line, Messages.Clock())) { DiagnosticsDirectory = served.DiagnosticsDirectory };
+            Net = new NetHud(new LiveMatchNetSource(served), line => Messages.Log.Add(line, Messages.Clock())) { DiagnosticsDirectory = served.DiagnosticsDirectory, Skin = Skin };
 
         CommandBar = Input.CommandBar!.Build(match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(match.World, match.Human);
@@ -133,6 +138,12 @@ public sealed class MatchController
 
     public LiveGame Match { get; }
     public HudAssets Assets => _assets;
+
+    /// <summary>The skin the HUD is drawn in (the settings' <c>display.skin</c>, docs/UI-MODERN.md).</summary>
+    public UiSkin Skin { get; }
+
+    /// <summary>The window tree of the control bar and the in-game menu (read by the readability check of the skins).</summary>
+    public UiWindowTree Tree => _tree;
     public GameInputController Input { get; }
     public MatchStatsTracker Stats { get; }
 
@@ -648,7 +659,7 @@ public sealed class MatchController
         // The scheme art is drawn by two marker windows of the control bar (W3DCommandBarBackgroundDraw, W3DCommandBarForegroundDraw): the background under the windows that
         // follow the marker, the foreground over those before it. The world-space feedback (selection rings, health bars, orders, rally points, placement ghost, healing icons)
         // lies between the 3D scene and the control bar chrome.
-        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(ResolveControlBarCallbacks(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
+        var commands = HudOverlayRenderer.Build(Overlay, _clockMs).AddRange(BarBand(width, height)).AddRange(ResolveControlBarCallbacks(baseList.Commands)).AddRange(extra).AddRange(BuildSuperweaponCommands(width, height))
             .Add(new UiCustomDraw("Viewport3D", "Viewport", viewportRect));
         // InGameUI::postDraw: the message lines lie over the windows.
         if (OwnsMessageList && !Messages.Log.IsEmpty) commands = commands.AddRange(MissionTextOverlay.Messages(Messages.Log, TextStyle, _scaleOptions, _textMeasure, width, height));
@@ -657,6 +668,21 @@ public sealed class MatchController
         // Mouse::drawTooltip lies over everything, the window tree's own tooltips (TOOLTIPTEXT) and the command button descriptions alike.
         if (_tree.Tooltip is { } tooltip) commands = commands.AddRange(_tooltips.Build(tooltip, _tree.Viewport, _scaleOptions, _tree.Services.TextMeasure));
         return baseList with { Commands = commands };
+    }
+
+    /// <summary>
+    /// The modern skin keeps the command bar in proportion (docs/UI-MODERN.md section 3): where the window is wider than the bar, the band beside it is the skin's
+    /// canvas colour from the bar's top line down, so the world view ends at the same line across the whole width. Nothing in the original skin (the bar fills the width).
+    /// </summary>
+    private ImmutableArray<UiDrawCommand> BarBand(int width, int height)
+    {
+        if (!Skin.IsModern) return [];
+        var bar = _controlBarRoot.Rect;
+        var commands = ImmutableArray.CreateBuilder<UiDrawCommand>(2);
+        var color = Skin.Style.Palette.Canvas;
+        if (bar.X > 0) commands.Add(new UiFillRect(new UiRect(0, bar.Y, bar.X, height - bar.Y), color));
+        if (bar.Right < width) commands.Add(new UiFillRect(new UiRect(bar.Right, bar.Y, width - bar.Right, height - bar.Y), color));
+        return commands.ToImmutable();
     }
 
     /// <summary>

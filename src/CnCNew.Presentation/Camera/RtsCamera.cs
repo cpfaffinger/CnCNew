@@ -120,6 +120,30 @@ public sealed class RtsCamera : IViewProjection
     /// <summary>Current shake displacement of the pivot (reference shake plus <see cref="AddShakeOffset"/>).</summary>
     public Vector2 ShakeOffset => _shakeOffset + _extraShake;
 
+    /// <summary>
+    /// The options' "3D view at a wide window" (<c>display.aspect</c>, docs/UI-MODERN.md section 7): false (the default) keeps the original's horizontal field of view
+    /// at every aspect, true keeps the vertical one it has at 4:3, so a wide window shows more to the sides. A presentation choice; nothing of the game reads it.
+    /// </summary>
+    public bool KeepVerticalView
+    {
+        get => _keepVerticalView;
+        set
+        {
+            if (_keepVerticalView == value) return;
+            _keepVerticalView = value;
+            _dirty = true;
+        }
+    }
+
+    private bool _keepVerticalView;
+
+    /// <summary>The tangent of half the horizontal field of view at <paramref name="aspect"/>.</summary>
+    private float TanHalfHorizontal(float aspect)
+    {
+        var original = MathF.Tan(DegreesToRadians(_settings.HorizontalFovDegrees) / 2f);
+        return _keepVerticalView ? original / (4f / 3f) * aspect : original;
+    }
+
     public void SetViewportSize(Vector2 size)
     {
         if (!(size.X >= 1 && size.Y >= 1)) throw new ArgumentOutOfRangeException(nameof(size), "The viewport needs at least 1x1 pixels.");
@@ -195,7 +219,7 @@ public sealed class RtsCamera : IViewProjection
         if (delta == Vector2.Zero) return;
         Refresh();
         var aspect = _viewport.X / _viewport.Y;
-        var tanX = MathF.Tan(DegreesToRadians(_settings.HorizontalFovDegrees) / 2);
+        var tanX = TanHalfHorizontal(aspect);
         var tanY = tanX / aspect;
         var viewX = delta.X * _settings.ScrollResolution / _viewport.X * 2 * tanX;
         var viewY = -delta.Y * _settings.ScrollResolution * aspect / _viewport.Y * 2 * tanY;
@@ -391,7 +415,7 @@ public sealed class RtsCamera : IViewProjection
         eye = source + target;
         view = Matrix4x4.CreateLookAt(eye, target, Vector3.UnitZ);
         var aspect = _viewport.X / _viewport.Y;
-        var fovY = 2f * MathF.Atan(MathF.Tan(DegreesToRadians(_settings.HorizontalFovDegrees) / 2f) / aspect);
+        var fovY = 2f * MathF.Atan(TanHalfHorizontal(aspect) / aspect);
         far = _settings.MinFarPlane;
         var fieldMin = _terrain.FieldMin;
         var fieldMax = _terrain.FieldMax;

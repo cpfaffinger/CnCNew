@@ -15,6 +15,11 @@ namespace CnCNew.Game.Shell.Screens;
 /// custom WND section or reuse of an inert placeholder combo).
 /// Accept persists the working copy via <see cref="SettingsStore"/> and emits <see cref="SettingsChangedOutput"/>;
 /// Cancel discards it; Defaults resets the working copy (not the persisted file) to <see cref="GameSettings.Default"/>.
+/// <para>
+/// "More options" (<see cref="MoreOptionsButton"/>, docs/UI-MODERN.md section 7) opens <see cref="MoreOptionsScreen"/> for what this layout does not reach. It is a copy
+/// of the layout's Defaults button made when the screen opens, at the free place right of the title (476, 21 to 632, 53 of the layout's 800 x 600), with a callback of its
+/// own - the one window this project adds to the original's options.
+/// </para>
 /// </summary>
 public sealed class OptionsScreen : ShellScreen
 {
@@ -27,11 +32,17 @@ public sealed class OptionsScreen : ShellScreen
     private GameSettings _working;
     private ImmutableArray<(int Width, int Height)> _resolutionEntries;
 
+    /// <summary>The name of the "More options" button (<see cref="MoreOptionsLayoutOf"/>).</summary>
+    public const string MoreOptionsButton = "OptionsMore.wnd:ButtonMoreOptions";
+
     public OptionsScreen(GameShell shell) : base(shell, ShellLayoutNames.OptionsMenu)
     {
         _working = shell.Settings;
         Tree.Register("OptionsMenuSystem", OnSystem);
         Tree.Register("OptionsMenuInput", OnInput);
+        Tree.Register("OptionsMoreSystem", OnSystem);
+        Tree.AddLayout(MoreOptionsLayoutOf(W("ButtonDefaults").Definition));
+        Tree.FindByName(MoreOptionsButton)!.SetText("More options");
         W("LabelVersion").SetText("CnCNew 0.1.0");
         // The layout's TEXT of an entry field is the word "Entry"; OptionsMenuInit overwrites it with the stored values. There are none here
         // (network play is out of scope), so the fields start empty instead of showing the placeholder.
@@ -83,6 +94,7 @@ public sealed class OptionsScreen : ShellScreen
             case UiEventKind.ButtonSelected when e.Source == "OptionsMenu.wnd:ButtonAccept": Accept(); break;
             case UiEventKind.ButtonSelected when e.Source == "OptionsMenu.wnd:ButtonBack": Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.CloseTop(); break;
             case UiEventKind.ButtonSelected when e.Source == "OptionsMenu.wnd:ButtonDefaults": Defaults(); break;
+            case UiEventKind.ButtonSelected when e.Source == MoreOptionsButton: Shell.PlaySound(ShellUiSounds.ButtonClick); Shell.OpenMoreOptions(); break;
             case UiEventKind.ButtonSelected when e.Source == "OptionsMenu.wnd:CheckAlternateMouse":
                 _working = _working with { Controls = _working.Controls with { AlternateMouse = e.Value != 0 } };
                 break;
@@ -119,15 +131,55 @@ public sealed class OptionsScreen : ShellScreen
     private void Accept()
     {
         Shell.PlaySound(ShellUiSounds.ButtonClick);
-        Shell.ApplySettings(_working);
-        Shell.CloseTop();
+        if (Shell.ApplySettings(_working)) Shell.RebuildScreens();
+        else Shell.CloseTop();
+    }
+
+    /// <summary>
+    /// The screen came back from "More options": what that screen saved is taken into the working copy, so an Accept here does not write the older values back. What this
+    /// screen's own gadgets show is left as the person set it.
+    /// </summary>
+    public override void OnRevealed()
+    {
+        var saved = Shell.Settings;
+        _working = _working with
+        {
+            Display = _working.Display with { Mode = saved.Display.Mode, Aspect = saved.Display.Aspect, Skin = saved.Display.Skin },
+            Audio = _working.Audio with { Device = saved.Audio.Device },
+            Accessibility = saved.Accessibility,
+        };
+    }
+
+    /// <summary>
+    /// The "More options" button as a layout of its own: the shipped definition of the Defaults button (<paramref name="defaults"/>) with another name, the free place right of
+    /// the title in the layout's 800 x 600 (the same width and height as Defaults, its right edge on the panel's buttons) and a system callback of its own, because it stands
+    /// outside the options' parent window.
+    /// </summary>
+    public static CnCNew.Ui.Wnd.WndLayout MoreOptionsLayoutOf(CnCNew.Ui.Wnd.WndWindow defaults)
+    {
+        ArgumentNullException.ThrowIfNull(defaults);
+        var rect = defaults.Rect;
+        var button = defaults with
+        {
+            Name = MoreOptionsButton,
+            Rect = rect with { Left = 632 - rect.Width, Top = 21, Right = 632, Bottom = 21 + rect.Height },
+            Callbacks = defaults.Callbacks with { System = "OptionsMoreSystem" },
+        };
+        return new CnCNew.Ui.Wnd.WndLayout("OptionsMore.wnd", 2, new CnCNew.Ui.Wnd.WndLayoutCallbacks(null, null, null), CnCNew.Ui.Wnd.WndDefaults.None, [button], [],
+            ImmutableSortedDictionary<string, int>.Empty);
     }
 
     private void Defaults()
     {
         Shell.PlaySound(ShellUiSounds.ButtonClick);
         var d = GameSettings.Default;
-        _working = _working with { Display = d.Display, Audio = d.Audio, Controls = d.Controls };
+        // The values of "More options" are not this screen's to reset.
+        _working = _working with
+        {
+            Display = d.Display with { Mode = _working.Display.Mode, Aspect = _working.Display.Aspect, Skin = _working.Display.Skin },
+            Audio = d.Audio with { Device = _working.Audio.Device },
+            Controls = d.Controls,
+        };
         BuildResolutionList();
         RefreshWidgets();
     }

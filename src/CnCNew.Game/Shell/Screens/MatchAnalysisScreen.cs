@@ -155,7 +155,7 @@ public sealed class MatchAnalysisScreen : ShellScreen
         if (_analysis is not { } analysis) return list;
         var area = Area();
         var commands = list.Commands.ToBuilder();
-        new Painter(commands, area, Tree.Services.TextMeasure).Page(analysis, _page, _eventScroll);
+        new Painter(commands, area, Tree.Services.TextMeasure, Shell.Skin, Tree.Viewport, Tree.Options.TextScale).Page(analysis, _page, _eventScroll);
         return list with { Commands = commands.ToImmutable() };
     }
 
@@ -169,14 +169,23 @@ public sealed class MatchAnalysisScreen : ShellScreen
         return new UiRect(backdrop.X + inset, top, backdrop.Width - 2 * inset, backdrop.Bottom - inset - top);
     }
 
-    /// <summary>Draws one page into the area, in screen pixels scaled from the layout's 800 x 600.</summary>
-    private sealed class Painter(ImmutableArray<UiDrawCommand>.Builder commands, UiRect area, IUiTextMeasure measure)
+    /// <summary>
+    /// Draws one page into the area, in screen pixels scaled from the layout's 800 x 600. The original skin draws with the colours and fonts the screen always had; the
+    /// modern skin with its palette and type scale (docs/UI-MODERN.md sections 4 and 5).
+    /// </summary>
+    private sealed class Painter(ImmutableArray<UiDrawCommand>.Builder commands, UiRect area, IUiTextMeasure measure, CnCNew.Ui.Skins.UiSkin skin, UiViewport viewport, decimal textScale)
     {
         private readonly int _unit = Math.Max(1, area.Width / 700);
         private int S(int value) => value * area.Width / 700;
-        private UiFont Small => new(FontName, Math.Max(8, S(10)), false);
-        private UiFont Normal => new(FontName, Math.Max(9, S(12)), false);
-        private UiFont Bold => new(FontName, Math.Max(9, S(12)), true);
+        private UiFont Small => skin.IsModern ? skin.Style.Font(CnCNew.Ui.Skins.UiTypeStep.Caption, viewport, textScale) : new(FontName, Math.Max(8, S(10)), false);
+        private UiFont Normal => skin.IsModern ? skin.Style.Font(CnCNew.Ui.Skins.UiTypeStep.Body, viewport, textScale) : new(FontName, Math.Max(9, S(12)), false);
+        private UiFont Bold => skin.IsModern ? skin.Style.Font(CnCNew.Ui.Skins.UiTypeStep.Control, viewport, textScale) with { Bold = true } : new(FontName, Math.Max(9, S(12)), true);
+        private WndColor Ink => skin.IsModern ? skin.Style.Palette.Text : MatchAnalysisScreen.Ink;
+        private WndColor Muted => skin.IsModern ? skin.Style.Palette.Muted : MatchAnalysisScreen.Muted;
+        private WndColor Grid => skin.IsModern ? skin.Style.Palette.Border : MatchAnalysisScreen.Grid;
+        private WndColor Plate => skin.IsModern ? skin.Style.Palette.Panel : MatchAnalysisScreen.Plate;
+        private WndColor Shadow => skin.IsModern ? skin.Style.Palette.Shadow : MatchAnalysisScreen.Shadow;
+        private WndColor Field => skin.IsModern ? skin.Style.Palette.Canvas : new WndColor(25, 25, 25, 255);
 
         private static WndColor Color(int rgb, int alpha = 255) => new((byte)AnalysisPalette.Red(rgb), (byte)AnalysisPalette.Green(rgb), (byte)AnalysisPalette.Blue(rgb), (byte)alpha);
 
@@ -324,7 +333,7 @@ public sealed class MatchAnalysisScreen : ShellScreen
             var lefts = new[] { area.X + area.Width / 4 - side / 2, area.X + area.Width * 3 / 4 - side / 2 };
             Text("Movement: whose army stood where", Bold, Ink, lefts[0], area.Y + S(2));
             Text("Fights: where units and buildings died", Bold, Ink, lefts[1], area.Y + S(2));
-            foreach (var left in lefts) Fill(new UiRect(left, top, side, side), new WndColor(25, 25, 25, 255));
+            foreach (var left in lefts) Fill(new UiRect(left, top, side, side), Field);
             var movement = AnalysisCharts.MovementMap(analysis);
             var fights = AnalysisCharts.FightsMap(analysis);
             for (var index = 0; index < size * size; index++)

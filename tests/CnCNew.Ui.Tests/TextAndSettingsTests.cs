@@ -457,12 +457,13 @@ public static class TextAndSettingsTests
             var found = result.Issues.Select(issue => $"{issue.Path}:{issue.Code}").ToArray();
             string[] wanted =
             [
-                "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
+                "version:migrated", "extra:unknown-property", "display.hdr:unknown-property", "accessibility:missing", "display.width:invalid-type",
                 "controls.cameraRotateSpeed:missing", "controls.alternateMouse:missing", "general.defaultAiDifficulty:invalid-type", "skirmish.lastFactions:invalid-type",
                 "audio.ambient:clamped",
             ];
             Assert(found.SequenceEqual(wanted), $"Binding issues: {string.Join(", ", found)}.");
-            Assert(result.Status == SettingsLoadStatus.Loaded && result.Settings.Display.Mode == DisplayMode.Fullscreen && result.Settings.Display.Width == 1280
+            Assert(result.Status == SettingsLoadStatus.Migrated && result.Settings.Display.Mode == DisplayMode.Fullscreen && result.Settings.Display.Width == 1280
+                && result.Settings.Display.Aspect == AspectHandling.KeepHorizontal && result.Settings.Display.Skin == UiSkinName.Original && result.Settings.Audio.Device.Length == 0
                 && result.Settings.Audio.Ambient == 1f && result.Settings.General.Language == "French" && result.Settings.Skirmish.LastFactions.IsEmpty,
                 "Valid values are kept, invalid ones use the defaults.");
         }
@@ -517,13 +518,26 @@ public static class TextAndSettingsTests
                 migrated["display"]!["mode"] = fullscreen ? "fullscreen" : "windowed";
                 return migrated;
             });
-            var result = new SettingsStore(directory, [migration]).Load();
+            var result = new SettingsStore(directory, [migration, .. SettingsStore.Migrations]).Load();
             Assert(result.Status == SettingsLoadStatus.Migrated && result.FileVersion == 0, "The file is migrated.");
             Assert(result.Settings.Display.Mode == DisplayMode.Fullscreen, "The migration result is bound.");
-            Assert(result.Issues.Single().Code == "migrated", "The migration is reported.");
+            Assert(result.Issues.Length == GameSettings.CurrentVersion && result.Issues.All(issue => issue.Code == "migrated"), "Every migration step is reported.");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration, migration]), "same schema version");
             Throws<ArgumentException>(() => new SettingsStore(directory, [migration with { FromVersion = GameSettings.CurrentVersion }]), "must start below");
-            Assert(SettingsStore.Migrations.IsEmpty, "Schema version 1 ships without migrations.");
+            Assert(SettingsStore.Migrations.Length == 1 && SettingsStore.Migrations[0].FromVersion == 1, "Schema version 2 ships the one step from version 1.");
+
+            // Version 1 to 2 (Phase 38): the skin and the device come in at what version 1 meant, the aspect the client never applied becomes the one it drew.
+            var version1 = Encoding.UTF8.GetString(SettingsJson.Write(GameSettings.Default))
+                .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal)
+                .Replace("\"aspect\": \"keepHorizontal\"", "\"aspect\": \"stretch\"", StringComparison.Ordinal)
+                .Replace(",\n    \"skin\": \"original\"", "", StringComparison.Ordinal)
+                .Replace(",\n    \"device\": \"\"", "", StringComparison.Ordinal);
+            Assert(!version1.Contains("skin", StringComparison.Ordinal) && !version1.Contains("device", StringComparison.Ordinal) && version1.Contains("stretch", StringComparison.Ordinal),
+                "The version 1 file was written as version 1 had it.");
+            File.WriteAllText(Path.Combine(directory, SettingsStore.FileName), version1);
+            var upgraded = new SettingsStore(directory).Load();
+            Assert(upgraded.Status == SettingsLoadStatus.Migrated && upgraded.Settings == GameSettings.Default && upgraded.Issues.Single().Code == "migrated",
+                $"A version 1 file of the defaults loads as the defaults of version 2: {string.Join(", ", upgraded.Issues.Select(issue => issue.Path + ":" + issue.Code))}.");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

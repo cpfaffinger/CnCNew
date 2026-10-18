@@ -41,8 +41,20 @@ public sealed class SettingsStore
 {
     public const string FileName = "settings.json";
 
-    /// <summary>Schema steps shipped with this build. Version 1 is the first schema, so there are none yet.</summary>
-    public static ImmutableArray<SettingsMigration> Migrations { get; } = [];
+    /// <summary>
+    /// Schema steps shipped with this build: version 2 (Phase 38) adds the interface skin and the sound device, each at the value version 1 meant, and replaces the three
+    /// aspect values of version 1, which no client applied, by the one the camera drew (<c>keepHorizontal</c>).
+    /// </summary>
+    public static ImmutableArray<SettingsMigration> Migrations { get; } =
+    [
+        new SettingsMigration(1, "display.skin and audio.device added (the original skin, the system's default device); display.aspect is keepHorizontal", root =>
+        {
+            if (root["display"] is JsonObject display && !display.ContainsKey("skin")) display["skin"] = SettingsJson.Name(UiSkinName.Original);
+            if (root["display"] is JsonObject aspect && aspect.ContainsKey("aspect")) aspect["aspect"] = SettingsJson.Name(AspectHandling.KeepHorizontal);
+            if (root["audio"] is JsonObject audio && !audio.ContainsKey("device")) audio["device"] = "";
+            return root;
+        }),
+    ];
 
     private readonly ImmutableArray<SettingsMigration> _migrations;
 
@@ -146,6 +158,7 @@ public static class SettingsJson
             writer.WriteBoolean("vsync", settings.Display.VSync);
             writer.WriteString("uiScale", Name(settings.Display.UiScale));
             writer.WriteString("aspect", Name(settings.Display.Aspect));
+            writer.WriteString("skin", Name(settings.Display.Skin));
             writer.WriteEndObject();
 
             writer.WriteStartObject("audio");
@@ -154,6 +167,7 @@ public static class SettingsJson
             writer.WriteNumber("effects", settings.Audio.Effects);
             writer.WriteNumber("voice", settings.Audio.Voice);
             writer.WriteNumber("ambient", settings.Audio.Ambient);
+            writer.WriteString("device", settings.Audio.Device);
             writer.WriteEndObject();
 
             writer.WriteStartObject("controls");
@@ -200,8 +214,8 @@ public static class SettingsJson
         var reader = new Reader(issues);
         reader.Unknown(root, "", ["version", "display", "audio", "controls", "accessibility", "general", "skirmish"]);
 
-        var display = reader.Section(root, "display", ["mode", "width", "height", "vsync", "uiScale", "aspect"]);
-        var audio = reader.Section(root, "audio", ["master", "music", "effects", "voice", "ambient"]);
+        var display = reader.Section(root, "display", ["mode", "width", "height", "vsync", "uiScale", "aspect", "skin"]);
+        var audio = reader.Section(root, "audio", ["master", "music", "effects", "voice", "ambient", "device"]);
         var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse"]);
         var accessibility = reader.Section(root, "accessibility", ["highContrastUi", "uiTextScalePercent", "colorBlindSafeTeamColors"]);
         var general = reader.Section(root, "general", ["language", "showFps", "pauseOnFocusLoss", "defaultAiDifficulty"]);
@@ -214,13 +228,15 @@ public static class SettingsJson
                 reader.Int(display, "display.height", d.Display.Height),
                 reader.Bool(display, "display.vsync", d.Display.VSync),
                 reader.Enum(display, "display.uiScale", d.Display.UiScale),
-                reader.Enum(display, "display.aspect", d.Display.Aspect)),
+                reader.Enum(display, "display.aspect", d.Display.Aspect),
+                reader.Enum(display, "display.skin", d.Display.Skin)),
             new AudioSettings(
                 reader.Float(audio, "audio.master", d.Audio.Master),
                 reader.Float(audio, "audio.music", d.Audio.Music),
                 reader.Float(audio, "audio.effects", d.Audio.Effects),
                 reader.Float(audio, "audio.voice", d.Audio.Voice),
-                reader.Float(audio, "audio.ambient", d.Audio.Ambient)),
+                reader.Float(audio, "audio.ambient", d.Audio.Ambient),
+                reader.String(audio, "audio.device", d.Audio.Device)!),
             new ControlSettings(
                 reader.Float(controls, "controls.scrollSpeed", d.Controls.ScrollSpeed),
                 reader.Float(controls, "controls.cameraRotateSpeed", d.Controls.CameraRotateSpeed),

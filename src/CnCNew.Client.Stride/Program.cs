@@ -132,6 +132,9 @@ var replayFile = GetArgument(args, "--replay");
 CnCNew.Client.Stride.ClientRuntime.ReplayDirectory = GetArgument(args, "--replay-dir");
 CnCNew.Client.Stride.ClientRuntime.ReplayCheckpointSeconds = int.Parse(GetArgument(args, "--replay-checkpoint-seconds") ?? CnCNew.Game.Replays.ReplayPlayback.DefaultCheckpointSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture);
 CnCNew.Client.Stride.ClientRuntime.SkirmishSeconds = int.Parse(GetArgument(args, "--skirmish-seconds") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
+// --skin original|modern: the interface skin of this run (docs/UI-MODERN.md); without it the settings decide (display.skin, the original by default). A skin chosen
+// in the options replaces it.
+CnCNew.Client.Stride.ClientRuntime.Skin = GetArgument(args, "--skin") is { } skinText ? CnCNew.Ui.Skins.UiSkin.Parse(skinText).Name : null;
 if (replayFile is not null && (matchMap is not null || missionMap is not null || modelPath is not null || shellScriptPath is not null || contentDirectory is null))
     throw new ArgumentException("--replay plays a file: it needs --content-dir and excludes --match, --mission, --scenario, --join, --model-path and --shell-script.");
 CnCNewGame.ReplayFile = replayFile;
@@ -740,10 +743,13 @@ internal sealed class CnCNewGame(
             var back = GraphicsDevice.Presenter.BackBuffer;
             _runtime.Update(gameTime, Input, back.Width, back.Height, smokeTest ? SmokeStepSeconds : null);
             if (_runtime.Game is { } game && liveOptions is not { Spectate: true }) Window.Title = caption is null ? $"CnCNew — {game.HumanFaction}" : $"CnCNew — {caption.Replace('|', ' ')}";
-            if (_runtime.PendingResolution is { } resolution)
+            if (_runtime.TakePendingResolution() is { } resolution)
             {
                 GraphicsDeviceManager.PreferredBackBufferWidth = resolution.Width;
                 GraphicsDeviceManager.PreferredBackBufferHeight = resolution.Height;
+                // The display mode of the options (docs/UI-MODERN.md section 7): a window, a window without a frame, or the whole screen.
+                GraphicsDeviceManager.IsFullScreen = resolution.Mode == CnCNew.Ui.Settings.DisplayMode.Fullscreen;
+                Window.IsBorderLess = resolution.Mode == CnCNew.Ui.Settings.DisplayMode.Borderless;
                 GraphicsDeviceManager.ApplyChanges();
             }
             if (_runtime.ShellScript is { } shellScript && Shell is { } shellOptions && (shellScript.IsFinished || _shellWatch.Elapsed.TotalSeconds > shellOptions.ScriptSeconds))

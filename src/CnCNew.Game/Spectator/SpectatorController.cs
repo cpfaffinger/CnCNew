@@ -149,7 +149,7 @@ public sealed class SpectatorController
         Cameras = [..match.Players.Select((player, index) => new AiCamera(player.Id,
             new Vector2(CnCNew.Presentation.FixedConvert.ToSingle(starts[index].X), CnCNew.Presentation.FixedConvert.ToSingle(starts[index].Y)), time.TicksPerOriginalFrame))];
         _probe = new RtsCamera(match.Camera.Settings, match.Heights, match.Camera.ViewportSize);
-        _renderer = new SpectatorHud(match, hud.Assets.Images, textMeasure ?? new MonospaceTextMeasure());
+        _renderer = new SpectatorHud(match, hud.Assets.Images, textMeasure ?? new MonospaceTextMeasure(), hud.Skin);
         PlayerMaxHeight = match.Camera.Settings.MaxHeightAboveGround;
 
         match.Speed = Options.Speed > 0 ? Options.Speed : 1;

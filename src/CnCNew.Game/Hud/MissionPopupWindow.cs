@@ -31,7 +31,7 @@ public sealed class MissionPopupWindow
     private PopupMessage? _message;
     private UiViewport _laidOutFor;
 
-    public MissionPopupWindow(HudAssets assets, IUiTextMeasure measure, UiScaleOptions options, UiViewport viewport)
+    public MissionPopupWindow(HudAssets assets, IUiTextMeasure measure, UiScaleOptions options, UiViewport viewport, CnCNew.Ui.Skins.UiSkin? skin = null)
     {
         ArgumentNullException.ThrowIfNull(assets);
         ArgumentNullException.ThrowIfNull(measure);
@@ -39,7 +39,7 @@ public sealed class MissionPopupWindow
         _measure = measure;
         _options = options;
         _tree = new UiWindowTree(viewport, options, assets.BuildTreeServices(measure));
-        var roots = _tree.AddLayout(assets.InGamePopup);
+        var roots = _tree.AddLayout((skin ?? CnCNew.Ui.Skins.UiSkin.Original).Derive(assets.InGamePopup, assets.HeaderTemplates));
         _parent = roots.SingleOrDefault(window => window.Name == ParentName) ?? throw new InvalidDataException("InGamePopupMessage.wnd has no InGamePopupMessageParent window.");
         _text = _tree.FindByName(TextName) ?? throw new InvalidDataException("InGamePopupMessage.wnd has no StaticTextMessage window.");
         _ok = _tree.FindByName(OkName) ?? throw new InvalidDataException("InGamePopupMessage.wnd has no ButtonOk window.");

@@ -10,12 +10,15 @@ namespace CnCNew.Game.Shell;
 /// </summary>
 public abstract class ShellScreen
 {
-    protected ShellScreen(GameShell shell, string layoutName)
+    protected ShellScreen(GameShell shell, string layoutName) : this(shell, layoutName, shell.Layout(layoutName)) { }
+
+    /// <summary>A screen on a layout the shell does not ship as a file of its own (made at run time from shipped ones, already in the shell's skin).</summary>
+    protected ShellScreen(GameShell shell, string layoutName, CnCNew.Ui.Wnd.WndLayout layout)
     {
         Shell = shell;
         LayoutName = layoutName;
         Tree = new UiWindowTree(shell.Viewport, shell.ScaleOptions, shell.TreeServices);
-        Tree.AddLayout(shell.Layouts.Get(layoutName));
+        Tree.AddLayout(layout);
         if (shell.TransitionTable is { } table) Transitions = new WindowTransitionHandler(table, new UiTransitionHost(Tree, shell.PlaySound));
     }
 
