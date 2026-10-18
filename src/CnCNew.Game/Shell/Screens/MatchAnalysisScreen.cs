@@ -250,7 +250,8 @@ public sealed class MatchAnalysisScreen : ShellScreen
         private void Timeline(TimelineChart chart, UiRect box)
         {
             var left = box.X + S(64);
-            var top = box.Y + S(20);
+            // The plot begins below the title line, so that its top axis label (drawn half a line above the top line) does not run into the title.
+            var top = box.Y + S(4) + measure.LineHeight(Bold) + S(6);
             var width = box.Right - S(12) - left;
             var height = box.Bottom - S(22) - top;
             Text(chart.Title, Bold, Ink, box.X + S(8), box.Y + S(2));
