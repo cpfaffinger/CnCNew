@@ -43,6 +43,11 @@ internal static class NetHudTests
         harness.Run("No two states share a picture", () => TestHarness.Assert(baselines.Count >= 6 * 15 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count,
             $"{baselines.Count} hashes, {baselines.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
         if (updating) SaveBaselines(baselines);
+        var modern = SkinPins.Load(SkinPins.Modern(BaselinePath));
+        harness.Run("Every state of the indicators and every drop reason has a picture in the modern skin", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => Pictures(data, modern, updating)));
+        harness.Run("No two states share a picture in the modern skin", () => TestHarness.Assert(modern.Count >= 6 * 15 && modern.Values.Distinct(StringComparer.Ordinal).Count() == modern.Count,
+            $"{modern.Count} hashes, {modern.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
+        if (updating) SkinPins.Save(SkinPins.Modern(BaselinePath), modern);
         return harness.Failures;
     }
 
@@ -250,13 +255,13 @@ internal static class NetHudTests
     private static void Pictures(GameData data, Dictionary<string, string> baselines, bool updating)
     {
         var style = InGameUiStyle.FromGraph(data.Graph);
-        var options = UiScaleOptions.Original with { Mode = LayoutScaleMode.Uniform };
+        var options = SkinPins.Current.HudScale(UiScaleOptions.Original with { Mode = LayoutScaleMode.Uniform });
         var measure = new MonospaceTextMeasure();
         void Capture(string name, Action<Source, NetHud> arrange)
         {
             var source = new Source();
             var log = new UiMessageLog(style.Settings);
-            var hud = new NetHud(source, line => log.Add(line, 0));
+            var hud = new NetHud(source, line => log.Add(line, 0)) { Skin = SkinPins.Current };
             arrange(source, hud);
             hud.Update();
             foreach (var (width, height) in Resolutions)

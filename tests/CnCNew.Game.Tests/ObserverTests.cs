@@ -67,6 +67,16 @@ internal static class ObserverTests
             TestHarness.Assert(mine.Length >= 48 && mine.Distinct(StringComparer.Ordinal).Count() == mine.Length, $"{mine.Length} hashes at this rate, {mine.Distinct(StringComparer.Ordinal).Count()} distinct");
         });
         if (updating) SaveBaselines(baselines);
+        var modern = SkinPins.Load(SkinPins.Modern(BaselinePath));
+        harness.Run("The observer HUD in six resolutions in the modern skin", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => Screens(data, watched, modern, updating)));
+        harness.Run("No two states of the observer HUD share a picture in the modern skin", () =>
+        {
+            var rate = $"@{data.Rate.TicksPerSecond}Hz";
+            var mine = modern.Where(pair => pair.Key.EndsWith(rate, StringComparison.Ordinal)).Select(pair => pair.Value).ToArray();
+            TestHarness.Assert(mine.Length >= 48 && mine.Distinct(StringComparer.Ordinal).Count() == mine.Length, $"{mine.Length} hashes at this rate, {mine.Distinct(StringComparer.Ordinal).Count()} distinct");
+        });
+        // A run at one rate records only its own; the other rates' hashes stay.
+        if (updating) SkinPins.Save(SkinPins.Modern(BaselinePath), modern, merge: true);
         harness.Run("A person opens a replay, chooses a view and the research tab, goes to an event and seeks; the view stays", () => PersonWatchesAReplay(data, watched));
         return harness.Failures;
     }
@@ -146,7 +156,7 @@ internal static class ObserverTests
 
     private static ReplayPlayback Open(GameData data, Watched watched) => ReplayPlayback.Open(data, watched.File, Viewport, new ReplayPlaybackOptions(30));
 
-    private static SpectatorController Observe(ReplayPlayback playback) => new(playback.Match, new MatchController(playback.Match, GameSettings.Default));
+    private static SpectatorController Observe(ReplayPlayback playback) => new(playback.Match, new MatchController(playback.Match, SkinPins.Settings));
 
     private static void PlayToEnd(ReplayPlayback playback, SpectatorController spectator)
     {
@@ -238,7 +248,7 @@ internal static class ObserverTests
         var playback = Open(data, watched);
         var spectator = Observe(playback);
         playback.SeekTo(data.Rate.Time.WholeSecondsToTicks(390));
-        spectator = new SpectatorController(playback.Match, new MatchController(playback.Match, GameSettings.Default));
+        spectator = new SpectatorController(playback.Match, new MatchController(playback.Match, SkinPins.Settings));
         spectator.Update(0.0);
         void Key(KeyCode key) => spectator.Process(new KeyEvent(0, key, IsDown: true));
         Capture(spectator, data, "Observer-Production", baselines, updating);

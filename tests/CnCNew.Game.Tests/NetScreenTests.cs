@@ -53,6 +53,17 @@ internal static class NetScreenTests
         harness.Run("No two states share a picture", () => TestHarness.Assert(baselines.Count >= 336 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count,
             $"{baselines.Count} hashes, {baselines.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
         if (updating) SaveBaselines(baselines);
+        var modern = SkinPins.Load(SkinPins.Modern(BaselinePath));
+        SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () =>
+        {
+            harness.Run("The way to a room in the modern skin", () => WayToRoom(data, modern, updating));
+            harness.Run("A room, the map picker, the shared load screen in the modern skin", () => RoomAndLoading(data, modern, updating));
+            harness.Run("Every refusal has a screen with its text in the modern skin", () => Refusals(data, modern, updating));
+            harness.Run("A match that did not end by its own rules says why in the modern skin", () => MatchEnds(data, modern, updating));
+        });
+        harness.Run("No two states share a picture in the modern skin", () => TestHarness.Assert(modern.Count >= 336 && modern.Values.Distinct(StringComparer.Ordinal).Count() == modern.Count,
+            $"{modern.Count} hashes, {modern.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
+        if (updating) SkinPins.Save(SkinPins.Modern(BaselinePath), modern);
         return harness.Failures;
     }
 
@@ -159,7 +170,7 @@ internal static class NetScreenTests
     {
         var network = new ScriptedNetwork();
         var environment = new FixedShellEnvironment(Path.Combine(Path.GetTempPath(), "cncnew-net-screen-tests-" + Guid.NewGuid().ToString("N")));
-        return (GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight), network: network), network);
+        return (GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight), network: network, skin: SkinPins.Current), network);
     }
 
     /// <summary>Main menu, Multiplayer, Network, Join with the remembered address: the shell stands on the server's front with a lobby that is connecting.</summary>

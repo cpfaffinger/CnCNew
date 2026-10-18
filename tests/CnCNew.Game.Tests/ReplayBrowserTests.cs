@@ -71,6 +71,11 @@ internal static class ReplayBrowserTests
         harness.Run("No two states of the list share a picture", () => TestHarness.Assert(baselines.Count >= 48 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count,
             $"{baselines.Count} hashes, {baselines.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
         if (updating) SaveBaselines(baselines);
+        var modern = SkinPins.Load(SkinPins.Modern(BaselinePath));
+        harness.Run("The replay list in six resolutions in the modern skin", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => Screens(data, modern, updating)));
+        harness.Run("No two states of the list share a picture in the modern skin", () => TestHarness.Assert(modern.Count >= 48 && modern.Values.Distinct(StringComparer.Ordinal).Count() == modern.Count,
+            $"{modern.Count} hashes, {modern.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
+        if (updating) SkinPins.Save(SkinPins.Modern(BaselinePath), modern);
         harness.Run("A person at the menus: a skirmish recorded, found in the list, played to the end with seeks back and forth, renamed and deleted", () => PersonAtTheMenus(data));
         // --replay-measure-minutes N (docs/REPLAY-BROWSER.md section 7): an eight-player match of computer players, recorded and played with seeks, measured in real time.
         var minutesAt = Array.IndexOf(args, "--replay-measure-minutes");
@@ -482,7 +487,7 @@ internal static class ReplayBrowserTests
     }
 
     private static GameShell NewShell(GameData data, string directory)
-        => GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        => GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
 
     private static void OpenList(GameShell shell)
     {
@@ -614,6 +619,9 @@ internal static class ReplayBrowserTests
         public List<ReplaySeek> Seeks { get; } = [];
         public List<string> Endings { get; } = [];
 
+        /// <summary>The settings of the playback's HUD: the defaults, in the skin the menus are drawn in (as the client does).</summary>
+        private CnCNew.Ui.Settings.GameSettings HudSettings => CnCNew.Ui.Settings.GameSettings.Default with { Display = CnCNew.Ui.Settings.GameSettings.Default.Display with { Skin = shell.Skin.Name } };
+
         public void Attach()
         {
             script.MatchInput = _matchInput.Add;
@@ -656,7 +664,7 @@ internal static class ReplayBrowserTests
                 {
                     Seeks.Add(playback.SeekTo(target));
                     var previous = _spectator;
-                    _spectator = new SpectatorController(playback.Match, new MatchController(playback.Match, CnCNew.Ui.Settings.GameSettings.Default));
+                    _spectator = new SpectatorController(playback.Match, new MatchController(playback.Match, HudSettings));
                     _spectator.TakeViewFrom(previous);
                     return;
                 }
@@ -683,7 +691,7 @@ internal static class ReplayBrowserTests
                     try
                     {
                         Playback = ReplayPlayback.Open(data, replay.File, Viewport, new ReplayPlaybackOptions(CheckpointSeconds));
-                        _spectator = new SpectatorController(Playback.Match, new MatchController(Playback.Match, CnCNew.Ui.Settings.GameSettings.Default));
+                        _spectator = new SpectatorController(Playback.Match, new MatchController(Playback.Match, HudSettings));
                     }
                     catch (ReplayRefusedException refusal)
                     {

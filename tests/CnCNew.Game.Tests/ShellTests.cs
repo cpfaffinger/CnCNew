@@ -48,6 +48,10 @@ internal static class ShellTests
         // The screen hashes of baselines/screens.txt do not depend on the simulation rate (measured equal at 30, 60 and 120 Hz; the match behind the score screen
         // is bounded in game time), so the walk runs on the suite's data.
         harness.Run("Menu shell walks every screen and draws cleanly", () => WalkScreens(data, baselines, updating));
+        // The same walk in the modern skin, against its own file (docs/UI-MODERN.md section 9, R2).
+        var modern = SkinPins.Load(SkinPins.Modern(BaselinePath));
+        harness.Run("Menu shell walks every screen and draws cleanly in the modern skin", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => WalkScreens(data, modern, updating)));
+        if (updating) SkinPins.Save(SkinPins.Modern(BaselinePath), modern);
         harness.Run("Options persist and reload", () => OptionsPersist(data));
         harness.Run("The score counters count by the owner of an object: units built, supplies collected, losses and kills", () => ScoreCountersByOwner(data));
         harness.Run("Boot loading screen reaches the main menu", () => BootFlow(contentDir));
@@ -72,7 +76,7 @@ internal static class ShellTests
 
     private static void WalkScreens(GameData data, Dictionary<string, string> baselines, bool updating)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         TestHarness.Assert(shell.CurrentScreen is MainMenuScreen, "starts on the main menu");
         Capture(shell, "MainMenu", baselines, updating);
 

@@ -244,6 +244,10 @@ public sealed class ShellScript
             case "phase":
                 if (!Enum.TryParse<ShellPhase>(words[2], true, out var phase)) { problem = $"unknown phase '{words[2]}'"; return false; }
                 return shell.Phase == phase;
+            case "skin":
+                // wait skin original|modern: the skin the menus are drawn in (docs/UI-MODERN.md).
+                if (words[2].ToLowerInvariant() is not ("original" or "modern")) { problem = $"unknown skin '{words[2]}'"; return false; }
+                return shell.Skin.Id == words[2].ToLowerInvariant();
             case "screen":
                 return shell.Phase is not (ShellPhase.InMatch or ShellPhase.InMission) && shell.Stack.Count > 0 && !shell.CurrentScreen.IsClosing && !shell.IsAnimating
                        && shell.CurrentScreen.GetType().Name.Equals(words[2], StringComparison.OrdinalIgnoreCase);

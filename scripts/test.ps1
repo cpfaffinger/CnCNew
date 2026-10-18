@@ -75,6 +75,7 @@ $areaOfPath = @(
     @('tests/Shared/', 'simulation'),
     @('src/CnCNew.Game/', 'game'), @('tests/CnCNew.Game.Tests/', 'game'), @('tools/CnCNew.CampaignTool/', 'game'),
     @('src/CnCNew.Client.Stride/', 'client'),
+    @('scripts/shell/', 'game'),
     @('scripts/', 'scripts'),
     @('docs/', 'docs')
 )
@@ -100,11 +101,11 @@ $stepsOfArea = @{
     simtool      = @{ affected = @();                                       gate = 'inputs', 'quick' }
     manifest     = @{ affected = 'inputs', 'reference';                     gate = @() }
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
-    ui           = @{ affected = 'ui';                                      gate = 'game' }
+    ui           = @{ affected = 'ui';                                      gate = 'game', 'skins' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
     net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'diagnostics', 'game' }
-    game         = @{ affected = 'game-focus', 'net';                       gate = 'game', 'net', 'net-lobby', 'replay-browser', 'diagnostics' }
-    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package' }
+    game         = @{ affected = 'game-focus', 'net';                       gate = 'game', 'net', 'net-lobby', 'replay-browser', 'diagnostics', 'skins' }
+    client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package', 'skins' }
     scripts      = @{ affected = @();                                       gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
     build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'presentation', 'sim', 'net'
@@ -116,13 +117,13 @@ $gameSuites = @{
     Analysis  = 'MatchAnalysisTests', 'ReplayBrowserTests', 'ObserverTests'
     Audio     = 'AudioDirectorTests'
     Campaign  = 'CampaignTests', 'CampaignShellTests'
-    Hud       = 'HudTests', 'MissionHudTests', 'HotkeyTests', 'NetHudTests'
+    Hud       = 'HudTests', 'MissionHudTests', 'HotkeyTests', 'NetHudTests', 'SkinTests'
     Lockstep  = 'LiveMatchTests', 'HudTests', 'CampaignShellTests', 'SpectatorTests', 'NetLobbyTests', 'NetShellTests'
     Live      = 'LiveMatchTests', 'DeterminismTests', 'TimeScaleTests', 'ScenarioTests', 'MissionPresentationTests', 'MissionEffectsTests', 'MissionTextTests', 'ReplayBrowserTests', 'AttachedEffectsTests', 'MatchAnalysisTests'
     Replays   = 'ReplayBrowserTests', 'NetShellTests', 'MatchAnalysisTests', 'ObserverTests'
     Save      = 'CampaignTests', 'CampaignShellTests'
-    Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests', 'NetScreenTests', 'NetShellTests', 'ReplayBrowserTests', 'MatchAnalysisTests'
-    Spectator = 'SpectatorTests', 'ReplayBrowserTests', 'ObserverTests'
+    Shell     = 'ShellTests', 'ShellTransitionTests', 'CampaignShellTests', 'NetScreenTests', 'NetShellTests', 'ReplayBrowserTests', 'MatchAnalysisTests', 'SkinTests'
+    Spectator = 'SpectatorTests', 'ReplayBrowserTests', 'ObserverTests', 'SkinTests'
 }
 $gameSuitesOfSimulation = 'DeterminismTests', 'LiveMatchTests', 'SourceRuleTests'
 
@@ -227,6 +228,7 @@ $steps = @(
     New-Step 'server-package-linux' 'The linux-x64 server package under Linux (WSL) with an empty environment, clients under Windows' ((Script-Run 'check-server-package') + '-Platform' + 'linux') -Content -Environment
     New-Step 'diagnostics'  'Crash reports, run logs and support bundles of the client and the server: what they hold and what they never hold' (Script-Run 'check-diagnostics')
     New-Step 'client-package' 'The self-contained Windows package: layout, no original data, the packaged patcher and client run' (Script-Run 'check-client-package') -Content -Environment
+    New-Step 'skins'        'The two interface skins: a person by script switches to the modern skin in the window and walks the shell; the readability of both skins with the GDI font' (Script-Run 'check-skins') -Content -Environment
     New-Step 'patch-layer'  'The patch layer: its own compatibility baseline, a deterministic match, two layer clients on a server and an original client refused' (Script-Run 'check-patch-layer') -Content -Environment
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content

@@ -65,6 +65,11 @@ internal static class MatchAnalysisTests
         harness.Run("No two states of the analysis screen share a picture", () => TestHarness.Assert(baselines.Count >= 48 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count,
             $"{baselines.Count} hashes, {baselines.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
         if (updating) SaveBaselines(baselines);
+        var modern = SkinPins.Load(SkinPins.Modern(BaselinePath));
+        harness.Run("The analysis screen in six resolutions in the modern skin", () => SkinPins.With(CnCNew.Ui.Skins.UiSkin.Modern, () => Screens(data, played, modern, updating)));
+        harness.Run("No two states of the analysis screen share a picture in the modern skin", () => TestHarness.Assert(modern.Count >= 48 && modern.Values.Distinct(StringComparer.Ordinal).Count() == modern.Count,
+            $"{modern.Count} hashes, {modern.Values.Distinct(StringComparer.Ordinal).Count()} distinct"));
+        if (updating) SkinPins.Save(SkinPins.Modern(BaselinePath), modern);
         harness.Run("A person opens the analysis after a match from the score screen and from the replay list, and turns its pages", () => PersonOpensTheAnalysis(data));
         return harness.Failures;
     }
@@ -311,7 +316,7 @@ internal static class MatchAnalysisTests
     // ------------------------------------------------------------------------------------------------- the screens
 
     private static GameShell NewShell(GameData data, string directory)
-        => GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        => GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
 
     private static void Screens(GameData data, Played played, Dictionary<string, string> baselines, bool updating)
     {
