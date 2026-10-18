@@ -197,4 +197,5 @@ milestones of Stage 3 have no brief yet (`plan/STAGE-3-CHANGES.md`).
 | [HANDOFF-PHASE34.md](handoffs/HANDOFF-PHASE34.md) | S3-M6: a shared group path and a cell budget per tick as a movement profile | done by machine (16 October 2026), the tick maximum target missed |
 | [HANDOFF-PHASE35.md](handoffs/HANDOFF-PHASE35.md) | S3-M3: the replay browser - recording, list, playback | done by machine (16 October 2026) |
 | [HANDOFF-PHASE36.md](handoffs/HANDOFF-PHASE36.md) | S3-M4: match analysis with graphics - from a replay or a running match | done |
-| [HANDOFF-PHASE37.md](handoffs/HANDOFF-PHASE37.md) | S3-M2: spectator and observer - free camera, views, panels, the event ticker, a human match from its replay | next |
+| [HANDOFF-PHASE37.md](handoffs/HANDOFF-PHASE37.md) | S3-M2: spectator and observer - free camera, views, panels, the event ticker, a human match from its replay | done |
+| [HANDOFF-PHASE38.md](handoffs/HANDOFF-PHASE38.md) | S3-M5: the modern user interface - the design decision, a skin beside the original's, an options screen | next |

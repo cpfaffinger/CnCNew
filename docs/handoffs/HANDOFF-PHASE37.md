@@ -1,5 +1,5 @@
 > **Stage:** 3 – Changes · **Milestone:** S3-M2 Spectator and observer · **Phase:** 37
-> **Status:** current (starting state measured 17 October 2026 at `c2dcc4f`; not begun)
+> **Status:** done by machine (18 October 2026, at `7574bd4`); the side items: F-42 closed, the GLA cause found (D-34), the long ticks shown to be first calls, the angry-mob case not taken further · **Successor:** HANDOFF-PHASE38.md
 > **Predecessor:** HANDOFF-PHASE36.md · **Results in:** docs/SPECTATOR-MODE.md, docs/REPLAY-BROWSER.md, docs/MATCH-ANALYSIS.md, docs/GAME-HUD.md, docs/plan/STAGE-3-CHANGES.md
 > **Side items:** the residue of S3-M6 (the long thinks of the computer players under `movement-budget`; the angry-mob rate case); the score screen's counters as the original's `ScoreKeeper` counts them (F-42)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
