@@ -23,10 +23,17 @@ public sealed class PlayerTally
 /// <c>TickResult</c> with the world that produced it; if nothing was ever recorded, <see cref="HasData"/> is false and the score screen renders <c>-</c> for every counter
 /// instead of a fabricated zero.
 /// <para>
-/// Most events name only their object (a death, a finished unit, a supply deposit carry no player): the player is the object's owner - or, for a death, the killer's owner -
-/// read from the world, or remembered from when the object appeared if it is gone already (the same attribution as the match analysis, docs/MATCH-ANALYSIS.md). Units are
-/// infantry, vehicles and aircraft including workers, buildings are structures (<c>SpectatorStats.Classify</c>); a kill counts only against somebody else's object. Not as
-/// the original: its <c>ScoreKeeper</c> counts only objects of the kinds <c>SCORE</c>, <c>SCORE_CREATE</c> and the scoring building masks (fidelity register F-42).
+/// Most events of the simulation name only their object (a death, a finished unit, a supply deposit carry no player): the player is the object's owner - or, for a death, the killer's owner -
+/// read from the world, or remembered from when the object appeared if it is gone already (the same attribution as the match analysis, docs/MATCH-ANALYSIS.md).
+/// </para>
+/// <para>
+/// What counts is the original's <c>ScoreKeeper</c> (F-42, Phase 37): built - a unit of the kind <c>INFANTRY</c> or <c>VEHICLE</c> with <c>SCORE</c> or <c>SCORE_CREATE</c> when
+/// its factory finishes it (<c>Player::onUnitCreated</c>), a <c>STRUCTURE</c> with <c>SCORE</c> or <c>SCORE_CREATE</c> when its construction completes
+/// (<c>onStructureConstructionComplete</c>); lost and destroyed - only a death with a causer (<c>ActiveBody</c> calls <c>scoreTheKill</c> of the damage's source), of a
+/// playable player's object that is not <c>IGNORED_IN_GUI</c> and not under construction, a <c>STRUCTURE</c> with <c>SCORE</c> or <c>SCORE_DESTROY</c> or an
+/// <c>INFANTRY</c>/<c>VEHICLE</c> with <c>SCORE</c> or <c>SCORE_DESTROY</c>; destroyed counts for the causer's player only against an enemy (<c>addObjectDestroyed</c>). Resources
+/// are the supply deposits only - the original adds crates, bounties, the cash hack, oil derricks and prisoners (<c>addMoneyEarned</c>), which the simulation raises no
+/// event for. Not built: a structure built again by the GLA's rebuild hole is counted once more (the original skips <c>isRebuild</c>), and <c>removeObjectBuilt</c>.
 /// </para>
 /// </summary>
 public sealed class MatchStatistics
@@ -72,11 +79,14 @@ public sealed class MatchStatistics
                     _known.Remove(e.Entity.Value);
                     break;
                 case SimEventKind.ProductionCompleted:
-                    if (Identify(world, e.Entity) is { Owner.IsSystem: false } factory) TallyOf(factory.Owner).UnitsBuilt++;
+                    if (Identify(world, e.Entity) is { Owner.IsSystem: false } factory && e.Value >= 0 && e.Value < world.Templates.Templates.Length
+                        && ScoresWhenBuilt(world.Templates[(int)e.Value]) == ScoreKind.Unit)
+                        TallyOf(factory.Owner).UnitsBuilt++;
                     break;
                 case SimEventKind.ConstructionCompleted:
                 {
-                    var owner = !e.Player.IsSystem ? e.Player : Identify(world, e.Entity)?.Owner ?? PlayerId.System;
+                    if (Identify(world, e.Entity) is not { } building || ScoresWhenBuilt(building.Template) != ScoreKind.Building) break;
+                    var owner = !e.Player.IsSystem ? e.Player : building.Owner;
                     if (!owner.IsSystem) TallyOf(owner).BuildingsBuilt++;
                     break;
                 }
@@ -86,18 +96,37 @@ public sealed class MatchStatistics
                 case SimEventKind.EntityDied:
                 {
                     if (!_dead.Add(e.Entity.Value) || Identify(world, e.Entity) is not { } victim || victim.Owner.IsSystem) break;
-                    var kind = CnCNew.Game.Spectator.SpectatorStats.Classify(victim.Template);
-                    if (kind == CnCNew.Game.Spectator.SpectatorUnitClass.None) break;
-                    var structure = kind == CnCNew.Game.Spectator.SpectatorUnitClass.Structure;
-                    if (structure) TallyOf(victim.Owner).BuildingsLost++; else TallyOf(victim.Owner).UnitsLost++;
-                    if (e.Other.IsValid && Identify(world, e.Other) is { Owner.IsSystem: false } killer && killer.Owner != victim.Owner)
-                    {
-                        if (structure) TallyOf(killer.Owner).BuildingsDestroyed++; else TallyOf(killer.Owner).UnitsDestroyed++;
-                    }
+                    // Object::scoreTheKill is called for the source of the killing damage; a death without one (a sale, a timer) scores nothing.
+                    if (!e.Other.IsValid || Identify(world, e.Other) is not { } killer) break;
+                    if (victim.Template.IsKindOf("IGNORED_IN_GUI")) break;
+                    if (world.FindEntity(e.Entity) is { } dying && dying.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction)) break;
+                    var kind = ScoresWhenLost(victim.Template);
+                    if (kind == ScoreKind.None) break;
+                    if (kind == ScoreKind.Building) TallyOf(victim.Owner).BuildingsLost++; else TallyOf(victim.Owner).UnitsLost++;
+                    if (killer.Owner.IsSystem || killer.Owner == victim.Owner || !world.AreEnemies(killer.Owner, victim.Owner)) break;
+                    if (kind == ScoreKind.Building) TallyOf(killer.Owner).BuildingsDestroyed++; else TallyOf(killer.Owner).UnitsDestroyed++;
                     break;
                 }
             }
         }
+    }
+
+    private enum ScoreKind { None, Unit, Building }
+
+    /// <summary><c>ScoreKeeper::addObjectBuilt</c>: the scoring building masks (<c>STRUCTURE</c> with <c>SCORE</c> or <c>SCORE_CREATE</c>), else an infantry or vehicle with them.</summary>
+    private static ScoreKind ScoresWhenBuilt(CnCNew.Simulation.Templates.ObjectTemplate template)
+        => Scores(template, "SCORE_CREATE");
+
+    /// <summary><c>ScoreKeeper::addObjectLost</c> and <c>addObjectDestroyed</c>: the same with <c>SCORE_DESTROY</c> for <c>SCORE_CREATE</c>.</summary>
+    private static ScoreKind ScoresWhenLost(CnCNew.Simulation.Templates.ObjectTemplate template)
+        => Scores(template, "SCORE_DESTROY");
+
+    private static ScoreKind Scores(CnCNew.Simulation.Templates.ObjectTemplate template, string second)
+    {
+        var scores = template.IsKindOf("SCORE") || template.IsKindOf(second);
+        if (!scores) return ScoreKind.None;
+        if (template.IsKindOf("STRUCTURE")) return ScoreKind.Building;
+        return template.IsKindOf("INFANTRY") || template.IsKindOf("VEHICLE") ? ScoreKind.Unit : ScoreKind.None;
     }
 
     public PlayerTally? TryGet(PlayerId player) => _tallies.TryGetValue(player.Value, out var tally) ? tally : null;

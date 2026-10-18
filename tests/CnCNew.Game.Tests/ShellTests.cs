@@ -639,8 +639,25 @@ internal static class ShellTests
         var live = LiveMatch.Create(data, setup, new Vector2(NavWidth, NavHeight));
         var stats = new MatchStatistics();
         stats.Begin(live.Session.World);
-        while (!live.Session.IsOver) stats.Record(live.Session.Step(), live.Session.World);
+        // The original's rule, computed here from the events alone (ScoreKeeper::addObjectBuilt): a finished unit counts when it is infantry or a vehicle of the kind SCORE or
+        // SCORE_CREATE; a worker without them does not (F-42).
+        var expectedBuilt = new Dictionary<int, int>();
+        var producedWithoutScore = 0;
+        while (!live.Session.IsOver)
+        {
+            var result = live.Session.Step();
+            stats.Record(result, live.Session.World);
+            foreach (var item in result.Events.Where(item => item.Kind == CnCNew.Simulation.Events.SimEventKind.ProductionCompleted))
+            {
+                var unit = live.Session.World.Templates[(int)item.Value];
+                var owner = live.Session.World.FindEntity(item.Entity)!.Owner.Value;
+                var scores = (unit.IsKindOf("SCORE") || unit.IsKindOf("SCORE_CREATE")) && (unit.IsKindOf("INFANTRY") || unit.IsKindOf("VEHICLE"));
+                if (scores) expectedBuilt[owner] = expectedBuilt.GetValueOrDefault(owner) + 1; else producedWithoutScore++;
+            }
+        }
         var computer = stats.TryGet(live.Session.Players[1].Id);
+        TestHarness.Assert(computer!.UnitsBuilt == expectedBuilt.GetValueOrDefault(live.Session.Players[1].Id.Value),
+            $"units built as the original counts them ({computer.UnitsBuilt} against {expectedBuilt.GetValueOrDefault(live.Session.Players[1].Id.Value)}; {producedWithoutScore} produced units without a scoring kind)");
         TestHarness.Assert(computer is { UnitsBuilt: > 0, Resources: > 0, BuildingsBuilt: > 0 },
             $"the computer player built units and collected supplies ({computer?.UnitsBuilt} units, {computer?.Resources} credits, {computer?.BuildingsBuilt} buildings)");
         var counted = live.Session.World.Entities.Count(entity => entity.Owner == live.Session.Players[1].Id && CnCNew.Game.Spectator.SpectatorStats.Classify(entity.Template) is CnCNew.Game.Spectator.SpectatorUnitClass.Army or CnCNew.Game.Spectator.SpectatorUnitClass.Worker && !entity.EffectivelyDead);

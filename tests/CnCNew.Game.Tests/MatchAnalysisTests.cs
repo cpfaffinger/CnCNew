@@ -247,10 +247,10 @@ internal static class MatchAnalysisTests
         {
             var row = played.Info.Result.First(result => result.Player == player.Player);
             TestHarness.Assert(player.Collected == row.Resources, $"player {player.Player}: the credits collected are the score screen's ({player.Collected} against {row.Resources})");
-            TestHarness.Assert(player.UnitsBuiltCount == row.UnitsBuilt, $"player {player.Player}: the units built are the score screen's ({player.UnitsBuiltCount} against {row.UnitsBuilt})");
-            TestHarness.Assert(player.StructuresBuilt.Sum(item => item.Count) == row.BuildingsBuilt, $"player {player.Player}: the buildings built are the score screen's");
-            TestHarness.Assert(player.UnitsLostCount == row.UnitsLost && player.StructuresLostCount == row.BuildingsLost && player.Kills >= row.UnitsDestroyed,
-                $"player {player.Player}: losses and kills are the score screen's ({player.UnitsLostCount}/{row.UnitsLost}, {player.StructuresLostCount}/{row.BuildingsLost}, {player.Kills}/{row.UnitsDestroyed})");
+            // The score screen counts as the original's ScoreKeeper does - only the kinds SCORE, SCORE_CREATE, SCORE_DESTROY (F-42) -, the analysis every unit and building.
+            TestHarness.Assert(player.UnitsBuiltCount >= row.UnitsBuilt && player.StructuresBuilt.Sum(item => item.Count) >= row.BuildingsBuilt
+                && player.UnitsLostCount >= row.UnitsLost && player.StructuresLostCount >= row.BuildingsLost && player.Kills >= row.UnitsDestroyed,
+                $"player {player.Player}: the analysis counts at least what the score screen counts ({player.UnitsBuiltCount}/{row.UnitsBuilt}, {player.UnitsLostCount}/{row.UnitsLost}, {player.StructuresLostCount}/{row.BuildingsLost}, {player.Kills}/{row.UnitsDestroyed})");
             var last = analysis.SamplesOf(player.Player).Last();
             TestHarness.Assert(last.Money == match.World.MoneyOf(new CnCNew.Simulation.Ids.PlayerId(player.Player)).Floor(), $"player {player.Player}: the money of the last sample is the world's");
             TestHarness.Assert(last.Collected == player.Collected && last.Spent == player.Spent && last.Kills == player.Kills, $"player {player.Player}: the last sample and the totals agree");
