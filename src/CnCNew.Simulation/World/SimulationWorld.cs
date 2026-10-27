@@ -67,7 +67,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[(int)CommandRejection.UpgradeInProduction + 1];
+    private readonly long[] _rejections = new long[(int)CommandRejection.ParkingPlacesFull + 1];
 
     /// <summary>Size of the rejection table when the state hash first covered it (reasons up to <see cref="CommandRejection.CannotToggleOvercharge"/>); later reasons are hashed only when they occurred.</summary>
     private const int LegacyRejectionEntries = (int)CommandRejection.CannotToggleOvercharge + 1;
@@ -627,6 +627,13 @@ public sealed partial class SimulationWorld : IWorldServices
     private static Modules.BuiltIn.ProductionUpdate? FindProductionModule(Entity entity)
         => Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.ProductionUpdate) as Modules.BuiltIn.ProductionUpdate;
 
+    /// <summary>
+    /// The airfield of a producer when queueing <paramref name="template"/> there reserves a space (<c>ParkingPlaceBehavior::shouldReserveDoorWhenQueued</c>: anything but a
+    /// <c>PRODUCED_AT_HELIPAD</c> object), else null.
+    /// </summary>
+    private static Modules.BuiltIn.ParkingPlaceBehavior? QueueReservesSpace(Entity producer, ObjectTemplate template)
+        => template.IsKindOf("PRODUCED_AT_HELIPAD") ? null : Array.Find(producer.ModuleArray, module => module is Modules.BuiltIn.ParkingPlaceBehavior) as Modules.BuiltIn.ParkingPlaceBehavior;
+
     private static bool CanMove(Entity entity) => AiOf(entity) is not null;
 
     private static Modules.BuiltIn.AIUpdateInterface? AiOf(Entity entity)
@@ -779,6 +786,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (producer.Owner != command.Player) return CommandRejection.NotPermitted;
                 var production = FindProductionModule(producer);
                 if (production is null || !CanProduceNow(producer)) return CommandRejection.CannotProduce;
+                if (QueueReservesSpace(producer, queueTemplate) is { } parking && !parking.IsFreeToExitFor(queueTemplate)) return CommandRejection.ParkingPlacesFull;
                 if (!production.HasRoom) return CommandRejection.QueueFull;
                 if (!CanProduceTemplate(player, producer, queueTemplate) || !player.CanBuildUnits) return CommandRejection.CannotProduceTemplate;
                 if (!BuildableOf(queueTemplate).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(player, queueTemplate))
@@ -1087,6 +1095,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_templates.TryGet(queue.Template, out var queueTemplate) || !queueTemplate.IsInstantiable) { RecordRejection(command, CommandRejection.UnknownTemplate); break; }
                 var production = FindProductionModule(producer);
                 if (production is null || !CanProduceNow(producer)) { RecordRejection(command, CommandRejection.CannotProduce); break; }
+                var parking = QueueReservesSpace(producer, queueTemplate);
+                if (parking is not null && !parking.IsFreeToExitFor(queueTemplate)) { RecordRejection(command, CommandRejection.ParkingPlacesFull); break; }
                 if (!production.HasRoom) { RecordRejection(command, CommandRejection.QueueFull); break; }
                 var buyer = _players[producer.Owner.Value];
                 if (!CanProduceTemplate(buyer, producer, queueTemplate)) { RecordRejection(command, CommandRejection.CannotProduceTemplate); break; }
@@ -1097,7 +1107,9 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (buyer.Money < queueCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }
                 // ProductionUpdate.h: the full cost is withdrawn immediately at queue time, refunded in full on cancel.
                 buyer.Money -= queueCost;
-                production.Enqueue(Time, queueTemplate.Index, queueCost, queueTemplate.BuildTicks, production.Data.QuantityOf(_templates, queueTemplate.Index));
+                // ProductionUpdate::queueCreateUnit: an airfield reserves the space - the door - of the aircraft now, not when it is finished.
+                var reserved = parking?.ReserveDoor(this, queueTemplate) ?? Modules.ExitDoor.NoneAvailable;
+                production.Enqueue(Time, queueTemplate.Index, queueCost, queueTemplate.BuildTicks, production.Data.QuantityOf(_templates, queueTemplate.Index), reserved);
                 var producerNode = Array.Find(producer.Updates, node => ReferenceEquals(node.Module, production));
                 if (producerNode is not null) WakeAt(producer, producerNode.Update, _tick);
                 MarkDirty(producer);

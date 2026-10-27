@@ -2389,13 +2389,14 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
 
     /// <param name="time">The time service of the world: a build time of zero still takes one logic frame of the original, not one tick.</param>
     /// <param name="quantity">How many units the entry makes (<see cref="ProductionData.QuantityOf"/>).</param>
-    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks, int quantity = 1)
+    /// <param name="reservedDoor">A door reserved when the order was queued (an airfield's space), or <see cref="ExitDoor.NoneAvailable"/>.</param>
+    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks, int quantity = 1, int reservedDoor = ExitDoor.NoneAvailable)
     {
         var ticks = time.AtLeastOneFrame(totalTicks);
         // The entry that starts an empty queue is worked on in the step of its order, and that step stands for a whole logic frame of the original: the unit is done
         // BuildTime less one frame after the order (not less one tick). An entry that waits behind another starts one step after its predecessor left and takes the full time.
         if (_queue.Count == 0) ticks -= time.TicksPerOriginalFrame - TickOrder.Next;
-        _queue.Add(new ProductionEntry(templateIndex, cost, ticks, quantity));
+        _queue.Add(new ProductionEntry(templateIndex, cost, ticks, quantity, ReservedDoor: reservedDoor));
     }
 
     /// <summary>

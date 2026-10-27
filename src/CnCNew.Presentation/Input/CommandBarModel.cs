@@ -49,6 +49,9 @@ public enum ButtonReason
 
     /// <summary>The upgrade is being researched (<c>Player::hasUpgradeInProduction</c>, <c>ProductionUpdate::isUpgradeInQueue</c>).</summary>
     InProduction,
+
+    /// <summary><c>CANMAKE_PARKING_PLACES_FULL</c>: the airfield has no free space for another aircraft.</summary>
+    ParkingFull,
 }
 
 /// <param name="Slot">1..14 as in the <c>CommandSet</c>.</param>
@@ -296,6 +299,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 else
                 {
                     if (production is null || entity.HasStatus(ObjectStatusBits.UnderConstruction)) return State(ButtonAvailability.Restricted, ButtonReason.NoProducer, null, cost, ticks);
+                    // BuildAssistant::canMakeUnit: an airfield reserves a space for every aircraft it queues.
+                    if (!template.IsKindOf("PRODUCED_AT_HELIPAD") && entity.Modules.OfType<ParkingPlaceBehavior>().FirstOrDefault() is { } parking && !parking.IsFreeToExitFor(template))
+                        return State(ButtonAvailability.Restricted, ButtonReason.ParkingFull, null, cost, ticks);
                     if (!production.HasRoom) return State(ButtonAvailability.Restricted, ButtonReason.QueueFull, null, cost, ticks);
                 }
                 if (!template.IsInstantiable) return State(ButtonAvailability.Restricted, ButtonReason.NotInstantiable, null, cost, ticks);

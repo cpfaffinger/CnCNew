@@ -306,7 +306,7 @@ static partial class Tests
         Check.That(parking.OccupantOf(0) == jet.Id, "It still holds its space.");
     }
 
-    /// <summary>Two jets share one runway: the second waits as next in line, then starts after the first; an idle jet returns on its own after <c>ReturnToBaseIdleTime</c> and a full airfield holds production back.</summary>
+    /// <summary>Two jets share one runway: the second waits as next in line, then starts after the first; an idle jet returns on its own after <c>ReturnToBaseIdleTime</c>; a full airfield refuses another jet (F-45).</summary>
     public static void AirRunwayQueueIdleReturnAndFullAirfield()
     {
         var (world, feeder, airfield, parking, first, _) = ParkedJet(dummy: false);
@@ -315,9 +315,12 @@ static partial class Tests
         var second = world.Entities.Where(value => value.Template.Name == "AirTestJet").OrderBy(value => value.Id.Value).Last();
         StepUntil(world, () => JetOf(second).Phase == JetAIUpdate.JetPhase.None, 600, "The second jet parked: " + JetOf(second).Phase);
         Check.That(parking.OccupantOf(0) == first.Id && parking.OccupantOf(1) == second.Id, "Each jet holds one of the two spaces.");
-        Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, "A third jet can be queued.");
+        // BuildAssistant::canMakeUnit: with both spaces taken a third jet cannot be queued (CANMAKE_PARKING_PLACES_FULL; F-45).
+        feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet");
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.ParkingPlacesFull] == 1, "A third jet cannot be queued while both spaces are taken.");
         for (var i = 0; i < world.Frames(150); i++) world.Step();
-        Check.That(world.Entities.Count(value => value.Template.Name == "AirTestJet") == 2, "With both spaces taken the airfield holds the finished third jet back (nothing was created).");
+        Check.That(world.Entities.Count(value => value.Template.Name == "AirTestJet") == 2, "Nothing was created.");
         Check.That(!parking.IsFreeToExit, "The airfield has no free exit.");
 
         // both jets are ordered away at the same moment: one runway
@@ -350,9 +353,11 @@ static partial class Tests
         StepUntil(world, () => !firstJet.AllowAirLoco && !secondJet.AllowAirLoco && firstJet.Phase == JetAIUpdate.JetPhase.None && secondJet.Phase == JetAIUpdate.JetPhase.None, 4000, "Both idle jets landed and parked: " + firstJet.Phase + "/" + secondJet.Phase);
         Check.That(parking.OccupantOf(0) == first.Id && parking.OccupantOf(1) == second.Id && first.Z == Fixed.Zero && second.Z == Fixed.Zero, "Each is back on its own space.");
 
-        // a space frees up: the third jet appears
+        // a space frees up: a third jet can be queued now and appears in it
         world.Kill(second.Id);
-        StepUntil(world, () => world.Entities.Count(value => value.Template.Name == "AirTestJet" && !value.EffectivelyDead) == 2 && world.Entities.Any(value => value.Template.Name == "AirTestJet" && value.Id.Value > second.Id.Value), 200, "The third jet was released as soon as a space was free.");
+        world.Step();
+        Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, "With a space free a third jet is queued.");
+        StepUntil(world, () => world.Entities.Count(value => value.Template.Name == "AirTestJet" && !value.EffectivelyDead) == 2 && world.Entities.Any(value => value.Template.Name == "AirTestJet" && value.Id.Value > second.Id.Value), 200, "The third jet was produced into the free space.");
     }
 
     /// <summary>A destroyed airfield takes its parked and taxiing aircraft with it, spares those in flight; a jet that is out of ammunition with no airfield left circles and burns (OutOfAmmoDamagePerSecond).</summary>

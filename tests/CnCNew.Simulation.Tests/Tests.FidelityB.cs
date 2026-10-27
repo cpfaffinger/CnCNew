@@ -386,4 +386,32 @@ static partial class Tests
             $"The dead producers refund their queues in full ({world.MoneyOf(player)}).");
         Check.That(CountOf(world, "QuickUnit") == 0, "and make nothing.");
     }
+
+    /// <summary>
+    /// F-45: an airfield reserves a space for every aircraft it queues (<c>ProductionUpdate::queueCreateUnit</c>, <c>ParkingPlaceBehavior::shouldReserveDoorWhenQueued</c>): a third
+    /// jet at an airfield of two spaces is refused (<c>CANMAKE_PARKING_PLACES_FULL</c>) and nothing is paid; a cancelled order gives its space back.
+    /// </summary>
+    public static void FidelityAirfieldReservesItsSpaceWhenQueued()
+    {
+        var world = AirWorld(out var fixture, out var feeder, false);
+        feeder.Spawn(1, "AirTestAirfield", owner: 1, x: 500, y: 500);
+        world.Step();
+        feeder.GiveMoney(1, 1000);
+        world.Step();
+        var airfield = world.Entities.Single(value => value.Template.Name == "AirTestAirfield");
+        var parking = airfield.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.ParkingPlaceBehavior>().Single();
+        for (var i = 0; i < 3; i++) feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet");
+        world.Step();
+        var player = new PlayerId(1);
+        Check.That(world.RejectionCounts[(int)CommandRejection.ParkingPlacesFull] == 1 && world.MoneyOf(player) == Fixed.FromInt(800),
+            $"Two jets are queued with a space each, the third is refused and not paid ({world.MoneyOf(player)}).");
+        Check.That(parking.IsReservedForExit(0) && parking.IsReservedForExit(1), "Both spaces are reserved while the jets are only queued.");
+        feeder.CancelProduction(1, airfield.Id.Value, 1);
+        world.Step();
+        Check.That(world.MoneyOf(player) == Fixed.FromInt(900) && parking.IsReservedForExit(0) && !parking.IsReservedForExit(1), "A cancelled order gives its space back.");
+        Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, "and a new order may take it.");
+        world.Step();
+        for (var i = 0; i < world.Frames(120); i++) world.Step();
+        Check.That(world.Entities.Count(value => value.Template.Name == "AirTestJet") == 2, "Both queued jets are produced into their spaces.");
+    }
 }

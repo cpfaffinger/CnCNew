@@ -731,6 +731,11 @@ public enum CommandRejection : byte
     /// queue (<c>ProductionUpdate::isUpgradeInQueue</c>).
     /// </summary>
     UpgradeInProduction = 40,
+
+    /// <summary>
+    /// <c>CANMAKE_PARKING_PLACES_FULL</c>: an airfield reserves a space for every aircraft it queues (<c>ParkingPlaceBehavior::shouldReserveDoorWhenQueued</c>), and none is free.
+    /// </summary>
+    ParkingPlacesFull = 41,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)
