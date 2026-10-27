@@ -135,6 +135,9 @@ public sealed partial class SimulationWorld : IWorldServices
         /// <summary><c>Energy::m_powerSabotagedTillFrame</c> (<c>SabotagePowerPlantCrateCollide</c>): the tick until which the player's power counts as sabotaged; 0 = never.</summary>
         public long PowerSabotagedUntil { get; set; }
 
+        /// <summary><c>Player::m_attackedFrame</c> as a tick (<c>setAttackedBy</c>); -1 until the first attack, written only after it.</summary>
+        public long AttackedTick { get; set; } = -1;
+
         /// <summary>The strategy centers' battle plans in force (<c>SimulationWorld.BattlePlan.cs</c>); <see langword="null"/> until a plan was ever started.</summary>
         public BattlePlanState? BattlePlan { get; set; }
 
@@ -2177,6 +2180,7 @@ public sealed partial class SimulationWorld : IWorldServices
             player.Tunnels.Describe(writer);
             // Written only once a power plant was sabotaged, so every world without a saboteur keeps its serialized form (and hash).
             if (player.PowerSabotagedUntil > 0) writer.Int("powerSabotagedUntil", player.PowerSabotagedUntil);
+            if (player.AttackedTick >= 0) writer.Int("attackedTick", player.AttackedTick);
             player.BattlePlan?.Describe(writer);
             writer.EndObject();
         }

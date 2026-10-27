@@ -632,7 +632,11 @@ public sealed partial class ScriptEngine
 
 public sealed partial class ScriptEngine
 {
-    private const long SupplyScanSeconds = 10;
+    /// <summary><c>AIPlayer::isSupplySourceAttacked</c>'s <c>SCAN_RATE</c>: its comment says ten seconds, the code counts ten logic frames of the original.</summary>
+    private const long SupplyScanFrames = 10;
+
+    /// <summary><c>AIPlayer::m_supplySourceAttackCheckFrame</c> by player: the first original frame of the next scan; written only once a player was asked.</summary>
+    private readonly SortedDictionary<int, long> _supplyAttackCheckFrames = [];
     private const decimal SupplyCenterSafeRadius = 250m;
 
     private readonly SortedDictionary<int, string> _teamStates = [];
@@ -849,12 +853,29 @@ public sealed partial class ScriptEngine
                                               && SquaredReach.Of(radius + entity.Template.BoundingCircleRadius).Contains(Distance2(entity, warehouse.X, warehouse.Y)));
     }
 
+    /// <summary>
+    /// <c>AIPlayer::isSupplySourceAttacked</c> (F-52): on the first frame it sets the next scan ten frames ahead and answers no; otherwise not before that scan, and not when the
+    /// player was last attacked more than ten frames ago (<c>Player::getAttackedFrame</c>); a scan sets the next one ten frames ahead and asks whether a cash generator, dozer
+    /// or harvester of the player has a damage record of the last ten frames. Frames are those of the original, at every rate.
+    /// </summary>
     private bool SupplySourceAttacked(PlayerId player)
     {
-        var now = _world.Tick;
-        if (now == 0) return false;
-        foreach (var entity in _world.Entities.Where(entity => entity.Owner == player && !entity.EffectivelyDead && (entity.Template.IsKindOf("CASH_GENERATOR") || entity.Template.IsKindOf("DOZER") || entity.Template.IsKindOf("HARVESTER"))))
-            if (entity.LastDamageTick >= 0 && now - entity.LastDamageTick < _world.Time.WholeSecondsToTicks(SupplyScanSeconds)) return true;
+        var frame = _world.Time.FramesIn(_world.Tick);
+        if (frame == 0)
+        {
+            _supplyAttackCheckFrames[player.Value] = SupplyScanFrames;
+            return false;
+        }
+        if (frame < _supplyAttackCheckFrames.GetValueOrDefault(player.Value)) return false;
+        var attacked = _world.AttackedTick(player);
+        if ((attacked >= 0 ? _world.Time.FramesIn(attacked) : 0) + SupplyScanFrames < frame) return false;
+        _supplyAttackCheckFrames[player.Value] = frame + SupplyScanFrames;
+        foreach (var entity in _world.Entities)
+        {
+            if (entity.Owner != player || entity.DestroyRequested || entity.Body is null || entity.LastDamageTick < 0) continue;
+            if (!entity.Template.IsKindOf("CASH_GENERATOR") && !entity.Template.IsKindOf("DOZER") && !entity.Template.IsKindOf("HARVESTER")) continue;
+            if (_world.Time.FramesIn(entity.LastDamageTick) + SupplyScanFrames > frame) return true;
+        }
         return false;
     }
 
@@ -872,6 +893,12 @@ public sealed partial class ScriptEngine
         {
             writer.BeginArray("transportStatus");
             foreach (var (id, status) in _transportStatus) { writer.BeginObject(null); writer.UInt("id", id); writer.Int("frame", status.Frame); writer.Int("count", status.Count); writer.EndObject(); }
+            writer.EndArray();
+        }
+        if (_supplyAttackCheckFrames.Count > 0)
+        {
+            writer.BeginArray("supplyAttackCheckFrames");
+            foreach (var (player, frame) in _supplyAttackCheckFrames) { writer.BeginObject(null); writer.Int("player", player); writer.Int("frame", frame); writer.EndObject(); }
             writer.EndArray();
         }
         if (_techBuildingAnswers.Count > 0)
@@ -898,6 +925,8 @@ public sealed partial class ScriptEngine
         LoadNotifications(reader, "completedUpgrades", _completedUpgrades);
         _transportStatus.Clear();
         if (reader.Has("transportStatus")) foreach (var item in reader.Array("transportStatus")) _transportStatus[checked((uint)item.UInt("id"))] = (item.Int("frame"), checked((int)item.Int("count")));
+        _supplyAttackCheckFrames.Clear();
+        if (reader.Has("supplyAttackCheckFrames")) foreach (var item in reader.Array("supplyAttackCheckFrames")) _supplyAttackCheckFrames[checked((int)item.Int("player"))] = item.Int("frame");
         _techBuildingAnswers.Clear();
         if (reader.Has("techBuildingAnswers")) foreach (var item in reader.Array("techBuildingAnswers")) _techBuildingAnswers[item.Text("key")] = item.Bool("answer");
 

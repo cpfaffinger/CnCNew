@@ -350,6 +350,8 @@ run.Test("Flight: a shot-down payload plane takes its riders with it", Tests.Fli
 run.Test("Flight: countermeasures divert missiles to flares", Tests.FlightCountermeasuresDivertMissiles);
 run.Test("Reforged review (F-46): a decoyed missile takes the newest flare that exists", Tests.ReforgedCountermeasureTakesTheNewestFlare);
 run.Test("Reforged review (F-47): a toppling structure fires lines of shots across its footprint", Tests.ReforgedToppleCrushLine);
+run.Test("Reforged review (F-52): the last damage is recorded; a unit that may not hide under fire shows itself", Tests.ReforgedLastDamageIsRecorded);
+run.Test("Reforged review (F-52): the supply source attacked condition sees a hit by an existing enemy", Tests.ReforgedSupplySourceAttacked);
 run.Test("Flight: the particle uplink cannon burns its target and restores mid-beam", Tests.FlightParticleUplinkCannonBurnsItsTarget);
 run.Test("Flight: a battle bus has two lives and is thrown by the first death", Tests.FlightBattleBusHasTwoLives);
 run.Test("Slaves: the fixture objects of the slave/spawn/container group are instantiable; a bad rider line is a data error", Tests.SlaveFixtureObjectsAreInstantiable);

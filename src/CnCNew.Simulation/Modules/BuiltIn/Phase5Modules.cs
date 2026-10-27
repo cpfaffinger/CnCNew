@@ -190,7 +190,8 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         "MOVING" => Entity.Speed.Abs() > data.MoveThresholdSpeed,
         "USING_ABILITY" => Entity.HasStatus(ObjectStatusBits.Index("USING_ABILITY")),
         "FIRING_PRIMARY" or "FIRING_SECONDARY" or "FIRING_TERTIARY" => Entity.LastFireTick == world.Tick,
-        "TAKING_DAMAGE" => Entity.LastDamageTick == world.Tick,
+        // StealthUpdate::allowedToStealth: a damage record (not a heal) of this frame of the original or the one before (F-52).
+        "TAKING_DAMAGE" => Entity.LastDamageTick >= 0 && !Entity.LastDamageHealing && world.Time.FramesIn(world.Tick) - world.Time.FramesIn(Entity.LastDamageTick) <= 1,
         _ => false,
     };
 

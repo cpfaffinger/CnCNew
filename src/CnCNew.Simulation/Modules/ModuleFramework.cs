@@ -344,6 +344,9 @@ public interface IWorldServices
     /// <summary><c>Energy::setPowerSabotagedTillFrame</c>: the player's power counts as sabotaged until the given tick (overwrites any earlier value; unknown players are ignored).</summary>
     void SetPowerSabotagedUntil(PlayerId player, long tick);
 
+    /// <summary><c>Player::setAttackedBy</c>: an object of <paramref name="victim"/> was damaged by one of <paramref name="attacker"/>; the victim's attacked frame is now.</summary>
+    void NoteAttacked(PlayerId victim, PlayerId attacker);
+
     /// <summary><c>Energy::m_powerSabotagedTillFrame</c> as a tick; 0 when the player's power was never sabotaged.</summary>
     long PowerSabotagedUntil(PlayerId player);
 

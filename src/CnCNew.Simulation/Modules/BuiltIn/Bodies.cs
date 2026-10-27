@@ -95,6 +95,11 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
             if (amount <= Fixed.Zero) return DamageOutcome.NoEffect;
             var oldHealState = DamageState;
             InternalChangeHealth(world, amount);
+            // ActiveBody::attemptHealing: every heal that is applied becomes the last damage record, whether the health rose or not.
+            Entity.LastDamageTick = world.Tick;
+            Entity.LastDamageSource = info.Source;
+            Entity.LastDamageHealing = true;
+            world.MarkDirty(Entity);
             if (Health <= PreviousHealth) return DamageOutcome.NoEffect;
             // ActiveBody.cpp attemptHealing: both callbacks only run once health actually rose.
             foreach (var module in Entity.DamageModules) module.OnHealing(world, info);
@@ -111,6 +116,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         if (info.Kill) amount = Health;
         var oldDamageState = DamageState;
         InternalChangeHealth(world, -amount);
+        RecordDamage(world, info);
         var actualDamageDealt = PreviousHealth - Health;
         if (Health < PreviousHealth)
         {
@@ -133,6 +139,31 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
             return DamageOutcome.Killed;
         }
         return Health != PreviousHealth ? DamageOutcome.Applied : DamageOutcome.NoEffect;
+    }
+
+    /// <summary>
+    /// <c>ActiveBody::attemptDamage</c> after the damage is applied: the record is replaced when it is older than the frame before this one; within this frame and the one before,
+    /// only by a damage whose source exists - and, when the recorded source exists too, only by one from a vehicle, infantry or faction structure ("we prefer the one that tells
+    /// who the attacker is"). Then the victim's player learns it was attacked when the recorded source exists (<c>Player::setAttackedBy</c>). (F-52)
+    /// </summary>
+    private void RecordDamage(IWorldServices world, in DamageInfo info)
+    {
+        var replace = true;
+        if (Entity.LastDamageTick >= 0 && world.Time.FramesIn(world.Tick) - world.Time.FramesIn(Entity.LastDamageTick) <= 1)
+        {
+            var recorded = world.FindEntity(Entity.LastDamageSource);
+            var current = world.FindEntity(info.Source);
+            replace = current is not null && (recorded is null || current.Template.IsKindOf("VEHICLE") || current.Template.IsKindOf("INFANTRY")
+                                              || AirWeaponModules.IsFactionStructure(current));
+        }
+        if (replace)
+        {
+            Entity.LastDamageTick = world.Tick;
+            Entity.LastDamageSource = info.Source;
+            Entity.LastDamageHealing = false;
+            world.MarkDirty(Entity);
+        }
+        if (world.FindEntity(Entity.LastDamageSource) is { } attacker) world.NoteAttacked(Entity.Owner, attacker.Owner);
     }
 
     /// <summary>

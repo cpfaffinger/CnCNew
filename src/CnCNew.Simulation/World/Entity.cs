@@ -197,7 +197,17 @@ public sealed class Entity
     /// <summary>The unit's own attack state (its victim, an attack-move); null while it attacks nothing and marches nowhere, so such an object keeps its serialized form.</summary>
     internal AcquisitionState? Acquisition { get; set; }
 
+    /// <summary>
+    /// <c>ActiveBody::m_lastDamageTimestamp</c>: the tick of the last damage record (-1: none). <c>attemptDamage</c> records applied damage - within the frame of the record and the
+    /// next one only a damage from a vehicle, infantry or faction structure replaces it -, <c>attemptHealing</c> records every heal (<see cref="Modules.BuiltIn.ActiveBody"/>).
+    /// </summary>
     public long LastDamageTick { get; internal set; } = -1;
+
+    /// <summary><c>m_lastDamageInfo.in.m_sourceID</c> of the last record; written only with a record.</summary>
+    public EntityId LastDamageSource { get; internal set; } = EntityId.Invalid;
+
+    /// <summary>The last record is a heal (<c>DAMAGE_HEALING</c>), which <c>StealthUpdate</c> does not count as damage; written only when set.</summary>
+    public bool LastDamageHealing { get; internal set; }
 
     /// <summary><c>Object::isCaptured</c> (<c>setCaptured</c>, never cleared): the object was taken over by entering it (an unmanned vehicle); counted by the skirmish condition on captured units. Written only when set.</summary>
     public bool Captured { get; internal set; }
@@ -327,6 +337,8 @@ public sealed class Entity
         writer.Int("weaponReadyTick", WeaponReadyTick);
         WeaponSlots?.Describe(writer);
         writer.Int("lastDamageTick", LastDamageTick);
+        if (LastDamageTick >= 0) writer.UInt("lastDamageSource", LastDamageSource.Value);
+        if (LastDamageHealing) writer.Bool("lastDamageHealing", true);
         writer.Int("lastFireTick", LastFireTick);
         DescribeTurrets(writer);
         Firing?.Describe(writer);

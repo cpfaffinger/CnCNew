@@ -47,6 +47,15 @@ public sealed partial class SimulationWorld
         if (_players.TryGetValue(player.Value, out var state)) state.PowerSabotagedUntil = tick;
     }
 
+    /// <inheritdoc cref="IWorldServices.NoteAttacked"/>
+    public void NoteAttacked(PlayerId victim, PlayerId attacker)
+    {
+        if (_players.TryGetValue(victim.Value, out var state)) state.AttackedTick = Tick;
+    }
+
+    /// <summary><c>Player::getAttackedFrame</c>: the tick an object of the player was last damaged by an existing source (-1: never).</summary>
+    public long AttackedTick(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.AttackedTick : -1;
+
     /// <inheritdoc cref="IWorldServices.PowerSabotagedUntil"/>
     public long PowerSabotagedUntil(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.PowerSabotagedUntil : 0;
 

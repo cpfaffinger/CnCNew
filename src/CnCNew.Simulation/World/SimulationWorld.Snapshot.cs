@@ -74,6 +74,7 @@ public sealed partial class SimulationWorld
             foreach (var shared in player.Array("sharedReadyFrames")) known.SharedReadyFrames[checked((int)shared.Int("power"))] = shared.Int("frame");
             known.Tunnels.Load(player);
             known.PowerSabotagedUntil = player.Has("powerSabotagedUntil") ? player.Int("powerSabotagedUntil") : 0;
+            known.AttackedTick = player.Has("attackedTick") ? player.Int("attackedTick") : -1;
             known.BattlePlan = player.Has("battlePlan") ? BattlePlanState.Load(player.Object("battlePlan")) : null;
         }
         LoadDelayedDamage(state);
@@ -168,6 +169,8 @@ public sealed partial class SimulationWorld
             WeaponClip = checked((int)reader.Int("weaponClip")),
             WeaponReadyTick = reader.Int("weaponReadyTick"),
             LastDamageTick = reader.Int("lastDamageTick"),
+            LastDamageSource = reader.Has("lastDamageSource") ? new EntityId(checked((uint)reader.UInt("lastDamageSource"))) : EntityId.Invalid,
+            LastDamageHealing = reader.Has("lastDamageHealing") && reader.Bool("lastDamageHealing"),
             LastFireTick = reader.Int("lastFireTick"),
             Captured = reader.Has("captured"),
             HasPlayerUpgradeArmor = reader.Bool("hasPlayerUpgradeArmor"),
