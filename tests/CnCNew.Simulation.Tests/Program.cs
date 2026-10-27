@@ -348,6 +348,7 @@ run.Test("Flight: scripted paradrop (plane, parachutes, landing, deletion, conti
 run.Test("Flight: a ground transport sets its team down, returns and is deleted", Tests.FlightTransportReturnsAndLeaves);
 run.Test("Flight: a shot-down payload plane takes its riders with it", Tests.FlightShotDownPlaneDestroysItsPayload);
 run.Test("Flight: countermeasures divert missiles to flares", Tests.FlightCountermeasuresDivertMissiles);
+run.Test("Reforged review (F-46): a decoyed missile takes the newest flare that exists", Tests.ReforgedCountermeasureTakesTheNewestFlare);
 run.Test("Flight: the particle uplink cannon burns its target and restores mid-beam", Tests.FlightParticleUplinkCannonBurnsItsTarget);
 run.Test("Flight: a battle bus has two lives and is thrown by the first death", Tests.FlightBattleBusHasTwoLives);
 run.Test("Slaves: the fixture objects of the slave/spawn/container group are instantiable; a bad rider line is a data error", Tests.SlaveFixtureObjectsAreInstantiable);

@@ -311,18 +311,39 @@ public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModul
 
     public EntityId CalculateCountermeasureToDivertTo(IWorldServices world, Entity victim)
     {
-        var considered = Math.Max(data.VolleySize, 1);
-        var best = EntityId.Invalid;
-        var bestDistance = Fixed.MaxValue;
-        for (var index = _flares.Count - 1; index >= 0 && considered-- > 0; index--)
+        Fixed? DistanceOf(EntityId id)
         {
-            if (world.FindEntity(_flares[index].Id) is not { } flare) continue;
+            if (world.FindEntity(id) is not { } flare) return null;
             var dx = flare.X - victim.X;
             var dy = flare.Y - victim.Y;
-            var distance = dx * dx + dy * dy;
-            if (distance >= bestDistance) continue;
-            bestDistance = distance;
-            best = flare.Id;
+            return dx * dx + dy * dy;
+        }
+        return PickFlare([.._flares.Select(flare => flare.Id)], data.VolleySize, DistanceOf);
+    }
+
+    /// <summary>
+    /// <c>CountermeasuresBehavior::calculateCountermeasureToDivertTo</c>, the walk as the original makes it (F-46): from the newest flare backwards, at most
+    /// <c>max(VolleySize, 1)</c> passes, stepping back only past a flare that no longer exists (<c>--it</c> in its <c>else</c>) - an existing flare is weighed again on the next
+    /// pass, so the newest flare that still exists is the one, whatever the distances of the older ones. <paramref name="distance"/> is null for a flare that is gone; the
+    /// walk stops at the oldest flare instead of reading before it.
+    /// </summary>
+    public static EntityId PickFlare(IReadOnlyList<EntityId> flares, int volleySize, Func<EntityId, Fixed?> distance)
+    {
+        var passes = Math.Max(volleySize, 1);
+        var best = EntityId.Invalid;
+        var bestDistance = Fixed.MaxValue;
+        var index = flares.Count - 1;
+        while (index >= 0 && passes-- > 0)
+        {
+            if (distance(flares[index]) is { } found)
+            {
+                if (found < bestDistance)
+                {
+                    bestDistance = found;
+                    best = flares[index];
+                }
+            }
+            else index--;
         }
         return best;
     }
