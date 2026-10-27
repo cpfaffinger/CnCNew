@@ -89,6 +89,9 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary><see cref="RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed)"/> with a map object's initial health in percent (<c>objectInitialHealth</c>).</summary>
+    /// <summary><c>Object::setDisabledUntil(DISABLED_EMP, until)</c> as <c>EMPUpdate</c> calls it (the scripts' and tests' way to it).</summary>
+    public void DisableByEmpUntil(Entity victim, long until) => Modules.BuiltIn.AirWeaponModules.DisableUntil(this, victim, until);
+
     /// <summary>Sets or clears one script disable bit of an entity (<see cref="Entity.ScriptHeld"/> = <c>DISABLED_HELD</c>, <see cref="Entity.ScriptDisabled"/> = <c>OBJECT_STATUS_SCRIPT_DISABLED</c>).</summary>
     public void SetScriptDisable(Entity entity, byte bit, bool on)
     {

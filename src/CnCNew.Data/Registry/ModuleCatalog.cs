@@ -343,7 +343,7 @@ public static class ModuleCatalog
             new("DoorWaitOpenTime", FieldType.Opaque, Source: "ProductionUpdate.h"),
             new("DoorCloseTime", FieldType.Opaque, Source: "ProductionUpdate.h"),
             new("ConstructionCompleteDuration", FieldType.Opaque, Source: "ProductionUpdate.h"),
-            new("DisabledTypesToProcess", FieldType.Opaque, Source: "ProductionUpdate.h"),
+            new("DisabledTypesToProcess", FieldType.Flags, Table: NameTablesPhase5.DisabledType, Source: "ProductionUpdate.cpp (default DISABLED_HELD)"),
         ]);
 
         // ------------------------------------------------------------------------------------------ next blockers

@@ -374,6 +374,9 @@ public sealed class CashHackSpecialPower(CashHackData data) : SpecialPowerModule
 /// </summary>
 public abstract class BuildCompleteModule : SimModule, IUpdateModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (onBuildComplete is no update in the reference).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     private long _nextWake = -1;
 
     public long NextWake { get => _nextWake; set => _nextWake = value; }

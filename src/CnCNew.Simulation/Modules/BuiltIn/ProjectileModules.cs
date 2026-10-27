@@ -488,6 +488,9 @@ public static class MissileFrames
 /// </summary>
 public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule, IProjectileModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (an AIUpdate).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
+
     private static readonly Fixed ApproachHeight = Fixed.FromInt(10);
 
     internal enum MissileState : byte { PreLaunch, Launch, Ignition, AttackNoTurn, Attack, Kill, KillSelf, Dead }

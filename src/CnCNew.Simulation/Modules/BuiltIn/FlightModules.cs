@@ -94,6 +94,9 @@ public sealed record JetSlowDeathData(SlowDeathData Base, string FxOnGroundDeath
 /// </summary>
 public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (a SlowDeathBehavior).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     private long _nextWake = -1;
     private bool _activated;
     private long _destructionTick;
@@ -260,6 +263,9 @@ public sealed record CountermeasuresData(UpgradeMuxData UpgradeMux, string Flare
 /// </summary>
 public sealed class CountermeasuresBehavior(CountermeasuresData data) : SimModule, IUpdateModule, IUpgradeModule, ICountermeasuresModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
+
     private readonly UpgradeMuxState _mux = new(data.UpgradeMux);
     private readonly List<Flare> _flares = [];
     private long _nextWake = -1;
@@ -1176,6 +1182,9 @@ public sealed record ParticleUplinkData(string PowerName, string BeamObject, str
 /// </summary>
 public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimModule, IUpdateModule, ISpecialPowerHandler
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Subdued | DisabledMask.Underpowered | DisabledMask.Emp | DisabledMask.Hacked;
+
     private enum Beam : byte { None, Born, Decaying, Dead }
 
     /// <summary>Own value: a scripted waypoint path waits this many logic frames of the original for the use of the power that follows it.</summary>

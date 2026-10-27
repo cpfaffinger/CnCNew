@@ -20,6 +20,11 @@ public static class NameTablesPhase5
     public static NameTable StealthForbiddenCondition { get; } = new("StealthForbiddenCondition", "StealthUpdate.h TheStealthLevelNames",
         "ATTACKING", "MOVING", "USING_ABILITY", "FIRING_PRIMARY", "FIRING_SECONDARY", "FIRING_TERTIARY", "NO_BLACK_MARKET", "TAKING_DAMAGE", "RIDERS_ATTACKING");
 
+    /// <summary>DisabledTypes.cpp DisabledMaskType::s_bitNameList (13 entries).</summary>
+    public static NameTable DisabledType { get; } = new("DisabledType", "DisabledTypes.cpp DisabledMaskType::s_bitNameList",
+        "DEFAULT", "DISABLED_HACKED", "DISABLED_EMP", "DISABLED_HELD", "DISABLED_PARALYZED", "DISABLED_UNMANNED", "DISABLED_UNDERPOWERED", "DISABLED_FREEFALL",
+        "DISABLED_AWESTRUCK", "DISABLED_BRAINWASHED", "DISABLED_SUBDUED", "DISABLED_SCRIPT_DISABLED", "DISABLED_SCRIPT_UNDERPOWERED");
+
     /// <summary>BitFlags.cpp ArmorSetFlags::s_bitNameList (8 entries).</summary>
     public static NameTable ArmorSetCondition { get; } = new("ArmorSetCondition", "BitFlags.cpp ArmorSetFlags::s_bitNameList",
         "VETERAN", "ELITE", "HERO", "PLAYER_UPGRADE", "WEAK_VERSUS_BASEDEFENSES", "SECOND_LIFE", "CRATE_UPGRADE_ONE", "CRATE_UPGRADE_TWO");

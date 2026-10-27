@@ -67,8 +67,10 @@ internal static class AirWeaponModules
     public static void DisableUntil(IWorldServices world, Entity victim, long until)
     {
         victim.EmpDisabledUntil = until;
-        // A weapon cannot become ready while the object is disabled (the movement is stopped by the AI update itself).
+        // A weapon cannot become ready while the object is disabled; its AI does not run (GameLogic::update) and leaves it standing.
         SimulationWorld.DelayWeaponsUntil(victim, until, true);
+        foreach (var module in victim.ModuleArray)
+            if (module is AIUpdateInterface ai) ai.StopForDisable(world);
         world.MarkDirty(victim);
     }
 
@@ -760,6 +762,9 @@ public sealed record NeutronSlowDeathData(SlowDeathData Base, string GroundFx, I
 /// </summary>
 public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (a SlowDeathBehavior).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     private static readonly int ExplodedDeath = NameTables.DeathType.TryIndexOf("EXPLODED", out var index) ? index : DeathTypes.Normal;
 
     private long _nextWake = -1;
@@ -1040,6 +1045,9 @@ public sealed record SpectreData(string PowerName, string GattlingTemplate, stri
 /// </summary>
 public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateModule, ISpecialPowerHandler
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Subdued | DisabledMask.Underpowered | DisabledMask.Emp | DisabledMask.Hacked;
+
     public enum GunshipStatus : byte { Inserting, Orbiting, Departing, Idle }
 
     private static readonly Fixed OrbitSlopeMax = Fixed.FromDecimal(0.8m);

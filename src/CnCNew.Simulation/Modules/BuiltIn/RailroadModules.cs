@@ -58,6 +58,9 @@ public sealed record RailroadData(bool IsLocomotive, ImmutableArray<string> Carr
 /// </summary>
 public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModule, IProducerReceiver
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (a PhysicsBehavior in the reference).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     /// <summary>
     /// <c>FRAMES_UNPULLED_LONG_ENOUGH_TO_UNHITCH (2)</c> (RailroadGuideAIUpdate.cpp): updates of the original without a pull from the carriage ahead; with more than
     /// that many behind it a carriage leads itself. The counter counts this module's updates (one per tick), so the bound is the last tick of the frame after

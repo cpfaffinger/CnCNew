@@ -386,6 +386,13 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
 
     // ------------------------------------------------------------------------------------------------------------------ the update
 
+    /// <inheritdoc/>
+    public override void StopForDisable(IWorldServices world)
+    {
+        SetFlightFrameSpeed(world.Time, Fixed.Zero);
+        world.MarkDirty(Entity);
+    }
+
     public override long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;

@@ -29,6 +29,9 @@ public sealed record PhysicsData(Fixed Mass, bool AllowBouncing, bool AllowColli
 /// </summary>
 public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     private long _nextWake = SimulationTiming.SleepForever;
     private bool _falling;
     private Fixed _velocityX;

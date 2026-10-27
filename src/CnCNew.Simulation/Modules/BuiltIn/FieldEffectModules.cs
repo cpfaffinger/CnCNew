@@ -44,11 +44,14 @@ public sealed record PropagandaTowerData(Fixed Radius, long ScanDelayTicks, Fixe
 /// healed it last, until that tower has not healed it for a scan delay (<c>attemptHealingFromSoleBenefactor</c>; a tower that is gone releases its claims at once instead of letting
 /// them run out). Objects that leave the area, and everything when the tower dies, is removed, is sold, is captured by nobody (neutral), or sits in a container that is itself contained
 /// (an Overlord inside a Helix), lose both bonuses — also when another tower still covers them, as in the reference. A tower under construction does nothing; a tower that is
-/// carried (the Overlord's, the Helix's) does not scan when it is a vehicle itself (the Emperor) or when its carrier is carried. The disabled-by-EMP/underpower check and the pulse FX
+/// carried (the Overlord's, the Helix's) does not scan when it is a vehicle itself (the Emperor) or when its carrier is carried. A tower disabled in any way but held lets go of everybody. The pulse FX
 /// have no counterpart.
 /// </summary>
 public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModule, IUpdateModule, IDieModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     /// <summary>
     /// <c>Object::getEnclosingContainedBy</c>: whether any container up the chain encloses the object below it (<c>ContainModuleInterface::isEnclosingContainerFor</c>). A Helix does not
     /// enclose its portable structure, an Overlord not its first rider, a parachute nothing; every other container encloses. A garrison's <c>IsEnclosingContainer</c> is not typed
@@ -100,6 +103,12 @@ public sealed class PropagandaTowerBehavior(PropagandaTowerData data) : SimModul
             return SimulationTiming.SleepForever;
         }
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
+        // "We need to let go of everyone if we are EMPd or underpowered or yadda, but not if we are only held."
+        if ((Entity.DisabledFlags(world.Tick) & ~DisabledMask.Held) != DisabledMask.None)
+        {
+            RemoveAllInfluence(world);
+            return SimulationTiming.SleepNone;
+        }
         // onCapture: "We don't function for the neutral player."
         if (Entity.Owner.IsSystem)
         {

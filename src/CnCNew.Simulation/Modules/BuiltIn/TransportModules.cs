@@ -205,6 +205,9 @@ public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrb
 /// </summary>
 public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (a SlowDeathBehavior).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     private long _nextWake = -1;
     private bool _activated;
     private long _destructionTick;

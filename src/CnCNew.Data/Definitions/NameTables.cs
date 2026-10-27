@@ -68,6 +68,6 @@ public static class NameTables
         KindOf, ObjectStatus, DamageType, DeathType, Veterancy, Geometry, RadarPriority, BuildableStatus, BuildCompletion, EditorSorting, Shadow, LocomotorSet,
         NameTablesPhase5.StealthForbiddenCondition, NameTablesPhase5.ArmorSetCondition, NameTablesPhase5.WeaponSetCondition,
         NameTablesPhase5.WeaponBonusCondition, NameTablesPhase5.WeaponBonusField,
-        NameTablesPhase5.UpgradeType, NameTablesPhase5.MaxHealthChangeType, NameTablesPhase5.DebrisDisposition, NameTablesPhase5.WeaponAffectsMask,
+        NameTablesPhase5.UpgradeType, NameTablesPhase5.MaxHealthChangeType, NameTablesPhase5.DebrisDisposition, NameTablesPhase5.WeaponAffectsMask, NameTablesPhase5.DisabledType,
     ];
 }

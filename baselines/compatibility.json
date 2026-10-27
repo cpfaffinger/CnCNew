@@ -4027,15 +4027,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "ProductionUpdate/DisabledTypesToProcess",
-      "count": 8,
-      "owners": [
-        "ProductionUpdate"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "ProductionUpdate/DoorCloseTime",
       "count": 35,
       "owners": [

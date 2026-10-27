@@ -375,6 +375,9 @@ public sealed record SlowDeathPhases(ImmutableArray<ImmutableArray<string>> Fx, 
 /// </summary>
 public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.Mux), IUpdateModule, ISlowDeathCandidate
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     private bool _activated;
     private long _destructionTick;
     private long _midpointTick;
@@ -598,6 +601,9 @@ public sealed record StealthDetectorData(
 /// </summary>
 public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule, IUpdateModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
+
     private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
     private long _nextWake = -1;
@@ -682,6 +688,9 @@ public sealed record PoisonedData(long PoisonDamageIntervalTicks, long PoisonDur
 /// </summary>
 public sealed class PoisonedBehavior(PoisonedData data) : SimModule, IUpdateModule, IDamageModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     private long _nextWake = -1;
     /// <summary>Absolute tick of the next self-damage application; <see cref="long.MaxValue"/> means "not scheduled" (the reference's frame 0 sentinel, avoided here since tick 0 is a real tick).</summary>
     private long _poisonDamageTick = long.MaxValue;

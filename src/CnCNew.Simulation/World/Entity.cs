@@ -239,6 +239,15 @@ public sealed class Entity
     public const byte ScriptHeld = 1;
     public const byte ScriptDisabled = 2;
 
+    /// <summary><c>Object::getDisabledFlags</c> at <paramref name="tick"/>: the disabled types the port models (EMP, held, script-disabled).</summary>
+    public DisabledMask DisabledFlags(long tick)
+    {
+        var mask = EmpDisabledUntil > tick ? DisabledMask.Emp : DisabledMask.None;
+        if ((ScriptDisableMask & ScriptHeld) != 0) mask |= DisabledMask.Held;
+        if ((ScriptDisableMask & ScriptDisabled) != 0) mask |= DisabledMask.ScriptDisabled;
+        return mask;
+    }
+
     /// <summary><c>SlowDeathBehavior::onDie</c>'s "another AI already handled us" guard, generalized to the entity (not tied to <c>AIUpdateInterface</c>): the weighted sibling lottery runs at most once per death.</summary>
     public bool SlowDeathStarted { get; internal set; }
 

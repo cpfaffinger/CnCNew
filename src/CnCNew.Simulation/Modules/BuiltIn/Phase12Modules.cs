@@ -198,6 +198,9 @@ public sealed record FireWeaponPowerData(SpecialPowerBaseData Base, int MaxShots
 /// </summary>
 public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModuleBase(data.Base), IUpdateModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (the reference's power is an attack order carried out by the AI).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
+
     private long _nextWake = SimulationTiming.SleepForever;
     private int _shotsLeft;
     private SpecialPowerTarget _target;

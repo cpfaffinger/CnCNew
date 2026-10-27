@@ -42,6 +42,9 @@ public sealed record NoFieldsData : ModuleData
 /// </summary>
 public sealed class BaseRegenerateUpdate : SimModule, IUpdateModule, IDamageModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Underpowered;
+
     /// <summary><c>BaseRenerateUpdate.cpp</c>, <c>BaseRegenerateUpdate::update</c>: <c>const Int HEAL_RATE = 3</c> – both the sleep and the factor of the amount, in logic frames of the original.</summary>
     private const int HealRateFrames = 3;
     private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");

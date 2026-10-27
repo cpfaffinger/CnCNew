@@ -672,6 +672,12 @@ public interface IUpdateModule
 
     /// <summary>Returns the number of ticks to sleep (at least 1) or <see cref="Time.SimulationTiming.SleepForever"/>.</summary>
     long Update(IWorldServices world);
+
+    /// <summary>
+    /// <c>UpdateModule::getDisabledTypesToProcess</c>: the disabled types under which the module still runs. An object disabled in any other way skips the module and asks again
+    /// the next tick (<c>GameLogic::update</c>); the default is none.
+    /// </summary>
+    DisabledMask DisabledTypesToProcess => DisabledMask.None;
 }
 
 public interface IDieModule

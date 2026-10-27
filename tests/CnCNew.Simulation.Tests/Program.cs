@@ -202,6 +202,7 @@ run.Test("Fidelity B (F-10): <This Team> in a team's create script in a mission"
 run.Test("Fidelity B (F-43): an upgrade is researched in its producer's queue for its build time", Tests.FidelityUpgradesTakeTheirBuildTime);
 run.Test("Fidelity B (F-44): a producer that dies refunds its whole queue", Tests.FidelityDeadProducerRefundsItsQueue);
 run.Test("Fidelity B (F-45): an airfield reserves a space for every aircraft it queues", Tests.FidelityAirfieldReservesItsSpaceWhenQueued);
+run.Test("Phase 40: a disabled object runs only the update modules that process its disabled types", Tests.DisableRuleStopsTheModulesThatDoNotProcessIt);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);

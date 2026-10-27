@@ -120,11 +120,14 @@ public sealed record OclUpdateData(string Ocl, ImmutableArray<(string Side, stri
 /// <c>OCLUpdate::update</c>: an object (a supply drop zone, a reinforcement pad) that runs a creation list every random <c>MinDelay..MaxDelay</c>, at its own position or the nearest map edge
 /// (<c>CreateAtEdge</c>), not while it is under construction. The first time it is allowed to create it only starts the timer ("you don't get to actually spread the first try"). A
 /// <c>FactionTriggered</c> object (the reinforcement pads) does nothing while its owner is not a playable side; when one captures it the timer starts, a change of owner restarts it, and the list used
-/// is the <c>FactionOCL</c> whose side equals the owner's <c>PlayerTemplate</c> side. Not modeled: the object being disabled (the simulation has no disabled states), the secondary creation point
+/// is the <c>FactionOCL</c> whose side equals the owner's <c>PlayerTemplate</c> side. Not modeled: the secondary creation point
 /// (the object's own position, the target of a parachute delivery — <c>CreateFromList</c> has no such parameter).
 /// </summary>
 public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     private long _nextWake = -1;
     private long _nextCreation;
     private long _timerStarted;
@@ -137,6 +140,13 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
 
     public long Update(IWorldServices world)
     {
+        // "if (getObject()->isDisabled()) m_nextCreationFrame++": a disabled object's next creation moves on with the time it is disabled.
+        if (Entity.DisabledFlags(world.Tick) != DisabledMask.None)
+        {
+            _nextCreation++;
+            world.MarkDirty(Entity);
+            return SimulationTiming.SleepNone;
+        }
         if (data.FactionTriggered)
         {
             var owner = Entity.Owner;
@@ -985,6 +995,9 @@ public sealed record WeaponBonusUpdateData(ImmutableArray<string> RequiredKinds,
 /// </summary>
 public sealed class WeaponBonusUpdate(WeaponBonusUpdateData data) : SimModule, IUpdateModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (the countdowns are the receivers' TempWeaponBonusHelper (all types); the pulse itself waits while the beacon is disabled).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     private long _nextWake = -1;
     private readonly List<(EntityId Target, long Expiry)> _active = [];
 
@@ -1013,12 +1026,14 @@ public sealed class WeaponBonusUpdate(WeaponBonusUpdateData data) : SimModule, I
             _active.RemoveAt(index);
         }
         if (_nextPulse < 0) _nextPulse = now;
-        if (now >= _nextPulse)
+        // A disabled beacon gives nothing (WeaponBonusUpdate processes no disabled type) and pulses as soon as it is enabled again.
+        var disabled = Entity.DisabledFlags(now) != DisabledMask.None;
+        if (now >= _nextPulse && !disabled)
         {
             Pulse(world);
             _nextPulse = now + world.Time.AtLeastOneFrame(data.Delay);
         }
-        var soonest = _nextPulse;
+        var soonest = disabled && now >= _nextPulse ? now + SimulationTiming.SleepNone : _nextPulse;
         foreach (var (_, expiry) in _active) soonest = Math.Min(soonest, expiry);
         return Math.Max(soonest - now, SimulationTiming.SleepNone);
     }

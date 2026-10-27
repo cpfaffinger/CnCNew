@@ -84,6 +84,9 @@ public sealed record StealthData(
 /// </summary>
 public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
+
     private static readonly int StealthedBit = ObjectStatusBits.Index("STEALTHED");
     private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
     private static readonly int CanStealthBit = ObjectStatusBits.Index("CAN_STEALTH");
@@ -247,6 +250,9 @@ public sealed record AutoHealData(
 /// </summary>
 public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModule, IUpgradeModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
+
     private readonly UpgradeMuxState _mux = new(data.Mux);
     private bool _active;
     private long _nextWake = -1;
@@ -608,6 +614,9 @@ public enum AutoAcquire : byte
 /// </summary>
 public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (AIUpdateInterface::getDisabledTypesToProcess: the AI runs while held).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
+
     private long _nextWake = -1;
     private DockMachine? _dock;
     private bool _lastCommandFromPlayer;
@@ -1808,6 +1817,17 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     }
 
     /// <summary>The module stops the object itself: no speed of a frame is left, neither its own nor the one the object carries.</summary>
+    /// <summary>
+    /// The object becomes disabled in a way its AI does not process (<c>DISABLED_EMP</c>): the AI's update does not run until the disable ends (<c>GameLogic::update</c>), so the object
+    /// stops where it is, its orders kept.
+    /// </summary>
+    public virtual void StopForDisable(IWorldServices world)
+    {
+        Entity.Speed = Fixed.Zero;
+        ClearFrameSpeed();
+        world.MarkDirty(Entity);
+    }
+
     private void ClearFrameSpeed()
     {
         _frameSpeed = Fixed.Zero;
@@ -2297,7 +2317,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 /// simulation behaviour — nothing waits for a door — and are kept for the presentation only (docs/MODEL-CONDITIONS-BUILDINGS.md); the catalog carries them as Opaque, so they are read from the original text.
 /// </summary>
 public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations = 0, long DoorOpeningTicks = 0, long DoorWaitOpenTicks = 0, long DoorCloseTicks = 0, long ConstructionCompleteTicks = 0,
-    ImmutableArray<ProductionQuantity> QuantityModifiers = default) : ModuleData
+    ImmutableArray<ProductionQuantity> QuantityModifiers = default, DisabledMask DisabledTypesToProcess = DisabledMask.Held) : ModuleData
 {
     public static ProductionData Parse(RatedModuleConfiguration configuration)
     {
@@ -2309,7 +2329,9 @@ public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations =
             configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorWaitOpenTime")),
             configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorCloseTime")),
             configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "ConstructionCompleteDuration")),
-            [..ModuleConfigReader.All(configuration, "QuantityModifier").Select(Quantity)]);
+            [..ModuleConfigReader.All(configuration, "QuantityModifier").Select(Quantity)],
+            // ProductionUpdateModuleData: DISABLED_HELD unless the data name others.
+            ModuleConfigReader.Flags(configuration, "DisabledTypesToProcess") is { } types ? DisabledMasks.FromNames(types.Names) : DisabledMask.Held);
     }
 
     private const int OneUnit = 1;
@@ -2376,6 +2398,9 @@ public readonly record struct ProductionQueueItem(int TemplateIndex, Fixed Cost,
 /// </summary>
 public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateModule, IDieModule
 {
+    /// <summary><c>ProductionUpdate::getDisabledTypesToProcess</c>: the data's <c>DisabledTypesToProcess</c>.</summary>
+    public DisabledMask DisabledTypesToProcess => data.DisabledTypesToProcess;
+
     private readonly List<ProductionEntry> _queue = [];
     private long _nextWake = -1;
     private bool _hasRally;
@@ -2602,7 +2627,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
 
     private long _disabledUntil;
 
-    /// <summary><c>Object::setDisabledUntil(DISABLED_HACKED, frame)</c> as <c>SabotageMilitaryFactoryCrateCollide</c> uses it: a disabled producer's update does not run (<c>ProductionUpdateModuleData::m_disabledTypesToProcess</c> is empty by default), so its queue stands still until the tick.</summary>
+    /// <summary><c>Object::setDisabledUntil(DISABLED_HACKED, frame)</c> as <c>SabotageMilitaryFactoryCrateCollide</c> uses it: a hacked producer's update does not run (<c>ProductionUpdateModuleData::m_disabledTypesToProcess</c> holds only <c>DISABLED_HELD</c> by default), so its queue stands still until the tick.</summary>
     public void DisableUntil(IWorldServices world, long tick)
     {
         _disabledUntil = tick;
@@ -2612,7 +2637,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public long Update(IWorldServices world)
     {
         if (_queue.Count == 0) return SimulationTiming.SleepForever;
-        if (world.Tick < _disabledUntil || Entity.ScriptDisableMask != 0) return SimulationTiming.SleepNone;
+        if (world.Tick < _disabledUntil) return SimulationTiming.SleepNone;
         AdvanceDoors(world);
         var frame = world.Time.TicksPerOriginalFrame;
         if (_constructionComplete >= 0 && !ConstructionCompleteAt(world.Tick, frame)) _constructionComplete = -1;

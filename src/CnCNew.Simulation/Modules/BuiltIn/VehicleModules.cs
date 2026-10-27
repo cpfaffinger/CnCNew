@@ -122,6 +122,9 @@ public sealed record BattleBusData(SlowDeathData Base, string FxStartUndeath, st
 /// </summary>
 public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
 {
+    /// <summary><c>getDisabledTypesToProcess</c> (a SlowDeathBehavior).</summary>
+    public DisabledMask DisabledTypesToProcess => DisabledMask.All;
+
     /// <summary><c>GROUND_CHECK_DELAY = 10</c> and <c>EMPTY_HULK_CHECK_DELAY = 15</c> (BattleBusSlowDeathBehavior.cpp), in logic frames of the original.</summary>
     private const long GroundCheckDelayFrames = 10;
     private const long EmptyHulkCheckDelayFrames = 15;
