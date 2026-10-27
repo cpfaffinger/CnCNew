@@ -115,4 +115,23 @@ static partial class Tests
         for (var tick = 0; tick < world.Frames(5); tick++) world.Step();
         Check.That(tank.TurretOf(0)!.Value.Angle != turning, "It turns on when the disable is over.");
     }
+
+    /// <summary>
+    /// <c>BattlePlanUpdate</c>'s <c>paralyzeTroop</c> disables the object (<c>DISABLED_PARALYZED</c>), not only its AI: the turret stands with the rest of what does not process it,
+    /// and the unit acts again when the paralysis is over. The port paralyzed the AI module alone, and the turret went on turning.
+    /// </summary>
+    public static void ParalysisDisablesTheObject()
+    {
+        var (world, feeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
+        var tank = Slotted(world, "TurretTank");
+        feeder.FireWeapon(1, tank.Id.Value, IdOf(world, "TurretTarget"));
+        for (var tick = 0; tick < world.Frames(3); tick++) world.Step();
+        var turning = tank.TurretOf(0)!.Value.Angle;
+        world.ParalyzeTroops(tank.Owner, ["VEHICLE"], [], world.Tick + world.Frames(10));
+        Check.That((tank.DisabledFlags(world.Tick) & DisabledMask.Paralyzed) != 0, "The paralyzed tank carries DISABLED_PARALYZED.");
+        for (var tick = 0; tick < world.Frames(10); tick++) world.Step();
+        Check.That(tank.TurretOf(0)!.Value.Angle == turning, $"A paralyzed tank's turret stands ({turning.Raw} -> {tank.TurretOf(0)!.Value.Angle.Raw} raw).");
+        for (var tick = 0; tick < world.Frames(5); tick++) world.Step();
+        Check.That(tank.DisabledFlags(world.Tick) == DisabledMask.None && tank.TurretOf(0)!.Value.Angle != turning, "It turns on when the paralysis is over.");
+    }
 }

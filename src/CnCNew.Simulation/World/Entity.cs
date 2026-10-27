@@ -233,16 +233,20 @@ public sealed class Entity
     /// <summary><c>DISABLED_EMP</c> until this tick (<c>Object::setDisabledUntil</c> by <c>EMPUpdate</c>/<c>LeafletDropBehavior</c>); 0 when never disabled. Movement and weapons stand still while it lies ahead.</summary>
     public long EmpDisabledUntil { get; internal set; }
 
+    /// <summary><c>DISABLED_PARALYZED</c> (<c>BattlePlanUpdate</c>'s change of plan) up to this tick (the first tick it no longer holds); 0 when never paralyzed.</summary>
+    public long ParalyzedUntil { get; internal set; }
+
     /// <summary>Script disables: bit 1 = <c>DISABLED_HELD</c> (<c>NAMED_SET_HELD</c>: nothing acts), bit 2 = <c>OBJECT_STATUS_SCRIPT_DISABLED</c> (<c>PLAYER_DISABLE_FACTORIES</c>: the object produces nothing). 0 when never touched.</summary>
     public byte ScriptDisableMask { get; internal set; }
 
     public const byte ScriptHeld = 1;
     public const byte ScriptDisabled = 2;
 
-    /// <summary><c>Object::getDisabledFlags</c> at <paramref name="tick"/>: the disabled types the port models (EMP, held, script-disabled).</summary>
+    /// <summary><c>Object::getDisabledFlags</c> at <paramref name="tick"/>: the disabled types the port models (EMP, paralyzed, held, script-disabled).</summary>
     public DisabledMask DisabledFlags(long tick)
     {
         var mask = EmpDisabledUntil > tick ? DisabledMask.Emp : DisabledMask.None;
+        if (ParalyzedUntil > tick) mask |= DisabledMask.Paralyzed;
         if ((ScriptDisableMask & ScriptHeld) != 0) mask |= DisabledMask.Held;
         if ((ScriptDisableMask & ScriptDisabled) != 0) mask |= DisabledMask.ScriptDisabled;
         return mask;
@@ -354,6 +358,7 @@ public sealed class Entity
         Acquisition?.Describe(writer);
         if (Captured) writer.Bool("captured", true);
         if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
+        if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
         writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);
         writer.Bool("hasPlayerUpgradeWeapon", HasPlayerUpgradeWeapon);

@@ -181,8 +181,10 @@ public sealed partial class SimulationWorld
         foreach (var entity in _entities.Values)
         {
             if (entity.Owner != player || entity.DestroyRequested || !validKinds.Any(entity.Template.IsKindOf) || invalidKinds.Any(entity.Template.IsKindOf)) continue;
+            // paralyzeTroop: Object::setDisabledUntil(DISABLED_PARALYZED, ...) - the object's modules but those that process it stand (its AI among them) until the plan has settled.
+            entity.ParalyzedUntil = untilTick;
             foreach (var module in entity.ModuleArray)
-                if (module is AIUpdateInterface ai) ai.ParalyzeUntil(this, untilTick);
+                if (module is AIUpdateInterface ai) ai.StopForDisable(this);
             DelayWeaponsUntil(entity, untilTick, false);
             MarkDirty(entity);
         }

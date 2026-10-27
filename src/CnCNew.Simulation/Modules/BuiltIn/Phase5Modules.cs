@@ -1194,21 +1194,6 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         machine.Halt(world, this);
     }
 
-    private long _paralyzedUntil;
-
-    /// <summary>
-    /// <c>Object::setDisabledUntil(DISABLED_PARALYZED, frame)</c> for an object with AI (<c>BattlePlanUpdate</c> paralyzes the troops of a changing battle plan): until <paramref name="tick"/> the AI does not run
-    /// at all (<c>AIUpdateInterface::getDisabledTypesToProcess</c> only lets <c>DISABLED_HELD</c> through), so the object stands still with its order intact and carries on afterwards.
-    /// </summary>
-    public void ParalyzeUntil(IWorldServices world, long tick)
-    {
-        _paralyzedUntil = Math.Max(_paralyzedUntil, tick);
-        Entity.Speed = Fixed.Zero;
-        ClearFrameSpeed();
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
-        world.MarkDirty(Entity);
-    }
-
     public virtual long Update(IWorldServices world)
     {
         // A death whose stop waits for this turn (StopAtDeath): the step of the frame the object died in is taken below, then it stands. A wait that was not
@@ -1232,7 +1217,6 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             ClearFrameSpeed();
             return SimulationTiming.SleepNone;
         }
-        if (world.Tick < _paralyzedUntil) return SimulationTiming.SleepNone;
         // The dock machine is a state machine of the original's logic frame: its states change once per frame, so that "the update after the arrival" is a frame later at every
         // rate. While the dock works on the object (ProcessDock) the machine runs every tick: the docks' actions are written per tick (a repair dock heals a share per tick), and
         // the action delays of the carriers lie on the frame grid by themselves.
@@ -1818,8 +1802,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     /// <summary>The module stops the object itself: no speed of a frame is left, neither its own nor the one the object carries.</summary>
     /// <summary>
-    /// The object becomes disabled in a way its AI does not process (<c>DISABLED_EMP</c>): the AI's update does not run until the disable ends (<c>GameLogic::update</c>), so the object
-    /// stops where it is, its orders kept.
+    /// The object becomes disabled in a way its AI does not process (<c>DISABLED_EMP</c>, <c>DISABLED_PARALYZED</c>): the AI's update does not run until the disable ends
+    /// (<c>GameLogic::update</c>), so the object stops where it is, its orders kept.
     /// </summary>
     public virtual void StopForDisable(IWorldServices world)
     {
@@ -2203,7 +2187,6 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         writer.Bool("approaching", _approaching);
         if (_evacuatePending) writer.Bool("evacuate", true);
         if (_goal.IsValid) writer.UInt("goal", _goal.Value);
-        if (_paralyzedUntil > 0) writer.Int("paralyzedUntil", _paralyzedUntil);
         if (_exitAfterEvacuate || _returning)
         {
             writer.Bool("exitAfterEvacuate", _exitAfterEvacuate);
@@ -2270,7 +2253,6 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _approaching = reader.Bool("approaching");
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
         _goal = reader.Has("goal") ? new EntityId(checked((uint)reader.UInt("goal"))) : EntityId.Invalid;
-        _paralyzedUntil = reader.Has("paralyzedUntil") ? reader.Int("paralyzedUntil") : 0;
         _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");
         _returning = reader.Has("returning") && reader.Bool("returning");
         _exitX = reader.Has("exitX") ? reader.Fixed("exitX") : Fixed.Zero;

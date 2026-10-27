@@ -179,6 +179,7 @@ public sealed partial class SimulationWorld
             BuilderId = new EntityId(checked((uint)reader.UInt("builder"))),
             SellCompleteTick = reader.Int("sellCompleteTick"),
             EmpDisabledUntil = reader.Has("empDisabledUntil") ? reader.Int("empDisabledUntil") : 0,
+            ParalyzedUntil = reader.Has("paralyzedUntil") ? reader.Int("paralyzedUntil") : 0,
             ScriptDisableMask = reader.Has("scriptDisableMask") ? checked((byte)reader.Int("scriptDisableMask")) : (byte)0,
         };
         if (reader.Has("shroudScalar")) entity.ShroudScalar = reader.Fixed("shroudScalar");
