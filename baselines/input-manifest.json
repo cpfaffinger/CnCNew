@@ -32,8 +32,8 @@
     },
     "templates": {
       "items": 2115,
-      "sha256": "2A1D3815F1DE9E4EAB10ECDB16ECD834247FF6E94AE477025D8D42376D730D51",
-      "values": 542707
+      "sha256": "C7D20EB97481A60E4DA98435B964E28DAA7B4A8FF92C33CDF7B68C1F72752543",
+      "values": 542727
     },
     "upgrades": {
       "items": 85,
@@ -47,8 +47,8 @@
     },
     "whole": {
       "items": 2115,
-      "sha256": "1DFC6F441333E6E8C460964CAD6BFD35F71856CC63DD3199FD325A7BC5AB4AD7",
-      "values": 633055
+      "sha256": "46E3C88190596639F8E0B959FAD14EC4857F9696F2F099907276ABBE3FD876BA",
+      "values": 633075
     }
   },
   "definitions": {
