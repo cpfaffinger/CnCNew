@@ -25,6 +25,7 @@ public sealed partial class SimulationWorld
     private static readonly int PlayerUpgradeSetBit = NameTablesPhase5Index("PLAYER_UPGRADE");
     private static readonly int DeployDamageType = DamageIndex("DEPLOY");
     private static readonly int DisarmDamageType = DamageIndex("DISARM");
+    private static readonly int SniperDamageType = DamageIndex("SNIPER");
 
     private static int NameTablesPhase5Index(string name)
         => CnCNew.Data.Definitions.NameTablesPhase5.WeaponSetCondition.TryIndexOf(name, out var index) ? index : throw new InvalidOperationException($"{name} is not a weapon set condition.");
@@ -113,13 +114,16 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>WeaponTemplate::estimateWeaponTemplateDamage</c> (through <c>Object::estimateDamage</c>): the primary damage after the weapon's bonuses and the victim's armor,
-    /// with the reference's nonzero stand-ins (flame against shrubbery, deploy against anything grounded, disarm against mines). Not modeled: the garrison cases
-    /// (<c>DAMAGE_SURRENDER</c>, <c>AllowAttackGarrisonedBldgs</c>, sniper at an empty structure).
+    /// with the reference's nonzero stand-ins (flame against shrubbery, deploy against anything grounded, disarm against mines) and its zero for a sniper at a structure with a
+    /// contain module and nobody inside ("if there is noone home to take the bullet, return 0", F-49). Not modeled: the garrison cases (<c>DAMAGE_SURRENDER</c>,
+    /// <c>AllowAttackGarrisonedBldgs</c>).
     /// </summary>
     private Fixed EstimateDamage(Entity source, WeaponInfo weapon, Entity victim)
     {
         var template = victim.Template;
         if (template.IsKindOf("SHRUBBERY")) return weapon.DeathType == DeathTypes.Burned ? Fixed.One : Fixed.Zero;
+        // getContain() is the first contain module of the object.
+        if (weapon.DamageType == SniperDamageType && template.IsKindOf("STRUCTURE") && victim.Modules.OfType<Modules.IContainerModule>().FirstOrDefault() is { ContainCount: 0 }) return Fixed.Zero;
         if (weapon.DamageType == DisarmDamageType) return template.IsKindOf("MINE") || template.IsKindOf("BOOBY_TRAP") || template.IsKindOf("DEMOTRAP") ? Fixed.One : Fixed.Zero;
         if (weapon.DamageType == DeployDamageType && !IsSignificantlyAboveTerrainAtFrameEnd(victim)) return Fixed.One;
         var amount = weapon.DamageWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions, weapon.PrimaryDamage);
