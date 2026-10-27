@@ -553,7 +553,7 @@ static partial class Tests
         world.Kill(Get(world, "AirLeafletBomb").Id);
         world.Step();
         var tick = world.Tick;
-        Check.That(Named(world, "AirEmpInfantry", 2).EmpDisabledUntil == tick + world.Frames(45) - 1 || Named(world, "AirEmpInfantry", 2).EmpDisabledUntil == tick + world.Frames(45), $"Enemy infantry is disabled for 45 ticks ({Named(world, "AirEmpInfantry", 2).EmpDisabledUntil} vs {tick}).");
+        Check.That(Named(world, "AirEmpInfantry", 2).EmpDisabledUntil == tick + world.Frames(46) - 1, $"Enemy infantry is disabled for 45 frames and through the last of them, from the frame the bomb died in ({Named(world, "AirEmpInfantry", 2).EmpDisabledUntil} vs {tick}).");
         Check.That(Named(world, "AirEmpTank", 2, 0).EmpDisabledUntil > 0 && Named(world, "AirEmpTank", 2, 1).EmpDisabledUntil == 0, "The enemy vehicle in range is disabled, the far one is not.");
         Check.That(Named(world, "AirEmpWall", 2).EmpDisabledUntil == 0 && Named(world, "AirEmpInfantry", 3).EmpDisabledUntil == 0, "A structure and an ally are not.");
     }

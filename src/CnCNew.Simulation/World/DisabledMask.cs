@@ -1,3 +1,5 @@
+using CnCNew.Simulation.Time;
+
 namespace CnCNew.Simulation.World;
 
 /// <summary>
@@ -34,6 +36,12 @@ public static class DisabledMasks
         "DEFAULT", "DISABLED_HACKED", "DISABLED_EMP", "DISABLED_HELD", "DISABLED_PARALYZED", "DISABLED_UNMANNED", "DISABLED_UNDERPOWERED", "DISABLED_FREEFALL",
         "DISABLED_AWESTRUCK", "DISABLED_BRAINWASHED", "DISABLED_SUBDUED", "DISABLED_SCRIPT_DISABLED", "DISABLED_SCRIPT_UNDERPOWERED",
     ];
+
+    /// <summary>
+    /// The first tick at which a disable set "until" <paramref name="until"/> (<c>Object::setDisabledUntil</c>) no longer holds: <c>Object::checkDisabledStatus</c> runs after the
+    /// updates of a frame and clears a disable whose frame has come, so it holds through the whole frame of <paramref name="until"/>.
+    /// </summary>
+    public static long EnabledFrom(SimulationTime time, long until) => time.FloorToFrame(until) + time.TicksPerOriginalFrame;
 
     /// <summary>The mask of a set of names of the table; an unknown name is an error.</summary>
     public static DisabledMask FromNames(IEnumerable<string> names)

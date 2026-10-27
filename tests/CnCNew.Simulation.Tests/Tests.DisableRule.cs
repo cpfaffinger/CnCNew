@@ -63,4 +63,37 @@ static partial class Tests
         Check.That(Produced("DefaultExitFactory", (world, factory) => world.DisableByEmpUntil(factory, world.Tick + world.Frames(15))) == 1,
             "After a short EMP the queue goes on.");
     }
+
+    /// <summary>
+    /// <c>Object::checkDisabledStatus</c> runs after the updates of a frame and clears a disable whose frame has come: a factory disabled before its update in frame f "until"
+    /// f + 10 skips the updates of frames f to f + 10 - eleven frames - and its unit comes eleven frames late. The port let it go one frame early.
+    /// </summary>
+    public static void DisableHoldsThroughItsLastFrame()
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: RetailModuleFiles());
+        var frame = 0L;
+        long Completed(int disableFrames)
+        {
+            var world = NewWorld(fixture);
+            frame = world.Frames(1);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "DefaultExitFactory", x: 300, y: 300);
+            world.Step();
+            feeder.GiveMoney(1, 1000);
+            world.Step();
+            var factory = world.Entities.Single(entity => entity.Template.Name == "DefaultExitFactory");
+            while (world.Tick % world.Frames(1) != 0) world.Step();
+            feeder.QueueProduction(1, factory.Id.Value, "QuickUnit");
+            world.Step();
+            while (world.Tick % world.Frames(1) != 0) world.Step();
+            var start = world.Tick;
+            if (disableFrames > 0) world.DisableByEmpUntil(factory, world.Tick + world.Frames(disableFrames));
+            while (CountOf(world, "QuickUnit") == 0 && world.Tick < start + world.Frames(200)) world.Step();
+            return world.Tick - start;
+        }
+
+        var free = Completed(0);
+        var disabled = Completed(10);
+        Check.That(disabled - free == 11 * frame, $"A disable until ten frames on holds eleven frames of updates ({free} against {disabled} ticks).");
+    }
 }

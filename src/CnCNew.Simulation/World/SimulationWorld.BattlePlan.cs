@@ -177,6 +177,7 @@ public sealed partial class SimulationWorld
     /// <inheritdoc cref="IWorldServices.ParalyzeTroops"/>
     public void ParalyzeTroops(PlayerId player, ImmutableArray<string> validKinds, ImmutableArray<string> invalidKinds, long untilTick)
     {
+        untilTick = DisabledMasks.EnabledFrom(Time, untilTick);
         foreach (var entity in _entities.Values)
         {
             if (entity.Owner != player || entity.DestroyRequested || !validKinds.Any(entity.Template.IsKindOf) || invalidKinds.Any(entity.Template.IsKindOf)) continue;

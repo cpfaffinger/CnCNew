@@ -65,7 +65,7 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
     /// <summary><c>Object::setDisabledUntil(DISABLED_HACKED, frame)</c> as the Internet-Center sabotage hands it to every hacker inside: the module's update does not run before <paramref name="tick"/>.</summary>
     public void DisableUntil(IWorldServices world, long tick)
     {
-        _hackedUntil = tick;
+        _hackedUntil = DisabledMasks.EnabledFrom(world.Time, tick);
         Entity.Speed = Fixed.Zero;
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
         world.MarkDirty(Entity);

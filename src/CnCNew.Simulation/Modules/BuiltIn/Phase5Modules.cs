@@ -2630,7 +2630,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     /// <summary><c>Object::setDisabledUntil(DISABLED_HACKED, frame)</c> as <c>SabotageMilitaryFactoryCrateCollide</c> uses it: a hacked producer's update does not run (<c>ProductionUpdateModuleData::m_disabledTypesToProcess</c> holds only <c>DISABLED_HELD</c> by default), so its queue stands still until the tick.</summary>
     public void DisableUntil(IWorldServices world, long tick)
     {
-        _disabledUntil = tick;
+        _disabledUntil = DisabledMasks.EnabledFrom(world.Time, tick);
         world.MarkDirty(Entity);
     }
 

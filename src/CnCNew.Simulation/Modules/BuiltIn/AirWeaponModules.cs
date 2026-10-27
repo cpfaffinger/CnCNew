@@ -66,9 +66,10 @@ internal static class AirWeaponModules
     /// <summary><c>Object::setDisabledUntil(DISABLED_EMP, ...)</c>: the object neither moves nor shoots until <paramref name="until"/>.</summary>
     public static void DisableUntil(IWorldServices world, Entity victim, long until)
     {
-        victim.EmpDisabledUntil = until;
+        var enabled = DisabledMasks.EnabledFrom(world.Time, until);
+        victim.EmpDisabledUntil = enabled;
         // A weapon cannot become ready while the object is disabled; its AI does not run (GameLogic::update) and leaves it standing.
-        SimulationWorld.DelayWeaponsUntil(victim, until, true);
+        SimulationWorld.DelayWeaponsUntil(victim, enabled, true);
         foreach (var module in victim.ModuleArray)
             if (module is AIUpdateInterface ai) ai.StopForDisable(world);
         world.MarkDirty(victim);
