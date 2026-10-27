@@ -2,8 +2,8 @@
   "catalogs": {
     "commands": {
       "items": 1,
-      "sha256": "FF85601A2A97B75F515A062F40F4F4F124DCC28E59DD2D302E77761155C7F48C",
-      "values": 6336
+      "sha256": "CE91FF3426C1C8FBC07C003A771199781401BB89340583DA9D2C17AE6D97E374",
+      "values": 8221
     },
     "crates": {
       "items": 9,
@@ -47,8 +47,8 @@
     },
     "whole": {
       "items": 2115,
-      "sha256": "87666A2DA8CF256D99B9A5C548C6D9AB383DDAAE414CCA27B6E07A40B880ACF7",
-      "values": 631170
+      "sha256": "1DFC6F441333E6E8C460964CAD6BFD35F71856CC63DD3199FD325A7BC5AB4AD7",
+      "values": 633055
     }
   },
   "definitions": {
