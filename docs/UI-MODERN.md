@@ -175,8 +175,7 @@ Sections 1 to 9 are the decision as it was committed (`8464d5c`) before any code
 - **Check boxes** (not in section 2): the modern derivation lets a check box's window reach to its right neighbour (or its parent's edge), 4 units short; the original
   draws a longer label unclipped beyond the window, and with Segoe UI more labels are longer than their box.
 - **Drop shadows** (section 5): the modern skin draws none; text over pictures keeps the original's only where the art is kept (the command bar).
-- **Tooltips and the message list** keep the original's style (`Mouse.ini`, `InGameUI.ini`) in both skins; the in-game message lines and the superweapon clocks are not
-  restyled.
+- **Tooltips and the message list** kept the original's style (`Mouse.ini`, `InGameUI.ini`) in both skins until Phase 39; section 15 has what the modern skin draws now.
 
 ## 11. Measured (thresholds of section 9)
 
@@ -211,8 +210,7 @@ empty space. The original: 1 (this project's own "More options" label at 800 x 6
   palette and the type fit the game, whether the proportional command bar plays better than the stretched one, whether the hotkey list is useful. The pictures were
   looked at by the agent while the skin was built (PNG of `UiRenderTool --skins`), which is not an acceptance.
 - Geometry of its own for single screens (section 2, way (a)); the modern skin's screens keep the original's proportions.
-- The campaign screens and the mission HUD are derived like every layout, but neither pinned in the modern skin nor walked by the scripted person.
-- The modern skin's tooltips, message list and superweapon clocks (the original's style).
+- The campaign screens and the mission HUD are not walked by the scripted person (pinned in both skins since Phase 39, section 15).
 - Integer scaling of the original skin (D-21), offered nowhere.
 - Display mode and sound device are applied by the client; a change of either was not observed by a person (the full screen, a second sound device).
 
@@ -226,3 +224,18 @@ empty space. The original: 1 (this project's own "More options" label at 800 x 6
 - `scripts/perf-profile.ps1` with the binaries of `d718187` and of `89490f5`: every one of the ten runs with the same final hash on both sides, means within -5.9 % and
   +0.3 % (the simulation is unchanged).
 - Clean room of `89490f5` (`C:\cr38`): every step ok - 0 warnings, the known export, input manifest identical, the quick set 9 of 9, the packages free of original data.
+
+## 15. Phase 39: the open ends of the modern skin
+
+- **Tooltips:** the modern skin draws the pointer tooltip (`Mouse::drawTooltip`'s place - the window tree's `TOOLTIPTEXT` and the command bar's descriptions alike) as a
+  panel of its palette (panel, border, text, accent for the highlighted line, shadow) with its text in the body step; the timing of `Mouse.ini` stays
+  (`TooltipPainter.Build(..., skin)`, used by the shell and the HUD).
+- **The message list, the superweapon clocks and the other in-game texts:** `InGameUiStyle.WithSkin` gives every role of `InGameUI.ini` the skin's family at the type
+  step its original size falls in (`UiSkinStyle.StepOf`); the colours - the message colours, a player's house colour on a clock - stay the original's. The original skin
+  returns the style unchanged.
+- **Pinned:** `SkinTests` adds the HUD of a match with a line in the message list and the money display's tooltip, in both skins and six resolutions (`skin-screens.txt`
+  now 48 hashes; the test checks that the line is shown and that the tooltip is a panel of the modern palette only in the modern skin). `CampaignPinTests` (new) pins the
+  campaign's way - the difficulty question of the main menu, the briefing of `MD_USA01` and that mission's HUD after its opening cinematic - in six resolutions:
+  `campaign-screens.txt` and `campaign-screens-modern.txt`, 30 hashes each (the two shell screens once, the mission's HUD per rate, because it is a picture of a real
+  mission). The opening cinematic of `MD_USA01` runs longer than 50 s; the test gives it up to 15,000 drawn frames.
+- **Not done:** the scripted person still does not walk the campaign; nobody has looked at the tooltip or the message list in the modern skin.

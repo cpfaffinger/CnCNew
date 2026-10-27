@@ -121,6 +121,12 @@ the shell; the readability check with the GDI font. Side items: the late long ti
 path queue of one frame, `docs/PERF-MOVEMENT.md` §13); D-34 prepared as a measured proposal, not adopted (`docs/SKIRMISH-AI.md` §7a). With S3-M5 every milestone of
 Stage 3 is built by machine; none is accepted by a human. Next: `docs/handoffs/HANDOFF-PHASE39.md`.
 
+**Stage 1, S1-M11, fidelity package B (Phase 39, 27 October 2026, by machine):** F-07 to F-10 and F-43 fixed as the original's source does, and F-44 to F-47 found on
+the way (a dying producer refunds its queue, an airfield reserves its spaces when it queues, the newest flare, the crushing lines of a toppling structure) - each one cause
+with its own manifest commit where a manifest moved; F-06 is the original's behaviour (`docs/SIMULATION-CORE.md` §53). Since F-44 the retail reference match ends without a
+winner at its limit of 432,000 ticks. Side items: the modern skin draws tooltips, messages and superweapon clocks; the campaign's way pinned in both skins. Zero Hour
+Reforged is read as a second source of fixes (`docs/REFORGED-FIXES.md`); its first reading entered F-48 to F-57. Next: `docs/handoffs/HANDOFF-PHASE40.md`.
+
 ## 6. Patch integration and quality (Phase 30)
 
 **Postponed on 5 October 2026:** this section was the step after Phase 17 and now lies behind the programme from section 5 (`docs/handoffs/HANDOFF-PHASE30.md`).

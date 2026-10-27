@@ -128,7 +128,7 @@ milestone status is updated in each stage document.
 | S1-M8 | World presentation (terrain, objects, effects) | 7, 8, 15 | built – not accepted |
 | S1-M9 | Input, shell, HUD, texts, original layouts | 8, 12, 16, publication | built – not accepted |
 | S1-M10 | Sound, cursor, waypoints, mission in the client | 16, 17 | built – not accepted (never heard) |
-| S1-M11 | Playability and acceptance by a human | 15, 16, 17, acceptance package, 31 (fidelity package A, done 10 October 2026) | **open** – the acceptance goal of Stage 1 is not reached; the three simulation findings of the pre-check are fixed (F-03, F-04, F-05; debris and four follow-ups entered as F-34 to F-37) |
+| S1-M11 | Playability and acceptance by a human | 15, 16, 17, acceptance package, 31 (fidelity package A, done 10 October 2026), 39 (fidelity package B, done 27 October 2026) | **open** – the acceptance goal of Stage 1 is not reached; the three simulation findings of the pre-check are fixed (F-03, F-04, F-05; debris and four follow-ups entered as F-34 to F-37); package B fixed F-07 to F-10 and F-43 to F-47, F-06 is the original's behaviour (`docs/SIMULATION-CORE.md` §53) |
 | S1-M12 | Installer and clean content from the Steam master | publication (9 October) | built – not accepted |
 | S1-M13 | The skirmish AI of the original as a faithful computer opponent | 23 (side product) | built as an option, with named deviations |
 | S1-M14 | Tooling of the port | 1–23 | done, grows with every phase |
@@ -232,6 +232,11 @@ The sequence from here:
    picture; More options; both skins pinned, a scripted person, the readability check; two defects of the analysis screen found and fixed; the late long tick under
    `movement-budget` broken down; D-34 prepared as a measured proposal (variant B: only the GLA worker kept; 7 of 50 manifest runs change). With it every Stage 3
    milestone is built by machine - none is accepted by a human (R3). The brief that follows is `HANDOFF-PHASE39.md` (Stage 1: fidelity package B, D-13, D-14, F-43).
+   **Phase 39 done (27 October 2026)** (S1-M11, fidelity package B, with side items): F-07 to F-10 and F-43 fixed as the original's source does, and five further
+   findings of the same reading - F-44 and F-45 in `ProductionUpdate.cpp`, F-46 and F-47 through Zero Hour Reforged (`docs/REFORGED-FIXES.md`) - each one cause, with
+   its own manifest commit where a manifest moved (F-07 and F-46 moved none); F-06 is the original's behaviour (a rule-profile candidate). After F-44 the retail reference match ends in a stalemate at its limit of
+   432,000 ticks. The modern skin draws tooltips, messages and superweapon clocks; the campaign's way is pinned in both skins. The brief that follows is
+   `HANDOFF-PHASE40.md` (Stage 1: the review of Zero Hour Reforged, F-48, F-49, the reference match's driver seed).
 4. **Stage 3, split by whether it touches the simulation (D-1):**
    - **Simulation-touching Stage 3 work** (S3-M1 AI tactics and levels, S3-M6 pathfinding, S3-M7 patch layers) comes
      **after Phase 27**: it needs the profile fingerprint in the match description and the replay header (built in 24 and
@@ -276,8 +281,8 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-8 | A standard skirmish ends after one hour of game time, also for a human (§7a no. 8) – the original has no such limit | unchanged | R1 | 1 |
 | D-9 | Assessing the balance after the AI corrections (ChinaTankGeneral 70 of 80 against AirForce) (§7a no. 10) | not assessed | – | 3 |
 | D-10 | The second physical machine with a different CPU (§7a no. 11, E1) | open; instructions in `docs/DETERMINISM.md` §4. Phase 26 ran without it (eight client processes on one machine); a second runtime environment that needs no hardware - Linux under WSL - needs the .NET runtime installed there | Phase 27 | 2 **Phase 27:** the runtime was installed in the WSL distribution with the owner's word; Linux and Windows agree on the manifest and in one match on this CPU (`docs/DETERMINISM.md` §2d). The second machine itself is open; the machine-only substitute is exhausted with this. |
-| D-13 | Known 30 Hz findings, each a fidelity fix with its own manifest: `SupplyMachine` overwrites a player's command in one frame; a magazine without reload time fires once more through a second command in the same tick; `QuantityModifier` not applied (one Red Guard instead of two); the unit comes into being at completion, not when the gate opens | fix, one cause per commit | R1 | 1 |
-| D-14 | `<This Team>` in a team's create script: fixed for AI sessions, not in the mission VM (changes manifest runs) | fix | R1 | 1 |
+| D-13 | Known 30 Hz findings, each a fidelity fix with its own manifest: `SupplyMachine` overwrites a player's command in one frame; a magazine without reload time fires once more through a second command in the same tick; `QuantityModifier` not applied (one Red Guard instead of two); the unit comes into being at completion, not when the gate opens | fix, one cause per commit - **done in Phase 39** (`docs/SIMULATION-CORE.md` §53) | R1 | 1 |
+| D-14 | `<This Team>` in a team's create script: fixed for AI sessions, not in the mission VM (changes manifest runs) | fix - **done in Phase 39** (§53.5) | R1 | 1 |
 | D-15 | Rank system (skill points per kill, `Rank.ini`, purchase points per rank): the simulation gives one purchase point every 90 s instead | implement as a rule of the game | R1 | 1 |
 | D-16 | Completing the original AI's C++ half (bridge repair, rebuild hole, cluster mines, prerequisite-free build path, placement without shroud; `docs/SKIRMISH-AI-ORIGINAL.md` §6.2) | leave as named deviations of the option | R1 | 1 |
 | D-17 | Rule for slow clients: how long to display, throttle, disconnect | display up to 2 s, throttle up to 10 s, then disconnect - **built with these defaults as configuration (Phase 26, `docs/NETWORK-PROTOCOL.md` §14); measured: a lost connection slows the others for 8 s at half speed, a client that only keeps up with the slowed game for 14.4 s in three incidents. Open: the numbers, the speed while slowed (50 %), and whether the count starts again after a recovery** | Phase 27 | 4 **Phase 27: the restart of the count is configuration now (`lagRecoveryMs`, default 30 s: a member's used time is forgotten only after it kept up that long); a close after the end is logged as a close. The numbers stay a proposal.** |
@@ -300,6 +305,9 @@ decision stays with the project owner. Decided items are kept for one month, the
 | D-26 | The limits of a public server (`docs/DEDICATED-SERVER.md` §9.2): the defaults are proposals from measurements on one machine - above all 8 connections per address, 100 key exchanges a second, 500 messages a second per member, 20 s without a hash report, a match of at most 2 h, a recording of at most 64 MiB | the defaults of §9.2 | R4 | 4 |
 
 **Decided:**
+
+- **D-13 and D-14 (fix, 10 October 2026; done in Phase 39, 27 October 2026):** F-07, F-08, F-09 and F-10 fixed, each with its own manifest commit; F-06 is what the
+  original does (`SupplyTruckWantsToPickUpOrDeliverBoxesState::update` gives the dock order without a check) and stays (`docs/SIMULATION-CORE.md` §53.4).
 
 - **D-5 (13 October 2026, built in Phase 28 as the brief of that phase asked):** a command of a player may not state a point beyond 131,072 units on any axis
   or an angle beyond 1,024 radians; `SimulationWorld.Check` and `Submit` reject it with `InvalidArguments` - on every machine alike, before it could overflow the

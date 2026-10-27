@@ -3415,3 +3415,121 @@ Each a change of the original's own behaviour, with its manifest commit when the
 
 After them the three community fixes they blocked are adopted behind the rule profile (`3bd8ceb`, `docs/GGC-FIXES.md` 3.1d): `door-exit-to-rally` (17),
 `bike-trainable-from-rider` (18; `Entity.IsTrainable`, an override saved only when set), `enter-needs-vertical-overlap` (19).
+
+## 53. Phase 39: fidelity package B (27 October 2026)
+
+The findings F-06 to F-10 and F-43 of the fidelity register (`docs/plan/STAGE-1-PORT.md` §3), each read in the original's source and either fixed - one cause, one implementation
+commit, one manifest commit, a test that fails on the code before at 30, 60 and 120 Hz (`tests/CnCNew.Simulation.Tests/Tests.FidelityB.cs`) - or named as the original's own
+behaviour. Stage 1 work: the yardstick is the original's function. **No human has seen any of it.**
+
+### 53.1 F-08: `QuantityModifier` (`ProductionUpdate::queueCreateUnit`, `ProductionUpdate::update`)
+
+`queueCreateUnit` gives a production entry the count of the first `QuantityModifier` whose template exists and is the ordered one (`isEquivalentTo`); the order is paid once. When the
+entry is finished, `update` tries `getProductionQuantityRemaining` exits in one frame: each that the exit lets go (`reserveDoorForExit`) makes a unit and counts it
+(`oneProductionSuccessful`); the entry stays at the head of the queue, "overbuilding", until all have left. `QueueProductionExitUpdate` closes its door for `ExitDelay` after each
+unit ("Mainly for the multiple produced Red Guard. Make them come out one at a time"), so the second Red Guard leaves 300 ms after the first. `cancelUnitCreate` deposits the
+whole cost, also when one of the units has left. Built: `ProductionData.QuantityModifiers` (parsed from the opaque field as `parseAppendQuantityModifier` reads it, a name the data
+does not define matches nothing, as `findTemplate` returning null does), `ProductionEntry.Quantity`/`Produced` (written to the state only when not 1 and 0). Equivalence by
+reskin (`m_reskinnedFrom`) is not modelled: no shipped modifier names a reskinned template. Data: the Chinese barracks of the four China factions (`ChinaInfantryRedguard 2`,
+`Nuke_`, `Tank_` and the Boss's) and `Infa_ChinaInfantryMiniGunner 1` (no change). Implementation `b42a210`, manifest `c5fc4aa`: the reference manifest moved in the 16
+runs with a China faction (12 pairings end at another tick, Armored Fury China-GLA changes its winner from GLA to China, Alpine Assault America-China becomes a
+stalemate - 15 of 16 pairings decided); the 27 mission runs, the stress test, the reference match and the sweep are unchanged; the input manifest moved in the
+template catalogue only (the new field). Test `FidelityQuantityModifier`.
+
+### 53.2 F-09: the unit comes into being when its door is open (`ProductionUpdate::update`, `updateDoors`, `setHoldDoorOpen`)
+
+The original reserves a door for the finished unit (`reserveDoorForExit`), opens it (or keeps it open, or pops a closing door back to waiting open) and makes the object only when
+the door waits open (`door->m_doorWaitOpenFrame != 0`) - more than `DoorOpeningTime` after it began to open (`updateDoors`, strict comparison). The port made the unit at
+completion and ran the door in the presentation `DoorOpeningTime` ahead. Now the simulation keeps the four doors (`ProductionUpdate.Door`: the tick each phase began, the hold of
+the airfield and when it was released) and the construction-complete phase; a transition carries its own tick, so a sleeping module catches up exactly as one updated every frame;
+"more than" is one logic frame of the original at every rate. The exit modules answer `IProductionExit.ReserveDoor` (one door when free; the airfield the first free space, whose
+door is its number, and none needed for `PRODUCED_AT_HELIPAD`), `ClaimExit(world, produced, door)` and `UnreserveDoor`; `ParkingPlaceBehavior` holds a space's door open while an
+aircraft has the space (`reserveSpace`, `releaseSpace`, `purgeDead`, and the new aircraft from `exitObjectViaDoor`). A release counts until the frame after it (what releases a
+space, an aircraft, is updated after the airfield). The presentation (`StructureConditionTracker`) reads the doors from the simulation instead of imitating them; a factory's unit now
+appears `DoorOpeningTime` and one frame after the same order at a factory without a door (31 frames for one second).
+Implementation `08def33`, manifest `60ca6d5`: 37 of 50 runs moved - the 16 pairings, the four eight-player runs, the reference match and the sweep in their
+results, 15 mission runs in their hashes only (the doors are state; every result quantity of the 27 missions is equal). All 16 pairings are decided again (Alpine
+Assault America-China won by China), Death Valley America-China changes its winner (America -> China); the reference match is won by FactionGLA at tick 51,660
+(`3E2BFE48E3E4F02D` / `ED8B4247184A9F13`; it was tick 32,520). The input manifest did not move. The presentation's door tests now follow the original's timing (each
+phase one frame more than its time; `CONSTRUCTION_COMPLETE` re-armed in the loop that makes the unit, so it lasts twice its duration and a frame). Test
+`FidelityUnitAtOpenDoor`. The airfield's reservation at queue time followed as F-45 (§53.8).
+
+### 53.3 F-07: a clip without reload time (`Weapon::getStatus`, the attack state)
+
+The original's weapon is ready again in the frame of the shot that emptied a clip without reload time, but its AI fires once per frame; the port fires one shot per command, and at
+30 Hz a second `FireWeaponCommand` in the same tick fired again (above 30 Hz the port already waited a frame). `ConsumeShot` now makes such a weapon ready in the next frame at
+every rate. Nothing else is different at 30 Hz: every other attempt comes a frame later anyway. Implementation `6968ff4`; **neither manifest moved** (both are 60 Hz runs,
+where the port already waited a frame; measured with the full set). Test `FidelityNoReloadClipFiresOncePerFrame`.
+
+### 53.4 F-06: `SupplyMachine` over a player's command - the original's behaviour
+
+`SupplyTruckWantsToPickUpOrDeliverBoxesState::update` orders the dock without asking what the truck does (`aiDock(..., CMD_FROM_AI)`, `SupplyTruckAIUpdate.cpp`), and
+`StateMachine::updateStateMachine` runs a state's `update` before its transition conditions; `GameLogic::update` processes the frame's commands before the object updates. A player's
+command that arrives in the frame after the machine entered "wanting" is therefore overwritten in the original as well. Not changed; the register names it as the original's.
+
+### 53.5 F-10: `<This Team>` in a mission's team scripts (`ScriptEngine::executeScript`, `getTeamNamed`)
+
+`executeScript` keeps `m_callingTeam` and sets only `m_conditionTeam` for the instances its conditions name; `getTeamNamed(THIS_TEAM)` returns the calling team first. The mission
+VM cleared the calling team (the original-AI sessions had the two variables since Phase 23), so a team's create script whose conditions name no team had no `<This Team>`
+(`TEAM_HUNT <This Team>` did nothing). Now one rule for both. Implementation `83510c7`, manifest `e62d747`: 11 mission runs moved (the nine Generals' Challenge boss
+runs, `MD_CHI05`, `MD_GLA03`), every one with its outcome and its end; nothing else moved. Test `FidelityThisTeamInMissionCreateScript` (a team's create script kills
+its own team).
+
+### 53.6 F-43: upgrades take their build time (`ProductionUpdate::queueUpgrade`, `update`)
+
+The port completed an upgrade in the purchase command; the original queues it in a producer's queue for its build time (`UpgradeTemplate::calcTimeToBuild`: `BuildTime`
+seconds of logic frames), pays it when queued, completes it when its time is over (`update`, `PRODUCTION_UPGRADE`: the player's upgrade, or `us->giveUpgrade` for an
+object upgrade) and refunds it in full on cancel (`cancelUpgrade`). Built (`SimulationWorld.Upgrades.cs`, `ProductionUpdate.EnqueueUpgrade`):
+
+- A `PurchaseUpgradeCommand` names the producer: the object itself for an object upgrade, the building for a player upgrade (the control bar's button names the
+  selected building - `MSG_QUEUE_UPGRADE` goes to the selected group); without one the world takes the first of the player's buildings, in id order, that can research it
+  now (`AIPlayer::buildUpgrade` walks the build list - the order is the one difference, named). A script's upgrade button is researched at its carrier
+  (`Object::doCommandButton`).
+- The checks, in `AIGroup::queueUpgrade`'s and `queueUpgrade`'s order: the money (`canAffordUpgrade`), owned (`hasUpgrade` / `hasUpgradeComplete`), in production - a
+  player upgrade in any of the player's queues (`hasUpgradeInProduction`), an object upgrade in the producer's queue (`isUpgradeInQueue`) - the new rejection
+  `UpgradeInProduction`, a producer without the button (`Object::canProduceUpgrade`, every command set a `CommandSetUpgrade` can switch to counts) or without a queue,
+  a full queue. `affectedByUpgrade` (an object upgrade needs a module that reacts to it) is not checked, as before.
+- The command bar shows an upgrade in the queue with its button's picture and progress and follows `ControlBarCommand.cpp`: a full queue restricts, owned or in
+  production shows like "cannot afford" (`ButtonReason.InProduction`), then the money. The observer's research tab lists what is in research with its building and
+  progress (`SpectatorPlayerPanel.Researching`). The original AI's queue scan skips upgrade entries.
+- Tests that switch on a module through an upgrade grant it directly (`Feeder.GrantUpgrade`, the world's `CompleteUpgrade` as a script's grant); `Phase5Economy`
+  keeps the purchase rules a fixture without a producer can show.
+
+Implementation `400ea98`, manifest `f678994`: 16 mission runs moved, 6 of them in their results (`GC_ChemGeneral` against two generals, `GC_SuperWeaponsGeneral` against the Demolitions general, `MD_CHI05`,
+`MD_GLA05`, `MD_USA05`: scripted upgrades take their time, a few script orders are refused while one is in production), every run with its outcome and its end;
+the skirmish runs are unchanged (the built-in AI buys no upgrade). Test `FidelityUpgradesTakeTheirBuildTime`; the rate-equivalence suite's upgrade cases (economy group)
+measure the research time now (29.97 s for a 30 s upgrade) and are equal at 30, 60 and 120 Hz.
+
+### 53.7 F-44: a producer that dies refunds its queue (`ProductionUpdate::onDie`)
+
+Found while reading `ProductionUpdate.cpp` for F-43: `ProductionUpdate` is also a die module in the original (`getDie`), and `onDie` calls
+`cancelAndRefundAllProduction` - the owner gets back everything the dying building had queued, units and upgrades alike (each through `cancelUnitCreate` /
+`cancelUpgrade`, so the full cost). The port refunded on a sale (`BuildAssistant::sellObject`) and a defection only; a destroyed factory kept the money of its queue.
+`ProductionUpdate.OnDie` now does what `onDie` does. Implementation `81918dc`, manifest `c7f3def`: 9 runs moved, 47 of 50 keep their outcome and their end; two pairings end later with the same winner (Alpine Assault America-China, Bitter Winter ChinaTank-AirForce), and **the retail reference match no longer ends**: the refunds of its dying factories keep seven factions alive with two objects each, and it runs to its limit of 432,000 ticks as a stalemate (deterministic: checkpoints, a fresh run and a continuation from a snapshot identical). Whether to choose another driver seed for it, as Phase 22 did, is left to its own commit (Phase 40). Test `FidelityDeadProducerRefundsItsQueue`.
+
+### 53.8 F-45: an airfield reserves its spaces when it queues (`ProductionUpdate::queueCreateUnit`, `ParkingPlaceBehavior::shouldReserveDoorWhenQueued`)
+
+Found while reading `ProductionUpdate.cpp` for F-09: `queueCreateUnit` asks every `ParkingPlaceBehavior` of the producer whether it reserves a door when an aircraft
+is queued (`shouldReserveDoorWhenQueued`: anything but `PRODUCED_AT_HELIPAD`) and reserves the space then; `BuildAssistant::canMakeUnit` refuses the order when no
+space is free (`CANMAKE_PARKING_PLACES_FULL`). The port queued any number of aircraft and held the finished one at the head of the queue until a space was free. Now the
+queue order reserves the space (`ParkingPlaceBehavior.ReserveDoor`, the entry keeps its door), a full airfield refuses it (the new rejection `ParkingPlacesFull`; the
+command bar shows `ButtonReason.ParkingFull`) and a cancelled order gives its space back (`unreserveDoorForExit`). The air test of a full airfield follows the original.
+Implementation `8f644ff`, manifest `6614543`: no result quantity of the 50 runs moved (no run queues more aircraft than its airfield has spaces), but the three mission runs of `GC_AirGeneral` (Laser, Infantry and Stealth general) change their chain hash and that of their continuation from a snapshot - final hash, end and outcome as before; the input manifest is unchanged. Test `FidelityAirfieldReservesItsSpaceWhenQueued`.
+
+### 53.9 F-46: a decoyed missile takes the newest flare (`CountermeasuresBehavior::calculateCountermeasureToDivertTo`)
+
+Found by reading Zero Hour Reforged's changelog (`docs/REFORGED-FIXES.md` R-21): the original walks back from the newest flare at most `max(VolleySize, 1)` passes and steps
+back only past a flare that is gone (`--it` in its `else`); an existing flare is weighed again on the next pass, so the newest flare that still exists is taken, however
+near an older one is. The port took the nearest of the last `VolleySize` flares - what Reforged changed it to, not the original. `CountermeasuresBehavior.PickFlare` is the
+original's walk (it stops at the oldest flare instead of reading before it). Implementation `96a3508`; **neither manifest moved** (measured with the full set: no run of the manifest lets a missile meet a flare older than the newest). Test `ReforgedCountermeasureTakesTheNewestFlare`.
+
+### 53.10 F-47: a toppling structure crushes across its footprint (`StructureToppleUpdate::applyCrushingDamage`, `doDamageLine`)
+
+Found by the same reading (R-22): below `THETA_CEILING` the original fires, every frame, lines of shots from the last crushed distance to the leading edge and one more at the
+leading edge; a line is a shot every 25 units from `-facingWidth` while below `facingWidth` and one at `facingWidth`, the width being half the length of
+`(MajorRadius * sin, MinorRadius * cos)` of the orientation less the topple angle. The port fired one shot at the leading edge when it advanced and reported the sweep as not
+simulated. A shot's offset is `(i * sin, i * cos)` of the topple angle as the original writes it - across the fall only at 0 and 90 degrees, along it at 45; Reforged
+corrects it, the original profile keeps it (a rule-profile candidate). The debris creation list of a line (`doPhaseStuff(STPHASE_FINAL)`) stays out, as the slow-death
+debris (F-36). Implementation `9671fb0`, manifest `f84e33c`: nine mission runs change their hashes and save-point snapshot (their structures' state lost the "not simulated" flag); no result quantity moved but `MD_GLA01`'s count of skipped creations (80 -> 79) - every outcome, end and shot count as before. Test `ReforgedToppleCrushLine` (the shots of a line at 0, 90 and 45 degrees) and the collision test of a
+falling building.
+

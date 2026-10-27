@@ -99,6 +99,12 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   layouts derived at run time - Segoe UI on a type scale, flat chrome, the command bar in proportion at 16:9 - chosen in the options' new "More options" (also display
   mode, wide-screen view, text size, sound device, the hotkey list) or with `--skin modern`; the original skin stays the default and its pictures stay as they were
   (`docs/UI-MODERN.md`). Whether the modern skin is better to read and use is a human's judgement, not yet made.
+- **Fidelity package B (Phase 39, by machine):** one Red Guard order makes two soldiers (`QuantityModifier`), a unit comes out when its factory's door stands open,
+  an upgrade is researched in its building's queue for its build time (the observer's research tab shows it), a factory that dies refunds its queue, an airfield
+  refuses an aircraft it has no space for, a decoyed missile takes the newest flare, a toppling building crushes across its footprint, `<This Team>` in a mission's
+  team scripts - each read in the original's source and changed with its own manifest commit (`docs/SIMULATION-CORE.md` §53); the retail reference match now runs to its
+  limit without a winner. Zero Hour Reforged is read as a second source of fixes (`docs/REFORGED-FIXES.md`); its first reading found ten more places where this port
+  differs from the original (F-48 to F-57), the work of Phase 40.
 - **Open and named:** determinism is verified on one machine, a second physical machine is outstanding; the
   tick maximum misses its target; no video decoder; the balance of the AI is not assessed; eleven decisions lie
   with the project owner (`docs/plan/PROGRAMME.md` §7). The plan: `docs/plan/PROGRAMME.md` – four stages (port,

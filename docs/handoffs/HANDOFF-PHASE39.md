@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port · **Milestone:** S1-M11 Playability and acceptance by a human (fidelity package B: F-06 to F-10, F-43) · **Phase:** 39
-> **Status:** current (starting state measured 18 October 2026 at `89490f5`; not begun)
+> **Status:** done by machine (27 October 2026; `docs/SIMULATION-CORE.md` §53; starting state measured 18 October 2026 at `89490f5`)
 > **Predecessor:** HANDOFF-PHASE38.md · **Results in:** docs/SIMULATION-CORE.md, docs/GAME-RULES.md, docs/SCRIPT-ENGINE.md, docs/plan/STAGE-1-PORT.md §3, docs/SPECTATOR-MODE.md (research in progress)
 > **Side items:** the modern skin's open ends (S3-M5: tooltips, message list and superweapon clocks in the skin's style; the campaign screens and the mission HUD pinned in the modern skin); D-34 stays the owner's
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
