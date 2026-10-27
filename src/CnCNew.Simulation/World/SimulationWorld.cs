@@ -849,6 +849,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (source.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (!_entities.TryGetValue(fire.Target.Value, out var fireTarget) || fireTarget.DestroyRequested || fireTarget.Body is null) return CommandRejection.UnknownEntity;
                 if (fire.Slot is < WeaponSlot.Best or >= WeaponSlot.Count || !Enum.IsDefined(fire.Origin)) return CommandRejection.InvalidArguments;
+                if (!TurretsLetAttack(source)) return CommandRejection.NoWeapon;
                 var choice = ChooseWeapon(source, fireTarget, fire.Origin, fire.Slot);
                 if (choice.Rejection != 0) return choice.Rejection;
                 if (!CanPlayerSee(command.Player, fireTarget)) return CommandRejection.TargetNotVisible;
@@ -1196,6 +1197,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 var fireTarget = FindEntity(fire.Target);
                 if (fireTarget is null || fireTarget.DestroyRequested || fireTarget.Body is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
                 UpdateWeaponSet(source);
+                // Object::isAbleToAttack: every weapon on a switched-off turret - the attack state fails at once (F-57).
+                if (!TurretsLetAttack(source)) { RecordRejection(command, CommandRejection.NoWeapon); break; }
                 var choice = ChooseWeapon(source, fireTarget, fire.Origin, fire.Slot);
                 if (choice.Rejection != 0) { RecordRejection(command, choice.Rejection); break; }
                 if (!GateAllowsFire(source, fireTarget)) { RecordRejection(command, CommandRejection.WeaponNotReady); break; }

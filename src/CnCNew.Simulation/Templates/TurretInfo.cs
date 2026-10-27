@@ -37,10 +37,10 @@ public sealed record TurretInfo(
 
     /// <summary>
     /// Whether this turret takes part in aiming and gates its weapons. A turret that cannot turn is one of the reference's "fake turrets" (the Comanche's, so it can attack on the
-    /// move): <c>AIAttackAimAtTargetState::update</c> then falls through to turning the body, so its weapons are not held back by the turret. A turret that starts disabled
-    /// (<c>InitiallyDisabled</c>, switched on by <c>BattlePlanUpdate</c>/<c>DeployStyleAIUpdate</c>) does not aim either.
+    /// move): <c>AIAttackAimAtTargetState::update</c> then falls through to turning the body, so its weapons are not held back by the turret. Whether the turret is switched on
+    /// (<c>InitiallyDisabled</c>, switched by <c>BattlePlanUpdate</c>/<c>DeployStyleAIUpdate</c>) is state of the object (<see cref="World.TurretState"/>, F-57).
     /// </summary>
-    public bool Gates => TurnRate > Fixed.Zero && !InitiallyDisabled;
+    public bool Gates => TurnRate > Fixed.Zero;
 
     /// <summary>
     /// The turret glances around while idle: it takes part in turning, a scan angle is set (<c>TurretAIIdleScanState::onEnter</c> ends at once when both angles are zero) and the interval is a real one.

@@ -330,11 +330,15 @@ public sealed class FireSpreadUpdate(FireSpreadData data) : SimModule, IUpdateMo
 
 // ================================================================================================================ DeployStyleAIUpdate
 
-/// <summary><c>DeployStyleAIUpdate.h</c>: the AI base plus the time to unpack and to pack (ticks). The turret options and the manual animations are typed; the turrets themselves are the simulation's (docs/SIM-TURRET-AIM.md), the deploy-specific turret options are not modeled.</summary>
-public sealed record DeployStyleData(AIUpdateData Base, long UnpackTicks, long PackTicks) : ModuleData
+/// <summary>
+/// <c>DeployStyleAIUpdate.h</c>: the AI base plus the time to unpack and to pack (ticks), <c>TurretsFunctionOnlyWhenDeployed</c> (the turret of the current weapon is switched on
+/// when the unit is set up and off when it packs) and <c>TurretsMustCenterBeforePacking</c> (a move order first recentres that turret). The manual animations are typed only.
+/// </summary>
+public sealed record DeployStyleData(AIUpdateData Base, long UnpackTicks, long PackTicks, bool TurretsFunctionOnlyWhenDeployed = false, bool TurretsMustCenterBeforePacking = false) : ModuleData
 {
     public static DeployStyleData Parse(RatedModuleConfiguration configuration) => new(
-        AIUpdateData.Parse(configuration), ModuleConfigReader.Ticks(configuration, "UnpackTime", 0), ModuleConfigReader.Ticks(configuration, "PackTime", 0));
+        AIUpdateData.Parse(configuration), ModuleConfigReader.Ticks(configuration, "UnpackTime", 0), ModuleConfigReader.Ticks(configuration, "PackTime", 0),
+        ModuleConfigReader.Bool(configuration, "TurretsFunctionOnlyWhenDeployed", false), ModuleConfigReader.Bool(configuration, "TurretsMustCenterBeforePacking", false));
 }
 
 /// <summary>
@@ -344,8 +348,10 @@ public sealed record DeployStyleData(AIUpdateData Base, long UnpackTicks, long P
 /// a shot in range (<see cref="IFireGate"/>, asked when an accepted fire command executes or the unit fires at a victim it acquired itself, after range and readiness) starts deploying and is dropped until the
 /// unit is deployed — the next attempt (the unit's own attack fires every tick it may, a command giver re-issues its order) succeeds afterwards — and a move order (<see cref="OrderMove"/>) starts undeploying and is carried out
 /// when the unit is packed. An attack wanted while packing reverses the pack where it stands (<c>setMyState(DEPLOY, reverseDeploy)</c>, both directions take <c>UnpackTime</c> as in the
-/// reference) and drops the pending move; an unpacking unit asked to move reverses likewise. While unpacking or packing the unit stands still. The idle auto deploy follows from the unit's own target acquisition (it deploys for a victim it acquired). Not modeled: turret recentering (<c>ALIGNING_TURRETS</c> is never entered: a packing unit does not wait for its turret to centre), <c>TurretsFunctionOnlyWhenDeployed</c>, the model conditions,
-/// animations and sounds.
+/// reference) and drops the pending move; an unpacking unit asked to move reverses likewise. While unpacking or packing the unit stands still. The idle auto deploy follows from the unit's own target acquisition (it deploys for a victim it acquired).
+/// With <c>TurretsFunctionOnlyWhenDeployed</c> the turret of the current weapon is switched on when the unit is ready to attack and off when it packs; with
+/// <c>TurretsMustCenterBeforePacking</c> a move order to a deployed unit with such a turret first recentres it (<c>ALIGNING_TURRETS</c>, the unit stands still) and the unit packs
+/// once the turret stands at its natural angle; an attack wanted while aligning makes it ready to attack again (F-57). Not modeled: the model conditions, animations and sounds.
 /// </summary>
 public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterface(data.Base), IFireGate
 {
@@ -389,9 +395,10 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
         (_pendingX, _pendingY, _pendingFromPlayer, _hasPendingMove) = (x, y, fromPlayer, true);
         switch (_state)
         {
-            case DeployState.ReadyToAttack: SetState(world, DeployState.Undeploy, false); break;
+            // Turrets that must centre before packing are aligned first (only a unit whose current weapon sits on a turret).
+            case DeployState.ReadyToAttack: SetState(world, data.TurretsMustCenterBeforePacking && HasTurretForCurrentWeapon() ? DeployState.AligningTurrets : DeployState.Undeploy, false); break;
             case DeployState.Deploy when _frameToWait != 0: SetState(world, DeployState.Undeploy, true); break;
-            case DeployState.AligningTurrets: SetState(world, DeployState.Undeploy, false); break;
+            // ALIGNING_TURRETS packs only once the turret is centred (Update).
         }
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
         world.MarkDirty(Entity);
@@ -440,13 +447,17 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
             if (_state == DeployState.Deploy) SetState(world, DeployState.ReadyToAttack, false);
             else if (_state == DeployState.Undeploy) SetState(world, DeployState.ReadyToMove, false);
         }
+        // ALIGNING_TURRETS with a move wanted: the turrets are centred, so pack. Decided in the first tick of the unit's own logic frame of the original: the turret reaches its
+        // natural angle within a frame, which at 30 Hz the update sees only in the next one.
+        if (_state == DeployState.AligningTurrets && _hasPendingMove && world.Time.BeginsFrameOf(Entity, now) && world.IsTurretInNaturalPosition(Entity))
+            SetState(world, DeployState.Undeploy, false);
         if (_state == DeployState.ReadyToMove && _hasPendingMove)
         {
             _hasPendingMove = false;
             base.OrderMove(world, _pendingX, _pendingY, _pendingFromPlayer);
         }
-        // DEPLOY / UNDEPLOY: setLocomotorGoalNone() every tick — the unit does not move while it sets up or packs.
-        if (_state is DeployState.Deploy or DeployState.Undeploy) StopInternalMove();
+        // DEPLOY / UNDEPLOY / ALIGNING_TURRETS: setLocomotorGoalNone() every tick — the unit does not move while it sets up, packs or centres its turret.
+        if (_state is DeployState.Deploy or DeployState.Undeploy or DeployState.AligningTurrets) StopInternalMove();
         if (_commandsFrom != 0)
         {
             if (now >= _commandsFrom) _commandsFrom = 0;
@@ -454,7 +465,17 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
         }
         var sleep = base.Update(world);
         // The reference never sleeps this AI so that any new command is caught; here a running timer or a waiting move keeps it awake (and the frame the unit became ready in).
-        return _state is DeployState.Deploy or DeployState.Undeploy || _hasPendingMove || _commandsFrom != 0 ? SimulationTiming.SleepNone : sleep;
+        return _state is DeployState.Deploy or DeployState.Undeploy or DeployState.AligningTurrets || _hasPendingMove || _commandsFrom != 0 ? SimulationTiming.SleepNone : sleep;
+    }
+
+    /// <summary><c>getWhichTurretForCurWeapon() != TURRET_INVALID</c>.</summary>
+    private bool HasTurretForCurrentWeapon()
+    {
+        if (Entity.Template.Turrets is not { } set) return false;
+        var slot = Entity.CurrentWeaponSlot;
+        for (var index = 0; index < Templates.TurretSet.MaxTurrets; index++)
+            if (set[index] is { } info && info.Controls(slot)) return true;
+        return false;
     }
 
     /// <summary><c>setMyState</c>: the status and timer effects (sounds and model conditions are presentation).</summary>
@@ -467,7 +488,11 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
         {
             case DeployState.Deploy:
             case DeployState.Undeploy:
-                if (state == DeployState.Undeploy) Entity.Status &= ~(1UL << DeployedBit);
+                if (state == DeployState.Undeploy)
+                {
+                    Entity.Status &= ~(1UL << DeployedBit);
+                    if (data.TurretsFunctionOnlyWhenDeployed) world.SetTurretEnabled(Entity, false);
+                }
                 if (reverse)
                 {
                     // The animation runs back from where it stands: the time already spent becomes the time to spend (both directions use UnpackTime in the reference).
@@ -482,6 +507,7 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
             case DeployState.ReadyToAttack:
                 Entity.Status |= 1UL << DeployedBit;
                 _frameToWait = 0;
+                if (data.TurretsFunctionOnlyWhenDeployed) world.SetTurretEnabled(Entity, true);
                 if (world.Time.TicksPerOriginalFrame > 1)
                 {
                     _commandsFrom = now + world.Time.TicksPerOriginalFrame;
@@ -490,6 +516,7 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
                 break;
             case DeployState.AligningTurrets:
                 _frameToWait = 0;
+                world.RecenterTurret(Entity);
                 break;
         }
     }

@@ -61,7 +61,10 @@ public sealed record BattlePlanUpdateData(
 /// <c>changeBattlePlan(+1)</c> on the player, which sets the <c>BATTLEPLAN_*</c> weapon bonus on every qualifying object and gives hold the line its damage scalar and search and destroy its sight
 /// scalar (see <c>SimulationWorld.BattlePlan.cs</c>), the center itself gets its own bonus (double maximum health for hold the line, a wider shroud and active stealth detection for search and
 /// destroy). Choosing another plan makes it pack: the bonuses are removed again and every qualifying troop of the player is <em>paralyzed</em> for <c>BattlePlanChangeParalyzeTime</c> (it
-/// neither moves nor fires). Removing the center removes its plan. The bombardment turret (<c>InitiallyDisabled</c>, enabled by <c>BattlePlanUpdate::setTurretEnabled</c> in the reference) is not switched by the plan here: a disabled turret takes no part in aiming (docs/SIM-TURRET-AIM.md), so it is always "centred" and the pack-up never waits for it.
+/// neither moves nor fires). Removing the center removes its plan. The center's gun sits on a turret the module switches off when the center is created (<c>onObjectCreated</c>; the
+/// shipped turret is not <c>InitiallyDisabled</c>): the plan switches it on when
+/// bombardment becomes active, and before bombardment packs up the turret is ordered to recentre - the pack-up waits until it stands at its natural angle - and switched off
+/// (<c>enableTurret</c>, <c>recenterTurret</c>, <c>isTurretInNaturalPosition</c>; F-57). While switched off the center attacks nothing (<c>Object::isAbleToAttack</c>).
 /// Not modelled: the radar blip, messages, sounds and door animations; the unit sight <em>range</em> (only the shroud clearing range is scaled, the simulation has no per-object vision range).
 /// A capture leaves the plan's bonuses with the old owner, as in the reference; with <see cref="Rules.GameFix.BattlePlanFollowsCapture"/> they move to the new one.
 /// </summary>
@@ -81,6 +84,7 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
     private int _bombardment;
     private int _searchAndDestroy;
     private int _holdTheLine;
+    private bool _centeringTurret;
 
     public override string ModuleName => "BattlePlanUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
@@ -94,7 +98,12 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
     /// <summary><c>getActiveBattlePlan</c>: the plan that is unpacked and working, <see cref="BattlePlanKind.None"/> while in transition.</summary>
     public BattlePlanKind ActivePlan => _status == TransitionStatus.Active ? _planAffectingArmy : BattlePlanKind.None;
 
-    public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
+    public override void OnSpawn(IWorldServices world)
+    {
+        _nextWake = world.Tick + SimulationTiming.SleepNone;
+        // onObjectCreated: enableTurret(false) - the gun works only under bombardment.
+        world.SetTurretEnabled(Entity, false);
+    }
 
     /// <summary>Choose the plan the center should be in (<c>m_desiredPlan</c>).</summary>
     public void SelectPlan(BattlePlanKind plan) => _desiredPlan = plan;
@@ -122,10 +131,30 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
                 break;
             case TransitionStatus.Unpacking:
                 SetStatus(world, TransitionStatus.Active);
+                if (_currentPlan == BattlePlanKind.Bombardment) world.SetTurretEnabled(Entity, true);
                 break;
             case TransitionStatus.Active:
-                // A different plan was chosen: pack up. Bombardment needs the turret centred first; the plan does not enable that turret, so it always is, but only an object with AI ever gets here.
-                if (_currentPlan != _desiredPlan && (_currentPlan != BattlePlanKind.Bombardment || CrateModules.AiOf(Entity) is not null)) SetStatus(world, TransitionStatus.Packing);
+                // A different plan was chosen: pack up. Bombardment centres its turret first: centred, it packs and switches the turret off; otherwise the center goes idle and the
+                // turret is told to recentre once. Only an object with AI gets past bombardment.
+                if (_currentPlan == _desiredPlan) break;
+                if (_currentPlan != BattlePlanKind.Bombardment) SetStatus(world, TransitionStatus.Packing);
+                // Decided in the first tick of the center's own logic frame of the original: the turret comes to rest within a frame, which at 30 Hz is seen only in the next one.
+                else if (CrateModules.AiOf(Entity) is not null && world.Time.BeginsFrameOf(Entity, world.Tick))
+                {
+                    if (world.IsTurretInNaturalPosition(Entity))
+                    {
+                        SetStatus(world, TransitionStatus.Packing);
+                        _centeringTurret = false;
+                        world.SetTurretEnabled(Entity, false);
+                    }
+                    else if (!_centeringTurret)
+                    {
+                        world.EndAttack(Entity);
+                        world.RecenterTurret(Entity);
+                        _centeringTurret = true;
+                        world.MarkDirty(Entity);
+                    }
+                }
                 break;
             case TransitionStatus.Packing:
                 SetStatus(world, TransitionStatus.Idle);
@@ -263,6 +292,7 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
         writer.Int("bombardment", _bombardment);
         writer.Int("searchAndDestroy", _searchAndDestroy);
         writer.Int("holdTheLine", _holdTheLine);
+        if (_centeringTurret) writer.Bool("centeringTurret", true);
     }
 
     public override void Load(IStateReader reader)
@@ -280,6 +310,7 @@ public sealed class BattlePlanUpdate(BattlePlanUpdateData data) : SimModule, IUp
         _bombardment = checked((int)reader.Int("bombardment"));
         _searchAndDestroy = checked((int)reader.Int("searchAndDestroy"));
         _holdTheLine = checked((int)reader.Int("holdTheLine"));
+        _centeringTurret = reader.Has("centeringTurret") && reader.Bool("centeringTurret");
     }
 
     private static BattlePlanKind Plan(long value) => value is >= 0 and <= (int)BattlePlanKind.SearchAndDestroy ? (BattlePlanKind)value : throw new InvalidDataException("Battle plan out of range.");

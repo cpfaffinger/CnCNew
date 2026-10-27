@@ -202,7 +202,7 @@ static partial class Tests
           End
         End
         Object SwDeployer
-          KindOf = SELECTABLE VEHICLE
+          KindOf = SELECTABLE VEHICLE CAN_ATTACK
           VisionRange = 300.0
           ShroudClearingRange = 300.0
           Locomotor = SET_NORMAL SkirmishLoco

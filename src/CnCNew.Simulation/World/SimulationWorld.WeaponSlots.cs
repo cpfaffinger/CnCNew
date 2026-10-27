@@ -419,6 +419,7 @@ public sealed partial class SimulationWorld
     {
         if (source.DestroyRequested || source.EffectivelyDead || victim.DestroyRequested || victim.Body is null) return false;
         UpdateWeaponSet(source);
+        if (!TurretsLetAttack(source)) return false;
         var choice = ChooseWeapon(source, victim, FireOrigin.Ai);
         if (!choice.CanFire || !GateAllowsFire(source, victim)) return false;
         if (!AimTurretsAt(source, choice.Slot, victim)) { NoteTurretWait(); return false; }

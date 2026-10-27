@@ -472,8 +472,9 @@ static partial class Tests
                 }
                 return -1;
             }
-            var first = Until(BattlePlanKind.Bombardment);
-            var second = Until(BattlePlanKind.HoldTheLine);
+            // Hold the line first: leaving bombardment waits for a turret this center has not (BattlePlanUpdate::isTurretInNaturalPosition is false without one, F-57).
+            var first = Until(BattlePlanKind.HoldTheLine);
+            var second = Until(BattlePlanKind.Bombardment);
             Check.That(first == 30 * TimingUnitsPerFrame && second == 61 * TimingUnitsPerFrame,
                 $"{rate}: the first plan is active after 30 frames, a changed plan after 61 (120 and 244 units of 1/120 s), measured {first} and {second}.");
         }

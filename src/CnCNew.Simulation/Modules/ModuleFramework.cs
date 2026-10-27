@@ -83,6 +83,15 @@ public interface IWorldServices
     /// </summary>
     void EndAttack(Entity entity);
 
+    /// <summary><c>AIUpdateInterface::setTurretEnabled</c> for the turret of the object's current weapon (F-57); nothing without such a turret.</summary>
+    void SetTurretEnabled(Entity entity, bool enabled);
+
+    /// <summary><c>AIUpdateInterface::recenterTurret</c> for the turret of the object's current weapon: it drops its victim and turns back to its natural angle at once.</summary>
+    void RecenterTurret(Entity entity);
+
+    /// <summary><c>AIUpdateInterface::isTurretInNaturalPosition</c> for the turret of the object's current weapon; false without such a turret.</summary>
+    bool IsTurretInNaturalPosition(Entity entity);
+
     /// <summary>
     /// <c>AI_ATTACK_MOVE_TO</c> begins for the entity, which is being ordered to move to (<paramref name="x"/>, <paramref name="y"/>): it engages what it meets on the way and resumes the
     /// march afterwards. Called by the AI module from inside its move order, after <see cref="EndAttack"/>.

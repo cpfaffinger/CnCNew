@@ -56,7 +56,9 @@ The scan fields (`MinIdleScanAngle`, `MaxIdleScanAngle`, `MinIdleScanInterval`, 
 * `Templates/TurretInfo.cs`: `TurretInfo` (a turret template in radians per tick and ticks) and `TurretSet` (main and second turret, `TurretsLinked` of the AI module);
   `ObjectTemplate.Turrets` is `null` for objects without a block. Missing keys have the constructor values of `TurretAIData` (0.01 rad per frame, two seconds of recentre time,
   scan interval 9,999,999 frames, no scan angle).
-* `TurretInfo.Gates`: only a turret with a turn rate > 0 and not `InitiallyDisabled` takes part in aiming (see 5). `TurretInfo.CanScan`: `Gates`, a scan angle greater than 0 and a real
+* `TurretInfo.Gates`: only a turret with a turn rate > 0 takes part in aiming (see 5). Whether it is switched on is state of the object (`TurretState.Enabled`, `TurretAI::m_enabled`;
+  it starts as `InitiallyDisabled` says and is switched by `BattlePlanUpdate` and `DeployStyleAIUpdate` - F-57): a switched-off turret neither aims, scans nor turns, its weapons do
+  not fire, and an object without `CAN_ATTACK` whose every weapon sits on one cannot attack at all (`Object::isAbleToAttack`: it acquires nobody, an order to fire is `NoWeapon`). `TurretInfo.CanScan`: `Gates`, a scan angle greater than 0 and a real
   interval (smaller than the default value); otherwise `TurretAIIdleScanState::onEnter` (`minA == 0 && maxA == 0` → immediately `STATE_SUCCESS`) never sees anything to do.
 * `World/TurretState.cs`: per turret angle (relative to the vehicle direction), pitch, target, `HoldUntil`, weapon slot of the last command, `Rotating`, sweep state and, new, the attack state
   (`Persistent`, `Pursuing`, `LoseInterestAt`) and the scanning (`Scanning`, `ScanAngle`, `NextScan`, `ScanDraws`). `Entity.Turrets`, publicly readable as `Entity.TurretOf(index)` →
@@ -149,7 +151,7 @@ Implementation as above (`ScheduleScan`, `IdleScanStep`, `ScanStep`):
   `world.LogicRandom` is **not** touched (test: a world with and one without a scanning turret have the same state of the logic stream after 1500 ticks). The values differ from those of the
   reference, the distribution (uniform in the interval, uniform in the angle range, sign 50 : 50) does not. Order of the draws as in the reference: interval, angle, sign.
 * The data: 38 `Turret` blocks set a scan interval (50 objects including the reskins of the generals have a scanning turret): the sentry drone (every 250 ms, up to 360°),
-  Patriot battery and Gattling cannon (250 ms, 360°), the fire base (550–950 ms, 360°), strategy center (main turret; 500–1000 ms, 60°; its `AltTurret` is `InitiallyDisabled`), the technicals (5–10 s, 30–60°), the ECM vehicle (interval 0, exactly 180°,
+  Patriot battery and Gattling cannon (250 ms, 360°), the fire base (550–950 ms, 360°), strategy center (500–1000 ms, 60°; only while its turret is switched on, under bombardment), the technicals (5–10 s, 30–60°), the ECM vehicle (interval 0, exactly 180°,
   `RecenterTime` 0: it turns back and forth without interruption, as in the reference).
 * Self-acquisition: `TurretAI::friend_checkForIdleMoodTarget` (a resting turret chooses a victim of its own accord, `AutoAcquireEnemiesWhenIdle`) has been part of the target acquisition of the simulation since Phase 17
   (`docs/SIMULATION-CORE.md` §33): a resting turret gets its victim from the unit, even if its body is driving; a victim interrupts the scanning like every attack.
@@ -177,7 +179,7 @@ the sentry drone; the drawn picture can lag behind the simulation state by one t
 |---|---|---|
 | Object without a `Turret` block (infantry, buildings without a turret, aircraft) | fires immediately | no `m_turretAI` |
 | Turret with `TurretTurnRate = 0` (18 blocks of the retail data; the "fake turret" of the reference, e.g. of the Comanche) | fires immediately, turret stays centred | `AIAttackAimAtTargetState::update`: "incapable of turning, turn ourself" → body aims |
-| `InitiallyDisabled = Yes` (4 blocks, the strategy centers; together with the fake turrets 22 objects with a non-aiming turret) | as before; does not scan either | the reference switches them on through `BattlePlanUpdate`/`DeployStyleAIUpdate` (`setTurretEnabled`); `BattlePlanModule` switches no turret here |
+| A switched-off turret (`InitiallyDisabled = Yes`: the 4 Nuke Cannon blocks; the strategy center's turret, switched off when the center is created; a deploy-style unit with `TurretsFunctionOnlyWhenDeployed` while it is not set up) | does not aim, scan or turn; its weapons do not fire; without `CAN_ATTACK` the object cannot attack | `TurretAI::updateTurretAI` runs the turret's state machine only when enabled; `BattlePlanUpdate` switches it on under bombardment and recentres it before packing, `DeployStyleAIUpdate` when set up, centring it before packing with `TurretsMustCenterBeforePacking` (F-57; until Phase 40 such a turret fired without aiming and was never switched) |
 | Slot that no turret controls (`ControlledWeaponSlots`) | fires immediately | `getWhichTurretForCurWeapon` = `TURRET_INVALID` |
 | `FireOrigin.Script` (single command of a script button) | fires immediately, the turret turns nevertheless, **no** attack state | the command is not repeated |
 | Module-driven shots (`TryFireWeaponSlot`, `FireCurrentWeaponAtPosition`, aircraft, projectiles) | as before (one-off aiming) | sequence of their own |

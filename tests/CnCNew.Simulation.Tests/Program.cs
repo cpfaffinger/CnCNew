@@ -384,6 +384,8 @@ run.Test("Specials: spy vision power, reference counts, reveal and duration", Te
 run.Test("Specials: spy vision upgrades, kind filter and self-powered cycle", Tests.SpecialsSpyVisionUpgrades);
 run.Test("Specials: assisted targeting (request range, free check, secondary clip)", Tests.SpecialsAssistedTargeting);
 run.Test("Specials: battle plans (cycle, army bonuses, center bonus, paralysis, snapshot)", Tests.SpecialsBattlePlanCycle);
+run.Test("Turret switch (F-57): the strategy center's gun works only under bombardment and its pack-up waits for the turret", Tests.TurretSwitchStrategyCenter);
+run.Test("Turret switch (F-57): a deploy-style unit aims its turret once set up and centres it before packing", Tests.TurretSwitchDeployStyle);
 run.Test("Specials: battle plan restore and unsupported options", Tests.SpecialsBattlePlanShrouds);
 run.Test("Specials: projectile stream bookkeeping", Tests.SpecialsProjectileStream);
 run.Test("Structures: the fixture instantiates, a bone-FX OCL slot is refused", Tests.StructuresFixtureInstantiates);

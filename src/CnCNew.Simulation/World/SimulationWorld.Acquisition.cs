@@ -150,7 +150,8 @@ public sealed partial class SimulationWorld
     private void StepAcquirer(Entity entity, AIUpdateInterface ai, long tick)
     {
         var state = entity.Acquisition;
-        if (!MayAct(entity, tick))
+        // Object::isAbleToAttack: weapons on a switched-off turret acquire nobody, and an attack the unit runs itself ends (cannotPossiblyAttackObject).
+        if (!MayAct(entity, tick) || !TurretsLetAttack(entity))
         {
             if (state is { Victim.IsValid: true, Ordered: false }) EndEngagement(entity, ai, state);
             return;
@@ -543,6 +544,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void AutoFire(Entity source, Entity victim, bool turretOnly)
     {
+        if (!TurretsLetAttack(source)) return;
         var choice = ChooseWeapon(source, victim, FireOrigin.Ai);
         if (choice.Rejection != 0 || (turretOnly && !IsOnAimingTurret(source, choice.Slot)) || !GateAllowsFire(source, victim)) return;
         if (!AimTurretsAt(source, choice.Slot, victim, TurretAimOrder.Attack))

@@ -90,8 +90,11 @@ public sealed partial class SimulationWorld
             if (states[index] is { } state && set[index] is { } info && NeedsStep(info, state)) { _activeTurrets.Add(entity.Id.Value); return; }
     }
 
-    /// <summary>A turret needs stepping while it is away from rest, and always when its data make it glance around (the idle timer runs while it rests).</summary>
-    private static bool NeedsStep(TurretInfo info, TurretState state) => !state.IsPristine(info) || info.CanScan;
+    /// <summary>
+    /// A turret needs stepping while it is away from rest, and always when its data make it glance around (the idle timer runs while it rests). A disabled turret stands where it
+    /// is (<c>TurretAI::updateTurretAI</c> runs its state machine only when enabled); it only finishes the frame's step it was in.
+    /// </summary>
+    private static bool NeedsStep(TurretInfo info, TurretState state) => (state.Enabled || state.SubSteps != 0) && (!state.IsAtRest(info) || info.CanScan);
 
     private void LoadTurrets(Entity entity, IStateReader reader)
     {
@@ -121,6 +124,8 @@ public sealed partial class SimulationWorld
         {
             if (states[index] is not { } state || set[index] is not { Gates: true } info) continue;
             if (!set.Linked && !info.Controls(slot)) continue;
+            // A disabled turret runs no state machine: it never aims, so its weapon never fires (TurretAI::updateTurretAI).
+            if (!state.Enabled) { aligned = false; continue; }
             RequestAim(source, info, state, victim, slot, order);
             if (!IsAligned(source, info, state, victim, slot)) aligned = false;
         }
@@ -192,7 +197,7 @@ public sealed partial class SimulationWorld
         if (slot < 0) return;
         for (var index = 0; index < states.Length; index++)
         {
-            if (states[index] is not { } state || set[index] is not { Gates: true } info) continue;
+            if (states[index] is not { Enabled: true } state || set[index] is not { Gates: true } info) continue;
             if (!set.Linked && !info.Controls(slot)) continue;
             RequestAim(unit, info, state, victim, slot, order);
         }
@@ -249,6 +254,84 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < TurretSet.MaxTurrets; index++)
             if (set[index] is { Gates: true }) return true;
         return false;
+    }
+
+    /// <summary><c>AIUpdateInterface::getWhichTurretForCurWeapon</c>: the first turret that carries the object's current weapon slot, -1 for none.</summary>
+    private static int TurretForCurrentWeapon(Entity entity)
+    {
+        if (entity.Turrets is null || entity.Template.Turrets is not { } set) return -1;
+        var slot = entity.CurrentWeaponSlot;
+        for (var index = 0; index < TurretSet.MaxTurrets; index++)
+            if (set[index] is { } info && info.Controls(slot)) return index;
+        return -1;
+    }
+
+    /// <summary>
+    /// <c>AIUpdateInterface::setTurretEnabled(getWhichTurretForCurWeapon(), enabled)</c> (F-57): switches the turret of the current weapon. A disabled turret stands where it is
+    /// and its weapons cannot fire; switched on, it wakes.
+    /// </summary>
+    public void SetTurretEnabled(Entity entity, bool enabled)
+    {
+        var index = TurretForCurrentWeapon(entity);
+        if (index < 0 || entity.Turrets![index] is not { } state || state.Enabled == enabled) return;
+        state.Enabled = enabled;
+        if (NeedsStep(entity.Template.Turrets![index]!, state)) _activeTurrets.Add(entity.Id.Value);
+        MarkDirty(entity);
+    }
+
+    /// <summary>
+    /// <c>AIUpdateInterface::recenterTurret(getWhichTurretForCurWeapon())</c>: the turret of the current weapon drops its victim and turns back to its natural angle at once
+    /// (<c>TURRETAI_RECENTER</c>, without the hold of an ended attack).
+    /// </summary>
+    public void RecenterTurret(Entity entity)
+    {
+        var index = TurretForCurrentWeapon(entity);
+        if (index < 0 || entity.Turrets![index] is not { } state) return;
+        state.Target = EntityId.Invalid;
+        state.Persistent = false;
+        state.Pursuing = false;
+        state.LoseInterestAt = 0;
+        state.HoldUntil = TurretDeadlineSet;
+        state.Scanning = false;
+        state.ScanAngle = Fixed.Zero;
+        state.NextScan = 0;
+        _activeTurrets.Add(entity.Id.Value);
+        MarkDirty(entity);
+    }
+
+    /// <summary><c>TurretAI::isTurretInNaturalPosition</c> for the turret of the current weapon: at its natural angle and pitch, or the object is under construction. False without such a turret.</summary>
+    public bool IsTurretInNaturalPosition(Entity entity)
+    {
+        var index = TurretForCurrentWeapon(entity);
+        if (index < 0 || entity.Turrets![index] is not { } state || entity.Template.Turrets![index] is not { } info) return false;
+        if (entity.HasStatus(ObjectStatusBits.UnderConstruction)) return true;
+        return state.Angle == info.NaturalAngle && state.Pitch == info.NaturalPitch;
+    }
+
+    /// <summary>
+    /// The turret part of <c>Object::isAbleToAttack</c>: an object with an AI and without <c>CAN_ATTACK</c> whose every weapon sits on a disabled turret cannot attack - it acquires
+    /// nobody, an attack it runs ends and an order to fire is refused (a weapon on no turret is always switched on).
+    /// </summary>
+    private bool TurretsLetAttack(Entity entity)
+    {
+        if (entity.Turrets is not { } states || entity.Template.Turrets is not { } turrets || AiOf(entity) is null || entity.Template.IsKindOf("CAN_ATTACK")) return true;
+        if (ActiveWeaponSet(entity) is not { } set) return true;
+        var anyWeapon = false;
+        for (var slot = 0; slot < WeaponSlot.Count; slot++)
+        {
+            if (!set.HasWeapon(slot)) continue;
+            anyWeapon = true;
+            var carried = false;
+            for (var index = 0; index < TurretSet.MaxTurrets; index++)
+            {
+                if (turrets[index] is not { } info || !info.Controls(slot)) continue;
+                carried = true;
+                if (states[index] is { Enabled: true }) return true;
+                break;
+            }
+            if (!carried) return true;
+        }
+        return !anyWeapon;
     }
 
     /// <summary>The victim of a unit's current attack (the target of its first turret that holds an attack), or invalid when none of its turrets does.</summary>

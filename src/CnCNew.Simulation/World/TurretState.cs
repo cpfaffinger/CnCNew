@@ -99,16 +99,29 @@ internal sealed class TurretState
     /// <summary>The turret's pitch rate per logic frame of the original. From the catalog; not state.</summary>
     public Fixed FramePitchRate;
 
+    /// <summary>
+    /// <c>TurretAI::m_enabled</c>: a disabled turret neither aims nor turns, and the weapons it carries cannot fire (<c>Object::isAbleToAttack</c>). It starts as the data say
+    /// (<c>InitiallyDisabled</c>) and is switched by <c>BattlePlanUpdate</c> and <c>DeployStyleAIUpdate</c> (F-57).
+    /// </summary>
+    public bool Enabled;
+
+    /// <summary>Whether the turret starts enabled; from the catalog, not state. <see cref="Enabled"/> is written only when it differs from this.</summary>
+    private readonly bool _enabledAtStart;
+
     public TurretState(TurretInfo info)
     {
         Angle = info.NaturalAngle;
         Pitch = info.NaturalPitch;
+        Enabled = _enabledAtStart = !info.InitiallyDisabled;
     }
 
-    /// <summary>At rest: at the natural angle and pitch, no order, nothing pending. Such a turret needs no stepping and writes nothing to the snapshot.</summary>
-    public bool IsPristine(TurretInfo info)
+    /// <summary>At rest: at the natural angle and pitch, no order, nothing pending. Such a turret needs no stepping.</summary>
+    public bool IsAtRest(TurretInfo info)
         => Angle == info.NaturalAngle && Pitch == info.NaturalPitch && !Target.IsValid && HoldUntil == 0 && !Rotating && SweepUntil == 0 && PositiveSweep
            && !Persistent && !Pursuing && LoseInterestAt == 0 && !Scanning && NextScan == 0 && SubSteps == 0;
+
+    /// <summary>At rest and switched as at the start: such a turret writes nothing to the snapshot.</summary>
+    public bool IsPristine(TurretInfo info) => IsAtRest(info) && Enabled == _enabledAtStart;
 
     public void ResetToRest(TurretInfo info)
     {
@@ -147,6 +160,7 @@ internal sealed class TurretState
         if (Scanning) { writer.Bool("scanning", true); writer.Fixed("scanAngle", ScanAngle); }
         if (NextScan != 0) writer.Int("nextScan", NextScan);
         if (ScanDraws != 0) writer.Int("scanDraws", ScanDraws);
+        if (Enabled != _enabledAtStart) writer.Bool("enabled", Enabled);
         if (SubSteps != 0)
         {
             writer.Int("subSteps", SubSteps);
@@ -175,6 +189,7 @@ internal sealed class TurretState
         ScanAngle = reader.Has("scanAngle") ? reader.Fixed("scanAngle") : Fixed.Zero;
         NextScan = reader.Has("nextScan") ? reader.Int("nextScan") : 0;
         ScanDraws = reader.Has("scanDraws") ? checked((int)reader.Int("scanDraws")) : 0;
+        Enabled = reader.Has("enabled") ? reader.Bool("enabled") : _enabledAtStart;
         SubSteps = reader.Has("subSteps") ? checked((int)reader.Int("subSteps")) : 0;
         GoalAngle = reader.Has("goalAngle") ? reader.Fixed("goalAngle") : Fixed.Zero;
         GoalPitch = reader.Has("goalPitch") ? reader.Fixed("goalPitch") : Fixed.Zero;

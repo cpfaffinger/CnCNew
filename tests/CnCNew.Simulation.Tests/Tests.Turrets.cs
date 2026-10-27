@@ -3,6 +3,7 @@ using System.Text;
 using CnCNew.Content;
 using CnCNew.Data.Compilation;
 using CnCNew.Data.Registry;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
@@ -276,7 +277,8 @@ static partial class Tests
         catalog.TryGet("FakeTurretTank", out var fake);
         catalog.TryGet("SwitchedOffTank", out var off);
         catalog.TryGet("PlainTank", out var plain);
-        Check.That(!fake!.Turrets![0]!.Gates && !off!.Turrets![0]!.Gates && plain!.Turrets is null, "A turret that cannot turn or starts disabled does not aim; a tank without a block has no turret.");
+        Check.That(!fake!.Turrets![0]!.Gates && off!.Turrets![0]! is { Gates: true, InitiallyDisabled: true } && plain!.Turrets is null,
+            "A turret that cannot turn does not aim; one that starts disabled aims once it is switched on (F-57); a tank without a block has no turret.");
 
         Dictionary<string, string> Files(string turretBlockBody) => new(SyntheticFixture.Files)
         {
@@ -317,13 +319,18 @@ static partial class Tests
 
     public static void TurretsSomeWeaponsNeverWait()
     {
-        // No turret, a turret that cannot turn (the Comanche's), one that starts disabled, a slot no turret controls, and a script's one-off command button: the shot goes out at once.
-        foreach (var name in new[] { "PlainTank", "FakeTurretTank", "SwitchedOffTank" })
+        // No turret, a turret that cannot turn (the Comanche's), a slot no turret controls, and a script's one-off command button: the shot goes out at once.
+        foreach (var name in new[] { "PlainTank", "FakeTurretTank" })
         {
             var (world, feeder, _) = TurretWorld((name, 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
             Check.That(TicksUntilShot(world, feeder, IdOf(world, name), IdOf(world, "TurretTarget")) == 0, $"{name} fires on its first order.");
             Check.That(world.TurretWaits == 0 && Near(Slotted(world, name).TurretOf(0)?.Angle ?? Fixed.Zero, Fixed.Zero), $"{name}: no turret movement, nothing waited.");
         }
+
+        // A turret that starts disabled is switched off: a tank without CAN_ATTACK whose only weapon sits on it cannot attack (Object::isAbleToAttack, F-57).
+        var (off, offFeeder, _) = TurretWorld(("SwitchedOffTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
+        var refused = offFeeder.FireWeapon(1, IdOf(off, "SwitchedOffTank"), IdOf(off, "TurretTarget"));
+        Check.That(!refused.Accepted && refused.Reason == CommandRejection.NoWeapon, $"SwitchedOffTank refuses to fire while its turret is off ({refused.Reason}).");
 
         var (split, splitFeeder, _) = TurretWorld(("SplitTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
         var splitTank = Slotted(split, "SplitTank");
