@@ -1,7 +1,7 @@
 > **Stage:** 3 – Changes · **Milestone:** S3-M7 Bug-fix and balance layers (a second source: Zero Hour Reforged) · **Phase:** 40
 > **Status:** next (starting state: the end of Phase 39, see below)
 > **Predecessor:** HANDOFF-PHASE39.md · **Results in:** docs/REFORGED-FIXES.md, docs/GGC-FIXES.md (the rule profile), docs/SIMULATION-CORE.md, docs/plan/STAGE-1-PORT.md §3
-> **Side items:** the retail reference match's driver seed (it ends in a stalemate since F-44), F-48 to F-57 (found in the first reading), the Phase 39 leftovers named below
+> **Side items:** the retail reference match's driver seed (it ends in a stalemate since F-44), F-48 to F-58 (found in the first reading), the Phase 39 leftovers named below
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
 N+1 handoff (Phase 40): the fixes of Zero Hour Reforged reviewed against the original and this port - each candidate of `docs/REFORGED-FIXES.md` §3 decided (kind A to
@@ -39,11 +39,12 @@ Filled in at the end of Phase 39 (the state, the reference values, the tier that
 6. The kind-C findings already entered: F-48 (R-17: weapon damage reaches `HighlanderBody`/`UndeadBody` already armour-adjusted - the original caps the raw amount and
    applies the armour in `ActiveBody::attemptDamage`) and F-49 (R-06: `Weapon::estimateWeaponDamage` refuses `DAMAGE_SNIPER` at a structure with a contain module and
    nobody inside) - each with its test, implementation and manifest commit as in step 4.
-   The first reading at the end of Phase 39 found eight more, each registered in `docs/plan/STAGE-1-PORT.md` §3 with its source places: F-50 (no radar per player),
+   The first reading at the end of Phase 39 found nine more, each registered in `docs/plan/STAGE-1-PORT.md` §3 with its source places: F-50 (no radar per player),
    F-51 (riders of a transport that cannot let them out survive its death), F-52 (an object's last damage is never recorded - stealth `TAKING_DAMAGE`, the original
    AI's `SKIRMISH_SUPPLY_SOURCE_ATTACKED`), F-53 (the landed Battle Bus hulk is not held), F-54 (no stealth garrison), F-55 (no attack line of sight - 245 objects need
-   one; a large cause), F-56 (`Object::onDisabledEdge`: an EMP'd power plant keeps powering its base) and F-57 (the strategy center's gun fires under every plan).
-   Order them by what a player meets first (F-52, F-56, F-57, F-51, F-53 are small; F-50, F-54, F-55 are causes of their own size) and name what does not fit into the phase.
+   one; a large cause), F-56 (`Object::onDisabledEdge`: an EMP'd power plant keeps powering its base) F-57 (the strategy center's gun fires under every plan) and F-58
+   (guarding is no state of the simulation, only a client's standing order).
+   Order them by what a player meets first (F-52, F-56, F-57, F-51, F-53 are small; F-50, F-54, F-55, F-58 are causes of their own size) and name what does not fit into the phase.
 7. The retail reference match: since F-44 (a dying producer refunds its queue) it runs to its limit of 432,000 ticks without a winner - deterministic, but the longest run of
    the manifest and no longer a match that ends. Survey driver seeds with `SimTool reference-match --driver-seed HEX --record-only` as Phase 22 did, choose one that ends,
    and change it in a commit of its own (cause: the seed, after F-44); if no seed ends within the limit, name that and keep the stalemate.
