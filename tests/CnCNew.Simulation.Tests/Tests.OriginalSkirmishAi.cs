@@ -673,11 +673,12 @@ static partial class Tests
         MapData map;
         using (var stream = content.OpenRead(MapPath)) map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, MapPath);
-        // Three minutes and forty seconds: the bases stand, the first teams have marched and fought. Not longer with these catalogs: since the teams' own scripts send them out
-        // (<This Team>), an air fight begins at frame 6,779, and at 120 Hz - with catalogs without model geometry, as here - one projectile more is in flight and a MiG is hit harder
-        // than at 30 Hz (not traced; the projectile note below is the same family). With the catalogs of the product the same match is equal in every field for all 7,200 frames
-        // at 30 against 120 Hz: `SimTool rate-compare <content> --original-diff FactionChina,FactionGLA --rates 30,120 --difficulty hard --frames 7200 --fields`.
-        const int Frames = 6_600;
+        // Three minutes and twenty seconds: the bases stand, the first teams have marched and fought. Not longer with these catalogs: since the teams' own scripts send them out
+        // (<This Team>), an air fight begins - at frame 6,779 until Phase 39, at frame 6,102 since its fidelity package B -, and above 30 Hz - with catalogs without model
+        // geometry, as here - a MiG is hit otherwise and falls elsewhere than at 30 Hz (not traced; the projectile note below is the same family). With the catalogs of the
+        // product the same match is equal in every field for all 7,200 frames at 30 against 60 and 120 Hz (measured at 26bd7b5):
+        // `SimTool rate-compare <content> --original-diff FactionChina,FactionGLA --rates 30,120 --difficulty hard --frames 7200 --fields`.
+        const int Frames = 6_000;
 
         ScriptedSkirmishSession Start(CnCNew.Simulation.Time.SimulationRate rate)
         {
