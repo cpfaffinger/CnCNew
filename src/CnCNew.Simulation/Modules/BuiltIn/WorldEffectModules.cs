@@ -141,7 +141,7 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
     public long Update(IWorldServices world)
     {
         // "if (getObject()->isDisabled()) m_nextCreationFrame++": a disabled object's next creation moves on with the time it is disabled.
-        if (Entity.DisabledFlags(world.Tick) != DisabledMask.None)
+        if (world.DisabledFlagsOf(Entity) != DisabledMask.None)
         {
             _nextCreation++;
             world.MarkDirty(Entity);
@@ -1027,7 +1027,7 @@ public sealed class WeaponBonusUpdate(WeaponBonusUpdateData data) : SimModule, I
         }
         if (_nextPulse < 0) _nextPulse = now;
         // A disabled beacon gives nothing (WeaponBonusUpdate processes no disabled type) and pulses as soon as it is enabled again.
-        var disabled = Entity.DisabledFlags(now) != DisabledMask.None;
+        var disabled = world.DisabledFlagsOf(Entity) != DisabledMask.None;
         if (now >= _nextPulse && !disabled)
         {
             Pulse(world);

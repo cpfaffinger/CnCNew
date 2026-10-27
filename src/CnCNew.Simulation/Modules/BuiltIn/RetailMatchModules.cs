@@ -58,6 +58,9 @@ public sealed record HealContainData(OpenContainData Base, int ContainMax, long 
 /// </summary>
 public sealed class HealContain(HealContainData data) : ContainModuleBase(data.Base)
 {
+    /// <summary>An <c>OpenContain</c>: it does not hold its occupants.</summary>
+    public override bool HoldsRiders => false;
+
     private readonly Dictionary<uint, long> _containedSinceTick = [];
     // OpenContain::m_whichExitPath of the healed occupants' exits (1-based); written only when it is not the first.
     private int _whichExitPath = 1;

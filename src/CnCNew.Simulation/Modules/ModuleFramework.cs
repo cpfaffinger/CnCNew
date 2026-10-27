@@ -398,6 +398,9 @@ public interface IWorldServices
     /// <summary><c>paralyzeTroop</c> for every qualifying object of the player: until <paramref name="untilTick"/> it neither moves nor fires (<c>DISABLED_PARALYZED</c>).</summary>
     void ParalyzeTroops(PlayerId player, ImmutableArray<string> validKinds, ImmutableArray<string> invalidKinds, long untilTick);
 
+    /// <summary><c>Object::getDisabledFlags</c>: the object's own disables and <c>DISABLED_HELD</c> while a container that holds its riders carries it.</summary>
+    DisabledMask DisabledFlagsOf(Entity entity);
+
     /// <summary><c>BodyModuleInterface::getDamageScalar</c>: the factor every non-unresistable damage is multiplied by (1 unless a hold-the-line battle plan covers the object).</summary>
     Fixed DamageScalarOf(Entity entity);
 
@@ -723,6 +726,12 @@ public interface IContainerModule
 
     /// <summary><c>ContainModuleInterface::isSpecificRiderFreeToExit</c>, as an exit command asks it: false refuses the command (the ferry's riders cannot leave while it is in transit); true for every container but the ferry.</summary>
     bool IsRiderFreeToExit(Entity rider) => true;
+
+    /// <summary>
+    /// Whether the container holds its riders (<c>setDisabled(DISABLED_HELD)</c> in <c>onContaining</c>, cleared in <c>onRemoving</c>): every transport, garrison, tunnel, helix and
+    /// parachute does; <c>OpenContain</c> itself and <c>HealContain</c> do not.
+    /// </summary>
+    bool HoldsRiders => true;
 
     /// <summary>
     /// <c>ContainModuleInterface::exitObjectViaDoor</c> for a container that runs its own exit sequence instead of letting the rider simply step out (<c>RailedTransportContain</c>

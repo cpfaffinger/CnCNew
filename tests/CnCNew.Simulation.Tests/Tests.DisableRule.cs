@@ -134,4 +134,61 @@ static partial class Tests
         for (var tick = 0; tick < world.Frames(5); tick++) world.Step();
         Check.That(tank.DisabledFlags(world.Tick) == DisabledMask.None && tank.TurretOf(0)!.Value.Angle != turning, "It turns on when the paralysis is over.");
     }
+
+    /// <summary>
+    /// A transport holds its riders (<c>TransportContain::onContaining</c> sets <c>DISABLED_HELD</c>), so a rider's update modules that do not process it stand while it rides - a
+    /// lifetime does not run out inside; a <c>HealContain</c> is an <c>OpenContain</c> and holds nobody. The port ran every rider's modules.
+    /// </summary>
+    public static void TransportHoldsItsRiders()
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: new Dictionary<string, string>(RetailModuleFiles())
+        {
+            ["Data/INI/Object/HeldRiders.ini"] = """
+            Object HoldingTruck
+              KindOf = SELECTABLE VEHICLE
+              Body = ActiveBody Body01
+                MaxHealth = 300.0
+                InitialHealth = 300.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+              Behavior = AIUpdateInterface AI01
+              End
+              Behavior = TransportContain Transport01
+                Slots = 3
+                AllowInsideKindOf = INFANTRY
+              End
+            End
+            Object ShortLivedRider
+              KindOf = SELECTABLE INFANTRY
+              TransportSlotCount = 1
+              Body = ActiveBody Body01
+                MaxHealth = 50.0
+                InitialHealth = 50.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+              Behavior = LifetimeUpdate Life01
+                MinLifetime = 1000
+                MaxLifetime = 1000
+              End
+            End
+            """,
+        });
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "HoldingTruck", x: 100, y: 100);
+        feeder.Spawn(1, "Barracks", x: 300, y: 300);
+        feeder.Spawn(1, "ShortLivedRider", x: 100, y: 100);
+        feeder.Spawn(1, "ShortLivedRider", x: 300, y: 300);
+        world.Step();
+        var truck = world.Entities.Single(entity => entity.Template.Name == "HoldingTruck");
+        var barracks = world.Entities.Single(entity => entity.Template.Name == "Barracks");
+        var riders = world.Entities.Where(entity => entity.Template.Name == "ShortLivedRider").OrderBy(entity => entity.Id.Value).ToArray();
+        Check.That(world.TryEnterContainer(riders[0], truck) && world.TryEnterContainer(riders[1], barracks), "Setup: one rider boards the truck, one the barracks.");
+        Check.That(world.DisabledFlagsOf(riders[0]) == DisabledMask.Held && world.DisabledFlagsOf(riders[1]) == DisabledMask.None, "The transport holds its rider; the barracks does not.");
+        for (var tick = 0; tick < world.Frames(60); tick++) world.Step();
+        Check.That(world.FindEntity(riders[0].Id) is { EffectivelyDead: false }, "A held rider's lifetime does not run out while it rides.");
+        Check.That(world.FindEntity(riders[1].Id) is null or { EffectivelyDead: true }, "The barracks' occupant lives its second.");
+    }
 }

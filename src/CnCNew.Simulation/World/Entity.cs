@@ -242,7 +242,7 @@ public sealed class Entity
     public const byte ScriptHeld = 1;
     public const byte ScriptDisabled = 2;
 
-    /// <summary><c>Object::getDisabledFlags</c> at <paramref name="tick"/>: the disabled types the port models (EMP, paralyzed, held, script-disabled).</summary>
+    /// <summary>The object's own disables at <paramref name="tick"/> (EMP, paralyzed, script hold, script disable); <see cref="Modules.IWorldServices.DisabledFlagsOf"/> adds its container's hold.</summary>
     public DisabledMask DisabledFlags(long tick)
     {
         var mask = EmpDisabledUntil > tick ? DisabledMask.Emp : DisabledMask.None;

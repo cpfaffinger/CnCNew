@@ -206,6 +206,7 @@ run.Test("Phase 40: a disabled object runs only the update modules that process 
 run.Test("Phase 40: a disable holds through the frame it lasts until", Tests.DisableHoldsThroughItsLastFrame);
 run.Test("Phase 40: the turret of a disabled object stands", Tests.DisabledTurretStands);
 run.Test("Phase 40: a battle plan's paralysis disables the object, not only its AI", Tests.ParalysisDisablesTheObject);
+run.Test("Phase 40: a transport holds its riders, a HealContain does not", Tests.TransportHoldsItsRiders);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);

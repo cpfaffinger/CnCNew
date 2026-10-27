@@ -1467,7 +1467,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (++processed > MaxUpdatesPerTick) throw new InvalidOperationException("Update storm: too many module updates in one tick.");
             MarkDirty(entity);
             // GameLogic::update: a disabled object runs only the modules that process one of its disabled types; the others ask again the next tick.
-            var disabled = entity.DisabledFlags(tick);
+            var disabled = DisabledFlagsOf(entity);
             if (disabled != DisabledMask.None && (disabled & node.Update.DisabledTypesToProcess) == 0)
             {
                 node.Update.NextWake = tick + SimulationTiming.SleepNone;

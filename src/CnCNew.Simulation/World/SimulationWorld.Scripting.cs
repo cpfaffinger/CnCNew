@@ -89,6 +89,14 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary><see cref="RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed)"/> with a map object's initial health in percent (<c>objectInitialHealth</c>).</summary>
+    /// <inheritdoc cref="IWorldServices.DisabledFlagsOf"/>
+    public DisabledMask DisabledFlagsOf(Entity entity)
+    {
+        var mask = entity.DisabledFlags(_tick);
+        if (entity.ContainedBy.IsValid && FindEntity(entity.ContainedBy)?.Container is { HoldsRiders: true }) mask |= DisabledMask.Held;
+        return mask;
+    }
+
     /// <summary><c>Object::setDisabledUntil(DISABLED_EMP, until)</c> as <c>EMPUpdate</c> calls it (the scripts' and tests' way to it).</summary>
     public void DisableByEmpUntil(Entity victim, long until) => Modules.BuiltIn.AirWeaponModules.DisableUntil(this, victim, until);
 

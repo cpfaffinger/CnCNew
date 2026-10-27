@@ -115,6 +115,9 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     public int ContainCount => Riders.Count;
     public IReadOnlyList<EntityId> Contained => Riders;
 
+    /// <inheritdoc cref="IContainerModule.HoldsRiders"/>
+    public virtual bool HoldsRiders => true;
+
     /// <summary>
     /// <c>OpenContain::m_passengersAllowedToFire</c> (<c>PassengersAllowedToFire</c> of the data, switched on by <c>PassengersFireUpgrade</c>). Recorded state: firing from inside a container
     /// is not simulated anywhere yet, so nothing reads the flag; it is saved only when set.
