@@ -905,9 +905,10 @@ internal static class StructureConditionTests
         var waiting = Span(timeline, StructureConditions.DoorWaitingOpen[0]);
         var closing = Span(timeline, StructureConditions.DoorClosing[0]);
         Check(completed > 0 && opening is not null && waiting is not null && closing is not null, $"The war factory shows DOOR_1_OPENING, DOOR_1_WAITING_OPEN, DOOR_1_CLOSING in turn ({text}).");
-        Near(TestTime.Frames(world, 98), completed - opening!.Value.First, 2, "The door starts opening 98 ticks before the Crusader appears");
-        Near(TestTime.Frames(world, 90), waiting!.Value.Last - waiting.Value.First + 1, 3, "The door waits open 90 ticks");
-        Near(TestTime.Frames(world, 120), closing!.Value.Last - closing.Value.First + 1, 2, "The door closes for 120 ticks");
+        // The simulation makes the unit when the door is fully open, a frame more than DoorOpeningTime after it began to open (F-09).
+        Near(TestTime.Frames(world, 99), completed - opening!.Value.First, TestTime.Frames(world, 1), "The door starts opening 98 frames and one more before the Crusader appears");
+        Near(TestTime.Frames(world, 91), waiting!.Value.Last - waiting.Value.First + 1, TestTime.Frames(world, 1), "The door waits open 90 frames and one more");
+        Near(TestTime.Frames(world, 121), closing!.Value.Last - closing.Value.First + 1, TestTime.Frames(world, 1), "The door closes for 120 frames and one more");
         Check(Span(timeline, StructureConditions.ConstructionComplete) is { } complete && complete.First == opening.Value.First, "CONSTRUCTION_COMPLETE starts with the door.");
         Console.WriteLine($"       real data: AmericaWarFactory door timeline {text}");
 
