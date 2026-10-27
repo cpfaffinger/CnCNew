@@ -2370,7 +2370,7 @@ public readonly record struct ProductionQueueItem(int TemplateIndex, Fixed Cost,
 /// cancel, matching <c>Money::withdraw</c>/<c>deposit</c> semantics; there is no per-frame energy-ratio build-time penalty
 /// (a documented phase-5 simplification — <c>ProductionUpdate::calcTimeToBuild</c> in the reference).
 /// </summary>
-public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateModule
+public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateModule, IDieModule
 {
     private readonly List<ProductionEntry> _queue = [];
     private long _nextWake = -1;
@@ -2464,6 +2464,18 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             Unreserve(entry);
         }
         _queue.Clear();
+    }
+
+    /// <summary>
+    /// <c>ProductionUpdate::onDie</c> -> <c>cancelAndRefundAllProduction</c>: a producer that dies cancels everything in its queue, units and upgrades, and its owner gets the whole
+    /// cost back (F-44; the port refunded on a sale only, so a destroyed factory kept the money of its queue).
+    /// </summary>
+    public void OnDie(IWorldServices world, in DamageInfo info)
+    {
+        if (_queue.Count == 0) return;
+        CancelAll(out var refund);
+        if (!Entity.Owner.IsSystem) world.AddMoney(Entity.Owner, refund);
+        world.MarkDirty(Entity);
     }
 
     /// <summary><c>removeFromProductionQueue</c>: the door an entry had reserved is given back when the entry goes without its unit.</summary>

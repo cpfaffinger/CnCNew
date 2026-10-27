@@ -356,4 +356,34 @@ static partial class Tests
         cancelled.Step();
         Check.That(cancelled.RejectionCounts[(int)CommandRejection.CannotProduce] == 1 && cancelled.MoneyOf(player) == Fixed.FromInt(1000), "A factory without the button cannot research it.");
     }
+
+    /// <summary>
+    /// F-44: <c>ProductionUpdate::onDie</c> cancels the whole queue of a producer that dies and refunds it (<c>cancelAndRefundAllProduction</c>): a unit in production and an
+    /// upgrade in research are paid back, and the upgrade is no longer in production.
+    /// </summary>
+    public static void FidelityDeadProducerRefundsItsQueue()
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: FidelityBFiles());
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "FidelityLab");
+        feeder.Spawn(1, "DefaultExitFactory", x: 300, y: 300);
+        world.Step();
+        feeder.GiveMoney(1, 1000);
+        world.Step();
+        var player = new PlayerId(1);
+        feeder.PurchaseUpgrade(1, "Upgrade_FidelityPlayer", 1);
+        feeder.QueueProduction(1, 2, "QuickUnit");
+        feeder.QueueProduction(1, 2, "QuickUnit");
+        world.Step();
+        Check.That(world.MoneyOf(player) == Fixed.FromInt(880), $"Setup: an upgrade and two units are paid ({world.MoneyOf(player)}).");
+        feeder.Kill(1);
+        feeder.Kill(2);
+        world.Step();
+        world.Step();
+        var upgrade = fixture.Templates.Upgrades.TryGet("Upgrade_FidelityPlayer", out var info) ? info.Index : -1;
+        Check.That(world.MoneyOf(player) == Fixed.FromInt(1000) && !world.UpgradeInProduction(player, upgrade) && !world.PlayerUpgrades(player).Has(upgrade),
+            $"The dead producers refund their queues in full ({world.MoneyOf(player)}).");
+        Check.That(CountOf(world, "QuickUnit") == 0, "and make nothing.");
+    }
 }
