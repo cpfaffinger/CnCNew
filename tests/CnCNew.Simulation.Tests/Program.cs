@@ -197,6 +197,7 @@ run.Test("Phase 5: BaseRegenerateUpdate wake tick survives a snapshot", Tests.Ma
 run.Test("Phase 5: production exits, burst and exit delay", Tests.RetailProductionExits);
 run.Test("Fidelity B (F-08): QuantityModifier - one order makes as many units as the modifier says, paid once", Tests.FidelityQuantityModifier);
 run.Test("Fidelity B (F-09): a produced unit comes into being when its door is fully open", Tests.FidelityUnitAtOpenDoor);
+run.Test("Fidelity B (F-07): a clip without reload time fires at most once per frame of the original", Tests.FidelityNoReloadClipFiresOncePerFrame);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);

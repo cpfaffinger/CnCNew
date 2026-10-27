@@ -198,5 +198,36 @@ static partial class Tests
         for (var i = 0; i < cancelled.Frames(60); i++) cancelled.Step();
         Check.That(CountOf(cancelled, "QuickUnit") == 0 && cancelled.MoneyOf(new PlayerId(1)) == Fixed.FromInt(1000), "A cancel while the door opens makes nothing and refunds the cost.");
     }
+
+    /// <summary>
+    /// F-07: a weapon whose clip reloads in no time (<c>ClipReloadTime = 0</c>) fires at most once per logic frame of the original. The original fires from the attack state of its
+    /// AI, once per frame (<c>Weapon::getStatus</c> is ready again in the frame of the last shot, but nothing asks twice); the port fires one shot per command, and a second command
+    /// in the tick of the shot that emptied the clip fired again at 30 Hz.
+    /// </summary>
+    public static void FidelityNoReloadClipFiresOncePerFrame()
+    {
+        foreach (var (rate, _) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, TimingFiles());
+            feeder.Spawn(1, "TimingGunner", x: 100, y: 100);
+            feeder.Spawn(2, "TimingDummy", x: 150, y: 100);
+            world.Step();
+            TimingAlign(world);
+            var gunner = TimingOnly(world, "TimingGunner");
+            var dummy = TimingOnly(world, "TimingDummy");
+            int Shots(int commands)
+            {
+                for (var i = 0; i < commands; i++) feeder.FireWeapon(1, gunner.Id.Value, dummy.Id.Value);
+                return world.Step().Events.Count(item => item.Kind == CnCNew.Simulation.Events.SimEventKind.WeaponFired && item.Entity == gunner.Id);
+            }
+            Check.That(Shots(1) == 1, $"{rate}: the first shot of the clip.");
+            for (var i = 0; i < world.Frames(4); i++) world.Step();
+            TimingAlign(world);
+            var emptying = Shots(2);
+            Check.That(emptying == 1, $"{rate}: the shot that empties the clip and a second command in the same tick fire once ({emptying}).");
+            TimingAlign(world);
+            Check.That(Shots(1) == 1, $"{rate}: the reloaded clip fires in the next frame.");
+        }
+    }
 }
 
