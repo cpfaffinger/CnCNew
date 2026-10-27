@@ -2351,9 +2351,9 @@ public readonly record struct ProductionQuantity(string Template, int Count);
 
 /// <summary>
 /// One queued unit: template, its cost (for a full refund on cancel, also after some of its units left - <c>cancelUnitCreate</c> deposits the whole cost) and remaining build
-/// ticks; <see cref="Quantity"/> units are made of it, <see cref="Produced"/> of them have left.
+/// ticks; <see cref="Quantity"/> units are made of it, <see cref="Produced"/> of them have left; <see cref="ReservedDoor"/> is the door reserved for the next of them.
 /// </summary>
-internal readonly record struct ProductionEntry(int TemplateIndex, Fixed Cost, long RemainingTicks, int Quantity = 1, int Produced = 0);
+internal readonly record struct ProductionEntry(int TemplateIndex, Fixed Cost, long RemainingTicks, int Quantity = 1, int Produced = 0, int ReservedDoor = ExitDoor.NoneAvailable);
 
 /// <summary>Public counterpart of <see cref="ProductionEntry"/> for <see cref="ProductionUpdate.Queue"/>.</summary>
 public readonly record struct ProductionQueueItem(int TemplateIndex, Fixed Cost, long RemainingTicks);
@@ -2426,6 +2426,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     {
         if (!HasSlot(slot)) { refund = Fixed.Zero; return false; }
         refund = _queue[slot].Cost;
+        Unreserve(_queue[slot]);
         _queue.RemoveAt(slot);
         return true;
     }
@@ -2434,8 +2435,113 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public void CancelAll(out Fixed refund)
     {
         refund = Fixed.Zero;
-        foreach (var entry in _queue) refund += entry.Cost;
+        foreach (var entry in _queue)
+        {
+            refund += entry.Cost;
+            Unreserve(entry);
+        }
         _queue.Clear();
+    }
+
+    /// <summary><c>removeFromProductionQueue</c>: the door an entry had reserved is given back when the entry goes without its unit.</summary>
+    private void Unreserve(ProductionEntry entry)
+    {
+        if (entry.ReservedDoor >= ExitDoor.First && Entity.Modules.OfType<IProductionExit>().FirstOrDefault() is { } exit) exit.UnreserveDoor(entry.ReservedDoor);
+    }
+
+    // ------------------------------------------------------------------------------------------------ doors
+
+    /// <summary>
+    /// <c>ProductionUpdate::DoorInfo</c>: the tick a door began opening, waiting open and closing (-1 when it is not in that phase), whether <c>ParkingPlaceBehavior</c> holds it open,
+    /// and the tick the hold was last released.
+    /// </summary>
+    private struct Door
+    {
+        public long Opened;
+        public long WaitOpen;
+        public long Closed;
+        public long Released;
+        public bool Hold;
+
+        public static Door Shut => new() { Opened = -1, WaitOpen = -1, Closed = -1, Released = -1 };
+
+        public readonly bool IsClosed => Opened < 0 && WaitOpen < 0 && Closed < 0;
+
+        public readonly bool IsDefault => IsClosed && Released < 0 && !Hold;
+    }
+
+    /// <summary>What a door shows: <c>DOOR_n_OPENING</c>, <c>DOOR_n_WAITING_OPEN</c>, <c>DOOR_n_CLOSING</c> or nothing.</summary>
+    public enum DoorPhase { Closed, Opening, WaitingOpen, Closing }
+
+    private readonly Door[] _doors = [Door.Shut, Door.Shut, Door.Shut, Door.Shut];
+    private long _constructionComplete = -1;
+
+    /// <summary>
+    /// <c>ProductionUpdate::updateDoors</c>, caught up to <paramref name="now"/>: a door waits open once more than <c>DoorOpeningTime</c> has passed since it began opening, closes
+    /// once more than <c>DoorWaitOpenTime</c> has passed since it was last kept open and nobody holds it, and is shut once more than <c>DoorCloseTime</c> has passed. "More than" is
+    /// a whole logic frame of the original more (one tick at 30 Hz), so the door keeps the place in its frame at every rate. A released hold counts until the frame after it: what
+    /// releases a space (an aircraft) is updated after the airfield. Every transition carries its own tick, so a module that slept through it lands where one updated every frame would.
+    /// </summary>
+    private static void Advance(ref Door door, ProductionData timing, long now, long frame)
+    {
+        while (true)
+        {
+            if (door.Opened >= 0)
+            {
+                var at = door.Opened + timing.DoorOpeningTicks + frame;
+                if (at > now) return;
+                door.WaitOpen = at;
+                door.Opened = -1;
+            }
+            else if (door.WaitOpen >= 0 && !door.Hold)
+            {
+                var at = Math.Max(door.WaitOpen + timing.DoorWaitOpenTicks + frame, door.Released + frame);
+                if (at > now) return;
+                door.Closed = at;
+                door.WaitOpen = -1;
+            }
+            else if (door.Closed >= 0 && !door.Hold)
+            {
+                var at = Math.Max(door.Closed + timing.DoorCloseTicks + frame, door.Released + frame);
+                if (at > now) return;
+                door.Closed = -1;
+            }
+            else return;
+        }
+    }
+
+    private void AdvanceDoors(IWorldServices world)
+    {
+        if (data.NumDoorAnimations <= 0) return;
+        for (var index = 0; index < ExitDoor.Count; index++) Advance(ref _doors[index], data, world.Tick, world.Time.TicksPerOriginalFrame);
+    }
+
+    /// <summary>The phase of door <paramref name="index"/> in <paramref name="tick"/> (the last tick the world stepped, or later), for the model conditions of the presentation.</summary>
+    public DoorPhase DoorAt(int index, long tick, long ticksPerOriginalFrame)
+    {
+        if (data.NumDoorAnimations <= 0 || index < ExitDoor.First || index >= ExitDoor.Count) return DoorPhase.Closed;
+        var door = _doors[index];
+        Advance(ref door, data, tick, ticksPerOriginalFrame);
+        return door.Opened >= 0 ? DoorPhase.Opening : door.WaitOpen >= 0 ? DoorPhase.WaitingOpen : door.Closed >= 0 ? DoorPhase.Closing : DoorPhase.Closed;
+    }
+
+    /// <summary><c>MODELCONDITION_CONSTRUCTION_COMPLETE</c>: from the first door reservation of a finished unit until more than <c>ConstructionCompleteDuration</c> has passed.</summary>
+    public bool ConstructionCompleteAt(long tick, long ticksPerOriginalFrame)
+        => _constructionComplete >= 0 && tick < _constructionComplete + data.ConstructionCompleteTicks + ticksPerOriginalFrame;
+
+    /// <summary>
+    /// <c>ProductionUpdate::setHoldDoorOpen</c>, called by <c>ParkingPlaceBehavior</c> when a space gets or loses its aircraft: a held door does not close, and a shut door that is held
+    /// begins to open.
+    /// </summary>
+    public void SetHoldDoorOpen(IWorldServices world, int index, bool hold)
+    {
+        if (index < ExitDoor.First || index >= ExitDoor.Count || _doors[index].Hold == hold) return;
+        AdvanceDoors(world);
+        ref var door = ref _doors[index];
+        door.Hold = hold;
+        if (!hold) door.Released = world.Tick;
+        else if (door.IsClosed && data.NumDoorAnimations > 0) door.Opened = world.Tick;
+        world.MarkDirty(Entity);
     }
 
     /// <summary>The rally point, when one is set (<c>ExitInterface::getRallyPoint</c>).</summary>
@@ -2467,6 +2573,9 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     {
         if (_queue.Count == 0) return SimulationTiming.SleepForever;
         if (world.Tick < _disabledUntil || Entity.ScriptDisableMask != 0) return SimulationTiming.SleepNone;
+        AdvanceDoors(world);
+        var frame = world.Time.TicksPerOriginalFrame;
+        if (_constructionComplete >= 0 && !ConstructionCompleteAt(world.Tick, frame)) _constructionComplete = -1;
         var head = _queue[0];
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
         var remaining = head.RemainingTicks - TickOrder.Next;
@@ -2476,22 +2585,47 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             return SimulationTiming.SleepNone;
         }
         // ProductionUpdate::update: every unit of the entry the exit lets go now leaves (getProductionQuantityRemaining tries); one the exit holds back (the delay of
-        // QueueProductionExitUpdate) waits at the head of the queue, which goes on "overbuilding" and asks again in the next step.
+        // QueueProductionExitUpdate, a door still opening) waits at the head of the queue, which goes on "overbuilding" and asks again in the next step.
         var template = world.Templates[head.TemplateIndex];
         var produced = head.Produced;
+        var exitDoor = head.ReservedDoor;
         for (var attempt = head.Quantity - head.Produced; attempt > 0; attempt--)
         {
-            if (exit is not null && !exit.IsFreeToExitFor(template)) break;
-            Produce(world, exit, head.TemplateIndex);
+            if (exit is null)
+            {
+                Produce(world, null, head.TemplateIndex, ExitDoor.NoneNeeded);
+                produced++;
+                continue;
+            }
+            if (exitDoor == ExitDoor.NoneAvailable) exitDoor = exit.ReserveDoor(world, template);
+            if (exitDoor == ExitDoor.NoneAvailable) break;
+            var hasDoor = data.NumDoorAnimations > 0 && exitDoor >= ExitDoor.First && exitDoor < ExitDoor.Count;
+            if (hasDoor)
+            {
+                // A shut door begins to open, a door waiting open is kept open, a closing one is popped back to waiting open.
+                ref var door = ref _doors[exitDoor];
+                if (door.IsClosed) door.Opened = world.Tick;
+                else if (door.WaitOpen >= 0) door.WaitOpen = world.Tick;
+                else if (door.Closed >= 0)
+                {
+                    door.WaitOpen = world.Tick;
+                    door.Closed = -1;
+                }
+            }
+            if (_constructionComplete < 0) _constructionComplete = world.Tick;
+            // The unit is made only when its door is fully open (door->m_doorWaitOpenFrame != 0); a door that is still opening keeps the reservation for the next step.
+            if (hasDoor && _doors[exitDoor].WaitOpen < 0) break;
+            Produce(world, exit, head.TemplateIndex, exitDoor);
             produced++;
+            exitDoor = ExitDoor.NoneAvailable;
         }
         if (produced >= head.Quantity) _queue.RemoveAt(0);
-        else _queue[0] = head with { RemainingTicks = TickOrder.Next, Produced = produced };
+        else _queue[0] = head with { RemainingTicks = TickOrder.Next, Produced = produced, ReservedDoor = exitDoor };
         return _queue.Count == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
     }
 
     /// <summary><c>exitObjectViaDoor</c>: the unit leaves over the exit point of its factory (NaturalRallyPoint) and goes on to the player's rally point, if one is set.</summary>
-    private void Produce(IWorldServices world, IProductionExit? exit, int templateIndex)
+    private void Produce(IWorldServices world, IProductionExit? exit, int templateIndex, int door)
     {
         var forcesSupplyWanting = exit is { ForcesSupplyWanting: true };
         Fixed doorX = Fixed.Zero, doorY = Fixed.Zero, exitX = Fixed.Zero, exitY = Fixed.Zero;
@@ -2499,7 +2633,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
             : _hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: _hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
             : default(SpawnExtras?);
-        var (x, y, z, angle) = exit is null ? OwnPlace(world) : exit.ClaimExit(world, world.Templates[templateIndex]);
+        var (x, y, z, angle) = exit is null ? OwnPlace(world) : exit.ClaimExit(world, world.Templates[templateIndex], door);
         if (extras is { } value) world.RequestSpawn(templateIndex, Entity.Owner, x, y, z, angle, value);
         else world.RequestSpawn(templateIndex, Entity.Owner, x, y, z, angle);
         world.Emit(SimEventKind.ProductionCompleted, Entity.Id, EntityId.Invalid, string.Empty, templateIndex);
@@ -2531,9 +2665,26 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             writer.Int("remaining", entry.RemainingTicks);
             if (entry.Quantity != 1) writer.Int("quantity", entry.Quantity);
             if (entry.Produced != 0) writer.Int("produced", entry.Produced);
+            if (entry.ReservedDoor != ExitDoor.NoneAvailable) writer.Int("exitDoor", entry.ReservedDoor);
             writer.EndObject();
         }
         writer.EndArray();
+        if (_constructionComplete >= 0) writer.Int("constructionComplete", _constructionComplete);
+        if (_doors.Any(door => !door.IsDefault))
+        {
+            writer.BeginArray("doors");
+            foreach (var door in _doors)
+            {
+                writer.BeginObject(null);
+                writer.Int("opened", door.Opened);
+                writer.Int("waitOpen", door.WaitOpen);
+                writer.Int("closed", door.Closed);
+                writer.Int("released", door.Released);
+                writer.Bool("hold", door.Hold);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
     }
 
     public override void Load(IStateReader reader)
@@ -2546,6 +2697,18 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         _queue.Clear();
         foreach (var entry in reader.Array("queue"))
             _queue.Add(new ProductionEntry(checked((int)entry.Int("template")), entry.Fixed("cost"), entry.Int("remaining"),
-                entry.Has("quantity") ? checked((int)entry.Int("quantity")) : 1, entry.Has("produced") ? checked((int)entry.Int("produced")) : 0));
+                entry.Has("quantity") ? checked((int)entry.Int("quantity")) : 1, entry.Has("produced") ? checked((int)entry.Int("produced")) : 0,
+                entry.Has("exitDoor") ? checked((int)entry.Int("exitDoor")) : ExitDoor.NoneAvailable));
+        _constructionComplete = reader.Has("constructionComplete") ? reader.Int("constructionComplete") : -1;
+        for (var index = 0; index < ExitDoor.Count; index++) _doors[index] = Door.Shut;
+        if (reader.Has("doors"))
+        {
+            var index = 0;
+            foreach (var door in reader.Array("doors"))
+            {
+                if (index >= ExitDoor.Count) throw new InvalidDataException("ProductionUpdate has more than four doors.");
+                _doors[index++] = new Door { Opened = door.Int("opened"), WaitOpen = door.Int("waitOpen"), Closed = door.Int("closed"), Released = door.Int("released"), Hold = door.Bool("hold") };
+            }
+        }
     }
 }

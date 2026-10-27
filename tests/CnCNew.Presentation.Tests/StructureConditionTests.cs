@@ -63,6 +63,9 @@ internal static class StructureConditionTests
             DoorCloseTime = 1000
             ConstructionCompleteDuration = 1000
           End
+          Behavior = DefaultProductionExitUpdate Exit01
+            UnitCreatePoint = X:30.0 Y:0.0 Z:0.0
+          End
         End
 
         Object PopFactory
@@ -84,6 +87,9 @@ internal static class StructureConditionTests
             DoorOpeningTime = 1000
             DoorWaitOpenTime = 0
             DoorCloseTime = 2000
+          End
+          Behavior = DefaultProductionExitUpdate Exit01
+            UnitCreatePoint = X:30.0 Y:0.0 Z:0.0
           End
         End
 
@@ -528,21 +534,23 @@ internal static class StructureConditionTests
         var text = Describe(timeline);
         TestHarness.Assert(opening is not null && waiting is not null && closing is not null && complete is not null, $"The door goes through opening, waiting-open and closing ({text}).");
 
-        // DoorOpeningTime = 30 ticks: the door is fully open when the unit appears.
-        Near(TestTime.Frames(rig.World, 30), completed - opening!.Value.First, 2, $"The door starts opening DoorOpeningTime before the unit appears ({text})");
+        // DoorOpeningTime = 30 frames: the simulation makes the unit when the door is fully open, more than DoorOpeningTime (one frame more) after it began to open (F-09).
+        var frame = TestTime.Frames(rig.World, 1);
+        Near(TestTime.Frames(rig.World, 31), completed - opening!.Value.First, frame, $"The door starts opening DoorOpeningTime and a frame before the unit appears ({text})");
         TestHarness.Assert(timeline.First(item => item.Tick == completed).Set.Contains(StructureConditions.DoorWaitingOpen[0]) || timeline.First(item => item.Tick == completed).Set.Contains(StructureConditions.DoorOpening[0]),
             "The unit appears at the end of the opening.");
-        Near(TestTime.Frames(rig.World, 30), opening.Value.Last - opening.Value.First + 1, 2, "Opening lasts DoorOpeningTime");
-        Near(TestTime.Frames(rig.World, 60), waiting!.Value.Last - waiting.Value.First + 1, 3, "Waiting open lasts DoorWaitOpenTime after the unit");
-        Near(TestTime.Frames(rig.World, 30), closing!.Value.Last - closing.Value.First + 1, 2, "Closing lasts DoorCloseTime");
+        Near(TestTime.Frames(rig.World, 31), opening.Value.Last - opening.Value.First + 1, frame, "Opening lasts more than DoorOpeningTime");
+        Near(TestTime.Frames(rig.World, 61), waiting!.Value.Last - waiting.Value.First + 1, frame, "Waiting open lasts more than DoorWaitOpenTime after the unit");
+        Near(TestTime.Frames(rig.World, 31), closing!.Value.Last - closing.Value.First + 1, frame, "Closing lasts more than DoorCloseTime");
         TestHarness.Assert(opening.Value.Last < waiting.Value.First && waiting.Value.Last < closing.Value.First, "The phases follow one another without overlap.");
         TestHarness.Assert(timeline.All(item => new[] { StructureConditions.DoorOpening[0], StructureConditions.DoorWaitingOpen[0], StructureConditions.DoorClosing[0] }.Count(item.Set.Contains) <= 1),
             "Exactly one door bit at a time.");
         TestHarness.Assert(timeline[^1].Set == ModelConditionSet.Empty, "The door is closed again at the end.");
 
-        // ConstructionCompleteDuration = 30 ticks from the moment the finished unit is handed to the exit.
+        // ConstructionCompleteDuration = 30 frames from the first door reservation; ProductionUpdate::update lets it expire at its top and sets it again in the loop that makes
+        // the unit 31 frames later, so it lasts 62 frames.
         TestHarness.Assert(complete!.Value.First == opening.Value.First, "The construction-complete phase starts with the door.");
-        Near(TestTime.Frames(rig.World, 30), complete.Value.Last - complete.Value.First + 1, 2, "Construction complete lasts ConstructionCompleteDuration");
+        Near(TestTime.Frames(rig.World, 62), complete.Value.Last - complete.Value.First + 1, frame, "Construction complete lasts twice more than ConstructionCompleteDuration");
     }
 
     private static void ProductionDoorReuse()
@@ -561,7 +569,7 @@ internal static class StructureConditionTests
         TestHarness.Assert(closing is not null && closing.Value.First > completions[1], $"The door does not close between the units ({Describe(timeline)}).");
         TestHarness.Assert(timeline.Where(item => item.Tick > completions[0] && item.Tick <= completions[1]).All(item => item.Set.Contains(StructureConditions.DoorWaitingOpen[0])),
             "It stays waiting-open until the second unit has left.");
-        Near(TestTime.Frames(rig.World, 60), closing!.Value.First - completions[1], 4, "Closing starts DoorWaitOpenTime after the second unit");
+        Near(TestTime.Frames(rig.World, 61), closing!.Value.First - completions[1], TestTime.Frames(rig.World, 1), "Closing starts more than DoorWaitOpenTime after the second unit");
 
         // A door that is still closing when the next unit is ready pops back to waiting-open (ProductionUpdate::update).
         var pop = new Rig();
@@ -575,10 +583,13 @@ internal static class StructureConditionTests
         TestHarness.Assert(completions2.Length == 2, "Both units were produced at the pop factory.");
         var between = timeline2.Where(item => item.Tick > completions2[0] + 2 && item.Tick < completions2[1] - TestTime.Frames(pop.World, 32)).ToArray();
         TestHarness.Assert(between.Any(item => item.Set.Contains(StructureConditions.DoorClosing[0])), $"With no wait the door starts closing after the first unit ({Describe(timeline2)}).");
-        var atSecond = timeline2.Where(item => item.Tick >= completions2[1] - TestTime.Frames(pop.World, 25) && item.Tick <= completions2[1] - 2).ToArray();
-        TestHarness.Assert(atSecond.All(item => item.Set.Contains(StructureConditions.DoorWaitingOpen[0]) && !item.Set.Contains(StructureConditions.DoorClosing[0])),
+        // The second unit is ready while the door closes: the door pops to waiting-open and the unit leaves in the same tick (no second opening).
+        var atSecond = timeline2.Single(item => item.Tick == completions2[1]).Set;
+        var beforeSecond = timeline2.Single(item => item.Tick == completions2[1] - 1).Set;
+        TestHarness.Assert(beforeSecond.Contains(StructureConditions.DoorClosing[0]) && atSecond.Contains(StructureConditions.DoorWaitingOpen[0]) && !atSecond.Contains(StructureConditions.DoorOpening[0]),
             $"A closing door pops to waiting-open when the second unit is ready ({Describe(timeline2)}).");
-        TestHarness.Assert(timeline2.All(item => !item.Set.Contains(StructureConditions.ConstructionComplete)), "ConstructionCompleteDuration absent: no construction-complete phase.");
+        // ConstructionCompleteDuration 0: ProductionUpdate::update still sets the phase whenever a finished unit reserves its door; it ends in the next frame.
+        TestHarness.Assert(atSecond.Contains(StructureConditions.ConstructionComplete), "Without a ConstructionCompleteDuration the phase shows only while a finished unit is handed to the door.");
     }
 
     private static void ProducersWithoutDoors()
@@ -611,7 +622,7 @@ internal static class StructureConditionTests
         var opening = Span(timeline, StructureConditions.DoorOpening[0]);
         var waiting = Span(timeline, StructureConditions.DoorWaitingOpen[0]);
         TestHarness.Assert(opening is not null && waiting is not null && waiting.Value.Last == timeline[^1].Tick, $"Door 1 opens and then stays waiting-open while the space is held ({Describe(timeline)}).");
-        Near(TestTime.Frames(rig.World, 30), opening!.Value.Last - opening.Value.First + 1, 2, "Door 1 opens for DoorOpeningTime");
+        Near(TestTime.Frames(rig.World, 31), opening!.Value.Last - opening.Value.First + 1, TestTime.Frames(rig.World, 1), "Door 1 opens for more than DoorOpeningTime");
         TestHarness.Assert(timeline.All(item => !item.Set.Contains(StructureConditions.DoorOpening[1]) && !item.Set.Contains(StructureConditions.DoorWaitingOpen[1]) && !item.Set.Contains(StructureConditions.DoorClosing[0])),
             "The other door stays shut and door 1 never closes while held.");
 
@@ -622,11 +633,11 @@ internal static class StructureConditionTests
         for (var i = 0; i < TestTime.Frames(rig.World, 100); i++) after.Add(rig.Step(airfield));
         var closing = Span(after, StructureConditions.DoorClosing[0]);
         TestHarness.Assert(closing is not null, $"Door 1 closes after the aircraft left ({Describe(after)}).");
-        Near(1, closing!.Value.First - release, 1, "Closing starts right after the release: the wait time has long elapsed");
-        Near(TestTime.Frames(rig.World, 30), closing.Value.Last - closing.Value.First + 1, 2, "Closing lasts DoorCloseTime");
+        Near(TestTime.Frames(rig.World, 1) + 1, closing!.Value.First - release, 1, "Closing starts a frame after the release: the wait time has long elapsed");
+        Near(TestTime.Frames(rig.World, 31), closing.Value.Last - closing.Value.First + 1, TestTime.Frames(rig.World, 1), "Closing lasts more than DoorCloseTime");
         TestHarness.Assert(after[^1].Set == ModelConditionSet.Empty, "and the door is closed.");
 
-        // Production: a unit made at the airfield opens the door of the first free space before it appears and keeps it open afterwards (the space is reserved).
+        // Production: a unit made at the airfield opens the door of the first free space, appears when it is open and keeps it open afterwards (the space is the aircraft's).
         var second = new Rig();
         var field = second.Spawn("DoorAirfield", 1, 200, 200);
         second.GiveMoney(1, 100);
@@ -636,7 +647,7 @@ internal static class StructureConditionTests
         var made = second.SampleOfFirst(SimEventKind.ProductionCompleted);
         var doorOne = Span(run, StructureConditions.DoorOpening[0]);
         TestHarness.Assert(doorOne is not null && run[^1].Set.Contains(StructureConditions.DoorWaitingOpen[0]), $"The produced aircraft's door opens and stays open ({Describe(run)}).");
-        Near(TestTime.Frames(second.World, 30), made - doorOne!.Value.First, 2, "Door 1 starts opening DoorOpeningTime before the aircraft appears");
+        Near(TestTime.Frames(second.World, 31), made - doorOne!.Value.First, TestTime.Frames(second.World, 1), "Door 1 starts opening more than DoorOpeningTime before the aircraft appears");
         TestHarness.Assert(run.All(item => !item.Set.Contains(StructureConditions.DoorOpening[1])), "Only the door of the reserved space opens.");
     }
 

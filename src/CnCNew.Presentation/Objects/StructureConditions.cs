@@ -173,39 +173,21 @@ public static class StructureConditions
 }
 
 /// <summary>
-/// The model conditions that need a memory, one table per entity, advanced once per simulated tick: the production doors of <c>ProductionUpdate::updateDoors</c> (and the airfield's per-space doors held open
-/// by <c>ParkingPlaceBehavior</c>), <c>CONSTRUCTION_COMPLETE</c>, and the latched bits whose reference module sets them on an event and clears them on the next one (the bomber's doors
-/// <c>DeliveringState::onExit</c>, the checkpoint gate <c>CheckpointUpdate::update</c>, the repair drone's arm <c>SlavedUpdate::setRepairModelConditionStates</c>).
+/// The model conditions that need a memory, one table per entity, advanced once per simulated tick: the latched bits whose reference module sets them on an event and clears them on
+/// the next one (the bomber's doors <c>DeliveringState::onExit</c>, the checkpoint gate <c>CheckpointUpdate::update</c>, the repair drone's arm
+/// <c>SlavedUpdate::setRepairModelConditionStates</c>), and - read from the simulation, which keeps them since Phase 39 (F-09) - the production doors of
+/// <c>ProductionUpdate::updateDoors</c> (the airfield's per-space doors held open by <c>ParkingPlaceBehavior</c>) and <c>CONSTRUCTION_COMPLETE</c>.
 /// <para>
-/// <b>Production doors.</b> The reference opens a door only when the finished unit is ready to leave, creates the unit when the door is fully open (<c>ProductionUpdate::update</c>:
-/// <c>door->m_doorWaitOpenFrame != 0</c>), keeps the door open for <c>DoorWaitOpenTime</c> after the last unit and then closes it for <c>DoorCloseTime</c>. The simulation creates the unit the
-/// moment the queue entry is done and has no door, so the door is run on the simulation's clock instead: it starts opening <c>DoorOpeningTime</c> (and one tick) before the head entry completes (the
-/// remaining ticks of the entry are known), is fully open when the unit appears, and from then on follows <c>updateDoors</c> exactly (same transitions, same strict comparisons, same pop to
-/// waiting-open of a door that is still closing when the next unit is ready, same hold-open). Opened this early the whole cycle is shifted by <c>DoorOpeningTime</c> against the reference,
-/// which is the price of seeing the unit leave through an open door.
+/// <b>Production doors.</b> The simulation opens a door when the finished unit is ready to leave and creates the unit when the door is fully open (<c>ProductionUpdate::update</c>:
+/// <c>door->m_doorWaitOpenFrame != 0</c>); the presentation shows the phase the simulation's door is in at the tick (<see cref="ProductionUpdate.DoorAt"/>).
 /// </para>
 /// </summary>
 public sealed class StructureConditionTracker
 {
     private const int MaxDoors = 4;
 
-    private sealed class Door
-    {
-        public long Opened = -1;
-        public long WaitOpen = -1;
-        public long Closed = -1;
-        public bool Hold;
-
-        /// <summary>The last sampled tick at which the door was held open: a held door cannot start closing, so the closing of a released door starts no earlier than the tick after.</summary>
-        public long LastHold = -1;
-
-        public bool IsClosed => Opened < 0 && WaitOpen < 0 && Closed < 0;
-    }
-
     private sealed class Entry
     {
-        public readonly Door[] Doors = [new(), new(), new(), new()];
-        public long ConstructionComplete = -1;
         public bool PlaneDoorsOpened;
         public bool CheckpointAlly;
         public bool CheckpointEnemy;
@@ -224,7 +206,6 @@ public sealed class StructureConditionTracker
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(world);
         ProductionUpdate? production = null;
-        ParkingPlaceBehavior? parking = null;
         DeliverPayloadAIUpdate? plane = null;
         CheckpointUpdate? checkpoint = null;
         SlavedUpdate? drone = null;
@@ -233,7 +214,6 @@ public sealed class StructureConditionTracker
             switch (module)
             {
                 case ProductionUpdate value: production = value; break;
-                case ParkingPlaceBehavior value: parking = value; break;
                 case DeliverPayloadAIUpdate value: plane = value; break;
                 case CheckpointUpdate value: checkpoint = value; break;
                 case SlavedUpdate value: drone = value; break;
@@ -246,7 +226,7 @@ public sealed class StructureConditionTracker
         if (production is null && plane is null && checkpoint is null && drone is null) return ModelConditionSet.Empty;
         if (!_entries.TryGetValue(entity.Id.Value, out var entry)) _entries[entity.Id.Value] = entry = new Entry();
         var set = ModelConditionSet.Empty;
-        if (production is not null) set = Production(entry, entity, world, production, parking, set);
+        if (production is not null) set = Production(entity, world, production, set);
         if (plane is not null) set = Plane(entry, plane, set);
         if (checkpoint is not null) set = Checkpoint(entry, checkpoint, set);
         if (drone is not null) set = Drone(entry, drone, set);
@@ -261,114 +241,26 @@ public sealed class StructureConditionTracker
 
     // ------------------------------------------------------------------------------------------------ production
 
-    private static ModelConditionSet Production(Entry entry, Entity entity, SimulationWorld world, ProductionUpdate production, ParkingPlaceBehavior? parking, ModelConditionSet set)
+    private static ModelConditionSet Production(Entity entity, SimulationWorld world, ProductionUpdate production, ModelConditionSet set)
     {
         var data = production.Data;
         var doorCount = Math.Clamp(data.NumDoorAnimations, 0, MaxDoors);
         if (doorCount == 0 && data.ConstructionCompleteTicks == 0) return set;
-        var now = world.Tick;
-
-        if (parking is not null)
-        {
-            // ParkingPlaceBehavior::reserveSpace / releaseSpace / purgeDead: the door of a space stays open while an aircraft holds the space; a closed door opens (ProductionUpdate::setHoldDoorOpen).
-            for (var space = 0; space < Math.Min(parking.SpaceCount, doorCount); space++)
-            {
-                var door = entry.Doors[space];
-                door.Hold = parking.OccupantOf(space).IsValid || parking.IsReservedForExit(space);
-                if (door.Hold) door.LastHold = now;
-                if (door.Hold && door.IsClosed) door.Opened = now;
-            }
-        }
-
-        // The head entry is about to be handed to the exit: ProductionUpdate::update then reserves a door, opens it and starts the construction-complete phase.
-        // The door is waiting open in the tick after its opening time has passed (the strict comparison of updateDoors), so it starts one tick more than DoorOpeningTime
-        // before the entry completes: the unit appears behind a door that already shows DOOR_n_WAITING_OPEN, not in the last tick of DOOR_n_OPENING.
-        var lead = doorCount > 0 ? data.DoorOpeningTicks + 1 : 0;
-        if (!entity.HasStatus(ObjectStatusBits.UnderConstruction) && production.TryGetHead(out var head) && head.RemainingTicks <= Math.Max(lead, 1))
-        {
-            var produced = world.Templates[head.TemplateIndex];
-            var exit = entity.Modules.OfType<IProductionExit>().FirstOrDefault();
-            if (exit is null || exit.IsFreeToExitFor(produced))
-            {
-                var start = Math.Min(now, now + head.RemainingTicks - lead);
-                var exitDoor = parking is not null && !produced.IsKindOf("PRODUCED_AT_HELIPAD") ? FirstFreeSpace(parking) : 0;
-                if (exitDoor >= 0 && exitDoor < doorCount) ReserveDoor(entry.Doors[exitDoor], now, start);
-                if (entry.ConstructionComplete < 0 && data.ConstructionCompleteTicks > 0) entry.ConstructionComplete = start;
-            }
-        }
-
+        // The tick the world last stepped: the simulation decided the doors in it (world.Tick is already the next one).
+        var now = world.Tick - CnCNew.Simulation.Time.TickOrder.Next;
+        var frame = world.Time.TicksPerOriginalFrame;
         for (var index = 0; index < doorCount; index++)
         {
-            var door = entry.Doors[index];
-            UpdateDoor(door, data);
-            if (door.Opened >= 0) set = set.With(StructureConditions.DoorOpening[index]);
-            if (door.WaitOpen >= 0) set = set.With(StructureConditions.DoorWaitingOpen[index]);
-            if (door.Closed >= 0) set = set.With(StructureConditions.DoorClosing[index]);
-        }
-
-        // ProductionUpdate::update: the construction-complete phase ends when more than ConstructionCompleteDuration has passed.
-        if (entry.ConstructionComplete >= 0)
-        {
-            if (now - entry.ConstructionComplete > data.ConstructionCompleteTicks) entry.ConstructionComplete = -1;
-            else set = set.With(StructureConditions.ConstructionComplete);
-        }
-
-        void UpdateDoor(Door door, ProductionData timing)
-        {
-            // ProductionUpdate::updateDoors, with the frame stamps chained so that a gap between two samples (an object out of sight) cannot lose a transition.
-            bool moved;
-            do
+            set = production.DoorAt(index, now, frame) switch
             {
-                moved = false;
-                if (door.Opened >= 0)
-                {
-                    if (now - door.Opened > timing.DoorOpeningTicks)
-                    {
-                        door.WaitOpen = door.Opened + timing.DoorOpeningTicks + 1;
-                        door.Opened = -1;
-                        moved = true;
-                    }
-                }
-                else if (door.WaitOpen >= 0)
-                {
-                    if (now - door.WaitOpen > timing.DoorWaitOpenTicks && !door.Hold)
-                    {
-                        door.Closed = Math.Max(door.WaitOpen + timing.DoorWaitOpenTicks + 1, door.LastHold + 1);
-                        door.WaitOpen = -1;
-                        moved = true;
-                    }
-                }
-                else if (door.Closed >= 0 && !door.Hold && now - door.Closed > timing.DoorCloseTicks)
-                {
-                    door.Closed = -1;
-                    moved = true;
-                }
-            }
-            while (moved);
+                ProductionUpdate.DoorPhase.Opening => set.With(StructureConditions.DoorOpening[index]),
+                ProductionUpdate.DoorPhase.WaitingOpen => set.With(StructureConditions.DoorWaitingOpen[index]),
+                ProductionUpdate.DoorPhase.Closing => set.With(StructureConditions.DoorClosing[index]),
+                _ => set,
+            };
         }
-
+        if (production.ConstructionCompleteAt(now, frame)) set = set.With(StructureConditions.ConstructionComplete);
         return set;
-    }
-
-    /// <summary><c>ProductionUpdate::update</c>, the branch that serves a finished unit: a closed door starts opening, a waiting-open door is kept waiting, a closing door pops to waiting-open.</summary>
-    private static void ReserveDoor(Door door, long now, long start)
-    {
-        if (door.IsClosed) door.Opened = start;
-        else if (door.WaitOpen >= 0) door.WaitOpen = now;
-        else if (door.Closed >= 0)
-        {
-            door.WaitOpen = now;
-            door.Closed = -1;
-            door.Opened = -1;
-        }
-    }
-
-    /// <summary><c>ParkingPlaceBehavior::reserveDoorForExit</c> (<c>findEmptyPPI</c>): the door of the first space nobody holds or has reserved; -1 when there is none.</summary>
-    private static int FirstFreeSpace(ParkingPlaceBehavior parking)
-    {
-        for (var space = 0; space < parking.SpaceCount; space++)
-            if (!parking.OccupantOf(space).IsValid && !parking.IsReservedForExit(space)) return space;
-        return -1;
     }
 
     // ------------------------------------------------------------------------------------------------ latches

@@ -249,6 +249,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
             {
                 _occupant[index] = EntityId.Invalid;
                 _reservedForExit[index] = false;
+                HoldDoor(world, index, false);
             }
         }
         for (var index = 0; index < _runwayUser.Length; index++)
@@ -280,6 +281,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
         }
         _occupant[index] = aircraft.Id;
         _reservedForExit[index] = false;
+        HoldDoor(world, index, true);
         if (data.LandingDeckHeightOffset != Fixed.Zero) aircraft.Status |= 1UL << DeckHeightBit;
         info = InfoOfSpace(world, index);
         if (parkingOffset != Fixed.Zero)
@@ -311,6 +313,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
             {
                 _occupant[index] = EntityId.Invalid;
                 _reservedForExit[index] = false;
+                HoldDoor(world, index, false);
             }
         aircraft.Status &= ~(1UL << DeckHeightBit);
     }
@@ -443,6 +446,48 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
     /// </summary>
     public (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world, ObjectTemplate produced) => ClaimExitCore(world, produced);
 
+    /// <summary>
+    /// <c>reserveDoorForExit</c>: a <c>PRODUCED_AT_HELIPAD</c> object needs no door; anything else reserves the first free space, whose door is the space's number
+    /// (<c>buildInfo</c> counts the doors along the spaces).
+    /// </summary>
+    public int ReserveDoor(IWorldServices world, ObjectTemplate produced)
+    {
+        Purge(world);
+        if (produced.IsKindOf("PRODUCED_AT_HELIPAD")) return ExitDoor.NoneNeeded;
+        var index = EmptySpace();
+        if (index < 0) return ExitDoor.NoneAvailable;
+        _reservedForExit[index] = true;
+        return index;
+    }
+
+    /// <summary>
+    /// <c>exitObjectViaDoor</c> through a reserved door: the aircraft takes the space of that door, whose door is held open from now on (<c>reserveSpace</c> of the new object; the
+    /// space itself becomes the aircraft's when it is adopted, <see cref="TryAdoptArrival"/>).
+    /// </summary>
+    public (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world, ObjectTemplate produced, int door)
+    {
+        if (door < ExitDoor.First || door >= _occupant.Length || !_reservedForExit[door] || _occupant[door].IsValid || produced.IsKindOf("PRODUCED_AT_HELIPAD"))
+            return ClaimExitCore(world, produced);
+        HoldDoor(world, door, true);
+        var info = InfoOfSpace(world, door);
+        _arrivals.Add(new Arrival(produced.Index, info.HangarInternal.X, info.HangarInternal.Y, Entity.Owner, world.Tick, door));
+        return (info.HangarInternal.X, info.HangarInternal.Y, info.HangarInternal.Z, info.HangarInternalOrientation);
+    }
+
+    /// <summary><c>unreserveDoorForExit</c>: the space of the door is free again.</summary>
+    public void UnreserveDoor(int door)
+    {
+        if (door < ExitDoor.First || door >= _occupant.Length) return;
+        _occupant[door] = EntityId.Invalid;
+        _reservedForExit[door] = false;
+    }
+
+    /// <summary><c>ProductionUpdate::setHoldDoorOpen</c> for the door of a space (the producer of an airfield is the airfield itself).</summary>
+    private void HoldDoor(IWorldServices world, int space, bool hold)
+    {
+        if (Array.Find(Entity.ModuleArray, module => module is ProductionUpdate) is ProductionUpdate production) production.SetHoldDoorOpen(world, space, hold);
+    }
+
     private (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExitCore(IWorldServices world, ObjectTemplate? produced)
     {
         if (produced is not null && produced.IsKindOf("PRODUCED_AT_HELIPAD"))
@@ -480,6 +525,7 @@ public sealed class ParkingPlaceBehavior(ParkingPlaceData data) : SimModule, IUp
                 if (space < 0 || space >= parking._occupant.Length || !parking._reservedForExit[space] || parking._occupant[space].IsValid) return null;
                 parking._occupant[space] = aircraft.Id;
                 parking._reservedForExit[space] = false;
+                parking.HoldDoor(world, space, true);
                 if (parking.Data.LandingDeckHeightOffset != Fixed.Zero) aircraft.Status |= 1UL << DeckHeightBit;
             }
             return parking;

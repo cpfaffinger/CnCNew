@@ -583,6 +583,29 @@ public interface IProductionExit
 
     /// <summary><see cref="ClaimExit(IWorldServices)"/> for a specific product (<c>ParkingPlaceBehavior::reserveDoorForExit</c> reserves a door only for what needs one).</summary>
     (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world, ObjectTemplate produced) => ClaimExit(world);
+
+    /// <summary>
+    /// <c>ExitInterface::reserveDoorForExit</c>: the door a unit of <paramref name="produced"/> will leave by (<see cref="ExitDoor.First"/> and up), <see cref="ExitDoor.NoneNeeded"/>,
+    /// or <see cref="ExitDoor.NoneAvailable"/> when it may not leave now. Every exit but the airfield has one door, free when the exit is.
+    /// </summary>
+    int ReserveDoor(IWorldServices world, ObjectTemplate produced) => IsFreeToExitFor(produced) ? ExitDoor.First : ExitDoor.NoneAvailable;
+
+    /// <summary><c>exitObjectViaDoor</c> through the door <see cref="ReserveDoor"/> gave.</summary>
+    (Fixed X, Fixed Y, Fixed Z, Fixed Angle) ClaimExit(IWorldServices world, ObjectTemplate produced, int door) => ClaimExit(world, produced);
+
+    /// <summary><c>ExitInterface::unreserveDoorForExit</c>: a reserved door whose unit will not come (its order was cancelled).</summary>
+    void UnreserveDoor(int door)
+    {
+    }
+}
+
+/// <summary><c>ExitDoorType</c> (<c>UpdateModule.h</c>): the four doors of a producer and the two answers that are no door.</summary>
+public static class ExitDoor
+{
+    public const int First = 0;
+    public const int Count = 4;
+    public const int NoneAvailable = -1;
+    public const int NoneNeeded = -2;
 }
 
 /// <summary>A module driven by the <see cref="UpgradeMux"/> state machine (<c>UpgradeModule</c> / any <c>UpgradeMux</c>-mixin module).</summary>
