@@ -194,9 +194,9 @@ public sealed partial class ScriptEngine
 
     /// <summary>
     /// <c>ScriptEngine::m_conditionTeam</c>: the instance a script's conditions are evaluated for, kept apart from the team a script was called for (<c>m_callingTeam</c>) as the
-    /// reference keeps it - in a session of the original skirmish AI. There <c>executeScript</c> leaves the calling team alone, so a team's own script (<c>runScript(name, team)</c>:
-    /// on create, on idle, on destroyed ...) still has its team as <c>&lt;This Team&gt;</c> when its conditions name no team. A mission keeps the one variable it always had (and its
-    /// reference values): there this field stays <see langword="null"/> and a called script without a condition team has no <c>&lt;This Team&gt;</c>.
+    /// reference keeps it. <c>executeScript</c> leaves the calling team alone, so a team's own script (<c>runScript(name, team)</c>: on create, on idle, on destroyed ...) still has
+    /// its team as <c>&lt;This Team&gt;</c> when its conditions name no team - in a mission as in a session of the original skirmish AI (F-10; the mission VM cleared the calling
+    /// team until Phase 39).
     /// </summary>
     private ScriptTeam? _conditionInstance;
 
@@ -533,8 +533,7 @@ public sealed partial class ScriptEngine
         else if (onlyInstance is not null) RunForInstance(unit, script, onlyInstance);
         else
         {
-            if (_ai.Count > 0) _conditionInstance = null;
-            else _callingTeam = null;
+            _conditionInstance = null;
             if (EvaluateConditions(unit))
             {
                 _executedScripts++;
@@ -553,8 +552,7 @@ public sealed partial class ScriptEngine
 
     private void RunForInstance(ScriptUnit unit, MapScript script, ScriptTeam instance)
     {
-        if (_ai.Count > 0) _conditionInstance = instance;
-        else _callingTeam = instance;
+        _conditionInstance = instance;
         if (EvaluateConditions(unit))
         {
             _executedScripts++;

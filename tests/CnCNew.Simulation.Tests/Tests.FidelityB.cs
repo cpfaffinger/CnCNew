@@ -4,6 +4,8 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
+using CnCNew.Data.World;
+using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.World;
 
 /// <summary>
@@ -228,6 +230,25 @@ static partial class Tests
             TimingAlign(world);
             Check.That(Shots(1) == 1, $"{rate}: the reloaded clip fires in the next frame.");
         }
+    }
+
+    /// <summary>
+    /// F-10: a team's create script whose conditions name no team runs with the team as <c>&lt;This Team&gt;</c> in a mission as well (<c>ScriptEngine::executeScript</c> keeps
+    /// <c>m_callingTeam</c> and sets only <c>m_conditionTeam</c>; <c>getTeamNamed(THIS_TEAM)</c> returns the calling team first). The mission VM cleared the calling team.
+    /// </summary>
+    public static void FidelityThisTeamInMissionCreateScript()
+    {
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("OnCreate", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("INCREMENT_COUNTER", Scr.Int(1), Scr.Counter("created")), Scr.Do("TEAM_KILL", Scr.Team("<This Team>"))], subroutine: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Hunter"), Placed("BetaSoldier", 400m, 200m, "Wave", "W1"), Placed("BetaSoldier", 410m, 220m, "Wave", "W2")]);
+        MapProperties Wave() => new([Scr.Text("teamName", "Wave"), Scr.Text("teamOwner", PlayerB), Scr.Flag("teamIsSingleton", true), Scr.Text("teamOnCreateScript", "OnCreate")]);
+        map = map with { Teams = [..map.Teams, Wave()] };
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(10));
+        Check.That(session.Engine.CounterValue("created") == 1, $"The create script ran ({session.Engine.CounterValue("created")}).");
+        var alive = new[] { "W1", "W2" }.Count(name => NamedIn(session, name) is { EffectivelyDead: false });
+        Check.That(alive == 0, $"TEAM_KILL <This Team> in the create script killed the team ({alive} of 2 alive).");
+        Check.That(NamedIn(session, "Hunter") is { EffectivelyDead: false }, "Nobody else died.");
     }
 }
 
