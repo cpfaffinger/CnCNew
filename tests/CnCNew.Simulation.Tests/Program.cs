@@ -199,6 +199,7 @@ run.Test("Fidelity B (F-08): QuantityModifier - one order makes as many units as
 run.Test("Fidelity B (F-09): a produced unit comes into being when its door is fully open", Tests.FidelityUnitAtOpenDoor);
 run.Test("Fidelity B (F-07): a clip without reload time fires at most once per frame of the original", Tests.FidelityNoReloadClipFiresOncePerFrame);
 run.Test("Fidelity B (F-10): <This Team> in a team's create script in a mission", Tests.FidelityThisTeamInMissionCreateScript);
+run.Test("Fidelity B (F-43): an upgrade is researched in its producer's queue for its build time", Tests.FidelityUpgradesTakeTheirBuildTime);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);

@@ -96,7 +96,7 @@ static partial class Tests
         Check.That(!thing.HasStatus(noAttack) && !thing.HasStatus(unselectable), "Before the upgrade no bit is set.");
         feeder.GiveMoney(1, 1000);
         world.Step();
-        feeder.PurchaseUpgrade(1, "Upgrade_StatusBits", target: thing.Id.Value);
+        feeder.GrantUpgrade(1, "Upgrade_StatusBits", target: thing.Id.Value);
         CsRun(world, 30, () => thing.HasStatus(noAttack));
         Check.That(thing.HasStatus(noAttack), "The upgrade sets NO_ATTACK_FROM_AI.");
         Check.That(!thing.HasStatus(unselectable), "A bit in both masks is set first and cleared after, as the reference does: UNSELECTABLE ends cleared.");

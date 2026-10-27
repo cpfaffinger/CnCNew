@@ -420,7 +420,11 @@ public sealed class CommandModeController
                 return ForAll(sources.Where(entity => entity.HasStatus(ObjectStatusBits.UnderConstruction)),
                     site => Issue((sequence, tick) => new CancelConstructCommand(Player, sequence, tick, site.Id)));
             case GuiCommandKind.PlayerUpgrade:
-                return Result(Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, null)));
+            {
+                // The building whose button was pressed researches it (MSG_QUEUE_UPGRADE goes to the selected group).
+                var producer = sources.IsEmpty ? (EntityId?)null : sources[0].Id;
+                return Result(Issue((sequence, tick) => new PurchaseUpgradeCommand(Player, sequence, tick, button.Upgrade, producer)));
+            }
             case GuiCommandKind.ObjectUpgrade:
             {
                 if (sources.IsEmpty) return ActivationResult.NoSource;

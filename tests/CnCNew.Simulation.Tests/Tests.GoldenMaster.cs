@@ -32,7 +32,7 @@ static partial class Tests
             {
                 feeder.GiveMoney(2, 500);
                 world.Step();
-                feeder.PurchaseUpgrade(2, "Upgrade_Armor", target: 2);
+                feeder.GrantUpgrade(2, "Upgrade_Armor", target: 2);
                 world.Step();
             }
 

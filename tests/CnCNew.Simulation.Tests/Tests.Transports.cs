@@ -351,7 +351,8 @@ static partial class Tests
             {
                 feeder.GiveMoney(1, 100);
                 world.Step();
-                bought = feeder.PurchaseUpgrade(1, "Upgrade_AmericaSupplyLines").Accepted;
+                feeder.GrantUpgrade(1, "Upgrade_AmericaSupplyLines");
+                bought = true;
             }
             Check.That(chinook.Z == Fixed.FromInt(100), "The Chinook supplies in flight.");
             // The net animation (DOCKING) belongs to the time at the dock, not to the flight there (demo finding: unloading was shown while the Chinook was still on its way).

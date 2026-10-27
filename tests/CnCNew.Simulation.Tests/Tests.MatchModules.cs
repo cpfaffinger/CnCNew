@@ -167,7 +167,7 @@ static partial class Tests
         void Step(int ticks) { for (var i = 0; i < ticks; i++) events.AddRange(world.Step().Events); }
         Step(3);
         Check.That(CountOf(world, "TestMine") == 0, "No mines before the trigger upgrade.");
-        feeder.PurchaseUpgrade(1, "Upgrade_Mines", target: 2);
+        feeder.GrantUpgrade(1, "Upgrade_Mines", target: 2);
         Step(3);
         // radius 20 layer + 5 mine radius: ring 1 at 25 (16 mines), ring 2 at 35 (22 mines), stop at 45 >= 40.
         Check.That(CountOf(world, "TestMine") == 38, "Two rings of 16 and 22 mines: " + CountOf(world, "TestMine"));
@@ -178,11 +178,11 @@ static partial class Tests
         var orientations = mines.Select(value => value.Angle.Raw).Distinct().Count();
         Check.That(orientations > 30, "Every mine draws its own orientation: " + orientations);
 
-        feeder.PurchaseUpgrade(1, "Upgrade_Mines", target: 2);
+        feeder.GrantUpgrade(1, "Upgrade_Mines", target: 2);
         Step(3);
         Check.That(CountOf(world, "TestMine") == 38, "Repurchasing does not lay a second field.");
 
-        feeder.PurchaseUpgrade(1, "Upgrade_EMPMines", target: 2);
+        feeder.GrantUpgrade(1, "Upgrade_EMPMines", target: 2);
         Step(4);
         Check.That(CountOf(world, "TestMine") == 0 && CountOf(world, "EmpMine") == 38, $"The upgrade replaces the old mines: {CountOf(world, "TestMine")} old, {CountOf(world, "EmpMine")} new.");
 
@@ -194,7 +194,7 @@ static partial class Tests
         walled.Step();
         walledFeeder.GiveMoney(1, 100);
         walled.Step();
-        walledFeeder.PurchaseUpgrade(1, "Upgrade_Mines", target: 1);
+        walledFeeder.GrantUpgrade(1, "Upgrade_Mines", target: 1);
         for (var i = 0; i < 3; i++) walled.Step();
         Check.That(CountOf(walled, "TestMine") == 37, "A mine mostly under a structure is vetoed: " + CountOf(walled, "TestMine"));
 
@@ -215,8 +215,8 @@ static partial class Tests
         bad.Step();
         badFeeder.GiveMoney(1, 100);
         bad.Step();
-        badFeeder.PurchaseUpgrade(1, "Upgrade_Mines", target: 1);
-        badFeeder.PurchaseUpgrade(1, "Upgrade_Mines", target: 2);
+        badFeeder.GrantUpgrade(1, "Upgrade_Mines", target: 1);
+        badFeeder.GrantUpgrade(1, "Upgrade_Mines", target: 2);
         var badEvents = new List<SimEvent>();
         for (var i = 0; i < 3; i++) badEvents.AddRange(bad.Step().Events);
         var skips = badEvents.Where(value => value.Kind == SimEventKind.CreationSkipped).ToArray();
@@ -234,13 +234,13 @@ static partial class Tests
         live.Step();
         liveFeeder.GiveMoney(1, 100);
         live.Step();
-        liveFeeder.PurchaseUpgrade(1, "Upgrade_Mines", target: 2);
+        liveFeeder.GrantUpgrade(1, "Upgrade_Mines", target: 2);
         for (var i = 0; i < 3; i++) live.Step();
         var restored = WorldSnapshot.Restore(WorldSnapshot.Write(live), fixture.Templates, fixture.Fingerprint);
         Check.That(restored.StateHash == live.StateHash, "The minefield state round-trips through a snapshot.");
         var restoredFeeder = liveFeeder.ForkTo(restored);
-        liveFeeder.PurchaseUpgrade(1, "Upgrade_EMPMines", target: 2);
-        restoredFeeder.PurchaseUpgrade(1, "Upgrade_EMPMines", target: 2);
+        liveFeeder.GrantUpgrade(1, "Upgrade_EMPMines", target: 2);
+        restoredFeeder.GrantUpgrade(1, "Upgrade_EMPMines", target: 2);
         for (var i = 0; i < live.Frames(6); i++)
             Check.That(live.Step().StateHash == restored.Step().StateHash, "The upgrade swap after a restore is hash-identical to the live run at step " + i + ".");
         Check.That(CountOf(restored, "EmpMine") == 38 && CountOf(restored, "TestMine") == 0, "The restored world swapped its mines.");

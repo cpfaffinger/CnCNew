@@ -496,8 +496,8 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// A script-named button that is not a special power. <c>PLAYER_UPGRADE</c>/<c>OBJECT_UPGRADE</c> buy the upgrade the button names (the ordinary
-    /// <see cref="PurchaseUpgradeCommand"/>, so funds and prerequisites apply); a <c>FIRE_WEAPON</c> button with a target object fires the carrier's weapon at it
+    /// A script-named button that is not a special power. <c>PLAYER_UPGRADE</c>/<c>OBJECT_UPGRADE</c> order the upgrade the button names at the carrier (the ordinary
+    /// <see cref="PurchaseUpgradeCommand"/>, so funds, prerequisites and the build time apply); a <c>FIRE_WEAPON</c> button with a target object fires the carrier's weapon at it
     /// (fired from the button's <c>WeaponSlot</c>, pinning it like the reference); a <c>SWITCH_WEAPON</c> button pins its slot permanently. Every other command type, a missing target and an
     /// unknown button are counted as diagnostics under their own message, never executed and never confused with each other.
     /// </summary>
@@ -516,7 +516,8 @@ public sealed partial class ScriptEngine
             {
                 if (button.Upgrade.Length == 0) { Diagnose($"command button '{ability}' names no upgrade"); return false; }
                 var upgrade = button.Upgrade;
-                EntityId? upgradeTarget = button.Command.Equals("OBJECT_UPGRADE", StringComparison.OrdinalIgnoreCase) ? source : null;
+                // Object::doCommandButton: the carrier's own queue researches it (ProductionUpdate::queueUpgrade), a player upgrade as well as an object upgrade.
+                EntityId? upgradeTarget = source;
                 if (_issue(owner, (sequence, tick) => new PurchaseUpgradeCommand(owner, sequence, tick, upgrade, upgradeTarget)).Accepted) return true;
                 Diagnose($"upgrade button '{ability}' rejected");
                 return false;

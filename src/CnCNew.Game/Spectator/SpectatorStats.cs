@@ -42,8 +42,11 @@ public sealed record SpectatorPlayerPanel(
     ImmutableArray<SpectatorCount> UnitsLost, int UnitsLostCount, long UnitsLostValue,
     ImmutableArray<SpectatorCount> StructuresLost, int StructuresLostCount, long StructuresLostValue,
     int Kills, long KillsValue, int StructuresBuilt,
-    ImmutableArray<string> Upgrades = default, int ObjectUpgrades = 0, ImmutableArray<string> Sciences = default)
+    ImmutableArray<string> Upgrades = default, int ObjectUpgrades = 0, ImmutableArray<string> Sciences = default, ImmutableArray<SpectatorProductionItem> Researching = default)
 {
+    /// <summary>The upgrades being researched now, with the building and the progress of each (<c>ProductionUpdate</c>'s queues; F-43).</summary>
+    public ImmutableArray<SpectatorProductionItem> Researching { get; init; } = Researching.IsDefault ? [] : Researching;
+
     /// <summary>The player's upgrades (player-wide, in the catalogue's order; the engine's veterancy upgrades left out).</summary>
     public ImmutableArray<string> Upgrades { get; init; } = Upgrades.IsDefault ? [] : Upgrades;
 
@@ -68,7 +71,10 @@ public sealed record SpectatorPanels(long Tick, long GameSeconds, ImmutableArray
                 string.Create(CultureInfo.InvariantCulture, $"{(item.IsConstruction ? "build " : item.Producer + " > ")}{item.Template} {item.Progress * 100:F0}% q{item.Queued}")))).Append('\n');
             text.Append(CultureInfo.InvariantCulture, $"  units lost {player.UnitsLostCount} ({player.UnitsLostValue}): ").Append(string.Join(", ", player.UnitsLost.Select(item => $"{item.Template} x{item.Count}"))).Append('\n');
             text.Append(CultureInfo.InvariantCulture, $"  structures lost {player.StructuresLostCount} ({player.StructuresLostValue}): ").Append(string.Join(", ", player.StructuresLost.Select(item => $"{item.Template} x{item.Count}"))).Append('\n');
-            text.Append(CultureInfo.InvariantCulture, $"  research: upgrades {string.Join(", ", player.Upgrades)}; object upgrades {player.ObjectUpgrades}; sciences {string.Join(", ", player.Sciences)}").Append('\n');
+            text.Append(CultureInfo.InvariantCulture, $"  research: upgrades {string.Join(", ", player.Upgrades)}; object upgrades {player.ObjectUpgrades}; sciences {string.Join(", ", player.Sciences)}");
+            if (!player.Researching.IsEmpty)
+                text.Append("; in research ").Append(string.Join(", ", player.Researching.Select(item => string.Create(CultureInfo.InvariantCulture, $"{item.Producer} > {item.Template} {item.Progress * 100:F0}%"))));
+            text.Append('\n');
         }
         return text.ToString();
     }
@@ -222,6 +228,7 @@ public sealed class SpectatorStats
             var row = RowOf(player.Id);
             var army = new SortedDictionary<string, (int Count, long Value)>(StringComparer.Ordinal);
             var production = ImmutableArray.CreateBuilder<SpectatorProductionItem>();
+            var researching = ImmutableArray.CreateBuilder<SpectatorProductionItem>();
             int harvesters = 0, supplyCenters = 0, consumption = 0, units = 0, armyUnits = 0, workers = 0, structures = 0;
             long armyValue = 0;
             foreach (var entity in world.EntitiesOwnedBy(player.Id).AsSpan())
@@ -242,9 +249,14 @@ public sealed class SpectatorStats
                     if (SimulationQueries.HasModule(entity, "SupplyCenterDockUpdate")) supplyCenters++;
                     if (SimulationQueries.ProductionOf(entity)?.Queue is { IsDefaultOrEmpty: false } queue)
                     {
-                        var head = world.Templates[queue[0].TemplateIndex];
-                        var total = Math.Max(head.BuildTicks, 1);
-                        production.Add(new SpectatorProductionItem(template.Name, head.Name, Math.Clamp((total - queue[0].RemainingTicks) / (float)total, 0f, 1f), queue.Length, false));
+                        // Only the head of a queue progresses; an upgrade at the head is research (an upgrade further back is only queued).
+                        var (headName, headTicks) = queue[0].IsUpgrade
+                            ? (world.Upgrades.Upgrades[queue[0].UpgradeIndex].Name, world.Upgrades.Upgrades[queue[0].UpgradeIndex].BuildTicks)
+                            : (world.Templates[queue[0].TemplateIndex].Name, world.Templates[queue[0].TemplateIndex].BuildTicks);
+                        var total = Math.Max(headTicks, 1);
+                        var item = new SpectatorProductionItem(template.Name, headName, Math.Clamp((total - queue[0].RemainingTicks) / (float)total, 0f, 1f), queue.Length, false);
+                        production.Add(item);
+                        if (queue[0].IsUpgrade) researching.Add(item);
                     }
                     continue;
                 }
@@ -257,8 +269,7 @@ public sealed class SpectatorStats
                 var (count, sum) = army.GetValueOrDefault(template.Name);
                 army[template.Name] = (count + 1, sum + cost);
             }
-            // Research (Phase 37): what the world holds - the player's upgrades, the upgrades of its objects, its sciences. An upgrade is complete when it is bought
-            // (SimulationWorld.CompleteUpgrade), so nothing is "in research" (fidelity register F-43).
+            // Research (Phase 37): what the world holds - the player's upgrades, the upgrades of its objects, its sciences - and since Phase 39 (F-43) what is being researched.
             var upgrades = world.PlayerUpgrades(player.Id);
             var objectUpgrades = 0;
             foreach (var entity in world.EntitiesOwnedBy(player.Id).AsSpan())
@@ -277,7 +288,7 @@ public sealed class SpectatorStats
                 Sorted(row.StructuresLost), row.StructuresLost.Values.Sum(value => value.Count), row.StructuresLost.Values.Sum(value => value.Value),
                 row.Kills, row.KillsValue, row.StructuresBuilt,
                 [..world.Upgrades.Upgrades.Where(info => !info.IsEngine && info.Scope == UpgradeScope.Player && upgrades.Has(info.Index)).Select(info => info.Name)], objectUpgrades,
-                [..world.Sciences.Sciences.Where(info => sciences.Has(info.Index)).Select(info => info.Name)]));
+                [..world.Sciences.Sciences.Where(info => sciences.Has(info.Index)).Select(info => info.Name)], researching.ToImmutable()));
         }
         return new SpectatorPanels(world.Tick, world.Tick / _ticksPerSecond, panels.ToImmutable(), winner, isOver);
     }

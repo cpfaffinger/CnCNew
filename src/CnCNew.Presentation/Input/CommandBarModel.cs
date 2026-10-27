@@ -46,6 +46,9 @@ public enum ButtonReason
     UnknownReference,
     /// <summary>The original supports the button, the simulation has no command for it yet.</summary>
     NotSupportedBySimulation,
+
+    /// <summary>The upgrade is being researched (<c>Player::hasUpgradeInProduction</c>, <c>ProductionUpdate::isUpgradeInQueue</c>).</summary>
+    InProduction,
 }
 
 /// <param name="Slot">1..14 as in the <c>CommandSet</c>.</param>
@@ -303,9 +306,14 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             case GuiCommandKind.PlayerUpgrade or GuiCommandKind.ObjectUpgrade:
             {
                 if (!world.Upgrades.TryGet(button.Upgrade, out var upgrade)) return State(ButtonAvailability.Restricted, ButtonReason.UnknownReference);
+                // ControlBar::getCommandAvailability (ControlBarCommand.cpp), in its order: a full queue restricts; an upgrade owned or in production (anywhere for a player
+                // upgrade, in this queue for an object upgrade) is shown like one that cannot be afforded; then the money and the sciences.
+                if (production is { HasRoom: false }) return State(ButtonAvailability.Restricted, ButtonReason.QueueFull, null, upgrade.BuildCost, upgrade.BuildTicks);
+                if (button.Kind == GuiCommandKind.ObjectUpgrade && production is null) return State(ButtonAvailability.Restricted, ButtonReason.NoProducer, null, upgrade.BuildCost, upgrade.BuildTicks);
                 var owned = button.Kind == GuiCommandKind.PlayerUpgrade ? world.PlayerUpgrades(player).Has(upgrade.Index) : entity.CompletedUpgrades.Has(upgrade.Index);
                 if (owned) return State(ButtonAvailability.CantAfford, ButtonReason.AlreadyOwned, null, upgrade.BuildCost, upgrade.BuildTicks);
-                if (button.Kind == GuiCommandKind.ObjectUpgrade && production is null) return State(ButtonAvailability.Restricted, ButtonReason.NoProducer, null, upgrade.BuildCost, upgrade.BuildTicks);
+                var inProduction = button.Kind == GuiCommandKind.PlayerUpgrade ? world.UpgradeInProduction(player, upgrade.Index) : production?.IsUpgradeInQueue(upgrade.Index) == true;
+                if (inProduction) return State(ButtonAvailability.CantAfford, ButtonReason.InProduction, null, upgrade.BuildCost, upgrade.BuildTicks);
                 if (world.MoneyOf(player) < upgrade.BuildCost) return State(ButtonAvailability.Restricted, ButtonReason.InsufficientFunds, null, upgrade.BuildCost, upgrade.BuildTicks);
                 foreach (var name in button.Sciences)
                     if (!world.Sciences.TryGet(name, out var science) || !world.PlayerSciences(player).Has(science.Index))
@@ -401,13 +409,18 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         var queue = SimulationQueries.Describe(production).Array("queue");
         for (var index = 0; index < queue.Count && index < MaxQueueButtons; index++)
         {
-            var template = world.Templates[checked((int)queue[index].Int("template"))];
-            var cost = queue[index].Values.TryGetValue("cost", out var value) && value is Fixed fixedCost ? fixedCost : template.BuildCost;
-            var total = Math.Max(template.BuildTicks, 1);
+            // An upgrade researched here (F-43) shows the button that ordered it, as populateBuildQueue does for a PRODUCTION_UPGRADE entry.
+            var upgrade = queue[index].Values.ContainsKey("upgrade") ? world.Upgrades.Upgrades[checked((int)queue[index].Int("upgrade"))] : null;
+            var template = upgrade is null ? world.Templates[checked((int)queue[index].Int("template"))] : null;
+            var name = upgrade?.Name ?? template!.Name;
+            var cost = queue[index].Values.TryGetValue("cost", out var value) && value is Fixed fixedCost ? fixedCost : upgrade?.BuildCost ?? template!.BuildCost;
+            var total = Math.Max(upgrade?.BuildTicks ?? template!.BuildTicks, 1);
             var progress = index == 0 ? Math.Clamp((total - queue[index].Int("remaining")) / (float)total, 0f, 1f) : 0f;
             var image = Enumerable.Range(0, set.Slots.Length).Select(slot => ButtonOf(set, slot))
-                .FirstOrDefault(button => button is { Kind: GuiCommandKind.UnitBuild } && button.Object.Equals(template.Name, StringComparison.OrdinalIgnoreCase))?.ButtonImage ?? string.Empty;
-            entries.Add(new QueueEntry(index, template.Name, image, cost, progress));
+                .FirstOrDefault(button => upgrade is null
+                    ? button is { Kind: GuiCommandKind.UnitBuild } && button.Object.Equals(name, StringComparison.OrdinalIgnoreCase)
+                    : button is { Kind: GuiCommandKind.PlayerUpgrade or GuiCommandKind.ObjectUpgrade } && button.Upgrade.Equals(name, StringComparison.OrdinalIgnoreCase))?.ButtonImage ?? string.Empty;
+            entries.Add(new QueueEntry(index, name, image, cost, progress));
         }
         return entries.ToImmutable();
     }

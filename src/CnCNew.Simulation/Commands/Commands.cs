@@ -724,6 +724,13 @@ public enum CommandRejection : byte
     /// <c>getVictimAntiMask</c>) or would do no damage through the victim's armor (<c>estimateWeaponDamage</c>, unresistable weapons excepted).
     /// </summary>
     InvalidWeaponTarget = 39,
+
+    // --------------------------------------------------------------------------------------------------- upgrades with build time (F-43)
+    /// <summary>
+    /// The upgrade is being researched already: a player upgrade in any of the player's queues (<c>Player::hasUpgradeInProduction</c>), an object upgrade in the producer's own
+    /// queue (<c>ProductionUpdate::isUpgradeInQueue</c>).
+    /// </summary>
+    UpgradeInProduction = 40,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

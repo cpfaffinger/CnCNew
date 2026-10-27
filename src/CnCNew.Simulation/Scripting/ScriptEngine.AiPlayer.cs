@@ -625,7 +625,7 @@ public sealed partial class ScriptEngine
         {
             if (!Counts(entity) || entity.HasStatus(UnderConstructionBit) || ProductionOf(entity) is not { } production) continue;
             foreach (var item in production.Queue)
-                if (_world.Templates.Templates[item.TemplateIndex].IsKindOf(kind)) return false;
+                if (!item.IsUpgrade && _world.Templates.Templates[item.TemplateIndex].IsKindOf(kind)) return false;
             if (production.HasRoom) factories.Add((entity, production));
         }
         // The reference walks every template and asks each factory whether it can make it (isPossibleToMakeUnit: a button of its command set); here the factories are asked for

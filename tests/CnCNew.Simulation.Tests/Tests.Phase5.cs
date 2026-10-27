@@ -433,21 +433,25 @@ static partial class Tests
         world.Step();
         Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(1000), "GiveMoneyCommand credits the balance.");
 
+        // A purchase is researched in a producer's queue (F-43, Tests.FidelityB): this fixture has no producer, so nothing is bought here.
         feeder.PurchaseUpgrade(1, "Upgrade_PlayerWide");
         world.Step();
-        Check.That(world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(800) && world.PlayerUpgrades(new PlayerId(1)).Any(),
-            "The player-scoped upgrade completes and its cost (200) is withdrawn.");
+        Check.That(world.RejectionCounts[(int)CommandRejection.CannotProduce] == 1 && world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(1000),
+            "Without a building that researches it a player upgrade is refused and nothing is paid.");
 
+        feeder.GrantUpgrade(1, "Upgrade_PlayerWide");
+        Check.That(world.PlayerUpgrades(new PlayerId(1)).Any(), "A granted player-scoped upgrade completes.");
         feeder.PurchaseUpgrade(1, "Upgrade_PlayerWide");
         world.Step();
-        Check.That(world.RejectionCounts[(int)CommandRejection.AlreadyOwned] == 1 && world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(800),
-            "Repurchasing a completed player upgrade is rejected and does not withdraw money again.");
+        Check.That(world.RejectionCounts[(int)CommandRejection.AlreadyOwned] == 1 && world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(1000),
+            "Repurchasing a completed player upgrade is rejected and does not withdraw money.");
 
         var fighter = world.FindEntity(new EntityId(1))!;
         feeder.PurchaseUpgrade(1, "Upgrade_Armor", target: 1);
         world.Step();
-        Check.That(fighter.CompletedUpgrades.Any() && fighter.HasPlayerUpgradeArmor && world.MoneyOf(new PlayerId(1)) == Fixed.FromInt(700),
-            "An object-scoped upgrade completes on its target and withdraws its own cost (100).");
+        Check.That(world.RejectionCounts[(int)CommandRejection.CannotProduce] == 2 && !fighter.CompletedUpgrades.Any(), "An object without a production queue cannot research its upgrade.");
+        feeder.GrantUpgrade(1, "Upgrade_Armor", target: 1);
+        Check.That(fighter.CompletedUpgrades.Any() && fighter.HasPlayerUpgradeArmor, "A granted object-scoped upgrade completes on its target.");
 
         feeder.PurchaseUpgrade(1, "Upgrade_DoesNotExist");
         world.Step();
@@ -523,7 +527,7 @@ static partial class Tests
         // validation (Validate() checks against current state, not same-tick effects still pending execution).
         feeder.GiveMoney(2, 1000);
         world.Step();
-        feeder.PurchaseUpgrade(2, "Upgrade_Armor", target: 2);
+        feeder.GrantUpgrade(2, "Upgrade_Armor", target: 2);
         world.Step();
         Check.That(target.HasPlayerUpgradeArmor, "ArmorUpgrade switches the target to its PLAYER_UPGRADE armor set.");
         feeder.FireWeapon(1, 1, 2);
@@ -533,7 +537,7 @@ static partial class Tests
         // WeaponSetUpgrade: player 1 upgrades entity 1's weapon set (TestGun -> BigGun, unlimited clip).
         feeder.GiveMoney(1, 1000);
         world.Step();
-        feeder.PurchaseUpgrade(1, "Upgrade_Weapon", target: 1);
+        feeder.GrantUpgrade(1, "Upgrade_Weapon", target: 1);
         world.Step();
         Check.That(attacker.HasPlayerUpgradeWeapon && attacker.WeaponClip == int.MaxValue, "WeaponSetUpgrade switches weapons and refills the (unlimited) clip.");
         for (var i = 0; i < world.Frames(10); i++) world.Step();
@@ -542,7 +546,7 @@ static partial class Tests
         Check.That(target.Body.Health == Fixed.FromInt(70), "The upgraded BigGun deals 40 damage at 50% armor (20), leaving 70.");
 
         // MaxHealthUpgrade (SAME_CURRENTHEALTH): the cap rises, current health is unchanged.
-        feeder.PurchaseUpgrade(1, "Upgrade_Health", target: 1);
+        feeder.GrantUpgrade(1, "Upgrade_Health", target: 1);
         world.Step();
         Check.That(attacker.Body!.MaxHealth == Fixed.FromInt(150) && attacker.Body.Health == Fixed.FromInt(100),
             "MaxHealthUpgrade raises the cap by AddMaxHealth (50) and leaves current health unchanged for SAME_CURRENTHEALTH.");
@@ -889,7 +893,7 @@ static partial class Tests
         world2.Step();
         feeder2.GiveMoney(1, 1000);
         world2.Step();
-        feeder2.PurchaseUpgrade(1, "Upgrade_Detonator", target: 1);
+        feeder2.GrantUpgrade(1, "Upgrade_Detonator", target: 1);
         world2.Step();
         feeder2.Kill(1);
         var result2 = world2.Step();
@@ -904,7 +908,7 @@ static partial class Tests
         world3.Step();
         feeder3.GiveMoney(1, 1000);
         world3.Step();
-        feeder3.PurchaseUpgrade(1, "Upgrade_AltDetonator");
+        feeder3.GrantUpgrade(1, "Upgrade_AltDetonator");
         world3.Step();
         feeder3.Kill(1);
         var result3 = world3.Step();

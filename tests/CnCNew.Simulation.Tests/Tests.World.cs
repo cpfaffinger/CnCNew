@@ -51,6 +51,13 @@ sealed class Feeder(SimulationWorld world)
     public SubmitResult GiveMoney(int target, decimal amount, long? tick = null)
         => world.Submit(new GiveMoneyCommand(PlayerId.System, Next(0), tick ?? world.Tick, new PlayerId(target), Fixed.FromDecimal(amount)));
 
+    /// <summary>
+    /// The upgrade complete at once, as a script's grant does (<see cref="SimulationWorld.CompleteUpgrade"/>): for tests of what an upgrade does. A purchase is researched in a
+    /// producer's queue for its build time since Phase 39 (F-43).
+    /// </summary>
+    public void GrantUpgrade(int player, string upgrade, uint? target = null)
+        => world.CompleteUpgrade(new PlayerId(player), target is { } id ? new EntityId(id) : null, upgrade);
+
     public SubmitResult PurchaseUpgrade(int player, string upgrade, uint? target = null, long? tick = null)
         => world.Submit(new PurchaseUpgradeCommand(new PlayerId(player), Next(player), tick ?? world.Tick, upgrade, target is { } id ? new EntityId(id) : null));
 

@@ -377,7 +377,7 @@ static partial class Tests
         Check.That(Rejected(feeder.UseSpecialPower(1, id, "SPECIAL_Paused"), CommandRejection.SpecialPowerNotReady), "A paused power never becomes ready, however long it waits.");
         feeder.GiveMoney(1, 100);
         world.Step();
-        feeder.PurchaseUpgrade(1, "Upgrade_Unpause", id);
+        feeder.GrantUpgrade(1, "Upgrade_Unpause", id);
         StepTo(world, world.Tick + 3);
         Check.That(Rejected(feeder.UseSpecialPower(1, id, "SPECIAL_Paused"), CommandRejection.SpecialPowerNotReady), "Unpausing adds the paused time back, so the countdown restarts from the pause point.");
         StepTo(world, world.Tick + world.Frames(61));
@@ -406,7 +406,7 @@ static partial class Tests
         var scholar = IdOf(world, "Scholar");
         feeder.GiveMoney(1, 100);
         world.Step();
-        feeder.PurchaseUpgrade(1, "Upgrade_ScholarLocked", scholar);
+        feeder.GrantUpgrade(1, "Upgrade_ScholarLocked", scholar);
         StepTo(world, world.Tick + 3);
         world.Sciences.TryGet("SCIENCE_Locked", out var locked);
         world.Sciences.TryGet("SCIENCE_Strike2", out var strike2);
@@ -419,7 +419,7 @@ static partial class Tests
         StepTo(world, world.Tick + world.Frames(130));
         Check.That(Rejected(feeder.UseSpecialPower(1, gunship, "SPECIAL_Gunship", SpecialPowerTargetKind.Location, x: 3, y: 3), CommandRejection.SpecialPowerHandlerMissing),
             "A power whose effect is an update module with no matching handler is refused, not silently ignored.");
-        feeder.PurchaseUpgrade(1, "Upgrade_Scholar", scholar);
+        feeder.GrantUpgrade(1, "Upgrade_Scholar", scholar);
         StepTo(world, world.Tick + 3);
         Check.That(world.PlayerSciences(new PlayerId(1)).Has(strike2.Index), "GrantScienceUpgrade grants the science.");
         Check.That(feeder.UseSpecialPower(1, gunship, "SPECIAL_Gunship", SpecialPowerTargetKind.Location, x: 3, y: 3).Accepted, "The owned science selects the handler.");

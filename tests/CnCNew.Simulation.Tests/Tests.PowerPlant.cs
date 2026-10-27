@@ -112,7 +112,7 @@ static partial class Tests
 
         feeder.GiveMoney(1, 100);
         world.Step();
-        feeder.PurchaseUpgrade(1, "Upgrade_Rods", target: 1);
+        feeder.GrantUpgrade(1, "Upgrade_Rods", target: 1);
         world.Step();
         world.Step();
         Check.That(world.EnergyProductionOf(owner) == 8, "PowerPlantUpgrade adds EnergyBonus (3) to the owner.");

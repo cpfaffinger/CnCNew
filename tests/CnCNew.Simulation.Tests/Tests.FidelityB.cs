@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
@@ -67,6 +68,42 @@ static partial class Tests
           Behavior = DefaultProductionExitUpdate Exit01
             UnitCreatePoint = X:10.0 Y:0.0 Z:0.0
             NaturalRallyPoint = X:20.0 Y:0.0 Z:0.0
+          End
+        End
+
+        Upgrade Upgrade_FidelityPlayer
+          Type = PLAYER
+          BuildCost = 100
+          BuildTime = 2
+        End
+        Upgrade Upgrade_FidelityObject
+          Type = OBJECT
+          BuildCost = 50
+          BuildTime = 1
+        End
+        CommandButton Cmd_FidelityPlayer
+          Command = PLAYER_UPGRADE
+          Upgrade = Upgrade_FidelityPlayer
+        End
+        CommandButton Cmd_FidelityObject
+          Command = OBJECT_UPGRADE
+          Upgrade = Upgrade_FidelityObject
+        End
+        CommandSet FidelityLabSet
+          1 = Cmd_FidelityPlayer
+          2 = Cmd_FidelityObject
+        End
+        Object FidelityLab
+          KindOf = STRUCTURE
+          CommandSet = FidelityLabSet
+          Body = StructureBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = ProductionUpdate Prod01
+            MaxQueueEntries = 3
           End
         End
         """,
@@ -250,5 +287,73 @@ static partial class Tests
         Check.That(alive == 0, $"TEAM_KILL <This Team> in the create script killed the team ({alive} of 2 alive).");
         Check.That(NamedIn(session, "Hunter") is { EffectivelyDead: false }, "Nobody else died.");
     }
-}
 
+
+    /// <summary>
+    /// F-43: <c>ProductionUpdate::queueUpgrade</c> researches an upgrade in the producer's queue for its build time - paid when queued, complete when the time is over, refunded in
+    /// full when cancelled; a player upgrade in production anywhere and an object upgrade in the producer's queue cannot be ordered twice; a building without the button cannot
+    /// research it (<c>Object::canProduceUpgrade</c>); an order without a building goes to the first of the player's buildings that can (<c>AIPlayer::buildUpgrade</c>).
+    /// </summary>
+    public static void FidelityUpgradesTakeTheirBuildTime()
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: FidelityBFiles());
+        Check.That(fixture.Templates.TryGet("FidelityLab", out var lab) && lab.IsInstantiable, "The laboratory binds.");
+        SimulationWorld Lab(out Feeder feeder)
+        {
+            var world = NewWorld(fixture);
+            feeder = new Feeder(world);
+            feeder.Spawn(1, "FidelityLab");
+            feeder.Spawn(1, "DoorFactory", x: 300, y: 300);
+            world.Step();
+            feeder.GiveMoney(1, 1000);
+            world.Step();
+            return world;
+        }
+        var player = new PlayerId(1);
+        var playerUpgrade = fixture.Templates.Upgrades.TryGet("Upgrade_FidelityPlayer", out var playerInfo) ? playerInfo.Index : -1;
+        var objectUpgrade = fixture.Templates.Upgrades.TryGet("Upgrade_FidelityObject", out var objectInfo) ? objectInfo.Index : -1;
+
+        var world = Lab(out var feeder);
+        var ordered = world.Tick;
+        Check.That(feeder.PurchaseUpgrade(1, "Upgrade_FidelityPlayer", 1).Accepted, "The player upgrade is ordered at the laboratory.");
+        world.Step();
+        Check.That(world.MoneyOf(player) == Fixed.FromInt(900) && !world.PlayerUpgrades(player).Has(playerUpgrade) && world.UpgradeInProduction(player, playerUpgrade),
+            $"It is paid when queued and is in production, not complete ({world.MoneyOf(player)}).");
+        feeder.PurchaseUpgrade(1, "Upgrade_FidelityPlayer", 1);
+        world.Step();
+        Check.That(world.RejectionCounts[(int)CommandRejection.UpgradeInProduction] == 1 && world.MoneyOf(player) == Fixed.FromInt(900), "A second order while it is researched is refused.");
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+        long done = -1;
+        for (var i = 0; i < world.Frames(80) && done < 0; i++)
+        {
+            Check.That(world.Step().StateHash == restored.Step().StateHash, "The research is hash-identical after a restore at step " + i + ".");
+            if (world.PlayerUpgrades(player).Has(playerUpgrade)) done = world.Tick;
+        }
+        // As a unit: the entry that starts an empty queue is done BuildTime less up to one frame after its order (ProductionUpdate.Enqueue).
+        Check.That(done > 0 && done - ordered > world.Frames(59) && done - ordered <= world.Frames(60) + 1,
+            $"The player upgrade is complete BuildTime (60 frames) after its order ({done - ordered} ticks).");
+        Check.That(!world.UpgradeInProduction(player, playerUpgrade), "and no longer in production.");
+
+        // an object upgrade, researched by the object itself
+        Check.That(feeder.PurchaseUpgrade(1, "Upgrade_FidelityObject", 1).Accepted, "The object upgrade is ordered.");
+        world.Step();
+        var labEntity = world.FindEntity(new EntityId(1))!;
+        Check.That(!labEntity.CompletedUpgrades.Has(objectUpgrade), "The object upgrade is not complete when ordered.");
+        for (var i = 0; i < world.Frames(31); i++) world.Step();
+        Check.That(labEntity.CompletedUpgrades.Has(objectUpgrade) && world.MoneyOf(player) == Fixed.FromInt(850), "The laboratory has its object upgrade after BuildTime; both upgrades paid once.");
+
+        // a cancel refunds in full; an order without a building finds the laboratory; a building without the button cannot research
+        var cancelled = Lab(out var cancelledFeeder);
+        cancelledFeeder.PurchaseUpgrade(1, "Upgrade_FidelityPlayer");
+        cancelled.Step();
+        Check.That(cancelled.MoneyOf(player) == Fixed.FromInt(900) && cancelled.UpgradeInProduction(player, playerUpgrade), "An order without a building is researched at the laboratory.");
+        cancelledFeeder.CancelProduction(1, 1, 0);
+        cancelled.Step();
+        for (var i = 0; i < cancelled.Frames(80); i++) cancelled.Step();
+        Check.That(cancelled.MoneyOf(player) == Fixed.FromInt(1000) && !cancelled.PlayerUpgrades(player).Has(playerUpgrade) && !cancelled.UpgradeInProduction(player, playerUpgrade),
+            "A cancelled upgrade is refunded in full and never completes.");
+        cancelledFeeder.PurchaseUpgrade(1, "Upgrade_FidelityPlayer", 2);
+        cancelled.Step();
+        Check.That(cancelled.RejectionCounts[(int)CommandRejection.CannotProduce] == 1 && cancelled.MoneyOf(player) == Fixed.FromInt(1000), "A factory without the button cannot research it.");
+    }
+}

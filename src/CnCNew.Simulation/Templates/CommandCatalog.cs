@@ -18,14 +18,22 @@ public sealed class CommandCatalog
     private readonly ImmutableDictionary<string, CommandButtonInfo> _buttonsByName = ImmutableDictionary<string, CommandButtonInfo>.Empty;
     private readonly ImmutableDictionary<string, ImmutableArray<string>> _buildsBySet;
     private readonly ImmutableDictionary<string, string> _specialPowerByButton;
+    private readonly ImmutableDictionary<string, ImmutableArray<string>> _upgradesBySet;
 
     private CommandCatalog(ImmutableDictionary<string, ImmutableArray<string>> buildsBySet, ImmutableDictionary<string, string> specialPowerByButton,
-        ImmutableDictionary<string, CommandButtonInfo> buttonsByName)
+        ImmutableDictionary<string, CommandButtonInfo> buttonsByName, ImmutableDictionary<string, ImmutableArray<string>> upgradesBySet)
     {
         _buildsBySet = buildsBySet;
         _specialPowerByButton = specialPowerByButton;
         _buttonsByName = buttonsByName;
+        _upgradesBySet = upgradesBySet;
     }
+
+    /// <summary>
+    /// The upgrades the buttons of the named command set research (<c>PLAYER_UPGRADE</c>, <c>OBJECT_UPGRADE</c>): what <c>Object::canProduceUpgrade</c> asks of a producer's set;
+    /// empty for an unknown set.
+    /// </summary>
+    public ImmutableArray<string> UpgradesOf(string commandSet) => _upgradesBySet.TryGetValue(commandSet, out var upgrades) ? upgrades : [];
 
     /// <summary>Any command button by definition name (<c>TheControlBar-&gt;findCommandButton</c>), for scripts that use a button that is not a special power; <see langword="false"/> for an unknown name.</summary>
     public bool TryGetButton(string buttonName, out CommandButtonInfo info) => _buttonsByName.TryGetValue(buttonName, out info!);
@@ -60,13 +68,22 @@ public sealed class CommandCatalog
             if (!string.IsNullOrWhiteSpace(target)) buttons[button.OriginalName] = target.Trim();
         }
         var sets = ImmutableDictionary.CreateBuilder<string, ImmutableArray<string>>(StringComparer.OrdinalIgnoreCase);
+        var upgradeSets = ImmutableDictionary.CreateBuilder<string, ImmutableArray<string>>(StringComparer.OrdinalIgnoreCase);
         foreach (var set in graph.Definitions.OfType<CommandSetDefinition>())
         {
             var builds = ImmutableArray.CreateBuilder<string>();
+            var upgrades = ImmutableArray.CreateBuilder<string>();
             foreach (var field in set.Fields)
-                if (buttons.TryGetValue(field.Value.OriginalText.Trim(), out var target) && !builds.Contains(target, StringComparer.OrdinalIgnoreCase)) builds.Add(target);
+            {
+                var buttonName = field.Value.OriginalText.Trim();
+                if (buttons.TryGetValue(buttonName, out var target) && !builds.Contains(target, StringComparer.OrdinalIgnoreCase)) builds.Add(target);
+                if (all.TryGetValue(buttonName, out var info) && info.Upgrade.Length > 0
+                    && (info.Command.Equals("PLAYER_UPGRADE", StringComparison.OrdinalIgnoreCase) || info.Command.Equals("OBJECT_UPGRADE", StringComparison.OrdinalIgnoreCase))
+                    && !upgrades.Contains(info.Upgrade, StringComparer.OrdinalIgnoreCase)) upgrades.Add(info.Upgrade);
+            }
             sets[set.OriginalName] = builds.ToImmutable();
+            upgradeSets[set.OriginalName] = upgrades.ToImmutable();
         }
-        return new CommandCatalog(sets.ToImmutable(), abilities.ToImmutable(), all.ToImmutable());
+        return new CommandCatalog(sets.ToImmutable(), abilities.ToImmutable(), all.ToImmutable(), upgradeSets.ToImmutable());
     }
 }

@@ -362,7 +362,7 @@ static partial class Tests
         Check.That(deposits.Count == 1 && deposits[0].Value == 40, "The second period pays 40 again.");
         feeder.GiveMoney(1, 500);
         world.Step();
-        feeder.PurchaseUpgrade(1, "Upgrade_PlayerWide");
+        feeder.GrantUpgrade(1, "Upgrade_PlayerWide");
         world.Step();
         var before = world.MoneyOf(new PlayerId(1));
         deposits = RunCollecting(world, world.Frames(90) + 1, SimEventKind.SupplyDeposited);

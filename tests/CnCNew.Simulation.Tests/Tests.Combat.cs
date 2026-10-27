@@ -396,7 +396,7 @@ static partial class Tests
         feeder.Damage(outpost.Id.Value, 50);
         world.Step();
         Check.That(outpost.Body!.Health == Fixed.FromInt(150), "The outpost is damaged before the upgrade.");
-        Check.That(feeder.PurchaseUpgrade(1, "Upgrade_Fortify", target: outpost.Id.Value).Accepted, "The upgrade purchase is accepted.");
+        feeder.GrantUpgrade(1, "Upgrade_Fortify", target: outpost.Id.Value);
         for (var i = 0; i < world.Frames(10); i++) world.Step();
         Check.That(!world.Entities.Any(value => value.Template.Name == "Outpost"), "The outpost is gone.");
         var fortress = Get(world, "Fortress");

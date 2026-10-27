@@ -438,7 +438,12 @@ public sealed class SpectatorHud
                 foreach (var name in player.Upgrades.Take(ListRows / 2)) top = Note("  " + Short(name, 34), top);
                 if (player.Upgrades.Length > ListRows / 2) top = Note($"  ... {player.Upgrades.Length - ListRows / 2} more upgrades", top);
                 foreach (var name in player.Sciences.Take(ListRows / 2)) top = Note("  " + Short(name, 34), top);
-                return player.Sciences.Length > ListRows / 2 ? Note($"  ... {player.Sciences.Length - ListRows / 2} more sciences", top) : top;
+                if (player.Sciences.Length > ListRows / 2) top = Note($"  ... {player.Sciences.Length - ListRows / 2} more sciences", top);
+                if (player.Researching.IsEmpty) return top;
+                top = Note($"in research {player.Researching.Length}", top);
+                foreach (var item in player.Researching.Take(ListRows / 2))
+                    top = Note(string.Create(CultureInfo.InvariantCulture, $"  {Short(item.Template, 28)} {item.Progress * 100:F0}%"), top);
+                return top;
             }
 
             int EconomyRows(SpectatorPlayerPanel player, int top)

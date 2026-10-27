@@ -67,7 +67,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[(int)CommandRejection.InvalidWeaponTarget + 1];
+    private readonly long[] _rejections = new long[(int)CommandRejection.UpgradeInProduction + 1];
 
     /// <summary>Size of the rejection table when the state hash first covered it (reasons up to <see cref="CommandRejection.CannotToggleOvercharge"/>); later reasons are hashed only when they occurred.</summary>
     private const int LegacyRejectionEntries = (int)CommandRejection.CannotToggleOvercharge + 1;
@@ -767,17 +767,9 @@ public sealed partial class SimulationWorld : IWorldServices
                 break;
             case PurchaseUpgradeCommand purchase:
             {
-                if (!_templates.Upgrades.TryGet(purchase.Upgrade, out var info)) return CommandRejection.UnknownUpgrade;
-                if (info.IsEngine) return CommandRejection.NotPermitted;
-                if (info.Scope == UpgradeScope.Object)
-                {
-                    if (purchase.Target is not { } targetId) return CommandRejection.InvalidArguments;
-                    if (!_entities.TryGetValue(targetId.Value, out var target) || target.DestroyRequested) return CommandRejection.UnknownEntity;
-                    if (target.Owner != command.Player) return CommandRejection.NotPermitted;
-                    if (target.CompletedUpgrades.Has(info.Index)) return CommandRejection.AlreadyOwned;
-                }
-                else if (player.CompletedUpgrades.Has(info.Index)) return CommandRejection.AlreadyOwned;
-                if (player.Money < info.BuildCost) return CommandRejection.InsufficientFunds;
+                if (_templates.Upgrades.TryGet(purchase.Upgrade, out var info) && info.IsEngine) return CommandRejection.NotPermitted;
+                var check = CheckUpgradePurchase(player, purchase, out _, out _);
+                if (check != 0) return check;
                 break;
             }
             case QueueProductionCommand queue:
@@ -1081,20 +1073,10 @@ public sealed partial class SimulationWorld : IWorldServices
                 break;
             case PurchaseUpgradeCommand purchase:
             {
-                if (!_templates.Upgrades.TryGet(purchase.Upgrade, out var info)) { RecordRejection(command, CommandRejection.UnknownUpgrade); break; }
                 var payer = _players[command.Player.Value];
-                Entity? scopeEntity = null;
-                if (info.Scope == UpgradeScope.Object)
-                {
-                    scopeEntity = purchase.Target is { } targetId ? FindEntity(targetId) : null;
-                    if (scopeEntity is null || scopeEntity.DestroyRequested) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
-                    if (scopeEntity.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
-                    if (scopeEntity.CompletedUpgrades.Has(info.Index)) { RecordRejection(command, CommandRejection.AlreadyOwned); break; }
-                }
-                else if (payer.CompletedUpgrades.Has(info.Index)) { RecordRejection(command, CommandRejection.AlreadyOwned); break; }
-                if (payer.Money < info.BuildCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }
-                payer.Money -= info.BuildCost;
-                CompleteUpgrade(command.Player, scopeEntity?.Id, purchase.Upgrade);
+                var verdict = CheckUpgradePurchase(payer, purchase, out var producer, out var info);
+                if (verdict != 0) { RecordRejection(command, verdict); break; }
+                QueueUpgrade(payer, producer!, info!);
                 break;
             }
             case QueueProductionCommand queue:

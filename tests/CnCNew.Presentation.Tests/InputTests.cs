@@ -1211,7 +1211,7 @@ static class InputTests
         arena.Step(5);
         barracksBar = bar.Build(world, selection);
         Assert(barracksBar[1] is { Availability: ButtonAvailability.Restricted, Reason: ButtonReason.QueueFull }, "two queued of MaxQueueEntries 2: queue full");
-        Assert(barracksBar[2] is { Availability: ButtonAvailability.Restricted, Reason: ButtonReason.InsufficientFunds }, "50 left: the 300 upgrade is unaffordable");
+        Assert(barracksBar[2] is { Availability: ButtonAvailability.Restricted, Reason: ButtonReason.QueueFull }, "a full queue restricts the upgrade before its price (ControlBarCommand.cpp)");
         Assert(barracksBar.Queue is [var head, var next] && head.Template == "Ranger" && head.ButtonImage == "SRanger" && head.Cost == Fixed.FromInt(200)
                && head.Progress > 0f && head.Progress < 1f && next.Progress == 0f, $"queue view: head in progress, second waiting ({string.Join(", ", barracksBar.Queue)})");
         Assert(controller.CancelProduction(barracks.Id, 1), "a queue icon cancels its entry");
@@ -1220,9 +1220,19 @@ static class InputTests
 
         arena.System(sequence => new GiveMoneyCommand(PlayerId.System, sequence, world.Tick, Me, Fixed.FromInt(100)));
         arena.Step();
-        Assert(bar.Activate(world, bar.Build(world, selection), 2, controller) == ActivationResult.Issued && arena.Sink.Issued[^1] is PurchaseUpgradeCommand { Upgrade: "Upgrade_Flash", Target: null },
-            "the player upgrade is bought");
+        Assert(bar.Activate(world, bar.Build(world, selection), 2, controller) == ActivationResult.Issued
+               && arena.Sink.Issued[^1] is PurchaseUpgradeCommand { Upgrade: "Upgrade_Flash" } purchase && purchase.Target == barracks.Id,
+            "the player upgrade is ordered at the selected building");
         arena.Step();
+        // ProductionUpdate::queueUpgrade (F-43): the upgrade waits in the building's queue behind the ranger and is "in production" until its build time is over.
+        var researching = bar.Build(world, selection);
+        Assert(researching[2] is { Availability: ButtonAvailability.Restricted, Reason: ButtonReason.QueueFull } && researching.Queue is [_, { Template: "Upgrade_Flash" }],
+            $"the upgrade waits in the queue behind the ranger, which is full again ({string.Join(", ", researching.Queue)})");
+        for (var i = 0; i < 20000 && bar.Build(world, selection).Queue.Length > 1; i++) arena.Step();
+        researching = bar.Build(world, selection);
+        Assert(researching[2] is { Availability: ButtonAvailability.CantAfford, Reason: ButtonReason.InProduction } && researching.Queue is [{ Template: "Upgrade_Flash", Progress: >= 0f }],
+            $"once the ranger has left, the upgrade is researched and its button shows it in production ({string.Join(", ", researching.Queue)})");
+        for (var i = 0; i < 20000 && !world.PlayerUpgrades(Me).Any(); i++) arena.Step();
         Assert(bar.Build(world, selection)[2] is { Availability: ButtonAvailability.CantAfford, Reason: ButtonReason.AlreadyOwned }, "an owned upgrade shows as already owned");
 
         selection.Replace([ranger.Id, tank.Id]);

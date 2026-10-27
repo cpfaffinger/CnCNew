@@ -339,8 +339,8 @@ static partial class Tests
 
         feeder.GiveMoney(1, 500);
         world.Step();
-        feeder.PurchaseUpgrade(1, "Upgrade_Scalar", target: recruit.Id.Value);
-        feeder.PurchaseUpgrade(1, "Upgrade_Booster", target: recruit.Id.Value);
+        feeder.GrantUpgrade(1, "Upgrade_Scalar", target: recruit.Id.Value);
+        feeder.GrantUpgrade(1, "Upgrade_Booster", target: recruit.Id.Value);
         for (var i = 0; i < world.Frames(5); i++) world.Step();
         Check.That(recruit.ExperienceScalar == Fixed.FromDecimal(1.25m), "ExperienceScalarUpgrade adds AddXPScalar to the scalar.");
         Check.That(recruit.WeaponBonusConditions == 1u << WeaponBonusTable.PlayerUpgradeCondition, "WeaponBonusUpgrade sets the PLAYER_UPGRADE condition.");

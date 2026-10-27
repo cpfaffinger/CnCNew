@@ -392,7 +392,7 @@ static partial class Tests
         radarWorld.Step();
         var radar = radarWorld.FindEntity(new EntityId(1))!.Modules.OfType<RadarUpdate>().Single();
         Check.That(!radar.RadarActive, "The radar is inactive before the upgrade.");
-        radarFeeder.PurchaseUpgrade(1, "Upgrade_Radar", target: 1);
+        radarFeeder.GrantUpgrade(1, "Upgrade_Radar", target: 1);
         for (var i = 0; i < 3; i++) radarWorld.Step();
         Check.That(radar.RadarActive && !radar.IsExtendComplete(radarWorld.Tick), "RadarUpgrade activates the radar; the extension is still running.");
         for (var i = 0; i < radarWorld.Frames(100); i++) radarWorld.Step();
