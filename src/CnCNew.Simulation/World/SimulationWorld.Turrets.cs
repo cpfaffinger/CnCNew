@@ -491,6 +491,9 @@ public sealed partial class SimulationWorld
                 (finished ??= []).Add(id);
                 continue;
             }
+            // updateTurretAI runs inside AIUpdate::update, so a turret stands while its object's AI is skipped (a disable other than DISABLED_HELD), and the AI itself leaves it
+            // standing while the object is paralyzed, unmanned, EMP'd, subdued or hacked - all of them disables other than DISABLED_HELD.
+            if ((entity.DisabledFlags(tick) & ~DisabledMask.Held) != DisabledMask.None) continue;
 
             var changed = false;
             var resting = true;

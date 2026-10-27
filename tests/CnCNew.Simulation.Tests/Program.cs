@@ -204,6 +204,7 @@ run.Test("Fidelity B (F-44): a producer that dies refunds its whole queue", Test
 run.Test("Fidelity B (F-45): an airfield reserves a space for every aircraft it queues", Tests.FidelityAirfieldReservesItsSpaceWhenQueued);
 run.Test("Phase 40: a disabled object runs only the update modules that process its disabled types", Tests.DisableRuleStopsTheModulesThatDoNotProcessIt);
 run.Test("Phase 40: a disable holds through the frame it lasts until", Tests.DisableHoldsThroughItsLastFrame);
+run.Test("Phase 40: the turret of a disabled object stands", Tests.DisabledTurretStands);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);

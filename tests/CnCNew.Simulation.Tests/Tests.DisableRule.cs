@@ -96,4 +96,23 @@ static partial class Tests
         var disabled = Completed(10);
         Check.That(disabled - free == 11 * frame, $"A disable until ten frames on holds eleven frames of updates ({free} against {disabled} ticks).");
     }
+
+    /// <summary>
+    /// <c>AIUpdate::update</c> steps its turrets (<c>updateTurretAI</c>) only while the object is not paralyzed, unmanned, EMP'd, subdued or hacked - and not at all while the AI is
+    /// skipped: an EMP'd tank's turret stands where it was and turns on when the disable ends.
+    /// </summary>
+    public static void DisabledTurretStands()
+    {
+        var (world, feeder, _) = TurretWorld(("TurretTank", 1, 0, 0, 0m), ("TurretTarget", 2, 0, 100, 0m));
+        var tank = Slotted(world, "TurretTank");
+        feeder.FireWeapon(1, tank.Id.Value, IdOf(world, "TurretTarget"));
+        for (var tick = 0; tick < world.Frames(3); tick++) world.Step();
+        var turning = tank.TurretOf(0)!.Value.Angle;
+        Check.That(turning != CnCNew.Simulation.Numerics.Fixed.Zero, "Setup: the turret turns towards the target.");
+        world.DisableByEmpUntil(tank, world.Tick + world.Frames(10));
+        for (var tick = 0; tick < world.Frames(10); tick++) world.Step();
+        Check.That(tank.TurretOf(0)!.Value.Angle == turning, $"An EMP'd tank's turret stands ({turning.Raw} -> {tank.TurretOf(0)!.Value.Angle.Raw} raw).");
+        for (var tick = 0; tick < world.Frames(5); tick++) world.Step();
+        Check.That(tank.TurretOf(0)!.Value.Angle != turning, "It turns on when the disable is over.");
+    }
 }
