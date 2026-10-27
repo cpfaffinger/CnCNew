@@ -2287,11 +2287,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 // ============================================================================================= ProductionUpdate
 
 /// <summary>
-/// <c>ProductionUpdate.h</c>. <c>QuantityModifier</c> is typed but not applied: one unit per completed queue entry, created at the exit module's <c>UnitCreatePoint</c> and sent along its exit path (docs/SIMULATION-CORE.md §42).
+/// <c>ProductionUpdate.h</c>. A completed queue entry makes as many units as its <c>QuantityModifier</c> says (<c>ProductionUpdate::queueCreateUnit</c>: one Red Guard order
+/// gives two, paid once), each created at the exit module's <c>UnitCreatePoint</c> and sent along its exit path (docs/SIMULATION-CORE.md §42).
 /// The door-animation timing fields (<c>NumDoorAnimations</c>, <c>DoorOpeningTime</c>, <c>DoorWaitOpenTime</c>, <c>DoorCloseTime</c>, <c>ConstructionCompleteDuration</c>; milliseconds in the INI, ticks here) change no
 /// simulation behaviour — nothing waits for a door — and are kept for the presentation only (docs/MODEL-CONDITIONS-BUILDINGS.md); the catalog carries them as Opaque, so they are read from the original text.
 /// </summary>
-public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations = 0, long DoorOpeningTicks = 0, long DoorWaitOpenTicks = 0, long DoorCloseTicks = 0, long ConstructionCompleteTicks = 0) : ModuleData
+public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations = 0, long DoorOpeningTicks = 0, long DoorWaitOpenTicks = 0, long DoorCloseTicks = 0, long ConstructionCompleteTicks = 0,
+    ImmutableArray<ProductionQuantity> QuantityModifiers = default) : ModuleData
 {
     public static ProductionData Parse(RatedModuleConfiguration configuration)
     {
@@ -2302,7 +2304,34 @@ public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations =
             configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorOpeningTime")),
             configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorWaitOpenTime")),
             configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "DoorCloseTime")),
-            configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "ConstructionCompleteDuration")));
+            configuration.Time.DurationMillisecondsToTicks(OpaqueNumber(configuration, "ConstructionCompleteDuration")),
+            [..ModuleConfigReader.All(configuration, "QuantityModifier").Select(Quantity)]);
+    }
+
+    private const int OneUnit = 1;
+
+    /// <summary>
+    /// <c>ProductionUpdate::queueCreateUnit</c>: the count of the first modifier whose template exists and is the ordered one (a name the data does not define matches nothing
+    /// and the search goes on, as <c>findTemplate</c> returning null does in the original); one without a match.
+    /// </summary>
+    public int QuantityOf(TemplateCatalog templates, int templateIndex)
+    {
+        if (QuantityModifiers.IsDefault) return OneUnit;
+        foreach (var modifier in QuantityModifiers)
+            if (templates.TryGet(modifier.Template, out var template) && template.Index == templateIndex) return modifier.Count;
+        return OneUnit;
+    }
+
+    /// <summary><c>parseAppendQuantityModifier</c>: "<c>TemplateName [Count]</c>", the count 1 when it is left out.</summary>
+    private static ProductionQuantity Quantity(DefinitionField field)
+    {
+        var tokens = field.Value.OriginalText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length is < 1 or > 2)
+            throw new InvalidDataException($"{field.Location.Source}({field.Location.Line}): ProductionUpdate QuantityModifier expects 'TemplateName [Count]', got '{field.Value.OriginalText.Trim()}'.");
+        if (tokens.Length == 1) return new ProductionQuantity(tokens[0], 1);
+        return int.TryParse(tokens[1], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var count) && count >= 0
+            ? new ProductionQuantity(tokens[0], count)
+            : throw new InvalidDataException($"{field.Location.Source}({field.Location.Line}): ProductionUpdate QuantityModifier expects a non-negative whole count, got '{tokens[1]}'.");
     }
 
     /// <summary><c>INI::parseInt</c>/<c>parseDurationUnsignedInt</c> input of a field the catalog keeps Opaque: the first token as a whole number; absent: zero (the constructor default).</summary>
@@ -2317,8 +2346,14 @@ public sealed record ProductionData(int MaxQueueEntries, int NumDoorAnimations =
     }
 }
 
-/// <summary>One queued unit: template, its cost (for a full refund on cancel) and remaining build ticks.</summary>
-internal readonly record struct ProductionEntry(int TemplateIndex, Fixed Cost, long RemainingTicks);
+/// <summary>One <c>QuantityModifier</c> line: an order of <see cref="Template"/> makes <see cref="Count"/> units.</summary>
+public readonly record struct ProductionQuantity(string Template, int Count);
+
+/// <summary>
+/// One queued unit: template, its cost (for a full refund on cancel, also after some of its units left - <c>cancelUnitCreate</c> deposits the whole cost) and remaining build
+/// ticks; <see cref="Quantity"/> units are made of it, <see cref="Produced"/> of them have left.
+/// </summary>
+internal readonly record struct ProductionEntry(int TemplateIndex, Fixed Cost, long RemainingTicks, int Quantity = 1, int Produced = 0);
 
 /// <summary>Public counterpart of <see cref="ProductionEntry"/> for <see cref="ProductionUpdate.Queue"/>.</summary>
 public readonly record struct ProductionQueueItem(int TemplateIndex, Fixed Cost, long RemainingTicks);
@@ -2348,13 +2383,14 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     public override void OnSpawn(IWorldServices world) => _nextWake = SimulationTiming.SleepForever;
 
     /// <param name="time">The time service of the world: a build time of zero still takes one logic frame of the original, not one tick.</param>
-    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks)
+    /// <param name="quantity">How many units the entry makes (<see cref="ProductionData.QuantityOf"/>).</param>
+    public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks, int quantity = 1)
     {
         var ticks = time.AtLeastOneFrame(totalTicks);
         // The entry that starts an empty queue is worked on in the step of its order, and that step stands for a whole logic frame of the original: the unit is done
         // BuildTime less one frame after the order (not less one tick). An entry that waits behind another starts one step after its predecessor left and takes the full time.
         if (_queue.Count == 0) ticks -= time.TicksPerOriginalFrame - TickOrder.Next;
-        _queue.Add(new ProductionEntry(templateIndex, cost, ticks));
+        _queue.Add(new ProductionEntry(templateIndex, cost, ticks, quantity));
     }
 
     public bool HasSlot(int slot) => slot >= 0 && slot < _queue.Count;
@@ -2434,28 +2470,39 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         var head = _queue[0];
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
         var remaining = head.RemainingTicks - TickOrder.Next;
-        if (remaining <= 0 && exit is not null && !exit.IsFreeToExitFor(world.Templates[head.TemplateIndex]))
+        if (remaining > 0)
         {
-            // The door is closed (QueueProductionExitUpdate delay): the finished unit waits at the head of the queue.
-            _queue[0] = head with { RemainingTicks = TickOrder.Next };
+            _queue[0] = head with { RemainingTicks = remaining };
+            return SimulationTiming.SleepNone;
         }
-        else if (remaining <= 0)
+        // ProductionUpdate::update: every unit of the entry the exit lets go now leaves (getProductionQuantityRemaining tries); one the exit holds back (the delay of
+        // QueueProductionExitUpdate) waits at the head of the queue, which goes on "overbuilding" and asks again in the next step.
+        var template = world.Templates[head.TemplateIndex];
+        var produced = head.Produced;
+        for (var attempt = head.Quantity - head.Produced; attempt > 0; attempt--)
         {
-            _queue.RemoveAt(0);
-            var forcesSupplyWanting = exit is { ForcesSupplyWanting: true };
-            // exitObjectViaDoor: the unit leaves over the exit point of its factory (NaturalRallyPoint) and goes on to the player's rally point, if one is set.
-            Fixed doorX = Fixed.Zero, doorY = Fixed.Zero, exitX = Fixed.Zero, exitY = Fixed.Zero;
-            var hasExit = !forcesSupplyWanting && exit is not null && exit.TryGetExitPath(out doorX, out doorY, out exitX, out exitY);
-            var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
-                : _hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: _hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
-                : default(SpawnExtras?);
-            var (x, y, z, angle) = exit is null ? OwnPlace(world) : exit.ClaimExit(world, world.Templates[head.TemplateIndex]);
-            if (extras is { } value) world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle, value);
-            else world.RequestSpawn(head.TemplateIndex, Entity.Owner, x, y, z, angle);
-            world.Emit(SimEventKind.ProductionCompleted, Entity.Id, EntityId.Invalid, string.Empty, head.TemplateIndex);
+            if (exit is not null && !exit.IsFreeToExitFor(template)) break;
+            Produce(world, exit, head.TemplateIndex);
+            produced++;
         }
-        else _queue[0] = head with { RemainingTicks = remaining };
+        if (produced >= head.Quantity) _queue.RemoveAt(0);
+        else _queue[0] = head with { RemainingTicks = TickOrder.Next, Produced = produced };
         return _queue.Count == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
+    }
+
+    /// <summary><c>exitObjectViaDoor</c>: the unit leaves over the exit point of its factory (NaturalRallyPoint) and goes on to the player's rally point, if one is set.</summary>
+    private void Produce(IWorldServices world, IProductionExit? exit, int templateIndex)
+    {
+        var forcesSupplyWanting = exit is { ForcesSupplyWanting: true };
+        Fixed doorX = Fixed.Zero, doorY = Fixed.Zero, exitX = Fixed.Zero, exitY = Fixed.Zero;
+        var hasExit = !forcesSupplyWanting && exit is not null && exit.TryGetExitPath(out doorX, out doorY, out exitX, out exitY);
+        var extras = forcesSupplyWanting ? new SpawnExtras(Fixed.Zero, ForceSupplyWanting: true)
+            : _hasRally || hasExit ? new SpawnExtras(Fixed.Zero, HasRally: _hasRally, RallyX: _rallyX, RallyY: _rallyY, HasExit: hasExit, DoorX: doorX, DoorY: doorY, ExitX: exitX, ExitY: exitY)
+            : default(SpawnExtras?);
+        var (x, y, z, angle) = exit is null ? OwnPlace(world) : exit.ClaimExit(world, world.Templates[templateIndex]);
+        if (extras is { } value) world.RequestSpawn(templateIndex, Entity.Owner, x, y, z, angle, value);
+        else world.RequestSpawn(templateIndex, Entity.Owner, x, y, z, angle);
+        world.Emit(SimEventKind.ProductionCompleted, Entity.Id, EntityId.Invalid, string.Empty, templateIndex);
     }
 
     /// <summary>
@@ -2482,6 +2529,8 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             writer.Int("template", entry.TemplateIndex);
             writer.Fixed("cost", entry.Cost);
             writer.Int("remaining", entry.RemainingTicks);
+            if (entry.Quantity != 1) writer.Int("quantity", entry.Quantity);
+            if (entry.Produced != 0) writer.Int("produced", entry.Produced);
             writer.EndObject();
         }
         writer.EndArray();
@@ -2496,6 +2545,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         _disabledUntil = reader.Has("disabledUntil") ? reader.Int("disabledUntil") : 0;
         _queue.Clear();
         foreach (var entry in reader.Array("queue"))
-            _queue.Add(new ProductionEntry(checked((int)entry.Int("template")), entry.Fixed("cost"), entry.Int("remaining")));
+            _queue.Add(new ProductionEntry(checked((int)entry.Int("template")), entry.Fixed("cost"), entry.Int("remaining"),
+                entry.Has("quantity") ? checked((int)entry.Int("quantity")) : 1, entry.Has("produced") ? checked((int)entry.Int("produced")) : 0));
     }
 }

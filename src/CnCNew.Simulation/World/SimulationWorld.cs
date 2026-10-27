@@ -1115,7 +1115,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (buyer.Money < queueCost) { RecordRejection(command, CommandRejection.InsufficientFunds); break; }
                 // ProductionUpdate.h: the full cost is withdrawn immediately at queue time, refunded in full on cancel.
                 buyer.Money -= queueCost;
-                production.Enqueue(Time, queueTemplate.Index, queueCost, queueTemplate.BuildTicks);
+                production.Enqueue(Time, queueTemplate.Index, queueCost, queueTemplate.BuildTicks, production.Data.QuantityOf(_templates, queueTemplate.Index));
                 var producerNode = Array.Find(producer.Updates, node => ReferenceEquals(node.Module, production));
                 if (producerNode is not null) WakeAt(producer, producerNode.Update, _tick);
                 MarkDirty(producer);
