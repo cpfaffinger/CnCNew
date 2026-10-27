@@ -177,6 +177,7 @@ static partial class Tests
           Behavior = TransportContain Transport01
             Slots = 10
             AllowInsideKindOf = INFANTRY VEHICLE PARACHUTABLE
+            DestroyRidersWhoAreNotFreeToExit = Yes
           End
           Behavior = JetSlowDeathBehavior JetDeath01
             DestructionDelay = 2000

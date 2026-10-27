@@ -1019,6 +1019,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary><c>getAiFreeToExit</c>: whether passengers may leave right now (a Chinook has to land first).</summary>
     protected virtual bool ReadyToUnload(IWorldServices world) => true;
 
+    /// <summary><c>AIUpdateInterface::getAiFreeToExit</c> as a question without side effects: free for every AI but a Chinook in the air and a payload plane with shut doors or dead.</summary>
+    public virtual bool AiFreeToExit(IWorldServices world, Entity rider) => true;
+
     /// <summary><c>DozerAIInterface::newTask(DOZER_TASK_REPAIR)</c>: walk to the structure and heal it until it is at full health.</summary>
     public void OrderRepair(IWorldServices world, Entity target) => StartTask(world, BuilderTask.Repair, target);
 

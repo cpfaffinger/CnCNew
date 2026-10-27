@@ -775,6 +775,8 @@ public sealed class DeliverPayloadAIUpdate(DeliverPayloadData data) : AIUpdateIn
     /// <summary><c>getAiFreeToExit</c>: the doors are open and the plane is alive.</summary>
     public bool FreeToExit => _freeToExit && !Entity.EffectivelyDead;
 
+    public override bool AiFreeToExit(IWorldServices world, Entity rider) => FreeToExit;
+
     /// <summary>The plane is on its delivery run.</summary>
     public bool Delivering => _phase != Phase.None;
 

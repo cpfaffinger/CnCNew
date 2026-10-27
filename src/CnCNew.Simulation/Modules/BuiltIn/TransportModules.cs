@@ -72,6 +72,9 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     /// <summary>The Chinook stands on the ground.</summary>
     public bool Landed(IWorldServices world) => Entity.Z <= world.GroundHeightAt(Entity.X, Entity.Y);
 
+    /// <summary><c>ChinookAIUpdate::getAiFreeToExit</c>: landed (the combat drop, which lets a rider that can rappel out in the air, is not simulated).</summary>
+    public override bool AiFreeToExit(IWorldServices world, Entity rider) => Landed(world);
+
     protected override bool ReadyToUnload(IWorldServices world)
     {
         _landing = true;

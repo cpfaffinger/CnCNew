@@ -387,6 +387,7 @@ run.Test("Specials: battle plans (cycle, army bonuses, center bonus, paralysis, 
 run.Test("Turret switch (F-57): the strategy center's gun works only under bombardment and its pack-up waits for the turret", Tests.TurretSwitchStrategyCenter);
 run.Test("Turret switch (F-57): a deploy-style unit aims its turret once set up and centres it before packing", Tests.TurretSwitchDeployStyle);
 run.Test("Sniper estimate (F-49): a sniper cannot aim at an empty structure with a contain module", Tests.SniperDoesNotTargetAnEmptyStructure);
+run.Test("Riders not free to exit (F-51): a rider that may not leave a dying transport dies with it", Tests.RidersNotFreeToExitDieWithTheirTransport);
 run.Test("Specials: battle plan restore and unsupported options", Tests.SpecialsBattlePlanShrouds);
 run.Test("Specials: projectile stream bookkeeping", Tests.SpecialsProjectileStream);
 run.Test("Structures: the fixture instantiates, a bone-FX OCL slot is refused", Tests.StructuresFixtureInstantiates);

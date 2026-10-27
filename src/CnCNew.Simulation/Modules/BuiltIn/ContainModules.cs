@@ -57,12 +57,8 @@ public sealed record OpenContainData(
 /// <summary>
 /// Shared <c>OpenContain</c> behavior: <c>KindOf</c>/relationship gating (<c>Relationship</c> of the container's owner towards the candidate's), entering/leaving (position snap
 /// to the container, clearing a pending move order), and death handling. <c>OpenContain::onDie</c> applies
-/// <c>DamagePercentToUnits</c> to each occupant's current health, then calls <c>removeAllContained</c> — never
-/// <c>killAllContained</c> — for every container whose <c>killRidersWhoAreNotFreeToExit</c> ends up a no-op in this
-/// engine: <c>GarrisonContain</c>'s is the base class's own no-op, and <c>TransportContain</c>'s real
-/// terrain/pathfinding/airborne-locomotor checks in <c>isSpecificRiderFreeToExit</c> have no equivalent here (no
-/// terrain/pathfinding at all), so riders are always "free to exit". Capacity and the periodic <see cref="Update"/>
-/// behavior are subtype-specific.
+/// <c>DamagePercentToUnits</c> to each occupant's current health, then <c>killRidersWhoAreNotFreeToExit</c> (a no-op but for
+/// <see cref="TransportContain"/>) and <c>removeAllContained</c>. Capacity and the periodic <see cref="Update"/> behavior are subtype-specific.
 /// </summary>
 public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpdateModule, IDieModule, IContainerModule
 {
@@ -174,8 +170,12 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
                 if (rider?.Body is null) continue;
                 world.Damage(rider.Id, new DamageInfo(info.Source, rider.Body.Health * data.DamagePercentToUnits, DamageTypes.Unresistable, DeathTypes.Normal, false));
             }
+        KillRidersWhoAreNotFreeToExit(world);
         EjectAll(world);
     }
+
+    /// <summary><c>OpenContain::killRidersWhoAreNotFreeToExit</c>: nothing; only a transport has riders that may not leave.</summary>
+    protected virtual void KillRidersWhoAreNotFreeToExit(IWorldServices world) { }
 
     protected void EjectAll(IWorldServices world)
     {
@@ -419,6 +419,9 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 /// </summary>
 public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed HealthRegenPercentPerSecond) : ModuleData
 {
+    /// <summary><c>DestroyRidersWhoAreNotFreeToExit</c> (default no): a rider that may not leave the dying transport is destroyed instead of killed.</summary>
+    public bool DestroyRidersWhoAreNotFreeToExit { get; init; }
+
     /// <summary><c>OpenContainModuleData::m_numberOfExitPaths</c> (default 1): 0 lets a rider out on the container's own position, 1 uses the bones <c>ExitStart</c>/<c>ExitEnd</c>, more cycle through <c>ExitStart01</c>..<c>ExitEndNN</c>.</summary>
     public int NumberOfExitPaths { get; init; } = 1;
 
@@ -439,6 +442,7 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
         NumberOfExitPaths = checked((int)ModuleConfigReader.Int(configuration, "NumberOfExitPaths", 1)),
         ExitDelayTicks = ModuleConfigReader.Ticks(configuration, "ExitDelay", 0),
         ScatterNearbyOnExit = ModuleConfigReader.Bool(configuration, "ScatterNearbyOnExit", true),
+        DestroyRidersWhoAreNotFreeToExit = ModuleConfigReader.Bool(configuration, "DestroyRidersWhoAreNotFreeToExit", false),
     };
 }
 
@@ -479,19 +483,37 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     }
 
     /// <summary>
-    /// <c>DestroyRidersWhoAreNotFreeToExit</c> (<c>TransportContain::killRidersWhoAreNotFreeToExit</c>), as far as this simulation has a gate: a payload plane
-    /// (<see cref="DeliverPayloadAIUpdate"/>) whose doors are shut when it dies takes its riders (and what they carry) with it — they are destroyed, not killed.
+    /// <c>TransportContain::killRidersWhoAreNotFreeToExit</c> (F-51): before the riders are put out of the dying transport, every one that may not leave
+    /// (<see cref="IsSpecificRiderFreeToExit"/>) is killed - or, with <c>DestroyRidersWhoAreNotFreeToExit</c>, destroyed with what it carries (a payload plane's cargo).
     /// </summary>
-    public override void OnDie(IWorldServices world, in DamageInfo info)
+    protected override void KillRidersWhoAreNotFreeToExit(IWorldServices world)
     {
-        if (data.Base.DieMux.IsApplicable(Entity, info) && Entity.ModuleArray.OfType<DeliverPayloadAIUpdate>().FirstOrDefault() is { FreeToExit: false })
-            foreach (var riderId in Riders.ToArray())
-                if (world.FindEntity(riderId) is { } rider)
-                {
-                    Remove(world, rider, false);
-                    DestroyWithContents(world, rider);
-                }
-        base.OnDie(world, info);
+        foreach (var riderId in Riders.ToArray())
+        {
+            if (world.FindEntity(riderId) is not { } rider || IsSpecificRiderFreeToExit(world, rider)) continue;
+            if (data.DestroyRidersWhoAreNotFreeToExit)
+            {
+                Remove(world, rider, false);
+                DestroyWithContents(world, rider);
+            }
+            else world.Kill(rider.Id);
+        }
+    }
+
+    /// <summary>
+    /// <c>TransportContain::isSpecificRiderFreeToExit</c>: the transport's AI must let the rider out (<c>getAiFreeToExit</c>: a Chinook only when landed, a payload plane only with its
+    /// doors open and alive); a transport on an airborne locomotor may always put riders out; otherwise the rider needs an AI with a locomotor whose surfaces fit the pathfinding
+    /// cell under the transport (<c>Pathfinder::validMovementTerrain</c>: an obstacle or impassable cell counts as fitting, a cliff or water cell needs that surface).
+    /// </summary>
+    private bool IsSpecificRiderFreeToExit(IWorldServices world, Entity rider)
+    {
+        if (CrateModules.AiOf(Entity) is { } ai && !ai.AiFreeToExit(world, rider)) return false;
+        if (CrateModules.UsesAirborneLocomotor(Entity)) return true;
+        if (CrateModules.AiOf(rider) is null || rider.Template.Locomotor is not { } locomotor) return false;
+        if (world.Navigation?.Terrain is not { } terrain) return true;
+        var (cx, cy) = (Terrain.TerrainMap.CellOf(Entity.X), Terrain.TerrainMap.CellOf(Entity.Y));
+        if (!terrain.IsInside(cx, cy)) return false;
+        return world.Navigation.IsBlockedByObstacle(cx, cy) || Terrain.NavigationGrid.SurfaceAllows(terrain.CellAt(cx, cy), locomotor.Surfaces);
     }
 
     private static void DestroyWithContents(IWorldServices world, Entity entity)
