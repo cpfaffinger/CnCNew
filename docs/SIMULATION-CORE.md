@@ -3543,3 +3543,52 @@ in the first tier 4 run of the phase. Eleven seeds were surveyed at 60 Hz (`SimT
 commands. The same tier 4 run found the test "the original skirmish AI plays the same match at 30, 60 and 120 Hz" failing from frame 6,102: the teams' air fight it stops
 before now begins earlier, and with catalogs without model geometry a shot-down MiG falls elsewhere above 30 Hz; with the product's catalogs the match is equal in every
 field for all 7,200 frames (`SimTool rate-compare --original-diff`), so the test's window is 6,000 frames (`283c3e7`).
+
+## 54. Phase 40: the Zero Hour Reforged review (October 2026)
+
+Zero Hour Reforged (EA's GPL source worked on as a game) is read as a second source of fixes (`docs/REFORGED-FIXES.md`); every place where its changelog led to a
+difference between this port and the original is checked in the original's source and fixed in the original profile as Stage 1 work - one cause, one implementation
+commit, a test that fails on the code before at 30, 60 and 120 Hz, one manifest commit where a manifest moved. Nothing of Reforged's code is copied. **No human has seen
+any of it.**
+
+### 54.1 F-52: the last damage is recorded (`ActiveBody::attemptDamage`, `attemptHealing`, `AIPlayer::isSupplySourceAttacked`)
+
+`ActiveBody` keeps the frame and the source of the last damage; a heal is recorded as well. Within the frame of a record and the next one only a damage from a vehicle,
+infantry or faction structure replaces a record whose source exists ("we prefer the one that tells who the attacker is"), and a damage with an existing source tells the
+victim's player it was attacked (`Player::setAttackedBy`). The port wrote no record: `StealthUpdate`'s `TAKING_DAMAGE` never held, and neither did the scripts' and the
+original AI's `SKIRMISH_SUPPLY_SOURCE_ATTACKED`, which now scans every ten original frames, only while the player was attacked in them, over its cash generators, dozers and
+harvesters. New state, written only when set: `Entity.LastDamageSource`, `LastDamageHealing`, `PlayerState.AttackedTick`, the script engine's `supplyAttackCheckFrames`.
+Tests `ReforgedLastDamageIsRecorded`, `ReforgedSupplySourceAttacked`. Manifest `e2170ca`: 46 of 50 runs change their state hashes only; no outcome, winner, end tick or command count moves.
+
+### 54.2 F-57: turrets are switched by their modules (`TurretAI::setTurretEnabled`, `BattlePlanUpdate`, `DeployStyleAIUpdate`, `Object::isAbleToAttack`)
+
+A switched-off turret runs no state machine (`TurretAI::updateTurretAI`): it neither aims, scans nor turns, and its weapons do not fire; an object without `CAN_ATTACK` whose
+every weapon sits on such a turret cannot attack (`Object::isAbleToAttack`: it acquires nobody, its attack ends, an order to fire is refused with `NoWeapon`). The switch is
+state (`TurretState.Enabled`, written only when it differs from `InitiallyDisabled`). `BattlePlanUpdate::onObjectCreated` switches the strategy center's turret off (the
+shipped turret is not `InitiallyDisabled`; the port's comment and `docs/SIM-TURRET-AIM.md` had taken the stealth detector's key for the turret's); bombardment switches it on
+once unpacked; leaving bombardment the center goes idle and recentres the turret once, packs when it stands at its natural angle and switches it off. While an enemy stays in
+range the idle center aims at it again (`setTurretTargetObject` puts the turret back to `AIM`) and bombardment does not pack - the original's code. `DeployStyleAIUpdate` with
+`TurretsFunctionOnlyWhenDeployed` switches the turret on when ready to attack and off when packing - the Nuke Cannon's turret now aims before its first shot - and with
+`TurretsMustCenterBeforePacking` a move order aligns the turret first (`ALIGNING_TURRETS`, standing still). Both modules decide on the turret's rest in the first tick of the
+object's own frame (the turret reaches it within a frame, which at 30 Hz is seen only in the next one). Tests `TurretSwitchStrategyCenter`, `TurretSwitchDeployStyle`; four
+older tests that encoded the old behaviour are adapted. Manifests `1186ea8`: seven mission runs change their hashes only; the input manifest gains `DeployStyleData`'s two keys.
+
+### 54.3 F-49: a sniper does not aim at an empty structure (`WeaponTemplate::estimateWeaponTemplateDamage`)
+
+A weapon of `DAMAGE_SNIPER` estimates 0 against a structure whose first contain module holds nobody, so it cannot target it; with an occupant the estimate is the armoured
+damage again. The comment of `EstimateDamage` named the rule, the code lacked it. The garrison cases of the same function (`DAMAGE_SURRENDER`, `AllowAttackGarrisonedBldgs`)
+stay unmodelled. Test `SniperDoesNotTargetAnEmptyStructure`. No manifest moved.
+
+### 54.4 F-53: the landed hulk of a Battle Bus is held (`BattleBusSlowDeathBehavior::update`)
+
+When the thrown bus comes down the original goes idle, scrubs its physics and sets `DISABLED_HELD`; the port halted it and nothing more. The hulk now ends its attack and
+carries the held bit (`Entity.ScriptHeld`), whose readers keep it from acquiring and moving. Not done: `AIGroup`'s and `Team::tryToRecruit`'s skipping of held members (the
+port's group orders reach the hulk, which its AI then does not carry out). The battle bus test checks the bit and a move order. No manifest moved.
+
+### 54.5 F-51: riders who may not leave a dying transport die with it (`TransportContain::killRidersWhoAreNotFreeToExit`)
+
+`OpenContain::onDie` kills - or destroys with `DestroyRidersWhoAreNotFreeToExit` - every rider for which `isSpecificRiderFreeToExit` fails before it puts the rest out: the
+transport's AI must let it out (`getAiFreeToExit`: a Chinook only when landed - the combat drop is not simulated -, a payload plane only alive with its doors open), a
+transport on an airborne locomotor may always put riders out, otherwise the rider needs an AI with a locomotor whose surfaces fit the pathfinding cell under the transport
+(`Pathfinder::validMovementTerrain`: an obstacle cell counts as fitting). The port destroyed only a payload plane's riders. `DestroyRidersWhoAreNotFreeToExit` is read now (23
+shipped blocks). Test `RidersNotFreeToExitDieWithTheirTransport`. Input manifest `6a6a398` (the new key); the reference manifest is unchanged.

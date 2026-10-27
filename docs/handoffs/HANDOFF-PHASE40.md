@@ -60,3 +60,15 @@ Reforged's own designs (kind D), every judgement of a human, D-32.
 
 By machine: every candidate decided with its reason; fixes with tests as above; both manifests of the original profile unchanged except by a kind-C cause with its own
 manifest commit; the checks the changes can reach green.
+
+## Progress (28 October 2026)
+
+- Step 7 done in Phase 39's close: the reference match takes driver seed `5EED0003` (`91f8f60`, manifest `f5c3ae4`; `docs/SIMULATION-CORE.md` §53.11).
+- Step 6, the small causes: F-52 (`74db784` / `e2170ca`), F-57 (`296b646` / `1186ea8`), F-49 (`96b40dd`), F-53 (`7e63dd4`), F-51 (`b5e8f58` / `6a6a398`) - §54.1 to §54.5,
+  each with a test that fails on the code before at 30, 60 and 120 Hz. Checked on the merged state: `Simulation.Tests` at 30, 60 and 120 Hz and with real data (the
+  rate-equivalence suite 0 / 0), `Game.Tests` at 30, 60 and 120 Hz, `Presentation.Tests` with real data, `session-check` 19 of 19, objective driver 24/24 and 24/24, audit
+  24 of 24 with end probes 13/24 and 15/24. Not run (selective): `Net.Tests`, the network steps, the client checks.
+- Step 3, decided: R-02 B (after F-57), R-05 B (after F-53), R-06 C (F-49), R-23 A (and F-51), R-29 first half B, R-30 B for stealth (F-52), R-37 B (`GameFix` 19).
+- Next: F-56 needs the original's disable model first - the central rule of `GameLogic::update` (a disabled object runs only the modules that process its disable), the
+  expiry after the last frame, the turret and the paralysis, riders held by their containers - then F-16 (brown-out), F-56, F-50; then F-48, F-54, F-55, F-58 and the open
+  R-items.
