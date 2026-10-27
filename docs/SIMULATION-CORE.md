@@ -3533,3 +3533,13 @@ corrects it, the original profile keeps it (a rule-profile candidate). The debri
 debris (F-36). Implementation `9671fb0`, manifest `f84e33c`: nine mission runs change their hashes and save-point snapshot (their structures' state lost the "not simulated" flag); no result quantity moved but `MD_GLA01`'s count of skipped creations (80 -> 79) - every outcome, end and shot count as before. Test `ReforgedToppleCrushLine` (the shots of a line at 0, 90 and 45 degrees) and the collision test of a
 falling building.
 
+### 53.11 The retail reference match takes a new driver seed (after F-44)
+
+Since F-44 the match with driver seed `5EED0007` ran to its limit of 432,000 ticks without a winner, and the real-data test "the retail match ends with a winner" failed
+in the first tier 4 run of the phase. Eleven seeds were surveyed at 60 Hz (`SimTool reference-match --driver-seed HEX --record-only`): eight end within 15 game minutes, two
+(5EED0009, 5EED0007) run to the limit, one was not finished. `5EED0003` ends with the same winner, FactionGLA, at the same original frame (16,410) at 30, 60 and 120 Hz;
+`5EED0001` ends at another frame at 120 Hz. The seed is changed in a commit of its own (`91f8f60`), the manifest in another (`f5c3ae4`: the 13 fields of the run
+`reference-match`, the other 49 runs and the input manifest unchanged): winner FactionGLA at tick 32,820, end hash `F5751AAB8AD42D2F`, chain `A0751445A92EF9C7`, 31,480
+commands. The same tier 4 run found the test "the original skirmish AI plays the same match at 30, 60 and 120 Hz" failing from frame 6,102: the teams' air fight it stops
+before now begins earlier, and with catalogs without model geometry a shot-down MiG falls elsewhere above 30 Hz; with the product's catalogs the match is equal in every
+field for all 7,200 frames (`SimTool rate-compare --original-diff`), so the test's window is 6,000 frames (`283c3e7`).
