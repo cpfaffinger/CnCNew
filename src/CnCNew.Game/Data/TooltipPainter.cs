@@ -29,8 +29,15 @@ public sealed class TooltipPainter
 
     public MouseTooltipSettings Style => _style;
 
-    public ImmutableArray<UiDrawCommand> Build(UiTooltip tooltip, UiViewport viewport, UiScaleOptions options, IUiTextMeasure measure)
+    public ImmutableArray<UiDrawCommand> Build(UiTooltip tooltip, UiViewport viewport, UiScaleOptions options, IUiTextMeasure measure, CnCNew.Ui.Skins.UiSkin? skin = null)
     {
+        if (skin is { IsModern: true })
+        {
+            // The modern skin (docs/UI-MODERN.md section 5): the tooltip is a panel of the skin with its text in the body step; the timing of Mouse.ini stays.
+            var palette = skin.Style.Palette;
+            var modern = _style with { TextColor = palette.Text, HighlightColor = palette.Accent, ShadowColor = palette.Shadow, BorderColor = palette.Border, BackgroundColor = palette.Panel };
+            return UiTooltipLayout.Build(tooltip, modern, skin.Style.Font(CnCNew.Ui.Skins.UiTypeStep.Body, viewport, options.TextScale), viewport, measure);
+        }
         var size = UiScaler.ScaleFontSize(_font.Size, true, viewport, options, UiScaler.DefaultDisplayWidth, UiScaler.DefaultDisplayHeight);
         return UiTooltipLayout.Build(tooltip, _style, new UiFont(_font.Name, size, _font.Bold), viewport, measure);
     }

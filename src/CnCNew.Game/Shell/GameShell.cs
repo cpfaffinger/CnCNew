@@ -400,7 +400,7 @@ public sealed class GameShell
         }
         // Mouse::drawTooltip lies over every window.
         if (_tooltips is not null && _stack.Count > 0 && CurrentScreen.Tree.Tooltip is { } tooltip)
-            commands.AddRange(_tooltips.Build(tooltip, Viewport, ScaleOptions, _textMeasure));
+            commands.AddRange(_tooltips.Build(tooltip, Viewport, ScaleOptions, _textMeasure, Skin));
         if (Phase == ShellPhase.MatchLoading) _loadingFrameShown = true;
         return new UiDrawList(commands.ToImmutable(), new UiDrawStatistics(windows, unresolvedLabels, unresolvedSizes, border, custom.ToImmutableSortedDictionary(StringComparer.Ordinal)));
     }

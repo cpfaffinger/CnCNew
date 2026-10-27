@@ -83,6 +83,7 @@ public sealed class MatchController
         Messages = new HudMessageFeed(new UiMessageLog(TextStyle.Settings), _assets.Text, match.Data.Graph) { Clock = () => Match.Clock.OriginalFrames };
         var services = _assets.BuildTreeServices(textMeasure ?? new MonospaceTextMeasure());
         Skin = UiSkin.For(settings.Display.Skin);
+        TextStyle = TextStyle.WithSkin(Skin);
         _scaleOptions = Skin.HudScale(new UiScaleOptions
         {
             Mode = MapScaleMode(settings.Display.UiScale),
@@ -666,7 +667,7 @@ public sealed class MatchController
         // The indicators of a match of a server lie over the HUD.
         if (Net is { } net) commands = commands.AddRange(net.Build(width, height, _textMeasure));
         // Mouse::drawTooltip lies over everything, the window tree's own tooltips (TOOLTIPTEXT) and the command button descriptions alike.
-        if (_tree.Tooltip is { } tooltip) commands = commands.AddRange(_tooltips.Build(tooltip, _tree.Viewport, _scaleOptions, _tree.Services.TextMeasure));
+        if (_tree.Tooltip is { } tooltip) commands = commands.AddRange(_tooltips.Build(tooltip, _tree.Viewport, _scaleOptions, _tree.Services.TextMeasure, Skin));
         return baseList with { Commands = commands };
     }
 

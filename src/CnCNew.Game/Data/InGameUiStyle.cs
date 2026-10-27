@@ -23,7 +23,7 @@ public enum InGameUiFontRole
 /// <c>InGameUI::init</c> takes from <c>Language.ini</c> (<see cref="LanguageFonts"/>), at the adjusted size for a screen (<c>GlobalLanguage::adjustFontSize</c>). One instance
 /// per loaded game; it holds no per-frame state.
 /// </summary>
-public sealed class InGameUiStyle(InGameUiSettings settings, LanguageFonts language)
+public sealed class InGameUiStyle(InGameUiSettings settings, LanguageFonts language, CnCNew.Ui.Skins.UiSkinStyle? skin = null)
 {
     public static InGameUiStyle FromGraph(CompiledDefinitionGraph graph) => new(InGameUiSettings.FromGraph(graph), LanguageFonts.FromGraph(graph));
 
@@ -31,10 +31,18 @@ public sealed class InGameUiStyle(InGameUiSettings settings, LanguageFonts langu
     public LanguageFonts Language => language;
 
     /// <summary>
+    /// The style in a skin's type (docs/UI-MODERN.md section 4): the modern skin draws the message list, the superweapon clocks and the other in-game texts in its own family,
+    /// each role at the step its original size falls in; the colours stay the original's (house colours, the message colours). The original skin returns this style.
+    /// </summary>
+    public InGameUiStyle WithSkin(CnCNew.Ui.Skins.UiSkin skin) => skin.IsModern ? new InGameUiStyle(settings, language, skin.Style) : this;
+
+    /// <summary>
     /// <c>InGameUI::init</c> replaces the font of every role by the <c>Language.ini</c> slot of the same name, so the font of a role is that slot's name, point size and weight, scaled
     /// for <paramref name="viewport"/> like every other text.
     /// </summary>
-    public UiFont Font(InGameUiFontRole role, UiViewport viewport, UiScaleOptions options) => language.Resolve(SlotOf(role), viewport, options);
+    public UiFont Font(InGameUiFontRole role, UiViewport viewport, UiScaleOptions options)
+        => skin is null ? language.Resolve(SlotOf(role), viewport, options)
+            : skin.Font(CnCNew.Ui.Skins.UiSkinStyle.StepOf(language.Settings.Font(SlotOf(role)).Size), viewport, options.TextScale);
 
     /// <summary>The unscaled description of a role's font (the <c>Language.ini</c> slot).</summary>
     public FontDescription Description(InGameUiFontRole role) => language.Settings.Font(SlotOf(role));

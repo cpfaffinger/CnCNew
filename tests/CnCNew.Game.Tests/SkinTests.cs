@@ -118,8 +118,23 @@ internal static class SkinTests
             Pin($"Hud-{skin.Id}", hud.BuildDrawList, baselines, updating);
             var band = hud.BuildDrawList(1920, 1080).Commands.OfType<UiFillRect>().Count(fill => fill.Color == ModernLayout.Palette.Canvas);
             TestHarness.Assert(skin.IsModern ? band == 2 : band == 0, $"{skin}: the band beside the command bar at 16:9 ({band} fills)");
+
+            // The same HUD with a line in the message list and the money display's tooltip (Phase 39): the modern skin draws both in its type and palette.
+            hud.Messages.ClientNote("a line of the message list");
+            var money = hud.WindowRect("ControlBar.wnd:MoneyDisplay") ?? throw new InvalidOperationException("no money display");
+            hud.Process(new MouseMoveEvent(10_016, new Vector2(money.CenterX, money.CenterY)));
+            for (var step = 0; step < 4; step++)
+            {
+                live.Advance(0.25);
+                hud.Update(0.25);
+            }
+            var tipped = hud.BuildDrawList(NavWidth, NavHeight).Commands;
+            var palette = ModernLayout.Palette;
+            TestHarness.Assert(tipped.OfType<UiTextDraw>().Any(text => text.Text.Contains("a line of the message list", StringComparison.Ordinal)), $"{skin}: the message list shows the line");
+            TestHarness.Assert(skin.IsModern == tipped.OfType<UiFillRect>().Any(fill => fill.Color == palette.Panel), $"{skin}: the tooltip is a panel of the modern palette only in the modern skin");
+            Pin($"HudTooltip-{skin.Id}", hud.BuildDrawList, baselines, updating);
         }
-        TestHarness.Assert(baselines.Count == 36 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count, $"no two of the {baselines.Count} pictures are the same");
+        TestHarness.Assert(baselines.Count == 48 && baselines.Values.Distinct(StringComparer.Ordinal).Count() == baselines.Count, $"no two of the {baselines.Count} pictures are the same");
     }
 
     private static void SettingsChooseTheSkin(GameData data)
