@@ -667,7 +667,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "509E6A63D08E0F54",
+        "chainHash": "235410EEEE791305",
         "endTick": 6000,
         "ended": false,
         "executedActions": 588,
@@ -686,7 +686,7 @@
         "outcomeTick": -1,
         "placedObjects": 1077,
         "players": 3,
-        "restoredChainHash": "509E6A63D08E0F54",
+        "restoredChainHash": "235410EEEE791305",
         "restoredFinalHash": "2EF643FDD7BBB3D6",
         "saveTick": 3000,
         "shots": 0,
@@ -710,7 +710,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "0A2B5533F8CB8287",
+        "chainHash": "D12B5B09D4423BA3",
         "endTick": 6000,
         "ended": false,
         "executedActions": 588,
@@ -729,7 +729,7 @@
         "outcomeTick": -1,
         "placedObjects": 1077,
         "players": 3,
-        "restoredChainHash": "0A2B5533F8CB8287",
+        "restoredChainHash": "D12B5B09D4423BA3",
         "restoredFinalHash": "2DDCDE4196070DBA",
         "saveTick": 3000,
         "shots": 0,
@@ -753,7 +753,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "290471388B9F17D3",
+        "chainHash": "D3A593CA494D37C6",
         "endTick": 6000,
         "ended": false,
         "executedActions": 588,
@@ -772,7 +772,7 @@
         "outcomeTick": -1,
         "placedObjects": 1077,
         "players": 3,
-        "restoredChainHash": "290471388B9F17D3",
+        "restoredChainHash": "D3A593CA494D37C6",
         "restoredFinalHash": "3DB980DC9E1E0EDD",
         "saveTick": 3000,
         "shots": 0,
