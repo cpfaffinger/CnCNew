@@ -612,6 +612,14 @@ static partial class Tests
         Check.That(peak > Fixed.FromInt(10), $"The bus was thrown into the air (peak {peak}).");
         Check.That(landed > 0, "It came down again.");
         Check.That(!bus.EffectivelyDead, "It survived the throw.");
+        // F-53: the landed hulk is held (BattleBusSlowDeathBehavior::update, setDisabled(DISABLED_HELD)); an order to move leaves it where it fell. The landing is decided at the end
+        // of a logic frame of the original, which above 30 Hz may be a tick after the bus first touched the ground.
+        Run(session, session.Frames(1));
+        Check.That((bus.ScriptDisableMask & Entity.ScriptHeld) != 0, "The landed hulk is held.");
+        var (fellX, fellY) = (bus.X, bus.Y);
+        bus.Modules.OfType<AIUpdateInterface>().First().OrderMove(session.World, bus.X + Fixed.FromInt(80), bus.Y, true);
+        Run(session, session.Frames(60));
+        Check.That(bus.X == fellX && bus.Y == fellY, $"A held hulk does not drive off ({bus.X}, {bus.Y}).");
 
         // Second life: a normal death.
         session.World.Damage(bus.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(1000), DamageTypes.Explosion, DeathTypes.Normal, false));

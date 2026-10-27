@@ -117,7 +117,8 @@ public sealed record BattleBusData(SlowDeathData Base, string FxStartUndeath, st
 /// <c>PercentDamageToPassengers</c> of its maximum health; once it touched the ground again (checked after ten ticks, so not on the way up) it plays <c>FXHitGround</c>/<c>OCLHitGround</c>
 /// and stays where it fell — with <c>EmptyHulkDestructionDelay</c> it is killed (penalty damage, the one death type the module ignores) when nobody has been inside for that long. Started by a real
 /// death (<c>onDie</c> sets its flag first) it is an ordinary slow death with its destruction delay. The throw is kinematic (the reference pushes the body through
-/// <c>PhysicsBehavior</c>: no random spin, no 2D drift), and the reference's <c>DISABLED_HELD</c> on the landed hulk has no counterpart (the bus is halted, nothing more).
+/// <c>PhysicsBehavior</c>: no random spin, no 2D drift). The landed hulk goes idle and is held (<c>aiIdle</c>, <c>setDisabled(DISABLED_HELD)</c>; F-53): it acquires nothing and its AI
+/// does not move it.
 /// </summary>
 public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
 {
@@ -205,8 +206,11 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
             {
                 _inFirstDeath = false;
                 Effects(world, data.FxHitGround, data.OclHitGround);
+                // "And stop us forever": aiIdle, the physics scrubbed, DISABLED_HELD.
+                world.EndAttack(Entity);
                 Entity.HasMoveTarget = false;
                 Entity.Speed = Fixed.Zero;
+                Entity.ScriptDisableMask |= Entity.ScriptHeld;
                 return data.EmptyHulkDelayTicks == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
             }
             return SimulationTiming.SleepNone;
