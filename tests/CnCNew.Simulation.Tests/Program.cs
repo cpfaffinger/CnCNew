@@ -349,6 +349,7 @@ run.Test("Flight: a ground transport sets its team down, returns and is deleted"
 run.Test("Flight: a shot-down payload plane takes its riders with it", Tests.FlightShotDownPlaneDestroysItsPayload);
 run.Test("Flight: countermeasures divert missiles to flares", Tests.FlightCountermeasuresDivertMissiles);
 run.Test("Reforged review (F-46): a decoyed missile takes the newest flare that exists", Tests.ReforgedCountermeasureTakesTheNewestFlare);
+run.Test("Reforged review (F-47): a toppling structure fires lines of shots across its footprint", Tests.ReforgedToppleCrushLine);
 run.Test("Flight: the particle uplink cannon burns its target and restores mid-beam", Tests.FlightParticleUplinkCannonBurnsItsTarget);
 run.Test("Flight: a battle bus has two lives and is thrown by the first death", Tests.FlightBattleBusHasTwoLives);
 run.Test("Slaves: the fixture objects of the slave/spawn/container group are instantiable; a bad rider line is a data error", Tests.SlaveFixtureObjectsAreInstantiable);
@@ -517,7 +518,7 @@ run.Test("Helix: portable structure rides free, follows and dies with it", Tests
 run.Test("Transports: snapshot v8, determinism and replay v8 commands", Tests.TransportSnapshotAndReplay);
 run.Test("Collision: real CrushDie/SquishCollide footprint overlap", Tests.CollisionCrushAndSquish);
 run.Test("Collision: ToppleUpdate push, kill, stump and mid-fall snapshot continuation", Tests.CollisionTopple);
-run.Test("Collision: StructureToppleUpdate delayed collapse and reduced crushing sweep", Tests.CollisionStructureTopple);
+run.Test("Collision: StructureToppleUpdate delayed collapse and the crushing sweep across the footprint (F-47)", Tests.CollisionStructureTopple);
 run.Test("Collision: HeightDieUpdate threshold, delay, structures and ground floor", Tests.CollisionHeightDie);
 run.Test("Rate invariance (physics): a toppling object falls frame by frame of the original", Tests.RateInvarianceToppleFall);
 run.Test("Rate invariance (physics): a toppling structure accelerates, decays and crushes once per frame of the original", Tests.RateInvarianceStructureTopple);

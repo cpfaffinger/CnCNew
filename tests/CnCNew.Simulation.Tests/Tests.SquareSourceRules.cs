@@ -36,6 +36,7 @@ static partial class Tests
         new("Simulation/Templates/ObjectTemplate.cs", RuleSelfProduct, "public Fixed BoundingCircleRadius =>", "the diagonal of a box of the template's geometry"),
         new("Simulation/Templates/ObjectTemplate.cs", RuleSelfProduct, "if (IsBox) return Fixed.Sqrt(", "the diagonal of a box of the template's geometry"),
         new("Simulation/Modules/BuiltIn/WorldEffectModules.cs", RuleSelfProduct, "_current.Major * _current.Major", "the diagonal of the firestorm's current box (FinalMajor of the data: at most 90)"),
+        new("Simulation/Modules/BuiltIn/ToppleAndFallModules.cs", RuleSelfProduct, "var facingWidth = Fixed.Sqrt(majorComponent * majorComponent", "the projection of the footprint (the template's geometry radii times a sine or cosine)"),
         // -- speeds per tick and fractions between 0 and 1
         new("Simulation/Modules/BuiltIn/Phase5Modules.cs", RuleSelfProduct, "var brakingDistance = locomotor.Braking > Fixed.Zero", "v² / 2a with the unit's current speed per tick"),
         new("Simulation/Modules/BuiltIn/Phase5Modules.cs", RuleSelfProduct, "brakingDistance = (speed * speed - minSpeed * minSpeed)", "v² / 2a with speeds per logic frame of the original (per tick at 30 Hz)"),

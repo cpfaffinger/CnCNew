@@ -383,7 +383,7 @@ static partial class Tests
         Check.That(live.FindEntity(new EntityId(2)) is null && restored.FindEntity(new EntityId(2)) is null, "Both the live and the restored run finish the topple with the same outcome.");
     }
 
-    /// <summary><c>StructureToppleUpdate.cpp</c>: delayed collapse and the ground-damage sweep (reduced to the leading edge, see the module's doc comment).</summary>
+    /// <summary><c>StructureToppleUpdate.cpp</c>: delayed collapse and the ground-damage sweep across the footprint (F-47).</summary>
     public static void CollisionStructureTopple()
     {
         var (world, feeder) = CollisionWorld();
@@ -393,11 +393,9 @@ static partial class Tests
         var events = new List<SimEvent>();
         for (var tick = 0; tick < world.Frames(400); tick++) events.AddRange(world.Step().Events);
         Check.That(world.FindEntity(new EntityId(1)) is not null, "The building persists as rubble: StructureToppleUpdate is itself the only die module, and it never requests destruction.");
-        // The crushing weapon only fires once the building has fallen close to flat (theta <= PI/6), so the skip fires at least once
-        // once MinToppleDelay plus most of the fall has elapsed; a victim's exact position would depend on the random topple
-        // direction (LogicRandom jitter), so this checks that the code path ran, not that it hit anyone.
-        Check.That(events.Count(value => value.Kind == SimEventKind.CreationSkipped && value.Value == CreationSkipReasons.SettingNotSimulated && value.Text.Contains("grid sweep")) == 1,
-            "The reduced crushing-damage sweep reports itself exactly once: " + events.Count(value => value.Kind == SimEventKind.CreationSkipped));
+        // The crushing weapon only fires once the building has fallen close to flat (theta <= PI/6); then every frame fires lines of shots (F-47, the sweep's
+        // points are tested in ReforgedToppleCrushLine).
+        Check.That(events.All(value => value.Kind != SimEventKind.CreationSkipped || !value.Text.Contains("grid sweep")), "The crushing sweep is no longer reported as left out.");
 
         // Two independent runs of the collapse (random delay and direction) are hash-identical.
         var (runA, feederA) = CollisionWorld();

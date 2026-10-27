@@ -252,10 +252,9 @@ public sealed record StructureToppleData(
 /// <see cref="IWorldServices.LogicRandom"/> in place of the reference's non-synced <c>GameLogicRandomValueReal</c> —
 /// same distribution, same generator), then swings from upright to flat over an accelerating, structural-integrity-decayed
 /// angle (<c>update</c>'s <c>TOPPLESTATE_TOPPLING</c> branch) while firing <c>CrushingWeaponName</c> along the ground it
-/// is falling onto. The reference fires a dense grid of shots across the whole falling face each tick
-/// (<c>doDamageLine</c>'s width sweep); this ports only the leading-edge shot that advances with <c>m_lastCrushedLocation</c>
-/// and skips the perpendicular sweep (<see cref="CreationSkipReasons.SettingNotSimulated"/>, raised once) — less area
-/// damage under a collapsing building, not none. FX, the burst cadence and the OCL debris spawns are not modelled (Opaque
+/// is falling onto: below <c>THETA_CEILING</c>, every frame, lines of shots from the last crushed distance to the leading edge and one at the leading
+/// edge, each line a shot every 25 units across the projected width of the footprint (<c>applyCrushingDamage</c>, <c>doDamageLine</c>; F-47 - the port fired
+/// one shot at the leading edge until Phase 40). FX, the burst cadence and the OCL debris spawns of a line are not modelled (Opaque
 /// fields, see <see cref="StructureToppleData"/>); the building does not change the model-condition state the reference
 /// uses to mark the collapse as finished, since nothing here renders a model.
 /// </summary>
@@ -288,7 +287,6 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
     private Fixed _structuralIntegrity;
     private Fixed _lastCrushedDistance;
     private Fixed _buildingHeight;
-    private bool _gridSweepWarned;
     // The ticks taken of the current frame of the fall (the fall is the original's recursion, once per frame; the angle covers the frame's step tick by tick).
     private FramePhase _framePhase;
 
@@ -387,23 +385,54 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
         }
     }
 
-    /// <summary><c>StructureToppleUpdate::applyCrushingDamage</c>, leading-edge shot only (see the class doc comment for the omitted width sweep).</summary>
+    /// <summary><c>WEAPON_SPACING_PERPENDICULAR</c> and <c>WEAPON_SPACING_PARALLEL</c>: 25 units between two lines and between two shots of a line.</summary>
+    private static readonly Fixed CrushSpacing = Fixed.FromInt(25);
+
+    /// <summary>
+    /// <c>StructureToppleUpdate::applyCrushingDamage</c>: the projected width of the footprint across the fall (<c>getMinorRadius() * Cos(angle)</c> and
+    /// <c>getMajorRadius() * Sin(angle)</c> of the orientation less the topple angle, half the length of that vector), a line of shots every 25 units from the last
+    /// crushed distance up to the leading edge, one more line at the leading edge in every frame, and the last crushed distance the first step past it.
+    /// </summary>
     private void ApplyCrushingDamage(IWorldServices world, Fixed theta)
     {
         if (theta > ThetaCeiling || data.CrushingWeapon.Length == 0) return;
         if (!world.Weapons.TryGet(data.CrushingWeapon, out var weapon))
             throw new InvalidDataException($"StructureToppleUpdate references the unknown weapon '{data.CrushingWeapon}'.");
+        var cosFacing = FixedTrig.Cos(Entity.Angle);
+        var sinFacing = FixedTrig.Sin(Entity.Angle);
+        var cosAngle = cosFacing * _directionX + sinFacing * _directionY;
+        var sinAngle = sinFacing * _directionX - cosFacing * _directionY;
+        var minorComponent = Entity.Template.GeometryMinorRadius * cosAngle;
+        var majorComponent = Entity.Template.GeometryMajorRadius * sinAngle;
+        var facingWidth = Fixed.Sqrt(majorComponent * majorComponent + minorComponent * minorComponent) / Fixed.FromInt(2);
         var maxDistance = _buildingHeight * (Fixed.One - FixedTrig.Sin(theta));
-        if (maxDistance <= _lastCrushedDistance) return;
-        _lastCrushedDistance = maxDistance;
-        if (!_gridSweepWarned)
-        {
-            world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, "StructureToppleUpdate crushing grid sweep", CreationSkipReasons.SettingNotSimulated);
-            _gridSweepWarned = true;
-        }
-        var x = Entity.X + maxDistance * _directionX;
-        var y = Entity.Y + maxDistance * _directionY;
-        world.FireWeaponAt(Entity, weapon, null, x, y, world.GroundHeightAt(x, y));
+        var along = _lastCrushedDistance;
+        for (; along < maxDistance; along += CrushSpacing) DamageLine(world, weapon, along, facingWidth);
+        DamageLine(world, weapon, maxDistance, facingWidth);
+        _lastCrushedDistance = along;
+    }
+
+    /// <summary>
+    /// <c>StructureToppleUpdate::doDamageLine</c>: shots from one side of the line to the other and one on its far edge. The original offsets a shot by <c>i * Sin(toppleAngle)</c>
+    /// in x and <c>i * Cos(toppleAngle)</c> in y - across the fall only at 0 and 90 degrees, along a diagonal in between; kept as it is (the original profile).
+    /// </summary>
+    private void DamageLine(IWorldServices world, WeaponInfo weapon, Fixed along, Fixed facingWidth)
+    {
+        foreach (var (x, y) in DamageLineTargets(Entity.X, Entity.Y, _directionX, _directionY, along, facingWidth))
+            world.FireWeaponAt(Entity, weapon, null, x, y, world.GroundHeightAt(x, y));
+    }
+
+    /// <summary>
+    /// The points <c>doDamageLine</c> fires at: <paramref name="along"/> down the line of fall (<paramref name="cos"/>, <paramref name="sin"/> of the topple angle) from the
+    /// building's position, then every 25 units from <c>-facingWidth</c> while below <c>facingWidth</c>, and once at <c>facingWidth</c>, each offset by
+    /// <c>(offset * sin, offset * cos)</c> as the original writes it.
+    /// </summary>
+    public static IEnumerable<(Fixed X, Fixed Y)> DamageLineTargets(Fixed originX, Fixed originY, Fixed cos, Fixed sin, Fixed along, Fixed facingWidth)
+    {
+        var baseX = originX + along * cos;
+        var baseY = originY + along * sin;
+        for (var offset = -facingWidth; offset < facingWidth; offset += CrushSpacing) yield return (baseX + offset * sin, baseY + offset * cos);
+        yield return (baseX + facingWidth * sin, baseY + facingWidth * cos);
     }
 
     public override void Describe(IStateWriter writer)
@@ -421,7 +450,6 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
         if ((_angleFine & FineMask) != 0) writer.Int("angleFine", _angleFine & FineMask);
         writer.Fixed("structuralIntegrity", _structuralIntegrity);
         writer.Fixed("lastCrushedDistance", _lastCrushedDistance);
-        writer.Bool("gridSweepWarned", _gridSweepWarned);
         _framePhase.Describe(writer, "framePhase");
     }
 
@@ -437,7 +465,6 @@ public sealed class StructureToppleUpdate(StructureToppleData data) : SimModule,
         _angleFine = (reader.Fixed("accumulatedAngle").Raw << FineBits) + (reader.Has("angleFine") ? reader.Int("angleFine") : 0);
         _structuralIntegrity = reader.Fixed("structuralIntegrity");
         _lastCrushedDistance = reader.Fixed("lastCrushedDistance");
-        _gridSweepWarned = reader.Bool("gridSweepWarned");
         _framePhase.Load(reader, "framePhase");
         _buildingHeight = ToppleAndFallModules.MaxHeightAbovePosition(Entity.Template);
     }

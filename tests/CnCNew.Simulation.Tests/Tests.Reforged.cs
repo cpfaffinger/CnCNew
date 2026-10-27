@@ -27,4 +27,25 @@ static partial class Tests
         Fixed? AllGone(EntityId id) => null;
         Check.That(!CountermeasuresBehavior.PickFlare(flares, 9, AllGone).IsValid, "The walk stops at the oldest flare instead of reading before it.");
     }
+
+    /// <summary>
+    /// F-47 (R-22): <c>StructureToppleUpdate::doDamageLine</c> fires every 25 units from <c>-facingWidth</c> while below <c>facingWidth</c> and once at <c>facingWidth</c>, each shot
+    /// offset by <c>(i * Sin(toppleAngle), i * Cos(toppleAngle))</c>: across the fall at 0 and 90 degrees, along the fall at 45 degrees - kept as the original writes it.
+    /// The port fired one shot at the leading edge and no line at all.
+    /// </summary>
+    public static void ReforgedToppleCrushLine()
+    {
+        var width = Fixed.FromInt(30);
+        var along = Fixed.FromInt(20);
+        (Fixed, Fixed)[] East = [..StructureToppleUpdate.DamageLineTargets(Fixed.Zero, Fixed.Zero, Fixed.One, Fixed.Zero, along, width)];
+        Check.That(East.Length == 4 && East.All(point => point.Item1 == along) && East.Select(point => point.Item2.Round()).SequenceEqual(new long[] { -30, -5, 20, 30 }),
+            $"Falling east (0 degrees): shots at -30, -5, 20 and the edge 30 across the fall ({string.Join(" ", East)}).");
+        (Fixed, Fixed)[] North = [..StructureToppleUpdate.DamageLineTargets(Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.One, along, width)];
+        Check.That(North.All(point => point.Item2 == along) && North.Select(point => point.Item1.Round()).SequenceEqual(new long[] { -30, -5, 20, 30 }),
+            "Falling north (90 degrees): the same shots across the fall.");
+        var half = Fixed.Sqrt(Fixed.One / Fixed.FromInt(2));
+        (Fixed, Fixed)[] Diagonal = [..StructureToppleUpdate.DamageLineTargets(Fixed.Zero, Fixed.Zero, half, half, along, width)];
+        Check.That(Diagonal.All(point => point.Item1 == point.Item2), "Falling north-east (45 degrees): every shot lies on the line of fall itself, as the original writes the offset.");
+    }
 }
+
