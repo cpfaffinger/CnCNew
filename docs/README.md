@@ -39,6 +39,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 | [THIRD-PARTY.md](THIRD-PARTY.md) | Phase 30, generated: every NuGet package of every project with its declared licence and the programs that carry it |
 | [ACCEPTANCE-MACHINE.md](ACCEPTANCE-MACHINE.md) | Phase 30: the 85 acceptance items, each with the check that proves what a program can, and what only a human can judge; the named limits |
 | [GGC-FIXES.md](GGC-FIXES.md) | Phase 30: the fixes of GeneralsGameCode - catalogue, the rule profile, the adopted and rejected fixes, the work list |
+| [REFORGED-FIXES.md](REFORGED-FIXES.md) | Phase 39/40: Zero Hour Reforged as a second source of fixes - what a change of it can be for this port (kinds A to E), the work list R-01 to R-38 |
 | [GGC-FIXES-CATALOGUE.md](GGC-FIXES-CATALOGUE.md) | Phase 30, generated: every `@bugfix`/`@fix` of Zero Hour and the shared code by subsystem, CRC-gated or not, and its review |
 | [PATCH-LAYER.md](PATCH-LAYER.md) | Phase 30: GeneralsGamePatch as a layer of the import - how it is built, what was measured, why it does not compile yet |
 | [CONTENT-PIPELINE.md](CONTENT-PIPELINE.md) | Runtime content contract (schema 2) and format matrix |
