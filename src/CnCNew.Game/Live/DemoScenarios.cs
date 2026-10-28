@@ -51,10 +51,12 @@ public static class DemoScenarios
     /// <summary>Raptors are built at an airfield, take off on the attack order, fly to two Missile Defenders and are shot at; what survives lands and reloads.</summary>
     public static DemoScenario JetStrafe { get; } = new(
         "jet-strafe", "Jet against missile troopers",
-        "The airfield builds two Raptors. They take off on the attack order, fly to two missile troopers (Missile Defender), are shot at, fire their missiles, fly back, land and reload.",
+        "The airfield, powered by a plant beside it, builds two Raptors. They take off on the attack order, fly to two missile troopers (Missile Defender), are shot at, fire their missiles, fly back, land and reload.",
         3600,
         [
             new("airfield", "AmericaAirfield", 1, 0, 0, 0f),
+            // The airfield consumes power: without a plant the Raptors are built at half speed (ThingTemplate::calcTimeToBuild).
+            new("power", "AmericaPowerPlant", 1, -220, 0, 0f),
             new("trooper1", "AmericaInfantryMissileDefender", 2, 700, 20, 180f),
             new("trooper2", "AmericaInfantryMissileDefender", 2, 705, -15, 180f),
         ],
