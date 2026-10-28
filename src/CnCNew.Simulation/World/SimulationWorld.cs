@@ -1642,6 +1642,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 (held ??= []).Add(entity);
                 continue;
             }
+            // Object::onDestroy: "the old cleanUpContain safeguard" - a rider that is destroyed says goodbye to its container (removeFromContain).
+            if (entity.ContainedBy.IsValid && FindEntity(entity.ContainedBy) is { Container: { } container }) container.Remove(this, entity, false);
             foreach (var module in entity.ModuleArray) module.OnRemove(this);
             foreach (var node in entity.Updates) _updates.Remove(node);
             if (entity.Timers is { Count: > 0 } timers)
