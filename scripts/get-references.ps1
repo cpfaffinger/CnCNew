@@ -55,6 +55,7 @@ New-Item -ItemType Directory -Force -Path $target | Out-Null
 $failed = 0
 foreach ($source in $sources) {
     $directory = Join-Path $target $source.Name
+    $fresh = $false
     if (Test-Path -LiteralPath (Join-Path $directory '.git')) {
         Write-Host "== $($source.Name): present, expecting $($source.Commit.Substring(0, 8))" -ForegroundColor Cyan
         git -C $directory cat-file -e "$($source.Commit)^{commit}" 2>$null
@@ -71,11 +72,16 @@ foreach ($source in $sources) {
     else {
         Write-Host "== $($source.Name): cloning $($source.Url)" -ForegroundColor Cyan
         git clone --quiet --no-checkout $source.Url $directory
+        $fresh = $true
     }
     if ($LASTEXITCODE -ne 0) { Write-Warning "$($source.Name): git failed (exit code $LASTEXITCODE)."; $failed++; continue }
     # Some reference trees hold paths longer than 260 characters.
     git -C $directory config core.longpaths true
-    if ((git -C $directory rev-parse HEAD 2>$null) -ne $source.Commit) {
+    if ($fresh) {
+        # A clone without checkout has an empty index; when its default branch already is the commit, a plain checkout writes nothing (the files count as deleted).
+        git -C $directory -c advice.detachedHead=false checkout --quiet --force $source.Commit
+    }
+    elseif ((git -C $directory rev-parse HEAD 2>$null) -ne $source.Commit) {
         git -C $directory -c advice.detachedHead=false checkout --quiet $source.Commit
     }
     if ($LASTEXITCODE -ne 0) { Write-Warning "$($source.Name): commit $($source.Commit) cannot be checked out."; $failed++; continue }
