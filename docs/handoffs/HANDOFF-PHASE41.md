@@ -78,4 +78,6 @@ Reforged candidate decided with its reason; the checks the changes can reach gre
   fire base's stations; then (§55.7) the match on entry, the turret bone and the transports' fire points - 16 of 16 pairings decided; the Battle Bus's passed bonus
   (§55.8).
 - F-54, the stealth garrison (§55.9): the count, capture, the hidden state and the acquisition, entering, the detector, no stealth in a transport, exposure, the drawing.
-  Next: F-58 (docs/GUARD-STATE.md), the rest of F-60 (orders through the container, armed riders, the drawing), the Reforged candidates.
+- F-58, guarding (§55.10): the guard command (`CommandTypes.Version` 18, replay 16), the guard of a position, an object, an area, the script guard actions, the
+  player's retaliation, the rule fix `guard-answers-only-when-idle` (R-35). The detector without a line of sight; the re-opened fixes 22 and 23 (§55.11). R-03 decided (D).
+  Next: R-24, R-27, R-34; the rest of F-60 (orders through the container, armed riders, the drawing); F-58's tunnel guard and the modules that read the guard.

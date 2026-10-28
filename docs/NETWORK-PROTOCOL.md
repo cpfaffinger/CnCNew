@@ -1049,7 +1049,7 @@ The room's:
 
 ### 20.6 Orders nobody can give, and who decides
 
-- **A command on the wire is an order of a player or it is nothing.** `CommandTypes.IsPlayerOrder` names the 24 of 34 command types a player gives; the other ten
+- **A command on the wire is an order of a player or it is nothing.** `CommandTypes.IsPlayerOrder` names the 24 of 34 command types a player gives (25 of 35 since the guard command of Phase 41, `CommandTypes.Version` 18); the other ten
   (spawn, destroy, damage, kill, the timers, give money, give science points, set relationship, the leave) are the system's. `CommandWire.IsPlausible` - asked by the
   relay for every intent before it is put into a bundle - refuses them like a command that is too long or has no header; the relay still decodes nothing.
 - **A command that does not decode is left out by every client alike.** The relay passes the bytes on unread, so an order with a plausible header and garbage behind

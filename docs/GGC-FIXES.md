@@ -155,25 +155,28 @@ had as "not applicable" applies (it is also Reforged's R-09):
 | --- | --- | --- | --- | --- |
 | `contact-weapon-not-view-blocked` (20) | `AIPathfind.cpp`, `Pathfinder::isAttackViewBlockedByObstacle` | an attacker of the kind `ATTACK_NEEDS_LINE_OF_SIGHT` is view-blocked whatever its weapon: a suicide bomber (the GLA Terrorists carry the kind) standing in another structure's cells cannot see a building it touches - the acquisition passes the building by | an attacker whose current weapon is a contact weapon (`isContactWeapon`) is never view-blocked (none for an `IMMOBILE` one, which has no current weapon here) | `GameFixContactWeaponNotViewBlocked`: under both profiles at 30, 60 and 120 Hz; a soldier with a gun at the same place stays blocked |
 
-Re-opened by the corrections of Phase 40: the `Object::onDisabledEdge` fix of section 3.2 (a power plant under construction does not change the power when it is
-disabled) has a path to act on since F-56, and the `UndeadBody::attemptDamage` fix (the Battle Bus decides by the armour-adjusted damage) was rejected because the port
-applied the armour before the body, which F-48 corrected - both are rule-profile candidates again, not yet decided.
+After F-58 (guarding as a state of the simulation), F-56 (the disabled edge of a power plant) and F-48 (the body applies the armour) three more apply, adopted the same way
+(docs/SIMULATION-CORE.md §55.10, §55.11):
+
+| Fix | Community source (file, function) | Original | With the fix | Test |
+| --- | --- | --- | --- | --- |
+| `guard-answers-only-when-idle` (21) | `AIGuard.cpp`, `AIGuardMachine::AIGuardMachine`; `AIGuardRetaliate.cpp`, `AIGuardRetaliateMachine::AIGuardRetaliateMachine` | a guard shot while it attacks (INNER) or walks back to its post (RETURN) turns to the attacker at once; the retaliation likewise in RETURN | the conditions are removed: it goes on and answers once it stands idle at its post (Reforged's R-35) | `GameFixGuardAnswersOnlyWhenIdle`: under both profiles at 30, 60 and 120 Hz |
+| `no-power-edge-for-unfinished-plant` (22) | `Object.cpp`, `Object::onDisabledEdge` | a disable on a power plant under construction takes its production from the player - which it does not produce yet - and gives it back when it ends | no energy change for a plant under construction | `GameFixNoPowerEdgeForUnfinishedPlant`: under both profiles at 30, 60 and 120 Hz |
+| `undead-lethal-by-armour` (23) | `UndeadBody.cpp`, `UndeadBody::attemptDamage` | the raw amount decides whether a blow would kill the Battle Bus: a blow its armour makes survivable starts the second life | `estimateDamage` (after the armour) decides | `GameFixUndeadLethalByArmour`: under both profiles at 30, 60 and 120 Hz |
 
 ### 3.2 Reviewed and not adopted
 
 | Fix | Why not |
 | --- | --- |
 | `ActiveBody::internalAddSubdualDamage` - subdual damage can no longer go negative | this port does not simulate subdual damage at all (a body reports it as "no effect"); the defect cannot occur. The missing subdual simulation is a fidelity debt of its own. |
-| `Object::onDisabledEdge` - a power plant under construction does not change the power when it is disabled | this port has no disabled-power path for power plants (energy follows ownership and construction only); nothing to correct. |
 | `GameLogic::tryStartNewGame` - random colour, position and faction from the logical seed | this port already draws them from the match description's own seed (`MatchDescription.Resolve`). |
 | `AIUpdateInterface::xfer`, `GameLogic::xfer` - save order and an out-of-range field of the save | this port's saves are its own format; the original's `xfer` is not ported. |
-| `UndeadBody::attemptDamage` - the Battle Bus decides by the armour-adjusted damage (Phase 32) | **rejected after the check by hand**: this port applies the armour before the body (`SimulationWorld.Combat.cs`, `DealWeaponDamage`), so the Battle Bus already compares the armour-adjusted amount for weapon damage; the fix would apply the armour twice. Damage that is not a weapon's reaches a body without armour in this port - a fidelity gap of its own. |
 
 The other 74 CRC-gated markers that are not adopted are, by the review column of the catalogue: **17 equivalent** (this port already behaves as the fix makes the
 original behave, e.g. the owner checks of rally points and special powers, an exit that is immediate), **49 not applicable** (C++ memory and crash defects,
 CRC and save bookkeeping, effects decoupled from the logic CRC, code paths this port does not have - guard state machines, collision damage, batches), and
 the 11 markers Phase 32 left as candidates or undecided, decided in Phase 33 (section 3.1c): 5 adopted, 4 rejected with the reason, 2 more not applicable.
-**Since Phase 34 the 96 CRC-gated markers are: 26 adopted (19 fixes), 17 equivalent, 51 not applicable, 2 rejected; none open** (Phase 33: 23 adopted, 16 fixes, 5 rejected - three of the rejected waited for F-34, F-38 and F-39, section 3.1d). Several "not applicable" entries name fidelity gaps of this port found on the way (no power loss of disabled power plants, no ejection of passengers on
+**Since Phase 41 the 96 CRC-gated markers are: 31 adopted (23 fixes), 17 equivalent, 47 not applicable, 1 rejected; none open** (Phase 34: 26 adopted, 19 fixes, 51 not applicable, 2 rejected) (Phase 33: 23 adopted, 16 fixes, 5 rejected - three of the rejected waited for F-34, F-38 and F-39, section 3.1d). Several "not applicable" entries name fidelity gaps of this port found on the way (no power loss of disabled power plants, no ejection of passengers on
 capture, no wait for a dead builder before a resume, no sniper check against empty structures) - they are Stage 1 debts, not fixes.
 
 ### 3.3 Not yet reviewed

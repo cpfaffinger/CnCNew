@@ -3821,10 +3821,53 @@ out, those of kind `STEALTH_GARRISON` marked detected for their `StealthDelay`, 
 later one in the original (`aiExit` is a state). **The detector** (`b7adda8`): it scans with `PartitionFilterStealthedOrStealthGarrisoned` - a stealthed object, or a
 garrison holding a stealth rider -; a rider its container encloses is out of the partition and never found itself; for a found garrison every rider with a `StealthUpdate`
 that is not the detector's player's nor its ally is marked for the scan's period plus two frames; relationship and kind filters apply to the building; the port's terrain
-line of sight stays on both branches (the original has none in this code). Tests in `Tests.StealthGarrison.cs` (the count; capture; the hidden state against an idle
+line of sight stayed on both branches then (the original has none in this code; removed in §55.11). Tests in `Tests.StealthGarrison.cs` (the count; capture; the hidden state against an idle
 rifleman, a detected rider, a plain garrison and a unit with `ATTACK_BUILDINGS` against a neutral and an own building; capture of a hidden one; entering a full hidden
 garrison; three detectors - in range, out of range, looking only for infantry), each failing on the code before at 30, 60 and 120 Hz. **Step 5** (`baa0fb2`): no stealth inside a container that is not garrisonable (`allowedToStealth`; `IsGarrisonable` - a garrison, and an Overlord whose
 portable structure's container is one). **Step 6** (`9b43a51`): a stealth rider thrown out is detected for its `StealthDelay` - the bunker buster, a combat bike's new
 rider, the capture of a garrisonable building; the kick-out of `Object::defect` is not modelled at all. **The presentation** (`51ed3ec`): for the player a frame is drawn
 for, a hidden garrison of a non-ally shows no `GARRISONED` and is drawn, and remembered in the fog, in the colour of its owner from before; the tooltip owner, the minimap
 colour and the attack cursor are not changed yet. Steps 2 to 4, entering, step 6 and the drawing move no field of either manifest; step 5 changes the hashes of the mission runs `MD_GLA03` and `MD_USA02` (15 of 1,929 fields), no outcome or end tick (manifest `b5282ac`).
+
+### 55.10 F-58: guarding as a state of the simulation (`AIGuardMachine`, `AIGuardRetaliateMachine`, `aiGuardPosition`, `aiGuardObject`, `aiGuardArea`)
+
+Read in `docs/GUARD-STATE.md`. **Step 1** (`96cb34c`): a new command `GuardCommand` (`MSG_DO_GUARD_POSITION` / `MSG_DO_GUARD_OBJECT` to a group, `groupGuardPosition`): every
+unit guards the same point or object in one of the three modes of the guard buttons. `GuardState` (the entity's `guard`, written only while it guards) and
+`SimulationWorld.Guard.cs` run the original's machine per unit: IDLE looks every `GuardEnemyScanRate` (15 frames; the first after a hashed 0..15) for the closest enemy within
+the inner range of the guarded centre - a human's unit 1.8 x vision, a computer's 1.1 x, times a computer team's mood, a contained unit its largest weapon range - that the unit
+could attack here or after moving; INNER attacks it within that range, OUTER follows it within the outer range (2.2 / 1.333) and gives up when it has not been back inside
+the inner range for `GuardChaseUnitsDuration` (300 frames); RETURN walks back, looking every `GuardEnemyReturnScanRate` (30 frames); an attacker that hurt the unit and that it
+can answer is attacked from INNER, RETURN and IDLE (ATTACK_AGGRESSOR, the body's last damage record read and cleared). `GUARD_WITHOUT_PURSUIT` has no OUTER,
+`GUARD_FLYING_UNITS_ONLY` looks at flying units only; GET_CRATE never holds, as in the original. The guard decides in the first tick of the unit's own original frame (the
+acquisition's loop runs it instead of the unit's own acquisition), reads positions where frames end, and ends with the unit's next order; a guarding unit is not idle. The
+client's three guard buttons send the command with their mode; its standing order for the guard is gone. **`CommandTypes.Version` 18, replay format 16**; the guard is an
+order of a player (25 of 35 types), fuzzed with the other commands; `WorldSnapshot` stays 10. **The fog** (`d63b5cb`): the guard's look has no fog filter (Reforged adds one)
+and its attack walks after what it found - its victim need not be visible. **Step 3** (`5013d05`): `TEAM_GUARD_AREA` guards the trigger area - its bounds centre is the
+guarded position, the scans look inside the polygon out to the area's radius as the original computes it (`halfHeight = (hi.y + lo.y) / 2`, the plus kept), OUTER at least that
+far; the guard keeps the area by name, the mission gives the world its areas. Not modelled: the original's gate that looks only when some object entered or left a trigger area,
+or one was made or destroyed, within the last scan period. **Step 4** (`a1a13a0`): `NAMED_GUARD`, `TEAM_GUARD` and `UNIT_GUARD_FOR_FRAMECOUNT` guard the own position,
+`TEAM_GUARD_POSITION` the waypoint, `TEAM_GUARD_OBJECT` the named object, `TEAM_GUARD_SUPPLY_CENTER` the warehouse's side (the first pick of a warehouse under attack is
+not modelled); `TEAM_GUARD_FOR_FRAMECOUNT` stays idle as in the original. Tests in `Tests.Guard.cs` (the chase, the return, the frames at 30, 60 and 120 Hz, a save in the
+middle of the chase, a move ending the guard; giving up; the modes; a computer's ranges; the answer to an attacker beyond the inner range) and `Tests.Phase13Actions.cs` (the
+script actions; the area: an enemy inside is attacked, one outside the polygon but within the radius is not). Measured: step 1 changes the two version fields and the command-stream hashes of the 22 runs whose description carries them (manifest `f93ac7c`), step 4 the hashes of twelve mission runs whose scripts guard (`e0623a3`), the fog rule nothing, step 3 the mission run `MD_GLA05` - shots, objects, script executions, not its outcome (`8dfb467`); the input manifest is unchanged throughout, no outcome or end tick moved. **Step 6, the player's retaliation** (`32e7cdd`): a hit on a human player's object by an enemy that is no airborne target,
+within 200 between the bounding circles, makes every idle, mobile object of the player and its allies within 120 + the victim's radius that could attack the attacker enter
+`AIGuardRetaliateMachine` - ATTACK_AGGRESSOR on the attacker (outer + inner range from where it stood, 300 frames), RETURN, an IDLE that looks once (INNER 1.5 x inner, OUTER
+0.67 x (outer + inner), no ordinary buildings) and ends; the exit when the retaliator leaves its inner range. The mode is on for every human player (the original's client
+switches it on in the match's first second; the option to turn it off is not built). The hits are noted during the tick and decided at its end, a hit from outside a step at
+once: the team relations of a decision are not read in the middle of the combat phase (an equivalence test of the entity lists found that a call there moved the script
+engine's team table). It changes only `MD_GLA05` again (manifest `80f52cd`, not its outcome): the AI pairings and the reference match have no human player. **The rule fix `guard-answers-only-when-idle`** (`bbdded6`, `GameFix` 21; Reforged's R-35): the community source
+removes the attack-aggressor condition from the guard's INNER and RETURN and the retaliation's RETURN - a guard shot while it fights or walks back answers once it stands idle.
+Not built: step 2's guarded object moving off (built into the command and IDLE's check, not tested on its own), step 5 (the tunnel network guard), step 7 (`DeployStyleAIUpdate` deploying in the
+guard's IDLE, which needs the guard's own moves to pack the unit first; `JetAIUpdate`'s reload resume; `FlightDeckBehavior`'s order passing), the enter guard of templates
+with `isEnterGuard`.
+
+### 55.11 The stealth detector without a line of sight, and two re-opened community fixes
+
+**The detector** (`2996901`): `StealthDetectorUpdate::update` scans with `iterateObjectsInRange` and no line of sight - a candidate within the detection range is found
+behind a ridge as well. Phase 10 had added a terrain test of its own; it is removed (the side item of the brief), and its test of that time says the opposite now.
+No field of either manifest moved. **`no-power-edge-for-unfinished-plant`** (`5640d20`, `GameFix` 22): `Object::onDisabledEdge` of the community source changes no energy for a
+power plant under construction - an EMP on a plant still being built took 5 from its player under the original rules (test: -5 against 0, the finished plant 5 either way).
+F-56 gave the port the path the fix acts on. **`undead-lethal-by-armour`** (`ec50e56`, `GameFix` 23): `UndeadBody::attemptDamage` decides by `estimateDamage`, the amount after
+the armour - a raw 150 that the armour halves no longer starts a bus's second life at a health of 100. Phase 32 rejected it while the port applied the armour before the body;
+F-48 moved it into the body. Both behind the rule profile, tested under both profiles at 30, 60 and 120 Hz. The catalogue's 96 CRC-gated markers: 31 adopted (23 fixes), 17
+equivalent, 47 not applicable, 1 rejected.

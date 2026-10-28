@@ -194,6 +194,11 @@ script-library <content> --show TEAM_GUARD` gives them).
 
 ## 3. Proposed plan (one cause per step)
 
+**Built (28 October 2026), docs/SIMULATION-CORE.md §55.10:** step 1 with the object field of step 2 (`GuardCommand`, `CommandTypes.Version` 18, replay 16), step 3 without the
+original's trigger-area gate, step 4, step 6 with the mode on for every human player (no option yet), and Reforged's R-35 as the community fix `guard-answers-only-when-idle`
+(`GameFix` 21); the guard's look and attack have no fog filter (a victim need not be visible). Open: step 5 (the tunnel network), step 7 (`DeployStyleAIUpdate` would need the
+guard's own moves to pack the unit first), the parts of step 8 that are the client's (the retaliation option).
+
 General for every step:
 - **Where:** a world-side state like `AcquisitionState` (`SimulationWorld.Guard.cs`, `Entity.Guard`), not a client book; written into the snapshot only
   when present (precedent: `acquisition`, new optional fields keep `WorldSnapshot` 10). A guarding unit is **not** `IsIdle`
