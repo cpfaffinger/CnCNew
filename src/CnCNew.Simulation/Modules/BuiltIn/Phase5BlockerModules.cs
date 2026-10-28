@@ -660,7 +660,7 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
             foreach (var riderId in garrison.Contained)
                 if (world.FindEntity(riderId) is { } rider && StealthOf(rider) is { } riderStealth && rider.Owner != Entity.Owner
                     && world.RelationshipOf(Entity.Owner, rider.Owner) != Relationship.Allies)
-                    riderStealth.MarkDetected(world, data.UpdateRateTicks + 2 * world.Time.TicksPerOriginalFrame);
+                    riderStealth.MarkDetected(world, data.UpdateRateTicks + world.Time.OriginalFrames(2));
         }
         // A DetectionRate of 0 scans once per logic frame of the original; the mark above holds one frame longer, so no gap opens.
         return world.Time.AtLeastOneFrame(data.UpdateRateTicks);
