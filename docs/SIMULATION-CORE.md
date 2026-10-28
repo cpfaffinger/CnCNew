@@ -3869,5 +3869,8 @@ No field of either manifest moved. **`no-power-edge-for-unfinished-plant`** (`56
 power plant under construction - an EMP on a plant still being built took 5 from its player under the original rules (test: -5 against 0, the finished plant 5 either way).
 F-56 gave the port the path the fix acts on. **`undead-lethal-by-armour`** (`ec50e56`, `GameFix` 23): `UndeadBody::attemptDamage` decides by `estimateDamage`, the amount after
 the armour - a raw 150 that the armour halves no longer starts a bus's second life at a health of 100. Phase 32 rejected it while the port applied the armour before the body;
-F-48 moved it into the body. Both behind the rule profile, tested under both profiles at 30, 60 and 120 Hz. The catalogue's 96 CRC-gated markers: 31 adopted (23 fixes), 17
+F-48 moved it into the body. **`takeoff-waits-for-one-jet`** (`GameFix` 24; Reforged's R-34): the original's `JetPauseBeforeTakeoffState::findWaiter` keeps a jet at the start
+of its runway while any jet holding a runway taxis - also each jet that taxis up behind it once the front jets hand their runways on; the community source waits only for the
+first jet found on the other runway (four jets on two runways: under the original no jet starts its run while another taxis, with the fix a front jet does). All three behind
+the rule profile, tested under both profiles at 30, 60 and 120 Hz. The catalogue's 96 CRC-gated markers: 31 adopted (23 fixes), 17
 equivalent, 47 not applicable, 1 rejected.
