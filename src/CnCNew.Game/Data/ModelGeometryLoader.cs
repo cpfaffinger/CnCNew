@@ -105,10 +105,29 @@ public static class ModelGeometryLoader
                     stations = Read(GarrisonConditions[0], "STATION", Math.Min(Count(definition, garrison, "ContainMax"), ContainerFirePoints.MaxGarrisonPoints));
             }
             var riders = transport is null ? ImmutableArray<BonePose>.Empty : Read(ModelConditionSet.Empty, "FIREPOINT", ContainerFirePoints.MaxTransportPoints);
-            points[definition.OriginalName] = new ContainerFirePoints(sets, stations, riders);
+            // PassengersInTurret: the points turn with the turret about its bone (getSingleLogicalBonePositionOnTurret, the turret's launch offset of the default state).
+            BonePose? pivot = null;
+            if (transport is not null && !riders.IsEmpty && Flag(definition, transport, "PassengersInTurret", defaultValue: false))
+                pivot = TurretPivot(definition, visual, library, scale) ?? throw new InvalidDataException($"{definition.OriginalName}: PassengersInTurret without a turret bone in its model.");
+            points[definition.OriginalName] = new ContainerFirePoints(sets, stations, riders, pivot);
         }
 
         return points;
+    }
+
+    /// <summary>The rest pose of the main turret's angle bone of the first draw module that names one in its default state, scaled as the pristine bones are.</summary>
+    private static BonePose? TurretPivot(ObjectDefinition definition, ObjectVisual visual, W3dAssetLibrary library, Fixed scale)
+    {
+        foreach (var draw in visual.Draws)
+        {
+            if (BestStateSelector.FindBest(draw, ModelConditionSet.Empty) is not (var state and >= 0) || state >= draw.States.Length) continue;
+            if (draw.States[state] is not { Model: { } model, Turret.AngleBone: { } bone }) continue;
+            var skeleton = library.GetModel(model).Skeleton;
+            if (skeleton.FindBone(bone) is not (var index and >= 0)) throw new InvalidDataException($"{definition.OriginalName}: turret bone '{bone}' is not in model '{model}'.");
+            var pose = RestPose(skeleton, index);
+            return pose with { X = pose.X * scale, Y = pose.Y * scale, Z = pose.Z * scale };
+        }
+        return null;
     }
 
     /// <summary><c>doSingleBoneName</c>: a public name makes itself and its numbered variations public.</summary>

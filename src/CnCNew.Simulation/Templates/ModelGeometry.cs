@@ -29,9 +29,10 @@ public sealed record ExitPath(BonePose? Start, BonePose? End);
 /// damaged and really damaged sets of the model states {GARRISONED}, {GARRISONED DAMAGED}, {GARRISONED REALLYDAMAGED}; a point beyond a set's length is the building's centre. A
 /// non-enclosing garrison (<c>loadStationGarrisonPoints</c>) has up to <c>ContainMax</c> <c>STATIONnn</c> of {GARRISONED} (<see cref="Stations"/>). A transport
 /// (<c>OpenContain::putObjAtNextFirePoint</c>) has up to 32 <c>FIREPOINTnn</c> of its model without a condition (<see cref="Transport"/>); with <c>PassengersInTurret</c> they are
-/// rest poses on the turret. Poses are in the object's frame, scaled by the template's <c>Scale</c> as the pristine bones are.
+/// rest poses on the turret, turned with it about <see cref="TurretPivot"/>, the turret bone's rest pose (<c>Object::getSingleLogicalBonePositionOnTurret</c>). Poses are in the object's
+/// frame, scaled by the template's <c>Scale</c> as the pristine bones are.
 /// </summary>
-public sealed record ContainerFirePoints(ImmutableArray<ImmutableArray<BonePose>> Garrison, ImmutableArray<BonePose> Stations, ImmutableArray<BonePose> Transport)
+public sealed record ContainerFirePoints(ImmutableArray<ImmutableArray<BonePose>> Garrison, ImmutableArray<BonePose> Stations, ImmutableArray<BonePose> Transport, BonePose? TurretPivot = null)
 {
     /// <summary><c>MAX_GARRISON_POINTS</c>.</summary>
     public const int MaxGarrisonPoints = 40;
@@ -107,7 +108,9 @@ public sealed class ModelGeometry
         {
             var points = pair.Value;
             text.Append(CultureInfo.InvariantCulture, $"firepoints {pair.Key.ToUpperInvariant()} {string.Join("|", points.Garrison.Select(set => string.Join(";", set.Select(Pose))))}");
-            text.Append(CultureInfo.InvariantCulture, $" stations {string.Join(";", points.Stations.Select(Pose))} transport {string.Join(";", points.Transport.Select(Pose))}\n");
+            text.Append(CultureInfo.InvariantCulture, $" stations {string.Join(";", points.Stations.Select(Pose))} transport {string.Join(";", points.Transport.Select(Pose))}");
+            if (points.TurretPivot is { } pivot) text.Append(CultureInfo.InvariantCulture, $" turret {Pose(pivot)}");
+            text.Append('\n');
         }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
     }

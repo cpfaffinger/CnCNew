@@ -92,6 +92,13 @@ internal static class ModelGeometryTests
                 $"the fire base has the four stations its model makes public (ExtraPublicBone STATION01..04), as the model has them: {string.Join(" | ", fireBase)}");
             TestHarness.Assert(garrisons.Length == 164 && pristine == 3288 && stations.Length == 4 && transports.Length == 55 && transports.Sum(pair => pair.Value.Transport.Length) == 301,
                 $"measured on the master installation: 164 garrisons with 3,288 pristine points, 4 fire bases, 55 transports with 301 points ({garrisons.Length}, {pristine}, {stations.Length}, {transports.Length})");
+            var turret = transports.Where(pair => pair.Value.TurretPivot is not null).Select(pair => pair.Key).ToArray();
+            Console.WriteLine($"       turret fire points (PassengersInTurret): {string.Join(", ", turret)}; ChinaTankOverlord {points["ChinaTankOverlord"].Transport[0]} about {points["ChinaTankOverlord"].TurretPivot}");
+            // NVOVRLRD.W3D (tools/CnCNew.W3dTool bones): TURRET01 (0, 0, 10.192), FIREPOINT01 (-15, 0, 15).
+            TestHarness.Assert(points["ChinaTankOverlord"].TurretPivot is { } pivot && Near(pivot.Z, 10.192m) && Near(pivot.X, 0m) && Near(points["ChinaTankOverlord"].Transport[0].X, -15m),
+                "the Overlord's portable structure stands on its turret's fire point, turned about the turret bone");
+            TestHarness.Assert(turret.All(name => name.Contains("Overlord", StringComparison.Ordinal) || name.Contains("Emperor", StringComparison.Ordinal)) && turret.Length == 5,
+                $"only the Overlords and the Tank General's Emperor carry their riders in the turret ({turret.Length})");
             TestHarness.Assert(garrisons.All(pair => pair.Value.Garrison.All(set => set.Length <= ContainerFirePoints.MaxGarrisonPoints))
                 && transports.All(pair => pair.Value.Transport.Length <= ContainerFirePoints.MaxTransportPoints), "no set is longer than the original's arrays");
         });
