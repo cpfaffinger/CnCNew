@@ -230,6 +230,7 @@ run.Test("Phase 41 (F-60, step 3): garrison and Helix riders have the GARRISONED
 run.Test("Phase 41 (F-60, step 5): a garrisoned rider fires from inside, within its garrisoned range, and never walks", Tests.FireFromContainersGarrisonFires);
 run.Test("Phase 41 (F-60, step 4): a garrison's rider fires from the fire point closest to its victim, a fire base's from its station", Tests.FireFromContainersFirePoints);
 run.Test("Phase 41 (F-60, step 4): a garrison matches its points at once when a rider comes in", Tests.FireFromContainersMatchOnEntry);
+run.Test("Phase 41 (F-60, step 4): a transport's rider fires from the fire point of its place among the riders", Tests.FireFromContainersTransportFirePoints);
 run.Test("Phase 41 (F-60, step 5): a Humvee's rider and an Overlord's gattling fire, a plain transport's and a tunnel's riders do not", Tests.FireFromContainersTransportsFire);
 run.Test("Phase 41 (F-60, step 5): a garrison fight is the same at 30, 60 and 120 Hz and continues after a snapshot", Tests.FireFromContainersRatesAndSnapshot);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);

@@ -253,18 +253,12 @@ public sealed partial class SimulationWorld
            && (entity.ScriptDisableMask & Entity.ScriptHeld) == 0 && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
 
     /// <summary>
-    /// The container of a contained rider, null for an object in no container. A garrison's riders stand at its fire points or stations and are measured from there
-    /// (<see cref="ShooterOf"/>); this simulation does not move the riders of a moving transport yet, so - a named stand-in - the range, search, view and shot of a transport's
-    /// rider are measured from the transport (docs/FIRE-FROM-CONTAINERS.md §3, step 4).
+    /// The container of a contained rider, null for an object in no container. Where a rider is measured from is <see cref="ShooterPosition"/>.
     /// </summary>
     private Entity? FiringContainerOf(Entity entity) => entity.ContainedBy.IsValid ? FindEntity(entity.ContainedBy) : null;
 
-    /// <summary>Where a contained rider's shot leaves from (<c>Weapon::calcProjectileLaunchPosition</c> of an enclosed launcher): its <see cref="ShooterOf"/> where its begun frame ends.</summary>
-    private (Fixed X, Fixed Y, Fixed Z) FiringPointOf(Entity rider)
-    {
-        var shooter = ShooterOf(rider);
-        return _firstFrameTicks != TickOrder.Next ? shooter.FrameEnd(_tick) : (shooter.X, shooter.Y, shooter.Z);
-    }
+    /// <summary>Where a contained rider's shot leaves from (<c>Weapon::calcProjectileLaunchPosition</c> of an enclosed launcher): its <see cref="ShooterPosition"/> where its begun frame ends.</summary>
+    private (Fixed X, Fixed Y, Fixed Z) FiringPointOf(Entity rider) => ShooterPosition(rider, _firstFrameTicks != TickOrder.Next);
 
     /// <summary>
     /// <c>Object::isAbleToAttack</c>'s gate for a contained object (F-60, docs/FIRE-FROM-CONTAINERS.md): the container lets this rider fire
@@ -442,15 +436,11 @@ public sealed partial class SimulationWorld
         var limit = SquaredReach.Of(radius);
         var turretOnly = mode == AcquireMode.Turret;
         var buildings = computer || (ai.AutoAcquire & AutoAcquire.AttackBuildings) != 0;
-        // A rider looks from where it stands in a garrison, from its container in any other (ShooterOf); its container's bounding circle is in the radius.
-        var looker = ShooterOf(entity);
-        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue, OwnX = looker.X, OwnY = looker.Y };
+        // A rider looks from where it stands (ShooterPosition); its container's bounding circle is in the radius.
         // Above 30 Hz the look measures from where the unit's begun frame ends to where each candidate's ends (rule 3 of the frame convention).
-        if (_firstFrameTicks != TickOrder.Next)
-        {
-            search.FrameEnd = true;
-            (search.OwnX, search.OwnY, _) = looker.FrameEnd(_tick);
-        }
+        var frameEnd = _firstFrameTicks != TickOrder.Next;
+        var (ownX, ownY, _) = ShooterPosition(entity, frameEnd);
+        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue, OwnX = ownX, OwnY = ownY, FrameEnd = frameEnd };
 
         if (RelationshipOverride is not null)
         {

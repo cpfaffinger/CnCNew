@@ -7,13 +7,44 @@ namespace CnCNew.Simulation.World;
 /// <summary>
 /// The fire points of a garrison (F-60, step 4, docs/FIRE-FROM-CONTAINERS.md): a rider of an enclosing garrison stands at the building's centre until it has a victim, then at the
 /// free fire point of the model closest to it (<c>GarrisonContain</c>); a rider of a fire base stands at its station. Range, view and shot of such a rider are measured from where
-/// it stands. The riders of every other container are still measured from their container (the stand-in of step 5, <see cref="FiringContainerOf"/>).
+/// it stands. A transport's rider stands at the transport's fire point of its place among the riders, a Helix's above the Helix (<see cref="ShooterPosition"/>).
 /// </summary>
 public sealed partial class SimulationWorld
 {
-    /// <summary>The object whose position a rider's range, view, search and shot are measured from: the rider itself in a garrison, its container in any other, itself outside.</summary>
-    private Entity ShooterOf(Entity entity)
-        => FiringContainerOf(entity) is { } container && container.Container is not GarrisonContain ? container : entity;
+    /// <summary><c>HelixContain::redeployOccupants</c>: its riders stand 8 above it.</summary>
+    private static readonly Fixed HelixRiderHeight = Fixed.FromInt(8);
+
+    /// <summary>
+    /// Where a rider's range, view, search and shot are measured from - where its begun frame ends above 30 Hz when <paramref name="frameEnd"/>. Outside a container and in a garrison the
+    /// object itself (a garrison puts its riders at their points and stations). In any other container where <c>OpenContain::redeployOccupants</c> puts it, which the original
+    /// does every time the container's transform changes: a Helix's rider 8 above the Helix; a transport's at the transport's <c>FIREPOINTnn</c> of its place among the riders in
+    /// the order they came in, the points used round from the first (<c>putObjAtNextFirePoint</c>), turned with the turret about its bone for <c>PassengersInTurret</c>
+    /// (<c>getSingleLogicalBonePositionOnTurret</c>); without points the container's position. Derived from the container's pose, not kept: after a rider leaves a standing
+    /// transport the others take their new points at once, the original at the transport's next move (docs/FIRE-FROM-CONTAINERS.md §3, step 4).
+    /// </summary>
+    private (Fixed X, Fixed Y, Fixed Z) ShooterPosition(Entity entity, bool frameEnd)
+    {
+        if (FiringContainerOf(entity) is not { } container || container.Container is GarrisonContain)
+            return frameEnd ? entity.FrameEnd(_tick) : (entity.X, entity.Y, entity.Z);
+        var (x, y, z) = frameEnd ? container.FrameEnd(_tick) : (container.X, container.Y, container.Z);
+        if (container.Container is HelixContain helix) return helix.PortableStructure == entity.Id ? (x, y, z) : (x, y, z + HelixRiderHeight);
+        if (!_templates.Geometry.FirePoints.TryGetValue(container.Template.Name, out var points) || points.Transport.IsEmpty) return (x, y, z);
+        var riders = container.Container is ContainModuleBase own ? own.Contained : container.Container!.Contained;
+        var place = 0;
+        while (place < riders.Count && riders[place] != entity.Id) place++;
+        var pose = points.Transport[place % points.Transport.Length];
+        var (px, py) = (pose.X, pose.Y);
+        if (points.TurretPivot is { } pivot && container.TurretOf(0) is { } turret)
+        {
+            var (turnCos, turnSin) = (FixedTrig.Cos(turret.Angle), FixedTrig.Sin(turret.Angle));
+            var (dx, dy) = (px - pivot.X, py - pivot.Y);
+            (px, py) = (pivot.X + dx * turnCos - dy * turnSin, pivot.Y + dx * turnSin + dy * turnCos);
+        }
+
+        var angle = frameEnd ? container.FrameEndAngle(_tick) : container.Angle;
+        var (cos, sin) = (FixedTrig.Cos(angle), FixedTrig.Sin(angle));
+        return (x + px * cos - py * sin, y + px * sin + py * cos, z + pose.Z);
+    }
 
     /// <summary>The enclosing garrison the rider is inside, if any.</summary>
     private GarrisonContain? EnclosingGarrisonOf(Entity entity)
@@ -21,7 +52,7 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// Where <see cref="WithinWeaponRange"/> measures from (<c>WeaponSet::getAbleToUseWeaponAgainstTarget</c>): a rider of an enclosing garrison at a point from its point; one at the
-    /// centre from the free point closest to the victim (<c>calcBestGarrisonPosition</c>) - false when every point is taken; everybody else from <see cref="ShooterOf"/>, read where its
+    /// centre from the free point closest to the victim (<c>calcBestGarrisonPosition</c>) - false when every point is taken; everybody else from <see cref="ShooterPosition"/>, read where its
     /// begun frame ends above 30 Hz.
     /// </summary>
     private bool TryRangeOrigin(Entity source, Fixed victimX, Fixed victimY, Fixed victimZ, out Fixed x, out Fixed y)
@@ -33,8 +64,7 @@ public sealed partial class SimulationWorld
             return found;
         }
 
-        var shooter = ShooterOf(source);
-        (x, y, _) = _firstFrameTicks != TickOrder.Next ? shooter.FrameEnd(_tick) : (shooter.X, shooter.Y, shooter.Z);
+        (x, y, _) = ShooterPosition(source, _firstFrameTicks != TickOrder.Next);
         return true;
     }
 

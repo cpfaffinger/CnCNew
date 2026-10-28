@@ -452,14 +452,14 @@ static partial class Tests
     /// at (<paramref name="distance"/>, 0) - all made in one tick, the rider inside before the next one (an enemy beyond 100 cannot be fired at from outside in between).
     /// </summary>
     private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, Entity Container, Entity Rider, Entity Victim, TemplateCatalog Templates, string Fingerprint) FcScene(
-        SimulationRate rate, string container, string rider, int distance, string victim = "FcTarget", bool computer = false, ModelGeometry? geometry = null)
+        SimulationRate rate, string container, string rider, int distance, string victim = "FcTarget", bool computer = false, ModelGeometry? geometry = null, Fixed containerAngle = default)
     {
         var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRunnerIni));
         var templates = geometry is null ? fixture.Templates : TemplateCatalog.Build(fixture.Graph, fixture.Bindings, rate, geometry);
         var fingerprint = (geometry ?? ModelGeometry.None).Combine(fixture.Fingerprint);
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, computer ? ComputerAgainstHuman : CombatPlayers, SyntheticFixture.FixtureId, fingerprint), templates);
         var feeder = new Feeder(world);
-        feeder.Spawn(1, container, owner: 1, x: 0, y: 0);
+        feeder.Spawn(1, container, owner: 1, x: 0, y: 0, angle: containerAngle);
         feeder.Spawn(1, rider, owner: 1, x: 0, y: 0);
         feeder.Spawn(2, victim, owner: 2, x: distance, y: 0);
         world.Step();
@@ -574,6 +574,29 @@ static partial class Tests
             $"Setup: the victim died in the middle of the building's frame, the rider is still at its point ({scene.Rider.X}; tick {scene.World.Tick}, spawn {scene.Container.SpawnTick}, dead {scene.Victim.EffectivelyDead}).");
         Check.That(scene.World.TryEnterContainer(second, scene.Container), "Setup: a second rider comes in.");
         Check.That((scene.Rider.X, scene.Rider.Y) == (scene.Container.X, scene.Container.Y), $"The first rider is back at the centre at once ({scene.Rider.X}, {scene.Rider.Y}).");
+    }
+
+    /// <summary>
+    /// Step 4, a transport's fire points (<c>OpenContain::redeployOccupants</c>, <c>putObjAtNextFirePoint</c>): the Humvee's model has one point 40 to its east and one 40 to its west; its
+    /// first rider stands at the first. It fires at an enemy 130 to the east (90 from its point, within 100) and not at one 130 to the west (170 from its point); without points it is
+    /// measured from the Humvee and fires at neither. Turned round, the first point is in the west.
+    /// </summary>
+    public static void FireFromContainersTransportFirePoints()
+    {
+        static ModelGeometry Points() => new([], [],
+        [
+            new KeyValuePair<string, ContainerFirePoints>("FcHumvee", new ContainerFirePoints([], [], [FcPose(40, 0, 5), FcPose(-40, 0, 5)])),
+        ]);
+
+        var east = FcScene(TestRate.Default, "FcHumvee", "FcRifleman", 130, geometry: Points());
+        Check.That(FcRun(east.World, east.Rider, 60).Shots > 0, "The Humvee's first rider fires from the east point at an enemy 130 to the east.");
+        var plain = FcScene(TestRate.Default, "FcHumvee", "FcRifleman", 130);
+        Check.That(FcRun(plain.World, plain.Rider, 60).Shots == 0, "Without fire points it is measured from the Humvee: 130 is beyond 100.");
+        var west = FcScene(TestRate.Default, "FcHumvee", "FcRifleman", -130, geometry: Points());
+        Check.That(FcRun(west.World, west.Rider, 60).Shots == 0, "An enemy 130 to the west is 170 from the east point.");
+
+        var turned = FcScene(TestRate.Default, "FcHumvee", "FcRifleman", -130, geometry: Points(), containerAngle: FixedTrig.Pi);
+        Check.That(FcRun(turned.World, turned.Rider, 60).Shots > 0, "Turned round, the first point lies in the west and the enemy there is fired at.");
     }
 
     /// <summary>
