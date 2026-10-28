@@ -90,15 +90,16 @@ function Invoke-Replay([string]$Name, [string[]]$GameArgs, [string]$Size, [int]$
     }
 }
 
+# The power plant is the player's first: without power it is built at half speed (ThingTemplate::calcTimeToBuild, MinLowEnergyProductionSpeed 0.5, F-16) - 2,000 frames leave room.
 $built = @{ unresolved = 0; commandsAccepted = '>=1'; commandsRejected = 0; sitesCreated = 1; sitesCompleted = 1 }
 $mission = @('--mission', 'Maps/GC_ChemGeneral/GC_ChemGeneral.map')
 $match = @('--match', 'Maps/Alpine Assault/Alpine Assault.map')
-Invoke-Replay 'mission-1280x720' $mission '1280x720' 1400 'dozer-build.txt' $built @('mission presentation:*locked at exit False*')
+Invoke-Replay 'mission-1280x720' $mission '1280x720' 2000 'dozer-build.txt' $built @('mission presentation:*locked at exit False*')
 Invoke-Replay 'mission-intro-clicks' $mission '1280x720' 800 'clicks-during-intro.txt' @{ unresolved = 0; selectionChanges = 0; commandsAccepted = 0; sitesCreated = 0 } @('mission presentation: input locked for * ticks, locked at exit False, letterbox at exit False*', 'input-script: at exit*command mode None*') @(700, 799)
 if (-not $Quick) {
-    Invoke-Replay 'mission-1920x1080' $mission '1920x1080' 1400 'dozer-build.txt' $built @()
-    Invoke-Replay 'match-1280x720' $match '1280x720' 1400 'dozer-build.txt' $built @()
-    Invoke-Replay 'match-1920x1080' $match '1920x1080' 1400 'dozer-build.txt' $built @()
+    Invoke-Replay 'mission-1920x1080' $mission '1920x1080' 2000 'dozer-build.txt' $built @()
+    Invoke-Replay 'match-1280x720' $match '1280x720' 2000 'dozer-build.txt' $built @()
+    Invoke-Replay 'match-1920x1080' $match '1920x1080' 2000 'dozer-build.txt' $built @()
 }
 
 if ($failures -gt 0) {
