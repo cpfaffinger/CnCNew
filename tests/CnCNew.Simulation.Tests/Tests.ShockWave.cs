@@ -49,6 +49,20 @@ static partial class Tests
             ShockResistance = 1.0
           End
         End
+        Object ShockDummy
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 10.0
+            ShockMaxYaw = 0.0001
+            ShockMaxPitch = 0.0001
+            ShockMaxRoll = 0.0001
+            MinFallHeightForDamage = 1000.0
+          End
+        End
         Object ShockLauncher
           KindOf = STRUCTURE
           Body = ActiveBody Body01
@@ -174,6 +188,57 @@ static partial class Tests
             var saved = ShockRun(rate, saveMidway: true);
             foreach (var (name, values) in reference)
                 Check.That(saved[name] == values, $"{rate}: after a save in mid-flight {name} ends the same ({saved[name]} against {values}).");
+        }
+    }
+
+    /// <summary>
+    /// Step 3, the stun as the original has it: a tank thrown from the ground loses its stun in its first step (tested where it stood) and keeps flailing to the end; a dummy
+    /// thrown from high in the air is still stunned when it lands, flails no more and shows STUNNED until the stun ends on the ground; thrown off the map while stunned, it dies
+    /// when it lands. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void ShockWaveStun()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder, _) = ShockWorld(rate);
+            feeder.Spawn(1, "ShockLauncher", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "ShockTank", owner: 2, x: 50, y: 0);
+            feeder.Spawn(2, "ShockDummy", owner: 2, x: 0, y: 60, z: 80);
+            world.Step();
+            Entity Find(string name) => world.Entities.Single(value => value.Template.Name == name);
+            PhysicsBehavior PhysicsOf(Entity entity) => entity.Modules.OfType<PhysicsBehavior>().Single();
+            var (tank, dummy) = (PhysicsOf(Find("ShockTank")), PhysicsOf(Find("ShockDummy")));
+            Check.That(world.Weapons.TryGet("ShockBomb", out var bomb), "Setup: the bomb is in the catalog.");
+            world.DealWeaponDamage(Find("ShockLauncher"), bomb!, null, Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            Check.That(tank.Stunned && tank.ShowsFlailing && dummy.Stunned && dummy.ShowsFlailing, $"{rate}: the shock stuns both and makes them flail.");
+            for (var step = 0; step < world.Frames(2); step++) world.Step();
+            Check.That(!tank.Stunned && tank.ShowsFlailing && !tank.ShowsStunned, $"{rate}: thrown from the ground, the tank's stun ends in its first step; it keeps flailing.");
+            Check.That(dummy.Stunned, $"{rate}: thrown from high up, the dummy is still stunned.");
+            var landed = false;
+            for (var step = 0; step < world.Frames(400) && (tank.Flying || dummy.Flying); step++)
+            {
+                world.Step();
+                if (!landed && dummy.ShowsStunned)
+                {
+                    landed = true;
+                    Check.That(!dummy.ShowsFlailing, $"{rate}: landing stunned, it flails no more and shows STUNNED.");
+                }
+            }
+            Check.That(landed && !dummy.Stunned && !dummy.ShowsStunned && !dummy.Flying, $"{rate}: on the ground its stun ends ({landed}, stunned {dummy.Stunned}, pose {dummy.ShowsStunned}, flying {dummy.Flying}, at {Find("ShockDummy").X} {Find("ShockDummy").Z}).");
+            Check.That(tank.ShowsFlailing && !tank.Flying, $"{rate}: the tank, landed, still flails - the original's leftover.");
+
+            // Off the map while stunned: a terrain whose edge is x = 0, the dummy thrown west across it.
+            var fixture = new SyntheticFixture(rate, files: ShockFiles);
+            var map = CnCNew.Simulation.Terrain.TerrainMap.Build(SyntheticMaps.Build(100, 100, 1, (_, _) => 0), "shock");
+            var edgeWorld = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, map.Fingerprint), fixture.Templates, map);
+            var edgeFeeder = new Feeder(edgeWorld);
+            edgeFeeder.Spawn(1, "ShockLauncher", owner: 1, x: 60, y: 300);
+            edgeFeeder.Spawn(2, "ShockDummy", owner: 2, x: 10, y: 300, z: 85);
+            edgeWorld.Step();
+            var thrown = edgeWorld.Entities.Single(value => value.Template.Name == "ShockDummy");
+            edgeWorld.DealWeaponDamage(edgeWorld.Entities.Single(value => value.Template.Name == "ShockLauncher"), bomb!, null, Fixed.FromInt(60), Fixed.FromInt(300), Fixed.Zero);
+            for (var step = 0; step < edgeWorld.Frames(400) && !thrown.EffectivelyDead && thrown.InPhysicsFlight; step++) edgeWorld.Step();
+            Check.That(thrown.EffectivelyDead && thrown.X < Fixed.Zero, $"{rate}: landing off the map while stunned kills it ({thrown.X}, dead {thrown.EffectivelyDead}).");
         }
     }
 }

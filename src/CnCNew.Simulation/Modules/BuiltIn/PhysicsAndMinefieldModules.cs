@@ -90,6 +90,11 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     private Fixed _roll;
     private bool _bounce;
     private bool _wasAirborne;
+    // The stun (F-63, step 3): IS_STUNNED, and the two model conditions the original sets on the object - STUNNED_FLAILING from the shock until a landing while stunned, STUNNED
+    // from that landing until the stun ends. The stun's end clears STUNNED only, so a unit whose stun ends before it lands keeps flailing (the original's own defect).
+    private bool _stunned;
+    private bool _flailing;
+    private bool _stunnedPose;
 
     public override string ModuleName => "PhysicsBehavior";
     public PhysicsData Data => data;
@@ -106,6 +111,15 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     /// <summary>The object flies after a shock (F-63): its movement waits until it rests on the ground again.</summary>
     public bool Flying => _flying;
 
+    /// <summary><c>getIsStunned</c>: the object's locomotor does nothing (<c>Locomotor::locoUpdate_moveTowards*</c>).</summary>
+    public bool Stunned => _stunned;
+
+    /// <summary>The model condition <c>STUNNED_FLAILING</c> the shock set (cleared only by a landing while stunned).</summary>
+    public bool ShowsFlailing => _flailing;
+
+    /// <summary>The model condition <c>STUNNED</c>: from a landing while stunned until the stun ends.</summary>
+    public bool ShowsStunned => _stunnedPose;
+
     /// <summary>The pitch and roll a shock gave the object, in radians (0 for an upright object).</summary>
     public (Fixed Pitch, Fixed Roll) Tilt => (_pitch, _roll);
 
@@ -121,6 +135,9 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _accelX += forceX * resisted / mass;
         _accelY += forceY * resisted / mass;
         _accelZ += forceZ * resisted / mass;
+        // Object::attemptDamage: setStunned(true) and STUNNED_FLAILING.
+        _stunned = true;
+        _flailing = true;
         if (!stickToGround)
         {
             _bounce = true;
@@ -259,6 +276,15 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         var x = startX + _velocityX;
         var y = startY + _velocityY;
         var z = oldZ + _velocityZ;
+        // The stun ends at rest or when the object is not significantly above the terrain - tested where it stood before this step (the original applies its new matrix only
+        // at the end of the update), so a unit thrown from the ground loses its stun in its first step. Only STUNNED is cleared.
+        if (_stunned && ((_velocityX.Abs() < StunRelief && _velocityY.Abs() < StunRelief && _velocityZ.Abs() < StunRelief) || !world.IsSignificantlyAboveTerrain(Entity)))
+        {
+            _stunned = false;
+            _stunnedPose = false;
+        }
+        // handleBounce and testStunnedUnitForDestruction read the object's orientation before this step's rotation, for the same reason.
+        var uprightBefore = Upright;
         if (_yawRate != Fixed.Zero || _pitchRate != Fixed.Zero || _rollRate != Fixed.Zero)
         {
             var pitchRate = _pitchRate * data.PitchRollYawFactor;
@@ -283,11 +309,16 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
             if (_velocityZ < Fixed.Zero)
             {
                 // handleBounce: an object on its back is turned over (roll pi), the pitch is not flipped as well.
-                _roll = Upright ? Fixed.Zero : FixedTrig.Pi;
+                _roll = uprightBefore ? Fixed.Zero : FixedTrig.Pi;
                 _pitch = Fixed.Zero;
             }
             bounced = bounceZ > Fixed.Zero;
             if (!bounced) _bounce = data.AllowBouncing;
+            else if (StunnedUnitIsDestroyed(world, startX, startY, uprightBefore))
+            {
+                world.Kill(Entity.Id);
+                world.MarkDirty(Entity);
+            }
         }
         var activeVelocityZ = _velocityZ;
         if (z <= ground)
@@ -295,6 +326,12 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
             _velocityZ += ground - z;
             if (_velocityZ > Fixed.Zero) _velocityZ = Fixed.Zero;
             z = ground;
+            // "When a stunned object hits the ground the first time": STUNNED_FLAILING becomes STUNNED.
+            if (_stunned)
+            {
+                _flailing = false;
+                _stunnedPose = true;
+            }
         }
         else if (stick) z = ground;
         if (bounced) (_pitch, _roll) = (Fixed.Zero, Fixed.Zero);
@@ -326,10 +363,11 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
                 world.Damage(Entity.Id, new DamageInfo(Entity.Id, net * data.Mass * data.FallHeightDamageFactor, FallingDamageType, SplattedDeathType, false));
         }
 
-        // At rest on the ground: the flight is over and the movement takes the object again.
-        if (!airborne && _velocityX == Fixed.Zero && _velocityY == Fixed.Zero && _velocityZ == Fixed.Zero && _accelX == Fixed.Zero && _accelY == Fixed.Zero && _accelZ == Fixed.Zero
-            && _yawRate == Fixed.Zero && _pitchRate == Fixed.Zero && _rollRate == Fixed.Zero)
+        // At rest on the ground: the flight is over and the movement takes the object again. What is left of the rates is dropped - the original lets them decay on (by 0.85 a
+        // frame on the ground, never quite to zero), turning the object imperceptibly while its locomotor already drives it; the port's movement waits for the flight's end.
+        if (!airborne && _velocityX == Fixed.Zero && _velocityY == Fixed.Zero && _velocityZ == Fixed.Zero && _accelX == Fixed.Zero && _accelY == Fixed.Zero && _accelZ == Fixed.Zero)
         {
+            (_yawRate, _pitchRate, _rollRate) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
             _flying = false;
             Entity.InPhysicsFlight = false;
             _bounce = false;
@@ -344,6 +382,24 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     private Fixed _stepZ;
 
     private bool Upright => FixedTrig.Cos(_pitch) * FixedTrig.Cos(_roll) > Fixed.Zero;
+
+    private static readonly Fixed StunRelief = Fixed.FromDecimal(0.5m);
+
+    /// <summary>
+    /// <c>testStunnedUnitForDestruction</c>, at a bounce: a stunned object dies when it lands on its back, off the map, or - with an AI - on a cliff or under water without a
+    /// locomotor for that surface; read where it stood before the step, as the original does.
+    /// </summary>
+    private bool StunnedUnitIsDestroyed(IWorldServices world, Fixed x, Fixed y, bool upright)
+    {
+        if (!_stunned) return false;
+        if (!upright) return true;
+        if (FlightModules.IsOffMap(world, x, y)) return true;
+        if (CrateModules.AiOf(Entity) is null || world.Terrain is not { } terrain) return false;
+        var surfaces = Entity.Template.Locomotor?.Surfaces ?? LocomotorSurfaces.None;
+        var (cx, cy) = (Terrain.TerrainMap.CellOf(x), Terrain.TerrainMap.CellOf(y));
+        if (terrain.IsInside(cx, cy) && (terrain.CellAt(cx, cy) & Terrain.CellFlags.Cliff) != 0 && (surfaces & LocomotorSurfaces.Cliff) == 0) return true;
+        return terrain.IsUnderwater(x, y) && (surfaces & LocomotorSurfaces.Water) == 0;
+    }
 
     private void Damp(Fixed factor)
     {
@@ -372,6 +428,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         writer.Fixed("roll", _roll);
         writer.Bool("bounce", _bounce);
         writer.Bool("wasAirborne", _wasAirborne);
+        writer.Bool("stunned", _stunned);
         if (_subStep == 0) return;
         writer.Int("flightSubStep", _subStep);
         writer.Fixed("stepX", _stepX);
@@ -396,6 +453,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _roll = reader.Fixed("roll");
         _bounce = reader.Bool("bounce");
         _wasAirborne = reader.Bool("wasAirborne");
+        _stunned = reader.Bool("stunned");
         if (!reader.Has("flightSubStep")) return;
         _subStep = checked((int)reader.Int("flightSubStep"));
         _stepX = reader.Fixed("stepX");
@@ -406,6 +464,8 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     public override void Describe(IStateWriter writer)
     {
         writer.Int("nextWake", _nextWake);
+        if (_flailing) writer.Bool("flailing", true);
+        if (_stunnedPose) writer.Bool("stunnedPose", true);
         if (_flying) DescribeFlight(writer);
         if (!_falling) return;
         writer.Bool("falling", true);
@@ -423,6 +483,8 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _velocityY = _falling ? reader.Fixed("velocityY") : Fixed.Zero;
         _velocityZ = _falling ? reader.Fixed("velocityZ") : Fixed.Zero;
         _subStep = _falling && reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;
+        _flailing = reader.Has("flailing");
+        _stunnedPose = reader.Has("stunnedPose");
         LoadFlight(reader);
         Entity.InPhysicsFlight = _flying;
     }
