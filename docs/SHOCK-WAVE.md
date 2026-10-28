@@ -70,6 +70,8 @@ happen in the tick of the damage, in victim order, as the original's.
 - **Where it hooks in:** `SimulationWorld.DealDamageCore`, after each victim's `Damage`, in victim order (the three random draws there); the vector from the source's
   position (the frame end above 30 Hz, as the victim's) to the victim's; a source that is gone gives the original's zero vector, i.e. straight up.
 - `GroundStiffness` is 0.8 in the shipped `GameData.ini`.
+- **What step 2 must read first** (none is read by the port today): the locomotor's `StickToGround` (`LocomotorInfo`), `GameData`'s `GroundStiffness`, and the original's
+  `Object::isAirborneTarget` (an aircraft in the air is not shocked) as a query of the world.
 
 ## 4. Not determined
 
