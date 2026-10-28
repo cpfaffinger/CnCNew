@@ -68,9 +68,9 @@ static partial class Tests
         End
         """;
 
-    private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) GuardWorld(SimulationRate rate, bool computer = false)
+    private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture) GuardWorld(SimulationRate rate, bool computer = false, CnCNew.Simulation.Rules.RuleProfile? rules = null)
     {
-        var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(GuardIni));
+        var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(GuardIni), rules: rules ?? CnCNew.Simulation.Rules.RuleProfile.Original);
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, computer ? ComputerAgainstHuman : CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         return (world, new Feeder(world), fixture);
     }
@@ -234,5 +234,33 @@ static partial class Tests
         Check.That(Moved(human: true, busy: false) > Fixed.FromInt(30), "A human player's idle rifleman drives at the sniper that shot its friend.");
         Check.That(Moved(human: false, busy: false) < Fixed.FromInt(5), "A computer player's rifleman does not.");
         Check.That(Moved(human: true, busy: true) < Fixed.FromInt(5), "A rifleman that is walking does not join.");
+    }
+
+    /// <summary>
+    /// The rule fix <c>guard-answers-only-when-idle</c> (the community source; Reforged's R-35): a guard (flying units only, so its own scans pass a ground sniper by) walks back to its post
+    /// 200 away and is shot by a sniper on the way. Under the original rules RETURN answers at once and turns to the sniper; with the fix it walks on to its post and answers there.
+    /// At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void GameFixGuardAnswersOnlyWhenIdle()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            Fixed FromPost(CnCNew.Simulation.Rules.RuleProfile rules)
+            {
+                var (world, feeder, _) = GuardWorld(rate, rules: rules);
+                var guardian = GdSpawn(world, feeder, "FcRifleman", 1, 200, 0);
+                var sniper = GdSpawn(world, feeder, "GdSniper", 2, 100, 150);
+                feeder.Guard(1, [guardian.Id.Value], 0, 0, mode: GuardMode.FlyingUnitsOnly);
+                for (var step = 0; step < world.Frames(30); step++) world.Step();
+                feeder.FireWeapon(2, sniper.Id.Value, guardian.Id.Value);
+                for (var step = 0; step < world.Frames(150); step++) world.Step();
+                return GdDistance(guardian, 0, 0);
+            }
+
+            var original = FromPost(CnCNew.Simulation.Rules.RuleProfile.Original);
+            var fixedRun = FromPost(CnCNew.Simulation.Rules.RuleProfile.Parse("guard-answers-only-when-idle"));
+            Check.That(original > Fixed.FromInt(60), $"{rate}: under the original rules the returning guard turns to the sniper ({original} from its post).");
+            Check.That(fixedRun < Fixed.FromInt(40), $"{rate}: with the fix it walks on towards its post ({fixedRun} from it).");
+        }
     }
 }

@@ -70,6 +70,9 @@ public enum GameFix
 
     /// <summary>An attacker whose current weapon is a contact weapon is never view-blocked, so a suicide unit touching a building sets its charge off (<c>Pathfinder::isAttackViewBlockedByObstacle</c>).</summary>
     ContactWeaponNotViewBlocked = 20,
+
+    /// <summary>A guard answers an attacker only in its IDLE state, not while it attacks (INNER) or walks back to its post (RETURN); the retaliation likewise not in RETURN (<c>AIGuardMachine</c>, <c>AIGuardRetaliateMachine</c>).</summary>
+    GuardAnswersOnlyWhenIdle = 21,
 }
 
 /// <summary>
@@ -171,6 +174,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.ContactWeaponNotViewBlocked, "contact-weapon-not-view-blocked",
             "Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp, Pathfinder::isAttackViewBlockedByObstacle",
             "an attacker whose current weapon is a contact weapon - a suicide bomber - is never view-blocked, so it can set its charge off at a building it touches though another structure's cells lie in the line"),
+        new(GameFix.GuardAnswersOnlyWhenIdle, "guard-answers-only-when-idle",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIGuard.cpp, AIGuardMachine::AIGuardMachine; AIGuardRetaliate.cpp, AIGuardRetaliateMachine::AIGuardRetaliateMachine",
+            "a guarding unit that is shot while it fights or walks back to its post goes on with that and answers the attacker once it stands idle at its post, instead of turning to the attacker at once - no more alternating between returning and shooting back"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

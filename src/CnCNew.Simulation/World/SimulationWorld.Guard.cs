@@ -283,8 +283,8 @@ public sealed partial class SimulationWorld
         {
             case GuardPhase.Inner or GuardPhase.Outer or GuardPhase.Aggressor:
             {
-                // INNER's condition (the guard's, not the retaliation's): an attacker in reach is answered first.
-                if (guard.Phase == GuardPhase.Inner && !guard.Retaliate && AttackedAndCanAnswer(entity, guard))
+                // INNER's condition (the guard's, not the retaliation's): an attacker in reach is answered first - not with the rule fix guard-answers-only-when-idle.
+                if (guard.Phase == GuardPhase.Inner && !guard.Retaliate && !_templates.Rules.Has(Rules.GameFix.GuardAnswersOnlyWhenIdle) && AttackedAndCanAnswer(entity, guard))
                 {
                     EndGuardAttack(entity, ai);
                     EnterGuardAggressor(entity, ai, guard, tick);
@@ -299,7 +299,8 @@ public sealed partial class SimulationWorld
                 return;
             }
             case GuardPhase.Return:
-                if (AttackedAndCanAnswer(entity, guard))
+                // RETURN's condition, which the rule fix guard-answers-only-when-idle removes (the attack is then answered in IDLE, its record not read before).
+                if (!_templates.Rules.Has(Rules.GameFix.GuardAnswersOnlyWhenIdle) && AttackedAndCanAnswer(entity, guard))
                 {
                     if (state is { Chasing: true } || entity.HasMoveTarget) ai.StopInternalMoveAtFrameEnd(this);
                     EnterGuardAggressor(entity, ai, guard, tick);
