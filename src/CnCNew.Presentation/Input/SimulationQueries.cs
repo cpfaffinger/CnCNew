@@ -64,7 +64,7 @@ public static class SimulationQueries
     public static bool CanFireAt(SimulationWorld world, Entity source, Entity target, FireOrigin origin = FireOrigin.Player)
     {
         if (target.DestroyRequested || target.Body is null) return false;
-        return world.ChooseWeapon(source, target, origin).CanFire && world.CanPlayerSee(source.Owner, target);
+        return world.ChooseWeaponInView(source, target, origin).CanFire && world.CanPlayerSee(source.Owner, target);
     }
 
     public static bool InRange(SimulationWorld world, Entity source, Entity target)
@@ -72,7 +72,8 @@ public static class SimulationQueries
         var reach = WeaponRange(world, source);
         var dx = target.X - source.X;
         var dy = target.Y - source.Y;
-        return reach > Fixed.Zero && SquaredReach.Of(reach).Contains(dx * dx + dy * dy);
+        // A unit that cannot see its victim from here is not in range: it keeps approaching (outOfWeaponRangeObject, F-55).
+        return reach > Fixed.Zero && SquaredReach.Of(reach).Contains(dx * dx + dy * dy) && !world.AttackViewBlocksFiring(source, target);
     }
 
     /// <summary><c>SimulationWorld.CanBuildTemplate</c>: a buildable structure of the builder's side (<c>Player::canBuild</c>).</summary>

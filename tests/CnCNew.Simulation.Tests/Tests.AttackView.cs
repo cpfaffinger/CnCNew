@@ -1,9 +1,13 @@
+using CnCNew.Simulation.Commands;
+using CnCNew.Simulation.Events;
+using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
+using CnCNew.Simulation.World;
 
 // F-55: the attack's view test. Step (a): the terrain line of BaseHeightMapRenderObjClass::isClearLineOfSight; step (b): the obstacle walk of
-// Pathfinder::isAttackViewBlockedByObstacle over the pathfind cells.
+// Pathfinder::isAttackViewBlockedByObstacle over the pathfind cells; step (c): outOfWeaponRangeObject counts a blocked view as out of range.
 static partial class Tests
 {
     public static void TerrainLineOfSightFollowsTheOriginal()
@@ -35,6 +39,7 @@ static partial class Tests
         ["Data/INI/Object/AttackViewFixture.ini"] = """
         Object ViewWall
           KindOf = STRUCTURE
+          GeometryIsSmall = No
           Geometry = CYLINDER
           GeometryMajorRadius = 15.0
           GeometryHeight = 20.0
@@ -46,6 +51,7 @@ static partial class Tests
 
         Object ViewFence
           KindOf = STRUCTURE CAN_SEE_THROUGH_STRUCTURE
+          GeometryIsSmall = No
           Geometry = CYLINDER
           GeometryMajorRadius = 15.0
           GeometryHeight = 5.0
@@ -102,5 +108,64 @@ static partial class Tests
         ab.RemoveFootprint(9, wall!, F(60), F(55), Fixed.Zero);
         ab.AddFootprint(9, wall!, F(60), F(55), Fixed.Zero);
         Check.That(Blocked(ab, 95, 55) && !ab.IsAttackLineBlocked(F(45), F(55), F(65), F(55), []), "Removed and added again, the grid answers as before.");
+    }
+
+    private static IReadOnlyDictionary<string, string> AttackGateFiles() => new Dictionary<string, string>(AcquisitionFiles())
+    {
+        ["Data/INI/Object/AttackViewFixture.ini"] = AttackViewFiles()["Data/INI/Object/AttackViewFixture.ini"],
+        ["Data/INI/Object/AttackGateFixture.ini"] = """
+        Object LosSoldier
+          KindOf = SELECTABLE INFANTRY ATTACK_NEEDS_LINE_OF_SIGHT
+          VisionRange = 150.0
+          Locomotor = SET_NORMAL ChaseLoco
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY AcqGun
+          End
+          Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
+            MoodAttackCheckRate = 250
+          End
+        End
+        """,
+    };
+
+    /// <summary>A world on a flat map of 300 x 300 with the objects; returns the shots the first object fired over three seconds and the answer to an attack order it was given after the first frames.</summary>
+    private static (int Shots, SubmitResult Order) AttackGateScene(string attacker, string? between)
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: AttackGateFiles());
+        var terrain = TerrainMap.Build(SyntheticMaps.Build(30, 30, 1), "attack-gate");
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, attacker, owner: 1, x: 50, y: 150);
+        feeder.Spawn(2, "AcqMute", owner: 2, x: 130, y: 150);
+        if (between is not null) feeder.Spawn(2, between, owner: 2, x: 90, y: 150);
+        // The order is given once the first vision pass has seen the victim.
+        for (var step = 0; step < world.Frames(3); step++) world.Step();
+        var shooter = world.Entities.First(value => value.Template.Name == attacker);
+        var victim = world.Entities.First(value => value.Template.Name == "AcqMute");
+        var order = feeder.FireWeapon(1, shooter.Id.Value, victim.Id.Value);
+        var shots = 0;
+        for (var step = 0; step < world.Frames(90); step++)
+            foreach (var value in world.Step().Events)
+                if (value.Kind == SimEventKind.WeaponFired && value.Entity == shooter.Id) shots++;
+        return (shots, order);
+    }
+
+    public static void AttackNeedsAClearView()
+    {
+        var blocked = AttackGateScene("LosSoldier", "ViewWall");
+        Check.That(blocked.Shots == 0, $"A unit that needs a line of sight does not fire through a structure ({blocked.Shots} shots).");
+        Check.That(!blocked.Order.Accepted && blocked.Order.Reason == CommandRejection.OutOfRange, $"An order to fire through it is out of range ({blocked.Order}).");
+        var open = AttackGateScene("LosSoldier", null);
+        Check.That(open.Shots > 0 && open.Order.Accepted, $"Without the structure it fires ({open.Shots} shots).");
+        var fence = AttackGateScene("LosSoldier", "ViewFence");
+        Check.That(fence.Shots > 0, $"Through a structure one can see through it fires ({fence.Shots} shots).");
+        var blind = AttackGateScene("AcqSoldier", "ViewWall");
+        Check.That(blind.Shots > 0 && blind.Order.Accepted, $"A unit without the kind fires through the structure ({blind.Shots} shots).");
     }
 }

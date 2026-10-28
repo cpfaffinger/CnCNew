@@ -524,7 +524,8 @@ public sealed partial class SimulationWorld
             var weapon = _templates.Weapons[set.Weapons[slot]];
             if (!CanTarget(source, weapon, victim, victimMask)) continue;
             can = true;
-            if (WithinWeaponRange(source, weapon, victim)) inRange = true;
+            // outOfWeaponRangeObject: a blocked view counts as out of range (F-55).
+            if (WithinWeaponRange(source, weapon, victim) && !AttackViewBlocks(source, weapon, victim)) inRange = true;
         }
 
         return can;
