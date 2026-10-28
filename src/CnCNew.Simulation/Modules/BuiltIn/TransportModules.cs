@@ -87,7 +87,10 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     public override void OrderEvacuate(IWorldServices world, bool move, Fixed x, Fixed y, bool thenExit = false)
     {
         base.OrderEvacuate(world, move, x, y, thenExit);
-        _dropAll = move;
+        // The rule fix chinook-unloads-one-by-one: the standard way unless somebody already wants in or out - and never for the _AND_EXIT form, which the standard way would
+        // fly home with its riders aboard (the correction Zero Hour Reforged made to the community fix).
+        _dropAll = move && (!world.Templates.Rules.Has(Rules.GameFix.ChinookUnloadsOneByOne) || thenExit
+                            || Entity.Container is TransportContain { HasRidersWaitingToExit: true } || HasBoarders(world));
     }
 
     /// <summary>

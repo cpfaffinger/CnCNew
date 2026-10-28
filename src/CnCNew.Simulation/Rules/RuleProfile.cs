@@ -82,6 +82,9 @@ public enum GameFix
 
     /// <summary>A jet about to take off waits only for the first jet it found taxiing on another runway, not for every jet that taxis later (<c>JetPauseBeforeTakeoffState::update</c>).</summary>
     TakeoffWaitsForOneJet = 24,
+
+    /// <summary>A Chinook told to unload at a place lets its riders out through the door one after the other, not all in one frame (<c>ChinookAIUpdate::aiDoCommand</c>).</summary>
+    ChinookUnloadsOneByOne = 25,
 }
 
 /// <summary>
@@ -195,6 +198,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.TakeoffWaitsForOneJet, "takeoff-waits-for-one-jet",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp, JetPauseBeforeTakeoffState::update, findJetToWaitFor",
             "a jet at the start of its runway waits for the one jet it saw taxiing on the other runway, not again for each jet that starts to taxi behind it - the airfield no longer holds every jet back while one taxis"),
+        new(GameFix.ChinookUnloadsOneByOne, "chinook-unloads-one-by-one",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp, ChinookAIUpdate::aiDoCommand",
+            "a Chinook ordered to unload at a place lands and lets its riders out through the door one after the other, as a bare evacuation does, instead of dropping all of them in one frame; a reinforcement Chinook that leaves the map afterwards still drops them at once"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

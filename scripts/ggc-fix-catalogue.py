@@ -113,7 +113,7 @@ REVIEW_BY_LINE = {
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1294': 'not applicable - as above',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1326': 'equivalent - entering oneself is refused in the pre-check (SimulationWorld.cs, CheckMoveAndEnter)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1330': 'equivalent - an enter order the container cannot take is refused in the pre-check',
-    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1345': 'equivalent - the port lands the Chinook and lets riders out one by one through the door',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/ChinookAIUpdate.cpp:1345': 'adopted - GameFix.ChinookUnloadsOneByOne (after the fidelity correction F-62, Phase 41; not for the _AND_EXIT form, after Zero Hour Reforged)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/DeployStyleAIUpdate.cpp:146': 'equivalent - deploying starts only from a fire attempt that passed the range check',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/DozerAIUpdate.cpp:2358': 'equivalent - a builder keeps its task over a disable in the port',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/HackInternetAIUpdate.cpp:132': 'not applicable - the port has no hack command for a unit that is already hacking',

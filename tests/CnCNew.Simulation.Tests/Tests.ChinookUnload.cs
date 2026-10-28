@@ -86,4 +86,54 @@ static partial class Tests
             Check.That(chinook.Z == Fixed.FromInt(100), $"{rate}: with nobody at the door, the Chinook takes off again.");
         }
     }
+
+    /// <summary>
+    /// Rule fix chinook-unloads-one-by-one: an unload at a place lets the three riders out through the door three frames apart instead of in one step; the exit form of a
+    /// reinforcement (<c>AICMD_MOVE_TO_POSITION_AND_EVACUATE_AND_EXIT</c>) still drops them at once. Under both profiles at 30, 60 and 120 Hz.
+    /// </summary>
+    public static void GameFixChinookUnloadsOneByOne()
+    {
+        var files = TransportFiles().ToDictionary(pair => pair.Key, pair => pair.Value.Replace("Slots = 4\n", "Slots = 4\n    ExitDelay = 100\n"));
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            long[] Unload(CnCNew.Simulation.Rules.RuleProfile rules, bool thenExit)
+            {
+                var fixture = new SyntheticFixture(rate, files: files, rules: rules);
+                var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 11, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+                var feeder = new Feeder(world);
+                feeder.Spawn(1, "Rotorcraft", x: 150, y: 150);
+                for (var tick = 0; tick < world.Frames(25); tick++) world.Step();
+                var chinook = Get(world, "Rotorcraft");
+                for (var i = 0; i < 3; i++) feeder.Spawn(1, "Grunt", x: 120, y: 130 + 20 * i);
+                world.Step();
+                var grunts = world.Entities.Where(value => value.Template.Name == "Grunt").OrderBy(value => value.Id.Value).ToArray();
+                foreach (var grunt in grunts) feeder.MoveAndEnter(1, grunt.Id.Value, chinook.Id.Value);
+                for (var tick = 0; tick < world.Frames(300) && !grunts.All(grunt => grunt.ContainedBy == chinook.Id); tick++) world.Step();
+                for (var tick = 0; tick < world.Frames(40) && chinook.Z != Fixed.FromInt(100); tick++) world.Step();
+                Check.That(grunts.All(grunt => grunt.ContainedBy == chinook.Id) && chinook.Z == Fixed.FromInt(100), $"{rate}: setup - three aboard, the Chinook at its height.");
+                while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+                if (thenExit) chinook.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.AIUpdateInterface>().First().OrderEvacuate(world, true, Fixed.FromInt(300), Fixed.FromInt(150), thenExit: true);
+                else Check.That(feeder.Evacuate(1, chinook.Id.Value, x: 300, y: 150).Accepted, $"{rate}: an unload at (300, 150) is ordered.");
+                var left = new long[grunts.Length];
+                for (var tick = 0; tick < world.Frames(400) && grunts.Any(grunt => grunt.ContainedBy.IsValid); tick++)
+                {
+                    world.Step();
+                    for (var i = 0; i < grunts.Length; i++)
+                        if (left[i] == 0 && !grunts[i].ContainedBy.IsValid) left[i] = world.Tick;
+                }
+                Check.That(left.All(value => value > 0), $"{rate}: all three got out ({string.Join(", ", left)}).");
+                return left.Order().ToArray();
+            }
+
+            var fix = CnCNew.Simulation.Rules.RuleProfile.Parse("chinook-unloads-one-by-one");
+            var original = Unload(CnCNew.Simulation.Rules.RuleProfile.Original, false);
+            var fixedRun = Unload(fix, false);
+            var exitForm = Unload(fix, true);
+            Check.That(original.Distinct().Count() == 1, $"{rate}: under the original rules all three are out in one step ({string.Join(", ", original)}).");
+            Check.That(fixedRun[1] - fixedRun[0] == ThreeFrames(rate) && fixedRun[2] - fixedRun[1] == ThreeFrames(rate), $"{rate}: with the fix they leave three frames apart ({string.Join(", ", fixedRun)}).");
+            Check.That(exitForm.Distinct().Count() == 1, $"{rate}: with the fix a reinforcement that leaves the map still drops them at once ({string.Join(", ", exitForm)}).");
+        }
+
+        static long ThreeFrames(SimulationRate rate) => 3L * rate.TicksPerOriginalFrame;
+    }
 }
