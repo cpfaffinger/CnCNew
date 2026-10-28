@@ -119,13 +119,14 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         var oldDamageState = DamageState;
         InternalChangeHealth(world, -amount);
         RecordDamage(world, info);
-        var actualDamageDealt = PreviousHealth - Health;
+        var actualDamageClipped = PreviousHealth - Health;
         if (Health < PreviousHealth)
         {
-            world.Emit(SimEventKind.EntityDamaged, Entity.Id, info.Source, string.Empty, actualDamageDealt.Raw);
+            world.Emit(SimEventKind.EntityDamaged, Entity.Id, info.Source, string.Empty, actualDamageClipped.Raw);
             // ActiveBody.cpp attemptDamage: "if health went down, run the damage module callback" — before the
-            // fear-sound and death checks below, so it runs even on a killing blow.
-            foreach (var module in Entity.DamageModules) module.OnDamage(world, info, actualDamageDealt);
+            // fear-sound and death checks below, so it runs even on a killing blow. The modules read out.m_actualDamageDealt: the amount after the armour and the
+            // damage scalar, before the health clips it (a killing blow deals more than the health it takes).
+            foreach (var module in Entity.DamageModules) module.OnDamage(world, info, amount);
         }
         if (DamageState != oldDamageState)
             foreach (var module in Entity.DamageModules) module.OnBodyDamageStateChange(world, info, oldDamageState, DamageState);

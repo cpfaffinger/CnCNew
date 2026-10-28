@@ -18,6 +18,14 @@ static partial class Tests
           DamageType = EXPLOSION
         End
 
+        Weapon ArmourPulse
+          PrimaryDamage = 10
+          PrimaryDamageRadius = 30.0
+          AttackRange = 10.0
+          DamageType = EXPLOSION
+          RadiusDamageAffects = ENEMIES
+        End
+
         Armor ArmourWeak
           Armor = Default 200%
         End
@@ -59,6 +67,25 @@ static partial class Tests
             InitialHealth = 100.0
           End
           Behavior = DestroyDie Destroy01
+          End
+        End
+
+        Object ArmourTrap
+          KindOf = SELECTABLE STRUCTURE
+          Body = ActiveBody Body01
+            MaxHealth = 20.0
+            InitialHealth = 20.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = FireWeaponWhenDamagedBehavior Trap01
+            StartsActive = Yes
+            ReactionWeaponPristine = ArmourPulse
+            ReactionWeaponDamaged = ArmourPulse
+            ReactionWeaponReallyDamaged = ArmourPulse
+            ReactionWeaponRubble = ArmourPulse
+            DamageTypes = NONE +EXPLOSION
+            DamageAmount = 30.0
           End
         End
 
@@ -123,5 +150,17 @@ static partial class Tests
             world.Step();
             Check.That(tank.Body.Health == Fixed.FromInt(90), $"Half armour heals half of 20 ({tank.Body.Health}).");
         }
+    }
+
+    public static void DamageModulesReadTheUnclippedAmount()
+    {
+        // ActiveBody::attemptDamage: out.m_actualDamageDealt is the amount before the health clips it. A blow of 50 at a trap with 20 left reaches its threshold of 30,
+        // so the trap fires its reaction weapon as it dies; the clipped 20 would not.
+        var (world, feeder) = ArmourWorld();
+        var trap = ArmourSpawn(world, feeder, "ArmourTrap", 1, 100);
+        var neighbour = ArmourSpawn(world, feeder, "ArmourShooter", 2, 110);
+        feeder.Damage(trap.Id.Value, 50m);
+        for (var step = 0; step < world.Frames(3); step++) world.Step();
+        Check.That(neighbour.Body!.Health < Fixed.FromInt(100), $"The dying trap's reaction weapon hurt its neighbour ({neighbour.Body.Health}).");
     }
 }
