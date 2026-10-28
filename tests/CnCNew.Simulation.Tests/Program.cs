@@ -246,6 +246,7 @@ run.Test("Phase 41 (F-58, step 1): a guard gives up beyond its outer range; the 
 run.Test("Phase 41 (F-58, step 1): a guard answers an attacker beyond its inner range", Tests.GuardAnswersAnAttacker);
 run.Test("Phase 41 (F-58, step 6): a human player's idle units answer an attack on a friend nearby", Tests.GuardRetaliation);
 run.Test("Rule fix guard-answers-only-when-idle: a returning guard walks on to its post before it answers", Tests.GameFixGuardAnswersOnlyWhenIdle);
+run.Test("Phase 42 (F-58, step 7): a deploying unit on guard sets up at its post and packs before it chases", Tests.GuardDeployStyleDeploysAndPacks);
 run.Test("Phase 41 (F-58, step 4): the script guard actions guard a waypoint, an own position, an object", Tests.ScriptGuardActions);
 run.Test("Phase 41 (F-58, step 3): a team guards a trigger area - inside the polygon, out to its radius", Tests.ScriptGuardArea);
 run.Test("Phase 41 (F-54, step 2): a container counts its riders of kind STEALTH_GARRISON", Tests.StealthGarrisonCount);

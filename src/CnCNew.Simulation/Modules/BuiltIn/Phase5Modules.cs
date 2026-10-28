@@ -708,6 +708,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>The locomotor set the object moves with right now (a jet picks its taxi, attack or return set).</summary>
     protected virtual LocomotorInfo? SelectedLocomotor => Entity.Template.Locomotor;
 
+    /// <summary>The object keeps its move but does not move this tick (<c>setLocomotorGoalNone</c> while a deploying unit packs or unpacks): the move goes on afterwards.</summary>
+    protected virtual bool HoldsMovement => false;
+
     /// <summary>The constants the object moves with: <see cref="SelectedLocomotor"/>, in its damaged form once the body is as damaged as <c>MovementPenaltyDamageState</c> (<c>Locomotor::getMaxSpeedForCondition</c> and its siblings).</summary>
     protected LocomotorInfo? ActiveLocomotor => SelectedLocomotor?.ForCondition(Entity.Body is ActiveBody body ? body.DamageState : BodyDamageStates.Pristine);
 
@@ -1281,7 +1284,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (_dock is not null && (_dock.Active || world.Time.IsOriginalFrameBoundary(world.Tick)) && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
         if (_task != BuilderTask.None) UpdateTask(world);
         // A shocked object in flight is moved by its physics (F-63): the movement keeps its order and goes on once the object rests on the ground again.
-        if (Entity.InPhysicsFlight)
+        if (Entity.InPhysicsFlight || HoldsMovement)
         {
             Entity.Speed = Fixed.Zero;
             ClearFrameSpeed();

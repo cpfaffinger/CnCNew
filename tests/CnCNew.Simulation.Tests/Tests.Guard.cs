@@ -52,6 +52,24 @@ static partial class Tests
           ClipSize = 0
           DelayBetweenShots = 300
         End
+        Object GdCannon
+          KindOf = SELECTABLE VEHICLE CAN_ATTACK
+          VisionRange = 150.0
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcRifle
+          End
+          Behavior = DeployStyleAIUpdate AI01
+            AutoAcquireEnemiesWhenIdle = Yes
+            PackTime = 500
+            UnpackTime = 500
+          End
+        End
         Object GdSniper
           KindOf = SELECTABLE INFANTRY
           VisionRange = 200.0
@@ -262,6 +280,41 @@ static partial class Tests
             var fixedRun = FromPost(CnCNew.Simulation.Rules.RuleProfile.Parse("guard-answers-only-when-idle"));
             Check.That(original > Fixed.FromInt(60), $"{rate}: under the original rules the returning guard turns to the sniper ({original} from its post).");
             Check.That(fixedRun < Fixed.FromInt(40), $"{rate}: with the fix it walks on towards its post ({fixedRun} from it).");
+        }
+    }
+
+    /// <summary>
+    /// F-58 step 7, <c>DeployStyleAIUpdate::update</c>: a deploying unit on guard sets itself up at its post while it is idle there ("idle guarders deploy for fastest response");
+    /// when the guard then chases an enemy beyond its weapon it packs first and only then drives (the guard's move waits, it is not lost), and deploys again to fire. At 30, 60
+    /// and 120 Hz.
+    /// </summary>
+    public static void GuardDeployStyleDeploysAndPacks()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder, _) = GuardWorld(rate);
+            var cannon = GdSpawn(world, feeder, "GdCannon", 1, 0, 0);
+            var deploy = cannon.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.DeployStyleAIUpdate>().Single();
+            Check.That(feeder.Guard(1, [cannon.Id.Value], 0, 0).Accepted, $"{rate}: the guard order is accepted.");
+            for (var step = 0; step < world.Frames(60); step++) world.Step();
+            Check.That(deploy.IsDeployed, $"{rate}: idle at its post, the guard has set itself up.");
+            var dummy = GdSpawn(world, feeder, "GdDummy", 2, 200, 0);
+            var (lastX, lastY) = (cannon.X, cannon.Y);
+            var moved = false;
+            for (var step = 0; step < world.Frames(900) && !dummy.EffectivelyDead && world.Entities.Contains(dummy); step++)
+            {
+                // Packed when the tick began (its move runs before it decides to set up for an attack in reach) or when it ended (a pack that finishes in the tick lets it drive in it).
+                var packed = deploy.IsPacked;
+                world.Step();
+                packed |= deploy.IsPacked;
+                if (cannon.X != lastX || cannon.Y != lastY)
+                {
+                    moved = true;
+                    Check.That(packed, $"{rate}: it drives only when packed (tick {world.Tick}).");
+                }
+                (lastX, lastY) = (cannon.X, cannon.Y);
+            }
+            Check.That(moved && (dummy.EffectivelyDead || !world.Entities.Contains(dummy)), $"{rate}: it drove after the enemy and killed it (moved {moved}).");
         }
     }
 }

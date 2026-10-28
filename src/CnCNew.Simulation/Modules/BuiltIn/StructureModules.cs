@@ -456,8 +456,26 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
             _hasPendingMove = false;
             base.OrderMove(world, _pendingX, _pendingY, _pendingFromPlayer);
         }
-        // DEPLOY / UNDEPLOY / ALIGNING_TURRETS: setLocomotorGoalNone() every tick — the unit does not move while it sets up, packs or centres its turret.
-        if (_state is DeployState.Deploy or DeployState.Undeploy or DeployState.AligningTurrets) StopInternalMove();
+        // DeployStyleAIUpdate::update: "idle guarders deploy for fastest response against attackers" (isInGuardIdleState, as a victim in range does); otherwise a unit that tries
+        // to move - here an internal move of its guard or its own attack, an order goes through OrderMove - packs first (isTryingToMove), and the move waits (F-58, step 7).
+        if (Entity.Guard is { Phase: GuardPhase.Idle } && !Entity.HasMoveTarget)
+        {
+            switch (_state)
+            {
+                case DeployState.ReadyToMove: SetState(world, DeployState.Deploy, false); break;
+                case DeployState.Undeploy when _frameToWait != 0: SetState(world, DeployState.Deploy, true); break;
+                case DeployState.AligningTurrets: SetState(world, DeployState.ReadyToAttack, false); break;
+            }
+        }
+        else if (Entity.HasMoveTarget && !_hasPendingMove)
+        {
+            switch (_state)
+            {
+                case DeployState.ReadyToAttack: SetState(world, data.TurretsMustCenterBeforePacking && HasTurretForCurrentWeapon() ? DeployState.AligningTurrets : DeployState.Undeploy, false); break;
+                case DeployState.Deploy when _frameToWait != 0: SetState(world, DeployState.Undeploy, true); break;
+                case DeployState.AligningTurrets when world.Time.BeginsFrameOf(Entity, now) && world.IsTurretInNaturalPosition(Entity): SetState(world, DeployState.Undeploy, false); break;
+            }
+        }
         if (_commandsFrom != 0)
         {
             if (now >= _commandsFrom) _commandsFrom = 0;
@@ -465,8 +483,13 @@ public sealed class DeployStyleAIUpdate(DeployStyleData data) : AIUpdateInterfac
         }
         var sleep = base.Update(world);
         // The reference never sleeps this AI so that any new command is caught; here a running timer or a waiting move keeps it awake (and the frame the unit became ready in).
-        return _state is DeployState.Deploy or DeployState.Undeploy or DeployState.AligningTurrets || _hasPendingMove || _commandsFrom != 0 ? SimulationTiming.SleepNone : sleep;
+        // ... and while it guards, whose IDLE it must see (F-58, step 7).
+        return _state is DeployState.Deploy or DeployState.Undeploy or DeployState.AligningTurrets || _hasPendingMove || _commandsFrom != 0 || Entity.Guard is not null
+            ? SimulationTiming.SleepNone : sleep;
     }
+
+    /// <summary>DEPLOY, UNDEPLOY, ALIGNING_TURRETS: <c>setLocomotorGoalNone()</c> every frame - the unit does not move while it sets up, packs or centres its turret, and keeps its move.</summary>
+    protected override bool HoldsMovement => _state is DeployState.Deploy or DeployState.Undeploy or DeployState.AligningTurrets;
 
     /// <summary><c>getWhichTurretForCurWeapon() != TURRET_INVALID</c>.</summary>
     private bool HasTurretForCurrentWeapon()
