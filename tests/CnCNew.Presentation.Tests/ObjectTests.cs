@@ -487,7 +487,8 @@ static partial class ObjectTests
         var catalog = ObjectVisualCatalog.Build(fixture.Graph);
         var world = NewWorld(fixture);
         var rover = Spawn(world, "Rover", 1, 10, 10);
-        var target = Spawn(world, "Rover", 2, 50, 10);
+        // A target that cannot shoot back: since F-58 a human player's idle unit that is hit answers, and the shooter answers that in turn (the player's retaliation).
+        var target = Spawn(world, "Bunker", 2, 50, 10);
         var entity = world.FindEntity(rover)!;
         var visual = catalog["Rover"];
         ModelConditionSet Conditions(ConditionContext context = default) => ConditionDeriver.Derive(entity, world, visual, context);
