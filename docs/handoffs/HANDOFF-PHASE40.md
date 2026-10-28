@@ -1,5 +1,5 @@
 > **Stage:** 3 – Changes · **Milestone:** S3-M7 Bug-fix and balance layers (a second source: Zero Hour Reforged) · **Phase:** 40
-> **Status:** next (starting state: the end of Phase 39, see below)
+> **Status:** done by machine (28 October 2026); the rest is in HANDOFF-PHASE41.md
 > **Predecessor:** HANDOFF-PHASE39.md · **Results in:** docs/REFORGED-FIXES.md, docs/GGC-FIXES.md (the rule profile), docs/SIMULATION-CORE.md, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** the retail reference match's driver seed (it ends in a stalemate since F-44), F-48 to F-58 (found in the first reading), the Phase 39 leftovers named below
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -72,3 +72,7 @@ manifest commit; the checks the changes can reach green.
 - Next: F-56 needs the original's disable model first - the central rule of `GameLogic::update` (a disabled object runs only the modules that process its disable), the
   expiry after the last frame, the turret and the paralysis, riders held by their containers - then F-16 (brown-out), F-56, F-50; then F-48, F-54, F-55, F-58 and the open
   R-items.
+- The disable model (§54.6 to §54.9): the central rule (`a1e8115`), the last frame, the turret, the paralysis, riders held. Then F-16 (§54.10,
+  §54.11), F-56 (§54.12), the pause of the special powers (§54.13), F-50 (§54.14), F-48 and the dealt amount (§54.15, §54.16), F-59 (§54.17) - each with its test at 30, 60
+  and 120 Hz and its manifest commit where a field moved; the reference match's seed `5EED0001` (§54.18).
+- Not built here, carried into `HANDOFF-PHASE41.md`: F-54, F-55, F-58 and the Reforged candidates R-03, R-24, R-27, R-34 (rest); F-55 was built at once (§55.1).

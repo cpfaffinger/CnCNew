@@ -39,6 +39,10 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 | [THIRD-PARTY.md](THIRD-PARTY.md) | Phase 30, generated: every NuGet package of every project with its declared licence and the programs that carry it |
 | [ACCEPTANCE-MACHINE.md](ACCEPTANCE-MACHINE.md) | Phase 30: the 85 acceptance items, each with the check that proves what a program can, and what only a human can judge; the named limits |
 | [GGC-FIXES.md](GGC-FIXES.md) | Phase 30: the fixes of GeneralsGameCode - catalogue, the rule profile, the adopted and rejected fixes, the work list |
+| [ATTACK-LINE-OF-SIGHT.md](ATTACK-LINE-OF-SIGHT.md) | Phase 41: F-55 - when the original lets a unit fire only with a clear view, the steps of the fix |
+| [STEALTH-GARRISON.md](STEALTH-GARRISON.md) | Phase 41: F-54 and what it rests on (F-60, F-61) - the stealth garrison, the garrison's owner |
+| [FIRE-FROM-CONTAINERS.md](FIRE-FROM-CONTAINERS.md) | Phase 41: F-60 - which containers let their riders fire, from where, the steps of the fix |
+| [GUARD-STATE.md](GUARD-STATE.md) | Phase 41: F-58 - guarding as an AI state of the original, the steps of the fix |
 | [REFORGED-FIXES.md](REFORGED-FIXES.md) | Phase 39/40: Zero Hour Reforged as a second source of fixes - what a change of it can be for this port (kinds A to E), the work list R-01 to R-38 |
 | [GGC-FIXES-CATALOGUE.md](GGC-FIXES-CATALOGUE.md) | Phase 30, generated: every `@bugfix`/`@fix` of Zero Hour and the shared code by subsystem, CRC-gated or not, and its review |
 | [PATCH-LAYER.md](PATCH-LAYER.md) | Phase 30: GeneralsGamePatch as a layer of the import - how it is built, what was measured, why it does not compile yet |

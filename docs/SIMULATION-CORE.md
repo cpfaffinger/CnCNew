@@ -3592,3 +3592,169 @@ transport's AI must let it out (`getAiFreeToExit`: a Chinook only when landed - 
 transport on an airborne locomotor may always put riders out, otherwise the rider needs an AI with a locomotor whose surfaces fit the pathfinding cell under the transport
 (`Pathfinder::validMovementTerrain`: an obstacle cell counts as fitting). The port destroyed only a payload plane's riders. `DestroyRidersWhoAreNotFreeToExit` is read now (23
 shipped blocks). Test `RidersNotFreeToExitDieWithTheirTransport`. Input manifest `6a6a398` (the new key); the reference manifest is unchanged.
+
+### 54.6 The central disable rule (`GameLogic::update`, `UpdateModule::getDisabledTypesToProcess`)
+
+A disabled object runs only the update modules whose `getDisabledTypesToProcess` shares a type with its disabled mask; a skipped module asks again the next tick. The port
+ran every module and had a few check an EMP or a script hold themselves. `DisabledMask` holds the thirteen types of `DisabledTypes.cpp`; `IWorldServices.DisabledFlagsOf`
+gives the ones the port models - EMP, paralyzed (§54.8), held (a script, the ferry, the Battle Bus hulk, a container that holds its riders, §54.9), script-disabled. The modules'
+masks are the original's: the AI family, missiles, `AutoHealBehavior`, `CountermeasuresBehavior`, `StealthUpdate`, `StealthDetectorUpdate` and `FireWeaponPower` (the original's
+power is an attack order of the AI) process `DISABLED_HELD`; `BaseRegenerateUpdate` `DISABLED_UNDERPOWERED`; `ParticleUplinkCannonUpdate` and `SpectreGunshipUpdate` four types;
+`OCLUpdate`, the physics, the railroad, poison, the propaganda tower, the slow deaths, the build-complete modules and the weapon bonus beacon all of them; every other none.
+`ProductionUpdate` reads `DisabledTypesToProcess` (typed now, default `DISABLED_HELD`, `HELD UNDERPOWERED` on eight shipped launchers): an EMP stops a factory's queue, a held
+factory produces on. `OCLUpdate` pushes its next creation on while disabled; a propaganda tower disabled other than held lets go of everybody; a disabled beacon gives
+nothing. An EMP stops its victim's AI at once (`StopForDisable`). The compatibility baselines lose `ProductionUpdate/DisabledTypesToProcess` (712 and 705 entries). Test
+`DisableRuleStopsTheModulesThatDoNotProcessIt`. Commit `a1e8115`, manifests `a19c0fc`.
+
+### 54.7 A disable holds through its last frame (`Object::checkDisabledStatus`)
+
+`checkDisabledStatus` runs after the updates of a frame and clears a disable whose frame has come (`now >= until`): a disable "until" frame U holds through U. The port let
+it go at the first tick of U. `DisabledMasks.EnabledFrom` gives the first tick it no longer holds, for the EMP (and the weapons it holds back), the paralysis, a sabotaged
+factory and a hacker of a sabotaged internet center. Test `DisableHoldsThroughItsLastFrame` (a factory disabled until ten frames on is eleven frames late). Commit `c63a520`; no field of either manifest moved.
+
+### 54.8 The turret of a disabled object stands, and paralysis disables the object (`AIUpdate::update`, `paralyzeTroop`)
+
+`TurretAI::updateTurretAI` runs inside `AIUpdate::update` and only while the object is not paralyzed, unmanned, EMP'd, subdued or hacked: a turret stands while its object
+carries a disable other than held (`DisabledTurretStands`). `BattlePlanUpdate`'s `paralyzeTroop` sets `DISABLED_PARALYZED` on the object: `Entity.ParalyzedUntil` (saved when
+set) replaces the AI's own field, so everything of the troop that does not process it stands, its turret too (`ParalysisDisablesTheObject`). Commits `df2e372`, `7c821fa`; no field of either manifest moved.
+
+### 54.9 A container holds its riders (`onContaining`: `setDisabled(DISABLED_HELD)`)
+
+Every transport (and the containers built on it), garrison, tunnel, helix and parachute holds its riders; `OpenContain` and `HealContain` do not
+(`IContainerModule.HoldsRiders`). A held rider runs only its AI, auto-heal, countermeasures, stealth, production and the modules of all types - a lifetime does not run out
+inside a transport (`TransportHoldsItsRiders`). The port ran every module of a rider. Commit `6343803`, manifest `491e9f8`.
+
+### 54.10 F-16: the brown-out (`Energy`, `Player::onPowerBrownOutChange`)
+
+`Energy` keeps production and consumption apart; every change of either asks `hasSufficientPower` and `doPowerDisable` sets `DISABLED_UNDERPOWERED` on every `POWERED`
+object of the player in a brown-out (Patriots, Gattling cannons, speaker towers, the superweapons, the laser Crusader) and clears it after. A sabotaged power plant counts as no
+production and starts the brown-out at once; `Player::update` ends it the frame after the sabotage. The port kept the net sum and disabled nothing. `PlayerState.EnergyConsumption`
+and `Entity.Underpowered` are saved when set; the scripts' power conditions, the original AI, the command bar and the low-power cue read `HasSufficientPower`,
+`ProducedEnergyOf`, `EnergyConsumptionOf`. Test `BrownOutDisablesPoweredObjects`. Commit `8b6a7bb`, manifest `7e235b8`.
+
+### 54.11 F-16: build time under low power (`ThingTemplate::calcTimeToBuild`, `ProductionUpdate::update`, `DozerAIUpdate`)
+
+`calcTimeToBuild` divides the build time by the production speed of the supply ratio (production / consumption; the production itself without consumers; 0 while
+sabotaged; at most 1): one less the shortfall times `LowEnergyPenaltyModifier`, at least `MinLowEnergyProductionSpeed`, below full supply at most
+`MaxLowEnergyProductionSpeed` (1.0, 0.5, 0.8), truncated to frames. `ProductionUpdate` compares the frames under construction with it every frame; `DozerAIUpdate` adds
+`100 / calcTimeToBuild` to a structure's percent every frame of work. The port built at full speed. **A consequence of the original's code that no community source changes:
+a player without production and consumption - every GLA player - has a ratio of 0 and builds units and structures at half speed.** Upgrades do not depend on power
+(`UpgradeTemplate::calcTimeToBuild`). A queue entry keeps elapsed ticks and its last total; a structure keeps `ConstructionProgress` (a share of 2^40, each step's share of
+its total under power, rounded up, so a build at full power completes at the step it did). The three `GameData` keys are typed; data without them (synthetic test data only) has
+no penalty. `ProductionTimeChange` and the handicap are not modelled (no data uses them); `MultipleFactory` stays deferred (the shipped value 1.0 changes nothing). Tests
+`LowPowerSlowsProduction`, `LowPowerSlowsConstruction`. The staged scene `jet-strafe` stood its airfield alone, so its Raptors came out at half speed and too late for
+the scene: it now has a power plant beside the airfield, as a player of the original would. Commits `0c8d463` (manifest `949259e`) and `ba4183c` (manifest `2b5006a`); the retail reference match runs to its limit since (§54.18).
+
+### 54.12 F-56: the disabled edge (`Object::onDisabledEdge`)
+
+When an object becomes disabled and when its last disable ends, the original tells `SpyVisionUpdate`, cancels a dozer's task (going down), and takes a power plant's production
+- with its upgrade's and an active overcharge's `EnergyBonus` - out of its player's energy and gives it back; a disabled producer neither enters nor leaves the energy
+(`friend_adjustPowerForPlayer`), and `PowerPlantUpgrade`/`OverchargeBehavior::onCapture` move nothing while it is disabled. The port finds the edge at the end of the tick among
+the objects the tick touched and the disabled ones (the original fires it in the setter; at 30 Hz the same frame). An EMP'd power plant now browns out its base. The radar part
+belongs to F-50. Test `DisabledPowerPlantStopsProducing`. Commit `dda7e16`; no field of either manifest moved.
+
+### 54.13 A disable pauses the special powers (`Object::pauseAllSpecialPowers`)
+
+`setDisabledUntil` pauses the object's special powers once for every disabled type but `DISABLED_HELD` when it is set, `clearDisabled` resumes them once when it is
+cleared: a superweapon's clock stands while its building is underpowered or EMP'd. The edge pass finds the types that came and went (`Entity.PowerPauseTypes`, derived) and
+pauses once per type, counted from the start of the frame it is found in, so the pause is as long at every rate. Test `DisablePausesSpecialPowers`. Commit `95acd6d`, manifest `a0fe31e`.
+
+### 54.14 F-50: the player's radar (`Player::addRadar`, `hasRadar`, `RadarUpgrade`, `W3DLeftHUDDraw`, `LeftHUDInput`)
+
+A player counts its radars: `RadarUpgrade` adds one when upgraded (the American command center grants it at creation, China buys it, the GLA's radar van has a disable-proof
+one) and takes it away on delete and capture, not while the object is disabled (its edge took it away already); a brown-out switches the radar off unless a disable-proof
+one is there. The client draws the minimap and lets it take clicks only while the radar is on - forced by a mission (`RADAR_FORCE_ENABLE`/`RADAR_REVERT_TO_NORMAL`), or not
+hidden (`RADAR_DISABLE`/`RADAR_ENABLE`) and the viewer has one; otherwise the left HUD eats the click. The port had no radar per player and drew the minimap always. A
+spectator's minimap is its own. Tests `PlayerRadar`, `HudTests` "Minimap click moves the camera". Commits `86393d1` (manifest `464896d`) and `ff88d52`.
+
+### 54.15 F-48: the body applies the armour (`ActiveBody::attemptDamage`, `attemptHealing`)
+
+The original passes every damage raw to the body; `ActiveBody::attemptDamage` adjusts it by the current armour (`m_curArmor.adjustDamage`), and `attemptHealing` does the
+same with a heal. `HighlanderBody` caps the raw amount at one point below the health and `UndeadBody` decides its second life on the raw amount, both before the armour; the
+damage modules read the raw `in.m_amount` (the bridges' share of the damage). The port applied the armour in the weapon (`DealDamageCore`) and in three other places that
+deal damage (the wave guide's water, the flame field, the air blast of the neutron and fuel-air bombs), so a hero weak to a weapon survived its cap with one point, a second
+life began only when the armoured amount reached the health, and everything else - burning, poison, crushing, falling, the scripts' damage - and every heal reached the body
+without armour. The body now adjusts what it is given and the callers pass the raw amount; the weapon still returns what its primary victim's armour makes of it for the
+impact event. A heal is scaled by the armour's `HEALING` coefficient, which the shipped armours set only through `DEFAULT` (35 of the 53 armours name it: 19 at 100 %, 11 between 25 and 90 % - the Stinger soldier's and the projectiles' at 25 % -, `TreeArmor`, `InvulnerableAllArmor`, `HazardousMaterialArmor` and `AvalancheArmor` at 0 % and `InvulnerableArmor` at 1 %).
+`HiveStructureBody` hands the raw amount to the slave, whose own armour applies. Test `ArmourIsAppliedByTheBody`. Commit `8622f6f`, manifest `20f22c5`.
+
+### 54.16 The damage modules read the dealt amount before the clip (`out.m_actualDamageDealt`)
+
+`attemptDamage` records the amount after the armour and the damage scalar (`m_actualDamageDealt`) and the health it took (`m_actualDamageClipped`); the damage modules
+read the first - `FireWeaponWhenDamagedBehavior`'s threshold, `FlammableUpdate`'s flame limit, `PoisonedBehavior`'s poison. The port passed the clipped amount, so a killing
+blow counted only the health that was left (a trap with 20 left that took 50 fired nothing as it died). The damage event keeps the clipped amount. Test
+`DamageModulesReadTheUnclippedAmount`. Commit `815e461`, manifest `b8a581a`.
+
+### 54.17 F-59: a power opens its view at the target (`SpecialPowerModule::createViewObject`)
+
+Found while reading R-29 (Reforged sets Frenzy's `ViewObjectDuration` and `ViewObjectRange` to 0 because "a Frenzy fired into the fog scouted an enemy base"): every trigger
+of a power at a place - `doSpecialPowerAtObject` at the object's position, `doSpecialPowerAtLocation` at the location, `markSpecialPowerTriggered` by the particle
+cannon, the Spectre gunship and its deployment - calls `createViewObject`, which creates the `GameData`'s `SpecialPowerViewObject` (`SuperweaponPing`) for the power's owner at
+the place, sets its shroud clearing range to the power's `ViewObjectRange` and the lifetime of its `DeletionUpdate` to `ViewObjectDuration`; a trigger without a place
+(`doSpecialPower`, a waypoint path, a special ability) opens none. 37 of the shipped powers have both values (the superweapons, the generals' powers, Frenzy's 250 for 30 s).
+The port typed the two fields and read neither: no power ever showed its owner the place it hit. `ISpecialPowerModule.Trigger` takes the place, the world queues the view
+object with the power's range (`Entity.ShroudRange`, saved when set; the vision takes it over the template's) and duration (`SpawnSetup.DeletionTicks`); `GameData`'s
+`SpecialPowerViewObject` is typed (compatibility baseline 708 entries, the patch layer's 701). The Spectre's takeover marks the gunship's power once more before it fires
+it, as `SpectreGunshipDeploymentUpdate` does. A script that fires an ability along a waypoint path passes the closest waypoint as a location: for any power but the particle
+cannon (whose own trigger passes the first waypoint, as the original's) that opens a view the original does not; whether a shipped map fires another power that way is not checked. Test
+`PowerOpensItsViewAtTheTarget`. Commit `c4117e9`, manifest `2df0271`.
+
+### 54.18 The retail reference match takes driver seed 5EED0001 (after F-16)
+
+Since F-16 (a player below full power builds slower - every GLA player at half speed, as `calcTimeToBuild` reads a ratio of 0 for no production and no consumption)
+the match with driver seed `5EED0003` runs to its limit of 432,000 ticks without a winner. Of the seeds surveyed at 60 Hz on the state of this phase `5EED0001`,
+`5EED0002` and `5EED0005` end (`5EED0004` was stopped unfinished); `5EED0001` ends with FactionGLA at the same original frame (18,945) at 30, 60 and 120 Hz and is the
+seed (`72ea6ca`, manifest `f5b85bb`). The same seed still ends at the same frame with the line of sight, the garrison owner and
+firing from inside of §55. `reference-manifest write --only <id>` measures only the named runs into an existing manifest (`6043210`).
+
+## 55. Phase 41: the attack's line of sight, the garrison's owner, firing from inside (October 2026)
+
+The causes of their own size the Reforged review left (`docs/handoffs/HANDOFF-PHASE41.md`): three readings of the original first (`docs/ATTACK-LINE-OF-SIGHT.md`,
+`docs/STEALTH-GARRISON.md`, `docs/GUARD-STATE.md`, `docs/FIRE-FROM-CONTAINERS.md`), then each cause with a test that fails on the code before at 30, 60 and 120 Hz and its own
+manifest commit. F-54 (the stealth garrison) and F-58 (guarding) are read, not built.
+
+### 55.1 F-55: the attack needs a line of sight (`Pathfinder::isAttackViewBlockedByObstacle`, `outOfWeaponRangeObject`, `PartitionFilterLineOfSight`, `findAttackPath`)
+
+An attacker of the kind `ATTACK_NEEDS_LINE_OF_SIGHT` (AIData's `AttackUsesLineOfSight`, true) does not fire through the terrain or a structure. Five steps, `docs/ATTACK-LINE-OF-SIGHT.md` §4:
+(a) `TerrainMap.IsClearLineOfSight`, the vertex Bresenham of `BaseHeightMapRenderObjClass::isClearLineOfSight` (a square as high as its highest corner, the start square tested
+and the end square never, a fudge of 0.5, clear off the field and above the map's highest point); (b) `NavigationGrid.IsAttackLineBlocked`, the 4-connected cell walk with
+the exceptions of `attackBlockedByObstacleCallback` (the attacker, the victim, either one's slaver, the attacker's container, a see-through structure, the structure covering
+the victim's cell; cliff and water cells never block) - each cell keeps its count, the sum of the covering ids and the opaque count, so where footprints overlap the set is the
+owner (the original keeps the first claimer; a restored world would not know it); (c) `outOfWeaponRangeObject` counts a blocked view as out of range for an attacker on the
+ground with a weapon that is not a contact weapon at a victim not significantly above the terrain - the units' own attacks and turrets (`CanAttack`) and an ordered attack
+(`ChooseWeaponInView`: the weapon is chosen as before and a blocked view of it is `OutOfRange`; the client's `InRange` keeps approaching); (d) the acquisition passes a
+blocked candidate by (`AcquisitionViewBlocked`: the terrain between the two tops for every candidate, then the attack's view for one on the ground); (e) the approach goes
+where it can fire (`FindAttackPosition`: nine half-cell points toward the victim, then a search of at most 2,500 cells - cost so far plus the distance less half the attack
+distance, ties by cell index -, the first cell passable, inside the range less a quarter cell and with a clear view), for a pursuit the unit cannot fire from and for a
+computer unit's chase. Not modelled: `checkDestination`'s test of other units' goals, the vehicles' strip-back, pathfind layers (bridges), leech range. Tests
+`TerrainLineOfSightFollowsTheOriginal`, `AttackLineBlockedByStructures`, `AttackNeedsAClearView`, `AcquisitionPassesBlockedCandidates`, `ApproachGoesWhereItCanFire`; the
+rate-equivalence suite 0 / 0 after (c), (d) and (e). Commits `2d1a8e0`, `49fc4be` (no behaviour), `05c31a8` (manifest `bdfe102`), `6744770` (manifest `d2ab940`), `8a8d661` (manifest `69193b5`).
+
+### 55.2 The rule fix `contact-weapon-not-view-blocked` (`GameFix` 20)
+
+The community source's fix in `isAttackViewBlockedByObstacle`: an attacker whose current weapon is a contact weapon is never view-blocked, so a suicide bomber standing in
+another structure's cells sets its charge off at a building it touches (Reforged R-09). Behind the rule profile; `docs/GGC-FIXES.md` 3.1e. Test under both profiles.
+
+### 55.3 A destroyed rider leaves its container (`Object::onDestroy`)
+
+`Object::onDestroy` takes an object that is destroyed inside a container out of it (`removeFromContain`, "the old cleanUpContain safeguard"); the port left a dead rider in
+its container's list until the container pruned it - a garrison only while it heals. The destroy phase now removes it. Test `DestroyedRiderLeavesItsContainer`. Commit `4173564`; no field of either manifest moved.
+
+### 55.4 F-61: a garrisoned building belongs to its occupants (`GarrisonContain::recalcApparentControllingPlayer`, `ActionManager::canEnterObject`)
+
+A garrisoned building is its first rider's player's and goes back to the owner it had when the last rider is gone (`setTeam`, `m_originalTeam`; saved while set); a
+container that is not the enterer's player's takes nobody while somebody is inside and never when it is a faction structure, in the four places the port checks an entry.
+Before, a garrisoned civilian building stayed neutral - nobody ever took it for an enemy - and two players could share one. Not modelled yet: `OBJECT_STATUS_CAN_ATTACK`,
+the stealth garrison's exception (F-54), `onCollide`'s ejection of another player's riders. Three old tests set up two players in one building and now keep to one. Test
+`GarrisonBelongsToItsOccupants`. Commit `d24c085`, manifest `1887314`.
+
+### 55.5 F-60: riders fire from inside a container (`Object::isAbleToAttack`, `isPassengerAllowedToFire`)
+
+Step 0 types `PassengersAllowedToFire` for the transport family and `IsEnclosingContainer` (compatibility baselines 703 and 696 entries). Step 2: `IsPassengerAllowedToFire`
+per container as the original (a garrison always; a transport infantry with the flag; an Overlord infantry or its portable structure, never when itself contained; a Helix its
+portable structure always, infantry with the flag; tunnel, cave, parachute and heal containers by the flag no data sets). Step 3: the `GARRISONED` weapon bonus of garrison
+and Helix riders (range 133 %, damage 125 % in the shipped data). Step 5: a contained rider acts when its container lets it fire - the container's hold is no stop, the AI
+processes `DISABLED_HELD` -, searches its largest weapon range plus the container's bounding circle, never chases, drops a victim out of range. **Stand-in until the fire
+points are built** (steps 1 and 4 of `docs/FIRE-FROM-CONTAINERS.md`): range, search, view and shot are measured from the container - for an enclosing garrison from the
+point of its bounding circle nearest the victim. Not built: the Battle Bus's `WeaponBonusPassedToPassengers`, orders through the container, `ArmedRidersUpgradeMyWeaponSet`,
+the drawing of riders at their points, clearing a garrison. Tests in `Tests.FireFromContainers.cs`. Commits `a4585da` (manifest `dba394b`), `a52452b`, `91099aa` (manifest `7ba5ec5`), `7d5c9a7` (manifest `ba8fd0e`).

@@ -72,3 +72,5 @@ Reforged candidate decided with its reason; the checks the changes can reach gre
 - Step 2, F-55, built before Phase 40 was merged (on top of its last commit): (a) and (b) without behaviour; (c), (d), (e) each with its test that fails before at 30,
   60 and 120 Hz; the rate-equivalence suite 0 / 0 after each; `contact-weapon-not-view-blocked` (`GameFix` 20) under both profiles. The manifest commits of (c) to (e)
   follow the measurements.
+- F-61 and the destroyed rider (§55.3, §55.4); F-60 steps 0, 2, 3, 5 (§55.5, a stand-in for the fire points); the pictures of real matches pinned again
+  (`43c3be6`). Next: F-60's fire points (steps 1 and 4) and the rest of F-60, then F-54, F-58, the Reforged candidates.
