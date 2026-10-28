@@ -154,6 +154,9 @@ public sealed class Entity
     internal Fixed SpeedPerFrame { get; set; }
 
     public bool HasMoveTarget { get; internal set; }
+
+    /// <summary>A shock wave threw the object (F-63, <see cref="Modules.BuiltIn.PhysicsBehavior.Flying"/>): its movement waits until it rests on the ground. Derived from the physics module's state.</summary>
+    public bool InPhysicsFlight { get; internal set; }
     public Fixed MoveTargetX { get; internal set; }
     public Fixed MoveTargetY { get; internal set; }
 

@@ -1280,7 +1280,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         // the action delays of the carriers lie on the frame grid by themselves.
         if (_dock is not null && (_dock.Active || world.Time.IsOriginalFrameBoundary(world.Tick)) && _dock.Update(world, this) != DockStatus.Continue) EndDock(world);
         if (_task != BuilderTask.None) UpdateTask(world);
-        if (Entity.HasMoveTarget)
+        // A shocked object in flight is moved by its physics (F-63): the movement keeps its order and goes on once the object rests on the ground again.
+        if (Entity.InPhysicsFlight)
+        {
+            Entity.Speed = Fixed.Zero;
+            ClearFrameSpeed();
+        }
+        else if (Entity.HasMoveTarget)
         {
             if (ActiveLocomotor is not { } locomotor)
             {

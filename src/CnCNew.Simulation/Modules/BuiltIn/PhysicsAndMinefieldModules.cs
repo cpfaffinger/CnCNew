@@ -1,3 +1,4 @@
+using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
@@ -76,6 +77,19 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     private Fixed _velocityZ;
     // The ticks of the current frame of the original already fallen (0: this tick takes the frame's step). Always 0 at 30 Hz (and then not written).
     private int _subStep;
+    // The flight of a shocked object (F-63): the acceleration waiting for the next step, the rates of yaw, pitch and roll per frame, the pitch and roll the object has,
+    // whether it may bounce (applyRandomRotation allows it until a bounce gives nothing back) and whether it was above the ground after the last step.
+    private bool _flying;
+    private Fixed _accelX;
+    private Fixed _accelY;
+    private Fixed _accelZ;
+    private Fixed _yawRate;
+    private Fixed _pitchRate;
+    private Fixed _rollRate;
+    private Fixed _pitch;
+    private Fixed _roll;
+    private bool _bounce;
+    private bool _wasAirborne;
 
     public override string ModuleName => "PhysicsBehavior";
     public PhysicsData Data => data;
@@ -89,6 +103,42 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     /// stepped once per frame, on the object's own phase (the first step one frame after the release), exactly as at 30 Hz: gravity per frame² is added to the velocity per frame,
     /// the landing is judged on the whole step. The step of a frame is fallen in equal shares over its ticks (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md).
     /// </summary>
+    /// <summary>The object flies after a shock (F-63): its movement waits until it rests on the ground again.</summary>
+    public bool Flying => _flying;
+
+    /// <summary>The pitch and roll a shock gave the object, in radians (0 for an upright object).</summary>
+    public (Fixed Pitch, Fixed Roll) Tilt => (_pitch, _roll);
+
+    /// <summary>
+    /// <c>Object::attemptDamage</c>'s shock wave on this object: <c>applyShock</c> (the force less the <c>ShockResistance</c> share, divided by the mass, waits for the next step as an
+    /// acceleration) and <c>applyRandomRotation</c> (unless the object sticks to the ground: bouncing allowed, and the yaw, pitch and roll rates each gain their <c>ShockMax</c> times
+    /// a draw of the logic stream between -1 and 1, in that order). The flight is stepped once per logic frame of the original from the next one on, like a fall.
+    /// </summary>
+    public void ApplyShock(IWorldServices world, Fixed forceX, Fixed forceY, Fixed forceZ, bool stickToGround)
+    {
+        var resisted = Fixed.One - Fixed.Min(Fixed.One, Fixed.Max(Fixed.Zero, data.ShockResistance));
+        var mass = data.Mass > Fixed.Zero ? data.Mass : Fixed.One;
+        _accelX += forceX * resisted / mass;
+        _accelY += forceY * resisted / mass;
+        _accelZ += forceZ * resisted / mass;
+        if (!stickToGround)
+        {
+            _bounce = true;
+            _yawRate += data.ShockMaxYaw * world.LogicRandom.Range(-Fixed.One, Fixed.One);
+            _pitchRate += data.ShockMaxPitch * world.LogicRandom.Range(-Fixed.One, Fixed.One);
+            _rollRate += data.ShockMaxRoll * world.LogicRandom.Range(-Fixed.One, Fixed.One);
+        }
+        if (!_flying)
+        {
+            _flying = true;
+            Entity.InPhysicsFlight = true;
+            _wasAirborne = Entity.Z > world.GroundHeightAt(Entity.X, Entity.Y);
+            if (!_falling) _subStep = 0;
+            world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
+        }
+        world.MarkDirty(Entity);
+    }
+
     public void StartFall(IWorldServices world, Fixed velocityX, Fixed velocityY)
     {
         _falling = true;
@@ -101,6 +151,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
 
     public long Update(IWorldServices world)
     {
+        if (_flying && !_falling) return Fly(world);
         if (!_falling) return SimulationTiming.SleepForever;
         var time = world.Time;
         if (_subStep != 0)
@@ -141,9 +192,221 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         return SimulationTiming.SleepNone;
     }
 
+    private static readonly Fixed MinNonAeroFriction = Fixed.FromDecimal(0.01m);
+    private static readonly Fixed MaxFriction = Fixed.FromDecimal(0.99m);
+    private static readonly Fixed GroundDamping = Fixed.One - Fixed.FromDecimal(0.15m);
+    private static readonly Fixed BounceDamping = Fixed.FromDecimal(0.7m);
+    private static readonly Fixed VelocityThreshold = Fixed.FromDecimal(0.001m);
+    private static readonly Fixed MinStiffness = Fixed.FromDecimal(0.01m);
+    private static readonly Fixed SteepFall = Fixed.FromInt(3);
+    private static readonly Fixed TinyDelta = Fixed.FromDecimal(0.01m);
+    private static readonly int FallingDamageType = NameTables.DamageType.TryIndexOf("FALLING", out var falling) ? falling : DamageTypes.Unresistable;
+    private static readonly int SplattedDeathType = NameTables.DeathType.TryIndexOf("SPLATTED", out var splatted) ? splatted : DeathTypes.Normal;
+
+    /// <summary>
+    /// One update of <c>PhysicsBehavior::update</c> for a shocked object, the step of a logic frame of the original (fallen in equal shares over the frame's ticks above 30 Hz):
+    /// gravity; on or near the ground the rates damped by 0.85 and the lateral and forward friction against the object's facing, in the air the aerodynamic friction; the
+    /// velocity (components under 0.001 become 0) moves the object; yaw turns its facing, pitch and roll are kept (the centre of mass bends the pitch towards straight down or
+    /// up); the ground: <c>handleBounce</c> (the stiffness of the ground gives back the downward speed of a falling object that may bounce, the rates are damped by 0.7, an
+    /// object on its back is turned over and righted after the bounce), the object on the ground, one that sticks to it kept there; the falling damage of a steep landing
+    /// (<c>DAMAGE_FALLING</c>, <c>DEATH_SPLATTED</c>, by the speed beyond <c>MinFallHeightForDamage</c>'s, times the mass and <c>FallHeightDamageFactor</c>). The flight ends when
+    /// the object rests on the ground without speed and without rates.
+    /// </summary>
+    private long Fly(IWorldServices world)
+    {
+        var time = world.Time;
+        if (_subStep != 0)
+        {
+            Entity.X += time.FrameShare(_stepX, _subStep);
+            Entity.Y += time.FrameShare(_stepY, _subStep);
+            Entity.Z += time.FrameShare(_stepZ, _subStep);
+            _subStep = time.NextSubStep(_subStep);
+            world.MarkDirty(Entity);
+            return _subStep == 0 && !_flying ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
+        }
+
+        var stick = Entity.Template.Locomotor is { StickToGround: true };
+        _accelZ += ProjectileModules.GravityPerFrameSquared(world);
+        if (!world.IsSignificantlyAboveTerrain(Entity))
+        {
+            Damp(GroundDamping);
+            if (_velocityX != Fixed.Zero || _velocityY != Fixed.Zero)
+            {
+                var dirX = FixedTrig.Cos(Entity.Angle);
+                var dirY = FixedTrig.Sin(Entity.Angle);
+                var lateral = _velocityX * -dirY + _velocityY * dirX;
+                var forward = _velocityX * dirX + _velocityY * dirY;
+                var lf = Clamp(data.LateralFriction, MinNonAeroFriction, MaxFriction);
+                var ff = Clamp(data.ForwardFriction, MinNonAeroFriction, MaxFriction);
+                _accelX -= lf * lateral * -dirY + ff * forward * dirX;
+                _accelY -= lf * lateral * dirX + ff * forward * dirY;
+            }
+        }
+        else
+        {
+            var aero = Clamp(data.AerodynamicFriction, Fixed.Zero, MaxFriction);
+            _accelX -= _velocityX * aero;
+            _accelY -= _velocityY * aero;
+            _accelZ -= _velocityZ * aero;
+            Damp(Fixed.One - aero);
+        }
+        _velocityX = Small(_velocityX + _accelX);
+        _velocityY = Small(_velocityY + _accelY);
+        _velocityZ = Small(_velocityZ + _accelZ);
+        (_accelX, _accelY, _accelZ) = (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+
+        var (startX, startY, oldZ) = (Entity.X, Entity.Y, Entity.Z);
+        var x = startX + _velocityX;
+        var y = startY + _velocityY;
+        var z = oldZ + _velocityZ;
+        if (_yawRate != Fixed.Zero || _pitchRate != Fixed.Zero || _rollRate != Fixed.Zero)
+        {
+            var pitchRate = _pitchRate * data.PitchRollYawFactor;
+            if (data.CenterOfMassOffset != Fixed.Zero)
+            {
+                var halfPi = FixedTrig.Pi / Fixed.FromInt(2);
+                pitchRate *= FixedTrig.Sin(data.CenterOfMassOffset > Fixed.Zero ? halfPi - _pitch : _pitch - halfPi);
+            }
+            _roll = FixedTrig.Normalize(_roll + _rollRate * data.PitchRollYawFactor);
+            _pitch = FixedTrig.Normalize(_pitch + pitchRate);
+            Entity.Angle = FixedTrig.Normalize(Entity.Angle + _yawRate * data.PitchRollYawFactor);
+        }
+
+        var ground = world.GroundHeightAt(x, y);
+        var bounced = false;
+        var bounceZ = Fixed.Zero;
+        if (_bounce && z <= ground)
+        {
+            var stiffness = Clamp(world.Templates.GroundStiffness, MinStiffness, MaxFriction);
+            if (oldZ > ground && _velocityZ < Fixed.Zero) bounceZ = _velocityZ.Abs() * stiffness;
+            Damp(BounceDamping);
+            if (_velocityZ < Fixed.Zero)
+            {
+                // handleBounce: an object on its back is turned over (roll pi), the pitch is not flipped as well.
+                _roll = Upright ? Fixed.Zero : FixedTrig.Pi;
+                _pitch = Fixed.Zero;
+            }
+            bounced = bounceZ > Fixed.Zero;
+            if (!bounced) _bounce = data.AllowBouncing;
+        }
+        var activeVelocityZ = _velocityZ;
+        if (z <= ground)
+        {
+            _velocityZ += ground - z;
+            if (_velocityZ > Fixed.Zero) _velocityZ = Fixed.Zero;
+            z = ground;
+        }
+        else if (stick) z = ground;
+        if (bounced) (_pitch, _roll) = (Fixed.Zero, Fixed.Zero);
+        if (bounced && _bounce) _accelZ += bounceZ;
+
+        var airborne = z > ground;
+        var fell = _wasAirborne && !airborne;
+        _wasAirborne = airborne;
+        (_stepX, _stepY, _stepZ) = (x - startX, y - startY, z - oldZ);
+        if (time.TicksPerOriginalFrame != 1)
+        {
+            // The step was judged whole, as at 30 Hz; the object covers the first share of it now and the rest on the next ticks of the frame.
+            Entity.X = startX + time.FrameShare(_stepX, 0);
+            Entity.Y = startY + time.FrameShare(_stepY, 0);
+            Entity.Z = oldZ + time.FrameShare(_stepZ, 0);
+            _subStep = time.NextSubStep(0);
+        }
+        else (Entity.X, Entity.Y, Entity.Z) = (x, y, z);
+        world.MarkDirty(Entity);
+
+        if (fell)
+        {
+            // v = sqrt(2 g h): the speed a fall from MinFallHeightForDamage reaches.
+            var minimumSpeed = Fixed.Sqrt((Fixed.FromInt(2) * ProjectileModules.GravityPerFrameSquared(world) * data.MinFallHeightForDamage).Abs());
+            var net = -activeVelocityZ - minimumSpeed;
+            if (net > Fixed.Zero
+                && (_velocityX.Abs() <= TinyDelta || activeVelocityZ.Abs() >= _velocityX.Abs() * SteepFall)
+                && (_velocityY.Abs() <= TinyDelta || activeVelocityZ.Abs() >= _velocityY.Abs() * SteepFall))
+                world.Damage(Entity.Id, new DamageInfo(Entity.Id, net * data.Mass * data.FallHeightDamageFactor, FallingDamageType, SplattedDeathType, false));
+        }
+
+        // At rest on the ground: the flight is over and the movement takes the object again.
+        if (!airborne && _velocityX == Fixed.Zero && _velocityY == Fixed.Zero && _velocityZ == Fixed.Zero && _accelX == Fixed.Zero && _accelY == Fixed.Zero && _accelZ == Fixed.Zero
+            && _yawRate == Fixed.Zero && _pitchRate == Fixed.Zero && _rollRate == Fixed.Zero)
+        {
+            _flying = false;
+            Entity.InPhysicsFlight = false;
+            _bounce = false;
+            return _subStep == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
+        }
+        return SimulationTiming.SleepNone;
+    }
+
+    // The step the object takes in the frame being flown (its shares are covered over the frame's ticks above 30 Hz).
+    private Fixed _stepX;
+    private Fixed _stepY;
+    private Fixed _stepZ;
+
+    private bool Upright => FixedTrig.Cos(_pitch) * FixedTrig.Cos(_roll) > Fixed.Zero;
+
+    private void Damp(Fixed factor)
+    {
+        _yawRate *= factor;
+        _pitchRate *= factor;
+        _rollRate *= factor;
+    }
+
+    private static Fixed Clamp(Fixed value, Fixed low, Fixed high) => Fixed.Min(high, Fixed.Max(low, value));
+
+    private static Fixed Small(Fixed value) => value.Abs() < VelocityThreshold ? Fixed.Zero : value;
+
+    private void DescribeFlight(IStateWriter writer)
+    {
+        writer.Bool("flying", true);
+        writer.Fixed("flightVelocityX", _velocityX);
+        writer.Fixed("flightVelocityY", _velocityY);
+        writer.Fixed("flightVelocityZ", _velocityZ);
+        writer.Fixed("accelX", _accelX);
+        writer.Fixed("accelY", _accelY);
+        writer.Fixed("accelZ", _accelZ);
+        writer.Fixed("yawRate", _yawRate);
+        writer.Fixed("pitchRate", _pitchRate);
+        writer.Fixed("rollRate", _rollRate);
+        writer.Fixed("pitch", _pitch);
+        writer.Fixed("roll", _roll);
+        writer.Bool("bounce", _bounce);
+        writer.Bool("wasAirborne", _wasAirborne);
+        if (_subStep == 0) return;
+        writer.Int("flightSubStep", _subStep);
+        writer.Fixed("stepX", _stepX);
+        writer.Fixed("stepY", _stepY);
+        writer.Fixed("stepZ", _stepZ);
+    }
+
+    private void LoadFlight(IStateReader reader)
+    {
+        _flying = reader.Has("flying");
+        if (!_flying) return;
+        _velocityX = reader.Fixed("flightVelocityX");
+        _velocityY = reader.Fixed("flightVelocityY");
+        _velocityZ = reader.Fixed("flightVelocityZ");
+        _accelX = reader.Fixed("accelX");
+        _accelY = reader.Fixed("accelY");
+        _accelZ = reader.Fixed("accelZ");
+        _yawRate = reader.Fixed("yawRate");
+        _pitchRate = reader.Fixed("pitchRate");
+        _rollRate = reader.Fixed("rollRate");
+        _pitch = reader.Fixed("pitch");
+        _roll = reader.Fixed("roll");
+        _bounce = reader.Bool("bounce");
+        _wasAirborne = reader.Bool("wasAirborne");
+        if (!reader.Has("flightSubStep")) return;
+        _subStep = checked((int)reader.Int("flightSubStep"));
+        _stepX = reader.Fixed("stepX");
+        _stepY = reader.Fixed("stepY");
+        _stepZ = reader.Fixed("stepZ");
+    }
+
     public override void Describe(IStateWriter writer)
     {
         writer.Int("nextWake", _nextWake);
+        if (_flying) DescribeFlight(writer);
         if (!_falling) return;
         writer.Bool("falling", true);
         writer.Fixed("velocityX", _velocityX);
@@ -160,6 +423,8 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _velocityY = _falling ? reader.Fixed("velocityY") : Fixed.Zero;
         _velocityZ = _falling ? reader.Fixed("velocityZ") : Fixed.Zero;
         _subStep = _falling && reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;
+        LoadFlight(reader);
+        Entity.InPhysicsFlight = _flying;
     }
 }
 
