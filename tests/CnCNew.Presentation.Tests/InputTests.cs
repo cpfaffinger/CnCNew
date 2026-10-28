@@ -1044,6 +1044,10 @@ static class InputTests
         selection.Replace([tank.Id]);
         controller.OnMeta(world, MetaAction.Stop);
         Assert(arena.Sink.Issued[^1] is SetMoveTargetCommand halt && halt.Target == tank.Id && halt.X == tank.X && halt.Y == tank.Y, "stop halts the unit where it stands");
+        controller.OnMeta(world, MetaAction.Guard);
+        Assert(controller.Mode == CommandModeKind.Guard && controller.CompleteTarget(world, view, Screen(60, 100)) && controller.Mode == CommandModeKind.None, "the click completes the guard");
+        Assert(arena.Sink.Issued[^1] is GuardCommand { Mode: GuardMode.Normal, Object.IsValid: false } guardOrder && guardOrder.Units.SequenceEqual([tank.Id]) && !controller.Orders.TryGet(tank.Id, out _),
+            "the guard is the simulation's GuardCommand (F-58), no standing order of the client");
         controller.OnMeta(world, MetaAction.AttackMove);
         Assert(controller.Mode == CommandModeKind.AttackMove && controller.Hover(world, view, Screen(60, 100)).Cursor == CursorKind.AttackMove, "attack-move mode shows its cursor");
         Assert(controller.CompleteTarget(world, view, Screen(60, 100)) && controller.Orders.TryGet(tank.Id, out var attackMove) && attackMove.Kind == StandingOrderKind.AttackMove

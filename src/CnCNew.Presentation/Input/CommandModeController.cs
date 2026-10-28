@@ -576,25 +576,29 @@ public sealed class CommandModeController
             case CommandModeKind.AttackMove or CommandModeKind.Guard:
             {
                 if (ground is not { } point) { Feedback(FeedbackKind.InvalidOrder, world, Vector3.Zero, EntityId.Invalid, Settings.MarkerFrames); return false; }
-                var kind = Mode == CommandModeKind.AttackMove ? StandingOrderKind.AttackMove : StandingOrderKind.Guard;
                 var any = false;
-                if (kind == StandingOrderKind.AttackMove)
+                foreach (var unit in sources) Orders.Clear(unit.Id);
+                if (Mode == CommandModeKind.AttackMove)
                 {
                     // MSG_DO_ATTACKMOVETO to the selection: one group order, as for a plain move.
-                    foreach (var unit in sources) Orders.Clear(unit.Id);
                     any = MoveGroup(world, sources, point, true);
                     if (any)
                         foreach (var unit in sources.Where(SimulationQueries.CanMove))
-                            Orders.Set(unit.Id, new StandingOrder(kind, EntityId.Invalid, new Vector2(point.X, point.Y), [], world.Tick));
+                            Orders.Set(unit.Id, new StandingOrder(StandingOrderKind.AttackMove, EntityId.Invalid, new Vector2(point.X, point.Y), [], world.Tick));
                 }
                 else
-                    foreach (var unit in sources)
+                {
+                    // MSG_DO_GUARD_POSITION to the selection (groupGuardPosition): the simulation's guard, in the mode of the button (F-58).
+                    var guards = sources.Where(SimulationQueries.CanMove).Select(unit => unit.Id).ToImmutableArray();
+                    var mode = _button?.Kind switch
                     {
-                        Orders.Clear(unit.Id);
-                        if (!Move(world, unit, point)) continue;
-                        Orders.Set(unit.Id, new StandingOrder(kind, EntityId.Invalid, new Vector2(point.X, point.Y), [], world.Tick));
-                        any = true;
-                    }
+                        GuiCommandKind.GuardWithoutPursuit => GuardMode.WithoutPursuit,
+                        GuiCommandKind.GuardFlyingUnitsOnly => GuardMode.FlyingUnitsOnly,
+                        _ => GuardMode.Normal,
+                    };
+                    var (x, y) = (SimulationQueries.ToFixed(point.X), SimulationQueries.ToFixed(point.Y));
+                    any = !guards.IsEmpty && Issue((sequence, tick) => new GuardCommand(Player, sequence, tick, guards, x, y, EntityId.Invalid, mode)).Accepted;
+                }
                 if (any) Feedback(FeedbackKind.MoveMarker, world, point, EntityId.Invalid, Settings.MoveHintFrames);
                 Cancel();
                 return any;

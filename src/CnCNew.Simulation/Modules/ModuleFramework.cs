@@ -83,6 +83,9 @@ public interface IWorldServices
     /// </summary>
     void EndAttack(Entity entity);
 
+    /// <summary>A new order ends the unit's guard (<c>AIGuardState::onExit</c>, F-58).</summary>
+    void EndGuard(Entity entity);
+
     /// <summary>
     /// <c>GarrisonContain::matchObjectsToGarrisonPoints</c> of an enclosing garrison (F-60, step 4): a rider at a point whose victim is gone or out of range goes back to the centre,
     /// a rider with a victim takes the free point closest to it, and a rider at a point moves to a free one closer to its victim.

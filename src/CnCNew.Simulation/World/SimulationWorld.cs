@@ -781,6 +781,7 @@ public sealed partial class SimulationWorld : IWorldServices
             SetMoveTargetCommand move => InReach(move.X, limit) && InReach(move.Y, limit),
             AttackMoveCommand march => InReach(march.X, limit) && InReach(march.Y, limit),
             GroupMoveCommand group => InReach(group.X, limit) && InReach(group.Y, limit),
+            GuardCommand guard => InReach(guard.X, limit) && InReach(guard.Y, limit),
             PursueCommand pursue => InReach(pursue.X, limit) && InReach(pursue.Y, limit),
             UseSpecialPowerCommand power => InReach(power.X, limit) && InReach(power.Y, limit),
             ConstructCommand construct => InReach(construct.X, limit) && InReach(construct.Y, limit) && InReach(construct.Angle, CommandAngleLimit),
@@ -872,6 +873,8 @@ public sealed partial class SimulationWorld : IWorldServices
             case PlayerLeaveCommand:
                 if (command.Player.IsSystem) return CommandRejection.NotPermitted;
                 break;
+            case GuardCommand guard:
+                return CheckGuard(command.Player, guard);
             case GroupMoveCommand group:
             {
                 if (group.Units.IsDefaultOrEmpty || group.Units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
@@ -1220,6 +1223,13 @@ public sealed partial class SimulationWorld : IWorldServices
             case GroupMoveCommand group:
                 ExecuteGroupMove(group);
                 break;
+            case GuardCommand guard:
+            {
+                var reason = CheckGuard(command.Player, guard);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                ExecuteGuard(guard);
+                break;
+            }
             case PlayerLeaveCommand leave:
                 ExecutePlayerLeave(leave.Player, leave.TransferToAlly);
                 break;

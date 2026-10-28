@@ -40,12 +40,13 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// and a trailing SHA-256 over everything before it. Strings are u16-length-prefixed UTF-8.
 /// Commands are stored ordered by (tick, player, sequence). Truncated, corrupted (hash mismatch) and version-foreign files are rejected.
 /// Version 15 (phase 26): command table 17 with the player-leave command (a bool); version 14 is rejected.
+/// Version 16 (phase 41): command table 18 with the guard command (units, point, object, mode; F-58); version 15 is rejected.
 /// Version 14 (phase 24): after the checkpoint interval the header carries the match description (u32 length, then the canonical bytes; length 0 = none); version 13 is rejected.
 /// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 15;
+    public const int CurrentVersion = 16;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -384,6 +385,14 @@ public static class ReplayFormat
             case PlayerLeaveCommand leave:
                 writer.Write(leave.TransferToAlly);
                 break;
+            case GuardCommand guard:
+                writer.Write(guard.Units.Length);
+                foreach (var unit in guard.Units) writer.Write(unit.Value);
+                writer.Write(guard.X.Raw);
+                writer.Write(guard.Y.Raw);
+                writer.Write(guard.Object.Value);
+                writer.Write((byte)guard.Mode);
+                break;
             case GroupMoveCommand group:
                 writer.Write(group.Units.Length);
                 foreach (var unit in group.Units) writer.Write(unit.Value);
@@ -446,6 +455,7 @@ public static class ReplayFormat
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadBoolean()),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.ReadBoolean()),
+            CommandTypes.Guard => new GuardCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), new EntityId(reader.ReadUInt32()), (GuardMode)reader.ReadByte()),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
     }

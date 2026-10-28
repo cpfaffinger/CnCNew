@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 17;
+    public const int Version = 18;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -91,7 +91,11 @@ public static class CommandTypes
     /// <summary><c>MSG_SELF_DESTRUCT</c>: a player leaves a running match - by losing the connection (everything it owns dies) or by choice (a living ally inherits) (docs/SIMULATION-CORE.md §47).</summary>
     public const ushort PlayerLeave = 34;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= PlayerLeave;
+    // ------------------------------------------------------------------------------------------------------------ guard (v18)
+    /// <summary><c>MSG_DO_GUARD_POSITION</c> / <c>MSG_DO_GUARD_OBJECT</c> to a group (<c>AIGroup::groupGuardPosition</c>, <c>aiGuardPosition</c>): the units guard a point or an object (docs/GUARD-STATE.md, F-58).</summary>
+    public const ushort Guard = 35;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= Guard;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -176,6 +180,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Pursue => new PursueCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), new EntityId(checked((uint)reader.UInt("victim"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"), reader.Bool("attack")),
+            CommandTypes.Guard => new GuardCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"),
+                new EntityId(checked((uint)reader.UInt("object"))), (GuardMode)checked((byte)reader.Int("mode"))),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
@@ -761,6 +767,41 @@ public sealed record PlayerLeaveCommand(PlayerId Player, ulong Sequence, long Ti
 {
     public override ushort TypeCode => CommandTypes.PlayerLeave;
     protected override void DescribeBody(IStateWriter writer) => writer.Bool("transfer", TransferToAlly);
+}
+
+/// <summary><c>GuardMode</c>: the three guard buttons (<c>GUARD</c>, <c>GUARD_WITHOUT_PURSUIT</c>, <c>GUARD_FLYING_UNITS_ONLY</c>).</summary>
+public enum GuardMode : byte { Normal = 0, WithoutPursuit = 1, FlyingUnitsOnly = 2 }
+
+/// <summary>
+/// <c>MSG_DO_GUARD_POSITION</c> (<see cref="Object"/> invalid) or <c>MSG_DO_GUARD_OBJECT</c> to a group (<c>AIGroup::groupGuardPosition</c> / <c>groupGuardObject</c>): every unit guards the
+/// same point or object in <see cref="Mode"/> (docs/GUARD-STATE.md, F-58). An immobile object or a projectile ignores it (<c>privateGuardPosition</c>).
+/// </summary>
+public sealed record GuardCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y, EntityId Object, GuardMode Mode) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.Guard;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.BeginArray("units");
+        foreach (var unit in Units)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", unit.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+        writer.UInt("object", Object.Value);
+        writer.Int("mode", (int)Mode);
+    }
+
+    // The unit list is compared by content, as for a group move.
+    public bool Equals(GuardCommand? other)
+        => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && Object == other.Object && Mode == other.Mode
+           && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
+
+    public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }
 
 public sealed record GroupMoveCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y, bool Attack) : SimCommand(Player, Sequence, Tick)

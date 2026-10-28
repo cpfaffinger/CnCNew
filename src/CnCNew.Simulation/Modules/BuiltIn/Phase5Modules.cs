@@ -702,7 +702,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private enum BuilderTask : byte { None, Construct, Repair }
 
     /// <summary><c>AIUpdateInterface::isIdle</c>: no move order, not docking, no builder task and no evacuation waiting (<c>AI_EVACUATE</c>).</summary>
-    public virtual bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning;
+    public virtual bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning && Entity.Guard is null;
 
     /// <summary>The locomotor the object moves with right now (<c>AIUpdateInterface::getCurLocomotor</c>); aircraft switch between their locomotor sets (<c>JetAIUpdate::chooseLocomotorSet</c>).</summary>
     /// <summary>The locomotor set the object moves with right now (a jet picks its taxi, attack or return set).</summary>
@@ -774,6 +774,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         if (Entity.EffectivelyDead && IsGroundMover) return;
         _pathGroup = 0;
         world.EndAttack(Entity);
+        world.EndGuard(Entity);
         if (attackMove) world.BeginAttackMove(Entity, x, y);
         CancelDock(world);
         ClearTask();
@@ -931,6 +932,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public void OrderIdle(IWorldServices world, bool fromPlayer = false)
     {
         world.EndAttack(Entity);
+        world.EndGuard(Entity);
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
@@ -963,6 +965,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public virtual void OrderIdle(IWorldServices world)
     {
         world.EndAttack(Entity);
+        world.EndGuard(Entity);
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
@@ -1020,6 +1023,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     public virtual void OrderDock(IWorldServices world, Entity dock, bool fromPlayer)
     {
         world.EndAttack(Entity);
+        world.EndGuard(Entity);
         CancelDock(world);
         ClearTask();
         _enterTarget = EntityId.Invalid;
@@ -1081,6 +1085,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     private void StartTask(IWorldServices world, BuilderTask task, Entity target)
     {
         world.EndAttack(Entity);
+        world.EndGuard(Entity);
         CancelDock(world);
         _enterTarget = EntityId.Invalid;
         _goal = EntityId.Invalid;

@@ -431,6 +431,11 @@ static partial class NetTests
         for (var tick = 0; tick < length && !source.IsOver; tick++) source.Step();
         var orders = source.RecordedCommands.Where(command => CommandTypes.IsPlayerOrder(command.TypeCode)).OrderBy(command => command.Tick).ToList();
         var encoded = orders.Select(ReplayFormat.EncodeCommand).ToList();
+        // The computer players give no guard (F-58): a guard of the units of their moves, in each mode, is changed too.
+        var guards = 0;
+        foreach (var move in orders.OfType<SetMoveTargetCommand>().Take(30))
+            encoded.Add(ReplayFormat.EncodeCommand(new GuardCommand(move.Player, move.Sequence, move.Tick, [move.Target], move.X, move.Y,
+                CnCNew.Simulation.Ids.EntityId.Invalid, (GuardMode)(guards++ % 3))));
         var kinds = orders.Select(command => command.TypeCode).Distinct().Count();
         Check.That(orders.Count > 100 && kinds >= 5, $"the match gave orders to change ({orders.Count} of {kinds} kinds)");
         // The same match with three seats for players: the recorded orders are given as the players' own at their ticks, so the world lives as it did - and between

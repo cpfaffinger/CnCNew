@@ -15,8 +15,6 @@ public enum StandingOrderKind
     Attack,
     /// <summary><c>groupAttackMoveToPosition</c>: the simulation's attack-move (<see cref="AttackMoveCommand"/>); the entry only says that the unit is on one, until it arrives.</summary>
     AttackMove,
-    /// <summary><c>groupGuardPosition</c> without pursuit: walk to the point; standing there the unit picks its victims itself (the simulation's idle target acquisition).</summary>
-    Guard,
     /// <summary><c>MSG_ADD_WAYPOINT</c>: the next point is ordered when the previous one is reached.</summary>
     Waypoints,
 }
@@ -124,8 +122,6 @@ public sealed class StandingOrders
                 case StandingOrderKind.AttackMove:
                     // The simulation marches, fights and marches on; the entry ends with the attack-move.
                     if (settled && !world.IsAttackMoving(unit)) Clear(unit.Id);
-                    break;
-                case StandingOrderKind.Guard:
                     break;
                 case StandingOrderKind.Waypoints:
                     if (!settled || unit.HasMoveTarget) break;

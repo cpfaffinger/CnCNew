@@ -73,6 +73,9 @@ sealed class Feeder(SimulationWorld world)
     public SubmitResult Pursue(int player, uint unit, uint victim, int x, int y, long? tick = null)
         => world.Submit(new PursueCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(unit), new EntityId(victim), Fixed.FromInt(x), Fixed.FromInt(y)));
 
+    public SubmitResult Guard(int player, uint[] units, int x, int y, uint guarded = 0, GuardMode mode = GuardMode.Normal, long? tick = null)
+        => world.Submit(new GuardCommand(new PlayerId(player), Next(player), tick ?? world.Tick, [..units.Select(unit => new EntityId(unit))], Fixed.FromInt(x), Fixed.FromInt(y), new EntityId(guarded), mode));
+
     public SubmitResult AttackMove(int player, uint unit, int x, int y, long? tick = null)
         => world.Submit(new AttackMoveCommand(new PlayerId(player), Next(player), tick ?? world.Tick, new EntityId(unit), Fixed.FromInt(x), Fixed.FromInt(y)));
 
