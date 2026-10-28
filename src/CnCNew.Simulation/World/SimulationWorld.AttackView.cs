@@ -38,7 +38,7 @@ public sealed partial class SimulationWorld
     private static readonly Fixed ContactRangeFudge = Fixed.FromDecimal(1.05m);
 
     /// <summary><c>WeaponTemplate::isContactWeapon</c>: "fudge this a little to account for pathfinding roundoff & such" - a range a twentieth longer still short of a cell.</summary>
-    private static bool IsContactWeapon(WeaponInfo weapon) => weapon.AttackRange * ContactRangeFudge < Fixed.FromInt(global::CnCNew.Simulation.Terrain.TerrainMap.CellSize);
+    internal static bool IsContactWeapon(WeaponInfo weapon) => weapon.AttackRange * ContactRangeFudge < Fixed.FromInt(global::CnCNew.Simulation.Terrain.TerrainMap.CellSize);
 
     /// <summary><c>Object::getCurrentWeapon</c>: the slot last chosen or locked in the active set, else its primary.</summary>
     private WeaponInfo? CurrentWeapon(Entity entity)

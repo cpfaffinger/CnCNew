@@ -675,7 +675,7 @@ public static class ModuleCatalog
             new("InitialPayload", FieldType.Opaque, Source: "TransportContain.h"),
             new("HealthRegen%PerSec", FieldType.Real, Source: "TransportContain.h"),
             new("ExitDelay", FieldType.DurationMs, Source: "TransportContain.h"),
-            new("ArmedRidersUpgradeMyWeaponSet", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ArmedRidersUpgradeMyWeaponSet", FieldType.Bool, Source: "TransportContain.h"),
             // DemoGeneral.ini sets this key twice (identical values, a copy-paste artifact in the shipped data).
             new("DelayExitInAir", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "TransportContain.h"),
         ]);
@@ -814,7 +814,7 @@ public static class ModuleCatalog
             new("InitialPayload", FieldType.Opaque, Source: "TransportContain.h"),
             new("HealthRegen%PerSec", FieldType.Real, Source: "TransportContain.h"),
             new("ExitDelay", FieldType.DurationMs, Source: "TransportContain.h"),
-            new("ArmedRidersUpgradeMyWeaponSet", FieldType.Opaque, Source: "TransportContain.h"),
+            new("ArmedRidersUpgradeMyWeaponSet", FieldType.Bool, Source: "TransportContain.h"),
             new("DelayExitInAir", FieldType.Opaque, Repeat: RepeatPolicy.Accumulate, Source: "TransportContain.h"),
         ];
         // TunnelContainModuleData = OpenContainModuleData + TimeForFullHeal (parseDurationReal). ContainMax is parseable but unused: the

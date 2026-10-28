@@ -4747,15 +4747,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "TransportContain/ArmedRidersUpgradeMyWeaponSet",
-      "count": 11,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "TransportContain/DelayExitInAir",
       "count": 6,
       "owners": [

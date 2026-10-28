@@ -233,6 +233,7 @@ run.Test("Phase 41 (F-60, step 2): isPassengerAllowedToFire per container (garri
 run.Test("Phase 41 (F-60, step 3): garrison and Helix riders have the GARRISONED weapon bonus while inside", Tests.FireFromContainersGarrisonedBonus);
 run.Test("Phase 41 (F-60, step 5): a garrisoned rider fires from inside, within its garrisoned range, and never walks", Tests.FireFromContainersGarrisonFires);
 run.Test("Fire from containers, step 6: an attack order on a garrisoned building is passed to its riders", Tests.FireFromContainersOrdersThroughTheContainer);
+run.Test("Fire from containers, step 7: armed riders give a transport its PLAYER_UPGRADE weapon set", Tests.FireFromContainersArmedRidersUpgradeWeaponSet);
 run.Test("Phase 41 (F-60, step 4): a garrison's rider fires from the fire point closest to its victim, a fire base's from its station", Tests.FireFromContainersFirePoints);
 run.Test("Phase 41 (F-60, step 3): a Battle Bus passes its weapon bonus to its riders", Tests.FireFromContainersPassedBonus);
 run.Test("Phase 41 (F-58, step 1): a guard drives to an enemy in its inner range, kills it and returns", Tests.GuardPositionChasesAndReturns);

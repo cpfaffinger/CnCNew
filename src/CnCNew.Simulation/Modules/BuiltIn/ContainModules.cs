@@ -758,6 +758,12 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
     /// <summary><c>WeaponBonusPassedToPassengers</c> (default no, <c>OpenContainModuleData</c>): the transport's own weapon bonus conditions are its riders' too (F-60; the Battle Bus).</summary>
     public bool WeaponBonusPassedToPassengers { get; init; }
 
+    /// <summary>
+    /// <c>ArmedRidersUpgradeMyWeaponSet</c> (default no): the transport carries its <c>PLAYER_UPGRADE</c> weapon set while an infantry rider has a weapon that reaches beyond contact
+    /// and does damage (F-60, step 7; the Battle Bus, the Listening Outpost, the Troop Crawler).
+    /// </summary>
+    public bool ArmedRidersUpgradeMyWeaponSet { get; init; }
+
     public static TransportContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "Slots", 0)),
@@ -769,6 +775,7 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
         DestroyRidersWhoAreNotFreeToExit = ModuleConfigReader.Bool(configuration, "DestroyRidersWhoAreNotFreeToExit", false),
         PassengersAllowedToFire = ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
         WeaponBonusPassedToPassengers = ModuleConfigReader.Bool(configuration, "WeaponBonusPassedToPassengers", false),
+        ArmedRidersUpgradeMyWeaponSet = ModuleConfigReader.Bool(configuration, "ArmedRidersUpgradeMyWeaponSet", false),
     };
 }
 
@@ -779,9 +786,8 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
 /// <see cref="TransportContainData.Slots"/>. <c>HealthRegen%PerSec</c> heals every occupant continuously (unlike
 /// <c>GarrisonContain</c>'s ramp-to-full-over-a-fixed-duration): <c>MaxHealth * percent / 100</c> per second, applied
 /// as a per-tick sliver. Deliberately not modeled: <c>InitialPayload</c> (same reason as <c>GarrisonContain</c>'s
-/// <c>InitialRoster</c>), firing from inside, exit paths/bones/pitch/delay/scatter (all presentation or need real
-/// movement/positioning), capture handling (no capture system), <c>ArmedRidersUpgradeMyWeaponSet</c> (no WeaponBonus
-/// system at all, project-wide).
+/// <c>InitialRoster</c>), the exit bone and pitch, and capture handling. Firing from inside, the exit paths, the door's delay and the scatter of a dead
+/// transport's riders are modeled (F-60, F-03, F-51); <c>ArmedRidersUpgradeMyWeaponSet</c> switches the transport's weapon set (F-60, step 7).
 /// </summary>
 public class TransportContain(TransportContainData data) : ContainModuleBase(data.Base)
 {
@@ -823,6 +829,45 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         _usedSlots += candidate.Template.TransportSlotCount;
         var phase = (int)(world.Tick - world.Time.OriginalFrames(world.Time.FramesIn(world.Tick)));
         if (phase != 0) EnterPhases[candidate.Id.Value] = phase;
+        LetRidersUpgradeWeaponSet(world);
+    }
+
+    private static readonly int DeployDamage = NameTables.DamageType.TryIndexOf("DEPLOY", out var deploy) ? deploy : throw new InvalidOperationException("DEPLOY is not a damage type.");
+    private static readonly int DisarmDamage = NameTables.DamageType.TryIndexOf("DISARM", out var disarm) ? disarm : throw new InvalidOperationException("DISARM is not a damage type.");
+    private static readonly int HackDamage = NameTables.DamageType.TryIndexOf("HACK", out var hack) ? hack : throw new InvalidOperationException("HACK is not a damage type.");
+
+    /// <summary>
+    /// <c>TransportContain::letRidersUpgradeWeaponSet</c>, after every rider that comes in or goes out (<c>onContaining</c>, <c>onRemoving</c>): with
+    /// <c>ArmedRidersUpgradeMyWeaponSet</c> the transport's <c>PLAYER_UPGRADE</c> weapon set flag is set while some infantry rider carries a weapon that is no contact weapon and is a
+    /// damage weapon (<c>Weapon::isDamageWeapon</c>: <c>DEPLOY</c> and <c>DISARM</c> are, <c>HACK</c> is not, else a primary or secondary damage above zero), and cleared otherwise -
+    /// the same flag a <c>WeaponSetUpgrade</c> raises, as in the original.
+    /// </summary>
+    private void LetRidersUpgradeWeaponSet(IWorldServices world)
+    {
+        if (!data.ArmedRidersUpgradeMyWeaponSet) return;
+        var any = false;
+        foreach (var id in Riders)
+        {
+            if (world.FindEntity(id) is not { } rider || !rider.Template.IsKindOf("INFANTRY") || SimulationWorld.ActiveWeaponSet(rider) is not { } set) continue;
+            for (var slot = 0; slot < WeaponSlot.Count && !any; slot++)
+            {
+                if (!set.HasWeapon(slot)) continue;
+                var weapon = world.Templates.Weapons[set.Weapons[slot]];
+                any = !SimulationWorld.IsContactWeapon(weapon) && IsDamageWeapon(weapon);
+            }
+            if (any) break;
+        }
+        if (Entity.HasPlayerUpgradeWeapon == any) return;
+        Entity.HasPlayerUpgradeWeapon = any;
+        world.WeaponSetFlagsChanged(Entity);
+        world.MarkDirty(Entity);
+    }
+
+    private static bool IsDamageWeapon(WeaponInfo weapon)
+    {
+        if (weapon.DamageType == DeployDamage || weapon.DamageType == DisarmDamage) return true;
+        if (weapon.DamageType == HackDamage) return false;
+        return weapon.PrimaryDamage > Fixed.Zero || weapon.SecondaryDamage > Fixed.Zero;
     }
 
     /// <summary>
@@ -877,6 +922,7 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         _exitNotBusyTick = world.Tick + data.ExitDelayTicks;
         // The same function: "if (getObject()->isEffectivelyDead()) scatterToNearbyPosition(rider)" - the riders of a destroyed transport, and only they, are scattered.
         if (positionAtContainer && Entity.EffectivelyDead) ScatterToNearbyPosition(world, candidate);
+        LetRidersUpgradeWeaponSet(world);
     }
 
     // The riders that were told to leave and wait for the door (AIExitState of each of them), the tick from which the door is free again (TransportContain::m_frameExitNotBusy),

@@ -41,6 +41,18 @@ static partial class Tests
           ClipSize = 0
           DelayBetweenShots = 300
         End
+        Weapon FcBusDummy
+          PrimaryDamage = 0.1
+          AttackRange = 100.0
+          DamageType = SMALL_ARMS
+          DelayBetweenShots = 1000
+        End
+        Weapon FcKnife
+          PrimaryDamage = 20
+          AttackRange = 3.0
+          DamageType = MELEE
+          DelayBetweenShots = 500
+        End
         Weapon FcGattlingGun
           PrimaryDamage = 5
           AttackRange = 150.0
@@ -163,6 +175,41 @@ static partial class Tests
             Slots = 2
             PassengersAllowedToFire = Yes
             WeaponBonusPassedToPassengers = Yes
+          End
+        End
+        Object FcArmedBus
+          KindOf = SELECTABLE VEHICLE TRANSPORT
+          TransportSlotCount = 3
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          WeaponSet
+            Conditions = PLAYER_UPGRADE
+            Weapon = PRIMARY FcBusDummy
+          End
+          Behavior = TransportAIUpdate AI01
+          End
+          Behavior = TransportContain Transport01
+            Slots = 2
+            PassengersAllowedToFire = Yes
+            ArmedRidersUpgradeMyWeaponSet = Yes
+          End
+        End
+        Object FcKnifeman
+          KindOf = SELECTABLE INFANTRY
+          TransportSlotCount = 1
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcKnife
+          End
+          Behavior = AIUpdateInterface AI01
           End
         End
         Object FcTruck
@@ -589,6 +636,25 @@ static partial class Tests
             for (var step = 0; step < empty.World.Frames(30) && empty.Rider.ContainedBy.IsValid; step++) empty.World.Step();
             Check.That(empty.Feeder.Pursue(1, empty.Container.Id.Value, empty.Victim.Id.Value, 0, 0).Reason == CommandRejection.CannotMove, $"{rate}: an empty building cannot take an attack order.");
         }
+    }
+
+    /// <summary>
+    /// Step 7, <c>ArmedRidersUpgradeMyWeaponSet</c> (<c>TransportContain::letRidersUpgradeWeaponSet</c>): a transport with the flag carries its <c>PLAYER_UPGRADE</c> weapon set while a
+    /// rifleman is inside, loses it when he leaves, and a rider with only a contact weapon (a knife) does not give it.
+    /// </summary>
+    public static void FireFromContainersArmedRidersUpgradeWeaponSet()
+    {
+        var scene = FcScene(TestRate.Default, "FcArmedBus", "FcRifleman", 300);
+        bool Upgraded() => scene.Container.HasPlayerUpgradeWeapon && SimulationWorld.ActiveWeaponSet(scene.Container) is { WeaponCount: > 0 };
+        Check.That(Upgraded(), "With a rifleman inside the bus carries its PLAYER_UPGRADE weapon set.");
+        scene.Feeder.ExitContainer(1, scene.Rider.Id.Value);
+        for (var step = 0; step < scene.World.Frames(30) && scene.Rider.ContainedBy.IsValid; step++) scene.World.Step();
+        Check.That(!scene.Rider.ContainedBy.IsValid && !Upgraded(), "Empty, it has none.");
+        scene.Feeder.Spawn(1, "FcKnifeman", owner: 1, x: 0, y: 0);
+        scene.World.Step();
+        var knifeman = scene.World.Entities.Single(value => value.Template.Name == "FcKnifeman");
+        Check.That(scene.World.TryEnterContainer(knifeman, scene.Container) && !Upgraded(), "A rider with only a contact weapon gives it no weapon set.");
+        Check.That(scene.World.TryEnterContainer(scene.Rider, scene.Container) && Upgraded(), "The rifleman back inside gives it again.");
     }
 
     /// <summary>
