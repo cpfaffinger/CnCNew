@@ -192,6 +192,8 @@ static partial class Tests
             var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 5, players, "real-air-silo", fingerprint, terrain.Fingerprint), catalog, terrain);
             var sequence = new Dictionary<int, ulong>();
             SubmitResult Send(int player, Func<ulong, SimCommand> make) => world.Submit(make(sequence[player] = sequence.GetValueOrDefault(player) + 1));
+            // The silo is POWERED: without a power plant its player is browned out and its power paused (F-16).
+            Check.That(Send(1, next => new SpawnCommand(new PlayerId(1), next, world.Tick, "ChinaPowerPlant", new PlayerId(1), Fixed.FromInt(1000), Fixed.FromInt(3300), Fixed.Zero, Fixed.Zero)).Accepted, "The power plant spawns.");
             Check.That(Send(1, next => new SpawnCommand(new PlayerId(1), next, world.Tick, "ChinaNuclearMissileLauncher", new PlayerId(1), Fixed.FromInt(1000), Fixed.FromInt(3000), Fixed.Zero, Fixed.Zero)).Accepted, "The silo spawns.");
             Check.That(Send(2, next => new SpawnCommand(new PlayerId(2), next, world.Tick, "AmericaTankCrusader", new PlayerId(2), Fixed.FromInt(3000), Fixed.FromInt(3000), Fixed.Zero, Fixed.Zero)).Accepted, "The target spawns.");
             world.Step();

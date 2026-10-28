@@ -604,6 +604,7 @@ static partial class Tests
             var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 9, players, "real-scan", fingerprint), catalog);
             var feeder = new Feeder(world);
             feeder.Spawn(1, template, owner: 1, x: 500, y: 500);
+            if (template == "AmericaPatriotBattery") feeder.Spawn(1, "AmericaPowerPlant", owner: 1, x: 800, y: 500); // a powered base defence is disabled without power (F-16)
             world.Step();
             var unit = world.Entities.First(value => value.Template.Name == template);
             var scans = 0;
