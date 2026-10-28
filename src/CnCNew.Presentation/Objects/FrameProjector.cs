@@ -84,6 +84,9 @@ public sealed class FrameProjector
     private Dictionary<uint, Capture> _previous = [];
     private Dictionary<uint, Capture> _current = [];
     private ImmutableArray<Capture> _currentOrdered = [];
+    private ImmutableArray<DrawableInstance> _guns = [];
+    // The way each garrison gun last faced (GarrisonContain::trackTargets orients it while its rider has a victim), by GarrisonGunIndex.
+    private readonly Dictionary<int, float> _gunYaw = [];
 
     /// <summary>The objects the last <see cref="Advance"/> captured, in the order of their ids: what the attached effects follow (<see cref="Fx.AttachedEffects"/>).</summary>
     public IEnumerable<Fx.ProjectedEntity> Projected
@@ -205,6 +208,7 @@ public sealed class FrameProjector
             if (_known.Add(entity.Id.Value)) Claim(capture);
         }
         _currentOrdered = ordered.ToImmutable();
+        _guns = GarrisonGuns(world);
         observer?.PhaseEnded(PresentationPhase.ProjectorAdvanceCapture);
         if (world.Tick % time.OriginalFrames(PruneIntervalFrames) == 0)
         {
@@ -286,6 +290,7 @@ public sealed class FrameProjector
         }
         for (; nextGhost < ghosts.Length; nextGhost++)
             drawables.Add(ToDrawable(ghosts[nextGhost], ghosts[nextGhost].Position, ghosts[nextGhost].Yaw, true));
+        drawables.AddRange(_guns);
         var baseConditions = BaseConditions(_options);
         foreach (var item in _options.Scenery)
         {
@@ -294,6 +299,61 @@ public sealed class FrameProjector
                 1f, 1f, baseConditions, _scenerySelections[item.Index], null, null, true, false, Fogged: _options.Viewer is not null && _sceneryFogged[item.Index]));
         }
         return new RenderFrame(Tick, alpha, _options.Viewer, drawables.ToImmutable()) { Ahead = ahead };
+    }
+
+    /// <summary>The object the original draws at an occupied garrison point (<c>TheThingFactory->findTemplate("GarrisonGun")</c>).</summary>
+    public const string GarrisonGunTemplate = "GarrisonGun";
+
+    /// <summary><c>MUZZLE_FLASH_LIFETIME</c> (<c>LOGICFRAMES_PER_SECOND / 7</c>): the gun shows FIRING_A from the frame after its rider's shot until more than this many frames have passed.</summary>
+    public const int GarrisonFlashFrames = OriginalFrame.PerSecond / 7;
+
+    /// <summary>The key of a garrison gun among the drawables without an entity: negative, apart from scenery and the placement preview.</summary>
+    public static int GarrisonGunIndex(EntityId building, int point) => -(1 << 20) - checked((int)(building.Value * 40 + (uint)point));
+
+    /// <summary>
+    /// <c>GarrisonContain::putObjectAtGarrisonPoint</c>, <c>trackTargets</c> and <c>updateEffects</c> (F-60, step 8): a gun barrel at every occupied point of an enclosing garrison
+    /// the viewer sees, where its rider stands, facing the rider's victim (it keeps the way it faced while the rider has none), with FIRING_A in the frames after the rider's
+    /// shot (not for a poison weapon). Drawn only - the gun is no object of the simulation.
+    /// </summary>
+    private ImmutableArray<DrawableInstance> GarrisonGuns(SimulationWorld world)
+    {
+        if (!_catalog.TryGet(GarrisonGunTemplate, out var gun)) return [];
+        var guns = ImmutableArray.CreateBuilder<DrawableInstance>();
+        var baseConditions = BaseConditions(_options);
+        foreach (var capture in _currentOrdered)
+        {
+            if (world.FindEntity(new EntityId(capture.Id)) is not { Container: CnCNew.Simulation.Modules.BuiltIn.GarrisonContain { IsEnclosing: true } garrison } building) continue;
+            foreach (var (point, riderId, target) in garrison.OccupiedPoints())
+            {
+                if (world.FindEntity(riderId) is not { } rider) continue;
+                var key = GarrisonGunIndex(building.Id, point);
+                var position = new Vector3(ToFloat(rider.X), ToFloat(rider.Y), ToFloat(rider.Z));
+                var victim = world.FindEntity(world.AcquiredVictimOf(rider)) ?? world.FindEntity(target);
+                if (victim is not null && (victim.X != rider.X || victim.Y != rider.Y))
+                    _gunYaw[key] = MathF.Atan2(ToFloat(victim.Y) - position.Y, ToFloat(victim.X) - position.X);
+                var conditions = GunFlashes(rider, world) ? baseConditions.Union(FiringA) : baseConditions;
+                guns.Add(new DrawableInstance(EntityId.Invalid, key, gun, position, _gunYaw.GetValueOrDefault(key, capture.Yaw), building.Owner,
+                    _options.Colors?.Of(building.Owner) ?? TeamColors.Neutral, 1f, 1f, conditions, Select(gun, conditions), null, null, false, false));
+            }
+        }
+        foreach (var stale in _gunYaw.Keys.Where(key => !guns.Any(drawable => drawable.SceneryIndex == key)).ToArray()) _gunYaw.Remove(stale);
+        return guns.ToImmutable();
+    }
+
+    private static readonly ModelConditionSet FiringA = ModelConditionSet.Parse("FIRING_A");
+    private static readonly int PoisonDamage = NameTables.DamageType.TryIndexOf("POISON", out var poison) ? poison : throw new InvalidOperationException("POISON is not a damage type.");
+
+    /// <summary>The rider fired, with a weapon that is not poison, between one and <see cref="GarrisonFlashFrames"/> + 1 original frames before the tick just simulated.</summary>
+    private static bool GunFlashes(Entity rider, SimulationWorld world)
+    {
+        var last = -1L;
+        var slotFired = -1;
+        for (var slot = 0; slot < CnCNew.Simulation.Templates.WeaponSlot.Count; slot++)
+            if (rider.LastFireTickOf(slot) is var tick && tick > last) (last, slotFired) = (tick, slot);
+        if (last < 0) return false;
+        var since = world.Tick - 1 - last;
+        if (since < world.Time.OriginalFrames(1) || since >= world.Time.OriginalFrames(GarrisonFlashFrames + 2)) return false;
+        return SimulationWorld.ActiveWeaponSet(rider) is not { } set || !set.HasWeapon(slotFired) || world.Templates.Weapons[set.Weapons[slotFired]].DamageType != PoisonDamage;
     }
 
     /// <summary>Shortest-arc interpolation of two angles in radians.</summary>

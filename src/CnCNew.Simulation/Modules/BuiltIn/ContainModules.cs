@@ -480,6 +480,14 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         PutAt(world, rider, victim, condition, index);
     }
 
+    /// <summary>The occupied points in index order: the point, its rider (standing at the point) and the target it was put there for.</summary>
+    public IEnumerable<(int Index, EntityId Rider, EntityId Target)> OccupiedPoints()
+    {
+        if (_pointsInUse == 0) yield break;
+        for (var index = 0; index < ContainerFirePoints.MaxGarrisonPoints; index++)
+            if (_pointRider[index].IsValid) yield return (index, _pointRider[index], _pointTarget[index]);
+    }
+
     /// <summary>The riders at points, in the order of the points (<c>removeInvalidObjectsFromGarrisonPoints</c> walks them so).</summary>
     public IEnumerable<EntityId> RidersAtPoints()
     {
