@@ -44,7 +44,7 @@ REVIEW = {
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Body/ActiveBody.cpp#ActiveBody::internalAddSubdualDamage':
         'not applicable - this port does not simulate subdual damage (a body reports it as no effect, docs/SIMULATION-CORE.md)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Object.cpp#Object::onDisabledEdge':
-        'not applicable - this port has no disabled-power path of power plants (energy follows ownership and construction only)',
+        'adopted - GameFix.NoPowerEdgeForUnfinishedPlant (after the fidelity correction F-56, Phase 41)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/System/GameLogic.cpp#GameLogic::tryStartNewGame':
         'equivalent - random colour, position and faction are drawn from the match description\'s own seed (MatchDescription.Resolve)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate.cpp#AIUpdateInterface::xfer':

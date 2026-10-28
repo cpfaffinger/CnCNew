@@ -89,6 +89,8 @@ public sealed partial class SimulationWorld
         // "We can't affect something that consumes, or else we go low power which removes the consumption which makes us not low power..."
         var power = entity.Template.EnergyProduction;
         if (power <= 0) return;
+        // The rule fix no-power-edge-for-unfinished-plant: a plant under construction produces nothing yet, so its edge changes nothing.
+        if (_templates.Rules.Has(Rules.GameFix.NoPowerEdgeForUnfinishedPlant) && entity.HasStatus(ObjectStatusBits.UnderConstruction)) return;
         foreach (var module in entity.ModuleArray)
         {
             if (module is PowerPlantUpgrade { Executed: true }) power += entity.Template.EnergyBonus;

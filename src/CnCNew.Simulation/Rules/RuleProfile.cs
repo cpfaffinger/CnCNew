@@ -73,6 +73,10 @@ public enum GameFix
 
     /// <summary>A guard answers an attacker only in its IDLE state, not while it attacks (INNER) or walks back to its post (RETURN); the retaliation likewise not in RETURN (<c>AIGuardMachine</c>, <c>AIGuardRetaliateMachine</c>).</summary>
     GuardAnswersOnlyWhenIdle = 21,
+
+    /// <summary>A power plant under construction changes no energy when it is disabled or enabled again - it produces nothing yet (<c>Object::onDisabledEdge</c>).</summary>
+    NoPowerEdgeForUnfinishedPlant = 22,
+
 }
 
 /// <summary>
@@ -177,6 +181,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.GuardAnswersOnlyWhenIdle, "guard-answers-only-when-idle",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIGuard.cpp, AIGuardMachine::AIGuardMachine; AIGuardRetaliate.cpp, AIGuardRetaliateMachine::AIGuardRetaliateMachine",
             "a guarding unit that is shot while it fights or walks back to its post goes on with that and answers the attacker once it stands idle at its post, instead of turning to the attacker at once - no more alternating between returning and shooting back"),
+        new(GameFix.NoPowerEdgeForUnfinishedPlant, "no-power-edge-for-unfinished-plant",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Object.cpp, Object::onDisabledEdge",
+            "an EMP or another disable on a power plant that is still being built takes no power from its player - it produces none yet - instead of putting the base into a brown-out"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

@@ -358,6 +358,43 @@ static partial class Tests
     }
 
     /// <summary>
+    /// The rule fix <c>no-power-edge-for-unfinished-plant</c> (<c>Object::onDisabledEdge</c>): an EMP on a power plant that is still being built takes 5 from its player's production under the
+    /// original rules - it produces nothing yet - and nothing with the fix; either way the finished plant produces 5. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void GameFixNoPowerEdgeForUnfinishedPlant()
+    {
+        foreach (var rate in new[] { CnCNew.Simulation.Time.SimulationRate.Hz30, CnCNew.Simulation.Time.SimulationRate.Hz60, CnCNew.Simulation.Time.SimulationRate.Hz120 })
+        {
+            (int WhileDisabled, int Finished) Run(CnCNew.Simulation.Rules.RuleProfile rules)
+            {
+                var fixture = new SyntheticFixture(rate, files: ConstructionFiles(), rules: rules);
+                var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, ""), fixture.Templates);
+                var feeder = new Feeder(world);
+                feeder.GiveMoney(1, 1000);
+                world.Step();
+                feeder.Spawn(1, "Dozer", x: 0, y: 0);
+                world.Step();
+                var dozer = world.Entities.Single(entity => entity.Template.Name == "Dozer");
+                feeder.Construct(1, dozer.Id.Value, "Plant", 60, 0);
+                for (var step = 0; step < world.Frames(10); step++) world.Step();
+                var site = world.Entities.Single(entity => entity.Template.Name == "Plant");
+                Check.That(site.HasStatus(ObjectStatusBits.UnderConstruction), $"{rate}: setup - the plant is being built.");
+                world.DisableByEmpUntil(site, world.Tick + world.Frames(5));
+                world.Step();
+                var whileDisabled = world.ProducedEnergyOf(new PlayerId(1));
+                for (var step = 0; step < world.Frames(300) && site.HasStatus(ObjectStatusBits.UnderConstruction); step++) world.Step();
+                for (var step = 0; step < world.Frames(10); step++) world.Step();
+                return (whileDisabled, world.ProducedEnergyOf(new PlayerId(1)));
+            }
+
+            var original = Run(CnCNew.Simulation.Rules.RuleProfile.Original);
+            var fixedRun = Run(CnCNew.Simulation.Rules.RuleProfile.Parse("no-power-edge-for-unfinished-plant"));
+            Check.That(original.WhileDisabled == -5 && fixedRun.WhileDisabled == 0, $"{rate}: the EMP takes 5 from the unfinished plant's player under the original rules, nothing with the fix ({original.WhileDisabled}, {fixedRun.WhileDisabled}).");
+            Check.That(original.Finished == 5 && fixedRun.Finished == 5, $"{rate}: the finished plant produces 5 either way ({original.Finished}, {fixedRun.Finished}).");
+        }
+    }
+
+    /// <summary>
     /// F-56: <c>Object::onDisabledEdge</c> takes a power plant's production out of its player's energy when the plant becomes disabled and gives it back when its last disable
     /// ends - an EMP'd plant browns out the base it powers. A disabled plant that is destroyed does not take its production out a second time
     /// (<c>friend_adjustPowerForPlayer</c>). The port's plant kept producing under an EMP.
