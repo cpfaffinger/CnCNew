@@ -217,6 +217,7 @@ run.Test("Phase 40 (F-48): the body applies the armour to raw damage and healing
 run.Test("Phase 40: damage modules read the dealt amount before the health clips it (out.m_actualDamageDealt)", Tests.DamageModulesReadTheUnclippedAmount);
 run.Test("Phase 40 (F-59): a power triggered at a place opens its view there (createViewObject)", Tests.PowerOpensItsViewAtTheTarget);
 run.Test("Phase 41 (F-55a): the terrain line of the attack view follows the original (isClearLineOfSight)", Tests.TerrainLineOfSightFollowsTheOriginal);
+run.Test("Phase 41 (F-55b): the obstacle walk of the attack view (isAttackViewBlockedByObstacle)", Tests.AttackLineBlockedByStructures);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);

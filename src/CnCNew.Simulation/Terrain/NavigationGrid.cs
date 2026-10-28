@@ -67,6 +67,10 @@ public sealed class NavigationGrid
     private readonly int _cellsX;
     private readonly int _cellsY;
     private readonly ushort[] _obstacles;
+    // For the attack's view (F-55): the sum of the ids of the footprints covering a cell - its owner when exactly one does, independent of the order they came in -
+    // and how many of them cannot be seen through.
+    private readonly ulong[] _obstacleIds;
+    private readonly ushort[] _opaqueObstacles;
     private readonly byte[] _state;
     private SearchCell[] _search;
     private bool[] _open = new bool[CellStates];
@@ -117,6 +121,8 @@ public sealed class NavigationGrid
         _cellsY = terrain.CellsY;
         var cells = checked(_cellsX * _cellsY);
         _obstacles = new ushort[cells];
+        _obstacleIds = new ulong[cells];
+        _opaqueObstacles = new ushort[cells];
         _state = new byte[cells];
         _search = new SearchCell[cells];
         for (var cy = 0; cy < _cellsY; cy++)
@@ -138,13 +144,13 @@ public sealed class NavigationGrid
 
     public void AddFootprint(ulong entityId, ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
     {
-        Apply(template, x, y, angle, 1);
+        Apply(template, x, y, angle, 1, entityId);
         ObstacleSum = unchecked(ObstacleSum + Mix(entityId));
     }
 
     public void RemoveFootprint(ulong entityId, ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
     {
-        Apply(template, x, y, angle, -1);
+        Apply(template, x, y, angle, -1, entityId);
         ObstacleSum = unchecked(ObstacleSum - Mix(entityId));
     }
 
@@ -206,9 +212,10 @@ public sealed class NavigationGrid
         }
     }
 
-    private void Apply(ObjectTemplate template, Fixed x, Fixed y, Fixed angle, int delta)
+    private void Apply(ObjectTemplate template, Fixed x, Fixed y, Fixed angle, int delta, ulong entityId)
     {
         var footprint = new Footprint(template, x, y, angle);
+        var opaque = template.IsKindOf("CAN_SEE_THROUGH_STRUCTURE") ? 0 : delta;
         var x0 = Math.Max(0, footprint.X0);
         var x1 = Math.Min(Terrain.CellsX - 1, footprint.X1);
         var y0 = Math.Max(0, footprint.Y0);
@@ -220,6 +227,8 @@ public sealed class NavigationGrid
                 var index = cy * Terrain.CellsX + cx;
                 var count = checked((ushort)(_obstacles[index] + delta));
                 _obstacles[index] = count;
+                _obstacleIds[index] = unchecked(_obstacleIds[index] + (ulong)(long)delta * entityId);
+                _opaqueObstacles[index] = checked((ushort)(_opaqueObstacles[index] + opaque));
                 _state[index] = count > 0 ? (byte)(_state[index] | ObstacleBit) : (byte)(_state[index] & ~ObstacleBit);
             }
         _memoStale = true;
@@ -244,6 +253,55 @@ public sealed class NavigationGrid
     }
 
     public bool IsBlockedByObstacle(int cx, int cy) => Terrain.IsInside(cx, cy) && _obstacles[cy * Terrain.CellsX + cx] > 0;
+
+    /// <summary>
+    /// The obstacle part of <c>Pathfinder::isAttackViewBlockedByObstacle</c> (<c>iterateCellsAlongLine</c> with <c>attackBlockedByObstacleCallback</c>): a 4-connected
+    /// Bresenham walk over the cells from the one under the attacker to the one under the victim, both included, blocked at the first cell a structure covers that
+    /// cannot be seen through (<c>CAN_SEE_THROUGH_STRUCTURE</c>) unless the structure is one of <paramref name="excepted"/> (the attacker, the victim, either one's slaver,
+    /// the attacker's container) or the one that covers the victim's cell. A cliff or water cell under a structure never blocks (<c>setTypeAsObstacle</c> leaves such a
+    /// cell as it is). Where footprints overlap, the cell's owner is the set of them (the original keeps the first that claimed it): a cell of several blocks unless it is
+    /// covered by the same set as the victim's cell, and it passes as transparent only when all of them are.
+    /// </summary>
+    public bool IsAttackLineBlocked(Fixed fromX, Fixed fromY, Fixed toX, Fixed toY, ReadOnlySpan<ulong> excepted)
+    {
+        var x = Math.Clamp(TerrainMap.CellOf(fromX), 0, Terrain.CellsX - 1);
+        var y = Math.Clamp(TerrainMap.CellOf(fromY), 0, Terrain.CellsY - 1);
+        var endX = Math.Clamp(TerrainMap.CellOf(toX), 0, Terrain.CellsX - 1);
+        var endY = Math.Clamp(TerrainMap.CellOf(toY), 0, Terrain.CellsY - 1);
+        var victimCell = endY * Terrain.CellsX + endX;
+        var deltaX = Math.Abs(endX - x);
+        var deltaY = Math.Abs(endY - y);
+        var stepX = endX >= x ? 1 : -1;
+        var stepY = endY >= y ? 1 : -1;
+        var (majorX, majorY, minorX, minorY, denominator, add) = deltaX >= deltaY
+            ? (stepX, 0, 0, stepY, deltaX, deltaY)
+            : (0, stepY, stepX, 0, deltaY, deltaX);
+        var numerator = denominator / 2;
+        for (var step = 0; step <= denominator; step++)
+        {
+            if (BlocksView(y * Terrain.CellsX + x, victimCell, excepted)) return true;
+            numerator += add;
+            if (numerator >= denominator)
+            {
+                // The minor step is a cell of its own: the walk never passes a corner diagonally.
+                numerator -= denominator;
+                x += minorX;
+                y += minorY;
+                if (BlocksView(y * Terrain.CellsX + x, victimCell, excepted)) return true;
+            }
+            x += majorX;
+            y += majorY;
+        }
+        return false;
+    }
+
+    private bool BlocksView(int index, int victimCell, ReadOnlySpan<ulong> excepted)
+    {
+        if (_opaqueObstacles[index] == 0) return false;
+        if ((_state[index] & TerrainBits) != 0) return false;
+        if (_obstacles[index] == 1 && excepted.Contains(_obstacleIds[index])) return false;
+        return _obstacles[victimCell] == 0 || _obstacles[index] != _obstacles[victimCell] || _obstacleIds[index] != _obstacleIds[victimCell];
+    }
 
     public bool IsPassable(int cx, int cy, LocomotorSurfaces surfaces)
     {
