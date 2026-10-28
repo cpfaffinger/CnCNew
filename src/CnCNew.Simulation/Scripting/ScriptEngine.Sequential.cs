@@ -84,7 +84,14 @@ public sealed partial class ScriptEngine
             case "TEAM_SPIN_FOR_FRAMECOUNT":
                 if (Has(type, p, 2) && FindTeam(Str(p, 0)) is { } spinning) SetSequenceTimer(spinning.Id, 0, Int(p, 1));
                 return true;
+            // doUnitGuardForFramecount: the unit guards its own position while the sequence waits (F-58).
             case "UNIT_GUARD_FOR_FRAMECOUNT":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } guardian)
+                {
+                    GuardOwnPosition(guardian);
+                    SetSequenceTimer(0, guardian.Id.Value, Int(p, 1));
+                }
+                return true;
             case "UNIT_IDLE_FOR_FRAMECOUNT":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } idler)
                 {

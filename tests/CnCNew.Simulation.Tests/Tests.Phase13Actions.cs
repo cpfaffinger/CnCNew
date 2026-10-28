@@ -166,6 +166,26 @@ static partial class Tests
         Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches.");
     }
 
+    public static void ScriptGuardActions()
+    {
+        // F-58, step 4: TEAM_GUARD_POSITION guards a waypoint, NAMED_GUARD and TEAM_GUARD the unit's own position, TEAM_GUARD_OBJECT a named object - as guard states of the
+        // simulation, no longer a walk or a stop; TEAM_GUARD_SUPPLY_CENTER guards the warehouse's side (ScriptAiExpandsToASupplyWarehouse).
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Guard", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_GUARD_POSITION", Scr.Team("Squad"), Scr.Waypoint("Mid")), Scr.Do("NAMED_GUARD", Scr.Unit("Sentry")),
+                Scr.Do("TEAM_GUARD_OBJECT", Scr.Team("teamPlayerA"), Scr.Unit("Sentry"))], oneShot: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 100m, "Squad", "Walker"), Placed("AlphaSoldier", 100m, 160m, "teamA", "Sentry"), Placed("AlphaSoldier", 140m, 160m, "teamPlayerA", "Escort1")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(300));
+        var walker = NamedIn(session, "Walker")!;
+        var sentry = NamedIn(session, "Sentry")!;
+        var escort = NamedIn(session, "Escort1")!;
+        Check.That(session.World.IsGuarding(walker) && (walker.X - Fixed.FromInt(250)).Abs() < Fixed.FromInt(30) && (walker.Y - Fixed.FromInt(200)).Abs() < Fixed.FromInt(30), $"TEAM_GUARD_POSITION: the team guards the waypoint and stands there ({walker.X}, {walker.Y}, guarding {session.World.IsGuarding(walker)}; {string.Join("; ", session.Engine.Diagnostics.Keys)}).");
+        Check.That(session.World.IsGuarding(sentry) && sentry.X == Fixed.FromInt(100) && sentry.Y == Fixed.FromInt(160), "NAMED_GUARD: the unit guards where it stands.");
+        Check.That(session.World.IsGuarding(escort), "TEAM_GUARD_OBJECT: the team guards the named object.");
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.StateHash() == session.StateHash() && restored.World.IsGuarding(walker.Id is var id ? restored.World.FindEntity(id)! : null!), "A restored mission keeps the guards.");
+    }
+
     public static void ScriptDisableHoldAndEvacuate()
     {
         // NAMED_SET_HELD freezes an object, PLAYER_DISABLE_FACTORIES stops the production of one type, NAMED_SET_EVAC_LEFT_OR_RIGHT sets a garrison's exit side.

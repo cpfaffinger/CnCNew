@@ -299,20 +299,30 @@ public sealed partial class ScriptEngine
                 break;
             case "TEAM_STOP":
             case "TEAM_STOP_AND_DISBAND":
-            case "TEAM_GUARD":
                 if (Has(type, p, 1))
                     foreach (var team in TeamsNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Stop(member);
                 break;
-            case "NAMED_GUARD":
-                if (Has(type, p, 1) && NamedEntity(Str(p, 0)) is { } guard) Stop(guard);
-                break;
-            case "TEAM_GUARD_POSITION":
-                if (Has(type, p, 2))
+            // doTeamGuard: each member guards its own position (F-58).
+            case "TEAM_GUARD":
+                if (Has(type, p, 1))
                     foreach (var team in TeamsNamed(Str(p, 0)))
-                        foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, PositionMode + Str(p, 1));
+                        foreach (var member in LiveMembers(team).ToArray()) GuardOwnPosition(member);
                 break;
+            // doNamedGuard: the object guards its own position.
+            case "NAMED_GUARD":
+                if (Has(type, p, 1) && NamedEntity(Str(p, 0)) is { } guard) GuardOwnPosition(guard);
+                break;
+            // doTeamGuardPosition: the team guards the waypoint (groupGuardPosition).
+            case "TEAM_GUARD_POSITION":
+                if (Has(type, p, 2) && WaypointOrDiagnose(Str(p, 1)) is { } post)
+                    foreach (var team in TeamsNamed(Str(p, 0))) GuardBy(LiveMembers(team).ToArray(), post.X, post.Y, EntityId.Invalid);
+                break;
+            // doTeamGuardObject: the team guards the named object (groupGuardObject).
             case "TEAM_GUARD_OBJECT":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 1)) is { } guarded)
+                    foreach (var team in TeamsNamed(Str(p, 0))) GuardBy(LiveMembers(team).ToArray(), guarded.X, guarded.Y, guarded.Id);
+                break;
             case "TEAM_ATTACK_NAMED":
                 if (Has(type, p, 2))
                     foreach (var team in TeamsNamed(Str(p, 0)))
@@ -572,6 +582,31 @@ public sealed partial class ScriptEngine
             : _issue(owner, (sequence, tick) => new SetMoveTargetCommand(owner, sequence, tick, id, x, y)).Accepted;
         if (!accepted) Diagnose("order rejected");
         else if (busy) _busyThisTick.Add(id.Value);
+    }
+
+    /// <summary>A guard order of the script (F-58): the members guard the point or the object (<c>aiGuardPosition</c> / <c>aiGuardObject</c>, <c>CMD_FROM_SCRIPT</c>), by their owners.</summary>
+    private void GuardBy(IReadOnlyList<Entity> members, Fixed x, Fixed y, EntityId guarded)
+    {
+        foreach (var owner in members.Select(member => member.Owner).Distinct().OrderBy(owner => owner.Value))
+        {
+            if (owner.IsSystem) { Diagnose("order for a neutral object"); continue; }
+            ImmutableArray<EntityId> units = [..members.Where(member => member.Owner == owner && member.Template.Locomotor is not null).Select(member => member.Id)];
+            if (units.IsEmpty) continue;
+            foreach (var unit in units)
+            {
+                _buttonHunts.Remove(unit.Value);
+                _followers.Remove(unit.Value);
+            }
+            if (!_issue(owner, (sequence, tick) => new GuardCommand(owner, sequence, tick, units, x, y, guarded, GuardMode.Normal)).Accepted) Diagnose("order rejected");
+            else foreach (var unit in units) _busyThisTick.Add(unit.Value);
+        }
+    }
+
+    /// <summary><c>aiGuardPosition</c> of the object's own position (where its begun frame ends).</summary>
+    private void GuardOwnPosition(Entity entity)
+    {
+        var (x, y, _) = entity.FrameEnd(_world.Tick);
+        GuardBy([entity], x, y, EntityId.Invalid);
     }
 
     private void Stop(Entity entity)

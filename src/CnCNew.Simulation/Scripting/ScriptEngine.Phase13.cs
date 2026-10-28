@@ -455,7 +455,10 @@ public sealed partial class ScriptEngine
         return null;
     }
 
-    /// <summary><c>AIPlayer::guardSupplyCenter</c>: the team guards (walks to, then stands at) the warehouse, on the side facing the enemy's structures.</summary>
+    /// <summary>
+    /// <c>AIPlayer::guardSupplyCenter</c>: the team guards the warehouse's side facing the enemy's structures (<c>groupGuardPosition</c>, F-58). Not modelled: the original first takes a
+    /// warehouse that is under attack (<c>isSupplySourceAttacked</c>).
+    /// </summary>
     private void GuardSupplyCenter(ScriptTeam team, int minSupplies)
     {
         var owner = team.Owner;
@@ -474,11 +477,7 @@ public sealed partial class ScriptEngine
                 location = (warehouse.X - dx / length * radius, warehouse.Y - dy / length * radius);
             }
         }
-        foreach (var member in LiveMembers(team).ToArray())
-        {
-            _followers.Remove(member.Id.Value);
-            MoveTo(member, location.X, location.Y);
-        }
+        GuardBy(LiveMembers(team).ToArray(), location.X, location.Y, EntityId.Invalid);
     }
 
     /// <summary>
