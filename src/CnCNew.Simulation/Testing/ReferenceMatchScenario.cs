@@ -35,9 +35,11 @@ public sealed record ReferenceMatchOptions(uint WorldSeed, uint DriverSeed, long
     // The driver seed is chosen, not arbitrary: the match is a war of attrition whose end depends on the production draws. Of 36 driver seeds four (at 16
     // fraction bits) or five (at 24) give no winner within 45,000 ticks, among them, at 24 bits, the seed 5EED0005 that was the standard until phase 22.
     // 5EED0007 ended with the same winner at both resolutions (docs/FIXED-POINT-Q39-24.md). Since F-44 (a producer that dies refunds its queue, phase 39) it runs to the
-    // limit without a winner; of eleven seeds surveyed at 60 Hz eight end within 15 game minutes, and 5EED0003 ends with the same winner at the same original frame (16,410)
-    // at 30, 60 and 120 Hz (docs/SIMULATION-CORE.md section 53).
-    public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0003, 216_000, 300, 0, 1_000, 1_500, 1_500, 300);
+    // limit without a winner; of eleven seeds surveyed at 60 Hz eight end within 15 game minutes, and 5EED0003 ended with the same winner at the same original frame (16,410)
+    // at 30, 60 and 120 Hz (docs/SIMULATION-CORE.md section 53). Since the power and disable corrections of phase 40 (F-16: a player below full power builds slower) 5EED0003
+    // runs to the limit again; of the seeds surveyed 5EED0001, 5EED0002 and 5EED0005 end (5EED0004 was stopped unfinished), and 5EED0001 ends with FactionGLA at the same
+    // original frame (18,945) at 30, 60 and 120 Hz (section 54).
+    public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0001, 216_000, 300, 0, 1_000, 1_500, 1_500, 300);
 
     /// <summary>
     /// The standard match for a catalog of <paramref name="rate"/>: <see cref="Standard"/> with its budget as game time, two hours at every rate (the 216,000 are
