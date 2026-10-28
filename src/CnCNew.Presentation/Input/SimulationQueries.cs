@@ -67,6 +67,13 @@ public static class SimulationQueries
         return world.ChooseWeaponInView(source, target, origin).CanFire && world.CanPlayerSee(source.Owner, target);
     }
 
+    /// <summary>The unit can take an attack order: it has a weapon, or it is a container whose riders may fire (<c>Object::isAbleToAttack</c>, F-60).</summary>
+    public static bool CanTakeAttackOrder(SimulationWorld world, Entity entity) => HasWeapon(entity) || world.PassesAttackToRiders(entity);
+
+    /// <summary><see cref="InRange"/>, or for a container without a weapon of its own: one of its riders reaches the target from its fire point.</summary>
+    public static bool InRangeOrRiders(SimulationWorld world, Entity source, Entity target)
+        => HasWeapon(source) ? InRange(world, source, target) : world.RidersCanAttack(source, target, out var inRange) && inRange;
+
     public static bool InRange(SimulationWorld world, Entity source, Entity target)
     {
         var reach = WeaponRange(world, source);

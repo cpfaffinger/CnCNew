@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
@@ -551,6 +552,43 @@ static partial class Tests
         near.Feeder.ExitContainer(1, near.Rider.Id.Value);
         near.World.Step();
         Check.That(!near.Rider.ContainedBy.IsValid && !near.World.AcquiredVictimOf(near.Rider).IsValid, "Leaving the building ends its attack.");
+    }
+
+    /// <summary>
+    /// Step 6, orders through the container (<c>AIGroup::groupAttackObjectPrivate</c>): an attack order on a garrisoned building is passed to its rider, which leaves the nearer enemy
+    /// it picked itself for the ordered one and fires at it; an order on an enemy out of every rider's reach is passed on and fails, the rider cannot approach; an empty building cannot take the order. At 30, 60 and
+    /// 120 Hz.
+    /// </summary>
+    public static void FireFromContainersOrdersThroughTheContainer()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var scene = FcScene(rate, "FcBunker", "FcRifleman", 60);
+            scene.Feeder.Spawn(2, "FcTarget", owner: 2, x: -100, y: 0);
+            scene.Feeder.Spawn(2, "FcTarget", owner: 2, x: 0, y: 300);
+            scene.World.Step();
+            var far = scene.World.Entities.Single(value => value.Template.Name == "FcTarget" && value.X == Fixed.FromInt(-100));
+            var outOfReach = scene.World.Entities.Single(value => value.Template.Name == "FcTarget" && value.Y == Fixed.FromInt(300));
+            FcRun(scene.World, scene.Rider, 30);
+            Check.That(scene.World.AcquiredVictimOf(scene.Rider) == scene.Victim.Id, $"{rate}: setup - the rider attacks the nearer enemy it picked itself.");
+
+            Check.That(scene.Feeder.Pursue(1, scene.Container.Id.Value, outOfReach.Id.Value, 0, 0).Accepted, $"{rate}: a garrisoned building takes an attack order.");
+            // "Possible after moving" passes too; a rider cannot move, so the attack ends and the rider looks again.
+            FcRun(scene.World, scene.Rider, 30);
+            Check.That(Hurt(outOfReach) == Fixed.Zero && scene.World.AcquiredVictimOf(scene.Rider) != outOfReach.Id, $"{rate}: an enemy out of the rider's reach is not fired at.");
+
+            var before = Hurt(far);
+            Check.That(scene.Feeder.Pursue(1, scene.Container.Id.Value, far.Id.Value, 0, 0).Accepted, $"{rate}: the order on the farther enemy is taken.");
+            scene.World.Step();
+            Check.That(scene.World.AcquiredVictimOf(scene.Rider) == far.Id, $"{rate}: the rider attacks the ordered enemy.");
+            Check.That(FcRun(scene.World, scene.Rider, 60).Shots > 0 && Hurt(far) > before && scene.Rider.ContainedBy == scene.Container.Id,
+                $"{rate}: it fires at it from inside.");
+
+            var empty = FcScene(rate, "FcBunker", "FcRifleman", 60);
+            empty.Feeder.ExitContainer(1, empty.Rider.Id.Value);
+            for (var step = 0; step < empty.World.Frames(30) && empty.Rider.ContainedBy.IsValid; step++) empty.World.Step();
+            Check.That(empty.Feeder.Pursue(1, empty.Container.Id.Value, empty.Victim.Id.Value, 0, 0).Reason == CommandRejection.CannotMove, $"{rate}: an empty building cannot take an attack order.");
+        }
     }
 
     /// <summary>

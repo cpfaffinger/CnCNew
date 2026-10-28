@@ -168,7 +168,7 @@ public sealed class CommandModeController
 
         if (ForceAttack)
         {
-            var armed = own.Any(entity => SimulationQueries.HasWeapon(entity));
+            var armed = own.Any(entity => SimulationQueries.CanTakeAttackOrder(world, entity));
             if (target is not null && target.Body is not null && armed && !own.Contains(target)) return Hint(ContextAction.ForceAttackObject, CursorKind.ForceAttackObj);
             if (target is null && ground is not null && armed) return Hint(ContextAction.ForceAttackGround, CursorKind.ForceAttackGround);
         }
@@ -183,8 +183,8 @@ public sealed class CommandModeController
 
         if (target is not null && world.AreEnemies(Player, target.Owner) && target.Body is not null)
         {
-            var armed = own.Where(entity => SimulationQueries.HasWeapon(entity)).ToList();
-            if (armed.Any(entity => SimulationQueries.InRange(world, entity, target))) return Hint(ContextAction.AttackObject, CursorKind.AttackObj);
+            var armed = own.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity)).ToList();
+            if (armed.Any(entity => SimulationQueries.InRangeOrRiders(world, entity, target))) return Hint(ContextAction.AttackObject, CursorKind.AttackObj);
             if (armed.Any(SimulationQueries.CanMove)) return Hint(ContextAction.AttackObjectAfterMoving, CursorKind.OutRange);
             return Hint(ContextAction.Invalid, CursorKind.GenericInvalid);
         }
@@ -261,8 +261,14 @@ public sealed class CommandModeController
             case ContextAction.AttackObject or ContextAction.AttackObjectAfterMoving or ContextAction.ForceAttackObject when target is not null:
             {
                 var any = false;
-                foreach (var unit in own.Where(entity => SimulationQueries.HasWeapon(entity)))
+                foreach (var unit in own.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity)))
                 {
+                    // A garrisoned building has no weapon and does not move: the one order goes to the simulation, which passes it to the riders (F-60, step 6).
+                    if (!SimulationQueries.HasWeapon(unit) && !SimulationQueries.CanMove(unit))
+                    {
+                        if (Issue((sequence, tick) => new PursueCommand(Player, sequence, tick, unit.Id, target.Id, unit.X, unit.Y)).Accepted) any = true;
+                        continue;
+                    }
                     Orders.Set(unit.Id, new StandingOrder(StandingOrderKind.Attack, target.Id, SimulationQueries.GroundOf(target), [], world.Tick));
                     any = true;
                 }

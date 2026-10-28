@@ -104,6 +104,52 @@ public sealed partial class SimulationWorld
     /// An accepted fire or pursue order of the unit's command giver names its victim (<c>aiAttackObject</c>): the unit is attacking by order, so it does not pick victims by itself
     /// until the orders stop.
     /// </summary>
+    /// <summary>
+    /// <c>AIGroup::groupAttackObjectPrivate</c>: "a garrisoned container capable of firing" - one with riders whose container lets them fire (<c>isPassengerAllowedToFire()</c>) - passes an
+    /// attack order on to its riders (F-60, step 6).
+    /// </summary>
+    public bool PassesAttackToRiders(Entity unit) => unit.Container is { Contained.Count: > 0 } container && container.IsPassengerAllowedToFire(this, null);
+
+    /// <summary>For the client's cursor: some rider of <paramref name="container"/> could attack <paramref name="victim"/>, and <paramref name="inRange"/> whether one reaches it from where it is.</summary>
+    public bool RidersCanAttack(Entity container, Entity victim, out bool inRange)
+    {
+        inRange = false;
+        if (!PassesAttackToRiders(container)) return false;
+        var can = false;
+        foreach (var id in container.Container!.Contained)
+        {
+            if (FindEntity(id) is not { EffectivelyDead: false } rider || !ContainerLetsFire(rider) || !CanAttack(rider, victim, false, out var reaches)) continue;
+            can = true;
+            inRange |= reaches;
+        }
+        return can;
+    }
+
+    /// <summary>
+    /// The riders' half of <c>groupAttackObjectPrivate</c>: every rider whose <c>getAbleToAttackSpecificObject</c> is possible (here or after moving) gets <c>aiAttackObject</c> on the
+    /// victim. A rider cannot move, so its attack is the engagement of its own look with this victim: it fires while the victim is in reach of its fire point and ends the attack
+    /// when it is not, as the original's attack state fails for a rider that cannot approach.
+    /// </summary>
+    private void PassAttackToRiders(Entity container, Entity victim)
+    {
+        foreach (var id in container.Container!.Contained)
+        {
+            if (FindEntity(id) is not { EffectivelyDead: false, DestroyRequested: false } rider || AiOf(rider) is not { } ai) continue;
+            if (!ContainerLetsFire(rider) || !IsAttackable(rider, victim) || !CanAttack(rider, victim, false, out _)) continue;
+            EndGuard(rider);
+            var state = rider.Acquisition ??= new AcquisitionState();
+            if (state.Chasing) ai.StopInternalMove();
+            state.Victim = victim.Id;
+            state.Ordered = false;
+            state.AttackMove = false;
+            state.Chasing = false;
+            state.ChaseTick = 0;
+            AimTurretsForAttack(rider, victim, TurretAimOrder.Attack);
+            _acquirers.Add(rider.Id.Value);
+            MarkDirty(rider);
+        }
+    }
+
     private void NoteOrderedAttack(Entity unit, Entity victim)
     {
         if (AiOf(unit) is not { } ai) return;

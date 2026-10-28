@@ -891,7 +891,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_entities.TryGetValue(pursue.Unit.Value, out var pursuer) || pursuer.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (pursuer.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (!_entities.TryGetValue(pursue.Victim.Value, out var pursued) || pursued.DestroyRequested || pursued.Body is null) return CommandRejection.UnknownEntity;
-                if (!CanMove(pursuer)) return CommandRejection.CannotMove;
+                if (!CanMove(pursuer) && !PassesAttackToRiders(pursuer)) return CommandRejection.CannotMove;
                 if (!CanPlayerSee(command.Player, pursued)) return CommandRejection.TargetNotVisible;
                 break;
             }
@@ -1240,7 +1240,14 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (unit.Owner != command.Player) { RecordRejection(command, CommandRejection.NotPermitted); break; }
                 var victim = FindEntity(pursue.Victim);
                 if (victim is null || victim.DestroyRequested || victim.Body is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
-                if (!CanMove(unit)) { RecordRejection(command, CommandRejection.CannotMove); break; }
+                // AIGroup::groupAttackObjectPrivate: a container whose riders may fire orders them first, then the container itself attacks if it can (F-60, step 6).
+                var passes = PassesAttackToRiders(unit);
+                if (passes) PassAttackToRiders(unit, victim);
+                if (!CanMove(unit))
+                {
+                    if (!passes) RecordRejection(command, CommandRejection.CannotMove);
+                    break;
+                }
                 ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
                 // The order replaces the unit's attack like any new AI command; the pursuit then starts the attack afresh against the victim. A unit that needs a line of
                 // sight and cannot fire from where it stands goes where it can (AIAttackApproachTargetState::computePath -> findAttackPath, F-55).

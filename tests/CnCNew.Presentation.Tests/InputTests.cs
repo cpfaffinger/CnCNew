@@ -1007,6 +1007,18 @@ static class InputTests
         arena.Step();
         Assert(world.RejectionCounts.Sum() == 0, $"every issued command was accepted by the simulation ({string.Join(",", world.RejectionCounts)})");
         Assert(r1.ContainedBy == bunker.Id && r2.ContainedBy == bunker.Id && barracks.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.ProductionUpdate>().Any(), "the orders took effect");
+
+        // A garrisoned building takes an attack order for its riders (F-60, step 6): the attack cursor over an enemy in their reach, and one PursueCommand the simulation passes on.
+        arena.Spawn("Ranger", Enemy, 40, 150);
+        arena.Step();
+        var near = arena.Find("Ranger", Enemy, 40, 150);
+        selection.Replace([bunker.Id]);
+        Assert(controller.Hover(world, view, Screen(40, 150)) is { Action: ContextAction.AttackObject, Cursor: CursorKind.AttackObj }, "a garrisoned bunker over an enemy in its riders' reach: attack");
+        Assert(controller.Hover(world, view, Screen(120, 40)) is { Action: ContextAction.Invalid }, "an enemy beyond its riders' reach: the bunker cannot go there");
+        Assert(Issued(() => controller.IssueContext(world, view, Screen(40, 150))) is [PursueCommand order] && order.Unit == bunker.Id && order.Victim == near.Id
+               && !controller.Orders.TryGet(bunker.Id, out _), "one PursueCommand for the bunker, no standing order");
+        arena.Step();
+        Assert(world.AcquiredVictimOf(r1) == near.Id && world.AcquiredVictimOf(r2) == near.Id, "the riders attack the ordered enemy");
     }
 
     private static void StandingOrderBehaviour()
