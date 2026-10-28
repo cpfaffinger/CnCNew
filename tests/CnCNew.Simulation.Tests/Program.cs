@@ -213,6 +213,7 @@ run.Test("Phase 40 (F-16): low power slows production (calcTimeToBuild)", Tests.
 run.Test("Phase 40 (F-16): low power slows construction (DozerAIUpdate)", Tests.LowPowerSlowsConstruction);
 run.Test("Phase 40 (F-56): a disabled power plant stops producing (onDisabledEdge)", Tests.DisabledPowerPlantStopsProducing);
 run.Test("Rule fix no-power-edge-for-unfinished-plant: an EMP on a plant being built takes no power", Tests.GameFixNoPowerEdgeForUnfinishedPlant);
+run.Test("Rule fix undead-lethal-by-armour: a blow the armour makes survivable starts no second life", Tests.GameFixUndeadLethalByArmour);
 run.Test("Phase 40: a disable other than held pauses the special powers (pauseAllSpecialPowers)", Tests.DisablePausesSpecialPowers);
 run.Test("Phase 40 (F-50): the player's radar", Tests.PlayerRadar);
 run.Test("Phase 40 (F-48): the body applies the armour to raw damage and healing", Tests.ArmourIsAppliedByTheBody);

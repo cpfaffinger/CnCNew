@@ -90,7 +90,7 @@ REVIEW_BY_LINE = {
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/InstantDeathBehavior.cpp:163': 'adopted - GameFix.NoDeathWeaponFromScaffold',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/InstantDeathBehavior.cpp:183': 'equivalent - every InstantDeathBehavior of an object runs in the port (no dead-state guard)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Behavior/PropagandaTowerBehavior.cpp:212': 'adopted - GameFix.PropagandaTowerEnclosingContainer',
-    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Body/UndeadBody.cpp:87': 'rejected - the port applies the armour before the body (SimulationWorld.Combat.cs, DealWeaponDamage), so UndeadBody already compares the armour-adjusted amount for weapon damage; the fix would apply the armour twice',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Body/UndeadBody.cpp:87': 'adopted - GameFix.UndeadLethalByArmour (after the fidelity correction F-48, Phase 41)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Collide/CrateCollide/CrateCollide.cpp:170': 'equivalent - a collision stops on a destroyed crate (SimulationWorld.Collision.cs)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/OpenContain.cpp:181': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Contain/OpenContain.cpp:305': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',

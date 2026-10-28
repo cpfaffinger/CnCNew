@@ -106,9 +106,10 @@ static partial class Tests
         """,
     };
 
-    private static (SimulationWorld World, Feeder Feeder) ArmourWorld()
+    private static (SimulationWorld World, Feeder Feeder) ArmourWorld(CnCNew.Simulation.Rules.RuleProfile? rules = null, CnCNew.Simulation.Time.SimulationRate? rate = null)
     {
-        var world = NewWorld(new SyntheticFixture(TestRate.Default, files: ArmourFiles()));
+        var fixture = new SyntheticFixture(rate ?? TestRate.Default, files: ArmourFiles(), rules: rules ?? CnCNew.Simulation.Rules.RuleProfile.Original);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate ?? TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
         return (world, new Feeder(world));
     }
 
@@ -149,6 +150,31 @@ static partial class Tests
             feeder.Damage(tank.Id.Value, 20m, damageType: DamageTypes.Healing);
             world.Step();
             Check.That(tank.Body.Health == Fixed.FromInt(90), $"Half armour heals half of 20 ({tank.Body.Health}).");
+        }
+    }
+
+    /// <summary>
+    /// The rule fix <c>undead-lethal-by-armour</c> (<c>UndeadBody::attemptDamage</c> with <c>estimateDamage</c>): a raw 150 that the bus's armour halves to 75 is not lethal at a health of 100 -
+    /// the bus takes 75 and keeps its first life; under the original rules the raw amount decides and the second life begins. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void GameFixUndeadLethalByArmour()
+    {
+        foreach (var rate in new[] { CnCNew.Simulation.Time.SimulationRate.Hz30, CnCNew.Simulation.Time.SimulationRate.Hz60, CnCNew.Simulation.Time.SimulationRate.Hz120 })
+        {
+            (bool SecondLife, Fixed Health) Hit(CnCNew.Simulation.Rules.RuleProfile rules)
+            {
+                var (world, feeder) = ArmourWorld(rules, rate);
+                var shooter = ArmourSpawn(world, feeder, "ArmourShooter", 1, 100);
+                var bus = ArmourSpawn(world, feeder, "ArmourBus", 2, 110);
+                world.Weapons.TryGet("ArmourGun", out var gun);
+                world.DealWeaponDamage(shooter, gun!, bus, bus.X, bus.Y, bus.Z);
+                return (((UndeadBody)bus.Body!).IsSecondLife, bus.Body.Health);
+            }
+
+            var original = Hit(CnCNew.Simulation.Rules.RuleProfile.Original);
+            var fixedRun = Hit(CnCNew.Simulation.Rules.RuleProfile.Parse("undead-lethal-by-armour"));
+            Check.That(original.SecondLife, $"{rate}: under the original rules the raw amount starts the second life.");
+            Check.That(!fixedRun.SecondLife && fixedRun.Health == Fixed.FromInt(25), $"{rate}: with the fix the bus takes 75 and keeps its first life ({fixedRun.Health}).");
         }
     }
 

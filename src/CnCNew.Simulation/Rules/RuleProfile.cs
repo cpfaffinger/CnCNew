@@ -77,6 +77,8 @@ public enum GameFix
     /// <summary>A power plant under construction changes no energy when it is disabled or enabled again - it produces nothing yet (<c>Object::onDisabledEdge</c>).</summary>
     NoPowerEdgeForUnfinishedPlant = 22,
 
+    /// <summary>A Battle Bus decides whether a blow would kill it by the damage after its armour, not before (<c>UndeadBody::attemptDamage</c>, <c>estimateDamage</c>).</summary>
+    UndeadLethalByArmour = 23,
 }
 
 /// <summary>
@@ -184,6 +186,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.NoPowerEdgeForUnfinishedPlant, "no-power-edge-for-unfinished-plant",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Object.cpp, Object::onDisabledEdge",
             "an EMP or another disable on a power plant that is still being built takes no power from its player - it produces none yet - instead of putting the base into a brown-out"),
+        new(GameFix.UndeadLethalByArmour, "undead-lethal-by-armour",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Body/UndeadBody.cpp, UndeadBody::attemptDamage",
+            "a Battle Bus begins its second life only when a blow would kill it after its armour - a blow its armour makes survivable no longer turns it into the bus's empty shell"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

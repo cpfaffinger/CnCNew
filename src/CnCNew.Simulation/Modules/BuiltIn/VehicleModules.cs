@@ -51,7 +51,9 @@ public sealed class UndeadBody(UndeadBodyData data) : ActiveBody(data.Body, "Und
     {
         var startSecondLife = false;
         var applied = info;
-        if (info.DamageType != DamageTypes.Unresistable && !_secondLife && info.Amount >= Health && IsHealthDamaging(info.DamageType) && !Entity.EffectivelyDead)
+        // The rule fix undead-lethal-by-armour: the blow is lethal by estimateDamage (after the armour), not by its raw amount.
+        var lethal = world.Templates.Rules.Has(Rules.GameFix.UndeadLethalByArmour) ? world.AdjustDamageByArmor(Entity, info.DamageType, info.Amount) : info.Amount;
+        if (info.DamageType != DamageTypes.Unresistable && !_secondLife && lethal >= Health && IsHealthDamaging(info.DamageType) && !Entity.EffectivelyDead)
         {
             applied = info with { Amount = Fixed.Min(info.Amount, Health - Fixed.One) };
             startSecondLife = true;
