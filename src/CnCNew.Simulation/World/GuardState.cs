@@ -29,6 +29,12 @@ internal sealed class GuardState
 
     public GuardPhase Phase;
 
+    /// <summary>The machine is <c>AIGuardRetaliateMachine</c> (<c>AI_GUARD_RETALIATE</c>, a human player's unit answering an attack on a friend nearby) instead of the guard's.</summary>
+    public bool Retaliate;
+
+    /// <summary>The machine was entered and has not run its first state yet: it does so at the unit's next decision.</summary>
+    public bool Starting;
+
     /// <summary><c>AIGuardMachine::m_nemesisID</c>: the enemy the attacking states attack.</summary>
     public EntityId Nemesis;
 
@@ -57,6 +63,8 @@ internal sealed class GuardState
         if (Area.Length > 0) writer.Text("area", Area);
         if (Mode != GuardMode.Normal) writer.Int("mode", (int)Mode);
         writer.Int("phase", (int)Phase);
+        if (Retaliate) writer.Bool("retaliate", true);
+        if (Starting) writer.Bool("starting", true);
         if (Nemesis.IsValid) writer.UInt("nemesis", Nemesis.Value);
         if (GiveUpTick != 0) writer.Int("giveUpTick", GiveUpTick);
         writer.Int("nextScanTick", NextScanTick);
@@ -79,6 +87,8 @@ internal sealed class GuardState
             Area = reader.Has("area") ? reader.Text("area") : string.Empty,
             Mode = reader.Has("mode") ? (GuardMode)checked((byte)reader.Int("mode")) : GuardMode.Normal,
             Phase = (GuardPhase)checked((byte)reader.Int("phase")),
+            Retaliate = reader.Has("retaliate") && reader.Bool("retaliate"),
+            Starting = reader.Has("starting") && reader.Bool("starting"),
             Nemesis = reader.Has("nemesis") ? new EntityId(checked((uint)reader.UInt("nemesis"))) : EntityId.Invalid,
             GiveUpTick = reader.Has("giveUpTick") ? reader.Int("giveUpTick") : 0,
             NextScanTick = reader.Int("nextScanTick"),
@@ -96,8 +106,8 @@ internal sealed class GuardState
 }
 
 /// <summary>Every mutable field of a <see cref="GuardState"/> (or none), compared before and after a step to learn whether the entity's serialized state changed.</summary>
-internal readonly record struct GuardStamp(bool Present, GuardPhase Phase, EntityId Nemesis, long GiveUpTick, long NextScanTick, Fixed GuardeeX, Fixed GuardeeY, long ClearedDamageTick)
+internal readonly record struct GuardStamp(bool Present, GuardPhase Phase, EntityId Nemesis, long GiveUpTick, long NextScanTick, Fixed GuardeeX, Fixed GuardeeY, long ClearedDamageTick, bool Starting)
 {
     public static GuardStamp Of(GuardState? state)
-        => state is null ? default : new(true, state.Phase, state.Nemesis, state.GiveUpTick, state.NextScanTick, state.GuardeeX, state.GuardeeY, state.ClearedDamageTick);
+        => state is null ? default : new(true, state.Phase, state.Nemesis, state.GiveUpTick, state.NextScanTick, state.GuardeeX, state.GuardeeY, state.ClearedDamageTick, state.Starting);
 }

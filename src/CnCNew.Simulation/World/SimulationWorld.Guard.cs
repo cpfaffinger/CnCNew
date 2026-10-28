@@ -30,6 +30,16 @@ public sealed partial class SimulationWorld
     private const long GuardScanFrames = 15;
     private const long GuardReturnScanFrames = 30;
 
+    /// <summary><c>MaxRetaliationDistance</c> (AIData.ini 200) and <c>RetaliationFriendsRadius</c> (120).</summary>
+    private static readonly Fixed MaxRetaliationDistance = Fixed.FromInt(200);
+    private static readonly Fixed RetaliationFriendsRadius = Fixed.FromInt(120);
+
+    /// <summary>The retaliation's radii: ATTACK_AGGRESSOR outer + inner range, INNER 1.5 x the inner range, OUTER 0.67 x (outer + inner) (<c>AIGuardRetaliate.cpp</c>).</summary>
+    private static readonly Fixed RetaliateInnerFactor = Fixed.FromDecimal(1.5m);
+    private static readonly Fixed RetaliateOuterFactor = Fixed.FromDecimal(0.67m);
+
+    private static readonly int UsingAbilityStatus = Modules.ObjectStatusBits.Index("USING_ABILITY");
+
     /// <summary>IDLE's "the guarded object moved": more than two pathfinding cells along x or along y (<c>4 * PATHFIND_CELL_SIZE_F^2</c> per axis).</summary>
     private static readonly Fixed GuardeeMoveLimitSquared = Fixed.FromInt(4 * 10 * 10);
 
@@ -45,6 +55,76 @@ public sealed partial class SimulationWorld
         if (entity.Guard is null) return;
         entity.Guard = null;
         MarkDirty(entity);
+    }
+
+    /// <summary>A hit on a human player's object noted for the retaliation (<see cref="RetaliateFor"/>): the victim as it was hit, and its attacker.</summary>
+    private readonly record struct RetaliationCall(EntityId Victim, PlayerId Owner, Fixed X, Fixed Y, Fixed Radius, EntityId Damager);
+
+    /// <summary>The hits of this tick; decided at its end (<see cref="ProcessRetaliations"/>) and empty between ticks, so never saved.</summary>
+    private readonly List<RetaliationCall> _retaliations = [];
+
+    /// <inheritdoc cref="IWorldServices.RetaliateFor"/>
+    /// <remarks>
+    /// The player's logical retaliation mode is on for every human player: the original turns it on with a message its client sends in the first frame divisible by 30 in which the
+    /// option (on by default) differs, so from the match's first second; the option to turn it off is not built. The hit is noted here and decided at the end of the tick
+    /// (<see cref="ProcessRetaliations"/>): the original decides inside <c>attemptDamage</c>, but the retaliation's machine runs only from the unit's next decision either way, and the
+    /// team relations a decision asks for are not to be read in the middle of the combat phase.
+    /// </remarks>
+    public void RetaliateFor(Entity victim, EntityId damagerId)
+    {
+        if (victim.Owner.IsSystem || IsComputerPlayer(victim.Owner) || !_players.ContainsKey(victim.Owner.Value) || !damagerId.IsValid || damagerId == victim.Id) return;
+        if (victim.Template.IsKindOf("DRONE")) return;
+        var (vx, vy, _) = victim.FrameEnd(_tick);
+        _retaliations.Add(new RetaliationCall(victim.Id, victim.Owner, vx, vy, victim.Template.BoundingCircleRadius, damagerId));
+        // A hit from outside a step (a host's or a test's direct damage) is decided at once: between ticks nothing may stay pending that a snapshot would not carry.
+        if (!_stepping) ProcessRetaliations();
+    }
+
+    /// <summary>A step of the world is running (<see cref="Step"/>).</summary>
+    private bool _stepping;
+
+    /// <summary>
+    /// The decisions of <c>ActiveBody::attemptDamage</c>'s retaliation for the hits of this tick, in their order. <c>shouldRetaliateAgainstAggressor</c>: the attacker exists, is no airborne
+    /// target, is the victim's enemy, within 200 between the bounding circles. Then every object of the player and its allies within 120 + the victim's radius that would retaliate
+    /// (<c>shouldRetaliate</c>: not <c>CANNOT_RETALIATE</c>, not immobile, no drone, an AI that is idle, not stealthed and undetected, not using an ability) and could attack the attacker
+    /// here or after moving enters the retaliation; its machine runs from the unit's next decision.
+    /// </summary>
+    private void ProcessRetaliations()
+    {
+        if (_retaliations.Count == 0) return;
+        foreach (var call in _retaliations)
+        {
+            if (FindEntity(call.Damager) is not { DestroyRequested: false, EffectivelyDead: false } damager || IsSignificantlyAboveTerrainAtFrameEnd(damager)) continue;
+            var relation = FindEntity(call.Victim) is { } victim ? RelationshipBetween(damager, victim) : RelationshipOf(damager.Owner, call.Owner);
+            if (relation != Relationship.Enemies) continue;
+            var (dx0, dy0, _) = damager.FrameEnd(_tick);
+            var ax = dx0 - call.X;
+            var ay = dy0 - call.Y;
+            if (!SquaredReach.Of(MaxRetaliationDistance + call.Radius + damager.Template.BoundingCircleRadius).Contains(ax * ax + ay * ay)) continue;
+            var friends = SquaredReach.Of(RetaliationFriendsRadius + call.Radius);
+            foreach (var player in Configuration.Players)
+            {
+                if (player.Id != call.Owner && RelationshipOf(call.Owner, player.Id) != Relationship.Allies) continue;
+                foreach (var friend in EntitiesOwnedBy(player.Id).AsSpan())
+                {
+                    if (friend.DestroyRequested || friend.EffectivelyDead || friend.ContainedBy.IsValid || AiOf(friend) is not { } ai) continue;
+                    var (fx, fy, _) = friend.FrameEnd(_tick);
+                    var fdx = fx - call.X;
+                    var fdy = fy - call.Y;
+                    if (!friends.Contains(fdx * fdx + fdy * fdy)) continue;
+                    if (friend.Template.IsKindOf("CANNOT_RETALIATE") || friend.Template.IsKindOf("IMMOBILE") || friend.Template.IsKindOf("DRONE") || !ai.IsIdle) continue;
+                    if ((friend.HasStatus(StealthedStatus) && !friend.HasStatus(DetectedStatus)) || friend.HasStatus(UsingAbilityStatus)) continue;
+                    if (!MayAct(friend, _tick) || !TurretsLetAttack(friend) || ActiveWeaponSet(friend) is null) continue;
+                    UpdateWeaponSet(friend);
+                    if (!CanAttack(friend, damager, false, out _)) continue;
+                    // privateGuardRetaliate: the post is where the unit stands, the nemesis the attacker; the machine's first state is ATTACK_AGGRESSOR.
+                    friend.Guard = new GuardState { X = fx, Y = fy, Retaliate = true, Starting = true, Phase = GuardPhase.Aggressor, Nemesis = damager.Id };
+                    _acquirers.Add(friend.Id.Value);
+                    MarkDirty(friend);
+                }
+            }
+        }
+        _retaliations.Clear();
     }
 
     private CommandRejection CheckGuard(PlayerId issuer, GuardCommand order)
@@ -174,16 +254,37 @@ public sealed partial class SimulationWorld
         }
     }
 
+    /// <summary>The radius of an attacking state: INNER and ATTACK_AGGRESSOR the inner range, OUTER the outer one; for the retaliation its own (<see cref="RetaliateInnerFactor"/>).</summary>
+    private Fixed AttackRadius(Entity entity, GuardState guard, GuardPhase phase)
+    {
+        if (!guard.Retaliate) return phase == GuardPhase.Outer ? OuterGuardRange(entity, guard) : GuardRange(entity, true);
+        var inner = GuardRange(entity, true);
+        var outer = GuardRange(entity, false);
+        return phase switch
+        {
+            GuardPhase.Aggressor => outer + inner,
+            GuardPhase.Inner => inner * RetaliateInnerFactor,
+            _ => (outer + inner) * RetaliateOuterFactor,
+        };
+    }
+
     /// <summary>One decision of the guard, in the first tick of the unit's own logic frame of the original (<see cref="StepAcquisition"/>).</summary>
     private void StepGuard(Entity entity, AIUpdateInterface ai, GuardState guard, long tick)
     {
         var state = entity.Acquisition;
+        if (guard.Starting)
+        {
+            // The retaliation's machine starts in ATTACK_AGGRESSOR; with nothing to attack it goes on to RETURN.
+            guard.Starting = false;
+            EnterGuardAggressor(entity, ai, guard, tick);
+            return;
+        }
         switch (guard.Phase)
         {
             case GuardPhase.Inner or GuardPhase.Outer or GuardPhase.Aggressor:
             {
-                // INNER's condition: an attacker in reach is answered first.
-                if (guard.Phase == GuardPhase.Inner && AttackedAndCanAnswer(entity, guard))
+                // INNER's condition (the guard's, not the retaliation's): an attacker in reach is answered first.
+                if (guard.Phase == GuardPhase.Inner && !guard.Retaliate && AttackedAndCanAnswer(entity, guard))
                 {
                     EndGuardAttack(entity, ai);
                     EnterGuardAggressor(entity, ai, guard, tick);
@@ -191,9 +292,9 @@ public sealed partial class SimulationWorld
                 }
                 if (GuardAttackGoesOn(entity, ai, guard, tick)) return;
                 EndGuardAttack(entity, ai);
-                // INNER -> OUTER; OUTER -> GET_CRATE -> RETURN; ATTACK_AGGRESSOR -> INNER (success and failure alike).
+                // INNER -> OUTER; OUTER -> GET_CRATE -> RETURN; ATTACK_AGGRESSOR -> INNER, the retaliation's -> RETURN (success and failure alike).
                 if (guard.Phase == GuardPhase.Inner) EnterGuardOuter(entity, ai, guard, tick);
-                else if (guard.Phase == GuardPhase.Outer) EnterGuardReturn(entity, ai, guard, tick);
+                else if (guard.Phase == GuardPhase.Outer || guard.Retaliate) EnterGuardReturn(entity, ai, guard, tick);
                 else EnterGuardInner(entity, ai, guard, tick);
                 return;
             }
@@ -227,6 +328,12 @@ public sealed partial class SimulationWorld
                 if (LookForGuardTarget(entity, guard) is not null)
                 {
                     EnterGuardInner(entity, ai, guard, tick);
+                    return;
+                }
+                // The retaliation's IDLE looks once: nothing found, the machine is over and the unit idle again.
+                if (guard.Retaliate)
+                {
+                    entity.Guard = null;
                     return;
                 }
                 if (guard.Object.IsValid && FindEntity(guard.Object) is { DestroyRequested: false } guarded)
@@ -273,6 +380,8 @@ public sealed partial class SimulationWorld
             {
                 if (candidate.DestroyRequested || candidate.EffectivelyDead || candidate.Body is null || candidate.ContainedBy.IsValid || !AreEnemies(entity, candidate)) continue;
                 if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT")) continue;
+                // The retaliation's look adds PartitionFilterRejectBuildings: ordinary buildings are no target.
+                if (guard.Retaliate && !AcquiresStructure(entity, candidate, false, IsComputerPlayer(entity.Owner))) continue;
                 if (candidate.HasStatus(StealthedStatus) && !candidate.HasStatus(DetectedStatus)) continue;
                 var (x, y, _) = candidate.FrameEnd(_tick);
                 var dx = x - cx;
@@ -308,7 +417,7 @@ public sealed partial class SimulationWorld
     {
         guard.Phase = GuardPhase.Inner;
         guard.GiveUpTick = 0;
-        if (StartGuardAttack(entity, ai, guard, tick, GuardRange(entity, true))) return;
+        if (StartGuardAttack(entity, ai, guard, tick, AttackRadius(entity, guard, GuardPhase.Inner))) return;
         EnterGuardOuter(entity, ai, guard, tick);
     }
 
@@ -316,7 +425,7 @@ public sealed partial class SimulationWorld
     {
         guard.Phase = GuardPhase.Outer;
         guard.GiveUpTick = tick + Time.OriginalFrames(GuardChaseFrames);
-        if (guard.Mode != GuardMode.WithoutPursuit && StartGuardAttack(entity, ai, guard, tick, OuterGuardRange(entity, guard))) return;
+        if (guard.Mode != GuardMode.WithoutPursuit && StartGuardAttack(entity, ai, guard, tick, AttackRadius(entity, guard, GuardPhase.Outer))) return;
         guard.GiveUpTick = 0;
         EnterGuardReturn(entity, ai, guard, tick);
     }
@@ -324,11 +433,14 @@ public sealed partial class SimulationWorld
     private void EnterGuardAggressor(Entity entity, AIUpdateInterface ai, GuardState guard, long tick)
     {
         guard.Phase = GuardPhase.Aggressor;
-        if (entity.LastDamageSource.IsValid) guard.Nemesis = entity.LastDamageSource;
+        // The guard's aggressor is the body's last attacker; the retaliation's is the attacker it answers (its goal object), else the last attacker that did not heal.
+        if (!guard.Retaliate && entity.LastDamageSource.IsValid) guard.Nemesis = entity.LastDamageSource;
+        else if (guard.Retaliate && FindEntity(guard.Nemesis) is null && !entity.LastDamageHealing && entity.LastDamageSource.IsValid) guard.Nemesis = entity.LastDamageSource;
         guard.GiveUpTick = tick + Time.OriginalFrames(GuardChaseFrames);
-        if (StartGuardAttack(entity, ai, guard, tick, GuardRange(entity, true))) return;
+        if (StartGuardAttack(entity, ai, guard, tick, AttackRadius(entity, guard, GuardPhase.Aggressor))) return;
         guard.GiveUpTick = 0;
-        EnterGuardInner(entity, ai, guard, tick);
+        if (guard.Retaliate) EnterGuardReturn(entity, ai, guard, tick);
+        else EnterGuardInner(entity, ai, guard, tick);
     }
 
     /// <summary>RETURN (<c>AIGuardReturnState::onEnter</c>): the first scan after up to a scan period, then a walk to the centre; already there, the unit is IDLE.</summary>
@@ -378,10 +490,12 @@ public sealed partial class SimulationWorld
         if (entity.Acquisition is not { Victim.IsValid: true } state || FindEntity(state.Victim) is not { } victim || !IsGuardVictim(entity, victim)) return false;
         var (cx, cy) = GuardCentre(guard);
         var inner = GuardRange(entity, true);
-        var radius = guard.Phase == GuardPhase.Outer ? OuterGuardRange(entity, guard) : inner;
-        if (!WithinGuardRadius(victim, cx, cy, radius)) return false;
+        if (!WithinGuardRadius(victim, cx, cy, AttackRadius(entity, guard, guard.Phase))) return false;
+        // The retaliation's exit conditions add the retaliator itself leaving its inner range of the post.
+        if (guard.Retaliate && !WithinGuardRadius(entity, cx, cy, inner)) return false;
         if (guard.Phase == GuardPhase.Outer)
         {
+            // OUTER refreshes its give-up time while the victim is within the inner range of the centre (the retaliation's ATTACK_AGGRESSOR does not).
             var (vx, vy, _) = victim.FrameEnd(tick);
             var dx = cx - vx;
             var dy = cy - vy;

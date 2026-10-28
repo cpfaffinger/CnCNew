@@ -83,6 +83,12 @@ public interface IWorldServices
     /// </summary>
     void EndAttack(Entity entity);
 
+    /// <summary>
+    /// <c>ActiveBody::attemptDamage</c>'s last step (F-58): a human player's object hurt by <paramref name="damager"/> makes the idle units of its player and its allies nearby answer the
+    /// attack (<c>aiGuardRetaliate</c>).
+    /// </summary>
+    void RetaliateFor(Entity victim, EntityId damager);
+
     /// <summary>A new order ends the unit's guard (<c>AIGuardState::onExit</c>, F-58).</summary>
     void EndGuard(Entity entity);
 

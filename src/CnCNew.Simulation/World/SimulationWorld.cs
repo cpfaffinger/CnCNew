@@ -2000,7 +2000,19 @@ public sealed partial class SimulationWorld : IWorldServices
     /// <summary>Executes one tick and returns its state hash. The returned buffers are reused by the next call.</summary>
     public TickResult Step()
     {
-        if (PhaseObserver is { } observer) return StepObserved(observer);
+        _stepping = true;
+        try
+        {
+            return PhaseObserver is { } observer ? StepObserved(observer) : StepPlain();
+        }
+        finally
+        {
+            _stepping = false;
+        }
+    }
+
+    private TickResult StepPlain()
+    {
         var tick = _tick;
         _tickEvents.Clear();
         ExecuteCommands(tick);
@@ -2018,6 +2030,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ProcessSpawns();
         DeliverEvents();
         if (_vision is not null && tick % VisionInterval == _visionPhase) RefreshVision();
+        ProcessRetaliations();
         ProcessDisabledEdges(tick + TickOrder.Next);
         _tick = tick + TickOrder.Next;
         return new TickResult(tick, ComputeIncrementalHash(), _tickEvents);
@@ -2082,6 +2095,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (refresh) HashVision();
         observer.PhaseEnded(TickPhase.VisionHash);
         observer.PhaseStarted(TickPhase.Hash);
+        ProcessRetaliations();
         ProcessDisabledEdges(tick + TickOrder.Next);
         _tick = tick + TickOrder.Next;
         var hash = ComputeIncrementalHash();

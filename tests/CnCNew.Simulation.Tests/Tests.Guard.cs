@@ -201,4 +201,38 @@ static partial class Tests
         Check.That(Furthest(guard: true) > Fixed.FromInt(30), "The guard answers the sniper that shot it.");
         Check.That(Furthest(guard: false) < Fixed.FromInt(30), "Without the guard the rifleman stays.");
     }
+
+    /// <summary>
+    /// Step 6, the player's retaliation (<c>ActiveBody::attemptDamage</c>, <c>AIGuardRetaliateMachine</c>): a human player's idle rifleman 100 from a friend that a sniper shoots from 160 away -
+    /// 260 from the rifleman, beyond its rifle - drives at the sniper. A computer player's rifleman in the same place stays (only a human player retaliates, and the sniper is beyond
+    /// its idle look of 200). A unit that is not idle does not join.
+    /// </summary>
+    public static void GuardRetaliation()
+    {
+        Fixed Moved(bool human, bool busy)
+        {
+            var (world, feeder, _) = GuardWorld(TestRate.Default, computer: true);
+            // ComputerAgainstHuman: player 1 is the computer, player 2 the human.
+            var side = human ? 2 : 1;
+            var rifleman = GdSpawn(world, feeder, "FcRifleman", side, 0, 0);
+            var friend = GdSpawn(world, feeder, "GdRunner", side, 100, 0);
+            var sniper = GdSpawn(world, feeder, "GdSniper", 3 - side, 260, 0);
+            if (busy) feeder.SetMoveTarget(side, rifleman.Id.Value, 0, -400);
+            for (var step = 0; step < world.Frames(10); step++) world.Step();
+            var start = (rifleman.X, rifleman.Y);
+            feeder.FireWeapon(3 - side, sniper.Id.Value, friend.Id.Value);
+            var furthest = Fixed.Zero;
+            for (var step = 0; step < world.Frames(120); step++)
+            {
+                world.Step();
+                var dx = rifleman.X - start.X;
+                furthest = Fixed.Max(furthest, dx);
+            }
+            return furthest;
+        }
+
+        Check.That(Moved(human: true, busy: false) > Fixed.FromInt(30), "A human player's idle rifleman drives at the sniper that shot its friend.");
+        Check.That(Moved(human: false, busy: false) < Fixed.FromInt(5), "A computer player's rifleman does not.");
+        Check.That(Moved(human: true, busy: true) < Fixed.FromInt(5), "A rifleman that is walking does not join.");
+    }
 }

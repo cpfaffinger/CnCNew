@@ -260,7 +260,9 @@ static partial class Tests
                 $"Round {round}: the enemy-sighted and all-clear scripts ran equally often ({byOwner.Engine.CounterValue("sighted")}/{byOwner.Engine.CounterValue("clear")} against {perObject.Engine.CounterValue("sighted")}/{perObject.Engine.CounterValue("clear")}).");
         }
         Check.That(byOwner.World.RelationshipOverride is null && perObject.World.RelationshipOverride is not null, "Only the second session has a relationship override.");
-        Check.That(byOwner.CombatStats.Shots > 20 && byOwner.Engine.CounterValue("sighted") > 0 && byOwner.Engine.CounterValue("clear") > 0,
+        // The all-clear runs at 30 Hz; at 60 and 120 Hz the human side follows the wave since it answers attacks on its friends (F-58), and the wave never sees it gone again in
+        // these rounds. Both sessions are compared on the counter every round either way.
+        Check.That(byOwner.CombatStats.Shots > 20 && byOwner.Engine.CounterValue("sighted") > 0,
             $"The battle was one: {byOwner.CombatStats.Shots} shots, enemy sighted {byOwner.Engine.CounterValue("sighted")} times, all clear {byOwner.Engine.CounterValue("clear")} times.");
     }
 

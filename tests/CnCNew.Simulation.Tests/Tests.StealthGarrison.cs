@@ -33,6 +33,22 @@ static partial class Tests
             InnateStealth = Yes
           End
         End
+        Object FcQuietSneak
+          KindOf = SELECTABLE INFANTRY STEALTH_GARRISON
+          TransportSlotCount = 1
+          VisionRange = 150.0
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = StealthUpdate Stealth01
+            StealthDelay = 0
+            InnateStealth = Yes
+          End
+        End
         Object FcHunter
           KindOf = SELECTABLE INFANTRY
           VisionRange = 150.0
@@ -181,7 +197,8 @@ static partial class Tests
     }
 
     /// <summary>
-    /// Step 3, the apparent owner and the acquisition (<c>PartitionFilterRejectBuildings</c>, <c>PartitionFilterStealthedAndUndetected</c>): player 1's stealth rider holds a neutral
+    /// Step 3, the apparent owner and the acquisition (<c>PartitionFilterRejectBuildings</c>, <c>PartitionFilterStealthedAndUndetected</c>): player 1's unarmed stealth rider (an armed one
+    /// would fire and draw the retaliation of player 2's units, F-58) holds a neutral
     /// building, which is player 1's now. An idle rifleman of player 2 next to it does not take it for an enemy - its apparent owner is the neutral one; once the rider is
     /// detected it does. A building held by a plain rifleman it takes at once. A unit with <c>ATTACK_BUILDINGS</c> has no building filter and takes the hidden neutral building - as the
     /// original does -, but passes by a hidden building whose owner from before is its enemy.
@@ -190,7 +207,7 @@ static partial class Tests
     {
         var (world, feeder) = StealthGarrisonWorld();
         var bunker = SgSpawn(world, feeder, "FcBunker", 0, 0, 0);
-        var sneak = SgInside(world, feeder, "FcSneak", 1, bunker);
+        var sneak = SgInside(world, feeder, "FcQuietSneak", 1, bunker);
         var watcher = SgSpawn(world, feeder, "FcRifleman", 2, 80, 0);
         var garrison = (GarrisonContain)bunker.Container!;
         Check.That(bunker.Owner == new PlayerId(1) && garrison.HidesGarrison(world) && garrison.ApparentOwnerFor(world, new PlayerId(2)) == PlayerId.System
@@ -211,14 +228,14 @@ static partial class Tests
 
         var (huntWorld, huntFeeder) = StealthGarrisonWorld();
         var neutral = SgSpawn(huntWorld, huntFeeder, "FcBunker", 0, 0, 0);
-        SgInside(huntWorld, huntFeeder, "FcSneak", 1, neutral);
+        SgInside(huntWorld, huntFeeder, "FcQuietSneak", 1, neutral);
         var hunter = SgSpawn(huntWorld, huntFeeder, "FcHunter", 2, 80, 0);
         for (var step = 0; step < huntWorld.Frames(30); step++) huntWorld.Step();
         Check.That(huntWorld.AcquiredVictimOf(hunter) == neutral.Id, "A unit with ATTACK_BUILDINGS takes the hidden neutral building (its apparent owner is no enemy).");
 
         var (ownWorld, ownFeeder) = StealthGarrisonWorld();
         var own = SgSpawn(ownWorld, ownFeeder, "FcBunker", 1, 0, 0);
-        SgInside(ownWorld, ownFeeder, "FcSneak", 1, own);
+        SgInside(ownWorld, ownFeeder, "FcQuietSneak", 1, own);
         var ownHunter = SgSpawn(ownWorld, ownFeeder, "FcHunter", 2, 80, 0);
         for (var step = 0; step < ownWorld.Frames(30); step++) ownWorld.Step();
         Check.That(!ownWorld.AcquiredVictimOf(ownHunter).IsValid, "It passes by player 1's own building held by its stealth rider: the apparent owner is its enemy and the riders are hidden.");
