@@ -591,9 +591,10 @@ public sealed record StealthDetectorData(
 /// object within range and calls <see cref="StealthUpdate.MarkDetected"/> on it. Two reference simplifications, both
 /// project-wide and pre-existing, not introduced by this module: no team/diplomacy system exists yet, so "ally" is
 /// approximated as same <see cref="World.Entity.Owner"/> (the reference excludes only actual allies via
-/// <c>PartitionFilterRelationship::ALLOW_ENEMIES|ALLOW_NEUTRAL</c>); and no Contain system exists yet, so
-/// <c>CanDetectWhileGarrisoned</c>/<c>CanDetectWhileContained</c> are typed but currently inert (an object is never
-/// "contained"), and garrisoned-riders' own stealth is never scanned. <c>UNDER_CONSTRUCTION</c>/<c>SOLD</c> are ported
+/// <c>PartitionFilterRelationship::ALLOW_ENEMIES|ALLOW_NEUTRAL</c>); <c>CanDetectWhileGarrisoned</c>/<c>CanDetectWhileContained</c>
+/// are typed but inert. A rider its container encloses is not scanned; a garrison with a rider of kind <c>STEALTH_GARRISON</c> is, and its
+/// riders with a <c>StealthUpdate</c> are marked (F-54, <c>PartitionFilterStealthedOrStealthGarrisoned</c> and the building branch of
+/// <c>update</c>). <c>UNDER_CONSTRUCTION</c>/<c>SOLD</c> are ported
 /// (matching every other module that checks them) even though nothing sets either status bit yet.
 /// A candidate within <see cref="StealthDetectorData.DetectionRange"/> but behind higher terrain is not detected
 /// (<c>TerrainMap.HasHeightLineOfSight</c>, phase 10); without a terrain (synthetic fixtures) every in-range candidate is
@@ -633,9 +634,13 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
         var terrain = world.Terrain;
         foreach (var candidate in world.Entities)
         {
-            // The status bit first: nearly no object is stealthed, and the tests are independent of each other, so their order only decides what is
-            // looked at in vain (the relationship is three table lookups per object). The objects that pass, and the order they are marked in, are the same.
-            if (!candidate.HasStatus(StealthedBit)) continue;
+            // PartitionFilterStealthedOrStealthGarrisoned first: nearly no object is stealthed or a stealth garrison, and the tests are independent of each other, so their order only
+            // decides what is looked at in vain (the relationship is three table lookups per object). The objects that pass, and the order they are marked in, are the same.
+            var garrison = candidate.HasStatus(StealthedBit) ? null : candidate.Container as GarrisonContain;
+            if (garrison is null && !candidate.HasStatus(StealthedBit)) continue;
+            if (garrison is not null && (garrison.ContainCount == 0 || garrison.StealthUnitsContained(world) == 0)) continue;
+            // A rider its container encloses is out of the partition (OpenContain::addOrRemoveObjFromWorld): the detector finds its building, never the rider itself.
+            if (IsEnclosed(world, candidate)) continue;
             if (candidate.Id == Entity.Id || candidate.EffectivelyDead || world.RelationshipOf(Entity.Owner, candidate.Owner) == Relationship.Allies) continue;
             if (!data.ExtraRequiredKindOf.IsEmpty && !HasAnyKind(candidate.Template, data.ExtraRequiredKindOf)) continue;
             if (HasAnyKind(candidate.Template, data.ExtraForbiddenKindOf)) continue;
@@ -643,16 +648,47 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
             var dy = candidate.Y - Entity.Y;
             if (!SquaredReach.Of(range).Contains(dx * dx + dy * dy)) continue;
             if (terrain is not null && !terrain.HasHeightLineOfSight(Entity.X, Entity.Y, EyeHeight(Entity), candidate.X, candidate.Y, EyeHeight(candidate))) continue;
-            foreach (var module in candidate.Modules)
+            if (StealthOf(candidate) is { } stealth)
             {
-                if (module is not StealthUpdate stealth) continue;
                 // markAsDetected(m_updateRate + 1): the extra step is one logic frame of the original, so the mark outlasts the next scan by the same game time at every rate.
                 stealth.MarkDetected(world, data.UpdateRateTicks + world.Time.TicksPerOriginalFrame);
-                break;
+                continue;
             }
+
+            // "Perhaps they are garrisoning something stealthy": every rider with a StealthUpdate that is not the detector's player's and not its ally, for two frames more than the scan.
+            if (garrison is null) continue;
+            foreach (var riderId in garrison.Contained)
+                if (world.FindEntity(riderId) is { } rider && StealthOf(rider) is { } riderStealth && rider.Owner != Entity.Owner
+                    && world.RelationshipOf(Entity.Owner, rider.Owner) != Relationship.Allies)
+                    riderStealth.MarkDetected(world, data.UpdateRateTicks + 2 * world.Time.TicksPerOriginalFrame);
         }
         // A DetectionRate of 0 scans once per logic frame of the original; the mark above holds one frame longer, so no gap opens.
         return world.Time.AtLeastOneFrame(data.UpdateRateTicks);
+    }
+
+    private static StealthUpdate? StealthOf(World.Entity entity)
+    {
+        foreach (var module in entity.Modules)
+            if (module is StealthUpdate stealth) return stealth;
+        return null;
+    }
+
+    /// <summary>
+    /// <c>OpenContain::isEnclosingContainerFor</c> of the object's own container: every container encloses its riders but a garrison with <c>IsEnclosingContainer = No</c>, a Helix its
+    /// portable structure, an Overlord its first rider and a parachute.
+    /// </summary>
+    private static bool IsEnclosed(IWorldServices world, World.Entity entity)
+    {
+        if (!entity.ContainedBy.IsValid || world.FindEntity(entity.ContainedBy) is not { } container) return false;
+        foreach (var module in container.Modules)
+            switch (module)
+            {
+                case GarrisonContain { IsEnclosing: false }: return false;
+                case HelixContain helix when helix.PortableStructure == entity.Id: return false;
+                case OverlordContain overlord when overlord.FirstRider == entity.Id: return false;
+                case ParachuteContain: return false;
+            }
+        return container.Container is not null;
     }
 
     private static bool HasAnyKind(ObjectTemplate template, ImmutableArray<string> kinds)

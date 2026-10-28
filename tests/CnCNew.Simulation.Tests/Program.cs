@@ -234,6 +234,7 @@ run.Test("Phase 41 (F-54, step 2): a container counts its riders of kind STEALTH
 run.Test("Phase 41 (F-54): canCaptureBuilding's stealth and garrison rules", Tests.StealthGarrisonCapture);
 run.Test("Phase 41 (F-54, step 3): a hidden stealth garrison shows non-allies its owner from before; acquisition reads it", Tests.StealthGarrisonHiddenFromAcquisition);
 run.Test("Phase 41 (F-54, step 3): a hidden stealth garrison appears to contain friendlies to a capturer", Tests.StealthGarrisonHiddenCapture);
+run.Test("Phase 41 (F-54, step 4): a detector reveals a stealth garrison's riders through its building", Tests.StealthGarrisonDetector);
 run.Test("Phase 41 (F-60, step 4): a garrison matches its points at once when a rider comes in", Tests.FireFromContainersMatchOnEntry);
 run.Test("Phase 41 (F-60, step 4): a transport's rider fires from the fire point of its place among the riders", Tests.FireFromContainersTransportFirePoints);
 run.Test("Phase 41 (F-60, step 5): a Humvee's rider and an Overlord's gattling fire, a plain transport's and a tunnel's riders do not", Tests.FireFromContainersTransportsFire);

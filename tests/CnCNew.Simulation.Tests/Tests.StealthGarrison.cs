@@ -49,6 +49,31 @@ static partial class Tests
             AutoAcquireEnemiesWhenIdle = Yes ATTACK_BUILDINGS
           End
         End
+        Object FcEye
+          KindOf = SELECTABLE VEHICLE
+          VisionRange = 150.0
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = StealthDetectorUpdate Detect01
+            DetectionRate = 100
+            DetectionRange = 120.0
+          End
+        End
+        Object FcInfantryEye
+          KindOf = SELECTABLE VEHICLE
+          VisionRange = 150.0
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = StealthDetectorUpdate Detect01
+            DetectionRate = 100
+            DetectionRange = 120.0
+            ExtraRequiredKindOf = INFANTRY
+          End
+        End
         Object FcCloakedBunker
           KindOf = STRUCTURE CAPTURABLE
           Geometry = CYLINDER
@@ -177,5 +202,27 @@ static partial class Tests
         Check.That(!StagedCaptureRules.CanCapture(world, actor, hidden), "A hidden stealth garrison appears to contain friendlies: no capture.");
         sneak.Modules.OfType<StealthUpdate>().Single().MarkDetected(world, world.Frames(300));
         Check.That(StagedCaptureRules.CanCapture(world, actor, hidden), "Detected, held by stealth riders only, it can be captured.");
+    }
+
+    /// <summary>
+    /// Step 4, the detector's building branch (<c>StealthDetectorUpdate::update</c>, <c>PartitionFilterStealthedOrStealthGarrisoned</c>): a detector of player 2 next to a hidden
+    /// garrison marks its stealth rider and the building shows its owner; one out of range leaves it hidden. A rider inside an enclosing building is out of the partition: a detector
+    /// that looks only for infantry (<c>ExtraRequiredKindOf</c>, on the building) does not find it - before, it found the rider itself.
+    /// </summary>
+    public static void StealthGarrisonDetector()
+    {
+        foreach (var (eye, distance, detected) in new[] { ("FcEye", 100, true), ("FcEye", 200, false), ("FcInfantryEye", 100, false) })
+        {
+            var (world, feeder) = StealthGarrisonWorld();
+            var bunker = SgSpawn(world, feeder, "FcBunker", 0, 0, 0);
+            var sneak = SgInside(world, feeder, "FcSneak", 1, bunker);
+            for (var step = 0; step < world.Frames(2); step++) world.Step();
+            var garrison = (GarrisonContain)bunker.Container!;
+            Check.That(garrison.HidesGarrison(world), $"Setup ({eye} at {distance}): hidden.");
+            SgSpawn(world, feeder, eye, 2, distance, 0);
+            for (var step = 0; step < world.Frames(10); step++) world.Step();
+            Check.That(sneak.HasStatus(ObjectStatusBits.Index("DETECTED")) == detected && garrison.HidesGarrison(world) == !detected,
+                $"{eye} at {distance}: the rider {(detected ? "is" : "is not")} detected and the garrison {(detected ? "shows" : "hides")} its owner.");
+        }
     }
 }
