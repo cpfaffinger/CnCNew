@@ -1073,6 +1073,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary>An evacuation order waits for the object to stand still and be ready (<see cref="ReadyToUnload"/>).</summary>
     public bool EvacuatePending => _evacuatePending;
 
+    /// <summary>The evacuation itself, once the object stands still and is ready: every passenger is told to leave (<c>AI_EVACUATE</c>, <c>orderAllPassengersToExit</c>).</summary>
+    protected virtual void Unload(IWorldServices world) => world.EvacuateContainer(Entity);
+
+    /// <summary><c>getAiFreeToExit</c> answering <c>WAIT_TO_EXIT</c>: a rider told to leave waits at the door (<c>AIExitState::update</c>) - a Chinook in the air.</summary>
+    public virtual bool RidersWaitToExit(IWorldServices world) => false;
+
     /// <summary><c>getAiFreeToExit</c>: whether passengers may leave right now (a Chinook has to land first).</summary>
     protected virtual bool ReadyToUnload(IWorldServices world) => true;
 
@@ -1302,7 +1308,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             _evacuatePending = false;
             // The passengers get out where the move ended: above 30 Hz the object is put there first (it is still covering the last step).
             if (_frameTicksLeft > 0) SettleFrame(world.Tick);
-            world.EvacuateContainer(Entity);
+            Unload(world);
             if (_exitAfterEvacuate)
             {
                 // AIMoveAndDeleteState: back to where the order was given, then deleted.

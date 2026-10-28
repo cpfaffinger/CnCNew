@@ -56,6 +56,8 @@ public sealed record ChinookData(SupplyCarrierData Carrier) : ModuleData
 internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.Carrier)
 {
     private bool _landing;
+    /// <summary>The pending evacuation is the Chinook's own (<c>MOVE_TO_AND_EVAC</c>, <c>ChinookEvacuateState</c>): an unload at a place, which puts everybody out at once.</summary>
+    private bool _dropAll;
     /// <summary>The change of height of the running logic frame of the original, flown in shares per tick; empty at 30 Hz.</summary>
     private FlightFrameStep _climb;
 
@@ -75,6 +77,30 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     /// <summary><c>ChinookAIUpdate::getAiFreeToExit</c>: landed (the combat drop, which lets a rider that can rappel out in the air, is not simulated).</summary>
     public override bool AiFreeToExit(IWorldServices world, Entity rider) => Landed(world);
 
+    /// <summary><c>ChinookAIUpdate::getAiFreeToExit</c>: <c>WAIT_TO_EXIT</c> while not landed - a rider told to leave stays at the door (F-62).</summary>
+    public override bool RidersWaitToExit(IWorldServices world) => !Landed(world);
+
+    /// <summary>
+    /// <c>ChinookAIUpdate::aiDoCommand</c> for <c>AICMD_MOVE_TO_POSITION_AND_EVACUATE</c> (and <c>_AND_EXIT</c>): the Chinook's own states - move, land, <c>ChinookEvacuateState</c>,
+    /// take off. A bare evacuation (<c>AICMD_EVACUATE</c>) lands and goes the standard way, rider after rider through the door.
+    /// </summary>
+    public override void OrderEvacuate(IWorldServices world, bool move, Fixed x, Fixed y, bool thenExit = false)
+    {
+        base.OrderEvacuate(world, move, x, y, thenExit);
+        _dropAll = move;
+    }
+
+    /// <summary>
+    /// <c>ChinookEvacuateState::onEnter</c>: <c>removeAllContained(FALSE)</c> - every rider is out in the frame the Chinook has landed, where it stands, and stands there (F-62).
+    /// <c>getTeam()-&gt;setActive()</c> has no counterpart (a script team of the port is active from its creation).
+    /// </summary>
+    protected override void Unload(IWorldServices world)
+    {
+        if (!_dropAll) { base.Unload(world); return; }
+        _dropAll = false;
+        world.EvacuateContainer(Entity, atOnce: true);
+    }
+
     protected override bool ReadyToUnload(IWorldServices world)
     {
         _landing = true;
@@ -89,7 +115,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         var stride = world.Time.TicksPerOriginalFrame;
         if (stride > 1 && world.Tick < Entity.SpawnTick + stride) return SimulationTiming.SleepNone;
         var sleep = base.Update(world);
-        if (!EvacuatePending) _landing = false;
+        if (!EvacuatePending) _landing = _dropAll = false;
         // The change of height is the 30 Hz step (one locomotor speed per logic frame of the original, at most the rest of the way), decided once per frame and flown in shares
         // per tick: the Chinook is on the ground, and lets its passengers out, in the same frame at every rate.
         // Observers read the Chinook where the frame it has begun ends: the rest of its movement and of its change of height.
@@ -104,8 +130,12 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         var locomotor = Entity.Template.Locomotor;
         // The height is kept over the ground where the frame's movement ends: at 30 Hz the Chinook has made its whole step when it looks at the ground below it.
         var ground = world.GroundHeightAt(Entity.X + moving.X, Entity.Y + moving.Y);
-        // ChinookAIUpdate::update: an idle Chinook lands while somebody wants to enter it and takes off again when nobody does (fidelity finding F-38: the boarders wait for it).
-        var forBoarders = !_landing && !Entity.HasMoveTarget && !IsInsideDock && SupplyIdle && HasBoarders(world);
+        // ChinookAIUpdate::update: an idle Chinook lands while somebody wants to enter it or get out of it and takes off again when nobody does (fidelity findings F-38: the boarders
+        // wait for it; F-62: so do the riders at the door).
+        // A landed Chinook that is not idle does not take off by itself either: in the frame of an evacuation the riders already wait at the door.
+        var atTheDoor = Entity.Container is TransportContain { HasRidersWaitingToExit: true };
+        var forBoarders = !_landing && !Entity.HasMoveTarget && !IsInsideDock
+                          && ((SupplyIdle && (atTheDoor || HasBoarders(world))) || (atTheDoor && Landed(world)));
         var target = _landing || forBoarders ? ground : ground + (locomotor?.PreferredHeight ?? Fixed.Zero);
         var climb = FlightFrames.PerFrame(world.Time, locomotor?.Speed ?? Fixed.Zero);
         if (Entity.Z != target && climb > Fixed.Zero)
@@ -135,6 +165,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     {
         base.Describe(writer);
         writer.Bool("landing", _landing);
+        if (_dropAll) writer.Bool("dropAll", true);
         _climb.Describe(writer, "climbStep");
     }
 
@@ -142,6 +173,7 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     {
         base.Load(reader);
         _landing = reader.Bool("landing");
+        _dropAll = reader.Has("dropAll") && reader.Bool("dropAll");
         _climb.Load(reader, "climbStep");
     }
 }

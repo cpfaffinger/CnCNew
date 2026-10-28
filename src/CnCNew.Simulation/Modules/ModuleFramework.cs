@@ -305,8 +305,11 @@ public interface IWorldServices
     /// <summary><c>Player::getTunnelSystem</c>: the player's tunnel network (every player has one; an unknown player gets an empty, unused one).</summary>
     TunnelTracker TunnelSystemOf(PlayerId player);
 
-    /// <summary><c>ContainModuleInterface::removeAllContained</c> as an ordered evacuation: every passenger leaves through <paramref name="container"/> (for a tunnel: everybody in the network).</summary>
-    void EvacuateContainer(Entity container);
+    /// <summary>
+    /// An ordered evacuation: every passenger leaves through <paramref name="container"/>'s door (for a tunnel: everybody in the network); with <paramref name="atOnce"/>
+    /// <c>ContainModuleInterface::removeAllContained</c> itself - all of them in this step, put where the container stands, without a door.
+    /// </summary>
+    void EvacuateContainer(Entity container, bool atOnce = false);
 
     // ------------------------------------------------------------------------------------ phase 10: footprint collision
 

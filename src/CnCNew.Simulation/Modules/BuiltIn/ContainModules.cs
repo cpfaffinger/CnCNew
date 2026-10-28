@@ -902,9 +902,15 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         return true;
     }
 
-    private void ReleaseThroughDoor(IWorldServices world)
+    /// <summary>Riders were told to leave and wait for the door (<c>OpenContain::hasObjectsWantingToEnterOrExit</c>, the leaving half).</summary>
+    public bool HasRidersWaitingToExit => _exitWanted.Count > 0;
+
+    /// <summary>Lets out whoever may leave now; true when the riders wait for the transport's AI (<c>WAIT_TO_EXIT</c>), not for the door.</summary>
+    private bool ReleaseThroughDoor(IWorldServices world)
     {
-        while (_exitWanted.Count > 0 && world.Tick >= _exitNotBusyTick)
+        // AIExitState::update: "getAiFreeToExit(obj) == WAIT_TO_EXIT" - a Chinook in the air keeps its riders at the door until it has landed (F-62).
+        var wait = CrateModules.AiOf(Entity) is { } ai && ai.RidersWaitToExit(world);
+        while (!wait && _exitWanted.Count > 0 && world.Tick >= _exitNotBusyTick)
         {
             var next = _exitWanted[0];
             foreach (var id in _exitWanted)
@@ -913,7 +919,8 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
             if (world.FindEntity(next) is not { EffectivelyDead: false, DestroyRequested: false } rider || !Riders.Contains(next)) continue;
             ExitObjectViaDoor(world, rider);
         }
-        if (_exitWanted.Count > 0) world.WakeAt(Entity, this, _exitNotBusyTick);
+        if (_exitWanted.Count > 0) world.WakeAt(Entity, this, wait ? world.Tick + SimulationTiming.SleepNone : _exitNotBusyTick);
+        return wait;
     }
 
     private void ExitObjectViaDoor(IWorldServices world, Entity rider) => ExitObjectViaDoor(world, rider, data.NumberOfExitPaths, ref _whichExitPath);
@@ -947,8 +954,8 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         PruneDead(world);
         var sleep = Regenerate(world);
         if (_exitWanted.Count == 0) return sleep;
-        ReleaseThroughDoor(world);
-        return _exitWanted.Count == 0 ? sleep : Math.Min(sleep, _exitNotBusyTick - world.Tick);
+        var wait = ReleaseThroughDoor(world);
+        return _exitWanted.Count == 0 ? sleep : Math.Min(sleep, wait ? SimulationTiming.SleepNone : _exitNotBusyTick - world.Tick);
     }
 
     private long Regenerate(IWorldServices world)

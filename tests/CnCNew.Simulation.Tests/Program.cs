@@ -569,6 +569,7 @@ run.Test("Group move: every unit keeps its offset, shortened to six radii, and g
 run.Test("Slow death phases: INITIAL, MIDPOINT and FINAL play effect list, creation list and weapon", Tests.SlowDeathPlaysItsPhases);run.Test("Slow death phases: the same frames at 30, 60 and 120 Hz, snapshot during the death", Tests.SlowDeathPhasesAreTheSameAtEveryRate);
 run.Test("Slow death phases: a dying vehicle stops, takes no order and leaves its hull where it died, at every rate", Tests.SlowDeathStopsTheDyingMover);
 run.Test("Chinook: flight height, supply trips, Supply Lines boost and landing to unload", Tests.ChinookSupplyFlightAndLanding);
+run.Test("Chinook (F-62): an unload at a place puts everybody out at once, a bare evacuation one by one through the door", Tests.ChinookUnloadAtAPlaceAtOnceAndAtTheDoorOneByOne);
 run.Test("Chinook: helicopter slow death falls, crashes and leaves a hull", Tests.HelicopterSlowDeathFall);
 run.Test("Helix: portable structure rides free, follows and dies with it", Tests.HelixPortableStructure);
 run.Test("Transports: snapshot v8, determinism and replay v8 commands", Tests.TransportSnapshotAndReplay);
