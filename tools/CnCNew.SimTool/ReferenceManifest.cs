@@ -138,7 +138,7 @@ internal static class ReferenceManifest
     private static readonly string[] QuickMissions = ["mission_MD_GLA05", "mission_MD_USA05"];
 
     private const string UsageText = """
-        Usage: CnCNew.SimTool reference-manifest write <content-dir> <file> [--set quick|full] [--jobs N]
+        Usage: CnCNew.SimTool reference-manifest write <content-dir> <file> [--set quick|full] [--jobs N] [--only <id>[,<id>]]   (--only: replaces those runs in the existing file)
                CnCNew.SimTool reference-manifest results <content-dir> --out <file> [--commands <dir>] [--set quick|full] [--only <run-id>[,<run-id>]] [--jobs N]
                CnCNew.SimTool reference-manifest check <content-dir> <file> [--set quick|full] [--only <run-id>[,<run-id>]] [--verify-incremental|--explain-incremental] [--jobs N]
                CnCNew.SimTool reference-manifest list  <content-dir>
@@ -192,7 +192,8 @@ internal static class ReferenceManifest
         var selected = plan.Where(spec => set == FullSet || spec.Quick).ToList();
         if (ManifestCommands.Option(args, "--only") is { } only)
         {
-            if (args[1] == "write") return ManifestCommands.Fail("--only is a check option; a manifest is written as a whole set.");
+            // A write of some runs replaces them in the manifest that is there and keeps the others (a cause that moves one run need not measure all of them).
+            if (args[1] == "write" && !File.Exists(path)) return ManifestCommands.Fail($"--only writes into an existing manifest; {path} does not exist.");
             var wanted = only.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             var unknown = wanted.Where(id => plan.All(spec => spec.Id != id)).ToArray();
             if (unknown.Length > 0) return ManifestCommands.Fail($"Unknown run id(s): {string.Join(", ", unknown)}. `reference-manifest list <content-dir>` prints the ids.");
@@ -231,7 +232,7 @@ internal static class ReferenceManifest
             }
             return 0;
         }
-        return args[1] == "write" ? Write(path, selected, outcomes, unavailable) : Check(path, schema, set, ManifestCommands.Option(args, "--only") is not null, selected, outcomes, unavailable, verify);
+        return args[1] == "write" ? Write(path, selected, outcomes, unavailable, ManifestCommands.Option(args, "--only") is not null) : Check(path, schema, set, ManifestCommands.Option(args, "--only") is not null, selected, outcomes, unavailable, verify);
     }
 
     private static ManifestObject Header() => new ManifestObject()
@@ -241,9 +242,17 @@ internal static class ReferenceManifest
         .Add("tickRate", ToolRate.Current.TicksPerSecond)
         .Add("worldSnapshotVersion", WorldSnapshot.Version);
 
-    private static int Write(string path, List<RunSpec> selected, Dictionary<string, RunOutcome> outcomes, ManifestObject unavailable)
+    private static int Write(string path, List<RunSpec> selected, Dictionary<string, RunOutcome> outcomes, ManifestObject unavailable, bool only)
     {
         var runs = new ManifestObject();
+        var kept = 0;
+        if (only)
+            foreach (var (id, entry) in ManifestDocument.Read(File.ReadAllBytes(path)).Object("runs").Values)
+            {
+                if (selected.Any(spec => spec.Id == id)) continue;
+                runs.Add(id, entry);
+                kept++;
+            }
         var problems = 0;
         var notRepeating = new List<string>();
         foreach (var spec in selected)
@@ -267,7 +276,7 @@ internal static class ReferenceManifest
         }
         var root = new ManifestObject().Add("kind", Kind).Add("schema", Schema).Add("simulation", Header()).Add("unavailable", unavailable).Add("runs", runs);
         File.WriteAllBytes(path, ManifestDocument.WriteBytes(root));
-        Console.WriteLine($"Reference manifest written at {ToolRate.Current}: {selected.Count} runs ({selected.Count(spec => spec.Quick)} in the quick set).");
+        Console.WriteLine($"Reference manifest written at {ToolRate.Current}: {selected.Count} runs ({selected.Count(spec => spec.Quick)} in the quick set){(only ? $", {kept} kept as they were" : string.Empty)}.");
         // The manifest states what was measured. A false repeat flag is a defect of the simulation that the file makes visible; it is not hidden by refusing to write.
         if (notRepeating.Count > 0) Console.WriteLine($"WARNING: {notRepeating.Count} run(s) are recorded with a false repeat flag: {string.Join(", ", notRepeating)}.");
         return 0;
