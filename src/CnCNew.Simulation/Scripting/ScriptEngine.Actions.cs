@@ -328,7 +328,22 @@ public sealed partial class ScriptEngine
                     foreach (var team in TeamsNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, NamedMode + Str(p, 1));
                 break;
+            // doTeamGuardArea: the team guards the trigger area (F-58, step 3).
             case "TEAM_GUARD_AREA":
+                if (Has(type, p, 2) && FindAreaQualified(Str(p, 1)) is { } guardedArea)
+                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    {
+                        var members = LiveMembers(team).ToArray();
+                        foreach (var member in members)
+                        {
+                            _buttonHunts.Remove(member.Id.Value);
+                            _followers.Remove(member.Id.Value);
+                            _busyThisTick.Add(member.Id.Value);
+                        }
+                        _world.GuardArea(members, guardedArea);
+                    }
+                else if (Has(type, p, 2)) Diagnose($"unknown trigger area '{Str(p, 1)}'");
+                break;
             case "TEAM_ATTACK_AREA":
                 if (Has(type, p, 2))
                     foreach (var team in TeamsNamed(Str(p, 0)))
@@ -782,6 +797,9 @@ public sealed partial class ScriptEngine
             }
         return best;
     }
+
+    /// <summary>The trigger area of a guard by the name it keeps (<see cref="SimulationWorld.GuardAreas"/>).</summary>
+    public ScriptArea? FindGuardArea(string name) => _program.FindArea(name);
 
     private (Fixed X, Fixed Y)? AreaCentre(string name)
     {

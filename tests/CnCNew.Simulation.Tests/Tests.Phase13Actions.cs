@@ -186,6 +186,26 @@ static partial class Tests
         Check.That(restored.StateHash() == session.StateHash() && restored.World.IsGuarding(walker.Id is var id ? restored.World.FindEntity(id)! : null!), "A restored mission keeps the guards.");
     }
 
+    public static void ScriptGuardArea()
+    {
+        // F-58, step 3: TEAM_GUARD_AREA - the guard looks inside the polygon (LeftArea, 0..200 x 0..400) out to the area's radius from its bounds centre (100, 200): an enemy inside it is
+        // attacked, one outside the polygon - though within the radius - is not.
+        Fixed Hurt(int enemyX, int enemyY)
+        {
+            var (map, fixture, terrain) = MissionMap([
+                Scr.Script("Guard", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_GUARD_AREA", Scr.Team("Squad"), Scr.Area("LeftArea"))], oneShot: true),
+            ], objects: [Placed("AlphaSoldier", 100m, 200m, "Squad", "Keeper"), Placed("BetaSoldier", enemyX, enemyY, "teamB", "Intruder")]);
+            var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+            Run(session, session.Frames(300));
+            Check.That(session.World.IsGuarding(NamedIn(session, "Keeper")!), $"The team guards the area ({string.Join("; ", session.Engine.Diagnostics.Keys)}).");
+            var intruder = NamedIn(session, "Intruder");
+            return intruder is null ? Fixed.FromInt(80) : intruder.Body!.MaxHealth - intruder.Body.Health;
+        }
+
+        Check.That(Hurt(150, 380) > Fixed.Zero, "An enemy inside the area is attacked.");
+        Check.That(Hurt(300, 200) == Fixed.Zero, "One outside the polygon, within the area's radius of its centre, is not.");
+    }
+
     public static void ScriptDisableHoldAndEvacuate()
     {
         // NAMED_SET_HELD freezes an object, PLAYER_DISABLE_FACTORIES stops the production of one type, NAMED_SET_EVAC_LEFT_OR_RIGHT sets a garrison's exit side.

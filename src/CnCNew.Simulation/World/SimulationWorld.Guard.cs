@@ -2,6 +2,7 @@ using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Time;
 
 namespace CnCNew.Simulation.World;
@@ -31,6 +32,9 @@ public sealed partial class SimulationWorld
 
     /// <summary>IDLE's "the guarded object moved": more than two pathfinding cells along x or along y (<c>4 * PATHFIND_CELL_SIZE_F^2</c> per axis).</summary>
     private static readonly Fixed GuardeeMoveLimitSquared = Fixed.FromInt(4 * 10 * 10);
+
+    /// <summary>The trigger areas a guard of an area finds by name (the mission's script program); null in a world without them. Not part of the snapshot: the host sets it again.</summary>
+    public Func<string, ScriptArea?>? GuardAreas { get; set; }
 
     /// <summary>The unit guards (<c>AI_GUARD</c>): it is not idle, and its own acquisition is the guard's.</summary>
     public bool IsGuarding(Entity entity) => entity.Guard is not null;
@@ -80,6 +84,48 @@ public sealed partial class SimulationWorld
         }
         if (!any) RecordRejection(order, CommandRejection.UnknownEntity);
     }
+
+    /// <summary>
+    /// <c>aiGuardArea</c> of a script (<c>TEAM_GUARD_AREA</c>, F-58 step 3): the units guard the trigger area - its bounds centre is the guarded position, the scans look inside the polygon
+    /// out to the area's radius (<see cref="AreaGeometry"/>).
+    /// </summary>
+    internal void GuardArea(IReadOnlyList<Entity> units, ScriptArea area)
+    {
+        var (cx, cy, _) = AreaGeometry(area);
+        foreach (var unit in units)
+        {
+            if (unit.DestroyRequested || unit.Owner.IsSystem || AiOf(unit) is not { } ai) continue;
+            if (unit.Template.Locomotor is null || unit.Template.IsKindOf("IMMOBILE") || unit.Template.IsKindOf("PROJECTILE")) continue;
+            ai.OrderIdle(this, true);
+            unit.Guard = new GuardState { X = cx, Y = cy, Area = area.Name };
+            _acquirers.Add(unit.Id.Value);
+            EnterGuardReturn(unit, ai, unit.Guard, _tick);
+            MarkDirty(unit);
+        }
+    }
+
+    /// <summary>
+    /// <c>PolygonTrigger::getCenterPoint</c> and <c>getRadius</c>: the centre of the outline's bounds, and the radius as the original computes it - <c>halfHeight = (hi.y + lo.y) / 2</c>, a
+    /// plus where a minus belongs (<c>PolygonTrigger.cpp</c>), so the radius grows with the area's y position. Kept: the guard of an area reaches as far as the original's.
+    /// </summary>
+    private static (Fixed X, Fixed Y, Fixed Radius) AreaGeometry(ScriptArea area)
+    {
+        int loX = int.MaxValue, loY = int.MaxValue, hiX = int.MinValue, hiY = int.MinValue;
+        foreach (var (x, y) in area.Points)
+        {
+            loX = Math.Min(loX, x);
+            loY = Math.Min(loY, y);
+            hiX = Math.Max(hiX, x);
+            hiY = Math.Max(hiY, y);
+        }
+        if (area.Points.IsDefaultOrEmpty) return (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+        var two = Fixed.FromInt(2);
+        var halfWidth = Fixed.FromInt(hiX - loX) / two;
+        var halfHeight = Fixed.FromInt(hiY + loY) / two;
+        return (Fixed.FromInt(loX + hiX) / two, Fixed.FromInt(loY + hiY) / two, AirModules.Distance2D(Fixed.Zero, Fixed.Zero, halfWidth, halfHeight));
+    }
+
+    private ScriptArea? GuardedArea(GuardState guard) => guard.Area.Length > 0 ? GuardAreas?.Invoke(guard.Area) : null;
 
     /// <summary>The guarded centre: the guarded object where its begun frame ends, else the guarded position.</summary>
     private (Fixed X, Fixed Y) GuardCentre(GuardState guard)
@@ -214,6 +260,10 @@ public sealed partial class SimulationWorld
         }
         var (cx, cy) = GuardCentre(guard);
         var limit = SquaredReach.Of(GuardRange(entity, true));
+        // An area: its radius from its centre, and only what stands inside the polygon (PartitionFilterPolygonTrigger). Not modelled: the original looks only when some object
+        // entered or left a trigger area, or one was made or destroyed, within the last scan period (updateObjectsChangedTriggerAreas) - here it looks every scan.
+        var area = GuardedArea(guard);
+        if (area is not null) limit = SquaredReach.Of(AreaGeometry(area).Radius);
         Entity? best = null;
         var bestDistance = Fixed.MaxValue;
         foreach (var player in Configuration.Players)
@@ -230,6 +280,7 @@ public sealed partial class SimulationWorld
                 var distance = dx * dx + dy * dy;
                 if (!limit.Contains(distance) || distance > bestDistance || (distance == bestDistance && best is not null && candidate.Id.Value > best.Id.Value)) continue;
                 if (guard.Mode == GuardMode.FlyingUnitsOnly && !IsSignificantlyAboveTerrainAtFrameEnd(candidate)) continue;
+                if (area is not null && !area.Contains(x, y)) continue;
                 if (!CanAttack(entity, candidate, false, out _)) continue;
                 best = candidate;
                 bestDistance = distance;
@@ -265,7 +316,7 @@ public sealed partial class SimulationWorld
     {
         guard.Phase = GuardPhase.Outer;
         guard.GiveUpTick = tick + Time.OriginalFrames(GuardChaseFrames);
-        if (guard.Mode != GuardMode.WithoutPursuit && StartGuardAttack(entity, ai, guard, tick, GuardRange(entity, false))) return;
+        if (guard.Mode != GuardMode.WithoutPursuit && StartGuardAttack(entity, ai, guard, tick, OuterGuardRange(entity, guard))) return;
         guard.GiveUpTick = 0;
         EnterGuardReturn(entity, ai, guard, tick);
     }
@@ -327,7 +378,7 @@ public sealed partial class SimulationWorld
         if (entity.Acquisition is not { Victim.IsValid: true } state || FindEntity(state.Victim) is not { } victim || !IsGuardVictim(entity, victim)) return false;
         var (cx, cy) = GuardCentre(guard);
         var inner = GuardRange(entity, true);
-        var radius = guard.Phase == GuardPhase.Outer ? GuardRange(entity, false) : inner;
+        var radius = guard.Phase == GuardPhase.Outer ? OuterGuardRange(entity, guard) : inner;
         if (!WithinGuardRadius(victim, cx, cy, radius)) return false;
         if (guard.Phase == GuardPhase.Outer)
         {
@@ -338,6 +389,13 @@ public sealed partial class SimulationWorld
         }
         if (guard.GiveUpTick != 0 && tick >= guard.GiveUpTick) return false;
         return GuardEngage(entity, ai, state, victim, tick);
+    }
+
+    /// <summary>OUTER's radius: the outer range, at least the guarded area's radius (<c>AIGuardOuterState::onEnter</c>).</summary>
+    private Fixed OuterGuardRange(Entity entity, GuardState guard)
+    {
+        var outer = GuardRange(entity, false);
+        return GuardedArea(guard) is { } area ? Fixed.Max(outer, AreaGeometry(area).Radius) : outer;
     }
 
     /// <summary>

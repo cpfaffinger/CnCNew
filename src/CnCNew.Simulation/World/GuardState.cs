@@ -22,6 +22,9 @@ internal sealed class GuardState
     /// <summary><c>m_objectToGuard</c>: the guarded object; invalid for a position.</summary>
     public EntityId Object;
 
+    /// <summary><c>m_areaToGuard</c>: the guarded trigger area by name (empty: none); <see cref="X"/>, <see cref="Y"/> are then its bounds centre.</summary>
+    public string Area = string.Empty;
+
     public GuardMode Mode;
 
     public GuardPhase Phase;
@@ -51,6 +54,7 @@ internal sealed class GuardState
         writer.Fixed("x", X);
         writer.Fixed("y", Y);
         if (Object.IsValid) writer.UInt("object", Object.Value);
+        if (Area.Length > 0) writer.Text("area", Area);
         if (Mode != GuardMode.Normal) writer.Int("mode", (int)Mode);
         writer.Int("phase", (int)Phase);
         if (Nemesis.IsValid) writer.UInt("nemesis", Nemesis.Value);
@@ -72,6 +76,7 @@ internal sealed class GuardState
             X = reader.Fixed("x"),
             Y = reader.Fixed("y"),
             Object = reader.Has("object") ? new EntityId(checked((uint)reader.UInt("object"))) : EntityId.Invalid,
+            Area = reader.Has("area") ? reader.Text("area") : string.Empty,
             Mode = reader.Has("mode") ? (GuardMode)checked((byte)reader.Int("mode")) : GuardMode.Normal,
             Phase = (GuardPhase)checked((byte)reader.Int("phase")),
             Nemesis = reader.Has("nemesis") ? new EntityId(checked((uint)reader.UInt("nemesis"))) : EntityId.Invalid,

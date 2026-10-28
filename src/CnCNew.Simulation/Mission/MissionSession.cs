@@ -86,6 +86,7 @@ public sealed class MissionSession
         }
         Engine = new ScriptEngine(program, world, new ScriptEngineOptions(options.Difficulty, localPlayer, options.PresentationLatencyTicks, options.MissionAttempts) { Ai = options.Ai }, Issue);
         world.AcquisitionAdvisor = Engine;
+        world.GuardAreas = Engine.FindGuardArea;
         world.SelfAcquisition = options.CombatIntervalTicks != 0;
     }
 

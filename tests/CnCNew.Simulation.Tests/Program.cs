@@ -234,6 +234,7 @@ run.Test("Phase 41 (F-58, step 1): a guard drives to an enemy in its inner range
 run.Test("Phase 41 (F-58, step 1): a guard gives up beyond its outer range; the guard modes; a computer's ranges", Tests.GuardGivesUpAndModes);
 run.Test("Phase 41 (F-58, step 1): a guard answers an attacker beyond its inner range", Tests.GuardAnswersAnAttacker);
 run.Test("Phase 41 (F-58, step 4): the script guard actions guard a waypoint, an own position, an object", Tests.ScriptGuardActions);
+run.Test("Phase 41 (F-58, step 3): a team guards a trigger area - inside the polygon, out to its radius", Tests.ScriptGuardArea);
 run.Test("Phase 41 (F-54, step 2): a container counts its riders of kind STEALTH_GARRISON", Tests.StealthGarrisonCount);
 run.Test("Phase 41 (F-54): canCaptureBuilding's stealth and garrison rules", Tests.StealthGarrisonCapture);
 run.Test("Phase 41 (F-54, step 3): a hidden stealth garrison shows non-allies its owner from before; acquisition reads it", Tests.StealthGarrisonHiddenFromAcquisition);
