@@ -1193,8 +1193,11 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (victim is null || victim.DestroyRequested || victim.Body is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
                 if (!CanMove(unit)) { RecordRejection(command, CommandRejection.CannotMove); break; }
                 ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
-                // The order replaces the unit's attack like any new AI command; the pursuit then starts the attack afresh against the victim.
-                AiOf(unit)!.OrderMove(this, pursue.X, pursue.Y, true);
+                // The order replaces the unit's attack like any new AI command; the pursuit then starts the attack afresh against the victim. A unit that needs a line of
+                // sight and cannot fire from where it stands goes where it can (AIAttackApproachTargetState::computePath -> findAttackPath, F-55).
+                var (pursueX, pursueY) = (pursue.X, pursue.Y);
+                if (CanAttack(unit, victim, false, out var firesFromHere) && !firesFromHere && FindAttackPosition(unit, victim) is { } place) (pursueX, pursueY) = place;
+                AiOf(unit)!.OrderMove(this, pursueX, pursueY, true);
                 BeginPursuit(unit, victim);
                 NoteOrderedAttack(unit, victim);
                 break;

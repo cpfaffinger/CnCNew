@@ -62,8 +62,14 @@ public sealed partial class SimulationWorld
     /// </summary>
     public bool IsAttackViewBlocked(Entity attacker, Entity victim)
     {
-        if (!AttackUsesLineOfSight || Navigation is null || Terrain is null || !attacker.Template.IsKindOf(NeedsLineOfSightKind)) return false;
         var (attackerX, attackerY, attackerZ) = attacker.FrameEnd(_tick);
+        return IsAttackViewBlockedFrom(attacker, attackerX, attackerY, attackerZ, victim);
+    }
+
+    /// <summary><see cref="IsAttackViewBlocked"/> with the attacker standing at (<paramref name="attackerX"/>, <paramref name="attackerY"/>, <paramref name="attackerZ"/>).</summary>
+    private bool IsAttackViewBlockedFrom(Entity attacker, Fixed attackerX, Fixed attackerY, Fixed attackerZ, Entity victim)
+    {
+        if (!AttackUsesLineOfSight || Navigation is null || Terrain is null || !attacker.Template.IsKindOf(NeedsLineOfSightKind)) return false;
         var (victimX, victimY, victimZ) = victim.FrameEnd(_tick);
         if (!attacker.Template.IsKindOf("IMMOBILE"))
         {
@@ -87,6 +93,138 @@ public sealed partial class SimulationWorld
         var (otherX, otherY, otherZ) = candidate.FrameEnd(_tick);
         if (!Terrain.IsClearLineOfSight(ownX, ownY, ownZ + MaxHeightAbovePosition(entity.Template), otherX, otherY, otherZ + MaxHeightAbovePosition(candidate.Template))) return true;
         return !IsSignificantlyAboveTerrainAtFrameEnd(candidate) && IsAttackViewBlocked(entity, candidate);
+    }
+
+    /// <summary><c>isGoalPosWithinAttackRange</c>: a goal lies a quarter cell inside the weapon's range (and outside its minimum range).</summary>
+    private static readonly Fixed GoalRangeMargin = Fixed.FromDecimal(2.5m);
+
+    private static readonly Fixed HalfCell = Fixed.FromInt(global::CnCNew.Simulation.Terrain.TerrainMap.CellSize / 2);
+
+    /// <summary><c>ATTACK_CELL_LIMIT</c>: the cells the search looks at before it gives up.</summary>
+    private const int AttackCellLimit = 2500;
+
+    /// <summary><c>COST_ORTHOGONAL</c> and <c>COST_DIAGONAL</c> of the original's search, in world units of a cell of 10.</summary>
+    private const long OrthogonalStepCost = 10;
+    private const long DiagonalStepCost = 14;
+
+    /// <summary>The priority of a cell in the search: the estimate first, then the cell index (a map has fewer cells than this).</summary>
+    private const long CellKeySpan = 33_554_432;
+
+    private int[]? _attackSearchStamp;
+    private long[]? _attackSearchCost;
+    private int _attackSearchRun;
+    private readonly PriorityQueue<int, long> _attackSearchOpen = new();
+
+    /// <summary>
+    /// <c>Pathfinder::findAttackPath</c> for a ground unit of the kind <c>ATTACK_NEEDS_LINE_OF_SIGHT</c>: the place it moves to so that it can fire at the victim - first up to nine
+    /// points half a cell apart straight toward the victim, then a search outward from the unit toward the victim over at most 2,500 cells; the first that is passable for the
+    /// unit, within the weapon's range less a quarter cell (and outside its minimum range plus as much) and has a clear view is the goal. Null when the search finds none:
+    /// the unit then walks at the victim and stops where it can fire (the fallback of <c>doPathfind</c>). Not modelled: the test of <c>checkDestination</c> that no other unit
+    /// has its goal there, and the vehicles' strip-back past cells other units block.
+    /// </summary>
+    public (Fixed X, Fixed Y)? FindAttackPosition(Entity unit, Entity victim)
+    {
+        if (!AttackUsesLineOfSight || Navigation is not { } grid || Terrain is not { } terrain || !unit.Template.IsKindOf(NeedsLineOfSightKind)) return null;
+        if (unit.Template.Locomotor is not { } locomotor || (locomotor.Surfaces & LocomotorSurfaces.Air) != 0) return null;
+        var choice = ChooseWeapon(unit, victim, FireOrigin.Ai);
+        if (choice.Slot < 0 || ActiveWeaponSet(unit) is not { } set || !set.HasWeapon(choice.Slot)) return null;
+        var weapon = _templates.Weapons[set.Weapons[choice.Slot]];
+        var range = weapon.RangeWith(_templates.GlobalWeaponBonus, unit.WeaponBonusConditions);
+        var far = SquaredReach.Of(range - GoalRangeMargin);
+        var hasNear = weapon.MinimumAttackRange > Fixed.Zero;
+        var near = SquaredReach.Of(weapon.MinimumAttackRange + GoalRangeMargin);
+        var (unitX, unitY, _) = unit.FrameEnd(_tick);
+        var (victimX, victimY, _) = victim.FrameEnd(_tick);
+
+        bool Fits(Fixed x, Fixed y)
+        {
+            if (!grid.IsPassable(global::CnCNew.Simulation.Terrain.TerrainMap.CellOf(x), global::CnCNew.Simulation.Terrain.TerrainMap.CellOf(y), locomotor.Surfaces)) return false;
+            var dx = victimX - x;
+            var dy = victimY - y;
+            var distance = dx * dx + dy * dy;
+            if (!far.Contains(distance) || (hasNear && near.ContainsStrictly(distance))) return false;
+            return !IsAttackViewBlockedFrom(unit, x, y, terrain.HeightAt(x, y), victim);
+        }
+
+        var towardX = victimX - unitX;
+        var towardY = victimY - unitY;
+        var length = Fixed.Sqrt(towardX * towardX + towardY * towardY);
+        if (length > Fixed.Zero)
+            for (var step = 1; step <= 9; step++)
+            {
+                var along = HalfCell * Fixed.FromInt(step);
+                if (along > length) break;
+                var x = unitX + towardX * along / length;
+                var y = unitY + towardY * along / length;
+                if (Fits(x, y)) return (x, y);
+            }
+
+        // The search: the cost so far plus the distance to the victim less half the attack distance (the range and three cells), the cheaper first, then the lower cell index.
+        var cellsX = terrain.CellsX;
+        var cells = cellsX * terrain.CellsY;
+        if (_attackSearchStamp is null || _attackSearchStamp.Length != cells)
+        {
+            _attackSearchStamp = new int[cells];
+            _attackSearchCost = new long[cells];
+            _attackSearchRun = 0;
+        }
+        if (++_attackSearchRun == int.MaxValue)
+        {
+            Array.Clear(_attackSearchStamp);
+            _attackSearchRun = 1;
+        }
+        var stamp = _attackSearchStamp;
+        var cost = _attackSearchCost!;
+        var run = _attackSearchRun;
+        var halfAttack = (range + Fixed.FromInt(3 * global::CnCNew.Simulation.Terrain.TerrainMap.CellSize)) / Fixed.FromInt(2);
+        long Heuristic(int cx, int cy)
+        {
+            var dx = global::CnCNew.Simulation.Terrain.TerrainMap.CellCenter(cx) - victimX;
+            var dy = global::CnCNew.Simulation.Terrain.TerrainMap.CellCenter(cy) - victimY;
+            var left = Fixed.Sqrt(dx * dx + dy * dy) - halfAttack;
+            return left > Fixed.Zero ? left.Floor() : 0;
+        }
+        var startX = Math.Clamp(global::CnCNew.Simulation.Terrain.TerrainMap.CellOf(unitX), 0, cellsX - 1);
+        var startY = Math.Clamp(global::CnCNew.Simulation.Terrain.TerrainMap.CellOf(unitY), 0, terrain.CellsY - 1);
+        var open = _attackSearchOpen;
+        open.Clear();
+        var start = startY * cellsX + startX;
+        stamp[start] = run;
+        cost[start] = 0;
+        open.Enqueue(start, Key(Heuristic(startX, startY), start));
+        var examined = 0;
+        while (examined < AttackCellLimit && open.TryDequeue(out var index, out var key))
+        {
+            var cx = index % cellsX;
+            var cy = index / cellsX;
+            // A cell queued again at a lower cost leaves its older entry behind.
+            if (key != Key(cost[index] + Heuristic(cx, cy), index)) continue;
+            examined++;
+            var centerX = global::CnCNew.Simulation.Terrain.TerrainMap.CellCenter(cx);
+            var centerY = global::CnCNew.Simulation.Terrain.TerrainMap.CellCenter(cy);
+            var offX = centerX - unitX;
+            var offY = centerY - unitY;
+            if (index != start && !SquaredReach.Of(HalfCell).Contains(offX * offX + offY * offY) && Fits(centerX, centerY)) return (centerX, centerY);
+            for (var dy = -1; dy <= 1; dy++)
+                for (var dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0) continue;
+                    var nx = cx + dx;
+                    var ny = cy + dy;
+                    if (!grid.IsPassable(nx, ny, locomotor.Surfaces)) continue;
+                    // A diagonal step only past two open corners.
+                    if (dx != 0 && dy != 0 && (!grid.IsPassable(cx + dx, cy, locomotor.Surfaces) || !grid.IsPassable(cx, cy + dy, locomotor.Surfaces))) continue;
+                    var next = ny * cellsX + nx;
+                    var through = cost[index] + (dx != 0 && dy != 0 ? DiagonalStepCost : OrthogonalStepCost);
+                    if (stamp[next] == run && cost[next] <= through) continue;
+                    stamp[next] = run;
+                    cost[next] = through;
+                    open.Enqueue(next, Key(through + Heuristic(nx, ny), next));
+                }
+        }
+        return null;
+
+        static long Key(long estimate, int cell) => estimate * CellKeySpan + cell;
     }
 
     /// <summary><c>GeometryInfo::getMaxHeightAbovePosition</c>: a sphere its radius, a box or a cylinder its height.</summary>

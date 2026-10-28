@@ -332,7 +332,9 @@ public sealed partial class SimulationWorld
         if (!SquaredReach.Of(leash).Contains(dx * dx + dy * dy)) return false;
         if (!state.Chasing || tick - state.ChaseTick >= _chaseRefreshTicks || !entity.HasMoveTarget)
         {
-            if (!ai.StartInternalMove(victimX, victimY)) return false;
+            // A unit that needs a line of sight walks to where it can fire (findAttackPath, F-55), the others at the victim.
+            var (goalX, goalY) = FindAttackPosition(entity, victim) ?? (victimX, victimY);
+            if (!ai.StartInternalMove(goalX, goalY)) return false;
             ai.BeginMoveWithNextFrame(this);
             WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
             state.Chasing = true;

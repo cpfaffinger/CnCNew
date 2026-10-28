@@ -8,7 +8,7 @@ using CnCNew.Simulation.World;
 
 // F-55: the attack's view test. Step (a): the terrain line of BaseHeightMapRenderObjClass::isClearLineOfSight; step (b): the obstacle walk of
 // Pathfinder::isAttackViewBlockedByObstacle over the pathfind cells; step (c): outOfWeaponRangeObject counts a blocked view as out of range;
-// step (d): the acquisition passes a candidate it cannot see by (PartitionFilterLineOfSight).
+// step (d): the acquisition passes a candidate it cannot see by (PartitionFilterLineOfSight); step (e): the approach goes where it can fire (findAttackPath).
 static partial class Tests
 {
     public static void TerrainLineOfSightFollowsTheOriginal()
@@ -115,6 +115,16 @@ static partial class Tests
     {
         ["Data/INI/Object/AttackViewFixture.ini"] = AttackViewFiles()["Data/INI/Object/AttackViewFixture.ini"],
         ["Data/INI/Object/AttackGateFixture.ini"] = """
+        Locomotor LosLoco
+          Surfaces = GROUND
+          Speed = 90.0
+          Acceleration = 300.0
+          Braking = 300.0
+          TurnRate = 360.0
+          MinSpeed = 0.0
+          CloseEnoughDist = 1.0
+        End
+
         Weapon LosFlak
           PrimaryDamage = 10
           AttackRange = 150.0
@@ -173,7 +183,7 @@ static partial class Tests
         Object LosSoldier
           KindOf = SELECTABLE INFANTRY ATTACK_NEEDS_LINE_OF_SIGHT
           VisionRange = 150.0
-          Locomotor = SET_NORMAL ChaseLoco
+          Locomotor = SET_NORMAL LosLoco
           Body = ActiveBody Body01
             MaxHealth = 1000.0
             InitialHealth = 1000.0
@@ -251,5 +261,38 @@ static partial class Tests
         Check.That(behind == 0, $"Behind the ridge a soldier that needs a line of sight does not acquire it ({behind} shots).");
         var blind = ShotsAtAircraftBehindRidge("FlakSoldier", ridge: true);
         Check.That(blind > 0, $"One without the kind does ({blind} shots).");
+    }
+
+    /// <summary>
+    /// A soldier ordered to pursue a victim behind a wall (or in the open): returns where it stands three seconds later, its distance to the victim and whether it fired.
+    /// </summary>
+    private static (Fixed Distance, int Shots, bool Clear) PursuitBehindWall(bool wall)
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: AttackGateFiles());
+        var terrain = TerrainMap.Build(SyntheticMaps.Build(30, 30, 1), "attack-place");
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, "LosSoldier", owner: 1, x: 50, y: 150);
+        feeder.Spawn(2, "AcqMute", owner: 2, x: 130, y: 150);
+        if (wall) feeder.Spawn(1, "ViewWall", owner: 1, x: 90, y: 150);
+        for (var step = 0; step < world.Frames(3); step++) world.Step();
+        var shooter = world.Entities.First(value => value.Template.Name == "LosSoldier");
+        var victim = world.Entities.First(value => value.Template.Name == "AcqMute");
+        Check.That(feeder.Pursue(1, shooter.Id.Value, victim.Id.Value, 130, 150).Accepted, "Setup: the pursuit is accepted.");
+        var shots = 0;
+        for (var step = 0; step < world.Frames(150); step++)
+            foreach (var value in world.Step().Events)
+                if (value.Kind == SimEventKind.WeaponFired && value.Entity == shooter.Id) shots++;
+        var dx = victim.X - shooter.X;
+        var dy = victim.Y - shooter.Y;
+        return (Fixed.Sqrt(dx * dx + dy * dy), shots, !world.IsAttackViewBlocked(shooter, victim));
+    }
+
+    public static void ApproachGoesWhereItCanFire()
+    {
+        var behind = PursuitBehindWall(wall: true);
+        Check.That(behind.Clear && behind.Shots > 0, $"Ordered at a victim behind a wall, the soldier reaches a place with a clear view and fires ({behind.Shots} shots).");
+        // Without the search the pursuit walks onto the victim (0 away) and fires from there.
+        Check.That(behind.Distance > Fixed.FromInt(40), $"It stops in range where it can see, not at the victim ({behind.Distance} away; range 100).");
     }
 }
