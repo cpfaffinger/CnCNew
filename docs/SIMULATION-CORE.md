@@ -3755,6 +3755,27 @@ per container as the original (a garrison always; a transport infantry with the 
 portable structure always, infantry with the flag; tunnel, cave, parachute and heal containers by the flag no data sets). Step 3: the `GARRISONED` weapon bonus of garrison
 and Helix riders (range 133 %, damage 125 % in the shipped data). Step 5: a contained rider acts when its container lets it fire - the container's hold is no stop, the AI
 processes `DISABLED_HELD` -, searches its largest weapon range plus the container's bounding circle, never chases, drops a victim out of range. **Stand-in until the fire
-points are built** (steps 1 and 4 of `docs/FIRE-FROM-CONTAINERS.md`): range, search, view and shot are measured from the container - for an enclosing garrison from the
+points are built** (for the garrisons replaced by §55.6) (steps 1 and 4 of `docs/FIRE-FROM-CONTAINERS.md`): range, search, view and shot are measured from the container - for an enclosing garrison from the
 point of its bounding circle nearest the victim. Not built: the Battle Bus's `WeaponBonusPassedToPassengers`, orders through the container, `ArmedRidersUpgradeMyWeaponSet`,
 the drawing of riders at their points, clearing a garrison. Tests in `Tests.FireFromContainers.cs`. Commits `a4585da` (manifest `dba394b`), `a52452b`, `91099aa` (manifest `7ba5ec5`), `7d5c9a7` (manifest `ba8fd0e`).
+
+### 55.6 F-60, steps 1 and 4: the fire points of a garrison and the stations of a fire base (`loadGarrisonPoints`, `matchObjectsToGarrisonPoints`, `pickAStationForMe`)
+
+Step 1 reads the bones (`ModelGeometryLoader.ReadFirePoints`, `ModelGeometry.FirePoints`, part of the world fingerprint like the exit paths): for an enclosing
+garrison `FIREPOINT01..40` of the model states {GARRISONED}, {GARRISONED DAMAGED} and {GARRISONED REALLYDAMAGED}; for a fire base `STATION01..ContainMax` of
+{GARRISONED}; for a transport and an Overlord `FIREPOINT01..32` of the model without a condition. As `Drawable::getPristineBonePositions` reads them: over the draw modules in
+order, consecutive from `01` until the first missing bone, only public bones (`FirePoint` is a `StandardPublicBone` of `GameData.ini`, the stations are `ExtraPublicBone`s of
+the four fire bases), with the template's `Scale` as root (`validateCachedBones`). Measured on the master installation: 164 garrisons with 3,288 pristine points (at most 40), the four fire bases with 16 stations (at z -7.18 below the origin - the bunker is sunk), 55 transports with 301 points.
+
+Step 4 for the garrisons (`GarrisonContain`, `SimulationWorld.GarrisonPoints.cs`): a rider without a victim stands at the building's centre (`onContaining`); its range test
+while it looks is made from the free point closest to the candidate (`calcBestGarrisonPosition` - its own point counts as taken, and a building with every point taken
+lets nobody in range, as in the original); when it attacks it steps to that point (`attemptBestFirePointPosition`) and measures range, view and shot from there; once per
+logic frame of the original, in the first tick of the building's own frame, a rider at a point that attacks nobody or whose victim is out of range goes back to the centre,
+a rider with a victim takes the free point closest to it, and a rider at a point moves to a free one strictly closer to its victim (`removeInvalidObjectsFromGarrisonPoints`,
+`addValidObjectsToGarrisonPoints`, `trackTargets`); the 40 points beyond the model's are the centre. The set follows the body's damage state (`findConditionIndex`, rubble
+uses the really damaged one). A fire base puts each rider on the first free station when it comes in and back on the ground when it leaves (`removeObjectFromStationPoint`,
+"Patch 1.01"). Point and station occupancy is state, written only while somebody stands at one. The step-5 stand-in for a garrison (the building's bounding circle) is
+gone; a transport's riders are still measured from the transport (its fire points are read, not used yet: `OpenContain::redeployOccupants` moves them on every change
+of the transport's pose, a state of its own). Not modelled: the night and snow variants of a model the original would have cached at the first entry, the gun drawable
+and its muzzle flash (step 8), `MobileGarrison` (the original keeps the points where the building first stood). Tests in `Tests.FireFromContainers.cs`
+(`FireFromContainersFirePoints`, the rate case on fire points) and `ModelGeometryTests` (real data). Step 1 moves only the fingerprint fields of 48 runs (69 of 1,927, manifest `c016cbf`); step 4 the hashes of 18 mission runs with garrisoned riders (104 fields), no outcome, end tick or command count (manifest `14d17c3`); the rate-equivalence suite 0 / 0. Commits `e7e86a0`, `532e5cb`..

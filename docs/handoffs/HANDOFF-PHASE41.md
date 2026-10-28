@@ -73,4 +73,7 @@ Reforged candidate decided with its reason; the checks the changes can reach gre
   60 and 120 Hz; the rate-equivalence suite 0 / 0 after each; `contact-weapon-not-view-blocked` (`GameFix` 20) under both profiles. The manifest commits of (c) to (e)
   follow the measurements.
 - F-61 and the destroyed rider (§55.3, §55.4); F-60 steps 0, 2, 3, 5 (§55.5, a stand-in for the fire points); the pictures of real matches pinned again
-  (`43c3be6`). Next: F-60's fire points (steps 1 and 4) and the rest of F-60, then F-54, F-58, the Reforged candidates.
+  (`43c3be6`).
+- F-60 steps 1 and 4 (§55.6): the fire points and stations read from the models (part of the world fingerprint), the garrison's 40 points and the
+  fire base's stations; the stand-in remains for transports. Next: the transports' fire points and the rest of F-60 (orders through the container, the Battle Bus's
+  bonus, armed riders, the drawing), then F-54, F-58, the Reforged candidates.

@@ -216,6 +216,11 @@ garrisons keep their hashes.
    bones, and whether a draw module's instance scale applies (the loader's audit must count them); the night/snow model variants the original would have cached
    at first entry (proposal: the day/no-snow states; register the deviation).
 
+   **Built (28 October 2026).** `ModelGeometryLoader.ReadFirePoints`, `ModelGeometry.FirePoints` (`ContainerFirePoints`: three garrison sets, the stations, the transport's
+   points), as `Drawable::getPristineBonePositions` reads them: over the draw modules in order, consecutive from `01` until the first missing bone, only public bones
+   (`FirePoint` is a `StandardPublicBone` of `GameData.ini`; the stations are `ExtraPublicBone`s of the fire bases), with the template's `Scale`. The day/no-snow states are
+   read (the deviation stays as proposed). Measured on the master installation: 164 garrisons with 3,288 pristine points (at most 40), the four fire bases with 16 stations - at z -7.18 below the origin, the bunker is sunk and its riders stand hidden -, 55 transports with 301 points; a second read gives the byte-identical table.
+
 2. **`IsPassengerAllowedToFire` per container (no behaviour).** Pure functions per class, as 1.1; unit tests: garrison yes / subdued no; Humvee infantry yes, vehicle no;
    tunnel no; Overlord gattling yes, Overlord inside a Helix no; Helix gattling yes, Helix infantry only with the upgrade; bunker rider on an Overlord asks the Overlord.
 
@@ -229,6 +234,16 @@ garrisons keep their hashes.
    garrison: station per rider in entry order. Above 30 Hz the rider's position is derived from the container's `FrameEnd`. Test: a scene with a synthetic building
    template whose geometry has two fire points (east/west) - without a victim the rider is at the centre; a Humvee rider moves with the Humvee. Changes hashes of
    runs with riders (rider coordinates are state).
+
+   **Built (28 October 2026) for the garrisons; the transports' half is open.** `GarrisonContain` keeps the 40 points (rider, victim) and the stations
+   (`SimulationWorld.GarrisonPoints.cs`): a rider without a victim stands at the centre; while it looks its range is tested from the free point closest to the candidate
+   (`calcBestGarrisonPosition`; its own point counts as taken; a building with every point taken lets nobody in range - quirk (e) holds now); when it attacks it steps to
+   that point (`attemptBestFirePointPosition`); once per original frame, in the first tick of the building's own frame, `removeInvalid` / `addValid` / `trackTargets`
+   (a rider whose victim is gone or out of range goes back to the centre, a rider with a victim takes the closest free point, a rider at a point moves to a free one strictly
+   closer). The points beyond the model's are the centre; the set follows the damage state. A fire base puts a rider on the first free station and back on the ground when it
+   leaves. The garrison stays awake while an enclosing building has riders. The step-5 stand-in is gone for the garrisons; a transport's, an Overlord's and a Helix's riders
+   are still measured from the container (their points are read, not used: `redeployOccupants` on every pose change is a state of its own). Tests:
+   `FireFromContainersFirePoints` (scenes (a), (b), (e)'s "out of every point", the station, a snapshot), the rate case of step 5 on fire points.
 
 5. **Firing from inside (the behaviour change).** `MayAct` lets a contained rider act when its container allows it; `AcquireRadius` = largest weapon range
    (with step 3's conditions) + container bounding circle radius, mood Sleep/Passive range zeroing and the stealth veto skipped for a contained rider; `CanAttack`'s
@@ -245,7 +260,7 @@ garrisons keep their hashes.
    Overlord gattling/Helix upgrades or loaded Humvees/Battle Buses (the built-in `SkirmishAi` does not garrison; whether it loads transports or buys the gattling was
    not determined) - its own manifest commit; reference match driver seed re-checked.
 
-   **Built (28 October 2026) without steps 1 and 4 - a named stand-in.** The port has no fire points and does not move the riders of a moving transport, so a rider's
+   **Built (28 October 2026) without steps 1 and 4 - a named stand-in; for the garrisons replaced by step 4 the same day (above).** The port has no fire points and does not move the riders of a moving transport, so a rider's
    range, its search for victims (origin and radius), its view and the point its shot leaves from are measured from its container
    (`SimulationWorld.FiringContainerOf`): for an enclosing garrison (`IsEnclosingContainer`, default yes) from the point of the building's bounding circle nearest the
    victim - both limits of `WithinWeaponRange` move out by the radius, the shot leaves from that point -, for every other container (a fire base, a transport, an Overlord,
