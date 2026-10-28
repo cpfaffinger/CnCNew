@@ -414,12 +414,44 @@ public sealed partial class SimulationWorld : IWorldServices
         return true;
     }
 
+    /// <inheritdoc cref="IWorldServices.EnterOnArrival"/>
+    /// <remarks>
+    /// The original sends such a rider out with <c>aiExit</c>, a state of the rider that takes a frame or more, and asks for room right after - so the enterer gets in at a later touch.
+    /// A garrison lets a rider out at once here, so the enterer gets in at the same touch.
+    /// </remarks>
+    public bool EnterOnArrival(Entity actor, Entity container)
+    {
+        if (!actor.DestroyRequested && !container.DestroyRequested && container.Container is Modules.BuiltIn.ContainModuleBase own && own.ContainCount > 0)
+            foreach (var riderId in own.Contained.ToArray())
+            {
+                if (FindEntity(riderId) is not { } rider || rider.Owner == actor.Owner) continue;
+                if (rider.Template.IsKindOf("STEALTH_GARRISON"))
+                    foreach (var module in rider.Modules)
+                        if (module is Modules.BuiltIn.StealthUpdate stealth) { stealth.MarkDetected(this); break; }
+                if (container.Container.ExitViaDoor(this, rider)) continue;
+                container.Container.Remove(this, rider, true);
+                rider.ContainedBy = EntityId.Invalid;
+                MarkDirty(rider);
+                Emit(SimEventKind.EntityUncontained, rider.Id, container.Id, string.Empty, 0, PlayerId.System);
+            }
+        return TryEnterContainer(actor, container);
+    }
+
     /// <summary>
-    /// <c>ActionManager::canEnterObject</c> for a container that is not the enterer's player's (F-61): it must hold nobody - a garrison belongs to its occupants' player, so
-    /// one player at a time is inside - and it must be no faction structure. Not modelled yet: the stealth garrison's exception (F-54).
+    /// <c>ActionManager::canEnterObject</c> for a container that is not the enterer's player's (F-61, F-54): no faction structure, and nobody inside but riders of kind
+    /// <c>STEALTH_GARRISON</c> - a garrison belongs to its occupants' player, so one player at a time is inside, but a building that looks empty because only stealth riders hold it
+    /// may be entered; on arrival they are sent out (<see cref="EnterOnArrival"/>). Such a building's room is not checked at the order (<see cref="EnterChecksRoom"/>).
     /// </summary>
-    private static bool MayEnterAsOwner(Entity actor, Entity container)
-        => container.Owner == actor.Owner || (container.Container is { ContainCount: 0 } && !IsFactionStructure(container.Template));
+    private bool MayEnterAsOwner(Entity actor, Entity container)
+    {
+        if (container.Owner == actor.Owner) return true;
+        if (container.Container is not { } inside || IsFactionStructure(container.Template)) return false;
+        return inside.ContainCount - inside.StealthUnitsContained(this) <= 0;
+    }
+
+    /// <summary><c>canEnterObject</c>'s capacity test: skipped for another player's building held by stealth riders only (it looks empty).</summary>
+    private bool EnterChecksRoom(Entity actor, Entity container)
+        => container.Owner == actor.Owner || container.Container is not { ContainCount: > 0 } inside || inside.StealthUnitsContained(this) == 0;
 
     private void PutIntoContainer(Entity actor, Entity container, PlayerId player)
     {
@@ -898,7 +930,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!command.Player.IsSystem && actor.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (actor.ContainedBy.IsValid) return CommandRejection.CannotEnterContainer;
                 if (!_entities.TryGetValue(enter.Container.Value, out var container) || container.DestroyRequested || container.Container is null) return CommandRejection.UnknownEntity;
-                if (!MayEnterAsOwner(actor, container) || !container.Container.IsValidContainerFor(this, actor, true)) return CommandRejection.CannotEnterContainer;
+                if (!MayEnterAsOwner(actor, container) || !container.Container.IsValidContainerFor(this, actor, EnterChecksRoom(actor, container))) return CommandRejection.CannotEnterContainer;
                 break;
             }
             case ExitContainerCommand exit:

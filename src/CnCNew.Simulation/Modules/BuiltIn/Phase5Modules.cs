@@ -132,6 +132,9 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         world.MarkDirty(Entity);
     }
 
+    /// <summary><c>StealthUpdate::markAsDetected()</c> without a duration: detected for the module's <c>StealthDelay</c>.</summary>
+    public void MarkDetected(IWorldServices world) => MarkDetected(world, data.StealthDelayTicks);
+
     /// <summary><c>StealthUpdate::markAsDetected</c>: extends (never shortens) how long <c>DETECTED</c> stays set. Called by <c>StealthDetectorUpdate</c>.</summary>
     public void MarkDetected(IWorldServices world, long ticks)
     {
@@ -1406,7 +1409,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var dx = container.X - ownX;
         var dy = container.Y - ownY;
         if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy)) return;
-        world.TryEnterContainer(Entity, container);
+        world.EnterOnArrival(Entity, container);
     }
 
     /// <summary><c>Object::isAboveTerrain</c>: the object's position lies above the ground under it.</summary>

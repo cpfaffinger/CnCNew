@@ -74,6 +74,36 @@ static partial class Tests
             ExtraRequiredKindOf = INFANTRY
           End
         End
+        Object FcBoarder
+          KindOf = SELECTABLE INFANTRY
+          Geometry = CYLINDER
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          TransportSlotCount = 1
+          VisionRange = 150.0
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object FcSmallBunker
+          KindOf = STRUCTURE
+          Geometry = CYLINDER
+          GeometryMajorRadius = 30.0
+          GeometryMinorRadius = 30.0
+          GeometryHeight = 20.0
+          Body = StructureBody Body01
+            MaxHealth = 5000.0
+            InitialHealth = 5000.0
+          End
+          Behavior = GarrisonContain Garrison01
+            ContainMax = 1
+          End
+        End
         Object FcCloakedBunker
           KindOf = STRUCTURE CAPTURABLE
           Geometry = CYLINDER
@@ -224,5 +254,29 @@ static partial class Tests
             Check.That(sneak.HasStatus(ObjectStatusBits.Index("DETECTED")) == detected && garrison.HidesGarrison(world) == !detected,
                 $"{eye} at {distance}: the rider {(detected ? "is" : "is not")} detected and the garrison {(detected ? "shows" : "hides")} its owner.");
         }
+    }
+
+    /// <summary>
+    /// Step 3 d, entering (<c>ActionManager::canEnterObject</c>, <c>OpenContain::onCollide</c>): player 1's stealth rider holds a neutral building with room for one. Player 2's infantry is
+    /// ordered in - the building looks empty, so the order is accepted although it is full -, and on arrival the stealth rider is detected and sent out and the rifleman takes the building.
+    /// A building held by a plain rifleman of player 1 refuses the order.
+    /// </summary>
+    public static void StealthGarrisonEnter()
+    {
+        var (world, feeder) = StealthGarrisonWorld();
+        var bunker = SgSpawn(world, feeder, "FcSmallBunker", 0, 0, 0);
+        var sneak = SgInside(world, feeder, "FcSneak", 1, bunker);
+        var rifleman = SgSpawn(world, feeder, "FcBoarder", 2, 120, 0);
+        Check.That(bunker.Owner == new PlayerId(1) && bunker.Container!.ContainCount == 1, "Setup: the full building is player 1's.");
+        Check.That(feeder.MoveAndEnter(2, rifleman.Id.Value, bunker.Id.Value).Accepted, "Player 2 may order its rifleman into the building held only by a stealth rider.");
+        for (var step = 0; step < world.Frames(150) && !rifleman.ContainedBy.IsValid; step++) world.Step();
+        Check.That(rifleman.ContainedBy == bunker.Id && !sneak.ContainedBy.IsValid && sneak.HasStatus(ObjectStatusBits.Index("DETECTED")) && bunker.Owner == new PlayerId(2),
+            $"On arrival the stealth rider is detected and out, the rifleman in, the building player 2's (rifleman in {rifleman.ContainedBy}, owner {bunker.Owner}).");
+
+        var (plainWorld, plainFeeder) = StealthGarrisonWorld();
+        var plain = SgSpawn(plainWorld, plainFeeder, "FcBunker", 0, 0, 0);
+        SgInside(plainWorld, plainFeeder, "FcRifleman", 1, plain);
+        var other = SgSpawn(plainWorld, plainFeeder, "FcRifleman", 2, 120, 0);
+        Check.That(!plainFeeder.MoveAndEnter(2, other.Id.Value, plain.Id.Value).Accepted, "A building held by a plain rifleman of player 1 refuses player 2's order.");
     }
 }
