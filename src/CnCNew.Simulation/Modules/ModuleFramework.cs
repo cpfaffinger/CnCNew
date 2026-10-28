@@ -757,6 +757,16 @@ public interface IContainerModule
     /// hands the exit to its dock): true when the container took the exit over, false to let the world remove the rider with <see cref="Remove"/>.
     /// </summary>
     bool ExitViaDoor(IWorldServices world, Entity rider) => false;
+
+    /// <summary>
+    /// <c>ContainModuleInterface::isPassengerAllowedToFire(id)</c>, the gate of <c>Object::isAbleToAttack</c> for a contained object (F-60): whether <paramref name="rider"/> may fire from
+    /// inside. <paramref name="rider"/> null is the call without an id, which a container makes of the one it rides in (and the acquisition's stealth exception makes): the
+    /// rules about the rider's kind are then skipped. False for a container that has no rule of its own.
+    /// </summary>
+    bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => false;
+
+    /// <summary><c>ContainModuleInterface::isSpecialOverlordStyleContainer</c>: true for <c>OverlordContain</c> and <c>HelixContain</c>, whose rider's own transport asks them.</summary>
+    bool IsSpecialOverlordStyleContainer => false;
 }
 
 /// <summary>

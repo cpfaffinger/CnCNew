@@ -249,6 +249,13 @@ public sealed partial class SimulationWorld
            && (entity.ScriptDisableMask & Entity.ScriptHeld) == 0 && !entity.ContainedBy.IsValid;
 
     /// <summary>
+    /// <c>Object::isAbleToAttack</c>'s gate for a contained object (F-60, docs/FIRE-FROM-CONTAINERS.md): the container lets this rider fire
+    /// (<see cref="IContainerModule.IsPassengerAllowedToFire"/>). False for an object in no container.
+    /// </summary>
+    public bool ContainerLetsFire(Entity rider)
+        => rider.ContainedBy.IsValid && FindEntity(rider.ContainedBy)?.Container is { } container && container.IsPassengerAllowedToFire(this, rider);
+
+    /// <summary>
     /// Which of the reference's three callers of <c>getNextMoodTarget</c> applies: the attack-move, the idle state, or the idle turret of a unit whose body is busy. The idle callers need
     /// <c>AutoAcquireEnemiesWhenIdle = Yes</c> and, for a stealthed unit, the <c>Stealthed</c> bit ("Sorry, stealthed and not allowed to idle fire when stealthed").
     /// </summary>

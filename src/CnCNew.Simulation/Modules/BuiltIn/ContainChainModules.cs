@@ -110,8 +110,8 @@ public sealed class InternetHackContain(InternetHackContainData data) : Transpor
 
 /// <summary>
 /// <c>PassengersFireUpgrade.cpp</c>: the upgrade lets the passengers of the object's container fire (<c>setPassengerAllowedToFire(TRUE)</c>). The flag is recorded on the
-/// container (<see cref="ContainModuleBase.PassengersAllowedToFire"/>); firing from inside a container does not exist in this simulation, so no code reads it yet. The
-/// reference never switches it off again.
+/// container (<see cref="ContainModuleBase.PassengersAllowedToFire"/>) and read by its <see cref="ContainModuleBase.IsPassengerAllowedToFire"/> (F-60). The reference never
+/// switches it off again.
 /// </summary>
 public sealed class PassengersFireUpgrade(UpgradeMuxOnlyData data) : UpgradeMuxModule(data.Mux)
 {
@@ -365,6 +365,22 @@ public sealed class OverlordContain(OverlordContainData data) : TransportContain
 
     public override bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
         => Redirected is { } redirected ? redirected.IsValidContainerFor(world, candidate, checkCapacity) : base.IsValidContainerFor(world, candidate, checkCapacity);
+
+    /// <inheritdoc/>
+    public override bool IsSpecialOverlordStyleContainer => true;
+
+    /// <summary>
+    /// <c>OverlordContain::isPassengerAllowedToFire</c>: infantry and the portable structure (its gattling cannon) may fire, no vehicle; never while the Overlord is itself inside
+    /// something ("nested containment voids firing, always"); otherwise the transport's flag (<c>TransportContain::isPassengerAllowedToFire()</c> without the id). The riders of the
+    /// battle bunker on its back are listed by the bunker but contained by the Overlord here (<see cref="Entity.ContainedBy"/>), so they ask the Overlord directly - the answer the
+    /// original reaches through the bunker's <c>TransportContain</c>, which passes an Overlord-style container's question on with the rider.
+    /// </summary>
+    public override bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider)
+    {
+        if (rider is not null && !rider.Template.IsKindOf("INFANTRY") && !rider.Template.IsKindOf("PORTABLE_STRUCTURE")) return false;
+        if (Entity.ContainedBy.IsValid) return false;
+        return base.IsPassengerAllowedToFire(world, null);
+    }
 
     public override void Add(IWorldServices world, Entity candidate)
     {

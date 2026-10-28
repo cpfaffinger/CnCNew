@@ -225,6 +225,7 @@ run.Test("Phase 41 (F-55e): the approach of an attack goes where it can fire (fi
 run.Test("Phase 41: a destroyed rider leaves its container (Object::onDestroy)", Tests.DestroyedRiderLeavesItsContainer);
 run.Test("Phase 41 (F-61): a garrisoned building belongs to its occupants (recalcApparentControllingPlayer, canEnterObject)", Tests.GarrisonBelongsToItsOccupants);
 run.Test("Phase 41 (F-60, step 0): PassengersAllowedToFire and IsEnclosingContainer are typed", Tests.FireFromContainersKeysAreTyped);
+run.Test("Phase 41 (F-60, step 2): isPassengerAllowedToFire per container (garrison, transport, tunnel, Overlord, Helix, nesting)", Tests.FireFromContainersPassengerRules);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);

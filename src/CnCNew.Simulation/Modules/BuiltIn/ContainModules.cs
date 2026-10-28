@@ -133,6 +133,19 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     /// </summary>
     public bool PassengersMayFire => PassengersAllowedToFire || PassengersFireByData;
 
+    /// <summary>
+    /// <c>OpenContain::isPassengerAllowedToFire</c> (OpenContain.cpp; the rule of every container without its own - tunnel, cave, parachute, heal): no unless the flag is set, and a
+    /// container that is itself inside another one asks that one (without an id). No shipped tunnel, parachute or heal container sets the flag, so their riders never fire.
+    /// </summary>
+    public virtual bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => PassengersMayFire && OuterLetsFire(world, Entity);
+
+    /// <summary>The part of <c>OpenContain::isPassengerAllowedToFire</c> after the flag: a container that rides in another one passes the question on, without an id.</summary>
+    internal static bool OuterLetsFire(IWorldServices world, Entity container)
+        => !container.ContainedBy.IsValid || (world.FindEntity(container.ContainedBy)?.Container is { } outer && outer.IsPassengerAllowedToFire(world, null));
+
+    /// <inheritdoc cref="IContainerModule.IsSpecialOverlordStyleContainer"/>
+    public virtual bool IsSpecialOverlordStyleContainer => false;
+
     public abstract bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity);
 
     protected bool PassesKindOfAndRelationship(IWorldServices world, Entity candidate)
@@ -293,6 +306,12 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 
     /// <summary><c>IsEnclosingContainer</c> of the data: the riders are inside the walls (every garrison but the four fire bases).</summary>
     public bool IsEnclosing => data.IsEnclosingContainer;
+
+    /// <summary>
+    /// <c>GarrisonContain::isPassengerAllowedToFire</c>: "a GarrisonContain always lets people shoot out" - whatever the data's flag says and whatever the rider is - unless the
+    /// building is <c>DISABLED_SUBDUED</c>. Nothing in this simulation sets <c>DISABLED_SUBDUED</c> yet (there is no subdual damage), so the test never refuses here today.
+    /// </summary>
+    public override bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => (world.DisabledFlagsOf(Entity) & DisabledMask.Subdued) == 0;
 
     public override void OnSpawn(IWorldServices world)
         => NextWake = data.HealObjects ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
@@ -528,6 +547,17 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
 
     /// <inheritdoc/>
     protected override bool PassengersFireByData => data.PassengersAllowedToFire;
+
+    /// <summary>
+    /// <c>TransportContain::isPassengerAllowedToFire</c>: only infantry fires ("no vehicles"); a transport that rides an Overlord-style container (the battle bunker on an Overlord)
+    /// lets that container decide with the rider; otherwise the flag (<c>OpenContain::isPassengerAllowedToFire()</c>, without the id).
+    /// </summary>
+    public override bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider)
+    {
+        if (rider is not null && !rider.Template.IsKindOf("INFANTRY")) return false;
+        if (Entity.ContainedBy.IsValid && world.FindEntity(Entity.ContainedBy)?.Container is { IsSpecialOverlordStyleContainer: true } outer) return outer.IsPassengerAllowedToFire(world, rider);
+        return base.IsPassengerAllowedToFire(world, null);
+    }
 
     public override void OnSpawn(IWorldServices world)
         => NextWake = data.HealthRegenPercentPerSecond > Fixed.Zero ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;

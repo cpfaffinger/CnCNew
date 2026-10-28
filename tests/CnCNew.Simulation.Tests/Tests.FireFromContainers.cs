@@ -313,4 +313,83 @@ static partial class Tests
         foreach (var (module, key) in new[] { ("TransportContain", "PassengersAllowedToFire"), ("HelixContain", "PassengersAllowedToFire"), ("TunnelContain", "PassengersAllowedToFire"), ("GarrisonContain", "IsEnclosingContainer") })
             Check.Throws<Exception>(() => _ = new SyntheticFixture(TestRate.Default, files: FireFromContainerFiles(Bad(module, key))).Templates, "Maybe");
     }
+
+    private static Entity FcInside(SimulationWorld world, Feeder feeder, string template, int owner, Entity container)
+    {
+        var rider = FcSpawn(world, feeder, template, owner, (int)container.X.Floor(), (int)container.Y.Floor());
+        Check.That(world.TryEnterContainer(rider, container), $"Setup: {template} enters {container.Template.Name}.");
+        return rider;
+    }
+
+    /// <summary>
+    /// Step 2: <c>isPassengerAllowedToFire</c> per container (docs/FIRE-FROM-CONTAINERS.md §1.1) - a garrison always; a transport for infantry and only with the flag, which the
+    /// upgrade switches on; a tunnel by its flag; an Overlord for infantry and its portable structure, never while it is itself contained; the battle bunker's riders by the Overlord;
+    /// a Helix for its portable structure always and for infantry by the flag, never while contained; a transport inside another container by that container.
+    /// </summary>
+    public static void FireFromContainersPassengerRules()
+    {
+        var (world, feeder, _) = FireFromContainerWorld(TestRate.Default);
+        FcRules Of(Entity container) => new FcRules(world, container);
+
+        var bunker = FcSpawn(world, feeder, "FcBunker", 1, 0, 0);
+        var garrisoned = FcInside(world, feeder, "FcRifleman", 1, bunker);
+        Check.That(world.ContainerLetsFire(garrisoned) && Of(bunker).Allows(null), "A garrison lets its riders fire, whatever asks.");
+
+        var humvee = FcSpawn(world, feeder, "FcHumvee", 1, 100, 0);
+        var jeep = FcSpawn(world, feeder, "FcJeep", 1, 100, 50);
+        var humveeRider = FcInside(world, feeder, "FcRifleman", 1, humvee);
+        Check.That(world.ContainerLetsFire(humveeRider), "A transport with PassengersAllowedToFire lets its infantry fire.");
+        Check.That(!Of(humvee).Allows(jeep), "No vehicle fires from a transport.");
+        var truck = FcSpawn(world, feeder, "FcTruck", 1, 200, 0);
+        var truckRider = FcInside(world, feeder, "FcRifleman", 1, truck);
+        Check.That(!world.ContainerLetsFire(truckRider), "A transport without the flag does not.");
+        truck.Modules.OfType<TransportContain>().Single().PassengersAllowedToFire = true;
+        Check.That(world.ContainerLetsFire(truckRider), "PassengersFireUpgrade's flag lets them.");
+        Check.That(!world.ContainerLetsFire(jeep), "An object in no container is not let fire by one.");
+
+        var tunnel = FcSpawn(world, feeder, "FcTunnel", 1, 300, 0);
+        var openTunnel = FcSpawn(world, feeder, "FcTunnelOpen", 1, 400, 0);
+        for (var step = 0; step < world.Frames(2); step++) world.Step();
+        var tunnelRider = FcInside(world, feeder, "FcRifleman", 1, tunnel);
+        Check.That(!world.ContainerLetsFire(tunnelRider), "A tunnel's riders do not fire.");
+        Check.That(Of(openTunnel).Allows(tunnelRider), "A tunnel with the flag would let them (no shipped tunnel has it).");
+
+        var overlord = FcSpawn(world, feeder, "FcOverlord", 1, 500, 0);
+        var gattling = FcInside(world, feeder, "FcGattling", 1, overlord);
+        Check.That(world.ContainerLetsFire(gattling), "The Overlord's portable structure fires.");
+        Check.That(Of(overlord).Allows(humveeRider) && !Of(overlord).Allows(jeep), "An Overlord lets infantry fire and no vehicle.");
+        var carrier = FcSpawn(world, feeder, "FcCarrier", 1, 600, 0);
+        Check.That(world.TryEnterContainer(overlord, carrier), "Setup: the Overlord rides in a carrier.");
+        Check.That(!world.ContainerLetsFire(gattling), "Nested containment voids an Overlord's firing.");
+
+        var bunkerOverlord = FcSpawn(world, feeder, "FcOverlord", 1, 700, 0);
+        var battleBunker = FcInside(world, feeder, "FcBattleBunker", 1, bunkerOverlord);
+        var bunkerRider = FcInside(world, feeder, "FcRifleman", 1, bunkerOverlord);
+        Check.That(battleBunker.Container!.Contained.Contains(bunkerRider.Id), "Setup: the rider sits in the battle bunker on the Overlord's back.");
+        Check.That(world.ContainerLetsFire(bunkerRider) && Of(battleBunker).Allows(bunkerRider), "The battle bunker's rider fires: the bunker (without the flag) asks the Overlord.");
+
+        var helix = FcSpawn(world, feeder, "FcHelix", 1, 800, 0);
+        var helixGun = FcInside(world, feeder, "FcGattling", 1, helix);
+        var helixRider = FcInside(world, feeder, "FcRifleman", 1, helix);
+        Check.That(world.ContainerLetsFire(helixGun), "A Helix's portable structure always fires.");
+        Check.That(!world.ContainerLetsFire(helixRider) && !Of(helix).Allows(jeep) && !Of(helix).Allows(null), "Its infantry needs the flag; a vehicle and a question without a rider are refused.");
+        helix.Modules.OfType<HelixContain>().Single().PassengersAllowedToFire = true;
+        Check.That(world.ContainerLetsFire(helixRider), "After the upgrade the Helix's infantry fires.");
+        var spectre = FcSpawn(world, feeder, "FcSpectre", 1, 900, 0);
+        Check.That(Of(spectre).Allows(helixRider), "A Helix with PassengersAllowedToFire = Yes lets infantry fire from the start.");
+        var carrier2 = FcSpawn(world, feeder, "FcCarrier", 1, 1000, 0);
+        Check.That(world.TryEnterContainer(helix, carrier2), "Setup: the Helix rides in a carrier.");
+        Check.That(!world.ContainerLetsFire(helixGun) && !world.ContainerLetsFire(helixRider), "Nested containment voids a Helix's firing, also for its portable structure.");
+
+        var carrier3 = FcSpawn(world, feeder, "FcCarrier", 1, 1100, 0);
+        Check.That(world.TryEnterContainer(humvee, carrier3), "Setup: the Humvee rides in a carrier.");
+        Check.That(!world.ContainerLetsFire(humveeRider), "A transport inside a container without the flag passes the no on.");
+        carrier3.Modules.OfType<TransportContain>().Single().PassengersAllowedToFire = true;
+        Check.That(world.ContainerLetsFire(humveeRider), "Inside one with the flag its infantry fires.");
+    }
+
+    private readonly record struct FcRules(SimulationWorld World, Entity Container)
+    {
+        public bool Allows(Entity? rider) => Container.Container!.IsPassengerAllowedToFire(World, rider);
+    }
 }

@@ -416,6 +416,21 @@ public sealed class HelixContain(HelixContainData data) : TransportContain(data.
     public override string ModuleName => "HelixContain";
     public EntityId PortableStructure => _portable;
 
+    /// <inheritdoc/>
+    public override bool IsSpecialOverlordStyleContainer => true;
+
+    /// <summary>
+    /// <c>HelixContain::isPassengerAllowedToFire</c>: never while the Helix is itself inside something; its portable structure (the gattling cannon) always; infantry by the
+    /// transport's rule (the flag, which <c>PassengersFireUpgrade</c> switches on for the shipped Helixes); anything else, and a question without a rider, no.
+    /// </summary>
+    public override bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider)
+    {
+        if (Entity.ContainedBy.IsValid) return false;
+        if (rider is null) return false;
+        if (_portable.IsValid && rider.Id == _portable) return true;
+        return rider.Template.IsKindOf("INFANTRY") && base.IsPassengerAllowedToFire(world, rider);
+    }
+
     public override bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
     {
         if (candidate.Template.IsKindOf("PORTABLE_STRUCTURE") && !_portable.IsValid && !Entity.EffectivelyDead) return true;
@@ -555,6 +570,9 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
         _registered = true;
         _nextWake = world.Tick + SimulationTiming.SleepNone;
     }
+
+    /// <summary><c>OpenContain::isPassengerAllowedToFire</c>: the tunnel has no rule of its own; the data's flag (no shipped tunnel sets it) and, like every open container, the one it rides in.</summary>
+    public bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => data.PassengersAllowedToFire && ContainModuleBase.OuterLetsFire(world, Entity);
 
     public bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity)
     {
