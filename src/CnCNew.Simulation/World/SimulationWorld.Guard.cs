@@ -207,7 +207,7 @@ public sealed partial class SimulationWorld
     {
         if (!MayAct(entity, _tick) || !TurretsLetAttack(entity) || ActiveWeaponSet(entity) is null) return null;
         UpdateWeaponSet(entity);
-        if (AcquisitionAdvisor is { } teams && teams.CommonTargetOf(entity) is { } common && IsAttackable(entity, common) && CanAttack(entity, common, false, out _))
+        if (AcquisitionAdvisor is { } teams && teams.CommonTargetOf(entity) is { } common && IsGuardVictim(entity, common) && CanAttack(entity, common, false, out _))
         {
             guard.Nemesis = common.Id;
             return common;
@@ -307,7 +307,7 @@ public sealed partial class SimulationWorld
     /// <summary>The attack of INNER, OUTER and ATTACK_AGGRESSOR (<c>AIAttackState</c> on the nemesis): false when there is no nemesis to attack.</summary>
     private bool StartGuardAttack(Entity entity, AIUpdateInterface ai, GuardState guard, long tick, Fixed radius)
     {
-        if (FindEntity(guard.Nemesis) is not { } nemesis || !IsAttackable(entity, nemesis)) return false;
+        if (FindEntity(guard.Nemesis) is not { } nemesis || !IsGuardVictim(entity, nemesis)) return false;
         var (cx, cy) = GuardCentre(guard);
         if (!WithinGuardRadius(nemesis, cx, cy, radius)) return false;
         var state = entity.Acquisition ??= new AcquisitionState();
@@ -324,7 +324,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool GuardAttackGoesOn(Entity entity, AIUpdateInterface ai, GuardState guard, long tick)
     {
-        if (entity.Acquisition is not { Victim.IsValid: true } state || FindEntity(state.Victim) is not { } victim || !IsAttackable(entity, victim)) return false;
+        if (entity.Acquisition is not { Victim.IsValid: true } state || FindEntity(state.Victim) is not { } victim || !IsGuardVictim(entity, victim)) return false;
         var (cx, cy) = GuardCentre(guard);
         var inner = GuardRange(entity, true);
         var radius = guard.Phase == GuardPhase.Outer ? GuardRange(entity, false) : inner;
@@ -339,6 +339,14 @@ public sealed partial class SimulationWorld
         if (guard.GiveUpTick != 0 && tick >= guard.GiveUpTick) return false;
         return GuardEngage(entity, ai, state, victim, tick);
     }
+
+    /// <summary>
+    /// A victim of the guard: alive, an enemy, not inside a container, not stealthed and undetected - but, unlike <see cref="IsAttackable"/>, not asked to be visible: the guard's look
+    /// has no fog filter (<c>lookForInnerTarget</c>; Reforged adds one) and its attack walks into the fog after what it found.
+    /// </summary>
+    private bool IsGuardVictim(Entity entity, Entity victim)
+        => !victim.DestroyRequested && !victim.EffectivelyDead && victim.Body is not null && !victim.ContainedBy.IsValid && AreEnemies(entity, victim)
+           && !(victim.HasStatus(StealthedStatus) && !victim.HasStatus(DetectedStatus));
 
     private bool WithinGuardRadius(Entity victim, Fixed cx, Fixed cy, Fixed radius)
     {
