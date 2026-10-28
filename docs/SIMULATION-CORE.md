@@ -3804,3 +3804,27 @@ when the container it rides in passes its bonus on, the container's own conditio
 the range test, the damage estimate and the damage, the reload and clip, the turret's pitch range, the pre-attack delay, the conditions a projectile carries; the rider's own
 conditions stay its own. Test `FireFromContainersPassedBonus` (a veteran bus gives its rider range 120 instead of 100 and it fires at 115; a veteran Humvee passes nothing).
 No field of either manifest moved (`cfc16aa`): no run of the manifest has a veteran or otherwise conditioned Battle Bus with a rider..
+
+### 55.9 F-54: the stealth garrison (`m_stealthUnitsContained`, `m_hideGarrisonedStateFromNonallies`, `getApparentControllingPlayer`, `StealthDetectorUpdate`)
+
+Read in `docs/STEALTH-GARRISON.md`; F-61 (§55.4) was its step 1. **The count** (`ccb940b`): `StealthUnitsContained` - the riders of kind `STEALTH_GARRISON` (their kind, not their
+stealth state), derived from the riders; the original's count is a counter that `killAllContained` does not lower (R-18) - not modelled. **Capture** (`9f74c4c`):
+`canCaptureBuilding` refuses a stealthed, undetected target (not a disguised one) and a garrisonable building with riders not of that kind - the port allowed both.
+**The hidden state** (`539217e`): a garrison is hidden while riders are inside, all of kind `STEALTH_GARRISON`, the first not `DETECTED` (the original's flag is recalculated on
+every change of its riders and whenever its first rider's `DETECTED` flips, so it equals this derived value); hidden, it shows a player its owner does not count as an ally the
+owner it had before the riders (`getApparentControllingPlayer`, the F-61 record of the original owner). Target acquisition reads it as `findClosestEnemy` does: without
+`ATTACK_BUILDINGS` the building's apparent owner must be the unit's enemy before the computer player's exception (`PartitionFilterRejectBuildings`) - the port had folded that
+exception into the building flag -, and a container whose riders are hidden stealth riders is passed by when its apparent owner is the unit's enemy
+(`PartitionFilterStealthedAndUndetected`'s building branch; an empty container is not hidden). A capturer refuses a building that appears to contain friendlies. **Entering**
+(`1e4c97e`): `canEnterObject` lets another player in when only stealth riders are inside, without the room test; on arrival (`onCollide`) the other player's riders are sent
+out, those of kind `STEALTH_GARRISON` marked detected for their `StealthDelay`, and the enterer goes in - at the same touch here (a garrison lets its riders out at once), at a
+later one in the original (`aiExit` is a state). **The detector** (`b7adda8`): it scans with `PartitionFilterStealthedOrStealthGarrisoned` - a stealthed object, or a
+garrison holding a stealth rider -; a rider its container encloses is out of the partition and never found itself; for a found garrison every rider with a `StealthUpdate`
+that is not the detector's player's nor its ally is marked for the scan's period plus two frames; relationship and kind filters apply to the building; the port's terrain
+line of sight stays on both branches (the original has none in this code). Tests in `Tests.StealthGarrison.cs` (the count; capture; the hidden state against an idle
+rifleman, a detected rider, a plain garrison and a unit with `ATTACK_BUILDINGS` against a neutral and an own building; capture of a hidden one; entering a full hidden
+garrison; three detectors - in range, out of range, looking only for infantry), each failing on the code before at 30, 60 and 120 Hz. **Step 5** (`baa0fb2`): no stealth inside a container that is not garrisonable (`allowedToStealth`; `IsGarrisonable` - a garrison, and an Overlord whose
+portable structure's container is one). **Step 6** (`9b43a51`): a stealth rider thrown out is detected for its `StealthDelay` - the bunker buster, a combat bike's new
+rider, the capture of a garrisonable building; the kick-out of `Object::defect` is not modelled at all. **The presentation** (`51ed3ec`): for the player a frame is drawn
+for, a hidden garrison of a non-ally shows no `GARRISONED` and is drawn, and remembered in the fog, in the colour of its owner from before; the tooltip owner, the minimap
+colour and the attack cursor are not changed yet. Steps 2 to 4, entering, step 6 and the drawing move no field of either manifest; step 5 changes the hashes of the mission runs `MD_GLA03` and `MD_USA02` (15 of 1,929 fields), no outcome or end tick (manifest `b5282ac`).

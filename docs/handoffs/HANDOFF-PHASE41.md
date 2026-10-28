@@ -76,5 +76,6 @@ Reforged candidate decided with its reason; the checks the changes can reach gre
   (`43c3be6`).
 - F-60 steps 1 and 4 (§55.6): the fire points and stations read from the models (part of the world fingerprint), the garrison's 40 points and the
   fire base's stations; then (§55.7) the match on entry, the turret bone and the transports' fire points - 16 of 16 pairings decided; the Battle Bus's passed bonus
-  (§55.8). Next: F-54 (steps 2 to 4 of docs/STEALTH-GARRISON.md), the rest of F-60 (orders through the container, armed riders, the drawing), F-58, the Reforged
-  candidates.
+  (§55.8).
+- F-54, the stealth garrison (§55.9): the count, capture, the hidden state and the acquisition, entering, the detector, no stealth in a transport, exposure, the drawing.
+  Next: F-58 (docs/GUARD-STATE.md), the rest of F-60 (orders through the container, armed riders, the drawing), the Reforged candidates.

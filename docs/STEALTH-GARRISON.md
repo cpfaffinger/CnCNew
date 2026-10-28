@@ -154,6 +154,11 @@ attributed by my scan to `CINE_CheeringHijacker` (to verify). `ObjectReskin` blo
 
 ## 3. Proposed plan (one cause per step; each with a synthetic scene that fails before it)
 
+**Built (28 October 2026), docs/SIMULATION-CORE.md §55.9:** step 1 is F-61 (§55.4); steps 2, 3 (a to d), 4, 5 and 6 and the presentation's model condition, colour and fog
+memory, each with its commit and its test in `Tests.StealthGarrison.cs` / `StealthGarrisonConditionTests.cs`. Deviations: the count is derived (R-18's stale part is not
+modelled); an enterer gets into a building whose stealth riders it sends out at the same touch (the original: a later one); the port's terrain line of sight stays on the
+detector's building branch; the kick-out of `Object::defect`, the tooltip owner, the minimap colour and the attack cursor are not built.
+
 Common rules: everything in `CnCNew.Simulation`; Fixed point only; the rider order is `Riders` (entry order) - never a
 dictionary; new state written only when it differs from the default, so worlds without a stealth rider or a swap keep
 their snapshots. Decisions follow the frame convention (observers read at the frame end; self-acquisition once per
