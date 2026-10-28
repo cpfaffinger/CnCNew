@@ -943,7 +943,8 @@ internal static class StructureConditionTests
         }
         Check(packed, "Choosing another plan packs the first one: DOOR_2_CLOSING.");
 
-        // Nuclear missile silo: the door follows the power's recharge.
+        // Nuclear missile silo: the door follows the power's recharge. The silo is POWERED: without a power plant its player is browned out, the silo disabled and its power paused (F-16).
+        spawn("ChinaPowerPlant", 2, 3000, 1300);
         var silo = spawn("ChinaNuclearMissileLauncher", 2, 3000, 1000);
         var door = silo.Modules.OfType<MissileLauncherBuildingUpdate>().Single();
         var states = new SortedSet<string>(StringComparer.Ordinal);
