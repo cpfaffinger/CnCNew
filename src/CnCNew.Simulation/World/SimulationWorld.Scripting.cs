@@ -77,8 +77,8 @@ public sealed partial class SimulationWorld
         if (!newOwner.IsSystem && !_players.ContainsKey(newOwner.Value)) return false;
         if (!entity.HasStatus(ObjectStatusBits.UnderConstruction))
         {
-            ApplyTemplateEnergy(entity.Owner, entity.Template.EnergyProduction, false);
-            ApplyTemplateEnergy(newOwner, entity.Template.EnergyProduction, true);
+            ApplyObjectEnergy(entity, entity.Owner, false);
+            ApplyObjectEnergy(entity, newOwner, true);
         }
         RemoveBattlePlanFromEntity(entity);
         NotifyOwnerChange(entity, newOwner);
@@ -90,9 +90,11 @@ public sealed partial class SimulationWorld
 
     /// <summary><see cref="RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed)"/> with a map object's initial health in percent (<c>objectInitialHealth</c>).</summary>
     /// <inheritdoc cref="IWorldServices.DisabledFlagsOf"/>
-    public DisabledMask DisabledFlagsOf(Entity entity)
+    public DisabledMask DisabledFlagsOf(Entity entity) => DisabledFlagsAt(entity, _tick);
+
+    private DisabledMask DisabledFlagsAt(Entity entity, long tick)
     {
-        var mask = entity.DisabledFlags(_tick);
+        var mask = entity.DisabledFlags(tick);
         if (entity.ContainedBy.IsValid && FindEntity(entity.ContainedBy)?.Container is { HoldsRiders: true }) mask |= DisabledMask.Held;
         return mask;
     }

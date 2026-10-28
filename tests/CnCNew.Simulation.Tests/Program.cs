@@ -210,6 +210,7 @@ run.Test("Phase 40: a transport holds its riders, a HealContain does not", Tests
 run.Test("Phase 40 (F-16): a brown-out puts DISABLED_UNDERPOWERED on the powered objects", Tests.BrownOutDisablesPoweredObjects);
 run.Test("Phase 40 (F-16): low power slows production (calcTimeToBuild)", Tests.LowPowerSlowsProduction);
 run.Test("Phase 40 (F-16): low power slows construction (DozerAIUpdate)", Tests.LowPowerSlowsConstruction);
+run.Test("Phase 40 (F-56): a disabled power plant stops producing (onDisabledEdge)", Tests.DisabledPowerPlantStopsProducing);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);

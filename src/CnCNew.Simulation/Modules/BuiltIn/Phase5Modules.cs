@@ -1051,6 +1051,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         world.MarkDirty(Entity);
     }
 
+    /// <summary>Whether a dozer or worker has a build, repair or other task (<c>DozerAIInterface::getCurrentTask</c> is not <c>DOZER_TASK_INVALID</c>).</summary>
+    public bool HasBuilderTask => _task != BuilderTask.None;
+
     private void ClearTask()
     {
         _task = BuilderTask.None;

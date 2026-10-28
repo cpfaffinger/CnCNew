@@ -236,6 +236,9 @@ public sealed class Entity
     /// <summary><c>DISABLED_UNDERPOWERED</c>: a <c>POWERED</c> object of a player in a brown-out (<c>Player::onPowerBrownOutChange</c>).</summary>
     public bool Underpowered { get; internal set; }
 
+    /// <summary>Whether the object's disabled edge is up (<see cref="SimulationWorld"/>'s <c>onDisabledEdge</c>); derived, rebuilt when a snapshot is restored.</summary>
+    internal bool DisabledEdge { get; set; }
+
     /// <summary><c>DISABLED_PARALYZED</c> (<c>BattlePlanUpdate</c>'s change of plan) up to this tick (the first tick it no longer holds); 0 when never paralyzed.</summary>
     public long ParalyzedUntil { get; internal set; }
 

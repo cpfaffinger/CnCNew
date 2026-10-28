@@ -356,4 +356,55 @@ static partial class Tests
         Check.That(done && work == world.Frames(119) + 1, $"Without power the two-second plant takes 120 frames of work, the first step counting a whole frame ({work} steps).");
         Check.That(site.Body!.Health == site.Body.MaxHealth, "The finished structure has exactly its maximum health.");
     }
+
+    /// <summary>
+    /// F-56: <c>Object::onDisabledEdge</c> takes a power plant's production out of its player's energy when the plant becomes disabled and gives it back when its last disable
+    /// ends - an EMP'd plant browns out the base it powers. A disabled plant that is destroyed does not take its production out a second time
+    /// (<c>friend_adjustPowerForPlayer</c>). The port's plant kept producing under an EMP.
+    /// </summary>
+    public static void DisabledPowerPlantStopsProducing()
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: new Dictionary<string, string>(RetailModuleFiles())
+        {
+            ["Data/INI/Object/EdgePower.ini"] = """
+            Object EdgePlant
+              KindOf = STRUCTURE
+              EnergyProduction = 10
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+            End
+            Object EdgeConsumer
+              KindOf = STRUCTURE POWERED
+              EnergyProduction = -5
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+            End
+            """,
+        });
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        var player = new PlayerId(1);
+        feeder.Spawn(1, "EdgePlant", x: 100, y: 100);
+        feeder.Spawn(1, "EdgeConsumer", x: 300, y: 300);
+        world.Step();
+        var plant = world.Entities.Single(entity => entity.Template.Name == "EdgePlant");
+        var consumer = world.Entities.Single(entity => entity.Template.Name == "EdgeConsumer");
+        Check.That(world.ProducedEnergyOf(player) == 10 && world.HasSufficientPower(player) && !consumer.Underpowered, "Setup: the plant powers the consumer.");
+        world.DisableByEmpUntil(plant, world.Tick + world.Frames(20));
+        world.Step();
+        Check.That(world.ProducedEnergyOf(player) == 0 && !world.HasSufficientPower(player) && consumer.Underpowered, "The EMP'd plant produces nothing: the base browns out.");
+        for (var tick = 0; tick < world.Frames(22); tick++) world.Step();
+        Check.That(world.ProducedEnergyOf(player) == 10 && world.HasSufficientPower(player) && !consumer.Underpowered, "When the EMP is over the plant produces again.");
+        world.DisableByEmpUntil(plant, world.Tick + world.Frames(20));
+        world.Step();
+        world.Kill(plant.Id);
+        for (var tick = 0; tick < world.Frames(2); tick++) world.Step();
+        Check.That(world.ProducedEnergyOf(player) == 0 && world.EnergyConsumptionOf(player) == 5, $"A disabled plant that dies takes nothing out a second time ({world.ProducedEnergyOf(player)}).");
+    }
 }

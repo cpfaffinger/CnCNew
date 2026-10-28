@@ -98,11 +98,12 @@ public sealed partial class SimulationWorld
         var movingBonus = 0;
         if (!target.HasStatus(ObjectStatusBits.UnderConstruction))
         {
-            ApplyTemplateEnergy(oldOwner, target.Template.EnergyProduction, false);
-            ApplyTemplateEnergy(newOwner, target.Template.EnergyProduction, true);
+            ApplyObjectEnergy(target, oldOwner, false);
+            ApplyObjectEnergy(target, newOwner, true);
         }
-        if (target.Modules.OfType<PowerPlantUpgrade>().FirstOrDefault() is { Executed: true }) movingBonus += target.Template.EnergyBonus;
-        if (target.Modules.OfType<OverchargeBehavior>().FirstOrDefault() is { Active: true }) movingBonus += target.Template.EnergyBonus;
+        // PowerPlantUpgrade::onCapture and OverchargeBehavior::onCapture move nothing while the object is disabled.
+        if (!target.DisabledEdge && target.Modules.OfType<PowerPlantUpgrade>().FirstOrDefault() is { Executed: true }) movingBonus += target.Template.EnergyBonus;
+        if (!target.DisabledEdge && target.Modules.OfType<OverchargeBehavior>().FirstOrDefault() is { Active: true }) movingBonus += target.Template.EnergyBonus;
         if (movingBonus != 0)
         {
             AddEnergyProduction(oldOwner, -movingBonus);

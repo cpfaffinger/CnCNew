@@ -1639,7 +1639,8 @@ public sealed partial class SimulationWorld : IWorldServices
             if (entity.Timers is { Count: > 0 } timers)
                 foreach (var timer in timers.ToArray()) RemoveTimer(timer);
             // Energy::objectLeavingInfluence: the mirror image of the Register() hook.
-            if (!entity.HasStatus(ObjectStatusBits.UnderConstruction)) ApplyTemplateEnergy(entity.Owner, entity.Template.EnergyProduction, false);
+            if (!entity.HasStatus(ObjectStatusBits.UnderConstruction)) ApplyObjectEnergy(entity, entity.Owner, false);
+            if (entity.DisabledEdge) _disabledObjects.Remove(entity);
             if (entity.SellCompleteTick >= 0) _sales.Remove((entity.SellCompleteTick, entity.Id.Value));
             if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
                 navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
@@ -1903,7 +1904,7 @@ public sealed partial class SimulationWorld : IWorldServices
         TrackCollidable(entity);
         _moduleCount += entity.ModuleArray.Length;
         // Energy::objectEnteringInfluence: incremental, not recomputed per frame.
-        if (!entity.HasStatus(ObjectStatusBits.UnderConstruction)) ApplyTemplateEnergy(entity.Owner, entity.Template.EnergyProduction, true);
+        if (!entity.HasStatus(ObjectStatusBits.UnderConstruction)) ApplyObjectEnergy(entity, entity.Owner, true);
         if (entity.SellCompleteTick >= 0) _sales.Add((entity.SellCompleteTick, entity.Id.Value));
         if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
             navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
@@ -1953,6 +1954,7 @@ public sealed partial class SimulationWorld : IWorldServices
         ProcessSpawns();
         DeliverEvents();
         if (_vision is not null && tick % VisionInterval == _visionPhase) RefreshVision();
+        ProcessDisabledEdges(tick + TickOrder.Next);
         _tick = tick + TickOrder.Next;
         return new TickResult(tick, ComputeIncrementalHash(), _tickEvents);
     }
@@ -2016,6 +2018,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (refresh) HashVision();
         observer.PhaseEnded(TickPhase.VisionHash);
         observer.PhaseStarted(TickPhase.Hash);
+        ProcessDisabledEdges(tick + TickOrder.Next);
         _tick = tick + TickOrder.Next;
         var hash = ComputeIncrementalHash();
         observer.PhaseEnded(TickPhase.Hash);

@@ -144,6 +144,7 @@ public sealed partial class SimulationWorld
         if (state.Int("pendingCommands") != _pendingCommandCount || state.Int("entities") != _entities.Count || state.Int("timers") != _timerById.Count)
             throw new InvalidDataException("Snapshot table sizes do not match their contents.");
         LoadVision(state);
+        RebuildDisabledEdges();
         ComputeFullHash();
     }
 
