@@ -102,6 +102,12 @@ public sealed class MissionPresentationDirector
     private long _cameraCompletesAtTick;
     private bool _cameraPending;
     private bool _countersVisible = true;
+
+    /// <summary><c>Radar::forceOn</c> (<c>RADAR_FORCE_ENABLE</c> / <c>RADAR_REVERT_TO_NORMAL</c>): the minimap is drawn whether the player has a radar or not.</summary>
+    public bool RadarForced { get; private set; }
+
+    /// <summary><c>Radar::hide</c> (<c>RADAR_DISABLE</c> / <c>RADAR_ENABLE</c>): the minimap is not drawn, unless it is forced.</summary>
+    public bool RadarHidden { get; private set; }
     private bool _inputLocked;
     private long _lastObservedTick;
     private long _tickBeforeStep;
@@ -962,6 +968,14 @@ public sealed class MissionPresentationDirector
             case "ENABLE_COUNTDOWN_TIMER_DISPLAY" or "DISABLE_COUNTDOWN_TIMER_DISPLAY":
                 _countersVisible = action == "ENABLE_COUNTDOWN_TIMER_DISPLAY";
                 Handled(action, Channel.Overlay);
+                return;
+            case "RADAR_FORCE_ENABLE" or "RADAR_REVERT_TO_NORMAL":
+                RadarForced = action == "RADAR_FORCE_ENABLE";
+                Handled(action, Channel.Radar);
+                return;
+            case "RADAR_DISABLE" or "RADAR_ENABLE":
+                RadarHidden = action == "RADAR_DISABLE";
+                Handled(action, Channel.Radar);
                 return;
             case "RADAR_CREATE_EVENT":
                 if (output.Arguments.Length > 1 && TryParseCoord(output.Arguments[0], out var x, out var y) && int.TryParse(output.Arguments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var eventType))

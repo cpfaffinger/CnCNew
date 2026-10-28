@@ -930,7 +930,8 @@ internal sealed class ClientRuntime : IDisposable
     /// </summary>
     private void DrawCustom(GraphicsContext context, UiCustomDraw draw)
     {
-        if (draw.Callback != "W3DLeftHUDDraw" || _running is not { } running) return;
+        // W3DLeftHUDDraw draws the radar only while it is on (forced, or not hidden and the viewer has one); a spectator's minimap is its own.
+        if (draw.Callback != "W3DLeftHUDDraw" || _running is not { } running || (running.Spectator is null && !running.Host.Match.RadarOn)) return;
         var image = running.Host.Match.Minimap;
         var scale = Math.Min(draw.Rect.Width / (float)image.Width, draw.Rect.Height / (float)image.Height);
         var width = image.Width * scale;

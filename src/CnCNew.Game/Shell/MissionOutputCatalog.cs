@@ -78,6 +78,7 @@ public static class MissionOutputCatalog
         Shown("centered text at 0.9 of the screen height in the font the script names (W3DDisplay::draw, DISPLAY_CINEMATIC_TEXT)", "DISPLAY_CINEMATIC_TEXT");
         Shown("a named counter/timer line at NamedTimerCountdownPosition, stacked upward (InGameUI::postDraw: NamedTimerCountdown fonts and colors)", "DISPLAY_COUNTDOWN_TIMER", "DISPLAY_COUNTER", "HIDE_COUNTDOWN_TIMER", "HIDE_COUNTER", "ENABLE_COUNTDOWN_TIMER_DISPLAY", "DISABLE_COUNTDOWN_TIMER_DISPLAY");
         Shown("blinking dot on the minimap", "RADAR_CREATE_EVENT", "OBJECT_CREATE_RADAR_EVENT", "TEAM_CREATE_RADAR_EVENT");
+        Shown("the minimap forced on or hidden (Radar::forceOn, Radar::hide)", "RADAR_FORCE_ENABLE", "RADAR_REVERT_TO_NORMAL", "RADAR_ENABLE", "RADAR_DISABLE");
         Shown("outcome banner", "VICTORY", "DEFEAT");
 
         // ---- sound control (AudioDirector.Script.cs)
@@ -110,7 +111,7 @@ public static class MissionOutputCatalog
 
         // ---- not displayed, with the reason
         Not("the control bar model keeps the availability (Hidden/Disabled sciences are hidden/restricted PurchaseScience buttons), but the client has no Generals Powers panel to show it", "PLAYER_SCIENCE_AVAILABILITY");
-        Not("the client has no radar-facility rule: the minimap is always live, so there is nothing to force on or off", "RADAR_FORCE_ENABLE", "RADAR_REVERT_TO_NORMAL", "RADAR_ENABLE", "RADAR_DISABLE", "REFRESH_RADAR");
+        Not("the minimap is drawn from the live world in every frame, so there is no terrain picture to refresh", "REFRESH_RADAR");
         Not("the mission result screen shows one row without statistics; the scoring flags are kept by the director", "ENABLE_SCORING", "DISABLE_SCORING", "PLAYER_EXCLUDE_FROM_SCORE_SCREEN");
         Not("the fog texture covers the playable area only and the terrain beyond it keeps the fog's edge value; there is no separate shroud ring for the active border to switch", "ENABLE_BORDER_SHROUD", "DISABLE_BORDER_SHROUD");
         Not("the sky box model is not drawn by the terrain layer", "DRAW_SKYBOX_BEGIN", "DRAW_SKYBOX_END");

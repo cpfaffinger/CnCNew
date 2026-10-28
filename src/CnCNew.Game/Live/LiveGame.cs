@@ -126,6 +126,12 @@ public abstract class LiveGame
     public TeamColors Colors { get; }
     public IFxWorldView FxView => _fxView;
 
+    /// <summary>
+    /// Whether the minimap is drawn and takes clicks (<c>W3DLeftHUDDraw</c>, <c>LeftHUDInput</c>): the radar forced on by a mission, or not hidden and the viewer has a radar
+    /// (<c>Player::hasRadar</c>). A spectator's own minimap is not ruled by it.
+    /// </summary>
+    public bool RadarOn => this is LiveMission { Director: var director } ? director.RadarForced || (!director.RadarHidden && World.HasRadar(Human)) : World.HasRadar(Human);
+
     /// <summary>The viewer: slot 0 of a skirmish, the local side of a mission.</summary>
     public PlayerId Human { get; }
 

@@ -806,6 +806,12 @@ internal static class HudTests
         long time = 10_000;
         // A point well inside the minimap frame but away from its centre, so a no-op click would be detectable.
         var clickPoint = new Vector2(rect.X + rect.Width * 0.25f, rect.Y + rect.Height * 0.75f);
+        // LeftHUDInput: without a radar the window eats the click (F-50); the viewer has none in the first frame.
+        TestHarness.Assert(!match.RadarOn, "the viewer has no radar in the first frame");
+        Click(controller, ref time, MouseButton.Left, clickPoint);
+        TestHarness.Assert(match.Camera.Pivot == before, "without a radar the minimap click is eaten");
+        match.World.AddRadar(match.Human, false);
+        TestHarness.Assert(match.RadarOn, "a radar of the viewer switches the minimap on");
         Click(controller, ref time, MouseButton.Left, clickPoint);
         var after = match.Camera.Pivot;
         TestHarness.Assert(Vector2.DistanceSquared(before, after) > 1f, $"the minimap click recentred the camera ({before} -> {after})");

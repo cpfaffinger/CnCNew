@@ -260,6 +260,12 @@ public sealed class MatchController
             else _minimapPanning = false;
             return;
         }
+        // LeftHUDInput: a radar that is off eats the click over its window.
+        if (!IsMenuOpen && !Match.RadarOn && _leftHud.Rect.Contains(Round(button.Position.X), Round(button.Position.Y)))
+        {
+            _uiOwnsMouse = true;
+            return;
+        }
 
         var x = Round(button.Position.X);
         var y = Round(button.Position.Y);
@@ -298,7 +304,8 @@ public sealed class MatchController
     {
         world = default;
         var rect = _leftHud.Rect;
-        if (!rect.Contains((int)screen.X, (int)screen.Y)) return false;
+        // LeftHUDInput: without a radar (or with it hidden) the window eats the input; the click does not reach the world.
+        if (!rect.Contains((int)screen.X, (int)screen.Y) || !Match.RadarOn) return false;
         var minimap = Match.Minimap;
         var scale = Math.Min(rect.Width / (float)minimap.Width, rect.Height / (float)minimap.Height);
         var drawWidth = minimap.Width * scale;
@@ -593,7 +600,7 @@ public sealed class MatchController
             if (IsMenuOpen || _uiOwnsMouse) return true;
             if (!Input.State.HasMouse) return false;
             var position = Input.State.MousePosition;
-            return TryMinimapWorld(position, out _) || _tree.InputTarget(Round(position.X), Round(position.Y)) is not null;
+            return _leftHud.Rect.Contains(Round(position.X), Round(position.Y)) || _tree.InputTarget(Round(position.X), Round(position.Y)) is not null;
         }
     }
 
