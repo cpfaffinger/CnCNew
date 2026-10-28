@@ -1,3 +1,4 @@
+using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
@@ -7,7 +8,8 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Presentation.Objects;
 
 /// <summary>Inputs of <see cref="ConditionDeriver"/> that are not entity state: time of day, weather, and the construction work one tick earlier.</summary>
-public readonly record struct ConditionContext(bool Night = false, bool Snow = false, int? PreviousConstructionWork = null);
+/// <param name="Viewer">The player the frame is drawn for; a hidden stealth garrison shows a non-ally no <c>GARRISONED</c> (null: everything is shown).</param>
+public readonly record struct ConditionContext(bool Night = false, bool Snow = false, int? PreviousConstructionWork = null, PlayerId? Viewer = null);
 
 /// <summary>
 /// Derives the model condition bits of an entity from simulation state. The reference sets these bits imperatively from many places
@@ -100,8 +102,10 @@ public static partial class ConditionDeriver
         if (entity.CrateWeaponLevel > 0) set = set.With(entity.CrateWeaponLevel == 1 ? ModelConditions.WeaponSetCrateUpgradeOne : ModelConditions.WeaponSetCrateUpgradeTwo);
         if (entity.CrateArmorLevel > 0) set = set.With(entity.CrateArmorLevel == 1 ? ModelConditions.ArmorSetCrateUpgradeOne : ModelConditions.ArmorSetCrateUpgradeTwo);
 
+        // GarrisonContain::recalcApparentModelConditionState: GARRISONED only for a viewer who sees the building's real owner - not when stealth riders hide it from a non-ally (F-54).
         if (entity.Container is { ContainCount: > 0 } container)
-            set = set.With(container is GarrisonContain ? ModelConditions.Garrisoned : ModelConditions.Loaded);
+            if (container is not GarrisonContain garrison) set = set.With(ModelConditions.Loaded);
+            else if (context.Viewer is not { } viewer || garrison.ApparentOwnerFor(world, viewer) == entity.Owner) set = set.With(ModelConditions.Garrisoned);
         if (entity.CarriedSupplyBoxes() > 0) set = set.With(ModelConditions.Carrying);
 
         foreach (var module in entity.Modules)

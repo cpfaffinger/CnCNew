@@ -308,7 +308,7 @@ public sealed class FrameProjector
     private Capture CaptureEntity(Entity entity, SimulationWorld world, ObjectVisual visual, Capture? previous)
     {
         var conditions = ConditionDeriver.Derive(entity, world, visual,
-            new ConditionContext(_options.Night, _options.Snow, previous?.ConstructionWork));
+            new ConditionContext(_options.Night, _options.Snow, previous?.ConstructionWork, _options.Viewer));
         conditions = conditions.Union(_structures.Update(entity, world));
         var health = entity.Body is { } body && body.MaxHealth > Fixed.Zero ? ToFloat(body.Health) / ToFloat(body.MaxHealth) : 1f;
         var construction = entity.HasStatus(ObjectStatusBits.UnderConstruction)
@@ -338,7 +338,9 @@ public sealed class FrameProjector
         conditions = conditions.Union(_units.Update(entity, world, world.Tick - 1, _turrets));
         // The selected states are a function of the visual and the condition bits alone; most objects keep both from one tick to the next.
         var selections = previous is not null && ReferenceEquals(previous.Visual, visual) && previous.Conditions == conditions ? previous.Selections : Select(visual, conditions);
-        return new Capture(entity.Id.Value, visual, entity.Owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
+        // GarrisonContain::getApparentControllingPlayer: a hidden stealth garrison is drawn in the colour of its owner from before for a non-ally, and remembered so in the fog (F-54).
+        var owner = _options.Viewer is { } viewer && entity.Container?.ApparentOwnerFor(world, viewer) is { } apparent ? apparent : entity.Owner;
+        return new Capture(entity.Id.Value, visual, owner, new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z)),
             ToFloat(entity.Angle), entity.X, entity.Y, Math.Clamp(health, 0f, 1f), construction, conditions, selections,
             entity.ConstructionWork, main?.Angle, main?.Pitch, alt?.Angle, alt?.Pitch, travel, fired, healedAt, chassis);
     }
