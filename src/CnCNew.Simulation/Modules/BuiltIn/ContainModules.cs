@@ -146,6 +146,12 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     /// <inheritdoc cref="IContainerModule.IsSpecialOverlordStyleContainer"/>
     public virtual bool IsSpecialOverlordStyleContainer => false;
 
+    /// <summary>
+    /// <c>WEAPONBONUSCONDITION_GARRISONED</c>: set on a rider by <c>GarrisonContain::onContaining</c> and <c>HelixContain::onContaining</c> and cleared by their <c>onRemoving</c> - not by
+    /// <c>TransportContain</c> - so the weapon bonus lines of the data (<c>GARRISONED RANGE 133%</c>, <c>GARRISONED DAMAGE 125%</c> in GameData.ini) apply to the rider's weapons.
+    /// </summary>
+    internal static readonly uint GarrisonedBonus = 1u << SlaveSupport.WeaponBonusBit("GARRISONED");
+
     public abstract bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity);
 
     protected bool PassesKindOfAndRelationship(IWorldServices world, Entity candidate)
@@ -327,6 +333,8 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     public override void Add(IWorldServices world, Entity candidate)
     {
         base.Add(world, candidate);
+        // onContaining: "give the object a garrisoned version of its weapon".
+        candidate.WeaponBonusConditions |= GarrisonedBonus;
         _containedSinceTick[candidate.Id.Value] = world.Tick;
         if (data.HealObjects) world.WakeAt(Entity, this, world.Tick);
         RecalcControllingPlayer(world);
@@ -364,6 +372,8 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     public override void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
     {
         base.Remove(world, candidate, positionAtContainer);
+        // onRemoving: "give the object back a regular weapon".
+        candidate.WeaponBonusConditions &= ~GarrisonedBonus;
         _containedSinceTick.Remove(candidate.Id.Value);
         if (positionAtContainer && EvacDisposition is 1 or 2) LeaveToTheSide(world, candidate);
         RecalcControllingPlayer(world);

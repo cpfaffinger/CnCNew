@@ -406,8 +406,8 @@ public sealed record HelixContainData(TransportContainData Transport) : ModuleDa
 /// <c>HelixContain.cpp</c>: a <c>TransportContain</c> with one extra place for a <c>PORTABLE_STRUCTURE</c> (the gattling cannon or propaganda tower a
 /// Helix carries on its back): the first portable structure is always accepted, does not use a slot, follows the Helix's position and heading every
 /// update, dies with the Helix (<c>onDie</c>: <c>kill</c>) and disappears with it (<c>onDelete</c>). A second one replaces nothing (it takes a normal
-/// slot check, as the reference falls through to <c>TransportContain</c>). Not modeled: the garrisoned weapon bonus and the damage-state mirroring
-/// (<c>onBodyDamageStateChange</c> is visual).
+/// slot check, as the reference falls through to <c>TransportContain</c>). Every rider gets the garrisoned weapon bonus while inside (F-60). Not modeled: the damage-state
+/// mirroring (<c>onBodyDamageStateChange</c> is visual).
 /// </summary>
 public sealed class HelixContain(HelixContainData data) : TransportContain(data.Transport)
 {
@@ -444,6 +444,8 @@ public sealed class HelixContain(HelixContainData data) : TransportContain(data.
             _portable = candidate.Id;
             candidate.ContainedBy = Entity.Id;
             candidate.HasMoveTarget = false;
+            candidate.WeaponBonusConditions |= GarrisonedBonus;
+            world.MarkDirty(candidate);
             candidate.X = Entity.X;
             candidate.Y = Entity.Y;
             candidate.Z = Entity.Z;
@@ -452,14 +454,18 @@ public sealed class HelixContain(HelixContainData data) : TransportContain(data.
             return;
         }
         base.Add(world, candidate);
+        candidate.WeaponBonusConditions |= GarrisonedBonus;
     }
 
     public override void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
     {
+        // onRemoving clears the garrisoned bonus of every rider.
+        candidate.WeaponBonusConditions &= ~GarrisonedBonus;
         if (candidate.Id == _portable)
         {
             _portable = EntityId.Invalid;
             candidate.ContainedBy = EntityId.Invalid;
+            world.MarkDirty(candidate);
             return;
         }
         base.Remove(world, candidate, positionAtContainer);

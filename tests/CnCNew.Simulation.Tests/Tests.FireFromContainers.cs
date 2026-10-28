@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -391,5 +392,42 @@ static partial class Tests
     private readonly record struct FcRules(SimulationWorld World, Entity Container)
     {
         public bool Allows(Entity? rider) => Container.Container!.IsPassengerAllowedToFire(World, rider);
+    }
+
+    /// <summary>
+    /// Step 3: <c>WEAPONBONUSCONDITION_GARRISONED</c> is set on a rider of a <c>GarrisonContain</c> or a <c>HelixContain</c> (its infantry and its portable structure) while it is inside and
+    /// cleared when it leaves, so GameData's <c>GARRISONED RANGE 133%</c> and <c>DAMAGE 125%</c> apply; a <c>TransportContain</c> gives none.
+    /// </summary>
+    public static void FireFromContainersGarrisonedBonus()
+    {
+        var (world, feeder, fixture) = FireFromContainerWorld(TestRate.Default);
+        var garrisoned = CnCNew.Data.Definitions.NameTablesPhase5.WeaponBonusCondition.TryIndexOf("GARRISONED", out var bit) ? 1u << bit : 0u;
+        Check.That(fixture.Templates.Weapons.TryGet("FcRifle", out var rifle), "Setup: the rifle.");
+        static bool Near(Fixed value, decimal expected) => value - Fixed.FromDecimal(expected) < Fixed.FromDecimal(0.01m) && Fixed.FromDecimal(expected) - value < Fixed.FromDecimal(0.01m);
+        Fixed Damage(Entity rider) => rifle!.DamageWith(fixture.Templates.GlobalWeaponBonus, rider.WeaponBonusConditions, rifle.PrimaryDamage);
+
+        var bunker = FcSpawn(world, feeder, "FcBunker", 1, 0, 0);
+        var rifleman = FcInside(world, feeder, "FcRifleman", 1, bunker);
+        Check.That((rifleman.WeaponBonusConditions & garrisoned) != 0, "A garrisoned rider has the GARRISONED condition.");
+        Check.That(Near(world.MaxWeaponRange(rifleman), 133m) && Near(Damage(rifleman), 12.5m),
+            $"Its rifle reaches 133 % and hurts 125 % ({world.MaxWeaponRange(rifleman)}, {Damage(rifleman)}).");
+        world.Step();
+        feeder.ExitContainer(1, rifleman.Id.Value);
+        for (var step = 0; step < world.Frames(2); step++) world.Step();
+        Check.That(!rifleman.ContainedBy.IsValid && (rifleman.WeaponBonusConditions & garrisoned) == 0 && world.MaxWeaponRange(rifleman) == Fixed.FromInt(100),
+            "Out of the building the condition is gone and the rifle reaches 100 again.");
+
+        var helix = FcSpawn(world, feeder, "FcHelix", 1, 300, 0);
+        var gattling = FcInside(world, feeder, "FcGattling", 1, helix);
+        var helixRider = FcInside(world, feeder, "FcRifleman", 1, helix);
+        Check.That((gattling.WeaponBonusConditions & garrisoned) != 0 && (helixRider.WeaponBonusConditions & garrisoned) != 0 && Near(world.MaxWeaponRange(gattling), 199.5m),
+            $"A Helix's portable structure and its infantry are garrisoned too (the gattling reaches {world.MaxWeaponRange(gattling)}).");
+        helix.Container!.Remove(world, helixRider, true);
+        helix.Modules.OfType<HelixContain>().Single().Remove(world, gattling, true);
+        Check.That((gattling.WeaponBonusConditions & garrisoned) == 0 && (helixRider.WeaponBonusConditions & garrisoned) == 0, "Both lose it when they are taken out.");
+
+        var humvee = FcSpawn(world, feeder, "FcHumvee", 1, 600, 0);
+        var humveeRider = FcInside(world, feeder, "FcRifleman", 1, humvee);
+        Check.That((humveeRider.WeaponBonusConditions & garrisoned) == 0 && world.MaxWeaponRange(humveeRider) == Fixed.FromInt(100), "A transport's rider gets no garrisoned bonus.");
     }
 }
