@@ -48,6 +48,9 @@ public sealed partial class SimulationWorld
             if (victim is not null) (x, y, z) = victim.FrameEnd(_tick);
             (sourceX, sourceY, sourceZ) = source.FrameEnd(_tick);
         }
+        // A contained rider fires from its container (FiringContainerOf, F-60).
+        var container = FiringContainerOf(source);
+        if (container is not null) (sourceX, sourceY, sourceZ) = FiringPointOf(container, x, y);
         var conditions = source.WeaponBonusConditions;
         // Weapon::privateFireWeapon starts with this: a networked weapon asks its neighbours to join in.
         if (weapon.RequestAssistRange > Fixed.Zero && victim is not null) ProcessRequestAssistance(source, weapon, victim);
@@ -90,7 +93,7 @@ public sealed partial class SimulationWorld
         var damageX = weapon.DamageDealtAtSelfPosition ? sourceX : x;
         var damageY = weapon.DamageDealtAtSelfPosition ? sourceY : y;
         var damageZ = weapon.DamageDealtAtSelfPosition ? sourceZ : z;
-        var delay = FlightTicks(source, x, y, z, weapon.WeaponSpeed);
+        var delay = container is null ? FlightTicks(source.X, source.Y, source.Z, x, y, z, weapon.WeaponSpeed) : FlightTicks(sourceX, sourceY, sourceZ, x, y, z, weapon.WeaponSpeed);
         if (delay == 0)
             return DealDamageCore(source.Id, source, EntityId.Invalid, source.Id, conditions, weapon, victimId.IsValid ? victim : null, damageX, damageY, damageZ);
         var due = _tick + delay;
@@ -139,12 +142,12 @@ public sealed partial class SimulationWorld
     /// moved the count by a whole frame where the distance is a multiple of the speed.
     /// </para>
     /// </summary>
-    internal long FlightTicks(Entity source, Fixed x, Fixed y, Fixed z, Fixed speed)
+    internal long FlightTicks(Fixed fromX, Fixed fromY, Fixed fromZ, Fixed x, Fixed y, Fixed z, Fixed speed)
     {
         if (speed <= Fixed.Zero) return 0;
-        var dx = x - source.X;
-        var dy = y - source.Y;
-        var dz = z - source.Z;
+        var dx = x - fromX;
+        var dy = y - fromY;
+        var dz = z - fromZ;
         var distance = Fixed.Sqrt(dx * dx + dy * dy + dz * dz);
         var perFrame = Modules.BuiltIn.ProjectileModules.FrameSpeed(Time, speed).Raw;
         if (distance.Raw < perFrame) return 0;

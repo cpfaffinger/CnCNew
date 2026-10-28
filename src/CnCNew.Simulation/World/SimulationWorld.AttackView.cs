@@ -25,9 +25,12 @@ public sealed partial class SimulationWorld
     {
         if (!AttackUsesLineOfSight || Navigation is null || Terrain is null || !attacker.Template.IsKindOf(NeedsLineOfSightKind)) return false;
         if (IsContactWeapon(weapon)) return false;
-        // isDoingGroundMovement, IMMOBILE, "the brutal special case for stinger soldiers"; a rider in a container is on the ground as well, but a contained object attacks nothing here.
-        var onGround = (attacker.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) == 0)
-            || attacker.Template.IsKindOf("IMMOBILE") || attacker.Template.IsKindOf("SPAWNS_ARE_THE_WEAPONS");
+        // isDoingGroundMovement, IMMOBILE, "the brutal special case for stinger soldiers"; a rider of a structure or of a container that is no airborne target is on the ground (F-60).
+        var container = FiringContainerOf(attacker);
+        var onGround = container is not null
+            ? container.Template.IsKindOf("STRUCTURE") || !IsSignificantlyAboveTerrainAtFrameEnd(container)
+            : (attacker.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) == 0)
+              || attacker.Template.IsKindOf("IMMOBILE") || attacker.Template.IsKindOf("SPAWNS_ARE_THE_WEAPONS");
         if (!onGround || IsSignificantlyAboveTerrainAtFrameEnd(victim)) return false;
         return IsAttackViewBlocked(attacker, victim);
     }
@@ -72,7 +75,8 @@ public sealed partial class SimulationWorld
     /// </summary>
     public bool IsAttackViewBlocked(Entity attacker, Entity victim)
     {
-        var (attackerX, attackerY, attackerZ) = attacker.FrameEnd(_tick);
+        // A contained rider looks out from its container's position (FiringContainerOf, F-60).
+        var (attackerX, attackerY, attackerZ) = (FiringContainerOf(attacker) ?? attacker).FrameEnd(_tick);
         return IsAttackViewBlockedFrom(attacker, attackerX, attackerY, attackerZ, victim);
     }
 
@@ -102,7 +106,7 @@ public sealed partial class SimulationWorld
     private bool AcquisitionViewBlocked(Entity entity, Entity candidate)
     {
         if (!AttackUsesLineOfSight || Terrain is null || !entity.Template.IsKindOf(NeedsLineOfSightKind)) return false;
-        var (ownX, ownY, ownZ) = entity.FrameEnd(_tick);
+        var (ownX, ownY, ownZ) = (FiringContainerOf(entity) ?? entity).FrameEnd(_tick);
         var (otherX, otherY, otherZ) = candidate.FrameEnd(_tick);
         if (!Terrain.IsClearLineOfSight(ownX, ownY, ownZ + MaxHeightAbovePosition(entity.Template), otherX, otherY, otherZ + MaxHeightAbovePosition(candidate.Template))) return true;
         return !IsSignificantlyAboveTerrainAtFrameEnd(candidate) && IsAttackViewBlocked(entity, candidate);

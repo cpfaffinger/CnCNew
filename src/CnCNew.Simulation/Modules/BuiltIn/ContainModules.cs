@@ -189,6 +189,8 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         Riders.Remove(candidate.Id);
         candidate.ContainedBy = EntityId.Invalid;
         if (positionAtContainer) (candidate.X, candidate.Y, _) = Entity.FrameEnd(world.Tick);
+        // F-60: a rider that attacked from inside ends that attack when it leaves (the original's exitObjectViaDoor gives it a new state, aiFollowPath).
+        if (candidate.Acquisition is { Victim.IsValid: true }) world.EndAttack(candidate);
     }
 
     public virtual void OnDie(IWorldServices world, in DamageInfo info)

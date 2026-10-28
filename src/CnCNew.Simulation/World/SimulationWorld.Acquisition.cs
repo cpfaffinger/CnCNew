@@ -243,10 +243,43 @@ public sealed partial class SimulationWorld
         else if (!entity.HasMoveTarget) state.AttackMove = false;
     }
 
-    /// <summary>Objects that cannot act do not acquire: under construction, sold, disabled (EMP, held by a script) or inside a container (firing from inside one does not exist here).</summary>
-    private static bool MayAct(Entity entity, long tick)
+    /// <summary>
+    /// Objects that cannot act do not acquire: under construction, sold, disabled (EMP, held by a script) or inside a container that does not let them fire (<c>Object::isAbleToAttack</c>,
+    /// F-60). The container's own hold (<c>DISABLED_HELD</c> of every rider) is no stop: the original's AI processes <c>DISABLED_HELD</c>
+    /// (<c>AIUpdateInterface::getDisabledTypesToProcess</c>), so a held rider still looks for victims and fires.
+    /// </summary>
+    private bool MayAct(Entity entity, long tick)
         => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && entity.EmpDisabledUntil <= tick
-           && (entity.ScriptDisableMask & Entity.ScriptHeld) == 0 && !entity.ContainedBy.IsValid;
+           && (entity.ScriptDisableMask & Entity.ScriptHeld) == 0 && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
+
+    /// <summary>
+    /// The object a contained rider is taken to fire from: its container. This simulation has no garrison fire points and does not move the riders of a moving transport yet
+    /// (steps 1 and 4 of docs/FIRE-FROM-CONTAINERS.md §3), so - a named stand-in - a rider's range, its search for victims, its view and its shot are measured from the container:
+    /// for an enclosing garrison from the point of the building's bounding circle nearest the victim (the fire points of the original stand around the walls), for every other
+    /// container from its position. Null for an object in no container.
+    /// </summary>
+    private Entity? FiringContainerOf(Entity entity) => entity.ContainedBy.IsValid ? FindEntity(entity.ContainedBy) : null;
+
+    /// <summary>The bounding-circle radius by which an enclosing garrison brings its riders closer to their victims (the stand-in of <see cref="FiringContainerOf"/>); zero otherwise.</summary>
+    private static Fixed FiringEdgeOf(Entity? container)
+        => container?.Container is GarrisonContain { IsEnclosing: true } ? container.Template.BoundingCircleRadius : Fixed.Zero;
+
+    /// <summary>
+    /// Where a contained rider's shot leaves from (the stand-in of <see cref="FiringContainerOf"/>): the container's position where its begun frame ends, moved for an enclosing
+    /// garrison toward (<paramref name="victimX"/>, <paramref name="victimY"/>) to the building's bounding circle, or onto the victim when it stands inside that circle.
+    /// </summary>
+    private (Fixed X, Fixed Y, Fixed Z) FiringPointOf(Entity container, Fixed victimX, Fixed victimY)
+    {
+        var (x, y, z) = _firstFrameTicks != TickOrder.Next ? container.FrameEnd(_tick) : (container.X, container.Y, container.Z);
+        var edge = FiringEdgeOf(container);
+        if (edge <= Fixed.Zero) return (x, y, z);
+        var dx = victimX - x;
+        var dy = victimY - y;
+        var distance = Fixed.Sqrt(dx * dx + dy * dy);
+        if (distance <= Fixed.Zero) return (x, y, z);
+        var step = Fixed.Min(edge, distance);
+        return (x + Fixed.MultiplyDivide(dx, step, distance), y + Fixed.MultiplyDivide(dy, step, distance), z);
+    }
 
     /// <summary>
     /// <c>Object::isAbleToAttack</c>'s gate for a contained object (F-60, docs/FIRE-FROM-CONTAINERS.md): the container lets this rider fire
@@ -263,7 +296,9 @@ public sealed partial class SimulationWorld
     {
         if (state is { AttackMove: true }) return AcquireMode.AttackMove;
         if ((ai.AutoAcquire & AutoAcquire.Idle) == 0) return AcquireMode.None;
-        if (entity.HasStatus(StealthedStatus) && (ai.AutoAcquire & AutoAcquire.Stealthed) == 0) return AcquireMode.None;
+        // "Being in a firing container is an exception to this veto" (getNextMoodTarget asks the container without an id).
+        if (entity.HasStatus(StealthedStatus) && (ai.AutoAcquire & AutoAcquire.Stealthed) == 0
+            && !(FiringContainerOf(entity)?.Container is { } container && container.IsPassengerAllowedToFire(this, null))) return AcquireMode.None;
         if (ai.IsIdle) return AcquireMode.Idle;
         return HasAimingTurret(entity) ? AcquireMode.Turret : AcquireMode.None;
     }
@@ -361,8 +396,11 @@ public sealed partial class SimulationWorld
         state.ClearVictim();
     }
 
-    /// <summary>Only a computer player's ground unit walks to a victim it picked itself; a human player's unit stays where its player put it.</summary>
-    private bool MayChase(Entity entity, bool aircraft) => !aircraft && entity.Template.Locomotor is not null && IsComputerPlayer(entity.Owner);
+    /// <summary>
+    /// Only a computer player's ground unit walks to a victim it picked itself; a human player's unit stays where its player put it, and a rider never walks (it is held and not
+    /// mobile, <c>Object::isMobile</c>; its attack state fails out of range, <c>AIAttackAimAtTargetState::update</c>).
+    /// </summary>
+    private bool MayChase(Entity entity, bool aircraft) => !aircraft && entity.Template.Locomotor is not null && IsComputerPlayer(entity.Owner) && !entity.ContainedBy.IsValid;
 
     /// <summary>
     /// <c>AI::getAdjustedVisionRangeForObject(obj, OWNERTYPE | MOOD)</c> for a unit that may walk to its victim: the vision range times the guard-outer factor, times the mood factor of a
@@ -372,6 +410,9 @@ public sealed partial class SimulationWorld
     private Fixed AcquireRadius(Entity entity, bool chase)
     {
         var reach = MaxWeaponRange(entity);
+        // AI::getAdjustedVisionRangeForObject gives a contained object its largest weapon range (with its bonuses), and getNextMoodTarget adds the container's bounding circle
+        // "so that large buildings can auto acquire everything in outer ranges".
+        if (FiringContainerOf(entity) is { } container) return reach + container.Template.BoundingCircleRadius;
         if (!chase) return reach;
         var vision = entity.Template.VisionRange * AcquireVisionFactorComputer;
         switch (AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal)
@@ -402,8 +443,11 @@ public sealed partial class SimulationWorld
     private Entity? FindMoodTarget(Entity entity, AIUpdateInterface ai, AcquireMode mode)
     {
         var computer = IsComputerPlayer(entity.Owner);
+        var container = FiringContainerOf(entity);
         // "Human units don't have a mood": only a computer player's unit sleeps or stays passive. A passive unit of the reference answers its last attacker; that is not modeled.
-        if (computer && (AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal) is Attitude.Sleep or Attitude.Passive) return null;
+        // A contained unit does not sleep: getAdjustedVisionRangeForObject gives it its weapon range instead of the mood's zero. Passive is getNextMoodTarget's own test and holds inside too.
+        var attitude = computer ? AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal : Attitude.Normal;
+        if ((attitude == Attitude.Sleep && container is null) || attitude == Attitude.Passive) return null;
         var aircraft = entity.Template.IsKindOf("AIRCRAFT");
         var chase = mode == AcquireMode.AttackMove && MayChase(entity, aircraft);
         var radius = AcquireRadius(entity, chase);
@@ -411,12 +455,14 @@ public sealed partial class SimulationWorld
         var limit = SquaredReach.Of(radius);
         var turretOnly = mode == AcquireMode.Turret;
         var buildings = computer || (ai.AutoAcquire & AutoAcquire.AttackBuildings) != 0;
-        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue, OwnX = entity.X, OwnY = entity.Y };
+        // A rider looks from its container (FiringContainerOf), whose bounding circle is in the radius.
+        var looker = container ?? entity;
+        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue, OwnX = looker.X, OwnY = looker.Y };
         // Above 30 Hz the look measures from where the unit's begun frame ends to where each candidate's ends (rule 3 of the frame convention).
         if (_firstFrameTicks != TickOrder.Next)
         {
             search.FrameEnd = true;
-            (search.OwnX, search.OwnY, _) = entity.FrameEnd(_tick);
+            (search.OwnX, search.OwnY, _) = looker.FrameEnd(_tick);
         }
 
         if (RelationshipOverride is not null)

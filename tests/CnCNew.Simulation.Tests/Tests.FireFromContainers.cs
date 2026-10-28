@@ -1,7 +1,9 @@
 using System.Collections.Immutable;
+using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -429,5 +431,149 @@ static partial class Tests
         var humvee = FcSpawn(world, feeder, "FcHumvee", 1, 600, 0);
         var humveeRider = FcInside(world, feeder, "FcRifleman", 1, humvee);
         Check.That((humveeRider.WeaponBonusConditions & garrisoned) == 0 && world.MaxWeaponRange(humveeRider) == Fixed.FromInt(100), "A transport's rider gets no garrisoned bonus.");
+    }
+
+    private const string FcRunnerIni = """
+        Object FcRunner
+          KindOf = SELECTABLE VEHICLE
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        """;
+
+    /// <summary>
+    /// One container scene: <paramref name="container"/> of player 1 at the origin, <paramref name="rider"/> of player 1 put inside it, and an enemy <paramref name="victim"/> of player 2
+    /// at (<paramref name="distance"/>, 0) - all made in one tick, the rider inside before the next one (an enemy beyond 100 cannot be fired at from outside in between).
+    /// </summary>
+    private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, Entity Container, Entity Rider, Entity Victim) FcScene(
+        SimulationRate rate, string container, string rider, int distance, string victim = "FcTarget", bool computer = false)
+    {
+        var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRunnerIni));
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, computer ? ComputerAgainstHuman : CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, container, owner: 1, x: 0, y: 0);
+        feeder.Spawn(1, rider, owner: 1, x: 0, y: 0);
+        feeder.Spawn(2, victim, owner: 2, x: distance, y: 0);
+        world.Step();
+        var box = world.Entities.Single(value => value.Template.Name == container);
+        var inside = world.Entities.Single(value => value.Template.Name == rider);
+        Check.That(world.TryEnterContainer(inside, box), $"Setup: {rider} enters {container}.");
+        return (world, feeder, fixture, box, inside, world.Entities.Single(value => value.Template.Name == victim));
+    }
+
+    /// <summary>Steps <paramref name="frames"/> original frames; the shots of <paramref name="source"/> and the tick of the first one (-1 for none).</summary>
+    private static (int Shots, long First) FcRun(SimulationWorld world, Entity source, int frames)
+    {
+        var shots = 0;
+        var first = -1L;
+        for (var step = 0; step < world.Frames(frames); step++)
+        {
+            var result = world.Step();
+            var now = ShotsOf(result, source);
+            if (now > 0 && first < 0) first = result.Tick;
+            shots += now;
+        }
+        return (shots, first);
+    }
+
+    /// <summary>
+    /// Step 5 (the behaviour change): a rifleman garrisoned in a building picks an enemy in range and fires (no shot before F-60), while it stays inside and held; it reaches an enemy
+    /// beyond its plain range but within its garrisoned range (133 %) from the building's bounding circle (the stand-in for the fire points), and nothing beyond that; a fire base
+    /// (not enclosing) measures from its centre; a computer player's rider never walks after a victim that leaves and drops it; a rider that leaves ends its attack.
+    /// </summary>
+    public static void FireFromContainersGarrisonFires()
+    {
+        var near = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 80);
+        var (shots, first) = FcRun(near.World, near.Rider, 60);
+        Check.That(shots > 0, "A garrisoned rifleman fires at an enemy in range.");
+        var firstFrame = near.World.InFrames(first - near.Rider.SpawnTick);
+        Check.That(firstFrame is >= 1 and <= 4, $"It looks two frames after it became idle and fires at once (first shot {firstFrame} frames after its creation).");
+        Check.That(near.Rider.ContainedBy == near.Container.Id && (near.World.DisabledFlagsOf(near.Rider) & DisabledMask.Held) != 0, "It fires from inside, held by the building.");
+        Check.That(Hurt(near.Victim) > Fixed.FromInt(12 * shots) && Hurt(near.Victim) < Fixed.FromInt(13 * shots),
+            $"Its shots carry the garrisoned damage, 125 % of 10 ({Hurt(near.Victim)} from {shots} shots).");
+
+        var edge = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 150);
+        Check.That(FcRun(edge.World, edge.Rider, 60).Shots > 0, "An enemy 150 away - beyond 100 and beyond 133 from the centre, within 133 of the building's 30-unit circle - is fired at.");
+        var beyond = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 170);
+        Check.That(FcRun(beyond.World, beyond.Rider, 60).Shots == 0 && !beyond.World.AcquiredVictimOf(beyond.Rider).IsValid, "One 170 away is out of reach.");
+        var station = FcScene(TestRate.Default, "FcFireBase", "FcRifleman", 150);
+        Check.That(FcRun(station.World, station.Rider, 60).Shots == 0, "A fire base (no enclosing container) measures from its centre: 150 is beyond 133.");
+        var stationNear = FcScene(TestRate.Default, "FcFireBase", "FcRifleman", 120);
+        Check.That(FcRun(stationNear.World, stationNear.Rider, 60).Shots > 0, "Within 133 of its centre its rider fires.");
+
+        var computer = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 80, "FcRunner", computer: true);
+        Check.That(FcRun(computer.World, computer.Rider, 30).Shots > 0, "Setup: the computer player's rider fires at the runner.");
+        computer.Feeder.SetMoveTarget(2, computer.Victim.Id.Value, 600, 0);
+        FcRun(computer.World, computer.Rider, 150);
+        Check.That(computer.Rider.ContainedBy == computer.Container.Id && !computer.Rider.HasMoveTarget && !computer.World.AcquiredVictimOf(computer.Rider).IsValid,
+            "When its victim runs out of range a computer player's rider stays inside and drops it.");
+
+        Check.That(near.World.AcquiredVictimOf(near.Rider) == near.Victim.Id, "Setup: the rifleman still attacks.");
+        near.Feeder.ExitContainer(1, near.Rider.Id.Value);
+        near.World.Step();
+        Check.That(!near.Rider.ContainedBy.IsValid && !near.World.AcquiredVictimOf(near.Rider).IsValid, "Leaving the building ends its attack.");
+    }
+
+    /// <summary>
+    /// Step 5: a Humvee-like transport with <c>PassengersAllowedToFire</c> lets its rifleman fire; a transport without the flag and a tunnel do not; an Overlord's portable structure
+    /// (a gattling cannon) fires from its back.
+    /// </summary>
+    public static void FireFromContainersTransportsFire()
+    {
+        var humvee = FcScene(TestRate.Default, "FcHumvee", "FcRifleman", 80);
+        Check.That(FcRun(humvee.World, humvee.Rider, 60).Shots > 0, "A rifleman in a Humvee fires.");
+        var truck = FcScene(TestRate.Default, "FcTruck", "FcRifleman", 80);
+        Check.That(FcRun(truck.World, truck.Rider, 60).Shots == 0, "A rifleman in a transport without the flag does not.");
+        var overlord = FcScene(TestRate.Default, "FcOverlord", "FcGattling", 120);
+        Check.That(FcRun(overlord.World, overlord.Rider, 60).Shots > 0, "The Overlord's gattling cannon fires.");
+
+        var fixture = new SyntheticFixture(TestRate.Default, files: FireFromContainerFiles());
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var feeder = new Feeder(world);
+        var tunnel = FcSpawn(world, feeder, "FcTunnel", 1, 0, 0);
+        for (var step = 0; step < world.Frames(2); step++) world.Step();
+        var rider = FcInside(world, feeder, "FcRifleman", 1, tunnel);
+        FcSpawn(world, feeder, "FcTarget", 2, 60, 0);
+        Check.That(FcRun(world, rider, 60).Shots == 0, "A rifleman in a tunnel does not fire.");
+    }
+
+    /// <summary>
+    /// Step 5 across rates and a save: the same garrison fight (the enemy at the building's edge range) has its first shot in the same original frame, the same number of shots and the
+    /// same damage at 30, 60 and 120 Hz; a snapshot in the middle of the fight continues to the same hashes and shots.
+    /// </summary>
+    public static void FireFromContainersRatesAndSnapshot()
+    {
+        var results = new List<(long Frame, int Shots, Fixed Hurt)>();
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var scene = FcScene(rate, "FcBunker", "FcRifleman", 150);
+            var (shots, first) = FcRun(scene.World, scene.Rider, 90);
+            Check.That(first >= 0, $"At {rate.TicksPerSecond} Hz the rider fires.");
+            // Counted from the rider's creation: the scene is made in the first tick of every world, which lies at another game time at each rate.
+            results.Add((scene.World.InFrames(first - scene.Rider.SpawnTick), shots, Hurt(scene.Victim)));
+        }
+        Check.That(results.All(value => value == results[0]),
+            $"The first shot frame, the shots and the damage are the same at 30, 60 and 120 Hz ({string.Join("; ", results.Select(value => $"frame {value.Frame}, {value.Shots} shots, {value.Hurt}"))}).");
+
+        var live = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 80);
+        Check.That(FcRun(live.World, live.Rider, 20).Shots > 0, "Setup: the fight is on.");
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(live.World), live.Fixture.Templates, live.Fixture.Fingerprint);
+        Check.That(restored.StateHash == live.World.StateHash, "The garrison fight restores to the same hash.");
+        var restoredRider = restored.FindEntity(live.Rider.Id)!;
+        int liveShots = 0, restoredShots = 0;
+        for (var step = 0; step < live.World.Frames(60); step++)
+        {
+            var a = live.World.Step();
+            var b = restored.Step();
+            Check.That(a.StateHash == b.StateHash, $"Step {step} after the restore has the same hash.");
+            liveShots += ShotsOf(a, live.Rider);
+            restoredShots += ShotsOf(b, restoredRider);
+        }
+        Check.That(liveShots > 0 && liveShots == restoredShots, $"Both go on firing alike ({liveShots} and {restoredShots} shots).");
     }
 }

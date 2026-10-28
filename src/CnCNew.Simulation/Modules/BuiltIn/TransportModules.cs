@@ -466,6 +466,7 @@ public sealed class HelixContain(HelixContainData data) : TransportContain(data.
             _portable = EntityId.Invalid;
             candidate.ContainedBy = EntityId.Invalid;
             world.MarkDirty(candidate);
+            if (candidate.Acquisition is { Victim.IsValid: true }) world.EndAttack(candidate);
             return;
         }
         base.Remove(world, candidate, positionAtContainer);

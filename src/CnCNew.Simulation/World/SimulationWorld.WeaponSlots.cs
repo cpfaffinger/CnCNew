@@ -134,26 +134,31 @@ public sealed partial class SimulationWorld
     private bool CanTarget(Entity source, WeaponInfo weapon, Entity victim, int victimAntiMask)
         => (weapon.AntiMask & victimAntiMask) != 0 && (EstimateDamage(source, weapon, victim) > Fixed.Zero || weapon.DamageType == DamageTypes.Unresistable);
 
-    /// <summary><c>Weapon::isWithinAttackRange</c> with the center distance this world uses everywhere: within the attack range and not inside the minimum attack range.</summary>
+    /// <summary>
+    /// <c>Weapon::isWithinAttackRange</c> with the center distance this world uses everywhere: within the attack range and not inside the minimum attack range. A contained rider measures
+    /// from its container (<see cref="FiringContainerOf"/>, F-60): an enclosing garrison's riders from its bounding circle, so both limits are moved out by its radius.
+    /// </summary>
     private bool WithinWeaponRange(Entity source, WeaponInfo weapon, Entity victim)
     {
-        var dx = victim.X - source.X;
-        var dy = victim.Y - source.Y;
+        var shooter = FiringContainerOf(source) ?? source;
+        var dx = victim.X - shooter.X;
+        var dy = victim.Y - shooter.Y;
         if (_firstFrameTicks != TickOrder.Next)
         {
             // Above 30 Hz both objects are read where the logic frame of the original they have begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the
             // answer is the one the 30 Hz step gives after the whole step of both, in every tick of that frame, instead of flipping somewhere inside it.
             var (victimX, victimY, _) = victim.FrameEnd(_tick);
-            var (sourceX, sourceY, _) = source.FrameEnd(_tick);
+            var (sourceX, sourceY, _) = shooter.FrameEnd(_tick);
             dx = victimX - sourceX;
             dy = victimY - sourceY;
         }
         var distanceSquared = dx * dx + dy * dy;
+        var edge = shooter == source ? Fixed.Zero : FiringEdgeOf(shooter);
         var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
-        if (!SquaredReach.Of(reach).Contains(distanceSquared)) return false;
+        if (!SquaredReach.Of(reach + edge).Contains(distanceSquared)) return false;
         var minimum = weapon.MinimumAttackRange;
         // Weapon.cpp: "distSqr < minAttackRangeSqr - 0.5f" (the shipped, non-RATIONALIZE_ATTACK_RANGE build).
-        return minimum <= Fixed.Zero || !SquaredReach.ContainsStrictly(minimum, distanceSquared, Fixed.FromDecimal(0.5m));
+        return minimum <= Fixed.Zero || !SquaredReach.ContainsStrictly(minimum + edge, distanceSquared, Fixed.FromDecimal(0.5m));
     }
 
     private static bool IsPreferredAgainst(WeaponSetInfo set, int slot, Entity victim)

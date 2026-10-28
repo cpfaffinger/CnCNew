@@ -245,6 +245,19 @@ garrisons keep their hashes.
    Overlord gattling/Helix upgrades or loaded Humvees/Battle Buses (the built-in `SkirmishAi` does not garrison; whether it loads transports or buys the gattling was
    not determined) - its own manifest commit; reference match driver seed re-checked.
 
+   **Built (28 October 2026) without steps 1 and 4 - a named stand-in.** The port has no fire points and does not move the riders of a moving transport, so a rider's
+   range, its search for victims (origin and radius), its view and the point its shot leaves from are measured from its container
+   (`SimulationWorld.FiringContainerOf`): for an enclosing garrison (`IsEnclosingContainer`, default yes) from the point of the building's bounding circle nearest the
+   victim - both limits of `WithinWeaponRange` move out by the radius, the shot leaves from that point -, for every other container (a fire base, a transport, an Overlord,
+   a Helix) from the container's position, read where its begun frame ends above 30 Hz. Consequences against the original: a garrisoned rider's range is a circle around the
+   building's circle instead of the union of up to 40 fire points; there is no occupancy of points, so the quirk (e) - a full building whose new rider finds no free point -
+   does not exist, and riders do not change points; scenes (a) "from the east point" and "changes point" are not tested. Mood: a contained computer unit does not sleep
+   (`getAdjustedVisionRangeForObject` gives it its weapon range), but **Passive still holds** - `getNextMoodTarget`'s own Passive test (it answers the last attacker, which the
+   port does not model and treats as "none") does not look at containment, so the port keeps "none" for a passive contained unit too; the stealth veto is lifted when the
+   container lets its riders fire (asked without an id, as the original). A rider that leaves ends its attack (`ContainModuleBase.Remove`, `HelixContain.Remove`). Not built
+   with this step: `WeaponBonusPassedToPassengers` of the Battle Bus (step 3's second half), orders through the container (step 6), `ArmedRidersUpgradeMyWeaponSet` (step 7),
+   the presentation (step 8), and the garrison's own update (`GarrisonContain` still sleeps without healing - nothing of its per-frame matching exists to wake for).
+
 6. **Orders through the container.** A `FireWeaponCommand` (and force-attack/attack-position) whose source is a container with allowed riders forwards to every rider
    that can attack the target (`AIGroup::groupAttackObject`, `TransportAIUpdate`), as ordered attacks; the Chinook's 10-frame re-issue. Test: a garrisoned building ordered
    to fire at a target in range of a point: the riders fire; out of range: no rider is ordered. The client side (cursor on a garrisoned building) follows.
