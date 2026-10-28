@@ -11,6 +11,15 @@ namespace CnCNew.Simulation.World;
 /// </summary>
 public sealed partial class SimulationWorld
 {
+    /// <summary>
+    /// <c>Weapon::computeBonus</c>'s conditions: the object's own, and those of the container it rides in when that passes its bonus on (<c>WeaponBonusPassedToPassengers</c>, the Battle
+    /// Bus; the container's own conditions, not its container's). Every weapon calculation of a shooter - range, damage, reload, pre-attack delay - reads these.
+    /// </summary>
+    public uint WeaponBonusOf(Entity source)
+        => source.ContainedBy.IsValid && FindEntity(source.ContainedBy) is { Container.PassesWeaponBonus: true } container
+            ? source.WeaponBonusConditions | container.WeaponBonusConditions
+            : source.WeaponBonusConditions;
+
     /// <summary><c>HelixContain::redeployOccupants</c>: its riders stand 8 above it.</summary>
     private static readonly Fixed HelixRiderHeight = Fixed.FromInt(8);
 

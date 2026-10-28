@@ -21,7 +21,7 @@ public sealed partial class SimulationWorld
     /// shockwaves, damage status, historic damage.
     /// </summary>
     public Fixed DealWeaponDamage(Entity source, WeaponInfo weapon, Entity? primaryVictim, Fixed x, Fixed y, Fixed z)
-        => DealDamageCore(source.Id, source, EntityId.Invalid, source.Id, source.WeaponBonusConditions, weapon, primaryVictim, x, y, z);
+        => DealDamageCore(source.Id, source, EntityId.Invalid, source.Id, WeaponBonusOf(source), weapon, primaryVictim, x, y, z);
 
     /// <summary>
     /// The shared body of <c>dealDamageInternal</c>. <paramref name="sourceId"/> must be valid (the reference returns without one);

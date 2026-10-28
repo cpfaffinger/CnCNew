@@ -466,7 +466,7 @@ public sealed partial class SimulationWorld
         if (info.GroundUnitPitch > Fixed.Zero && (victim.Template.IsKindOf("IMMOBILE") || (victim.HasMoveTarget && !IsSignificantlyAboveTerrainAtFrameEnd(victim))))
         {
             var weaponIndex = WeaponIndexIn(source, slot);
-            var range = weaponIndex >= 0 ? _templates.Weapons[weaponIndex].RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions) : Fixed.One;
+            var range = weaponIndex >= 0 ? _templates.Weapons[weaponIndex].RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source)) : Fixed.One;
             if (range < Fixed.One) range = Fixed.One;
             var distance = Fixed.Sqrt(dx * dx + dy * dy + dz * dz);
             desired = Fixed.Max(actual + info.GroundUnitPitch * (distance / range), info.MinPitch);

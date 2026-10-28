@@ -181,7 +181,7 @@ public sealed partial class SimulationWorld
         // Weapon::getPreAttackDelay: "Look for a reason to return zero and have no delay."
         if (weapon.PreAttackType == WeaponPrefire.PerClip && weapon.ClipSize > 0 && source.ClipOf(slot) is var clip && clip != 0 && clip < weapon.ClipSize) return true;
         if (weapon.PreAttackType == WeaponPrefire.PerAttack && state is not null && state.Victim == victim.Id && state.Shots > 0) return true;
-        var delay = weapon.PreAttackDelayWith(Time, _templates.GlobalWeaponBonus, source.WeaponBonusConditions);
+        var delay = weapon.PreAttackDelayWith(Time, _templates.GlobalWeaponBonus, WeaponBonusOf(source));
         if (delay <= 0) return true;
 
         state ??= source.Firing = new FiringState();

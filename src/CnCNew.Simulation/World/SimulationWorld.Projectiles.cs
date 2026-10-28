@@ -51,7 +51,7 @@ public sealed partial class SimulationWorld
         // A contained rider fires from its fire point or station in a garrison, from its transport's fire point in any other (ShooterPosition, F-60).
         var contained = source.ContainedBy.IsValid;
         if (contained) (sourceX, sourceY, sourceZ) = FiringPointOf(source);
-        var conditions = source.WeaponBonusConditions;
+        var conditions = WeaponBonusOf(source);
         // Weapon::privateFireWeapon starts with this: a networked weapon asks its neighbours to join in.
         if (weapon.RequestAssistRange > Fixed.Zero && victim is not null) ProcessRequestAssistance(source, weapon, victim);
 

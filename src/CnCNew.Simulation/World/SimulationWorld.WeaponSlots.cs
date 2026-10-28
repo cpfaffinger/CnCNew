@@ -83,7 +83,7 @@ public sealed partial class SimulationWorld
         var range = Fixed.Zero;
         if (ActiveWeaponSet(entity) is not { } set) return range;
         foreach (var index in set.Weapons)
-            if (index >= 0) range = Fixed.Max(range, _templates.Weapons[index].RangeWith(_templates.GlobalWeaponBonus, entity.WeaponBonusConditions));
+            if (index >= 0) range = Fixed.Max(range, _templates.Weapons[index].RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(entity)));
         return range;
     }
 
@@ -126,7 +126,7 @@ public sealed partial class SimulationWorld
         if (weapon.DamageType == SniperDamageType && template.IsKindOf("STRUCTURE") && victim.Modules.OfType<Modules.IContainerModule>().FirstOrDefault() is { ContainCount: 0 }) return Fixed.Zero;
         if (weapon.DamageType == DisarmDamageType) return template.IsKindOf("MINE") || template.IsKindOf("BOOBY_TRAP") || template.IsKindOf("DEMOTRAP") ? Fixed.One : Fixed.Zero;
         if (weapon.DamageType == DeployDamageType && !IsSignificantlyAboveTerrainAtFrameEnd(victim)) return Fixed.One;
-        var amount = weapon.DamageWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions, weapon.PrimaryDamage);
+        var amount = weapon.DamageWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source), weapon.PrimaryDamage);
         return ActiveArmor(victim).Adjust(weapon.DamageType, amount);
     }
 
@@ -147,7 +147,7 @@ public sealed partial class SimulationWorld
         var dx = victimX - sourceX;
         var dy = victimY - sourceY;
         var distanceSquared = dx * dx + dy * dy;
-        var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, source.WeaponBonusConditions);
+        var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source));
         if (!SquaredReach.Of(reach).Contains(distanceSquared)) return false;
         var minimum = weapon.MinimumAttackRange;
         // Weapon.cpp: "distSqr < minAttackRangeSqr - 0.5f" (the shipped, non-RATIONALIZE_ATTACK_RANGE build).
@@ -331,7 +331,7 @@ public sealed partial class SimulationWorld
         var set = ActiveWeaponSet(source)!;
         var weapon = _templates.Weapons[set.Weapons[slot]];
         var bonuses = _templates.GlobalWeaponBonus;
-        var conditions = source.WeaponBonusConditions;
+        var conditions = WeaponBonusOf(source);
         var clip = source.ClipOf(slot);
         if (clip == 0) clip = ClipCapacity(weapon);
         source.LastFireTick = _tick;

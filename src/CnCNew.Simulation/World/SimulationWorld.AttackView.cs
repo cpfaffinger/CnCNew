@@ -146,7 +146,7 @@ public sealed partial class SimulationWorld
         var choice = ChooseWeapon(unit, victim, FireOrigin.Ai);
         if (choice.Slot < 0 || ActiveWeaponSet(unit) is not { } set || !set.HasWeapon(choice.Slot)) return null;
         var weapon = _templates.Weapons[set.Weapons[choice.Slot]];
-        var range = weapon.RangeWith(_templates.GlobalWeaponBonus, unit.WeaponBonusConditions);
+        var range = weapon.RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(unit));
         var far = SquaredReach.Of(range - GoalRangeMargin);
         var hasNear = weapon.MinimumAttackRange > Fixed.Zero;
         var near = SquaredReach.Of(weapon.MinimumAttackRange + GoalRangeMargin);

@@ -771,6 +771,9 @@ public interface IContainerModule
     /// </summary>
     bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => false;
 
+    /// <summary><c>OpenContain::isWeaponBonusPassedToPassengers</c>: the container's weapon bonus conditions are added to its riders' (<c>Weapon::computeBonus</c>).</summary>
+    bool PassesWeaponBonus => false;
+
     /// <summary><c>ContainModuleInterface::isSpecialOverlordStyleContainer</c>: true for <c>OverlordContain</c> and <c>HelixContain</c>, whose rider's own transport asks them.</summary>
     bool IsSpecialOverlordStyleContainer => false;
 }

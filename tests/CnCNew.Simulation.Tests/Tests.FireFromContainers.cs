@@ -22,6 +22,7 @@ static partial class Tests
           MaxTunnelCapacity = 4
           WeaponBonus = GARRISONED RANGE 133%
           WeaponBonus = GARRISONED DAMAGE 125%
+          WeaponBonus = VETERAN RANGE 120%
         End
         """,
         ["Data/INI/Object/FireFromContainerFixture.ini"] = """
@@ -140,6 +141,27 @@ static partial class Tests
           Behavior = TransportContain Transport01
             Slots = 2
             PassengersAllowedToFire = Yes
+          End
+        End
+        Object FcBus
+          KindOf = SELECTABLE VEHICLE TRANSPORT
+          Geometry = CYLINDER
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 10.0
+          GeometryHeight = 10.0
+          TransportSlotCount = 3
+          VisionRange = 300.0
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = TransportAIUpdate AI01
+          End
+          Behavior = TransportContain Transport01
+            Slots = 2
+            PassengersAllowedToFire = Yes
+            WeaponBonusPassedToPassengers = Yes
           End
         End
         Object FcTruck
@@ -552,6 +574,23 @@ static partial class Tests
         var rider = FcInside(world, feeder, "FcRifleman", 1, tunnel);
         FcSpawn(world, feeder, "FcTarget", 2, 60, 0);
         Check.That(FcRun(world, rider, 60).Shots == 0, "A rifleman in a tunnel does not fire.");
+    }
+
+    /// <summary>
+    /// Step 3, the passed bonus (<c>Weapon::computeBonus</c>, <c>WeaponBonusPassedToPassengers</c>): a veteran bus passes its <c>VETERAN</c> condition to its rider - range 120 instead of 100 -
+    /// and the rider fires at an enemy 115 away; a veteran Humvee passes nothing. The rider's own conditions stay its own.
+    /// </summary>
+    public static void FireFromContainersPassedBonus()
+    {
+        var bus = FcScene(TestRate.Default, "FcBus", "FcRifleman", 115);
+        Check.That(bus.World.MaxWeaponRange(bus.Rider) == Fixed.FromInt(100), $"Setup: a rider of a bus without a bonus has range 100 ({bus.World.MaxWeaponRange(bus.Rider)}).");
+        bus.World.SetVeterancy(bus.Container.Id, 1);
+        Check.That((bus.World.MaxWeaponRange(bus.Rider) - Fixed.FromInt(120)).Abs() < Fixed.FromDecimal(0.001m) && bus.World.WeaponBonusOf(bus.Rider) != bus.Rider.WeaponBonusConditions,
+            $"A veteran bus passes VETERAN to its rider: range 120 ({bus.World.MaxWeaponRange(bus.Rider)}), its own conditions unchanged.");
+        Check.That(FcRun(bus.World, bus.Rider, 60).Shots > 0, "The rider fires at an enemy 115 away.");
+        var humvee = FcScene(TestRate.Default, "FcHumvee", "FcRifleman", 115);
+        humvee.World.SetVeterancy(humvee.Container.Id, 1);
+        Check.That(humvee.World.MaxWeaponRange(humvee.Rider) == Fixed.FromInt(100) && FcRun(humvee.World, humvee.Rider, 60).Shots == 0, "A veteran Humvee passes nothing: 115 is out of reach.");
     }
 
     /// <summary>

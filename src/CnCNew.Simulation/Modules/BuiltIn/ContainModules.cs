@@ -139,6 +139,9 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     /// </summary>
     public virtual bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => PassengersMayFire && OuterLetsFire(world, Entity);
 
+    /// <inheritdoc cref="IContainerModule.PassesWeaponBonus"/>
+    public virtual bool PassesWeaponBonus => false;
+
     /// <summary>The part of <c>OpenContain::isPassengerAllowedToFire</c> after the flag: a container that rides in another one passes the question on, without an id.</summary>
     internal static bool OuterLetsFire(IWorldServices world, Entity container)
         => !container.ContainedBy.IsValid || (world.FindEntity(container.ContainedBy)?.Container is { } outer && outer.IsPassengerAllowedToFire(world, null));
@@ -764,6 +767,9 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
     /// <c>TransportContain::isPassengerAllowedToFire</c>: only infantry fires ("no vehicles"); a transport that rides an Overlord-style container (the battle bunker on an Overlord)
     /// lets that container decide with the rider; otherwise the flag (<c>OpenContain::isPassengerAllowedToFire()</c>, without the id).
     /// </summary>
+    /// <inheritdoc cref="IContainerModule.PassesWeaponBonus"/>
+    public override bool PassesWeaponBonus => data.WeaponBonusPassedToPassengers;
+
     public override bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider)
     {
         if (rider is not null && !rider.Template.IsKindOf("INFANTRY")) return false;
