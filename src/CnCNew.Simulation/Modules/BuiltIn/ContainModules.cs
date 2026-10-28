@@ -119,10 +119,19 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     public virtual bool HoldsRiders => true;
 
     /// <summary>
-    /// <c>OpenContain::m_passengersAllowedToFire</c> (<c>PassengersAllowedToFire</c> of the data, switched on by <c>PassengersFireUpgrade</c>). Recorded state: firing from inside a container
-    /// is not simulated anywhere yet, so nothing reads the flag; it is saved only when set.
+    /// The switched part of <c>OpenContain::m_passengersAllowedToFire</c>: set by <c>PassengersFireUpgrade</c> (never cleared, as in the original) and, from their own data, by
+    /// <c>InternetHackContain</c>, <c>OverlordContain</c> and <c>RiderChangeContain</c>. Saved only when set. The flag the container has is <see cref="PassengersMayFire"/>.
     /// </summary>
     public bool PassengersAllowedToFire { get; set; }
+
+    /// <summary>The value of <c>PassengersAllowedToFire</c> in the container's data (<c>OpenContain</c>'s constructor copies it into <c>m_passengersAllowedToFire</c>).</summary>
+    protected virtual bool PassengersFireByData => false;
+
+    /// <summary>
+    /// <c>OpenContain::m_passengersAllowedToFire</c>: the data's value, or switched on since (<see cref="PassengersAllowedToFire"/>). The data's part is not state: the flag is only ever
+    /// switched on, so the two together are the original's one flag.
+    /// </summary>
+    public bool PassengersMayFire => PassengersAllowedToFire || PassengersFireByData;
 
     public abstract bool IsValidContainerFor(IWorldServices world, Entity candidate, bool checkCapacity);
 
@@ -248,11 +257,20 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
 /// </summary>
 public sealed record GarrisonContainData(OpenContainData Base, int ContainMax, bool HealObjects, long TimeForFullHealTicks) : ModuleData
 {
+    /// <summary>
+    /// <c>IsEnclosingContainer</c> (default yes, GarrisonContain.h): the riders are inside the walls. No on the four fire bases, whose riders sit on the building's stations,
+    /// visible. Read for where a rider fires from (F-60).
+    /// </summary>
+    public bool IsEnclosingContainer { get; init; } = true;
+
     public static GarrisonContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "ContainMax", -1)),
         ModuleConfigReader.Bool(configuration, "HealObjects", false),
-        ModuleConfigReader.Ticks(configuration, "TimeForFullHeal", 0));
+        ModuleConfigReader.Ticks(configuration, "TimeForFullHeal", 0))
+    {
+        IsEnclosingContainer = ModuleConfigReader.Bool(configuration, "IsEnclosingContainer", true),
+    };
 }
 
 /// <summary>
@@ -272,6 +290,9 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 
     public override string ModuleName => "GarrisonContain";
     public override int ContainMax => data.ContainMax;
+
+    /// <summary><c>IsEnclosingContainer</c> of the data: the riders are inside the walls (every garrison but the four fire bases).</summary>
+    public bool IsEnclosing => data.IsEnclosingContainer;
 
     public override void OnSpawn(IWorldServices world)
         => NextWake = data.HealObjects ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
@@ -470,6 +491,9 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
     /// </summary>
     public bool ScatterNearbyOnExit { get; init; } = true;
 
+    /// <summary><c>PassengersAllowedToFire</c> (default no, <c>OpenContainModuleData</c>): the riders may fire from inside (F-60; a Humvee, a Battle Bus, a Listening Outpost, the Spectre).</summary>
+    public bool PassengersAllowedToFire { get; init; }
+
     public static TransportContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "Slots", 0)),
@@ -479,6 +503,7 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
         ExitDelayTicks = ModuleConfigReader.Ticks(configuration, "ExitDelay", 0),
         ScatterNearbyOnExit = ModuleConfigReader.Bool(configuration, "ScatterNearbyOnExit", true),
         DestroyRidersWhoAreNotFreeToExit = ModuleConfigReader.Bool(configuration, "DestroyRidersWhoAreNotFreeToExit", false),
+        PassengersAllowedToFire = ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
     };
 }
 
@@ -500,6 +525,9 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
 
     public override string ModuleName => "TransportContain";
     public override int ContainMax => data.Slots;
+
+    /// <inheritdoc/>
+    protected override bool PassengersFireByData => data.PassengersAllowedToFire;
 
     public override void OnSpawn(IWorldServices world)
         => NextWake = data.HealthRegenPercentPerSecond > Fixed.Zero ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;

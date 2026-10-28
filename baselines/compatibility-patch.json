@@ -2722,15 +2722,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GarrisonContain/IsEnclosingContainer",
-      "count": 4,
-      "owners": [
-        "GarrisonContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GarrisonContain/MobileGarrison",
       "count": 3,
       "owners": [
@@ -2821,15 +2812,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "HelixContain/PassengersAllowedToFire",
-      "count": 13,
-      "owners": [
-        "HelixContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "HelixContain/ShouldDrawPips",
       "count": 3,
       "owners": [
@@ -2840,15 +2822,6 @@
     {
       "category": "deferred-field",
       "name": "InternetHackContain/GoAggressiveOnExit",
-      "count": 4,
-      "owners": [
-        "InternetHackContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "InternetHackContain/PassengersAllowedToFire",
       "count": 4,
       "owners": [
         "InternetHackContain"
@@ -3637,15 +3610,6 @@
         "Object"
       ],
       "plannedTarget": "phase-5-object-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "OverlordContain/PassengersAllowedToFire",
-      "count": 10,
-      "owners": [
-        "OverlordContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
     },
     {
       "category": "deferred-field",
@@ -4884,15 +4848,6 @@
       "category": "deferred-field",
       "name": "TransportContain/OrientLikeContainerOnExit",
       "count": 24,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "TransportContain/PassengersAllowedToFire",
-      "count": 26,
       "owners": [
         "TransportContain"
       ],

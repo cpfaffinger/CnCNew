@@ -501,9 +501,15 @@ public sealed class HelixContain(HelixContainData data) : TransportContain(data.
 /// </summary>
 public sealed record TunnelContainData(DieMuxData DieMux, Fixed TicksForFullHeal) : ModuleData
 {
+    /// <summary><c>PassengersAllowedToFire</c> of <c>OpenContainModuleData</c> (default no; no shipped tunnel sets it): the tunnel has no rule of its own, the flag decides (F-60).</summary>
+    public bool PassengersAllowedToFire { get; init; }
+
     public static TunnelContainData Parse(RatedModuleConfiguration configuration) => new(
         DieMuxData.Parse(configuration),
-        ModuleConfigReader.Find(configuration, "TimeForFullHeal")?.Value.Value is Data.Definitions.GameTime time ? SimulationRate.Original.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero);
+        ModuleConfigReader.Find(configuration, "TimeForFullHeal")?.Value.Value is Data.Definitions.GameTime time ? SimulationRate.Original.Time.DurationMillisecondsToFixedTicks(time.Milliseconds) : Fixed.Zero)
+    {
+        PassengersAllowedToFire = ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
+    };
 }
 
 /// <summary>
