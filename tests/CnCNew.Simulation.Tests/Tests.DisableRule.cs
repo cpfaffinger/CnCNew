@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.World;
 
@@ -320,5 +321,39 @@ static partial class Tests
         Check.That(Built() - full == 30 * frame, $"Without power at all a 30-frame unit takes 60 frames ({Built()} against {full} ticks).");
         Check.That(Built("TenPlant", "TwentyConsumer") - full == 30 * frame, "With half the supply it takes 60 frames.");
         Check.That(Built("TenPlant", "ElevenConsumer") - full == 7 * frame, "With 10 of 11 it takes 37 frames (the maximum speed 0.8 below full supply, truncated).");
+    }
+
+    /// <summary>
+    /// F-16: <c>DozerAIUpdate</c> adds <c>100 / calcTimeToBuild</c> to the construction percent in every frame of work, so a structure builds under the player's power as a unit
+    /// does: a player without production and consumption builds a two-second plant in 120 frames of work instead of 60. The port built at full speed always.
+    /// </summary>
+    public static void LowPowerSlowsConstruction()
+    {
+        var files = new Dictionary<string, string>(ConstructionFiles())
+        {
+            ["Data/INI/GameData.ini"] = "GameData\n  SellPercentage = 50%\n  MinLowEnergyProductionSpeed = 0.5\n  MaxLowEnergyProductionSpeed = 0.8\n  LowEnergyPenaltyModifier = 1.0\nEnd\n",
+        };
+        var fixture = new SyntheticFixture(TestRate.Default, files: files);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, ""), fixture.Templates);
+        var feeder = new Feeder(world);
+        feeder.GiveMoney(1, 1000);
+        world.Step();
+        feeder.Spawn(1, "Dozer", x: 0, y: 0);
+        world.Step();
+        var dozer = world.Entities.Single(entity => entity.Template.Name == "Dozer");
+        Check.That(feeder.Construct(1, dozer.Id.Value, "Plant", 60, 0).Accepted, "Setup: the dozer is ordered to build the plant.");
+        world.Step();
+        var site = world.Entities.Single(entity => entity.Template.Name == "Plant");
+        var work = 0;
+        var done = false;
+        for (var tick = 0; tick < world.Frames(400) && !done; tick++)
+        {
+            var before = site.ConstructionWork;
+            world.Step();
+            if (site.ConstructionWork > before) work++;
+            done = !site.HasStatus(ObjectStatusBits.UnderConstruction);
+        }
+        Check.That(done && work == world.Frames(119) + 1, $"Without power the two-second plant takes 120 frames of work, the first step counting a whole frame ({work} steps).");
+        Check.That(site.Body!.Health == site.Body.MaxHealth, "The finished structure has exactly its maximum health.");
     }
 }

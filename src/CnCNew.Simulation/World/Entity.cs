@@ -271,6 +271,18 @@ public sealed class Entity
     /// <summary>Build ticks already invested while the object is <c>UNDER_CONSTRUCTION</c> (<c>Object::m_constructionPercent</c>, in ticks of its build time).</summary>
     public int ConstructionWork { get; internal set; }
 
+    /// <summary>
+    /// <c>Object::m_constructionPercent</c> as a share of <see cref="ConstructionProgressScale"/>: every step of builder work adds its share of the build time the player's power
+    /// gives at that step (<c>DozerAIUpdate</c>: <c>100 / calcTimeToBuild</c> per frame), rounded up.
+    /// </summary>
+    public long ConstructionProgress { get; internal set; }
+
+    /// <summary>The whole of <see cref="ConstructionProgress"/> (2^40: the rounding of the longest build stays far below one step).</summary>
+    public const long ConstructionProgressScale = 1L << 40;
+
+    /// <summary>How far the construction is, 0 to 1, for readers outside the simulation.</summary>
+    public Fixed ConstructionShare => Fixed.FromRaw(Math.Min(ConstructionProgress, ConstructionProgressScale) / (ConstructionProgressScale / Fixed.One.Raw));
+
     /// <summary>The dozer or worker that placed this construction site (<c>Object::m_builderID</c>); invalid for everything else.</summary>
     public EntityId BuilderId { get; internal set; } = EntityId.Invalid;
 
@@ -368,6 +380,7 @@ public sealed class Entity
         writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);
         writer.Bool("hasPlayerUpgradeWeapon", HasPlayerUpgradeWeapon);
         writer.Int("constructionWork", ConstructionWork);
+        if (ConstructionProgress != 0) writer.Int("constructionProgress", ConstructionProgress);
         writer.UInt("builder", BuilderId.Value);
         writer.Int("sellCompleteTick", SellCompleteTick);
         if (ShroudScalar != Fixed.One) writer.Fixed("shroudScalar", ShroudScalar);

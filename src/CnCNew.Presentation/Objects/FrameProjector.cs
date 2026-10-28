@@ -312,7 +312,7 @@ public sealed class FrameProjector
         conditions = conditions.Union(_structures.Update(entity, world));
         var health = entity.Body is { } body && body.MaxHealth > Fixed.Zero ? ToFloat(body.Health) / ToFloat(body.MaxHealth) : 1f;
         var construction = entity.HasStatus(ObjectStatusBits.UnderConstruction)
-            ? Math.Min(1f, entity.ConstructionWork / (float)Math.Max(entity.Template.BuildTicks, 1))
+            ? ToFloat(entity.ConstructionShare)
             : 1f;
         // The distance rolled along the heading, signed (backwards is negative): a wheel rotates by TireRotationMultiplier times this (W3DTruckDraw accumulates multiplier * speed per frame).
         var position = new Vector3(ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z));

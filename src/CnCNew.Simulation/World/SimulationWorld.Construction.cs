@@ -233,35 +233,38 @@ public sealed partial class SimulationWorld
         => !producer.HasStatus(ObjectStatusBits.UnderConstruction) && !producer.HasStatus(ObjectStatusBits.Sold);
 
     /// <summary>
-    /// One tick of builder work (<c>DozerAIUpdate</c> calling <c>Object::setConstructionPercent</c>): health rises linearly from one point to
-    /// the maximum, completing the structure after <c>BuildTime</c> ticks of work. True once the structure is complete.
+    /// One tick of builder work (<c>DozerAIUpdate</c> calling <c>Object::setConstructionPercent</c>): the construction moves on by the step's share of the build time the player's
+    /// power gives now (<c>calcTimeToBuild</c>, <see cref="BuildTicksUnderPower"/>), health rises with it linearly from one point to the maximum, and the structure is complete
+    /// when the shares make the whole. True once the structure is complete.
     /// </summary>
     public bool AdvanceConstruction(Entity site)
     {
         if (!site.HasStatus(ObjectStatusBits.UnderConstruction)) return true;
-        var total = Math.Max(site.Template.BuildTicks, _minimumBuildTicks);
-        var before = Math.Min(site.ConstructionWork, total);
+        var total = Math.Max(BuildTicksUnderPower(site.Owner, site.Template.BuildTicks), _minimumBuildTicks);
+        var before = Math.Min(site.ConstructionProgress, Entity.ConstructionProgressScale);
         // The first step of work stands for a whole logic frame of the original (at 30 Hz it is one): the structure is complete BuildTime less one frame after the
         // work began, at every rate, not BuildTime less one tick. Every later step is one tick of work.
-        site.ConstructionWork += checked((int)(site.ConstructionWork == 0 ? Time.TicksPerOriginalFrame : TickOrder.Next));
-        var work = Math.Min(site.ConstructionWork, total);
+        var step = site.ConstructionWork == 0 ? Time.TicksPerOriginalFrame : TickOrder.Next;
+        site.ConstructionWork += checked((int)step);
+        site.ConstructionProgress += (long)(((Int128)step * Entity.ConstructionProgressScale + total - 1) / total);
+        var progress = Math.Min(site.ConstructionProgress, Entity.ConstructionProgressScale);
         if (site.Body is IConstructionBody body)
         {
-            var delta = Fixed.FromRaw(ConstructionHealthTarget(site, work, total) - ConstructionHealthTarget(site, before, total));
+            var delta = Fixed.FromRaw(ConstructionHealthTarget(site, progress) - ConstructionHealthTarget(site, before));
             if (delta > Fixed.Zero) body.ChangeHealthForConstruction(this, delta);
         }
         MarkDirty(site);
-        if (site.ConstructionWork < total) return false;
+        if (site.ConstructionProgress < Entity.ConstructionProgressScale) return false;
         CompleteConstruction(site);
         return true;
     }
 
-    private static long ConstructionHealthTarget(Entity site, long work, long total)
+    private static long ConstructionHealthTarget(Entity site, long progress)
     {
         var one = Fixed.One.Raw;
         var max = Math.Max(site.Body!.MaxHealth.Raw, one);
-        // Raw health times work units: 128 bits, the product of a large health (the data has 99,999,999) and a long build leaves a machine word at a fine resolution.
-        return one + (long)((Int128)(max - one) * work / total);
+        // Raw health times the progress: 128 bits, the product of a large health (the data has 99,999,999) and the progress scale leaves a machine word.
+        return one + (long)((Int128)(max - one) * progress / Entity.ConstructionProgressScale);
     }
 
     private void CompleteConstruction(Entity site)

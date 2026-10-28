@@ -241,7 +241,7 @@ public sealed class SpectatorStats
                 {
                     if (entity.HasStatus(ObjectStatusBits.UnderConstruction))
                     {
-                        production.Add(new SpectatorProductionItem(template.Name, template.Name, Math.Clamp(entity.ConstructionWork / (float)Math.Max(template.BuildTicks, 1), 0f, 1f), 1, true));
+                        production.Add(new SpectatorProductionItem(template.Name, template.Name, CnCNew.Presentation.FixedConvert.ToSingle(entity.ConstructionShare), 1, true));
                         continue;
                     }
                     structures++;

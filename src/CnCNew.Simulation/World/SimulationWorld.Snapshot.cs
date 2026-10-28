@@ -184,6 +184,7 @@ public sealed partial class SimulationWorld
             HasPlayerUpgradeArmor = reader.Bool("hasPlayerUpgradeArmor"),
             HasPlayerUpgradeWeapon = reader.Bool("hasPlayerUpgradeWeapon"),
             ConstructionWork = checked((int)reader.Int("constructionWork")),
+            ConstructionProgress = reader.Has("constructionProgress") ? reader.Int("constructionProgress") : 0,
             BuilderId = new EntityId(checked((uint)reader.UInt("builder"))),
             SellCompleteTick = reader.Int("sellCompleteTick"),
             EmpDisabledUntil = reader.Has("empDisabledUntil") ? reader.Int("empDisabledUntil") : 0,
