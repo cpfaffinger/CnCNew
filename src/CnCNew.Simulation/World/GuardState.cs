@@ -45,9 +45,6 @@ internal sealed class GuardState
     /// </summary>
     public long ClearedDamageTick = -1;
 
-    /// <summary>The guard was ordered by a script (<c>CMD_FROM_SCRIPT</c>); otherwise by a player.</summary>
-    public bool FromScript;
-
     public void Describe(IStateWriter writer)
     {
         writer.BeginObject("guard");
@@ -65,7 +62,6 @@ internal sealed class GuardState
             writer.Fixed("guardeeY", GuardeeY);
         }
         if (ClearedDamageTick >= 0) writer.Int("clearedDamageTick", ClearedDamageTick);
-        if (FromScript) writer.Bool("fromScript", true);
         writer.EndObject();
     }
 
@@ -82,7 +78,6 @@ internal sealed class GuardState
             GiveUpTick = reader.Has("giveUpTick") ? reader.Int("giveUpTick") : 0,
             NextScanTick = reader.Int("nextScanTick"),
             ClearedDamageTick = reader.Has("clearedDamageTick") ? reader.Int("clearedDamageTick") : -1,
-            FromScript = reader.Has("fromScript") && reader.Bool("fromScript"),
         };
         if (state.Object.IsValid)
         {

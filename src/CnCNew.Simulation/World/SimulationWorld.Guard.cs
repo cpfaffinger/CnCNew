@@ -61,7 +61,7 @@ public sealed partial class SimulationWorld
     /// <c>AIGroup::groupGuardPosition</c> / <c>groupGuardObject</c>: every unit guards the same point or object (<c>privateGuardPosition</c>): an immobile object or a projectile ignores the
     /// order; the old state is cleared; the machine starts in RETURN (its <c>onEnter</c> runs INNER, OUTER and GET_CRATE through at once, none of which has a nemesis).
     /// </summary>
-    private void ExecuteGuard(GuardCommand order, bool fromScript = false)
+    private void ExecuteGuard(GuardCommand order)
     {
         var guarded = order.Object.IsValid ? FindEntity(order.Object) : null;
         var any = false;
@@ -69,9 +69,9 @@ public sealed partial class SimulationWorld
         {
             if (FindEntity(id) is not { DestroyRequested: false } unit || unit.Owner != order.Player || AiOf(unit) is not { } ai) continue;
             if (unit.Template.Locomotor is null || unit.Template.IsKindOf("IMMOBILE") || unit.Template.IsKindOf("PROJECTILE")) continue;
-            ai.OrderIdle(this, !fromScript);
+            ai.OrderIdle(this, true);
             var (x, y) = guarded is not null ? (guarded.X, guarded.Y) : (order.X, order.Y);
-            unit.Guard = new GuardState { X = x, Y = y, Object = guarded?.Id ?? EntityId.Invalid, Mode = order.Mode, FromScript = fromScript };
+            unit.Guard = new GuardState { X = x, Y = y, Object = guarded?.Id ?? EntityId.Invalid, Mode = order.Mode };
             if (guarded is not null) (unit.Guard.GuardeeX, unit.Guard.GuardeeY) = (guarded.X, guarded.Y);
             _acquirers.Add(unit.Id.Value);
             EnterGuardReturn(unit, ai, unit.Guard, _tick);
