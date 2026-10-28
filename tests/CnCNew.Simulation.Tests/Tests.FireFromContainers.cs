@@ -53,6 +53,12 @@ static partial class Tests
           DamageType = MELEE
           DelayBetweenShots = 500
         End
+        Weapon FcClearGun
+          PrimaryDamage = 2
+          AttackRange = 150.0
+          DamageType = KILL_GARRISONED
+          DelayBetweenShots = 100
+        End
         Weapon FcGattlingGun
           PrimaryDamage = 5
           AttackRange = 150.0
@@ -118,6 +124,34 @@ static partial class Tests
           End
           Behavior = GarrisonContain Garrison01
             ContainMax = 5
+          End
+        End
+        Object FcImmuneBunker
+          KindOf = STRUCTURE
+          Geometry = CYLINDER
+          GeometryMajorRadius = 30.0
+          GeometryMinorRadius = 30.0
+          GeometryHeight = 20.0
+          Body = StructureBody Body01
+            MaxHealth = 5000.0
+            InitialHealth = 5000.0
+          End
+          Behavior = GarrisonContain Garrison01
+            ContainMax = 5
+            ImmuneToClearBuildingAttacks = Yes
+          End
+        End
+        Object FcClearer
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcClearGun
+          End
+          Behavior = AIUpdateInterface AI01
           End
         End
         Object FcFireBase
@@ -655,6 +689,38 @@ static partial class Tests
         var knifeman = scene.World.Entities.Single(value => value.Template.Name == "FcKnifeman");
         Check.That(scene.World.TryEnterContainer(knifeman, scene.Container) && !Upgraded(), "A rider with only a contact weapon gives it no weapon set.");
         Check.That(scene.World.TryEnterContainer(scene.Rider, scene.Container) && Upgraded(), "The rifleman back inside gives it again.");
+    }
+
+    /// <summary>
+    /// Clearing a garrison (<c>ActiveBody::attemptDamage</c>, <c>DAMAGE_KILL_GARRISONED</c>; the microwave tank's building clearer): a shot of 2 kills the first two of three riders of
+    /// a bunker and leaves the bunker whole; an empty bunker cannot be fired at with it; a bunker with <c>ImmuneToClearBuildingAttacks</c> cannot either, and its riders live.
+    /// </summary>
+    public static void FireFromContainersKillGarrisoned()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRunnerIni));
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "FcClearer", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "FcBunker", owner: 2, x: 100, y: 0);
+            feeder.Spawn(2, "FcImmuneBunker", owner: 2, x: 0, y: 100);
+            for (var i = 0; i < 3; i++) feeder.Spawn(2, "FcRifleman", owner: 2, x: 100, y: 0);
+            for (var i = 0; i < 2; i++) feeder.Spawn(2, "FcRifleman", owner: 2, x: 0, y: 100);
+            world.Step();
+            var clearer = world.Entities.Single(value => value.Template.Name == "FcClearer");
+            var bunker = world.Entities.Single(value => value.Template.Name == "FcBunker");
+            var immune = world.Entities.Single(value => value.Template.Name == "FcImmuneBunker");
+            Check.That(!feeder.FireWeapon(1, clearer.Id.Value, bunker.Id.Value).Accepted, $"{rate}: an empty bunker cannot be fired at with the clearer.");
+            var riders = world.Entities.Where(value => value.Template.Name == "FcRifleman").OrderBy(value => value.Id.Value).ToArray();
+            foreach (var rider in riders.Take(3)) Check.That(world.TryEnterContainer(rider, bunker), $"{rate}: setup - a rifleman enters the bunker.");
+            foreach (var rider in riders.Skip(3)) Check.That(world.TryEnterContainer(rider, immune), $"{rate}: setup - a rifleman enters the immune bunker.");
+            Check.That(!feeder.FireWeapon(1, clearer.Id.Value, immune.Id.Value).Accepted, $"{rate}: the immune bunker cannot be fired at with the clearer.");
+            Check.That(feeder.FireWeapon(1, clearer.Id.Value, bunker.Id.Value).Accepted, $"{rate}: the garrisoned bunker can.");
+            world.Step();
+            Check.That(riders[0].EffectivelyDead && riders[1].EffectivelyDead && !riders[2].EffectivelyDead, $"{rate}: the first two riders die, the third lives.");
+            Check.That(bunker.Body!.Health == Fixed.FromInt(5000) && riders.Skip(3).All(rider => !rider.EffectivelyDead), $"{rate}: the bunker is whole, the immune bunker's riders live.");
+        }
     }
 
     /// <summary>

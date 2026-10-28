@@ -302,6 +302,9 @@ public sealed record GarrisonContainData(OpenContainData Base, int ContainMax, b
     /// </summary>
     public bool IsEnclosingContainer { get; init; } = true;
 
+    /// <summary><c>ImmuneToClearBuildingAttacks</c> (default no): no weapon that clears a garrison kills the riders of this building (F-60, clearing a garrison).</summary>
+    public bool ImmuneToClearBuildingAttacks { get; init; }
+
     public static GarrisonContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "ContainMax", -1)),
@@ -309,6 +312,7 @@ public sealed record GarrisonContainData(OpenContainData Base, int ContainMax, b
         ModuleConfigReader.Ticks(configuration, "TimeForFullHeal", 0))
     {
         IsEnclosingContainer = ModuleConfigReader.Bool(configuration, "IsEnclosingContainer", true),
+        ImmuneToClearBuildingAttacks = ModuleConfigReader.Bool(configuration, "ImmuneToClearBuildingAttacks", false),
     };
 }
 
@@ -548,6 +552,9 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 
     /// <inheritdoc cref="IContainerModule.IsGarrisonable"/>
     public override bool IsGarrisonable => true;
+
+    /// <inheritdoc cref="IContainerModule.IsImmuneToClearBuildingAttacks"/>
+    public bool IsImmuneToClearBuildingAttacks => data.ImmuneToClearBuildingAttacks;
 
     /// <summary>
     /// <c>GarrisonContain::m_hideGarrisonedStateFromNonallies</c> (F-54): riders inside, every one of kind <c>STEALTH_GARRISON</c>, and the first of them (entry order) not

@@ -124,6 +124,8 @@ public sealed partial class SimulationWorld
         if (template.IsKindOf("SHRUBBERY")) return weapon.DeathType == DeathTypes.Burned ? Fixed.One : Fixed.Zero;
         // getContain() is the first contain module of the object.
         if (weapon.DamageType == SniperDamageType && template.IsKindOf("STRUCTURE") && victim.Modules.OfType<Modules.IContainerModule>().FirstOrDefault() is { ContainCount: 0 }) return Fixed.Zero;
+        // estimateDamage: DAMAGE_KILL_GARRISONED only against riders it can clear (1, a nonzero value), nothing otherwise.
+        if (weapon.DamageType == DamageTypes.KillGarrisoned) return victim.Container is { CanBeCleared: true } ? Fixed.One : Fixed.Zero;
         if (weapon.DamageType == DisarmDamageType) return template.IsKindOf("MINE") || template.IsKindOf("BOOBY_TRAP") || template.IsKindOf("DEMOTRAP") ? Fixed.One : Fixed.Zero;
         if (weapon.DamageType == DeployDamageType && !IsSignificantlyAboveTerrainAtFrameEnd(victim)) return Fixed.One;
         var amount = weapon.DamageWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source), weapon.PrimaryDamage);

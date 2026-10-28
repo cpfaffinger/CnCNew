@@ -792,6 +792,12 @@ public interface IContainerModule
     /// <summary><c>ContainModuleInterface::isGarrisonable</c>: a garrison, and an Overlord whose portable structure is one; no other container.</summary>
     bool IsGarrisonable => false;
 
+    /// <summary><c>ContainModuleInterface::isImmuneToClearBuildingAttacks</c>: weapons that clear a garrison do not reach the riders (a garrison's <c>ImmuneToClearBuildingAttacks</c>).</summary>
+    bool IsImmuneToClearBuildingAttacks => false;
+
+    /// <summary>The riders of this container can be cleared out by a weapon that clears a garrison: it holds some and is garrisonable and not immune (<c>ActiveBody::attemptDamage</c>).</summary>
+    bool CanBeCleared => ContainCount > 0 && IsGarrisonable && !IsImmuneToClearBuildingAttacks;
+
     /// <summary>
     /// <c>OpenContain::m_stealthUnitsContained</c> (F-54): the riders whose kind is <c>STEALTH_GARRISON</c> - their kind, not whether they are stealthed. Derived from the riders here;
     /// the original keeps a count, which <c>killAllContained</c> does not lower (R-18, not modelled).
