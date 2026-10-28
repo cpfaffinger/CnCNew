@@ -277,7 +277,7 @@ garrisons keep their hashes.
    (`getAdjustedVisionRangeForObject` gives it its weapon range), but **Passive still holds** - `getNextMoodTarget`'s own Passive test (it answers the last attacker, which the
    port does not model and treats as "none") does not look at containment, so the port keeps "none" for a passive contained unit too; the stealth veto is lifted when the
    container lets its riders fire (asked without an id, as the original). A rider that leaves ends its attack (`ContainModuleBase.Remove`, `HelixContain.Remove`). Not built
-   with this step: `WeaponBonusPassedToPassengers` of the Battle Bus (step 3's second half), orders through the container (step 6), `ArmedRidersUpgradeMyWeaponSet` (step 7),
+   with this step: `WeaponBonusPassedToPassengers` of the Battle Bus (step 3's second half - built the same day, SIMULATION-CORE §55.8), orders through the container (step 6), `ArmedRidersUpgradeMyWeaponSet` (step 7),
    the presentation (step 8), and the garrison's own update (`GarrisonContain` still sleeps without healing - nothing of its per-frame matching exists to wake for).
 
 6. **Orders through the container.** A `FireWeaponCommand` (and force-attack/attack-position) whose source is a container with allowed riders forwards to every rider

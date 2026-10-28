@@ -3795,3 +3795,12 @@ the original reads the current model, so a damaged transport whose damaged model
 without (a)), `FireFromContainersTransportFirePoints` (a Humvee with a point 40 east and one 40 west: its first rider fires at an enemy 130 east and not at one 130 west,
 without points at neither, turned round at the western one), `ModelGeometryTests` (the Overlord's `FIREPOINT01` (-15, 0, 15) about `TURRET01` (0, 0, 10.19)); the
 rate-equivalence suite 0 / 0 in all ten groups.
+
+### 55.8 F-60, step 3 completed: the Battle Bus passes its weapon bonus (`Weapon::computeBonus`, `OpenContain::getWeaponBonusPassedToPassengers`)
+
+`WeaponBonusPassedToPassengers` is typed (Bool on `TransportContain` and the contain modules built on its field list; six shipped Battle Buses set it; compatibility baselines
+702 and 695 entries) and read into `TransportContainData` (`7ae72b1`, manifest `dec6f7d`: the input manifest and the fingerprint fields of 48 runs). `SimulationWorld.WeaponBonusOf(source)` is `computeBonus`'s condition set: the shooter's own, and,
+when the container it rides in passes its bonus on, the container's own conditions (not its container's). Every weapon calculation of a shooter reads it - the longest range,
+the range test, the damage estimate and the damage, the reload and clip, the turret's pitch range, the pre-attack delay, the conditions a projectile carries; the rider's own
+conditions stay its own. Test `FireFromContainersPassedBonus` (a veteran bus gives its rider range 120 instead of 100 and it fires at 115; a veteran Humvee passes nothing).
+No field of either manifest moved (`cfc16aa`): no run of the manifest has a veteran or otherwise conditioned Battle Bus with a rider..
