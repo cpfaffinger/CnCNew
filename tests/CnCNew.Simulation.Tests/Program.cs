@@ -163,7 +163,7 @@ run.Test("Phase 5: player/faction setup and science purchase", Tests.Phase5Scien
 run.Test("Phase 5: SlowDeathBehavior weighted sibling lottery", Tests.Phase5SlowDeath);
 run.Test("Phase 5: FireWeaponWhenDeadBehavior activation and conflict re-check", Tests.Phase5FireWeaponWhenDead);
 run.Test("Phase 5: StealthDetectorUpdate marks and expires DETECTED", Tests.Phase5StealthDetector);
-run.Test("Phase 10: StealthDetectorUpdate respects height line of sight", Tests.Phase5StealthDetectorHeightLineOfSight);
+run.Test("Phase 41: StealthDetectorUpdate detects behind a ridge (no line of sight, as the original)", Tests.Phase5StealthDetectorHeightLineOfSight);
 run.Test("Phase 5: PoisonedBehavior periodic damage, re-poison and healing", Tests.Phase5Poisoned);
 run.Test("Game fixes: the rule profile and its fingerprint", Tests.GameFixProfile);
 run.Test("Game fixes: a kill by poison credits the poisoner", Tests.GameFixPoisonKillCredit);

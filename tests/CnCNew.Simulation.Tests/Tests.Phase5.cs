@@ -975,7 +975,7 @@ static partial class Tests
         for (var i = 0; i < world.Frames(6); i++) world.Step();
         Check.That(enemy.HasStatus(stealthedBit), "The target is cloaked.");
         for (var i = 0; i < world.Frames(20); i++) world.Step();
-        Check.That(!enemy.HasStatus(detectedBit), "A ridge between the detector and the target blocks detection even within DetectionRange.");
+        Check.That(enemy.HasStatus(detectedBit), "A ridge between the detector and the target does not block detection within DetectionRange: the original's scan has no line of sight.");
 
         // The identical layout without the ridge detects normally: the range test alone is not what is being exercised here.
         var flat = TerrainMap.Build(SyntheticMaps.Build(20, 4, 1), "detector-flat");

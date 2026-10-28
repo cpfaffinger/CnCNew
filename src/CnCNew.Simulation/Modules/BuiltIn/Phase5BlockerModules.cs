@@ -596,9 +596,8 @@ public sealed record StealthDetectorData(
 /// riders with a <c>StealthUpdate</c> are marked (F-54, <c>PartitionFilterStealthedOrStealthGarrisoned</c> and the building branch of
 /// <c>update</c>). <c>UNDER_CONSTRUCTION</c>/<c>SOLD</c> are ported
 /// (matching every other module that checks them) even though nothing sets either status bit yet.
-/// A candidate within <see cref="StealthDetectorData.DetectionRange"/> but behind higher terrain is not detected
-/// (<c>TerrainMap.HasHeightLineOfSight</c>, phase 10); without a terrain (synthetic fixtures) every in-range candidate is
-/// still reachable, as before.
+/// The scan has no line of sight: a candidate within <see cref="StealthDetectorData.DetectionRange"/> is found behind higher terrain too, as
+/// <c>iterateObjectsInRange</c> finds it (Phase 10 had added a terrain test of its own; removed in Phase 41).
 /// </summary>
 public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule, IUpdateModule
 {
@@ -618,12 +617,6 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
     /// <summary><c>StealthDetectorUpdate::setSDEnabled</c> (the strategy center's search-and-destroy plan): an enabled detector scans again from the next tick, a disabled one sleeps.</summary>
     public void SetEnabled(IWorldServices world, bool enabled) => world.WakeAt(Entity, this, enabled ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever);
 
-    /// <summary>
-    /// The height a line of sight is drawn from/to for an object: ground position plus its full <c>GeometryHeight</c> (the object's own
-    /// top, not a separate per-template eye-height field, which the catalog does not carry — a named simplification).
-    /// </summary>
-    private static Fixed EyeHeight(World.Entity entity) => entity.Z + entity.Template.GeometryHeight;
-
     public long Update(IWorldServices world)
     {
         if (Entity.EffectivelyDead) return SimulationTiming.SleepForever;
@@ -631,7 +624,6 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
         if (Entity.HasStatus(SoldBit)) return SimulationTiming.SleepForever;
 
         var range = data.DetectionRange > Fixed.Zero ? data.DetectionRange : Entity.Template.VisionRange;
-        var terrain = world.Terrain;
         foreach (var candidate in world.Entities)
         {
             // PartitionFilterStealthedOrStealthGarrisoned first: nearly no object is stealthed or a stealth garrison, and the tests are independent of each other, so their order only
@@ -647,7 +639,6 @@ public sealed class StealthDetectorUpdate(StealthDetectorData data) : SimModule,
             var dx = candidate.X - Entity.X;
             var dy = candidate.Y - Entity.Y;
             if (!SquaredReach.Of(range).Contains(dx * dx + dy * dy)) continue;
-            if (terrain is not null && !terrain.HasHeightLineOfSight(Entity.X, Entity.Y, EyeHeight(Entity), candidate.X, candidate.Y, EyeHeight(candidate))) continue;
             if (StealthOf(candidate) is { } stealth)
             {
                 // markAsDetected(m_updateRate + 1): the extra step is one logic frame of the original, so the mark outlasts the next scan by the same game time at every rate.
