@@ -24,6 +24,7 @@ Func<string[], int>[] suites =
     CaptureConditionTests.Run,
     StealthGarrisonConditionTests.Run,
     GarrisonGunTests.Run,
+    ShockConditionTests.Run,
     CaptureFlashTests.Run,
     JetOrderTests.Run,
     PlacementPreviewTests.Run,
