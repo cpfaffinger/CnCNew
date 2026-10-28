@@ -34,13 +34,21 @@ static partial class Tests
             MinFallHeightForDamage = 20.0
           End
         End
+        Locomotor ShockFeet
+          Surfaces = GROUND
+          Speed = 20
+          StickToGround = Yes
+        End
         Object ShockSoldier
           KindOf = SELECTABLE INFANTRY
+          Locomotor = SET_NORMAL ShockFeet
           Body = ActiveBody Body01
             MaxHealth = 100.0
             InitialHealth = 100.0
           End
           Behavior = PhysicsBehavior Physics01
+          End
+          Behavior = AIUpdateInterface AI01
           End
         End
         """,
@@ -67,5 +75,7 @@ static partial class Tests
                    && soldier.ZFriction == Fixed.FromDecimal(0.8m) && soldier.AerodynamicFriction == Fixed.Zero && soldier.MinFallHeightForDamage == Fixed.FromInt(40)
                    && soldier.FallHeightDamageFactor == Fixed.One && soldier.PitchRollYawFactor == Fixed.FromInt(2),
             "Without the keys, the defaults of PhysicsBehaviorModuleData.");
+        Check.That(fixture.Templates.Templates.Single(value => value.Name == "ShockSoldier").Locomotor is { StickToGround: true }, "A locomotor's StickToGround is read.");
+        Check.That(fixture.Templates.GroundStiffness == Fixed.FromDecimal(0.5m), $"Without GroundStiffness in GameData the original's default 0.5 ({fixture.Templates.GroundStiffness}).");
     }
 }
