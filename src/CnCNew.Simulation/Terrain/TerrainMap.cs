@@ -39,6 +39,7 @@ public sealed class TerrainMap
     private readonly int _vertexWidth;
     private readonly int _vertexHeight;
     private readonly int _border;
+    private readonly Fixed _maxHeight;
     private readonly ImmutableArray<CellFlags> _cells;
     private readonly ImmutableArray<WaterArea> _water;
     private readonly Dictionary<int, TerrainWaypoint> _waypointsById;
@@ -60,6 +61,10 @@ public sealed class TerrainMap
         for (var cy = 0; cy < cellsY; cy++)
             for (var cx = 0; cx < cellsX; cx++) cells[cy * cellsX + cx] = Classify(map.BlendTiles, cx, cy);
         _cells = [..cells];
+        // BaseHeightMapRenderObjClass::getMaxHeight: the highest vertex of the whole field.
+        var highest = 0;
+        foreach (var height in _heights) highest = Math.Max(highest, height);
+        _maxHeight = Fixed.FromInt(highest) * HeightScale;
         Fingerprint = ComputeFingerprint(map);
     }
 
@@ -236,6 +241,64 @@ public sealed class TerrainMap
 
     /// <summary><c>TerrainLogic::isUnderwater</c>: water at the point and the terrain below its level.</summary>
     public bool IsUnderwater(Fixed x, Fixed y) => TryWaterLevel(x, y, out var level) && HeightAt(x, y) < level;
+
+    /// <summary>
+    /// <c>BaseHeightMapRenderObjClass::isClearLineOfSight</c> (the <c>DO_BRESENHAM</c> branch, reached through <c>TerrainLogic::isClearLineOfSight</c>): a Bresenham walk
+    /// over the vertex squares of the height field from the square under (<paramref name="x0"/>, <paramref name="y0"/>) toward the one under (<paramref name="x1"/>,
+    /// <paramref name="y1"/>). A square is as high as the highest of its four corners; the sight line starts at <paramref name="z0"/> and climbs by an equal share per
+    /// step. The start square is tested, the end square never; the line is blocked where a square stands more than 0.5 above it, and clear once the walk leaves the
+    /// field or the line, still climbing, is above the highest point of the map. Used by the attack's view test (F-55).
+    /// </summary>
+    public bool IsClearLineOfSight(Fixed x0, Fixed y0, Fixed z0, Fixed x1, Fixed y1, Fixed z1)
+    {
+        var x = FloorToCell(x0) + _border;
+        var y = FloorToCell(y0) + _border;
+        var endX = FloorToCell(x1) + _border;
+        var endY = FloorToCell(y1) + _border;
+        var deltaX = Math.Abs(endX - x);
+        var deltaY = Math.Abs(endY - y);
+        var stepX = endX >= x ? 1 : -1;
+        var stepY = endY >= y ? 1 : -1;
+        // The major axis advances every step, the minor one when the numerator reaches the denominator.
+        var (majorX, majorY, minorX, minorY, denominator, add) = deltaX >= deltaY
+            ? (stepX, 0, 0, stepY, deltaX, deltaY)
+            : (0, stepY, stepX, 0, deltaY, deltaX);
+        var steps = denominator;
+        if (steps == 0) return true;
+        var numerator = denominator / 2;
+        var z = z0;
+        var climb = (z1 - z0) / Fixed.FromInt(steps);
+        for (var step = 0; step < steps; step++)
+        {
+            if (x < 0 || y < 0 || x >= _vertexWidth - 1 || y >= _vertexHeight - 1) break;
+            var index = y * _vertexWidth + x;
+            var corners = Math.Max(Math.Max(_heights[index], _heights[index + 1]), Math.Max(_heights[index + _vertexWidth], _heights[index + _vertexWidth + 1]));
+            if (Fixed.FromInt(corners) * HeightScale > z + LineOfSightFudge) return false;
+            if (z >= _maxHeight && climb > Fixed.Zero) break;
+            z += climb;
+            numerator += add;
+            if (numerator >= denominator)
+            {
+                numerator -= denominator;
+                x += minorX;
+                y += minorY;
+            }
+            x += majorX;
+            y += majorY;
+        }
+        return true;
+    }
+
+    /// <summary><c>LOS_FUDGE</c>.</summary>
+    private static readonly Fixed LineOfSightFudge = Fixed.FromRaw(Fixed.ScaleRaw / 2);
+
+    /// <summary><c>REAL_TO_INT_FLOOR(pos / MAP_XY_FACTOR)</c>, exact on the raw value.</summary>
+    private static int FloorToCell(Fixed value)
+    {
+        var cell = value.Raw / CellSizeFixed.Raw;
+        if (value.Raw < 0 && cell * CellSizeFixed.Raw != value.Raw) cell--;
+        return checked((int)cell);
+    }
 
     /// <summary>Upper bound on the samples <see cref="HasHeightLineOfSight"/> takes along one line; see its doc comment for what this limits.</summary>
     public const int MaxLineOfSightSamples = 64;
