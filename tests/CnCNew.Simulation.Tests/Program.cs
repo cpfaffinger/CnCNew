@@ -238,6 +238,7 @@ run.Test("Phase 41 (F-60, step 5): a garrisoned rider fires from inside, within 
 run.Test("Fire from containers, step 6: an attack order on a garrisoned building is passed to its riders", Tests.FireFromContainersOrdersThroughTheContainer);
 run.Test("Fire from containers, step 7: armed riders give a transport its PLAYER_UPGRADE weapon set", Tests.FireFromContainersArmedRidersUpgradeWeaponSet);
 run.Test("Fire from containers, clearing a garrison: KILL_GARRISONED kills riders, not an immune building's", Tests.FireFromContainersKillGarrisoned);
+run.Test("Fire from containers, clearing a garrison by a shell: AllowAttackGarrisonedBldgs and GarrisonHitKill", Tests.FireFromContainersGarrisonHitKill);
 run.Test("Phase 41 (F-60, step 4): a garrison's rider fires from the fire point closest to its victim, a fire base's from its station", Tests.FireFromContainersFirePoints);
 run.Test("Phase 41 (F-60, step 3): a Battle Bus passes its weapon bonus to its riders", Tests.FireFromContainersPassedBonus);
 run.Test("Phase 41 (F-58, step 1): a guard drives to an enemy in its inner range, kills it and returns", Tests.GuardPositionChasesAndReturns);

@@ -43,6 +43,9 @@ public sealed record WeaponInfo(
 
     public Fixed ScatterRadius { get; init; }
 
+    /// <summary><c>AllowAttackGarrisonedBldgs</c> (default no): the weapon may be aimed at a garrisoned building whose riders it can clear (<c>estimateWeaponDamage</c> returns 1; F-60).</summary>
+    public bool AllowAttackGarrisonedBuildings { get; init; }
+
     /// <summary>
     /// <c>ShockWaveAmount</c>, <c>ShockWaveRadius</c>, <c>ShockWaveTaperOff</c> (all 0 by default, <c>WeaponTemplate</c>): the push an area weapon gives each victim
     /// (<c>Object::attemptDamage</c> - the amount times one minus the victim's share of the radius times one minus the taper-off; F-63, docs/SHOCK-WAVE.md).
@@ -292,6 +295,7 @@ public sealed class WeaponCatalog
                 ProjectileObject = projectile,
                 ScatterRadius = Length("ScatterRadius"),
                 ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),
+                AllowAttackGarrisonedBuildings = Flag("AllowAttackGarrisonedBldgs"),
                 ShockWaveAmount = Length("ShockWaveAmount"),
                 ShockWaveRadius = Length("ShockWaveRadius"),
                 ShockWaveTaperOff = Length("ShockWaveTaperOff"),

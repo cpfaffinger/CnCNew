@@ -53,6 +53,16 @@ static partial class Tests
           DamageType = MELEE
           DelayBetweenShots = 500
         End
+        Weapon FcFlashBang
+          PrimaryDamage = 0
+          PrimaryDamageRadius = 5.0
+          AttackRange = 150.0
+          WeaponSpeed = 300
+          ProjectileObject = FcFlashShell
+          DamageType = EXPLOSION
+          DelayBetweenShots = 1000
+          AllowAttackGarrisonedBldgs = Yes
+        End
         Weapon FcClearGun
           PrimaryDamage = 2
           AttackRange = 150.0
@@ -139,6 +149,36 @@ static partial class Tests
           Behavior = GarrisonContain Garrison01
             ContainMax = 5
             ImmuneToClearBuildingAttacks = Yes
+          End
+        End
+        Object FcFlashShell
+          KindOf = PROJECTILE
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Behavior = DumbProjectileBehavior Dumb01
+            FirstHeight = 0
+            SecondHeight = 0
+            FirstPercentIndent = 30%
+            SecondPercentIndent = 70%
+            GarrisonHitKillCount = 2
+            GarrisonHitKillRequiredKindOf = INFANTRY
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object FcGrenadier
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcFlashBang
+          End
+          Behavior = AIUpdateInterface AI01
           End
         End
         Object FcClearer
@@ -720,6 +760,34 @@ static partial class Tests
             world.Step();
             Check.That(riders[0].EffectivelyDead && riders[1].EffectivelyDead && !riders[2].EffectivelyDead, $"{rate}: the first two riders die, the third lives.");
             Check.That(bunker.Body!.Health == Fixed.FromInt(5000) && riders.Skip(3).All(rider => !rider.EffectivelyDead), $"{rate}: the bunker is whole, the immune bunker's riders live.");
+        }
+    }
+
+    /// <summary>
+    /// Clearing a garrison by a shell (<c>DumbProjectileBehavior::projectileHandleCollision</c>, <c>AllowAttackGarrisonedBldgs</c>; the flash-bang grenade): a weapon of no damage
+    /// cannot be aimed at an empty bunker but can at a garrisoned one; its shell, reaching the bunker, kills two of its three riders and vanishes without its explosion.
+    /// </summary>
+    public static void FireFromContainersGarrisonHitKill()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRunnerIni));
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "FcGrenadier", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "FcBunker", owner: 2, x: 100, y: 0);
+            for (var i = 0; i < 3; i++) feeder.Spawn(2, "FcRifleman", owner: 2, x: 100, y: 0);
+            world.Step();
+            var grenadier = world.Entities.Single(value => value.Template.Name == "FcGrenadier");
+            var bunker = world.Entities.Single(value => value.Template.Name == "FcBunker");
+            Check.That(!feeder.FireWeapon(1, grenadier.Id.Value, bunker.Id.Value).Accepted, $"{rate}: a weapon of no damage cannot be aimed at an empty bunker.");
+            var riders = world.Entities.Where(value => value.Template.Name == "FcRifleman").OrderBy(value => value.Id.Value).ToArray();
+            foreach (var rider in riders) Check.That(world.TryEnterContainer(rider, bunker), $"{rate}: setup - a rifleman enters the bunker.");
+            Check.That(feeder.FireWeapon(1, grenadier.Id.Value, bunker.Id.Value).Accepted, $"{rate}: the garrisoned bunker it can.");
+            var impacts = 0;
+            for (var step = 0; step < world.Frames(30); step++) impacts += world.Step().Events.Count(value => value.Kind == SimEventKind.WeaponImpact);
+            Check.That(riders[0].EffectivelyDead && riders[1].EffectivelyDead && !riders[2].EffectivelyDead, $"{rate}: the shell kills the first two riders, the third lives.");
+            Check.That(impacts == 0 && !world.Entities.Any(value => value.Template.Name == "FcFlashShell"), $"{rate}: the shell is gone without its explosion ({impacts} impacts).");
         }
     }
 

@@ -19,6 +19,29 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// </summary>
 internal static class ProjectileModules
 {
+    /// <summary>
+    /// <c>DumbProjectileBehavior::projectileHandleCollision</c> with a garrisoned building (F-60, clearing a garrison): up to <paramref name="count"/> living riders of the kinds asked
+    /// for (<c>isKindOfMulti</c>), in the order they are in it, die and the launcher scores them; when one died the FX plays at the building and the shell is destroyed without
+    /// its explosion (true). Nothing happens - and the shell explodes as usual - when the victim holds no rider it may kill or is immune to clearing.
+    /// </summary>
+    public static bool ClearGarrison(IWorldServices world, Entity shell, EntityId launcher, EntityId victim, int count, ImmutableArray<string> required, ImmutableArray<string> forbidden, string fx)
+    {
+        if (count <= 0 || world.FindEntity(victim) is not { Container: { CanBeCleared: true } contain } building) return false;
+        var killed = 0;
+        foreach (var id in contain.Contained.ToArray())
+        {
+            if (killed >= count) break;
+            if (world.FindEntity(id) is not { EffectivelyDead: false } rider) continue;
+            if (required.Any(kind => !rider.Template.IsKindOf(kind)) || forbidden.Any(rider.Template.IsKindOf)) continue;
+            world.Damage(rider.Id, new DamageInfo(launcher, Fixed.Zero, DamageTypes.Unresistable, DeathTypes.Normal, true));
+            killed++;
+        }
+        if (killed == 0) return false;
+        if (fx.Length > 0) world.EmitAt(SimEventKind.FxRequested, building.Id, EntityId.Invalid, fx, 0, building.X, building.Y, building.Z);
+        world.RequestDestroy(shell.Id);
+        return true;
+    }
+
     public static ImmutableArray<IModuleBinding> Bindings { get; } =
     [
         new ModuleBinding<DumbProjectileData>("DumbProjectileBehavior", ModuleOwnerKind.Object, (configuration, _) => DumbProjectileData.Parse(configuration), data => new DumbProjectileBehavior(data)),
@@ -56,10 +79,18 @@ internal static class ProjectileModules
 
 // ================================================================================================ DumbProjectileBehavior
 
-/// <summary><c>DumbProjectileBehaviorModuleData</c>. <c>GarrisonHitKill*</c> act on a collision with a garrisoned building, which cannot happen without collisions (typed, not applied).</summary>
+/// <summary>
+/// <c>DumbProjectileBehaviorModuleData</c>. <c>GarrisonHitKill*</c> act when the shell hits a garrisoned building (F-60, clearing a garrison): the port's shells collide with nothing on
+/// their way, so it is applied when the shell reaches its victim and that is the building.
+/// </summary>
 public sealed record DumbProjectileData(long MaxLifespanTicks, bool TumbleRandomly, bool DetonateCallsKill, Fixed FirstHeight, Fixed SecondHeight,
     Fixed FirstPercentIndent, Fixed SecondPercentIndent, Fixed FlightPathAdjustPerTick) : ModuleData
 {
+    public int GarrisonHitKillCount { get; init; }
+    public ImmutableArray<string> GarrisonHitKillRequiredKindOf { get; init; } = [];
+    public ImmutableArray<string> GarrisonHitKillForbiddenKindOf { get; init; } = [];
+    public string GarrisonHitKillFx { get; init; } = string.Empty;
+
     // DEFAULT_MAX_LIFESPAN = 10 * LOGICFRAMES_PER_SECOND.
     private const long DefaultMaxLifespanFrames = 10 * SimulationRate.OriginalFramesPerSecond;
 
@@ -71,7 +102,13 @@ public sealed record DumbProjectileData(long MaxLifespanTicks, bool TumbleRandom
         ModuleConfigReader.Real(configuration, "SecondHeight", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "FirstPercentIndent", Fixed.Zero),
         ModuleConfigReader.Real(configuration, "SecondPercentIndent", Fixed.Zero),
-        ModuleConfigReader.Real(configuration, "FlightPathAdjustDistPerSecond", Fixed.Zero) / configuration.Time.TicksPerSecondFixed);
+        ModuleConfigReader.Real(configuration, "FlightPathAdjustDistPerSecond", Fixed.Zero) / configuration.Time.TicksPerSecondFixed)
+    {
+        GarrisonHitKillCount = checked((int)ModuleConfigReader.Int(configuration, "GarrisonHitKillCount", 0)),
+        GarrisonHitKillRequiredKindOf = ModuleConfigReader.Flags(configuration, "GarrisonHitKillRequiredKindOf")?.Names ?? [],
+        GarrisonHitKillForbiddenKindOf = ModuleConfigReader.Flags(configuration, "GarrisonHitKillForbiddenKindOf")?.Names ?? [],
+        GarrisonHitKillFx = ModuleConfigReader.Text(configuration, "GarrisonHitKillFX"),
+    };
 }
 
 /// <summary>
@@ -268,7 +305,12 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         if (_detonated) return SimulationTiming.SleepForever;
         if (_subStep != 0) return FlyTowardNextPoint(world);
         if (_lifespanTick != 0 && world.Tick >= _lifespanTick) { Detonate(world); return SimulationTiming.SleepForever; }
-        if (_step >= _segments) { Detonate(world); return SimulationTiming.SleepForever; }
+        if (_step >= _segments)
+        {
+            if (!ProjectileModules.ClearGarrison(world, Entity, _launcher, _victim, data.GarrisonHitKillCount, data.GarrisonHitKillRequiredKindOf, data.GarrisonHitKillForbiddenKindOf, data.GarrisonHitKillFx))
+                Detonate(world);
+            return SimulationTiming.SleepForever;
+        }
         if (_victim.IsValid && data.FlightPathAdjustPerTick > Fixed.Zero && world.FindEntity(_victim) is { DestroyRequested: false } victim)
         {
             var target = Center(victim, world.Tick);

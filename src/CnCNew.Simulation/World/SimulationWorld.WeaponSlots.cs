@@ -25,6 +25,7 @@ public sealed partial class SimulationWorld
     private static readonly int PlayerUpgradeSetBit = NameTablesPhase5Index("PLAYER_UPGRADE");
     private static readonly int DeployDamageType = DamageIndex("DEPLOY");
     private static readonly int DisarmDamageType = DamageIndex("DISARM");
+    private static readonly int SurrenderDamageType = DamageIndex("SURRENDER");
     private static readonly int SniperDamageType = DamageIndex("SNIPER");
 
     private static int NameTablesPhase5Index(string name)
@@ -126,6 +127,8 @@ public sealed partial class SimulationWorld
         if (weapon.DamageType == SniperDamageType && template.IsKindOf("STRUCTURE") && victim.Modules.OfType<Modules.IContainerModule>().FirstOrDefault() is { ContainCount: 0 }) return Fixed.Zero;
         // estimateDamage: DAMAGE_KILL_GARRISONED only against riders it can clear (1, a nonzero value), nothing otherwise.
         if (weapon.DamageType == DamageTypes.KillGarrisoned) return victim.Container is { CanBeCleared: true } ? Fixed.One : Fixed.Zero;
+        // estimateWeaponDamage: a weapon with AllowAttackGarrisonedBldgs (or a surrender weapon) is worth 1 against riders it can clear, whatever else it would do.
+        if ((weapon.AllowAttackGarrisonedBuildings || weapon.DamageType == SurrenderDamageType) && victim.Container is { CanBeCleared: true }) return Fixed.One;
         if (weapon.DamageType == DisarmDamageType) return template.IsKindOf("MINE") || template.IsKindOf("BOOBY_TRAP") || template.IsKindOf("DEMOTRAP") ? Fixed.One : Fixed.Zero;
         if (weapon.DamageType == DeployDamageType && !IsSignificantlyAboveTerrainAtFrameEnd(victim)) return Fixed.One;
         var amount = weapon.DamageWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source), weapon.PrimaryDamage);
