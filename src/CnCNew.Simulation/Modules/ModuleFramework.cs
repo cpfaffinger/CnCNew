@@ -485,7 +485,8 @@ public interface ISpecialPowerModule
     void SetReadyFrame(long frame);
 
     /// <summary><c>SpecialPowerModule::pauseCountdown</c>.</summary>
-    void PauseCountdown(IWorldServices world, bool pause);
+    /// <summary>Pauses or resumes the countdown; <paramref name="atTick"/> is the tick it counts from (the current tick when absent).</summary>
+    void PauseCountdown(IWorldServices world, bool pause, long? atTick = null);
 
     /// <summary><c>SpecialPowerModule::triggerSpecialPower</c>: starts the recharge.</summary>
     void Trigger(IWorldServices world);

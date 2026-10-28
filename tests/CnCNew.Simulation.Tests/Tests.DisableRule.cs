@@ -407,4 +407,31 @@ static partial class Tests
         for (var tick = 0; tick < world.Frames(2); tick++) world.Step();
         Check.That(world.ProducedEnergyOf(player) == 0 && world.EnergyConsumptionOf(player) == 5, $"A disabled plant that dies takes nothing out a second time ({world.ProducedEnergyOf(player)}).");
     }
+
+    /// <summary>
+    /// <c>Object::setDisabledUntil</c> pauses the object's special powers for every disabled type but held (<c>pauseAllSpecialPowers</c>), and <c>clearDisabled</c> resumes them: a
+    /// superweapon EMP'd for twenty frames is ready twenty frames later. The port's powers counted down through every disable.
+    /// </summary>
+    public static void DisablePausesSpecialPowers()
+    {
+        long ReadyAfter(bool emp)
+        {
+            var fixture = new SyntheticFixture(TestRate.Default, files: CratesAndSpecialsFiles());
+            var world = NewWorld(fixture);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "SabSuperweapon", x: 200, y: 100);
+            world.Step();
+            while (world.Tick % world.Frames(1) != 0) world.Step();
+            var building = world.Entities.Single(entity => entity.Template.Name == "SabSuperweapon");
+            var power = building.Modules.OfType<ISpecialPowerModule>().Single();
+            var start = world.Tick;
+            if (emp) world.DisableByEmpUntil(building, world.Tick + world.Frames(20));
+            while (!power.IsReady(world) && world.Tick < start + world.Frames(300)) world.Step();
+            return world.Tick - start;
+        }
+
+        var free = ReadyAfter(false);
+        var disabled = ReadyAfter(true);
+        Check.That(disabled - free == TestRate.Default.Time.OriginalFrames(20), $"An EMP of twenty frames delays the power by twenty frames ({free} against {disabled} ticks).");
+    }
 }

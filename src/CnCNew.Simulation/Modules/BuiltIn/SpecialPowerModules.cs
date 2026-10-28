@@ -122,17 +122,18 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
     /// <summary>The caller marks the entity dirty (this method has no world).</summary>
     public void SetReadyFrame(long frame) => _availableOnFrame = frame;
 
-    public void PauseCountdown(IWorldServices world, bool pause)
+    public void PauseCountdown(IWorldServices world, bool pause, long? atTick = null)
     {
+        var tick = atTick ?? world.Tick;
         if (pause)
         {
-            if (_pausedCount == 0) _pausedOnFrame = world.Tick;
+            if (_pausedCount == 0) _pausedOnFrame = tick;
             _pausedCount++;
         }
         else if (_pausedCount > 0)
         {
             _pausedCount--;
-            if (_pausedCount == 0) _availableOnFrame += world.Tick - _pausedOnFrame;
+            if (_pausedCount == 0) _availableOnFrame += tick - _pausedOnFrame;
         }
         // Pause count, pause frame and ready frame are hashed state: without this the cached hash of the carrier stays stale until something else touches it
         // (NAMED_STOP/START_SPECIAL_POWER_COUNTDOWN, UnpauseSpecialPowerUpgrade; finding D8).

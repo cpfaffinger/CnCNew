@@ -239,6 +239,9 @@ public sealed class Entity
     /// <summary>Whether the object's disabled edge is up (<see cref="SimulationWorld"/>'s <c>onDisabledEdge</c>); derived, rebuilt when a snapshot is restored.</summary>
     internal bool DisabledEdge { get; set; }
 
+    /// <summary>The disabled types that hold the object's special powers paused (<c>pauseAllSpecialPowers</c>, every type but held); derived like <see cref="DisabledEdge"/>.</summary>
+    internal DisabledMask PowerPauseTypes { get; set; }
+
     /// <summary><c>DISABLED_PARALYZED</c> (<c>BattlePlanUpdate</c>'s change of plan) up to this tick (the first tick it no longer holds); 0 when never paralyzed.</summary>
     public long ParalyzedUntil { get; internal set; }
 

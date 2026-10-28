@@ -29,7 +29,9 @@ public sealed partial class SimulationWorld
     private void RefreshDisabledEdge(Entity entity, long tick)
     {
         if (!entity.Registered || entity.DestroyRequested) return;
-        var disabled = DisabledFlagsAt(entity, tick) != DisabledMask.None;
+        var flags = DisabledFlagsAt(entity, tick);
+        PauseSpecialPowers(entity, flags & ~DisabledMask.Held);
+        var disabled = flags != DisabledMask.None;
         if (disabled == entity.DisabledEdge) return;
         entity.DisabledEdge = disabled;
         if (disabled) _disabledObjects.Add(entity);
@@ -44,9 +46,32 @@ public sealed partial class SimulationWorld
         _disabledObjects.Clear();
         foreach (var entity in _entities.Values)
         {
-            entity.DisabledEdge = DisabledFlagsAt(entity, _tick) != DisabledMask.None;
+            var flags = DisabledFlagsAt(entity, _tick);
+            entity.DisabledEdge = flags != DisabledMask.None;
+            entity.PowerPauseTypes = flags & ~DisabledMask.Held;
             if (entity.DisabledEdge) _disabledObjects.Add(entity);
         }
+    }
+
+    /// <summary>
+    /// <c>Object::pauseAllSpecialPowers</c>: every disabled type but <c>DISABLED_HELD</c> pauses the object's special powers once when it is set and lets go once when it is
+    /// cleared - a superweapon's clock stands while its building is underpowered or EMP'd.
+    /// </summary>
+    private void PauseSpecialPowers(Entity entity, DisabledMask types)
+    {
+        if (types == entity.PowerPauseTypes) return;
+        var added = System.Numerics.BitOperations.PopCount((uint)(types & ~entity.PowerPauseTypes));
+        var removed = System.Numerics.BitOperations.PopCount((uint)(entity.PowerPauseTypes & ~types));
+        entity.PowerPauseTypes = types;
+        // The disable is set in a frame and cleared at the end of its last one: both count from the start of the frame the edge is found in, so the pause is as long at every rate.
+        var frameStart = Time.FloorToFrame(_tick);
+        foreach (var module in entity.ModuleArray)
+        {
+            if (module is not ISpecialPowerModule power) continue;
+            for (var count = 0; count < added; count++) power.PauseCountdown(this, true, frameStart);
+            for (var count = 0; count < removed; count++) power.PauseCountdown(this, false, frameStart);
+        }
+        MarkDirty(entity);
     }
 
     private void OnDisabledEdge(Entity entity, bool becomingDisabled)
