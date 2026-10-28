@@ -109,7 +109,8 @@ public sealed partial class SimulationWorld
                     pending.Has("enslaver") ? new EntityId(checked((uint)pending.UInt("enslaver"))) : default,
                     pending.Has("producer") ? new EntityId(checked((uint)pending.UInt("producer"))) : default,
                     pending.Has("exitX"), pending.Has("exitX") ? pending.Fixed("doorX") : default, pending.Has("exitX") ? pending.Fixed("doorY") : default,
-                    pending.Has("exitX") ? pending.Fixed("exitX") : default, pending.Has("exitX") ? pending.Fixed("exitY") : default),
+                    pending.Has("exitX") ? pending.Fixed("exitX") : default, pending.Has("exitX") ? pending.Fixed("exitY") : default,
+                    pending.Has("deletionTicks") ? pending.Int("deletionTicks") : 0, pending.Has("shroudRange") ? pending.Fixed("shroudRange") : default),
                 pending.Has("notBefore") ? pending.Int("notBefore") : 0));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
@@ -197,6 +198,7 @@ public sealed partial class SimulationWorld
             ScriptDisableMask = reader.Has("scriptDisableMask") ? checked((byte)reader.Int("scriptDisableMask")) : (byte)0,
         };
         if (reader.Has("shroudScalar")) entity.ShroudScalar = reader.Fixed("shroudScalar");
+        if (reader.Has("shroudRange")) entity.ShroudRange = reader.Fixed("shroudRange");
         if (reader.Has("crateWeaponLevel")) entity.CrateWeaponLevel = checked((int)reader.Int("crateWeaponLevel"));
         if (reader.Has("trainable")) entity.TrainableOverride = reader.Bool("trainable");
         if (reader.Has("crateArmorLevel")) entity.CrateArmorLevel = checked((int)reader.Int("crateArmorLevel"));

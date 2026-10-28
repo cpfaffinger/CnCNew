@@ -140,14 +140,27 @@ public abstract class SpecialPowerModuleBase(SpecialPowerBaseData baseData) : Si
         world.MarkDirty(Entity);
     }
 
-    public void Trigger(IWorldServices world) => StartRecharge(world);
+    public void Trigger(IWorldServices world, (Fixed X, Fixed Y)? at = null)
+    {
+        // aboutToDoSpecialPower (presentation), createViewObject, startPowerRecharge.
+        if (at is { } place) world.CreateSpecialPowerViewObject(Entity.Owner, _power, place.X, place.Y);
+        StartRecharge(world);
+    }
 
     public void Use(IWorldServices world, in SpecialPowerTarget target)
     {
         SpecialPowerRouting.FindHandler(Entity, world, _power)?.Initiate(world, _power, target);
-        if (!baseData.StartsAttack) Trigger(world);
+        // doSpecialPowerAtObject triggers at the object's position, doSpecialPowerAtLocation at the location, doSpecialPower without a place.
+        if (!baseData.StartsAttack) Trigger(world, PlaceOf(world, target));
         Apply(world, target);
     }
+
+    private static (Fixed X, Fixed Y)? PlaceOf(IWorldServices world, in SpecialPowerTarget target) => target.Kind switch
+    {
+        SpecialPowerTargetKind.Object => world.FindEntity(target.Entity) is { } victim ? (victim.X, victim.Y) : null,
+        SpecialPowerTargetKind.Location => (target.X, target.Y),
+        _ => null,
+    };
 
     /// <summary>The power-specific effect that runs after the base <c>doSpecialPower*</c> (initiate + trigger).</summary>
     protected virtual void Apply(IWorldServices world, in SpecialPowerTarget target) { }
@@ -563,7 +576,7 @@ public sealed class SpectreGunshipDeploymentUpdate(SpectreGunshipData data) : Si
         else if (!gunship.IsInstantiable)
             world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, data.GunshipTemplate, CreationSkipReasons.TemplateNotInstantiable);
         else CreateGunship(world, gunship, targetX, targetY);
-        SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world);
+        SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world, (targetX, targetY));
     }
 
     private void CreateGunship(IWorldServices world, ObjectTemplate gunship, Fixed targetX, Fixed targetY)

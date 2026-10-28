@@ -1579,15 +1579,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GameData/SpecialPowerViewObject",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GameData/SpeechOn",
       "count": 1,
       "owners": [

@@ -350,6 +350,8 @@ public sealed class TemplateCatalog
     public int ValuePerSupplyBox { get; }
     /// <summary><c>GlobalData::m_LowEnergyPenaltyModifier</c>, <c>m_MinLowEnergyProductionSpeed</c>, <c>m_MaxLowEnergyProductionSpeed</c> (<c>ThingTemplate::calcTimeToBuild</c>).</summary>
     public LowEnergyRules LowEnergy { get; private init; } = LowEnergyRules.Absent;
+    /// <summary><c>GlobalData::m_specialPowerViewObjectName</c> (<c>GameData.ini SpecialPowerViewObject = SuperweaponPing</c>): what a power creates at its target to show it; empty when absent.</summary>
+    public string SpecialPowerViewObject { get; private init; } = string.Empty;
     /// <summary><c>GlobalData::m_sellPercentage</c> as a ratio (<c>GameData.ini SellPercentage = 50%</c>): the share of a structure's cost a sale refunds; the reference default is 1.0.</summary>
     public Fixed SellPercentage { get; }
     /// <summary><c>GlobalData::m_healthBonus[level]</c>: the max-health multiplier of veterancy level 0..3 (<c>GameData.ini HealthBonus_Veteran/Elite/Heroic</c>; every absent value is the reference default 1.0, level 0 is always 1.0).</summary>
@@ -456,6 +458,8 @@ public sealed class TemplateCatalog
         {
             MaxTunnelCapacity = ResolveMaxTunnelCapacity(graph),
             LowEnergy = ResolveLowEnergy(graph),
+            SpecialPowerViewObject = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
+                .LastOrDefault(field => field.Name.Equals("SpecialPowerViewObject", StringComparison.OrdinalIgnoreCase))?.Value.Value is DefinitionReference { IsNone: false } view ? view.Name : string.Empty,
             Geometry = geometry ?? ModelGeometry.None,
             Rate = rate,
             Rules = rules ?? RuleProfile.Original,
@@ -532,7 +536,6 @@ public sealed class TemplateCatalog
         return (Get("UnitDamagedThreshold", 0.7m), Get("UnitReallyDamagedThreshold", 0.35m));
     }
 
-    /// <summary>Same fallback rule as the damage thresholds; -64 is the retail <c>GameData.ini</c> value.</summary>
     /// <summary>Absent keys: the reference's defaults of <c>GlobalData</c> (all 0.0).</summary>
     private static LowEnergyRules ResolveLowEnergy(CompiledDefinitionGraph graph)
     {
@@ -541,6 +544,7 @@ public sealed class TemplateCatalog
         return new LowEnergyRules(Get("LowEnergyPenaltyModifier"), Get("MinLowEnergyProductionSpeed"), Get("MaxLowEnergyProductionSpeed"));
     }
 
+    /// <summary>Same fallback rule as the damage thresholds; -64 is the retail <c>GameData.ini</c> value.</summary>
     private static decimal ResolveGravity(CompiledDefinitionGraph graph)
     {
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();

@@ -1289,7 +1289,7 @@ public sealed class ParticleUplinkCannonUpdate(ParticleUplinkData data) : SimMod
         _pulses = 0;
         _scorches = 0;
         _driveLeft = 0;
-        SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world);
+        SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world, (_initial.X, _initial.Y));
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 

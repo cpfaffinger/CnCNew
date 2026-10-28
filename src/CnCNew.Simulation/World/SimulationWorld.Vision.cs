@@ -90,6 +90,7 @@ public sealed partial class SimulationWorld
             if (entity.Owner.IsSystem || entity.DestroyRequested || entity.EffectivelyDead || entity.ContainedBy.IsValid) continue;
             var range = entity.HasStatus(ObjectStatusBits.UnderConstruction) ? entity.Template.BoundingCircleRadius : entity.Template.ShroudClearingRange;
             if (TryShroudOverride(entity, out var overridden)) range = overridden;
+            if (entity.ShroudRange > Fixed.Zero) range = entity.ShroudRange;
             if (range <= Fixed.Zero) continue;
             // The strategy center's own wider shroud and the search-and-destroy plan's sight bonus for the army.
             if (entity.ShroudScalar != Fixed.One) range *= entity.ShroudScalar;

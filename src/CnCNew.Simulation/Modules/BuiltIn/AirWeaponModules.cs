@@ -1091,7 +1091,11 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
         _nextWake = SimulationTiming.SleepForever;
         // Created by a carrier's SpectreGunshipDeploymentUpdate: the carrier fired the gunship's power at the target right after creating it.
         if (SpectreGunshipDeploymentUpdate.TryTakePending(world, Entity, out var x, out var y))
+        {
+            // SpectreGunshipDeploymentUpdate marks the gunship's power triggered at the target before it fires it there (markSpecialPowerTriggered, then doSpecialPowerAtLocation).
+            SpecialPowerRouting.FindModule(Entity, _power)?.Trigger(world, (x, y));
             Initiate(world, _power, new SpecialPowerTarget(SpecialPowerTargetKind.Location, EntityId.Invalid, x, y));
+        }
     }
 
     public bool Handles(IWorldServices world, int powerIndex) => powerIndex == _power;
@@ -1117,7 +1121,7 @@ public sealed class SpectreGunshipUpdate(SpectreData data) : SimModule, IUpdateM
             _gattling = world.RequestSpawn(template.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
             _gattlingPlaced = false;
         }
-        SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world);
+        SpecialPowerRouting.FindModule(Entity, powerIndex)?.Trigger(world, (_initialTarget.X, _initialTarget.Y));
         // A gunship that is still being created is scheduled when it is registered; a registered one is woken through the world (which compares with the current wake tick).
         if (Entity.Registered)
         {

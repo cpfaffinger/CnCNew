@@ -319,6 +319,9 @@ public sealed class Entity
     /// <summary>Factor on the template's shroud clearing range (<c>Object::setShroudClearingRange</c>: the strategy center's search-and-destroy bonus); 1 for every other object.</summary>
     public Fixed ShroudScalar { get; internal set; } = Fixed.One;
 
+    /// <summary>A shroud clearing range set on the object (<c>Object::setShroudClearingRange</c>: a power's view object), 0 while the template's applies.</summary>
+    public Fixed ShroudRange { get; internal set; }
+
     public bool IsVisionSpiedBy(PlayerId player) => VisionSpiedBy is { } spied && spied.TryGetValue(player.Value, out var count) && count > 0;
     internal UpdateNode[] Updates { get; set; } = [];
     internal List<Timers.SimTimer>? Timers { get; set; }
@@ -390,6 +393,7 @@ public sealed class Entity
         writer.UInt("builder", BuilderId.Value);
         writer.Int("sellCompleteTick", SellCompleteTick);
         if (ShroudScalar != Fixed.One) writer.Fixed("shroudScalar", ShroudScalar);
+        if (ShroudRange > Fixed.Zero) writer.Fixed("shroudRange", ShroudRange);
         if (CrateWeaponLevel != 0) writer.Int("crateWeaponLevel", CrateWeaponLevel);
         if (TrainableOverride is { } trainable) writer.Bool("trainable", trainable);
         if (CrateArmorLevel != 0) writer.Int("crateArmorLevel", CrateArmorLevel);

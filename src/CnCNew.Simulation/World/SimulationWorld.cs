@@ -163,7 +163,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly record struct SpawnSetup(bool HasHealth, int HealthPercent, bool HasVeterancy, int Veterancy, long MinLifetimeTicks, long MaxLifetimeTicks,
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default,
-        bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default);
+        bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default, long DeletionTicks = 0, Fixed ShroudRange = default);
 
     // Ticks per logic frame of the original: how long after the spawn phase that asked for it an object requested inside that phase appears (ProcessSpawns). 1 at 30 Hz.
     private readonly long _firstFrameTicks;
@@ -1716,6 +1716,11 @@ public sealed partial class SimulationWorld : IWorldServices
         if (setup.MaxLifetimeTicks > 0)
             foreach (var module in entity.ModuleArray)
                 if (module is Modules.BuiltIn.LifetimeUpdate lifetime) lifetime.OverrideRange(setup.MinLifetimeTicks, setup.MaxLifetimeTicks);
+        // createViewObject: DeletionUpdate::setLifetimeRange(duration, duration) and setShroudClearingRange(range).
+        if (setup.DeletionTicks > 0)
+            foreach (var module in entity.ModuleArray)
+                if (module is Modules.BuiltIn.DeletionUpdate deletion) deletion.OverrideRange(setup.DeletionTicks, setup.DeletionTicks);
+        if (setup.ShroudRange > Fixed.Zero) entity.ShroudRange = setup.ShroudRange;
         foreach (var module in entity.ModuleArray) module.OnSpawn(this);
         ApplyBattlePlanToEntity(entity);
         if (setup.Producer.IsValid)
@@ -2258,6 +2263,8 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.Fixed("rallyY", setup.RallyY);
             if (setup.Producer.IsValid) writer.UInt("producer", setup.Producer.Value);
             if (pending.NotBefore != 0) writer.Int("notBefore", pending.NotBefore);
+            if (setup.DeletionTicks > 0) writer.Int("deletionTicks", setup.DeletionTicks);
+            if (setup.ShroudRange > Fixed.Zero) writer.Fixed("shroudRange", setup.ShroudRange);
             if (setup.HasExit)
             {
                 writer.Fixed("doorX", setup.DoorX);

@@ -13,6 +13,12 @@ public sealed record SpecialPowerInfo(int Index, string Name, string Type, long 
 {
     /// <summary><c>RadiusCursorRadius</c>: the area the power affects, as far as the script AI aims it (<c>SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST</c>); zero when the definition declares none.</summary>
     public Fixed RadiusCursorRadius { get; init; }
+
+    /// <summary><c>ViewObjectDuration</c> in ticks: how long the view a trigger opens at the target stays (0: none).</summary>
+    public long ViewObjectTicks { get; init; }
+
+    /// <summary><c>ViewObjectRange</c>: the shroud clearing range of that view (0: none).</summary>
+    public Fixed ViewObjectRange { get; init; }
 }
 
 /// <summary>
@@ -69,7 +75,12 @@ public sealed class SpecialPowerCatalog
                 long whole => Fixed.FromInt(whole),
                 _ => Fixed.Zero,
             };
-            powers.Add(new SpecialPowerInfo(powers.Count, definition.OriginalName, type, reloadTicks, science, sharedSynced, publicTimer) { RadiusCursorRadius = radius });
+            var viewTicks = Field("ViewObjectDuration")?.Value.Value is GameTime view ? timing.DurationMillisecondsToTicks(view.Milliseconds) : 0;
+            var viewRange = Field("ViewObjectRange")?.Value.Value is decimal range ? Fixed.FromDecimal(range) : Fixed.Zero;
+            powers.Add(new SpecialPowerInfo(powers.Count, definition.OriginalName, type, reloadTicks, science, sharedSynced, publicTimer)
+            {
+                RadiusCursorRadius = radius, ViewObjectTicks = viewTicks, ViewObjectRange = viewRange,
+            });
         }
         return new SpecialPowerCatalog(powers.ToImmutable(), defaulted);
     }

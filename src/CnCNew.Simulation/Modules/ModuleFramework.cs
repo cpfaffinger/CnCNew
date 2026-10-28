@@ -413,6 +413,12 @@ public interface IWorldServices
     /// <summary><c>BodyModuleInterface::getDamageScalar</c>: the factor every non-unresistable damage is multiplied by (1 unless a hold-the-line battle plan covers the object).</summary>
     Fixed DamageScalarOf(Entity entity);
 
+    /// <summary>
+    /// <c>SpecialPowerModule::createViewObject</c>: when the power has a view (<c>ViewObjectRange</c> and <c>ViewObjectDuration</c> above 0), the <c>GameData</c>'s
+    /// <c>SpecialPowerViewObject</c> is created for <paramref name="owner"/> at the place, with the view's range as its shroud clearing range and its duration as its lifetime.
+    /// </summary>
+    void CreateSpecialPowerViewObject(PlayerId owner, int power, Fixed x, Fixed y);
+
     /// <summary>Scales the object's shroud clearing range by <paramref name="scalar"/> (<c>Object::setShroudClearingRange</c>); 1 restores the template's range.</summary>
     void SetShroudScalar(Entity entity, Fixed scalar);
 
@@ -494,8 +500,11 @@ public interface ISpecialPowerModule
     /// <summary>Pauses or resumes the countdown; <paramref name="atTick"/> is the tick it counts from (the current tick when absent).</summary>
     void PauseCountdown(IWorldServices world, bool pause, long? atTick = null);
 
-    /// <summary><c>SpecialPowerModule::triggerSpecialPower</c>: starts the recharge.</summary>
-    void Trigger(IWorldServices world);
+    /// <summary>
+    /// <c>SpecialPowerModule::triggerSpecialPower</c>: starts the recharge, and with a place (<paramref name="at"/>) opens the power's view there
+    /// (<c>createViewObject</c>; F-59). A trigger without a place - a power without a target, a waypoint path, a recharge started by a crate - opens none.
+    /// </summary>
+    void Trigger(IWorldServices world, (Fixed X, Fixed Y)? at = null);
 
     /// <summary><c>doSpecialPower*</c>: initiates via the entity's handlers, triggers unless <see cref="StartsAttack"/>, then applies the module's own effect.</summary>
     void Use(IWorldServices world, in SpecialPowerTarget target);

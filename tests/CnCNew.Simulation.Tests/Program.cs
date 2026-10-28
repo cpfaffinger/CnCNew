@@ -215,6 +215,7 @@ run.Test("Phase 40: a disable other than held pauses the special powers (pauseAl
 run.Test("Phase 40 (F-50): the player's radar", Tests.PlayerRadar);
 run.Test("Phase 40 (F-48): the body applies the armour to raw damage and healing", Tests.ArmourIsAppliedByTheBody);
 run.Test("Phase 40: damage modules read the dealt amount before the health clips it (out.m_actualDamageDealt)", Tests.DamageModulesReadTheUnclippedAmount);
+run.Test("Phase 40 (F-59): a power triggered at a place opens its view there (createViewObject)", Tests.PowerOpensItsViewAtTheTarget);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);
