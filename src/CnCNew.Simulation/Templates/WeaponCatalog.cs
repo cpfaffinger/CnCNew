@@ -42,6 +42,14 @@ public sealed record WeaponInfo(
     public string ProjectileObject { get; init; } = string.Empty;
 
     public Fixed ScatterRadius { get; init; }
+
+    /// <summary>
+    /// <c>ShockWaveAmount</c>, <c>ShockWaveRadius</c>, <c>ShockWaveTaperOff</c> (all 0 by default, <c>WeaponTemplate</c>): the push an area weapon gives each victim
+    /// (<c>Object::attemptDamage</c> - the amount times one minus the victim's share of the radius times one minus the taper-off; F-63, docs/SHOCK-WAVE.md).
+    /// </summary>
+    public Fixed ShockWaveAmount { get; init; }
+    public Fixed ShockWaveRadius { get; init; }
+    public Fixed ShockWaveTaperOff { get; init; }
     public Fixed ScatterRadiusVsInfantry { get; init; }
     public string DetonationFx { get; init; } = string.Empty;
     public string DetonationOcl { get; init; } = string.Empty;
@@ -284,6 +292,9 @@ public sealed class WeaponCatalog
                 ProjectileObject = projectile,
                 ScatterRadius = Length("ScatterRadius"),
                 ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),
+                ShockWaveAmount = Length("ShockWaveAmount"),
+                ShockWaveRadius = Length("ShockWaveRadius"),
+                ShockWaveTaperOff = Length("ShockWaveTaperOff"),
                 DetonationFx = Name("ProjectileDetonationFX"),
                 DetonationOcl = Name("ProjectileDetonationOCL"),
                 DamageDealtAtSelfPosition = Flag("DamageDealtAtSelfPosition"),

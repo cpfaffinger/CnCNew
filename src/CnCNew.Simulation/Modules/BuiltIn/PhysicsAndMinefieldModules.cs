@@ -11,14 +11,51 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 
 // ========================================================================================== PhysicsBehavior / SquishCollide
 
-/// <summary>The <c>PhysicsBehavior</c> fields the module carries; friction, shock, fall-damage and crash-weapon keys are typed by the catalog schema but have no consumer yet.</summary>
+/// <summary>
+/// The <c>PhysicsBehavior</c> fields the module carries, with the defaults of <c>PhysicsBehaviorModuleData</c>. The shock, friction and fall fields are what the flight of a shocked
+/// object reads (F-63, docs/SHOCK-WAVE.md): the frictions per logic frame of the original (<c>parseFrictionPerSec</c>: the value per second times 1/30), the shock rates in
+/// radians per frame, <c>MinFallHeightForDamage</c> as the height (the original turns it into a speed with the gravity, <c>heightToSpeed</c>). The crash-weapon keys have no consumer.
+/// </summary>
 public sealed record PhysicsData(Fixed Mass, bool AllowBouncing, bool AllowCollideForce, bool KillWhenRestingOnGround) : ModuleData
 {
-    public static PhysicsData Parse(RatedModuleConfiguration configuration) => new(
-        ModuleConfigReader.Real(configuration, "Mass", Fixed.One),
-        ModuleConfigReader.Bool(configuration, "AllowBouncing", false),
-        ModuleConfigReader.Bool(configuration, "AllowCollideForce", true),
-        ModuleConfigReader.Bool(configuration, "KillWhenRestingOnGround", false));
+    public Fixed ShockResistance { get; init; }
+    public Fixed ShockMaxYaw { get; init; } = Fixed.FromDecimal(0.05m);
+    public Fixed ShockMaxPitch { get; init; } = Fixed.FromDecimal(0.025m);
+    public Fixed ShockMaxRoll { get; init; } = Fixed.FromDecimal(0.025m);
+    public Fixed ForwardFriction { get; init; } = Fixed.FromDecimal(0.15m);
+    public Fixed LateralFriction { get; init; } = Fixed.FromDecimal(0.15m);
+    public Fixed ZFriction { get; init; } = Fixed.FromDecimal(0.8m);
+    public Fixed AerodynamicFriction { get; init; }
+    public Fixed CenterOfMassOffset { get; init; }
+    public Fixed MinFallHeightForDamage { get; init; } = Fixed.FromInt(40);
+    public Fixed FallHeightDamageFactor { get; init; } = Fixed.One;
+    public Fixed PitchRollYawFactor { get; init; } = Fixed.FromInt(2);
+
+    public static PhysicsData Parse(RatedModuleConfiguration configuration)
+    {
+        var frame = Fixed.FromInt(CnCNew.Data.OriginalFrame.PerSecond);
+        Fixed PerFrame(string key, Fixed fallback) => ModuleConfigReader.Find(configuration, key) is not null ? ModuleConfigReader.Real(configuration, key, Fixed.Zero) / frame : fallback;
+        var defaults = new PhysicsData(Fixed.One, false, true, false);
+        return new PhysicsData(
+            ModuleConfigReader.Real(configuration, "Mass", Fixed.One),
+            ModuleConfigReader.Bool(configuration, "AllowBouncing", false),
+            ModuleConfigReader.Bool(configuration, "AllowCollideForce", true),
+            ModuleConfigReader.Bool(configuration, "KillWhenRestingOnGround", false))
+        {
+            ShockResistance = ModuleConfigReader.Real(configuration, "ShockResistance", defaults.ShockResistance),
+            ShockMaxYaw = ModuleConfigReader.Real(configuration, "ShockMaxYaw", defaults.ShockMaxYaw),
+            ShockMaxPitch = ModuleConfigReader.Real(configuration, "ShockMaxPitch", defaults.ShockMaxPitch),
+            ShockMaxRoll = ModuleConfigReader.Real(configuration, "ShockMaxRoll", defaults.ShockMaxRoll),
+            ForwardFriction = PerFrame("ForwardFriction", defaults.ForwardFriction),
+            LateralFriction = PerFrame("LateralFriction", defaults.LateralFriction),
+            ZFriction = PerFrame("ZFriction", defaults.ZFriction),
+            AerodynamicFriction = PerFrame("AerodynamicFriction", defaults.AerodynamicFriction),
+            CenterOfMassOffset = ModuleConfigReader.Real(configuration, "CenterOfMassOffset", defaults.CenterOfMassOffset),
+            MinFallHeightForDamage = ModuleConfigReader.Real(configuration, "MinFallHeightForDamage", defaults.MinFallHeightForDamage),
+            FallHeightDamageFactor = ModuleConfigReader.Real(configuration, "FallHeightDamageFactor", defaults.FallHeightDamageFactor),
+            PitchRollYawFactor = ModuleConfigReader.Real(configuration, "PitchRollYawFactor", defaults.PitchRollYawFactor),
+        };
+    }
 }
 
 /// <summary>
