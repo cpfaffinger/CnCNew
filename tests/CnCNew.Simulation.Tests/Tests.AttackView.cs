@@ -7,7 +7,8 @@ using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.World;
 
 // F-55: the attack's view test. Step (a): the terrain line of BaseHeightMapRenderObjClass::isClearLineOfSight; step (b): the obstacle walk of
-// Pathfinder::isAttackViewBlockedByObstacle over the pathfind cells; step (c): outOfWeaponRangeObject counts a blocked view as out of range.
+// Pathfinder::isAttackViewBlockedByObstacle over the pathfind cells; step (c): outOfWeaponRangeObject counts a blocked view as out of range;
+// step (d): the acquisition passes a candidate it cannot see by (PartitionFilterLineOfSight).
 static partial class Tests
 {
     public static void TerrainLineOfSightFollowsTheOriginal()
@@ -114,6 +115,61 @@ static partial class Tests
     {
         ["Data/INI/Object/AttackViewFixture.ini"] = AttackViewFiles()["Data/INI/Object/AttackViewFixture.ini"],
         ["Data/INI/Object/AttackGateFixture.ini"] = """
+        Weapon LosFlak
+          PrimaryDamage = 10
+          AttackRange = 150.0
+          DamageType = EXPLOSION
+          ClipSize = 0
+          DelayBetweenShots = 300
+          AntiAirborneVehicle = Yes
+          AntiGround = No
+        End
+
+        Object LosFlakSoldier
+          KindOf = SELECTABLE INFANTRY ATTACK_NEEDS_LINE_OF_SIGHT
+          VisionRange = 400.0
+          Locomotor = SET_NORMAL ChaseLoco
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY LosFlak
+          End
+          Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
+            MoodAttackCheckRate = 250
+          End
+        End
+
+        Object FlakSoldier
+          KindOf = SELECTABLE INFANTRY
+          VisionRange = 400.0
+          Locomotor = SET_NORMAL ChaseLoco
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY LosFlak
+          End
+          Behavior = AIUpdateInterface AI01
+            AutoAcquireEnemiesWhenIdle = Yes
+            MoodAttackCheckRate = 250
+          End
+        End
+
+        Object HoverCraft
+          KindOf = SELECTABLE VEHICLE AIRCRAFT
+          VisionRange = 400.0
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+        End
+
         Object LosSoldier
           KindOf = SELECTABLE INFANTRY ATTACK_NEEDS_LINE_OF_SIGHT
           VisionRange = 150.0
@@ -167,5 +223,33 @@ static partial class Tests
         Check.That(fence.Shots > 0, $"Through a structure one can see through it fires ({fence.Shots} shots).");
         var blind = AttackGateScene("AcqSoldier", "ViewWall");
         Check.That(blind.Shots > 0 && blind.Order.Accepted, $"A unit without the kind fires through the structure ({blind.Shots} shots).");
+    }
+
+    /// <summary>An anti-air soldier on flat ground, a ridge (when there is one) between it and an aircraft hovering 100 high; returns the shots it fired over three seconds.</summary>
+    private static int ShotsAtAircraftBehindRidge(string soldier, bool ridge)
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: AttackGateFiles());
+        // Vertex column 8 (world x 70 to 80) rises to 255 raw (159 m): the line from the soldier's top to the aircraft's top passes far below it.
+        var terrain = TerrainMap.Build(SyntheticMaps.Build(30, 30, 1, (x, _) => ridge && x == 8 ? 255 : 0), "flak");
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+        var feeder = new Feeder(world);
+        feeder.Spawn(1, soldier, owner: 1, x: 50, y: 150);
+        feeder.Spawn(2, "HoverCraft", owner: 2, x: 150, y: 150, z: 100);
+        var shots = 0;
+        for (var step = 0; step < world.Frames(90); step++)
+            foreach (var value in world.Step().Events)
+                if (value.Kind == SimEventKind.WeaponFired && world.FindEntity(value.Entity)?.Template.Name == soldier) shots++;
+        return shots;
+    }
+
+    public static void AcquisitionPassesBlockedCandidates()
+    {
+        // The attack gate does not test an airborne victim; the acquisition's filter tests the terrain between the two tops for every candidate.
+        var open = ShotsAtAircraftBehindRidge("LosFlakSoldier", ridge: false);
+        Check.That(open > 0, $"Setup: without the ridge the soldier fires at the aircraft ({open} shots).");
+        var behind = ShotsAtAircraftBehindRidge("LosFlakSoldier", ridge: true);
+        Check.That(behind == 0, $"Behind the ridge a soldier that needs a line of sight does not acquire it ({behind} shots).");
+        var blind = ShotsAtAircraftBehindRidge("FlakSoldier", ridge: true);
+        Check.That(blind > 0, $"One without the kind does ({blind} shots).");
     }
 }

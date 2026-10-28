@@ -75,6 +75,20 @@ public sealed partial class SimulationWorld
         return Navigation.IsAttackLineBlocked(attackerX, attackerY, victimX, victimY, excepted);
     }
 
+    /// <summary>
+    /// <c>PartitionFilterLineOfSight</c>, the filter <c>getNextMoodTarget</c> adds (<c>AI::CAN_SEE</c>) for an acquirer of the kind <c>ATTACK_NEEDS_LINE_OF_SIGHT</c>: the terrain
+    /// between the two tops (<c>isClearLineOfSightTerrain</c> with both objects - for every candidate, an aircraft and an <c>IMMOBILE</c> acquirer too), then, for a candidate
+    /// not significantly above the terrain, the attack's view (<c>Pathfinder::isViewBlockedByObstacle</c>). A blocked candidate is passed by, also by a unit that may chase.
+    /// </summary>
+    private bool AcquisitionViewBlocked(Entity entity, Entity candidate)
+    {
+        if (!AttackUsesLineOfSight || Terrain is null || !entity.Template.IsKindOf(NeedsLineOfSightKind)) return false;
+        var (ownX, ownY, ownZ) = entity.FrameEnd(_tick);
+        var (otherX, otherY, otherZ) = candidate.FrameEnd(_tick);
+        if (!Terrain.IsClearLineOfSight(ownX, ownY, ownZ + MaxHeightAbovePosition(entity.Template), otherX, otherY, otherZ + MaxHeightAbovePosition(candidate.Template))) return true;
+        return !IsSignificantlyAboveTerrainAtFrameEnd(candidate) && IsAttackViewBlocked(entity, candidate);
+    }
+
     /// <summary><c>GeometryInfo::getMaxHeightAbovePosition</c>: a sphere its radius, a box or a cylinder its height.</summary>
     private static Fixed MaxHeightAbovePosition(ObjectTemplate template)
         => template.Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase) ? template.GeometryMajorRadius : template.GeometryHeight;

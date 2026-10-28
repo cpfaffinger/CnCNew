@@ -219,6 +219,7 @@ run.Test("Phase 40 (F-59): a power triggered at a place opens its view there (cr
 run.Test("Phase 41 (F-55a): the terrain line of the attack view follows the original (isClearLineOfSight)", Tests.TerrainLineOfSightFollowsTheOriginal);
 run.Test("Phase 41 (F-55b): the obstacle walk of the attack view (isAttackViewBlockedByObstacle)", Tests.AttackLineBlockedByStructures);
 run.Test("Phase 41 (F-55c): a unit that needs a line of sight does not fire through a structure (outOfWeaponRangeObject)", Tests.AttackNeedsAClearView);
+run.Test("Phase 41 (F-55d): the acquisition passes a candidate it cannot see by (PartitionFilterLineOfSight)", Tests.AcquisitionPassesBlockedCandidates);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);

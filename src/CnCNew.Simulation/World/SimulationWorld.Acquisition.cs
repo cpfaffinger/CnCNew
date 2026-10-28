@@ -460,6 +460,7 @@ public sealed partial class SimulationWorld
         if (!search.Limit.Contains(distance)) return;
         if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT") || candidate.Template.IsKindOf("MINE")) return;
         if (!IsAttackable(entity, candidate) || !AcquiresStructure(candidate, search.Buildings)) return;
+        if (AcquisitionViewBlocked(entity, candidate)) return;
         if (!CanAttack(entity, candidate, search.TurretOnly, out var inRange) || (!inRange && !search.Chase)) return;
 
         if (AcquisitionAdvisor is { } advisor && advisor.TryAttackPriority(entity, candidate, out var priority))
