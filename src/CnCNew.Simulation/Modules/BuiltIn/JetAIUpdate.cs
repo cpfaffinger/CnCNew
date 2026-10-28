@@ -646,6 +646,22 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     /// </summary>
     private bool FindWaiter(IWorldServices world, ParkingPlaceBehavior parking)
     {
+        var column = parking.SpaceOf(Entity.Id) % Math.Max(parking.Data.Cols, 1);
+        if (world.Templates.Rules.Has(Rules.GameFix.TakeoffWaitsForOneJet))
+        {
+            // The rule fix takeoff-waits-for-one-jet (findJetToWaitFor): the first jet taxiing on another runway; it is waited for only if it is the one saved first.
+            for (var runway = 0; runway < parking.RunwayCount; runway++)
+            {
+                if (runway == column) continue;
+                var other = world.FindEntity(parking.RunwayReservation(world, runway));
+                if (other is null || other == Entity) continue;
+                if (Array.Find(other.ModuleArray, module => module is JetAIUpdate) is not JetAIUpdate jet || jet._phase != JetPhase.TaxiToTakeoff) continue;
+                if (!_waitedFor.IsValid) _waitedFor = other.Id;
+                if (_waitedFor == other.Id) return true;
+                break;
+            }
+            return SameRunwayStillRolling(world, parking, column);
+        }
         for (var runway = 0; runway < parking.RunwayCount; runway++)
         {
             var other = world.FindEntity(parking.RunwayReservation(world, runway));
@@ -654,7 +670,11 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             if (!_waitedFor.IsValid) _waitedFor = other.Id;
             return true;
         }
-        var column = parking.SpaceOf(Entity.Id) % Math.Max(parking.Data.Cols, 1);
+        return SameRunwayStillRolling(world, parking, column);
+    }
+
+    private bool SameRunwayStillRolling(IWorldServices world, ParkingPlaceBehavior parking, int column)
+    {
         for (var space = 0; space < parking.SpaceCount; space++)
         {
             if (space % Math.Max(parking.Data.Cols, 1) != column || world.FindEntity(parking.OccupantOf(space)) is not { } other || other == Entity) continue;

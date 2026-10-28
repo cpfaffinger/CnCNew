@@ -412,4 +412,57 @@ static partial class Tests
         Check.That(craft.X == pad.X && craft.Y == pad.Y && craft.Z == pad.Z, $"It stands on the pad again ({craft.X}, {craft.Y}, {craft.Z}).");
         Check.That(Enumerable.Range(0, parking.SpaceCount).All(index => !parking.OccupantOf(index).IsValid), "Still no space was used.");
     }
+
+    /// <summary>
+    /// Rule fix takeoff-waits-for-one-jet: four jets on an airfield with two runways are ordered away at once. Under the original's rules (<c>findWaiter</c>) a jet at the start of
+    /// its runway waits as long as any jet with a runway taxis - also the two that begin to taxi behind the first pair once those hand their runways on; with the fix it waits only for
+    /// the one jet it saw first on the other runway, so a front jet starts its run while a jet behind it still taxis. All four take off under both rules.
+    /// </summary>
+    public static void GameFixTakeoffWaitsForOneJet()
+    {
+        var files = AirFixtureFiles.ToDictionary(pair => pair.Key, pair => pair.Value.Replace("NumCols = 1", "NumCols = 2"));
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            (int Overlaps, int TakenOff) Run(CnCNew.Simulation.Rules.RuleProfile rules)
+            {
+                var fixture = new SyntheticFixture(rate, files: files, rules: rules);
+                var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+                var feeder = new Feeder(world);
+                feeder.Spawn(1, "AirTestAirfield", owner: 1, x: 500, y: 500);
+                world.Step();
+                feeder.GiveMoney(1, 1000);
+                world.Step();
+                var airfield = Get(world, "AirTestAirfield");
+                for (var i = 0; i < 4; i++) Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, $"{rate}: jet {i} is queued.");
+                StepUntil(world, () => world.Entities.Count(value => value.Template.Name == "AirTestJet") == 4, 800, $"{rate}: four jets were produced.");
+                var jets = world.Entities.Where(value => value.Template.Name == "AirTestJet").OrderBy(value => value.Id.Value).ToArray();
+                StepUntil(world, () => jets.All(jet => JetOf(jet).Phase == JetAIUpdate.JetPhase.None), 1500, $"{rate}: all four jets parked.");
+                for (var i = 0; i < jets.Length; i++) feeder.SetMoveTarget(1, jets[i].Id.Value, 1500, 300 + 100 * i);
+                var phases = jets.Select(jet => JetOf(jet).Phase).ToArray();
+                var overlaps = 0;
+                var taken = new bool[jets.Length];
+                for (var tick = 0; tick < world.Frames(3000) && !taken.All(value => value); tick++)
+                {
+                    world.Step();
+                    for (var i = 0; i < jets.Length; i++)
+                    {
+                        var phase = JetOf(jets[i]).Phase;
+                        if (phase == JetAIUpdate.JetPhase.TakingOff && phases[i] != JetAIUpdate.JetPhase.TakingOff)
+                        {
+                            taken[i] = true;
+                            if (jets.Any(other => other != jets[i] && JetOf(other).Phase == JetAIUpdate.JetPhase.TaxiToTakeoff)) overlaps++;
+                        }
+                        phases[i] = phase;
+                    }
+                }
+                return (overlaps, taken.Count(value => value));
+            }
+
+            var original = Run(CnCNew.Simulation.Rules.RuleProfile.Original);
+            var fixedRun = Run(CnCNew.Simulation.Rules.RuleProfile.Parse("takeoff-waits-for-one-jet"));
+            Check.That(original.TakenOff == 4 && fixedRun.TakenOff == 4, $"{rate}: all four jets take off under both rules ({original.TakenOff}, {fixedRun.TakenOff}).");
+            Check.That(original.Overlaps == 0, $"{rate}: under the original rules no jet starts its run while another taxis ({original.Overlaps}).");
+            Check.That(fixedRun.Overlaps > 0, $"{rate}: with the fix a front jet starts its run while a jet behind it still taxis ({fixedRun.Overlaps}).");
+        }
+    }
 }

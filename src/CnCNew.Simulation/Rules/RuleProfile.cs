@@ -79,6 +79,9 @@ public enum GameFix
 
     /// <summary>A Battle Bus decides whether a blow would kill it by the damage after its armour, not before (<c>UndeadBody::attemptDamage</c>, <c>estimateDamage</c>).</summary>
     UndeadLethalByArmour = 23,
+
+    /// <summary>A jet about to take off waits only for the first jet it found taxiing on another runway, not for every jet that taxis later (<c>JetPauseBeforeTakeoffState::update</c>).</summary>
+    TakeoffWaitsForOneJet = 24,
 }
 
 /// <summary>
@@ -189,6 +192,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.UndeadLethalByArmour, "undead-lethal-by-armour",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Body/UndeadBody.cpp, UndeadBody::attemptDamage",
             "a Battle Bus begins its second life only when a blow would kill it after its armour - a blow its armour makes survivable no longer turns it into the bus's empty shell"),
+        new(GameFix.TakeoffWaitsForOneJet, "takeoff-waits-for-one-jet",
+            "GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp, JetPauseBeforeTakeoffState::update, findJetToWaitFor",
+            "a jet at the start of its runway waits for the one jet it saw taxiing on the other runway, not again for each jet that starts to taxi behind it - the airfield no longer holds every jet back while one taxis"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

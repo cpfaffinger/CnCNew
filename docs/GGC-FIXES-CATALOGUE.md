@@ -11,7 +11,7 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 
 | Subsystem | Markers | CRC-gated | Reviewed here |
 | --- | ---: | ---: | ---: |
-| AI | 37 | 24 | 25 |
+| AI | 37 | 24 | 26 |
 | UI | 30 | 0 | 0 |
 | engine | 56 | 8 | 8 |
 | network | 9 | 1 | 1 |
@@ -20,7 +20,7 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 | scripts | 2 | 0 | 0 |
 | simulation | 109 | 55 | 57 |
 | tools | 3 | 0 | 0 |
-| **all** | **354** | **96** | **99** |
+| **all** | **354** | **96** | **100** |
 
 ## AI
 
@@ -56,7 +56,7 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 | `GameLogic/Object/Update/AIUpdate/DozerAIUpdate.cpp:1618` | `DozerAIUpdate::update` | bugfix | Stubbjax 2025-11-16 |  | Invalidate the task when the build scaffold is destroyed. |  |
 | `GameLogic/Object/Update/AIUpdate/DozerAIUpdate.cpp:2358` | `DozerAIUpdate::onDisabledEdge` | bugfix | Stubbjax 2025-11-17 | yes | Resume previous task when re-enabled. | equivalent - a builder keeps its task over a disable in the port |
 | `GameLogic/Object/Update/AIUpdate/HackInternetAIUpdate.cpp:132` | `HackInternetAIUpdate::aiDoCommand` | bugfix | andrew-2e128 / Mauller 2025-07-14 | yes | prevent hacking hackers packing and unpacking when commanded to hack the internet | not applicable - the port has no hack command for a unit that is already hacking |
-| `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:1467` | `JetAIUpdate::isOutOfSpecialReloadAmmo` | bugfix |  |  | Reimplements the update to wait for another Jet on another runway. |  |
+| `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:1467` | `JetAIUpdate::isOutOfSpecialReloadAmmo` | bugfix |  |  | Reimplements the update to wait for another Jet on another runway. | adopted - GameFix.TakeoffWaitsForOneJet (CRC-gated by the #if around the whole update, which this scan does not see; Phase 41) |
 | `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2026` | `JetAIUpdate::update` | bugfix | arcticdolphin 2026-03-02 | yes | Move healed helicopter to rally point if present. | adopted - GameFix.HealedHelicopterToRally |
 | `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2150` | `JetAIUpdate::update` | bugfix | arcticdolphin 2026-03-04 | yes | Reset locomotor when attack locomotor timer expires. | equivalent - the attack locomotor ends with its timer (JetAIUpdate.cs) |
 | `GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2745` | `JetAIUpdate::crc` | bugfix |  |  | Save landing position. |  |

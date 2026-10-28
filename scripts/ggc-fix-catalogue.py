@@ -117,6 +117,7 @@ REVIEW_BY_LINE = {
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/DeployStyleAIUpdate.cpp:146': 'equivalent - deploying starts only from a fire attempt that passed the range check',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/DozerAIUpdate.cpp:2358': 'equivalent - a builder keeps its task over a disable in the port',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/HackInternetAIUpdate.cpp:132': 'not applicable - the port has no hack command for a unit that is already hacking',
+    'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:1467': 'adopted - GameFix.TakeoffWaitsForOneJet (CRC-gated by the #if around the whole update, which this scan does not see; Phase 41)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2026': 'adopted - GameFix.HealedHelicopterToRally',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/JetAIUpdate.cpp:2150': 'equivalent - the attack locomotor ends with its timer (JetAIUpdate.cs)',
     'GeneralsMD/Code/GameEngine/Source/GameLogic/Object/Update/AIUpdate/MissileAIUpdate.cpp:557': 'not applicable - the port has no diving-missile distance logic',
