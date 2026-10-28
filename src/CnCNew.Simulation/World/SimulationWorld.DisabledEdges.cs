@@ -78,6 +78,12 @@ public sealed partial class SimulationWorld
     {
         foreach (var module in entity.ModuleArray)
             if (module is SpyVisionUpdate spy) spy.SetDisabledUntilFrame(this, becomingDisabled ? SimulationTiming.SleepForever : 0);
+        foreach (var module in entity.ModuleArray)
+            if (module is RadarUpgrade { Executed: true } radar)
+            {
+                if (becomingDisabled) RemoveRadar(entity.Owner, radar.DisableProof);
+                else AddRadar(entity.Owner, radar.DisableProof);
+            }
         // "Have to say goodbye to the thing we might be building or repairing so someone else can do it."
         if (becomingDisabled && Modules.BuiltIn.CrateModules.AiOf(entity) is { HasBuilderTask: true } dozer) dozer.OrderIdle(this);
         // "We can't affect something that consumes, or else we go low power which removes the consumption which makes us not low power..."

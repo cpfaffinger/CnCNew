@@ -66,15 +66,37 @@ public sealed partial class SimulationWorld
     /// <summary>"Design won't make the minimum 0, they promise": 0.01.</summary>
     private static readonly Fixed LowestProductionSpeed = Fixed.FromRaw(Fixed.One.Raw / 100);
 
+    /// <inheritdoc cref="IWorldServices.AddRadar"/>
+    public void AddRadar(PlayerId player, bool disableProof)
+    {
+        if (!_players.TryGetValue(player.Value, out var state)) return;
+        state.RadarCount++;
+        if (disableProof) state.DisableProofRadarCount++;
+    }
+
+    /// <inheritdoc cref="IWorldServices.RemoveRadar"/>
+    public void RemoveRadar(PlayerId player, bool disableProof)
+    {
+        if (!_players.TryGetValue(player.Value, out var state)) return;
+        state.RadarCount--;
+        if (disableProof) state.DisableProofRadarCount--;
+    }
+
+    /// <summary><c>Player::hasRadar</c>: a radar the player has, and not switched off by a brown-out unless one of them is disable-proof.</summary>
+    public bool HasRadar(PlayerId player)
+        => _players.TryGetValue(player.Value, out var state) && (!state.RadarDisabled || state.DisableProofRadarCount != 0) && state.RadarCount > 0;
+
     /// <summary><c>Energy::getConsumption</c>: what the player's objects consume.</summary>
     public int EnergyConsumptionOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.EnergyConsumption : 0;
 
     /// <summary>
-    /// <c>Player::onPowerBrownOutChange</c>: every <c>POWERED</c> object of the player is underpowered during a brown-out and no longer after it (<c>doPowerDisable</c>). The radar part
-    /// waits for the player's radar.
+    /// <c>Player::onPowerBrownOutChange</c>: the player's radar is switched off during a brown-out (unless a disable-proof one is there) and every <c>POWERED</c> object of the
+    /// player is underpowered (<c>doPowerDisable</c>); both end with it.
     /// </summary>
     private void OnPowerBrownOutChange(PlayerId player, bool brownOut)
     {
+        // disableRadar / enableRadar: the restriction only; a radar the player does not have is not given.
+        if (_players.TryGetValue(player.Value, out var state)) state.RadarDisabled = brownOut;
         foreach (var entity in EntitiesOwnedBy(player).AsSpan())
         {
             if (entity.Underpowered == brownOut || !entity.Template.IsKindOf(PoweredKind)) continue;

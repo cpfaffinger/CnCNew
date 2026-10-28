@@ -434,4 +434,93 @@ static partial class Tests
         var disabled = ReadyAfter(true);
         Check.That(disabled - free == TestRate.Default.Time.OriginalFrames(20), $"An EMP of twenty frames delays the power by twenty frames ({free} against {disabled} ticks).");
     }
+
+    /// <summary>
+    /// F-50: a player's radar (<c>Player::addRadar</c>, <c>hasRadar</c>): the radar upgrade gives it, a brown-out switches it off unless one of the player's radars is
+    /// <c>DisableProof</c> (the GLA's), the building's disabled edge takes it away and gives it back, its death takes it away. The port had no radar per player.
+    /// </summary>
+    public static void PlayerRadar()
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: new Dictionary<string, string>(RetailModuleFiles())
+        {
+            ["Data/INI/Object/Radar.ini"] = """
+            Upgrade Upgrade_TestRadar
+              Type = OBJECT
+              BuildCost = 0
+              BuildTime = 0
+            End
+            Upgrade Upgrade_TestProofRadar
+              Type = OBJECT
+              BuildCost = 0
+              BuildTime = 0
+            End
+            Object RadarBuilding
+              KindOf = STRUCTURE
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+              Behavior = RadarUpgrade Radar01
+                TriggeredBy = Upgrade_TestRadar
+              End
+            End
+            Object ProofRadarBuilding
+              KindOf = STRUCTURE
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+              Behavior = RadarUpgrade Radar01
+                TriggeredBy = Upgrade_TestProofRadar
+                DisableProof = Yes
+              End
+            End
+            Object RadarConsumer
+              KindOf = STRUCTURE
+              EnergyProduction = -5
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+            End
+            """,
+        });
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        var player = new PlayerId(1);
+        feeder.Spawn(1, "RadarBuilding", x: 100, y: 100);
+        world.Step();
+        var building = world.Entities.Single(entity => entity.Template.Name == "RadarBuilding");
+        Check.That(!world.HasRadar(player), "Setup: no radar before the upgrade.");
+        feeder.GrantUpgrade(1, "Upgrade_TestRadar", building.Id.Value);
+        world.Step();
+        Check.That(world.HasRadar(player), "The radar upgrade gives the player a radar.");
+
+        world.DisableByEmpUntil(building, world.Tick + world.Frames(10));
+        world.Step();
+        Check.That(!world.HasRadar(player), "An EMP'd radar building takes the radar away (its disabled edge).");
+        for (var tick = 0; tick < world.Frames(12); tick++) world.Step();
+        Check.That(world.HasRadar(player), "It gives it back when the EMP is over.");
+
+        feeder.Spawn(1, "RadarConsumer", x: 300, y: 300);
+        world.Step();
+        Check.That(!world.HasRadar(player), "A brown-out switches the radar off.");
+        feeder.Spawn(1, "ProofRadarBuilding", x: 500, y: 500);
+        world.Step();
+        var proof = world.Entities.Single(entity => entity.Template.Name == "ProofRadarBuilding");
+        feeder.GrantUpgrade(1, "Upgrade_TestProofRadar", proof.Id.Value);
+        world.Step();
+        Check.That(world.HasRadar(player), "A disable-proof radar keeps it on in a brown-out.");
+
+        world.Kill(proof.Id);
+        world.Kill(building.Id);
+        for (var tick = 0; tick < world.Frames(2); tick++) world.Step();
+        Check.That(!world.HasRadar(player), "Their deaths take the radar away.");
+    }
 }

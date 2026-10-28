@@ -75,6 +75,9 @@ public sealed partial class SimulationWorld
             known.Tunnels.Load(player);
             known.PowerSabotagedUntil = player.Has("powerSabotagedUntil") ? player.Int("powerSabotagedUntil") : 0;
             if (known.PowerSabotagedUntil != 0) _runningPowerSabotages++;
+            known.RadarCount = player.Has("radarCount") ? checked((int)player.Int("radarCount")) : 0;
+            known.DisableProofRadarCount = player.Has("disableProofRadarCount") ? checked((int)player.Int("disableProofRadarCount")) : 0;
+            known.RadarDisabled = player.Has("radarDisabled") && player.Bool("radarDisabled");
             known.AttackedTick = player.Has("attackedTick") ? player.Int("attackedTick") : -1;
             known.BattlePlan = player.Has("battlePlan") ? BattlePlanState.Load(player.Object("battlePlan")) : null;
         }

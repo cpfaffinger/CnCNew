@@ -404,6 +404,12 @@ public interface IWorldServices
     /// <summary><c>ThingTemplate::calcTimeToBuild</c>: a unit's or structure's build time under the player's power (<see cref="SimulationWorld.BuildTicksUnderPower"/>).</summary>
     long BuildTicksUnderPower(PlayerId player, long baseTicks);
 
+    /// <summary><c>Player::addRadar</c>: one more radar for the player (a disable-proof one also in that count).</summary>
+    void AddRadar(PlayerId player, bool disableProof);
+
+    /// <summary><c>Player::removeRadar</c>.</summary>
+    void RemoveRadar(PlayerId player, bool disableProof);
+
     /// <summary><c>BodyModuleInterface::getDamageScalar</c>: the factor every non-unresistable damage is multiplied by (1 unless a hold-the-line battle plan covers the object).</summary>
     Fixed DamageScalarOf(Entity entity);
 

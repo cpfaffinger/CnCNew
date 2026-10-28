@@ -137,6 +137,11 @@ public sealed partial class SimulationWorld : IWorldServices
         /// <summary><c>Energy::m_powerSabotagedTillFrame</c> (<c>SabotagePowerPlantCrateCollide</c>): the tick until which the player's power counts as sabotaged; 0 = never.</summary>
         public long PowerSabotagedUntil { get; set; }
 
+        /// <summary><c>Player::m_radarCount</c>, <c>m_disableProofRadarCount</c>, <c>m_radarDisabled</c> (a brown-out switches the radar off unless a disable-proof one is there).</summary>
+        public int RadarCount { get; set; }
+        public int DisableProofRadarCount { get; set; }
+        public bool RadarDisabled { get; set; }
+
         /// <summary><c>Player::m_attackedFrame</c> as a tick (<c>setAttackedBy</c>); -1 until the first attack, written only after it.</summary>
         public long AttackedTick { get; set; } = -1;
 
@@ -2202,6 +2207,9 @@ public sealed partial class SimulationWorld : IWorldServices
             player.Tunnels.Describe(writer);
             // Written only once a power plant was sabotaged, so every world without a saboteur keeps its serialized form (and hash).
             if (player.PowerSabotagedUntil > 0) writer.Int("powerSabotagedUntil", player.PowerSabotagedUntil);
+            if (player.RadarCount != 0) writer.Int("radarCount", player.RadarCount);
+            if (player.DisableProofRadarCount != 0) writer.Int("disableProofRadarCount", player.DisableProofRadarCount);
+            if (player.RadarDisabled) writer.Bool("radarDisabled", true);
             if (player.AttackedTick >= 0) writer.Int("attackedTick", player.AttackedTick);
             player.BattlePlan?.Describe(writer);
             writer.EndObject();

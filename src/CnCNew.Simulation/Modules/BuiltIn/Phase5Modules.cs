@@ -458,10 +458,38 @@ public sealed record RadarUpgradeData(UpgradeMuxData Mux, bool DisableProof) : M
         => new(UpgradeMuxData.Parse(configuration, catalog), ModuleConfigReader.Bool(configuration, "DisableProof", false));
 }
 
-public sealed class RadarUpgrade(RadarUpgradeData data) : UpgradeMuxModule(data.Mux)
+/// <summary>
+/// <c>RadarUpgrade.cpp</c>: the upgrade gives the owner a radar (<c>Player::addRadar</c>, counted, <c>DisableProof</c> also in the count that a brown-out cannot switch off) and
+/// extends the dish; <c>onDelete</c> and <c>onCapture</c> take it away and hand it over - not while the object is disabled, whose edge took it away already
+/// (<c>Object::onDisabledEdge</c>).
+/// </summary>
+public sealed class RadarUpgrade(RadarUpgradeData data) : UpgradeMuxModule(data.Mux), IOwnerChangeReceiver
 {
     public override string ModuleName => "RadarUpgrade";
-    protected override void Activate(IWorldServices world) => Entity.Modules.OfType<RadarUpdate>().FirstOrDefault()?.ExtendRadar(world);
+    public bool DisableProof => data.DisableProof;
+
+    protected override void Activate(IWorldServices world)
+    {
+        world.AddRadar(Entity.Owner, data.DisableProof);
+        Entity.Modules.OfType<RadarUpdate>().FirstOrDefault()?.ExtendRadar(world);
+    }
+
+    protected override void Deactivate(IWorldServices world)
+    {
+        if (!Entity.DisabledEdge) world.RemoveRadar(Entity.Owner, data.DisableProof);
+    }
+
+    public override void OnRemove(IWorldServices world)
+    {
+        if (Executed && !Entity.DisabledEdge) world.RemoveRadar(Entity.Owner, data.DisableProof);
+    }
+
+    public void OnOwnerChanged(IWorldServices world, PlayerId oldOwner, PlayerId newOwner)
+    {
+        if (!Executed || Entity.DisabledEdge) return;
+        world.RemoveRadar(oldOwner, data.DisableProof);
+        world.AddRadar(newOwner, data.DisableProof);
+    }
 }
 
 /// <summary>

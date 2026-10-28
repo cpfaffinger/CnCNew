@@ -212,6 +212,7 @@ run.Test("Phase 40 (F-16): low power slows production (calcTimeToBuild)", Tests.
 run.Test("Phase 40 (F-16): low power slows construction (DozerAIUpdate)", Tests.LowPowerSlowsConstruction);
 run.Test("Phase 40 (F-56): a disabled power plant stops producing (onDisabledEdge)", Tests.DisabledPowerPlantStopsProducing);
 run.Test("Phase 40: a disable other than held pauses the special powers (pauseAllSpecialPowers)", Tests.DisablePausesSpecialPowers);
+run.Test("Phase 40 (F-50): the player's radar", Tests.PlayerRadar);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);
 run.Test("Phase 5: EjectPilotDie, VeterancyGainCreate, PreorderCreate, RadarUpdate", Tests.RetailSmallModules);
 run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRebuildHole);
