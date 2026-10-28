@@ -104,6 +104,24 @@ static partial class Tests
             ContainMax = 1
           End
         End
+        Object FcBike
+          KindOf = VEHICLE SELECTABLE
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = RiderChangeContain Rider01
+            Slots = 1
+            AllowInsideKindOf = INFANTRY
+            Rider1 = FcSneak RIDER1 WEAPON_RIDER1 STATUS_RIDER1 FcBikeCommands SET_NORMAL
+            Rider2 = FcRifleman RIDER2 WEAPON_RIDER2 STATUS_RIDER2 FcBikeCommands SET_NORMAL
+            ScuttleDelay = 600
+            ScuttleStatus = TOPPLED
+          End
+        End
         Object FcCloakedBunker
           KindOf = STRUCTURE CAPTURABLE
           Geometry = CYLINDER
@@ -295,5 +313,28 @@ static partial class Tests
         feeder.ExitContainer(1, inHumvee.Id.Value);
         for (var step = 0; step < world.Frames(5); step++) world.Step();
         Check.That(!inHumvee.ContainedBy.IsValid && inHumvee.HasStatus(stealthed), "Out of the transport it stealths again.");
+    }
+
+    /// <summary>
+    /// Step 6, exposure (<c>aiEvacuateInstantly(TRUE)</c>, <c>markAllPassengersDetected</c>): a stealth rider that a combat bike throws out for its new rider is detected; one that
+    /// leaves the bike by its own order is not.
+    /// </summary>
+    public static void StealthGarrisonExposedWhenThrownOut()
+    {
+        var detected = ObjectStatusBits.Index("DETECTED");
+        var (world, feeder) = StealthGarrisonWorld();
+        var bike = SgSpawn(world, feeder, "FcBike", 1, 0, 0);
+        var sneak = SgInside(world, feeder, "FcSneak", 1, bike);
+        for (var step = 0; step < world.Frames(3); step++) world.Step();
+        Check.That(!sneak.HasStatus(detected), "Setup: the stealth rider rides undetected.");
+        SgInside(world, feeder, "FcRifleman", 1, bike);
+        Check.That(!sneak.ContainedBy.IsValid && sneak.HasStatus(detected), "Thrown out for the new rider, it is detected.");
+
+        var (calm, calmFeeder) = StealthGarrisonWorld();
+        var other = SgSpawn(calm, calmFeeder, "FcBike", 1, 0, 0);
+        var leaver = SgInside(calm, calmFeeder, "FcSneak", 1, other);
+        calmFeeder.ExitContainer(1, leaver.Id.Value);
+        for (var step = 0; step < calm.Frames(30) && leaver.ContainedBy.IsValid; step++) calm.Step();
+        Check.That(!leaver.ContainedBy.IsValid && !leaver.HasStatus(detected), "Leaving by its own order, it is not.");
     }
 }

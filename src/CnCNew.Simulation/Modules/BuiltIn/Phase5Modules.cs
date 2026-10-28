@@ -135,6 +135,17 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     /// <summary><c>StealthUpdate::markAsDetected()</c> without a duration: detected for the module's <c>StealthDelay</c>.</summary>
     public void MarkDetected(IWorldServices world) => MarkDetected(world, data.StealthDelayTicks);
 
+    /// <summary>
+    /// <c>OpenContain::removeFromContain(rider, exposeStealthUnits = TRUE)</c> and <c>markAllPassengersDetected</c>: a rider of kind <c>STEALTH_GARRISON</c> that is thrown out is
+    /// marked detected for its <c>StealthDelay</c> (F-54).
+    /// </summary>
+    public static void Expose(IWorldServices world, Entity rider)
+    {
+        if (!rider.Template.IsKindOf("STEALTH_GARRISON")) return;
+        foreach (var module in rider.Modules)
+            if (module is StealthUpdate stealth) { stealth.MarkDetected(world); return; }
+    }
+
     /// <summary><c>StealthUpdate::markAsDetected</c>: extends (never shortens) how long <c>DETECTED</c> stays set. Called by <c>StealthDetectorUpdate</c>.</summary>
     public void MarkDetected(IWorldServices world, long ticks)
     {

@@ -370,6 +370,7 @@ public sealed class BunkerBusterBehavior(BunkerBusterData data) : SimModule, IUp
                     for (var guard = 0; guard < 1024 && contain.Contained.Count > 0; guard++)
                     {
                         if (world.FindEntity(contain.Contained[0]) is not { } occupant) break;
+                        StealthUpdate.Expose(world, occupant);
                         contain.Remove(world, occupant, true);
                         world.Damage(occupant.Id, harm);
                     }

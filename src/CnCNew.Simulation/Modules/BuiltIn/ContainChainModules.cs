@@ -212,11 +212,12 @@ public sealed class RiderChangeContain(RiderChangeContainData data) : TransportC
         var isPayload = _pendingPayload.Contains(candidate.Id);
         if (!isPayload && _payloadCreated && Riders.Count > 0)
         {
-            // onContaining: "Remove our existing rider".
+            // onContaining: "Remove our existing rider" (aiEvacuateInstantly(TRUE): a stealth rider thrown out is detected).
             _replacing = true;
             foreach (var id in Riders.ToArray())
                 if (world.FindEntity(id) is { } old)
                 {
+                    StealthUpdate.Expose(world, old);
                     Remove(world, old, true);
                     world.Emit(SimEventKind.EntityUncontained, old.Id, Entity.Id, string.Empty, 0);
                 }

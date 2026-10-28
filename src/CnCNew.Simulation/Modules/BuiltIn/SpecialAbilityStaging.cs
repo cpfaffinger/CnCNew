@@ -402,8 +402,11 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     {
         if (data.AwardXp > 0) world.AddExperiencePoints(Entity, data.AwardXp);
         if (target is null || target.Owner == Entity.Owner || target.EffectivelyDead) return;
-        if (target.Container is GarrisonContain)
+        if (target.Container is { IsGarrisonable: true })
         {
+            // removeAllContained(TRUE): the stealth riders thrown out are detected.
+            foreach (var riderId in target.Container.Contained.ToArray())
+                if (world.FindEntity(riderId) is { } rider) StealthUpdate.Expose(world, rider);
             world.EvacuateContainer(target);
             return;
         }
