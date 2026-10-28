@@ -68,7 +68,9 @@ public static class StagedCaptureRules
         // "If the enemy unit is stealthed and not detected, then we can't capture it!"
         if (target.HasStatus(StealthedStatus) && !target.HasStatus(DetectedStatus) && !target.HasStatus(DisguisedStatus)) return false;
         // "If it's garrisoned already, we cannot capture it (unless it's just stealth-garrisoned)" (F-54).
-        return target.Container is not GarrisonContain garrison || garrison.ContainCount - garrison.StealthUnitsContained(world) <= 0;
+        if (target.Container is GarrisonContain garrison && garrison.ContainCount - garrison.StealthUnitsContained(world) > 0) return false;
+        // appearsToContainFriendlies: a stealth garrison that makes the building look like a non-enemy's.
+        return target.Container?.ApparentOwnerFor(world, actor.Owner) is not { } apparent || world.RelationshipOf(actor.Owner, apparent) == Relationship.Enemies;
     }
 
     private static readonly int StealthedStatus = ObjectStatusBits.Index("STEALTHED");

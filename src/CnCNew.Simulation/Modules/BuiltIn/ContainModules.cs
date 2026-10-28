@@ -151,6 +151,9 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         return count;
     }
 
+    /// <inheritdoc cref="IContainerModule.ApparentOwnerFor"/>
+    public virtual PlayerId? ApparentOwnerFor(IWorldServices world, PlayerId observer) => null;
+
     /// <summary>The part of <c>OpenContain::isPassengerAllowedToFire</c> after the flag: a container that rides in another one passes the question on, without an id.</summary>
     internal static bool OuterLetsFire(IWorldServices world, Entity container)
         => !container.ContainedBy.IsValid || (world.FindEntity(container.ContainedBy)?.Container is { } outer && outer.IsPassengerAllowedToFire(world, null));
@@ -531,6 +534,19 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         _hasOriginalOwner = false;
         world.MarkDirty(Entity);
     }
+
+    /// <summary>
+    /// <c>GarrisonContain::m_hideGarrisonedStateFromNonallies</c> (F-54): riders inside, every one of kind <c>STEALTH_GARRISON</c>, and the first of them (entry order) not
+    /// <c>DETECTED</c>. The original recalculates the flag on every change of the riders and whenever its first rider's <c>DETECTED</c> flips, so it equals this derived value.
+    /// </summary>
+    public bool HidesGarrison(IWorldServices world)
+        => Riders.Count > 0 && StealthUnitsContained(world) == Riders.Count && world.FindEntity(Riders[0]) is { } first && !first.HasStatus(DetectedStatus);
+
+    private static readonly int DetectedStatus = ObjectStatusBits.Index("DETECTED");
+
+    /// <summary><c>GarrisonContain::getApparentControllingPlayer</c>: hidden, the owner from before the riders for a player the owner does not count as an ally; otherwise the owner.</summary>
+    public override PlayerId? ApparentOwnerFor(IWorldServices world, PlayerId observer)
+        => _hasOriginalOwner && HidesGarrison(world) && world.RelationshipOf(Entity.Owner, observer) != Relationship.Allies ? _originalOwner : Entity.Owner;
 
     /// <summary><c>GarrisonContain::m_evacDisposition</c> (<c>NAMED_SET_EVAC_LEFT_OR_RIGHT</c>): 1 = leave to the left, 2 = to the right, anything else bursts from the centre.</summary>
     public int EvacDisposition { get; set; }

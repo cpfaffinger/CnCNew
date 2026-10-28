@@ -777,6 +777,12 @@ public interface IContainerModule
     /// </summary>
     int StealthUnitsContained(IWorldServices world) => 0;
 
+    /// <summary>
+    /// <c>ContainModuleInterface::getApparentControllingPlayer(observer)</c> (F-54): the player <paramref name="observer"/> takes this container's object for. Null for every container but
+    /// a garrison (<c>OpenContain</c> returns none); a garrison held only by undetected stealth riders shows a player its owner does not count as an ally the owner it had before.
+    /// </summary>
+    PlayerId? ApparentOwnerFor(IWorldServices world, PlayerId observer) => null;
+
     /// <summary><c>OpenContain::isWeaponBonusPassedToPassengers</c>: the container's weapon bonus conditions are added to its riders' (<c>Weapon::computeBonus</c>).</summary>
     bool PassesWeaponBonus => false;
 

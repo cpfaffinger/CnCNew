@@ -108,6 +108,50 @@ static partial class Tests
     }
 
     /// <summary>
+    /// Step 3, the apparent owner and the acquisition (<c>PartitionFilterRejectBuildings</c>, <c>PartitionFilterStealthedAndUndetected</c>): player 1's stealth rider holds a neutral
+    /// building, which is player 1's now. An idle rifleman of player 2 next to it does not take it for an enemy - its apparent owner is the neutral one; once the rider is
+    /// detected it does. A building held by a plain rifleman it takes at once. A unit with <c>ATTACK_BUILDINGS</c> has no building filter and takes the hidden neutral building - as the
+    /// original does -, but passes by a hidden building whose owner from before is its enemy.
+    /// </summary>
+    public static void StealthGarrisonHiddenFromAcquisition()
+    {
+        var (world, feeder) = StealthGarrisonWorld();
+        var bunker = SgSpawn(world, feeder, "FcBunker", 0, 0, 0);
+        var sneak = SgInside(world, feeder, "FcSneak", 1, bunker);
+        var watcher = SgSpawn(world, feeder, "FcRifleman", 2, 80, 0);
+        var garrison = (GarrisonContain)bunker.Container!;
+        Check.That(bunker.Owner == new PlayerId(1) && garrison.HidesGarrison(world) && garrison.ApparentOwnerFor(world, new PlayerId(2)) == PlayerId.System
+                   && garrison.ApparentOwnerFor(world, new PlayerId(1)) == new PlayerId(1), "The building is player 1's, hidden: player 2 sees the neutral owner, player 1 itself.");
+        for (var step = 0; step < world.Frames(30); step++) world.Step();
+        Check.That(!world.AcquiredVictimOf(watcher).IsValid, "Player 2's idle rifleman passes the hidden garrison by.");
+        sneak.Modules.OfType<StealthUpdate>().Single().MarkDetected(world, world.Frames(300));
+        Check.That(!garrison.HidesGarrison(world) && garrison.ApparentOwnerFor(world, new PlayerId(2)) == new PlayerId(1), "Detected, the building shows its owner.");
+        for (var step = 0; step < world.Frames(30); step++) world.Step();
+        Check.That(world.AcquiredVictimOf(watcher) == bunker.Id, "Then the rifleman takes it.");
+
+        var (plainWorld, plainFeeder) = StealthGarrisonWorld();
+        var plain = SgSpawn(plainWorld, plainFeeder, "FcBunker", 0, 0, 0);
+        SgInside(plainWorld, plainFeeder, "FcRifleman", 1, plain);
+        var plainWatcher = SgSpawn(plainWorld, plainFeeder, "FcRifleman", 2, 80, 0);
+        for (var step = 0; step < plainWorld.Frames(30); step++) plainWorld.Step();
+        Check.That(plainWorld.AcquiredVictimOf(plainWatcher) == plain.Id, "A building held by a plain rifleman is taken.");
+
+        var (huntWorld, huntFeeder) = StealthGarrisonWorld();
+        var neutral = SgSpawn(huntWorld, huntFeeder, "FcBunker", 0, 0, 0);
+        SgInside(huntWorld, huntFeeder, "FcSneak", 1, neutral);
+        var hunter = SgSpawn(huntWorld, huntFeeder, "FcHunter", 2, 80, 0);
+        for (var step = 0; step < huntWorld.Frames(30); step++) huntWorld.Step();
+        Check.That(huntWorld.AcquiredVictimOf(hunter) == neutral.Id, "A unit with ATTACK_BUILDINGS takes the hidden neutral building (its apparent owner is no enemy).");
+
+        var (ownWorld, ownFeeder) = StealthGarrisonWorld();
+        var own = SgSpawn(ownWorld, ownFeeder, "FcBunker", 1, 0, 0);
+        SgInside(ownWorld, ownFeeder, "FcSneak", 1, own);
+        var ownHunter = SgSpawn(ownWorld, ownFeeder, "FcHunter", 2, 80, 0);
+        for (var step = 0; step < ownWorld.Frames(30); step++) ownWorld.Step();
+        Check.That(!ownWorld.AcquiredVictimOf(ownHunter).IsValid, "It passes by player 1's own building held by its stealth rider: the apparent owner is its enemy and the riders are hidden.");
+    }
+
+    /// <summary>
     /// <c>ActionManager::canCaptureBuilding</c>'s stealth and garrison rules: a building garrisoned by an enemy's plain rider cannot be captured, a stealthed and undetected structure
     /// neither.
     /// </summary>
@@ -123,5 +167,15 @@ static partial class Tests
         Check.That(cloaked.HasStatus(ObjectStatusBits.Index("STEALTHED")) && !StagedCaptureRules.CanCapture(world, actor, cloaked), "A stealthed, undetected structure cannot be captured.");
     }
 
-
+    /// <summary>Step 3, capture (<c>appearsToContainFriendlies</c>): a hidden stealth garrison whose apparent owner is neutral cannot be captured; detected, it can.</summary>
+    public static void StealthGarrisonHiddenCapture()
+    {
+        var (world, feeder) = StealthGarrisonWorld();
+        var actor = SgSpawn(world, feeder, "FcRifleman", 2, 200, 0);
+        var hidden = SgSpawn(world, feeder, "FcBunker", 0, 300, 0);
+        var sneak = SgInside(world, feeder, "FcSneak", 1, hidden);
+        Check.That(!StagedCaptureRules.CanCapture(world, actor, hidden), "A hidden stealth garrison appears to contain friendlies: no capture.");
+        sneak.Modules.OfType<StealthUpdate>().Single().MarkDetected(world, world.Frames(300));
+        Check.That(StagedCaptureRules.CanCapture(world, actor, hidden), "Detected, held by stealth riders only, it can be captured.");
+    }
 }

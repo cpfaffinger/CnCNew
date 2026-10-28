@@ -435,12 +435,12 @@ public sealed partial class SimulationWorld
         if (radius <= Fixed.Zero) return null;
         var limit = SquaredReach.Of(radius);
         var turretOnly = mode == AcquireMode.Turret;
-        var buildings = computer || (ai.AutoAcquire & AutoAcquire.AttackBuildings) != 0;
+        var buildings = (ai.AutoAcquire & AutoAcquire.AttackBuildings) != 0;
         // A rider looks from where it stands (ShooterPosition); its container's bounding circle is in the radius.
         // Above 30 Hz the look measures from where the unit's begun frame ends to where each candidate's ends (rule 3 of the frame convention).
         var frameEnd = _firstFrameTicks != TickOrder.Next;
         var (ownX, ownY, _) = ShooterPosition(entity, frameEnd);
-        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue, OwnX = ownX, OwnY = ownY, FrameEnd = frameEnd };
+        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, Computer = computer, BestDistance = Fixed.MaxValue, OwnX = ownX, OwnY = ownY, FrameEnd = frameEnd };
 
         if (RelationshipOverride is not null)
         {
@@ -468,6 +468,7 @@ public sealed partial class SimulationWorld
         public bool TurretOnly;
         public bool Chase;
         public bool Buildings;
+        public bool Computer;
         public Entity? Best;
         public Fixed BestDistance;
         public int BestEffective;
@@ -491,7 +492,7 @@ public sealed partial class SimulationWorld
         var distance = dx * dx + dy * dy;
         if (!search.Limit.Contains(distance)) return;
         if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT") || candidate.Template.IsKindOf("MINE")) return;
-        if (!IsAttackable(entity, candidate) || !AcquiresStructure(candidate, search.Buildings)) return;
+        if (!IsAttackable(entity, candidate) || !AcquiresStructure(entity, candidate, search.Buildings, search.Computer) || IsHiddenStealthGarrison(entity, candidate)) return;
         if (AcquisitionViewBlocked(entity, candidate)) return;
         if (!CanAttack(entity, candidate, search.TurretOnly, out var inRange) || (!inRange && !search.Chase)) return;
 
@@ -516,14 +517,31 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>PartitionFilterInsignificantBuildings</c> (<c>AttackIgnoreInsignificantBuildings = Yes</c> in AIData.ini) and <c>PartitionFilterRejectBuildings</c>: an empty building that is no
-    /// faction building is ignored by everybody; other enemy structures are victims for a computer player and for a unit with the <c>ATTACK_BUILDINGS</c> bit, and for everybody else only
+    /// faction building is ignored by everybody; a unit with the <c>ATTACK_BUILDINGS</c> bit takes every other one. Without it (<c>findClosestEnemy</c> adds the filter) the building's
+    /// apparent owner (<see cref="Modules.IContainerModule.ApparentOwnerFor"/>, F-54) must be the unit's player's enemy; then a computer player's unit takes it, and everybody else only
     /// base defenses and occupied buildings.
     /// </summary>
-    private static bool AcquiresStructure(Entity candidate, bool buildings)
+    private bool AcquiresStructure(Entity entity, Entity candidate, bool buildings, bool computer)
     {
         if (!candidate.Template.IsKindOf("STRUCTURE")) return true;
         if (candidate.Container is { ContainCount: 0 } && !IsFactionStructure(candidate.Template)) return false;
-        return buildings || candidate.Template.IsKindOf("FS_BASE_DEFENSE") || candidate.Container is { ContainCount: > 0 };
+        if (buildings) return true;
+        var apparent = candidate.Container?.ApparentOwnerFor(this, entity.Owner) ?? candidate.Owner;
+        if (RelationshipOf(entity.Owner, apparent) != Relationship.Enemies) return false;
+        return computer || candidate.Template.IsKindOf("FS_BASE_DEFENSE") || candidate.Container is { ContainCount: > 0 };
+    }
+
+    /// <summary>
+    /// <c>PartitionFilterStealthedAndUndetected</c>'s branch for a container (F-54): a container whose riders are all of kind <c>STEALTH_GARRISON</c>, the first of them not
+    /// <c>DETECTED</c>, is passed by when its apparent owner is the looking unit's enemy (a faction garrison, or one whose owner from before is hostile). An empty container is not
+    /// hidden (the original read the first of an empty list there - GeneralsGameCode guards it).
+    /// </summary>
+    private bool IsHiddenStealthGarrison(Entity entity, Entity candidate)
+    {
+        if (candidate.Container is not { ContainCount: > 0 } container || container.ApparentOwnerFor(this, entity.Owner) is not { } apparent) return false;
+        if (container.StealthUnitsContained(this) != container.ContainCount) return false;
+        if (FindEntity(container.Contained[0]) is not { } first || first.HasStatus(DetectedStatus)) return false;
+        return RelationshipOf(entity.Owner, apparent) == Relationship.Enemies;
     }
 
     /// <summary><c>Object::isFactionStructure</c>: any of the <c>FS_*</c> kinds.</summary>
