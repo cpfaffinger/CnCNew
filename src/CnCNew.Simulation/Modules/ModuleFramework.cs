@@ -311,6 +311,12 @@ public interface IWorldServices
     /// </summary>
     void EvacuateContainer(Entity container, bool atOnce = false);
 
+    /// <summary>
+    /// The riders' half of an attack order on a container whose riders may fire (<c>AIGroup::groupAttackObjectPrivate</c>, F-60); with <paramref name="onlyIdle"/> only the riders
+    /// without a victim, and without asking whether they can attack it (<c>ChinookAIUpdate::update</c>'s re-issue).
+    /// </summary>
+    void PassAttackToRiders(Entity container, Entity victim, bool onlyIdle = false);
+
     // ------------------------------------------------------------------------------------ phase 10: footprint collision
 
     /// <summary>

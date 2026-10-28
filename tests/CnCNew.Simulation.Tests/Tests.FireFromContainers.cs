@@ -181,6 +181,35 @@ static partial class Tests
           Behavior = AIUpdateInterface AI01
           End
         End
+        Object FcChinook
+          KindOf = SELECTABLE VEHICLE AIRCRAFT TRANSPORT
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          Behavior = ChinookAIUpdate AI01
+          End
+          Behavior = TransportContain Transport01
+            Slots = 4
+            PassengersAllowedToFire = Yes
+          End
+        End
+        Object FcQuietRifleman
+          KindOf = SELECTABLE INFANTRY
+          TransportSlotCount = 1
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcRifle
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
         Object FcClearer
           KindOf = SELECTABLE VEHICLE
           Body = ActiveBody Body01
@@ -788,6 +817,37 @@ static partial class Tests
             for (var step = 0; step < world.Frames(30); step++) impacts += world.Step().Events.Count(value => value.Kind == SimEventKind.WeaponImpact);
             Check.That(riders[0].EffectivelyDead && riders[1].EffectivelyDead && !riders[2].EffectivelyDead, $"{rate}: the shell kills the first two riders, the third lives.");
             Check.That(impacts == 0 && !world.Entities.Any(value => value.Template.Name == "FcFlashShell"), $"{rate}: the shell is gone without its explosion ({impacts} impacts).");
+        }
+    }
+
+    /// <summary>
+    /// The Chinook's re-issue (<c>ChinookAIUpdate::update</c>): a Chinook ordered to attack gives its victim, every frame whose number ends in 1, to a rider that has none - here a
+    /// rifleman that never looks for one himself and boards after the order. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void FireFromContainersChinookReissuesItsVictim()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRunnerIni));
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "FcChinook", owner: 1, x: 0, y: 0);
+            feeder.Spawn(1, "FcQuietRifleman", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "FcTarget", owner: 2, x: 80, y: 0);
+            world.Step();
+            var chinook = world.Entities.Single(value => value.Template.Name == "FcChinook");
+            var rider = world.Entities.Single(value => value.Template.Name == "FcQuietRifleman");
+            var target = world.Entities.Single(value => value.Template.Name == "FcTarget");
+            Check.That(feeder.Pursue(1, chinook.Id.Value, target.Id.Value, 0, 0).Accepted, $"{rate}: the Chinook is ordered to attack.");
+            world.Step();
+            Check.That(world.TryEnterContainer(rider, chinook) && !world.AcquiredVictimOf(rider).IsValid, $"{rate}: setup - the rifleman boards after the order, without a victim.");
+            var given = -1L;
+            for (var step = 0; step < world.Frames(12) && given < 0; step++)
+            {
+                world.Step();
+                if (world.AcquiredVictimOf(rider) == target.Id) given = world.Time.ToOriginalFrames(world.Tick);
+            }
+            Check.That(given >= 0, $"{rate}: within ten frames the Chinook's victim is the rider's (frame {given}).");
         }
     }
 

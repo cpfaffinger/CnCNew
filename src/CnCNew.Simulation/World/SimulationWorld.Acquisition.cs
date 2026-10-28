@@ -130,12 +130,16 @@ public sealed partial class SimulationWorld
     /// victim. A rider cannot move, so its attack is the engagement of its own look with this victim: it fires while the victim is in reach of its fire point and ends the attack
     /// when it is not, as the original's attack state fails for a rider that cannot approach.
     /// </summary>
-    private void PassAttackToRiders(Entity container, Entity victim)
+    public void PassAttackToRiders(Entity container, Entity victim, bool onlyIdle = false)
     {
         foreach (var id in container.Container!.Contained)
         {
             if (FindEntity(id) is not { EffectivelyDead: false, DestroyRequested: false } rider || AiOf(rider) is not { } ai) continue;
-            if (!ContainerLetsFire(rider) || !IsAttackable(rider, victim) || !CanAttack(rider, victim, false, out _)) continue;
+            if (onlyIdle)
+            {
+                if (rider.Acquisition is { Victim.IsValid: true }) continue;
+            }
+            else if (!ContainerLetsFire(rider) || !IsAttackable(rider, victim) || !CanAttack(rider, victim, false, out _)) continue;
             EndGuard(rider);
             var state = rider.Acquisition ??= new AcquisitionState();
             if (state.Chasing) ai.StopInternalMove();
