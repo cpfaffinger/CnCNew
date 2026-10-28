@@ -299,7 +299,8 @@ static partial class Tests
         var scout = CsSpawn(world, feeder, "EnemyScout", 2, 150, 150);
         var center = CsSpawn(world, feeder, "EnemyCenter", 2, 100, 180);
         var friend = CsSpawn(world, feeder, "EnemyScout", 1, 60, 150);
-        var prisoners = new[] { CsSpawn(world, feeder, "Prisoner", 2, 20, 40), CsSpawn(world, feeder, "Prisoner", 2, 25, 40) };
+        // The station's own riders: a building held by somebody takes nobody of another player (canEnterObject, F-61).
+        var prisoners = new[] { CsSpawn(world, feeder, "Prisoner", 1, 20, 40), CsSpawn(world, feeder, "Prisoner", 1, 25, 40) };
         foreach (var prisoner in prisoners) Check.That(world.TryEnterContainer(prisoner, station), "A prisoner enters the station.");
         var vision = world.Vision!;
         VisionSettle(world);

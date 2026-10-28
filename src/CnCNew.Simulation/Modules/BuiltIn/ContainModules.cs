@@ -289,6 +289,33 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         base.Add(world, candidate);
         _containedSinceTick[candidate.Id.Value] = world.Tick;
         if (data.HealObjects) world.WakeAt(Entity, this, world.Tick);
+        RecalcControllingPlayer(world);
+    }
+
+    // The owner the building had before its first rider came in (recorded only while somebody is inside).
+    private PlayerId _originalOwner;
+    private bool _hasOriginalOwner;
+
+    /// <summary>
+    /// <c>GarrisonContain::recalcApparentControllingPlayer</c> (F-61): a garrisoned building belongs to its first rider's player (<c>setTeam</c> of that player's default
+    /// team) and goes back to the owner it had before when the last one is gone (<c>onRemoving</c>: <c>m_originalTeam</c>). Not modelled: <c>OBJECT_STATUS_CAN_ATTACK</c>
+    /// (riders fire from no container here yet, F-60) and the hidden state of a stealth garrison (F-54).
+    /// </summary>
+    private void RecalcControllingPlayer(IWorldServices world)
+    {
+        if (!_hasOriginalOwner)
+        {
+            _originalOwner = Entity.Owner;
+            _hasOriginalOwner = true;
+        }
+        if (Riders.Count > 0)
+        {
+            if (world.FindEntity(Riders[0]) is { } first) world.TransferOwnership(Entity.Id, first.Owner);
+            return;
+        }
+        world.TransferOwnership(Entity.Id, _originalOwner);
+        _hasOriginalOwner = false;
+        world.MarkDirty(Entity);
     }
 
     /// <summary><c>GarrisonContain::m_evacDisposition</c> (<c>NAMED_SET_EVAC_LEFT_OR_RIGHT</c>): 1 = leave to the left, 2 = to the right, anything else bursts from the centre.</summary>
@@ -299,6 +326,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         base.Remove(world, candidate, positionAtContainer);
         _containedSinceTick.Remove(candidate.Id.Value);
         if (positionAtContainer && EvacDisposition is 1 or 2) LeaveToTheSide(world, candidate);
+        RecalcControllingPlayer(world);
     }
 
     /// <summary>
@@ -357,7 +385,9 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 
     public override long Update(IWorldServices world)
     {
+        var before = Riders.Count;
         PruneDead(world);
+        if (Riders.Count != before) RecalcControllingPlayer(world);
         if (data.HealObjects)
             foreach (var riderId in Riders.ToArray())
             {
@@ -386,6 +416,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     {
         writer.Int("nextWake", NextWake);
         if (EvacDisposition != 0) writer.Int("evacDisposition", EvacDisposition);
+        if (_hasOriginalOwner) writer.Int("originalOwner", _originalOwner.Value);
         writer.BeginArray("contained");
         foreach (var riderId in Riders)
         {
@@ -401,6 +432,8 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     {
         NextWake = reader.Int("nextWake");
         EvacDisposition = reader.Has("evacDisposition") ? checked((int)reader.Int("evacDisposition")) : 0;
+        _hasOriginalOwner = reader.Has("originalOwner");
+        _originalOwner = _hasOriginalOwner ? new PlayerId(checked((int)reader.Int("originalOwner"))) : default;
         Riders.Clear();
         _containedSinceTick.Clear();
         foreach (var entry in reader.Array("contained"))

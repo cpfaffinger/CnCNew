@@ -204,6 +204,9 @@ static partial class Tests
         feeder.EnterContainer(2, teamMate.Id.Value, barracks.Id.Value);
         world.Step();
         Check.That(teamMate.ContainedBy == barracks.Id && Refused() == 0, "A team mate of the barracks' owner is an ally: AllowAlliesInside = Yes admits it.");
+        // It leaves again: a building held by one player takes nobody of another (canEnterObject, F-61), and the checks below are of the relationship alone.
+        feeder.ExitContainer(2, teamMate.Id.Value);
+        world.Step();
 
         feeder.EnterContainer(3, enemies[0].Id.Value, barracks.Id.Value);
         world.Step();

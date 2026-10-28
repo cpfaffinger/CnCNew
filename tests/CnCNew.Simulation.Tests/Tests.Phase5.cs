@@ -1130,7 +1130,8 @@ static partial class Tests
         var feeder = new Feeder(world);
         feeder.Spawn(1, "Bunker", x: 0, y: 0);
         feeder.Spawn(1, "Rebel", x: 5, y: 5);
-        feeder.Spawn(2, "Rebel", x: 5, y: 5);
+        // One player at a time is inside a building (canEnterObject, F-61): both rebels are player 1's.
+        feeder.Spawn(1, "Rebel", x: 5, y: 5);
         feeder.Spawn(2, "Tankish", x: 5, y: 5);
         world.Step();
         var bunker = world.FindEntity(new EntityId(1))!;
@@ -1146,10 +1147,10 @@ static partial class Tests
         Check.That(world.RejectionCounts[(int)CommandRejection.CannotEnterContainer] == 1, "A vehicle cannot enter a Garrison: AllowInsideKindOf defaults to INFANTRY only.");
 
         feeder.EnterContainer(1, 2, 1);
-        feeder.EnterContainer(2, 3, 1);
+        feeder.EnterContainer(1, 3, 1);
         world.Step();
         Check.That(bunker.Container!.ContainCount == 2 && allyRebel.ContainedBy == bunker.Id && enemyRebel.ContainedBy == bunker.Id,
-            "Both an own and an enemy infantry unit enter: AllowAlliesInside and AllowEnemiesInside default to true.");
+            "Two infantry units of one player enter.");
         Check.That(allyRebel.X == bunker.X && allyRebel.Y == bunker.Y, "A contained entity snaps to the container's position.");
 
         feeder.Spawn(1, "Rebel", x: 5, y: 5);

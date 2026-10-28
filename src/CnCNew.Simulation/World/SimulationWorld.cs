@@ -409,10 +409,17 @@ public sealed partial class SimulationWorld : IWorldServices
     public bool TryEnterContainer(Entity actor, Entity container)
     {
         if (actor.DestroyRequested || actor.ContainedBy.IsValid || container.DestroyRequested || container.Container is null) return false;
-        if (!container.Container.IsValidContainerFor(this, actor, true)) return false;
+        if (!MayEnterAsOwner(actor, container) || !container.Container.IsValidContainerFor(this, actor, true)) return false;
         PutIntoContainer(actor, container, actor.Owner);
         return true;
     }
+
+    /// <summary>
+    /// <c>ActionManager::canEnterObject</c> for a container that is not the enterer's player's (F-61): it must hold nobody - a garrison belongs to its occupants' player, so
+    /// one player at a time is inside - and it must be no faction structure. Not modelled yet: the stealth garrison's exception (F-54).
+    /// </summary>
+    private static bool MayEnterAsOwner(Entity actor, Entity container)
+        => container.Owner == actor.Owner || (container.Container is { ContainCount: 0 } && !IsFactionStructure(container.Template));
 
     private void PutIntoContainer(Entity actor, Entity container, PlayerId player)
     {
@@ -891,7 +898,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!command.Player.IsSystem && actor.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (actor.ContainedBy.IsValid) return CommandRejection.CannotEnterContainer;
                 if (!_entities.TryGetValue(enter.Container.Value, out var container) || container.DestroyRequested || container.Container is null) return CommandRejection.UnknownEntity;
-                if (!container.Container.IsValidContainerFor(this, actor, true)) return CommandRejection.CannotEnterContainer;
+                if (!MayEnterAsOwner(actor, container) || !container.Container.IsValidContainerFor(this, actor, true)) return CommandRejection.CannotEnterContainer;
                 break;
             }
             case ExitContainerCommand exit:
@@ -955,7 +962,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (actor.ContainedBy.IsValid) return CommandRejection.CannotEnterContainer;
         container = FindEntity(order.Container);
         if (container is null || container.DestroyRequested || container.Container is null || container == actor) return CommandRejection.UnknownEntity;
-        return container.Container.IsValidContainerFor(this, actor, false) ? 0 : CommandRejection.CannotEnterContainer;
+        return MayEnterAsOwner(actor, container) && container.Container.IsValidContainerFor(this, actor, false) ? 0 : CommandRejection.CannotEnterContainer;
     }
 
     /// <summary>The container's owner evacuates it; a position needs a container that can move there.</summary>
@@ -1261,7 +1268,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (actor.ContainedBy.IsValid) { RecordRejection(command, CommandRejection.CannotEnterContainer); break; }
                 var container = FindEntity(enter.Container);
                 if (container is null || container.DestroyRequested || container.Container is null) { RecordRejection(command, CommandRejection.UnknownEntity); break; }
-                if (!container.Container.IsValidContainerFor(this, actor, true)) { RecordRejection(command, CommandRejection.CannotEnterContainer); break; }
+                if (!MayEnterAsOwner(actor, container) || !container.Container.IsValidContainerFor(this, actor, true)) { RecordRejection(command, CommandRejection.CannotEnterContainer); break; }
                 PutIntoContainer(actor, container, command.Player);
                 break;
             }
