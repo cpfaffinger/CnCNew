@@ -142,6 +142,15 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     /// <inheritdoc cref="IContainerModule.PassesWeaponBonus"/>
     public virtual bool PassesWeaponBonus => false;
 
+    /// <inheritdoc cref="IContainerModule.StealthUnitsContained"/>
+    public int StealthUnitsContained(IWorldServices world)
+    {
+        var count = 0;
+        foreach (var id in Riders)
+            if (world.FindEntity(id) is { } rider && rider.Template.IsKindOf("STEALTH_GARRISON")) count++;
+        return count;
+    }
+
     /// <summary>The part of <c>OpenContain::isPassengerAllowedToFire</c> after the flag: a container that rides in another one passes the question on, without an id.</summary>
     internal static bool OuterLetsFire(IWorldServices world, Entity container)
         => !container.ContainedBy.IsValid || (world.FindEntity(container.ContainedBy)?.Container is { } outer && outer.IsPassengerAllowedToFire(world, null));

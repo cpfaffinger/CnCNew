@@ -771,6 +771,12 @@ public interface IContainerModule
     /// </summary>
     bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => false;
 
+    /// <summary>
+    /// <c>OpenContain::m_stealthUnitsContained</c> (F-54): the riders whose kind is <c>STEALTH_GARRISON</c> - their kind, not whether they are stealthed. Derived from the riders here;
+    /// the original keeps a count, which <c>killAllContained</c> does not lower (R-18, not modelled).
+    /// </summary>
+    int StealthUnitsContained(IWorldServices world) => 0;
+
     /// <summary><c>OpenContain::isWeaponBonusPassedToPassengers</c>: the container's weapon bonus conditions are added to its riders' (<c>Weapon::computeBonus</c>).</summary>
     bool PassesWeaponBonus => false;
 
