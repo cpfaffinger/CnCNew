@@ -1816,7 +1816,7 @@
       "kind": "reference-match",
       "parameters": {
         "arenaRadius": 1500,
-        "driverSeed": "5EED0003",
+        "driverSeed": "5EED0001",
         "graceOriginalFrames": 300,
         "income": 1500,
         "incomeIntervalOriginalFrames": 300,
@@ -1827,20 +1827,22 @@
         "worldSeed": "C0FFEE05"
       },
       "results": {
-        "chainHash": "EAC0396355B84E42",
-        "commandStreamSha256": "6284C3993B6911E009F3F78085D29A8E345C984F0FF4FEA0749AFAFF54DC733C",
-        "commands": 35029,
-        "endTick": 432000,
-        "finalHash": "6840D81F1F1A518B",
+        "chainHash": "8E7AC06F9771E2E6",
+        "commandStreamSha256": "C1A1AD65225E63621CFF0B2476F00904F74571BDECCFCC086018617CF597859C",
+        "commands": 25551,
+        "endTick": 38491,
+        "finalHash": "6C86A27E229B1849",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
-        "outcome": "stalemate",
-        "peakLivingObjects": 2695,
+        "outcome": "winner",
+        "peakLivingObjects": 205,
         "players": 13,
         "rejectedCommands": 0,
-        "snapshotBytes": 2776731,
-        "snapshotSha256": "24018BF4C6B8D479A8407A18E2F354543C5078B77AECCADFB4D0F1EECDC8E48C",
-        "snapshotTick": 216000
+        "snapshotBytes": 356074,
+        "snapshotSha256": "8E8712FFB10EA1DBD6A9D2A2C9E2A566E89F400AAB3FE0AFFCE8DB7F1CAF3C03",
+        "snapshotTick": 19245,
+        "victoryTick": 37890,
+        "winner": "FactionGLA"
       },
       "set": "quick"
     },
