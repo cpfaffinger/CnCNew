@@ -721,6 +721,9 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
     /// <summary><c>PassengersAllowedToFire</c> (default no, <c>OpenContainModuleData</c>): the riders may fire from inside (F-60; a Humvee, a Battle Bus, a Listening Outpost, the Spectre).</summary>
     public bool PassengersAllowedToFire { get; init; }
 
+    /// <summary><c>WeaponBonusPassedToPassengers</c> (default no, <c>OpenContainModuleData</c>): the transport's own weapon bonus conditions are its riders' too (F-60; the Battle Bus).</summary>
+    public bool WeaponBonusPassedToPassengers { get; init; }
+
     public static TransportContainData Parse(RatedModuleConfiguration configuration) => new(
         OpenContainData.Parse(configuration, ["INFANTRY"]),
         checked((int)ModuleConfigReader.Int(configuration, "Slots", 0)),
@@ -731,6 +734,7 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
         ScatterNearbyOnExit = ModuleConfigReader.Bool(configuration, "ScatterNearbyOnExit", true),
         DestroyRidersWhoAreNotFreeToExit = ModuleConfigReader.Bool(configuration, "DestroyRidersWhoAreNotFreeToExit", false),
         PassengersAllowedToFire = ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
+        WeaponBonusPassedToPassengers = ModuleConfigReader.Bool(configuration, "WeaponBonusPassedToPassengers", false),
     };
 }
 

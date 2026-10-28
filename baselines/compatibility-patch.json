@@ -4855,15 +4855,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "TransportContain/WeaponBonusPassedToPassengers",
-      "count": 6,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Upgrade/AcademyClassify",
       "count": 3,
       "owners": [
