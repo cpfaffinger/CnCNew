@@ -236,6 +236,7 @@ run.Test("Phase 41 (F-54, step 3): a hidden stealth garrison shows non-allies it
 run.Test("Phase 41 (F-54, step 3): a hidden stealth garrison appears to contain friendlies to a capturer", Tests.StealthGarrisonHiddenCapture);
 run.Test("Phase 41 (F-54, step 3): another player enters a building held only by stealth riders and sends them out", Tests.StealthGarrisonEnter);
 run.Test("Phase 41 (F-54, step 4): a detector reveals a stealth garrison's riders through its building", Tests.StealthGarrisonDetector);
+run.Test("Phase 41 (F-54, step 5): a stealth rider does not stealth inside a transport", Tests.StealthGarrisonNoStealthInTransport);
 run.Test("Phase 41 (F-60, step 4): a garrison matches its points at once when a rider comes in", Tests.FireFromContainersMatchOnEntry);
 run.Test("Phase 41 (F-60, step 4): a transport's rider fires from the fire point of its place among the riders", Tests.FireFromContainersTransportFirePoints);
 run.Test("Phase 41 (F-60, step 5): a Humvee's rider and an Overlord's gattling fire, a plain transport's and a tunnel's riders do not", Tests.FireFromContainersTransportsFire);

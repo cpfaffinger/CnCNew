@@ -178,6 +178,8 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
 
     private bool AnyForbiddenCondition(IWorldServices world)
     {
+        // allowedToStealth: no stealth inside a container that is not garrisonable (a transport, a tunnel); inside a garrison a rider may (F-54).
+        if (Entity.ContainedBy.IsValid && world.FindEntity(Entity.ContainedBy)?.Container is { IsGarrisonable: false }) return true;
         if (data.ForbiddenStatus != 0 && (Entity.Status & data.ForbiddenStatus) != 0) return true;
         if (data.RequiredStatus != 0 && (Entity.Status & data.RequiredStatus) != data.RequiredStatus) return true;
         foreach (var name in data.ForbiddenConditions)

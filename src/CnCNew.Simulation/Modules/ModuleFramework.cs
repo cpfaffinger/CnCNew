@@ -777,6 +777,9 @@ public interface IContainerModule
     /// </summary>
     bool IsPassengerAllowedToFire(IWorldServices world, Entity? rider) => false;
 
+    /// <summary><c>ContainModuleInterface::isGarrisonable</c>: a garrison, and an Overlord whose portable structure is one; no other container.</summary>
+    bool IsGarrisonable => false;
+
     /// <summary>
     /// <c>OpenContain::m_stealthUnitsContained</c> (F-54): the riders whose kind is <c>STEALTH_GARRISON</c> - their kind, not whether they are stealthed. Derived from the riders here;
     /// the original keeps a count, which <c>killAllContained</c> does not lower (R-18, not modelled).

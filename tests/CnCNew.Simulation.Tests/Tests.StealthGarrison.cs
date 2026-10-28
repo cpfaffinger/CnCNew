@@ -279,4 +279,21 @@ static partial class Tests
         var other = SgSpawn(plainWorld, plainFeeder, "FcRifleman", 2, 120, 0);
         Check.That(!plainFeeder.MoveAndEnter(2, other.Id.Value, plain.Id.Value).Accepted, "A building held by a plain rifleman of player 1 refuses player 2's order.");
     }
+
+    /// <summary>Step 5, <c>StealthUpdate::allowedToStealth</c>: a stealth rider keeps <c>STEALTHED</c> inside a garrison and loses it inside a transport.</summary>
+    public static void StealthGarrisonNoStealthInTransport()
+    {
+        var stealthed = ObjectStatusBits.Index("STEALTHED");
+        var (world, feeder) = StealthGarrisonWorld();
+        var bunker = SgSpawn(world, feeder, "FcBunker", 1, 0, 0);
+        var humvee = SgSpawn(world, feeder, "FcHumvee", 1, 300, 0);
+        var inBunker = SgInside(world, feeder, "FcSneak", 1, bunker);
+        var inHumvee = SgInside(world, feeder, "FcSneak", 1, humvee);
+        for (var step = 0; step < world.Frames(5); step++) world.Step();
+        Check.That(inBunker.HasStatus(stealthed), "Inside a garrison the stealth rider stays stealthed.");
+        Check.That(!inHumvee.HasStatus(stealthed), "Inside a transport it is not.");
+        feeder.ExitContainer(1, inHumvee.Id.Value);
+        for (var step = 0; step < world.Frames(5); step++) world.Step();
+        Check.That(!inHumvee.ContainedBy.IsValid && inHumvee.HasStatus(stealthed), "Out of the transport it stealths again.");
+    }
 }

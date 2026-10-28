@@ -342,6 +342,9 @@ public sealed class OverlordContain(OverlordContainData data) : TransportContain
     public override string ModuleName => "OverlordContain";
     public bool Redirecting => Redirected is not null;
 
+    /// <summary><c>OverlordContain::isGarrisonable</c>: whether its portable structure's container is.</summary>
+    public override bool IsGarrisonable => Redirected?.IsGarrisonable ?? false;
+
     public void Attach(IWorldServices world) => _world = world;
 
     /// <summary><c>getRedirectedContain</c>: the container of the first passenger, once redirection is on.</summary>

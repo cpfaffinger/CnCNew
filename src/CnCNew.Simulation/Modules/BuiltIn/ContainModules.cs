@@ -142,6 +142,9 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
     /// <inheritdoc cref="IContainerModule.PassesWeaponBonus"/>
     public virtual bool PassesWeaponBonus => false;
 
+    /// <inheritdoc cref="IContainerModule.IsGarrisonable"/>
+    public virtual bool IsGarrisonable => false;
+
     /// <inheritdoc cref="IContainerModule.StealthUnitsContained"/>
     public int StealthUnitsContained(IWorldServices world)
     {
@@ -534,6 +537,9 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         _hasOriginalOwner = false;
         world.MarkDirty(Entity);
     }
+
+    /// <inheritdoc cref="IContainerModule.IsGarrisonable"/>
+    public override bool IsGarrisonable => true;
 
     /// <summary>
     /// <c>GarrisonContain::m_hideGarrisonedStateFromNonallies</c> (F-54): riders inside, every one of kind <c>STEALTH_GARRISON</c>, and the first of them (entry order) not
