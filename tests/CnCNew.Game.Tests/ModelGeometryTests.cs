@@ -74,6 +74,27 @@ internal static class ModelGeometryTests
             TestHarness.Assert(Near(humvee[0].Start!.Value.X, -5.719m) && Near(humvee[0].End!.Value.X, -15.950m) && Near(humvee[1].End!.Value.Y, 10.989m), "the Humvee's exit bones are the model's");
             TestHarness.Assert(exits.Count == 100 && paths == 166 && complete == 82 && none.Length == 76, $"measured on the master installation: 100 door containers, 166 paths, 82 with both bones, 76 containers without any ({exits.Count}, {paths}, {complete}, {none.Length})");
         });
+
+        harness.Run("Model geometry: the fire points and stations of the garrisons and transports (loadGarrisonPoints, loadStationGarrisonPoints, putObjAtNextFirePoint)", () =>
+        {
+            var points = data.Templates.Geometry.FirePoints;
+            var garrisons = points.Where(pair => pair.Value.Garrison.Any(set => !set.IsEmpty)).ToArray();
+            var transports = points.Where(pair => !pair.Value.Transport.IsEmpty).ToArray();
+            var stations = points.Where(pair => !pair.Value.Stations.IsEmpty).ToArray();
+            var pristine = garrisons.Sum(pair => pair.Value.Garrison[0].Length);
+            Console.WriteLine($"       fire points: {garrisons.Length} garrisons ({pristine} pristine points, at most {garrisons.Max(pair => pair.Value.Garrison.Max(set => set.Length))}), "
+                + $"{stations.Length} fire bases ({stations.Sum(pair => pair.Value.Stations.Length)} stations), {transports.Length} transports ({transports.Sum(pair => pair.Value.Transport.Length)} points)");
+            Console.WriteLine($"       transports: {string.Join(", ", transports.Select(pair => $"{pair.Key} {pair.Value.Transport.Length}").Take(16))}");
+            // ABFIREBASE.W3D (tools/CnCNew.W3dTool bones): STATION01 (17.205, 16.507, -7.176), STATION03 (-17.357, -17.144, -7.176) - the bunker is sunk, its riders stand below its origin.
+            static bool Near(Fixed value, decimal expected) => Math.Abs(value.ToDecimal() - expected) <= 0.07m;
+            var fireBase = points["AmericaFireBase"].Stations;
+            TestHarness.Assert(fireBase.Length == 4 && Near(fireBase[0].X, 17.205m) && Near(fireBase[0].Y, 16.507m) && Near(fireBase[0].Z, -7.176m) && Near(fireBase[2].X, -17.357m) && Near(fireBase[2].Y, -17.144m),
+                $"the fire base has the four stations its model makes public (ExtraPublicBone STATION01..04), as the model has them: {string.Join(" | ", fireBase)}");
+            TestHarness.Assert(garrisons.Length == 164 && pristine == 3288 && stations.Length == 4 && transports.Length == 55 && transports.Sum(pair => pair.Value.Transport.Length) == 301,
+                $"measured on the master installation: 164 garrisons with 3,288 pristine points, 4 fire bases, 55 transports with 301 points ({garrisons.Length}, {pristine}, {stations.Length}, {transports.Length})");
+            TestHarness.Assert(garrisons.All(pair => pair.Value.Garrison.All(set => set.Length <= ContainerFirePoints.MaxGarrisonPoints))
+                && transports.All(pair => pair.Value.Transport.Length <= ContainerFirePoints.MaxTransportPoints), "no set is longer than the original's arrays");
+        });
         return harness.Failures;
     }
 }

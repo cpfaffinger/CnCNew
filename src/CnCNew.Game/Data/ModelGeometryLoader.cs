@@ -42,7 +42,101 @@ public static class ModelGeometryLoader
             layouts[definition.OriginalName] = ReadLayout(library, definition.OriginalName, model, rows, cols);
         }
 
-        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library));
+        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library));
+    }
+
+    /// <summary>The bone names <c>GameData.ini</c>'s <c>StandardPublicBone</c> makes public for every model that matter here; any other name must be an <c>ExtraPublicBone</c> of the draw module.</summary>
+    private static readonly string[] StandardPublicBones = ["FirePoint"];
+
+    /// <summary>The containers whose riders <c>OpenContain::redeployOccupants</c> puts at <c>FIREPOINTnn</c> (the Helix puts them above itself, <c>HelixContain::redeployOccupants</c>).</summary>
+    private static readonly string[] FirePointTransports = ["TransportContain", "OverlordContain"];
+
+    private static readonly ModelConditionSet[] GarrisonConditions =
+        [ModelConditionSet.Parse("GARRISONED"), ModelConditionSet.Parse("GARRISONED DAMAGED"), ModelConditionSet.Parse("GARRISONED REALLYDAMAGED")];
+
+    /// <summary>
+    /// The rider points of every garrison and fire-point transport (<see cref="ContainerFirePoints"/>): for each condition the original asks for, the draw modules in order give the bones
+    /// <c>PREFIX01</c>, <c>PREFIX02</c>, ... of their best state until one is missing (<c>W3DModelDraw::getPristineBonePositionsForConditionState</c>), summed up to the limit
+    /// (<c>Drawable::getPristineBonePositions</c>); a bone that is not public is not found. The pristine bones are taken with the template's <c>Scale</c> as root (<c>validateCachedBones</c>).
+    /// </summary>
+    private static SortedDictionary<string, ContainerFirePoints> ReadFirePoints(CompiledDefinitionGraph graph, ObjectVisualCatalog visuals, W3dAssetLibrary library)
+    {
+        var points = new SortedDictionary<string, ContainerFirePoints>(StringComparer.Ordinal);
+        foreach (var definition in graph.Definitions.OfType<ObjectDefinition>().OrderBy(value => value.OriginalName, StringComparer.Ordinal))
+        {
+            var garrison = definition.Modules.FirstOrDefault(value => value.Name.Equals("GarrisonContain", StringComparison.Ordinal));
+            var transport = definition.Modules.FirstOrDefault(value => FirePointTransports.Contains(value.Name, StringComparer.Ordinal));
+            if ((garrison is null && transport is null) || !visuals.TryGet(definition.OriginalName, out var visual)) continue;
+            var scale = Fixed.FromDecimal(ScaleOf(definition));
+            ImmutableArray<BonePose> Read(ModelConditionSet conditions, string prefix, int max)
+            {
+                var poses = ImmutableArray.CreateBuilder<BonePose>();
+                foreach (var draw in visual.Draws)
+                {
+                    if (poses.Count >= max) break;
+                    if (BestStateSelector.FindBest(draw, conditions) is not (var state and >= 0) || state >= draw.States.Length || draw.States[state].Model is not { } model) continue;
+                    W3dSkeleton skeleton;
+                    try
+                    {
+                        skeleton = library.GetModel(model).Skeleton;
+                    }
+                    catch (W3dMissingAssetException exception)
+                    {
+                        throw new InvalidDataException($"{definition.OriginalName}: model '{model}' cannot be loaded: {exception.Message}");
+                    }
+                    for (var number = 1; number <= 99 && poses.Count < max; number++)
+                    {
+                        var name = prefix + number.ToString("00", CultureInfo.InvariantCulture);
+                        if (!IsPublic(draw, name) || skeleton.FindBone(name) is not (var bone and >= 0)) break;
+                        var pose = RestPose(skeleton, bone);
+                        poses.Add(pose with { X = pose.X * scale, Y = pose.Y * scale, Z = pose.Z * scale });
+                    }
+                }
+                return poses.ToImmutable();
+            }
+
+            var sets = ImmutableArray<ImmutableArray<BonePose>>.Empty;
+            var stations = ImmutableArray<BonePose>.Empty;
+            if (garrison is not null)
+            {
+                if (Flag(definition, garrison, "IsEnclosingContainer", defaultValue: true))
+                    sets = [.. GarrisonConditions.Select(conditions => Read(conditions, "FIREPOINT", ContainerFirePoints.MaxGarrisonPoints))];
+                else
+                    stations = Read(GarrisonConditions[0], "STATION", Math.Min(Count(definition, garrison, "ContainMax"), ContainerFirePoints.MaxGarrisonPoints));
+            }
+            var riders = transport is null ? ImmutableArray<BonePose>.Empty : Read(ModelConditionSet.Empty, "FIREPOINT", ContainerFirePoints.MaxTransportPoints);
+            points[definition.OriginalName] = new ContainerFirePoints(sets, stations, riders);
+        }
+
+        return points;
+    }
+
+    /// <summary><c>doSingleBoneName</c>: a public name makes itself and its numbered variations public.</summary>
+    private static bool IsPublic(DrawSpec draw, string bone)
+    {
+        static bool Covers(string name, string bone)
+            => bone.Equals(name, StringComparison.OrdinalIgnoreCase)
+                || (bone.Length == name.Length + 2 && bone.StartsWith(name, StringComparison.OrdinalIgnoreCase) && char.IsAsciiDigit(bone[^2]) && char.IsAsciiDigit(bone[^1]));
+        return StandardPublicBones.Any(name => Covers(name, bone)) || draw.ExtraPublicBones.Any(name => Covers(name.Trim(), bone));
+    }
+
+    private static decimal ScaleOf(ObjectDefinition definition)
+    {
+        var field = definition.Fields.LastOrDefault(value => value.Name.Equals("Scale", StringComparison.OrdinalIgnoreCase));
+        if (field is null) return 1m;
+        return decimal.TryParse(field.Value.OriginalText.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var scale) && scale > 0
+            ? scale
+            : throw new InvalidDataException($"{definition.OriginalName}: Scale is not a positive number ('{field.Value.OriginalText.Trim()}').");
+    }
+
+    private static bool Flag(ObjectDefinition definition, ModuleConfiguration module, string key, bool defaultValue)
+    {
+        var field = module.Fields.LastOrDefault(value => value.Name.Equals(key, StringComparison.OrdinalIgnoreCase));
+        if (field is null) return defaultValue;
+        var text = field.Value.OriginalText.Trim();
+        if (text.Equals("Yes", StringComparison.OrdinalIgnoreCase)) return true;
+        if (text.Equals("No", StringComparison.OrdinalIgnoreCase)) return false;
+        throw new InvalidDataException($"{definition.OriginalName}: {module.Name} {key} is not Yes or No ('{text}').");
     }
 
     /// <summary>The contain modules whose riders leave through <c>OpenContain::exitObjectViaDoor</c> (the garrison, the tunnel, the ferry and the parachute have exits of their own).</summary>
