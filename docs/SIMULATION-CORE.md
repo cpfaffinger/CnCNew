@@ -3775,7 +3775,23 @@ a rider with a victim takes the free point closest to it, and a rider at a point
 `addValidObjectsToGarrisonPoints`, `trackTargets`); the 40 points beyond the model's are the centre. The set follows the body's damage state (`findConditionIndex`, rubble
 uses the really damaged one). A fire base puts each rider on the first free station when it comes in and back on the ground when it leaves (`removeObjectFromStationPoint`,
 "Patch 1.01"). Point and station occupancy is state, written only while somebody stands at one. The step-5 stand-in for a garrison (the building's bounding circle) is
-gone; a transport's riders are still measured from the transport (its fire points are read, not used yet: `OpenContain::redeployOccupants` moves them on every change
+gone; a transport's riders were still measured from the transport until §55.7 (its fire points were read, not used: `OpenContain::redeployOccupants` moves them on every change
 of the transport's pose, a state of its own). Not modelled: the night and snow variants of a model the original would have cached at the first entry, the gun drawable
 and its muzzle flash (step 8), `MobileGarrison` (the original keeps the points where the building first stood). Tests in `Tests.FireFromContainers.cs`
 (`FireFromContainersFirePoints`, the rate case on fire points) and `ModelGeometryTests` (real data). Step 1 moves only the fingerprint fields of 48 runs (69 of 1,927, manifest `c016cbf`); step 4 the hashes of 18 mission runs with garrisoned riders (104 fields), no outcome, end tick or command count (manifest `14d17c3`); the rate-equivalence suite 0 / 0. Commits `e7e86a0`, `532e5cb`..
+
+### 55.7 F-60, step 4 continued: the match on entry, the transports' fire points (`redeployOccupants`, `putObjAtNextFirePoint`, `getSingleLogicalBonePositionOnTurret`)
+
+Three causes. (a) A rider that enters an enclosing garrison makes it match its points at once (`OpenContain::addToContain` calls the garrison's `redeployOccupants`, which is
+`matchObjectsToGarrisonPoints`), not only at the building's next frame: a rider at a point whose victim died in the middle of the building's frame goes back to the centre when
+another comes in. No field of either manifest moved (`2cc126e`).. (b) The table carries the turret bone of a container with `PassengersInTurret` (the rest pose of the main turret's angle bone of the default
+state): the four Overlords and the Tank General's Emperor; the bone table's golden hash is new (`843CCD2C…`). The fingerprint fields of 48 runs and the input manifest's geometry entry (`4c59644`, manifest `2e5e05e`).. (c) A transport's rider is measured - range, search,
+view, shot - from where `OpenContain::redeployOccupants` puts it, which the original does on every change of the transport's transform: the `FIREPOINTnn` of its place among
+the riders in the order they came in, the points used round from the first; with `PassengersInTurret` the point turns with the turret about its bone (`Pre_Rotate_Z` turns
+the rotation part only, so the turn is about the pivot); a Helix's riders 8 above it, its portable structure on it (`HelixContain::redeployOccupants`, `update`); a container
+without points its own position. The position is derived from the container's pose where its begun frame ends, not kept: after a rider leaves a standing transport the others
+take their new points at once, the original at the transport's next move - registered as a deviation. The transport's points are those of its model without a condition;
+the original reads the current model, so a damaged transport whose damaged model moves its points is not followed. Four pairings with America change (`5a04fbd`, manifest `d381fd6`): Armored Fury America-China (America at tick 40,291 instead of 59,701), Armored Fury GLA-America (37,711 instead of 60,541), Bitter Winter GLA-America (30,181 instead of 30,211), and Bitter Winter America-China, a stalemate before, is won by America at tick 72,991 - **16 of 16 pairings decided**; the reference match, the stress test and every mission run unchanged; balance not assessed.. Tests `FireFromContainersMatchOnEntry` (fails
+without (a)), `FireFromContainersTransportFirePoints` (a Humvee with a point 40 east and one 40 west: its first rider fires at an enemy 130 east and not at one 130 west,
+without points at neither, turned round at the western one), `ModelGeometryTests` (the Overlord's `FIREPOINT01` (-15, 0, 15) about `TURRET01` (0, 0, 10.19)); the
+rate-equivalence suite 0 / 0 in all ten groups.

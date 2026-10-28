@@ -235,7 +235,7 @@ garrisons keep their hashes.
    template whose geometry has two fire points (east/west) - without a victim the rider is at the centre; a Humvee rider moves with the Humvee. Changes hashes of
    runs with riders (rider coordinates are state).
 
-   **Built (28 October 2026) for the garrisons; the transports' half is open.** `GarrisonContain` keeps the 40 points (rider, victim) and the stations
+   **Built (28 October 2026) for the garrisons; the transports' half the same day (below).** `GarrisonContain` keeps the 40 points (rider, victim) and the stations
    (`SimulationWorld.GarrisonPoints.cs`): a rider without a victim stands at the centre; while it looks its range is tested from the free point closest to the candidate
    (`calcBestGarrisonPosition`; its own point counts as taken; a building with every point taken lets nobody in range - quirk (e) holds now); when it attacks it steps to
    that point (`attemptBestFirePointPosition`); once per original frame, in the first tick of the building's own frame, `removeInvalid` / `addValid` / `trackTargets`
@@ -244,6 +244,13 @@ garrisons keep their hashes.
    leaves. The garrison stays awake while an enclosing building has riders. The step-5 stand-in is gone for the garrisons; a transport's, an Overlord's and a Helix's riders
    are still measured from the container (their points are read, not used: `redeployOccupants` on every pose change is a state of its own). Tests:
    `FireFromContainersFirePoints` (scenes (a), (b), (e)'s "out of every point", the station, a snapshot), the rate case of step 5 on fire points.
+
+   **The transports, built (28 October 2026).** A transport's rider is measured from where `redeployOccupants` puts it: the transport's `FIREPOINTnn` of its place among
+   the riders in entry order, round from the first; with `PassengersInTurret` turned with the turret about its bone (the table carries the turret bone's rest pose); a Helix's
+   riders 8 above it, its portable structure on it; without points the transport's position. Derived from the container's frame-end pose, not kept as state - **deviation**:
+   after a rider leaves a standing transport the others take their new points at once, the original at the next move; the points are those of the model without a
+   condition (the original reads the current model). An enclosing garrison also matches its points at once when a rider enters (`addToContain` -> `redeployOccupants`).
+   SIMULATION-CORE §55.7.
 
 5. **Firing from inside (the behaviour change).** `MayAct` lets a contained rider act when its container allows it; `AcquireRadius` = largest weapon range
    (with step 3's conditions) + container bounding circle radius, mood Sleep/Passive range zeroing and the stealth veto skipped for a contained rider; `CanAttack`'s
