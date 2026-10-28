@@ -342,6 +342,8 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         if (data.HealObjects || data.IsEnclosingContainer) world.WakeAt(Entity, this, world.Tick);
         if (!data.IsEnclosingContainer) PickStation(world, candidate);
         RecalcControllingPlayer(world);
+        // addToContain's redeployOccupants: an enclosing garrison matches its riders to its points at once, not only at its next frame.
+        if (data.IsEnclosingContainer) world.MatchGarrisonPoints(Entity, this);
     }
 
     // ------------------------------------------------------------------------------------------- fire points (F-60, step 4)

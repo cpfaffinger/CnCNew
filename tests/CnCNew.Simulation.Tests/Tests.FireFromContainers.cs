@@ -555,6 +555,28 @@ static partial class Tests
     }
 
     /// <summary>
+    /// Step 4, the match on entry (<c>OpenContain::addToContain</c> -> <c>GarrisonContain::redeployOccupants</c> -> <c>matchObjectsToGarrisonPoints</c>): at 60 Hz a rider at a point
+    /// whose victim died in the middle of the building's frame goes back to the centre at once when another rider comes in, not at the building's next frame.
+    /// </summary>
+    public static void FireFromContainersMatchOnEntry()
+    {
+        var scene = FcScene(SimulationRate.Hz60, "FcBunker", "FcRifleman", 150, geometry: FcFirePoints());
+        FcRun(scene.World, scene.Rider, 60);
+        Check.That(scene.Rider.X == Fixed.FromInt(30), $"Setup: the rider fires from the east point ({scene.Rider.X}).");
+        scene.Feeder.Spawn(1, "FcRifleman", owner: 1, x: 0, y: 0);
+        scene.World.Step();
+        var second = scene.World.Entities.Where(value => value.Template.Name == "FcRifleman").OrderBy(value => value.Id.Value).Last();
+        var ticks = scene.World.Time.TicksPerOriginalFrame;
+        while ((scene.World.Tick - scene.Container.SpawnTick) % ticks != 1) scene.World.Step();
+        scene.Feeder.Kill(scene.Victim.Id.Value);
+        scene.World.Step();
+        Check.That((scene.World.Tick - 1 - scene.Container.SpawnTick) % ticks != 0 && scene.Victim.EffectivelyDead && scene.Rider.X == Fixed.FromInt(30),
+            $"Setup: the victim died in the middle of the building's frame, the rider is still at its point ({scene.Rider.X}; tick {scene.World.Tick}, spawn {scene.Container.SpawnTick}, dead {scene.Victim.EffectivelyDead}).");
+        Check.That(scene.World.TryEnterContainer(second, scene.Container), "Setup: a second rider comes in.");
+        Check.That((scene.Rider.X, scene.Rider.Y) == (scene.Container.X, scene.Container.Y), $"The first rider is back at the centre at once ({scene.Rider.X}, {scene.Rider.Y}).");
+    }
+
+    /// <summary>
     /// Step 4, the fire points (<c>GarrisonContain</c>, docs/FIRE-FROM-CONTAINERS.md): a rider without a victim stands at the building's centre; it acquires an enemy within range of the
     /// free point closest to it (<c>calcBestGarrisonPosition</c>) and fires from that point; when its victim is gone it goes back to the centre and takes the point on the side of its
     /// next one; a fire base's rider stands at its station, raised, and is put back on the ground when it leaves; a snapshot keeps the points.
