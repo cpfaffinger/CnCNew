@@ -70,7 +70,7 @@ public sealed class LiveAudioView(LiveGame live) : IAudioGameView
         .FirstOrDefault(value => value.Faction.Name.Equals(live.HumanFaction, StringComparison.OrdinalIgnoreCase))?.Side ?? "";
 
     public GameClock Clock => live.Clock;
-    public bool LowPower => live.World.EnergyProductionOf(live.Human) < 0;
+    public bool LowPower => !live.World.HasSufficientPower(live.Human);
     public Relationship RelationshipOf(PlayerId from, PlayerId to) => live.World.RelationshipOf(from, to);
     public bool IsShrouded(Vector3 position) => live.FxView.IsShrouded(position);
 }

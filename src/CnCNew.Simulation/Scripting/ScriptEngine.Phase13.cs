@@ -696,7 +696,7 @@ public sealed partial class ScriptEngine
                 return true;
             // evaluatePlayerHasComparisonValueExcessPower: production - consumption against the kilowatts.
             case "PLAYER_EXCESS_POWER_COMPARE_VALUE":
-                result = Has(type, p, 3) && ResolvePlayer(Str(p, 0)) is { } excess && Compare(Int(p, 1), _world.EnergyProductionOf(excess.Id), Int(p, 2));
+                result = Has(type, p, 3) && ResolvePlayer(Str(p, 0)) is { } excess && Compare(Int(p, 1), _world.ProducedEnergyOf(excess.Id) - _world.EnergyConsumptionOf(excess.Id), Int(p, 2));
                 return true;
             // evaluateSkirmishUnownedFactionUnitComparison: the neutral player's unmanned objects.
             case "SKIRMISH_UNOWNED_FACTION_UNIT_EXISTS":
@@ -815,15 +815,8 @@ public sealed partial class ScriptEngine
         return false;
     }
 
-    /// <summary><c>Energy::getProduction</c>/<c>getConsumption</c>: the simulation keeps the net sum, so consumption is rebuilt from the objects' negative <c>EnergyProduction</c>.</summary>
-    private (long Production, long Consumption) EnergyOf(PlayerId player)
-    {
-        long consumption = 0;
-        foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
-            if (!entity.EffectivelyDead && !entity.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction) && entity.Template.EnergyProduction < 0)
-                consumption -= entity.Template.EnergyProduction;
-        return (_world.EnergyProductionOf(player) + consumption, consumption);
-    }
+    /// <summary><c>Energy::getProduction</c>/<c>getConsumption</c>.</summary>
+    private (long Production, long Consumption) EnergyOf(PlayerId player) => (_world.ProducedEnergyOf(player), _world.EnergyConsumptionOf(player));
 
     private bool TechBuildingNear(string playerName, int distance, string areaName)
     {

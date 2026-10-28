@@ -74,6 +74,7 @@ public sealed partial class SimulationWorld
             foreach (var shared in player.Array("sharedReadyFrames")) known.SharedReadyFrames[checked((int)shared.Int("power"))] = shared.Int("frame");
             known.Tunnels.Load(player);
             known.PowerSabotagedUntil = player.Has("powerSabotagedUntil") ? player.Int("powerSabotagedUntil") : 0;
+            if (known.PowerSabotagedUntil != 0) _runningPowerSabotages++;
             known.AttackedTick = player.Has("attackedTick") ? player.Int("attackedTick") : -1;
             known.BattlePlan = player.Has("battlePlan") ? BattlePlanState.Load(player.Object("battlePlan")) : null;
         }
@@ -112,8 +113,15 @@ public sealed partial class SimulationWorld
         LoadExitClaims(state);
         LoadPathQueue(state);
 
+        _restoringEnergy = true;
         foreach (var item in state.Array("entityList")) LoadEntity(item);
-        foreach (var player in state.Array("players")) _players[checked((int)player.Int("id"))].EnergyProduction = checked((int)player.Int("energyProduction"));
+        _restoringEnergy = false;
+        foreach (var player in state.Array("players"))
+        {
+            var known = _players[checked((int)player.Int("id"))];
+            known.EnergyProduction = checked((int)player.Int("energyProduction"));
+            known.EnergyConsumption = player.Has("energyConsumption") ? checked((int)player.Int("energyConsumption")) : 0;
+        }
         foreach (var item in state.Array("destroyQueue"))
         {
             var entity = FindEntity(new EntityId(checked((uint)item.UInt("id")))) ?? throw new InvalidDataException("Destroy queue references an unknown entity.");
@@ -180,6 +188,7 @@ public sealed partial class SimulationWorld
             SellCompleteTick = reader.Int("sellCompleteTick"),
             EmpDisabledUntil = reader.Has("empDisabledUntil") ? reader.Int("empDisabledUntil") : 0,
             ParalyzedUntil = reader.Has("paralyzedUntil") ? reader.Int("paralyzedUntil") : 0,
+            Underpowered = reader.Has("underpowered") && reader.Bool("underpowered"),
             ScriptDisableMask = reader.Has("scriptDisableMask") ? checked((byte)reader.Int("scriptDisableMask")) : (byte)0,
         };
         if (reader.Has("shroudScalar")) entity.ShroudScalar = reader.Fixed("shroudScalar");

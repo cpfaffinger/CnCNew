@@ -191,4 +191,72 @@ static partial class Tests
         Check.That(world.FindEntity(riders[0].Id) is { EffectivelyDead: false }, "A held rider's lifetime does not run out while it rides.");
         Check.That(world.FindEntity(riders[1].Id) is null or { EffectivelyDead: true }, "The barracks' occupant lives its second.");
     }
+
+    /// <summary>
+    /// F-16: <c>Energy</c> keeps production and consumption apart and every change of either calls <c>Player::onPowerBrownOutChange</c>: in a brown-out every <c>POWERED</c> object
+    /// of the player carries <c>DISABLED_UNDERPOWERED</c> (a powered factory makes nothing - its <c>ProductionUpdate</c> processes only held), a new power plant ends it, and a
+    /// sabotaged power plant starts it again until the sabotage is over (<c>Player::update</c>). The port kept a net sum and disabled nothing.
+    /// </summary>
+    public static void BrownOutDisablesPoweredObjects()
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: new Dictionary<string, string>(RetailModuleFiles())
+        {
+            ["Data/INI/Object/BrownOut.ini"] = """
+            Object HungryFactory
+              KindOf = STRUCTURE POWERED
+              EnergyProduction = -5
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+              Behavior = ProductionUpdate Prod01
+                MaxQueueEntries = 3
+              End
+              Behavior = DefaultProductionExitUpdate Exit01
+                UnitCreatePoint = X:10.0 Y:-4.0 Z:0.0
+                NaturalRallyPoint = X:20.0 Y:0.0 Z:0.0
+              End
+            End
+            Object SmallPlant
+              KindOf = STRUCTURE
+              EnergyProduction = 10
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+            End
+            """,
+        });
+        var world = NewWorld(fixture);
+        var feeder = new Feeder(world);
+        var player = new PlayerId(1);
+        feeder.Spawn(1, "HungryFactory", x: 300, y: 300);
+        world.Step();
+        feeder.GiveMoney(1, 1000);
+        world.Step();
+        var factory = world.Entities.Single(entity => entity.Template.Name == "HungryFactory");
+        Check.That(!world.HasSufficientPower(player) && world.ProducedEnergyOf(player) == 0 && world.EnergyConsumptionOf(player) == 5, "Setup: the factory consumes 5 and nothing produces.");
+        Check.That((world.DisabledFlagsOf(factory) & DisabledMask.Underpowered) != 0, "A powered object of a player in a brown-out is underpowered.");
+        feeder.QueueProduction(1, factory.Id.Value, "QuickUnit");
+        for (var tick = 0; tick < world.Frames(60); tick++) world.Step();
+        Check.That(CountOf(world, "QuickUnit") == 0, "The underpowered factory makes nothing.");
+
+        feeder.Spawn(1, "SmallPlant", x: 100, y: 100);
+        world.Step();
+        Check.That(world.HasSufficientPower(player) && world.DisabledFlagsOf(factory) == DisabledMask.None, "A power plant ends the brown-out.");
+        for (var tick = 0; tick < world.Frames(40); tick++) world.Step();
+        Check.That(CountOf(world, "QuickUnit") == 1, "The factory produces again.");
+
+        world.SetPowerSabotagedUntil(player, world.Tick + world.Frames(30));
+        Check.That(!world.HasSufficientPower(player) && world.ProducedEnergyOf(player) == 0 && world.DisabledFlagsOf(factory) == DisabledMask.Underpowered,
+            "A sabotaged power plant starts the brown-out at once.");
+        for (var tick = 0; tick < world.Frames(30); tick++) world.Step();
+        Check.That(world.DisabledFlagsOf(factory) == DisabledMask.Underpowered, "It lasts to the end of the sabotage.");
+        for (var tick = 0; tick < world.Frames(2); tick++) world.Step();
+        Check.That(world.HasSufficientPower(player) && world.DisabledFlagsOf(factory) == DisabledMask.None, "Player::update ends it the frame after.");
+    }
 }

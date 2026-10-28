@@ -269,7 +269,7 @@ public sealed partial class SimulationWorld
         site.Status &= ~(1UL << ObjectStatusBits.UnderConstruction);
         var builder = site.BuilderId;
         site.BuilderId = EntityId.Invalid;
-        if (_players.TryGetValue(site.Owner.Value, out var owner)) owner.EnergyProduction += site.Template.EnergyProduction;
+        ApplyTemplateEnergy(site.Owner, site.Template.EnergyProduction, true);
         foreach (var node in site.Updates)
             if (node.Module is Modules.BuiltIn.BuildCompleteModule) WakeAt(site, node.Update, _tick);
         MarkDirty(site);

@@ -233,6 +233,9 @@ public sealed class Entity
     /// <summary><c>DISABLED_EMP</c> until this tick (<c>Object::setDisabledUntil</c> by <c>EMPUpdate</c>/<c>LeafletDropBehavior</c>); 0 when never disabled. Movement and weapons stand still while it lies ahead.</summary>
     public long EmpDisabledUntil { get; internal set; }
 
+    /// <summary><c>DISABLED_UNDERPOWERED</c>: a <c>POWERED</c> object of a player in a brown-out (<c>Player::onPowerBrownOutChange</c>).</summary>
+    public bool Underpowered { get; internal set; }
+
     /// <summary><c>DISABLED_PARALYZED</c> (<c>BattlePlanUpdate</c>'s change of plan) up to this tick (the first tick it no longer holds); 0 when never paralyzed.</summary>
     public long ParalyzedUntil { get; internal set; }
 
@@ -247,6 +250,7 @@ public sealed class Entity
     {
         var mask = EmpDisabledUntil > tick ? DisabledMask.Emp : DisabledMask.None;
         if (ParalyzedUntil > tick) mask |= DisabledMask.Paralyzed;
+        if (Underpowered) mask |= DisabledMask.Underpowered;
         if ((ScriptDisableMask & ScriptHeld) != 0) mask |= DisabledMask.Held;
         if ((ScriptDisableMask & ScriptDisabled) != 0) mask |= DisabledMask.ScriptDisabled;
         return mask;
@@ -359,6 +363,7 @@ public sealed class Entity
         if (Captured) writer.Bool("captured", true);
         if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
         if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);
+        if (Underpowered) writer.Bool("underpowered", true);
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
         writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);
         writer.Bool("hasPlayerUpgradeWeapon", HasPlayerUpgradeWeapon);

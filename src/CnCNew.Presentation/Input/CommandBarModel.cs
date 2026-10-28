@@ -269,7 +269,7 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
         }
         var exemptFromPower = button.Kind is GuiCommandKind.Sell or GuiCommandKind.Evacuate or GuiCommandKind.ExitContainer or GuiCommandKind.BeaconDelete
             or GuiCommandKind.SetRallyPoint or GuiCommandKind.Stop or GuiCommandKind.SwitchWeapon;
-        if (!exemptFromPower && !button.Has(CommandOptions.IgnoresUnderpowered) && entity.Template.IsKindOf("POWERED") && world.EnergyProductionOf(player) < 0)
+        if (!exemptFromPower && !button.Has(CommandOptions.IgnoresUnderpowered) && entity.Underpowered)
             return State(ButtonAvailability.Restricted, ButtonReason.Underpowered);
         if (button.Has(CommandOptions.NeedUpgrade) && button.Upgrade.Length > 0)
         {
@@ -459,11 +459,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
 
     public PlayerHud Hud(SimulationWorld world, PlayerId player)
     {
-        var consumption = 0;
-        foreach (var entity in world.Entities)
-            if (entity.Owner == player && SimulationQueries.IsAlive(entity) && !entity.HasStatus(ObjectStatusBits.UnderConstruction) && entity.Template.EnergyProduction < 0)
-                consumption -= entity.Template.EnergyProduction;
-        var production = world.EnergyProductionOf(player) + consumption;
+        var consumption = world.EnergyConsumptionOf(player);
+        var production = world.ProducedEnergyOf(player);
         var powers = new SortedDictionary<string, SpecialPowerView>(StringComparer.Ordinal);
         var sciences = world.PlayerSciences(player);
         foreach (var entity in world.Entities.Where(entity => entity.Owner == player && SimulationQueries.IsAlive(entity)).OrderBy(entity => entity.Id.Value))

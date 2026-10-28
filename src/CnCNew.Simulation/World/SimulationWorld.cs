@@ -112,6 +112,8 @@ public sealed partial class SimulationWorld : IWorldServices
         public Fixed Money { get; set; }
         /// <summary>Incrementally maintained sum of owned objects' <c>EnergyProduction</c> (<c>Energy::objectEnteringInfluence</c>/<c>Leaving</c>); negative means a net consumer.</summary>
         public int EnergyProduction { get; set; }
+        /// <summary><c>Energy::m_energyConsumption</c>: what the owned objects with a negative <c>EnergyProduction</c> consume (the production is the net sum plus this).</summary>
+        public int EnergyConsumption { get; set; }
         public UpgradeMask CompletedUpgrades { get; set; }
 
         // ------------------------------------------------------------------------------------- phase 5: sciences
@@ -508,9 +510,12 @@ public sealed partial class SimulationWorld : IWorldServices
         if (_players.TryGetValue(player.Value, out var state)) state.Money += amount;
     }
 
+    /// <summary><c>Energy::addProduction</c> (a power plant's upgrade bonus, an overcharge): the brown-out follows.</summary>
     public void AddEnergyProduction(PlayerId player, int amount)
     {
-        if (_players.TryGetValue(player.Value, out var state)) state.EnergyProduction += amount;
+        if (!_players.TryGetValue(player.Value, out var state)) return;
+        state.EnergyProduction += amount;
+        if (amount != 0 && !_restoringEnergy) OnPowerBrownOutChange(player, !HasSufficientPower(player));
     }
 
     /// <summary>
@@ -1634,7 +1639,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (entity.Timers is { Count: > 0 } timers)
                 foreach (var timer in timers.ToArray()) RemoveTimer(timer);
             // Energy::objectLeavingInfluence: the mirror image of the Register() hook.
-            if (!entity.HasStatus(ObjectStatusBits.UnderConstruction) && _players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction -= entity.Template.EnergyProduction;
+            if (!entity.HasStatus(ObjectStatusBits.UnderConstruction)) ApplyTemplateEnergy(entity.Owner, entity.Template.EnergyProduction, false);
             if (entity.SellCompleteTick >= 0) _sales.Remove((entity.SellCompleteTick, entity.Id.Value));
             if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
                 navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
@@ -1898,7 +1903,7 @@ public sealed partial class SimulationWorld : IWorldServices
         TrackCollidable(entity);
         _moduleCount += entity.ModuleArray.Length;
         // Energy::objectEnteringInfluence: incremental, not recomputed per frame.
-        if (!entity.HasStatus(ObjectStatusBits.UnderConstruction) && _players.TryGetValue(entity.Owner.Value, out var owner)) owner.EnergyProduction += entity.Template.EnergyProduction;
+        if (!entity.HasStatus(ObjectStatusBits.UnderConstruction)) ApplyTemplateEnergy(entity.Owner, entity.Template.EnergyProduction, true);
         if (entity.SellCompleteTick >= 0) _sales.Add((entity.SellCompleteTick, entity.Id.Value));
         if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
             navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
@@ -1935,6 +1940,7 @@ public sealed partial class SimulationWorld : IWorldServices
         _tickEvents.Clear();
         ExecuteCommands(tick);
         FireTimers(tick);
+        EndPowerSabotages();
         RunUpdates(tick);
         if (_pathQueue.Count > 0 || _pathAnswers.Count > 0) ProcessPathQueue();
         StepAcquisition(tick);
@@ -1969,6 +1975,7 @@ public sealed partial class SimulationWorld : IWorldServices
         observer.PhaseEnded(TickPhase.Commands);
         observer.PhaseStarted(TickPhase.Timers);
         FireTimers(tick);
+        EndPowerSabotages();
         observer.PhaseEnded(TickPhase.Timers);
         observer.PhaseStarted(TickPhase.Updates);
         RunUpdates(tick);
@@ -2170,6 +2177,7 @@ public sealed partial class SimulationWorld : IWorldServices
             writer.EndArray();
             writer.Fixed("money", player.Money);
             writer.Int("energyProduction", player.EnergyProduction);
+            if (player.EnergyConsumption != 0) writer.Int("energyConsumption", player.EnergyConsumption);
             player.CompletedUpgrades.Describe(writer, "completedUpgrades");
             player.CompletedSciences.Describe(writer, "completedSciences");
             writer.Int("sciencePurchasePoints", player.SciencePurchasePoints);

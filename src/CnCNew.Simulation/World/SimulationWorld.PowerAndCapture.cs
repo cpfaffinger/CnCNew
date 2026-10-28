@@ -96,7 +96,11 @@ public sealed partial class SimulationWorld
         var oldOwner = target.Owner;
         var newOwner = actor.Owner;
         var movingBonus = 0;
-        if (!target.HasStatus(ObjectStatusBits.UnderConstruction)) movingBonus += target.Template.EnergyProduction;
+        if (!target.HasStatus(ObjectStatusBits.UnderConstruction))
+        {
+            ApplyTemplateEnergy(oldOwner, target.Template.EnergyProduction, false);
+            ApplyTemplateEnergy(newOwner, target.Template.EnergyProduction, true);
+        }
         if (target.Modules.OfType<PowerPlantUpgrade>().FirstOrDefault() is { Executed: true }) movingBonus += target.Template.EnergyBonus;
         if (target.Modules.OfType<OverchargeBehavior>().FirstOrDefault() is { Active: true }) movingBonus += target.Template.EnergyBonus;
         if (movingBonus != 0)

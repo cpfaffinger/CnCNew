@@ -397,7 +397,7 @@ public sealed partial class ScriptEngine
         var player = state.Setup.Player;
         var data = _options.Ai!.Data;
         BindSites(state);
-        var underPowered = _world.EnergyProductionOf(player) < 0;
+        var underPowered = !_world.HasSufficientPower(player);
         var powerUnderConstruction = false;
         AiBuildEntry? chosen = null;
         var chosenIsPriority = false;

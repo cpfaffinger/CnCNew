@@ -77,8 +77,8 @@ public sealed partial class SimulationWorld
         if (!newOwner.IsSystem && !_players.ContainsKey(newOwner.Value)) return false;
         if (!entity.HasStatus(ObjectStatusBits.UnderConstruction))
         {
-            if (_players.TryGetValue(entity.Owner.Value, out var previous)) previous.EnergyProduction -= entity.Template.EnergyProduction;
-            if (_players.TryGetValue(newOwner.Value, out var next)) next.EnergyProduction += entity.Template.EnergyProduction;
+            ApplyTemplateEnergy(entity.Owner, entity.Template.EnergyProduction, false);
+            ApplyTemplateEnergy(newOwner, entity.Template.EnergyProduction, true);
         }
         RemoveBattlePlanFromEntity(entity);
         NotifyOwnerChange(entity, newOwner);

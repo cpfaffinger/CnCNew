@@ -73,9 +73,9 @@ public sealed partial class ScriptEngine
             case "PLAYER_HAS_N_OR_FEWER_FACTION_BUILDINGS":
                 return Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } faction && Int(p, 1) >= CountBuildings(faction.Id, true);
             case "PLAYER_HAS_POWER":
-                return Has(type, p, 1) && ResolvePlayer(Str(p, 0)) is { } powered && _world.EnergyProductionOf(powered.Id) >= 0;
+                return Has(type, p, 1) && ResolvePlayer(Str(p, 0)) is { } powered && _world.HasSufficientPower(powered.Id);
             case "PLAYER_HAS_NO_POWER":
-                return !(Has(type, p, 1) && ResolvePlayer(Str(p, 0)) is { } unpowered && _world.EnergyProductionOf(unpowered.Id) >= 0);
+                return !(Has(type, p, 1) && ResolvePlayer(Str(p, 0)) is { } unpowered && _world.HasSufficientPower(unpowered.Id));
             case "PLAYER_HAS_OBJECT_COMPARISON":
             {
                 if (!Has(type, p, 4) || ResolvePlayer(Str(p, 0)) is not { } owner) return false;

@@ -44,7 +44,12 @@ public sealed partial class SimulationWorld
     /// <inheritdoc cref="IWorldServices.SetPowerSabotagedUntil"/>
     public void SetPowerSabotagedUntil(PlayerId player, long tick)
     {
-        if (_players.TryGetValue(player.Value, out var state)) state.PowerSabotagedUntil = tick;
+        if (!_players.TryGetValue(player.Value, out var state)) return;
+        if (state.PowerSabotagedUntil == 0 && tick != 0) _runningPowerSabotages++;
+        else if (state.PowerSabotagedUntil != 0 && tick == 0) _runningPowerSabotages--;
+        state.PowerSabotagedUntil = tick;
+        // SabotagePowerPlantCrateCollide: "Trigger the callback function that will turn everything off."
+        OnPowerBrownOutChange(player, true);
     }
 
     /// <inheritdoc cref="IWorldServices.NoteAttacked"/>
