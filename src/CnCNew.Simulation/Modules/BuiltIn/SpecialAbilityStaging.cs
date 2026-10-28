@@ -64,8 +64,16 @@ public static class StagedCaptureRules
         if (!target.Template.IsKindOf("STRUCTURE") || target.HasStatus(ObjectStatusBits.UnderConstruction) || target.HasStatus(ObjectStatusBits.Sold)) return false;
         if (target.Owner == actor.Owner) return false;
         var relationship = world.RelationshipOf(actor.Owner, target.Owner);
-        return relationship == Relationship.Enemies || (target.Template.IsKindOf("CAPTURABLE") && relationship != Relationship.Allies);
+        if (!(relationship == Relationship.Enemies || (target.Template.IsKindOf("CAPTURABLE") && relationship != Relationship.Allies))) return false;
+        // "If the enemy unit is stealthed and not detected, then we can't capture it!"
+        if (target.HasStatus(StealthedStatus) && !target.HasStatus(DetectedStatus) && !target.HasStatus(DisguisedStatus)) return false;
+        // "If it's garrisoned already, we cannot capture it (unless it's just stealth-garrisoned)" (F-54).
+        return target.Container is not GarrisonContain garrison || garrison.ContainCount - garrison.StealthUnitsContained(world) <= 0;
     }
+
+    private static readonly int StealthedStatus = ObjectStatusBits.Index("STEALTHED");
+    private static readonly int DetectedStatus = ObjectStatusBits.Index("DETECTED");
+    private static readonly int DisguisedStatus = ObjectStatusBits.Index("DISGUISED");
 }
 
 /// <summary>

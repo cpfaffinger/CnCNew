@@ -107,5 +107,21 @@ static partial class Tests
         Check.That(garrison.StealthUnitsContained(world) == 0 && garrison.ContainCount == 1, "One died inside: none counts.");
     }
 
+    /// <summary>
+    /// <c>ActionManager::canCaptureBuilding</c>'s stealth and garrison rules: a building garrisoned by an enemy's plain rider cannot be captured, a stealthed and undetected structure
+    /// neither.
+    /// </summary>
+    public static void StealthGarrisonCapture()
+    {
+        var (world, feeder) = StealthGarrisonWorld();
+        var actor = SgSpawn(world, feeder, "FcRifleman", 2, 200, 0);
+        var held = SgSpawn(world, feeder, "FcBunker", 0, 0, 0);
+        SgInside(world, feeder, "FcRifleman", 1, held);
+        Check.That(!StagedCaptureRules.CanCapture(world, actor, held), "A building garrisoned by player 1's rifleman cannot be captured.");
+        var cloaked = SgSpawn(world, feeder, "FcCloakedBunker", 1, 0, 300);
+        for (var step = 0; step < world.Frames(2); step++) world.Step();
+        Check.That(cloaked.HasStatus(ObjectStatusBits.Index("STEALTHED")) && !StagedCaptureRules.CanCapture(world, actor, cloaked), "A stealthed, undetected structure cannot be captured.");
+    }
+
 
 }
