@@ -121,9 +121,9 @@ public sealed partial class SimulationWorld
             }
 
             var amount = killSelf ? HugeDamage : primaryRadiusSquared.Contains(distanceSquared) ? primaryDamage : secondaryDamage;
-            var adjusted = ActiveArmor(victim).Adjust(weapon.DamageType, amount);
-            if (victim == primaryVictim) dealt = adjusted;
-            Damage(victim.Id, new DamageInfo(damageSource, adjusted, weapon.DamageType, weapon.DeathType, false));
+            // The body applies the armour (ActiveBody::attemptDamage); the value returned is what it would come to.
+            if (victim == primaryVictim) dealt = ActiveArmor(victim).Adjust(weapon.DamageType, amount);
+            Damage(victim.Id, new DamageInfo(damageSource, amount, weapon.DamageType, weapon.DeathType, false));
         }
         return dealt;
     }

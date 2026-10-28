@@ -636,8 +636,7 @@ public sealed class WaveGuideUpdate(WaveGuideData data) : SimModule, IUpdateModu
                 obj.Status |= 1UL << WetBit;
                 world.MarkDirty(obj);
                 if (obj.ModuleArray.OfType<ToppleUpdate>().FirstOrDefault() is { IsAbleToBeToppled: true } topple) topple.ApplyTopplingSpeed(world, obj.X - px, obj.Y - py, data.ToppleForce);
-                var amount = world.AdjustDamageByArmor(obj, WaterDamage, data.DamageAmount);
-                world.Damage(obj.Id, new DamageInfo(Entity.Id, amount, WaterDamage, FloodedDeath, false));
+                world.Damage(obj.Id, new DamageInfo(Entity.Id, data.DamageAmount, WaterDamage, FloodedDeath, false));
             }
         }
     }
@@ -923,7 +922,7 @@ public sealed class FirestormDynamicGeometryInfoUpdate(FirestormData data) : Sim
         }
         targets.Sort(static (a, b) => a.Id.Value.CompareTo(b.Id.Value));
         foreach (var other in targets)
-            world.Damage(other.Id, new DamageInfo(Entity.Id, world.AdjustDamageByArmor(other, flame, data.DamageAmount), flame, DeathTypes.Burned, false));
+            world.Damage(other.Id, new DamageInfo(Entity.Id, data.DamageAmount, flame, DeathTypes.Burned, false));
     }
 
     public override void Describe(IStateWriter writer)

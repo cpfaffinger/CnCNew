@@ -89,7 +89,9 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
     public virtual DamageOutcome AttemptDamage(IWorldServices world, in DamageInfo info)
     {
         if (Entity.EffectivelyDead) return DamageOutcome.NoEffect;
-        var amount = info.Amount;
+        // ActiveBody::attemptDamage and attemptHealing: the body applies its armour to whatever reaches it - a weapon's damage, burning, crushing, falling, healing -; the caller
+        // passes the raw amount, and the damage modules see it (F-48).
+        var amount = world.AdjustDamageByArmor(Entity, info.DamageType, info.Amount);
         if (info.DamageType == DamageTypes.Healing && !info.Kill)
         {
             if (amount <= Fixed.Zero) return DamageOutcome.NoEffect;

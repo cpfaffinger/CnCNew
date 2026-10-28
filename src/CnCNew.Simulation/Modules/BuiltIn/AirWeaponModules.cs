@@ -846,7 +846,7 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
                 amount = Fixed.Max(blast.MaxDamage * percent, blast.MinDamage);
             }
             if (amount == Fixed.Zero || other.Body is null) continue;
-            world.Damage(other.Id, new DamageInfo(Entity.Id, AirWeaponModules.ArmorOf(other).Adjust(DamageTypes.Explosion, amount), DamageTypes.Explosion, ExplodedDeath, false));
+            world.Damage(other.Id, new DamageInfo(Entity.Id, amount, DamageTypes.Explosion, ExplodedDeath, false));
         }
     }
 
