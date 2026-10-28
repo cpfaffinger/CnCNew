@@ -60,7 +60,7 @@ REVIEW_BY_LINE = {
     'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:7265': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
     'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:7333': 'not applicable - the port has no moveAlliesAwayFromDestination search (allies step to the nearest free place, SimulationWorld.ExitGoals.cs)',
     'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:8368': 'not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it',
-    'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:9492': 'not applicable - the port never refuses an attack because obstacles block the view (no isAttackViewBlockedByObstacle)',
+    'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:9492': 'adopted - GameFix.ContactWeaponNotViewBlocked (after the fidelity correction F-55, Phase 41)',
     'Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp:11282': 'not applicable - CRC or save bookkeeping of the C++ engine; the port hashes and saves its own state',
     'Core/GameEngine/Source/GameLogic/System/GameLogicDispatch.cpp:859': 'not applicable - a guard of the C++ game flow against a new-game message during a game; the port starts a match from its description',
     'Core/GameEngine/Source/GameLogic/System/GameLogicDispatch.cpp:962': "equivalent - a rally point is only set by the producer's owner (SimulationWorld.Construction.cs, MayCommand)",

@@ -24,8 +24,7 @@ public sealed partial class SimulationWorld
     private bool AttackViewBlocks(Entity attacker, WeaponInfo weapon, Entity victim)
     {
         if (!AttackUsesLineOfSight || Navigation is null || Terrain is null || !attacker.Template.IsKindOf(NeedsLineOfSightKind)) return false;
-        // WeaponTemplate::isContactWeapon: "fudge this a little to account for pathfinding roundoff".
-        if (weapon.AttackRange * ContactRangeFudge < Fixed.FromInt(global::CnCNew.Simulation.Terrain.TerrainMap.CellSize)) return false;
+        if (IsContactWeapon(weapon)) return false;
         // isDoingGroundMovement, IMMOBILE, "the brutal special case for stinger soldiers"; a rider in a container is on the ground as well, but a contained object attacks nothing here.
         var onGround = (attacker.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) == 0)
             || attacker.Template.IsKindOf("IMMOBILE") || attacker.Template.IsKindOf("SPAWNS_ARE_THE_WEAPONS");
@@ -34,6 +33,17 @@ public sealed partial class SimulationWorld
     }
 
     private static readonly Fixed ContactRangeFudge = Fixed.FromDecimal(1.05m);
+
+    /// <summary><c>WeaponTemplate::isContactWeapon</c>: "fudge this a little to account for pathfinding roundoff & such" - a range a twentieth longer still short of a cell.</summary>
+    private static bool IsContactWeapon(WeaponInfo weapon) => weapon.AttackRange * ContactRangeFudge < Fixed.FromInt(global::CnCNew.Simulation.Terrain.TerrainMap.CellSize);
+
+    /// <summary><c>Object::getCurrentWeapon</c>: the slot last chosen or locked in the active set, else its primary.</summary>
+    private WeaponInfo? CurrentWeapon(Entity entity)
+    {
+        if (ActiveWeaponSet(entity) is not { } set) return null;
+        var slot = entity.WeaponSlots is { } slots && slots.SetIndex == set.Index ? slots.Current : WeaponSlot.Primary;
+        return set.HasWeapon(slot) ? _templates.Weapons[set.Weapons[slot]] : null;
+    }
 
     /// <summary>
     /// <see cref="ChooseWeapon"/>, then the view of the chosen weapon: the choice of an ordered attack. The original chooses the weapon without looking
@@ -70,6 +80,9 @@ public sealed partial class SimulationWorld
     private bool IsAttackViewBlockedFrom(Entity attacker, Fixed attackerX, Fixed attackerY, Fixed attackerZ, Entity victim)
     {
         if (!AttackUsesLineOfSight || Navigation is null || Terrain is null || !attacker.Template.IsKindOf(NeedsLineOfSightKind)) return false;
+        // The rule fix contact-weapon-not-view-blocked (the community source): an attacker with a current weapon (none for an IMMOBILE one) that is a contact weapon is never blocked.
+        if (_templates.Rules.Has(Rules.GameFix.ContactWeaponNotViewBlocked) && !attacker.Template.IsKindOf("IMMOBILE") && CurrentWeapon(attacker) is { } current && IsContactWeapon(current))
+            return false;
         var (victimX, victimY, victimZ) = victim.FrameEnd(_tick);
         if (!attacker.Template.IsKindOf("IMMOBILE"))
         {

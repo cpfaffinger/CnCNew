@@ -187,7 +187,7 @@ the like): by its own judgement, a fix that changes the outcome of a match. Unga
 | `GameLogic/AI/AIPathfind.cpp:7333` | `Pathfinder::moveAlliesAwayFromDestination` | fix | helmutbuhler 2025-06-11 | yes | The indentation was wrong on retail here. | not applicable - the port has no moveAlliesAwayFromDestination search (allies step to the nearest free place, SimulationWorld.ExitGoals.cs) |
 | `GameLogic/AI/AIPathfind.cpp:7506` | `Pathfinder::processHierarchicalCell` | bugfix | Caball009 2026-09-14 |  | Check newCell->m_info before accessing it to prevent a possible crash. |  |
 | `GameLogic/AI/AIPathfind.cpp:8368` | `Pathfinder::clip` | bugfix | Caball009 2026-02-27 | yes | This was originally uninitialized. | not applicable - a defect of the C++ code itself (memory, an uninitialised value, a crash guard); the port is managed code without it |
-| `GameLogic/AI/AIPathfind.cpp:9492` | `Pathfinder::isAttackViewBlockedByObstacle` | bugfix | Stubbjax 2026-08-23 | yes | Don't consider the attack blocked if it is a contact weapon. | not applicable - the port never refuses an attack because obstacles block the view (no isAttackViewBlockedByObstacle) |
+| `GameLogic/AI/AIPathfind.cpp:9492` | `Pathfinder::isAttackViewBlockedByObstacle` | bugfix | Stubbjax 2026-08-23 | yes | Don't consider the attack blocked if it is a contact weapon. | adopted - GameFix.ContactWeaponNotViewBlocked (after the fidelity correction F-55, Phase 41) |
 | `GameLogic/AI/AIPathfind.cpp:11282` | `Pathfinder::crc` | fix |  | yes | The original code effectively accessed m_numWallPieces 128 times, | not applicable - CRC or save bookkeeping of the C++ engine; the port hashes and saves its own state |
 
 ## rendering

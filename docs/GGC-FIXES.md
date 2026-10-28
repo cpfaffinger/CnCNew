@@ -146,6 +146,19 @@ original's trainability is still read from the template unless the fix set it (`
 tracker). The shipped objects the first fix reaches: the fifteen barracks with `HealContain` and a production exit (America, China, GLA and their generals) - the twelve
 tunnel networks also carry a production exit, but their riders leave by `TunnelContain`'s own way, not through a door.
 
+### 3.1e Adopted (Phase 41)
+
+After the fidelity correction F-55 (the attack's line of sight, `docs/ATTACK-LINE-OF-SIGHT.md`) the port has `isAttackViewBlockedByObstacle`, and the fix the catalogue
+had as "not applicable" applies (it is also Reforged's R-09):
+
+| Fix | Community source (file, function) | Original | With the fix | Test |
+| --- | --- | --- | --- | --- |
+| `contact-weapon-not-view-blocked` (20) | `AIPathfind.cpp`, `Pathfinder::isAttackViewBlockedByObstacle` | an attacker of the kind `ATTACK_NEEDS_LINE_OF_SIGHT` is view-blocked whatever its weapon: a suicide bomber (the GLA Terrorists carry the kind) standing in another structure's cells cannot see a building it touches - the acquisition passes the building by | an attacker whose current weapon is a contact weapon (`isContactWeapon`) is never view-blocked (none for an `IMMOBILE` one, which has no current weapon here) | `GameFixContactWeaponNotViewBlocked`: under both profiles at 30, 60 and 120 Hz; a soldier with a gun at the same place stays blocked |
+
+Re-opened by the corrections of Phase 40: the `Object::onDisabledEdge` fix of section 3.2 (a power plant under construction does not change the power when it is
+disabled) has a path to act on since F-56, and the `UndeadBody::attemptDamage` fix (the Battle Bus decides by the armour-adjusted damage) was rejected because the port
+applied the armour before the body, which F-48 corrected - both are rule-profile candidates again, not yet decided.
+
 ### 3.2 Reviewed and not adopted
 
 | Fix | Why not |

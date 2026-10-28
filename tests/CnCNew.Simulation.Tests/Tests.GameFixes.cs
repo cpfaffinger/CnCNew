@@ -21,7 +21,9 @@ static partial class Tests
         Check.That(RuleProfile.Parse(RuleProfile.AllFixes.Name).Equals(RuleProfile.AllFixes) && RuleProfile.Parse("original").Equals(RuleProfile.Original), "A profile's name parses back to the profile.");
         Check.Throws<ArgumentException>(() => RuleProfile.Parse("poison-kill-credit,no-such-fix"), "Unknown rule profile or fix 'no-such-fix'"); // never ignored
         Check.That(RuleProfile.Catalogue.Select(info => (int)info.Fix).SequenceEqual(Enumerable.Range(1, RuleProfile.Catalogue.Length)), "The catalogue lists every fix once, by its number.");
-        Check.That(RuleProfile.Catalogue.All(info => info.Source.StartsWith("GeneralsMD/", StringComparison.Ordinal) && info.Source.Contains("::", StringComparison.Ordinal)), "Every fix names its file and function in the community source.");
+        // The community source keeps the code of Zero Hour under GeneralsMD/ and the code both games share under Core/.
+        Check.That(RuleProfile.Catalogue.All(info => (info.Source.StartsWith("GeneralsMD/", StringComparison.Ordinal) || info.Source.StartsWith("Core/", StringComparison.Ordinal))
+            && info.Source.Contains("::", StringComparison.Ordinal)), "Every fix names its file and function in the community source.");
 
         var original = new SyntheticFixture(TestRate.Default);
         var fixes = new SyntheticFixture(TestRate.Default, rules: RuleProfile.AllFixes);

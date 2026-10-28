@@ -67,6 +67,9 @@ public enum GameFix
 
     /// <summary>A boarder goes into a container only when the two overlap in height, not merely when the container stands on the ground (<c>AIEnterState::update</c>).</summary>
     EnterNeedsVerticalOverlap = 19,
+
+    /// <summary>An attacker whose current weapon is a contact weapon is never view-blocked, so a suicide unit touching a building sets its charge off (<c>Pathfinder::isAttackViewBlockedByObstacle</c>).</summary>
+    ContactWeaponNotViewBlocked = 20,
 }
 
 /// <summary>
@@ -165,6 +168,9 @@ public class RuleProfile : IEquatable<RuleProfile>
         new(GameFix.EnterNeedsVerticalOverlap, "enter-needs-vertical-overlap",
             "GeneralsMD/Code/GameEngine/Source/GameLogic/AI/AIStates.cpp, AIEnterState::update (hasVerticalOverlap)",
             "a boarder at the end of its approach goes in only when it and the container overlap in height: a landing transport is boarded once it is low enough, a hovering boarder does not enter a container below it"),
+        new(GameFix.ContactWeaponNotViewBlocked, "contact-weapon-not-view-blocked",
+            "Core/GameEngine/Source/GameLogic/AI/AIPathfind.cpp, Pathfinder::isAttackViewBlockedByObstacle",
+            "an attacker whose current weapon is a contact weapon - a suicide bomber - is never view-blocked, so it can set its charge off at a building it touches though another structure's cells lie in the line"),
     ];
 
     // Declared after the catalogue: static initialisers run in textual order.

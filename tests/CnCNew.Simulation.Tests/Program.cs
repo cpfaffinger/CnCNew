@@ -189,6 +189,7 @@ run.Test("Game fixes (phase 33): healed-helicopter-to-rally", Tests.GameFixHeale
 run.Test("Game fixes (phase 34): door-exit-to-rally", Tests.GameFixDoorExitToRally);
 run.Test("Game fixes (phase 34): bike-trainable-from-rider", Tests.GameFixBikeTrainableFromRider);
 run.Test("Game fixes (phase 34): enter-needs-vertical-overlap", Tests.GameFixEnterNeedsVerticalOverlap);
+run.Test("Game fixes (phase 41): contact-weapon-not-view-blocked", Tests.GameFixContactWeaponNotViewBlocked);
 run.Test("Patch modules: StatusBitsUpgrade sets and clears status bits", Tests.PatchModuleStatusBitsUpgrade);
 run.Test("Patch modules: a saboteur at a supply drop zone", Tests.PatchModuleSabotageSupplyDropzone);
 run.Test("Phase 5: BaseRegenerateUpdate delay, bursts and stop at full health", Tests.Phase5BaseRegenerate);
