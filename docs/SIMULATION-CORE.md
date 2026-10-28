@@ -3869,8 +3869,27 @@ No field of either manifest moved. **`no-power-edge-for-unfinished-plant`** (`56
 power plant under construction - an EMP on a plant still being built took 5 from its player under the original rules (test: -5 against 0, the finished plant 5 either way).
 F-56 gave the port the path the fix acts on. **`undead-lethal-by-armour`** (`ec50e56`, `GameFix` 23): `UndeadBody::attemptDamage` decides by `estimateDamage`, the amount after
 the armour - a raw 150 that the armour halves no longer starts a bus's second life at a health of 100. Phase 32 rejected it while the port applied the armour before the body;
-F-48 moved it into the body. **`takeoff-waits-for-one-jet`** (`GameFix` 24; Reforged's R-34): the original's `JetPauseBeforeTakeoffState::findWaiter` keeps a jet at the start
+F-48 moved it into the body. **`takeoff-waits-for-one-jet`** (`4711e39`, `GameFix` 24; Reforged's R-34): the original's `JetPauseBeforeTakeoffState::findWaiter` keeps a jet at the start
 of its runway while any jet holding a runway taxis - also each jet that taxis up behind it once the front jets hand their runways on; the community source waits only for the
 first jet found on the other runway (four jets on two runways: under the original no jet starts its run while another taxis, with the fix a front jet does). All three behind
 the rule profile, tested under both profiles at 30, 60 and 120 Hz. The catalogue's 96 CRC-gated markers: 31 adopted (23 fixes), 17
-equivalent, 47 not applicable, 1 rejected.
+equivalent, 47 not applicable, 1 rejected (§55.12 moves one more).
+
+### 55.12 F-62: how a Chinook lets its riders out (`ChinookEvacuateState`, `AIExitState::update`, `ChinookAIUpdate::update`)
+
+Read for Reforged's R-34, whose third item ("a Chinook unloads all at once") is the original's behaviour that the community source changed. **The original**
+(`ChinookAIUpdate::aiDoCommand`): an unload at a place (`AICMD_MOVE_TO_POSITION_AND_EVACUATE`, and `_AND_EXIT` for a reinforcement) runs the Chinook's own states - move,
+land, `ChinookEvacuateState`, take off; its `onEnter` calls `removeAllContained(FALSE)`: every rider is out in that frame, put where the Chinook stands
+(`removeFromContainViaIterator`), and stands there. A bare evacuation (`AICMD_EVACUATE`) lands and goes the standard way, every rider told `aiExit`; a rider waits while the
+container's AI answers `WAIT_TO_EXIT` (`AIExitState::update`; only `ChinookAIUpdate::getAiFreeToExit`, for a Chinook not on the ground) and while the door is busy
+(`ExitDelay`), and an idle Chinook lands while somebody wants in or out and takes off only when nobody does (`ChinookAIUpdate::update`, `hasObjectsWantingToEnterOrExit`).
+**The port** (`5403e91`) let the riders of an unload at a place out through the door as well, and the Chinook climbed away while riders still queued there; the riders at the
+door never asked whether the Chinook was down. Now: an unload at a place is `EvacuateContainer(atOnce)` - `removeAllContained`; the transport's door releases nobody while its
+AI says wait (`AIUpdateInterface.RidersWaitToExit`); a landed Chinook with riders at its door stays down, also in the frame of the evacuation, when its supply machine still
+reads busy. `getTeam()->setActive()` of the evacuate state has no counterpart. Test `ChinookUnloadAtAPlaceAtOnceAndAtTheDoorOneByOne` at 30, 60 and 120 Hz: three riders out in
+one step the frame after the Chinook is down, where it stands; a bare evacuation three frames apart (`ExitDelay` 100 ms) with the Chinook on the ground until the last is out.
+The manifest (`76866ea`) moved in 9 of 1,929 fields, all of `mission_MD_USA02`, whose script reinforcement arrives by Chinook: its hashes, its snapshot and its shots (41 -> 36); outcome and end tick unchanged; the input manifest is identical. **The rule fix `chinook-unloads-one-by-one`** (`9f81dba`, `GameFix` 25): `ChinookAIUpdate::aiDoCommand` of the community source sends an unload at a place down the
+standard evacuation unless somebody already wants in or out - the riders leave through the door one after the other; this port does not do so for the `_AND_EXIT` form,
+because the standard way would fly the reinforcement home with its riders aboard (Reforged found and corrected that in its own copy, `4e780d3b`). Test
+`GameFixChinookUnloadsOneByOne` under both profiles at 30, 60 and 120 Hz. The catalogue's 96 CRC-gated markers: 32 adopted (24 fixes), 16 equivalent, 47 not applicable,
+1 rejected.

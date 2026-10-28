@@ -80,4 +80,7 @@ Reforged candidate decided with its reason; the checks the changes can reach gre
 - F-54, the stealth garrison (§55.9): the count, capture, the hidden state and the acquisition, entering, the detector, no stealth in a transport, exposure, the drawing.
 - F-58, guarding (§55.10): the guard command (`CommandTypes.Version` 18, replay 16), the guard of a position, an object, an area, the script guard actions, the
   player's retaliation, the rule fix `guard-answers-only-when-idle` (R-35). The detector without a line of sight; the re-opened fixes 22 and 23 (§55.11). R-03 decided (D).
-  Next: R-24, R-27, R-34; the rest of F-60 (orders through the container, armed riders, the drawing); F-58's tunnel guard and the modules that read the guard.
+- R-34 decided (§55.11, §55.12): the rule fix `takeoff-waits-for-one-jet` (24); F-62, a Chinook unloads at a place all at once and riders wait at its door; the rule
+  fix `chinook-unloads-one-by-one` (25).
+  R-24 rests on the shock wave, which the port lacks (F-63, open); R-27 is data, decided for the data layers.
+  Next: the rest of F-60 (orders through the container, armed riders, the drawing); F-58's tunnel guard and the modules that read the guard; F-63.
