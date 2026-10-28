@@ -227,7 +227,8 @@ run.Test("Phase 41 (F-61): a garrisoned building belongs to its occupants (recal
 run.Test("Phase 41 (F-60, step 0): PassengersAllowedToFire and IsEnclosingContainer are typed", Tests.FireFromContainersKeysAreTyped);
 run.Test("Phase 41 (F-60, step 2): isPassengerAllowedToFire per container (garrison, transport, tunnel, Overlord, Helix, nesting)", Tests.FireFromContainersPassengerRules);
 run.Test("Phase 41 (F-60, step 3): garrison and Helix riders have the GARRISONED weapon bonus while inside", Tests.FireFromContainersGarrisonedBonus);
-run.Test("Phase 41 (F-60, step 5): a garrisoned rider fires from inside, within its garrisoned range from the building's circle, and never walks", Tests.FireFromContainersGarrisonFires);
+run.Test("Phase 41 (F-60, step 5): a garrisoned rider fires from inside, within its garrisoned range, and never walks", Tests.FireFromContainersGarrisonFires);
+run.Test("Phase 41 (F-60, step 4): a garrison's rider fires from the fire point closest to its victim, a fire base's from its station", Tests.FireFromContainersFirePoints);
 run.Test("Phase 41 (F-60, step 5): a Humvee's rider and an Overlord's gattling fire, a plain transport's and a tunnel's riders do not", Tests.FireFromContainersTransportsFire);
 run.Test("Phase 41 (F-60, step 5): a garrison fight is the same at 30, 60 and 120 Hz and continues after a snapshot", Tests.FireFromContainersRatesAndSnapshot);
 run.Test("Phase 5: HealContain heals and releases occupants", Tests.RetailHealContain);

@@ -4,6 +4,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -450,11 +451,13 @@ static partial class Tests
     /// One container scene: <paramref name="container"/> of player 1 at the origin, <paramref name="rider"/> of player 1 put inside it, and an enemy <paramref name="victim"/> of player 2
     /// at (<paramref name="distance"/>, 0) - all made in one tick, the rider inside before the next one (an enemy beyond 100 cannot be fired at from outside in between).
     /// </summary>
-    private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, Entity Container, Entity Rider, Entity Victim) FcScene(
-        SimulationRate rate, string container, string rider, int distance, string victim = "FcTarget", bool computer = false)
+    private static (SimulationWorld World, Feeder Feeder, SyntheticFixture Fixture, Entity Container, Entity Rider, Entity Victim, TemplateCatalog Templates, string Fingerprint) FcScene(
+        SimulationRate rate, string container, string rider, int distance, string victim = "FcTarget", bool computer = false, ModelGeometry? geometry = null)
     {
         var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRunnerIni));
-        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, computer ? ComputerAgainstHuman : CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var templates = geometry is null ? fixture.Templates : TemplateCatalog.Build(fixture.Graph, fixture.Bindings, rate, geometry);
+        var fingerprint = (geometry ?? ModelGeometry.None).Combine(fixture.Fingerprint);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, computer ? ComputerAgainstHuman : CombatPlayers, SyntheticFixture.FixtureId, fingerprint), templates);
         var feeder = new Feeder(world);
         feeder.Spawn(1, container, owner: 1, x: 0, y: 0);
         feeder.Spawn(1, rider, owner: 1, x: 0, y: 0);
@@ -463,8 +466,20 @@ static partial class Tests
         var box = world.Entities.Single(value => value.Template.Name == container);
         var inside = world.Entities.Single(value => value.Template.Name == rider);
         Check.That(world.TryEnterContainer(inside, box), $"Setup: {rider} enters {container}.");
-        return (world, feeder, fixture, box, inside, world.Entities.Single(value => value.Template.Name == victim));
+        return (world, feeder, fixture, box, inside, world.Entities.Single(value => value.Template.Name == victim), templates, fingerprint);
     }
+
+    private static BonePose FcPose(int x, int y, int z) => new(Fixed.FromInt(x), Fixed.FromInt(y), Fixed.FromInt(z), Fixed.Zero);
+
+    /// <summary>
+    /// The bones a model would give (step 1): the bunker has two fire points, east and west of its centre on its upper floor, in each of its three sets; the fire base one station
+    /// to the east, raised.
+    /// </summary>
+    private static ModelGeometry FcFirePoints() => new([], [],
+    [
+        new KeyValuePair<string, ContainerFirePoints>("FcBunker", new ContainerFirePoints([.. Enumerable.Repeat(ImmutableArray.Create(FcPose(30, 0, 10), FcPose(-30, 0, 10)), 3)], [], [])),
+        new KeyValuePair<string, ContainerFirePoints>("FcFireBase", new ContainerFirePoints([], [FcPose(20, 0, 15)], [])),
+    ]);
 
     /// <summary>Steps <paramref name="frames"/> original frames; the shots of <paramref name="source"/> and the tick of the first one (-1 for none).</summary>
     private static (int Shots, long First) FcRun(SimulationWorld world, Entity source, int frames)
@@ -497,14 +512,11 @@ static partial class Tests
         Check.That(Hurt(near.Victim) > Fixed.FromInt(12 * shots) && Hurt(near.Victim) < Fixed.FromInt(13 * shots),
             $"Its shots carry the garrisoned damage, 125 % of 10 ({Hurt(near.Victim)} from {shots} shots).");
 
-        var edge = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 150);
-        Check.That(FcRun(edge.World, edge.Rider, 60).Shots > 0, "An enemy 150 away - beyond 100 and beyond 133 from the centre, within 133 of the building's 30-unit circle - is fired at.");
-        var beyond = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 170);
-        Check.That(FcRun(beyond.World, beyond.Rider, 60).Shots == 0 && !beyond.World.AcquiredVictimOf(beyond.Rider).IsValid, "One 170 away is out of reach.");
-        var station = FcScene(TestRate.Default, "FcFireBase", "FcRifleman", 150);
-        Check.That(FcRun(station.World, station.Rider, 60).Shots == 0, "A fire base (no enclosing container) measures from its centre: 150 is beyond 133.");
-        var stationNear = FcScene(TestRate.Default, "FcFireBase", "FcRifleman", 120);
-        Check.That(FcRun(stationNear.World, stationNear.Rider, 60).Shots > 0, "Within 133 of its centre its rider fires.");
+        var beyond = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 150);
+        Check.That(FcRun(beyond.World, beyond.Rider, 60).Shots == 0 && !beyond.World.AcquiredVictimOf(beyond.Rider).IsValid,
+            "A building whose model has no fire points has its 40 points at its centre: an enemy 150 away is beyond 133.");
+        var station = FcScene(TestRate.Default, "FcFireBase", "FcRifleman", 120);
+        Check.That(FcRun(station.World, station.Rider, 60).Shots > 0, "Within 133 of the centre of a fire base without stations its rider fires.");
 
         var computer = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 80, "FcRunner", computer: true);
         Check.That(FcRun(computer.World, computer.Rider, 30).Shots > 0, "Setup: the computer player's rider fires at the runner.");
@@ -543,6 +555,44 @@ static partial class Tests
     }
 
     /// <summary>
+    /// Step 4, the fire points (<c>GarrisonContain</c>, docs/FIRE-FROM-CONTAINERS.md): a rider without a victim stands at the building's centre; it acquires an enemy within range of the
+    /// free point closest to it (<c>calcBestGarrisonPosition</c>) and fires from that point; when its victim is gone it goes back to the centre and takes the point on the side of its
+    /// next one; a fire base's rider stands at its station, raised, and is put back on the ground when it leaves; a snapshot keeps the points.
+    /// </summary>
+    public static void FireFromContainersFirePoints()
+    {
+        var scene = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 150, geometry: FcFirePoints());
+        var centre = (scene.Container.X, scene.Container.Y);
+        Check.That((scene.Rider.X, scene.Rider.Y) == centre, "A rider that has nobody to fire at stands at the building's centre.");
+        var (shots, _) = FcRun(scene.World, scene.Rider, 60);
+        Check.That(shots > 0, "An enemy 150 away - beyond 133 from the centre, within 133 of the east fire point 30 out - is fired at.");
+        Check.That(scene.Rider.X == Fixed.FromInt(30) && scene.Rider.Y == Fixed.Zero && scene.Rider.Z == scene.Container.Z + Fixed.FromInt(10),
+            $"The rider fires from the east fire point, on the upper floor ({scene.Rider.X}, {scene.Rider.Y}, {scene.Rider.Z}).");
+        var restored = WorldSnapshot.Restore(WorldSnapshot.Write(scene.World), scene.Templates, scene.Fingerprint);
+        Check.That(restored.StateHash == scene.World.StateHash, "A world with a rider at a fire point restores to the same hash.");
+        for (var step = 0; step < scene.World.Frames(10); step++) Check.That(scene.World.Step().StateHash == restored.Step().StateHash, $"Step {step} after the restore has the same hash.");
+
+        scene.Feeder.Kill(scene.Victim.Id.Value);
+        scene.Feeder.Spawn(2, "FcTarget", owner: 2, x: -160, y: 0);
+        var (westShots, _) = FcRun(scene.World, scene.Rider, 90);
+        Check.That(westShots > 0 && scene.Rider.X == Fixed.FromInt(-30), $"Its next enemy, 160 to the west, it fires at from the west point ({westShots} shots, at {scene.Rider.X}).");
+        var west = scene.World.Entities.Single(value => value.Template.Name == "FcTarget" && !value.EffectivelyDead && !value.DestroyRequested);
+        scene.Feeder.Kill(west.Id.Value);
+        FcRun(scene.World, scene.Rider, 10);
+        Check.That((scene.Rider.X, scene.Rider.Y) == centre && !scene.World.AcquiredVictimOf(scene.Rider).IsValid, "With nobody left to fire at it goes back to the centre.");
+
+        var far = FcScene(TestRate.Default, "FcBunker", "FcRifleman", 170, geometry: FcFirePoints());
+        Check.That(FcRun(far.World, far.Rider, 60).Shots == 0, "An enemy 170 away is beyond 133 from every fire point.");
+
+        var station = FcScene(TestRate.Default, "FcFireBase", "FcRifleman", 150, geometry: FcFirePoints());
+        Check.That(station.Rider.X == Fixed.FromInt(20) && station.Rider.Z == station.Container.Z + Fixed.FromInt(15), $"The fire base's rider stands at its station ({station.Rider.X}, {station.Rider.Z}).");
+        Check.That(FcRun(station.World, station.Rider, 60).Shots > 0, "From its station 20 out an enemy 150 away is within 133.");
+        station.Feeder.ExitContainer(1, station.Rider.Id.Value);
+        station.World.Step();
+        Check.That(!station.Rider.ContainedBy.IsValid && station.Rider.Z == Fixed.Zero, $"Leaving, it is put on the ground again ({station.Rider.Z}).");
+    }
+
+    /// <summary>
     /// Step 5 across rates and a save: the same garrison fight (the enemy at the building's edge range) has its first shot in the same original frame, the same number of shots and the
     /// same damage at 30, 60 and 120 Hz; a snapshot in the middle of the fight continues to the same hashes and shots.
     /// </summary>
@@ -551,7 +601,7 @@ static partial class Tests
         var results = new List<(long Frame, int Shots, Fixed Hurt)>();
         foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
         {
-            var scene = FcScene(rate, "FcBunker", "FcRifleman", 150);
+            var scene = FcScene(rate, "FcBunker", "FcRifleman", 150, geometry: FcFirePoints());
             var (shots, first) = FcRun(scene.World, scene.Rider, 90);
             Check.That(first >= 0, $"At {rate.TicksPerSecond} Hz the rider fires.");
             // Counted from the rider's creation: the scene is made in the first tick of every world, which lies at another game time at each rate.

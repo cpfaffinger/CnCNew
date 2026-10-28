@@ -338,8 +338,158 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         // onContaining: "give the object a garrisoned version of its weapon".
         candidate.WeaponBonusConditions |= GarrisonedBonus;
         _containedSinceTick[candidate.Id.Value] = world.Tick;
-        if (data.HealObjects) world.WakeAt(Entity, this, world.Tick);
+        // The riders of an enclosing garrison are matched to its fire points once per logic frame of the original (update, UPDATE_SLEEP_NONE); a fire base puts each on a station.
+        if (data.HealObjects || data.IsEnclosingContainer) world.WakeAt(Entity, this, world.Tick);
+        if (!data.IsEnclosingContainer) PickStation(world, candidate);
         RecalcControllingPlayer(world);
+    }
+
+    // ------------------------------------------------------------------------------------------- fire points (F-60, step 4)
+
+    // GarrisonContain::m_garrisonPointData: the rider at each of the 40 points (invalid: free) and the victim it was put there for.
+    private readonly EntityId[] _pointRider = new EntityId[ContainerFirePoints.MaxGarrisonPoints];
+    private readonly EntityId[] _pointTarget = new EntityId[ContainerFirePoints.MaxGarrisonPoints];
+    private int _pointsInUse;
+
+    // GarrisonContain::m_stationPointList: the rider of each station of a fire base (invalid: free).
+    private EntityId[] _stationRider = [];
+
+    private ContainerFirePoints? FirePointsOf(IWorldServices world) => world.Templates.Geometry.FirePoints.TryGetValue(Entity.Template.Name, out var points) ? points : null;
+
+    /// <summary><c>findConditionIndex</c>: which of the three sets of fire points the body's state uses - rubble uses the really damaged one.</summary>
+    private int ConditionIndex() => Entity.Body is ActiveBody body ? Math.Min(body.DamageState, BodyDamageStates.ReallyDamaged) : BodyDamageStates.Pristine;
+
+    private (Fixed X, Fixed Y, Fixed Z) Place(BonePose pose)
+    {
+        var cos = FixedTrig.Cos(Entity.Angle);
+        var sin = FixedTrig.Sin(Entity.Angle);
+        return (Entity.X + pose.X * cos - pose.Y * sin, Entity.Y + pose.X * sin + pose.Y * cos, Entity.Z + pose.Z);
+    }
+
+    /// <summary><c>m_garrisonPoint[condition][index]</c>: a fire point of the model, or the building's centre for an index beyond the model's points (<c>loadGarrisonPoints</c>).</summary>
+    public (Fixed X, Fixed Y, Fixed Z) PointPosition(IWorldServices world, int condition, int index)
+        => FirePointsOf(world) is { } points && condition < points.Garrison.Length && index < points.Garrison[condition].Length
+            ? Place(points.Garrison[condition][index])
+            : (Entity.X, Entity.Y, Entity.Z);
+
+    /// <summary><c>findClosestFreeGarrisonPointIndex</c>: the free point closest to the target in three dimensions, the lowest index on a tie; -1 when all 40 are taken.</summary>
+    private int ClosestFreePoint(IWorldServices world, int condition, Fixed x, Fixed y, Fixed z)
+    {
+        if (_pointsInUse == ContainerFirePoints.MaxGarrisonPoints) return -1;
+        var closest = -1;
+        var best = Fixed.Zero;
+        for (var index = 0; index < ContainerFirePoints.MaxGarrisonPoints; index++)
+        {
+            if (_pointRider[index].IsValid) continue;
+            var (px, py, pz) = PointPosition(world, condition, index);
+            var distance = SquaredDistance(px - x, py - y, pz - z);
+            if (closest < 0 || distance < best) (closest, best) = (index, distance);
+        }
+        return closest;
+    }
+
+    private static Fixed SquaredDistance(Fixed dx, Fixed dy, Fixed dz) => dx * dx + dy * dy + dz * dz;
+
+    /// <summary>
+    /// <c>calcBestGarrisonPosition</c>: where a rider of this enclosing garrison would fire at the target from - the free point closest to it. A rider's own point is taken and so
+    /// not free (a quirk of the original); false when every point is taken.
+    /// </summary>
+    public bool TryBestPosition(IWorldServices world, Fixed x, Fixed y, Fixed z, out (Fixed X, Fixed Y, Fixed Z) position)
+    {
+        var condition = ConditionIndex();
+        var index = ClosestFreePoint(world, condition, x, y, z);
+        position = index >= 0 ? PointPosition(world, condition, index) : default;
+        return index >= 0;
+    }
+
+    /// <summary><c>getObjectGarrisonPointIndex</c>: the point the rider stands at, or -1 at the centre.</summary>
+    public int PointOf(EntityId rider)
+    {
+        if (_pointsInUse == 0) return -1;
+        for (var index = 0; index < ContainerFirePoints.MaxGarrisonPoints; index++)
+            if (_pointRider[index] == rider) return index;
+        return -1;
+    }
+
+    /// <summary><c>putObjectAtGarrisonPoint</c>: the rider stands at the point.</summary>
+    private void PutAt(IWorldServices world, Entity rider, EntityId target, int condition, int index)
+    {
+        _pointRider[index] = rider.Id;
+        _pointTarget[index] = target;
+        _pointsInUse++;
+        (rider.X, rider.Y, rider.Z) = PointPosition(world, condition, index);
+        world.MarkDirty(Entity);
+        world.MarkDirty(rider);
+    }
+
+    /// <summary><c>putObjectAtBestGarrisonPoint</c>: a rider at the centre takes the free point closest to (<paramref name="x"/>, <paramref name="y"/>, <paramref name="z"/>).</summary>
+    public void PutAtBestPoint(IWorldServices world, Entity rider, EntityId target, Fixed x, Fixed y, Fixed z)
+    {
+        if (PointOf(rider.Id) >= 0) return;
+        var condition = ConditionIndex();
+        var index = ClosestFreePoint(world, condition, x, y, z);
+        if (index >= 0) PutAt(world, rider, target, condition, index);
+    }
+
+    /// <summary><c>removeObjectFromGarrisonPoint</c>: the rider leaves its point and stands at the building's centre again.</summary>
+    public void RemoveFromPoint(IWorldServices world, Entity rider)
+    {
+        var index = PointOf(rider.Id);
+        if (index < 0) return;
+        _pointRider[index] = EntityId.Invalid;
+        _pointTarget[index] = EntityId.Invalid;
+        _pointsInUse--;
+        (rider.X, rider.Y, rider.Z) = (Entity.X, Entity.Y, Entity.Z);
+        world.MarkDirty(Entity);
+        world.MarkDirty(rider);
+    }
+
+    /// <summary>
+    /// <c>trackTargets</c> for one rider at a point: it moves to a free point strictly closer to its victim's position (<c>calcDistSqr</c> against its own position).
+    /// </summary>
+    public void TrackTarget(IWorldServices world, Entity rider, EntityId victim, Fixed x, Fixed y, Fixed z)
+    {
+        var own = PointOf(rider.Id);
+        if (own < 0) return;
+        var condition = ConditionIndex();
+        var index = ClosestFreePoint(world, condition, x, y, z);
+        if (index < 0) return;
+        var (px, py, pz) = PointPosition(world, condition, index);
+        if (SquaredDistance(px - x, py - y, pz - z) >= SquaredDistance(rider.X - x, rider.Y - y, rider.Z - z)) return;
+        RemoveFromPoint(world, rider);
+        PutAt(world, rider, victim, condition, index);
+    }
+
+    /// <summary>The riders at points, in the order of the points (<c>removeInvalidObjectsFromGarrisonPoints</c> walks them so).</summary>
+    public IEnumerable<EntityId> RidersAtPoints()
+    {
+        for (var index = 0; index < ContainerFirePoints.MaxGarrisonPoints; index++)
+            if (_pointRider[index].IsValid) yield return _pointRider[index];
+    }
+
+    /// <summary>
+    /// <c>pickAStationForMe</c> of a fire base: the first free station of the model (<c>loadStationGarrisonPoints</c>, up to <c>ContainMax</c>), where the rider then stands
+    /// (<c>positionObjectsAtStationGarrisonPoints</c>). A rider that finds none stays where it came in.
+    /// </summary>
+    private void PickStation(IWorldServices world, Entity rider)
+    {
+        var stations = FirePointsOf(world)?.Stations ?? [];
+        if (_stationRider.Length != stations.Length) Array.Resize(ref _stationRider, stations.Length);
+        for (var index = 0; index < stations.Length; index++)
+        {
+            if (_stationRider[index].IsValid) continue;
+            _stationRider[index] = rider.Id;
+            (rider.X, rider.Y, rider.Z) = Place(stations[index]);
+            return;
+        }
+    }
+
+    /// <summary><c>removeObjectFromStationPoint</c>, and the rider is put on the ground again ("Patch 1.01").</summary>
+    private void LeaveStation(IWorldServices world, Entity rider)
+    {
+        for (var index = 0; index < _stationRider.Length; index++)
+            if (_stationRider[index] == rider.Id) _stationRider[index] = EntityId.Invalid;
+        rider.Z = world.GroundHeightAt(rider.X, rider.Y);
     }
 
     // The owner the building had before its first rider came in (recorded only while somebody is inside).
@@ -373,6 +523,9 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
 
     public override void Remove(IWorldServices world, Entity candidate, bool positionAtContainer)
     {
+        // onRemoving: off its fire point (back to the centre) or its station (onto the ground).
+        if (data.IsEnclosingContainer) RemoveFromPoint(world, candidate);
+        else LeaveStation(world, candidate);
         base.Remove(world, candidate, positionAtContainer);
         // onRemoving: "give the object back a regular weapon".
         candidate.WeaponBonusConditions &= ~GarrisonedBonus;
@@ -440,13 +593,16 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
         var before = Riders.Count;
         PruneDead(world);
         if (Riders.Count != before) RecalcControllingPlayer(world);
+        // matchObjectsToGarrisonPoints, once per logic frame of the original, in the first tick of the building's own frame (the rider's acquisition decides there too).
+        var ticks = world.Time.TicksPerOriginalFrame;
+        if (data.IsEnclosingContainer && Riders.Count > 0 && (ticks == TickOrder.Next || (world.Tick - Entity.SpawnTick) % ticks == 0)) world.MatchGarrisonPoints(Entity, this);
         if (data.HealObjects)
             foreach (var riderId in Riders.ToArray())
             {
                 var rider = world.FindEntity(riderId);
                 if (rider?.Body is not null) HealOne(world, rider);
             }
-        return data.HealObjects ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return data.HealObjects || (data.IsEnclosingContainer && Riders.Count > 0) ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     /// <summary>
@@ -478,6 +634,32 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
             writer.EndObject();
         }
         writer.EndArray();
+        // Written only while a rider stands at a point or a station: a building without such riders keeps its state.
+        if (_pointsInUse > 0)
+        {
+            writer.BeginArray("points");
+            for (var index = 0; index < ContainerFirePoints.MaxGarrisonPoints; index++)
+            {
+                if (!_pointRider[index].IsValid) continue;
+                writer.BeginObject(null);
+                writer.Int("index", index);
+                writer.UInt("rider", _pointRider[index].Value);
+                writer.UInt("target", _pointTarget[index].Value);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
+        if (_stationRider.Any(rider => rider.IsValid))
+        {
+            writer.BeginArray("stations");
+            foreach (var rider in _stationRider)
+            {
+                writer.BeginObject(null);
+                writer.UInt("rider", rider.Value);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
     }
 
     public override void Load(IStateReader reader)
@@ -494,6 +676,18 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
             Riders.Add(id);
             _containedSinceTick[id.Value] = entry.Int("since");
         }
+        Array.Clear(_pointRider);
+        Array.Clear(_pointTarget);
+        _pointsInUse = 0;
+        if (reader.Has("points"))
+            foreach (var entry in reader.Array("points"))
+            {
+                var index = checked((int)entry.Int("index"));
+                _pointRider[index] = new EntityId(checked((uint)entry.UInt("rider")));
+                _pointTarget[index] = new EntityId(checked((uint)entry.UInt("target")));
+                _pointsInUse++;
+            }
+        _stationRider = reader.Has("stations") ? [.. reader.Array("stations").Select(entry => new EntityId(checked((uint)entry.UInt("rider"))))] : [];
     }
 }
 

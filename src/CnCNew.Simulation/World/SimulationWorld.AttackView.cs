@@ -75,8 +75,8 @@ public sealed partial class SimulationWorld
     /// </summary>
     public bool IsAttackViewBlocked(Entity attacker, Entity victim)
     {
-        // A contained rider looks out from its container's position (FiringContainerOf, F-60).
-        var (attackerX, attackerY, attackerZ) = (FiringContainerOf(attacker) ?? attacker).FrameEnd(_tick);
+        // A contained rider looks out from where it stands in a garrison, from its container in any other (ShooterOf, F-60).
+        var (attackerX, attackerY, attackerZ) = ShooterOf(attacker).FrameEnd(_tick);
         return IsAttackViewBlockedFrom(attacker, attackerX, attackerY, attackerZ, victim);
     }
 
@@ -106,7 +106,7 @@ public sealed partial class SimulationWorld
     private bool AcquisitionViewBlocked(Entity entity, Entity candidate)
     {
         if (!AttackUsesLineOfSight || Terrain is null || !entity.Template.IsKindOf(NeedsLineOfSightKind)) return false;
-        var (ownX, ownY, ownZ) = (FiringContainerOf(entity) ?? entity).FrameEnd(_tick);
+        var (ownX, ownY, ownZ) = ShooterOf(entity).FrameEnd(_tick);
         var (otherX, otherY, otherZ) = candidate.FrameEnd(_tick);
         if (!Terrain.IsClearLineOfSight(ownX, ownY, ownZ + MaxHeightAbovePosition(entity.Template), otherX, otherY, otherZ + MaxHeightAbovePosition(candidate.Template))) return true;
         return !IsSignificantlyAboveTerrainAtFrameEnd(candidate) && IsAttackViewBlocked(entity, candidate);

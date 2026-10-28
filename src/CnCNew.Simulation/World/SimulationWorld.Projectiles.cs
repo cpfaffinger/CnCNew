@@ -48,9 +48,9 @@ public sealed partial class SimulationWorld
             if (victim is not null) (x, y, z) = victim.FrameEnd(_tick);
             (sourceX, sourceY, sourceZ) = source.FrameEnd(_tick);
         }
-        // A contained rider fires from its container (FiringContainerOf, F-60).
-        var container = FiringContainerOf(source);
-        if (container is not null) (sourceX, sourceY, sourceZ) = FiringPointOf(container, x, y);
+        // A contained rider fires from its fire point or station in a garrison, from its container in any other (ShooterOf, F-60).
+        var contained = source.ContainedBy.IsValid;
+        if (contained) (sourceX, sourceY, sourceZ) = FiringPointOf(source);
         var conditions = source.WeaponBonusConditions;
         // Weapon::privateFireWeapon starts with this: a networked weapon asks its neighbours to join in.
         if (weapon.RequestAssistRange > Fixed.Zero && victim is not null) ProcessRequestAssistance(source, weapon, victim);
@@ -93,7 +93,7 @@ public sealed partial class SimulationWorld
         var damageX = weapon.DamageDealtAtSelfPosition ? sourceX : x;
         var damageY = weapon.DamageDealtAtSelfPosition ? sourceY : y;
         var damageZ = weapon.DamageDealtAtSelfPosition ? sourceZ : z;
-        var delay = container is null ? FlightTicks(source.X, source.Y, source.Z, x, y, z, weapon.WeaponSpeed) : FlightTicks(sourceX, sourceY, sourceZ, x, y, z, weapon.WeaponSpeed);
+        var delay = !contained ? FlightTicks(source.X, source.Y, source.Z, x, y, z, weapon.WeaponSpeed) : FlightTicks(sourceX, sourceY, sourceZ, x, y, z, weapon.WeaponSpeed);
         if (delay == 0)
             return DealDamageCore(source.Id, source, EntityId.Invalid, source.Id, conditions, weapon, victimId.IsValid ? victim : null, damageX, damageY, damageZ);
         var due = _tick + delay;

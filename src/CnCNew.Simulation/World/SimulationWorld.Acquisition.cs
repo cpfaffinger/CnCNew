@@ -253,32 +253,17 @@ public sealed partial class SimulationWorld
            && (entity.ScriptDisableMask & Entity.ScriptHeld) == 0 && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
 
     /// <summary>
-    /// The object a contained rider is taken to fire from: its container. This simulation has no garrison fire points and does not move the riders of a moving transport yet
-    /// (steps 1 and 4 of docs/FIRE-FROM-CONTAINERS.md §3), so - a named stand-in - a rider's range, its search for victims, its view and its shot are measured from the container:
-    /// for an enclosing garrison from the point of the building's bounding circle nearest the victim (the fire points of the original stand around the walls), for every other
-    /// container from its position. Null for an object in no container.
+    /// The container of a contained rider, null for an object in no container. A garrison's riders stand at its fire points or stations and are measured from there
+    /// (<see cref="ShooterOf"/>); this simulation does not move the riders of a moving transport yet, so - a named stand-in - the range, search, view and shot of a transport's
+    /// rider are measured from the transport (docs/FIRE-FROM-CONTAINERS.md §3, step 4).
     /// </summary>
     private Entity? FiringContainerOf(Entity entity) => entity.ContainedBy.IsValid ? FindEntity(entity.ContainedBy) : null;
 
-    /// <summary>The bounding-circle radius by which an enclosing garrison brings its riders closer to their victims (the stand-in of <see cref="FiringContainerOf"/>); zero otherwise.</summary>
-    private static Fixed FiringEdgeOf(Entity? container)
-        => container?.Container is GarrisonContain { IsEnclosing: true } ? container.Template.BoundingCircleRadius : Fixed.Zero;
-
-    /// <summary>
-    /// Where a contained rider's shot leaves from (the stand-in of <see cref="FiringContainerOf"/>): the container's position where its begun frame ends, moved for an enclosing
-    /// garrison toward (<paramref name="victimX"/>, <paramref name="victimY"/>) to the building's bounding circle, or onto the victim when it stands inside that circle.
-    /// </summary>
-    private (Fixed X, Fixed Y, Fixed Z) FiringPointOf(Entity container, Fixed victimX, Fixed victimY)
+    /// <summary>Where a contained rider's shot leaves from (<c>Weapon::calcProjectileLaunchPosition</c> of an enclosed launcher): its <see cref="ShooterOf"/> where its begun frame ends.</summary>
+    private (Fixed X, Fixed Y, Fixed Z) FiringPointOf(Entity rider)
     {
-        var (x, y, z) = _firstFrameTicks != TickOrder.Next ? container.FrameEnd(_tick) : (container.X, container.Y, container.Z);
-        var edge = FiringEdgeOf(container);
-        if (edge <= Fixed.Zero) return (x, y, z);
-        var dx = victimX - x;
-        var dy = victimY - y;
-        var distance = Fixed.Sqrt(dx * dx + dy * dy);
-        if (distance <= Fixed.Zero) return (x, y, z);
-        var step = Fixed.Min(edge, distance);
-        return (x + Fixed.MultiplyDivide(dx, step, distance), y + Fixed.MultiplyDivide(dy, step, distance), z);
+        var shooter = ShooterOf(rider);
+        return _firstFrameTicks != TickOrder.Next ? shooter.FrameEnd(_tick) : (shooter.X, shooter.Y, shooter.Z);
     }
 
     /// <summary>
@@ -358,6 +343,8 @@ public sealed partial class SimulationWorld
                 state.Halted = true;
             }
 
+            // attemptBestFirePointPosition: a rider of an enclosing garrison steps to the fire point it was found in range from (TryRangeOrigin).
+            PlaceAtFirePoint(entity, victim);
             AcquisitionAdvisor?.NoteFiring(entity, victim);
             AutoFire(entity, victim, turretOnly);
             return true;
@@ -455,8 +442,8 @@ public sealed partial class SimulationWorld
         var limit = SquaredReach.Of(radius);
         var turretOnly = mode == AcquireMode.Turret;
         var buildings = computer || (ai.AutoAcquire & AutoAcquire.AttackBuildings) != 0;
-        // A rider looks from its container (FiringContainerOf), whose bounding circle is in the radius.
-        var looker = container ?? entity;
+        // A rider looks from where it stands in a garrison, from its container in any other (ShooterOf); its container's bounding circle is in the radius.
+        var looker = ShooterOf(entity);
         var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, BestDistance = Fixed.MaxValue, OwnX = looker.X, OwnY = looker.Y };
         // Above 30 Hz the look measures from where the unit's begun frame ends to where each candidate's ends (rule 3 of the frame convention).
         if (_firstFrameTicks != TickOrder.Next)
