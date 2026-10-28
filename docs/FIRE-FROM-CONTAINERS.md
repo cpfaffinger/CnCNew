@@ -280,14 +280,14 @@ garrisons keep their hashes.
    with this step: `WeaponBonusPassedToPassengers` of the Battle Bus (step 3's second half - built the same day, SIMULATION-CORE §55.8), orders through the container (step 6), `ArmedRidersUpgradeMyWeaponSet` (step 7),
    the presentation (step 8), and the garrison's own update (`GarrisonContain` still sleeps without healing - nothing of its per-frame matching exists to wake for).
 
-6. **Orders through the container.** A `FireWeaponCommand` (and force-attack/attack-position) whose source is a container with allowed riders forwards to every rider
+6. **Orders through the container.** **Built (28 October 2026), docs/SIMULATION-CORE.md §55.13** - without the attack on a position and the Chinook's re-issue. A `FireWeaponCommand` (and force-attack/attack-position) whose source is a container with allowed riders forwards to every rider
    that can attack the target (`AIGroup::groupAttackObject`, `TransportAIUpdate`), as ordered attacks; the Chinook's 10-frame re-issue. Test: a garrisoned building ordered
    to fire at a target in range of a point: the riders fire; out of range: no rider is ordered. The client side (cursor on a garrisoned building) follows.
 
-7. **`ArmedRidersUpgradeMyWeaponSet`.** The transport's `PLAYER_UPGRADE` weapon set while an infantry rider with a non-contact damage weapon is inside. Test: a Battle Bus
+7. **`ArmedRidersUpgradeMyWeaponSet`.** **Built (28 October 2026), §55.13.** The transport's `PLAYER_UPGRADE` weapon set while an infantry rider with a non-contact damage weapon is inside. Test: a Battle Bus
    with a rifleman has the dummy weapon set, empty it has none.
 
-8. **Presentation (drawing only).** The snapshot carries the occupied garrison points (rider, point position, victim); `FrameProjector` draws a `GarrisonGun` at each
+8. **Presentation (drawing only).** **Built (28 October 2026), §55.13** - the garrison gun; the snapshot needed no new field (the rider stands at its point). The snapshot carries the occupied garrison points (rider, point position, victim); `FrameProjector` draws a `GarrisonGun` at each
    occupied point of an enclosing garrison, oriented to the victim, with `FIRING_A` for 4 original frames after a shot (none for poison); fire-base riders drawn at
    their stations. Picture pins of scenes with garrisons change.
 

@@ -83,4 +83,4 @@ Reforged candidate decided with its reason; the checks the changes can reach gre
 - R-34 decided (§55.11, §55.12): the rule fix `takeoff-waits-for-one-jet` (24); F-62, a Chinook unloads at a place all at once and riders wait at its door; the rule
   fix `chinook-unloads-one-by-one` (25).
   R-24 rests on the shock wave, which the port lacks (F-63, open); R-27 is data, decided for the data layers.
-  Next: the rest of F-60 (orders through the container, armed riders, the drawing); F-58's tunnel guard and the modules that read the guard; F-63.
+- F-60 completed (§55.13): orders through the container, armed riders' weapon set, the garrison gun. F-58 steps 5 and 7 read again and left open (docs/GUARD-STATE.md).

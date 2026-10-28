@@ -3893,3 +3893,20 @@ standard evacuation unless somebody already wants in or out - the riders leave t
 because the standard way would fly the reinforcement home with its riders aboard (Reforged found and corrected that in its own copy, `4e780d3b`). Test
 `GameFixChinookUnloadsOneByOne` under both profiles at 30, 60 and 120 Hz. The catalogue's 96 CRC-gated markers: 32 adopted (24 fixes), 16 equivalent, 47 not applicable,
 1 rejected.
+
+### 55.13 F-60 completed: orders through the container, armed riders, the garrison gun
+
+**Orders through the container** (`eb06bc0`, step 6; `AIGroup::groupAttackObjectPrivate`): a container whose riders may fire (`isPassengerAllowedToFire()`, at least one rider)
+passes an attack order on to every rider whose `getAbleToAttackSpecificObject` is possible - in reach or after moving -, then attacks itself if it can. A `PursueCommand` on
+such a container is not refused for not moving; each rider takes the victim as the engagement of its own look (`SimulationWorld.PassAttackToRiders`), fires while it is in
+reach of its fire point and ends the attack when it is not, as the original's attack state fails for a rider that cannot approach. The client treats such a container as armed
+(`SimulationQueries.CanTakeAttackOrder`, `InRangeOrRiders`): the attack cursor when a rider reaches the target, one `PursueCommand` for a building instead of a standing order.
+Not built: an attack on a position (`groupAttackPosition` - the port has no command for it) and the Chinook's re-issue of its victim every ten frames. No field of the reference manifest moved: no run of it orders a garrison or a transport whose riders may fire.
+**Armed riders** (`1474a80`, step 7; `TransportContain::letRidersUpgradeWeaponSet`): after every rider that comes in or goes out, a transport with
+`ArmedRidersUpgradeMyWeaponSet` sets its `PLAYER_UPGRADE` weapon set flag while an infantry rider carries a weapon that is no contact weapon and a damage weapon
+(`Weapon::isDamageWeapon`: `DEPLOY` and `DISARM` are, `HACK` is not, else a primary or secondary damage above zero) and clears it otherwise - the flag a `WeaponSetUpgrade`
+raises, as in the original. The key is typed (compatibility baselines 702 -> 701 and 695 -> 694). The typed key moves the input manifest (definitions, catalogs, world fingerprint) and the fingerprint fields of the reference manifest (`ad5f09a`: 69 of 1,929, `commandStreamSha256` and `snapshotSha256`); no end hash, winner or end tick changed - no run carries a transport with the flag and an armed rider.
+**The garrison gun** (`4dc82c7`, step 8, presentation only; `putObjectAtGarrisonPoint`, `trackTargets`, `updateEffects`): a `GarrisonGun` drawable at every occupied point
+of an enclosing garrison the viewer sees, where the rider stands, facing the rider's victim, with FIRING_A from the frame after the rider's shot until more than
+`MUZZLE_FLASH_LIFETIME` (30/7, so 4) frames have passed - five frames -, not for a poison weapon (`FrameProjector.GarrisonGuns`); no object of the simulation. Test
+`GarrisonGunTests` at 30, 60 and 120 Hz. No human has seen it.
