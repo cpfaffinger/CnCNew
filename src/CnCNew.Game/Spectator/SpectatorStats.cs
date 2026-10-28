@@ -253,7 +253,7 @@ public sealed class SpectatorStats
                         var (headName, headTicks) = queue[0].IsUpgrade
                             ? (world.Upgrades.Upgrades[queue[0].UpgradeIndex].Name, world.Upgrades.Upgrades[queue[0].UpgradeIndex].BuildTicks)
                             : (world.Templates[queue[0].TemplateIndex].Name, world.Templates[queue[0].TemplateIndex].BuildTicks);
-                        var total = Math.Max(headTicks, 1);
+                        var total = Math.Max(queue[0].TotalTicks > 0 ? queue[0].TotalTicks : headTicks, 1);
                         var item = new SpectatorProductionItem(template.Name, headName, Math.Clamp((total - queue[0].RemainingTicks) / (float)total, 0f, 1f), queue.Length, false);
                         production.Add(item);
                         if (queue[0].IsUpgrade) researching.Add(item);

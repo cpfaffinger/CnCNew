@@ -420,8 +420,9 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             var template = upgrade is null ? world.Templates[checked((int)queue[index].Int("template"))] : null;
             var name = upgrade?.Name ?? template!.Name;
             var cost = queue[index].Values.TryGetValue("cost", out var value) && value is Fixed fixedCost ? fixedCost : upgrade?.BuildCost ?? template!.BuildCost;
-            var total = Math.Max(upgrade?.BuildTicks ?? template!.BuildTicks, 1);
-            var progress = index == 0 ? Math.Clamp((total - queue[index].Int("remaining")) / (float)total, 0f, 1f) : 0f;
+            // The total is the one the producer's last step computed under the player's power (calcTimeToBuild).
+            var total = Math.Max(queue[index].Int("total"), 1);
+            var progress = index == 0 ? Math.Clamp(queue[index].Int("elapsed") / (float)total, 0f, 1f) : 0f;
             var image = Enumerable.Range(0, set.Slots.Length).Select(slot => ButtonOf(set, slot))
                 .FirstOrDefault(button => upgrade is null
                     ? button is { Kind: GuiCommandKind.UnitBuild } && button.Object.Equals(name, StringComparison.OrdinalIgnoreCase)

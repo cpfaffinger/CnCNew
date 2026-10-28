@@ -1,4 +1,6 @@
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Templates;
 
 namespace CnCNew.Simulation.World;
 
@@ -38,6 +40,31 @@ public sealed partial class SimulationWorld
     /// <summary><c>Energy::getProduction</c>: what the player's objects produce; nothing while the power is sabotaged.</summary>
     public int ProducedEnergyOf(PlayerId player)
         => !_players.TryGetValue(player.Value, out var state) || _tick < state.PowerSabotagedUntil ? 0 : state.EnergyProduction + state.EnergyConsumption;
+
+    /// <summary>
+    /// <c>ThingTemplate::calcTimeToBuild</c>'s energy part: a build time of <paramref name="baseTicks"/> (whole frames of the original) divided by the production speed of the
+    /// player's supply ratio (<c>getEnergySupplyRatio</c>: production / consumption, the production itself without consumers, 0 while sabotaged; at most 1): one less the
+    /// shortfall times <c>LowEnergyPenaltyModifier</c>, at least <c>MinLowEnergyProductionSpeed</c>, below full supply at most <c>MaxLowEnergyProductionSpeed</c>, and never 0.
+    /// A player without production and consumption has a ratio of 0. The frames are truncated as the reference's integer is. Data without any of the three keys (synthetic
+    /// test data; the shipped <c>GameData.ini</c> names them) has no penalty - the reference's zero defaults would make every build below full power a hundred times longer.
+    /// </summary>
+    public long BuildTicksUnderPower(PlayerId player, long baseTicks)
+    {
+        var rules = _templates.LowEnergy;
+        if (rules == LowEnergyRules.Absent) return baseTicks;
+        var production = ProducedEnergyOf(player);
+        var consumption = EnergyConsumptionOf(player);
+        var ratio = consumption == 0 ? Fixed.FromInt(production) : Fixed.FromInt(production) / Fixed.FromInt(consumption);
+        if (ratio > Fixed.One) ratio = Fixed.One;
+        var speed = Fixed.Max(Fixed.One - (Fixed.One - ratio) * rules.PenaltyModifier, rules.MinProductionSpeed);
+        if (ratio < Fixed.One) speed = Fixed.Min(speed, rules.MaxProductionSpeed);
+        if (speed <= Fixed.Zero) speed = LowestProductionSpeed;
+        if (speed == Fixed.One) return baseTicks;
+        return Time.OriginalFrames((Fixed.FromInt(Time.FramesIn(baseTicks)) / speed).Floor());
+    }
+
+    /// <summary>"Design won't make the minimum 0, they promise": 0.01.</summary>
+    private static readonly Fixed LowestProductionSpeed = Fixed.FromRaw(Fixed.One.Raw / 100);
 
     /// <summary><c>Energy::getConsumption</c>: what the player's objects consume.</summary>
     public int EnergyConsumptionOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.EnergyConsumption : 0;

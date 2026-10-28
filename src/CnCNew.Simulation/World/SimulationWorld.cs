@@ -1118,7 +1118,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 buyer.Money -= queueCost;
                 // ProductionUpdate::queueCreateUnit: an airfield reserves the space - the door - of the aircraft now, not when it is finished.
                 var reserved = parking?.ReserveDoor(this, queueTemplate) ?? Modules.ExitDoor.NoneAvailable;
-                production.Enqueue(Time, queueTemplate.Index, queueCost, queueTemplate.BuildTicks, production.Data.QuantityOf(_templates, queueTemplate.Index), reserved);
+                production.Enqueue(Time, queueTemplate.Index, queueCost, BuildTicksUnderPower(producer.Owner, queueTemplate.BuildTicks), production.Data.QuantityOf(_templates, queueTemplate.Index), reserved);
                 var producerNode = Array.Find(producer.Updates, node => ReferenceEquals(node.Module, production));
                 if (producerNode is not null) WakeAt(producer, producerNode.Update, _tick);
                 MarkDirty(producer);

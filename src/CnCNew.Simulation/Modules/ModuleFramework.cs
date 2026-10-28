@@ -401,6 +401,9 @@ public interface IWorldServices
     /// <summary><c>Object::getDisabledFlags</c>: the object's own disables and <c>DISABLED_HELD</c> while a container that holds its riders carries it.</summary>
     DisabledMask DisabledFlagsOf(Entity entity);
 
+    /// <summary><c>ThingTemplate::calcTimeToBuild</c>: a unit's or structure's build time under the player's power (<see cref="SimulationWorld.BuildTicksUnderPower"/>).</summary>
+    long BuildTicksUnderPower(PlayerId player, long baseTicks);
+
     /// <summary><c>BodyModuleInterface::getDamageScalar</c>: the factor every non-unresistable damage is multiplied by (1 unless a hold-the-line battle plan covers the object).</summary>
     Fixed DamageScalarOf(Entity entity);
 

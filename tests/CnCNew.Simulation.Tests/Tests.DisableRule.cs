@@ -259,4 +259,66 @@ static partial class Tests
         for (var tick = 0; tick < world.Frames(2); tick++) world.Step();
         Check.That(world.HasSufficientPower(player) && world.DisabledFlagsOf(factory) == DisabledMask.None, "Player::update ends it the frame after.");
     }
+
+    /// <summary>
+    /// F-16: <c>ThingTemplate::calcTimeToBuild</c> divides a unit's build time by the production speed of the player's supply ratio (<c>GameData</c>: penalty modifier 1.0,
+    /// minimum 0.5, maximum below full supply 0.8), and <c>ProductionUpdate::update</c> compares the frames under construction with it every frame. A player without production
+    /// and consumption has a ratio of 0 - half speed -, production alone is full speed, half the supply is half speed, 10 of 11 is the maximum 0.8 (a 30-frame unit takes 37). The
+    /// port built at full speed always.
+    /// </summary>
+    public static void LowPowerSlowsProduction()
+    {
+        var fixture = new SyntheticFixture(TestRate.Default, files: new Dictionary<string, string>(RetailModuleFiles())
+        {
+            ["Data/INI/GameData.ini"] = "GameData\n  MinLowEnergyProductionSpeed = 0.5\n  MaxLowEnergyProductionSpeed = 0.8\n  LowEnergyPenaltyModifier = 1.0\nEnd\n",
+            ["Data/INI/Object/LowPower.ini"] = """
+            Object TenPlant
+              KindOf = STRUCTURE
+              EnergyProduction = 10
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+            End
+            Object TwentyConsumer
+              KindOf = STRUCTURE
+              EnergyProduction = -20
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+            End
+            Object ElevenConsumer
+              KindOf = STRUCTURE
+              EnergyProduction = -11
+              Body = StructureBody Body01
+                MaxHealth = 500.0
+                InitialHealth = 500.0
+              End
+            End
+            """,
+        });
+        var frame = 0L;
+        long Built(params string[] power)
+        {
+            var world = NewWorld(fixture);
+            var feeder = new Feeder(world);
+            frame = world.Frames(1);
+            feeder.Spawn(1, "DefaultExitFactory", x: 300, y: 300);
+            foreach (var building in power) feeder.Spawn(1, building, x: 100, y: 100);
+            world.Step();
+            feeder.GiveMoney(1, 1000);
+            world.Step();
+            var factory = world.Entities.Single(entity => entity.Template.Name == "DefaultExitFactory");
+            var start = world.Tick;
+            feeder.QueueProduction(1, factory.Id.Value, "QuickUnit");
+            while (CountOf(world, "QuickUnit") == 0 && world.Tick < start + world.Frames(300)) world.Step();
+            return world.Tick - start;
+        }
+
+        var full = Built("TenPlant");
+        Check.That(Built() - full == 30 * frame, $"Without power at all a 30-frame unit takes 60 frames ({Built()} against {full} ticks).");
+        Check.That(Built("TenPlant", "TwentyConsumer") - full == 30 * frame, "With half the supply it takes 60 frames.");
+        Check.That(Built("TenPlant", "ElevenConsumer") - full == 7 * frame, "With 10 of 11 it takes 37 frames (the maximum speed 0.8 below full supply, truncated).");
+    }
 }

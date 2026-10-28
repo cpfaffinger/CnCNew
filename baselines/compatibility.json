@@ -1102,15 +1102,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GameData/LowEnergyPenaltyModifier",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GameData/MakeTrackMarks",
       "count": 1,
       "owners": [
@@ -1148,15 +1139,6 @@
     {
       "category": "deferred-field",
       "name": "GameData/MaxLineBuildObjects",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/MaxLowEnergyProductionSpeed",
       "count": 1,
       "owners": [
         "GameData"
@@ -1274,15 +1256,6 @@
     {
       "category": "deferred-field",
       "name": "GameData/MinDistFromEdgeOfMapForBuild",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/MinLowEnergyProductionSpeed",
       "count": 1,
       "owners": [
         "GameData"

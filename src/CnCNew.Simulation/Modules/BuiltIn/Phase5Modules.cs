@@ -2359,14 +2359,18 @@ public readonly record struct ProductionQuantity(string Template, int Count);
 
 /// <summary>
 /// One queued unit or upgrade: template (-1 for an upgrade), its cost (for a full refund on cancel, also after some of its units left - <c>cancelUnitCreate</c> deposits the whole
-/// cost) and remaining build ticks; <see cref="Quantity"/> units are made of it, <see cref="Produced"/> of them have left; <see cref="ReservedDoor"/> is the door reserved for the next
-/// of them. <see cref="UpgradeIndex"/> is the upgrade an entry researches (<c>PRODUCTION_UPGRADE</c>), -1 for a unit.
+/// cost), the ticks it has been worked on (<c>m_framesUnderConstruction</c>) and the total its last step computed (<c>calcTimeToBuild</c>, which depends on the player's power);
+/// <see cref="Quantity"/> units are made of it, <see cref="Produced"/> of them have left; <see cref="ReservedDoor"/> is the door reserved for the next of them. <see cref="UpgradeIndex"/>
+/// is the upgrade an entry researches (<c>PRODUCTION_UPGRADE</c>), -1 for a unit.
 /// </summary>
-internal readonly record struct ProductionEntry(int TemplateIndex, Fixed Cost, long RemainingTicks, int Quantity = 1, int Produced = 0, int ReservedDoor = ExitDoor.NoneAvailable,
-    int UpgradeIndex = -1);
+internal readonly record struct ProductionEntry(int TemplateIndex, Fixed Cost, long ElapsedTicks, long TotalTicks, int Quantity = 1, int Produced = 0,
+    int ReservedDoor = ExitDoor.NoneAvailable, int UpgradeIndex = -1)
+{
+    public long RemainingTicks => Math.Max(TotalTicks - ElapsedTicks, 0);
+}
 
 /// <summary>Public counterpart of <see cref="ProductionEntry"/> for <see cref="ProductionUpdate.Queue"/>: a unit (<see cref="TemplateIndex"/>) or an upgrade (<see cref="UpgradeIndex"/>).</summary>
-public readonly record struct ProductionQueueItem(int TemplateIndex, Fixed Cost, long RemainingTicks, int UpgradeIndex = -1)
+public readonly record struct ProductionQueueItem(int TemplateIndex, Fixed Cost, long RemainingTicks, int UpgradeIndex = -1, long TotalTicks = 0)
 {
     public bool IsUpgrade => UpgradeIndex >= 0;
 }
@@ -2403,11 +2407,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     /// <param name="reservedDoor">A door reserved when the order was queued (an airfield's space), or <see cref="ExitDoor.NoneAvailable"/>.</param>
     public void Enqueue(SimulationTime time, int templateIndex, Fixed cost, long totalTicks, int quantity = 1, int reservedDoor = ExitDoor.NoneAvailable)
     {
-        var ticks = time.AtLeastOneFrame(totalTicks);
-        // The entry that starts an empty queue is worked on in the step of its order, and that step stands for a whole logic frame of the original: the unit is done
-        // BuildTime less one frame after the order (not less one tick). An entry that waits behind another starts one step after its predecessor left and takes the full time.
-        if (_queue.Count == 0) ticks -= time.TicksPerOriginalFrame - TickOrder.Next;
-        _queue.Add(new ProductionEntry(templateIndex, cost, ticks, quantity, ReservedDoor: reservedDoor));
+        _queue.Add(new ProductionEntry(templateIndex, cost, FirstElapsed(time), time.AtLeastOneFrame(totalTicks), quantity, ReservedDoor: reservedDoor));
     }
 
     /// <summary>
@@ -2416,10 +2416,14 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     /// </summary>
     public void EnqueueUpgrade(SimulationTime time, int upgradeIndex, Fixed cost, long totalTicks)
     {
-        var ticks = time.AtLeastOneFrame(totalTicks);
-        if (_queue.Count == 0) ticks -= time.TicksPerOriginalFrame - TickOrder.Next;
-        _queue.Add(new ProductionEntry(-1, cost, ticks, UpgradeIndex: upgradeIndex));
+        _queue.Add(new ProductionEntry(-1, cost, FirstElapsed(time), time.AtLeastOneFrame(totalTicks), UpgradeIndex: upgradeIndex));
     }
+
+    /// <summary>
+    /// The entry that starts an empty queue is worked on in the step of its order, and that step stands for a whole logic frame of the original: the unit is done its build time
+    /// less one frame after the order (not less one tick). An entry that waits behind another starts one step after its predecessor left and takes the full time.
+    /// </summary>
+    private long FirstElapsed(SimulationTime time) => _queue.Count == 0 ? time.TicksPerOriginalFrame - TickOrder.Next : 0;
 
     /// <summary><c>ProductionUpdate::isUpgradeInQueue</c>.</summary>
     public bool IsUpgradeInQueue(int upgradeIndex)
@@ -2442,7 +2446,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
     /// Public, read-only view of the queue (`docs/PRESENTATION-INPUT.md` §10 point 2): template, paid cost (full refund on cancel) and the
     /// remaining ticks of work, head first. Only the head entry (index 0) progresses.
     /// </summary>
-    public ImmutableArray<ProductionQueueItem> Queue => [.._queue.Select(entry => new ProductionQueueItem(entry.TemplateIndex, entry.Cost, entry.RemainingTicks, entry.UpgradeIndex))];
+    public ImmutableArray<ProductionQueueItem> Queue => [.._queue.Select(entry => new ProductionQueueItem(entry.TemplateIndex, entry.Cost, entry.RemainingTicks, entry.UpgradeIndex, entry.TotalTicks))];
 
     /// <summary>The entry that is being built (the only one that progresses); false for an empty queue. Unlike <see cref="Queue"/> this allocates nothing, for readers that look at every producer every tick.</summary>
     public bool TryGetHead(out ProductionQueueItem head)
@@ -2453,7 +2457,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             return false;
         }
         var entry = _queue[0];
-        head = new ProductionQueueItem(entry.TemplateIndex, entry.Cost, entry.RemainingTicks, entry.UpgradeIndex);
+        head = new ProductionQueueItem(entry.TemplateIndex, entry.Cost, entry.RemainingTicks, entry.UpgradeIndex, entry.TotalTicks);
         return true;
     }
 
@@ -2625,10 +2629,12 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         if (_constructionComplete >= 0 && !ConstructionCompleteAt(world.Tick, frame)) _constructionComplete = -1;
         var head = _queue[0];
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
-        var remaining = head.RemainingTicks - TickOrder.Next;
-        if (remaining > 0)
+        // ProductionUpdate::update: one more frame under construction against calcTimeToBuild of this frame - a unit's total follows the player's power, an upgrade's does not.
+        var elapsed = head.ElapsedTicks + TickOrder.Next;
+        var total = head.UpgradeIndex >= 0 ? head.TotalTicks : world.Time.AtLeastOneFrame(world.BuildTicksUnderPower(Entity.Owner, world.Templates[head.TemplateIndex].BuildTicks));
+        if (elapsed < total)
         {
-            _queue[0] = head with { RemainingTicks = remaining };
+            _queue[0] = head with { ElapsedTicks = elapsed, TotalTicks = total };
             return SimulationTiming.SleepNone;
         }
         if (head.UpgradeIndex >= 0)
@@ -2675,7 +2681,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             exitDoor = ExitDoor.NoneAvailable;
         }
         if (produced >= head.Quantity) _queue.RemoveAt(0);
-        else _queue[0] = head with { RemainingTicks = TickOrder.Next, Produced = produced, ReservedDoor = exitDoor };
+        else _queue[0] = head with { ElapsedTicks = elapsed, TotalTicks = total, Produced = produced, ReservedDoor = exitDoor };
         return _queue.Count == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
     }
 
@@ -2717,7 +2723,8 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             writer.BeginObject(null);
             writer.Int("template", entry.TemplateIndex);
             writer.Fixed("cost", entry.Cost);
-            writer.Int("remaining", entry.RemainingTicks);
+            writer.Int("elapsed", entry.ElapsedTicks);
+            writer.Int("total", entry.TotalTicks);
             if (entry.Quantity != 1) writer.Int("quantity", entry.Quantity);
             if (entry.Produced != 0) writer.Int("produced", entry.Produced);
             if (entry.ReservedDoor != ExitDoor.NoneAvailable) writer.Int("exitDoor", entry.ReservedDoor);
@@ -2752,7 +2759,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         _disabledUntil = reader.Has("disabledUntil") ? reader.Int("disabledUntil") : 0;
         _queue.Clear();
         foreach (var entry in reader.Array("queue"))
-            _queue.Add(new ProductionEntry(checked((int)entry.Int("template")), entry.Fixed("cost"), entry.Int("remaining"),
+            _queue.Add(new ProductionEntry(checked((int)entry.Int("template")), entry.Fixed("cost"), entry.Int("elapsed"), entry.Int("total"),
                 entry.Has("quantity") ? checked((int)entry.Int("quantity")) : 1, entry.Has("produced") ? checked((int)entry.Int("produced")) : 0,
                 entry.Has("exitDoor") ? checked((int)entry.Int("exitDoor")) : ExitDoor.NoneAvailable,
                 entry.Has("upgrade") ? checked((int)entry.Int("upgrade")) : -1));
