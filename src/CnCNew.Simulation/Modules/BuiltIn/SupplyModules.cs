@@ -106,6 +106,13 @@ internal struct DozerBoredom
             {
                 _since = world.Tick;
                 if (FindObjectToRepair(world, entity, boredRange) is { } target) ai.OrderRepair(world, target, fromPlayer: false);
+                // Nothing to repair: "maybe go clear some mines, if I feel like it" (F-69) - the mine-clearing flag is set, and the closest mine in range is attacked; the walk to it
+                // is decided in the builder's next frame, which begins with the next tick.
+                else if (world.FindMineToClear(entity, boredRange) is { } mine)
+                {
+                    world.BuilderAttacks(entity, mine);
+                    return Math.Min(sleep, SimulationTiming.SleepNone);
+                }
             }
         }
         // A task - also the repair it has just given itself - is worked from the next tick on, its walk begun in the first tick of the builder's next frame.

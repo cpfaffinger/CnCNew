@@ -52,12 +52,16 @@ internal sealed class AcquisitionState
     /// </summary>
     public bool Forced;
 
+    /// <summary>A forced attack that may also be on a neutral object: a bored builder's on a mine (<c>findMine</c>: <c>ALLOW_ENEMIES | ALLOW_NEUTRAL</c>, F-69).</summary>
+    public bool Neutral;
+
     public bool IsDefault => !Victim.IsValid && !AttackMove && Mode == 0;
 
     public void ClearVictim()
     {
         Victim = EntityId.Invalid;
         Forced = false;
+        Neutral = false;
         Ordered = false;
         OrderedTick = 0;
         Chasing = false;
@@ -92,6 +96,7 @@ internal sealed class AcquisitionState
             writer.Int("chaseTick", ChaseTick);
         }
         if (Forced) writer.Bool("forced", true);
+        if (Neutral) writer.Bool("neutral", true);
         writer.EndObject();
     }
 
@@ -123,6 +128,8 @@ internal sealed class AcquisitionState
             state.ChaseTick = reader.Int("chaseTick");
         }
         state.Forced = reader.Has("forced") && reader.Bool("forced");
+        state.Neutral = reader.Has("neutral") && reader.Bool("neutral");
+        if (state.Neutral && !state.Forced) throw new InvalidDataException("Only a forced attack may be on a neutral object.");
         if (state.IsDefault) throw new InvalidDataException("An acquisition state without a victim, an attack-move or a pending look is never written.");
         if (state.Forced && (!state.Victim.IsValid || state.Ordered)) throw new InvalidDataException("A slave's forced attack needs a victim and no order.");
         if ((state.Ordered || state.Chasing) && !state.Victim.IsValid) throw new InvalidDataException("An ordered attack or a chase needs a victim.");
@@ -132,10 +139,10 @@ internal sealed class AcquisitionState
 }
 
 /// <summary>Every mutable field of an <see cref="AcquisitionState"/> (or none), compared before and after a step to learn whether the entity's serialized state changed.</summary>
-internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset, bool Forced)
+internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset, bool Forced, bool Neutral)
 {
     public static AcquisitionStamp Of(AcquisitionState? state)
-        => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset, state.Forced);
+        => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset, state.Forced, state.Neutral);
 }
 
 /// <summary>

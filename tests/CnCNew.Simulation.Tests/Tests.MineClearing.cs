@@ -87,9 +87,42 @@ static partial class Tests
             for (var step = 0; step < world.Frames(300) && gone < 0; step++)
             {
                 world.Step();
-                if (mine.Body!.Health <= Fixed.Zero) gone = (world.Tick + world.Time.TicksPerOriginalFrame - 1) / world.Time.TicksPerOriginalFrame;
+                if (mine.Body!.Health <= Fixed.Zero) gone = (world.Tick - dozer.SpawnTick + world.Time.TicksPerOriginalFrame - 1) / world.Time.TicksPerOriginalFrame;
             }
             Check.That(gone > 0, $"{rate}: the dozer disarms the mine.");
+            if (reference < 0) reference = gone;
+            else Check.That(gone == reference, $"{rate}: the mine is disarmed in the frame it is at 30 Hz ({gone} against {reference}).");
+        }
+    }
+
+    /// <summary>
+    /// F-69 step 2, <c>findMine</c>: a bored dozer with nothing to repair drives to an enemy mine 90 units away - out of its weapon's reach, inside <c>BoredRange</c> - and disarms it,
+    /// in the same frame at 30, 60 and 120 Hz; its own mine, nearer, it leaves. Before, an idle dozer only disarmed a mine in its weapon's reach.
+    /// </summary>
+    public static void BoredDozerGoesToClearAMine()
+    {
+        long reference = -1;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/MineClearing.ini"] = MineClearingIni });
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "mines");
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+            var feeder = new Feeder(world);
+            Check.That(feeder.Spawn(1, "McDozer", owner: 1, x: 300, y: 300).Accepted && feeder.Spawn(2, "McMine", owner: 2, x: 390, y: 300).Accepted
+                && feeder.Spawn(1, "McMine", owner: 1, x: 300, y: 340).Accepted, $"{rate}: dozer and mines spawn.");
+            world.Step();
+            var enemy = world.Entities.Single(value => value.Template.Name == "McMine" && value.Owner == new PlayerId(2));
+            var own = world.Entities.Single(value => value.Template.Name == "McMine" && value.Owner == new PlayerId(1));
+            var dozer = world.Entities.Single(value => value.Template.Name == "McDozer");
+            long gone = -1;
+            for (var step = 0; step < world.Frames(600) && gone < 0; step++)
+            {
+                world.Step();
+                // Frames of the dozer's own grid (from the tick it appeared in), a tick off the world's above 30 Hz.
+                if (enemy.Body!.Health <= Fixed.Zero) gone = (world.Tick - dozer.SpawnTick + world.Time.TicksPerOriginalFrame - 1) / world.Time.TicksPerOriginalFrame;
+            }
+            Check.That(gone > 150, $"{rate}: the bored dozer goes to disarm the enemy's mine ({gone}).");
+            Check.That(own.Body!.Health > Fixed.Zero, $"{rate}: its own mine stays.");
             if (reference < 0) reference = gone;
             else Check.That(gone == reference, $"{rate}: the mine is disarmed in the frame it is at 30 Hz ({gone} against {reference}).");
         }

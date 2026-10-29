@@ -1257,8 +1257,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// </summary>
     internal void BeginMoveWithNextFrame(IWorldServices world)
     {
-        var ticks = world.Time.TicksPerOriginalFrame;
-        if (ticks > 1 && _frameTicksLeft == 0) _moveHoldUntil = Math.Max(_moveHoldUntil, world.Tick + ticks);
+        // The object's next frame begins a whole frame later when the move is given in a frame's first tick (the acquisition's), and with the next tick when it is given where
+        // a frame ends (a bored builder's attack, F-69).
+        if (world.Time.TicksPerOriginalFrame > TickOrder.Next && _frameTicksLeft == 0) _moveHoldUntil = Math.Max(_moveHoldUntil, NextFrameBegin(world));
     }
 
     // Above 30 Hz only: the tick before which the object takes no decision of a new frame (StopInternalMoveAtFrameEnd). Never set at 30 Hz.

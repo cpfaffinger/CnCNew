@@ -284,6 +284,12 @@ public interface IWorldServices
     /// <summary><see cref="RelationshipOf"/> == enemies.</summary>
     bool AreEnemies(PlayerId a, PlayerId b);
 
+    /// <summary><c>findMine</c> (F-69): the closest mine within <paramref name="range"/> of the builder that it may clear - an enemy's or a neutral one, seen, and one its active weapons can attack.</summary>
+    Entity? FindMineToClear(Entity builder, Fixed range) => null;
+
+    /// <summary><c>aiAttackObject(mine, 1, CMD_FROM_DOZER)</c> (F-69): the builder walks at the mine and disarms it.</summary>
+    void BuilderAttacks(Entity builder, Entity victim) { }
+
     /// <summary>"Science Purchase Points" earned via rank/experience in the reference (not modeled); a scenario/system command credits them directly instead — see <c>docs/GAME-RULES.md</c>.</summary>
     int SciencePointsOf(PlayerId player);
     void AddSciencePoints(PlayerId player, int amount);
