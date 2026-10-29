@@ -505,7 +505,7 @@ public sealed partial class ScriptEngine
         var source = carrier.Id;
         if (!_world.Templates.Commands.TryGetSpecialPowerAbility(ability, out var power))
         {
-            return UseOtherCommandButton(carrier, ability, kind, target);
+            return UseOtherCommandButton(carrier, ability, kind, target, x, y);
         }
         if (_issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, source, power, kind, target, x, y)).Accepted) return true;
         Diagnose("ability use rejected");
@@ -518,7 +518,7 @@ public sealed partial class ScriptEngine
     /// (fired from the button's <c>WeaponSlot</c>, pinning it like the reference); a <c>SWITCH_WEAPON</c> button pins its slot permanently. Every other command type, a missing target and an
     /// unknown button are counted as diagnostics under their own message, never executed and never confused with each other.
     /// </summary>
-    private bool UseOtherCommandButton(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target)
+    private bool UseOtherCommandButton(Entity carrier, string ability, SpecialPowerTargetKind kind, EntityId target, Fixed x, Fixed y)
     {
         if (!_world.Templates.Commands.TryGetButton(ability, out var button))
         {
@@ -541,8 +541,24 @@ public sealed partial class ScriptEngine
             }
             case "FIRE_WEAPON":
             {
-                if (kind != SpecialPowerTargetKind.Object || !target.IsValid) { Diagnose($"fire-weapon button '{ability}' used without a target object"); return false; }
                 if (!TryButtonSlot(button, ability, out var slot)) return false;
+                // Object::doCommandButton / doCommandButtonAtPosition / doCommandButtonAtObject with ATTACK_OBJECTS_POSITION: an attack on a place with the button's slot (F-64).
+                var needsObject = button.Has("NEED_TARGET_ENEMY_OBJECT") || button.Has("NEED_TARGET_NEUTRAL_OBJECT") || button.Has("NEED_TARGET_ALLY_OBJECT");
+                (Fixed X, Fixed Y, bool Own)? place = kind switch
+                {
+                    SpecialPowerTargetKind.None when !needsObject && !button.Has("NEED_TARGET_POS") => (Fixed.Zero, Fixed.Zero, true),
+                    SpecialPowerTargetKind.Location when button.Has("NEED_TARGET_POS") => (x, y, false),
+                    SpecialPowerTargetKind.Object when button.Has("ATTACK_OBJECTS_POSITION") && _world.FindEntity(target) is { } placed => (placed.X, placed.Y, false),
+                    _ => null,
+                };
+                if (place is { } at)
+                {
+                    var shots = button.MaxShotsToFire;
+                    if (_issue(owner, (sequence, tick) => new AttackPositionCommand(owner, sequence, tick, [source], at.X, at.Y, at.Own, slot, shots)).Accepted) return true;
+                    Diagnose($"fire-weapon button '{ability}' rejected");
+                    return false;
+                }
+                if (kind != SpecialPowerTargetKind.Object || !target.IsValid) { Diagnose($"fire-weapon button '{ability}' used without a target its options allow"); return false; }
                 if (_issue(owner, (sequence, tick) => new FireWeaponCommand(owner, sequence, tick, source, target, slot, FireOrigin.Script)).Accepted) return true;
                 Diagnose($"fire-weapon button '{ability}' rejected");
                 return false;

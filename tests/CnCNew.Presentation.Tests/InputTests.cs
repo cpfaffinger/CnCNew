@@ -973,9 +973,25 @@ static class InputTests
         controller.OnMeta(world, MetaAction.BeginForceAttack);
         Assert(controller.Hover(world, view, Screen(60, 60)) is { Action: ContextAction.ForceAttackObject, Cursor: CursorKind.ForceAttackObj }, "Ctrl over an own dozer: force attack");
         Assert(controller.Hover(world, view, Screen(10, 10)) is { Action: ContextAction.ForceAttackGround, Cursor: CursorKind.ForceAttackGround }, "Ctrl over ground: force attack ground");
-        Assert(!controller.IssueContext(world, view, Screen(10, 10)) && controller.UnsupportedCounts["ForceAttackGround"] == 1
-               && controller.DrainFeedback() is [{ Kind: FeedbackKind.Unsupported, Detail: "ForceAttackGround" }], "the simulation has no fire-at-position command: reported");
+        var forced = Issued(() => controller.IssueContext(world, view, Screen(10, 10)));
+        Assert(forced is [AttackPositionCommand { OwnPosition: false, Slot: -1, MaxShots: 0 } place] && place.Units.SequenceEqual([r1.Id, r2.Id])
+               && place.X == Fixed.FromInt(10) && place.Y == Fixed.FromInt(10) && !controller.Orders.TryGet(r1.Id, out _),
+            "Ctrl-click on the ground: one attack on the place for the armed units, without a limit (F-64); their standing orders end");
+        Assert(controller.DrainFeedback() is [{ Kind: FeedbackKind.AttackMarker }], "an attack marker at the place");
         controller.OnMeta(world, MetaAction.EndForceAttack);
+
+        // FIRE_WEAPON buttons (F-64): without a target every member fires at its own place (MSG_DO_WEAPON), with NEED_TARGET_POS at the clicked place (MSG_DO_WEAPON_AT_LOCATION).
+        CnCNew.Presentation.Input.CommandButtonInfo FireButton(string name, CommandOptions options, string slot, int shots)
+            => new(name, GuiCommandKind.FireWeapon, options, "", "", "", [], slot, "", "", "", "", "NONE", "", "", "") { MaxShotsToFire = shots };
+        var detonate = FireButton("Command_TestDetonate", CommandOptions.OkForMultiSelect, "PRIMARY", 1);
+        var own = Issued(() => Assert(controller.Activate(world, detonate, [r1, r2]) == ActivationResult.Issued, "a button without a target is issued at once"));
+        Assert(own is [AttackPositionCommand { OwnPosition: true, Slot: 0, MaxShots: 1 } atOwn] && atOwn.Units.SequenceEqual([r1.Id, r2.Id]), "every member at its own place, the button's slot and shots");
+        var wall = FireButton("Command_TestFireWall", CommandOptions.NeedTargetPos | CommandOptions.OkForMultiSelect, "PRIMARY", 0);
+        Assert(controller.Activate(world, wall, [r1]) == ActivationResult.EnteredMode && controller.Mode == CommandModeKind.ButtonTarget, "a button at a place asks for the place");
+        var atPlace = Issued(() => controller.CompleteTarget(world, view, Screen(30, 20)));
+        Assert(atPlace is [AttackPositionCommand { OwnPosition: false, Slot: 0, MaxShots: 0 } wallOrder] && wallOrder.Units.SequenceEqual([r1.Id])
+               && wallOrder.X == Fixed.FromInt(30) && wallOrder.Y == Fixed.FromInt(20), "the clicked place, the button's slot, no limit");
+        controller.DrainFeedback();
         controller.OnMeta(world, MetaAction.BeginPreferSelection);
         Assert(controller.Hover(world, view, Screen(60, 60)) is { Action: ContextAction.Select }, "Shift over an own unit selects");
         controller.OnMeta(world, MetaAction.EndPreferSelection);

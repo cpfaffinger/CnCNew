@@ -70,6 +70,12 @@ public sealed record CommandButtonInfo(
     string RadiusCursorType)
 {
     public bool Has(CommandOptions option) => (Options & option) == option;
+
+    /// <summary><c>MaxShotsToFire</c> of a <c>FIRE_WEAPON</c> button: the shots of its attack, 0 for no limit (the original's default is a "huge number").</summary>
+    public int MaxShotsToFire { get; init; }
+
+    /// <summary>The button's <see cref="WeaponSlot"/> as a slot index (<see cref="CnCNew.Simulation.Templates.WeaponSlot.Primary"/> when it names none).</summary>
+    public int WeaponSlotIndex => CnCNew.Simulation.Templates.WeaponSlot.TryParse(WeaponSlot, out var slot) ? slot : CnCNew.Simulation.Templates.WeaponSlot.Primary;
     public bool NeedsTarget => (Options & CommandOptions.NeedTarget) != 0;
 
     /// <summary>The button's <c>OPTION_ONE/TWO/THREE</c> as 1..3 (0 without one): the strategy center's battle plan choice, carried by <c>UseSpecialPowerCommand.Option</c>.</summary>
@@ -232,7 +238,11 @@ public sealed class CommandButtonCatalog
         ImmutableArray<string> sciences = [..Text("Science").Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).Where(value => !value.Equals("NONE", StringComparison.OrdinalIgnoreCase))];
         return new CommandButtonInfo(definition.OriginalName, kind, options, Text("Object"), Text("Upgrade"), Text("SpecialPower"), sciences,
             Text("WeaponSlot") is { Length: > 0 } slot ? slot : "PRIMARY", Text("TextLabel"), Text("DescriptLabel"), Text("ConflictingLabel"), Text("ButtonImage"),
-            Text("ButtonBorderType") is { Length: > 0 } border ? border : "NONE", Text("CursorName"), Text("InvalidCursorName"), Text("RadiusCursorType"));
+            Text("ButtonBorderType") is { Length: > 0 } border ? border : "NONE", Text("CursorName"), Text("InvalidCursorName"), Text("RadiusCursorType"))
+        {
+            MaxShotsToFire = int.TryParse(Text("MaxShotsToFire"), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var shots) && shots is > 0 and < 0x7fffffff
+                ? shots : 0,
+        };
     }
 
     /// <summary>

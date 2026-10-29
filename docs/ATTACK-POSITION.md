@@ -1,7 +1,7 @@
 # An attack on a place (`AI_ATTACK_POSITION`)
 
 Read on 29 October 2026 for the rest of F-60 (`groupAttackPosition` through a container, `docs/FIRE-FROM-CONTAINERS.md`) and registered as F-64
-(`docs/plan/STAGE-1-PORT.md` §3). Nothing of it is built; this is the starting point of the work. Sources: EA's released code
+(`docs/plan/STAGE-1-PORT.md` §3). **Built in Phase 43 (29 October 2026): steps 1 to 4 - `docs/SIMULATION-CORE.md` §57.** The slaves of step 3 are F-65. Sources: EA's released code
 (`references/ea-generals-zero-hour/GeneralsMD/Code/GameEngine/Source`), read, never copied.
 
 ## 1. What the original does

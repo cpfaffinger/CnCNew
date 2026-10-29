@@ -192,9 +192,9 @@ public sealed record FireWeaponPowerData(SpecialPowerBaseData Base, int MaxShots
 
 /// <summary>
 /// <c>FireWeaponPower::doSpecialPower*</c>: reloads every weapon (<c>reloadAllAmmo</c>) and orders the object to attack the target (an object, a position, or its own position) for
-/// <see cref="FireWeaponPowerData.MaxShots"/> shots. The reference gives an AI attack order and aims the turrets; the simulation fires the object's current weapon (the locked
-/// slot, else the primary one of the active weapon set; <see cref="IWorldServices.FireCurrentWeaponAtPosition"/>, so the slot's clip, reload and last shot are kept) at the target
-/// whenever that slot is ready, without the approach or turn time.
+/// <see cref="FireWeaponPowerData.MaxShots"/> shots. A position and the own position are the world's attack on a place (<c>aiAttackPosition</c>, F-64: the approach, the turrets'
+/// turn, the weapon's wind-up). An object is a stand-in: the object's current weapon (the locked slot, else the primary one of the active weapon set;
+/// <see cref="IWorldServices.FireCurrentWeaponAtPosition"/>, so the slot's clip, reload and last shot are kept) fires at it whenever that slot is ready, without the approach or turn time.
 /// </summary>
 public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModuleBase(data.Base), IUpdateModule
 {
@@ -213,6 +213,13 @@ public sealed class FireWeaponPower(FireWeaponPowerData data) : SpecialPowerModu
     {
         if (SimulationWorld.ActiveWeaponIndex(Entity) < 0) return;
         world.ReloadAllAmmo(Entity);
+        if (target.Kind != SpecialPowerTargetKind.Object)
+        {
+            // doSpecialPower / doSpecialPowerAtLocation: aiAttackPosition(NULL or the place, MaxShotsToFire, CMD_FROM_AI).
+            var (x, y) = target.Kind == SpecialPowerTargetKind.Location ? (target.X, target.Y) : (Entity.X, Entity.Y);
+            world.AttackPlaceFor(Entity, x, y, data.MaxShots);
+            return;
+        }
         _shotsLeft = data.MaxShots;
         _target = target;
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);

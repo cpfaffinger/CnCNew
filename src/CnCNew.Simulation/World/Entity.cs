@@ -203,6 +203,9 @@ public sealed class Entity
     /// <summary>The unit's guard (<c>AI_GUARD</c>, F-58); null while it guards nothing, so such an object keeps its serialized form.</summary>
     internal GuardState? Guard { get; set; }
 
+    /// <summary>The unit's attack on a place (<c>AI_ATTACK_POSITION</c>, F-64); null while it attacks no place, so such an object keeps its serialized form.</summary>
+    internal AttackPlaceState? AttackPlace { get; set; }
+
     /// <summary>
     /// <c>ActiveBody::m_lastDamageTimestamp</c>: the tick of the last damage record (-1: none). <c>attemptDamage</c> records applied damage - within the frame of the record and the
     /// next one only a damage from a vehicle, infantry or faction structure replaces it -, <c>attemptHealing</c> records every heal (<see cref="Modules.BuiltIn.ActiveBody"/>).
@@ -388,6 +391,7 @@ public sealed class Entity
         Firing?.Describe(writer);
         Acquisition?.Describe(writer);
         Guard?.Describe(writer);
+        AttackPlace?.Describe(writer);
         if (Captured) writer.Bool("captured", true);
         if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
         if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);

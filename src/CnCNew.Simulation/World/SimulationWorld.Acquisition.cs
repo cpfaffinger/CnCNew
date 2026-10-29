@@ -82,7 +82,7 @@ public sealed partial class SimulationWorld
 
     private void RegisterAcquirer(Entity entity)
     {
-        if (AiOf(entity) is { } ai && ((ai.AutoAcquire & AutoAcquire.Idle) != 0 || entity.Acquisition is not null || entity.Guard is not null)) _acquirers.Add(entity.Id.Value);
+        if (AiOf(entity) is { } ai && ((ai.AutoAcquire & AutoAcquire.Idle) != 0 || entity.Acquisition is not null || entity.Guard is not null || entity.AttackPlace is not null)) _acquirers.Add(entity.Id.Value);
     }
 
     public void BeginAttackMove(Entity entity, Fixed x, Fixed y)
@@ -190,16 +190,22 @@ public sealed partial class SimulationWorld
             if (_firstFrameTicks != TickOrder.Next && (tick - entity.SpawnTick) % _firstFrameTicks != 0) continue;
             var before = AcquisitionStamp.Of(entity.Acquisition);
             var guardBefore = GuardStamp.Of(entity.Guard);
+            var placeBefore = AttackPlaceStamp.Of(entity.AttackPlace);
+            // An attack on a place replaces the unit's other states (AI_ATTACK_POSITION); it waits while the unit may not act.
+            if (entity.AttackPlace is { } place)
+            {
+                if (MayAct(entity, tick)) StepAttackPlace(entity, ai, place, tick);
+            }
             // A guarding unit's attacks are its guard's (AI_GUARD replaces the idle state the unit's own acquisition belongs to).
-            if (entity.Guard is { } guard)
+            else if (entity.Guard is { } guard)
             {
                 if (MayAct(entity, tick) && TurretsLetAttack(entity)) StepGuard(entity, ai, guard, tick);
                 else if (entity.Acquisition is { Victim.IsValid: true } held) EndEngagement(entity, ai, held);
             }
             else StepAcquirer(entity, ai, tick);
             if (entity.Acquisition is { IsDefault: true }) entity.Acquisition = null;
-            if (AcquisitionStamp.Of(entity.Acquisition) != before || GuardStamp.Of(entity.Guard) != guardBefore) MarkDirty(entity);
-            if (entity.Acquisition is null && entity.Guard is null && (ai.AutoAcquire & AutoAcquire.Idle) == 0) _acquirers.Remove(id);
+            if (AcquisitionStamp.Of(entity.Acquisition) != before || GuardStamp.Of(entity.Guard) != guardBefore || AttackPlaceStamp.Of(entity.AttackPlace) != placeBefore) MarkDirty(entity);
+            if (entity.Acquisition is null && entity.Guard is null && entity.AttackPlace is null && (ai.AutoAcquire & AutoAcquire.Idle) == 0) _acquirers.Remove(id);
         }
     }
 

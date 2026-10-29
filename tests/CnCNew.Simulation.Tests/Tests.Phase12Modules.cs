@@ -45,6 +45,12 @@ static partial class Tests
         Check.That(session.Issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, gunner.Id, "GunPower", SpecialPowerTargetKind.Object, target.Id, Fixed.Zero, Fixed.Zero)).Accepted, "The gun power is accepted.");
         Run(session, session.Frames(40));
         Check.That(health - target.Body.Health >= Fixed.FromInt(40) || target.EffectivelyDead, $"The power fired its two shots (health {health} -> {target.Body.Health}).");
+        // At a place it is the world's attack on a place (F-64): the gunner attacks it for its two shots and is done.
+        Check.That(session.Issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, gunner.Id, "GunPower", SpecialPowerTargetKind.Location, EntityId.Invalid, gunner.X + Fixed.FromInt(40), gunner.Y)).Accepted, "The gun power at a place is accepted.");
+        Run(session, 2);
+        Check.That(session.World.IsAttackingPlace(gunner), "The gunner attacks the place.");
+        Run(session, session.Frames(60));
+        Check.That(!session.World.IsAttackingPlace(gunner), "With its two shots fired it is done.");
         var soldiers = session.World.Entities.Count(entity => entity.Template.Name == "AlphaSoldier");
         Check.That(session.Issue(owner, (sequence, tick) => new UseSpecialPowerCommand(owner, sequence, tick, gunner.Id, "LaunchPower", SpecialPowerTargetKind.Location, EntityId.Invalid, Fixed.FromInt(200), Fixed.FromInt(250))).Accepted, "The launch power is accepted.");
         Run(session, session.Frames(3));

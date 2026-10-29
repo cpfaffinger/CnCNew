@@ -250,14 +250,14 @@ the check "fast path available" for the move cursor.
   `DOZER_CONSTRUCT_CANCEL` → `CancelConstructCommand`, `SPECIAL_POWER` without target → `UseSpecialPowerCommand(None)`, `SELECT_ALL_UNITS_OF_TYPE`.
   Queue icon → `CancelProduction`, cancelling a construction site → `CancelConstruction`.
 * Target mode (`NEED_TARGET_*`): `ATTACK_MOVE`, `GUARD*`, `SET_RALLY_POINT`, special powers with object or position target, `FIRE_WEAPON` with
-  object target. An object matching the options (enemy/neutral/ally, own ones count as allied) has precedence over the position; the
+  object or position target (Phase 43: a position, `ATTACK_OBJECTS_POSITION` and a button without a target are an `AttackPositionCommand`, F-64). An object matching the options (enemy/neutral/ally, own ones count as allied) has precedence over the position; the
   cursor is `CursorName` or `InvalidCursorName`, otherwise `Target`/`GenericInvalid` (like `InGameUI::evaluateContextCommand`: if `getCursorIndex` delivers
   no cursor, `Mouse::CROSS` applies). A name that is not an engine cursor is listed in `CommandButtonCatalog.UnknownCursorNames`; in the retail data that is
   exactly `DaisyCutter` (§11). Right click/Escape/selection change cancel.
 * `SPECIAL_POWER_FROM_SHORTCUT`: the source is the own object with the readiest module (ready first, then smallest id;
   `findMostReadyShortcutSpecialPowerOfType`), independently of the selection.
 * Unsupported button kinds (hack, hijacking, sabotage, car bomb, combat drop, weapon switch, overcharge, beacon, rail transport,
-  upgrade cancel, special power construction, `EXIT_CONTAINER` inventory, `FIRE_WEAPON` on position/mine clearing) deliver `ActivationResult.Unsupported`,
+  upgrade cancel, special power construction, `EXIT_CONTAINER` inventory, `FIRE_WEAPON` with the mine-clearing weapon set) deliver `ActivationResult.Unsupported`,
   count in `UnsupportedCounts` and are in the bar as `Restricted`/`NotSupportedBySimulation`.
 
 ### Standing orders (`StandingOrders`)
@@ -368,7 +368,7 @@ helpful as purely reading accesses) are:
    (reads, for shared powers, the same common readiness frame as `IsReady`) and `UpgradeMuxModule.Executed` are now public.
 3. ~~A public dock marker~~ **done (Phase 10):** `SimulationWorld.IsDock(EntityId)` replaces the module name matching from outside; `IDockModule`
    stays internal, but is no longer needed.
-4. Commands for: firing at a position (`FORCE_ATTACK_GROUND`, `FIRE_WEAPON` with `NEED_TARGET_POS`), permanent attacking/attack move/
+4. Commands for: ~~firing at a position (`FORCE_ATTACK_GROUND`, `FIRE_WEAPON` with `NEED_TARGET_POS`)~~ (done in Phase 43, `AttackPositionCommand`), permanent attacking/attack move/
    guarding/waypoints as AI states (today repeated on the client side), formation movement, hijacking, sabotage, hacking, combat drop,
    weapon switch, beacon, upgrade cancel, special power construction, line building. **Present since Phase 10:** `OverchargeCommand` (`TOGGLE_OVERCHARGE`,
    switches `OverchargeBehavior.Toggle`) and, as a deliberately simplified "capture", `CaptureCommand` (direct takeover including the energy pool effect by

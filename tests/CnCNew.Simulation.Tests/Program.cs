@@ -239,6 +239,7 @@ run.Test("Fire from containers, step 6: an attack order on a garrisoned building
 run.Test("Fire from containers, step 7: armed riders give a transport its PLAYER_UPGRADE weapon set", Tests.FireFromContainersArmedRidersUpgradeWeaponSet);
 run.Test("Fire from containers, clearing a garrison: KILL_GARRISONED kills riders, not an immune building's", Tests.FireFromContainersKillGarrisoned);
 run.Test("Fire from containers, clearing a garrison by a shell: AllowAttackGarrisonedBldgs and GarrisonHitKill", Tests.FireFromContainersGarrisonHitKill);
+run.Test("Fire from containers: a missile that hits a garrison kills riders instead of exploding", Tests.FireFromContainersMissileGarrisonHitKill);
 run.Test("Fire from containers: a Chinook gives its victim to a rider without one every tenth frame", Tests.FireFromContainersChinookReissuesItsVictim);
 run.Test("Phase 41 (F-60, step 4): a garrison's rider fires from the fire point closest to its victim, a fire base's from its station", Tests.FireFromContainersFirePoints);
 run.Test("Phase 41 (F-60, step 3): a Battle Bus passes its weapon bonus to its riders", Tests.FireFromContainersPassedBonus);
@@ -250,6 +251,9 @@ run.Test("Rule fix guard-answers-only-when-idle: a returning guard walks on to i
 run.Test("Phase 42 (F-58, step 7): a deploying unit on guard sets up at its post and packs before it chases", Tests.GuardDeployStyleDeploysAndPacks);
 run.Test("Phase 42 (F-58, step 7): a parked jet takes off for its guard, reloads and guards on", Tests.GuardJetTakesOffAndResumesAfterReload);
 run.Test("Phase 42 (F-58, step 7): a parked jet takes off to answer an attack on its airfield", Tests.GuardRetaliationJetTakesOff);
+run.Test("Phase 43 (F-64, step 1): an attack on a place walks into range, fires its shots and ends", Tests.AttackPlaceWalksFiresAndEnds);
+run.Test("Phase 43 (F-64, step 1): an attack on a place without a limit, with a locked slot, and refused", Tests.AttackPlaceLimitsAndSlots);
+run.Test("Phase 43 (F-64, step 3): a garrisoned building passes an attack on a place to its riders", Tests.AttackPlaceThroughTheContainer);
 run.Test("Phase 41 (F-58, step 4): the script guard actions guard a waypoint, an own position, an object", Tests.ScriptGuardActions);
 run.Test("Phase 41 (F-58, step 3): a team guards a trigger area - inside the polygon, out to its radius", Tests.ScriptGuardArea);
 run.Test("Phase 41 (F-54, step 2): a container counts its riders of kind STEALTH_GARRISON", Tests.StealthGarrisonCount);
@@ -694,6 +698,7 @@ if (contentDirectory is not null) run.Test("Real data: the original skirmish AI 
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI plays the same match at 30, 60 and 120 Hz", () => Tests.RealOriginalSkirmishAiAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a session of the original skirmish AI saved inside a frame at 60 and 120 Hz continues identically", () => Tests.RealOriginalSkirmishAiContinuesFromAnyTick(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (F-64): the Scud Storm launches its nine missiles at 30, 60 and 120 Hz", () => Tests.RealScudStormLaunches(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: every retail DeployStyleAIUpdate object is ready to attack, fires and is packed after the same time at 30, 60 and 120 Hz", () => Tests.RealDeployStyleTimesAreTheSame(contentDirectory));
 // Phase 23: the rate-equivalence suite, one test per group ("--only RateEquivalence" runs all, "--only \"RateEquivalence: weapons\"" one); 30, 60 and 120 Hz whatever --tick-rate says.

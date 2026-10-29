@@ -3973,3 +3973,59 @@ clear, so the flame tanks, toxin trucks and flash-bangs aim at a garrisoned buil
 Not built: an attack on a position through a container (`groupAttackPosition`; the port has no command for an attack on a position). **F-54's two open ends** are covered:
 `onCollide`'s ejection of another player's riders is `SimulationWorld.EnterOnArrival` (Phase 41), and the two readers of the garrison's `CAN_ATTACK` status are the port's
 `PassesAttackToRiders` (`Object::isAbleToAttack`) and `IsAttackable` against a de-garrisoned neutral building (the attack state's fail-safe).
+
+## 57. Phase 43: an attack on a place (fidelity package E)
+
+Read in `docs/ATTACK-POSITION.md`; one cause per commit with its test, a manifest commit where a field moves.
+
+### 57.1 F-64 step 1: the state (`AIUpdateInterface::privateAttackPosition`, `AIAttackState` on a position)
+
+(`3031276`) A new command `AttackPositionCommand` (`MSG_DO_FORCE_ATTACK_GROUND`, `MSG_DO_WEAPON_AT_LOCATION`, `MSG_DO_WEAPON` to a group, `AIGroup::groupAttackPosition`): the units,
+the place, "own position", the slot and the shots. A `FIRE_WEAPON` button's slot is locked temporarily on every member that has it (`setWeaponLockForGroup`; none has it: nothing
+happens, `NoWeapon`), the force-fire releases a temporary lock. Every member's state is cleared and it attacks the place (`Entity.AttackPlace`, `AttackPlaceState`, written only while
+present): under construction, out of ammunition (`Object::isOutOfAmmo`: every weapon empty and not reloading by time) or without the weapon - nothing. The weapon is the locked one,
+else the primary one (`chooseBestWeaponForTarget(NULL)`: "make only Primary attack the ground"). One decision per frame of the unit's own original frame (in the acquisition's pass,
+before the guard): out of ammunition, the shots used up, no weapon, or another weapon than the one locked at the start - the attack ends (`AIAttackState::update`); out of range
+(`Weapon::isWithinAttackRange(source, pos)`, the minimum range too, from a rider's fire point) or out of view (`outOfWeaponRangePosition`: a unit on the ground, the terrain line
+and the structures between) a mobile unit walks at the place and stops in range, one that may not walk - a rider, an immobile object - gives up; in range the turrets turn to the
+place (`setTurretTargetPosition`: `TurretState.AtPlace` with the place, the turret's angle, pitch and the ground arc toward a point), the weapon waits for its reload and its
+wind-up and fires at the place (`FireWeaponAt` without a victim, `WeaponFired` without a target). A unit that attacks a place is not idle; any order ends it (`EndAttack`).
+**`CommandTypes.Version` 19, replay format 17** (the attack on a place is an order of a player: 26 of 36 types); `WorldSnapshot` 10 (optional fields). Tests
+`AttackPlaceWalksFiresAndEnds` (the same frames at 30, 60 and 120 Hz, a snapshot in the walk) and `AttackPlaceLimitsAndSlots`; the fuzz suite changes such orders. Not modelled:
+the continue range of a mine clearer (an object near the place is attacked instead), a contact weapon's reachable place.
+
+### 57.2 F-64 step 2: the client
+
+(`b7c8ad3`) Ctrl-click on the ground gives the armed units of the selection one attack without a limit; a `FIRE_WEAPON` button without a target sends every member to its own place
+(the bomb truck's and convoy truck's detonation, the demo suicide, the fake building, the Battle Bus's trap), one with `NEED_TARGET_POS` asks for the place (the Dragon tank's fire
+wall, the toxin tractor, the Comanche's rocket pods, the battleship, mine clearing), one with `ATTACK_OBJECTS_POSITION` goes to the object's place - each with the button's slot and
+`MaxShotsToFire` (`CommandButtonInfo.MaxShotsToFire`, 0 for the original's "huge number"). The units' standing orders end. Before, all of them were refused as unsupported.
+`InputTests`.
+
+### 57.3 F-64 step 3: through the container
+
+(`200fb2a`) `groupAttackPosition` gives the place to the riders of a container that lets them fire ("garrisoned buildings force attack a ground position") - the rest of F-60's step 6.
+Test `AttackPlaceThroughTheContainer` (the same frames at 30, 60 and 120 Hz). Not built: the slaves of a spawner without free will (`orderSlavesToAttackPosition`) - the port's slaves
+follow no attack of their spawner at all (F-65).
+
+### 57.4 F-64 step 4: the other callers
+
+**`FireWeaponPower`** (`b3a3d4c`): at a place and at the own place the power reloads and gives the attack on a place (the battleship's bombardment of the missions turns its linked
+turrets now); at an object the stand-in stays. **The scripts' `FIRE_WEAPON` buttons** (`a1dfd91`; `Object::doCommandButton*`): without a target at the carrier's place, with
+`NEED_TARGET_POS` at the place, with `ATTACK_OBJECTS_POSITION` at the object's place (the simulation's button catalogue carries the options and the shots). **The `Attack` nugget of
+a creation list** (`d832a99`, `AttackNugget::create`): the source locks the slot and attacks the second point for its shots - `SUPERWEAPON_ScudStorm` is the one shipped list with
+it, and until now it was counted as not simulated: **a Scud Storm never fired** in the port. Real-data test `RealScudStormLaunches` (nine missiles at 30, 60 and 120 Hz, 0 before).
+
+### 57.5 F-60's last rest: a missile that hits a garrison
+
+(`9dd0105`, `MissileAIUpdate::projectileHandleCollision`) An armed missile that reaches the garrisoned building it was fired at kills up to `GarrisonHitKillCount` riders of the
+required and not forbidden kinds, the launcher scoring them, plays the FX at the building and vanishes without its explosion - as the shell does since Phase 42 (§56.3); the toxin
+rockets of the chemical general carry it. Test `FireFromContainersMissileGarrisonHitKill` at 30, 60 and 120 Hz.
+
+### 57.6 What the manifests say
+
+The command table and the replay format moved the two version fields and the command-stream hashes of the 22 runs whose description carries them (manifest `ce8817d`, 24 of
+1,929 fields, measured at `3031276`). Of the steps that act, only the scripts' buttons move a run: `mission_MD_USA01`, whose script uses a `FIRE_WEAPON` button without a target,
+changes its final, save and restore hashes and its snapshot (manifest `b65346d`); `FireWeaponPower`, the `Attack` nugget and the missile's `GarrisonHitKill` move none of the 50 runs
+(no run fires a Scud Storm, a battleship or a toxin rocket at a garrison). The input manifest moved in the command, creation-list and template catalogues (`2a83705`). The retail
+reference match (FactionGLA at tick 37,890, `6C86A27E229B1849` / `8E7AC06F9771E2E6`), the stress test and the 16 pairings are unchanged.

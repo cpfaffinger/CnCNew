@@ -171,22 +171,25 @@ public sealed partial class SimulationWorld
     /// (<c>PER_ATTACK</c>: no consecutive shot at it yet) or the first shot of a clip (<c>PER_CLIP</c>). False while the weapon winds up: the fire order stays accepted and a later
     /// order of the attack fires. The wind-up is dropped when the unit gets another order (<see cref="EndAttack"/>, the reference's <c>onExit</c>) or aims at another victim.
     /// </summary>
-    private bool PreAttackDone(Entity source, WeaponInfo weapon, int slot, Entity victim)
+    private bool PreAttackDone(Entity source, WeaponInfo weapon, int slot, Entity victim) => PreAttackDone(source, weapon, slot, victim.Id);
+
+    /// <summary><see cref="PreAttackDone(Entity, WeaponInfo, int, Entity)"/> for a victim by id - invalid for the place of an attack on a place (F-64).</summary>
+    private bool PreAttackDone(Entity source, WeaponInfo weapon, int slot, EntityId victimId)
     {
         if (weapon.PreAttackDelayTicks == 0) return true;
         var state = source.Firing;
         // "Until and including" the last tick of the grace is one step more than the grace; that step is a logic frame of the original at every rate (as in StepFiringTrackers).
-        if (state is not null && state.PreSlot == slot && state.PreVictim == victim.Id && _tick < state.PreFinish + Time.OriginalFrames(PreAttackStaleFrames) + _turretFrameTicks) return _tick >= state.PreFinish;
+        if (state is not null && state.PreSlot == slot && state.PreVictim == victimId && _tick < state.PreFinish + Time.OriginalFrames(PreAttackStaleFrames) + _turretFrameTicks) return _tick >= state.PreFinish;
 
         // Weapon::getPreAttackDelay: "Look for a reason to return zero and have no delay."
         if (weapon.PreAttackType == WeaponPrefire.PerClip && weapon.ClipSize > 0 && source.ClipOf(slot) is var clip && clip != 0 && clip < weapon.ClipSize) return true;
-        if (weapon.PreAttackType == WeaponPrefire.PerAttack && state is not null && state.Victim == victim.Id && state.Shots > 0) return true;
+        if (weapon.PreAttackType == WeaponPrefire.PerAttack && state is not null && state.Victim == victimId && state.Shots > 0) return true;
         var delay = weapon.PreAttackDelayWith(Time, _templates.GlobalWeaponBonus, WeaponBonusOf(source));
         if (delay <= 0) return true;
 
         state ??= source.Firing = new FiringState();
         state.PreSlot = slot;
-        state.PreVictim = victim.Id;
+        state.PreVictim = victimId;
         state.PreFinish = _tick + delay;
         MarkDirty(source);
         return false;

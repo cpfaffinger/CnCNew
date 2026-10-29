@@ -2,8 +2,8 @@
   "catalogs": {
     "commands": {
       "items": 1,
-      "sha256": "CE91FF3426C1C8FBC07C003A771199781401BB89340583DA9D2C17AE6D97E374",
-      "values": 8221
+      "sha256": "3879F5AD894CED9AAB565F39EF469DF79A434B89C419A696BFA938EE9F0AE5D6",
+      "values": 11268
     },
     "crates": {
       "items": 9,
@@ -12,8 +12,8 @@
     },
     "creationLists": {
       "items": 294,
-      "sha256": "F05CC01126BBBCBA0BBBBB557710AD2C86774E083F25F1CB2B83A9407D8AF854",
-      "values": 28528
+      "sha256": "BDEE43E0146303C4F14DA6287C35BA0B4DB230471844DDDC9BF3D3B2D9FC5B8F",
+      "values": 29960
     },
     "factions": {
       "items": 15,
@@ -32,8 +32,8 @@
     },
     "templates": {
       "items": 2115,
-      "sha256": "55C0589223C68E5BF6669AF711F7898291DE23449AAE1B7FE5DC9EB1B362526D",
-      "values": 561997
+      "sha256": "683C222B610BDCC0DD43112A11DADF01680F0F570CE08514A3834C8683BE0E27",
+      "values": 562268
     },
     "upgrades": {
       "items": 85,
@@ -47,8 +47,8 @@
     },
     "whole": {
       "items": 2115,
-      "sha256": "0A64E886B550885FBE13C3BCB6E0FCFB6C49D6575F611234B691FE0C4C8DEB8F",
-      "values": 720088
+      "sha256": "BFB91E693B260D9F0F481694F6829DC0F8E63AD8767649F9178CCDFF4AC288C2",
+      "values": 724838
     }
   },
   "definitions": {
