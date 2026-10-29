@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 18;
+    public const int Version = 19;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -95,7 +95,14 @@ public static class CommandTypes
     /// <summary><c>MSG_DO_GUARD_POSITION</c> / <c>MSG_DO_GUARD_OBJECT</c> to a group (<c>AIGroup::groupGuardPosition</c>, <c>aiGuardPosition</c>): the units guard a point or an object (docs/GUARD-STATE.md, F-58).</summary>
     public const ushort Guard = 35;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= Guard;
+    // ------------------------------------------------------------------------------------------------------ attack a place (v19)
+    /// <summary>
+    /// <c>MSG_DO_FORCE_ATTACK_GROUND</c>, <c>MSG_DO_WEAPON_AT_LOCATION</c>, <c>MSG_DO_WEAPON</c> to a group (<c>AIGroup::groupAttackPosition</c>, <c>aiAttackPosition</c>): the units attack a
+    /// place or their own positions (docs/ATTACK-POSITION.md, F-64).
+    /// </summary>
+    public const ushort AttackPosition = 36;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= AttackPosition;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -183,6 +190,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.Guard => new GuardCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"),
                 new EntityId(checked((uint)reader.UInt("object"))), (GuardMode)checked((byte)reader.Int("mode")), reader.Has("area") ? reader.Text("area") : string.Empty),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
+            CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"),
+                reader.Fixed("y"), reader.Bool("own"), checked((int)reader.Int("slot")), checked((int)reader.Int("maxShots"))),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -805,6 +814,42 @@ public sealed record GuardCommand(PlayerId Player, ulong Sequence, long Tick, Im
     public bool Equals(GuardCommand? other)
         => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && Object == other.Object && Mode == other.Mode
            && Area == other.Area && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
+
+    public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
+}
+
+/// <summary>
+/// An attack on a place to a group (<c>AIGroup::groupAttackPosition</c>, docs/ATTACK-POSITION.md, F-64): every unit attacks (<see cref="X"/>, <see cref="Y"/>) or, with
+/// <see cref="OwnPosition"/>, its own position (<c>MSG_DO_WEAPON</c>). <see cref="Slot"/> is the weapon slot a <c>FIRE_WEAPON</c> button locks for the attack
+/// (<c>setWeaponLockForGroup(slot, LOCKED_TEMPORARILY)</c>: no member has that weapon - nothing happens) or <see cref="WeaponSlot.Best"/> for the force-fire on the ground, which releases a
+/// temporary lock; <see cref="MaxShots"/> is the button's <c>MaxShotsToFire</c>, 0 for no limit.
+/// </summary>
+public sealed record AttackPositionCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y, bool OwnPosition, int Slot, int MaxShots)
+    : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.AttackPosition;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.BeginArray("units");
+        foreach (var unit in Units)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", unit.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+        writer.Bool("own", OwnPosition);
+        writer.Int("slot", Slot);
+        writer.Int("maxShots", MaxShots);
+    }
+
+    // The unit list is compared by content, as for a group move.
+    public bool Equals(AttackPositionCommand? other)
+        => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && OwnPosition == other.OwnPosition
+           && Slot == other.Slot && MaxShots == other.MaxShots && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
 
     public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }

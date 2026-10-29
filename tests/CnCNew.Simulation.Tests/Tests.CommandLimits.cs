@@ -57,6 +57,6 @@ internal static partial class Tests
             CommandTypes.GiveSciencePoints, CommandTypes.SetRelationship, CommandTypes.PlayerLeave, 0, 999];
         Check.That(not.All(code => !CommandTypes.IsPlayerOrder(code)), "spawning, damage, timers, gifts, relations and the leave are not");
         var orders = Enumerable.Range(0, 100).Count(code => CommandTypes.IsPlayerOrder((ushort)code));
-        Check.That(orders == 25 && CommandTypes.IsPlayerOrder(CommandTypes.Guard), $"25 of the 35 command types are orders of a player, the guard among them ({orders})");
+        Check.That(orders == 26 && CommandTypes.IsPlayerOrder(CommandTypes.Guard) && CommandTypes.IsPlayerOrder(CommandTypes.AttackPosition), $"26 of the 36 command types are orders of a player, the guard and the attack on a place among them ({orders})");
     }
 }

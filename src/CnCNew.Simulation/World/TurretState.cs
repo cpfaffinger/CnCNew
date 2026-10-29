@@ -34,6 +34,15 @@ internal sealed class TurretState
     public EntityId Target;
 
     /// <summary>
+    /// The turret aims at a place (<c>TurretAI::m_target</c> with <c>TARGET_POSITION</c>, <c>setTurretTargetPosition</c>): the attack on a place (F-64) of the unit. Only with
+    /// <see cref="Persistent"/> and no <see cref="Target"/>; <see cref="PlaceX"/>, <see cref="PlaceY"/>, <see cref="PlaceZ"/> are the place.
+    /// </summary>
+    public bool AtPlace;
+    public Fixed PlaceX;
+    public Fixed PlaceY;
+    public Fixed PlaceZ;
+
+    /// <summary>
     /// A one-off aim tracks until this tick; with the target gone (or after an attack ended) the angle is held until this tick before the turret recenters; 0 while there is nothing to hold.
     /// Ignored while <see cref="Persistent"/>.
     /// </summary>
@@ -117,7 +126,7 @@ internal sealed class TurretState
 
     /// <summary>At rest: at the natural angle and pitch, no order, nothing pending. Such a turret needs no stepping.</summary>
     public bool IsAtRest(TurretInfo info)
-        => Angle == info.NaturalAngle && Pitch == info.NaturalPitch && !Target.IsValid && HoldUntil == 0 && !Rotating && SweepUntil == 0 && PositiveSweep
+        => Angle == info.NaturalAngle && Pitch == info.NaturalPitch && !Target.IsValid && !AtPlace && HoldUntil == 0 && !Rotating && SweepUntil == 0 && PositiveSweep
            && !Persistent && !Pursuing && LoseInterestAt == 0 && !Scanning && NextScan == 0 && SubSteps == 0;
 
     /// <summary>At rest and switched as at the start: such a turret writes nothing to the snapshot.</summary>
@@ -128,6 +137,7 @@ internal sealed class TurretState
         Angle = info.NaturalAngle;
         Pitch = info.NaturalPitch;
         Target = EntityId.Invalid;
+        AtPlace = false;
         HoldUntil = 0;
         Rotating = false;
         SweepUntil = 0;
@@ -155,6 +165,12 @@ internal sealed class TurretState
         writer.Bool("positiveSweep", PositiveSweep);
         // The attack and idle-scan state is written only when it is set, so a turret that never attacked or scanned keeps its serialized form.
         if (Persistent) writer.Bool("persistent", true);
+        if (AtPlace)
+        {
+            writer.Fixed("placeX", PlaceX);
+            writer.Fixed("placeY", PlaceY);
+            writer.Fixed("placeZ", PlaceZ);
+        }
         if (Pursuing) writer.Bool("pursuing", true);
         if (LoseInterestAt != 0) writer.Int("loseInterestAt", LoseInterestAt);
         if (Scanning) { writer.Bool("scanning", true); writer.Fixed("scanAngle", ScanAngle); }
@@ -184,6 +200,10 @@ internal sealed class TurretState
         PositiveSweep = reader.Bool("positiveSweep");
         Persistent = reader.Has("persistent") && reader.Bool("persistent");
         Pursuing = reader.Has("pursuing") && reader.Bool("pursuing");
+        AtPlace = reader.Has("placeX");
+        PlaceX = AtPlace ? reader.Fixed("placeX") : Fixed.Zero;
+        PlaceY = AtPlace ? reader.Fixed("placeY") : Fixed.Zero;
+        PlaceZ = AtPlace ? reader.Fixed("placeZ") : Fixed.Zero;
         LoseInterestAt = reader.Has("loseInterestAt") ? reader.Int("loseInterestAt") : 0;
         Scanning = reader.Has("scanning") && reader.Bool("scanning");
         ScanAngle = reader.Has("scanAngle") ? reader.Fixed("scanAngle") : Fixed.Zero;
@@ -198,7 +218,8 @@ internal sealed class TurretState
         if (SubSteps < 0) throw new InvalidDataException("Negative turret sub-step counter in snapshot.");
         if (Slot is < 0 or >= WeaponSlot.Count) throw new InvalidDataException("Turret weapon slot out of range.");
         if (HoldUntil < 0 || SweepUntil < 0 || LoseInterestAt < 0 || NextScan < 0 || ScanDraws < 0) throw new InvalidDataException("Negative turret timer in snapshot.");
-        if (Persistent && !Target.IsValid) throw new InvalidDataException("A persistent turret attack needs a victim.");
+        if (Persistent && Target.IsValid == AtPlace) throw new InvalidDataException("A persistent turret attack needs a victim or a place.");
+        if (AtPlace && !Persistent) throw new InvalidDataException("A turret aims at a place only in an attack.");
         if (Pursuing && !Persistent) throw new InvalidDataException("A pursuit is an attack.");
     }
 }
@@ -206,9 +227,9 @@ internal sealed class TurretState
 /// <summary>Every mutable field of a <see cref="TurretState"/>, compared before and after a step to learn whether the entity's serialized state changed (a struct: stepping must not allocate).</summary>
 internal readonly record struct TurretStamp(
     Fixed Angle, Fixed Pitch, bool Rotating, EntityId Target, long SweepUntil, bool PositiveSweep, long HoldUntil, bool Persistent, bool Pursuing, long LoseInterestAt,
-    bool Scanning, Fixed ScanAngle, long NextScan, int ScanDraws, int Slot, int SubSteps)
+    bool Scanning, Fixed ScanAngle, long NextScan, int ScanDraws, int Slot, int SubSteps, bool AtPlace, Fixed PlaceX, Fixed PlaceY)
 {
     public static TurretStamp Of(TurretState state)
         => new(state.Angle, state.Pitch, state.Rotating, state.Target, state.SweepUntil, state.PositiveSweep, state.HoldUntil, state.Persistent, state.Pursuing, state.LoseInterestAt,
-            state.Scanning, state.ScanAngle, state.NextScan, state.ScanDraws, state.Slot, state.SubSteps);
+            state.Scanning, state.ScanAngle, state.NextScan, state.ScanDraws, state.Slot, state.SubSteps, state.AtPlace, state.PlaceX, state.PlaceY);
 }

@@ -342,7 +342,7 @@ static partial class Tests
     /// </summary>
     public static void StatesOfSixteenFractionBitsAreRejected()
     {
-        Check.That(Fixed.FractionBits == 24 && WorldSnapshot.Version == 10 && ReplayFormat.CurrentVersion == 16 && CommandTypes.Version == 18, "The formats of 24 fraction bits: snapshot 10, replay 16, command table 18 (replay and command table raised last by the guard command of phase 41; the fraction bits are those of phase 22).");
+        Check.That(Fixed.FractionBits == 24 && WorldSnapshot.Version == 10 && ReplayFormat.CurrentVersion == 17 && CommandTypes.Version == 19, "The formats of 24 fraction bits: snapshot 10, replay 17, command table 19 (replay and command table raised last by the attack on a place of phase 43; the fraction bits are those of phase 22).");
         var (fixture, replay, _) = ShortReplay();
         var world = ReplayRunner.CreateWorld(replay.Header, fixture.Templates);
         ReplayRunner.Run(replay, world, new ReplayRunOptions { StopTick = 300 });

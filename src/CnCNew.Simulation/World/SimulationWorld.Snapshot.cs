@@ -227,6 +227,7 @@ public sealed partial class SimulationWorld
         if (reader.Has("firing")) entity.Firing = FiringState.Load(reader.Object("firing"));
         if (reader.Has("acquisition")) entity.Acquisition = AcquisitionState.Load(reader.Object("acquisition"));
         if (reader.Has("guard")) entity.Guard = GuardState.Load(reader.Object("guard"));
+        if (reader.Has("attackPlace")) entity.AttackPlace = AttackPlaceState.Load(reader.Object("attackPlace"));
         var modules = reader.Array("modules");
         if (modules.Count != entity.ModuleArray.Length) throw new InvalidDataException($"Entity {entity.Id} has {modules.Count} module states but its template has {entity.ModuleArray.Length}.");
         for (var index = 0; index < modules.Count; index++)

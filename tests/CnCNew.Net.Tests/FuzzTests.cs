@@ -436,6 +436,10 @@ static partial class NetTests
         foreach (var move in orders.OfType<SetMoveTargetCommand>().Take(30))
             encoded.Add(ReplayFormat.EncodeCommand(new GuardCommand(move.Player, move.Sequence, move.Tick, [move.Target], move.X, move.Y,
                 CnCNew.Simulation.Ids.EntityId.Invalid, (GuardMode)(guards++ % 3))));
+        // Nor an attack on a place (F-64): one at the target of their moves, at their own place and with a slot, is changed too.
+        var places = 0;
+        foreach (var move in orders.OfType<SetMoveTargetCommand>().Skip(30).Take(30))
+            encoded.Add(ReplayFormat.EncodeCommand(new AttackPositionCommand(move.Player, move.Sequence, move.Tick, [move.Target], move.X, move.Y, places % 3 == 1, places++ % 3 - 1, places % 4)));
         var kinds = orders.Select(command => command.TypeCode).Distinct().Count();
         Check.That(orders.Count > 100 && kinds >= 5, $"the match gave orders to change ({orders.Count} of {kinds} kinds)");
         // The same match with three seats for players: the recorded orders are given as the players' own at their ticks, so the world lives as it did - and between

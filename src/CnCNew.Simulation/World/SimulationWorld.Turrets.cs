@@ -133,6 +133,41 @@ public sealed partial class SimulationWorld
         return aligned;
     }
 
+    /// <summary>
+    /// The attack on a place (F-64, <c>AIAttackAimAtTargetState</c> on a position, <c>setTurretTargetPosition</c>): the turrets that control <paramref name="slot"/> aim at the place for the
+    /// attack; true when all of them point at it (always for an object without an aiming turret).
+    /// </summary>
+    private bool AimTurretsAtPlace(Entity source, int slot, Fixed x, Fixed y, Fixed z)
+    {
+        if (source.Turrets is not { } states || source.Template.Turrets is not { } set) return true;
+        var aligned = true;
+        for (var index = 0; index < states.Length; index++)
+        {
+            if (states[index] is not { } state || set[index] is not { Gates: true } info) continue;
+            if (!set.Linked && !info.Controls(slot)) continue;
+            if (!state.Enabled) { aligned = false; continue; }
+            if (!(state.Persistent && state.AtPlace && state.PlaceX == x && state.PlaceY == y && state.PlaceZ == z && state.Slot == slot))
+            {
+                if (state.Target.IsValid || !state.AtPlace || state.PlaceX != x || state.PlaceY != y) AbandonFrameStep(state);
+                state.Target = EntityId.Invalid;
+                state.AtPlace = true;
+                (state.PlaceX, state.PlaceY, state.PlaceZ) = (x, y, z);
+                state.Slot = slot;
+                state.Persistent = true;
+                state.Pursuing = false;
+                state.LoseInterestAt = 0;
+                state.HoldUntil = 0;
+                state.Scanning = false;
+                state.ScanAngle = Fixed.Zero;
+                state.NextScan = 0;
+                _activeTurrets.Add(source.Id.Value);
+                MarkDirty(source);
+            }
+            if (!IsAlignedAtPlace(source, info, state, x, y, z, slot)) aligned = false;
+        }
+        return aligned;
+    }
+
     /// <summary>How a turret is told to aim: a one-off shot (module, script button), an accepted fire order of a unit that attacks, or a pursuit (the unit is on its way to attack).</summary>
     private enum TurretAimOrder { Shot, Attack, Pursuit }
 
@@ -150,6 +185,7 @@ public sealed partial class SimulationWorld
             if (state.Persistent && state.Target == victim.Id && state.Slot == slot && (state.Pursuing || !pursuing)) return;
             if (state.Target != victim.Id) AbandonFrameStep(state);
             state.Target = victim.Id;
+            state.AtPlace = false;
             state.Slot = slot;
             state.Persistent = true;
             state.Pursuing = pursuing || samePursuit;
@@ -168,6 +204,7 @@ public sealed partial class SimulationWorld
         if (!state.Persistent && state.Target == victim.Id && state.Slot == slot && state.HoldUntil == holdUntil) return;
         if (state.Target != victim.Id) AbandonFrameStep(state);
         state.Target = victim.Id;
+        state.AtPlace = false;
         state.Slot = slot;
         state.HoldUntil = holdUntil;
         state.Persistent = false;
@@ -210,6 +247,11 @@ public sealed partial class SimulationWorld
     public void EndAttack(Entity entity)
     {
         ClearAcquisition(entity);
+        if (entity.AttackPlace is not null)
+        {
+            entity.AttackPlace = null;
+            MarkDirty(entity);
+        }
         EndPreAttack(entity);
         StopTurrets(entity);
     }
@@ -221,7 +263,7 @@ public sealed partial class SimulationWorld
         var changed = false;
         for (var index = 0; index < states.Length; index++)
         {
-            if (states[index] is not { } state || set[index] is not { } info || !state.Target.IsValid) continue;
+            if (states[index] is not { } state || set[index] is not { } info || (!state.Target.IsValid && !state.AtPlace)) continue;
             StopAiming(info, state, _tick);
             changed = true;
         }
@@ -241,6 +283,7 @@ public sealed partial class SimulationWorld
     private static void StopAiming(TurretInfo info, TurretState state, long tick)
     {
         state.Target = EntityId.Invalid;
+        state.AtPlace = false;
         state.Persistent = false;
         state.Pursuing = false;
         state.LoseInterestAt = 0;
@@ -288,6 +331,7 @@ public sealed partial class SimulationWorld
         var index = TurretForCurrentWeapon(entity);
         if (index < 0 || entity.Turrets![index] is not { } state) return;
         state.Target = EntityId.Invalid;
+        state.AtPlace = false;
         state.Persistent = false;
         state.Pursuing = false;
         state.LoseInterestAt = 0;
@@ -428,12 +472,24 @@ public sealed partial class SimulationWorld
     }
 
     private bool IsAlignedAt(Entity source, TurretInfo info, Fixed angle, Fixed pitch, Entity victim, int slot)
+        => IsAlignedTo(info, angle, pitch, DesiredTurretAngle(source, victim), info.AllowsPitch && info.PitchRate > Fixed.Zero ? DesiredTurretPitch(source, info, victim, slot) : pitch, slot);
+
+    private static bool IsAlignedTo(TurretInfo info, Fixed angle, Fixed pitch, Fixed desiredAngle, Fixed desiredPitch, int slot)
     {
-        var desired = DesiredTurretAngle(source, victim);
-        var difference = FixedTrig.AngleDifference(angle, desired).Abs();
+        var difference = FixedTrig.AngleDifference(angle, desiredAngle).Abs();
         var sweep = info.SweepOf(slot);
         if (sweep > Fixed.Zero ? difference >= sweep : difference > TurretAlignThreshold) return false;
-        return !info.AllowsPitch || info.PitchRate <= Fixed.Zero || (pitch - DesiredTurretPitch(source, info, victim, slot)).Abs() <= TurretAlignThreshold;
+        return !info.AllowsPitch || info.PitchRate <= Fixed.Zero || (pitch - desiredPitch).Abs() <= TurretAlignThreshold;
+    }
+
+    /// <summary><see cref="IsAligned"/> for the place (<paramref name="x"/>, <paramref name="y"/>, <paramref name="z"/>) of an attack on a place.</summary>
+    private bool IsAlignedAtPlace(Entity source, TurretInfo info, TurretState state, Fixed x, Fixed y, Fixed z, int slot)
+    {
+        var desiredAngle = DesiredTurretAngleAt(source, x, y);
+        var desiredPitch = info.AllowsPitch && info.PitchRate > Fixed.Zero ? DesiredTurretPitchAt(source, info, x, y, z, slot, arc: true) : state.Pitch;
+        if (state.SubSteps != 0)
+            return IsAlignedTo(info, state.StartAngle, state.StartPitch, desiredAngle, desiredPitch, slot) && IsAlignedTo(info, state.GoalAngle, state.GoalPitch, desiredAngle, desiredPitch, slot);
+        return IsAlignedTo(info, state.Angle, state.Pitch, desiredAngle, desiredPitch, slot);
     }
 
     /// <summary><c>getRelativeAngle2D(obj, enemyPosition)</c>: the bearing to the victim minus the body's heading, wrapped.</summary>
@@ -442,8 +498,14 @@ public sealed partial class SimulationWorld
         // Both objects where the logic frame of the original they have begun ends, and the body's heading there (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3): the
         // turret turns once per frame toward what the 30 Hz turret sees after the step of that frame. At 30 Hz these are the positions and the heading.
         var (victimX, victimY, _) = victim.FrameEnd(_tick);
+        return DesiredTurretAngleAt(source, victimX, victimY);
+    }
+
+    /// <summary>The relative angle to a point (a victim's position, or the place of an attack on a place).</summary>
+    private Fixed DesiredTurretAngleAt(Entity source, Fixed x, Fixed y)
+    {
         var (ownX, ownY, _) = source.FrameEnd(_tick);
-        return FixedTrig.Normalize(FixedTrig.Atan2(victimY - ownY, victimX - ownX) - source.FrameEndAngle(_tick));
+        return FixedTrig.Normalize(FixedTrig.Atan2(y - ownY, x - ownX) - source.FrameEndAngle(_tick));
     }
 
     /// <summary>
@@ -453,9 +515,16 @@ public sealed partial class SimulationWorld
     /// </summary>
     private Fixed DesiredTurretPitch(Entity source, TurretInfo info, Entity victim, int slot)
     {
+        var (victimX, victimY, victimZ) = victim.FrameEnd(_tick);
+        return DesiredTurretPitchAt(source, info, victimX, victimY, victimZ, slot,
+            victim.Template.IsKindOf("IMMOBILE") || (victim.HasMoveTarget && !IsSignificantlyAboveTerrainAtFrameEnd(victim)));
+    }
+
+    /// <summary>The pitch toward a point; <paramref name="arc"/>: <c>GroundUnitPitch</c> applies (a ground target - an immobile or moving ground victim, or a place).</summary>
+    private Fixed DesiredTurretPitchAt(Entity source, TurretInfo info, Fixed victimX, Fixed victimY, Fixed victimZ, int slot, bool arc)
+    {
         if (!info.AllowsPitch) return info.NaturalPitch;
         if (info.FirePitch > Fixed.Zero) return info.FirePitch;
-        var (victimX, victimY, victimZ) = victim.FrameEnd(_tick);
         var (ownX, ownY, ownZ) = source.FrameEnd(_tick);
         var dx = victimX - ownX;
         var dy = victimY - ownY;
@@ -463,7 +532,7 @@ public sealed partial class SimulationWorld
         var horizontal = Fixed.Sqrt(dx * dx + dy * dy);
         var actual = FixedTrig.Atan2(dz, horizontal);
         var desired = Fixed.Max(actual, info.MinPitch);
-        if (info.GroundUnitPitch > Fixed.Zero && (victim.Template.IsKindOf("IMMOBILE") || (victim.HasMoveTarget && !IsSignificantlyAboveTerrainAtFrameEnd(victim))))
+        if (info.GroundUnitPitch > Fixed.Zero && arc)
         {
             var weaponIndex = WeaponIndexIn(source, slot);
             var range = weaponIndex >= 0 ? _templates.Weapons[weaponIndex].RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source)) : Fixed.One;
@@ -547,7 +616,12 @@ public sealed partial class SimulationWorld
 
         // "Until and including HoldUntil" is one step more than the hold time: that step is a logic frame of the original, as at 30 Hz, not a tick.
         var holding = state.HoldUntil > 0 && tick < state.HoldUntil + _turretFrameTicks;
-        if (victim is not null && (state.Persistent || holding))
+        if (victim is null && state.AtPlace && state.Persistent)
+        {
+            TurnAngle(state, DesiredTurretAngleAt(entity, state.PlaceX, state.PlaceY), state.FrameTurnRate);
+            if (info.AllowsPitch) TurnPitch(state, DesiredTurretPitchAt(entity, info, state.PlaceX, state.PlaceY, state.PlaceZ, state.Slot, arc: true), state.FramePitchRate);
+        }
+        else if (victim is not null && (state.Persistent || holding))
         {
             var swingsPositive = state.PositiveSweep;
             AimStep(entity, info, state, victim, tick);
