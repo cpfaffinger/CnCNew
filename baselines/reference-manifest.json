@@ -1661,9 +1661,9 @@
         "ended": false,
         "executedActions": 225,
         "executedScripts": 107,
-        "finalHash": "0F6B38C8E208C5B1",
-        "hashAfterRestore": "AACA115BD5D4596C",
-        "hashAtSave": "AACA115BD5D4596C",
+        "finalHash": "7074B903E378E31C",
+        "hashAfterRestore": "513C631CBC842B79",
+        "hashAtSave": "513C631CBC842B79",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1676,12 +1676,12 @@
         "placedObjects": 2846,
         "players": 14,
         "restoredChainHash": "4CC73600383F03E9",
-        "restoredFinalHash": "0F6B38C8E208C5B1",
+        "restoredFinalHash": "7074B903E378E31C",
         "saveTick": 3000,
         "shots": 123,
         "skippedObjects": 784,
-        "snapshotBytes": 7847008,
-        "snapshotSha256": "D8BE3F6EFB0FCF201A52633AC09AA43BB841F70ACAF0B33F975BA31480A3475A"
+        "snapshotBytes": 7847019,
+        "snapshotSha256": "C631C86F375DFDD2527C610C9B331CF9965FE2D63E59B30DB0BABC7C21CE2793"
       },
       "set": "full"
     },
