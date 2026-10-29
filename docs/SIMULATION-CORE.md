@@ -4063,3 +4063,14 @@ pieces fly, bounce, die when they rest on the ground and their slow death remove
 pieces, the same frames at 30, 60 and 120 Hz); before, every such nugget was a counted `CreationSkipped`. Not modelled: the client's level of detail that skips debris
 (`isDebrisSkipped`). Manifest `d772e44`: 27 runs, 232 fields; the retail reference match (driver seed `5EED0001`) is won again - FactionAmericaAirForceGeneral at tick 58,980 (end tick 59,581), end hash `B27181D1B5B51ED2`, chain `E516FD33713713E6`, 34,965 commands; 15 of 16 pairings decided; seven mission runs change their hashes, every outcome kept. Input manifest `2de7d59` (the creation lists, the templates and the whole catalogue).
 
+### 58.5 F-67: a bored dozer repairs
+
+(`1ec6676`; `DozerPrimaryIdleState::update`, `findObjectToRepair`) The original's dozer machine sits in its idle state while the dozer has no task; the state remembers the last
+frame in which the dozer was not idle (`m_idleTooLongTimestamp`, also set when a task ends and the state is entered), and once more than `BoredTime` has passed (5,000 ms in every
+shipped dozer, `BoredRange` 150) it orders a repair of the closest structure of its player within `BoredRange` that `ActionManager::canRepairObject` lets it repair - from the centre, on
+the ground - and stamps the frame, so it looks again every `BoredTime` while it stays idle. The port's dozer never did; `DozerAIUpdate` now reads `BoredTime` and `BoredRange`
+(`DozerAIData`), reads its state where its frame ends (a move that arrives in a frame has arrived for the 30 Hz frame, which the 30 Hz update reads after the step), sleeps until the next
+look, and gives itself the repair as an order of the AI (`OrderRepair(..., fromPlayer: false)`). `IsRepairable` also refuses bridges, bridge towers and rebuild holes, as
+`canRepairObject` does (also for a player's repair order). Test `DozerRepairsWhenBored` (bored 150 frames after the frame it arrived in, the near hut repaired, nothing else - not the
+far hut, the enemy's or the hole - in the same frames at 30, 60 and 120 Hz; a snapshot while it waits). Not modelled: the mine-clearing half of boredom (F-69) and the GLA worker's
+dozer brain (F-68). Manifests `9ab428a`: 46 of 50 runs; the 16 pairings keep their winners (15 decided) and end at other ticks, every mission run keeps its outcome, and the retail reference match is won by FactionGLA at tick 28,980 (end tick 29,581, end hash `D2EEF461CB764BD2`, chain `A8E8F06EEBC82332`, 20,958 commands); the input manifest in the templates and the whole catalogue.
