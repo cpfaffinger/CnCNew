@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package E) · **Phase:** 43
-> **Status:** in progress (starting state: the end of Phase 42, see below)
+> **Status:** done by machine (29 October 2026); the rest is in HANDOFF-PHASE44.md
 > **Predecessor:** HANDOFF-PHASE42.md · **Results in:** docs/ATTACK-POSITION.md, docs/SIMULATION-CORE.md §57, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** what Phase 42 left of F-58 (the tunnel network's guard, the flight deck's order passing), the missile's `GarrisonHitKill`
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -54,4 +54,6 @@ manifest commit; the checks the changes can reach green.
 
 ## Progress
 
-Nothing yet.
+- F-64 (§57.1 to §57.4): `AttackPositionCommand` (`CommandTypes.Version` 19, replay 17), the attack on a place in the world, the client's force-fire and `FIRE_WEAPON` buttons, a garrison's riders, `FireWeaponPower` and the scripts' buttons at a place, the `Attack` nugget of a creation list (the Scud Storm fires); manifests `ce8817d`, `b65346d`, input manifest `2a83705`.
+- F-60's last rest (§57.5): a missile that hits a garrison kills riders.
+- Registered and carried into `HANDOFF-PHASE44.md`: F-65 (the slaves of a spawner follow no attack); not built: a mine clearer's continue range and weapon set, a contact weapon's reachable place. Closing measurements: `CLAUDE.md`, paragraph "Phase 43".

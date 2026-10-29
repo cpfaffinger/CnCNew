@@ -73,7 +73,8 @@ phase number is 32.
 | **40** | [HANDOFF-PHASE40.md](HANDOFF-PHASE40.md) | **S3-M7** | A second source of fixes: the changes of Zero Hour Reforged reviewed against the original and this port (`docs/REFORGED-FIXES.md`, R-01 to R-38) | **done** by machine (28 October 2026): the disable model, F-16, F-48 to F-53, F-56, F-57, F-59; §54 |
 | **41** | [HANDOFF-PHASE41.md](HANDOFF-PHASE41.md) | **S1/S3** | The attack's line of sight (F-55), firing from inside (F-60), the garrison's owner (F-61), the stealth garrison (F-54), guarding (F-58) | **done** by machine (29 October 2026): F-54, F-55, F-61, F-62 done, F-60 and F-58 in large part, the rule fixes 20 to 25, R-03, R-24, R-27, R-34, R-35 decided; §55 |
 | **42** | [HANDOFF-PHASE42.md](HANDOFF-PHASE42.md) | **S1-M11** | Fidelity package D: the weapon's shock wave (F-63), a deploying and a flying guard (F-58 step 7), clearing a garrison and the rest of F-60, F-54's open ends | **done** by machine (29 October 2026): §56 |
-| **43** | [HANDOFF-PHASE43.md](HANDOFF-PHASE43.md) | **S1-M11** | Fidelity package E: an attack on a place (F-64) | **next** |
+| **43** | [HANDOFF-PHASE43.md](HANDOFF-PHASE43.md) | **S1-M11** | Fidelity package E: an attack on a place (F-64) | **done** by machine (29 October 2026): §57 |
+| **44** | [HANDOFF-PHASE44.md](HANDOFF-PHASE44.md) | **S1-M11** | Fidelity package F: slow deaths (F-37), the slaves of a spawner (F-65), thrown objects (F-66) and debris (F-36) | **next** |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 
