@@ -4029,3 +4029,53 @@ The command table and the replay format moved the two version fields and the com
 changes its final, save and restore hashes and its snapshot (manifest `b65346d`); `FireWeaponPower`, the `Attack` nugget and the missile's `GarrisonHitKill` move none of the 50 runs
 (no run fires a Scud Storm, a battleship or a toxin rocket at a garrison). The input manifest moved in the command, creation-list and template catalogues (`2a83705`). The retail
 reference match (FactionGLA at tick 37,890, `6C86A27E229B1849` / `8E7AC06F9771E2E6`), the stress test and the 16 pairings are unchanged.
+
+## 58. Phase 44: slow deaths, slaves, thrown objects and debris (fidelity package F)
+
+Each finding read in the original's source, one cause per commit with a test that fails on the code before at 30, 60 and 120 Hz, and its own manifest commit where a field moved.
+
+### 58.1 F-37: the slow-death subclasses run the base's begin and phases
+
+(`eeef16f`; `HelicopterSlowDeathBehavior`, `JetSlowDeathBehavior`, `BattleBusSlowDeathBehavior` (its real death), `NeutronMissileSlowDeathBehavior`) In the original each calls
+`SlowDeathBehavior::beginSlowDeath` and `update` first: the sink, destruction and midpoint draws in this order and the INITIAL lists, then the MIDPOINT lists once their frame has
+come and the FINAL lists at the destruction frame. The port's subclasses drew no midpoint and played no list; a shared `SlowDeathClock` (written while the slow death runs) does it
+for all four, and the Battle Bus's real death sleeps to the midpoint, then to the destruction. Test `SlowDeathSubclassPlaysTheBasePhases` (a helicopter's wreck: the three lists in the
+same frames at 30, 60 and 120 Hz, a snapshot in the fall). The third draw shifts the logic stream wherever such a death happens - Manifest `9e90e78`: 10 runs, 54 fields; Bitter Winter America-China ends later, every winner and mission outcome kept.
+
+### 58.2 F-65: the slaves of a spawner take its attacks
+
+(`37ee90c`; `AIGroup::groupAttackObject`, `groupAttackPosition` -> `SpawnBehavior::orderSlavesToAttackTarget`, `orderSlavesToAttackPosition`) A spawner whose slaves have no free will
+(`SlavesHaveFreeWill`, read now) hands an attack order on to every living slave with an AI: on an object as a forced attack (`AcquisitionState.Forced`: the slave walks at the
+victim as the guard's attack does, without a fog filter, until it cannot attack it; its own look does not replace the victim), on a place as the attack on a place (§57). The
+pre-check lets such a spawner take an attack order though it cannot move, and the client offers the attack cursor for it - the stinger site could not take an attack order before.
+Test `SlavesTakeTheirSpawnersAttack` (the first hit in the same frame at 30, 60 and 120 Hz; a site whose soldiers have free will cannot take the order). Not modelled:
+`orderSlavesToGoIdle` (the port's stop is a move order, which an immobile spawner cannot take). No field of either manifest moved: no run gives a spawner an attack order.
+
+### 58.3 F-66: a creation list throws the objects it creates
+
+(`a08a266`; `doStuffToObj`) For an object with a physics module `SEND_IT_OUT` pushes it along the ground (two draws of up to four times `DispositionIntensity`), `SEND_IT_FLYING`,
+`SEND_IT_UP` and `RANDOM_FORCE` give it the drawn yaw, roll and pitch rates (`SpinRate` and its overrides, else pi/32 times the intensity) and an upward force (`calcRandomForce` - a
+heading, a pitch and a magnitude - for `RANDOM_FORCE`) and let it bounce, `WHIRLING` sets the three rates, `OrientInForceDirection` turns it along the force. The draws follow the
+original's order after the health; the port drew none of them, so the logic stream of every such creation was shifted. The object flies with the flight of the shock wave (§56.1;
+`PhysicsBehavior.Launch` - no stun - with a debris mass kept); `KillWhenRestingOnGround` also ends a flight. Test `CreationListThrowsWhatItCreates` (a crate thrown up and one pushed
+out rest in the same place at 30, 60 and 120 Hz; a snapshot in the flight). Not modelled: `ExtraBounciness`, `ExtraFriction`, `INHERIT_VELOCITY`, `FLOATING`. Manifest `64a544b`: 22 runs, 194 fields; fourteen pairings end at other ticks with the same winner, Armored Fury China-GLA is a stalemate (15 of 16 decided), and the retail reference match ran to its limit; mission outcomes kept.
+
+### 58.4 F-36: the debris of a creation list
+
+(`7ea2663`; `reallyCreate` of a `CreateDebris` nugget) `Count` pieces of `GenericDebris`, one of the `ModelNames` drawn for each (every second word of each line, as
+`parseDebrisObjectNames` reads them), the animation set drawn before the health, owned by the source's player, given the nugget's `Mass` and thrown by its disposition (§58.3): the
+pieces fly, bounce, die when they rest on the ground and their slow death removes them. The model is the presentation's. Real-data test `RealDebrisFlies` (a dying Crusader's
+pieces, the same frames at 30, 60 and 120 Hz); before, every such nugget was a counted `CreationSkipped`. Not modelled: the client's level of detail that skips debris
+(`isDebrisSkipped`). Manifest `d772e44`: 27 runs, 232 fields; the retail reference match (driver seed `5EED0001`) is won again - FactionAmericaAirForceGeneral at tick 58,980 (end tick 59,581), end hash `B27181D1B5B51ED2`, chain `E516FD33713713E6`, 34,965 commands; 15 of 16 pairings decided; seven mission runs change their hashes, every outcome kept. Input manifest `2de7d59` (the creation lists, the templates and the whole catalogue).
+
+### 58.5 F-67: a bored dozer repairs
+
+(`1ec6676`; `DozerPrimaryIdleState::update`, `findObjectToRepair`) The original's dozer machine sits in its idle state while the dozer has no task; the state remembers the last
+frame in which the dozer was not idle (`m_idleTooLongTimestamp`, also set when a task ends and the state is entered), and once more than `BoredTime` has passed (5,000 ms in every
+shipped dozer, `BoredRange` 150) it orders a repair of the closest structure of its player within `BoredRange` that `ActionManager::canRepairObject` lets it repair - from the centre, on
+the ground - and stamps the frame, so it looks again every `BoredTime` while it stays idle. The port's dozer never did; `DozerAIUpdate` now reads `BoredTime` and `BoredRange`
+(`DozerAIData`), reads its state where its frame ends (a move that arrives in a frame has arrived for the 30 Hz frame, which the 30 Hz update reads after the step), sleeps until the next
+look, and gives itself the repair as an order of the AI (`OrderRepair(..., fromPlayer: false)`). `IsRepairable` also refuses bridges, bridge towers and rebuild holes, as
+`canRepairObject` does (also for a player's repair order). Test `DozerRepairsWhenBored` (bored 150 frames after the frame it arrived in, the near hut repaired, nothing else - not the
+far hut, the enemy's or the hole - in the same frames at 30, 60 and 120 Hz; a snapshot while it waits). Not modelled: the mine-clearing half of boredom (F-69) and the GLA worker's
+dozer brain (F-68). Manifests `9ab428a`: 46 of 50 runs; the 16 pairings keep their winners (15 decided) and end at other ticks, every mission run keeps its outcome, and the retail reference match is won by FactionGLA at tick 28,980 (end tick 29,581, end hash `D2EEF461CB764BD2`, chain `A8E8F06EEBC82332`, 20,958 commands); the input manifest in the templates and the whole catalogue.

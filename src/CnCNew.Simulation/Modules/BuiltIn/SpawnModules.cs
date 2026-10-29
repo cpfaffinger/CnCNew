@@ -21,12 +21,15 @@ internal static class SpawnModules
 /// <c>SpawnBehavior</c> field set (<c>SpawnBehavior.h</c>). <c>CanReclaimOrphans</c> (on a non-one-shot spawner) and
 /// <c>PropagateDamageTypesToSlavesWhenExisting</c> need producer links that do not exist: an object that asks for one of them keeps the module
 /// in <c>MissingModules</c> instead of being simulated wrongly. <c>AggregateHealth</c> and <c>ExitByBudding</c> (the angry mob's nexus) are simulated.
-/// <c>SlavesHaveFreeWill</c> only steers the slaves' own AI and <c>InitialBurst</c> only paces the nexus' exit through its barracks; both are read by the schema but have no effect here.
+/// <c>SlavesHaveFreeWill</c> decides whether the slaves take their spawner's attacks (F-65); <c>InitialBurst</c> only paces the nexus' exit through its barracks and has no effect here.
 /// </summary>
 public sealed record SpawnBehaviorData(
     int SpawnNumber, long ReplaceDelayTicks, bool OneShot, ImmutableArray<string> SpawnTemplates, bool RequireSpawner, DieMuxData Mux,
     bool AggregateHealth = false, bool ExitByBudding = false) : ModuleData
 {
+    /// <summary><c>SlavesHaveFreeWill</c> (default no): slaves without it attack what their spawner is ordered to attack (F-65).</summary>
+    public bool SlavesHaveFreeWill { get; init; }
+
     public static SpawnBehaviorData Parse(RatedModuleConfiguration configuration)
     {
         var oneShot = ModuleConfigReader.Bool(configuration, "OneShot", false);
@@ -38,7 +41,10 @@ public sealed record SpawnBehaviorData(
         if (number > 0 && templates.IsEmpty) throw new InvalidDataException("SpawnBehavior has a SpawnNumber but no SpawnTemplateName.");
         return new SpawnBehaviorData(number, ModuleConfigReader.Ticks(configuration, "SpawnReplaceDelay", 0), oneShot, templates,
             ModuleConfigReader.Bool(configuration, "SpawnedRequireSpawner", false), DieMuxData.Parse(configuration),
-            ModuleConfigReader.Bool(configuration, "AggregateHealth", false), ModuleConfigReader.Bool(configuration, "ExitByBudding", false));
+            ModuleConfigReader.Bool(configuration, "AggregateHealth", false), ModuleConfigReader.Bool(configuration, "ExitByBudding", false))
+        {
+            SlavesHaveFreeWill = ModuleConfigReader.Bool(configuration, "SlavesHaveFreeWill", false),
+        };
     }
 }
 
@@ -90,6 +96,7 @@ internal sealed class SpawnBehavior(SpawnBehaviorData data) : SimModule, IUpdate
     public int LivingSpawnCount => _spawns.Count;
     public int SpawnNumber => data.SpawnNumber;
     public IReadOnlyList<EntityId> Slaves => _spawns;
+    public bool SlavesHaveFreeWill => data.SlavesHaveFreeWill;
 
     public override void OnSpawn(IWorldServices world)
     {

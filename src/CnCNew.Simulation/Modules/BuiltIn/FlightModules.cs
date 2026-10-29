@@ -94,6 +94,9 @@ public sealed record JetSlowDeathData(SlowDeathData Base, string FxOnGroundDeath
 /// </summary>
 public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
 {
+    /// <summary>The base behaviour's midpoint and phases (F-37).</summary>
+    private readonly SlowDeathClock _clock = new();
+
     /// <summary><c>getDisabledTypesToProcess</c> (a SlowDeathBehavior).</summary>
     public DisabledMask DisabledTypesToProcess => DisabledMask.All;
 
@@ -129,12 +132,8 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
     public void BeginSlowDeath(IWorldServices world)
     {
         _activated = true;
-        // SlowDeathBehavior::beginSlowDeath: both variance draws happen, the sink animation is presentation.
-        // SlowDeathBehavior.cpp, SlowDeathBehavior::beginSlowDeath: GameLogicRandomValue(0, m_sinkDelayVariance) / (0, m_destructionDelayVariance) –
-        // both drawn in frames of the original, then scaled; the destruction is at least one frame away.
-        _ = data.Base.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.SinkDelayVarianceTicks);
-        var destruction = data.Base.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.DestructionDelayVarianceTicks);
-        _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
+        // SlowDeathBehavior::beginSlowDeath first: its three draws (sink, destruction, midpoint, in frames of the original) and the initial phase (F-37).
+        _destructionTick = world.Tick + _clock.Begin(world, Entity, data.Base);
         _deathTick = world.Tick;
         _groundTick = 0;
         _fallSpeed = Fixed.Zero;
@@ -149,7 +148,13 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
     public long Update(IWorldServices world)
     {
         if (!_activated) return SimulationTiming.SleepForever;
-        if (world.Tick >= _destructionTick) world.RequestDestroy(Entity.Id);
+        // SlowDeathBehavior::update first: the midpoint phase, and at the destruction frame the final one.
+        if (world.Tick >= _destructionTick)
+        {
+            _clock.Final(world, Entity, data.Base);
+            world.RequestDestroy(Entity.Id);
+        }
+        else _clock.Step(world, Entity, data.Base);
         if (_groundTick == 0)
         {
             // The fall is the 30 Hz step (the speed of the fall grows once per logic frame of the original and is a value per frame), flown in shares per tick.
@@ -198,6 +203,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
     {
         writer.Int("nextWake", _nextWake);
         writer.Bool("activated", _activated);
+        if (_activated) _clock.Describe(writer);
         writer.Int("destructionTick", _destructionTick);
         writer.Int("deathTick", _deathTick);
         writer.Int("groundTick", _groundTick);
@@ -209,6 +215,7 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
     {
         _nextWake = reader.Int("nextWake");
         _activated = reader.Bool("activated");
+        if (_activated) _clock.Load(reader);
         _destructionTick = reader.Int("destructionTick");
         _deathTick = reader.Int("deathTick");
         _groundTick = reader.Int("groundTick");

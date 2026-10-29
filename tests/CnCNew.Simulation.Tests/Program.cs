@@ -583,6 +583,10 @@ run.Test("Player leaves by choice: the first living ally inherits objects and mo
 run.Test("Command limits: a point or an angle beyond the limit is refused for every kind of order, the limit itself is an order, the system is not bound; which types are orders of a player", Tests.CommandCoordinatesHaveALimit);
 run.Test("Group move: every unit keeps its offset, shortened to six radii, and gets a place of its own", Tests.GroupMoveGivesEveryUnitItsOwnDestination);run.Test("Group move: coinciding places and an occupied goal are adjusted to the nearest free cell", Tests.GroupMoveAdjustsToFreePlaces);run.Test("Group move: the command is validated, saved in a snapshot and replayed", Tests.GroupMoveCommandIsValidatedSavedAndReplayed);run.Test("Group move: the same destinations and places at 30, 60 and 120 Hz", Tests.GroupMoveIsTheSameAtEveryRate);
 run.Test("Slow death phases: INITIAL, MIDPOINT and FINAL play effect list, creation list and weapon", Tests.SlowDeathPlaysItsPhases);run.Test("Slow death phases: the same frames at 30, 60 and 120 Hz, snapshot during the death", Tests.SlowDeathPhasesAreTheSameAtEveryRate);
+run.Test("Phase 44 (F-37): a subclass of the slow death plays the base's phases", Tests.SlowDeathSubclassPlaysTheBasePhases);
+run.Test("Phase 44 (F-65): the slaves of a spawner take its attack", Tests.SlavesTakeTheirSpawnersAttack);
+run.Test("Phase 44 (F-66): a creation list throws what it creates", Tests.CreationListThrowsWhatItCreates);
+run.Test("Phase 44 (F-67): a dozer that stands idle repairs the closest hurt structure of its player", Tests.DozerRepairsWhenBored);
 run.Test("Slow death phases: a dying vehicle stops, takes no order and leaves its hull where it died, at every rate", Tests.SlowDeathStopsTheDyingMover);
 run.Test("Chinook: flight height, supply trips, Supply Lines boost and landing to unload", Tests.ChinookSupplyFlightAndLanding);
 run.Test("Chinook (F-62): an unload at a place puts everybody out at once, a bare evacuation one by one through the door", Tests.ChinookUnloadAtAPlaceAtOnceAndAtTheDoorOneByOne);
@@ -699,6 +703,7 @@ if (contentDirectory is not null) run.Test("Real data: the original skirmish AI 
 if (contentDirectory is not null) run.Test("Real data: a session of the original skirmish AI saved inside a frame at 60 and 120 Hz continues identically", () => Tests.RealOriginalSkirmishAiContinuesFromAnyTick(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-64): the Scud Storm launches its nine missiles at 30, 60 and 120 Hz", () => Tests.RealScudStormLaunches(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data (F-36): a dying Crusader throws its debris at 30, 60 and 120 Hz", () => Tests.RealDebrisFlies(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: every retail DeployStyleAIUpdate object is ready to attack, fires and is packed after the same time at 30, 60 and 120 Hz", () => Tests.RealDeployStyleTimesAreTheSame(contentDirectory));
 // Phase 23: the rate-equivalence suite, one test per group ("--only RateEquivalence" runs all, "--only \"RateEquivalence: weapons\"" one); 30, 60 and 120 Hz whatever --tick-rate says.

@@ -52,6 +52,9 @@ public interface ISpawnerModule
 {
     /// <summary><c>m_spawnIDs</c>: every spawn that has not been seen dead yet, in creation order.</summary>
     IReadOnlyList<EntityId> Slaves { get; }
+
+    /// <summary><c>doSlavesHaveFreedom</c> (<c>SlavesHaveFreeWill</c>): "slaves with free will don't attack when parent attacks".</summary>
+    bool SlavesHaveFreeWill { get; }
 }
 
 /// <summary>The part of a spawn-point exit that remembers who stands on which spawn point (<c>m_spawnPointOccupier</c>), told by the spawner once it asked for the entity.</summary>

@@ -156,6 +156,41 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         world.MarkDirty(Entity);
     }
 
+    /// <summary>
+    /// <c>doStuffToObj</c>'s throw of a created object (F-66): <c>setMass</c> for a piece of debris (<paramref name="mass"/> above zero), <c>applyForce</c> (the force divided by the mass
+    /// waits for the next step as an acceleration), <c>setYawRate</c>, <c>setRollRate</c>, <c>setPitchRate</c>, <c>setAngles(orientation, 0, 0)</c> and, for <paramref name="bounce"/>,
+    /// <c>setAllowBouncing(true)</c>. The flight is the shocked object's without the stun, stepped once per logic frame of the original from the next one on.
+    /// </summary>
+    public void Launch(IWorldServices world, Fixed forceX, Fixed forceY, Fixed forceZ, Fixed yawRate, Fixed pitchRate, Fixed rollRate, bool rates, bool bounce, Fixed mass)
+    {
+        if (mass > Fixed.Zero) _mass = mass;
+        var effective = Mass;
+        _accelX += forceX / effective;
+        _accelY += forceY / effective;
+        _accelZ += forceZ / effective;
+        if (rates)
+        {
+            (_yawRate, _pitchRate, _rollRate) = (yawRate, pitchRate, rollRate);
+            (_pitch, _roll) = (Fixed.Zero, Fixed.Zero);
+        }
+        if (bounce) _bounce = true;
+        if (!_flying)
+        {
+            _flying = true;
+            Entity.InPhysicsFlight = true;
+            _wasAirborne = Entity.Z > world.GroundHeightAt(Entity.X, Entity.Y);
+            if (!_falling) _subStep = 0;
+            world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
+        }
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary>The mass the forces divide by: the module's, or the one a debris nugget set (<c>setMass</c>).</summary>
+    private Fixed Mass => _mass > Fixed.Zero ? _mass : data.Mass > Fixed.Zero ? data.Mass : Fixed.One;
+
+    /// <summary><c>setMass</c> of a debris nugget (0: the module's own).</summary>
+    private Fixed _mass;
+
     public void StartFall(IWorldServices world, Fixed velocityX, Fixed velocityY)
     {
         _falling = true;
@@ -358,7 +393,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
             if (net > Fixed.Zero
                 && (_velocityX.Abs() <= TinyDelta || activeVelocityZ.Abs() >= _velocityX.Abs() * SteepFall)
                 && (_velocityY.Abs() <= TinyDelta || activeVelocityZ.Abs() >= _velocityY.Abs() * SteepFall))
-                world.Damage(Entity.Id, new DamageInfo(Entity.Id, net * data.Mass * data.FallHeightDamageFactor, FallingDamageType, SplattedDeathType, false));
+                world.Damage(Entity.Id, new DamageInfo(Entity.Id, net * Mass * data.FallHeightDamageFactor, FallingDamageType, SplattedDeathType, false));
         }
 
         // At rest on the ground: the flight is over and the movement takes the object again. What is left of the rates is dropped - the original lets them decay on (by 0.85 a
@@ -369,6 +404,8 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
             _flying = false;
             Entity.InPhysicsFlight = false;
             _bounce = false;
+            // KILL_WHEN_RESTING_ON_GROUND: a piece of debris that has come to rest dies (and its slow death removes it).
+            if (data.KillWhenRestingOnGround) world.Kill(Entity.Id);
             return _subStep == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
         }
         return SimulationTiming.SleepNone;
@@ -462,6 +499,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     public override void Describe(IStateWriter writer)
     {
         writer.Int("nextWake", _nextWake);
+        if (_mass > Fixed.Zero) writer.Fixed("mass", _mass);
         if (_flailing) writer.Bool("flailing", true);
         if (_stunnedPose) writer.Bool("stunnedPose", true);
         if (_flying) DescribeFlight(writer);
@@ -481,6 +519,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _velocityY = _falling ? reader.Fixed("velocityY") : Fixed.Zero;
         _velocityZ = _falling ? reader.Fixed("velocityZ") : Fixed.Zero;
         _subStep = _falling && reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;
+        _mass = reader.Has("mass") ? reader.Fixed("mass") : Fixed.Zero;
         _flailing = reader.Has("flailing");
         _stunnedPose = reader.Has("stunnedPose");
         LoadFlight(reader);

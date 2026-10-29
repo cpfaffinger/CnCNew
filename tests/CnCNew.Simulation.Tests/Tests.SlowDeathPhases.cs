@@ -90,6 +90,23 @@ internal static partial class Tests
             OCL = FINAL OCL_PhaseHull
           End
         End
+        Object PhaseHeli
+          KindOf = VEHICLE AIRCRAFT SELECTABLE
+          Locomotor = SET_NORMAL PhaseLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = HelicopterSlowDeathBehavior Death01
+            DestructionDelay = 2000
+            DelayFromGroundToFinalDeath = 99999
+            FX = INITIAL FX_Begin
+            FX = MIDPOINT FX_Middle
+            FX = FINAL FX_EndA
+          End
+        End
         Object PlainTank
           KindOf = VEHICLE SELECTABLE
           Body = ActiveBody Body01
@@ -155,7 +172,7 @@ internal static partial class Tests
         var middle = Frame("fx FX_Middle");
         Check.That(middle >= 21 && middle <= 39, $"The MIDPOINT effect list is requested between 35 % and 65 % of the delay (frame {middle}; {text}).");
         Check.That(Frame("blast") >= middle && Frame("blast") <= middle + 1, $"The MIDPOINT weapon is fired at the object's position and hurts the bystander ({text}).");
-        Check.That(log.Any(line => line == $"{middle} skipped CreateDebris {CreationSkipReasons.NuggetNotSimulated}"), $"A creation the simulation cannot perform is counted with its reason ({text}).");
+        Check.That(log.Any(line => line == $"{middle} skipped GenericDebris {CreationSkipReasons.UnknownTemplate}"), $"A creation the simulation cannot perform is counted with its reason ({text}).");
         var final = log.Where(line => line.Contains("fx FX_End", System.StringComparison.Ordinal)).ToArray();
         Check.That(final.Length == 1 && final[0].StartsWith("60 ", System.StringComparison.Ordinal), $"One of the two FINAL effect lists is drawn and requested at the destruction frame ({text}).");
         Check.That(Frame("hull") is 60 or 61 && Frame("gone") is 60 or 61, $"The FINAL creation list leaves the hull when the object goes ({text}).");
@@ -172,6 +189,26 @@ internal static partial class Tests
         // The bounds of the midpoint draw are the single-precision products of the reference, cut off.
         Check.That(SlowDeathPhases.MidpointBounds(20) == (7, 13) && SlowDeathPhases.MidpointBounds(30) == (10, 19) && SlowDeathPhases.MidpointBounds(60) == (21, 39) && SlowDeathPhases.MidpointBounds(1) == (0, 0) && SlowDeathPhases.MidpointBounds(0) == (0, 0),
             $"0.35f and 0.65f of 20, 30, 60, 1 and 0 frames: {SlowDeathPhases.MidpointBounds(20)}, {SlowDeathPhases.MidpointBounds(30)}, {SlowDeathPhases.MidpointBounds(60)}, {SlowDeathPhases.MidpointBounds(1)}.");
+    }
+
+    /// <summary>
+    /// F-37: a subclass of the slow death runs the base's begin and update (<c>HelicopterSlowDeathBehavior::beginSlowDeath</c> and <c>update</c> call <c>SlowDeathBehavior</c>'s first) - the
+    /// helicopter's wreck plays the INITIAL list at its death, the MIDPOINT list between 35 % and 65 % of the destruction delay and the FINAL list when the base's destruction frame
+    /// removes it. In the same frames at 30, 60 and 120 Hz, and a snapshot during the fall continues identically. Before, a subclass played none of them and drew no midpoint.
+    /// </summary>
+    public static void SlowDeathSubclassPlaysTheBasePhases()
+    {
+        var reference = SlowDeathRun(SimulationRate.Hz30, "PhaseHeli", 11, snapshotAfterTicks: 10).Log;
+        var text = string.Join("; ", reference);
+        Check.That(reference.Contains("0 fx FX_Begin"), $"The INITIAL list at the death ({text}).");
+        var middle = reference.Where(line => line.EndsWith("fx FX_Middle", System.StringComparison.Ordinal)).Select(line => int.Parse(line.Split(' ')[0], System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+        Check.That(middle.Length == 1 && middle[0] >= 21 && middle[0] <= 39, $"The MIDPOINT list once, between 35 % and 65 % of the delay ({text}).");
+        Check.That(reference.Contains("60 fx FX_EndA") && (reference.Contains("60 gone") || reference.Contains("61 gone")), $"The FINAL list when the base removes the wreck ({text}).");
+        foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var run = SlowDeathRun(rate, "PhaseHeli", 11, snapshotAfterTicks: 10 * rate.TicksPerOriginalFrame + 1).Log;
+            Check.That(run.SequenceEqual(reference), $"{rate}: the phases fall into the frames of 30 Hz ({string.Join("; ", run)} against {text}).");
+        }
     }
 
     /// <summary>The same death at 30, 60 and 120 Hz: every phase in the same logic frame, and a snapshot during the slow death continues identically.</summary>

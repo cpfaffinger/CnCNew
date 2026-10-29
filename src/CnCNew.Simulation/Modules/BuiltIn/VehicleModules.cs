@@ -124,6 +124,9 @@ public sealed record BattleBusData(SlowDeathData Base, string FxStartUndeath, st
 /// </summary>
 public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
 {
+    /// <summary>The base behaviour's midpoint and phases (F-37).</summary>
+    private readonly SlowDeathClock _clock = new();
+
     /// <summary><c>getDisabledTypesToProcess</c> (a SlowDeathBehavior).</summary>
     public DisabledMask DisabledTypesToProcess => DisabledMask.All;
 
@@ -174,12 +177,10 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
     {
         if (_realDeath)
         {
-            // SlowDeathBehavior::beginSlowDeath: both draws, then the destruction timer.
-            _ = data.Base.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.SinkDelayVarianceTicks);
-            var destruction = data.Base.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.DestructionDelayVarianceTicks);
+            // SlowDeathBehavior::beginSlowDeath: its three draws, the initial phase (F-37), then the destruction timer.
+            _destructionTick = world.Tick + _clock.Begin(world, Entity, data.Base);
             _activated = true;
-            _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
-            world.WakeAt(Entity, this, _destructionTick);
+            world.WakeAt(Entity, this, _clock.NextDue(_destructionTick));
             return;
         }
         _inFirstDeath = true;
@@ -221,7 +222,18 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
             return SimulationTiming.SleepNone;
         }
         // "If a real death, we aren't allowed to do anything": SlowDeathBehavior::update.
-        if (_realDeath) return SlowDeathTimer.Update(world, Entity, _activated, _destructionTick);
+        if (_realDeath)
+        {
+            if (!_activated) return SimulationTiming.SleepForever;
+            if (world.Tick < _destructionTick)
+            {
+                _clock.Step(world, Entity, data.Base);
+                return _clock.NextDue(_destructionTick) - world.Tick;
+            }
+            _clock.Final(world, Entity, data.Base);
+            world.RequestDestroy(Entity.Id);
+            return SimulationTiming.SleepForever;
+        }
         // Neither death is running: wake now and then to see whether the hulk is empty.
         if (Entity.Container is not { } passengers) return SimulationTiming.SleepForever;
         if (data.EmptyHulkDelayTicks == 0) return SimulationTiming.SleepForever;
@@ -250,6 +262,7 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
         writer.Bool("realDeath", _realDeath);
         writer.Bool("firstDeath", _inFirstDeath);
         writer.Bool("activated", _activated);
+        if (_activated) _clock.Describe(writer);
         writer.Int("groundCheckTick", _groundCheckTick);
         writer.Int("penaltyDeathTick", _penaltyDeathTick);
         writer.Int("destructionTick", _destructionTick);
@@ -263,6 +276,7 @@ public sealed class BattleBusSlowDeathBehavior(BattleBusData data) : DieModuleBa
         _realDeath = reader.Bool("realDeath");
         _inFirstDeath = reader.Bool("firstDeath");
         _activated = reader.Bool("activated");
+        if (_activated) _clock.Load(reader);
         _groundCheckTick = reader.Int("groundCheckTick");
         _penaltyDeathTick = reader.Int("penaltyDeathTick");
         _destructionTick = reader.Int("destructionTick");

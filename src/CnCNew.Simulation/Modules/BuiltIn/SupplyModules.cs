@@ -16,7 +16,7 @@ internal static class SupplyModules
     [
         new ModuleBinding<SupplyCarrierData>("SupplyTruckAIUpdate", ModuleOwnerKind.Object, (configuration, _) => SupplyCarrierData.Parse(configuration), data => new SupplyTruckAIUpdate(data)),
         new ModuleBinding<SupplyCarrierData>("WorkerAIUpdate", ModuleOwnerKind.Object, (configuration, _) => SupplyCarrierData.Parse(configuration), data => new WorkerAIUpdate(data)),
-        new ModuleBinding<AIUpdateData>("DozerAIUpdate", ModuleOwnerKind.Object, (configuration, _) => AIUpdateData.Parse(configuration), data => new DozerAIUpdate(data)),
+        new ModuleBinding<DozerAIData>("DozerAIUpdate", ModuleOwnerKind.Object, (configuration, _) => DozerAIData.Parse(configuration), data => new DozerAIUpdate(data)),
     ];
 }
 
@@ -59,11 +59,100 @@ public sealed record SupplyCarrierData(AIUpdateData Ai, int MaxBoxes, long Cente
         checked((int)ModuleConfigReader.Int(configuration, "UpgradedSupplyBoost", 0)));
 }
 
-/// <summary><c>DozerAIUpdate</c>: builds and repairs structures (see <see cref="AIUpdateInterface.OrderConstruct"/>). Mine clearing and the autonomous "bored" behaviour are not modelled.</summary>
-public sealed class DozerAIUpdate(AIUpdateData data) : AIUpdateInterface(data)
+/// <summary><c>DozerAIUpdateModuleData</c>: the AI's fields, <c>BoredTime</c> (parsed as a duration) and <c>BoredRange</c>.</summary>
+public sealed record DozerAIData(AIUpdateData Ai, long BoredTicks, Fixed BoredRange) : ModuleData
 {
+    public static DozerAIData Parse(RatedModuleConfiguration configuration) => new(AIUpdateData.Parse(configuration),
+        ModuleConfigReader.Ticks(configuration, "BoredTime", 0), ModuleConfigReader.Real(configuration, "BoredRange", Fixed.Zero));
+}
+
+/// <summary>
+/// <c>DozerAIUpdate</c>: builds and repairs structures (see <see cref="AIUpdateInterface.OrderConstruct"/>), and gets bored (F-67, <c>DozerPrimaryIdleState::update</c>): a dozer that has
+/// stood idle without a task for more than <c>BoredTime</c> repairs the closest structure of its player within <c>BoredRange</c> that it may repair (<c>findObjectToRepair</c>), and
+/// looks again every <c>BoredTime</c> while it stays idle. Mine clearing (the other half of boredom) is not modelled.
+/// </summary>
+public sealed class DozerAIUpdate(DozerAIData data) : AIUpdateInterface(data.Ai)
+{
+    // m_idleTooLongTimestamp: the last tick of the dozer's own frame in which it was not idle, had a task, or was bored. The idle state is entered at the dozer's creation.
+    private long _boredSince;
+
     public override string ModuleName => "DozerAIUpdate";
     public override bool CanBuild => true;
+
+    public override void OnSpawn(IWorldServices world)
+    {
+        base.OnSpawn(world);
+        _boredSince = world.Tick + world.Time.TicksPerOriginalFrame - TickOrder.Next;
+        NextWake = _boredSince + data.BoredTicks + world.Time.TicksPerOriginalFrame;
+    }
+
+    /// <summary>
+    /// The base's update, then the dozer machine's idle state, as in the original after <c>AIUpdateInterface::update</c>. The state is read where the dozer's frame ends - a move
+    /// that arrives in a frame has arrived for the 30 Hz frame, which is read once the whole step is made.
+    /// </summary>
+    public override long Update(IWorldServices world)
+    {
+        var hadTask = HasBuilderTask;
+        var sleep = base.Update(world);
+        if (Entity.EffectivelyDead) return sleep;
+        var frame = world.Time.TicksPerOriginalFrame;
+        if (world.Time.BeginsFrameOf(Entity, world.Tick + TickOrder.Next))
+        {
+            // A task that ended in this frame enters the idle state now (its onEnter sets the stamp); a dozer that is not idle resets it.
+            if (hadTask || HasBuilderTask || !IsIdle) _boredSince = world.Tick;
+            else if (world.Tick - _boredSince >= data.BoredTicks + frame)
+            {
+                _boredSince = world.Tick;
+                if (FindObjectToRepair(world) is { } target) OrderRepair(world, target, fromPlayer: false);
+            }
+        }
+        if (HasBuilderTask || !IsIdle)
+        {
+            // Something the world drives (a guard) keeps it from being idle without waking it: look again where the next frame ends.
+            if (sleep < SimulationTiming.SleepForever) return sleep;
+            for (var ahead = TickOrder.Next; ; ahead++)
+                if (world.Time.BeginsFrameOf(Entity, world.Tick + ahead + TickOrder.Next)) return ahead;
+        }
+        // The next look lies after this tick: the stamp is the last frame end that was looked at, and a look is due a whole frame after it at the earliest.
+        return Math.Min(sleep, _boredSince + data.BoredTicks + frame - world.Tick);
+    }
+
+    /// <summary>
+    /// <c>findObjectToRepair</c>: the closest structure of the dozer's player within <c>BoredRange</c> (between the centres, on the ground; ties by id) that
+    /// <c>ActionManager::canRepairObject</c> lets it repair.
+    /// </summary>
+    private Entity? FindObjectToRepair(IWorldServices world)
+    {
+        Entity? best = null;
+        var bestDistance = Fixed.Zero;
+        var reach = SquaredReach.Of(data.BoredRange);
+        foreach (var candidate in world.EntitiesOwnedBy(Entity.Owner).AsSpan())
+        {
+            if (candidate == Entity || !IsRepairable(candidate)) continue;
+            var dx = candidate.X - Entity.X;
+            var dy = candidate.Y - Entity.Y;
+            var distance = dx * dx + dy * dy;
+            if (!reach.Contains(distance)) continue;
+            if (best is null || distance < bestDistance)
+            {
+                best = candidate;
+                bestDistance = distance;
+            }
+        }
+        return best;
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        base.Describe(writer);
+        writer.Int("boredSince", _boredSince);
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        base.Load(reader);
+        _boredSince = reader.Has("boredSince") ? reader.Int("boredSince") : 0;
+    }
 }
 
 internal enum SupplyState { Busy, Idle, Wanting, Regrouping, Docking }
