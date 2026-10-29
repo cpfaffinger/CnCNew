@@ -141,7 +141,7 @@ Windows (`dotnet build -c Release`); a framework-dependent build is the same fil
 | **Linux (WSL2), inputs** | `SimTool input-manifest check game/content baselines/input-manifest.json` under Linux, binaries of `4f7d5ca` | **identical** |
 | **Linux (WSL2), computation** | `SimTool reference-manifest check … --set full --jobs 6` under Linux, the same binaries | **50 of 50 runs identical** (60 Hz, schema 2) |
 | **One match, two systems** | `scripts/check-net-cross-os.ps1` (`NetTool net-match --linux server,2,4`): the dedicated server, its proxy and clients 2 and 4 are Linux processes, clients 1 and 3 Windows processes; three players, five computer players, a watcher, 45 s of game time through the proxy with 40 ms delay, 10 ms jitter, 1 % loss | **one hash chain** on all four clients (2,700 ticks), the server agreed on every tick |
-| **A state across the boundary** | the same, and the Linux client 2 loses its connection and joins again with the state the Windows client 1 wrote | the state loaded under Linux hashes to what the clients agreed on; all four end in the same state |
+| **A state across the boundary** | the same, and the Linux client 2 loses its connection and joins again with the state a Windows client (1 or 3, the first whose reports are in time) wrote | the state loaded under Linux hashes to what the clients agreed on; all four end in the same state |
 
 Every process states its operating system itself (`Os` in a client's result, `os=` in the server's `listening` line), and the check fails if one ran elsewhere than
 asked. Without the WSL distribution or its runtime the check ends with exit code 3 and the tier shows the step as **NOT RUN** - never as passed

@@ -62,7 +62,8 @@ if ($LASTEXITCODE -ne 0) { $failed++ }
 else {
     $row = Get-Content (Join-Path $OutDir 'rejoin/row.json') -Raw | ConvertFrom-Json
     if ($row.notes -notmatch 'c2 lost its connection at tick \d+ and joined again at tick [1-9]') { Write-Host 'FAIL: client 2 did not join the running match again.'; $failed++ }
-    if ($row.notes -notmatch 'c1 handed over') { Write-Host 'FAIL: the state did not come from the Windows client 1.'; $failed++ }
+    # The relay asks the first member whose hash reports are in time (RelayServer.RequestSnapshot); on a loaded machine that can be client 3 instead of 1 - both are Windows.
+    if ($row.notes -notmatch 'c[13] handed over') { Write-Host 'FAIL: the state did not come from a Windows client (1 or 3).'; $failed++ }
 }
 
 if ($failed -gt 0) { Write-Host "Net cross-OS: $failed check(s) failed; logs in $OutDir"; exit 1 }
