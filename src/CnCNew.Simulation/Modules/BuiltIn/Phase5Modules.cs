@@ -1243,6 +1243,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     // Above 30 Hz only: the tick before which the object takes no decision of a new frame (StopInternalMoveAtFrameEnd). Never set at 30 Hz.
     private long _moveHoldUntil;
 
+    /// <summary>The first tick after this one that begins a frame of the object.</summary>
+    private long NextFrameBegin(IWorldServices world)
+    {
+        for (var tick = world.Tick + TickOrder.Next; ; tick++)
+            if (world.Time.BeginsFrameOf(Entity, tick)) return tick;
+    }
+
     private void InvalidatePath()
     {
         // A new order during the last frame of a move: the object still covers that frame's step, but it has not arrived.
@@ -1297,6 +1304,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         // A shocked object in flight is moved by its physics (F-63): the movement keeps its order and goes on once the object rests on the ground again.
         if (Entity.InPhysicsFlight || HoldsMovement)
         {
+            // A flight holds the movement for whole frames of the object (F-74): the 30 Hz movement that has its turn before the flight's update decides again only in the frame
+            // after the one the flight ended in; above 30 Hz the flight ends in a frame's first tick, and the movement must not decide in that frame's later ticks.
+            if (Entity.InPhysicsFlight && world.Time.TicksPerOriginalFrame > TickOrder.Next) _moveHoldUntil = Math.Max(_moveHoldUntil, NextFrameBegin(world));
             Entity.Speed = Fixed.Zero;
             ClearFrameSpeed();
         }

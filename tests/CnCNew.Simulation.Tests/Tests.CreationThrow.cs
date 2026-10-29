@@ -2,6 +2,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -41,6 +42,35 @@ static partial class Tests
           End
           Behavior = SlowDeathBehavior Death01
             DestructionDelay = 5000
+          End
+        End
+        Locomotor CtLoco
+          Surfaces = GROUND
+          TurnRate = 360.0
+          Speed = 30.0
+          Acceleration = 30.0
+          Braking = 30.0
+          MinSpeed = 0.0
+          CloseEnoughDist = 1.0
+        End
+        Object CtTrooper
+          KindOf = SELECTABLE INFANTRY
+          Locomotor = SET_NORMAL CtLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 1.0
+          End
+        End
+        ObjectCreationList OCL_CtTrooperOut
+          CreateObject
+            ObjectNames = CtTrooper
+            Disposition = SEND_IT_OUT
+            DispositionIntensity = 2.0
           End
         End
         ObjectCreationList OCL_CtWreckOut
@@ -140,6 +170,46 @@ static partial class Tests
             while ((world.Tick - wreck.SpawnTick) % frame != 0) world.Step();
             Check.That(wreck.Body!.Health <= Fixed.Zero, $"{rate}: the wreck died.");
             Check.That((wreck.X, wreck.Y) == (end.X, end.Y), $"{rate}: it stands where the frame it died in ends ({wreck.X}, {wreck.Y} against {end.X}, {end.Y}).");
+        }
+    }
+
+    /// <summary>
+    /// F-74: a soldier pushed out by a creation list, with an order to walk, walks off when it rests - in the same frame and along the same places at 30, 60 and 120 Hz. Before, above
+    /// 30 Hz the flight ended in a frame's first tick and the soldier's movement, which had held still for the flight, decided its first step in the frame's later ticks.
+    /// </summary>
+    public static void PushedSoldierWalksOffInTheFrameAfterItRests()
+    {
+        string? reference = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(CreationThrowIni));
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "pushed");
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+            var feeder = new Feeder(world);
+            var source = GdSpawn(world, feeder, "CtSource", 1, 300, 300);
+            world.CreateFromList(source, "OCL_CtTrooperOut", EntityId.Invalid, false);
+            world.Step();
+            var trooper = world.Entities.Single(value => value.Template.Name == "CtTrooper");
+            Check.That(trooper.InPhysicsFlight, $"{rate}: the soldier slides.");
+            Check.That(feeder.SetMoveTarget(1, trooper.Id.Value, 500, 300).Accepted, $"{rate}: the soldier is told to walk.");
+            // The soldier's place at the end of each of its frames, by the number of the frame since it appeared.
+            var frames = new SortedDictionary<long, string>();
+            for (var step = 0; step < world.Frames(300); step++)
+            {
+                world.Step();
+                if ((world.Tick - trooper.SpawnTick) % world.Time.TicksPerOriginalFrame == 0)
+                    frames[(world.Tick - trooper.SpawnTick) / world.Time.TicksPerOriginalFrame] = $"{trooper.X.Raw},{trooper.Y.Raw},{(trooper.InPhysicsFlight ? 1 : 0)}";
+            }
+            Check.That(trooper.X > Fixed.FromInt(450), $"{rate}: the soldier walked off ({trooper.X}).");
+            var line = string.Join(";", frames.Where(pair => pair.Key >= 2 && pair.Key <= 280).Select(pair => $"{pair.Key}:{pair.Value}"));
+            if (reference is null) reference = line;
+            else
+            {
+                var a = line.Split(';');
+                var b = reference.Split(';');
+                var first = Enumerable.Range(0, Math.Min(a.Length, b.Length)).FirstOrDefault(index => a[index] != b[index], -1);
+                Check.That(first < 0 && a.Length == b.Length, $"{rate}: the soldier is where 30 Hz has it at the end of every frame (first difference: {(first < 0 ? "-" : a[first] + " against " + b[first])}).");
+            }
         }
     }
 }

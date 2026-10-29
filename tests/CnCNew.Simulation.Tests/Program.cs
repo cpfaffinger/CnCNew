@@ -578,6 +578,7 @@ run.Test("Container exit: ExitStart and ExitEnd bones, cycling through the exit 
 run.Test("Container exit: without exit paths the rider stays on the container", Tests.ContainerExitWithoutExitPathsStaysOnTheContainer);
 run.Test("Phase 45 (F-71): a rider leaves a turning transport where its frame ends", Tests.RiderLeavesATurningTransportWhereTheFrameEnds);
 run.Test("Phase 45 (F-73): a heal aura judges its radius where the frames end", Tests.HealAuraJudgesTheRadiusWhereTheFramesEnd);
+run.Test("Phase 45 (F-74): a pushed soldier walks off in the frame after it rests", Tests.PushedSoldierWalksOffInTheFrameAfterItRests);
 run.Test("Container exit: a destroyed transport scatters its riders", Tests.ContainerExitDeadTransportScattersItsRiders);
 run.Test("Container exit: the same frames and places at 30, 60 and 120 Hz, snapshot in mid-exit", Tests.ContainerExitIsTheSameAtEveryRate);
 run.Test("Player leaves: riders are put out, everything of the player dies, a tech building becomes neutral; pending in a snapshot, round trip in the replay format", Tests.PlayerLeaveKillsEverythingOfThePlayer);
