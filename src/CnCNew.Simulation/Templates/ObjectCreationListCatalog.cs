@@ -46,6 +46,9 @@ public sealed record CreationThrow(Fixed Mass, Fixed DispositionIntensity, Fixed
     Fixed MinForcePitch, Fixed MaxForcePitch, bool OrientInForceDirection, int AnimationSets)
 {
     public static CreationThrow None { get; } = new(Fixed.Zero, Fixed.Zero, -Fixed.One, -Fixed.One, -Fixed.One, -Fixed.One, Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero, false, 0);
+
+    /// <summary>The <c>ModelNames</c> of a debris nugget (every second word of each line, as <c>parseDebrisObjectNames</c> reads them): one is drawn for each piece (F-36).</summary>
+    public ImmutableArray<string> Models { get; init; } = [];
 }
 
 /// <summary>
@@ -200,8 +203,13 @@ public sealed class ObjectCreationListCatalog
         Fixed Radians(string name) => Field(name)?.Value.Value is Angle angle ? SimulationTiming.DegreesToRadians(angle.Degrees) : Fixed.Zero;
         Fixed Rate(string name) => Field(name)?.Value.Value is Angle angle ? SimulationTiming.DegreesToRadians(angle.Degrees / CnCNew.Data.OriginalFrame.PerSecond) : -Fixed.One;
         var sets = section.Fields.Count(field => field.Name.Equals("AnimationSet", StringComparison.OrdinalIgnoreCase));
+        var models = section.Fields.Where(field => field.Name.Equals("ModelNames", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(field => field.Value.Value is ImmutableArray<string> names ? names : []).ToImmutableArray();
         return new CreationThrow(Real("Mass"), Real("DispositionIntensity"), Rate("SpinRate"), Rate("YawRate"), Rate("RollRate"), Rate("PitchRate"),
-            Real("MinForceMagnitude"), Real("MaxForceMagnitude"), Radians("MinForcePitch"), Radians("MaxForcePitch"), Field("OrientInForceDirection")?.Value.Value is true, sets);
+            Real("MinForceMagnitude"), Real("MaxForceMagnitude"), Radians("MinForcePitch"), Radians("MaxForcePitch"), Field("OrientInForceDirection")?.Value.Value is true, sets)
+        {
+            Models = models,
+        };
     }
 
     private static PayloadDelivery BuildDelivery(DefinitionSection section, SimulationTime timing)

@@ -52,6 +52,7 @@ public sealed partial class SimulationWorld
                 }
                 created = EntityId.Invalid;
             }
+            else if (nugget.Kind == CreationNuggetKind.CreateDebris) created = ExecuteDebris(source, nugget, origin);
             else created = ExecuteNugget(source, nugget, origin);
             if (!first.IsValid) first = created;
         }
@@ -278,6 +279,32 @@ public sealed partial class SimulationWorld
         return first;
     }
 
+    /// <summary>
+    /// <c>reallyCreate</c> of a <c>CreateDebris</c> nugget (F-36): <c>Count</c> pieces of <c>GenericDebris</c>, each with one of the <c>ModelNames</c> drawn, owned by the source's player, given its
+    /// <c>Mass</c> and thrown by the nugget's disposition - pieces that fly, bounce, die when they rest on the ground and are removed by their slow death. The model is presentation.
+    /// Not modelled: the client's level of detail that skips debris (<c>isDebrisSkipped</c>; the port creates them always).
+    /// </summary>
+    private EntityId ExecuteDebris(Entity source, CreationNugget nugget, (Fixed X, Fixed Y, Fixed Z) origin)
+    {
+        var models = nugget.Throw?.Models ?? [];
+        if (models.IsEmpty) return EntityId.Invalid;
+        if (nugget.SkipIfSignificantlyAirborne && IsSignificantlyAboveTerrain(source)) return EntityId.Invalid;
+        if (nugget.RequiresLivePlayer && !source.Owner.IsSystem && IsPlayerDefeated(source.Owner)) return EntityId.Invalid;
+        if (!_templates.TryGet("GenericDebris", out var template) || !template.IsInstantiable)
+        {
+            Emit(SimEventKind.CreationSkipped, source.Id, EntityId.Invalid, "GenericDebris", CreationSkipReasons.UnknownTemplate);
+            return EntityId.Invalid;
+        }
+        var first = EntityId.Invalid;
+        for (var index = 0; index < nugget.Count; index++)
+        {
+            _ = LogicRandom.Range(0, models.Length - 1);
+            var id = PlaceAndQueue(source, nugget, template, source.Owner, origin.X, origin.Y, origin.Z, EntityId.Invalid, debris: true);
+            if (!first.IsValid) first = id;
+        }
+        return first;
+    }
+
     private int QueuedTemplate(EntityId id)
     {
         foreach (var pending in _spawnQueue)
@@ -295,9 +322,9 @@ public sealed partial class SimulationWorld
         }
     }
 
-    private EntityId PlaceAndQueue(Entity source, CreationNugget nugget, ObjectTemplate template, PlayerId owner, Fixed x, Fixed y, Fixed z, EntityId container)
+    private EntityId PlaceAndQueue(Entity source, CreationNugget nugget, ObjectTemplate template, PlayerId owner, Fixed x, Fixed y, Fixed z, EntityId container, bool debris = false)
     {
-        var (setup, placement) = Configure(source, nugget, template, x, y, z);
+        var (setup, placement) = Configure(source, nugget, template, x, y, z, debris);
         var id = RequestSpawn(template.Index, owner, placement.X, placement.Y, placement.Z, placement.Angle);
         // ObjectCreationList.cpp reallyCreate: obj->setProducer(sourceObj). Only recorded for objects with a module that reads it.
         var producer = source.Id;
@@ -307,8 +334,11 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>The part of <c>doStuffToObj</c> that can be modeled: health, lifetime, veterancy, containment and placement.</summary>
-    private (SpawnSetup Setup, (Fixed X, Fixed Y, Fixed Z, Fixed Angle) Placement) Configure(Entity source, CreationNugget nugget, ObjectTemplate template, Fixed baseX, Fixed baseY, Fixed baseZ)
+    private (SpawnSetup Setup, (Fixed X, Fixed Y, Fixed Z, Fixed Angle) Placement) Configure(Entity source, CreationNugget nugget, ObjectTemplate template, Fixed baseX, Fixed baseY, Fixed baseZ,
+        bool debris = false)
     {
+        // A piece of debris draws its animation set first (DebrisDrawInterface::setAnimNames), before its health.
+        if (debris && nugget.Throw is { AnimationSets: > 0 } sets) _ = LogicRandom.Range(0, sets.AnimationSets - 1);
         var offset = Rotate(nugget.OffsetX, nugget.OffsetY, source.Angle);
         var (x, y, z) = (baseX + offset.X, baseY + offset.Y, baseZ + nugget.OffsetZ);
         var angle = Fixed.Zero;
@@ -398,7 +428,9 @@ public sealed partial class SimulationWorld
             nugget.InheritsVeterancy && template.IsTrainable, nugget.InheritsVeterancy ? source.VeterancyLevel : 0,
             lifetimeMax > 0 ? lifetimeMin : 0, lifetimeMax > 0 ? lifetimeMax : 0,
             EntityId.Invalid, nugget.ContainInsideSourceObject ? source.Id : EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
-            Enslaver: template.Modules.Any(spec => spec.Binding.Name is "SlavedUpdate" or "MobMemberSlavedUpdate") ? source.Id : EntityId.Invalid, Throw: thrown);
+            Enslaver: template.Modules.Any(spec => spec.Binding.Name is "SlavedUpdate" or "MobMemberSlavedUpdate") ? source.Id : EntityId.Invalid,
+            // "if (!m_nameAreObjects) objUp->setMass(m_mass)": a piece of debris takes the nugget's mass for the forces of its throw.
+            Throw: debris && thrown is { } piece ? piece with { Mass = cast.Mass } : thrown);
         return (setup, (x, y, z, angle));
     }
 

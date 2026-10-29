@@ -172,7 +172,7 @@ internal static partial class Tests
         var middle = Frame("fx FX_Middle");
         Check.That(middle >= 21 && middle <= 39, $"The MIDPOINT effect list is requested between 35 % and 65 % of the delay (frame {middle}; {text}).");
         Check.That(Frame("blast") >= middle && Frame("blast") <= middle + 1, $"The MIDPOINT weapon is fired at the object's position and hurts the bystander ({text}).");
-        Check.That(log.Any(line => line == $"{middle} skipped CreateDebris {CreationSkipReasons.NuggetNotSimulated}"), $"A creation the simulation cannot perform is counted with its reason ({text}).");
+        Check.That(log.Any(line => line == $"{middle} skipped GenericDebris {CreationSkipReasons.UnknownTemplate}"), $"A creation the simulation cannot perform is counted with its reason ({text}).");
         var final = log.Where(line => line.Contains("fx FX_End", System.StringComparison.Ordinal)).ToArray();
         Check.That(final.Length == 1 && final[0].StartsWith("60 ", System.StringComparison.Ordinal), $"One of the two FINAL effect lists is drawn and requested at the destruction frame ({text}).");
         Check.That(Frame("hull") is 60 or 61 && Frame("gone") is 60 or 61, $"The FINAL creation list leaves the hull when the object goes ({text}).");

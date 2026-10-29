@@ -252,7 +252,7 @@ static partial class Tests
         Check.That(skips.SequenceEqual([
             $"Pending:{CreationSkipReasons.TemplateNotInstantiable}", $"Pending:{CreationSkipReasons.ContainerNotInstantiable}",
             $"InvulnerableTime:{CreationSkipReasons.SettingNotSimulated}", $"DiesOnBadLand:{CreationSkipReasons.SettingNotSimulated}",
-            $"CreateDebris:{CreationSkipReasons.NuggetNotSimulated}", $"CreateObject:{CreationSkipReasons.NoObjectNamed}"]),
+            $"GenericDebris:{CreationSkipReasons.UnknownTemplate}", $"CreateObject:{CreationSkipReasons.NoObjectNamed}"]),
             "Every skipped nugget, template and setting raises exactly one event: " + string.Join(" | ", skips));
         Check.That(Created("Bit").Count() == 1, "Only the member that can be simulated is created.");
         Clear();
