@@ -38,13 +38,14 @@ public sealed partial class SimulationWorld
 
     private static readonly int CarBombSetBit = NameTablesPhase5Index("CARBOMB");
     private static readonly int CrateUpgradeOneSetBit = NameTablesPhase5Index("CRATEUPGRADE_ONE");
+    private static readonly int MineClearingSetBit = NameTablesPhase5Index("MINE_CLEARING_DETAIL");
 
     /// <summary>
     /// <c>Object::getWeaponSetFlags</c> as far as this simulation raises flags: <c>VETERAN</c>/<c>ELITE</c>/<c>HERO</c> follow the veterancy level (exclusive,
     /// <c>Object::onVeterancyLevelChanged</c>), <c>PLAYER_UPGRADE</c> follows <c>WeaponSetUpgrade</c>, <c>CARBOMB</c> follows <c>IS_CARBOMB</c>
     /// (<c>ConvertToCarBombCrateCollide</c> sets the weapon-set flag together with the status and nothing ever clears either) and <c>CRATEUPGRADE_ONE</c>/<c>_TWO</c> follow
-    /// <see cref="Entity.CrateWeaponLevel"/> (<c>SalvageCrateCollide</c>; one flag at a time, as the reference swaps them). The remaining conditions a <c>WeaponSet</c> can name
-    /// (<c>VEHICLE_HIJACK</c>, <c>MINE_CLEARING_DETAIL</c>, <c>WEAPON_RIDER*</c>) are never raised.
+    /// <see cref="Entity.CrateWeaponLevel"/> (<c>SalvageCrateCollide</c>; one flag at a time, as the reference swaps them), <c>MINE_CLEARING_DETAIL</c> follows
+    /// <see cref="Entity.MineClearingDetail"/> (F-69). The remaining conditions a <c>WeaponSet</c> can name (<c>VEHICLE_HIJACK</c>, <c>WEAPON_RIDER*</c>) are never raised.
     /// </summary>
     public static uint WeaponSetFlagsOf(Entity entity)
     {
@@ -53,6 +54,7 @@ public sealed partial class SimulationWorld
         if (entity.HasPlayerUpgradeWeapon) flags |= 1u << PlayerUpgradeSetBit;
         if (entity.CrateWeaponLevel > 0) flags |= 1u << (CrateUpgradeOneSetBit + entity.CrateWeaponLevel - 1);
         if (entity.HasStatus(CarBombStatusBit)) flags |= 1u << CarBombSetBit;
+        if (entity.MineClearingDetail) flags |= 1u << MineClearingSetBit;
         return flags;
     }
 

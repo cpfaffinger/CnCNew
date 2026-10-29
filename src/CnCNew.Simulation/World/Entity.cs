@@ -221,6 +221,12 @@ public sealed class Entity
     /// <summary><c>Object::isCaptured</c> (<c>setCaptured</c>, never cleared): the object was taken over by entering it (an unmanned vehicle); counted by the skirmish condition on captured units. Written only when set.</summary>
     public bool Captured { get; internal set; }
 
+    /// <summary>
+    /// The weapon set flag <c>WEAPONSET_MINE_CLEARING_DETAIL</c> (F-69): a dozer or a worker carries it whenever it is not at work on a task (<c>DozerAIUpdate::update</c>,
+    /// <c>DozerActionDoActionState::update</c>, <c>WorkerAIUpdate::update</c>), and its mine-clearing weapon set is then its active one. Written only when set.
+    /// </summary>
+    public bool MineClearingDetail { get; internal set; }
+
     /// <summary>Tick of the object's last <c>FireWeaponCommand</c>, for phase-5's coarse "is firing" approximation (-1: never).</summary>
     public long LastFireTick { get; internal set; } = -1;
 
@@ -393,6 +399,7 @@ public sealed class Entity
         Guard?.Describe(writer);
         AttackPlace?.Describe(writer);
         if (Captured) writer.Bool("captured", true);
+        if (MineClearingDetail) writer.Bool("mineClearingDetail", true);
         if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
         if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);
         if (Underpowered) writer.Bool("underpowered", true);

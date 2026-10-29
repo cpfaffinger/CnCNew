@@ -178,6 +178,8 @@ public sealed class DozerAIUpdate(DozerAIData data) : AIUpdateInterface(data.Ai)
     public override void OnSpawn(IWorldServices world)
     {
         base.OnSpawn(world);
+        // The idle state's onEnter: "maybe go clear some mines, if I feel like it".
+        SetMineClearingDetail(world, true);
         _boredom.Enter(world, Entity);
         NextWake = _boredom.FirstLook(world, data.BoredTicks);
     }
@@ -187,6 +189,7 @@ public sealed class DozerAIUpdate(DozerAIData data) : AIUpdateInterface(data.Ai)
         var hadTask = HasBuilderTask;
         var sleep = base.Update(world);
         if (Entity.EffectivelyDead) return sleep;
+        SetMineClearingDetail(world, !WorkingAtTask);
         return _boredom.Look(world, this, hadTask, sleep, data.BoredTicks, data.BoredRange);
     }
 
@@ -502,6 +505,7 @@ internal sealed class WorkerAIUpdate(WorkerAIData data) : SupplyCarrierAI(data.C
     public override void OnSpawn(IWorldServices world)
     {
         base.OnSpawn(world);
+        SetMineClearingDetail(world, true);
         _boredom.Enter(world, Entity);
         NextWake = _boredom.FirstLook(world, data.BoredTicks);
     }
@@ -528,7 +532,10 @@ internal sealed class WorkerAIUpdate(WorkerAIData data) : SupplyCarrierAI(data.C
             else if (_asTruck && !wantsTruck && SupplyBrainState == SupplyState.Busy) BecomeDozer(world);
         }
         var sleep = base.Update(world);
-        if (Entity.EffectivelyDead || _asTruck) return sleep;
+        if (Entity.EffectivelyDead) return sleep;
+        // As a supply truck the worker may be diverted to clear mines while it gathers; as a dozer it clears none while at work on a task.
+        SetMineClearingDetail(world, _asTruck || !WorkingAtTask);
+        if (_asTruck) return sleep;
         return _boredom.Look(world, this, hadTask, sleep, data.BoredTicks, data.BoredRange);
     }
 

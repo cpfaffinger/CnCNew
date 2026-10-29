@@ -192,6 +192,7 @@ public sealed partial class SimulationWorld
             LastDamageHealing = reader.Has("lastDamageHealing") && reader.Bool("lastDamageHealing"),
             LastFireTick = reader.Int("lastFireTick"),
             Captured = reader.Has("captured"),
+            MineClearingDetail = reader.Has("mineClearingDetail"),
             HasPlayerUpgradeArmor = reader.Bool("hasPlayerUpgradeArmor"),
             HasPlayerUpgradeWeapon = reader.Bool("hasPlayerUpgradeWeapon"),
             ConstructionWork = checked((int)reader.Int("constructionWork")),

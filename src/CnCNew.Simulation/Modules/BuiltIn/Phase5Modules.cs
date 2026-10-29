@@ -1111,6 +1111,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _task = task;
         _taskTarget = target.Id;
         _approaching = false;
+        _working = false;
         _lastCommandFromPlayer = fromPlayer;
         world.WakeAt(Entity, this, world.Tick);
         world.MarkDirty(Entity);
@@ -1128,7 +1129,25 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _task = BuilderTask.None;
         _taskTarget = EntityId.Invalid;
         _approaching = false;
+        _working = false;
     }
+
+    // The builder is at work on its task (DozerActionDoActionState): within reach of the site, building or repairing. The approach is not work.
+    private bool _working;
+
+    /// <summary>
+    /// The builder's mine-clearing flag (F-69) after its update: carried while it is not at work on a task - the original sets it every frame without a task and in the idle state,
+    /// and clears it every frame of the work.
+    /// </summary>
+    internal void SetMineClearingDetail(IWorldServices world, bool carried)
+    {
+        if (Entity.MineClearingDetail == carried) return;
+        Entity.MineClearingDetail = carried;
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary>The builder is at work on its task, within reach of the site (<c>DozerActionDoActionState</c>).</summary>
+    internal bool WorkingAtTask => _task != BuilderTask.None && _working;
 
     private void EndTask(IWorldServices world)
     {
@@ -1160,6 +1179,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         var dy = target.Y - Entity.Y;
         if (!SquaredReach.Of(reach).Contains(dx * dx + dy * dy))
         {
+            _working = false;
             if (Entity.HasMoveTarget) { _approaching = true; return; }
             // The approach ended (blocked or as close as the grid allows) without getting within reach: give up.
             if (_approaching || !StartInternalMove(target.X, target.Y)) { EndTask(world); return; }
@@ -1168,6 +1188,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         }
         StopInternalMove();
         _approaching = false;
+        _working = true;
         if (_task == BuilderTask.Construct)
         {
             if (world.AdvanceConstruction(target)) EndTask(world);
@@ -2273,6 +2294,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         writer.Int("task", (int)_task);
         writer.UInt("taskTarget", _taskTarget.Value);
         writer.Bool("approaching", _approaching);
+        if (_working) writer.Bool("working", true);
         if (_evacuatePending) writer.Bool("evacuate", true);
         if (_goal.IsValid) writer.UInt("goal", _goal.Value);
         if (_exitAfterEvacuate || _returning)
@@ -2339,6 +2361,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _task = (BuilderTask)task;
         _taskTarget = new EntityId(checked((uint)reader.UInt("taskTarget")));
         _approaching = reader.Bool("approaching");
+        _working = reader.Has("working") && reader.Bool("working");
         _evacuatePending = reader.Has("evacuate") && reader.Bool("evacuate");
         _goal = reader.Has("goal") ? new EntityId(checked((uint)reader.UInt("goal"))) : EntityId.Invalid;
         _exitAfterEvacuate = reader.Has("exitAfterEvacuate") && reader.Bool("exitAfterEvacuate");

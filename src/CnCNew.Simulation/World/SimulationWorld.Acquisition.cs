@@ -562,7 +562,8 @@ public sealed partial class SimulationWorld
         }
         var distance = dx * dx + dy * dy;
         if (!search.Limit.Contains(distance)) return;
-        if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT") || candidate.Template.IsKindOf("MINE")) return;
+        // A mine is a target like any other (F-69): only a weapon with AntiMine can attack it (getVictimAntiMask) - the builders' mine-clearing weapons.
+        if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT")) return;
         if (!IsAttackable(entity, candidate) || !AcquiresStructure(entity, candidate, search.Buildings, search.Computer) || IsHiddenStealthGarrison(entity, candidate)) return;
         if (AcquisitionViewBlocked(entity, candidate)) return;
         if (!CanAttack(entity, candidate, search.TurretOnly, out var inRange) || (!inRange && !search.Chase)) return;
