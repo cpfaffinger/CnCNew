@@ -731,9 +731,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
 
     public bool CanRepair => CanBuild && data.RepairRatePerSecond > Fixed.Zero;
 
-    /// <summary><c>ActionManager::canRepairObject</c>, reduced to the rules that exist here: a complete, unsold structure that is hurt.</summary>
+    /// <summary>
+    /// <c>ActionManager::canRepairObject</c>, reduced to the rules that exist here: a complete, unsold structure that is hurt, and not a bridge, a bridge tower or a hole that
+    /// rebuilds a structure by itself.
+    /// </summary>
     public static bool IsRepairable(Entity target)
-        => target.Template.IsKindOf("STRUCTURE") && !target.EffectivelyDead && !target.HasStatus(ObjectStatusBits.UnderConstruction)
+        => target.Template.IsKindOf("STRUCTURE") && !target.Template.IsKindOf("BRIDGE") && !target.Template.IsKindOf("BRIDGE_TOWER") && !target.Template.IsKindOf("REBUILD_HOLE")
+           && !target.EffectivelyDead && !target.HasStatus(ObjectStatusBits.UnderConstruction)
            && !target.HasStatus(SoldBit) && target.Body is { } body && body.Health < body.MaxHealth;
 
     /// <summary>The main machine is in <c>AI_DOCK</c>.</summary>
@@ -1088,10 +1092,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// <summary><c>AIUpdateInterface::getAiFreeToExit</c> as a question without side effects: free for every AI but a Chinook in the air and a payload plane with shut doors or dead.</summary>
     public virtual bool AiFreeToExit(IWorldServices world, Entity rider) => true;
 
-    /// <summary><c>DozerAIInterface::newTask(DOZER_TASK_REPAIR)</c>: walk to the structure and heal it until it is at full health.</summary>
-    public void OrderRepair(IWorldServices world, Entity target) => StartTask(world, BuilderTask.Repair, target);
+    /// <summary><c>DozerAIInterface::newTask(DOZER_TASK_REPAIR)</c>: walk to the structure and heal it until it is at full health (<c>aiRepair</c>; a bored dozer gives itself the order).</summary>
+    public void OrderRepair(IWorldServices world, Entity target, bool fromPlayer = true) => StartTask(world, BuilderTask.Repair, target, fromPlayer);
 
-    private void StartTask(IWorldServices world, BuilderTask task, Entity target)
+    private void StartTask(IWorldServices world, BuilderTask task, Entity target, bool fromPlayer = true)
     {
         world.EndAttack(Entity);
         world.EndGuard(Entity);
@@ -1104,7 +1108,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _task = task;
         _taskTarget = target.Id;
         _approaching = false;
-        _lastCommandFromPlayer = true;
+        _lastCommandFromPlayer = fromPlayer;
         world.WakeAt(Entity, this, world.Tick);
         world.MarkDirty(Entity);
     }
