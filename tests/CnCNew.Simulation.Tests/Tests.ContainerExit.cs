@@ -5,6 +5,7 @@ using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
@@ -243,6 +244,57 @@ internal static partial class Tests
                 var first = Enumerable.Range(0, reference.Frames.Count).FirstOrDefault(frame => run.Frames[frame] != reference.Frames[frame], -1);
                 Check.That(first < 0, $"{rate}: the riders are where 30 Hz has them at the end of every logic frame (first difference in frame {first + 1}: {(first < 0 ? "" : run.Frames[first] + " against " + reference.Frames[first])}).");
             }
+        }
+    }
+
+    /// <summary>
+    /// F-71: riders leave a transport that keeps turning (a new place to drive to in another direction every frame) one by one through its doors. The door's bones turn with the
+    /// transport where its frame ends - above 30 Hz the rider that the transport let out in its own update met a heading that had turned only one share of the frame and walked to another
+    /// place (a ranger left an ambulance in a match). Every rider leaves in the frame and for the place 30 Hz has.
+    /// </summary>
+    public static void RiderLeavesATurningTransportWhereTheFrameEnds()
+    {
+        List<string>? reference = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            // On ground with a navigation grid: a mover without one drives straight and does not turn.
+            var geometry = DoorTruckBones();
+            var fixture = new SyntheticFixture(rate, files: ContainerExitFiles());
+            var templates = TemplateCatalog.Build(fixture.Graph, fixture.Bindings, rate, geometry);
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "turning");
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 11, CombatPlayers, SyntheticFixture.FixtureId, geometry.Combine(fixture.Fingerprint), terrain.Fingerprint), templates, terrain);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "DoorTruck", x: 300, y: 300);
+            for (var index = 0; index < 4; index++) feeder.Spawn(1, "Grunt", x: 400 + 30 * index, y: 400);
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            var truck = world.Entities.Single(value => value.Template.Name == "DoorTruck");
+            var grunts = Grunts(world);
+            foreach (var grunt in grunts) Check.That(world.TryEnterContainer(grunt, truck), $"{rate}: grunt {grunt.Id.Value} boards.");
+            for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+            foreach (var grunt in grunts) Check.That(feeder.ExitContainer(1, grunt.Id.Value).Accepted, $"{rate}: grunt {grunt.Id.Value} is told to get out.");
+            var left = new List<string>();
+            var angles = new HashSet<long>();
+            for (var frame = 0; frame < 40; frame++)
+            {
+                // Eight compass points, five steps on each frame: the truck has to turn by 135 degrees every frame.
+                (int X, int Y)[] points = [(300, 0), (212, 212), (0, 300), (-212, 212), (-300, 0), (-212, -212), (0, -300), (212, -212)];
+                var (px, py) = points[frame * 3 % 8];
+                Check.That(feeder.SetMoveTarget(1, truck.Id.Value, 300 + px, 300 + py).Accepted,
+                    $"{rate}: the truck is sent another way in frame {frame}.");
+                for (var tick = 0; tick < rate.TicksPerOriginalFrame; tick++) world.Step();
+                angles.Add(truck.Angle.Raw);
+                foreach (var grunt in grunts)
+                    if (!grunt.ContainedBy.IsValid && !left.Any(line => line.StartsWith($"{grunt.Id.Value}:", StringComparison.Ordinal)))
+                        left.Add($"{grunt.Id.Value}: frame {frame} target {grunt.MoveTargetX.Raw},{grunt.MoveTargetY.Raw}");
+            }
+            Check.That(left.Count == 4 && angles.Count > 10, $"{rate}: all four riders are out ({left.Count}) of a truck that turned ({angles.Count} headings).");
+            if (reference is null)
+            {
+                reference = left;
+                continue;
+            }
+            for (var index = 0; index < left.Count; index++)
+                Check.That(left[index] == reference[index], $"{rate}: rider {index} leaves as at 30 Hz ({left[index]} against {reference[index]}).");
         }
     }
 }

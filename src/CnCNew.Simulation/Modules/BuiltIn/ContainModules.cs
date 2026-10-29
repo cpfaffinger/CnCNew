@@ -91,14 +91,16 @@ public abstract class ContainModuleBase(OpenContainData data) : SimModule, IUpda
         }
         // "To cycle from 1 to n": only a container with several paths counts.
         if (numberOfExitPaths > 1) whichExitPath = whichExitPath % numberOfExitPaths + 1;
-        var cos = FixedTrig.Cos(Entity.Angle);
-        var sin = FixedTrig.Sin(Entity.Angle);
+        // The bones turn with the container where its frame ends, as its centre does (F-71): a container that turns lets a rider out in its own update after it decided the frame.
+        var heading = Entity.FrameEndAngle(world.Tick);
+        var cos = FixedTrig.Cos(heading);
+        var sin = FixedTrig.Sin(heading);
         (Fixed X, Fixed Y) World(BonePose? bone) => bone is { } pose ? (centreX + pose.X * cos - pose.Y * sin, centreY + pose.X * sin + pose.Y * cos) : (centreX, centreY);
         var (startX, startY) = World(path?.Start);
         var (endX, endY) = World(path?.End);
         rider.X = startX;
         rider.Y = startY;
-        rider.Angle = Entity.Angle;
+        rider.Angle = heading;
         world.MarkDirty(rider);
         if (CrateModules.AiOf(rider) is not { } ai) return;
         world.FindPossibleDestination(rider, ref endX, ref endY);

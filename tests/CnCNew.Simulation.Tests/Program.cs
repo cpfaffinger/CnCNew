@@ -576,6 +576,7 @@ run.Test("Transports: walk in, drive and unload at a position", Tests.TransportL
 run.Test("Container exit: riders leave a living transport one by one, ExitDelay apart, to places of their own", Tests.ContainerExitRidersLeaveOneByOne);
 run.Test("Container exit: ExitStart and ExitEnd bones, cycling through the exit paths", Tests.ContainerExitUsesTheExitBones);
 run.Test("Container exit: without exit paths the rider stays on the container", Tests.ContainerExitWithoutExitPathsStaysOnTheContainer);
+run.Test("Phase 45 (F-71): a rider leaves a turning transport where its frame ends", Tests.RiderLeavesATurningTransportWhereTheFrameEnds);
 run.Test("Container exit: a destroyed transport scatters its riders", Tests.ContainerExitDeadTransportScattersItsRiders);
 run.Test("Container exit: the same frames and places at 30, 60 and 120 Hz, snapshot in mid-exit", Tests.ContainerExitIsTheSameAtEveryRate);
 run.Test("Player leaves: riders are put out, everything of the player dies, a tech building becomes neutral; pending in a snapshot, round trip in the replay format", Tests.PlayerLeaveKillsEverythingOfThePlayer);
