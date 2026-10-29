@@ -55,6 +55,14 @@ internal sealed class AcquisitionState
     /// <summary>A forced attack that may also be on a neutral object: a bored builder's on a mine (<c>findMine</c>: <c>ALLOW_ENEMIES | ALLOW_NEUTRAL</c>, F-69).</summary>
     public bool Neutral;
 
+    /// <summary>
+    /// <c>m_originalVictimPos</c> and the controlling player of the first victim of an attack with a weapon that has a <c>ContinueAttackRange</c> (F-69): the next victim is looked for
+    /// around this place, among that player's objects. Set at the first shot, kept while the attack goes on from victim to victim; <see cref="ContinueOwner"/> 0 when unset.
+    /// </summary>
+    public Fixed ContinueX;
+    public Fixed ContinueY;
+    public int ContinueOwner;
+
     public bool IsDefault => !Victim.IsValid && !AttackMove && Mode == 0;
 
     public void ClearVictim()
@@ -97,6 +105,12 @@ internal sealed class AcquisitionState
         }
         if (Forced) writer.Bool("forced", true);
         if (Neutral) writer.Bool("neutral", true);
+        if (ContinueOwner != 0)
+        {
+            writer.Int("continueOwner", ContinueOwner);
+            writer.Fixed("continueX", ContinueX);
+            writer.Fixed("continueY", ContinueY);
+        }
         writer.EndObject();
     }
 
@@ -129,6 +143,12 @@ internal sealed class AcquisitionState
         }
         state.Forced = reader.Has("forced") && reader.Bool("forced");
         state.Neutral = reader.Has("neutral") && reader.Bool("neutral");
+        if (reader.Has("continueOwner"))
+        {
+            state.ContinueOwner = checked((int)reader.Int("continueOwner"));
+            state.ContinueX = reader.Fixed("continueX");
+            state.ContinueY = reader.Fixed("continueY");
+        }
         if (state.Neutral && !state.Forced) throw new InvalidDataException("Only a forced attack may be on a neutral object.");
         if (state.IsDefault) throw new InvalidDataException("An acquisition state without a victim, an attack-move or a pending look is never written.");
         if (state.Forced && (!state.Victim.IsValid || state.Ordered)) throw new InvalidDataException("A slave's forced attack needs a victim and no order.");
@@ -139,10 +159,12 @@ internal sealed class AcquisitionState
 }
 
 /// <summary>Every mutable field of an <see cref="AcquisitionState"/> (or none), compared before and after a step to learn whether the entity's serialized state changed.</summary>
-internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset, bool Forced, bool Neutral)
+internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset, bool Forced, bool Neutral,
+    int ContinueOwner, Fixed ContinueX, Fixed ContinueY)
 {
     public static AcquisitionStamp Of(AcquisitionState? state)
-        => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset, state.Forced, state.Neutral);
+        => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset, state.Forced, state.Neutral,
+            state.ContinueOwner, state.ContinueX, state.ContinueY);
 }
 
 /// <summary>

@@ -576,6 +576,7 @@ public sealed partial class SimulationWorld
             }
             PlaceAtFirePoint(entity, victim);
             AcquisitionAdvisor?.NoteFiring(entity, victim);
+            NoteContinueOrigin(entity, state, victim);
             AutoFire(entity, victim, false);
             return true;
         }

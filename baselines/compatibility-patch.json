@@ -5008,15 +5008,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "Weapon/ContinueAttackRange",
-      "count": 2,
-      "owners": [
-        "Weapon"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Weapon/ContinuousFireCoast",
       "count": 17,
       "owners": [

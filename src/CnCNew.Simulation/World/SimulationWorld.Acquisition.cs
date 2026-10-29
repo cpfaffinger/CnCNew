@@ -238,12 +238,14 @@ public sealed partial class SimulationWorld
             {
                 // A slave's forced attack (F-65): it walks at its victim as the guard's attack does, without a fog filter, until it cannot attack it any more.
                 if (victim is not null && (IsGuardVictim(entity, victim) || (state.Neutral && IsNeutralVictim(entity, victim))) && GuardEngage(entity, ai, state, victim, tick)) return;
+                if (ContinueAttack(entity, state, victim) is { } next && GuardEngage(entity, ai, state, next, tick)) return;
                 EndEngagement(entity, ai, state);
                 if (state.Mode != 0) (state.NextCheck, state.Offset) = (tick + _forceIdleTicks, true);
             }
             else
             {
                 if (attackable && Engage(entity, ai, state, victim!, ModeOf(entity, ai, state), tick)) return;
+                if (ContinueAttack(entity, state, victim) is { } next && Engage(entity, ai, state, next, ModeOf(entity, ai, state), tick)) return;
                 EndEngagement(entity, ai, state);
                 // AIAttackMoveToState::update (forceRetargetThisFrame): on an attack-move the next victim is looked for at once. An idle unit or turret enters its idle state again,
                 // whose look is due two frames later.
@@ -411,6 +413,7 @@ public sealed partial class SimulationWorld
             // attemptBestFirePointPosition: a rider of an enclosing garrison steps to the fire point it was found in range from (TryRangeOrigin).
             PlaceAtFirePoint(entity, victim);
             AcquisitionAdvisor?.NoteFiring(entity, victim);
+            NoteContinueOrigin(entity, state, victim);
             AutoFire(entity, victim, turretOnly);
             return true;
         }
@@ -446,6 +449,59 @@ public sealed partial class SimulationWorld
         StopTurrets(entity);
         if (state.Chasing) ai.StopInternalMoveAtFrameEnd(this);
         state.ClearVictim();
+        state.ContinueOwner = 0;
+        (state.ContinueX, state.ContinueY) = (Fixed.Zero, Fixed.Zero);
+    }
+
+    /// <summary>The largest <c>ContinueAttackRange</c> of the weapons of the unit's active set (F-69); zero for every weapon but the builders' mine-clearing ones.</summary>
+    private Fixed ContinueRangeOf(Entity entity)
+    {
+        var range = Fixed.Zero;
+        if (ActiveWeaponSet(entity) is not { } set) return range;
+        foreach (var index in set.Weapons)
+            if (index >= 0 && _templates.Weapons[index].ContinueAttackRange > range) range = _templates.Weapons[index].ContinueAttackRange;
+        return range;
+    }
+
+    /// <summary>The first shot of an attack with a continue range remembers where its first victim stood and whose it was (<c>m_originalVictimPos</c>, F-69).</summary>
+    private void NoteContinueOrigin(Entity entity, AcquisitionState state, Entity victim)
+    {
+        if (state.ContinueOwner != 0 || ContinueRangeOf(entity) <= Fixed.Zero) return;
+        var (x, y, _) = victim.FrameEnd(_tick);
+        (state.ContinueX, state.ContinueY, state.ContinueOwner) = (x, y, victim.Owner.Value);
+    }
+
+    /// <summary>
+    /// <c>AIAttackFireWeaponState::update</c>: after a weapon with a <c>ContinueAttackRange</c> destroyed its victim (or the victim is gone), the attack goes on at the closest object of
+    /// the first victim's player within that range of where the first victim stood (between the centres, on the ground; ties by id) that the unit may attack - "after disarming a
+    /// mine, look for additional mines". Null when there is none; the attack then ends.
+    /// </summary>
+    private Entity? ContinueAttack(Entity entity, AcquisitionState state, Entity? victim)
+    {
+        if (state.ContinueOwner == 0 || (victim is not null && !victim.EffectivelyDead && !victim.DestroyRequested)) return null;
+        var range = ContinueRangeOf(entity);
+        if (range <= Fixed.Zero) return null;
+        Entity? best = null;
+        var bestDistance = Fixed.Zero;
+        var reach = SquaredReach.Of(range);
+        foreach (var candidate in EntitiesOwnedBy(new PlayerId(state.ContinueOwner)).AsSpan())
+        {
+            if (candidate == victim || !(IsGuardVictim(entity, candidate) || IsNeutralVictim(entity, candidate)) || !CanPlayerSee(entity.Owner, candidate) || !CanAttack(entity, candidate, false, out _)) continue;
+            var dx = candidate.X - state.ContinueX;
+            var dy = candidate.Y - state.ContinueY;
+            var distance = dx * dx + dy * dy;
+            if (!reach.Contains(distance)) continue;
+            if (best is null || distance < bestDistance)
+            {
+                best = candidate;
+                bestDistance = distance;
+            }
+        }
+        if (best is null) return null;
+        state.Victim = best.Id;
+        state.Neutral = state.Neutral || RelationshipOf(entity.Owner, best.Owner) == Relationship.Neutral;
+        AimTurretsForAttack(entity, best, TurretAimOrder.Attack);
+        return best;
     }
 
     /// <summary>

@@ -38,6 +38,9 @@ public sealed record WeaponInfo(
     public bool ScaleWeaponSpeed { get; init; }
     public Fixed MinimumAttackRange { get; init; }
 
+    /// <summary><c>m_continueAttackRange</c> (F-69): if above zero, after the victim is destroyed the attack goes on at a similar object of the same player within this range of the first one.</summary>
+    public Fixed ContinueAttackRange { get; init; }
+
     /// <summary><c>m_projectileName</c>; empty when the weapon fires no projectile object (<c>None</c> or absent).</summary>
     public string ProjectileObject { get; init; } = string.Empty;
 
@@ -292,6 +295,7 @@ public sealed class WeaponCatalog
                 MinWeaponSpeed = Speed("MinWeaponSpeed"),
                 ScaleWeaponSpeed = Flag("ScaleWeaponSpeed"),
                 MinimumAttackRange = Length("MinimumAttackRange"),
+                ContinueAttackRange = Length("ContinueAttackRange"),
                 ProjectileObject = projectile,
                 ScatterRadius = Length("ScatterRadius"),
                 ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),
