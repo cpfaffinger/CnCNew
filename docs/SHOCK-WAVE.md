@@ -1,6 +1,6 @@
 # The weapon's shock wave - analysis and plan (fidelity finding F-63)
 
-Read on 28 October 2026 for Reforged's R-24 (`docs/REFORGED-FIXES.md`). Nothing of it is built; this is the starting point of the work. Sources: EA's released code
+Read on 28 October 2026 for Reforged's R-24 (`docs/REFORGED-FIXES.md`). **Built in Phase 42 (29 October 2026), all four steps - docs/SIMULATION-CORE.md §56.1.** Sources: EA's released code
 (`references/ea-generals-zero-hour`), read, never copied.
 
 ## 1. What the original does

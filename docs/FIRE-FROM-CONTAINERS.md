@@ -291,7 +291,8 @@ garrisons keep their hashes.
    occupied point of an enclosing garrison, oriented to the victim, with `FIRING_A` for 4 original frames after a shot (none for poison); fire-base riders drawn at
    their stations. Picture pins of scenes with garrisons change.
 
-9. **Not F-60 but needed next (register separately):** F-61 (building passes to its riders' player - without it an enemy never acquires a neutral garrisoned
+9. **Clearing a garrison - built in Phase 42 (§56.3):** `DAMAGE_KILL_GARRISONED`, the shell's `GarrisonHitKill`, `AllowAttackGarrisonedBldgs`; the Chinook's re-issue too.
+   **Not F-60 but needed next (register separately):** F-61 (building passes to its riders' player - without it an enemy never acquires a neutral garrisoned
    building, `IsAttackable`/`AreEnemies`, and a human's garrison has no vision of its own; with step 5 alone a garrison is an unassailable gun: doing F-61
    before step 5 avoids an unbalanced intermediate manifest); clearing garrisons (`KILL_GARRISONED`, `GarrisonHitKill*`, `AllowAttackGarrisonedBldgs`); the
    container-death damage of `OnDie` (MaxHealth, burned, kill at 100 %); the enclosure test for victims (`IsAttackable`, area damage) so fire-base riders and portable

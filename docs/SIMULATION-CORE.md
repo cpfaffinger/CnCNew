@@ -3910,3 +3910,54 @@ raises, as in the original. The key is typed (compatibility baselines 702 -> 701
 of an enclosing garrison the viewer sees, where the rider stands, facing the rider's victim, with FIRING_A from the frame after the rider's shot until more than
 `MUZZLE_FLASH_LIFETIME` (30/7, so 4) frames have passed - five frames -, not for a poison weapon (`FrameProjector.GarrisonGuns`); no object of the simulation. Test
 `GarrisonGunTests` at 30, 60 and 120 Hz. No human has seen it.
+
+## 56. Phase 42: the shock wave, a deploying guard, clearing a garrison (fidelity package D)
+
+Each finding read in the original's source (`docs/SHOCK-WAVE.md`, `docs/GUARD-STATE.md`, `docs/FIRE-FROM-CONTAINERS.md`), one cause per commit with a test that fails on the
+code before at 30, 60 and 120 Hz, and its own manifest commit.
+
+### 56.1 F-63: the weapon's shock wave (`Object::attemptDamage`, `PhysicsBehavior::applyShock`, `applyRandomRotation`, `update`, `testStunnedUnitForDestruction`)
+
+**Step 1, the inputs** (`517aabf`, `3f2955b`, manifest `cd620cf`): `ShockWaveAmount`, `ShockWaveRadius`, `ShockWaveTaperOff` of a weapon; of `PhysicsBehavior` `ShockResistance`, `ShockMax{Yaw,Pitch,Roll}`, the four
+frictions (per logic frame of the original, `parseFrictionPerSec`), `CenterOfMassOffset`, `MinFallHeightForDamage`, `FallHeightDamageFactor`, `PitchRollYawFactor` with the defaults of
+`PhysicsBehaviorModuleData`; a locomotor's `StickToGround`; `GameData`'s `GroundStiffness` (0.5 without the key). The input manifest moved; the reference manifest did not.
+**Step 2, the flight** (`155eae5`, `cae779e`): an area weapon with a shock wave pushes every victim with a physics module that is no aircraft in the air and no projectile along the vector from the
+source (straight up without one) by the amount times one minus its share of the radius times one minus the taper-off, and upward by the same amount (`normalize`, `scale`,
+then `z = length()`); `applyShock` takes the `ShockResistance` share off and divides by the mass; `applyRandomRotation` (not for a locomotor that sticks to the ground) allows
+bouncing and adds `ShockMax*` times three draws of the logic stream to the yaw, pitch and roll rates. The flight is the original's update once per logic frame of the
+original (fallen in equal shares over the frame's ticks above 30 Hz): gravity; on or near the ground the rates damped by 0.85 and the lateral and forward friction against
+the facing, in the air the aerodynamic friction; components under 0.001 set to zero; yaw turns the facing, pitch and roll are kept (the centre of mass bends the pitch); the
+bounce (`GroundStiffness` gives back the downward speed of a falling object that may bounce; the rates damped by 0.7; an object on its back turned over, righted after the
+bounce); the ground clamp, a sticking object kept on the ground; the falling damage of a steep landing (`DAMAGE_FALLING`, `DEATH_SPLATTED`, by the speed beyond
+`MinFallHeightForDamage`'s times the mass and `FallHeightDamageFactor`). **Named differences:** the port's movement pins a ground unit to the terrain, so it waits while the
+object flies (the original's locomotor pushes again once the stun has ended); a flight ends at rest on the ground, where the rates the original lets decay on are dropped.
+Test `ShockWaveFlight`: a light tank flies away from the blast, turns and takes the falling damage, a fully resistant object stays, a soldier slides without rising - the same
+end at 30, 60 and 120 Hz and after a save in mid-flight. No field of either manifest moved. The rate-equivalence suite found the radiation field of the nuke MiG's missile reading a thrown object in the middle of its frame of flight (585 against 592.5 damage in 60 s at 60 and 120 Hz): the flight now sets the step of its frame ahead and covers it in shares as a mover does, so `Entity.FrameEnd` tells where the frame ends (`cae779e`).
+**Step 3, the stun** (`a92c1ff`): the shock stuns the object and sets `STUNNED_FLAILING`; the stun ends at rest or when the object is not significantly above the terrain - tested
+where it stood before the step (the original applies the new matrix at the end of the update), so a unit thrown from the ground loses it in its first step - and clears
+`STUNNED` only, so such a unit keeps flailing (the original's defect, Reforged's R-24); a landing while stunned turns flailing into `STUNNED`; at a bounce a stunned object
+that lands on its back, off the map, or on a cliff or under water without a locomotor for it dies. The orientation for the bounce and the test is the one before the step's
+rotation. Test `ShockWaveStun`. No field of either manifest moved.
+**Step 4, the drawing** (`cd161cb`): `STUNNED_FLAILING` and `STUNNED` from the physics module's state, the pitch and roll added to the chassis pose while the object flies
+(`ShockConditionTests`). No human has seen it.
+
+### 56.2 F-58 step 7: a deploying unit on guard (`DeployStyleAIUpdate::update`)
+
+(`b9b0a8e`, manifest `f64949d`) An idle guard sets itself up at its post (`isInGuardIdleState`, as for a victim in range); a unit that tries to move packs first (`isTryingToMove`) - also for an
+internal move of its guard or its own attack, not only for an order; while it sets up, packs or centres its turret its move is held (`setLocomotorGoalNone`), not ended
+(`AIUpdateInterface.HoldsMovement`), so the guard's walk and chase go on once it is packed; a guarding deployer does not sleep. Test `GuardDeployStyleDeploysAndPacks`.
+Two mission runs (`MD_GLA01`, `MD_USA01`) change their hashes, outcomes and end ticks kept. Step 5 (the tunnel network guard) stays open: only the original AI's script library uses it.
+
+### 56.3 F-60's rest: clearing a garrison, the Chinook's re-issue
+
+**`DAMAGE_KILL_GARRISONED`** (`59e6ff2`, manifest `9a3a63a`; `ActiveBody::attemptDamage`): the floor of the amount of riders of a garrisonable container that is not `ImmuneToClearBuildingAttacks` die, in
+their order, the damager scoring the kills; `estimateDamage` gives the weapon 1 against riders it can clear and nothing otherwise. `ImmuneToClearBuildingAttacks` typed
+(compatibility baselines 701 -> 700, the patch layer's 694 -> 693). The definition fingerprint moved `commandStreamSha256` and `snapshotSha256` of the runs that carry it (69 fields) and the input manifest; no outcome, end tick or end hash.
+**A shell that hits a garrison** (`1950f68`, manifest `99e5a06`; `DumbProjectileBehavior::projectileHandleCollision`): up to `GarrisonHitKillCount` living riders of the required and not forbidden kinds
+die, the launcher scoring them; when one died the FX plays at the building and the shell is destroyed without its explosion - applied when the shell reaches its victim and
+that is the building, because the port's shells collide with nothing on their way; `AllowAttackGarrisonedBldgs` (and a surrender weapon) is worth 1 against riders it can
+clear, so the flame tanks, toxin trucks and flash-bangs aim at a garrisoned building. The missile's `GarrisonHitKill` is not applied. The input manifest moved; no field of the reference manifest.
+**The Chinook's re-issue** (`86925d9`; `ChinookAIUpdate::update`): every frame whose number ends in 1 a rider without a victim is given the attacking Chinook's. No field of either manifest moved.
+Not built: an attack on a position through a container (`groupAttackPosition`; the port has no command for an attack on a position). **F-54's two open ends** are covered:
+`onCollide`'s ejection of another player's riders is `SimulationWorld.EnterOnArrival` (Phase 41), and the two readers of the garrison's `CAN_ATTACK` status are the port's
+`PassesAttackToRiders` (`Object::isAbleToAttack`) and `IsAttackable` against a de-garrisoned neutral building (the attack state's fail-safe).
