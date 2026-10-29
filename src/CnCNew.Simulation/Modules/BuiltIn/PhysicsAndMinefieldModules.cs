@@ -269,7 +269,8 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         var time = world.Time;
         if (_subStep != 0)
         {
-            Entity.CoverShare(world.Tick, time.FrameShare(_stepX, _subStep), time.FrameShare(_stepY, _subStep), time.FrameShare(_stepZ, _subStep));
+            // A frame that something completed after its decision (Entity.CompleteFrame: a move stopped to attack, a death) has no rest left to cover.
+            if (Entity.IsInsideFrameStep) Entity.CoverShare(world.Tick, time.FrameShare(_stepX, _subStep), time.FrameShare(_stepY, _subStep), time.FrameShare(_stepZ, _subStep));
             _subStep = time.NextSubStep(_subStep);
             world.MarkDirty(Entity);
             return _subStep == 0 && !_flying ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
