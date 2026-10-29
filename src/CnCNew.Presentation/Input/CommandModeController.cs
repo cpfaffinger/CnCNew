@@ -276,8 +276,15 @@ public sealed class CommandModeController
                 Feedback(FeedbackKind.AttackMarker, world, EntityPicker.CenterOf(target), target.Id, Settings.MarkerFrames);
                 return true;
             }
-            case ContextAction.ForceAttackGround:
-                return Unsupported(world, "ForceAttackGround", ground);
+            case ContextAction.ForceAttackGround when ground is { } place:
+            {
+                // MSG_DO_FORCE_ATTACK_GROUND: the group attacks the ground without a limit (groupAttackPosition).
+                var armed = own.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity)).Select(entity => entity.Id).ToImmutableArray();
+                if (armed.IsEmpty) return false;
+                if (!AttackPlace(armed, place, own: false, CnCNew.Simulation.Templates.WeaponSlot.Best, 0)) return false;
+                Feedback(FeedbackKind.AttackMarker, world, place, EntityId.Invalid, Settings.MarkerFrames);
+                return true;
+            }
             case ContextAction.ResumeConstruction when target is not null:
             {
                 var builder = ResumeBuilders(own, target).First();
@@ -482,7 +489,14 @@ public sealed class CommandModeController
                 var producers = sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).Select(entity => entity.Id).ToImmutableArray();
                 return producers.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, producers);
             }
-            case GuiCommandKind.FireWeapon when button.Has(CommandOptions.NeedTargetEnemyObject) || button.Has(CommandOptions.NeedTargetNeutralObject):
+            case GuiCommandKind.FireWeapon when !button.NeedsTarget:
+            {
+                // MSG_DO_WEAPON: every member attacks its own position with the button's slot (a bomb truck's detonation, a convoy truck's nuke).
+                var members = sources.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity)).Select(entity => entity.Id).ToImmutableArray();
+                if (members.IsEmpty) return ActivationResult.NoSource;
+                return AttackPlace(members, Vector3.Zero, own: true, button.WeaponSlotIndex, button.MaxShotsToFire) ? ActivationResult.Issued : ActivationResult.NoSource;
+            }
+            case GuiCommandKind.FireWeapon when button.Has(CommandOptions.NeedTargetEnemyObject) || button.Has(CommandOptions.NeedTargetNeutralObject) || button.Has(CommandOptions.NeedTargetPos):
             {
                 var armed = sources.Where(entity => SimulationQueries.HasWeapon(entity)).Select(entity => entity.Id).ToImmutableArray();
                 return armed.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, armed);
@@ -621,7 +635,12 @@ public sealed class CommandModeController
                 {
                     GuiCommandKind.SetRallyPoint when position is { } rally => SetRally(world, sources, rally),
                     GuiCommandKind.SpecialPower or GuiCommandKind.SpecialPowerFromShortcut => UseSpecialPower(world, button, sources, objectTarget, position),
+                    // ATTACK_OBJECTS_POSITION: the weapon goes to the object's place (MSG_DO_WEAPON_AT_LOCATION).
+                    GuiCommandKind.FireWeapon when objectTarget is not null && button.Has(CommandOptions.AttackObjectsPosition)
+                        => AttackPlace(sources, EntityPicker.CenterOf(objectTarget), own: false, button.WeaponSlotIndex, button.MaxShotsToFire),
                     GuiCommandKind.FireWeapon when objectTarget is not null => OrderAttack(world, sources, objectTarget),
+                    // MSG_DO_WEAPON_AT_LOCATION: the button's slot at the place for its shots.
+                    GuiCommandKind.FireWeapon when position is { } place => AttackPlace(sources, place, own: false, button.WeaponSlotIndex, button.MaxShotsToFire),
                     _ => Unsupported(world, $"{button.Kind}Target", position ?? Vector3.Zero),
                 };
                 Cancel();
@@ -631,6 +650,18 @@ public sealed class CommandModeController
                 return false;
         }
     }
+
+    /// <summary>
+    /// An attack on a place to the group (<see cref="AttackPositionCommand"/>, F-64): the client's standing orders of the units end - the attack is the simulation's.
+    /// </summary>
+    private bool AttackPlace(ImmutableArray<EntityId> units, Vector3 place, bool own, int slot, int shots)
+    {
+        foreach (var unit in units) Orders.Clear(unit);
+        return Issue((sequence, tick) => new AttackPositionCommand(Player, sequence, tick, units, SimulationQueries.ToFixed(place.X), SimulationQueries.ToFixed(place.Y), own, slot, shots)).Accepted;
+    }
+
+    private bool AttackPlace(ImmutableArray<Entity> units, Vector3 place, bool own, int slot, int shots)
+        => !units.IsEmpty && AttackPlace(units.Select(unit => unit.Id).ToImmutableArray(), place, own, slot, shots);
 
     private bool OrderAttack(SimulationWorld world, ImmutableArray<Entity> units, Entity target)
     {
