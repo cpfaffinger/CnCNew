@@ -181,7 +181,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(checked((uint)reader.UInt("unit"))), reader.Fixed("x"), reader.Fixed("y")),
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"), reader.Bool("attack")),
             CommandTypes.Guard => new GuardCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"), reader.Fixed("y"),
-                new EntityId(checked((uint)reader.UInt("object"))), (GuardMode)checked((byte)reader.Int("mode"))),
+                new EntityId(checked((uint)reader.UInt("object"))), (GuardMode)checked((byte)reader.Int("mode")), reader.Has("area") ? reader.Text("area") : string.Empty),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
@@ -776,8 +776,12 @@ public enum GuardMode : byte { Normal = 0, WithoutPursuit = 1, FlyingUnitsOnly =
 /// <c>MSG_DO_GUARD_POSITION</c> (<see cref="Object"/> invalid) or <c>MSG_DO_GUARD_OBJECT</c> to a group (<c>AIGroup::groupGuardPosition</c> / <c>groupGuardObject</c>): every unit guards the
 /// same point or object in <see cref="Mode"/> (docs/GUARD-STATE.md, F-58). An immobile object or a projectile ignores it (<c>privateGuardPosition</c>).
 /// </summary>
-public sealed record GuardCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y, EntityId Object, GuardMode Mode) : SimCommand(Player, Sequence, Tick)
+public sealed record GuardCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units, Fixed X, Fixed Y, EntityId Object, GuardMode Mode, string Area = "")
+    : SimCommand(Player, Sequence, Tick)
 {
+    /// <summary>Own limit on the length of a trigger area's name (<c>Area</c>, a script's <c>TEAM_GUARD_AREA</c>): a longer one is refused.</summary>
+    public const int MaxAreaName = 256;
+
     public override ushort TypeCode => CommandTypes.Guard;
 
     protected override void DescribeBody(IStateWriter writer)
@@ -794,12 +798,13 @@ public sealed record GuardCommand(PlayerId Player, ulong Sequence, long Tick, Im
         writer.Fixed("y", Y);
         writer.UInt("object", Object.Value);
         writer.Int("mode", (int)Mode);
+        if (Area.Length > 0) writer.Text("area", Area);
     }
 
     // The unit list is compared by content, as for a group move.
     public bool Equals(GuardCommand? other)
         => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && Object == other.Object && Mode == other.Mode
-           && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
+           && Area == other.Area && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
 
     public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }

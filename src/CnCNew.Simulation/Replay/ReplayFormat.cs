@@ -392,6 +392,7 @@ public static class ReplayFormat
                 writer.Write(guard.Y.Raw);
                 writer.Write(guard.Object.Value);
                 writer.Write((byte)guard.Mode);
+                WriteString(writer, guard.Area);
                 break;
             case GroupMoveCommand group:
                 writer.Write(group.Units.Length);
@@ -455,7 +456,8 @@ public static class ReplayFormat
             CommandTypes.AttackMove => new AttackMoveCommand(player, sequence, tick, new EntityId(reader.ReadUInt32()), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
             CommandTypes.GroupMove => new GroupMoveCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), reader.ReadBoolean()),
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.ReadBoolean()),
-            CommandTypes.Guard => new GuardCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), new EntityId(reader.ReadUInt32()), (GuardMode)reader.ReadByte()),
+            CommandTypes.Guard => new GuardCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), new EntityId(reader.ReadUInt32()), (GuardMode)reader.ReadByte(),
+                ReadString(reader)),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),
         };
     }

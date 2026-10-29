@@ -78,7 +78,8 @@ static partial class Tests
     private static Entity GdSpawn(SimulationWorld world, Feeder feeder, string template, int owner, int x, int y)
     {
         feeder.Spawn(0, template, owner: owner, x: x, y: y);
-        world.Step();
+        // One whole frame of the original, so that the orders that follow are given at the start of the same frame at every rate.
+        for (var step = 0; step < world.Frames(1); step++) world.Step();
         return world.Entities.Where(value => value.Template.Name == template).OrderBy(value => value.Id.Value).Last();
     }
 

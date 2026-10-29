@@ -330,18 +330,10 @@ public sealed partial class ScriptEngine
                 break;
             // doTeamGuardArea: the team guards the trigger area (F-58, step 3).
             case "TEAM_GUARD_AREA":
+                // A guard order of the script like the others (GuardBy): through the command path, so that it takes effect where they do at every rate.
                 if (Has(type, p, 2) && FindAreaQualified(Str(p, 1)) is { } guardedArea)
                     foreach (var team in TeamsNamed(Str(p, 0)))
-                    {
-                        var members = LiveMembers(team).ToArray();
-                        foreach (var member in members)
-                        {
-                            _buttonHunts.Remove(member.Id.Value);
-                            _followers.Remove(member.Id.Value);
-                            _busyThisTick.Add(member.Id.Value);
-                        }
-                        _world.GuardArea(members, guardedArea);
-                    }
+                        GuardBy(LiveMembers(team).ToArray(), Fixed.Zero, Fixed.Zero, EntityId.Invalid, guardedArea.Name);
                 else if (Has(type, p, 2)) Diagnose($"unknown trigger area '{Str(p, 1)}'");
                 break;
             case "TEAM_ATTACK_AREA":
@@ -600,7 +592,7 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>A guard order of the script (F-58): the members guard the point or the object (<c>aiGuardPosition</c> / <c>aiGuardObject</c>, <c>CMD_FROM_SCRIPT</c>), by their owners.</summary>
-    private void GuardBy(IReadOnlyList<Entity> members, Fixed x, Fixed y, EntityId guarded)
+    private void GuardBy(IReadOnlyList<Entity> members, Fixed x, Fixed y, EntityId guarded, string area = "")
     {
         foreach (var owner in members.Select(member => member.Owner).Distinct().OrderBy(owner => owner.Value))
         {
@@ -612,7 +604,7 @@ public sealed partial class ScriptEngine
                 _buttonHunts.Remove(unit.Value);
                 _followers.Remove(unit.Value);
             }
-            if (!_issue(owner, (sequence, tick) => new GuardCommand(owner, sequence, tick, units, x, y, guarded, GuardMode.Normal)).Accepted) Diagnose("order rejected");
+            if (!_issue(owner, (sequence, tick) => new GuardCommand(owner, sequence, tick, units, x, y, guarded, GuardMode.Normal, area)).Accepted) Diagnose("order rejected");
             else foreach (var unit in units) _busyThisTick.Add(unit.Value);
         }
     }

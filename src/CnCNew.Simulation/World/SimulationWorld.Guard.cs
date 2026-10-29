@@ -131,6 +131,8 @@ public sealed partial class SimulationWorld
     {
         if (order.Units.IsDefaultOrEmpty || order.Units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
         if (!Enum.IsDefined(order.Mode)) return CommandRejection.InvalidArguments;
+        // A trigger area is a script's (TEAM_GUARD_AREA): one the world does not know is refused, as is a name beyond the limit.
+        if (order.Area.Length > GuardCommand.MaxAreaName || (order.Area.Length > 0 && GuardAreas?.Invoke(order.Area) is null)) return CommandRejection.InvalidArguments;
         if (order.Object.IsValid && (FindEntity(order.Object) is not { DestroyRequested: false })) return CommandRejection.UnknownEntity;
         foreach (var id in order.Units)
         {
@@ -148,40 +150,24 @@ public sealed partial class SimulationWorld
     private void ExecuteGuard(GuardCommand order)
     {
         var guarded = order.Object.IsValid ? FindEntity(order.Object) : null;
+        // aiGuardArea: the bounds centre of the trigger area is the guarded position (AreaGeometry).
+        var area = order.Area.Length > 0 ? GuardAreas?.Invoke(order.Area) : null;
+        var (areaX, areaY, _) = area is not null ? AreaGeometry(area) : (Fixed.Zero, Fixed.Zero, Fixed.Zero);
         var any = false;
         foreach (var id in order.Units)
         {
             if (FindEntity(id) is not { DestroyRequested: false } unit || unit.Owner != order.Player || AiOf(unit) is not { } ai) continue;
             if (unit.Template.Locomotor is null || unit.Template.IsKindOf("IMMOBILE") || unit.Template.IsKindOf("PROJECTILE")) continue;
             ai.OrderIdle(this, true);
-            var (x, y) = guarded is not null ? (guarded.X, guarded.Y) : (order.X, order.Y);
-            unit.Guard = new GuardState { X = x, Y = y, Object = guarded?.Id ?? EntityId.Invalid, Mode = order.Mode };
+            var (x, y) = guarded is not null ? (guarded.X, guarded.Y) : area is not null ? (areaX, areaY) : (order.X, order.Y);
+            unit.Guard = new GuardState { X = x, Y = y, Object = guarded?.Id ?? EntityId.Invalid, Mode = order.Mode, Area = area?.Name ?? string.Empty };
             if (guarded is not null) (unit.Guard.GuardeeX, unit.Guard.GuardeeY) = (guarded.X, guarded.Y);
             _acquirers.Add(unit.Id.Value);
-            EnterGuardReturn(unit, ai, unit.Guard, _tick);
+            EnterGuardReturn(unit, ai, unit.Guard, _tick, ordered: true);
             MarkDirty(unit);
             any = true;
         }
         if (!any) RecordRejection(order, CommandRejection.UnknownEntity);
-    }
-
-    /// <summary>
-    /// <c>aiGuardArea</c> of a script (<c>TEAM_GUARD_AREA</c>, F-58 step 3): the units guard the trigger area - its bounds centre is the guarded position, the scans look inside the polygon
-    /// out to the area's radius (<see cref="AreaGeometry"/>).
-    /// </summary>
-    internal void GuardArea(IReadOnlyList<Entity> units, ScriptArea area)
-    {
-        var (cx, cy, _) = AreaGeometry(area);
-        foreach (var unit in units)
-        {
-            if (unit.DestroyRequested || unit.Owner.IsSystem || AiOf(unit) is not { } ai) continue;
-            if (unit.Template.Locomotor is null || unit.Template.IsKindOf("IMMOBILE") || unit.Template.IsKindOf("PROJECTILE")) continue;
-            ai.OrderIdle(this, true);
-            unit.Guard = new GuardState { X = cx, Y = cy, Area = area.Name };
-            _acquirers.Add(unit.Id.Value);
-            EnterGuardReturn(unit, ai, unit.Guard, _tick);
-            MarkDirty(unit);
-        }
     }
 
     /// <summary>
@@ -445,7 +431,11 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>RETURN (<c>AIGuardReturnState::onEnter</c>): the first scan after up to a scan period, then a walk to the centre; already there, the unit is IDLE.</summary>
-    private void EnterGuardReturn(Entity entity, AIUpdateInterface ai, GuardState guard, long tick)
+    /// <remarks>
+    /// <paramref name="ordered"/>: the guard order itself, taken in the command phase before the tick's updates like any other order, so its move begins in this tick; the
+    /// guard's own decisions act after the updates and begin their move with the unit's next frame (<see cref="AIUpdateInterface.BeginMoveWithNextFrame"/>).
+    /// </remarks>
+    private void EnterGuardReturn(Entity entity, AIUpdateInterface ai, GuardState guard, long tick, bool ordered = false)
     {
         guard.Phase = GuardPhase.Return;
         guard.GiveUpTick = 0;
@@ -454,7 +444,7 @@ public sealed partial class SimulationWorld
         var (gx, gy) = FindFreeGoal(entity, entity.X, entity.Y, cx, cy);
         if (ai.StartInternalMove(gx, gy))
         {
-            ai.BeginMoveWithNextFrame(this);
+            if (!ordered) ai.BeginMoveWithNextFrame(this);
             WakeAt(entity, ai, Math.Min(ai.NextWake, tick + _turretFrameTicks));
             return;
         }
