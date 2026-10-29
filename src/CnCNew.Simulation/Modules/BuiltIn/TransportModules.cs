@@ -259,6 +259,8 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     private long _lastSelfSpinUpdate;
     private Fixed _bladeFlyOff;
     private long _hitGroundTick;
+    /// <summary>The base behaviour's midpoint and phases (F-37).</summary>
+    private readonly SlowDeathClock _clock = new();
     /// <summary>The speed of the fall per logic frame of the original, negative.</summary>
     private Fixed _fallSpeed;
     /// <summary>The step of the running frame of the spiral, flown in shares per tick; empty at 30 Hz.</summary>
@@ -278,10 +280,8 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     public void BeginSlowDeath(IWorldServices world)
     {
         _activated = true;
-        // SlowDeathBehavior::beginSlowDeath: both variance draws happen, the sink animation is presentation.
-        _ = data.Base.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.SinkDelayVarianceTicks);
-        var destruction = data.Base.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.DestructionDelayVarianceTicks);
-        _destructionTick = Math.Min(world.Tick + world.Time.AtLeastOneFrame(destruction), SimulationTiming.SleepForever);
+        // SlowDeathBehavior::beginSlowDeath first: its three draws and the initial phase (F-37); the sink animation is presentation.
+        _destructionTick = Math.Min(world.Tick + _clock.Begin(world, Entity, data.Base), SimulationTiming.SleepForever);
         _bladeFlyOff = world.LogicRandom.Range(data.MinBladeFlyOffDelay, data.MaxBladeFlyOffDelay);
         _forwardAngle = Entity.Angle;
         _forwardSpeed = data.SpiralOrbitForwardSpeed;
@@ -300,11 +300,14 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     public long Update(IWorldServices world)
     {
         if (!_activated) return SimulationTiming.SleepForever;
+        // SlowDeathBehavior::update first: the midpoint phase, and at the destruction frame the final one.
         if (world.Tick >= _destructionTick)
         {
+            _clock.Final(world, Entity, data.Base);
             world.RequestDestroy(Entity.Id);
             return SimulationTiming.SleepForever;
         }
+        _clock.Step(world, Entity, data.Base);
         if (_hitGroundTick == 0) Spiral(world);
         // The wait on the ground is compared once per logic frame of the original, counted from the impact (the delay is in unrounded frames: compared every tick it would end
         // on a tick between two frames).
@@ -401,6 +404,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     {
         writer.Int("nextWake", _nextWake);
         writer.Bool("activated", _activated);
+        if (_activated) _clock.Describe(writer);
         writer.Int("destructionTick", _destructionTick);
         writer.Fixed("forwardAngle", _forwardAngle);
         writer.Fixed("forwardSpeed", _forwardSpeed);
@@ -417,6 +421,7 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     {
         _nextWake = reader.Int("nextWake");
         _activated = reader.Bool("activated");
+        if (_activated) _clock.Load(reader);
         _destructionTick = reader.Int("destructionTick");
         _forwardAngle = reader.Fixed("forwardAngle");
         _forwardSpeed = reader.Fixed("forwardSpeed");

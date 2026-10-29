@@ -764,6 +764,9 @@ public sealed record NeutronSlowDeathData(SlowDeathData Base, string GroundFx, I
 /// </summary>
 public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
 {
+    /// <summary>The base behaviour's midpoint and phases (F-37).</summary>
+    private readonly SlowDeathClock _clock = new();
+
     /// <summary><c>getDisabledTypesToProcess</c> (a SlowDeathBehavior).</summary>
     public DisabledMask DisabledTypesToProcess => DisabledMask.All;
 
@@ -788,11 +791,8 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
     public void BeginSlowDeath(IWorldServices world)
     {
         _activated = true;
-        // SlowDeathBehavior.cpp, SlowDeathBehavior::beginSlowDeath: GameLogicRandomValue(0, m_sinkDelayVariance) / (0, m_destructionDelayVariance) –
-        // both drawn in frames of the original, then scaled; the destruction is at least one frame away.
-        _ = data.Base.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.SinkDelayVarianceTicks);
-        var destruction = data.Base.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.Base.DestructionDelayVarianceTicks);
-        _destructionTick = world.Tick + world.Time.AtLeastOneFrame(destruction);
+        // SlowDeathBehavior::beginSlowDeath: its three draws (sink, destruction, midpoint, in frames of the original) and the initial phase (F-37).
+        _destructionTick = world.Tick + _clock.Begin(world, Entity, data.Base);
         // The explosion starts with the update after the death: one logic frame of the original later (the next tick at 30 Hz), not one tick.
         world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
     }
@@ -800,7 +800,13 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
     public long Update(IWorldServices world)
     {
         if (!_activated) return SimulationTiming.SleepForever;
-        if (world.Tick >= _destructionTick) world.RequestDestroy(Entity.Id);
+        // SlowDeathBehavior::update first: the midpoint phase, and at the destruction frame the final one.
+        if (world.Tick >= _destructionTick)
+        {
+            _clock.Final(world, Entity, data.Base);
+            world.RequestDestroy(Entity.Id);
+        }
+        else _clock.Step(world, Entity, data.Base);
         if (_activationTick == 0)
         {
             _activationTick = world.Tick;
@@ -855,6 +861,7 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
     {
         writer.Int("nextWake", _nextWake);
         writer.Bool("activated", _activated);
+        if (_activated) _clock.Describe(writer);
         writer.Int("destructionTick", _destructionTick);
         writer.Int("activationTick", _activationTick);
         writer.BeginArray("completed");
@@ -871,6 +878,7 @@ public sealed class NeutronMissileSlowDeathBehavior(NeutronSlowDeathData data) :
     {
         _nextWake = reader.Int("nextWake");
         _activated = reader.Bool("activated");
+        if (_activated) _clock.Load(reader);
         _destructionTick = reader.Int("destructionTick");
         _activationTick = reader.Int("activationTick");
         var completed = reader.Array("completed");

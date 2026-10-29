@@ -454,21 +454,57 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
 }
 
 /// <summary>
-/// The destruction timer of <c>SlowDeathBehavior::update</c>, shared by the modules that run that update (<c>BattleBusSlowDeathBehavior::update</c> calls it for a real death).
-/// The original's update returns <c>UPDATE_SLEEP_NONE</c> from the beginning of the slow death to the destruction frame; only that frame is modeled here, so the module
-/// sleeps through the time before it - and the rest of the timer has to be the return value of an update that comes before it. Such an update happens: <c>WakeAt</c>
-/// (<c>GameLogic::friend_awakenUpdateModule</c>) drops a request for the next tick when the module is still due in the running one ("already awake"), because the update of
-/// this tick decides with its return value. A slow death of one frame that begins in a tick its module is due in used to answer "forever" there, and the dead object stayed
-/// in the world (docs/DEFECT-LOST-WAKE.md).
+/// What a subclass of <c>SlowDeathBehavior</c> runs through its base calls (F-37): <c>SlowDeathBehavior::beginSlowDeath</c> - the sink, destruction and midpoint draws in this order
+/// (the midpoint between 35 % and 65 % of the destruction delay, in frames of the original) and the initial phase's lists - and the phases of <c>SlowDeathBehavior::update</c>, the
+/// midpoint once its frame has come and the final one at the destruction frame. Written with the module only while its slow death runs.
 /// </summary>
-internal static class SlowDeathTimer
+internal sealed class SlowDeathClock
 {
-    public static long Update(IWorldServices world, Entity entity, bool activated, long destructionTick)
+    private long _midpointTick;
+    private bool _midpointDone;
+
+    /// <summary>The base's begin; returns the destruction delay in ticks (at least one frame of the original).</summary>
+    public long Begin(IWorldServices world, Entity entity, SlowDeathData data)
     {
-        if (!activated) return SimulationTiming.SleepForever;
-        if (world.Tick < destructionTick) return destructionTick - world.Tick;
-        world.RequestDestroy(entity.Id);
-        return SimulationTiming.SleepForever;
+        _ = data.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.SinkDelayVarianceTicks);
+        var destruction = data.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.DestructionDelayVarianceTicks);
+        var (low, high) = SlowDeathPhases.MidpointBounds(world.Time.ToOriginalFrames(destruction));
+        var midpoint = world.Time.DrawFrames(world.LogicRandom, world.Time.OriginalFrames(low), world.Time.OriginalFrames(high));
+        _midpointTick = world.Tick + world.Time.AtLeastOneFrame(midpoint);
+        _midpointDone = false;
+        data.Phases.Do(world, entity, SlowDeathPhase.Initial);
+        return world.Time.AtLeastOneFrame(destruction);
+    }
+
+    /// <summary>The base's update before the destruction frame: the midpoint phase once its frame has come.</summary>
+    public void Step(IWorldServices world, Entity entity, SlowDeathData data)
+    {
+        if (_midpointDone || world.Tick < _midpointTick) return;
+        _midpointDone = true;
+        world.MarkDirty(entity);
+        data.Phases.Do(world, entity, SlowDeathPhase.Midpoint);
+    }
+
+    /// <summary>The base's update at the destruction frame: the midpoint if it has not come yet, then the final phase.</summary>
+    public void Final(IWorldServices world, Entity entity, SlowDeathData data)
+    {
+        Step(world, entity, data);
+        data.Phases.Do(world, entity, SlowDeathPhase.Final);
+    }
+
+    /// <summary>The next tick the base needs an update in before <paramref name="destructionTick"/>: the midpoint, else the destruction.</summary>
+    public long NextDue(long destructionTick) => _midpointDone ? destructionTick : Math.Min(_midpointTick, destructionTick);
+
+    public void Describe(IStateWriter writer)
+    {
+        writer.Int("midpointTick", _midpointTick);
+        if (_midpointDone) writer.Bool("midpointDone", true);
+    }
+
+    public void Load(IStateReader reader)
+    {
+        _midpointTick = reader.Has("midpointTick") ? reader.Int("midpointTick") : 0;
+        _midpointDone = reader.Has("midpointDone") && reader.Bool("midpointDone");
     }
 }
 
