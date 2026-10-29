@@ -306,21 +306,24 @@ public sealed class AutoHealBehavior(AutoHealData data) : SimModule, IUpdateModu
     {
         if (!_active) return SimulationTiming.SleepForever;
         foreach (var candidate in world.Entities)
-            if (Matches(candidate)) world.Damage(candidate.Id, new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false));
+            if (Matches(world, candidate)) world.Damage(candidate.Id, new DamageInfo(Entity.Id, data.HealingAmount, DamageTypes.Healing, DeathTypes.None, false));
         if (data.SingleBurst) { _active = false; return SimulationTiming.SleepForever; }
         // A missing or zero HealingDelay heals once per logic frame of the original, at every rate.
         return world.Time.AtLeastOneFrame(data.HealingDelayTicks);
     }
 
-    private bool Matches(Entity candidate)
+    private bool Matches(IWorldServices world, Entity candidate)
     {
         if (candidate.Owner != Entity.Owner || candidate.Body is null || candidate.EffectivelyDead) return false;
         if (data.SkipSelfForHealing && candidate.Id == Entity.Id) return false;
         if (!data.KindOf.IsEmpty && !data.KindOf.Any(candidate.Template.IsKindOf)) return false;
         if (data.ForbiddenKindOf.Any(candidate.Template.IsKindOf)) return false;
         if (data.AffectsWholePlayer) return true;
-        var dx = candidate.X - Entity.X;
-        var dy = candidate.Y - Entity.Y;
+        // Where the frames end (F-73): above 30 Hz a mover that has decided its frame is still inside the step the 30 Hz aura sees it at the end of.
+        var (x, y, _) = candidate.FrameEnd(world.Tick);
+        var (ownX, ownY, _) = Entity.FrameEnd(world.Tick);
+        var dx = x - ownX;
+        var dy = y - ownY;
         return SquaredReach.Of(data.Radius).Contains(dx * dx + dy * dy);
     }
 
