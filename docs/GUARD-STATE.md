@@ -204,7 +204,7 @@ tries to move (`isWaitingForPath() || getPath()`) - also for the guard's own wal
 (`setLocomotorGoalNone` every frame of DEPLOY, UNDEPLOY, ALIGNING_TURRETS). The port's module packs only for an order (`OrderMove`) and, while it packs or unpacks, stops the
 internal move (`StopInternalMove`), which ends the move a guard's RETURN or chase began - so step 7 needs first a way to hold an internal move during the pack without losing
 it (the same gap makes a deployed unit of a computer player chase on an attack-move without packing). **Built in Phase 42 (§56.2):** the held move (`AIUpdateInterface.HoldsMovement`), the deploy in guard
-IDLE and the pack before any move; the jet's reload-resumable guard and the flight deck's propagation stay open. Step 5 (the tunnel network guard) is used only by the original AI's
+IDLE and the pack before any move; the jet's reload-resumable guard too (a parked jet takes off for its guard); the flight deck's propagation stays open (the deck is a shell). Step 5 (the tunnel network guard) is used only by the original AI's
 skirmish script library (`SkirmishScripts.scb`, 4 actions), not by a mission.
 
 General for every step:

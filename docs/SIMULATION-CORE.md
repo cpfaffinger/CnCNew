@@ -3947,6 +3947,13 @@ rotation. Test `ShockWaveStun`. No field of either manifest moved.
 internal move of its guard or its own attack, not only for an order; while it sets up, packs or centres its turret its move is held (`setLocomotorGoalNone`), not ended
 (`AIUpdateInterface.HoldsMovement`), so the guard's walk and chase go on once it is packed; a guarding deployer does not sleep. Test `GuardDeployStyleDeploysAndPacks`.
 Two mission runs (`MD_GLA01`, `MD_USA01`) change their hashes, outcomes and end ticks kept. Step 5 (the tunnel network guard) stays open: only the original AI's script library uses it.
+**The jet on guard** (`JetAIUpdate::aiDoCommand`, `update`): a guard order (position, object, area) or a retaliation that reaches an aircraft that is parked, taking off or landing is stored
+(`HAS_PENDING_COMMAND`) - a parked one takes off for it - and held by the world (`GuardState.Held`: its machine decides nothing) until the aircraft flies, when it is given again
+(RETURN, or the retaliation's ATTACK_AGGRESSOR); a guarding aircraft whose `RETURN_TO_BASE` magazine is empty holds the guard, flies home on its return locomotor, lands, reloads,
+takes off and guards on (`ALLOW_INTERRUPT_AND_RESUME_OF_CUR_STATE_FOR_RELOAD`); a move or landing order stored meanwhile replaces the guard. Before, a parked jet ordered to
+guard - or answering an attack on its airfield for a human player - fired from its parking space and never reloaded. Tests `GuardJetTakesOffAndResumesAfterReload` (the hits on
+the same frames at 30, 60 and 120 Hz, a snapshot while the guard is held) and `GuardRetaliationJetTakesOff`. Not modelled: the same for a hunt order (the port has none);
+`FlightDeckBehavior`'s order passing (the carrier's deck is a shell, `docs/SCRIPT-ENGINE.md` §8).
 
 ### 56.3 F-60's rest: clearing a garrison, the Chinook's re-issue
 
