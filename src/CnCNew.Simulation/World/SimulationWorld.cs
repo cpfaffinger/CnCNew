@@ -894,7 +894,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!_entities.TryGetValue(pursue.Unit.Value, out var pursuer) || pursuer.DestroyRequested) return CommandRejection.UnknownEntity;
                 if (pursuer.Owner != command.Player) return CommandRejection.NotPermitted;
                 if (!_entities.TryGetValue(pursue.Victim.Value, out var pursued) || pursued.DestroyRequested || pursued.Body is null) return CommandRejection.UnknownEntity;
-                if (!CanMove(pursuer) && !PassesAttackToRiders(pursuer)) return CommandRejection.CannotMove;
+                if (!CanMove(pursuer) && !PassesAttackToRiders(pursuer) && !PassesAttackToSlaves(pursuer)) return CommandRejection.CannotMove;
                 if (!CanPlayerSee(command.Player, pursued)) return CommandRejection.TargetNotVisible;
                 break;
             }
@@ -1253,6 +1253,12 @@ public sealed partial class SimulationWorld : IWorldServices
                 // AIGroup::groupAttackObjectPrivate: a container whose riders may fire orders them first, then the container itself attacks if it can (F-60, step 6).
                 var passes = PassesAttackToRiders(unit);
                 if (passes) PassAttackToRiders(unit, victim);
+                // groupAttackObjectPrivate: a spawner whose slaves have no free will orders them to attack (F-65).
+                if (PassesAttackToSlaves(unit))
+                {
+                    PassAttackToSlaves(unit, victim);
+                    passes = true;
+                }
                 if (!CanMove(unit))
                 {
                     if (!passes) RecordRejection(command, CommandRejection.CannotMove);

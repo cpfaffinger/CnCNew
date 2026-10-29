@@ -46,11 +46,18 @@ internal sealed class AcquisitionState
     /// <summary>Tick the chase was last pointed at the victim's position.</summary>
     public long ChaseTick;
 
+    /// <summary>
+    /// <c>aiForceAttackObject</c> of a spawner's slave (<c>SpawnBehavior::orderSlavesToAttackTarget</c>, F-65): the slave attacks the victim its spawner was ordered to, walking at it,
+    /// until the victim is gone or out of its reach for good; its own look does not replace it.
+    /// </summary>
+    public bool Forced;
+
     public bool IsDefault => !Victim.IsValid && !AttackMove && Mode == 0;
 
     public void ClearVictim()
     {
         Victim = EntityId.Invalid;
+        Forced = false;
         Ordered = false;
         OrderedTick = 0;
         Chasing = false;
@@ -84,6 +91,7 @@ internal sealed class AcquisitionState
             writer.Bool("chasing", true);
             writer.Int("chaseTick", ChaseTick);
         }
+        if (Forced) writer.Bool("forced", true);
         writer.EndObject();
     }
 
@@ -114,7 +122,9 @@ internal sealed class AcquisitionState
             state.Chasing = reader.Bool("chasing");
             state.ChaseTick = reader.Int("chaseTick");
         }
+        state.Forced = reader.Has("forced") && reader.Bool("forced");
         if (state.IsDefault) throw new InvalidDataException("An acquisition state without a victim, an attack-move or a pending look is never written.");
+        if (state.Forced && (!state.Victim.IsValid || state.Ordered)) throw new InvalidDataException("A slave's forced attack needs a victim and no order.");
         if ((state.Ordered || state.Chasing) && !state.Victim.IsValid) throw new InvalidDataException("An ordered attack or a chase needs a victim.");
         if (state.OrderedTick < 0 || state.ChaseTick < 0) throw new InvalidDataException("Negative acquisition tick in snapshot.");
         return state;
@@ -122,10 +132,10 @@ internal sealed class AcquisitionState
 }
 
 /// <summary>Every mutable field of an <see cref="AcquisitionState"/> (or none), compared before and after a step to learn whether the entity's serialized state changed.</summary>
-internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset)
+internal readonly record struct AcquisitionStamp(bool Present, EntityId Victim, bool Ordered, long OrderedTick, bool AttackMove, Fixed GoalX, Fixed GoalY, bool Halted, bool Chasing, long ChaseTick, byte Mode, long NextCheck, bool Offset, bool Forced)
 {
     public static AcquisitionStamp Of(AcquisitionState? state)
-        => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset);
+        => state is null ? default : new(true, state.Victim, state.Ordered, state.OrderedTick, state.AttackMove, state.GoalX, state.GoalY, state.Halted, state.Chasing, state.ChaseTick, state.Mode, state.NextCheck, state.Offset, state.Forced);
 }
 
 /// <summary>

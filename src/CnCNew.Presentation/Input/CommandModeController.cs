@@ -185,7 +185,8 @@ public sealed class CommandModeController
         {
             var armed = own.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity)).ToList();
             if (armed.Any(entity => SimulationQueries.InRangeOrRiders(world, entity, target))) return Hint(ContextAction.AttackObject, CursorKind.AttackObj);
-            if (armed.Any(SimulationQueries.CanMove)) return Hint(ContextAction.AttackObjectAfterMoving, CursorKind.OutRange);
+            // A spawner whose slaves take its attacks (the stinger site, F-65): its slaves walk at the victim.
+            if (armed.Any(SimulationQueries.CanMove) || armed.Any(world.PassesAttackToSlaves)) return Hint(ContextAction.AttackObjectAfterMoving, CursorKind.OutRange);
             return Hint(ContextAction.Invalid, CursorKind.GenericInvalid);
         }
         if (target is null && ground is not null && own.All(entity => SimulationQueries.ProductionOf(entity) is not null))

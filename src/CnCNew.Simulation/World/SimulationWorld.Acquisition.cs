@@ -234,6 +234,13 @@ public sealed partial class SimulationWorld
                 if (attackable && tick - Math.Max(state.OrderedTick, EarliestReadyTick(entity, tick)) < _orderedAttackGraceTicks + _turretFrameTicks) return;
                 state.ClearVictim();
             }
+            else if (state.Forced)
+            {
+                // A slave's forced attack (F-65): it walks at its victim as the guard's attack does, without a fog filter, until it cannot attack it any more.
+                if (victim is not null && IsGuardVictim(entity, victim) && GuardEngage(entity, ai, state, victim, tick)) return;
+                EndEngagement(entity, ai, state);
+                if (state.Mode != 0) (state.NextCheck, state.Offset) = (tick + _forceIdleTicks, true);
+            }
             else
             {
                 if (attackable && Engage(entity, ai, state, victim!, ModeOf(entity, ai, state), tick)) return;
