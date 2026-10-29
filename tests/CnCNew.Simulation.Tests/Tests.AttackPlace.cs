@@ -162,4 +162,35 @@ static partial class Tests
         Check.That(!feeder.AttackPosition(2, [cannon.Id.Value], 300, 0).Accepted, "Another player's unit is refused.");
         Check.That(!feeder.AttackPosition(1, [cannon.Id.Value], 200_000, 0).Accepted, "A place beyond the map's reach is refused.");
     }
+
+    /// <summary>
+    /// Step 3, through the container (<c>AIGroup::groupAttackPosition</c>: "garrisoned buildings force attack a ground position"): the force-fire of a garrisoned building at a place
+    /// within its rider's reach makes the rider fire its three shots at the place from inside; the rider stays inside. At 30, 60 and 120 Hz the shots fall in the same frames.
+    /// </summary>
+    public static void AttackPlaceThroughTheContainer()
+    {
+        long[] Run(SimulationRate rate)
+        {
+            var scene = FcScene(rate, "FcBunker", "FcRifleman", 2000);
+            Check.That(scene.Feeder.AttackPosition(1, [scene.Container.Id.Value], 0, -80, shots: 3).Accepted, $"{rate}: the garrisoned building takes the force-fire.");
+            var start = scene.World.Tick;
+            var frames = new List<long>();
+            for (var step = 0; step < scene.World.Frames(300); step++)
+            {
+                var result = scene.World.Step();
+                for (var shot = 0; shot < ShotsOf(result, scene.Rider); shot++)
+                    frames.Add((scene.World.Tick - start + scene.World.Time.TicksPerOriginalFrame - 1) / scene.World.Time.TicksPerOriginalFrame);
+            }
+            Check.That(frames.Count == 3 && scene.Rider.ContainedBy == scene.Container.Id && !scene.World.IsAttackingPlace(scene.Rider),
+                $"{rate}: the rider fired its three shots from inside and is done ({frames.Count}).");
+            return [.. frames];
+        }
+
+        var reference = Run(SimulationRate.Hz30);
+        foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var other = Run(rate);
+            Check.That(other.SequenceEqual(reference), $"{rate}: the shots fall on the same frames as at 30 Hz ({string.Join(",", other)} against {string.Join(",", reference)}).");
+        }
+    }
 }

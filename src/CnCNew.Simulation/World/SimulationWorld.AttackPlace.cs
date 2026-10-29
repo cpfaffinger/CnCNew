@@ -35,7 +35,9 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>AIGroup::groupAttackPosition</c> after <c>GameLogicDispatch</c>: a <c>FIRE_WEAPON</c> button locks its slot temporarily on every member that has it
-    /// (<c>setWeaponLockForGroup</c>; when none has, nothing happens), the force-fire on the ground releases a temporary lock; then every member attacks the place, or its own position.
+    /// (<c>setWeaponLockForGroup</c>; when none has, nothing happens), the force-fire on the ground releases a temporary lock; then every member attacks the place, or its own position,
+    /// and so do the riders of a member whose container lets them fire (F-60's attack on a position through the container). Not modelled: the slaves of a spawner without free will
+    /// (<c>orderSlavesToAttackPosition</c>; the port's slaves follow no attack of their spawner, F-65).
     /// </summary>
     private void ExecuteAttackPosition(AttackPositionCommand order)
     {
@@ -55,10 +57,16 @@ public sealed partial class SimulationWorld
         else
             foreach (var unit in members) ReleaseWeaponLock(unit, WeaponLockKind.Temporary);
         var any = false;
+        var shots = order.MaxShots > 0 ? order.MaxShots : -1;
         foreach (var unit in members)
         {
             var (x, y) = order.OwnPosition ? FramePosition(unit) : (order.X, order.Y);
-            any |= AttackPlace(unit, x, y, order.MaxShots > 0 ? order.MaxShots : -1, fromPlayer: true);
+            // "This code allows garrisoned buildings to force attack a ground position": the riders of a container that lets them fire attack the same place.
+            if (PassesAttackToRiders(unit))
+                foreach (var id in unit.Container!.Contained.ToArray())
+                    if (FindEntity(id) is { EffectivelyDead: false, DestroyRequested: false } rider && ContainerLetsFire(rider) && PlaceSlot(rider) is not null)
+                        any |= AttackPlace(rider, x, y, shots, fromPlayer: true);
+            any |= AttackPlace(unit, x, y, shots, fromPlayer: true);
         }
         if (!any) RecordRejection(order, CommandRejection.UnknownEntity);
     }

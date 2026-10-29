@@ -252,6 +252,7 @@ run.Test("Phase 42 (F-58, step 7): a parked jet takes off for its guard, reloads
 run.Test("Phase 42 (F-58, step 7): a parked jet takes off to answer an attack on its airfield", Tests.GuardRetaliationJetTakesOff);
 run.Test("Phase 43 (F-64, step 1): an attack on a place walks into range, fires its shots and ends", Tests.AttackPlaceWalksFiresAndEnds);
 run.Test("Phase 43 (F-64, step 1): an attack on a place without a limit, with a locked slot, and refused", Tests.AttackPlaceLimitsAndSlots);
+run.Test("Phase 43 (F-64, step 3): a garrisoned building passes an attack on a place to its riders", Tests.AttackPlaceThroughTheContainer);
 run.Test("Phase 41 (F-58, step 4): the script guard actions guard a waypoint, an own position, an object", Tests.ScriptGuardActions);
 run.Test("Phase 41 (F-58, step 3): a team guards a trigger area - inside the polygon, out to its radius", Tests.ScriptGuardArea);
 run.Test("Phase 41 (F-54, step 2): a container counts its riders of kind STEALTH_GARRISON", Tests.StealthGarrisonCount);
