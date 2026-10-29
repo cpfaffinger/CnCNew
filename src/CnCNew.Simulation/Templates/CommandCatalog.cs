@@ -10,8 +10,14 @@ namespace CnCNew.Simulation.Templates;
 /// <c>*_USE_COMMANDBUTTON_ABILITY*</c> script actions, <c>ScriptEngine.Actions.cs</c>). Everything else on a button (rally point, sell,
 /// upgrades, non-power commands) is presentation or handled elsewhere.
 /// </summary>
-/// <summary>What a command button does, as far as scripts that name buttons need it: its <c>Command</c> type, the <c>Upgrade</c> it names and the <c>WeaponSlot</c> of a <c>FIRE_WEAPON</c> button (empty when absent).</summary>
-public sealed record CommandButtonInfo(string Command, string Upgrade, string WeaponSlot);
+/// <summary>
+/// What a command button does, as far as scripts that name buttons need it: its <c>Command</c> type, the <c>Upgrade</c> it names, the <c>WeaponSlot</c> of a <c>FIRE_WEAPON</c> button
+/// (empty when absent), its <c>Options</c> (the names, upper case) and its <c>MaxShotsToFire</c> (0 for no limit, the original's "huge number").
+/// </summary>
+public sealed record CommandButtonInfo(string Command, string Upgrade, string WeaponSlot, ImmutableArray<string> Options, int MaxShotsToFire)
+{
+    public bool Has(string option) => Options.Contains(option, StringComparer.Ordinal);
+}
 
 public sealed class CommandCatalog
 {
@@ -55,9 +61,13 @@ public sealed class CommandCatalog
         foreach (var button in graph.Definitions.OfType<CommandButtonDefinition>())
         {
             var command = button.Fields.LastOrDefault(field => field.Name.Equals("Command", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText ?? string.Empty;
+            var options = button.Fields.LastOrDefault(field => field.Name.Equals("Options", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText ?? string.Empty;
+            var shotsText = button.Fields.LastOrDefault(field => field.Name.Equals("MaxShotsToFire", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty;
+            var shots = int.TryParse(shotsText, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed) && parsed is > 0 and < 0x7fffffff ? parsed : 0;
             all[button.OriginalName] = new CommandButtonInfo(command.Trim(),
                 button.Fields.LastOrDefault(field => field.Name.Equals("Upgrade", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty,
-                button.Fields.LastOrDefault(field => field.Name.Equals("WeaponSlot", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty);
+                button.Fields.LastOrDefault(field => field.Name.Equals("WeaponSlot", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty,
+                [..options.Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries).TakeWhile(token => !token.StartsWith(';')).Select(token => token.ToUpperInvariant())], shots);
             if (command.StartsWith("SPECIAL_POWER", StringComparison.OrdinalIgnoreCase))
             {
                 var power = button.Fields.LastOrDefault(field => field.Name.Equals("SpecialPower", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText;

@@ -680,7 +680,9 @@ static partial class Tests
         var session = StartMission([
             Scr.Script("Fire", [Scr.And(Scr.If("FLAG", Scr.Flag("go"), Scr.Bool(true)))], [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY_ON_NAMED", Scr.Unit("Shooter"), Scr.Ability("Cmd_AlphaBig"), Scr.Unit("Victim"))], oneShot: true),
             Scr.Script("Switch", [Scr.And(Scr.If("FLAG", Scr.Flag("go"), Scr.Bool(true)))], [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY", Scr.Unit("Switcher"), Scr.Ability("Cmd_AlphaSwitchBig"))], oneShot: true),
-        ], objects: [Placed("AlphaDual", 100m, 100m, "teamA", "Shooter"), Placed("BetaSoldier", 130m, 100m, "teamB", "Victim"), Placed("AlphaDual", 100m, 300m, "teamA", "Switcher")],
+            Scr.Script("Detonate", [Scr.And(Scr.If("FLAG", Scr.Flag("go"), Scr.Bool(true)))], [Scr.Do("NAMED_USE_COMMANDBUTTON_ABILITY", Scr.Unit("Detonator"), Scr.Ability("Cmd_AlphaBig"))], oneShot: true),
+        ], objects: [Placed("AlphaDual", 100m, 100m, "teamA", "Shooter"), Placed("BetaSoldier", 130m, 100m, "teamB", "Victim"), Placed("AlphaDual", 100m, 300m, "teamA", "Switcher"),
+            Placed("AlphaDual", 300m, 300m, "teamA", "Detonator")],
         options: MissionOptions.Standard with { CombatIntervalTicks = 0 }, extraFiles: extra);
         var victim = NamedIn(session, "Victim")!;
         var shooter = NamedIn(session, "Shooter")!;
@@ -692,5 +694,8 @@ static partial class Tests
         Check.That(before - victim.Body.Health == Fixed.FromInt(50), $"A FIRE_WEAPON button names the SECONDARY slot: the carrier shoots SlotBig (50), not its primary gun (20): {before - victim.Body.Health} dealt; diagnostics: {string.Join("; ", session.Engine.Diagnostics.Keys)}; rejections: {string.Join(",", session.World.RejectionCounts.Select((count, index) => count > 0 ? $"{(CommandRejection)index}={count}" : ""))}.");
         Check.That(shooter.WeaponLock == WeaponLockKind.Temporary && shooter.CurrentWeaponSlot == 1, "...and the button pinned that slot.");
         Check.That(switcher.WeaponLock == WeaponLockKind.Permanent && switcher.CurrentWeaponSlot == 1, "A SWITCH_WEAPON button locks its slot permanently.");
+        // Object::doCommandButton: a FIRE_WEAPON button without a target fires its slot at the carrier's own place (an attack on a place, F-64).
+        var detonator = NamedIn(session, "Detonator")!;
+        Check.That(detonator.ClipOf(1) < 2 && detonator.CurrentWeaponSlot == 1, $"A FIRE_WEAPON button without a target fires the SECONDARY slot at the own place (clip {detonator.ClipOf(1)}).");
     }
 }
