@@ -234,9 +234,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         var time = world.Time;
         if (_subStep != 0)
         {
-            Entity.X += time.FrameShare(_stepX, _subStep);
-            Entity.Y += time.FrameShare(_stepY, _subStep);
-            Entity.Z += time.FrameShare(_stepZ, _subStep);
+            Entity.CoverShare(world.Tick, time.FrameShare(_stepX, _subStep), time.FrameShare(_stepY, _subStep), time.FrameShare(_stepZ, _subStep));
             _subStep = time.NextSubStep(_subStep);
             world.MarkDirty(Entity);
             return _subStep == 0 && !_flying ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
@@ -343,10 +341,10 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         (_stepX, _stepY, _stepZ) = (x - startX, y - startY, z - oldZ);
         if (time.TicksPerOriginalFrame != 1)
         {
-            // The step was judged whole, as at 30 Hz; the object covers the first share of it now and the rest on the next ticks of the frame.
-            Entity.X = startX + time.FrameShare(_stepX, 0);
-            Entity.Y = startY + time.FrameShare(_stepY, 0);
-            Entity.Z = oldZ + time.FrameShare(_stepZ, 0);
+            // The step was judged whole, as at 30 Hz; the object covers the first share of it now and the rest on the next ticks of the frame. Observers read where the
+            // frame ends (Entity.FrameEnd: a radiation field's pulse, an area weapon), as they do for a mover.
+            Entity.SetAhead(world.Tick, _stepX, _stepY, _stepZ);
+            Entity.CoverShare(world.Tick, time.FrameShare(_stepX, 0), time.FrameShare(_stepY, 0), time.FrameShare(_stepZ, 0));
             _subStep = time.NextSubStep(0);
         }
         else (Entity.X, Entity.Y, Entity.Z) = (x, y, z);
