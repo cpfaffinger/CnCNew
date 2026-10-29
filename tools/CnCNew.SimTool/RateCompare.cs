@@ -129,7 +129,7 @@ internal static class RateCompare
     }
 
     /// <summary>
-    /// <c>--map-diff A,B --map PATH [--seed N] [--rates X,Y] [--frames N]</c> and the options of <c>--fields</c>: one match of two built-in AIs on a shipped map (exactly
+    /// <c>--map-diff A,B --map PATH [--seed N] [--rates X,Y] [--frames N] [--tactics a,b] [--strength a,b]</c> and the options of <c>--fields</c>: one match of two built-in AIs on a shipped map (exactly
     /// <c>ai-match --map PATH --factions A,B [--seed N]</c>, the tool's catalogs with model geometry) at two rates side by side, every described field of every object after
     /// every logic frame of the original. A diagnosis.
     /// </summary>
@@ -149,7 +149,7 @@ internal static class RateCompare
             var options = CnCNew.Simulation.Testing.SkirmishMatchOptions.Standard with { MaxTicks = rate.Time.OriginalFrames(frames) };
             if (Value(args, "--seed") is { } seed) options = options with { AiSeed = uint.Parse(seed, CultureInfo.InvariantCulture), WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) ^ 0xC0FFEE06 };
             var session = CnCNew.Simulation.Skirmish.SkirmishMatchSession.Start(options, context.Catalog, context.Fingerprint, terrain, map.Objects,
-                [..ReferenceManifest.Participants(context, factions).Select(participant => new CnCNew.Simulation.Skirmish.SkirmishSlot(participant))]);
+                [..ReferenceManifest.Participants(context, factions).Select((participant, index) => CnCNew.Simulation.Testing.AiSlotChoice.At(AiSurvey.Choices(args), index).Slot(participant))]);
             ends.Add(() => $"{rate.TicksPerSecond} Hz: over {session.IsOver}, winner {(session.Winner is { } winner ? session.Players.First(player => player.Id == winner).Faction : "none")} at tick {session.VictoryTick.ToString(CultureInfo.InvariantCulture)} (frame {(session.VictoryTick < 0 ? -1 : session.VictoryTick / rate.TicksPerOriginalFrame).ToString(CultureInfo.InvariantCulture)}), world tick {session.World.Tick.ToString(CultureInfo.InvariantCulture)}");
             // --commands N: what the players ordered in the last N logic frames before the comparison stopped (the AI's own state is outside the world and not compared).
             if (Value(args, "--commands") is { } span)
