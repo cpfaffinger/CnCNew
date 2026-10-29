@@ -35,7 +35,7 @@ public sealed record CreationNugget(CreationNuggetKind Kind, int Count, Creation
     Fixed MinDistanceA, Fixed MinDistanceB, Fixed MaxDistance, Fixed OffsetX, Fixed OffsetY, Fixed OffsetZ,
     long MinLifetimeTicks, long MaxLifetimeTicks, ImmutableArray<string> Objects, string PutInContainer, bool ContainInsideSourceObject,
     bool InheritsVeterancy, bool SkipIfSignificantlyAirborne, Fixed MinHealth, Fixed MaxHealth, bool RequiresLivePlayer, string Weapon,
-    long InvulnerableTicks, bool DiesOnBadLand, PayloadDelivery? Delivery = null);
+    long InvulnerableTicks, bool DiesOnBadLand, PayloadDelivery? Delivery = null, int AttackShots = 1, int AttackSlot = 0);
 
 /// <summary>
 /// The data of a <c>DeliverPayload</c> nugget (<c>DeliverPayloadNugget</c>, <c>ObjectCreationList.cpp</c>): the transports (<see cref="FormationSize"/> of them, spaced
@@ -169,7 +169,10 @@ public sealed class ObjectCreationListCatalog
             Real("MinDistanceAFormation", Fixed.Zero), Real("MinDistanceBFormation", Fixed.Zero), Real("MaxDistanceFormation", Fixed.Zero),
             offset.Item1, offset.Item2, offset.Item3, Ticks("MinLifetime"), Ticks("MaxLifetime"), objects.ToImmutable(), Reference("PutInContainer"),
             Bool("ContainInsideSourceObject"), Bool("InheritsVeterancy"), Bool("SkipIfSignificantlyAirborne"), health, maxHealth,
-            Bool("RequiresLivePlayer"), Reference("Weapon"), Ticks("InvulnerableTime"), Bool("DiesOnBadLand"), kind == CreationNuggetKind.DeliverPayload ? BuildDelivery(section, timing) : null);
+            Bool("RequiresLivePlayer"), Reference("Weapon"), Ticks("InvulnerableTime"), Bool("DiesOnBadLand"), kind == CreationNuggetKind.DeliverPayload ? BuildDelivery(section, timing) : null,
+            // AttackNugget: NumberOfShots (1) and WeaponSlot (PRIMARY) of the source's attack on the second point.
+            Field("NumberOfShots")?.Value.Value is long shots ? checked((int)shots) : 1,
+            WeaponSlot.TryParse(Field("WeaponSlot")?.Value.OriginalText ?? string.Empty, out var slot) ? slot : WeaponSlot.Primary);
     }
 
     private static PayloadDelivery BuildDelivery(DefinitionSection section, SimulationTime timing)

@@ -41,6 +41,17 @@ public sealed partial class SimulationWorld
                 FireTempWeapon(source, nugget.Weapon, target.X, target.Y, target.Z);
                 created = EntityId.Invalid;
             }
+            else if (nugget.Kind == CreationNuggetKind.Attack)
+            {
+                // AttackNugget::create: the source locks the slot temporarily ("merely fires till the weapon is empty or the attack is done") and attacks the second point for its
+                // shots (aiAttackPosition, CMD_FROM_AI; F-64) - the Scud Storm's launch. Nothing without an AI.
+                if (AiOf(source) is not null)
+                {
+                    SetWeaponLock(source, nugget.AttackSlot, WeaponLockKind.Temporary);
+                    AttackPlace(source, target.X, target.Y, nugget.AttackShots, fromPlayer: false);
+                }
+                created = EntityId.Invalid;
+            }
             else created = ExecuteNugget(source, nugget, origin);
             if (!first.IsValid) first = created;
         }
