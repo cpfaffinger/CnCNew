@@ -12,8 +12,8 @@
     },
     "creationLists": {
       "items": 294,
-      "sha256": "BDEE43E0146303C4F14DA6287C35BA0B4DB230471844DDDC9BF3D3B2D9FC5B8F",
-      "values": 29960
+      "sha256": "4123BAF3524536FB47BFB3AD4809BF4F0CEFE98130117BB170B205EC3C95D136",
+      "values": 48680
     },
     "factions": {
       "items": 15,
@@ -32,8 +32,8 @@
     },
     "templates": {
       "items": 2115,
-      "sha256": "683C222B610BDCC0DD43112A11DADF01680F0F570CE08514A3834C8683BE0E27",
-      "values": 562268
+      "sha256": "4DE1FD5AFC736A77D95F54212E8BB4ED67C25713955E99C5503C9739590C54BA",
+      "values": 562303
     },
     "upgrades": {
       "items": 85,
@@ -47,8 +47,8 @@
     },
     "whole": {
       "items": 2115,
-      "sha256": "BFB91E693B260D9F0F481694F6829DC0F8E63AD8767649F9178CCDFF4AC288C2",
-      "values": 724838
+      "sha256": "2E1E1ACC29F319BE00A9F5555A9C6B7A7363F222A78F998EB7196E03160FBE36",
+      "values": 743593
     }
   },
   "definitions": {
