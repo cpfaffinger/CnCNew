@@ -100,7 +100,9 @@ internal struct DozerBoredom
                 if (FindObjectToRepair(world, entity, boredRange) is { } target) ai.OrderRepair(world, target, fromPlayer: false);
             }
         }
-        if (ai.HasBuilderTask || !ai.IsIdle)
+        // A task - also the repair it has just given itself - is worked from the next tick on, its walk begun in the first tick of the builder's next frame.
+        if (ai.HasBuilderTask) return Math.Min(sleep, SimulationTiming.SleepNone);
+        if (!ai.IsIdle)
         {
             // Something the world drives (a guard) keeps it from being idle without waking it: look again where the next frame ends.
             if (sleep < SimulationTiming.SleepForever) return sleep;

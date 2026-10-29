@@ -75,7 +75,8 @@ static partial class Tests
             var ai = dozer.Modules.OfType<DozerAIUpdate>().Single();
             Check.That(feeder.SetMoveTarget(1, dozer.Id.Value, 160, 100).Accepted, "The dozer is sent 60 units on.");
             var start = world.Tick;
-            long Frame() => (world.Tick - start + world.Time.TicksPerOriginalFrame - 1) / world.Time.TicksPerOriginalFrame;
+            // Frames of the dozer's own grid (from the tick it appeared in), which is a tick off the world's above 30 Hz: the decisions it takes lie on it.
+            long Frame() => (world.Tick - dozer.SpawnTick + world.Time.TicksPerOriginalFrame - 1) / world.Time.TicksPerOriginalFrame - (start - dozer.SpawnTick) / world.Time.TicksPerOriginalFrame;
             long arrived = -1, bored = -1, healed = -1;
             for (var step = 0; step < world.Frames(400) && healed < 0; step++)
             {

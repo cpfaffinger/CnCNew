@@ -72,7 +72,8 @@ static partial class Tests
             var brains = (IWorkerBrains)worker;
             Check.That(feeder.Damage(bench.Id.Value, 50).Accepted, $"{rate}: the bench is hurt.");
             var start = world.Tick;
-            long Frame() => (world.Tick - start + factor - 1) / factor;
+            // Frames of the worker's own grid (from the tick it appeared in), which is a tick off the world's above 30 Hz: the decisions it takes lie on it.
+            long Frame() => (world.Tick - laborer.SpawnTick + factor - 1) / factor - (start - laborer.SpawnTick) / factor;
             long bored = -1, healing = -1, repaired = -1, truck = -1, delivered = -1, dozer = -1;
             var docked = false;
             var sentAway = false;
@@ -108,9 +109,8 @@ static partial class Tests
             Check.That(bored > 0 && repaired > bored, $"{rate}: the idle worker repairs the bench by itself ({bored}, {repaired}).");
             Check.That(truck > repaired && delivered > truck, $"{rate}: sent to the warehouse it acts as a supply truck and delivers ({truck}, {delivered}).");
             Check.That(dozer > 0, $"{rate}: sent away it is a dozer again ({dozer}).");
-            // Above 30 Hz the builder that arrives at the bench begins to repair a frame later (the repair task looks at its reach once per frame, F-70): the steps of the
-            // two brains are compared from where the bench is full.
-            Check.That(healing - HealingAt30(healing) <= 1, $"{rate}: the repair begins within a frame of 30 Hz.");
+            // The bench is full a frame later above 30 Hz (the heal slice per frame is rounded): the steps of the two brains are compared from where it is full.
+            Check.That(healing == HealingAt30(healing), $"{rate}: the repair begins in the frame it begins at 30 Hz ({healing}, F-70).");
             var steps = new List<long> { bored, truck - repaired, delivered - truck, dozer - delivered };
             if (reference is null)
             {
