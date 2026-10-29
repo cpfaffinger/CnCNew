@@ -53,6 +53,12 @@ public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRa
     /// <summary><c>Appearance = WINGS</c> (<c>LOCO_WINGS</c>): a fixed-wing aircraft that cannot hover (<c>Locomotor::moveTowardsPositionWings</c>/<c>maintainCurrentPositionWings</c>). Jets with such a locomotor never fall below <see cref="MinSpeed"/> and circle instead of stopping (<c>docs/SIM-JET-FLIGHT.md</c>).</summary>
     public bool IsWings { get; init; }
 
+    /// <summary>
+    /// <c>StickToGround</c> (<c>LocomotorTemplate::m_stickToGround</c>, default no): "walking guys aren't allowed to catch huge (or even small) air" - the physics module keeps such
+    /// an object on the ground and gives it no random rotation (<c>Locomotor::locoUpdate</c>, <c>setStickToGround</c>; F-63, docs/SHOCK-WAVE.md).
+    /// </summary>
+    public bool StickToGround { get; init; }
+
     /// <summary><c>Locomotor::m_circlingRadius</c> (<c>CirclingRadius</c>): the radius of the circle a winged aircraft flies to hold a position, positive clockwise, negative counter-clockwise, 0 the smallest circle its speed and turn rate allow.</summary>
     public Fixed CirclingRadius { get; init; }
 
@@ -457,6 +463,8 @@ public sealed class TemplateCatalog
         var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus)
         {
             MaxTunnelCapacity = ResolveMaxTunnelCapacity(graph),
+            GroundStiffness = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
+                .LastOrDefault(field => field.Name.Equals("GroundStiffness", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal stiffness ? Fixed.FromDecimal(stiffness) : Fixed.FromDecimal(0.5m),
             LowEnergy = ResolveLowEnergy(graph),
             SpecialPowerViewObject = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("SpecialPowerViewObject", StringComparison.OrdinalIgnoreCase))?.Value.Value is DefinitionReference { IsNone: false } view ? view.Name : string.Empty,
@@ -494,6 +502,12 @@ public sealed class TemplateCatalog
 
     /// <summary><c>GlobalData::m_maxTunnelCapacity</c>: how many objects one player's tunnel network holds (<c>TunnelTracker::getContainMax</c>).</summary>
     public int MaxTunnelCapacity { get; private init; }
+
+    /// <summary>
+    /// <c>GlobalData::m_groundStiffness</c> (<c>GameData.ini GroundStiffness</c>, 0.5 without the key): the share of its downward speed a bouncing object gets back from the ground
+    /// (<c>PhysicsBehavior::handleBounce</c>, clamped to 0.01-0.99 there; F-63, docs/SHOCK-WAVE.md).
+    /// </summary>
+    public Fixed GroundStiffness { get; private init; } = Fixed.FromDecimal(0.5m);
 
     /// <summary>Airfield bones read from the models (<see cref="ModelGeometry.None"/> when the host supplied none).</summary>
     public ModelGeometry Geometry { get; private init; } = ModelGeometry.None;
@@ -735,6 +749,7 @@ public sealed class TemplateCatalog
                 IsHover = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("HOVER", StringComparison.OrdinalIgnoreCase) == true,
                 IsWings = definition.Fields.LastOrDefault(field => field.Name.Equals("Appearance", StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim().Equals("WINGS", StringComparison.OrdinalIgnoreCase) == true,
                 CirclingRadius = Fixed.FromDecimal(Signed("CirclingRadius")),
+                StickToGround = definition.Fields.LastOrDefault(field => field.Name.Equals("StickToGround", StringComparison.OrdinalIgnoreCase))?.Value.Value is true,
                 PenaltyDamageState = penaltyState,
             };
             if (speedDamaged != speed || turnRateDamaged != turnRate || accelerationDamaged != acceleration || liftDamaged != lift)

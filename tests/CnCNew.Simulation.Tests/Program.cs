@@ -216,6 +216,9 @@ run.Test("Rule fix no-power-edge-for-unfinished-plant: an EMP on a plant being b
 run.Test("Rule fix undead-lethal-by-armour: a blow the armour makes survivable starts no second life", Tests.GameFixUndeadLethalByArmour);
 run.Test("Rule fix takeoff-waits-for-one-jet: a jet at its runway waits for one jet on the other runway, not for every taxiing one", Tests.GameFixTakeoffWaitsForOneJet);
 run.Test("Rule fix chinook-unloads-one-by-one: an unload at a place goes through the door rider after rider", Tests.GameFixChinookUnloadsOneByOne);
+run.Test("Shock wave (F-63), step 1: the weapon's shock wave keys and the physics keys of the flight are read", Tests.ShockWaveFieldsAreRead);
+run.Test("Shock wave (F-63), step 2: a shocked object flies, turns, lands and is hurt by the fall, the same at every rate", Tests.ShockWaveFlight);
+run.Test("Shock wave (F-63), step 3: the stun - lost in the first step off the ground, the flailing kept, a stunned landing, death off the map", Tests.ShockWaveStun);
 run.Test("Phase 40: a disable other than held pauses the special powers (pauseAllSpecialPowers)", Tests.DisablePausesSpecialPowers);
 run.Test("Phase 40 (F-50): the player's radar", Tests.PlayerRadar);
 run.Test("Phase 40 (F-48): the body applies the armour to raw damage and healing", Tests.ArmourIsAppliedByTheBody);
@@ -234,6 +237,9 @@ run.Test("Phase 41 (F-60, step 3): garrison and Helix riders have the GARRISONED
 run.Test("Phase 41 (F-60, step 5): a garrisoned rider fires from inside, within its garrisoned range, and never walks", Tests.FireFromContainersGarrisonFires);
 run.Test("Fire from containers, step 6: an attack order on a garrisoned building is passed to its riders", Tests.FireFromContainersOrdersThroughTheContainer);
 run.Test("Fire from containers, step 7: armed riders give a transport its PLAYER_UPGRADE weapon set", Tests.FireFromContainersArmedRidersUpgradeWeaponSet);
+run.Test("Fire from containers, clearing a garrison: KILL_GARRISONED kills riders, not an immune building's", Tests.FireFromContainersKillGarrisoned);
+run.Test("Fire from containers, clearing a garrison by a shell: AllowAttackGarrisonedBldgs and GarrisonHitKill", Tests.FireFromContainersGarrisonHitKill);
+run.Test("Fire from containers: a Chinook gives its victim to a rider without one every tenth frame", Tests.FireFromContainersChinookReissuesItsVictim);
 run.Test("Phase 41 (F-60, step 4): a garrison's rider fires from the fire point closest to its victim, a fire base's from its station", Tests.FireFromContainersFirePoints);
 run.Test("Phase 41 (F-60, step 3): a Battle Bus passes its weapon bonus to its riders", Tests.FireFromContainersPassedBonus);
 run.Test("Phase 41 (F-58, step 1): a guard drives to an enemy in its inner range, kills it and returns", Tests.GuardPositionChasesAndReturns);
@@ -241,6 +247,9 @@ run.Test("Phase 41 (F-58, step 1): a guard gives up beyond its outer range; the 
 run.Test("Phase 41 (F-58, step 1): a guard answers an attacker beyond its inner range", Tests.GuardAnswersAnAttacker);
 run.Test("Phase 41 (F-58, step 6): a human player's idle units answer an attack on a friend nearby", Tests.GuardRetaliation);
 run.Test("Rule fix guard-answers-only-when-idle: a returning guard walks on to its post before it answers", Tests.GameFixGuardAnswersOnlyWhenIdle);
+run.Test("Phase 42 (F-58, step 7): a deploying unit on guard sets up at its post and packs before it chases", Tests.GuardDeployStyleDeploysAndPacks);
+run.Test("Phase 42 (F-58, step 7): a parked jet takes off for its guard, reloads and guards on", Tests.GuardJetTakesOffAndResumesAfterReload);
+run.Test("Phase 42 (F-58, step 7): a parked jet takes off to answer an attack on its airfield", Tests.GuardRetaliationJetTakesOff);
 run.Test("Phase 41 (F-58, step 4): the script guard actions guard a waypoint, an own position, an object", Tests.ScriptGuardActions);
 run.Test("Phase 41 (F-58, step 3): a team guards a trigger area - inside the polygon, out to its radius", Tests.ScriptGuardArea);
 run.Test("Phase 41 (F-54, step 2): a container counts its riders of kind STEALTH_GARRISON", Tests.StealthGarrisonCount);

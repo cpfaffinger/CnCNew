@@ -2704,15 +2704,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GarrisonContain/ImmuneToClearBuildingAttacks",
-      "count": 15,
-      "owners": [
-        "GarrisonContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GarrisonContain/InitialRoster",
       "count": 2,
       "owners": [

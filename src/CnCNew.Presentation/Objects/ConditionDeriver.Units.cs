@@ -22,6 +22,8 @@ public static class UnitFlags
     public static readonly ModelConditionFlag SpecialCheering = ModelConditions.Parse("SPECIAL_CHEERING");
     public static readonly ModelConditionFlag Splatted = ModelConditions.Parse("SPLATTED");
     public static readonly ModelConditionFlag SecondLife = ModelConditions.Parse("SECOND_LIFE");
+    public static readonly ModelConditionFlag StunnedFlailing = ModelConditions.Parse("STUNNED_FLAILING");
+    public static readonly ModelConditionFlag Stunned = ModelConditions.Parse("STUNNED");
     public static readonly ModelConditionFlag ContinuousFireSlow = ModelConditions.Parse("CONTINUOUS_FIRE_SLOW");
     public static readonly ModelConditionFlag ContinuousFireMean = ModelConditions.Parse("CONTINUOUS_FIRE_MEAN");
     public static readonly ModelConditionFlag ContinuousFireFast = ModelConditions.Parse("CONTINUOUS_FIRE_FAST");
@@ -68,6 +70,11 @@ public static partial class ConditionDeriver
                     break;
                 case ToppleUpdate { HasToppled: true }:
                     set = set.With(UnitFlags.Toppled);
+                    break;
+                case PhysicsBehavior physics when physics.ShowsFlailing || physics.ShowsStunned:
+                    // Object::attemptDamage's shock wave and PhysicsBehavior::update (F-63): STUNNED_FLAILING from the shock until a stunned landing, STUNNED after it.
+                    if (physics.ShowsFlailing) set = set.With(UnitFlags.StunnedFlailing);
+                    if (physics.ShowsStunned) set = set.With(UnitFlags.Stunned);
                     break;
                 case BattleBusSlowDeathBehavior bus when bus.HasLanded(world):
                     set = set.With(UnitFlags.SecondLife);

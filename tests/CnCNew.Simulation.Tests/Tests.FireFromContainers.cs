@@ -53,6 +53,22 @@ static partial class Tests
           DamageType = MELEE
           DelayBetweenShots = 500
         End
+        Weapon FcFlashBang
+          PrimaryDamage = 0
+          PrimaryDamageRadius = 5.0
+          AttackRange = 150.0
+          WeaponSpeed = 300
+          ProjectileObject = FcFlashShell
+          DamageType = EXPLOSION
+          DelayBetweenShots = 1000
+          AllowAttackGarrisonedBldgs = Yes
+        End
+        Weapon FcClearGun
+          PrimaryDamage = 2
+          AttackRange = 150.0
+          DamageType = KILL_GARRISONED
+          DelayBetweenShots = 100
+        End
         Weapon FcGattlingGun
           PrimaryDamage = 5
           AttackRange = 150.0
@@ -118,6 +134,93 @@ static partial class Tests
           End
           Behavior = GarrisonContain Garrison01
             ContainMax = 5
+          End
+        End
+        Object FcImmuneBunker
+          KindOf = STRUCTURE
+          Geometry = CYLINDER
+          GeometryMajorRadius = 30.0
+          GeometryMinorRadius = 30.0
+          GeometryHeight = 20.0
+          Body = StructureBody Body01
+            MaxHealth = 5000.0
+            InitialHealth = 5000.0
+          End
+          Behavior = GarrisonContain Garrison01
+            ContainMax = 5
+            ImmuneToClearBuildingAttacks = Yes
+          End
+        End
+        Object FcFlashShell
+          KindOf = PROJECTILE
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Behavior = DumbProjectileBehavior Dumb01
+            FirstHeight = 0
+            SecondHeight = 0
+            FirstPercentIndent = 30%
+            SecondPercentIndent = 70%
+            GarrisonHitKillCount = 2
+            GarrisonHitKillRequiredKindOf = INFANTRY
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object FcGrenadier
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcFlashBang
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object FcChinook
+          KindOf = SELECTABLE VEHICLE AIRCRAFT TRANSPORT
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          Behavior = ChinookAIUpdate AI01
+          End
+          Behavior = TransportContain Transport01
+            Slots = 4
+            PassengersAllowedToFire = Yes
+          End
+        End
+        Object FcQuietRifleman
+          KindOf = SELECTABLE INFANTRY
+          TransportSlotCount = 1
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcRifle
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        Object FcClearer
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcClearGun
+          End
+          Behavior = AIUpdateInterface AI01
           End
         End
         Object FcFireBase
@@ -655,6 +758,97 @@ static partial class Tests
         var knifeman = scene.World.Entities.Single(value => value.Template.Name == "FcKnifeman");
         Check.That(scene.World.TryEnterContainer(knifeman, scene.Container) && !Upgraded(), "A rider with only a contact weapon gives it no weapon set.");
         Check.That(scene.World.TryEnterContainer(scene.Rider, scene.Container) && Upgraded(), "The rifleman back inside gives it again.");
+    }
+
+    /// <summary>
+    /// Clearing a garrison (<c>ActiveBody::attemptDamage</c>, <c>DAMAGE_KILL_GARRISONED</c>; the microwave tank's building clearer): a shot of 2 kills the first two of three riders of
+    /// a bunker and leaves the bunker whole; an empty bunker cannot be fired at with it; a bunker with <c>ImmuneToClearBuildingAttacks</c> cannot either, and its riders live.
+    /// </summary>
+    public static void FireFromContainersKillGarrisoned()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRunnerIni));
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "FcClearer", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "FcBunker", owner: 2, x: 100, y: 0);
+            feeder.Spawn(2, "FcImmuneBunker", owner: 2, x: 0, y: 100);
+            for (var i = 0; i < 3; i++) feeder.Spawn(2, "FcRifleman", owner: 2, x: 100, y: 0);
+            for (var i = 0; i < 2; i++) feeder.Spawn(2, "FcRifleman", owner: 2, x: 0, y: 100);
+            world.Step();
+            var clearer = world.Entities.Single(value => value.Template.Name == "FcClearer");
+            var bunker = world.Entities.Single(value => value.Template.Name == "FcBunker");
+            var immune = world.Entities.Single(value => value.Template.Name == "FcImmuneBunker");
+            Check.That(!feeder.FireWeapon(1, clearer.Id.Value, bunker.Id.Value).Accepted, $"{rate}: an empty bunker cannot be fired at with the clearer.");
+            var riders = world.Entities.Where(value => value.Template.Name == "FcRifleman").OrderBy(value => value.Id.Value).ToArray();
+            foreach (var rider in riders.Take(3)) Check.That(world.TryEnterContainer(rider, bunker), $"{rate}: setup - a rifleman enters the bunker.");
+            foreach (var rider in riders.Skip(3)) Check.That(world.TryEnterContainer(rider, immune), $"{rate}: setup - a rifleman enters the immune bunker.");
+            Check.That(!feeder.FireWeapon(1, clearer.Id.Value, immune.Id.Value).Accepted, $"{rate}: the immune bunker cannot be fired at with the clearer.");
+            Check.That(feeder.FireWeapon(1, clearer.Id.Value, bunker.Id.Value).Accepted, $"{rate}: the garrisoned bunker can.");
+            world.Step();
+            Check.That(riders[0].EffectivelyDead && riders[1].EffectivelyDead && !riders[2].EffectivelyDead, $"{rate}: the first two riders die, the third lives.");
+            Check.That(bunker.Body!.Health == Fixed.FromInt(5000) && riders.Skip(3).All(rider => !rider.EffectivelyDead), $"{rate}: the bunker is whole, the immune bunker's riders live.");
+        }
+    }
+
+    /// <summary>
+    /// Clearing a garrison by a shell (<c>DumbProjectileBehavior::projectileHandleCollision</c>, <c>AllowAttackGarrisonedBldgs</c>; the flash-bang grenade): a weapon of no damage
+    /// cannot be aimed at an empty bunker but can at a garrisoned one; its shell, reaching the bunker, kills two of its three riders and vanishes without its explosion.
+    /// </summary>
+    public static void FireFromContainersGarrisonHitKill()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRunnerIni));
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "FcGrenadier", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "FcBunker", owner: 2, x: 100, y: 0);
+            for (var i = 0; i < 3; i++) feeder.Spawn(2, "FcRifleman", owner: 2, x: 100, y: 0);
+            world.Step();
+            var grenadier = world.Entities.Single(value => value.Template.Name == "FcGrenadier");
+            var bunker = world.Entities.Single(value => value.Template.Name == "FcBunker");
+            Check.That(!feeder.FireWeapon(1, grenadier.Id.Value, bunker.Id.Value).Accepted, $"{rate}: a weapon of no damage cannot be aimed at an empty bunker.");
+            var riders = world.Entities.Where(value => value.Template.Name == "FcRifleman").OrderBy(value => value.Id.Value).ToArray();
+            foreach (var rider in riders) Check.That(world.TryEnterContainer(rider, bunker), $"{rate}: setup - a rifleman enters the bunker.");
+            Check.That(feeder.FireWeapon(1, grenadier.Id.Value, bunker.Id.Value).Accepted, $"{rate}: the garrisoned bunker it can.");
+            var impacts = 0;
+            for (var step = 0; step < world.Frames(30); step++) impacts += world.Step().Events.Count(value => value.Kind == SimEventKind.WeaponImpact);
+            Check.That(riders[0].EffectivelyDead && riders[1].EffectivelyDead && !riders[2].EffectivelyDead, $"{rate}: the shell kills the first two riders, the third lives.");
+            Check.That(impacts == 0 && !world.Entities.Any(value => value.Template.Name == "FcFlashShell"), $"{rate}: the shell is gone without its explosion ({impacts} impacts).");
+        }
+    }
+
+    /// <summary>
+    /// The Chinook's re-issue (<c>ChinookAIUpdate::update</c>): a Chinook ordered to attack gives its victim, every frame whose number ends in 1, to a rider that has none - here a
+    /// rifleman that never looks for one himself and boards after the order. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void FireFromContainersChinookReissuesItsVictim()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRunnerIni));
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "FcChinook", owner: 1, x: 0, y: 0);
+            feeder.Spawn(1, "FcQuietRifleman", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "FcTarget", owner: 2, x: 80, y: 0);
+            world.Step();
+            var chinook = world.Entities.Single(value => value.Template.Name == "FcChinook");
+            var rider = world.Entities.Single(value => value.Template.Name == "FcQuietRifleman");
+            var target = world.Entities.Single(value => value.Template.Name == "FcTarget");
+            Check.That(feeder.Pursue(1, chinook.Id.Value, target.Id.Value, 0, 0).Accepted, $"{rate}: the Chinook is ordered to attack.");
+            world.Step();
+            Check.That(world.TryEnterContainer(rider, chinook) && !world.AcquiredVictimOf(rider).IsValid, $"{rate}: setup - the rifleman boards after the order, without a victim.");
+            var given = -1L;
+            for (var step = 0; step < world.Frames(12) && given < 0; step++)
+            {
+                world.Step();
+                if (world.AcquiredVictimOf(rider) == target.Id) given = world.Time.ToOriginalFrames(world.Tick);
+            }
+            Check.That(given >= 0, $"{rate}: within ten frames the Chinook's victim is the rider's (frame {given}).");
+        }
     }
 
     /// <summary>

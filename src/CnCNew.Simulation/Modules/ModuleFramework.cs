@@ -92,6 +92,18 @@ public interface IWorldServices
     /// <summary>A new order ends the unit's guard (<c>AIGuardState::onExit</c>, F-58).</summary>
     void EndGuard(Entity entity);
 
+    /// <summary><c>ALLOW_INTERRUPT_AND_RESUME_OF_CUR_STATE_FOR_RELOAD</c> (F-58): the unit guards (or retaliates) and the guard is not held - an aircraft out of ammunition interrupts it to reload.</summary>
+    bool GuardResumesAfterReload(Entity entity);
+
+    /// <summary>The unit's guard waits for its aircraft (<c>HAS_PENDING_COMMAND</c> with the guard as the most recent command).</summary>
+    bool IsGuardHeld(Entity entity);
+
+    /// <summary>An aircraft that returns to reload holds its guard: the guard's attack ends and its machine decides nothing until <see cref="ResumeGuard"/>.</summary>
+    void HoldGuard(Entity entity);
+
+    /// <summary>The aircraft flies again and gives its stored guard again (<c>m_mostRecentCommand.reconstitute</c>).</summary>
+    void ResumeGuard(Entity entity);
+
     /// <summary>
     /// <c>GarrisonContain::matchObjectsToGarrisonPoints</c> of an enclosing garrison (F-60, step 4): a rider at a point whose victim is gone or out of range goes back to the centre,
     /// a rider with a victim takes the free point closest to it, and a rider at a point moves to a free one closer to its victim.
@@ -310,6 +322,12 @@ public interface IWorldServices
     /// <c>ContainModuleInterface::removeAllContained</c> itself - all of them in this step, put where the container stands, without a door.
     /// </summary>
     void EvacuateContainer(Entity container, bool atOnce = false);
+
+    /// <summary>
+    /// The riders' half of an attack order on a container whose riders may fire (<c>AIGroup::groupAttackObjectPrivate</c>, F-60); with <paramref name="onlyIdle"/> only the riders
+    /// without a victim, and without asking whether they can attack it (<c>ChinookAIUpdate::update</c>'s re-issue).
+    /// </summary>
+    void PassAttackToRiders(Entity container, Entity victim, bool onlyIdle = false);
 
     // ------------------------------------------------------------------------------------ phase 10: footprint collision
 
@@ -791,6 +809,12 @@ public interface IContainerModule
 
     /// <summary><c>ContainModuleInterface::isGarrisonable</c>: a garrison, and an Overlord whose portable structure is one; no other container.</summary>
     bool IsGarrisonable => false;
+
+    /// <summary><c>ContainModuleInterface::isImmuneToClearBuildingAttacks</c>: weapons that clear a garrison do not reach the riders (a garrison's <c>ImmuneToClearBuildingAttacks</c>).</summary>
+    bool IsImmuneToClearBuildingAttacks => false;
+
+    /// <summary>The riders of this container can be cleared out by a weapon that clears a garrison: it holds some and is garrisonable and not immune (<c>ActiveBody::attemptDamage</c>).</summary>
+    bool CanBeCleared => ContainCount > 0 && IsGarrisonable && !IsImmuneToClearBuildingAttacks;
 
     /// <summary>
     /// <c>OpenContain::m_stealthUnitsContained</c> (F-54): the riders whose kind is <c>STEALTH_GARRISON</c> - their kind, not whether they are stealthed. Derived from the riders here;

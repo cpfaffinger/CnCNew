@@ -119,6 +119,11 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
         if (stride > 1 && world.Tick < Entity.SpawnTick + stride) return SimulationTiming.SleepNone;
         var sleep = base.Update(world);
         if (!EvacuatePending) _landing = _dropAll = false;
+        // ChinookAIUpdate::update, "if we are attacking something, lets make sure our passengers follow suit": every frame whose number ends in 1 (frame % 10 == 1) a rider
+        // without a victim is given the Chinook's (F-60).
+        if (Entity.Acquisition is { Victim.IsValid: true } attack && Entity.Container is { } held && held.IsPassengerAllowedToFire(world, null)
+            && world.Time.IsOriginalFrameBoundary(world.Tick) && world.Time.FramesIn(world.Tick) % 10 == 1 && world.FindEntity(attack.Victim) is { } victim)
+            world.PassAttackToRiders(Entity, victim, onlyIdle: true);
         // The change of height is the 30 Hz step (one locomotor speed per logic frame of the original, at most the rest of the way), decided once per frame and flown in shares
         // per tick: the Chinook is on the ground, and lets its passengers out, in the same frame at every rate.
         // Observers read the Chinook where the frame it has begun ends: the rest of its movement and of its change of height.
@@ -149,7 +154,8 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
             world.MarkDirty(Entity);
         }
         _climb.Publish(world.Time, world.Tick, Entity, moving.X, moving.Y);
-        return Entity.Z != target || forBoarders ? SimulationTiming.SleepNone : sleep;
+        // ... and an attacking Chinook with riders stays awake for its re-issue.
+        return Entity.Z != target || forBoarders || (Entity.Acquisition is { Victim.IsValid: true } && Entity.Container is { ContainCount: > 0 }) ? SimulationTiming.SleepNone : sleep;
     }
 
     /// <summary><c>OpenContain::hasObjectsWantingToEnterOrExit</c> for entering: a living object whose enter order aims at this Chinook.</summary>

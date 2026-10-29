@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
@@ -51,6 +52,24 @@ static partial class Tests
           DamageType = SMALL_ARMS
           ClipSize = 0
           DelayBetweenShots = 300
+        End
+        Object GdCannon
+          KindOf = SELECTABLE VEHICLE CAN_ATTACK
+          VisionRange = 150.0
+          Locomotor = SET_NORMAL FcFeet
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcRifle
+          End
+          Behavior = DeployStyleAIUpdate AI01
+            AutoAcquireEnemiesWhenIdle = Yes
+            PackTime = 500
+            UnpackTime = 500
+          End
         End
         Object GdSniper
           KindOf = SELECTABLE INFANTRY
@@ -262,6 +281,143 @@ static partial class Tests
             var fixedRun = FromPost(CnCNew.Simulation.Rules.RuleProfile.Parse("guard-answers-only-when-idle"));
             Check.That(original > Fixed.FromInt(60), $"{rate}: under the original rules the returning guard turns to the sniper ({original} from its post).");
             Check.That(fixedRun < Fixed.FromInt(40), $"{rate}: with the fix it walks on towards its post ({fixedRun} from it).");
+        }
+    }
+
+    /// <summary>
+    /// F-58 step 7, <c>DeployStyleAIUpdate::update</c>: a deploying unit on guard sets itself up at its post while it is idle there ("idle guarders deploy for fastest response");
+    /// when the guard then chases an enemy beyond its weapon it packs first and only then drives (the guard's move waits, it is not lost), and deploys again to fire. At 30, 60
+    /// and 120 Hz.
+    /// </summary>
+    public static void GuardDeployStyleDeploysAndPacks()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, feeder, _) = GuardWorld(rate);
+            var cannon = GdSpawn(world, feeder, "GdCannon", 1, 0, 0);
+            var deploy = cannon.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.DeployStyleAIUpdate>().Single();
+            Check.That(feeder.Guard(1, [cannon.Id.Value], 0, 0).Accepted, $"{rate}: the guard order is accepted.");
+            for (var step = 0; step < world.Frames(60); step++) world.Step();
+            Check.That(deploy.IsDeployed, $"{rate}: idle at its post, the guard has set itself up.");
+            var dummy = GdSpawn(world, feeder, "GdDummy", 2, 200, 0);
+            var (lastX, lastY) = (cannon.X, cannon.Y);
+            var moved = false;
+            for (var step = 0; step < world.Frames(900) && !dummy.EffectivelyDead && world.Entities.Contains(dummy); step++)
+            {
+                // Packed when the tick began (its move runs before it decides to set up for an attack in reach) or when it ended (a pack that finishes in the tick lets it drive in it).
+                var packed = deploy.IsPacked;
+                world.Step();
+                packed |= deploy.IsPacked;
+                if (cannon.X != lastX || cannon.Y != lastY)
+                {
+                    moved = true;
+                    Check.That(packed, $"{rate}: it drives only when packed (tick {world.Tick}).");
+                }
+                (lastX, lastY) = (cannon.X, cannon.Y);
+            }
+            Check.That(moved && (dummy.EffectivelyDead || !world.Entities.Contains(dummy)), $"{rate}: it drove after the enemy and killed it (moved {moved}).");
+        }
+    }
+
+    /// <summary>An airfield of player 1 at (500, 500) with one jet parked on it and an enemy dummy at <paramref name="dummyX"/>, at <paramref name="rate"/>.</summary>
+    private static (SimulationWorld World, Feeder Feeder, Entity Airfield, Entity Jet, Entity Dummy, SyntheticFixture Fixture) GuardJetWorld(SimulationRate rate, int dummyX, int dummyY = 500)
+    {
+        var fixture = new SyntheticFixture(rate, files: AirFixtureFiles);
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 9, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        var feeder = new Feeder(world);
+        feeder.Spawn(0, "AirTestAirfield", owner: 1, x: 500, y: 500);
+        feeder.Spawn(0, "AirDummy", owner: 2, x: dummyX, y: dummyY);
+        world.Step();
+        feeder.GiveMoney(1, 1000);
+        world.Step();
+        var airfield = Get(world, "AirTestAirfield");
+        Check.That(feeder.QueueProduction(1, airfield.Id.Value, "AirTestJet").Accepted, $"{rate}: the jet is queued at the airfield.");
+        StepUntil(world, () => world.Entities.Any(value => value.Template.Name == "AirTestJet"), 200, "The airfield produced the jet.");
+        var jet = Get(world, "AirTestJet");
+        StepUntil(world, () => JetOf(jet).Phase == JetAIUpdate.JetPhase.None, 600, "The produced jet is parked.");
+        // Orders in the same frame of the original at every rate (the jet is parked by then).
+        Check.That(world.Tick < world.Frames(120), $"{rate}: the jet is parked before frame 120.");
+        while (world.Tick < world.Frames(120)) world.Step();
+        return (world, feeder, airfield, jet, Get(world, "AirDummy"), fixture);
+    }
+
+    /// <summary>
+    /// F-58 step 7, <c>JetAIUpdate::aiDoCommand</c> and <c>update</c>: a parked jet told to guard a point near an enemy takes off first and then guards (it flies there, fires its two
+    /// missiles); out of missiles it holds the guard, flies home, lands, reloads, takes off again and guards on - a second sortie hits the enemy again
+    /// (<c>ALLOW_INTERRUPT_AND_RESUME_OF_CUR_STATE_FOR_RELOAD</c>). The same frames of each hit at 30, 60 and 120 Hz, and a snapshot while the guard is held continues identically.
+    /// </summary>
+    public static void GuardJetTakesOffAndResumesAfterReload()
+    {
+        long[] Run(SimulationRate rate, bool save)
+        {
+            var (world, feeder, _, jet, dummy, fixture) = GuardJetWorld(rate, 1500);
+            var ai = JetOf(jet);
+            Check.That(feeder.Guard(1, [jet.Id.Value], 1400, 500).Accepted, $"{rate}: the guard order is accepted.");
+            var start = world.Tick;
+            var hits = new List<long>();
+            var takeoffs = 0;
+            var last = ai.Phase;
+            var health = dummy.Body!.Health;
+            var saved = false;
+            for (var step = 0; step < world.Frames(4000) && hits.Count < 4; step++)
+            {
+                world.Step();
+                if (ai.Phase != last && ai.Phase == JetAIUpdate.JetPhase.TakingOff) takeoffs++;
+                last = ai.Phase;
+                if (dummy.Body.Health < health)
+                {
+                    // The frame the hit fell in, counted to its end (the first tick of a frame above 30 Hz belongs to that frame).
+                    hits.Add((world.Tick - start + world.Time.TicksPerOriginalFrame - 1) / world.Time.TicksPerOriginalFrame);
+                    health = dummy.Body.Health;
+                    Check.That(jet.Z > Fixed.Zero && ai.AllowAirLoco, $"{rate}: the jet fires from the air (hit {hits.Count} at frame {hits[^1]}: {ai.Phase}, z {jet.Z}, air {ai.AllowAirLoco}).");
+                }
+                if (save && !saved && ai.Phase == JetAIUpdate.JetPhase.ReloadAmmo)
+                {
+                    saved = true;
+                    Check.That(world.IsGuarding(jet) && world.IsGuardHeld(jet), $"{rate}: while it reloads the guard is held.");
+                    var restored = WorldSnapshot.Restore(WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint);
+                    Check.That(restored.StateHash == world.StateHash, $"{rate}: the snapshot with a held guard restores to the same hash.");
+                    for (var follow = 0; follow < restored.Frames(30); follow++)
+                        Check.That(restored.Step().StateHash == world.Step().StateHash, $"{rate}: the restored world follows the reload (step {follow}).");
+                }
+            }
+            Check.That(hits.Count >= 4, $"{rate}: two sorties of two missiles each hit the enemy ({hits.Count} hits).");
+            Check.That(takeoffs >= 2, $"{rate}: the jet took off for the guard and again after reloading ({takeoffs}).");
+            Check.That(world.IsGuarding(jet), $"{rate}: it still guards.");
+            Check.That(!save || saved, $"{rate}: the jet reloaded.");
+            return [.. hits];
+        }
+
+        var reference = Run(SimulationRate.Hz30, save: false);
+        foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var other = Run(rate, save: false);
+            Check.That(other.SequenceEqual(reference), $"{rate}: the hits fall on the same frames as at 30 Hz ({string.Join(",", other)} against {string.Join(",", reference)}).");
+        }
+        Run(TestRate.Default, save: true);
+    }
+
+    /// <summary>
+    /// F-58 step 7 with step 6: a human player's parked jet beside its airfield answers an enemy that shoots the airfield (<c>aiGuardRetaliate</c> reaches <c>JetAIUpdate::aiDoCommand</c>,
+    /// which takes off for it) - it does not fire from the ground. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void GuardRetaliationJetTakesOff()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var (world, _, airfield, jet, dummy, _) = GuardJetWorld(rate, 650);
+            var ai = JetOf(jet);
+            var clip = jet.WeaponClip;
+            world.Damage(airfield.Id, new DamageInfo(dummy.Id, Fixed.FromInt(10), DamageTypes.Explosion, DeathTypes.Normal, false));
+            Check.That(world.IsGuarding(jet), $"{rate}: the parked jet answers the attack on its airfield.");
+            var tookOff = false;
+            for (var step = 0; step < world.Frames(600) && !tookOff; step++)
+            {
+                world.Step();
+                Check.That(ai.AllowAirLoco || jet.WeaponClip == clip, $"{rate}: it does not fire before it flies.");
+                tookOff = ai.AllowAirLoco;
+            }
+            Check.That(tookOff, $"{rate}: it took off to answer ({ai.Phase}).");
         }
     }
 }

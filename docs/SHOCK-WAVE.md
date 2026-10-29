@@ -1,6 +1,6 @@
 # The weapon's shock wave - analysis and plan (fidelity finding F-63)
 
-Read on 28 October 2026 for Reforged's R-24 (`docs/REFORGED-FIXES.md`). Nothing of it is built; this is the starting point of the work. Sources: EA's released code
+Read on 28 October 2026 for Reforged's R-24 (`docs/REFORGED-FIXES.md`). **Built in Phase 42 (29 October 2026), all four steps - docs/SIMULATION-CORE.md §56.1.** Sources: EA's released code
 (`references/ea-generals-zero-hour`), read, never copied.
 
 ## 1. What the original does
@@ -57,6 +57,21 @@ movement system, not by forces. `ShockWaveAmount`, `ShockWaveRadius`, `ShockWave
 
 Rate invariance: the flight is a 30 Hz step (decided in the first tick of the object's frame, read at the frame end, `docs/SIMULATION-CORE.md` §43); the three random draws
 happen in the tick of the damage, in victim order, as the original's.
+
+## 3a. Read for step 2 (28 October 2026)
+
+- **Infantry does not fly.** `Locomotor::locoUpdate` hands the locomotor's `StickToGround` (typed, `UpgradeSchema.cs`; infantry locomotors set it) to the physics
+  module (`setStickToGround`); such an object skips `applyRandomRotation` and is put back on the ground every update unless `ALLOW_TO_FALL` (`PhysicsUpdate.cpp` 786-789):
+  a shocked soldier slides along the ground, it does not rise or tumble.
+- **The force is upward by the full amount.** After `normalize` and `scale(amount x mult)` the force has the length `amount x mult`, so `z = length` sets the upward part to
+  exactly that, whatever the vector's own `z` was.
+- **The port's movement pins a ground unit to the terrain** every step it moves it (`Phase5Modules.cs`, the ground clamp of the move), so a flight needs the movement
+  paused while the object is in the air - a named difference: the original's locomotor would push again as soon as the (quirky) stun has ended.
+- **Where it hooks in:** `SimulationWorld.DealDamageCore`, after each victim's `Damage`, in victim order (the three random draws there); the vector from the source's
+  position (the frame end above 30 Hz, as the victim's) to the victim's; a source that is gone gives the original's zero vector, i.e. straight up.
+- `GroundStiffness` is 0.8 in the shipped `GameData.ini`.
+- **What step 2 must read first** (none is read by the port today): the locomotor's `StickToGround` (`LocomotorInfo`), `GameData`'s `GroundStiffness`, and the original's
+  `Object::isAirborneTarget` (an aircraft in the air is not shocked) as a query of the world.
 
 ## 4. Not determined
 

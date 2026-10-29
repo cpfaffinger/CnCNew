@@ -395,6 +395,9 @@ public sealed class FrameProjector
         var main = _turrets.Update(entity, 0);
         var alt = _turrets.Update(entity, 1);
         var chassis = _suspension.Update(entity, visual, world, _options.SnapDistance) ?? ChassisPose.Level;
+        // The pitch and roll a shock wave gave the object (F-63; the physics module's matrix in the original) on top of what the chassis does.
+        if (entity.InPhysicsFlight && entity.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.PhysicsBehavior>().FirstOrDefault() is { } thrown && thrown.Tilt != (Fixed.Zero, Fixed.Zero))
+            chassis = chassis with { Pitch = chassis.Pitch + ToFloat(thrown.Tilt.Pitch), Roll = chassis.Roll + ToFloat(thrown.Tilt.Roll) };
         conditions = conditions.Union(_units.Update(entity, world, world.Tick - 1, _turrets));
         // The selected states are a function of the visual and the condition bits alone; most objects keep both from one tick to the next.
         var selections = previous is not null && ReferenceEquals(previous.Visual, visual) && previous.Conditions == conditions ? previous.Selections : Select(visual, conditions);

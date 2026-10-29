@@ -1,4 +1,6 @@
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
@@ -124,7 +126,35 @@ public sealed partial class SimulationWorld
             // The body applies the armour (ActiveBody::attemptDamage); the value returned is what it would come to.
             if (victim == primaryVictim) dealt = ActiveArmor(victim).Adjust(weapon.DamageType, amount);
             Damage(victim.Id, new DamageInfo(damageSource, amount, weapon.DamageType, weapon.DeathType, false));
+            if (weapon.ShockWaveAmount > Fixed.Zero && weapon.ShockWaveRadius > Fixed.Zero) ShockWave(source, victim, weapon, frameEnd);
         }
         return dealt;
     }
+
+    /// <summary>
+    /// <c>Object::attemptDamage</c>'s shock wave (F-63, docs/SHOCK-WAVE.md): an object with a physics module that is no aircraft in the air and no projectile is pushed along the
+    /// vector from the source to it (straight up when they coincide or the source is gone) by <c>ShockWaveAmount</c> times one minus its share of <c>ShockWaveRadius</c> times one
+    /// minus <c>ShockWaveTaperOff</c>, and upward by the same amount; positions are read where their frames end above 30 Hz.
+    /// </summary>
+    private void ShockWave(Entity? source, Entity victim, WeaponInfo weapon, bool frameEnd)
+    {
+        if (victim.DestroyRequested || victim.Template.IsKindOf("PROJECTILE")) return;
+        if (victim.HasStatus(AirborneTargetBit) || (victim.Template.IsKindOf("AIRCRAFT") && IsSignificantlyAboveTerrain(victim))) return;
+        if (Array.Find(victim.ModuleArray, module => module is PhysicsBehavior) is not PhysicsBehavior physics) return;
+        var (vx, vy, vz) = frameEnd ? victim.FrameEnd(_tick) : (victim.X, victim.Y, victim.Z);
+        Fixed dx = Fixed.Zero, dy = Fixed.Zero, dz = Fixed.Zero;
+        if (source is not null)
+        {
+            var (sx, sy, sz) = frameEnd ? source.FrameEnd(_tick) : (source.X, source.Y, source.Z);
+            (dx, dy, dz) = (vx - sx, vy - sy, vz - sz);
+        }
+        if (dx == Fixed.Zero && dy == Fixed.Zero && dz == Fixed.Zero) dz = Fixed.One;
+        var length = Fixed.Sqrt(dx * dx + dy * dy + dz * dz);
+        var share = Fixed.Min(Fixed.One, length / weapon.ShockWaveRadius);
+        var amount = weapon.ShockWaveAmount * (Fixed.One - share * (Fixed.One - weapon.ShockWaveTaperOff));
+        // normalize, scale, then "z = length()": the upward part is the whole amount, whatever the vector's own z was.
+        physics.ApplyShock(this, dx / length * amount, dy / length * amount, amount, victim.Template.Locomotor is { StickToGround: true });
+    }
+
+    private static readonly int AirborneTargetBit = ObjectStatusBits.Index("AIRBORNE_TARGET");
 }

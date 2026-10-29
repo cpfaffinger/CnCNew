@@ -86,6 +86,23 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         Entity.EffectivelyDead = Health <= Fixed.Zero;
     }
 
+    /// <summary>
+    /// <c>ActiveBody::attemptDamage</c> for <c>DAMAGE_KILL_GARRISONED</c> (the microwave tank's building clearer): the floor of the amount of riders of a garrisonable container that
+    /// is not immune to it die, in the order they are in it, and the damager scores the kills; the building itself takes nothing.
+    /// </summary>
+    private void KillGarrisoned(IWorldServices world, in DamageInfo info)
+    {
+        if (Entity.Container is not { CanBeCleared: true } contain) return;
+        var kills = info.Amount.Floor();
+        foreach (var id in contain.Contained.ToArray())
+        {
+            if (kills <= 0) break;
+            if (world.FindEntity(id) is not { EffectivelyDead: false } rider) continue;
+            world.Damage(rider.Id, new DamageInfo(info.Source, Fixed.Zero, DamageTypes.Unresistable, DeathTypes.Normal, true));
+            kills--;
+        }
+    }
+
     public virtual DamageOutcome AttemptDamage(IWorldServices world, in DamageInfo info)
     {
         if (Entity.EffectivelyDead) return DamageOutcome.NoEffect;
@@ -109,7 +126,12 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
                 foreach (var module in Entity.DamageModules) module.OnBodyDamageStateChange(world, info, oldHealState, DamageState);
             return DamageOutcome.Applied;
         }
-        if (DamageTypes.IsSubdual(info.DamageType) || info.DamageType is DamageTypes.KillPilot or DamageTypes.KillGarrisoned or DamageTypes.Status)
+        if (info.DamageType == DamageTypes.KillGarrisoned)
+        {
+            KillGarrisoned(world, info);
+            return DamageOutcome.NoEffect;
+        }
+        if (DamageTypes.IsSubdual(info.DamageType) || info.DamageType is DamageTypes.KillPilot or DamageTypes.Status)
             return DamageOutcome.NoEffect;
         // ActiveBody::attemptDamage: the body's damage scalar (the strategy center's hold-the-line plan) applies to everything but unresistable damage.
         if (info.DamageType != DamageTypes.Unresistable) amount *= world.DamageScalarOf(Entity);

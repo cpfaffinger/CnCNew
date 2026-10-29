@@ -57,6 +57,44 @@ public sealed partial class SimulationWorld
         MarkDirty(entity);
     }
 
+    /// <summary>
+    /// <c>JetAIUpdate::aiDoCommand</c> for a guard: an aircraft that is parked, taking off or landing stores the order and takes it up when it flies (a parked one takes off for it); the
+    /// guard is then held. False when the unit takes the guard at once.
+    /// </summary>
+    private bool GuardWaitsForAircraft(AIUpdateInterface ai, GuardState guard)
+    {
+        if (ai is not JetAIUpdate jet || jet.TakeGuardNow(this)) return false;
+        guard.Held = true;
+        return true;
+    }
+
+    /// <inheritdoc cref="IWorldServices.GuardResumesAfterReload"/>
+    public bool GuardResumesAfterReload(Entity entity) => entity.Guard is { Held: false };
+
+    /// <inheritdoc cref="IWorldServices.IsGuardHeld"/>
+    public bool IsGuardHeld(Entity entity) => entity.Guard is { Held: true };
+
+    /// <inheritdoc cref="IWorldServices.HoldGuard"/>
+    public void HoldGuard(Entity entity)
+    {
+        if (entity.Guard is not { Held: false } guard) return;
+        if (AiOf(entity) is { } ai) EndGuardAttack(entity, ai);
+        guard.Held = true;
+        MarkDirty(entity);
+    }
+
+    /// <inheritdoc cref="IWorldServices.ResumeGuard"/>
+    public void ResumeGuard(Entity entity)
+    {
+        if (entity.Guard is not { Held: true } guard || AiOf(entity) is not { } ai) return;
+        guard.Held = false;
+        _acquirers.Add(entity.Id.Value);
+        // The stored order is given again: the guard's machine starts in RETURN, the retaliation's in ATTACK_AGGRESSOR on the attacker it answers.
+        if (guard.Retaliate) guard.Starting = true;
+        else EnterGuardReturn(entity, ai, guard, _tick, ordered: true);
+        MarkDirty(entity);
+    }
+
     /// <summary>A hit on a human player's object noted for the retaliation (<see cref="RetaliateFor"/>): the victim as it was hit, and its attacker.</summary>
     private readonly record struct RetaliationCall(EntityId Victim, PlayerId Owner, Fixed X, Fixed Y, Fixed Radius, EntityId Damager);
 
@@ -119,6 +157,7 @@ public sealed partial class SimulationWorld
                     if (!CanAttack(friend, damager, false, out _)) continue;
                     // privateGuardRetaliate: the post is where the unit stands, the nemesis the attacker; the machine's first state is ATTACK_AGGRESSOR.
                     friend.Guard = new GuardState { X = fx, Y = fy, Retaliate = true, Starting = true, Phase = GuardPhase.Aggressor, Nemesis = damager.Id };
+                    GuardWaitsForAircraft(ai, friend.Guard);
                     _acquirers.Add(friend.Id.Value);
                     MarkDirty(friend);
                 }
@@ -163,7 +202,7 @@ public sealed partial class SimulationWorld
             unit.Guard = new GuardState { X = x, Y = y, Object = guarded?.Id ?? EntityId.Invalid, Mode = order.Mode, Area = area?.Name ?? string.Empty };
             if (guarded is not null) (unit.Guard.GuardeeX, unit.Guard.GuardeeY) = (guarded.X, guarded.Y);
             _acquirers.Add(unit.Id.Value);
-            EnterGuardReturn(unit, ai, unit.Guard, _tick, ordered: true);
+            if (!GuardWaitsForAircraft(ai, unit.Guard)) EnterGuardReturn(unit, ai, unit.Guard, _tick, ordered: true);
             MarkDirty(unit);
             any = true;
         }
@@ -257,6 +296,7 @@ public sealed partial class SimulationWorld
     /// <summary>One decision of the guard, in the first tick of the unit's own logic frame of the original (<see cref="StepAcquisition"/>).</summary>
     private void StepGuard(Entity entity, AIUpdateInterface ai, GuardState guard, long tick)
     {
+        if (guard.Held) return;
         var state = entity.Acquisition;
         if (guard.Starting)
         {
