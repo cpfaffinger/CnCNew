@@ -356,4 +356,87 @@ static partial class Tests
         var dy = (patient.Y - pad.Y).Abs();
         Check.That(dx > Fixed.FromInt(20) || dy > Fixed.FromInt(20), $"The healed patient walked off the pad through its door ({patient.X}, {patient.Y}; pad at {pad.X}, {pad.Y}).");
     }
+
+    /// <summary>
+    /// F-75: the scan counts the frames of the object, also after it was held. A computer player's hurt patient rides in a bus: held, it does not scan. The bus lets it out in its update,
+    /// after the patient's update of that tick, and the patient goes to the pad in the same frame at 30, 60 and 120 Hz, counted from the frame it was let out in - at 30 Hz its next update
+    /// is the next frame's. Before, above 30 Hz the scan ran in the next tick, inside the frame it was let out in, a frame early.
+    /// </summary>
+    public static void AutoFindHealingCountsFramesAfterAHold()
+    {
+        long? reference = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var files = new Dictionary<string, string>(RepairFiles())
+            {
+                ["Data/INI/Object/HoldFixture.ini"] = """
+                Object RpBus
+                  KindOf = SELECTABLE VEHICLE TRANSPORT
+                  Locomotor = SET_NORMAL TestLocomotor
+                  Body = ActiveBody Body01
+                    MaxHealth = 100.0
+                    InitialHealth = 100.0
+                  End
+                  Behavior = TransportAIUpdate AI01
+                  End
+                  Behavior = TransportContain Transport01
+                    Slots = 2
+                    ExitDelay = 250
+                    NumberOfExitPaths = 0
+                  End
+                End
+                Object RpRider
+                  KindOf = SELECTABLE INFANTRY
+                  TransportSlotCount = 1
+                  Locomotor = SET_NORMAL TestLocomotor
+                  Body = ActiveBody Body01
+                    MaxHealth = 50.0
+                    InitialHealth = 50.0
+                  End
+                  Behavior = AIUpdateInterface AI01
+                  End
+                  Behavior = AutoFindHealingUpdate Find01
+                    ScanRate = 100
+                    ScanRange = 300.0
+                    NeverHeal = 0.85
+                    AlwaysHeal = 0.25
+                  End
+                End
+                """,
+            };
+            var fixture = new SyntheticFixture(rate, files: files);
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, RepairPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            // Two riders before the bus: they have their turn in a tick before the bus has. The first leaves when the bus is told to unload; the second when its door is free again,
+            // in the bus's update - after the patient's update of that tick.
+            feeder.Spawn(1, "RpRider");
+            feeder.Spawn(1, "RpRider");
+            feeder.Spawn(1, "Clinic", x: 200);
+            feeder.Spawn(1, "RpBus");
+            world.Step();
+            var first = Get(world, "RpRider");
+            var patient = Get(world, "RpRider", 1);
+            var bus = Get(world, "RpBus");
+            Check.That(world.TryEnterContainer(first, bus) && world.TryEnterContainer(patient, bus), $"{rate}: the riders board the bus.");
+            feeder.Damage(patient.Id.Value, 20);
+            for (var i = 0; i < world.Frames(250); i++) world.Step();
+            Check.That(patient.ContainedBy == bus.Id && !patient.HasMoveTarget, $"{rate}: held in the bus, the hurt patient does not go to the pad.");
+            Check.That(feeder.Evacuate(1, bus.Id.Value).Accepted, $"{rate}: the bus lets its riders out.");
+            long outTick = -1, walks = -1;
+            for (var i = 0; i < world.Frames(400) && walks < 0; i++)
+            {
+                world.Step();
+                if (outTick < 0 && !patient.ContainedBy.IsValid) outTick = world.Tick;
+                if (outTick >= 0 && (patient.HasMoveTarget || patient.ContainedBy.IsValid))
+                {
+                    walks = (world.Tick - outTick + world.Time.TicksPerOriginalFrame - 1) / world.Time.TicksPerOriginalFrame;
+                    // The scan is a decision of the patient's frame: it is taken in the first tick of one.
+                    Check.That(world.Time.BeginsFrameOf(patient, world.Tick - 1), $"{rate}: the scan sends the patient in a tick that begins one of its frames (tick {world.Tick - 1}).");
+                }
+            }
+            Check.That(walks >= 0, $"{rate}: let out, the patient goes to the pad.");
+            if (reference is null) reference = walks;
+            else Check.That(walks == reference, $"{rate}: it goes to the pad in the frame 30 Hz has ({walks} against {reference}).");
+        }
+    }
 }

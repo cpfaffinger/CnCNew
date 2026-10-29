@@ -123,22 +123,30 @@ internal sealed class AutoFindHealingUpdate(AutoFindHealingData data) : SimModul
 
     public long Update(IWorldServices world)
     {
-        if (!world.IsComputerPlayer(Entity.Owner)) return SimulationTiming.SleepNone;
+        // The original's update runs once per logic frame of the object (F-75): above 30 Hz the countdown is looked at in the first tick of the object's own frames only, so that a
+        // module that resumes inside a frame (after a hold: a container let the object out) keeps the object's frames.
+        var frame = world.Time.TicksPerOriginalFrame;
+        if (!world.Time.BeginsFrameOf(Entity, world.Tick))
+        {
+            for (var ahead = TickOrder.Next; ; ahead++)
+                if (world.Time.BeginsFrameOf(Entity, world.Tick + ahead)) return ahead;
+        }
+        if (!world.IsComputerPlayer(Entity.Owner)) return frame;
         if (_nextScanTicks > 0)
         {
-            _nextScanTicks--;
-            return SimulationTiming.SleepNone;
+            _nextScanTicks -= frame;
+            return frame;
         }
-        // m_nextScanFrames-- / m_nextScanFrames = data->m_scanFrames (AutoFindHealingUpdate.cpp): a period of ScanRate + 1 frames of the original.
-        _nextScanTicks = world.Time.CountdownReload(data.ScanTicks);
+        // m_nextScanFrames-- / m_nextScanFrames = data->m_scanFrames (AutoFindHealingUpdate.cpp): a period of ScanRate + 1 frames of the original, counted in ticks of whole frames.
+        _nextScanTicks = world.Time.FloorToFrame(data.ScanTicks);
 
         var ai = Entity.Modules.OfType<AIUpdateInterface>().FirstOrDefault();
-        if (ai is null || Entity.Body is not { } body) return SimulationTiming.SleepNone;
-        if (body.Health > body.MaxHealth * data.NeverHeal) return SimulationTiming.SleepNone;
-        if (!ai.IsIdle) return SimulationTiming.SleepNone;
+        if (ai is null || Entity.Body is not { } body) return frame;
+        if (body.Health > body.MaxHealth * data.NeverHeal) return frame;
+        if (!ai.IsIdle) return frame;
 
         if (ScanClosestHealPad(world) is { } pad) ai.OrderGetHealed(world, pad, false);
-        return SimulationTiming.SleepNone;
+        return frame;
     }
 
     private Entity? ScanClosestHealPad(IWorldServices world)
