@@ -349,9 +349,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 return State(ButtonAvailability.Available, ButtonReason.None);
             }
             case GuiCommandKind.FireWeapon:
-                // Only object targets exist in the simulation (FireWeaponCommand); position and mine-clearing shots have no command.
-                if (button.Has(CommandOptions.UsesMineClearingWeaponset) || (!button.Has(CommandOptions.NeedTargetEnemyObject) && !button.Has(CommandOptions.NeedTargetNeutralObject)))
-                    return State(ButtonAvailability.Restricted, ButtonReason.NotSupportedBySimulation);
+                // An object target is a FireWeaponCommand, a place and the own place an attack on a place (F-64); the mine-clearing weapon set (MINE_CLEARING_DETAIL) is not modelled.
+                if (button.Has(CommandOptions.UsesMineClearingWeaponset)) return State(ButtonAvailability.Restricted, ButtonReason.NotSupportedBySimulation);
             {
                 // The button's own weapon slot (CommandButton::m_weaponSlot, PRIMARY when absent).
                 var slot = Simulation.Templates.WeaponSlot.TryParse(button.WeaponSlot, out var parsed) ? parsed : Simulation.Templates.WeaponSlot.Primary;

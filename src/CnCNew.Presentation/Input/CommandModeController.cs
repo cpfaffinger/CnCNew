@@ -489,14 +489,16 @@ public sealed class CommandModeController
                 var producers = sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).Select(entity => entity.Id).ToImmutableArray();
                 return producers.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, producers);
             }
-            case GuiCommandKind.FireWeapon when !button.NeedsTarget:
+            // USES_MINE_CLEARING_WEAPONSET switches to the mine-clearing weapon set first (MINE_CLEARING_DETAIL), which the simulation does not model: unsupported below.
+            case GuiCommandKind.FireWeapon when !button.NeedsTarget && !button.Has(CommandOptions.UsesMineClearingWeaponset):
             {
                 // MSG_DO_WEAPON: every member attacks its own position with the button's slot (a bomb truck's detonation, a convoy truck's nuke).
                 var members = sources.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity)).Select(entity => entity.Id).ToImmutableArray();
                 if (members.IsEmpty) return ActivationResult.NoSource;
                 return AttackPlace(members, Vector3.Zero, own: true, button.WeaponSlotIndex, button.MaxShotsToFire) ? ActivationResult.Issued : ActivationResult.NoSource;
             }
-            case GuiCommandKind.FireWeapon when button.Has(CommandOptions.NeedTargetEnemyObject) || button.Has(CommandOptions.NeedTargetNeutralObject) || button.Has(CommandOptions.NeedTargetPos):
+            case GuiCommandKind.FireWeapon when !button.Has(CommandOptions.UsesMineClearingWeaponset)
+                                                && (button.Has(CommandOptions.NeedTargetEnemyObject) || button.Has(CommandOptions.NeedTargetNeutralObject) || button.Has(CommandOptions.NeedTargetPos)):
             {
                 var armed = sources.Where(entity => SimulationQueries.HasWeapon(entity)).Select(entity => entity.Id).ToImmutableArray();
                 return armed.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, armed);
