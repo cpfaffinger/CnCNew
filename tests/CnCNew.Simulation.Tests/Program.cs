@@ -239,6 +239,7 @@ run.Test("Fire from containers, step 6: an attack order on a garrisoned building
 run.Test("Fire from containers, step 7: armed riders give a transport its PLAYER_UPGRADE weapon set", Tests.FireFromContainersArmedRidersUpgradeWeaponSet);
 run.Test("Fire from containers, clearing a garrison: KILL_GARRISONED kills riders, not an immune building's", Tests.FireFromContainersKillGarrisoned);
 run.Test("Fire from containers, clearing a garrison by a shell: AllowAttackGarrisonedBldgs and GarrisonHitKill", Tests.FireFromContainersGarrisonHitKill);
+run.Test("Fire from containers: a missile that hits a garrison kills riders instead of exploding", Tests.FireFromContainersMissileGarrisonHitKill);
 run.Test("Fire from containers: a Chinook gives its victim to a rider without one every tenth frame", Tests.FireFromContainersChinookReissuesItsVictim);
 run.Test("Phase 41 (F-60, step 4): a garrison's rider fires from the fire point closest to its victim, a fire base's from its station", Tests.FireFromContainersFirePoints);
 run.Test("Phase 41 (F-60, step 3): a Battle Bus passes its weapon bonus to its riders", Tests.FireFromContainersPassedBonus);

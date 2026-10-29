@@ -820,6 +820,80 @@ static partial class Tests
         }
     }
 
+    private const string FcRocketIni = """
+        Locomotor FcRocketLoco
+          Surfaces = AIR
+          Speed = 300
+          Acceleration = 9000
+          TurnRate = 360
+        End
+        Weapon FcToxinRocket
+          PrimaryDamage = 30
+          PrimaryDamageRadius = 5.0
+          AttackRange = 200.0
+          WeaponSpeed = 300
+          ProjectileObject = FcToxinMissile
+          DamageType = EXPLOSION
+          DelayBetweenShots = 1000
+        End
+        Object FcToxinMissile
+          KindOf = PROJECTILE SMALL_MISSILE
+          Body = ActiveBody Body01
+            MaxHealth = 10.0
+            InitialHealth = 10.0
+          End
+          Locomotor = SET_NORMAL FcRocketLoco
+          Behavior = MissileAIUpdate Missile01
+            TryToFollowTarget = Yes
+            DistanceToTargetForLock = 0
+            GarrisonHitKillCount = 2
+            GarrisonHitKillRequiredKindOf = INFANTRY
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object FcRocketeer
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 1000.0
+            InitialHealth = 1000.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY FcToxinRocket
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        """;
+
+    /// <summary>
+    /// Clearing a garrison by a missile (<c>MissileAIUpdate::projectileHandleCollision</c> - the toxin rockets of the chemical general): the missile, reaching the garrisoned bunker it
+    /// was fired at, kills two of its three riders and vanishes without its explosion; the bunker is whole. Before, it exploded on the bunker. At 30, 60 and 120 Hz.
+    /// </summary>
+    public static void FireFromContainersMissileGarrisonHitKill()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(FcRocketIni));
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "FcRocketeer", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "FcBunker", owner: 2, x: 150, y: 0);
+            for (var i = 0; i < 3; i++) feeder.Spawn(2, "FcRifleman", owner: 2, x: 150, y: 0);
+            world.Step();
+            var rocketeer = world.Entities.Single(value => value.Template.Name == "FcRocketeer");
+            var bunker = world.Entities.Single(value => value.Template.Name == "FcBunker");
+            var riders = world.Entities.Where(value => value.Template.Name == "FcRifleman").OrderBy(value => value.Id.Value).ToArray();
+            foreach (var rider in riders) Check.That(world.TryEnterContainer(rider, bunker), $"{rate}: setup - a rifleman enters the bunker.");
+            Check.That(feeder.FireWeapon(1, rocketeer.Id.Value, bunker.Id.Value).Accepted, $"{rate}: the rocket is fired at the garrisoned bunker.");
+            for (var step = 0; step < world.Frames(60); step++) world.Step();
+            Check.That(riders[0].EffectivelyDead && riders[1].EffectivelyDead && !riders[2].EffectivelyDead, $"{rate}: the missile kills the first two riders, the third lives.");
+            Check.That(bunker.Body!.Health == bunker.Body.MaxHealth && !world.Entities.Any(value => value.Template.Name == "FcToxinMissile"),
+                $"{rate}: the bunker is whole and the missile gone ({bunker.Body.Health}).");
+        }
+    }
+
     /// <summary>
     /// The Chinook's re-issue (<c>ChinookAIUpdate::update</c>): a Chinook ordered to attack gives its victim, every frame whose number ends in 1, to a rider that has none - here a
     /// rifleman that never looks for one himself and boards after the order. At 30, 60 and 120 Hz.

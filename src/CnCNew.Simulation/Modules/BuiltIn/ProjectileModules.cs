@@ -447,12 +447,17 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
 /// <summary>
 /// <c>MissileAIUpdateModuleData</c> in simulation units: velocities per tick, durations in ticks, the lock distance defaults to 75, the kill-self
 /// delay to 3 ticks (the reference constructor). <c>DistanceToTargetBeforeDiving</c> steers the preferred-height flight of cruise missiles and
-/// <c>DistanceScatterWhenJammed</c> the reaction to ECM jamming; neither exists here (typed, not applied). <c>GarrisonHitKill*</c>: see
-/// <see cref="DumbProjectileData"/>.
+/// <c>DistanceScatterWhenJammed</c> the reaction to ECM jamming; neither exists here (typed, not applied). <c>GarrisonHitKill*</c> act as a shell's do
+/// (<see cref="DumbProjectileData"/>, <c>MissileAIUpdate::projectileHandleCollision</c>): when an armed missile reaches its victim and that is a garrisoned building.
 /// </summary>
 public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks, long IgnitionDelayTicks, Fixed InitialVelocity, Fixed DistanceToTravelBeforeTurning,
     Fixed LockDistance, string IgnitionFx, bool UseWeaponSpeed, bool DetonateOnNoFuel, bool DetonateCallsKill, long KillSelfDelayTicks) : ModuleData
 {
+    public int GarrisonHitKillCount { get; init; }
+    public ImmutableArray<string> GarrisonHitKillRequiredKindOf { get; init; } = [];
+    public ImmutableArray<string> GarrisonHitKillForbiddenKindOf { get; init; } = [];
+    public string GarrisonHitKillFx { get; init; } = string.Empty;
+
     public static MissileData Parse(RatedModuleConfiguration configuration)
     {
         var velocity = ModuleConfigReader.Real(configuration, "InitialVelocity", Fixed.Zero);
@@ -467,7 +472,13 @@ public sealed record MissileData(bool TryToFollowTarget, long FuelLifetimeTicks,
             ModuleConfigReader.Bool(configuration, "UseWeaponSpeed", false),
             ModuleConfigReader.Bool(configuration, "DetonateOnNoFuel", false),
             ModuleConfigReader.Bool(configuration, "DetonateCallsKill", false),
-            ModuleConfigReader.Ticks(configuration, "KillSelfDelay", 3));
+            ModuleConfigReader.Ticks(configuration, "KillSelfDelay", 3))
+        {
+            GarrisonHitKillCount = checked((int)ModuleConfigReader.Int(configuration, "GarrisonHitKillCount", 0)),
+            GarrisonHitKillRequiredKindOf = ModuleConfigReader.Flags(configuration, "GarrisonHitKillRequiredKindOf")?.Names ?? [],
+            GarrisonHitKillForbiddenKindOf = ModuleConfigReader.Flags(configuration, "GarrisonHitKillForbiddenKindOf")?.Names ?? [],
+            GarrisonHitKillFx = ModuleConfigReader.Text(configuration, "GarrisonHitKillFX"),
+        };
         MissileFrames.Register(data, configuration.Time, velocity);
         return data;
     }
@@ -807,7 +818,9 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             if (remaining <= _speed)
             {
                 Place(world, _goal);
-                if (_armed) Detonate(world);
+                // projectileHandleCollision with its victim: a garrisoned building loses riders instead of taking the explosion.
+                if (_armed && (!_victim.IsValid || !ProjectileModules.ClearGarrison(world, Entity, _launcher, _victim, data.GarrisonHitKillCount, data.GarrisonHitKillRequiredKindOf,
+                        data.GarrisonHitKillForbiddenKindOf, data.GarrisonHitKillFx))) Detonate(world);
                 return;
             }
             _direction = new Point3(toGoal.X / remaining, toGoal.Y / remaining, toGoal.Z / remaining);
