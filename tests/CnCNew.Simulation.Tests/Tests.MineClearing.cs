@@ -1,3 +1,5 @@
+using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Commands;
 using System.Collections.Immutable;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
@@ -166,6 +168,40 @@ static partial class Tests
             Check.That(firstGone > 0 && secondGone > firstGone && secondGone - firstGone < 120, $"{rate}: the dozer goes on to the next mine at once ({firstGone}, {secondGone}).");
             if (reference is null) reference = (firstGone, secondGone);
             else Check.That((firstGone, secondGone) == reference.Value, $"{rate}: the same frames as at 30 Hz (({firstGone}, {secondGone}) against {reference}).");
+        }
+    }
+
+    /// <summary>
+    /// F-69 step 4, <c>Command_DisarmMinesAtPosition</c> (<c>MSG_SET_MINE_CLEARING_DETAIL</c>, then <c>MSG_DO_WEAPON_AT_LOCATION</c>): a dozer is given the
+    /// mine-clearing flag and an attack on a place beside an enemy mine; it attacks the mine near the place (its weapon's continue range), drives to it and disarms it - the same frame at
+    /// 30, 60 and 120 Hz, long before it would have been bored. Only the owner may give the flag.
+    /// </summary>
+    public static void DisarmMinesButtonClearsTheMineNearThePlace()
+    {
+        long reference = -1;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/MineClearing.ini"] = MineClearingIni });
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "mines");
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+            var feeder = new Feeder(world);
+            Check.That(feeder.Spawn(1, "McDozer", owner: 1, x: 300, y: 300).Accepted && feeder.Spawn(2, "McMine", owner: 2, x: 360, y: 300).Accepted, $"{rate}: dozer and mine spawn.");
+            world.Step();
+            var dozer = world.Entities.Single(value => value.Template.Name == "McDozer");
+            var mine = world.Entities.Single(value => value.Template.Name == "McMine");
+            Check.That(world.Submit(new SetMineClearingCommand(new PlayerId(2), 900, world.Tick, [dozer.Id])).Reason == CommandRejection.NotPermitted, $"{rate}: only the owner gives the order.");
+            Check.That(world.Submit(new SetMineClearingCommand(new PlayerId(1), 900, world.Tick, [dozer.Id])).Accepted, $"{rate}: the mine-clearing flag is given.");
+            Check.That(world.Submit(new AttackPositionCommand(new PlayerId(1), 901, world.Tick, [dozer.Id], Fixed.FromInt(365), Fixed.FromInt(305), false, WeaponSlot.Primary, 0)).Accepted,
+                $"{rate}: the dozer is sent to clear the mines at the place.");
+            long gone = -1;
+            for (var step = 0; step < world.Frames(300) && gone < 0; step++)
+            {
+                world.Step();
+                if (mine.Body!.Health <= Fixed.Zero) gone = (world.Tick - dozer.SpawnTick + world.Time.TicksPerOriginalFrame - 1) / world.Time.TicksPerOriginalFrame;
+            }
+            Check.That(gone > 0 && gone < 150, $"{rate}: the dozer clears the mine near the place before it would have been bored ({gone}).");
+            if (reference < 0) reference = gone;
+            else Check.That(gone == reference, $"{rate}: the mine is disarmed in the frame it is at 30 Hz ({gone} against {reference}).");
         }
     }
 }

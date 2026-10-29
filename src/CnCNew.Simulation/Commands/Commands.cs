@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 19;
+    public const int Version = 20;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -102,7 +102,11 @@ public static class CommandTypes
     /// </summary>
     public const ushort AttackPosition = 36;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= AttackPosition;
+    // ------------------------------------------------------------------------------------------------------ mine clearing (v20)
+    /// <summary><c>MSG_SET_MINE_CLEARING_DETAIL</c> to a group (<c>AIGroup::setMineClearingDetail(true)</c>): the units carry the mine-clearing weapon set flag (F-69).</summary>
+    public const ushort SetMineClearing = 37;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= SetMineClearing;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -192,6 +196,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.PlayerLeave => new PlayerLeaveCommand(player, sequence, tick, reader.Bool("transfer")),
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"),
                 reader.Fixed("y"), reader.Bool("own"), checked((int)reader.Int("slot")), checked((int)reader.Int("maxShots"))),
+            CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -850,6 +855,32 @@ public sealed record AttackPositionCommand(PlayerId Player, ulong Sequence, long
     public bool Equals(AttackPositionCommand? other)
         => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && OwnPosition == other.OwnPosition
            && Slot == other.Slot && MaxShots == other.MaxShots && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
+
+    public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
+}
+
+/// <summary>
+/// <c>MSG_SET_MINE_CLEARING_DETAIL</c> (F-69): the client sends it with a <c>USES_MINE_CLEARING_WEAPONSET</c> button (<c>Command_DisarmMinesAtPosition</c>) before the attack on the place;
+/// every unit of the selection carries the weapon set flag <c>MINE_CLEARING_DETAIL</c> (<c>AIGroup::setMineClearingDetail(true)</c>; nothing ever sends <c>false</c>).
+/// </summary>
+public sealed record SetMineClearingCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.SetMineClearing;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.BeginArray("units");
+        foreach (var unit in Units)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", unit.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+
+    public bool Equals(SetMineClearingCommand? other)
+        => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
 
     public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }

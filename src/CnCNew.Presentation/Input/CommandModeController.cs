@@ -490,18 +490,18 @@ public sealed class CommandModeController
                 var producers = sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).Select(entity => entity.Id).ToImmutableArray();
                 return producers.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, producers);
             }
-            // USES_MINE_CLEARING_WEAPONSET switches to the mine-clearing weapon set first (MINE_CLEARING_DETAIL), which the simulation does not model: unsupported below.
-            case GuiCommandKind.FireWeapon when !button.NeedsTarget && !button.Has(CommandOptions.UsesMineClearingWeaponset):
+            case GuiCommandKind.FireWeapon when !button.NeedsTarget:
             {
                 // MSG_DO_WEAPON: every member attacks its own position with the button's slot (a bomb truck's detonation, a convoy truck's nuke).
                 var members = sources.Where(entity => SimulationQueries.CanTakeAttackOrder(world, entity)).Select(entity => entity.Id).ToImmutableArray();
                 if (members.IsEmpty) return ActivationResult.NoSource;
                 return AttackPlace(members, Vector3.Zero, own: true, button.WeaponSlotIndex, button.MaxShotsToFire) ? ActivationResult.Issued : ActivationResult.NoSource;
             }
-            case GuiCommandKind.FireWeapon when !button.Has(CommandOptions.UsesMineClearingWeaponset)
-                                                && (button.Has(CommandOptions.NeedTargetEnemyObject) || button.Has(CommandOptions.NeedTargetNeutralObject) || button.Has(CommandOptions.NeedTargetPos)):
+            case GuiCommandKind.FireWeapon when button.Has(CommandOptions.NeedTargetEnemyObject) || button.Has(CommandOptions.NeedTargetNeutralObject) || button.Has(CommandOptions.NeedTargetPos):
             {
-                var armed = sources.Where(entity => SimulationQueries.HasWeapon(entity)).Select(entity => entity.Id).ToImmutableArray();
+                // USES_MINE_CLEARING_WEAPONSET: the units switch to the mine-clearing weapon set when the order comes (F-69), so a builder at work without it takes part.
+                var armed = sources.Where(entity => button.Has(CommandOptions.UsesMineClearingWeaponset) ? SimulationQueries.CanTakeAttackOrder(world, entity) : SimulationQueries.HasWeapon(entity))
+                    .Select(entity => entity.Id).ToImmutableArray();
                 return armed.IsEmpty ? ActivationResult.NoSource : EnterButtonMode(button, armed);
             }
             default:
@@ -642,6 +642,9 @@ public sealed class CommandModeController
                     GuiCommandKind.FireWeapon when objectTarget is not null && button.Has(CommandOptions.AttackObjectsPosition)
                         => AttackPlace(sources, EntityPicker.CenterOf(objectTarget), own: false, button.WeaponSlotIndex, button.MaxShotsToFire),
                     GuiCommandKind.FireWeapon when objectTarget is not null => OrderAttack(world, sources, objectTarget),
+                    // MSG_SET_MINE_CLEARING_DETAIL, then MSG_DO_WEAPON_AT_LOCATION (ControlBarCommandProcessing.cpp, F-69): the units carry the mine-clearing weapon set and attack the place.
+                    GuiCommandKind.FireWeapon when position is { } place && button.Has(CommandOptions.UsesMineClearingWeaponset)
+                        => ClearMines(sources, place, button.WeaponSlotIndex, button.MaxShotsToFire),
                     // MSG_DO_WEAPON_AT_LOCATION: the button's slot at the place for its shots.
                     GuiCommandKind.FireWeapon when position is { } place => AttackPlace(sources, place, own: false, button.WeaponSlotIndex, button.MaxShotsToFire),
                     _ => Unsupported(world, $"{button.Kind}Target", position ?? Vector3.Zero),
@@ -665,6 +668,15 @@ public sealed class CommandModeController
 
     private bool AttackPlace(ImmutableArray<Entity> units, Vector3 place, bool own, int slot, int shots)
         => !units.IsEmpty && AttackPlace(units.Select(unit => unit.Id).ToImmutableArray(), place, own, slot, shots);
+
+    /// <summary>The mine-clearing button at a place (F-64, F-69): the selection carries the mine-clearing weapon set (<see cref="SetMineClearingCommand"/>), then it attacks the place.</summary>
+    private bool ClearMines(ImmutableArray<Entity> units, Vector3 place, int slot, int shots)
+    {
+        if (units.IsEmpty) return false;
+        var ids = units.Select(unit => unit.Id).ToImmutableArray();
+        if (!Issue((sequence, tick) => new SetMineClearingCommand(Player, sequence, tick, ids)).Accepted) return false;
+        return AttackPlace(ids, place, own: false, slot, shots);
+    }
 
     private bool OrderAttack(SimulationWorld world, ImmutableArray<Entity> units, Entity target)
     {

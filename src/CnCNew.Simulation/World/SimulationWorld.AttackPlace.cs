@@ -88,12 +88,19 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>aiAttackPosition</c> / <c>privateAttackPosition</c> and <c>AIAttackState::onEnter</c>: the unit's state is cleared and it attacks (<paramref name="x"/>, <paramref name="y"/>) for
-    /// <paramref name="shots"/> shots (-1: no limit). Nothing for a unit without an AI, under construction, out of ammunition or without the weapon to fire. Not modelled: a weapon with a
-    /// continue range looking for an object near the place, a contact weapon's reachable place.
+    /// <paramref name="shots"/> shots (-1: no limit). Nothing for a unit without an AI, under construction, out of ammunition or without the weapon to fire. A unit whose active weapons
+    /// have a continue range (a builder clearing mines, F-69) attacks the closest object near the place instead, if there is one, and otherwise fires one shot at the place. Not
+    /// modelled: a contact weapon's reachable place.
     /// </summary>
     private bool AttackPlace(Entity unit, Fixed x, Fixed y, int shots, bool fromPlayer)
     {
         if (AiOf(unit) is not { } ai || unit.EffectivelyDead) return false;
+        if (ClearingVictimNear(unit, x, y) is { } victim)
+        {
+            BuilderAttacks(unit, victim);
+            return true;
+        }
+        if (ContinueRangeOf(unit) > Fixed.Zero) shots = 1;
         ai.OrderIdle(this, fromPlayer);
         if (unit.HasStatus(Modules.ObjectStatusBits.UnderConstruction) || IsOutOfAmmo(unit) || PlaceSlot(unit) is not { } slot) return false;
         var state = new AttackPlaceState { X = x, Y = y, Z = GroundHeightAt(x, y), ShotsLeft = shots };

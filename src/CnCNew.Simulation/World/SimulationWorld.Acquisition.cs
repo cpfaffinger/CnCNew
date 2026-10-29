@@ -237,7 +237,8 @@ public sealed partial class SimulationWorld
             else if (state.Forced)
             {
                 // A slave's forced attack (F-65): it walks at its victim as the guard's attack does, without a fog filter, until it cannot attack it any more.
-                if (victim is not null && (IsGuardVictim(entity, victim) || (state.Neutral && IsNeutralVictim(entity, victim))) && GuardEngage(entity, ai, state, victim, tick)) return;
+                if (victim is not null && (IsGuardVictim(entity, victim) || (state.Neutral && IsNeutralVictim(entity, victim)) || IsClearingVictim(entity, victim))
+                    && GuardEngage(entity, ai, state, victim, tick)) return;
                 if (ContinueAttack(entity, state, victim) is { } next && GuardEngage(entity, ai, state, next, tick)) return;
                 EndEngagement(entity, ai, state);
                 if (state.Mode != 0) (state.NextCheck, state.Offset) = (tick + _forceIdleTicks, true);
@@ -486,7 +487,7 @@ public sealed partial class SimulationWorld
         var reach = SquaredReach.Of(range);
         foreach (var candidate in EntitiesOwnedBy(new PlayerId(state.ContinueOwner)).AsSpan())
         {
-            if (candidate == victim || !(IsGuardVictim(entity, candidate) || IsNeutralVictim(entity, candidate)) || !CanPlayerSee(entity.Owner, candidate) || !CanAttack(entity, candidate, false, out _)) continue;
+            if (candidate == victim || !IsClearingVictim(entity, candidate) || !CanAttack(entity, candidate, false, out _)) continue;
             var dx = candidate.X - state.ContinueX;
             var dy = candidate.Y - state.ContinueY;
             var distance = dx * dx + dy * dy;

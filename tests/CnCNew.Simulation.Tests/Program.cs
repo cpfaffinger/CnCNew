@@ -582,6 +582,7 @@ run.Test("Phase 45 (F-74): a pushed soldier walks off in the frame after it rest
 run.Test("Phase 45 (F-69): an idle dozer disarms a mine beside it", Tests.IdleDozerDisarmsAMineBesideIt);
 run.Test("Phase 45 (F-69): a bored dozer goes to clear a mine", Tests.BoredDozerGoesToClearAMine);
 run.Test("Phase 45 (F-69): a dozer goes on to the next mine", Tests.DozerGoesOnToTheNextMine);
+run.Test("Phase 45 (F-69): the disarm-mines button clears the mine near the place", Tests.DisarmMinesButtonClearsTheMineNearThePlace);
 run.Test("Container exit: a destroyed transport scatters its riders", Tests.ContainerExitDeadTransportScattersItsRiders);
 run.Test("Container exit: the same frames and places at 30, 60 and 120 Hz, snapshot in mid-exit", Tests.ContainerExitIsTheSameAtEveryRate);
 run.Test("Player leaves: riders are put out, everything of the player dies, a tech building becomes neutral; pending in a snapshot, round trip in the replay format", Tests.PlayerLeaveKillsEverythingOfThePlayer);

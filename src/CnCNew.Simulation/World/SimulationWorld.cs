@@ -882,6 +882,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 return CheckGuard(command.Player, guard);
             case AttackPositionCommand place:
                 return CheckAttackPosition(command.Player, place);
+            case SetMineClearingCommand clearing:
+                return CheckSetMineClearing(command.Player, clearing);
             case GroupMoveCommand group:
             {
                 if (group.Units.IsDefaultOrEmpty || group.Units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
@@ -1235,6 +1237,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 var reason = CheckGuard(command.Player, guard);
                 if (reason != 0) { RecordRejection(command, reason); break; }
                 ExecuteGuard(guard);
+                break;
+            }
+            case SetMineClearingCommand clearing:
+            {
+                var reason = CheckSetMineClearing(command.Player, clearing);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                ExecuteSetMineClearing(clearing);
                 break;
             }
             case AttackPositionCommand place:

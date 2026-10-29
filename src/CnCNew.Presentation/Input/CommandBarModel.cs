@@ -349,12 +349,15 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 return State(ButtonAvailability.Available, ButtonReason.None);
             }
             case GuiCommandKind.FireWeapon:
-                // An object target is a FireWeaponCommand, a place and the own place an attack on a place (F-64); the mine-clearing weapon set (MINE_CLEARING_DETAIL) is not modelled.
-                if (button.Has(CommandOptions.UsesMineClearingWeaponset)) return State(ButtonAvailability.Restricted, ButtonReason.NotSupportedBySimulation);
+                // An object target is a FireWeaponCommand, a place and the own place an attack on a place (F-64).
             {
                 // The button's own weapon slot (CommandButton::m_weaponSlot, PRIMARY when absent).
                 var slot = Simulation.Templates.WeaponSlot.TryParse(button.WeaponSlot, out var parsed) ? parsed : Simulation.Templates.WeaponSlot.Primary;
-                if (SimulationWorld.WeaponIndexIn(entity, slot) < 0) return State(ButtonAvailability.Restricted, ButtonReason.NoWeapon);
+                // "If this is a mine-clearing button but we don't have the right weaponset, just declare it available... we'll switch weaponsets when the time comes" (F-69).
+                if (SimulationWorld.WeaponIndexIn(entity, slot) < 0)
+                    return button.Has(CommandOptions.UsesMineClearingWeaponset) && !entity.MineClearingDetail
+                        ? State(ButtonAvailability.Available, ButtonReason.None)
+                        : State(ButtonAvailability.Restricted, ButtonReason.NoWeapon);
                 if (world.Tick < entity.ReadyTickOf(slot)) return State(ButtonAvailability.NotReady, ButtonReason.Reloading);
                 return State(ButtonAvailability.Available, ButtonReason.None);
             }
