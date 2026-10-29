@@ -4079,3 +4079,14 @@ look, and gives itself the repair as an order of the AI (`OrderRepair(..., fromP
 `canRepairObject` does (also for a player's repair order). Test `DozerRepairsWhenBored` (bored 150 frames after the frame it arrived in, the near hut repaired, nothing else - not the
 far hut, the enemy's or the hole - in the same frames at 30, 60 and 120 Hz; a snapshot while it waits). Not modelled: the mine-clearing half of boredom (F-69) and the GLA worker's
 dozer brain (F-68). Manifests `9ab428a`: 46 of 50 runs; the 16 pairings keep their winners (15 decided) and end at other ticks, every mission run keeps its outcome, and the retail reference match is won by FactionGLA at tick 28,980 (end tick 29,581, end hash `D2EEF461CB764BD2`, chain `A8E8F06EEBC82332`, 20,958 commands); the input manifest in the templates and the whole catalogue.
+
+### 58.6 A flight adds nothing to a frame something completed
+
+(`4b5bf73`) Above 30 Hz a flying or sliding object - the physics of the shock wave (§56.1) and of a thrown object (§58.3) - covers its frame's step in shares. When something
+completed the frame after its decision (`Entity.CompleteFrame`: a move stopped where the frame ends to attack, `AIUpdateInterface.StopInternalMoveAtFrameEnd`; a death), the flight
+went on covering the shares of that frame, and the object stood a share beyond the frame's end. Found by tier 4: the observer's watched match (`ObserverTests`, two computer players
+with the rush profile) gave a building's loss two frames apart at 30 and 60 Hz; bisected to F-66, the first lasting difference (`rate-compare --map-diff ... --fields`, with
+`--tactics`) was a ranger pushed out of its dying barracks that stopped to attack while it slid. Test `ThrownObjectThatDiesInsideAFrameStopsAtItsEnd` (a wreck killed inside a frame
+stands where the frame ends; fails on the code before at 60 Hz). With it the watched match is the same game at 30, 60 and 120 Hz to the last compared field, and the observer
+HUD's pictures are the same at every rate (`07d2466`). Manifest `87b49cd`: 14 runs, 84 fields - nine pairings (six end at other ticks, every winner kept), the three eight-player runs and two mission runs; the retail reference match and the stress test unchanged. Seen on the way and registered as F-71: in the default match America against China a ranger is given
+a move target that differs between 30 and 60 Hz by a fraction of a unit (frame 6,510; older than Phase 44).
