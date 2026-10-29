@@ -4090,3 +4090,28 @@ with the rush profile) gave a building's loss two frames apart at 30 and 60 Hz; 
 stands where the frame ends; fails on the code before at 60 Hz). With it the watched match is the same game at 30, 60 and 120 Hz to the last compared field, and the observer
 HUD's pictures are the same at every rate (`07d2466`). Manifest `87b49cd`: 14 runs, 84 fields - nine pairings (six end at other ticks, every winner kept), the three eight-player runs and two mission runs; the retail reference match and the stress test unchanged. Seen on the way and registered as F-71: in the default match America against China a ranger is given
 a move target that differs between 30 and 60 Hz by a fraction of a unit (frame 6,510; older than Phase 44).
+
+## 59. Phase 45: the worker's brains and mine clearing (fidelity package G)
+
+Each finding read in the original's source, one cause per commit with a test that fails on the code before at 30, 60 and 120 Hz, and its own manifest commit where a field moved.
+
+### 59.1 F-68: a worker is a dozer until it gathers
+
+(`d5dd6f7`; `WorkerAIUpdate::update`, `WorkerStateMachine`, `supplyTruckSubMachineWantsToEnter`, `supplyTruckSubMachineReadyToLeave`, `newTask`) The original's GLA worker has two brains under a
+master machine: it acts as a dozer by default (`AS_DOZER`, the first defined state), becomes a supply truck when a want is forced on it (`setForceWantingState`: a supply centre's exit,
+the computer player) or it docks (`AI_DOCK`), and a dozer again when neither holds and its supply brain is busy (`ST_BUSY` - the worker does something the supply brain does not
+know); leaving a brain resets it, and a new build or repair task makes it a dozer at once. Only the brain it acts as runs. The port's worker always ran the supply brain, and went back to
+gathering by itself when a task ended (`OnBuilderTaskEnded` forced a want - the original's worker stays idle; the built-in computer player sends an idle carrier to a warehouse after
+a while). Now `WorkerAIUpdate` keeps the master machine (looked at where its supply brain steps, before it - the original looks after the base AI's update) and, as a dozer, the idle
+state of §58.5 (`DozerBoredom`, shared with `DozerAIUpdate`, which keeps its behaviour). Test `WorkerSwitchesBetweenItsBrains` (bored 150 frames after its first frame and repairing a
+hurt bench; sent to a warehouse it acts as a truck and delivers; sent away while it gathers it is a dozer again - in the same frames at 30, 60 and 120 Hz, a snapshot while it gathers);
+before, a worker never repaired by itself. Manifests `01cac31`: 25 runs, 212 fields - the eight GLA pairings end at other ticks with the same winners, Armored Fury China-GLA is won by China (16 of 16 pairings decided), 16 mission runs change their hashes and keep their outcomes, the retail reference match only its hashes; the input manifest in the templates and the whole catalogue.
+
+### 59.2 F-70: a bored builder begins its repair in its next frame
+
+(`5a26040`) The idle state of §58.5 gave the repair order where the builder's frame ends and then slept to the next frame end; above 30 Hz the module so missed the first tick of the
+builder's next frame, its walk began half a 30 Hz step late, and the repair a frame late. A builder with a task is now worked from the next tick on. Found by the test of F-68, whose
+first version counted frames on the world's grid: the builder's own frames are a tick off the world's above 30 Hz (they begin with the tick it appeared in), and the half step late
+had hidden behind that in the test of F-67. The tests of F-67 and F-68 count on the builder's grid, and F-68's compares the frame the repair begins in (it fails on the code before at
+60 Hz). Manifest `829f945`: 13 runs, 95 fields - Alpine Assault America-China is a stalemate (15 of 16 pairings decided), every other winner kept, no mission run moved; the retail reference match (driver seed `5EED0001`) is won by FactionAmericaAirForceGeneral at tick 44,190 (end tick 44,791, end hash `6712720B0BEA1919`, chain `87A06C85A4D416C7`, 26,987 commands).
+
