@@ -92,6 +92,18 @@ public interface IWorldServices
     /// <summary>A new order ends the unit's guard (<c>AIGuardState::onExit</c>, F-58).</summary>
     void EndGuard(Entity entity);
 
+    /// <summary><c>ALLOW_INTERRUPT_AND_RESUME_OF_CUR_STATE_FOR_RELOAD</c> (F-58): the unit guards (or retaliates) and the guard is not held - an aircraft out of ammunition interrupts it to reload.</summary>
+    bool GuardResumesAfterReload(Entity entity);
+
+    /// <summary>The unit's guard waits for its aircraft (<c>HAS_PENDING_COMMAND</c> with the guard as the most recent command).</summary>
+    bool IsGuardHeld(Entity entity);
+
+    /// <summary>An aircraft that returns to reload holds its guard: the guard's attack ends and its machine decides nothing until <see cref="ResumeGuard"/>.</summary>
+    void HoldGuard(Entity entity);
+
+    /// <summary>The aircraft flies again and gives its stored guard again (<c>m_mostRecentCommand.reconstitute</c>).</summary>
+    void ResumeGuard(Entity entity);
+
     /// <summary>
     /// <c>GarrisonContain::matchObjectsToGarrisonPoints</c> of an enclosing garrison (F-60, step 4): a rider at a point whose victim is gone or out of range goes back to the centre,
     /// a rider with a victim takes the free point closest to it, and a rider at a point moves to a free one closer to its victim.

@@ -64,8 +64,8 @@ public sealed record JetAIData(AIUpdateData Base, Fixed OutOfAmmoDamageRatePerSe
 /// rate, stopping on the spot — its braking is huge); take-off and landing set the height as a function of the covered distance (the reference's lift ramp
 /// <c>m_maxLift · ratio²</c> and the glide to the runway); free flight is the ordinary air movement of <see cref="AIUpdateInterface"/> with the height approaching the locomotor's
 /// <c>PreferredHeight</c> by the locomotor's lift (net of gravity) and a quarter of its speed on the way down. A fixed-wing aircraft (WINGS locomotor) flies with a minimum speed, a limited turn rate and circles when it has nothing to do (<c>JetAIUpdate.Flight.cs</c>,
-/// <c>docs/SIM-JET-FLIGHT.md</c>); every other aircraft holds its position in the air; the landing aligns the heading to the runway at its start (no turn onto the approach). Not modeled: the interrupt-and-resume of a guard/hunt order for reloading (there are no
-/// such orders), <c>notifyVictimIsDead</c> (no attack state), the lock-on cursor, afterburners and landing sounds, aircraft-carrier decks, the sneaky targeting offset, the progressive
+/// <c>docs/SIM-JET-FLIGHT.md</c>); every other aircraft holds its position in the air; the landing aligns the heading to the runway at its start (no turn onto the approach). A guard waits for the take-off and is interrupted by an empty magazine and given again after the reload (F-58); not modeled: the same for a hunt order (the
+/// port has none), <c>notifyVictimIsDead</c> (no attack state), the lock-on cursor, afterburners and landing sounds, aircraft-carrier decks, the sneaky targeting offset, the progressive
 /// refill of the clip while reloading (the clip is full when the reload time is over).
 /// </summary>
 public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data.Base)
@@ -76,7 +76,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         ReturnToDeadAirfield, CirclingDeadAirfield,
     }
 
-    private enum PendingKind : byte { None, Move, Land }
+    private enum PendingKind : byte { None, Move, Land, Guard }
 
     private static readonly Fixed ParkedOrientationTolerance = Fixed.FromDecimal(0.001m);
     private static readonly Fixed Misaligned = FixedTrig.PiFraction(1, 6); // as the ground movement of AIUpdateInterface
@@ -312,11 +312,14 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     {
         if (TakeoffOrLandingInProgress)
         {
+            // The stored order replaces whatever was stored, a guard included.
+            world.EndGuard(Entity);
             Store(PendingKind.Move, x, y, fromPlayer, EntityId.Invalid, attackMove);
             return;
         }
         if (!_allowAir)
         {
+            world.EndGuard(Entity);
             Store(PendingKind.Move, x, y, fromPlayer, EntityId.Invalid, attackMove);
             BeginTakeoff();
             return;
@@ -341,6 +344,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         if (airfield.EffectivelyDead || !airfield.Template.IsKindOf("FS_AIRFIELD") || world.RelationshipOf(Entity.Owner, airfield.Owner) != Relationship.Allies) return;
         if (TakeoffOrLandingInProgress)
         {
+            world.EndGuard(Entity);
             Store(PendingKind.Land, Fixed.Zero, Fixed.Zero, fromPlayer, airfield.Id);
             return;
         }
@@ -348,11 +352,37 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         {
             // isParkedAt: already standing at that airfield, nothing to do.
             if (_airfield == airfield.Id) return;
+            world.EndGuard(Entity);
             Store(PendingKind.Land, Fixed.Zero, Fixed.Zero, fromPlayer, airfield.Id);
             BeginTakeoff();
             return;
         }
+        world.EndGuard(Entity);
         BeginLanding(world, airfield);
+    }
+
+    /// <summary>
+    /// <c>aiDoCommand</c> for a guard (<c>AICMD_GUARD_POSITION</c>, <c>_OBJECT</c>, <c>_AREA</c>, <c>_RETALIATE</c>): stored while a take-off or landing runs or the aircraft is parked
+    /// (which starts the take-off) - false, the world holds the guard until <see cref="ExecutePending"/> gives it again; while the aircraft flies the guard begins at once - true.
+    /// </summary>
+    public bool TakeGuardNow(IWorldServices world)
+    {
+        if (TakeoffOrLandingInProgress)
+        {
+            Store(PendingKind.Guard, Fixed.Zero, Fixed.Zero, true, EntityId.Invalid);
+            return false;
+        }
+        if (!_allowAir)
+        {
+            Store(PendingKind.Guard, Fixed.Zero, Fixed.Zero, true, EntityId.Invalid);
+            BeginTakeoff();
+            return false;
+        }
+        _pending = PendingKind.None;
+        _returnTick = 0;
+        _phase = JetPhase.None;
+        _useReturnLocomotor = false;
+        return true;
     }
 
     private void Store(PendingKind kind, Fixed x, Fixed y, bool fromPlayer, EntityId target, bool attackMove = false)
@@ -525,10 +555,19 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     private void IdleLogic(IWorldServices world, ParkingPlaceBehavior? parking)
     {
         var now = world.Tick;
-        if (!base.IsIdle)
+        // A held guard is the stored order of an idle aircraft (HAS_PENDING_COMMAND), not a state it is busy with.
+        if (!base.IsIdle && !world.IsGuardHeld(Entity))
         {
             parking?.SetHealee(world, Entity, false);
             _returnTick = 0;
+            // ALLOW_INTERRUPT_AND_RESUME_OF_CUR_STATE_FOR_RELOAD: a guard whose magazine is empty is stored, the aircraft flies home to reload and gives it again afterwards.
+            if (_allowAir && world.GuardResumesAfterReload(Entity) && IsOutOfSpecialReloadAmmo(world))
+            {
+                world.HoldGuard(Entity);
+                Store(PendingKind.Guard, Fixed.Zero, Fixed.Zero, true, EntityId.Invalid);
+                _useReturnLocomotor = true;
+                BeginReturnForLanding(world);
+            }
             return;
         }
         if (parking is not null)
@@ -581,6 +620,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _returnTick = 0;
         if (kind == PendingKind.Move) base.OrderMove(world, x, y, fromPlayer, attackMove);
         else if (kind == PendingKind.Land && world.FindEntity(target) is { } airfield) BeginLanding(world, airfield);
+        else if (kind == PendingKind.Guard) world.ResumeGuard(Entity);
     }
 
     // ------------------------------------------------------------------------------------------------------------------ take-off
@@ -1136,7 +1176,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         _homeX = reader.Fixed("homeX");
         _homeY = reader.Fixed("homeY");
         var pending = reader.Int("pending");
-        if (pending < 0 || pending > (int)PendingKind.Land) throw new InvalidDataException("Jet pending order out of range.");
+        if (pending < 0 || pending > (int)PendingKind.Guard) throw new InvalidDataException("Jet pending order out of range.");
         _pending = (PendingKind)pending;
         if (_pending != PendingKind.None)
         {
