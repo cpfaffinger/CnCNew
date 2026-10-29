@@ -58,7 +58,7 @@ static partial class Tests
     /// </summary>
     public static void DozerRepairsWhenBored()
     {
-        (long Bored, long Healed) Run(SimulationRate rate, bool save)
+        (long Bored, long Healed, long Again) Run(SimulationRate rate, bool save)
         {
             var fixture = new SyntheticFixture(rate, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/DozerBored.ini"] = DozerBoredIni });
             var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
@@ -96,11 +96,26 @@ static partial class Tests
             Check.That(others.All(value => value.Body!.Health < value.Body.MaxHealth && (value.Template.Name != "BoredHut" || value.Body.Health == Fixed.FromInt(500))),
                 $"{rate}: nothing else is repaired.");
             Check.That(!ai.LastCommandFromPlayer, $"{rate}: the repair is not the player's order.");
-            return (bored - arrived, healed);
+            // F-72: the repair ends (the hut is whole) in the first tick of a frame above 30 Hz; the idle state is entered then, and the dozer is bored again 150 frames later
+            // when the hut is hurt once more - not a frame earlier.
+            long done = -1, again = -1;
+            for (var step = 0; step < world.Frames(800) && again < 0; step++)
+            {
+                world.Step();
+                if (done < 0 && !ai.HasBuilderTask)
+                {
+                    done = Frame();
+                    Check.That(feeder.Damage(near.Id.Value, 300).Accepted, $"{rate}: the hut is hurt again.");
+                }
+                if (done >= 0 && again < 0 && ai.HasBuilderTask) again = Frame();
+            }
+            Check.That(done > healed && again > done, $"{rate}: the repair ends and the dozer repairs again ({done}, {again}).");
+            return (bored - arrived, healed, again - done);
         }
 
         var reference = Run(SimulationRate.Hz30, false);
         Check.That(reference.Bored == 150, $"The dozer is bored 150 frames after it arrived (the last frame it moved and 151 frames after it; {reference.Bored}).");
+        Check.That(reference.Again == 151, $"The dozer is bored again 151 frames after the frame its repair ended in ({reference.Again}).");
         foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
         {
             var other = Run(rate, false);

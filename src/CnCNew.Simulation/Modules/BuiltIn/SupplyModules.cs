@@ -75,6 +75,9 @@ public sealed record DozerAIData(AIUpdateData Ai, long BoredTicks, Fixed BoredRa
 internal struct DozerBoredom
 {
     private long _since;
+    // The builder had a task when its frame began (F-72): the original's one update of the frame asks that before the step; above 30 Hz a task that ends in the frame's first
+    // tick is gone where the frame ends.
+    private bool _busy;
 
     /// <summary>The idle state is entered (its <c>onEnter</c>): at the builder's creation, and when its dozer brain is reset.</summary>
     public void Enter(IWorldServices world, Entity entity) => _since = world.Time.BeginsFrameOf(entity, world.Tick + TickOrder.Next)
@@ -90,10 +93,15 @@ internal struct DozerBoredom
     {
         var entity = ai.Entity;
         var frame = world.Time.TicksPerOriginalFrame;
+        if (hadTask && world.Time.BeginsFrameOf(entity, world.Tick)) _busy = true;
         if (world.Time.BeginsFrameOf(entity, world.Tick + TickOrder.Next))
         {
-            // A task that ended in this frame enters the idle state now (its onEnter sets the stamp); a builder that is not idle resets it.
-            if (hadTask || ai.HasBuilderTask || !ai.IsIdle) _since = world.Tick;
+            // A task that ended in this frame enters the idle state now (its onEnter sets the stamp); a builder that is not idle where the frame ends resets it.
+            if (_busy || ai.HasBuilderTask || !ai.IsIdle)
+            {
+                _since = world.Tick;
+                _busy = false;
+            }
             else if (world.Tick - _since >= boredTicks + frame)
             {
                 _since = world.Tick;
@@ -102,9 +110,9 @@ internal struct DozerBoredom
         }
         // A task - also the repair it has just given itself - is worked from the next tick on, its walk begun in the first tick of the builder's next frame.
         if (ai.HasBuilderTask) return Math.Min(sleep, SimulationTiming.SleepNone);
-        if (!ai.IsIdle)
+        if (!ai.IsIdle || _busy)
         {
-            // Something the world drives (a guard) keeps it from being idle without waking it: look again where the next frame ends.
+            // Something the world drives (a guard) keeps it from being idle without waking it, or its task ended inside the frame: look again where the frame ends.
             if (sleep < SimulationTiming.SleepForever) return sleep;
             return NextFrameEnd(world, entity) - world.Tick;
         }
@@ -143,9 +151,17 @@ internal struct DozerBoredom
         return best;
     }
 
-    public readonly void Describe(IStateWriter writer) => writer.Int("boredSince", _since);
+    public readonly void Describe(IStateWriter writer)
+    {
+        writer.Int("boredSince", _since);
+        if (_busy) writer.Bool("boredBusy", true);
+    }
 
-    public void Load(IStateReader reader) => _since = reader.Has("boredSince") ? reader.Int("boredSince") : 0;
+    public void Load(IStateReader reader)
+    {
+        _since = reader.Has("boredSince") ? reader.Int("boredSince") : 0;
+        _busy = reader.Has("boredBusy") && reader.Bool("boredBusy");
+    }
 }
 
 /// <summary>
