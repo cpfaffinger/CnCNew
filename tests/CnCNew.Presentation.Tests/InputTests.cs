@@ -991,6 +991,13 @@ static class InputTests
         var atPlace = Issued(() => controller.CompleteTarget(world, view, Screen(30, 20)));
         Assert(atPlace is [AttackPositionCommand { OwnPosition: false, Slot: 0, MaxShots: 0 } wallOrder] && wallOrder.Units.SequenceEqual([r1.Id])
                && wallOrder.X == Fixed.FromInt(30) && wallOrder.Y == Fixed.FromInt(20), "the clicked place, the button's slot, no limit");
+        // USES_MINE_CLEARING_WEAPONSET (F-69): the selection carries the mine-clearing weapon set first (MSG_SET_MINE_CLEARING_DETAIL), then attacks the place.
+        var disarm = FireButton("Command_TestDisarmMines", CommandOptions.NeedTargetPos | CommandOptions.OkForMultiSelect | CommandOptions.UsesMineClearingWeaponset, "PRIMARY", 0);
+        Assert(controller.Activate(world, disarm, [r1, r2]) == ActivationResult.EnteredMode, "the disarm-mines button asks for the place");
+        var clearing = Issued(() => controller.CompleteTarget(world, view, Screen(35, 25)));
+        Assert(clearing is [SetMineClearingCommand flag, AttackPositionCommand { OwnPosition: false, Slot: 0, MaxShots: 0 } clearOrder] && flag.Units.SequenceEqual([r1.Id, r2.Id])
+               && clearOrder.Units.SequenceEqual([r1.Id, r2.Id]) && clearOrder.X == Fixed.FromInt(35) && clearOrder.Y == Fixed.FromInt(25), "the flag for the group, then the attack on the place");
+        controller.DrainFeedback();
         controller.DrainFeedback();
         controller.OnMeta(world, MetaAction.BeginPreferSelection);
         Assert(controller.Hover(world, view, Screen(60, 60)) is { Action: ContextAction.Select }, "Shift over an own unit selects");
