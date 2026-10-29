@@ -92,6 +92,9 @@ public interface IWorldServices
     /// <summary>A new order ends the unit's guard (<c>AIGuardState::onExit</c>, F-58).</summary>
     void EndGuard(Entity entity);
 
+    /// <summary><c>aiAttackPosition(pos, shots, CMD_FROM_AI)</c> (F-64): the unit attacks the place for <paramref name="shots"/> shots (0 or less: no limit); false when it cannot.</summary>
+    bool AttackPlaceFor(Entity unit, Fixed x, Fixed y, int shots);
+
     /// <summary><c>ALLOW_INTERRUPT_AND_RESUME_OF_CUR_STATE_FOR_RELOAD</c> (F-58): the unit guards (or retaliates) and the guard is not held - an aircraft out of ammunition interrupts it to reload.</summary>
     bool GuardResumesAfterReload(Entity entity);
 

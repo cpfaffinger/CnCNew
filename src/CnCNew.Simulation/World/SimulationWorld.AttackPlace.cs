@@ -71,6 +71,9 @@ public sealed partial class SimulationWorld
         if (!any) RecordRejection(order, CommandRejection.UnknownEntity);
     }
 
+    /// <inheritdoc cref="IWorldServices.AttackPlaceFor"/>
+    public bool AttackPlaceFor(Entity unit, Fixed x, Fixed y, int shots) => AttackPlace(unit, x, y, shots > 0 ? shots : -1, fromPlayer: false);
+
     private (Fixed X, Fixed Y) FramePosition(Entity unit)
     {
         var (x, y, _) = unit.FrameEnd(_tick);
