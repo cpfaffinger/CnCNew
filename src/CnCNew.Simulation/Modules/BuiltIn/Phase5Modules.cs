@@ -1111,7 +1111,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
         _lastCommandFromPlayer = fromPlayer;
         world.WakeAt(Entity, this, world.Tick);
         world.MarkDirty(Entity);
+        OnBuilderTaskStarted(world);
     }
+
+    /// <summary>Called when a build or repair task is given.</summary>
+    protected virtual void OnBuilderTaskStarted(IWorldServices world) { }
 
     /// <summary>Whether a dozer or worker has a build, repair or other task (<c>DozerAIInterface::getCurrentTask</c> is not <c>DOZER_TASK_INVALID</c>).</summary>
     public bool HasBuilderTask => _task != BuilderTask.None;

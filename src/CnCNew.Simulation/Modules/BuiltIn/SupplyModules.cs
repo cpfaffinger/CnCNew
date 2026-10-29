@@ -15,7 +15,7 @@ internal static class SupplyModules
     public static ImmutableArray<IModuleBinding> Bindings { get; } =
     [
         new ModuleBinding<SupplyCarrierData>("SupplyTruckAIUpdate", ModuleOwnerKind.Object, (configuration, _) => SupplyCarrierData.Parse(configuration), data => new SupplyTruckAIUpdate(data)),
-        new ModuleBinding<SupplyCarrierData>("WorkerAIUpdate", ModuleOwnerKind.Object, (configuration, _) => SupplyCarrierData.Parse(configuration), data => new WorkerAIUpdate(data)),
+        new ModuleBinding<WorkerAIData>("WorkerAIUpdate", ModuleOwnerKind.Object, (configuration, _) => WorkerAIData.Parse(configuration), data => new WorkerAIUpdate(data)),
         new ModuleBinding<DozerAIData>("DozerAIUpdate", ModuleOwnerKind.Object, (configuration, _) => DozerAIData.Parse(configuration), data => new DozerAIUpdate(data)),
     ];
 }
@@ -67,70 +67,69 @@ public sealed record DozerAIData(AIUpdateData Ai, long BoredTicks, Fixed BoredRa
 }
 
 /// <summary>
-/// <c>DozerAIUpdate</c>: builds and repairs structures (see <see cref="AIUpdateInterface.OrderConstruct"/>), and gets bored (F-67, <c>DozerPrimaryIdleState::update</c>): a dozer that has
-/// stood idle without a task for more than <c>BoredTime</c> repairs the closest structure of its player within <c>BoredRange</c> that it may repair (<c>findObjectToRepair</c>), and
-/// looks again every <c>BoredTime</c> while it stays idle. Mine clearing (the other half of boredom) is not modelled.
+/// The idle state of the dozer machine (<c>DozerPrimaryIdleState</c>, F-67) for a dozer and for a worker that acts as one: it remembers the last tick of the builder's own frame in
+/// which it was not idle, had a task, or was bored (<c>m_idleTooLongTimestamp</c>); once more than <c>BoredTime</c> has passed it repairs the closest structure of its player within
+/// <c>BoredRange</c> that it may repair (<c>findObjectToRepair</c>) and stamps the frame, so it looks again every <c>BoredTime</c> while it stays idle. The state is read where the
+/// builder's frame ends - a move that arrives in a frame has arrived for the 30 Hz frame, which is read once the whole step is made. Mine clearing is not modelled (F-69).
 /// </summary>
-public sealed class DozerAIUpdate(DozerAIData data) : AIUpdateInterface(data.Ai)
+internal struct DozerBoredom
 {
-    // m_idleTooLongTimestamp: the last tick of the dozer's own frame in which it was not idle, had a task, or was bored. The idle state is entered at the dozer's creation.
-    private long _boredSince;
+    private long _since;
 
-    public override string ModuleName => "DozerAIUpdate";
-    public override bool CanBuild => true;
+    /// <summary>The idle state is entered (its <c>onEnter</c>): at the builder's creation, and when its dozer brain is reset.</summary>
+    public void Enter(IWorldServices world, Entity entity) => _since = world.Time.BeginsFrameOf(entity, world.Tick + TickOrder.Next)
+        ? world.Tick : NextFrameEnd(world, entity);
 
-    public override void OnSpawn(IWorldServices world)
-    {
-        base.OnSpawn(world);
-        _boredSince = world.Tick + world.Time.TicksPerOriginalFrame - TickOrder.Next;
-        NextWake = _boredSince + data.BoredTicks + world.Time.TicksPerOriginalFrame;
-    }
+    /// <summary>The first look of a builder made at this tick.</summary>
+    public long FirstLook(IWorldServices world, long boredTicks) => _since + boredTicks + world.Time.TicksPerOriginalFrame;
 
     /// <summary>
-    /// The base's update, then the dozer machine's idle state, as in the original after <c>AIUpdateInterface::update</c>. The state is read where the dozer's frame ends - a move
-    /// that arrives in a frame has arrived for the 30 Hz frame, which is read once the whole step is made.
+    /// After the base's update (<paramref name="hadTask"/>: the builder had a task before it): the idle state's update where the frame ends; the sleep until it must look again.
     /// </summary>
-    public override long Update(IWorldServices world)
+    public long Look(IWorldServices world, AIUpdateInterface ai, bool hadTask, long sleep, long boredTicks, Fixed boredRange)
     {
-        var hadTask = HasBuilderTask;
-        var sleep = base.Update(world);
-        if (Entity.EffectivelyDead) return sleep;
+        var entity = ai.Entity;
         var frame = world.Time.TicksPerOriginalFrame;
-        if (world.Time.BeginsFrameOf(Entity, world.Tick + TickOrder.Next))
+        if (world.Time.BeginsFrameOf(entity, world.Tick + TickOrder.Next))
         {
-            // A task that ended in this frame enters the idle state now (its onEnter sets the stamp); a dozer that is not idle resets it.
-            if (hadTask || HasBuilderTask || !IsIdle) _boredSince = world.Tick;
-            else if (world.Tick - _boredSince >= data.BoredTicks + frame)
+            // A task that ended in this frame enters the idle state now (its onEnter sets the stamp); a builder that is not idle resets it.
+            if (hadTask || ai.HasBuilderTask || !ai.IsIdle) _since = world.Tick;
+            else if (world.Tick - _since >= boredTicks + frame)
             {
-                _boredSince = world.Tick;
-                if (FindObjectToRepair(world) is { } target) OrderRepair(world, target, fromPlayer: false);
+                _since = world.Tick;
+                if (FindObjectToRepair(world, entity, boredRange) is { } target) ai.OrderRepair(world, target, fromPlayer: false);
             }
         }
-        if (HasBuilderTask || !IsIdle)
+        if (ai.HasBuilderTask || !ai.IsIdle)
         {
             // Something the world drives (a guard) keeps it from being idle without waking it: look again where the next frame ends.
             if (sleep < SimulationTiming.SleepForever) return sleep;
-            for (var ahead = TickOrder.Next; ; ahead++)
-                if (world.Time.BeginsFrameOf(Entity, world.Tick + ahead + TickOrder.Next)) return ahead;
+            return NextFrameEnd(world, entity) - world.Tick;
         }
         // The next look lies after this tick: the stamp is the last frame end that was looked at, and a look is due a whole frame after it at the earliest.
-        return Math.Min(sleep, _boredSince + data.BoredTicks + frame - world.Tick);
+        return Math.Min(sleep, _since + boredTicks + frame - world.Tick);
+    }
+
+    private static long NextFrameEnd(IWorldServices world, Entity entity)
+    {
+        for (var ahead = TickOrder.Next; ; ahead++)
+            if (world.Time.BeginsFrameOf(entity, world.Tick + ahead + TickOrder.Next)) return world.Tick + ahead;
     }
 
     /// <summary>
-    /// <c>findObjectToRepair</c>: the closest structure of the dozer's player within <c>BoredRange</c> (between the centres, on the ground; ties by id) that
+    /// <c>findObjectToRepair</c>: the closest structure of the builder's player within <c>BoredRange</c> (between the centres, on the ground; ties by id) that
     /// <c>ActionManager::canRepairObject</c> lets it repair.
     /// </summary>
-    private Entity? FindObjectToRepair(IWorldServices world)
+    private static Entity? FindObjectToRepair(IWorldServices world, Entity self, Fixed range)
     {
         Entity? best = null;
         var bestDistance = Fixed.Zero;
-        var reach = SquaredReach.Of(data.BoredRange);
-        foreach (var candidate in world.EntitiesOwnedBy(Entity.Owner).AsSpan())
+        var reach = SquaredReach.Of(range);
+        foreach (var candidate in world.EntitiesOwnedBy(self.Owner).AsSpan())
         {
-            if (candidate == Entity || !IsRepairable(candidate)) continue;
-            var dx = candidate.X - Entity.X;
-            var dy = candidate.Y - Entity.Y;
+            if (candidate == self || !AIUpdateInterface.IsRepairable(candidate)) continue;
+            var dx = candidate.X - self.X;
+            var dy = candidate.Y - self.Y;
             var distance = dx * dx + dy * dy;
             if (!reach.Contains(distance)) continue;
             if (best is null || distance < bestDistance)
@@ -142,16 +141,47 @@ public sealed class DozerAIUpdate(DozerAIData data) : AIUpdateInterface(data.Ai)
         return best;
     }
 
+    public readonly void Describe(IStateWriter writer) => writer.Int("boredSince", _since);
+
+    public void Load(IStateReader reader) => _since = reader.Has("boredSince") ? reader.Int("boredSince") : 0;
+}
+
+/// <summary>
+/// <c>DozerAIUpdate</c>: builds and repairs structures (see <see cref="AIUpdateInterface.OrderConstruct"/>), and gets bored (<see cref="DozerBoredom"/>, F-67): after the base's update the
+/// dozer machine's idle state runs, as in the original after <c>AIUpdateInterface::update</c>.
+/// </summary>
+public sealed class DozerAIUpdate(DozerAIData data) : AIUpdateInterface(data.Ai)
+{
+    private DozerBoredom _boredom;
+
+    public override string ModuleName => "DozerAIUpdate";
+    public override bool CanBuild => true;
+
+    public override void OnSpawn(IWorldServices world)
+    {
+        base.OnSpawn(world);
+        _boredom.Enter(world, Entity);
+        NextWake = _boredom.FirstLook(world, data.BoredTicks);
+    }
+
+    public override long Update(IWorldServices world)
+    {
+        var hadTask = HasBuilderTask;
+        var sleep = base.Update(world);
+        if (Entity.EffectivelyDead) return sleep;
+        return _boredom.Look(world, this, hadTask, sleep, data.BoredTicks, data.BoredRange);
+    }
+
     public override void Describe(IStateWriter writer)
     {
         base.Describe(writer);
-        writer.Int("boredSince", _boredSince);
+        _boredom.Describe(writer);
     }
 
     public override void Load(IStateReader reader)
     {
         base.Load(reader);
-        _boredSince = reader.Has("boredSince") ? reader.Int("boredSince") : 0;
+        _boredom.Load(reader);
     }
 }
 
@@ -173,6 +203,12 @@ internal sealed class SupplyMachine
     public bool Sleeps => _state == SupplyState.Idle && !_forceWanting;
 
     public void SetForceWanting() => _forceWanting = true;
+
+    /// <summary><c>isForcedIntoWantingState</c>: a forced want waits to be serviced.</summary>
+    public bool ForcedWanting => _forceWanting;
+
+    /// <summary><c>resetToDefaultState</c>: the default state (<c>ST_BUSY</c>, the first defined); its <c>onEnter</c> does nothing.</summary>
+    public void Reset() => _state = SupplyState.Busy;
 
     public void Update(IWorldServices world, SupplyCarrierAI ai)
     {
@@ -372,14 +408,20 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
         base.OrderDock(world, dock, fromPlayer);
     }
 
-    protected override void OnBuilderTaskEnded(IWorldServices world) => _machine.SetForceWanting();
+    /// <summary>The supply brain runs (a worker runs it only while it acts as a supply truck, F-68).</summary>
+    protected virtual bool SupplyBrainRuns => true;
+
+    /// <summary>The supply brain's state and its forced want, for a worker's master machine.</summary>
+    protected SupplyState SupplyBrainState => _machine.State;
+    protected bool SupplyBrainForced => _machine.ForcedWanting;
+    protected void ResetSupplyBrain() => _machine.Reset();
 
     public override long Update(IWorldServices world)
     {
         // Like the dock machine (AIUpdateInterface.Update): one step of the supply machine per logic frame of the original.
-        if (!IsBuilding && world.Time.IsOriginalFrameBoundary(world.Tick)) _machine.Update(world, this);
+        if (!IsBuilding && SupplyBrainRuns && world.Time.IsOriginalFrameBoundary(world.Tick)) _machine.Update(world, this);
         var baseSleep = base.Update(world);
-        return _machine.Sleeps ? baseSleep : Math.Min(baseSleep, SimulationTiming.SleepNone);
+        return _machine.Sleeps || !SupplyBrainRuns ? baseSleep : Math.Min(baseSleep, SimulationTiming.SleepNone);
     }
 
     public override void Describe(IStateWriter writer)
@@ -406,15 +448,93 @@ internal sealed class SupplyTruckAIUpdate(SupplyCarrierData data) : SupplyCarrie
     public override long UpgradedSupplyBoost(IWorldServices world) => 0;
 }
 
-/// <summary>
-/// <c>WorkerAIUpdate</c>: a dozer that also gathers. The reference switches between its dozer and supply brain by the object's task; here
-/// the worker always runs the supply brain (construction is not modelled). The boost applies once the player owns <c>Upgrade_GLAWorkerShoes</c>.
-/// </summary>
-internal sealed class WorkerAIUpdate(SupplyCarrierData data) : SupplyCarrierAI(data)
+/// <summary>A worker's two brains as the world shows them (F-68).</summary>
+public interface IWorkerBrains
 {
+    /// <summary>The worker acts as a supply truck (<c>AS_SUPPLY_TRUCK</c>), not as a dozer.</summary>
+    bool ActsAsSupplyTruck { get; }
+}
+
+/// <summary><c>WorkerAIUpdateModuleData</c>: the supply truck's fields and the dozer's <c>BoredTime</c> and <c>BoredRange</c>.</summary>
+internal sealed record WorkerAIData(SupplyCarrierData Carrier, long BoredTicks, Fixed BoredRange) : ModuleData
+{
+    public static WorkerAIData Parse(RatedModuleConfiguration configuration) => new(SupplyCarrierData.Parse(configuration),
+        ModuleConfigReader.Ticks(configuration, "BoredTime", 0), ModuleConfigReader.Real(configuration, "BoredRange", Fixed.Zero));
+}
+
+/// <summary>
+/// <c>WorkerAIUpdate</c> (F-68): a dozer that also gathers. Its master machine (<c>WorkerStateMachine</c>) acts as a dozer by default and becomes a supply truck when a want is forced on
+/// it or it docks (<c>supplyTruckSubMachineWantsToEnter</c>), and a dozer again when neither holds and its supply brain is busy (<c>supplyTruckSubMachineReadyToLeave</c>); leaving a
+/// brain resets it, and a new task makes it a dozer at once (<c>newTask</c>). As a dozer it builds, repairs and gets bored (<see cref="DozerBoredom"/>); only as a truck its supply brain
+/// runs. The master machine is looked at where the supply brain steps, before it. The boost applies once the player owns <c>Upgrade_GLAWorkerShoes</c>.
+/// </summary>
+internal sealed class WorkerAIUpdate(WorkerAIData data) : SupplyCarrierAI(data.Carrier), IWorkerBrains
+{
+    private bool _asTruck;
+    private DozerBoredom _boredom;
+
     public override string ModuleName => "WorkerAIUpdate";
     public override bool CanBuild => true;
     public override long UpgradedSupplyBoost(IWorldServices world) => BoostIfUpgraded(world, "Upgrade_GLAWorkerShoes");
+    protected override bool SupplyBrainRuns => _asTruck;
+
+    /// <summary>The worker acts as a supply truck (<c>AS_SUPPLY_TRUCK</c>), not as a dozer.</summary>
+    public bool ActsAsSupplyTruck => _asTruck;
+
+    public override void OnSpawn(IWorldServices world)
+    {
+        base.OnSpawn(world);
+        _boredom.Enter(world, Entity);
+        NextWake = _boredom.FirstLook(world, data.BoredTicks);
+    }
+
+    protected override void OnBuilderTaskStarted(IWorldServices world)
+    {
+        // newTask: a worker that acts as a supply truck becomes a dozer at once (the original also idles its AI, which StartTask has done).
+        if (_asTruck) BecomeDozer(world);
+    }
+
+    public override long Update(IWorldServices world)
+    {
+        var hadTask = HasBuilderTask;
+        if (!IsBuilding && world.Time.IsOriginalFrameBoundary(world.Tick))
+        {
+            var wantsTruck = SupplyBrainForced || IsDocking;
+            if (!_asTruck && wantsTruck)
+            {
+                // ActAsDozerState::onExit: the dozer brain is reset.
+                _asTruck = true;
+                _boredom.Enter(world, Entity);
+                world.MarkDirty(Entity);
+            }
+            else if (_asTruck && !wantsTruck && SupplyBrainState == SupplyState.Busy) BecomeDozer(world);
+        }
+        var sleep = base.Update(world);
+        if (Entity.EffectivelyDead || _asTruck) return sleep;
+        return _boredom.Look(world, this, hadTask, sleep, data.BoredTicks, data.BoredRange);
+    }
+
+    private void BecomeDozer(IWorldServices world)
+    {
+        // ActAsSupplyTruckState::onExit: the supply brain is reset.
+        _asTruck = false;
+        ResetSupplyBrain();
+        world.MarkDirty(Entity);
+    }
+
+    public override void Describe(IStateWriter writer)
+    {
+        base.Describe(writer);
+        writer.Bool("asTruck", _asTruck);
+        _boredom.Describe(writer);
+    }
+
+    public override void Load(IStateReader reader)
+    {
+        base.Load(reader);
+        _asTruck = reader.Has("asTruck") && reader.Bool("asTruck");
+        _boredom.Load(reader);
+    }
 }
 
 /// <summary>
