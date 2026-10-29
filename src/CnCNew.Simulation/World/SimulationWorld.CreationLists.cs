@@ -314,6 +314,11 @@ public sealed partial class SimulationWorld
         var angle = Fixed.Zero;
         var disposition = nugget.Disposition;
         var healthPercent = LogicRandom.Range(nugget.MinHealth, nugget.MaxHealth);
+        // The throw of an object with a physics module (F-66): its draws follow the dispositions' in the original's order, after the health.
+        var physics = template.Modules.Any(spec => spec.Name == "PhysicsBehavior");
+        var cast = nugget.Throw ?? CreationThrow.None;
+        var intensity = cast.DispositionIntensity;
+        SpawnThrow? thrown = null;
         if (disposition.HasFlag(CreationDisposition.LikeExisting)) angle = source.Angle;
         if (disposition.HasFlag(CreationDisposition.OnGroundAligned))
         {
@@ -324,8 +329,67 @@ public sealed partial class SimulationWorld
         {
             angle = LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
             z = Fixed.Zero;
+            if (physics)
+            {
+                // SEND_IT_OUT: a horizontal push of up to four times the intensity.
+                var horizontal = Fixed.FromInt(4) * intensity;
+                var fx = LogicRandom.Range(-horizontal, horizontal);
+                var fy = LogicRandom.Range(-horizontal, horizontal);
+                if (cast.OrientInForceDirection) angle = FixedTrig.Atan2(fy, fx);
+                thrown = new SpawnThrow(fx, fy, Fixed.Zero, default, default, default, false, false, Fixed.Zero);
+            }
         }
-        if ((disposition & (CreationDisposition.SendItFlying | CreationDisposition.SendItUp | CreationDisposition.RandomForce)) != 0) angle = source.Angle;
+        if ((disposition & (CreationDisposition.SendItFlying | CreationDisposition.SendItUp | CreationDisposition.RandomForce)) != 0)
+        {
+            angle = source.Angle;
+            if (physics)
+            {
+                // "if omitted from INI, calc it based on intensity": the spin, and the yaw, roll and pitch rates as overrides; drawn yaw, roll, pitch.
+                var spin = cast.SpinRate >= Fixed.Zero ? cast.SpinRate : FixedTrig.PiFraction(1, 32) * intensity;
+                var yawRate = cast.YawRate >= Fixed.Zero ? cast.YawRate : spin;
+                var rollRate = cast.RollRate >= Fixed.Zero ? cast.RollRate : spin;
+                var pitchRate = cast.PitchRate >= Fixed.Zero ? cast.PitchRate : spin;
+                var yaw = LogicRandom.Range(-yawRate, yawRate);
+                var roll = LogicRandom.Range(-rollRate, rollRate);
+                var pitch = LogicRandom.Range(-pitchRate, pitchRate);
+                Fixed fx, fy, fz;
+                if (disposition.HasFlag(CreationDisposition.SendItFlying))
+                {
+                    var horizontal = Fixed.FromInt(4) * intensity;
+                    var vertical = Fixed.FromInt(3) * intensity;
+                    fx = LogicRandom.Range(-horizontal, horizontal);
+                    fy = LogicRandom.Range(-horizontal, horizontal);
+                    fz = LogicRandom.Range(vertical * Fixed.FromDecimal(0.33m), vertical);
+                }
+                else if (disposition.HasFlag(CreationDisposition.SendItUp))
+                {
+                    var horizontal = Fixed.FromInt(2) * intensity;
+                    var vertical = Fixed.FromInt(4) * intensity;
+                    fx = LogicRandom.Range(-horizontal, horizontal);
+                    fy = LogicRandom.Range(-horizontal, horizontal);
+                    fz = LogicRandom.Range(vertical * Fixed.FromDecimal(0.75m), vertical);
+                }
+                else
+                {
+                    // calcRandomForce: a heading, a pitch and a magnitude; the force is the magnitude along the heading, raised by the pitch.
+                    var heading = LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
+                    var raise = LogicRandom.Range(cast.MinForcePitch, cast.MaxForcePitch);
+                    var magnitude = LogicRandom.Range(cast.MinForce, cast.MaxForce);
+                    var level = magnitude * FixedTrig.Cos(raise);
+                    (fx, fy, fz) = (level * FixedTrig.Cos(heading), level * FixedTrig.Sin(heading), magnitude * FixedTrig.Sin(raise));
+                }
+                if (cast.OrientInForceDirection) angle = FixedTrig.Atan2(fy, fx);
+                thrown = new SpawnThrow(fx, fy, fz, yaw, pitch, roll, true, true, Fixed.Zero);
+            }
+        }
+        if (disposition.HasFlag(CreationDisposition.Whirling) && physics)
+        {
+            var yaw = LogicRandom.Range(-intensity, intensity);
+            var roll = LogicRandom.Range(-intensity, intensity);
+            var pitch = LogicRandom.Range(-intensity, intensity);
+            var before = thrown ?? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero);
+            thrown = before with { Yaw = yaw, Pitch = pitch, Roll = roll, Rates = true };
+        }
 
         // ObjectCreationList::create(..., lifetimeFrames): a lifetime handed in by the caller (FireOCLAfterWeaponCooldownUpdate) replaces the nugget's own.
         var lifetimeMin = _listLifetimeOverride > 0 ? _listLifetimeOverride : nugget.MinLifetimeTicks;
@@ -334,7 +398,7 @@ public sealed partial class SimulationWorld
             nugget.InheritsVeterancy && template.IsTrainable, nugget.InheritsVeterancy ? source.VeterancyLevel : 0,
             lifetimeMax > 0 ? lifetimeMin : 0, lifetimeMax > 0 ? lifetimeMax : 0,
             EntityId.Invalid, nugget.ContainInsideSourceObject ? source.Id : EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
-            Enslaver: template.Modules.Any(spec => spec.Binding.Name is "SlavedUpdate" or "MobMemberSlavedUpdate") ? source.Id : EntityId.Invalid);
+            Enslaver: template.Modules.Any(spec => spec.Binding.Name is "SlavedUpdate" or "MobMemberSlavedUpdate") ? source.Id : EntityId.Invalid, Throw: thrown);
         return (setup, (x, y, z, angle));
     }
 

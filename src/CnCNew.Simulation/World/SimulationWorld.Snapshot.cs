@@ -110,7 +110,13 @@ public sealed partial class SimulationWorld
                     pending.Has("producer") ? new EntityId(checked((uint)pending.UInt("producer"))) : default,
                     pending.Has("exitX"), pending.Has("exitX") ? pending.Fixed("doorX") : default, pending.Has("exitX") ? pending.Fixed("doorY") : default,
                     pending.Has("exitX") ? pending.Fixed("exitX") : default, pending.Has("exitX") ? pending.Fixed("exitY") : default,
-                    pending.Has("deletionTicks") ? pending.Int("deletionTicks") : 0, pending.Has("shroudRange") ? pending.Fixed("shroudRange") : default),
+                    pending.Has("deletionTicks") ? pending.Int("deletionTicks") : 0, pending.Has("shroudRange") ? pending.Fixed("shroudRange") : default,
+                    pending.Has("throwX")
+                        ? new SpawnThrow(pending.Fixed("throwX"), pending.Fixed("throwY"), pending.Fixed("throwZ"),
+                            pending.Has("throwYaw") ? pending.Fixed("throwYaw") : default, pending.Has("throwYaw") ? pending.Fixed("throwPitch") : default,
+                            pending.Has("throwYaw") ? pending.Fixed("throwRoll") : default, pending.Has("throwYaw"), pending.Has("throwBounce"),
+                            pending.Has("throwMass") ? pending.Fixed("throwMass") : default)
+                        : null),
                 pending.Has("notBefore") ? pending.Int("notBefore") : 0));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));

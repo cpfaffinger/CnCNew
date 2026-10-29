@@ -585,6 +585,7 @@ run.Test("Group move: every unit keeps its offset, shortened to six radii, and g
 run.Test("Slow death phases: INITIAL, MIDPOINT and FINAL play effect list, creation list and weapon", Tests.SlowDeathPlaysItsPhases);run.Test("Slow death phases: the same frames at 30, 60 and 120 Hz, snapshot during the death", Tests.SlowDeathPhasesAreTheSameAtEveryRate);
 run.Test("Phase 44 (F-37): a subclass of the slow death plays the base's phases", Tests.SlowDeathSubclassPlaysTheBasePhases);
 run.Test("Phase 44 (F-65): the slaves of a spawner take its attack", Tests.SlavesTakeTheirSpawnersAttack);
+run.Test("Phase 44 (F-66): a creation list throws what it creates", Tests.CreationListThrowsWhatItCreates);
 run.Test("Slow death phases: a dying vehicle stops, takes no order and leaves its hull where it died, at every rate", Tests.SlowDeathStopsTheDyingMover);
 run.Test("Chinook: flight height, supply trips, Supply Lines boost and landing to unload", Tests.ChinookSupplyFlightAndLanding);
 run.Test("Chinook (F-62): an unload at a place puts everybody out at once, a bare evacuation one by one through the door", Tests.ChinookUnloadAtAPlaceAtOnceAndAtTheDoorOneByOne);

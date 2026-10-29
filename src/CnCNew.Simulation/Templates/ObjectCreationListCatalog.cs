@@ -35,7 +35,18 @@ public sealed record CreationNugget(CreationNuggetKind Kind, int Count, Creation
     Fixed MinDistanceA, Fixed MinDistanceB, Fixed MaxDistance, Fixed OffsetX, Fixed OffsetY, Fixed OffsetZ,
     long MinLifetimeTicks, long MaxLifetimeTicks, ImmutableArray<string> Objects, string PutInContainer, bool ContainInsideSourceObject,
     bool InheritsVeterancy, bool SkipIfSignificantlyAirborne, Fixed MinHealth, Fixed MaxHealth, bool RequiresLivePlayer, string Weapon,
-    long InvulnerableTicks, bool DiesOnBadLand, PayloadDelivery? Delivery = null, int AttackShots = 1, int AttackSlot = 0);
+    long InvulnerableTicks, bool DiesOnBadLand, PayloadDelivery? Delivery = null, int AttackShots = 1, int AttackSlot = 0, CreationThrow? Throw = null);
+
+/// <summary>
+/// What <c>doStuffToObj</c> gives a created object with a physics module (F-66): the <c>Mass</c> of a debris nugget, <c>DispositionIntensity</c>, the spin and the yaw, roll and pitch
+/// rates (radians per logic frame of the original, below zero when absent - "calc it based on intensity"), the force range of <c>RANDOM_FORCE</c> (magnitudes, pitch in radians),
+/// <c>OrientInForceDirection</c>, and how many <c>AnimationSet</c>s a debris nugget has (one is drawn for each piece).
+/// </summary>
+public sealed record CreationThrow(Fixed Mass, Fixed DispositionIntensity, Fixed SpinRate, Fixed YawRate, Fixed RollRate, Fixed PitchRate, Fixed MinForce, Fixed MaxForce,
+    Fixed MinForcePitch, Fixed MaxForcePitch, bool OrientInForceDirection, int AnimationSets)
+{
+    public static CreationThrow None { get; } = new(Fixed.Zero, Fixed.Zero, -Fixed.One, -Fixed.One, -Fixed.One, -Fixed.One, Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero, false, 0);
+}
 
 /// <summary>
 /// The data of a <c>DeliverPayload</c> nugget (<c>DeliverPayloadNugget</c>, <c>ObjectCreationList.cpp</c>): the transports (<see cref="FormationSize"/> of them, spaced
@@ -172,7 +183,25 @@ public sealed class ObjectCreationListCatalog
             Bool("RequiresLivePlayer"), Reference("Weapon"), Ticks("InvulnerableTime"), Bool("DiesOnBadLand"), kind == CreationNuggetKind.DeliverPayload ? BuildDelivery(section, timing) : null,
             // AttackNugget: NumberOfShots (1) and WeaponSlot (PRIMARY) of the source's attack on the second point.
             Field("NumberOfShots")?.Value.Value is long shots ? checked((int)shots) : 1,
-            WeaponSlot.TryParse(Field("WeaponSlot")?.Value.OriginalText ?? string.Empty, out var slot) ? slot : WeaponSlot.Primary);
+            WeaponSlot.TryParse(Field("WeaponSlot")?.Value.OriginalText ?? string.Empty, out var slot) ? slot : WeaponSlot.Primary,
+            BuildThrow(section));
+    }
+
+    /// <summary>The throw of a created object (<see cref="CreationThrow"/>): rates from degrees per second (<c>parseAngularVelocityReal</c>), pitches from degrees.</summary>
+    private static CreationThrow BuildThrow(DefinitionSection section)
+    {
+        DefinitionField? Field(string name) => section.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        Fixed Real(string name) => Field(name)?.Value.Value switch
+        {
+            decimal value => Fixed.FromDecimal(value),
+            Distance distance => Fixed.FromDecimal(distance.Value),
+            _ => Fixed.Zero,
+        };
+        Fixed Radians(string name) => Field(name)?.Value.Value is Angle angle ? SimulationTiming.DegreesToRadians(angle.Degrees) : Fixed.Zero;
+        Fixed Rate(string name) => Field(name)?.Value.Value is Angle angle ? SimulationTiming.DegreesToRadians(angle.Degrees / CnCNew.Data.OriginalFrame.PerSecond) : -Fixed.One;
+        var sets = section.Fields.Count(field => field.Name.Equals("AnimationSet", StringComparison.OrdinalIgnoreCase));
+        return new CreationThrow(Real("Mass"), Real("DispositionIntensity"), Rate("SpinRate"), Rate("YawRate"), Rate("RollRate"), Rate("PitchRate"),
+            Real("MinForceMagnitude"), Real("MaxForceMagnitude"), Radians("MinForcePitch"), Radians("MaxForcePitch"), Field("OrientInForceDirection")?.Value.Value is true, sets);
     }
 
     private static PayloadDelivery BuildDelivery(DefinitionSection section, SimulationTime timing)
