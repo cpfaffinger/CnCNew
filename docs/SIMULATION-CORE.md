@@ -3860,6 +3860,11 @@ removes the attack-aggressor condition from the guard's INNER and RETURN and the
 Not built: step 2's guarded object moving off (built into the command and IDLE's check, not tested on its own), step 5 (the tunnel network guard), step 7 (`DeployStyleAIUpdate` deploying in the
 guard's IDLE, which needs the guard's own moves to pack the unit first; `JetAIUpdate`'s reload resume; `FlightDeckBehavior`'s order passing), the enter guard of templates
 with `isEnterGuard`.
+**The guard order's own tick** (`e0d9c7d`, manifest `4ef56b8`): the guard order is taken in the command phase, before the tick's updates, like any other order; its return
+move had been held for the unit's next frame as if it were one of the guard's own decisions, so above 30 Hz the move began one frame late - the original skirmish AI's match
+diverged at 60 Hz from frame 4,159 (found by bisecting to `5013d05`, the area guard). The script's `TEAM_GUARD_AREA` goes through the command path as the other script guard
+actions do (`GuardCommand.Area` with the trigger area's name, refused when unknown or longer than 256 characters); the guard tests give their orders at the start of a frame of
+the original at every rate. Thirteen mission runs whose scripts give guard orders change their hashes; every outcome and end tick is kept; the input manifest is unchanged.
 
 ### 55.11 The stealth detector without a line of sight, and two re-opened community fixes
 

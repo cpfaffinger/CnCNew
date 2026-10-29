@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package C, by decision D-12's order) and 3 – Changes (S3-M7, the rest of the Reforged review) · **Phase:** 41
-> **Status:** in progress (starting state: the end of Phase 40, see below)
+> **Status:** done by machine (29 October 2026); the rest is in HANDOFF-PHASE42.md
 > **Predecessor:** HANDOFF-PHASE40.md · **Results in:** docs/ATTACK-LINE-OF-SIGHT.md, docs/STEALTH-GARRISON.md, docs/GUARD-STATE.md, docs/SIMULATION-CORE.md §55, docs/plan/STAGE-1-PORT.md §3, docs/REFORGED-FIXES.md, docs/GGC-FIXES.md
 > **Side items:** the Reforged candidates still open after Phase 40, the two community fixes Phase 40 re-opened, the stealth detector's terrain test
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -84,3 +84,7 @@ Reforged candidate decided with its reason; the checks the changes can reach gre
   fix `chinook-unloads-one-by-one` (25).
   R-24 rests on the shock wave, which the port lacks (F-63, open); R-27 is data, decided for the data layers.
 - F-60 completed (§55.13): orders through the container, armed riders' weapon set, the garrison gun. F-58 steps 5 and 7 read again and left open (docs/GUARD-STATE.md).
+- The guard order's own tick (§55.10, `e0d9c7d`, manifest `4ef56b8`): found when the original skirmish AI's match diverged at 60 Hz; the cross-OS check takes the
+  state of either Windows client (`09a1e3e`).
+- Not built here, carried into `HANDOFF-PHASE42.md`: F-63 (the shock wave), F-58 steps 5 and 7, F-60's attack on a position, clearing a garrison and the Chinook's re-issue,
+  F-54's two open ends. Closing measurements: `CLAUDE.md`, paragraph "Phase 41".
