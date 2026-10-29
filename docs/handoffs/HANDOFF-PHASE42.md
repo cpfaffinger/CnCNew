@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package D) · **Phase:** 42
-> **Status:** in progress (starting state: the end of Phase 41, see below)
+> **Status:** done by machine (29 October 2026); the rest is in HANDOFF-PHASE43.md
 > **Predecessor:** HANDOFF-PHASE41.md · **Results in:** docs/SHOCK-WAVE.md, docs/GUARD-STATE.md, docs/SIMULATION-CORE.md §56, docs/plan/STAGE-1-PORT.md §3, docs/REFORGED-FIXES.md
 > **Side items:** the parts of F-58 and F-60 Phase 41 left open, F-54's two open ends
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -53,4 +53,7 @@ manifests of the original profile unchanged except by a cause with its own manif
 
 ## Progress
 
-Nothing yet.
+- F-63 in four steps (§56.1): the inputs, the flight, the stun, the drawing - and the flight's frame end (`cae779e`).
+- F-58 step 7 (§56.2): a deploying unit on guard (`b9b0a8e`, manifest `f64949d`); a jet takes off for its guard and guards on after reloading (`c27533d`, no field moved).
+- F-60's rest (§56.3): `DAMAGE_KILL_GARRISONED` (`59e6ff2`), the shell's `GarrisonHitKill` (`1950f68`), the Chinook's re-issue (`86925d9`); F-54's open ends covered.
+- Not built here, carried into `HANDOFF-PHASE43.md`: an attack on a place (F-64, read in `docs/ATTACK-POSITION.md`), the missile's `GarrisonHitKill`; F-58 step 5 (only the original AI's library) and the flight deck (a shell) stay open. Closing measurements: `CLAUDE.md`, paragraph "Phase 42".

@@ -44,6 +44,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 | [FIRE-FROM-CONTAINERS.md](FIRE-FROM-CONTAINERS.md) | Phase 41: F-60 - which containers let their riders fire, from where, the steps of the fix |
 | [GUARD-STATE.md](GUARD-STATE.md) | Phase 41: F-58 - guarding as an AI state of the original, the steps of the fix |
 | [SHOCK-WAVE.md](SHOCK-WAVE.md) | Phase 41: F-63 - the weapon's shock wave of the original (push, rotation, stun), what the port lacks, the steps of the fix |
+| [ATTACK-POSITION.md](ATTACK-POSITION.md) | Phase 42: F-64 - the original's attack on a place (`AI_ATTACK_POSITION`): force-fire on the ground, `FIRE_WEAPON` buttons at a place, the riders and slaves; the steps of the fix |
 | [REFORGED-FIXES.md](REFORGED-FIXES.md) | Phase 39/40: Zero Hour Reforged as a second source of fixes - what a change of it can be for this port (kinds A to E), the work list R-01 to R-38 |
 | [GGC-FIXES-CATALOGUE.md](GGC-FIXES-CATALOGUE.md) | Phase 30, generated: every `@bugfix`/`@fix` of Zero Hour and the shared code by subsystem, CRC-gated or not, and its review |
 | [PATCH-LAYER.md](PATCH-LAYER.md) | Phase 30: GeneralsGamePatch as a layer of the import - how it is built, what was measured, why it does not compile yet |
