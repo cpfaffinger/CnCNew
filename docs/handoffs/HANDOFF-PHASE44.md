@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package F) · **Phase:** 44
-> **Status:** in progress (starting state: the end of Phase 43, see below)
+> **Status:** done by machine (29 October 2026); the rest is in HANDOFF-PHASE45.md
 > **Predecessor:** HANDOFF-PHASE43.md · **Results in:** docs/SIMULATION-CORE.md §58, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** the mine clearer's continue range and its weapon set (F-64's rest), the tunnel network's guard (F-58 step 5) if a measured match needs it
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -54,4 +54,7 @@ own manifest commit; the checks the changes can reach green.
 
 ## Progress
 
-Nothing yet.
+- F-37 (§58.1, `eeef16f`, manifest `9e90e78`), F-65 (§58.2, `37ee90c`), F-66 (§58.3, `a08a266`, manifest `64a544b`), F-36 (§58.4, `7ea2663`, manifest `d772e44`, input manifest `2de7d59`).
+- Found on the way: F-67, the bored dozer (§58.5, `1ec6676`, manifests `9ab428a`); registered F-68 (the worker's dozer brain) and F-69 (mine clearing).
+- Found by tier 4: a flight covered the shares of a frame something had completed (§58.6, `4b5bf73`, manifest `87b49cd`; the observer HUD pinned again in `07d2466`); registered F-71.
+- Carried into `HANDOFF-PHASE45.md`: F-68, F-69, F-71, F-66's rest (`ExtraBounciness`, `ExtraFriction`, `INHERIT_VELOCITY`, `FLOATING`). Closing measurements: `CLAUDE.md`, paragraph "Phase 44".
