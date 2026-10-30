@@ -596,6 +596,7 @@ run.Test("Phase 44 (F-37): a subclass of the slow death plays the base's phases"
 run.Test("Phase 44 (F-65): the slaves of a spawner take its attack", Tests.SlavesTakeTheirSpawnersAttack);
 run.Test("Phase 44 (F-66): a creation list throws what it creates", Tests.CreationListThrowsWhatItCreates);
 run.Test("Phase 45 (F-66): a creation list's extra friction and inherited velocity", Tests.CreationListFrictionAndInheritedVelocity);
+run.Test("Phase 49 (F-66): what a falling plane makes flies on with the plane's velocity", Tests.CreationListTakesAFallingPlanesVelocity);
 run.Test("Phase 44 (F-66): a thrown object that dies inside a frame stops where the frame ends", Tests.ThrownObjectThatDiesInsideAFrameStopsAtItsEnd);
 run.Test("Phase 44 (F-67): a dozer that stands idle repairs the closest hurt structure of its player", Tests.DozerRepairsWhenBored);
 run.Test("Phase 45 (F-68): a worker is a dozer by default, a supply truck while it gathers", Tests.WorkerSwitchesBetweenItsBrains);

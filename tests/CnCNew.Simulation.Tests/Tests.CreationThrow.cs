@@ -277,7 +277,29 @@ static partial class Tests
             return (made.X.Raw, made.Y.Raw, madeX.Raw, madeY.Raw);
         }
 
+        (long X, long Y) Walker(SimulationRate rate)
+        {
+            var (world, feeder) = Make(rate);
+            var walker = GdSpawn(world, feeder, "CtTrooper", 1, 100, 100);
+            do world.Step();
+            while ((world.Tick - walker.SpawnTick) % world.Time.TicksPerOriginalFrame != 0);
+            Check.That(GroupMove(world, [walker], 400, 100).Accepted, $"{rate}: the move is accepted.");
+            // Thirty whole frames of its own, then the soldier makes a crate where its frame ends.
+            while ((world.Tick - walker.SpawnTick) % world.Time.TicksPerOriginalFrame != 0 || world.Tick - walker.SpawnTick < 30 * world.Time.TicksPerOriginalFrame) world.Step();
+            Check.That(walker.HasMoveTarget, $"{rate}: the soldier still walks.");
+            world.CreateFromList(walker, "OCL_CtInherit", EntityId.Invalid, false);
+            var (madeX, madeY, _) = walker.FrameEnd(world.Tick);
+            world.Step();
+            var made = world.Entities.Single(value => value.Template.Name == "CtCrate");
+            for (var step = 0; step < world.Frames(300); step++) world.Step();
+            Check.That(!made.Modules.OfType<PhysicsBehavior>().Single().Flying, $"{rate}: the crate rests.");
+            return (made.X.Raw - madeX.Raw, made.Y.Raw - madeY.Raw);
+        }
+
         static long Length((long X, long Y) way) => Math.Abs(way.X) + Math.Abs(way.Y);
+        var slid = Walker(SimulationRate.Hz30);
+        Check.That(slid.X > 0, $"INHERIT_VELOCITY: a crate made by a walking soldier slides on the way it walks ({slid.X}, {slid.Y}).");
+        foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 }) Check.That(Walker(rate) == slid, $"{rate}: the walker's crate rests where it rests at 30 Hz.");
         var smooth = Slide(SimulationRate.Hz30, "OCL_CtOut");
         var rough = Slide(SimulationRate.Hz30, "OCL_CtOutRough");
         Check.That(Length(rough) > 0 && Length(rough) < Length(smooth), $"ExtraFriction: the rough crate slides a shorter way ({Length(rough)} against {Length(smooth)}).");

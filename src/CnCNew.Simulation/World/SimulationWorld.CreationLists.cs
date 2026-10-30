@@ -357,7 +357,7 @@ public sealed partial class SimulationWorld
         var intensity = cast.DispositionIntensity;
         SpawnThrow? thrown = null;
         // INHERIT_VELOCITY: the source's velocity becomes a force on the object, before anything else of the throw.
-        var inherit = disposition.HasFlag(CreationDisposition.InheritVelocity) && physics && SourcePhysics(source) is { } sourcePhysics ? sourcePhysics.Velocity : default;
+        var inherit = disposition.HasFlag(CreationDisposition.InheritVelocity) && physics ? SourceVelocity(source) : default;
         if (disposition.HasFlag(CreationDisposition.LikeExisting)) angle = sourceAngle;
         if (disposition.HasFlag(CreationDisposition.OnGroundAligned))
         {
@@ -451,11 +451,22 @@ public sealed partial class SimulationWorld
         return (setup, (x, y, z, angle));
     }
 
-    private static Modules.BuiltIn.PhysicsBehavior? SourcePhysics(Entity source)
+    /// <summary>
+    /// <c>getPhysics()->getVelocity()</c> of the source, nothing without a physics module: its fall or flight, else what moves it - a wreck's way down before its AI's speed, which it keeps.
+    /// </summary>
+    private (Fixed X, Fixed Y, Fixed Z) SourceVelocity(Entity source)
     {
+        Modules.BuiltIn.PhysicsBehavior? physics = null;
+        (Fixed X, Fixed Y, Fixed Z)? moving = null;
         foreach (var module in source.ModuleArray)
-            if (module is Modules.BuiltIn.PhysicsBehavior physics) return physics;
-        return null;
+        {
+            if (module is Modules.BuiltIn.PhysicsBehavior behavior) physics = behavior;
+            else if (module is Modules.BuiltIn.IFrameVelocity mover && mover.FrameVelocity(this) is { } velocity && (moving is null || module is not Modules.BuiltIn.AIUpdateInterface)) moving = velocity;
+        }
+
+        if (physics is null) return default;
+        var flight = physics.Velocity;
+        return (flight.X.Raw | flight.Y.Raw | flight.Z.Raw) != 0 ? flight : moving ?? default;
     }
 
     private static (Fixed X, Fixed Y) Rotate(Fixed x, Fixed y, Fixed angle)

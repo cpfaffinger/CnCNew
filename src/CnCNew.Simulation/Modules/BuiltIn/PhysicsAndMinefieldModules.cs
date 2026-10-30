@@ -207,7 +207,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
 
     /// <summary>
     /// <c>getVelocity</c> per logic frame of the original, for a created object's <c>INHERIT_VELOCITY</c>: the velocity of a fall or a flight. The port's locomotors do not move an
-    /// object through its physics module, so a unit that drives or flies under its locomotor has none here (the original's has its speed).
+    /// object through its physics module; what they give is <see cref="IFrameVelocity"/>.
     /// </summary>
     public (Fixed X, Fixed Y, Fixed Z) Velocity => _flying || _falling ? (_velocityX, _velocityY, _velocityZ) : default;
 

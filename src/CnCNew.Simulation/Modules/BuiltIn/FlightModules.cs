@@ -92,7 +92,7 @@ public sealed record JetSlowDeathData(SlowDeathData Base, string FxOnGroundDeath
 /// (<c>DestructionDelay</c>) destroys the object whatever the phase, and the rest of that update still runs. Not modeled: rolling and pitching the model, the death loop sound,
 /// the tree collision (<c>hitATree</c>), the deck-height status of carriers.
 /// </summary>
-public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
+public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate, IFrameVelocity
 {
     /// <summary>The base behaviour's midpoint and phases (F-37).</summary>
     private readonly SlowDeathClock _clock = new();
@@ -127,6 +127,13 @@ public sealed class JetSlowDeathBehavior(JetSlowDeathData data) : DieModuleBase(
             return;
         }
         SlowDeathLottery.Run(world, Entity, info, IsApplicable(info));
+    }
+
+    public (Fixed X, Fixed Y, Fixed Z)? FrameVelocity(IWorldServices world)
+    {
+        if (!_activated || _groundTick != 0) return null;
+        var speed = FlightFrames.PerFrame(world.Time, Entity.Speed);
+        return (FixedTrig.Cos(Entity.Angle) * speed, FixedTrig.Sin(Entity.Angle) * speed, _fallSpeed);
     }
 
     public void BeginSlowDeath(IWorldServices world)

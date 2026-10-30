@@ -199,6 +199,74 @@ static partial class Tests
         FlightVerdict();
     }
 
+    private static IReadOnlyDictionary<string, string> FallingPlaneFiles() => new Dictionary<string, string>(ScriptFiles())
+    {
+        ["Data/INI/Object/FallingPlaneFixture.ini"] = """
+        Object InheritPlane
+          KindOf = SELECTABLE VEHICLE AIRCRAFT
+          Locomotor = SET_NORMAL PlaneLoco
+          Body = ActiveBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 1.0
+          End
+          Behavior = JetSlowDeathBehavior JetDeath01
+            DestructionDelay = 5000
+            FallHowFast = 50%
+          End
+        End
+        Object InheritCrate
+          KindOf = SELECTABLE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 1.0
+          End
+        End
+        ObjectCreationList OCL_InheritCrate
+          CreateObject
+            ObjectNames = InheritCrate
+            Disposition = LIKE_EXISTING INHERIT_VELOCITY
+          End
+        End
+        """,
+    };
+
+    /// <summary>
+    /// F-66's rest: <c>INHERIT_VELOCITY</c> gives what a falling plane makes the way it falls - a crate made ten frames into the fall flies on along the plane's heading and comes down away
+    /// from where it was made, at the same place at 30, 60 and 120 Hz. Before, only a fall or flight of the physics module gave a velocity, and the crate dropped where it was made.
+    /// </summary>
+    public static void CreationListTakesAFallingPlanesVelocity()
+    {
+        var places = new (long X, long Y)[FlightRates.Length];
+        for (var index = 0; index < FlightRates.Length; index++)
+        {
+            var (world, feeder) = FlightRateWorld(FlightRates[index], FallingPlaneFiles());
+            feeder.Spawn(1, "InheritPlane", owner: 1, x: 500, y: 500, z: 90);
+            StepFrames(world, 5);
+            var plane = Only(world, "InheritPlane");
+            Check.That(feeder.SetMoveTarget(1, plane.Id.Value, 2500, 500).Accepted, "The move order is accepted.");
+            StepFrames(world, 60);
+            feeder.Kill(plane.Id.Value);
+            StepFrames(world, 10);
+            var (madeX, madeY, _) = plane.FrameEnd(world.Tick);
+            world.CreateFromList(plane, "OCL_InheritCrate", EntityId.Invalid, false);
+            world.Step();
+            var crate = Only(world, "InheritCrate");
+            StepFrames(world, 300);
+            Check.That(!crate.InPhysicsFlight, $"{FlightRates[index]}: the crate rests.");
+            places[index] = (crate.X.Raw - madeX.Raw, crate.Y.Raw - madeY.Raw);
+            Check.That(places[index].X > Fixed.FromInt(20).Raw, $"{FlightRates[index]}: the crate flies on along the plane's way ({places[index].X}).");
+            Check.That(places[index] == places[0], $"{FlightRates[index]}: the crate rests where it rests at 30 Hz.");
+        }
+    }
+
     /// <summary>
     /// <c>ParachuteContain</c>: a parachute released at height 100 falls freely until it has dropped its open distance (10), then sinks at its locomotor's <c>SpeedLimitZ</c> (one unit per
     /// frame) and, with a landing spot (<c>ParachuteDirectly</c>), steers there at the locomotor's speed (two units per frame); on the ground the rider gets off. Once straight down, once steered.

@@ -244,7 +244,7 @@ public sealed record HelicopterSlowDeathData(SlowDeathData Base, Fixed SpiralOrb
 /// blows up (<c>FXFinalBlowUp</c>, <c>OCLFinalBlowUp</c>), leaves the <c>FinalRubbleObject</c> and is destroyed. The motion is kinematic: the reference
 /// pushes the body with a force through <c>PhysicsBehavior</c> (mass, friction); here the orbit speed moves it directly.
 /// </summary>
-public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate
+public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : DieModuleBase(data.Base.Mux), IUpdateModule, ISlowDeathCandidate, IFrameVelocity
 {
     /// <summary><c>getDisabledTypesToProcess</c> (a SlowDeathBehavior).</summary>
     public DisabledMask DisabledTypesToProcess => DisabledMask.All;
@@ -276,6 +276,9 @@ public sealed class HelicopterSlowDeathBehavior(HelicopterSlowDeathData data) : 
     public bool HasHitGround => _hitGroundTick != 0;
 
     public override void OnDie(IWorldServices world, in DamageInfo info) => SlowDeathLottery.Run(world, Entity, info, IsApplicable(info));
+
+    public (Fixed X, Fixed Y, Fixed Z)? FrameVelocity(IWorldServices world)
+        => _activated && _hitGroundTick == 0 ? (FixedTrig.Cos(_forwardAngle) * _forwardSpeed, FixedTrig.Sin(_forwardAngle) * _forwardSpeed, _fallSpeed) : null;
 
     public void BeginSlowDeath(IWorldServices world)
     {

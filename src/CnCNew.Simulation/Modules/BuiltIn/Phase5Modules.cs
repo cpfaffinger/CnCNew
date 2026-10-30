@@ -659,7 +659,7 @@ public enum AutoAcquire : byte
 /// state of the main machine that exists here: an order (<see cref="OrderMove"/>, <see cref="OrderDock"/>) cancels it, exactly as any
 /// new AI command replaces the current state in the reference. The supply-truck, worker and dozer modules derive from this class.
 /// </summary>
-public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
+public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IFrameVelocity
 {
     /// <summary><c>getDisabledTypesToProcess</c> (AIUpdateInterface::getDisabledTypesToProcess: the AI runs while held).</summary>
     public DisabledMask DisabledTypesToProcess => DisabledMask.Held;
@@ -1934,6 +1934,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
     /// this value divided by the ticks per frame and has lost its last bits). <paramref name="ticksPerOriginalFrame"/> is the world's <c>Time.TicksPerOriginalFrame</c>.
     /// </summary>
     public Fixed SpeedPerOriginalFrame(int ticksPerOriginalFrame) => _stride == 0 ? Entity.Speed * ticksPerOriginalFrame : FrameSpeed();
+
+    /// <summary>The way the locomotor drives the object: along its heading where its frame ends, at the speed of that frame.</summary>
+    public (Fixed X, Fixed Y, Fixed Z)? FrameVelocity(IWorldServices world)
+    {
+        var speed = SpeedPerOriginalFrame(world.Time.TicksPerOriginalFrame);
+        if (speed == Fixed.Zero) return null;
+        var angle = Entity.FrameEndAngle(world.Tick);
+        return (FixedTrig.Cos(angle) * speed, FixedTrig.Sin(angle) * speed, Fixed.Zero);
+    }
 
     private void SetFrameSpeed(Fixed speed)
     {

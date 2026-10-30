@@ -508,6 +508,15 @@ internal sealed class SlowDeathClock
     }
 }
 
+/// <summary>
+/// <c>PhysicsBehavior::getVelocity</c> of an object the port does not move through its physics module: a unit under its locomotor, a wreck on its way down. Units per logic frame of the
+/// original, null while the module does not move the object.
+/// </summary>
+public interface IFrameVelocity
+{
+    (Fixed X, Fixed Y, Fixed Z)? FrameVelocity(IWorldServices world);
+}
+
 /// <summary>A module that takes part in the weighted slow-death lottery (<c>SlowDeathBehavior</c> and its subclasses such as <c>HelicopterSlowDeathBehavior</c>).</summary>
 public interface ISlowDeathCandidate
 {
