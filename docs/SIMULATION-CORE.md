@@ -4105,7 +4105,7 @@ gathering by itself when a task ended (`OnBuilderTaskEnded` forced a want - the 
 a while). Now `WorkerAIUpdate` keeps the master machine (looked at where its supply brain steps, before it - the original looks after the base AI's update) and, as a dozer, the idle
 state of §58.5 (`DozerBoredom`, shared with `DozerAIUpdate`, which keeps its behaviour). Test `WorkerSwitchesBetweenItsBrains` (bored 150 frames after its first frame and repairing a
 hurt bench; sent to a warehouse it acts as a truck and delivers; sent away while it gathers it is a dozer again - in the same frames at 30, 60 and 120 Hz, a snapshot while it gathers);
-before, a worker never repaired by itself. Manifests `01cac31`: 25 runs, 212 fields - the eight GLA pairings end at other ticks with the same winners, Armored Fury China-GLA is won by China (16 of 16 pairings decided), 16 mission runs change their hashes and keep their outcomes, the retail reference match only its hashes; the input manifest in the templates and the whole catalogue.
+before, a worker never repaired by itself. Manifests `01cac31`: 25 runs, 212 fields - the eight GLA pairings end at other ticks with the same winners, Armored Fury China-GLA is won by China (16 of 16 pairings decided), 16 mission runs change their hashes and keep their outcomes, the retail reference match only its hashes; the input manifest in the templates and the whole catalogue. The AI survey the brief asked for (`SimTool ai-survey`, the eight pairings with GLA of the manifest, ten seeds each, 60 Hz, 25 game minutes, the binaries of `bae0d37` and of `d5dd6f7`): before 80 of 80 matches decided and GLA wins 2, after 78 of 80 and GLA wins 1; the decided matches last 549 and 561 s (median); no match has the same final hash. By pairing (GLA / opponent / undecided) only Armored Fury moves: China-GLA 1/9/0 against 0/9/1, GLA-America 1/9/0 against 1/8/1. Reported, not judged.
 
 ### 59.2 F-70: a bored builder begins its repair in its next frame
 
@@ -4114,4 +4114,76 @@ builder's next frame, its walk began half a 30 Hz step late, and the repair a fr
 first version counted frames on the world's grid: the builder's own frames are a tick off the world's above 30 Hz (they begin with the tick it appeared in), and the half step late
 had hidden behind that in the test of F-67. The tests of F-67 and F-68 count on the builder's grid, and F-68's compares the frame the repair begins in (it fails on the code before at
 60 Hz). Manifest `829f945`: 13 runs, 95 fields - Alpine Assault America-China is a stalemate (15 of 16 pairings decided), every other winner kept, no mission run moved; the retail reference match (driver seed `5EED0001`) is won by FactionAmericaAirForceGeneral at tick 44,190 (end tick 44,791, end hash `6712720B0BEA1919`, chain `87A06C85A4D416C7`, 26,987 commands).
+
+### 59.3 F-71: a rider leaves a turning container by its frame end's heading
+
+(`54a76f6`; `OpenContain::exitObjectViaDoor`) The rider's place at the door was turned with the container's heading as it stood in the tick, while the container's centre was read where its
+frame ends (F-03): above 30 Hz a container that turns and lets a rider out in its own update, after it decided its frame, turned the door's bones by one share of the frame - a ranger left an
+ambulance for another place at 60 Hz than at 30 Hz in the default match America against China on Alpine Assault (frame 6,510; found with `rate-compare --map-diff ... --fields`, every
+other field of every object agreeing before). The heading is the frame end's (`Entity.FrameEndAngle`). Test `RiderLeavesATurningTransportWhereTheFrameEnds` (a truck on a navigation grid
+that turns by 135 degrees every frame lets four riders out through its door; every rider leaves in the frame and for the place 30 Hz has; fails at 60 Hz on the code before). Manifest `4680ac8`: 4 runs, 29 fields - Armored Fury America-China is won by America at tick 49,680 instead of 78,060, Armored Fury GLA-America at 38,970 instead of 38,250; the retail reference match and every mission run unchanged.
+
+### 59.4 F-72: the idle state sees a task that ended in the frame's first tick
+
+(`0e87e10`) The original's one update of the frame asks whether the builder had a task before its step, and whether it is idle after it. Above 30 Hz a repair that ends in the first tick
+of the builder's frame was gone where the frame ends: the idle state of §58.5 did not stamp that frame, slept by the old stamp, and was bored a frame early (the default match, a dozer at
+frame 11,762). A task when the frame begins now counts for the frame, and a builder whose task ended inside it looks again where it ends. Test `DozerRepairsWhenBored` has the dozer bored
+again after its repair: 151 frames after the frame the repair ended in, at every rate (150 at 60 Hz on the code before). Manifest `534cdac`: 22 runs, 124 fields - Alpine Assault America-China is won by China at tick 44,280 (16 of 16 pairings decided), five pairings end at other ticks with the same winners, no mission run moved; the retail reference match (driver seed `5EED0001`) runs to its limit as a stalemate (§59.10).
+
+### 59.5 F-73: a heal aura judges its radius where the frames end
+
+(`dc4e064`; `AutoHealBehavior::update`) A heal aura with a `Radius` - the ambulance's for vehicles and for infantry - compared the healer's and the candidate's positions as they stood in the
+tick: above 30 Hz a mover that had its turn earlier in the tick stood inside its frame step, and the aura healed it after it had left the radius at 30 Hz (a dozer that drove away from an
+ambulance, frame 13,517). Both are read where their frames end. Test `HealAuraJudgesTheRadiusWhereTheFramesEnd` (a hurt truck drives out of an aura that heals every frame; healed in
+the same frames at every rate; one heal more at 60 Hz on the code before). Manifest `b517483`: 5 runs, 6 fields, the hashes only.
+
+### 59.6 F-74: a flight holds the movement for whole frames of the object
+
+(`236badc`) The 30 Hz movement that has its turn before the flight's update (§56.1, §58.3) decides again only in the frame after the one the flight ended in. Above 30 Hz the flight ends in a
+frame's first tick, and the movement decided its first step in that frame's later ticks - a ranger pushed out of its dying barracks walked off half a step early (frame 18,645). A flight
+now holds the movement to the object's next frame (`_moveHoldUntil`). Test `PushedSoldierWalksOffInTheFrameAfterItRests` (a soldier pushed out with an order to walk stands where 30 Hz
+has it at the end of every frame; at 60 Hz it differed from frame 58 on the code before). Manifest `c46f1d7`: 14 runs, 43 fields - Armored Fury America-China is won at tick 59,040 instead of 66,390, Bitter Winter ChinaTank-AirForce at 42,000 instead of 53,970, the same winners; no mission run moved.
+
+With F-71 to F-74 and §58.6 the default match America against China on Alpine Assault (`SimTool rate-compare --map-diff FactionAmerica,FactionChina --fields`) is the same game at 30,
+60 and 120 Hz to the last compared field (China wins in frame 22,140 at all three), and so are the other three Alpine Assault pairings of the manifest at 30 and 60 Hz.
+
+### 59.7 F-69: mine clearing
+
+Four steps, each with its own test and manifest commit. **Step 1** (`2660db5`; `DozerAIUpdate::update`, `DozerActionDoActionState::update`, `WorkerAIUpdate::update`): a dozer or a worker carries
+the weapon set flag `MINE_CLEARING_DETAIL` whenever it is not at work on a task (a worker that gathers carries it always; `Entity.MineClearingDetail`), and its mine-clearing weapon set
+is then its active one; with `AutoAcquireEnemiesWhenIdle` an idle builder disarms an enemy mine in its reach. The units' own target search no longer leaves mines out: only a weapon with
+`AntiMine` can attack one, and the shipped ones are the two disarming weapons. Test `IdleDozerDisarmsAMineBesideIt`. Manifest `ebd4645`: 49 runs, 297 fields - every run with a builder writes its flag into the state (snapshot sizes and hashes); no outcome and no end moved. **Step 2** (`110c89a`; `findMine`): a bored builder with nothing to
+repair attacks the closest mine within `BoredRange` of an enemy or a neutral player that it may attack (`aiAttackObject(mine, 1, CMD_FROM_DOZER)`, in the world a forced attack - as a
+slave's, F-65 - that may be on a neutral object, `AcquisitionState.Neutral`); the order is given where the builder's frame ends, so above 30 Hz the attack begins at once and the walk
+with the next tick, and `BeginMoveWithNextFrame` holds a move to the object's next frame begin. Test `BoredDozerGoesToClearAMine`. No field of either manifest moved: no run of the manifest has a bored builder with a mine in its range. **Step 3** (`0fdc183`; `AIAttackFireWeaponState::update`):
+a weapon's `ContinueAttackRange` (typed now; its compatibility entry is gone - 699 and 692 entries) makes the attack go on, after the victim is gone, at the closest object of the first
+victim's player within that range of where the first victim stood (`m_originalVictimPos`). Test `DozerGoesOnToTheNextMine`. Manifest `2a9a863`: the definitions and the world fingerprint change (the command-stream and snapshot hashes of 48 runs), and the input manifest in the weapon catalogue; no run disarms a mine. **Step 4** (`2c64747`; `Command_DisarmMinesAtPosition`):
+the client sends `MSG_SET_MINE_CLEARING_DETAIL` for the selection - a new command `SetMineClearingCommand` (**`CommandTypes.Version` 20, replay format 18**; an order of a player, 27 of 37
+types) - then the attack on the place; an attack on a place with a weapon that has a continue range attacks the closest object near the place, stealthed or not (the original sets
+`IGNORING_STEALTH` for such an attack), and otherwise fires one shot at the place. The bar declares a mine-clearing button available without the weapon, as the original does. Tests
+`DisarmMinesButtonClearsTheMineNearThePlace` and the presentation's input test. Manifest `09ac1e1`: the two version fields and the command-stream hashes of 22 runs; the input manifest unchanged.
+
+### 59.8 F-75: the heal scan counts the frames of the object
+
+(`eb32bdc`; `AutoFindHealingUpdate::update`) The original's update runs once per logic frame of the object; the port counted its countdown down in ticks from whatever tick the module ran.
+Above 30 Hz a module that resumed inside a frame - its object held in a transport and let out in the transport's update - kept counting off the object's frames, and the scan sent the object
+a frame early (a missile defender on Bitter Winter, frame 11,189 at 60 Hz). The countdown is looked at in the first tick of the object's own frames only, a frame of ticks at a time; 30 Hz is
+unchanged. Test `AutoFindHealingCountsFramesAfterAHold` (sent in a tick that begins one of its frames - not so at 120 Hz on the code before). Manifest `4272771`: 36 runs, 94 fields, the hashes only (the pairings with an American army, the eight-player runs, 17 mission runs, the retail reference match); every outcome and end kept. With it the default match America against
+China on Bitter Winter agrees at 30 and 60 Hz to frame 25,631 (before: 11,189); the next difference there, a Humvee's turret angle, is registered as F-76.
+
+### 59.9 F-66's rest: extra friction, inherited velocity, floating
+
+(`f1f953a`; `doStuffToObj`, `PhysicsBehavior::getForwardFriction` and its siblings) What §58.3 left of the creation list's throw. `ExtraFriction` (per second, kept per frame) is added to the
+forward, lateral and aerodynamic frictions of the thrown object (`setExtraFriction`, in `SEND_IT_OUT` and in the throwing dispositions). `INHERIT_VELOCITY` applies the source's velocity
+as a force, before a debris mass is set; in the port that is the velocity of a fall or a flight of the source's physics module - the port's locomotors do not move an object through its
+physics module, so a unit driving or flying under its locomotor gives nothing (a named difference: the original's dying jet or drone hands its speed to its hulk). `FLOATING` enables
+the object's `FloatUpdate`; no shipped object made with it has one (the generic debris), so it does nothing in the shipped data. `ExtraBounciness` is stored by the original
+(`setExtraBounciness`) and never read; it is not kept. Test `CreationListFrictionAndInheritedVelocity` (a rough crate slides a shorter way than a smooth one with the same push, a crate
+made by a sliding crate slides on; the same places at 30, 60 and 120 Hz; on the code before the rough crate slid as far). Input manifest `6c9c5d6` (the creation lists' catalogue); no field of the reference manifest moved.
+
+### 59.10 The retail reference match takes driver seed 5EED0004 (after F-72)
+
+Since F-72 the match with driver seed `5EED0001` runs to its limit of 432,000 ticks without a winner (manifest `534cdac`). Of the seeds surveyed at 60 Hz on the state of this phase
+(`SimTool reference-match --driver-seed HEX --record-only`) `5EED0003`, `5EED0004`, `5EED0005` and `5EED0006` end, `5EED0002` and `5EED0008` do not; `5EED0004` ends with FactionGLA at
+the same original frame (14,745) at 30, 60 and 120 Hz and is the seed (`089ad43`). Manifest `f590320`: the 10 fields of the run `reference-match` - FactionGLA at tick 29,490 (end tick 30,091), end hash `22BEB490BE548657`, chain `9B4680E436709FD7`, 19,741 commands; the other 49 runs and the input manifest unchanged.
 
