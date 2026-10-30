@@ -50,7 +50,7 @@ internal static class HudTests
         // The hash of baselines/hud-drawlist-1280x720.sha256 does not depend on the simulation rate (measured equal at 30, 60 and 120 Hz): the suite's data.
         harness.Run("Golden draw list hash", () => GoldenDrawListHash(data));
         harness.Run("Message list: refused orders, finished buildings and upgrades, attacks and defeats print the original's labels at the message position and fade; what has no line is counted", () => MessageList(data));
-        harness.Run("Message list through the real click path: a refused building spot prints 'You can't build here'", () => MessageListFromARefusedPlacement(data));
+        harness.Run("Message list through the real click path: a refused building spot names the obstacles in its way", () => MessageListFromARefusedPlacement(data));
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));
 
         harness.Run("Cursor and markers: Alt waypoints draw a path with a marker per station, an order leaves a fading hint, the cursor follows context and windows", () => CursorAndMarkers(data));
@@ -1047,7 +1047,7 @@ internal static class HudTests
         feed.Observe(new CommandFeedback(FeedbackKind.InvalidOrder, Vector3.Zero, CnCNew.Simulation.Ids.EntityId.Invalid, match.Tick, 30, Detail: nameof(PlacementIssue.BlockedFootprint)));
         feed.Observe(new CommandFeedback(FeedbackKind.Unsupported, Vector3.Zero, CnCNew.Simulation.Ids.EntityId.Invalid, match.Tick, 30, Detail: "Beacon"));
         lines = Lines();
-        TestHarness.Assert(lines.Length == 6 && lines[^3].Text == "You must explore there before building" && lines[^2].Text == "You can't build here" && lines[0].Text == "You don't have enough money to make upgrade",
+        TestHarness.Assert(lines.Length == 6 && lines[^3].Text == "You must explore there before building" && lines[^2].Text.Contains("obstacles", StringComparison.Ordinal) && lines[0].Text == "You don't have enough money to make upgrade",
             $"six lines at most ({string.Join(" | ", lines.Select(line => line.Text))})");
         TestHarness.Assert(lines[^1].Text == "(not supported in this build: Beacon)", "what this build cannot do is a line in parentheses, not a text of the game");
 
@@ -1141,8 +1141,8 @@ internal static class HudTests
         TestHarness.Assert(controller.Messages.Log.IsEmpty, "hovering prints nothing");
         Click(controller, ref time, MouseButton.Left, refusedAt!.Value);
         Advance(match, controller, 1);
-        var drawn = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(draw => draw.Text == "You can't build here").ToArray();
-        TestHarness.Assert(drawn is [{ X: 10, Y: 10 }], $"the click prints GUI:CantBuildThere at the message position of the retail InGameUI.ini, 10,10 ({string.Join(" | ", controller.Messages.Log.Lines.Select(line => line.Text))})");
+        var drawn = controller.BuildDrawList(1280, 720).Commands.OfType<UiTextDraw>().Where(draw => draw.Text.Contains("obstacles", StringComparison.Ordinal)).ToArray();
+        TestHarness.Assert(drawn is [{ X: 10, Y: 10 }], $"the click prints GUI:CantBuildObjectsInTheWay at the message position of the retail InGameUI.ini, 10,10 ({string.Join(" | ", controller.Messages.Log.Lines.Select(line => line.Text))})");
         TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.Placement, "and the placement stays on for another try");
     }
 
