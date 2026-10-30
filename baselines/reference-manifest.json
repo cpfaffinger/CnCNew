@@ -17,7 +17,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "B6AFF001BB0A8DF4",
+        "chainHash": "F3DF818FC2AF64D1",
         "commandStreamSha256": "76F5368929E2CE1B233D1D65F127DA50C079E4B102C50F1233415B37BCF879D8",
         "commands": 1645,
         "endTick": 44881,
@@ -83,7 +83,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "7B13B0774C570644",
+        "chainHash": "4F99368D518E75FD",
         "commandStreamSha256": "1378477FED42BDC31D44A1FF21C9707E5182B4870D852F605C0CC5DEF65D330F",
         "commands": 441,
         "endTick": 20101,
@@ -116,17 +116,17 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "DF8BF39FA0ABEE0F",
+        "chainHash": "863858AAB0FCBC17",
         "commandStreamSha256": "7006DF60288981C9B8DB6BD9549C1ED109F7AAD5DFDA60795BB456837C42EAF9",
         "commands": 608,
         "endTick": 18931,
-        "finalHash": "E0F854CECD3FCA86",
+        "finalHash": "47BB9069E455EEE2",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "winner",
         "rejectedCommands": 137,
         "snapshotBytes": 392839,
-        "snapshotSha256": "436AA9BFC8CF181B6B8A8FE13237FE25BE4D0A6BBF339BEBE397CA12063E60FA",
+        "snapshotSha256": "1C23204388FAA8FD82DA0B00C963D94ED2362E0A8DF06509F604E8679033924C",
         "snapshotTick": 9465,
         "victoryTick": 18330,
         "winner": "FactionAmerica"
@@ -149,17 +149,17 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "BF0C1C197BCEAAB7",
+        "chainHash": "56D1AD545059E797",
         "commandStreamSha256": "88D3C23A9CF87D370B68336C1269920B2AD23B027FCB79A796D03DF4D434459E",
         "commands": 1992,
         "endTick": 59641,
-        "finalHash": "CA9FF3DBD0355435",
+        "finalHash": "5FB2585AB0BFD014",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "winner",
         "rejectedCommands": 222,
         "snapshotBytes": 676867,
-        "snapshotSha256": "410E0ECBCD10EC5BCFAB37A9761987AF58DA9FAC9D1C330991FCAA158322AEF0",
+        "snapshotSha256": "23F1FD07517AED97CB324EDE7FD1806415C4300C4F58C8CC9DD5FD03B8F5CB90",
         "snapshotTick": 29820,
         "victoryTick": 59040,
         "winner": "FactionAmerica"
@@ -215,7 +215,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "77965AEB0331D91B",
+        "chainHash": "85344B01D38127FE",
         "commandStreamSha256": "AF9005DC841645AA4F3AD3C7E434A9F809F158D4BF48BAAFD65B33A312C0B8B5",
         "commands": 1580,
         "endTick": 39601,
@@ -248,17 +248,17 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "81A87FEFA269AA9B",
+        "chainHash": "2417C6612199D96A",
         "commandStreamSha256": "E9A5C1E42176FCB0F20307F5A564BE7B5D1AD3B3A0B147AC34900FAF2640D78A",
         "commands": 1217,
         "endTick": 39571,
-        "finalHash": "FC3C178CCC19C843",
+        "finalHash": "BF9FADF4668304E1",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "winner",
         "rejectedCommands": 155,
         "snapshotBytes": 675709,
-        "snapshotSha256": "D8A78E22DC291F8818B6E4757611D57B1BFBBDB98F9B67EC17126F7C9F8FF769",
+        "snapshotSha256": "D6DB2B4B3A39FE59FD15B7C246B6C6584E5A71F952015133A015A4E53E2F22D5",
         "snapshotTick": 19785,
         "victoryTick": 38970,
         "winner": "FactionAmerica"
@@ -281,17 +281,17 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "4873EA6DE1824E6F",
+        "chainHash": "B04299D842BB2A9F",
         "commandStreamSha256": "A7457FEF783CBB1D0971BC3AC9167E290D5E6DFA27A9DE0077A2E092D1759698",
         "commands": 3899,
         "endTick": 89821,
-        "finalHash": "0600C809FFE8D860",
+        "finalHash": "50F3180208A42245",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "winner",
         "rejectedCommands": 583,
         "snapshotBytes": 443620,
-        "snapshotSha256": "339BA329BA0F7CC0256DA93E0D22A2AA684E3C932EA999E012540D1179ACB9BF",
+        "snapshotSha256": "7574884DF58BDB4887304EC0372D9496B688C6A709F99088A3306387183171C1",
         "snapshotTick": 44910,
         "victoryTick": 89220,
         "winner": "FactionAmerica"
@@ -347,7 +347,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "79914268DF182CDB",
+        "chainHash": "5A39817393DA8EE7",
         "commandStreamSha256": "CB628761E6A48660403244211E782F603F3194704A8D0AA41FBF76EB969AC511",
         "commands": 1993,
         "endTick": 42601,
@@ -380,17 +380,17 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "1FC343E32F71812E",
+        "chainHash": "4B277B65C4E53EDE",
         "commandStreamSha256": "EFD9A786DC3721909535CBC920030CA286F5A388F5332AA3ACEE8C3F1C852924",
         "commands": 1394,
         "endTick": 35131,
-        "finalHash": "5157CFAEF8FFD0EB",
+        "finalHash": "B86B1CD9701ED34E",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "winner",
         "rejectedCommands": 198,
         "snapshotBytes": 446938,
-        "snapshotSha256": "96719423593D0C5DD3C8832E478AB833B4073FAF748C107C60003671A5C0582D",
+        "snapshotSha256": "F64832F7DA816DAA9A126C743A874D13B02709DA967702B28999A7069A1CA59A",
         "snapshotTick": 17565,
         "victoryTick": 34530,
         "winner": "FactionAmerica"
@@ -413,7 +413,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "A0805E00E5599399",
+        "chainHash": "5A889CB104573CF1",
         "commandStreamSha256": "9E7BCC66133C2314D9ED111E27DD5E56B181717BB6012472C9915FF749BF826F",
         "commands": 684,
         "endTick": 27121,
@@ -479,7 +479,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "1480F0016FC64FB8",
+        "chainHash": "F1AF935135825145",
         "commandStreamSha256": "33CE3B9250F706C6472023D5BDAF36DC10EA7DF0032EF66D099A9D5C9928EE53",
         "commands": 836,
         "endTick": 27721,
@@ -512,7 +512,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "7DE73A6E67650A29",
+        "chainHash": "51143783BDD72410",
         "commandStreamSha256": "09657F1CFC4746CF92ECBC72FB053261FD65B1816E14751BDA9CF8540B560B6B",
         "commands": 973,
         "endTick": 47581,
@@ -545,7 +545,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "CE876CDE18CBE855",
+        "chainHash": "AACE8C2C4AFB9804",
         "commandStreamSha256": "F5A96B121F31DCBDE79844DB5F5B17ABC6F995E2F96D4C865B0D2DE8BD199DE8",
         "commands": 3202,
         "endTick": 18000,
@@ -576,11 +576,11 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "05500F2AF1AA099E",
+        "chainHash": "527F8A7E5B93725D",
         "commandStreamSha256": "BA6A7DEA9C4B0EBC378711BFC23F90C6C6C017C534BFC012FC5894064FE75D2A",
         "commands": 2948,
         "endTick": 18000,
-        "finalHash": "C5C9A49ECFF858F4",
+        "finalHash": "6E4AAE4A2DF650C1",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "stalemate",
@@ -607,7 +607,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "313D3420D552FFEF",
+        "chainHash": "49B438B9C90F6F19",
         "commandStreamSha256": "70B861A652808005E299A03F3F15E1987798D872D3F4BB96084AD0137BFE1537",
         "commands": 2648,
         "endTick": 18000,
@@ -638,7 +638,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "47B6BED496F071D3",
+        "chainHash": "D47948868751E8DA",
         "commandStreamSha256": "C766FBD61073D6DF33E76B3AE1C6CF61D2492B0630B7D6CA4A3C89E2639EDA7B",
         "commands": 425,
         "endTick": 6000,
@@ -882,12 +882,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "D47FD72508E433E5",
+        "chainHash": "186661D0236EAFF0",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "F2DBDAF5808370A9",
+        "finalHash": "F82AD9D6B118DBCF",
         "hashAfterRestore": "58EC42994A2AFB9E",
         "hashAtSave": "58EC42994A2AFB9E",
         "humanSide": "",
@@ -901,8 +901,8 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "D47FD72508E433E5",
-        "restoredFinalHash": "F2DBDAF5808370A9",
+        "restoredChainHash": "186661D0236EAFF0",
+        "restoredFinalHash": "F82AD9D6B118DBCF",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
@@ -925,12 +925,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "F4808AC680A472CA",
+        "chainHash": "4C158F32CB06B82A",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "A8C40B94D52215FA",
+        "finalHash": "D283A3A980B63F31",
         "hashAfterRestore": "37C8DEE3638D77D1",
         "hashAtSave": "37C8DEE3638D77D1",
         "humanSide": "",
@@ -944,8 +944,8 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "F4808AC680A472CA",
-        "restoredFinalHash": "A8C40B94D52215FA",
+        "restoredChainHash": "4C158F32CB06B82A",
+        "restoredFinalHash": "D283A3A980B63F31",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
@@ -968,12 +968,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "608133CD390A896B",
+        "chainHash": "C963A17282463A00",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "B9A2769FFD698F91",
+        "finalHash": "2B3EC6CAAB9EC4D6",
         "hashAfterRestore": "1B023BFC9DD812D1",
         "hashAtSave": "1B023BFC9DD812D1",
         "humanSide": "",
@@ -987,8 +987,8 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "608133CD390A896B",
-        "restoredFinalHash": "B9A2769FFD698F91",
+        "restoredChainHash": "C963A17282463A00",
+        "restoredFinalHash": "2B3EC6CAAB9EC4D6",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
@@ -1011,12 +1011,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "6E499D09C9291A8D",
+        "chainHash": "78FC7DB687240C97",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "2F30CE1983DDFF47",
+        "finalHash": "55C2C2D57BB9993F",
         "hashAfterRestore": "0EE9AA60958BC46A",
         "hashAtSave": "0EE9AA60958BC46A",
         "humanSide": "",
@@ -1030,8 +1030,8 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "6E499D09C9291A8D",
-        "restoredFinalHash": "2F30CE1983DDFF47",
+        "restoredChainHash": "78FC7DB687240C97",
+        "restoredFinalHash": "55C2C2D57BB9993F",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
@@ -1054,12 +1054,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "0DACD69B714D8D6E",
+        "chainHash": "6C7DCBB779A0F1AB",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "81A6F683DB789A75",
+        "finalHash": "F89CC7598F697FD3",
         "hashAfterRestore": "10421C322620DE30",
         "hashAtSave": "10421C322620DE30",
         "humanSide": "",
@@ -1073,8 +1073,8 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "0DACD69B714D8D6E",
-        "restoredFinalHash": "81A6F683DB789A75",
+        "restoredChainHash": "6C7DCBB779A0F1AB",
+        "restoredFinalHash": "F89CC7598F697FD3",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
@@ -1097,12 +1097,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "B37AFD053B605B9D",
+        "chainHash": "869630692981AEAA",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "8910E9D06243B3F9",
+        "finalHash": "11A3B8CF178D6FB1",
         "hashAfterRestore": "7558A1FFEC9D6FAB",
         "hashAtSave": "7558A1FFEC9D6FAB",
         "humanSide": "",
@@ -1116,8 +1116,8 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "B37AFD053B605B9D",
-        "restoredFinalHash": "8910E9D06243B3F9",
+        "restoredChainHash": "869630692981AEAA",
+        "restoredFinalHash": "11A3B8CF178D6FB1",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
@@ -1140,12 +1140,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "09A9C311FAFA56CF",
+        "chainHash": "CE9417CFF8815644",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "AC8D4B1429A95D64",
+        "finalHash": "13CB901CB4FE0808",
         "hashAfterRestore": "457D5C4AF4B5A7CE",
         "hashAtSave": "457D5C4AF4B5A7CE",
         "humanSide": "",
@@ -1159,8 +1159,8 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "09A9C311FAFA56CF",
-        "restoredFinalHash": "AC8D4B1429A95D64",
+        "restoredChainHash": "CE9417CFF8815644",
+        "restoredFinalHash": "13CB901CB4FE0808",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
@@ -1183,12 +1183,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "54A87443AD996D7B",
+        "chainHash": "D580EA7668D5CF10",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "8834C223D5E3C505",
+        "finalHash": "66AC209F3B82A337",
         "hashAfterRestore": "F2972E7FF589E841",
         "hashAtSave": "F2972E7FF589E841",
         "humanSide": "",
@@ -1202,8 +1202,8 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "54A87443AD996D7B",
-        "restoredFinalHash": "8834C223D5E3C505",
+        "restoredChainHash": "D580EA7668D5CF10",
+        "restoredFinalHash": "66AC209F3B82A337",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
@@ -1226,12 +1226,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "12C7C71BE3E4AE16",
+        "chainHash": "6C7347E1B919A723",
         "endTick": 6000,
         "ended": false,
         "executedActions": 733,
         "executedScripts": 96,
-        "finalHash": "3DB10C4B355F6D87",
+        "finalHash": "2ACF47204CCFB317",
         "hashAfterRestore": "46AFDC7608BCD42A",
         "hashAtSave": "46AFDC7608BCD42A",
         "humanSide": "",
@@ -1245,8 +1245,8 @@
         "outcomeTick": -1,
         "placedObjects": 1551,
         "players": 3,
-        "restoredChainHash": "12C7C71BE3E4AE16",
-        "restoredFinalHash": "3DB10C4B355F6D87",
+        "restoredChainHash": "6C7347E1B919A723",
+        "restoredFinalHash": "2ACF47204CCFB317",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 164,
@@ -1269,7 +1269,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "1832A9F6E379A572",
+        "chainHash": "F2F83A91BC72C663",
         "endTick": 6000,
         "ended": false,
         "executedActions": 582,
@@ -1288,7 +1288,7 @@
         "outcomeTick": -1,
         "placedObjects": 4556,
         "players": 13,
-        "restoredChainHash": "1832A9F6E379A572",
+        "restoredChainHash": "F2F83A91BC72C663",
         "restoredFinalHash": "1E5EC53351FAE55E",
         "saveTick": 3000,
         "shots": 0,
@@ -1312,7 +1312,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "1D8F9130FCB088AF",
+        "chainHash": "5B4ACB6B9BD56C47",
         "endTick": 6000,
         "ended": false,
         "executedActions": 593,
@@ -1331,7 +1331,7 @@
         "outcomeTick": -1,
         "placedObjects": 681,
         "players": 4,
-        "restoredChainHash": "1D8F9130FCB088AF",
+        "restoredChainHash": "5B4ACB6B9BD56C47",
         "restoredFinalHash": "0928BADB77C2FD0E",
         "saveTick": 3000,
         "shots": 0,
@@ -1484,7 +1484,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "68E5C08371EBE76D",
+        "chainHash": "1F00DEA637DF44C3",
         "endTick": 6000,
         "ended": false,
         "executedActions": 487,
@@ -1503,7 +1503,7 @@
         "outcomeTick": -1,
         "placedObjects": 2749,
         "players": 7,
-        "restoredChainHash": "68E5C08371EBE76D",
+        "restoredChainHash": "1F00DEA637DF44C3",
         "restoredFinalHash": "EBEDF7ADF51050BC",
         "saveTick": 3000,
         "shots": 2926,
@@ -1527,7 +1527,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "97C926B270CA1354",
+        "chainHash": "DFA3E687ECAAEE9E",
         "endTick": 6000,
         "ended": false,
         "executedActions": 275,
@@ -1546,7 +1546,7 @@
         "outcomeTick": -1,
         "placedObjects": 1780,
         "players": 10,
-        "restoredChainHash": "97C926B270CA1354",
+        "restoredChainHash": "DFA3E687ECAAEE9E",
         "restoredFinalHash": "4DBC3C9727320400",
         "saveTick": 3000,
         "shots": 1221,
@@ -1570,14 +1570,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "781B9ECDE790FB70",
+        "chainHash": "CC8AD7979683C445",
         "endTick": 6000,
         "ended": false,
         "executedActions": 486,
         "executedScripts": 102,
-        "finalHash": "EC429554F85FA2FE",
-        "hashAfterRestore": "738F1A88A35558CB",
-        "hashAtSave": "738F1A88A35558CB",
+        "finalHash": "BE22EDB1BFEDE788",
+        "hashAfterRestore": "00A5F34BFAE953D9",
+        "hashAtSave": "00A5F34BFAE953D9",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1589,13 +1589,13 @@
         "outcomeTick": -1,
         "placedObjects": 1753,
         "players": 10,
-        "restoredChainHash": "781B9ECDE790FB70",
-        "restoredFinalHash": "EC429554F85FA2FE",
+        "restoredChainHash": "CC8AD7979683C445",
+        "restoredFinalHash": "BE22EDB1BFEDE788",
         "saveTick": 3000,
         "shots": 0,
         "skippedObjects": 458,
         "snapshotBytes": 4117446,
-        "snapshotSha256": "CFBF6FEA02FA7A0CC4B67233D81E5E8C6527B03D505C5F15F90A3E903F0B58EA"
+        "snapshotSha256": "E3E93B38BD7384417FB41FE442C0A1952C87584770358964F8C0BF5F109FAA10"
       },
       "set": "full"
     },
@@ -1613,7 +1613,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "7ABB8499498EE635",
+        "chainHash": "3E179BD9E60C3A81",
         "endTick": 6000,
         "ended": false,
         "executedActions": 384,
@@ -1632,7 +1632,7 @@
         "outcomeTick": -1,
         "placedObjects": 5813,
         "players": 12,
-        "restoredChainHash": "7ABB8499498EE635",
+        "restoredChainHash": "3E179BD9E60C3A81",
         "restoredFinalHash": "DEE43C7750D6CF21",
         "saveTick": 3000,
         "shots": 785,
@@ -1656,14 +1656,14 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "A72F63238434EF0D",
+        "chainHash": "EB3165ACB6175863",
         "endTick": 6000,
         "ended": false,
         "executedActions": 225,
         "executedScripts": 107,
-        "finalHash": "CE3223D3EAA03A4C",
-        "hashAfterRestore": "0262B38525759823",
-        "hashAtSave": "0262B38525759823",
+        "finalHash": "5C357F4A6F4582A2",
+        "hashAfterRestore": "389E74EFCDE5D8A4",
+        "hashAtSave": "389E74EFCDE5D8A4",
         "humanSide": "",
         "identicalAfterSaveRestore": true,
         "identicalInRun2": true,
@@ -1675,13 +1675,13 @@
         "outcomeTick": -1,
         "placedObjects": 2846,
         "players": 14,
-        "restoredChainHash": "A72F63238434EF0D",
-        "restoredFinalHash": "CE3223D3EAA03A4C",
+        "restoredChainHash": "EB3165ACB6175863",
+        "restoredFinalHash": "5C357F4A6F4582A2",
         "saveTick": 3000,
         "shots": 178,
         "skippedObjects": 784,
         "snapshotBytes": 7847095,
-        "snapshotSha256": "83D80950350318836BFA434FDFFF3AB2E1575961D19D24307DBEDA9F41DEC074"
+        "snapshotSha256": "EACB214529AFA71037878337F97C32E3A8AB65A0ADC832BD79E5498F330BD2BA"
       },
       "set": "full"
     },
@@ -1699,7 +1699,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "FFABD971B4E4C24C",
+        "chainHash": "7EAA977EE9EF1F4E",
         "endTick": 6000,
         "ended": false,
         "executedActions": 196,
@@ -1718,7 +1718,7 @@
         "outcomeTick": -1,
         "placedObjects": 3158,
         "players": 14,
-        "restoredChainHash": "FFABD971B4E4C24C",
+        "restoredChainHash": "7EAA977EE9EF1F4E",
         "restoredFinalHash": "D9EEFFAF5D0B16DD",
         "saveTick": 3000,
         "shots": 36,
@@ -1785,7 +1785,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "AC67DE93309339EA",
+        "chainHash": "D74F1C10567B8325",
         "endTick": 6000,
         "ended": false,
         "executedActions": 48,
@@ -1804,7 +1804,7 @@
         "outcomeTick": -1,
         "placedObjects": 2040,
         "players": 7,
-        "restoredChainHash": "AC67DE93309339EA",
+        "restoredChainHash": "D74F1C10567B8325",
         "restoredFinalHash": "CC8F1D65436239E5",
         "saveTick": 3000,
         "shots": 174,
@@ -1829,7 +1829,7 @@
         "worldSeed": "C0FFEE05"
       },
       "results": {
-        "chainHash": "33B5578895086FCC",
+        "chainHash": "35121803B3514E0D",
         "commandStreamSha256": "870DE2AA8AC653AB70C271F7CC60EBD1645F4BF8D88264B488D2C6D85AED9127",
         "commands": 31908,
         "endTick": 432000,
@@ -1861,452 +1861,452 @@
       "results": {
         "atTickBudget": 64,
         "attempted": 64,
-        "combinedSha256": "731D608EA566259234BAC53C1FBDEE847B729A3A11C0A3C98EE099DFFC7DABDD",
+        "combinedSha256": "FED6C5A9D3775A4A7C83DE5A8B0F21AA89A7C34B06B8B278A88B2247351D21B0",
         "failed": 0,
         "maps": {
           "Maps/Alpine Assault/Alpine Assault.map": {
-            "chainHash": "074E100DB67D4669",
+            "chainHash": "66BD936B30F771DB",
             "endTick": 6000,
             "finalHash": "800C5461869C9BCB",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/BarrenBadlands/BarrenBadlands.map": {
-            "chainHash": "086783DE623CA7F6",
+            "chainHash": "4327CE70F311C52C",
             "endTick": 6000,
             "finalHash": "45EA06A98AE9DFED",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Bear Town Beatdown/Bear Town Beatdown.map": {
-            "chainHash": "47024B7F008D8600",
+            "chainHash": "79E4F1BB3F347F7F",
             "endTick": 6000,
             "finalHash": "B01F816EC603BB44",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Bitter Winter/Bitter Winter.map": {
-            "chainHash": "12087551CF5F864B",
+            "chainHash": "017420FFD8111B2B",
             "endTick": 6000,
             "finalHash": "19E2B90850639540",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Bombardment Beach/Bombardment Beach.map": {
-            "chainHash": "9B631CD988904EC4",
+            "chainHash": "DA03552979DDCDAF",
             "endTick": 6000,
             "finalHash": "6904A4BF22585459",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Cairo Commandos/Cairo Commandos.map": {
-            "chainHash": "FC42E04CD83E09F7",
+            "chainHash": "517060F2B09C15DD",
             "endTick": 6000,
             "finalHash": "6CB6B36AFED24436",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Dark Mountain/Dark Mountain.map": {
-            "chainHash": "3DFA744FAB4532BE",
+            "chainHash": "637C75B68FD37D3A",
             "endTick": 6000,
             "finalHash": "0005846BE0B89468",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Dark Night/Dark Night.map": {
-            "chainHash": "280F9B60A072D087",
+            "chainHash": "2DA2C2FEB56C1626",
             "endTick": 6000,
             "finalHash": "7AC4E80FC7760EC8",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Death Valley/Death Valley.map": {
-            "chainHash": "BE6B3103A10107D5",
+            "chainHash": "FDC1FD250774361F",
             "endTick": 6000,
             "finalHash": "07EA7031672B0CFC",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Defcon6/Defcon6.map": {
-            "chainHash": "2C3E0C5A9D8BAA6D",
+            "chainHash": "383E97F6BAF25D28",
             "endTick": 6000,
             "finalHash": "4BF8B50226F2F0F0",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Desert Fury/Desert Fury.map": {
-            "chainHash": "DB3C68EA24BB0368",
+            "chainHash": "28AB23A0EDE751BA",
             "endTick": 6000,
             "finalHash": "D304E514A99C31C3",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Destruction Station/Destruction Station.map": {
-            "chainHash": "F8B30E5CCD3912B8",
+            "chainHash": "FE73206F1644999B",
             "endTick": 6000,
             "finalHash": "E4BD071042331819",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/DogsOfWar/DogsOfWar.map": {
-            "chainHash": "7F09362E24069996",
+            "chainHash": "950AF2BA572EBE67",
             "endTick": 6000,
             "finalHash": "6C392DAF0916DD8B",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Dust Devil/Dust Devil.map": {
-            "chainHash": "85ECB27BD9F27C9A",
+            "chainHash": "62F1A0273C2F7CF6",
             "endTick": 6000,
             "finalHash": "9C936C2D9C9C9B77",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Eastern Everglades/Eastern Everglades.map": {
-            "chainHash": "210811A6AADE298B",
+            "chainHash": "6663AB1E7A0640CF",
             "endTick": 6000,
             "finalHash": "96331BBEED363FE5",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/El Scorcho/El Scorcho.map": {
-            "chainHash": "D8F1F8C42FA8943C",
+            "chainHash": "2E661D5628EF8AD0",
             "endTick": 6000,
             "finalHash": "1304815B1F3D5FC0",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Fallen Empire/Fallen Empire.map": {
-            "chainHash": "D8500DB275B10E70",
+            "chainHash": "E7E65FF7A4E50ED0",
             "endTick": 6000,
             "finalHash": "EF5FD5BA568DD1A4",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Final Crusade/Final Crusade.map": {
-            "chainHash": "B6F8EB07DC61F154",
+            "chainHash": "554B6C4A316E1AD8",
             "endTick": 6000,
             "finalHash": "5CF4527916501BBD",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Flash Effect/Flash Effect.map": {
-            "chainHash": "B1B103798C2591BD",
+            "chainHash": "15966565B04064DA",
             "endTick": 6000,
             "finalHash": "3A3AAB45E6CC1853",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Flash Fire/Flash Fire.map": {
-            "chainHash": "6439561BFF01405A",
+            "chainHash": "F055F411BDC2B4CE",
             "endTick": 6000,
             "finalHash": "0173CF5D0118952F",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/FloodedPlains/FloodedPlains.map": {
-            "chainHash": "D869DCFC3D32ABF8",
+            "chainHash": "AFB3F50137D30E64",
             "endTick": 6000,
             "finalHash": "B81C45BFA9202062",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/ForgottenForestZH/ForgottenForestZH.map": {
-            "chainHash": "F59CEFA39AD78C2C",
+            "chainHash": "E4DC5C9D78CACDF3",
             "endTick": 6000,
             "finalHash": "88D16EA9D49BA736",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Fortress Avalanche/Fortress Avalanche.map": {
-            "chainHash": "A7E9230CA906C342",
+            "chainHash": "7DEC40F541048B05",
             "endTick": 6000,
             "finalHash": "6DEBF9615D612449",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Free Fire Zone/Free Fire Zone.map": {
-            "chainHash": "5439527BC2E9F289",
+            "chainHash": "D124E43AB486831D",
             "endTick": 6000,
             "finalHash": "0C6301C29CDB81A9",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Golden Oasis/Golden Oasis.map": {
-            "chainHash": "88626B7512163043",
+            "chainHash": "2CD42E69A6BA0567",
             "endTick": 6000,
             "finalHash": "E1FCFD70505E2B5B",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Green Pastures/Green Pastures.map": {
-            "chainHash": "228B0CB276E2E02A",
+            "chainHash": "411F42E01FA18325",
             "endTick": 6000,
             "finalHash": "33989C0D9E0B6CA3",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Heartland Shield/Heartland Shield.map": {
-            "chainHash": "172FC518FA6EAC56",
+            "chainHash": "84C7CC7346D57274",
             "endTick": 6000,
             "finalHash": "D118B9771EE549D6",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Homeland Alliance/Homeland Alliance.map": {
-            "chainHash": "7B97D3FB21017BBD",
+            "chainHash": "A32CB3FFB10C8AED",
             "endTick": 6000,
             "finalHash": "95DA56B3F4B284CD",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Hostile Dawn/Hostile Dawn.map": {
-            "chainHash": "C71AAD2B645EF806",
+            "chainHash": "B70CDE00B3BBC088",
             "endTick": 6000,
             "finalHash": "CB54BE841346277B",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Iron Dragon/Iron Dragon.map": {
-            "chainHash": "0CC7EA6FAA1638F7",
+            "chainHash": "29E423468B23D85D",
             "endTick": 6000,
             "finalHash": "B4E864B205089653",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Killing Fields/Killing Fields.map": {
-            "chainHash": "C369E510A46C1D5C",
+            "chainHash": "89141929B90D4C76",
             "endTick": 6000,
             "finalHash": "78B22F64F5ACB478",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Leipzig Lowlands/Leipzig Lowlands.map": {
-            "chainHash": "6A9B733D55B4EBF3",
+            "chainHash": "CF4EAF6BDBD6358B",
             "endTick": 6000,
             "finalHash": "3BF4F9DE3D7B4840",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Lights Out/Lights Out.map": {
-            "chainHash": "F268F65681CDCD35",
+            "chainHash": "33751516EA9E72F9",
             "endTick": 6000,
             "finalHash": "9BE16B670300282E",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Lone Eagle/Lone Eagle.map": {
-            "chainHash": "70D4C2CD6C038F07",
+            "chainHash": "EFE448C20EA127F0",
             "endTick": 6000,
             "finalHash": "EDA428AE457C0F13",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Manic Aggression/Manic Aggression.map": {
-            "chainHash": "A28BDDDCFBB3889D",
+            "chainHash": "39C8D752D50754C4",
             "endTick": 6000,
             "finalHash": "956C26130BDD567B",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Mountain Guns/Mountain Guns.map": {
-            "chainHash": "ED396F5667746226",
+            "chainHash": "79F400F4C2C14884",
             "endTick": 6000,
             "finalHash": "9663378EBFCB1FC0",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/MountainFox/MountainFox.map": {
-            "chainHash": "32711E5C772DCC35",
+            "chainHash": "23CA870D39B1B1B7",
             "endTick": 6000,
             "finalHash": "54FEBDE8E35F93A9",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/NorthAmerica/NorthAmerica.map": {
-            "chainHash": "F0F6E0142B164155",
+            "chainHash": "A26B091948AAED10",
             "endTick": 6000,
             "finalHash": "3110FC917E6AA826",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Overland/Overland.map": {
-            "chainHash": "C8C41334D5179AF9",
+            "chainHash": "A56111815CE38E81",
             "endTick": 6000,
             "finalHash": "0FE79167127F2714",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Red Rock/Red Rock.map": {
-            "chainHash": "3D6CCF3F07BC4CB4",
+            "chainHash": "B3E0A473C08095D8",
             "endTick": 6000,
             "finalHash": "635D8B8D12165671",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Rocky Rampage/Rocky Rampage.map": {
-            "chainHash": "707CB4EE47093829",
+            "chainHash": "3BB357360BF2F4E7",
             "endTick": 6000,
             "finalHash": "53FBA6AE34FB0EF2",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Rogue Agent/Rogue Agent.map": {
-            "chainHash": "F3EDF9EB34CD78E2",
+            "chainHash": "183766CBE6B69067",
             "endTick": 6000,
             "finalHash": "4E4A1E7669FBFF60",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Sand Serpent/Sand Serpent.map": {
-            "chainHash": "88DB03C8164223F5",
+            "chainHash": "839EE68971623013",
             "endTick": 6000,
             "finalHash": "605C499EE83D6005",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Seaside Mutiny/Seaside Mutiny.map": {
-            "chainHash": "592E3EB480337221",
+            "chainHash": "7E972EF78A59C4F2",
             "endTick": 6000,
             "finalHash": "9B76CB42C66717FC",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Silent River/Silent River.map": {
-            "chainHash": "681DE6BD24C21D49",
+            "chainHash": "2CC8B7BEE1F5F2E5",
             "endTick": 6000,
             "finalHash": "0B2933098F07A6EB",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/TheFrontline/TheFrontline.map": {
-            "chainHash": "A7D91F6AA3E2BF65",
+            "chainHash": "07D9EACAEA860C49",
             "endTick": 6000,
             "finalHash": "9FE36D89F03903F3",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Tournament City/Tournament City.map": {
-            "chainHash": "63E67040D33F1E99",
+            "chainHash": "A83DB1AD708A2C89",
             "endTick": 6000,
             "finalHash": "2606F2A491392229",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Tournament Continent/Tournament Continent.map": {
-            "chainHash": "49B0EE740404AB51",
+            "chainHash": "A2484E495FCACD64",
             "endTick": 6000,
             "finalHash": "F89D69EA0A9F5DFA",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Tournament Desert/Tournament Desert.map": {
-            "chainHash": "ED3B4AE65C1C0DC9",
+            "chainHash": "02E276C66CD19D30",
             "endTick": 6000,
             "finalHash": "27E3E7D64FA9286E",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Tournament Island/Tournament Island.map": {
-            "chainHash": "5C062476212E88BF",
+            "chainHash": "81C24EB366EE84E0",
             "endTick": 6000,
             "finalHash": "EF0D20465DDCD92C",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Tournament Lake/Tournament Lake.map": {
-            "chainHash": "351543B351BD4D7D",
+            "chainHash": "FD3CC75F4BFEE276",
             "endTick": 6000,
             "finalHash": "B987B11CB7F789F8",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Tournament Plains/Tournament Plains.map": {
-            "chainHash": "C31C983E7A05C85C",
+            "chainHash": "AEC2745B1BE84B17",
             "endTick": 6000,
             "finalHash": "A8D8614E8DBE262E",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Tournament Tundra/Tournament Tundra.map": {
-            "chainHash": "A60C886B41DF54DF",
+            "chainHash": "4CC12F365A8C89B9",
             "endTick": 6000,
             "finalHash": "6BB6029DD1E2FA2C",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Tournament Urban/Tournament Urban.map": {
-            "chainHash": "EB2EC83D4B17D0D3",
+            "chainHash": "AEE7477C66B6E5D4",
             "endTick": 6000,
             "finalHash": "9AAF01A28D6FE3F1",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/TournamentA/TournamentA.map": {
-            "chainHash": "1A776C033C8C45F7",
+            "chainHash": "090A0A25BFE56CAD",
             "endTick": 6000,
             "finalHash": "0A24840CB0458F2A",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/TournamentB/TournamentB.map": {
-            "chainHash": "20F30911BE509EAC",
+            "chainHash": "D8C178EF4A813F04",
             "endTick": 6000,
             "finalHash": "701CD50CBAAE389F",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Twilight Flame/Twilight Flame.map": {
-            "chainHash": "F00D5948C27D07A7",
+            "chainHash": "3E90F6B200253F0E",
             "endTick": 6000,
             "finalHash": "69E0CDDDF8EA45BD",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Victory Valley/Victory Valley.map": {
-            "chainHash": "378EA7CC2930D6BB",
+            "chainHash": "C9575DD4F34EFC68",
             "endTick": 6000,
             "finalHash": "7680C020A6C79F85",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Wasteland Warlords/Wasteland Warlords.map": {
-            "chainHash": "CB1C8B5D83B8F824",
+            "chainHash": "B1A6B8526D2BA107",
             "endTick": 6000,
             "finalHash": "50155EB01ED79756",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Whiteout/Whiteout.map": {
-            "chainHash": "79D171B50203ED45",
+            "chainHash": "F58B0608424C2238",
             "endTick": 6000,
             "finalHash": "848712474D160315",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Winding River/Winding River.map": {
-            "chainHash": "55413089B0D82A1B",
+            "chainHash": "D2A570D1B42719CB",
             "endTick": 6000,
             "finalHash": "33312D9DE71FB522",
             "outcome": "stalemate",
             "status": "ended"
           },
           "Maps/Winter Wolf/Winter Wolf.map": {
-            "chainHash": "1D294E7EF631127B",
+            "chainHash": "09FBC5EEEFC95DDD",
             "endTick": 6000,
             "finalHash": "7A33C5411769A894",
             "outcome": "stalemate",
             "status": "ended"
           },
           "maps/Armored Fury/Armored Fury.map": {
-            "chainHash": "9F2B7E577E3561B4",
+            "chainHash": "6EB4FE4EF75063AA",
             "endTick": 6000,
             "finalHash": "7E80A0ED349C6CBA",
             "outcome": "stalemate",
             "status": "ended"
           },
           "maps/Scorched Earth/Scorched Earth.map": {
-            "chainHash": "383F54AC4A2F32A9",
+            "chainHash": "880E1A27B95CF6E3",
             "endTick": 6000,
             "finalHash": "C6F1F8B08ED10517",
             "outcome": "stalemate",
