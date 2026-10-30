@@ -38,8 +38,10 @@ public sealed record ReferenceMatchOptions(uint WorldSeed, uint DriverSeed, long
     // limit without a winner; of eleven seeds surveyed at 60 Hz eight end within 15 game minutes, and 5EED0003 ended with the same winner at the same original frame (16,410)
     // at 30, 60 and 120 Hz (docs/SIMULATION-CORE.md section 53). Since the power and disable corrections of phase 40 (F-16: a player below full power builds slower) 5EED0003
     // runs to the limit again; of the seeds surveyed 5EED0001, 5EED0002 and 5EED0005 end (5EED0004 was stopped unfinished), and 5EED0001 ends with FactionGLA at the same
-    // original frame (18,945) at 30, 60 and 120 Hz (section 54).
-    public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0001, 216_000, 300, 0, 1_000, 1_500, 1_500, 300);
+    // original frame (18,945) at 30, 60 and 120 Hz (section 54). Since the bored builder sees a task that ended in its frame's first tick (F-72, phase 45) 5EED0001 runs to
+    // the limit; of the seeds surveyed 5EED0003, 5EED0004, 5EED0005 and 5EED0006 end (5EED0002 and 5EED0008 do not), and 5EED0004 ends with FactionGLA at the same
+    // original frame (14,745) at 30, 60 and 120 Hz (section 59).
+    public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0004, 216_000, 300, 0, 1_000, 1_500, 1_500, 300);
 
     /// <summary>
     /// The standard match for a catalog of <paramref name="rate"/>: <see cref="Standard"/> with its budget as game time, two hours at every rate (the 216,000 are
