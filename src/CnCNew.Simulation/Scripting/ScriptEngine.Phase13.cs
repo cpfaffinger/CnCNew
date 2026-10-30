@@ -386,9 +386,15 @@ public sealed partial class ScriptEngine
             best = distance;
             closest = index;
         }
+        if (!follow)
+        {
+            // doTeamMoveToSkirmishApproachPath: groupMoveToPosition to that waypoint - one group order (F-35).
+            foreach (var member in members) _followers.Remove(member.Id.Value);
+            MoveGroup(members, path.Waypoints[closest].X, path.Waypoints[closest].Y);
+            return;
+        }
         foreach (var member in members)
         {
-            if (!follow) { _followers.Remove(member.Id.Value); MoveTo(member, path.Waypoints[closest].X, path.Waypoints[closest].Y); continue; }
             _buttonHunts.Remove(member.Id.Value);
             _followers[member.Id.Value] = new Follower { Entity = member.Id.Value, Path = PathMode + path.Label, Index = closest };
             _completedPath.Remove(member.Id.Value);

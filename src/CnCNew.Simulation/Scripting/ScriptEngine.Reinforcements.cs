@@ -12,7 +12,7 @@ public sealed partial class ScriptEngine
 {
     /// <summary>
     /// <c>ScriptActions::doCreateReinforcements</c>. The team's units (<c>teamUnitMaxCount</c> of each type) appear at the team's reinforcement origin (or at the destination)
-    /// in a row. Without <c>teamTransport</c> they walk to the destination when they came from an origin. With a transport the reference creates it first and then
+    /// in a row. Without <c>teamTransport</c> they walk to the destination as one group order when they came from an origin. With a transport the reference creates it first and then
     /// <list type="number">
     /// <item><description>with <c>teamStartsFull</c> loads the team's units into the other <c>TRANSPORT</c> members of the team (first fit, largest first — the reference solves a
     /// partition problem);</description></item>
@@ -58,13 +58,14 @@ public sealed partial class ScriptEngine
                 var id = _world.RequestSpawn(template.Index, team.Owner, x, start.Y + row, start.Z, Fixed.Zero);
                 team.Members.Add(id.Value);
                 if (team.AttackPriority.Length > 0) _prioritySetOf[id.Value] = team.AttackPriority;
-                if (transportTemplate is null && walkOnArrival) _followers[id.Value] = new Follower { Entity = id.Value, Path = PositionMode + destinationName, Index = 0 };
             }
             row += template.GeometryMajorRadius * 2;
         }
         team.Created = true;
         _world.MaterializePendingSpawns();
         if (transportTemplate is not null) DispatchTransports(team, prototype, transportTemplate, destination, destinationName);
+        // "if (needToMoveToDestination)": the team walks to the destination as one group (getTeamAsAIGroup, groupMoveToPosition; F-35).
+        else if (walkOnArrival) MoveGroup(team.Members.Select(EntityById).OfType<Entity>().ToArray(), destination.X, destination.Y);
     }
 
     private Entity? EntityById(uint id) => _world.FindEntity(new EntityId(id));
