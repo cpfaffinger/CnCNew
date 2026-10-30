@@ -47,4 +47,10 @@ commit; the checks the changes can reach green.
 
 ## Progress
 
-Nothing yet.
+- F-80 narrowed (30 October 2026, no code changed): the Crusader on Armored Fury (object 3948) has just left its factory. At 30 Hz the step that ends the first leg of its exit path
+  orders the second leg (`OrderMove` to the rally point, which ends the acquisition state through `EndAttack`), and the acquisition phase of the same tick decides again (next check
+  29,671). Above 30 Hz the second leg is ordered with the last tick of the unit's frame (`AIUpdateInterface.UpdateLiving`, `_exitRallyPending`, Phase 23), after the acquisition of that
+  frame decided in its first tick; the order clears it, and the unit decides again only in its next frame (next check two frames later, and from there some 40 frames apart). Found with
+  `--trace 3948`, `--commands 14` (no order of a player in the window) and a throwaway build that printed the stack of every change of `Entity.HasMoveTarget`. The next step is the remedy
+  named in the register: the unit decides again in the tick of that order, with the decision's tick taken as its frame's first tick - test first a factory that sends a unit with
+  `AutoAcquireEnemiesWhenIdle` to a rally point past an enemy, and compare its acquisition state at the end of every frame at 30, 60 and 120 Hz.
