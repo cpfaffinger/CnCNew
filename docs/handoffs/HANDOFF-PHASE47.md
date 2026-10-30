@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package I) · **Phase:** 47
-> **Status:** next (starting state: the end of Phase 46, see below)
+> **Status:** done by machine (30 October 2026); the rest is in HANDOFF-PHASE48.md
 > **Predecessor:** HANDOFF-PHASE46.md · **Results in:** docs/SIMULATION-CORE.md §61, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** a locomotor's velocity for `INHERIT_VELOCITY` (F-66's named difference), the next rate differences the default matches show after F-77
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -51,4 +51,9 @@ commit; the checks the changes can reach green.
 
 ## Progress
 
-Nothing yet.
+- F-77 (§61.1) in two steps: a creation list reads its source's heading (`01c23ba`, manifest `1db078c`) and place (`f02bc73`, manifest `8557bcb`) where the source's frame ends; Bitter
+  Winter agrees at 30 and 60 Hz to frame 39,931.
+- F-78 (§61.2, `21e6274`, manifest `209392f`): a waypoint follower goes on when its move has ended. The brief's premise was half right: a unit inside the 40 units was ordered on only when
+  its move had ended anyway; the difference was a move that ended farther away, which the VM repeated for good.
+- Registered: F-79 (a supply truck's heading on Bitter Winter at frame 39,931).
+- Carried into `HANDOFF-PHASE48.md`: F-79, a locomotor's velocity for `INHERIT_VELOCITY`. Closing measurements: `CLAUDE.md`, paragraph "Phase 47".

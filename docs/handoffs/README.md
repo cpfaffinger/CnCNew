@@ -77,7 +77,8 @@ phase number is 32.
 | **44** | [HANDOFF-PHASE44.md](HANDOFF-PHASE44.md) | **S1-M11** | Fidelity package F: slow deaths (F-37), the slaves of a spawner (F-65), thrown objects (F-66), debris (F-36), the bored dozer (F-67) | **done** by machine (29 October 2026): §58 |
 | **45** | [HANDOFF-PHASE45.md](HANDOFF-PHASE45.md) | **S1-M11** | Fidelity package G: the worker's two brains (F-68), mine clearing (F-69), five rate differences (F-71 to F-75), F-66's rest | **done** by machine (30 October 2026): §59 |
 | **46** | [HANDOFF-PHASE46.md](HANDOFF-PHASE46.md) | **S1-M11** | Fidelity package H: team orders as group orders (F-35), a turret's hold (F-76) | **done** by machine (30 October 2026): §60 |
-| **47** | [HANDOFF-PHASE47.md](HANDOFF-PHASE47.md) | **S1-M11** | Fidelity package I: the hulk of a dying truck (F-77), the VM's waypoint arrival (F-78) | **next** |
+| **47** | [HANDOFF-PHASE47.md](HANDOFF-PHASE47.md) | **S1-M11** | Fidelity package I: the creation list's source (F-77), the waypoint follower (F-78) | **done** by machine (30 October 2026): §61 |
+| **48** | [HANDOFF-PHASE48.md](HANDOFF-PHASE48.md) | **S1-M11** | Fidelity package J: the next rate differences (F-79) | **next** |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 
