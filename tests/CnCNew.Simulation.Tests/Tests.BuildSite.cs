@@ -76,6 +76,16 @@ static partial class Tests
             InitialHealth = 300.0
           End
         End
+        Object SiteSpot
+          KindOf = SELECTABLE STRUCTURE
+          Geometry = CYLINDER
+          GeometryMajorRadius = 6.0
+          GeometryHeight = 10.0
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+        End
         Object SiteCenter
           KindOf = SELECTABLE STRUCTURE CANNOT_BUILD_NEAR_SUPPLIES
           BuildCost = 100
@@ -120,10 +130,12 @@ static partial class Tests
             var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (x, _) => x >= 34 ? Math.Min(255, (x - 34) * 10) : 0, [(10, 40)]), "site");
             var (world, feeder) = BuildSiteWorld(rate, terrain);
             Check.That(SiteCode(world, 200, 200) == LegalBuildCode.Ok, $"{rate}: flat open ground is a site.");
+            Check.That(SiteCode(world, 200, 200, template: "SiteSpot") == LegalBuildCode.Ok, $"{rate}: a small circle has no sample at three cells.");
             Check.That(SiteCode(world, 200, 25) == LegalBuildCode.RestrictedTerrain, $"{rate}: too close to the map's edge ({SiteCode(world, 200, 25)}).");
             Check.That(SiteCode(world, 590, 200) == LegalBuildCode.RestrictedTerrain, $"{rate}: too close to the far edge ({SiteCode(world, 590, 200)}).");
             Check.That(SiteCode(world, 5000, 60) == LegalBuildCode.RestrictedTerrain, $"{rate}: off the map.");
-            Check.That(SiteCode(world, 95, 395) == LegalBuildCode.RestrictedTerrain, $"{rate}: on a cliff ({SiteCode(world, 95, 395)}).");
+            Check.That(SiteCode(world, 106, 395) == LegalBuildCode.RestrictedTerrain, $"{rate}: over a cliff ({SiteCode(world, 106, 395)}).");
+            Check.That(SiteCode(world, 95, 395) == LegalBuildCode.NoClearPath, $"{rate}: no way onto a cliff, which is asked first ({SiteCode(world, 95, 395)}).");
             Check.That(SiteCode(world, 450, 200) == LegalBuildCode.NotFlatEnough, $"{rate}: on the hill ({SiteCode(world, 450, 200)}).");
             Check.That(feeder.Construct(1, 1, "Plant", 450, 200).Reason == CommandRejection.InvalidPlacement, $"{rate}: the order is refused on the hill.");
             Check.That(feeder.Construct(1, 1, "Plant", 200, 25).Reason == CommandRejection.InvalidPlacement, $"{rate}: the order is refused at the edge.");
@@ -197,6 +209,30 @@ static partial class Tests
             var line = $"{mine.X.Raw},{mine.Y.Raw}";
             reference ??= line;
             Check.That(line == reference, $"{rate}: the soldier stands where it stands at 30 Hz ({line} against {reference}).");
+        }
+    }
+
+    /// <summary>
+    /// The shroud and the way. A place the player has seen but does not look at now is no site for a player (<c>CELLSHROUD_FOGGED</c> is not <c>CELLSHROUD_CLEAR</c>), and ground the builder cannot
+    /// reach is none either. A computer player's order is asked for neither. Before, explored ground was enough and a site behind a wall of cliffs was legal.
+    /// </summary>
+    public static void BuildSiteNeedsSightAndAWay()
+    {
+        foreach (var (rate, _) in WorldRates)
+        {
+            // A wall of cliffs along column 30.
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, cliffs: Enumerable.Range(0, 60).Select(cy => (31, cy + 1))), "site");
+            var (world, feeder, _) = RatedWorld(rate, BuildSiteFiles(), terrain);
+            feeder.GiveMoney(1, 1000);
+            feeder.Spawn(1, "Dozer", owner: 1, x: 100, y: 100);
+            for (var tick = 0; tick < world.Frames(3); tick++) world.Step();
+            Check.That(SiteCode(world, 100, 500) == LegalBuildCode.Shroud, $"{rate}: ground nobody has seen ({SiteCode(world, 100, 500)}).");
+            world.ExploreMap(new PlayerId(1));
+            Check.That(SiteCode(world, 100, 500) == LegalBuildCode.Shroud, $"{rate}: fogged ground ({SiteCode(world, 100, 500)}).");
+            world.RevealMapPermanently(new PlayerId(1), true);
+            for (var tick = 0; tick < world.Frames(3); tick++) world.Step();
+            Check.That(SiteCode(world, 100, 500) == LegalBuildCode.Ok, $"{rate}: ground the player looks at ({SiteCode(world, 100, 500)}).");
+            Check.That(SiteCode(world, 500, 100) == LegalBuildCode.NoClearPath, $"{rate}: behind the cliffs ({SiteCode(world, 500, 100)}).");
         }
     }
 

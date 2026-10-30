@@ -31,6 +31,8 @@ public enum PlacementIssue
     NotFlatEnough,
     /// <summary><c>LBC_TOO_CLOSE_TO_SUPPLIES</c>.</summary>
     TooCloseToSupplies,
+    /// <summary><c>LBC_NO_CLEAR_PATH</c>: the builder cannot get there.</summary>
+    NoClearPath,
 }
 
 /// <summary>
@@ -157,6 +159,7 @@ public static class SimulationQueries
             LegalBuildCode.RestrictedTerrain => PlacementIssue.RestrictedTerrain,
             LegalBuildCode.NotFlatEnough => PlacementIssue.NotFlatEnough,
             LegalBuildCode.TooCloseToSupplies => PlacementIssue.TooCloseToSupplies,
+            LegalBuildCode.NoClearPath => PlacementIssue.NoClearPath,
             LegalBuildCode.Shroud => PlacementIssue.Shroud,
             _ => PlacementIssue.BlockedFootprint,
         };

@@ -59,7 +59,9 @@ public sealed partial class SimulationWorld
             return CommandRejection.MissingPrerequisite;
         if (ExceedsMaxSimultaneousOfType(owner, found)) return CommandRejection.ProductionLimitReached;
         if (owner.Money < ProductionCostOf(owner, found)) return CommandRejection.InsufficientFunds;
-        return CheckBuildSite(builder, found, construct.X, construct.Y, construct.Angle) == LegalBuildCode.Ok ? 0 : CommandRejection.InvalidPlacement;
+        // DozerAIUpdate::construct, "AI has weaker restriction on building": a computer player is not asked for the shroud or a path, it validates the ground itself.
+        var site = owner.IsComputer ? CheckBuildGround(found, construct.X, construct.Y, construct.Angle) : CheckBuildSite(builder, found, construct.X, construct.Y, construct.Angle);
+        return site == LegalBuildCode.Ok ? 0 : CommandRejection.InvalidPlacement;
     }
 
     /// <summary><c>Player::canBuild</c> (buildable status) plus the builder's command set, approximated by the shared <c>Side</c>.</summary>
