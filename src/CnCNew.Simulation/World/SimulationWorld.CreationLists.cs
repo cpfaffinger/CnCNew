@@ -12,8 +12,12 @@ namespace CnCNew.Simulation.World;
 // step that changes what a list produces is reported through CreationSkipped instead of being dropped (docs/SIMULATION-CORE.md).
 public sealed partial class SimulationWorld
 {
+    /// <summary>A creation list at its source: where the source's frame ends (F-77; above 30 Hz a mover is read inside its frame's step otherwise). 30 Hz: its position.</summary>
     public EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth)
-        => CreateFromList(source, listName, requester, transferPreviousHealth, source.X, source.Y, source.Z);
+    {
+        var (x, y, z) = source.FrameEnd(_tick);
+        return CreateFromList(source, listName, requester, transferPreviousHealth, x, y, z);
+    }
 
     public EntityId CreateFromList(Entity source, string listName, EntityId requester, bool transferPreviousHealth, Fixed originX, Fixed originY, Fixed originZ)
         => CreateFromList(source, listName, requester, transferPreviousHealth, originX, originY, originZ, originX, originY, originZ, true);

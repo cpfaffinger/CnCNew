@@ -317,4 +317,32 @@ static partial class Tests
             else Check.That(crate.Angle.Raw == reference, $"{rate}: the crate has the heading 30 Hz gives it ({crate.Angle.Raw} against {reference}).");
         }
     }
+
+    /// <summary>
+    /// F-77, the place: a soldier walking straight on makes a crate <c>LIKE_EXISTING</c> inside a frame's step; the crate appears where the soldier's frame ends - the same place at 30, 60
+    /// and 120 Hz. Before, above 30 Hz it appeared where the soldier stood inside the step.
+    /// </summary>
+    public static void CreationListTakesTheSourcePlaceWhereItsFrameEnds()
+    {
+        (long X, long Y)? reference = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(CreationThrowIni));
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "walking");
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+            var feeder = new Feeder(world);
+            var trooper = GdSpawn(world, feeder, "CtTrooper", 1, 200, 300);
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            Check.That(feeder.SetMoveTarget(1, trooper.Id.Value, 500, 300).Accepted, $"{rate}: the soldier is told to walk on.");
+            // Ten whole frames of the walk, then the first tick of the eleventh: above 30 Hz the soldier is inside that frame's step.
+            for (var step = 0; step < world.Frames(10) + 1; step++) world.Step();
+            Check.That(rate == SimulationRate.Hz30 || trooper.IsInsideFrameStep, $"{rate}: the soldier walks inside its frame's step.");
+            world.CreateFromList(trooper, "OCL_CtLike", EntityId.Invalid, false);
+            world.Step();
+            var crate = world.Entities.Single(value => value.Template.Name == "CtCrate");
+            if (reference is null) reference = (crate.X.Raw, crate.Y.Raw);
+            else Check.That((crate.X.Raw, crate.Y.Raw) == reference, $"{rate}: the crate appears where 30 Hz has it ({crate.X.Raw}, {crate.Y.Raw} against {reference}).");
+        }
+    }
 }
+
