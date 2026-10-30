@@ -65,7 +65,7 @@ internal static class Phase5Modules
 /// </summary>
 public sealed record StealthData(
     long StealthDelayTicks, Fixed MoveThresholdSpeed, ImmutableArray<string> ForbiddenConditions,
-    ulong RequiredStatus, ulong ForbiddenStatus, bool InnateStealth) : ModuleData
+    ulong RequiredStatus, ulong ForbiddenStatus, bool InnateStealth, bool TeamDisguised, long DisguiseTransitionTicks, long RevealTransitionTicks, Fixed RevealDistance) : ModuleData
 {
     public static StealthData Parse(RatedModuleConfiguration configuration) => new(
         ModuleConfigReader.Ticks(configuration, "StealthDelay", 0),
@@ -74,7 +74,11 @@ public sealed record StealthData(
         ModuleConfigReader.Flags(configuration, "StealthForbiddenConditions")?.Names ?? [],
         ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "RequiredStatus"), NameTables.ObjectStatus),
         ObjectStatusBits.Mask(ModuleConfigReader.Flags(configuration, "ForbiddenStatus"), NameTables.ObjectStatus),
-        ModuleConfigReader.Bool(configuration, "InnateStealth", false));
+        ModuleConfigReader.Bool(configuration, "InnateStealth", false),
+        ModuleConfigReader.Bool(configuration, "DisguisesAsTeam", false),
+        ModuleConfigReader.Ticks(configuration, "DisguiseTransitionTime", 0),
+        ModuleConfigReader.Ticks(configuration, "DisguiseRevealTransitionTime", 0),
+        ModuleConfigReader.Real(configuration, "RevealDistanceFromTarget", Fixed.Zero));
 }
 
 /// <summary>
@@ -93,6 +97,81 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     private long _nextWake = -1;
     private long _readyTick = long.MaxValue;
     private long _detectedUntilTick = -1;
+
+    private static readonly int DisguisedBit = ObjectStatusBits.Index("DISGUISED");
+
+    // The disguise (F-83, disguiseAsObject): whose look the object takes over, how far the change is, and whether it stands for it now.
+    private int _disguiseTemplate = -1;
+    private PlayerId _disguisePlayer;
+    private long _disguiseTicks;
+    private bool _toDisguise;
+    private bool _halfwayDone;
+    private bool _disguised;
+
+    /// <summary><c>m_enabled</c>: a unit that disguises sleeps until it is told to.</summary>
+    private bool Enabled => !data.TeamDisguised || _enabledDisguise;
+    private bool _enabledDisguise;
+
+    /// <summary><c>canDisguise</c>.</summary>
+    public bool CanDisguise => data.TeamDisguised;
+
+    /// <summary><c>isDisguised</c>: the object stands for <see cref="DisguisedTemplate"/> of <see cref="DisguisedPlayer"/>.</summary>
+    public bool IsDisguised => _disguised;
+
+    public int DisguisedTemplate => _disguised ? _disguiseTemplate : -1;
+    public PlayerId DisguisedPlayer => _disguisePlayer;
+
+    /// <summary>
+    /// <c>StealthUpdate::disguiseAsObject</c>: with a target the object takes its look (or the look the target itself has taken) over <c>DisguiseTransitionTime</c>, without one a disguise falls
+    /// over <c>DisguiseRevealTransitionTime</c>. The status changes at the half of the time, where the model changes.
+    /// </summary>
+    public void DisguiseAs(IWorldServices world, Entity? target)
+    {
+        if (target is not null)
+        {
+            var other = target.ModuleArray.OfType<StealthUpdate>().FirstOrDefault();
+            (_disguiseTemplate, _disguisePlayer) = other is { IsDisguised: true } ? (other._disguiseTemplate, other._disguisePlayer) : (target.Template.Index, target.Owner);
+            _enabledDisguise = true;
+            _toDisguise = true;
+            _disguiseTicks = data.DisguiseTransitionTicks;
+            _halfwayDone = false;
+            world.WakeAt(Entity, this, world.Tick + world.Time.TicksPerOriginalFrame);
+        }
+        else if (_disguised)
+        {
+            _disguiseTemplate = -1;
+            _toDisguise = false;
+            _disguiseTicks = data.RevealTransitionTicks;
+            _halfwayDone = false;
+        }
+        world.MarkDirty(Entity);
+    }
+
+    private void ChangeDisguise(IWorldServices world)
+    {
+        _disguised = _toDisguise;
+        if (_disguised) Entity.Status |= 1UL << DisguisedBit;
+        else Entity.Status &= ~(1UL << DisguisedBit);
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary>One step of the change of look; true when the disguise has fallen and the module sleeps.</summary>
+    private bool StepDisguise(IWorldServices world)
+    {
+        if (_disguiseTicks <= 0) return false;
+        _disguiseTicks--;
+        var whole = _toDisguise ? data.DisguiseTransitionTicks : data.RevealTransitionTicks;
+        if (!_halfwayDone && _disguiseTicks * 2 <= whole)
+        {
+            ChangeDisguise(world);
+            _halfwayDone = true;
+        }
+        if (_disguiseTicks != 0 || _toDisguise) return false;
+        // "We're finished removing disguise so turn off stealth update."
+        _enabledDisguise = false;
+        Entity.Status &= ~((1UL << StealthedBit) | (1UL << DetectedBit));
+        return true;
+    }
 
     /// <summary><c>OBJECT_STATUS_SCRIPT_UNSTEALTHED</c> (<c>NAMED_SET_STEALTH_ENABLED</c> false): a script keeps the object from stealthing; saved only while set.</summary>
     public bool ScriptUnstealthed { get; set; }
@@ -149,6 +228,8 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
     /// <summary><c>StealthUpdate::markAsDetected</c>: extends (never shortens) how long <c>DETECTED</c> stays set. Called by <c>StealthDetectorUpdate</c>.</summary>
     public void MarkDetected(IWorldServices world, long ticks)
     {
+        // "If we are disguised, remove the disguise permanently!"
+        if (_disguised) DisguiseAs(world, null);
         var until = world.Tick + world.Time.AtLeastOneFrame(ticks);
         if (until > _detectedUntilTick) _detectedUntilTick = until;
         Entity.Status |= 1UL << DetectedBit;
@@ -158,6 +239,14 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
 
     public long Update(IWorldServices world)
     {
+        if (!Enabled) return SimulationTiming.SleepForever;
+        if (StepDisguise(world)) return SimulationTiming.SleepForever;
+        // getRevealDistanceFromTarget: close enough to its victim a unit in disguise shows itself.
+        if (data.RevealDistance > Fixed.Zero && Entity.Acquisition is { Victim.IsValid: true } attack && world.FindEntity(attack.Victim) is { } victim)
+        {
+            var (dx, dy) = (victim.X - Entity.X, victim.Y - Entity.Y);
+            if (SquaredReach.Of(data.RevealDistance).Contains(dx * dx + dy * dy)) MarkDetected(world);
+        }
         if (Entity.HasStatus(DetectedBit) && world.Tick >= _detectedUntilTick) Entity.Status &= ~(1UL << DetectedBit);
         // StealthUpdate::update: without CAN_STEALTH (innate, or granted by StealthUpgrade) the module does nothing.
         if (!Entity.HasStatus(CanStealthBit)) return SimulationTiming.SleepNone;
@@ -221,6 +310,15 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         writer.Int("detectedUntilTick", _detectedUntilTick);
         if (ScriptUnstealthed) writer.Bool("scriptUnstealthed", true);
         if (_framesGranted > 0) writer.Int("framesGranted", _framesGranted);
+        if (_enabledDisguise)
+        {
+            writer.Int("disguiseTemplate", _disguiseTemplate);
+            writer.Int("disguisePlayer", _disguisePlayer.Value);
+            writer.Int("disguiseTicks", _disguiseTicks);
+            writer.Bool("disguiseGaining", _toDisguise);
+            writer.Bool("disguiseHalfway", _halfwayDone);
+            writer.Bool("disguised", _disguised);
+        }
     }
 
     public override void Load(IStateReader reader)
@@ -231,6 +329,14 @@ public sealed class StealthUpdate(StealthData data) : SimModule, IUpdateModule
         _detectedUntilTick = reader.Int("detectedUntilTick");
         ScriptUnstealthed = reader.Has("scriptUnstealthed") && reader.Bool("scriptUnstealthed");
         _framesGranted = reader.Has("framesGranted") ? reader.Int("framesGranted") : 0;
+        _enabledDisguise = reader.Has("disguiseTemplate");
+        if (!_enabledDisguise) return;
+        _disguiseTemplate = checked((int)reader.Int("disguiseTemplate"));
+        _disguisePlayer = new PlayerId(checked((int)reader.Int("disguisePlayer")));
+        _disguiseTicks = reader.Int("disguiseTicks");
+        _toDisguise = reader.Bool("disguiseGaining");
+        _halfwayDone = reader.Bool("disguiseHalfway");
+        _disguised = reader.Bool("disguised");
     }
 }
 

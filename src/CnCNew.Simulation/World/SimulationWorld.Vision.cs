@@ -128,8 +128,22 @@ public sealed partial class SimulationWorld
         // Where the frame the object has begun ends: at 30 Hz it has taken its whole step (F-82).
         var (x, y, _) = entity.FrameEnd(_tick);
         if (!IsPositionVisibleTo(player, x, y)) return false;
-        return !entity.HasStatus(StealthedStatus) || entity.HasStatus(DetectedStatus);
+        return !IsHiddenFrom(player, entity);
     }
+
+    /// <summary>
+    /// <c>PartitionFilterStealthedAndUndetected</c>: stealthed and undetected. A unit in disguise is no stealthed unit to a player whose enemy it looks like: it stands there as that vehicle.
+    /// </summary>
+    private bool IsHiddenFrom(PlayerId player, Entity entity)
+    {
+        if (!entity.HasStatus(StealthedStatus) || entity.HasStatus(DetectedStatus)) return false;
+        if (!entity.HasStatus(DisguisedStatus) || !entity.Template.IsKindOf("DISGUISER")) return true;
+        foreach (var module in entity.ModuleArray)
+            if (module is Modules.BuiltIn.StealthUpdate { IsDisguised: true } stealth) return RelationshipOf(player, stealth.DisguisedPlayer) != Relationship.Enemies;
+        return true;
+    }
+
+    private static readonly int DisguisedStatus = ObjectStatusBits.Index("DISGUISED");
 
     /// <summary>Every entity the player may see, in ascending id order: the only view a computer player is allowed to plan with.</summary>
     public List<Entity> EntitiesVisibleTo(PlayerId player)

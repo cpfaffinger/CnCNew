@@ -393,7 +393,7 @@ public sealed partial class SimulationWorld
     /// <summary>The victim is still one the unit may attack: alive, an enemy and visible to the unit's player (<c>getAbleToAttackSpecificObject(ATTACK_CONTINUED_TARGET, …)</c>).</summary>
     private bool IsAttackable(Entity entity, Entity victim)
         => !victim.DestroyRequested && !victim.EffectivelyDead && victim.Body is not null && !victim.ContainedBy.IsValid && AreEnemies(entity, victim)
-           && !(victim.HasStatus(StealthedStatus) && !victim.HasStatus(DetectedStatus)) && CanPlayerSee(entity.Owner, victim);
+           && !IsHiddenFrom(entity.Owner, victim) && CanPlayerSee(entity.Owner, victim);
 
     /// <summary>
     /// One tick of an attack on <paramref name="victim"/>: in range the unit stands (an attack-move stops for the fight, aircraft keep flying) and fires when its weapon may; out of range a

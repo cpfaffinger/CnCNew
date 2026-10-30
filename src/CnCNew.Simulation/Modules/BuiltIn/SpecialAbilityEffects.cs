@@ -22,6 +22,7 @@ internal enum AbilityKind : byte
     StealCash,
     LaserMissiles,
     HelixBomb,
+    DisguiseAsVehicle,
 }
 
 /// <summary>
@@ -58,7 +59,7 @@ public sealed partial class SpecialAbilityUpdate
         ("SPECIAL_TANKHUNTER_TNT_ATTACK", AbilityKind.TankHunterTnt), ("SPECIAL_BOOBY_TRAP", AbilityKind.BoobyTrap),
         ("SPECIAL_HACKER_DISABLE_BUILDING", AbilityKind.HackerDisable), ("SPECIAL_BLACKLOTUS_DISABLE_VEHICLE_HACK", AbilityKind.VehicleHack),
         ("SPECIAL_BLACKLOTUS_STEAL_CASH_HACK", AbilityKind.StealCash), ("SPECIAL_MISSILE_DEFENDER_LASER_GUIDED_MISSILES", AbilityKind.LaserMissiles),
-        ("SPECIAL_HELIX_NAPALM_BOMB", AbilityKind.HelixBomb),
+        ("SPECIAL_HELIX_NAPALM_BOMB", AbilityKind.HelixBomb), ("SPECIAL_DISGUISE_AS_VEHICLE", AbilityKind.DisguiseAsVehicle),
     ];
 
     /// <summary>How much a cash hack takes at most (<c>desiredAmount</c> of <c>triggerAbilityEffect</c>).</summary>
@@ -82,6 +83,9 @@ public sealed partial class SpecialAbilityUpdate
                 return victim.Template.IsKindOf("STRUCTURE") && relation != Relationship.Enemies;
             case AbilityKind.LaserMissiles:
                 return victim.Template.IsKindOf("VEHICLE") && relation == Relationship.Enemies;
+            case AbilityKind.DisguiseAsVehicle:
+                return victim.Template.IsKindOf("VEHICLE") && !victim.Template.IsKindOf("AIRCRAFT") && !victim.Template.IsKindOf("BOAT") && !victim.Template.IsKindOf("CLIFF_JUMPER")
+                    && !victim.ModuleArray.Any(module => module is RailroadBehavior);
             case AbilityKind.HackerDisable:
                 return victim.Template.IsKindOf("STRUCTURE") && relation == Relationship.Enemies && victim.Template.IsKindOf("CAPTURABLE") && !victim.Template.IsKindOf("REBUILD_HOLE");
             case AbilityKind.VehicleHack:
@@ -202,6 +206,9 @@ public sealed partial class SpecialAbilityUpdate
                 // "We can't double booby trap something."
                 if (kind == AbilityKind.BoobyTrap && target.HasStatus(BoobyTrappedBit)) return false;
                 CreateSpecialObject(world, target);
+                return true;
+            case AbilityKind.DisguiseAsVehicle:
+                if (target is not null) Entity.ModuleArray.OfType<StealthUpdate>().FirstOrDefault()?.DisguiseAs(world, target);
                 return true;
             case AbilityKind.HelixBomb:
                 // "Couldn't be simpler... the special object is the bomb."

@@ -72,6 +72,36 @@ static partial class Tests
             NeedToFaceTarget = No
           End
         End
+        SpecialPower SPECIAL_TestDisguise
+          Enum = SPECIAL_DISGUISE_AS_VEHICLE
+          ReloadTime = 0
+        End
+        Object HackTruck
+          KindOf = SELECTABLE VEHICLE DISGUISER
+          Locomotor = SET_NORMAL GroundLoco
+          Body = ActiveBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = SpecialAbility Disguise01
+            SpecialPowerTemplate = SPECIAL_TestDisguise
+            UpdateModuleStartsAttack = Yes
+          End
+          Behavior = SpecialAbilityUpdate DisguiseUpdate01
+            SpecialPowerTemplate = SPECIAL_TestDisguise
+            StartAbilityRange = 1000000.0
+            NeedToFaceTarget = No
+          End
+          Behavior = StealthUpdate Stealth01
+            StealthDelay = 1
+            InnateStealth = Yes
+            DisguisesAsTeam = Yes
+            DisguiseTransitionTime = 1000
+            DisguiseRevealTransitionTime = 1000
+          End
+        End
         Object HackBeam
           KindOf = INERT NO_COLLIDE
           Body = ActiveBody Body01
@@ -241,6 +271,46 @@ static partial class Tests
             var line = $"{made}:{bomb.Z.Raw}";
             reference ??= line;
             Check.That(line == reference, $"{rate}: as at 30 Hz ({line} against {reference}).");
+        }
+    }
+
+    /// <summary>
+    /// The bomb truck takes the look of a vehicle: in the middle of its change it is <c>DISGUISED</c>, and from then on it is that vehicle to a player that vehicle is an enemy of. When it is detected
+    /// the disguise falls, and the module sleeps again. The same frames at 30, 60 and 120 Hz.
+    /// </summary>
+    public static void AbilityDisguisesAVehicle()
+    {
+        string? reference = null;
+        foreach (var (rate, _) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, AbilityHackFiles());
+            feeder.Spawn(1, "HackTruck", owner: 1, x: 100, y: 100);
+            feeder.Spawn(1, "HackVehicle", owner: 1, x: 200, y: 100);
+            feeder.Spawn(2, "HackVehicle", owner: 2, x: 300, y: 100);
+            for (var tick = 0; tick < world.Time.TicksPerOriginalFrame; tick++) world.Step();
+            var truck = ChargeFind(world, "HackTruck");
+            var mine = world.Entities.First(value => value.Template.Name == "HackVehicle" && value.Owner.Value == 1);
+            var stealth = truck.Modules.OfType<StealthUpdate>().Single();
+            Check.That(feeder.UseSpecialPower(1, truck.Id.Value, "SPECIAL_TestDisguise", SpecialPowerTargetKind.Object, mine.Id.Value).Accepted, $"{rate}: the order is accepted.");
+            var (disguised, fell) = (-1L, -1L);
+            for (var step = 0; step < world.Frames(120) && disguised < 0; step++)
+            {
+                world.Step();
+                if (stealth.IsDisguised) disguised = (world.Tick - 1) / world.Time.TicksPerOriginalFrame;
+            }
+            Check.That(disguised > 0 && stealth.DisguisedPlayer.Value == 1, $"{rate}: the truck is in disguise.");
+            for (var tick = 0; tick < world.Frames(30); tick++) world.Step();
+            Check.That(world.CanPlayerSee(new PlayerId(2), truck) == (truck.ContainedBy.Value == 0), $"{rate}: player 2 takes it for the enemy vehicle it looks like.");
+            stealth.MarkDetected(world, world.Frames(30));
+            for (var step = 0; step < world.Frames(120) && fell < 0; step++)
+            {
+                world.Step();
+                if (!stealth.IsDisguised) fell = (world.Tick - 1) / world.Time.TicksPerOriginalFrame;
+            }
+            Check.That(fell > disguised, $"{rate}: the disguise falls when the truck is detected.");
+            var line = $"{disguised}-{fell}";
+            reference ??= line;
+            Check.That(line == reference, $"{rate}: the frames of 30 Hz ({line} against {reference}).");
         }
     }
 

@@ -98,6 +98,7 @@ run.Test("Phase 50 (F-83): a hack disables its target for its time", Tests.Abili
 run.Test("Phase 50 (F-83): the cash hack", Tests.AbilityStealsCash);
 run.Test("Phase 50 (F-83): the laser lock", Tests.AbilityLocksAndFiresTheLaserMissile);
 run.Test("Phase 50 (F-83): the Helix drops its bomb", Tests.AbilityDropsABomb);
+run.Test("Phase 50 (F-83): the bomb truck in disguise", Tests.AbilityDisguisesAVehicle);
 run.Test("Phase 50 (F-18): a supply center keeps its distance to the supplies", Tests.BuildSiteKeepsItsDistanceToSupplies);
 run.Test("Phase 50 (F-18): the objects under a building site", Tests.BuildSiteClearsItsGround);
 run.Test("Phase 50 (F-18): a building site needs the sight of the player and a way for the builder", Tests.BuildSiteNeedsSightAndAWay);
