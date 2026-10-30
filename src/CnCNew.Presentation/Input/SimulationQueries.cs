@@ -29,6 +29,8 @@ public enum PlacementIssue
     RestrictedTerrain,
     /// <summary><c>LBC_NOT_FLAT_ENOUGH</c>.</summary>
     NotFlatEnough,
+    /// <summary><c>LBC_TOO_CLOSE_TO_SUPPLIES</c>.</summary>
+    TooCloseToSupplies,
 }
 
 /// <summary>
@@ -154,6 +156,7 @@ public static class SimulationQueries
             LegalBuildCode.Ok => PlacementIssue.None,
             LegalBuildCode.RestrictedTerrain => PlacementIssue.RestrictedTerrain,
             LegalBuildCode.NotFlatEnough => PlacementIssue.NotFlatEnough,
+            LegalBuildCode.TooCloseToSupplies => PlacementIssue.TooCloseToSupplies,
             LegalBuildCode.Shroud => PlacementIssue.Shroud,
             _ => PlacementIssue.BlockedFootprint,
         };

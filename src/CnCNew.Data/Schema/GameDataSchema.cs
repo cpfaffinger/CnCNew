@@ -28,6 +28,7 @@ public static class GameDataSchema
         new FieldSchema("SpecialPowerViewObject", FieldType.Reference, ReferenceKind: DefinitionKind.Object, Source: Table),
         new FieldSchema("AllowedHeightVariationForBuilding", FieldType.Real, Source: Table),
         new FieldSchema("MinDistFromEdgeOfMapForBuild", FieldType.Real, Source: Table),
+        new FieldSchema("SupplyBuildBorder", FieldType.Real, Source: Table),
         new FieldSchema("HealthBonus_Veteran", FieldType.Percent, Source: Table),
         new FieldSchema("HealthBonus_Elite", FieldType.Percent, Source: Table),
         new FieldSchema("HealthBonus_Heroic", FieldType.Percent, Source: Table),

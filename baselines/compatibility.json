@@ -1615,15 +1615,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GameData/SupplyBuildBorder",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GameData/TerrainHeightAtEdgeOfMap",
       "count": 1,
       "owners": [

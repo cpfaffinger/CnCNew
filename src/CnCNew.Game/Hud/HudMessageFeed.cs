@@ -138,6 +138,7 @@ public sealed class HudMessageFeed
                     PlacementIssue.Shroud => "GUI:CantBuildShroud",
                     PlacementIssue.RestrictedTerrain => "GUI:CantBuildRestrictedTerrain",
                     PlacementIssue.NotFlatEnough => "GUI:CantBuildNotFlatEnough",
+                    PlacementIssue.TooCloseToSupplies => "GUI:CantBuildTooCloseToSupplies",
                     PlacementIssue.BlockedFootprint => "GUI:CantBuildObjectsInTheWay",
                     PlacementIssue.InsufficientFunds => "GUI:NotEnoughMoneyToBuild",
                     _ => "GUI:CantBuildThere",

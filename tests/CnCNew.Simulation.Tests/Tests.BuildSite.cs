@@ -17,6 +17,35 @@ static partial class Tests
           SellPercentage = 50%
           AllowedHeightVariationForBuilding = 10.0
           MinDistFromEdgeOfMapForBuild = 30.0
+          SupplyBuildBorder = 20.0
+        End
+        """,
+        ["Data/INI/Object/BuildSiteFixture.ini"] = """
+        Object SiteDock
+          KindOf = SELECTABLE STRUCTURE SUPPLY_SOURCE
+          Geometry = BOX
+          GeometryMajorRadius = 30.0
+          GeometryMinorRadius = 30.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+        End
+        Object SiteCenter
+          KindOf = SELECTABLE STRUCTURE CANNOT_BUILD_NEAR_SUPPLIES
+          BuildCost = 100
+          BuildTime = 1
+          Geometry = BOX
+          GeometryMajorRadius = 20.0
+          GeometryMinorRadius = 20.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
         End
         """,
     };
@@ -32,8 +61,8 @@ static partial class Tests
         return (world, feeder);
     }
 
-    private static LegalBuildCode SiteCode(SimulationWorld world, int x, int y, decimal angle = 0m)
-        => world.Templates.TryGet("Plant", out var plant) ? world.CheckBuildSite(new PlayerId(1), plant, Fixed.FromInt(x), Fixed.FromInt(y), Fixed.FromDecimal(angle)) : throw new InvalidOperationException("No Plant.");
+    private static LegalBuildCode SiteCode(SimulationWorld world, int x, int y, decimal angle = 0m, string template = "Plant")
+        => world.Templates.TryGet(template, out var site) ? world.CheckBuildSite(new PlayerId(1), site, Fixed.FromInt(x), Fixed.FromInt(y), Fixed.FromDecimal(angle)) : throw new InvalidOperationException($"No {template}.");
 
     /// <summary>
     /// The terrain rules. Off the map, closer to the edge than <c>MinDistFromEdgeOfMapForBuild</c>, on a cliff or on water: <c>LBC_RESTRICTED_TERRAIN</c>; a slope whose samples differ by more
@@ -56,6 +85,26 @@ static partial class Tests
             Check.That(feeder.Construct(1, 1, "Plant", 450, 200).Reason == CommandRejection.InvalidPlacement, $"{rate}: the order is refused on the hill.");
             Check.That(feeder.Construct(1, 1, "Plant", 200, 25).Reason == CommandRejection.InvalidPlacement, $"{rate}: the order is refused at the edge.");
             Check.That(feeder.Construct(1, 1, "Plant", 200, 200).Accepted, $"{rate}: the order is accepted on flat ground.");
+        }
+    }
+
+    /// <summary>
+    /// <c>CANNOT_BUILD_NEAR_SUPPLIES</c>: a supply center may not touch a supply source's footprint grown by <c>SupplyBuildBorder</c>; other buildings may, and so may a supply center beyond the
+    /// border. A turned site is measured turned. Before, a supply center could stand against the supplies.
+    /// </summary>
+    public static void BuildSiteKeepsItsDistanceToSupplies()
+    {
+        foreach (var (rate, _) in WorldRates)
+        {
+            var (world, feeder) = BuildSiteWorld(rate, TerrainMap.Build(SyntheticMaps.Build(60, 60, 1), "site"));
+            feeder.Spawn(1, "SiteDock", owner: 0, x: 300, y: 300);
+            world.Step();
+            // The dock reaches to 330, its border to 350: a center of radius 20 touches it up to 370.
+            Check.That(SiteCode(world, 365, 300, template: "SiteCenter") == LegalBuildCode.TooCloseToSupplies, $"{rate}: inside the border ({SiteCode(world, 365, 300, template: "SiteCenter")}).");
+            Check.That(SiteCode(world, 375, 300, template: "SiteCenter") == LegalBuildCode.Ok, $"{rate}: beyond the border ({SiteCode(world, 375, 300, template: "SiteCenter")}).");
+            Check.That(SiteCode(world, 365, 300) == LegalBuildCode.Ok, $"{rate}: any other building may stand there ({SiteCode(world, 365, 300)}).");
+            // Turned by 45 degrees the center's corner reaches 28 towards the dock: it touches the border up to 378.
+            Check.That(SiteCode(world, 375, 300, 0.7854m, "SiteCenter") == LegalBuildCode.TooCloseToSupplies, $"{rate}: a turned site is measured turned ({SiteCode(world, 375, 300, 0.7854m, "SiteCenter")}).");
         }
     }
 }

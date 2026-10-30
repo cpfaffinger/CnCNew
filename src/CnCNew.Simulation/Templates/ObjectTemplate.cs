@@ -295,9 +295,9 @@ public sealed class ObjectTemplate
 public sealed class TemplateBuildException(string message) : FormatException(message);
 
 /// <summary>The keys of <c>GameData</c> that shape a building site (F-18), zero without them as in <c>GlobalData::GlobalData</c>.</summary>
-public sealed record BuildSiteRules(Fixed HeightVariation, Fixed EdgeDistance)
+public sealed record BuildSiteRules(Fixed HeightVariation, Fixed EdgeDistance, Fixed SupplyBorder)
 {
-    public static BuildSiteRules None { get; } = new(Fixed.Zero, Fixed.Zero);
+    public static BuildSiteRules None { get; } = new(Fixed.Zero, Fixed.Zero, Fixed.Zero);
 }
 
 /// <summary>The low-energy production penalty of <c>GameData</c> (<c>ThingTemplate::calcTimeToBuild</c>).</summary>
@@ -516,7 +516,7 @@ public sealed class TemplateCatalog
     /// </summary>
     public Fixed GroundStiffness { get; private init; } = Fixed.FromDecimal(0.5m);
 
-    /// <summary><c>AllowedHeightVariationForBuilding</c> and <c>MinDistFromEdgeOfMapForBuild</c> of <c>GameData</c> (F-18).</summary>
+    /// <summary><c>AllowedHeightVariationForBuilding</c>, <c>MinDistFromEdgeOfMapForBuild</c> and <c>SupplyBuildBorder</c> of <c>GameData</c> (F-18).</summary>
     public BuildSiteRules BuildSite { get; private init; } = BuildSiteRules.None;
 
     /// <summary>Airfield bones read from the models (<see cref="ModelGeometry.None"/> when the host supplied none).</summary>
@@ -565,7 +565,7 @@ public sealed class TemplateCatalog
     {
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
         Fixed Get(string name) => gameData?.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal real ? Fixed.FromDecimal(real) : Fixed.Zero;
-        return new BuildSiteRules(Get("AllowedHeightVariationForBuilding"), Get("MinDistFromEdgeOfMapForBuild"));
+        return new BuildSiteRules(Get("AllowedHeightVariationForBuilding"), Get("MinDistFromEdgeOfMapForBuild"), Get("SupplyBuildBorder"));
     }
 
     private static LowEnergyRules ResolveLowEnergy(CompiledDefinitionGraph graph)

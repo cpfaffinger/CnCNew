@@ -13,6 +13,7 @@ public enum LegalBuildCode : byte
     NotFlatEnough,
     ObjectsInTheWay,
     Shroud,
+    TooCloseToSupplies,
 }
 
 public sealed partial class SimulationWorld
@@ -34,6 +35,30 @@ public sealed partial class SimulationWorld
         if (Navigation is not { } navigation) return LegalBuildCode.Ok;
         if (!navigation.Terrain.IsOnMap(x, y)) return LegalBuildCode.RestrictedTerrain;
         if (!navigation.IsFootprintClear(template, x, y, angle)) return LegalBuildCode.ObjectsInTheWay;
+        if (TooCloseToSupplies(template, x, y, angle)) return LegalBuildCode.TooCloseToSupplies;
         return BuildSiteTerrain.Check(navigation.Terrain, template, x, y, angle, _templates.BuildSite);
+    }
+
+    /// <summary>
+    /// "Special case for supply centers: can't build too close to supply sources": only the closest source counts (<c>getClosestObject</c> within the site's bounding circle and twice the border,
+    /// <c>FROM_BOUNDINGSPHERE_2D</c>, so from the source's circle), with its footprint grown by <c>SupplyBuildBorder</c>.
+    /// </summary>
+    private bool TooCloseToSupplies(ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
+    {
+        var border = _templates.BuildSite.SupplyBorder;
+        if (border <= Fixed.Zero || !template.IsKindOf("CANNOT_BUILD_NEAR_SUPPLIES")) return false;
+        var range = template.BoundingCircleRadius + border * Fixed.FromInt(2);
+        Entity? closest = null;
+        var nearest = Fixed.MaxValue;
+        foreach (var source in EntitiesOfKind("SUPPLY_SOURCE").AsSpan())
+        {
+            if (source.DestroyRequested) continue;
+            var (dx, dy) = (source.X - x, source.Y - y);
+            var distance = Fixed.Max(Fixed.Zero, Fixed.Sqrt(dx * dx + dy * dy) - source.Template.BoundingCircleRadius);
+            if (distance > range || distance >= nearest) continue;
+            nearest = distance;
+            closest = source;
+        }
+        return closest is not null && SiteShape.Collide(new SiteShape(template, x, y, angle), new SiteShape(closest.Template, closest.X, closest.Y, closest.Angle, border));
     }
 }
