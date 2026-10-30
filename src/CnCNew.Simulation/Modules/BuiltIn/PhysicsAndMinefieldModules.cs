@@ -159,11 +159,22 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     /// <summary>
     /// <c>doStuffToObj</c>'s throw of a created object (F-66): <c>setMass</c> for a piece of debris (<paramref name="mass"/> above zero), <c>applyForce</c> (the force divided by the mass
     /// waits for the next step as an acceleration), <c>setYawRate</c>, <c>setRollRate</c>, <c>setPitchRate</c>, <c>setAngles(orientation, 0, 0)</c> and, for <paramref name="bounce"/>,
-    /// <c>setAllowBouncing(true)</c>. The flight is the shocked object's without the stun, stepped once per logic frame of the original from the next one on.
+    /// <c>setAllowBouncing(true)</c>. The flight is the shocked object's without the stun, stepped once per logic frame of the original from the next one on. Before all of it
+    /// <c>INHERIT_VELOCITY</c> applies the source's velocity as a force (<paramref name="inherit"/>, divided by the object's own mass - the debris mass is set after it), and
+    /// <c>setExtraFriction</c> adds <paramref name="extraFriction"/> to the forward, lateral and aerodynamic frictions.
     /// </summary>
-    public void Launch(IWorldServices world, Fixed forceX, Fixed forceY, Fixed forceZ, Fixed yawRate, Fixed pitchRate, Fixed rollRate, bool rates, bool bounce, Fixed mass)
+    public void Launch(IWorldServices world, Fixed forceX, Fixed forceY, Fixed forceZ, Fixed yawRate, Fixed pitchRate, Fixed rollRate, bool rates, bool bounce, Fixed mass,
+        (Fixed X, Fixed Y, Fixed Z) inherit = default, Fixed extraFriction = default)
     {
+        if ((inherit.X.Raw | inherit.Y.Raw | inherit.Z.Raw) != 0)
+        {
+            var own = Mass;
+            _accelX += inherit.X / own;
+            _accelY += inherit.Y / own;
+            _accelZ += inherit.Z / own;
+        }
         if (mass > Fixed.Zero) _mass = mass;
+        _extraFriction = extraFriction;
         var effective = Mass;
         _accelX += forceX / effective;
         _accelY += forceY / effective;
@@ -190,6 +201,15 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
 
     /// <summary><c>setMass</c> of a debris nugget (0: the module's own).</summary>
     private Fixed _mass;
+
+    /// <summary><c>m_extraFriction</c>: a creation list's <c>ExtraFriction</c>, added to every friction (F-66).</summary>
+    private Fixed _extraFriction;
+
+    /// <summary>
+    /// <c>getVelocity</c> per logic frame of the original, for a created object's <c>INHERIT_VELOCITY</c>: the velocity of a fall or a flight. The port's locomotors do not move an
+    /// object through its physics module, so a unit that drives or flies under its locomotor has none here (the original's has its speed).
+    /// </summary>
+    public (Fixed X, Fixed Y, Fixed Z) Velocity => _flying || _falling ? (_velocityX, _velocityY, _velocityZ) : default;
 
     public void StartFall(IWorldServices world, Fixed velocityX, Fixed velocityY)
     {
@@ -287,15 +307,15 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
                 var dirY = FixedTrig.Sin(Entity.Angle);
                 var lateral = _velocityX * -dirY + _velocityY * dirX;
                 var forward = _velocityX * dirX + _velocityY * dirY;
-                var lf = Clamp(data.LateralFriction, MinNonAeroFriction, MaxFriction);
-                var ff = Clamp(data.ForwardFriction, MinNonAeroFriction, MaxFriction);
+                var lf = Clamp(data.LateralFriction + _extraFriction, MinNonAeroFriction, MaxFriction);
+                var ff = Clamp(data.ForwardFriction + _extraFriction, MinNonAeroFriction, MaxFriction);
                 _accelX -= lf * lateral * -dirY + ff * forward * dirX;
                 _accelY -= lf * lateral * dirX + ff * forward * dirY;
             }
         }
         else
         {
-            var aero = Clamp(data.AerodynamicFriction, Fixed.Zero, MaxFriction);
+            var aero = Clamp(data.AerodynamicFriction + _extraFriction, Fixed.Zero, MaxFriction);
             _accelX -= _velocityX * aero;
             _accelY -= _velocityY * aero;
             _accelZ -= _velocityZ * aero;
@@ -501,6 +521,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
     {
         writer.Int("nextWake", _nextWake);
         if (_mass > Fixed.Zero) writer.Fixed("mass", _mass);
+        if (_extraFriction != Fixed.Zero) writer.Fixed("extraFriction", _extraFriction);
         if (_flailing) writer.Bool("flailing", true);
         if (_stunnedPose) writer.Bool("stunnedPose", true);
         if (_flying) DescribeFlight(writer);
@@ -521,6 +542,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         _velocityZ = _falling ? reader.Fixed("velocityZ") : Fixed.Zero;
         _subStep = _falling && reader.Has("subStep") ? checked((int)reader.Int("subStep")) : 0;
         _mass = reader.Has("mass") ? reader.Fixed("mass") : Fixed.Zero;
+        _extraFriction = reader.Has("extraFriction") ? reader.Fixed("extraFriction") : Fixed.Zero;
         _flailing = reader.Has("flailing");
         _stunnedPose = reader.Has("stunnedPose");
         LoadFlight(reader);

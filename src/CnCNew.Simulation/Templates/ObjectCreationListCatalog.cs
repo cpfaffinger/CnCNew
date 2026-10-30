@@ -40,7 +40,8 @@ public sealed record CreationNugget(CreationNuggetKind Kind, int Count, Creation
 /// <summary>
 /// What <c>doStuffToObj</c> gives a created object with a physics module (F-66): the <c>Mass</c> of a debris nugget, <c>DispositionIntensity</c>, the spin and the yaw, roll and pitch
 /// rates (radians per logic frame of the original, below zero when absent - "calc it based on intensity"), the force range of <c>RANDOM_FORCE</c> (magnitudes, pitch in radians),
-/// <c>OrientInForceDirection</c>, and how many <c>AnimationSet</c>s a debris nugget has (one is drawn for each piece).
+/// <c>OrientInForceDirection</c>, and how many <c>AnimationSet</c>s a debris nugget has (one is drawn for each piece). <c>ExtraBounciness</c> is not kept: the original stores it
+/// on the physics module (<c>setExtraBounciness</c>) and never reads it.
 /// </summary>
 public sealed record CreationThrow(Fixed Mass, Fixed DispositionIntensity, Fixed SpinRate, Fixed YawRate, Fixed RollRate, Fixed PitchRate, Fixed MinForce, Fixed MaxForce,
     Fixed MinForcePitch, Fixed MaxForcePitch, bool OrientInForceDirection, int AnimationSets)
@@ -49,6 +50,9 @@ public sealed record CreationThrow(Fixed Mass, Fixed DispositionIntensity, Fixed
 
     /// <summary>The <c>ModelNames</c> of a debris nugget (every second word of each line, as <c>parseDebrisObjectNames</c> reads them): one is drawn for each piece (F-36).</summary>
     public ImmutableArray<string> Models { get; init; } = [];
+
+    /// <summary><c>ExtraFriction</c> (<c>parseFrictionPerSec</c>, per logic frame of the original): added to the physics module's frictions of the thrown object (<c>setExtraFriction</c>).</summary>
+    public Fixed ExtraFriction { get; init; }
 }
 
 /// <summary>
@@ -209,6 +213,7 @@ public sealed class ObjectCreationListCatalog
             Real("MinForceMagnitude"), Real("MaxForceMagnitude"), Radians("MinForcePitch"), Radians("MaxForcePitch"), Field("OrientInForceDirection")?.Value.Value is true, sets)
         {
             Models = models,
+            ExtraFriction = Real("ExtraFriction") / Fixed.FromInt(CnCNew.Data.OriginalFrame.PerSecond),
         };
     }
 

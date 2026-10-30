@@ -164,10 +164,14 @@ public sealed partial class SimulationWorld : IWorldServices
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default,
         bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default, long DeletionTicks = 0, Fixed ShroudRange = default,
-        SpawnThrow? Throw = null);
+        SpawnThrow? Throw = null, bool Floating = false);
 
-    /// <summary>The throw <c>doStuffToObj</c> gives a created object with a physics module (F-66): the force, the rates (with <see cref="Rates"/>), bouncing, a debris mass (0: none).</summary>
-    private readonly record struct SpawnThrow(Fixed ForceX, Fixed ForceY, Fixed ForceZ, Fixed Yaw, Fixed Pitch, Fixed Roll, bool Rates, bool Bounce, Fixed Mass);
+    /// <summary>
+    /// The throw <c>doStuffToObj</c> gives a created object with a physics module (F-66): the force, the rates (with <see cref="Rates"/>), bouncing, a debris mass (0: none), the
+    /// source's velocity applied as a force before the mass is set (<c>INHERIT_VELOCITY</c>) and the extra friction (<c>setExtraFriction</c>).
+    /// </summary>
+    private readonly record struct SpawnThrow(Fixed ForceX, Fixed ForceY, Fixed ForceZ, Fixed Yaw, Fixed Pitch, Fixed Roll, bool Rates, bool Bounce, Fixed Mass,
+        Fixed InheritX = default, Fixed InheritY = default, Fixed InheritZ = default, Fixed ExtraFriction = default);
 
     // Ticks per logic frame of the original: how long after the spawn phase that asked for it an object requested inside that phase appears (ProcessSpawns). 1 at 30 Hz.
     private readonly long _firstFrameTicks;
@@ -1866,7 +1870,16 @@ public sealed partial class SimulationWorld : IWorldServices
             foreach (var module in entity.ModuleArray)
                 if (module is Modules.BuiltIn.PhysicsBehavior physics)
                 {
-                    physics.Launch(this, thrown.ForceX, thrown.ForceY, thrown.ForceZ, thrown.Yaw, thrown.Pitch, thrown.Roll, thrown.Rates, thrown.Bounce, thrown.Mass);
+                    physics.Launch(this, thrown.ForceX, thrown.ForceY, thrown.ForceZ, thrown.Yaw, thrown.Pitch, thrown.Roll, thrown.Rates, thrown.Bounce, thrown.Mass,
+                        (thrown.InheritX, thrown.InheritY, thrown.InheritZ), thrown.ExtraFriction);
+                    break;
+                }
+        // FLOATING: findUpdateModule("FloatUpdate")->setEnabled(TRUE).
+        if (setup.Floating)
+            foreach (var module in entity.ModuleArray)
+                if (module is Modules.BuiltIn.FloatUpdate floating)
+                {
+                    floating.Enable(this);
                     break;
                 }
         // exitObjectViaDoor: the exit path of a produced unit (out of the factory first, then to the rally point); a spawn with only a rally point walks straight there.
@@ -2376,6 +2389,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (pending.NotBefore != 0) writer.Int("notBefore", pending.NotBefore);
             if (setup.DeletionTicks > 0) writer.Int("deletionTicks", setup.DeletionTicks);
             if (setup.ShroudRange > Fixed.Zero) writer.Fixed("shroudRange", setup.ShroudRange);
+            if (setup.Floating) writer.Bool("floating", true);
             if (setup.HasExit)
             {
                 writer.Fixed("doorX", setup.DoorX);
@@ -2417,6 +2431,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 }
                 if (thrown.Bounce) writer.Bool("throwBounce", true);
                 if (thrown.Mass > Fixed.Zero) writer.Fixed("throwMass", thrown.Mass);
+                if ((thrown.InheritX.Raw | thrown.InheritY.Raw | thrown.InheritZ.Raw) != 0)
+                {
+                    writer.Fixed("throwInheritX", thrown.InheritX);
+                    writer.Fixed("throwInheritY", thrown.InheritY);
+                    writer.Fixed("throwInheritZ", thrown.InheritZ);
+                }
+                if (thrown.ExtraFriction != Fixed.Zero) writer.Fixed("throwExtraFriction", thrown.ExtraFriction);
             }
             writer.EndObject();
         }

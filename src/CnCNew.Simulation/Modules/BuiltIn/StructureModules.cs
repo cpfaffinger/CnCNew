@@ -607,6 +607,14 @@ public sealed class FloatUpdate(FloatData data) : SimModule, IUpdateModule
         _nextWake = _enabled ? world.Tick + SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
+    /// <summary><c>setEnabled(TRUE)</c>: a creation list's <c>FLOATING</c> disposition (F-66).</summary>
+    public void Enable(IWorldServices world)
+    {
+        if (_enabled) return;
+        _enabled = true;
+        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+    }
+
     public long Update(IWorldServices world)
     {
         if (!_enabled) return SimulationTiming.SleepForever;

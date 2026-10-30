@@ -115,8 +115,12 @@ public sealed partial class SimulationWorld
                         ? new SpawnThrow(pending.Fixed("throwX"), pending.Fixed("throwY"), pending.Fixed("throwZ"),
                             pending.Has("throwYaw") ? pending.Fixed("throwYaw") : default, pending.Has("throwYaw") ? pending.Fixed("throwPitch") : default,
                             pending.Has("throwYaw") ? pending.Fixed("throwRoll") : default, pending.Has("throwYaw"), pending.Has("throwBounce"),
-                            pending.Has("throwMass") ? pending.Fixed("throwMass") : default)
-                        : null),
+                            pending.Has("throwMass") ? pending.Fixed("throwMass") : default,
+                            pending.Has("throwInheritX") ? pending.Fixed("throwInheritX") : default, pending.Has("throwInheritX") ? pending.Fixed("throwInheritY") : default,
+                            pending.Has("throwInheritX") ? pending.Fixed("throwInheritZ") : default,
+                            pending.Has("throwExtraFriction") ? pending.Fixed("throwExtraFriction") : default)
+                        : null,
+                    pending.Has("floating")),
                 pending.Has("notBefore") ? pending.Int("notBefore") : 0));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));

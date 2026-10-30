@@ -94,6 +94,20 @@ static partial class Tests
             DispositionIntensity = 2.0
           End
         End
+        ObjectCreationList OCL_CtOutRough
+          CreateObject
+            ObjectNames = CtCrate
+            Disposition = SEND_IT_OUT
+            DispositionIntensity = 2.0
+            ExtraFriction = 15.0
+          End
+        End
+        ObjectCreationList OCL_CtInherit
+          CreateObject
+            ObjectNames = CtCrate
+            Disposition = LIKE_EXISTING INHERIT_VELOCITY
+          End
+        End
         """;
 
     /// <summary>
@@ -210,6 +224,63 @@ static partial class Tests
                 var first = Enumerable.Range(0, Math.Min(a.Length, b.Length)).FirstOrDefault(index => a[index] != b[index], -1);
                 Check.That(first < 0 && a.Length == b.Length, $"{rate}: the soldier is where 30 Hz has it at the end of every frame (first difference: {(first < 0 ? "-" : a[first] + " against " + b[first])}).");
             }
+        }
+    }
+
+    /// <summary>
+    /// The rest of F-66 (<c>doStuffToObj</c>): <c>ExtraFriction</c> is added to the frictions of the pushed crate (<c>setExtraFriction</c>), so the same push slides it a shorter way;
+    /// <c>INHERIT_VELOCITY</c> gives a crate made by a flying crate the source's velocity as a force, so it flies on and rests away from where it was made. The same resting places at
+    /// 30, 60 and 120 Hz. Before, the extra friction was not read and the inherited velocity not applied: the rough crate slid as far as the smooth one, and the made crate stood.
+    /// </summary>
+    public static void CreationListFrictionAndInheritedVelocity()
+    {
+        (SimulationWorld World, Feeder Feeder) Make(SimulationRate rate)
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(CreationThrowIni));
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            return (world, new Feeder(world));
+        }
+
+        (long X, long Y) Slide(SimulationRate rate, string list)
+        {
+            var (world, feeder) = Make(rate);
+            var source = GdSpawn(world, feeder, "CtSource", 1, 100, 100);
+            world.CreateFromList(source, list, EntityId.Invalid, false);
+            for (var step = 0; step < world.Frames(300); step++) world.Step();
+            var crate = world.Entities.Single(value => value.Template.Name == "CtCrate");
+            Check.That(!crate.Modules.OfType<PhysicsBehavior>().Single().Flying, $"{rate} {list}: the crate rests.");
+            return (crate.X.Raw - Fixed.FromInt(100).Raw, crate.Y.Raw - Fixed.FromInt(100).Raw);
+        }
+
+        (long X, long Y, long MadeX, long MadeY) Inherit(SimulationRate rate)
+        {
+            var (world, feeder) = Make(rate);
+            var source = GdSpawn(world, feeder, "CtSource", 1, 100, 100);
+            world.CreateFromList(source, "OCL_CtOut", EntityId.Invalid, false);
+            world.Step();
+            var flyer = world.Entities.Single(value => value.Template.Name == "CtCrate");
+            // Three whole frames of the slide, then the crate makes another where its frame ends.
+            while ((world.Tick - flyer.SpawnTick) % world.Time.TicksPerOriginalFrame != 0 || world.Tick - flyer.SpawnTick < 3 * world.Time.TicksPerOriginalFrame) world.Step();
+            Check.That(flyer.InPhysicsFlight, $"{rate}: the first crate still slides.");
+            var (madeX, madeY) = (flyer.X, flyer.Y);
+            world.CreateFromList(flyer, "OCL_CtInherit", EntityId.Invalid, false);
+            world.Step();
+            var made = world.Entities.Where(value => value.Template.Name == "CtCrate").OrderBy(value => value.Id.Value).Last();
+            for (var step = 0; step < world.Frames(300); step++) world.Step();
+            Check.That(!made.Modules.OfType<PhysicsBehavior>().Single().Flying, $"{rate}: the made crate rests.");
+            return (made.X.Raw, made.Y.Raw, madeX.Raw, madeY.Raw);
+        }
+
+        static long Length((long X, long Y) way) => Math.Abs(way.X) + Math.Abs(way.Y);
+        var smooth = Slide(SimulationRate.Hz30, "OCL_CtOut");
+        var rough = Slide(SimulationRate.Hz30, "OCL_CtOutRough");
+        Check.That(Length(rough) > 0 && Length(rough) < Length(smooth), $"ExtraFriction: the rough crate slides a shorter way ({Length(rough)} against {Length(smooth)}).");
+        var inherited = Inherit(SimulationRate.Hz30);
+        Check.That((inherited.X, inherited.Y) != (inherited.MadeX, inherited.MadeY), "INHERIT_VELOCITY: the made crate flies on from where it was made.");
+        foreach (var rate in new[] { SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            Check.That(Slide(rate, "OCL_CtOutRough") == rough, $"{rate}: the rough crate rests where it rests at 30 Hz.");
+            Check.That(Inherit(rate) == inherited, $"{rate}: the made crate rests where it rests at 30 Hz.");
         }
     }
 }

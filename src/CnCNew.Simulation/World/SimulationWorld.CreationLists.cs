@@ -349,6 +349,8 @@ public sealed partial class SimulationWorld
         var cast = nugget.Throw ?? CreationThrow.None;
         var intensity = cast.DispositionIntensity;
         SpawnThrow? thrown = null;
+        // INHERIT_VELOCITY: the source's velocity becomes a force on the object, before anything else of the throw.
+        var inherit = disposition.HasFlag(CreationDisposition.InheritVelocity) && physics && SourcePhysics(source) is { } sourcePhysics ? sourcePhysics.Velocity : default;
         if (disposition.HasFlag(CreationDisposition.LikeExisting)) angle = source.Angle;
         if (disposition.HasFlag(CreationDisposition.OnGroundAligned))
         {
@@ -366,7 +368,7 @@ public sealed partial class SimulationWorld
                 var fx = LogicRandom.Range(-horizontal, horizontal);
                 var fy = LogicRandom.Range(-horizontal, horizontal);
                 if (cast.OrientInForceDirection) angle = FixedTrig.Atan2(fy, fx);
-                thrown = new SpawnThrow(fx, fy, Fixed.Zero, default, default, default, false, false, Fixed.Zero);
+                thrown = new SpawnThrow(fx, fy, Fixed.Zero, default, default, default, false, false, Fixed.Zero, ExtraFriction: cast.ExtraFriction);
             }
         }
         if ((disposition & (CreationDisposition.SendItFlying | CreationDisposition.SendItUp | CreationDisposition.RandomForce)) != 0)
@@ -409,7 +411,7 @@ public sealed partial class SimulationWorld
                     (fx, fy, fz) = (level * FixedTrig.Cos(heading), level * FixedTrig.Sin(heading), magnitude * FixedTrig.Sin(raise));
                 }
                 if (cast.OrientInForceDirection) angle = FixedTrig.Atan2(fy, fx);
-                thrown = new SpawnThrow(fx, fy, fz, yaw, pitch, roll, true, true, Fixed.Zero);
+                thrown = new SpawnThrow(fx, fy, fz, yaw, pitch, roll, true, true, Fixed.Zero, ExtraFriction: cast.ExtraFriction);
             }
         }
         if (disposition.HasFlag(CreationDisposition.Whirling) && physics)
@@ -419,6 +421,13 @@ public sealed partial class SimulationWorld
             var pitch = LogicRandom.Range(-intensity, intensity);
             var before = thrown ?? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero);
             thrown = before with { Yaw = yaw, Pitch = pitch, Roll = roll, Rates = true };
+        }
+        // "if (!m_nameAreObjects) objUp->setMass(m_mass)" belongs to the dispositions that throw, not to the inherited velocity.
+        var massed = thrown is not null;
+        if ((inherit.X.Raw | inherit.Y.Raw | inherit.Z.Raw) != 0)
+        {
+            var before = thrown ?? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero);
+            thrown = before with { InheritX = inherit.X, InheritY = inherit.Y, InheritZ = inherit.Z };
         }
 
         // ObjectCreationList::create(..., lifetimeFrames): a lifetime handed in by the caller (FireOCLAfterWeaponCooldownUpdate) replaces the nugget's own.
@@ -430,8 +439,16 @@ public sealed partial class SimulationWorld
             EntityId.Invalid, nugget.ContainInsideSourceObject ? source.Id : EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
             Enslaver: template.Modules.Any(spec => spec.Binding.Name is "SlavedUpdate" or "MobMemberSlavedUpdate") ? source.Id : EntityId.Invalid,
             // "if (!m_nameAreObjects) objUp->setMass(m_mass)": a piece of debris takes the nugget's mass for the forces of its throw.
-            Throw: debris && thrown is { } piece ? piece with { Mass = cast.Mass } : thrown);
+            Throw: debris && massed && thrown is { } piece ? piece with { Mass = cast.Mass } : thrown,
+            Floating: disposition.HasFlag(CreationDisposition.Floating));
         return (setup, (x, y, z, angle));
+    }
+
+    private static Modules.BuiltIn.PhysicsBehavior? SourcePhysics(Entity source)
+    {
+        foreach (var module in source.ModuleArray)
+            if (module is Modules.BuiltIn.PhysicsBehavior physics) return physics;
+        return null;
     }
 
     private static (Fixed X, Fixed Y) Rotate(Fixed x, Fixed y, Fixed angle)
