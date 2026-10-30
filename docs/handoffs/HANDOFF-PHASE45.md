@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package G) · **Phase:** 45
-> **Status:** in progress (starting state: the end of Phase 44, see below)
+> **Status:** done by machine (30 October 2026); the rest is in HANDOFF-PHASE46.md
 > **Predecessor:** HANDOFF-PHASE44.md · **Results in:** docs/SIMULATION-CORE.md §59, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** F-71 (a move target that differs between the rates), the creation list's `ExtraBounciness`, `ExtraFriction`, `INHERIT_VELOCITY` and `FLOATING` (F-66's rest)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -53,4 +53,9 @@ commit; the checks the changes can reach green.
 
 ## Progress
 
-Nothing yet.
+- F-68 (§59.1, `d5dd6f7`, manifests `01cac31`; the AI survey of the GLA pairings before and after in §59.1), F-69 in four steps (§59.7: `2660db5` / `ebd4645`, `110c89a`,
+  `0fdc183` / `2a9a863`, `2c64747` / `09ac1e1`, the presentation's test `e840d52`), F-71 (§59.3, `54a76f6` / `4680ac8`), F-66's rest (§59.9, `f1f953a`, input manifest `6c9c5d6`).
+- Found on the way: F-70 (§59.2, `5a26040` / `829f945`), and by comparing the default matches across rates F-72 (§59.4, `0e87e10` / `534cdac`), F-73 (§59.5, `dc4e064` / `b517483`),
+  F-74 (§59.6, `236badc` / `c46f1d7`), F-75 (§59.8, `eb32bdc` / `4272771`); registered F-76 (the next difference on Bitter Winter).
+- Since F-72 the retail reference match with driver seed `5EED0001` ran to its limit: the seed is `5EED0004` (§59.10, `089ad43` / `f590320`).
+- Carried into `HANDOFF-PHASE46.md`: F-76, F-35, a locomotor's velocity for `INHERIT_VELOCITY`. Closing measurements: `CLAUDE.md`, paragraph "Phase 45".

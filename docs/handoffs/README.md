@@ -75,7 +75,8 @@ phase number is 32.
 | **42** | [HANDOFF-PHASE42.md](HANDOFF-PHASE42.md) | **S1-M11** | Fidelity package D: the weapon's shock wave (F-63), a deploying and a flying guard (F-58 step 7), clearing a garrison and the rest of F-60, F-54's open ends | **done** by machine (29 October 2026): §56 |
 | **43** | [HANDOFF-PHASE43.md](HANDOFF-PHASE43.md) | **S1-M11** | Fidelity package E: an attack on a place (F-64) | **done** by machine (29 October 2026): §57 |
 | **44** | [HANDOFF-PHASE44.md](HANDOFF-PHASE44.md) | **S1-M11** | Fidelity package F: slow deaths (F-37), the slaves of a spawner (F-65), thrown objects (F-66), debris (F-36), the bored dozer (F-67) | **done** by machine (29 October 2026): §58 |
-| **45** | [HANDOFF-PHASE45.md](HANDOFF-PHASE45.md) | **S1-M11** | Fidelity package G: the worker's two brains (F-68), mine clearing (F-69), a rate difference (F-71) | **next** |
+| **45** | [HANDOFF-PHASE45.md](HANDOFF-PHASE45.md) | **S1-M11** | Fidelity package G: the worker's two brains (F-68), mine clearing (F-69), five rate differences (F-71 to F-75), F-66's rest | **done** by machine (30 October 2026): §59 |
+| **46** | [HANDOFF-PHASE46.md](HANDOFF-PHASE46.md) | **S1-M11** | Fidelity package H: team orders as group orders (F-35), the next rate difference (F-76) | **next** |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 
