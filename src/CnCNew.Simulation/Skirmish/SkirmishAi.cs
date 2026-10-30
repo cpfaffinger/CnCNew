@@ -792,8 +792,9 @@ public sealed partial class SkirmishAi
 
     /// <summary>
     /// <c>AIPlayer::buildBySupplies</c>: a supply center goes next to a supply source — three cells from the warehouse toward the base, and if that spot is not legal the first legal
-    /// one on growing squares around it (two cells wider each time, up to twice <see cref="SupplyCenterCloseDistance"/>). A spot the player has not explored yet cannot be built on
-    /// (<c>ConstructCommand</c>), so the builder is first sent there to look. Without any supply source on the map the center goes up at the base like every other structure.
+    /// one on growing squares around it (two cells wider each time, up to twice <see cref="SupplyCenterCloseDistance"/>; the whole walk in one think, as the original does: a shipped dock with
+    /// its border and the AI's bib pushes the first legal spot some 14 cells out). A spot the player has not explored yet cannot be built on (<c>ConstructCommand</c>), so the builder is first
+    /// sent there to look. Without any supply source on the map the center goes up at the base like every other structure.
     /// </summary>
     private (Fixed X, Fixed Y)? FindSupplyPlacement(ObjectTemplate template, Entity builder, HashSet<uint> used)
     {
@@ -818,11 +819,9 @@ public sealed partial class SkirmishAi
 
         var radius = template.BoundingCircleRadius;
         var gap = Fixed.FromInt(12);
-        var checks = 0;
         var paths = 0;
         (Fixed X, Fixed Y)? Try(Fixed x, Fixed y)
         {
-            if (++checks > PlacementChecksPerThink) return null;
             foreach (var entity in _structures) if (Clash(entity, radius, gap, x, y)) return null;
             foreach (var entity in _sites) if (Clash(entity, radius, gap, x, y)) return null;
             foreach (var (spotX, spotY) in _badSpots) if (DistanceSquared(spotX, spotY, x, y) < Fixed.FromInt(900)) return null;
@@ -847,7 +846,6 @@ public sealed partial class SkirmishAi
                 if (Try(originX - half, y) is { } left) return left;
                 if (Try(originX - half + size, y) is { } right) return right;
             }
-            if (checks > PlacementChecksPerThink) break;
         }
         return null;
     }

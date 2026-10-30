@@ -105,6 +105,8 @@ public sealed class ObjectTemplate
         GeometryMajorRadius = Real(definition, "GeometryMajorRadius");
         GeometryMinorRadius = Real(definition, "GeometryMinorRadius");
         GeometryHeight = Real(definition, "GeometryHeight");
+        FactoryExitWidth = Real(definition, "FactoryExitWidth");
+        FactoryExtraBibWidth = Real(definition, "FactoryExtraBibWidth");
         GeometryIsSmall = definition.Fields.LastOrDefault(field => field.Name.Equals("GeometryIsSmall", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         VisionRange = Real(definition, "VisionRange");
         ShroudClearingRange = definition.Fields.Any(field => field.Name.Equals("ShroudClearingRange", StringComparison.OrdinalIgnoreCase)) ? Real(definition, "ShroudClearingRange") : VisionRange;
@@ -161,6 +163,12 @@ public sealed class ObjectTemplate
     public Fixed LaserBeamRadius { get; }
     public Fixed GeometryMinorRadius { get; }
     public Fixed GeometryHeight { get; }
+
+    /// <summary><c>FactoryExitWidth</c>: how much room a factory keeps free in front of it (F-18).</summary>
+    public Fixed FactoryExitWidth { get; }
+
+    /// <summary><c>FactoryExtraBibWidth</c>: how much room a building keeps free around it (F-18).</summary>
+    public Fixed FactoryExtraBibWidth { get; }
 
     public bool IsBox => Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
     private bool IsSphere => Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase);
@@ -286,6 +294,7 @@ public sealed class ObjectTemplate
         return field?.Value.Value switch
         {
             Distance distance => Fixed.FromDecimal(distance.Value),
+            decimal real => Fixed.FromDecimal(real),
             CompatibilityValue compatibility => Fixed.FromDecimal(decimal.Parse(compatibility.NormalizedValue, CultureInfo.InvariantCulture)),
             _ => Fixed.Zero,
         };

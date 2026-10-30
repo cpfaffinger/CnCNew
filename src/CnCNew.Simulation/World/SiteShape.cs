@@ -23,6 +23,19 @@ internal readonly struct SiteShape
         _minor = (_box ? template.GeometryMinorRadius : template.GeometryMajorRadius) + grow;
     }
 
+    private SiteShape(Fixed x, Fixed y, Fixed angle, Fixed major, Fixed minor, bool box)
+    {
+        (_x, _y) = (x, y);
+        (_cos, _sin) = (FixedTrig.Cos(angle), FixedTrig.Sin(angle));
+        (_major, _minor, _box) = (major, minor, box);
+    }
+
+    /// <summary>A rectangle: a building's bounds with its bib (<c>isLocationClearOfObjects</c> makes them a box whatever the geometry).</summary>
+    public static SiteShape Bounds(Fixed x, Fixed y, Fixed angle, Fixed major, Fixed minor) => new(x, y, angle, major, minor, true);
+
+    /// <summary>A factory's exit: a rectangle in front of a box, a circle in front of anything else.</summary>
+    public static SiteShape Exit(Fixed x, Fixed y, Fixed angle, Fixed major, Fixed minor, bool box) => new(x, y, angle, major, minor, box);
+
     public static bool Collide(in SiteShape a, in SiteShape b)
     {
         if (!a._box && !b._box)

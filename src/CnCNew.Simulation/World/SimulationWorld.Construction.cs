@@ -59,7 +59,7 @@ public sealed partial class SimulationWorld
             return CommandRejection.MissingPrerequisite;
         if (ExceedsMaxSimultaneousOfType(owner, found)) return CommandRejection.ProductionLimitReached;
         if (owner.Money < ProductionCostOf(owner, found)) return CommandRejection.InsufficientFunds;
-        return CheckBuildSite(owner.Id, found, construct.X, construct.Y, construct.Angle) == LegalBuildCode.Ok ? 0 : CommandRejection.InvalidPlacement;
+        return CheckBuildSite(builder, found, construct.X, construct.Y, construct.Angle) == LegalBuildCode.Ok ? 0 : CommandRejection.InvalidPlacement;
     }
 
     /// <summary><c>Player::canBuild</c> (buildable status) plus the builder's command set, approximated by the shared <c>Side</c>.</summary>
@@ -156,6 +156,8 @@ public sealed partial class SimulationWorld
 
     private void StartConstruction(PlayerId issuer, Entity builder, ObjectTemplate template, ConstructCommand construct)
     {
+        // "We tried to move our units out of the way, but they wouldn't" (buildObjectNow): the AI gets to cheat.
+        if (!ClearSite(builder.Owner, template, construct.X, construct.Y, construct.Angle) && !_players[builder.Owner.Value].IsComputer) return;
         var constructionCost = ProductionCostOf(_players[builder.Owner.Value], template);
         _players[builder.Owner.Value].Money -= constructionCost;
         var site = SpawnEntity(new PendingSpawn(Ids.AllocateEntity(), template.Index, builder.Owner, construct.X, construct.Y, Fixed.Zero, construct.Angle), builder.Id);

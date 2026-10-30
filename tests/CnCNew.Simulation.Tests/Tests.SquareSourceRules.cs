@@ -35,6 +35,7 @@ static partial class Tests
         // -- geometry of a template or of a growing shape: the largest retail radius is 1,117 (rate-audit --ranges)
         new("Simulation/Templates/ObjectTemplate.cs", RuleSelfProduct, "public Fixed BoundingCircleRadius =>", "the diagonal of a box of the template's geometry"),
         new("Simulation/Templates/ObjectTemplate.cs", RuleSelfProduct, "if (IsBox) return Fixed.Sqrt(", "the diagonal of a box of the template's geometry"),
+        new("Simulation/World/SimulationWorld.BuildSite.cs", RuleSelfProduct, "var radius = Fixed.Sqrt(template.GeometryMajorRadius", "the diagonal of the template's geometry (moveObjectsForConstruction)"),
         new("Simulation/Modules/BuiltIn/WorldEffectModules.cs", RuleSelfProduct, "_current.Major * _current.Major", "the diagonal of the firestorm's current box (FinalMajor of the data: at most 90)"),
         new("Simulation/Modules/BuiltIn/ToppleAndFallModules.cs", RuleSelfProduct, "var facingWidth = Fixed.Sqrt(majorComponent * majorComponent", "the projection of the footprint (the template's geometry radii times a sine or cosine)"),
         // -- speeds per tick and fractions between 0 and 1

@@ -93,6 +93,7 @@ run.Test("Boarding: infantry walks into its transport instead of around it, the 
 run.Test("Rate invariance, consolidation: movers that meet are where the 30 Hz movers are", Tests.RateConsolidationMoversThatMeetAreTheSame);
 run.Test("Phase 50 (F-18): the terrain rules of a building site", Tests.BuildSiteTerrainRules);
 run.Test("Phase 50 (F-18): a supply center keeps its distance to the supplies", Tests.BuildSiteKeepsItsDistanceToSupplies);
+run.Test("Phase 50 (F-18): the objects under a building site", Tests.BuildSiteClearsItsGround);
 run.Test("Rate invariance, exits: produced units leave their factory, make room and reach the rally point as at 30 Hz", Tests.RateExitsAreTheSame);
 run.Test("Phase 49 (F-80): a unit on its exit path looks for victims in the frames it does at 30 Hz", Tests.ExitPathAcquisitionIsTheSameAtEveryRate);
 run.Test("Phase 49 (F-81): a disabled module wakes on the frames of its object", Tests.DisabledModuleWakesOnItsFrames);
@@ -723,6 +724,7 @@ if (contentDirectory is not null) run.Test("Real data: Ranger, Red Guard, Rebel 
 if (contentDirectory is not null) run.Test("Real data: turrets of the Crusader, the Battlemaster, the sweeping guns and the linked battleships", () => Tests.RealTurrets(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a Crusader keeps its turret on a Battlemaster it chases; retail turrets scan while idle", () => Tests.RealTurretAttackAndScan(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail AutoAcquire flags; a Crusader and a Battlemaster fight without orders", () => Tests.RealAcquisition(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: computer players raise their supply center beside the shipped dock (F-18)", () => Tests.RealComputerPlayersBuildBesideTheDock(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI with the shipped script library on Alpine Assault", () => Tests.RealOriginalSkirmishAi(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI plays the same match at 30, 60 and 120 Hz", () => Tests.RealOriginalSkirmishAiAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a session of the original skirmish AI saved inside a frame at 60 and 120 Hz continues identically", () => Tests.RealOriginalSkirmishAiContinuesFromAnyTick(contentDirectory));

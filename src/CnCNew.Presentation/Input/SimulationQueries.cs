@@ -151,7 +151,7 @@ public static class SimulationQueries
         if (!CanBuildTemplate(world, player, builder, template)) return PlacementIssue.CannotConstruct;
         if (!PrerequisitesSatisfied(world, player, template)) return PlacementIssue.MissingPrerequisite;
         if (world.MoneyOf(player) < template.BuildCost) return PlacementIssue.InsufficientFunds;
-        return world.CheckBuildSite(player, template, x, y, angle) switch
+        return world.CheckBuildSite(builder, template, x, y, angle) switch
         {
             LegalBuildCode.Ok => PlacementIssue.None,
             LegalBuildCode.RestrictedTerrain => PlacementIssue.RestrictedTerrain,

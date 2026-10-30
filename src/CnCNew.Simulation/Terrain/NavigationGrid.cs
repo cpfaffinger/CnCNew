@@ -234,16 +234,6 @@ public sealed class NavigationGrid
         _memoStale = true;
     }
 
-    /// <summary>No footprint of another object under the template's: the terrain under it is a question of <see cref="BuildSiteTerrain"/>.</summary>
-    public bool IsFootprintClear(ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
-    {
-        var footprint = new Footprint(template, x, y, angle);
-        for (var cy = footprint.Y0; cy <= footprint.Y1; cy++)
-            for (var cx = footprint.X0; cx <= footprint.X1; cx++)
-                if (Terrain.IsInside(cx, cy) && _obstacles[cy * Terrain.CellsX + cx] > 0 && footprint.Contains(cx, cy)) return false;
-        return true;
-    }
-
     public bool IsBlockedByObstacle(int cx, int cy) => Terrain.IsInside(cx, cy) && _obstacles[cy * Terrain.CellsX + cx] > 0;
 
     /// <summary>
