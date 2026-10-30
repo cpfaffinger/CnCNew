@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package H) · **Phase:** 46
-> **Status:** next (starting state: the end of Phase 45, see below)
+> **Status:** done by machine (30 October 2026); the rest is in HANDOFF-PHASE47.md
 > **Predecessor:** HANDOFF-PHASE45.md · **Results in:** docs/SIMULATION-CORE.md §60, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** a locomotor's velocity for `INHERIT_VELOCITY` (F-66's named difference), the next rate differences the default matches show after F-76
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -53,4 +53,10 @@ commit; the checks the changes can reach green.
 
 ## Progress
 
-Nothing yet.
+- F-76 (§60.1, `86e363c`, manifest `ad7d42a`): a turret's hold after a dead victim counts from the next frame; Bitter Winter agrees at 30 and 60 Hz to frame 33,486.
+- F-35 (§60.2): the script's team move (`204c126`, manifest `29b4b97`), the walking reinforcements and the approach path move (`7633bac`, no field moved) are group orders; the
+  waypoint following and the hunt are orders per member in the original too - the VM's 40-unit arrival is registered as F-78; the built-in AI's army orders are not the original's.
+- Registered: F-77 (the hulk of a dying supply truck on Bitter Winter takes another heading at 60 Hz), F-78.
+- The rate comparison needs the options of Phase 45 (`--frames 50000 --persist 10 --ignore ...constructionProgress|DynamicShroudClearingRange`); without them construction progress,
+  spread differently inside a frame on purpose, shows as a difference at frame 168.
+- Carried into `HANDOFF-PHASE47.md`: F-77, F-78, a locomotor's velocity for `INHERIT_VELOCITY`. Closing measurements: `CLAUDE.md`, paragraph "Phase 46".
