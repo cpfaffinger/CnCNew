@@ -294,6 +294,12 @@ public sealed class ObjectTemplate
 
 public sealed class TemplateBuildException(string message) : FormatException(message);
 
+/// <summary>The keys of <c>GameData</c> that shape a building site (F-18), zero without them as in <c>GlobalData::GlobalData</c>.</summary>
+public sealed record BuildSiteRules(Fixed HeightVariation, Fixed EdgeDistance)
+{
+    public static BuildSiteRules None { get; } = new(Fixed.Zero, Fixed.Zero);
+}
+
 /// <summary>The low-energy production penalty of <c>GameData</c> (<c>ThingTemplate::calcTimeToBuild</c>).</summary>
 public sealed record LowEnergyRules(Fixed PenaltyModifier, Fixed MinProductionSpeed, Fixed MaxProductionSpeed)
 {
@@ -466,6 +472,7 @@ public sealed class TemplateCatalog
             GroundStiffness = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("GroundStiffness", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal stiffness ? Fixed.FromDecimal(stiffness) : Fixed.FromDecimal(0.5m),
             LowEnergy = ResolveLowEnergy(graph),
+            BuildSite = ResolveBuildSite(graph),
             SpecialPowerViewObject = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("SpecialPowerViewObject", StringComparison.OrdinalIgnoreCase))?.Value.Value is DefinitionReference { IsNone: false } view ? view.Name : string.Empty,
             Geometry = geometry ?? ModelGeometry.None,
@@ -509,6 +516,9 @@ public sealed class TemplateCatalog
     /// </summary>
     public Fixed GroundStiffness { get; private init; } = Fixed.FromDecimal(0.5m);
 
+    /// <summary><c>AllowedHeightVariationForBuilding</c> and <c>MinDistFromEdgeOfMapForBuild</c> of <c>GameData</c> (F-18).</summary>
+    public BuildSiteRules BuildSite { get; private init; } = BuildSiteRules.None;
+
     /// <summary>Airfield bones read from the models (<see cref="ModelGeometry.None"/> when the host supplied none).</summary>
     public ModelGeometry Geometry { get; private init; } = ModelGeometry.None;
 
@@ -551,6 +561,13 @@ public sealed class TemplateCatalog
     }
 
     /// <summary>Absent keys: the reference's defaults of <c>GlobalData</c> (all 0.0).</summary>
+    private static BuildSiteRules ResolveBuildSite(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        Fixed Get(string name) => gameData?.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal real ? Fixed.FromDecimal(real) : Fixed.Zero;
+        return new BuildSiteRules(Get("AllowedHeightVariationForBuilding"), Get("MinDistFromEdgeOfMapForBuild"));
+    }
+
     private static LowEnergyRules ResolveLowEnergy(CompiledDefinitionGraph graph)
     {
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();

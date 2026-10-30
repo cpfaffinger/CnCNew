@@ -136,6 +136,9 @@ public sealed class HudMessageFeed
                 Message(issue switch
                 {
                     PlacementIssue.Shroud => "GUI:CantBuildShroud",
+                    PlacementIssue.RestrictedTerrain => "GUI:CantBuildRestrictedTerrain",
+                    PlacementIssue.NotFlatEnough => "GUI:CantBuildNotFlatEnough",
+                    PlacementIssue.BlockedFootprint => "GUI:CantBuildObjectsInTheWay",
                     PlacementIssue.InsufficientFunds => "GUI:NotEnoughMoneyToBuild",
                     _ => "GUI:CantBuildThere",
                 });

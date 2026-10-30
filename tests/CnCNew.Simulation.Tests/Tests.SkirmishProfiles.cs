@@ -66,7 +66,7 @@ static partial class Tests
         var terrain = TerrainMap.Build(map, "skirmish-profiles");
         var frames = fixture.Templates.Rate.TicksPerOriginalFrame;
         var firstWave = new Dictionary<AiTactics, long>();
-        // The most base defences a profile has raised while its army was smaller than six (before the balanced AI's rule of one per six units starts).
+        // The most base defences a profile has begun while its army was smaller than six (before the balanced AI's rule of one per six units starts).
         var towers = new Dictionary<AiTactics, int>();
         foreach (var tactics in new[] { AiTactics.Balanced, AiTactics.Rush, AiTactics.Turtle, AiTactics.Eco })
         {
@@ -83,7 +83,7 @@ static partial class Tests
                 if (session.World.Tick % (15L * frames) != 0) continue;
                 var own = session.World.Entities.Where(entity => entity.Owner == owner && !entity.EffectivelyDead).ToList();
                 if (own.Count(entity => entity.Template.Name is "AlphaSoldier" or "AlphaTank") < 6)
-                    early = Math.Max(early, own.Count(entity => entity.Template.Name == "AlphaTower" && !entity.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction)));
+                    early = Math.Max(early, own.Count(entity => entity.Template.Name == "AlphaTower"));
             }
             firstWave[tactics] = wave < 0 ? long.MaxValue : wave / frames;
             towers[tactics] = early;

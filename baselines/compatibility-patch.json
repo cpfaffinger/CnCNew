@@ -391,15 +391,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GameData/AllowedHeightVariationForBuilding",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GameData/AmmoPipScaleFactor",
       "count": 1,
       "owners": [
@@ -1220,15 +1211,6 @@
     {
       "category": "deferred-field",
       "name": "GameData/MinCameraHeight",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/MinDistFromEdgeOfMapForBuild",
       "count": 1,
       "owners": [
         "GameData"

@@ -59,10 +59,7 @@ public sealed partial class SimulationWorld
             return CommandRejection.MissingPrerequisite;
         if (ExceedsMaxSimultaneousOfType(owner, found)) return CommandRejection.ProductionLimitReached;
         if (owner.Money < ProductionCostOf(owner, found)) return CommandRejection.InsufficientFunds;
-        if (Navigation is { } navigation
-            && (!navigation.IsFootprintLegal(found, construct.X, construct.Y, construct.Angle) || !IsPositionExploredBy(owner.Id, construct.X, construct.Y)))
-            return CommandRejection.InvalidPlacement;
-        return 0;
+        return CheckBuildSite(owner.Id, found, construct.X, construct.Y, construct.Angle) == LegalBuildCode.Ok ? 0 : CommandRejection.InvalidPlacement;
     }
 
     /// <summary><c>Player::canBuild</c> (buildable status) plus the builder's command set, approximated by the shared <c>Side</c>.</summary>

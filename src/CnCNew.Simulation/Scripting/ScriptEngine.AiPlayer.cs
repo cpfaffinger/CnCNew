@@ -545,7 +545,7 @@ public sealed partial class ScriptEngine
                                  (entry.X - half, entry.Y - half + along), (entry.X - half + full, entry.Y - half + along),
                              })
                     {
-                        if (!navigation.IsFootprintLegal(template, cx, cy, entry.Angle)) continue;
+                        if (_world.CheckBuildGround(template, cx, cy, entry.Angle) != LegalBuildCode.Ok) continue;
                         (x, y) = (cx, cy);
                         found = true;
                         break;
@@ -1195,7 +1195,7 @@ public sealed partial class ScriptEngine
             var y = state.BaseY + offsetY * cos + offsetX * sin;
             if (flank) state.FlankDefense++;
             else state.FrontDefense++;
-            if (!navigation.IsFootprintLegal(template, x, y, Fixed.Zero)) continue;
+            if (_world.CheckBuildGround(template, x, y, Fixed.Zero) != LegalBuildCode.Ok) continue;
             AddPriorityBuild(state, templateName, x, y);
             return;
         }
@@ -1215,7 +1215,7 @@ public sealed partial class ScriptEngine
         foreach (var member in members) { sumX += member.X.Floor(); sumY += member.Y.Floor(); }
         var x = Fixed.FromInt(sumX / members.Length);
         var y = Fixed.FromInt(sumY / members.Length);
-        if (navigation.IsFootprintLegal(template, x, y, Fixed.Zero)) return;
+        if (_world.CheckBuildGround(template, x, y, Fixed.Zero) == LegalBuildCode.Ok) return;
         var cell = Fixed.FromDecimal(TerrainMap.CellSize);
         var rings = (int)(2m * SupplyCenterCloseDistance / TerrainMap.CellSize);
         for (var ring = 0; ring < rings; ring += 2)
@@ -1227,7 +1227,7 @@ public sealed partial class ScriptEngine
                 var along = cell * Fixed.FromInt(step);
                 foreach (var (cx, cy) in new[] { (x - half + along, y - half), (x - half + along, y - half + full), (x - half, y - half + along), (x - half + full, y - half + along) })
                 {
-                    if (!navigation.IsFootprintLegal(template, cx, cy, Fixed.Zero)) continue;
+                    if (_world.CheckBuildGround(template, cx, cy, Fixed.Zero) != LegalBuildCode.Ok) continue;
                     AddPriorityBuild(state, templateName, cx, cy);
                     return;
                 }
@@ -1253,7 +1253,7 @@ public sealed partial class ScriptEngine
                 var along = cell * Fixed.FromInt(step);
                 foreach (var (cx, cy) in new[] { (x - half + along, y - half), (x - half + along, y - half + full), (x - half, y - half + along), (x - half + full, y - half + along) })
                 {
-                    if (!navigation.IsFootprintLegal(template, cx, cy, Fixed.Zero)) continue;
+                    if (_world.CheckBuildGround(template, cx, cy, Fixed.Zero) != LegalBuildCode.Ok) continue;
                     AddPriorityBuild(state, template.Name, cx, cy);
                     return;
                 }

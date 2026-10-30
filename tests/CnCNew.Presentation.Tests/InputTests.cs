@@ -1143,8 +1143,8 @@ static class InputTests
         PlacementIssue Check(string template, float x, float y) => SimulationQueries.CheckPlacement(world, Me, dozer, template, SimulationQueries.ToFixed(x), SimulationQueries.ToFixed(y), Fixed.Zero);
         Assert(Check("Plant", 40, 80) == PlacementIssue.None, "a free explored spot is legal");
         Assert(Check("Plant", 85, 45) == PlacementIssue.BlockedFootprint, "overlapping the plant");
-        Assert(Check("Plant", 155, 155) == PlacementIssue.BlockedFootprint, "a cliff cell");
-        Assert(Check("Plant", 5000, 40) == PlacementIssue.BlockedFootprint, "off the map");
+        Assert(Check("Plant", 155, 155) == PlacementIssue.Shroud, "a cliff cell out of sight: the shroud is asked first");
+        Assert(Check("Plant", 5000, 40) == PlacementIssue.RestrictedTerrain, "off the map");
         Assert(Check("Plant", 180, 180) == PlacementIssue.Shroud, "never explored");
         Assert(Check("Tower", 40, 80) == PlacementIssue.None, "a finished plant satisfies the tower prerequisite");
         Assert(Check("Ranger", 40, 80) == PlacementIssue.CannotConstruct, "units are not constructed");

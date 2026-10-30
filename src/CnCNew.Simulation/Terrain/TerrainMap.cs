@@ -189,6 +189,9 @@ public sealed class TerrainMap
 
     public bool IsInside(int cx, int cy) => (uint)cx < (uint)CellsX && (uint)cy < (uint)CellsY;
 
+    /// <summary>The point lies on the map (<c>getMaximumPathfindExtent</c>).</summary>
+    public bool IsOnMap(Fixed x, Fixed y) => x >= Fixed.Zero && y >= Fixed.Zero && IsInside(CellOf(x), CellOf(y));
+
     public CellFlags CellAt(int cx, int cy) => _cells[cy * CellsX + cx];
 
     public static int CellOf(Fixed coordinate) => checked((int)(coordinate.Floor() / CellSize));

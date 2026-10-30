@@ -730,7 +730,7 @@ public sealed partial class SkirmishAi
                 var y = _options.HomeY + FixedTrig.Sin(angle) * Fixed.FromInt(ring);
                 if (++checks > PlacementChecksPerThink) return null;
                 if (!SpotFree(template, radius, x, y)) continue;
-                if (_world.Navigation is { } navigation && !navigation.IsFootprintLegal(template, x, y, Fixed.Zero)) continue;
+                if (_world.CheckBuildGround(template, x, y, Fixed.Zero) != LegalBuildCode.Ok) continue;
                 if (!_world.IsPositionExploredBy(_player, x, y)) continue;
                 if (_world.Navigation is { } grid && !Reachable(grid, builder, x, y)) continue;
                 return (x, y);
@@ -826,7 +826,7 @@ public sealed partial class SkirmishAi
             foreach (var entity in _structures) if (Clash(entity, radius, gap, x, y)) return null;
             foreach (var entity in _sites) if (Clash(entity, radius, gap, x, y)) return null;
             foreach (var (spotX, spotY) in _badSpots) if (DistanceSquared(spotX, spotY, x, y) < Fixed.FromInt(900)) return null;
-            if (_world.Navigation is { } navigation && !navigation.IsFootprintLegal(template, x, y, Fixed.Zero)) return null;
+            if (_world.CheckBuildGround(template, x, y, Fixed.Zero) != LegalBuildCode.Ok) return null;
             if (!_world.IsPositionExploredBy(_player, x, y)) return null;
             if (_world.Navigation is { } grid && (++paths > 12 || !Reachable(grid, builder, x, y))) return null;
             return (x, y);

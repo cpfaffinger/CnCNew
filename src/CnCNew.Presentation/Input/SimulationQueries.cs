@@ -21,16 +21,20 @@ public enum PlacementIssue
     CannotConstruct,
     MissingPrerequisite,
     InsufficientFunds,
-    /// <summary><c>NavigationGrid.IsFootprintLegal</c> failed: off the map, cliff, water or another footprint.</summary>
+    /// <summary><c>LBC_OBJECTS_IN_THE_WAY</c>: another footprint.</summary>
     BlockedFootprint,
     /// <summary>The spot was never explored by the player (<c>LBC_SHROUD</c>).</summary>
     Shroud,
+    /// <summary><c>LBC_RESTRICTED_TERRAIN</c>: off the map, on water or a cliff, too close to the map's edge.</summary>
+    RestrictedTerrain,
+    /// <summary><c>LBC_NOT_FLAT_ENOUGH</c>.</summary>
+    NotFlatEnough,
 }
 
 /// <summary>
 /// Read-only rule queries over the public simulation API. Where the simulation keeps a check private, the check is rebuilt here from the same
 /// public data and named after the simulation method it mirrors; the terrain part of placement calls the simulation's own
-/// <see cref="Simulation.Terrain.NavigationGrid.IsFootprintLegal"/> and <see cref="SimulationWorld.IsPositionExploredBy"/>.
+/// <see cref="SimulationWorld.CheckBuildSite"/>.
 /// </summary>
 public static class SimulationQueries
 {
@@ -145,12 +149,14 @@ public static class SimulationQueries
         if (!CanBuildTemplate(world, player, builder, template)) return PlacementIssue.CannotConstruct;
         if (!PrerequisitesSatisfied(world, player, template)) return PlacementIssue.MissingPrerequisite;
         if (world.MoneyOf(player) < template.BuildCost) return PlacementIssue.InsufficientFunds;
-        if (world.Navigation is { } navigation)
+        return world.CheckBuildSite(player, template, x, y, angle) switch
         {
-            if (!navigation.IsFootprintLegal(template, x, y, angle)) return PlacementIssue.BlockedFootprint;
-            if (!world.IsPositionExploredBy(player, x, y)) return PlacementIssue.Shroud;
-        }
-        return PlacementIssue.None;
+            LegalBuildCode.Ok => PlacementIssue.None,
+            LegalBuildCode.RestrictedTerrain => PlacementIssue.RestrictedTerrain,
+            LegalBuildCode.NotFlatEnough => PlacementIssue.NotFlatEnough,
+            LegalBuildCode.Shroud => PlacementIssue.Shroud,
+            _ => PlacementIssue.BlockedFootprint,
+        };
     }
 
     /// <summary>
