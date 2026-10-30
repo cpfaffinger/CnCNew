@@ -108,6 +108,12 @@ static partial class Tests
             Disposition = LIKE_EXISTING INHERIT_VELOCITY
           End
         End
+        ObjectCreationList OCL_CtLike
+          CreateObject
+            ObjectNames = CtCrate
+            Disposition = LIKE_EXISTING
+          End
+        End
         """;
 
     /// <summary>
@@ -281,6 +287,34 @@ static partial class Tests
         {
             Check.That(Slide(rate, "OCL_CtOutRough") == rough, $"{rate}: the rough crate rests where it rests at 30 Hz.");
             Check.That(Inherit(rate) == inherited, $"{rate}: the made crate rests where it rests at 30 Hz.");
+        }
+    }
+
+    /// <summary>
+    /// F-77: a creation list takes its source's heading where the source's frame ends. A soldier turns round to walk off; inside the turn of a frame (above 30 Hz, after the frame's first
+    /// tick) it makes a crate <c>LIKE_EXISTING</c>, whose heading is the one the soldier has at the end of that frame - the same at 30, 60 and 120 Hz. Before, above 30 Hz the crate took
+    /// the soldier's heading inside the turn.
+    /// </summary>
+    public static void CreationListTakesTheSourceHeadingWhereItsFrameEnds()
+    {
+        long? reference = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: FireFromContainerFiles(CreationThrowIni));
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "turning");
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+            var feeder = new Feeder(world);
+            var trooper = GdSpawn(world, feeder, "CtTrooper", 1, 300, 300);
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            Check.That(feeder.SetMoveTarget(1, trooper.Id.Value, 200, 300).Accepted, $"{rate}: the soldier is told to walk off behind it.");
+            // Five whole frames of the turn, then the first tick of the sixth: above 30 Hz the soldier is inside that frame's turn.
+            for (var step = 0; step < world.Frames(5) + 1; step++) world.Step();
+            Check.That(rate == SimulationRate.Hz30 || trooper.HasAheadAngle, $"{rate}: the soldier turns inside its frame.");
+            world.CreateFromList(trooper, "OCL_CtLike", EntityId.Invalid, false);
+            world.Step();
+            var crate = world.Entities.Single(value => value.Template.Name == "CtCrate");
+            if (reference is null) reference = crate.Angle.Raw;
+            else Check.That(crate.Angle.Raw == reference, $"{rate}: the crate has the heading 30 Hz gives it ({crate.Angle.Raw} against {reference}).");
         }
     }
 }

@@ -339,7 +339,10 @@ public sealed partial class SimulationWorld
     {
         // A piece of debris draws its animation set first (DebrisDrawInterface::setAnimNames), before its health.
         if (debris && nugget.Throw is { AnimationSets: > 0 } sets) _ = LogicRandom.Range(0, sets.AnimationSets - 1);
-        var offset = Rotate(nugget.OffsetX, nugget.OffsetY, source.Angle);
+        // The source's heading where its frame ends (F-77): above 30 Hz a source that turns is read inside its frame's turn otherwise - a supply truck whose slow death ends while it
+        // turns left its hulk half a turn short at 60 Hz. 30 Hz: its heading.
+        var sourceAngle = source.FrameEndAngle(_tick);
+        var offset = Rotate(nugget.OffsetX, nugget.OffsetY, sourceAngle);
         var (x, y, z) = (baseX + offset.X, baseY + offset.Y, baseZ + nugget.OffsetZ);
         var angle = Fixed.Zero;
         var disposition = nugget.Disposition;
@@ -351,7 +354,7 @@ public sealed partial class SimulationWorld
         SpawnThrow? thrown = null;
         // INHERIT_VELOCITY: the source's velocity becomes a force on the object, before anything else of the throw.
         var inherit = disposition.HasFlag(CreationDisposition.InheritVelocity) && physics && SourcePhysics(source) is { } sourcePhysics ? sourcePhysics.Velocity : default;
-        if (disposition.HasFlag(CreationDisposition.LikeExisting)) angle = source.Angle;
+        if (disposition.HasFlag(CreationDisposition.LikeExisting)) angle = sourceAngle;
         if (disposition.HasFlag(CreationDisposition.OnGroundAligned))
         {
             angle = LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
@@ -373,7 +376,7 @@ public sealed partial class SimulationWorld
         }
         if ((disposition & (CreationDisposition.SendItFlying | CreationDisposition.SendItUp | CreationDisposition.RandomForce)) != 0)
         {
-            angle = source.Angle;
+            angle = sourceAngle;
             if (physics)
             {
                 // "if omitted from INI, calc it based on intensity": the spin, and the yaw, roll and pitch rates as overrides; drawn yaw, roll, pitch.
