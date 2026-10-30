@@ -281,20 +281,18 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "22729778EF7C7775",
-        "commandStreamSha256": "A7457FEF783CBB1D0971BC3AC9167E290D5E6DFA27A9DE0077A2E092D1759698",
-        "commands": 3899,
-        "endTick": 89821,
-        "finalHash": "50F3180208A42245",
+        "chainHash": "6CBDD6915013A54A",
+        "commandStreamSha256": "9D4296FED5BA0235F5B13921B0A17EA7E3C0B9235B28C811C97A9135F6A19069",
+        "commands": 3622,
+        "endTick": 90000,
+        "finalHash": "63FDFB0ABBB2BD1C",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
-        "outcome": "winner",
-        "rejectedCommands": 583,
-        "snapshotBytes": 443620,
-        "snapshotSha256": "7574884DF58BDB4887304EC0372D9496B688C6A709F99088A3306387183171C1",
-        "snapshotTick": 44910,
-        "victoryTick": 89220,
-        "winner": "FactionAmerica"
+        "outcome": "stalemate",
+        "rejectedCommands": 577,
+        "snapshotBytes": 456583,
+        "snapshotSha256": "2133DDBDE52100FF783BD775A8950A513F2948D0F2D1EB54D59F71922AB71597",
+        "snapshotTick": 45000
       },
       "set": "full"
     },
@@ -576,11 +574,11 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "237EF760E9D9CB83",
+        "chainHash": "D03D0F54B4AF6F0A",
         "commandStreamSha256": "BA6A7DEA9C4B0EBC378711BFC23F90C6C6C017C534BFC012FC5894064FE75D2A",
         "commands": 2948,
         "endTick": 18000,
-        "finalHash": "6E4AAE4A2DF650C1",
+        "finalHash": "508F3CE44CE1D5D7",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "stalemate",
@@ -1613,7 +1611,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "3E179BD9E60C3A81",
+        "chainHash": "C670ABC75870E263",
         "endTick": 6000,
         "ended": false,
         "executedActions": 384,
@@ -1632,7 +1630,7 @@
         "outcomeTick": -1,
         "placedObjects": 5813,
         "players": 12,
-        "restoredChainHash": "3E179BD9E60C3A81",
+        "restoredChainHash": "C670ABC75870E263",
         "restoredFinalHash": "DEE43C7750D6CF21",
         "saveTick": 3000,
         "shots": 785,
