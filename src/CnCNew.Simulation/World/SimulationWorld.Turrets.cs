@@ -279,6 +279,13 @@ public sealed partial class SimulationWorld
     /// </summary>
     private const long TurretDeadlineSet = 1;
 
+    /// <summary>The first tick of a logic frame of the original at or after <paramref name="tick"/> (the tick itself at 30 Hz): the turrets step in the world's phases, on its frames.</summary>
+    private long FrameBeginAtOrAfter(long tick)
+    {
+        while (!Time.IsOriginalFrameBoundary(tick)) tick++;
+        return tick;
+    }
+
     /// <summary>The target is dropped; the angle is held for the recentre time, then the turret turns back.</summary>
     private static void StopAiming(TurretInfo info, TurretState state, long tick)
     {
@@ -593,7 +600,6 @@ public sealed partial class SimulationWorld
             ContinueFrameStep(state);
             return true;
         }
-
         var before = TurretStamp.Of(state);
 
         Entity? victim = null;
@@ -604,7 +610,9 @@ public sealed partial class SimulationWorld
             if (victim is null || victim.DestroyRequested || victim.EffectivelyDead || victim.Body is null)
             {
                 victim = null;
-                if (state.Persistent) StopAiming(info, state, tick);
+                // Above 30 Hz a turret that stands still decides in every tick; a victim that died in its frame is seen by the 30 Hz turret in the next frame, so the hold counts
+                // from the first tick of the next frame (F-76).
+                if (state.Persistent) StopAiming(info, state, FrameBeginAtOrAfter(tick));
                 else state.Target = EntityId.Invalid;
             }
             else if (state.Persistent && !KeepsAttackIntent(entity, victim, state, tick))

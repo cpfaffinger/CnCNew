@@ -246,6 +246,8 @@ static partial class Tests
             "200 ticks after the last order the turret still points at the victim: the attack goes on.");
         Check.That(Encoding.UTF8.GetString(WorldSnapshot.Write(world)).Contains("\"persistent\""), "The attack is part of the snapshot.");
 
+        // The kill is a command of a tick that begins a frame of the original, as every order of a test across rates.
+        while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
         feeder.Kill(fragile);
         for (var i = 0; i < world.Frames(1 + 15); i++)
         {

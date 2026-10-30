@@ -659,6 +659,7 @@ run.Test("Turrets: two turrets, firing pitch, sweep and linked turrets", Tests.T
 run.Test("Turrets: snapshot mid-turn and determinism", Tests.TurretsSnapshotMidTurnAndDeterminism);
 run.Test("Turret attack: the aim survives order gaps and a chase; another order or the victim's death ends it", Tests.TurretAttackSurvivesGapsChaseAndAnOrderEndsIt);
 run.Test("Turret attack: a dead or departing victim ends it, a dead attacker leaves nothing", Tests.TurretAttackEndsWhenTheVictimDiesOrIsLost);
+run.Test("Phase 46 (F-76): a turret holds after its kill from the next frame", Tests.TurretHoldsAfterItsKillFromTheNextFrame);
 run.Test("Turret attack: only attack orders start one, a new fire order moves it", Tests.TurretAttackOnlyFromAnAttackOrder);
 run.Test("Turret attack: a victim that is no longer visible ends the aim", Tests.TurretAttackEndsWhenTheVictimIsNoLongerVisible);
 run.Test("Turret attack: a victim that falls into the fog ends the aim", Tests.TurretAttackEndsWhenTheVictimFallsIntoTheFog);
