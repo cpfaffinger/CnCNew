@@ -4212,3 +4212,24 @@ itself), and the move to the closest waypoint of a skirmish approach path. Tests
 `ApproachPathMoveIsAGroupOrder`. No field of either manifest moved: no run of the manifest walks a reinforcement from an origin or moves a team to an approach path within its window. Not group orders in the original either: `groupFollowWaypointPath` and `groupHunt` order every member by itself, as the VM does; what differs there is
 the VM's arrival test (40 units), registered as F-78. The built-in computer player's army orders are not the original's (Stage 3) and stay single orders.
 
+## 61. Phase 47: the creation list's source and the waypoint follower (fidelity package I)
+
+Each finding read in the original's source, one cause per commit with a test that fails on the code before at 30, 60 and 120 Hz, and its own manifest commit where a field moved.
+
+### 61.1 F-77: a creation list reads its source where the source's frame ends
+
+`doStuffToObj` places and turns what it makes by its source. On Bitter Winter two Chinese supply trucks whose slow deaths ended while they moved left their hulks (`OCL FINAL`, `SEND_IT_FLYING`) and
+debris elsewhere at 60 Hz than at 30 Hz: above 30 Hz a mover is inside its frame's step after the frame's first tick, and the creation list read it there - the truck that turned left its
+hulk half a turn short (frame 33,486), the truck that drove half a step short (frame 39,040). **Step 1** (`01c23ba`): the heading (the offset's rotation, `LIKE_EXISTING`, the throwing
+dispositions) is the source's where its frame ends (`Entity.FrameEndAngle`), as F-71 did for a rider at a door. Test `CreationListTakesTheSourceHeadingWhereItsFrameEnds`. Manifest `1db078c`: 3 runs, 16 fields - Bitter Winter America-China, which America won at tick 89,220, runs to its limit as a stalemate (15 of 16 pairings decided); the eight-player run on Iron Dragon and `MD_GLA05` change their hashes, every other outcome kept.
+**Step 2** (`f02bc73`): a creation list made at its source starts where the source's frame ends (`Entity.FrameEnd`); a caller that names its own origin keeps it. Test
+`CreationListTakesTheSourcePlaceWhereItsFrameEnds`. Manifest `8557bcb`: 5 runs, 15 fields, no outcome moved - the retail reference match in its chain hash (`DD8B8BE23385D28C`; winner, tick and end hash kept), Bitter Winter America-China, Iron Dragon, `MD_GLA05` and `MD_USA02`. With both the default match America against China on Bitter Winter agrees at 30 and 60 Hz to frame 39,931 (F-79).
+
+### 61.2 F-78: a waypoint follower goes on when its move has ended
+
+(`21e6274`; `AIFollowWaypointPathState::update`) The original goes on to the next waypoint when its move to the current one has finished, whatever its status ("if move to has finished, move to
+next point on waypoint path"). The VM went on only within 40 units of the waypoint and ordered the unit to it again otherwise - a unit whose move ended farther away (a waypoint inside a
+structure, a path that failed) stood for good. A unit inside the 40 units was already ordered on only when its move had ended, so the corner of a path was never cut. The follower now
+remembers the waypoint its move was ordered for (`Follower.GoalIndex`, until now a team follower's only) and goes on when that move has ended. Test `FollowerGoesOnWhenItsMoveEnds` (a soldier
+whose path's corner lies inside a block finishes the path at 30, 60 and 120 Hz). Manifest `209392f`: 12 mission runs (the nine `GC_ChinaBoss` runs, `MD_GLA01`, `MD_USA01`, `MD_USA02`) change their hashes, every outcome and end tick kept.
+
