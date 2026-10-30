@@ -281,7 +281,7 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "6CBDD6915013A54A",
+        "chainHash": "DF34A9CBD1B05F1F",
         "commandStreamSha256": "9D4296FED5BA0235F5B13921B0A17EA7E3C0B9235B28C811C97A9135F6A19069",
         "commands": 3622,
         "endTick": 90000,
@@ -574,15 +574,15 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "D03D0F54B4AF6F0A",
-        "commandStreamSha256": "BA6A7DEA9C4B0EBC378711BFC23F90C6C6C017C534BFC012FC5894064FE75D2A",
-        "commands": 2948,
+        "chainHash": "B6B3CDDA2A39205F",
+        "commandStreamSha256": "C2A27DA19FA4E79CEF392EF4D474E7D781664EBE632C1A2BFF334DFABB9DE087",
+        "commands": 2929,
         "endTick": 18000,
-        "finalHash": "508F3CE44CE1D5D7",
+        "finalHash": "40C37A59D484E984",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "stalemate",
-        "rejectedCommands": 469,
+        "rejectedCommands": 473,
         "snapshotBytes": 2345905,
         "snapshotSha256": "254F4F2B90AB24B7BDC94BFBC65799DAB1188C73D3014B92399BF4125E01192B",
         "snapshotTick": 9000
@@ -1611,12 +1611,12 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "C670ABC75870E263",
+        "chainHash": "804986D8BCCE2A21",
         "endTick": 6000,
         "ended": false,
         "executedActions": 384,
         "executedScripts": 102,
-        "finalHash": "DEE43C7750D6CF21",
+        "finalHash": "EF545F30CAF9C749",
         "hashAfterRestore": "B8D3173D6E023208",
         "hashAtSave": "B8D3173D6E023208",
         "humanSide": "",
@@ -1625,15 +1625,15 @@
         "identicalToUninterruptedRunAfterSaveRestore": true,
         "missingActionHits": 0,
         "missingConditionHits": 0,
-        "objects": 2258,
+        "objects": 2259,
         "outcome": "none",
         "outcomeTick": -1,
         "placedObjects": 5813,
         "players": 12,
-        "restoredChainHash": "C670ABC75870E263",
-        "restoredFinalHash": "DEE43C7750D6CF21",
+        "restoredChainHash": "804986D8BCCE2A21",
+        "restoredFinalHash": "EF545F30CAF9C749",
         "saveTick": 3000,
-        "shots": 785,
+        "shots": 784,
         "skippedObjects": 3569,
         "snapshotBytes": 9075168,
         "snapshotSha256": "A4BFA90D0956F3F8D637120252416DDA211A3C8D02563E01EC388A2233943573"
@@ -1697,7 +1697,7 @@
         "worldSeed": "C0FFEE09"
       },
       "results": {
-        "chainHash": "7EAA977EE9EF1F4E",
+        "chainHash": "A2E917105CF19BAC",
         "endTick": 6000,
         "ended": false,
         "executedActions": 196,
@@ -1716,7 +1716,7 @@
         "outcomeTick": -1,
         "placedObjects": 3158,
         "players": 14,
-        "restoredChainHash": "7EAA977EE9EF1F4E",
+        "restoredChainHash": "A2E917105CF19BAC",
         "restoredFinalHash": "09E07ED24ED13594",
         "saveTick": 3000,
         "shots": 36,
@@ -1827,7 +1827,7 @@
         "worldSeed": "C0FFEE05"
       },
       "results": {
-        "chainHash": "9B4680E436709FD7",
+        "chainHash": "DD8B8BE23385D28C",
         "commandStreamSha256": "AD7BE8E67BACD7D4C8FFF880310894EBB14525212EECB84D827CF1580B4484A6",
         "commands": 19741,
         "endTick": 30091,
