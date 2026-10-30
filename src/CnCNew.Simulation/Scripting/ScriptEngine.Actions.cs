@@ -702,7 +702,9 @@ public sealed partial class ScriptEngine
                     continue;
                 }
                 var waypoint = path.Waypoints[Math.Min(follower.Index, path.Waypoints.Length - 1)];
-                if (DistanceSquared(entity, waypoint.X, waypoint.Y) <= ArrivalDistanceSquared)
+                // AIFollowWaypointPathState::update: "if move to has finished, move to next point on waypoint path" - when the move to this waypoint has ended, whether it arrived
+                // or not (F-78; the VM went on within 40 units of the waypoint while the unit still walked).
+                if (follower.GoalIndex == follower.Index && !Marching(entity))
                 {
                     follower.Index++;
                     if (follower.Index >= path.Waypoints.Length)
@@ -717,7 +719,11 @@ public sealed partial class ScriptEngine
                     }
                     waypoint = path.Waypoints[follower.Index];
                 }
-                if (!Marching(entity)) MoveTo(entity, waypoint.X, waypoint.Y);
+                if (follower.GoalIndex != follower.Index || !Marching(entity))
+                {
+                    MoveTo(entity, waypoint.X, waypoint.Y);
+                    follower.GoalIndex = follower.Index;
+                }
                 continue;
             }
             // aiAttackObject: the named victim is the unit's order, whatever the unit would pick by itself; the shot goes out as soon as a weapon reaches it.

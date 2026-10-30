@@ -133,7 +133,7 @@ public sealed partial class ScriptEngine
         public int Team;
         public Fixed OffsetX;
         public Fixed OffsetY;
-        /// <summary>The team waypoint the current move order was given for (-1: none yet).</summary>
+        /// <summary>The waypoint (the team's, or the follower's own) the current move order was given for (-1: none yet); a follower goes on when that move has ended (F-78).</summary>
         public int GoalIndex = -1;
     }
 
@@ -1006,6 +1006,7 @@ public sealed partial class ScriptEngine
                 writer.Fixed("offsetY", follower.OffsetY);
                 writer.Int("goalIndex", follower.GoalIndex);
             }
+            else if (follower.GoalIndex >= 0) writer.Int("goalIndex", follower.GoalIndex);
             writer.EndObject();
         }
         writer.EndArray();
@@ -1184,7 +1185,7 @@ public sealed partial class ScriptEngine
             {
                 Entity = checked((uint)item.UInt("entity")), Path = item.Text("path"), Index = checked((int)item.Int("index")), AsTeam = item.Has("asTeam"),
                 Team = item.Has("asTeam") ? checked((int)item.Int("team")) : 0, OffsetX = item.Has("asTeam") ? item.Fixed("offsetX") : Fixed.Zero,
-                OffsetY = item.Has("asTeam") ? item.Fixed("offsetY") : Fixed.Zero, GoalIndex = item.Has("asTeam") ? checked((int)item.Int("goalIndex")) : -1,
+                OffsetY = item.Has("asTeam") ? item.Fixed("offsetY") : Fixed.Zero, GoalIndex = item.Has("goalIndex") ? checked((int)item.Int("goalIndex")) : -1,
             };
         _lastDamage.Clear();
         foreach (var item in reader.Array("lastDamage")) _lastDamage[checked((uint)item.UInt("victim"))] = new LastDamage(checked((int)item.Int("owner")), item.Text("template"));
