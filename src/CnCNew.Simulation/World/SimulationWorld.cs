@@ -670,7 +670,8 @@ public sealed partial class SimulationWorld : IWorldServices
         var id = Ids.AllocateEntity();
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
             extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY, Enslaver: extras.Enslaver, Producer: extras.Producer,
-            HasExit: extras.HasExit, DoorX: extras.DoorX, DoorY: extras.DoorY, ExitX: extras.ExitX, ExitY: extras.ExitY, StickTo: extras.StickTo, Bomber: extras.Bomber);
+            HasExit: extras.HasExit, DoorX: extras.DoorX, DoorY: extras.DoorY, ExitX: extras.ExitX, ExitY: extras.ExitY, StickTo: extras.StickTo, Bomber: extras.Bomber,
+            Throw: extras.Drop ? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero) : null);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }

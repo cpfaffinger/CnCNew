@@ -609,7 +609,7 @@ public static class SpecialPowerRouting
 /// </summary>
 public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default,
     EntityId Enslaver = default, EntityId Producer = default, bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default,
-    EntityId StickTo = default, EntityId Bomber = default);
+    EntityId StickTo = default, EntityId Bomber = default, bool Drop = false);
 
 // ------------------------------------------------------------------------------------------------ structures and world group
 

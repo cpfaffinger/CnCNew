@@ -21,6 +21,7 @@ internal enum AbilityKind : byte
     VehicleHack,
     StealCash,
     LaserMissiles,
+    HelixBomb,
 }
 
 /// <summary>
@@ -57,6 +58,7 @@ public sealed partial class SpecialAbilityUpdate
         ("SPECIAL_TANKHUNTER_TNT_ATTACK", AbilityKind.TankHunterTnt), ("SPECIAL_BOOBY_TRAP", AbilityKind.BoobyTrap),
         ("SPECIAL_HACKER_DISABLE_BUILDING", AbilityKind.HackerDisable), ("SPECIAL_BLACKLOTUS_DISABLE_VEHICLE_HACK", AbilityKind.VehicleHack),
         ("SPECIAL_BLACKLOTUS_STEAL_CASH_HACK", AbilityKind.StealCash), ("SPECIAL_MISSILE_DEFENDER_LASER_GUIDED_MISSILES", AbilityKind.LaserMissiles),
+        ("SPECIAL_HELIX_NAPALM_BOMB", AbilityKind.HelixBomb),
     ];
 
     /// <summary>How much a cash hack takes at most (<c>desiredAmount</c> of <c>triggerAbilityEffect</c>).</summary>
@@ -67,6 +69,7 @@ public sealed partial class SpecialAbilityUpdate
     {
         var kind = KindOf(world);
         if (target.Kind == SpecialPowerTargetKind.None) return kind == AbilityKind.RemoteCharges;
+        if (target.Kind == SpecialPowerTargetKind.Location) return kind == AbilityKind.HelixBomb;
         if (target.Kind != SpecialPowerTargetKind.Object || world.FindEntity(target.Entity) is not { EffectivelyDead: false } victim) return false;
         var relation = world.RelationshipOf(Entity.Owner, victim.Owner);
         switch (kind)
@@ -86,7 +89,7 @@ public sealed partial class SpecialAbilityUpdate
             case AbilityKind.StealCash:
                 return relation == Relationship.Enemies && victim.Template.IsKindOf("CASH_GENERATOR") && !victim.HasStatus(ObjectStatusBits.UnderConstruction)
                     && victim.Template.IsKindOf("CAPTURABLE") && !victim.Template.IsKindOf("REBUILD_HOLE") && MayBeHacked(world, victim);
-            case AbilityKind.TimedCharges or AbilityKind.RemoteCharges:
+            case AbilityKind.TimedCharges or AbilityKind.RemoteCharges or AbilityKind.HelixBomb:
                 if (victim.Template.IsKindOf("BRIDGE") || victim.Template.IsKindOf("BRIDGE_TOWER")) return false;
                 if (!victim.Template.IsKindOf("STRUCTURE") && !victim.Template.IsKindOf("VEHICLE")) return false;
                 if (SpecialObjectCount(world) >= data.MaxSpecialObjects) return false;
@@ -151,7 +154,7 @@ public sealed partial class SpecialAbilityUpdate
     }
 
     /// <summary><c>createSpecialObject</c>: over the limit a persistent kind makes none, another kind removes what it has. The object appears where the unit stands, with its heading.</summary>
-    private EntityId CreateSpecialObject(IWorldServices world, Entity? stickTo)
+    private EntityId CreateSpecialObject(IWorldServices world, Entity? stickTo, bool drop = false)
     {
         ValidateSpecialObjects(world);
         if (_specialObjects.Count >= data.MaxSpecialObjects)
@@ -161,7 +164,7 @@ public sealed partial class SpecialAbilityUpdate
         }
         if (!world.Templates.TryGet(data.SpecialObject, out var template)) return EntityId.Invalid;
         var made = world.RequestSpawn(template.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle,
-            new SpawnExtras(Fixed.Zero, StickTo: stickTo?.Id ?? default, Bomber: Entity.Id, Producer: Entity.Id));
+            new SpawnExtras(Fixed.Zero, StickTo: stickTo?.Id ?? default, Bomber: Entity.Id, Producer: Entity.Id, Drop: drop));
         _specialObjects.Add(made);
         world.MarkDirty(Entity);
         return made;
@@ -199,6 +202,10 @@ public sealed partial class SpecialAbilityUpdate
                 // "We can't double booby trap something."
                 if (kind == AbilityKind.BoobyTrap && target.HasStatus(BoobyTrappedBit)) return false;
                 CreateSpecialObject(world, target);
+                return true;
+            case AbilityKind.HelixBomb:
+                // "Couldn't be simpler... the special object is the bomb."
+                CreateSpecialObject(world, null, drop: true);
                 return true;
             case AbilityKind.HackerDisable or AbilityKind.VehicleHack:
                 if (target is null || world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return false;

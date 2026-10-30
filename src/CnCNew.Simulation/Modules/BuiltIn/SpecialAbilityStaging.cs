@@ -127,6 +127,11 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     /// <summary><c>m_noTargetCommand</c>: the order named neither an object nor a place (the detonation of remote charges).</summary>
     private bool _noTarget;
 
+    /// <summary><c>m_targetPos</c>: the order named a place.</summary>
+    private bool _hasPlace;
+    private Fixed _placeX;
+    private Fixed _placeY;
+
     /// <summary>Ticks of the current logic frame of the original the unit has spent turning to its target (<see cref="TurnToward"/>); always 0 at 30 Hz, written only while nonzero.</summary>
     private int _facePhase;
 
@@ -194,6 +199,12 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     {
         if (target.Kind == SpecialPowerTargetKind.None) Begin(world, null);
         else if (target.Kind == SpecialPowerTargetKind.Object && world.FindEntity(target.Entity) is { } victim) Begin(world, victim);
+        else if (target.Kind == SpecialPowerTargetKind.Location)
+        {
+            Begin(world, null);
+            (_noTarget, _hasPlace, _placeX, _placeY) = (false, true, target.X, target.Y);
+            if (data.UnpackTicks != 0) _packState = PackState.Packed;
+        }
     }
 
     /// <summary>
@@ -320,7 +331,7 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
             if (data.NeedToFaceTarget && !_noTarget && !_facingComplete)
             {
                 _facingInitiated = true;
-                if (target is not null && !TurnToward(world, target)) return;
+                if (target is not null ? !TurnToward(world, target.X, target.Y) : _hasPlace && !TurnToward(world, _placeX, _placeY)) return;
                 _facingComplete = true;
             }
             if (NeedToUnpack)
@@ -344,7 +355,11 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
             return;
         }
 
-        if (ai.IsIdle) ApproachTarget(world, ai, target);
+        if (ai.IsIdle)
+        {
+            if (_hasPlace) ai.OrderMove(world, _placeX, _placeY, false);
+            else ApproachTarget(world, ai, target);
+        }
     }
 
     /// <summary><c>handlePackingProcessing</c>: counts the unpack/pack animation down; true while a stage still runs (the rest of the update is skipped).</summary>
@@ -530,6 +545,9 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         _flashPhase = Fixed.Zero;
         _facePhase = 0;
         _noTarget = false;
+        _hasPlace = false;
+        _placeX = Fixed.Zero;
+        _placeY = Fixed.Zero;
     }
 
     // ------------------------------------------------------------------------------------------------------------ approach and facing
@@ -544,7 +562,14 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     private bool IsWithinStartRange(Entity? target, AIUpdateInterface ai)
     {
         if (_withinRange) return true;
-        if (target is null || data.StartAbilityRange >= SpecialAbilityUpdateData.HugeDistance) return true;
+        if (data.StartAbilityRange >= SpecialAbilityUpdateData.HugeDistance) return true;
+        if (_hasPlace)
+        {
+            var (dx, dy) = (_placeX - Entity.X, _placeY - Entity.Y);
+            if (SquaredReach.Of(data.StartAbilityRange + Entity.Template.BoundingCircleRadius).Contains(dx * dx + dy * dy)) return true;
+            return ai.IsIdle && _approachOrders > 0;
+        }
+        if (target is null) return true;
         var range = data.ApproachRequiresLos ? Fixed.Max(Fixed.Zero, data.StartAbilityRange - Undersize) : data.StartAbilityRange;
         if (WithinSpheres(target, range)) return true;
         return ai.IsIdle && _approachOrders > 0 && WithinSpheres(target, range + ArrivalSlack);
@@ -583,9 +608,9 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     /// rate, where a snap-in against one tick of turn ended it up to a frame early.
     /// </para>
     /// </summary>
-    private bool TurnToward(IWorldServices world, Entity target)
+    private bool TurnToward(IWorldServices world, Fixed x, Fixed y)
     {
-        var desired = FixedTrig.Atan2(target.Y - Entity.Y, target.X - Entity.X);
+        var desired = FixedTrig.Atan2(y - Entity.Y, x - Entity.X);
         var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
         var turnRate = Entity.Template.Locomotor?.TurnRatePerTick ?? Fixed.Zero;
         var frame = world.Time.TicksPerOriginalFrame;
@@ -617,6 +642,11 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         }
         DescribeSpecialObjects(writer);
         if (_noTarget) writer.Bool("abilityNoTarget", true);
+        if (_hasPlace)
+        {
+            writer.Fixed("abilityPlaceX", _placeX);
+            writer.Fixed("abilityPlaceY", _placeY);
+        }
         writer.Bool("abilityActive", true);
         writer.Int("abilityState", (int)_packState);
         writer.Int("abilityAnim", _animFrames);
@@ -644,6 +674,7 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         }
         _active = true;
         _noTarget = reader.Has("abilityNoTarget");
+        if (reader.Has("abilityPlaceX")) (_hasPlace, _placeX, _placeY) = (true, reader.Fixed("abilityPlaceX"), reader.Fixed("abilityPlaceY"));
         var state = reader.Int("abilityState");
         if (state < 0 || state > (int)PackState.Unpacked) throw new InvalidDataException("Special ability pack state out of range.");
         _packState = (PackState)state;

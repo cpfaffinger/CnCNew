@@ -38,6 +38,40 @@ static partial class Tests
           Enum = SPECIAL_MISSILE_DEFENDER_LASER_GUIDED_MISSILES
           ReloadTime = 0
         End
+        SpecialPower SPECIAL_TestBomb
+          Enum = SPECIAL_HELIX_NAPALM_BOMB
+          ReloadTime = 0
+        End
+        Object HackBomb
+          KindOf = NO_COLLIDE UNATTACKABLE
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = PhysicsBehavior Physics01
+            Mass = 75.0
+          End
+        End
+        Object HackBomber
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = SpecialAbility Bomb01
+            SpecialPowerTemplate = SPECIAL_TestBomb
+            UpdateModuleStartsAttack = Yes
+          End
+          Behavior = SpecialAbilityUpdate BombUpdate01
+            SpecialPowerTemplate = SPECIAL_TestBomb
+            UnpackTime = 500
+            SpecialObject = HackBomb
+            SpecialObjectsPersistent = Yes
+            NeedToFaceTarget = No
+          End
+        End
         Object HackBeam
           KindOf = INERT NO_COLLIDE
           Body = ActiveBody Body01
@@ -183,6 +217,30 @@ static partial class Tests
                 for (var step = 0; step < world.Frames(45); step++) world.Step();
             }
             Check.That(world.MoneyOf(new PlayerId(1)).Floor() == 1500 && world.MoneyOf(new PlayerId(2)).Floor() == 0, $"{rate}: the money has moved ({world.MoneyOf(new PlayerId(1))}, {world.MoneyOf(new PlayerId(2))}).");
+        }
+    }
+
+    /// <summary>The Helix drops its bomb at a place: an object that falls from where the unit is, the same way at every rate. Only this ability takes a place.</summary>
+    public static void AbilityDropsABomb()
+    {
+        string? reference = null;
+        foreach (var (rate, _) in WorldRates)
+        {
+            var (world, feeder, _) = RatedWorld(rate, AbilityHackFiles());
+            feeder.Spawn(1, "HackBomber", owner: 1, x: 100, y: 100, z: 200);
+            for (var tick = 0; tick < world.Time.TicksPerOriginalFrame; tick++) world.Step();
+            var bomber = ChargeFind(world, "HackBomber");
+            Check.That(feeder.UseSpecialPower(1, bomber.Id.Value, "SPECIAL_TestBomb", SpecialPowerTargetKind.Location, x: 120, y: 100).Accepted, $"{rate}: the order is accepted.");
+            var made = StepUntilExists(world, "HackBomb", 200);
+            Check.That(made > 0, $"{rate}: the bomb is dropped.");
+            var bomb = ChargeFind(world, "HackBomb");
+            // Thirty whole frames of the bomb's own.
+            for (var tick = 0; tick < world.Frames(30); tick++) world.Step();
+            while ((world.Tick - bomb.SpawnTick) % world.Time.TicksPerOriginalFrame != 0) world.Step();
+            Check.That(bomb.Z < CnCNew.Simulation.Numerics.Fixed.FromInt(195), $"{rate}: it falls ({bomb.Z}).");
+            var line = $"{made}:{bomb.Z.Raw}";
+            reference ??= line;
+            Check.That(line == reference, $"{rate}: as at 30 Hz ({line} against {reference}).");
         }
     }
 
