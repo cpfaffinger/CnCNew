@@ -278,8 +278,7 @@ public sealed partial class ScriptEngine
                 break;
             case "MOVE_TEAM_TO":
                 if (Has(type, p, 2) && WaypointOrDiagnose(Str(p, 1)) is { } destination)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
-                        foreach (var member in LiveMembers(team).ToArray()) MoveTo(member, destination.X, destination.Y);
+                    foreach (var team in TeamsNamed(Str(p, 0))) MoveGroup(LiveMembers(team).ToArray(), destination.X, destination.Y);
                 break;
             case "TEAM_FOLLOW_WAYPOINTS":
             case "TEAM_FOLLOW_WAYPOINTS_EXACT":
@@ -605,6 +604,31 @@ public sealed partial class ScriptEngine
             : _issue(owner, (sequence, tick) => new SetMoveTargetCommand(owner, sequence, tick, id, x, y)).Accepted;
         if (!accepted) Diagnose("order rejected");
         else if (busy) _busyThisTick.Add(id.Value);
+    }
+
+    /// <summary>
+    /// A team's move as one group order (F-35): <c>getTeamAsAIGroup</c>, then <c>AIGroup::groupMoveToPosition</c> - every member gets a destination of its own around the point
+    /// (<see cref="GroupMoveCommand"/>), not the point itself. One order per owner; as <see cref="MoveTo"/>, a computer player's alert or aggressive members attack-move, so they
+    /// are ordered apart from the others of their owner.
+    /// </summary>
+    private void MoveGroup(IEnumerable<Entity> members, Fixed x, Fixed y)
+    {
+        var movers = new List<(PlayerId Owner, bool Attack, EntityId Id)>();
+        foreach (var member in members)
+        {
+            _buttonHunts.Remove(member.Id.Value);
+            if (member.Owner.IsSystem) { Diagnose("order for a neutral object"); continue; }
+            if (member.Template.Locomotor is null) continue;
+            movers.Add((member.Owner, _world.IsComputerPlayer(member.Owner) && AttitudeOf(member) >= Attitude.Alert, member.Id));
+        }
+        foreach (var order in movers.GroupBy(mover => (mover.Owner, mover.Attack)).OrderBy(order => order.Key.Owner.Value).ThenBy(order => order.Key.Attack))
+        {
+            var owner = order.Key.Owner;
+            var attack = order.Key.Attack;
+            var ids = order.Select(mover => mover.Id).ToImmutableArray();
+            if (!_issue(owner, (sequence, tick) => new GroupMoveCommand(owner, sequence, tick, ids, x, y, attack)).Accepted) { Diagnose("order rejected"); continue; }
+            foreach (var id in ids) _busyThisTick.Add(id.Value);
+        }
     }
 
     /// <summary>A guard order of the script (F-58): the members guard the point or the object (<c>aiGuardPosition</c> / <c>aiGuardObject</c>, <c>CMD_FROM_SCRIPT</c>), by their owners.</summary>
