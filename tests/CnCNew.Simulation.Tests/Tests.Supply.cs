@@ -4,6 +4,7 @@ using System.Linq;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Replay;
 using CnCNew.Simulation.Snapshots;
@@ -476,4 +477,44 @@ static partial class Tests
         Check.That(fixture.Templates.TryGet("Colony", out var colony) && !colony.IsInstantiable && colony.MissingModules.Contains("SpawnBehavior[CanReclaimOrphans]"), "CanReclaimOrphans is reported as a missing feature.");
         Check.That(fixture.Templates.TryGet("Hive", out var hive) && hive.IsInstantiable && fixture.Templates.TryGet("Hauler", out var hauler) && hauler.IsInstantiable, "Supported spawners and haulers are instantiable.");
     }
+
+    /// <summary>
+    /// F-79: a hauler at work in a warehouse's dock whose warehouse is destroyed after the updates of a frame's first tick leaves the dock in the next frame at 30, 60 and 120 Hz. Before,
+    /// above 30 Hz its dock machine, which runs every tick while the dock works on it, saw the warehouse gone in the frame's second tick and left a frame early.
+    /// </summary>
+    public static void HaulerSeesItsDockGoneInTheNextFrame()
+    {
+        long? reference = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: SupplyFiles());
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "Warehouse", x: 0);
+            feeder.Spawn(1, "Hauler", x: 80);
+            world.Step();
+            var warehouse = IdOf(world, "Warehouse");
+            var hauler = world.FindEntity(new EntityId(IdOf(world, "Hauler")))!;
+            var ai = hauler.Modules.OfType<AIUpdateInterface>().Single();
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            Check.That(world.Submit(new DockCommand(new PlayerId(1), 900, world.Tick, hauler.Id, new EntityId(warehouse))).Accepted, $"{rate}: the hauler is sent to the warehouse.");
+            // Into the dock, then to the end of a tick that began a frame of the original: the warehouse is destroyed after that tick's updates.
+            for (var step = 0; step < world.Frames(600) && !ai.IsInsideDock; step++) world.Step();
+            Check.That(ai.IsInsideDock, $"{rate}: the hauler works in the dock.");
+            while (!world.Time.IsOriginalFrameBoundary(world.Tick)) world.Step();
+            world.Step();
+            var killed = (world.Tick - 1) / world.Time.TicksPerOriginalFrame;
+            world.Kill(new EntityId(warehouse));
+            var left = -1L;
+            for (var step = 0; step < world.Frames(10) && left < 0; step++)
+            {
+                world.Step();
+                if (!ai.IsDocking) left = (world.Tick - 1) / world.Time.TicksPerOriginalFrame - killed;
+            }
+            Check.That(left > 0, $"{rate}: the hauler left the dock after the warehouse was destroyed ({left}).");
+            if (reference is null) reference = left;
+            else Check.That(left == reference, $"{rate}: it leaves in the frame 30 Hz has (frame {left} after the destruction against {reference}).");
+        }
+    }
 }
+

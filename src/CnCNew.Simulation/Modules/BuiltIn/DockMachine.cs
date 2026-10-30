@@ -166,7 +166,9 @@ internal sealed class DockMachine(EntityId dockId)
                 if (dock.IsClearToEnter(world, ai.Entity.Id)) return DockStatus.Success;
                 return _enterTick + world.Time.OriginalFrames(ClearanceTimeoutFrames) < world.Tick ? DockStatus.Failure : DockStatus.Continue;
             case DockState.ProcessDock:
-                if (dock is null) return DockStatus.Failure;
+                // The machine runs every tick while the dock works on its docker, but its states change once per frame (F-79): a dock that is gone - destroyed in a phase after
+                // the updates of a frame's first tick - is seen in the next frame, as at 30 Hz, not in that frame's later ticks.
+                if (dock is null) return world.Time.IsOriginalFrameBoundary(world.Tick) ? DockStatus.Failure : DockStatus.Continue;
                 if (world.Tick < _nextActionTick) return DockStatus.Continue;
                 _nextActionTick = world.Tick + ActionDelay(world, dock, ai);
                 // "invoke the dock's action until it tells us it is done or the dock becomes closed" (AIDockProcessDockState::update)
