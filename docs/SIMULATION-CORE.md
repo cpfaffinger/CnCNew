@@ -4187,3 +4187,28 @@ Since F-72 the match with driver seed `5EED0001` runs to its limit of 432,000 ti
 (`SimTool reference-match --driver-seed HEX --record-only`) `5EED0003`, `5EED0004`, `5EED0005` and `5EED0006` end, `5EED0002` and `5EED0008` do not; `5EED0004` ends with FactionGLA at
 the same original frame (14,745) at 30, 60 and 120 Hz and is the seed (`089ad43`). Manifest `f590320`: the 10 fields of the run `reference-match` - FactionGLA at tick 29,490 (end tick 30,091), end hash `22BEB490BE548657`, chain `9B4680E436709FD7`, 19,741 commands; the other 49 runs and the input manifest unchanged.
 
+## 60. Phase 46: the turret's hold and the team's group orders (fidelity package H)
+
+Each finding read in the original's source, one cause per commit with a test that fails on the code before at 30, 60 and 120 Hz, and its own manifest commit where a field moved.
+
+### 60.1 F-76: a turret's hold after a dead victim counts from the next frame
+
+(`86e363c`; `TurretAI::updateTurretAI`, `TurretAIAimTurretState`) Above 30 Hz a turret that stands still decides in every tick. On Bitter Winter a Red Guard was killed by delayed damage
+(the phase after the turrets') in the first tick of frame 25,480; the Humvee's turret saw it dead in the frame's second tick and its hold of `RecenterTime` counted from there, so it recentred a
+tick early and stood a share of a step further at the end of frame 25,631 than at 30 Hz, where the turret sees the death in the next frame. The hold now counts from the first tick of the
+next frame of the original. The general alternative - a turret decides only in the first tick of a frame - was tried and dropped: five turret tests that give their order inside a frame
+expect the turret to answer in that tick. Test `TurretHoldsAfterItsKillFromTheNextFrame` (a tank finds a fragile victim by itself and kills it with a shot that hits later; its turret's angle at
+the end of every frame is the same at 30, 60 and 120 Hz; at 60 Hz it differed from frame 16 on the code before); the older test of a killed victim gives its kill command in a tick that
+begins a frame. Manifest `ad7d42a`: 11 runs, 12 fields, the chain hashes only - seven pairings with an American army, the three eight-player runs and the mission run `MD_GLA01`; every final hash, outcome and end kept, the retail reference match unchanged. With it the default match America against China on Bitter Winter agrees at 30 and 60 Hz to frame 33,486 (F-77).
+
+### 60.2 F-35: a team's move is a group order
+
+The script actions of the original that move a team end in `AIGroup::groupMoveToPosition`: every member gets a destination of its own around the point (its offset from the member nearest
+the goal, at most six of its radii, then the nearest free place - `computeIndividualDestination`, `adjustDestination`; the port's `GroupMoveCommand` of F-04). The VM ordered every member
+onto the point itself. Now `MoveGroup` sends one `GroupMoveCommand` per owner (a computer player's alert or aggressive members attack-move, as the single move did, and are ordered apart from the
+others). **Step 1** (`204c126`; `doMoveToWaypoint`): `MOVE_TEAM_TO`. Test `TeamMoveIsAGroupOrder` (a square of four soldiers keeps its sides at the waypoint). Manifest `29b4b97`: seven mission runs change their hashes (`GC_AirGeneral` against three generals, `GC_SuperWeaponsGeneral` against the Demolition general, `MD_CHI01`, `MD_CHI05`, `MD_USA05`), every outcome and end tick kept. **Step 2** (`7633bac`;
+`doCreateReinforcements`, `doTeamMoveToSkirmishApproachPath`): a reinforcement team without a transport walks from its origin as one group (the VM let every member follow the point by
+itself), and the move to the closest waypoint of a skirmish approach path. Tests `ReinforcementsWalkAsAGroup` (four wide vehicles keep their row at 30, 60 and 120 Hz) and
+`ApproachPathMoveIsAGroupOrder`. No field of either manifest moved: no run of the manifest walks a reinforcement from an origin or moves a team to an approach path within its window. Not group orders in the original either: `groupFollowWaypointPath` and `groupHunt` order every member by itself, as the VM does; what differs there is
+the VM's arrival test (40 units), registered as F-78. The built-in computer player's army orders are not the original's (Stage 3) and stay single orders.
+
