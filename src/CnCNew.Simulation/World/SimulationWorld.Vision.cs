@@ -125,7 +125,9 @@ public sealed partial class SimulationWorld
         if (_vision is null || player.IsSystem) return true;
         if (entity.Owner == player || RelationshipOf(player, entity.Owner) == Relationship.Allies) return true;
         if (entity.ContainedBy.IsValid) return false;
-        if (!IsPositionVisibleTo(player, entity.X, entity.Y)) return false;
+        // Where the frame the object has begun ends: at 30 Hz it has taken its whole step (F-82).
+        var (x, y, _) = entity.FrameEnd(_tick);
+        if (!IsPositionVisibleTo(player, x, y)) return false;
         return !entity.HasStatus(StealthedStatus) || entity.HasStatus(DetectedStatus);
     }
 
