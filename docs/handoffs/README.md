@@ -79,7 +79,8 @@ phase number is 32.
 | **46** | [HANDOFF-PHASE46.md](HANDOFF-PHASE46.md) | **S1-M11** | Fidelity package H: team orders as group orders (F-35), a turret's hold (F-76) | **done** by machine (30 October 2026): §60 |
 | **47** | [HANDOFF-PHASE47.md](HANDOFF-PHASE47.md) | **S1-M11** | Fidelity package I: the creation list's source (F-77), the waypoint follower (F-78) | **done** by machine (30 October 2026): §61 |
 | **48** | [HANDOFF-PHASE48.md](HANDOFF-PHASE48.md) | **S1-M11** | Fidelity package J: the dock that is gone (F-79), the default matches compared | **done** by machine (30 October 2026): §62 |
-| **49** | [HANDOFF-PHASE49.md](HANDOFF-PHASE49.md) | **S1-M11** | Fidelity package K: a Crusader's next target check (F-80) | **next** |
+| **49** | [HANDOFF-PHASE49.md](HANDOFF-PHASE49.md) | **S1-M11** | Fidelity package K: the exit path's second leg (F-80), the source's velocity (F-66), a disabled module's wake (F-81), the sight of a victim (F-82) | **done** by machine (30 October 2026): §63 |
+| **50** | [HANDOFF-PHASE50.md](HANDOFF-PHASE50.md) | **S1-M11** | Fidelity package L: the building site of the original (F-18) | **next** |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 

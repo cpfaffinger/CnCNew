@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package K) · **Phase:** 49
-> **Status:** next (starting state: the end of Phase 48, see below)
+> **Status:** done by machine (30 October 2026); the rest is in HANDOFF-PHASE50.md
 > **Predecessor:** HANDOFF-PHASE48.md · **Results in:** docs/SIMULATION-CORE.md §63, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** a locomotor's velocity for `INHERIT_VELOCITY` (F-66's named difference)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -54,3 +54,7 @@ commit; the checks the changes can reach green.
   `--trace 3948`, `--commands 14` (no order of a player in the window) and a throwaway build that printed the stack of every change of `Entity.HasMoveTarget`. The next step is the remedy
   named in the register: the unit decides again in the tick of that order, with the decision's tick taken as its frame's first tick - test first a factory that sends a unit with
   `AutoAcquireEnemiesWhenIdle` to a rally point past an enemy, and compare its acquisition state at the end of every frame at 30, 60 and 120 Hz.
+- F-80 (§63.1, `4b94136`, manifest `9b32e64`): the unit decides in the tick of the second leg's order, with the frame's first tick as the decision's tick.
+- F-66's rest (§63.2, `d58b631`, manifest `981d2c8`): `INHERIT_VELOCITY` takes what moves the source (`IFrameVelocity`).
+- F-81 (§63.3, `3bb461a`, manifest `f3cc122`) and F-82 (§63.4, `8b03a6c`, manifest `44fc259`): the two causes found by comparing all sixteen pairings of the manifest.
+- All sixteen pairings are the same game at 30 and 60 Hz to their ends (§63.5). Carried into `HANDOFF-PHASE50.md`: F-18. Closing measurements: `CLAUDE.md`, paragraph "Phase 49".
