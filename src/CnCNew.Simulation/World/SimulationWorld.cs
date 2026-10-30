@@ -164,7 +164,7 @@ public sealed partial class SimulationWorld : IWorldServices
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default,
         bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default, long DeletionTicks = 0, Fixed ShroudRange = default,
-        SpawnThrow? Throw = null, bool Floating = false);
+        SpawnThrow? Throw = null, bool Floating = false, EntityId StickTo = default, EntityId Bomber = default);
 
     /// <summary>
     /// The throw <c>doStuffToObj</c> gives a created object with a physics module (F-66): the force, the rates (with <see cref="Rates"/>), bouncing, a debris mass (0: none), the
@@ -670,9 +670,16 @@ public sealed partial class SimulationWorld : IWorldServices
         var id = Ids.AllocateEntity();
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
             extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY, Enslaver: extras.Enslaver, Producer: extras.Producer,
-            HasExit: extras.HasExit, DoorX: extras.DoorX, DoorY: extras.DoorY, ExitX: extras.ExitX, ExitY: extras.ExitY);
+            HasExit: extras.HasExit, DoorX: extras.DoorX, DoorY: extras.DoorY, ExitX: extras.ExitX, ExitY: extras.ExitY, StickTo: extras.StickTo, Bomber: extras.Bomber);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
+    }
+
+    public bool IsSpawnPending(EntityId id)
+    {
+        foreach (var pending in _spawnQueue)
+            if (pending.Id == id) return true;
+        return false;
     }
 
     /// <summary>Armor counterpart of <see cref="ActiveWeaponSet"/>; see <see cref="Templates.ObjectTemplate.VeteranArmor"/>.</summary>
@@ -1834,6 +1841,12 @@ public sealed partial class SimulationWorld : IWorldServices
         Register(entity);
         Emit(SimEventKind.EntitySpawned, entity.Id, EntityId.Invalid, template.Name, 0, pending.Owner);
         _spawnedTotal++;
+        // SpecialAbilityUpdate::triggerAbilityEffect: initStickyBomb on the charge it has just made.
+        if (setup.StickTo.IsValid && FindEntity(setup.StickTo) is { DestroyRequested: false } stuck && entity.ModuleArray.OfType<Modules.BuiltIn.StickyBombUpdate>().FirstOrDefault() is { } charge)
+        {
+            charge.InitStickyBomb(this, stuck, FindEntity(setup.Bomber));
+            MarkDirty(entity);
+        }
         // SlavedUpdateInterface::onEnslave, called by the creator (SpawnBehavior::createSpawn, the creation nugget) once the object exists.
         if (setup.Enslaver.IsValid && FindEntity(setup.Enslaver) is { DestroyRequested: false } enslaver)
         {
@@ -2418,6 +2431,11 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             if (setup.SetCreator) writer.UInt("creator", setup.Creator.Value);
             if (setup.Enslaver.IsValid) writer.UInt("enslaver", setup.Enslaver.Value);
+            if (setup.StickTo.IsValid)
+            {
+                writer.UInt("stickTo", setup.StickTo.Value);
+                writer.UInt("bomber", setup.Bomber.Value);
+            }
             if (setup.Throw is { } thrown)
             {
                 writer.Fixed("throwX", thrown.ForceX);

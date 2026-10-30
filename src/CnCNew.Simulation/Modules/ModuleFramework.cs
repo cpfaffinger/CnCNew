@@ -183,6 +183,9 @@ public interface IWorldServices
     /// <summary><see cref="RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed)"/> with the adjustments an engine-internal spawner applies to the fresh object (<see cref="SpawnExtras"/>).</summary>
     EntityId RequestSpawn(int templateIndex, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle, in SpawnExtras extras);
 
+    /// <summary>The object was requested and does not exist yet.</summary>
+    bool IsSpawnPending(EntityId id);
+
     /// <summary>
     /// One tick of construction work on a site (<c>DozerAIUpdate::update</c> in <c>DOZER_TASK_BUILD</c>): health rises, and the last tick completes the structure
     /// (clears <c>UNDER_CONSTRUCTION</c>, starts its power production and create modules). True when the structure is complete.
@@ -605,7 +608,8 @@ public static class SpecialPowerRouting
 /// (<c>aiFollowExitProductionPath</c>): first to the exit point of its factory, then to the rally point, if there is one.
 /// </summary>
 public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default,
-    EntityId Enslaver = default, EntityId Producer = default, bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default);
+    EntityId Enslaver = default, EntityId Producer = default, bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default,
+    EntityId StickTo = default, EntityId Bomber = default);
 
 // ------------------------------------------------------------------------------------------------ structures and world group
 

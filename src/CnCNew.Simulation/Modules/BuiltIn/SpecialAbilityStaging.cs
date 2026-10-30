@@ -11,14 +11,14 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Modules.BuiltIn;
 
 /// <summary>
-/// <c>SpecialAbilityUpdateModuleData</c>: the fields the staged capture powers read. Absent fields use the constructor defaults of the reference
-/// (<c>StartAbilityRange</c>/<c>AbilityAbortRange</c> = <c>SPECIAL_ABILITY_HUGE_DISTANCE</c>, times 0, <c>NeedToFaceTarget</c> = Yes,
-/// <c>PackUnpackVariationFactor</c> 0). The special-object fields (<c>SpecialObject</c>, the sounds, <c>EffectDuration</c>, ...) belong to the abilities that
-/// are not staged and to presentation, and stay unread.
+/// <c>SpecialAbilityUpdateModuleData</c>. Absent fields use the constructor defaults of the reference (<c>StartAbilityRange</c>/<c>AbilityAbortRange</c> =
+/// <c>SPECIAL_ABILITY_HUGE_DISTANCE</c>, times 0, <c>NeedToFaceTarget</c> = Yes, <c>PackUnpackVariationFactor</c> 0, <c>MaxSpecialObjects</c> 1). The sounds and the particle system belong to
+/// presentation and stay unread.
 /// </summary>
 public sealed record SpecialAbilityUpdateData(
     SpecialPowerBaseData Base, Fixed StartAbilityRange, Fixed AbilityAbortRange, long PreparationTicks, long PackTicks, long UnpackTicks,
-    Fixed PackUnpackVariation, bool DoCaptureFx, int AwardXp, bool NeedToFaceTarget, bool ApproachRequiresLos) : ModuleData
+    Fixed PackUnpackVariation, bool DoCaptureFx, int AwardXp, bool NeedToFaceTarget, bool ApproachRequiresLos, string SpecialObject, int MaxSpecialObjects, bool SpecialObjectsPersistent,
+    bool SpecialObjectsPersistWhenOwnerDies, bool SkipPackingWithNoTarget, bool LoseStealthOnTrigger, Fixed FleeRange) : ModuleData
 {
     /// <summary><c>SPECIAL_ABILITY_HUGE_DISTANCE</c>: "no limit". Compared, never squared (the square would not fit a <see cref="Fixed"/>).</summary>
     public static readonly Fixed HugeDistance = Fixed.FromInt(10000000);
@@ -34,7 +34,14 @@ public sealed record SpecialAbilityUpdateData(
         ModuleConfigReader.Bool(configuration, "DoCaptureFX", false),
         checked((int)ModuleConfigReader.Int(configuration, "AwardXPForTriggering", 0)),
         ModuleConfigReader.Bool(configuration, "NeedToFaceTarget", true),
-        ModuleConfigReader.Bool(configuration, "ApproachRequiresLOS", true));
+        ModuleConfigReader.Bool(configuration, "ApproachRequiresLOS", true),
+        ModuleConfigReader.Text(configuration, "SpecialObject"),
+        checked((int)ModuleConfigReader.Int(configuration, "MaxSpecialObjects", 1)),
+        ModuleConfigReader.Bool(configuration, "SpecialObjectsPersistent", false),
+        ModuleConfigReader.Bool(configuration, "SpecialObjectsPersistWhenOwnerDies", false),
+        ModuleConfigReader.Bool(configuration, "SkipPackingWithNoTarget", false),
+        ModuleConfigReader.Bool(configuration, "LoseStealthOnTrigger", false),
+        ModuleConfigReader.Real(configuration, "FleeRangeAfterCompletion", Fixed.Zero));
 }
 
 /// <summary>The part of a staged capture the player sees, in the order the ability goes through them.</summary>
@@ -90,7 +97,7 @@ public static class StagedCaptureRules
 /// (<c>onExit</c>) when its object dies, is ordered to do something else by the player or a script, or its target dies / is captured by an ally.
 /// </para>
 /// </summary>
-public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : SpecialPowerModuleBase(data.Base), IUpdateModule, ISpecialPowerHandler
+public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : SpecialPowerModuleBase(data.Base), IUpdateModule, ISpecialPowerHandler
 {
     private enum PackState : byte { None, Packing, Unpacking, Packed, Unpacked }
 
@@ -112,6 +119,9 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     private bool _facingComplete;
     private int _approachOrders;
     private Fixed _flashPhase;
+
+    /// <summary><c>m_noTargetCommand</c>: the order named neither an object nor a place (the detonation of remote charges).</summary>
+    private bool _noTarget;
 
     /// <summary>Ticks of the current logic frame of the original the unit has spent turning to its target (<see cref="TurnToward"/>); always 0 at 30 Hz, written only while nonzero.</summary>
     private int _facePhase;
@@ -171,31 +181,31 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
 
     // ------------------------------------------------------------------------------------------------------------ handler
 
-    public bool Handles(IWorldServices world, int powerIndex) => powerIndex == PowerIndex && IsCapture(world);
+    public bool Handles(IWorldServices world, int powerIndex) => powerIndex == PowerIndex && KindOf(world) != AbilityKind.None;
 
-    public bool ValidatesTarget(IWorldServices world, int powerIndex, in SpecialPowerTarget target)
-        => target.Kind == SpecialPowerTargetKind.Object && world.FindEntity(target.Entity) is { } victim && StagedCaptureRules.CanCapture(world, Entity, victim) && CrateModules.AiOf(Entity) is not null;
+    public bool ValidatesTarget(IWorldServices world, int powerIndex, in SpecialPowerTarget target) => TakesTarget(world, target);
 
     /// <summary><c>initiateIntentToDoSpecialPower</c> through <c>UseSpecialPowerCommand</c>.</summary>
     public void Initiate(IWorldServices world, int powerIndex, in SpecialPowerTarget target)
     {
-        if (target.Kind != SpecialPowerTargetKind.Object || world.FindEntity(target.Entity) is not { } victim) return;
-        Begin(world, victim);
+        if (target.Kind == SpecialPowerTargetKind.None) Begin(world, null);
+        else if (target.Kind == SpecialPowerTargetKind.Object && world.FindEntity(target.Entity) is { } victim) Begin(world, victim);
     }
 
     /// <summary>
     /// <c>initiateIntentToDoSpecialPower</c>: forgets any earlier run, takes the target, goes idle (the approach starts in the next update) and starts at the unpacked state when
     /// <c>UnpackTime</c> is zero. A second staged ability of the same object is cancelled first (the reference kills the mutually exclusive ones).
     /// </summary>
-    public void Begin(IWorldServices world, Entity target)
+    public void Begin(IWorldServices world, Entity? target)
     {
         if (CrateModules.AiOf(Entity) is not { } ai) return;
         foreach (var module in Entity.ModuleArray)
             if (module is SpecialAbilityUpdate { _active: true } other && !ReferenceEquals(other, this)) other.Exit(world);
         ClearRun();
         Entity.Status &= ~(1UL << UsingAbilityBit);
-        _target = target.Id;
-        _packState = data.UnpackTicks == 0 ? PackState.Unpacked : PackState.Packed;
+        _target = target?.Id ?? EntityId.Invalid;
+        _noTarget = target is null;
+        _packState = data.UnpackTicks == 0 || (_noTarget && data.SkipPackingWithNoTarget) ? PackState.Unpacked : PackState.Packed;
         _active = true;
         ai.OrderIdle(world, false);
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
@@ -212,14 +222,21 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
 
     public long Update(IWorldServices world)
     {
-        if (!_active) return SimulationTiming.SleepForever;
+        // "Validation of special objects makes sure that they still exist": a planted charge keeps the module awake, for the end of its owner too.
+        if (!_active)
+        {
+            if (Entity.EffectivelyDead) Exit(world, cleanup: true);
+            ValidateSpecialObjects(world);
+            return _specialObjects.Count > 0 ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        }
         Step(world);
-        return _active ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
+        return _active || _specialObjects.Count > 0 ? SimulationTiming.SleepNone : SimulationTiming.SleepForever;
     }
 
     private void Step(IWorldServices world)
     {
-        if (Entity.EffectivelyDead || Entity.DestroyRequested) { Exit(world); return; }
+        ValidateSpecialObjects(world);
+        if (Entity.EffectivelyDead || Entity.DestroyRequested) { Exit(world, cleanup: true); return; }
         var ai = CrateModules.AiOf(Entity);
         // "ai->getLastCommandSource() != CMD_FROM_AI": the player or a script ordered something else.
         if (ai is null || ai.LastCommandFromPlayer) { Exit(world); return; }
@@ -233,11 +250,18 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         if (target is not null)
         {
             // A dead target ends the ability at once; a stealthed, undetected target as long as the preparation has not completed; one a colleague already captured.
+            var kind = KindOf(world);
             if (target.EffectivelyDead) abort = true;
             else
             {
-                if (target.Owner == Entity.Owner) abort = true;
-                if (target.HasStatus(StealthedBit) && !target.HasStatus(DetectedBit) && _prepFrames != 0) abort = true;
+                if (kind is AbilityKind.InfantryCapture or AbilityKind.BlackLotusCapture && target.Owner == Entity.Owner) abort = true;
+                var checksStealth = kind switch
+                {
+                    AbilityKind.TankHunterTnt => false,
+                    AbilityKind.TimedCharges or AbilityKind.RemoteCharges => !NeedToUnpack,
+                    _ => true,
+                };
+                if (checksStealth && target.HasStatus(StealthedBit) && !target.HasStatus(DetectedBit) && _prepFrames != 0) abort = true;
             }
         }
 
@@ -274,7 +298,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
                 // The approach move ends where the unit is (aiBusy / aiIdle in the reference's first state change).
                 if (Entity.HasMoveTarget) ai.OrderIdle(world, false);
             }
-            if (data.NeedToFaceTarget && !_facingComplete)
+            if (data.NeedToFaceTarget && !_noTarget && !_facingComplete)
             {
                 _facingInitiated = true;
                 if (target is not null && !TurnToward(world, target)) return;
@@ -318,7 +342,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         return false;
     }
 
-    private bool NeedToPack => _packState == PackState.Unpacked && data.PackTicks > 0;
+    private bool NeedToPack => _packState == PackState.Unpacked && data.PackTicks > 0 && !(_noTarget && data.SkipPackingWithNoTarget);
     private bool NeedToUnpack => _packState == PackState.Packed && data.UnpackTicks > 0;
 
     private long Varied(IWorldServices world, long ticks)
@@ -343,15 +367,15 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
 
     /// <summary>
     /// <c>startPreparation</c> for the capture powers: the counter is set; a target a colleague already captured stops here (the next update aborts); otherwise the power's recharge
-    /// starts ("Trigger the reset timer on the special power because we're officially starting it now"), the unit goes idle and <c>USING_ABILITY</c> is set. (A booby-trapped target
-    /// would detonate here; the simulation has no booby traps, see the doc.)
+    /// starts ("Trigger the reset timer on the special power because we're officially starting it now"), the unit goes idle and <c>USING_ABILITY</c> is set. "Whoops, it was mined": an infantry capture sets a booby trap off here.
     /// </summary>
     private void StartPreparation(IWorldServices world, Entity? target, ISpecialPowerModule power)
     {
         _prepFrames = data.PreparationTicks;
-        if (target is not null)
+        if (target is not null && IsCapture(world))
         {
             if (target.Owner == Entity.Owner) return;
+            if (CaptureKind(world) == CaptureType.Infantry && StickyBombUpdate.CheckAndDetonateBoobyTrap(world, target, Entity) && target.EffectivelyDead) return;
             // Black Lotus: "Relationship r == ALLIES: return" (an ally of any kind, not only the own team).
             if (CaptureKind(world) == CaptureType.BlackLotus && world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return;
         }
@@ -367,6 +391,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     private bool ContinuePreparation(IWorldServices world, Entity? target, ISpecialPowerModule power)
     {
         if (data.AbilityAbortRange < SpecialAbilityUpdateData.HugeDistance && target is not null && !WithinSpheres(target, data.AbilityAbortRange)) return false;
+        if (!IsCapture(world)) return true;
         if (target is null) return false;
         if (world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return false;
         if (data.DoCaptureFx) StepCaptureFlash(world, target);
@@ -401,6 +426,11 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     private void TriggerEffect(IWorldServices world, Entity? target, ISpecialPowerModule power)
     {
         if (data.AwardXp > 0) world.AddExperiencePoints(Entity, data.AwardXp);
+        if (!IsCapture(world))
+        {
+            if (TriggerKind(world, target, KindOf(world)) && data.LoseStealthOnTrigger) StealthUpdate.Expose(world, Entity);
+            return;
+        }
         if (target is null || target.Owner == Entity.Owner || target.EffectivelyDead) return;
         if (target.Container is { IsGarrisonable: true })
         {
@@ -424,13 +454,32 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     {
         _withinRange = false;
         _packState = PackState.None;
+        // "He will plant the charge then flee; without a target he simply detonates it without fleeing": away from what the unit faces, around its own mines.
+        if (data.FleeRange > Fixed.Zero && !_noTarget && CrateModules.AiOf(Entity) is { } ai)
+        {
+            var (fleeX, fleeY) = (Entity.X - FixedTrig.Cos(Entity.Angle) * data.FleeRange, Entity.Y - FixedTrig.Sin(Entity.Angle) * data.FleeRange);
+            foreach (var mine in world.EntitiesOfKind("MINE").AsSpan())
+            {
+                if (mine.Owner != Entity.Owner) continue;
+                var (dx, dy) = (fleeX - mine.X, fleeY - mine.Y);
+                var distance = Fixed.Sqrt(dx * dx + dy * dy);
+                if (distance > data.FleeRange + mine.Template.BoundingCircleRadius || distance == Fixed.Zero) continue;
+                (fleeX, fleeY) = (mine.X + dx / distance * data.FleeRange, mine.Y + dy / distance * data.FleeRange);
+                break;
+            }
+            ai.OrderMove(world, fleeX, fleeY, false);
+        }
         Exit(world);
     }
 
-    /// <summary><c>onExit</c>: clears the run (the model conditions follow the stage, which becomes <see cref="AbilityStage.None"/>) and the status.</summary>
-    private void Exit(IWorldServices world)
+    /// <summary>
+    /// <c>onExit</c>: clears the run (the model conditions follow the stage, which becomes <see cref="AbilityStage.None"/>) and the status. Special objects that do not persist go, and with
+    /// <paramref name="cleanup"/> (the unit is dead) those that do not outlive their owner.
+    /// </summary>
+    private void Exit(IWorldServices world, bool cleanup = false)
     {
         Entity.Status &= ~(1UL << UsingAbilityBit);
+        if (!data.SpecialObjectsPersistent || (cleanup && !data.SpecialObjectsPersistWhenOwnerDies)) KillSpecialObjects(world);
         ClearRun();
         world.MarkDirty(Entity);
     }
@@ -448,6 +497,7 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         _approachOrders = 0;
         _flashPhase = Fixed.Zero;
         _facePhase = 0;
+        _noTarget = false;
     }
 
     // ------------------------------------------------------------------------------------------------------------ approach and facing
@@ -526,7 +576,15 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
     public override void Describe(IStateWriter writer)
     {
         base.Describe(writer);
-        if (!_active) return;
+        if (!_active)
+        {
+            if (_specialObjects.Count == 0) return;
+            DescribeSpecialObjects(writer);
+            writer.Int("nextWake", _nextWake);
+            return;
+        }
+        DescribeSpecialObjects(writer);
+        if (_noTarget) writer.Bool("abilityNoTarget", true);
         writer.Bool("abilityActive", true);
         writer.Int("abilityState", (int)_packState);
         writer.Int("abilityAnim", _animFrames);
@@ -546,8 +604,14 @@ public sealed class SpecialAbilityUpdate(SpecialAbilityUpdateData data) : Specia
         base.Load(reader);
         ClearRun();
         _nextWake = SimulationTiming.SleepForever;
-        if (!reader.Has("abilityActive")) return;
+        LoadSpecialObjects(reader);
+        if (!reader.Has("abilityActive"))
+        {
+            if (_specialObjects.Count > 0) _nextWake = reader.Int("nextWake");
+            return;
+        }
         _active = true;
+        _noTarget = reader.Has("abilityNoTarget");
         var state = reader.Int("abilityState");
         if (state < 0 || state > (int)PackState.Unpacked) throw new InvalidDataException("Special ability pack state out of range.");
         _packState = (PackState)state;

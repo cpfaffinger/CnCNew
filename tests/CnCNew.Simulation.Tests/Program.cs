@@ -92,6 +92,8 @@ run.Test("Goal spots: units sent to one point all arrive beside each other, the 
 run.Test("Boarding: infantry walks into its transport instead of around it, the same at 30, 60 and 120 Hz", Tests.BoardersWalkIntoTheirTransport);
 run.Test("Rate invariance, consolidation: movers that meet are where the 30 Hz movers are", Tests.RateConsolidationMoversThatMeetAreTheSame);
 run.Test("Phase 50 (F-18): the terrain rules of a building site", Tests.BuildSiteTerrainRules);
+run.Test("Phase 50 (F-83): a unit plants a remote charge and sets it off", Tests.AbilityPlantsARemoteChargeAndSetsItOff);
+run.Test("Phase 50 (F-83): a timed charge and a booby trap", Tests.AbilityPlantsATimedChargeAndABoobyTrap);
 run.Test("Phase 50 (F-18): a supply center keeps its distance to the supplies", Tests.BuildSiteKeepsItsDistanceToSupplies);
 run.Test("Phase 50 (F-18): the objects under a building site", Tests.BuildSiteClearsItsGround);
 run.Test("Phase 50 (F-18): a building site needs the sight of the player and a way for the builder", Tests.BuildSiteNeedsSightAndAWay);

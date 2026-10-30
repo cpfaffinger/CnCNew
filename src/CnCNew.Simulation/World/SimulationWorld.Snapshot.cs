@@ -120,7 +120,9 @@ public sealed partial class SimulationWorld
                             pending.Has("throwInheritX") ? pending.Fixed("throwInheritZ") : default,
                             pending.Has("throwExtraFriction") ? pending.Fixed("throwExtraFriction") : default)
                         : null,
-                    pending.Has("floating")),
+                    pending.Has("floating"),
+                    pending.Has("stickTo") ? new EntityId(checked((uint)pending.UInt("stickTo"))) : default,
+                    pending.Has("stickTo") ? new EntityId(checked((uint)pending.UInt("bomber"))) : default),
                 pending.Has("notBefore") ? pending.Int("notBefore") : 0));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));
