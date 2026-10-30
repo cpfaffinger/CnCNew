@@ -4176,7 +4176,7 @@ China on Bitter Winter agrees at 30 and 60 Hz to frame 25,631 (before: 11,189); 
 (`f1f953a`; `doStuffToObj`, `PhysicsBehavior::getForwardFriction` and its siblings) What §58.3 left of the creation list's throw. `ExtraFriction` (per second, kept per frame) is added to the
 forward, lateral and aerodynamic frictions of the thrown object (`setExtraFriction`, in `SEND_IT_OUT` and in the throwing dispositions). `INHERIT_VELOCITY` applies the source's velocity
 as a force, before a debris mass is set; in the port that is the velocity of a fall or a flight of the source's physics module - the port's locomotors do not move an object through its
-physics module, so a unit driving or flying under its locomotor gives nothing (a named difference: the original's dying jet or drone hands its speed to its hulk). `FLOATING` enables
+physics module, so a unit driving or flying under its locomotor gives nothing (a named difference until Phase 49, §63.2: the original's dying jet or drone hands its speed to its hulk). `FLOATING` enables
 the object's `FloatUpdate`; no shipped object made with it has one (the generic debris), so it does nothing in the shipped data. `ExtraBounciness` is stored by the original
 (`setExtraBounciness`) and never read; it is not kept. Test `CreationListFrictionAndInheritedVelocity` (a rough crate slides a shorter way than a smooth one with the same push, a crate
 made by a sliding crate slides on; the same places at 30, 60 and 120 Hz; on the code before the rough crate slid as far). Input manifest `6c9c5d6` (the creation lists' catalogue); no field of the reference manifest moved.
@@ -4250,4 +4250,42 @@ Fury ChinaTank-AirForce is won by ChinaTank at tick 38,940 instead of 39,000, Bi
 With F-79 the default match America against China on Bitter Winter agrees at 30 and 60 Hz to frame 49,244; on Death Valley it is the same game at 30 and 60 Hz to the last of 50,000
 compared frames; on Armored Fury it agrees to frame 29,669 (and on Alpine Assault to the end since Phase 45). The next difference on Armored Fury and on Bitter Winter is the same kind -
 a Crusader's next target check (`acquisition.nextCheck`) some 40 frames apart - and is registered as F-80.
+
+## 63. Phase 49: the exit path's second leg, the source's velocity, a disabled module's wake, the sight of a victim (fidelity package K)
+
+Each finding read in the original's source, one cause per commit with a test that fails on the code before and compares 30, 60 and 120 Hz, and its own manifest commit where a field moved.
+
+### 63.1 F-80: a unit decides again in the frame its exit path's second leg was ordered
+
+(`4b94136`) At 30 Hz the step that ends the first leg of an exit path orders the second leg (`OrderMove`, which ends the acquisition state), and the acquisition of the same tick decides
+again: the turret's look is reset two frames ahead. Above 30 Hz the second leg is ordered with the last tick of the unit's frame (so that the arrival's shares are covered, §42), after that
+frame's acquisition; the unit decided again only in its next frame, its next look lay a frame later, and the shift of the look drawn by the frame's number made it some 40 frames apart.
+`DecideAfterLateOrder` runs the unit's decision in the tick of the order, with the frame's first tick as the decision's tick. Test `ExitPathAcquisitionIsTheSameAtEveryRate` (a factory sends a
+tank with a turret to a rally point past an enemy; its acquisition state at the end of every frame of its own and the frame it first has a victim are those of 30 Hz at 60 and 120 Hz). Manifest `9b32e64`: 7 runs, 13 fields, hashes only - the four Armored Fury pairings, Bitter Winter ChinaTank-AirForce, Death Valley China-GLA and ChinaTank-AirForce.
+
+### 63.2 F-66's rest: `INHERIT_VELOCITY` takes what moves the source
+
+(`d58b631`; `doStuffToObj`, `getPhysics()->getVelocity()`) §59.9 named the difference: the port's locomotors and the wrecks' falls do not move an object through its physics module, so a creation
+list gave nothing for a unit that drove or a plane that fell. `IFrameVelocity` gives the velocity per frame of the original for them: the AI's speed along the heading where the frame ends, a
+jet's fall (`JetSlowDeathBehavior`) and a helicopter's spiral (`HelicopterSlowDeathBehavior`) before the AI's speed, which they keep. An object without a physics module gives nothing, as in
+the original. What stays: a flyer's climb under its locomotor has no vertical part. Tests `CreationListFrictionAndInheritedVelocity` (a crate made by a walking soldier slides on) and
+`CreationListTakesAFallingPlanesVelocity` (a crate made by a falling plane flies on), the same places at 30, 60 and 120 Hz. Manifest `981d2c8`: 2 runs, 12 fields - the retail reference match is won by FactionGLA at tick 36,540 instead of 29,490 (end tick 37,141, end hash `3E41F7F2A4F4D9A5`, chain `938C7502C5E562FF`, 22,445 commands; a metastable match, §38, the same game at 30, 60 and 120 Hz), `MD_USA02` changes its hashes.
+
+### 63.3 F-81: a disabled object's module asks again with the object's next frame
+
+(`3bb461a`; `GameLogic::update`) A disabled object runs only the update modules that process one of its disabled types (§54); the others ask again. The original asks in its next frame; the port
+asked in the next tick, so above 30 Hz a module woke in the tick the disable ended, inside a frame of its object, and a module that sleeps by whole frames stayed a share of a frame early from
+then on. In the pairing ChinaTank against AirForce a horde member that had ridden in a transport counted its neighbours half a frame before 30 Hz does, and one neighbour stood at the edge of
+the radius (Armored Fury frame 18,840, Death Valley frame 12,964). The module now asks with the first tick of the object's next frame (`SimulationWorld.RunUpdates`). Test
+`DisabledModuleWakesOnItsFrames`. Manifest `f3cc122`: 32 runs, 58 fields, hashes only (a wake is saved state); every outcome, end tick and command count kept.
+
+### 63.4 F-82: a player sees an object where the frame it has begun ends
+
+(`8b03a6c`) Rule 3 of the frame convention (§43): an observer reads the frame end. `CanPlayerSee` read the object's place inside its frame step, so above 30 Hz a victim that left the sight in
+that step was seen for another frame - on Bitter Winter two gattling tanks kept their turrets on a Chinook flying out of sight (frame 17,687). It now reads the place where the frame ends. Test
+`VictimLeavesTheSightWhereItsFrameEnds` (a tank gives up a runner that walks out of its sight in the frame it does at 30 Hz). Manifest `44fc259`: 2 runs, 17 fields - Bitter Winter ChinaTank-AirForce ends at tick 41,311 instead of 42,601 with the same winner, the eight-player run on Fortress Avalanche changes its commands and hashes.
+
+### 63.5 The default matches compared
+
+With these four causes **all sixteen pairings of the manifest are the same game at 30, 60 and 120 Hz to their ends**: `rate-compare --map-diff <factions> --map <map> --fields --frames 50000 --persist 10` with `--rates 30,60` and `--rates 30,120` finds no difference in any compared field (the fields left out are those of §59: `.nextWake`, `.previousHealth`, the construction progress inside a frame, `DynamicShroudClearingRange`). The default match America against China ends at frame 22,140 on Alpine Assault, 29,520 on Armored Fury, 49,125 on Bitter Winter and 13,260 on Death Valley; the retail reference match is the same game too. This holds for the pairings of the manifest with its seeds: it is a measurement of sixteen matches, not a proof.
 
