@@ -5,6 +5,7 @@ using CnCNew.Data.Definitions;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.World;
 
@@ -63,6 +64,8 @@ public sealed class FrameProjector
 
     /// <summary>The tracker tables are cleaned of entities that are gone every this many original frames (five seconds).</summary>
     public const int PruneIntervalFrames = 150;
+
+    private static readonly int DisguisedBit = ObjectStatusBits.Index("DISGUISED");
 
     private readonly ObjectVisualCatalog _catalog;
     private readonly FrameProjectorOptions _options;
@@ -200,9 +203,13 @@ public sealed class FrameProjector
         foreach (var entity in entities)
         {
             if (entity.DestroyRequested || entity.ContainedBy.IsValid) continue;
-            if (!_catalog.TryGet(entity.Template.Name, out var visual)) { MissingVisuals++; continue; }
+            // StealthUpdate::changeVisualDisguise: a unit in disguise has the model of what it stands for, and the house colour of that player for everybody but its allies.
+            var disguise = entity.HasStatus(DisguisedBit) ? entity.Modules.OfType<StealthUpdate>().FirstOrDefault(stealth => stealth.IsDisguised) : null;
+            var shown = disguise is not null ? world.Templates[disguise.DisguisedTemplate].Name : entity.Template.Name;
+            if (!_catalog.TryGet(shown, out var visual)) { MissingVisuals++; continue; }
             var previous = _previous.GetValueOrDefault(entity.Id.Value);
             var capture = CaptureEntity(entity, world, visual, previous);
+            if (disguise is not null && _options.Viewer is { } looking && world.RelationshipOf(entity.Owner, looking) != Relationship.Allies) capture = capture with { Owner = disguise.DisguisedPlayer };
             _current[entity.Id.Value] = capture;
             ordered.Add(capture);
             if (_known.Add(entity.Id.Value)) Claim(capture);
