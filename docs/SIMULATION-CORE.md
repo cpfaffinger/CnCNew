@@ -4233,3 +4233,21 @@ structure, a path that failed) stood for good. A unit inside the 40 units was al
 remembers the waypoint its move was ordered for (`Follower.GoalIndex`, until now a team follower's only) and goes on when that move has ended. Test `FollowerGoesOnWhenItsMoveEnds` (a soldier
 whose path's corner lies inside a block finishes the path at 30, 60 and 120 Hz). Manifest `209392f`: 12 mission runs (the nine `GC_ChinaBoss` runs, `MD_GLA01`, `MD_USA01`, `MD_USA02`) change their hashes, every outcome and end tick kept.
 
+## 62. Phase 48: the dock that is gone, and the default matches compared (fidelity package J)
+
+### 62.1 F-79: a docker sees its dock gone in the next frame
+
+(`787e2d5`; `AIDockProcessDockState::update`) On Bitter Winter a Chinese supply truck at work in a supply center's dock left it a frame early at 60 Hz (frame 39,929) when the center was
+destroyed: the dock machine runs every tick while the dock works on its docker (the docks' actions are written per tick), and above 30 Hz it saw the dock gone in the second tick of the
+frame the dock was destroyed in, after that tick's updates; at 30 Hz the truck sees it in the next frame. Found with `rate-compare --trace` and two throwaway builds that printed the
+stack of `EndDock` and the machine's state per tick (the dock of the truck's machine was not the supply center that lived on, but another one, destroyed). The machine's states change
+once per frame, and a dock that is gone now ends `ProcessDock` only in a tick that begins a frame. Test `HaulerSeesItsDockGoneInTheNextFrame` (a hauler whose warehouse is destroyed after
+the updates of a frame's first tick leaves the dock in the next frame at 30, 60 and 120 Hz; in the same frame at 60 Hz on the code before). Manifest `8356f7a`: 2 runs, 12 fields - Armored
+Fury ChinaTank-AirForce is won by ChinaTank at tick 38,940 instead of 39,000, Bitter Winter America-China changes its hashes and commands.
+
+### 62.2 The default matches compared
+
+With F-79 the default match America against China on Bitter Winter agrees at 30 and 60 Hz to frame 49,244; on Death Valley it is the same game at 30 and 60 Hz to the last of 50,000
+compared frames; on Armored Fury it agrees to frame 29,669 (and on Alpine Assault to the end since Phase 45). The next difference on Armored Fury and on Bitter Winter is the same kind -
+a Crusader's next target check (`acquisition.nextCheck`) some 40 frames apart - and is registered as F-80.
+
