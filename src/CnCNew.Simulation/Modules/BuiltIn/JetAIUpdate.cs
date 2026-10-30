@@ -430,7 +430,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         // in the first tick of its own frame, and its state after every frame is the 30 Hz state (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7).
         var stride = world.Time.TicksPerOriginalFrame;
         if (stride > 1 && world.Tick < Entity.SpawnTick + stride) return SimulationTiming.SleepNone;
-        if (Entity.EmpDisabledUntil > world.Tick || (Entity.ScriptDisableMask & Entity.ScriptHeld) != 0)
+        if (Entity.IsDisabledByTime(world.Tick) || (Entity.ScriptDisableMask & Entity.ScriptHeld) != 0)
         {
             SetFlightFrameSpeed(world.Time, Fixed.Zero);
             return SimulationTiming.SleepNone;

@@ -63,11 +63,12 @@ internal static class AirWeaponModules
     /// <summary><c>Object::isAirborneTarget</c> as far as it can be known here: flying clearly above the terrain, or flagged so.</summary>
     public static bool IsAirborne(IWorldServices world, Entity entity) => entity.HasStatus(ObjectStatusBits.Index("AIRBORNE_TARGET")) || world.IsSignificantlyAboveTerrain(entity);
 
-    /// <summary><c>Object::setDisabledUntil(DISABLED_EMP, ...)</c>: the object neither moves nor shoots until <paramref name="until"/>.</summary>
-    public static void DisableUntil(IWorldServices world, Entity victim, long until)
+    /// <summary><c>Object::setDisabledUntil(DISABLED_EMP, ...)</c>, with <paramref name="hacked"/> <c>DISABLED_HACKED</c>: the object neither moves nor shoots until <paramref name="until"/>.</summary>
+    public static void DisableUntil(IWorldServices world, Entity victim, long until, bool hacked = false)
     {
         var enabled = DisabledMasks.EnabledFrom(world.Time, until);
-        victim.EmpDisabledUntil = enabled;
+        if (hacked) victim.HackedUntil = enabled;
+        else victim.EmpDisabledUntil = enabled;
         // A weapon cannot become ready while the object is disabled; its AI does not run (GameLogic::update) and leaves it standing.
         SimulationWorld.DelayWeaponsUntil(victim, enabled, true);
         foreach (var module in victim.ModuleArray)

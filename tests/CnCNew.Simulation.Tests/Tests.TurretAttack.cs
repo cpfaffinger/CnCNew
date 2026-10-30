@@ -106,7 +106,7 @@ static partial class Tests
           End
         End
         SpecialPower SPECIAL_TurretAbility
-          Enum = SPECIAL_BLACKLOTUS_STEAL_CASH_HACK
+          Enum = SPECIAL_REMOTE_CHARGES
           ReloadTime = 0
         End
         Object AbilityTank

@@ -2,6 +2,7 @@ using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.World;
 
 namespace CnCNew.Simulation.Modules.BuiltIn;
@@ -16,6 +17,10 @@ internal enum AbilityKind : byte
     RemoteCharges,
     TankHunterTnt,
     BoobyTrap,
+    HackerDisable,
+    VehicleHack,
+    StealCash,
+    LaserMissiles,
 }
 
 /// <summary>
@@ -50,7 +55,12 @@ public sealed partial class SpecialAbilityUpdate
         ("SPECIAL_INFANTRY_CAPTURE_BUILDING", AbilityKind.InfantryCapture), ("SPECIAL_BLACKLOTUS_CAPTURE_BUILDING", AbilityKind.BlackLotusCapture),
         ("SPECIAL_TIMED_CHARGES", AbilityKind.TimedCharges), ("SPECIAL_REMOTE_CHARGES", AbilityKind.RemoteCharges),
         ("SPECIAL_TANKHUNTER_TNT_ATTACK", AbilityKind.TankHunterTnt), ("SPECIAL_BOOBY_TRAP", AbilityKind.BoobyTrap),
+        ("SPECIAL_HACKER_DISABLE_BUILDING", AbilityKind.HackerDisable), ("SPECIAL_BLACKLOTUS_DISABLE_VEHICLE_HACK", AbilityKind.VehicleHack),
+        ("SPECIAL_BLACKLOTUS_STEAL_CASH_HACK", AbilityKind.StealCash), ("SPECIAL_MISSILE_DEFENDER_LASER_GUIDED_MISSILES", AbilityKind.LaserMissiles),
     ];
+
+    /// <summary>How much a cash hack takes at most (<c>desiredAmount</c> of <c>triggerAbilityEffect</c>).</summary>
+    private static readonly Fixed StolenCash = Fixed.FromInt(1000);
 
     /// <summary><c>ActionManager::canDoSpecialPowerAtObject</c> and its siblings for this ability's kind: what the order may name.</summary>
     private bool TakesTarget(IWorldServices world, in SpecialPowerTarget target)
@@ -67,6 +77,15 @@ public sealed partial class SpecialAbilityUpdate
                 return victim.Template.IsKindOf("STRUCTURE") || (victim.Template.IsKindOf("VEHICLE") && !victim.Template.IsKindOf("AIRCRAFT"));
             case AbilityKind.BoobyTrap:
                 return victim.Template.IsKindOf("STRUCTURE") && relation != Relationship.Enemies;
+            case AbilityKind.LaserMissiles:
+                return victim.Template.IsKindOf("VEHICLE") && relation == Relationship.Enemies;
+            case AbilityKind.HackerDisable:
+                return victim.Template.IsKindOf("STRUCTURE") && relation == Relationship.Enemies && victim.Template.IsKindOf("CAPTURABLE") && !victim.Template.IsKindOf("REBUILD_HOLE");
+            case AbilityKind.VehicleHack:
+                return relation == Relationship.Enemies && victim.Template.IsKindOf("VEHICLE") && !victim.Template.IsKindOf("AIRCRAFT") && !AirWeaponModules.IsAirborne(world, victim) && MayBeHacked(world, victim);
+            case AbilityKind.StealCash:
+                return relation == Relationship.Enemies && victim.Template.IsKindOf("CASH_GENERATOR") && !victim.HasStatus(ObjectStatusBits.UnderConstruction)
+                    && victim.Template.IsKindOf("CAPTURABLE") && !victim.Template.IsKindOf("REBUILD_HOLE") && MayBeHacked(world, victim);
             case AbilityKind.TimedCharges or AbilityKind.RemoteCharges:
                 if (victim.Template.IsKindOf("BRIDGE") || victim.Template.IsKindOf("BRIDGE_TOWER")) return false;
                 if (!victim.Template.IsKindOf("STRUCTURE") && !victim.Template.IsKindOf("VEHICLE")) return false;
@@ -81,6 +100,47 @@ public sealed partial class SpecialAbilityUpdate
     }
 
     private bool HasChargeKind => data.SpecialObject.Length > 0;
+
+    /// <summary>"If the enemy unit is stealthed and not detected, then we can't attack it", and a container that looks friendly is not hacked (<c>appearsToContainFriendlies</c>).</summary>
+    private bool MayBeHacked(IWorldServices world, Entity victim)
+    {
+        if (victim.HasStatus(StealthedBit) && !victim.HasStatus(DetectedBit) && !victim.HasStatus(ObjectStatusBits.Index("DISGUISED"))) return false;
+        return victim.Container?.ApparentOwnerFor(world, Entity.Owner) is not { } apparent || world.RelationshipOf(Entity.Owner, apparent) == Relationship.Enemies;
+    }
+
+    /// <summary>The kind's part of <c>startPreparation</c>; false when the preparation does not begin (the target has become an ally's).</summary>
+    private bool PrepareKind(IWorldServices world, Entity? target)
+    {
+        switch (KindOf(world))
+        {
+            case AbilityKind.LaserMissiles:
+                if (target is not null) CreateSpecialObject(world, null);
+                return true;
+            case AbilityKind.HackerDisable or AbilityKind.VehicleHack or AbilityKind.StealCash:
+                if (target is null) return true;
+                if (world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return false;
+                CreateSpecialObject(world, null);
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /// <summary>The kind's part of <c>continuePreparation</c>: an aim or a hack on a vehicle ends with its target or when the target has become an ally's.</summary>
+    private bool ContinueKind(IWorldServices world, Entity? target)
+    {
+        if (KindOf(world) is not (AbilityKind.LaserMissiles or AbilityKind.VehicleHack)) return true;
+        return target is not null && world.RelationshipOf(Entity.Owner, target.Owner) != Relationship.Allies;
+    }
+
+    /// <summary>The missile defender goes back to its rifle: "the instant we remove the laser, reset the weaponset" (<c>killSpecialObjects</c>).</summary>
+    private void ReleaseLaserLock(IWorldServices world)
+    {
+        if (_laserLocked) world.ReleaseWeaponLock(Entity, WeaponLockKind.Temporary);
+        _laserLocked = false;
+    }
+
+    private bool _laserLocked;
 
     private bool HasChargeOn(IWorldServices world, EntityId victim)
     {
@@ -140,6 +200,26 @@ public sealed partial class SpecialAbilityUpdate
                 if (kind == AbilityKind.BoobyTrap && target.HasStatus(BoobyTrappedBit)) return false;
                 CreateSpecialObject(world, target);
                 return true;
+            case AbilityKind.HackerDisable or AbilityKind.VehicleHack:
+                if (target is null || world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return false;
+                AirWeaponModules.DisableUntil(world, target, world.Tick + data.EffectTicks, hacked: true);
+                return true;
+            case AbilityKind.StealCash:
+                if (target is null) return false;
+                // "Check to see if they have 1000 cash, otherwise, take the remainder".
+                var stolen = world.WithdrawMoney(target.Owner, StolenCash);
+                if (stolen > Fixed.Zero) world.AddMoney(Entity.Owner, stolen);
+                return true;
+            case AbilityKind.LaserMissiles:
+                if (target is null) return false;
+                // "Lock it just till the weapon is empty or the attack is done".
+                if (world.SetWeaponLock(Entity, WeaponSlot.Secondary, WeaponLockKind.Temporary))
+                {
+                    _laserLocked = true;
+                    world.BuilderAttacks(Entity, target);
+                    world.MarkDirty(Entity);
+                }
+                return true;
             case AbilityKind.RemoteCharges:
                 if (target is not null && StickyBombUpdate.CheckAndDetonateBoobyTrap(world, target, Entity) && (target.EffectivelyDead || Entity.EffectivelyDead)) return false;
                 if (target is null)
@@ -163,6 +243,7 @@ public sealed partial class SpecialAbilityUpdate
 
     private void DescribeSpecialObjects(IStateWriter writer)
     {
+        if (_laserLocked) writer.Bool("abilityLaserLocked", true);
         if (_specialObjects.Count == 0) return;
         writer.BeginArray("specialObjects");
         foreach (var id in _specialObjects)
@@ -177,6 +258,7 @@ public sealed partial class SpecialAbilityUpdate
     private void LoadSpecialObjects(IStateReader reader)
     {
         _specialObjects.Clear();
+        _laserLocked = reader.Has("abilityLaserLocked");
         if (!reader.Has("specialObjects")) return;
         foreach (var item in reader.Array("specialObjects")) _specialObjects.Add(new EntityId(checked((uint)item.UInt("id"))));
     }

@@ -1311,7 +1311,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     private long UpdateLiving(IWorldServices world)
     {
-        if (Entity.EmpDisabledUntil > world.Tick || (Entity.ScriptDisableMask & Entity.ScriptHeld) != 0)
+        if (Entity.IsDisabledByTime(world.Tick) || (Entity.ScriptDisableMask & Entity.ScriptHeld) != 0)
         {
             // DISABLED_EMP (EMPUpdate): the object cannot act until the disable runs out; its orders stay.
             Entity.Speed = Fixed.Zero;

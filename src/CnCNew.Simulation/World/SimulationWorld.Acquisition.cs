@@ -333,7 +333,7 @@ public sealed partial class SimulationWorld
     /// (<c>AIUpdateInterface::getDisabledTypesToProcess</c>), so a held rider still looks for victims and fires.
     /// </summary>
     private bool MayAct(Entity entity, long tick)
-        => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && entity.EmpDisabledUntil <= tick
+        => !entity.HasStatus(ObjectStatusBits.UnderConstruction) && !entity.HasStatus(SoldStatus) && !entity.IsDisabledByTime(tick)
            && (entity.ScriptDisableMask & Entity.ScriptHeld) == 0 && (!entity.ContainedBy.IsValid || ContainerLetsFire(entity));
 
     /// <summary>

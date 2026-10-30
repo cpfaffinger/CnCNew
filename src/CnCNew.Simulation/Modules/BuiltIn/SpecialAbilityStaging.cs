@@ -18,7 +18,8 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 public sealed record SpecialAbilityUpdateData(
     SpecialPowerBaseData Base, Fixed StartAbilityRange, Fixed AbilityAbortRange, long PreparationTicks, long PackTicks, long UnpackTicks,
     Fixed PackUnpackVariation, bool DoCaptureFx, int AwardXp, bool NeedToFaceTarget, bool ApproachRequiresLos, string SpecialObject, int MaxSpecialObjects, bool SpecialObjectsPersistent,
-    bool SpecialObjectsPersistWhenOwnerDies, bool SkipPackingWithNoTarget, bool LoseStealthOnTrigger, Fixed FleeRange) : ModuleData
+    bool SpecialObjectsPersistWhenOwnerDies, bool SkipPackingWithNoTarget, bool LoseStealthOnTrigger, Fixed FleeRange, long EffectTicks, long PersistentPrepTicks,
+    bool PersistenceRequiresRecharge) : ModuleData
 {
     /// <summary><c>SPECIAL_ABILITY_HUGE_DISTANCE</c>: "no limit". Compared, never squared (the square would not fit a <see cref="Fixed"/>).</summary>
     public static readonly Fixed HugeDistance = Fixed.FromInt(10000000);
@@ -41,7 +42,10 @@ public sealed record SpecialAbilityUpdateData(
         ModuleConfigReader.Bool(configuration, "SpecialObjectsPersistWhenOwnerDies", false),
         ModuleConfigReader.Bool(configuration, "SkipPackingWithNoTarget", false),
         ModuleConfigReader.Bool(configuration, "LoseStealthOnTrigger", false),
-        ModuleConfigReader.Real(configuration, "FleeRangeAfterCompletion", Fixed.Zero));
+        ModuleConfigReader.Real(configuration, "FleeRangeAfterCompletion", Fixed.Zero),
+        ModuleConfigReader.Ticks(configuration, "EffectDuration", 0),
+        ModuleConfigReader.Ticks(configuration, "PersistentPrepTime", 0),
+        ModuleConfigReader.Bool(configuration, "PersistenceRequiresRecharge", false));
 }
 
 /// <summary>The part of a staged capture the player sees, in the order the ability goes through them.</summary>
@@ -208,7 +212,8 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         _packState = data.UnpackTicks == 0 || (_noTarget && data.SkipPackingWithNoTarget) ? PackState.Unpacked : PackState.Packed;
         _active = true;
         ai.OrderIdle(world, false);
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
+        // setWakeFrame(UPDATE_SLEEP_NONE): the next logic frame of the original, whatever tick of a frame the order came in.
+        world.WakeAt(Entity, this, world.Tick + world.Time.TicksPerOriginalFrame);
         world.MarkDirty(Entity);
     }
 
@@ -254,14 +259,20 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
             if (target.EffectivelyDead) abort = true;
             else
             {
-                if (kind is AbilityKind.InfantryCapture or AbilityKind.BlackLotusCapture && target.Owner == Entity.Owner) abort = true;
-                var checksStealth = kind switch
+                if (kind is AbilityKind.InfantryCapture or AbilityKind.BlackLotusCapture or AbilityKind.HackerDisable && target.Owner == Entity.Owner) abort = true;
+                if (kind == AbilityKind.LaserMissiles && target.Template.IsKindOf("STRUCTURE")) abort = true;
+                var hidden = target.HasStatus(StealthedBit) && !target.HasStatus(DetectedBit);
+                if (kind is AbilityKind.LaserMissiles or AbilityKind.VehicleHack) abort |= hidden;
+                else
                 {
-                    AbilityKind.TankHunterTnt => false,
-                    AbilityKind.TimedCharges or AbilityKind.RemoteCharges => !NeedToUnpack,
-                    _ => true,
-                };
-                if (checksStealth && target.HasStatus(StealthedBit) && !target.HasStatus(DetectedBit) && _prepFrames != 0) abort = true;
+                    var checksStealth = kind switch
+                    {
+                        AbilityKind.TankHunterTnt => false,
+                        AbilityKind.TimedCharges or AbilityKind.RemoteCharges => !NeedToUnpack,
+                        _ => true,
+                    };
+                    if (checksStealth && hidden && _prepFrames != 0) abort = true;
+                }
             }
         }
 
@@ -275,16 +286,24 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
 
         if (_prepFrames != 0)
         {
-            _prepFrames--;
+            // "If power requires recharging, lets freeze prep countdown until power is ready".
+            if (!IsPersistent || !data.PersistenceRequiresRecharge || power.IsReady(world)) _prepFrames--;
             if (_prepFrames == 0)
             {
                 TriggerEffect(world, target, power);
-                EndPreparation();
+                if (IsPersistent)
+                {
+                    // The ability repeats until it is told otherwise or its target ends.
+                    _prepFrames = data.PersistentPrepTicks;
+                    if (data.PersistenceRequiresRecharge) power.Trigger(world);
+                    return;
+                }
+                EndPreparation(world);
                 if (NeedToPack) StartPacking(world); else FinishAbility(world);
             }
             else if (!ContinuePreparation(world, target, power))
             {
-                EndPreparation();
+                EndPreparation(world);
                 if (NeedToPack) StartPacking(world); else FinishAbility(world);
             }
             return;
@@ -314,7 +333,13 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
             if (_prepFrames != 0) return;
             // PreparationTime 0: trigger at once.
             TriggerEffect(world, target, power);
-            EndPreparation();
+            if (IsPersistent && data.PersistenceRequiresRecharge)
+            {
+                _prepFrames = data.PersistentPrepTicks;
+                power.Trigger(world);
+                return;
+            }
+            EndPreparation(world);
             if (NeedToPack) StartPacking(world); else FinishAbility(world);
             return;
         }
@@ -341,6 +366,9 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         }
         return false;
     }
+
+    /// <summary><c>isPersistentAbility</c>: the preparation repeats after every trigger.</summary>
+    private bool IsPersistent => data.PersistentPrepTicks > 0;
 
     private bool NeedToPack => _packState == PackState.Unpacked && data.PackTicks > 0 && !(_noTarget && data.SkipPackingWithNoTarget);
     private bool NeedToUnpack => _packState == PackState.Packed && data.UnpackTicks > 0;
@@ -379,6 +407,7 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
             // Black Lotus: "Relationship r == ALLIES: return" (an ally of any kind, not only the own team).
             if (CaptureKind(world) == CaptureType.BlackLotus && world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return;
         }
+        if (!PrepareKind(world, target)) return;
         power.Trigger(world);
         if (CrateModules.AiOf(Entity) is { } ai) ai.OrderIdle(world, false);
         Entity.Status |= 1UL << UsingAbilityBit;
@@ -391,7 +420,7 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     private bool ContinuePreparation(IWorldServices world, Entity? target, ISpecialPowerModule power)
     {
         if (data.AbilityAbortRange < SpecialAbilityUpdateData.HugeDistance && target is not null && !WithinSpheres(target, data.AbilityAbortRange)) return false;
-        if (!IsCapture(world)) return true;
+        if (!IsCapture(world)) return ContinueKind(world, target);
         if (target is null) return false;
         if (world.RelationshipOf(Entity.Owner, target.Owner) == Relationship.Allies) return false;
         if (data.DoCaptureFx) StepCaptureFlash(world, target);
@@ -444,10 +473,12 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
         if (CaptureKind(world) == CaptureType.BlackLotus) power.Trigger(world);
     }
 
-    private void EndPreparation()
+    /// <summary><c>endPreparation</c>: the placed charges stay, the beam of an ability that aims or hacks goes.</summary>
+    private void EndPreparation(IWorldServices world)
     {
         Entity.Status &= ~(1UL << UsingAbilityBit);
         _prepFrames = 0;
+        if (KindOf(world) is AbilityKind.LaserMissiles or AbilityKind.HackerDisable or AbilityKind.VehicleHack or AbilityKind.StealCash) KillSpecialObjects(world);
     }
 
     private void FinishAbility(IWorldServices world)
@@ -480,6 +511,7 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     {
         Entity.Status &= ~(1UL << UsingAbilityBit);
         if (!data.SpecialObjectsPersistent || (cleanup && !data.SpecialObjectsPersistWhenOwnerDies)) KillSpecialObjects(world);
+        ReleaseLaserLock(world);
         ClearRun();
         world.MarkDirty(Entity);
     }

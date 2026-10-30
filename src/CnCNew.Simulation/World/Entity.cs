@@ -248,6 +248,12 @@ public sealed class Entity
     /// <summary><c>DISABLED_EMP</c> until this tick (<c>Object::setDisabledUntil</c> by <c>EMPUpdate</c>/<c>LeafletDropBehavior</c>); 0 when never disabled. Movement and weapons stand still while it lies ahead.</summary>
     public long EmpDisabledUntil { get; internal set; }
 
+    /// <summary>The object is <c>DISABLED_HACKED</c> before this tick (a hacker's or Black Lotus's ability, F-83); 0 when it never was.</summary>
+    public long HackedUntil { get; internal set; }
+
+    /// <summary>A disable with an end stops the object: EMP or a hack.</summary>
+    internal bool IsDisabledByTime(long tick) => EmpDisabledUntil > tick || HackedUntil > tick;
+
     /// <summary><c>DISABLED_UNDERPOWERED</c>: a <c>POWERED</c> object of a player in a brown-out (<c>Player::onPowerBrownOutChange</c>).</summary>
     public bool Underpowered { get; internal set; }
 
@@ -270,6 +276,7 @@ public sealed class Entity
     public DisabledMask DisabledFlags(long tick)
     {
         var mask = EmpDisabledUntil > tick ? DisabledMask.Emp : DisabledMask.None;
+        if (HackedUntil > tick) mask |= DisabledMask.Hacked;
         if (ParalyzedUntil > tick) mask |= DisabledMask.Paralyzed;
         if (Underpowered) mask |= DisabledMask.Underpowered;
         if ((ScriptDisableMask & ScriptHeld) != 0) mask |= DisabledMask.Held;
@@ -401,6 +408,7 @@ public sealed class Entity
         if (Captured) writer.Bool("captured", true);
         if (MineClearingDetail) writer.Bool("mineClearingDetail", true);
         if (EmpDisabledUntil != 0) writer.Int("empDisabledUntil", EmpDisabledUntil);
+        if (HackedUntil != 0) writer.Int("hackedUntil", HackedUntil);
         if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);
         if (Underpowered) writer.Bool("underpowered", true);
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
