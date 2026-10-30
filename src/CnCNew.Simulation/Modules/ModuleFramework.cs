@@ -84,6 +84,12 @@ public interface IWorldServices
     void EndAttack(Entity entity);
 
     /// <summary>
+    /// The second leg of an exit path was ordered with the last tick of the unit's frame: the unit decides again where the 30 Hz acquisition does after that order, in the frame it was
+    /// ordered in (F-80). Nothing to do at 30 Hz, where the acquisition of the tick follows the order.
+    /// </summary>
+    void DecideAfterLateOrder(Entity entity);
+
+    /// <summary>
     /// <c>ActiveBody::attemptDamage</c>'s last step (F-58): a human player's object hurt by <paramref name="damager"/> makes the idle units of its player and its allies nearby answer the
     /// attack (<c>aiGuardRetaliate</c>).
     /// </summary>

@@ -1352,6 +1352,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule
             // exitObjectViaDoor adjusts the rally point for the unit (Pathfinder::adjustDestination): the units of a factory do not all end on the same spot.
             var (rallyX, rallyY) = world.FindFreeGoal(Entity, Entity.X, Entity.Y, _exitRallyX, _exitRallyY);
             OrderMove(world, rallyX, rallyY, false);
+            world.DecideAfterLateOrder(Entity);
         }
         if (_enterTarget.IsValid) UpdateEnter(world);
         if (_goal.IsValid) UpdateGoal(world);

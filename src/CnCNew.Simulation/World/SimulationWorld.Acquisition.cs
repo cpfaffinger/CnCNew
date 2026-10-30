@@ -209,6 +209,16 @@ public sealed partial class SimulationWorld
         }
     }
 
+    public void DecideAfterLateOrder(Entity entity)
+    {
+        if (_firstFrameTicks == TickOrder.Next || !_acquirers.Contains(entity.Id.Value) || AiOf(entity) is not { } ai) return;
+        var before = AcquisitionStamp.Of(entity.Acquisition);
+        // The frame's first tick: the order belongs to the step that began there, and the look that follows counts from it.
+        StepAcquirer(entity, ai, _tick + TickOrder.Next - _firstFrameTicks);
+        if (entity.Acquisition is { IsDefault: true }) entity.Acquisition = null;
+        if (AcquisitionStamp.Of(entity.Acquisition) != before) MarkDirty(entity);
+    }
+
     private enum AcquireMode : byte { None = 0, Idle = 1, Turret = 2, AttackMove = 3 }
 
     private void StepAcquirer(Entity entity, AIUpdateInterface ai, long tick)
