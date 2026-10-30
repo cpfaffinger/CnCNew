@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package J) · **Phase:** 48
-> **Status:** next (starting state: the end of Phase 47, see below)
+> **Status:** done by machine (30 October 2026); the rest is in HANDOFF-PHASE49.md
 > **Predecessor:** HANDOFF-PHASE47.md · **Results in:** docs/SIMULATION-CORE.md §62, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** a locomotor's velocity for `INHERIT_VELOCITY` (F-66's named difference)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -49,4 +49,8 @@ commit; the checks the changes can reach green.
 
 ## Progress
 
-Nothing yet.
+- F-79 (§62.1, `787e2d5`, manifest `8356f7a`): a docker sees its dock gone in the next frame. Found with two throwaway builds that printed where the dock machine ended - the dock of
+  the truck's machine was another supply center than the one it docked at again.
+- The default matches compared (§62.2): Bitter Winter to frame 49,244, Death Valley to the end of 50,000 frames, Armored Fury to frame 29,669; the next difference on both is the same kind
+  and registered as F-80.
+- Carried into `HANDOFF-PHASE49.md`: F-80, a locomotor's velocity for `INHERIT_VELOCITY`. Closing measurements: `CLAUDE.md`, paragraph "Phase 48".
