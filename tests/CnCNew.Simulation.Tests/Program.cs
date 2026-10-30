@@ -93,6 +93,7 @@ run.Test("Boarding: infantry walks into its transport instead of around it, the 
 run.Test("Rate invariance, consolidation: movers that meet are where the 30 Hz movers are", Tests.RateConsolidationMoversThatMeetAreTheSame);
 run.Test("Rate invariance, exits: produced units leave their factory, make room and reach the rally point as at 30 Hz", Tests.RateExitsAreTheSame);
 run.Test("Phase 49 (F-80): a unit on its exit path looks for victims in the frames it does at 30 Hz", Tests.ExitPathAcquisitionIsTheSameAtEveryRate);
+run.Test("Phase 49 (F-81): a disabled module wakes on the frames of its object", Tests.DisabledModuleWakesOnItsFrames);
 run.Test("Rate invariance, exits: a snapshot while a unit waits for its place continues like the live world", Tests.RateExitsSnapshotWhileWaitingForThePlace);
 run.Test("Rate invariance, ground: a snapshot inside a logic frame continues like the live world", Tests.GroundRateInvarianceSnapshotInsideAFrame);
 run.Test("Rate invariance, ground: an order inside a logic frame keeps the step continuous and cancels a pending arrival", Tests.GroundRateInvarianceOrderInsideAFrame);
