@@ -4289,3 +4289,91 @@ that step was seen for another frame - on Bitter Winter two gattling tanks kept 
 
 With these four causes **all sixteen pairings of the manifest are the same game at 30, 60 and 120 Hz to their ends**: `rate-compare --map-diff <factions> --map <map> --fields --frames 50000 --persist 10` with `--rates 30,60` and `--rates 30,120` finds no difference in any compared field (the fields left out are those of §59: `.nextWake`, `.previousHealth`, the construction progress inside a frame, `DynamicShroudClearingRange`). The default match America against China ends at frame 22,140 on Alpine Assault, 29,520 on Armored Fury, 49,125 on Bitter Winter and 13,260 on Death Valley; the retail reference match is the same game too. This holds for the pairings of the manifest with its seeds: it is a measurement of sixteen matches, not a proof.
 
+
+## 64. Phase 50: the building site of the original, the special abilities (fidelity package L)
+
+Each finding read in the original's source, one cause per commit with a test that fails on the code before and compares 30, 60 and 120 Hz, and its own manifest commit where a field moved.
+
+### 64.1 F-18: a site is legal by the rules of `BuildAssistant::isLocationLegalToBuild`
+
+`CheckConstruct` asked `NavigationGrid.IsFootprintLegal` and the player's exploration of the centre, and answered `InvalidPlacement` for all of it. `SimulationWorld.BuildSite.cs` is now the original's
+check, in its order, with its answers (`LegalBuildCode`): a site off the map is restricted terrain whatever else is true; a player needs the sight of the centre first of all (`LBC_SHROUD`, "since
+returning other errors for shrouded areas could be used to game the system"); then the objects, the supplies, the builder's path and the terrain. The port's three callers that look for a site
+(the built-in AI and the original AI's library) ask `CheckBuildGround`, the same check without a builder, as `AIPlayer` calls it.
+
+- **The terrain** (`b247a21`, `BuildSiteTerrain`, `iterateFootprint`, `checkSampleBuildLocation`): the footprint, turned with the building, is sampled at three cells and then at one, with the extra
+  sample outside the extent that snaps to the edge; a sample off the map, on water, on a cliff or closer to the map's edge than `MinDistFromEdgeOfMapForBuild` is restricted; the highest and the lowest
+  sample may differ by `AllowedHeightVariationForBuilding`. `MinDistFromEdgeOfMapForBuild`, `AllowedHeightVariationForBuilding` and `SupplyBuildBorder` of `GameData` are typed (`BuildSiteRules`, compatibility
+  baseline 696 entries, the patch layer's 689). A small circle has no sample at three cells: its corners lie outside it, and nothing has been measured yet (the original starts high below low; a
+  subtraction of the port's two empty bounds overflowed on the first eight-player run).
+- **The supplies** (`2f17c00`, the special case for `CANNOT_BUILD_NEAR_SUPPLIES`): only the closest `SUPPLY_SOURCE` counts (`getClosestObject` within the site's bounding circle and twice the border, from the
+  source's circle), with its footprint grown by `SupplyBuildBorder` (`expandFootprint`): `LBC_TOO_CLOSE_TO_SUPPLIES`.
+- **The objects** (`d0cd821`, `isLocationClearOfObjects`, `clearRemovableForConstruction`, `moveObjectsForConstruction`): what will be removed (shrubbery, `CLEARED_BY_BUILD`, rubble, the dead), mines and inert
+  objects do not count; an immobile or disabled object and an enemy do; an ally at an ability cannot be moved aside. The bibs and factory exits of the second half (`FactoryExitWidth`, `FactoryExtraBibWidth`
+  typed), with the three cells a computer player keeps "so it doesn't build itself into a corner", and with the original's collision tests (`SiteShape`: `xy_collideTest_Rect_Rect` compares corners, so a cross
+  of two long rectangles does not collide, and a circle against a rectangle is the square around it). When a building is begun the removable objects under it are destroyed and the player's and neutral
+  units walk off to a place drawn around it - two draws of the logic stream per unit, in the order of their ids; what cannot be moved makes a human's construction fail, and the AI "gets to cheat".
+- **The sight and the path** (`75daa55`): `SHROUD_REVEALED` and `CLEAR_PATH` (`isQuickPathAvailable`, "no goals on cliffs", an immobile builder needs none); the client's preview and its message name the reason
+  with the original's texts (`GUI:CantBuild*`, `6407cd2`).
+
+**The search of a computer player found no site beside a real dock.** A shipped `SupplyDock` is 100 by 122 units, a supply center 104 by 94; with its bib the first legal spot lies some 14 cells out, and the
+port's search stopped after the 400 checks of an ordinary placement, before it got there: no computer player collected anything, and every real-data test of the simulation passed, because none asks
+for it. The `Game.Tests` score counters found it. The original walks the whole square in one think (`AIPlayer::buildBySupplies`, up to `2 * SUPPLY_CENTER_CLOSE_DIST`), and so does the port now; the test is
+`RealComputerPlayersBuildBesideTheDock`. The eight-player runs of the manifest are what found the overflow above: both are reasons to run the real data before the manifests.
+
+Named differences: `isBusy` of an ally is not read (an ally at an ability is); `IGNORE_STEALTHED`, the client's stealth exception, is not built (a stealthed object blocks); the bridge case of the terrain
+rules waits for F-20; the built-in AI's ordinary sites keep the port's own rings (`SkirmishAi` is Stage 3's). A computer player's supply center now goes up about 40 s later than before on Alpine Assault:
+the first legal spot is farther from the dock, and the truck's way with it. Manifest of the terrain (`87cd88e`): 49 runs, 117 fields; 16 of 16 pairings decided. Outcomes: BitterWinter_America-China: stalemate -> FactionAmerica. The retail reference match keeps its end and its hashes. Manifest of the supplies (`82443b8`): 49 runs, 213 fields; 16 of 16 pairings decided. Outcomes: ArmoredFury_China-GLA: FactionChina -> FactionGLA; ArmoredFury_GLA-America: FactionAmerica -> FactionGLA. The retail reference match keeps its end and its hashes. Manifest of the objects (`f37c32b`): 21 runs, 197 fields; 15 of 16 pairings decided. Outcomes: AlpineAssault_America-China: FactionChina -> FactionAmerica; ArmoredFury_China-GLA: FactionGLA -> FactionChina; ArmoredFury_GLA-America: FactionGLA -> FactionAmerica; BitterWinter_GLA-America: FactionAmerica -> FactionGLA; DeathValley_America-China: FactionChina -> stalemate; DeathValley_GLA-America: FactionGLA -> FactionAmerica. The retail reference match is unchanged. Manifest of the sight and the path (`044e346`): 1 runs, 5 fields; 15 of 16 pairings decided. The retail reference match is unchanged.
+
+Tests (`Tests.BuildSite.cs`, each at 30, 60 and 120 Hz): `BuildSiteTerrainRules`, `BuildSiteKeepsItsDistanceToSupplies`, `BuildSiteClearsItsGround`, `BuildSiteNeedsSightAndAWay`.
+
+### 64.2 F-83: the special abilities are what they say
+
+`SpecialAbilityUpdate` staged the two capture powers only; every other ability was a shell, its order refused as `SpecialPowerHandlerMissing`. `SpecialAbilityEffects.cs` is the rest of
+`SpecialAbilityUpdate::triggerAbilityEffect` with `initiateIntentToDoSpecialPower`, the module's preparation, persistence and packing (`SpecialObject`, `MaxSpecialObjects`, `SpecialObjectsPersistent`,
+`SpecialObjectsPersistWhenOwnerDies`, `SkipPackingWithNoTarget`, `LoseStealthOnTrigger`, `FleeRangeAfterCompletion`, `EffectDuration`, `PersistentPrepTime`, `DoCaptureFX` and the rest are read):
+
+- **The charges** (`82bb3c9`): Burton's and Kell's timed and remote charges and the Tank Hunter's TNT. The charge is a special object that sticks to its victim (`StickyBombUpdate`, `SpawnExtras.StickTo`, saved until it
+  spawned); a remote charge goes off when its owner orders it without a target; the booby trap is planted; the owner's death ends what does not persist.
+- **The hacks and the aimed missiles** (`9b402ec`): the Hacker's and Black Lotus's disable of a building or vehicle (`DISABLED_HACKED`, `Entity.HackedUntil`), the cash hack (`StealCashHack`), the Missile Defender's
+  laser lock (held while the unit aims, released when the ability ends).
+- **The Helix's bomb** (`c7eb261`): dropped at a place, the special object is the bomb, and it falls without being thrown.
+- **The bomb truck's disguise** (`de827ac`, `StealthUpdate::disguiseAsObject`, `changeVisualDisguise`): `DisguisesAsTeam` takes the look of a vehicle (or the look that vehicle itself has taken) over
+  `DisguiseTransitionTime`, the status changes at the half of it, and the look falls over `DisguiseRevealTransitionTime` when the unit is detected or comes within `RevealDistanceFromTarget` of its victim; a
+  player whose enemy it looks like sees that vehicle, not a stealthed unit (`IsHiddenFrom`, `PartitionFilterStealthedAndUndetected`). The drawing (`e540cbd`): the model of the disguise for everybody, the house
+  colour of its player for everybody but the allies, the true owner for an observer.
+
+`SpecialAbilityUpdate` wakes a frame after an order, as the module's `update` runs after the order was given. Named differences (the register's rest of F-83): `UniqueSpecialObjectTargets`, `FlipOwner*`,
+`PreTriggerUnstealthTime`, the bomb's pitch rate and airborne friction, the hack's particles, the floating cash text and its EVA line, the score's money earned, the laser's beam, the weapon-set exception of
+a disguised unit (`WeaponSet.cpp`). The built-in AI aims these abilities at the wrong targets, which are refused (`InvalidSpecialPowerTarget`): counted, and Stage 3's. Manifest of the charges (`a058ac9`): 16 runs, 57 fields; 15 of 16 pairings decided. The retail reference match is unchanged. Manifest of the hacks (`3b7db71`): 17 runs, 59 fields; 15 of 16 pairings decided. The retail reference match is unchanged. Manifest of the disguise (`eed7889`): 1 runs, 8 fields; 15 of 16 pairings decided. The retail reference match is unchanged.
+
+Tests (`Tests.AbilityCharges.cs`, `Tests.AbilityHacks.cs`, each at 30, 60 and 120 Hz, the drawing in `DisguiseDrawTests.cs`).
+
+### 64.3 F-84: idle allies make way for a dozer or a harvester
+
+(`08c7049`, `Pathfinder::moveAllies`, "Harvesters & dozers want a clear path") The first legal supply center lies farther from the dock, and the builder that had been sent ahead to look now stayed where it
+looked: on one start of Alpine Assault that was the dock's approach point, and the truck pushed against an idle dozer for the rest of the match. The port had the rule only for a factory's exit point.
+`MoveAlliesOffPath` is its other half: a dozer or a harvester with a new path asks, from the last node back, every idle ally on a node to step aside - not one that moves, attacks, is at an ability or at
+work, is disabled, nor the object it aims at. Whether an ally is idle depends on who decided before whom in a frame, and above 30 Hz two objects can have their frames a tick apart, so the question is asked
+at the end of the mover's frame (`93cda2f`, found by the rate suite; `RequestClearPath`, the same place as a factory's exit claims): every object has decided there at every rate, and an ally that the original
+asks before its own turn in the frame is asked a frame later. Infantry pushes nobody, so the GLA worker asks no one. Every other mover asks only when its search was blocked by an ally (`Path::getBlockedByAlly`), which the
+port's search does not know: a named difference, and `aiMoveAwayFromUnit`'s search of a place off the path is the nearest free place beside the node. Test `IdleAlliesMakeWayForAHarvester` (a truck, an ally on
+the approach point of its dock: the same deliveries at 30, 60 and 120 Hz; an enemy stays). Manifest `6624ade`: 10 runs, 83 fields; 15 of 16 pairings decided. The retail reference match is unchanged. Manifest `97e1685`: 36 runs, 83 fields; 14 of 16 pairings decided. Every outcome kept. The retail reference match is unchanged.
+
+### 64.4 F-85: a bored dozer sees no hurt of its own frame
+
+(`427c724`, found by comparing Alpine Assault America against China, frame 6,093) The look of a bored dozer stands at the frame's end above 30 Hz (F-67, F-70), but it stands for the update of the frame's first
+tick: a structure first hurt after that update was seen a frame early, and the dozer repaired it where the 30 Hz dozer looked again 150 frames later. Test `BoredDozerSeesNoHurtOfItsOwnFrame`. Manifest `b2cc46a`: 2 runs, 16 fields; 14 of 16 pairings decided. Outcomes: AlpineAssault_America-China: FactionAmerica -> stalemate. The retail reference match is unchanged.
+
+### 64.5 F-86: a unit sees its goal gone in its next frame
+
+(`2293c97`, found by comparing Death Valley America against China, frame 43,968) A pilot on its way to a vehicle stopped a frame earlier at 60 Hz: the vehicle died after the updates of a frame's first tick, and the
+pilot saw that in the frame's second tick, where the 30 Hz pilot sees it with its next step. `UpdateGoal` now looks once per frame of the object, like the container of `UpdateEnter` and the dock of F-79, and the
+object stops where its frame ends. Test `WalkerSeesItsGoalGoneInTheNextFrame`. Manifest `21ce084`: 1 run, 3 fields (DeathValley_America-China): hashes only; 14 of 16 pairings decided. The retail reference match is unchanged.
+
+### 64.6 The result
+
+The real data moved the sixteen pairings of the manifest as the rules said they would: 14 of 16 decided (Alpine Assault America against China and Death Valley America against China run to the limit of 25 game
+minutes), with several outcomes changed per cause above; balance is not assessed. No mission run changes its outcome. The retail reference match and the stress test keep their results. `rate-compare --map-diff ... --fields --frames 50000 --persist 10`, with the fields of §59 and a dead dozer's `boredSince` left out, finds **15 of 16 pairings the
+same game at 30, 60 and 120 Hz to their ends**, and Alpine Assault America against China to frame 45,501, beyond the manifest's limit of 45,000 frames: a ranger's `enterTarget` (F-87, registered). This holds for
+the pairings of the manifest with their seeds: it is a measurement, not a proof. The rate-equivalence suite stands at 0 / 0 in all ten groups.

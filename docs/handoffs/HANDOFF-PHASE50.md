@@ -71,4 +71,6 @@ commit; the checks the changes can reach green.
 
 ## Progress
 
-Nothing yet.
+- F-18 (§64.1): the terrain `b247a21`, the supplies `2f17c00`, the objects `d0cd821`, the sight and the path `75daa55`, the client's reasons `6407cd2`.
+- F-83 (§64.2): the charges `82bb3c9`, the hacks and the laser `9b402ec`, the Helix's bomb `c7eb261`, the disguise `de827ac`, its drawing `e540cbd`.
+- Found by the real data and the rate comparison: F-84 (§64.3, `08c7049`), F-85 (§64.4, `427c724`), F-86 (§64.5, `2293c97`). Carried into `HANDOFF-PHASE51.md`: F-17. Closing measurements: `CLAUDE.md`, paragraph "Phase 50".
