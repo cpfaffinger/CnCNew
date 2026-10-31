@@ -38,7 +38,7 @@ public sealed class CampaignController(MissionContext context, CampaignDefinitio
         var attempts = Progress.AttemptsOf(mission.Name);
         var seed = unchecked(baseSeed + (uint)attempts * 7919u + (uint)Campaign.Sequence.IndexOf(mission) * 104729u);
         var options = new MissionOptions(seed, Progress.Difficulty, maxTicks, PresentationLatencyTicks: presentationLatencyTicks, MissionAttempts: attempts, HumanSideName: humanSideName,
-            HumanFaction: Campaign.IsChallenge ? Campaign.PlayerFaction : string.Empty);
+            HumanFaction: Campaign.IsChallenge ? Campaign.PlayerFaction : string.Empty, RankPoints: Progress.RankPoints);
         return MissionRun.Load(context, mission.MapPath, options, mission);
     }
 
@@ -52,13 +52,15 @@ public sealed class CampaignController(MissionContext context, CampaignDefinitio
         ArgumentNullException.ThrowIfNull(run);
         if (run.Mission is null || !string.Equals(run.Mission.Name, Progress.CurrentMission, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The run is not of the current mission.");
+        // ScoreScreen's initSinglePlayer: the general keeps the points of the mission that ended, won or lost.
+        var points = run.Session.World.SkillPointsOf(Mission.MissionSession.LocalPlayerOf(run.Session.Program, run.Session.Options.HumanSideName));
         switch (run.Session.Outcome)
         {
             case MissionOutcome.Victory:
-                Progress = Progress.Won(Campaign);
+                Progress = Progress.Won(Campaign) with { RankPoints = points };
                 return MissionConclusion.Victory;
             case MissionOutcome.Defeat:
-                Progress = Progress.Lost();
+                Progress = Progress.Lost() with { RankPoints = points };
                 return MissionConclusion.Defeat;
             default:
                 throw new InvalidOperationException("The mission has no outcome yet.");

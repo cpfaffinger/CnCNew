@@ -118,6 +118,7 @@ public sealed class ObjectTemplate
         MaxSimultaneousOfType = definition.Fields.LastOrDefault(field => field.Name.Equals("MaxSimultaneousOfType", StringComparison.OrdinalIgnoreCase))?.Value.Value is long maxType ? checked((int)maxType) : 0;
         IsTrainable = definition.Fields.LastOrDefault(field => field.Name.Equals("IsTrainable", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         ExperienceValue = IntegerArray(definition, "ExperienceValue");
+        SkillPointValue = definition.Fields.Any(field => field.Name.Equals("SkillPointValue", StringComparison.OrdinalIgnoreCase)) ? IntegerArray(definition, "SkillPointValue") : [];
         ExperienceRequired = IntegerArray(definition, "ExperienceRequired");
         DefaultArmor = defaultArmor;
         PlayerUpgradeArmor = playerUpgradeArmor;
@@ -215,6 +216,12 @@ public sealed class ObjectTemplate
     public bool IsTrainable { get; }
     /// <summary><c>ThingTemplate::m_experienceValue</c>: the experience a killer earns for destroying this object, by the victim's own veterancy level (absent key: all zero, the reference default).</summary>
     public ImmutableArray<int> ExperienceValue { get; }
+
+    /// <summary><c>SkillPointValue</c> as written; empty means the <c>ExperienceValue</c> of the level (<c>USE_EXP_VALUE_FOR_SKILL_VALUE</c>).</summary>
+    public ImmutableArray<int> SkillPointValue { get; }
+
+    /// <summary><c>ThingTemplate::getSkillPointValue</c>: what a kill of this object at a veterancy level gives its killer's player.</summary>
+    public int SkillPointValueAt(int level) => level < SkillPointValue.Length ? SkillPointValue[level] : ExperienceValue[level];
     /// <summary><c>ThingTemplate::m_experienceRequired</c>: the experience at which this object reaches level 0..3 (absent key: all zero).</summary>
     public ImmutableArray<int> ExperienceRequired { get; }
     public ImmutableArray<ModuleSpec> Modules { get; }
@@ -320,7 +327,7 @@ public sealed class TemplateCatalog
 {
     private readonly ImmutableDictionary<string, ObjectTemplate> _byName;
 
-    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, CommandCatalog commands, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, SpecialPowerCatalog specialPowers,
+    private TemplateCatalog(ImmutableArray<ObjectTemplate> templates, CommandCatalog commands, UpgradeCatalog upgrades, WeaponCatalog weapons, ScienceCatalog sciences, RankCatalog ranks, SpecialPowerCatalog specialPowers,
         FactionCatalog factions, CrateCatalog crates, ObjectCreationListCatalog creationLists, Fixed unitDamagedThreshold, Fixed unitReallyDamagedThreshold, decimal gravity, Fixed baseRegenHealthPercentPerSecond, long baseRegenDelayTicks, Fixed standardMinefieldDistance, int valuePerSupplyBox, Fixed sellPercentage, ImmutableArray<Fixed> healthBonus, WeaponBonusTable globalWeaponBonus)
     {
         HealthBonus = healthBonus;
@@ -335,6 +342,7 @@ public sealed class TemplateCatalog
         Upgrades = upgrades;
         Weapons = weapons;
         Sciences = sciences;
+        Ranks = ranks;
         SpecialPowers = specialPowers;
         Factions = factions;
         Crates = crates;
@@ -352,6 +360,9 @@ public sealed class TemplateCatalog
     public UpgradeCatalog Upgrades { get; }
     public WeaponCatalog Weapons { get; }
     public ScienceCatalog Sciences { get; }
+
+    /// <summary>The levels of a general (<c>Rank.ini</c>).</summary>
+    public RankCatalog Ranks { get; }
     public SpecialPowerCatalog SpecialPowers { get; }
     public FactionCatalog Factions { get; }
     public CrateCatalog Crates { get; }
@@ -408,6 +419,7 @@ public sealed class TemplateCatalog
         var armors = ArmorCatalog.Build(graph);
         var locomotors = BuildLocomotors(graph, timing);
         var sciences = ScienceCatalog.Build(graph);
+        var ranks = RankCatalog.Build(graph, sciences);
         var specialPowers = SpecialPowerCatalog.Build(graph, sciences, timing);
         var factions = FactionCatalog.Build(graph, sciences);
         var crates = CrateCatalog.Build(graph, sciences);
@@ -475,7 +487,7 @@ public sealed class TemplateCatalog
             });
         }
         var commands = CommandCatalog.Build(graph);
-        var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus)
+        var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, ranks, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus)
         {
             MaxTunnelCapacity = ResolveMaxTunnelCapacity(graph),
             GroundStiffness = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields

@@ -12,7 +12,7 @@ namespace CnCNew.Simulation.Templates;
 /// <see cref="StartMoney"/>/<see cref="IntrinsicSciences"/> once at world construction (<c>SimulationWorld</c>,
 /// mirroring <c>Player::Player()</c>) and issuing ordinary <c>SpawnCommand</c>s for the starting building/units.
 /// </summary>
-public sealed record FactionInfo(string Name, Fixed StartMoney, ScienceMask IntrinsicSciences, string StartingBuilding, ImmutableArray<string> StartingUnits, bool IsObserver, bool PlayableSide, string Side = "");
+public sealed record FactionInfo(string Name, Fixed StartMoney, ScienceMask IntrinsicSciences, string StartingBuilding, ImmutableArray<string> StartingUnits, bool IsObserver, bool PlayableSide, string Side = "", int IntrinsicSciencePurchasePoints = 0);
 
 /// <summary>Every <c>PlayerTemplate</c> definition, keyed by name (<c>FactionAmerica</c>, <c>FactionChina</c>, the per-general variants, <c>FactionObserver</c>, <c>FactionCivilian</c>).</summary>
 public sealed class FactionCatalog
@@ -51,7 +51,8 @@ public sealed class FactionCatalog
             var isObserver = Field("IsObserver")?.Value.Value is true;
             var playableSide = Field("PlayableSide")?.Value.Value is true;
             var side = Field("Side")?.Value.OriginalText.Trim() ?? string.Empty;
-            factions.Add(new FactionInfo(definition.OriginalName, startMoney, sciences.MaskOf(intrinsicNames), startingBuilding, startingUnits.ToImmutable(), isObserver, playableSide, side));
+            factions.Add(new FactionInfo(definition.OriginalName, startMoney, sciences.MaskOf(intrinsicNames), startingBuilding, startingUnits.ToImmutable(), isObserver, playableSide, side,
+                Field("IntrinsicSciencePurchasePoints")?.Value.Value is long points ? checked((int)points) : 0));
         }
         return new FactionCatalog(factions.ToImmutable());
     }

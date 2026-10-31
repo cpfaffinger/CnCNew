@@ -34,6 +34,8 @@ public sealed record UpgradeDefinition(DefinitionId Id, string OriginalName, Ini
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 public sealed record ScienceDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
+public sealed record RankDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
+    : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 public sealed record PlayerDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 public sealed record FactionDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)

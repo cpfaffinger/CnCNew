@@ -37,7 +37,7 @@ namespace CnCNew.Simulation.Mission;
 /// The faction of the human side when the host chose a persona (the Generals' Challenge general): it replaces the faction the map gives that side and, on a map without any human side (<c>GC_LaserGeneral</c>), adds one named <paramref name="HumanSideName"/> (default <c>ThePlayer</c>) — <see cref="ScriptProgram.WithHumanSide"/>. Empty keeps what the map says.
 /// </param>
 public sealed record MissionOptions(uint WorldSeed, ScriptDifficulty Difficulty, long MaxTicks = 0, int PresentationLatencyTicks = 0, int CombatIntervalTicks = 3,
-    int MissionAttempts = 1, string HumanSideName = "", string HumanFaction = "")
+    int MissionAttempts = 1, string HumanSideName = "", string HumanFaction = "", int RankPoints = 0)
 {
     public static MissionOptions Standard { get; } = new(0xC0FFEE09, ScriptDifficulty.Normal);
 
@@ -136,6 +136,9 @@ public sealed class MissionSession
         session.PlaceObjects(catalog, terrain);
         // The reference creates the map's objects synchronously while loading, so the first script evaluation already sees them.
         world.MaterializePendingSpawns();
+        // GameLogic::startNewGame: the skill points of the last mission, for the humans of a single player game.
+        if (options.RankPoints != 0)
+            foreach (var player in program.Players.Where(player => player.IsHuman)) world.AddSkillPoints(player.Id, options.RankPoints);
         return session;
     }
 

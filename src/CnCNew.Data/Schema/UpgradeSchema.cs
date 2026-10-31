@@ -33,6 +33,15 @@ public static class ScienceSchema
         new FieldSchema("DisplayName", FieldType.Opaque, Source: Table),
         new FieldSchema("Description", FieldType.Opaque, Source: Table),
     ]);
+
+    /// <summary>A level of a general (<c>RankInfoStore::friend_parseRankDefinition</c>).</summary>
+    public static SchemaSet Rank { get; } = new("Rank",
+    [
+        new FieldSchema("RankName", FieldType.Text, Source: "RankInfo.cpp"),
+        new FieldSchema("SkillPointsNeeded", FieldType.Integer, Min: 0, Source: "RankInfo.cpp"),
+        new FieldSchema("SciencesGranted", FieldType.ReferenceList, ReferenceKind: DefinitionKind.Science, Source: "RankInfo.cpp"),
+        new FieldSchema("SciencePurchasePointsGranted", FieldType.Integer, Min: 0, Source: "RankInfo.cpp"),
+    ]);
 }
 
 /// <summary>

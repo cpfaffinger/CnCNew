@@ -121,6 +121,16 @@ public sealed partial class SimulationWorld : IWorldServices
         /// <summary>"Science Purchase Points" (<c>Player::getSciencePurchasePoints</c>): a currency separate from money, normally earned via rank/experience (not modeled — see <see cref="IWorldServices.AddSciencePoints"/>).</summary>
         public int SciencePurchasePoints { get; set; }
 
+        /// <summary>The name of the player's <c>PlayerTemplate</c>; a save names it, or a restored world forgets what is playable and what a step down of the rank returns to.</summary>
+        public string? Faction { get; set; }
+
+        // ---------------------------------------------------------------------------------------- the rank (SimulationWorld.Rank.cs)
+        public int RankLevel { get; set; }
+        public int SkillPoints { get; set; }
+        public Fixed SkillPointsModifier { get; set; } = Fixed.One;
+        public ScienceMask IntrinsicSciences { get; set; }
+        public int IntrinsicSciencePoints { get; set; }
+
         /// <summary><c>Player::m_canBuildBase</c> / <c>m_canBuildUnits</c> (<c>Player::allowedToBuild</c>): switched off by the <c>PLAYER_DISABLE_*_CONSTRUCTION</c> script actions.</summary>
         public bool CanBuildBase { get; set; } = true;
         public bool CanBuildUnits { get; set; } = true;
@@ -225,7 +235,10 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (!templates.Factions.TryGet(factionName, out var faction))
                     throw new ArgumentException($"Unknown faction '{factionName}' for player {player.Id}.", nameof(configuration));
                 state.Money = faction.StartMoney;
-                state.CompletedSciences = faction.IntrinsicSciences;
+                state.Faction = factionName;
+                state.IntrinsicSciences = faction.IntrinsicSciences;
+                state.IntrinsicSciencePoints = faction.IntrinsicSciencePurchasePoints;
+                ResetRank(state);
             }
             if (!_players.TryAdd(player.Id.Value, state))
                 throw new ArgumentException($"Duplicate player id {player.Id}.", nameof(configuration));
@@ -1672,7 +1685,10 @@ public sealed partial class SimulationWorld : IWorldServices
         if (killer is null || killer.Owner.IsSystem || killer.Owner == victim.Owner) return;
         if (!AreEnemies(killer.Owner, victim.Owner)) return;
         if (victim.Template.IsKindOf("IGNORED_IN_GUI") || victim.HasStatus(ObjectStatusBits.UnderConstruction)) return;
+        // Object::scoreTheKill: a side that is not playable (civilians, for example) gives nothing.
+        if (FactionOf(victim.Owner) is { PlayableSide: false }) return;
         AddExperience(killer, victim.Template.ExperienceValue[victim.VeterancyLevel]);
+        AddSkillPoints(killer.Owner, victim.Template.SkillPointValueAt(victim.VeterancyLevel));
         if (!_players.TryGetValue(killer.Owner.Value, out var payee) || payee.CashBounty.Raw == 0) return;
         var bounty = Rules.GameFixRules.CashBounty(victim.Template.BuildCost * payee.CashBounty, _templates.Rules.Has(Rules.GameFix.BountyRounding));
         if (bounty > 0) payee.Money += Fixed.FromInt(bounty);
@@ -2302,6 +2318,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private void DescribeGlobal(IStateWriter writer)
     {
         writer.Int("tick", _tick);
+        if (_rankLevelLimit != DefaultRankLevelLimit) writer.Int("rankLevelLimit", _rankLevelLimit);
         Ids.Describe(writer);
         Streams.DescribeLogic(writer);
         writer.Int("entities", _entities.Count);
@@ -2330,12 +2347,14 @@ public sealed partial class SimulationWorld : IWorldServices
                 writer.EndObject();
             }
             writer.EndArray();
+            if (player.Faction is { } faction) writer.Text("faction", faction);
             writer.Fixed("money", player.Money);
             writer.Int("energyProduction", player.EnergyProduction);
             if (player.EnergyConsumption != 0) writer.Int("energyConsumption", player.EnergyConsumption);
             player.CompletedUpgrades.Describe(writer, "completedUpgrades");
             player.CompletedSciences.Describe(writer, "completedSciences");
             writer.Int("sciencePurchasePoints", player.SciencePurchasePoints);
+            DescribeRank(writer, player);
             writer.Fixed("cashBounty", player.CashBounty);
             // Written only when switched off, so a world no script ever restricted keeps the serialized form (and hash) it had before the switches existed.
             if (!player.CanBuildBase) writer.Bool("canBuildBase", false);

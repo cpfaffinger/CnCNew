@@ -723,6 +723,7 @@ public static class ModuleCatalog
             new("TriggerSound", FieldType.Opaque, Source: "SpecialAbilityUpdate.cpp"),
             new("LoseStealthOnTrigger", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
             new("AwardXPForTriggering", FieldType.Integer, Source: "SpecialAbilityUpdate.cpp"),
+            new("SkillPointsForTriggering", FieldType.Integer, Source: "SpecialAbilityUpdate.cpp"),
             new("ApproachRequiresLOS", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
             new("NeedToFaceTarget", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),
             new("PersistenceRequiresRecharge", FieldType.Bool, Source: "SpecialAbilityUpdate.cpp"),

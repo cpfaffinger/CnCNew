@@ -22,7 +22,7 @@ public enum DefinitionKind
 {
     Object, Weapon, WeaponSet, Armor, Damage, Upgrade, Science, Player, Faction,
     CommandButton, CommandSet, FxList, Fx, AudioEvent, DialogEvent, MusicTrack,
-    AmbientStream, Locomotor, ExperienceLevel, SpecialPower, GameData, GlobalData, Crate, ObjectCreationList,
+    AmbientStream, Locomotor, ExperienceLevel, SpecialPower, GameData, GlobalData, Crate, ObjectCreationList, Rank,
     Compatibility
 }
 

@@ -17,6 +17,7 @@ internal static class DomainSchemas
         DefinitionKind.Armor => ArmorSchema.Armor,
         DefinitionKind.Upgrade => UpgradeSchema.Upgrade,
         DefinitionKind.Science => ScienceSchema.Science,
+        DefinitionKind.Rank => ScienceSchema.Rank,
         DefinitionKind.Locomotor => LocomotorSchema.Locomotor,
         DefinitionKind.Faction => FactionSchema.Faction,
         DefinitionKind.Crate => CrateSchema.Crate,

@@ -219,6 +219,10 @@ run.Test("Fidelity B (F-07): a clip without reload time fires at most once per f
 run.Test("Fidelity B (F-10): <This Team> in a team's create script in a mission", Tests.FidelityThisTeamInMissionCreateScript);
 run.Test("Fidelity B (F-43): an upgrade is researched in its producer's queue for its build time", Tests.FidelityUpgradesTakeTheirBuildTime);
 run.Test("Fidelity B (F-44): a producer that dies refunds its whole queue", Tests.FidelityDeadProducerRefundsItsQueue);
+run.Test("Rank (D-15): the start of a player, the levels, a step down", Tests.RankStartAndLevels);
+run.Test("Rank (D-15): the limit and the scale of a script, across a save", Tests.RankLimitAndModifier);
+run.Test("Rank (D-15): the points of a kill", Tests.RankPointsOfAKill);
+run.Test("Rank (D-15): the script actions act on the world", Tests.RankScriptActions);
 run.Test("Fidelity B (F-45): an airfield reserves a space for every aircraft it queues", Tests.FidelityAirfieldReservesItsSpaceWhenQueued);
 run.Test("Phase 40: a disabled object runs only the update modules that process its disabled types", Tests.DisableRuleStopsTheModulesThatDoNotProcessIt);
 run.Test("Phase 40: a disable holds through the frame it lasts until", Tests.DisableHoldsThroughItsLastFrame);

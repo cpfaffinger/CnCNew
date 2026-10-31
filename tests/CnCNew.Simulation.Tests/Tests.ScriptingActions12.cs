@@ -71,9 +71,6 @@ static partial class Tests
                 Scr.Do("NAMED_FACE_WAYPOINT", Scr.Unit("Soldier"), Scr.Waypoint("Far")),
                 Scr.Do("NAMED_SET_UNMANNED_STATUS", Scr.Unit("Abandoned")),
                 Scr.Do("TEAM_SET_ATTITUDE", Scr.Team("teamA"), Scr.Int(2)),
-                Scr.Do("PLAYER_SET_RANKLEVEL", Scr.Side(PlayerA), Scr.Int(4)),
-                Scr.Do("PLAYER_ADD_RANKLEVEL", Scr.Side(PlayerA), Scr.Int(1)),
-                Scr.Do("PLAYER_SET_RANKLEVELLIMIT", Scr.Int(3)),
                 Scr.Do("SCRIPTING_OVERRIDE_HULK_LIFETIME", Scr.Real(2m)),
                 Scr.Do("NAMED_SET_HELD", Scr.Unit("Soldier"), Scr.Int(1))], oneShot: true),
             Scr.Script("Wipe", [Scr.And(Scr.If("FLAG", Scr.Flag("wipe"), Scr.Bool(true)))], [Scr.Do("DELETE_ALL_UNMANNED")], oneShot: true),
@@ -83,8 +80,8 @@ static partial class Tests
         var abandoned = NamedIn(session, "Abandoned")!;
         Check.That(soldier.Angle.Abs() < Fixed.FromDecimal(0.01m), $"Facing the waypoint to the east sets heading 0 (was {soldier.Angle}).");
         Check.That(abandoned.Owner.IsSystem, "An unmanned object belongs to the neutral player.");
-        Check.That(session.Engine.RankLevelOf(soldier.Owner) == 5 && session.Engine.RankLimit == 3 && session.Engine.HulkLifetimeOverrideTicks == session.Frames(60), "Rank level, limit and hulk lifetime are recorded.");
-        Check.That(session.Engine.RecordedActions >= 5, $"Recorded actions are counted apart from executed ones ({session.Engine.RecordedActions}).");
+        Check.That(session.Engine.HulkLifetimeOverrideTicks == session.Frames(60), "The hulk lifetime is recorded.");
+        Check.That(session.Engine.RecordedActions >= 2, $"Recorded actions are counted apart from executed ones ({session.Engine.RecordedActions}).");
         Check.That(session.Engine.MissingActionHits.Count == 0, "No missing actions: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
         session.Engine.SignalUiInteraction("wipe");
         Run(session, session.Frames(3));

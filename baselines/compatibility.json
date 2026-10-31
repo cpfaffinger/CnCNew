@@ -5602,15 +5602,6 @@
     },
     {
       "category": "definition",
-      "name": "Rank",
-      "count": 5,
-      "owners": [
-        "top-level"
-      ],
-      "plannedTarget": "phase-specific typed definition compiler"
-    },
-    {
-      "category": "definition",
       "name": "Road",
       "count": 63,
       "owners": [

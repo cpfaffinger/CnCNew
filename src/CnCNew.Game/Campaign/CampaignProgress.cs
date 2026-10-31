@@ -10,7 +10,7 @@ namespace CnCNew.Game.Campaign;
 /// attempt count, as in the reference (<c>CampaignManager</c> keeps the current mission until <c>SetVictorious(TRUE)</c> advances it).
 /// </summary>
 public sealed record CampaignProgress(
-    string Campaign, ScriptDifficulty Difficulty, string CurrentMission, ImmutableSortedSet<string> Completed, ImmutableSortedDictionary<string, int> Attempts, bool Finished)
+    string Campaign, ScriptDifficulty Difficulty, string CurrentMission, ImmutableSortedSet<string> Completed, ImmutableSortedDictionary<string, int> Attempts, bool Finished, int RankPoints = 0)
 {
     public static CampaignProgress Begin(CampaignDefinition campaign, ScriptDifficulty difficulty)
     {
@@ -49,6 +49,7 @@ public sealed record CampaignProgress(
         writer.Int("difficulty", (int)Difficulty);
         writer.Text("current", CurrentMission);
         writer.Bool("finished", Finished);
+        if (RankPoints != 0) writer.Int("rankPoints", RankPoints);
         writer.BeginArray("completed");
         foreach (var mission in Completed)
         {
@@ -76,6 +77,7 @@ public sealed record CampaignProgress(
         foreach (var item in reader.Array("completed")) completed.Add(item.Text("mission"));
         var attempts = ImmutableSortedDictionary.CreateBuilder<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var item in reader.Array("attempts")) attempts[item.Text("mission")] = checked((int)item.Int("count"));
-        return new CampaignProgress(reader.Text("campaign"), (ScriptDifficulty)difficulty, reader.Text("current"), completed.ToImmutable(), attempts.ToImmutable(), reader.Bool("finished"));
+        return new CampaignProgress(reader.Text("campaign"), (ScriptDifficulty)difficulty, reader.Text("current"), completed.ToImmutable(), attempts.ToImmutable(), reader.Bool("finished"),
+            reader.Has("rankPoints") ? checked((int)reader.Int("rankPoints")) : 0);
     }
 }

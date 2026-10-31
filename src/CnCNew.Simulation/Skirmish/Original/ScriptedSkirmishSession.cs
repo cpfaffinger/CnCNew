@@ -48,8 +48,8 @@ public sealed record ScriptedSkirmishSlot(MatchParticipant Participant, ScriptDi
 public sealed record ScriptedSkirmishOptions(uint Seed, long MaxTicks, long GraceFrames, int StartMoney, int SciencePointIntervalFrames, bool AllMapObjects = false,
     bool LibraryScriptsForMissingSides = false)
 {
-    /// <summary>The budget, start money and science stand-in of <see cref="SkirmishMatchOptions.Standard"/>, so that matches of the two AIs compare.</summary>
-    public static ScriptedSkirmishOptions Standard { get; } = new(0xC0FFEE06, 108_000, 300, 10_000, 2_700);
+    /// <summary>The budget and start money of <see cref="SkirmishMatchOptions.Standard"/>, so that matches of the two AIs compare.</summary>
+    public static ScriptedSkirmishOptions Standard { get; } = new(0xC0FFEE06, 108_000, 300, 10_000, 0);
 }
 
 /// <summary>
@@ -59,7 +59,7 @@ public sealed record ScriptedSkirmishOptions(uint Seed, long MaxTicks, long Grac
 /// directly - and its truth is its state: <see cref="Save"/> and <see cref="Restore"/> continue hash-identically, AI included.
 /// <para>
 /// What the session itself stands in for, as <see cref="SkirmishMatchSession"/> does: the start money of the setup screen, a science purchase point every
-/// <see cref="ScriptedSkirmishOptions.SciencePointIntervalFrames"/> (there is no rank system) and the decision who has won. A computer player has the whole map explored: the reference's AI
+/// <see cref="ScriptedSkirmishOptions.SciencePointIntervalFrames"/> if a caller asks for one, and the decision who has won. A computer player has the whole map explored: the reference's AI
 /// places structures without asking the shroud.
 /// </para>
 /// </summary>

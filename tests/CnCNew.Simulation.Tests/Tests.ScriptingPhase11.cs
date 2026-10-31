@@ -296,7 +296,7 @@ static partial class Tests
             Scr.Script("Fired", [Scr.And(Scr.If("PLAYER_TRIGGERED_SPECIAL_POWER_FROM_NAMED", Scr.Side(PlayerA), power, Scr.Unit("Hero")))], [Scr.Do("SET_FLAG", Scr.Flag("fired"), Scr.Bool(true))], oneShot: true),
             Scr.Script("Look", [Scr.And(Scr.If("FLAG", Scr.Flag("look"), Scr.Bool(true)))], [Scr.Do("MAP_REVEAL_PERMANENTLY_AT_WAYPOINT", Scr.Waypoint("Far"), Scr.Real(60m), Scr.Side(PlayerA), Scr.Named(MapScriptParameterType.RevealName, "FarLook"))], oneShot: true),
             Scr.Script("Unlook", [Scr.And(Scr.If("FLAG", Scr.Flag("unlook"), Scr.Bool(true)))], [Scr.Do("MAP_UNDO_REVEAL_PERMANENTLY_AT_WAYPOINT", Scr.Named(MapScriptParameterType.RevealName, "FarLook"))], oneShot: true),
-            Scr.Script("Record", [Scr.And(Scr.If("FLAG", Scr.Flag("record"), Scr.Bool(true)))], [Scr.Do("PLAYER_AFFECT_RECEIVING_EXPERIENCE", Scr.Side(PlayerA), Scr.Real(2m)), Scr.Do("OBJECT_ALLOW_BONUSES", Scr.Bool(false))], oneShot: true),
+            Scr.Script("Record", [Scr.And(Scr.If("FLAG", Scr.Flag("record"), Scr.Bool(true)))], [Scr.Do("TEAM_WANDER_IN_PLACE", Scr.Team("teamA")), Scr.Do("OBJECT_ALLOW_BONUSES", Scr.Bool(false))], oneShot: true),
         ], objects: [Placed("AlphaHero", 100m, 100m, "teamA", "Hero"), Placed("BetaSoldier", 300m, 100m, "teamB", "Target")]);
         var engine = session.Engine;
         var viewer = new PlayerId(1);
@@ -315,8 +315,8 @@ static partial class Tests
         Check.That(!world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "The named undo takes the reveal back.");
         engine.SignalUiInteraction("record");
         Run(session, session.Frames(2));
-        Check.That(engine.RecordedActions == 2 && engine.SkillPointsModifierOf(viewer) == Fixed.FromInt(2), "The experience scale and the bonus switch are recorded, not executed.");
-        var recordOnly = StartMission([Scr.Script("Record", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("PLAYER_AFFECT_RECEIVING_EXPERIENCE", Scr.Side(PlayerA), Scr.Real(2m)), Scr.Do("OBJECT_ALLOW_BONUSES", Scr.Bool(false))], oneShot: true)]);
+        Check.That(engine.RecordedActions == 2, "The wander and the bonus switch are recorded, not executed.");
+        var recordOnly = StartMission([Scr.Script("Record", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_WANDER_IN_PLACE", Scr.Team("teamA")), Scr.Do("OBJECT_ALLOW_BONUSES", Scr.Bool(false))], oneShot: true)]);
         Run(recordOnly, recordOnly.Frames(2));
         Check.That(recordOnly.Engine.ExecutedActions == 0 && recordOnly.Engine.RecordedActions == 2 && recordOnly.Engine.MissingActionHits.Count == 0, "Recorded actions are neither counted as executed nor as missing.");
         Check.That(ScriptCoverage.ActionSupport("OBJECT_ALLOW_BONUSES") == ScriptSupport.Recorded, "The support table names them as recorded.");

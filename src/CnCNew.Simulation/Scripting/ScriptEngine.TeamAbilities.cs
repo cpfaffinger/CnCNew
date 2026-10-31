@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Scripting;
 /// Actions added in Phase 12: per-team and per-player relationship overrides, the team command-button family (<c>TEAM_HUNT_WITH_COMMAND_BUTTON</c>,
 /// <c>TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_*</c>, <c>TEAM_PARTIAL_USE_COMMANDBUTTON</c>), transport loading, tunnel guarding, panic, facing, the stealth switch,
 /// unmanning and production priority. Every function cites its reference in <c>ScriptActions.cpp</c>; what the simulation has no consumer for is
-/// <see cref="ScriptSupport.Recorded"/> (attitude, wander, held, rank level and limit, hulk lifetime), never counted as executed.
+/// <see cref="ScriptSupport.Recorded"/> (attitude, wander, held, hulk lifetime), never counted as executed.
 /// </summary>
 public sealed partial class ScriptEngine
 {
@@ -24,12 +24,10 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<long, int> _relPlayerTeam = [];
     private readonly SortedDictionary<int, int> _teamAttitude = [];
     private readonly SortedDictionary<int, int> _teamWander = [];
-    private readonly SortedDictionary<int, int> _rankLevel = [];
     private readonly SortedSet<uint> _unmanned = [];
     private readonly SortedDictionary<string, int> _priorityDelta = new(StringComparer.Ordinal);
     private readonly SortedDictionary<uint, string> _buttonHunts = [];
     private readonly SortedDictionary<uint, long> _buttonHuntNext = [];
-    private int _rankLimit = -1;
     private long _hulkLifetimeOverrideTicks = -1;
     private Dictionary<uint, ScriptTeam>? _entityTeams;
     private long _entityTeamsTick = -1;
@@ -38,12 +36,6 @@ public sealed partial class ScriptEngine
     private long _entityTeamsVersion = -1;
     private long _memberTotalVersion = -1;
     private int _memberTotal;
-
-    /// <summary>The rank level script actions set for a player (recorded: the simulation has no rank system to read it).</summary>
-    public int RankLevelOf(PlayerId player) => _rankLevel.GetValueOrDefault(player.Value);
-
-    /// <summary>The map-wide rank level limit a script set, or −1.</summary>
-    public int RankLimit => _rankLimit;
 
     /// <summary>The hulk lifetime override in ticks a script set (<c>SCRIPTING_OVERRIDE_HULK_LIFETIME</c>), or −1.</summary>
     public long HulkLifetimeOverrideTicks => _hulkLifetimeOverrideTicks;
@@ -205,14 +197,12 @@ public sealed partial class ScriptEngine
                 _recordedActions++;
                 return true;
             case "PLAYER_SET_RANKLEVELLIMIT":
-                if (Has(type, p, 1)) _rankLimit = Int(p, 0);
-                _recordedActions++;
+                if (Has(type, p, 1)) _world.SetRankLevelLimit(Int(p, 0));
                 return true;
             case "PLAYER_SET_RANKLEVEL":
             case "PLAYER_ADD_RANKLEVEL":
                 if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } ranked)
-                    _rankLevel[ranked.Id.Value] = type == "PLAYER_SET_RANKLEVEL" ? Int(p, 1) : _rankLevel.GetValueOrDefault(ranked.Id.Value) + Int(p, 1);
-                _recordedActions++;
+                    _world.SetRankLevel(ranked.Id, type == "PLAYER_SET_RANKLEVEL" ? Int(p, 1) : _world.RankLevelOf(ranked.Id) + Int(p, 1));
                 return true;
             case "SCRIPTING_OVERRIDE_HULK_LIFETIME":
                 if (Has(type, p, 1)) _hulkLifetimeOverrideTicks = Real(p, 0).IsNegative ? -1 : _world.Time.OriginalFrames(SecondsToFrames(Real(p, 0)));
@@ -503,8 +493,6 @@ public sealed partial class ScriptEngine
         DescribeRelations(writer, "relPlayerTeam", _relPlayerTeam);
         DescribePairs(writer, "teamAttitude", _teamAttitude);
         DescribePairs(writer, "teamWander", _teamWander);
-        DescribePairs(writer, "rankLevel", _rankLevel);
-        if (_rankLimit != -1) writer.Int("rankLimit", _rankLimit);
         if (_hulkLifetimeOverrideTicks != -1) writer.Int("hulkLifetimeOverride", _hulkLifetimeOverrideTicks);
         if (_unmanned.Count > 0) { writer.BeginArray("unmanned"); foreach (var id in _unmanned) { writer.BeginObject(null); writer.UInt("id", id); writer.EndObject(); } writer.EndArray(); }
         if (_priorityDelta.Count > 0)
@@ -544,8 +532,6 @@ public sealed partial class ScriptEngine
         LoadRelations(reader, "relPlayerTeam", _relPlayerTeam);
         LoadPairs(reader, "teamAttitude", _teamAttitude);
         LoadPairs(reader, "teamWander", _teamWander);
-        LoadPairs(reader, "rankLevel", _rankLevel);
-        _rankLimit = reader.Has("rankLimit") ? checked((int)reader.Int("rankLimit")) : -1;
         _hulkLifetimeOverrideTicks = reader.Has("hulkLifetimeOverride") ? reader.Int("hulkLifetimeOverride") : -1;
         _unmanned.Clear();
         if (reader.Has("unmanned")) foreach (var item in reader.Array("unmanned")) _unmanned.Add(checked((uint)item.UInt("id")));

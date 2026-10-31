@@ -17,7 +17,7 @@ namespace CnCNew.Simulation.Modules.BuiltIn;
 /// </summary>
 public sealed record SpecialAbilityUpdateData(
     SpecialPowerBaseData Base, Fixed StartAbilityRange, Fixed AbilityAbortRange, long PreparationTicks, long PackTicks, long UnpackTicks,
-    Fixed PackUnpackVariation, bool DoCaptureFx, int AwardXp, bool NeedToFaceTarget, bool ApproachRequiresLos, string SpecialObject, int MaxSpecialObjects, bool SpecialObjectsPersistent,
+    Fixed PackUnpackVariation, bool DoCaptureFx, int AwardXp, int SkillPoints, bool NeedToFaceTarget, bool ApproachRequiresLos, string SpecialObject, int MaxSpecialObjects, bool SpecialObjectsPersistent,
     bool SpecialObjectsPersistWhenOwnerDies, bool SkipPackingWithNoTarget, bool LoseStealthOnTrigger, Fixed FleeRange, long EffectTicks, long PersistentPrepTicks,
     bool PersistenceRequiresRecharge) : ModuleData
 {
@@ -34,6 +34,7 @@ public sealed record SpecialAbilityUpdateData(
         ModuleConfigReader.Real(configuration, "PackUnpackVariationFactor", Fixed.Zero),
         ModuleConfigReader.Bool(configuration, "DoCaptureFX", false),
         checked((int)ModuleConfigReader.Int(configuration, "AwardXPForTriggering", 0)),
+        checked((int)ModuleConfigReader.Int(configuration, "SkillPointsForTriggering", -1)),
         ModuleConfigReader.Bool(configuration, "NeedToFaceTarget", true),
         ModuleConfigReader.Bool(configuration, "ApproachRequiresLOS", true),
         ModuleConfigReader.Text(configuration, "SpecialObject"),
@@ -470,6 +471,9 @@ public sealed partial class SpecialAbilityUpdate(SpecialAbilityUpdateData data) 
     private void TriggerEffect(IWorldServices world, Entity? target, ISpecialPowerModule power)
     {
         if (data.AwardXp > 0) world.AddExperiencePoints(Entity, data.AwardXp);
+        // "If unspecified, it'll use the award experience to units for triggering value."
+        var skillPoints = data.SkillPoints != -1 ? data.SkillPoints : data.AwardXp;
+        if (skillPoints > 0) world.AddSkillPoints(Entity.Owner, skillPoints);
         if (!IsCapture(world))
         {
             if (TriggerKind(world, target, KindOf(world)) && data.LoseStealthOnTrigger) StealthUpdate.Expose(world, Entity);

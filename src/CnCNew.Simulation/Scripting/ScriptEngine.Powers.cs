@@ -22,16 +22,12 @@ public sealed partial class ScriptEngine
 
     private readonly SortedDictionary<string, NamedReveal> _namedReveals = new(StringComparer.Ordinal);
 
-    /// <summary>Recorded-only state: <c>Player::setSkillPointsModifier</c> by player id (raw fixed value) and the last <c>OBJECT_ALLOW_BONUSES</c> choice (-1: never given).</summary>
-    private readonly SortedDictionary<int, long> _skillPointsModifier = [];
-
+    /// <summary>Recorded-only state: the last <c>OBJECT_ALLOW_BONUSES</c> choice (-1: never given).</summary>
     private int _objectBonusesEnabled = -1;
     private long _recordedActions;
 
     /// <summary>Executions of <see cref="ScriptSupport.Recorded"/> actions: stored, but no simulation rule reads them yet.</summary>
     public long RecordedActions => _recordedActions;
-
-    public Fixed SkillPointsModifierOf(PlayerId player) => _skillPointsModifier.TryGetValue(player.Value, out var raw) ? Fixed.FromRaw(raw) : Fixed.One;
 
     private bool TryExecutePowerAction(MapScriptAction action)
     {
@@ -108,8 +104,7 @@ public sealed partial class ScriptEngine
 
             // ---- recorded only
             case "PLAYER_AFFECT_RECEIVING_EXPERIENCE":
-                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } learner) _skillPointsModifier[learner.Id.Value] = Real(p, 1).Raw;
-                _recordedActions++;
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } learner) _world.SetSkillPointsModifier(learner.Id, Real(p, 1));
                 return true;
             case "OBJECT_ALLOW_BONUSES":
                 if (Has(type, p, 1)) _objectBonusesEnabled = Int(p, 0) != 0 ? 1 : 0;
@@ -255,18 +250,6 @@ public sealed partial class ScriptEngine
             }
             writer.EndArray();
         }
-        if (_skillPointsModifier.Count > 0)
-        {
-            writer.BeginArray("skillPointsModifier");
-            foreach (var (player, raw) in _skillPointsModifier)
-            {
-                writer.BeginObject(null);
-                writer.Int("player", player);
-                writer.Int("raw", raw);
-                writer.EndObject();
-            }
-            writer.EndArray();
-        }
         if (_objectBonusesEnabled >= 0) writer.Int("objectBonuses", _objectBonusesEnabled);
         if (_recordedActions > 0) writer.Int("recordedActions", _recordedActions);
     }
@@ -277,9 +260,6 @@ public sealed partial class ScriptEngine
         if (reader.Has("namedReveals"))
             foreach (var item in reader.Array("namedReveals"))
                 _namedReveals[item.Text("name")] = new NamedReveal(checked((int)item.Int("player")), item.Fixed("x"), item.Fixed("y"), item.Fixed("radius"));
-        _skillPointsModifier.Clear();
-        if (reader.Has("skillPointsModifier"))
-            foreach (var item in reader.Array("skillPointsModifier")) _skillPointsModifier[checked((int)item.Int("player"))] = item.Int("raw");
         _objectBonusesEnabled = reader.Has("objectBonuses") ? checked((int)reader.Int("objectBonuses")) : -1;
         _recordedActions = reader.Has("recordedActions") ? reader.Int("recordedActions") : 0;
     }

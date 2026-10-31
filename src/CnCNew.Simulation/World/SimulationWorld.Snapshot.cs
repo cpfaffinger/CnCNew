@@ -37,6 +37,7 @@ public sealed partial class SimulationWorld
     {
         if (_entities.Count != 0 || _tick != 0 || _spawnQueue.Count != 0) throw new InvalidOperationException("A snapshot can only be loaded into a fresh world.");
         _tick = state.Int("tick");
+        _rankLevelLimit = state.Has("rankLevelLimit") ? checked((int)state.Int("rankLevelLimit")) : DefaultRankLevelLimit;
         if (_tick < 0) throw new InvalidDataException("Negative tick in snapshot.");
         Ids.Load(state);
         Streams.LoadLogic(state);
@@ -66,6 +67,7 @@ public sealed partial class SimulationWorld
             known.CompletedUpgrades = UpgradeMask.Load(player, "completedUpgrades");
             known.CompletedSciences = ScienceMask.Load(player, "completedSciences");
             known.SciencePurchasePoints = checked((int)player.Int("sciencePurchasePoints"));
+            LoadRank(player, known);
             known.CashBounty = player.Fixed("cashBounty");
             known.CanBuildBase = !player.Has("canBuildBase") || player.Bool("canBuildBase");
             known.CanBuildUnits = !player.Has("canBuildUnits") || player.Bool("canBuildUnits");

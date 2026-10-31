@@ -148,8 +148,7 @@ public sealed partial class ScriptEngine
                 _recordedActions++;
                 return true;
             case "PLAYER_ADD_SKILLPOINTS":
-                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } skilled2) _recordedSettings[type + "|" + skilled2.Id.Value] = _recordedSettings.GetValueOrDefault(type + "|" + skilled2.Id.Value) + Int(p, 1);
-                _recordedActions++;
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } skilled2) _world.AddSkillPoints(skilled2.Id, Int(p, 1));
                 return true;
             // doGuardSupplyCenter -> AIPlayer::guardSupplyCenter
             case "TEAM_GUARD_SUPPLY_CENTER":

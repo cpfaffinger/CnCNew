@@ -303,6 +303,9 @@ public interface IWorldServices
     int SciencePointsOf(PlayerId player);
     void AddSciencePoints(PlayerId player, int amount);
 
+    /// <summary><c>Player::addSkillPoints</c>: true when a level was gained.</summary>
+    bool AddSkillPoints(PlayerId player, int delta);
+
     /// <summary><c>Player::grantScience</c>: adds a science without paying (no prerequisite or purchasability check beyond <c>isScienceGrantable</c>), then re-arms the special powers it gates. False when it was already owned.</summary>
     bool GrantScience(PlayerId player, string scienceName);
 
