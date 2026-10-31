@@ -110,6 +110,8 @@ public sealed partial class ScriptEngine
         public int SkillSet = AiNoSkillSet;
         /// <summary>The orders of <see cref="AiUnitOrder"/>, newest first.</summary>
         public readonly List<AiUnitOrder> UnitOrders = [];
+        /// <summary>Gatherers just produced and the centres they are sent to: a unit appears at any tick of a frame, the order goes out where the AI thinks, at the start of the next one.</summary>
+        public readonly List<(uint Unit, uint Dock)> GathererDocks = [];
         public int FrontDefense;
         public int FlankDefense;
         // m_curFrontLeft/Right, m_curLeftFlankLeft/Right, m_curRightFlankLeft/Right defence angles.
@@ -346,6 +348,7 @@ public sealed partial class ScriptEngine
             _aiCurrent = state;
             try
             {
+                SendProducedGatherers(state);
                 if (Observer is { } observer) UpdateAiPlayerObserved(observer, state);
                 else
                 {
@@ -357,6 +360,14 @@ public sealed partial class ScriptEngine
             }
             finally { _aiCurrent = null; }
         }
+    }
+
+    private void SendProducedGatherers(AiPlayer state)
+    {
+        if (state.GathererDocks.Count == 0) return;
+        foreach (var (unit, dock) in state.GathererDocks)
+            if (_world.FindEntity(new EntityId(unit)) is { } gatherer && _world.FindEntity(new EntityId(dock)) is { } center) DockAt(state.Setup.Player, gatherer, center);
+        state.GathererDocks.Clear();
     }
 
     /// <summary>The same four calls in the same order, each reported to the observer (the section of the AI players is suspended meanwhile: sections do not nest).</summary>
@@ -429,14 +440,14 @@ public sealed partial class ScriptEngine
                         if (!entry.IsSupply || entry.DesiredGatherers <= 0 || entry.DesiredGatherers <= entry.CurrentGatherers) continue;
                         if (entry.ObjectId == 0 || _world.FindEntity(new EntityId(entry.ObjectId)) is not { } center) continue;
                         entry.CurrentGatherers++;
-                        DockAt(state.Setup.Player, unit, center);
+                        state.GathererDocks.Add((unit.Id.Value, center.Id.Value));
                     }
             }
             break;
         }
         if (gatherer || !unit.Template.IsKindOf("DOZER")) return;
         state.BuildCheckTick = _tick;
-        state.StructureReadyTick = _tick + _world.Time.OriginalFrames(1);
+        state.StructureReadyTick = _tick;
     }
 
     // ------------------------------------------------------------------------------------------------ base building
@@ -1497,6 +1508,15 @@ public sealed partial class ScriptEngine
             writer.Int("enemy", state.Enemy);
             writer.Int("enemyCheckTick", state.EnemyCheckTick);
             writer.Int("skillSet", state.SkillSet);
+            writer.BeginArray("gathererDocks");
+            foreach (var (unit, dock) in state.GathererDocks)
+            {
+                writer.BeginObject(null);
+                writer.UInt("unit", unit);
+                writer.UInt("dock", dock);
+                writer.EndObject();
+            }
+            writer.EndArray();
             writer.BeginArray("unitOrders");
             foreach (var order in state.UnitOrders)
             {
@@ -1581,6 +1601,8 @@ public sealed partial class ScriptEngine
             state.Enemy = checked((int)item.Int("enemy"));
             state.EnemyCheckTick = item.Int("enemyCheckTick");
             state.SkillSet = checked((int)item.Int("skillSet"));
+            state.GathererDocks.Clear();
+            foreach (var dock in item.Array("gathererDocks")) state.GathererDocks.Add((checked((uint)dock.UInt("unit")), checked((uint)dock.UInt("dock"))));
             state.UnitOrders.Clear();
             foreach (var order in item.Array("unitOrders"))
                 state.UnitOrders.Add(new AiUnitOrder { Template = order.Text("template"), Gatherer = order.Bool("gatherer"), Factory = checked((uint)order.UInt("factory")) });
