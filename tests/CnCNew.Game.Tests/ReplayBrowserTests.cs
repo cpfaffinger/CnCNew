@@ -366,8 +366,8 @@ internal static class ReplayBrowserTests
         // Another rule profile: the same file in a game that runs the original with the fixes of the community.
         var fixes = GameData.Load(contentDir, rate: data.Rate, rules: CnCNew.Simulation.Rules.RuleProfile.Parse("fixes"));
         var rules = Open(recorded.File, fixes);
-        TestHarness.Assert(fixes.Fingerprint != data.Fingerprint && rules is { Kind: ReplayCompatibilityKind.OtherRules } && rules.Message.Contains("'original'", StringComparison.Ordinal)
-            && rules.Message.Contains("fixes)", StringComparison.Ordinal) && rules.Message.Contains("--rules original", StringComparison.Ordinal),
+        TestHarness.Assert(fixes.Fingerprint != data.Fingerprint && rules is { Kind: ReplayCompatibilityKind.OtherRules } && rules.Message.Contains("'product'", StringComparison.Ordinal)
+            && rules.Message.Contains("fixes)", StringComparison.Ordinal) && rules.Message.Contains("--rules product", StringComparison.Ordinal),
             $"a file of another rule profile is refused with its reason ({rules?.Message})");
         // Damaged: one changed byte in the middle of the match.
         var damaged = (byte[])recorded.File.Clone();

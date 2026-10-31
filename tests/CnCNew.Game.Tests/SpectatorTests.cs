@@ -131,7 +131,7 @@ internal static class SpectatorTests
         var match = LiveMatch.Create(data, setup, Viewport);
         var human = new PlayerId(1);
         var step = TestTime.TickSeconds(match.World);
-        for (var index = 0; index < 4; index++) match.Advance(step);
+        for (var index = 0; index < match.World.Time.OriginalFrames(4); index++) match.Advance(step);
         var own = match.World.Entities.Where(entity => entity.Owner == human && !entity.EffectivelyDead).ToArray();
         TestHarness.Assert(own.Any(entity => entity.Template.IsKindOf("COMMANDCENTER")) && own.Any(entity => entity.Template.IsKindOf("DOZER")), $"the human starts with a command centre and a dozer ({string.Join(", ", own.Select(entity => entity.Template.Name))})");
         var dozer = own.First(entity => entity.Template.IsKindOf("DOZER"));

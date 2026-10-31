@@ -503,10 +503,9 @@ internal static class MissionTextTests
     private static void RealStyle(GameData data)
     {
         {
-            // doSpeechPlay shows DIALOGEVENT:<name>Subtitle as a military caption unless the text starts with '*': the retail English table hides all but one of them.
+            // doSpeechPlay shows DIALOGEVENT:<name>Subtitle as a military caption unless the text starts with '*': the patch's English table hides all of them.
             var subtitles = data.LoadText("English").Table.Entries.Where(entry => entry.Label.StartsWith("DIALOGEVENT:", StringComparison.OrdinalIgnoreCase) && entry.Label.EndsWith("Subtitle", StringComparison.OrdinalIgnoreCase)).ToArray();
-            TestHarness.Assert(subtitles.Length == 2455 && subtitles.Count(entry => entry.Text.StartsWith("*", StringComparison.Ordinal)) == 2454 && subtitles.Count(entry => entry.Text.Length == 0) == 0
-                && subtitles.Single(entry => !entry.Text.StartsWith("*", StringComparison.Ordinal)).Label == "DIALOGEVENT:01_AllCheerSoundSubtitle", "2454 of the 2455 retail subtitles are hidden by a leading asterisk; only the cheering is shown");
+            TestHarness.Assert(subtitles.Length == 2455 && subtitles.All(entry => entry.Text.StartsWith("*", StringComparison.Ordinal)), "the patch hides all 2455 subtitles by a leading asterisk");
         }
         var style = InGameUiStyle.FromGraph(data.Graph);
         TestHarness.Assert(style.Settings.MessagePosition == new InGameUiPixelPoint(10, 10) && style.Settings.MilitaryCaptionPosition == new InGameUiPixelPoint(10, 340), "the retail positions");

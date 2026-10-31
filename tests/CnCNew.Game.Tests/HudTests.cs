@@ -296,13 +296,13 @@ internal static class HudTests
         }
     }
 
-    private static (LiveMatch Match, MatchController Controller) NewMatch(GameData data, Vector2 viewport, GameSettings? settings = null)
+    private static (LiveMatch Match, MatchController Controller) NewMatch(GameData data, Vector2 viewport, GameSettings? settings = null, bool started = true)
     {
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard);
         var match = LiveMatch.Create(data, setup, viewport);
         var controller = new MatchController(match, settings ?? GameSettings.Default);
-        Advance(match, controller, (int)match.World.Time.OriginalFrames(4)); // the start object of the patch makes the builder in its third frame
+        if (started) Advance(match, controller, (int)match.World.Time.OriginalFrames(4)); // the start object of the patch makes the builder in its third frame
         return (match, controller);
     }
 
@@ -692,6 +692,7 @@ internal static class HudTests
                 var moveTarget = startGround + new Vector2(150, 0);
                 Click(controller, ref time, MouseButton.Right, Screen(match, new Vector3(moveTarget.X, moveTarget.Y, 0f)));
                 Advance(match, controller, 30);
+                Advance(match, controller, 30); // the path comes from the queue of the budgeted movement, and a dozer turns before it drives
                 TestHarness.Assert(Vector2.Distance(SimulationQueries.GroundOf(unit), startGround) > 1f, "the right-click move order actually moved the unit");
                 Refresh(controller);
 
@@ -800,7 +801,7 @@ internal static class HudTests
 
     private static void MinimapClickMovesCamera(GameData data)
     {
-        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720), started: false);
         Advance(match, controller, 1);
         var rect = controller.WindowRect("ControlBar.wnd:LeftHUD") ?? throw new InvalidOperationException("LeftHUD window missing");
         var before = match.Camera.Pivot;
@@ -1212,7 +1213,7 @@ internal static class HudTests
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         var poorMatch = LiveMatch.Create(data, new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard with { StartMoney = 100 }), new Vector2(1280, 720));
         var poor = new MatchController(poorMatch, GameSettings.Default);
-        Advance(poorMatch, poor, 1);
+        Advance(poorMatch, poor, (int)poorMatch.World.Time.OriginalFrames(4));
         var poorDozer = poorMatch.World.Entities.First(entity => entity.Owner == poorMatch.Human && entity.Template.IsKindOf("DOZER"));
         long poorTime = 10_000;
         Click(poor, ref poorTime, MouseButton.Left, Screen(poorMatch, EntityPicker.CenterOf(poorDozer)));

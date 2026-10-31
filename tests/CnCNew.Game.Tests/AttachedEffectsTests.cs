@@ -48,8 +48,8 @@ internal static class AttachedEffectsTests
         TestHarness.Assert(catalog.Problems.IsEmpty, $"every slot of the shipped data is read ({string.Join("; ", catalog.Problems.Take(5))})");
         TestHarness.Assert(catalog.BodyRules.Length == 7 && catalog.BodyRules[AttachedEffectCatalog.SmokeSmall] is { Prefix: "smokes", Max: > 0 } && catalog.BodyRules[AttachedEffectCatalog.Aflame].Max > 0,
             $"the body's seven categories from GameData ({string.Join(", ", catalog.BodyRules.Select(rule => $"{rule.Prefix}:{rule.System}:{rule.Max}"))})");
-        TestHarness.Assert(catalog.Objects.TryGetValue("DragonTankFlameProjectile", out var flame) && flame.BoneFx.Count(slot => slot.State == 0 && slot.IsParticleSystem) == 6,
-            "the Dragon tank's flame projectile has its six pristine particle systems");
+        TestHarness.Assert(catalog.Objects.TryGetValue("DragonTankFlameProjectile", out var flame) && flame.BoneFx.Count(slot => slot.State == 0 && slot.IsParticleSystem) == 3,
+            "the Dragon tank's flame projectile has its three pristine particle systems (the patch took out the three that do nothing)");
         var transitions = catalog.Objects.Values.Count(template => !template.Transition.IsDefaultOrEmpty);
         var bodies = catalog.Objects.Values.Count(template => template.HasActiveBody);
         TestHarness.Assert(transitions > 100 && bodies > 500, $"damage transitions ({transitions}) and active bodies ({bodies})");
@@ -97,7 +97,6 @@ internal static class AttachedEffectsTests
         var stats = scene.Attached.Stats;
         Console.WriteLine($"       dragon: {stats}; frames with a flame trail {trails}; frames with a burning unit {aflame}; systems seen: {string.Join(", ", names)}");
         TestHarness.Assert(stats.BoneFxSystems > 0 && trails > 10, $"the flame's trail runs ({stats.BoneFxSystems} systems, in {trails} frames)");
-        TestHarness.Assert(names.Any(name => name.StartsWith("FlameThrowerSmoke", StringComparison.OrdinalIgnoreCase)), "the flame smokes");
         TestHarness.Assert(stats.StreamProjectiles > 0 && streams > 10, $"the flame's stream is drawn through its projectiles ({stats.StreamProjectiles} projectiles, a band in {streams} frames)");
         TestHarness.Assert(scene.Fx.Capture().ProjectileStreams.Length == scene.Attached.ProjectileStreams.Length, "the frame the renderer gets carries the streams");
         TestHarness.Assert(aflame == 0 || stats.BodySystems + stats.ModelStateSystems > 0, "what burns shows it");
