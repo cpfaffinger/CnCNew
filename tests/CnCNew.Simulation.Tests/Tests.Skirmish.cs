@@ -45,7 +45,7 @@ static partial class Tests
 
     public static void SkirmishAiPlaysAMatch()
     {
-        var (replay, scenario, holder) = SkirmishRecord(12_000);
+        var (replay, scenario, holder) = SkirmishRecord(TestRate.Frames(12_000));
         var (fixture, terrain) = (holder.Fixture, holder.Terrain);
         Check.That(scenario.Players.Length == 2, "Both playable factions take part.");
         Check.That(scenario.Winner is not null && scenario.VictoryTick > 0,
@@ -77,7 +77,7 @@ static partial class Tests
         var tail = ReplayRunner.Run(read, restored, new ReplayRunOptions { RecordTickHashes = true });
         Check.That(headRun.TickHashes.Concat(tail.TickHashes).SequenceEqual(second.TickHashes), "A snapshot taken mid-match continues hash identically.");
 
-        var again = SkirmishRecord(12_000).Replay;
+        var again = SkirmishRecord(TestRate.Frames(12_000)).Replay;
         Check.That(ReplayFormat.Write(again with { Checkpoints = [] }).AsSpan().SequenceEqual(ReplayFormat.Write(replay with { Checkpoints = [] })), "Recording the same match twice yields the same replay.");
         var other = SkirmishRecord(12_000, aiSeed: 99).Replay;
         Check.That(!ReplayFormat.Write(other with { Checkpoints = [] }).AsSpan().SequenceEqual(ReplayFormat.Write(replay with { Checkpoints = [] })), "The AI seed is an input of the recording.");
