@@ -579,7 +579,7 @@ The director still uses the tick as a clock, but no longer assumes that it lasts
    `ProductionUpdate` or `DozerAIUpdate`.
 2. **Building count** (`Player::countBuildings`): living `STRUCTURE` objects (faction count: additionally `MP_COUNT_FOR_VICTORY`).
 3. **First evaluation of delayed scripts:** the original draws `GameLogicRandomValue(0, 2 s)`; here an offset derived from the script name
-   in the same range (consumes no random stream that a restored world would not repeat).
+   in the same range (consumes no random stream that a restored world would not repeat). A skirmish of the original AI draws it as the original does, when the match starts (`docs/SKIRMISH-AI-ORIGINAL.md` §6.2 item 12).
 4. **Attacker history** reads owner/type after the world step; an attacker that died in the same tick is stored with an unknown
    owner (the original stores the player mask at the time of the damage).
 5. **Commands as movement:** `*_HUNT`, `*_ATTACK_*`, `*_GUARD_*` and path following move the unit; shooting is taken over by the automatic
@@ -610,17 +610,17 @@ The director still uses the tick as a clock, but no longer assumes that it lasts
 13. **Special powers:** `NAMED_FIRE_SPECIAL_POWER_AT_*` and the waypoint abilities go as an ordinary `UseSpecialPowerCommand` through the usual readiness, science and
     target checks (the original calls `doSpecialPowerAtLocation` on the module and does not check the readiness); `…_USING_WAYPOINT_PATH` uses only the nearest path point as the location.
     `SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST` searches for the location among the positions of hostile objects (sum of `BuildCost` in the effect radius, at least 50) instead of on the 10×10 grid of the original
-    in a random direction and takes all enemies of the player instead of `getSkirmishEnemyPlayer`.
+    in a random direction and takes all enemies of the player instead of `getSkirmishEnemyPlayer`. A skirmish of the original AI follows the original (`docs/SKIRMISH-AI-ORIGINAL.md` §6.2 item 13).
 14. **Garrison:** `MayGarrison` maps `isKindOf(STRUCTURE) && player == 0 || player == own` with "last entered"; `…NEAREST_BUILDING` sorts by distance to the leader/to the unit
     (internet centers only for money hackers); `PLAYER_GARRISON_ALL_BUILDINGS` counts free slots across the order, the original checks only the state at the command.
 15. **`BUILD_TEAM`** (Phase 13: `ScriptEngine.TeamQueues.cs`, after `AIPlayer::buildSpecificAITeam`/`checkQueuedTeams`/`checkReadyTeams`): every finished factory of the team owner that may produce the unit
     (`CanQueueProductionTemplate`), one command per tick per order, preferably an idle one; the team is in the **build queue** and is invisible (`Created` false). A built unit joins through
     `EntitySpawned` and walks to the home location (`aiFollowExitProductionPath`). When all types are finished, the team goes into the **ready queue**; if `teamInitialIdleFrames` expire (0: never) without
     the minimum being built or in production, the team is dissolved. As long as a member is idle, a team with `teamExecutesActionsOnCreate` executes the true actions of its
-    `teamProductionCondition` script (`<This Team>` = the team). Still without build list assignment and priority/queue jumping.
+    `teamProductionCondition` script (`<This Team>` = the team). Still without build list assignment and priority/queue jumping; a skirmish of the original AI has both (`AIPlayer::buildSpecificAITeam`, `queueUnits`, `docs/SKIRMISH-AI-ORIGINAL.md` §6.2 items 6 and 13).
 16. **`RECRUIT_TEAM`:** like `Team::tryToRecruit` (priority, `teamIsAIRecruitable`, `TEAM_AVAILABLE_FOR_RECRUITMENT`, default team = `team<player name>` always recruitable); since Phase 13 the team begins in the
     ready queue: the members go to the home location, it becomes active when all are idle, after 60 seconds or – with start actions – as soon as a member is idle. "Build variants" and held
-    units are not considered; without `teamHome` nothing is recruited.
+    units are not considered; without `teamHome` nothing is recruited, except for a player of the original skirmish AI, which goes on with the origin of the map (`AISkirmishPlayer::recruitSpecificAITeam`).
 17. **Recorded instead of executed:** `PLAYER_AFFECT_RECEIVING_EXPERIENCE`, `OBJECT_ALLOW_BONUSES` and since Phase 12 `TEAM_SET_ATTITUDE`, `TEAM_WANDER(_IN_PLACE)`, `PLAYER_SET_RANKLEVELLIMIT`,
     `PLAYER_SET_RANKLEVEL`, `PLAYER_ADD_RANKLEVEL`, `SCRIPTING_OVERRIDE_HULK_LIFETIME` (§5; read accessors `AttitudeOf`, `RankLevelOf`, `RankLimit`, `HulkLifetimeOverrideTicks`, `SkillPointsModifierOf`). Whoever evaluates them later
     introduces a consumer (AI stance, rank system, hulk list, experience gain); until then they count neither as executed nor as missing.

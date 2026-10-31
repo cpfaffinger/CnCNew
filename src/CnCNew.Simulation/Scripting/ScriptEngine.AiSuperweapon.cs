@@ -17,6 +17,10 @@ public sealed partial class ScriptEngine
     private const string ClusterMines = "SPECIAL_CLUSTER_MINES";
     private const string NukeClusterMines = "NUKE_SPECIAL_CLUSTER_MINES";
     private const string SneakAttack = "SPECIAL_SNEAK_ATTACK";
+    /// <summary><c>Center</c>, <c>Flank</c>, <c>Backdoor</c>: what a cluster mine draws among.</summary>
+    private const int LastEntrance = 2;
+    /// <summary>The four directions a grid is walked in, drawn from one on.</summary>
+    private const int GridDirections = 4;
 
     /// <summary>
     /// <c>doSkirmishFireSpecialPowerAtMostCost</c>: against the current enemy, one holder that is ready per team of the player fires (a structure is on the default team). A place that comes out
@@ -48,7 +52,7 @@ public sealed partial class ScriptEngine
     private bool ComputeSuperweaponTarget(AiPlayer state, SpecialPowerInfo power, PlayerId enemy, Fixed weaponRadius, out Fixed x, out Fixed y)
     {
         if (power.Type is not (ClusterMines or NukeClusterMines)) return ComputeTargetOfMostValue(power, enemy, weaponRadius, out x, out y);
-        var mode = _world.LogicRandom.Range(0, 2);
+        var mode = _world.LogicRandom.Range(0, LastEntrance);
         var label = (mode == 1 ? FlankPath : mode == 2 ? BackdoorPath : CenterPath) + (state.Setup.StartIndex + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
         var (goalX, goalY) = (state.BaseX, state.BaseY);
         if (_program.FindPath(label) is { Waypoints.IsDefaultOrEmpty: false } path)
@@ -96,7 +100,7 @@ public sealed partial class ScriptEngine
         var xCount = Math.Min((width / radius).Ceiling() + 1, 10);
         var yCount = Math.Min((height / radius).Ceiling() + 1, 10);
         var military = power.Type != SneakAttack;
-        var (xDelta, yDelta, xStart, yStart) = _world.LogicRandom.Range(1, 4) switch
+        var (xDelta, yDelta, xStart, yStart) = _world.LogicRandom.Range(1, GridDirections) switch
         {
             1 => (1L, 1L, 0L, 0L),
             2 => (-1L, 1L, xCount, 0L),

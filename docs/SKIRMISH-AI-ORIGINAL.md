@@ -32,9 +32,9 @@ Sources: `references/ea-generals-zero-hour/GeneralsMD/Code/GameEngine/…`; ever
 | Part | Where (`AI/AIPlayer.cpp` unless named otherwise) | Behaviour |
 | --- | --- | --- |
 | Base building | `AISkirmishPlayer::doBaseBuilding`, `processBaseBuilding` | Every two seconds (at once when a structure was finished): one structure per round. A **priority entry** (asked for by a script) comes first, above it a power plant when power is short; then automatic entries with rebuilds left. Destroyed or captured structures wait `RebuildDelayTimeSeconds` (30 s). Sites without a dozer get a new one. Before that `isLocationSafe`: no enemy within `SupplyCenterSafeRadius` (300) |
-| Building with a dozer | `AIPlayer::buildStructureWithDozer` | Dozer, full money, place; if the place is not legal, growing squares are searched (skirmish: up to 120 cells, step four cells). `BuildAssistant::buildObjectNow` checks **no prerequisites**; if the dozer does not reach the place, it is moved there |
-| Dozer | `findDozer`, `queueDozer` | Nearest idle dozer; a worker that carries supplies is not taken; if there is none, one is ordered as a priority order |
-| Gatherers | `checkForSupplyCenter`, `queueSupplyTruck` | A finished supply centre wants `ResourceGatherers<Level>` + 1 gatherers as long as a stocked, non-hostile warehouse lies within `SUPPLY_CENTER_CLOSE_DIST` (20 cells); missing ones are built as a priority order, loose gatherers are docked again |
+| Building with a dozer | `AIPlayer::buildStructureWithDozer` | Dozer, full money, no enemy on the place, the place; if the dozer cannot use it, growing squares are searched (skirmish: up to 120 cells, step four cells); without a result the entry's own place. If the dozer does not reach the place, it is moved there. `BuildAssistant::buildObjectNow` tests the **prerequisites** (`isPossibleToMakeUnit` -> `Player::canBuild`): what lacks one is not built |
+| Dozer | `findDozer`, `queueDozer` | Nearest idle dozer, else one with another task than building; a worker that gathers is not taken, nor the dozer kept for repairs; if there is none, one is ordered as a priority order |
+| Gatherers | `checkForSupplyCenter`, `queueSupplyTruck`, `onUnitProduced` | A finished supply centre of the build list wants `ResourceGatherers<Level>` + 1 gatherers, counted by their preferred dock, as long as a stocked, non-hostile warehouse lies within `SUPPLY_CENTER_CLOSE_DIST` (20 cells); missing ones are built as a priority order (the first takes the gatherer the centre comes with), loose gatherers are docked again |
 | Supply centres | `buildBySupplies`, `findSupplyCenter`, `isSupplySourceSafe` | Only on a script's order (`AI_PLAYER_BUILD_SUPPLY_CENTER`): warehouse with enough supplies, without an own centre beside it, not much nearer to the enemy; the place beside it as a priority entry |
 | Recruit before training | `AIPlayer::queueUnits`, `Team::tryToRecruit` | Every order of a team first takes fitting units from recruitable teams of lower priority - above all from the default team, where the units of disbanded teams stand - within `MaxRecruitRadius` (500) of home or base centre; only then units are trained, one unit at a time per order |
 | Teams | `AISkirmishPlayer::doTeamBuilding`, `AIPlayer::selectTeamToBuild`, `isAGoodIdeaToBuildTeam`, `isPossibleToBuildTeam`, `queueUnits`, `checkQueuedTeams`, `checkReadyTeams` | When the team timer has run out (`TeamSeconds` 10 s; ÷ 0.6 below `Poor` 2,000, ÷ 2 above `Wealthy` 7,000): among all team templates of the player whose **production condition** (a script, `TeamPrototype::evaluateProductionCondition` in `Common/RTS/Team.cpp`) holds, that do not yet have `teamMaxInstances` instances, are not being built and are possible (a factory for every type, one of them free, money for `TeamResourcesToStart` = 10 % of the mean cost), the highest `teamProductionPriority` wins; among equals `GameLogicRandomValue(0, count-1)` **draws**. Before that `selectTeamToReinforce` gets its turn: a team in the field with `teamAutoReinforce` and a higher priority that misses a unit gets one. Teams the AI chose itself are only begun at free factories; after `teamInitialIdleFrames` a team is disbanded when its minimum is neither built nor in work |
@@ -45,7 +45,7 @@ Sources: `references/ea-generals-zero-hour/GeneralsMD/Code/GameEngine/…`; ever
 | Enemy | `AISkirmishPlayer::getAiEnemy`, `acquireEnemy` | Every five seconds: the enemy stays as long as it has units and a build facility; otherwise the one with the nearest base; one that another AI already attacks counts 500 farther, one that attacks me 25 nearer |
 | Defence ring | `AISkirmishPlayer::buildAIBaseDefenseStructure` | On the circle base radius + `SkirmishBaseDefenseExtraDistance` (150): "front" towards the path `Center<n>`, "flank" alternately `Backdoor<n>` and `Flank<n>`; the first on the line, further ones alternately left and right at a distance of four structure radii, up to 60° |
 | Superweapons | `AISkirmishPlayer::computeSuperweaponTarget`, `AIPlayer::computeSuperweaponTarget` | Target by value within the effect radius; cluster mines **drawn** onto one of the three own approaches |
-| Bridges | `updateBridgeRepair`, `AISkirmishPlayer::checkBridges` | A dozer repairs a destroyed bridge on an approach path |
+| Bridges | `updateBridgeRepair`, `AISkirmishPlayer::checkBridges` | A broken bridge on an approach path goes into the repair queue of two and a dozer is kept for it; `ActionManager::canRepairObject` refuses bridges ("repairing bridges cut"), so that order comes to nothing. The same queue serves `PLAYER_REPAIR_NAMED_STRUCTURE`, which works |
 
 ### 1.3 What the scripts do
 
@@ -133,6 +133,8 @@ the difficulty per player, the 1,765 generic team scripts and the production con
 `CombatZone` 61. **62 maps have the twelve template sides, two only the three of the base game** (`Armored Fury`, `Scorched Earth`): there a general's player gets no scripts, as in the
 original (a named option that is not the reference gives it the library's, §6.2 item 11).
 
+**What the maps do not get here:** 19 of the 64 maps have bridges of the terrain (objects with the bridge point flags: Dark Night, Heartland Shield, TournamentB and more, 62 bridges). The port does not build them: no bridge object, no towers, no layer of the pathfinder, so nothing crosses them, for any AI. Objects with `BridgeBehavior` that a map places stand on two maps (`MonumentTrainBridge` on Alpine Assault and Killing Fields).
+
 **`MultiplayerScripts.scb`** (26 scripts on the neutral side): 7 condition types and 7 action types - timers (`SET_MILLISECOND_TIMER` 19, `SET_COUNTER` 3), announcements
 (`MUSIC_SET_TRACK` 10, `SPEECH_PLAY` 10) and one each of `VICTORY`, `DEFEAT`, `LOCALDEFEAT` for the local player. It decides nothing about who has won - that is
 `VictoryConditions::update`, which its conditions (`MULTIPLAYER_ALLIED_VICTORY` …) only read - it announces it and ends the game for the local human. It is not attached; the session
@@ -167,7 +169,7 @@ uses it as well.
 | State in snapshot/hash | no | yes, complete (tested at every tick) |
 | Difficulty | none | three levels per player |
 | Session | `SkirmishMatchSession`, reproducible as a replay | `ScriptedSkirmishSession`, like a mission **no** replay; the truth is the state |
-| Map objects | only warehouses | structures and warehouses of the map (§6.4) |
+| Map objects | only warehouses | every object of the map (§6.4) |
 
 ## 5. Design: alternatives and recommendation
 
@@ -185,7 +187,7 @@ write directly into the world), and the script evaluation costs time per tick (�
   a test fixes it, a normal game draws it outside the simulation. All random draws of the AI go through this one stream, as in the original.
 - **State in the hash from the start** (in anticipation of phase 24): the C++ part lives in the `ScriptEngine` (`ScriptEngine.AiPlayer.cs` and the `ScriptEngine.Ai*.cs` files);
   `Describe`/`Load`/`StateHash` contain build list, timers, enemy, skill set, defence angles, production and hook state, the condition memory, the common victims and the
-  reinforcement orders in a fixed order. `WorldSnapshot` is unchanged (version 10); the session state has a format of its own, `cncnew-scripted-skirmish-state` version 1.
+  reinforcement orders in a fixed order. `WorldSnapshot` is unchanged (version 10); the session state has a format of its own, `cncnew-scripted-skirmish-state` version 2.
 - **Opt-in.** `ScriptEngineOptions.Ai`/`MissionOptions.Ai` are `null` for every mission; without them no new path takes another way. `SkirmishMatchSession` is untouched.
 - **Time.** The AI thinks on ticks that begin a frame of the original; its deadlines are tick deadlines from frames/seconds through the time service (`SourceRules` enforces that).
   It shares the grid of the script VM, which evaluates on frame boundaries at every rate (`docs/SCRIPT-ENGINE.md` §2).
@@ -200,7 +202,8 @@ write directly into the world), and the script evaluation costs time per tick (�
 | `SageMapDecoder.DecodeScriptLibrary`, `MapScriptLibrary` | `CnCNew.Formats`, `CnCNew.Data/World` | decode the `.scb` (three chunks, everything else reported as skipped) |
 | `AiData` | `Simulation/Skirmish/Original` | §3 |
 | `SkirmishScriptAttachment` | `Simulation/Skirmish/Original` | §1.1 as a pure transformation of data: map + library + slots → `MapData` (side 0 neutral, sides 1..N the slots, then civilians) |
-| `ScriptEngine.AiPlayer.cs` | `Simulation/Scripting` | §1.2 as far as not excepted below; the six actions; qualified areas; current player; difficulty per list |
+| `ScriptEngine.AiPlayer.cs` | `Simulation/Scripting` | §1.2; the six actions; qualified areas; current player; difficulty per list |
+| `ScriptEngine.AiSuperweapon.cs` | `Simulation/Scripting` | `computeSuperweaponTarget`, `getPlayerSuperweaponValue`, `doSkirmishFireSpecialPowerAtMostCost` |
 | `ScriptEngine.AiConditionMemory.cs` | `Simulation/Scripting` | §1.6: when two conditions are looked at again |
 | `ScriptEngine.AiTeamTarget.cs` | `Simulation/Scripting` | the common victim of a team (`Team::setTeamTargetObject`); the world asks through `IAcquisitionAdvisor.CommonTargetOf`/`NoteFiring` |
 | `ScriptEngine.AiReinforce.cs` | `Simulation/Scripting` | `AIPlayer::selectTeamToReinforce`, `AIUpdateInterface::joinTeam` |
@@ -210,47 +213,31 @@ write directly into the world), and the script evaluation costs time per tick (�
 
 ### 6.2 Deviations from the original (complete)
 
-For each deliberate deviation: what the original does, what it would take, what it costs.
+Decision D-16 of 31 October 2026: the C++ half is completed fully. This list said what was missing; it now says what became of each item and what is still different. Every item has a test in `tests/CnCNew.Simulation.Tests/Tests.OriginalSkirmishAi.cs` that fails on the code before.
 
-1. **Prerequisites apply.** The original builds a priority entry whatever its prerequisites: `AIPlayer::buildStructureWithDozer` calls `TheBuildAssistant->buildObjectNow`, which
-   places the object without `canMakeUnit`. Here a construction is an ordinary player command; consequence: instead of the *first* open priority entry the first one the rules
-   allow now is taken; one without its prerequisite waits without blocking the others. *To follow the original:* a construction path for the AI that skips the prerequisite test
-   (a flag on `ConstructCommand` or a direct world write) - a rule exception only for a computer player, which a mixed match (human and AI under the same rules) makes visible.
-   The scripts order their buildings in an order that respects the prerequisites, so the difference shows only when a prerequisite structure is destroyed. Not done; cost of doing
-   it: one command field and a new `CommandTypes.Version`.
-2. **No moving of the dozer** when it does not reach the building place.
-3. **Map objects:** the default is only structures and warehouses of the map (§6.4). The original creates everything. `--all-map-objects`
-   (`ScriptedSkirmishOptions.AllMapObjects`) does the same at a cost measured on Alpine Assault of 7.5 ms per tick, 3.4 ms of it `RailroadBehavior`. To make it the default the
-   scenery modules would have to become cheap first (trees, lamps, sound objects, trains: several hundred objects per map whose updates cost more than the rest of the match).
-4. **Map explored** for computer players. The original does not ask the shroud when the AI places a structure: `AIPlayer::buildStructureWithDozer` tests
-   `TheBuildAssistant->isLocationLegalToBuild` with `CLEAR_PATH | TERRAIN_RESTRICTIONS | NO_OBJECT_OVERLAP`, without the `SHROUD_REVEALED` a human's placement carries
-   (`InGameUI.cpp`, `PlaceEventTranslator.cpp`). Here the construction command requires an explored cell, so the session explores the map for a computer player
-   (`World.ExploreMap`). *To follow the original exactly:* the placement test without the shroud for a computer player; same kind of rule exception as item 1. Not done.
-5. **Gatherers:** implemented by effect (as many gatherers as all supplied centres together want; idle ones to the nearest stocked warehouse), not per centre with a preferred dock.
-   Centres are looked for in the world, not only in the build list.
-6. **Factory search** over all own production structures and their `CommandSet` instead of only over the build list.
-7. **Science points on a timer.** The original gives a player skill points for what it destroys (`Player::addSkillPointsForKill`, `addSkillPoints`; levels from `Rank.ini`) and
-   purchase points per rank (`Player::addSciencePurchasePoints`).
-   There is no rank system in the simulation; the session gives every living player one purchase point every 2,700 frames (90 s), as `SkirmishMatchSession` does. *To follow the
-   original:* the rank system (skill points per kill by `ExperienceValue`, `Rank.ini` thresholds, purchase points per rank) - a rule of the game for humans as well, not a part
-   of the AI; it belongs to a phase of its own.
-8. **Start money** 10,000 from the options (the setup screen of the original sets it), as for the built-in AI.
-9. **Not implemented:** bridge repair (`AIPlayer::updateBridgeRepair`, `AISkirmishPlayer::checkBridges`: needs the bridge state per approach path and a repair order for a dozer;
-   whether a map of the surveys ever needs it has not been measured); following a GLA rebuild hole (`processBaseBuilding`
-   finds the hole of a destroyed structure through `RebuildHoleBehavior` and waits for it instead of sending a worker: here the entry is rebuilt by a worker after the delay if the
-   hole failed, and the hole rebuilds by itself otherwise - the visible difference is a second site when both happen); cluster mines on the own approaches
-   (`AISkirmishPlayer::computeSuperweaponTarget` draws one of `Center`/`Flank`/`Backdoor` for a power of type `SPECIAL_CLUSTER_MINES` or `NUKE_SPECIAL_CLUSTER_MINES`: here the mines go where every other superweapon
-   goes, to the most valuable place of the enemy); `MultiplayerScripts.scb` (§2: announcements only). `teamVeterancy` needs nothing: the reference reads the key into
-   `TeamTemplateInfo::m_veterancy` (`Team.cpp`) and no code reads the field. `AIAttackSquadState::chooseVictim` has no caller in a skirmish of the shipped library (§1.4).
-10. **Human in a slot:** the first slot is tested (the client's skirmish against the original AI, `tests/CnCNew.Game.Tests`); the start base of a human takes the start position by
-    the number of humans, not by the slot, so a human in another slot is not supported.
-11. **Named option, not the reference:** `ScriptedSkirmishOptions.LibraryScriptsForMissingSides` (`--library-for-missing-sides`): a player whose side has no template side on the
-    map takes the library's template player of its side (`Skirmish<Side>`). Off by default; the attachment report says when it was used.
-12. **First evaluation of delayed scripts:** the reference draws the offset (0 to 2 s) from the logic random stream when the scripts are prepared; the engine derives it from the
-    script name, because a restored engine is constructed again and must not draw again. The spread is the same, the individual offsets are not.
-13. What the VM approximated before (`docs/SCRIPT-ENGINE.md` §8) still applies: formations, `SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST` without a grid, garrison etc.; the
-    acquisition of the units is the one of the simulation (`docs/SIMULATION-CORE.md` §33), so "a member takes the team's victim" means: when it can attack it from where it is, or
-    is on an attack-move and may chase.
+1. **Prerequisites: the premise of this item was wrong, and the code now follows the source.** This list used to say that `buildObjectNow` places an object without looking at prerequisites. It tests them: `buildObjectNow` calls `isPossibleToMakeUnit`, whose last step is `Player::canBuild` (prerequisites, `canBuildMoreOfType`) - the same in EA's source, GeneralsGameCode and Zero Hour Reforged. What was different is the choice: `processBaseBuilding` takes the *first* open priority entry whatever the rules say, so an entry that lacks a prerequisite is not built **and the entries behind it wait**. That is what happens now (`RulesAllow`, which skipped such an entry, is gone). A computer player therefore gets no exception from the prerequisites, and no flag for it was added. The player flag `ValidatesOwnSites` (written only when set) serves another line of the source: `DozerAIUpdate::construct`, "Just build it. The ai will validate, or cheat": the world asks this player nothing about the site. Also from the source: the branch for automatic entries never takes one (`canMakeUnit(dozer, bldgPlan)` refuses the null plan it is asked about, and only a null plan would be replaced), so an automatic entry is built only as a power plant.
+2. **Moving the dozer: done.** `buildStructureWithDozer` in its order: no enemy on the place (`EnemyObjectsInTheWay`), the place, else the search around it (`SearchSquares`, with the reference's offsets and its overwritten second test), else the entry's own place; a dozer that cannot reach it stands there at once (`SimulationWorld.Teleport`, one more direct world write). Whether a dozer gets there is one flood of the grid for all places of a search (`NavigationGrid.ReachableCells`; the reference has zones).
+3. **Map objects: every object is created now, by default.** The cost was one thing: a carriage turned its box by a sine and a cosine per object of the world and frame. That is fixed without a change of result (`7382ec4`), and the rest is affordable (§6.4). The former choice is `--structures-only`, `ScriptedSkirmishOptions.AllMapObjects = false`.
+4. **Map explored: gone.** A computer player was already spared the shroud at the construction check (`CheckConstruct`, Phase 50), and nothing else of this AI reads what is explored: the script conditions ask what is visible (`IsPositionVisibleTo`), which exploring does not change. The session no longer calls `ExploreMap`; the map of a computer player starts shrouded, as a human's does.
+5. **Gatherers: per centre with a preferred dock.** `QueueSupplyTruck` is `queueSupplyTruck` over the entries of the build list: desired and current counts, a recount from the docks the gatherers remember while supplies are left, loose gatherers taken back one per round, three times the wanted number as the limit, one order at a time (`AiUnitOrder`, the `TeamInQueue` with one `WorkOrder` of the reference at the head of the queue), the first order takes the gatherer the centre comes with. A dock sent to a just-produced gatherer waits for the first tick of the next frame: a unit appears at any tick of a frame, and an order given there is another match above 30 Hz. The gatherer remembers its dock at once, as `aiDock` leaves it.
+6. **Factory search: over the build list.** `FindFactory` is `findFactory`: the first finished, unsold production building of the list that can make the unit (a button of its command set, the rules) and is doing nothing, else the last busy one when a busy one will do. `isPossibleToBuildTeam`, `queueDozer`, `queueSupplyTruck`, the teams and `buildUpgrade` use it or walk the list themselves. `queueUnits` runs at its pace (every two seconds, at once when something was produced), not per tick, and a factory that is gone is forgotten (`validateFactory`). A captured factory leaves the list, so it serves nobody until it stands in it again.
+7. **Science points: nothing left.** The simulation has the rank system (`SimulationWorld.Rank.cs`): skill points for kills, levels from `Rank.ini`, purchase points per rank. `ScriptedSkirmishOptions.SciencePointIntervalFrames` is 0 by default; a caller who asks for the timer gets it.
+8. **Start money** 10,000 from the options (the setup screen of the original sets it), as for the built-in AI. Stays.
+9. **The three parts named here:**
+   - *Bridge repair: done as far as the world has bridges.* `RepairStructure` and `UpdateBridgeRepair` are `repairStructure` and `updateBridgeRepair`: a queue of two, a dozer that is kept (`FindDozer` leaves it alone, also after the job, as in the reference), once a second, home to the base centre after the last job. `PLAYER_REPAIR_NAMED_STRUCTURE` of an AI player uses it (0 uses in the library). `CheckBridges` runs for `SKIRMISH_FOLLOW_APPROACH_PATH`. A broken bridge stays broken and keeps its dozer: `canRepairObject` refuses bridges in the original as `IsRepairable` does here. **Difference:** `FindBrokenBridge` answers for objects with `BridgeBehavior`, whose two deck ends join what lies beyond them; the terrain bridges of 19 maps do not exist in the port (§2). Building them is a change of the world for every game, with its manifests, and no matter of this AI.
+   - *Rebuild hole: done, and it needed the hole to work.* The port's hole never rebuilt anything (it recorded `CreationSkipped`). `RebuildHoleBehavior` now sends its worker, builds free of charge where the hole lies, masks the hole meanwhile, starts over when worker or site are lost and goes when the building stands. `ProcessBaseBuilding` finds the hole by its spawner, the entry holds it, and the finished building takes its place. **Difference:** the rule is switched on by this session alone (`SimulationWorld.EnableHoleRebuilding`, written only when set): in every other world holes stay holes, because a hole that rebuilds changes matches of the built-in AI and the manifests. In the original it holds in every game; that is a step of its own. Attackers and sticky bombs do not go over to the site (`transferAttack`, `transferBombs`). **Not a difference:** in the round that finds the hole a priority entry still counts as missing, because the reference asks the variable it filled before it looked for the hole; with a dozer and the money it starts a second site beside the hole. The test shows both ways.
+   - *Cluster mines: done.* `ComputeSuperweaponTarget` draws one of `Center`/`Flank`/`Backdoor` for `SPECIAL_CLUSTER_MINES` and `NUKE_SPECIAL_CLUSTER_MINES`; the edge of the base towards the nearest waypoint of that path, as `computeSuperweaponTarget` has it.
+   - `MultiplayerScripts.scb` (§2: announcements only) stays out. `teamVeterancy` needs nothing: the reference reads the key into `TeamTemplateInfo::m_veterancy` (`Team.cpp`) and no code reads the field. `AIAttackSquadState::chooseVictim` has no caller in a skirmish of the shipped library (§1.4).
+10. **Human in a slot: any slot.** `MissionSession.PlaceHumanStarts` takes the start position of the side in a skirmish, and `LiveMatch.CreateScripted` makes the viewer's slot the human one instead of refusing every slot but the first. The game layer's change was compiled, not played: `Game.Tests` were not run on it.
+11. **Named option, not the reference:** `ScriptedSkirmishOptions.LibraryScriptsForMissingSides` (`--library-for-missing-sides`): a player whose side has no template side on the map takes the library's template player of its side (`Skirmish<Side>`). Off by default; the attachment report says when it was used. Stays.
+12. **First evaluation of delayed scripts: drawn.** `DrawFirstEvaluations`, in the order of the lists, from the logic random stream, when the match starts; the state keeps the result, so a restored engine does not draw. A mission keeps the offset from the name (its reference values are fixed).
+13. **What the VM approximated before (`docs/SCRIPT-ENGINE.md` §8):**
+    - `SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST` is `doSkirmishFireSpecialPowerAtMostCost` for this AI (`ScriptEngine.AiSuperweapon.cs`): against the current enemy, one ready holder per team, the grid in a drawn direction, `getPlayerSuperweaponValue` with the tenth and the five times, the fine tuning on the reference's diagonal, the sneak attack through `calcClosestConstructionZoneLocation`, which - as in the reference - answers only for a place that was not free. What a sneak attack builds stands in `AiData.ReferenceObjects`, because a field in the module data would change the input manifest. A mission keeps the search over object positions.
+    - `BUILD_TEAM` of an AI player is `buildSpecificAITeam`: no team without a factory for every type, required and optional units are orders of their own (so a type with both trains two at a time), a script's team goes to the head of the queue, its start actions run at once.
+    - `RECRUIT_TEAM` of an AI player goes on without a home, as `recruitSpecificAITeam` does: the library's teams have none, and the recruits walk to the origin of the map (1 use).
+    - What stays approximate and is no part of the C++ half: formations (`asTeam` on an approach path), garrisons and transports (§8 items 14 and 21, 18 and 33 uses); the acquisition of the units is the one of the simulation (`docs/SIMULATION-CORE.md` §33), so "a member takes the team's victim" means: when it can attack it from where it is, or is on an attack-move and may chase.
+
+**Small differences that remain, all of them looked at:** an order for a dozer or gatherer takes the first unit of its type, because an object here does not say which factory made it (the reference matches factory and type). `queueDozer` and `queueSupplyTruck` turn unit production on for one order; the world's command does not know that, and the library has no `PLAYER_DISABLE_UNIT_CONSTRUCTION` (0 uses). `onUnitProduced` starts its local `supplyTruck` at false, the community source's fix of an uninitialised variable, not at the true of the retail build. `clearTeamFlags` after a disbanded team is not built: its names are unqualified, the library's flags are qualified, so it clears nothing in the original either. `RepairCommand` takes only the player's own objects, the reference also neutral ones (no use in the library).
 
 **A defect found and fixed on the way** (commit `b3c4b4e`): the VM kept one variable where the reference keeps two (`m_callingTeam`, `m_conditionTeam`), and a called script whose
 conditions name no team lost `<This Team>`. The create scripts of the teams - 1,313 of 1,340 prototypes have one - therefore did nothing with `<This Team>`
@@ -267,12 +254,16 @@ reinforcement orders. `ScriptProgram.cs`: `GenericScripts`, `AutoReinforce`, `At
 187/129/19/9). `MissionSession.cs`: `MissionOptions.Ai`, `CommandObserver`. `IAcquisitionAdvisor`: `CommonTargetOf`, `NoteFiring` (defaults: nothing). Without `Ai` every one of
 these paths is the old one.
 
-### 6.4 Map objects: measured reason
+### 6.4 Map objects: measured
 
-Alpine Assault, China against GLA, 4,000 ticks with a probe (`ai-match … --profile --all-map-objects`, first order, 30 Hz): 7,519 µs per tick, of it `RailroadBehavior` 3,424 µs
-(13 calls per tick - the train of the map), 596 `StealthUpdate` calls per tick, world hash 1,011 µs; the map brings 397 trees, 22 lamps, 68 sound objects. Without these objects
-(default): 165 objects at the end instead of 714 and about 1.25 ms per tick. No script of the library refers to them. `--all-map-objects`
-(`ScriptedSkirmishOptions.AllMapObjects`) restores the state of the original.
+First version (30 Hz, Alpine Assault, China against GLA): 7,519 µs per tick with every object, about 1,250 without, of it `RailroadBehavior` 3,424 µs. Measured again on 31 October 2026 on a machine busy with another measured run, so these numbers compare with each other only (60 Hz, Release, seed 7, medium):
+
+| Run | Without scenery | Every object, before | Every object, now |
+| --- | --- | --- | --- |
+| Alpine Assault, two players, 3 game minutes (`ai-match --profile`) | 441 µs per tick, 98 objects | 1,502 µs, 725 objects; `RailroadBehavior` 843 µs for 13 calls per tick, world updates 1,172 µs | **926 µs**; `RailroadBehavior` 134 µs, world updates 522 µs, hash 264 µs |
+| Twilight Flame, eight players, 5 game minutes (`perf`) | 898 µs after warm-up | - | **1,248 µs** |
+
+The final hash of the Alpine Assault match is the same before and after the change of the train (`6799706BB70590B0`). 1,248 µs is 7.5 % of a core at 60 Hz: that is why every object is the default now. No script of the library refers to the scenery; the two Alpine Assault runs end with the same armies. The same match stays the same game at 30, 60 and 120 Hz for 6,000 frames with every object; only the train is left out of that comparison, whose shares of a frame round differently at the rates.
 
 ### 6.5 Tests
 
@@ -302,7 +293,7 @@ dotnet build -c Release tools/CnCNew.MapTool
 dotnet run -c Release --no-build --project tools/CnCNew.MapTool -- script-library <content> [--verbose | --show "<text in the team or script name>"]
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-data <content>
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-match <content> --map "Maps/Alpine Assault/Alpine Assault.map" --factions FactionChina,FactionGLA `
-    --ai original --difficulty medium [--ai-b builtin|original] [--difficulty-b easy|medium|hard] [--seed N] [--max-ticks N | --minutes M] [--trace N] [--profile] [--no-verify] [--all-map-objects] [--library-for-missing-sides]
+    --ai original --difficulty medium [--ai-b builtin|original] [--difficulty-b easy|medium|hard] [--seed N] [--max-ticks N | --minutes M] [--trace N] [--profile] [--no-verify] [--structures-only] [--library-for-missing-sides]
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-survey <content> --out <tsv> --seeds N --minutes 25 --jobs 4 --ai original --difficulty hard --difficulty-b easy
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- ai-census <content> --out <tsv> --seeds N --jobs 4 --ai original --difficulty hard
 dotnet run -c Release --no-build --project tools/CnCNew.SimTool -- perf <content> --map "Maps/Twilight Flame/Twilight Flame.map" --players 8 --ai original --difficulty medium --minutes 30 [--script-detail]
@@ -488,7 +479,7 @@ AI per tick at 30 Hz (the VM then also ran on every tick at 60 Hz), 2,790 µs pe
 | --- | --- | --- | --- |
 | 1 | **Generals on maps without their template side** get scripts | **implemented as a named option** (`LibraryScriptsForMissingSides`, `--library-for-missing-sides`): the library's template player of the general's own side, not the base side (the base side's teams name units the general cannot train). Off by default. Effect not surveyed | share of decided matches on `Armored Fury`, `Scorched Earth` |
 | 2 | **Script evaluation on demand** | the cost aim was reached without it (§7.3) by making each evaluation cheap; an index of scripts by the counters and flags they read remains possible and would need the same proof | `perf --ai original`, identical session hashes |
-| 3 | **Missing rules of the C++ part** | done: common victim, reinforcements, the two condition memories, `<This Team>`; open: bridge repair, rebuild hole, cluster mines (§6.2 item 9) | surveys of §7 |
+| 3 | **Missing rules of the C++ part** | done (§6.2) | surveys of §7 |
 | 4 | **Economy without warehouses** as a kind "improved": when the supplies in reach run out, prefer the money structures of the side (the build list contains them) instead of waiting for the script sequence | open matches end with empty warehouses and money near zero (§7.5) | share of open matches, money over time (`--trace`, `ai-census`) |
 | 5 | **Army value instead of fixed waves** as a kind of AI of its own on the framework of the teams | the built-in AI composes by exchange value since 8 October; the original's waves are fixed | survey kind against kind |
 | 6 | **Lift the built-in `SkirmishAi` onto the same state framework** (`Describe`/`Load`/hash), so that register E11 is settled for both AIs | E11 is solved for the original AI, open for the built-in one - this is the work of phase 24 if the built-in AI stays the default | save/load test as §6.5 |
@@ -505,7 +496,8 @@ AI per tick at 30 Hz (the VM then also ran on every tick at 60 Hz), 2,790 µs pe
 - **Seeds per survey:** the level and kind-against-kind surveys have 3 seeds per seat order (96 matches per pair) instead of the 10 the order asked for; the medium-against-medium
   surveys have the full 20 seeds at both rates.
 - **The mission VM has the `<This Team>` defect** that was fixed for the skirmish AI (§6.2); fixing it changes manifest runs.
-- **Cost:** the maximum of a tick is not addressed (it is the world's: path searches); `--all-map-objects` stays expensive.
+- **Cost:** the maximum of a tick is not addressed (it is the world's: path searches).
+- **§7 was measured before D-16:** the surveys, the census and the cost table describe the AI of 9 October, before the changes of §6.2. Base building, gatherers, the pace of `queueUnits` and the map objects all change matches; none of the surveys was repeated.
 - More than two players: the 8-player runs of §7.3 (no missing types, deterministic by session hash on two runs); no survey. Teams/allies: only the attachment is tested, no
   match. Human in a slot: the first slot only.
 - 120 Hz: the tests of §6.5 and one `rate-compare` pairing; no survey.
@@ -531,9 +523,9 @@ every demo and the multiplayer slots use.
 | **Replay** | a match is a command replay | no: scripts write into the world; the truth is the state (as for a mission). A lockstep session has to run the scripts on every machine, which they do deterministically |
 | **Rate equality** (same seed at 30 and 60 Hz: same outcome / end within 1 s, of 320) | 317 / 287 | 291 / 212; `rate-distribution` 36 passed, 0 failed |
 | **Knowledge** | only what it has seen and remembers | everything (the original knows no fog) |
-| **Map objects** | warehouses only | structures and warehouses; everything only with `--all-map-objects` (7.5 ms per tick) |
+| **Map objects** | warehouses only | every object of the map (§6.4); structures and warehouses only with `--structures-only` |
 | **Where it runs** | everywhere (default) | tools, tests, client (`--ai original`), spectator, shell setup (three armies) - all opt-in |
-| **What is missing** | levels; E11 | bridge repair, rebuild hole, cluster mines; the rank system (science points on a timer); prerequisites apply; an explanation for the faction table and the open matches; a human's eye |
+| **What is missing** | levels; E11 | the terrain bridges and the rebuild holes for every game (§6.2 item 9); an explanation for the faction table and the open matches; a human's eye |
 
 **What switching the default would change.** The 16 AI runs, the three 8-player runs and the 64-map skirmish overview of `baselines/reference-manifest.json` are matches of the
 built-in AI: all of them get new values (or stay as "built-in" runs beside new "original" runs - then nothing changes and the manifest grows). The reference match, the stress test

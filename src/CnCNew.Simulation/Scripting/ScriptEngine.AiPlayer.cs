@@ -28,7 +28,8 @@ public sealed record ScriptAiSetup(AiData Data, ImmutableArray<ScriptAiPlayerSet
 /// <em>what</em> is built and where teams go; this part does what they ask for: the build list of the side laid out around the start position, structures by dozer, rebuilding, power first,
 /// dozers and gatherers, which team to train next, skill points, the current enemy and the base defences on the approach paths.
 /// <para>
-/// Everything the AI does is a normal player command (<see cref="ScriptCommandIssuer"/>); its one direct world write is the command centre standing at the start (<c>buildStructureNow</c>).
+/// Everything the AI does is a normal player command (<see cref="ScriptCommandIssuer"/>); its direct world writes are the command centre standing at the start (<c>buildStructureNow</c>), the
+/// dozer moved to a place it cannot reach, and the dock a gatherer remembers.
 /// It thinks on ticks that begin a logic frame of the original and its timers are deadlines in ticks made from frames and seconds by the time service, so they run in the same game time at
 /// every tick rate.
 /// Its random draws (<c>GameLogicRandomValue</c> in the reference) come from <see cref="SimulationWorld.LogicRandom"/>.
