@@ -4593,3 +4593,5 @@ The original has no state machine of a team: `Team::m_state` is the text `TEAM_S
 ### 69.7 Versions and what moves
 
 `CommandTypes.Version` **21**, replay **20**; `WorldSnapshot`, `MissionSnapshot`, `SaveGame`, match description, session state, protocol and transport unchanged (new optional state only; a mission saved with `teamAttitude` loses it). Compatibility baseline **664** entries (`GoAggressiveOnExit`, `WanderWidthFactor`, `WanderAboutPointRadius`, `CapableOfFollowingWaypoints` typed; 670 before). **The manifests are not rewritten:** the input manifest moves in the catalogues, the version fields and the command-stream hashes of every run; the missions move (attitudes, sleepers, team victims, wander, repulsors, sequential scripts that now wait for a fight, contacts); the skirmish runs move by the contacts, by `ResetMoodCheckTimeOnExit` and by civilians.
+
+The rate-equivalence suite: `ai/skirmish FactionAmerica against FactionChina` no longer parts on the real data and leaves `KnownMovementRateCases` (§66.6); `Boss_InfantryAngryMobNexus` and `ai/skirmish FactionGLA against FactionAmerica` stay on the list.

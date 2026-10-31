@@ -93,7 +93,6 @@ static partial class Tests
     private static readonly string[] KnownMovementRateCases =
     [
         "locomotion/Boss_InfantryAngryMobNexus",
-        "ai/skirmish FactionAmerica against FactionChina",
         "ai/skirmish FactionGLA against FactionAmerica",
     ];
 }
