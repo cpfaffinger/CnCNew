@@ -670,12 +670,29 @@ public sealed partial class AudioDirector : IDisposable
         _evaIssued = _mixer.Statistics.RenderedFrames;
     }
 
-    /// <summary>Cutscene movies are Bink video with an audio track; no decoder exists in the runtime, so the request is counted and skipped.</summary>
+    /// <summary>A movie that could not be played (its file is missing or refused, docs/CLIENT-VIDEO.md) is counted and skipped.</summary>
     public void OnMovieRequested(string movieName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(movieName);
         _movies[movieName] = _movies.GetValueOrDefault(movieName) + 1;
     }
+
+    /// <summary>
+    /// The sound of a movie: on the voice bus at the speech volume, as <c>BinkVideoPlayer::createStream</c> sets it (<c>calculateMovieAudioVolume</c>: 0.8 of the speech volume plus a
+    /// little, because Bink takes 0 for full volume). It never gives way to another voice.
+    /// </summary>
+    public long PlayMovieSound(CnCNew.Video.BinkSound sound)
+    {
+        ArgumentNullException.ThrowIfNull(sound);
+        const float scale = 1f / 32768f;
+        const float bink = 0.81f;
+        var samples = new float[sound.Samples.Length];
+        for (var index = 0; index < samples.Length; index++) samples[index] = sound.Samples[index] * scale;
+        var request = PlayRequest.ForBuffer(PcmBuffer.FromOwnedArray(sound.SampleRate, sound.Channels, samples), AudioBus.Voice, volume: bink) with { Priority = AudioPriority.Critical, Cullable = false, Streaming = true };
+        return _mixer.Play(request).Value;
+    }
+
+    public void StopMovieSound(long handle) => _mixer.Stop(new VoiceHandle(handle));
 
     // ---------------------------------------------------------------------------------------------- ambient
 

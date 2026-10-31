@@ -19,7 +19,7 @@ namespace CnCNew.Game.Audio;
 /// <see cref="Mixer"/> to a device or to an <see cref="OfflineAudioRenderer"/>. Nothing here writes to the simulation: it only reads the game through
 /// <see cref="LiveGame"/> and listens to events the HUD already raises. No Stride types; the whole class runs headless in tests.
 /// </summary>
-public sealed class GameAudio : IDisposable, IMissionAudioControl
+public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.Movies.IMovieSound
 {
     private readonly FxCatalog _fx;
     private readonly SortedDictionary<string, int> _unknownHooks = new(StringComparer.Ordinal);
@@ -58,6 +58,11 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl
 
     /// <summary>The volume sliders of the options screen; takes effect with the next rendered block.</summary>
     public void ApplySettings(AudioSettings settings) => Director.ApplySettings(settings);
+
+    /// <summary>The sound of a movie goes to the director's mixer.</summary>
+    public long PlayMovieSound(CnCNew.Video.BinkSound sound) => Director.PlayMovieSound(sound);
+
+    public void StopMovieSound(long handle) => Director.StopMovieSound(handle);
 
     /// <summary>The shell is on screen: the menu theme plays (looped) until a game is attached.</summary>
     public void EnterShell()

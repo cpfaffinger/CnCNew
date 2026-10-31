@@ -13,6 +13,7 @@
     <ProjectReference Include="../CnCNew.Presentation/CnCNew.Presentation.csproj" />
     <ProjectReference Include="../CnCNew.Ui/CnCNew.Ui.csproj" />
     <ProjectReference Include="../CnCNew.Audio/CnCNew.Audio.csproj" />
+    <ProjectReference Include="../CnCNew.Video/CnCNew.Video.csproj" />
     <ProjectReference Include="../CnCNew.W3D/CnCNew.W3D.csproj" />
   </ItemGroup>
 </Project>

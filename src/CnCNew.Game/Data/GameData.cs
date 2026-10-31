@@ -40,6 +40,11 @@ public sealed class GameData
     /// <summary>The continuous effects objects carry outside the FX lists of events (docs/PRESENTATION-FX.md, "Attached effects").</summary>
     public CnCNew.Presentation.Fx.AttachedEffectCatalog AttachedEffects { get; }
 
+    /// <summary>The movies of <c>Video.ini</c> (docs/CLIENT-VIDEO.md).</summary>
+    public CnCNew.Game.Movies.MovieCatalog Movies => _movies ??= CnCNew.Game.Movies.MovieCatalog.FromGraph(Graph);
+
+    private CnCNew.Game.Movies.MovieCatalog? _movies;
+
     /// <summary>The rest-pose bones of the draw models, read when first asked for.</summary>
     public ModelBoneTable ModelBones { get; }
 
