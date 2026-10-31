@@ -86,6 +86,7 @@ public sealed class FrameProjector
     private readonly SelectionFlashTracker _flashes = new();
     private readonly ImmutableDictionary<string, ImmutableArray<int>> _sceneryByTemplate;
     private readonly SortedDictionary<uint, Capture> _ghosts = [];
+    private readonly HashSet<uint> _hiddenBeacons = [];
     private readonly HashSet<uint> _known = [];
     private Dictionary<uint, Capture> _previous = [];
     private Dictionary<uint, Capture> _current = [];
@@ -173,6 +174,9 @@ public sealed class FrameProjector
     }
 
     /// <summary><c>Object::setCustomIndicatorColor</c> (<c>NAMED_CUSTOM_COLOR</c>): the house colour of one object, taken from the colour's alpha-red-green-blue integer; 0 gives the owner's colour back (<c>clearCustomIndicatorColor</c>).</summary>
+    /// <summary><c>BeaconClientUpdate::hideBeacon</c> after a viewer's delete key: another's beacon goes from this machine's picture only.</summary>
+    public void HideBeacon(EntityId beacon) => _hiddenBeacons.Add(beacon.Value);
+
     public bool SetHouseColor(EntityId entity, uint argb, SimulationWorld world)
     {
         if (world.FindEntity(entity) is null) return false;
@@ -207,7 +211,7 @@ public sealed class FrameProjector
         {
             // A parachute encloses nobody (ParachuteContain::isEnclosingContainerFor is OpenContain's, and its drawable stays on): the rider hangs under it. Every other rider is inside.
             var chute = entity.ContainedBy.IsValid ? world.FindEntity(entity.ContainedBy) : null;
-            if (entity.DestroyRequested || (entity.ContainedBy.IsValid && chute?.Container is not ParachuteContain)) continue;
+            if (entity.DestroyRequested || (entity.ContainedBy.IsValid && chute?.Container is not ParachuteContain) || _hiddenBeacons.Contains(entity.Id.Value)) continue;
             // StealthUpdate::changeVisualDisguise: a unit in disguise has the model of what it stands for, and the house colour of that player for everybody but its allies.
             var disguise = entity.HasStatus(DisguisedBit) ? entity.Modules.OfType<StealthUpdate>().FirstOrDefault(stealth => stealth.IsDisguised) : null;
             var shown = disguise is not null ? world.Templates[disguise.DisguisedTemplate].Name : entity.Template.Name;

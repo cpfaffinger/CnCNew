@@ -56,6 +56,7 @@ internal static class HudTests
 
         harness.Run("Cursor and markers: Alt waypoints draw a path with a marker per station, an order leaves a fading hint, the cursor follows context and windows", () => CursorAndMarkers(data));
         harness.Run("Diplomacy: the communicator button shows the players of a skirmish, with side, team and state", () => DiplomacyWindow(data));
+        harness.Run("Beacons: the button of a match of a server, a place, the limit, the delete key, and nothing for an enemy", () => BeaconButton(data));
         harness.Run("Placement preview: the chosen building follows the cursor in the object frame, translucent, red where refused, gone after the click", () => PlacementPreviewInObjectFrame(data));
 
         return harness.Failures;
@@ -107,6 +108,63 @@ internal static class HudTests
         Advance(match, controller, 1);
         Click(controller, ref time, MouseButton.Left, Center("ControlBar.wnd:ButtonOptions"));
         TestHarness.Assert(controller.IsMenuOpen && !controller.IsDiplomacyOpen, "the quit menu takes its place");
+    }
+
+    /// <summary>The button of a game of several humans (<c>ControlBar::setControlBarSchemeByPlayer</c>, <c>ControlBar::update</c>) and <c>GameLogic::onPlaceBeacon</c> as a player sees it.</summary>
+    private static void BeaconButton(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        var world = match.World;
+        long time = 10_000;
+        Refresh(controller);
+        var button = controller.Tree.FindByName("ControlBar.wnd:ButtonPlaceBeacon")!;
+        TestHarness.Assert(button.IsHidden, "a skirmish on one machine has no beacon button");
+        controller.Input.DispatchMeta(MetaAction.PlaceBeacon, world, match.Camera);
+        TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.None, "and its key does nothing");
+
+        controller.BeaconsEnabled = true;
+        var heard = new List<bool>();
+        controller.Messages.BeaconPlaced += heard.Add;
+        Refresh(controller);
+        TestHarness.Assert(!button.IsHidden && button.IsEnabled, "a match of a server has it");
+        var rect = controller.WindowRect("ControlBar.wnd:ButtonPlaceBeacon") ?? throw new InvalidOperationException("no button");
+        Click(controller, ref time, MouseButton.Left, new Vector2(rect.X + rect.Width / 2f, rect.Y + rect.Height / 2f));
+        TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.ButtonTarget, "the button waits for a place");
+        Click(controller, ref time, MouseButton.Left, new Vector2(640, 300));
+        Advance(match, controller, (int)world.Time.OriginalFrames(2));
+        var beacon = world.Entities.FirstOrDefault(world.IsBeacon) ?? throw new InvalidOperationException($"no beacon stands (mode {controller.Input.Commands.Mode})");
+        TestHarness.Assert(beacon.Owner == match.Human && beacon.Template.Name == "MultiplayerBeacon" && controller.Input.Commands.Mode == CommandModeKind.None, $"a click on the ground places it ({beacon.Template.Name})");
+        TestHarness.Assert(heard.SequenceEqual([false]), $"the player hears its own beacon and is not told by the announcer ({heard.Count})");
+        TestHarness.Assert(match.Frame.Drawables.Any(drawable => drawable.Entity == beacon.Id), "the player sees it");
+
+        // Up to the limit of the data; then the button is grey and the key does nothing.
+        for (var count = 1; count < world.Templates.MaxBeaconsPerPlayer; count++)
+        {
+            controller.Input.DispatchMeta(MetaAction.PlaceBeacon, world, match.Camera);
+            Click(controller, ref time, MouseButton.Left, new Vector2(500 + 40 * count, 280));
+            Advance(match, controller, (int)world.Time.OriginalFrames(2));
+        }
+        Refresh(controller);
+        TestHarness.Assert(world.BeaconCount(match.Human) == world.Templates.MaxBeaconsPerPlayer && !button.IsEnabled, $"at the limit the button is grey ({world.BeaconCount(match.Human)} of {world.Templates.MaxBeaconsPerPlayer})");
+        controller.Input.DispatchMeta(MetaAction.PlaceBeacon, world, match.Camera);
+        TestHarness.Assert(controller.Input.Commands.Mode == CommandModeKind.None, "and the key waits for nothing");
+
+        // The delete key on the selection takes the own beacon away.
+        controller.Input.Selection.Replace([beacon.Id]);
+        controller.Input.DispatchMeta(MetaAction.DeleteBeacon, world, match.Camera);
+        Advance(match, controller, (int)world.Time.OriginalFrames(2));
+        Refresh(controller);
+        TestHarness.Assert(world.FindEntity(beacon.Id) is null && button.IsEnabled, "the delete key takes it away, and there is room again");
+
+        // An enemy's beacon: neither drawn nor told of.
+        var enemy = world.Configuration.Players.First(player => !player.Id.IsSystem && player.Id != match.Human && world.AreEnemies(match.Human, player.Id)).Id;
+        heard.Clear();
+        var near = world.Entities.First(entity => entity.Owner == match.Human && !world.IsBeacon(entity));
+        TestHarness.Assert(world.Submit(new CnCNew.Simulation.Commands.PlaceBeaconCommand(enemy, 90_000, world.Tick, near.X, near.Y)).Accepted, "the enemy places one beside the player's unit");
+        Advance(match, controller, (int)world.Time.OriginalFrames(2));
+        var foreign = world.Entities.FirstOrDefault(entity => entity.Owner == enemy && world.IsBeacon(entity)) ?? throw new InvalidOperationException("the enemy's beacon does not stand");
+        TestHarness.Assert(heard.Count == 0, "an enemy's beacon is not announced");
+        TestHarness.Assert(!world.CanPlayerSee(match.Human, foreign) && match.Frame.Drawables.All(drawable => drawable.Entity != foreign.Id), "and not drawn, though it stands where the player sees");
     }
 
     private static void GeneralsWindow(GameData data)
@@ -1008,6 +1066,7 @@ internal static class HudTests
     {
         const int width = 1280, height = 720;
         var (match, controller) = NewMatch(data, new Vector2(width, height));
+        controller.BeaconsEnabled = true; // the button of a match of a server
         TestHarness.Assert(match.HumanFaction.Contains("America", StringComparison.OrdinalIgnoreCase), $"the test match is played by America ({match.HumanFaction})");
         Advance(match, controller, 1);
         var commands = controller.BuildDrawList(width, height).Commands;

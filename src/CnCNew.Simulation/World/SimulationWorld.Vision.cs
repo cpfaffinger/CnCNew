@@ -128,7 +128,8 @@ public sealed partial class SimulationWorld
         // Where the frame the object has begun ends: at 30 Hz it has taken its whole step (F-82).
         var (x, y, _) = entity.FrameEnd(_tick);
         if (!IsPositionVisibleTo(player, x, y)) return false;
-        return !IsHiddenFrom(player, entity);
+        // BeaconClientUpdate::hideBeacon: the beacon of a non-ally is not there for this player.
+        return !IsHiddenFrom(player, entity) && !IsBeacon(entity);
     }
 
     /// <summary>

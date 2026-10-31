@@ -641,6 +641,9 @@ public sealed partial class AudioDirector : IDisposable
     }
 
     /// <summary>The build queue refused an order for lack of money (<c>EVA_InsufficientFunds</c> of <c>Player::buildingDeniedByFunds</c>).</summary>
+    /// <summary>An ally's beacon (<c>EVA_BeaconDetected</c>).</summary>
+    public void NotifyBeaconDetected() => Count(_eva.Request("BeaconDetected") ? AudioOutcomes.EvaRequested : AudioOutcomes.EvaUnknown);
+
     public void NotifyInsufficientFunds()
     {
         if (!_eva.Request("InsufficientFunds")) Count(AudioOutcomes.EvaUnknown);

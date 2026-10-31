@@ -492,6 +492,9 @@ public sealed class CommandModeController
                 _sources = movers;
                 return ActivationResult.EnteredMode;
             }
+            // MSG_META_PLACE_BEACON: a place, and no unit behind it.
+            case GuiCommandKind.PlaceBeacon:
+                return EnterButtonMode(button, []);
             case GuiCommandKind.SetRallyPoint:
             {
                 var producers = sources.Where(entity => SimulationQueries.ProductionOf(entity) is not null).Select(entity => entity.Id).ToImmutableArray();
@@ -644,6 +647,7 @@ public sealed class CommandModeController
                 var issued = button.Kind switch
                 {
                     GuiCommandKind.SetRallyPoint when position is { } rally => SetRally(world, sources, rally),
+                    GuiCommandKind.PlaceBeacon when position is { } beacon => Issue((sequence, tick) => new PlaceBeaconCommand(Player, sequence, tick, SimulationQueries.ToFixed(beacon.X), SimulationQueries.ToFixed(beacon.Y))).Accepted,
                     GuiCommandKind.SpecialPower or GuiCommandKind.SpecialPowerFromShortcut => UseSpecialPower(world, button, sources, objectTarget, position),
                     // ATTACK_OBJECTS_POSITION: the weapon goes to the object's place (MSG_DO_WEAPON_AT_LOCATION).
                     GuiCommandKind.FireWeapon when objectTarget is not null && button.Has(CommandOptions.AttackObjectsPosition)
@@ -774,6 +778,9 @@ public sealed class CommandModeController
     }
 
     /// <summary>A click on a production queue icon (<c>Command_CancelUnitCreate</c>): cancels that entry with a full refund.</summary>
+    /// <summary><c>MSG_REMOVE_BEACON</c>: the world takes the player's own among them away.</summary>
+    public bool RemoveBeacons(ImmutableArray<EntityId> beacons) => Issue((sequence, tick) => new RemoveBeaconCommand(Player, sequence, tick, beacons)).Accepted;
+
     public bool CancelProduction(EntityId producer, int index)
         => Issue((sequence, tick) => new CancelProductionCommand(Player, sequence, tick, producer, index)).Accepted;
 

@@ -86,6 +86,7 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
         hud.Input.Selection.SelectionChanged += OnSelectionChanged;
         hud.CommandFeedbackObserved += OnCommandFeedback;
         hud.ButtonClicked += OnButtonClicked;
+        hud.Messages.BeaconPlaced += OnBeaconPlaced;
         Director.StartMatchMusic(new LiveAudioView(live).HumanSide);
     }
 
@@ -97,6 +98,7 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
             hud.Input.Selection.SelectionChanged -= OnSelectionChanged;
             hud.CommandFeedbackObserved -= OnCommandFeedback;
             hud.ButtonClicked -= OnButtonClicked;
+            hud.Messages.BeaconPlaced -= OnBeaconPlaced;
         }
         if (_live is not null) Director.StopMusic();
         // What a mission script did to the volumes, muted events and Eva ends with the game (AudioManager::reset).
@@ -164,6 +166,13 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
 
     private void OnButtonClicked() => PlayHook("GUIClickSound");
 
+    /// <summary><c>GameLogic::onPlaceBeacon</c>: <c>BeaconPlaced</c> for the player and its allies, <c>EVA_BeaconDetected</c> for the allies.</summary>
+    private void OnBeaconPlaced(bool fromAlly)
+    {
+        PlayUi("BeaconPlaced");
+        if (fromAlly) Director.NotifyBeaconDetected();
+    }
+
     private void OnSelectionChanged(ImmutableArray<EntityId> selected)
     {
         var before = _selected;
@@ -218,6 +227,9 @@ public sealed class GameAudio : IDisposable, IMissionAudioControl, CnCNew.Game.M
                 break;
             case FeedbackKind.Rejected when feedback.Rejection == CommandRejection.InsufficientFunds:
                 Director.NotifyInsufficientFunds();
+                break;
+            case FeedbackKind.Rejected when feedback.Rejection == CommandRejection.TooManyBeacons:
+                PlayUi("BeaconPlacementFailed");
                 break;
         }
     }

@@ -65,6 +65,12 @@ public sealed class HudMessageFeed
         }
     }
 
+    /// <summary>The name of a player of a room, where a server named one; the rest go by the world's name.</summary>
+    public Func<PlayerId, string?> PlayerName { get; set; } = _ => null;
+
+    /// <summary>A beacon the local player may know of was placed; true when it is an ally's. The audio layer plays the original's two sounds.</summary>
+    public event Action<bool>? BeaconPlaced;
+
     /// <summary>The display name of a faction (<c>PlayerTemplate::getDisplayName</c>), or its own name without one.</summary>
     public string FactionText(string faction) => _factionLabels.TryGetValue(faction, out var label) ? _text.Get(label) : faction;
 
@@ -128,6 +134,9 @@ public sealed class HudMessageFeed
                     case CommandRejection.InvalidPlacement:
                         Message("GUI:CantBuildThere");
                         return;
+                    case CommandRejection.TooManyBeacons:
+                        Message("GUI:TooManyBeacons");
+                        return;
                     default:
                         Count($"rejected {feedback.Rejection} ({feedback.Detail})");
                         return;
@@ -173,6 +182,12 @@ public sealed class HudMessageFeed
                 _orderedUpgrades[simEvent.Text] = ordered - 1;
                 if (!_upgradeLabels.TryGetValue(simEvent.Text, out var upgradeLabel)) { Count("upgrade completed without DisplayName"); return; }
                 Message("UPGRADE:UpgradeComplete", _text.Get(upgradeLabel));
+                return;
+            case SimEventKind.BeaconPlaced:
+                // GameLogic::onPlaceBeacon: the player and its allies hear of it, in words and a sound; speech only an ally.
+                if (simEvent.Player != human && world.RelationshipOf(human, simEvent.Player) != Relationship.Allies) return;
+                Message("GUI:BeaconPlaced", PlayerName(simEvent.Player) ?? world.Configuration.Players.FirstOrDefault(player => player.Id == simEvent.Player)?.Name ?? $"Player {simEvent.Player.Value}");
+                BeaconPlaced?.Invoke(simEvent.Player != human);
                 return;
             case SimEventKind.PlayerDefeated:
                 if (!AnnounceDefeats || simEvent.Tick <= 1) return;

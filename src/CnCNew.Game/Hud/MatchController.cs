@@ -134,6 +134,8 @@ public sealed partial class MatchController
         if (match is LiveMatch { Remote: not null } served)
             Net = new NetHud(new LiveMatchNetSource(served), line => Messages.Log.Add(line, Messages.Clock())) { DiagnosticsDirectory = served.DiagnosticsDirectory, Skin = Skin };
 
+        BeaconsEnabled = match is LiveMatch { Remote: not null, Setup.Spectator: false };
+        Messages.PlayerName = player => Net?.NameOfSeat(player.Value);
         CommandBar = Input.CommandBar!.Build(match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(match.World, match.Human);
         Generals = Input.CommandBar.Generals(match.World, match.Human);
@@ -332,6 +334,8 @@ public sealed partial class MatchController
     {
         if (action == MetaAction.Options) { OpenMenu(); return; }
         if (action == MetaAction.Diplomacy) { ToggleDiplomacy(); return; }
+        if (action == MetaAction.PlaceBeacon) { ArmBeacon(); return; }
+        if (action == MetaAction.DeleteBeacon) { RemoveSelectedBeacons(); return; }
         UiRequest?.Invoke(action);
     }
 
@@ -442,8 +446,8 @@ public sealed partial class MatchController
             case "ControlBar.wnd:PopupCommunicator":
                 ToggleDiplomacy();
                 break;
-            case "ControlBar.wnd:ButtonPlaceBeacon":
-                Messages.ClientNote($"not supported in this build: {name.Split(':')[^1]}");
+            case BeaconButton:
+                ArmBeacon();
                 break;
         }
     }
@@ -721,6 +725,7 @@ public sealed partial class MatchController
 
         RefreshDynamicWindows();
         RefreshGeneralsWindow();
+        RefreshBeaconButton();
         if (IsDiplomacyOpen) RefreshDiplomacy();
         var baseList = _tree.BuildDrawList();
         var extra = BuildDynamicCommands();
