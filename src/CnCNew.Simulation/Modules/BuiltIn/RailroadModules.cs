@@ -544,9 +544,29 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
         if (_waitingInWings || _endOfLine) return;
         var radiusUs = Entity.Template.GeometryMajorRadius;
         List<Entity>? hits = null;
+        // A carriage looks at every object at every frame: the turn is worked out once, and what is out of reach of the box costs two comparisons.
+        var box = Entity.Template.Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
+        var cos = box ? FixedTrig.Cos(Entity.Angle) : Fixed.Zero;
+        var sin = box ? FixedTrig.Sin(Entity.Angle) : Fixed.Zero;
+        var (major, minor) = (Entity.Template.GeometryMajorRadius, Entity.Template.GeometryMinorRadius);
         foreach (var other in world.Entities)
         {
-            if (other.Id == Entity.Id || other.DestroyRequested || other.ContainedBy.IsValid || !Overlaps(other)) continue;
+            if (other.Id == Entity.Id || other.DestroyRequested || other.ContainedBy.IsValid) continue;
+            if (box)
+            {
+                var otherRadius = other.Template.BoundingCircleRadius;
+                var (dx, dy) = (other.X - Entity.X, other.Y - Entity.Y);
+                var reach = major + minor + otherRadius + otherRadius;
+                if (dx.Abs() > reach || dy.Abs() > reach) continue;
+                var along = dx * cos + dy * sin;
+                var across = -dx * sin + dy * cos;
+                if (along.Abs() > major + otherRadius || across.Abs() > minor + otherRadius) continue;
+            }
+            else
+            {
+                var (dx, dy) = (other.X - Entity.X, other.Y - Entity.Y);
+                if (!SquaredReach.Of(Entity.Template.BoundingCircleRadius + other.Template.BoundingCircleRadius).Contains(dx * dx + dy * dy)) continue;
+            }
             (hits ??= []).Add(other);
         }
         if (hits is null) return;
@@ -615,24 +635,6 @@ public sealed class RailroadBehavior(RailroadData data) : SimModule, IUpdateModu
     }
 
     /// <summary>The overlap of this carriage's box (major radius along its heading, minor across, grown by the other's bounding radius) with another object's position.</summary>
-    private bool Overlaps(Entity other)
-    {
-        var template = Entity.Template;
-        var dx = other.X - Entity.X;
-        var dy = other.Y - Entity.Y;
-        var otherRadius = other.Template.BoundingCircleRadius;
-        if (!template.Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase))
-        {
-            var limit = template.BoundingCircleRadius + otherRadius;
-            return SquaredReach.Of(limit).Contains(dx * dx + dy * dy);
-        }
-        var cos = FixedTrig.Cos(Entity.Angle);
-        var sin = FixedTrig.Sin(Entity.Angle);
-        var along = dx * cos + dy * sin;
-        var across = -dx * sin + dy * cos;
-        return along.Abs() <= template.GeometryMajorRadius + otherRadius && across.Abs() <= template.GeometryMinorRadius + otherRadius;
-    }
-
     // ------------------------------------------------------------------------------------------------------------- state
 
     public override void Describe(IStateWriter writer)
