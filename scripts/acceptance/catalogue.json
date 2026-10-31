@@ -189,6 +189,20 @@
     {"id": "SKIRM-04", "group": "SKIRM", "title": "A refused building site says why", "scene": "skirmish", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Select a dozer and try to place a building on a slope, on a cliff, at the edge of the map and on another building. Try a supply center right beside a supply dock.", "expectation": "The preview shows the spot as refused and a line in the message list names the reason: not flat enough, restricted terrain, objects in the way, too close to supplies.", "sources": []},
     {"id": "SKIRM-05", "group": "SKIRM", "title": "Your units make way for a building", "scene": "skirmish", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Stand a few of your soldiers where you then place a building.", "expectation": "The building is begun, and your soldiers walk off the site by themselves.", "sources": []},
     {"id": "SKIRM-06", "group": "SKIRM", "title": "Computer units come at what they see", "scene": "skirmish", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Walk one unit close to resting units of the computer player, just beyond their weapon range.", "expectation": "They walk at your unit and attack it, and do not simply wait until it is in range.", "sources": []},
+    {
+      "id": "SKIRM-07",
+      "group": "SKIRM",
+      "title": "The general's window",
+      "scene": "skirmish",
+      "needsMotion": false,
+      "needsSound": false,
+      "minutes": 2.0,
+      "instruction": "Click the star on the command bar. Buy something with the point you start with, close the window with its button, then destroy enemy units until the star blinks again and open the window.",
+      "expectation": "The window names the rank and fills a bar towards the next one and shows the points to spend; what you may buy is in colour, what you may not is grey, what you own stays in colour; only your own general's powers are shown; a new rank makes the star blink and gives a point.",
+      "sources": [
+        "docs/SIMULATION-CORE.md §67"
+      ]
+    },
     {"id": "REPLAY-01", "group": "REPLAY", "title": "The analysis of a match", "scene": "replay-run", "needsMotion": true, "needsSound": false, "minutes": 2.0, "instruction": "In the main menu: Single Player, Skirmish, Start. The match ends by itself after 60 seconds of game time. On the score screen press Analysis and page through it.", "expectation": "Six pages with charts of money, army and events. You can read them, and what they show fits the match you just saw.", "sources": []},
     {"id": "REPLAY-02", "group": "REPLAY", "title": "The replay list", "scene": "replay-run", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Go back to the main menu and open Replay.", "expectation": "The match you just played is in the list with its date and map, and it can be renamed and deleted.", "sources": []},
     {"id": "REPLAY-03", "group": "REPLAY", "title": "Playing a replay", "scene": "replay-run", "needsMotion": true, "needsSound": false, "minutes": 2.0, "instruction": "Load the replay. Press Page Down and Page Up to jump, Home to go to the start, and change the view of a player with F5 and F6.", "expectation": "The same match plays again, jumps land where they should within a moment, and the match ends with the same result.", "sources": []},
