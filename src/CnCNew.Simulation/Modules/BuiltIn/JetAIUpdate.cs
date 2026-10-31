@@ -84,6 +84,9 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
     // Own speeds of the kinematic stand-in, written as distances per logic frame of the original and scaled where they are used (untouched at 30 Hz).
     /// <summary>The taxi speed of an aircraft without an active locomotor.</summary>
     private static readonly Fixed FallbackTaxiSpeedPerFrame = Fixed.One;
+    /// <summary><c>m_ultraAccurateSlideIntoPlaceFactor</c> of a wing's locomotor: within this many frames of travel of its point the flight goes straight at it.</summary>
+    private static readonly Fixed SlideIntoPlaceFrames = Fixed.FromInt(2);
+
     /// <summary>The slowest horizontal approach of a helicopter to its landing spot.</summary>
     private static readonly Fixed MinHelicopterApproachSpeedPerFrame = Fixed.One;
     /// <summary>The slowest landing speed of a winged aircraft.</summary>
@@ -911,11 +914,11 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
             return;
         }
         if (!parking.ReserveRunway(world, Entity.Id, true)) return; // the winged aircraft circles meanwhile (ShouldCircle)
-        // From here on a straight glide to the runway end, then the roll-out to its start.
+        // JetTakeoffOrLandingState: over the approach point onto the end of the runway, then the roll-out to its start; the height falls with the way left to the end of the runway.
         _glideHeight = Fixed.Max(Fixed.Zero, Entity.Z - parking.ApronHeight(world, Entity.X, Entity.Y));
-        _glideLength = AirModules.Distance2D(Entity.X, Entity.Y, info.RunwayEnd.X, info.RunwayEnd.Y);
+        _glideLength = AirModules.Distance2D(Entity.X, Entity.Y, info.RunwayApproach.X, info.RunwayApproach.Y) + AirModules.Distance2D(info.RunwayApproach.X, info.RunwayApproach.Y, info.RunwayEnd.X, info.RunwayEnd.Y);
         Enter(JetPhase.Landing);
-        Entity.Angle = FixedTrig.Atan2(info.RunwayEnd.Y - Entity.Y, info.RunwayEnd.X - Entity.X);
+        _path.Add(info.RunwayApproach);
         _path.Add(info.RunwayEnd);
         _path.Add(info.RunwayStart);
     }
@@ -925,7 +928,7 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         var flight = Entity.Template.Locomotor;
         if (parking is null || flight is null) { BeginReturnForLanding(world); return; }
         // Speeds and their change in units of one logic frame of the original, with the constants the 30 Hz step computes with.
-        FlightFrameConstants(world.Time, flight, out var topSpeed, out var acceleration, out var braking, out _, out var slowest);
+        FlightFrameConstants(world.Time, flight, out var topSpeed, out var acceleration, out var braking, out var turn, out var slowest);
         if (Helicopter)
         {
             // HeliTakeoffOrLandingState (landing): settle vertically on the helipad or the space.
@@ -963,16 +966,28 @@ public sealed partial class JetAIUpdate(JetAIData data) : AIUpdateInterface(data
         SetFlightFrameSpeed(world.Time, speed);
         var distance = AirModules.Distance2D(Entity.X, Entity.Y, target.X, target.Y);
         var step = Fixed.Min(speed, distance);
-        if (distance > Fixed.Zero)
+        var airborne = _pathIndex < _path.Count - 1;
+        if (airborne && distance > speed * SlideIntoPlaceFrames)
         {
-            Entity.Angle = FixedTrig.Atan2(target.Y - Entity.Y, target.X - Entity.X);
+            // setUltraAccurate: the flight turns at twice its rate ("monster turning ability") and slides into place from two frames away, so the arc does not orbit its point.
+            var desired = FixedTrig.Atan2(target.Y - Entity.Y, target.X - Entity.X);
+            var difference = FixedTrig.AngleDifference(Entity.Angle, desired);
+            var limit = turn * 2;
+            Entity.Angle = turn > Fixed.Zero && difference.Abs() > limit ? FixedTrig.Normalize(Entity.Angle + (difference.IsNegative ? -limit : limit)) : desired;
+            Entity.X += FixedTrig.Cos(Entity.Angle) * step;
+            Entity.Y += FixedTrig.Sin(Entity.Angle) * step;
+        }
+        else if (distance > Fixed.Zero)
+        {
+            if (!airborne) Entity.Angle = FixedTrig.Atan2(target.Y - Entity.Y, target.X - Entity.X);
             Entity.X += (target.X - Entity.X) * step / distance;
             Entity.Y += (target.Y - Entity.Y) * step / distance;
         }
         var ground = parking.ApronHeight(world, Entity.X, Entity.Y);
-        if (_pathIndex == 0)
+        if (airborne)
         {
-            var remaining = AirModules.Distance2D(Entity.X, Entity.Y, _leg.RunwayEnd.X, _leg.RunwayEnd.Y);
+            var remaining = AirModules.Distance2D(Entity.X, Entity.Y, target.X, target.Y);
+            if (_pathIndex == 0) remaining += AirModules.Distance2D(target.X, target.Y, _leg.RunwayEnd.X, _leg.RunwayEnd.Y);
             var fraction = _glideLength > Fixed.Zero ? Fixed.Min(Fixed.One, remaining / _glideLength) : Fixed.Zero;
             Entity.Z = ground + _glideHeight * fraction;
         }

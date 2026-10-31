@@ -105,13 +105,31 @@ static partial class Tests
         Check.That(ai.IsOutOfSpecialReloadAmmo(world), "The jet is out of ammunition.");
         var touchdown = (X: Fixed.Zero, Y: Fixed.Zero);
         var phases = new List<JetAIUpdate.JetPhase>();
+        var approach = Get(world, "AirTestAirfield").Modules.OfType<ParkingPlaceBehavior>().Single().InfoOfSpace(world, 0).RunwayApproach;
+        var nearestApproach = Fixed.MaxValue;
+        var sharpestTurn = Fixed.Zero;
+        var heading = jet.Angle;
+        var turnsInAir = false;
         for (var tick = 0; tick < world.Frames(4000) && !(phases.Contains(JetAIUpdate.JetPhase.ReloadAmmo) && ai.Phase == JetAIUpdate.JetPhase.None && !ai.AllowAirLoco); tick++)
         {
             world.Step();
             if (phases.Count == 0 || phases[^1] != ai.Phase) phases.Add(ai.Phase);
+            if (ai.Phase == JetAIUpdate.JetPhase.Landing && world.Time.IsOriginalFrameBoundary(world.Tick))
+            {
+                nearestApproach = Fixed.Min(nearestApproach, Fixed.Sqrt((jet.X - approach.X) * (jet.X - approach.X) + (jet.Y - approach.Y) * (jet.Y - approach.Y)));
+                var turned = FixedTrig.AngleDifference(heading, jet.Angle).Abs();
+                if (jet.Z > world.GroundHeightAt(jet.X, jet.Y) + Fixed.FromInt(2))
+                {
+                    sharpestTurn = Fixed.Max(sharpestTurn, turned);
+                    turnsInAir |= turned > Fixed.Zero;
+                }
+            }
+            if (world.Time.IsOriginalFrameBoundary(world.Tick)) heading = jet.Angle;
             if (ai.Phase == JetAIUpdate.JetPhase.Landing && touchdown.X == Fixed.Zero && jet.Z <= world.GroundHeightAt(jet.X, jet.Y) + Fixed.FromDecimal(0.5m)) touchdown = (jet.X, jet.Y);
         }
         Check.That(!ai.AllowAirLoco && jet.WeaponClip == 2, $"The jet landed, taxied and reloaded: {string.Join(">", phases)}.");
+        Check.That(nearestApproach < Fixed.FromInt(30), $"It came in over the approach point behind the runway ({nearestApproach}).");
+        Check.That(turnsInAir && sharpestTurn < Fixed.One, $"It turned onto the runway in an arc and did not snap round ({sharpestTurn} at most per frame).");
         Check.That(touchdown.X > Fixed.FromInt(600) && (touchdown.Y - Fixed.FromInt(450)).Abs() < Fixed.FromInt(2), $"It touched down at the end of the model's runway ({touchdown.X}, {touchdown.Y}).");
         Check.That((jet.X - Fixed.FromInt(480)).Abs() < Fixed.FromDecimal(0.2m) && (jet.Y - Fixed.FromInt(530)).Abs() < Fixed.FromDecimal(0.2m), $"It stands on its parking bone again ({jet.X}, {jet.Y}).");
 
