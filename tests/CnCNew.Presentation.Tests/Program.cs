@@ -11,6 +11,7 @@ Func<string[], int>[] suites =
     FxTests.Run,
     TerrainTests.Run,
     RoadTests.Run,
+    BridgeMeshTests.Run,
     CameraTests.Run,
     VisionTests.Run,
     MinimapTests.Run,

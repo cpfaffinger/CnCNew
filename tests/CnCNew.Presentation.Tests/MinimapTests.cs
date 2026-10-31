@@ -4,6 +4,7 @@ using CnCNew.Presentation.Camera;
 using CnCNew.Presentation.Minimap;
 using CnCNew.Presentation.Terrain;
 using CnCNew.Presentation.Vision;
+using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Terrain;
 using static CnCNew.Presentation.Tests.TestHarness;
 
@@ -21,7 +22,30 @@ internal static class MinimapTests
         t.Run("height shading", Shading);
         t.Run("terrain layer with water", TerrainLayer);
         t.Run("fog, dots and camera footprint", Compose);
+        t.Run("a working bridge has its colour, over the water too", Bridge);
         return t.Failures;
+    }
+
+    /// <summary><c>W3DRadar::buildTerrainTexture</c>: a pixel on a working bridge is not water, and takes the bridge's colour at the height of the whole bridge.</summary>
+    private static void Bridge()
+    {
+        var map = SyntheticTerrain.Map(16, 16, 0, (_, _) => 0);
+        var model = TerrainRenderModel.Build(map, SyntheticTerrain.Lookup(), SyntheticTerrain.Options());
+        var heights = new TerrainHeightSampler(map.HeightField);
+        var terrain = TerrainMap.Build(map, "synthetic");
+        var ground = MinimapImage.Build(model, heights, terrain, Water, 32);
+        var (from, to) = (new DeckPoint(Fixed.FromInt(10), Fixed.FromInt(70), Fixed.Zero), new DeckPoint(Fixed.FromInt(150), Fixed.FromInt(70), Fixed.Zero));
+        var deck = TerrainBridge.FromSpan("X", string.Empty, 0, from, to, Fixed.FromInt(-20), Fixed.FromInt(20), Fixed.One);
+        var image = MinimapImage.Build(model, heights, terrain, Water, 32, bridges: [new MinimapBridge(deck, new Rgba32(200, 10, 20, 255))]);
+        static Rgba32 At(MinimapImage image, Vector2 world)
+        {
+            var pixel = image.WorldToPixel(world);
+            var offset = ((int)pixel.Y * image.Width + (int)pixel.X) * 4;
+            return new Rgba32(image.TerrainRgba[offset], image.TerrainRgba[offset + 1], image.TerrainRgba[offset + 2], 255);
+        }
+
+        Assert(At(image, new Vector2(80f, 70f)).R > At(image, new Vector2(80f, 70f)).G * 4, $"On the deck the bridge's colour ({At(image, new Vector2(80f, 70f))}).");
+        Assert(At(image, new Vector2(80f, 120f)) == At(ground, new Vector2(80f, 120f)), "Beside it nothing changes.");
     }
 
     private static (MinimapImage Image, TerrainRenderModel Model) Build(int size, MapData map)

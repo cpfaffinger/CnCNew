@@ -19,6 +19,28 @@ internal static class ModelGeometryTests
         }
 
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
+        harness.Run("Model geometry: the deck of every Bridge block with a model, and the sections it is drawn with", () =>
+        {
+            var geometry = data.Templates.Geometry;
+            var library = new CnCNew.W3D.W3dAssetLibrary(path => data.Content.Exists(path) ? data.Content.OpenRead(path) : null);
+            var lighting = CnCNew.Presentation.Terrain.TerrainRenderOptions.FromDefinitions(data.Graph).Lighting;
+            var modelled = data.Templates.Bridges.Bridges.Where(block => block.Visuals[0].Model.Length > 0).ToArray();
+            Console.WriteLine($"       bridges: {data.Templates.Bridges.Bridges.Length} blocks, {modelled.Length} with a model, {geometry.BridgeDecks.Count} decks");
+            TestHarness.Assert(modelled.Length > 0 && geometry.BridgeDecks.Count == modelled.Length, $"every block with a model has a deck ({geometry.BridgeDecks.Count} of {modelled.Length})");
+            foreach (var block in modelled)
+            {
+                var deck = geometry.BridgeDecks[block.Name];
+                var width = deck.MaxY - deck.MinY;
+                TestHarness.Assert(width > Fixed.FromInt(20) && width < Fixed.FromInt(400) && deck.MinY < Fixed.Zero && deck.MaxY > Fixed.Zero, $"{block.Name}: a deck on both sides of its line ({deck.MinY} to {deck.MaxY})");
+                var art = BridgeArtLoader.Load(library, block.Visuals[0], block.Scale);
+                TestHarness.Assert(art is not null, $"{block.Name}: the model has a left section");
+                var mesh = CnCNew.Presentation.Terrain.BridgeMeshBuilder.Build(block.Name, 0, art!, new System.Numerics.Vector3(100f, 100f, 10f), new System.Numerics.Vector3(400f, 100f, 10f), lighting);
+                TestHarness.Assert(mesh.TriangleCount > 0 && mesh.Bounds.Max.X > 390f && mesh.Bounds.Max.X < 410f, $"{block.Name}: it reaches from point to point ({mesh.Bounds.Min.X} to {mesh.Bounds.Max.X})");
+                // Roads.ini names a few textures of damaged states the game does not ship; a terrain bridge never gets there (its object is immortal), and the client keeps the state before.
+                TestHarness.Assert(CnCNew.W3D.W3dTexturePathResolver.Resolve(art!.Texture, data.Content.Exists).Found, $"{block.Name}: its texture '{art.Texture}' is in the content");
+            }
+        });
+
         harness.Run("Model geometry: all nine retail airfields have their bones, in the catalog and in the world fingerprint", () =>
         {
             var geometry = data.Templates.Geometry;

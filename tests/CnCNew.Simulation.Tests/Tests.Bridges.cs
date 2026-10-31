@@ -581,8 +581,8 @@ static partial class Tests
         var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default, new ModelGeometry([], [], [], decks), CnCNew.Simulation.Rules.RuleProfile.Product);
         Check.That(catalog.Bridges.Bridges.Length == 27 && catalog.Bridges.TryGet("KandaharBridge", out var kandahar) && kandahar.Towers.All(name => name.Length > 0) && kandahar.ScaffoldObject == "BridgeScaffold01", "The Bridge blocks of Roads.ini are typed.");
         MapData map;
-        using (var stream = content.OpenRead("Maps/Bridge Busters/Bridge Busters.map")) map = CnCNew.Formats.SageMapDecoder.Decode(stream);
-        var terrain = TerrainMap.Build(map, "Bridge Busters");
+        using (var stream = content.OpenRead("Maps/Dark Night/Dark Night.map")) map = CnCNew.Formats.SageMapDecoder.Decode(stream);
+        var terrain = TerrainMap.Build(map, "Dark Night");
         Check.That(terrain.BridgeSpans.Length >= 1, "The map has bridges.");
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), catalog.Rate, 1, CombatPlayers, SyntheticFixture.FixtureId, fingerprint, terrain.Fingerprint), catalog, terrain);
         Check.That(world.Bridges.Count == terrain.BridgeSpans.Length, $"Every pair of points is a bridge ({world.Bridges.Count} of {terrain.BridgeSpans.Length}).");
