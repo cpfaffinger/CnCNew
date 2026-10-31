@@ -82,7 +82,8 @@ phase number is 32.
 | **49** | [HANDOFF-PHASE49.md](HANDOFF-PHASE49.md) | **S1-M11** | Fidelity package K: the exit path's second leg (F-80), the source's velocity (F-66), a disabled module's wake (F-81), the sight of a victim (F-82) | **done** by machine (30 October 2026): §63 |
 | **50** | [HANDOFF-PHASE50.md](HANDOFF-PHASE50.md) | **S1-M11** | Fidelity package L: the building site of the original (F-18), the special abilities (F-83), idle allies make way (F-84), a dozer's look (F-85), a walker's goal (F-86) | **done** by machine (31 October 2026): `docs/SIMULATION-CORE.md` §64 |
 | **51** | [HANDOFF-PHASE51.md](HANDOFF-PHASE51.md) | **S1-M11** | Fidelity package M: the approximations of target acquisition (F-17), the dying and the pad (F-87) | **done** by machine (31 October 2026): `docs/SIMULATION-CORE.md` §65 |
-| **52** | [HANDOFF-PHASE52.md](HANDOFF-PHASE52.md) | **Stage 3** | One product: the patch layer, the fixes and the movement profile are the default and the yardstick (D-3, D-4, D-32, D-33) | **next** |
+| 52 | [HANDOFF-PHASE52.md](HANDOFF-PHASE52.md) | Stage 3 | One product: the patch layer, the fixes and the movement profile are the default and the yardstick (D-3, D-4, D-32, D-33) | done |
+| **53** | [HANDOFF-PHASE53.md](HANDOFF-PHASE53.md) | **Stages 3, 4** | The decisions that are a default: D-8, D-19, D-21, D-22, D-23 (interval), D-25, D-26, D-30, D-34 | **next** |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 

@@ -277,7 +277,7 @@ the agent on the owner's instruction.
 All open decisions of the project owner in one place. The briefs each name a default so that nobody is blocked; the
 decision stays with the project owner. Decided items are kept for one month, then moved to the stage document.
 
-None open since 31 October 2026.
+None open since 31 October 2026. Phase 52 built D-3, D-4, D-32 and D-33.
 
 **Decided:**
 

@@ -4412,3 +4412,38 @@ What stays of §33.5: the values of `AIData.ini` are still named constants of th
 No winner of the sixteen pairings moved between Phase 50 and this phase: 14 of 16 are decided, and the same two run to the limit of 25 game minutes (Alpine Assault America against China, Death Valley America against China). 26 runs of the manifest moved in their hashes and courses. No mission run changes its outcome or its end tick. The objective driver reaches victory 24/24 and defeat 24/24. The retail reference match with driver seed `5EED0003` is won by FactionAmericaAirForceGeneral at tick 41,070 (original frame 20,535 at 30 and 60 Hz; end tick 41,671), end hash `0C93FC376E2D669F`, chain `C7CFAA4B096306F1`, 26,086 commands. The stress test is unchanged.
 
 **The rate comparison:** ten of the sixteen pairings are the same game at 30, 60 and 120 Hz to their ends; six part: Armored Fury America against China (frame 29,490), China against GLA (11,939), GLA against America (16,119), Bitter Winter ChinaTank against AirForce (7,095), Death Valley America against China (38,879), ChinaTank against AirForce (13,343). Each is a cause of its own, and they are registered as F-88. The three read so far: on Bitter Winter a detour around standing units is planned from other blockers, on Death Valley a look of the bored dozer misses a structure hurt by a lower id in the updates of its frame (F-85 cannot tell that from a hit after them), on Armored Fury a thrown Red Guard lands a share of a step apart. The rate-equivalence suite stands at 0 / 0 in all ten groups.
+
+
+## 66. Phase 52: one product, the patched variant
+
+The owner's change of course of 31 October 2026 (`docs/plan/PROGRAMME.md` §7: D-3, D-4, D-32, D-33). The game is GeneralsGamePatch above the Steam installation, every adopted fix and the budgeted movement; the manifests measure this variant; the original stays as a switch (`game/original/content`, `--rules original`). How the patch reaches a machine and what is made of its sources is in `docs/PATCH-LAYER.md`.
+
+### 66.1 What the simulation needed
+
+- **The start** (F-89): the patch gives every faction an `...StartingThings` object instead of its builder: it lives 50 ms, and its `OCLUpdate` without a delay makes the dozer or worker (and on a GLA side the `CashBountyDummy`). Its first update only starts the timer, the second finds it run out, and that is the frame its `DeletionUpdate` ends it. `GameLogic::update` asks nobody whether an object is destroyed, so the list is made in that frame; the port skipped every module of a destroyed object, and **on the patched data no player had a builder** - the measurements of Phase 32 played without one. The scheduler now lets an `OCLUpdate` run in that frame, and the module acts where the object's frame begins, or a delay of zero would make a builder per tick above 30 Hz. Tests `StartingObjectMakesItsListOnce`, `RealPlayersStartWithOneBuilder` (one builder, one dummy, no starting object left at 30, 60 and 120 Hz).
+- **A lone weapon outside the primary slot** (F-90): the patch moved the Scud Storm's weapon to `SECONDARY`. An object with one weapon kept it without slot state, as the primary one, so the site never launched; `HasMultipleWeaponSlots` is now also true for it. `RealScudStormLaunches`.
+- **Hierarchies and visibility** (`docs/PATCH-LAYER.md` §2): a top-level hierarchy without the container flag, a visibility default of 255.
+- **Optional blocks:** the first layer of Phase 32 kept the blocks its bundle excludes, and so both alternatives of 16 command sets. `baselines/compatibility.json` dropped from 689 to 674 entries with them.
+
+### 66.2 The rule profile
+
+`RuleProfile.Product` (name `product`) is every adopted fix and `MovementProfile.Budgeted`. `GameData.Load`, the client and the tools default to it, `TemplateCatalog.Build` keeps the original for a caller that names no profile: the synthetic fixtures simulate the engine as the original's source reads, and every fix and the movement profile are tested by name. The tests with real data name the product. A manifest is checked with the product only.
+
+### 66.3 The two hash constructions (D-4)
+
+- **An object from its modules' hashes** (`docs/PERF-HASH.md` §7 part A): the object's own fields and each module are a stream of their own (`IStateWriter.FoldsModules`, `EndStream`, `EndStreams`), a module opens with two words - the object's id and `SimModule.FrameKey`, its index, name and tag folded once per template slot - and the object's hash is a chain over the streams' hashes (`StateHash.Combine`). `FoldHashBatch` folds the streams of a batch side by side as before. The template's name no longer goes into the hash; its index does.
+- **Vision by rows** (`docs/PERF-VISION.md` §7): a row's value is a chain from slot and row over its bytes, the hash a chain over all row values; `VisionMap.CurrentHash` compares the touched rows with the copy and mixes only those that changed. The kept chain values and their checkpoints are gone.
+
+Parts B and C of `docs/PERF-HASH.md` §7 (the wake tick as a word, marking without the scheduler) are not built: they are no hash construction of their own and need the rebuild named there. **Replay 19, `WorldSnapshot` 11**: a recorded hash and a snapshot's stored hash mean something else now. Measured against the binaries before them on the same match, one after the other (8 players, Twilight Flame, 18,000 ticks, warmed up, two runs each): a tick 752 -> 517 µs on average, the vision hash 116 -> 12 µs, the object hash 227 -> 116 µs.
+
+### 66.4 The reference match
+
+`ReferenceMatchOptions.Standard` is half an hour of game time (54,000 frames) instead of two hours, and the match need not end: on the patched data none of six seeds ended within an hour, because the supply Chinooks of the American sides fly on after their bases and nothing the generator orders goes after them. Run to its budget it would be 1.8 million commands.
+
+### 66.5 The result
+
+Against the manifest of Phase 51, on other data and other rules: 46 of the 50 runs keep their outcome. Alpine Assault America against China is won by China at tick 44,760 (a stalemate before), ChinaTank against AirForce on Alpine Assault is a stalemate (a win before), Armored Fury America against China goes to China at tick 19,560 (to America before), and the reference match runs to its budget. 14 of 16 pairings are decided, every mission run keeps its outcome. The reference match (driver seed `5EED0003`, half an hour): stalemate at tick 108,000, end hash `06C310520645B428`, chain `7A99249F70171948`. The stress test `9EE9F730D124C3BD` / `5611A72EDB7D52F2` (its world is empty at the end, so only the chain moved). World fingerprint `73AE8F9DD1855D13`. Balance is not assessed (D-9).
+
+### 66.6 The rate-equivalence suite
+
+The suite measures the product. Three measurements of the suite were wrong on the patched data and are corrected, without touching a tolerance: a missile that dies without an impact event is read where its frame ends, and the victim where the flight ended, not after the blast has thrown it; a structure takes its subdual armour with an upgrade it grants itself in its first update, so a weapon case steps one frame before it begins. Three cases part between the rates under the budgeted movement and are named in `KnownMovementRateCases`, which fails when one of them stops parting: `Boss_InfantryAngryMobNexus` (known since Phase 34) and two AI pairings (F-88). Under `--rules fixes` the suite stands at 0 / 0.

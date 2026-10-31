@@ -1,5 +1,5 @@
 > **Stage:** 3 – Changes (the owner's change of course of 31 October 2026) · **Phase:** 52
-> **Status:** next (starting state: the end of Phase 51, see below)
+> **Status:** done
 > **Predecessor:** HANDOFF-PHASE51.md · **Results in:** docs/PATCH-LAYER.md, docs/plan/PROGRAMME.md, a new reference manifest
 > **Side items:** the two faster hashes (D-4)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -41,4 +41,4 @@ By machine: the clean room builds the patched variant from a fresh checkout, tie
 
 ## Progress
 
-Nothing yet.
+Done: `docs/SIMULATION-CORE.md` §66, `docs/PATCH-LAYER.md`. The installation fetches the patch at a commit and makes the content of it, the fixes and the budgeted movement are the default, the two hash constructions are built, the manifests measure the product. Carried on: `HANDOFF-PHASE53.md`. Closing measurements: `CLAUDE.md`, paragraph "Phase 52".

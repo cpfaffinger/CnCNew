@@ -281,7 +281,7 @@ Checked and discarded, apart from §4.4 and §4.5:
   Too little yield for a further place that has to be right.
 - **Eight instead of four chains:** equally fast in the microbenchmark.
 
-## 7. Proposal for the coordinator: a different construction (not implemented)
+## 7. Proposal for the coordinator: a different construction (part A built in Phase 52, D-4; `docs/SIMULATION-CORE.md` §66.3)
 
 According to handoff item 4 this is a separate, named decision. The measurement says: the target value of Phase 19 (tick on
 average ≤ 1.0 ms) leaves roughly 100 µs for the hash if one grants it a tenth of the tick; with today's
