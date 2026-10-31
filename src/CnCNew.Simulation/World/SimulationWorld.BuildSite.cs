@@ -66,6 +66,29 @@ public sealed partial class SimulationWorld
         return BuildSiteTerrain.Check(navigation.Terrain, template, x, y, angle, _templates.BuildSite);
     }
 
+    /// <summary>
+    /// <c>Pathfinder::findBrokenBridge</c>: the broken bridge that would join the two places, which no way joins now, or nothing. The world has no bridge layers (the terrain bridges of a map are
+    /// not built, <c>docs/SKIRMISH-AI-ORIGINAL.md</c> §6.2 item 9): what can be broken is an object with <c>BridgeBehavior</c>, and it joins what lies beyond the two ends of its deck.
+    /// </summary>
+    public EntityId FindBrokenBridge(Fixed fromX, Fixed fromY, Fixed toX, Fixed toY, LocomotorSurfaces surfaces)
+    {
+        if (Navigation is not { } navigation) return EntityId.Invalid;
+        bool[]? near = null;
+        bool[]? far = null;
+        foreach (var bridge in EntitiesWithModule<Modules.BuiltIn.BridgeBehavior>().AsSpan())
+        {
+            if (bridge.DestroyRequested || bridge.Modules.OfType<Modules.BuiltIn.BridgeBehavior>().First() is not { IsDestroyed: true }) continue;
+            near ??= navigation.ReachableCells(fromX, fromY, surfaces);
+            if (navigation.Reaches(near, toX, toY)) return EntityId.Invalid;
+            far ??= navigation.ReachableCells(toX, toY, surfaces);
+            var reach = bridge.Template.GeometryMajorRadius + Fixed.FromInt(TerrainMap.CellSize);
+            var (endX, endY) = (FixedTrig.Cos(bridge.Angle) * reach, FixedTrig.Sin(bridge.Angle) * reach);
+            var (oneX, oneY, otherX, otherY) = (bridge.X + endX, bridge.Y + endY, bridge.X - endX, bridge.Y - endY);
+            if ((navigation.Reaches(near, oneX, oneY) && navigation.Reaches(far, otherX, otherY)) || (navigation.Reaches(near, otherX, otherY) && navigation.Reaches(far, oneX, oneY))) return bridge.Id;
+        }
+        return EntityId.Invalid;
+    }
+
     /// <summary><c>CLEAR_PATH</c>: the builder can get there (<c>isQuickPathAvailable</c>; "no goals on cliffs"), unless it is immobile.</summary>
     private static bool HasClearPath(NavigationGrid navigation, Entity builder, Fixed x, Fixed y)
     {

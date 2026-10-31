@@ -55,6 +55,9 @@ internal interface ISupplyCarrier
 
     /// <summary><c>setForceWantingState</c>.</summary>
     void SetForceWanting(IWorldServices world, bool wanting);
+
+    /// <summary>What a dock order from a player leaves behind at once (<c>m_preferredDock</c>), for a caller whose order reaches the object only with the next step.</summary>
+    void RememberDock(IWorldServices world, EntityId dock);
 }
 
 public sealed record SupplyCarrierData(AIUpdateData Ai, int MaxBoxes, long CenterDelayTicks, long WarehouseDelayTicks, Fixed ScanDistance, int UpgradedSupplyBoost) : ModuleData
@@ -447,6 +450,12 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
     {
         _machine.SetForceWanting();
         world.WakeAt(Entity, this, world.Tick);
+    }
+
+    public void RememberDock(IWorldServices world, EntityId dock)
+    {
+        _preferredDock = dock;
+        world.MarkDirty(Entity);
     }
 
     public void SetForceWanting(IWorldServices world, bool wanting)

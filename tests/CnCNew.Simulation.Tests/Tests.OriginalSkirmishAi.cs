@@ -1196,4 +1196,91 @@ static partial class Tests
         StepFrames(rich, 600);
         Check.That(CountOwned(rich, 1, "AlphaShack") == 2, $"The priority entry of the round that finds the hole gets a second site, and the hole rebuilds too ({CountOwned(rich, 1, "AlphaShack", finishedOnly: false)}).");
     }
+
+    private const string AiBridgeObject = """
+        Object TestBridge
+          KindOf = STRUCTURE IMMOBILE BRIDGE LANDMARK_BRIDGE
+          Geometry = BOX
+          GeometryMajorRadius = 40.0
+          GeometryMinorRadius = 10.0
+          GeometryHeight = 5.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = BridgeBehavior Bridge01
+            LateralScaffoldSpeed = 100.0
+            VerticalScaffoldSpeed = 70.0
+          End
+        End
+        """;
+
+    /// <summary>A timer that runs out at <paramref name="frames"/>, and the one action after it.</summary>
+    private static MapScript[] AiAfter(int frames, params MapScriptAction[] actions) =>
+    [
+        Scr.Script("A Clock Start", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_TIMER", Scr.Counter("A Clock"), Scr.Int(frames))], oneShot: true),
+        Scr.Script("A After", [Scr.And(Scr.If("TIMER_EXPIRED", Scr.Counter("A Clock")))], actions, oneShot: true),
+    ];
+
+    /// <summary>
+    /// <c>doTeamFollowSkirmishApproachPath</c> asks <c>checkBridges</c>: a broken bridge that would join the team and the path goes into the repair queue and a dozer is kept for it. The order then
+    /// comes to nothing: <c>canRepairObject</c> refuses bridges ("repairing bridges cut"), in the original as here. Before, no bridge was looked at.
+    /// </summary>
+    public static void OriginalAiKeepsADozerForABrokenBridge()
+    {
+        MapData Map()
+        {
+            var map = AiSkirmishMapWithCliffs(Enumerable.Range(0, 40).Select(y => (30, y)));
+            var path = new MapObject("*Waypoints/Waypoint", 400m, 200m, 0m, 0m, 0, new MapProperties([new MapProperty("waypointID", MapPropertyType.Int, 100, 0m, string.Empty), Scr.Text("waypointName", "Center2.Far"), Scr.Text("waypointPathLabel1", "Center2")]));
+            return map with { Objects = [..map.Objects, path] };
+        }
+        var follow = Scr.Do("SKIRMISH_FOLLOW_APPROACH_PATH", Scr.Team("teamplayer"), Scr.SkirmishPath("Center"), Scr.Bool(false));
+        var (session, fixture, terrain, map, library, data) = StartAiVariant(AiDataText(), AiBridgeObject, AiLibraryWithAlphaScripts(AiAfter(60, follow)), Map());
+        Check.That(fixture.Templates.TryGet("TestBridge", out var template), "The fixture has the bridge.");
+        var bridgeId = session.World.RequestSpawn(template.Index, new PlayerId(0), Fixed.FromInt(305), Fixed.FromInt(200), Fixed.Zero, Fixed.Zero);
+        StepFrames(session, 30);
+        session.World.Kill(bridgeId);
+        StepFrames(session, 90);
+        var player = new PlayerId(1);
+        var (structures, dozer) = session.Engine.AiRepairOf(player);
+        Check.That(structures.SequenceEqual([bridgeId.Value]), $"The broken bridge is in the repair queue ({string.Join(", ", structures)}).");
+        Check.That(session.World.Entities.Any(entity => entity.Id.Value == dozer && entity.Template.Name == "AlphaDozer"), $"A dozer is kept for it ({dozer}).");
+        var restored = ScriptedSkirmishSession.Restore(session.Save(), fixture.Templates, fixture.Fingerprint, terrain, map, library, data);
+        Check.That(restored.StateHash() == session.StateHash(), "The repair queue is state.");
+        StepFrames(session, 300);
+        // (A kept dozer that falls is replaced: the two soldiers may meet across the cliffs.)
+        var (still, keptNow) = session.Engine.AiRepairOf(player);
+        Check.That(still.SequenceEqual([bridgeId.Value]) && session.World.Entities.Any(entity => entity.Id.Value == keptNow && entity.Template.Name == "AlphaDozer"),
+            $"It stays that way: nobody can repair a bridge ({string.Join(", ", still)}; {keptNow}, was {dozer}).");
+
+        // Nothing is queued while the bridge stands: a way that is simply not there is nobody's business.
+        var (whole, wholeFixture, _, _, _, _) = StartAiVariant(AiDataText(), AiBridgeObject, AiLibraryWithAlphaScripts(AiAfter(60, follow)), Map());
+        wholeFixture.Templates.TryGet("TestBridge", out var standing);
+        whole.World.RequestSpawn(standing.Index, new PlayerId(0), Fixed.FromInt(305), Fixed.FromInt(200), Fixed.Zero, Fixed.Zero);
+        StepFrames(whole, 120);
+        Check.That(whole.Engine.AiRepairOf(player).Structures.IsEmpty, "A bridge that stands is not repaired.");
+    }
+
+    /// <summary>
+    /// <c>doPlayerRepairStructure</c> for an AI player goes through the same queue (<c>repairStructure</c>, <c>updateBridgeRepair</c>): a dozer is kept, repairs until the structure is pristine, and
+    /// goes home to the base centre, and it stays kept. Before, the nearest dozer got the order and was free again.
+    /// </summary>
+    public static void OriginalAiRepairsThroughItsQueue()
+    {
+        var library = AiLibraryWithAlphaScripts(AiAfter(400, Scr.Do("PLAYER_REPAIR_NAMED_STRUCTURE", Scr.Side("SkirmishAlpha"), Scr.Unit("Hurt"))));
+        var (session, _, _, _, _, _) = StartAiVariant(AiDataText(), string.Empty, library);
+        var player = new PlayerId(1);
+        var centre = session.World.Entities.Single(entity => entity.Owner == player && entity.Template.Name == "AlphaCenter");
+        session.Engine.RegisterNamed("Hurt", centre.Id);
+        session.World.Damage(centre.Id, new DamageInfo(CnCNew.Simulation.Ids.EntityId.Invalid, Fixed.FromInt(450), DamageTypes.Explosion, DeathTypes.Normal, false));
+        StepFrames(session, 500);
+        Check.That(session.Engine.AiRepairOf(player).Structures.SequenceEqual([centre.Id.Value]) || centre.Body!.Health == centre.Body.MaxHealth, $"The structure is in the queue ({centre.Body!.Health}).");
+        var dozer = session.Engine.AiRepairOf(player).Dozer;
+        Check.That(dozer != 0, "A dozer is kept for it.");
+        StepFrames(session, 1_500);
+        Check.That(centre.Body!.Health == centre.Body.MaxHealth, $"It is repaired ({centre.Body.Health}).");
+        var (structures, kept) = session.Engine.AiRepairOf(player);
+        Check.That(structures.IsEmpty && kept == dozer, $"The queue is empty and the dozer stays kept ({string.Join(", ", structures)}; {kept}).");
+    }
 }

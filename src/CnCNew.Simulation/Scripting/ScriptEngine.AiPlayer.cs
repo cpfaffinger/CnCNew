@@ -55,6 +55,8 @@ public sealed partial class ScriptEngine
     private const long AiSitePendingFrames = 2 * SimulationRate.OriginalFramesPerSecond;
     /// <summary><c>buildStructureWithDozer</c>: a skirmish AI looks for another place up to 120 pathfind cells away, in steps of four cells outwards and two cells along a side.</summary>
     private const int AiPlacementLimitCells = 120;
+    /// <summary><c>AIPlayer::MAX_STRUCTURES_TO_REPAIR</c>.</summary>
+    private const int AiMaxStructuresToRepair = 2;
     /// <summary><c>doUpgradesAndSkills</c>: nothing is bought in the first two frames.</summary>
     private const long AiSkillStartFrames = 2;
     private const int AiNoSkillSet = -1;
@@ -112,6 +114,14 @@ public sealed partial class ScriptEngine
         public readonly List<AiUnitOrder> UnitOrders = [];
         /// <summary>Gatherers just produced and the centres they are sent to: a unit appears at any tick of a frame, the order goes out where the AI thinks, at the start of the next one.</summary>
         public readonly List<(uint Unit, uint Dock)> GathererDocks = [];
+        /// <summary><c>m_structuresToRepair</c>, <c>m_repairDozer</c> and what goes with them (<see cref="UpdateBridgeRepair"/>).</summary>
+        public readonly List<uint> StructuresToRepair = [];
+        public uint RepairDozer;
+        public Fixed RepairOriginX;
+        public Fixed RepairOriginY;
+        public bool DozerQueuedForRepair;
+        public bool DozerIsRepairing;
+        public long RepairCheckTick;
         public int FrontDefense;
         public int FlankDefense;
         // m_curFrontLeft/Right, m_curLeftFlankLeft/Right, m_curRightFlankLeft/Right defence angles.
@@ -160,6 +170,10 @@ public sealed partial class ScriptEngine
         }
         return result.ToImmutable();
     }
+
+    /// <summary>What an AI player has to repair and the dozer that is kept for it; for tools and tests.</summary>
+    public (ImmutableArray<uint> Structures, uint Dozer) AiRepairOf(PlayerId player)
+        => AiOfPlayer(player) is { } state ? ([..state.StructuresToRepair], state.RepairDozer) : ([], 0);
 
     /// <summary>Each supply centre of an AI player's build list: its object, the gatherers it wants and the ones it has; for tools and tests.</summary>
     public ImmutableArray<(uint ObjectId, int Desired, int Current)> AiSupplyCentersOf(PlayerId player)
@@ -355,6 +369,7 @@ public sealed partial class ScriptEngine
                     DoBaseBuilding(state);
                     DoTeamBuilding(state);
                     DoUpgradesAndSkills(state);
+                    UpdateBridgeRepair(state);
                     UpdateGenericScripts(state);
                 }
             }
@@ -382,6 +397,7 @@ public sealed partial class ScriptEngine
         observer.SectionEnded(ScriptSection.AiTeamBuilding);
         observer.SectionStarted(ScriptSection.AiSkills);
         DoUpgradesAndSkills(state);
+        UpdateBridgeRepair(state);
         observer.SectionEnded(ScriptSection.AiSkills);
         observer.SectionStarted(ScriptSection.AiTeamScripts);
         UpdateGenericScripts(state);
@@ -448,12 +464,19 @@ public sealed partial class ScriptEngine
                         if (!entry.IsSupply || entry.DesiredGatherers <= 0 || entry.DesiredGatherers <= entry.CurrentGatherers) continue;
                         if (entry.ObjectId == 0 || _world.FindEntity(new EntityId(entry.ObjectId)) is not { } center) continue;
                         entry.CurrentGatherers++;
+                        carrier.RememberDock(_world, center.Id);
                         state.GathererDocks.Add((unit.Id.Value, center.Id.Value));
                     }
             }
             break;
         }
         if (gatherer || !unit.Template.IsKindOf("DOZER")) return;
+        if (state.DozerQueuedForRepair)
+        {
+            state.RepairDozer = unit.Id.Value;
+            state.DozerQueuedForRepair = false;
+            return;
+        }
         state.BuildCheckTick = _tick;
         state.StructureReadyTick = _tick;
     }
@@ -699,6 +722,7 @@ public sealed partial class ScriptEngine
             if (!Counts(entity) || !entity.Template.IsKindOf("DOZER") || entity.HasStatus(UnderConstructionBit) || AiOf(entity) is not { CanBuild: true } ai) continue;
             // "If it is gathering supplies, don't steal it."
             if (!ai.HasBuilderTask && ai is ISupplyCarrier carrier && (carrier.IsFerrying || carrier.IsForcedWanting)) continue;
+            if (entity.Id.Value == state.RepairDozer) continue;
             needDozer = false;
             if (ai.IsConstructing || _busyThisTick.Contains(entity.Id.Value)) continue;
             var idle = !ai.HasBuilderTask;
@@ -933,6 +957,7 @@ public sealed partial class ScriptEngine
     /// <summary>"Although this is the ai, we are sending in CMD_FROM_PLAYER": the dock is the one the gatherer remembers from now on.</summary>
     private void DockAt(PlayerId player, Entity unit, Entity dock)
     {
+        if (AiOf(unit) is ISupplyCarrier carrier) carrier.RememberDock(_world, dock.Id);
         var actor = unit.Id;
         var target = dock.Id;
         if (_issue(player, (sequence, tick) => new DockCommand(player, sequence, tick, actor, target)).Accepted) _busyThisTick.Add(actor.Value);
@@ -1235,6 +1260,99 @@ public sealed partial class ScriptEngine
         foreach (var module in entity.ModuleArray)
             if (module is TModule found) return found;
         return null;
+    }
+
+    /// <summary><c>AIPlayer::repairStructure</c>: a structure that is noticeably damaged joins the queue of two, once.</summary>
+    private void RepairStructure(AiPlayer state, EntityId structure)
+    {
+        if (_world.FindEntity(structure) is not { Body: { } } target || IsPristine(target) || state.StructuresToRepair.Contains(structure.Value)) return;
+        if (state.StructuresToRepair.Count >= AiMaxStructuresToRepair) return;
+        state.StructuresToRepair.Add(structure.Value);
+    }
+
+    private static bool IsPristine(Entity entity) => entity.Body is not ActiveBody { DamageState: not BodyDamageStates.Pristine };
+
+    private void OrderRepair(PlayerId player, Entity dozer, Entity structure)
+    {
+        var builder = dozer.Id;
+        var target = structure.Id;
+        _issue(player, (sequence, tick) => new RepairCommand(player, sequence, tick, builder, target));
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::updateBridgeRepair</c>, once a second while the queue holds something: a dozer is found (or ordered) and kept for the job - <see cref="FindDozer"/> leaves it alone from then on,
+    /// also after the job - and told to repair; when it has no task left and the structure is pristine the structure leaves the queue, and with the last one it goes home.
+    /// <para>
+    /// The original never gets further with a bridge: <c>ActionManager::canRepairObject</c> refuses bridges and their towers ("repairing bridges cut"), as <see cref="AIUpdateInterface.IsRepairable"/>
+    /// does here, so the order comes to nothing, the bridge stays in the queue and the dozer stays kept. Nothing of that is a deviation.
+    /// </para>
+    /// </summary>
+    private void UpdateBridgeRepair(AiPlayer state)
+    {
+        if (state.StructuresToRepair.Count == 0 || _tick < state.RepairCheckTick) return;
+        state.RepairCheckTick = _tick + _world.Time.OriginalFrames(SimulationRate.OriginalFramesPerSecond);
+        Entity? structure = null;
+        while (structure is null && state.StructuresToRepair.Count > 0)
+        {
+            structure = _world.FindEntity(new EntityId(state.StructuresToRepair[0]));
+            if (structure is null) state.StructuresToRepair.RemoveAt(0);
+        }
+        if (structure is null) return;
+        var player = state.Setup.Player;
+        if (state.RepairDozer == 0)
+        {
+            state.DozerIsRepairing = false;
+            if (state.DozerQueuedForRepair) return;
+            if (FindDozer(state, structure.X, structure.Y) is { } free)
+            {
+                state.RepairDozer = free.Id.Value;
+                (state.RepairOriginX, state.RepairOriginY) = (free.X, free.Y);
+                OrderRepair(player, free, structure);
+                state.DozerIsRepairing = true;
+                return;
+            }
+            QueueDozer(state);
+            state.DozerQueuedForRepair = true;
+            return;
+        }
+        if (_world.FindEntity(new EntityId(state.RepairDozer)) is not { } dozer || AiOf(dozer) is not { } ai)
+        {
+            // "We got killed": a dozer is looked for in the next frame.
+            state.RepairDozer = 0;
+            state.RepairCheckTick = _tick;
+            return;
+        }
+        if (state.DozerIsRepairing)
+        {
+            if (ai.HasBuilderTask) return;
+            if (IsPristine(structure))
+            {
+                state.StructuresToRepair.RemoveAt(0);
+                state.DozerIsRepairing = false;
+                if (state.StructuresToRepair.Count == 0)
+                {
+                    MoveTo(dozer, state.BaseX, state.BaseY);
+                    return;
+                }
+            }
+        }
+        OrderRepair(player, dozer, structure);
+        state.DozerIsRepairing = true;
+    }
+
+    /// <summary>
+    /// <c>AISkirmishPlayer::checkBridges</c>: walking the path from the waypoint on, the first place the unit cannot reach and a broken bridge would join puts the bridge into the repair queue.
+    /// </summary>
+    private void CheckBridges(AiPlayer state, Entity unit, ImmutableArray<ScriptWaypoint> waypoints, int from)
+    {
+        var surfaces = unit.Template.Locomotor?.Surfaces ?? LocomotorSurfaces.Ground;
+        for (var index = from; index < waypoints.Length; index++)
+        {
+            var bridge = _world.FindBrokenBridge(unit.X, unit.Y, waypoints[index].X, waypoints[index].Y, surfaces);
+            if (!bridge.IsValid) continue;
+            RepairStructure(state, bridge);
+            return;
+        }
     }
 
     /// <summary><c>AISkirmishPlayer::getAiEnemy</c>: the current enemy, reconsidered every five seconds.</summary>
@@ -1540,6 +1658,23 @@ public sealed partial class ScriptEngine
                 writer.EndObject();
             }
             writer.EndArray();
+            if (state.StructuresToRepair.Count > 0 || state.RepairDozer != 0 || state.DozerQueuedForRepair)
+            {
+                writer.BeginArray("structuresToRepair");
+                foreach (var structure in state.StructuresToRepair)
+                {
+                    writer.BeginObject(null);
+                    writer.UInt("id", structure);
+                    writer.EndObject();
+                }
+                writer.EndArray();
+                writer.UInt("repairDozer", state.RepairDozer);
+                writer.Fixed("repairOriginX", state.RepairOriginX);
+                writer.Fixed("repairOriginY", state.RepairOriginY);
+                writer.Bool("dozerQueuedForRepair", state.DozerQueuedForRepair);
+                writer.Bool("dozerIsRepairing", state.DozerIsRepairing);
+                writer.Int("repairCheckTick", state.RepairCheckTick);
+            }
             writer.Int("frontDefense", state.FrontDefense);
             writer.Int("flankDefense", state.FlankDefense);
             writer.BeginArray("defenseAngles");
@@ -1619,6 +1754,17 @@ public sealed partial class ScriptEngine
             state.UnitOrders.Clear();
             foreach (var order in item.Array("unitOrders"))
                 state.UnitOrders.Add(new AiUnitOrder { Template = order.Text("template"), Gatherer = order.Bool("gatherer"), Factory = checked((uint)order.UInt("factory")) });
+            state.StructuresToRepair.Clear();
+            if (item.Has("repairDozer"))
+            {
+                foreach (var structure in item.Array("structuresToRepair")) state.StructuresToRepair.Add(checked((uint)structure.UInt("id")));
+                state.RepairDozer = checked((uint)item.UInt("repairDozer"));
+                state.RepairOriginX = item.Fixed("repairOriginX");
+                state.RepairOriginY = item.Fixed("repairOriginY");
+                state.DozerQueuedForRepair = item.Bool("dozerQueuedForRepair");
+                state.DozerIsRepairing = item.Bool("dozerIsRepairing");
+                state.RepairCheckTick = item.Int("repairCheckTick");
+            }
             state.FrontDefense = checked((int)item.Int("frontDefense"));
             state.FlankDefense = checked((int)item.Int("flankDefense"));
             var index = 0;

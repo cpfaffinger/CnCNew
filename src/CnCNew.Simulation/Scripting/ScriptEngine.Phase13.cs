@@ -107,10 +107,15 @@ public sealed partial class ScriptEngine
                     else _world.CompleteUpgrade(upgraded.Owner, upgraded.Id, upgrade.Name);
                 }
                 return true;
-            // doPlayerRepairStructure -> Player::repairStructure: a dozer of the player is sent to repair the structure (the AI queues it; here the nearest builder gets the order).
+            // doPlayerRepairStructure -> Player::repairStructure: the skirmish AI queues it; for a mission's player the nearest builder gets the order.
             case "PLAYER_REPAIR_NAMED_STRUCTURE":
                 if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } repairer && NamedEntity(Str(p, 1)) is { } damaged)
                 {
+                    if (AiOfPlayer(repairer.Id) is { } repairAi)
+                    {
+                        RepairStructure(repairAi, damaged.Id);
+                        return true;
+                    }
                     var owner = repairer.Id;
                     var target = damaged.Id;
                     var dozer = _world.Entities.Where(entity => entity.Owner == owner && !entity.EffectivelyDead && !entity.DestroyRequested && entity.Template.IsKindOf("DOZER")).OrderBy(entity => Distance2(entity, damaged.X, damaged.Y)).ThenBy(entity => entity.Id.Value).FirstOrDefault();
@@ -392,6 +397,7 @@ public sealed partial class ScriptEngine
             MoveGroup(members, path.Waypoints[closest].X, path.Waypoints[closest].Y);
             return;
         }
+        if (CurrentScriptPlayer() is { } walking && AiOfPlayer(walking.Id) is { } walkingAi) CheckBridges(walkingAi, members[0], path.Waypoints, closest);
         foreach (var member in members)
         {
             _buttonHunts.Remove(member.Id.Value);
