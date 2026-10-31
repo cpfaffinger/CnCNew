@@ -74,6 +74,7 @@ $areaOfPath = @(
     @('tools/CnCNew.PresentationTool/', 'presentation'),
     @('src/CnCNew.Ui/', 'ui'), @('tests/CnCNew.Ui.Tests/', 'ui'), @('tools/CnCNew.UiRenderTool/', 'ui'),
     @('src/CnCNew.Audio/', 'audio'), @('tests/CnCNew.Audio.Tests/', 'audio'),
+    @('src/CnCNew.Video/', 'video'), @('tests/CnCNew.Video.Tests/', 'video'),
     @('src/CnCNew.Net/', 'net'), @('src/CnCNew.Server/', 'net'), @('tests/CnCNew.Net.Tests/', 'net'), @('tools/CnCNew.NetTool/', 'net'), @('tools/CnCNew.DedicatedServer/', 'net'),
     @('tests/Shared/', 'simulation'),
     @('src/CnCNew.Game/', 'game'), @('tests/CnCNew.Game.Tests/', 'game'), @('tools/CnCNew.CampaignTool/', 'game'),
@@ -106,12 +107,13 @@ $stepsOfArea = @{
     presentation = @{ affected = 'presentation';                            gate = 'presentation-content', 'game' }
     ui           = @{ affected = 'ui';                                      gate = 'game', 'skins' }
     audio        = @{ affected = 'audio';                                   gate = 'audio-content', 'game' }
+    video        = @{ affected = 'video';                                   gate = 'video-content', 'game' }
     net          = @{ affected = 'net';                                     gate = 'net-30', 'net-120', 'net-probe', 'net-match', 'net-robust', 'net-join', 'net-lobby', 'net-acceptance', 'net-load', 'server-package', 'diagnostics', 'game' }
     game         = @{ affected = 'game-focus', 'net';                       gate = 'game', 'net', 'net-lobby', 'replay-browser', 'diagnostics', 'skins' }
     client       = @{ affected = @();                                       gate = 'check-spectator', 'check-dozer', 'check-hotkeys', 'net-join', 'net-lobby', 'net-acceptance', 'replay-browser', 'diagnostics', 'client-package', 'skins' }
     scripts      = @{ affected = @();                                       gate = @() }
     docs         = @{ affected = @();                                       gate = @() }
-    build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'presentation', 'sim', 'net'
+    build        = @{ affected = 'archives', 'io', 'content', 'import', 'images', 'formats', 'w3d', 'data', 'ui', 'audio', 'video', 'presentation', 'sim', 'net'
                       gate     = 'data-content', 'compat', 'verify', 'presentation-content', 'inputs', 'quick', 'game' }
 }
 
@@ -188,6 +190,7 @@ $steps = @(
     New-Step 'import'       'Import.Tests'                                    (Test-Program 'Import')
     New-Step 'ui'           'Ui.Tests'                                        (Test-Program 'Ui')
     New-Step 'audio'        'Audio.Tests'                                     (Test-Program 'Audio')
+    New-Step 'video'        'Video.Tests'                                     (Test-Program 'Video')
     New-Step 'presentation' 'Presentation.Tests'                              (Test-Program 'Presentation')
     New-Step 'data'         'Data.Tests'                                      (Test-Program 'Data')
     New-Step 'compat'       'Compatibility baseline'                          @('dotnet', 'run', '--no-build', '--project', 'tools/CnCNew.IniTool', '--', 'compat-check', $ContentDir, 'baselines/compatibility.json') -Content
@@ -208,6 +211,7 @@ $steps = @(
     New-Step 'net-30'       'Net.Tests (30 Hz)'                               ((Test-Program 'Net') + '--' + '--tick-rate' + '30')
     New-Step 'net-120'      'Net.Tests (120 Hz)'                              ((Test-Program 'Net') + '--' + '--tick-rate' + '120')
     New-Step 'audio-content' 'Audio.Tests (real data)'                        ((Test-Program 'Audio') + '--' + $content) -Content
+    New-Step 'video-content' 'Video.Tests (real data)'                        ((Test-Program 'Video') + '--' + $content) -Content
     New-Step 'quick'        'Reference manifest, quick set'                   ((Release-Run $simTool) + 'reference-manifest' + 'check' + $ContentDir + 'baselines/reference-manifest.json' + '--set' + 'quick') -Content -Release $simTool
     New-Step 'rate-suite'   'Rate-equivalence suite (30/60/120 Hz)'           ((Release-Run $simTests) + $content + '--only' + 'RateEquivalence') -Content -Release $simTests
     New-Step 'game'         'Game.Tests (real data)'                          ((Release-Run $gameTests) + $content) -Content -Release $gameTests

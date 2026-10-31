@@ -83,22 +83,6 @@ static partial class Tests
         Check.That(failures.Count == 0, $"{failures.Count} audio file(s) failed to decode.");
     }
 
-    public static void RealMovies(string directory)
-    {
-        var content = ContentFileSystem.Open(directory);
-        var movies = content.EnumerateFiles().Where(path => path.EndsWith(".bik", StringComparison.OrdinalIgnoreCase)).ToArray();
-        var totalSeconds = 0.0;
-        foreach (var path in movies)
-        {
-            using var stream = content.OpenRead(path);
-            var header = CnCNew.Audio.Movies.BinkHeader.Read(stream);
-            totalSeconds += header.DurationSeconds;
-            var audio = header.AudioTracks.IsEmpty ? "no audio" : string.Join(", ", header.AudioTracks.Select(track => $"{track.SampleRate} Hz {(track.Channels == 1 ? "mono" : "stereo")}{(track.UsesDct ? " DCT" : " RDFT")}"));
-            Console.WriteLine($"         {path}: {header.Signature} {header.Width}x{header.Height} {header.FrameCount} frames @ {header.FramesPerSecond:0.###} fps = {header.DurationSeconds:0.0} s, {header.KeyFrames} key frames, {audio}");
-        }
-        Console.WriteLine($"       {movies.Length} Bink movies, {totalSeconds / 60:0.0} min total");
-    }
-
     public static void RealCatalog(string directory)
     {
         var content = ContentFileSystem.Open(directory);

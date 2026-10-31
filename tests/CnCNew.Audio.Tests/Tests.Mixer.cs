@@ -5,7 +5,6 @@ using System.Security.Cryptography;
 using CnCNew.Audio;
 using CnCNew.Audio.Catalog;
 using CnCNew.Audio.Mixing;
-using CnCNew.Audio.Movies;
 using CnCNew.Audio.Selection;
 
 static partial class Tests
@@ -247,64 +246,10 @@ static partial class Tests
         Console.WriteLine($"       mixer script hash {first}");
     }
 
-    public static void BinkHeaders()
-    {
-        var file = Bink('i', frames: 3, width: 640, height: 480, fpsNumerator: 30000, fpsDenominator: 1001, tracks: [(44100, 0x3000, 7)]);
-        var header = BinkHeader.Parse(file, file.Length);
-        Check.That(header.Signature == "BIKi" && header.FrameCount == 3 && header.Width == 640 && header.Height == 480, "Signature, frames and size.");
-        Check.Near(header.FramesPerSecond, 29.97, 0.001, "Frame rate numerator/denominator.");
-        Check.Near(header.DurationSeconds, 3 * 1001 / 30000.0, 1e-9, "Duration.");
-        Check.That(header.AudioTracks.Single() == new BinkAudioTrack(7, 44100, 2, false, true, 1234), "Audio track rate, stereo and DCT flags.");
-        Check.That(header.KeyFrames == 1, "Key frames from bit 0 of the frame index.");
-        var read = BinkHeader.Read(new MemoryStream(file));
-        Check.That(read with { AudioTracks = header.AudioTracks } == header && read.AudioTracks.SequenceEqual(header.AudioTracks), "Stream reading gives the same header.");
-        Check.Throws<NotSupportedException>(() => BinkHeader.Parse([.. "KB2j"u8, .. new byte[60]], 64), "Bink 2");
-        Check.Throws<InvalidDataException>(() => BinkHeader.Parse(file, file.Length + 1), "announces");
-        var broken = (byte[])file.Clone();
-        BinaryPrimitives.WriteUInt32LittleEndian(broken.AsSpan(44 + 12 + 4), 0);
-        Check.Throws<InvalidDataException>(() => BinkHeader.Parse(broken, broken.Length), "frame index");
-    }
-
     // ------------------------------------------------------------------------------------------ fixtures
 
     private static PcmBuffer Dc(float value, int rate, int frames) => PcmBuffer.FromOwnedArray(rate, 1, Enumerable.Repeat(value, frames).ToArray());
 
     private static PcmBuffer Sine(double frequency, int rate, int frames)
         => PcmBuffer.FromOwnedArray(rate, 1, [..Enumerable.Range(0, frames).Select(index => (float)(0.4 * Math.Sin(2 * Math.PI * frequency * index / rate)))]);
-
-    /// <summary>A synthetic Bink 1 file: header, one audio track table, frame index and 16 payload bytes per frame.</summary>
-    private static byte[] Bink(char revision, int frames, int width, int height, uint fpsNumerator, uint fpsDenominator, (ushort Rate, ushort Flags, uint Id)[] tracks)
-    {
-        var headerLength = 44 + tracks.Length * 12 + (frames + 1) * 4;
-        var total = headerLength + frames * 16;
-        var data = new byte[total];
-        var span = data.AsSpan();
-        "BIK"u8.CopyTo(span);
-        data[3] = (byte)revision;
-        BinaryPrimitives.WriteUInt32LittleEndian(span[4..], (uint)(total - 8));
-        BinaryPrimitives.WriteUInt32LittleEndian(span[8..], (uint)frames);
-        BinaryPrimitives.WriteUInt32LittleEndian(span[12..], 16);
-        BinaryPrimitives.WriteUInt32LittleEndian(span[16..], (uint)frames);
-        BinaryPrimitives.WriteUInt32LittleEndian(span[20..], (uint)width);
-        BinaryPrimitives.WriteUInt32LittleEndian(span[24..], (uint)height);
-        BinaryPrimitives.WriteUInt32LittleEndian(span[28..], fpsNumerator);
-        BinaryPrimitives.WriteUInt32LittleEndian(span[32..], fpsDenominator);
-        BinaryPrimitives.WriteUInt32LittleEndian(span[40..], (uint)tracks.Length);
-        var offset = 44;
-        foreach (var _ in tracks) { BinaryPrimitives.WriteUInt32LittleEndian(span[offset..], 1234); offset += 4; }
-        foreach (var track in tracks)
-        {
-            BinaryPrimitives.WriteUInt16LittleEndian(span[offset..], track.Rate);
-            BinaryPrimitives.WriteUInt16LittleEndian(span[(offset + 2)..], track.Flags);
-            offset += 4;
-        }
-        foreach (var track in tracks) { BinaryPrimitives.WriteUInt32LittleEndian(span[offset..], track.Id); offset += 4; }
-        for (var frame = 0; frame <= frames; frame++)
-        {
-            var position = (uint)(headerLength + frame * 16);
-            BinaryPrimitives.WriteUInt32LittleEndian(span[offset..], frame == 0 ? position | 1 : position);
-            offset += 4;
-        }
-        return data;
-    }
 }

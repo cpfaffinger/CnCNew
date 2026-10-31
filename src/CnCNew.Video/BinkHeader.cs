@@ -1,13 +1,12 @@
 using System.Buffers.Binary;
 using System.Collections.Immutable;
 
-namespace CnCNew.Audio.Movies;
+namespace CnCNew.Video;
 
 public sealed record BinkAudioTrack(int TrackId, int SampleRate, int Channels, bool SixteenBit, bool UsesDct, uint MaxDecodedSize);
 
 /// <summary>
-/// Header of a Bink 1 video (<c>.bik</c>). Only the container header and the frame index are read; decoding the
-/// video or audio needs the proprietary Bink codec, which this project does not have (see docs/AUDIO.md).
+/// Header of a Bink 1 video (<c>.bik</c>): the container header and a check of the frame index. <see cref="BinkFile"/> is the way to the frames.
 /// </summary>
 public sealed record BinkHeader(
     string Signature,
@@ -24,6 +23,9 @@ public sealed record BinkHeader(
     int KeyFrames)
 {
     public const int MaxAudioTracks = 256;
+
+    /// <summary>Where the frame index starts: the fixed header, then twelve bytes per audio track.</summary>
+    public int FrameIndexOffset => 44 + AudioTracks.Length * 12;
 
     public double FramesPerSecond => (double)FpsNumerator / FpsDenominator;
     public double DurationSeconds => FrameCount / FramesPerSecond;

@@ -15,6 +15,7 @@
     <Project Path="src/CnCNew.Presentation/CnCNew.Presentation.csproj" />
     <Project Path="src/CnCNew.Ui/CnCNew.Ui.csproj" />
     <Project Path="src/CnCNew.Audio/CnCNew.Audio.csproj" />
+    <Project Path="src/CnCNew.Video/CnCNew.Video.csproj" />
     <Project Path="src/CnCNew.W3D/CnCNew.W3D.csproj" />
   </Folder>
   <Folder Name="/tools/">
@@ -42,6 +43,7 @@
     <Project Path="tests/CnCNew.Presentation.Tests/CnCNew.Presentation.Tests.csproj" />
     <Project Path="tests/CnCNew.Ui.Tests/CnCNew.Ui.Tests.csproj" />
     <Project Path="tests/CnCNew.Audio.Tests/CnCNew.Audio.Tests.csproj" />
+    <Project Path="tests/CnCNew.Video.Tests/CnCNew.Video.Tests.csproj" />
     <Project Path="tests/CnCNew.Net.Tests/CnCNew.Net.Tests.csproj" />
     <Project Path="tests/CnCNew.Game.Tests/CnCNew.Game.Tests.csproj" />
   </Folder>

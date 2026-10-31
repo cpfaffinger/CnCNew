@@ -14,11 +14,9 @@ run.Test("Mixer: loop seams, fade-in and fade-out", Tests.LoopSeamAndFades);
 run.Test("Mixer: music streaming and crossfade", Tests.MusicCrossfade);
 run.Test("Mixer: event voices with delay, attack, loops and decay", Tests.EventVoices);
 run.Test("Mixer: two runs of one script are byte-identical", Tests.MixerDeterminism);
-run.Test("Bink: header, audio tracks, frame index and rejection", Tests.BinkHeaders);
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) run.Test("Real data: every sound, speech and music file decodes", () => Tests.RealDecode(contentDirectory));
-if (contentDirectory is not null) run.Test("Real data: every Bink movie header parses", () => Tests.RealMovies(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: audio catalog", () => Tests.RealCatalog(contentDirectory));
 return run.Finish();
 
