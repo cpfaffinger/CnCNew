@@ -192,7 +192,8 @@ public sealed class ShellNetwork : IShellNetwork
     {
         Port = HostOptions.Port == 0 ? DefaultPort : HostOptions.Port,
         KeyFile = HostOptions.KeyFile ?? Path.Combine(_directory, "host-key.pem"),
-        Room = HostOptions.Room ?? new CnCNew.Server.RelayOptions(AllowModifiedBuilds: BuildIdentity.Current.Modified),
+        // The server's defaults of D-19 and D-23, as a dedicated server has them.
+        Room = HostOptions.Room ?? new CnCNew.Server.RelayOptions(AllowModifiedBuilds: BuildIdentity.Current.Modified, HashInterval: 4, SeatHoldMs: 300_000, SpectatorDelayMs: 120_000, AllowLateWatchers: true),
     });
 }
 

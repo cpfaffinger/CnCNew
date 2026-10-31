@@ -89,7 +89,7 @@ $running = @()
 $watch = [Diagnostics.Stopwatch]::StartNew()
 try {
     $server = Start-Logged 'server' @('tools/CnCNew.DedicatedServer/bin/Release/net10.0/CnCNew.DedicatedServer.dll', '--port', '0', '--address', '127.0.0.1', '--allow-modified-builds', '--status-seconds', '30',
-        '--seat-hold-ms', '20000', '--key-file', (Quote (Join-Path $OutDir 'server-key.pem')))
+        '--seat-hold-ms', '20000', '--spectator-delay-ms', '0', '--hash-interval', '1', '--key-file', (Quote (Join-Path $OutDir 'server-key.pem')))
     $running += $server
     $listening = Wait-Line 'server' ' event=listening ' 40
     if (-not $listening -or $listening -notmatch ' port=(\d+)') { Write-Host 'FAIL: the server did not start.'; exit 1 }

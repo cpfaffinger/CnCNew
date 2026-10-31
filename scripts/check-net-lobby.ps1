@@ -235,7 +235,9 @@ else {
 }
 $waryKnown = Get-Content (Join-Path $waryDir 'known-servers.json') -Raw | ConvertFrom-Json -AsHashtable
 if ($waryKnown["127.0.0.1:$port"] -ne $bogus) { Fail 'the wary client changed the key it knew' }
-foreach ($file in 'host/host-key.pem', 'host/player-key.pem', 'guest/player-key.pem', 'host/recent-servers.txt', 'guest/recent-servers.txt') {
+# D-25: anonymous unless asked, so nothing here makes a player key.
+foreach ($file in 'host/player-key.pem', 'guest/player-key.pem') { if (Test-Path -LiteralPath (Join-Path $OutDir $file)) { Fail "$file was written though nobody asked for a key" } }
+foreach ($file in 'host/host-key.pem', 'host/recent-servers.txt', 'guest/recent-servers.txt') {
     if (-not (Test-Path (Join-Path $OutDir $file))) { Fail "$file was not written in the run's directory" }
 }
 if (-not $SkipLocal) {
