@@ -22,3 +22,7 @@ Shadows, sky, weather, the shell map and the effects not drawn yet; then a packa
 ## Acceptance
 
 Tier 4; every rendering change looked at by machine and named for a human in `scripts/acceptance/catalogue.json`.
+
+## Progress
+
+Done (31 October 2026, `docs/CLIENT-SHADOWS.md`, `docs/CLIENT-TERRAIN.md`, `docs/CLIENT-FX.md`, `docs/GAME-SHELL.md`): stencil shadows and decals, cloud shadows, the sky box, the black border, snow and rain, the shell map, the soft water edge, light pulses, smudges, the user's own maps, credits that end; a script's pitch and zoom (the "no sky" of `MD_USA01` was a camera defect). Script outputs 76 of 92 displayed. **Left of the brief:** the rest of F-25 (`CAMEO_FLASH`, the camera along a path, the shaker, `WATER_CHANGE_HEIGHT*`, drawn paratroopers), chat in a local skirmish and diplomacy (F-24), F-30, F-92, F-88, `scripts/perf-profile.ps1`, the clean room with a real download.

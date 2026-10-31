@@ -85,7 +85,10 @@
     "mission-chem": { "title": "Mission GC_ChemGeneral: intro", "live": { "client": ["--mission", "Maps/GC_ChemGeneral/GC_ChemGeneral.map"] }, "capture": { "client": ["--mission", "Maps/GC_ChemGeneral/GC_ChemGeneral.map"], "frames": 960, "every": 80, "audio": true } },
     "mission-usa01": { "title": "Mission MD_USA01: intro with texts", "live": { "client": ["--mission", "Maps/MD_USA01/MD_USA01.map"] }, "capture": { "client": ["--mission", "Maps/MD_USA01/MD_USA01.map"], "frames": 1500, "every": 100, "audio": true } },
     "replay-run": {"title": "A short skirmish, its analysis and its replay", "live": {"client": ["--shell", "--skirmish-seconds", "60"]}},
-    "skin-modern": {"title": "The game in the modern skin", "live": {"client": ["--shell", "--skin", "modern", "--skirmish-seconds", "60"]}}
+    "skin-modern": {"title": "The game in the modern skin", "live": {"client": ["--shell", "--skin", "modern", "--skirmish-seconds", "60"]}},
+    "skirmish-bridge": {"title": "Skirmish on Dark Night, a map with bridges", "live": {"client": ["--match", "Maps/Dark Night/Dark Night.map", "--faction", "FactionAmerica", "--opponent", "FactionChina"]}, "capture": {"client": ["--match", "Maps/Dark Night/Dark Night.map", "--faction", "FactionAmerica", "--opponent", "FactionChina"], "frames": 300, "every": 60, "audio": true}},
+    "skirmish-snow": {"title": "Skirmish on Bitter Winter, a map with snow", "live": {"client": ["--match", "Maps/Bitter Winter/Bitter Winter.map", "--faction", "FactionAmerica", "--opponent", "FactionChina"]}, "capture": {"client": ["--match", "Maps/Bitter Winter/Bitter Winter.map", "--faction", "FactionAmerica", "--opponent", "FactionChina"], "frames": 300, "every": 60, "audio": true}},
+    "intro": {"title": "The start of the game with its intro", "live": {"client": []}}
   },
   "items": [
     { "id": "INST-01", "group": "INST", "title": "The installer creates a game directory", "scene": "install", "needsMotion": true, "needsSound": false, "optional": true, "minutes": 3.0, "instruction": "In the cloned repository run `pwsh scripts\\install.ps1` (only if nothing lies under %LOCALAPPDATA%\\CnCNew\\Game yet, or to repeat it).", "expectation": "The script finds the Steam installation by itself, ends with `Installation: ...` naming content, record, client and the start line, and takes about two minutes. The Steam installation is unchanged afterwards.", "sources": ["docs/INSTALLATION.md"] },
@@ -101,6 +104,30 @@
     { "id": "SHELL-07", "group": "SHELL", "title": "Menu music and clicks", "scene": "shell", "needsMotion": false, "needsSound": true, "minutes": 0.5, "instruction": "Listen in the same window and click a few buttons.", "expectation": "The menu theme plays; every click on a button gives exactly one click sound; the music slider of the options changes the volume at once.", "sources": ["DEMO-FINDINGS no. 7"] },
     { "id": "SHELL-08", "group": "SHELL", "title": "Starting a skirmish and a mission from the menu", "scene": "shell", "needsMotion": true, "needsSound": false, "minutes": 2.5, "instruction": "Single player, skirmish, start the game; after the start Esc and exit back to the menu. Then single player, the USA campaign, pick a difficulty, start the mission, back with Esc.", "expectation": "Both start without a crash into the map with the command bar; Esc opens the game menu, exiting leads back to the main menu and the menu music sets in again.", "sources": ["CLAUDE.md phase 16: clicking through the shell is open"] },
     { "id": "SHELL-09", "group": "SHELL", "title": "A game saved at 30 Hz is refused", "scene": "shell-30", "needsMotion": true, "needsSound": false, "optional": true, "minutes": 2.0, "instruction": "This window runs at 30 Hz: start a mission, save through Esc, quit. Then start `pwsh scripts\\demo-shell.ps1` (60 Hz) and load the saved game.", "expectation": "At 60 Hz an understandable message says the game was saved at another rate, and nothing crashes; with `-TickRate 30` the same save loads.", "sources": ["former 60 Hz list: old saved game"] },
+    {
+      "id": "SHELL-10",
+      "group": "SHELL",
+      "title": "The battle behind the menu",
+      "scene": "shell",
+      "needsMotion": true,
+      "needsSound": false,
+      "minutes": 1.0,
+      "instruction": "Stay in the main menu for a minute.",
+      "expectation": "A battle runs behind the menu instead of a black background. It stops when a match begins.",
+      "sources": []
+    },
+    {
+      "id": "SHELL-11",
+      "group": "SHELL",
+      "title": "The intro movies",
+      "scene": "intro",
+      "needsMotion": true,
+      "needsSound": true,
+      "minutes": 1.0,
+      "instruction": "Start the game and watch; press Escape on a second start.",
+      "expectation": "The EA logo and the sizzle play with picture and sound in step, before the menu; Escape skips them.",
+      "sources": []
+    },
 
     { "id": "HUD-01", "group": "HUD", "title": "Command bar, idle", "scene": "hud-tour", "needsMotion": false, "needsSound": false, "minutes": 0.5, "instruction": "First picture of the strip (nothing selected).", "expectation": "The bar spans the whole width (at 16:9 stretched as in the original), the radar on the left, the logo of the own side on the right, the money at the top centre; no black holes.", "sources": ["docs/UI-VANILLA-FIT.md §6"] },
     { "id": "HUD-02", "group": "HUD", "title": "Selection: portrait, construction menu, tooltip", "scene": "hud-tour", "needsMotion": false, "needsSound": false, "minutes": 0.5, "instruction": "Pictures with the dozer selected and the pointer over a construct button.", "expectation": "The unit's portrait on the right, its command buttons with their pictures in the middle; the tooltip names the building, its price and description, and for disabled buttons what is missing.", "sources": ["docs/UI-VANILLA-FIT.md §6", "DEMO-FINDINGS no. 29"] },
@@ -126,6 +153,54 @@
     { "id": "WORLD-05", "group": "WORLD", "title": "Models in the viewer", "scene": "viewer-commandcenter", "moreScenes": ["viewer-barracks", "viewer-crusader", "viewer-dozer"], "needsMotion": false, "needsSound": false, "minutes": 0.5, "instruction": "Pictures `viewer-commandcenter`, `viewer-barracks`, `viewer-crusader`, `viewer-dozer`.", "expectation": "Buildings complete with all walls; the tank with hull, turret and barrel; the dozer with four tyres below and the blade in front.", "sources": ["docs/CLIENT-OBJECTS.md checklist: viewer-*"] },
     { "id": "WORLD-06", "group": "WORLD", "title": "Grown base, team colours, shadows", "scene": "skirmish-autoplay", "needsMotion": false, "needsSound": false, "minutes": 0.5, "instruction": "Strip of the skirmish the computer plays.", "expectation": "Buildings and units carry their player's colour, fences stand at the building edges, guns point at their target in a fight. In the original every object casts a shadow on the ground.", "sources": ["docs/CLIENT-OBJECTS.md checklist: match-base-late, match-combat"] },
     { "id": "WORLD-07", "group": "WORLD", "title": "Fog: revealing and darkening in the window", "scene": "skirmish", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Send the dozer a little way into the black and bring it back.", "expectation": "The terrain is revealed ahead of the unit and darkened (not black again) a short time behind it; both run evenly, without lag or jumps; buildings in the darkened part stay visible with their ground.", "sources": ["former 60 Hz list: fog", "DEMO-FINDINGS no. 6"] },
+    {
+      "id": "WORLD-08",
+      "group": "WORLD",
+      "title": "Shadows",
+      "scene": "skirmish",
+      "needsMotion": false,
+      "needsSound": false,
+      "minutes": 2.0,
+      "instruction": "Look at your base and at units close up, then far away.",
+      "expectation": "Buildings and units cast shadows on the ground and on each other, to the same side as the sun of the map; nothing flickers, no shadow hangs in the air.",
+      "sources": []
+    },
+    {
+      "id": "WORLD-09",
+      "group": "WORLD",
+      "title": "Clouds over the ground",
+      "scene": "skirmish",
+      "needsMotion": true,
+      "needsSound": false,
+      "minutes": 1.0,
+      "instruction": "Watch the ground for half a minute.",
+      "expectation": "Soft cloud shadows drift slowly over the terrain and the roads.",
+      "sources": []
+    },
+    {
+      "id": "WORLD-10",
+      "group": "WORLD",
+      "title": "Snow",
+      "scene": "skirmish-snow",
+      "needsMotion": true,
+      "needsSound": false,
+      "minutes": 1.0,
+      "instruction": "Look at the map.",
+      "expectation": "Snow falls through the picture; it looks like weather, not like noise.",
+      "sources": []
+    },
+    {
+      "id": "WORLD-11",
+      "group": "WORLD",
+      "title": "Bridges",
+      "scene": "skirmish-bridge",
+      "needsMotion": false,
+      "needsSound": false,
+      "minutes": 3.0,
+      "instruction": "Find the river and order a unit across a bridge, then one under it if the ground below is passable.",
+      "expectation": "The bridge is drawn with its towers and fits its banks. The unit drives up, across and down on the deck, does not sink into it and does not fly over it. A unit under the bridge stays under it.",
+      "sources": []
+    },
 
     { "id": "UNIT-01", "group": "UNIT", "title": "Starting, driving, braking", "scene": "acc-march", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Watch the tanks and soldiers start and stop.", "expectation": "The movement is smooth and even, without a two-step stutter; tanks are at speed at once (that is what the data say), nothing jumps when it stops.", "sources": ["former 60 Hz list: movement; starting and braking"] },
     { "id": "UNIT-02", "group": "UNIT", "title": "Turning", "scene": "acc-march", "needsMotion": true, "needsSound": false, "minutes": 0.2, "instruction": "Watch the turn for the way back (after 24 seconds).", "expectation": "Vehicles and soldiers turn steadily into the new direction, not in visible steps and not abruptly.", "sources": ["former 60 Hz list: turning"] },
@@ -176,6 +251,18 @@
     { "id": "MISS-02", "group": "MISS", "title": "Intro of MD_USA01: texts, fades, counters", "scene": "mission-usa01", "needsMotion": true, "needsSound": true, "minutes": 1.5, "instruction": "Watch and listen to the first minute.", "expectation": "Captions type character by character with a typing sound, stand readable and disappear; fades are soft; camera moves end when the text goes on.", "sources": ["former 60 Hz list: mission intro", "DEMO-FINDINGS no. 9, 27"] },
     { "id": "MISS-03", "group": "MISS", "title": "Building after the intro", "scene": "mission-chem", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "After the intro select the dozer and build a power plant.", "expectation": "The dozer builds as in a skirmish; clicks during the intro did nothing.", "sources": ["DEMO-FINDINGS no. 19"], "check": "pwsh scripts/check-dozer-build.ps1 -Quick" },
     { "id": "MISS-04", "group": "MISS", "title": "The mission's scripts run", "scene": "mission-chem", "needsMotion": true, "needsSound": false, "minutes": 2.0, "instruction": "Play or watch for two minutes.", "expectation": "The map's enemy acts (attacks, announcements, captions); the mission does not feel like an empty map.", "sources": ["DEMO-FINDINGS no. 9"] },
+    {
+      "id": "MISS-05",
+      "group": "MISS",
+      "title": "The movie of a mission",
+      "scene": "mission-usa01",
+      "needsMotion": true,
+      "needsSound": true,
+      "minutes": 1.0,
+      "instruction": "Start the first mission from the menu of the campaign.",
+      "expectation": "The intro movie of the mission plays on its load screen, with sound, and the mission starts after it.",
+      "sources": []
+    },
 
     { "id": "RATE-01", "group": "RATE", "title": "Movement: 60 Hz against 30 Hz", "scene": "acc-march", "needsMotion": true, "needsSound": false, "minutes": 1.2, "instruction": "Press `c` to see the same scene at 30 Hz.", "expectation": "At 60 Hz the movement is visibly smoother; paths, speed and arrival times are the same.", "sources": ["former 60 Hz list: movement"] },
     { "id": "RATE-02", "group": "RATE", "title": "Effects and sound: 60 Hz against 30 Hz", "scene": "tank-duel", "needsMotion": true, "needsSound": true, "minutes": 1.0, "instruction": "Press `c` to see and hear the same scene at 30 Hz.", "expectation": "Explosions, smoke and muzzle flashes last as long and are as dense; the same number of shots and sounds.", "sources": ["former 60 Hz list: effects, sound"] },
