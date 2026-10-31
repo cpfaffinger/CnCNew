@@ -41,6 +41,7 @@ internal static class MissionTextTests
         harness.Run("A speech event shows its subtitle label as a caption for 8 seconds unless the text is missing, empty or starts with an asterisk", SpeechSubtitles);
         harness.Run("Letterbox bars cover what a 16:9 picture leaves free (none at 16:9), fade in over a second, lie over the messages and under the cinematic text; only the top bar fades out", LetterboxFollowsTheOriginal);
         harness.Run("Every typed character of the military caption asks the audio for the typing click; without audio the clicks are counted as not started", TypingClick);
+        MissionMovieTests.Register(harness);
 
         var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
         if (contentDirectory is not null)
@@ -53,6 +54,7 @@ internal static class MissionTextTests
             harness.Run("Real data: a pausing popup stops the mission and swallows input until it is closed; one that does not pause lets the world go on", () => RealPopupInTheMission(data));
             harness.Run("Real data: the MD_USA01 caption starts the retail typing click once per character through the real audio director", () => RealTypingClick(data));
             harness.Run("Real data: the mission HUD's own messages share the scripts' message list and stay on screen while the control bar is hidden", () => RealSharedMessageList(data));
+            MissionMovieTests.RegisterRealData(harness, data);
         }
         return harness.Failures;
     }

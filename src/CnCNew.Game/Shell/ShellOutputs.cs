@@ -39,6 +39,9 @@ public sealed record StartReplayOutput(string Name, byte[] File) : ShellOutput;
 /// </summary>
 public sealed record StartMissionOutput(MissionRun Run, CampaignController? Controller) : ShellOutput;
 
+/// <summary>A mission's intro movie starts on the load screen: its sound has the speakers to itself, so the menu theme ends here (the original's music ended with the shell).</summary>
+public sealed record StopMusicOutput : ShellOutput;
+
 /// <summary>The player confirmed Quit; the host should terminate the application.</summary>
 public sealed record ExitRequestedOutput : ShellOutput;
 

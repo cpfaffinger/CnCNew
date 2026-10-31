@@ -302,6 +302,13 @@ public sealed class MissionPresentationDirector
     /// </summary>
     public Func<string, string, bool>? Audio { get; set; }
 
+    /// <summary>
+    /// The host's movies for <c>MOVIE_PLAY_FULLSCREEN</c> and <c>MOVIE_PLAY_RADAR</c>: called with the movie's name and whether it goes to the radar; returns the movie's length in
+    /// seconds, or <see langword="null"/> when it cannot be played. The picture runs on the real clock; the scripts hear of the end after that length in game time, so a mission does not
+    /// depend on how fast a client draws. Without a host a movie is its text placeholder, as in a run without a window.
+    /// </summary>
+    public Func<string, bool, double?>? Movies { get; set; }
+
     /// <summary>The camera move's destination in world units, when it names a waypoint the map actually has
     /// (<c>MOVE_CAMERA_TO</c>/<c>MOVE_CAMERA_ALONG_WAYPOINT_PATH</c>/<c>RESET_CAMERA</c>/<c>SETUP_CAMERA</c>); <see langword="null"/> while no
     /// move is active, or for a move kind with no fixed target (<c>ROTATE_CAMERA</c>, <c>CAMERA_MOVE_HOME</c>,
@@ -580,7 +587,7 @@ public sealed class MissionPresentationDirector
         var placeholderName = MoviePlaceholder ?? SubtitleEvent;
         if (placeholderName is { Length: > 0 })
         {
-            // No Bink decoder and no decoded dialogue/subtitle text in this build (docs/CAMPAIGN-AND-SAVEGAMES.md): the raw event/movie name is shown, clearly marked as a placeholder
+            // A movie no host could play and a speech event have no text in this build (docs/CAMPAIGN-AND-SAVEGAMES.md): the raw event/movie name is shown, clearly marked as a placeholder
             // rather than invented dialogue, in the message font of the data. Inside the lower letterbox bar; without the letterbox above the control bar instead of on top of it.
             var text = MoviePlaceholder is not null ? $"(movie placeholder: {placeholderName})" : $"(speech: {placeholderName})";
             var font = style.Font(InGameUiFontRole.Message, new UiViewport(width, height), options);
@@ -904,6 +911,12 @@ public sealed class MissionPresentationDirector
                 return;
             case "MOVIE_PLAY_FULLSCREEN" or "MOVIE_PLAY_RADAR":
                 if (output.Arguments.Length == 0) { Problem(action, "movie name missing"); return; }
+                if (Movies?.Invoke(output.Arguments[0], action == "MOVIE_PLAY_RADAR") is { } movieSeconds)
+                {
+                    _completions.Add((output.Arguments[0], tick + Time.OriginalFrames((long)Math.Ceiling(movieSeconds * OriginalFrame.PerSecond))));
+                    Handled(action, Channel.Overlay);
+                    return;
+                }
                 MoviePlaceholder = output.Arguments[0];
                 _movieExpiresAtTick = tick + Time.OriginalFrames(DefaultPlaceholderFrames);
                 _completions.Add((output.Arguments[0], tick + Time.OriginalFrames(DefaultPlaceholderFrames)));

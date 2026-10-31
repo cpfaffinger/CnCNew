@@ -30,9 +30,9 @@ public enum ShellPhase
     InMatch,
     /// <summary>The score screen, built from the finished match.</summary>
     Results,
-    /// <summary>A campaign mission was chosen: <c>SinglePlayerLoadScreen.wnd</c> shows its objectives/units/location while a
-    /// placeholder stands in for the intro movie and briefing voice (no Bink decoder, see <c>docs/CAMPAIGN-AND-SAVEGAMES.md</c>).
-    /// Held for <see cref="CampaignMission.VoiceLengthSeconds"/> of simulated time, then <see cref="StartMissionOutput"/> fires.</summary>
+    /// <summary>A campaign mission was chosen: <c>SinglePlayerLoadScreen.wnd</c> plays the mission's intro movie to its end or until Escape
+    /// (docs/CLIENT-VIDEO.md). Without a movie (no <see cref="GameShell.Movies"/>, or it cannot be played) the screen shows objectives/units/location and is
+    /// held for <see cref="CampaignMission.VoiceLengthSeconds"/> of simulated time. Then <see cref="StartMissionOutput"/> fires.</summary>
     MissionBriefing,
     /// <summary>The host owns the mission now (steps <c>MissionRun.Session</c> and drains its <c>ScriptEngine</c> outputs); the
     /// shell draws nothing until <see cref="GameShell.MissionFinished"/>.</summary>
@@ -63,6 +63,7 @@ public sealed class GameShell
     private CampaignController? _pendingMissionController;
     private double _briefingElapsed;
     private double _briefingDuration;
+    private CnCNew.Game.Movies.MovieClip? _briefingMovie;
 
     private readonly IUiTextMeasure _textMeasure;
     private readonly bool _animateTransitions;
@@ -80,6 +81,9 @@ public sealed class GameShell
         var loaded = _settingsStore.Load();
         Settings = loaded.Settings;
     }
+
+    /// <summary>The movies of a client with a window (docs/CLIENT-VIDEO.md); without one the shell plays none and holds its screens as a run without a decoder did.</summary>
+    public CnCNew.Game.Movies.MovieDirector? Movies { get; set; }
 
     public GameData Data { get; private set; } = null!;
     public IShellEnvironment Environment { get; }
@@ -284,6 +288,12 @@ public sealed class GameShell
     public void HandleInput(InputEvent evt)
     {
         if (_stack.Count == 0 || CurrentScreen.IsClosing) return;
+        // GameClient::isMovieAbortRequested: Escape, when it comes up, ends the movie of a load screen.
+        if (Phase == ShellPhase.MissionBriefing && _briefingMovie is { } movie && evt is KeyEvent { IsDown: false, Key: KeyCode.Escape })
+        {
+            movie.Stop();
+            return;
+        }
         var tree = CurrentScreen.Tree;
         switch (evt)
         {
@@ -359,12 +369,13 @@ public sealed class GameShell
         else if (Phase == ShellPhase.MissionBriefing)
         {
             _briefingElapsed += dtSeconds;
-            if (_briefingElapsed >= _briefingDuration)
+            if (_briefingMovie is { } movie ? movie.IsFinished : _briefingElapsed >= _briefingDuration)
             {
                 var run = _pendingMission!;
                 var controller = _pendingMissionController;
                 _pendingMission = null;
                 _pendingMissionController = null;
+                _briefingMovie = null;
                 Phase = ShellPhase.InMission;
                 _outputs.Add(new StartMissionOutput(run, controller));
             }
@@ -557,6 +568,8 @@ public sealed class GameShell
     {
         ArgumentNullException.ThrowIfNull(run);
         var conclusion = controller is null ? (MissionConclusion?)null : controller.Conclude(run);
+        // ScoreScreen.cpp: a campaign that was won to its end shows its final movie first, alone on the screen; the shipped Campaign.ini names none.
+        if (controller is { IsFinished: true, Campaign.FinalVictoryMovie.Length: > 0 }) Movies?.PlayFullScreen(controller.Campaign.FinalVictoryMovie, modal: true);
         Phase = ShellPhase.MissionResults;
         Replace(new MissionBannerScreen(this, conclusion));
         Push(new MissionResultScreen(this, run, controller, conclusion));
@@ -678,8 +691,8 @@ public sealed class GameShell
     }
 
     /// <summary>Starts (or restarts) the current mission of <paramref name="controller"/> and shows its briefing
-    /// (<see cref="ShellPhase.MissionBriefing"/>); <c>VoiceLengthSeconds</c> sets how long the briefing holds (floor of 2 s so
-    /// a mission that does not set it is still readable, no Bink decoder so the intro movie stays a placeholder).</summary>
+    /// (<see cref="ShellPhase.MissionBriefing"/>): its intro movie, or without one <c>VoiceLengthSeconds</c> of the screen (floor of 2 s so
+    /// a mission that does not set it is still readable).</summary>
     internal void BeginMission(CampaignController controller)
     {
         var run = controller.StartCurrentMission();
@@ -688,7 +701,9 @@ public sealed class GameShell
         _briefingElapsed = 0;
         _briefingDuration = Math.Max(2.0, run.Mission?.VoiceLengthSeconds ?? 0);
         Phase = ShellPhase.MissionBriefing;
-        Replace(new MissionBriefingScreen(this, run.Mission!));
+        _briefingMovie = run.Mission is { IntroMovie.Length: > 0 } mission ? Movies?.Open(mission.IntroMovie) : null;
+        if (_briefingMovie is not null) _outputs.Add(new StopMusicOutput());
+        Replace(new MissionBriefingScreen(this, run.Mission!, _briefingMovie));
     }
 
     internal void BeginCampaign(CampaignDefinition campaign, ScriptDifficulty difficulty)

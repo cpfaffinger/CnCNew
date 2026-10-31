@@ -230,24 +230,39 @@ public sealed class LoadGameScreen : ShellScreen
 /// <c>SinglePlayerLoadScreen.wnd</c> reused as the mission briefing (the retail file already carries an
 /// <c>ObjectivesWin</c> group with five <c>StaticTextLine</c> rows and three cameo+text slots, matching
 /// <see cref="CampaignMission.ObjectiveLabels"/>/<see cref="CampaignMission.UnitNames"/> exactly: the loading screen
-/// doubled as the briefing while the mission's intro movie and voice-over played over it in the retail game). There is
-/// no Bink decoder in this build (documented permanent limit, see <c>docs/CAMPAIGN-AND-SAVEGAMES.md</c>), so
-/// <see cref="CampaignMission.IntroMovie"/>/<see cref="CampaignMission.BriefingVoice"/> show as a named placeholder in
-/// the progress label instead of actually playing; <see cref="GameShell"/> holds this screen up for
-/// <see cref="CampaignMission.VoiceLengthSeconds"/> so the player has time to read the objectives before the mission
-/// starts. The file declares no <c>SYSTEMCALLBACK</c>/<c>INPUTCALLBACK</c> (confirmed against the shipped data, same as
-/// <see cref="LoadingScreen"/>), so there is deliberately no click-to-skip here either.
+/// doubled as the briefing while the mission's intro movie and voice-over played over it in the retail game). The movie
+/// is drawn over the screen's background and under its children, as <c>W3DGameWinDefaultDraw</c> draws a window's video
+/// buffer (<c>SinglePlayerLoadScreen::init</c>), and only Escape ends it early (<see cref="GameShell.HandleInput"/>).
+/// Without a movie <see cref="CampaignMission.IntroMovie"/> shows as a named placeholder in the progress label and
+/// <see cref="GameShell"/> holds this screen up for <see cref="CampaignMission.VoiceLengthSeconds"/> so the player has
+/// time to read the objectives before the mission starts. The file declares no <c>SYSTEMCALLBACK</c>/<c>INPUTCALLBACK</c>
+/// (confirmed against the shipped data, same as <see cref="LoadingScreen"/>), so there is deliberately no click-to-skip here.
 /// </summary>
 public sealed class MissionBriefingScreen : ShellScreen
 {
-    public MissionBriefingScreen(GameShell shell, CampaignMission mission) : base(shell, ShellLayoutNames.SinglePlayerLoadScreen)
+    private readonly IUiVideoSurface? _movie;
+
+    /// <summary>The movie is drawn into the root window, between its picture and its children; the objectives wait behind it (Zero Hour's load screen shows the movie and the bar alone).</summary>
+    public override UiDrawList BuildDrawList()
     {
+        var list = base.BuildDrawList();
+        if (_movie is null) return list;
+        var background = 0;
+        while (background < list.Commands.Length && list.Commands[background] is not UiImageDraw) background++;
+        if (background == list.Commands.Length) background = -1;
+        return list with { Commands = list.Commands.Insert(background + 1, new UiVideoDraw(_movie, W("ParentSinglePlayerLoadScreen").Rect)) };
+    }
+
+    public MissionBriefingScreen(GameShell shell, CampaignMission mission, IUiVideoSurface? movie = null) : base(shell, ShellLayoutNames.SinglePlayerLoadScreen)
+    {
+        _movie = movie;
+        if (movie is not null) HideWindow("ObjectivesWin");
         for (var line = 0; line < 5; line++)
             W($"StaticTextLine{line}").SetText(line < mission.ObjectiveLabels.Length ? Text(mission.ObjectiveLabels[line]) : string.Empty);
         W("StaticTextCameoText0").SetText(mission.LocationLabel.Length > 0 ? Text(mission.LocationLabel) : string.Empty);
         for (var unit = 0; unit < 3; unit++)
             W($"StaticTextCameoText{unit + 1}").SetText(unit < mission.UnitNames.Length ? Text(mission.UnitNames[unit]) : string.Empty);
-        var placeholder = mission.IntroMovie.Length > 0 ? $"(movie placeholder: {mission.IntroMovie})" : "Loading...";
+        var placeholder = mission.IntroMovie.Length > 0 && movie is null ? $"(movie placeholder: {mission.IntroMovie})" : "Loading...";
         W("Percent").SetText(placeholder);
     }
 }

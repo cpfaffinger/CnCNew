@@ -71,7 +71,7 @@ public static class MissionOutputCatalog
         Shown("audio event played; its name on screen as a placeholder subtitle", "SPEECH_PLAY");
         Shown("audio event played (not positioned)", "SOUND_PLAY_NAMED", "PLAY_SOUND_EFFECT", "PLAY_SOUND_EFFECT_AT");
         Shown("music track started", "MUSIC_SET_TRACK");
-        Shown("text placeholder with the movie name (no video decoder)", "MOVIE_PLAY_FULLSCREEN", "MOVIE_PLAY_RADAR");
+        Shown("the movie over everything or in the radar's window, with its sound (docs/CLIENT-VIDEO.md); a text placeholder with its name when it cannot be played", "MOVIE_PLAY_FULLSCREEN", "MOVIE_PLAY_RADAR");
         Shown("a line of the message list at the top left (InGameUI::message: MessageFont, MessagePosition, fades after about nine seconds)", "DISPLAY_TEXT");
         Shown("a message window with an OK button (InGamePopupMessage.wnd; pauses the game when the script says so)", "INGAME_POPUP_MESSAGE");
         Shown("the label typed out character by character at the bottom left, title line then body (InGameUI::militarySubtitle: MilitaryCaption fonts and position, blinking block cursor, fade)", "SHOW_MILITARY_CAPTION");
