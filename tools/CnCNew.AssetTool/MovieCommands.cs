@@ -73,6 +73,7 @@ internal static class MovieCommands
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         var timer = new Stopwatch();
         double worst = 0;
+        var worstFrame = 0;
         var total = TimeSpan.Zero;
         while (true)
         {
@@ -81,7 +82,7 @@ internal static class MovieCommands
             movie.CopyRgba(rgba);
             timer.Stop();
             total += timer.Elapsed;
-            worst = Math.Max(worst, timer.Elapsed.TotalMilliseconds);
+            if (timer.Elapsed.TotalMilliseconds > worst) (worst, worstFrame) = (timer.Elapsed.TotalMilliseconds, movie.FramesDecoded - 1);
             movie.WritePlanes(hash.AppendData);
         }
         var framesHash = Convert.ToHexString(hash.GetHashAndReset());
@@ -98,7 +99,7 @@ internal static class MovieCommands
             audioLine = string.Create(Culture, $"{sound.SampleRate} Hz {sound.Channels} ch {sound.Seconds:F2} s peak {peak} decoded in {timer.Elapsed.TotalMilliseconds:F0} ms, samples SHA-256 {Convert.ToHexString(SHA256.HashData(bytes))}");
         }
         var mean = total.TotalMilliseconds / movie.FrameCount;
-        var line = string.Create(Culture, $"{header.Signature} {movie.Width}x{movie.Height} {movie.FrameCount} frames @ {header.FramesPerSecond:F3} fps = {header.DurationSeconds:F2} s, alpha {(movie.HasAlpha ? "yes" : "no")}, {audioLine}; frames SHA-256 {framesHash}; decode mean {mean:F2} ms, max {worst:F2} ms per frame");
+        var line = string.Create(Culture, $"{header.Signature} {movie.Width}x{movie.Height} {movie.FrameCount} frames @ {header.FramesPerSecond:F3} fps = {header.DurationSeconds:F2} s, alpha {(movie.HasAlpha ? "yes" : "no")}, {audioLine}; frames SHA-256 {framesHash}; decode mean {mean:F2} ms, max {worst:F2} ms per frame (frame {worstFrame}, {file.Packets(worstFrame).VideoLength} bytes)");
         return (line, header.DurationSeconds, movie.FrameCount, worst);
     }
 
