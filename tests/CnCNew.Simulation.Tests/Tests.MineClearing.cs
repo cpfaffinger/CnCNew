@@ -60,6 +60,36 @@ static partial class Tests
             AutoAcquireEnemiesWhenIdle = Yes
           End
         End
+        Object McTrap
+          KindOf = STRUCTURE IMMOBILE
+          Body = StructureBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY McDisarm
+            Weapon = SECONDARY McDisarm
+            Weapon = TERTIARY McDisarm
+          End
+          Behavior = DemoTrapUpdate Trap01
+            DefaultProximityMode = Yes
+            DetonationWeaponSlot = PRIMARY
+            ProximityModeWeaponSlot = SECONDARY
+            ManualModeWeaponSlot = TERTIARY
+            TriggerDetonationRange = 60.0
+            AutoDetonationWithFriendsInvolved = Yes
+          End
+          Behavior = KeepObjectDie Keep01
+          End
+        End
+        Object McSturdyMine
+          KindOf = MINE
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+        End
         Object McMine
           KindOf = MINE
           Body = ActiveBody Body01
@@ -68,6 +98,30 @@ static partial class Tests
           End
         End
         """;
+
+    /// <summary><c>DemoTrapUpdate::update</c> (F-19): "check if it's trying to disarm me. If so, don't blow up!" - a dozer that attacks with a <c>DISARM</c> weapon does not set a trap off.</summary>
+    public static void DozerAtWorkDoesNotSetATrapOff()
+    {
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/MineClearing.ini"] = MineClearingIni });
+            var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "mines");
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
+            var feeder = new Feeder(world);
+            Check.That(feeder.Spawn(1, "McDozer", owner: 1, x: 300, y: 300).Accepted && feeder.Spawn(2, "McSturdyMine", owner: 2, x: 315, y: 300).Accepted, $"{rate}: dozer and mine spawn.");
+            world.Step();
+            var dozer = world.Entities.Single(value => value.Template.Name == "McDozer");
+            for (var step = 0; step < world.Frames(120) && !world.IsDisarming(dozer); step++) world.Step();
+            Check.That(world.IsDisarming(dozer), $"{rate}: the dozer is at work.");
+            Check.That(feeder.Spawn(2, "McTrap", owner: 2, x: 330, y: 300).Accepted, $"{rate}: the trap spawns.");
+            for (var step = 0; step < world.Frames(30); step++) world.Step();
+            var trap = world.Entities.Single(value => value.Template.Name == "McTrap");
+            Check.That(!trap.EffectivelyDead && !trap.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.DemoTrapUpdate>().Single().Detonated, $"{rate}: the dozer at work does not set the trap off.");
+            world.Kill(world.Entities.Single(value => value.Template.Name == "McSturdyMine").Id);
+            for (var step = 0; step < world.Frames(60); step++) world.Step();
+            Check.That(trap.EffectivelyDead, $"{rate}: a dozer that has stopped working does.");
+        }
+    }
 
     /// <summary>
     /// An idle dozer beside an enemy mine disarms it: the mine dies in the same frame at 30, 60 and 120 Hz, and the dozer's mine-clearing set is its active one. Before, the dozer had

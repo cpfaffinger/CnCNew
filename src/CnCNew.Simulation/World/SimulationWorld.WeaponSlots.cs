@@ -472,6 +472,14 @@ public sealed partial class SimulationWorld
         return true;
     }
 
+    /// <summary><inheritdoc cref="IWorldServices.IsDisarming"/></summary>
+    public bool IsDisarming(Entity entity)
+    {
+        if (entity.Acquisition is not { Victim.IsValid: true } || ActiveWeaponSet(entity) is not { } set) return false;
+        var slot = entity.WeaponSlots?.Current ?? WeaponSlot.Primary;
+        return set.HasWeapon(slot) && _templates.Weapons[set.Weapons[slot]].DamageType == DisarmDamageType;
+    }
+
     /// <summary><c>WeaponSet::releaseWeaponLock</c>: a permanent release clears every lock, a temporary one only a temporary lock.</summary>
     public void ReleaseWeaponLock(Entity entity, WeaponLockKind kind)
     {

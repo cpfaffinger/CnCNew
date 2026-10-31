@@ -42,10 +42,9 @@ public sealed record DemoTrapData(bool DefaultProximityMode, int DetonationSlot,
 /// <c>DemoTrapUpdate::update</c>/<c>detonate</c>: a booby trap that goes off (fires <c>DetonationWeapon</c> where it stands, if it has one, and kills itself, so its die modules deliver the
 /// explosion) when an enemy that is not airborne and not of an ignored kind comes within <c>TriggerDetonationRange</c> of its centre while it is in proximity mode, when it is told to (the
 /// detonation mode), or, with <c>DetonateWhenKilled</c>, when it is destroyed; never while it is under construction or being sold. A friend (or the trap itself, which counts as one) in
-/// range blocks the proximity trigger unless <c>AutoDetonationWithFriendsInvolved</c> is set. The reference tells the modes apart by which of the object's three weapons is selected (weapon
-/// locks switched by command buttons): the simulation has one weapon per object and no slot switching, so the mode is the module's own state — <see cref="DemoTrapMode"/> — set from
-/// <c>DefaultProximityMode</c> at creation and changed with <see cref="SetMode"/>; no command is wired to it. Scans happen every <c>ScanRate</c> ticks. Not modeled: a dozer that is
-/// disarming it (weapon damage type <c>DISARM</c>) is not excused.
+/// range blocks the proximity trigger unless <c>AutoDetonationWithFriendsInvolved</c> is set. The mode is the object's current weapon slot (<c>getCurrentWeapon()-&gt;getWeaponSlot()</c>,
+/// F-19): <c>onObjectCreated</c> locks the slot of <c>DefaultProximityMode</c>, and the buttons <c>SWITCH_WEAPON</c> of the trap's command set lock another one through
+/// <see cref="SetWeaponLockCommand"/>. Scans happen every <c>ScanRate</c> ticks. A dozer that is attacking with a <c>DISARM</c> weapon does not set the trap off.
 /// </summary>
 public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
 {
@@ -53,7 +52,6 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
     public enum DemoTrapMode : byte { Proximity, Manual, Detonate }
 
     private long _nextWake = -1;
-    private DemoTrapMode _mode;
     private long _scanCountdown;
     private bool _detonated;
 
@@ -62,17 +60,16 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
 
     public override string ModuleName => "DemoTrapUpdate";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
-    public DemoTrapMode Mode => _mode;
+    public DemoTrapMode Mode => (Entity.WeaponSlots?.Current ?? data.ProximitySlot) switch
+    {
+        var slot when slot == data.DetonationSlot => DemoTrapMode.Detonate,
+        var slot when slot == data.ManualSlot => DemoTrapMode.Manual,
+        _ => DemoTrapMode.Proximity,
+    };
     public bool Detonated => _detonated;
 
-    public override void OnSpawn(IWorldServices world) => _mode = data.DefaultProximityMode ? DemoTrapMode.Proximity : DemoTrapMode.Manual;
-
-    /// <summary>The weapon-slot switch: proximity, manual (never scans) or detonation (goes off at the next update).</summary>
-    public void SetMode(IWorldServices world, DemoTrapMode mode)
-    {
-        _mode = mode;
-        world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
-    }
+    /// <summary><c>DemoTrapUpdate::onObjectCreated</c>: "lock it just till the weapon is empty or the attack is done".</summary>
+    public override void OnSpawn(IWorldServices world) => world.SetWeaponLock(Entity, data.DefaultProximityMode ? data.ProximitySlot : data.ManualSlot, WeaponLockKind.Temporary);
 
     public long Update(IWorldServices world)
     {
@@ -83,7 +80,9 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
             if (data.DetonateWhenKilled) Detonate(world);
             return SimulationTiming.SleepNone;
         }
-        if (_mode == DemoTrapMode.Detonate)
+        // "Get the current weapon slot -- this determines what mode we're in."
+        var mode = Mode;
+        if (mode == DemoTrapMode.Detonate)
         {
             Detonate(world);
             return SimulationTiming.SleepNone;
@@ -93,7 +92,7 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
             _scanCountdown--;
             return SimulationTiming.SleepNone;
         }
-        if (_mode == DemoTrapMode.Manual) return SimulationTiming.SleepNone;
+        if (mode == DemoTrapMode.Manual) return SimulationTiming.SleepNone;
         // DemoTrapUpdate.cpp, DemoTrapUpdate::update: m_nextScanFrames-- / m_nextScanFrames = m_scanFrames – a scan every ScanRate + 1 frames of the original.
         _scanCountdown = world.Time.CountdownReload(data.ScanTicks);
 
@@ -117,6 +116,8 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
         foreach (var other in inRange)
         {
             if (IsIgnoredKind(other.Template) || other.EffectivelyDead) continue;
+            // "If we're dealing with a dozer... check if it's trying to disarm me. If so, don't blow up!"
+            if (other.Template.IsKindOf("DOZER") && world.IsDisarming(other)) continue;
             // "order matters: we want to know if I consider it to be an enemy, not vice versa"
             if (world.RelationshipOf(Entity.Owner, other.Owner) != Relationship.Enemies)
             {
@@ -150,7 +151,6 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
     public override void Describe(IStateWriter writer)
     {
         writer.Int("nextWake", _nextWake);
-        writer.Int("mode", (int)_mode);
         writer.Int("scanCountdown", _scanCountdown);
         writer.Bool("detonated", _detonated);
     }
@@ -158,9 +158,6 @@ public sealed class DemoTrapUpdate(DemoTrapData data) : SimModule, IUpdateModule
     public override void Load(IStateReader reader)
     {
         _nextWake = reader.Int("nextWake");
-        var mode = reader.Int("mode");
-        if (mode < 0 || mode > (int)DemoTrapMode.Detonate) throw new InvalidDataException("Demo trap mode out of range.");
-        _mode = (DemoTrapMode)mode;
         _scanCountdown = reader.Int("scanCountdown");
         _detonated = reader.Bool("detonated");
     }

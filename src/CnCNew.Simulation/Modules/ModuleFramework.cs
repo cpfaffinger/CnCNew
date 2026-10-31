@@ -140,6 +140,9 @@ public interface IWorldServices
     /// <summary><c>AIUpdateInterface::setAttitude</c>.</summary>
     void SetAttitude(Entity entity, int attitude);
 
+    /// <summary>The object attacks with a weapon of damage type <c>DISARM</c>.</summary>
+    bool IsDisarming(Entity entity);
+
     /// <summary><c>ActiveBody::attemptDamage</c>: a damaged civilian scares others.</summary>
     void NoteRepulsableDamage(Entity entity);
 

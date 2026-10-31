@@ -10,6 +10,7 @@ using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
@@ -303,6 +304,12 @@ static partial class Tests
           Body = StructureBody Body01
             MaxHealth = 50.0
             InitialHealth = 50.0
+          End
+          WeaponSet
+            Conditions = None
+            Weapon = PRIMARY SwBlast
+            Weapon = SECONDARY SwBlast
+            Weapon = TERTIARY SwBlast
           End
           Behavior = DemoTrapUpdate Trap01
             DefaultProximityMode = Yes
@@ -957,18 +964,19 @@ static partial class Tests
 
         var manual = new StructuresWorld();
         var manualTrap = manual.Spawn("SwTrap", 1, 300, 200);
-        Module<DemoTrapUpdate>(manualTrap).SetMode(manual.World, DemoTrapUpdate.DemoTrapMode.Manual);
+        Check.That(Module<DemoTrapUpdate>(manualTrap).Mode == DemoTrapUpdate.DemoTrapMode.Proximity, "DefaultProximityMode locks the proximity slot at creation.");
+        Check.That(manual.World.Submit(new SetWeaponLockCommand(new PlayerId(1), 1, manual.World.Tick, manualTrap.Id, WeaponSlot.Tertiary, WeaponLockKind.Permanent)).Accepted, "The button of the trap is a weapon lock.");
         var victim = manual.Spawn("SwWalker", 2, 310, 200);
         manual.Run(5);
-        Check.That(!manualTrap.EffectivelyDead, "A trap in manual mode never scans.");
-        Module<DemoTrapUpdate>(manualTrap).SetMode(manual.World, DemoTrapUpdate.DemoTrapMode.Detonate);
+        Check.That(!manualTrap.EffectivelyDead && Module<DemoTrapUpdate>(manualTrap).Mode == DemoTrapUpdate.DemoTrapMode.Manual, "A trap in manual mode never scans.");
+        manual.World.SetWeaponLock(manualTrap, WeaponSlot.Primary, WeaponLockKind.Permanent);
         manual.Run(3);
         Check.That(manualTrap.EffectivelyDead && victim.Body!.Health < Fixed.FromInt(100), "Told to detonate, it goes off.");
 
         var killed = new StructuresWorld();
         var doomed = killed.Spawn("SwTrap", 1, 300, 200);
         var nearby = killed.Spawn("SwWalker", 2, 320, 200);
-        Module<DemoTrapUpdate>(doomed).SetMode(killed.World, DemoTrapUpdate.DemoTrapMode.Manual);
+        killed.World.SetWeaponLock(doomed, WeaponSlot.Tertiary, WeaponLockKind.Permanent);
         killed.Run(2);
         killed.World.Damage(doomed.Id, new DamageInfo(EntityId.Invalid, Fixed.FromInt(500), DamageTypes.Explosion, DeathTypes.Normal, false));
         killed.Run(3);

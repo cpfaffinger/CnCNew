@@ -440,6 +440,7 @@ run.Test("Scripts: a team attack-moves to the nearest place of enemy value (F-22
 run.Test("Scripts: a team uses its button on the most valuable enemy in range (F-22)", Tests.TeamUsesItsButtonOnTheMostValuable);
 run.Test("Team idle: a sequential script waits for a fight to end (F-21)", Tests.SequentialScriptWaitsForAFight);
 run.Test("Team idle: an object that cannot move counts when it has an AI, and a fight or a hack is not idle (F-21)", Tests.TeamIdleReadsTheStateOfTheAi);
+run.Test("Demo traps: a dozer at work with a disarming weapon does not set a trap off (F-19)", Tests.DozerAtWorkDoesNotSetATrapOff);
 run.Test("Stopping distance: a script ends a move short of its goal, on the ground by at most four cells (F-22)", Tests.StoppingDistanceEndsAMoveShort);
 run.Test("Hulks: a script's override sets the lifetime of a new hulk and hurries a hulk's slow death (F-22)", Tests.HulkLifetimeOverride);
 run.Test("Scripts: FREEZE_TIME stops the world and not the scripts; UNFREEZE_TIME and the end of the mission lift it", Tests.ScriptFreezeTimeStopsTheWorldNotTheScripts);
