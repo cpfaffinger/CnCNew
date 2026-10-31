@@ -37,15 +37,15 @@ public sealed record ScriptedSkirmishSlot(MatchParticipant Participant, ScriptDi
 /// the same match on every machine; a match that should be unpredictable gets a fresh seed from its host, outside the simulation.
 /// </param>
 /// <param name="AllMapObjects">
-/// Whether every pre-placed object of the map is created, as the reference does, or only the ones a match is played with: structures (civilian and tech buildings, bunkers, walls) and
-/// supply sources. The default leaves out trees, rocks, lamps, ambient sound objects and trains - several hundred objects per map whose updates cost more than the rest of the match
-/// (docs/SKIRMISH-AI-ORIGINAL.md, measurement) and that no script of the library refers to.
+/// Every pre-placed object of the map is created, as the reference does. Off, only the ones a match is played with: structures (civilian and tech buildings, bunkers, walls) and supply
+/// sources, without trees, rocks, lamps, ambient sound objects and trains; that plays the same scripts (no script of the library refers to them) at about two thirds of the cost
+/// (docs/SKIRMISH-AI-ORIGINAL.md §6.4).
 /// </param>
 /// <param name="LibraryScriptsForMissingSides">
 /// Not the reference (<see cref="SkirmishScriptAttachment.Attach"/>): a computer player whose side has no template side on the map takes the library's scripts for its side instead of
 /// running without an AI. Off by default: "original" stays what the reference does.
 /// </param>
-public sealed record ScriptedSkirmishOptions(uint Seed, long MaxTicks, long GraceFrames, int StartMoney, int SciencePointIntervalFrames, bool AllMapObjects = false,
+public sealed record ScriptedSkirmishOptions(uint Seed, long MaxTicks, long GraceFrames, int StartMoney, int SciencePointIntervalFrames, bool AllMapObjects = true,
     bool LibraryScriptsForMissingSides = false)
 {
     /// <summary>The budget and start money of <see cref="SkirmishMatchOptions.Standard"/>, so that matches of the two AIs compare.</summary>
@@ -67,7 +67,7 @@ public sealed class ScriptedSkirmishSession
 {
     public const string FixtureId = "skirmish-original";
     public const string Format = "cncnew-scripted-skirmish-state";
-    public const int Version = 1;
+    public const int Version = 2;
     private const long VictoryCheckIntervalFrames = 15;
 
     private readonly ScriptedSkirmishOptions _options;

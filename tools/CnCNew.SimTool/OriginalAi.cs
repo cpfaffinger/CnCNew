@@ -93,7 +93,7 @@ internal static class OriginalAi
     public static bool LibraryForMissingSides(string[] args) => args.Contains("--library-for-missing-sides");
 
     public static ScriptedSkirmishSession Start(SimContext context, MapData map, TerrainMap terrain, MapScriptLibrary library, ImmutableArray<ScriptedSkirmishSlot> slots, uint seed, long maxTicks,
-        bool allMapObjects = false, bool libraryForMissingSides = false)
+        bool allMapObjects = true, bool libraryForMissingSides = false)
     {
         var data = context.AiData ?? throw new InvalidOperationException("The content has no AIData block.");
         var options = ScriptedSkirmishOptions.Standard with { Seed = seed, MaxTicks = maxTicks, AllMapObjects = allMapObjects, LibraryScriptsForMissingSides = libraryForMissingSides };
@@ -172,7 +172,7 @@ internal static class OriginalAi
         for (var index = 0; index < slots.Length; index++) Console.WriteLine($"  player {index + 1}: {slots[index].Participant.Faction.Name} ({Describe(slots[index])})");
 
         watch.Restart();
-        var allObjects = args.Contains("--all-map-objects");
+        var allObjects = !args.Contains("--structures-only");
         var session = Start(context, map, terrain, library, slots, seed, maxTicks, allObjects, LibraryForMissingSides(args));
         foreach (var note in session.Notes.Take(12)) Console.WriteLine($"  note: {note}");
         if (session.Notes.Length > 12) Console.WriteLine($"  ... {session.Notes.Length - 12} more notes");

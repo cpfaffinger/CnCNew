@@ -699,6 +699,8 @@ static partial class Tests
                 // Projectiles in flight are left out: the stream of a toxin truck stands two to five raw steps (3e-7 units) beside the 30 Hz one for the three frames it lives
                 // (frame 4030, catalogs without model geometry as here; not traced). What they hit and how hard is in the health of everything else.
                 if (entity.Template.IsKindOf("PROJECTILE")) continue;
+                // A train covers its way in shares of a frame: where the frames end it stands the rounding of those shares apart at the rates (what it hits is in the health of the rest).
+                if (entity.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.RailroadBehavior>().Any()) continue;
                 var building = entity.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction);
                 lines.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
                     $"{entity.Id.Value} {entity.Template.Name} owner {entity.Owner.Value} at {entity.X.Raw} {entity.Y.Raw} {entity.Z.Raw} angle {entity.Angle.Raw} moving {entity.HasMoveTarget} in {entity.ContainedBy.Value} dead {entity.EffectivelyDead} building {building} health {(building ? 0 : entity.Body?.Health.Raw ?? 0)}"));
@@ -1471,5 +1473,39 @@ static partial class Tests
         var (recruiting, _, _, _, _, _) = StartAiVariant(AiDataText(), string.Empty, recruit);
         StepFrames(recruiting, 60);
         Check.That(recruiting.Engine.TeamInstances.Single(team => team.Prototype == "A Pair0").Members.Count == 1, "A team without a home recruits, and its recruit walks to the origin of the map as in the reference.");
+    }
+
+    /// <summary>The session creates every object of the map, as the reference does; the option that leaves the scenery out is a named one. Before, the scenery was left out by default.</summary>
+    public static void OriginalAiCreatesEveryMapObject()
+    {
+        Check.That(ScriptedSkirmishOptions.Standard.AllMapObjects, "The standard match has all the objects of the map.");
+        const string Tree = """
+            Object TestTree
+              KindOf = IMMOBILE
+              Geometry = CYLINDER
+              GeometryMajorRadius = 4.0
+              GeometryHeight = 10.0
+              GeometryIsSmall = Yes
+              Body = ActiveBody Body01
+                MaxHealth = 10.0
+                InitialHealth = 10.0
+              End
+              Behavior = DestroyDie Destroy01
+              End
+            End
+            """;
+        var plain = AiSkirmishMap();
+        var map = plain with { Objects = [..plain.Objects, new MapObject("TestTree", 300m, 200m, 0m, 0m, 0, MapProperties.Empty)] };
+        var files = AiFiles(AiDataText());
+        files["Data/INI/Object/AiVariant.ini"] = Tree;
+        var fixture = new SyntheticFixture(TestRate.Default, files: files);
+        var terrain = TerrainMap.Build(map, "skirmish-original");
+        var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
+        var slots = ImmutableArray.Create(new ScriptedSkirmishSlot(participants.Single(value => value.Side == "Alpha")), new ScriptedSkirmishSlot(participants.Single(value => value.Side == "Beta")));
+        var options = ScriptedSkirmishOptions.Standard with { MaxTicks = 100 };
+        var all = ScriptedSkirmishSession.Start(options, fixture.Templates, fixture.Fingerprint, terrain, map, AiLibrary(), AiData.TryBuild(fixture.Graph)!, slots);
+        Check.That(all.World.Entities.Any(entity => entity.Template.Name == "TestTree"), "The tree stands.");
+        var without = ScriptedSkirmishSession.Start(options with { AllMapObjects = false }, fixture.Templates, fixture.Fingerprint, terrain, map, AiLibrary(), AiData.TryBuild(fixture.Graph)!, slots);
+        Check.That(!without.World.Entities.Any(entity => entity.Template.Name == "TestTree"), "The named option leaves it out.");
     }
 }
