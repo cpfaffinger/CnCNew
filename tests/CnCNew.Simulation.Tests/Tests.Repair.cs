@@ -87,6 +87,26 @@ static partial class Tests
             AlwaysHeal = 0.25
           End
         End
+
+        Object DyingPatient
+          KindOf = SELECTABLE INFANTRY
+          Locomotor = SET_NORMAL TestLocomotor
+          Body = ActiveBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = SlowDeathBehavior Death01
+            DestructionDelay = 60000
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+          Behavior = AutoFindHealingUpdate Find01
+            ScanRate = 100
+            ScanRange = 300.0
+            NeverHeal = 0.85
+            AlwaysHeal = 0.25
+          End
+        End
         """,
     };
 
@@ -204,6 +224,34 @@ static partial class Tests
         Check.That(!patient.ContainedBy.IsValid && patient.Body.Health == patient.Body.MaxHealth, "The pad healed the patient to full health and released it.");
         for (var i = 0; i < world.Frames(60); i++) world.Step();
         Check.That(!patient.HasMoveTarget && !patient.ContainedBy.IsValid, "A healthy patient is not sent in again.");
+    }
+
+    /// <summary>
+    /// F-87: the dying are not idle (<c>AI_DEAD</c>), so a unit in its slow death looks for no pad. Before, a ranger that died in the frame of its scan was given the pad as its enter target above 30 Hz and
+    /// kept it through its death.
+    /// </summary>
+    public static void AutoFindHealingLeavesTheDyingAlone()
+    {
+        foreach (var (rate, _) in WorldRates)
+        {
+            var fixture = new SyntheticFixture(rate, files: RepairFiles());
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, RepairPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "Clinic", x: 100);
+            feeder.Spawn(1, "DyingPatient");
+            for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
+            var patient = Get(world, "DyingPatient");
+            var ai = patient.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.AIUpdateInterface>().Single();
+            feeder.Damage(patient.Id.Value, 100);
+            var aimed = false;
+            for (var tick = 0; tick < world.Frames(300); tick++)
+            {
+                world.Step();
+                aimed |= ai.EnterTarget.IsValid;
+            }
+            Check.That(patient.EffectivelyDead && !patient.DestroyRequested, $"{rate}: the unit is in its slow death.");
+            Check.That(!aimed, $"{rate}: the dying look for no pad.");
+        }
     }
 
     /// <summary>The scan does nothing for human players, healthy objects, busy objects, enemy pads, and pads out of range.</summary>

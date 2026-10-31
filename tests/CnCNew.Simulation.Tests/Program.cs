@@ -329,6 +329,7 @@ run.Test("Repair: RepairDockUpdate snapshot mid-repair", Tests.RepairDockSnapsho
 run.Test("Repair: AutoFindHealingUpdate walks a hurt computer unit into a pad", Tests.AutoFindHealingWalksToPad);
 run.Test("Healing: a healed occupant leaves a heal pad through its door (F-34)", Tests.HealContainReleasesThroughTheDoor);
 run.Test("Repair: AutoFindHealingUpdate refusals", Tests.AutoFindHealingRefusals);
+run.Test("Phase 51 (F-87): the dying look for no pad", Tests.AutoFindHealingLeavesTheDyingAlone);
 run.Test("Repair: AutoFindHealingUpdate picks the closest pad", Tests.AutoFindHealingPicksClosestPad);
 run.Test("Phase 45 (F-75): the heal scan counts the frames of the object after a hold", Tests.AutoFindHealingCountsFramesAfterAHold);
 run.Test("Repair: computer flag in the replay header", Tests.RepairPlayerTypeReplayHeader);

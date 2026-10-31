@@ -143,7 +143,8 @@ internal sealed class AutoFindHealingUpdate(AutoFindHealingData data) : SimModul
         var ai = Entity.Modules.OfType<AIUpdateInterface>().FirstOrDefault();
         if (ai is null || Entity.Body is not { } body) return frame;
         if (body.Health > body.MaxHealth * data.NeverHeal) return frame;
-        if (!ai.IsIdle) return frame;
+        // The dying are in the AI's dead state, which is not idle (F-87).
+        if (!ai.IsIdle || Entity.EffectivelyDead) return frame;
 
         if (ScanClosestHealPad(world) is { } pad) ai.OrderGetHealed(world, pad, false);
         return frame;
