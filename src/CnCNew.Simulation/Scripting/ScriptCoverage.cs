@@ -93,7 +93,7 @@ public static class ScriptCoverage
         "NAMED_FACE_NAMED", "UNIT_DESTROY_ALL_CONTAINED", "NAMED_RECEIVE_UPGRADE", "PLAYER_REPAIR_NAMED_STRUCTURE", "PLAYER_CREATE_TEAM_FROM_CAPTURED_UNITS", "TEAM_COLLECT_NEARBY_FOR_TEAM", "DEBUG_CRASH_BOX",
         "TEAM_SET_ATTITUDE", "NAMED_SET_ATTITUDE", "SCRIPTING_OVERRIDE_HULK_LIFETIME", "NAMED_SET_STOPPING_DISTANCE", "SET_STOPPING_DISTANCE",
         "TEAM_WANDER", "TEAM_WANDER_IN_PLACE", "NAMED_SET_REPULSOR", "TEAM_SET_REPULSOR", "CHOOSE_VICTIM_ALWAYS_USES_NORMAL",
-        "NAMED_FIRE_WEAPON_FOLLOWING_WAYPOINT_PATH", "SKIRMISH_ATTACK_NEAREST_GROUP_WITH_VALUE", "SKIRMISH_PERFORM_COMMANDBUTTON_ON_MOST_VALUABLE_OBJECT");
+        "NAMED_FIRE_WEAPON_FOLLOWING_WAYPOINT_PATH", "SKIRMISH_ATTACK_NEAREST_GROUP_WITH_VALUE", "SKIRMISH_PERFORM_COMMANDBUTTON_ON_MOST_VALUABLE_OBJECT", "SET_CAVE_INDEX");
 
     public static readonly ImmutableHashSet<string> ForwardedActions = ImmutableHashSet.Create(StringComparer.Ordinal,
         "DEBUG_MESSAGE_BOX", "DEBUG_STRING", "PLAY_SOUND_EFFECT", "PLAY_SOUND_EFFECT_AT", "SOUND_PLAY_NAMED", "SPEECH_PLAY", "MOVIE_PLAY_FULLSCREEN", "MOVIE_PLAY_RADAR",
@@ -125,8 +125,7 @@ public static class ScriptCoverage
     /// the original skirmish AI reads them (<see cref="ActionSupportWithSkirmishAi"/>), a mission's computer player has no <c>AIPlayer</c> here.
     /// </summary>
     public static readonly ImmutableHashSet<string> RecordedActions = ImmutableHashSet.Create(StringComparer.Ordinal,
-        "SET_BASE_CONSTRUCTION_SPEED", "PLAYER_SELECT_SKILLSET",
-        "SET_CAVE_INDEX");
+        "SET_BASE_CONSTRUCTION_SPEED", "PLAYER_SELECT_SKILLSET");
 
     /// <summary>
     /// Actions that belong to the original skirmish AI (<c>AISkirmishPlayer</c>: its build list, base radius and side data): executed for a player that AI runs

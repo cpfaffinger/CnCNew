@@ -138,7 +138,7 @@ public sealed partial class ScriptEngine
             case "TEAM_COLLECT_NEARBY_FOR_TEAM":
             case "DEBUG_CRASH_BOX":
                 return true;
-            // updateNamedSetAttitude: AIUpdateInterface::setAttitude. doSetStoppingDistance: see SetStoppingDistance. Settings without a consumer in the simulation (recorded): doSetCaveIndex
+            // updateNamedSetAttitude: AIUpdateInterface::setAttitude. doSetStoppingDistance: see SetStoppingDistance. 
             case "NAMED_SET_ATTITUDE":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } attitudeUnit && AiOf(attitudeUnit) is not null) _world.SetAttitude(attitudeUnit, Int(p, 1));
                 return true;
@@ -156,9 +156,9 @@ public sealed partial class ScriptEngine
             case "CHOOSE_VICTIM_ALWAYS_USES_NORMAL":
                 if (Has(type, p, 1)) _chooseVictimAlwaysNormal = Int(p, 0) != 0;
                 return true;
+            // doSetCaveIndex: findCave finds no module on any object here, so the original's "if( caveModule == nullptr ) return" is all there is: CaveContain is in no INI of the game or
+            // the patch, and the module catalogue refuses what it does not know.
             case "SET_CAVE_INDEX":
-                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } cave) _recordedSettings[type + "|" + cave.Id.Value] = Int(p, 1);
-                _recordedActions++;
                 return true;
             case "PLAYER_ADD_SKILLPOINTS":
                 if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } skilled2) _world.AddSkillPoints(skilled2.Id, Int(p, 1));
