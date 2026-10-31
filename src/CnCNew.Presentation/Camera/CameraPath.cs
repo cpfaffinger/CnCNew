@@ -9,7 +9,7 @@ namespace CnCNew.Presentation.Camera;
 /// </summary>
 public sealed class CameraPath
 {
-    private const float FrameSeconds = 1f / 30f;
+    private const float FrameSeconds = 1f / CnCNew.Data.OriginalFrame.PerSecond;
     private const float MinimumLeg = 10f; // MAP_XY_FACTOR
     private readonly List<Vector2> _points = [];
     private readonly float[] _angles;
