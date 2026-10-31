@@ -360,6 +360,40 @@ public sealed partial class MatchController
         }
     }
 
+    // ControlBar::update: every 10 frames each button of the bar with a flash count left changes its look; the count stands still while the button is not in the bar.
+    private const double FlashChangeSeconds = 10.0 / CnCNew.Data.OriginalFrame.PerSecond;
+    private readonly Dictionary<string, int> _flashCounts = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _flashing = new(StringComparer.Ordinal);
+    private double _flashClock;
+
+    /// <summary>A script's <c>CAMEO_FLASH</c> (<see cref="CnCNew.Game.Shell.IMissionHudControl.FlashCommandButton"/>).</summary>
+    public void FlashCommandButton(string buttonName, int count)
+    {
+        if (count > 0) _flashCounts[buttonName] = count;
+        else _flashCounts.Remove(buttonName);
+    }
+
+    /// <summary>The buttons that show the flash now.</summary>
+    public IReadOnlyCollection<string> FlashingButtons => _flashing;
+
+    private void StepFlashes(double deltaSeconds)
+    {
+        if (_flashCounts.Count == 0) return;
+        _flashClock += deltaSeconds;
+        while (_flashClock >= FlashChangeSeconds)
+        {
+            _flashClock -= FlashChangeSeconds;
+            for (var slot = 1; slot <= CommandBarModel.GridSlots; slot++)
+            {
+                if (CommandBar[slot] is not { Button.Name: var name } || !_flashCounts.TryGetValue(name, out var count)) continue;
+                if (count % 2 == 0) _flashing.Add(name);
+                else _flashing.Remove(name);
+                if (--count > 0) _flashCounts[name] = count;
+                else _flashCounts.Remove(name);
+            }
+        }
+    }
+
     private void OnControlBarSystem(UiWindowTree tree, UiEvent uiEvent)
     {
         if (uiEvent.Kind is not (UiEventKind.ButtonSelected or UiEventKind.ButtonSelectedRight)) return;
@@ -367,6 +401,12 @@ public sealed partial class MatchController
         var name = uiEvent.Source;
         if (SlotOf(name, "ControlBar.wnd:ButtonCommand") is { } slot && slot >= 1 && slot <= CommandBarModel.GridSlots)
         {
+            // ControlBar::processContextSensitiveButtonClick: a button that is pressed stops flashing.
+            if (CommandBar[slot] is { Button.Name: var pressed })
+            {
+                _flashCounts.Remove(pressed);
+                _flashing.Remove(pressed);
+            }
             Input.CommandBar!.Activate(Match.World, CommandBar, slot, Input.Commands);
             return;
         }
@@ -423,6 +463,7 @@ public sealed partial class MatchController
             ApplyCamera(intent);
             Match.Camera.Update((float)deltaSeconds, intent.Scroll != Vector2.Zero);
         }
+        StepFlashes(deltaSeconds);
 
         // The world moved under a resting pointer: the context (and with it the cursor) is evaluated again every frame, not only on input events.
         if (!PointerOverWindow) Input.RefreshHint(Match.World, Match.Camera);
@@ -907,6 +948,8 @@ public sealed partial class MatchController
             var rect = _tree.FindByName($"ControlBar.wnd:ButtonCommand{slot:00}")!.Rect;
             if (button.Button.ButtonImage.Length > 0 && _assets.Images.TryGet(button.Button.ButtonImage, out _))
                 commands.Add(new UiImageDraw(button.Button.ButtonImage, rect, WndColor.White, false, false));
+            // W3DGadgetPushButtonImageDraw: WIN_STATUS_FLASHING lays the pushed overlay over the cameo.
+            if (_flashing.Contains(button.Button.Name) && _assets.Images.TryGet("Cameo_push", out _)) commands.Add(new UiImageDraw("Cameo_push", rect, WndColor.White, false, false));
             if (button.Availability == ButtonAvailability.NotReady && button.ReadyFraction is { } fraction)
             {
                 var wipe = (int)(rect.Height * (1 - fraction));

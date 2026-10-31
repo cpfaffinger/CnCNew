@@ -67,6 +67,9 @@ public interface IMissionHudControl
     /// <summary><c>PLAYER_SCIENCE_AVAILABILITY</c> (<c>Player::setScienceAvailability</c>) for the local player: "Available", "Disabled" or "Hidden". False when the name of the availability or of the science is unknown.</summary>
     bool SetScienceAvailability(string science, string availability);
 
+    /// <summary><c>CAMEO_FLASH</c> (<c>CommandButton::setFlashCount</c>): the button of that name flashes for this many changes of its look.</summary>
+    void FlashCommandButton(string buttonName, int count);
+
     /// <summary><c>OPTIONS_SET_DRAWICON_UI_MODE</c> (<c>GameLogic::setDrawIconUI</c>): the icon overlay (heal icons and selection marks) of the drawables.</summary>
     void SetIconUiEnabled(bool enabled);
 

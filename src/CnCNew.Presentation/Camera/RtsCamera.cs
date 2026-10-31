@@ -120,6 +120,57 @@ public sealed class RtsCamera : IViewProjection
     /// <summary>Current shake displacement of the pivot (reference shake plus <see cref="AddShakeOffset"/>).</summary>
     public Vector2 ShakeOffset => _shakeOffset + _extraShake;
 
+    // CameraShakeSystemClass: a shaker turns the camera, it does not move it (W3DView::buildCameraTransform, Rotate_X, Rotate_Y, Rotate_Z after Look_At).
+    private sealed class Shaker(Vector3 position, float radius, float seconds, float intensity, Vector3 omega, Vector3 phi)
+    {
+        public readonly Vector3 Position = position, Omega = omega, Phi = phi;
+        public readonly float Radius = radius, Seconds = seconds, Intensity = intensity;
+        public float Elapsed;
+    }
+
+    private static readonly Vector3 ShakerAxes = new(7.5f * MathF.PI / 180f, 15f * MathF.PI / 180f, 5f * MathF.PI / 180f);
+    private const float ShakerMinOmega = 12.5f * 2f * MathF.PI, ShakerMaxOmega = 15f * 2f * MathF.PI, ShakerEndOmega = 2f * MathF.PI;
+    private readonly List<Shaker> _shakers = [];
+    private readonly Random _shakerRandom = new(0x5BA4E);
+    private Vector3 _shakerAngles;
+
+    /// <summary>The camera's turn by the shakers now, in radians about its own axes.</summary>
+    public Vector3 ShakerAngles => _shakerAngles;
+
+    /// <summary><c>CameraShakeSystemClass::Add_Camera_Shake</c>: a shake around a place, felt within its radius; its power is degrees of amplitude.</summary>
+    public void AddShaker(Vector3 position, float radius, float seconds, float degrees)
+    {
+        float Between(float low, float high) => low + (float)_shakerRandom.NextDouble() * (high - low);
+        var omega = new Vector3(Between(ShakerMinOmega, ShakerMaxOmega), Between(ShakerMinOmega, ShakerMaxOmega), Between(ShakerMinOmega, ShakerMaxOmega));
+        var phi = new Vector3(Between(0f, 2f * MathF.PI), Between(0f, 2f * MathF.PI), Between(0f, 2f * MathF.PI));
+        _shakers.Add(new Shaker(position, radius, seconds, degrees * MathF.PI / 180f, omega, phi));
+    }
+
+    /// <summary><c>CameraShakeSystemClass::Timestep</c> and <c>Update_Camera_Shaker</c> for one logic frame: sinusoids that stretch with time and fade with it and with the distance, a random part, clamped per axis.</summary>
+    private void StepShakers(float frameSeconds)
+    {
+        foreach (var shaker in _shakers) shaker.Elapsed += frameSeconds;
+        _shakers.RemoveAll(shaker => shaker.Elapsed >= shaker.Seconds);
+        var angles = Vector3.Zero;
+        var eye = Eye;
+        foreach (var shaker in _shakers)
+        {
+            var distance = Vector3.Distance(eye, shaker.Position);
+            if (distance > shaker.Radius) continue;
+            var intensity = shaker.Intensity * (1f - distance / shaker.Radius) * (1f - shaker.Elapsed / shaker.Seconds);
+            var minor = intensity * 0.5f;
+            for (var axis = 0; axis < 3; axis++)
+            {
+                var omega = shaker.Omega[axis] + (ShakerEndOmega - shaker.Omega[axis]) * shaker.Elapsed;
+                angles[axis] += ShakerAxes[axis] * intensity * MathF.Sin(omega * shaker.Elapsed + shaker.Phi[axis]);
+                angles += new Vector3((float)_shakerRandom.NextDouble(), (float)_shakerRandom.NextDouble(), (float)_shakerRandom.NextDouble()) * 2f * minor - new Vector3(minor);
+            }
+        }
+        var before = _shakerAngles;
+        _shakerAngles = Vector3.Clamp(angles, -ShakerAxes, ShakerAxes);
+        if (_shakerAngles != before) _dirty = true;
+    }
+
     /// <summary>
     /// The options' "3D view at a wide window" (<c>display.aspect</c>, docs/UI-MODERN.md section 7): false (the default) keeps the original's horizontal field of view
     /// at every aspect, true keeps the vertical one it has at 4:3, so a wide window shows more to the sides. A presentation choice; nothing of the game reads it.
@@ -308,6 +359,7 @@ public sealed class RtsCamera : IViewProjection
         while (_shakeTime >= 1f / FrameRate)
         {
             _shakeTime -= 1f / FrameRate;
+            StepShakers(1f / FrameRate);
             if (_shakeIntensity > 0.01f)
             {
                 _shakeOffset = new Vector2(_shakeIntensity * _shakeCos, _shakeIntensity * _shakeSin);
@@ -438,6 +490,7 @@ public sealed class RtsCamera : IViewProjection
         }
 
         view = Matrix4x4.CreateLookAt(eye, target, Vector3.UnitZ);
+        if (_shakerAngles != Vector3.Zero) view *= Matrix4x4.CreateRotationX(-_shakerAngles.X) * Matrix4x4.CreateRotationY(-_shakerAngles.Y) * Matrix4x4.CreateRotationZ(-_shakerAngles.Z);
         var aspect = _viewport.X / _viewport.Y;
         var fovY = 2f * MathF.Atan(TanHalfHorizontal(aspect) / aspect);
         far = _settings.MinFarPlane;

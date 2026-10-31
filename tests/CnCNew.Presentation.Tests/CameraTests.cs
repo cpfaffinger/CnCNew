@@ -26,6 +26,8 @@ internal static class CameraTests
         t.Run("rotation, pitch and zoom limits", RotationPitchZoom);
         t.Run("zoom follows the terrain height", TerrainFollowing);
         t.Run("camera shake spring", Shake);
+        t.Run("a shaker turns the camera near it and ends", ShakerTurnsTheCamera);
+        t.Run("a flight along a waypoint path", FlightAlongAPath);
         t.Run("ground footprint", Footprint);
         return t.Failures;
     }
@@ -249,6 +251,75 @@ internal static class CameraTests
         camera.Update(CnCNew.Tests.TestTime.FrameSecondsF, isScrolling: true);
         Assert(camera.Zoom == fast, "no height change while scrolling fast within the limits");
         Near(camera.HeightAroundPivot(), terrain.HeightAt(camera.Pivot.X, camera.Pivot.Y), 70, "height around pivot samples the neighbourhood");
+    }
+
+    /// <summary><c>CameraShakeSystemClass</c>: rotation, not motion; felt within the radius around the place, fading with time, clamped per axis; gone at the end of its time.</summary>
+    private static void ShakerTurnsTheCamera()
+    {
+        var camera = new RtsCamera(Settings, Flat(), Viewport);
+        var (eye, view) = (camera.Eye, camera.View);
+        camera.AddShaker(eye, 100f, 1f, 20f);
+        var strongest = 0f;
+        var limit = new Vector3(7.5f, 15f, 5f) * MathF.PI / 180f;
+        for (var frame = 0; frame < 20; frame++)
+        {
+            camera.Update(1f / 30f, false);
+            var angles = camera.ShakerAngles;
+            Assert(MathF.Abs(angles.X) <= limit.X && MathF.Abs(angles.Y) <= limit.Y && MathF.Abs(angles.Z) <= limit.Z, $"the turn is clamped per axis ({angles})");
+            strongest = Math.Max(strongest, angles.Length());
+        }
+        Assert(strongest > 0.01f, $"the camera turns ({strongest})");
+        Assert(camera.Eye == eye && camera.View != view, "without moving");
+        for (var frame = 0; frame < 15; frame++) camera.Update(1f / 30f, false);
+        Assert(camera.ShakerAngles == Vector3.Zero && camera.View == view, "the time over, it stands as before");
+        camera.AddShaker(eye + new Vector3(500, 0, 0), 100f, 1f, 20f);
+        camera.Update(1f / 30f, false);
+        Assert(camera.ShakerAngles == Vector3.Zero, "beyond the radius nothing happens");
+    }
+
+    /// <summary><c>W3DView::moveCameraAlongWaypointPath</c>: through the middles of the legs, turning with them, to the last waypoint at the end of its time.</summary>
+    private static void FlightAlongAPath()
+    {
+        Near(0f, CameraPath.Ease(0f, 0.2f, 0.8f), 1e-5, "the ease starts at nothing");
+        Near(1f, CameraPath.Ease(1f, 0.2f, 0.8f), 1e-5, "and ends at the whole way");
+        Near(0.5f, CameraPath.Ease(0.5f, 0.2f, 0.8f), 1e-5, "with the middle of the time at the middle of the way");
+        Assert(CameraPath.Ease(0.1f, 0.2f, 0.8f) < 0.1f, "it starts slow");
+
+        var start = new Vector2(1000, 1000);
+        Vector2[] chain = [new(1000, 1500), new(1500, 1500), new(1500, 2000)];
+        var flight = new CameraPath(start, 0f, chain, 15f, 0f, 0f, 0f);
+        var positions = new List<Vector2>();
+        var angles = new List<float>();
+        var steps = 0;
+        while (!flight.IsFinished && steps++ < 1000)
+        {
+            flight.Advance(1f / 30f);
+            positions.Add(flight.Position);
+            angles.Add(flight.Angle);
+        }
+        Near(15f * 30f, steps, 2, "it takes its time");
+        Assert(flight.Position == chain[^1], $"and ends at the last waypoint ({flight.Position})");
+        var longest = positions.Zip(positions.Skip(1), Vector2.Distance).Max();
+        Assert(longest < 15f, $"no jump on the way ({longest})");
+        var cut = positions.Min(point => Vector2.Distance(point, chain[0]));
+        Assert(cut > 5f && cut < 200f, $"the curve cuts the corner at the waypoint ({cut})");
+        Assert(positions.Any(point => Vector2.Distance(point, (chain[0] + chain[1]) / 2) < 15f), "and passes the middle of a leg");
+        var camera = new RtsCamera(Settings, Flat(400), Viewport);
+        camera.SetAngle(angles[angles.Count / 2]);
+        var forward = camera.Target - camera.Eye;
+        // The angle at a waypoint is the mean of its two legs, so a short leg between two others never shows its own.
+        Assert(forward.X > 100f && Math.Abs(forward.X - forward.Y) < 1f, $"in the leg to the east, between two to the north, the camera looks half way east ({forward})");
+
+        var still = new CameraPath(start, 0.5f, [start], 2f, 0f, 0f, 0f);
+        Assert(still.IsFinished, "a path that goes nowhere is over at once");
+        var stutter = new CameraPath(start, 0f, chain, 15f, 0.5f, 0f, 0f);
+        var seen = new List<Vector2>();
+        for (var frame = 0; frame < 60; frame++)
+        {
+            stutter.Advance(1f / 30f);
+            seen.Add(stutter.Position);
+        }
+        Assert(seen.Distinct().Count() <= 5, $"a stutter moves it only every half second ({seen.Distinct().Count()})");
     }
 
     private static void Shake()

@@ -49,7 +49,9 @@ public static class MissionOutputCatalog
 
         // ---- camera (docs/SCRIPT-ENGINE.md §7a, MissionPresentationDirector.ApplyCameraTo)
         Shown("camera pans to the waypoint over the script's duration", "MOVE_CAMERA_TO");
-        Shown("camera pans straight to the path's first waypoint (the path itself is not flown)", "MOVE_CAMERA_ALONG_WAYPOINT_PATH");
+        Shown("camera flies along the waypoint's chain over the script's duration, turning with it (W3DView::moveCameraAlongWaypointPath)", "MOVE_CAMERA_ALONG_WAYPOINT_PATH");
+        Shown("a shaker at the waypoint turns the camera while it is within the radius (CameraShakeSystemClass)", "CAMERA_ADD_SHAKER_AT");
+        Shown("the command button of that name flashes while it stands in the bar (ControlBar::update); the general's star of MD_GLA02 is not one of those, in the original neither", "CAMEO_FLASH");
         Shown("camera pans to the waypoint and returns to default angle, pitch and zoom", "RESET_CAMERA");
         Shown("camera cuts to the waypoint, looks at the second waypoint, takes zoom and pitch", "SETUP_CAMERA");
         Shown("camera rotates in place over the script's duration", "ROTATE_CAMERA");
@@ -122,9 +124,7 @@ public static class MissionOutputCatalog
         Not("a render option of the original (dynamic particle cap); the client's particle budget is fixed", "OPTIONS_SET_PARTICLE_CAP_MODE");
         Not("the frame pacing of the client is not script controlled", "SET_FPS_LIMIT");
         Not("debug output of the map designers (message box / log); never shown", "DEBUG_MESSAGE_BOX", "DEBUG_STRING");
-        Not("the control bar has no button cameo flash", "CAMEO_FLASH");
         Not("emoticon bubbles over objects are not drawn", "NAMED_SET_EMOTICON", "TEAM_SET_EMOTICON");
-        Not("the rotational camera shaker (CameraShakeSystemClass) needs a camera roll offset the camera does not have", "CAMERA_ADD_SHAKER_AT");
         Not("the camera mod that freezes the angle during a move is not modelled", "CAMERA_MOD_FREEZE_ANGLE", "CAMERA_MOD_FREEZE_TIME");
         Not("no retail effect or no campaign map uses it", "CAMERA_MOVE_HOME", "MOVE_CAMERA_TO_SELECTION", "CAMERA_SET_DEFAULT", "CAMERA_SET_AUDIBLE_DISTANCE", "CAMERA_ENABLE_SLAVE_MODE", "CAMERA_DISABLE_SLAVE_MODE",
             "CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER", "CAMERA_MOD_SET_ROLLING_AVERAGE", "SET_VISUAL_SPEED_MULTIPLIER", "CAMERA_FADE_SATURATE");

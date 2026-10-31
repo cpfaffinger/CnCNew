@@ -66,6 +66,8 @@ public sealed class MissionController : IMissionHudControl
 
     public bool AddCommandButton(string buttonName, string objectType, int slot) => ControlBar.AddButton(buttonName, objectType, slot);
 
+    public void FlashCommandButton(string buttonName, int count) => Hud.FlashCommandButton(buttonName, count);
+
     public bool SetScienceAvailability(string science, string availability)
     {
         if (!ControlBarScriptState.TryParseAvailability(availability, out var parsed) || !Mission.World.Sciences.TryGet(science, out _)) return false;

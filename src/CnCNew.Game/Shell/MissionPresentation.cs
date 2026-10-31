@@ -116,6 +116,9 @@ public sealed class MissionPresentationDirector
     // Scripted camera: requests are recorded when the script fires and resolved against the real camera in ApplyCameraTo.
     private readonly Tween _moveX = new(), _moveY = new(), _zoom = new(), _pitch = new(), _angle = new();
     private (float Factor, double Seconds)? _zoomRequest, _pitchRequest;
+    private (Vector2[] Path, float Seconds, float Stutter, float EaseIn, float EaseOut)? _pathRequest;
+    private CameraPath? _cameraPath;
+    private readonly Queue<(Vector3 Position, float Radius, float Seconds, float Degrees)> _pendingShakers = new();
     private (float Turns, double Seconds)? _rotateRequest;
     private (Vector2 Target, double Seconds)? _lookRequest;
     private double? _resetRequest;
@@ -444,6 +447,28 @@ public sealed class MissionPresentationDirector
             _blurJumpDue = false;
             if (_blurTarget is { } jump) camera.CenterOn(new Vector2(jump.X, jump.Y));
         }
+        while (_pendingShakers.Count > 0)
+        {
+            var (position, radius, shakerSeconds, degrees) = _pendingShakers.Dequeue();
+            camera.AddShaker(position, radius, shakerSeconds, degrees);
+            Handled("CAMERA_ADD_SHAKER_AT", Channel.Camera);
+        }
+        if (_pathRequest is { } flight)
+        {
+            _pathRequest = null;
+            _cameraPath = new CameraPath(camera.Pivot, camera.Angle, flight.Path, flight.Seconds, flight.Stutter, flight.EaseIn, flight.EaseOut);
+            _moveX.Stop();
+            _moveY.Stop();
+            _angle.Stop();
+            Handled("MOVE_CAMERA_ALONG_WAYPOINT_PATH", Channel.Camera);
+        }
+        if (_cameraPath is { } flying)
+        {
+            flying.Advance(double.IsPositiveInfinity(seconds) ? float.MaxValue : (float)seconds);
+            camera.CenterOn(flying.Position);
+            camera.SetAngle(flying.Angle);
+            if (flying.IsFinished) _cameraPath = null;
+        }
         while (_pendingShakes.Count > 0)
         {
             // ScriptActions::doScreenShake -> W3DView::shake at the view position: the full intensity of the type, a random direction (the reference draws it from the client random stream; a golden-angle sequence here).
@@ -742,21 +767,77 @@ public sealed class MissionPresentationDirector
         return ((float)waypoint.X.ToDecimal(), (float)waypoint.Y.ToDecimal());
     }
 
+    /// <summary>The positions from the named waypoint along its first links (<c>getLink(0)</c>), as far as they go: a chain that closes ends where it would repeat, at most <c>MAX_WAYPOINTS</c>.</summary>
+    private Vector2[] WaypointChain(ScriptOutput output, int index)
+    {
+        const int MaxWaypoints = 25;
+        if (output.Arguments.Length <= index) { Problem(output.Action, "waypoint argument missing"); return []; }
+        var waypoints = _session.World.Terrain?.Waypoints ?? [];
+        var chain = new List<Vector2>();
+        var current = waypoints.FirstOrDefault(point => point.Name == output.Arguments[index]);
+        if (current is null) { Problem(output.Action, $"unknown waypoint '{output.Arguments[index]}'"); return []; }
+        while (current is not null && chain.Count < MaxWaypoints)
+        {
+            chain.Add(new Vector2((float)current.X.ToDecimal(), (float)current.Y.ToDecimal()));
+            var next = current.NextId;
+            current = next < 0 ? null : waypoints.FirstOrDefault(point => point.Id == next);
+        }
+        return [..chain];
+    }
+
     private void Apply(ScriptOutput output, long tick)
     {
         var action = output.Action;
         switch (action)
         {
-            case "MOVE_CAMERA_TO" or "MOVE_CAMERA_ALONG_WAYPOINT_PATH" or "RESET_CAMERA":
+            case "CAMEO_FLASH":
             {
-                // doMoveCameraTo/doMoveCameraAlongWaypointPath/doResetCamera (ScriptActions.cpp): parameter 0 is the waypoint name, 1 is the move's duration in seconds.
-                // The path variant flies along the waypoint's links in the original; here the camera goes straight to the named waypoint.
+                // doCameoFlash(button, seconds): DRAWABLE_FRAMES_PER_FLASH 15 per change, an even count so that the cameo returns to its state.
+                if (_hud is not { } hud || output.Arguments.Length < 1) return;
+                Number(output, 1, out var flashSeconds);
+                var count = (int)flashSeconds * OriginalFrame.PerSecond / 15;
+                hud.FlashCommandButton(output.Arguments[0], count % 2 == 1 ? count + 1 : count);
+                Handled(action, Channel.Hud);
+                return;
+            }
+            case "MOVE_CAMERA_ALONG_WAYPOINT_PATH":
+            {
+                // doMoveCameraAlongWaypointPath(waypoint, seconds, stutter, ease in, ease out): the chain of first links from the waypoint.
+                Number(output, 1, out var seconds);
+                Number(output, 2, out var stutter);
+                Number(output, 3, out var easeIn);
+                Number(output, 4, out var easeOut);
+                var chain = WaypointChain(output, 0);
+                _cameraPending = true;
+                _cameraCompletesAtTick = tick + DurationTicks(seconds);
+                CameraTarget = chain.Length > 0 ? (chain[^1].X, chain[^1].Y) : null;
+                if (chain.Length == 0) return;
+                _followName = null;
+                _cameraPath = null;
+                _pathRequest = (chain, (float)seconds, (float)stutter, (float)easeIn, (float)easeOut);
+                return;
+            }
+            case "CAMERA_ADD_SHAKER_AT":
+            {
+                // doC3CameraShake(waypoint, amplitude, seconds, radius).
+                if (_session.Program.FindWaypoint(output.Arguments.Length > 0 ? output.Arguments[0] : string.Empty) is not { } place) { Problem(action, "unknown waypoint"); return; }
+                Number(output, 1, out var amplitude);
+                Number(output, 2, out var seconds);
+                Number(output, 3, out var radius);
+                _pendingShakers.Enqueue((new Vector3((float)place.X.ToDecimal(), (float)place.Y.ToDecimal(), (float)place.Z.ToDecimal()), (float)radius, (float)seconds, (float)amplitude));
+                return;
+            }
+            case "MOVE_CAMERA_TO" or "RESET_CAMERA":
+            {
+                // doMoveCameraTo/doResetCamera (ScriptActions.cpp): parameter 0 is the waypoint name, 1 is the move's duration in seconds.
                 Number(output, 1, out var seconds);
                 CameraTarget = WaypointAt(output, 0);
                 _cameraPending = true;
                 _cameraCompletesAtTick = tick + DurationTicks(seconds);
                 if (CameraTarget is not { } target) return;
                 _followName = null;
+                _cameraPath = null;
+                _pathRequest = null;
                 _moveX.Start(target.X, seconds);
                 _moveY.Start(target.Y, seconds);
                 if (action == "RESET_CAMERA") _resetRequest = seconds;

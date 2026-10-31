@@ -51,6 +51,7 @@ file sealed class FakeHud : IMissionHudControl
     public bool SetScienceAvailability(string science, string availability) { Calls.Add($"science {science} {availability}"); return true; }
     public void SetIconUiEnabled(bool enabled) => Calls.Add($"icons {enabled}");
     public bool SetObjectSelectable(EntityId entity, bool selectable) { Calls.Add($"selectable {selectable}"); return true; }
+    public void FlashCommandButton(string buttonName, int count) => Calls.Add($"flash {buttonName} {count}");
     public void SetSpecialPowerDisplay(bool enabled) => Calls.Add($"power display {enabled}");
     public bool SetObjectSpecialPowerDisplay(EntityId entity, bool visible) { Calls.Add($"object power display {visible}"); return true; }
 }
@@ -69,6 +70,7 @@ internal static class MissionEffectsTests
         harness.Run("Object, HUD and flag outputs reach their consumers; what has none is reported, not shown", ObjectAndHudOutputsReachTheirConsumers);
         harness.Run("While time is frozen the presentation clock goes on: a camera move finishes and thaws the world", PresentationClockRunsWhileTimeIsFrozen);
         harness.Run("SCREEN_SHAKE shakes the real camera deterministically with the GameData intensity of its type", ScreenShakeShakesTheCamera);
+        harness.Run("The camera flies a waypoint chain, a shaker turns it, a cameo flash reaches the bar", CameraPathShakerAndFlash);
         harness.Run("MAP_SWITCH_BORDER confines the camera to the border; a border the map lacks is reported", BorderSwitchConfinesTheCamera);
         harness.Run("The grey-scale and the motion blur follow the original's frame counts; the cut happens at the blur's apex", ScreenFiltersFollowTheOriginalFrameCounts);
         harness.Run("The superweapon list: a ready power is bold and flashes white every 15 frames, and the list ends in an ellipsis above the control bar", SuperweaponDrawRules);
@@ -258,6 +260,33 @@ internal static class MissionEffectsTests
     }
 
     // ---------------------------------------------------------------------------------------------------- camera
+
+    /// <summary><c>doMoveCameraAlongWaypointPath</c>, <c>doC3CameraShake</c>, <c>doCameoFlash</c>.</summary>
+    private static void CameraPathShakerAndFlash()
+    {
+        var fly = Script("Fly", If("CONDITION_TRUE"),
+        [
+            Do("MOVE_CAMERA_ALONG_WAYPOINT_PATH", Named(MapScriptParameterType.Waypoint, "Target"), Real(1), Real(0), Real(0), Real(0)),
+            Do("CAMERA_ADD_SHAKER_AT", Named(MapScriptParameterType.Waypoint, "Target"), Real(10), Real(2), Real(100000)),
+            Do("CAMEO_FLASH", Text("Command_Something"), Int(3)),
+        ], oneShot: true);
+        var (map, fixture, terrain) = Mission([fly], [Waypoint("Target", 1, 150m, 150m)]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var director = new MissionPresentationDirector(session);
+        var hud = new FakeHud();
+        director.Hud = hud;
+        var camera = new RtsCamera(MinimalCameraSettings(), new TerrainHeightSampler(map.HeightField), new Vector2(1280, 720));
+        camera.CenterOn(new Vector2(50, 50));
+        StepOnce(session, director);
+        director.ApplyCameraTo(camera, 1.0 / 30);
+        camera.Update(1f / 30f, false);
+        TestHarness.Assert(camera.ShakerAngles != Vector3.Zero, "the shaker turns the camera");
+        TestHarness.Assert(hud.Calls.Contains("flash Command_Something 6"), $"three seconds are six changes of a cameo: {string.Join(", ", hud.Calls)}");
+        for (var frame = 0; frame < 40; frame++) director.ApplyCameraTo(camera, 1.0 / 30);
+        TestHarness.Assert(Vector2.Distance(camera.Pivot, new Vector2(150, 150)) < 1f, $"the camera ends at the end of the chain ({camera.Pivot})");
+        var counts = director.Counts().ToDictionary(count => count.Action);
+        TestHarness.Assert(counts["MOVE_CAMERA_ALONG_WAYPOINT_PATH"].Displayed == 1 && counts["CAMERA_ADD_SHAKER_AT"].Displayed == 1 && counts["CAMEO_FLASH"].Displayed == 1, "all three are displayed");
+    }
 
     private static void ScreenShakeShakesTheCamera()
     {
@@ -451,6 +480,20 @@ internal static class MissionEffectsTests
             TestHarness.Assert(controller.AddCommandButton(button.Name, entity.Template.Name, slot + 1), "the script puts it back");
             controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
             TestHarness.Assert(controller.Hud.CommandBar[slot + 1]?.Button.Name == button.Name, "and the bar shows it again");
+            // A cameo flash: the pushed overlay comes and goes every 10 frames, and pressing the button would stop it; six changes end it.
+            controller.FlashCommandButton(button.Name, 4);
+            bool Flashing() => controller.Hud.BuildDrawList(1280, 720).Commands.OfType<CnCNew.Ui.Runtime.UiImageDraw>().Any(image => image.Image == "Cameo_push");
+            var shown = new List<bool>();
+            for (var frame = 0; frame < 60; frame++)
+            {
+                controller.Update(1.0 / 30);
+                shown.Add(Flashing());
+            }
+            var changes = shown.Zip(shown.Skip(1), (first, second) => first != second).Count(changed => changed);
+            TestHarness.Assert(shown.Any(on => on) && changes == 4 && !shown[^1], $"the cameo flashes twice and returns to its look ({changes} changes)");
+            controller.FlashCommandButton("NonCommand_GeneralsExperience", 4);
+            controller.Update(1.0);
+            TestHarness.Assert(!Flashing(), "a button that is not in the bar shows nothing");
             TestHarness.Assert(!controller.RemoveCommandButton("Command_ThatDoesNotExist", entity.Template.Name) && !controller.RemoveCommandButton(button.Name, "NoSuchObjectType"), "an unknown button or type is refused, never ignored");
             return;
         }
