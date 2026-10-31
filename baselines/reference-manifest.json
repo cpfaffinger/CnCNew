@@ -411,11 +411,11 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "673437C835EF09EB",
-        "commandStreamSha256": "06DB2FF3AB47AAAF8DEC8B599D70DC8BA52810C841A66FCB1E2EDF77DFB72E01",
+        "chainHash": "79DFA0E41B976245",
+        "commandStreamSha256": "51AE7557F6638E6B27D83C36F085CAA6572CFB529E3CBB0EB91AA42C56482B8E",
         "commands": 2937,
         "endTick": 90000,
-        "finalHash": "B3C84C33CAD36859",
+        "finalHash": "6333AF7911F1A720",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "stalemate",
