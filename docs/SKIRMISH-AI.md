@@ -183,7 +183,7 @@ walking. **A fix was measured, not adopted:** the builder sent to look is not pi
 60 s, GLA at 120 s) and survive the ten minutes. It changes the default AI and so the reference values (every pairing with GLA) - a decision of the project owner (D-34
 in `docs/plan/PROGRAMME.md` §7), not taken here.
 
-## 7a. D-34 as a measured proposal (Phase 38) - not adopted
+## 7a. D-34 as a measured proposal (Phase 38), adopted as variant B on 31 October 2026 (Phase 53)
 
 The fix of section 7 was built in two variants in a worktree outside the repository (base `5ce44a2`, the simulation unchanged since Phase 37) and measured; the default AI
 is unchanged, and so are the reference values. The variant proposed is in `docs/proposals/D-34-scout-reserved.patch` (applies to `SkirmishAi.cs` at `5ce44a2`).
