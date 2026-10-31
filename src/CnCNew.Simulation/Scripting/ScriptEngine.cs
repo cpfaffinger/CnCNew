@@ -138,6 +138,8 @@ public sealed partial class ScriptEngine
         /// <summary><c>m_timer</c> and <c>m_waitFrames</c> of <c>AIWanderState</c> and <c>AIPanicState</c>: the frames to the next look for a repulsor, and between two looks.</summary>
         public int Timer;
         public int WaitFrames;
+        /// <summary>The victim <c>AIAttackSquadState</c> chose for the attacker of a team; 0 for none.</summary>
+        public uint Victim;
     }
 
     /// <summary><c>Team::getCurrentWaypoint</c> of the teams that follow a path as a team: the index the first member to arrive advances.</summary>
@@ -1011,6 +1013,7 @@ public sealed partial class ScriptEngine
                 writer.Int("goalIndex", follower.GoalIndex);
             }
             else if (follower.GoalIndex >= 0) writer.Int("goalIndex", follower.GoalIndex);
+            if (follower.Victim != 0) writer.UInt("victim", follower.Victim);
             if (follower.WaitFrames != 0)
             {
                 writer.Fixed("offsetX", follower.OffsetX);
@@ -1198,6 +1201,7 @@ public sealed partial class ScriptEngine
                 Team = item.Has("asTeam") ? checked((int)item.Int("team")) : 0, OffsetX = item.Has("offsetX") ? item.Fixed("offsetX") : Fixed.Zero,
                 OffsetY = item.Has("offsetY") ? item.Fixed("offsetY") : Fixed.Zero, GoalIndex = item.Has("goalIndex") ? checked((int)item.Int("goalIndex")) : -1,
                 Timer = item.Has("timer") ? checked((int)item.Int("timer")) : 0, WaitFrames = item.Has("waitFrames") ? checked((int)item.Int("waitFrames")) : 0,
+                Victim = item.Has("victim") ? checked((uint)item.UInt("victim")) : 0,
             };
         _lastDamage.Clear();
         foreach (var item in reader.Array("lastDamage")) _lastDamage[checked((uint)item.UInt("victim"))] = new LastDamage(checked((int)item.Int("owner")), item.Text("template"));

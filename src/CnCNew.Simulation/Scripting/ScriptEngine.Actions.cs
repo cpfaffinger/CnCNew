@@ -742,6 +742,8 @@ public sealed partial class ScriptEngine
             }
             // aiAttackObject: the named victim is the unit's order, whatever the unit would pick by itself; the shot goes out as soon as a weapon reaches it.
             if (mode.StartsWith(NamedMode, StringComparison.Ordinal) && NamedEntity(ModeArgument(mode, NamedMode.Length)) is { EffectivelyDead: false } ordered && FireAtOrdered(entity, ordered)) continue;
+            var squadVictim = mode.StartsWith(TeamMode, StringComparison.Ordinal) ? SquadVictim(follower, entity, ModeArgument(mode, TeamMode.Length)) : null;
+            if (squadVictim is not null && FireAtOrdered(entity, squadVictim)) continue;
             if (_tick % retargetInterval != follower.Entity % RetargetIntervalFrames * ticksPerFrame) continue;
             if (mode.StartsWith(PositionMode, StringComparison.Ordinal))
             {
@@ -756,7 +758,7 @@ public sealed partial class ScriptEngine
             (Fixed X, Fixed Y)? target = null;
             if (mode == HuntMode) target = HuntVictim(entity) is { } enemy ? (enemy.X, enemy.Y) : null;
             else if (mode.StartsWith(NamedMode, StringComparison.Ordinal)) target = NamedEntity(ModeArgument(mode, NamedMode.Length)) is { EffectivelyDead: false } named ? (named.X, named.Y) : null;
-            else if (mode.StartsWith(TeamMode, StringComparison.Ordinal)) target = NearestOfTeam(entity, ModeArgument(mode, TeamMode.Length));
+            else if (squadVictim is not null) target = (squadVictim.X, squadVictim.Y);
             else if (mode.StartsWith(AreaMode, StringComparison.Ordinal)) target = AreaCentre(ModeArgument(mode, AreaMode.Length));
             if (target is not { } goal)
             {
@@ -834,21 +836,33 @@ public sealed partial class ScriptEngine
         return best;
     }
 
-    private (Fixed X, Fixed Y)? NearestOfTeam(Entity from, string prototype)
+    /// <summary>
+    /// <c>AIAttackSquadState::chooseVictim</c>: the attacker keeps its victim until it is dead (<c>AI_ATTACK_OBJECT</c> of the sub-machine), then chooses by the difficulty of its player: on
+    /// easy a random unit of the team, on normal the closest, on hard the one every attacker picks, the first of the team's list - the last that joined, as a team's list is prepended to.
+    /// <c>CHOOSE_VICTIM_ALWAYS_USES_NORMAL</c> makes it the closest at every difficulty.
+    /// </summary>
+    private Entity? SquadVictim(Follower follower, Entity attacker, string prototype)
     {
-        (Fixed X, Fixed Y)? best = null;
-        var bestDistance = Fixed.MaxValue;
+        if (follower.Victim != 0 && _world.FindEntity(new EntityId(follower.Victim)) is { EffectivelyDead: false, DestroyRequested: false } kept) return kept;
+        var squad = new List<Entity>();
         foreach (var team in TeamsNamed(prototype))
             foreach (var member in LiveMembers(team))
-            {
-                if (member.EffectivelyDead) continue;
-                var distance = DistanceSquared(from, member.X, member.Y);
-                if (distance >= bestDistance) continue;
-                best = (member.X, member.Y);
-                bestDistance = distance;
-            }
-        return best;
+                if (!member.EffectivelyDead) squad.Add(member);
+        follower.Victim = 0;
+        if (squad.Count == 0) return null;
+        var difficulty = _chooseVictimAlwaysNormal ? ScriptDifficulty.Normal : AiOfPlayer(attacker.Owner)?.Setup.Difficulty ?? _options.Difficulty;
+        var victim = difficulty switch
+        {
+            ScriptDifficulty.Easy => squad[_world.LogicRandom.Range(0, squad.Count - 1)],
+            ScriptDifficulty.Hard => squad[^1],
+            _ => squad.OrderBy(member => DistanceSquared(attacker, member.X, member.Y)).ThenBy(member => member.Id.Value).First(),
+        };
+        follower.Victim = victim.Id.Value;
+        return victim;
     }
+
+    // ScriptEngine::m_ChooseVictimAlwaysUsesNormal
+    private bool _chooseVictimAlwaysNormal;
 
     /// <summary>The trigger area of a guard by the name it keeps (<see cref="SimulationWorld.GuardAreas"/>).</summary>
     public ScriptArea? FindGuardArea(string name) => _program.FindArea(name);

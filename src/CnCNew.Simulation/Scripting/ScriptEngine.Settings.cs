@@ -84,6 +84,7 @@ public sealed partial class ScriptEngine
     private void DescribeSettingState(IStateWriter writer)
     {
         DescribePhase13State(writer);
+        if (_chooseVictimAlwaysNormal) writer.Bool("chooseVictimAlwaysNormal", true);
         if (_recordedSettings.Count == 0) return;
         writer.BeginArray("recordedSettings");
         foreach (var (key, value) in _recordedSettings) { writer.BeginObject(null); writer.Text("key", key); writer.Int("value", value); writer.EndObject(); }
@@ -94,6 +95,7 @@ public sealed partial class ScriptEngine
     {
         LoadPhase13State(reader);
         _recordedSettings.Clear();
+        _chooseVictimAlwaysNormal = reader.Has("chooseVictimAlwaysNormal") && reader.Bool("chooseVictimAlwaysNormal");
         if (reader.Has("recordedSettings")) foreach (var item in reader.Array("recordedSettings")) _recordedSettings[item.Text("key")] = item.Int("value");
     }
 }

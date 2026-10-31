@@ -138,7 +138,7 @@ public sealed partial class ScriptEngine
             case "TEAM_COLLECT_NEARBY_FOR_TEAM":
             case "DEBUG_CRASH_BOX":
                 return true;
-            // updateNamedSetAttitude: AIUpdateInterface::setAttitude. doSetStoppingDistance: see SetStoppingDistance. Settings without a consumer in the simulation (recorded): doChooseVictimAlwaysUsesNormal, doSetCaveIndex, doPlayerAddSkillPoints
+            // updateNamedSetAttitude: AIUpdateInterface::setAttitude. doSetStoppingDistance: see SetStoppingDistance. Settings without a consumer in the simulation (recorded): doSetCaveIndex
             case "NAMED_SET_ATTITUDE":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } attitudeUnit && AiOf(attitudeUnit) is not null) _world.SetAttitude(attitudeUnit, Int(p, 1));
                 return true;
@@ -152,9 +152,9 @@ public sealed partial class ScriptEngine
                     foreach (var member in LiveMembers(stoppers).ToArray())
                         if (!SetStoppingDistance(member, Real(p, 1))) break;
                 return true;
+            // doChooseVictimAlwaysUsesNormal -> ScriptEngine::setChooseVictimAlwaysUsesNormal, read by AIAttackSquadState::chooseVictim (SquadVictim).
             case "CHOOSE_VICTIM_ALWAYS_USES_NORMAL":
-                if (Has(type, p, 1)) _recordedSettings[type + "|"] = Int(p, 0) != 0 ? 1 : 0;
-                _recordedActions++;
+                if (Has(type, p, 1)) _chooseVictimAlwaysNormal = Int(p, 0) != 0;
                 return true;
             case "SET_CAVE_INDEX":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } cave) _recordedSettings[type + "|" + cave.Id.Value] = Int(p, 1);

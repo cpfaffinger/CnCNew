@@ -11,6 +11,30 @@ using CnCNew.Simulation.Scripting;
 /// </summary>
 static partial class Tests
 {
+    private static (bool Near, bool Last) SquadVictimOn(ScriptDifficulty difficulty, bool alwaysNormal)
+    {
+        MapScriptAction[] actions = alwaysNormal
+            ? [Scr.Do("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", Scr.Int(1)), Scr.Do("NAMED_ATTACK_TEAM", Scr.Unit("Hunter"), Scr.Team("teamB"))]
+            : [Scr.Do("NAMED_ATTACK_TEAM", Scr.Unit("Hunter"), Scr.Team("teamB"))];
+        var (map, fixture, terrain) = MissionMap([Scr.Script("Go", [Scr.And(Scr.If("CONDITION_TRUE"))], actions, oneShot: true)],
+            objects: [Placed("MoodGunner", 100m, 200m, "teamA", "Hunter"), Placed("Bystander", 100m, 330m, "teamB", "Near"), Placed("Bystander", 320m, 200m, "teamB", "Last")], extraFiles: RoamFiles());
+        var session = MissionSession.Start(MissionOptions.Standard with { Difficulty = difficulty }, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(450));
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.StateHash() == session.StateHash(), "A restored mission matches.");
+        return (Hurt(session, "Near"), Hurt(session, "Last"));
+    }
+
+    public static void SquadAttackersChooseByDifficulty()
+    {
+        Check.That(SquadVictimOn(ScriptDifficulty.Normal, false) is (true, false), "On normal the attacker takes the closest unit of the team.");
+        Check.That(SquadVictimOn(ScriptDifficulty.Hard, false) is (false, true), "On hard every attacker takes the first of the team's list, the last that joined.");
+        Check.That(SquadVictimOn(ScriptDifficulty.Hard, true) is (true, false), "CHOOSE_VICTIM_ALWAYS_USES_NORMAL makes it the closest on hard as well.");
+        var easy = SquadVictimOn(ScriptDifficulty.Easy, false);
+        Check.That(easy.Near != easy.Last, "On easy it is one random unit.");
+        Check.That(SquadVictimOn(ScriptDifficulty.Easy, true) is (true, false), "And the closest with the switch.");
+    }
+
     public static void OriginalAiObeysItsScriptedSettings()
     {
         MapScript[] settings = [Scr.Script("A Settings", [Scr.And(Scr.If("CONDITION_TRUE"))],
