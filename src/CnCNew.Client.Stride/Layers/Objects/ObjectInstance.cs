@@ -69,6 +69,13 @@ internal sealed class DrawPartState
     public float CabAngle;
     public float TrailerAngle;
 
+    /// <summary>The shadow of each rigid part of <see cref="Asset"/>, by its place in <see cref="ModelAsset.RigidParts"/>.</summary>
+    public CnCNew.Client.Stride.Layers.Shadows.ShadowPartState?[]? ShadowParts;
+
+    /// <summary>The light of this object and how far its volume reaches under its base; an immobile thing finds them once (<c>updateOptimalExtrusionPadding</c>).</summary>
+    public System.Numerics.Vector3 ShadowLight;
+    public float ShadowPadding = -1f;
+
     /// <summary>True once <see cref="ModelName"/> was set to something and the asset failed to load (drawn as a placeholder).</summary>
     public bool IsPlaceholder => Placeholder is not null;
 }

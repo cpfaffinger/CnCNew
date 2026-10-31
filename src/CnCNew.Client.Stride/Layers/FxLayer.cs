@@ -28,6 +28,7 @@ internal sealed class FxLayer : IWorldLayer
     private FxDemo? _demo;
     private Frustum _frustum;
     private bool _printed;
+    private List<CnCNew.Presentation.Shadows.ShadowDecal>? _shadowDecals;
 
     public FxLayer() => _isVisible = IsVisible;
 
@@ -48,6 +49,7 @@ internal sealed class FxLayer : IWorldLayer
         _materials = new FxMaterials(services);
         _pool = new FxRunPool(services.Scene, _geometry, _materials);
         _builder = new FxBuilder(_geometry, match.Heights, services.GraphicsDevice.ColorSpace == ColorSpace.Linear);
+        _shadowDecals = services.ShadowDecals;
         _demo = FxDemo.FromEnvironment(out var bench);
         if (bench)
         {
@@ -74,7 +76,7 @@ internal sealed class FxLayer : IWorldLayer
         LastFrame = fx;
 
         var view = FxView.From(camera);
-        builder.Build(fx, in view, in _frustum);
+        builder.Build(fx, in view, in _frustum, _shadowDecals);
         pool.BeginFrame();
         var lastDepth = view.Far * 0.98f;
         for (var run = 0; run < builder.RunCount; run++)

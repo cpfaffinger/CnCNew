@@ -40,6 +40,15 @@ internal sealed class ObjectLayerStats
     public int Translucent;
     public long FlashTintedTotal;
 
+    /// <summary>Sides of shadow volumes this frame, shadow decals this frame, and CPU time spent on the shadows this frame (part of <see cref="FrameMilliseconds"/>).</summary>
+    public int ShadowQuads;
+    public int ShadowDecals;
+    public double ShadowMilliseconds;
+
+    /// <summary>Sides of shadow volumes that did not fit the buffer (cumulative) and shadow textures that are not in the content (cumulative, distinct).</summary>
+    public long ShadowQuadsDropped;
+    public int ShadowTexturesMissing;
+
     /// <summary>Triangles submitted this frame (sum of visible mesh draw counts / 3).</summary>
     public long Triangles;
 
@@ -83,7 +92,7 @@ internal sealed class ObjectLayerStats
     }
 
     public override string ToString() =>
-        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} wheels={WheelsDriven} flashes={MuzzleFlashesShown}/{MuzzleFlashesShown + MuzzleFlashesHidden} headlightsHidden={HeadlightsHidden} tinted={FlashTinted} tintedTotal={FlashTintedTotal} translucent={Translucent} triangles={Triangles} " +
+        $"drawables={Drawables} drawn={Drawn} culled={Culled} pooled={Pooled} skinned={SkinnedDrawn} turrets={TurretsDriven} wheels={WheelsDriven} flashes={MuzzleFlashesShown}/{MuzzleFlashesShown + MuzzleFlashesHidden} headlightsHidden={HeadlightsHidden} tinted={FlashTinted} tintedTotal={FlashTintedTotal} translucent={Translucent} triangles={Triangles} shadowQuads={ShadowQuads} shadowDecals={ShadowDecals} shadowMs={ShadowMilliseconds:F3} shadowDropped={ShadowQuadsDropped} shadowTexturesMissing={ShadowTexturesMissing} " +
         $"models={ModelsLoaded} missingModels={ModelsMissing} missingTextures={TexturesMissing} missingAnimations={MissingAnimations} placeholders={Placeholders} gpuProblems={GpuResourceProblems} " +
         $"frameMs={FrameMilliseconds:F3} avgMs={AverageFrameMilliseconds:F3} allocB={FrameAllocatedBytes}";
 }

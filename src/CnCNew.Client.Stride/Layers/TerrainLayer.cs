@@ -356,6 +356,7 @@ internal sealed class TerrainLayer : IWorldLayer
                     throw new InvalidDataException($"Road '{batch.Template}': texture '{batch.Texture}' is not in the content.");
                 var texture = services.Textures.Resolve(new W3dTextureReference(batch.Texture));
                 material = TerrainMaterials.CreateRoad(device, texture, FogTexture, linear, services.DepthWrites);
+                services.TransparentOrder.Layers[material.Passes[0]] = StackedBackToFrontSortMode.RoadLayer;
                 materials.Add(batch.Texture, material);
             }
             var vertexBuffer = StrideBuffer.Vertex.New(device, batch.Vertices, GraphicsResourceUsage.Immutable);

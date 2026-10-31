@@ -1,6 +1,7 @@
 using System.Numerics;
 using CnCNew.Presentation.Camera;
 using CnCNew.Presentation.Fx;
+using CnCNew.Presentation.Shadows;
 using CnCNew.Presentation.Terrain;
 
 namespace CnCNew.Client.Stride.Layers.Fx;
@@ -94,7 +95,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
 
     public int QuadCountOf(int run) => _runs[run].Count;
 
-    public void Build(FxFrame frame, in FxView view, in Frustum frustum)
+    public void Build(FxFrame frame, in FxView view, in Frustum frustum, IReadOnlyList<ShadowDecal>? shadowDecals = null)
     {
         geometry.Reset();
         _runCount = 0;
@@ -105,6 +106,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
         var batches = frame.Particles.Batches;
         PrepareBatches(batches);
         EmitDecals(frame.Decals, frustum, frame.Frame);
+        if (shadowDecals is not null) EmitShadowDecals(shadowDecals);
         EmitUnsortedParticles(frame.Particles.Particles, batches.Length);
         EmitSorted(frame);
         Counts = new FxBuildCounts(_particlesDrawn, _streaks, _tracers, _decals, batches.Length, _runCount, geometry.QuadCount, geometry.DroppedQuads,
@@ -233,12 +235,53 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             }
 
             var color = Pack(new Vector3(decal.Color.X, decal.Color.Y, decal.Color.Z), decal.Color.W * fade);
-            var material = MaterialId(new FxMaterialKey(decal.Texture, FxBlend.Alpha));
+            var material = MaterialId(new FxMaterialKey(decal.Texture, FxBlend.Alpha, Ground: true));
             var first = geometry.QuadCount;
             EmitDraped(decal, color);
             EndItem(material, first, _view.Far, 0);
             _decals++;
         }
+    }
+
+    /// <summary>
+    /// <c>W3DProjectedShadowManager::queueDecal</c>: a rectangle turned with its object, laid on the height field and multiplied into what is drawn. Decals with one texture follow each other
+    /// in the list (the object layer's order of drawables), so they share a run when the order allows it.
+    /// </summary>
+    private void EmitShadowDecals(IReadOnlyList<ShadowDecal> decals)
+    {
+        var white = Pack(Vector3.One, 1f);
+        for (var index = 0; index < decals.Count; index++)
+        {
+            var decal = decals[index];
+            var material = MaterialId(new FxMaterialKey(decal.Texture, FxBlend.Multiply, Ground: true));
+            var first = geometry.QuadCount;
+            var columns = Math.Clamp((int)MathF.Ceiling(decal.SizeX / TerrainHeightSampler.CellSize), 1, 8);
+            var rows = Math.Clamp((int)MathF.Ceiling(decal.SizeY / TerrainHeightSampler.CellSize), 1, 8);
+            for (var row = 0; row < rows; row++)
+            {
+                for (var column = 0; column < columns; column++)
+                {
+                    var quad = geometry.NextQuad();
+                    if (quad.IsEmpty) return;
+                    var (u0, u1, v0, v1) = (column / (float)columns, (column + 1) / (float)columns, row / (float)rows, (row + 1) / (float)rows);
+                    SetShadowCorner(ref quad[0], decal, u0, v0, white);
+                    SetShadowCorner(ref quad[1], decal, u0, v1, white);
+                    SetShadowCorner(ref quad[2], decal, u1, v1, white);
+                    SetShadowCorner(ref quad[3], decal, u1, v0, white);
+                }
+            }
+
+            EndItem(material, first, _view.Far, 0);
+            _decals++;
+        }
+    }
+
+    private void SetShadowCorner(ref FxVertex vertex, in ShadowDecal decal, float u, float v, uint color)
+    {
+        var point = decal.At(u, v);
+        vertex.Position = new Vector3(point.X, point.Y, heights.HeightAt(point.X, point.Y) + GroundLift);
+        vertex.Color = color;
+        vertex.Uv = new Vector2(u, v);
     }
 
     private void EmitDraped(in DecalInstance decal, uint color)

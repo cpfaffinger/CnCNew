@@ -24,8 +24,8 @@ internal enum FxBlend
     Multiply,
 }
 
-/// <summary>A draw state: texture name (null draws the vertex color only) and blend equation.</summary>
-internal readonly record struct FxMaterialKey(string? Texture, FxBlend Blend);
+/// <summary>A draw state: texture name (null draws the vertex color only), blend equation, and whether it lies on the ground with the terrain, under the stencil shadows.</summary>
+internal readonly record struct FxMaterialKey(string? Texture, FxBlend Blend, bool Ground = false);
 
 /// <summary>
 /// Unlit materials for effect quads: output is <c>texture * vertex color</c> (RGBA) as emissive color and alpha, blended with a manual
@@ -97,7 +97,7 @@ internal sealed class FxMaterials(RenderServices services)
                 break;
             case FxBlend.Multiply:
                 pass.HasTransparency = true;
-                pass.BlendState = new BlendStateDescription(Blend.Zero, Blend.SourceColor);
+                pass.BlendState = Shadows.ShadowVolumeRenderer.Multiply(Blend.Zero, Blend.SourceColor);
                 break;
             case FxBlend.AlphaTest:
                 pass.HasTransparency = false;
@@ -107,6 +107,7 @@ internal sealed class FxMaterials(RenderServices services)
         }
 
         services.DepthWrites[pass] = key.Blend == FxBlend.AlphaTest;
+        if (key.Ground) services.TransparentOrder.Layers[pass] = StackedBackToFrontSortMode.GroundDecalLayer;
         return material;
     }
 }

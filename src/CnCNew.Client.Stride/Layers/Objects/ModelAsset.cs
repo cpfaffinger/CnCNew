@@ -10,7 +10,8 @@ using BoundingSphere = Stride.Core.Mathematics.BoundingSphere;
 namespace CnCNew.Client.Stride.Layers.Objects;
 
 /// <summary>One rigid (non-skinned) renderable sub-object of the model's most detailed LOD; occupies skeleton node <see cref="NodeIndex"/>.</summary>
-internal sealed record RigidPart(int NodeIndex, string FullName, int BoneIndex, bool DefaultVisible);
+/// <remarks><see cref="Caster"/> is its shadow geometry, null when the part casts no volume (<c>W3DShadowGeometry::initFromHLOD</c>).</remarks>
+internal sealed record RigidPart(int NodeIndex, string FullName, int BoneIndex, bool DefaultVisible, CnCNew.Presentation.Shadows.ShadowCasterMesh? Caster = null);
 
 /// <summary>Metadata for one entry of <see cref="ModelAsset.NeutralModel"/>'s <c>Meshes</c> list, aligned 1:1 by index.</summary>
 internal sealed record MeshInfo(W3dMesh Mesh, W3dRenderBatch Batch, int MaterialIndex, bool IsHouseColor, bool IsAnimatedMapper, bool UsesHouseColorTexture);
@@ -311,7 +312,7 @@ internal sealed class ModelAsset
                 Name = sub.Name,
                 Flags = ModelNodeFlags.EnableRender | ModelNodeFlags.OverrideWorldMatrix,
             };
-            rigidParts.Add(new RigidPart(nodeIndex, sub.Name, sub.BoneIndex, sub.IsVisibleByDefault));
+            rigidParts.Add(new RigidPart(nodeIndex, sub.Name, sub.BoneIndex, sub.IsVisibleByDefault, ShadowCaster(mesh)));
 
             var restWorld = model.Skeleton.RestWorldTransforms[sub.BoneIndex];
             var (worldMin, worldMax) = TransformBounds(mesh.BoundsMinimum, mesh.BoundsMaximum, restWorld);
@@ -425,6 +426,23 @@ internal sealed class ModelAsset
 
         return new ModelAsset(name, services, model, neutralModel, rigidParts.ToArray(), meshInfos.ToArray(), skinParts.ToArray(),
             radius, maxHeight <= 0 ? radius : maxHeight, hasHouseColor) { GroundClearance = minimum.Z < 0f && minimum.Z > -50f ? -minimum.Z : 0f };
+    }
+
+    /// <summary>
+    /// The shadow geometry of a rigid mesh: <c>W3DShadowGeometry::initFromHLOD</c> leaves out a mesh that blends or tests alpha unless its <c>CAST_SHADOW</c> flag is set; a skinned mesh never
+    /// casts a volume (those are the infantry, which have decals).
+    /// </summary>
+    private static CnCNew.Presentation.Shadows.ShadowCasterMesh? ShadowCaster(W3dMesh mesh)
+    {
+        if (!mesh.CastsShadow && mesh.Materials.Shaders.Any(shader => shader.AlphaTestEnabled || shader.SourceBlend != W3dSourceBlend.One || shader.DestinationBlend != W3dDestinationBlend.Zero)) return null;
+        var triangles = new (int, int, int)[mesh.Triangles.Count];
+        for (var index = 0; index < triangles.Length; index++)
+        {
+            var triangle = mesh.Triangles[index];
+            triangles[index] = ((int)triangle.Vertex0, (int)triangle.Vertex1, (int)triangle.Vertex2);
+        }
+
+        return CnCNew.Presentation.Shadows.ShadowCasterMesh.Build(mesh.Vertices, triangles);
     }
 
     private Model BuildTeamVariant(ColorValue team)

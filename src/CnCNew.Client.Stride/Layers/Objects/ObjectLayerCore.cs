@@ -1,10 +1,12 @@
 using System.Diagnostics;
 using System.Numerics;
+using CnCNew.Client.Stride.Layers.Shadows;
 using CnCNew.Client.Stride.Rendering;
 using CnCNew.Data.Definitions;
 using CnCNew.Data;
 using CnCNew.Game.Live;
 using CnCNew.Presentation.Objects;
+using CnCNew.Presentation.Shadows;
 using CnCNew.Presentation.Terrain;
 using CnCNew.W3D;
 using Color4 = Stride.Core.Mathematics.Color4;
@@ -42,6 +44,10 @@ internal sealed class ObjectLayerCore : IWorldLayer
     private readonly HashSet<string> _missingAnimations = [];
     private readonly List<long> _toRemove = [];
     private readonly Stopwatch _stopwatch = new();
+    private ShadowVolumeRenderer? _shadows;
+    private Vector3 _sun;
+    private readonly Dictionary<string, bool> _shadowTextures = new(StringComparer.OrdinalIgnoreCase);
+    private long _shadowTicks;
     private bool _smokeTest;
     private int _frameLimit = int.MaxValue;
     private int _frameCounter;
@@ -54,6 +60,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
         _assets = new ModelAssetCache(services);
         _pool = new EntityPool();
         _placeholderModel = PlaceholderBox.Build(services.GraphicsDevice, _assets.Indices, new Color4(1f, 0.15f, 0.85f, 1f));
+        _sun = ShadowSun.Direction(TerrainLighting.ObjectsFromDefinitions(services.Data.Graph));
+        if (!ShadowsOff) _shadows = new ShadowVolumeRenderer(services);
 
         var args = Environment.GetCommandLineArgs();
         _smokeTest = args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase);
@@ -83,6 +91,9 @@ internal sealed class ObjectLayerCore : IWorldLayer
         stats.Translucent = 0;
         stats.Triangles = 0;
         stats.Placeholders = 0;
+        _shadows?.Begin();
+        _services.ShadowDecals.Clear();
+        _shadowTicks = 0;
 
         foreach (var drawable in frame.Objects.Drawables)
         {
@@ -110,6 +121,17 @@ internal sealed class ObjectLayerCore : IWorldLayer
             _instances.Remove(key);
         }
 
+        if (_shadows is { } shadows)
+        {
+            var shadowStart = Stopwatch.GetTimestamp();
+            shadows.End(frame.CommandList, _match.Camera);
+            _shadowTicks += Stopwatch.GetTimestamp() - shadowStart;
+            stats.ShadowQuads = shadows.Quads;
+            stats.ShadowQuadsDropped = shadows.DroppedQuads;
+        }
+
+        stats.ShadowDecals = _services.ShadowDecals.Count;
+        stats.ShadowMilliseconds = _shadowTicks * 1000.0 / Stopwatch.Frequency;
         stats.ModelsLoaded = _assets.LoadedCount;
         stats.ModelsMissing = _assets.MissingCount;
         stats.TexturesMissing = _services.Textures.MissingCount;
@@ -141,6 +163,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
         foreach (var instance in _instances.Values) ReleaseInstance(instance);
         _instances.Clear();
+        _shadows?.Dispose();
         _assets.Dispose();
     }
 
@@ -215,9 +238,19 @@ internal sealed class ObjectLayerCore : IWorldLayer
             : Matrix4x4.CreateRotationX(-drawable.Chassis.Roll) * Matrix4x4.CreateRotationY(drawable.Chassis.Pitch) * Matrix4x4.CreateTranslation(0f, 0f, drawable.Chassis.LiftZ);
         var instanceMatrix = Matrix4x4.CreateScale(scale) * chassis * Matrix4x4.CreateRotationZ(drawable.Yaw) * Matrix4x4.CreateTranslation(position);
         var radius = asset?.Radius ?? Math.Max(drawable.SelectionRadius, 2f);
-        var aabb = new Aabb(new Vector3(position.X - radius, position.Y - radius, position.Z - radius),
-            new Vector3(position.X + radius, position.Y + radius, position.Z + radius));
+        var boxMinimum = new Vector3(position.X - radius, position.Y - radius, position.Z - radius);
+        var boxMaximum = new Vector3(position.X + radius, position.Y + radius, position.Z + radius);
+        var castsVolume = _shadows is not null && asset is not null && draw.Kind == DrawModuleKind.Model && drawable.Visual.ShadowCast.Volume && drawable.Opacity >= 1f;
+        if (castsVolume)
+        {
+            PrepareShadow(drawable, asset!, part, instanceMatrix, frame.Match);
+            // A shadow reaches further than its object: an object just outside the view still has to be posed for the part of its shadow inside it.
+            var tip = position + part.ShadowLight * (asset!.Height / MathF.Max(0.05f, -part.ShadowLight.Z));
+            boxMinimum = Vector3.Min(boxMinimum, tip - new Vector3(radius));
+            boxMaximum = Vector3.Max(boxMaximum, tip + new Vector3(radius));
+        }
 
+        var aabb = new Aabb(boxMinimum, boxMaximum);
         if (!_match.Camera.Frustum.Intersects(aabb))
         {
             if (part.InScene) RemovePartFromScene(part);
@@ -290,6 +323,8 @@ internal sealed class ObjectLayerCore : IWorldLayer
         }
 
         var skeleton = rigidComponent.Skeleton;
+        var shadowFloor = castsVolume ? ShadowFloor(drawable, part, frame.Match) : 0f;
+        var shadowStill = drawable.IsStatic || drawable.IsStructure;
         foreach (var rigidPart in asset.RigidParts)
         {
             var boneWorld = pose.GetBoneWorldTransform(rigidPart.BoneIndex);
@@ -313,7 +348,17 @@ internal sealed class ObjectLayerCore : IWorldLayer
             // degenerate world matrix, which no triangle survives.
             node.WorldMatrix = visible ? nodeWorld.ToStride() : default;
             node.Flags = visible ? node.Flags | global::Stride.Rendering.ModelNodeFlags.EnableRender : node.Flags & ~global::Stride.Rendering.ModelNodeFlags.EnableRender;
+            // W3DVolumetricShadow::updateVolumes: a hidden mesh has no volume.
+            if (visible && castsVolume && rigidPart.Caster is { } caster)
+            {
+                var shadowStart = Stopwatch.GetTimestamp();
+                var shadowPart = part.ShadowParts![rigidPart.NodeIndex - 1] ??= new ShadowPartState();
+                _shadows!.Add(caster, shadowPart, nodeWorld, part.ShadowLight, shadowFloor, shadowStill);
+                _shadowTicks += Stopwatch.GetTimestamp() - shadowStart;
+            }
         }
+
+        AddShadowDecal(drawable, draw, asset, position, scale);
 
         for (var m = 0; m < rigidModel.Meshes.Count; m++)
         {
@@ -326,6 +371,79 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
         UpdateSkins(part, asset, pose, state, drawable, instanceMatrix, flash, opacity, frame);
         Stats.Drawn++;
+    }
+
+    /// <summary>Debug switch for cost comparisons and screenshot checks: <c>CNCNEW_SHADOWS=0</c> draws no shadow of any kind.</summary>
+    private static readonly bool ShadowsOff = System.Environment.GetEnvironmentVariable("CNCNEW_SHADOWS") == "0";
+
+    /// <summary>
+    /// The light of a volume and how far it reaches under its object (<c>W3DVolumetricShadowManager::addShadow</c>): the object's limit on the sun's elevation, and for something immobile the
+    /// walk of <c>updateOptimalExtrusionPadding</c>, once; a mobile thing reaches just under its base.
+    /// </summary>
+    private void PrepareShadow(DrawableInstance drawable, ModelAsset asset, DrawPartState part, in Matrix4x4 instanceMatrix, LiveGame match)
+    {
+        if (part.ShadowParts is not null) return;
+        part.ShadowParts = new ShadowPartState[asset.RigidParts.Length];
+        var scale = ShadowSun.LengthScale(drawable.Visual.ShadowCast.SizeX);
+        part.ShadowPadding = ShadowSun.ExtrusionBuffer;
+        if (drawable.IsStatic || drawable.IsStructure)
+        {
+            var box = asset.NeutralModel.BoundingBox;
+            var (minimum, maximum) = (new Vector3(float.MaxValue), new Vector3(float.MinValue));
+            for (var corner = 0; corner < 8; corner++)
+            {
+                var point = new Vector3((corner & 1) == 0 ? box.Minimum.X : box.Maximum.X, (corner & 2) == 0 ? box.Minimum.Y : box.Maximum.Y, (corner & 4) == 0 ? box.Minimum.Z : box.Maximum.Z);
+                var world = Vector3.Transform(point, instanceMatrix);
+                minimum = Vector3.Min(minimum, world);
+                maximum = Vector3.Max(maximum, world);
+            }
+
+            (part.ShadowPadding, scale) = ShadowSun.OptimalExtrusion(match.Heights, drawable.Position, minimum, maximum, _sun, scale);
+        }
+
+        part.ShadowLight = ShadowSun.Limited(_sun, scale);
+    }
+
+    /// <summary><c>W3DVolumetricShadow::Update</c>: a thing in the air reaches down to the lowest point of the map, everything else to its padding under its base.</summary>
+    private static float ShadowFloor(DrawableInstance drawable, DrawPartState part, LiveGame match)
+    {
+        var position = drawable.Position;
+        return MathF.Abs(position.Z - match.Heights.HeightAt(position.X, position.Y)) >= ShadowSun.AirborneDelta && !drawable.IsStatic && !drawable.IsStructure
+            ? match.Heights.MinHeight - ShadowSun.ExtrusionBuffer
+            : position.Z - part.ShadowPadding;
+    }
+
+    /// <summary><c>W3DProjectedShadowManager::addShadow</c> and <c>W3DTreeBuffer::drawTrees</c>: a decal under the object when its template asks for one (a size of 0 is the size of the model's box), a <c>shadow.tga</c> under a tree that says <c>DoShadow</c>.</summary>
+    private void AddShadowDecal(DrawableInstance drawable, DrawSpec draw, ModelAsset asset, Vector3 position, float scale)
+    {
+        if (_shadows is null || drawable.Opacity < 1f) return;
+        var box = asset.NeutralModel.BoundingBox;
+        if (draw.Kind == DrawModuleKind.Tree)
+        {
+            if (draw.Setting("DoShadow") is { } setting && setting.Trim().Equals("Yes", StringComparison.OrdinalIgnoreCase) && HasShadowTexture(ShadowDecal.DefaultTexture))
+                _services.ShadowDecals.Add(ShadowDecal.UnderTree(position, ((box.Maximum.X - box.Minimum.X) + (box.Maximum.Y - box.Minimum.Y)) * 0.5f * scale));
+            return;
+        }
+
+        var shadow = drawable.Visual.ShadowCast;
+        if (draw.Kind != DrawModuleKind.Model || !shadow.Decal || !HasShadowTexture(shadow.DecalTexture)) return;
+        var sizeX = shadow.SizeX != 0f ? shadow.SizeX : box.Maximum.X - box.Minimum.X;
+        var sizeY = shadow.SizeY != 0f ? shadow.SizeY : box.Maximum.Y - box.Minimum.Y;
+        _services.ShadowDecals.Add(ShadowDecal.Under(shadow.DecalTexture, position, drawable.Yaw, sizeX, sizeY, shadow.OffsetX, shadow.OffsetY));
+    }
+
+    private bool HasShadowTexture(string name)
+    {
+        if (_shadowTextures.TryGetValue(name, out var known)) return known;
+        var found = W3dTexturePathResolver.Resolve(name, _services.Content.Exists).Found;
+        _shadowTextures.Add(name, found);
+        if (!found)
+        {
+            Stats.ShadowTexturesMissing++;
+            Console.Error.WriteLine($"warning: object layer: shadow texture '{name}' is not in the content.");
+        }
+
+        return found;
     }
 
     /// <summary>The opacity of a drawable in whole percent (<see cref="DrawableInstance.Opacity"/>), so the translucent variants of a model's materials can be cached.</summary>
@@ -567,6 +685,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
         ReleaseSkins(part);
         part.ModelName = modelName;
         part.Asset = _assets.Get(modelName);
+        part.ShadowParts = null;
         part.StateIndex = -1;
         part.Binding = null;
         part.Animation = null;
@@ -747,6 +866,7 @@ internal sealed class ObjectLayerCore : IWorldLayer
 
         part.ModelName = null;
         part.Asset = null;
+        part.ShadowParts = null;
         part.Pose = null;
         part.StateIndex = -1;
         part.Binding = null;
