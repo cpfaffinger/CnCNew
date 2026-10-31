@@ -59,8 +59,8 @@ public sealed record ScriptedSkirmishOptions(uint Seed, long MaxTicks, long Grac
 /// directly - and its truth is its state: <see cref="Save"/> and <see cref="Restore"/> continue hash-identically, AI included.
 /// <para>
 /// What the session itself stands in for, as <see cref="SkirmishMatchSession"/> does: the start money of the setup screen, a science purchase point every
-/// <see cref="ScriptedSkirmishOptions.SciencePointIntervalFrames"/> if a caller asks for one, and the decision who has won. A computer player has the whole map explored: the reference's AI
-/// places structures without asking the shroud.
+/// <see cref="ScriptedSkirmishOptions.SciencePointIntervalFrames"/> if a caller asks for one, and the decision who has won. A computer player's map is shrouded like a human's: its AI places
+/// structures without asking the shroud, and nothing else it does looks at what is explored.
 /// </para>
 /// </summary>
 public sealed class ScriptedSkirmishSession
@@ -188,7 +188,7 @@ public sealed class ScriptedSkirmishSession
         return attached;
     }
 
-    /// <summary>Start money, the map explored for the computer players, and every player's start units in a ring around its start position (the AI places its own command centre).</summary>
+    /// <summary>Start money, and every player's start units in a ring around its start position (the AI places its own command centre).</summary>
     private void PlaceStarts(TemplateCatalog catalog, ImmutableArray<TerrainWaypoint> starts)
     {
         for (var index = 0; index < _slots.Length; index++)
@@ -208,11 +208,7 @@ public sealed class ScriptedSkirmishSession
                 _builtin.Add(new SkirmishAi(World, catalog, new SkirmishAiOptions(player, unchecked(_options.Seed + (uint)index * 7919u), bx, by, participant.Side,
                     SkirmishMatchSession.FamilyPrefix(participant.Faction), hints.ToImmutable()), SubmitBuiltin));
             }
-            else
-            {
-                World.ExploreMap(player);
-                World.SetValidatesOwnSites(player);
-            }
+            else World.SetValidatesOwnSites(player);
             var ring = (catalog.TryGet(participant.BaseBuilding, out var building) ? building.BoundingCircleRadius : Fixed.Zero) + Fixed.FromInt(30);
             var units = participant.Faction.StartingUnits;
             for (var unit = 0; unit < units.Length; unit++)

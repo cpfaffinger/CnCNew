@@ -572,6 +572,7 @@ run.Test("Original skirmish AI: a team in the field is reinforced", Tests.Origin
 run.Test("Original skirmish AI: saved at any tick, also inside a frame at 60 and 120 Hz, the session continues identically", Tests.OriginalAiSessionContinuesFromAnyTick);
 run.Test("Original skirmish AI: the first open priority entry is taken, and what lacks a prerequisite holds the ones behind it", Tests.OriginalAiWaitsForTheFirstOpenPriorityEntry);
 run.Test("Original skirmish AI: a dozer that cannot reach a building place is moved there", Tests.OriginalAiMovesADozerThatCannotReachTheSite);
+run.Test("Original skirmish AI: its map is shrouded and it builds on ground it has not seen", Tests.OriginalAiBuildsOnGroundItHasNotSeen);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Session state: the state of SkirmishAi names every field", Tests.SkirmishAiStateNamesEveryField);
 run.Test("Session state: SkirmishAi never acts in the order of a hash table", Tests.SkirmishAiNeverActsInTheOrderOfAHashTable);

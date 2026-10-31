@@ -860,4 +860,19 @@ static partial class Tests
         Check.That(built.X >= Fixed.FromInt(90) && CountOwned(walled, 1, "AlphaPlant") >= 1, $"It stands on the dozer's side of the wall ({built.X}, {built.Y}).");
         Check.That(walled.Engine.AiBuildListOf(new PlayerId(1)).Any(entry => entry.Template == "AlphaPlant" && entry.X == built.X && entry.ObjectId == built.Id.Value), "The entry has moved with it.");
     }
+
+    /// <summary>
+    /// <c>buildStructureWithDozer</c> does not ask the shroud (<c>SHROUD_REVEALED</c> is the human's placement), and nothing else of the AI looks at what is explored: its map starts shrouded as a
+    /// human's does, and it builds on ground it has never seen. Before, the session explored the map for it.
+    /// </summary>
+    public static void OriginalAiBuildsOnGroundItHasNotSeen()
+    {
+        var library = AiLibraryWithAlphaScripts(Scr.Script("A Far", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SKIRMISH_BUILD_BUILDING", Scr.Type("AlphaBarracks"))], oneShot: true));
+        // 200 units to one side of the centre in the list: turned by 135 degrees it stands at (241, 59), beyond what the centre and the start units see.
+        var (session, _, _, _, _, _) = StartAiVariant(AiDataText().Replace("Location = X:160.00 Y:100.00", "Location = X:-100.00 Y:100.00", StringComparison.Ordinal), string.Empty, library);
+        var far = session.Engine.AiBuildListOf(new PlayerId(1)).Single(entry => entry.Template == "AlphaBarracks");
+        Check.That(!session.World.IsPositionExploredBy(new PlayerId(1), far.X, far.Y), $"The place ({far.X}, {far.Y}) is shrouded for the computer player at the start.");
+        StepFrames(session, 400);
+        Check.That(CountOwned(session, 1, "AlphaBarracks") == 1, $"It builds there all the same (pending: {string.Join("; ", session.Engine.AiPendingBuilds(new PlayerId(1)))}).");
+    }
 }
