@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package M) · **Phase:** 51
-> **Status:** next (starting state: the end of Phase 50, see below)
+> **Status:** done by machine (31 October 2026); the rest is in HANDOFF-PHASE52.md
 > **Predecessor:** HANDOFF-PHASE50.md · **Results in:** docs/SIMULATION-CORE.md §65, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** a ranger's `enterTarget` on Alpine Assault (F-87), and what the comparison of the sixteen pairings still finds
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
@@ -54,4 +54,5 @@ commit; the checks the changes can reach green.
 
 ## Progress
 
-Nothing yet.
+- The seed (`3f3f10a`), F-87 (§65.1, `8768d44`), the chase from rest (§65.2, `1c3b258`), the fog (§65.3, `4fbcc9e`), the passive answer and the ability (§65.4, `ee3289e`), the circles (§65.5, `385cf2d`).
+- Carried on: `HANDOFF-PHASE52.md` is the switch to the one patched variant; the rate differences these causes opened (F-88) and F-40 come after it. Closing measurements: `CLAUDE.md`, paragraph "Phase 51".

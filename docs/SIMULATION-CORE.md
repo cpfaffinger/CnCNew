@@ -1504,6 +1504,8 @@ read "stands still" as "needs a new command" therefore also ask `IsAttackMoving`
 
 ### 33.5 Approximations and what is missing
 
+(As of Phase 17. Phases 41, 42 and 51 have closed most of this list; what stays is named in §65.5.)
+
 * **No pursuit from idle.** In the reference a resting unit of a computer player runs after a victim in its search radius (`aiAttackObject`); here it stays where it is and takes only what is in
   range. Pursuit happens only on an attack move. Reason: the command issuers position their units (rally point, script posts); a unit that leaves its post collides with their bookkeeping.
 * **`AIData.ini` is not typed:** `GuardOuterModifierAI` 1.333, `AlertRangeModifier` 1.1, `AggressiveRangeModifier` 1.5, `AttackPriorityDistanceModifier` 100, `ForceIdleMSEC` 67 and
@@ -4377,3 +4379,36 @@ The real data moved the sixteen pairings of the manifest as the rules said they 
 minutes), with several outcomes changed per cause above; balance is not assessed. No mission run changes its outcome. The retail reference match and the stress test keep their results. `rate-compare --map-diff ... --fields --frames 50000 --persist 10`, with the fields of §59 and a dead dozer's `boredSince` left out, finds **15 of 16 pairings the
 same game at 30, 60 and 120 Hz to their ends**, and Alpine Assault America against China to frame 45,501, beyond the manifest's limit of 45,000 frames: a ranger's `enterTarget` (F-87, registered). This holds for
 the pairings of the manifest with their seeds: it is a measurement, not a proof. The rate-equivalence suite stands at 0 / 0 in all ten groups.
+
+
+## 65. Phase 51: target acquisition as the original looks (fidelity package M)
+
+Each finding read in the original's source, one cause per commit with a test that fails on the code before and compares 30, 60 and 120 Hz where it can differ. The four causes of F-17 share one manifest commit (§65.5): with the chase alone the reference match ran so long that a manifest per cause cost hours, and Phase 52 moves every reference value anyway. §33.5 is the list this phase works off; what stays of it is named at the end of §65.5.
+
+### 65.1 F-87: the dying look for no pad
+
+(`8768d44`) A unit in its slow death is in the AI's dead state, which is not idle. `AutoFindHealingUpdate` asked only `IsIdle`, and above 30 Hz a ranger that died in the frame of its scan was given the pad as its enter target and kept it through its death (Alpine Assault America against China, frame 45,501). Test `AutoFindHealingLeavesTheDyingAlone`. Manifest `de2b336`: 12 runs, 15 fields; 14 of 16 pairings decided. The retail reference match keeps its end and its hashes.
+
+### 65.2 A computer player's unit walks to its victim from rest
+
+(`1c3b258`, `AIIdleState::update`, `AI::getAdjustedVisionRangeForObject`) `AIIdleState` calls `aiAttackObject` on what `getNextMoodTarget` finds, and only a human player's unit is held to `AI::WITHIN_ATTACK_RANGE`. The port walked only on an attack-move: §33.5 left the chase out because the command issuers position their units, and `SkirmishAi` is Stage 3's and adapts to the world. A resting computer unit now looks as far as its vision times `GuardOuterModifierAI` and the mood's factor - no longer "never less than its weapons reach", which the original does not have - walks to what it finds and stops in range; `Chasing` keeps it in the idle mode while the walk makes it busy. A human player's unit looks as far as its weapons reach and its vision times `GuardOuterModifierHuman`. Test `AcquisitionComputerUnitWalksToItsVictim`. **Since this cause the retail reference match with driver seed `5EED0004` runs to its limit:** it takes `5EED0003` (`3f3f10a`), which ends before and after the cause. Manifest `c67e1b8`: 1 runs, 11 fields; 14 of 16 pairings decided. Outcomes: reference-match: FactionGLA -> FactionGLADemolitionGeneral. The retail reference match ends at tick 31261 (FactionGLADemolitionGeneral, D5113D1ACBD8D947).
+
+### 65.3 The fog ends no attack
+
+(`4fbcc9e`) "Fog no longer prevents attacking at all. it prevents targeting in findClosestEnemy" (`WeaponSet.cpp`, the old check left in as a comment); `AI::UNFOGGED` is set for a human player's unit only. The port asked the player's sight in every step of an attack and of a turret's aim, and for computer players too. `IsAttackable` no longer asks it, `KeepsAttackIntent` asks only for the stealthed, and only a human player's unit looks through the fog filter, where the look is made (`ConsiderMoodTarget`). So the rule of F-82 now holds for a victim coming into sight: test `VictimComesIntoTheSightWhereItsFrameEnds`, and `TurretAttackGoesOnInTheFog`. The commands of a player keep their own check (`TargetNotVisible`): a person cannot click what is not drawn, and F-40 is open.
+
+### 65.4 A passive unit answers, a unit at an ability looks for nobody
+
+(`ee3289e`, `getNextMoodTarget`) A computer player's unit of a passive team picks nobody but returns its last attacker ("Do not allow units that healed me to get acquired!"), and a unit with `IS_USING_ABILITY` acquires nothing ("Shouldn't auto-acquire a target at this time"). Test `AcquisitionPassiveUnitAnswersItsAttacker`.
+
+### 65.5 Range and distance between the bounding circles
+
+(`385cf2d`, `AI::findClosestEnemy`) The search runs `FROM_BOUNDINGSPHERE_2D`: the range, the choice of the closest and the distance a priority loses are measured between the two bounding circles (`distCalcProc_BoundaryAndBoundary_2D`), not between centres. A rider's higher priority counts for its container (`priorityFunc`), and a structure that is no faction building counts only when it can be garrisoned and is occupied (`PartitionFilterInsignificantBuildings`, `isGarrisonable`): the port asked "has a container and is empty". Test `AcquisitionMeasuresBetweenCircles`. Manifest `5ac5e73`: 26 runs, 241 fields; 14 of 16 pairings decided. Outcomes: reference-match: FactionGLADemolitionGeneral -> FactionAmericaAirForceGeneral. The retail reference match ends at tick 41671 (FactionAmericaAirForceGeneral, 0C93FC376E2D669F).
+
+What stays of §33.5: the values of `AIData.ini` are still named constants of the shipped file, not typed for this search (the original AI's `AiData` reads them); `NotWhileAttacking` has no effect of its own, because a unit here has one victim; a deploying vehicle's attack-move and the retry of a failed path (`ATTACK_RETRY_COUNT`) are not built. `checkForCrateToPickup`, which the idle state calls, does nothing in the original: it clears `m_crateCreated` before it looks the crate up, so nothing of it is ported.
+
+### 65.6 The result
+
+No winner of the sixteen pairings moved between Phase 50 and this phase: 14 of 16 are decided, and the same two run to the limit of 25 game minutes (Alpine Assault America against China, Death Valley America against China). 26 runs of the manifest moved in their hashes and courses. No mission run changes its outcome or its end tick. The objective driver reaches victory 24/24 and defeat 24/24. The retail reference match with driver seed `5EED0003` is won by FactionAmericaAirForceGeneral at tick 41,070 (original frame 20,535 at 30 and 60 Hz; end tick 41,671), end hash `0C93FC376E2D669F`, chain `C7CFAA4B096306F1`, 26,086 commands. The stress test is unchanged.
+
+**The rate comparison:** ten of the sixteen pairings are the same game at 30, 60 and 120 Hz to their ends; six part: Armored Fury America against China (frame 29,490), China against GLA (11,939), GLA against America (16,119), Bitter Winter ChinaTank against AirForce (7,095), Death Valley America against China (38,879), ChinaTank against AirForce (13,343). Each is a cause of its own, and they are registered as F-88. The three read so far: on Bitter Winter a detour around standing units is planned from other blockers, on Death Valley a look of the bored dozer misses a structure hurt by a lower id in the updates of its frame (F-85 cannot tell that from a hit after them), on Armored Fury a thrown Red Guard lands a share of a step apart. The rate-equivalence suite stands at 0 / 0 in all ten groups.
