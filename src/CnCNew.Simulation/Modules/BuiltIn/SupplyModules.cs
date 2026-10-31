@@ -52,6 +52,9 @@ internal interface ISupplyCarrier
 
     /// <summary><c>isForcedIntoWantingState</c>.</summary>
     bool IsForcedWanting { get; }
+
+    /// <summary><c>setForceWantingState</c>.</summary>
+    void SetForceWanting(IWorldServices world, bool wanting);
 }
 
 public sealed record SupplyCarrierData(AIUpdateData Ai, int MaxBoxes, long CenterDelayTicks, long WarehouseDelayTicks, Fixed ScanDistance, int UpgradedSupplyBoost) : ModuleData
@@ -246,6 +249,7 @@ internal sealed class SupplyMachine
     public bool Sleeps => _state == SupplyState.Idle && !_forceWanting;
 
     public void SetForceWanting() => _forceWanting = true;
+    public void ClearForceWanting() => _forceWanting = false;
 
     /// <summary><c>isForcedIntoWantingState</c>: a forced want waits to be serviced.</summary>
     public bool ForcedWanting => _forceWanting;
@@ -443,6 +447,14 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
     {
         _machine.SetForceWanting();
         world.WakeAt(Entity, this, world.Tick);
+    }
+
+    public void SetForceWanting(IWorldServices world, bool wanting)
+    {
+        if (wanting == _machine.ForcedWanting) return;
+        if (wanting) ForceWanting(world);
+        else _machine.ClearForceWanting();
+        world.MarkDirty(Entity);
     }
 
     protected int BoostIfUpgraded(IWorldServices world, string upgrade)

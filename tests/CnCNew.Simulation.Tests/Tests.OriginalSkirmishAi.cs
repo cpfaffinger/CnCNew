@@ -767,7 +767,9 @@ static partial class Tests
     }
 
     /// <summary>The test library with other scripts for Alpha and none for Beta, which stands still: both have their default teams only.</summary>
-    private static MapScriptLibrary AiLibraryWithAlphaScripts(params MapScript[] scripts)
+    private static MapScriptLibrary AiLibraryWithAlphaScripts(params MapScript[] scripts) => AiLibraryWithAlpha(scripts, []);
+
+    private static MapScriptLibrary AiLibraryWithAlpha(MapScript[] scripts, MapProperties[] teams)
     {
         var (beta, betaTeams) = (new MapScriptList([], []), new[] { new MapProperties([Scr.Text("teamName", "teamSkirmishBeta"), Scr.Text("teamOwner", "SkirmishBeta"), Scr.Flag("teamIsSingleton", true)]) });
         var defaultTeam = new MapProperties([Scr.Text("teamName", "teamSkirmishAlpha"), Scr.Text("teamOwner", "SkirmishAlpha"), Scr.Flag("teamIsSingleton", true)]);
@@ -775,7 +777,7 @@ static partial class Tests
         return new MapScriptLibrary("CkMp",
             [new MapScriptLibraryPlayer(string.Empty, MapProperties.Empty), new MapScriptLibraryPlayer("SkirmishAlpha", MapProperties.Empty), new MapScriptLibraryPlayer("SkirmishBeta", MapProperties.Empty),
                 new MapScriptLibraryPlayer("PlyrCivilian", MapProperties.Empty)],
-            [defaultTeam, ..betaTeams], [new MapScriptList([], []), new MapScriptList([..scripts], []), beta, civilian], []);
+            [defaultTeam, ..teams, ..betaTeams], [new MapScriptList([], []), new MapScriptList([..scripts], []), beta, civilian], []);
     }
 
     private const string AiTechObject = """
@@ -874,5 +876,216 @@ static partial class Tests
         Check.That(!session.World.IsPositionExploredBy(new PlayerId(1), far.X, far.Y), $"The place ({far.X}, {far.Y}) is shrouded for the computer player at the start.");
         StepFrames(session, 400);
         Check.That(CountOwned(session, 1, "AlphaBarracks") == 1, $"It builds there all the same (pending: {string.Join("; ", session.Engine.AiPendingBuilds(new PlayerId(1)))}).");
+    }
+
+    private const string AiSupplyObjects = """
+        Object AlphaSupplyCenter
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE FS_SUPPLY_CENTER
+          BuildCost = 100
+          BuildTime = 1
+          CommandSet = AlphaSupplySet
+          Geometry = BOX
+          GeometryMajorRadius = 12.0
+          GeometryMinorRadius = 12.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = ProductionUpdate Prod01
+            MaxQueueEntries = 3
+          End
+          Behavior = SupplyCenterProductionExitUpdate Exit01
+            UnitCreatePoint = X: 0.0 Y: 0.0 Z: 0.0
+            NaturalRallyPoint = X: 20.0 Y: 0.0 Z: 0.0
+          End
+          Behavior = SpawnBehavior Spawn01
+            SpawnNumber = 1
+            SpawnReplaceDelay = 9999
+            SpawnTemplateName = AlphaTruck
+            OneShot = Yes
+            CanReclaimOrphans = No
+            SlavesHaveFreeWill = Yes
+          End
+          Behavior = SupplyCenterDockUpdate Dock01
+            NumberApproachPositions = 4
+          End
+          Behavior = SupplyCenterCreate Create01
+          End
+        End
+        Object AlphaTruck
+          Side = Alpha
+          KindOf = SELECTABLE VEHICLE HARVESTER
+          BuildCost = 10
+          BuildTime = 1
+          Locomotor = SET_NORMAL SkirmishLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = SupplyTruckAIUpdate AI01
+            MaxBoxes = 2
+            SupplyCenterActionDelay = 100
+            SupplyWarehouseActionDelay = 100
+            SupplyWarehouseScanDistance = 400.0
+          End
+        End
+        Object NeutralDepot
+          KindOf = STRUCTURE SUPPLY_SOURCE
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 10.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 500.0
+            InitialHealth = 500.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = SupplyWarehouseDockUpdate Dock01
+            NumberApproachPositions = 4
+            StartingBoxes = 500
+          End
+          Behavior = SupplyWarehouseCreate Create01
+          End
+        End
+        CommandButton Cmd_AlphaTruck
+          Command = UNIT_BUILD
+          Object = AlphaTruck
+        End
+        CommandSet AlphaSupplySet
+          1 = Cmd_AlphaTruck
+        End
+        """;
+
+    /// <summary>
+    /// <c>checkForSupplyCenter</c>, <c>queueSupplyTruck</c>, <c>onUnitProduced</c>: a centre wants the gatherers of the side and level plus the one it comes with, each is sent to it and remembers
+    /// it as its dock, and when the centre is gone and another stands the loose gatherers are taken back one by one instead of new ones trained. Before, the gatherers had no dock of their own.
+    /// </summary>
+    public static void OriginalAiKeepsItsGatherersPerCentre()
+    {
+        var library = AiLibraryWithAlphaScripts(Scr.Script("A Supply", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SKIRMISH_BUILD_BUILDING", Scr.Type("AlphaSupplyCenter"))], oneShot: true));
+        var (session, fixture, terrain, map, _, data) = StartAiVariant(AiDataWithAlphaStructure("AlphaSupplyCenter"), AiSupplyObjects, library);
+        Check.That(fixture.Templates.TryGet("NeutralDepot", out var depot), "The fixture has the depot.");
+        session.World.RequestSpawn(depot.Index, new PlayerId(0), Fixed.FromInt(100), Fixed.FromInt(345), Fixed.Zero, Fixed.Zero);
+        var player = new PlayerId(1);
+        ImmutableArray<Entity> Trucks() => [..session.World.Entities.Where(entity => entity.Owner == player && entity.Template.Name == "AlphaTruck" && !entity.EffectivelyDead)];
+        StepFrames(session, 900);
+        var centres = session.Engine.AiSupplyCentersOf(player);
+        Check.That(centres.Length == 1 && centres[0] is { Desired: 4, Current: 4 }, $"The hard army's centre wants three gatherers and the one it comes with ({string.Join(", ", centres)}).");
+        var centre = centres[0].ObjectId;
+        Check.That(Trucks().Length == 4, $"It has them ({Trucks().Length}).");
+        Check.That(Trucks().All(truck => ScriptEngine.PreferredDockOf(truck)?.Value == centre), $"Each remembers the centre as its dock ({string.Join(", ", Trucks().Select(truck => ScriptEngine.PreferredDockOf(truck)?.Value))}).");
+        Check.That(session.World.MoneyOf(player) > Fixed.FromInt(1_800), $"They bring money ({session.World.MoneyOf(player)}).");
+
+        // Saved here, the rest of the test runs on the restored session.
+        var restored = ScriptedSkirmishSession.Restore(session.Save(), fixture.Templates, fixture.Fingerprint, terrain, map, library, data);
+        Check.That(restored.StateHash() == session.StateHash(), "Orders and counts are part of the state.");
+        session = restored;
+
+        var trucks = Trucks().Length;
+        session.World.Kill(new CnCNew.Simulation.Ids.EntityId(centre));
+        StepFrames(session, 1_200);
+        var rebuilt = session.Engine.AiSupplyCentersOf(player).Single();
+        Check.That(rebuilt.ObjectId != 0 && rebuilt.ObjectId != centre && CountOwned(session, 1, "AlphaSupplyCenter") == 1, $"The centre is rebuilt ({rebuilt}).");
+        Check.That(Trucks().Count(truck => ScriptEngine.PreferredDockOf(truck)?.Value == rebuilt.ObjectId) >= trucks && rebuilt.Current >= trucks,
+            $"The loose gatherers are back at the new centre ({string.Join(", ", Trucks().Select(truck => ScriptEngine.PreferredDockOf(truck)?.Value))}, {rebuilt}).");
+    }
+
+    private const string AiYardObjects = """
+        Upgrade Upgrade_AlphaDrill
+          Type = PLAYER
+          BuildTime = 1.0
+          BuildCost = 50
+        End
+        Object AlphaYard
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE
+          BuildCost = 60
+          BuildTime = 1
+          CommandSet = AlphaYardSet
+          Geometry = BOX
+          GeometryMajorRadius = 10.0
+          GeometryMinorRadius = 10.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 300.0
+            InitialHealth = 300.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = ProductionUpdate Prod01
+            MaxQueueEntries = 3
+          End
+        End
+        Object AlphaGuard
+          Side = Alpha
+          KindOf = SELECTABLE INFANTRY
+          BuildCost = 25
+          BuildTime = 1
+          Locomotor = SET_NORMAL SkirmishLoco
+          Body = ActiveBody Body01
+            MaxHealth = 80.0
+            InitialHealth = 80.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = AIUpdateInterface AI01
+          End
+        End
+        CommandButton Cmd_AlphaGuard
+          Command = UNIT_BUILD
+          Object = AlphaGuard
+        End
+        CommandButton Cmd_AlphaDrill
+          Command = PLAYER_UPGRADE
+          Upgrade = Upgrade_AlphaDrill
+        End
+        CommandSet AlphaYardSet
+          1 = Cmd_AlphaGuard
+          2 = Cmd_AlphaDrill
+        End
+        """;
+
+    /// <summary>
+    /// <c>findFactory</c> and <c>buildUpgrade</c> walk the build list: a production building of the player that the list does not hold is no factory of the AI. A team waits for it, and so does an
+    /// upgrade, until a building of the list can do the work. Before, every production building of the player counted.
+    /// </summary>
+    public static void OriginalAiLooksForFactoriesInItsBuildList()
+    {
+        var team = new MapProperties(
+        [
+            Scr.Text("teamName", "A Guards"), Scr.Text("teamOwner", "SkirmishAlpha"), Scr.Flag("teamIsSingleton", false), IntProperty("teamMaxInstances", 1),
+            Scr.Text("teamUnitType1", "AlphaGuard"), IntProperty("teamUnitMinCount1", 1), IntProperty("teamUnitMaxCount1", 1),
+            Scr.Text("teamProductionCondition", "A Guards Condition"), IntProperty("teamProductionPriority", 5),
+        ]);
+        MapScript[] Scripts(params MapScriptAction[] actions) =>
+        [
+            Scr.Script("A Guards Condition", [Scr.And(Scr.If("CONDITION_TRUE"))], [], subroutine: true),
+            Scr.Script("A Drill", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("AI_PLAYER_BUILD_UPGRADE", Scr.Side("SkirmishAlpha"), Scr.Named(MapScriptParameterType.Upgrade, "Upgrade_AlphaDrill"))]),
+            Scr.Script("A Start", [Scr.And(Scr.If("CONDITION_TRUE"))], actions, oneShot: true),
+        ];
+        var data = AiDataWithAlphaStructure("AlphaYard");
+
+        var (outside, fixture, _, _, _, _) = StartAiVariant(data, AiYardObjects, AiLibraryWithAlpha(Scripts(), [team]));
+        Check.That(fixture.Templates.TryGet("AlphaYard", out var yard), "The fixture has the yard.");
+        Check.That(fixture.Templates.Upgrades.TryGet("Upgrade_AlphaDrill", out var drill), "The fixture has the upgrade.");
+        outside.World.RequestSpawn(yard.Index, new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(330), Fixed.Zero, Fixed.Zero);
+        StepFrames(outside, 900);
+        Check.That(CountOwned(outside, 1, "AlphaYard") == 1 && CountOwned(outside, 1, "AlphaGuard") == 0, $"A yard the build list does not hold trains nothing for the AI ({CountOwned(outside, 1, "AlphaGuard")}).");
+        Check.That(!outside.World.PlayerUpgrades(new PlayerId(1)).Has(drill.Index), "Nor does it research.");
+
+        var (listed, _, _, _, _, _) = StartAiVariant(data, AiYardObjects, AiLibraryWithAlpha(Scripts(Scr.Do("SKIRMISH_BUILD_BUILDING", Scr.Type("AlphaYard"))), [team]));
+        StepFrames(listed, 900);
+        Check.That(CountOwned(listed, 1, "AlphaGuard") == 1, $"The yard of the build list trains the team ({CountOwned(listed, 1, "AlphaGuard")}).");
+        Check.That(listed.World.PlayerUpgrades(new PlayerId(1)).Has(drill.Index), "And researches the upgrade.");
     }
 }

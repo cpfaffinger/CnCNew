@@ -20,7 +20,7 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary><c>Object::canProduceUpgrade</c>: a button of the producer's command sets researches the upgrade (every set a <c>CommandSetUpgrade</c> can switch to counts).</summary>
-    private bool OffersUpgrade(Entity producer, UpgradeInfo info)
+    public bool OffersUpgrade(Entity producer, UpgradeInfo info)
     {
         foreach (var set in producer.Template.CommandSets)
             foreach (var name in _templates.Commands.UpgradesOf(set))

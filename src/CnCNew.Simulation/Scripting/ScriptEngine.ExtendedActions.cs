@@ -33,6 +33,8 @@ public sealed partial class ScriptEngine
         public long Started;
         /// <summary><c>TeamInQueue::m_reinforcementID</c>: the trained unit of a reinforcement, to be sent after its team at the next update (0: none yet).</summary>
         public uint Recruit;
+        /// <summary><c>WorkOrder::m_factoryID</c> of an AI player's order: where the unit is being trained (0: nowhere).</summary>
+        public uint Factory;
     }
 
     private readonly List<TeamBuildOrder> _teamBuilds = [];
@@ -377,9 +379,8 @@ public sealed partial class ScriptEngine
         {
             if (order.Queued >= order.Total || !_teams.TryGetValue(order.TeamId, out var team)) continue;
             var owner = team.Owner;
-            // A reinforcement looked for a recruit when it was chosen (around the team, not around the base); what is left is to train the one unit.
-            if (!order.Reinforcement && AiRecruitsFor(order, team)) continue;
-            if (AiHoldsUnitOrders(owner)) continue;
+            // The orders of an AI player wait for queueUnits (AiPlayer: QueueUnits).
+            if (_ai.Count > 0 && AiOfPlayer(owner) is not null) continue;
             Entity? best = null;
             var bestBusy = true;
             // Nothing in this walk changes the world (the order is issued after it), so the owner's list is read in place.
@@ -425,6 +426,7 @@ public sealed partial class ScriptEngine
             && _teams.TryGetValue(candidate.TeamId, out var team) && team.Owner == unit.Owner);
         if (order is null || !_teams.TryGetValue(order.TeamId, out var joined)) return;
         order.Joined++;
+        order.Factory = 0;
         if (!joined.Members.Contains(unit.Id.Value)) joined.Members.Add(unit.Id.Value);
         if (joined.AttackPriority.Length > 0) _prioritySetOf[unit.Id.Value] = joined.AttackPriority;
         // A trained reinforcement is sent after its team by the next update (ProcessTeamBuilds), on the frame grid, as checkReadyTeams does it; its order stays until then.
@@ -452,6 +454,7 @@ public sealed partial class ScriptEngine
             writer.Int("joined", order.Joined);
             writer.Bool("factoryMissing", order.FactoryMissing);
             if (order.IdleOnly) writer.Bool("idleOnly", true);
+            if (order.Factory != 0) writer.UInt("factory", order.Factory);
             if (order.Reinforcement)
             {
                 writer.Bool("reinforcement", true);
@@ -474,7 +477,7 @@ public sealed partial class ScriptEngine
                 Queued = checked((int)item.Int("queued")), Joined = checked((int)item.Int("joined")), FactoryMissing = item.Bool("factoryMissing"),
                 IdleOnly = item.Has("idleOnly") && item.Bool("idleOnly"),
                 Reinforcement = item.Has("reinforcement") && item.Bool("reinforcement"), Started = item.Has("started") ? item.Int("started") : 0,
-                Recruit = item.Has("recruit") ? checked((uint)item.UInt("recruit")) : 0,
+                Recruit = item.Has("recruit") ? checked((uint)item.UInt("recruit")) : 0, Factory = item.Has("factory") ? checked((uint)item.UInt("factory")) : 0,
             });
     }
 }

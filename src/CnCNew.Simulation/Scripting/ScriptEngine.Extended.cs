@@ -18,6 +18,7 @@ public sealed partial class ScriptEngine
     private static readonly int DetectedBit = ObjectStatusBits.Index("DETECTED");
     private static readonly int DisguisedBit = ObjectStatusBits.Index("DISGUISED");
     private static readonly int UnderConstructionBit = ObjectStatusBits.UnderConstruction;
+    private static readonly int SoldBit = ObjectStatusBits.Index("SOLD");
 
     /// <summary><c>Player::setAttackedBy</c> (<c>ActiveBody::attemptDamage</c>): the pairs (victim owner, attacker owner) that ever happened, never reset.</summary>
     private readonly SortedSet<(int Victim, int Attacker)> _attackedBy = [];

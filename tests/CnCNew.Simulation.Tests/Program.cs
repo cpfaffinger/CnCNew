@@ -573,6 +573,8 @@ run.Test("Original skirmish AI: saved at any tick, also inside a frame at 60 and
 run.Test("Original skirmish AI: the first open priority entry is taken, and what lacks a prerequisite holds the ones behind it", Tests.OriginalAiWaitsForTheFirstOpenPriorityEntry);
 run.Test("Original skirmish AI: a dozer that cannot reach a building place is moved there", Tests.OriginalAiMovesADozerThatCannotReachTheSite);
 run.Test("Original skirmish AI: its map is shrouded and it builds on ground it has not seen", Tests.OriginalAiBuildsOnGroundItHasNotSeen);
+run.Test("Original skirmish AI: gatherers per centre, with the centre as their dock", Tests.OriginalAiKeepsItsGatherersPerCentre);
+run.Test("Original skirmish AI: a factory is what the build list holds", Tests.OriginalAiLooksForFactoriesInItsBuildList);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Session state: the state of SkirmishAi names every field", Tests.SkirmishAiStateNamesEveryField);
 run.Test("Session state: SkirmishAi never acts in the order of a hash table", Tests.SkirmishAiNeverActsInTheOrderOfAHashTable);

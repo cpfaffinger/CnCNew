@@ -75,6 +75,19 @@ public sealed partial class ScriptEngine
         public long PendingUntil;
         public bool IsSupply;
         public int DesiredGatherers;
+        /// <summary><c>BuildListInfo::getCurrentGatherers</c>: -1 until the first one, the one a supply centre comes with, is accounted for.</summary>
+        public int CurrentGatherers;
+    }
+
+    /// <summary>
+    /// A unit the AI orders for itself: <c>queueDozer</c> and <c>queueSupplyTruck</c> put a <c>TeamInQueue</c> with one <c>WorkOrder</c> for the default team at the head of the queue, with
+    /// a busy factory good enough. <see cref="Factory"/> is <c>m_factoryID</c>: the unit is on its way there; the supply centre's first gatherer needs no training, only the order that takes it.
+    /// </summary>
+    private sealed class AiUnitOrder
+    {
+        public string Template = string.Empty;
+        public bool Gatherer;
+        public uint Factory;
     }
 
     private sealed class AiPlayer(ScriptAiPlayerSetup setup)
@@ -95,8 +108,8 @@ public sealed partial class ScriptEngine
         public int Enemy = -1;
         public long EnemyCheckTick;
         public int SkillSet = AiNoSkillSet;
-        /// <summary>A dozer or gatherer is wanted and could not be paid: team units wait (the reference puts such an order at the head of the build queue as a priority build).</summary>
-        public bool HoldUnitOrders;
+        /// <summary>The orders of <see cref="AiUnitOrder"/>, newest first.</summary>
+        public readonly List<AiUnitOrder> UnitOrders = [];
         public int FrontDefense;
         public int FlankDefense;
         // m_curFrontLeft/Right, m_curLeftFlankLeft/Right, m_curRightFlankLeft/Right defence angles.
@@ -115,6 +128,9 @@ public sealed partial class ScriptEngine
     /// <summary>Per team instance the generic script hooks that are done (bit per hook): <c>Team::m_shouldAttemptGenericScript</c>, inverted so that an untouched team stores nothing.</summary>
     private readonly SortedDictionary<int, int> _genericDone = [];
     private AiPlayer? _aiCurrent;
+    // The dozer and gatherer types in catalog order, looked up once; not state.
+    private ImmutableArray<ObjectTemplate> _aiDozerTemplates;
+    private ImmutableArray<ObjectTemplate> _aiHarvesterTemplates;
 
     /// <summary>Whether this engine runs the original skirmish AI for any player.</summary>
     public bool HasAiPlayers => _ai.Count > 0;
@@ -143,7 +159,12 @@ public sealed partial class ScriptEngine
         return result.ToImmutable();
     }
 
-    private bool AiHoldsUnitOrders(PlayerId player) => _ai.Count > 0 && AiOfPlayer(player) is { HoldUnitOrders: true };
+    /// <summary>Each supply centre of an AI player's build list: its object, the gatherers it wants and the ones it has; for tools and tests.</summary>
+    public ImmutableArray<(uint ObjectId, int Desired, int Current)> AiSupplyCentersOf(PlayerId player)
+        => AiOfPlayer(player) is { } state ? [..state.BuildList.Where(entry => entry.IsSupply).Select(entry => (entry.ObjectId, entry.DesiredGatherers, entry.CurrentGatherers))] : [];
+
+    /// <summary>The dock a supply gatherer remembers (<c>getPreferredDockID</c>), if the object is one; for tools and tests.</summary>
+    public static EntityId? PreferredDockOf(Entity entity) => AiOf(entity) is ISupplyCarrier carrier ? carrier.PreferredDock : null;
 
     private void InitializeAi()
     {
@@ -379,9 +400,43 @@ public sealed partial class ScriptEngine
         if (_ai.Count == 0 || AiOfPlayer(entity.Owner) is not { } state) return;
         state.TeamCheckTick = _tick;
         if (entity.Template.IsKindOf("STRUCTURE")) return;
+        // "factory could be null at the start of the game."
+        if (entity.SpawnTick > 0) AiUnitProduced(state, entity);
         // A unit that no team asked for belongs to the player's default team (every object of the reference has a team; recruiting takes from there).
         if (FirstTeamOf(entity.Id.Value) is not null) return;
         if (PlayerById(state.Setup.Player) is { } owner && FindTeamInstance("team" + owner.Name) is { } defaultTeam) defaultTeam.Members.Add(entity.Id.Value);
+    }
+
+    /// <summary>
+    /// The half of <c>AIPlayer::onUnitProduced</c> for the orders of <see cref="AiUnitOrder"/>. A gatherer gets to work and is sent to every centre that lacks one, so it ends at the last of them. A
+    /// dozer no gatherer order asked for looks at the base at once. The reference matches an order by factory and type; an object here does not say where it comes from, so by type.
+    /// </summary>
+    private void AiUnitProduced(AiPlayer state, Entity unit)
+    {
+        var gatherer = false;
+        for (var index = 0; index < state.UnitOrders.Count; index++)
+        {
+            var order = state.UnitOrders[index];
+            if (order.Factory == 0 || !string.Equals(order.Template, unit.Template.Name, StringComparison.Ordinal)) continue;
+            gatherer = order.Gatherer;
+            state.UnitOrders.RemoveAt(index);
+            if (AiOf(unit) is ISupplyCarrier carrier)
+            {
+                carrier.SetForceWanting(_world, gatherer);
+                if (gatherer)
+                    foreach (var entry in state.BuildList)
+                    {
+                        if (!entry.IsSupply || entry.DesiredGatherers <= 0 || entry.DesiredGatherers <= entry.CurrentGatherers) continue;
+                        if (entry.ObjectId == 0 || _world.FindEntity(new EntityId(entry.ObjectId)) is not { } center) continue;
+                        entry.CurrentGatherers++;
+                        DockAt(state.Setup.Player, unit, center);
+                    }
+            }
+            break;
+        }
+        if (gatherer || !unit.Template.IsKindOf("DOZER")) return;
+        state.BuildCheckTick = _tick;
+        state.StructureReadyTick = _tick + _world.Time.OriginalFrames(1);
     }
 
     // ------------------------------------------------------------------------------------------------ base building
@@ -632,42 +687,119 @@ public sealed partial class ScriptEngine
         return closest ?? any;
     }
 
-    /// <summary><c>AIPlayer::queueDozer</c>: unless one is in production already, the first dozer type a factory of the player can make is ordered.</summary>
-    private void QueueDozer(AiPlayer state) => QueueFirstOfKind(state, "DOZER");
-
-    private bool QueueFirstOfKind(AiPlayer state, string kind)
+    /// <summary>
+    /// <c>AIPlayer::queueDozer</c>: unless a dozer is ordered already, the first dozer type with a factory goes to the head of the queue. (The reference also turns unit production on for this
+    /// one order when a script has switched it off; the world's command does not know that.)
+    /// </summary>
+    private void QueueDozer(AiPlayer state)
     {
-        var player = state.Setup.Player;
-        var factories = new List<(Entity Entity, ProductionUpdate Production)>();
-        foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
+        if (DozerInQueue(state)) return;
+        foreach (var template in TemplatesOfKind(ref _aiDozerTemplates, "DOZER"))
         {
-            if (!Counts(entity) || entity.HasStatus(UnderConstructionBit) || ProductionOf(entity) is not { } production) continue;
-            foreach (var item in production.Queue)
-                if (!item.IsUpgrade && _world.Templates.Templates[item.TemplateIndex].IsKindOf(kind)) return false;
-            if (production.HasRoom) factories.Add((entity, production));
+            if (FindFactory(state, template, busyOk: true) is null) continue;
+            var order = new AiUnitOrder { Template = template.Name };
+            state.UnitOrders.Insert(0, order);
+            state.TeamCheckTick = _tick;
+            StartTraining(state, order, busyOk: true);
+            return;
         }
-        // The reference walks every template and asks each factory whether it can make it (isPossibleToMakeUnit: a button of its command set); here the factories are asked for
-        // what their command sets build, in the order of the buttons.
-        foreach (var (factory, _) in factories)
-            foreach (var set in factory.Template.CommandSets)
-                foreach (var name in _world.Templates.Commands.BuildsOf(set))
-                {
-                    if (!_world.Templates.TryGet(name, out var template) || !template.IsKindOf(kind) || template.IsKindOf("STRUCTURE") || !template.IsInstantiable) continue;
-                    if (!_world.CanQueueProductionTemplate(player, factory.Id, template.Name)) continue;
-                    if (_world.MoneyOf(player) < _world.ProductionCostOf(player, template))
-                    {
-                        // A priority order of the reference waits at the head of the queue; here the team orders wait until this one is paid.
-                        state.HoldUnitOrders = true;
-                        return false;
-                    }
-                    var producer = factory.Id;
-                    var unit = template.Name;
-                    // The reference turns unit production on for this one order even when a script has switched it off.
-                    state.HoldUnitOrders = false;
-                    return _issue(player, (sequence, tick) => new QueueProductionCommand(player, sequence, tick, producer, unit)).Accepted;
-                }
+    }
+
+    /// <summary><c>AIPlayer::dozerInQueue</c>, <c>TeamInQueue::includesADozer</c>: GLA workers are gatherers too, and an order for a gatherer is no dozer.</summary>
+    private bool DozerInQueue(AiPlayer state)
+    {
+        foreach (var order in state.UnitOrders)
+            if (!order.Gatherer && _world.Templates.TryGet(order.Template, out var template) && template.IsKindOf("DOZER")) return true;
+        foreach (var order in _teamBuilds)
+            if (order.Joined < order.Total && _teams.TryGetValue(order.TeamId, out var team) && team.Owner == state.Setup.Player && _world.Templates.TryGet(order.Type, out var unit) && unit.IsKindOf("DOZER")) return true;
         return false;
     }
+
+    /// <summary>The unit types of a kind in the order of the catalog, looked up once (the catalog never changes): the reference walks every template and asks for a factory.</summary>
+    private ImmutableArray<ObjectTemplate> TemplatesOfKind(ref ImmutableArray<ObjectTemplate> known, string kind)
+    {
+        if (!known.IsDefault) return known;
+        known = [.._world.Templates.Templates.Where(template => template.IsInstantiable && template.IsKindOf(kind) && !template.IsKindOf("STRUCTURE"))];
+        return known;
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::findFactory</c>: only what the build list holds is a factory of this AI. The first of its finished, unsold production buildings that can make the unit and is doing nothing,
+    /// else - when a busy one will do - the last busy one. An object that changed hands leaves the list.
+    /// </summary>
+    private Entity? FindFactory(AiPlayer state, ObjectTemplate thing, bool busyOk)
+    {
+        var player = state.Setup.Player;
+        Entity? busy = null;
+        foreach (var entry in state.BuildList)
+        {
+            if (entry.ObjectId == 0 || _world.FindEntity(new EntityId(entry.ObjectId)) is not { } factory) continue;
+            if (factory.Owner != player)
+            {
+                entry.ObjectId = 0;
+                continue;
+            }
+            if (factory.HasStatus(UnderConstructionBit) || factory.HasStatus(SoldBit) || ProductionOf(factory) is not { } production) continue;
+            // isPossibleToMakeUnit: a button of its command set, and the player may build it.
+            if (!_world.Templates.OffersBuild(factory.Template, thing.Name) || !_world.CanQueueProductionTemplate(player, factory.Id, thing.Name)) continue;
+            if (production.Queue.Length == 0) return factory;
+            if (busyOk) busy = factory;
+        }
+        return busy;
+    }
+
+    /// <summary><c>AIPlayer::startTraining</c>: a factory is found and the unit queued, which the money can refuse.</summary>
+    private bool StartTraining(AiPlayer state, AiUnitOrder order, bool busyOk)
+    {
+        if (!_world.Templates.TryGet(order.Template, out var template) || FindFactory(state, template, busyOk) is not { } factory) return false;
+        var player = state.Setup.Player;
+        var producer = factory.Id;
+        var unit = template.Name;
+        if (!_issue(player, (sequence, tick) => new QueueProductionCommand(player, sequence, tick, producer, unit)).Accepted) return false;
+        order.Factory = producer.Value;
+        return true;
+    }
+
+    /// <summary>
+    /// <c>AIPlayer::queueUnits</c> at its pace (every two seconds, at once when something was produced): first what the AI wants for itself, then the teams being built. A team's order takes a
+    /// recruit if there is one, trains one unit at a time, at an idle factory unless a script asked for the team, and a factory that is gone is forgotten (<c>validateFactory</c>).
+    /// </summary>
+    private void QueueUnits(AiPlayer state)
+    {
+        QueueSupplyTruck(state);
+        var player = state.Setup.Player;
+        foreach (var order in state.UnitOrders.ToArray())
+        {
+            if (order.Factory != 0 && !OwnsFactory(player, order.Factory)) order.Factory = 0;
+            if (order.Factory == 0) StartTraining(state, order, busyOk: true);
+        }
+        foreach (var order in _teamBuilds)
+        {
+            if (!_teams.TryGetValue(order.TeamId, out var team) || team.Owner != player) continue;
+            if (order.Factory != 0 && !OwnsFactory(player, order.Factory))
+            {
+                order.Factory = 0;
+                order.Queued = order.Joined;
+            }
+            if (order.Queued >= order.Total) continue;
+            // A reinforcement looked for a recruit when it was chosen (around the team, not around the base); what is left is to train the one unit.
+            if (!order.Reinforcement && AiRecruitsFor(order, team)) continue;
+            if (!_world.Templates.TryGet(order.Type, out var template)) continue;
+            if (FindFactory(state, template, busyOk: !order.IdleOnly) is not { } factory)
+            {
+                if (!order.IdleOnly && !order.FactoryMissing) { order.FactoryMissing = true; Diagnose($"BUILD_TEAM: no factory for '{order.Type}'"); }
+                continue;
+            }
+            order.FactoryMissing = false;
+            var producer = factory.Id;
+            var unit = template.Name;
+            if (!_issue(player, (sequence, tick) => new QueueProductionCommand(player, sequence, tick, producer, unit)).Accepted) continue;
+            order.Queued++;
+            order.Factory = producer.Value;
+        }
+    }
+
+    private bool OwnsFactory(PlayerId player, uint factory) => _world.FindEntity(new EntityId(factory)) is { } found && found.Owner == player;
 
     // ------------------------------------------------------------------------------------------------ supplies
 
@@ -676,6 +808,8 @@ public sealed partial class ScriptEngine
     {
         if (ModuleOf<SupplyCenterDockUpdate>(building) is null) return;
         entry.IsSupply = true;
+        entry.CurrentGatherers = -1;
+        // "Get a freebie with the supply depots."
         entry.DesiredGatherers = GatherersWanted(state) + 1;
     }
 
@@ -691,49 +825,93 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AIPlayer::queueSupplyTruck</c>, reduced to its effect: every finished supply centre of the player that still has a stocked, non-hostile warehouse within <c>SUPPLY_CENTER_CLOSE_DIST</c>
-    /// wants its gatherers; while the player has fewer than all centres want and none is in production, one is ordered. A gatherer that stands idle is sent to the nearest stocked warehouse
-    /// (the reference re-docks it at its centre, which starts the same loop). Centres are found in the world, not only in the build list: the scripts place them by the supplies
-    /// (<c>AI_PLAYER_BUILD_SUPPLY_CENTER</c>).
+    /// <c>AIPlayer::queueSupplyTruck</c>, for every supply centre of the build list. One that has its gatherers looks whether supplies are left beside it: if so its count starts over from what
+    /// the gatherers remember as their dock, and one of them that stands around is sent back. One that lacks a gatherer takes a loose one (its dock was destroyed), else orders one, unless
+    /// the player has three times what the centre wants; the first order takes the gatherer the centre comes with and trains nothing. One order at a time.
     /// </summary>
     private void QueueSupplyTruck(AiPlayer state)
     {
+        foreach (var order in state.UnitOrders)
+            if (order.Gatherer) return;
         var player = state.Setup.Player;
-        var close = Fixed.FromDecimal(SupplyCenterCloseDistance);
-        var warehouses = new List<Entity>();
-        foreach (var entity in _world.Entities)
-        {
-            if (entity.EffectivelyDead || entity.DestroyRequested || ModuleOf<SupplyWarehouseDockUpdate>(entity) is not { Boxes: > 0 }) continue;
-            if (!entity.Owner.IsSystem && _world.AreEnemies(player, entity.Owner)) continue;
-            warehouses.Add(entity);
-        }
-        var wanted = 0;
-        var harvesters = new List<Entity>();
+        var harvesters = new List<(Entity Unit, ISupplyCarrier Carrier)>();
         foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
+            if (Counts(entity) && entity.Template.IsKindOf("HARVESTER") && AiOf(entity) is ISupplyCarrier carrier) harvesters.Add((entity, carrier));
+        foreach (var entry in state.BuildList)
         {
-            if (!Counts(entity) || entity.HasStatus(UnderConstructionBit)) continue;
-            if (entity.Template.IsKindOf("HARVESTER") && AiOf(entity) is ISupplyCarrier) harvesters.Add(entity);
-            if (ModuleOf<SupplyCenterDockUpdate>(entity) is null || entity.Template.IsKindOf("REBUILD_HOLE")) continue;
-            var reach = SquaredReach.Of(close + entity.Template.BoundingCircleRadius);
-            if (warehouses.Any(warehouse => reach.Contains(Distance2(warehouse, entity.X, entity.Y)))) wanted += GatherersWanted(state) + 1;
-        }
-        if (warehouses.Count == 0) return;
-        foreach (var harvester in harvesters)
-        {
-            if (!IsIdle(harvester) || AiOf(harvester) is not { } ai || ai.IsBuilding || ai.IsDocking) continue;
-            Entity? nearest = null;
-            var best = Fixed.MaxValue;
-            foreach (var warehouse in warehouses)
+            if (!entry.IsSupply) continue;
+            var center = entry.ObjectId != 0 ? _world.FindEntity(new EntityId(entry.ObjectId)) : null;
+            if (entry.CurrentGatherers >= entry.DesiredGatherers)
             {
-                var distance = Distance2(warehouse, harvester.X, harvester.Y);
-                if (distance < best) { best = distance; nearest = warehouse; }
+                if (center is null || center.Template.IsKindOf("REBUILD_HOLE") || !HasSuppliesBeside(player, center)) continue;
+                CheckForSupplyCenter(state, entry, center);
+                var current = 0;
+                foreach (var (unit, carrier) in harvesters)
+                {
+                    if (carrier.PreferredDock != center.Id) continue;
+                    current++;
+                    if (!carrier.IsFerrying) DockAt(player, unit, center);
+                }
+                entry.CurrentGatherers = current;
+                continue;
             }
-            if (nearest is null) continue;
-            var actor = harvester.Id;
-            var dock = nearest.Id;
-            if (_issue(player, (sequence, tick) => new DockCommand(player, sequence, tick, actor, dock)).Accepted) _busyThisTick.Add(actor.Value);
+            foreach (var (unit, carrier) in harvesters)
+            {
+                if (carrier.PreferredDock.IsValid && _world.FindEntity(carrier.PreferredDock) is not null) continue;
+                if ((carrier.IsFerrying || carrier.IsForcedWanting) && center is not null)
+                {
+                    // "Re-attaching supply truck to supply center."
+                    entry.CurrentGatherers++;
+                    DockAt(player, unit, center);
+                    return;
+                }
+            }
+            if (harvesters.Count >= entry.DesiredGatherers * 3) continue;
+            foreach (var template in TemplatesOfKind(ref _aiHarvesterTemplates, "HARVESTER"))
+            {
+                if (FindFactory(state, template, busyOk: false) is not { } factory) continue;
+                var order = new AiUnitOrder { Template = template.Name, Gatherer = true };
+                state.UnitOrders.Insert(0, order);
+                state.TeamCheckTick = _tick;
+                if (entry.CurrentGatherers == -1)
+                {
+                    // "First one is automatic."
+                    order.Factory = factory.Id.Value;
+                    entry.CurrentGatherers = 0;
+                }
+                else StartTraining(state, order, busyOk: true);
+                break;
+            }
         }
-        if (harvesters.Count < wanted) QueueFirstOfKind(state, "HARVESTER");
+    }
+
+    /// <summary>The closest source of supplies beside a centre (<c>SUPPLY_CENTER_CLOSE_DIST</c> from its circle to the source's, not one of the player's own) has boxes and is not an enemy's.</summary>
+    private bool HasSuppliesBeside(PlayerId player, Entity center)
+    {
+        var reach = Fixed.FromDecimal(SupplyCenterCloseDistance) + center.Template.BoundingCircleRadius;
+        Entity? closest = null;
+        var nearest = Fixed.MaxValue;
+        foreach (var source in _world.EntitiesOfKind("SUPPLY_SOURCE").AsSpan())
+        {
+            if (source.Owner == player || source.EffectivelyDead || source.DestroyRequested) continue;
+            var distance = Distance2(source, center.X, center.Y);
+            if (!SquaredReach.Of(reach + source.Template.BoundingCircleRadius).Contains(distance)) continue;
+            var gap = Fixed.Sqrt(distance) - source.Template.BoundingCircleRadius;
+            if (gap >= nearest) continue;
+            nearest = gap;
+            closest = source;
+        }
+        if (closest is null) return false;
+        if (ModuleOf<SupplyWarehouseDockUpdate>(closest) is not { } warehouse) return true;
+        return warehouse.Boxes > 0 && !(!closest.Owner.IsSystem && _world.AreEnemies(player, closest.Owner));
+    }
+
+    /// <summary>"Although this is the ai, we are sending in CMD_FROM_PLAYER": the dock is the one the gatherer remembers from now on.</summary>
+    private void DockAt(PlayerId player, Entity unit, Entity dock)
+    {
+        var actor = unit.Id;
+        var target = dock.Id;
+        if (_issue(player, (sequence, tick) => new DockCommand(player, sequence, tick, actor, target)).Accepted) _busyThisTick.Add(actor.Value);
     }
 
     // ------------------------------------------------------------------------------------------------ teams
@@ -742,15 +920,14 @@ public sealed partial class ScriptEngine
     private void DoTeamBuilding(AiPlayer state)
     {
         if (!_world.CanBuildUnits(state.Setup.Player)) return;
-        if (_tick >= state.TeamCheckTick) state.HoldUnitOrders = false;
         if (!state.ReadyTeam && _tick >= state.TeamReadyTick)
         {
             state.ReadyTeam = true;
             state.TeamCheckTick = _tick;
         }
         if (_tick < state.TeamCheckTick) return;
-        QueueSupplyTruck(state);
-        if (state.ReadyTeam) SelectTeamToBuild(state);
+        QueueUnits(state);
+        if (state.ReadyTeam && SelectTeamToBuild(state)) QueueUnits(state);
         state.TeamCheckTick = _tick + _world.Time.OriginalFrames(AiRecheckFrames);
     }
 
@@ -760,9 +937,9 @@ public sealed partial class ScriptEngine
     /// team timer starts again (<c>TeamSeconds</c>, longer when poor, shorter when wealthy).
     /// <para>Before that <see cref="SelectTeamToReinforce"/> gets its turn, as in the reference.</para>
     /// </summary>
-    private void SelectTeamToBuild(AiPlayer state)
+    private bool SelectTeamToBuild(AiPlayer state)
     {
-        if (PlayerById(state.Setup.Player) is not { } owner) return;
+        if (PlayerById(state.Setup.Player) is not { } owner) return false;
         var data = _options.Ai!.Data;
         List<ScriptTeamPrototype>? candidates = null;
         var highest = NoTeamPriority;
@@ -774,13 +951,14 @@ public sealed partial class ScriptEngine
         }
         // "if (selectTeamToReinforce(hiPri)) return true": a team in the field that wants a unit comes before a new team of lower or equal priority.
         DropExpiredReinforcements();
-        if (SelectTeamToReinforce(state, owner, candidates is null ? NoTeamPriority : highest)) return;
-        if (candidates is null) return;
+        if (SelectTeamToReinforce(state, owner, candidates is null ? NoTeamPriority : highest)) return true;
+        if (candidates is null) return false;
         candidates.RemoveAll(prototype => prototype.ProductionPriority != highest);
         var pick = candidates[_world.LogicRandom.Range(0, candidates.Count - 1)];
         BuildTeam(pick.Name, idleOnly: true);
         state.ReadyTeam = false;
         state.TeamReadyTick = _tick + ScaledTimer(data.TeamSeconds, _world.MoneyOf(state.Setup.Player), data, data.TeamsPoorRate, data.TeamsWealthyRate);
+        return true;
     }
 
     /// <summary><c>AISkirmishPlayer::isAGoodIdeaToBuildTeam</c>: the production condition holds, fewer instances than <c>teamMaxInstances</c> exist, none is being built, and it is possible.</summary>
@@ -824,8 +1002,8 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AIPlayer::isPossibleToBuildTeam</c> with an idle factory required: a factory for every unit type, at least one of them idle, and cash for <c>TeamResourcesToStart</c> of the team's
-    /// mean cost.
+    /// <c>AIPlayer::isPossibleToBuildTeam</c> with an idle factory required: a factory of the build list for every unit type, at least one of them idle, and cash for
+    /// <c>TeamResourcesToStart</c> of the team's mean cost, in whole credits as the reference's integers have it.
     /// </summary>
     private bool IsPossibleToBuildTeam(AiPlayer state, ScriptTeamPrototype prototype)
     {
@@ -837,19 +1015,12 @@ public sealed partial class ScriptEngine
         {
             if (!_world.Templates.TryGet(unit.Type, out var template)) continue;
             any = true;
-            var factory = false;
-            foreach (var entity in _world.EntitiesOwnedBy(player).AsSpan())
-            {
-                if (!Counts(entity) || entity.HasStatus(UnderConstructionBit) || ProductionOf(entity) is not { } production) continue;
-                if (!_world.CanQueueProductionTemplate(player, entity.Id, unit.Type)) continue;
-                factory = true;
-                if (production.Queue.Length == 0) { anyIdle = true; break; }
-            }
-            if (!factory) return false;
-            cost += _world.ProductionCostOf(player, template) * Fixed.FromInt(unit.MaxCount + unit.MinCount) / Fixed.FromInt(2);
+            if (FindFactory(state, template, busyOk: true) is null) return false;
+            if (FindFactory(state, template, busyOk: false) is not null) anyIdle = true;
+            cost = Fixed.FromInt((cost + _world.ProductionCostOf(player, template) * Fixed.FromInt(unit.MaxCount + unit.MinCount) / Fixed.FromInt(2)).Floor());
         }
         if (!any) return false;
-        return _world.MoneyOf(player) >= cost * _options.Ai!.Data.TeamResourcesToStart && anyIdle;
+        return _world.MoneyOf(player) >= Fixed.FromInt((cost * _options.Ai!.Data.TeamResourcesToStart).Floor()) && anyIdle;
     }
 
     /// <summary>
@@ -1003,6 +1174,22 @@ public sealed partial class ScriptEngine
         }
         foreach (var science in side.SkillSets[state.SkillSet])
             if (_world.CanPurchaseScienceNow(player, science)) PurchaseScience(player, science);
+    }
+
+    /// <summary><c>AIPlayer::buildUpgrade</c>: with the money for it, at the first finished, unsold building of the build list whose command set offers the upgrade and that takes the order.</summary>
+    private void AiBuildUpgrade(AiPlayer state, UpgradeInfo upgrade)
+    {
+        var player = state.Setup.Player;
+        if (_world.MoneyOf(player) < upgrade.BuildCost) return;
+        foreach (var entry in state.BuildList)
+        {
+            if (entry.ObjectId == 0 || _world.FindEntity(new EntityId(entry.ObjectId)) is not { } factory) continue;
+            if (factory.HasStatus(UnderConstructionBit) || factory.HasStatus(SoldBit) || !_world.OffersUpgrade(factory, upgrade) || ProductionOf(factory) is null) continue;
+            var producer = factory.Id;
+            var name = upgrade.Name;
+            if (_issue(player, (sequence, tick) => new PurchaseUpgradeCommand(player, sequence, tick, name, producer)).Accepted) return;
+        }
+        Diagnose($"AI_PLAYER_BUILD_UPGRADE: player {player.Value} lacks a factory for '{upgrade.Name}'");
     }
 
     private void PurchaseScience(PlayerId player, string science) => _issue(player, (sequence, tick) => new PurchaseScienceCommand(player, sequence, tick, science));
@@ -1310,7 +1497,16 @@ public sealed partial class ScriptEngine
             writer.Int("enemy", state.Enemy);
             writer.Int("enemyCheckTick", state.EnemyCheckTick);
             writer.Int("skillSet", state.SkillSet);
-            writer.Bool("holdUnitOrders", state.HoldUnitOrders);
+            writer.BeginArray("unitOrders");
+            foreach (var order in state.UnitOrders)
+            {
+                writer.BeginObject(null);
+                writer.Text("template", order.Template);
+                writer.Bool("gatherer", order.Gatherer);
+                writer.UInt("factory", order.Factory);
+                writer.EndObject();
+            }
+            writer.EndArray();
             writer.Int("frontDefense", state.FrontDefense);
             writer.Int("flankDefense", state.FlankDefense);
             writer.BeginArray("defenseAngles");
@@ -1338,6 +1534,7 @@ public sealed partial class ScriptEngine
                 writer.Int("pendingUntil", entry.PendingUntil);
                 writer.Bool("supply", entry.IsSupply);
                 writer.Int("desiredGatherers", entry.DesiredGatherers);
+                writer.Int("currentGatherers", entry.CurrentGatherers);
                 writer.EndObject();
             }
             writer.EndArray();
@@ -1384,7 +1581,9 @@ public sealed partial class ScriptEngine
             state.Enemy = checked((int)item.Int("enemy"));
             state.EnemyCheckTick = item.Int("enemyCheckTick");
             state.SkillSet = checked((int)item.Int("skillSet"));
-            state.HoldUnitOrders = item.Bool("holdUnitOrders");
+            state.UnitOrders.Clear();
+            foreach (var order in item.Array("unitOrders"))
+                state.UnitOrders.Add(new AiUnitOrder { Template = order.Text("template"), Gatherer = order.Bool("gatherer"), Factory = checked((uint)order.UInt("factory")) });
             state.FrontDefense = checked((int)item.Int("frontDefense"));
             state.FlankDefense = checked((int)item.Int("flankDefense"));
             var index = 0;
@@ -1396,7 +1595,7 @@ public sealed partial class ScriptEngine
                     Template = entry.Text("template"), X = entry.Fixed("x"), Y = entry.Fixed("y"), Angle = entry.Fixed("angle"), Rebuilds = checked((int)entry.Int("rebuilds")),
                     Automatic = entry.Bool("automatic"), Priority = entry.Bool("priority"), ObjectId = checked((uint)entry.UInt("object")), Timestamp = entry.Int("timestamp"),
                     UnderConstruction = entry.Bool("underConstruction"), PendingUntil = entry.Int("pendingUntil"), IsSupply = entry.Bool("supply"),
-                    DesiredGatherers = checked((int)entry.Int("desiredGatherers")),
+                    DesiredGatherers = checked((int)entry.Int("desiredGatherers")), CurrentGatherers = checked((int)entry.Int("currentGatherers")),
                 });
         }
         _productionNextTick.Clear();
