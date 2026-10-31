@@ -56,10 +56,17 @@ public sealed partial class ScriptEngine
             case "NAMED_SET_REPULSOR":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } repulsive) _world.SetRepulsor(repulsive, Int(p, 1) != 0);
                 return true;
-            // doSetBaseConstructionSpeed (the AI's delay between teams): no consumer.
+            // updateBaseConstructionSpeed -> AIPlayer::setTeamDelaySeconds. Read by the original AI's team timer; a mission's computer player has no AIPlayer here, the value stays recorded.
             case "SET_BASE_CONSTRUCTION_SPEED":
-                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } builder) _recordedSettings[type + "|" + builder.Id.Value] = Int(p, 1);
-                _recordedActions++;
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } builder)
+                {
+                    if (AiOfPlayer(builder.Id) is { } teamTimer) teamTimer.TeamSeconds = Int(p, 1);
+                    else
+                    {
+                        _recordedSettings[type + "|" + builder.Id.Value] = Int(p, 1);
+                        _recordedActions++;
+                    }
+                }
                 return true;
             default:
                 return TryExecutePhase13Action(action);

@@ -102,6 +102,8 @@ public sealed partial class ScriptEngine
         public bool ReadyStructure;
         /// <summary>The tick the team (structure) timer of the reference runs out, and the tick of the next look at the queues: deadlines instead of the reference's counters.</summary>
         public long TeamReadyTick;
+        /// <summary><c>AIPlayer::m_teamSeconds</c> when a script set it (<c>SET_BASE_CONSTRUCTION_SPEED</c>); otherwise <c>TeamSeconds</c> of the data.</summary>
+        public int? TeamSeconds;
         public long StructureReadyTick;
         public long BuildCheckTick;
         public long TeamCheckTick;
@@ -147,6 +149,9 @@ public sealed partial class ScriptEngine
 
     /// <summary>The session is a skirmish with the script library (<see cref="ScriptEngineOptions.Ai"/>), whoever plays its slots.</summary>
     public bool IsSkirmish => _options.Ai is not null;
+
+    /// <summary>The tick the team timer of an AI player ends (<c>m_teamTimer</c>); for tools and tests.</summary>
+    public long AiTeamReadyTick(PlayerId player) => AiOfPlayer(player)?.TeamReadyTick ?? 0;
 
     /// <summary>Whether this engine runs the original skirmish AI for any player.</summary>
     public bool HasAiPlayers => _ai.Count > 0;
@@ -1067,7 +1072,8 @@ public sealed partial class ScriptEngine
         var pick = candidates[_world.LogicRandom.Range(0, candidates.Count - 1)];
         BuildTeam(pick.Name, idleOnly: true);
         state.ReadyTeam = false;
-        state.TeamReadyTick = _tick + ScaledTimer(data.TeamSeconds, _world.MoneyOf(state.Setup.Player), data, data.TeamsPoorRate, data.TeamsWealthyRate);
+        var seconds = state.TeamSeconds is { } set ? Fixed.FromInt(set) : data.TeamSeconds;
+        state.TeamReadyTick = _tick + ScaledTimer(seconds, _world.MoneyOf(state.Setup.Player), data, data.TeamsPoorRate, data.TeamsWealthyRate);
         return true;
     }
 
@@ -1283,7 +1289,8 @@ public sealed partial class ScriptEngine
             while (limit + 1 < side.SkillSets.Length && side.SkillSets[limit + 1].Length > 0) limit++;
             state.SkillSet = _world.LogicRandom.Range(0, limit);
         }
-        foreach (var science in side.SkillSets[state.SkillSet])
+        // "default: case 0": a selector no set answers to is the first set.
+        foreach (var science in side.SkillSets[state.SkillSet >= 0 && state.SkillSet < side.SkillSets.Length ? state.SkillSet : 0])
             if (_world.CanPurchaseScienceNow(player, science)) PurchaseScience(player, science);
     }
 
@@ -1692,6 +1699,7 @@ public sealed partial class ScriptEngine
             writer.Bool("readyTeam", state.ReadyTeam);
             writer.Bool("readyStructure", state.ReadyStructure);
             writer.Int("teamReadyTick", state.TeamReadyTick);
+            if (state.TeamSeconds is { } teamSeconds) writer.Int("teamSeconds", teamSeconds);
             writer.Int("structureReadyTick", state.StructureReadyTick);
             writer.Int("buildCheckTick", state.BuildCheckTick);
             writer.Int("teamCheckTick", state.TeamCheckTick);
@@ -1802,6 +1810,7 @@ public sealed partial class ScriptEngine
             state.ReadyTeam = item.Bool("readyTeam");
             state.ReadyStructure = item.Bool("readyStructure");
             state.TeamReadyTick = item.Int("teamReadyTick");
+            state.TeamSeconds = item.Has("teamSeconds") ? checked((int)item.Int("teamSeconds")) : null;
             state.StructureReadyTick = item.Int("structureReadyTick");
             state.BuildCheckTick = item.Int("buildCheckTick");
             state.TeamCheckTick = item.Int("teamCheckTick");

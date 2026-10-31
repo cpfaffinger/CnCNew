@@ -119,7 +119,10 @@ public static class ScriptCoverage
 
     public static ScriptSupport ConditionSupport(string typeName) => ExecutedConditions.Contains(typeName) ? ScriptSupport.Executed : ScriptSupport.Missing;
 
-    /// <summary>Actions the VM stores without the simulation reading them (<see cref="ScriptSupport.Recorded"/>); see <c>docs/SCRIPT-ENGINE.md</c> §8.</summary>
+    /// <summary>
+    /// Actions the VM stores without the simulation reading them (<see cref="ScriptSupport.Recorded"/>); see <c>docs/SCRIPT-ENGINE.md</c> §8. They are settings of <c>AIPlayer</c>: only
+    /// the original skirmish AI reads them (<see cref="ActionSupportWithSkirmishAi"/>), a mission's computer player has no <c>AIPlayer</c> here.
+    /// </summary>
     public static readonly ImmutableHashSet<string> RecordedActions = ImmutableHashSet.Create(StringComparer.Ordinal,
         "SET_BASE_CONSTRUCTION_SPEED", "PLAYER_SELECT_SKILLSET",
         "CHOOSE_VICTIM_ALWAYS_USES_NORMAL", "SET_CAVE_INDEX");
@@ -133,7 +136,8 @@ public static class ScriptCoverage
         "AI_PLAYER_BUILD_TYPE_NEAREST_TEAM");
 
     /// <summary>The support of an action type in a session with the original skirmish AI.</summary>
-    public static ScriptSupport ActionSupportWithSkirmishAi(string typeName) => SkirmishAiActions.Contains(typeName) ? ScriptSupport.Executed : ActionSupport(typeName);
+    public static ScriptSupport ActionSupportWithSkirmishAi(string typeName)
+        => SkirmishAiActions.Contains(typeName) || RecordedActions.Contains(typeName) ? ScriptSupport.Executed : ActionSupport(typeName);
 
     public static ScriptSupport ActionSupport(string typeName)
         => ExecutedActions.Contains(typeName) ? ScriptSupport.Executed : ForwardedActions.Contains(typeName) ? ScriptSupport.Forwarded

@@ -50,10 +50,17 @@ public sealed partial class ScriptEngine
                     else Diagnose($"buildable status {Int(p, 1)} out of range");
                 }
                 return true;
-            // doAffectPlayerSkillset -> Player::friend_setSkillset: picks the AI's general skill set; the simulation's AI has none (recorded).
+            // doAffectPlayerSkillset -> Player::friend_setSkillset -> AIPlayer::selectSkillset. Read by doUpgradesAndSkills of the original AI; a mission's computer player has no AIPlayer here, the value stays recorded.
             case "PLAYER_SELECT_SKILLSET":
-                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } skilled) _recordedSettings[type + "|" + skilled.Id.Value] = Int(p, 1) - 1;
-                _recordedActions++;
+                if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } skilled)
+                {
+                    if (AiOfPlayer(skilled.Id) is { } skillAi) skillAi.SkillSet = Int(p, 1) - 1;
+                    else
+                    {
+                        _recordedSettings[type + "|" + skilled.Id.Value] = Int(p, 1) - 1;
+                        _recordedActions++;
+                    }
+                }
                 return true;
             // doResumeSupplyTruckingForIdleUnits(empty): Player::setUnitsShouldIdleOrResume(false) for every human player: idle supply trucks are forced back to work.
             case "RESUME_SUPPLY_TRUCKING":

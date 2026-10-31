@@ -146,9 +146,10 @@ static partial class Tests
         return (new MapScriptList([..scripts], []), [defaultTeam, team]);
     }
 
-    private static MapScriptLibrary AiLibrary()
+    private static MapScriptLibrary AiLibrary(MapScript[]? alphaExtra = null)
     {
         var (alpha, alphaTeams) = AiLibrarySide("Alpha");
+        if (alphaExtra is not null) alpha = alpha with { Scripts = [..alpha.Scripts, ..alphaExtra] };
         var (beta, betaTeams) = AiLibrarySide("Beta");
         var civilian = new MapScriptList([Scr.Script("Music", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_FLAG", Scr.Flag("Playing"), Scr.Bool(true))], oneShot: true)], []);
         return new MapScriptLibrary("CkMp",
@@ -231,13 +232,13 @@ static partial class Tests
     }
 
     private static (ScriptedSkirmishSession Session, SyntheticFixture Fixture, TerrainMap Terrain, MapData Map, MapScriptLibrary Library, AiData Data) StartOriginalSkirmish(
-        ScriptDifficulty alpha = ScriptDifficulty.Hard, ScriptDifficulty beta = ScriptDifficulty.Easy, uint seed = 11, SimulationRateChoice rate = default)
+        ScriptDifficulty alpha = ScriptDifficulty.Hard, ScriptDifficulty beta = ScriptDifficulty.Easy, uint seed = 11, SimulationRateChoice rate = default, MapScript[]? alphaLibraryScripts = null)
     {
         var files = AiFiles(AiDataText());
         var fixture = new SyntheticFixture(rate.Rate ?? TestRate.Default, files: files);
         var map = AiSkirmishMap();
         var terrain = TerrainMap.Build(map, "skirmish-original");
-        var library = AiLibrary();
+        var library = AiLibrary(alphaLibraryScripts);
         var data = AiData.TryBuild(fixture.Graph)!;
         var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
         var slots = ImmutableArray.Create(new ScriptedSkirmishSlot(participants.Single(value => value.Side == "Alpha"), alpha), new ScriptedSkirmishSlot(participants.Single(value => value.Side == "Beta"), beta));

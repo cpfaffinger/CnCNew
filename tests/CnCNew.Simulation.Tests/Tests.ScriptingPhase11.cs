@@ -312,10 +312,10 @@ static partial class Tests
         engine.SignalUiInteraction("unlook");
         Run(session, session.Frames(8));
         Check.That(!world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "The named undo takes the reveal back.");
-        var recordOnly = StartMission([Scr.Script("Record", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_BASE_CONSTRUCTION_SPEED", Scr.Side(PlayerA), Scr.Int(30)), Scr.Do("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", Scr.Int(1))], oneShot: true)]);
+        var recordOnly = StartMission([Scr.Script("Record", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_BASE_CONSTRUCTION_SPEED", Scr.Side(PlayerA), Scr.Int(30)), Scr.Do("PLAYER_SELECT_SKILLSET", Scr.Side(PlayerA), Scr.Int(2))], oneShot: true)]);
         Run(recordOnly, recordOnly.Frames(2));
         Check.That(recordOnly.Engine.ExecutedActions == 0 && recordOnly.Engine.RecordedActions == 2 && recordOnly.Engine.MissingActionHits.Count == 0, "Recorded actions are neither counted as executed nor as missing.");
-        Check.That(ScriptCoverage.ActionSupport("CHOOSE_VICTIM_ALWAYS_USES_NORMAL") == ScriptSupport.Recorded, "The support table names them as recorded.");
+        Check.That(ScriptCoverage.ActionSupport("SET_BASE_CONSTRUCTION_SPEED") == ScriptSupport.Recorded && ScriptCoverage.ActionSupportWithSkirmishAi("SET_BASE_CONSTRUCTION_SPEED") == ScriptSupport.Executed, "The support table names them as recorded, and as executed by the original AI.");
     }
 
     private static CnCNew.Simulation.World.SimulationWorld world(MissionSession session) => session.World;

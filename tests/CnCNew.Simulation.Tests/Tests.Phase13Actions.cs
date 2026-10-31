@@ -97,7 +97,6 @@ static partial class Tests
             Scr.Script("All", [Scr.And(Scr.If("CONDITION_TRUE"))], [
                 Scr.Do("NAMED_FACE_NAMED", Scr.Unit("Walker"), Scr.Unit("Beacon")),
                 Scr.Do("NAMED_SET_ATTITUDE", Scr.Unit("Walker"), Scr.Int(2)),
-                Scr.Do("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", Scr.Int(1)),
                 Scr.Do("UNIT_DESTROY_ALL_CONTAINED", Scr.Unit("Bunker")),
                 Scr.Do("PLAYER_CREATE_TEAM_FROM_CAPTURED_UNITS", Scr.Side(PlayerA), Scr.Team("teamA")),
                 Scr.Do("DEBUG_CRASH_BOX", Scr.Named(MapScriptParameterType.TextString, "x"))], oneShot: true),
@@ -107,7 +106,6 @@ static partial class Tests
         var walker = NamedIn(session, "Walker")!;
         Check.That((walker.Angle - Fixed.FromDecimal(1.5707963m)).Abs() < Fixed.FromDecimal(0.05m), $"NAMED_FACE_NAMED turns the unit towards the object ({walker.Angle}).");
         Check.That(walker.OwnAttitude == 2, "NAMED_SET_ATTITUDE gives the object its attitude.");
-        Check.That(session.Engine.RecordedSetting("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", string.Empty) == 1, "The consumer-less settings are recorded.");
         Check.That(session.Engine.MissingActionHits.Count == 0, "No missing actions: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
     }
 

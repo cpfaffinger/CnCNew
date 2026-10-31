@@ -433,6 +433,7 @@ run.Test("Roaming: a civilian runs from a repulsor, on its panic locomotors, and
 run.Test("Roaming: a damaged civilian scares others for two seconds (F-22)", Tests.DamagedCivilianScaresOthers);
 run.Test("Roaming: an armed enemy repulses, an unarmed one does not (F-22)", Tests.ArmedEnemyRepulses);
 run.Test("Roaming: a panicking team runs its path on the panic locomotors and a repulsor turns it aside (F-22)", Tests.PanicRunsOnThePanicLocomotors);
+run.Test("Original skirmish AI: a script sets the skill set and the time between teams (F-22)", Tests.OriginalAiObeysItsScriptedSettings);
 run.Test("Stopping distance: a script ends a move short of its goal, on the ground by at most four cells (F-22)", Tests.StoppingDistanceEndsAMoveShort);
 run.Test("Hulks: a script's override sets the lifetime of a new hulk and hurries a hulk's slow death (F-22)", Tests.HulkLifetimeOverride);
 run.Test("Scripts: FREEZE_TIME stops the world and not the scripts; UNFREEZE_TIME and the end of the mission lift it", Tests.ScriptFreezeTimeStopsTheWorldNotTheScripts);
