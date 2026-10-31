@@ -66,6 +66,21 @@ public sealed record UiCustomDraw(string Callback, string Window, UiRect Rect) :
     public override string ToString() => $"custom {Callback} {Window} {Rect}";
 }
 
+/// <summary>A picture that changes while it is shown (a movie). <see cref="Version"/> goes up with every new picture; <see cref="Rgba"/> is 8-bit R, G, B, A in rows from the top.</summary>
+public interface IUiVideoSurface
+{
+    int Width { get; }
+    int Height { get; }
+    long Version { get; }
+    byte[] Rgba { get; }
+}
+
+/// <summary>A movie stretched into a window (<c>Display::drawVideoBuffer</c>).</summary>
+public sealed record UiVideoDraw(IUiVideoSurface Surface, UiRect Destination) : UiDrawCommand
+{
+    public override string ToString() => $"video {Surface.Width}x{Surface.Height} {Destination}";
+}
+
 public sealed record UiDrawStatistics(
     int WindowsDrawn,
     int UnresolvedLabels,

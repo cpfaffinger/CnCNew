@@ -46,6 +46,7 @@ internal sealed class UiRenderer : IDisposable
     private bool _batchOpen;
     private Texture? _lastTexture;
     private bool _inFrame;
+    private readonly Dictionary<IUiVideoSurface, VideoEntry> _videos = [];
 
     public UiRenderer(RenderServices services)
         : this(services.GraphicsDevice, services.Content, services.Data.Images, "English")
@@ -137,6 +138,7 @@ internal sealed class UiRenderer : IDisposable
     {
         if (!_inFrame) throw new InvalidOperationException("UiRenderer.End called without Begin.");
         Flush();
+        ReleaseUndrawnVideos();
         _frame.UnbalancedClipPops += _clips.UnderflowCount + _clips.Depth;
         var commandList = _context!.CommandList;
         commandList.SetViewport(_savedViewport);
@@ -163,6 +165,7 @@ internal sealed class UiRenderer : IDisposable
             case UiPushClip push: PushClip(push.Rect); break;
             case UiPopClip: PopClip(); break;
             case UiCustomDraw custom: DrawCustom(custom); break;
+            case UiVideoDraw video: DrawVideo(video.Surface, video.Destination); break;
             default: throw new NotSupportedException($"Unknown UI draw command {command.GetType().Name}.");
         }
     }
@@ -254,6 +257,59 @@ internal sealed class UiRenderer : IDisposable
         ArgumentNullException.ThrowIfNull(texture);
         if (destination.IsEmpty || !tint.IsVisible) return;
         Queue(texture, destination, source is { } rect ? new RectangleF(rect.X, rect.Y, rect.Width, rect.Height) : null, tint, SpriteEffects.None);
+    }
+
+    /// <summary>Draws a movie's newest picture stretched to <paramref name="destination"/>.</summary>
+    public void DrawVideo(IUiVideoSurface surface, UiRect destination)
+    {
+        RequireFrame();
+        if (destination.IsEmpty) return;
+        Queue(VideoTexture(surface), destination, null, WndColor.White, SpriteEffects.None);
+    }
+
+    /// <summary>
+    /// The texture of a movie: its newest picture is uploaded once, through the command list of the frame being drawn. A movie that was not drawn in a frame loses its texture at the
+    /// frame's end. Its format is <c>_SRgb</c>: measured against the decoder's pixels, a plain view comes out lighter (it reaches the sRGB render target as linear light), and this
+    /// one comes out as it was decoded, to the unit (docs/CLIENT-VIDEO.md).
+    /// </summary>
+    public Texture VideoTexture(IUiVideoSurface surface)
+    {
+        RequireFrame();
+        ArgumentNullException.ThrowIfNull(surface);
+        if (!_videos.TryGetValue(surface, out var entry))
+        {
+            entry = new VideoEntry(Texture.New2D(_device, surface.Width, surface.Height, PixelFormat.R8G8B8A8_UNorm_SRgb, TextureFlags.ShaderResource, 1, GraphicsResourceUsage.Default));
+            _videos.Add(surface, entry);
+        }
+        entry.Drawn = true;
+        if (entry.Version != surface.Version)
+        {
+            entry.Version = surface.Version;
+            entry.Texture.SetData(_context!.CommandList, surface.Rgba);
+        }
+        return entry.Texture;
+    }
+
+    private void ReleaseUndrawnVideos()
+    {
+        if (_videos.Count == 0) return;
+        foreach (var (surface, entry) in _videos.ToArray())
+        {
+            if (entry.Drawn)
+            {
+                entry.Drawn = false;
+                continue;
+            }
+            entry.Texture.Dispose();
+            _videos.Remove(surface);
+        }
+    }
+
+    private sealed class VideoEntry(Texture texture)
+    {
+        public Texture Texture { get; } = texture;
+        public long Version { get; set; } = -1;
+        public bool Drawn { get; set; }
     }
 
     public void DrawText(UiTextDraw text)
