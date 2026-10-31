@@ -121,6 +121,39 @@ internal static class TerrainMaterials
     }
 
     /// <summary>
+    /// Bridge material (<c>detailAlphaShader</c> of <c>W3DBridgeBuffer</c>): the bridge's texture times the lighting of the vertex colour times the fog, alpha tested, writing depth, seen from both
+    /// sides. The original's alpha test still blends what passes it; here what passes is opaque.
+    /// </summary>
+    public static Material CreateBridge(GraphicsDevice device, Texture bridge, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites)
+    {
+        IComputeColor color = new ComputeTextureColor(bridge, Uv0, Vector2.One, Vector2.Zero)
+        {
+            Filtering = TextureFilter.Anisotropic,
+            AddressModeU = TextureAddressMode.Wrap,
+            AddressModeV = TextureAddressMode.Wrap,
+        };
+        var modulated = new ComputeBinaryColor(color, VertexColor(0), BinaryOperator.Multiply);
+        var fogged = new ComputeBinaryColor(modulated, FogFactor(fog, linearSpace), BinaryOperator.Multiply);
+        var surface = SubstituteAlpha(fogged, modulated);
+
+        var material = Material.New(device, new MaterialDescriptor
+        {
+            Attributes =
+            {
+                // The cutoff reads the diffuse map's alpha; without a diffuse model the host's lights do not touch it.
+                Diffuse = new MaterialDiffuseMapFeature(surface),
+                Emissive = new MaterialEmissiveMapFeature(surface),
+                Transparency = new MaterialTransparencyCutoffFeature { Alpha = new ComputeFloat(96f / 255f) },
+                CullMode = CullMode.None,
+            },
+        });
+        var pass = material.Passes[0];
+        pass.CullMode = CullMode.None;
+        depthWrites[pass] = true;
+        return material;
+    }
+
+    /// <summary>
     /// Fog level (red channel, 0..1) replicated to all channels. The reference multiplies in gamma space; in a linear colour space the
     /// factor is squared so a fogged cell (0.5) ends up at the same display brightness ratio.
     /// </summary>

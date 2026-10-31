@@ -115,10 +115,10 @@ public sealed class SuspensionTracker
         var forwardSpeed = velX * dirX + velY * dirY;
         var motive = speed > ForwardEpsilon;
 
-        var (normalX, normalY) = TerrainNormal(world, entity.X, entity.Y);
+        var (normalX, normalY) = TerrainNormal(world, entity.X, entity.Y, entity.Layer);
         var groundPitch = (normalX * dirX + normalY * dirY) * (MathF.PI / 2f);
         var groundRoll = (normalX * perpX + normalY * perpY) * (MathF.PI / 2f);
-        var ground = world.GroundHeightAt(entity.X, entity.Y);
+        var ground = world.LayerHeightAt(entity.X, entity.Y, entity.Layer);
         var height = ToFloat(entity.Z - ground);
         var airborne = world.IsSignificantlyAboveTerrain(entity);
         var length = ToFloat(entity.Template.GeometryMajorRadius);
@@ -244,11 +244,11 @@ public sealed class SuspensionTracker
         foreach (var id in _states.Keys.Where(id => !exists(id)).ToArray()) _states.Remove(id);
     }
 
-    private static (float X, float Y) TerrainNormal(SimulationWorld world, Fixed x, Fixed y)
+    private static (float X, float Y) TerrainNormal(SimulationWorld world, Fixed x, Fixed y, int layer)
     {
         var step = Fixed.FromInt(2);
-        var dx = ToFloat(world.GroundHeightAt(x + step, y) - world.GroundHeightAt(x - step, y)) / 4f;
-        var dy = ToFloat(world.GroundHeightAt(x, y + step) - world.GroundHeightAt(x, y - step)) / 4f;
+        var dx = ToFloat(world.LayerHeightAt(x + step, y, layer) - world.LayerHeightAt(x - step, y, layer)) / 4f;
+        var dy = ToFloat(world.LayerHeightAt(x, y + step, layer) - world.LayerHeightAt(x, y - step, layer)) / 4f;
         var length = MathF.Sqrt(dx * dx + dy * dy + 1f);
         return (-dx / length, -dy / length);
     }

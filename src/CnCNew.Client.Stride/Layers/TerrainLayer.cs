@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using CnCNew.Client.Stride.Layers.Terrain;
 using CnCNew.Client.Stride.Rendering;
+using CnCNew.Game.Data;
 using CnCNew.Game.Live;
+using CnCNew.Presentation;
 using CnCNew.Presentation.Minimap;
 using CnCNew.Presentation.Terrain;
 using CnCNew.W3D;
@@ -46,6 +48,7 @@ internal sealed class TerrainLayer : IWorldLayer
     private readonly List<Entity> _entities = [];
     private readonly List<ModelComponent> _chunkComponents = [];
     private readonly List<WaterDraw> _waterDraws = [];
+    private readonly List<BridgeDraw> _bridgeDraws = [];
     private RenderServices? _services;
     private LiveGame? _match;
     private bool[] _chunkVisible = [];
@@ -136,6 +139,7 @@ internal sealed class TerrainLayer : IWorldLayer
         CreateWater(services, match, atlas, linear, fogScale);
         var roadWatch = Stopwatch.StartNew();
         var roads = CreateRoads(services, match, linear, fogScale, lightTable);
+        CreateBridges(services, match, linear, fogScale, lightTable);
         roadWatch.Stop();
         watch.Stop();
         AttachMilliseconds = watch.Elapsed.TotalMilliseconds;
@@ -174,6 +178,8 @@ internal sealed class TerrainLayer : IWorldLayer
         }
 
         UpdateFog(frame.CommandList, frame.TotalSeconds);
+        foreach (var draw in _bridgeDraws)
+            if (draw.Index < match.World.Bridges.Count) draw.Show(match.World.Bridges[draw.Index].DamageState);
         foreach (var draw in _waterDraws)
         {
             if (!draw.Batch.Animated) continue;
@@ -212,6 +218,7 @@ internal sealed class TerrainLayer : IWorldLayer
         _entities.Clear();
         _chunkComponents.Clear();
         _waterDraws.Clear();
+        _bridgeDraws.Clear();
         foreach (var resource in _resources) resource.Dispose();
         _resources.Clear();
         _services = null;
@@ -361,6 +368,62 @@ internal sealed class TerrainLayer : IWorldLayer
         return (batches.Count, model.Stats.Segments, model.Stats.Triangles);
     }
 
+    /// <summary>
+    /// The terrain bridges of the map (<c>W3DBridgeBuffer</c>, <c>docs/CLIENT-ROADS.md</c>): a mesh per bridge and damage state, one of them shown; a landmark bridge is an object and is drawn with
+    /// the objects. A bridge that has no art in a state keeps showing the state before, as the original puts the old model back.
+    /// </summary>
+    private void CreateBridges(RenderServices services, LiveGame match, bool linear, System.Numerics.Vector2 fogScale, byte[] lightTable)
+    {
+        var bridges = match.World.Bridges;
+        if (bridges.Count == 0) return;
+        var library = new W3dAssetLibrary(path => services.Content.Exists(path) ? services.Content.OpenRead(path) : null);
+        var lighting = TerrainRenderOptions.FromDefinitions(match.Data.Graph).Lighting;
+        var materials = new Dictionary<string, Material>(StringComparer.OrdinalIgnoreCase);
+        var device = services.GraphicsDevice;
+        for (var index = 0; index < bridges.Count; index++)
+        {
+            var bridge = bridges[index];
+            if (bridge.RenderIndex < 0 || !match.World.Templates.Bridges.TryGet(bridge.TemplateName, out var template)) continue;
+            var (start, end) = (ToVector(bridge.From), ToVector(bridge.To));
+            var meshes = new BridgeMesh?[template.Visuals.Length];
+            var components = new ModelComponent?[template.Visuals.Length];
+            for (var state = 0; state < template.Visuals.Length; state++)
+            {
+                if (BridgeArtLoader.Load(library, template.Visuals[state], template.Scale) is not { } art) continue;
+                // Roads.ini names textures of damaged states the game does not ship.
+                if (!W3dTexturePathResolver.Resolve(art.Texture, services.Content.Exists).Found)
+                {
+                    Console.WriteLine($"terrain: bridge '{bridge.TemplateName}' state {state}: texture '{art.Texture}' is not in the content");
+                    continue;
+                }
+
+                var mesh = BridgeMeshBuilder.Build(bridge.TemplateName, state, art, start, end, lighting);
+                if (!materials.TryGetValue(art.Texture, out var material))
+                {
+                    material = TerrainMaterials.CreateBridge(device, services.Textures.Resolve(new W3dTextureReference(art.Texture)), FogTexture, linear, services.DepthWrites);
+                    materials.Add(art.Texture, material);
+                }
+
+                var (vertices, indices) = BridgeVertices.Build(mesh, fogScale, lightTable);
+                var vertexBuffer = StrideBuffer.Vertex.New(device, vertices, GraphicsResourceUsage.Immutable);
+                var indexBuffer = StrideBuffer.Index.New(device, indices, GraphicsResourceUsage.Immutable);
+                Track(vertexBuffer, vertices.Length * WaterVertex.SizeInBytes);
+                Track(indexBuffer, indices.Length * sizeof(uint));
+                var component = CreateModel($"bridge {index} state {state}", material, vertexBuffer, WaterLayout, vertices.Length, indexBuffer, true, indices.Length, new BoundingBox(ToStride(mesh.Bounds.Min), ToStride(mesh.Bounds.Max)));
+                component.Enabled = false;
+                meshes[state] = mesh;
+                components[state] = component;
+            }
+
+            if (meshes[0] is null) continue;
+            var draw = new BridgeDraw(index, meshes, components);
+            draw.Show(bridge.DamageState);
+            _bridgeDraws.Add(draw);
+        }
+    }
+
+    private static System.Numerics.Vector3 ToVector(CnCNew.Simulation.Terrain.DeckPoint point) => new(FixedConvert.ToSingle(point.X), FixedConvert.ToSingle(point.Y), FixedConvert.ToSingle(point.Z));
+
     private ModelComponent CreateModel(string name, Material material, StrideBuffer vertexBuffer, VertexDeclaration layout, int vertexCount,
         StrideBuffer indexBuffer, bool wideIndices, int indexCount, BoundingBox bounds)
     {
@@ -396,4 +459,21 @@ internal sealed class TerrainLayer : IWorldLayer
     private static Vector3 ToStride(System.Numerics.Vector3 value) => new(value.X, value.Y, value.Z);
 
     private sealed record WaterDraw(WaterBatch Batch, StrideBuffer VertexBuffer);
+
+    /// <summary>The meshes of one terrain bridge and the state it shows; <c>W3DBridge::load</c> happens once for all states, when the layer is attached.</summary>
+    private sealed class BridgeDraw(int index, BridgeMesh?[] meshes, ModelComponent?[] components)
+    {
+        private int _shown = -1;
+
+        public int Index { get; } = index;
+
+        public void Show(int damageState)
+        {
+            var next = BridgeMeshBuilder.ShownState(damageState, _shown < 0 ? 0 : _shown, meshes);
+            if (next == _shown) return;
+            if (_shown >= 0 && components[_shown] is { } hidden) hidden.Enabled = false;
+            if (components[next] is { } shown) shown.Enabled = true;
+            _shown = next;
+        }
+    }
 }

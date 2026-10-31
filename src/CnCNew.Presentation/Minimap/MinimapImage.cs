@@ -10,6 +10,9 @@ namespace CnCNew.Presentation.Minimap;
 /// <summary>An entity marker in world coordinates; the caller decides visibility (hide enemies in fog before passing them).</summary>
 public readonly record struct MinimapDot(Vector2 World, Rgba32 Color);
 
+/// <summary>A bridge of the map that stands, with the <c>RadarColor</c> of its block.</summary>
+public readonly record struct MinimapBridge(TerrainBridge Bridge, Rgba32 Color);
+
 /// <summary>
 /// The radar image of a map (<c>W3DRadar::buildTerrainTexture</c>) and its composition with fog, entity dots and the camera footprint.
 /// The image covers the active map boundary (<c>W3DTerrainLogic::getExtent</c>, boundary 0 by default); its aspect follows the map (the longer side is the requested
@@ -32,6 +35,15 @@ public sealed class MinimapImage
     /// <summary>The static terrain layer (no fog, no dots).</summary>
     public ImmutableArray<byte> TerrainRgba { get; }
 
+    private static MinimapBridge? BridgeAt(IReadOnlyList<MinimapBridge>? bridges, Vector2 world)
+    {
+        if (bridges is null) return null;
+        var (x, y) = (ToFixed(world.X), ToFixed(world.Y));
+        for (var index = bridges.Count - 1; index >= 0; index--)
+            if (bridges[index].Bridge.IsPointOnBridge(x, y)) return bridges[index];
+        return null;
+    }
+
     /// <summary>Continuous pixel position of a world point (pixel centres at +0.5).</summary>
     public Vector2 WorldToPixel(Vector2 world) => new(world.X / WorldExtent.X * Width, (1f - world.Y / WorldExtent.Y) * Height);
 
@@ -50,9 +62,10 @@ public sealed class MinimapImage
     /// <summary>
     /// Terrain layer: per pixel the average of the 3x3 neighbouring samples; a land sample is the base tile's average colour
     /// (<c>getTerrainColorAt</c>) brightened above and darkened below the average terrain height (<c>interpolateColorForHeight</c>); a sample
-    /// under water is the <c>RadarWaterColor</c> darkened with depth. Cliffs show only through height shading, as in the reference.
+    /// under water is the <c>RadarWaterColor</c> darkened with depth. Cliffs show only through height shading, as in the reference. A pixel on a working bridge has the bridge's
+    /// <c>RadarColor</c>, shaded by the height of the whole bridge; <paramref name="bridges"/> go newest first through <c>findBridgeAt</c>, so the last of the list wins.
     /// </summary>
-    public static MinimapImage Build(TerrainRenderModel model, TerrainHeightSampler heights, TerrainMap logic, Rgba32 waterColor, int size, int boundary = 0)
+    public static MinimapImage Build(TerrainRenderModel model, TerrainHeightSampler heights, TerrainMap logic, Rgba32 waterColor, int size, int boundary = 0, IReadOnlyList<MinimapBridge>? bridges = null)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(heights);
@@ -122,6 +135,13 @@ public sealed class MinimapImage
                     }
                 }
                 var color = Rgba32.FromUnit(sum / Math.Max(count, 1), 255);
+                if (BridgeAt(bridges, image.PixelToWorld(new Vector2(px + 0.5f, py + 0.5f))) is { } bridge)
+                {
+                    var deck = bridge.Bridge;
+                    var deckHeight = FixedConvert.ToSingle(deck.FromLeft.Z + deck.FromRight.Z + deck.ToLeft.Z + deck.ToRight.Z) / 4f;
+                    color = Rgba32.FromUnit(ShadeForHeight(bridge.Color.ToUnitRgb(), deckHeight, averageZ, hiZ, loZ), 255);
+                }
+
                 var offset = (py * width + px) * 4;
                 rgba[offset] = color.R;
                 rgba[offset + 1] = color.G;

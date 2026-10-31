@@ -77,7 +77,7 @@ public abstract class LiveGame
         Camera.InitializeForMap(cameraStart);
         Fog = FogOfWarGrid.ForVision(world.Vision!, FogSettings.FromDefinitions(graph, 510f));
         var water = renderOptions.Water?.RadarColor ?? new Rgba32(100, 120, 140, 255);
-        Minimap = MinimapImage.Build(TerrainModel, Heights, terrain, water, 256);
+        Minimap = MinimapImage.Build(TerrainModel, Heights, terrain, water, 256, bridges: WorkingBridges(world));
         Colors = TeamColors.Resolve(players, graph);
         var scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
         FogViewer = human;
@@ -94,6 +94,16 @@ public abstract class LiveGame
         SyncAfterTick(default);
         Fog.Snap();
         Frame = _projector.Project(1f);
+    }
+
+    /// <summary><c>W3DRadar::buildTerrainTexture</c>'s "working bridge": its object is there and is no rubble.</summary>
+    private static List<MinimapBridge> WorkingBridges(SimulationWorld world)
+    {
+        var bridges = new List<MinimapBridge>();
+        foreach (var bridge in world.Bridges)
+            if (bridge.DamageState != CnCNew.Simulation.Modules.BuiltIn.BodyDamageStates.Rubble && bridge.ObjectId.IsValid && world.Templates.Bridges.TryGet(bridge.TemplateName, out var block))
+                bridges.Add(new MinimapBridge(bridge, new Rgba32(block.RadarColor.Red, block.RadarColor.Green, block.RadarColor.Blue, 255)));
+        return bridges;
     }
 
     public GameData Data { get; }
