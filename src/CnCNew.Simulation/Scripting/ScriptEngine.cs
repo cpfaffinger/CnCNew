@@ -232,8 +232,9 @@ public sealed partial class ScriptEngine
         {
             var script = program.Units[index].Script;
             _scriptActive[index] = script.IsActive;
-            // ScriptEngine::checkConditionsForTeamNames draws the first evaluation frame of a delayed script from the logic random stream; a
-            // name-derived offset in the same 0..2 s range keeps the spread without consuming a stream that a restored world would not replay.
+            // ScriptEngine::checkConditionsForTeamNames draws the first evaluation frame of a delayed script from the logic random stream. A skirmish of the original AI does
+            // (DrawFirstEvaluations, when the match starts, and the state keeps the result); for a mission a name-derived offset in the same 0..2 s range keeps the spread, and
+            // its reference values, without consuming the stream.
             _nextEvaluation[index] = script.DelayEvaluationSeconds > 0 ? _world.Time.OriginalFrames((long)(NameHash(script.Name) % (2 * SimulationRate.OriginalFramesPerSecond + 1))) : 0;
             _conditionTeam[index] = FindConditionTeam(script);
         }

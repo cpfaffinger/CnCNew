@@ -348,7 +348,6 @@ public sealed class LiveMatch : LiveGame
         var terrain = TerrainMap.Build(map, setup.MapPath);
 
         var humanPlays = !setup.AutoPlay && !setup.Spectator;
-        if (setup.UsesOriginalAi && setup.LocalSlot != 0) throw new ArgumentException("A match with the original AI is viewed from its first slot.");
         // The room: the setup becomes the settings of a local server, the viewer takes his seat (or none), the server starts the match and hands back its description.
         var relay = CnCNew.Game.Lockstep.LocalRelay.Open(data.Fingerprint);
         relay.StartMatch(setup.Describe(data, terrain).ToRoomSettings(withSeed: true), humanPlays ? setup.LocalSlot : -1);
@@ -535,12 +534,10 @@ public sealed class LiveMatch : LiveGame
         var original = data.LoadOriginalAi();
         // The scripted session places slot i at start position i and knows no teams or colours of its own; the factions are the resolved ones of the description.
         var slots = ImmutableArray.CreateBuilder<ScriptedSkirmishSlot>();
-        var first = setup.AiOf(0);
-        slots.Add(new ScriptedSkirmishSlot(match.Slots[0].Participant, first.Difficulty, IsHuman: humanPlays, Team: match.Slots[0].Description.Team, Kind: first.Kind));
-        for (var index = 0; index < setup.Opponents.Length; index++)
+        for (var index = 0; index <= setup.Opponents.Length; index++)
         {
-            var ai = setup.AiOf(index + 1);
-            slots.Add(new ScriptedSkirmishSlot(match.Slots[index + 1].Participant, ai.Difficulty, Team: match.Slots[index + 1].Description.Team, Kind: ai.Kind));
+            var ai = setup.AiOf(index);
+            slots.Add(new ScriptedSkirmishSlot(match.Slots[index].Participant, ai.Difficulty, IsHuman: humanPlays && index == setup.LocalSlot, Team: match.Slots[index].Description.Team, Kind: ai.Kind));
         }
         var standard = ScriptedSkirmishOptions.Standard;
         var seed = match.Description.Seed;

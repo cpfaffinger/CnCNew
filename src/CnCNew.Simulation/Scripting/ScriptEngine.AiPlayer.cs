@@ -144,6 +144,9 @@ public sealed partial class ScriptEngine
     private ImmutableArray<ObjectTemplate> _aiDozerTemplates;
     private ImmutableArray<ObjectTemplate> _aiHarvesterTemplates;
 
+    /// <summary>The session is a skirmish with the script library (<see cref="ScriptEngineOptions.Ai"/>), whoever plays its slots.</summary>
+    public bool IsSkirmish => _options.Ai is not null;
+
     /// <summary>Whether this engine runs the original skirmish AI for any player.</summary>
     public bool HasAiPlayers => _ai.Count > 0;
 
@@ -250,6 +253,7 @@ public sealed partial class ScriptEngine
     public void StartAiPlayers(Fixed extentX, Fixed extentY)
     {
         if (_options.Ai is not { } setup) return;
+        DrawFirstEvaluations();
         foreach (var state in _ai)
         {
             if (state.Started) continue;
@@ -297,6 +301,16 @@ public sealed partial class ScriptEngine
             }
         }
         _world.MaterializePendingSpawns();
+    }
+
+    /// <summary>
+    /// <c>ScriptEngine::newMap</c>, <c>checkConditionsForTeamNames</c>: every script with an evaluation delay, in the order of the lists, gets the frame of its first evaluation from the logic random
+    /// stream ("Offset by a random number of frames"), once, when the match starts: a restored engine reads it from its state.
+    /// </summary>
+    private void DrawFirstEvaluations()
+    {
+        foreach (var unit in _program.Units)
+            if (unit.Script.DelayEvaluationSeconds > 0) _nextEvaluation[unit.Index] = _world.Time.OriginalFrames(_world.LogicRandom.Range(0, 2 * SimulationRate.OriginalFramesPerSecond));
     }
 
     /// <summary>The nine sectors of the map (<c>adjustBuildList</c>) and the turn of a base in each.</summary>

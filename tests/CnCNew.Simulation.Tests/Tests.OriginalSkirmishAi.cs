@@ -1398,4 +1398,47 @@ static partial class Tests
         }
         Check.That(directions.Count == 3, $"Over twelve seeds all three entrances are mined ({string.Join(", ", directions)}).");
     }
+
+    /// <summary>A human takes its slot's start position, whichever slot it is. Before, it took the position by the count of humans, the first one, on top of the computer player of that slot.</summary>
+    public static void OriginalAiLeavesAHumanItsSlot()
+    {
+        var (session, _, _, _, _, _) = StartAiVariant(AiDataText(), string.Empty, humanSecond: true);
+        var human = session.World.Entities.Single(entity => entity.Template.Name == "BetaCenter");
+        Check.That(human.Owner == new PlayerId(2) && human.X == Fixed.FromInt(500) && human.Y == Fixed.FromInt(200), $"The human of the second slot starts at the second position ({human.X}, {human.Y}).");
+        var computer = session.World.Entities.Single(entity => entity.Template.Name == "AlphaCenter");
+        Check.That(computer.Owner == new PlayerId(1) && computer.X == Fixed.FromInt(100), "The computer player of the first slot has the first position.");
+        Check.That(session.World.Entities.Count(entity => entity.Template.Name == "BetaSoldier" && entity.X > Fixed.FromInt(400)) == 1, "The human's start units stand around its base.");
+        StepFrames(session, 300);
+        Check.That(CountOwned(session, 1, "AlphaPlant") >= 1 && session.Engine.MissingActionHits.Count == 0, "The AI of the other slot plays on.");
+    }
+
+    /// <summary>
+    /// <c>checkConditionsForTeamNames</c>: the first evaluation of a delayed script is offset by a draw of the logic random stream, so the seed moves it, and a restored engine does not draw again.
+    /// Before, the offset came from the script's name, the same for every seed.
+    /// </summary>
+    public static void OriginalAiDrawsTheFirstEvaluationOfDelayedScripts()
+    {
+        var library = AiLibraryWithAlphaScripts(Scr.Script("A Delayed", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_FLAG", Scr.Flag("A Seen"), Scr.Bool(true))], oneShot: true, delaySeconds: 5));
+        var frames = new SortedSet<long>();
+        for (uint seed = 1; seed <= 12; seed++)
+        {
+            var (session, _, _, _, _, _) = StartAiVariant(AiDataText(), string.Empty, library, seed: unchecked(seed * 0x9E3779B1u));
+            var frame = 0L;
+            while (!session.Engine.FlagValue("A Seen0") && frame < 100)
+            {
+                StepFrames(session, 1);
+                frame++;
+            }
+            Check.That(frame <= 61, $"The offset is at most two seconds ({frame}).");
+            frames.Add(frame);
+        }
+        Check.That(frames.Count >= 4, $"The seed moves the first evaluation ({string.Join(", ", frames)}).");
+
+        var (saved, fixture, terrain, map, _, data) = StartAiVariant(AiDataText(), string.Empty, library, seed: 0x9E3779B1u);
+        var restored = ScriptedSkirmishSession.Restore(saved.Save(), fixture.Templates, fixture.Fingerprint, terrain, map, library, data);
+        Check.That(restored.StateHash() == saved.StateHash(), "A restored engine has the drawn offsets and the stream that follows them: it does not draw again.");
+        StepFrames(saved, 90);
+        StepFrames(restored, 90);
+        Check.That(restored.StateHash() == saved.StateHash(), "And goes on alike.");
+    }
 }

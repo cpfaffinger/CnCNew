@@ -195,7 +195,7 @@ public sealed class MissionSession
             if (prototype is not null) Engine.AssignToTeam(prototype.Name, id);
         }
         PlaceBuildLists(catalog, skipped);
-        PlaceHumanStarts(catalog, terrain, skipped);
+        PlaceHumanStarts(catalog, terrain, skipped, Engine.IsSkirmish);
         SkippedObjects = [..skipped.Select(pair => (pair.Key, pair.Value))];
     }
 
@@ -226,16 +226,17 @@ public sealed class MissionSession
     /// <summary>
     /// A human side that owns nothing on the map but has a playable faction and a start position (the Generals' Challenge maps) starts like a skirmish player:
     /// the faction's base building on its <c>Player_N_Start</c> waypoint and the faction's start units in a ring around it. Sides that own placed objects
-    /// (campaign maps) keep exactly what the map gives them.
+    /// (campaign maps) keep exactly what the map gives them. In a skirmish of the original AI the side knows its slot, whichever humans there are.
     /// </summary>
-    private void PlaceHumanStarts(TemplateCatalog catalog, TerrainMap terrain, SortedDictionary<string, int> skipped)
+    private void PlaceHumanStarts(TemplateCatalog catalog, TerrainMap terrain, SortedDictionary<string, int> skipped, bool bySlot)
     {
         var starts = terrain.StartPositions;
         var humans = 0;
         foreach (var player in Program.Players)
         {
             if (!player.IsHuman || player.Id.IsSystem || !World.HasPlayer(player.Id)) continue;
-            var startIndex = humans++;
+            var startIndex = bySlot ? player.StartIndex : humans;
+            humans++;
             if (startIndex >= starts.Length || Program.Objects.Any(item => item.TeamName.Length > 0 && Program.FindTeam(item.TeamName)?.Owner == player.Name)) continue;
             if (!catalog.Factions.TryGet(player.Faction, out var faction) || faction.StartingBuilding.Length == 0 || !catalog.TryGet(faction.StartingBuilding, out var building) || !building.IsInstantiable)
             {
