@@ -57,6 +57,8 @@ internal static class MissionMovieTests
 
         var clip = movies.PlayFullScreen("Clip", modal: true)!;
         TestHarness.Assert(movies.FullScreen == clip && movies.FullScreenIsModal && sound.Started == 1 && clip.Version == 1, "the movie stands alone, with its sound");
+        movies.Update(1);
+        TestHarness.Assert(clip.Frame == 1 && !clip.IsFinished, "the frame that opened it, however long it took, is not the movie's time");
         movies.Update(0.04);
         TestHarness.Assert(clip.Frame == 2 && clip.Version == 2, "the second frame comes after a frame's time");
         movies.Update(1);
@@ -85,6 +87,7 @@ internal static class MissionMovieTests
         var intro = new MovieIntro(movies);
         intro.Update(0.01);
         TestHarness.Assert(opened.SequenceEqual([MovieIntro.LogoMovie]) && movies.FullScreenIsModal, "the logo first, alone");
+        movies.Update(0.2);
         movies.Update(0.2);
         intro.Update(0.01);
         intro.Update(0.9);
@@ -184,6 +187,7 @@ internal static class MissionMovieTests
         TestHarness.Assert(videoAt == 1 && list.Commands[0] is UiImageDraw, "over the screen's picture, under its children");
 
         movies.Update(1);
+        movies.Update(1);
         shell.Update(1);
         TestHarness.Assert(shell.Phase == ShellPhase.MissionBriefing, "the screen waits for the movie, not for the voice length");
         shell.HandleInput(new KeyEvent(0, KeyCode.Escape, true));
@@ -194,6 +198,7 @@ internal static class MissionMovieTests
 
         var ending = StartCampaign(data, Director(3, opened: _ => { }));
         ending.Movies!.Update(1);
+        ending.Movies.Update(1);
         ending.Update(0.01);
         TestHarness.Assert(ending.Phase == ShellPhase.InMission, "a movie that ends starts the mission");
 

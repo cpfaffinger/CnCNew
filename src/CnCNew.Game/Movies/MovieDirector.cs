@@ -21,6 +21,7 @@ public sealed class MovieClip : IUiVideoSurface
     private readonly IMovieSound? _sound;
     private readonly long _soundHandle;
     private bool _ended;
+    private bool _clockRuns;
 
     internal MovieClip(string name, MoviePlayer player, BinkSound? sound, IMovieSound? output)
     {
@@ -46,6 +47,12 @@ public sealed class MovieClip : IUiVideoSurface
 
     internal void Advance(double seconds)
     {
+        // The time of the frame that opened the movie holds the opening itself, and the sound starts at its end: the clock starts with the first update after it.
+        if (!_clockRuns)
+        {
+            _clockRuns = true;
+            return;
+        }
         _player.Advance(seconds);
         if (_player.IsFinished) End();
     }
