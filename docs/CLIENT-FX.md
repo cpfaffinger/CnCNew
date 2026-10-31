@@ -172,6 +172,10 @@ catalog, map or budget.
   `internal` and intended only for this layer.
 
 
+## The beam of an ability (Phase 59)
+
+`SpecialAbilityUpdate` makes a special object while it works; where that object has a `W3DLaserDraw`, `AttachedEffects` draws it as a band from the unit's `SpecialObjectAttachToBone`, or the unit, to the middle of its target (`W3DLaserDraw::doDrawModule`, `LaserUpdate`; `AttachedEffectCatalog.Lasers`, `LaserOwners`, `LaserSpec.Points`). The Black Lotus's `BinaryDataStream` is the one that shows: ten segments, an arc 30 high in the middle (a part of a cosine), and at least two units above the ground, because it "skims the ground rather than penetrates it". Drawn with the streams' band (`StreamInstance`). Not read: the beam's scrolling texture, its inner and outer colours.
+
 ## Time and tick rate (Phase 21)
 
 The FX layer of the client draws what `FxExecutor.Capture` delivers and keeps no clock of its own. Since Phase 21, `LiveGame` steps the effect clock once per **original frame** (1/30 s of game time) instead of once per simulation tick (`docs/PRESENTATION-FX.md`, "Time and tick rate"): at 30 Hz that is the same, at 60 Hz the particle image still changes 30 times per second. `FxDemo` (`CNCNEW_FX_DEMO=ring`) counts `match.Fx.Frame` and with that places its ring every 45 original frames (1.5 s) at every rate.

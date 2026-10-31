@@ -4627,3 +4627,16 @@ Expected in the manifests: the hashes of the mission runs that have two living i
 - The client moves the standing surface (`TerrainLayer.MoveWater`). **Not moved:** the soft edge's depth map and the minimap's water, both computed once.
 
 Two campaign maps use the action: `MD_CHI04` lowers `Fire Destruction Area` to 0 in 4 s, `MD_GLA04` lowers `Coolant_Reservoir` to 26 in 5 s; so I expect the hashes of the mission runs of those two maps to move, from the moment the scripts fire. `Tests.FidelityScriptMovesTheWater` holds it at 30, 60 and 120 Hz and across a save.
+
+## 73. Phase 59: beacons (F-24)
+
+`PlaceBeaconCommand` and `RemoveBeaconCommand` (`SimulationWorld.Beacons.cs`, `GameLogic::onPlaceBeacon`, `onRemoveBeacon`). **`CommandTypes.Version` 22, replay format 21**, rejection `TooManyBeacons` 43; both are orders of a player, 30 of 40 types.
+
+- A beacon is an ordinary object of the template the player's `PlayerTemplate` names (`BeaconName`, `FactionInfo.BeaconName`; `MultiplayerBeacon` for every faction), standing on the ground at the place; a point beyond the map stands on its edge (`TerrainMap.ClosestPointOnMap`, `findClosestEdgePoint`). It is made in the command phase, so that the limit counts it for the next order of the same tick.
+- The limit is `MaxBeaconsPerPlayer` of `Multiplayer.ini` (`TemplateCatalog.MaxBeaconsPerPlayer`; `MultiplayerSettings` is a typed block now, `MultiplayerSettingsSchema`, 3 without one as the original's constructor). The patch has 5.
+- A defeated player and a player without a template place none; the rest is `InvalidArguments` by the limit of coordinates of §49.
+- `RemoveBeaconCommand` carries what the client has selected, where the original takes the selection the logic knows: this port's selection is the client's. The owner's beacons go, the rest is ignored.
+- `SimEventKind.BeaconPlaced` is the presentation's. A non-ally does not see a beacon: `CanPlayerSee` says no, which also keeps it from the frame, the picker and the skirmish AI (`hideBeacon`; the object stays in the world, so the owner's limit counts it).
+- The world does not know whether a match has several humans: `isInMultiplayerGame` stands in the client (`docs/GAME-HUD.md` §23). A command from a scripted client of a local game would work; the relay does not care.
+
+No run of the manifest places a beacon. **Expected in the manifests:** `replayFormatVersion` and every `commandStreamSha256` (the versions stand in the stream's header), the input manifest in the catalogues (`FactionInfo`, `TemplateCatalog`), the fingerprints that follow the definition graph; no result quantity.

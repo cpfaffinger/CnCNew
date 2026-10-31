@@ -25,4 +25,6 @@ Tier 4; every rendering change looked at by machine and named for a human in `sc
 
 ## Progress
 
+Done (1 November 2026, the register's rest): F-92 (`docs/SIMULATION-CORE.md` §71), F-30 (`docs/CAMPAIGN-AND-SAVEGAMES.md` §2), F-25 (§72, `docs/SCRIPT-ENGINE.md` §7a, `docs/CLIENT-FX.md`, `docs/PRESENTATION-OBJECTS.md` 11a, `docs/SIM-JET-FLIGHT.md`), F-24 (`docs/GAME-HUD.md` §23, §73); F-91 judged not small and left open with its reason. The beacon raises `CommandTypes.Version` to 22 and the replay format to 21: both manifests want a commit of their own, with no result quantity moving.
+
 Done (31 October 2026, `docs/CLIENT-SHADOWS.md`, `docs/CLIENT-TERRAIN.md`, `docs/CLIENT-FX.md`, `docs/GAME-SHELL.md`): stencil shadows and decals, cloud shadows, the sky box, the black border, snow and rain, the shell map, the soft water edge, light pulses, smudges, the user's own maps, credits that end; a script's pitch and zoom (the "no sky" of `MD_USA01` was a camera defect). Script outputs 76 of 92 displayed. **Left of the brief:** the rest of F-25 (`CAMEO_FLASH`, the camera along a path, the shaker, `WATER_CHANGE_HEIGHT*`, drawn paratroopers), chat in a local skirmish and diplomacy (F-24), F-30, F-92, F-88, `scripts/perf-profile.ps1`, the clean room with a real download.

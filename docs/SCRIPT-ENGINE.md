@@ -401,7 +401,7 @@ of `MD_USA01` (tick 0–400, `SETUP_CAMERA(CINE_CameraPos01, 0.2, -0.45, …)`) 
 terrain in front of it is not drawn, or whether it is clipped, is **not investigated**; it is none of the outputs treated here and belongs to the camera findings.
 
 **All output types of the 24 campaign maps** (`CampaignTool outputs <Inhalt> [--maps]`: static count of the passed-on action types in the scripts, plus the state from
-`MissionOutputCatalog`; 92 types, 6,977 uses; **69 displayed, 2 handled by the simulation, 21 not displayed**; before 35 with and 57 without a consumer; 37 passed-on types
+`MissionOutputCatalog`; measured in Phase 59: 91 types, 6,975 uses; **82 displayed, 2 handled by the simulation, 7 not displayed**; at Phase 16: 69, 2 and 21 of 92; before that 35 with and 57 without a consumer; the other passed-on types
 occur in no campaign map and are only in the catalog):
 
 **With a consumer in the client** (state "displayed"; uses = actions in the scripts of all campaign maps, maps = maps with at least one use):

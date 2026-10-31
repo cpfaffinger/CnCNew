@@ -322,6 +322,10 @@ The object presentation no longer assumes anywhere that a tick lasts 1/30 s. Two
 
 **Not verified:** whether muzzle flash, flash and suspension *look* right at 60 Hz. Durations are measured, no human has seen it (visual check list: `docs/TICKRATE-MIGRATION.md` §14.7).
 
+## 11a. Riders under a parachute (Phase 59)
+
+A parachute encloses nobody (`ParachuteContain::isEnclosingContainerFor` stays `OpenContain`'s, and the rider's drawable stays on), so `FrameProjector` draws the rider of a `ParachuteContain` where every other rider disappears: at the chute's `PARA_ATTCH` less the rider's `PARA_MAN` in the rest pose (`FrameProjectorOptions.ModelBone`, `RiderOffset`).
+
 ## 12. Between two ticks (Phase 29)
 
 `FrameProjector.Project(alpha)` always drew position, heading and the turret's angles (yaw and pitch, of both turrets) on their way from the last tick's value to

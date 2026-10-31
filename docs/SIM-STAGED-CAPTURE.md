@@ -97,8 +97,8 @@ and the module sleeps. Thereby the state of all runs without a capture stays byt
 `UNPACKING` during `Unpacking`, `RAISING_FLAG` during `Preparing` (original: `startPreparation` replaces `UNPACKING` with `RAISING_FLAG`), with the Black Lotus instead `FIRING_A`
 (the hacker typing animation, also `startPreparation`), `PACKING` during `Packing`. `RAISING_FLAG` is now in `ConditionDeriver.ProducedNames`.
 
-Not implemented: the sound (unpack/pack/preparation loop, EVA "building is being stolen"; the tick sound with the flashing is a brief of its own),
-the data stream special object `BinaryDataStream` of the Black Lotus and the radar infiltration message. `Stage` and `StageTicksLeft` supply the basis for that.
+Not implemented: the sound (unpack/pack/preparation loop, EVA "building is being stolen"; the tick sound with the flashing is a brief of its own)
+and the radar infiltration message (the data stream `BinaryDataStream` of the Black Lotus is drawn since Phase 59, `docs/CLIENT-FX.md`). `Stage` and `StageTicksLeft` supply the basis for that.
 
 ### Flashing of the building (`DoCaptureFX`)
 

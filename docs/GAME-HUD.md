@@ -650,3 +650,21 @@ a match in both skins in six resolutions (`baselines/skin-screens.txt`), the net
 
 The settings' `display.aspect` reaches the camera: `keepVertical` sets `RtsCamera.KeepVerticalView` (the vertical field of view of 4:3 at every aspect: more to the sides);
 the default keeps the original's horizontal field of view, as the camera always did.
+
+## 23. Phase 59: diplomacy and the beacon
+
+**The window** (`MatchController.Diplomacy.cs`, `ToggleDiplomacy`, `PopulateInGameDiplomacyPopup` of `Diplomacy.cpp`, on the shipped `Diplomacy.wnd`): the button `ControlBar.wnd:PopupCommunicator` and the key `DIPLOMACY` toggle it; it hides the quit menu first, refuses while the scripts hold the input, and the quit menu takes its place. Escape closes it. It is not modal.
+
+- **A skirmish counts as multiplayer** (`RecorderClass::isMultiplayer`: `TheSkirmishGameInfo`), on one machine too: a row per player with name, side, team and state in the player's colour, `GUI:PlayerAlive` green, `GUI:PlayerDead` red, `GUI:PlayerGone` dark red. A computer player's name is its strength (`GameSlot::setState`), a random faction of a non-ally reads `GUI:Random` (`getApparentPlayerTemplateDisplayName`; `ShowRandomPlayerTemplate = Yes`), a computer player without a team `Team:AI`.
+- **Mute** only for another human still in a match of a server. It is this machine's own business: `NetHud` no longer shows the line of a muted connection (`ConnectionManager`). The original also leaves a muted slot out of the mask of a line to all; here the server routes chat, and the other side still gets the line.
+- **A mission has no players** (`isMultiplayer` is false): the window is the briefing history, the button's tooltip `NonCommand_BriefingHistory` instead of `NonCommand_Communicator`, and the list `ListboxSolo` holds every military caption and popup of the scripts once, in order, in the two message colours (`MissionPresentationDirector.BriefingHistory`, `UpdateDiplomacyBriefingText`).
+
+Not built: the buddy page (GameSpy; its two tabs stay hidden), watchers as rows (a watcher has no seat), the slide of 200 ms, dragging the window; the briefing history is not part of a saved mission (the original keeps it in `GameClient::xfer`).
+
+**The chat of a local skirmish does not exist.** `MSG_META_CHAT_*` act only under `GameLogic::isInMultiplayerGame`, which is LAN or internet; the chat of a match of a server is `NetHud`'s (section 21).
+
+**The beacon** (`MatchController.Beacons.cs`): `ButtonPlaceBeacon` is hidden unless the match is a match of a server and the viewer a player (`setControlBarSchemeByPlayer`), and grey at the limit (`ControlBar::update`). The button and the key `PLACE_BEACON` wait for a place (`Command_PlaceBeacon`, cursor `PlaceBeacon`); a click sends `PlaceBeaconCommand`. The key `DELETE_BEACON` sends the selection's beacons, and hides another's on this machine (`FrameProjector.HideBeacon`). `SimEventKind.BeaconPlaced` becomes for the player and its allies the line `GUI:BeaconPlaced` and the sound `BeaconPlaced`, for an ally also the announcer's `BeaconDetected`; `TooManyBeacons` becomes `GUI:TooManyBeacons` and `BeaconPlacementFailed`. A non-ally does not see one (`SimulationWorld.CanPlayerSee`, `docs/SIMULATION-CORE.md` §73).
+
+Not built: the beacon's caption (`MSG_SET_BEACON_TEXT`, `ControlBar.wnd:EditBeaconText`: it needs text in a command, with its bound on the wire), `BeaconClientUpdate`'s radar pulse and smoke, and the radar event of a placed beacon (a skirmish has no radar events yet).
+
+Tests: `HudTests` ("Diplomacy", "Beacons"), `NetHudTests` ("Muting"), `MissionTextTests` ("The briefing history", real data: the mission's window). The button leaves a local game: the HUD draw list hash and the HUD lines of `skin-screens.txt` and `campaign-screens*.txt` moved for it.
