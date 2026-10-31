@@ -28,9 +28,8 @@ public sealed record RailedTransportAiData(AIUpdateData Base, string PathPrefix)
 /// (<c>privateExecuteRailedTransport</c>) picks the next path round-robin and follows it from its start waypoint to its end, unless the dock is loading or unloading. An evacuation
 /// (<see cref="OrderEvacuate"/>) unloads everybody through the dock — not while in transit or while the dock is busy. Orders from the player other than the evacuation are ignored
 /// (<c>aiDoCommand</c>: "we ignore all commands from the player except the one to start a transit and to unload"). A waypoint path is followed hop by hop: an internal move to each
-/// waypoint, then along its first link to the next, until a waypoint has no link. Not modeled: the ultra-accurate locomotor flag (the boat's steering has no such mode here) and
-/// the player command <c>EXECUTE_RAILED_TRANSPORT</c> — the simulation has no command type for it (a new command would change the replay format), so only <see cref="ExecuteRailedTransport"/>
-/// starts a sailing; the map data contains no ferry, so no shipped map is affected.
+/// waypoint, then along its first link to the next, until a waypoint has no link. Not modeled: the ultra-accurate locomotor flag (the boat's steering has no such mode here).
+/// The button <c>EXECUTE_RAILED_TRANSPORT</c> is <see cref="Commands.ExecuteRailedTransportCommand"/>; the map data contains no ferry, so no shipped map is affected.
 /// </summary>
 public sealed class RailedTransportAIUpdate(RailedTransportAiData data) : AIUpdateInterface(data.Base)
 {

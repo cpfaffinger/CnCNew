@@ -919,6 +919,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 return CheckAttackPosition(command.Player, place);
             case SetMineClearingCommand clearing:
                 return CheckSetMineClearing(command.Player, clearing);
+            case ExecuteRailedTransportCommand ferry:
+                return CheckOwnUnits(command.Player, ferry.Units);
             case GroupMoveCommand group:
             {
                 if (group.Units.IsDefaultOrEmpty || group.Units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
@@ -1138,6 +1140,7 @@ public sealed partial class SimulationWorld : IWorldServices
             case GroupMoveCommand order: return AllSleep(order.Units);
             case GuardCommand order: return AllSleep(order.Units);
             case AttackPositionCommand order: return AllSleep(order.Units);
+            case ExecuteRailedTransportCommand order: return AllSleep(order.Units);
             default: return false;
         }
 
@@ -1324,6 +1327,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 var reason = CheckGuard(command.Player, guard);
                 if (reason != 0) { RecordRejection(command, reason); break; }
                 ExecuteGuard(guard with { Units = WithoutSleepers(guard.Units) });
+                break;
+            }
+            case ExecuteRailedTransportCommand ferry:
+            {
+                var reason = CheckOwnUnits(command.Player, ferry.Units);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                ExecuteRailedTransport(ferry);
                 break;
             }
             case SetMineClearingCommand clearing:

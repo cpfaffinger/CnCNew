@@ -43,12 +43,13 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// Version 16 (phase 41): command table 18 with the guard command (units, point, object, mode; F-58); version 15 is rejected.
 /// Version 17 (phase 43): command table 19 with the attack on a place (units, point, own position, slot, shots; F-64); version 16 is rejected.
 /// Version 18 (phase 45): command table 20 with the mine-clearing flag of a group (units; F-69); version 17 is rejected.
+/// Version 20: command table 21 with the order that sends a ferry on its way (units; F-19); version 19 is rejected.
 /// Version 14 (phase 24): after the checkpoint interval the header carries the match description (u32 length, then the canonical bytes; length 0 = none); version 13 is rejected.
 /// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 19;
+    public const int CurrentVersion = 20;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -400,6 +401,10 @@ public static class ReplayFormat
                 writer.Write(clearing.Units.Length);
                 foreach (var unit in clearing.Units) writer.Write(unit.Value);
                 break;
+            case ExecuteRailedTransportCommand ferry:
+                writer.Write(ferry.Units.Length);
+                foreach (var unit in ferry.Units) writer.Write(unit.Value);
+                break;
             case AttackPositionCommand place:
                 writer.Write(place.Units.Length);
                 foreach (var unit in place.Units) writer.Write(unit.Value);
@@ -474,6 +479,7 @@ public static class ReplayFormat
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()),
                 reader.ReadBoolean(), reader.ReadSByte(), reader.ReadInt32()),
             CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, ReadUnits(reader)),
+            CommandTypes.ExecuteRailedTransport => new ExecuteRailedTransportCommand(player, sequence, tick, ReadUnits(reader)),
             CommandTypes.Guard => new GuardCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), new EntityId(reader.ReadUInt32()), (GuardMode)reader.ReadByte(),
                 ReadString(reader)),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),

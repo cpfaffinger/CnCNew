@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 20;
+    public const int Version = 21;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -106,7 +106,11 @@ public static class CommandTypes
     /// <summary><c>MSG_SET_MINE_CLEARING_DETAIL</c> to a group (<c>AIGroup::setMineClearingDetail(true)</c>): the units carry the mine-clearing weapon set flag (F-69).</summary>
     public const ushort SetMineClearing = 37;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= SetMineClearing;
+    // ------------------------------------------------------------------------------------------------------ the ferry (v21)
+    /// <summary><c>MSG_EXECUTE_RAILED_TRANSPORT</c> to a group (<c>AIGroup::groupExecuteRailedTransport</c>): a ferry of the group sets off on its next path (F-19).</summary>
+    public const ushort ExecuteRailedTransport = 38;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= ExecuteRailedTransport;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -197,6 +201,7 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
             CommandTypes.AttackPosition => new AttackPositionCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))], reader.Fixed("x"),
                 reader.Fixed("y"), reader.Bool("own"), checked((int)reader.Int("slot")), checked((int)reader.Int("maxShots"))),
             CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
+            CommandTypes.ExecuteRailedTransport => new ExecuteRailedTransportCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -858,6 +863,32 @@ public sealed record AttackPositionCommand(PlayerId Player, ulong Sequence, long
     public bool Equals(AttackPositionCommand? other)
         => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && OwnPosition == other.OwnPosition
            && Slot == other.Slot && MaxShots == other.MaxShots && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
+
+    public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
+}
+
+/// <summary>
+/// <c>MSG_EXECUTE_RAILED_TRANSPORT</c> (F-19): the button <c>EXECUTE_RAILED_TRANSPORT</c> sends a ferry of the selection on its next path (<c>privateExecuteRailedTransport</c>); every other
+/// unit ignores it, as <c>AIUpdateInterface::privateExecuteRailedTransport</c> is empty.
+/// </summary>
+public sealed record ExecuteRailedTransportCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.ExecuteRailedTransport;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.BeginArray("units");
+        foreach (var unit in Units)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", unit.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+
+    public bool Equals(ExecuteRailedTransportCommand? other)
+        => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
 
     public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }

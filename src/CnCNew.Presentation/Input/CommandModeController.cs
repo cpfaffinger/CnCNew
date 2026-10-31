@@ -464,6 +464,13 @@ public sealed class CommandModeController
                 if (passengers.Count == 0) return ActivationResult.NoSource;
                 return ForAll(passengers, id => Issue((sequence, tick) => new ExitContainerCommand(Player, sequence, tick, id)));
             }
+            case GuiCommandKind.ExecuteRailedTransport:
+            {
+                // MSG_EXECUTE_RAILED_TRANSPORT (F-19).
+                var ferries = sources.Select(entity => entity.Id).ToImmutableArray();
+                if (ferries.IsEmpty) return ActivationResult.NoSource;
+                return Issue((sequence, tick) => new ExecuteRailedTransportCommand(Player, sequence, tick, ferries)).Accepted ? ActivationResult.Issued : ActivationResult.Rejected;
+            }
             case GuiCommandKind.SelectAllUnitsOfType:
                 Selection.Replace(world.Entities.Where(entity => entity.Owner == Player && EntityPicker.IsMassSelectable(entity)
                                                                  && entity.Template.Name.Equals(button.Object, StringComparison.OrdinalIgnoreCase)).Select(entity => entity.Id));

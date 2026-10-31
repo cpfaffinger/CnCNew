@@ -443,6 +443,8 @@ static partial class NetTests
         // Nor the mine-clearing flag (F-69): one for the units of their moves is changed too.
         foreach (var move in orders.OfType<SetMoveTargetCommand>().Skip(60).Take(10))
             encoded.Add(ReplayFormat.EncodeCommand(new SetMineClearingCommand(move.Player, move.Sequence, move.Tick, [move.Target])));
+        foreach (var move in orders.OfType<SetMoveTargetCommand>().Skip(70).Take(10))
+            encoded.Add(ReplayFormat.EncodeCommand(new ExecuteRailedTransportCommand(move.Player, move.Sequence, move.Tick, [move.Target])));
         var kinds = orders.Select(command => command.TypeCode).Distinct().Count();
         Check.That(orders.Count > 100 && kinds >= 5, $"the match gave orders to change ({orders.Count} of {kinds} kinds)");
         // The same match with three seats for players: the recorded orders are given as the players' own at their ticks, so the world lives as it did - and between

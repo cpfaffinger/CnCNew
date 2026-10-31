@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
@@ -57,15 +58,26 @@ public sealed partial class SimulationWorld
         if (_firstFrameTicks != TickOrder.Next && (_tick - builder.SpawnTick) % _firstFrameTicks != 0 && MayAct(builder, _tick)) GuardEngage(builder, ai, state, victim, _tick);
     }
 
-    private CommandRejection CheckSetMineClearing(PlayerId issuer, SetMineClearingCommand order)
+    private CommandRejection CheckSetMineClearing(PlayerId issuer, SetMineClearingCommand order) => CheckOwnUnits(issuer, order.Units);
+
+    private CommandRejection CheckOwnUnits(PlayerId issuer, ImmutableArray<EntityId> units)
     {
-        if (order.Units.IsDefaultOrEmpty || order.Units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
-        foreach (var id in order.Units)
+        if (units.IsDefaultOrEmpty || units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
+        foreach (var id in units)
         {
             if (!_entities.TryGetValue(id.Value, out var member) || member.DestroyRequested) return CommandRejection.UnknownEntity;
             if (member.Owner != issuer) return CommandRejection.NotPermitted;
         }
         return 0;
+    }
+
+    /// <summary><c>AIGroup::groupExecuteRailedTransport</c>: a ferry of the group sets off; another unit ignores the order (F-19).</summary>
+    private void ExecuteRailedTransport(ExecuteRailedTransportCommand order)
+    {
+        foreach (var id in order.Units)
+            if (FindEntity(id) is { DestroyRequested: false } unit && unit.Owner == order.Player)
+                foreach (var module in unit.ModuleArray)
+                    if (module is Modules.BuiltIn.RailedTransportAIUpdate ferry) ferry.ExecuteRailedTransport(this);
     }
 
     /// <summary><c>AIGroup::setMineClearingDetail(true)</c>: every member carries the flag (a builder at work drops it again in its next update, as the original's does).</summary>

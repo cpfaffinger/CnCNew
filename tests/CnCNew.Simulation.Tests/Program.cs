@@ -441,6 +441,7 @@ run.Test("Scripts: a team uses its button on the most valuable enemy in range (F
 run.Test("Team idle: a sequential script waits for a fight to end (F-21)", Tests.SequentialScriptWaitsForAFight);
 run.Test("Team idle: an object that cannot move counts when it has an AI, and a fight or a hack is not idle (F-21)", Tests.TeamIdleReadsTheStateOfTheAi);
 run.Test("Collisions: what stands in contact is hurt on, and what appears on something touches it (F-19)", Tests.CollisionsForWhatStandsAndWhatAppears);
+run.Test("Ferry: the button is a command that sends the ferry on its next path and round-trips (F-19)", Tests.FerryCommandSendsTheFerry);
 run.Test("Demo traps: a dozer at work with a disarming weapon does not set a trap off (F-19)", Tests.DozerAtWorkDoesNotSetATrapOff);
 run.Test("Stopping distance: a script ends a move short of its goal, on the ground by at most four cells (F-22)", Tests.StoppingDistanceEndsAMoveShort);
 run.Test("Hulks: a script's override sets the lifetime of a new hulk and hurries a hulk's slow death (F-22)", Tests.HulkLifetimeOverride);

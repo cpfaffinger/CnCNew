@@ -412,6 +412,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
                 return entity.Template.IsKindOf("STRUCTURE") ? State(ButtonAvailability.Available, ButtonReason.None) : State(ButtonAvailability.Restricted, ButtonReason.NotSupportedBySimulation);
             case GuiCommandKind.Evacuate:
                 return entity.Container is { ContainCount: > 0 } ? State(ButtonAvailability.Available, ButtonReason.None) : State(ButtonAvailability.Restricted, ButtonReason.EmptyContainer);
+            case GuiCommandKind.ExecuteRailedTransport:
+                return entity.Modules.OfType<RailedTransportAIUpdate>().Any() ? State(ButtonAvailability.Available, ButtonReason.None) : State(ButtonAvailability.Restricted, ButtonReason.NotSupportedBySimulation);
             case GuiCommandKind.SetRallyPoint:
                 return production is null ? State(ButtonAvailability.Restricted, ButtonReason.NoProducer) : State(ButtonAvailability.Available, ButtonReason.None);
             case GuiCommandKind.Stop or GuiCommandKind.SelectAllUnitsOfType or GuiCommandKind.DozerConstructCancel or GuiCommandKind.CancelUnitBuild:
