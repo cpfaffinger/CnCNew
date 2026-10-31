@@ -36,6 +36,9 @@ public sealed partial class SpecialAbilityUpdate
     /// <summary>The objects this ability has out in the world: the charges it has planted (<c>m_specialObjectIDList</c>), in the order they were made.</summary>
     private readonly List<EntityId> _specialObjects = [];
 
+    /// <summary>The objects it has made and still knows (<c>m_specialObjectIDs</c>); the presentation draws a laser between the unit and its target with them.</summary>
+    public IReadOnlyList<EntityId> SpecialObjects => _specialObjects;
+
     /// <summary>How many of its special objects exist (<c>getSpecialObjectCount</c>).</summary>
     public int SpecialObjectCount(IWorldServices world)
     {

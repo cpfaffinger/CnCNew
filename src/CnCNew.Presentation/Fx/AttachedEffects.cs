@@ -54,6 +54,12 @@ public sealed class AttachedEffectCatalog
     /// <summary>Per weapon the stream object its projectiles draw (<c>ProjectileStreamName</c>) with that object's <c>W3DProjectileStreamDraw</c>.</summary>
     public ImmutableDictionary<string, StreamSpec> WeaponStreams { get; private init; } = ImmutableDictionary<string, StreamSpec>.Empty;
 
+    /// <summary>The objects with a <c>W3DLaserDraw</c>, by name: what the special object of an ability draws between the unit and its target.</summary>
+    public ImmutableDictionary<string, LaserSpec> Lasers { get; private init; } = ImmutableDictionary<string, LaserSpec>.Empty;
+
+    /// <summary>The objects whose <c>SpecialAbilityUpdate</c> makes a laser, with the bone it leaves from (<c>SpecialObjectAttachToBone</c>).</summary>
+    public ImmutableDictionary<string, string> LaserOwners { get; private init; } = ImmutableDictionary<string, string>.Empty;
+
     /// <summary>Values the parser could not read, each with its place: counted, never guessed at.</summary>
     public ImmutableArray<string> Problems { get; private init; } = [];
 
@@ -67,6 +73,8 @@ public sealed class AttachedEffectCatalog
         var problems = new List<string>();
         var streamNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var streamDraws = new Dictionary<string, StreamSpec>(StringComparer.OrdinalIgnoreCase);
+        var lasers = ImmutableDictionary.CreateBuilder<string, LaserSpec>(StringComparer.OrdinalIgnoreCase);
+        var abilities = new List<(string Owner, string Object, string Bone)>();
         var rules = new BodyParticleRule[BodyKeys.Length];
         for (var index = 0; index < rules.Length; index++) rules[index] = new BodyParticleRule(string.Empty, string.Empty, 0);
         foreach (var definition in graph.Definitions)
@@ -75,6 +83,13 @@ public sealed class AttachedEffectCatalog
             {
                 case ObjectDefinition obj:
                     if (Compile(obj, problems) is { } template) objects[obj.OriginalName] = template;
+                    foreach (var module in obj.Modules)
+                    {
+                        string Key(string key) => module.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? string.Empty;
+                        float Amount(string key) => float.TryParse(Key(key), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) ? number : 0f;
+                        if (module.Name.Equals("W3DLaserDraw", StringComparison.Ordinal)) lasers[obj.OriginalName] = new LaserSpec(Key("Texture"), Amount("InnerBeamWidth"), Math.Max(1, (int)Amount("Segments")), Amount("ArcHeight"));
+                        if (module.Name.Equals("SpecialAbilityUpdate", StringComparison.Ordinal) && Key("SpecialObject").Length > 0) abilities.Add((obj.OriginalName, Key("SpecialObject"), Key("SpecialObjectAttachToBone")));
+                    }
                     if (obj.Modules.FirstOrDefault(module => module.Name.Equals("W3DProjectileStreamDraw", StringComparison.Ordinal)) is { } stream)
                     {
                         string Value(string key, string fallback) => stream.Fields.LastOrDefault(field => field.Name.Equals(key, StringComparison.OrdinalIgnoreCase))?.Value.OriginalText.Trim() ?? fallback;
@@ -115,7 +130,10 @@ public sealed class AttachedEffectCatalog
             if (streamDraws.TryGetValue(name, out var spec)) streams[weapon] = spec;
             else problems.Add($"Weapon {weapon}: the stream object '{name}' has no W3DProjectileStreamDraw");
         }
-        return new AttachedEffectCatalog { Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
+        var owners = ImmutableDictionary.CreateBuilder<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (owner, made, bone) in abilities)
+            if (lasers.ContainsKey(made)) owners[owner] = bone;
+        return new AttachedEffectCatalog { Lasers = lasers.ToImmutable(), LaserOwners = owners.ToImmutable(), Objects = objects.ToImmutable(), BodyRules = [.. rules], WeaponExhausts = exhausts.ToImmutable(), WeaponStreams = streams.ToImmutable(), Problems = [.. problems] };
     }
 
     private static string? Named(string token) => token.Length == 0 || token.Equals("None", StringComparison.OrdinalIgnoreCase) ? null : token;
@@ -211,6 +229,31 @@ public sealed class AttachedEffectCatalog
         var min = numbers.Count > 0 ? numbers[0] * CnCNew.Data.OriginalFrame.PerSecond / 1000f : 0f;
         var max = numbers.Count > 1 ? numbers[1] * CnCNew.Data.OriginalFrame.PerSecond / 1000f : min;
         return new Slot(bone, onlyOnce, min, max, name, randomBone, location);
+    }
+}
+
+/// <summary>The keys of a <c>W3DLaserDraw</c> this draws: the texture, the width of the beam, its segments and the height of its arc.</summary>
+public sealed record LaserSpec(string Texture, float Width, int Segments, float ArcHeight)
+{
+    /// <summary>
+    /// The points of the beam (<c>W3DLaserDraw::doDrawModule</c>): along the straight line, raised by a part of a cosine that is <see cref="ArcHeight"/> in the middle and nothing at the
+    /// ends, and "skim the ground rather than penetrate it" two units above <paramref name="ground"/>.
+    /// </summary>
+    public ImmutableArray<Vector3> Points(Vector3 start, Vector3 end, Func<float, float, float> ground)
+    {
+        ArgumentNullException.ThrowIfNull(ground);
+        if (ArcHeight <= 0f || Segments <= 1) return [start, end];
+        var points = ImmutableArray.CreateBuilder<Vector3>(Segments + 1);
+        var middle = (start + end) * 0.5f;
+        var half = Vector3.Distance(start, end) * 0.5f;
+        for (var index = 0; index <= Segments; index++)
+        {
+            var point = Vector3.Lerp(start, end, index / (float)Segments);
+            if (half > 0f) point.Z += MathF.Cos(Vector3.Distance(middle, point) / half * MathF.PI * 0.5f) * ArcHeight;
+            point.Z = Math.Max(point.Z, 2f + ground(point.X, point.Y));
+            points.Add(point);
+        }
+        return points.MoveToImmutable();
     }
 }
 
@@ -414,7 +457,29 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             Flush(frame, stream.Spec, points);
         }
         foreach (var key in ended) _streams.Remove(key);
+        if (catalog.LaserOwners.Count > 0) AddLasers(world, view, frame);
         _streamFrame = frame.ToImmutable();
+    }
+
+    /// <summary>The beams of the abilities at work (<c>SpecialAbilityUpdate::initLaser</c>, <c>LaserUpdate</c>): from the unit's bone, or the unit, to the centre of its target; a band like a stream. The Black Lotus's data stream is one of them.</summary>
+    private void AddLasers(SimulationWorld world, IFxWorldView view, ImmutableArray<StreamInstance>.Builder frame)
+    {
+        foreach (var item in _ordered)
+        {
+            if (world.FindEntity(item.Entity) is not { } entity || !catalog.LaserOwners.TryGetValue(entity.Template.Name, out var bone) || view.GetPose(item.Entity) is not { } pose) continue;
+            foreach (var module in entity.Modules)
+            {
+                if (module is not CnCNew.Simulation.Modules.BuiltIn.SpecialAbilityUpdate ability || !ability.Target.IsValid || world.FindEntity(ability.Target) is not { } target || view.GetPose(target.Id) is not { } victim) continue;
+                foreach (var id in ability.SpecialObjects)
+                {
+                    if (world.FindEntity(id) is not { } made || !catalog.Lasers.TryGetValue(made.Template.Name, out var laser)) continue;
+                    var start = bone.Length > 0 && BonePosition(item.Entity, bone, pose) is { } found ? found : pose.Position;
+                    var end = victim.Position + new Vector3(0f, 0f, FixedConvert.ToSingle(target.Template.GeometryHeight) / 2f);
+                    var points = laser.Points(start, end, (x, y) => world.Terrain is { } terrain ? FixedConvert.ToSingle(terrain.HeightAt(FixedConvert.FromSingle(x), FixedConvert.FromSingle(y))) : 0f);
+                    frame.Add(new StreamInstance(points, laser.Texture, laser.Width, 1f));
+                }
+            }
+        }
     }
 
     private static void Flush(ImmutableArray<StreamInstance>.Builder frame, StreamSpec spec, List<Vector3> points)

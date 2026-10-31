@@ -93,7 +93,7 @@ public abstract class LiveGame
         Colors = TeamColors.Resolve(players, graph);
         var scenery = StaticScenery.Build(map.Objects, data.Visuals, Heights.HeightAt).Items;
         FogViewer = human;
-        _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues };
+        _projectorOptions = new FrameProjectorOptions { Viewer = human, Colors = Colors, Scenery = scenery, ModelBone = data.ModelBones.Find, SelectionFlash = SelectionFlashSettings.FromDefinitions(graph), InterpolateValues = InterpolateValues };
         _projector = new FrameProjector(data.Visuals, _projectorOptions);
         Fx = new FxExecutor(data.Fx, world.Time, fxSeed, new ParticleBudget());
         Attached = new AttachedEffects(data.AttachedEffects, Fx, data.ModelBones.Find, fxSeed);

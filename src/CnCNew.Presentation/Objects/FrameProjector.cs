@@ -16,6 +16,9 @@ public sealed record FrameProjectorOptions
     /// <summary>Fog of war for this player (own, allied and currently visible objects, plus remembered structures); null shows everything.</summary>
     public PlayerId? Viewer { get; init; }
 
+    /// <summary>The rest position of a bone of a model, for what hangs on another object; null without a model library.</summary>
+    public Func<string, string, Vector3?>? ModelBone { get; init; }
+
     public bool Night { get; init; }
     public bool Snow { get; init; }
 
@@ -202,13 +205,16 @@ public sealed class FrameProjector
         var ordered = ImmutableArray.CreateBuilder<Capture>(entities.Count);
         foreach (var entity in entities)
         {
-            if (entity.DestroyRequested || entity.ContainedBy.IsValid) continue;
+            // A parachute encloses nobody (ParachuteContain::isEnclosingContainerFor is OpenContain's, and its drawable stays on): the rider hangs under it. Every other rider is inside.
+            var chute = entity.ContainedBy.IsValid ? world.FindEntity(entity.ContainedBy) : null;
+            if (entity.DestroyRequested || (entity.ContainedBy.IsValid && chute?.Container is not ParachuteContain)) continue;
             // StealthUpdate::changeVisualDisguise: a unit in disguise has the model of what it stands for, and the house colour of that player for everybody but its allies.
             var disguise = entity.HasStatus(DisguisedBit) ? entity.Modules.OfType<StealthUpdate>().FirstOrDefault(stealth => stealth.IsDisguised) : null;
             var shown = disguise is not null ? world.Templates[disguise.DisguisedTemplate].Name : entity.Template.Name;
             if (!_catalog.TryGet(shown, out var visual)) { MissingVisuals++; continue; }
             var previous = _previous.GetValueOrDefault(entity.Id.Value);
             var capture = CaptureEntity(entity, world, visual, previous);
+            if (chute is not null) capture = capture with { Position = capture.Position + RiderOffset(chute, capture, entity) };
             if (disguise is not null && _options.Viewer is { } looking && world.RelationshipOf(entity.Owner, looking) != Relationship.Allies) capture = capture with { Owner = disguise.DisguisedPlayer };
             _current[entity.Id.Value] = capture;
             ordered.Add(capture);
@@ -370,6 +376,17 @@ public sealed class FrameProjector
         if (delta > MathF.PI) delta -= MathF.Tau;
         else if (delta < -MathF.PI) delta += MathF.Tau;
         return from + delta * alpha;
+    }
+
+    /// <summary><c>ParachuteContain::updateOffsetsFromBones</c>: the chute's <c>PARA_ATTCH</c> bone over the rider's <c>PARA_MAN</c>, or over the top of a rider without one.</summary>
+    private Vector3 RiderOffset(Entity chute, Capture rider, Entity entity)
+    {
+        if (_options.ModelBone is not { } bone) return Vector3.Zero;
+        var carrier = _current.GetValueOrDefault(chute.Id.Value) ?? _previous.GetValueOrDefault(chute.Id.Value);
+        var attach = carrier?.Selections.FirstOrDefault(selection => selection.Model is not null).Model is { } model ? bone(model, "PARA_ATTCH") ?? Vector3.Zero : Vector3.Zero;
+        var man = rider.Selections.FirstOrDefault(selection => selection.Model is not null).Model is { } own ? bone(own, "PARA_MAN") : null;
+        var offset = attach - (man ?? new Vector3(0f, 0f, ToFloat(entity.Template.GeometryHeight)));
+        return Vector3.Transform(offset, Matrix4x4.CreateRotationZ(rider.Yaw));
     }
 
     private Capture CaptureEntity(Entity entity, SimulationWorld world, ObjectVisual visual, Capture? previous)

@@ -18,6 +18,66 @@ internal static class GarrisonGunTests
 {
     private static readonly ImmutableArray<PlayerConfiguration> Players = [new(new PlayerId(1), "Alpha"), new(new PlayerId(2), "Beta")];
 
+    /// <summary><c>ParachuteContain</c>: its rider is drawn, under the chute by the bones; a rider of any other container is not.</summary>
+    private static void ParatrooperIsDrawn()
+    {
+        var fixture = new SyntheticFixture(SimulationRate.Hz60, files: new Dictionary<string, string>(SyntheticFixture.Files)
+        {
+            ["Data/INI/Object/ChuteFixture.ini"] = """
+            Object PtChute
+              KindOf = PARACHUTE
+              Draw = W3DModelDraw ModuleTag_01
+                DefaultConditionState
+                  Model = PtChuteModel
+                End
+              End
+              Body = ActiveBody Body01
+                MaxHealth = 10.0
+                InitialHealth = 10.0
+              End
+              Behavior = ParachuteContain Chute01
+                ParachuteOpenDist = 1000.0
+                AllowInsideKindOf = INFANTRY PARACHUTABLE
+                FreeFallDamagePercent = 50%
+              End
+            End
+            Object PtSoldier
+              KindOf = INFANTRY SELECTABLE
+              Draw = W3DModelDraw ModuleTag_01
+                DefaultConditionState
+                  Model = PtMan
+                End
+              End
+              Body = ActiveBody Body01
+                MaxHealth = 10.0
+                InitialHealth = 10.0
+              End
+              GeometryHeight = 12.0
+            End
+            """
+        });
+        var rate = SimulationRate.Hz60;
+        var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, Players, SyntheticFixture.FixtureId, fixture.Fingerprint, ""), fixture.Templates);
+        world.Submit(new SpawnCommand(PlayerId.System, 1, world.Tick, "PtChute", new PlayerId(1), Fixed.Zero, Fixed.Zero, Fixed.FromInt(300), Fixed.Zero));
+        world.Submit(new SpawnCommand(PlayerId.System, 2, world.Tick, "PtSoldier", new PlayerId(1), Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.Zero));
+        world.Step();
+        var chute = world.Entities.Single(entity => entity.Template.Name == "PtChute");
+        var soldier = world.Entities.Single(entity => entity.Template.Name == "PtSoldier");
+        Assert(world.TryEnterContainer(soldier, chute), "setup - the soldier hangs on the chute.");
+        var projector = new FrameProjector(ObjectVisualCatalog.Build(fixture.Graph), new FrameProjectorOptions
+        {
+            ModelBone = (model, bone) => model.Equals("PtChuteModel", StringComparison.OrdinalIgnoreCase) && bone == "PARA_ATTCH" ? new System.Numerics.Vector3(0, 0, 5) : null,
+        });
+        world.Step();
+        projector.Advance(world);
+        projector.Advance(world);
+        var drawn = projector.Project(1f).Drawables;
+        var man = drawn.SingleOrDefault(drawable => drawable.TemplateName == "PtSoldier");
+        var canopy = drawn.Single(drawable => drawable.TemplateName == "PtChute");
+        Assert(man is not null, "the rider of a parachute is drawn.");
+        Assert(Math.Abs(man!.Position.Z - (canopy.Position.Z + 5f - 12f)) < 3f, $"his top hangs at the chute's bone ({man.Position.Z}, chute {canopy.Position.Z}).");
+    }
+
     private static IReadOnlyDictionary<string, string> Files() => new Dictionary<string, string>(SyntheticFixture.Files)
     {
         ["Data/INI/Object/GarrisonGunFixture.ini"] = """
@@ -102,6 +162,7 @@ internal static class GarrisonGunTests
     public static int Run(string[] args)
     {
         var t = new TestHarness("GarrisonGun");
+        t.Run("the rider of a parachute is drawn under it", ParatrooperIsDrawn);
         t.Run("a garrisoned rifleman's gun barrel stands at his point facing his victim, flashes in the five frames after a shot at 30, 60 and 120 Hz, and goes when he leaves", Gun);
         return t.Failures;
     }
