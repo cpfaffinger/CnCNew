@@ -580,8 +580,31 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
     // The step of the current frame and the ticks of it already flown (0: this tick decides a step). Always 0 at 30 Hz (and then not written).
     private Point3 _frameStep;
     private int _subStep;
+    // aiFollowWaypointPath: the waypoints still to fly, the one the goal stands on first. Empty for every missile no script sends along a path.
+    private readonly List<(Fixed X, Fixed Y)> _route = [];
 
     public override string ModuleName => "MissileAIUpdate";
+
+    /// <summary>
+    /// <c>aiFollowWaypointPath</c> of a missile: it flies from waypoint to waypoint at its height and comes down on the last one, where it detonates. The original flies the waypoints
+    /// with its locomotor's preferred height; a missile here flies at its goal, so a waypoint on the way keeps the height the missile has.
+    /// </summary>
+    public void FollowPath(IWorldServices world, ImmutableArray<(Fixed X, Fixed Y)> path)
+    {
+        if (path.IsDefaultOrEmpty) return;
+        _route.Clear();
+        _route.AddRange(path);
+        _victim = EntityId.Invalid;
+        _tracking = false;
+        GoToWaypoint(world);
+        world.MarkDirty(Entity);
+    }
+
+    private void GoToWaypoint(IWorldServices world)
+    {
+        var (x, y) = _route[0];
+        _goal = new Point3(x, y, _route.Count > 1 ? Entity.Z : world.GroundHeightAt(x, y));
+    }
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public EntityId Launcher => _launcher;
     internal MissileState State => _state;
@@ -823,6 +846,14 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         {
             var toGoal = new Point3(_goal.X - position.X, _goal.Y - position.Y, _goal.Z - position.Z);
             var remaining = Norm(toGoal);
+            if (remaining <= _speed && _route.Count > 1)
+            {
+                // AIFollowWaypointPathState: on to the next waypoint.
+                _route.RemoveAt(0);
+                GoToWaypoint(world);
+                toGoal = new Point3(_goal.X - position.X, _goal.Y - position.Y, _goal.Z - position.Z);
+                remaining = Fixed.Max(Norm(toGoal), Fixed.One);
+            }
             if (remaining <= _speed)
             {
                 Place(world, _goal);
@@ -946,6 +977,18 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         writer.Fixed("noTurnDistanceLeft", _noTurnDistanceLeft);
         DumbProjectileBehavior.WritePoint(writer, "previous", _previous);
         DumbProjectileBehavior.WritePoint(writer, "goal", _goal);
+        if (_route.Count > 0)
+        {
+            writer.BeginArray("route");
+            foreach (var (x, y) in _route)
+            {
+                writer.BeginObject(null);
+                writer.Fixed("x", x);
+                writer.Fixed("y", y);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
         DumbProjectileBehavior.WritePoint(writer, "original", _originalTarget);
         DumbProjectileBehavior.WritePoint(writer, "direction", _direction);
         writer.Fixed("speed", _speed);
@@ -979,6 +1022,8 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         _noTurnDistanceLeft = reader.Fixed("noTurnDistanceLeft");
         _previous = DumbProjectileBehavior.ReadPoint(reader, "previous");
         _goal = DumbProjectileBehavior.ReadPoint(reader, "goal");
+        _route.Clear();
+        if (reader.Has("route")) foreach (var item in reader.Array("route")) _route.Add((item.Fixed("x"), item.Fixed("y")));
         _originalTarget = DumbProjectileBehavior.ReadPoint(reader, "original");
         _direction = DumbProjectileBehavior.ReadPoint(reader, "direction");
         _speed = reader.Fixed("speed");

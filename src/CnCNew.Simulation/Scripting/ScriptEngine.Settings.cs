@@ -68,6 +68,17 @@ public sealed partial class ScriptEngine
                     }
                 }
                 return true;
+            // doNamedFireWeaponFollowingWaypointPath: from the waypoint closest to the unit to the end of the path.
+            case "NAMED_FIRE_WEAPON_FOLLOWING_WAYPOINT_PATH":
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } launcher && _program.FindPath(Str(p, 1)) is { Waypoints.IsDefaultOrEmpty: false } flightPath)
+                    _world.FireFollowingPath(launcher, [..flightPath.Waypoints.Skip(ClosestWaypointIndex(launcher, flightPath)).Select(waypoint => (waypoint.X, waypoint.Y))]);
+                return true;
+            case "SKIRMISH_ATTACK_NEAREST_GROUP_WITH_VALUE":
+                if (Has(type, p, 3) && FindTeam(Str(p, 0)) is { } valueHunters) AttackNearestGroupWithValue(valueHunters, Int(p, 1), Int(p, 2));
+                return true;
+            case "SKIRMISH_PERFORM_COMMANDBUTTON_ON_MOST_VALUABLE_OBJECT":
+                if (Has(type, p, 3) && FindTeam(Str(p, 0)) is { } valueTakers) CommandButtonOnMostValuable(valueTakers, Str(p, 1), Real(p, 2));
+                return true;
             default:
                 return TryExecutePhase13Action(action);
         }

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
@@ -103,6 +104,32 @@ public sealed partial class SimulationWorld
         return Fixed.Zero;
     }
 
+
+    /// <summary>
+    /// <c>doNamedFireWeaponFollowingWaypointPath</c>: the highest slot that holds a weapon able to follow waypoints fires at the object's own place, whatever its reload says
+    /// (<c>Weapon::forceFireWeapon</c>), and the projectile flies the path (<c>aiFollowWaypointPath</c>). False without such a weapon.
+    /// </summary>
+    public bool FireFollowingPath(Entity source, ImmutableArray<(Fixed X, Fixed Y)> path)
+    {
+        if (ActiveWeaponSet(source) is not { } set) return false;
+        for (var slot = WeaponSlot.Count - 1; slot >= 0; slot--)
+        {
+            if (!set.HasWeapon(slot) || !_templates.Weapons[set.Weapons[slot]].CapableOfFollowingWaypoints) continue;
+            var weapon = ConsumeShot(source, slot, EntityId.Invalid);
+            var (x, y, z) = source.FrameEnd(_tick);
+            var queued = _spawnQueue.Count;
+            FireWeaponAt(source, weapon, null, x, y, z);
+            Emit(SimEventKind.WeaponFired, source.Id, EntityId.Invalid, weapon.Name, 0, source.Owner);
+            if (_spawnQueue.Count == queued) return true;
+            var projectile = _spawnQueue[^1].Id;
+            MaterializePendingSpawns();
+            if (FindEntity(projectile) is { } missile)
+                foreach (var module in missile.ModuleArray)
+                    if (module is Modules.BuiltIn.MissileAIUpdate flight) flight.FollowPath(this, path);
+            return true;
+        }
+        return false;
+    }
 
     public void FireTempWeapon(Entity source, string weaponName, Fixed x, Fixed y, Fixed z)
     {

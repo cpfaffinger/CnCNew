@@ -445,15 +445,7 @@ public sealed partial class ScriptEngine
     private void Roam(Entity member, ScriptWaypointPath path, bool panic)
     {
         if (member.Template.Locomotor is null || member.Owner.IsSystem || _world.IsAsleep(member) || AiOf(member) is not { } ai) return;
-        var closest = 0;
-        var bestDistance = Fixed.MaxValue;
-        for (var index = 0; index < path.Waypoints.Length; index++)
-        {
-            var distance = Distance2(member, path.Waypoints[index].X, path.Waypoints[index].Y);
-            if (distance >= bestDistance) continue;
-            bestDistance = distance;
-            closest = index;
-        }
+        var closest = ClosestWaypointIndex(member, path);
         _buttonHunts.Remove(member.Id.Value);
         ai.ChooseLocomotorSet(_world, panic ? "SET_PANIC" : "SET_WANDER");
         ai.OrderIdle(_world);
@@ -462,6 +454,21 @@ public sealed partial class ScriptEngine
         _completedPath.Remove(member.Id.Value);
         _world.SetPanicking(member, panic);
         GoToRoamingWaypoint(follower, member, ai, path);
+    }
+
+    /// <summary><c>TerrainLogic::getClosestWaypointOnPath</c>.</summary>
+    private static int ClosestWaypointIndex(Entity entity, ScriptWaypointPath path)
+    {
+        var closest = 0;
+        var bestDistance = Fixed.MaxValue;
+        for (var index = 0; index < path.Waypoints.Length; index++)
+        {
+            var distance = Distance2(entity, path.Waypoints[index].X, path.Waypoints[index].Y);
+            if (distance >= bestDistance) continue;
+            bestDistance = distance;
+            closest = index;
+        }
+        return closest;
     }
 
     /// <summary>Ten logic frames of the original, the fixed part of <c>m_waitFrames</c> (<c>AIWanderState::onEnter</c>, <c>AIPanicState::onEnter</c>).</summary>

@@ -41,6 +41,9 @@ public sealed record WeaponInfo(
     /// <summary><c>m_continueAttackRange</c> (F-69): if above zero, after the victim is destroyed the attack goes on at a similar object of the same player within this range of the first one.</summary>
     public Fixed ContinueAttackRange { get; init; }
 
+    /// <summary><c>CapableOfFollowingWaypoints</c> (<c>WeaponTemplate::m_capableOfFollowingWaypoint</c>): the weapon a script can send along a path (<c>WeaponSet::findWaypointFollowingCapableWeapon</c>).</summary>
+    public bool CapableOfFollowingWaypoints { get; init; }
+
     /// <summary><c>m_projectileName</c>; empty when the weapon fires no projectile object (<c>None</c> or absent).</summary>
     public string ProjectileObject { get; init; } = string.Empty;
 
@@ -296,6 +299,7 @@ public sealed class WeaponCatalog
                 ScaleWeaponSpeed = Flag("ScaleWeaponSpeed"),
                 MinimumAttackRange = Length("MinimumAttackRange"),
                 ContinueAttackRange = Length("ContinueAttackRange"),
+                CapableOfFollowingWaypoints = Field("CapableOfFollowingWaypoints")?.Value.Value is true,
                 ProjectileObject = projectile,
                 ScatterRadius = Length("ScatterRadius"),
                 ScatterRadiusVsInfantry = Length("ScatterRadiusVsInfantry"),

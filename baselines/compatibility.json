@@ -4900,15 +4900,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "Weapon/CapableOfFollowingWaypoints",
-      "count": 4,
-      "owners": [
-        "Weapon"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Weapon/ContinuousFireCoast",
       "count": 17,
       "owners": [

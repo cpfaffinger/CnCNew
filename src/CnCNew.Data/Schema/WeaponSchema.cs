@@ -27,6 +27,7 @@ public static class WeaponSchema
             new("AttackRange", FieldType.Distance, Source: Table),
             new("MinimumAttackRange", FieldType.Distance, Source: Table),
             new("ContinueAttackRange", FieldType.Distance, Source: Table),
+            new("CapableOfFollowingWaypoints", FieldType.Bool, Source: Table),
             new("DamageType", FieldType.Enum, Table: NameTables.DamageType, Source: Table + " DamageTypeFlags::parseSingleBitFromINI"),
             new("DeathType", FieldType.Enum, Table: NameTables.DeathType, Source: Table),
             Real("WeaponSpeed"),
