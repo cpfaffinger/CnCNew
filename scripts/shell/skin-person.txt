@@ -1,17 +1,17 @@
-# The scripted person of docs/UI-MODERN.md section 9 (R4): starts in the original skin with fresh settings, chooses the modern skin in the options' "More options"
+# The scripted person of docs/UI-MODERN.md section 9 (R4): starts in the modern skin with fresh settings, chooses the original skin in the options' "More options"
 # and walks main menu, skirmish, score screen, analysis and the replay list with a playback - without a developer argument. Game.Tests (SkinTests) walks it without a
 # window, scripts/check-skins.ps1 in the window client. A step waits for what a person would see (CnCNew.Game.Shell.ShellScript).
 wait screen MainMenuScreen
-expect skin original
+expect skin modern
 click MainMenu.wnd:ButtonOptions
 wait screen OptionsScreen
 click OptionsMore.wnd:ButtonMoreOptions
 wait screen MoreOptionsScreen
-expect combo MoreOptions.wnd:ComboSkin shows Original
-select MoreOptions.wnd:ComboSkin Modern
+expect combo MoreOptions.wnd:ComboSkin shows Modern
+select MoreOptions.wnd:ComboSkin Original
 click MoreOptions.wnd:ButtonAccept
 wait screen OptionsScreen
-expect skin modern
+expect skin original
 click OptionsMenu.wnd:ButtonBack
 wait screen MainMenuScreen
 click MainMenu.wnd:ButtonSinglePlayer
@@ -23,7 +23,7 @@ wait phase InMatch
 wait phase Results
 limit 30
 wait screen ScoreScreenScreen
-expect skin modern
+expect skin original
 click ScoreScreen.wnd:ButtonSaveReplay
 wait screen MatchAnalysisScreen
 expect text ScoreScreen.wnd:ChallengeWinLossText contains page 1 of 6
@@ -51,4 +51,4 @@ click ScoreScreen.wnd:ButtonOk
 wait screen ReplayMenuScreen
 click ReplayMenu.wnd:ButtonBack
 wait screen MainMenuScreen
-expect skin modern
+expect skin original

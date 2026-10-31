@@ -43,7 +43,7 @@ public enum MenuAction
 /// has stepped the simulation for the frame) <see cref="Update"/>, then <see cref="BuildDrawList"/>.
 /// </para>
 /// </summary>
-public sealed class MatchController
+public sealed partial class MatchController
 {
     private readonly HudAssets _assets;
     private readonly TooltipPainter _tooltips;
@@ -102,6 +102,7 @@ public sealed class MatchController
         _tree.FindByName("ControlBar.wnd:ObserverPlayerInfoWindow")?.SetHidden(true);
         _tree.FindByName("ControlBar.wnd:ObserverPlayerListWindow")?.SetHidden(true);
         _tree.Register("ControlBarSystem", OnControlBarSystem);
+        AddGeneralsWindow();
 
         var quitMenuRoots = _tree.AddLayout(Skin.Derive(_assets.QuitMenu, _assets.HeaderTemplates));
         _quitMenuRoot = quitMenuRoots.Single(window => window.Name == "QuitMenu.wnd:QuitMenuParent");
@@ -134,6 +135,7 @@ public sealed class MatchController
 
         CommandBar = Input.CommandBar!.Build(match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(match.World, match.Human);
+        Generals = Input.CommandBar.Generals(match.World, match.Human);
         Overlay = HudOverlay.Empty;
     }
 
@@ -331,6 +333,7 @@ public sealed class MatchController
         IsMenuOpen = true;
         _wasPausedBeforeMenu = Match.Paused;
         Match.Paused = true;
+        HideGeneralsWindow();
         _quitMenuRoot.SetHidden(false);
     }
 
@@ -384,6 +387,9 @@ public sealed class MatchController
                 OpenMenu();
                 break;
             case "ControlBar.wnd:ButtonGeneral":
+                CloseMenu();
+                ToggleGeneralsWindow();
+                break;
             case "ControlBar.wnd:ButtonPlaceBeacon":
             case "ControlBar.wnd:PopupCommunicator":
                 Messages.ClientNote($"not supported in this build: {name.Split(':')[^1]}");
@@ -422,6 +428,7 @@ public sealed class MatchController
         if (!PointerOverWindow) Input.RefreshHint(Match.World, Match.Camera);
         CommandBar = Input.CommandBar!.Build(Match.World, Input.Selection);
         Hud = Input.CommandBar.Hud(Match.World, Match.Human);
+        UpdateGenerals();
         DrainFeedback();
         Overlay = ComputeOverlay();
         // The building follows the cursor in the world, too: the object layer draws it translucent (InGameUI::handleBuildPlacements).
@@ -661,6 +668,7 @@ public sealed class MatchController
         if (_tree.Viewport.Width != width || _tree.Viewport.Height != height) _tree.SetViewport(new UiViewport(width, height), _scaleOptions);
 
         RefreshDynamicWindows();
+        RefreshGeneralsWindow();
         var baseList = _tree.BuildDrawList();
         var extra = BuildDynamicCommands();
         var viewportRect = new UiRect(0, 0, width, _controlBarRoot.Rect.Y);
@@ -703,6 +711,7 @@ public sealed class MatchController
         const string prefix = "ControlBar.wnd:ButtonCommand";
         if (window.Name == "ControlBar.wnd:MoneyDisplay") return _descriptions.Money().ToTooltip();
         if (window.Name == "ControlBar.wnd:PowerWindow") return _descriptions.Power(Hud.EnergyProduction, Hud.EnergyConsumption).ToTooltip();
+        if (GeneralsButton(window.Name) is { } science) return _descriptions.Build(science, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } text ? text : null;
         if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return null;
         if (slot is < 1 or > CommandBarModel.GridSlots || CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) return null;
         var selected = Input.Selection.Selected.Select(Match.World.FindEntity).FirstOrDefault(entity => entity is not null);
@@ -925,6 +934,7 @@ public sealed class MatchController
             var ratio = Hud.EnergyConsumption <= 0 ? 1f : Math.Clamp(Hud.EnergyProduction / (float)Hud.EnergyConsumption, 0f, 1f);
             commands.Add(new UiFillRect(powerRect with { Width = (int)(powerRect.Width * ratio) }, powerColor));
         }
+        AddGeneralsCameos(commands);
         return commands.ToImmutable();
     }
 }

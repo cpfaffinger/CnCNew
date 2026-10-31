@@ -43,6 +43,7 @@ internal static class HudTests
         harness.Run("Box selection selects the start units", () => BoxSelectionSelects(data));
         harness.Run("Control groups store and recall a selection", () => ControlGroupsWork(data));
         harness.Run("Control bar scheme art and the logo image", () => SchemeArt(data));
+        harness.Run("The general's window: the star opens it, a science is bought with a point, a level grants the next, the bar fills, a science of another side stays away", () => GeneralsWindow(data));
         harness.Run("The money display shows the localized money at the scheme's rectangle, not the layout placeholder", () => MoneyDisplay(data));
         harness.Run("A command button shows its description as a pointer tooltip after the delay, and the icons carry no hot key or cost text", () => CommandButtonTooltip(data));
         harness.Run("Command button description: missing prerequisites and sciences are listed after 'Requires:', too little money and owned upgrades are said, as populateBuildTooltipLayout does", () => CommandButtonRequirements(data));
@@ -57,6 +58,55 @@ internal static class HudTests
         harness.Run("Placement preview: the chosen building follows the cursor in the object frame, translucent, red where refused, gone after the click", () => PlacementPreviewInObjectFrame(data));
 
         return harness.Failures;
+    }
+
+    private static void GeneralsWindow(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Vector2 Center(string window)
+        {
+            var rect = controller.WindowRect(window) ?? throw new InvalidOperationException($"no window {window}");
+            return new Vector2(rect.X + rect.Width / 2f, rect.Y + rect.Height / 2f);
+        }
+
+        var view = controller.Generals ?? throw new InvalidOperationException("the player has no general");
+        TestHarness.Assert(view.RankLevel == 1 && view.SciencePoints == 1 && view.ProgressPercent == 0, $"a match begins at level 1 with its point ({view.RankLevel}, {view.SciencePoints})");
+        TestHarness.Assert(view.Rank1.Length == CommandBarModel.GeneralsRank1Buttons && view.Rank3.Length == CommandBarModel.GeneralsRank3Buttons && view.Rank8.Length == CommandBarModel.GeneralsRank8Buttons, "all places of the layout");
+        var shown = view.Rank1.Concat(view.Rank3).Concat(view.Rank8).OfType<CommandBarButton>().ToArray();
+        TestHarness.Assert(shown.Length > 0 && shown.All(button => button.Button.Sciences.All(name => !name.Contains("CHINA", StringComparison.OrdinalIgnoreCase) && !name.Contains("GLA", StringComparison.OrdinalIgnoreCase))),
+            "no science of another side is shown: " + string.Join(", ", shown.SelectMany(button => button.Button.Sciences)));
+
+        Refresh(controller);
+        TestHarness.Assert(!controller.IsGeneralsWindowOpen, "the window begins closed");
+        Click(controller, ref time, MouseButton.Left, Center("ControlBar.wnd:ButtonGeneral"));
+        Advance(match, controller, 1);
+        Refresh(controller);
+        TestHarness.Assert(controller.IsGeneralsWindowOpen, "the star opens the window");
+        var list = controller.BuildDrawList(1280, 720);
+        TestHarness.Assert(list.Commands.OfType<UiTextDraw>().Any(text => text.Text == "1"), "the window shows the point to spend");
+
+        var choice = Array.FindIndex(view.Rank1.ToArray(), button => button is { IsEnabled: true });
+        TestHarness.Assert(choice >= 0, "something can be bought at level 1");
+        var science = view.Rank1[choice]!.Button.Sciences[0];
+        Click(controller, ref time, MouseButton.Left, Center($"GeneralsExpPoints.wnd:ButtonRank1Number{choice}"));
+        Advance(match, controller, (int)match.World.Time.OriginalFrames(2));
+        Refresh(controller);
+        TestHarness.Assert(match.World.Sciences.TryGet(science, out var bought) && match.World.PlayerSciences(match.Human).Has(bought.Index), $"{science} was bought");
+        view = controller.Generals!;
+        TestHarness.Assert(view.SciencePoints == 0 && view.Rank1[choice] is { Reason: ButtonReason.AlreadyOwned, IsEnabled: false }, "the point is spent and the button shows what is owned");
+
+        match.World.AddSkillPoints(match.Human, 800);
+        Advance(match, controller, 1);
+        view = controller.Generals!;
+        TestHarness.Assert(view.RankLevel == 2 && view.SciencePoints == 1, $"level 2 grants the next point ({view.RankLevel}, {view.SciencePoints})");
+        match.World.AddSkillPoints(match.Human, 350);
+        Advance(match, controller, 1);
+        TestHarness.Assert(controller.Generals!.ProgressPercent == 50, $"the bar stands half way to level 3 ({controller.Generals!.ProgressPercent})");
+
+        Click(controller, ref time, MouseButton.Left, Center("GeneralsExpPoints.wnd:ButtonExit"));
+        Advance(match, controller, 1);
+        TestHarness.Assert(!controller.IsGeneralsWindowOpen, "the window's button closes it");
     }
 
     /// <summary>
@@ -270,7 +320,7 @@ internal static class HudTests
 
         foreach (var alternate in new[] { true, false })
         {
-            var settings = GameSettings.Default with { Controls = GameSettings.Default.Controls with { AlternateMouse = alternate } };
+            var settings = SkinPins.Settings with { Controls = GameSettings.Default.Controls with { AlternateMouse = alternate } };
             var (match, controller) = NewMatch(data, new Vector2(1280, 720), settings);
             TestHarness.Assert(controller.Input.Settings.Scheme == (alternate ? MouseScheme.RightClickCommands : MouseScheme.LeftClickCommands), "the setting chooses the scheme");
             long time = 10_000;
@@ -301,7 +351,7 @@ internal static class HudTests
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard);
         var match = LiveMatch.Create(data, setup, viewport);
-        var controller = new MatchController(match, settings ?? GameSettings.Default);
+        var controller = new MatchController(match, settings ?? SkinPins.Settings);
         if (started) Advance(match, controller, (int)match.World.Time.OriginalFrames(4)); // the start object of the patch makes the builder in its third frame
         return (match, controller);
     }
@@ -1212,7 +1262,7 @@ internal static class HudTests
         // Too little money: 'Insufficient funds' after an empty line, before the requirements (canMakeUnit, then getRequiresList).
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         var poorMatch = LiveMatch.Create(data, new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard with { StartMoney = 100 }), new Vector2(1280, 720));
-        var poor = new MatchController(poorMatch, GameSettings.Default);
+        var poor = new MatchController(poorMatch, SkinPins.Settings);
         Advance(poorMatch, poor, (int)poorMatch.World.Time.OriginalFrames(4));
         var poorDozer = poorMatch.World.Entities.First(entity => entity.Owner == poorMatch.Human && entity.Template.IsKindOf("DOZER"));
         long poorTime = 10_000;

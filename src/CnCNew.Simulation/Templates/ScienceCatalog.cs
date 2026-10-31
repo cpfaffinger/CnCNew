@@ -82,6 +82,15 @@ public sealed class ScienceCatalog
     /// <summary><c>Player::hasPrereqsForScience</c>: every direct prerequisite must already be owned.</summary>
     public bool PrerequisitesSatisfied(ScienceMask owned, ScienceInfo science) => owned.TestForAll(MaskOf(science.PrerequisiteNames));
 
+    /// <summary><c>ScienceStore::playerHasRootPrereqsForScience</c>: the sciences at the ends of the prerequisites are owned, which tells the branch of the player's side from another's.</summary>
+    public bool RootsSatisfied(ScienceMask owned, ScienceInfo science)
+    {
+        if (science.PrerequisiteNames.IsEmpty) return owned.Has(science.Index);
+        foreach (var name in science.PrerequisiteNames)
+            if (TryGet(name, out var prerequisite) && !RootsSatisfied(owned, prerequisite)) return false;
+        return true;
+    }
+
     public static ScienceCatalog Build(CompiledDefinitionGraph graph)
     {
         ArgumentNullException.ThrowIfNull(graph);

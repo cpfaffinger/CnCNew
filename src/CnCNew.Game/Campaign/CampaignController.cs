@@ -53,7 +53,7 @@ public sealed class CampaignController(MissionContext context, CampaignDefinitio
         if (run.Mission is null || !string.Equals(run.Mission.Name, Progress.CurrentMission, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("The run is not of the current mission.");
         // ScoreScreen's initSinglePlayer: the general keeps the points of the mission that ended, won or lost.
-        var points = run.Session.World.SkillPointsOf(Mission.MissionSession.LocalPlayerOf(run.Session.Program, run.Session.Options.HumanSideName));
+        var points = run.Session.World.SkillPointsOf(Simulation.Mission.MissionSession.LocalPlayerOf(run.Session.Program, run.Session.Options.HumanSideName));
         switch (run.Session.Outcome)
         {
             case MissionOutcome.Victory:

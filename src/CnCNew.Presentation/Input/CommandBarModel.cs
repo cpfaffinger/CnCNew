@@ -95,6 +95,8 @@ public sealed record CommandBarView(
 public sealed record SpecialPowerView(string Power, EntityId Source, bool Ready, float ReadyFraction);
 
 /// <summary>The HUD numbers: money, the power balance (production includes plant bonuses; consumption is the finished consumers' draw), purchase points and the special powers the player can fire.</summary>
+public sealed record GeneralsView(int RankLevel, int SciencePoints, int ProgressPercent, ImmutableArray<CommandBarButton?> Rank1, ImmutableArray<CommandBarButton?> Rank3, ImmutableArray<CommandBarButton?> Rank8);
+
 public sealed record PlayerHud(Fixed Money, int EnergyProduction, int EnergyConsumption, int SciencePurchasePoints, ImmutableArray<SpecialPowerView> SpecialPowers)
 {
     /// <summary><c>Energy::hasSufficientPower</c> fails: <c>POWERED</c> objects are disabled (<c>Player.cpp doPowerDisable</c>).</summary>
@@ -120,7 +122,60 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
     /// <summary>What <c>getProductionCount</c> can show at most (<c>MAX_BUILD_QUEUE_BUTTONS</c>).</summary>
     public const int MaxQueueButtons = 9;
 
+    public const int GeneralsRank1Buttons = 4, GeneralsRank3Buttons = 15, GeneralsRank8Buttons = 4;
+
     public CommandButtonCatalog Catalog { get; } = catalog;
+
+    private (ButtonAvailability, ButtonReason) EvaluateScience(SimulationWorld world, PlayerId player, CommandButtonInfo button)
+    {
+        // ControlBar::populateGeneralsExpPoints: a science a script hid is not shown at all, one it disabled is shown but cannot be bought (Player::isScienceHidden / isScienceDisabled).
+        if (button.Sciences.Length > 0)
+        {
+            var scripted = Script.AvailabilityOf(button.Sciences[0]);
+            if (scripted == ScienceAvailability.Hidden) return (ButtonAvailability.Hidden, ButtonReason.NotPurchasable);
+            if (scripted == ScienceAvailability.Disabled) return (ButtonAvailability.Restricted, ButtonReason.NotPurchasable);
+        }
+        var owned = world.PlayerSciences(player);
+        Simulation.Templates.ScienceInfo? next = null;
+        foreach (var name in button.Sciences)
+        {
+            if (!world.Sciences.TryGet(name, out var science)) return (ButtonAvailability.Restricted, ButtonReason.UnknownReference);
+            if (!owned.Has(science.Index)) { next = science; break; }
+        }
+        if (next is null) return (ButtonAvailability.CantAfford, ButtonReason.AlreadyOwned);
+        if (!world.Sciences.PrerequisitesSatisfied(owned, next)) return (ButtonAvailability.Restricted, ButtonReason.MissingPrerequisite);
+        if (next.PurchasePointCost <= 0) return (ButtonAvailability.Restricted, ButtonReason.NotPurchasable);
+        if (world.SciencePointsOf(player) < next.PurchasePointCost) return (ButtonAvailability.Restricted, ButtonReason.InsufficientSciencePoints);
+        return (ButtonAvailability.Available, ButtonReason.None);
+    }
+
+    /// <summary>
+    /// What the general's window shows (<c>ControlBar::populatePurchaseScience</c>); null for a player whose side has no sets of sciences. A place stays empty for a missing or
+    /// script-only button, a science a script hid and a science of another branch (<c>playerHasRootPrereqsForScience</c>).
+    /// </summary>
+    public GeneralsView? Generals(SimulationWorld world, PlayerId player)
+    {
+        ArgumentNullException.ThrowIfNull(world);
+        if (world.FactionOf(player) is not { } faction || !Catalog.TryGetSet(faction.ScienceSetRank1, out var rank1) || !Catalog.TryGetSet(faction.ScienceSetRank3, out var rank3)
+            || !Catalog.TryGetSet(faction.ScienceSetRank8, out var rank8)) return null;
+        return new GeneralsView(world.RankLevelOf(player), world.SciencePointsOf(player), world.RankProgressPercentOf(player),
+            Places(rank1, GeneralsRank1Buttons), Places(rank3, GeneralsRank3Buttons), Places(rank8, GeneralsRank8Buttons));
+
+        ImmutableArray<CommandBarButton?> Places(CommandSetInfo set, int count)
+        {
+            var places = ImmutableArray.CreateBuilder<CommandBarButton?>(count);
+            for (var index = 0; index < count; index++)
+            {
+                var button = index < set.Slots.Length ? set.Slots[index] : null;
+                if (button is null || button.Has(CommandOptions.ScriptOnly) || button.Sciences.IsEmpty) { places.Add(null); continue; }
+                var (availability, reason) = EvaluateScience(world, player, button);
+                var hidden = availability == ButtonAvailability.Hidden || !world.Sciences.TryGet(button.Sciences[0], out var science) || !world.Sciences.RootsSatisfied(world.PlayerSciences(player), science);
+                places.Add(hidden ? null : new CommandBarButton(index + 1, button, availability, reason, null, default, 0, null, []));
+            }
+            return places.MoveToImmutable();
+        }
+    }
+
 
     /// <summary>What a mission script changed about the control bar (removed or added buttons, sciences hidden or disabled); nothing for a skirmish.</summary>
     public ControlBarScriptState Script { get; } = new();
@@ -328,25 +383,8 @@ public sealed class CommandBarModel(CommandButtonCatalog catalog, Func<string, s
             }
             case GuiCommandKind.PurchaseScience:
             {
-                // ControlBar::populateGeneralsExpPoints: a science a script hid is not shown at all, one it disabled is shown but cannot be bought (Player::isScienceHidden / isScienceDisabled).
-                if (button.Sciences.Length > 0)
-                {
-                    var scripted = Script.AvailabilityOf(button.Sciences[0]);
-                    if (scripted == ScienceAvailability.Hidden) return State(ButtonAvailability.Hidden, ButtonReason.NotPurchasable);
-                    if (scripted == ScienceAvailability.Disabled) return State(ButtonAvailability.Restricted, ButtonReason.NotPurchasable);
-                }
-                var owned = world.PlayerSciences(player);
-                Simulation.Templates.ScienceInfo? next = null;
-                foreach (var name in button.Sciences)
-                {
-                    if (!world.Sciences.TryGet(name, out var science)) return State(ButtonAvailability.Restricted, ButtonReason.UnknownReference);
-                    if (!owned.Has(science.Index)) { next = science; break; }
-                }
-                if (next is null) return State(ButtonAvailability.CantAfford, ButtonReason.AlreadyOwned);
-                if (!world.Sciences.PrerequisitesSatisfied(owned, next)) return State(ButtonAvailability.Restricted, ButtonReason.MissingPrerequisite);
-                if (next.PurchasePointCost <= 0) return State(ButtonAvailability.Restricted, ButtonReason.NotPurchasable);
-                if (world.SciencePointsOf(player) < next.PurchasePointCost) return State(ButtonAvailability.Restricted, ButtonReason.InsufficientSciencePoints);
-                return State(ButtonAvailability.Available, ButtonReason.None);
+                var (availability, reason) = EvaluateScience(world, player, button);
+                return State(availability, reason);
             }
             case GuiCommandKind.FireWeapon:
                 // An object target is a FireWeaponCommand, a place and the own place an attack on a place (F-64).

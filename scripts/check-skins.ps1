@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-    The two interface skins in the window (docs/UI-MODERN.md section 9): a scripted person switches to the modern skin in the options and walks the shell (R4), and the
+    The two interface skins in the window (docs/UI-MODERN.md section 9): a scripted person switches to the original skin in the options and walks the shell (R4), and the
     readability check of both skins measures every screen with the renderer's own GDI font (R3).
 
 .DESCRIPTION
     1. Starts the Release window client once with --shell-script scripts/shell/skin-person.txt and a settings directory of this run (never the user's): the client
-       starts in the original skin (nothing on its command line names a skin), the script opens Options > More options, chooses "Modern", accepts, and walks main menu >
+       starts in the modern skin (nothing on its command line names a skin), the script opens Options > More options, chooses "Original", accepts, and walks main menu >
        Single Player > Skirmish > a match of -MatchSeconds > the score screen > the analysis (two pages) > the replay list > the playback of the match to its end. The
-       settings file must then say "skin": "modern".
+       settings file must then say "skin": "original".
     2. Builds and runs tools/CnCNew.UiRenderTool --skins: main menu, single player, skirmish setup and map picker, the HUD, the score screen, two pages of the analysis,
        the options, More options, the replay list, credits and the quit question, in both skins at 800 x 600, 1280 x 720 and 1920 x 1080, drawn with the GDI font of the
        renderer and written as PNG into the output directory; the modern skin must meet R3 (a) (no label wider than its window) and (b) (the smallest text 13, 16 and
@@ -59,7 +59,7 @@ function Fail([string]$why) { Write-Host "   FAILED: $why"; $script:failures++ }
 $arguments = @($clientDll.FullName, '--content-dir', $ContentDir, '--size', '1280x720', '--mute', '--no-transitions', '--settings-dir', $settings, '--net-dir', (Join-Path $OutDir 'net'),
     '--skirmish-seconds', "$MatchSeconds", '--shell-script', (Join-Path $root 'scripts/shell/skin-person.txt'), '--shell-seconds', "$($TimeoutSeconds - 60)")
 if ($TickRate -gt 0) { $arguments += @('--tick-rate', "$TickRate") }
-Write-Host "== A person switches to the modern skin in the options and walks the shell in the window (logs in $OutDir)"
+Write-Host "== A person switches to the original skin in the options and walks the shell in the window (logs in $OutDir)"
 $log = Join-Path $OutDir 'client.log'
 $process = Start-Process -FilePath 'dotnet' -ArgumentList ($arguments | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }) -NoNewWindow -PassThru `
     -RedirectStandardOutput $log -RedirectStandardError (Join-Path $OutDir 'client.err')
@@ -81,8 +81,8 @@ elseif ($summary -cnotmatch 'failed=0 finished=1') {
 else { Write-Host "   $summary" }
 $file = Join-Path $settings 'settings.json'
 if (-not (Test-Path $file)) { Fail 'the client wrote no settings' }
-elseif ((Get-Content $file -Raw) -cnotmatch '"skin": "modern"') { Fail 'the settings do not keep the modern skin' }
-else { Write-Host '   the settings keep "skin": "modern"' }
+elseif ((Get-Content $file -Raw) -cnotmatch '"skin": "original"') { Fail 'the settings do not keep the chosen skin' }
+else { Write-Host '   the settings keep "skin": "original"' }
 
 # 2. The readability of both skins with the renderer's font.
 $render = Join-Path $OutDir 'render'

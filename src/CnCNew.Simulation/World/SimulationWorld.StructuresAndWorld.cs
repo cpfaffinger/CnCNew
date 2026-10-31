@@ -142,7 +142,7 @@ public sealed partial class SimulationWorld
     /// <inheritdoc cref="IWorldServices.IsPlayableSide"/>
     public bool IsPlayableSide(PlayerId player) => FactionOf(player)?.PlayableSide ?? false;
 
-    private Templates.FactionInfo? FactionOf(PlayerId player)
+    public Templates.FactionInfo? FactionOf(PlayerId player)
     {
         if (player.IsSystem) return null;
         foreach (var configured in Configuration.Players)

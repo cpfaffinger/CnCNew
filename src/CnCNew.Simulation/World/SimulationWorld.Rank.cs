@@ -40,6 +40,13 @@ public sealed partial class SimulationWorld
     public int NextLevelPointsOf(PlayerId player)
         => _players.TryGetValue(player.Value, out var state) && _templates.Ranks.At(state.RankLevel + 1) is { } next ? next.SkillPointsNeeded : -1;
 
+    /// <summary>The way from this level to the next in percent, as the general's window fills its bar; 0 at the last level.</summary>
+    public int RankProgressPercentOf(PlayerId player)
+    {
+        if (!_players.TryGetValue(player.Value, out var state) || _templates.Ranks.At(state.RankLevel) is not { } rank || _templates.Ranks.At(state.RankLevel + 1) is not { } next) return 0;
+        return (state.SkillPoints - rank.SkillPointsNeeded) * 100 / (next.SkillPointsNeeded - rank.SkillPointsNeeded);
+    }
+
     /// <summary><c>Player::addSkillPoints</c>: true when a level was gained.</summary>
     public bool AddSkillPoints(PlayerId player, int delta)
     {

@@ -60,7 +60,8 @@ internal static class SkinTests
     {
         var directory = Directory("original");
         var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
-        TestHarness.Assert(shell.Skin == UiSkin.Original && shell.Settings.Display.Skin == UiSkinName.Original, "a shell without settings draws the original skin (D-21)");
+        TestHarness.Assert(shell.Skin == UiSkin.Modern && shell.Settings.Display.Skin == UiSkinName.Modern, "a shell without settings draws the modern skin (D-21)");
+        shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: UiSkin.Original);
         foreach (var name in ShellLayoutNames.All)
             TestHarness.Assert(ReferenceEquals(shell.Layout(name), shell.Layouts.Get(name)), $"{name}: the original skin's layout is the shipped one itself");
         TestHarness.Assert(shell.ScaleOptions == UiScaleOptions.Original with { Mode = UiScaleMode.Uniform }, $"the menus are laid out uniformly as before ({shell.ScaleOptions})");
@@ -149,12 +150,12 @@ internal static class SkinTests
 
         // The run's --skin stays while settings are saved for another reason (the skirmish setup keeps its last map), and goes when the person chooses in the options.
         directory = Directory("override");
-        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: UiSkin.Modern);
-        TestHarness.Assert(shell.Skin == UiSkin.Modern && shell.Settings.Display.Skin == UiSkinName.Original, "the run's skin is the modern one, the settings still say original");
+        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: UiSkin.Original);
+        TestHarness.Assert(shell.Skin == UiSkin.Original && shell.Settings.Display.Skin == UiSkinName.Modern, "the run's skin is the original one, the settings still say modern");
         ShellTestInput.Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
         ShellTestInput.Click(shell, "MainMenu.wnd:ButtonSkirmish");
         ShellTestInput.Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
-        TestHarness.Assert(shell.Phase == ShellPhase.MatchLoading && shell.Skin == UiSkin.Modern, "saving the skirmish memory keeps the run's skin (the defect the readability check found)");
+        TestHarness.Assert(shell.Phase == ShellPhase.MatchLoading && shell.Skin == UiSkin.Original, "saving the skirmish memory keeps the run's skin (the defect the readability check found)");
         Delete(directory);
 
         directory = Directory("more");
@@ -164,19 +165,19 @@ internal static class SkinTests
         var script = ShellScript.Parse(
         [
             "wait screen MoreOptionsScreen",
-            "expect combo MoreOptions.wnd:ComboSkin shows Original",
+            "expect combo MoreOptions.wnd:ComboSkin shows Modern",
             "expect combo MoreOptions.wnd:ComboAudioDevice shows System default",
-            "select MoreOptions.wnd:ComboSkin Modern",
+            "select MoreOptions.wnd:ComboSkin Original",
             "select MoreOptions.wnd:ComboDisplayMode Window without frame",
             "select MoreOptions.wnd:ComboAspect Wider",
             "select MoreOptions.wnd:ComboTextScale 125 %",
             "select MoreOptions.wnd:ComboAudioDevice Headphones (Test)",
             "click MoreOptions.wnd:ButtonAccept",
             "wait screen OptionsScreen",
-            "expect skin modern",
+            "expect skin original",
             "click OptionsMenu.wnd:ButtonAccept",
             "wait screen MainMenuScreen",
-            "expect skin modern",
+            "expect skin original",
         ], "more-options");
         for (var frame = 0; frame < 400 && !script.IsFinished; frame++)
         {
@@ -187,7 +188,7 @@ internal static class SkinTests
         foreach (var line in script.Report().Where(line => line.Contains("FAILED", StringComparison.Ordinal))) Console.WriteLine($"       {line}");
         TestHarness.Assert(script.IsFinished && !script.Failed, $"the script runs through ({script.StepsDone}/{script.StepCount})");
         var saved = new SettingsStore(directory).Load().Settings;
-        TestHarness.Assert(saved.Display.Skin == UiSkinName.Modern && saved.Display.Mode == DisplayMode.Borderless && saved.Display.Aspect == AspectHandling.KeepVertical
+        TestHarness.Assert(saved.Display.Skin == UiSkinName.Original && saved.Display.Mode == DisplayMode.Borderless && saved.Display.Aspect == AspectHandling.KeepVertical
             && saved.Accessibility.UiTextScalePercent == 125 && saved.Audio.Device == "Headphones (Test)", $"More options saved what it showed ({saved.Display}, {saved.Accessibility}, {saved.Audio.Device})");
         TestHarness.Assert(shell.ScaleOptions.TextScale == 1.25m && shell.CurrentScreen.Tree.Options.TextScale == 1.25m, "the text scale reaches the screens built again");
         TestHarness.Assert(shell.DrainOutputs().OfType<ApplyResolutionOutput>().Any(output => output.Mode == DisplayMode.Borderless), "the display mode goes to the host");
@@ -205,9 +206,9 @@ internal static class SkinTests
         for (var frame = 0; frame < 20_000 && !script.IsFinished; frame++) host.Frame(0.25);
         foreach (var line in script.Report().TakeLast(4)) Console.WriteLine($"       {line}");
         TestHarness.Assert(script.IsFinished && !script.Failed, $"the script runs through ({script.StepsDone}/{script.StepCount})");
-        TestHarness.Assert(new SettingsStore(directory).Load().Settings.Display.Skin == UiSkinName.Modern, "the choice is kept in the settings");
+        TestHarness.Assert(new SettingsStore(directory).Load().Settings.Display.Skin == UiSkinName.Original, "the choice is kept in the settings");
         var again = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
-        TestHarness.Assert(again.Skin == UiSkin.Modern, "the next start of the game is in the modern skin");
+        TestHarness.Assert(again.Skin == UiSkin.Original, "the next start of the game is in the skin chosen");
         Delete(directory);
     }
 

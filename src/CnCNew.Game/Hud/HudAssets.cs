@@ -19,11 +19,13 @@ public sealed class HudAssets
     public const string PopupSaveLoadPath = "Window/Menus/PopupSaveLoad.wnd";
     public const string InGamePopupPath = "Window/InGamePopupMessage.wnd";
     public const string SchemePath = "Data/INI/ControlBarScheme.ini";
+    public const string GeneralsExpPointsPath = "Window/GeneralsExpPoints.wnd";
 
-    private HudAssets(WndLayout controlBar, WndLayout quitMenu, WndLayout popupSaveLoad, WndLayout inGamePopup, WndHeaderTemplateTable headerTemplates, ControlBarSchemeTable schemes,
+    private HudAssets(WndLayout controlBar, WndLayout generalsExpPoints, WndLayout quitMenu, WndLayout popupSaveLoad, WndLayout inGamePopup, WndHeaderTemplateTable headerTemplates, ControlBarSchemeTable schemes,
         LocalizedText text, MappedImageTable images)
     {
         ControlBar = controlBar;
+        GeneralsExpPoints = generalsExpPoints;
         QuitMenu = quitMenu;
         PopupSaveLoad = popupSaveLoad;
         InGamePopup = inGamePopup;
@@ -34,6 +36,7 @@ public sealed class HudAssets
     }
 
     public WndLayout ControlBar { get; }
+    public WndLayout GeneralsExpPoints { get; }
     public WndLayout QuitMenu { get; }
     /// <summary>The in-mission save/load popup (<see cref="CnCNew.Game.Hud.MissionPauseMenu"/>); not used by skirmish, which
     /// cannot be saved (see <c>docs/CAMPAIGN-AND-SAVEGAMES.md</c>).</summary>
@@ -57,6 +60,7 @@ public sealed class HudAssets
         }
 
         var controlBar = ReadLayout(ControlBarPath, "ControlBar.wnd");
+        var generalsExpPoints = ReadLayout(GeneralsExpPointsPath, "GeneralsExpPoints.wnd");
         var quitMenu = ReadLayout(QuitMenuPath, "QuitMenu.wnd");
         var popupSaveLoad = ReadLayout(PopupSaveLoadPath, "PopupSaveLoad.wnd");
         var inGamePopup = ReadLayout(InGamePopupPath, "InGamePopupMessage.wnd");
@@ -81,7 +85,7 @@ public sealed class HudAssets
         else schemes = ControlBarSchemeTable.Parse(string.Empty);
 
         var text = data.LoadText(language);
-        return new HudAssets(controlBar, quitMenu, popupSaveLoad, inGamePopup, headerTemplates, schemes, text, data.Images);
+        return new HudAssets(controlBar, generalsExpPoints, quitMenu, popupSaveLoad, inGamePopup, headerTemplates, schemes, text, data.Images);
     }
 
     public UiTreeServices BuildTreeServices(IUiTextMeasure measure) => new(measure)
