@@ -5485,15 +5485,6 @@
     },
     {
       "category": "definition",
-      "name": "MultiplayerSettings",
-      "count": 2,
-      "owners": [
-        "top-level"
-      ],
-      "plannedTarget": "phase-specific typed definition compiler"
-    },
-    {
-      "category": "definition",
       "name": "MultiplayerStartingMoneyChoice",
       "count": 6,
       "owners": [

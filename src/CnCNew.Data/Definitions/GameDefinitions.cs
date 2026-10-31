@@ -68,6 +68,8 @@ public sealed record CrateDefinition(DefinitionId Id, string OriginalName, IniSo
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 public sealed record GlobalDataDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
+public sealed record MultiplayerSettingsDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules) : GameDefinition(Id, OriginalName, Location, Fields, Modules);
+
 public sealed record BridgeDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)
     : GameDefinition(Id, OriginalName, Location, Fields, Modules);
 public sealed record CompatibilityDefinition(DefinitionId Id, string OriginalName, IniSourceLocation Location, ImmutableArray<DefinitionField> Fields, ImmutableArray<ModuleConfiguration> Modules)

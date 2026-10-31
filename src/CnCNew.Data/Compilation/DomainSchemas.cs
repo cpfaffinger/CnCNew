@@ -23,6 +23,7 @@ internal static class DomainSchemas
         DefinitionKind.Crate => CrateSchema.Crate,
         DefinitionKind.SpecialPower => SpecialPowerSchema.SpecialPower,
         DefinitionKind.Bridge => BridgeSchema.Bridge,
+        DefinitionKind.MultiplayerSettings => MultiplayerSettingsSchema.MultiplayerSettings,
         DefinitionKind.GameData or DefinitionKind.GlobalData => GameDataSchema.GameData,
         _ => null,
     };

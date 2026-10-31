@@ -84,7 +84,7 @@ public static class DefinitionCompiler
             kind = DefinitionKind.Compatibility;
         }
 
-        var name = declaration.Name ?? (kind is DefinitionKind.GameData or DefinitionKind.GlobalData or DefinitionKind.Compatibility ? declType : null);
+        var name = declaration.Name ?? (kind is DefinitionKind.GameData or DefinitionKind.GlobalData or DefinitionKind.MultiplayerSettings or DefinitionKind.Compatibility ? declType : null);
         if (string.IsNullOrWhiteSpace(name))
             throw new DefinitionCompileException($"Definition '{declType}' requires a name.", block.Location);
         var id = IdFor(kind, declType, name);
@@ -678,6 +678,7 @@ public static class DefinitionCompiler
             DefinitionKind.ObjectCreationList => new ObjectCreationListDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.GameData or DefinitionKind.GlobalData => new GlobalDataDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.Bridge => new BridgeDefinition(id, state.Name, state.Location, fields, modules),
+            DefinitionKind.MultiplayerSettings => new MultiplayerSettingsDefinition(id, state.Name, state.Location, fields, modules),
             _ => new CompatibilityDefinition(id, state.Name, state.Location, fields, modules),
         };
         return definition with { Sections = state.Sections.ToImmutableArray() };
@@ -781,6 +782,7 @@ public static class DefinitionCompiler
             "gamedata" => DefinitionKind.GameData, "globaldata" => DefinitionKind.GlobalData, "cratedata" => DefinitionKind.Crate,
             "objectcreationlist" => DefinitionKind.ObjectCreationList,
             "bridge" => DefinitionKind.Bridge,
+            "multiplayersettings" => DefinitionKind.MultiplayerSettings,
             _ => DefinitionKind.Compatibility,
         };
         return kind != DefinitionKind.Compatibility;

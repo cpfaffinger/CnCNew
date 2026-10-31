@@ -68,6 +68,10 @@ static void BridgeBlocksAreStrictlyTyped()
     End
     """;
     var graph = DefinitionCompiler.Compile(One(text));
+    var multiplayer = DefinitionCompiler.Compile(One("MultiplayerSettings\n  MaxBeaconsPerPlayer = 5\n  UseShroud = No\nEnd\n"));
+    var settings = multiplayer.Definitions.OfType<MultiplayerSettingsDefinition>().Single();
+    Assert(settings.Fields.Single(field => field.Name == "MaxBeaconsPerPlayer").Value.Value is 5L && settings.Fields.Single(field => field.Name == "UseShroud").Value.Value is false, "MultiplayerSettings is typed.");
+    Assert(!multiplayer.Audit.Compatibility.Any(entry => entry.Name.StartsWith("MultiplayerSettings", StringComparison.Ordinal)), "And no compatibility entry.");
     var bridge = graph.Definitions.OfType<BridgeDefinition>().Single();
     Assert(bridge.Id.Kind == DefinitionKind.Bridge && bridge.OriginalName == "Sample", "A Bridge block is a definition of its own kind.");
     Assert(bridge.Fields.Single(field => field.Name == "BridgeScale").Value.Value is 0.85m, "BridgeScale is a real.");

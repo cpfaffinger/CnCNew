@@ -23,7 +23,7 @@ public enum DefinitionKind
     Object, Weapon, WeaponSet, Armor, Damage, Upgrade, Science, Player, Faction,
     CommandButton, CommandSet, FxList, Fx, AudioEvent, DialogEvent, MusicTrack,
     AmbientStream, Locomotor, ExperienceLevel, SpecialPower, GameData, GlobalData, Crate, ObjectCreationList, Rank,
-    Compatibility, Bridge
+    Compatibility, Bridge, MultiplayerSettings
 }
 
 public readonly record struct GameTime(decimal Milliseconds);
