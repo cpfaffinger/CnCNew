@@ -1832,6 +1832,7 @@ public sealed partial class SimulationWorld : IWorldServices
             entity.BuilderId = builder;
         }
         AttachModules(entity, template);
+        ApplySoloBonus(entity);
         if (setup.HasVeterancy && template.IsTrainable) SetVeterancyLevel(entity, setup.Veterancy);
         InitializeWeaponClip(entity);
         if (setup.MaxLifetimeTicks > 0)
@@ -2319,6 +2320,7 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         writer.Int("tick", _tick);
         if (_rankLevelLimit != DefaultRankLevelLimit) writer.Int("rankLevelLimit", _rankLevelLimit);
+        DescribeSoloBonus(writer);
         Ids.Describe(writer);
         Streams.DescribeLogic(writer);
         writer.Int("entities", _entities.Count);

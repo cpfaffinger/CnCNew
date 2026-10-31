@@ -133,6 +133,7 @@ public sealed class MissionSession
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), catalog.Rate, options.WorldSeed, ConfiguredPlayers(program, catalog, notes), FixtureId, fingerprint, terrain.Fingerprint), catalog, terrain);
         ApplyRelations(world, program);
         var session = new MissionSession(options, world, program, map, [..notes]);
+        if (options.Ai is null) world.BeginSinglePlayer((int)options.Difficulty);
         session.PlaceObjects(catalog, terrain);
         // The reference creates the map's objects synchronously while loading, so the first script evaluation already sees them.
         world.MaterializePendingSpawns();

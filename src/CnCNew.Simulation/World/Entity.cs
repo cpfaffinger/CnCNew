@@ -141,6 +141,9 @@ public sealed class Entity
     /// <summary>The set <c>WeaponBonusCondition</c> bits (<c>Object::m_weaponBonusCondition</c>): the veterancy level and <c>PLAYER_UPGRADE</c> are modeled.</summary>
     public uint WeaponBonusConditions { get; internal set; }
 
+    /// <summary><c>Object::m_isReceivingDifficultyBonus</c> (<c>SimulationWorld.SoloBonus.cs</c>).</summary>
+    public bool ReceivingDifficultyBonus { get; internal set; }
+
     /// <summary>Object-scoped completed-upgrade mask (<c>Object::getObjectCompletedUpgradeMask</c>); most objects never set a bit.</summary>
     public UpgradeMask CompletedUpgrades { get; internal set; }
 
@@ -383,6 +386,7 @@ public sealed class Entity
         writer.Int("experience", Experience);
         writer.Fixed("experienceScalar", ExperienceScalar);
         writer.UInt("weaponBonusConditions", WeaponBonusConditions);
+        if (ReceivingDifficultyBonus) writer.Bool("difficultyBonus", true);
         writer.Bool("dead", EffectivelyDead);
         writer.Bool("slowDeathStarted", SlowDeathStarted);
         writer.Bool("destroyRequested", DestroyRequested);

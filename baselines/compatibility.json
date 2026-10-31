@@ -958,33 +958,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "GameData/HumanSoloPlayerHealthBonus_Easy",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/HumanSoloPlayerHealthBonus_Hard",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "GameData/HumanSoloPlayerHealthBonus_Normal",
-      "count": 1,
-      "owners": [
-        "GameData"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "GameData/InfantryLightAfternoonScale",
       "count": 1,
       "owners": [

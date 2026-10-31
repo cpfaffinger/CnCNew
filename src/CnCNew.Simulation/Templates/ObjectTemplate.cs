@@ -388,6 +388,9 @@ public sealed class TemplateCatalog
     public Fixed SellPercentage { get; }
     /// <summary><c>GlobalData::m_healthBonus[level]</c>: the max-health multiplier of veterancy level 0..3 (<c>GameData.ini HealthBonus_Veteran/Elite/Heroic</c>; every absent value is the reference default 1.0, level 0 is always 1.0).</summary>
     public ImmutableArray<Fixed> HealthBonus { get; }
+
+    /// <summary><c>GlobalData::m_soloPlayerHealthBonusForDifficulty</c>: human easy, normal, hard, then the computer's three; an absent value is 1.0.</summary>
+    public ImmutableArray<Fixed> SoloHealthBonus { get; private set; }
     /// <summary><c>GlobalData::m_weaponBonusSet</c>: the <c>WeaponBonus</c> lines of <c>GameData.ini</c>, applied to every weapon before its own set.</summary>
     public WeaponBonusTable GlobalWeaponBonus { get; }
     public ObjectTemplate this[int index] => Templates[index];
@@ -502,6 +505,7 @@ public sealed class TemplateCatalog
         };
         foreach (var name in catalog.Geometry.Airfields.Keys)
             if (!catalog.TryGet(name, out _)) throw new TemplateBuildException($"Model geometry names '{name}', which is not an Object definition.");
+        catalog.SoloHealthBonus = ResolveSoloHealthBonus(graph);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
                 if (!catalog.TryGet(entry.ObjectName, out _))
@@ -639,6 +643,15 @@ public sealed class TemplateCatalog
     }
 
     /// <summary>GlobalData.cpp: every <c>m_healthBonus[i]</c> starts at 1.0, so an absent key (or an absent GameData) changes nothing.</summary>
+    private static ImmutableArray<Fixed> ResolveSoloHealthBonus(CompiledDefinitionGraph graph)
+    {
+        var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();
+        Fixed Get(string name) => gameData?.Fields.LastOrDefault(field => field.Name.Equals(name, StringComparison.OrdinalIgnoreCase))?.Value.Value is Percentage percentage
+            ? Fixed.FromDecimal(percentage.Ratio) : Fixed.One;
+        return [Get("HumanSoloPlayerHealthBonus_Easy"), Get("HumanSoloPlayerHealthBonus_Normal"), Get("HumanSoloPlayerHealthBonus_Hard"),
+            Get("AISoloPlayerHealthBonus_Easy"), Get("AISoloPlayerHealthBonus_Normal"), Get("AISoloPlayerHealthBonus_Hard")];
+    }
+
     private static ImmutableArray<Fixed> ResolveHealthBonus(CompiledDefinitionGraph graph)
     {
         var gameData = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault();

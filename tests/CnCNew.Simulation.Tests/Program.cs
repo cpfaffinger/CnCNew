@@ -223,6 +223,7 @@ run.Test("Rank (D-15): the start of a player, the levels, a step down", Tests.Ra
 run.Test("Rank (D-15): the limit and the scale of a script, across a save", Tests.RankLimitAndModifier);
 run.Test("Rank (D-15): the points of a kill", Tests.RankPointsOfAKill);
 run.Test("Rank (D-15): the script actions act on the world", Tests.RankScriptActions);
+run.Test("Solo bonuses (D-6): health and weapon bonus by difficulty and owner, off for a script, across a save, none in a skirmish", Tests.SoloBonuses);
 run.Test("Fidelity B (F-45): an airfield reserves a space for every aircraft it queues", Tests.FidelityAirfieldReservesItsSpaceWhenQueued);
 run.Test("Phase 40: a disabled object runs only the update modules that process its disabled types", Tests.DisableRuleStopsTheModulesThatDoNotProcessIt);
 run.Test("Phase 40: a disable holds through the frame it lasts until", Tests.DisableHoldsThroughItsLastFrame);

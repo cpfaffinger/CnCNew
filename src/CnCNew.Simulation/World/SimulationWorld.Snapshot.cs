@@ -38,6 +38,7 @@ public sealed partial class SimulationWorld
         if (_entities.Count != 0 || _tick != 0 || _spawnQueue.Count != 0) throw new InvalidOperationException("A snapshot can only be loaded into a fresh world.");
         _tick = state.Int("tick");
         _rankLevelLimit = state.Has("rankLevelLimit") ? checked((int)state.Int("rankLevelLimit")) : DefaultRankLevelLimit;
+        LoadSoloBonus(state);
         if (_tick < 0) throw new InvalidDataException("Negative tick in snapshot.");
         Ids.Load(state);
         Streams.LoadLogic(state);
@@ -185,6 +186,7 @@ public sealed partial class SimulationWorld
             Experience = checked((int)reader.Int("experience")),
             ExperienceScalar = reader.Fixed("experienceScalar"),
             WeaponBonusConditions = checked((uint)reader.UInt("weaponBonusConditions")),
+            ReceivingDifficultyBonus = reader.Has("difficultyBonus"),
             EffectivelyDead = reader.Bool("dead"),
             SlowDeathStarted = reader.Bool("slowDeathStarted"),
             DestroyRequested = reader.Bool("destroyRequested"),

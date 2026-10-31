@@ -2,7 +2,9 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
+using CnCNew.Data.World;
 using CnCNew.Simulation.Modules;
+using CnCNew.Simulation.Scripting;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
@@ -80,6 +82,42 @@ static partial class Tests
           End
         End
         """;
+
+    /// <summary>D-6: the solo bonuses of a single player game by difficulty and owner, on every object from its first frame, off for a script, across a save; a skirmish has none.</summary>
+    public static void SoloBonuses()
+    {
+        const string game = "GameData\n  HumanSoloPlayerHealthBonus_Easy = 150%\n  HumanSoloPlayerHealthBonus_Normal = 100%\n  HumanSoloPlayerHealthBonus_Hard = 80%\n  AISoloPlayerHealthBonus_Hard = 200%\nEnd\n";
+        (decimal Human, decimal Computer, bool HumanBit, bool ComputerBit, MissionSession Session) Start(ScriptDifficulty difficulty, MapScript[]? scripts = null)
+        {
+            var session = StartMission(scripts ?? [], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Soldier"), Placed("BetaSoldier", 300m, 100m, "teamB", "Enemy")],
+                options: MissionOptions.Standard with { Difficulty = difficulty }, extraFiles: new Dictionary<string, string> { ["Data/INI/Default/GameData.ini"] = game });
+            Run(session, session.Frames(2));
+            var human = NamedIn(session, "Soldier")!;
+            var computer = NamedIn(session, "Enemy")!;
+            bool Bit(CnCNew.Simulation.World.Entity entity, string name) => CnCNew.Data.Definitions.NameTablesPhase5.WeaponBonusCondition.TryIndexOf(name, out var bit) && (entity.WeaponBonusConditions & (1u << bit)) != 0;
+            var level = difficulty switch { ScriptDifficulty.Easy => "EASY", ScriptDifficulty.Hard => "HARD", _ => "NORMAL" };
+            return (human.Body!.MaxHealth.ToDecimal(), computer.Body!.MaxHealth.ToDecimal(), Bit(human, "SOLO_HUMAN_" + level), Bit(computer, "SOLO_AI_" + level), session);
+        }
+
+        var normal = Start(ScriptDifficulty.Normal);
+        var easy = Start(ScriptDifficulty.Easy);
+        var hard = Start(ScriptDifficulty.Hard);
+        Check.That(easy.Human == normal.Human * 1.5m && easy.Computer == normal.Computer, $"Easy: the human's objects take 150 % ({easy.Human} against {normal.Human}).");
+        Check.That(Math.Abs(hard.Human - normal.Human * 0.8m) < 0.00001m && hard.Computer == normal.Computer * 2m, $"Hard: 80 % for the human, the data's 200 % for the computer ({hard.Human}, {hard.Computer}).");
+        Check.That(easy.HumanBit && easy.ComputerBit && hard.HumanBit && hard.ComputerBit && normal.HumanBit && normal.ComputerBit, "Each side carries the weapon bonus condition of the difficulty.");
+
+        var restored = MissionSnapshot.Restore(MissionSnapshot.Write(easy.Session), easy.Session.World.Templates, easy.Session.World.Configuration.DefinitionFingerprint, easy.Session.World.Terrain!, easy.Session.Map);
+        Check.That(restored.World.StateHash == easy.Session.World.StateHash && restored.World.SoloDifficulty == 0, "The bonus crosses a save.");
+
+        var off = Start(ScriptDifficulty.Easy, [Scr.Script("Off", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("OBJECT_ALLOW_BONUSES", Scr.Bool(false))], oneShot: true)]);
+        Check.That(Math.Abs(off.Human - normal.Human) < 0.00001m && !off.HumanBit && off.Session.Engine.RecordedActions == 0, $"A script takes the bonus back ({off.Human}).");
+
+        var fixture = new SyntheticFixture(TestRate.Default, files: new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/GameData.ini"] = game });
+        var skirmish = NewWorld(fixture);
+        new Feeder(skirmish).Spawn(1, "Soldier");
+        skirmish.Step();
+        Check.That(skirmish.SoloDifficulty == -1 && skirmish.Entities.All(entity => !entity.ReceivingDifficultyBonus), "A skirmish has no solo bonus.");
+    }
 
     private static IReadOnlyDictionary<string, string> RankFiles() => new Dictionary<string, string>(SyntheticFixture.Files) { ["Data/INI/Object/RankFixture.ini"] = RankIni };
 
