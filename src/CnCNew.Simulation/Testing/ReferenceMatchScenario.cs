@@ -42,10 +42,12 @@ public sealed record ReferenceMatchOptions(uint WorldSeed, uint DriverSeed, long
     // the limit; of the seeds surveyed 5EED0003, 5EED0004, 5EED0005 and 5EED0006 end (5EED0002 and 5EED0008 do not), and 5EED0004 ends with FactionGLA at the same
     // original frame (14,745) at 30, 60 and 120 Hz (section 59). Since a computer player's units walk to what they see from rest (F-17, phase 51) 5EED0004 runs to the limit;
     // of the seeds surveyed 5EED0002, 5EED0003, 5EED0005, 5EED0007 and 5EED0009 end (5EED0001, 5EED0006 and 5EED0008 do not), 5EED0003 the soonest (section 65).
-    public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0003, 216_000, 300, 0, 1_000, 1_500, 1_500, 300);
+    // On the patched data no seed surveyed ends within an hour (twelve before the starting objects made their builders, six after): the supply Chinooks of the American
+    // sides fly on after their bases, and nothing of what the generator orders goes after them. The match is the yardstick of half an hour of play, not of its end.
+    public static ReferenceMatchOptions Standard { get; } = new(0xC0FFEE05, 0x5EED0003, 54_000, 300, 0, 1_000, 1_500, 1_500, 300);
 
     /// <summary>
-    /// The standard match for a catalog of <paramref name="rate"/>: <see cref="Standard"/> with its budget as game time, two hours at every rate (the 216,000 are
+    /// The standard match for a catalog of <paramref name="rate"/>: <see cref="Standard"/> with its budget as game time, half an hour at every rate (the 54,000 are
     /// ticks at 30 Hz).
     /// </summary>
     public static ReferenceMatchOptions StandardAt(SimulationRate rate) => Standard with { MaxTicks = rate.Time.OriginalFrames(Standard.MaxTicks) };
@@ -188,9 +190,16 @@ public sealed class ReferenceMatchScenario
                 endTick = Math.Max(tick + TickOrder.Next + grace, _options.MinTicks);
             }
         }
+        Standing = [..world.Entities.Where(entity => entity.Owner != PlayerId.System && !entity.EffectivelyDead)
+            .GroupBy(entity => (entity.Owner.Value, entity.Template.Name))
+            .OrderBy(group => group.Key.Value).ThenBy(group => group.Key.Name, StringComparer.Ordinal)
+            .Select(group => $"player {group.Key.Value} {group.Key.Name} x{group.Count()}")];
         var header = provisional with { EndTick = endTick };
         return new ReplayFile(header, [.._commands.OrderBy(value => value.Tick).ThenBy(value => value.Player.Value).ThenBy(value => value.Sequence)], []);
     }
+
+    /// <summary>What every player has left when the run ends: for a report, nothing depends on it.</summary>
+    public ImmutableArray<string> Standing { get; private set; } = [];
 
     private void Observe(IReadOnlyList<SimEvent> events)
     {

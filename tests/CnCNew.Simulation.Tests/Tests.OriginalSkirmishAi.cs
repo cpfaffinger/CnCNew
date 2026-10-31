@@ -516,7 +516,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var data = AiData.TryBuild(graph);
         Check.That(data is { Sides.Length: 12, BuildLists.Count: 12 } && data.BuildLists.Values.Sum(list => list.Length) == 214 && data.BuildLists.Values.All(list => list.Count(entry => entry.AutomaticallyBuild) == 1),
@@ -584,7 +584,7 @@ static partial class Tests
         var terrain = TerrainMap.Build(map, MapPath);
         foreach (var rate in new[] { CnCNew.Simulation.Time.SimulationRate.Hz60, CnCNew.Simulation.Time.SimulationRate.Hz120 })
         {
-            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate);
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
             var print = rate.Combine(fingerprint);
             var everyone = ReferenceMatchScenario.Participants(catalog, out _);
             var slots = ImmutableArray.Create(new ScriptedSkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionAmerica"), ScriptDifficulty.Hard),
@@ -683,7 +683,7 @@ static partial class Tests
 
         ScriptedSkirmishSession Start(CnCNew.Simulation.Time.SimulationRate rate)
         {
-            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate);
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
             var everyone = ReferenceMatchScenario.Participants(catalog, out _);
             var slots = ImmutableArray.Create(new ScriptedSkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionChina"), ScriptDifficulty.Hard), new ScriptedSkirmishSlot(everyone.Single(value => value.Faction.Name == "FactionGLA"), ScriptDifficulty.Normal));
             return ScriptedSkirmishSession.Start(ScriptedSkirmishOptions.Standard with { Seed = 5, MaxTicks = rate.Time.OriginalFrames(Frames) }, catalog, rate.Combine(fingerprint), terrain, map, library, data, slots);

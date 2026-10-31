@@ -59,7 +59,7 @@ internal static class ShellTests
         harness.Run("Buttons draw hilite and pushed images under the pointer and drop them when it leaves", () => ButtonStates(data));
         harness.Run("Options: sliders draw their boxes and drag, static texts have no hover fill", () => OptionsSlidersAndLabels(data));
         harness.Run("Quit dialog: Yes and No stand at the first and the last button place, and the text takes the header template size", () => QuitDialogFonts(data));
-        harness.Run("Main menu: the custom mission button of the retail layout has its text from Data/Patch.str and is inert", () => CustomMissionButton(data));
+        harness.Run("Main menu: the patch's layout has no custom mission button, and its line for test builds is hidden", () => CustomMissionButton(data));
         harness.Run("Skirmish setup and options show localized words, not internal names or the layout's placeholders", () => LocalizedSetupText(data));
         harness.Run("Skirmish setup with the original AI offers the three armies of the original and starts a match of that AI", () => OriginalAiArmies(data));
         harness.Run("A window with TOOLTIPTEXT shows the pointer tooltip after the delay with the Mouse.ini style", () => PointerTooltip(data));
@@ -613,21 +613,13 @@ internal static class ShellTests
         }
     }
 
-    /// <summary>
-    /// The retail <c>MainMenu.wnd</c> comes from <c>PatchWindow.big</c> and has a button the main string table has no text for; the text is in <c>Data/Patch.str</c>.
-    /// The label must resolve (no "missing label" on the single-player menu) and the button must not react: this build has no screen behind it.
-    /// </summary>
+    /// <summary>The patch's <c>MainMenu.wnd</c> has no custom mission button and carries the line of its test builds, which the menu hides.</summary>
     private static void CustomMissionButton(GameData data)
     {
-        var text = data.LoadText("English");
-        TestHarness.Assert(text.TryGet("GUI:CustomMission", out var caption) && caption.Length > 0, "the label of the custom mission button resolves");
         var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:Patch104pTestVersion") is { IsVisible: false }, "the patch's line for its test builds is hidden");
         Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
-        var button = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonCustomMission");
-        TestHarness.Assert(button is { IsVisible: true, IsEnabled: false }, "the button is shown and disabled");
-        var before = shell.CurrentScreen;
-        Click(shell, "MainMenu.wnd:ButtonCustomMission");
-        TestHarness.Assert(ReferenceEquals(shell.CurrentScreen, before), "a click on it opens nothing");
+        TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonCustomMission") is null, "the patch's layout has no custom mission button");
     }
 
     // ------------------------------------------------------------------------------------------------- options persistence

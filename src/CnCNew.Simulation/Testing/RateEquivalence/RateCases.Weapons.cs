@@ -141,6 +141,8 @@ public static partial class RateCases
         var source = SpawnCarrier(scene, carrierName, flags, 1000, 2000);
         var victim = scene.Spawn(victimName, 2, Fixed.FromInt(1000) + distance, Fixed.FromInt(2000));
         if (victimName == AirVictim) scene.StepFrames(RateScene.Seconds(6));
+        // The patch's structures take their subdual armour with an upgrade they grant themselves in their first update.
+        scene.StepFrames(1);
         scene.Align();
 
         var shots = new List<long>();

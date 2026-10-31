@@ -77,9 +77,8 @@ public sealed class MainMenuScreen : ShellScreen
         // original's matchmaking service, which this build does not have: visible, inert.
         W("ButtonMultiplayer").SetEnabled(Shell.Network is not null);
         W("ButtonOnline").SetEnabled(false);
-        // The retail MainMenu.wnd (PatchWindow.big) has a "custom mission" button between Skirmish and Back; this build has no such screen (the published source of the
-        // original has no handler for it either). Kept visible but inert, like Multiplayer; a layout without the button has nothing to disable.
-        Tree.FindByName("MainMenu.wnd:ButtonCustomMission")?.SetEnabled(false);
+        // The patch's layout carries the line of its test builds, "Work In Progress. For test purposes only": it says nothing about this game.
+        Tree.FindByName("MainMenu.wnd:Patch104pTestVersion")?.SetHidden(true);
         var hasCampaigns = Shell.Campaigns is not null;
         W("ButtonUSA").SetEnabled(hasCampaigns && Shell.Campaigns!.Find("USA") is not null);
         W("ButtonGLA").SetEnabled(hasCampaigns && Shell.Campaigns!.Find("GLA") is not null);

@@ -43,7 +43,7 @@ internal static class RateAudit
         {
             var probe = new SimulationTimeProbe();
             built.Time.Probe = probe;
-            try { catalogs[built] = TemplateCatalog.Build(graph, ModuleBindingTable.Default, built, geometry); }
+            try { catalogs[built] = TemplateCatalog.Build(graph, ModuleBindingTable.Default, built, geometry, ToolRate.Rules); }
             finally { built.Time.Probe = null; }
             probes[built] = probe;
         }

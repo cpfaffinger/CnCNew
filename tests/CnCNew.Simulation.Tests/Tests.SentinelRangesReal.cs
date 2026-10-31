@@ -27,7 +27,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
         // Anything above this cannot be squared at the current resolution (741,455 at 24 fraction bits).
@@ -54,10 +54,10 @@ static partial class Tests
         string[] expectedWeapons =
         [
             "AircraftCarrierOrderLaunch", "CINE_GLAJarmenKellRifle", "CINE_RangerAdvancedCombatRifle", "CINE_USAPathfinderSniperRifle",
-            "Chem_ScudStormWeapon", "Demo_ScudStormWeapon", "GC_Chem_ScudStormWeapon", "ScudStormWeapon",
+            "Chem_ScudStormWeapon", "Demo_ScudStormWeapon", "GC_Chem_ScudStormWeapon", "ScudStormWeapon", "SupW_TomahawkStormWeapon", "TerroristSuicideNotARealWeapon",
         ];
         Check.That(farWeapons.Select(weapon => weapon.Name).SequenceEqual(expectedWeapons),
-            $"The retail weapons with an attack range beyond the square limit are the eight known ones (found: {string.Join(", ", farWeapons.Select(weapon => weapon.Name))}).");
+            $"The retail weapons with an attack range beyond the square limit are the ten known ones (found: {string.Join(", ", farWeapons.Select(weapon => weapon.Name))}).");
 
         // Every step that can square the range runs on its own, so that one overflow does not hide the next: the list is empty on the fixed code
         // and names every step on the code before the fix.

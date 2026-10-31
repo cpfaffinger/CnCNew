@@ -291,6 +291,7 @@ run.Test("Phase 5: RebuildHoleExposeDie and RebuildHoleBehavior", Tests.RetailRe
 run.Test("Phase 5: GarrisonContain capacity, entry, healing and ejection", Tests.Phase5Garrison);
 run.Test("Phase 5: TransportContain slot-weighted capacity and health regen", Tests.Phase5Transport);
 run.Test("Phase 5: CreateCrateDie conditions, draw order and requests", Tests.Phase5CreateCrateDie);
+run.Test("A destroyed object's OCLUpdate still makes its list in that frame, once at every rate", Tests.StartingObjectMakesItsListOnce);
 run.Test("Phase 5: ObjectCreationList execution and skip events", Tests.Phase5CreationLists);
 run.Test("Phase 5: ObjectCreationList determinism and snapshot", Tests.Phase5CreationListDeterminism);
 run.Test("Fixed-point Sin/Cos accuracy", Tests.FixedTrigAccuracy);
@@ -361,7 +362,7 @@ run.Test("Vision: allies, construction sites and reveal-to-all", Tests.VisionAll
 run.Test("Vision: targeting is gated by visibility and stealth", Tests.VisionGatesTargeting);
 run.Test("Vision: snapshot round trip and two-run determinism", Tests.VisionSnapshotAndDeterminism);
 run.Test("Vision: reveal, refresh and kept hash match the original computation on random sequences", Tests.VisionMapMatchesTheReferenceComputation);
-run.Test("Vision: the kept hash mixes only from the first changed byte", Tests.VisionHashOnlyMixesFromTheFirstChangedByte);
+run.Test("Vision: the kept hash mixes only the rows that changed", Tests.VisionHashOnlyMixesFromTheFirstChangedByte);
 run.Test("Vision: a random world matches the original computation in every tick", Tests.VisionWorldMatchesTheReferenceComputation);
 run.Test("Construction: a dozer builds a structure over BuildTime ticks", Tests.ConstructionBuildsAStructure);
 run.Test("Construction: cancelling a site refunds it in full", Tests.ConstructionCancelRefunds);
@@ -731,6 +732,7 @@ if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Coma
 if (contentDirectory is not null) run.Test("Real data: winged jets fly a square, never below their minimum speed, circle, and the B-52 and helicopters keep their movement", () => Tests.RealWingedFlight(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: a player starts with one builder at every rate", () => Tests.RealPlayersStartWithOneBuilder(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the retail reference match gives the same commands in the same frames at 30, 60 and 120 Hz", () => Tests.RealReferenceMatchAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the last nine modules (salvage, ferry, smart bomb, crippled warehouse) and a fully instantiable retail catalog", () => Tests.RealLastBlockers(contentDirectory));
@@ -743,7 +745,7 @@ if (contentDirectory is not null) run.Test("Real data: computer players raise th
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI with the shipped script library on Alpine Assault", () => Tests.RealOriginalSkirmishAi(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: the original skirmish AI plays the same match at 30, 60 and 120 Hz", () => Tests.RealOriginalSkirmishAiAcrossRates(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a session of the original skirmish AI saved inside a frame at 60 and 120 Hz continues identically", () => Tests.RealOriginalSkirmishAiContinuesFromAnyTick(contentDirectory));
-if (contentDirectory is not null) run.Test("Real data: the eight weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: the ten weapons with an everywhere range and the six bomb trucks pass their range checks", () => Tests.RealSentinelRanges(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-64): the Scud Storm launches its nine missiles at 30, 60 and 120 Hz", () => Tests.RealScudStormLaunches(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data (F-36): a dying Crusader throws its debris at 30, 60 and 120 Hz", () => Tests.RealDebrisFlies(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: lost wake census - no retail object that began a slow death stays in the world", () => Tests.RealLostWakeCensus(contentDirectory));

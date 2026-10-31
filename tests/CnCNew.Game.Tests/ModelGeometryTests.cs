@@ -41,7 +41,7 @@ internal static class ModelGeometryTests
             }
 
             var graphFingerprint = DefinitionSnapshotWriter.ComputeFingerprint(data.Graph).Sha256;
-            TestHarness.Assert(data.Fingerprint != graphFingerprint && data.Fingerprint == data.Rate.Combine(geometry.Combine(graphFingerprint)), "the world fingerprint folds the table in (and the tick rate, when it is not the original's)");
+            TestHarness.Assert(data.Fingerprint != graphFingerprint && data.Fingerprint == data.Rules.Combine(data.Rate.Combine(geometry.Combine(graphFingerprint))), "the world fingerprint folds the table in (and the tick rate, when it is not the original's)");
         });
 
         harness.Run("Model geometry: the American airfield's bones are the model's, read twice give the same table", () =>
@@ -72,7 +72,7 @@ internal static class ModelGeometryTests
             // AVHUMMER.W3D (tools/CnCNew.W3dTool bones): EXITSTART01 (-5.719, -0.006), EXITEND01 (-15.950, 0.001), EXITEND02 (-1.658, 10.989).
             static bool Near(Fixed value, decimal expected) => Math.Abs(value.ToDecimal() - expected) <= 0.07m;
             TestHarness.Assert(Near(humvee[0].Start!.Value.X, -5.719m) && Near(humvee[0].End!.Value.X, -15.950m) && Near(humvee[1].End!.Value.Y, 10.989m), "the Humvee's exit bones are the model's");
-            TestHarness.Assert(exits.Count == 100 && paths == 166 && complete == 82 && none.Length == 76, $"measured on the master installation: 100 door containers, 166 paths, 82 with both bones, 76 containers without any ({exits.Count}, {paths}, {complete}, {none.Length})");
+            TestHarness.Assert(exits.Count == 100 && paths == 168 && complete == 85 && none.Length == 75, $"measured on the patched content: 100 door containers, 168 paths, 85 with both bones, 75 containers without any ({exits.Count}, {paths}, {complete}, {none.Length})");
         });
 
         harness.Run("Model geometry: the fire points and stations of the garrisons and transports (loadGarrisonPoints, loadStationGarrisonPoints, putObjAtNextFirePoint)", () =>
@@ -90,8 +90,8 @@ internal static class ModelGeometryTests
             var fireBase = points["AmericaFireBase"].Stations;
             TestHarness.Assert(fireBase.Length == 4 && Near(fireBase[0].X, 17.205m) && Near(fireBase[0].Y, 16.507m) && Near(fireBase[0].Z, -7.176m) && Near(fireBase[2].X, -17.357m) && Near(fireBase[2].Y, -17.144m),
                 $"the fire base has the four stations its model makes public (ExtraPublicBone STATION01..04), as the model has them: {string.Join(" | ", fireBase)}");
-            TestHarness.Assert(garrisons.Length == 164 && pristine == 3288 && stations.Length == 4 && transports.Length == 55 && transports.Sum(pair => pair.Value.Transport.Length) == 301,
-                $"measured on the master installation: 164 garrisons with 3,288 pristine points, 4 fire bases, 55 transports with 301 points ({garrisons.Length}, {pristine}, {stations.Length}, {transports.Length})");
+            TestHarness.Assert(garrisons.Length == 164 && pristine == 3346 && stations.Length == 4 && transports.Length == 55 && transports.Sum(pair => pair.Value.Transport.Length) == 301,
+                $"measured on the patched content: 164 garrisons with 3,346 pristine points, 4 fire bases, 55 transports with 301 points ({garrisons.Length}, {pristine}, {stations.Length}, {transports.Length})");
             var turret = transports.Where(pair => pair.Value.TurretPivot is not null).Select(pair => pair.Key).ToArray();
             Console.WriteLine($"       turret fire points (PassengersInTurret): {string.Join(", ", turret)}; ChinaTankOverlord {points["ChinaTankOverlord"].Transport[0]} about {points["ChinaTankOverlord"].TurretPivot}");
             // NVOVRLRD.W3D (tools/CnCNew.W3dTool bones): TURRET01 (0, 0, 10.192), FIREPOINT01 (-15, 0, 15).

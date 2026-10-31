@@ -27,7 +27,7 @@ static partial class Tests
 
         List<string> Stream(SimulationRate rate)
         {
-            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate);
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
             var scenario = new ReferenceMatchScenario(ReferenceMatchOptions.Standard with { MaxTicks = rate.Time.OriginalFrames(Frames) });
             var recorded = scenario.Record(catalog, fingerprint);
             var stride = rate.TicksPerOriginalFrame;

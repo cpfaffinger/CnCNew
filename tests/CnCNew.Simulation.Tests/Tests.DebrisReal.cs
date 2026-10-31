@@ -26,7 +26,7 @@ static partial class Tests
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         (int Pieces, long Gone, Fixed Highest) Run(SimulationRate rate)
         {
-            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate);
+            var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
             Check.That(catalog.TryGet("GenericDebris", out var debris) && debris.IsInstantiable, "GenericDebris is instantiable: " + string.Join(", ", debris?.MissingModules ?? []));
             var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
             var terrain = TerrainMap.Build(SyntheticMaps.Build(80, 80, 1, (_, _) => 0), "debris");

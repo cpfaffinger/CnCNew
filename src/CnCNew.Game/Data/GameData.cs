@@ -74,12 +74,12 @@ public sealed class GameData
     /// <summary>The tick rate the catalogs were built for: every world of this data runs at it (a setting of the session, chosen at <see cref="Load"/>).</summary>
     public SimulationRate Rate => Templates.Rate;
 
-    /// <summary>The rules the catalogs were built with (<c>docs/GGC-FIXES.md</c>): the original's unless the host chose adopted fixes at <see cref="Load"/>.</summary>
+    /// <summary>The rules the catalogs were built with (<c>docs/GGC-FIXES.md</c>): the product's unless the host chose others at <see cref="Load"/>.</summary>
     public CnCNew.Simulation.Rules.RuleProfile Rules => Templates.Rules;
 
     /// <summary>Compiles the retail base data (map overlays excluded) and builds every catalog; the slow part of starting the game.</summary>
     /// <param name="rate">The tick rate of the sessions this data is for; <see cref="DefaultSessionRate"/> when null.</param>
-    /// <param name="rules">The rules of the sessions this data is for (<c>docs/GGC-FIXES.md</c>); the original's when null. Folded into <see cref="Fingerprint"/>.</param>
+    /// <param name="rules">The rules of the sessions this data is for (<c>docs/GGC-FIXES.md</c>); the product's when null. Folded into <see cref="Fingerprint"/>.</param>
     public static GameData Load(string contentDirectory, Action<string>? progress = null, bool modelGeometry = true, SimulationRate? rate = null,
         CnCNew.Simulation.Rules.RuleProfile? rules = null)
     {
@@ -94,7 +94,7 @@ public sealed class GameData
         var visuals = ObjectVisualCatalog.Build(graph);
         // The airfields' parking and runway points come from the draw models' bones, which the simulation cannot read: they enter the world as fingerprinted data (docs/SIM-JET-FLIGHT.md).
         var geometry = modelGeometry ? ModelGeometryLoader.Load(graph, visuals, content) : ModelGeometry.None;
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate ?? DefaultSessionRate, geometry, rules);
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate ?? DefaultSessionRate, geometry, rules ?? CnCNew.Simulation.Rules.RuleProfile.Product);
         var fingerprint = templates.Rules.Combine(templates.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256)));
         var fx = FxCatalog.Build(graph);
         var audio = AudioCatalog.FromGraph(graph, content.Exists);

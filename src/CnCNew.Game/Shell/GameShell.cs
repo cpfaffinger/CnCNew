@@ -201,7 +201,7 @@ public sealed class GameShell
 
     /// <summary>Starts in <see cref="ShellPhase.Boot"/>: <see cref="GameData.Load"/> runs on a worker thread while the boot load screen shows its stage.</summary>
     public static GameShell CreateLoading(string contentDirectory, IShellEnvironment environment, string language = "English", UiViewport? viewport = null, IUiTextMeasure? textMeasure = null, bool animateTransitions = false, CnCNew.Simulation.Time.SimulationRate? rate = null,
-        Func<GameData, IShellNetwork>? network = null, CnCNew.Ui.Skins.UiSkin? skin = null)
+        Func<GameData, IShellNetwork>? network = null, CnCNew.Ui.Skins.UiSkin? skin = null, CnCNew.Simulation.Rules.RuleProfile? rules = null)
     {
         var shell = new GameShell(environment, language, viewport ?? new UiViewport(GameSettings.Default.Display.Width, GameSettings.Default.Display.Height), textMeasure, animateTransitions);
         shell.SkinOverride = skin;
@@ -215,7 +215,7 @@ public sealed class GameShell
         shell._networkFactory = network;
         shell.Phase = ShellPhase.Boot;
         shell.Push(new LoadingScreen(shell, ShellLayoutNames.ShellGameLoadScreen));
-        shell._loadTask = Task.Run(() => GameData.Load(contentDirectory, stage => shell._loadStage = stage, rate: rate));
+        shell._loadTask = Task.Run(() => GameData.Load(contentDirectory, stage => shell._loadStage = stage, rate: rate, rules: rules));
         return shell;
     }
 

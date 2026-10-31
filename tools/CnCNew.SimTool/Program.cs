@@ -34,7 +34,7 @@ const string Usage = """
                                                            record the synthetic stress scenario as a replay with checkpoints
       replay-run <replay.bin>                              run a replay, verifying its checkpoints
       hash <replay.bin>                                    run a replay and print final hash and hash-chain digest
-      reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--world-seed HEX] [--driver-seed HEX] [--record-only] [--out replay.bin] [--diagnose]
+      reference-match <content-dir> [--max-ticks N] [--min-ticks N] [--world-seed HEX] [--driver-seed HEX] [--record-only] [--standing] [--out replay.bin] [--diagnose]
                                                            headless free-for-all of all playable factions: record, two fresh runs, snapshot continuation
       ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin] [--trace N [--trace-army]]
                                                            skirmish AIs on a real map: record, two fresh runs, snapshot continuation;
@@ -81,7 +81,7 @@ const string Usage = """
     Every command that creates a world takes --tick-rate N (30, 60 or 120; default: the product rate): the catalog is built for that rate and the world runs at it.
     A budget given as --ticks/--max-ticks is a raw tick count of that rate; --seconds S or --minutes M state it as game time instead, and the
     default budgets are game time (the same at every rate). The stress test counts steps (--ticks only). A manifest is checked at the rate its file records.
-    The commands that load the shipped content take --rules original|fixes|NAME,... (docs/GGC-FIXES.md; default original); a manifest is checked with the original rules only.
+    The commands that load the shipped content take --rules product|original|fixes|NAME,... (docs/GGC-FIXES.md; default product); a manifest is checked with the product rules only.
       match-analysis <content-dir> <file.cncreplay> --out <directory> [--title TEXT]
                                                            the analysis of a replay of the replay browser (docs/MATCH-ANALYSIS.md): analysis.json,
                                                            players.tsv, samples.tsv, events.tsv and report.html, with the SHA-256 of each
@@ -419,6 +419,7 @@ static int ReferenceMatch(string directory, string[] args)
     Console.WriteLine(scenario.Winner is null
         ? $"No winner within {recorded.Header.EndTick} ticks."
         : $"Winner: player {scenario.Winner.Value.Value} ({scenario.WinnerFaction}) at tick {scenario.VictoryTick} ({CnCNew.SimTool.ToolRate.Minutes(scenario.VictoryTick):F1} game minutes); replay length {recorded.Header.EndTick} ticks.");
+    if (args.Contains("--standing")) foreach (var line in scenario.Standing) Console.WriteLine($"  {line}");
     // --record-only: the course of the match under these seeds, without the replay checks (a survey over seeds).
     if (args.Contains("--record-only")) return 0;
 

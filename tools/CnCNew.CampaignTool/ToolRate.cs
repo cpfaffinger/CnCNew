@@ -14,8 +14,17 @@ internal static class ToolRate
 
     public static SimulationRate Current { get; private set; } = CnCNew.Game.Data.GameData.DefaultSessionRate;
 
+    /// <summary><c>--rules product|original|fixes|NAME,...</c>: the rules of the missions of this run (docs/GGC-FIXES.md); the product's without the option.</summary>
+    public static CnCNew.Simulation.Rules.RuleProfile Rules { get; private set; } = CnCNew.Simulation.Rules.RuleProfile.Product;
+
     public static void Read(string[] args)
     {
+        var rules = Array.IndexOf(args, "--rules");
+        if (rules >= 0)
+        {
+            if (rules + 1 >= args.Length) throw new ArgumentException("--rules needs a value: product, original, fixes or the names of fixes.");
+            Rules = CnCNew.Simulation.Rules.RuleProfile.Parse(args[rules + 1]);
+        }
         var index = Array.IndexOf(args, Option);
         if (index < 0) return;
         if (index + 1 >= args.Length) throw new ArgumentException($"{Option} needs a value: 30, 60 or 120.");

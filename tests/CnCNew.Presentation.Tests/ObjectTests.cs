@@ -811,7 +811,7 @@ static partial class ObjectTests
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default,
             DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude });
         var catalog = ObjectVisualCatalog.Build(graph);
-        Check.That(catalog.Visuals.Length == 2115, $"Every retail object has a visual ({catalog.Visuals.Length}).");
+        Check.That(catalog.Visuals.Length == 2184, $"Every object has a visual ({catalog.Visuals.Length}).");
 
         var crusader = catalog["AmericaTankCrusader"];
         var tank = crusader.Draws.Single(draw => draw.ModuleType == "W3DTankDraw");
@@ -843,7 +843,7 @@ static partial class ObjectTests
                           $"models {first.ModelFilesResolved}/{first.ModelFiles}, animations {first.AnimationFilesResolved}/{first.AnimationFiles}, " +
                           $"skeletons {first.SkeletonFilesResolved}/{first.SkeletonFiles}, rule errors {first.RuleErrors}");
 
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default);
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 1, Players, "presentation-real", fingerprint), templates);
         var sequence = 0UL;

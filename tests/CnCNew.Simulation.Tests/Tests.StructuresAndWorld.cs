@@ -1285,7 +1285,7 @@ static partial class Tests
         var content = CnCNew.Content.ContentFileSystem.Open(directory);
         var options = CnCNew.Data.Compilation.DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = CnCNew.Data.Compilation.MapOverlayMode.Exclude };
         var graph = CnCNew.Data.Compilation.DefinitionCompiler.Compile(new RealSource(content), CnCNew.Data.Registry.ModuleRegistry.Default, options);
-        var catalog = CnCNew.Simulation.Templates.TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, TestRate.Default);
+        var catalog = CnCNew.Simulation.Templates.TemplateCatalog.Build(graph, CnCNew.Simulation.Modules.ModuleBindingTable.Default, TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var carriers = catalog.Templates.Where(template => template.Modules.Any(module => StructureGroupModules.Contains(module.Name)) || template.MissingModules.Any(module => StructureGroupModules.Contains(module))).ToArray();
         var refused = carriers.Where(template => template.MissingModules.Any(module => StructureGroupModules.Any(name => module.Contains(name, StringComparison.Ordinal)))).ToArray();

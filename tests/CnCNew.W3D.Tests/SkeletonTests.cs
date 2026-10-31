@@ -285,6 +285,14 @@ internal static class SkeletonTests
         pose.Evaluate(animation.Bind(3), 0, Matrix4x4.Identity);
         Check(pose.IsBoneVisible(1), "Captured bones are forced visible (HTreeClass::Anim_Update).");
         Throws<ArgumentOutOfRangeException>(() => pose.SetTurretYaw(0, 1), "The root bone cannot be captured.");
+
+        // BitChannelClass::Get_Bit returns DefaultVal as it stands: two models of the community patch write 255, which is visible.
+        var loud = BitChannel(pivot: 1, firstFrame: 0, lastFrame: 0, defaultValue: false, 0);
+        loud[^2] = 255;
+        var outside = Decode(RawAnimation("HIDE", "CHAIN", frames: 2, [loud])).Animations.Single();
+        pose.ClearBoneOverrides();
+        pose.Evaluate(outside.Bind(3), 1, Matrix4x4.Identity);
+        Check(pose.IsBoneVisible(1), "A default of 255 outside the channel's frames means visible.");
     }
 
     private static void StrictnessFailures()
@@ -331,12 +339,12 @@ internal static class SkeletonTests
         var report = W3dSkeletonAudit.Run(names, library, decodeTime);
         stopwatch.Stop();
         Check(report.Failures.IsEmpty, "Real W3D decode failures:\n" + string.Join('\n', report.Failures.Take(20)));
-        Check(report.FileCount == 8894 && report["hierarchies"] == 6478 && report["models.hlod"] == 6502,
+        Check(report.FileCount == 8912 && report["hierarchies"] == 6494 && report["models.hlod"] == 6518,
             $"Real W3D inventory changed ({report.FileCount} files, {report["hierarchies"]} hierarchies, {report["models.hlod"]} HLODs).");
-        Check(report["animations.None"] == 4074 && report["animations.TimeCoded"] == 21 && report["animations.AdaptiveDelta"] == 0,
-            "Real animation counts changed.");
-        Check(report["meshes.skinned"] == 169 && report["model.unresolved-sub-objects"] == 45,
-            "Real skin or unresolved sub-object counts changed.");
+        Check(report["animations.None"] == 4084 && report["animations.TimeCoded"] == 21 && report["animations.AdaptiveDelta"] == 0,
+            $"Real animation counts changed ({report["animations.None"]}, {report["animations.TimeCoded"]}, {report["animations.AdaptiveDelta"]}).");
+        Check(report["meshes.skinned"] == 169 && report["model.unresolved-sub-objects"] == 42,
+            $"Real skin or unresolved sub-object counts changed ({report["meshes.skinned"]}, {report["model.unresolved-sub-objects"]}).");
         Check(report.UnresolvedHierarchyReferences.Length == 6 &&
               report.UnresolvedHierarchyReferences.All(entry => entry.Contains("GENERALSKEL", StringComparison.Ordinal)),
             "Only the six GENERALSKEL animations may lack their hierarchy.");

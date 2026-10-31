@@ -811,11 +811,7 @@ static void RealDataCatalogMatchesObservedModules(string directory)
     var source = new ContentSource(content);
     var graph = DefinitionCompiler.Compile(source, ModuleRegistry.Default, DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true });
     var observed = graph.Definitions.SelectMany(value => value.Modules).Select(value => value.Name).Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.Ordinal).ToArray();
-    // Phase 32: two modules of the original engine that the shipped data never uses and the community patch does (docs/PATCH-LAYER.md); named, so that
-    // nothing else may join them unseen.
-    string[] onlyForThePatch = ["SabotageSupplyDropzoneCrateCollide", "StatusBitsUpgrade"];
-    Assert(onlyForThePatch.All(name => !observed.Contains(name, StringComparer.OrdinalIgnoreCase)), "A module named as used by the patch only is used by the shipped data.");
-    var catalog = ModuleRegistry.Default.Descriptors.Select(value => value.Name).Where(name => !onlyForThePatch.Contains(name, StringComparer.Ordinal)).Order(StringComparer.Ordinal).ToArray();
+    var catalog = ModuleRegistry.Default.Descriptors.Select(value => value.Name).Order(StringComparer.Ordinal).ToArray();
     Assert(observed.SequenceEqual(catalog), $"Catalog ({catalog.Length}) and observed module set ({observed.Length}) differ: "
         + string.Join(",", catalog.Except(observed).Concat(observed.Except(catalog))));
     Assert(graph.Audit.Compatibility.All(value => !(value.Category == "module" && value.PlannedTarget == "unknown-module-not-in-catalog")), "No module may be uncatalogued.");

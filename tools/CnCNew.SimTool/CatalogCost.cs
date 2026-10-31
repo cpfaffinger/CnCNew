@@ -39,7 +39,7 @@ internal static class CatalogCost
             for (var round = 0; round < rounds; round++)
             {
                 watch.Restart();
-                catalogs[rate] = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, geometry);
+                catalogs[rate] = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, geometry, ToolRate.Rules);
                 times.Add(watch.Elapsed.TotalMilliseconds);
             }
             Console.WriteLine($"TemplateCatalog.Build at {rate}: first {times[0]:F0} ms, fastest of {rounds} {times.Min():F0} ms, median {times.Order().ElementAt(times.Count / 2):F0} ms ({catalogs[rate].Templates.Length} templates).");

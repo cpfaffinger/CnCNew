@@ -61,6 +61,9 @@ public static partial class RateCases
         public long FlightSteps { get; set; } = -1;
         public Fixed ImpactX { get; set; }
         public Fixed ImpactY { get; set; }
+        public Fixed VictimX { get; set; }
+        public Fixed VictimY { get; set; }
+        public bool Landed { get; set; }
         public Fixed Apex { get; set; }
         public Fixed Path { get; set; }
     }
@@ -84,10 +87,15 @@ public static partial class RateCases
                 shot.FlightSteps = step;
                 shot.ImpactX = item.X;
                 shot.ImpactY = item.Y;
+                if (victim is not null) (shot.VictimX, shot.VictimY, _) = victim.FrameEnd(scene.World.Tick);
             }
             if (projectile is not null && scene.World.FindEntity(projectile.Id) == projectile)
             {
-                (seenX, seenY, seenZ) = (projectile.X, projectile.Y, projectile.Z);
+                // Where its frame ends: a missile that dies without an impact event was last seen a frame before at 30 Hz, and only a tick before above it otherwise.
+                (seenX, seenY, seenZ) = projectile.FrameEnd(scene.World.Tick);
+                // The victim where the projectile's flight ended: what its blast does to the victim afterwards is not the impact.
+                if (victim is not null && !shot.Landed) (shot.VictimX, shot.VictimY, _) = victim.FrameEnd(scene.World.Tick);
+                shot.Landed |= projectile.EffectivelyDead;
                 shot.Apex = Fixed.Max(shot.Apex, projectile.Z);
                 // The path is sampled once per frame of the original: the same chords at every rate.
                 if (scene.Time.IsOriginalFrameBoundary(scene.World.Tick))
@@ -143,7 +151,8 @@ public static partial class RateCases
             var shot = Follow(standing, source, weapon, victim, aimX, aimY, RateScene.Seconds(90));
             var hit = shot.FlightSteps >= 0;
             quantities.Event("standing victim: flight time", Elapsed(shot.FlightSteps));
-            quantities.Distance("standing victim: impact distance from the victim", RateMeasure.Distance(shot.ImpactX, shot.ImpactY, victim.X, victim.Y), hit);
+            // A blast may have thrown the victim in the frame of the impact: it is read where that frame ends, as the moving victim below.
+            quantities.Distance("standing victim: impact distance from the victim", RateMeasure.Distance(shot.ImpactX, shot.ImpactY, shot.VictimX, shot.VictimY), hit);
         }
 
         // (3) at a victim that drives across the line of fire (a guided projectile follows, a ballistic one lands where the victim was)
@@ -159,8 +168,7 @@ public static partial class RateCases
             quantities.Event("moving victim: flight time", Elapsed(shot.FlightSteps));
             // The impact falls on the first tick of a logic frame of the original, in which the victim has covered one share of that frame's step; the 30 Hz world shows it
             // after the whole step. The victim is read where its frame ends (Entity.FrameEnd; at 30 Hz its position), so the suite adds no offset below one frame.
-            var (victimX, victimY, _) = victim.FrameEnd(moving.World.Tick);
-            quantities.Distance("moving victim: impact distance from the victim", RateMeasure.Distance(shot.ImpactX, shot.ImpactY, victimX, victimY), hit);
+            quantities.Distance("moving victim: impact distance from the victim", RateMeasure.Distance(shot.ImpactX, shot.ImpactY, shot.VictimX, shot.VictimY), hit);
         }
 
         // (4) scatter: forty shots launched in one step at the same point, the mean distance of the impacts from it

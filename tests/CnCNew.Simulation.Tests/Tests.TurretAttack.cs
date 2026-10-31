@@ -461,7 +461,7 @@ static partial class Tests
         Check.That(file.Commands.SequenceEqual(ordered), "PursueCommand survives the replay file.");
         var again = ReplayRunner.Run(file, fixture.Templates, fixture.Fingerprint, new ReplayRunOptions { RecordTickHashes = true });
         Check.That(again.TickHashes.AsSpan().SequenceEqual(probe.TickHashes) && again.VerifiedCheckpoints == file.Checkpoints.Length, "The replay reproduces itself tick by tick.");
-        Check.That(CommandTypes.IsKnown(CommandTypes.Pursue) && CommandTypes.IsKnown(CommandTypes.AttackMove) && CommandTypes.IsKnown(CommandTypes.GroupMove) && CommandTypes.IsKnown(CommandTypes.PlayerLeave) && CommandTypes.IsKnown(CommandTypes.Guard) && CommandTypes.IsKnown(CommandTypes.AttackPosition) && CommandTypes.IsKnown(CommandTypes.SetMineClearing) && !CommandTypes.IsKnown(CommandTypes.SetMineClearing + 1) && CommandTypes.Version == 20 && ReplayFormat.CurrentVersion == 18, "Command table 20 and replay format 18 carry the pursuit (and the attack-move, the group move, the player-leave, the guard, the attack on a place and the mine-clearing flag after it).");
+        Check.That(CommandTypes.IsKnown(CommandTypes.Pursue) && CommandTypes.IsKnown(CommandTypes.AttackMove) && CommandTypes.IsKnown(CommandTypes.GroupMove) && CommandTypes.IsKnown(CommandTypes.PlayerLeave) && CommandTypes.IsKnown(CommandTypes.Guard) && CommandTypes.IsKnown(CommandTypes.AttackPosition) && CommandTypes.IsKnown(CommandTypes.SetMineClearing) && !CommandTypes.IsKnown(CommandTypes.SetMineClearing + 1) && CommandTypes.Version == 20 && ReplayFormat.CurrentVersion == 19, "Command table 20 and replay format 18 carry the pursuit (and the attack-move, the group move, the player-leave, the guard, the attack on a place and the mine-clearing flag after it).");
         Check.That(ordered.OfType<PursueCommand>().Single().TypeCode == CommandTypes.Pursue, "The command has its own type code.");
     }
 
@@ -581,7 +581,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East"), new PlayerConfiguration(new PlayerId(2), "West"));
 

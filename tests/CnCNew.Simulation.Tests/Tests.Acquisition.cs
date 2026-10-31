@@ -584,7 +584,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var ignored = graph.Diagnostics.Count(value => value.Code == "compatibility-ignored-tokens" && value.Message.Contains("AutoAcquireEnemiesWhenIdle", StringComparison.Ordinal));
         Check.That(ignored == 0, $"No AutoAcquireEnemiesWhenIdle value loses tokens any more ({ignored}).");

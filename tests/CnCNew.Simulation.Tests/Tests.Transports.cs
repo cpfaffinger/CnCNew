@@ -507,10 +507,10 @@ static partial class Tests
         ];
         var bytes = ReplayFormat.Write(new ReplayFile(header, commands, []));
         var read = ReplayFormat.Read(bytes);
-        Check.That(read.Commands.SequenceEqual(commands) && ReplayFormat.CurrentVersion == 18 && CommandTypes.Version == 20, "MoveAndEnter and Evacuate round-trip in the replay format (18, command table 20).");
+        Check.That(read.Commands.SequenceEqual(commands) && ReplayFormat.CurrentVersion == 19 && CommandTypes.Version == 20, "MoveAndEnter and Evacuate round-trip in the replay format (18, command table 20).");
         var old = (byte[])bytes.Clone();
         BitConverter.GetBytes(6u).CopyTo(old, 8);
         Check.Throws<ReplayFormatException>(() => ReplayFormat.Read(old), "Unsupported replay format version 6");
-        Check.That(WorldSnapshot.Version == 10, "Snapshots are version 10.");
+        Check.That(WorldSnapshot.Version == 11, "Snapshots are version 11.");
     }
 }

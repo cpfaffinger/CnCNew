@@ -870,7 +870,7 @@ internal static class StructureConditionTests
         var content = ContentFileSystem.Open(directory);
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default,
             DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude });
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default);
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "East", "FactionAmerica"), new PlayerConfiguration(new PlayerId(2), "West", "FactionChina"));
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 1, players, "presentation-structures", fingerprint), templates);
@@ -883,11 +883,11 @@ internal static class StructureConditionTests
             return world.Entities.Where(entity => entity.Template.Name == template).OrderBy(entity => entity.Id.Value).Last();
         }
 
-        // The retail war factory: ProductionUpdate NumDoorAnimations = 1 with DoorOpeningTime 3250, DoorWaitOpenTime 3000, DoorCloseTime 4000, ConstructionCompleteDuration 1500 (milliseconds).
+        // The retail war factory: ProductionUpdate NumDoorAnimations = 1 with DoorOpeningTime 3300, DoorWaitOpenTime 3000, DoorCloseTime 3300, ConstructionCompleteDuration 1500 (milliseconds).
         var factory = Spawn("AmericaWarFactory", 1, 1000, 1000);
         var data = factory.Modules.OfType<ProductionUpdate>().Single().Data;
-        // The durations lie on the original's frame grid (98, 90, 120 and 45 frames) at every tick rate.
-        Check(data.NumDoorAnimations == 1 && data.DoorOpeningTicks == TestTime.Frames(world, 98) && data.DoorWaitOpenTicks == TestTime.Frames(world, 90) && data.DoorCloseTicks == TestTime.Frames(world, 120)
+        // The durations lie on the original's frame grid (99, 90, 99 and 45 frames) at every tick rate.
+        Check(data.NumDoorAnimations == 1 && data.DoorOpeningTicks == TestTime.Frames(world, 99) && data.DoorWaitOpenTicks == TestTime.Frames(world, 90) && data.DoorCloseTicks == TestTime.Frames(world, 99)
               && data.ConstructionCompleteTicks == TestTime.Frames(world, 45), $"The war factory's door timing is typed from the INI ({data}).");
         world.Submit(new GiveMoneyCommand(PlayerId.System, ++sequence, world.Tick, new PlayerId(1), Fixed.FromInt(20000)));
         world.Step();
@@ -906,9 +906,9 @@ internal static class StructureConditionTests
         var closing = Span(timeline, StructureConditions.DoorClosing[0]);
         Check(completed > 0 && opening is not null && waiting is not null && closing is not null, $"The war factory shows DOOR_1_OPENING, DOOR_1_WAITING_OPEN, DOOR_1_CLOSING in turn ({text}).");
         // The simulation makes the unit when the door is fully open, a frame more than DoorOpeningTime after it began to open (F-09).
-        Near(TestTime.Frames(world, 99), completed - opening!.Value.First, TestTime.Frames(world, 1), "The door starts opening 98 frames and one more before the Crusader appears");
+        Near(TestTime.Frames(world, 100), completed - opening!.Value.First, TestTime.Frames(world, 1), "The door starts opening 99 frames and one more before the Crusader appears");
         Near(TestTime.Frames(world, 91), waiting!.Value.Last - waiting.Value.First + 1, TestTime.Frames(world, 1), "The door waits open 90 frames and one more");
-        Near(TestTime.Frames(world, 121), closing!.Value.Last - closing.Value.First + 1, TestTime.Frames(world, 1), "The door closes for 120 frames and one more");
+        Near(TestTime.Frames(world, 100), closing!.Value.Last - closing.Value.First + 1, TestTime.Frames(world, 1), "The door closes for 99 frames and one more");
         Check(Span(timeline, StructureConditions.ConstructionComplete) is { } complete && complete.First == opening.Value.First, "CONSTRUCTION_COMPLETE starts with the door.");
         Console.WriteLine($"       real data: AmericaWarFactory door timeline {text}");
 

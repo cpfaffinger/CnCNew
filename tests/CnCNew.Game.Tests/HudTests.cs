@@ -302,6 +302,7 @@ internal static class HudTests
         var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard);
         var match = LiveMatch.Create(data, setup, viewport);
         var controller = new MatchController(match, settings ?? GameSettings.Default);
+        Advance(match, controller, (int)match.World.Time.OriginalFrames(4)); // the start object of the patch makes the builder in its third frame
         return (match, controller);
     }
 

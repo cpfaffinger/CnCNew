@@ -83,7 +83,7 @@ internal static class SentinelRangeTests
         var content = ContentFileSystem.Open(directory);
         var graph = DefinitionCompiler.Compile(new ContentSource(content), ModuleRegistry.Default,
             DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude });
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var limit = Fixed.Sqrt(Fixed.MaxValue);
         var asked = new List<string>();
@@ -98,13 +98,14 @@ internal static class SentinelRangeTests
                 Assert(world.Submit(new SpawnCommand(PlayerId.System, ++sequence, world.Tick, name, new PlayerId(owner), Fixed.FromInt(x), Fixed.FromInt(600), Fixed.Zero, Fixed.Zero)).Accepted, name + " spawns");
             world.Step();
             var source = world.FindEntity(new EntityId(1))!;
-            Assert(SimulationQueries.WeaponRange(world, source) > limit, $"{template.Name}: its reach is beyond the square limit");
+            // The weapon of another weapon set (a demo general's upgrade) is not its reach yet.
+            if (SimulationQueries.WeaponRange(world, source) <= limit) continue;
             Assert(SimulationQueries.InRange(world, source, world.FindEntity(new EntityId(2))!), $"{template.Name}: a target 400 units away is in range");
             asked.Add(template.Name);
             foreach (var weapon in far) weapons.Add(weapon.Name);
         }
         Console.WriteLine($"     asked {asked.Count} objects ({string.Join(", ", asked)}) carrying {weapons.Count} weapons ({string.Join(", ", weapons)})");
-        Assert(weapons.Count == 8 && asked.Count == 11, $"the eight retail weapons with an everywhere range on eleven objects ({weapons.Count} weapons, {asked.Count} objects)");
+        Assert(weapons.Count == 10 && asked.Count == 36, $"the ten weapons with an everywhere range on 36 objects ({weapons.Count} weapons, {asked.Count} objects)");
     }
 
     private sealed class ContentSource(ContentFileSystem content) : IDefinitionSource

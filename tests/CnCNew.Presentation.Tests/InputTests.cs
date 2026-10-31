@@ -1485,7 +1485,7 @@ static class InputTests
                && buttons.TryGetButton("Command_ConstructAmericaDozer", out var dozerButton) && dozerButton.SpecialPowerOption == 0,
             "the strategy center's three battle plan buttons carry OPTION_ONE/TWO/THREE as the command's option");
 
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.Tests.TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(Me, "America", "FactionAmerica"), new PlayerConfiguration(Enemy, "China", "FactionChina"));
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), CnCNew.Tests.TestRate.Default, 3, players, "input-real", fingerprint), catalog);

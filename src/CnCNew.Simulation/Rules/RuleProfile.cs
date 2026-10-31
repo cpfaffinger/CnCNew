@@ -107,8 +107,9 @@ public enum MovementProfile : byte
 public sealed record GameFixInfo(GameFix Fix, string Name, string Source, string Summary);
 
 /// <summary>
-/// The rules a world is simulated by: the original's (no fix on - the profile every reference value is measured with) or the original with a set of adopted fixes
-/// (<see cref="GameFix"/>). The profile is part of a catalog's identity, like the tick rate: <see cref="Combine"/> folds it into the definition fingerprint, so a world,
+/// The rules a world is simulated by: <see cref="Product"/> (every adopted fix and the budgeted movement - the profile every reference value is measured with, decisions
+/// D-3 and D-32 of <c>docs/plan/PROGRAMME.md</c>), the original's (no fix on - the switch that tells a defect of the patch from one of the port, and what a synthetic
+/// test fixture simulates) or any set of adopted fixes (<see cref="GameFix"/>). The profile is part of a catalog's identity, like the tick rate: <see cref="Combine"/> folds it into the definition fingerprint, so a world,
 /// a replay, a save and a match description made with one profile are refused by a machine with another - two machines with different rules are certain to diverge.
 /// The original profile leaves the fingerprint unchanged, so that nothing recorded before profiles existed changes its identity.
 /// </summary>
@@ -210,6 +211,12 @@ public class RuleProfile : IEquatable<RuleProfile>
     /// <summary>Every adopted fix.</summary>
     public static RuleProfile AllFixes { get; } = new(ImmutableSortedSet.CreateRange(Catalogue.Select(info => info.Fix)));
 
+    /// <summary>The rules of the game a player gets: every adopted fix and the budgeted movement.</summary>
+    public static RuleProfile Product { get; } = new WithBudgetedMovement(AllFixes.Fixes);
+
+    /// <summary>The name of <see cref="Product"/> in a profile's name and on the command line.</summary>
+    public const string ProductName = "product";
+
     public ImmutableSortedSet<GameFix> Fixes { get; }
 
     /// <summary>How ground units plan their paths; <see cref="MovementProfile.Original"/> in the original profile.</summary>
@@ -217,10 +224,12 @@ public class RuleProfile : IEquatable<RuleProfile>
 
     public bool IsOriginal => Fixes.IsEmpty && Movement == MovementProfile.Original;
 
+    public bool IsProduct => Equals(Product);
+
     public bool Has(GameFix fix) => Fixes.Contains(fix);
 
-    /// <summary><c>original</c>, or the names of the fixes in their numeric order joined by <c>+</c>, then <c>movement-budget</c> when the movement is budgeted.</summary>
-    public string Name => IsOriginal ? "original"
+    /// <summary><c>original</c>, <c>product</c>, or the names of the fixes in their numeric order joined by <c>+</c>, then <c>movement-budget</c> when the movement is budgeted.</summary>
+    public string Name => IsOriginal ? "original" : IsProduct ? ProductName
         : string.Join('+', Fixes.Select(fix => Info(fix).Name).Concat(Movement == MovementProfile.Budgeted ? [BudgetedMovementName] : []));
 
     /// <summary>
@@ -241,7 +250,7 @@ public class RuleProfile : IEquatable<RuleProfile>
     }
 
     /// <summary>
-    /// <c>original</c>, <c>fixes</c> (every adopted fix) or a list of fix names separated by <c>,</c> or <c>+</c>; <c>movement-budget</c> in the list selects
+    /// <c>original</c>, <c>product</c>, <c>fixes</c> (every adopted fix) or a list of fix names separated by <c>,</c> or <c>+</c>; <c>movement-budget</c> in the list selects
     /// <see cref="MovementProfile.Budgeted"/>, and <c>fixes</c> may stand in the list for every fix. An unknown name is an error, never ignored.
     /// </summary>
     public static RuleProfile Parse(string text)
@@ -249,6 +258,7 @@ public class RuleProfile : IEquatable<RuleProfile>
         ArgumentNullException.ThrowIfNull(text);
         var value = text.Trim();
         if (value.Equals("original", StringComparison.OrdinalIgnoreCase)) return Original;
+        if (value.Equals(ProductName, StringComparison.OrdinalIgnoreCase)) return Product;
         if (value.Equals("fixes", StringComparison.OrdinalIgnoreCase)) return AllFixes;
         var fixes = ImmutableSortedSet.CreateBuilder<GameFix>();
         var movement = MovementProfile.Original;
@@ -257,7 +267,7 @@ public class RuleProfile : IEquatable<RuleProfile>
             if (part.Equals(BudgetedMovementName, StringComparison.OrdinalIgnoreCase)) { movement = MovementProfile.Budgeted; continue; }
             if (part.Equals("fixes", StringComparison.OrdinalIgnoreCase)) { fixes.UnionWith(AllFixes.Fixes); continue; }
             var info = Catalogue.FirstOrDefault(entry => entry.Name.Equals(part, StringComparison.OrdinalIgnoreCase))
-                ?? throw new ArgumentException($"Unknown rule profile or fix '{part}'. Known: original, fixes, {BudgetedMovementName}, {string.Join(", ", Catalogue.Select(entry => entry.Name))}.");
+                ?? throw new ArgumentException($"Unknown rule profile or fix '{part}'. Known: original, {ProductName}, fixes, {BudgetedMovementName}, {string.Join(", ", Catalogue.Select(entry => entry.Name))}.");
             fixes.Add(info.Fix);
         }
         if (fixes.Count == 0 && movement == MovementProfile.Original) throw new ArgumentException("An empty rule profile; say 'original'.");
