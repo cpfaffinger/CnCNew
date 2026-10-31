@@ -365,6 +365,9 @@ public sealed class MissionPresentationDirector
 
     public bool BorderShroudEnabled { get; private set; } = true;
 
+    /// <summary><c>SHOW_WEATHER</c>: snow and rain of the map are shown (<c>SnowManager::setVisible</c>; on at the start of a map).</summary>
+    public bool WeatherShown { get; private set; } = true;
+
     public ImmutableArray<RadarBlip> RadarBlips => [.._radar];
 
     /// <summary>The radar blips for a host that draws them on its minimap; calling this tells the director the radar events are displayed.</summary>
@@ -456,7 +459,7 @@ public sealed class MissionPresentationDirector
             _resetRequest = null;
             // View::resetCamera: default angle, pitch and zoom at the waypoint.
             _angle.Start(0f, reset);
-            _pitch.Start(DefaultPitch(camera), reset);
+            _pitch.Start(1f, reset);
             _zoom.Start(camera.Settings.MaxHeightAboveGround, reset);
         }
         if (_moveX.Active || _moveY.Active)
@@ -487,20 +490,12 @@ public sealed class MissionPresentationDirector
         if (_pitchRequest is { } pitch)
         {
             _pitchRequest = null;
-            _pitch.Start(pitch.Factor * DefaultPitch(camera), pitch.Seconds);
+            // W3DView::pitchCamera: the scripts' pitch is m_FXPitch, a factor with its own meaning, not an angle.
+            _pitch.Start(pitch.Factor, pitch.Seconds);
         }
         if (_angle.Active) camera.SetAngle(_angle.Advance(camera.Angle, seconds));
-        if (_zoom.Active) camera.SetHeightAboveGround(_zoom.Advance(camera.HeightAboveGround, seconds));
-        if (_pitch.Active) camera.SetPitch(_pitch.Advance(camera.Pitch, seconds));
-    }
-
-    private static float DefaultPitch(RtsCamera camera)
-    {
-        var current = camera.Pitch;
-        camera.SetPitchToDefault();
-        var result = camera.Pitch;
-        camera.SetPitch(current);
-        return result;
+        if (_zoom.Active) camera.SetScriptedHeightAboveGround(_zoom.Advance(camera.HeightAboveGround, seconds));
+        if (_pitch.Active) camera.SetFxPitch(_pitch.Advance(camera.FxPitch, seconds));
     }
 
     /// <summary>The camera angle that looks from <paramref name="from"/> towards <paramref name="target"/> on the ground (<c>View::cameraModLookToward</c>); which way a larger angle turns the view is probed, not assumed.</summary>
@@ -1304,6 +1299,10 @@ public sealed class MissionPresentationDirector
                 return;
             case "ENABLE_BORDER_SHROUD" or "DISABLE_BORDER_SHROUD":
                 BorderShroudEnabled = action == "ENABLE_BORDER_SHROUD";
+                return;
+            case "SHOW_WEATHER":
+                if (!Number(output, 0, out var showWeather)) { Problem(action, "flag value missing"); return; }
+                WeatherShown = showWeather != 0f;
                 return;
         }
     }

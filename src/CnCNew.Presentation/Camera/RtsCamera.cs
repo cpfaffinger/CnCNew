@@ -200,9 +200,25 @@ public sealed class RtsCamera : IViewProjection
 
     public void SetPitchToDefault() => SetPitch(DegreesToRadians(_settings.PitchDegrees));
 
+    /// <summary><c>W3DView::m_FXPitch</c>: the pitch of the scripts, 1 by default (see <see cref="BuildMatrices"/>).</summary>
+    public float FxPitch { get; private set; } = 1f;
+
+    public void SetFxPitch(float value)
+    {
+        FxPitch = value;
+        _dirty = true;
+    }
+
     public void SetHeightAboveGround(float height)
     {
         HeightAboveGround = Math.Clamp(height, _settings.MinHeightAboveGround, MaxHeightAboveGround);
+        ClampToConstraints();
+    }
+
+    /// <summary><c>W3DView::zoomCameraOneFrame</c>: a script sets the zoom without the player's limit below, which is how the close-ups of a cut scene come about.</summary>
+    public void SetScriptedHeightAboveGround(float height)
+    {
+        HeightAboveGround = Math.Clamp(height, 1f, MaxHeightAboveGround);
         ClampToConstraints();
     }
 
@@ -413,6 +429,14 @@ public sealed class RtsCamera : IViewProjection
         source *= factor;
         target = new Vector3(pivot, GroundLevel);
         eye = source + target;
+        // W3DView::buildCameraPosition: a script's pitch does not turn the camera about its target. Below 1 it lifts the point looked at towards the camera's height, above 1 it brings the camera nearer over the ground.
+        if (FxPitch <= 1f) target.Z = eye.Z - (eye.Z - target.Z) * FxPitch;
+        else
+        {
+            eye.X = target.X + (eye.X - target.X) / FxPitch;
+            eye.Y = target.Y + (eye.Y - target.Y) / FxPitch;
+        }
+
         view = Matrix4x4.CreateLookAt(eye, target, Vector3.UnitZ);
         var aspect = _viewport.X / _viewport.Y;
         var fovY = 2f * MathF.Atan(TanHalfHorizontal(aspect) / aspect);
