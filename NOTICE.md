@@ -52,6 +52,13 @@ TERMS AND CONDITIONS", appendix "How to Apply These Terms to Your New Programs")
 the `LICENSE.md` of the EA release (without its introductory sentence and without the additional terms, which
 are in section 4 below); the file therefore has Windows line endings.
 
+## 3a. The Bink decoder
+
+`src/CnCNew.Video` is a decoder of the Bink video and audio formats written for this project in C#, after the public descriptions of the format (MultimediaWiki) and FFmpeg's
+`libavcodec/bink.c`, `binkdsp.c`, `binkaudio.c` and `libavformat/bink.c`, © Konstantin Shishkov, Peter Ross, Daniel Verkamp and the FFmpeg developers, LGPL 2.1 or later, which permits
+this use under the GPL. The fixed tables of the format in `BinkTables.cs` come from FFmpeg's `libavcodec/binkdata.h` under the same licence. It uses no code of RAD Game Tools, and Bink is
+a trademark of RAD Game Tools, Inc. Details: `docs/CLIENT-VIDEO.md`.
+
 ## 4. Relationship to the source code release by Electronic Arts
 
 Electronic Arts Inc. released the source code of *Command & Conquer Generals* and *Zero Hour* under GPL v3 with

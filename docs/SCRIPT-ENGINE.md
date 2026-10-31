@@ -314,7 +314,7 @@ a camera move) is not represented, no campaign map uses it.
   position (`AudioDirector.PlayUi`), `MUSIC_SET_TRACK` starts the track (`AudioDirector.SetMusicTrack`), after that the playlist of the side continues. For speech the director shows the subtitle
   `DIALOGEVENT:<Name>Subtitle` like `doSpeechPlay` (as a mission caption, 8 s; only if the table has it, it is not empty and does not begin with `*` – the English retail table hides 2,454 of 2,455) and next to it a marked
   placeholder with the event name. What does not start (unknown name, no file) is listed with a reason under "problems".
-- **Movie:** `MOVIE_PLAY_FULLSCREEN`/`MOVIE_PLAY_RADAR` show the movie name as a text placeholder (no Bink decoder, permanent limit).
+- **Movie:** `MOVIE_PLAY_FULLSCREEN`/`MOVIE_PLAY_RADAR` play the movie over everything or in the radar's window; the scripts hear of its end after its length in game time (`docs/CLIENT-VIDEO.md`). A movie the host cannot play, and every movie of a run without a window, is the movie's name as a text placeholder. No shipped map uses either action.
 - **Radar:** `RADAR_CREATE_EVENT`, `OBJECT_/TEAM_CREATE_RADAR_EVENT` are drawn as a white, blinking dot on the minimap (`RadarBlipsForDisplay`, 8 s). In the measurement runs exactly one
   radar event occurred (`MD_USA01`, tick 3,191); it was handed to the minimap, but not specifically checked in the image.
 
@@ -358,7 +358,7 @@ appears as itself and is listed under "problems" (`label … has no text`).
 | Superweapon list | `postDraw` | `SuperweaponCountdownPosition` (0.90 / 0.01), `docs/GAME-HUD.md` §14 | `SuperweaponCountdown*Font` (ready bold), house colour, flash colour `…FlashColor` | as there; "..." from 0.82 of the height on |
 | `INGAME_POPUP_MESSAGE` | `popupMessage` → `InGamePopupMessageInit` | x/y in percent (0..100) of the image area, width ≥ 50 pixels; text wrap width − 14, OK bottom right (`MissionPopupWindow`) | the windows from `InGamePopupMessage.wnd` (font of the template; text colour 254 instead of `PopupMessageColor`) | stays until OK, Enter or Escape (on release); with pause mark the mission pauses (`LiveGame.Paused`) and the window is modal; without it the world outside the window stays operable |
 | `SPEECH_PLAY` | `doSpeechPlay`: subtitle `DIALOGEVENT:<Name>Subtitle` through `militarySubtitle` (8000 ms), only if present, not empty, no leading `*` | like the mission caption | like it | in English almost never (2,454 of 2,455 with `*`); next to it the placeholder "(speech: Name)" bottom centre in the `MessageFont`, 3 s |
-| Movie | – (placeholder, no Bink) | bottom centre (in the letterbox in the lower bar) | `MessageFont` of the data, white | 3 s; marked placeholder |
+| Movie that cannot be played | – (placeholder) | bottom centre (in the letterbox in the lower bar) | `MessageFont` of the data, white | 3 s; marked placeholder |
 
 All times run on the presentation clock (`MissionPresentationDirector.Clock`, world tick plus frozen steps), i.e. on while time is stopped; in the original `update` decrements `lifetime`/`blockBeginFrame`/`incrementOnFrame`
 per frame for this. The state is a pure function of the frames since the beginning (`UiMessageLog`, `MilitaryCaptionState` in `Shell/MissionText.cs`, one `Update(frame)` per step), the draw lists are built by `MissionTextOverlay`; both can be

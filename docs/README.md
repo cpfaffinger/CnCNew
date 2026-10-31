@@ -100,6 +100,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 | [CLIENT-OBJECTS.md](CLIENT-OBJECTS.md) | Stride client: object layer, visual checklist |
 | [CLIENT-FX.md](CLIENT-FX.md) | Stride client: effect layer |
 | [CLIENT-UI-RENDERING.md](CLIENT-UI-RENDERING.md) | Stride client: 2D renderer of the UI draw list |
+| [CLIENT-VIDEO.md](CLIENT-VIDEO.md) | Bink movies: the decoder in C#, the player, where the game plays them |
 | [GAME-SHELL.md](GAME-SHELL.md) | Game shell: boot, menus, skirmish setup, result |
 | [GAME-HUD.md](GAME-HUD.md) | HUD and control surface in the game |
 | [GAME-AUDIO.md](GAME-AUDIO.md) | AudioDirector, EVA, music, device output |

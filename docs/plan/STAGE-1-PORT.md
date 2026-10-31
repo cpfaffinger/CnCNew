@@ -24,7 +24,7 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
   audits (`AssetTool verify`, `IniTool audit`, `ImageTool audit-tga`, `W3dTool audit`, `MapTool audit`). Documents:
   `docs/CONTENT-PIPELINE.md`, `docs/W3D-MATERIALS.md`, `docs/W3D-SKELETONS.md`, `docs/AUDIO.md`, `docs/MAP-SCRIPTS.md`.
 - **Numbers (master installation, 9 October 2026):** 25,608 runtime files; 224 INI files; 150 maps; 8,894 W3D files.
-- **Open:** none inside the milestone. The Bink video decoder is a permanent limit (F-02).
+- **Open:** none inside the milestone. The Bink video decoder is `src/CnCNew.Video` (F-02).
 
 ### S1-M2 Typed game data and compatibility baseline — done
 
@@ -206,7 +206,7 @@ planned to change. New deviations are entered here before they are fixed or left
 | ID | Deviation | Original (source) | Found | Disposition |
 |---|---|---|---|---|
 | F-01 | The RNG sequence was never compared against a compiled original; golden masters are derived from the source code | `RandomValue.cpp` | Phase 4/5 | limit until an original can be compiled or recorded |
-| F-02 | No Bink video decoder; movies are counted (`Stats.SkippedMovies`) and skipped | Bink SDK (proprietary) | Phase 7 | limit; substitute display (still image, text) is R1 work |
+| F-02 | No Bink video decoder; movies are counted (`Stats.SkippedMovies`) and skipped | Bink SDK (proprietary); the format is public: MultimediaWiki, FFmpeg `libavcodec/bink.c`, `binkaudio.c` | Phase 7 | **done** (31 October 2026, `docs/CLIENT-VIDEO.md`): `src/CnCNew.Video` decodes all 70 movies of the game; the intro, a mission's load screen, a won campaign's movie, the scripts' full-screen and radar movies play with their sound. Left out, named there: the portraits and the "VS" of the Generals' Challenge load screen. No human has seen or heard it |
 | F-03 | Passengers stand inside their transport after getting out | `OpenContain::exitObjectViaDoor`, `AIExitState::update`, `TransportContain::onRemoving` (scatter only for a destroyed transport), `GarrisonContain::exitObjectViaDoor` | acceptance S1 | **done** (Phase 31: implementation `f9abff8`, manifest `12533c6`; `docs/SIMULATION-CORE.md` §44.1). Left out, named there: door animation, container rally point, `GoAggressiveOnExit` and the other exit keys, bones of damaged model states |
 | F-04 | A group sent to one point gets no own destination per unit; late units walk around the parked group | `AIGroup::groupMoveToPosition`, `computeIndividualDestination`, `Pathfinder::adjustDestination`, `AIInternalMoveToState::onEnter` | acceptance S2 | **done** (Phase 31: implementation `39a1656`, manifest `1a191cd`; `docs/SIMULATION-CORE.md` §44.2; `CommandTypes.Version` 16, replay 13). Left out, named there: column moves along a group path, tightening, player formations, path-cost test |
 | F-05 | `SlowDeathBehavior` runs no per-phase effect, creation list or weapon: no death explosion, debris or wreck | `SlowDeathBehavior::beginSlowDeath`, `doPhaseStuff`, `update` | acceptance S3 | **done** (Phase 31: implementation `94711fb`, manifest `bab51c3`; `docs/SIMULATION-CORE.md` §44.3) for effect list, creation list, weapon and the midpoint draw of `SlowDeathBehavior`; the debris is F-36, the subclasses F-37 |
@@ -308,6 +308,6 @@ into `docs/DEMO-FINDINGS.md` with number, cause and status.
 
 ## 5. Permanent limits of the stage
 
-Bink video (F-02); the RNG comparison (F-01) as long as no original can be compiled or recorded; missions are not replays
+The RNG comparison (F-01) as long as no original can be compiled or recorded; missions are not replays
 (F-31); the derived evaluation offset (F-26); the simpler pathfinder as the port's pathfinder (F-28; the better one is an
 option in Stage 3).

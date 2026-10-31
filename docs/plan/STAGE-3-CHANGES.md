@@ -199,7 +199,7 @@ distribution comparison; a human has accepted each feature in the window.
 Collected from the documents; each becomes a milestone only by a decision of the project owner: the proposals beyond the
 original in `docs/SKIRMISH-AI-ORIGINAL.md` §8 (each only as an option or a kind of AI of its own); a co-simulating server
 that can deliver state (`docs/MULTIPLAYER-PLAN.md` §2.1, later option); 120 Hz as a player option (D-22); custom maps
-through an import path (`RadioButtonUserMaps` is empty in Stage 1, F-24); a substitute display for the Bink movies
+through an import path (`RadioButtonUserMaps` is empty in Stage 1, F-24); a substitute display for the Bink movies (no longer needed: `docs/CLIENT-VIDEO.md`)
 (F-02; R1 may do a still image with text); accounts, ladder, matchmaking, NAT traversal and GameSpy compatibility stay
 **out of scope** (`docs/MULTIPLAYER-PLAN.md` §1).
 

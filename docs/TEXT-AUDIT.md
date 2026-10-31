@@ -122,7 +122,7 @@ Status: **fixed** (with test or measurement), **simplified**, **open**, **delibe
 | Skirmish: color entries without a color patch | text instead of a coloured area | combo boxes know no entry colors | **open** |
 | Credits | fonts Arial 24 bold/16 bold/12 | fixed values | **fixed** (Language.ini + `adjustFontSize`, `ShellTests`); **open:** `COLUMN` pairs, scroll rate (original 2 px per frame, here 40 px/s) |
 | Score screen | player names are the army names ("FactionAmerica") | names come from the session | **open** (outside this brief: player name from the setup) |
-| Briefing/loading screen | still image instead of movie and progress texts | movies/Bink are missing | **open** (Phase 16, item 5) |
+| Briefing/loading screen | still image instead of movie and progress texts | movies/Bink were missing | the movie plays (`docs/CLIENT-VIDEO.md`); the progress texts are **open** (Phase 16, item 5) |
 | Mission texts | fixed Arial sizes, centred lines, invented placement in `MissionPresentation.cs` | not through `Language.ini`/`InGameUI.ini` | **fixed**, section 4.6 |
 | Cursor text (`drawCursorText`), captions above objects | do not exist | never implemented | **open** |
 | Superweapon/timer display | fixed values in the code (position, Arial 10, blink phase) | `InGameUI.ini` was not typed | **fixed**, section 4.6 |

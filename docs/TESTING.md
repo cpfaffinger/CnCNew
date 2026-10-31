@@ -63,6 +63,7 @@ those of `scripts/test.ps1`; the commands are printed by `-Plan`.
 | `presentation` | `CnCNew.Presentation`, its tests, `PresentationTool` | `presentation` | `presentation-content`, `game` |
 | `ui` | `CnCNew.Ui`, its tests, `UiRenderTool` | `ui` | `game` |
 | `audio` | `CnCNew.Audio`, its tests | `audio` | `audio-content`, `game` |
+| `video` | `CnCNew.Video`, its tests | `video` | `video-content`, `game` |
 | `net` | `CnCNew.Net`, `CnCNew.Server`, `Net.Tests`, `NetTool`, `DedicatedServer` | `net` (`Net.Tests`, 60 Hz) | `net-30`, `net-120`, `net-probe` (four clients and four computer players on a real map with delay and jitter, in one process), `net-match` (the dedicated server, the UDP proxy and four client processes: a match with delay, jitter and loss, and one with a client that vanishes), `net-robust` (a rejoin, a late and a delayed watcher, the server's replay played again, a desync named down to the field), `net-join` (the window client joins a match on a dedicated server; also in the gate of `client`), `game` |
 | `game` | `CnCNew.Game`, its tests, `CampaignTool` | `game-focus`: the suites of the touched folder (below) | `game` (all suites), `net` |
 | `client` | `CnCNew.Client.Stride` | – (build) | `check-spectator`, `check-dozer`, `check-hotkeys` |

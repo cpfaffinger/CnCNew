@@ -30,7 +30,7 @@ from `ContentFileSystem.Exists`/`OpenRead`.
 | `Mixing.PlayRequest.ForEvent` / `ForBuffer` | playback request from a plan or a raw buffer |
 | `Mixing.SoundCache` | decoded effects/speech by virtual path, errors remembered once |
 | `Mixing.Microphone.Place` | listener position and zoom volume like `AudioManager::update` |
-| `Movies.BinkHeader.Read` / `Parse` | header and frame index of `.bik`, no decoding |
+| `CnCNew.Video.BinkHeader.Read` / `Parse` | header and frame index of `.bik`; the decoder is `CnCNew.Video` (`docs/CLIENT-VIDEO.md`) |
 
 Naming decision: the typed audio definitions are called `AudioEventInfo` (one record for all
 three INI kinds, like `AudioEventInfo` of the reference), not `AudioEventDefinition`/`MusicTrackDefinition`/
@@ -128,7 +128,7 @@ Pitch shift changes pitch and tempo at the same time, as in Miles (`AIL_set_samp
 
 ## Bink movies
 
-`BinkHeader` reads only the header, audio track table and frame index of the Bink 1 container, described after
+`BinkHeader` (`CnCNew.Video`, it stood here until the decoder came) reads the header, audio track table and frame index of the Bink 1 container, described after
 the public format documentation (MultimediaWiki "Bink Container"; the same fields are documented by
 the demuxer `read_header` in FFmpeg's `libavformat/bink.c`): signature `BIK` + revision letter
 (`b`…`k`), file size − 8, frame count, largest frame, width, height, FPS numerator/denominator, video flags,
@@ -142,10 +142,7 @@ Real content: 70 movies (39 under `Data/English/Movies`, 2 under `Data/Movies`, 
 briefing movies, 30 fps, 44.1 kHz stereo DCT audio), 640×480 variants, 720×486 (`EA_LOGO`, 48 kHz),
 400×324 (20 generals' portraits without audio, 13 frames) and 96×120 (`VS_small`, without audio).
 
-**Limit:** Bink video and Bink audio are proprietary codecs; without an external decoder (Bink SDK or
-a licensed runtime) the movies cannot be played, nor can their sound. The client
-uses the header data (dimensions, duration) to show a silent placeholder for the duration of the movie or to
-skip the movie. That is not compatibility but a named gap.
+The movies and their sound are decoded by `src/CnCNew.Video` (`docs/CLIENT-VIDEO.md`); their sound reaches the mixer as one voice.
 
 ## Catalogue (`AudioCatalog`)
 
@@ -296,8 +293,6 @@ mixer smoke test).
 
 ## Limits
 
-- Bink movies cannot be played (see above); the client shows a silent placeholder or
-  skips.
 - Miles-specific effects are not reproduced: EAX/reverb, HRTF/surround providers
   (`Preferred3DHW*`, speaker types are only read), occlusion low-pass (`LowPassCutoff` is
   typed but not applied), Miles delay filter (delay is implemented as silence before the start or before

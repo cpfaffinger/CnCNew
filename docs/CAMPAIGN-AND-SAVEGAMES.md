@@ -157,9 +157,10 @@ and end probes: `docs/SCRIPT-ENGINE.md` §9). The size of a mission state is aro
   Loading is the Load button of the main menu (`LoadGameScreen`). Zero Hour never uses `SinglePlayerMenu.wnd` and `DifficultySelect.wnd`, and the shell no longer does either.
 - **Briefing**: `MissionBriefingScreen` reuses the real `SinglePlayerLoadScreen.wnd` (whose `ObjectivesWin` group with
   `StaticTextLine0..4` is already meant for exactly `ObjectiveLabels`; `StaticTextCameoText0..3` carries `LocationLabel` plus
-  `UnitNames0..2`). `ShellPhase.MissionBriefing` holds the screen for `max(VoiceLengthSeconds, 2)` simulated seconds
-  (no click skip, exactly like the shipped file – it declares no input callback); `IntroMovie`/`BriefingVoice`
-  appear as a named placeholder in the progress text (no Bink decoder, permanent limit). Most real
+  `UnitNames0..2`). `ShellPhase.MissionBriefing` plays the mission's `IntroMovie` in the screen to its end or until Escape, and
+  the mission starts then (`docs/CLIENT-VIDEO.md`). Without a movie (a run without a window; `TrainingCampaign`, which `Video.ini` does not know) the screen
+  holds for `max(VoiceLengthSeconds, 2)` simulated seconds (no click skip, exactly like the shipped file – it declares no input callback), and
+  `IntroMovie`/`BriefingVoice` appear as a named placeholder in the progress text. Most real
   USA/GLA/China missions carry no `ObjectiveLine` entries at all in `Campaign.ini` (only `TRAINING` does) – an empty
   line is then correct behaviour, not an error.
 - **Load list**: `LoadGameScreen` (`SaveLoad.wnd`, from the main menu via "Load/Replay" → "Load Game") lists

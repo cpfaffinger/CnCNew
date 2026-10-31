@@ -302,11 +302,9 @@ positioned on the `Voice` bus, since they come from the simulation and have a wo
 
 ## Movie sequences (Bink)
 
-`OnMovieRequested(name)` exists because menu/campaign will request movie sequences as soon as these packages are in place.
-The runtime contains **no Bink decoder** (the binary format is proprietary and cannot lawfully be decoded without the
-official Bink SDK); every call is counted (`Stats.SkippedMovies`, by movie name) and otherwise does nothing –
-no placeholder sound, no fake. That is a known, permanent limit of this project, not an implementation error
-of this package.
+Movies are played by `CnCNew.Game.Movies` (`docs/CLIENT-VIDEO.md`). The sound of a movie is one voice on the `Voice` bus at 0.81 of the speech volume
+(`PlayMovieSound`, after `BinkVideoPlayer::calculateMovieAudioVolume`); it cannot be stolen. `OnMovieRequested(name)` counts a movie that could not be played
+(`Stats.SkippedMovies`, by movie name), and nothing else happens: no placeholder sound, no fake.
 
 ## Device output (`CnCNew.Client.Stride/Audio/AudioOutput.cs`)
 

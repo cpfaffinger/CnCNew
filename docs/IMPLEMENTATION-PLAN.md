@@ -419,7 +419,7 @@ subject documents of the packages; details in `docs/CLIENT-TERRAIN.md`, `docs/CL
   0.266 ms, objects 0.19–0.60 ms, FX ≤ 1.735 ms for 10,000 particles – clearly below the originally stated
   guide value of 4 ms for ~600 drawables); golden-image/draw-list hashes are byte-identical over repeated runs.
   Measured on the development machine, not on separately defined target hardware.
-- *Play videos without a proprietary Miles/Bink SDK dependency:* **not fulfilled.** There is no
+- *Play videos without a proprietary Miles/Bink SDK dependency:* **fulfilled since 31 October 2026** by a decoder of our own (`docs/CLIENT-VIDEO.md`). What follows is the state of that phase. **Not fulfilled.** There is no
   Bink decoder; every call is counted (`Stats.SkippedMovies`) and otherwise does nothing. According to `docs/GAME-AUDIO.md`
   this is a known, permanent limit of the project (no legal decoding without the official Bink SDK),
   not an implementation defect of this phase.
