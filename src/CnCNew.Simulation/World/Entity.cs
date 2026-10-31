@@ -372,7 +372,7 @@ public sealed class Entity
         writer.BeginObject(null);
         writer.UInt("id", Id.Value);
         writer.Int("template", Template.Index);
-        writer.Text("templateName", Template.Name);
+        if (!writer.FoldsModules) writer.Text("templateName", Template.Name);
         writer.Int("owner", Owner.Value);
         writer.Fixed("x", X);
         writer.Fixed("y", Y);
@@ -451,12 +451,23 @@ public sealed class Entity
             writer.EndArray();
         }
         writer.BeginArray("modules");
-        // The hash path writes words down (WordStateWriter); for it the opening of a module, which never changes, is copied from the words prepared when the module was attached.
-        var words = writer as WordStateWriter;
+        if (writer.FoldsModules)
+        {
+            // For the hash a module opens with two words that say which module of which object it is; its frame never changes after it was attached.
+            foreach (var module in ModuleArray)
+            {
+                writer.EndStream();
+                writer.UInt("entity", Id.Value);
+                writer.UInt("frame", module.FrameKey);
+                module.Describe(writer);
+            }
+            writer.EndStream();
+            writer.EndStreams();
+            return;
+        }
         foreach (var module in ModuleArray)
         {
-            if (words is not null && module.FrameWords is { } frame) words.Append(frame);
-            else DescribeModuleFrame(writer, module);
+            DescribeModuleFrame(writer, module);
             module.Describe(writer);
             writer.EndObject();
             writer.EndObject();
@@ -467,7 +478,7 @@ public sealed class Entity
 
     /// <summary>
     /// The opening of one module inside <see cref="Describe"/>, up to the module's own state: its index, its name and its tag. None of them changes after the module was attached,
-    /// which is why the words this writes may be prepared once (<see cref="SimModule.FrameWords"/>). This routine is the only definition of those words.
+    /// which is why the hash takes them as one word prepared once (<see cref="SimModule.FrameKey"/>). This routine is the only definition of that word.
     /// </summary>
     internal static void DescribeModuleFrame(IStateWriter writer, SimModule module)
     {

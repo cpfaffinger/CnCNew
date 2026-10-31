@@ -396,11 +396,11 @@ static partial class NetTests
         Check.That(net.Server.Connections == 2, "a rejected connection is closed and gone");
 
         var raw = net.Raw();
-        raw.Send(MessageCodec.Encode(new HelloMessage(Protocol.Version + 1, Released.Id, CommandTypes.Version, ReplayFormat.CurrentVersion, 10, MatchDescription.EncodingVersion, Definitions, "old")));
+        raw.Send(MessageCodec.Encode(new HelloMessage(Protocol.Version + 1, Released.Id, CommandTypes.Version, ReplayFormat.CurrentVersion, 11, MatchDescription.EncodingVersion, Definitions, "old")));
         net.Server.Pump();
         Check.That(raw.TryReceive(out var answer) && MessageCodec.TryDecode(answer, out var reject, out _) && reject is RejectMessage { Reason: RejectReason.ProtocolVersion }, "another protocol version is rejected");
         var formats = net.Raw();
-        formats.Send(MessageCodec.Encode(new HelloMessage(Protocol.Version, Released.Id, CommandTypes.Version + 1, ReplayFormat.CurrentVersion, 10, MatchDescription.EncodingVersion, Definitions, "new")));
+        formats.Send(MessageCodec.Encode(new HelloMessage(Protocol.Version, Released.Id, CommandTypes.Version + 1, ReplayFormat.CurrentVersion, 11, MatchDescription.EncodingVersion, Definitions, "new")));
         net.Server.Pump();
         Check.That(formats.TryReceive(out answer) && MessageCodec.TryDecode(answer, out reject, out _) && reject is RejectMessage { Reason: RejectReason.FormatVersion }, "another command table is rejected");
 
@@ -496,7 +496,7 @@ static partial class NetTests
         raw.Send([0xFF, 0xFF]);
         net.Server.Pump();
         Check.That(net.Server.Discarded == 3 && net.Server.Connections == 1, $"a malformed hello, a message before the hello and an unknown type are counted ({net.Server.Discarded}); the connection is not admitted");
-        raw.Send(MessageCodec.Encode(new HelloMessage(Protocol.Version, Released.Id, CommandTypes.Version, ReplayFormat.CurrentVersion, 10, MatchDescription.EncodingVersion, Definitions, "x")));
+        raw.Send(MessageCodec.Encode(new HelloMessage(Protocol.Version, Released.Id, CommandTypes.Version, ReplayFormat.CurrentVersion, 11, MatchDescription.EncodingVersion, Definitions, "x")));
         raw.Send(MessageCodec.Encode(new TickRequestMessage(0)));
         raw.Send(MessageCodec.Encode(new IntentMessage(1, MoveIntent())));
         raw.Send(new byte[Protocol.MaxMessageBytes + 5]);

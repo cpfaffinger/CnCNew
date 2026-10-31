@@ -80,9 +80,9 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly WordStateWriter _entityWords = new();
     private readonly Entity[] _hashBatch = new Entity[HashBatchEntities];
     private readonly int[] _hashBatchEnds = new int[HashBatchEntities];
-    private readonly ulong[] _hashBatchValues = new ulong[HashBatchEntities];
+    private ulong[] _hashBatchValues = new ulong[HashBatchEntities];
     // Per template and module slot: the words that open the module in a description (index, name, tag).
-    private readonly ulong[]?[]?[] _moduleFrames;
+    private readonly ulong[]?[] _moduleFrames;
     private long _hashedEntities;
     private long _hashedWords;
     private long _hashedUnchanged;
@@ -211,7 +211,7 @@ public sealed partial class SimulationWorld : IWorldServices
         Terrain = terrain;
         Navigation = terrain is null ? null : new NavigationGrid(terrain);
         _templates = templates;
-        _moduleFrames = new ulong[]?[]?[templates.Templates.Length];
+        _moduleFrames = new ulong[]?[templates.Templates.Length];
         Ids = new IdCounters();
         Streams = new RandomStreams(configuration.Seed);
         foreach (var player in configuration.Players)
@@ -1971,9 +1971,9 @@ public sealed partial class SimulationWorld : IWorldServices
         var updates = new List<UpdateNode>();
         var upgrades = new List<IUpgradeModule>();
         var damages = new List<IDamageModule>();
-        // Index, name and tag of a module slot are the same for every entity of a template of this world's catalog; their words are prepared once per slot.
+        // Index, name and tag of a module slot are the same for every entity of a template of this world's catalog; their word is prepared once per slot.
         var frames = (uint)template.Index < (uint)_moduleFrames.Length && ReferenceEquals(_templates[template.Index], template)
-            ? _moduleFrames[template.Index] ??= new ulong[modules.Length][]
+            ? _moduleFrames[template.Index] ??= new ulong[modules.Length]
             : null;
         for (var index = 0; index < modules.Length; index++)
         {
@@ -1982,7 +1982,7 @@ public sealed partial class SimulationWorld : IWorldServices
             module.Entity = entity;
             module.Index = index;
             module.Tag = spec.Tag;
-            module.FrameWords = frames is null ? ModuleFrameWords(module) : frames[index] ??= ModuleFrameWords(module);
+            module.FrameKey = frames is null ? ModuleFrameKey(module) : frames[index] != 0 ? frames[index] : frames[index] = ModuleFrameKey(module);
             modules[index] = module;
             if (module is IBodyModule body && entity.Body is null) entity.Body = body;
             if (module is IContainerModule container && entity.Container is null) entity.Container = container;
@@ -2019,15 +2019,12 @@ public sealed partial class SimulationWorld : IWorldServices
         FillSlots(entity, set, 0);
     }
 
-    /// <summary>The words that open this module in an entity description, written by the routine that defines them (<see cref="Entity.DescribeModuleFrame"/>).</summary>
-    private ulong[] ModuleFrameWords(SimModule module)
+    /// <summary>The word that stands for the opening of this module in the hash of an entity, from the routine that defines the opening (<see cref="Entity.DescribeModuleFrame"/>).</summary>
+    private ulong ModuleFrameKey(SimModule module)
     {
-        var words = _entityWords;
-        var start = words.Count;
-        Entity.DescribeModuleFrame(words, module);
-        var frame = words.Words[start..].ToArray();
-        words.Truncate(start);
-        return frame;
+        _hasher.Reset();
+        Entity.DescribeModuleFrame(_hasher, module);
+        return _hasher.Hash;
     }
 
     private static int ClipCapacity(Templates.WeaponInfo weapon) => weapon.ClipSize == 0 ? int.MaxValue : weapon.ClipSize;
@@ -2209,7 +2206,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (!entity.Registered) continue;
             entity.Describe(words);
             _hashBatch[count] = entity;
-            _hashBatchEnds[count++] = words.Count;
+            _hashBatchEnds[count++] = words.StreamCount;
             if (count == HashBatchEntities || words.Count >= HashBatchWords) count = FoldHashBatch(count);
         }
         if (count > 0) FoldHashBatch(count);
@@ -2218,18 +2215,22 @@ public sealed partial class SimulationWorld : IWorldServices
     }
 
     /// <summary>
-    /// Hashes the entities written down in <see cref="_entityWords"/> and moves their contribution to the entity sum. Each hash is <see cref="HashEntity"/>'s value: the same
-    /// words in the same order through the same fold, only scheduled side by side. Applied in list order, one entity after the other, as the loop did before.
+    /// Hashes the entities written down in <see cref="_entityWords"/> and moves their contribution to the entity sum: first every stream, then each entity from its streams.
+    /// Each hash is <see cref="HashEntity"/>'s value: the same words in the same order through the same fold, only scheduled side by side. Applied in list order, one entity
+    /// after the other, as the loop did before.
     /// </summary>
     private int FoldHashBatch(int count)
     {
         var words = _entityWords;
-        var hashes = _hashBatchValues.AsSpan(0, count);
-        State.StateHash.FoldStreams(words.Words, _hashBatchEnds.AsSpan(0, count), hashes);
-        for (var index = 0; index < hashes.Length; index++)
+        if (_hashBatchValues.Length < words.StreamCount) _hashBatchValues = new ulong[words.StreamCount * 2];
+        var hashes = _hashBatchValues.AsSpan(0, words.StreamCount);
+        State.StateHash.FoldStreams(words.Words, words.StreamEnds, hashes);
+        var stream = 0;
+        for (var index = 0; index < count; index++)
         {
             var entity = _hashBatch[index];
-            var hash = hashes[index];
+            var hash = State.StateHash.Combine(hashes[stream.._hashBatchEnds[index]]);
+            stream = _hashBatchEnds[index];
             if (hash == entity.CachedHash) _hashedUnchanged++;
             _entitySum = unchecked(_entitySum - entity.CachedHash + hash);
             entity.CachedHash = hash;

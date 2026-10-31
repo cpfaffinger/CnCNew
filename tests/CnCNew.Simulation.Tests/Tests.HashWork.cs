@@ -114,7 +114,7 @@ static partial class Tests
             entity.Describe(hasher);
             words.Reset();
             entity.Describe(words);
-            Check.That(StateHash.Fold(StateHash.Seed, words.Words) == hasher.Hash, $"Tick {world.Tick}: the word description of {entity.Template.Name} ({entity.Id.Value}) folds to its hash.");
+            Check.That(words.ObjectHash() == hasher.Hash, $"Tick {world.Tick}: the word description of {entity.Template.Name} ({entity.Id.Value}) folds to its hash.");
             // A writer that keeps names (the snapshot) gets the same values in the same order: where a description saves building a name for the hash, it changes nothing else.
             NamedHash.Reset();
             entity.Describe(NamedHash);
@@ -176,6 +176,9 @@ static partial class Tests
         public void UInt(string name, ulong value) { Name(name); _inner.UInt(name, value); }
         public void Fixed(string name, Fixed value) { Name(name); _inner.Fixed(name, value); }
         public void Text(string name, string value) { Name(name); _inner.Text(name, value); }
+        public bool FoldsModules => true;
+        public void EndStream() => _inner.EndStream();
+        public void EndStreams() => _inner.EndStreams();
     }
 
     /// <summary>
@@ -316,7 +319,7 @@ static partial class Tests
         var content = ContentFileSystem.Open(directory);
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new RealSource(content), ModuleRegistry.Default, options);
-        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default);
+        var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, TestRate.Default, rules: CnCNew.Simulation.Rules.RuleProfile.Product);
         var (fingerprint, _) = CnCNew.Data.Snapshots.DefinitionSnapshotWriter.ComputeFingerprint(graph);
         var players = ImmutableArray.Create(new PlayerConfiguration(new PlayerId(1), "P1"));
         var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 77, players, "shipped-objects", fingerprint), catalog);

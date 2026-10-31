@@ -247,7 +247,7 @@ static partial class Tests
         map.ExploreCircle(1, Fixed.FromInt(5), Fixed.FromInt(635), Fixed.FromInt(3));
         Check.That(map.CurrentHash() == map.Hash(), "A script change in the middle slot is hashed.");
         var afterSecond = counters.BytesHashed - before;
-        Check.That(afterSecond > 64 * 64 && afterSecond <= 64 * 64 + 2 * 512, $"The chain resumes in the last rows of slot 1 and runs through slot 2 ({afterSecond} bytes).");
+        Check.That(afterSecond > 0 && afterSecond <= 8 * 64, $"Only the rows of the change are mixed ({afterSecond} bytes).");
 
         before = counters.BytesHashed;
         map.ShroudAll(0);

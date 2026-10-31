@@ -47,8 +47,8 @@ public sealed class VisionCounters
 /// The cell bytes and <see cref="Hash"/> define the result. Everything else in this class is bookkeeping that makes a refresh cost what is in
 /// sight instead of the map area: the circles of the last refresh per slot (a slot whose circles did not change is left alone, one with few
 /// changes is patched around them), the row extents the circles wrote (so a full redraw clears only those), the rows touched
-/// since the last hash, a copy of the cells as they were hashed and the chain values at fixed distances (so <see cref="CurrentHash"/> resumes the
-/// chain at the first byte that really changed). None of it is state: it is rebuilt from the cells, never hashed, never saved.
+/// since the last hash, a copy of the cells as they were hashed and the value of every row (so <see cref="CurrentHash"/> mixes only the rows that
+/// really changed). None of it is state: it is rebuilt from the cells, never hashed, never saved.
 /// </para>
 /// </summary>
 public sealed class VisionMap
@@ -62,15 +62,11 @@ public sealed class VisionMap
     private const ulong Ones = 0x0101010101010101UL;
     private const ulong VisibleAndExploredWord = (VisibleBit | ExploredBit) * Ones;
 
-    /// <summary>A chain value is kept before every this many hash words (64 words = 512 cell bytes).</summary>
-    private const int CheckpointShift = 6;
-    private const int CheckpointMask = (1 << CheckpointShift) - 1;
-
     private readonly byte[][] _cells;
 
     // Bookkeeping, not state (see the class remarks).
     private readonly byte[][] _hashed;        // the cells as CurrentHash last mixed them
-    private readonly ulong[][] _checkpoints;  // chain value before hash word (index << CheckpointShift) of the slot
+    private readonly ulong[][] _rowValues;    // per slot and row: the row's part of the hash (RowValue)
     private readonly int[] _touchedLow;       // rows written since the last CurrentHash, per slot; low > high when none
     private readonly int[] _touchedHigh;
     private readonly int[][] _revealMinX;     // per slot and row: the columns Reveal (or Load) may have left visible without the permanent mark
@@ -93,7 +89,7 @@ public sealed class VisionMap
         var length = cellsX * cellsY;
         _cells = new byte[playerSlots][];
         _hashed = new byte[playerSlots][];
-        _checkpoints = new ulong[playerSlots][];
+        _rowValues = new ulong[playerSlots][];
         _touchedLow = new int[playerSlots];
         _touchedHigh = new int[playerSlots];
         _revealMinX = new int[playerSlots][];
@@ -103,12 +99,11 @@ public sealed class VisionMap
         _pending = new List<Circle>[playerSlots];
         _drawn = new List<Circle>[playerSlots];
         _redraw = new bool[playerSlots];
-        var hash = StateHash.Seed;
         for (var slot = 0; slot < playerSlots; slot++)
         {
             _cells[slot] = new byte[length];
             _hashed[slot] = new byte[length];
-            _checkpoints[slot] = new ulong[((length >> 3) >> CheckpointShift) + 1];
+            _rowValues[slot] = new ulong[cellsY];
             _revealMinX[slot] = new int[cellsY];
             _revealMaxX[slot] = new int[cellsY];
             Array.Fill(_revealMinX[slot], int.MaxValue);
@@ -119,9 +114,9 @@ public sealed class VisionMap
             _revealHigh[slot] = -1;
             _pending[slot] = [];
             _drawn[slot] = [];
-            hash = MixSlot(slot, 0, hash);
+            for (var row = 0; row < cellsY; row++) _rowValues[slot][row] = RowValue(slot, row);
         }
-        _hash = hash;
+        _hash = ChainRows();
     }
 
     public int CellsX { get; }
@@ -639,35 +634,37 @@ public sealed class VisionMap
     }
 
     /// <summary>
-    /// The vision hash by definition: one chain of <see cref="StateHash.Mix"/> over every cell byte of every slot, eight bytes to a word (first
-    /// byte lowest), each slot closed by one more word of the remaining bytes (zero when there are none). This is the oracle for
-    /// <see cref="CurrentHash"/>; it reads nothing but the cells.
+    /// The vision hash by definition, in two levels (<c>docs/PERF-VISION.md</c> section 7.1): a row's value is a chain of <see cref="StateHash.Mix"/> from the slot and the row
+    /// over the row's bytes, eight to a word (first byte lowest), closed by one more word of the remaining bytes (zero when there are none); the hash is a chain over the
+    /// values of all rows in slot and row order. This is the oracle for <see cref="CurrentHash"/>; it reads nothing but the cells.
     /// </summary>
     public ulong Hash()
     {
         var hash = StateHash.Seed;
-        foreach (var cells in _cells)
+        for (var slot = 0; slot < _cells.Length; slot++)
         {
-            ulong word = 0;
-            var filled = 0;
-            foreach (var cell in cells)
+            for (var row = 0; row < CellsY; row++)
             {
-                word |= (ulong)cell << (filled * 8);
-                if (++filled != 8) continue;
-                hash = StateHash.Mix(hash, word);
-                word = 0;
-                filled = 0;
+                var value = StateHash.Mix(StateHash.Seed, ((ulong)slot << 32) | (uint)row);
+                ulong word = 0;
+                var filled = 0;
+                foreach (var cell in _cells[slot].AsSpan(row * CellsX, CellsX))
+                {
+                    word |= (ulong)cell << (filled * 8);
+                    if (++filled != 8) continue;
+                    value = StateHash.Mix(value, word);
+                    word = 0;
+                    filled = 0;
+                }
+                hash = StateHash.Mix(hash, StateHash.Mix(value, word));
             }
-            hash = StateHash.Mix(hash, word);
         }
         return hash;
     }
 
     /// <summary>
-    /// The value of <see cref="Hash"/> for the cells as they are now. Every step of the chain depends on the one before, so a changed byte forces
-    /// every later word of every later slot to be mixed again; what can be saved exactly is the part of the chain <em>before</em> the first
-    /// changed byte. The rows written since the last call are compared with the copy of the cells as they were hashed; with no difference the
-    /// kept value stands, otherwise the chain resumes at the last kept chain value at or before the first difference.
+    /// The value of <see cref="Hash"/> for the cells as they are now. The rows written since the last call are compared with the copy of the cells as they were hashed; a
+    /// row that differs gets a new value, and with no difference the kept hash stands.
     /// </summary>
     public ulong CurrentHash()
     {
@@ -675,78 +672,58 @@ public sealed class VisionMap
         if (ReferenceMode)
         {
             Counters.BytesHashed += (long)_cells.Length * CellsX * CellsY;
-            // The kept chain values no longer describe the cells; the next non-reference call starts over.
+            // The kept row values no longer describe the cells; the next non-reference call starts over.
             for (var slot = 0; slot < _cells.Length; slot++) TouchAll(slot);
             return Hash();
         }
-        var firstSlot = -1;
-        var firstByte = 0;
-        for (var slot = 0; slot < _cells.Length && firstSlot < 0; slot++)
+        var changed = false;
+        for (var slot = 0; slot < _cells.Length; slot++)
         {
             var low = _touchedLow[slot];
             var high = _touchedHigh[slot];
-            if (low > high) continue;
-            var start = low * CellsX;
-            var length = (high - low + 1) * CellsX;
-            var same = _cells[slot].AsSpan(start, length).CommonPrefixLength(_hashed[slot].AsSpan(start, length));
-            Counters.BytesCompared += Math.Min(length, same + 1);
-            if (same == length)
+            for (var row = low; row <= high; row++)
             {
-                _touchedLow[slot] = int.MaxValue;
-                _touchedHigh[slot] = -1;
-                continue;
+                var current = _cells[slot].AsSpan(row * CellsX, CellsX);
+                var copy = _hashed[slot].AsSpan(row * CellsX, CellsX);
+                var same = current.CommonPrefixLength(copy);
+                Counters.BytesCompared += Math.Min(CellsX, same + 1);
+                if (same == CellsX) continue;
+                current.CopyTo(copy);
+                _rowValues[slot][row] = RowValue(slot, row);
+                changed = true;
             }
-            firstSlot = slot;
-            firstByte = start + same;
+            _touchedLow[slot] = int.MaxValue;
+            _touchedHigh[slot] = -1;
         }
-        if (firstSlot < 0)
+        if (!changed)
         {
             Counters.HashUnchanged++;
             return _hash;
         }
+        return _hash = ChainRows();
+    }
 
-        // Bring the copy up to date: in the first changed slot from the first difference on, in later slots every touched row.
-        for (var slot = firstSlot; slot < _cells.Length; slot++)
-        {
-            var low = _touchedLow[slot];
-            var high = _touchedHigh[slot];
-            if (low > high) continue;
-            var start = slot == firstSlot ? firstByte : low * CellsX;
-            var end = (high + 1) * CellsX;
-            _cells[slot].AsSpan(start, end - start).CopyTo(_hashed[slot].AsSpan(start));
-            _touchedLow[slot] = int.MaxValue;
-            _touchedHigh[slot] = -1;
-        }
-
-        var firstWord = ((firstByte >> 3) >> CheckpointShift) << CheckpointShift;
-        var hash = _checkpoints[firstSlot][firstWord >> CheckpointShift];
-        for (var slot = firstSlot; slot < _cells.Length; slot++) hash = MixSlot(slot, slot == firstSlot ? firstWord : 0, hash);
-        _hash = hash;
+    private ulong ChainRows()
+    {
+        var hash = StateHash.Seed;
+        foreach (var rows in _rowValues) hash = StateHash.Fold(hash, rows);
         return hash;
     }
 
     /// <summary>
-    /// Continues the chain of <see cref="Hash"/> through one slot from hash word <paramref name="firstWord"/> (a multiple of the checkpoint
-    /// distance) and records the chain value before every checkpoint word. The words are read whole; on a little-endian machine that is the
-    /// word <see cref="Hash"/> assembles byte by byte, elsewhere the bytes are swapped to it.
+    /// A row's part of <see cref="Hash"/>. The words are read whole; on a little-endian machine that is the word <see cref="Hash"/> assembles byte by byte, elsewhere the
+    /// bytes are swapped to it.
     /// </summary>
-    private ulong MixSlot(int slot, int firstWord, ulong hash)
+    private ulong RowValue(int slot, int row)
     {
-        var cells = _cells[slot];
-        var checkpoints = _checkpoints[slot];
-        var words = MemoryMarshal.Cast<byte, ulong>(cells.AsSpan());
-        for (var index = firstWord; index < words.Length; index++)
-        {
-            if ((index & CheckpointMask) == 0) checkpoints[index >> CheckpointShift] = hash;
-            var word = words[index];
-            if (!BitConverter.IsLittleEndian) word = BinaryPrimitives.ReverseEndianness(word);
-            hash = StateHash.Mix(hash, word);
-        }
-        if ((words.Length & CheckpointMask) == 0) checkpoints[words.Length >> CheckpointShift] = hash;
+        var cells = _cells[slot].AsSpan(row * CellsX, CellsX);
+        var words = MemoryMarshal.Cast<byte, ulong>(cells);
+        var value = StateHash.Mix(StateHash.Seed, ((ulong)slot << 32) | (uint)row);
+        foreach (var read in words) value = StateHash.Mix(value, BitConverter.IsLittleEndian ? read : BinaryPrimitives.ReverseEndianness(read));
         ulong rest = 0;
         for (int index = words.Length * 8, filled = 0; index < cells.Length; index++, filled++) rest |= (ulong)cells[index] << (filled * 8);
-        Counters.BytesHashed += cells.Length - (long)firstWord * 8;
-        return StateHash.Mix(hash, rest);
+        Counters.BytesHashed += cells.Length;
+        return StateHash.Mix(value, rest);
     }
 
     public string Save(int slot) => Convert.ToBase64String(_cells[slot]);

@@ -24,6 +24,18 @@ public interface IStateWriter
     /// time (<c>"tower" + index</c>) may then pass any name and save the allocation; it must still build the real one for every writer that keeps names.
     /// </summary>
     bool KeepsNames => true;
+
+    /// <summary>
+    /// <see langword="true"/> for a writer that makes an object's hash (<c>docs/PERF-HASH.md</c> section 7): the object's own fields and each of its modules are a stream of
+    /// their own (<see cref="EndStream"/>), and a module opens with its identity as two words instead of its name and tag.
+    /// </summary>
+    bool FoldsModules => false;
+
+    /// <summary>Closes the stream written since the last call and starts the next one.</summary>
+    void EndStream() { }
+
+    /// <summary>Ends an object: the writer's hash is now the object's.</summary>
+    void EndStreams() { }
 }
 
 public interface IStateReader
@@ -61,6 +73,9 @@ public static class StateHash
         foreach (var character in value) hash = Mix(hash, character);
         return hash;
     }
+
+    /// <summary>The hash of an object from the hashes of its streams (<see cref="IStateWriter.FoldsModules"/>).</summary>
+    public static ulong Combine(ReadOnlySpan<ulong> streams) => Fold(Seed, streams);
 
     /// <summary>The fold <see cref="HashStateWriter"/> performs, over words that were written down first: <c>Mix</c> word by word, starting from <paramref name="hash"/>.</summary>
     public static ulong Fold(ulong hash, ReadOnlySpan<ulong> words)
@@ -149,11 +164,37 @@ public sealed class WordStateWriter : IStateWriter
 {
     private ulong[] _words = new ulong[4096];
     private int _count;
+    private int[] _streamEnds = new int[256];
+    private int _streamCount;
 
     public int Count => _count;
     public ReadOnlySpan<ulong> Words => _words.AsSpan(0, _count);
     public bool KeepsNames => false;
-    public void Reset() => _count = 0;
+    public bool FoldsModules => true;
+
+    /// <summary>Streams closed so far, and where each ends in <see cref="Words"/>: the input of <see cref="StateHash.FoldStreams"/>.</summary>
+    public int StreamCount => _streamCount;
+    public ReadOnlySpan<int> StreamEnds => _streamEnds.AsSpan(0, _streamCount);
+
+    public void Reset()
+    {
+        _count = 0;
+        _streamCount = 0;
+    }
+
+    public void EndStream()
+    {
+        if (_streamCount == _streamEnds.Length) Array.Resize(ref _streamEnds, _streamEnds.Length * 2);
+        _streamEnds[_streamCount++] = _count;
+    }
+
+    /// <summary>The hash of the one object written down, as <see cref="HashStateWriter"/> gives it.</summary>
+    public ulong ObjectHash()
+    {
+        var hashes = new ulong[_streamCount];
+        StateHash.FoldStreams(Words, StreamEnds, hashes);
+        return StateHash.Combine(hashes);
+    }
 
     /// <summary>Drops the words written after the first <paramref name="count"/>.</summary>
     public void Truncate(int count)
@@ -211,9 +252,28 @@ public sealed class WordStateWriter : IStateWriter
 public sealed class HashStateWriter : IStateWriter
 {
     private ulong _hash = StateHash.Seed;
+    private ulong _streams = StateHash.Seed;
     public ulong Hash => _hash;
-    public void Reset() => _hash = StateHash.Seed;
     public bool KeepsNames => false;
+    public bool FoldsModules => true;
+
+    public void Reset()
+    {
+        _hash = StateHash.Seed;
+        _streams = StateHash.Seed;
+    }
+
+    public void EndStream()
+    {
+        _streams = StateHash.Mix(_streams, _hash);
+        _hash = StateHash.Seed;
+    }
+
+    public void EndStreams()
+    {
+        _hash = _streams;
+        _streams = StateHash.Seed;
+    }
 
     public void BeginObject(string? name) => _hash = StateHash.Mix(_hash, 0xB1);
     public void EndObject() => _hash = StateHash.Mix(_hash, 0xE1);
