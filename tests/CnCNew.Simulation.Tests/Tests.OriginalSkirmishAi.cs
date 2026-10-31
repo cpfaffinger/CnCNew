@@ -465,7 +465,8 @@ static partial class Tests
                     if (restored.StateHash() != twin.StateHash() || restored.World.StateHash != twin.World.StateHash)
                         throw new InvalidOperationException($"{rate}: restored at tick {from}, the session differs from an uninterrupted one at tick {restored.World.Tick}.");
                 }
-                Check.That(compared > 0 && restored.StateHash() == session.StateHash(), $"{rate}: restored at tick {from} and continued for {compared} ticks it is the uninterrupted match.");
+                // Since a computer player's units walk at what they see the match may be over before the last save: a copy saved at its end has nothing to step.
+                Check.That((compared > 0 || from >= session.World.Tick) && restored.StateHash() == session.StateHash(), $"{rate}: restored at tick {from} and continued for {compared} ticks it is the uninterrupted match.");
                 (twin, _, _, _, _, _) = StartOriginalSkirmish(alpha: ScriptDifficulty.Hard, beta: ScriptDifficulty.Normal, rate: new SimulationRateChoice(rate));
             }
             // The session hash is the world hash and the engine hash (which contains the AI) and the decision of the session: a change in any of them shows.

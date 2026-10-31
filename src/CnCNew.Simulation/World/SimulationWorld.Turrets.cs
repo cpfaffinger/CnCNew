@@ -424,14 +424,13 @@ public sealed partial class SimulationWorld
     }
 
     /// <summary>
-    /// Whether a persistent aim goes on this tick. The victim has to stay attackable for its attacker's player (<c>TurretAIAimTurretState::update</c> fails the aim when
-    /// <c>getAbleToAttackSpecificObject(ATTACK_CONTINUED_TARGET, …)</c> does: a victim in the fog, stealthed or garrisoned) and, unless the unit pursues the victim, an attack on a victim
+    /// Whether a persistent aim goes on this tick. Unless the unit pursues the victim, an attack on a victim
     /// that no weapon reaches is given up after <see cref="TurretLoseInterestFrames"/> (the reference's attack state fails there: <c>AIAttackApproachTargetState::onEnter</c> returns failure
     /// for a unit that may not chase, which is every unit the AI sent after a target it acquired itself).
     /// </summary>
     private bool KeepsAttackIntent(Entity attacker, Entity victim, TurretState state, long tick)
     {
-        if (!CanPlayerSee(attacker.Owner, victim)) return false;
+        if (IsHiddenFrom(attacker.Owner, victim)) return false;
         if (state.Pursuing) { state.LoseInterestAt = 0; return true; }
         var range = MaxWeaponRange(attacker);
         var (victimX, victimY, _) = victim.FrameEnd(_tick);

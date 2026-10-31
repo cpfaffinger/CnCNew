@@ -395,10 +395,13 @@ public sealed partial class SimulationWorld
         }
     }
 
-    /// <summary>The victim is still one the unit may attack: alive, an enemy and visible to the unit's player (<c>getAbleToAttackSpecificObject(ATTACK_CONTINUED_TARGET, …)</c>).</summary>
+    /// <summary>
+    /// The victim is still one the unit may attack: alive, an enemy and not hidden (<c>getAbleToAttackSpecificObject(ATTACK_CONTINUED_TARGET, …)</c>). "Fog no longer prevents attacking at all. it prevents
+    /// targeting in findClosestEnemy" (<c>WeaponSet.cpp</c>): only a human player's unit looks through the fog filter, in <see cref="ConsiderMoodTarget"/>.
+    /// </summary>
     private bool IsAttackable(Entity entity, Entity victim)
         => !victim.DestroyRequested && !victim.EffectivelyDead && victim.Body is not null && !victim.ContainedBy.IsValid && AreEnemies(entity, victim)
-           && !IsHiddenFrom(entity.Owner, victim) && CanPlayerSee(entity.Owner, victim);
+           && !IsHiddenFrom(entity.Owner, victim);
 
     /// <summary>
     /// One tick of an attack on <paramref name="victim"/>: in range the unit stands (an attack-move stops for the fight, aircraft keep flying) and fires when its weapon may; out of range a
@@ -637,6 +640,8 @@ public sealed partial class SimulationWorld
         // A mine is a target like any other (F-69): only a weapon with AntiMine can attack it (getVictimAntiMask) - the builders' mine-clearing weapons.
         if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT")) return;
         if (!IsAttackable(entity, candidate) || !AcquiresStructure(entity, candidate, search.Buildings, search.Computer) || IsHiddenStealthGarrison(entity, candidate)) return;
+        // AI::UNFOGGED: "Instead of shroud affecting the ability to attack, it affects the ability to target" - for a human player's unit only.
+        if (!search.Computer && !CanPlayerSee(entity.Owner, candidate)) return;
         if (AcquisitionViewBlocked(entity, candidate)) return;
         if (!CanAttack(entity, candidate, search.TurretOnly, out var inRange) || (!inRange && !search.Chase)) return;
 

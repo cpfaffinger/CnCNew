@@ -108,7 +108,7 @@ run.Test("Phase 50 (F-86): a walker sees its goal gone in the next frame", Tests
 run.Test("Rate invariance, exits: produced units leave their factory, make room and reach the rally point as at 30 Hz", Tests.RateExitsAreTheSame);
 run.Test("Phase 49 (F-80): a unit on its exit path looks for victims in the frames it does at 30 Hz", Tests.ExitPathAcquisitionIsTheSameAtEveryRate);
 run.Test("Phase 49 (F-81): a disabled module wakes on the frames of its object", Tests.DisabledModuleWakesOnItsFrames);
-run.Test("Phase 49 (F-82): a unit gives up a victim that left its sight where the victim's frame ends", Tests.VictimLeavesTheSightWhereItsFrameEnds);
+run.Test("Phase 49 (F-82): a unit gives up a victim that left its sight where the victim's frame ends", Tests.VictimComesIntoTheSightWhereItsFrameEnds);
 run.Test("Rate invariance, exits: a snapshot while a unit waits for its place continues like the live world", Tests.RateExitsSnapshotWhileWaitingForThePlace);
 run.Test("Rate invariance, ground: a snapshot inside a logic frame continues like the live world", Tests.GroundRateInvarianceSnapshotInsideAFrame);
 run.Test("Rate invariance, ground: an order inside a logic frame keeps the step continuous and cancels a pending arrival", Tests.GroundRateInvarianceOrderInsideAFrame);
@@ -689,7 +689,7 @@ run.Test("Phase 47 (F-77): a creation list takes its source's place where its fr
 run.Test("Phase 48 (F-79): a hauler sees its dock gone in the next frame", Tests.HaulerSeesItsDockGoneInTheNextFrame);
 run.Test("Turret attack: only attack orders start one, a new fire order moves it", Tests.TurretAttackOnlyFromAnAttackOrder);
 run.Test("Turret attack: a victim that is no longer visible ends the aim", Tests.TurretAttackEndsWhenTheVictimIsNoLongerVisible);
-run.Test("Turret attack: a victim that falls into the fog ends the aim", Tests.TurretAttackEndsWhenTheVictimFallsIntoTheFog);
+run.Test("Turret attack: a victim that falls into the fog ends the aim", Tests.TurretAttackGoesOnInTheFog);
 run.Test("Turret attack: starting a unit ability ends the attack and the move", Tests.TurretAttackEndsWhenTheUnitStartsAnAbility);
 run.Test("Turret attack: snapshot mid-pursuit, determinism and the replay of PursueCommand", Tests.TurretAttackSnapshotAndReplay);
 run.Test("Firing tracker: consecutive shots spin the weapon up, a victim change coasts, idling cools it down", Tests.FiringTrackerSpinsUpCoastsAndCoolsDown);

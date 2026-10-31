@@ -368,8 +368,8 @@ static partial class Tests
         Check.That(tank.TurretOf(0)!.Value.Angle == Fixed.Zero, "The turret recentres after the hold.");
     }
 
-    /// <summary>The fog half of the visibility rule: the victim stays in weapon range and unstealthed, but the only object that saw it is gone.</summary>
-    public static void TurretAttackEndsWhenTheVictimFallsIntoTheFog()
+    /// <summary>"Fog no longer prevents attacking at all" (F-17, <c>WeaponSet.cpp</c>): the victim stays in weapon range and unstealthed, the only object that saw it is gone.</summary>
+    public static void TurretAttackGoesOnInTheFog()
     {
         var fixture = new SyntheticFixture(TestRate.Default, files: TurretAttackFiles());
         var terrain = NavTerrain();
@@ -389,18 +389,9 @@ static partial class Tests
         Check.That(world.AttackTargetOf(tank) == target.Id, "...as long as the spotter lives (the victim is in range, so nothing else ends the attack).");
 
         feeder.Destroy(IdOf(world, "FogSpotter"));
-        var ended = -1;
-        for (var i = 0; i < world.Frames(10) && ended < 0; i++)
-        {
-            world.Step();
-            if (!world.AttackTargetOf(tank).IsValid) ended = i;
-        }
+        for (var i = 0; i < world.Frames(30); i++) world.Step();
         Check.That(!world.CanPlayerSee(player, target), "Without the spotter the victim is in the fog.");
-        Check.That(ended >= 0, "A victim in the fog ends the aim although it is in range and not stealthed.");
-        Check.That(!feeder.FireWeapon(1, tank.Id.Value, target.Id.Value).Accepted || world.Step().Events.All(value => value.Kind != SimEventKind.WeaponFired), "No shot at a victim in the fog.");
-        Check.That(!world.AttackTargetOf(tank).IsValid, "...and a refused fire order does not start the attack again.");
-        for (var i = 0; i < world.Frames(80); i++) world.Step();
-        Check.That(tank.TurretOf(0)!.Value.Angle == Fixed.Zero, "The turret recentres after the hold.");
+        Check.That(world.AttackTargetOf(tank) == target.Id, "The fog does not end the attack: the victim is in range and not stealthed.");
     }
 
     /// <summary><c>SpecialAbilityUpdate::initiateIntentToDoSpecialPower</c> idles the unit: its move and its attack end when it starts a unit ability.</summary>
