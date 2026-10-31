@@ -76,7 +76,7 @@ known limit, with its reason; **fixed** - a defect found by the pre-check, corre
 | WORLD-03 roads | machine | world (`CLIENT-ROADS.md` checks) | likeness; the draw order of roads depends on the rate (decision D-7) |
 | WORLD-04 unexplored terrain | machine | world (`ObjectTests` scenery stays hidden until explored) | likeness |
 | WORLD-05 models in the viewer | **limit** | `model-audit` draws every triangle of every model in the game scenes | the model viewer (`--model-path`) shows the Crusader without its turret and with a pink patch: a defect of the viewer path only (the game scenes draw it complete); cause not investigated - the viewer is a developer tool, not part of the game |
-| WORLD-06 grown base, team colours, shadows | **limit** | world (team colours by player) | **no object casts a shadow** - not built (`CLIENT-OBJECTS.md`, known limitations); a fidelity debt of Stage 1 |
+| WORLD-06 grown base, team colours, shadows | machine | world (team colours by player), `ShadowTests`, the captures of `CLIENT-SHADOWS.md` | how the shadows look against the original's |
 | WORLD-07 fog in the window | machine | world, sim (vision per original frame) | how the fade looks |
 | UNIT-01 starting, driving, braking | machine | sim (rate suite: movement quantities within tolerance), scenes (`acc-march`) | feel |
 | UNIT-02 turning | machine | sim, scenes | feel |
@@ -111,7 +111,7 @@ known limit, with its reason; **fixed** - a defect found by the pre-check, corre
 | SPEC-08 the AI builds vehicles | **limit** | match (army composition measured over 320 matches in Phase 23) | as SPEC-07 (seed 11) |
 | SPEC-09 chance and repeatability | machine | match (`session-check`: 19 runs continue identically from 77 saves) | - |
 | MISS-01, 03, 04 mission GC_ChemGeneral | machine | campaign (reachability 24/24, audit 24/24, objective driver 24/24 and 24/24), `check-dozer-build` (building after the intro in the real client) | - |
-| MISS-02 intro of MD_USA01 | **limit** | campaign (script outputs counted) | **no sky is drawn** (known), and the scripted camera pitch near the horizon shows a rock face and flat blue; cause not found |
+| MISS-02 intro of MD_USA01 | machine | campaign (script outputs counted), captures at frames 100, 500 and 840 (`CLIENT-SHADOWS.md`) | the rock face and flat blue had a cause: the script's pitch was read as an angle, which put the eye under the ground (`W3DView::m_FXPitch`, Phase 58); how the intro looks |
 | RATE-01..05 60 against 30 Hz | machine | sim (rate suite 0 / 0), scenes at both rates, the reference match the same game at 30, 60 and 120 Hz | that nobody sees a difference |
 | PERF-01 smoothness | machine | perf (`PresentationTool smoothness`, `--net-stats`: the next tick late in 0 to 5 of 7,178 frames) | feel |
 | PERF-02 loading time | machine | perf (load steps logged by the client; `GameData.Load` measured in the smoke tests) | whether it is acceptable |
@@ -140,7 +140,7 @@ known limit, with its reason; **fixed** - a defect found by the pre-check, corre
 ## 4. The findings lists
 
 - **[DEMO-FINDINGS.md](DEMO-FINDINGS.md)** nos. 1 to 24 and the visual checklist of 60 Hz: every line is either fixed with its test (the document says which) or one of
-  the limits of section 3 (shadows, sky, debris, viewer); what remains is "only a human" in the sense above. The numbers 7, 9 and 10 that stand there as "open"
+  the limits of section 3 (debris, viewer); what remains is "only a human" in the sense above. The numbers 7, 9 and 10 that stand there as "open"
   were closed by Phase 16 (sound wired, script outputs shown, GDI text path) - the later sections of that document say so; this phase adds the machine state
   of section 3.
 - **[CLIENT-OBJECTS.md](CLIENT-OBJECTS.md)**, "Visual check of the world": its lines are WORLD-01 to WORLD-07, UNIT-10 to UNIT-17 and FX-01 to FX-04 above.

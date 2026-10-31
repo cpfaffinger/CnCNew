@@ -98,6 +98,7 @@ phases (`handoffs/HANDOFF-PHASE4.md` to `-23.md`), the acceptance block in `CONT
 | [CLIENT-TERRAIN.md](CLIENT-TERRAIN.md) | Stride client: terrain layer |
 | [CLIENT-ROADS.md](CLIENT-ROADS.md) | Stride client: roads |
 | [CLIENT-OBJECTS.md](CLIENT-OBJECTS.md) | Stride client: object layer, visual checklist |
+| [CLIENT-SHADOWS.md](CLIENT-SHADOWS.md) | Stride client: shadows of objects, clouds, the map's border, sky box, weather |
 | [CLIENT-FX.md](CLIENT-FX.md) | Stride client: effect layer |
 | [CLIENT-UI-RENDERING.md](CLIENT-UI-RENDERING.md) | Stride client: 2D renderer of the UI draw list |
 | [CLIENT-VIDEO.md](CLIENT-VIDEO.md) | Bink movies: the decoder in C#, the player, where the game plays them |

@@ -226,7 +226,7 @@ dotnet run --project src/CnCNew.Client.Stride -c Release -- --match "<map>" --co
 dotnet run --project tools/CnCNew.AssetTool -- install auto <target> [--patch <GameFilesEdited directory>] [--original]   (also check-install auto: the patcher finds the Steam installation)
 dotnet run --project tools/CnCNew.AssetTool -- describe-patch auto references/generals-game-patch/Patch104pZH baselines/patch-master.json --commit <commit>
 dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match game/content [--standing] --rules product|original|fixes|NAME[,NAME...]
-dotnet run --project src/CnCNew.Client.Stride -c Release -- --content-dir game/content [--rules original] [--no-log] [--support-bundle FILE] [--crash-test]
+dotnet run --project src/CnCNew.Client.Stride -c Release -- --content-dir game/content [--rules original] [--no-log] [--support-bundle FILE] [--crash-test] [--no-shell-map | --shell-map] [--user-maps DIR]
 dotnet run -c Release --project tools/CnCNew.DedicatedServer -- [--support-bundle FILE --config server.json] [--crash-test]
 pwsh scripts/check-net-acceptance.ps1 [-MatchSeconds 120]
 pwsh scripts/check-net-endurance.ps1 [-Minutes 65]

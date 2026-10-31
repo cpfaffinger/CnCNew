@@ -317,7 +317,7 @@ camera shake, decal buffer, sound cue rules and rate limiter. With `--content-di
 ## Limits
 
 - DRAWABLE particles (1 system) are output as instances with `ParticleKind.Drawable`; the reference does not draw
-  them. SMUDGE textures (`SMUD…`, 2 systems) need a heat-haze renderer (opacity from alpha, size);
+  them. SMUDGE textures (`SMUD…`, 2 systems) go to the client's heat-haze pass (`docs/CLIENT-FX.md`);
   VOLUME_PARTICLE (4) is rendered by the reference with depth 1, i.e. like normal particles.
 - No bone matrices: muzzles and bones are the rest-pose positions of the current model's bones (since Phase 35 supplied by `LiveGame`, "Attached effects" above); orientation = object.
 - Shroud/fog: only as a hook; `SimulationFxWorldView.IsShrouded` is always false. The shroud test for attached

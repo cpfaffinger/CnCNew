@@ -314,7 +314,7 @@ None of these touches `src/CnCNew.Simulation` or `src/CnCNew.Data`.
 
 ### 5.2 Found and not fixed (presentation, shell, scenes)
 
-- **No shadows.** No object casts a shadow on the ground; the world looks flat (WORLD-06). Not built (`docs/CLIENT-OBJECTS.md`, known limitations).
+- **Shadows** are built since Phase 58 (`docs/CLIENT-SHADOWS.md`), not yet seen by a human (WORLD-06).
 - **Intro of `MD_USA01`** (MISS-02): at the low camera angles of this intro a rock face fills the top third and one flat light blue the rest for the first 17 seconds,
   and at frames 1400–1500 the ground runs along the top edge of the picture. There is no sky (known); whether the scripted pitch is applied as in the original was
   not found out.

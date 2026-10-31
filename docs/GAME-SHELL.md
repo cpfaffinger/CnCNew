@@ -236,7 +236,7 @@ of them new.
   all tests and the golden hashes run without animation. Not played are the groups of multiplayer screens, of the difficulty menu (here a screen of its own), of the game menu
   in the game (`Quit*`, belongs to the HUD), `GenExpFade`, `ControlBarArrow` and the screen fade at game start (`FadeWholeScreen` after loading) – see §12 "Not implemented".
 * **Phase 16 (screen stack, §13):** the main menu stays in the stack under replacing screens (it plays its entry again on returning) but is not drawn. There is no background layer of its
-  own: in the original the 3D "shell map" lies behind all menus (deferred, §11), here black; the layouts draw frame and ruler themselves (`MainMenuRuler` at the root of
+  own: in the original the 3D "shell map" lies behind all menus (§20); the layouts draw frame and ruler themselves (`MainMenuRuler` at the root of
   `SkirmishGameOptionsMenu.wnd`, `SaveLoad.wnd`, `ScoreScreen.wnd`). Escape in the main menu and in the difficulty question is an addition of this shell (`MainMenuInput` of the original knows no Escape key).
 * **Phase 12:** the shell outputs (`StartMatchOutput`, `StartMissionOutput`, `ExitRequestedOutput`, display/settings changes) and the feedback
   (`MatchFinished`/`MissionFinished`) are connected in the Stride client (`ClientRuntime`, `docs/GAME-HUD.md` §15). On start `GameShell` reads `Data/INI/ChallengeMode.ini` and sets, via
@@ -437,7 +437,7 @@ everything is a `push`:
 `GameShell.BuildDrawList` draws from the lowest screen that, counted from the top, is the first with `HidesScreensBelow` (`FirstDrawnScreen`) up to the top; transition substitute areas and statistics count only these.
 Only the topmost screen received input anyway. **Background layer:** not necessary. Frame, ruler and logo do not lie in a layer that stays – the original hides the whole main menu layout
 (`MainMenuParent`, `MainMenuRuler`, `Logo`, `MapBorder*`), and the replacing layouts bring their ruler along themselves (`IMAGE: MainMenuRuler` at the root of `SkirmishGameOptionsMenu.wnd`, `SaveLoad.wnd`,
-`ScoreScreen.wnd`); what lies behind is the 3D shell map in the original (§11, deferred: here black). `ChallengeMenu.wnd` brings a background of its own (world map).
+`ScoreScreen.wnd`); what lies behind is the 3D shell map (§20). `ChallengeMenu.wnd` brings a background of its own (world map).
 When the hiding screen is closed, the main menu runs its init again (`doPop` → `runInit`): `OnRevealed` resets it to the root group, now also without animation (`LeaveFor` remembers the departure).
 
 ### 13.2 Why `SinglePlayerMenu.wnd` no longer exists
@@ -683,3 +683,19 @@ line of a layout is written down for it.
 **Pinned:** every screen hash of the shell is pinned once more in the modern skin (`baselines/screens-modern.txt`, 54), the options and More options in both skins in
 `baselines/skin-screens.txt`; a scripted person (`scripts/shell/skin-person.txt`) switches the skin and walks the shell without a window (`SkinTests`) and in the window
 client (`scripts/check-skins.ps1`). Not judged by a human: whether the modern menus are better to read and use.
+
+## 20. The shell map, the credits' end, the user's maps (Phase 58)
+
+**The battle behind the menus** (`ClientRuntime.UpdateShellMap`, `Shell::showShellMap`): when the shell reaches its menus a real game starts, `GameData`'s `ShellMapName`, as a `LiveMission` with its scripts and camera, without
+HUD or viewer; its sounds are drained and go nowhere. It runs behind every menu (`ShellPhase.Menus`) and stops when a match, a mission, a replay or the load of a network match takes its place, and comes back with the menus.
+The score screen has none (`BlankWindow.wnd` in the original). `--no-shell-map` leaves it out, as does a scripted person at the menus (`--shell-script`) unless `--shell-map` asks for it: the checks of the menus are about the menus.
+The original skin's main menu lets the scene through by itself; the modern skin's backdrop is a canvas of its own colour, which the client leaves out while the main menu is the lowest screen drawn
+(`GameShell.MainMenuIsBackdrop`). Nothing of this is in the shell's draw list, so the golden hashes of `Game.Tests` do not see it.
+
+**Credits** end by themselves: when the last line has left the screen (`CreditsMenuUpdate`, `TheCredits->isFinished()`). The rate stays this port's 40 pixels a second.
+
+**The user's maps** (`RadioButtonUserMaps`): `GameShell.LoadUserMaps` lays the directories of a user folder over the content as `UserMaps/<name>/<name>.map`, each with its hash, and reads the number of players from the map itself
+(`ContentFileSystem.AddUserMaps`). The folder is `Documents\Command and Conquer Generals Zero Hour Data\Maps` as in the original, or `--user-maps DIR`. Such a map is an ordinary content file: a replay of it needs it, and a server
+refuses a client without it. No map preview, and no name other than the file's.
+
+**"Eigene Mission"** of the old list is gone by itself: the patch's layout has no such button (`ShellTests`), and the original's `ButtonWorldBuilder` only starts an external program.

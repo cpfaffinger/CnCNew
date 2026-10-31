@@ -3,7 +3,7 @@
 As of: 30 September 2026 (package S3)
 
 `CnCNew.Client.Stride.Layers.FxLayer` draws what `CnCNew.Presentation.Fx` (`docs/PRESENTATION-FX.md`) delivers per
-frame: particles (camera-aligned or ground-aligned sprites, streaks), tracers and ground decals (scorch marks). `FxFrame`
+frame: particles (camera-aligned or ground-aligned sprites, streaks), tracers and ground decals (scorch marks), and the shadow decals and the snow of [CLIENT-SHADOWS.md](CLIENT-SHADOWS.md). `FxFrame`
 does not deliver FX models (unused in the retail content, see below); muzzle flashes are regular particle systems and
 need no special case. The layer only reads what `FxExecutor.Capture` hands out as `FxFrame`, and never writes back into
 the simulation or the presentation.
@@ -98,17 +98,27 @@ reference in gamma space. The table is built once per `FxBuilder`.
 
 | What | Why not drawn | Counter |
 |---|---|---|
-| `ParticleKind.Drawable` | No W3D particle model render path in this package; in the retail content 1 of 1,087 particle systems affected | `SkippedDrawable` |
-| `ParticleKind.Smudge` | Screen-space distortion (back buffer sample), no post-processing access in this package | `SkippedSmudge` |
+| `ParticleKind.Drawable` | `CarCrushGlassDebris` alone names a drawable, `GlassShard01`, and no template has that name; the original's renderer leaves such systems out too | `SkippedDrawable` |
 | `ParticleShader.None`, empty texture | No drawing state definable | `SkippedUnusable` |
-| `LightPulseInstance` | No pooled point lights in this package; the number of active pulses is counted, not drawn | `NotDrawnLights` |
-| `RayEffectRequest` | 0 uses in the retail content (`docs/PRESENTATION-FX.md`); beam drawables are not part of this package | `NotDrawnRays` |
+| `RayEffectRequest` | 0 uses in the retail content (no FX list has a `RayEffect`, `docs/PRESENTATION-FX.md`) | `NotDrawnRays` |
 | FX models | `FxFrame` delivers none (no FxNuggetKind for them); muzzle flashes are particle systems and are drawn regularly | – |
 | scroll of a projectile stream | `FxFrame.ProjectileStreams` (Phase 35, `docs/PRESENTATION-FX.md` "Attached effects") are drawn as additive bands of the stream's width through the projectiles, the texture once per tile (`TileFactor` quads per segment - the effect sampler clamps); `ScrollRate` is not reproduced | – |
 
 `FxExecutor.Capture` delivers `RayEffects` and `ViewShakes` once (they are cleared afterwards). `FxLayer` is the
 only caller of `Capture` in the Stride client layer and keeps the most recently captured `FxFrame`
 (`FxLayer.LastFrame`) available for later consumers (camera shake, beam rendering) instead of discarding it.
+
+## Light pulses and smudges (Phase 58)
+
+**Light pulses** (`W3DDynamicLight`): the original lights the terrain's vertices. `FxBuilder.EmitLightPulses` lays a grid of at most 10 x 10 cells on the terrain whose vertex colour is the light's, full within the inner radius and
+gone at the outer one, in the ground layer with `FxBlend.Light` (`DestinationColor / One`): the target times one plus the light, as a dynamic light adds to the static one. `FxLayer.Stats` still counts them under
+`lights`. The light on the objects is not drawn: pooled Stride point lights change the permutation of every lit material.
+
+**Smudges** (`W3DSmudgeManager`): the retail smudges are ordinary particles whose texture is called `SMUDGE.tga`, which nothing loads (`MicrowaveEmitter`, `GPSMicrowaveScambler`; `ParticleSys.cpp` turns them into smudges). `FxBuilder`
+keeps them apart, and `ScreenFilters.DrawSmudges` draws a copy of the finished picture back into each one over the world and under the HUD. The original draws a fan of four triangles with a shifted middle and a transparent
+rim; a sprite batch has no such fan, so here five nested rectangles, each looking a little further aside. The offset comes from the particle's personality, the size from its distance.
+
+`CNCNEW_FX_DEMO=ring` shows both near the camera.
 
 ## Diagnostic mode `CNCNEW_FX_DEMO`
 

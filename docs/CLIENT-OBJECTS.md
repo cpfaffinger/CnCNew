@@ -164,7 +164,7 @@ back faces and missing turrets are superseded by the Phase 15 corrections.
   (`ObjectRenderVertexBuilder.FixedViewDirection`, approx. (0, −0.6, 0.8) normalised) instead of a
   real per-pixel reflection, because the geometry is built once per asset and shared by all
   instances.
-- No blob/contact shadow (optional item of the brief): not implemented.
+- Shadows are built: [CLIENT-SHADOWS.md](CLIENT-SHADOWS.md).
 - HOUSECOLOR vertex colouring of a skinned part does not update on a change of owner after
   the first build (see above).
 
@@ -314,7 +314,7 @@ cause analysis above (buffer, winding, light), not a number.
 * **Cache:** `ModelAsset` holds the variants per (material slot, team colour, dimmed, flash, opacity in whole percent) and for skin parts per (part, batch, flash, opacity); a preview model therefore costs
   no more material builds after the first frame. `SolidOpacity = 100` is the state without a variant.
 * **Counter:** `translucent=` in the line `object layer:` (parts of the frame drawn translucently).
-* All of this does not apply to shadows (the layer draws none for the preview) and not to parts that the hide mechanism hides via the zero matrix (those stay invisible).
+* All of this does not apply to shadows (a translucent drawable casts none) and not to parts that the hide mechanism hides via the zero matrix (those stay invisible).
 
 ## Phase 30: the visual check by machine (14 October 2026)
 

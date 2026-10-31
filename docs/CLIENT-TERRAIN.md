@@ -69,17 +69,19 @@ blend `SourceAlpha/InverseSourceAlpha`, with `WaterAppearance.AdditiveBlending` 
 the terrain height lies above the water plane – just as in the original only real depressions/coasts appear
 flooded although the water surface in the model often spans the whole map (see the measurements).
 
+**The soft edge** (since Phase 58): the alpha of water is no longer the colour's but the depth's, `WaterShore.Opacity`: the plane of the batch over the terrain, per vertex of the playable area, divided by
+`TransparentWaterDepth` and capped at `TransparentWaterMinOpacity`, as `updateShorelineTile` writes it into destination alpha. It is an R8 texture in the fog's coordinates; a batch that lies at another height has its own.
+
 **Checked** (visually, see the screenshots section): lake shore (Bitter Winter, irregular coastline
 against snow), river with scroll animation (FloodedPlains, visible wave offset between frame 1
 and frame 600), alpha blending at the shoreline, depth behaviour in an oblique view. **Not
-checked**: `WaterAppearance.AdditiveBlending == true` (none of the eleven probed maps uses it) and
-`WaterAppearance.TransparentWaterDepth` (is currently not evaluated – water has constant
-opacity independent of the water depth below the surface; that is a known gap).
+checked**: `WaterAppearance.AdditiveBlending == true` (none of the eleven probed maps uses it).
 
 ## Fog of War / Shroud
 
 `FogTexture` is an `R8_UNorm` texture with one texel per cell of the playable area
-(`FogOfWarGrid.CellsX/CellsY`), created `Dynamic`. `UpdateFog` reads `match.Fog.CopyLevels(...)`
+(`FogOfWarGrid.CellsX/CellsY`) inside a ring of one texel, created `Dynamic`. The ring is the map's border (`W3DShroud`, [CLIENT-SHADOWS.md](CLIENT-SHADOWS.md)): what lies beyond the playable area clamps to it and is
+black until a script clears it; before Phase 58 it kept the fog's edge value. `UpdateFog` reads `match.Fog.CopyLevels(...)`
 at most every `FogInterval` (1/20 s) and uploads only if the content has changed
 (`SequenceEqual` comparison against the last upload) – on a map standing still the
 upload is practically dropped altogether. The values 0/127/255 (Shroud/Fog/Clear) end up unchanged in the texel; the
@@ -217,7 +219,6 @@ Screenshots were in the scratchpad of the session (`…/scratchpad/s1/`), not in
 
 ## Known limits
 
-- `WaterAppearance.TransparentWaterDepth` is not evaluated; water opacity is constant.
 - `WaterAppearance.AdditiveBlending == true` is provided for in the code, but observable on none of the
   probed maps and therefore visually unchecked.
 - Diagonal mismatches between base and overlay pass (see the table) are counted but not

@@ -296,10 +296,9 @@ a camera move) is not represented, no campaign map uses it.
 
 - **Camera** (`ApplyCameraTo(RtsCamera, seconds)`, per frame from `LiveGame.OnAdvanced`; 0 when paused): move to the waypoint over the script duration with soft ease-in and ease-out
   (`ScriptActions::doMoveCameraTo` → `View::moveCameraTo`; the ease times of the script are replaced by a fixed S-curve), cut with viewing direction/zoom/pitch
-  (`doSetupCamera`), zoom and pitch as a factor of the default values (`doZoomCamera`, `doPitchCamera`, `cameraModFinalZoom/Pitch`), rotation (`doRotateCamera`), look toward the waypoint
+  (`doSetupCamera`), zoom as a factor of the default value and pitch as `m_FXPitch` (`doZoomCamera`, `doPitchCamera`, `cameraModFinalZoom/Pitch`; below 1 and even negative it moves the point looked at, above 1 the camera, `W3DView::buildCameraPosition`; Phase 58), rotation (`doRotateCamera`), look toward the waypoint
   (`cameraModLookToward`; the sign of the camera angle is measured at the camera, not assumed), reset (`doResetCamera`), following a named object
-  (`doCameraFollowNamed`). Without an active script move the camera stays with the player. Limits: zoom and pitch are limited to the playable range of the `RtsCamera` (close-ups of the
-  cutscenes are thereby further away than in the original), `MOVE_CAMERA_ALONG_WAYPOINT_PATH` moves in a straight line to the first waypoint.
+  (`doCameraFollowNamed`). Without an active script move the camera stays with the player. Limits: `MOVE_CAMERA_ALONG_WAYPOINT_PATH` moves in a straight line to the first waypoint.
 - **Input lock** (`DISABLE_INPUT`/`ENABLE_INPUT`, `ScriptActions::doDisableInput`): `MissionController` sets `MatchController.WorldInputEnabled`; everything except Esc (game menu) is discarded, the
   pointer does not scroll, on locking, selection, command modes and held keys are cleared. A victory or a defeat lifts the lock.
 - **Letterbox and fades:** `CAMERA_LETTERBOX_BEGIN/END` hide the command bar and draw two bars (`doLetterBoxMode`: `HideControlBar`), `CAMERA_FADE_ADD/SUBTRACT/MULTIPLY` a
@@ -521,14 +520,14 @@ occur in no campaign map and are only in the catalog):
   "Disabled" = locked; test against the retail data), but the client has no Generals Powers window in which one buys sciences – so there is nothing to see. Applies only to the local side;
   other sides buy through the AI/simulation, which does not read this (in the report as the problem "availability of a side other than the local player").
 - **Radar** (`RADAR_ENABLE`, `RADAR_FORCE_ENABLE`, …): the client knows no radar facility rule, the minimap is always on; there is nothing to force.
-- **Sky and border** (`DRAW_SKYBOX_*`, `ENABLE_/DISABLE_BORDER_SHROUD`, `OVERSIZE_TERRAIN`, `RESIZE_VIEW_GUARDBAND`): the sky body `new_skybox` is drawn by no layer (the sky
+- **Sky and border** (`OVERSIZE_TERRAIN`, `RESIZE_VIEW_GUARDBAND`; since Phase 58 `DRAW_SKYBOX_*`, `ENABLE_/DISABLE_BORDER_SHROUD` and `SHOW_WEATHER` are displayed, `docs/CLIENT-SHADOWS.md`): formerly the sky body `new_skybox` was drawn by no layer (the sky
   above the horizon is the clear colour); the fog texture covers only the playable area, the terrain behind it takes its border value, a separate shadow ring for the active boundary does not exist;
   the terrain layer draws the whole height field including the border (nothing to "oversize"); the client clips no drawables at a guard band. The director keeps `SkyboxRequested` and
   `BorderShroudEnabled`.
 - **Render options** (`OPTIONS_SET_OCCLUSION_MODE`, `OPTIONS_SET_PARTICLE_CAP_MODE`, `SET_FPS_LIMIT`): options of the original (markers for units behind buildings, dynamic particle limit,
   frame rate limit) that the client does not have or does not let scripts control.
 - **Camera and world** (`CAMERA_ADD_SHAKER_AT`: the rotational shaker needs a camera roll offset that `RtsCamera` does not have; `CAMERA_MOD_FREEZE_ANGLE`; `WATER_CHANGE_HEIGHT_OVER_TIME`: the water plane
-  has a fixed height, the original also shifts the logical water level; `SHOW_WEATHER`: neither snow nor rain is drawn; `CAMEO_FLASH`: no blinking of button images; `DEBUG_MESSAGE_BOX`).
+  has a fixed height, the original also shifts the logical water level; `CAMEO_FLASH`: no blinking of button images; `DEBUG_MESSAGE_BOX`).
 
 Tests: `tests/CnCNew.Game.Tests/MissionEffectsTests.cs` (catalog complete; script outputs → sound, objects, HUD with dummies, "displayed needs the consumer"; the clock runs while time is stopped;
 shaking; map border; the counting automata of grey veil and blur; with `--content-dir`: `MD_USA01` 3900 frames through the real HUD and the real camera, removed and re-inserted command buttons

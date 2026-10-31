@@ -206,7 +206,7 @@ internal static class ShadowTests
         var (u, v) = TerrainClouds.Offset(10.0);
         TestHarness.Near(-0.2f, u, 1e-5, "0.02 a second");
         TestHarness.Near(-0.3f, v, 1e-5, "and half as much again the other way");
-        TestHarness.Near(1f, MathF.Abs(TerrainClouds.Offset(101.0).U) + 0.02f, 1e-3, "two turns are gone from the offset");
+        TestHarness.Near(0.02f, MathF.Abs(TerrainClouds.Offset(101.0).U), 1e-3, "two whole turns are gone from the offset");
         TestHarness.Near(1f / 315f, TerrainClouds.Stretch, 1e-7, "31.5 cells");
 
         // Two texels, black and white: half a texel is grey, one texel swaps them.
