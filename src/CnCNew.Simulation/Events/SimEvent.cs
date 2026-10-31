@@ -124,6 +124,9 @@ public enum SimEventKind : byte
     /// <c>DefectorTimerTickSound</c>); the flashes come faster as the capture nears its end. <c>Entity</c>: the building, <c>Other</c>: the capturing unit (its owner's colour is the flash colour).
     /// </summary>
     CaptureFlash = 84,
+
+    /// <summary>A player's beacon stands (<c>GameLogic::onPlaceBeacon</c>): the player's allies are told, in text, sound and speech. <see cref="SimEvent.Entity"/> is the beacon.</summary>
+    BeaconPlaced = 85,
 }
 
 /// <summary>

@@ -44,12 +44,13 @@ public sealed record ReplayFile(ReplayHeader Header, ImmutableArray<SimCommand> 
 /// Version 17 (phase 43): command table 19 with the attack on a place (units, point, own position, slot, shots; F-64); version 16 is rejected.
 /// Version 18 (phase 45): command table 20 with the mine-clearing flag of a group (units; F-69); version 17 is rejected.
 /// Version 20: command table 21 with the order that sends a ferry on its way (units; F-19); version 19 is rejected.
+/// Version 21: command table 22 with the two beacon orders (a place; units; F-24); version 20 is rejected.
 /// Version 14 (phase 24): after the checkpoint interval the header carries the match description (u32 length, then the canonical bytes; length 0 = none); version 13 is rejected.
 /// Version 12 (phase 22): positions and amounts in the payloads are raw fixed-point values with 24 fraction bits instead of 16; version 11 is rejected.
 /// </summary>
 public static class ReplayFormat
 {
-    public const int CurrentVersion = 20;
+    public const int CurrentVersion = 21;
     private static readonly byte[] Magic = "CNCRPLAY"u8.ToArray();
     private const int HashLength = 32;
 
@@ -405,6 +406,14 @@ public static class ReplayFormat
                 writer.Write(ferry.Units.Length);
                 foreach (var unit in ferry.Units) writer.Write(unit.Value);
                 break;
+            case PlaceBeaconCommand beacon:
+                writer.Write(beacon.X.Raw);
+                writer.Write(beacon.Y.Raw);
+                break;
+            case RemoveBeaconCommand beacons:
+                writer.Write(beacons.Units.Length);
+                foreach (var unit in beacons.Units) writer.Write(unit.Value);
+                break;
             case AttackPositionCommand place:
                 writer.Write(place.Units.Length);
                 foreach (var unit in place.Units) writer.Write(unit.Value);
@@ -480,6 +489,8 @@ public static class ReplayFormat
                 reader.ReadBoolean(), reader.ReadSByte(), reader.ReadInt32()),
             CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, ReadUnits(reader)),
             CommandTypes.ExecuteRailedTransport => new ExecuteRailedTransportCommand(player, sequence, tick, ReadUnits(reader)),
+            CommandTypes.PlaceBeacon => new PlaceBeaconCommand(player, sequence, tick, Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64())),
+            CommandTypes.RemoveBeacon => new RemoveBeaconCommand(player, sequence, tick, ReadUnits(reader)),
             CommandTypes.Guard => new GuardCommand(player, sequence, tick, ReadUnits(reader), Fixed.FromRaw(reader.ReadInt64()), Fixed.FromRaw(reader.ReadInt64()), new EntityId(reader.ReadUInt32()), (GuardMode)reader.ReadByte(),
                 ReadString(reader)),
             _ => throw new ReplayFormatException($"Unknown command type {type}."),

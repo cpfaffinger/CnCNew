@@ -67,7 +67,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private readonly List<SimEvent> _tickEvents = [];
     private readonly List<PendingSpawn> _spawnQueue = [];
     private readonly List<Entity> _destroyQueue = [];
-    private readonly long[] _rejections = new long[(int)CommandRejection.ParkingPlacesFull + 1];
+    private readonly long[] _rejections = new long[(int)CommandRejection.TooManyBeacons + 1];
 
     /// <summary>Size of the rejection table when the state hash first covered it (reasons up to <see cref="CommandRejection.CannotToggleOvercharge"/>); later reasons are hashed only when they occurred.</summary>
     private const int LegacyRejectionEntries = (int)CommandRejection.CannotToggleOvercharge + 1;
@@ -826,6 +826,7 @@ public sealed partial class SimulationWorld : IWorldServices
             ConstructCommand construct => InReach(construct.X, limit) && InReach(construct.Y, limit) && InReach(construct.Angle, CommandAngleLimit),
             SetRallyPointCommand rally => InReach(rally.X, limit) && InReach(rally.Y, limit),
             EvacuateCommand evacuate => InReach(evacuate.X, limit) && InReach(evacuate.Y, limit),
+            PlaceBeaconCommand beacon => InReach(beacon.X, limit) && InReach(beacon.Y, limit),
             SpawnCommand spawn => InReach(spawn.X, limit) && InReach(spawn.Y, limit) && InReach(spawn.Z, limit) && InReach(spawn.Angle, CommandAngleLimit),
             _ => true,
         };
@@ -921,6 +922,10 @@ public sealed partial class SimulationWorld : IWorldServices
                 return CheckSetMineClearing(command.Player, clearing);
             case ExecuteRailedTransportCommand ferry:
                 return CheckOwnUnits(command.Player, ferry.Units);
+            case PlaceBeaconCommand:
+                return CheckPlaceBeacon(command.Player);
+            case RemoveBeaconCommand beacons:
+                return beacons.Units.IsDefaultOrEmpty || beacons.Units.Length > RemoveBeaconCommand.MaxUnits ? CommandRejection.InvalidArguments : 0;
             case GroupMoveCommand group:
             {
                 if (group.Units.IsDefaultOrEmpty || group.Units.Length > GroupMoveCommand.MaxUnits) return CommandRejection.UnknownEntity;
@@ -1329,6 +1334,16 @@ public sealed partial class SimulationWorld : IWorldServices
                 ExecuteGuard(guard with { Units = WithoutSleepers(guard.Units) });
                 break;
             }
+            case PlaceBeaconCommand beacon:
+            {
+                var reason = CheckPlaceBeacon(command.Player);
+                if (reason != 0) { RecordRejection(command, reason); break; }
+                PlaceBeacon(beacon);
+                break;
+            }
+            case RemoveBeaconCommand beacons:
+                RemoveBeacons(beacons);
+                break;
             case ExecuteRailedTransportCommand ferry:
             {
                 var reason = CheckOwnUnits(command.Player, ferry.Units);

@@ -15,7 +15,7 @@ namespace CnCNew.Simulation.Commands;
 /// </summary>
 public static class CommandTypes
 {
-    public const int Version = 21;
+    public const int Version = 22;
     public const ushort Spawn = 1;
     public const ushort Destroy = 2;
     public const ushort Damage = 3;
@@ -110,7 +110,14 @@ public static class CommandTypes
     /// <summary><c>MSG_EXECUTE_RAILED_TRANSPORT</c> to a group (<c>AIGroup::groupExecuteRailedTransport</c>): a ferry of the group sets off on its next path (F-19).</summary>
     public const ushort ExecuteRailedTransport = 38;
 
-    public static bool IsKnown(ushort code) => code is >= Spawn and <= ExecuteRailedTransport;
+    // ------------------------------------------------------------------------------------------------------ beacons (v22)
+    /// <summary><c>MSG_PLACE_BEACON</c> (<c>GameLogic::onPlaceBeacon</c>, F-24).</summary>
+    public const ushort PlaceBeacon = 39;
+
+    /// <summary><c>MSG_REMOVE_BEACON</c> (<c>GameLogic::onRemoveBeacon</c>, F-24).</summary>
+    public const ushort RemoveBeacon = 40;
+
+    public static bool IsKnown(ushort code) => code is >= Spawn and <= RemoveBeacon;
 
     /// <summary>
     /// Whether a command of this type is an order a player gives - what may arrive as an intent over a network (docs/NETWORK-PROTOCOL.md section 20.6). Not among them:
@@ -202,6 +209,8 @@ public abstract record SimCommand(PlayerId Player, ulong Sequence, long Tick)
                 reader.Fixed("y"), reader.Bool("own"), checked((int)reader.Int("slot")), checked((int)reader.Int("maxShots"))),
             CommandTypes.SetMineClearing => new SetMineClearingCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
             CommandTypes.ExecuteRailedTransport => new ExecuteRailedTransportCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
+            CommandTypes.PlaceBeacon => new PlaceBeaconCommand(player, sequence, tick, reader.Fixed("x"), reader.Fixed("y")),
+            CommandTypes.RemoveBeacon => new RemoveBeaconCommand(player, sequence, tick, [..reader.Array("units").Select(unit => new EntityId(checked((uint)unit.UInt("id"))))]),
             _ => throw new InvalidDataException($"Unknown command type {code}."),
         };
     }
@@ -764,6 +773,9 @@ public enum CommandRejection : byte
 
     /// <summary><c>isAllowedToRespondToAiCommands</c>: a computer player's unit in the mood <c>ATTITUDE_SLEEP</c> ignores all commands.</summary>
     Asleep = 42,
+
+    /// <summary><c>GameLogic::onPlaceBeacon</c>: the player has <c>MaxBeaconsPerPlayer</c> beacons up.</summary>
+    TooManyBeacons = 43,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)
@@ -863,6 +875,44 @@ public sealed record AttackPositionCommand(PlayerId Player, ulong Sequence, long
     public bool Equals(AttackPositionCommand? other)
         => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && X == other.X && Y == other.Y && OwnPosition == other.OwnPosition
            && Slot == other.Slot && MaxShots == other.MaxShots && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
+
+    public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
+}
+
+/// <summary><c>MSG_PLACE_BEACON</c> (F-24): a beacon of the player at the place; a point beyond the map stands on its edge.</summary>
+public sealed record PlaceBeaconCommand(PlayerId Player, ulong Sequence, long Tick, Fixed X, Fixed Y) : SimCommand(Player, Sequence, Tick)
+{
+    public override ushort TypeCode => CommandTypes.PlaceBeacon;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.Fixed("x", X);
+        writer.Fixed("y", Y);
+    }
+}
+
+/// <summary><c>MSG_REMOVE_BEACON</c> (F-24): the player's beacons among the given objects go; every other object is ignored, as the original walks a selection.</summary>
+public sealed record RemoveBeaconCommand(PlayerId Player, ulong Sequence, long Tick, ImmutableArray<EntityId> Units) : SimCommand(Player, Sequence, Tick)
+{
+    /// <summary>Limit of the list, as of a group order.</summary>
+    public const int MaxUnits = GroupMoveCommand.MaxUnits;
+
+    public override ushort TypeCode => CommandTypes.RemoveBeacon;
+
+    protected override void DescribeBody(IStateWriter writer)
+    {
+        writer.BeginArray("units");
+        foreach (var unit in Units)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", unit.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+
+    public bool Equals(RemoveBeaconCommand? other)
+        => other is not null && Player == other.Player && Sequence == other.Sequence && Tick == other.Tick && Units.AsSpan().SequenceEqual(other.Units.AsSpan());
 
     public override int GetHashCode() => unchecked((int)Sequence * 397 ^ (int)Tick ^ Units.Length);
 }

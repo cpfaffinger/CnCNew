@@ -228,6 +228,13 @@ public sealed class TerrainMap
     /// <summary>The point lies on the map (<c>getMaximumPathfindExtent</c>).</summary>
     public bool IsOnMap(Fixed x, Fixed y) => x >= Fixed.Zero && y >= Fixed.Zero && IsInside(CellOf(x), CellOf(y));
 
+    /// <summary>The point, or the nearest point of the map's edge when it lies beyond the map (<c>TerrainLogic::findClosestEdgePoint</c>).</summary>
+    public (Fixed X, Fixed Y) ClosestPointOnMap(Fixed x, Fixed y)
+    {
+        var inset = Fixed.One / Fixed.FromInt(2);
+        return (Fixed.Max(Fixed.Zero, Fixed.Min(x, Fixed.FromInt(CellsX * CellSize) - inset)), Fixed.Max(Fixed.Zero, Fixed.Min(y, Fixed.FromInt(CellsY * CellSize) - inset)));
+    }
+
     public CellFlags CellAt(int cx, int cy) => _cells[cy * CellsX + cx];
 
     public static int CellOf(Fixed coordinate) => checked((int)(coordinate.Floor() / CellSize));

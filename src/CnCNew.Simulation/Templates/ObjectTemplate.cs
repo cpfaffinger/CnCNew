@@ -394,6 +394,12 @@ public sealed class TemplateCatalog
     public LowEnergyRules LowEnergy { get; private init; } = LowEnergyRules.Absent;
     /// <summary><c>GlobalData::m_specialPowerViewObjectName</c> (<c>GameData.ini SpecialPowerViewObject = SuperweaponPing</c>): what a power creates at its target to show it; empty when absent.</summary>
     public string SpecialPowerViewObject { get; private init; } = string.Empty;
+    /// <summary><c>MultiplayerSettings::getMaxBeaconsPerPlayer</c>.</summary>
+    public int MaxBeaconsPerPlayer { get; private init; }
+
+    /// <summary>The objects the player templates name as their <c>BeaconName</c>.</summary>
+    public ImmutableArray<string> BeaconTemplates { get; private init; } = [];
+
     /// <summary><c>GlobalData::m_sellPercentage</c> as a ratio (<c>GameData.ini SellPercentage = 50%</c>): the share of a structure's cost a sale refunds; the reference default is 1.0.</summary>
     public Fixed SellPercentage { get; }
     /// <summary><c>GlobalData::m_healthBonus[level]</c>: the max-health multiplier of veterancy level 0..3 (<c>GameData.ini HealthBonus_Veteran/Elite/Heroic</c>; every absent value is the reference default 1.0, level 0 is always 1.0).</summary>
@@ -504,6 +510,8 @@ public sealed class TemplateCatalog
         var catalog = new TemplateCatalog(templates.ToImmutable(), commands, upgrades, weapons, sciences, ranks, specialPowers, factions, crates, creationLists, unitDamagedThreshold, unitReallyDamagedThreshold, gravity, baseRegen, baseRegenDelay, minefieldDistance, valuePerSupplyBox, sellPercentage, healthBonus, globalWeaponBonus)
         {
             MaxTunnelCapacity = ResolveMaxTunnelCapacity(graph),
+            MaxBeaconsPerPlayer = ResolveMaxBeacons(graph),
+            BeaconTemplates = [..factions.Factions.Select(faction => faction.BeaconName).Where(name => name.Length > 0).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
             GroundStiffness = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("GroundStiffness", StringComparison.OrdinalIgnoreCase))?.Value.Value is decimal stiffness ? Fixed.FromDecimal(stiffness) : Fixed.FromDecimal(0.5m),
             LowEnergy = ResolveLowEnergy(graph),
@@ -656,6 +664,10 @@ public sealed class TemplateCatalog
         var value = gameData?.Fields.LastOrDefault(field => field.Name.Equals("ValuePerSupplyBox", StringComparison.OrdinalIgnoreCase))?.Value.Value;
         return value is long integer ? checked((int)integer) : 100;
     }
+
+    /// <summary>Absent key: the reference default of <c>MultiplayerSettings::MultiplayerSettings</c> (<c>m_maxBeaconsPerPlayer = 3</c>).</summary>
+    private static int ResolveMaxBeacons(CompiledDefinitionGraph graph)
+        => graph.Definitions.OfType<MultiplayerSettingsDefinition>().FirstOrDefault()?.Fields.LastOrDefault(field => field.Name.Equals("MaxBeaconsPerPlayer", StringComparison.OrdinalIgnoreCase))?.Value.Value is long limit ? checked((int)limit) : 3;
 
     /// <summary>Absent key: the reference default of <c>GlobalData</c> (<c>m_sellPercentage = 1.0f</c>).</summary>
     private static Fixed ResolveSellPercentage(CompiledDefinitionGraph graph)
