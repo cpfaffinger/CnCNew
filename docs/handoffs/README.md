@@ -84,7 +84,8 @@ phase number is 32.
 | **51** | [HANDOFF-PHASE51.md](HANDOFF-PHASE51.md) | **S1-M11** | Fidelity package M: the approximations of target acquisition (F-17), the dying and the pad (F-87) | **done** by machine (31 October 2026): `docs/SIMULATION-CORE.md` §65 |
 | 52 | [HANDOFF-PHASE52.md](HANDOFF-PHASE52.md) | Stage 3 | One product: the patch layer, the fixes and the movement profile are the default and the yardstick (D-3, D-4, D-32, D-33) | done |
 | **53** | [HANDOFF-PHASE53.md](HANDOFF-PHASE53.md) | **Stages 3, 4** | The decisions that are a default: D-8, D-19, D-21, D-22, D-23 (interval), D-25, D-26, D-30, D-34 | **done** by machine (31 October 2026) |
-| 54 | [HANDOFF-PHASE54.md](HANDOFF-PHASE54.md) | S1-M11 | Terrain bridges: the walkable deck, damage, repair, the model (F-20) | **next** |
+| 54 | [HANDOFF-PHASE54.md](HANDOFF-PHASE54.md) | S1-M11 | Terrain bridges: the walkable deck, damage, repair, the model (F-20) | **done** by machine (31 October 2026) |
+| 55 | [HANDOFF-PHASE55.md](HANDOFF-PHASE55.md) | S1-M11 | What the picture lacks: shadows, sky, weather, the shell map; the release candidate | **next** |
 
 ## Stage 4 – Multiplayer (`../plan/STAGE-4-MULTIPLAYER.md`)
 

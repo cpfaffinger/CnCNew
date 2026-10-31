@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port · **Milestone:** S1-M11 · **Phase:** 54
-> **Status:** next (starting state: the end of Phase 53)
+> **Status:** done by machine (31 October 2026; `docs/SIMULATION-CORE.md` §68 to §70, `docs/CLIENT-ROADS.md`, `docs/CLIENT-VIDEO.md`)
 > **Predecessor:** HANDOFF-PHASE53.md · **Results in:** `docs/SIMULATION-CORE.md`, `docs/CLIENT-ROADS.md`, new manifests
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
@@ -22,3 +22,7 @@ Retail reference match a stalemate at tick 108,000, `556023EBE5E461C2` / `2B71E8
 ## Acceptance
 
 A unit crosses a shipped map's bridge; a broken bridge closes the way and a repaired one opens it; every run of the manifests that changes names its cause; tier 4.
+
+## Progress
+
+Done: the bridges (§68), and of the rest of the brief the recorded script actions (F-22, 2 stay recorded in missions, F-91), the script's idle (F-21), the approximations of Phase 14 (F-19), Bink (F-02, `docs/CLIENT-VIDEO.md`), the server on Ubuntu (D-20, `docs/DEDICATED-SERVER.md` §16). The next brief is `HANDOFF-PHASE55.md`.
