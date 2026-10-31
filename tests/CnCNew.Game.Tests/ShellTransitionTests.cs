@@ -62,7 +62,7 @@ internal static class ShellTransitionTests
 
     private static IShellEnvironment NewEnvironment() => new FixedShellEnvironment(Path.Combine(Path.GetTempPath(), "cncnew-shell-transition-tests-" + Guid.NewGuid().ToString("N")));
 
-    private static GameShell NewShell(GameData data, bool animate) => GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(Width, Height), animateTransitions: animate);
+    private static GameShell NewShell(GameData data, bool animate) => GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(Width, Height), animateTransitions: animate, skin: SkinPins.Current);
 
     private static int Settle(GameShell shell, int limit = 600)
     {

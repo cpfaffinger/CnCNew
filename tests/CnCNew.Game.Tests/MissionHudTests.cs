@@ -31,7 +31,7 @@ internal static class MissionHudTests
         {
             var run = MissionRun.Load(MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", MissionOptions.Standard);
             var live = LiveMission.Create(data, run, viewport);
-            var controller = new MissionController(live, GameSettings.Default);
+            var controller = new MissionController(live, SkinPins.Settings);
             TestHarness.Assert(live.Frame.Drawables.Length > 0, "the mission's objects are drawn at the start");
             TestHarness.Assert(live.Players.Length >= 2 && !live.HumanFaction.Equals(string.Empty), $"the players and the viewer's faction are known (faction '{live.HumanFaction}')");
             for (var frame = 0; frame < 60; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
@@ -59,7 +59,7 @@ internal static class MissionHudTests
         {
             var run = MissionRun.Load(MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", MissionOptions.Standard);
             var live = LiveMission.Create(data, run, viewport);
-            var controller = new MissionController(live, GameSettings.Default);
+            var controller = new MissionController(live, SkinPins.Settings);
             long time = 10_000;
             void Click(Vector2 at)
             {
@@ -125,7 +125,7 @@ internal static class MissionHudTests
             var run = MissionRun.Load(MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
             var live = LiveMission.Create(data, run, viewport);
             live.Director.AudioControl = new FakeAudio(); // the volumes, mutes and Eva switch of the opening need a sound to act on
-            var controller = new MissionController(live, GameSettings.Default);
+            var controller = new MissionController(live, SkinPins.Settings);
             var start = live.Camera.Pivot;
             long time = 10_000;
             void Click(Vector2 at)
@@ -186,7 +186,7 @@ internal static class MissionHudTests
         {
             var run = MissionRun.Load(MissionContext.From(data), "Maps/GC_ChemGeneral/GC_ChemGeneral.map", MissionOptions.Standard);
             var live = LiveMission.Create(data, run, viewport);
-            var controller = new MissionController(live, GameSettings.Default);
+            var controller = new MissionController(live, SkinPins.Settings);
             var ended = new List<MissionOutcome>();
             controller.MissionEnded += ended.Add;
             for (var frame = 0; frame < 30; frame++) controller.Update(CnCNew.Tests.TestTime.FrameSeconds);

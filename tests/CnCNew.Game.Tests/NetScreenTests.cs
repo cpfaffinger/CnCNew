@@ -524,7 +524,7 @@ internal static class NetScreenTests
     {
         var network = new ScriptedNetwork();
         var environment = new FixedShellEnvironment(Path.Combine(Path.GetTempPath(), "cncnew-net-screen-tests-" + Guid.NewGuid().ToString("N")));
-        var shell = GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight), animateTransitions: true, network: network);
+        var shell = GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight), animateTransitions: true, network: network, skin: SkinPins.Current);
         // The script is the person; the test is the server: it moves the scripted lobby on when the person has reached the screen that waits for it.
         var script = ShellScript.Parse(
         [

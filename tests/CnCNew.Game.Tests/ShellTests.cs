@@ -179,7 +179,7 @@ internal static class ShellTests
     /// </summary>
     private static void MainMenuInitialState(GameData data)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         var tree = shell.CurrentScreen.Tree;
         foreach (var name in new[] { "ButtonUSARecentSave", "ButtonUSALoadGame", "ButtonGLARecentSave", "ButtonGLALoadGame", "ButtonChinaRecentSave", "ButtonChinaLoadGame",
                      "MapBorder", "MapBorder1", "MapBorder3", "MapBorder4", "ButtonGetUpdate", "ButtonGetMapPack" })
@@ -205,7 +205,7 @@ internal static class ShellTests
     /// </summary>
     private static void ScreenStackDrawing(GameData data)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         var main = shell.CurrentScreen;
         var mainAlone = main.BuildDrawList().Commands.Length;
         TestHarness.Assert(mainAlone > 0 && shell.BuildDrawList().Commands.Length == mainAlone, "the main menu alone is drawn on an empty stack");
@@ -291,7 +291,7 @@ internal static class ShellTests
     /// </summary>
     private static void ChallengeMenuBio(GameData data)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
         Click(shell, "MainMenu.wnd:ButtonChallenge");
         Click(shell, "MainMenu.wnd:ButtonHard");
@@ -324,7 +324,7 @@ internal static class ShellTests
     /// </summary>
     private static void LoadGameEscapeWithoutFocus(GameData data)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         Click(shell, "MainMenu.wnd:ButtonLoadReplay");
         Click(shell, "MainMenu.wnd:ButtonLoadGame");
         TestHarness.Assert(shell.CurrentScreen is LoadGameScreen, "load game is open");
@@ -346,7 +346,7 @@ internal static class ShellTests
 
     private static void ButtonStates(GameData data)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         var tree = shell.CurrentScreen.Tree;
         var button = tree.FindByName("MainMenu.wnd:ButtonSinglePlayer")!;
         var enabled = button.Definition.GetDrawData(WndDrawDataKind.Enabled)[0].Image!;
@@ -395,7 +395,7 @@ internal static class ShellTests
     private static void LocalizedSetupText(GameData data)
     {
         var directory = Path.Combine(Path.GetTempPath(), "cncnew-shell-tests-" + Guid.NewGuid().ToString("N"));
-        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
         Click(shell, "MainMenu.wnd:ButtonSkirmish");
         var tree = shell.CurrentScreen.Tree;
@@ -448,7 +448,7 @@ internal static class ShellTests
         TestHarness.Assert(started.Setup.Details.Length == 2 && started.Setup.Details[0] is { Team: 2, Color: 0, StartPosition: 0 } && started.Setup.Details[1] is { Team: 2, Color: 5, StartPosition: 1 },
             "the setup carries team, colour and start position of every slot that takes part");
 
-        shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         Click(shell, "MainMenu.wnd:ButtonOptions");
         foreach (var name in new[] { "TextEntryHTTPProxy", "TextEntryFirewallPortOverride" })
             TestHarness.Assert(shell.CurrentScreen.Tree.FindByName($"OptionsMenu.wnd:{name}")!.TextEntry!.Text.Length == 0, $"{name} starts empty, not with the layout's word 'Entry'");
@@ -461,7 +461,7 @@ internal static class ShellTests
     /// </summary>
     private static void OriginalAiArmies(GameData data)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         TestHarness.Assert(shell.SkirmishAi == CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, "the shell offers the built-in AI unless its host says otherwise");
         shell.SkirmishAi = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original;
         Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
@@ -486,7 +486,7 @@ internal static class ShellTests
             TestHarness.Assert(started.UsesOriginalAi && started.Opponents.Length == 1, $"the match runs the original AI with one opponent ({started.Opponents.Length})");
             TestHarness.Assert(started.AiOf(1) == new MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original, level), $"the opponent has the army its slot chose: {started.AiOf(1)} for entry {entry}");
             if (entry == 4) break;
-            shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+            shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
             shell.SkirmishAi = CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original;
             Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
             Click(shell, "MainMenu.wnd:ButtonSkirmish");
@@ -500,7 +500,7 @@ internal static class ShellTests
     /// </summary>
     private static void CreditsFonts(GameData data)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         Click(shell, "MainMenu.wnd:ButtonCredits");
         for (var i = 0; i < 400; i++) shell.Update(0.05);
         var fonts = shell.BuildDrawList().Commands.OfType<UiTextDraw>().Select(text => text.Font).Where(font => font.Name == "Arial").Distinct().ToArray();
@@ -512,7 +512,7 @@ internal static class ShellTests
 
     private static void PointerTooltip(GameData data)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
         var button = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonUSA")!;
         TestHarness.Assert(button.Definition.TooltipText is { Length: > 0 }, "the USA button carries a TOOLTIPTEXT");
@@ -533,7 +533,7 @@ internal static class ShellTests
     private static void OptionsSlidersAndLabels(GameData data)
     {
         var directory = Path.Combine(Path.GetTempPath(), "cncnew-shell-tests-" + Guid.NewGuid().ToString("N"));
-        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         Click(shell, "MainMenu.wnd:ButtonOptions");
         shell.HandleInput(new MouseMoveEvent(++_clockMs, new Vector2(4, 4)));
         var tree = shell.CurrentScreen.Tree;
@@ -586,7 +586,7 @@ internal static class ShellTests
     {
         foreach (var (width, height, title, message, button) in new[] { (1920, 1080, 36, 18, 27), (1280, 720, 24, 12, 18), (800, 600, 20, 10, 15) })
         {
-            var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(width, height));
+            var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(width, height), skin: SkinPins.Current);
             var mainButton = shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonExit")!;
             Click(shell, "MainMenu.wnd:ButtonExit");
             var tree = shell.CurrentScreen.Tree;
@@ -616,7 +616,7 @@ internal static class ShellTests
     /// <summary>The patch's <c>MainMenu.wnd</c> has no custom mission button and carries the line of its test builds, which the menu hides.</summary>
     private static void CustomMissionButton(GameData data)
     {
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:Patch104pTestVersion") is { IsVisible: false }, "the patch's line for its test builds is hidden");
         Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
         TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("MainMenu.wnd:ButtonCustomMission") is null, "the patch's layout has no custom mission button");
@@ -664,7 +664,7 @@ internal static class ShellTests
     {
         var directory = Path.Combine(Path.GetTempPath(), "cncnew-shell-tests-" + Guid.NewGuid().ToString("N"));
         var environment = new FixedShellEnvironment(directory);
-        var shell = GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         Click(shell, "MainMenu.wnd:ButtonOptions");
         TestHarness.Assert(shell.CurrentScreen is OptionsScreen, "options button opens the options screen");
 
@@ -688,7 +688,7 @@ internal static class ShellTests
         TestHarness.Assert(applied.Audio.Music > 0.99f, "the music slider change was applied");
         TestHarness.Assert(!applied.Controls.AlternateMouse, "the original's mouse setup was applied");
 
-        var reloaded = GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight));
+        var reloaded = GameShell.Create(data, environment, viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         TestHarness.Assert(reloaded.Settings.Display.Width == applied.Display.Width && reloaded.Settings.Display.Height == applied.Display.Height, "resolution persisted across a fresh shell");
         TestHarness.Assert(Math.Abs(reloaded.Settings.Audio.Music - applied.Audio.Music) < 0.01f, "music volume persisted across a fresh shell");
         TestHarness.Assert(!reloaded.Settings.Controls.AlternateMouse, "the mouse setup persisted across a fresh shell");

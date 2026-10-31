@@ -311,7 +311,7 @@ internal static class ObserverTests
     {
         var directory = Path.Combine(Path.GetTempPath(), "cncnew-observer-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
-        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(1280, 720));
+        var shell = GameShell.Create(data, new FixedShellEnvironment(directory), viewport: new UiViewport(1280, 720), skin: SkinPins.Current);
         shell.Replays!.Save("Rush against rush", watched.File);
         var lastFive = watched.Lines.Length;
         var script = ShellScript.Parse(

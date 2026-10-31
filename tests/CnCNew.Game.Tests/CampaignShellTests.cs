@@ -52,7 +52,7 @@ internal static class CampaignShellTests
     private static void RealCampaignFlow(string contentDir)
     {
         var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         TestHarness.Assert(shell.Campaigns is not null, "the campaign catalog loaded from real content");
         var usa = shell.Campaigns!.Find("USA") ?? throw new InvalidOperationException("USA campaign missing from real content");
         var firstMission = usa.FindMission(usa.FirstMission)!;
@@ -159,7 +159,7 @@ internal static class CampaignShellTests
         var contentDir = ContentDir(args);
         if (contentDir is null) { Console.WriteLine("  SKIP: needs real content for the result screen's WND layouts (pass --content-dir <dir>)"); return; }
         var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
 
         var (context, campaign) = SyntheticCampaign();
         var controller = new CampaignController(context, campaign, CampaignProgress.Begin(campaign, ScriptDifficulty.Normal));
@@ -220,7 +220,7 @@ internal static class CampaignShellTests
         var contentDir = ContentDir(args);
         if (contentDir is null) { Console.WriteLine("  SKIP: needs real content (pass --content-dir <dir>)"); return; }
         var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         var usa = shell.Campaigns!.Find("USA") ?? throw new InvalidOperationException("USA campaign missing from real content");
 
         var context = MissionContext.From(data);
@@ -266,7 +266,7 @@ internal static class CampaignShellTests
         var contentDir = ContentDir(args);
         if (contentDir is null) { Console.WriteLine("  SKIP: needs real content (pass --content-dir <dir>)"); return; }
         var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
-        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight));
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         var options = SkirmishMatchOptions.StandardAt(data.Rate);
         var setup = new CnCNew.Game.Live.MatchSetup(mapPath, "FactionAmerica", [CnCNew.Game.Live.MatchSetup.RandomFaction], options)

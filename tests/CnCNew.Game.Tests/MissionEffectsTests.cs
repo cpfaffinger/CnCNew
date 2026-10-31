@@ -383,7 +383,7 @@ internal static class MissionEffectsTests
     {
         var run = MissionRun.Load(MissionContext.From(data), map, MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
         var live = LiveMission.Create(data, run, new Vector2(1280, 720), label => label);
-        var controller = new MissionController(live, GameSettings.Default);
+        var controller = new MissionController(live, SkinPins.Settings);
         var audio = new FakeAudio();
         live.Director.AudioControl = audio;
         return (live, controller, audio);

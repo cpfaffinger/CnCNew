@@ -40,6 +40,8 @@ internal static class SourceRuleTests
             "the one place outside the simulation that names a simulation rate: the product rate, the default of a session whose host names none (GameData.DefaultSessionRate)"),
         ("CnCNew.Game/Hud/HudOverlayRenderer.cs", "clockMilliseconds / 30 + icon.Entity.Value % CrossFrames",
             "30 milliseconds of wall time per picture of the repair cross: a duration, not a rate"),
+        ("CnCNew.Ui/Settings/GameSettings.cs", "int TickRate = 60)",
+            "the player's choice of rate, stored in the settings file: CnCNew.Ui knows neither the simulation nor CnCNew.Game's ProductRate, and a test holds the two equal"),
         ("CnCNew.Client.Stride/Program.cs", "_renderedFrames / 60d",
             "the model viewer's smoke clock: 1/60 s of animation time per rendered frame; no simulation and no game time is involved"),
     ];

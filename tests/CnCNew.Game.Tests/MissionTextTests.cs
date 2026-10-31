@@ -497,7 +497,7 @@ internal static class MissionTextTests
         var text = data.LoadText("English");
         var run = MissionRun.Load(MissionContext.From(data), map, MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
         var live = LiveMission.Create(data, run, new Vector2(1280, 720), label => text.TryGet(label, out var resolved) ? resolved : label);
-        return (live, new MissionController(live, GameSettings.Default));
+        return (live, new MissionController(live, SkinPins.Settings));
     }
 
     private static void RealStyle(GameData data)
