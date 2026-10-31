@@ -744,6 +744,8 @@ static partial class NetTool
         var disturbances = (Option(args, "--disturb") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(text => text.Split(':')).ToArray();
         // All clients of a harness come from one address: more than a server lets one address hold by default.
         var serverArguments = new List<string> { "--port", "0", "--allow-modified-builds", "--exit-after-rooms", "1", "--status-seconds", "10", "--max-connections-per-address", "64" };
+        // The harness measures the bare transport: what a server holds or delays by default is asked for by a run that wants it.
+        serverArguments.AddRange(["--seat-hold-ms", "0", "--spectator-delay-ms", "0", "--hash-interval", "1"]);
         serverArguments.AddRange((Option(args, "--server-args") ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries));
         var watch = Stopwatch.StartNew();
         MatchRow Failed(string problem) => new(label, impairment, false, problem, members, 0, target, string.Empty, Spread.Of([]), 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, string.Empty, 0, string.Empty, 0, 0, 0, 0, watch.Elapsed.TotalSeconds);

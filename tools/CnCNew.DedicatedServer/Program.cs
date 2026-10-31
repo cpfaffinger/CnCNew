@@ -30,7 +30,7 @@ sealed record ServerConfig
     public int MaxMembersPerRoom { get; init; } = Protocol.MaxConnections;
     public int DefaultTickRate { get; init; } = 60;
     public bool AllowModifiedBuilds { get; init; }
-    public int HashInterval { get; init; } = 1;
+    public int HashInterval { get; init; } = 4;
     public int HelloTimeoutMs { get; init; } = 5_000;
     public int LagReportMs { get; init; } = 500;
     public int LagThrottleMs { get; init; } = 2_000;
@@ -39,11 +39,11 @@ sealed record ServerConfig
     /// <summary>How long a member counts as recovered before the lag rule forgets what it used of the limit (0: at once).</summary>
     public int LagRecoveryMs { get; init; } = 30_000;
     /// <summary>How long the seat of a member whose connection was lost is held for it to come back (0: the player leaves the match at once).</summary>
-    public int SeatHoldMs { get; init; }
+    public int SeatHoldMs { get; init; } = 300_000;
     /// <summary>How far behind the players somebody without a seat is sent the match (0: at the same time).</summary>
-    public int SpectatorDelayMs { get; init; }
+    public int SpectatorDelayMs { get; init; } = 120_000;
     /// <summary>Admit somebody without a seat to a match that is running.</summary>
-    public bool AllowLateWatchers { get; init; }
+    public bool AllowLateWatchers { get; init; } = true;
     public int PausesPerPlayer { get; init; } = 3;
     public int MaxPauseMs { get; init; } = 60_000;
     /// <summary>Only the host sets the speed of a match; otherwise every player may.</summary>
@@ -71,7 +71,7 @@ sealed record ServerConfig
     /// <summary>The largest session state the server passes on or starts a match from, in bytes.</summary>
     public int MaxStateBytes { get; init; } = 4 * 1024 * 1024;
     /// <summary>The longest match a host may set, in seconds of game time.</summary>
-    public int MaxMatchSeconds { get; init; } = 7_200;
+    public int MaxMatchSeconds { get; init; }
     /// <summary>What the commands of one match may add up to in memory, in bytes; a match that reaches it is ended.</summary>
     public long MaxRecordingBytes { get; init; } = 64L * 1024 * 1024;
     public int LoadLimitMs { get; init; } = 180_000;
@@ -162,6 +162,7 @@ static class DedicatedServer
                 "--throttle-speed" => config with { ThrottleSpeedPercent = Number() },
                 "--lag-recovery-ms" => config with { LagRecoveryMs = Number() },
                 "--seat-hold-ms" => config with { SeatHoldMs = Number() },
+                "--no-late-watchers" => config with { AllowLateWatchers = false },
                 "--spectator-delay-ms" => config with { SpectatorDelayMs = Number() },
                 "--allow-late-watchers" => config with { AllowLateWatchers = true },
                 "--pauses-per-player" => config with { PausesPerPlayer = Number() },

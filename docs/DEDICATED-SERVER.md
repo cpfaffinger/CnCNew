@@ -47,16 +47,16 @@ A JSON file (`--config`), overridden by the command line. **An unknown key in th
 | `maxMembersPerRoom` | `--max-members` | 16 | members of a room: at most 8 play (the protocol's seats), the others watch |
 | `defaultTickRate` | `--tick-rate` | 60 | what a room states before its host has set it (30, 60 or 120); the host's room settings decide |
 | `allowModifiedBuilds` | `--allow-modified-builds` | false | admit clients built from a modified source tree - the developer switch (§4) |
-| `hashInterval` | `--hash-interval` | 1 | every how many ticks the clients report their session hash |
+| `hashInterval` | `--hash-interval` | 4 | every how many ticks the clients report their session hash (D-23: 3.8 instead of 9.9 KB/s up, a desync is reported two ticks later, `docs/NETWORK-DIAGNOSTICS.md` §6) |
 | `helloTimeoutMs` | | 5,000 | a connection that has not said its hello after this time is closed |
 | `lagReportMs` | `--lag-report-ms` | 500 | from this lag on everybody is told who is behind; 0: never |
 | `lagThrottleMs` | `--lag-throttle-ms` | 2,000 | above this lag of a player the game is slowed for everybody; 0: the server neither slows nor drops for lag |
 | `throttleLimitMs` | `--throttle-limit-ms` | 10,000 | a member that stays above the limit this long is dropped |
 | `throttleSpeedPercent` | `--throttle-speed` | 50 | the share of the set game speed while the game is slowed |
 | `lagRecoveryMs` | `--lag-recovery-ms` | 30,000 | a member's used share of `throttleLimitMs` is forgotten only after it kept up for this long; 0: at once (the rule of Phase 26) |
-| `seatHoldMs` | `--seat-hold-ms` | 0 | how long the seat of a player whose connection was lost is kept for it to come back; 0: it leaves the match at once. Proposal for operation: 300,000 (five minutes) |
-| `spectatorDelayMs` | `--spectator-delay-ms` | 0 | how far behind the players somebody without a seat is sent the match; 0: at the same time. Proposal for operation: 120,000 |
-| `allowLateWatchers` | `--allow-late-watchers` | false | admit somebody without a seat to a match that already runs |
+| `seatHoldMs` | `--seat-hold-ms` | 300,000 | how long the seat of a player whose connection was lost is kept for it to come back (D-19); 0: it leaves the match at once |
+| `spectatorDelayMs` | `--spectator-delay-ms` | 120,000 | how far behind the players somebody without a seat is sent the match (D-19); 0: at the same time |
+| `allowLateWatchers` | `--allow-late-watchers`, `--no-late-watchers` | true | admit somebody without a seat to a match that already runs (D-19) |
 | `pausesPerPlayer` | `--pauses-per-player` | 3 | how often a player may pause a match |
 | `maxPauseMs` | `--max-pause-ms` | 60,000 | a pause ends by itself after this time; 0: never |
 | `hostSetsSpeed` | `--anyone-sets-speed` | true | only the host sets the game speed (the option turns it off) |
@@ -217,7 +217,7 @@ Every limit is configuration (`--config` key, also `--set key=value`); **0 turns
 | `hashReportLimitMs` | 20,000 | game time without the hash of a tick from a member that plays along | the member is dropped (`ProtocolViolation`) | `hashStalls` |
 | `maxStateBytes` | 4,194,304 | a session state (start from a save, a joiner's state) | the state is refused; the next member is asked | `statesRefused` |
 | `snapshotsPerMinute` | 6 | states asked of members | the join is refused (`CannotCatchUp`) | `joinsRateLimited` |
-| `maxMatchSeconds` | 7,200 | game time a host may set | the room settings are refused | `rejected` lines |
+| `maxMatchSeconds` | 0 (none, D-26) | game time a host may set | the room settings are refused | `rejected` lines |
 | `maxRecordingBytes` | 67,108,864 | the commands of a match in memory | the match is ended (`ServerLimit`) | `recordingBytes`, `match-ended reason=ServerLimit` |
 | `roomIdleLimitMs` | 3,600,000 | a lobby that never starts, a room whose match is over | everybody is sent home | `room-idle` line |
 | `logRetentionDays`, `replayRetentionDays` | 14, 0 | age of log and replay files | deleted | `replays-expired` |

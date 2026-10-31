@@ -31,7 +31,7 @@ public sealed record RelayOptions(bool AllowModifiedBuilds = false, bool HostMay
     /// <summary>The largest session state the room takes: with a start from a saved match and from a member for a joiner.</summary>
     public int MaxStateBytes { get; init; } = 4 * 1024 * 1024;
     /// <summary>The longest match a host may set, in seconds of game time.</summary>
-    public int MaxMatchSeconds { get; init; } = 7_200;
+    public int MaxMatchSeconds { get; init; }
     /// <summary>The most the commands of a match may add up to in the recording; a match that reaches it is ended.</summary>
     public long MaxRecordingBytes { get; init; } = 64L * 1024 * 1024;
     /// <summary>How long a member may take to build the match before it is dropped.</summary>

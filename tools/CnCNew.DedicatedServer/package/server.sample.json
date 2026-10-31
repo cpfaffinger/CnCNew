@@ -37,11 +37,11 @@
   "inboundBytesPerSecond": 262144,
   "messagesPerSecond": 500,
   "maxStateBytes": 4194304,
-  "maxMatchSeconds": 7200,
+  "maxMatchSeconds": 0,
   "maxRecordingBytes": 67108864,
 
-  // Proposals that wait for a decision of the project (D-17, D-19): off by default.
-  "seatHoldMs": 0,
-  "spectatorDelayMs": 0,
-  "allowLateWatchers": false
+  // A lost connection keeps its seat for five minutes, somebody who watches sees the match two minutes behind and may come in late (D-19).
+  "seatHoldMs": 300000,
+  "spectatorDelayMs": 120000,
+  "allowLateWatchers": true
 }
