@@ -119,6 +119,7 @@ public static class ModelConditions
     public static readonly ModelConditionFlag[] UsingWeapon = [UsingWeaponA, Parse("USING_WEAPON_B"), Parse("USING_WEAPON_C")];
     public static readonly ModelConditionFlag[] PreAttack = [Parse("PREATTACK_A"), Parse("PREATTACK_B"), Parse("PREATTACK_C")];
     public static readonly ModelConditionFlag Moving = Parse("MOVING");
+    public static readonly ModelConditionFlag Panicking = Parse("PANICKING");
     public static readonly ModelConditionFlag Dying = Parse("DYING");
     public static readonly ModelConditionFlag AwaitingConstruction = Parse("AWAITING_CONSTRUCTION");
     public static readonly ModelConditionFlag PartiallyConstructed = Parse("PARTIALLY_CONSTRUCTED");

@@ -162,6 +162,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
             if (world.LogicRandom.Range(0, 99) < 25)
                 world.Emit(SimEventKind.VoiceFearRequested, Entity.Id, info.Source, string.Empty, 0);
         // The player's retaliation (logical retaliation mode): friends nearby answer the attacker (F-58). The original does this after the death, which changes nothing here.
+        world.NoteRepulsableDamage(Entity);
         world.RetaliateFor(Entity, info.Source);
         if (Health <= Fixed.Zero && healthBefore > Fixed.Zero)
         {

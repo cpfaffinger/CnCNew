@@ -296,7 +296,6 @@ static partial class Tests
             Scr.Script("Fired", [Scr.And(Scr.If("PLAYER_TRIGGERED_SPECIAL_POWER_FROM_NAMED", Scr.Side(PlayerA), power, Scr.Unit("Hero")))], [Scr.Do("SET_FLAG", Scr.Flag("fired"), Scr.Bool(true))], oneShot: true),
             Scr.Script("Look", [Scr.And(Scr.If("FLAG", Scr.Flag("look"), Scr.Bool(true)))], [Scr.Do("MAP_REVEAL_PERMANENTLY_AT_WAYPOINT", Scr.Waypoint("Far"), Scr.Real(60m), Scr.Side(PlayerA), Scr.Named(MapScriptParameterType.RevealName, "FarLook"))], oneShot: true),
             Scr.Script("Unlook", [Scr.And(Scr.If("FLAG", Scr.Flag("unlook"), Scr.Bool(true)))], [Scr.Do("MAP_UNDO_REVEAL_PERMANENTLY_AT_WAYPOINT", Scr.Named(MapScriptParameterType.RevealName, "FarLook"))], oneShot: true),
-            Scr.Script("Record", [Scr.And(Scr.If("FLAG", Scr.Flag("record"), Scr.Bool(true)))], [Scr.Do("TEAM_WANDER_IN_PLACE", Scr.Team("teamA")), Scr.Do("TEAM_WANDER", Scr.Team("teamA"))], oneShot: true),
         ], objects: [Placed("AlphaHero", 100m, 100m, "teamA", "Hero"), Placed("BetaSoldier", 300m, 100m, "teamB", "Target")]);
         var engine = session.Engine;
         var viewer = new PlayerId(1);
@@ -313,13 +312,10 @@ static partial class Tests
         engine.SignalUiInteraction("unlook");
         Run(session, session.Frames(8));
         Check.That(!world(session).IsPositionVisibleTo(viewer, far.X, far.Y), "The named undo takes the reveal back.");
-        engine.SignalUiInteraction("record");
-        Run(session, session.Frames(2));
-        Check.That(engine.RecordedActions == 2, "The two wanders are recorded, not executed.");
-        var recordOnly = StartMission([Scr.Script("Record", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_WANDER_IN_PLACE", Scr.Team("teamA")), Scr.Do("TEAM_WANDER", Scr.Team("teamA"))], oneShot: true)]);
+        var recordOnly = StartMission([Scr.Script("Record", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SET_BASE_CONSTRUCTION_SPEED", Scr.Side(PlayerA), Scr.Int(30)), Scr.Do("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", Scr.Int(1))], oneShot: true)]);
         Run(recordOnly, recordOnly.Frames(2));
         Check.That(recordOnly.Engine.ExecutedActions == 0 && recordOnly.Engine.RecordedActions == 2 && recordOnly.Engine.MissingActionHits.Count == 0, "Recorded actions are neither counted as executed nor as missing.");
-        Check.That(ScriptCoverage.ActionSupport("TEAM_WANDER") == ScriptSupport.Recorded, "The support table names them as recorded.");
+        Check.That(ScriptCoverage.ActionSupport("CHOOSE_VICTIM_ALWAYS_USES_NORMAL") == ScriptSupport.Recorded, "The support table names them as recorded.");
     }
 
     private static CnCNew.Simulation.World.SimulationWorld world(MissionSession session) => session.World;

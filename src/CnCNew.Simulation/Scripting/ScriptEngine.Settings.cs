@@ -52,11 +52,11 @@ public sealed partial class ScriptEngine
             case "NAMED_SET_STOPPING_DISTANCE":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } stopper) SetStoppingDistance(stopper, Real(p, 1));
                 return true;
-            // doNamedSetRepulsor (the REPULSOR object status), doSetBaseConstructionSpeed (the AI's delay between teams): no consumer.
+            // doNamedSetRepulsor: the REPULSOR object status.
             case "NAMED_SET_REPULSOR":
-                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } repulsive) _recordedSettings[type + "|" + repulsive.Id.Value] = Int(p, 1) != 0 ? 1 : 0;
-                _recordedActions++;
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } repulsive) _world.SetRepulsor(repulsive, Int(p, 1) != 0);
                 return true;
+            // doSetBaseConstructionSpeed (the AI's delay between teams): no consumer.
             case "SET_BASE_CONSTRUCTION_SPEED":
                 if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } builder) _recordedSettings[type + "|" + builder.Id.Value] = Int(p, 1);
                 _recordedActions++;

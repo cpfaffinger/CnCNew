@@ -327,6 +327,57 @@ public sealed partial class NavigationGrid
         return reached;
     }
 
+    /// <summary>
+    /// <c>Pathfinder::findSafePath</c>, the goal of it: from the start outward by path cost, the first cell further than <paramref name="radius"/> from both repulsors; the cell furthest
+    /// from them seen so far once the search has looked at <paramref name="maxCells"/> cells; the last cell when the search space is exhausted. Null when nothing can be reached.
+    /// </summary>
+    public PathPoint? FindSafeGoal(Fixed startX, Fixed startY, LocomotorSurfaces surfaces, Fixed firstX, Fixed firstY, Fixed secondX, Fixed secondY, Fixed radius, int maxCells)
+    {
+        var (startCellX, startCellY) = ClampedCell(startX, startY);
+        var start = startCellY * _cellsX + startCellX;
+        var cost = new int[_cellsX * Terrain.CellsY];
+        Array.Fill(cost, int.MaxValue);
+        cost[start] = 0;
+        // By cost, then in the order the cells were found: one total order.
+        var open = new PriorityQueue<int, long>();
+        long found = 0;
+        open.Enqueue(start, found++);
+        var reach = SquaredReach.Of(radius);
+        var farthest = Fixed.Zero;
+        var looked = 0;
+        ReadOnlySpan<(int X, int Y, int Cost)> steps = [(1, 0, 10), (-1, 0, 10), (0, 1, 10), (0, -1, 10), (1, 1, 14), (1, -1, 14), (-1, 1, 14), (-1, -1, 14)];
+        while (open.TryDequeue(out var cell, out var order))
+        {
+            if (order >> 32 != cost[cell]) continue;
+            var (cx, cy) = (cell % _cellsX, cell / _cellsX);
+            var (centreX, centreY) = (TerrainMap.CellCenter(cx), TerrainMap.CellCenter(cy));
+            var firstDx = centreX - firstX;
+            var firstDy = centreY - firstY;
+            var secondDx = centreX - secondX;
+            var secondDy = centreY - secondY;
+            var distance = Fixed.Min(firstDx * firstDx + firstDy * firstDy, secondDx * secondDx + secondDy * secondDy);
+            var safe = !reach.Contains(distance) || (open.Count == 0 && looked > 0);
+            if (distance > farthest)
+            {
+                farthest = distance;
+                if (looked > maxCells) safe = true;
+            }
+            if (safe && cell != start && IsPassable(cx, cy, surfaces)) return new PathPoint(centreX, centreY);
+            foreach (var (dx, dy, step) in steps)
+            {
+                var (nx, ny) = (cx + dx, cy + dy);
+                if (!IsPassable(nx, ny, surfaces)) continue;
+                var next = ny * _cellsX + nx;
+                var total = cost[cell] + step;
+                if (total >= cost[next]) continue;
+                cost[next] = total;
+                looked++;
+                open.Enqueue(next, ((long)total << 32) | (uint)found++);
+            }
+        }
+        return null;
+    }
+
     /// <summary>Whether <paramref name="reached"/> of <see cref="ReachableCells"/> holds the cell of the place; "no goals on cliffs".</summary>
     public bool Reaches(bool[] reached, Fixed x, Fixed y)
     {

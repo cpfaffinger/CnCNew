@@ -2133,6 +2133,7 @@ public sealed partial class SimulationWorld : IWorldServices
         RegisterTurrets(entity);
         RegisterFiringTracker(entity);
         RegisterAcquirer(entity);
+        RegisterRepulsion(entity);
         foreach (var module in entity.ModuleArray)
             if (module is IWorldAttached attached) attached.Attach(this);
         foreach (var node in entity.Updates)
@@ -2179,6 +2180,7 @@ public sealed partial class SimulationWorld : IWorldServices
         RunUpdates(tick);
         if (_pathQueue.Count > 0 || _pathAnswers.Count > 0) ProcessPathQueue();
         StepAcquisition(tick);
+        StepRepulsion(tick);
         StepTurrets(tick);
         StepFiringTrackers(tick);
         DeliverEvents();
@@ -2221,6 +2223,7 @@ public sealed partial class SimulationWorld : IWorldServices
         observer.PhaseEnded(TickPhase.Updates);
         observer.PhaseStarted(TickPhase.Acquisition);
         StepAcquisition(tick);
+        StepRepulsion(tick);
         observer.PhaseEnded(TickPhase.Acquisition);
         observer.PhaseStarted(TickPhase.Turrets);
         StepTurrets(tick);

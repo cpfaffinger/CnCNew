@@ -73,6 +73,8 @@ public static class LocomotorSchema
             Real("PreferredHeight"),
             Real("SpeedLimitZ"),
             Real("CloseEnoughDist"),
+            Real("WanderWidthFactor"),
+            Real("WanderAboutPointRadius"),
             new FieldSchema("Surfaces", FieldType.Flags, Table: NameTablesPhase5.LocomotorSurface, Source: Table),
             new FieldSchema("StickToGround", FieldType.Bool, Source: Table),
             new FieldSchema("LocomotorWorksWhenDead", FieldType.Bool, Source: Table),

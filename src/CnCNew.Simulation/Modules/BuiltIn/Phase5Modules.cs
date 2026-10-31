@@ -811,11 +811,34 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private enum BuilderTask : byte { None, Construct, Repair }
 
     /// <summary><c>AIUpdateInterface::isIdle</c>: no move order, not docking, no builder task and no evacuation waiting (<c>AI_EVACUATE</c>).</summary>
-    public virtual bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning && Entity.Guard is null && Entity.AttackPlace is null;
+    public virtual bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning && Entity.Guard is null && Entity.AttackPlace is null && Entity.Roam is null;
 
     /// <summary>The locomotor the object moves with right now (<c>AIUpdateInterface::getCurLocomotor</c>); aircraft switch between their locomotor sets (<c>JetAIUpdate::chooseLocomotorSet</c>).</summary>
     /// <summary>The locomotor set the object moves with right now (a jet picks its taxi, attack or return set).</summary>
-    protected virtual LocomotorInfo? SelectedLocomotor => Entity.Template.Locomotor;
+    protected virtual LocomotorInfo? SelectedLocomotor
+        => _locomotorSet is not null && Entity.Template.LocomotorSets.TryGetValue(_locomotorSet, out var chosen) ? chosen : Entity.Template.Locomotor;
+
+    /// <summary><see cref="SelectedLocomotor"/> for the world.</summary>
+    internal LocomotorInfo? CurrentLocomotor => SelectedLocomotor;
+
+    // AIUpdateInterface::m_curLocomotorSet when it is not SET_NORMAL: a script's wander or panic, a run from a repulsor.
+    private string? _locomotorSet;
+
+    /// <summary>
+    /// <c>AIUpdateInterface::chooseLocomotorSet</c>: false for a set the object does not have, which keeps the one it has. The locomotors of the new set are new ones, so a script's
+    /// stopping distance stays behind. "It has been moved to the responsibility of the script to reset the locomotor before moving": no order goes back to <c>SET_NORMAL</c> by itself.
+    /// </summary>
+    public bool ChooseLocomotorSet(IWorldServices world, string name)
+    {
+        var chosen = name == "SET_NORMAL" ? null : name;
+        if (chosen == _locomotorSet) return true;
+        if (chosen is not null && !Entity.Template.LocomotorSets.ContainsKey(chosen)) return false;
+        _locomotorSet = chosen;
+        _stoppingDistance = Fixed.Zero;
+        InvalidatePath();
+        world.MarkDirty(Entity);
+        return true;
+    }
 
     /// <summary>The object keeps its move but does not move this tick (<c>setLocomotorGoalNone</c> while a deploying unit packs or unpacks): the move goes on afterwards.</summary>
     protected virtual bool HoldsMovement => false;
@@ -2499,6 +2522,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         writer.Int("nextWake", _nextWake);
         if (_speedCap > Fixed.Zero) writer.Fixed("speedCap", _speedCap);
         if (_stoppingDistance > Fixed.Zero) writer.Fixed("stoppingDistance", _stoppingDistance);
+        if (_locomotorSet is not null) writer.Text("locomotorSet", _locomotorSet);
         writer.Bool("lastCommandFromPlayer", _lastCommandFromPlayer);
         writer.Bool("docking", _dock is not null);
         writer.UInt("enterTarget", _enterTarget.Value);
@@ -2567,6 +2591,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _nextWake = reader.Int("nextWake");
         _speedCap = reader.Has("speedCap") ? reader.Fixed("speedCap") : Fixed.Zero;
         _stoppingDistance = reader.Has("stoppingDistance") ? reader.Fixed("stoppingDistance") : Fixed.Zero;
+        _locomotorSet = reader.Has("locomotorSet") ? reader.Text("locomotorSet") : null;
         _lastCommandFromPlayer = reader.Bool("lastCommandFromPlayer");
         _enterTarget = new EntityId(checked((uint)reader.UInt("enterTarget")));
         var task = reader.Int("task");

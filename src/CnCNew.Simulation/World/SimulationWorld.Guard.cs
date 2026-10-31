@@ -52,6 +52,8 @@ public sealed partial class SimulationWorld
     /// <summary>A new order of the unit ends its guard (<c>AIGuardState::onExit</c>); the attack it runs ends with the order's own <c>EndAttack</c>.</summary>
     public void EndGuard(Entity entity)
     {
+        // Every order that ends a guard replaces a roaming state as well.
+        EndRoam(entity);
         if (entity.Guard is null) return;
         entity.Guard = null;
         MarkDirty(entity);

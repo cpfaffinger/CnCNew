@@ -3136,25 +3136,7 @@
     },
     {
       "category": "deferred-field",
-      "name": "Locomotor/WanderAboutPointRadius",
-      "count": 1,
-      "owners": [
-        "Locomotor"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Locomotor/WanderLengthFactor",
-      "count": 2,
-      "owners": [
-        "Locomotor"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "Locomotor/WanderWidthFactor",
       "count": 2,
       "owners": [
         "Locomotor"

@@ -38,6 +38,12 @@ public enum LocomotorSurfaces
 public sealed record LocomotorInfo(Fixed Speed, Fixed Acceleration, Fixed TurnRatePerTick, Fixed Braking, Fixed MinSpeed, Fixed CloseEnoughDist,
     LocomotorSurfaces Surfaces = LocomotorSurfaces.None)
 {
+    /// <summary><c>LocomotorTemplate::m_wanderWidthFactor</c>: how many cells a wander's goal lies off its waypoint at most; 0 for a locomotor that does not wander (<c>AIWanderState</c>).</summary>
+    public Fixed WanderWidthFactor { get; init; }
+
+    /// <summary><c>LocomotorTemplate::m_wanderAboutPointRadius</c>: how far around a point a unit wanders (<c>AIWanderInPlaceState</c>).</summary>
+    public Fixed WanderAboutPointRadius { get; init; }
+
     /// <summary><c>Locomotor::m_preferredHeight</c>: the flight height above the terrain of an aircraft (0 for ground locomotors).</summary>
     public Fixed PreferredHeight { get; init; }
 
@@ -811,6 +817,8 @@ public sealed class TemplateCatalog
                 // CloseEnoughDist is a plain distance (not a rate): no per-tick conversion. 0 falls back to one tick's travel below.
                 Fixed.FromDecimal(closeEnough), surfaces)
             {
+                WanderWidthFactor = Fixed.FromDecimal(Get("WanderWidthFactor")),
+                WanderAboutPointRadius = Fixed.FromDecimal(Get("WanderAboutPointRadius")),
                 PreferredHeight = Fixed.FromDecimal(Get("PreferredHeight")),
                 SpeedLimitZ = timing.PerSecondToPerTick(Get("SpeedLimitZ")),
                 Lift = timing.PerSecondSquaredToPerTickSquared(lift),

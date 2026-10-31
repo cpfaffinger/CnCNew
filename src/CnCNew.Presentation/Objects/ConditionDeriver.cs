@@ -107,6 +107,7 @@ public static partial class ConditionDeriver
             if (container is not GarrisonContain garrison) set = set.With(ModelConditions.Loaded);
             else if (context.Viewer is not { } viewer || garrison.ApparentOwnerFor(world, viewer) == entity.Owner) set = set.With(ModelConditions.Garrisoned);
         if (entity.CarriedSupplyBoxes() > 0) set = set.With(ModelConditions.Carrying);
+        if (entity.Panicking) set = set.With(ModelConditions.Panicking);
 
         foreach (var module in entity.Modules)
         {

@@ -281,6 +281,15 @@ public sealed class Entity
     /// </summary>
     public int? OwnAttitude { get; internal set; }
 
+    /// <summary>The tick a civilian's <c>REPULSOR</c> status ends (<c>ObjectRepulsorHelper</c>); 0 when it is not timed.</summary>
+    public long RepulsorUntil { get; internal set; }
+
+    /// <summary><c>AI_WANDER_IN_PLACE</c> or <c>AI_MOVE_AWAY_FROM_REPULSORS</c>; null in every other state.</summary>
+    internal RoamState? Roam { get; set; }
+
+    /// <summary><c>MODELCONDITION_PANICKING</c>: the object runs from a repulsor or panics along a path (<c>AIPanicState</c>).</summary>
+    public bool Panicking { get; internal set; }
+
     public const byte ScriptHeld = 1;
     public const byte ScriptDisabled = 2;
 
@@ -427,6 +436,9 @@ public sealed class Entity
         if (Underpowered) writer.Bool("underpowered", true);
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
         if (OwnAttitude is { } attitude) writer.Int("attitude", attitude);
+        if (RepulsorUntil != 0) writer.Int("repulsorUntil", RepulsorUntil);
+        Roam?.Describe(writer);
+        if (Panicking) writer.Bool("panicking", true);
         writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);
         writer.Bool("hasPlayerUpgradeWeapon", HasPlayerUpgradeWeapon);
         writer.Int("constructionWork", ConstructionWork);

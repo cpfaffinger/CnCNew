@@ -140,6 +140,9 @@ public interface IWorldServices
     /// <summary><c>AIUpdateInterface::setAttitude</c>.</summary>
     void SetAttitude(Entity entity, int attitude);
 
+    /// <summary><c>ActiveBody::attemptDamage</c>: a damaged civilian scares others.</summary>
+    void NoteRepulsableDamage(Entity entity);
+
     /// <summary><c>AIUpdateInterface::wakeUpAndAttemptToTarget</c>.</summary>
     void WakeUpAndAttemptToTarget(Entity entity);
 

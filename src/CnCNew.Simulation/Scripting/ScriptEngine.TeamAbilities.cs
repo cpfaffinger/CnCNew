@@ -6,6 +6,7 @@ using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -22,7 +23,6 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<long, int> _relTeamTeam = [];
     private readonly SortedDictionary<long, int> _relTeamPlayer = [];
     private readonly SortedDictionary<long, int> _relPlayerTeam = [];
-    private readonly SortedDictionary<int, int> _teamWander = [];
     private readonly SortedSet<uint> _unmanned = [];
     private readonly SortedDictionary<string, int> _priorityDelta = new(StringComparer.Ordinal);
     private readonly SortedDictionary<uint, string> _buttonHunts = [];
@@ -132,7 +132,7 @@ public sealed partial class ScriptEngine
             case "TEAM_PANIC":
                 if (Has(type, p, 2) && _program.FindPath(Str(p, 1)) is { Waypoints.IsDefaultOrEmpty: false } panicPath)
                     foreach (var team in TeamsNamed(Str(p, 0)))
-                        foreach (var member in LiveMembers(team).ToArray()) Panic(member, panicPath);
+                        foreach (var member in LiveMembers(team).ToArray()) Roam(member, panicPath, true);
                 return true;
             case "NAMED_FACE_WAYPOINT":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } facing && WaypointOrDiagnose(Str(p, 1)) is { } faced) Face(facing, faced.X, faced.Y);
@@ -184,11 +184,23 @@ public sealed partial class ScriptEngine
                             if (AiOf(member) is not null) _world.SetAttitude(member, Int(p, 1));
                 return true;
             // ---- recorded only: no consumer in the simulation
+            // doTeamWander: every member walks the path from its closest waypoint on the wander locomotors.
             case "TEAM_WANDER":
+                if (Has(type, p, 2) && _program.FindPath(Str(p, 1)) is { Waypoints.IsDefaultOrEmpty: false } wanderPath)
+                    foreach (var team in TeamsNamed(Str(p, 0)))
+                        foreach (var member in LiveMembers(team).ToArray()) Roam(member, wanderPath, false);
+                return true;
+            // doTeamWanderInPlace
             case "TEAM_WANDER_IN_PLACE":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0))) _teamWander[team.Id] = type == "TEAM_WANDER" ? 1 : 2;
-                _recordedActions++;
+                    foreach (var team in TeamsNamed(Str(p, 0)))
+                        foreach (var member in LiveMembers(team).ToArray())
+                        {
+                            if (_world.IsAsleep(member) || member.Owner.IsSystem) continue;
+                            _buttonHunts.Remove(member.Id.Value);
+                            _followers.Remove(member.Id.Value);
+                            _world.BeginWanderInPlace(member);
+                        }
                 return true;
             case "PLAYER_SET_RANKLEVELLIMIT":
                 if (Has(type, p, 1)) _world.SetRankLevelLimit(Int(p, 0));
@@ -426,10 +438,13 @@ public sealed partial class ScriptEngine
         Enter(member, tunnel);
     }
 
-    /// <summary><c>doTeamPanic</c>: the member runs the waypoint path from the waypoint closest to it (<c>getClosestWaypointOnPath</c>, then <c>aiPanic</c>); the panic locomotor set is not modelled.</summary>
-    private void Panic(Entity member, ScriptWaypointPath path)
+    /// <summary>
+    /// <c>doTeamWander</c> and <c>doTeamPanic</c>: the member walks the waypoint path from the waypoint closest to it (<c>getClosestWaypointOnPath</c>, then <c>aiWander</c> or <c>aiPanic</c>) on
+    /// its wander or panic locomotors. <c>AIWanderState::onEnter</c>, <c>AIPanicState::onEnter</c>: the first goal lies off the waypoint by a random number of cells.
+    /// </summary>
+    private void Roam(Entity member, ScriptWaypointPath path, bool panic)
     {
-        if (member.Template.Locomotor is null || member.Owner.IsSystem || _world.IsAsleep(member)) return;
+        if (member.Template.Locomotor is null || member.Owner.IsSystem || _world.IsAsleep(member) || AiOf(member) is not { } ai) return;
         var closest = 0;
         var bestDistance = Fixed.MaxValue;
         for (var index = 0; index < path.Waypoints.Length; index++)
@@ -440,8 +455,78 @@ public sealed partial class ScriptEngine
             closest = index;
         }
         _buttonHunts.Remove(member.Id.Value);
-        _followers[member.Id.Value] = new Follower { Entity = member.Id.Value, Path = PathMode + path.Label, Index = closest };
+        ai.ChooseLocomotorSet(_world, panic ? "SET_PANIC" : "SET_WANDER");
+        ai.OrderIdle(_world);
+        var follower = new Follower { Entity = member.Id.Value, Path = (panic ? PanicMode : WanderMode) + path.Label, Index = closest, WaitFrames = RoamLookBase + (int)(member.Id.Value & 7) };
+        _followers[member.Id.Value] = follower;
         _completedPath.Remove(member.Id.Value);
+        _world.SetPanicking(member, panic);
+        GoToRoamingWaypoint(follower, member, ai, path);
+    }
+
+    /// <summary>Ten logic frames of the original, the fixed part of <c>m_waitFrames</c> (<c>AIWanderState::onEnter</c>, <c>AIPanicState::onEnter</c>).</summary>
+    private const int RoamLookBase = 10;
+
+    /// <summary>
+    /// <c>m_groupOffset</c> of <c>AIWanderState</c> and <c>AIPanicState</c>, drawn for every leg from a locomotor with a <c>WanderWidthFactor</c>, and <c>computeGoal</c>: the waypoint and that
+    /// offset, on the map when the waypoint is.
+    /// </summary>
+    private void GoToRoamingWaypoint(Follower follower, Entity entity, AIUpdateInterface ai, ScriptWaypointPath path)
+    {
+        (follower.OffsetX, follower.OffsetY) = (Fixed.Zero, Fixed.Zero);
+        if (ai.CurrentLocomotor is { WanderWidthFactor.Raw: > 0 } locomotor)
+        {
+            var cell = Fixed.FromInt(TerrainMap.CellSize);
+            var delta = (int)Math.Max(1, (locomotor.WanderWidthFactor + Fixed.FromDecimal(0.5m)).Floor());
+            follower.OffsetX = Fixed.FromInt(_world.LogicRandom.Range(-delta, delta)) * cell;
+            follower.OffsetY = Fixed.FromInt(_world.LogicRandom.Range(-delta, delta)) * cell;
+        }
+        var waypoint = path.Waypoints[follower.Index];
+        var (x, y) = _world.ClampedToMap(waypoint.X + follower.OffsetX, waypoint.Y + follower.OffsetY);
+        _world.RoamMove(entity, x, y);
+    }
+
+    /// <summary>
+    /// One update of <c>AIWanderState</c> or <c>AIPanicState</c>: a civilian looks for a repulsor every <c>m_waitFrames</c> and leaves for the state that runs from it; when the move to the
+    /// waypoint has ended the next leg begins. The end of the path is the end of the state (<c>setCompletedWaypoint</c>).
+    /// </summary>
+    private void UpdateRoamingFollower(Follower follower, Entity entity)
+    {
+        var panic = follower.Path.StartsWith(PanicMode, StringComparison.Ordinal);
+        var label = ModeArgument(follower.Path, panic ? PanicMode.Length : WanderMode.Length);
+        if (_program.FindPath(label) is not { Waypoints.IsDefaultOrEmpty: false } path || AiOf(entity) is not { } ai)
+        {
+            _followers.Remove(follower.Entity);
+            return;
+        }
+        if (entity.Template.IsKindOf("CAN_BE_REPULSED"))
+        {
+            follower.Timer--;
+            if (follower.Timer < 0)
+            {
+                follower.Timer = follower.WaitFrames;
+                if (_world.FindClosestRepulsor(entity) is not null)
+                {
+                    _followers.Remove(follower.Entity);
+                    _world.BeginMoveAwayFromRepulsors(entity);
+                    return;
+                }
+            }
+        }
+        if (entity.HasMoveTarget) return;
+        follower.Index++;
+        if (follower.Index >= path.Waypoints.Length)
+        {
+            if (!path.Loops)
+            {
+                _completedPath[follower.Entity] = path.Label;
+                _followers.Remove(follower.Entity);
+                _world.SetPanicking(entity, false);
+                return;
+            }
+            follower.Index = 0;
+        }
+        GoToRoamingWaypoint(follower, entity, ai, path);
     }
 
     /// <summary>
@@ -485,7 +570,6 @@ public sealed partial class ScriptEngine
         DescribeRelations(writer, "relTeamTeam", _relTeamTeam);
         DescribeRelations(writer, "relTeamPlayer", _relTeamPlayer);
         DescribeRelations(writer, "relPlayerTeam", _relPlayerTeam);
-        DescribePairs(writer, "teamWander", _teamWander);
         if (_unmanned.Count > 0) { writer.BeginArray("unmanned"); foreach (var id in _unmanned) { writer.BeginObject(null); writer.UInt("id", id); writer.EndObject(); } writer.EndArray(); }
         if (_priorityDelta.Count > 0)
         {
@@ -507,14 +591,6 @@ public sealed partial class ScriptEngine
             foreach (var (key, relation) in table) { writer.BeginObject(null); writer.Int("first", (int)(key >> 32)); writer.Int("second", (int)(key & 0xFFFFFFFF)); writer.Int("relation", relation); writer.EndObject(); }
             writer.EndArray();
         }
-
-        static void DescribePairs(IStateWriter writer, string name, SortedDictionary<int, int> table)
-        {
-            if (table.Count == 0) return;
-            writer.BeginArray(name);
-            foreach (var (key, value) in table) { writer.BeginObject(null); writer.Int("key", key); writer.Int("value", value); writer.EndObject(); }
-            writer.EndArray();
-        }
     }
 
     private void LoadTeamAbilityState(IStateReader reader)
@@ -522,7 +598,6 @@ public sealed partial class ScriptEngine
         LoadRelations(reader, "relTeamTeam", _relTeamTeam);
         LoadRelations(reader, "relTeamPlayer", _relTeamPlayer);
         LoadRelations(reader, "relPlayerTeam", _relPlayerTeam);
-        LoadPairs(reader, "teamWander", _teamWander);
         _unmanned.Clear();
         if (reader.Has("unmanned")) foreach (var item in reader.Array("unmanned")) _unmanned.Add(checked((uint)item.UInt("id")));
         _priorityDelta.Clear();
@@ -544,12 +619,6 @@ public sealed partial class ScriptEngine
             table.Clear();
             if (reader.Has(name))
                 foreach (var item in reader.Array(name)) table[Key(checked((int)item.Int("first")), checked((int)item.Int("second")))] = checked((int)item.Int("relation"));
-        }
-
-        static void LoadPairs(IStateReader reader, string name, SortedDictionary<int, int> table)
-        {
-            table.Clear();
-            if (reader.Has(name)) foreach (var item in reader.Array(name)) table[checked((int)item.Int("key"))] = checked((int)item.Int("value"));
         }
     }
 }

@@ -81,7 +81,6 @@ static partial class Tests
             Scr.Script("All", [Scr.And(Scr.If("CONDITION_TRUE"))], [
                 Scr.Do("TEAM_FACE_NAMED", Scr.Team("teamA"), Scr.Unit("Beacon")),
                 Scr.Do("PLAYER_SELL_EVERYTHING", Scr.Side(PlayerA)),
-                Scr.Do("NAMED_SET_REPULSOR", Scr.Unit("Walker"), Scr.Int(1)),
                 Scr.Do("SET_BASE_CONSTRUCTION_SPEED", Scr.Side(PlayerA), Scr.Int(30))], oneShot: true),
         ], objects: [Placed("AlphaSoldier", 100m, 200m, "teamA", "Walker"), Placed("AlphaBunker", 300m, 200m, "teamA", "Bunker"), Placed("BetaSoldier", 100m, 400m, "teamB", "Beacon")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
@@ -89,9 +88,8 @@ static partial class Tests
         var walker = NamedIn(session, "Walker")!;
         Check.That((walker.Angle - Fixed.FromDecimal(1.5707963m)).Abs() < Fixed.FromDecimal(0.05m), $"TEAM_FACE_NAMED turns the team toward the object (heading {walker.Angle}).");
         Check.That(NamedIn(session, "Bunker") is { } bunker && bunker.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.Sold), "PLAYER_SELL_EVERYTHING puts the player's structures up for sale.");
-        Check.That(session.Engine.RecordedSetting("NAMED_SET_REPULSOR", walker.Id.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) == 1
-                   && session.Engine.RecordedSetting("SET_BASE_CONSTRUCTION_SPEED", walker.Owner.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) == 30, "The consumer-less settings are recorded.");
-        Check.That(session.Engine.RecordedActions >= 2 && session.Engine.MissingActionHits.Count == 0, "Recorded actions count apart; none is missing: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
+        Check.That(session.Engine.RecordedSetting("SET_BASE_CONSTRUCTION_SPEED", walker.Owner.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) == 30, "The consumer-less settings are recorded.");
+        Check.That(session.Engine.RecordedActions >= 1 && session.Engine.MissingActionHits.Count == 0, "Recorded actions count apart; none is missing: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(restored.StateHash() == session.StateHash() && restored.Engine.RecordedSetting("SET_BASE_CONSTRUCTION_SPEED", walker.Owner.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) == 30, "A restored mission keeps the recorded settings.");
     }

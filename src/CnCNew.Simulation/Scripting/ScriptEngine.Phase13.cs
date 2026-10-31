@@ -131,13 +131,14 @@ public sealed partial class ScriptEngine
             case "TEAM_COLLECT_NEARBY_FOR_TEAM":
             case "DEBUG_CRASH_BOX":
                 return true;
-            // updateNamedSetAttitude: AIUpdateInterface::setAttitude. doSetStoppingDistance: see SetStoppingDistance. Settings without a consumer in the simulation (recorded): doTeamSetRepulsor, doChooseVictimAlwaysUsesNormal, doSetCaveIndex, doPlayerAddSkillPoints
+            // updateNamedSetAttitude: AIUpdateInterface::setAttitude. doSetStoppingDistance: see SetStoppingDistance. Settings without a consumer in the simulation (recorded): doChooseVictimAlwaysUsesNormal, doSetCaveIndex, doPlayerAddSkillPoints
             case "NAMED_SET_ATTITUDE":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } attitudeUnit && AiOf(attitudeUnit) is not null) _world.SetAttitude(attitudeUnit, Int(p, 1));
                 return true;
+            // doTeamSetRepulsor: the REPULSOR status of every member.
             case "TEAM_SET_REPULSOR":
-                if (Has(type, p, 2)) foreach (var team in TeamsNamed(Str(p, 0))) _recordedSettings[type + "|" + team.Id] = Int(p, 1) != 0 ? 1 : 0;
-                _recordedActions++;
+                if (Has(type, p, 2) && FindTeam(Str(p, 0)) is { } repulsors)
+                    foreach (var member in LiveMembers(repulsors).ToArray()) _world.SetRepulsor(member, Int(p, 1) != 0);
                 return true;
             case "SET_STOPPING_DISTANCE":
                 if (Has(type, p, 2) && FindTeam(Str(p, 0)) is { } stoppers)

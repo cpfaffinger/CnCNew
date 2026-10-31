@@ -13,6 +13,8 @@ public sealed partial class ScriptEngine
 {
     private const string HuntMode = "hunt";
     private const string PathMode = "path:";
+    private const string WanderMode = "wander:";
+    private const string PanicMode = "panic:";
     private const string NamedMode = "named:";
     private const string TeamMode = "team:";
     private const string AreaMode = "area:";
@@ -601,6 +603,7 @@ public sealed partial class ScriptEngine
         _buttonHunts.Remove(entity.Id.Value);
         if (entity.Owner.IsSystem) { Diagnose("order for a neutral object"); return; }
         if (entity.Template.Locomotor is null || _world.IsAsleep(entity)) return;
+        AiOf(entity)?.ChooseLocomotorSet(_world, "SET_NORMAL");
         var owner = entity.Owner;
         var id = entity.Id;
         var accepted = attack
@@ -623,6 +626,7 @@ public sealed partial class ScriptEngine
             _buttonHunts.Remove(member.Id.Value);
             if (member.Owner.IsSystem) { Diagnose("order for a neutral object"); continue; }
             if (member.Template.Locomotor is null || _world.IsAsleep(member)) continue;
+            AiOf(member)?.ChooseLocomotorSet(_world, "SET_NORMAL");
             movers.Add((member.Owner, _world.IsComputerPlayer(member.Owner) && _world.AttitudeOf(member) >= Attitude.Alert, member.Id));
         }
         foreach (var order in movers.GroupBy(mover => (mover.Owner, mover.Attack)).OrderBy(order => order.Key.Owner.Value).ThenBy(order => order.Key.Attack))
@@ -673,6 +677,7 @@ public sealed partial class ScriptEngine
     {
         _buttonHunts.Remove(entity.Id.Value);
         if (entity.Template.Locomotor is null || entity.Owner.IsSystem || _world.IsAsleep(entity)) return;
+        AiOf(entity)?.ChooseLocomotorSet(_world, "SET_NORMAL");
         if (AiOf(entity) is { SpeedCap.Raw: > 0 } slowed) slowed.SpeedCap = Fixed.Zero;
         _followers[entity.Id.Value] = new Follower { Entity = entity.Id.Value, Path = mode, Index = 0 };
         _completedPath.Remove(entity.Id.Value);
@@ -697,6 +702,11 @@ public sealed partial class ScriptEngine
             var entity = _world.FindEntity(new EntityId(follower.Entity));
             if (entity is null || entity.DestroyRequested || entity.EffectivelyDead) { _followers.Remove(follower.Entity); continue; }
             var mode = follower.Path;
+            if (mode.StartsWith(WanderMode, StringComparison.Ordinal) || mode.StartsWith(PanicMode, StringComparison.Ordinal))
+            {
+                UpdateRoamingFollower(follower, entity);
+                continue;
+            }
             if (mode.StartsWith(PathMode, StringComparison.Ordinal))
             {
                 if (_program.FindPath(ModeArgument(mode, PathMode.Length)) is not { } path || path.Waypoints.IsDefaultOrEmpty) { Diagnose($"unknown waypoint path '{ModeArgument(mode, PathMode.Length)}'"); _followers.Remove(follower.Entity); continue; }

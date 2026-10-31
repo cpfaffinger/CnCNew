@@ -135,6 +135,9 @@ public sealed partial class ScriptEngine
         public Fixed OffsetY;
         /// <summary>The waypoint (the team's, or the follower's own) the current move order was given for (-1: none yet); a follower goes on when that move has ended (F-78).</summary>
         public int GoalIndex = -1;
+        /// <summary><c>m_timer</c> and <c>m_waitFrames</c> of <c>AIWanderState</c> and <c>AIPanicState</c>: the frames to the next look for a repulsor, and between two looks.</summary>
+        public int Timer;
+        public int WaitFrames;
     }
 
     /// <summary><c>Team::getCurrentWaypoint</c> of the teams that follow a path as a team: the index the first member to arrive advances.</summary>
@@ -1008,6 +1011,13 @@ public sealed partial class ScriptEngine
                 writer.Int("goalIndex", follower.GoalIndex);
             }
             else if (follower.GoalIndex >= 0) writer.Int("goalIndex", follower.GoalIndex);
+            if (follower.WaitFrames != 0)
+            {
+                writer.Fixed("offsetX", follower.OffsetX);
+                writer.Fixed("offsetY", follower.OffsetY);
+                writer.Int("timer", follower.Timer);
+                writer.Int("waitFrames", follower.WaitFrames);
+            }
             writer.EndObject();
         }
         writer.EndArray();
@@ -1185,8 +1195,9 @@ public sealed partial class ScriptEngine
             _followers[checked((uint)item.UInt("entity"))] = new Follower
             {
                 Entity = checked((uint)item.UInt("entity")), Path = item.Text("path"), Index = checked((int)item.Int("index")), AsTeam = item.Has("asTeam"),
-                Team = item.Has("asTeam") ? checked((int)item.Int("team")) : 0, OffsetX = item.Has("asTeam") ? item.Fixed("offsetX") : Fixed.Zero,
-                OffsetY = item.Has("asTeam") ? item.Fixed("offsetY") : Fixed.Zero, GoalIndex = item.Has("goalIndex") ? checked((int)item.Int("goalIndex")) : -1,
+                Team = item.Has("asTeam") ? checked((int)item.Int("team")) : 0, OffsetX = item.Has("offsetX") ? item.Fixed("offsetX") : Fixed.Zero,
+                OffsetY = item.Has("offsetY") ? item.Fixed("offsetY") : Fixed.Zero, GoalIndex = item.Has("goalIndex") ? checked((int)item.Int("goalIndex")) : -1,
+                Timer = item.Has("timer") ? checked((int)item.Int("timer")) : 0, WaitFrames = item.Has("waitFrames") ? checked((int)item.Int("waitFrames")) : 0,
             };
         _lastDamage.Clear();
         foreach (var item in reader.Array("lastDamage")) _lastDamage[checked((uint)item.UInt("victim"))] = new LastDamage(checked((int)item.Int("owner")), item.Text("template"));
