@@ -68,7 +68,7 @@ deliver. The reference sets the bits imperatively in many places; here every bit
 | 56 | ACTIVELY_CONSTRUCTING | approximation: `AIUpdateInterface.IsBuilding` and the object stands still; the simulation does not expose target/approach |
 | 57 | CONSTRUCTION_COMPLETE | not modelled: `ProductionUpdate` sets it when a finished product exits |
 | 58–59 | RADAR_EXTENDING, RADAR_UPGRADED | `RadarUpdate.RadarActive` and `IsExtendComplete` |
-| 60 | PANICKING | not modelled |
+| 60 | PANICKING | `Entity.Panicking` (`SIMULATION-CORE.md` §68.2) |
 | 61, 63 | AFLAME, BURNED | status bits `AFLAME`, `BURNED` |
 | 62 | SMOLDERING | not modelled: intermediate state of `FlammableUpdate` is not public |
 | 64 | DOCKING | `AIUpdateInterface.IsDocking` |

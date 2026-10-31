@@ -57,7 +57,7 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
   collision (toppling, crushing, height death), target acquisition by the units themselves (`AttackMoveCommand`, Phase 17),
   firing stages and `PreAttackDelay` (Phase 16). Documents: `docs/GAME-RULES.md`, `docs/SIMULATION-CORE.md`,
   `docs/SIM-*.md`.
-- **Open (fidelity register):** F-03 to F-09, F-11 to F-14, F-16 to F-19. The three findings of the acceptance pre-check
+- **Open (fidelity register):** F-03 to F-09, F-11 to F-14, F-16 to F-18. The three findings of the acceptance pre-check
   (F-03 to F-05) are the next package (D-12).
 
 ### S1-M5 World, terrain, navigation, vision, construction — done, with named limits
@@ -66,7 +66,7 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
   water, start positions), `NavigationGrid` (deterministic A*, footprints, escape cells, replanning, caches since Phase 19,
   stationary blockers since Phase 15), `VisionMap` (visible/explored per player, sharing, stealth, detectors with height line
   of sight, permanent reveal), construction sites, local avoidance, formations (`asTeam`, Phase 14), bridges (`docs/SIMULATION-CORE.md` §68).
-- **Open:** F-21 (team state machine, "idle"), F-28 (the
+- **Open:** F-28 (the
   pathfinder is simpler than the original's: flat, approximated footprint, budget). Beyond the original (shared group paths,
   cell budgets) is S3-M6.
 
@@ -76,7 +76,7 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
   **2,115 of 2,115** retail objects instantiable; module uses covered 16,558 of 19,553 (the rest are the 22 presentation
   modules, which the simulation never instantiates). Document: `docs/SIMULATION-CORE.md` §30 (tables per module, source
   and approximation).
-- **Open:** the approximations named in §30 are entries of the fidelity register (F-16 to F-19); the 22 presentation
+- **Open:** the approximations named in §30 are entries of the fidelity register (F-16 to F-19, all closed); the 22 presentation
   modules are the client's (S1-M8: model states, F-23).
 
 ### S1-M7 Script VM, missions, campaign, savegames — done headless
@@ -93,7 +93,7 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
   and 15/24. The driver replaces player actions by interventions in the world and verifies the **script chain, not the
   playability**; the commands-only agent (0 world writes) wins `MD_GLA04` and `MD_CHI01`, `MD_CHI02` only after 43 game
   minutes.
-- **Open:** F-10 (`<This Team>` in the mission VM), F-22 (recorded actions without consumer), F-30 (unlocks and profile);
+- **Open:** F-10 (`<This Team>` in the mission VM), F-30 (unlocks and profile);
   playability by a human is S1-M11.
 
 ### S1-M8 World presentation — built, not accepted
@@ -223,11 +223,11 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-16 | `PowerSabotage` has no consumer (no underpowered state) | sabotage crates | Phase 14 | **done** (Phase 40: `8b6a7bb` / `7e235b8`, `0c8d463`, `ba4183c`; §54.10, §54.11) |
 | F-17 | Approximations of target acquisition (`docs/SIMULATION-CORE.md` §33.5) | `AIUpdateInterface::getNextMoodTarget` | Phase 17 | **done** (Phase 51, §65; the named rest in §65.5) |
 | F-18 | Reasons for rejecting a building site are not those of the original | `BuildAssistant::isLocationLegalToBuild` | Phase 17 | **done** (Phase 50, §64.1) |
-| F-19 | Approximations of Phase 14 (`docs/SIMULATION-CORE.md` §30): `DemoTrapUpdate` without weapon-slot command; ferry (`RailedTransport*`) without command type and retail map; weapon choice only `PREFER_MOST_DAMAGE`; collisions only for moving objects | per module | Phase 14 | fix per item or limit with reason |
+| F-19 | Approximations of Phase 14 (`docs/SIMULATION-CORE.md` §30): `DemoTrapUpdate` without weapon-slot command; ferry (`RailedTransport*`) without command type and retail map; weapon choice only `PREFER_MOST_DAMAGE`; collisions only for moving objects | per module | Phase 14 | **done** (§69.6: the trap by its weapon slot, `ExecuteRailedTransportCommand`, new objects and standing contacts collide; `PREFER_LONGEST_RANGE` has no caller in the original. No shipped map holds a ferry) |
 | F-20 | Bridges: objects from the map points, the walkable layer with entry points and ground beneath, the deck's height for everything on it, destruction, scaffolding and the dozer behind the original's cut of the repair, the AI's queue on the real bridge, `W3DBridgeBuffer`'s mesh, the radar's colour | `Bridge*`, `PathfindLayer`, `W3DBridge`, `AIPlayer::updateBridgeRepair` | Phases 6, 14, 23 | **done** (§68; what falls from the air lands under a deck, §68.7) |
-| F-21 | No team state machine of the original ("idle" without AI state; `TEAM_STATE_IS`) | `AIStateMachine`, `TeamState` | Phase 13 | fix |
-| F-22 | 13 script actions are recorded without a consumer (attitude, wander, repulsors, stopping distance, wreck lifetime, the caves, the skill set; rank and bonuses act since Phase 53); 9 missing (used in no campaign map) | `ScriptActions.cpp` | Phase 14 | fix per consumer; the 9 missing stay counted |
-| F-23 | Presentation: 11 model states without simulation behaviour (`EXPLODED_*`, `JAMMED`, `PANICKING`, `RAPPELLING`, `PREORDER`, `DOCKING_BEGINNING` …); no blob or contact shadow; `TransparentWaterDepth` unevaluated; drawable and smudge particles, light pulses and ray effects not drawn; camera-aligned billboards and HLOD aggregates unresolved; `AnimationMode.Manual` frame 0; environment mapping with a fixed view direction | `W3D*Draw`, `W3DWater`, `ParticleSys` | Phases 7, 15 | fix per item; visual acceptance decides the order |
+| F-21 | No team state machine of the original ("idle" without AI state; `TEAM_STATE_IS`) | `AIStateMachine`, `TeamState` | Phase 13 | **done** (§69.5: the original has no such machine, `TEAM_STATE_IS` reads a text; a script's idle is the state of the AI, `SimulationWorld.IsAiIdle`) |
+| F-22 | 13 script actions are recorded without a consumer (attitude, wander, repulsors, stopping distance, wreck lifetime, the caves, the skill set; rank and bonuses act since Phase 53); 9 missing (used in no campaign map) | `ScriptActions.cpp` | Phase 14 | **done** (§69.1 to §69.4). `SET_CAVE_INDEX` finds no cave in any data. What stays: the two settings of `AIPlayer` recorded and six actions on its build list missing in a mission, where the port has no `AIPlayer` (F-91) |
+| F-23 | Presentation: 11 model states without simulation behaviour (`EXPLODED_*`, `JAMMED`, `RAPPELLING`, `PREORDER`, `DOCKING_BEGINNING` …); no blob or contact shadow; `TransparentWaterDepth` unevaluated; drawable and smudge particles, light pulses and ray effects not drawn; camera-aligned billboards and HLOD aggregates unresolved; `AnimationMode.Manual` frame 0; environment mapping with a fixed view direction | `W3D*Draw`, `W3DWater`, `ParticleSys` | Phases 7, 15 | fix per item; visual acceptance decides the order |
 | F-24 | User interface: display mode, language, aspect ratio and text scaling not reachable (**Phase 38:** display mode, the wide-screen view, text size and sound device are reachable through "More options" and applied by the client; language is not - only English is supported); custom maps list empty; "Eigene Mission" without function; generals-powers bar, experience window, diplomacy and chat not loaded; credits end only with Escape; battle scene behind the main menu black; skybox, border shadow and weather of the script outputs missing | `OptionsMenu.wnd`, `MainMenu.cpp`, `InGameUI` | Phases 8, 16, publication | fix per item |
 | F-25 | Sound and mission presentation: 21 of 92 script output types not displayed (image effects, camera paths, speech subtitles); script sounds of the missions; Black Lotus data stream; drawn paratroopers; landing approach arc of the jets | `ScriptActions`, `W3DDisplay`, `JetAIUpdate` | Phase 16 | fix per item |
 | F-26 | The first evaluation offset of delayed AI scripts is derived from the script name, not drawn from the logic random stream (a restored engine must not draw again) | `ScriptEngine::newMap` | Phase 23 | **done** (Phase 53: the offset is drawn from the logic stream, the state keeps it) |
@@ -294,6 +294,8 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-88 | Six pairings of the manifest part between 30 and 60 or 120 Hz since the causes of Phase 51: Armored Fury America against China (frame 29,490), China against GLA (11,939), GLA against America (16,119), Bitter Winter ChinaTank against AirForce (7,095), Death Valley America against China (38,879), ChinaTank against AirForce (13,343) | the frame convention (`docs/SIMULATION-CORE.md` §43) | Phase 51 (rate comparison) | open |
 | F-89 | The modules of an object marked destroyed stopped at once; `GameLogic::update` runs them to the end of the frame, and the patch's starting objects make their builder in that frame | `docs/SIMULATION-CORE.md` §66.1 | Phase 52 | **done** (Phase 52, for `OCLUpdate`; the other modules are not known to need it) |
 | F-90 | A lone weapon outside the primary slot had no slot state | `docs/SIMULATION-CORE.md` §66.1 | Phase 52 | **done** (Phase 52) |
+| F-91 | A mission's computer player has no `AIPlayer`: `ScriptEngineOptions.Ai` is null for every mission, so nothing builds its base from the build list, trains its teams by the team timer or buys its sciences; `SET_BASE_CONSTRUCTION_SPEED`, `PLAYER_SELECT_SKILLSET` stay recorded there and six build actions missing | `AIPlayer::update` | Phase 13 (found with F-22) | open: changes every mission |
+| F-92 | Team actions reach every instance of a prototype without a calling team (`TeamsNamed`), where `getTeamNamed` gives one | `ScriptEngine::getTeamNamed` | Phase 9 (found with F-21) | open |
 | F-33 | Installer: Steam outside the default path untested; export contains the original program files; manifest hash Windows-only; client not self-contained | – | publication | fix in R1 |
 
 ## 4. Human acceptance backlog

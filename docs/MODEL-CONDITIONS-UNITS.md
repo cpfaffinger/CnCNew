@@ -56,7 +56,7 @@ All names are in `ConditionDeriver.ProducedNames` (own lines at the end of the s
 |---|---|---|
 | `EXPLODED_FLAILING`, `EXPLODED_BOUNCING` | `SlowDeathBehavior::beginSlowDeath` (`FlingForce`: impulse, `MODELCONDITION_EXPLODED_FLAILING`) and `update` (FLAILING → BOUNCING on ground contact, `isAboveTerrain`) | `FlingForce`/`FlingPitch` are typed but unused (comment of `SlowDeathBehavior`: a physics impulse on death): the object is never flung into the air, there is no flight and no impact. Prerequisite: fling physics of the `PhysicsBehavior` with height |
 | `JAMMED` | `ActiveBody::onSubdualChange` → `MissileAIUpdate::projectileNowJammed` (missile jammed by ECM with subdual damage ≥ maximum health) | Subdual damage is not modelled (`ActiveBody` reports `NoEffect`); `MissileAIUpdate` knows no jamming |
-| `PANICKING` | `AIPanicState`/`AIMoveAwayFromRepulsorsState` (`AIStates.cpp`) | `TEAM_PANIC` starts an ordinary waypoint follower in the script VM (not distinguishable from `FOLLOW_WAYPOINTS`); the flight from repulsors does not exist. Prerequisite: a separate panic state in the script follower (`MissionSnapshot`) or in the AI |
+| `PANICKING` | `AIPanicState`/`AIMoveAwayFromRepulsorsState` (`AIStates.cpp`) | Set: `Entity.Panicking`, derived in `ConditionDeriver` (`docs/SIMULATION-CORE.md` §68.2). |
 | `RAPPELLING` | `AIRappelState` (Chinook combat drop `AI_RAPPEL_INTO`), also backwards on cliffs (`AIFollowPathState`) | Combat drop and rappelling are not simulated (`ChinookAIUpdate`: "the drop is not simulated"); there is no reverse driving |
 
 `RAISING_FLAG` was listed here until the staged building capture; since then `CaptureConditions` derives it (`docs/SIM-STAGED-CAPTURE.md` §5).

@@ -8,8 +8,8 @@ using CnCNew.Simulation.World;
 namespace CnCNew.Simulation.Scripting;
 
 /// <summary>
-/// Actions added in Phase 13 (<c>docs/SCRIPT-ENGINE.md</c> §5): <c>TEAM_FACE_NAMED</c> and <c>PLAYER_SELL_EVERYTHING</c> are executed; three settings without a consumer in the
-/// simulation are <see cref="ScriptSupport.Recorded"/> (<c>NAMED_SET_STOPPING_DISTANCE</c>, <c>NAMED_SET_REPULSOR</c>, <c>SET_BASE_CONSTRUCTION_SPEED</c>), kept per subject in
+/// Actions added in Phase 13 (<c>docs/SCRIPT-ENGINE.md</c> §5): <c>TEAM_FACE_NAMED</c>, <c>PLAYER_SELL_EVERYTHING</c> and the settings; what a mission's computer player has no
+/// <c>AIPlayer</c> to read is <see cref="ScriptSupport.Recorded"/> (<c>SET_BASE_CONSTRUCTION_SPEED</c>, <c>PLAYER_SELECT_SKILLSET</c>), kept per subject in
 /// <see cref="_recordedSettings"/> (written to the state only when one was set, so existing hashes stay).
 /// </summary>
 public sealed partial class ScriptEngine

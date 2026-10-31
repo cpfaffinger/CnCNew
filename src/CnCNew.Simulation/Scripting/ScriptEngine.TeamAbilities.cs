@@ -15,8 +15,7 @@ namespace CnCNew.Simulation.Scripting;
 /// <summary>
 /// Actions added in Phase 12: per-team and per-player relationship overrides, the team command-button family (<c>TEAM_HUNT_WITH_COMMAND_BUTTON</c>,
 /// <c>TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_*</c>, <c>TEAM_PARTIAL_USE_COMMANDBUTTON</c>), transport loading, tunnel guarding, panic, facing, the stealth switch,
-/// unmanning and production priority. Every function cites its reference in <c>ScriptActions.cpp</c>; what the simulation has no consumer for is
-/// <see cref="ScriptSupport.Recorded"/> (attitude, wander, held, hulk lifetime), never counted as executed.
+/// unmanning, production priority, wandering and the attitude. Every function cites its reference in <c>ScriptActions.cpp</c>.
 /// </summary>
 public sealed partial class ScriptEngine
 {
@@ -183,7 +182,6 @@ public sealed partial class ScriptEngine
                         foreach (var member in LiveMembers(team).ToArray())
                             if (AiOf(member) is not null) _world.SetAttitude(member, Int(p, 1));
                 return true;
-            // ---- recorded only: no consumer in the simulation
             // doTeamWander: every member walks the path from its closest waypoint on the wander locomotors.
             case "TEAM_WANDER":
                 if (Has(type, p, 2) && _program.FindPath(Str(p, 1)) is { Waypoints.IsDefaultOrEmpty: false } wanderPath)

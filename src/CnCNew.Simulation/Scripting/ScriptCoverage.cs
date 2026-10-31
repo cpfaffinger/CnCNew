@@ -9,7 +9,7 @@ public enum ScriptSupport
     /// <summary>The type changes or reads engine, world or team state as the reference does (or as documented in <c>MAP-SCRIPTS.md</c> §8 where the simulation cannot model the reference exactly).</summary>
     Executed,
 
-    /// <summary>The engine keeps the value (saved and hashed) but the simulation has no consumer for it yet (player experience scale, difficulty bonuses): counted separately, never reported as executed or missing.</summary>
+    /// <summary>The engine keeps the value (saved and hashed) but nothing reads it here (settings of an <c>AIPlayer</c> in a mission): counted separately, never reported as executed or missing.</summary>
     Recorded,
 
     /// <summary>

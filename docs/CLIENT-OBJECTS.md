@@ -143,7 +143,7 @@ back faces and missing turrets are superseded by the Phase 15 corrections.
 
 - **Model states not set:** after the additional work of 4 October 2026 the presentation sets 95 of 106 state names (before 52; details and approximations in
   `docs/MODEL-CONDITIONS-BUILDINGS.md`, `docs/MODEL-CONDITIONS-UNITS.md`). Eight remain unset, each because the simulation does not know the behaviour: `EXPLODED_BOUNCING/FLAILING` (nothing is flung away), `JAMMED` (no jammer),
-  `PANICKING`, `RAPPELLING` (no rope descent), `PREORDER` (online profile feature), `DOCKING_BEGINNING` (entry and exit fall into one tick). `PREATTACK_A/B/C` has been set by the simulation since 4 October 2026
+  `RAPPELLING` (no rope descent), `PREORDER` (online profile feature), `DOCKING_BEGINNING` (entry and exit fall into one tick). `PREATTACK_A/B/C` has been set by the simulation since 4 October 2026
   (`PreAttackDelay`, `docs/SIM-FIRING-TRACKER.md`), `RAISING_FLAG` since the staged capture. Doors of factories are an
   approximation (the simulation has no door; the opening begins `DoorOpeningTime` before the appearance of the unit).
 - **Suspension and steering** have been built since 4 October 2026 (`SuspensionTracker`: tilt to the terrain and when accelerating, steering angle, four suspension travels, cabin sway); what is missing is
