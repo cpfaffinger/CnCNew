@@ -1,7 +1,9 @@
 # CnCNew – working instructions for coding agents
 
 Local C#/.NET 10 reimplementation of the SAGE runtime needed for *Command & Conquer: Generals – Zero Hour*
-(Windows client with Stride 4.3 / Direct3D 11). Scope of the first product:
+(Windows client with Stride 4.3 / Direct3D 11). **Since 31 October 2026 (Phase 52) there is one product: the game is the community patch GeneralsGamePatch above the Steam
+installation, every adopted fix and the budgeted movement; the manifests measure this variant, and the original stays only as a switch that tells patch from port
+(`docs/PATCH-LAYER.md`, `--rules original`, `game/original/content`).** Scope of the first product:
 single player (skirmish and campaign) and – since the scope change of 5 October 2026, planned and
 not yet built – multiplayer skirmishes through dedicated servers (`docs/MULTIPLAYER-PLAN.md`). Since
 Phase 23 (8 October 2026) the simulation runs at 60 Hz by default (the rate is a value of the world, 30 and 120 Hz remain supported); the
@@ -91,8 +93,9 @@ Import → runtime content → data models → simulation → presentation. Laye
 ## Local data (never commit)
 
 - `game/` – the developer installation in the repository: the same layout as a user installation (`game/content` =
-  schema 2 runtime content of open files, `game/install.json`, optionally `game/bin`), generated from the English Steam installation
-  (the only supported source version, described in `baselines/steam-master.json`) by `scripts/dev-content.ps1`.
+  schema 2 runtime content of open files, the patch above the game, `game/install.json`, optionally `game/bin`), generated from the English Steam installation
+  (the only supported source version, described in `baselines/steam-master.json`) and the patch (`baselines/patch-master.json`) by `scripts/dev-content.ps1`;
+  beside it `game/original/content`, the game without the patch, for the publication audit and to tell patch from port.
   Users install with `scripts/install.ps1` to `%LOCALAPPDATA%\CnCNew\Game` (`docs/INSTALLATION.md`).
 - `.local/` – other local working data (captures, measurement logs, definition snapshots). The former asset directories
   there (`game-original`, `assets/by-archive`, `content` = schema 1, `phase2-import-a`/`-b`, `manifests`, snapshots) no longer exist.
@@ -215,16 +218,15 @@ pwsh scripts/check-separation.ps1 -Directory <package directory> [-List <file>]
 pwsh scripts/licence-report.ps1 [-Check] [-CollectTo <dir>]
 pwsh scripts/clean-room.ps1 [-OutDir DIR] [-Commit REV] [-GameDir auto|DIR] [-Tier none|gate]
 python scripts/ggc-fix-catalogue.py [--check]
-pwsh scripts/check-patch-layer.ps1 [-PatchContent game/content-patch] [-Seconds 30]
+pwsh scripts/check-patch-layer.ps1 [-Seconds 30]
 dotnet run -c Release --project tools/CnCNew.SimTool -- ai-match game/content --map "<map>" --factions A,B [--tactics balanced|rush|turtle|eco|default,..] [--strength easy|medium|hard,..]
 dotnet run -c Release --project tools/CnCNew.SimTool -- ai-profiles game/content --subject default|rush|turtle|eco|easy|hard --side a|b --out <tsv> [--seeds 4] [--jobs N]
 dotnet run -c Release --project tools/CnCNew.SimTool -- ai-profiles-report <tsv> [<tsv> ..] [--out <report.md>]
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --match "<map>" --content-dir game/content --tactics rush[,..] [--ai builtin --difficulty easy|medium|hard]
-dotnet run --project tools/CnCNew.IniTool -- compat-check game/content-patch baselines/compatibility-patch.json
-dotnet run --project tools/CnCNew.AssetTool -- import-layer auto game/content-patch --patch references/generals-game-patch/Patch104pZH [--patch-source TEXT]
-dotnet run --project tools/CnCNew.AssetTool -- install auto <target>   (also check-install auto: the patcher finds the Steam installation)
-dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match game/content --rules original|fixes|NAME[,NAME...]
-dotnet run --project src/CnCNew.Client.Stride -c Release -- --content-dir game/content [--rules fixes] [--no-log] [--support-bundle FILE] [--crash-test]
+dotnet run --project tools/CnCNew.AssetTool -- install auto <target> [--patch <GameFilesEdited directory>] [--original]   (also check-install auto: the patcher finds the Steam installation)
+dotnet run --project tools/CnCNew.AssetTool -- describe-patch auto references/generals-game-patch/Patch104pZH baselines/patch-master.json --commit <commit>
+dotnet run -c Release --project tools/CnCNew.SimTool -- reference-match game/content [--standing] --rules product|original|fixes|NAME[,NAME...]
+dotnet run --project src/CnCNew.Client.Stride -c Release -- --content-dir game/content [--rules original] [--no-log] [--support-bundle FILE] [--crash-test]
 dotnet run -c Release --project tools/CnCNew.DedicatedServer -- [--support-bundle FILE --config server.json] [--crash-test]
 pwsh scripts/check-net-acceptance.ps1 [-MatchSeconds 120]
 pwsh scripts/check-net-endurance.ps1 [-Minutes 65]

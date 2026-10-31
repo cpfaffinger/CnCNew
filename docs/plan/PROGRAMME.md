@@ -7,6 +7,12 @@ the multiplayer and the register of bottlenecks stay in `docs/MULTIPLAYER-PLAN.m
 measurements of their state and are re-measured before any statement is built on them; the yardstick for results is
 `baselines/reference-manifest.json`, not a number in a text.
 
+**Since 31 October 2026 there is one product** (decisions D-3, D-4, D-32, D-33 in §7, built in Phase 52): the game is the patched variant - GeneralsGamePatch above
+the Steam installation, every adopted fix, the movement profile - and the manifests measure it (`docs/PATCH-LAYER.md`). The original stays beside it only as a switch
+that tells a defect of the patch from one of the port: `game/original/content` and `--rules original`. Where the stage texts below say "the original profile keeps the
+manifest", that is the history of how the work was ordered. A fidelity finding is still read in the original's source: the port's engine stays faithful, the data on top
+of it are the patch's.
+
 The four stage documents carry the milestones, deliverables and what is already done:
 
 | Stage | Document | One sentence |
@@ -263,7 +269,7 @@ the agent on the owner's instruction.
 |---|---|
 | **R1 Port** | A human has worked through the acceptance catalogue and clicked through shell → campaign → mission → save/load → completion and skirmish setup → match → result; every finding is fixed or named as a limit with a reason; the fidelity debt register has no entry without a disposition; the installer was run by a human from a Steam installation through `Start-CnCNew.cmd`; a client package for Windows and the documentation for humans (installation, troubleshooting) exist; tier 4 green at the state of the package. |
 | **R2 Engine** | A human has seen and heard the game at 60 Hz (checklist in `docs/DEMO-FINDINGS.md`); the reference manifest passes identically on a second physical machine with a different CPU; the skirmish savegame works (S2-M7); the performance targets are reached or every rest is named with its cost centre; the formats carry their versions and old states are rejected with a clear message. |
-| **R3 Changes** | Every change is selectable and off in the "original" profile; the original profile passes the unchanged manifest; every profile that touches the simulation has a fingerprint; balance effects are measured by the distribution comparison; a human has accepted each feature in the window. |
+| **R3 Changes** | (Decided otherwise on 31 October 2026: the changes of the rule profile and the patch are the product, the original stays only as a switch.) Every other change is selectable; every profile that touches the simulation has a fingerprint; balance effects are measured by the distribution comparison; a human has accepted each feature in the window. |
 | **R4 Multiplayer** | Phase 29 acceptance by humans (local skirmish over the embedded server, LAN match, internet match with AI slots, disconnect and rejoin, spectators); server package for Windows and Linux; the version and compatibility rule for savegames, replays and protocol from the first release on; Phase 30 clean-room build. |
 
 ## 7. Decision register

@@ -63,6 +63,9 @@ documents, the yardstick for results is `baselines/reference-manifest.json`.
   is, whom the match waits for and until when, who paused, and carries the chat. What a click costs on a line with delay is measured (the marker in the frame
   of the click, the order twice the delay and a tick or two later). **No human has seen or played any of it:** the acceptance was done by programs that stand
   in for a person - scripted clicks through the real client, pinned pictures of every state, a latency measurement.
+- **One product (Phase 52, 31 October 2026):** the game is the patched variant - the community patch GeneralsGamePatch above the Steam installation, every adopted fix
+  of GeneralsGameCode and the budgeted movement. The installer fetches the patch at a recorded commit and checks every file (`docs/PATCH-LAYER.md`); the manifests measure this
+  variant. The paragraphs below that call the original "the default and the yardstick" are the history; the original stays as a switch (`--rules original`, `game/original/content`).
 - **Shippable completion (Phase 30, by machine, on one machine):** a self-contained Windows package of the game (`scripts/package-client.ps1`: client and
   patcher, `Install-CnCNew.cmd` finds the Steam installation by itself), the server packages, a proof that no package holds original data
   (`scripts/check-separation.ps1`), the list of third-party licences (`docs/THIRD-PARTY.md`), crash reports, run logs and support bundles that never leave the
@@ -136,7 +139,7 @@ pwsh scripts/install.ps1                 # optional: -GameDir <Steam installatio
 pwsh scripts/uninstall.ps1               # removes the created game directory again
 ```
 
-`install.ps1` reads the installation without modifying it and creates the new game directory (default
+`install.ps1` reads the installation without modifying it, fetches the community patch once (110 MB, every file checked against its recorded hash) and creates the new game directory (default
 `%LOCALAPPDATA%\CnCNew\Game`). What is checked in the process, how the game is started, options and failure patterns
 are described in [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
