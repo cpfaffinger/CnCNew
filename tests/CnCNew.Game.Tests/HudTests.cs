@@ -351,7 +351,7 @@ internal static class HudTests
         var mapPath = data.Maps.First(path => path.Contains("Alpine Assault", StringComparison.OrdinalIgnoreCase));
         var setup = new MatchSetup(mapPath, data.Factions[0].Faction.Name, [data.Factions[1].Faction.Name], SkirmishMatchOptions.Standard);
         var match = LiveMatch.Create(data, setup, viewport);
-        var controller = new MatchController(match, settings ?? SkinPins.Settings);
+        var controller = new MatchController(match, settings ?? SkinPins.Settings) { StarBlinks = false };
         if (started) Advance(match, controller, (int)match.World.Time.OriginalFrames(4)); // the start object of the patch makes the builder in its third frame
         return (match, controller);
     }

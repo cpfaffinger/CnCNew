@@ -23,6 +23,9 @@ public sealed partial class MatchController
     private int _starRank;
     private int _starPoints;
 
+    /// <summary>The star blinks on the real clock, so a picture pinned at a moment of a match switches it off.</summary>
+    public bool StarBlinks { get; set; } = true;
+
     /// <summary>What the window shows, or null for a player without a general.</summary>
     public GeneralsView? Generals { get; private set; }
 
@@ -86,7 +89,7 @@ public sealed partial class MatchController
     private void RefreshGeneralsWindow()
     {
         if (_scheme is { } scheme)
-            _tree.FindByName("ControlBar.wnd:ButtonGeneral")?.SetEnabledImage0(_starFlash && _clockMs % 1000 >= 500 ? scheme.GeneralImages.Hilited : scheme.GeneralImages.Enabled);
+            _tree.FindByName("ControlBar.wnd:ButtonGeneral")?.SetEnabledImage0(StarBlinks && _starFlash && _clockMs % 1000 >= 500 ? scheme.GeneralImages.Hilited : scheme.GeneralImages.Enabled);
         if (!IsGeneralsWindowOpen || Generals is not { } view) return;
         Slots(GeneralsRank1, view.Rank1);
         Slots(GeneralsRank3, view.Rank3);
