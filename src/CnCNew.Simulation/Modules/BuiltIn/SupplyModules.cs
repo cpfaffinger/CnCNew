@@ -144,7 +144,7 @@ internal struct DozerBoredom
         var reach = SquaredReach.Of(range);
         foreach (var candidate in world.EntitiesOwnedBy(self.Owner).AsSpan())
         {
-            if (candidate == self || !AIUpdateInterface.IsRepairable(candidate)) continue;
+            if (candidate == self || !AIUpdateInterface.IsRepairable(candidate) || FirstHurtInThisFrame(world, candidate)) continue;
             var dx = candidate.X - self.X;
             var dy = candidate.Y - self.Y;
             var distance = dx * dx + dy * dy;
@@ -156,6 +156,15 @@ internal struct DozerBoredom
             }
         }
         return best;
+    }
+
+    /// <summary>
+    /// Above 30 Hz the look stands at the frame's end, for the update of the frame's first tick: what first hurt the structure after that update comes after the look, as it does at 30 Hz (F-85).
+    /// </summary>
+    private static bool FirstHurtInThisFrame(IWorldServices world, Entity candidate)
+    {
+        var perFrame = world.Time.TicksPerOriginalFrame;
+        return perFrame != TickOrder.Next && candidate.LastDamageTick > world.Tick - perFrame && candidate.Body is ActiveBody body && body.PreviousHealth >= body.MaxHealth;
     }
 
     public readonly void Describe(IStateWriter writer)
