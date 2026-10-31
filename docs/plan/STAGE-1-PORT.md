@@ -65,8 +65,8 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
 - **Delivered (30 September 2026 and later; Phases 6, 10, 15):** `MapData` from all 150 maps, `TerrainMap` (cells, heights,
   water, start positions), `NavigationGrid` (deterministic A*, footprints, escape cells, replanning, caches since Phase 19,
   stationary blockers since Phase 15), `VisionMap` (visible/explored per player, sharing, stealth, detectors with height line
-  of sight, permanent reveal), construction sites, local avoidance, formations (`asTeam`, Phase 14), bridge state (Phase 14).
-- **Open:** F-20 (bridge terrain, layers, scaffold, AI bridge repair), F-21 (team state machine, "idle"), F-28 (the
+  of sight, permanent reveal), construction sites, local avoidance, formations (`asTeam`, Phase 14), bridges (`docs/SIMULATION-CORE.md` §68).
+- **Open:** F-21 (team state machine, "idle"), F-28 (the
   pathfinder is simpler than the original's: flat, approximated footprint, budget). Beyond the original (shared group paths,
   cell budgets) is S3-M6.
 
@@ -224,7 +224,7 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-17 | Approximations of target acquisition (`docs/SIMULATION-CORE.md` §33.5) | `AIUpdateInterface::getNextMoodTarget` | Phase 17 | **done** (Phase 51, §65; the named rest in §65.5) |
 | F-18 | Reasons for rejecting a building site are not those of the original | `BuildAssistant::isLocationLegalToBuild` | Phase 17 | **done** (Phase 50, §64.1) |
 | F-19 | Approximations of Phase 14 (`docs/SIMULATION-CORE.md` §30): `DemoTrapUpdate` without weapon-slot command; ferry (`RailedTransport*`) without command type and retail map; weapon choice only `PREFER_MOST_DAMAGE`; collisions only for moving objects | per module | Phase 14 | fix per item or limit with reason |
-| F-20 | Bridges: state only; bridge terrain, layers and scaffold construction missing; AI bridge repair missing | `Bridge*`, `AIPlayer::updateBridgeRepair` | Phases 6, 14, 23 | fix when a map or the AI needs it; otherwise limit |
+| F-20 | Bridges: objects from the map points, the walkable layer with entry points and ground beneath, the deck's height for everything on it, destruction, scaffolding and the dozer behind the original's cut of the repair, the AI's queue on the real bridge, `W3DBridgeBuffer`'s mesh, the radar's colour | `Bridge*`, `PathfindLayer`, `W3DBridge`, `AIPlayer::updateBridgeRepair` | Phases 6, 14, 23 | **done** (§68; what falls from the air lands under a deck, §68.7) |
 | F-21 | No team state machine of the original ("idle" without AI state; `TEAM_STATE_IS`) | `AIStateMachine`, `TeamState` | Phase 13 | fix |
 | F-22 | 13 script actions are recorded without a consumer (attitude, wander, repulsors, stopping distance, wreck lifetime, the caves, the skill set; rank and bonuses act since Phase 53); 9 missing (used in no campaign map) | `ScriptActions.cpp` | Phase 14 | fix per consumer; the 9 missing stay counted |
 | F-23 | Presentation: 11 model states without simulation behaviour (`EXPLODED_*`, `JAMMED`, `PANICKING`, `RAPPELLING`, `PREORDER`, `DOCKING_BEGINNING` …); no blob or contact shadow; `TransparentWaterDepth` unevaluated; drawable and smudge particles, light pulses and ray effects not drawn; camera-aligned billboards and HLOD aggregates unresolved; `AnimationMode.Manual` frame 0; environment mapping with a fixed view direction | `W3D*Draw`, `W3DWater`, `ParticleSys` | Phases 7, 15 | fix per item; visual acceptance decides the order |

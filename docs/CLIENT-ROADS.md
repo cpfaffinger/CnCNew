@@ -22,17 +22,16 @@ and discarded. That has stayed: road points are not scenery objects, they go thr
   (first `POINT1`, then `POINT2`); the order of the file is preserved (`WorldHeightMap.cpp`
   appends objects).
 - **`Roads.ini`**: `Road <Name>` with `Texture`, `RoadWidth` and `RoadWidthInTexture`
-  (`TerrainRoads.cpp`, `m_terrainRoadFieldParseTable`). The data layer still keeps `Road` and `Bridge`
-  as *compatibility blocks* (`baselines/compatibility.json`: `Road` 63, `Bridge` 27, target "phase-specific
-  typed definition compiler") – like `Terrain`/`WaterSet`. There was therefore **no change to the
+  (`TerrainRoads.cpp`, `m_terrainRoadFieldParseTable`). The data layer still keeps `Road`
+  as a *compatibility block* (`baselines/compatibility.json`: `Road` 63, target "phase-specific
+  typed definition compiler") – like `Terrain`/`WaterSet`; `Bridge` is typed (`BridgeSchema`, section "Bridges"). There was therefore **no change to the
   `CnCNew.Data` schema or baseline**: `RoadCatalog.FromDefinitions` reads the three keys strictly through
   `WorldDefinitionReader` (a missing key or a wrong value type throws, nothing falls back to default
   values) and `GameData.MaxRoadSegments`. The order of the templates is that of the declaration
   (`IniSourceLocation`), not the canonical name order of the graph: it determines the ids
   (`TerrainRoadCollection::m_idCounter`, from 1) and thus which road type is drawn first when the
   stacking is equal.
-- **Bridges** (`FLAG_BRIDGE_POINT1/2`, `Bridge` blocks) are models with towers and damage states
-  and are not part of this.
+- **Bridges** (`FLAG_BRIDGE_POINT1/2`, `Bridge` blocks) are models laid along the deck: section "Bridges".
 
 Names are compared as in `TerrainRoadCollection::findRoad` (`AsciiString::operator==`: case-sensitive).
 A road point with an unknown template name is **not** drawn but counted
@@ -179,10 +178,23 @@ human should tick off against the pictures:
   `WWMath` approximations of the original are possible and meaningless for the presentation.
 - **Mitred corners** (`miter`) use infinite line intersections like `LineSegClass::Find_Intersection`;
   almost parallel edges can produce long spikes. In the 150 maps that does not occur (audit limit 300).
-- **Bridges** are not part of this piece, and the simulation does not see roads (no lanes, no terrain change).
+- The simulation does not see roads (no lanes, no terrain change).
+
+## Bridges
+
+`W3DBridgeBuffer` (`docs/SIMULATION-CORE.md` §68 has the simulation's side). `BridgeMeshBuilder` (`CnCNew.Presentation/Terrain/BridgeModel.cs`, no Stride type) is `W3DBridge::load` and `getIndicesNVertices`:
+
+- A model has the sub-objects `BRIDGE_LEFT`, `BRIDGE_SPAN`, `BRIDGE_RIGHT`, the last of a name counting (`Create_Render_Obj`). `BridgeArtLoader` (`CnCNew.Game`) reads them at their rest pose; the left one is the only one a model must have. Without a span, or with sections that do not meet within 5 % of the model's length, the bridge is `FIXED_BRIDGE`: stretched whole.
+- `numSpans = floor((desiredLength - (length - spanLength) + spanLength / 2) / spanLength)`: as many spans as fit, rounded to the nearest; the whole is then stretched along the bridge to end exactly at its 'to' point, while the width is the block's `BridgeScale`. On a slope the model's Z leans back with the deck (`vecZ`).
+- Every vertex is lit once, like the terrain (`TerrainLighting.Shade`, the original's `doTheLight`), and darkened by the fog texture. The material is `detailAlphaShader`: alpha test, depth write, no culling. **Limit:** what passes the original's alpha test is still blended with the texture's alpha; here it is opaque. The cloud pass is not drawn.
+- A bridge has a mesh per damage state, one shown (`ShownState`): a state whose model or texture does not exist keeps what was there, "put the old model back". `Roads.ini` names some textures of damaged states the game does not ship (`CBWBrdgeSt_.tga`); a terrain bridge never gets there, because its object is immortal. A landmark bridge is an object and is drawn with the objects.
+- The radar (`W3DRadar::buildTerrainTexture`): a pixel on a working bridge is no water and has the block's `RadarColor`, shaded by the mean height of the deck's corners. As in the original the radar image is made at the start of a match; a bridge that falls later does not change it.
+
+Seen in one capture of the client on Dark Night by an agent (a road deck with its kerbs over the river); no human has seen a bridge.
 
 ## Tests and tools
 
+- `tests/CnCNew.Presentation.Tests/BridgeMeshTests.cs` (synthetic sections, every number by hand) and `tests/CnCNew.Game.Tests/ModelGeometryTests.cs` (every shipped `Bridge` block with a model).
 - `tests/CnCNew.Presentation.Tests/RoadTests.cs` (synthetic, without original data): catalog, straight segment
   including UV/lighting/height, columns on the hill, 90° curve, mitre, T/H/Y/crossing, alpha join and
   stacking, counting (unknown, duplicate, unpaired, budget), determinism and winding, sampler
