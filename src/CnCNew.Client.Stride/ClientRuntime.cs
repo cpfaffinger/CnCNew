@@ -65,11 +65,25 @@ internal sealed class ClientRuntime : IDisposable
         _shell = shell?.Invoke(_ui);
         _settings = _shell?.Settings ?? settings;
         _audio = new ClientAudio(data, _settings.Audio, audio);
+        _movies = CnCNew.Game.Movies.MovieDirector.For(data, "English", _audio.Game, name => _audio.Game.Director.OnMovieRequested(name));
+        if (_shell is not null) _shell.Movies = _movies;
         _minimapBatch = new SpriteBatch(game.GraphicsDevice);
         _filters = new ScreenFilters(game.GraphicsDevice);
         _ui.CustomDraw = DrawCustom;
         _cursor = new SoftwareCursor(game.GraphicsDevice, data);
     }
+
+    private readonly CnCNew.Game.Movies.MovieDirector _movies;
+    private CnCNew.Game.Movies.MovieIntro? _intro;
+
+    /// <summary>The shell starts with the intro (for a person: not in a smoke test, a scripted run, <c>--play-movie</c> or with <c>--no-intro</c>).</summary>
+    public static bool PlayIntro { get; set; }
+
+    /// <summary>A movie of <c>Video.ini</c> to play alone at the start of the shell (<c>--play-movie NAME</c>), to see or to check one.</summary>
+    public static string? StartMovie { get; set; }
+
+    /// <summary>A movie of <c>Video.ini</c> for the radar's window of the first game this run starts (<c>--play-radar-movie NAME</c>): no shipped map asks for one, so this is how it is seen.</summary>
+    public static string? StartRadarMovie { get; set; }
 
     private readonly SoftwareCursor _cursor;
     private readonly ScreenFilters _filters;
@@ -110,7 +124,10 @@ internal sealed class ClientRuntime : IDisposable
         if (runtime._shell is { } timed) timed.SkirmishMatchSeconds = SkirmishSeconds;
         // --ai original: the skirmish setup offers the three armies of the original and its matches run the original AI (the default is unchanged).
         if (runtime._shell is { } shell) shell.SkirmishAi = skirmishAi;
-        runtime._audio.Game.EnterShell();
+        // The intro comes before the shell (GameClient::update) and with it the menu theme.
+        if (PlayIntro) runtime._intro = new CnCNew.Game.Movies.MovieIntro(runtime._movies);
+        else runtime._audio.Game.EnterShell();
+        if (StartMovie is { } movie) runtime._movies.PlayFullScreen(movie, modal: true);
         return runtime;
     }
 
@@ -599,6 +616,7 @@ internal sealed class ClientRuntime : IDisposable
             events.Add(new CnCNew.Presentation.Input.MouseMoveEvent(_clockMs, staged));
             _pointer = staged;
         }
+        if (UpdateMovies(events, seconds)) return;
         // Scripted input enters exactly where the device's does, so it meets the same HUD layout, text measure and update/draw order.
         if (_script is not null && _running is not null) events.AddRange(_script.EventsFor(_frame, _clockMs));
         if (_running is not null) events.AddRange(_scriptMatchEvents);
@@ -682,6 +700,39 @@ internal sealed class ClientRuntime : IDisposable
     }
 
     /// <summary>
+    /// The movies run on the real clock whatever else this frame does. The intro and a modal movie stand alone: nothing under them runs or takes input, and the frame ends here. Escape,
+    /// when it comes up, ends a full-screen movie (<c>WindowXlat</c>), and does not reach what lies under it.
+    /// </summary>
+    private bool UpdateMovies(List<CnCNew.Presentation.Input.InputEvent> events, double seconds)
+    {
+        _movies.Update(seconds);
+        var escape = events.Any(IsEscapeUp);
+        if (_intro is { } intro)
+        {
+            if (escape) intro.Skip();
+            intro.Update(seconds);
+            if (intro.IsDone)
+            {
+                _intro = null;
+                _audio.Game.EnterShell();
+            }
+            _audio.Update(seconds);
+            return true;
+        }
+        if (_movies.FullScreen is null) return false;
+        if (escape) _movies.StopFullScreen();
+        if (_movies.FullScreenIsModal)
+        {
+            _audio.Update(seconds);
+            return true;
+        }
+        events.RemoveAll(inputEvent => inputEvent is CnCNew.Presentation.Input.KeyEvent { Key: CnCNew.Presentation.Input.KeyCode.Escape });
+        return false;
+    }
+
+    private static bool IsEscapeUp(CnCNew.Presentation.Input.InputEvent inputEvent) => inputEvent is CnCNew.Presentation.Input.KeyEvent { IsDown: false, Key: CnCNew.Presentation.Input.KeyCode.Escape };
+
+    /// <summary>
     /// Behind the shared load screen: one stage of building the match per frame, so the screen is drawn and the connection moved between them. When the server lets
     /// the match begin the world takes the screen; a match that cannot be built here goes back to the shell with its reason.
     /// </summary>
@@ -722,7 +773,7 @@ internal sealed class ClientRuntime : IDisposable
     }
 
     /// <summary>Closes an audio capture and returns the audio report of the run (output, sources, mixer, everything that could not be played) for the console; call at exit.</summary>
-    public IReadOnlyList<string> FinishAudio() => _audio.Finish();
+    public IReadOnlyList<string> FinishAudio() => [.._movies.Report(), .._audio.Finish()];
 
     private void Carry(ShellOutput output)
     {
@@ -766,6 +817,9 @@ internal sealed class ClientRuntime : IDisposable
                 _running = Start(live, mission);
                 break;
             }
+            case StopMusicOutput:
+                _audio.Game.Director.StopMusic();
+                break;
             case ExitRequestedOutput:
                 ExitRequested = true;
                 break;
@@ -848,7 +902,16 @@ internal sealed class ClientRuntime : IDisposable
         }
         _audio.Game.Attach(game, running.Hud);
         // The mission scripts' speech, sounds, music and volumes go to the same director as everything else.
-        if (game is LiveMission scripted) scripted.Director.AudioControl = _audio.Game;
+        if (game is LiveMission scripted)
+        {
+            scripted.Director.AudioControl = _audio.Game;
+            scripted.Director.Movies = (name, radar) => (radar ? _movies.PlayRadar(name) : _movies.PlayFullScreen(name, modal: false))?.DurationSeconds;
+        }
+        if (StartRadarMovie is { } radarMovie)
+        {
+            StartRadarMovie = null;
+            _movies.PlayRadar(radarMovie);
+        }
         return running;
     }
 
@@ -920,6 +983,7 @@ internal sealed class ClientRuntime : IDisposable
         _game.SceneSystem.SceneInstance = null;
         _game.SceneSystem.GraphicsCompositor = null;
         running.Dispose();
+        _movies.StopAll();
         _audio.Game.EnterShell();
     }
 
@@ -930,6 +994,14 @@ internal sealed class ClientRuntime : IDisposable
     /// </summary>
     private void DrawCustom(GraphicsContext context, UiCustomDraw draw)
     {
+        // A movie for the radar takes its window, whether or not the player has a radar (W3DLeftHUDDraw).
+        if (draw.Callback == "W3DLeftHUDDraw" && _movies.Radar is { } radar)
+        {
+            _minimapBatch.Begin(context, SpriteSortMode.Deferred, BlendStates.Opaque, _game.GraphicsDevice.SamplerStates.LinearClamp, DepthStencilStates.None);
+            _minimapBatch.Draw(_ui.VideoTexture(radar), new global::Stride.Core.Mathematics.RectangleF(draw.Rect.X, draw.Rect.Y, draw.Rect.Width, draw.Rect.Height), global::Stride.Core.Mathematics.Color.White);
+            _minimapBatch.End();
+            return;
+        }
         // W3DLeftHUDDraw draws the radar only while it is on (forced, or not hidden and the viewer has one); a spectator's minimap is its own.
         if (draw.Callback != "W3DLeftHUDDraw" || _running is not { } running || (running.Spectator is null && !running.Host.Match.RadarOn)) return;
         var image = running.Host.Match.Minimap;
@@ -947,18 +1019,32 @@ internal sealed class ClientRuntime : IDisposable
         var back = device.Presenter.BackBuffer;
         var commandList = context.CommandList;
         commandList.SetRenderTargetAndViewport(null, back);
-        if (_running is null) commandList.Clear(back, global::Stride.Core.Mathematics.Color.Black);
+        var alone = _intro is not null || _movies.FullScreenIsModal;
+        if (_running is null || alone) commandList.Clear(back, global::Stride.Core.Mathematics.Color.Black);
         // The mission scripts' screen filters (grey-scale, motion blur) go over the finished world and under the HUD. Asking for them is what makes the director count them as displayed.
         if (_running?.Host.Match is LiveMission filtered && filtered.Director.PostEffects is { Any: true } effects) _filters.Apply(context, back, effects);
-        var list = _running is { } running ? running.BuildDrawList(back.Width, back.Height) : _shell?.BuildDrawList();
+        var list = alone ? null : _running is { } running ? running.BuildDrawList(back.Width, back.Height) : _shell?.BuildDrawList();
         _ui.Begin(context, back.Width, back.Height);
         if (list is not null)
             foreach (var command in list.Commands) _ui.Execute(command);
         if (Caption is { Length: > 0 } caption) DrawCaption(caption, back.Width);
         // The cursor lies on top of everything: the shell and the in-game menu show the arrow, a running game its context cursor.
         if (_pointer is { } pointer) _cursor.Draw(_ui, _running is { Spectator: null } playing ? playing.Hud.Cursor : CursorState.Arrow, pointer, _clockMs);
+        if (_movies.FullScreen is { } movie) _ui.DrawVideo(movie, FullScreenPlace(movie, back.Width, back.Height));
         _ui.End();
         _netStats?.FrameDrawn(_running?.Host.Match.Frame);
+    }
+
+    /// <summary>A movie keeps its aspect and fills the screen's height or width (<c>W3DDisplay::drawScaledVideoBuffer</c>).</summary>
+    private static CnCNew.Ui.Layout.UiRect FullScreenPlace(CnCNew.Game.Movies.MovieClip movie, int width, int height)
+    {
+        if (width * movie.Height >= height * movie.Width)
+        {
+            var scaled = movie.Width * height / movie.Height;
+            return new CnCNew.Ui.Layout.UiRect((width - scaled) / 2, 0, scaled, height);
+        }
+        var tall = movie.Height * width / movie.Width;
+        return new CnCNew.Ui.Layout.UiRect(0, (height - tall) / 2, width, tall);
     }
 
     public void Dispose()
@@ -968,6 +1054,7 @@ internal sealed class ClientRuntime : IDisposable
         _shell?.Shutdown();
         _running?.Dispose();
         _running = null;
+        _movies.StopAll();
         _audio.Dispose();
         _cursor.Dispose();
         _filters.Dispose();

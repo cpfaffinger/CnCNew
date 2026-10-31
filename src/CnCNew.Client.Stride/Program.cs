@@ -68,6 +68,10 @@ if (joinServer is not null)
 // without a port means (27960). --use-player-key: state the player's key (anonymous without it). --net-match-seconds N: a host of this game sets matches of that length (a check).
 // --shell-script FILE [--shell-var NAME=VALUE ...] [--shell-seconds N]: a person at the menus as a file (CnCNew.Game.Shell.ShellScript); the run ends when the script
 // is through (exit code 0), a step failed or the N seconds of real time are over (exit code 1). The device's mouse and keyboard are ignored while a script runs.
+// The intro plays at the start of the game for a person; --no-intro leaves it out, as the original's -nologo does, and a check or a scripted person never sees it.
+CnCNew.Client.Stride.ClientRuntime.PlayIntro = !smokeTest && GetArgument(args, "--shell-script") is null && GetArgument(args, "--play-movie") is null && !args.Contains("--no-intro", StringComparer.OrdinalIgnoreCase);
+CnCNew.Client.Stride.ClientRuntime.StartMovie = GetArgument(args, "--play-movie");
+CnCNew.Client.Stride.ClientRuntime.StartRadarMovie = GetArgument(args, "--play-radar-movie");
 var shellScriptPath = GetArgument(args, "--shell-script");
 if (shellScriptPath is not null && (matchMap is not null || missionMap is not null || smokeTest)) throw new ArgumentException("--shell-script drives the menus: it excludes --match, --mission, --scenario, --join and --smoke-test.");
 var shellScript = shellScriptPath is null ? null : CnCNew.Game.Shell.ShellScript.Load(shellScriptPath);
