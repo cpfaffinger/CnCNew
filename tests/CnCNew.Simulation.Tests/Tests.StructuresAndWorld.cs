@@ -80,8 +80,8 @@ static partial class Tests
         Object SwDebris
           KindOf = NONE
           Body = ActiveBody Body01
-            MaxHealth = 10.0
-            InitialHealth = 10.0
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
           End
           Behavior = LifetimeUpdate Life01
             MinLifetime = 6000
@@ -991,11 +991,11 @@ static partial class Tests
         var ally = sw.Spawn("SwWalker", 3, 300, 200);
         sw.World.ResolveFootprintCollisions(ally, Fixed.Zero, Fixed.Zero);
         Check.That(module.VirtualMinesRemaining == 4, "An ally does not set the mine off (DetonatedBy = ENEMIES NEUTRAL).");
+        // PartitionData::allocCoiArray: a new object looks at what it stands on (F-19), so appearing on the mine is touching it.
         var enemy = sw.Spawn("SwWalker", 2, 306, 200);
-        var health = enemy.Body!.Health;
         sw.World.ResolveFootprintCollisions(enemy, Fixed.Zero, Fixed.Zero);
         Check.That(module.VirtualMinesRemaining == 3, "An enemy sets off one virtual mine.");
-        Check.That(enemy.Body.Health < health, "The mine's weapon hurt it.");
+        Check.That(enemy.Body!.Health < enemy.Body.MaxHealth, "The mine's weapon hurt it.");
         Check.That(mine.Body!.Health == Fixed.FromInt(75), $"The mine's health fell to the share of its remaining virtual mines ({mine.Body.Health}).");
         sw.World.ResolveFootprintCollisions(enemy, Fixed.Zero, Fixed.Zero);
         Check.That(module.VirtualMinesRemaining == 3, "The same unit must move before it sets off the next one.");

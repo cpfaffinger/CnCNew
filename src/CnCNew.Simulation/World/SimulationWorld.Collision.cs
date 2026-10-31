@@ -399,18 +399,55 @@ public sealed partial class SimulationWorld
     /// </summary>
     private void DeliverCollisions(Entity mover)
     {
+        var touched = false;
         if (mover.CollideModules.Length > 0)
             foreach (var other in _entities)
             {
                 if (other.Id == mover.Id || !CanCollide(other) || !FootprintsOverlap(mover, other)) continue;
+                touched = true;
                 CallCollide(mover, other);
             }
         for (var index = 0; index < _collidables.Count; index++)
         {
             var holder = _collidables[index];
             if (holder.Id == mover.Id || !CanCollide(holder) || !CanCollide(mover) || !FootprintsOverlap(mover, holder)) continue;
+            touched = true;
             CallCollide(holder, mover);
         }
+        // PartitionContactList::processContactList: "re-dirtying collision": what touched something is looked at again in the next frame, whether it moves or not.
+        if (touched && !mover.Template.IsKindOf("IMMOBILE")) _contacts.Add(mover.Id.Value);
+    }
+
+    // The objects whose last look found something they touch and that are looked at again, by ascending id; none in a world where nothing touches.
+    private readonly SortedSet<uint> _contacts = [];
+    private readonly List<uint> _contactScratch = [];
+
+    /// <summary><c>PartitionManager::update</c> for what stands: a mover looks at its contacts with its step (<see cref="ResolveFootprintCollisions"/>), a standing object here, once per frame.</summary>
+    private void StepContacts(long tick)
+    {
+        if (_contacts.Count == 0) return;
+        _contactScratch.Clear();
+        _contactScratch.AddRange(_contacts);
+        foreach (var id in _contactScratch)
+        {
+            if (!_entities.TryGetValue(id, out var entity) || entity.DestroyRequested || entity.EffectivelyDead || entity.ContainedBy.IsValid)
+            {
+                _contacts.Remove(id);
+                continue;
+            }
+            if (!IsFirstTickOfFrame(entity, tick) || entity.HasMoveTarget) continue;
+            _contacts.Remove(id);
+            DeliverCollisions(entity);
+        }
+    }
+
+    /// <summary>
+    /// <c>PartitionData::allocCoiArray</c> makes a new object dirty: its first partition update looks at what it stands on, unless it is immobile. Projectiles collide by their own flight here.
+    /// </summary>
+    private void CollideWhenCreated(Entity entity)
+    {
+        if (!entity.Registered || !CanCollide(entity) || entity.Template.IsKindOf("IMMOBILE") || entity.Template.IsKindOf("PROJECTILE")) return;
+        DeliverCollisions(entity);
     }
 
     private static bool CanCollide(Entity entity) => !entity.DestroyRequested && !entity.ContainedBy.IsValid && !entity.HasStatus(NoCollisionsBit);

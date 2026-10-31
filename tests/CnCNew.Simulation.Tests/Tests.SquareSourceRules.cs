@@ -50,6 +50,7 @@ static partial class Tests
         new("Simulation/Modules/BuiltIn/FlightModules.cs", RuleSelfProduct, "Fixed.Sqrt(Fixed.One - dot * dot)", "the cosine between two unit vectors, clamped to ±0.99999 the line before"),
         new("Simulation/Modules/BuiltIn/JetAIUpdate.cs", RuleSelfProduct, "parking.Data.ApproachHeight * ratio * ratio", "a fraction in [0, 1]"),
         // -- whole numbers, not fixed-point values
+        new("Simulation/Scripting/ScriptEngine.ValueActions.cs", RuleSelfProduct, "if (dx * dx + dy * dy > radius * radius", "cells of the partition grid, integers"),
         new("Simulation/Terrain/VisionMap.cs", RuleSelfProduct, "private static long SquaredRadius(long reach)", "the saturating square of the vision circle test itself (machine words at 16 fraction bits)"),
         new("Simulation/Time/SimulationTime.cs", RuleSelfProduct, "public Fixed PerSecondSquaredToPerTickSquared(decimal unitsPerSecondSquared)", "ticks per second, an integer"),
         new("Simulation/Time/SimulationTime.cs", RuleSelfProduct, "public Fixed PerOriginalFrameSquaredToPerTickSquared(decimal valuePerFrameSquared)", "ticks per original frame, an integer"),

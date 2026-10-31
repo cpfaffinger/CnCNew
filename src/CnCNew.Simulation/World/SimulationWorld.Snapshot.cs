@@ -39,6 +39,8 @@ public sealed partial class SimulationWorld
         _tick = state.Int("tick");
         _rankLevelLimit = state.Has("rankLevelLimit") ? checked((int)state.Int("rankLevelLimit")) : DefaultRankLevelLimit;
         HulkLifetimeOverrideTicks = state.Has("hulkLifetimeOverride") ? state.Int("hulkLifetimeOverride") : -1;
+        _contacts.Clear();
+        if (state.Has("contacts")) foreach (var item in state.Array("contacts")) _contacts.Add(checked((uint)item.UInt("id")));
         _holesRebuild = state.Has("holesRebuild") && state.Bool("holesRebuild");
         LoadSoloBonus(state);
         if (_tick < 0) throw new InvalidDataException("Negative tick in snapshot.");

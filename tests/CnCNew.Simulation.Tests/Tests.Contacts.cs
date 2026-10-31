@@ -1,3 +1,4 @@
+using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Testing;
@@ -51,23 +52,22 @@ static partial class Tests
     {
         foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
         {
-            var fixture = new SyntheticFixture(rate, files: new Dictionary<string, string>(AttitudeFiles().Concat(SkirmishFiles()).ToDictionary(pair => pair.Key, pair => pair.Value)) { ["Data/INI/Object/ContactFixture.ini"] = ContactFixtureIni });
+            var fixture = new SyntheticFixture(rate, files: new Dictionary<string, string>(RoamFiles().Concat(SkirmishFiles()).ToDictionary(pair => pair.Key, pair => pair.Value)) { ["Data/INI/Object/ContactFixture.ini"] = ContactFixtureIni });
             var terrain = TerrainMap.Build(SyntheticMaps.Build(60, 60, 1, (_, _) => 0), "contacts");
             var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
             var feeder = new Feeder(world);
-            Check.That(feeder.Spawn(1, "ContactPool", owner: 2, x: 300, y: 300).Accepted && feeder.Spawn(2, "MoodGunner", owner: 1, x: 200, y: 300).Accepted, $"{rate}: pool and walker spawn.");
+            Check.That(feeder.Spawn(2, "ContactPool", owner: 2, x: 300, y: 300).Accepted, $"{rate}: the pool spawns.");
             world.Step();
-            var walker = world.Entities.Single(entity => entity.Template.Name == "MoodGunner");
-            Check.That(feeder.Move(3, walker.Id.Value, 300, 300).Accepted, $"{rate}: the walker is ordered.");
-            for (var step = 0; step < world.Frames(300) && (walker.HasMoveTarget || walker.Speed > Fixed.Zero); step++) world.Step();
+            Check.That(feeder.Spawn(1, "Bystander", owner: 1, x: 310, y: 300).Accepted, $"{rate}: a unit spawns in the pool.");
             for (var step = 0; step < world.Frames(30); step++) world.Step();
-            Check.That(!walker.HasMoveTarget, $"{rate}: the walker stands in the pool.");
+            var walker = world.Entities.Single(entity => entity.Template.Name == "Bystander");
+            Check.That(!walker.HasMoveTarget, $"{rate}: the unit stands.");
             var before = walker.Body!.Health;
-            Check.That(before < walker.Body.MaxHealth, $"{rate}: walking in, it was burnt.");
+            Check.That(before < walker.Body.MaxHealth, $"{rate}: appearing there, it was burnt.");
             for (var step = 0; step < world.Frames(30); step++) world.Step();
             var burnt = before - walker.Body.Health;
             Check.That(burnt >= Fixed.FromInt(25) && burnt <= Fixed.FromInt(35), $"{rate}: a standing object goes on being touched, once per frame ({burnt} in 30 frames).");
-            var restored = WorldSnapshot(world, fixture, terrain);
+            var restored = RestoredCopy(world, fixture, terrain);
             Check.That(restored.StateHash == world.StateHash, $"{rate}: a restored world matches.");
             for (var step = 0; step < world.Frames(5); step++)
             {
@@ -78,15 +78,15 @@ static partial class Tests
 
             var second = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 3, CombatPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint, terrain.Fingerprint), fixture.Templates, terrain);
             var feeder2 = new Feeder(second);
-            Check.That(feeder2.Spawn(1, "MoodGunner", owner: 1, x: 200, y: 300).Accepted, $"{rate}: a unit stands.");
+            Check.That(feeder2.Spawn(1, "Bystander", owner: 1, x: 200, y: 300).Accepted, $"{rate}: a unit stands.");
             for (var step = 0; step < second.Frames(5); step++) second.Step();
-            var standing = second.Entities.Single(entity => entity.Template.Name == "MoodGunner");
+            var standing = second.Entities.Single(entity => entity.Template.Name == "Bystander");
             Check.That(feeder2.Spawn(2, "ContactDrop", owner: 2, x: 200, y: 300).Accepted, $"{rate}: something appears on it.");
             for (var step = 0; step < second.Frames(5); step++) second.Step();
             Check.That(standing.Body!.Health < standing.Body.MaxHealth, $"{rate}: what appears on a standing object touches it.");
         }
     }
 
-    private static SimulationWorld WorldSnapshot(SimulationWorld world, SyntheticFixture fixture, TerrainMap terrain)
+    private static SimulationWorld RestoredCopy(SimulationWorld world, SyntheticFixture fixture, TerrainMap terrain)
         => CnCNew.Simulation.Snapshots.WorldSnapshot.Restore(CnCNew.Simulation.Snapshots.WorldSnapshot.Write(world), fixture.Templates, fixture.Fingerprint, terrain);
 }

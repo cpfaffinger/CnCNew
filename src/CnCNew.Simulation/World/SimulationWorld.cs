@@ -1870,7 +1870,11 @@ public sealed partial class SimulationWorld : IWorldServices
         foreach (var pending in batch)
         {
             if (pending.NotBefore > _tick) _spawnQueue.Insert(held++, pending);
-            else SpawnEntity(pending);
+            else
+            {
+                var created = SpawnEntity(pending);
+                if (endOfTick) CollideWhenCreated(created);
+            }
         }
         // "The next tick" is the next logic frame of the original (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 7): above 30 Hz an object requested while the spawn phase
         // creates another appears one frame after it, not one tick. At 30 Hz nothing is marked (and nothing new is written to a snapshot).
@@ -2181,6 +2185,7 @@ public sealed partial class SimulationWorld : IWorldServices
         if (_pathQueue.Count > 0 || _pathAnswers.Count > 0) ProcessPathQueue();
         StepAcquisition(tick);
         StepRepulsion(tick);
+        StepContacts(tick);
         StepTurrets(tick);
         StepFiringTrackers(tick);
         DeliverEvents();
@@ -2224,6 +2229,7 @@ public sealed partial class SimulationWorld : IWorldServices
         observer.PhaseStarted(TickPhase.Acquisition);
         StepAcquisition(tick);
         StepRepulsion(tick);
+        StepContacts(tick);
         observer.PhaseEnded(TickPhase.Acquisition);
         observer.PhaseStarted(TickPhase.Turrets);
         StepTurrets(tick);
@@ -2397,6 +2403,17 @@ public sealed partial class SimulationWorld : IWorldServices
         DescribeBridges(writer);
         if (_rankLevelLimit != DefaultRankLevelLimit) writer.Int("rankLevelLimit", _rankLevelLimit);
         if (HulkLifetimeOverrideTicks != -1) writer.Int("hulkLifetimeOverride", HulkLifetimeOverrideTicks);
+        if (_contacts.Count > 0)
+        {
+            writer.BeginArray("contacts");
+            foreach (var id in _contacts)
+            {
+                writer.BeginObject(null);
+                writer.UInt("id", id);
+                writer.EndObject();
+            }
+            writer.EndArray();
+        }
         if (_holesRebuild) writer.Bool("holesRebuild", true);
         DescribeSoloBonus(writer);
         Ids.Describe(writer);
