@@ -4447,3 +4447,45 @@ Against the manifest of Phase 51, on other data and other rules: 46 of the 50 ru
 ### 66.6 The rate-equivalence suite
 
 The suite measures the product. Three measurements of the suite were wrong on the patched data and are corrected, without touching a tolerance: a missile that dies without an impact event is read where its frame ends, and the victim where the flight ended, not after the blast has thrown it; a structure takes its subdual armour with an upgrade it grants itself in its first update, so a weapon case steps one frame before it begins. Three cases part between the rates under the budgeted movement and are named in `KnownMovementRateCases`, which fails when one of them stops parting: `Boss_InfantryAngryMobNexus` (known since Phase 34) and two AI pairings (F-88). Under `--rules fixes` the suite stands at 0 / 0.
+
+## 67. Phase 53: the decisions that are a default, the rank, the solo bonuses
+
+**The defaults the owner chose on 31 October 2026.** The server holds a seat five minutes, sends a watcher the match two minutes later, lets late watchers in, checks the hash every fourth tick and sets no limit to a match (D-19, D-23, D-26; a harness of `NetTool` asks for the old values by name, its measurements are not about these rules). The client plays a match of a human without a time limit (D-8, `SkirmishMatchOptions.NoTimeLimit`), states a player key only when asked to (D-25, `--use-player-key`, `--player-key FILE`), tells the sender of a line to the allies from a seat in no team that nobody reads it (D-30), draws the modern skin on a first start (D-21; a settings file that names a skin keeps it, a file of schema 1 or 2 keeps the original it played) and offers 60 and 120 Hz in "More options" (D-22, settings schema 3). The built-in AI reserves a GLA worker it sent to look for 60 s (D-34, variant B of `docs/SKIRMISH-AI.md` §7a).
+
+### 67.1 The rank of a general (D-15)
+
+The stand-in, a science point every 90 s, is gone from the standard match; the option stays, at 0. `Player::addSkillPoints`, `setRankLevel` and `resetRank` are in `SimulationWorld.Rank.cs`, `Rank.ini` is typed (`RankCatalog`, `RankDefinition`; the compatibility baseline loses its entry and the three solo health keys, 670 entries):
+
+- A player of a faction begins at level 1 with the intrinsic sciences and purchase points of its `PlayerTemplate` and what level 1 grants. A player without a faction has no rank.
+- A kill gives the killer's player `SkillPointValue` of the victim's veterancy level, or its `ExperienceValue` where the data write none (`getSkillPointValue`, `USE_EXP_VALUE_FOR_SKILL_VALUE`; the shipped data write none). Nothing for something under construction, as for experience; and nothing at all for a victim of a side that is not playable (`Object::scoreTheKill`: that return stands before the experience, and the port lacked it).
+- A special ability gives `SkillPointsForTriggering`, or `AwardXPForTriggering` where that is unset, to the player (`triggerAbilityEffect`).
+- The points are scaled by the player's modifier and rounded up, and stop at the lowest points of the last level or of the map's limit. Every level on the way grants its sciences and purchase points. A step down loses everything above level 1, as there.
+- The five script actions act on the world instead of being recorded: `PLAYER_ADD_SKILLPOINTS`, `PLAYER_SET_RANKLEVEL`, `PLAYER_ADD_RANKLEVEL`, `PLAYER_SET_RANKLEVELLIMIT`, `PLAYER_AFFECT_RECEIVING_EXPERIENCE`. The script VM keeps none of it any more.
+- A campaign carries the points: the mission that ended hands its human's points to `CampaignProgress.RankPoints` whether it was won or lost (`initSinglePlayer` of the score screen), the next mission begins with them (`MissionOptions.RankPoints`, `GameLogic::startNewGame`).
+- **Found on the way:** a world restored from a save knew no faction any more, because the snapshot did not write it: `IsPlayableSide` answered false after a load, and a step down of the rank would have had nothing to return to. The state now names the faction.
+
+The window is `GeneralsExpPoints.wnd` behind the star of the control bar (`MatchController.General.cs`, `CommandBarModel.Generals`, `ControlBar::populatePurchaseScience`): the title of the rank, the bar to the next, the points to spend, and the buttons of the three sets of `PlayerTemplate` (`PurchaseScienceCommandSetRank1/3/8`). A button is hidden for a script-only command, a science a script hid and a science whose root is not the player's (`RootsSatisfied`, `playerHasRootPrereqsForScience`), so a side sees its own general's powers. The star blinks while points wait (`getStarImage`). Until now a human could not spend a point at all.
+
+### 67.2 The solo bonuses (D-6)
+
+`SimulationWorld.SoloBonus.cs`, `Player::friend_applyDifficultyBonusesForObject`. In a single player game - a mission without the session of the original AI - every object takes the health factor of its owner and the difficulty (`GameData.ini`: human 150 % on easy, 80 % on hard; no computer value in the shipped data) with its ratio kept, and the weapon bonus condition `SOLO_HUMAN_*` or `SOLO_AI_*` (`GameData.ini`: the computer's rate of fire 80 % on easy, 120 % on hard). `OBJECT_ALLOW_BONUSES` switches it for every object and for those to come. As in the original, what a script takes back is what the owner of the moment gives. At the normal difficulty nothing changes but the bit, and every run of the manifest is at normal.
+
+### 67.3 The factory exit (D-2) and the road order (D-7)
+
+**D-2: nothing to build.** The question was whether a unit that gets an order in its first moments still has to leave through the door. It does not: `aiFollowExitProductionPath` is a state of the AI (`AI_FOLLOW_EXITPRODUCTION_PATH`), every command replaces it, and the factory stays an ignored obstacle (`ignoreObstacle`) so that the unit walks off through it. That is what the port does since §42 (`EndExitPath`); the patch that forced the gate stays unmerged. What stays different is named in §42.2: the door point is the port's way to the straight quick path of the original (the two coincide where the natural rally point lies on the door's axis), `FindFreeGoal` stands for `moveAlliesAwayFromDestination`.
+
+**D-7.** The roads share one bounding box so that the camera cannot change their order, and among equal distances Stride went by a state key that depends on the effects compiled so far, then by an index that moves as objects come and go. `StackedBackToFrontSortMode` keeps the place of a road in the state bits.
+
+### 67.4 Votes and the majority over a hash
+
+`docs/NETWORK-PROTOCOL.md` §24 (D-23, D-24): protocol version 7.
+
+### 67.5 The C++ half of the original AI (D-16)
+
+`docs/SKIRMISH-AI-ORIGINAL.md` §6.2 says what is complete and what still differs: priority entries as `processBaseBuilding` takes them, the search of a building place, gatherers per centre, the factories of the build list, every map object by default (a carriage no longer turns its box per object in the world, 843 to 134 µs per tick), no explored map, a human in any slot, the repair queue, rebuild holes, cluster mines on the own approaches, the superweapon grid, the offsets of delayed scripts drawn from the logic stream. The brief's premise that `buildObjectNow` ignores prerequisites was wrong and is not built: `isPossibleToMakeUnit` calls `Player::canBuild`.
+
+### 67.6 Reference values
+
+World fingerprint `3AED1A2D3593DE5F`; compatibility baseline 670 entries. Retail reference match a stalemate at tick 108,000, end hash `556023EBE5E461C2`, chain `2B71E89699445661`; stress test `9EE9F730D124C3BD` / `5611A72EDB7D52F2`; 14 of 16 AI pairings decided. **Superseded:** `06C310520645B428` / `7A99249F70171948`. Six of the sixteen pairings changed their outcome: Alpine Assault ChinaTank against AirForce (decided now), Armored Fury GLA against America, Bitter Winter China against GLA (a stalemate now), Bitter Winter GLA against America, Death Valley China against GLA - the rank gives every player what the 90-second point gave it only roughly, and D-34 gives the GLA its economy; balance not assessed (D-9). Protocol **7**, skirmish session state of the original AI **2**, settings schema **3**; `CommandTypes.Version` 20, replay 18, `WorldSnapshot` 10, `MissionSnapshot` 3, `SaveGame` 3, match description 3, transport 2 unchanged.
+
+**Not done / not verified:** everything a human judges (the window, the star, how a vote reads); terrain bridges (F-20, the next phase); a campaign played through with the rank; the §7 surveys of the original AI are older than §67.5.

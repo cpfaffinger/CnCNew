@@ -7,7 +7,7 @@ format of a match, a replay or a savegame.
 
 ## 1. What is fixed beforehand
 
-- **The original skin stays the default** until the owner decides (D-21). Its pictures stay as they are; every golden hash recorded before
+- **The modern skin is the default since Phase 53** (D-21, 31 October 2026), the original stays selectable; a settings file that names a skin keeps it. The original's pictures stay as they are; every golden hash recorded before
   this phase (shell 54, replay list 54, analysis 54, network screens 336, network HUD 138, observer 144) stays valid unchanged.
 - **One contract, one renderer.** Both skins produce `UiDrawList`s (fill, border, image, text, line, clip, custom) and are drawn by the one
   `UiRenderer` with the GDI font path (`docs/CLIENT-UI-RENDERING.md`). There is no second renderer.

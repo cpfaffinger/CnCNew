@@ -1,5 +1,5 @@
 > **Stage:** 3 and 4 – Changes, Multiplayer (the owner's decisions of 31 October 2026) · **Phase:** 53
-> **Status:** next (starting state: the end of Phase 52, see below)
+> **Status:** done by machine (31 October 2026; `docs/SIMULATION-CORE.md` §67)
 > **Predecessor:** HANDOFF-PHASE52.md · **Results in:** docs/DEDICATED-SERVER.md, docs/UI-TEXT-AND-SETTINGS.md, docs/SKIRMISH-AI.md, a new reference manifest
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
 
@@ -30,3 +30,7 @@ By machine: tier 4 green; every default named in `docs/DEDICATED-SERVER.md` and 
 ## Progress
 
 Nothing yet.
+
+## Progress
+
+Done: everything of the brief, and further the owner's D-15 (the rank and the general's window), D-6 (the solo bonuses), D-7 (the road order), D-2 (read: nothing to build), D-16 (the C++ half of the original AI), D-23 (votes), D-24 (the majority over a hash). `docs/SIMULATION-CORE.md` §67, `docs/NETWORK-PROTOCOL.md` §24, `docs/SKIRMISH-AI-ORIGINAL.md` §6.2. The next brief is `HANDOFF-PHASE54.md`.
