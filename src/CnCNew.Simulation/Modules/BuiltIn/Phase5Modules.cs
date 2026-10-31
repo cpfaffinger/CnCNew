@@ -838,6 +838,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary>The object is busy constructing or repairing (<c>DozerPrimaryStateMachine</c> outside its idle state).</summary>
     public bool IsBuilding => _task != BuilderTask.None;
 
+    /// <summary><c>DozerAIInterface::isTaskPending(DOZER_TASK_BUILD)</c>: the task is a construction, not a repair.</summary>
+    public bool IsConstructing => _task == BuilderTask.Construct;
+
     public bool CanRepair => CanBuild && data.RepairRatePerSecond > Fixed.Zero;
 
     /// <summary>

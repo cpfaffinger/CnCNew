@@ -43,6 +43,13 @@ public sealed partial class SimulationWorld
     /// </summary>
     public CommandRejection CheckConstruct(PlayerId issuer, ConstructCommand construct) => CheckConstruct(issuer, construct, out _, out _);
 
+    /// <summary>
+    /// <c>DozerAIUpdate::construct</c> for a computer player of the original skirmish AI: "Just build it. The ai will validate, or cheat." <c>AIPlayer::buildStructureWithDozer</c> has judged the
+    /// place, and when it found none it builds where the entry says as long as no enemy stands there, so the world asks nothing about the site of this player. The prerequisites stay:
+    /// <c>BuildAssistant::buildObjectNow</c> tests them (<c>isPossibleToMakeUnit</c>). Written in the world state only when set.
+    /// </summary>
+    public void SetValidatesOwnSites(PlayerId player) => _players[player.Value].ValidatesOwnSites = true;
+
     /// <summary>Shared by submission and execution: funds, prerequisites and the map change between the two.</summary>
     private CommandRejection CheckConstruct(PlayerId issuer, ConstructCommand construct, out Entity? builder, out ObjectTemplate? template)
     {
@@ -59,6 +66,7 @@ public sealed partial class SimulationWorld
             return CommandRejection.MissingPrerequisite;
         if (ExceedsMaxSimultaneousOfType(owner, found)) return CommandRejection.ProductionLimitReached;
         if (owner.Money < ProductionCostOf(owner, found)) return CommandRejection.InsufficientFunds;
+        if (owner.ValidatesOwnSites) return 0;
         // DozerAIUpdate::construct, "AI has weaker restriction on building": a computer player is not asked for the shroud or a path, it validates the ground itself.
         var site = owner.IsComputer ? CheckBuildGround(found, construct.X, construct.Y, construct.Angle) : CheckBuildSite(builder, found, construct.X, construct.Y, construct.Angle);
         return site == LegalBuildCode.Ok ? 0 : CommandRejection.InvalidPlacement;
@@ -154,6 +162,17 @@ public sealed partial class SimulationWorld
         if (!CanProduceTemplate(owner, producer, template)) return false;
         if (!BuildableOf(template).Equals("Ignore_Prerequisites", StringComparison.OrdinalIgnoreCase) && !PrerequisitesSatisfied(owner, template)) return false;
         return !ExceedsMaxSimultaneousOfType(owner, template);
+    }
+
+    /// <summary><c>Object::setPosition</c> of the AI's "Dozer unable to reach building. Teleporting.": the object stands on the ground at the place, whatever it was doing there is over.</summary>
+    public void Teleport(Entity entity, Fixed x, Fixed y)
+    {
+        entity.CompleteFrame(_tick);
+        entity.X = x;
+        entity.Y = y;
+        entity.Z = GroundHeightAt(x, y);
+        AiOf(entity)?.OrderIdle(this);
+        MarkDirty(entity);
     }
 
     private void StartConstruction(PlayerId issuer, Entity builder, ObjectTemplate template, ConstructCommand construct)

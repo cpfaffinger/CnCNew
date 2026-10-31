@@ -292,6 +292,43 @@ public sealed class NavigationGrid
         return SurfaceAllows(Terrain.CellAt(cx, cy), surfaces);
     }
 
+    /// <summary>
+    /// The cells a mover on these surfaces can reach from the start, footprints included (the zones of <c>Pathfinder::clientSafeQuickDoesPathExist</c> as one flood, for a caller with many goals):
+    /// a table by cell index for <see cref="Reaches"/>. A start inside a footprint walks out of it, as a path search does.
+    /// </summary>
+    public bool[] ReachableCells(Fixed startX, Fixed startY, LocomotorSurfaces surfaces)
+    {
+        var reached = new bool[_cellsX * Terrain.CellsY];
+        var (startCellX, startCellY) = ClampedCell(startX, startY);
+        var pending = new Stack<int>();
+        var start = startCellY * _cellsX + startCellX;
+        reached[start] = true;
+        pending.Push(start);
+        ReadOnlySpan<(int X, int Y)> steps = [(1, 0), (-1, 0), (0, 1), (0, -1)];
+        while (pending.TryPop(out var cell))
+        {
+            var (cx, cy) = (cell % _cellsX, cell / _cellsX);
+            var leaving = _obstacles[cell] > 0;
+            foreach (var (dx, dy) in steps)
+            {
+                var (nx, ny) = (cx + dx, cy + dy);
+                if (!Terrain.IsInside(nx, ny)) continue;
+                var next = ny * _cellsX + nx;
+                if (reached[next] || !(IsPassable(nx, ny, surfaces) || (leaving && SurfaceAllows(Terrain.CellAt(nx, ny), surfaces)))) continue;
+                reached[next] = true;
+                pending.Push(next);
+            }
+        }
+        return reached;
+    }
+
+    /// <summary>Whether <paramref name="reached"/> of <see cref="ReachableCells"/> holds the cell of the place; "no goals on cliffs".</summary>
+    public bool Reaches(bool[] reached, Fixed x, Fixed y)
+    {
+        var (cx, cy) = ClampedCell(x, y);
+        return (Terrain.CellAt(cx, cy) & CellFlags.Cliff) == 0 && reached[cy * _cellsX + cx];
+    }
+
     /// <summary>Priority cliff, then water, then clear: a cliff cell that is also under water is still a cliff.</summary>
     public static bool SurfaceAllows(CellFlags flags, LocomotorSurfaces surfaces)
     {

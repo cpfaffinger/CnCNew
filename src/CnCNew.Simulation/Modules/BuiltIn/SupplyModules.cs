@@ -46,6 +46,12 @@ internal interface ISupplyCarrier
 
     /// <summary>Spawn behaviour of a supply-centre produced unit: go to work at once instead of idling.</summary>
     void ForceWanting(IWorldServices world);
+
+    /// <summary><c>isCurrentlyFerryingSupplies</c>: the supply machine is at work (neither idle nor busy with something else).</summary>
+    bool IsFerrying { get; }
+
+    /// <summary><c>isForcedIntoWantingState</c>.</summary>
+    bool IsForcedWanting { get; }
 }
 
 public sealed record SupplyCarrierData(AIUpdateData Ai, int MaxBoxes, long CenterDelayTicks, long WarehouseDelayTicks, Fixed ScanDistance, int UpgradedSupplyBoost) : ModuleData
@@ -406,6 +412,9 @@ internal abstract class SupplyCarrierAI(SupplyCarrierData data) : AIUpdateInterf
     public int MaxBoxes => data.MaxBoxes;
     public Fixed WarehouseScanDistance => data.ScanDistance;
     public EntityId PreferredDock => _preferredDock;
+
+    public bool IsFerrying => _machine.State is SupplyState.Wanting or SupplyState.Docking;
+    public bool IsForcedWanting => _machine.ForcedWanting;
 
     public bool GainOneBox(int remainingInWarehouse)
     {

@@ -357,6 +357,22 @@ public sealed partial class ScriptEngine
         observer.SectionStarted(ScriptSection.AiPlayers);
     }
 
+    /// <summary><c>AIPlayer::onStructureProduced</c>: a structure of an AI player is finished: the queues and the build list are looked at again at once, and a supply centre starts its count.</summary>
+    private void AiObserveStructureFinished(Entity building)
+    {
+        if (_ai.Count == 0 || AiOfPlayer(building.Owner) is not { } state) return;
+        state.TeamCheckTick = _tick;
+        state.BuildCheckTick = _tick;
+        BindSites(state);
+        foreach (var entry in state.BuildList)
+        {
+            if (entry.ObjectId != building.Id.Value) continue;
+            entry.UnderConstruction = false;
+            CheckForSupplyCenter(state, entry, building);
+            return;
+        }
+    }
+
     /// <summary><c>AIPlayer::onUnitProduced</c> / <c>onStructureProduced</c>: something of an AI player came into the world, so its queues are looked at again at once.</summary>
     private void AiObserveSpawn(Entity entity)
     {
@@ -385,11 +401,12 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AISkirmishPlayer::processBaseBuilding</c>: one structure per round. A priority entry (one a script asked for) comes first, a power plant when power is short (or the list builds it
-    /// automatically) overrides it, an automatic entry with rebuilds left comes last. A destroyed or captured structure waits <c>RebuildDelayTimeSeconds</c>; a site whose dozer is gone gets another.
+    /// <c>AISkirmishPlayer::processBaseBuilding</c>: one structure per round. The first open priority entry (one a script asked for) is taken whatever the rules say about it, and a power plant
+    /// when power is short (or the list builds it automatically) overrides it. <c>buildObjectNow</c> then tests the prerequisites (<c>isPossibleToMakeUnit</c>): an entry that lacks one is
+    /// not built, and the entries behind it wait with it. A destroyed or captured structure waits <c>RebuildDelayTimeSeconds</c>; a site whose dozer is gone gets another.
     /// <para>
-    /// Deviation: the reference takes the first unbuilt priority entry and builds it whatever its prerequisites (<c>buildObjectNow</c> does not test them). Here a construction is a player
-    /// command with the rules of one, so the first priority entry the rules allow now is taken; one that still lacks a prerequisite waits without blocking the ones behind it.
+    /// The branch for automatic entries never takes one: the reference asks <c>canMakeUnit(dozer, bldgPlan)</c> of the plan chosen so far, which refuses a null plan, and only a null plan
+    /// would be replaced. What it does is look for a dozer, which orders one when power is short.
     /// </para>
     /// </summary>
     private void ProcessBaseBuilding(AiPlayer state)
@@ -409,7 +426,7 @@ public sealed partial class ScriptEngine
             if (entry.ObjectId != 0)
             {
                 building = _world.FindEntity(new EntityId(entry.ObjectId));
-                if (building is null || building.DestroyRequested || building.EffectivelyDead)
+                if (building is null || building.DestroyRequested)
                 {
                     // Destroyed. (A GLA structure leaves a hole that rebuilds it by itself; the hole is not followed here and the entry is rebuilt by a worker after the delay if the hole failed.)
                     building = null;
@@ -420,32 +437,27 @@ public sealed partial class ScriptEngine
                 else if (building.Owner != player)
                 {
                     // Captured.
-                    building = null;
                     entry.ObjectId = 0;
                     entry.UnderConstruction = false;
                     entry.Timestamp = _tick + TickOrder.Next;
                 }
                 else if (building.HasStatus(UnderConstructionBit))
                 {
-                    entry.UnderConstruction = true;
                     if (template.IsKindOf("FS_POWER") && !template.IsKindOf("CASH_GENERATOR")) powerUnderConstruction = true;
                     var builder = _world.FindEntity(building.BuilderId);
-                    if (builder is null || builder.EffectivelyDead || builder.Owner != player || AiOf(builder) is not { IsBuilding: true })
+                    if (builder is not null && (builder.Owner != player || builder.EffectivelyDead)) builder = null;
+                    if (builder is null)
                     {
-                        if (FindDozer(state, building.X, building.Y) is { } helper)
-                        {
-                            var site = building.Id;
-                            var helperId = helper.Id;
-                            _issue(player, (sequence, tick) => new ResumeConstructCommand(player, sequence, tick, helperId, site));
-                        }
+                        // "AI's Dozer got killed (or captured). Find another dozer."
+                        QueueDozer(state);
+                        builder = FindDozer(state, building.X, building.Y);
                     }
-                }
-                else if (entry.UnderConstruction)
-                {
-                    // onStructureProduced: the structure is finished.
-                    entry.UnderConstruction = false;
-                    state.TeamCheckTick = _tick;
-                    CheckForSupplyCenter(state, entry, building);
+                    if (builder is not null && AiOf(builder) is not { IsBuilding: true })
+                    {
+                        var site = building.Id;
+                        var helper = builder.Id;
+                        _issue(player, (sequence, tick) => new ResumeConstructCommand(player, sequence, tick, helper, site));
+                    }
                 }
             }
             if (entry.ObjectId == 0 && entry.Timestamp > 0)
@@ -456,19 +468,14 @@ public sealed partial class ScriptEngine
             if (building is not null || entry.PendingUntil > _tick) continue;
             var wanted = entry.Priority || entry.Automatic || (template.IsKindOf("FS_POWER") && !template.IsKindOf("CASH_GENERATOR") && underPowered);
             if (!wanted || !IsLocationSafe(player, entry.X, entry.Y, template)) continue;
-            if (entry.Priority && !chosenIsPriority && RulesAllow(state, entry))
+            if (entry.Priority && !chosenIsPriority)
             {
                 chosen = entry;
                 chosenIsPriority = true;
             }
             if (template.IsKindOf("FS_POWER") && power is null && !template.IsKindOf("CASH_GENERATOR") && (underPowered || entry.Automatic)) power = entry;
             if (!entry.Automatic) continue;
-            if (FindDozer(state, entry.X, entry.Y) is null)
-            {
-                if (underPowered) QueueDozer(state);
-                continue;
-            }
-            if ((entry.Rebuilds > 0 || entry.Rebuilds < 0) && chosen is null) chosen = entry;
+            if (FindDozer(state, entry.X, entry.Y) is null && underPowered) QueueDozer(state);
         }
         if (power is not null && (chosen is null || !string.Equals(power.Template, chosen.Template, StringComparison.Ordinal)) && !powerUnderConstruction) chosen = power;
         if (chosen is null || !BuildStructureWithDozer(state, chosen)) return;
@@ -487,15 +494,6 @@ public sealed partial class ScriptEngine
         if (money < Fixed.FromInt(data.Poor) && poorRate > Fixed.Zero) frames /= poorRate;
         else if (money > Fixed.FromInt(data.Wealthy) && wealthyRate > Fixed.Zero) frames /= wealthyRate;
         return Math.Min(_world.Time.OriginalFrames(frames.Floor()), _world.Time.OriginalFrames(AiTimerCapFrames));
-    }
-
-    /// <summary>Whether a construction order for the entry would pass everything but money and the exact place.</summary>
-    private bool RulesAllow(AiPlayer state, AiBuildEntry entry)
-    {
-        if (FindDozer(state, entry.X, entry.Y) is not { } dozer) return true;
-        var player = state.Setup.Player;
-        return _world.CheckConstruct(player, new ConstructCommand(player, 0, 0, dozer.Id, entry.Template, entry.X, entry.Y, entry.Angle))
-            is 0 or CommandRejection.InsufficientFunds or CommandRejection.InvalidPlacement;
     }
 
     /// <summary>An accepted construction order creates its site in the world step; the entry takes the site that appeared at the ordered place.</summary>
@@ -518,53 +516,73 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AIPlayer::buildStructureWithDozer</c>: a dozer, the money, and the place of the entry - or, when that place is not legal, the nearest legal one on growing squares around it.
+    /// <c>AIPlayer::buildStructureWithDozer</c>: a dozer, the money, no enemy on the place of the entry, and the place itself - or, when the dozer cannot use it, the first one
+    /// <see cref="FindPlaceNear"/> finds. Where none is found the entry's own place is built on anyway ("the ai will validate, or cheat"), and a dozer that cannot reach it stands there at once:
+    /// "Dozer unable to reach building. Teleporting." What the rules still refuse (a prerequisite, the limit of the type) is <c>buildObjectNow</c>'s refusal: nothing is built.
     /// </summary>
     private bool BuildStructureWithDozer(AiPlayer state, AiBuildEntry entry)
     {
         var player = state.Setup.Player;
         if (FindDozer(state, entry.X, entry.Y) is not { } dozer) return false;
         if (!_world.Templates.TryGet(entry.Template, out var template)) return false;
-        var rejection = _world.CheckConstruct(player, new ConstructCommand(player, 0, 0, dozer.Id, entry.Template, entry.X, entry.Y, entry.Angle));
+        if (_world.MoneyOf(player) < _world.ProductionCostOf(player, template)) return false;
         var (x, y) = (entry.X, entry.Y);
-        if (rejection == CommandRejection.InvalidPlacement && _world.Navigation is { } navigation)
+        var angle = entry.Angle;
+        if (_world.EnemyObjectsInTheWay(dozer, template, x, y, angle)) return false;
+        if (_world.Navigation is { } navigation && _world.CheckDozerSite(dozer, template, x, y, angle) != LegalBuildCode.Ok)
         {
-            var cell = Fixed.FromDecimal(TerrainMap.CellSize);
-            var found = false;
-            // posOffset grows by four cells a round; along a side the candidates are two cells apart (the loops of the reference with the skirmish increments).
-            for (var ring = 4; ring < AiPlacementLimitCells && !found; ring += 4)
-            {
-                var half = cell * Fixed.FromInt(ring) / Fixed.FromInt(2);
-                var full = cell * Fixed.FromInt(ring);
-                for (var step = 0; step <= ring && !found; step += 2)
-                {
-                    var along = cell * Fixed.FromInt(step);
-                    foreach (var (cx, cy) in new[]
-                             {
-                                 (entry.X - half + along, entry.Y - half), (entry.X - half + along, entry.Y - half + full),
-                                 (entry.X - half, entry.Y - half + along), (entry.X - half + full, entry.Y - half + along),
-                             })
-                    {
-                        if (_world.CheckBuildGround(template, cx, cy, entry.Angle) != LegalBuildCode.Ok) continue;
-                        (x, y) = (cx, cy);
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            if (!found) return false;
-            rejection = _world.CheckConstruct(player, new ConstructCommand(player, 0, 0, dozer.Id, entry.Template, x, y, entry.Angle));
+            var reach = navigation.ReachableCells(dozer.X, dozer.Y, dozer.Template.Locomotor?.Surfaces ?? LocomotorSurfaces.Ground);
+            if (!FindPlaceNear(dozer, template, angle, reach, ref x, ref y) && !navigation.Reaches(reach, x, y)) _world.Teleport(dozer, x, y);
         }
-        if (rejection != 0) return false;
         var builder = dozer.Id;
         var name = entry.Template;
-        var angle = entry.Angle;
         if (!_issue(player, (sequence, tick) => new ConstructCommand(player, sequence, tick, builder, name, x, y, angle)).Accepted) return false;
         entry.X = x;
         entry.Y = y;
         entry.PendingUntil = _tick + _world.Time.OriginalFrames(AiSitePendingFrames);
         _busyThisTick.Add(builder.Value);
         return true;
+    }
+
+    /// <summary>
+    /// The search of <c>buildStructureWithDozer</c> around a place that cannot be used, with the skirmish AI's increments: squares of growing size, up to 120 cells, walked along their sides.
+    /// The second test of a walk along a side answers only for that side's last step: the next step overwrites it, as in the reference, where only the first test leaves the loop.
+    /// </summary>
+    private bool FindPlaceNear(Entity dozer, ObjectTemplate template, Fixed angle, bool[] reach, ref Fixed x, ref Fixed y)
+    {
+        var cell = Fixed.FromInt(TerrainMap.CellSize);
+        var (originX, originY) = (x, y);
+        var (newX, newY) = (x, y);
+        var valid = false;
+        var limit = cell * Fixed.FromInt(AiPlacementLimitCells);
+        for (var posOffset = Fixed.Zero; posOffset < limit && !valid; posOffset += cell * Fixed.FromInt(2))
+        {
+            posOffset += cell * Fixed.FromInt(2);
+            var offset = posOffset / Fixed.FromInt(2);
+            var yPos = originY - offset;
+            for (var xPos = originX - offset; xPos <= originX + offset; xPos += cell)
+            {
+                xPos += cell;
+                (newX, newY) = (xPos, yPos);
+                valid = _world.CheckDozerSite(dozer, template, newX, newY, angle, reach) == LegalBuildCode.Ok;
+                if (valid) break;
+                newY = yPos + posOffset;
+                valid = _world.CheckDozerSite(dozer, template, newX, newY, angle, reach) == LegalBuildCode.Ok;
+            }
+            if (valid) break;
+            var xSide = originX - offset;
+            for (var ySide = originY - offset; ySide <= originY + offset; ySide += cell)
+            {
+                ySide += cell;
+                (newX, newY) = (xSide, ySide);
+                valid = _world.CheckDozerSite(dozer, template, newX, newY, angle, reach) == LegalBuildCode.Ok;
+                if (valid) break;
+                newX = xSide + posOffset;
+                valid = _world.CheckDozerSite(dozer, template, newX, newY, angle, reach) == LegalBuildCode.Ok;
+            }
+        }
+        if (valid) (x, y) = (newX, newY);
+        return valid;
     }
 
     /// <summary>
@@ -588,8 +606,8 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// <c>AIPlayer::findDozer</c>: a dozer of the player that is not building and - a worker - not carrying supplies; an idle one first, the nearest of those. When the player has no dozer
-    /// at all one is ordered (<c>queueDozer</c>).
+    /// <c>AIPlayer::findDozer</c>: a dozer of the player that is not constructing and - a worker without a task - not gathering; an idle one first, the nearest of those, else one with another
+    /// task. When the player has no dozer at all one is ordered (<c>queueDozer</c>).
     /// </summary>
     private Entity? FindDozer(AiPlayer state, Fixed x, Fixed y)
     {
@@ -600,11 +618,11 @@ public sealed partial class ScriptEngine
         foreach (var entity in _world.EntitiesOwnedBy(state.Setup.Player).AsSpan())
         {
             if (!Counts(entity) || !entity.Template.IsKindOf("DOZER") || entity.HasStatus(UnderConstructionBit) || AiOf(entity) is not { CanBuild: true } ai) continue;
-            // "If it is gathering supplies, don't steal it": a worker that carries boxes or is on its way to or at a dock.
-            if (!ai.IsBuilding && ai is ISupplyCarrier carrier && (carrier.Boxes > 0 || ai.IsDocking)) continue;
+            // "If it is gathering supplies, don't steal it."
+            if (!ai.HasBuilderTask && ai is ISupplyCarrier carrier && (carrier.IsFerrying || carrier.IsForcedWanting)) continue;
             needDozer = false;
-            if (ai.IsBuilding || _busyThisTick.Contains(entity.Id.Value)) continue;
-            var idle = IsIdle(entity);
+            if (ai.IsConstructing || _busyThisTick.Contains(entity.Id.Value)) continue;
+            var idle = !ai.HasBuilderTask;
             if (idle || any is null) any = entity;
             if (!idle) continue;
             var distance = Distance2(entity, x, y);

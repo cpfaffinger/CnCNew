@@ -135,6 +135,9 @@ public sealed partial class SimulationWorld : IWorldServices
         public bool CanBuildBase { get; set; } = true;
         public bool CanBuildUnits { get; set; } = true;
 
+        /// <summary>The computer player of the original skirmish AI: <c>AIPlayer::buildStructureWithDozer</c> has judged the place itself and <c>DozerAIUpdate::construct</c> asks no more (<see cref="SetValidatesOwnSites"/>).</summary>
+        public bool ValidatesOwnSites { get; set; }
+
         // ------------------------------------------------------------------------------------- special powers
         /// <summary>Power index to shared ready frame (<c>SharedSyncedTimer</c> powers), ordered for deterministic output.</summary>
         public SortedList<int, long> SharedReadyFrames { get; } = [];
@@ -2361,6 +2364,7 @@ public sealed partial class SimulationWorld : IWorldServices
             // Written only when switched off, so a world no script ever restricted keeps the serialized form (and hash) it had before the switches existed.
             if (!player.CanBuildBase) writer.Bool("canBuildBase", false);
             if (!player.CanBuildUnits) writer.Bool("canBuildUnits", false);
+            if (player.ValidatesOwnSites) writer.Bool("validatesOwnSites", true);
             DescribeCostModifiers(writer, player);
             writer.BeginArray("sharedReadyFrames");
             // Indexed: SortedList's foreach boxes its enumerator, and this runs every tick.

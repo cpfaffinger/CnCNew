@@ -738,4 +738,126 @@ static partial class Tests
         Console.WriteLine($"       original AI across rates: {Frames} frames, {sessions[0].Session.World.Entities.Count()} objects and {structures} structures of the two players at the end, equal at 30, 60 and 120 Hz ({transient} frame ends with a difference that did not last {Lasting} frames)");
         Check.That(structures >= 10, $"The compared match is one in which both players have built ({structures} structures).");
     }
+    // ------------------------------------------------------------------------------------------------ the C++ half, part by part (docs/SKIRMISH-AI-ORIGINAL.md §6.2)
+
+    /// <summary>A map of the fixture with more cliffs, by world cell (the height cells are one further in, the border).</summary>
+    private static MapData AiSkirmishMapWithCliffs(IEnumerable<(int X, int Y)> cliffs)
+    {
+        var plain = AiSkirmishMap();
+        var built = SyntheticMaps.Build(60, 40, 1, cliffs: cliffs.Select(cell => (cell.X + 1, cell.Y + 1)), triggers: plain.Triggers, waypoints: [("Player_1_Start", 100m, 200m, 0m), ("Player_2_Start", 500m, 200m, 0m)]);
+        return built with { Sides = plain.Sides, Teams = plain.Teams, PlayerScripts = plain.PlayerScripts };
+    }
+
+    /// <summary>A match of two AIs on a variant of the fixture: more objects and another AI data text, a library of its own, a map of its own.</summary>
+    private static (ScriptedSkirmishSession Session, SyntheticFixture Fixture, TerrainMap Terrain, MapData Map, MapScriptLibrary Library, AiData Data) StartAiVariant(string aiData, string extraObjects, MapScriptLibrary? library = null,
+        MapData? map = null, CnCNew.Simulation.Time.SimulationRate? rate = null, int startMoney = 2_000, uint seed = 11, bool humanFirst = false, bool humanSecond = false)
+    {
+        var files = AiFiles(aiData);
+        if (extraObjects.Length > 0) files["Data/INI/Object/AiVariant.ini"] = extraObjects;
+        var fixture = new SyntheticFixture(rate ?? TestRate.Default, files: files);
+        map ??= AiSkirmishMap();
+        var terrain = TerrainMap.Build(map, "skirmish-original");
+        library ??= AiLibrary();
+        var data = AiData.TryBuild(fixture.Graph)!;
+        var participants = ReferenceMatchScenario.Participants(fixture.Templates, out _);
+        var slots = ImmutableArray.Create(new ScriptedSkirmishSlot(participants.Single(value => value.Side == "Alpha"), ScriptDifficulty.Hard, IsHuman: humanFirst),
+            new ScriptedSkirmishSlot(participants.Single(value => value.Side == "Beta"), ScriptDifficulty.Easy, IsHuman: humanSecond));
+        var options = new ScriptedSkirmishOptions(seed, fixture.Templates.Rate.Time.OriginalFrames(60_000), 60, startMoney, 0, AllMapObjects: true);
+        return (ScriptedSkirmishSession.Start(options, fixture.Templates, fixture.Fingerprint, terrain, map, library, data, slots), fixture, terrain, map, library, data);
+    }
+
+    /// <summary>The test library with other scripts for Alpha and none for Beta, which stands still: both have their default teams only.</summary>
+    private static MapScriptLibrary AiLibraryWithAlphaScripts(params MapScript[] scripts)
+    {
+        var (beta, betaTeams) = (new MapScriptList([], []), new[] { new MapProperties([Scr.Text("teamName", "teamSkirmishBeta"), Scr.Text("teamOwner", "SkirmishBeta"), Scr.Flag("teamIsSingleton", true)]) });
+        var defaultTeam = new MapProperties([Scr.Text("teamName", "teamSkirmishAlpha"), Scr.Text("teamOwner", "SkirmishAlpha"), Scr.Flag("teamIsSingleton", true)]);
+        var civilian = new MapScriptList([], []);
+        return new MapScriptLibrary("CkMp",
+            [new MapScriptLibraryPlayer(string.Empty, MapProperties.Empty), new MapScriptLibraryPlayer("SkirmishAlpha", MapProperties.Empty), new MapScriptLibraryPlayer("SkirmishBeta", MapProperties.Empty),
+                new MapScriptLibraryPlayer("PlyrCivilian", MapProperties.Empty)],
+            [defaultTeam, ..betaTeams], [new MapScriptList([], []), new MapScriptList([..scripts], []), beta, civilian], []);
+    }
+
+    private const string AiTechObject = """
+        Object AlphaTech
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE
+          BuildCost = 60
+          BuildTime = 1
+          Prerequisites
+            Object = AlphaBarracks
+          End
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 200.0
+            InitialHealth = 200.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        """;
+
+    private static string AiDataWithAlphaStructure(string template, decimal x = 160m, decimal y = 40m)
+    {
+        var structure = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Structure {template}\n      Location = X:{x:F2} Y:{y:F2}\n      Rebuilds = 0\n      Angle = 0.00\n      InitiallyBuilt = No\n      AutomaticallyBuild = No\n    END\n    ");
+        return AiDataText().Replace("Structure AlphaPlant", structure + "Structure AlphaPlant", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// <c>processBaseBuilding</c> takes the first open priority entry whatever the rules say, and <c>buildObjectNow</c> tests its prerequisites (<c>isPossibleToMakeUnit</c>, <c>Player::canBuild</c>):
+    /// nothing is built, and the entries behind it wait. Before, the first entry the rules allowed was taken, and the one behind the blocked entry stood.
+    /// </summary>
+    public static void OriginalAiWaitsForTheFirstOpenPriorityEntry()
+    {
+        var library = AiLibraryWithAlphaScripts(Scr.Script("A Tech", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SKIRMISH_BUILD_BUILDING", Scr.Type("AlphaTech")), Scr.Do("SKIRMISH_BUILD_BUILDING", Scr.Type("AlphaPlant"))], oneShot: true));
+        var (session, fixture, _, _, _, _) = StartAiVariant(AiDataWithAlphaStructure("AlphaTech"), AiTechObject, library);
+        StepFrames(session, 300);
+        Check.That(CountOwned(session, 1, "AlphaTech", finishedOnly: false) == 0, "The first entry lacks its prerequisite and is not built: buildObjectNow refuses it.");
+        Check.That(CountOwned(session, 1, "AlphaPlant", finishedOnly: false) == 0, $"The entry behind it waits (pending: {string.Join("; ", session.Engine.AiPendingBuilds(new PlayerId(1)))}).");
+        Check.That(session.Engine.AiPendingBuilds(new PlayerId(1)).Any(line => line.StartsWith("AlphaTech: MissingPrerequisite", StringComparison.Ordinal)), $"It waits for the prerequisite ({string.Join("; ", session.Engine.AiPendingBuilds(new PlayerId(1)))}).");
+
+        // The prerequisite appears: first the one entry, then the one behind it.
+        Check.That(fixture.Templates.TryGet("AlphaBarracks", out var barracks), "The fixture has the barracks.");
+        session.World.RequestSpawn(barracks.Index, new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(300), Fixed.Zero, Fixed.Zero);
+        StepFrames(session, 300);
+        Check.That(CountOwned(session, 1, "AlphaTech") == 1 && CountOwned(session, 1, "AlphaPlant") >= 1, $"With its prerequisite the entry is built and the one behind it follows (pending: {string.Join("; ", session.Engine.AiPendingBuilds(new PlayerId(1)))}).");
+    }
+
+    /// <summary>
+    /// The end of <c>buildStructureWithDozer</c>: a dozer that has no way to any place around the entry stands on the entry's place at once ("Dozer unable to reach building. Teleporting.") and
+    /// builds there. A dozer with a way somewhere near gets that place instead. Before, the order went out and the dozer never arrived.
+    /// </summary>
+    public static void OriginalAiMovesADozerThatCannotReachTheSite()
+    {
+        foreach (var rate in new[] { CnCNew.Simulation.Time.SimulationRate.Hz30, CnCNew.Simulation.Time.SimulationRate.Hz60, CnCNew.Simulation.Time.SimulationRate.Hz120 })
+        {
+            // The dozer starts at (151, 200): cell (15, 20) is left free inside a ring of cliffs, too small for any structure.
+            var ring = new List<(int X, int Y)>();
+            for (var x = 14; x <= 16; x++)
+                for (var y = 19; y <= 21; y++)
+                    if (x != 15 || y != 20) ring.Add((x, y));
+            var (session, _, _, _, _, _) = StartAiVariant(AiDataText(), string.Empty, AiLibrary(), AiSkirmishMapWithCliffs(ring), rate);
+            var dozer = session.World.Entities.Single(entity => entity.Owner == new PlayerId(1) && entity.Template.Name == "AlphaDozer");
+            Check.That(TerrainMap.CellOf(dozer.X) == 15 && TerrainMap.CellOf(dozer.Y) == 20, $"{rate}: the dozer starts inside the ring ({dozer.X}, {dozer.Y}).");
+            var plant = session.Engine.AiBuildListOf(new PlayerId(1)).First(entry => entry.Template == "AlphaPlant");
+            StepFrames(session, 300);
+            Check.That(CountOwned(session, 1, "AlphaPlant") >= 1, $"{rate}: the plant stands (pending: {string.Join("; ", session.Engine.AiPendingBuilds(new PlayerId(1)))}).");
+            Check.That(session.World.Entities.Any(entity => entity.Template.Name == "AlphaPlant" && entity.Owner == new PlayerId(1) && entity.X == plant.X && entity.Y == plant.Y), $"{rate}: on the place of its entry.");
+            Check.That(session.World.Entities.Single(entity => entity.Id == dozer.Id).X < Fixed.FromInt(140), $"{rate}: the dozer is out of its ring.");
+        }
+
+        // A way somewhere near: the place of the entry lies behind a wall of cliffs, the structure goes to the first place on the dozer's side.
+        var wall = Enumerable.Range(0, 40).Select(y => (8, y));
+        var (walled, _, _, _, _, _) = StartAiVariant(AiDataText(), string.Empty, AiLibrary(), AiSkirmishMapWithCliffs(wall));
+        var wanted = walled.Engine.AiBuildListOf(new PlayerId(1)).First(entry => entry.Template == "AlphaPlant");
+        Check.That(wanted.X < Fixed.FromInt(80), $"The place of the entry lies west of the wall ({wanted.X}).");
+        StepFrames(walled, 300);
+        var built = walled.World.Entities.First(entity => entity.Template.Name == "AlphaPlant" && entity.Owner == new PlayerId(1));
+        Check.That(built.X >= Fixed.FromInt(90) && CountOwned(walled, 1, "AlphaPlant") >= 1, $"It stands on the dozer's side of the wall ({built.X}, {built.Y}).");
+        Check.That(walled.Engine.AiBuildListOf(new PlayerId(1)).Any(entry => entry.Template == "AlphaPlant" && entry.X == built.X && entry.ObjectId == built.Id.Value), "The entry has moved with it.");
+    }
 }

@@ -226,6 +226,9 @@ public sealed partial class ScriptEngine
                     AiObserveSpawn(produced);
                 }
                 break;
+            case CnCNew.Simulation.Events.SimEventKind.ConstructionCompleted:
+                if (_world.FindEntity(item.Entity) is { } finished) AiObserveStructureFinished(finished);
+                break;
             case CnCNew.Simulation.Events.SimEventKind.SpecialPowerUsed:
                 // SpecialPowerModule::triggerSpecialPower -> notifyOfTriggeredSpecialPower(owner, power, source).
                 _triggeredPowers.Add((item.Player.Value, item.Text, item.Entity.Value));

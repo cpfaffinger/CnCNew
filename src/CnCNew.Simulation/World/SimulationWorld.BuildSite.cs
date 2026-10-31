@@ -44,11 +44,25 @@ public sealed partial class SimulationWorld
         return navigation.Terrain.IsOnMap(x, y) ? CheckGround(navigation, null, template, x, y, angle, true) : LegalBuildCode.RestrictedTerrain;
     }
 
-    private LegalBuildCode CheckGround(NavigationGrid navigation, Entity? builder, ObjectTemplate template, Fixed x, Fixed y, Fixed angle, bool computer)
+    /// <summary>
+    /// The test of <c>AIPlayer::buildStructureWithDozer</c> (<c>CLEAR_PATH | TERRAIN_RESTRICTIONS | NO_OBJECT_OVERLAP</c> with the dozer, the AI's width around what it builds): without
+    /// <paramref name="reach"/> a path search answers whether the dozer gets there, with it that one flood (<see cref="NavigationGrid.ReachableCells"/>), for a search over many places.
+    /// </summary>
+    public LegalBuildCode CheckDozerSite(Entity dozer, ObjectTemplate template, Fixed x, Fixed y, Fixed angle, bool[]? reach = null)
+    {
+        if (Navigation is not { } navigation) return LegalBuildCode.Ok;
+        return navigation.Terrain.IsOnMap(x, y) ? CheckGround(navigation, dozer, template, x, y, angle, true, reach) : LegalBuildCode.RestrictedTerrain;
+    }
+
+    /// <summary><c>isLocationLegalToBuild</c> with <c>NO_ENEMY_OBJECT_OVERLAP</c> alone ("If there's enemy units or structures, don't build/rebuild"): an immobile object that is no enemy does not count.</summary>
+    public bool EnemyObjectsInTheWay(Entity builder, ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
+        => Navigation is { } navigation && navigation.Terrain.IsOnMap(x, y) && ObjectsInTheWay(navigation, builder, template, x, y, angle, onlyEnemies: true);
+
+    private LegalBuildCode CheckGround(NavigationGrid navigation, Entity? builder, ObjectTemplate template, Fixed x, Fixed y, Fixed angle, bool computer, bool[]? reach = null)
     {
         if (ObjectsInTheWay(navigation, builder, template, x, y, angle) || BlocksFactoryExit(template, x, y, angle, computer)) return LegalBuildCode.ObjectsInTheWay;
         if (TooCloseToSupplies(template, x, y, angle)) return LegalBuildCode.TooCloseToSupplies;
-        if (builder is not null && !HasClearPath(navigation, builder, x, y)) return LegalBuildCode.NoClearPath;
+        if (builder is not null && !(reach is null ? HasClearPath(navigation, builder, x, y) : navigation.Reaches(reach, x, y))) return LegalBuildCode.NoClearPath;
         return BuildSiteTerrain.Check(navigation.Terrain, template, x, y, angle, _templates.BuildSite);
     }
 
@@ -65,7 +79,7 @@ public sealed partial class SimulationWorld
     /// The objects under the footprint by <c>isLocationClearOfObjects</c>: what will be removed, mines and inert objects do not count, an immobile, disabled or enemy object does, and so does an
     /// ally at an ability, which may not be moved aside. Without a builder nobody is an enemy (<c>rel = NEUTRAL</c>).
     /// </summary>
-    private bool ObjectsInTheWay(NavigationGrid navigation, Entity? builder, ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
+    private bool ObjectsInTheWay(NavigationGrid navigation, Entity? builder, ObjectTemplate template, Fixed x, Fixed y, Fixed angle, bool onlyEnemies = false)
     {
         var site = new SiteShape(template, x, y, angle);
         var ground = navigation.Terrain.HeightAt(x, y);
@@ -75,6 +89,7 @@ public sealed partial class SimulationWorld
             if (FurtherThan(them.X, x, reach + them.Template.BoundingCircleRadius) || FurtherThan(them.Y, y, reach + them.Template.BoundingCircleRadius)) continue;
             if (!Overlaps(site, ground, template, them)) continue;
             var relation = builder is null ? Relationship.Neutral : RelationshipOf(builder.Owner, them.Owner);
+            if (onlyEnemies && them.Template.IsKindOf("IMMOBILE") && relation != Relationship.Enemies) continue;
             if (relation == Relationship.Allies && them.HasStatus(UsingAbilityBit)) return true;
             if (IsRemovableForConstruction(them) || them.Template.IsKindOf("MINE") || them.Template.IsKindOf("INERT")) continue;
             if (them.Template.IsKindOf("IMMOBILE") || DisabledFlagsOf(them) != DisabledMask.None || (builder is not null && relation == Relationship.Enemies)) return true;

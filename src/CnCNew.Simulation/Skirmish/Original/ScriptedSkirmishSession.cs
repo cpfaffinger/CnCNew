@@ -208,7 +208,11 @@ public sealed class ScriptedSkirmishSession
                 _builtin.Add(new SkirmishAi(World, catalog, new SkirmishAiOptions(player, unchecked(_options.Seed + (uint)index * 7919u), bx, by, participant.Side,
                     SkirmishMatchSession.FamilyPrefix(participant.Faction), hints.ToImmutable()), SubmitBuiltin));
             }
-            else World.ExploreMap(player);
+            else
+            {
+                World.ExploreMap(player);
+                World.SetValidatesOwnSites(player);
+            }
             var ring = (catalog.TryGet(participant.BaseBuilding, out var building) ? building.BoundingCircleRadius : Fixed.Zero) + Fixed.FromInt(30);
             var units = participant.Faction.StartingUnits;
             for (var unit = 0; unit < units.Length; unit++)

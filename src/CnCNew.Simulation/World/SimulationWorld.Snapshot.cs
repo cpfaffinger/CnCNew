@@ -72,6 +72,7 @@ public sealed partial class SimulationWorld
             known.CashBounty = player.Fixed("cashBounty");
             known.CanBuildBase = !player.Has("canBuildBase") || player.Bool("canBuildBase");
             known.CanBuildUnits = !player.Has("canBuildUnits") || player.Bool("canBuildUnits");
+            known.ValidatesOwnSites = player.Has("validatesOwnSites") && player.Bool("validatesOwnSites");
             LoadCostModifiers(player, known);
             known.SharedReadyFrames.Clear();
             foreach (var shared in player.Array("sharedReadyFrames")) known.SharedReadyFrames[checked((int)shared.Int("power"))] = shared.Int("frame");
