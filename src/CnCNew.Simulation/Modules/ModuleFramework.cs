@@ -290,6 +290,12 @@ public interface IWorldServices
     /// <summary><c>Player::getPlayerType() == PLAYER_COMPUTER</c>.</summary>
     bool IsComputerPlayer(PlayerId player);
 
+    /// <summary>A rebuild hole sends out its worker (<see cref="SimulationWorld.EnableHoleRebuilding"/>); otherwise it stays a hole, and <c>docs/SIMULATION-CORE.md</c> says why.</summary>
+    bool HolesRebuild { get; }
+
+    /// <inheritdoc cref="SimulationWorld.Reconstruct"/>
+    Entity Reconstruct(Entity hole, Entity worker, int templateIndex);
+
     /// <summary><see cref="RelationshipOf"/> == enemies.</summary>
     bool AreEnemies(PlayerId a, PlayerId b);
 
@@ -615,7 +621,7 @@ public static class SpecialPowerRouting
 /// </summary>
 public readonly record struct SpawnExtras(Fixed MaxHealth, int OriginTemplate = -1, bool ForceSupplyWanting = false, bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default,
     EntityId Enslaver = default, EntityId Producer = default, bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default,
-    EntityId StickTo = default, EntityId Bomber = default, bool Drop = false);
+    EntityId StickTo = default, EntityId Bomber = default, bool Drop = false, EntityId Spawner = default);
 
 // ------------------------------------------------------------------------------------------------ structures and world group
 
@@ -654,7 +660,8 @@ public interface IShroudRangeProvider
 /// <summary>A module told which template its object replaces when it is created by <see cref="IWorldServices.RequestSpawn(int, PlayerId, Fixed, Fixed, Fixed, Fixed, in SpawnExtras)"/>.</summary>
 public interface ISpawnOriginReceiver
 {
-    void OnSpawnedFrom(IWorldServices world, int originTemplate);
+    /// <param name="spawner"><c>m_spawnerObjectID</c>: the object it replaces, where the world keeps it (<see cref="IWorldServices.HolesRebuild"/>).</param>
+    void OnSpawnedFrom(IWorldServices world, int originTemplate, EntityId spawner);
 }
 
 /// <summary>A module that owns the door/exit geometry a producer's new units leave through (<c>ExitInterface</c>).</summary>

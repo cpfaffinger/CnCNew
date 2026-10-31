@@ -445,7 +445,8 @@ public sealed class RebuildHoleExposeDie(RebuildHoleExposeDieData data) : DieMod
             world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, data.HoleName, CreationSkipReasons.TemplateNotInstantiable);
             return;
         }
-        world.RequestSpawn(hole.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle, new SpawnExtras(data.HoleMaxHealth, Entity.Template.Index));
+        world.RequestSpawn(hole.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle,
+            new SpawnExtras(data.HoleMaxHealth, Entity.Template.Index, Spawner: world.HolesRebuild ? Entity.Id : default));
     }
 }
 
@@ -457,27 +458,97 @@ public sealed record RebuildHoleBehaviorData(string WorkerName, long WorkerRespa
 }
 
 /// <summary>
-/// <c>RebuildHoleBehavior.cpp</c>: the hole regenerates <c>HoleHealthRegen%PerSecond</c> of its maximum health per second and, once
-/// <c>WorkerRespawnDelay</c> has passed, spawns a worker that reconstructs the destroyed structure. The worker and its
-/// <c>construct</c> order are AI (phase 6), so at that point a <see cref="SimEventKind.CreationSkipped"/> event
-/// (<see cref="CreationSkipReasons.SettingNotSimulated"/>) records the missing rebuild and the countdown stops.
+/// <c>RebuildHoleBehavior.cpp</c>: the hole regenerates <c>HoleHealthRegen%PerSecond</c> of its maximum health per second and, once <c>WorkerRespawnDelay</c> has passed, spawns a worker that
+/// reconstructs the destroyed structure. Where the world's rule says so (<see cref="IWorldServices.HolesRebuild"/>, the session of the original skirmish AI) that happens: the worker comes up
+/// from the hole, builds free of charge where the hole lies, the hole is masked meanwhile, a worker or a site that is lost starts the wait over, and the finished building takes the hole away.
+/// Without the rule a <see cref="SimEventKind.CreationSkipped"/> event (<see cref="CreationSkipReasons.SettingNotSimulated"/>) records the missing rebuild and the countdown stops. Not modelled:
+/// that attackers and sticky bombs of the hole go over to the site (<c>transferAttack</c>, <c>transferBombs</c>) and back.
 /// </summary>
-public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModule, IUpdateModule, ISpawnOriginReceiver
+public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModule, IUpdateModule, ISpawnOriginReceiver, IDieModule
 {
+    private static readonly int MaskedBit = ObjectStatusBits.Index("MASKED");
+    private static readonly int UnselectableBit = ObjectStatusBits.Index("UNSELECTABLE");
+
     private long _nextWake = -1;
     private long _workerWait = -1;
     private int _origin = -1;
+    private EntityId _worker;
+    private EntityId _reconstructing;
+    private EntityId _spawner;
+    private bool _workerOnItsWay;
 
     public override string ModuleName => "RebuildHoleBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
 
+    /// <summary><c>getSpawnerID</c>: the structure this hole replaces (where the world keeps it).</summary>
+    public EntityId Spawner => _spawner;
+
+    /// <summary><c>getReconstructedBuildingID</c>.</summary>
+    public EntityId Reconstructed => _reconstructing;
+
     public override void OnSpawn(IWorldServices world) => _nextWake = world.Tick + SimulationTiming.SleepNone;
 
-    public void OnSpawnedFrom(IWorldServices world, int originTemplate)
+    public void OnSpawnedFrom(IWorldServices world, int originTemplate, EntityId spawner)
     {
-        _ = world;
         _origin = originTemplate;
+        _spawner = spawner;
         _workerWait = data.WorkerRespawnDelayTicks;
+    }
+
+    /// <summary><c>newWorkerRespawnProcess</c>: a worker there is goes, the wait starts over, and the hole is the focus of this place again.</summary>
+    private void NewWorkerRespawnProcess(IWorldServices world, Entity? worker)
+    {
+        if (worker is not null) world.RequestDestroy(worker.Id);
+        _worker = EntityId.Invalid;
+        _workerOnItsWay = false;
+        _workerWait = data.WorkerRespawnDelayTicks;
+        Entity.Status &= ~(1UL << MaskedBit);
+        world.MarkDirty(Entity);
+    }
+
+    private void UpdateRebuild(IWorldServices world)
+    {
+        var worker = _worker.IsValid ? world.FindEntity(_worker) : null;
+        if (_worker.IsValid && worker is null && !_workerOnItsWay) NewWorkerRespawnProcess(world, null);
+        var reconstructing = _reconstructing.IsValid ? world.FindEntity(_reconstructing) : null;
+        if (_reconstructing.IsValid && reconstructing is null)
+        {
+            NewWorkerRespawnProcess(world, worker);
+            worker = null;
+            _reconstructing = EntityId.Invalid;
+        }
+        if (_workerOnItsWay && worker is not null) StartWorker(world, worker, ref reconstructing);
+        else if (worker is null && !_workerOnItsWay && _workerWait > 0 && --_workerWait == 0 && world.Templates.TryGet(data.WorkerName, out var template) && template.IsInstantiable)
+        {
+            // The worker exists from the spawn phase on; the next update tells it what to do.
+            _worker = world.RequestSpawn(template.Index, Entity.Owner, Entity.X, Entity.Y, Entity.Z, Entity.Angle);
+            _workerOnItsWay = true;
+        }
+        if (reconstructing is null || reconstructing.HasStatus(ObjectStatusBits.UnderConstruction)) return;
+        if (worker is not null) world.RequestDestroy(worker.Id);
+        world.RequestDestroy(Entity.Id);
+    }
+
+    private void StartWorker(IWorldServices world, Entity worker, ref Entity? reconstructing)
+    {
+        _workerOnItsWay = false;
+        reconstructing ??= world.Reconstruct(Entity, worker, _origin);
+        _reconstructing = reconstructing.Id;
+        if (world.FindEntity(_reconstructing) is { BuilderId.IsValid: false } site) site.BuilderId = worker.Id;
+        if (CrateModules.AiOf(worker) is { } ai) ai.OrderConstruct(world, reconstructing);
+        worker.Status |= 1UL << UnselectableBit;
+        Entity.Status |= 1UL << MaskedBit;
+        world.MarkDirty(worker);
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>onDie</c>: a worker there is goes with the hole ("our rebuilding building and us the hole can be killed in the same frame"), and the hole does not stay.</summary>
+    public void OnDie(IWorldServices world, in DamageInfo info)
+    {
+        if (!world.HolesRebuild) return;
+        if (_worker.IsValid && world.FindEntity(_worker) is not null) world.RequestDestroy(_worker);
+        _worker = EntityId.Invalid;
+        world.RequestDestroy(Entity.Id);
     }
 
     public long Update(IWorldServices world)
@@ -499,7 +570,8 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
             }
         }
 
-        if (_workerWait > 0 && --_workerWait == 0)
+        if (world.HolesRebuild) UpdateRebuild(world);
+        else if (_workerWait > 0 && --_workerWait == 0)
             world.Emit(SimEventKind.CreationSkipped, Entity.Id, EntityId.Invalid, data.WorkerName, CreationSkipReasons.SettingNotSimulated);
         return SimulationTiming.SleepNone;
     }
@@ -509,6 +581,11 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
         writer.Int("nextWake", _nextWake);
         writer.Int("workerWait", _workerWait);
         writer.Int("origin", _origin);
+        // Written only by a world with the rule, so that a world without it keeps its serialized form and hash.
+        if (_worker.IsValid) writer.UInt("worker", _worker.Value);
+        if (_reconstructing.IsValid) writer.UInt("reconstructing", _reconstructing.Value);
+        if (_spawner.IsValid) writer.UInt("spawner", _spawner.Value);
+        if (_workerOnItsWay) writer.Bool("workerOnItsWay", true);
     }
 
     public override void Load(IStateReader reader)
@@ -516,5 +593,9 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
         _nextWake = reader.Int("nextWake");
         _workerWait = reader.Int("workerWait");
         _origin = checked((int)reader.Int("origin"));
+        _worker = reader.Has("worker") ? new EntityId(checked((uint)reader.UInt("worker"))) : EntityId.Invalid;
+        _reconstructing = reader.Has("reconstructing") ? new EntityId(checked((uint)reader.UInt("reconstructing"))) : EntityId.Invalid;
+        _spawner = reader.Has("spawner") ? new EntityId(checked((uint)reader.UInt("spawner"))) : EntityId.Invalid;
+        _workerOnItsWay = reader.Has("workerOnItsWay") && reader.Bool("workerOnItsWay");
     }
 }

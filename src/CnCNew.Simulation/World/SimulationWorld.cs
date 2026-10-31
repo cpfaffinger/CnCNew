@@ -177,7 +177,7 @@ public sealed partial class SimulationWorld : IWorldServices
         EntityId Container, EntityId ContainInSource, Fixed TransferDamage, EntityId TransferSource, Fixed MaxHealth = default, bool HasOrigin = false, int OriginTemplate = 0, bool ForceSupplyWanting = false,
         bool HasRally = false, Fixed RallyX = default, Fixed RallyY = default, ProjectileLaunch? Launch = null, Modules.BuiltIn.DeliveryOrder? Delivery = null, bool SetCreator = false, EntityId Creator = default, EntityId Enslaver = default, EntityId Producer = default,
         bool HasExit = false, Fixed DoorX = default, Fixed DoorY = default, Fixed ExitX = default, Fixed ExitY = default, long DeletionTicks = 0, Fixed ShroudRange = default,
-        SpawnThrow? Throw = null, bool Floating = false, EntityId StickTo = default, EntityId Bomber = default);
+        SpawnThrow? Throw = null, bool Floating = false, EntityId StickTo = default, EntityId Bomber = default, EntityId Spawner = default);
 
     /// <summary>
     /// The throw <c>doStuffToObj</c> gives a created object with a physics module (F-66): the force, the rates (with <see cref="Rates"/>), bouncing, a debris mass (0: none), the
@@ -687,7 +687,7 @@ public sealed partial class SimulationWorld : IWorldServices
         var setup = new SpawnSetup(false, 0, false, 0, 0, 0, EntityId.Invalid, EntityId.Invalid, Fixed.Zero, EntityId.Invalid,
             extras.MaxHealth, extras.OriginTemplate >= 0, Math.Max(extras.OriginTemplate, 0), extras.ForceSupplyWanting, extras.HasRally, extras.RallyX, extras.RallyY, Enslaver: extras.Enslaver, Producer: extras.Producer,
             HasExit: extras.HasExit, DoorX: extras.DoorX, DoorY: extras.DoorY, ExitX: extras.ExitX, ExitY: extras.ExitY, StickTo: extras.StickTo, Bomber: extras.Bomber,
-            Throw: extras.Drop ? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero) : null);
+            Throw: extras.Drop ? new SpawnThrow(Fixed.Zero, Fixed.Zero, Fixed.Zero, default, default, default, false, false, Fixed.Zero) : null, Spawner: extras.Spawner);
         _spawnQueue.Add(new PendingSpawn(id, templateIndex, owner, x, y, z, angle, setup));
         return id;
     }
@@ -1853,7 +1853,7 @@ public sealed partial class SimulationWorld : IWorldServices
                 if (module is IProducerReceiver receiver) receiver.OnProducedBy(this, setup.Producer);
         if (setup.HasOrigin)
             foreach (var module in entity.ModuleArray)
-                if (module is ISpawnOriginReceiver receiver) receiver.OnSpawnedFrom(this, setup.OriginTemplate);
+                if (module is ISpawnOriginReceiver receiver) receiver.OnSpawnedFrom(this, setup.OriginTemplate, setup.Spawner);
         if (setup.ForceSupplyWanting)
             foreach (var module in entity.ModuleArray)
                 if (module is Modules.BuiltIn.ISupplyCarrier carrier) carrier.ForceWanting(this);
@@ -2323,6 +2323,7 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         writer.Int("tick", _tick);
         if (_rankLevelLimit != DefaultRankLevelLimit) writer.Int("rankLevelLimit", _rankLevelLimit);
+        if (_holesRebuild) writer.Bool("holesRebuild", true);
         DescribeSoloBonus(writer);
         Ids.Describe(writer);
         Streams.DescribeLogic(writer);
@@ -2461,6 +2462,7 @@ public sealed partial class SimulationWorld : IWorldServices
             }
             if (setup.SetCreator) writer.UInt("creator", setup.Creator.Value);
             if (setup.Enslaver.IsValid) writer.UInt("enslaver", setup.Enslaver.Value);
+            if (setup.Spawner.IsValid) writer.UInt("spawner", setup.Spawner.Value);
             if (setup.StickTo.IsValid)
             {
                 writer.UInt("stickTo", setup.StickTo.Value);

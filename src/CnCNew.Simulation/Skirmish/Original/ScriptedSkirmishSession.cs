@@ -191,6 +191,8 @@ public sealed class ScriptedSkirmishSession
     /// <summary>Start money, and every player's start units in a ring around its start position (the AI places its own command centre).</summary>
     private void PlaceStarts(TemplateCatalog catalog, ImmutableArray<TerrainWaypoint> starts)
     {
+        // A session of this AI needs the holes of the GLA to rebuild: the AI waits for them. In the other sessions they do not yet (SimulationWorld.EnableHoleRebuilding).
+        World.EnableHoleRebuilding();
         for (var index = 0; index < _slots.Length; index++)
         {
             var player = PlayerOf(index);

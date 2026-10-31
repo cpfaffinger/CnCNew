@@ -575,6 +575,7 @@ run.Test("Original skirmish AI: a dozer that cannot reach a building place is mo
 run.Test("Original skirmish AI: its map is shrouded and it builds on ground it has not seen", Tests.OriginalAiBuildsOnGroundItHasNotSeen);
 run.Test("Original skirmish AI: gatherers per centre, with the centre as their dock", Tests.OriginalAiKeepsItsGatherersPerCentre);
 run.Test("Original skirmish AI: a factory is what the build list holds", Tests.OriginalAiLooksForFactoriesInItsBuildList);
+run.Test("Original skirmish AI: a hole of the GLA is waited for and rebuilds", Tests.OriginalAiWaitsForTheHole);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Session state: the state of SkirmishAi names every field", Tests.SkirmishAiStateNamesEveryField);
 run.Test("Session state: SkirmishAi never acts in the order of a hash table", Tests.SkirmishAiNeverActsInTheOrderOfAHashTable);

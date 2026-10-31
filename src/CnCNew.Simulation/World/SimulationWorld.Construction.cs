@@ -175,6 +175,30 @@ public sealed partial class SimulationWorld
         MarkDirty(entity);
     }
 
+    private bool _holesRebuild;
+
+    /// <inheritdoc cref="Modules.IWorldServices.HolesRebuild"/>
+    public bool HolesRebuild => _holesRebuild;
+
+    /// <summary>
+    /// The rule of a world in which a rebuild hole sends out its worker, as <c>RebuildHoleBehavior</c> does in every game of the original. The session of the original skirmish AI switches it on,
+    /// whose AI waits for its holes; it is off in every other world, because a hole that rebuilds changes matches and manifests, and that is a step of its own. Written only when set.
+    /// </summary>
+    public void EnableHoleRebuilding() => _holesRebuild = true;
+
+    /// <summary>
+    /// <c>ai->construct(..., isRebuild = TRUE)</c> by the worker of a hole: the structure stands up where the hole lies, reconstructing and free of charge, the worker works on it.
+    /// </summary>
+    public Entity Reconstruct(Entity hole, Entity worker, int templateIndex)
+    {
+        var site = SpawnEntity(new PendingSpawn(Ids.AllocateEntity(), templateIndex, worker.Owner, hole.X, hole.Y, Fixed.Zero, hole.Angle), worker.Id);
+        site.Status |= 1UL << ObjectStatusBits.Reconstructing;
+        MarkDirty(site);
+        Emit(SimEventKind.ConstructionStarted, site.Id, worker.Id, site.Template.Name, 0, worker.Owner);
+        BuilderOf(worker)?.OrderConstruct(this, site);
+        return site;
+    }
+
     private void StartConstruction(PlayerId issuer, Entity builder, ObjectTemplate template, ConstructCommand construct)
     {
         // "We tried to move our units out of the way, but they wouldn't" (buildObjectNow): the AI gets to cheat.
@@ -289,7 +313,7 @@ public sealed partial class SimulationWorld
 
     private void CompleteConstruction(Entity site)
     {
-        site.Status &= ~(1UL << ObjectStatusBits.UnderConstruction);
+        site.Status &= ~((1UL << ObjectStatusBits.UnderConstruction) | (1UL << ObjectStatusBits.Reconstructing));
         var builder = site.BuilderId;
         site.BuilderId = EntityId.Invalid;
         ApplyObjectEnergy(site, site.Owner, true);

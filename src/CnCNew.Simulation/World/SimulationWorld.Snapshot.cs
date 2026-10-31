@@ -38,6 +38,7 @@ public sealed partial class SimulationWorld
         if (_entities.Count != 0 || _tick != 0 || _spawnQueue.Count != 0) throw new InvalidOperationException("A snapshot can only be loaded into a fresh world.");
         _tick = state.Int("tick");
         _rankLevelLimit = state.Has("rankLevelLimit") ? checked((int)state.Int("rankLevelLimit")) : DefaultRankLevelLimit;
+        _holesRebuild = state.Has("holesRebuild") && state.Bool("holesRebuild");
         LoadSoloBonus(state);
         if (_tick < 0) throw new InvalidDataException("Negative tick in snapshot.");
         Ids.Load(state);
@@ -126,7 +127,8 @@ public sealed partial class SimulationWorld
                         : null,
                     pending.Has("floating"),
                     pending.Has("stickTo") ? new EntityId(checked((uint)pending.UInt("stickTo"))) : default,
-                    pending.Has("stickTo") ? new EntityId(checked((uint)pending.UInt("bomber"))) : default),
+                    pending.Has("stickTo") ? new EntityId(checked((uint)pending.UInt("bomber"))) : default,
+                    pending.Has("spawner") ? new EntityId(checked((uint)pending.UInt("spawner"))) : default),
                 pending.Has("notBefore") ? pending.Int("notBefore") : 0));
         }
         foreach (var item in state.Array("events")) _events.Enqueue(SimEvent.Load(item));

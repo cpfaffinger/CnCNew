@@ -1088,4 +1088,112 @@ static partial class Tests
         Check.That(CountOwned(listed, 1, "AlphaGuard") == 1, $"The yard of the build list trains the team ({CountOwned(listed, 1, "AlphaGuard")}).");
         Check.That(listed.World.PlayerUpgrades(new PlayerId(1)).Has(drill.Index), "And researches the upgrade.");
     }
+
+    private const string AiHoleObjects = """
+        Object AlphaWorker
+          Side = Alpha
+          KindOf = SELECTABLE INFANTRY DOZER
+          BuildCost = 10
+          BuildTime = 1
+          Locomotor = SET_NORMAL SkirmishLoco
+          Body = ActiveBody Body01
+            MaxHealth = 100.0
+            InitialHealth = 100.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = DozerAIUpdate AI01
+            RepairHealthPercentPerSecond = 10%
+          End
+        End
+        Object AlphaHole
+          Side = Alpha
+          KindOf = IMMOBILE STRUCTURE REBUILD_HOLE
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 2.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 50.0
+            InitialHealth = 50.0
+          End
+          Behavior = RebuildHoleBehavior Hole01
+            WorkerObjectName = AlphaWorker
+            WorkerRespawnDelay = 6000
+            HoleHealthRegen%PerSecond = 0.5%
+          End
+        End
+        Object AlphaShack
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE
+          BuildCost = 60
+          BuildTime = 1
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 200.0
+            InitialHealth = 200.0
+          End
+          Behavior = RebuildHoleExposeDie Die01
+            HoleName = AlphaHole
+            HoleMaxHealth = 50.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        """;
+
+    private static uint AiEntryObject(ScriptedSkirmishSession session, string template) => session.Engine.AiBuildListOf(new PlayerId(1)).First(entry => entry.Template == template).ObjectId;
+
+    /// <summary>
+    /// <c>processBaseBuilding</c> finds the hole of a destroyed structure by <c>getSpawnerID</c> and the entry waits for it; <c>RebuildHoleBehavior</c> sends its worker and raises the structure free
+    /// of charge; <c>onStructureProduced</c> gives the entry the new building. In the round that finds the hole a priority entry still counts as missing, as in the reference: with a
+    /// dozer and the money it gets a second site. Before, the hole stayed a hole for ever and the AI rebuilt beside it after the delay.
+    /// </summary>
+    public static void OriginalAiWaitsForTheHole()
+    {
+        var library = AiLibraryWithAlphaScripts(Scr.Script("A Shack", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SKIRMISH_BUILD_BUILDING", Scr.Type("AlphaShack"))], oneShot: true));
+        foreach (var rate in new[] { CnCNew.Simulation.Time.SimulationRate.Hz30, CnCNew.Simulation.Time.SimulationRate.Hz60, CnCNew.Simulation.Time.SimulationRate.Hz120 })
+        {
+            var (session, fixture, terrain, map, _, data) = StartAiVariant(AiDataWithAlphaStructure("AlphaShack"), AiHoleObjects, library, rate: rate);
+            var player = new PlayerId(1);
+            StepFrames(session, 300);
+            var first = AiEntryObject(session, "AlphaShack");
+            Check.That(first != 0 && CountOwned(session, 1, "AlphaShack") == 1, $"{rate}: the structure stands.");
+
+            // No money, so that the round that finds the hole cannot start a second site.
+            session.World.SetMoney(player, Fixed.Zero);
+            session.World.Kill(new CnCNew.Simulation.Ids.EntityId(first));
+            StepFrames(session, 100);
+            var waiting = AiEntryObject(session, "AlphaShack");
+            var hole = session.World.Entities.SingleOrDefault(entity => entity.Template.Name == "AlphaHole");
+            Check.That(hole is not null && waiting == hole.Id.Value, $"{rate}: the entry holds the hole ({waiting}).");
+
+            // Saved while the worker builds: the hole's state travels.
+            session.World.SetMoney(player, Fixed.FromInt(1_000));
+            StepFrames(session, 90);
+            Check.That(session.World.Entities.Any(entity => entity.Template.Name == "AlphaWorker"), $"{rate}: the worker is at work.");
+            var restored = ScriptedSkirmishSession.Restore(session.Save(), fixture.Templates, fixture.Fingerprint, terrain, map, library, data);
+            Check.That(restored.StateHash() == session.StateHash(), $"{rate}: the state of the hole is saved.");
+            session = restored;
+
+            StepFrames(session, 400);
+            var rebuilt = AiEntryObject(session, "AlphaShack");
+            Check.That(CountOwned(session, 1, "AlphaShack") == 1, $"{rate}: one structure stands again, no second site ({CountOwned(session, 1, "AlphaShack", finishedOnly: false)}).");
+            Check.That(session.World.MoneyOf(player) >= Fixed.FromInt(1_000), $"{rate}: a hole rebuilds free of charge ({session.World.MoneyOf(player)}).");
+            Check.That(session.World.Entities.Any(entity => entity.Id.Value == rebuilt && entity.Template.Name == "AlphaShack"), $"{rate}: the entry holds the rebuilt structure ({rebuilt}).");
+            Check.That(!session.World.Entities.Any(entity => entity.Template.Name is "AlphaHole" or "AlphaWorker"), $"{rate}: hole and worker are gone.");
+        }
+
+        // With the money, the round that finds the hole builds beside it.
+        var (rich, _, _, _, _, _) = StartAiVariant(AiDataWithAlphaStructure("AlphaShack"), AiHoleObjects, library);
+        StepFrames(rich, 300);
+        rich.World.Kill(new CnCNew.Simulation.Ids.EntityId(AiEntryObject(rich, "AlphaShack")));
+        StepFrames(rich, 600);
+        Check.That(CountOwned(rich, 1, "AlphaShack") == 2, $"The priority entry of the round that finds the hole gets a second site, and the hole rebuilds too ({CountOwned(rich, 1, "AlphaShack", finishedOnly: false)}).");
+    }
 }

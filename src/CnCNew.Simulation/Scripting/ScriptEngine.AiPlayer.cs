@@ -403,6 +403,14 @@ public sealed partial class ScriptEngine
             CheckForSupplyCenter(state, entry, building);
             return;
         }
+        // "See if this is spawned from a hole": the entry that waits at this place for this type. The hole may be gone by now: it goes the moment its building is finished.
+        foreach (var entry in state.BuildList)
+        {
+            if (entry.X != building.X || entry.Y != building.Y || !string.Equals(entry.Template, building.Template.Name, StringComparison.Ordinal)) continue;
+            if (entry.ObjectId == 0 || _world.FindEntity(new EntityId(entry.ObjectId)) is { Template: var waiting } && !waiting.IsKindOf("REBUILD_HOLE")) continue;
+            entry.ObjectId = building.Id.Value;
+            return;
+        }
     }
 
     /// <summary><c>AIPlayer::onUnitProduced</c> / <c>onStructureProduced</c>: something of an AI player came into the world, so its queues are looked at again at once.</summary>
@@ -494,11 +502,15 @@ public sealed partial class ScriptEngine
                 building = _world.FindEntity(new EntityId(entry.ObjectId));
                 if (building is null || building.DestroyRequested)
                 {
-                    // Destroyed. (A GLA structure leaves a hole that rebuilds it by itself; the hole is not followed here and the entry is rebuilt by a worker after the delay if the hole failed.)
+                    // Destroyed. A hole of the GLA that this structure left is what the entry waits for from now on. In this round the entry still counts as missing (the reference
+                    // asks the variable it filled before it looked for the hole), so a priority entry with a dozer at hand starts a second site beside the hole.
                     building = null;
+                    var prior = entry.ObjectId;
                     entry.ObjectId = 0;
                     entry.UnderConstruction = false;
                     entry.Timestamp = _tick + TickOrder.Next;
+                    foreach (var hole in _world.EntitiesOfKind("REBUILD_HOLE").AsSpan())
+                        if (ModuleOf<RebuildHoleBehavior>(hole) is { } behavior && behavior.Spawner.Value == prior) entry.ObjectId = hole.Id.Value;
                 }
                 else if (building.Owner != player)
                 {
@@ -603,6 +615,7 @@ public sealed partial class ScriptEngine
         var builder = dozer.Id;
         var name = entry.Template;
         if (!_issue(player, (sequence, tick) => new ConstructCommand(player, sequence, tick, builder, name, x, y, angle)).Accepted) return false;
+        entry.ObjectId = 0;
         entry.X = x;
         entry.Y = y;
         entry.PendingUntil = _tick + _world.Time.OriginalFrames(AiSitePendingFrames);
