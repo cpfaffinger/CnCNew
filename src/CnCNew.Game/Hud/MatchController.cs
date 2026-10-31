@@ -103,6 +103,7 @@ public sealed partial class MatchController
         _tree.FindByName("ControlBar.wnd:ObserverPlayerListWindow")?.SetHidden(true);
         _tree.Register("ControlBarSystem", OnControlBarSystem);
         AddGeneralsWindow();
+        AddDiplomacyWindow();
 
         var quitMenuRoots = _tree.AddLayout(Skin.Derive(_assets.QuitMenu, _assets.HeaderTemplates));
         _quitMenuRoot = quitMenuRoots.Single(window => window.Name == "QuitMenu.wnd:QuitMenuParent");
@@ -298,6 +299,12 @@ public sealed partial class MatchController
             if (key is { Key: KeyCode.Escape, IsDown: true, IsRepeat: false }) CloseMenu();
             return;
         }
+        // DiplomacyInput: the open window takes Escape for itself.
+        if (IsDiplomacyOpen && key is { Key: KeyCode.Escape, IsDown: true, IsRepeat: false })
+        {
+            HideDiplomacy();
+            return;
+        }
         Input.Process(key, Match.World, Match.Camera);
     }
 
@@ -324,6 +331,7 @@ public sealed partial class MatchController
     private void OnInputUiRequest(MetaAction action)
     {
         if (action == MetaAction.Options) { OpenMenu(); return; }
+        if (action == MetaAction.Diplomacy) { ToggleDiplomacy(); return; }
         UiRequest?.Invoke(action);
     }
 
@@ -334,6 +342,7 @@ public sealed partial class MatchController
         _wasPausedBeforeMenu = Match.Paused;
         Match.Paused = true;
         HideGeneralsWindow();
+        HideDiplomacy();
         _quitMenuRoot.SetHidden(false);
     }
 
@@ -430,8 +439,10 @@ public sealed partial class MatchController
                 CloseMenu();
                 ToggleGeneralsWindow();
                 break;
-            case "ControlBar.wnd:ButtonPlaceBeacon":
             case "ControlBar.wnd:PopupCommunicator":
+                ToggleDiplomacy();
+                break;
+            case "ControlBar.wnd:ButtonPlaceBeacon":
                 Messages.ClientNote($"not supported in this build: {name.Split(':')[^1]}");
                 break;
         }
@@ -710,6 +721,7 @@ public sealed partial class MatchController
 
         RefreshDynamicWindows();
         RefreshGeneralsWindow();
+        if (IsDiplomacyOpen) RefreshDiplomacy();
         var baseList = _tree.BuildDrawList();
         var extra = BuildDynamicCommands();
         var viewportRect = new UiRect(0, 0, width, _controlBarRoot.Rect.Y);
@@ -752,6 +764,7 @@ public sealed partial class MatchController
         const string prefix = "ControlBar.wnd:ButtonCommand";
         if (window.Name == "ControlBar.wnd:MoneyDisplay") return _descriptions.Money().ToTooltip();
         if (window.Name == "ControlBar.wnd:PowerWindow") return _descriptions.Power(Hud.EnergyProduction, Hud.EnergyConsumption).ToTooltip();
+        if (window.Name == "ControlBar.wnd:PopupCommunicator") return CommunicatorTooltip();
         if (GeneralsButton(window.Name) is { } science) return _descriptions.Build(science, Match.World, Match.Human, null).ToTooltip() is { Length: > 0 } text ? text : null;
         if (!window.Name.StartsWith(prefix, StringComparison.Ordinal) || !int.TryParse(window.Name.AsSpan(prefix.Length), CultureInfo.InvariantCulture, out var slot)) return null;
         if (slot is < 1 or > CommandBarModel.GridSlots || CommandBar[slot] is not { Availability: not ButtonAvailability.Hidden } button) return null;

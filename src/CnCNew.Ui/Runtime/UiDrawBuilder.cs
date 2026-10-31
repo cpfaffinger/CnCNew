@@ -441,6 +441,7 @@ public sealed partial class UiWindowTree
         private (WndColor Color, WndColor Shadow) TextColors(UiWindow window)
         {
             var colors = window.Definition.TextColors;
+            if (window.TextColor is { } own) return (own, colors.EnabledBorder);
             return StateOf(window) switch
             {
                 DrawState.Disabled => (colors.Disabled, colors.DisabledBorder),

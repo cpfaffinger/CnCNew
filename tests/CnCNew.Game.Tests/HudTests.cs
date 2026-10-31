@@ -55,9 +55,58 @@ internal static class HudTests
         harness.Run("The overlay is drawn: selection ring and health bar, a healed structure shows the wrench", () => OverlayIsDrawn(data));
 
         harness.Run("Cursor and markers: Alt waypoints draw a path with a marker per station, an order leaves a fading hint, the cursor follows context and windows", () => CursorAndMarkers(data));
+        harness.Run("Diplomacy: the communicator button shows the players of a skirmish, with side, team and state", () => DiplomacyWindow(data));
         harness.Run("Placement preview: the chosen building follows the cursor in the object frame, translucent, red where refused, gone after the click", () => PlacementPreviewInObjectFrame(data));
 
         return harness.Failures;
+    }
+
+    /// <summary><c>ToggleDiplomacy</c>, <c>PopulateInGameDiplomacyPopup</c>: a skirmish shows the players and has nobody to mute.</summary>
+    private static void DiplomacyWindow(GameData data)
+    {
+        var (match, controller) = NewMatch(data, new Vector2(1280, 720));
+        long time = 10_000;
+        Vector2 Center(string window)
+        {
+            var rect = controller.WindowRect(window) ?? throw new InvalidOperationException($"no window {window}");
+            return new Vector2(rect.X + rect.Width / 2f, rect.Y + rect.Height / 2f);
+        }
+        bool Shown(string name) => controller.Tree.FindByName($"Diplomacy.wnd:{name}") is { IsHidden: false };
+
+        Refresh(controller);
+        TestHarness.Assert(!controller.IsDiplomacyOpen, "the window begins closed");
+        var communicator = controller.Tree.FindByName("ControlBar.wnd:PopupCommunicator")!;
+        TestHarness.Assert(controller.Tree.TooltipOverride?.Invoke(communicator)?.StartsWith(controller.Assets.Text.Get("CONTROLBAR:Communicator"), StringComparison.Ordinal) == true, "the button is the communicator in a skirmish");
+        Click(controller, ref time, MouseButton.Left, Center("ControlBar.wnd:PopupCommunicator"));
+        Advance(match, controller, 1);
+        Refresh(controller);
+        TestHarness.Assert(controller.IsDiplomacyOpen && Shown("InGameParent") && !Shown("SoloParent") && !Shown("BuddiesParent") && !Shown("RadioButtonBuddies"), "the button opens the players' page");
+
+        var text = controller.Assets.Text;
+        var rows = controller.DiplomacyRows;
+        TestHarness.Assert(rows.Length == 2 && rows[0].Player == match.Human, $"one row per player ({rows.Length})");
+        TestHarness.Assert(rows[1].Name == text.Get("GUI:MediumAI") && rows[0].Side != rows[1].Side, $"the computer's name and each side ({rows[0].Name}, {rows[0].Side}, {rows[1].Name}, {rows[1].Side})");
+        TestHarness.Assert(rows.All(row => row.Status == text.Get("GUI:PlayerAlive") && row.MuteConnection is null), "both alive, and nobody to mute");
+        TestHarness.Assert(rows[0].Team == text.Get("Team:0") && rows[1].Team == text.Get("Team:AI"), $"the teams ({rows[0].Team}, {rows[1].Team})");
+        TestHarness.Assert(controller.Tree.FindByName("Diplomacy.wnd:StaticTextPlayer0") is { TextColor: not null } && Shown("StaticTextPlayer1") && !Shown("StaticTextPlayer2") && !Shown("ButtonMute0") && !Shown("ButtonUnMute0"), "two rows are shown, in the player's colour, the others hidden");
+
+        // What the dying leave behind is killed as well: the start object's builder, a hull.
+        for (var round = 0; round < 8 && !match.World.IsPlayerDefeated(rows[1].Player); round++)
+        {
+            foreach (var entity in match.World.Entities.Where(entity => entity.Owner == rows[1].Player && !entity.EffectivelyDead).ToArray()) match.World.Kill(entity.Id);
+            Advance(match, controller, (int)match.World.Time.OriginalFrames(30));
+        }
+        Refresh(controller);
+        TestHarness.Assert(match.World.IsPlayerDefeated(rows[1].Player) && controller.DiplomacyRows[1].Status == text.Get("GUI:PlayerDead"), $"the open window follows a defeat ({controller.DiplomacyRows[1].Status}, {string.Join(", ", match.World.Entities.Where(entity => entity.Owner == rows[1].Player).Select(entity => entity.Template.Name + (entity.EffectivelyDead ? "(dead)" : string.Empty)))})");
+
+        controller.Process(new KeyEvent(time += 16, KeyCode.Escape, true));
+        controller.Process(new KeyEvent(time += 16, KeyCode.Escape, false));
+        TestHarness.Assert(!controller.IsDiplomacyOpen && !controller.IsMenuOpen, "Escape closes the window and not the game's menu");
+
+        Click(controller, ref time, MouseButton.Left, Center("ControlBar.wnd:PopupCommunicator"));
+        Advance(match, controller, 1);
+        Click(controller, ref time, MouseButton.Left, Center("ControlBar.wnd:ButtonOptions"));
+        TestHarness.Assert(controller.IsMenuOpen && !controller.IsDiplomacyOpen, "the quit menu takes its place");
     }
 
     private static void GeneralsWindow(GameData data)

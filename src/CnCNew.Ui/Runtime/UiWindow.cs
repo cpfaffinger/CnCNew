@@ -151,6 +151,11 @@ public sealed class UiWindow
 
     public void SetTextLabel(string label) => Text = UiTextValue.Label(label);
 
+    /// <summary>The colour of the window's text in every state instead of the layout's (<c>winSetEnabledTextColors</c>); null gives the layout's back.</summary>
+    public WndColor? TextColor { get; private set; }
+
+    public void SetTextColor(WndColor? color) => TextColor = color;
+
     /// <summary>Checks or unchecks a check box, radio button (clearing its group) or check-like button without sending a message.</summary>
     public void SetChecked(bool value)
     {

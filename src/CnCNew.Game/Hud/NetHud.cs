@@ -36,6 +36,8 @@ public interface INetMatchSource
     string? NameOf(uint connectionId);
     /// <summary>The name of whoever sits (or sat) in a player's seat.</summary>
     string? NameOfPlayer(int player);
+    /// <summary>The connection of the member in a player's seat, or null for a seat nobody sits in.</summary>
+    uint? ConnectionOfPlayer(int player);
     void SendChat(string text, bool alliesOnly);
     /// <summary>The running vote, or null, and everything the server said about votes (docs/NETWORK-PROTOCOL.md section 24).</summary>
     VoteStateMessage? Vote { get; }
@@ -72,6 +74,7 @@ public sealed class NetHud
 {
     public const int FairRoundTripMs = 120, PoorRoundTripMs = 250;
     private const int MaxChatChars = 120;
+    private readonly HashSet<uint> _muted = [];
 
     private readonly INetMatchSource _source;
     private readonly Action<string> _notice;
@@ -146,6 +149,23 @@ public sealed class NetHud
     private string Name(uint connection) => _source.NameOf(connection) ?? $"Player (connection {connection})";
     private string PlayerName(int player) => _source.NameOfPlayer(player) ?? $"Player {player}";
 
+    /// <summary>The name in a player's seat for the diplomacy window, or null for a seat nobody sat in.</summary>
+    public string? NameOfSeat(int player) => _source.NameOfPlayer(player);
+
+    /// <summary>A human that lost its connection or left: the diplomacy window's <c>GUI:PlayerGone</c>.</summary>
+    public bool HasLeft(int player) => _source.HeldSeats.ContainsKey(player) || _source.Dropped.Any(dropped => dropped.Player == player);
+
+    /// <summary>The connection of another human's seat, which a mute button acts on; null for this client's own seat.</summary>
+    public uint? ConnectionOfOther(int player) => _source.ConnectionOfPlayer(player) is { } connection && connection != _source.OwnConnection ? connection : null;
+
+    public bool IsMuted(uint connection) => _muted.Contains(connection);
+
+    public void SetMuted(uint connection, bool muted)
+    {
+        if (muted) _muted.Add(connection);
+        else _muted.Remove(connection);
+    }
+
     private void Notice(string line)
     {
         NoticesGiven++;
@@ -170,6 +190,8 @@ public sealed class NetHud
         for (; _chatSeen < _source.Chat.Count; _chatSeen++)
         {
             var line = _source.Chat[_chatSeen];
+            // ConnectionManager: the line of a muted slot is not shown; the mute is this machine's own business.
+            if (_muted.Contains(line.ConnectionId)) continue;
             Notice($"{Name(line.ConnectionId)}{(line.AlliesOnly ? " (to allies)" : string.Empty)}: {line.Text}");
         }
         if (_source.Desync is { } desync && !_desyncSeen)
@@ -400,7 +422,11 @@ public sealed class LiveMatchNetSource(LiveMatch match) : INetMatchSource
         return null;
     }
 
-    public string? NameOfPlayer(int player)
+    public string? NameOfPlayer(int player) => MemberOf(player)?.Name;
+
+    public uint? ConnectionOfPlayer(int player) => MemberOf(player)?.ConnectionId;
+
+    private RoomMember? MemberOf(int player)
     {
         // Players are numbered over the slots that take part, in slot order.
         var number = 0;
@@ -408,7 +434,7 @@ public sealed class LiveMatchNetSource(LiveMatch match) : INetMatchSource
         {
             if (!_settings.Slots[slot].TakesPart || ++number != player) continue;
             foreach (var member in _members)
-                if (member.Slot == slot) return member.Name;
+                if (member.Slot == slot) return member;
             return null;
         }
         return null;

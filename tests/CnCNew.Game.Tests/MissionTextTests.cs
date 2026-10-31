@@ -37,6 +37,7 @@ internal static class MissionTextTests
         harness.Run("Cinematic text parses its font, wraps 20 pixels short of the screen, centers at 0.9 of the height and ends after its seconds", CinematicText);
         harness.Run("Without a style or a measure the texts are not drawn and the first one is a reported problem; unresolved labels are counted", NoStyleIsReported);
         harness.Run("A new caption replaces the one on screen; a popup keeps its clamped placement until dismissed", ReplacementAndPopup);
+        harness.Run("The briefing history: captions and popups in their order, each once", BriefingHistory);
         harness.Run("Fonts, sizes and positions follow the screen size and the text scale", ScalingFollowsTheScreen);
         harness.Run("A speech event shows its subtitle label as a caption for 8 seconds unless the text is missing, empty or starts with an asterisk", SpeechSubtitles);
         harness.Run("Letterbox bars cover what a 16:9 picture leaves free (none at 16:9), fade in over a second, lie over the messages and under the cinematic text; only the top bar fades out", LetterboxFollowsTheOriginal);
@@ -51,6 +52,7 @@ internal static class MissionTextTests
             harness.Run("Real data: the MD_USA01 opening types its caption in Courier New through the real HUD", () => RealCaption(data));
             harness.Run("Real data: the MD_CHI02 reinforcement countdown stands at the named timer position", () => RealCountdown(data));
             harness.Run("Real data: the message popup is laid out by InGamePopupMessage.wnd and closed by OK, Enter and Escape", () => RealPopupWindow(data));
+            harness.Run("Real data: the mission's communicator button shows what the scripts said", () => MissionBriefingWindow(data));
             harness.Run("Real data: a pausing popup stops the mission and swallows input until it is closed; one that does not pause lets the world go on", () => RealPopupInTheMission(data));
             harness.Run("Real data: the MD_USA01 caption starts the retail typing click once per character through the real audio director", () => RealTypingClick(data));
             harness.Run("Real data: the mission HUD's own messages share the scripts' message list and stay on screen while the control bar is hidden", () => RealSharedMessageList(data));
@@ -186,6 +188,27 @@ internal static class MissionTextTests
         TestHarness.Assert(!director.Letterbox && closing is [{ Rect: { Y: 0, Height: 75 }, Color.A: 127 }], $"ended: the top bar alone fades out ({closing.Length} bars, level {director.LetterboxFadeLevel})");
         for (var step = 0; step < 15; step++) Step(director, session);
         TestHarness.Assert(director.LetterboxFadeLevel == 0f && !director.BuildOverlayCommands(800, 600).OfType<UiFillRect>().Any(), "and is gone a second after the end");
+    }
+
+    private static void MissionBriefingWindow(GameData data)
+    {
+        var run = MissionRun.Load(MissionContext.From(data), "Maps/MD_USA01/MD_USA01.map", MissionOptions.Standard);
+        var live = LiveMission.Create(data, run, new System.Numerics.Vector2(1280, 720));
+        var controller = new MissionController(live, SkinPins.Settings);
+        var hud = controller.Hud;
+        hud.BriefingHistory = ["One", "Two"];
+        hud.WorldInputEnabled = true;
+        hud.BuildDrawList(1280, 720);
+        var button = hud.WindowRect("ControlBar.wnd:PopupCommunicator") ?? throw new InvalidOperationException("no communicator button");
+        var at = new System.Numerics.Vector2(button.X + button.Width / 2f, button.Y + button.Height / 2f);
+        hud.Process(new MouseMoveEvent(100, at));
+        hud.Process(new MouseButtonEvent(120, MouseButton.Left, true, at));
+        hud.Process(new MouseButtonEvent(170, MouseButton.Left, false, at));
+        hud.BuildDrawList(1280, 720);
+        TestHarness.Assert(hud.IsDiplomacyOpen && hud.Tree.FindByName("Diplomacy.wnd:SoloParent") is { IsHidden: false } && hud.Tree.FindByName("Diplomacy.wnd:InGameParent") is { IsHidden: true }, "a mission has the list and no players");
+        TestHarness.Assert(hud.Tree.TooltipOverride?.Invoke(hud.Tree.FindByName("ControlBar.wnd:PopupCommunicator")!)?.StartsWith(hud.Assets.Text.Get("CONTROLBAR:BriefingHistory"), StringComparison.Ordinal) == true, "and the button says so");
+        var list = hud.Tree.FindByName("Diplomacy.wnd:ListboxSolo")!.ListBox!;
+        TestHarness.Assert(list.Rows.Select(row => row.Cells[0]).SequenceEqual(["One", "Two"]) && list.Rows[0].Color != list.Rows[1].Color, "the lines stand in the list, in turns of the two colours");
     }
 
     /// <summary><c>InGameUI::update</c> plays <c>MilitarySubtitlesTyping</c> for every character it appends to the caption (not for a line break).</summary>
@@ -429,6 +452,15 @@ internal static class MissionTextTests
         TestHarness.Assert(Texts(labels).Single().Text == "GUI:Nothing" && labels.Problems.Keys.Any(key => key.Contains("GUI:Nothing", StringComparison.Ordinal) && key.Contains("no text", StringComparison.Ordinal)), "an unknown label is shown as itself and listed as a problem");
 
         static ImmutableArray<UiTextDraw> Texts0(MissionPresentationDirector director) => [..director.BuildOverlayCommands(1280, 720).OfType<UiTextDraw>()];
+    }
+
+    /// <summary><c>UpdateDiplomacyBriefingText</c>: captions and popups in their order, each once; the mission's window lists them in the two message colours.</summary>
+    private static void BriefingHistory()
+    {
+        var caption = Script("Caption", If("CONDITION_TRUE"), [Do("SHOW_MILITARY_CAPTION", Label("MAP:One"), Int(5000)), Do("INGAME_POPUP_MESSAGE", Label("GUI:Pop"), Int(10), Int(10), Int(200), Int(0)), Do("SHOW_MILITARY_CAPTION", Label("MAP:One"), Int(5000)), Do("DISPLAY_TEXT", Label("GUI:Other"))]);
+        var (session, director) = Synthetic([caption], label => label == "MAP:One" ? "FirstText" : label == "GUI:Pop" ? "Hello" : label);
+        Step(director, session);
+        TestHarness.Assert(director.BriefingHistory.SequenceEqual(["FirstText", "Hello"]), $"each line once, and a message is none ({string.Join(" | ", director.BriefingHistory)})");
     }
 
     private static void ReplacementAndPopup()

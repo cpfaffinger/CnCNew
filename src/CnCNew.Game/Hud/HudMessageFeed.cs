@@ -65,6 +65,9 @@ public sealed class HudMessageFeed
         }
     }
 
+    /// <summary>The display name of a faction (<c>PlayerTemplate::getDisplayName</c>), or its own name without one.</summary>
+    public string FactionText(string faction) => _factionLabels.TryGetValue(faction, out var label) ? _text.Get(label) : faction;
+
     /// <summary>The list the lines go to; a mission shares it with its scripts' <c>DISPLAY_TEXT</c>.</summary>
     public UiMessageLog Log { get; }
 

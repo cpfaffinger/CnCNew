@@ -29,6 +29,7 @@ internal static class NetHudTests
         harness.Run("Waiting for players: who is behind, by how much, and when the server drops it; a held seat counts down between two messages", Waiting);
         harness.Run("Pause with its requester, half speed, a changed speed", Banners);
         harness.Run("What happens once is a notice: every drop reason in its own words, a return, a seat given up, a desync with the package's place", Notices);
+        harness.Run("Muting: a muted connection's chat is not shown, and a seat is told from one's own and from one that left", Mute);
         harness.Run("The chat line: Enter to all, Backspace to the allies, the keys are letters while it is open, Escape drops it", Chat);
         var index = Array.IndexOf(args, "--content-dir");
         if (index < 0 || index + 1 >= args.Length)
@@ -99,6 +100,7 @@ internal static class NetHudTests
         public List<(string Text, bool Allies)> Sent { get; } = [];
         public string? NameOf(uint connectionId) => connectionId switch { 7 => "Alice", 8 => "Bob", 9 => "Carol", _ => null };
         public string? NameOfPlayer(int player) => player switch { 1 => "Alice", 2 => "Bob", 3 => "Carol", _ => null };
+        public uint? ConnectionOfPlayer(int player) => player switch { 1 => 7, 2 => 8, 3 => 9, _ => null };
         public void SendChat(string text, bool alliesOnly) => Sent.Add((text, alliesOnly));
         public bool HasAllies { get; set; } = true;
     }
@@ -137,6 +139,29 @@ internal static class NetHudTests
         source.Watching = true;
         hud.Update();
         TestHarness.Assert(hud.View.Watching && hud.StatusLine().Contains("watching yes", StringComparison.Ordinal), "a game that only watches says so, on the screen and in the status line");
+    }
+
+    private static void Mute()
+    {
+        var (hud, source, notices) = New();
+        hud.Update();
+        var before = notices.Count;
+        TestHarness.Assert(hud.ConnectionOfOther(2) == 8 && hud.ConnectionOfOther(4) is null, "another human's seat has a connection");
+        source.ChatLines.Add(new ChatMessage(8, "first"));
+        hud.Update();
+        TestHarness.Assert(notices.Count == before + 1, "a line is shown");
+        hud.SetMuted(8, true);
+        source.ChatLines.Add(new ChatMessage(8, "second"));
+        source.ChatLines.Add(new ChatMessage(9, "third"));
+        hud.Update();
+        TestHarness.Assert(hud.IsMuted(8) && notices.Count == before + 2 && notices[^1].Contains("third", StringComparison.Ordinal), "the muted member's line is not, another's is");
+        hud.SetMuted(8, false);
+        source.ChatLines.Add(new ChatMessage(8, "fourth"));
+        hud.Update();
+        TestHarness.Assert(notices[^1].Contains("fourth", StringComparison.Ordinal), "unmuted, the lines come again");
+        TestHarness.Assert(!hud.HasLeft(2), "a seat in play has not left");
+        source.Held[2] = new SeatStateMessage(2, SeatHold.Held, 30_000);
+        TestHarness.Assert(hud.HasLeft(2), "a seat held for a lost connection counts as gone");
     }
 
     private static void Waiting()

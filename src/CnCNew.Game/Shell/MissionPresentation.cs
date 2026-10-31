@@ -203,6 +203,19 @@ public sealed class MissionPresentationDirector
     /// </summary>
     public void UseMessages(UiMessageLog log) => _messages = log ?? throw new ArgumentNullException(nameof(log));
 
+    /// <summary>
+    /// <c>theBriefingList</c> of <c>Diplomacy.cpp</c>: every caption and popup of the scripts in the order they came, each text once (<c>UpdateDiplomacyBriefingText</c>). The diplomacy
+    /// window of a mission shows it. Not part of a saved mission yet: after a load it begins again.
+    /// </summary>
+    public IReadOnlyList<string> BriefingHistory => _briefingHistory;
+
+    private readonly List<string> _briefingHistory = [];
+
+    private void AddToBriefing(string text)
+    {
+        if (text.Length > 0 && !_briefingHistory.Contains(text)) _briefingHistory.Add(text);
+    }
+
     /// <summary><c>SHOW_MILITARY_CAPTION</c>: the caption being typed, shown or faded out, or <see langword="null"/>.</summary>
     public MilitaryCaptionState? MilitaryCaption => _militaryCaption;
 
@@ -1017,6 +1030,7 @@ public sealed class MissionPresentationDirector
                     Problem(action, "popup arguments missing");
                     return;
                 }
+                AddToBriefing(ResolveLabel(action, output.Arguments[0]));
                 ShowPopup(new PopupMessage(ResolveLabel(action, output.Arguments[0]), Math.Clamp(popupX, 0, 100), Math.Clamp(popupY, 0, 100), Math.Max(50, popupWidth), popupPause != 0));
                 Handled(action, Channel.Overlay);
                 return;
@@ -1038,6 +1052,7 @@ public sealed class MissionPresentationDirector
                 if (TextStyle is not { } style) { Problem(action, "no InGameUI style connected"); return; }
                 _militaryCaption = null;
                 var language = style.Language.Settings;
+                AddToBriefing(ResolveLabel(action, output.Arguments[0]));
                 _militaryCaption = MilitaryCaptionState.Begin(ResolveLabel(action, output.Arguments[0]), durationMs, FrameOf(tick), style.Settings, language.MilitaryCaptionSpeed, language.MilitaryCaptionDelayMilliseconds, out var problem);
                 if (_militaryCaption is null) Problem(action, problem ?? "no caption");
                 else Handled(action, Channel.Overlay);
@@ -1113,6 +1128,7 @@ public sealed class MissionPresentationDirector
         // A host that cannot resolve a label hands it back unchanged: that is "not found" here, and the usual case (the retail table has labels for most speech events).
         if (string.Equals(subtitle, label, StringComparison.Ordinal) || subtitle.Length == 0 || subtitle[0] == '*') return;
         var language = style.Language.Settings;
+        AddToBriefing(subtitle);
         _militaryCaption = MilitaryCaptionState.Begin(subtitle, SpeechSubtitleMilliseconds, FrameOf(tick), style.Settings, language.MilitaryCaptionSpeed, language.MilitaryCaptionDelayMilliseconds, out _);
     }
 

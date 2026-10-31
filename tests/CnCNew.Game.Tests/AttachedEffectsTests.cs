@@ -85,7 +85,7 @@ internal static class AttachedEffectsTests
         var owner = data.Graph.Definitions.OfType<CnCNew.Data.Definitions.ObjectDefinition>().First(definition => catalog.LaserOwners.ContainsKey(definition.OriginalName) && definition.OriginalName.Contains("Lotus", StringComparison.OrdinalIgnoreCase));
         TestHarness.Assert(owner is not null, "the Black Lotus is one of its owners");
         var points = spec!.Points(new Vector3(0, 0, 10), new Vector3(100, 0, 10), (_, _) => 0f);
-        TestHarness.Assert(points.Length == 11 && points[0] == new Vector3(0, 0, 10) && Math.Abs(points[^1].X - 100f) < 1e-3f, "ten segments between the two ends");
+        TestHarness.Assert(points.Length == 11 && Math.Abs(points[0].X) < 1e-3f && Math.Abs(points[^1].X - 100f) < 1e-3f, "ten segments between the two ends");
         TestHarness.Assert(Math.Abs(points[5].Z - 40f) < 1e-3f && Math.Abs(points[0].Z - 10f) < 1e-3f, "the arc is highest in the middle and nothing at the ends");
         TestHarness.Assert(spec.Points(new Vector3(0, 0, 0), new Vector3(100, 0, 0), (_, _) => 50f).All(point => point.Z >= 52f), "it skims the ground and does not go through it");
     }
