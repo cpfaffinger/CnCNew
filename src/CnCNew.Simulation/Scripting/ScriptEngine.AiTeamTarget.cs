@@ -24,7 +24,7 @@ public sealed partial class ScriptEngine
     {
         if (_ai.Count == 0 || CommonTargetTeamOf(entity) is not { CommonTarget: not 0 } team) return null;
         // "if (teamVictim && getAttitude() >= AI_NORMAL) return teamVictim".
-        return AttitudeOf(entity) >= Attitude.Normal ? TeamTarget(team) : null;
+        return _world.AttitudeOf(entity) >= Attitude.Normal ? TeamTarget(team) : null;
     }
 
     public void NoteFiring(Entity attacker, Entity victim)

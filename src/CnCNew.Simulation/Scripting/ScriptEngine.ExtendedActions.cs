@@ -331,6 +331,7 @@ public sealed partial class ScriptEngine
         foreach (var member in LiveMembers(source).ToArray())
         {
             if (!destination.Members.Contains(member.Id.Value)) destination.Members.Add(member.Id.Value);
+            _world.ClearOwnAttitude(member);
             if (member.Owner != destination.Owner) _world.TransferOwnership(member.Id, destination.Owner);
             if (destination.AttackPriority.Length > 0) _prioritySetOf[member.Id.Value] = destination.AttackPriority;
         }

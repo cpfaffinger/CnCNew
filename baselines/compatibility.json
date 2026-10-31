@@ -2758,15 +2758,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "InternetHackContain/GoAggressiveOnExit",
-      "count": 4,
-      "owners": [
-        "InternetHackContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "LeafletDropBehavior/LeafletFXParticleSystem",
       "count": 1,
       "owners": [
@@ -4009,15 +4000,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "RiderChangeContain/GoAggressiveOnExit",
-      "count": 11,
-      "owners": [
-        "RiderChangeContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "RiderChangeContain/ScuttleStatus",
       "count": 11,
       "owners": [
@@ -4740,15 +4722,6 @@
       "category": "deferred-field",
       "name": "TransportContain/ExitSound",
       "count": 5,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "TransportContain/GoAggressiveOnExit",
-      "count": 37,
       "owners": [
         "TransportContain"
       ],

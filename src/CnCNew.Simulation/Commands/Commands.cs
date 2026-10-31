@@ -756,6 +756,9 @@ public enum CommandRejection : byte
     /// <c>CANMAKE_PARKING_PLACES_FULL</c>: an airfield reserves a space for every aircraft it queues (<c>ParkingPlaceBehavior::shouldReserveDoorWhenQueued</c>), and none is free.
     /// </summary>
     ParkingPlacesFull = 41,
+
+    /// <summary><c>isAllowedToRespondToAiCommands</c>: a computer player's unit in the mood <c>ATTITUDE_SLEEP</c> ignores all commands.</summary>
+    Asleep = 42,
 }
 
 public readonly record struct SubmitResult(bool Accepted, CommandRejection Reason)

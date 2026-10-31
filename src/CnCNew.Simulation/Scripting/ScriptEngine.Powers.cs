@@ -200,6 +200,7 @@ public sealed partial class ScriptEngine
                 if (recruit is null) break;
                 foreach (var other in _teams.Values) other.Members.Remove(recruit.Id.Value);
                 team.Members.Add(recruit.Id.Value);
+                _world.ClearOwnAttitude(recruit);
                 if (team.AttackPriority.Length > 0) _prioritySetOf[recruit.Id.Value] = team.AttackPriority;
                 if (recruit.Template.Locomotor is not null) MoveTo(recruit, home.X, home.Y);
                 recruited++;

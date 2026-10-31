@@ -108,8 +108,8 @@ static partial class Tests
         Run(session, session.Frames(3));
         var walker = NamedIn(session, "Walker")!;
         Check.That((walker.Angle - Fixed.FromDecimal(1.5707963m)).Abs() < Fixed.FromDecimal(0.05m), $"NAMED_FACE_NAMED turns the unit towards the object ({walker.Angle}).");
-        Check.That(session.Engine.RecordedSetting("NAMED_SET_ATTITUDE", walker.Id.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)) == 2
-                   && session.Engine.RecordedSetting("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", string.Empty) == 1, "The consumer-less settings are recorded.");
+        Check.That(walker.OwnAttitude == 2, "NAMED_SET_ATTITUDE gives the object its attitude.");
+        Check.That(session.Engine.RecordedSetting("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", string.Empty) == 1, "The consumer-less settings are recorded.");
         Check.That(session.Engine.MissingActionHits.Count == 0, "No missing actions: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
     }
 

@@ -176,7 +176,7 @@ public interface IAcquisitionAdvisor
     /// <summary><c>AttackPriorityInfo::getPriority</c> for the set <paramref name="attacker"/> was given; false when it has none (<c>getDefaultAttackInfo</c>: the closest enemy wins).</summary>
     bool TryAttackPriority(Entity attacker, Entity target, out int priority);
 
-    /// <summary><c>AIUpdateInterface::getAttitude</c>: the mood of the unit's team.</summary>
+    /// <summary><c>TeamTemplateInfo::m_initialTeamAttitude</c> of the unit's team: its attitude unless it has an own one (<see cref="Entity.OwnAttitude"/>).</summary>
     Attitude AttitudeOf(Entity entity);
 
     /// <summary>

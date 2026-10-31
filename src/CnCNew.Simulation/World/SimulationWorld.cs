@@ -843,6 +843,7 @@ public sealed partial class SimulationWorld : IWorldServices
         }
         if (command.RequiresSystem && !command.Player.IsSystem) return CommandRejection.NotPermitted;
         if (!command.Player.IsSystem && !CoordinatesInReach(command)) return CommandRejection.InvalidArguments;
+        if (SleepsThrough(command)) return CommandRejection.Asleep;
         switch (command)
         {
             case SpawnCommand spawn:
@@ -1114,8 +1115,59 @@ public sealed partial class SimulationWorld : IWorldServices
         }
     }
 
+    /// <summary>
+    /// <c>isAllowedToRespondToAiCommands</c>, for what reaches a unit's <c>aiDoCommand</c>: the order of one unit that sleeps, or of a list in which every unit sleeps; of a list in
+    /// which some sleep, those stand still (<see cref="WithoutSleepers"/>).
+    /// </summary>
+    private bool SleepsThrough(SimCommand command)
+    {
+        switch (command)
+        {
+            case SetMoveTargetCommand order: return Sleeps(order.Target);
+            case AttackMoveCommand order: return Sleeps(order.Unit);
+            case PursueCommand order: return Sleeps(order.Unit);
+            case FireWeaponCommand order: return Sleeps(order.Source);
+            case DockCommand order: return Sleeps(order.Actor);
+            case EnterContainerCommand order: return Sleeps(order.Actor);
+            case ExitContainerCommand order: return Sleeps(order.Actor);
+            case MoveAndEnterCommand order: return Sleeps(order.Actor);
+            case CaptureCommand order: return Sleeps(order.Actor);
+            case ConstructCommand order: return Sleeps(order.Builder);
+            case ResumeConstructCommand order: return Sleeps(order.Builder);
+            case RepairCommand order: return Sleeps(order.Builder);
+            case GroupMoveCommand order: return AllSleep(order.Units);
+            case GuardCommand order: return AllSleep(order.Units);
+            case AttackPositionCommand order: return AllSleep(order.Units);
+            default: return false;
+        }
+
+        bool Sleeps(EntityId id) => _entities.TryGetValue(id.Value, out var unit) && IsAsleep(unit);
+
+        bool AllSleep(ImmutableArray<EntityId> units)
+        {
+            if (units.IsDefaultOrEmpty) return false;
+            foreach (var id in units)
+                if (!Sleeps(id)) return false;
+            return true;
+        }
+    }
+
+    /// <summary>The units of a group order that respond to it.</summary>
+    private ImmutableArray<EntityId> WithoutSleepers(ImmutableArray<EntityId> units)
+    {
+        foreach (var id in units)
+            if (_entities.TryGetValue(id.Value, out var unit) && IsAsleep(unit))
+                return [..units.Where(other => !(_entities.TryGetValue(other.Value, out var member) && IsAsleep(member)))];
+        return units;
+    }
+
     private void Execute(SimCommand command)
     {
+        if (SleepsThrough(command))
+        {
+            RecordRejection(command, CommandRejection.Asleep);
+            return;
+        }
         switch (command)
         {
             case SpawnCommand spawn:
@@ -1234,7 +1286,8 @@ public sealed partial class SimulationWorld : IWorldServices
                 // GameLogicDispatch doMoveTo: a move order releases any temporary weapon lock.
                 ReleaseWeaponLock(target, WeaponLockKind.Temporary);
                 var (moveX, moveY) = IndividualDestination(target, move.X, move.Y);
-                AiOf(target)!.OrderMove(this, moveX, moveY, true);
+                // AIMoveToState::update, MAA_Action_To_AttackMove: the plain move of a computer player's alert or aggressive unit is an attack-move.
+                AiOf(target)!.OrderMove(this, moveX, moveY, true, attackMove: IsComputerPlayer(target.Owner) && AttitudeOf(target) >= Attitude.Alert);
                 break;
             }
             case SetRelationshipCommand relationOrder:
@@ -1264,13 +1317,13 @@ public sealed partial class SimulationWorld : IWorldServices
                 break;
             }
             case GroupMoveCommand group:
-                ExecuteGroupMove(group);
+                ExecuteGroupMove(group with { Units = WithoutSleepers(group.Units) });
                 break;
             case GuardCommand guard:
             {
                 var reason = CheckGuard(command.Player, guard);
                 if (reason != 0) { RecordRejection(command, reason); break; }
-                ExecuteGuard(guard);
+                ExecuteGuard(guard with { Units = WithoutSleepers(guard.Units) });
                 break;
             }
             case SetMineClearingCommand clearing:

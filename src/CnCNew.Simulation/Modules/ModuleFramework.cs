@@ -134,6 +134,12 @@ public interface IWorldServices
     /// <summary>A new order ends the unit's guard (<c>AIGuardState::onExit</c>, F-58).</summary>
     void EndGuard(Entity entity);
 
+    /// <summary><c>AIUpdateInterface::setAttitude</c>.</summary>
+    void SetAttitude(Entity entity, int attitude);
+
+    /// <summary><c>AIUpdateInterface::wakeUpAndAttemptToTarget</c>.</summary>
+    void WakeUpAndAttemptToTarget(Entity entity);
+
     /// <summary><c>aiAttackPosition(pos, shots, CMD_FROM_AI)</c> (F-64): the unit attacks the place for <paramref name="shots"/> shots (0 or less: no limit); false when it cannot.</summary>
     bool AttackPlaceFor(Entity unit, Fixed x, Fixed y, int shots);
 

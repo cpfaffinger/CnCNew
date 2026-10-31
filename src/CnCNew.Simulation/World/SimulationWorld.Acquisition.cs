@@ -83,6 +83,48 @@ public sealed partial class SimulationWorld
     /// <summary>The goal of the unit's attack-move, if it is on one.</summary>
     public (Fixed X, Fixed Y)? AttackMoveGoalOf(Entity entity) => entity.Acquisition is { AttackMove: true } state ? (state.GoalX, state.GoalY) : null;
 
+    /// <summary>
+    /// <c>AIUpdateInterface::getAttitude</c>: the object's own attitude, else the initial attitude of its team. An unknown value counts as normal, as in
+    /// <c>getMoodMatrixValue</c>. Only a computer player's unit has a mood: ask <see cref="IsComputerPlayer"/> first.
+    /// </summary>
+    public Attitude AttitudeOf(Entity entity)
+    {
+        if (entity.OwnAttitude is not { } own) return AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal;
+        return own is >= (int)Attitude.Sleep and <= (int)Attitude.Aggressive ? (Attitude)own : Attitude.Normal;
+    }
+
+    /// <summary><c>AIUpdateInterface::setAttitude</c>.</summary>
+    public void SetAttitude(Entity entity, int attitude)
+    {
+        if (entity.OwnAttitude == attitude) return;
+        entity.OwnAttitude = attitude;
+        MarkDirty(entity);
+    }
+
+    /// <summary><c>Object::setTeam</c>: "now, adjust the attitude of the unit to its new team".</summary>
+    public void ClearOwnAttitude(Entity entity)
+    {
+        if (entity.OwnAttitude is null) return;
+        entity.OwnAttitude = null;
+        MarkDirty(entity);
+    }
+
+    /// <summary><c>AIUpdateInterface::wakeUpAndAttemptToTarget</c>: an idle unit looks for a victim now, the look after it shifted by up to half a rate.</summary>
+    public void WakeUpAndAttemptToTarget(Entity entity)
+    {
+        if (AiOf(entity) is not { IsIdle: true } ai || (ai.AutoAcquire & AutoAcquire.Idle) == 0) return;
+        var state = entity.Acquisition ??= new AcquisitionState();
+        (state.Mode, state.NextCheck, state.Offset) = ((byte)AcquireMode.Idle, _tick, true);
+        _acquirers.Add(entity.Id.Value);
+        MarkDirty(entity);
+    }
+
+    /// <summary>
+    /// <c>MM_Controller_AI | MM_Mood_Sleep</c>: "AI Units that are asleep actually ignore all commands" (<c>isAllowedToRespondToAiCommands</c>), acquire nothing while idle
+    /// (<c>MAA_Affect_Range_IgnoreAll</c>) and do not fire (<c>AIAttackFireWeaponState::onEnter</c>).
+    /// </summary>
+    public bool IsAsleep(Entity entity) => IsComputerPlayer(entity.Owner) && AttitudeOf(entity) == Attitude.Sleep;
+
     private void RegisterAcquirer(Entity entity)
     {
         if (AiOf(entity) is { } ai && ((ai.AutoAcquire & AutoAcquire.Idle) != 0 || entity.Acquisition is not null || entity.Guard is not null || entity.AttackPlace is not null)) _acquirers.Add(entity.Id.Value);
@@ -412,7 +454,7 @@ public sealed partial class SimulationWorld
     private bool Engage(Entity entity, AIUpdateInterface ai, AcquisitionState state, Entity victim, AcquireMode mode, long tick)
     {
         var turretOnly = mode == AcquireMode.Turret;
-        if (!CanAttack(entity, victim, turretOnly, out var inRange)) return false;
+        if (IsAsleep(entity) || !CanAttack(entity, victim, turretOnly, out var inRange)) return false;
         var aircraft = entity.Template.IsKindOf("AIRCRAFT");
         if (inRange)
         {
@@ -542,10 +584,13 @@ public sealed partial class SimulationWorld
         if (FiringContainerOf(entity) is { } container) return reach + container.Template.BoundingCircleRadius;
         if (!chase) return IsComputerPlayer(entity.Owner) ? reach : Fixed.Min(reach, entity.Template.VisionRange * AcquireVisionFactorHuman);
         var vision = entity.Template.VisionRange * AcquireVisionFactorComputer;
-        switch (AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal)
+        if (IsComputerPlayer(entity.Owner))
         {
-            case Attitude.Alert: vision *= AlertRangeFactor; break;
-            case Attitude.Aggressive: vision *= AggressiveRangeFactor; break;
+            switch (AttitudeOf(entity))
+            {
+                case Attitude.Alert: vision *= AlertRangeFactor; break;
+                case Attitude.Aggressive: vision *= AggressiveRangeFactor; break;
+            }
         }
 
         return vision;
@@ -573,10 +618,10 @@ public sealed partial class SimulationWorld
         if (entity.HasStatus(UsingAbilityBit)) return null;
         var computer = IsComputerPlayer(entity.Owner);
         var container = FiringContainerOf(entity);
-        // "Human units don't have a mood": only a computer player's unit sleeps or stays passive.
-        // A contained unit does not sleep: getAdjustedVisionRangeForObject gives it its weapon range instead of the mood's zero. Passive is getNextMoodTarget's own test and holds inside too.
-        var attitude = computer ? AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal : Attitude.Normal;
-        if (attitude == Attitude.Sleep && container is null) return null;
+        // "Human units don't have a mood": only a computer player's unit sleeps or stays passive. The sleeper never looks: AIIdleState and TurretAI test MAA_Affect_Range_IgnoreAll
+        // before they call getNextMoodTarget, also inside a container, where the range would not be the mood's zero. Passive is getNextMoodTarget's own test and holds inside too.
+        var attitude = computer ? AttitudeOf(entity) : Attitude.Normal;
+        if (attitude == Attitude.Sleep) return null;
         // A passive unit answers its last attacker: "Do not allow units that healed me to get acquired!"
         if (attitude == Attitude.Passive)
             return !entity.LastDamageHealing && FindEntity(entity.LastDamageSource) is { } attacker && IsAttackable(entity, attacker) ? attacker : null;

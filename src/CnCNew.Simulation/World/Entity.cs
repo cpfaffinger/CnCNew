@@ -275,6 +275,12 @@ public sealed class Entity
     /// <summary>Script disables: bit 1 = <c>DISABLED_HELD</c> (<c>NAMED_SET_HELD</c>: nothing acts), bit 2 = <c>OBJECT_STATUS_SCRIPT_DISABLED</c> (<c>PLAYER_DISABLE_FACTORIES</c>: the object produces nothing). 0 when never touched.</summary>
     public byte ScriptDisableMask { get; internal set; }
 
+    /// <summary>
+    /// <c>AIUpdateInterface::m_attitude</c> when it is not the initial attitude of the object's team: a script (<c>TEAM_SET_ATTITUDE</c>, <c>NAMED_SET_ATTITUDE</c>), the map's
+    /// <c>objectAggressiveness</c> or a transport with <c>GoAggressiveOnExit</c> set it. Joining a team takes it back (<c>Object::setTeam</c>). Null: the team's attitude.
+    /// </summary>
+    public int? OwnAttitude { get; internal set; }
+
     public const byte ScriptHeld = 1;
     public const byte ScriptDisabled = 2;
 
@@ -420,6 +426,7 @@ public sealed class Entity
         if (ParalyzedUntil != 0) writer.Int("paralyzedUntil", ParalyzedUntil);
         if (Underpowered) writer.Bool("underpowered", true);
         if (ScriptDisableMask != 0) writer.Int("scriptDisableMask", ScriptDisableMask);
+        if (OwnAttitude is { } attitude) writer.Int("attitude", attitude);
         writer.Bool("hasPlayerUpgradeArmor", HasPlayerUpgradeArmor);
         writer.Bool("hasPlayerUpgradeWeapon", HasPlayerUpgradeWeapon);
         writer.Int("constructionWork", ConstructionWork);

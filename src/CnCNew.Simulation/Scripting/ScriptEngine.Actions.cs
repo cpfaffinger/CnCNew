@@ -593,17 +593,16 @@ public sealed partial class ScriptEngine
     // ------------------------------------------------------------------------------------------------ orders
 
     /// <summary>
-    /// A move order; with <paramref name="attack"/> an attack-move. <c>AIUpdateInterface::privateMoveToPosition</c> also turns the plain move of a computer player's alert or aggressive
-    /// team into an attack-move (<c>MAA_Action_To_AttackMove</c>).
+    /// A move order; with <paramref name="attack"/> an attack-move. The world turns the plain move of a computer player's alert or aggressive unit into an attack-move
+    /// (<c>AIMoveToState::update</c>, <c>MAA_Action_To_AttackMove</c>).
     /// </summary>
     private void MoveTo(Entity entity, Fixed x, Fixed y, bool busy = true, bool attack = false)
     {
         _buttonHunts.Remove(entity.Id.Value);
         if (entity.Owner.IsSystem) { Diagnose("order for a neutral object"); return; }
-        if (entity.Template.Locomotor is null) return;
+        if (entity.Template.Locomotor is null || _world.IsAsleep(entity)) return;
         var owner = entity.Owner;
         var id = entity.Id;
-        if (!attack && _world.IsComputerPlayer(owner) && AttitudeOf(entity) >= Attitude.Alert) attack = true;
         var accepted = attack
             ? _issue(owner, (sequence, tick) => new AttackMoveCommand(owner, sequence, tick, id, x, y)).Accepted
             : _issue(owner, (sequence, tick) => new SetMoveTargetCommand(owner, sequence, tick, id, x, y)).Accepted;
@@ -623,8 +622,8 @@ public sealed partial class ScriptEngine
         {
             _buttonHunts.Remove(member.Id.Value);
             if (member.Owner.IsSystem) { Diagnose("order for a neutral object"); continue; }
-            if (member.Template.Locomotor is null) continue;
-            movers.Add((member.Owner, _world.IsComputerPlayer(member.Owner) && AttitudeOf(member) >= Attitude.Alert, member.Id));
+            if (member.Template.Locomotor is null || _world.IsAsleep(member)) continue;
+            movers.Add((member.Owner, _world.IsComputerPlayer(member.Owner) && _world.AttitudeOf(member) >= Attitude.Alert, member.Id));
         }
         foreach (var order in movers.GroupBy(mover => (mover.Owner, mover.Attack)).OrderBy(order => order.Key.Owner.Value).ThenBy(order => order.Key.Attack))
         {
@@ -673,7 +672,7 @@ public sealed partial class ScriptEngine
     private void StartFollowing(Entity entity, string mode)
     {
         _buttonHunts.Remove(entity.Id.Value);
-        if (entity.Template.Locomotor is null || entity.Owner.IsSystem) return;
+        if (entity.Template.Locomotor is null || entity.Owner.IsSystem || _world.IsAsleep(entity)) return;
         if (AiOf(entity) is { SpeedCap.Raw: > 0 } slowed) slowed.SpeedCap = Fixed.Zero;
         _followers[entity.Id.Value] = new Follower { Entity = entity.Id.Value, Path = mode, Index = 0 };
         _completedPath.Remove(entity.Id.Value);

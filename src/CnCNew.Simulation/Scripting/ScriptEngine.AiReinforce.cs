@@ -59,6 +59,7 @@ public sealed partial class ScriptEngine
             {
                 foreach (var other in _teams.Values) other.Members.Remove(recruit.Id.Value);
                 chosen.Members.Add(recruit.Id.Value);
+                _world.ClearOwnAttitude(recruit);
                 if (chosen.AttackPriority.Length > 0) _prioritySetOf[recruit.Id.Value] = chosen.AttackPriority;
                 order.Queued = 1;
                 order.Joined = 1;

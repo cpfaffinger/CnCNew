@@ -254,7 +254,7 @@ public sealed partial class SimulationWorld
         var factor = computer ? (inner ? GuardInnerFactorComputer : AcquireVisionFactorComputer) : (inner ? GuardInnerFactorHuman : GuardOuterFactorHuman);
         var range = entity.Template.VisionRange * factor;
         if (!computer) return range;
-        return (AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal) switch
+        return AttitudeOf(entity) switch
         {
             Attitude.Sleep => Fixed.Zero,
             Attitude.Alert => range * AlertRangeFactor,
@@ -565,7 +565,7 @@ public sealed partial class SimulationWorld
     /// </summary>
     private bool GuardEngage(Entity entity, AIUpdateInterface ai, AcquisitionState state, Entity victim, long tick)
     {
-        if (!CanAttack(entity, victim, false, out var inRange)) return false;
+        if (IsAsleep(entity) || !CanAttack(entity, victim, false, out var inRange)) return false;
         if (inRange)
         {
             if (state.Chasing)

@@ -110,7 +110,7 @@ public sealed record ScriptWaypointPath(string Label, ImmutableArray<ScriptWaypo
 /// <summary>A pre-placed object of the map (<c>ObjectsList</c>), not a waypoint.</summary>
 /// <param name="ScriptName">The <c>objectName</c> key (what <c>Unit</c> script parameters refer to); empty for anonymous objects.</param>
 /// <param name="TeamName">The <c>originalOwner</c> team prototype name; empty when the object belongs to no team.</param>
-public sealed record ScriptMapObject(string Template, string ScriptName, string TeamName, Fixed X, Fixed Y, Fixed Z, Fixed Angle, int HealthPercent, bool Enabled);
+public sealed record ScriptMapObject(string Template, string ScriptName, string TeamName, Fixed X, Fixed Y, Fixed Z, Fixed Angle, int HealthPercent, bool Enabled, int? Aggressiveness = null);
 
 /// <summary>One script with the coordinates the engine needs to address it: which side's list, which group, in which order.</summary>
 public sealed class ScriptUnit(int index, int listIndex, int groupIndex, MapScript script, bool isSubroutine)
@@ -341,7 +341,7 @@ public sealed class ScriptProgram
             var health = obj.Properties.TryGetInt("objectInitialHealth", out var value) ? value : 100;
             var enabled = obj.Properties.Find("objectEnabled") is not { } flag || flag.Bool;
             objects.Add(new ScriptMapObject(obj.Name, obj.Properties.GetText("objectName") ?? string.Empty, obj.Properties.GetText("originalOwner") ?? string.Empty,
-                Fixed.FromDecimal(obj.X), Fixed.FromDecimal(obj.Y), Fixed.FromDecimal(obj.Z), Fixed.FromDecimal(obj.Angle), health, enabled));
+                Fixed.FromDecimal(obj.X), Fixed.FromDecimal(obj.Y), Fixed.FromDecimal(obj.Z), Fixed.FromDecimal(obj.Angle), health, enabled, obj.Properties.TryGetInt("objectAggressiveness", out var mood) ? mood : null));
         }
 
         var units = ImmutableArray.CreateBuilder<ScriptUnit>();

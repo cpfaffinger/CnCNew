@@ -22,7 +22,6 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<long, int> _relTeamTeam = [];
     private readonly SortedDictionary<long, int> _relTeamPlayer = [];
     private readonly SortedDictionary<long, int> _relPlayerTeam = [];
-    private readonly SortedDictionary<int, int> _teamAttitude = [];
     private readonly SortedDictionary<int, int> _teamWander = [];
     private readonly SortedSet<uint> _unmanned = [];
     private readonly SortedDictionary<string, int> _priorityDelta = new(StringComparer.Ordinal);
@@ -39,9 +38,6 @@ public sealed partial class ScriptEngine
 
     /// <summary>The hulk lifetime override in ticks a script set (<c>SCRIPTING_OVERRIDE_HULK_LIFETIME</c>), or −1.</summary>
     public long HulkLifetimeOverrideTicks => _hulkLifetimeOverrideTicks;
-
-    /// <summary>The attitude (<c>AIMood</c> value) a script last gave a team instance, or <see langword="null"/>.</summary>
-    public int? AttitudeOf(int teamId) => _teamAttitude.TryGetValue(teamId, out var attitude) ? attitude : null;
 
     /// <summary>The effective production priority of a team prototype: its map value plus the successes and failures scripts recorded.</summary>
     public int ProductionPriorityOf(ScriptTeamPrototype prototype) => prototype.ProductionPriority + _priorityDelta.GetValueOrDefault(prototype.Name);
@@ -184,12 +180,14 @@ public sealed partial class ScriptEngine
                 }
                 return true;
 
-            // ---- recorded only: no consumer in the simulation
+            // updateTeamSetAttitude -> AIGroup::setAttitude: every member that is on the team now; who joins later has the team's initial attitude.
             case "TEAM_SET_ATTITUDE":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0))) _teamAttitude[team.Id] = Int(p, 1);
-                _recordedActions++;
+                    foreach (var team in TeamsNamed(Str(p, 0)))
+                        foreach (var member in LiveMembers(team).ToArray())
+                            if (AiOf(member) is not null) _world.SetAttitude(member, Int(p, 1));
                 return true;
+            // ---- recorded only: no consumer in the simulation
             case "TEAM_WANDER":
             case "TEAM_WANDER_IN_PLACE":
                 if (Has(type, p, 1))
@@ -435,7 +433,7 @@ public sealed partial class ScriptEngine
     /// <summary><c>doTeamPanic</c>: the member runs the waypoint path from the waypoint closest to it (<c>getClosestWaypointOnPath</c>, then <c>aiPanic</c>); the panic locomotor set is not modelled.</summary>
     private void Panic(Entity member, ScriptWaypointPath path)
     {
-        if (member.Template.Locomotor is null || member.Owner.IsSystem) return;
+        if (member.Template.Locomotor is null || member.Owner.IsSystem || _world.IsAsleep(member)) return;
         var closest = 0;
         var bestDistance = Fixed.MaxValue;
         for (var index = 0; index < path.Waypoints.Length; index++)
@@ -455,7 +453,7 @@ public sealed partial class ScriptEngine
     /// </summary>
     private void Face(Entity entity, Fixed x, Fixed y)
     {
-        if (entity.Owner.IsSystem || entity.Template.Locomotor is null) return;
+        if (entity.Owner.IsSystem || entity.Template.Locomotor is null || _world.IsAsleep(entity)) return;
         Stop(entity);
         var dx = x - entity.X;
         var dy = y - entity.Y;
@@ -491,7 +489,6 @@ public sealed partial class ScriptEngine
         DescribeRelations(writer, "relTeamTeam", _relTeamTeam);
         DescribeRelations(writer, "relTeamPlayer", _relTeamPlayer);
         DescribeRelations(writer, "relPlayerTeam", _relPlayerTeam);
-        DescribePairs(writer, "teamAttitude", _teamAttitude);
         DescribePairs(writer, "teamWander", _teamWander);
         if (_hulkLifetimeOverrideTicks != -1) writer.Int("hulkLifetimeOverride", _hulkLifetimeOverrideTicks);
         if (_unmanned.Count > 0) { writer.BeginArray("unmanned"); foreach (var id in _unmanned) { writer.BeginObject(null); writer.UInt("id", id); writer.EndObject(); } writer.EndArray(); }
@@ -530,7 +527,6 @@ public sealed partial class ScriptEngine
         LoadRelations(reader, "relTeamTeam", _relTeamTeam);
         LoadRelations(reader, "relTeamPlayer", _relTeamPlayer);
         LoadRelations(reader, "relPlayerTeam", _relPlayerTeam);
-        LoadPairs(reader, "teamAttitude", _teamAttitude);
         LoadPairs(reader, "teamWander", _teamWander);
         _hulkLifetimeOverrideTicks = reader.Has("hulkLifetimeOverride") ? reader.Int("hulkLifetimeOverride") : -1;
         _unmanned.Clear();

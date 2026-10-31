@@ -219,6 +219,7 @@ public sealed partial class SimulationWorld
             ParalyzedUntil = reader.Has("paralyzedUntil") ? reader.Int("paralyzedUntil") : 0,
             Underpowered = reader.Has("underpowered") && reader.Bool("underpowered"),
             ScriptDisableMask = reader.Has("scriptDisableMask") ? checked((byte)reader.Int("scriptDisableMask")) : (byte)0,
+            OwnAttitude = reader.Has("attitude") ? checked((int)reader.Int("attitude")) : null,
         };
         if (reader.Has("layer")) entity.Layer = checked((int)reader.Int("layer"));
         if (reader.Has("shroudScalar")) entity.ShroudScalar = reader.Fixed("shroudScalar");

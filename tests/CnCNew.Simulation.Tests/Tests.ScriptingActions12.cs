@@ -81,7 +81,7 @@ static partial class Tests
         Check.That(soldier.Angle.Abs() < Fixed.FromDecimal(0.01m), $"Facing the waypoint to the east sets heading 0 (was {soldier.Angle}).");
         Check.That(abandoned.Owner.IsSystem, "An unmanned object belongs to the neutral player.");
         Check.That(session.Engine.HulkLifetimeOverrideTicks == session.Frames(60), "The hulk lifetime is recorded.");
-        Check.That(session.Engine.RecordedActions >= 2, $"Recorded actions are counted apart from executed ones ({session.Engine.RecordedActions}).");
+        Check.That(session.Engine.RecordedActions >= 1, $"Recorded actions are counted apart from executed ones ({session.Engine.RecordedActions}).");
         Check.That(session.Engine.MissingActionHits.Count == 0, "No missing actions: " + string.Join(", ", session.Engine.MissingActionHits.Keys));
         session.Engine.SignalUiInteraction("wipe");
         Run(session, session.Frames(3));

@@ -68,6 +68,7 @@ public sealed class MissionSession
     public const string FixtureId = "mission";
 
     private readonly Dictionary<int, ulong> _sequences = [];
+    private readonly List<(EntityId Id, int Mood)> _placedMoods = [];
     private long _shots;
     private long _rejectedShots;
 
@@ -140,6 +141,10 @@ public sealed class MissionSession
         session.PlaceObjects(catalog, terrain);
         // The reference creates the map's objects synchronously while loading, so the first script evaluation already sees them.
         world.MaterializePendingSpawns();
+        // Object::updateObjValuesFromMapProperties: the map's objectAggressiveness replaces the attitude the object has from its team.
+        foreach (var (id, mood) in session._placedMoods)
+            if (world.FindEntity(id) is { } placed) world.SetAttitude(placed, mood);
+        session._placedMoods.Clear();
         // GameLogic::startNewGame: the skill points of the last mission, for the humans of a single player game.
         if (options.RankPoints != 0)
             foreach (var player in program.Players.Where(player => player.IsHuman)) world.AddSkillPoints(player.Id, options.RankPoints);
@@ -198,6 +203,7 @@ public sealed class MissionSession
             var id = World.RequestSpawn(template.Index, owner, placed.X, placed.Y, placed.Z, placed.Angle, placed.HealthPercent);
             if (placed.ScriptName.Length > 0) Engine.RegisterNamed(placed.ScriptName, id);
             if (prototype is not null) Engine.AssignToTeam(prototype.Name, id);
+            if (placed.Aggressiveness is { } mood && mood != (prototype?.Aggressiveness ?? 0)) _placedMoods.Add((id, mood));
         }
         PlaceBuildLists(catalog, skipped);
         PlaceHumanStarts(catalog, terrain, skipped, Engine.IsSkirmish);

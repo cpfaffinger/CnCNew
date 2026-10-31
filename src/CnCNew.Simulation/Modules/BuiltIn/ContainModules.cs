@@ -769,6 +769,12 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
     /// </summary>
     public bool ScatterNearbyOnExit { get; init; } = true;
 
+    /// <summary><c>GoAggressiveOnExit</c> (default no): "AI might need help using this transport in a good way. Make the passengers aggressive."</summary>
+    public bool GoAggressiveOnExit { get; init; }
+
+    /// <summary><c>ResetMoodCheckTimeOnExit</c> (default yes in the module data of <c>TransportContainModuleData</c>): an idle rider looks for a victim at once when it leaves.</summary>
+    public bool ResetMoodCheckTimeOnExit { get; init; } = true;
+
     /// <summary><c>PassengersAllowedToFire</c> (default no, <c>OpenContainModuleData</c>): the riders may fire from inside (F-60; a Humvee, a Battle Bus, a Listening Outpost, the Spectre).</summary>
     public bool PassengersAllowedToFire { get; init; }
 
@@ -789,6 +795,8 @@ public sealed record TransportContainData(OpenContainData Base, int Slots, Fixed
         NumberOfExitPaths = checked((int)ModuleConfigReader.Int(configuration, "NumberOfExitPaths", 1)),
         ExitDelayTicks = ModuleConfigReader.Ticks(configuration, "ExitDelay", 0),
         ScatterNearbyOnExit = ModuleConfigReader.Bool(configuration, "ScatterNearbyOnExit", true),
+        GoAggressiveOnExit = ModuleConfigReader.Bool(configuration, "GoAggressiveOnExit", false),
+        ResetMoodCheckTimeOnExit = ModuleConfigReader.Bool(configuration, "ResetMoodCheckTimeOnExit", true),
         DestroyRidersWhoAreNotFreeToExit = ModuleConfigReader.Bool(configuration, "DestroyRidersWhoAreNotFreeToExit", false),
         PassengersAllowedToFire = ModuleConfigReader.Bool(configuration, "PassengersAllowedToFire", false),
         WeaponBonusPassedToPassengers = ModuleConfigReader.Bool(configuration, "WeaponBonusPassedToPassengers", false),
@@ -938,7 +946,9 @@ public class TransportContain(TransportContainData data) : ContainModuleBase(dat
         // TransportContain::onRemoving: "m_frameExitNotBusy = TheGameLogic->getFrame() + d->m_exitDelay", for every rider that leaves, however it leaves.
         _exitNotBusyTick = world.Tick + data.ExitDelayTicks;
         // The same function: "if (getObject()->isEffectivelyDead()) scatterToNearbyPosition(rider)" - the riders of a destroyed transport, and only they, are scattered.
+        if (data.GoAggressiveOnExit) world.SetAttitude(candidate, (int)Attitude.Aggressive);
         if (positionAtContainer && Entity.EffectivelyDead) ScatterToNearbyPosition(world, candidate);
+        if (data.ResetMoodCheckTimeOnExit) world.WakeUpAndAttemptToTarget(candidate);
         LetRidersUpgradeWeaponSet(world);
     }
 
