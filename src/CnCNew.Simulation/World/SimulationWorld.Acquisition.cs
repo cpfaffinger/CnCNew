@@ -584,14 +584,13 @@ public sealed partial class SimulationWorld
         var chase = mode != AcquireMode.Turret && MayChase(entity, aircraft);
         var radius = AcquireRadius(entity, chase);
         if (radius <= Fixed.Zero) return null;
-        var limit = SquaredReach.Of(radius);
         var turretOnly = mode == AcquireMode.Turret;
         var buildings = (ai.AutoAcquire & AutoAcquire.AttackBuildings) != 0;
         // A rider looks from where it stands (ShooterPosition); its container's bounding circle is in the radius.
         // Above 30 Hz the look measures from where the unit's begun frame ends to where each candidate's ends (rule 3 of the frame convention).
         var frameEnd = _firstFrameTicks != TickOrder.Next;
         var (ownX, ownY, _) = ShooterPosition(entity, frameEnd);
-        var search = new MoodSearch { Limit = limit, TurretOnly = turretOnly, Chase = chase, Buildings = buildings, Computer = computer, BestDistance = Fixed.MaxValue, OwnX = ownX, OwnY = ownY, FrameEnd = frameEnd };
+        var search = new MoodSearch { Radius = radius, OwnRadius = CircleRadius(entity), TurretOnly = turretOnly, Chase = chase, Buildings = buildings, Computer = computer, BestDistance = Fixed.MaxValue, OwnX = ownX, OwnY = ownY, FrameEnd = frameEnd };
 
         if (RelationshipOverride is not null)
         {
@@ -615,7 +614,8 @@ public sealed partial class SimulationWorld
 
     private struct MoodSearch
     {
-        public SquaredReach Limit;
+        public Fixed Radius;
+        public Fixed OwnRadius;
         public bool TurretOnly;
         public bool Chase;
         public bool Buildings;
@@ -640,8 +640,10 @@ public sealed partial class SimulationWorld
             dx = x - search.OwnX;
             dy = y - search.OwnY;
         }
+        // FROM_BOUNDINGSPHERE_2D: the range and the distance are measured between the two bounding circles.
         var distance = dx * dx + dy * dy;
-        if (!search.Limit.Contains(distance)) return;
+        var radii = search.OwnRadius + CircleRadius(candidate);
+        if (!SquaredReach.Of(search.Radius + radii).Contains(distance)) return;
         // A mine is a target like any other (F-69): only a weapon with AntiMine can attack it (getVictimAntiMask) - the builders' mine-clearing weapons.
         if (candidate.Template.IsKindOf("PROJECTILE") || candidate.Template.IsKindOf("INERT")) return;
         if (!IsAttackable(entity, candidate) || !AcquiresStructure(entity, candidate, search.Buildings, search.Computer) || IsHiddenStealthGarrison(entity, candidate)) return;
@@ -650,20 +652,25 @@ public sealed partial class SimulationWorld
         if (AcquisitionViewBlocked(entity, candidate)) return;
         if (!CanAttack(entity, candidate, search.TurretOnly, out var inRange) || (!inRange && !search.Chase)) return;
 
+        var gap = Fixed.Max(Fixed.Zero, Fixed.Sqrt(distance) - radii);
         if (AcquisitionAdvisor is { } advisor && advisor.TryAttackPriority(entity, candidate, out var priority))
         {
             if (priority == 0) return;
-            var effective = (int)Math.Max(1, priority - (Fixed.Sqrt(distance) / AttackPriorityDistanceStep).Floor());
+            // "check for garrisoned buildings/vehicles & see if a higher priority unit is inside."
+            if (candidate.Container is { ContainCount: > 0 } inside)
+                foreach (var id in inside.Contained)
+                    if (FindEntity(id) is { } rider && advisor.TryAttackPriority(entity, rider, out var riderPriority) && riderPriority > priority) priority = riderPriority;
+            var effective = (int)Math.Max(1, priority - (gap / AttackPriorityDistanceStep).Floor());
             var better = effective > search.BestEffective || (effective == search.BestEffective && priority > search.BestPriority)
-                         || (effective == search.BestEffective && priority == search.BestPriority && IsNearer(candidate, distance, search.Best, search.BestDistance));
+                         || (effective == search.BestEffective && priority == search.BestPriority && IsNearer(candidate, gap, search.Best, search.BestDistance));
             if (!better) return;
             search.BestEffective = effective;
             search.BestPriority = priority;
         }
-        else if (!IsNearer(candidate, distance, search.Best, search.BestDistance)) return;
+        else if (!IsNearer(candidate, gap, search.Best, search.BestDistance)) return;
 
         search.Best = candidate;
-        search.BestDistance = distance;
+        search.BestDistance = gap;
     }
 
     private static bool IsNearer(Entity candidate, Fixed distance, Entity? best, Fixed bestDistance)
@@ -678,7 +685,7 @@ public sealed partial class SimulationWorld
     private bool AcquiresStructure(Entity entity, Entity candidate, bool buildings, bool computer)
     {
         if (!candidate.Template.IsKindOf("STRUCTURE")) return true;
-        if (candidate.Container is { ContainCount: 0 } && !IsFactionStructure(candidate.Template)) return false;
+        if (candidate.Container is { } contain && (!contain.IsGarrisonable || contain.ContainCount == 0) && !IsFactionStructure(candidate.Template)) return false;
         if (buildings) return true;
         var apparent = candidate.Container?.ApparentOwnerFor(this, entity.Owner) ?? candidate.Owner;
         if (RelationshipOf(entity.Owner, apparent) != Relationship.Enemies) return false;

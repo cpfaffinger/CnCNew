@@ -332,6 +332,7 @@ run.Test("Repair: AutoFindHealingUpdate refusals", Tests.AutoFindHealingRefusals
 run.Test("Phase 51 (F-87): the dying look for no pad", Tests.AutoFindHealingLeavesTheDyingAlone);
 run.Test("Phase 51 (F-17): a computer player's unit walks to its victim from rest", Tests.AcquisitionComputerUnitWalksToItsVictim);
 run.Test("Phase 51 (F-17): a passive unit answers its attacker, a unit at an ability acquires nothing", Tests.AcquisitionPassiveUnitAnswersItsAttacker);
+run.Test("Phase 51 (F-17): range and distance between the bounding circles, a rider's priority, insignificant structures", Tests.AcquisitionMeasuresBetweenCircles);
 run.Test("Repair: AutoFindHealingUpdate picks the closest pad", Tests.AutoFindHealingPicksClosestPad);
 run.Test("Phase 45 (F-75): the heal scan counts the frames of the object after a hold", Tests.AutoFindHealingCountsFramesAfterAHold);
 run.Test("Repair: computer flag in the replay header", Tests.RepairPlayerTypeReplayHeader);

@@ -142,6 +142,44 @@ static partial class Tests
           Behavior = DestroyDie Destroy01
           End
         End
+        Object AcqWide
+          KindOf = SELECTABLE VEHICLE
+          Geometry = CYLINDER
+          GeometryMajorRadius = 60.0
+          GeometryHeight = 10.0
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+        End
+        Object AcqRider
+          KindOf = SELECTABLE INFANTRY
+          TransportSlotCount = 1
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+        End
+        Object AcqCarrier
+          KindOf = SELECTABLE VEHICLE
+          Body = ActiveBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+          Behavior = TransportContain Transport01
+            Slots = 2
+          End
+        End
+        Object AcqShed
+          KindOf = SELECTABLE STRUCTURE
+          Body = StructureBody Body01
+            MaxHealth = 100000.0
+            InitialHealth = 100000.0
+          End
+          Behavior = TransportContain Transport01
+            Slots = 2
+          End
+        End
         Object AcqHut
           KindOf = SELECTABLE STRUCTURE
           Body = ActiveBody Body01
@@ -354,6 +392,29 @@ static partial class Tests
         busy.SetStatus(Slotted(busy, "AcqSoldier").Id, 1UL << ObjectStatusBits.Index("USING_ABILITY"));
         for (var step = 0; step < busy.Frames(30); step++) busy.Step();
         Check.That(!busy.AcquiredVictimOf(Slotted(busy, "AcqSoldier")).IsValid, "A unit at a special ability acquires nothing.");
+    }
+
+    /// <summary>
+    /// F-17, <c>findClosestEnemy</c>: range and distance are measured between the bounding circles (<c>FROM_BOUNDINGSPHERE_2D</c>), a rider's priority counts for its container, and a structure that is no
+    /// faction building and cannot be garrisoned is insignificant even with riders (<c>isGarrisonable</c>).
+    /// </summary>
+    public static void AcquisitionMeasuresBetweenCircles()
+    {
+        // Vision 150 times 1.333 is 200: a wide target 245 away is 185 from the soldier's circle, and nearer than a small one 195 away.
+        var (world, _, _) = AcquisitionWorld(true, ("AcqSoldier", 1, 0, 0), ("AcqDummy", 2, 195, 0), ("AcqWide", 2, 0, 245));
+        for (var step = 0; step < world.Frames(30); step++) world.Step();
+        Check.That(world.AcquiredVictimOf(Slotted(world, "AcqSoldier")) == Slotted(world, "AcqWide").Id, "The wide target is the closest one by its circle.");
+
+        var (ranked, _, _) = AcquisitionWorld(true, ("AcqSoldier", 1, 0, 0), ("AcqWeak", 2, 40, 0), ("AcqCarrier", 2, 0, 60), ("AcqRider", 2, 0, 60));
+        Check.That(ranked.TryEnterContainer(Slotted(ranked, "AcqRider"), Slotted(ranked, "AcqCarrier")), "The rider boards.");
+        ranked.AcquisitionAdvisor = new FixedAdvisor { Priorities = target => target.Template.Name switch { "AcqRider" => 9, "AcqWeak" => 3, _ => 1 } };
+        for (var step = 0; step < ranked.Frames(6); step++) ranked.Step();
+        Check.That(ranked.AcquiredVictimOf(Slotted(ranked, "AcqSoldier")) == Slotted(ranked, "AcqCarrier").Id, "The carrier counts with the priority of its rider.");
+
+        var (shed, _, _) = AcquisitionWorld(true, ("AcqSoldier", 1, 0, 0), ("AcqShed", 2, 60, 0), ("AcqRider", 2, 60, 0));
+        Check.That(shed.TryEnterContainer(Slotted(shed, "AcqRider"), Slotted(shed, "AcqShed")), "The rider enters the shed.");
+        for (var step = 0; step < shed.Frames(30); step++) shed.Step();
+        Check.That(Hurt(Slotted(shed, "AcqShed")) == Fixed.Zero, "A structure that cannot be garrisoned is insignificant, riders or not.");
     }
 
     private sealed class FixedAdvisor : IAcquisitionAdvisor
