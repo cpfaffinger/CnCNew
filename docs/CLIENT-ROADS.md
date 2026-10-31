@@ -111,7 +111,7 @@ in `Maps/USA02/USA02.map` – a known data error, explicitly allowed in `road-au
   discards the alpha of the texture if `UseAlpha` is missing – without it the transparent corners of the
   Y and H pieces appeared as grey rectangles (first seen that way and fixed).
 - `TerrainLayer.CreateRoads` builds one mesh per road template and creates the entities in stacking order
-  (`Stacking`, then declaration order, like `drawRoads`). Stride sorts transparent meshes by
+  (`Stacking`, then declaration order, like `drawRoads`); `StackedBackToFrontSortMode` keeps that order (D-7). Stride sorts transparent meshes by
   the distance of their bounding box; so that the order does not depend on the camera, all
   road meshes get **the same** bounding box (the union of all): equal keys keep the
   creation order. A texture that cannot be resolved makes `Attach` fail (no

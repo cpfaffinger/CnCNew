@@ -34,6 +34,9 @@ internal sealed class RenderServices : IDisposable
 
     public Dictionary<MaterialPass, bool> DepthWrites { get; } = [];
 
+    /// <summary>The order of the transparent stage, with the stacking of the roads.</summary>
+    public StackedBackToFrontSortMode TransparentOrder { get; } = new();
+
     /// <summary>The default forward compositor with the W3D depth-write processor installed.</summary>
     public GraphicsCompositor CreateCompositor()
     {
@@ -41,6 +44,7 @@ internal sealed class RenderServices : IDisposable
         var meshFeature = compositor.RenderFeatures.OfType<MeshRenderFeature>().Single();
         var stageSelector = meshFeature.RenderStageSelectors.OfType<MeshTransparentRenderStageSelector>().Single();
         meshFeature.PipelineProcessors.Add(new W3dDepthWritePipelineProcessor(DepthWrites, stageSelector.OpaqueRenderStage, stageSelector.TransparentRenderStage));
+        stageSelector.TransparentRenderStage.SortMode = TransparentOrder;
         return compositor;
     }
 

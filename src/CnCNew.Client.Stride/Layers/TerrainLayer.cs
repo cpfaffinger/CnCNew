@@ -333,10 +333,11 @@ internal sealed class TerrainLayer : IWorldLayer
         var model = RoadModel.Build(match.Map.Objects, match.Heights, RoadCatalog.FromDefinitions(graph), TerrainRenderOptions.FromDefinitions(graph).Lighting);
         if (model.Meshes.IsDefaultOrEmpty) return (0, 0, 0);
         var batches = RoadMeshBuilder.Build(model, fogScale, lightTable);
+        services.TransparentOrder.Stacking.Clear();
         var materials = new Dictionary<string, Material>(StringComparer.OrdinalIgnoreCase);
         var device = services.GraphicsDevice;
         // Roads of different templates overlap (markings on asphalt) and are blended in stacking order. Stride sorts transparent meshes by the distance of their
-        // bounding box, so every road mesh gets the same box: equal keys keep the submission order, which is the stacking order.
+        // bounding box, so every road mesh gets the same box, and among equal distances the sort mode goes by the place of a road (D-7).
         var allMin = batches.Aggregate(new System.Numerics.Vector3(float.MaxValue), (min, batch) => System.Numerics.Vector3.Min(min, batch.BoundsMin));
         var allMax = batches.Aggregate(new System.Numerics.Vector3(float.MinValue), (max, batch) => System.Numerics.Vector3.Max(max, batch.BoundsMax));
         var sharedBounds = new BoundingBox(ToStride(allMin), ToStride(allMax));
@@ -354,7 +355,8 @@ internal sealed class TerrainLayer : IWorldLayer
             var indexBuffer = StrideBuffer.Index.New(device, batch.Indices, GraphicsResourceUsage.Immutable);
             Track(vertexBuffer, batch.Vertices.Length * WaterVertex.SizeInBytes);
             Track(indexBuffer, batch.Indices.Length * sizeof(uint));
-            CreateModel($"road {batch.Template}", material, vertexBuffer, WaterLayout, batch.Vertices.Length, indexBuffer, true, batch.Indices.Length, sharedBounds);
+            var road = CreateModel($"road {batch.Template}", material, vertexBuffer, WaterLayout, batch.Vertices.Length, indexBuffer, true, batch.Indices.Length, sharedBounds);
+            services.TransparentOrder.Stacking[road.Model.Meshes[0]] = services.TransparentOrder.Stacking.Count;
         }
         return (batches.Count, model.Stats.Segments, model.Stats.Triangles);
     }
