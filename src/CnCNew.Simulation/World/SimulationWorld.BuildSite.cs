@@ -54,6 +54,10 @@ public sealed partial class SimulationWorld
         return navigation.Terrain.IsOnMap(x, y) ? CheckGround(navigation, dozer, template, x, y, angle, true, reach) : LegalBuildCode.RestrictedTerrain;
     }
 
+    /// <summary><c>isLocationLegalToBuild</c> with <c>NO_OBJECT_OVERLAP</c> alone, no builder, a computer player's width.</summary>
+    public bool IsClearOfObjects(ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
+        => Navigation is not { } navigation || (navigation.Terrain.IsOnMap(x, y) && !ObjectsInTheWay(navigation, null, template, x, y, angle) && !BlocksFactoryExit(template, x, y, angle, true));
+
     /// <summary><c>isLocationLegalToBuild</c> with <c>NO_ENEMY_OBJECT_OVERLAP</c> alone ("If there's enemy units or structures, don't build/rebuild"): an immobile object that is no enemy does not count.</summary>
     public bool EnemyObjectsInTheWay(Entity builder, ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
         => Navigation is { } navigation && navigation.Terrain.IsOnMap(x, y) && ObjectsInTheWay(navigation, builder, template, x, y, angle, onlyEnemies: true);

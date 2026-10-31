@@ -1283,4 +1283,119 @@ static partial class Tests
         var (structures, kept) = session.Engine.AiRepairOf(player);
         Check.That(structures.IsEmpty && kept == dozer, $"The queue is empty and the dozer stays kept ({string.Join(", ", structures)}; {kept}).");
     }
+
+    private const string AiPowerObjects = """
+        SpecialPower TestStrike
+          Enum = SPECIAL_DAISY_CUTTER
+          ReloadTime = 1000
+        End
+        SpecialPower TestMines
+          Enum = SPECIAL_CLUSTER_MINES
+          ReloadTime = 1000
+        End
+        Object AlphaSilo
+          Side = Alpha
+          KindOf = SELECTABLE STRUCTURE
+          BuildCost = 10
+          BuildTime = 1
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 200.0
+            InitialHealth = 200.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+          Behavior = SpecialAbility Power01
+            SpecialPowerTemplate = TestStrike
+          End
+          Behavior = SpecialAbility Power02
+            SpecialPowerTemplate = TestMines
+          End
+        End
+        Object BetaKeep
+          Side = Beta
+          KindOf = SELECTABLE STRUCTURE COMMANDCENTER
+          BuildCost = 1000
+          BuildTime = 1
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 200.0
+            InitialHealth = 200.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        Object BetaHut
+          Side = Beta
+          KindOf = SELECTABLE STRUCTURE
+          BuildCost = 200
+          BuildTime = 1
+          Geometry = BOX
+          GeometryMajorRadius = 8.0
+          GeometryMinorRadius = 8.0
+          GeometryHeight = 10.0
+          GeometryIsSmall = No
+          Body = StructureBody Body01
+            MaxHealth = 200.0
+            InitialHealth = 200.0
+          End
+          Behavior = DestroyDie Destroy01
+          End
+        End
+        """;
+
+    /// <summary>The place the script's power goes to, from a match of a silo on the fixture.</summary>
+    private static CnCNew.Simulation.Commands.UseSpecialPowerCommand AiPowerShot(string power, uint seed, MapData map, Action<ScriptedSkirmishSession, SyntheticFixture>? prepare = null)
+    {
+        var fire = Scr.Do("SKIRMISH_FIRE_SPECIAL_POWER_AT_MOST_COST", Scr.Side("SkirmishAlpha"), Scr.Named(MapScriptParameterType.SpecialPower, power));
+        var (session, fixture, _, _, _, _) = StartAiVariant(AiDataText(), AiPowerObjects, AiLibraryWithAlphaScripts(AiAfter(120, fire)), map, seed: seed);
+        fixture.Templates.TryGet("AlphaSilo", out var silo);
+        session.World.RequestSpawn(silo.Index, new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(300), Fixed.Zero, Fixed.Zero);
+        prepare?.Invoke(session, fixture);
+        session.RecordCommands();
+        StepFrames(session, 200);
+        var shots = session.RecordedCommands.OfType<CnCNew.Simulation.Commands.UseSpecialPowerCommand>().Where(command => command.SpecialPower == power).ToArray();
+        Check.That(shots.Length == 1, $"The ready holder fires once ({shots.Length}).");
+        return shots[0];
+    }
+
+    /// <summary>
+    /// <c>computeSuperweaponTarget</c>: a superweapon goes to the place of most value on the grid over the enemy's structures, where a command centre counts a tenth ("cannot be killed by any
+    /// superweapon"), and cluster mines go on the player's own entrances, one of three drawn. Before, the most expensive object was the target, and mines went there too.
+    /// </summary>
+    public static void OriginalAiAimsItsSuperweaponsAsTheOriginal()
+    {
+        void Beta(ScriptedSkirmishSession session, SyntheticFixture fixture)
+        {
+            fixture.Templates.TryGet("BetaKeep", out var keep);
+            fixture.Templates.TryGet("BetaHut", out var hut);
+            session.World.RequestSpawn(keep.Index, new PlayerId(2), Fixed.FromInt(540), Fixed.FromInt(60), Fixed.Zero, Fixed.Zero);
+            session.World.RequestSpawn(hut.Index, new PlayerId(2), Fixed.FromInt(420), Fixed.FromInt(340), Fixed.Zero, Fixed.Zero);
+        }
+        var shot = AiPowerShot("TestStrike", 11, AiSkirmishMap(), Beta);
+        var (dx, dy) = (shot.X - Fixed.FromInt(420), shot.Y - Fixed.FromInt(340));
+        Check.That(dx.Abs() < Fixed.FromInt(60) && dy.Abs() < Fixed.FromInt(60), $"The hut is worth more than the keep at a tenth of its cost ({shot.X}, {shot.Y}).");
+
+        // The three entrances of player 1: the mines stand on the edge of the base towards the nearest waypoint of a path, which is what is drawn.
+        var plain = AiSkirmishMap();
+        MapObject Path(int id, string label, decimal x, decimal y) => new("*Waypoints/Waypoint", x, y, 0m, 0m, 0, new MapProperties([new MapProperty("waypointID", MapPropertyType.Int, id, 0m, string.Empty), Scr.Text("waypointName", label + ".Point"), Scr.Text("waypointPathLabel1", label)]));
+        var map = plain with { Objects = [..plain.Objects, Path(100, "Center1", 400m, 200m), Path(101, "Flank1", 100m, 390m), Path(102, "Backdoor1", 100m, 10m)] };
+        var directions = new SortedSet<string>(StringComparer.Ordinal);
+        for (uint seed = 1; seed <= 12; seed++)
+        {
+            var mine = AiPowerShot("TestMines", unchecked(seed * 0x9E3779B1u), map);
+            var (mx, my) = (mine.X - Fixed.FromInt(100), mine.Y - Fixed.FromInt(200));
+            // The base of the fixture is centred off the start position, so the direction is told by its sign.
+            directions.Add(mx > my.Abs() ? "centre" : my > Fixed.Zero ? "flank" : "backdoor");
+        }
+        Check.That(directions.Count == 3, $"Over twelve seeds all three entrances are mined ({string.Join(", ", directions)}).");
+    }
 }

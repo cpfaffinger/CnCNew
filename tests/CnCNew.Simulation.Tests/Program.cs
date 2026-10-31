@@ -578,6 +578,7 @@ run.Test("Original skirmish AI: a factory is what the build list holds", Tests.O
 run.Test("Original skirmish AI: a hole of the GLA is waited for and rebuilds", Tests.OriginalAiWaitsForTheHole);
 run.Test("Original skirmish AI: a broken bridge on the approach goes into the repair queue and keeps a dozer", Tests.OriginalAiKeepsADozerForABrokenBridge);
 run.Test("Original skirmish AI: a structure a script names is repaired through the queue", Tests.OriginalAiRepairsThroughItsQueue);
+run.Test("Original skirmish AI: superweapons by value on a grid, cluster mines on the own entrances", Tests.OriginalAiAimsItsSuperweaponsAsTheOriginal);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Session state: the state of SkirmishAi names every field", Tests.SkirmishAiStateNamesEveryField);
 run.Test("Session state: SkirmishAi never acts in the order of a hash table", Tests.SkirmishAiNeverActsInTheOrderOfAHashTable);

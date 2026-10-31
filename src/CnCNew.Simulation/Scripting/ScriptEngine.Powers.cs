@@ -141,6 +141,11 @@ public sealed partial class ScriptEngine
     private void FireAtMostCost(PlayerId player, string power)
     {
         if (!_world.SpecialPowers.TryGet(power, out var info)) { Diagnose($"unknown special power '{power}'"); return; }
+        if (_ai.Count > 0)
+        {
+            AiFireAtMostCost(player, info);
+            return;
+        }
         var radius = info.RadiusCursorRadius > Fixed.FromInt(50) ? info.RadiusCursorRadius : Fixed.FromInt(50);
         var limit = SquaredReach.Of(radius);
         var enemies = _world.Entities.Where(entity => !entity.Owner.IsSystem && CountsAsObject(entity) && _world.AreEnemies(player, entity.Owner)).OrderBy(entity => entity.Id.Value).ToArray();

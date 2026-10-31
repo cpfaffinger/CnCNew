@@ -618,7 +618,7 @@ public sealed partial class ScriptEngine
 
     /// <summary>
     /// <c>AIPlayer::buildStructureWithDozer</c>: a dozer, the money, no enemy on the place of the entry, and the place itself - or, when the dozer cannot use it, the first one
-    /// <see cref="FindPlaceNear"/> finds. Where none is found the entry's own place is built on anyway ("the ai will validate, or cheat"), and a dozer that cannot reach it stands there at once:
+    /// <see cref="SearchSquares"/> finds. Where none is found the entry's own place is built on anyway ("the ai will validate, or cheat"), and a dozer that cannot reach it stands there at once:
     /// "Dozer unable to reach building. Teleporting." What the rules still refuse (a prerequisite, the limit of the type) is <c>buildObjectNow</c>'s refusal: nothing is built.
     /// </summary>
     private bool BuildStructureWithDozer(AiPlayer state, AiBuildEntry entry)
@@ -633,7 +633,8 @@ public sealed partial class ScriptEngine
         if (_world.Navigation is { } navigation && _world.CheckDozerSite(dozer, template, x, y, angle) != LegalBuildCode.Ok)
         {
             var reach = navigation.ReachableCells(dozer.X, dozer.Y, dozer.Template.Locomotor?.Surfaces ?? LocomotorSurfaces.Ground);
-            if (!FindPlaceNear(dozer, template, angle, reach, ref x, ref y) && !navigation.Reaches(reach, x, y)) _world.Teleport(dozer, x, y);
+            var limit = Fixed.FromInt(AiPlacementLimitCells * TerrainMap.CellSize);
+            if (!SearchSquares(limit, skirmish: true, (cx, cy) => _world.CheckDozerSite(dozer, template, cx, cy, angle, reach) == LegalBuildCode.Ok, ref x, ref y) && !navigation.Reaches(reach, x, y)) _world.Teleport(dozer, x, y);
         }
         var builder = dozer.Id;
         var name = entry.Template;
@@ -647,40 +648,39 @@ public sealed partial class ScriptEngine
     }
 
     /// <summary>
-    /// The search of <c>buildStructureWithDozer</c> around a place that cannot be used, with the skirmish AI's increments: squares of growing size, up to 120 cells, walked along their sides.
-    /// The second test of a walk along a side answers only for that side's last step: the next step overwrites it, as in the reference, where only the first test leaves the loop.
+    /// The search around a place of <c>buildStructureWithDozer</c> and <c>calcClosestConstructionZoneLocation</c>: squares of growing size walked along their sides, the skirmish AI in steps twice as
+    /// wide. The second test of a walk along a side answers only for that side's last step: the next step overwrites it, as in the reference, where only the first test leaves the loop.
     /// </summary>
-    private bool FindPlaceNear(Entity dozer, ObjectTemplate template, Fixed angle, bool[] reach, ref Fixed x, ref Fixed y)
+    private static bool SearchSquares(Fixed limit, bool skirmish, Func<Fixed, Fixed, bool> legal, ref Fixed x, ref Fixed y)
     {
         var cell = Fixed.FromInt(TerrainMap.CellSize);
         var (originX, originY) = (x, y);
         var (newX, newY) = (x, y);
         var valid = false;
-        var limit = cell * Fixed.FromInt(AiPlacementLimitCells);
         for (var posOffset = Fixed.Zero; posOffset < limit && !valid; posOffset += cell * Fixed.FromInt(2))
         {
-            posOffset += cell * Fixed.FromInt(2);
+            if (skirmish) posOffset += cell * Fixed.FromInt(2);
             var offset = posOffset / Fixed.FromInt(2);
             var yPos = originY - offset;
             for (var xPos = originX - offset; xPos <= originX + offset; xPos += cell)
             {
-                xPos += cell;
+                if (skirmish) xPos += cell;
                 (newX, newY) = (xPos, yPos);
-                valid = _world.CheckDozerSite(dozer, template, newX, newY, angle, reach) == LegalBuildCode.Ok;
+                valid = legal(newX, newY);
                 if (valid) break;
                 newY = yPos + posOffset;
-                valid = _world.CheckDozerSite(dozer, template, newX, newY, angle, reach) == LegalBuildCode.Ok;
+                valid = legal(newX, newY);
             }
             if (valid) break;
             var xSide = originX - offset;
             for (var ySide = originY - offset; ySide <= originY + offset; ySide += cell)
             {
-                ySide += cell;
+                if (skirmish) ySide += cell;
                 (newX, newY) = (xSide, ySide);
-                valid = _world.CheckDozerSite(dozer, template, newX, newY, angle, reach) == LegalBuildCode.Ok;
+                valid = legal(newX, newY);
                 if (valid) break;
                 newX = xSide + posOffset;
-                valid = _world.CheckDozerSite(dozer, template, newX, newY, angle, reach) == LegalBuildCode.Ok;
+                valid = legal(newX, newY);
             }
         }
         if (valid) (x, y) = (newX, newY);

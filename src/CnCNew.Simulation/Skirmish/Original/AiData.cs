@@ -59,6 +59,15 @@ public sealed class AiData
     public ImmutableArray<AiSideInfo> Sides { get; private init; } = [];
     public ImmutableSortedDictionary<string, ImmutableArray<AiBuildListEntry>> BuildLists { get; private init; } = ImmutableSortedDictionary<string, ImmutableArray<AiBuildListEntry>>.Empty;
 
+    /// <summary>
+    /// <c>OCLSpecialPower</c>'s <c>ReferenceObject</c> by holder and power, with the placement angle of that object (<c>getReferenceThingTemplate</c>, <c>getPlacementViewAngle</c>): what a sneak
+    /// attack builds. It stands here because a new field in the module data would change the input manifest for a value only this AI reads.
+    /// </summary>
+    public ImmutableSortedDictionary<string, (string Template, Fixed Angle)> ReferenceObjects { get; private init; } = ImmutableSortedDictionary<string, (string, Fixed)>.Empty;
+
+    /// <summary>The object the holder's module of the power stands for, if it names one.</summary>
+    public (string Template, Fixed Angle)? FindReferenceObject(string holder, string power) => ReferenceObjects.TryGetValue(holder + "|" + power, out var found) ? found : null;
+
     /// <summary>Top-level keys of the file that are valid but not read here, in ordinal order.</summary>
     public ImmutableArray<string> UnreadKeys { get; private init; } = [];
 
@@ -105,9 +114,32 @@ public sealed class AiData
             TeamResourcesToStart = Real("TeamResourcesToStart"), MaxRecruitRadius = Real("MaxRecruitRadius"), SkirmishBaseDefenseExtraDistance = Real("SkirmishBaseDefenseExtraDistance"),
             RotateSkirmishBases = scalars.TryGetValue("RotateSkirmishBases", out var rotate) && Flag(rotate, "RotateSkirmishBases"),
             SupplyCenterSafeRadius = Real("SupplyCenterSafeRadius"), RebuildDelaySeconds = Whole("RebuildDelayTimeSeconds"),
-            Sides = sides.ToImmutable(), BuildLists = lists.ToImmutable(),
+            Sides = sides.ToImmutable(), BuildLists = lists.ToImmutable(), ReferenceObjects = ReadReferenceObjects(graph),
             UnreadKeys = [..scalars.Keys.Where(key => Array.IndexOf(ReadKeys, key) < 0)],
         };
+    }
+
+    private static ImmutableSortedDictionary<string, (string Template, Fixed Angle)> ReadReferenceObjects(CompiledDefinitionGraph graph)
+    {
+        var angles = new SortedDictionary<string, Fixed>(StringComparer.OrdinalIgnoreCase);
+        var found = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var definition in graph.Definitions)
+        {
+            if (definition is not ObjectDefinition) continue;
+            foreach (var field in definition.Fields)
+                if (string.Equals(field.Name, "PlacementViewAngle", StringComparison.OrdinalIgnoreCase)) angles[definition.OriginalName] = Number(field.Value.OriginalText.Trim(), field.Name);
+            foreach (var module in definition.Modules)
+            {
+                if (!string.Equals(module.Name, "OCLSpecialPower", StringComparison.OrdinalIgnoreCase)) continue;
+                var power = module.Fields.FirstOrDefault(field => string.Equals(field.Name, "SpecialPowerTemplate", StringComparison.OrdinalIgnoreCase));
+                var reference = module.Fields.FirstOrDefault(field => string.Equals(field.Name, "ReferenceObject", StringComparison.OrdinalIgnoreCase));
+                if (power is not null && reference is not null) found[definition.OriginalName + "|" + power.Value.OriginalText.Trim()] = reference.Value.OriginalText.Trim();
+            }
+        }
+        var result = ImmutableSortedDictionary.CreateBuilder<string, (string, Fixed)>(StringComparer.Ordinal);
+        foreach (var (key, template) in found)
+            result[key] = (template, (angles.TryGetValue(template, out var degrees) ? degrees : Fixed.Zero) * FixedTrig.Pi / Fixed.FromInt(180));
+        return result.ToImmutable();
     }
 
     private static AiSideInfo ReadSide(string side, DefinitionSection section)
