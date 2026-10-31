@@ -1666,7 +1666,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         else if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum))
         {
             PlanPath(navigation, locomotor, air);
-            if (!air) world.MoveAlliesOffPath(Entity, _path);
+            if (!air) world.RequestClearPath(Entity);
         }
         if (_path.Count == 0)
         {
@@ -2269,7 +2269,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
                     _pathValid = true;
                     _pathComplete = detour || answer is { Status: PathStatus.Found };
                     _pathObstacles = navigation.ObstacleSum;
-                    if (!detour) world.MoveAlliesOffPath(Entity, _path);
+                    if (!detour) world.RequestClearPath(Entity);
                 }
             }
             else if (!world.IsPathPending(Entity))
@@ -2311,6 +2311,9 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         _pathIndex = 0;
         _pathComplete = true;
     }
+
+    /// <summary>The nodes of the path the object follows.</summary>
+    internal IReadOnlyList<PathPoint> PathNodes => _path;
 
     private void PlanPath(NavigationGrid navigation, LocomotorInfo locomotor, bool air)
     {

@@ -1776,6 +1776,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private void ProcessSpawns(bool endOfTick = true)
     {
         if (endOfTick && _exitClaims.Count != 0) ProcessExitClaims();
+        if (endOfTick && _clearPaths.Count != 0) ProcessClearPaths();
         if (_spawnQueue.Count == 0) return;
         // Damage applied while an entity is created (creation-list health transfer) can run die modules that queue further spawns, and so can the OnSpawn of a module (the
         // rider of a combat bike); those stay in the queue for the next tick.
@@ -2473,6 +2474,7 @@ public sealed partial class SimulationWorld : IWorldServices
         foreach (var simEvent in _events) simEvent.Describe(writer);
         writer.EndArray();
         DescribeExitClaims(writer);
+        DescribeClearPaths(writer);
         DescribePathQueue(writer);
     }
 }

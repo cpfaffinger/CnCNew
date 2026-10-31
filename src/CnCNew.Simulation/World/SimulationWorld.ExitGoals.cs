@@ -1,4 +1,5 @@
 using CnCNew.Simulation.Ids;
+using CnCNew.Simulation.Modules.BuiltIn;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
 using CnCNew.Simulation.Terrain;
@@ -66,6 +67,27 @@ public sealed partial class SimulationWorld
         writer.EndArray();
     }
 
+    // Written only while a claim waits for the end of its frame, which never happens at 30 Hz.
+    private void DescribeClearPaths(IStateWriter writer)
+    {
+        if (_clearPaths.Count == 0) return;
+        writer.BeginArray("clearPaths");
+        foreach (var claim in _clearPaths)
+        {
+            writer.BeginObject(null);
+            writer.UInt("mover", claim.Mover.Value);
+            writer.Int("tick", claim.Tick);
+            writer.EndObject();
+        }
+        writer.EndArray();
+    }
+
+    private void LoadClearPaths(IStateReader state)
+    {
+        if (!state.Has("clearPaths")) return;
+        foreach (var item in state.Array("clearPaths")) _clearPaths.Add(new ClearPathClaim(new EntityId(checked((uint)item.UInt("mover"))), item.Int("tick")));
+    }
+
     private void LoadExitClaims(IStateReader state)
     {
         if (!state.Has("exitClaims")) return;
@@ -101,17 +123,47 @@ public sealed partial class SimulationWorld
         return FindFreeGoal(unit, unit.X, unit.Y, exitX, exitY, false);
     }
 
-    /// <inheritdoc cref="IWorldServices.MoveAlliesOffPath"/>
+    /// <summary>A dozer or harvester whose new path clears the way in the spawn phase of <see cref="Tick"/>, the last tick of its frame.</summary>
+    private readonly record struct ClearPathClaim(EntityId Mover, long Tick);
+
+    private readonly List<ClearPathClaim> _clearPaths = [];
+
+    /// <inheritdoc cref="IWorldServices.RequestClearPath"/>
     /// <remarks>
     /// "Harvesters and dozers want a clear path": they ask whenever they have a new path, from its last node back, every idle ally that stands on a node - not one that moves, attacks, is at an
     /// ability or at work, nor the object they aim at. Every other mover asks only when its search was blocked by an ally (<c>Path::getBlockedByAlly</c>), which the port's search does not know, and
-    /// infantry pushes nobody without that. <c>aiMoveAwayFromUnit</c> searches a place off the path; here the ally steps to the nearest free place beside the node.
+    /// infantry pushes nobody without that. <c>aiMoveAwayFromUnit</c> searches a place off the path; here the ally steps to the nearest free place beside the node. Whether an ally is idle depends on
+    /// who has decided before whom in a frame: at the end of the mover's frame every object has, at every rate, so the question is asked there - an ally a frame later than the original's in id order.
     /// </remarks>
-    public void MoveAlliesOffPath(Entity mover, IReadOnlyList<PathPoint> path)
+    public void RequestClearPath(Entity mover)
     {
         var kind = mover.Template;
         if ((!kind.IsKindOf("DOZER") && !kind.IsKindOf("HARVESTER")) || kind.IsKindOf("INFANTRY") || kind.IsKindOf("NO_COLLIDE")) return;
-        var ignored = AiOf(mover)?.IgnoredObstacle ?? EntityId.Invalid;
+        foreach (var claim in _clearPaths)
+            if (claim.Mover == mover.Id) return;
+        _clearPaths.Add(new ClearPathClaim(mover.Id, _tick + _firstFrameTicks - TickOrder.Next - (_tick - mover.SpawnTick) % _firstFrameTicks));
+    }
+
+    private void ProcessClearPaths()
+    {
+        var kept = 0;
+        for (var index = 0; index < _clearPaths.Count; index++)
+        {
+            var claim = _clearPaths[index];
+            if (claim.Tick > _tick)
+            {
+                _clearPaths[kept++] = claim;
+                continue;
+            }
+            if (FindEntity(claim.Mover) is { DestroyRequested: false, EffectivelyDead: false } mover && AiOf(mover) is { } ai) MoveAlliesOffPath(mover, ai);
+        }
+        _clearPaths.RemoveRange(kept, _clearPaths.Count - kept);
+    }
+
+    private void MoveAlliesOffPath(Entity mover, AIUpdateInterface moving)
+    {
+        var path = moving.PathNodes;
+        var ignored = moving.IgnoredObstacle;
         var radius = CircleRadius(mover);
         for (var node = path.Count - 1; node >= 0; node--)
         {
