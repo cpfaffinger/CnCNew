@@ -374,6 +374,9 @@ public interface IWorldServices
     /// </summary>
     (Fixed X, Fixed Y) FindFreeGoal(Entity mover, Fixed fromX, Fixed fromY, Fixed x, Fixed y);
 
+    /// <summary><c>Pathfinder::moveAllies</c>: a dozer or a harvester that has a new path asks the idle allies at its nodes to make way.</summary>
+    void MoveAlliesOffPath(Entity mover, IReadOnlyList<Terrain.PathPoint> path);
+
     /// <summary>
     /// The same search for a unit already on its way: when the place <paramref name="mover"/> is heading for (<see cref="Entity.MoveTargetX"/>) has been taken — a ground unit
     /// of a side that is not its enemy stands there, or one with a lower id is heading there — the place <see cref="FindFreeGoal"/> gives from where the mover is now; false

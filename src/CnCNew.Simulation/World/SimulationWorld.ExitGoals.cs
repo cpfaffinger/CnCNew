@@ -101,6 +101,38 @@ public sealed partial class SimulationWorld
         return FindFreeGoal(unit, unit.X, unit.Y, exitX, exitY, false);
     }
 
+    /// <inheritdoc cref="IWorldServices.MoveAlliesOffPath"/>
+    /// <remarks>
+    /// "Harvesters and dozers want a clear path": they ask whenever they have a new path, from its last node back, every idle ally that stands on a node - not one that moves, attacks, is at an
+    /// ability or at work, nor the object they aim at. Every other mover asks only when its search was blocked by an ally (<c>Path::getBlockedByAlly</c>), which the port's search does not know, and
+    /// infantry pushes nobody without that. <c>aiMoveAwayFromUnit</c> searches a place off the path; here the ally steps to the nearest free place beside the node.
+    /// </remarks>
+    public void MoveAlliesOffPath(Entity mover, IReadOnlyList<PathPoint> path)
+    {
+        var kind = mover.Template;
+        if ((!kind.IsKindOf("DOZER") && !kind.IsKindOf("HARVESTER")) || kind.IsKindOf("INFANTRY") || kind.IsKindOf("NO_COLLIDE")) return;
+        var ignored = AiOf(mover)?.IgnoredObstacle ?? EntityId.Invalid;
+        var radius = CircleRadius(mover);
+        for (var node = path.Count - 1; node >= 0; node--)
+        {
+            var (x, y) = (path[node].X, path[node].Y);
+            var (fromX, fromY) = node > 0 ? (path[node - 1].X, path[node - 1].Y) : (mover.X, mover.Y);
+            foreach (var other in _mobiles)
+            {
+                if (other.Id == mover.Id || other.Id == ignored || other.HasMoveTarget || other.EffectivelyDead || other.DestroyRequested || other.ContainedBy.IsValid) continue;
+                var limit = radius + CircleRadius(other);
+                var (standsX, standsY, _) = other.FrameEnd(_tick);
+                if (FurtherThan(standsX, x, limit) || FurtherThan(standsY, y, limit)) continue;
+                var (ox, oy) = (standsX - x, standsY - y);
+                if (!SquaredReach.Of(limit).ContainsStrictly(ox * ox + oy * oy) || RelationshipOf(mover.Owner, other.Owner) != Relationship.Allies) continue;
+                if (other.HasStatus(UsingAbilityBit) || other.Acquisition is { Victim.IsValid: true } || DisabledFlagsOf(other) != DisabledMask.None) continue;
+                if (AiOf(other) is not { IsIdle: true, IsBuilding: false } ai) continue;
+                var (asideX, asideY) = FindFreeGoal(other, fromX, fromY, x, y, true);
+                if (asideX != x || asideY != y) ai.OrderMove(this, asideX, asideY, false);
+            }
+        }
+    }
+
     /// <summary>Own value: the rows tried for a unit already on its way to a taken goal (83 places): an army gathers on one point, a factory's door sees a few units.</summary>
     private const int GatherGoalRows = 12;
 

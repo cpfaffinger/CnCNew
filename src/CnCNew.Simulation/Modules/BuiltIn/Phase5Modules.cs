@@ -1659,7 +1659,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         {
             if (!QueuedPath(world, navigation, locomotor)) return;
         }
-        else if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum)) PlanPath(navigation, locomotor, air);
+        else if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum))
+        {
+            PlanPath(navigation, locomotor, air);
+            if (!air) world.MoveAlliesOffPath(Entity, _path);
+        }
         if (_path.Count == 0)
         {
             // Blocked: no cell next to the object can be entered. The order ends without an arrival.
@@ -2261,6 +2265,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
                     _pathValid = true;
                     _pathComplete = detour || answer is { Status: PathStatus.Found };
                     _pathObstacles = navigation.ObstacleSum;
+                    if (!detour) world.MoveAlliesOffPath(Entity, _path);
                 }
             }
             else if (!world.IsPathPending(Entity))
