@@ -754,7 +754,7 @@ relay never simulated; that its file leads to the clients' hash is what makes it
 log). The **speed** is the host's to set unless `HostSetsSpeed` is off. A local game keeps its own pause and speed without limits. None of it is a command: pause and
 speed are the server's clock, and the simulation sees ticks.
 
-**Votes are not built.** The brief names them next to the pause; nothing in this phase needs one, and what a vote would decide (kick a player, end a match, change the
+**Votes were not built in this phase; they are since Phase 53 (§24).** The brief names them next to the pause; nothing in this phase needs one, and what a vote would decide (kick a player, end a match, change the
 speed) is the owner's to say (D-23). The place for it is here: a request, a state the server broadcasts, a result that is either server state (speed, pause) or a
 command of a bundle (a leave).
 
@@ -1329,3 +1329,30 @@ the next tick was late in 0 to 5 of 7,178 frames - the playback delay of section
 The matrix of section 21 again, with protocol 5 (the list of rooms, the deadline in `LagState`, the flag on chat): 36 of 36 lines hash-identical on all eight clients; against Phase 28 the median over the lines of the change of order to execution is -0.1 ms (median), +0.1 ms (95 %) and +0.8 ms (99 %), of the bandwidth +9 B/s up and +38 B/s down (10.9 and 10.7 KB/s per client and direction on average).
 
 Endurance of a hosted server: one hosted server for 82.0 minutes of the final code (62 asked; the run ends at the end of a cycle): 188 cycles, each a guest that connected (the first time asked about the key), stood in front of the rooms (once for five and a half minutes - longer than a server lets a connection browse; the lobby came back by itself), entered, accepted, played 15 s, returned and left; 188 matches on both games, every one ended by its rules at the same tick and in the same state, 376 departures after the server had ended the match and none from a running one, 188 departures from the room by choice, no desync, managed memory 162 to 163 MB. A first run of 82 minutes before the end-of-match fix had the same result except one departure from the running match in every match (section 5 of docs/MULTIPLAYER-FINDINGS.md); the one before it ended after 58.4 minutes because its script held too few cycles.
+
+## 24. Votes and the majority over a hash (Phase 53) - protocol version 7
+
+**Three messages** (`VoteRequest`, `VoteCast`, `VoteState`, types 40 to 42): a player asks for a vote, a player gives its ballot, and the server tells everybody where the vote
+stands after every ballot and at its end. A vote decides one of three things (`VoteKind`): **remove a player** (`DropReason.VotedOut`; the player is told by `RejectReason.VotedOut`,
+`PlayerLeaveCommand` follows as for any drop), **end the match** (`EndReason.Voted`), **set the speed** (the same effect as the host's request, without the host).
+
+| Rule | Value | Reason |
+| --- | --- | --- |
+| who votes | the players that play along in time, without the one the vote is about | a watcher has no part in the game; a player who catches up does not know yet what it decides |
+| how many at a time | one per room | a second is refused (`InvalidRequest`), the first stands |
+| who counts | a strict majority of those who may vote; the starter has said yes | a tie decides nothing |
+| when it ends | when the majority is reached, when it can no longer be reached, after `voteTimeMs` (30 s) | time counts against it |
+| what a player may do | `votesPerPlayer` (3) votes per match | a vote is a broadcast per ballot: the bound of what a member can make the server send |
+| removing a player | needs two others | two players must not be able to remove each other |
+| a ballot nobody asked for | discarded and counted | as every message out of its place |
+
+In the client the chat line starts and answers a vote: `/kick name`, `/end`, `/speed percent`, `/yes`, `/no`. The panel of the HUD names the running vote, the message list its end.
+
+**The majority over a hash (D-24).** Up to two players a difference is a desync of the match, as before (§8): nobody can say who is right. From three players on (`MajorityFromPlayers`)
+the server waits for the reports of everybody who decides. Is there a strict majority for one hash, then that hash is the tick's; whoever said another is told by a `Desync` message of its
+own (it writes its diagnostics package), and dropped with `DropReason.Desync`; the others see a drop, not a desync, and play on. Without a strict majority the match ends as a desync.
+A liar therefore loses its own match, not everybody's (threat T11 of `docs/DEDICATED-SERVER.md`). Two who lie together in a room of five are still two against three; three of five who agree
+are the match, which is what a lockstep without a simulating server can know.
+
+The diagnosis of `docs/NETWORK-DIAGNOSTICS.md` needs two packages to compare: a client dropped by the majority writes one, the others do not, so `NetTool desync-diff` is a tool for a
+desync of the match. `scripts/check-net-robustness.ps1` plays its corrupted match with two players for that reason.
