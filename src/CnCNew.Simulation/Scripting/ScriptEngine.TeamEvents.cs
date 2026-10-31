@@ -88,15 +88,16 @@ public sealed partial class ScriptEngine
 
             if (prototype.OnIdleScript.Length > 0)
             {
-                var mobile = 0;
+                // Team::updateState: "if (!ai) continue"; an object with an AI counts whether it can move or not.
+                var thinking = 0;
                 var idle = true;
                 foreach (var id in team.Members)
                 {
-                    if (_world.FindEntity(new EntityId(id)) is not { DestroyRequested: false, EffectivelyDead: false } member || member.Template.Locomotor is null) continue;
-                    mobile++;
+                    if (_world.FindEntity(new EntityId(id)) is not { DestroyRequested: false, EffectivelyDead: false } member || AiOf(member) is null) continue;
+                    thinking++;
                     if (idle && !IsIdle(member)) idle = false;
                 }
-                if (mobile > 0 && idle && team.WasIdle) RunTeamScript(team, prototype.OnIdleScript);
+                if (thinking > 0 && idle && team.WasIdle) RunTeamScript(team, prototype.OnIdleScript);
                 team.WasIdle = idle;
             }
         }

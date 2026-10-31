@@ -131,7 +131,7 @@ public sealed partial class ScriptEngine
             }
     }
 
-    private bool IsIdle(Entity entity) => !Marching(entity) && !_followers.ContainsKey(entity.Id.Value) && !_busyThisTick.Contains(entity.Id.Value) && (AiOf(entity)?.IsIdle ?? true);
+    private bool IsIdle(Entity entity) => !Marching(entity) && !_followers.ContainsKey(entity.Id.Value) && !_busyThisTick.Contains(entity.Id.Value) && _world.IsAiIdle(entity);
 
     /// <summary>
     /// <c>evaluateAndProgressAllSequentialScripts</c>. A runner whose team or object is gone is dropped with everything queued behind it; otherwise, while the group is idle

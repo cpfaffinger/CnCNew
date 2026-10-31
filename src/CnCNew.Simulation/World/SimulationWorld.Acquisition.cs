@@ -77,6 +77,14 @@ public sealed partial class SimulationWorld
     /// <summary>The victim the unit attacks right now, by its own choice or by order (<c>AIUpdateInterface::getCurrentVictim</c>); invalid for none.</summary>
     public EntityId AcquiredVictimOf(Entity entity) => entity.Acquisition?.Victim ?? EntityId.Invalid;
 
+    /// <summary>
+    /// <c>AIUpdateInterface::isIdle</c> as a script reads it (F-21): the AI's state machine stands in <c>AI_IDLE</c>. An object without an AI is idle. <see cref="AIUpdateInterface.IsIdle"/>
+    /// asks only whether the body has an order, which is what the unit's own look needs; a unit in an attack, on an attack-move or at an ability (<c>AI_BUSY</c>) is in another state.
+    /// </summary>
+    public bool IsAiIdle(Entity entity)
+        => AiOf(entity) is not { } ai
+           || (ai.IsIdle && !ai.HidesIdle && entity.Acquisition is not ({ Victim.IsValid: true } or { AttackMove: true }) && !entity.HasStatus(UsingAbilityBit));
+
     /// <summary>The unit is on an attack-move (<c>AI_ATTACK_MOVE_TO</c>): marching, or stopped on the way for a fight.</summary>
     public bool IsAttackMoving(Entity entity) => entity.Acquisition is { AttackMove: true };
 

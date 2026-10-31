@@ -62,6 +62,9 @@ internal sealed class ChinookAIUpdate(ChinookData data) : SupplyCarrierAI(data.C
     private FlightFrameStep _climb;
 
     public override string ModuleName => "ChinookAIUpdate";
+
+    /// <summary><c>ChinookAIUpdate::isIdle</c>: "if we are waiting to disgorge some folks, we aren't 'idle'".</summary>
+    public override bool HidesIdle => Entity.Container is TransportContain { HasRidersWaitingToExit: true };
     public override long UpgradedSupplyBoost(IWorldServices world) => BoostIfUpgraded(world, "Upgrade_AmericaSupplyLines");
 
     /// <summary>"Flying, even if we start on the ground" (<c>m_flightStatus = CHINOOK_FLYING</c>): a fresh Chinook climbs to its height at once.</summary>

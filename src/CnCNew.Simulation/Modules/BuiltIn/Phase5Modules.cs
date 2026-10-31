@@ -813,6 +813,12 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary><c>AIUpdateInterface::isIdle</c>: no move order, not docking, no builder task and no evacuation waiting (<c>AI_EVACUATE</c>).</summary>
     public virtual bool IsIdle => _dock is null && !Entity.HasMoveTarget && _task == BuilderTask.None && !_evacuatePending && !_returning && Entity.Guard is null && Entity.AttackPlace is null && Entity.Roam is null;
 
+    /// <summary>
+    /// The AI is in a state of its own that <see cref="IsIdle"/> does not see: the <c>isIdle</c> overrides of <c>HackInternetAIUpdate</c> and <c>ChinookAIUpdate</c> ("scripting relies on
+    /// us never claiming to be idle").
+    /// </summary>
+    public virtual bool HidesIdle => false;
+
     /// <summary>The locomotor the object moves with right now (<c>AIUpdateInterface::getCurLocomotor</c>); aircraft switch between their locomotor sets (<c>JetAIUpdate::chooseLocomotorSet</c>).</summary>
     /// <summary>The locomotor set the object moves with right now (a jet picks its taxi, attack or return set).</summary>
     protected virtual LocomotorInfo? SelectedLocomotor

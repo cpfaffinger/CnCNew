@@ -83,6 +83,9 @@ public sealed class HackInternetAIUpdate(HackInternetData data) : AIUpdateInterf
     /// <summary><c>isHackingPackingOrUnpacking</c>.</summary>
     public bool IsHackingPackingOrUnpacking => _state != HackState.None;
 
+    /// <summary><c>HackInternetAIUpdate::isIdle</c>, and its states <c>UNPACKING</c>, <c>HACK_INTERNET</c> and <c>PACKING</c>, which are not <c>AI_IDLE</c>.</summary>
+    public override bool HidesIdle => _hasPending || _state != HackState.None;
+
     /// <summary><c>AIUpdateInterface::privateHackInternet</c> / <c>HackInternetAIUpdate::hackInternet</c>.</summary>
     public void StartHacking(IWorldServices world)
     {
