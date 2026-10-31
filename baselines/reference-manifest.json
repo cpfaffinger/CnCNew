@@ -574,15 +574,15 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "50C502E8746A2542",
-        "commandStreamSha256": "6DC2588ADC0CD11115ACBB84983F9183131AB8959F53A90F888287A4ABE7CA67",
-        "commands": 2624,
+        "chainHash": "28C43EB29864C673",
+        "commandStreamSha256": "2044BE16E72B99AED964DF58913B88AC3F212078D5AC03F27A586ED85D0693AF",
+        "commands": 2687,
         "endTick": 18000,
-        "finalHash": "70493ABB67E096FC",
+        "finalHash": "24507931725A01AA",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "stalemate",
-        "rejectedCommands": 496,
+        "rejectedCommands": 499,
         "snapshotBytes": 2346182,
         "snapshotSha256": "B9B8F10DC9257B79182F24804AC39BE13DA71E0743537CBBB60DBB97BC1C3785",
         "snapshotTick": 9000
