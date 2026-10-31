@@ -98,7 +98,6 @@ static partial class Tests
                 Scr.Do("NAMED_FACE_NAMED", Scr.Unit("Walker"), Scr.Unit("Beacon")),
                 Scr.Do("NAMED_SET_ATTITUDE", Scr.Unit("Walker"), Scr.Int(2)),
                 Scr.Do("TEAM_SET_REPULSOR", Scr.Team("teamA"), Scr.Int(1)),
-                Scr.Do("SET_STOPPING_DISTANCE", Scr.Team("teamA"), Scr.Real(5m)),
                 Scr.Do("CHOOSE_VICTIM_ALWAYS_USES_NORMAL", Scr.Int(1)),
                 Scr.Do("UNIT_DESTROY_ALL_CONTAINED", Scr.Unit("Bunker")),
                 Scr.Do("PLAYER_CREATE_TEAM_FROM_CAPTURED_UNITS", Scr.Side(PlayerA), Scr.Team("teamA")),

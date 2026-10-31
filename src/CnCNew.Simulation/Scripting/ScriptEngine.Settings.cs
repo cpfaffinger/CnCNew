@@ -48,11 +48,11 @@ public sealed partial class ScriptEngine
                     }
                 }
                 return true;
-            // doNamedSetStoppingDistance (Locomotor::setCloseEnoughDist), doNamedSetRepulsor (the REPULSOR object status), doSetBaseConstructionSpeed (the AI's delay between teams): no consumer.
+            // doNamedSetStoppingDistance: Locomotor::setCloseEnoughDist on the object's current locomotor, from half a unit on.
             case "NAMED_SET_STOPPING_DISTANCE":
-                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } stopper && Real(p, 1) >= Fixed.FromDecimal(0.5m)) _recordedSettings[type + "|" + stopper.Id.Value] = Real(p, 1).Raw;
-                _recordedActions++;
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } stopper) SetStoppingDistance(stopper, Real(p, 1));
                 return true;
+            // doNamedSetRepulsor (the REPULSOR object status), doSetBaseConstructionSpeed (the AI's delay between teams): no consumer.
             case "NAMED_SET_REPULSOR":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } repulsive) _recordedSettings[type + "|" + repulsive.Id.Value] = Int(p, 1) != 0 ? 1 : 0;
                 _recordedActions++;
@@ -64,6 +64,14 @@ public sealed partial class ScriptEngine
             default:
                 return TryExecutePhase13Action(action);
         }
+    }
+
+    /// <summary>False for an object without an AI or a locomotor, where <c>doSetStoppingDistance</c> gives up on the rest of the team.</summary>
+    private bool SetStoppingDistance(Entity entity, Fixed distance)
+    {
+        if (AiOf(entity) is not { } ai || entity.Template.Locomotor is null) return false;
+        if (distance >= Fixed.FromDecimal(0.5m)) ai.SetStoppingDistance(_world, distance);
+        return true;
     }
 
     private void DescribeSettingState(IStateWriter writer)

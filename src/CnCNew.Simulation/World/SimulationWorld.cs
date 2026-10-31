@@ -726,7 +726,7 @@ public sealed partial class SimulationWorld : IWorldServices
 
     private static bool CanMove(Entity entity) => AiOf(entity) is not null;
 
-    private static Modules.BuiltIn.AIUpdateInterface? AiOf(Entity entity)
+    internal static Modules.BuiltIn.AIUpdateInterface? AiOf(Entity entity)
         => Array.Find(entity.ModuleArray, module => module is Modules.BuiltIn.AIUpdateInterface) as Modules.BuiltIn.AIUpdateInterface;
 
     /// <summary>

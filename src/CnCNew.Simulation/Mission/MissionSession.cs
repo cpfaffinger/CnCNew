@@ -69,6 +69,7 @@ public sealed class MissionSession
 
     private readonly Dictionary<int, ulong> _sequences = [];
     private readonly List<(EntityId Id, int Mood)> _placedMoods = [];
+    private readonly List<(EntityId Id, Fixed Distance)> _placedStops = [];
     private long _shots;
     private long _rejectedShots;
 
@@ -145,6 +146,9 @@ public sealed class MissionSession
         foreach (var (id, mood) in session._placedMoods)
             if (world.FindEntity(id) is { } placed) world.SetAttitude(placed, mood);
         session._placedMoods.Clear();
+        foreach (var (id, distance) in session._placedStops)
+            if (world.FindEntity(id) is { } placed && SimulationWorld.AiOf(placed) is { } ai) ai.SetStoppingDistance(world, distance);
+        session._placedStops.Clear();
         // GameLogic::startNewGame: the skill points of the last mission, for the humans of a single player game.
         if (options.RankPoints != 0)
             foreach (var player in program.Players.Where(player => player.IsHuman)) world.AddSkillPoints(player.Id, options.RankPoints);
@@ -204,6 +208,7 @@ public sealed class MissionSession
             if (placed.ScriptName.Length > 0) Engine.RegisterNamed(placed.ScriptName, id);
             if (prototype is not null) Engine.AssignToTeam(prototype.Name, id);
             if (placed.Aggressiveness is { } mood && mood != (prototype?.Aggressiveness ?? 0)) _placedMoods.Add((id, mood));
+            if (placed.StoppingDistance > Fixed.Zero && template.Locomotor is { } locomotor && locomotor.CloseEnoughDist != placed.StoppingDistance) _placedStops.Add((id, placed.StoppingDistance));
         }
         PlaceBuildLists(catalog, skipped);
         PlaceHumanStarts(catalog, terrain, skipped, Engine.IsSkirmish);

@@ -427,6 +427,7 @@ run.Test("Attitude: a computer unit asleep ignores orders and fires at nothing (
 run.Test("Attitude: a team's attitude belongs to its members of the moment (F-22)", Tests.TeamAttitudeBelongsToTheMembersOfTheMoment);
 run.Test("Attitude: the map's objectAggressiveness replaces the team's (F-22)", Tests.MapObjectAggressivenessReplacesTheTeamsAttitude);
 run.Test("Attitude: GoAggressiveOnExit makes a transport's riders aggressive (F-22)", Tests.TransportMakesItsRidersAggressive);
+run.Test("Stopping distance: a script ends a move short of its goal, on the ground by at most four cells (F-22)", Tests.StoppingDistanceEndsAMoveShort);
 run.Test("Hulks: a script's override sets the lifetime of a new hulk and hurries a hulk's slow death (F-22)", Tests.HulkLifetimeOverride);
 run.Test("Scripts: FREEZE_TIME stops the world and not the scripts; UNFREEZE_TIME and the end of the mission lift it", Tests.ScriptFreezeTimeStopsTheWorldNotTheScripts);
 run.Test("Scripts: a frozen mission is frozen again after save and load, and ends unfrozen", Tests.ScriptFrozenTimeSurvivesSaveAndEnds);

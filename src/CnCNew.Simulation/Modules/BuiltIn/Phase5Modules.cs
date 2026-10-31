@@ -1722,7 +1722,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         // Everything from here on is one decision of a logic frame of the original, in that frame's units (docs/rate-invariance/RATE-INVARIANCE-GROUND.md): above 30 Hz the object decides once per
         // frame and covers the step in shares, at 30 Hz the frame is the tick and these are the locomotor's own constants.
         FrameConstants(locomotor, out var topSpeed, out var acceleration, out var braking, out var turnRate, out var minSpeed);
-        var arrivalRadius = Fixed.Max(locomotor.CloseEnoughDist, topSpeed);
+        var arrivalRadius = Fixed.Max(CloseEnough(locomotor, air), topSpeed);
         while (true)
         {
             if (!air && world.Bridges.Count != 0) FollowPathLayer(world);
@@ -1733,13 +1733,15 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             var toY = waypoint.Y - Entity.Y;
             if (!SquaredReach.Of(reach).Contains(toX * toX + toY * toY)) break;
             if (!last) { _pathIndex++; continue; }
+            // A script's stopping distance ends the move where the unit is (AIInternalMoveToState::update); the small arrival of a locomotor is put on the point.
+            if (StopsShort(locomotor, topSpeed, toX, toY)) (toX, toY) = (Fixed.Zero, Fixed.Zero);
             if (_stride > 1)
             {
-                BeginArrival(world, locomotor, waypoint.X - Entity.X, waypoint.Y - Entity.Y);
+                BeginArrival(world, locomotor, toX, toY);
                 return;
             }
-            Entity.X = waypoint.X;
-            Entity.Y = waypoint.Y;
+            Entity.X += toX;
+            Entity.Y += toY;
             if (!air) Entity.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
             var complete = _pathComplete;
             Entity.HasMoveTarget = false;
@@ -1842,7 +1844,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         // One decision of a logic frame of the original in that frame's units, with the constants and the speed the 30 Hz step computes with (FlightFrameConstants).
         FlightFrameConstants(world.Time, locomotor, out var topSpeed, out _, out var braking, out var turnRate, out var minSpeed);
         var speed = FrameSpeed();
-        var arrival = Fixed.Max(locomotor.CloseEnoughDist, topSpeed);
+        var arrival = Fixed.Max(CloseEnough(locomotor, true), topSpeed);
         var behind = distance > WingEpsilon && FixedTrig.AngleDifference(Entity.Angle, FixedTrig.Atan2(targetY - Entity.Y, targetX - Entity.X)).Abs() > FixedTrig.HalfPi;
         var arrived = distance <= arrival || (behind && distance <= TurnRadius(turnRate, Fixed.Max(speed, minSpeed)) * Fixed.FromInt(2));
         var brakingDistance = Fixed.Zero;
@@ -2417,16 +2419,17 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var distSq = dx * dx + dy * dy;
         // "Close enough" is at least one tick's travel at full speed, so a fast unit cannot perpetually overshoot and reverse.
         FrameConstants(locomotor, out var topSpeed, out var acceleration, out var braking, out _, out var minSpeed);
-        var closeEnough = Fixed.Max(locomotor.CloseEnoughDist, topSpeed);
+        var closeEnough = Fixed.Max(CloseEnough(locomotor, (locomotor.Surfaces & LocomotorSurfaces.Air) != 0), topSpeed);
         if (SquaredReach.Of(closeEnough).Contains(distSq))
         {
+            if (StopsShort(locomotor, topSpeed, dx, dy)) (dx, dy) = (Fixed.Zero, Fixed.Zero);
             if (_stride > 1)
             {
                 BeginArrival(world, locomotor, dx, dy);
                 return;
             }
-            Entity.X = Entity.MoveTargetX;
-            Entity.Y = Entity.MoveTargetY;
+            Entity.X += dx;
+            Entity.Y += dy;
             Entity.HasMoveTarget = false;
             Entity.Speed = Fixed.Zero;
             ClearFrameSpeed();
@@ -2458,6 +2461,31 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
 
     private Fixed _speedCap;
 
+    // Locomotor::m_closeEnoughDist of the object's current locomotor when a script or the map changed it; zero: the template's.
+    private Fixed _stoppingDistance;
+
+    /// <summary><c>AIInternalMoveToState::update</c>: a ground unit that is close enough on its path but further than four cells from the end of the path goes on.</summary>
+    private static readonly Fixed GroundStopLimit = Fixed.FromDecimal(4 * TerrainMap.CellSize);
+
+    /// <summary><c>Locomotor::setCloseEnoughDist</c> on the object's current locomotor; the value of a new locomotor set is its template's.</summary>
+    public void SetStoppingDistance(IWorldServices world, Fixed distance)
+    {
+        if (_stoppingDistance == distance) return;
+        _stoppingDistance = distance;
+        world.MarkDirty(Entity);
+    }
+
+    /// <summary><c>Locomotor::getCloseEnoughDist</c>, the limit of <c>AIInternalMoveToState::update</c> applied.</summary>
+    private Fixed CloseEnough(LocomotorInfo locomotor, bool air)
+    {
+        if (_stoppingDistance <= Fixed.Zero) return locomotor.CloseEnoughDist;
+        return air ? _stoppingDistance : Fixed.Min(_stoppingDistance, GroundStopLimit);
+    }
+
+    /// <summary>The move ended this far from its goal only because of a stopping distance.</summary>
+    private bool StopsShort(LocomotorInfo locomotor, Fixed topSpeed, Fixed dx, Fixed dy)
+        => _stoppingDistance > Fixed.Zero && !SquaredReach.Of(Fixed.Max(locomotor.CloseEnoughDist, topSpeed)).Contains(dx * dx + dy * dy);
+
     /// <summary>
     /// <c>AIUpdateInterface::setDesiredSpeed</c> (zero: no limit): a group that moves as a team (<c>AIGroup::getSpeed</c>, the slowest member) keeps every member at the group speed. The
     /// locomotor's own speed is never exceeded.
@@ -2470,6 +2498,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     {
         writer.Int("nextWake", _nextWake);
         if (_speedCap > Fixed.Zero) writer.Fixed("speedCap", _speedCap);
+        if (_stoppingDistance > Fixed.Zero) writer.Fixed("stoppingDistance", _stoppingDistance);
         writer.Bool("lastCommandFromPlayer", _lastCommandFromPlayer);
         writer.Bool("docking", _dock is not null);
         writer.UInt("enterTarget", _enterTarget.Value);
@@ -2537,6 +2566,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     {
         _nextWake = reader.Int("nextWake");
         _speedCap = reader.Has("speedCap") ? reader.Fixed("speedCap") : Fixed.Zero;
+        _stoppingDistance = reader.Has("stoppingDistance") ? reader.Fixed("stoppingDistance") : Fixed.Zero;
         _lastCommandFromPlayer = reader.Bool("lastCommandFromPlayer");
         _enterTarget = new EntityId(checked((uint)reader.UInt("enterTarget")));
         var task = reader.Int("task");
