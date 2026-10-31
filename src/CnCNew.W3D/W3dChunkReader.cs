@@ -8,6 +8,7 @@ public static class W3dChunkReader
     private const uint SizeMask = 0x7fffffff;
     private const int HeaderSize = 8;
     private const int MaximumDepth = 256;
+    private const uint HierarchyChunk = 0x100;
 
     public static W3dFile Read(Stream stream)
     {
@@ -19,22 +20,25 @@ public static class W3dChunkReader
 
         stream.Position = 0;
         var length = stream.Length;
-        var chunks = ReadChunks(stream, length, 0, out var trailing);
+        var chunks = ReadChunks(stream, length, 0, out var trailing, out var unmarked);
         if (stream.Position + trailing != length)
         {
             throw new InvalidDataException($"W3D parsing stopped at {stream.Position} of {length} bytes.");
         }
 
-        return new W3dFile(length, chunks) { TrailingBytes = trailing };
+        return new W3dFile(length, chunks) { TrailingBytes = trailing, UnmarkedHierarchies = unmarked };
     }
 
-    private static IReadOnlyList<W3dChunk> ReadChunks(Stream stream, long boundary, int depth) => ReadChunks(stream, boundary, depth, out _);
+    private static IReadOnlyList<W3dChunk> ReadChunks(Stream stream, long boundary, int depth) => ReadChunks(stream, boundary, depth, out _, out _);
 
     // trailing: at the top level only, fewer bytes than a chunk header after the last chunk. The original's loader (ChunkLoadClass::Open_Chunk, WWLib chunkio.cpp)
     // stops there because its read of the next header comes back short; inside a chunk the same remainder is an error here as there.
-    private static IReadOnlyList<W3dChunk> ReadChunks(Stream stream, long boundary, int depth, out int trailing)
+    // unmarked: top-level hierarchies without the container flag. The original never asks for the flag there: HTreeClass::Load_W3D opens the chunks inside, and
+    // Open_Chunk reads a header wherever the file stands. Two models of the community patch (ABSupplyCT_A7, _A8) were written that way.
+    private static IReadOnlyList<W3dChunk> ReadChunks(Stream stream, long boundary, int depth, out int trailing, out int unmarked)
     {
         trailing = 0;
+        unmarked = 0;
         if (depth > MaximumDepth)
         {
             throw new InvalidDataException($"W3D chunk nesting exceeds {MaximumDepth} levels.");
@@ -62,6 +66,12 @@ public static class W3dChunkReader
             var encodedSize = BinaryPrimitives.ReadUInt32LittleEndian(header[4..]);
             var isContainer = (encodedSize & ContainerFlag) != 0;
             var size = checked((int)(encodedSize & SizeMask));
+            if (!isContainer && depth == 0 && type == HierarchyChunk && size >= HeaderSize)
+            {
+                isContainer = true;
+                unmarked++;
+            }
+
             var dataOffset = stream.Position;
             var endOffset = checked(dataOffset + size);
             if (endOffset > boundary || endOffset > stream.Length)

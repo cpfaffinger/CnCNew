@@ -190,10 +190,10 @@ public static class W3dAnimationDecoder
             throw new InvalidDataException($"{context} has unknown bit channel type {type}; only visibility (0) exists.");
         }
 
-        if (defaultValue > 1 || lastFrame < firstFrame || lastFrame >= frameCount)
+        // Any value but 0 means visible: BitChannelClass::Get_Bit returns DefaultVal as it stands, and two models of the community patch write 255.
+        if (lastFrame < firstFrame || lastFrame >= frameCount)
         {
-            throw new InvalidDataException(
-                $"{context} has default {defaultValue} and frames {firstFrame}..{lastFrame} of {frameCount}.");
+            throw new InvalidDataException($"{context} has frames {firstFrame}..{lastFrame} of {frameCount}.");
         }
 
         var byteCount = (lastFrame - firstFrame + 1 + 7) / 8;

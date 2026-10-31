@@ -27,6 +27,15 @@ trailingByte.Write([1, 2, 0]);
 var withTrailing = W3dChunkReader.Read(trailingByte);
 Assert(withTrailing.Chunks.Count == 1 && withTrailing.TrailingBytes == 1 && withTrailing.Length == 11, "A remainder shorter than a chunk header at the end of the file is counted.");
 
+// HTreeClass::Load_W3D opens the chunks inside a hierarchy and never asks for its container flag; two models of the community patch lack it.
+using var unmarkedHierarchy = new MemoryStream();
+WriteHeader(unmarkedHierarchy, 0x100, 12, container: false);
+WriteHeader(unmarkedHierarchy, 0x101, 4, container: false);
+unmarkedHierarchy.Write([1, 2, 3, 4]);
+var hierarchy = W3dChunkReader.Read(unmarkedHierarchy);
+Assert(hierarchy.Chunks.Single().IsContainer && hierarchy.Chunks.Single().Children.Single().Type == 0x101 && hierarchy.UnmarkedHierarchies == 1, "A hierarchy without the flag is read and counted.");
+Assert(file.UnmarkedHierarchies == 0, "A file with the flag counts none.");
+
 using var truncated = new MemoryStream();
 WriteHeader(truncated, 1, 5, container: false);
 truncated.Write([1, 2]);
