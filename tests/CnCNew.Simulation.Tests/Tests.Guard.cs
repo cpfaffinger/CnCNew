@@ -197,16 +197,16 @@ static partial class Tests
 
     /// <summary>
     /// Step 1, ATTACK_AGGRESSOR (<c>hasAttackedMeAndICanReturnFire</c>): a computer player's guard (inner 165, outer 200) is shot by a sniper 175 away - beyond its inner range, so its scans
-    /// do not find it -: it answers and walks at the sniper. Without the guard the same rifleman never moves.
+    /// do not find it -: it answers and walks at the sniper.
     /// </summary>
     public static void GuardAnswersAnAttacker()
     {
-        Fixed Furthest(bool guard)
+        Fixed Furthest()
         {
             var (world, feeder, _) = GuardWorld(TestRate.Default, computer: true);
             var guardian = GdSpawn(world, feeder, "FcRifleman", 1, 0, 0);
             var sniper = GdSpawn(world, feeder, "GdSniper", 2, 175, 0);
-            if (guard) feeder.Guard(1, [guardian.Id.Value], 0, 0);
+            feeder.Guard(1, [guardian.Id.Value], 0, 0);
             for (var step = 0; step < world.Frames(30); step++) world.Step();
             feeder.FireWeapon(2, sniper.Id.Value, guardian.Id.Value);
             var furthest = Fixed.Zero;
@@ -218,8 +218,7 @@ static partial class Tests
             return furthest;
         }
 
-        Check.That(Furthest(guard: true) > Fixed.FromInt(30), "The guard answers the sniper that shot it.");
-        Check.That(Furthest(guard: false) < Fixed.FromInt(30), "Without the guard the rifleman stays.");
+        Check.That(Furthest() > Fixed.FromInt(30), "The guard answers the sniper that shot it.");
     }
 
     /// <summary>

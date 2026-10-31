@@ -23,6 +23,9 @@ public sealed partial class SimulationWorld
     /// <summary><c>GuardOuterModifierAI</c> (AIData.ini 1.333): how far beyond its vision a computer player's unit looks for a victim it then walks to.</summary>
     private static readonly Fixed AcquireVisionFactorComputer = Fixed.FromDecimal(1.333m);
 
+    /// <summary><c>GuardOuterModifierHuman</c> (AIData.ini 2.2): how far beyond its vision a human player's unit looks; what it finds must be in weapon range as well.</summary>
+    private static readonly Fixed AcquireVisionFactorHuman = Fixed.FromDecimal(2.2m);
+
     /// <summary><c>AlertRangeModifier</c> (AIData.ini 1.1).</summary>
     private static readonly Fixed AlertRangeFactor = Fixed.FromDecimal(1.1m);
 
@@ -358,6 +361,8 @@ public sealed partial class SimulationWorld
     private AcquireMode ModeOf(Entity entity, AIUpdateInterface ai, AcquisitionState? state)
     {
         if (state is { AttackMove: true }) return AcquireMode.AttackMove;
+        // aiAttackObject of the idle state: the walk to the victim is the attack, not a move that makes the unit busy.
+        if (state is { Chasing: true }) return AcquireMode.Idle;
         if ((ai.AutoAcquire & AutoAcquire.Idle) == 0) return AcquireMode.None;
         // "Being in a firing container is an exception to this veto" (getNextMoodTarget asks the container without an id).
         if (entity.HasStatus(StealthedStatus) && (ai.AutoAcquire & AutoAcquire.Stealthed) == 0
@@ -397,8 +402,9 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// One tick of an attack on <paramref name="victim"/>: in range the unit stands (an attack-move stops for the fight, aircraft keep flying) and fires when its weapon may; out of range a
-    /// computer player's unit on an attack-move walks to the victim (<c>AIAttackApproachTargetState</c>), everything else gives the victim up — a human player's unit that picked its
-    /// victim itself may not chase it (<c>isAllowedToChase</c>), and an idle turret drops a victim that left its range (<c>m_targetWasSetByIdleMood</c>). False when the attack is over.
+    /// computer player's unit walks to the victim (<c>AIAttackApproachTargetState</c>), from rest as on an attack-move (<c>AIIdleState::update</c> calls <c>aiAttackObject</c>), everything else
+    /// gives the victim up — a human player's unit that picked its victim itself may not chase it (<c>isAllowedToChase</c>), and an idle turret drops a victim that left its range
+    /// (<c>m_targetWasSetByIdleMood</c>). False when the attack is over.
     /// </summary>
     private bool Engage(Entity entity, AIUpdateInterface ai, AcquisitionState state, Entity victim, AcquireMode mode, long tick)
     {
@@ -429,7 +435,7 @@ public sealed partial class SimulationWorld
             return true;
         }
 
-        if (mode != AcquireMode.AttackMove || !MayChase(entity, aircraft)) return false;
+        if (turretOnly || !MayChase(entity, aircraft)) return false;
         var leash = AcquireRadius(entity, true) * ChaseLeashFactor;
         // The chase is decided after the updates of the tick: at 30 Hz both objects have taken their whole step by then. Above 30 Hz they are read where the frame they have
         // begun ends (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3, rule 3), and the walk starts one logic frame of the original later, as "the next tick" does at 30 Hz.
@@ -523,8 +529,7 @@ public sealed partial class SimulationWorld
 
     /// <summary>
     /// <c>AI::getAdjustedVisionRangeForObject(obj, OWNERTYPE | MOOD)</c> for a unit that may walk to its victim: the vision range times the guard-outer factor, times the mood factor of a
-    /// computer player's alert or aggressive team; never less than the reach of the unit's weapons. A unit that may not walk looks no further than its weapons reach
-    /// (<c>AI::WITHIN_ATTACK_RANGE</c>).
+    /// computer player's alert or aggressive team. A unit that may not walk looks no further than its weapons reach (<c>AI::WITHIN_ATTACK_RANGE</c>) and its vision times the human factor.
     /// </summary>
     private Fixed AcquireRadius(Entity entity, bool chase)
     {
@@ -532,7 +537,7 @@ public sealed partial class SimulationWorld
         // AI::getAdjustedVisionRangeForObject gives a contained object its largest weapon range (with its bonuses), and getNextMoodTarget adds the container's bounding circle
         // "so that large buildings can auto acquire everything in outer ranges".
         if (FiringContainerOf(entity) is { } container) return reach + container.Template.BoundingCircleRadius;
-        if (!chase) return reach;
+        if (!chase) return IsComputerPlayer(entity.Owner) ? reach : Fixed.Min(reach, entity.Template.VisionRange * AcquireVisionFactorHuman);
         var vision = entity.Template.VisionRange * AcquireVisionFactorComputer;
         switch (AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal)
         {
@@ -540,7 +545,7 @@ public sealed partial class SimulationWorld
             case Attitude.Aggressive: vision *= AggressiveRangeFactor; break;
         }
 
-        return Fixed.Max(reach, vision);
+        return vision;
     }
 
     /// <summary>The first tick from <paramref name="tick"/> on at which some weapon of the active set is ready, not looking further than the turrets' reload cap (an aircraft out of ammunition waits for its airfield).</summary>
@@ -568,7 +573,7 @@ public sealed partial class SimulationWorld
         var attitude = computer ? AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal : Attitude.Normal;
         if ((attitude == Attitude.Sleep && container is null) || attitude == Attitude.Passive) return null;
         var aircraft = entity.Template.IsKindOf("AIRCRAFT");
-        var chase = mode == AcquireMode.AttackMove && MayChase(entity, aircraft);
+        var chase = mode != AcquireMode.Turret && MayChase(entity, aircraft);
         var radius = AcquireRadius(entity, chase);
         if (radius <= Fixed.Zero) return null;
         var limit = SquaredReach.Of(radius);

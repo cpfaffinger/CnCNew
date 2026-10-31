@@ -238,6 +238,36 @@ static partial class Tests
         Check.That(shots == 0 && Slotted(quiet, "AcqSoldier").Modules.Count > 0, "With SelfAcquisition off nobody picks a victim.");
     }
 
+    /// <summary>
+    /// F-17: <c>AIIdleState::update</c> calls <c>aiAttackObject</c> on what <c>getNextMoodTarget</c> finds, and a computer player's unit looks as far as its vision times <c>GuardOuterModifierAI</c>: a resting
+    /// unit walks to a victim 180 units away (vision 150, weapon 100), stops in range and fires, in the same frames at 30, 60 and 120 Hz; a human player's unit stays. Before, only an attack-move walked.
+    /// </summary>
+    public static void AcquisitionComputerUnitWalksToItsVictim()
+    {
+        (long Fired, string Place)? reference = null;
+        foreach (var (rate, _) in WorldRates)
+        {
+            var fixture = new SyntheticFixture(rate, files: AcquisitionFiles());
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, ComputerAgainstHuman, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "AcqSoldier", owner: 1, x: 0, y: 0);
+            feeder.Spawn(2, "AcqDummy", owner: 2, x: 180, y: 0);
+            feeder.Spawn(2, "AcqSoldier", owner: 2, x: 0, y: 600);
+            feeder.Spawn(1, "AcqDummy", owner: 1, x: 180, y: 600);
+            world.Step();
+            var soldier = Slotted(world, "AcqSoldier");
+            var human = Slotted(world, "AcqSoldier", 1);
+            var fired = -1L;
+            for (var step = 0; step < world.Frames(600) && fired < 0; step++)
+                if (ShotsOf(world.Step(), soldier) > 0) fired = (world.Tick - 1) / world.Time.TicksPerOriginalFrame;
+            Check.That(fired > 0 && soldier.X > Fixed.FromInt(70), $"{rate}: the computer unit walked into range and fired ({fired}, {soldier.X}).");
+            Check.That(human.X == Fixed.Zero && human.Y == Fixed.FromInt(600), $"{rate}: the human player's unit stays where it stands.");
+            var result = (fired, soldier.X.ToString());
+            reference ??= result;
+            Check.That(result == reference, $"{rate}: in the same frame at the same place ({result} against {reference}).");
+        }
+    }
+
     public static void AcquisitionKillsOneVictimAfterAnother()
     {
         var (world, _, _) = AcquisitionWorld(false, ("AcqSoldier", 1, 0, 0), ("AcqWeak", 2, 50, 0), ("AcqWeak", 2, 0, 80));
