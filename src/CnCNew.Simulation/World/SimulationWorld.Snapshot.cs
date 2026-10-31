@@ -166,6 +166,7 @@ public sealed partial class SimulationWorld
         }
         if (state.Int("pendingCommands") != _pendingCommandCount || state.Int("entities") != _entities.Count || state.Int("timers") != _timerById.Count)
             throw new InvalidDataException("Snapshot table sizes do not match their contents.");
+        LoadBridges(state);
         LoadVision(state);
         RebuildDisabledEdges();
         ComputeFullHash();
@@ -219,6 +220,7 @@ public sealed partial class SimulationWorld
             Underpowered = reader.Has("underpowered") && reader.Bool("underpowered"),
             ScriptDisableMask = reader.Has("scriptDisableMask") ? checked((byte)reader.Int("scriptDisableMask")) : (byte)0,
         };
+        if (reader.Has("layer")) entity.Layer = checked((int)reader.Int("layer"));
         if (reader.Has("shroudScalar")) entity.ShroudScalar = reader.Fixed("shroudScalar");
         if (reader.Has("shroudRange")) entity.ShroudRange = reader.Fixed("shroudRange");
         if (reader.Has("crateWeaponLevel")) entity.CrateWeaponLevel = checked((int)reader.Int("crateWeaponLevel"));

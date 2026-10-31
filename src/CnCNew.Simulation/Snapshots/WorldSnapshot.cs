@@ -96,7 +96,7 @@ public static class WorldSnapshot
                 players.ToImmutable(), root.Text("fixture"), root.Text("definitionFingerprint"), root.Text("terrainFingerprint"));
             if (!string.Equals(configuration.TerrainFingerprint, terrain?.Fingerprint ?? string.Empty, StringComparison.Ordinal))
                 throw new SnapshotFormatException("The snapshot was written for a different terrain (fingerprint mismatch).");
-            var world = new SimulationWorld(configuration, templates, terrain);
+            var world = new SimulationWorld(configuration, templates, terrain, restoring: true);
             world.LoadFull(state);
             world.Streams.LoadPresentation(root.Object("presentation"));
             var recorded = root.Text("stateHash");

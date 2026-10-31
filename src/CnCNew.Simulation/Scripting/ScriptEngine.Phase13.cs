@@ -204,7 +204,6 @@ public sealed partial class ScriptEngine
     // ------------------------------------------------------------------------------------------------ booby traps and bridges
 
     private readonly List<(uint Bomb, uint Victim, long OffsetX, long OffsetY)> _pendingTraps = [];
-    private readonly SortedDictionary<uint, (bool Rubble, bool Changed)> _bridgeStates = [];
 
     /// <summary>
     /// <c>GeometryInfo::makeRandomOffsetOnPerimeter</c> + <c>StickyBombUpdate::initStickyBomb(victim, null, pos)</c>: the trap object is requested now and attached the tick it exists
@@ -258,24 +257,6 @@ public sealed partial class ScriptEngine
             var victim = _world.FindEntity(new EntityId(victimId));
             if (victim is null || victim.EffectivelyDead || bomb.Modules.OfType<StickyBombUpdate>().FirstOrDefault() is not { } sticky) { _world.RequestDestroy(bomb.Id); continue; }
             sticky.InitStickyBombAtOffset(_world, victim, Fixed.FromRaw(offsetX), Fixed.FromRaw(offsetY));
-        }
-    }
-
-    private static bool BridgeIsRubble(Entity bridge) => bridge.EffectivelyDead || bridge.Body is ActiveBody { DamageState: BodyDamageStates.Rubble };
-
-    /// <summary>
-    /// <c>TerrainLogic::updateBridgeDamageStates</c> / <c>BridgeInfo::damageStateChanged</c>: the update after a watched bridge object moved into or out of rubble its change flag is up
-    /// (<see cref="TryEvaluatePhase13Condition"/> reads it; the flag drops at the end of the next update, like <c>TerrainLogic::update</c> resets it).
-    /// </summary>
-    private void UpdateBridgeStates()
-    {
-        if (_bridgeStates.Count == 0) return;
-        foreach (var id in _bridgeStates.Keys.ToArray())
-        {
-            var state = _bridgeStates[id];
-            var bridge = _world.FindEntity(new EntityId(id));
-            var rubble = bridge is null || BridgeIsRubble(bridge);
-            _bridgeStates[id] = (rubble, rubble != state.Rubble);
         }
     }
 
@@ -572,7 +553,6 @@ public sealed partial class ScriptEngine
         UpdateCaptureOrders(tick);
         UpdatePendingStructures(tick);
         AttachPendingTraps();
-        UpdateBridgeStates();
     }
 
     private void DescribePhase13State(IStateWriter writer)
@@ -603,12 +583,6 @@ public sealed partial class ScriptEngine
             foreach (var (bomb, victim, offsetX, offsetY) in _pendingTraps) { writer.BeginObject(null); writer.UInt("bomb", bomb); writer.UInt("victim", victim); writer.Int("x", offsetX); writer.Int("y", offsetY); writer.EndObject(); }
             writer.EndArray();
         }
-        if (_bridgeStates.Count > 0)
-        {
-            writer.BeginArray("bridgeStates");
-            foreach (var (id, state) in _bridgeStates) { writer.BeginObject(null); writer.UInt("id", id); writer.Bool("rubble", state.Rubble); writer.Bool("changed", state.Changed); writer.EndObject(); }
-            writer.EndArray();
-        }
         if (_pendingStructures.Count > 0)
         {
             writer.BeginArray("pendingStructures");
@@ -631,8 +605,6 @@ public sealed partial class ScriptEngine
         if (reader.Has("captureOrders")) foreach (var item in reader.Array("captureOrders")) _captureOrders[checked((uint)item.UInt("member"))] = checked((uint)item.UInt("target"));
         _pendingTraps.Clear();
         if (reader.Has("pendingTraps")) foreach (var item in reader.Array("pendingTraps")) _pendingTraps.Add((checked((uint)item.UInt("bomb")), checked((uint)item.UInt("victim")), item.Int("x"), item.Int("y")));
-        _bridgeStates.Clear();
-        if (reader.Has("bridgeStates")) foreach (var item in reader.Array("bridgeStates")) _bridgeStates[checked((uint)item.UInt("id"))] = (item.Bool("rubble"), item.Bool("changed"));
         _pendingStructures.Clear();
         if (reader.Has("pendingStructures")) foreach (var item in reader.Array("pendingStructures")) _pendingStructures[item.Text("key")] = (checked((int)item.Int("owner")), item.Int("x"), item.Int("y"));
     }
@@ -720,11 +692,8 @@ public sealed partial class ScriptEngine
             // evaluateBridgeBroken / evaluateBridgeRepaired -> TerrainLogic::isBridgeBroken/isBridgeRepaired: true only on the update right after the bridge object entered (left) the rubble damage state.
             case "BRIDGE_BROKEN":
             case "BRIDGE_REPAIRED":
-                if (Has(type, p, 1) && NamedEntity(Str(p, 0)) is { } bridge && bridge.Modules.OfType<BridgeBehavior>().Any())
-                {
-                    if (!_bridgeStates.TryGetValue(bridge.Id.Value, out var bridgeState)) _bridgeStates[bridge.Id.Value] = (BridgeIsRubble(bridge), false);
-                    else result = bridgeState.Changed && bridgeState.Rubble == (type == "BRIDGE_BROKEN");
-                }
+                if (Has(type, p, 1) && _world.BridgeStatesChanged && NamedEntity(Str(p, 0)) is { } named && _world.BridgeOf(named.Id) is { DamageStateChanged: true } bridge)
+                    result = (bridge.DamageState == BodyDamageStates.Rubble) == (type == "BRIDGE_BROKEN");
                 return true;
             case "SUPPLY_SOURCE_SAFE":
                 result = Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } safe && SupplySourceSafeRemembered(safe.Id, Int(p, 1));

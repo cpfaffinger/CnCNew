@@ -149,7 +149,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         {
             _flying = true;
             Entity.InPhysicsFlight = true;
-            _wasAirborne = Entity.Z > world.GroundHeightAt(Entity.X, Entity.Y);
+            _wasAirborne = Entity.Z > world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
             if (!_falling) _subStep = 0;
             world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
         }
@@ -189,7 +189,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         {
             _flying = true;
             Entity.InPhysicsFlight = true;
-            _wasAirborne = Entity.Z > world.GroundHeightAt(Entity.X, Entity.Y);
+            _wasAirborne = Entity.Z > world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
             if (!_falling) _subStep = 0;
             world.WakeAt(Entity, this, world.Tick + world.Time.OriginalFrames(SimulationTiming.SleepNone));
         }
@@ -243,7 +243,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         Entity.X += _velocityX;
         Entity.Y += _velocityY;
         Entity.Z += _velocityZ;
-        var ground = world.GroundHeightAt(Entity.X, Entity.Y);
+        var ground = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
         if (Entity.Z <= ground)
         {
             Entity.Z = ground;
@@ -352,7 +352,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
             Entity.Angle = FixedTrig.Normalize(Entity.Angle + _yawRate * data.PitchRollYawFactor);
         }
 
-        var ground = world.GroundHeightAt(x, y);
+        var ground = world.LayerHeightAt(x, y, Entity.Layer);
         var bounced = false;
         var bounceZ = Fixed.Zero;
         if (_bounce && z <= ground)

@@ -108,6 +108,7 @@ public sealed class ObjectTemplate
         FactoryExitWidth = Real(definition, "FactoryExitWidth");
         FactoryExtraBibWidth = Real(definition, "FactoryExtraBibWidth");
         GeometryIsSmall = definition.Fields.LastOrDefault(field => field.Name.Equals("GeometryIsSmall", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
+        IsBridge = definition.Fields.LastOrDefault(field => field.Name.Equals("IsBridge", StringComparison.OrdinalIgnoreCase))?.Value.Value is true;
         VisionRange = Real(definition, "VisionRange");
         ShroudClearingRange = definition.Fields.Any(field => field.Name.Equals("ShroudClearingRange", StringComparison.OrdinalIgnoreCase)) ? Real(definition, "ShroudClearingRange") : VisionRange;
         TransportSlotCount = definition.Fields.LastOrDefault(field => field.Name.Equals("TransportSlotCount", StringComparison.OrdinalIgnoreCase))?.Value.Value is long slots ? checked((int)slots) : 0;
@@ -172,6 +173,9 @@ public sealed class ObjectTemplate
     public Fixed FactoryExtraBibWidth { get; }
 
     public bool IsBox => Geometry.Equals("BOX", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary><c>ThingTemplate::isBridge</c>: a landmark bridge, whose box is its deck.</summary>
+    public bool IsBridge { get; }
     private bool IsSphere => Geometry.Equals("SPHERE", StringComparison.OrdinalIgnoreCase);
 
     /// <summary><c>GeometryInfo::getBoundingCircleRadius</c> (<c>calcBoundingStuff</c>): the corner distance of a box, the major radius of a cylinder or sphere.</summary>

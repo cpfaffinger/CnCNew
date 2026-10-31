@@ -43,6 +43,9 @@ public sealed record ContainerFirePoints(ImmutableArray<ImmutableArray<BonePose>
     public bool IsEmpty => Garrison.All(set => set.IsEmpty) && Stations.IsEmpty && Transport.IsEmpty;
 }
 
+/// <summary>The lateral extent of a bridge model's left section, unscaled (<c>W3DBridge::load</c>: <c>m_minY</c>, <c>m_maxY</c>): how wide the deck is around the line between the bridge's two points.</summary>
+public readonly record struct BridgeDeck(Fixed MinY, Fixed MaxY);
+
 /// <summary>
 /// Model-derived constants the simulation may not read from model files itself (layering: the simulation sees no archives, content or renderer formats). The client layer reads them once from
 /// the base-pose skeletons of the draw models at load time and hands them to <see cref="TemplateCatalog.Build"/>; they are part of the world's identity, so <see cref="Fingerprint"/> is
@@ -62,10 +65,13 @@ public sealed class ModelGeometry
     /// <summary>The rider points of container templates by name (case-insensitive); a template without an entry has no such bones, and its riders stand at its position.</summary>
     public ImmutableDictionary<string, ContainerFirePoints> FirePoints { get; }
 
+    /// <summary>The deck of the <c>Bridge</c> blocks by name, for those whose pristine model has what <c>W3DBridge::load</c> asks for; a block without an entry makes no bridge.</summary>
+    public ImmutableDictionary<string, BridgeDeck> BridgeDecks { get; }
+
     /// <summary>SHA-256 of the canonical text of the table; empty for <see cref="None"/>.</summary>
     public string Fingerprint { get; }
 
-    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty;
+    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty;
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields) : this(airfields, []) { }
 
@@ -73,11 +79,12 @@ public sealed class ModelGeometry
         : this(airfields, exitPaths, []) { }
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>> exitPaths,
-        IEnumerable<KeyValuePair<string, ContainerFirePoints>> firePoints)
+        IEnumerable<KeyValuePair<string, ContainerFirePoints>> firePoints, IEnumerable<KeyValuePair<string, BridgeDeck>>? bridgeDecks = null)
     {
         Airfields = airfields.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         ExitPaths = exitPaths.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         FirePoints = firePoints.Where(pair => !pair.Value.IsEmpty).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
+        BridgeDecks = (bridgeDecks ?? []).ToImmutableDictionary(StringComparer.Ordinal);
         Fingerprint = IsEmpty ? string.Empty : ComputeFingerprint();
     }
 
@@ -112,6 +119,9 @@ public sealed class ModelGeometry
             if (points.TurretPivot is { } pivot) text.Append(CultureInfo.InvariantCulture, $" turret {Pose(pivot)}");
             text.Append('\n');
         }
+        // Written only when the table has bridges: a table without them keeps its fingerprint.
+        foreach (var pair in BridgeDecks.OrderBy(value => value.Key, StringComparer.Ordinal))
+            text.Append(CultureInfo.InvariantCulture, $"bridge {pair.Key} {pair.Value.MinY.Raw} {pair.Value.MaxY.Raw}\n");
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
     }
 }

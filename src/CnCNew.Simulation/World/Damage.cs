@@ -22,6 +22,9 @@ public static class DamageTypes
     public const int KillGarrisoned = 36;
     public const int Status = 37;
 
+    /// <summary><c>DAMAGE_FALLING</c>.</summary>
+    public static int Falling { get; } = NameTables.DamageType.TryIndexOf("FALLING", out var index) ? index : throw new InvalidOperationException("FALLING is not a damage type.");
+
     public static int Count => NameTables.DamageType.Count;
     public static bool IsSubdual(int type) => type is SubdualMissile or SubdualVehicle or SubdualBuilding or SubdualUnresistable;
     public static bool IsValid(int type) => type >= 0 && type < Count;
@@ -38,6 +41,9 @@ public static class DeathTypes
 
     /// <summary><c>DEATH_DETONATED</c>: a projectile that blew itself up.</summary>
     public static int Detonated { get; } = NameTables.DeathType.TryIndexOf("DETONATED", out var index) ? index : throw new InvalidOperationException("DETONATED is not a death type.");
+
+    /// <summary><c>DEATH_SPLATTED</c>: fell from a height.</summary>
+    public static int Splatted { get; } = NameTables.DeathType.TryIndexOf("SPLATTED", out var index) ? index : throw new InvalidOperationException("SPLATTED is not a death type.");
 
     public static int Count => NameTables.DeathType.Count;
     public static bool IsValid(int type) => type >= 0 && type < Count;

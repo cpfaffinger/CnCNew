@@ -37,6 +37,9 @@ public sealed class Entity
     public Fixed Y { get; internal set; }
     public Fixed Z { get; internal set; }
 
+    /// <summary><c>Object::getLayer</c>: the bridge layer the object is on, 0 on the ground (<see cref="SimulationWorld.GroundLayer"/>). Written only when it is not the ground.</summary>
+    public int Layer { get; internal set; }
+
     /// <summary>
     /// What is left of the step of the logic frame of the original this object is covering in shares, one per tick (docs/rate-invariance/RATE-INVARIANCE-CONSOLIDATION.md §1.3): the module that
     /// moves the object publishes it when it decides a frame and takes each share off it. Zero between two frames – and always at 30 Hz, where a frame is one tick: nothing
@@ -381,6 +384,7 @@ public sealed class Entity
         writer.Fixed("y", Y);
         writer.Fixed("z", Z);
         writer.Fixed("angle", Angle);
+        if (Layer != 0) writer.Int("layer", Layer);
         writer.UInt("status", Status);
         writer.Int("veterancy", VeterancyLevel);
         writer.Int("experience", Experience);

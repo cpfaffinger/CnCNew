@@ -4,6 +4,8 @@ using CnCNew.Simulation.Events;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
 using CnCNew.Simulation.State;
+using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Time;
 using CnCNew.Simulation.World;
 
@@ -49,28 +51,41 @@ public sealed record BridgeData(Fixed LateralScaffoldSpeed, Fixed VerticalScaffo
 
 /// <summary>
 /// <c>BridgeBehavior</c> (<c>BridgeBehavior.cpp</c>): the damage object of a bridge. Damage and healing to the bridge go to its four towers in the same proportion of their health
-/// (<c>onDamage</c>/<c>onHealing</c>: the percentage of the bridge's maximum health, unless the hit came from a tower); when the bridge is destroyed (<c>onDie</c>) its towers are killed, whatever
-/// stands on its deck and cannot fall is killed, and the <c>BridgeDieFX</c>/<c>BridgeDieOCL</c> lines go off at their delays after the death (each exactly once, in order; placed at the object's
-/// position instead of at a bone or a random spot on the deck); a bridge healed out of the rubble state is alive again. The towers are linked by <see cref="SetTower"/>, as
-/// <c>TerrainLogic</c> does when it builds a bridge: the simulation's terrain has no bridge layers, no bridge polygons and no repair scaffolding, so landmark bridges
-/// (objects with a box geometry that is the deck) are the bridges that exist and nothing links towers to them yet. Not modeled: the damage-state effects of the terrain's bridge template
-/// (<c>onBodyDamageStateChange</c>, <c>doAreaEffects</c>), passability of the pathfinding layer, the scaffolding of a repair (<c>createScaffolding</c>), and the fall of physics objects off a
-/// destroyed deck (the reference sets <c>allowToFall</c>; only objects without physics are killed here).
+/// (<c>onDamage</c>/<c>onHealing</c>: the percentage of the bridge's maximum health, unless the hit came from a tower). A change of damage state plays the transition effects of the <c>Bridge</c>
+/// block on the deck and has the terrain look at its bridges (<c>onBodyDamageStateChange</c>, <see cref="SimulationWorld.UpdateBridgeDamageStates"/>: the layer closes or opens, what is on a deck that
+/// became rubble dies). When the bridge is destroyed (<c>onDie</c>) its towers are killed, what is still on its layer falls or dies, and the <c>BridgeDieFX</c>/<c>BridgeDieOCL</c> lines go off at their
+/// delays after the death (each exactly once, in order; a line without a bone at a random spot of the deck, <c>ParentObject</c> at the object; a named bone at the object as well, because the bones
+/// of a landmark's model are not in the world's tables). A bridge healed out of the rubble state is alive again. Repair works with scaffolding: <see cref="CreateScaffolding"/> tiles scaffold objects
+/// and their supports in from both ends of the bridge, and while they stand the bridge cannot be used.
 /// </summary>
 public sealed class BridgeBehavior(BridgeData data) : SimModule, IUpdateModule, IDieModule, IDamageModule
 {
     public const int MaxTowers = 4;
 
+    /// <summary><c>BridgeBehavior::setScaffoldData</c>: <c>fudge</c>, how much further than its own height a scaffold starts below where it rises to.</summary>
+    private static readonly Fixed SunkenFudge = Fixed.FromInt(8);
+
+    /// <summary><c>createScaffolding</c>: "all scaffold objects *have* to move some distance".</summary>
+    private static readonly Fixed LeastMove = Fixed.FromFraction(1, 10);
+
     private long _nextWake = SimulationTiming.SleepForever;
     private readonly EntityId[] _towers = [EntityId.Invalid, EntityId.Invalid, EntityId.Invalid, EntityId.Invalid];
     private long _deathTick = -1;
     private long _firedUpTo = -1;
+    private bool _scaffoldPresent;
+    private readonly List<EntityId> _scaffolds = [];
 
     public override string ModuleName => "BridgeBehavior";
     public long NextWake { get => _nextWake; set => _nextWake = value; }
     public BridgeData Data => data;
     public bool IsDestroyed => _deathTick >= 0;
     public EntityId TowerId(int type) => type is >= 0 and < MaxTowers ? _towers[type] : EntityId.Invalid;
+
+    /// <summary><c>isScaffoldPresent</c>.</summary>
+    public bool IsScaffoldPresent => _scaffoldPresent;
+
+    /// <summary>The scaffold objects, those of the supports among them.</summary>
+    public IReadOnlyList<EntityId> Scaffolds => _scaffolds;
 
     /// <summary><c>BridgeBehavior::setTower</c>.</summary>
     public void SetTower(int type, Entity? tower)
@@ -87,6 +102,44 @@ public sealed class BridgeBehavior(BridgeData data) : SimModule, IUpdateModule, 
     {
         // "check for coming back from the dead, if our new state is not the rubble state, we can't possibly be dead"
         if (newState != BodyDamageStates.Rubble) _deathTick = -1;
+        if (world.BridgeOf(Entity.Id) is not { } bridge) return;
+        if (world.Templates.Bridges.TryGet(bridge.TemplateName, out var template))
+        {
+            var transition = (oldState > newState ? template.RepairedTo : template.DamagedTo)[newState];
+            for (var effect = 0; effect < BridgeCatalog.MaxBodyEffects; effect++) DoAreaEffects(world, template, bridge, transition.CreationLists[effect], transition.Effects[effect]);
+        }
+        world.UpdateBridgeDamageStates();
+    }
+
+    /// <summary><c>doAreaEffects</c>: <c>NumFXPerType</c> times the FX list and the creation list, each at a spot of its own.</summary>
+    private void DoAreaEffects(IWorldServices world, BridgeTemplate template, TerrainBridge bridge, string creationList, string effect)
+    {
+        if (creationList.Length == 0 && effect.Length == 0) return;
+        for (var index = 0; index < template.EffectsPerType; index++)
+        {
+            if (effect.Length > 0)
+            {
+                var (x, y, z) = RandomSurfacePosition(world, template, bridge);
+                world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, effect, 0, x, y, z);
+            }
+            if (creationList.Length > 0)
+            {
+                var (x, y, z) = RandomSurfacePosition(world, template, bridge);
+                world.CreateFromList(Entity, creationList, EntityId.Invalid, false, x, y, z);
+            }
+        }
+    }
+
+    /// <summary><c>getRandomSurfacePosition</c>: a share along the bridge, a share across it, and a height over the deck up to <c>TransitionEffectsHeight</c>, drawn in that order.</summary>
+    private static (Fixed X, Fixed Y, Fixed Z) RandomSurfacePosition(IWorldServices world, BridgeTemplate? template, TerrainBridge bridge)
+    {
+        var (from, along, across) = (bridge.FromLeft, bridge.ToLeft, bridge.FromRight);
+        var first = world.LogicRandom.Range(Fixed.Zero, Fixed.One);
+        var second = world.LogicRandom.Range(Fixed.Zero, Fixed.One);
+        var x = (along.X - from.X) * first + (across.X - from.X) * second + from.X;
+        var y = (along.Y - from.Y) * first + (across.Y - from.Y) * second + from.Y;
+        var z = (along.Z - from.Z) * first + (across.Z - from.Z) * second + from.Z;
+        return (x, y, z + world.LogicRandom.Range(Fixed.Zero, template?.TransitionEffectsHeight ?? Fixed.Zero));
     }
 
     private void Propagate(IWorldServices world, in DamageInfo info, bool healing)
@@ -113,43 +166,141 @@ public sealed class BridgeBehavior(BridgeData data) : SimModule, IUpdateModule, 
         world.WakeAt(Entity, this, world.Tick + SimulationTiming.SleepNone);
     }
 
-    /// <summary><c>handleObjectsOnBridgeOnDie</c>: what stands on the deck (the object's own box) and cannot fall dies.</summary>
+    /// <summary>
+    /// <c>handleObjectsOnBridgeOnDie</c>: what stands on the deck's layer inside its outline, not above it and not lower than the deck's lowest corner, leaves the layer; with a physics module it falls,
+    /// without one it dies.
+    /// </summary>
     private void HandleObjectsOnBridge(IWorldServices world)
     {
-        var template = Entity.Template;
-        var cos = FixedTrig.Cos(Entity.Angle);
-        var sin = FixedTrig.Sin(Entity.Angle);
+        if (world.BridgeOf(Entity.Id) is not { Layer: > 0 } bridge) return;
+        var lowest = Fixed.Min(Fixed.Min(bridge.FromLeft.Z, bridge.FromRight.Z), Fixed.Min(bridge.ToLeft.Z, bridge.ToRight.Z));
         var victims = new List<Entity>();
         foreach (var other in world.Entities)
         {
-            if (other.Id == Entity.Id || other.DestroyRequested || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
-            if (other.Template.IsKindOf("BRIDGE") || other.Template.IsKindOf("BRIDGE_TOWER") || world.IsSignificantlyAboveTerrain(other) || other.Z < Entity.Z) continue;
-            var dx = other.X - Entity.X;
-            var dy = other.Y - Entity.Y;
-            var along = (dx * cos + dy * sin).Abs();
-            var across = (-dx * sin + dy * cos).Abs();
-            if (along > template.GeometryMajorRadius || across > template.GeometryMinorRadius) continue;
-            victims.Add(other);
+            if (other.Id == Entity.Id || other.Layer != bridge.Layer || other.DestroyRequested || other.ContainedBy.IsValid) continue;
+            if (other.Template.IsKindOf("BRIDGE") || other.Template.IsKindOf("BRIDGE_TOWER") || world.IsSignificantlyAboveTerrain(other) || other.Z < lowest) continue;
+            if (bridge.IsPointOnBridge(other.X, other.Y)) victims.Add(other);
         }
         victims.Sort(static (a, b) => a.Id.Value.CompareTo(b.Id.Value));
         foreach (var other in victims)
-            if (!other.ModuleArray.OfType<PhysicsBehavior>().Any()) world.Kill(other.Id);
+        {
+            world.SetLayer(other, SimulationWorld.GroundLayer);
+            if (other.ModuleArray.OfType<PhysicsBehavior>().FirstOrDefault() is { } physics) physics.StartFall(world, Fixed.Zero, Fixed.Zero);
+            else world.Kill(other.Id);
+        }
+    }
+
+    /// <summary>
+    /// <c>BridgeBehavior::createScaffolding</c>: scaffold objects tiled across the bridge from both of its ends, one object's length apart, each rising out of the ground below its end and then
+    /// running to its place, a stack of supports below each down to the ground. While they stand the layer is closed.
+    /// </summary>
+    public void CreateScaffolding(IWorldServices world)
+    {
+        if (_scaffoldPresent || world.BridgeOf(Entity.Id) is not { } bridge || !world.Templates.Bridges.TryGet(bridge.TemplateName, out var template)) return;
+        if (!world.Templates.TryGet(template.ScaffoldObject, out var scaffold) || !world.Templates.TryGet(template.ScaffoldSupportObject, out var support)) return;
+        var center = new Point(Entity.X, Entity.Y, Entity.Z);
+        var spacing = scaffold.GeometryMajorRadius * Fixed.FromInt(2);
+        var (scaffoldHeight, supportHeight) = (scaffold.GeometryHeight, support.GeometryHeight);
+        var two = Fixed.FromInt(2);
+        var leftStart = new Point(bridge.FromRight.X + (bridge.FromLeft.X - bridge.FromRight.X) / two, bridge.FromRight.Y + (bridge.FromLeft.Y - bridge.FromRight.Y) / two, bridge.FromRight.Z + (bridge.FromLeft.Z - bridge.FromRight.Z) / two);
+        var rightStart = new Point(bridge.ToRight.X + (bridge.ToLeft.X - bridge.ToRight.X) / two, bridge.ToRight.Y + (bridge.ToLeft.Y - bridge.ToRight.Y) / two, bridge.ToRight.Z + (bridge.ToLeft.Z - bridge.ToRight.Z) / two);
+        var leftAngle = FixedTrig.Atan2(rightStart.Y - leftStart.Y, rightStart.X - leftStart.X);
+        var rightAngle = leftAngle + FixedTrig.TwoPi;
+        var (dx, dy, dz) = (rightStart.X - leftStart.X, rightStart.Y - leftStart.Y, rightStart.Z - leftStart.Z);
+        var distance = Fixed.Sqrt(dx * dx + dy * dy + dz * dz);
+        var numObjects = (spacing > Fixed.Zero ? (distance / spacing).Ceiling() : 0) + 1;
+        var numIterations = (numObjects + 1) / 2;
+        var (unitX, unitY, unitZ) = distance > Fixed.Zero ? (dx / distance, dy / distance, dz / distance) : (Fixed.Zero, Fixed.Zero, Fixed.Zero);
+        var created = 0L;
+        for (var index = 0L; index < numIterations; index++)
+        {
+            Tile(leftStart, unitX, unitY, unitZ, leftAngle, index);
+            created++;
+            if (created >= numObjects) continue;
+            Tile(rightStart, -unitX, -unitY, -unitZ, rightAngle, index);
+            created++;
+        }
+
+        void Tile(Point riseTo, Fixed x, Fixed y, Fixed z, Fixed angle, long place)
+        {
+            var share = spacing * place;
+            var destination = new Point(x * share + riseTo.X + LeastMove, y * share + riseTo.Y, z * share + riseTo.Z);
+            Place(scaffold, angle, scaffoldHeight, riseTo, destination, center);
+            // "create support object layers under the scaffold object, this object mirrors the scaffold object except is on a lower layer"
+            var (supportRise, supportGoal, supportCenter) = (riseTo, destination, center);
+            for (var offset = riseTo.Z; offset >= Fixed.Zero && supportHeight > Fixed.Zero; offset -= supportHeight)
+            {
+                supportRise = supportRise with { Z = supportRise.Z - supportHeight };
+                supportGoal = supportGoal with { Z = supportGoal.Z - supportHeight };
+                supportCenter = supportCenter with { Z = supportCenter.Z - supportHeight };
+                Place(support, angle, supportHeight, supportRise, supportGoal, supportCenter);
+            }
+        }
+
+        // setScaffoldData: every object starts sunken below where it rises to, and all of them meet in the middle at the same time.
+        void Place(ObjectTemplate what, Fixed angle, Fixed sunkenHeight, Point riseTo, Point build, Point middle)
+        {
+            var sunken = riseTo with { Z = riseTo.Z - sunkenHeight - SunkenFudge };
+            var entity = world.CreateNow(what, Entity.Owner, sunken.X, sunken.Y, sunken.Z, angle);
+            var behavior = entity.ModuleArray.OfType<BridgeScaffoldBehavior>().First();
+            behavior.SetPositions((sunken.X, sunken.Y, sunken.Z), (riseTo.X, riseTo.Y, riseTo.Z), (build.X, build.Y, build.Z));
+            var toBuild = Length(build.X - riseTo.X, build.Y - riseTo.Y, build.Z - riseTo.Z);
+            var toMiddle = Length(middle.X - riseTo.X, middle.Y - riseTo.Y, middle.Z - riseTo.Z);
+            behavior.SetSpeeds(toMiddle > Fixed.Zero ? data.LateralScaffoldSpeed * toBuild / toMiddle : data.LateralScaffoldSpeed, data.VerticalScaffoldSpeed);
+            behavior.SetMotion(world, BridgeScaffoldBehavior.Motion.Rise);
+            _scaffolds.Add(entity.Id);
+        }
+
+        _scaffoldPresent = true;
+        world.SetBridgeUsable(bridge, false);
+        world.MarkDirty(Entity);
+    }
+
+    private static Fixed Length(Fixed x, Fixed y, Fixed z) => Fixed.Sqrt(x * x + y * y + z * z);
+
+    private readonly record struct Point(Fixed X, Fixed Y, Fixed Z);
+
+    /// <summary><c>BridgeBehavior::removeScaffolding</c>: every scaffold turns round and goes; a bridge that is no rubble can be used again.</summary>
+    public void RemoveScaffolding(IWorldServices world)
+    {
+        if (!_scaffoldPresent) return;
+        foreach (var id in _scaffolds)
+            if (world.FindEntity(id) is { } scaffold && scaffold.ModuleArray.OfType<BridgeScaffoldBehavior>().FirstOrDefault() is { } behavior) behavior.ReverseMotion(world);
+        _scaffolds.Clear();
+        _scaffoldPresent = false;
+        world.MarkDirty(Entity);
+        if (Entity.Body is ActiveBody { DamageState: not BodyDamageStates.Rubble } && world.BridgeOf(Entity.Id) is { } bridge) world.SetBridgeUsable(bridge, true);
+    }
+
+    /// <summary><c>BridgeBehavior::isScaffoldInMotion</c>.</summary>
+    public bool IsScaffoldInMotion(IWorldServices world)
+    {
+        foreach (var id in _scaffolds)
+            if (world.FindEntity(id) is { } scaffold && scaffold.ModuleArray.OfType<BridgeScaffoldBehavior>().FirstOrDefault() is { CurrentMotion: not BridgeScaffoldBehavior.Motion.Still }) return true;
+        return false;
     }
 
     public long Update(IWorldServices world)
     {
         if (_deathTick < 0) return SimulationTiming.SleepForever;
         var deathTime = world.Tick - _deathTick;
+        var bridge = world.BridgeOf(Entity.Id);
+        var template = bridge is not null && world.Templates.Bridges.TryGet(bridge.TemplateName, out var found) ? found : null;
+        (Fixed X, Fixed Y, Fixed Z) Spot(BridgeEffect effect) => effect.Bone.Length > 0 || bridge is null ? (Entity.X, Entity.Y, Entity.Z) : RandomSurfacePosition(world, template, bridge);
         var last = 0L;
         foreach (var effect in data.DieFx)
         {
             last = Math.Max(last, effect.DelayTicks);
-            if (effect.DelayTicks > _firedUpTo && effect.DelayTicks <= deathTime) world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, effect.Name, 0, Entity.X, Entity.Y, Entity.Z);
+            if (effect.DelayTicks <= _firedUpTo || effect.DelayTicks > deathTime) continue;
+            var (x, y, z) = Spot(effect);
+            world.EmitAt(SimEventKind.FxRequested, Entity.Id, EntityId.Invalid, effect.Name, 0, x, y, z);
         }
         foreach (var effect in data.DieOcl)
         {
             last = Math.Max(last, effect.DelayTicks);
-            if (effect.DelayTicks > _firedUpTo && effect.DelayTicks <= deathTime) world.CreateFromList(Entity, effect.Name, EntityId.Invalid, false, Entity.X, Entity.Y, Entity.Z);
+            if (effect.DelayTicks <= _firedUpTo || effect.DelayTicks > deathTime) continue;
+            var (x, y, z) = Spot(effect);
+            world.CreateFromList(Entity, effect.Name, EntityId.Invalid, false, x, y, z);
         }
         _firedUpTo = deathTime;
         return deathTime >= last ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
@@ -162,6 +313,16 @@ public sealed class BridgeBehavior(BridgeData data) : SimModule, IUpdateModule, 
         writer.Int("firedUpTo", _firedUpTo);
         for (var index = 0; index < MaxTowers; index++)
             if (_towers[index].IsValid) writer.UInt(writer.KeepsNames ? "tower" + index : "tower", _towers[index].Value);
+        if (!_scaffoldPresent && _scaffolds.Count == 0) return;
+        writer.Bool("scaffoldPresent", _scaffoldPresent);
+        writer.BeginArray("scaffolds");
+        foreach (var id in _scaffolds)
+        {
+            writer.BeginObject(null);
+            writer.UInt("id", id.Value);
+            writer.EndObject();
+        }
+        writer.EndArray();
     }
 
     public override void Load(IStateReader reader)
@@ -171,6 +332,10 @@ public sealed class BridgeBehavior(BridgeData data) : SimModule, IUpdateModule, 
         _firedUpTo = reader.Int("firedUpTo");
         for (var index = 0; index < MaxTowers; index++)
             _towers[index] = reader.Has("tower" + index) ? new EntityId(checked((uint)reader.UInt("tower" + index))) : EntityId.Invalid;
+        _scaffoldPresent = reader.Has("scaffoldPresent") && reader.Bool("scaffoldPresent");
+        _scaffolds.Clear();
+        if (reader.Has("scaffolds"))
+            foreach (var item in reader.Array("scaffolds")) _scaffolds.Add(new EntityId(checked((uint)item.UInt("id"))));
     }
 }
 
@@ -190,6 +355,17 @@ public sealed class BridgeTowerBehavior : SimModule, IDamageModule, IDieModule
 
     public void SetBridge(Entity? bridge) => _bridge = bridge?.Id ?? EntityId.Invalid;
     public void SetTowerType(int type) => _type = type;
+
+    /// <summary><c>DozerAIUpdate::createBridgeScaffolding</c> and <c>isScaffoldInMotion</c>: scaffolding is put up over the tower's bridge if it has none; true when it stands still.</summary>
+    public bool ScaffoldStands(IWorldServices world)
+    {
+        if (world.FindEntity(_bridge)?.ModuleArray.OfType<BridgeBehavior>().FirstOrDefault() is not { } bridge) return true;
+        bridge.CreateScaffolding(world);
+        return !bridge.IsScaffoldInMotion(world);
+    }
+
+    /// <summary><c>WorkerAIUpdate::removeBridgeScaffolding</c>: "when we're done repairing bridges, tell the scaffolding to go away".</summary>
+    public void RemoveScaffolding(IWorldServices world) => world.FindEntity(_bridge)?.ModuleArray.OfType<BridgeBehavior>().FirstOrDefault()?.RemoveScaffolding(world);
 
     public void OnDamage(IWorldServices world, in DamageInfo info, Fixed actualDamageDealt) => Propagate(world, info, healing: false);
 
@@ -236,8 +412,7 @@ public sealed class BridgeTowerBehavior : SimModule, IDamageModule, IDieModule
 /// <c>BridgeScaffoldBehavior</c> (<c>BridgeScaffoldBehavior.cpp</c>): a piece of repair scaffolding that rises from <c>createPos</c> to <c>riseToPos</c>, builds across to <c>buildPos</c>, and
 /// the other way round (tear down, then sink and disappear). It moves towards the target of its current motion at the top speed of the motion (vertical or lateral, as set by
 /// <see cref="SetSpeeds"/>) slowed to at least 8 % of it over the last quarter of the way, and on arrival goes on to the next motion (<c>RISE → BUILD_ACROSS → still</c>,
-/// <c>TEAR_DOWN_ACROSS → SINK → destroyed</c>); <see cref="ReverseMotion"/> turns whatever it is doing round. <c>BridgeBehavior::createScaffolding</c> is what creates and drives
-/// scaffolds in the reference and is not modeled (see <see cref="BridgeBehavior"/>), so these objects exist and move only when something sets them up.
+/// <c>TEAR_DOWN_ACROSS → SINK → destroyed</c>); <see cref="ReverseMotion"/> turns whatever it is doing round. <see cref="BridgeBehavior.CreateScaffolding"/> creates and drives them.
 /// </summary>
 public sealed class BridgeScaffoldBehavior : SimModule, IUpdateModule
 {

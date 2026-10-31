@@ -130,6 +130,9 @@ public sealed partial class SimulationWorld
 
     private static long Magnitude(Fixed value) => value.Raw < 0 ? -value.Raw : value.Raw;
 
+    /// <summary>One object on a deck and the other under it, or on another deck: they pass each other (the original's collisions are three-dimensional, the port's circles are not).</summary>
+    private static bool OnAnotherLevel(Entity a, Entity b) => a.Layer != b.Layer && (a.Z - b.Z).Abs() > CnCNew.Simulation.Terrain.TerrainBridge.LayerCloseEnough;
+
     private static bool StandsStill(Entity other, Entity mover, EntityId goal)
         => !(other.HasMoveTarget || other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || other.Speed != Fixed.Zero);
 
@@ -160,7 +163,7 @@ public sealed partial class SimulationWorld
         {
             var other = mobiles[index];
             if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
-            if (!StandsStill(other, mover, goal)) continue;
+            if (!StandsStill(other, mover, goal) || OnAnotherLevel(mover, other)) continue;
             var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
             if (limit.Raw >= 0 && (other.X.Raw < minX.Raw - limit.Raw - ScanSlack || other.X.Raw > maxX.Raw + limit.Raw + ScanSlack || other.Y.Raw < minY.Raw - limit.Raw - ScanSlack || other.Y.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
             for (var sample = 0; sample < 4 && !blocked; sample++)
@@ -181,7 +184,7 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
-            if (!StandsStill(other, mover, goal) || FurtherThan(other.X, mover.X, around) || FurtherThan(other.Y, mover.Y, around)) continue;
+            if (!StandsStill(other, mover, goal) || FurtherThan(other.X, mover.X, around) || FurtherThan(other.Y, mover.Y, around) || OnAnotherLevel(mover, other)) continue;
             var ddx = other.X - mover.X;
             var ddy = other.Y - mover.Y;
             if (!aroundSquared.Contains(ddx * ddx + ddy * ddy)) continue;
@@ -205,7 +208,7 @@ public sealed partial class SimulationWorld
         {
             var other = mobiles[index];
             if (other.X.Raw < nearX || other.X.Raw > farX || other.Y.Raw < nearY || other.Y.Raw > farY) continue;
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || OnAnotherLevel(mover, other)) continue;
             var limit = moverRadius + CircleRadius(other);
             if (FurtherThan(other.X, x, limit) || FurtherThan(other.Y, y, limit)) continue;
             var ddx = other.X - x;
@@ -253,7 +256,7 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < mobiles.Count && !blocked; index++)
         {
             var other = mobiles[index];
-            if (!StandsStillAtFrameEnd(other, mover, goal)) continue;
+            if (!StandsStillAtFrameEnd(other, mover, goal) || OnAnotherLevel(mover, other)) continue;
             var (otherX, otherY, _) = other.FrameEnd(tick);
             var limit = moverRadius + CircleRadius(other) + StandingBlockerMargin;
             if (limit.Raw >= 0 && (otherX.Raw < minX.Raw - limit.Raw - ScanSlack || otherX.Raw > maxX.Raw + limit.Raw + ScanSlack || otherY.Raw < minY.Raw - limit.Raw - ScanSlack || otherY.Raw > maxY.Raw + limit.Raw + ScanSlack)) continue;
@@ -295,7 +298,7 @@ public sealed partial class SimulationWorld
         for (var index = 0; index < mobiles.Count; index++)
         {
             var other = mobiles[index];
-            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid) continue;
+            if (other.Id == mover.Id || other.Id == goal || other.EffectivelyDead || other.ContainedBy.IsValid || OnAnotherLevel(mover, other)) continue;
             var (otherX, otherY, _) = other.FrameEnd(tick);
             var limit = moverRadius + CircleRadius(other);
             if (FurtherThan(otherX, x, limit) || FurtherThan(otherY, y, limit)) continue;
@@ -424,6 +427,7 @@ public sealed partial class SimulationWorld
 
     private bool FootprintsOverlap(Entity a, Entity b)
     {
+        if (OnAnotherLevel(a, b)) return false;
         if (_firstFrameTicks != TickOrder.Next) return FootprintsOverlapAtFrameEnd(a, b);
         var limit = CircleRadius(a) + CircleRadius(b);
         if (FurtherThan(a.X, b.X, limit) || FurtherThan(a.Y, b.Y, limit)) return false;

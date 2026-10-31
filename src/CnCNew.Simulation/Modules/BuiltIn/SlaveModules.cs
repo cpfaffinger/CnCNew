@@ -126,13 +126,12 @@ internal static class SlaveSupport
 
 /// <summary>
 /// <c>SlavedUpdateModuleData</c> (<c>SlavedUpdate.h</c>): the keys the shipped drones and stinger soldiers use. The ranges are whole numbers (<c>parseInt</c>), the durations
-/// frames of the logic stream, <c>RepairRatePerSecond</c> and the altitudes reals. <c>RepairWeldingSys</c>/<c>RepairWeldingFXBone</c> (sparks) and
-/// <c>StayOnSameLayerAsMaster</c> (bridge layers do not exist here) are typed and have no consumer.
+/// frames of the logic stream, <c>RepairRatePerSecond</c> and the altitudes reals. <c>RepairWeldingSys</c>/<c>RepairWeldingFXBone</c> (sparks) are typed and have no consumer.
 /// </summary>
 public sealed record SlavedData(
     int GuardMaxRange, int GuardWanderRange, int AttackRange, int AttackWanderRange, int ScoutRange, int ScoutWanderRange, int DistToTargetToGrantRangeBonus,
     int RepairRange, Fixed RepairMinAltitude, Fixed RepairMaxAltitude, Fixed RepairRatePerSecond, int RepairWhenHealthBelowPercentage,
-    long MinReadyTicks, long MaxReadyTicks, long MinWeldTicks, long MaxWeldTicks) : ModuleData
+    long MinReadyTicks, long MaxReadyTicks, long MinWeldTicks, long MaxWeldTicks, bool StayOnSameLayerAsMaster) : ModuleData
 {
     public static SlavedData Parse(RatedModuleConfiguration configuration)
     {
@@ -142,7 +141,8 @@ public sealed record SlavedData(
             Int("RepairRange"), ModuleConfigReader.Real(configuration, "RepairMinAltitude", Fixed.Zero), ModuleConfigReader.Real(configuration, "RepairMaxAltitude", Fixed.Zero),
             ModuleConfigReader.Real(configuration, "RepairRatePerSecond", Fixed.Zero), Int("RepairWhenBelowHealth%"),
             ModuleConfigReader.Ticks(configuration, "RepairMinReadyTime", 0), ModuleConfigReader.Ticks(configuration, "RepairMaxReadyTime", 0),
-            ModuleConfigReader.Ticks(configuration, "RepairMinWeldTime", 0), ModuleConfigReader.Ticks(configuration, "RepairMaxWeldTime", 0));
+            ModuleConfigReader.Ticks(configuration, "RepairMinWeldTime", 0), ModuleConfigReader.Ticks(configuration, "RepairMaxWeldTime", 0),
+            ModuleConfigReader.Bool(configuration, "StayOnSameLayerAsMaster", false));
         if (data.MinReadyTicks > data.MaxReadyTicks || data.MinWeldTicks > data.MaxWeldTicks || data.RepairMinAltitude > data.RepairMaxAltitude)
             throw new InvalidDataException("SlavedUpdate: a minimum exceeds its maximum.");
         return data;
@@ -158,7 +158,7 @@ public sealed record SlavedData(
 /// <para>
 /// Differences, all deliberate: the master's current victim is not stored anywhere in this simulation (attacks are fire commands), so it is taken to be the nearest enemy
 /// within the master's weapon range while the master fired during the last two seconds; "pathing" is <see cref="AIUpdateInterface.OrderMove"/>; the welding sparks, model
-/// conditions, locomotor sets (panic, ultra accurate, precise z) and layers are presentation or have no counterpart; the repair spot is kept apart from the guard offset
+/// conditions and locomotor sets (panic, ultra accurate, precise z) are presentation or have no counterpart; the repair spot is kept apart from the guard offset
 /// (the reference writes an absolute position into that offset, which sends the drone far away once after a repair); a stealthy master does not grant stealth to the
 /// slave; <c>onSlaverDamage</c> does nothing without <c>ProneUpdate</c>. The random "direction" is the integer overload of the reference (0 to 6 radians).
 /// </para>
@@ -250,6 +250,7 @@ public sealed class SlavedUpdate(SlavedData data) : SimModule, IUpdateModule, IS
             return SimulationTiming.SleepNone;
         }
         if (world.RelationshipOf(master.Owner, Entity.Owner) != Relationship.Allies) world.TransferOwnership(Entity.Id, master.Owner);
+        if (data.StayOnSameLayerAsMaster) world.SetLayer(Entity, master.Layer);
 
         // The drone satisfies the spotting condition again below, on every update it still deserves it.
         if ((master.WeaponBonusConditions & (1u << DroneSpottingBit)) != 0)

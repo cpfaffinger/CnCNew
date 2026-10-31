@@ -247,7 +247,10 @@ public sealed partial class SimulationWorld
         if (!MayCommand(issuer, builder)) return CommandRejection.NotPermitted;
         if (AiOf(builder) is not { CanRepair: true } || builder.HasStatus(ObjectStatusBits.UnderConstruction)) return CommandRejection.CannotConstruct;
         target = FindEntity(repair.Target);
-        if (target is null || target.DestroyRequested || target.EffectivelyDead) return CommandRejection.UnknownEntity;
+        // Behind the cut of canRepairObject a bridge belongs to nobody, and a broken one is dead: "which can be destroyed and die, but can be repaired to bring the bridge back to life".
+        var bridge = !BridgeRepairIsCut && target is not null && (target.Template.IsKindOf("BRIDGE") || target.Template.IsKindOf("BRIDGE_TOWER"));
+        if (target is null || target.DestroyRequested || (target.EffectivelyDead && !bridge)) return CommandRejection.UnknownEntity;
+        if (bridge) return 0;
         if (target.Owner != builder.Owner) return CommandRejection.NotPermitted;
         if (!Modules.BuiltIn.AIUpdateInterface.IsRepairable(target)) return CommandRejection.CannotConstruct;
         return 0;

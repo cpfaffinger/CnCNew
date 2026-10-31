@@ -4,7 +4,8 @@ using CnCNew.Simulation.Templates;
 
 namespace CnCNew.Simulation.Terrain;
 
-public readonly record struct PathPoint(Fixed X, Fixed Y);
+/// <summary>A node of a path; <paramref name="Layer"/> is the bridge layer the node lies on (<c>PathNode::getLayer</c>), 0 on the ground.</summary>
+public readonly record struct PathPoint(Fixed X, Fixed Y, int Layer = 0);
 
 public enum PathStatus
 {
@@ -34,7 +35,7 @@ public sealed record PathResult(PathStatus Status, ImmutableArray<PathPoint> Poi
 /// is scratch memory of one search; none of it is part of the world state, hashed or saved (docs/PERF-MOVEMENT.md).
 /// </para>
 /// </summary>
-public sealed class NavigationGrid
+public sealed partial class NavigationGrid
 {
     private const int StraightCost = 10;
     private const int DiagonalCost = 14;
@@ -53,7 +54,8 @@ public sealed class NavigationGrid
     private const byte ObstacleBit = 4;
     private const byte EscapeBit = 8;
     private const byte TemporaryBit = 16;
-    private const int CellStates = 32;
+    private const byte ImpassableBit = 32;
+    private const int CellStates = 64;
 
     /// <summary>What one search knows about a cell; valid when <see cref="Stamp"/> is the number of the running search.</summary>
     private struct SearchCell
@@ -71,7 +73,7 @@ public sealed class NavigationGrid
     // and how many of them cannot be seen through.
     private readonly ulong[] _obstacleIds;
     private readonly ushort[] _opaqueObstacles;
-    private readonly byte[] _state;
+    private byte[] _state;
     private SearchCell[] _search;
     private bool[] _open = new bool[CellStates];
     private int _currentStamp;
@@ -125,6 +127,7 @@ public sealed class NavigationGrid
         _opaqueObstacles = new ushort[cells];
         _state = new byte[cells];
         _search = new SearchCell[cells];
+        _groundCells = cells;
         for (var cy = 0; cy < _cellsY; cy++)
             for (var cx = 0; cx < _cellsX; cx++)
                 _state[cy * _cellsX + cx] = (byte)((byte)terrain.CellAt(cx, cy) & TerrainBits);
@@ -140,7 +143,7 @@ public sealed class NavigationGrid
 
     /// <summary>Which objects block the grid: <c>Pathfinder::classifyObjectFootprint</c> handles only immobile structures without small geometry.</summary>
     public static bool Blocks(ObjectTemplate template)
-        => template.IsKindOf("STRUCTURE") && !template.IsKindOf("MOBILE") && !template.GeometryIsSmall;
+        => template.IsKindOf("STRUCTURE") && !template.IsKindOf("MOBILE") && !template.GeometryIsSmall && !template.IsKindOf("BRIDGE_TOWER");
 
     public void AddFootprint(ulong entityId, ObjectTemplate template, Fixed x, Fixed y, Fixed angle)
     {
@@ -288,7 +291,8 @@ public sealed class NavigationGrid
     public bool IsPassable(int cx, int cy, LocomotorSurfaces surfaces)
     {
         if (!Terrain.IsInside(cx, cy)) return false;
-        if (_obstacles[cy * Terrain.CellsX + cx] > 0) return false;
+        var index = cy * Terrain.CellsX + cx;
+        if (_obstacles[index] > 0 || (_state[index] & ImpassableBit) != 0) return false;
         return SurfaceAllows(Terrain.CellAt(cx, cy), surfaces);
     }
 
@@ -296,8 +300,9 @@ public sealed class NavigationGrid
     /// The cells a mover on these surfaces can reach from the start, footprints included (the zones of <c>Pathfinder::clientSafeQuickDoesPathExist</c> as one flood, for a caller with many goals):
     /// a table by cell index for <see cref="Reaches"/>. A start inside a footprint walks out of it, as a path search does.
     /// </summary>
-    public bool[] ReachableCells(Fixed startX, Fixed startY, LocomotorSurfaces surfaces)
+    public bool[] ReachableCells(Fixed startX, Fixed startY, LocomotorSurfaces surfaces, int startLayer = 0)
     {
+        if (_layers.Count != 0) return ReachableCellsOverLayers(startX, startY, surfaces, startLayer);
         var reached = new bool[_cellsX * Terrain.CellsY];
         var (startCellX, startCellY) = ClampedCell(startX, startY);
         var pending = new Stack<int>();
@@ -326,7 +331,7 @@ public sealed class NavigationGrid
     public bool Reaches(bool[] reached, Fixed x, Fixed y)
     {
         var (cx, cy) = ClampedCell(x, y);
-        return (Terrain.CellAt(cx, cy) & CellFlags.Cliff) == 0 && reached[cy * _cellsX + cx];
+        return (Terrain.CellAt(cx, cy) & CellFlags.Cliff) == 0 && (reached[cy * _cellsX + cx] || (_layers.Count != 0 && ReachesOnADeck(reached, cx, cy)));
     }
 
     /// <summary>Priority cliff, then water, then clear: a cliff cell that is also under water is still a cliff.</summary>
@@ -347,7 +352,7 @@ public sealed class NavigationGrid
     {
         for (var state = 0; state < CellStates; state++)
         {
-            var passable = (state & ObstacleBit) == 0 && SurfaceAllows((CellFlags)(state & TerrainBits), surfaces);
+            var passable = (state & (ObstacleBit | ImpassableBit)) == 0 && SurfaceAllows((CellFlags)(state & TerrainBits), surfaces);
             _open[state] = (passable && (state & TemporaryBit) == 0) || (state & EscapeBit) != 0;
         }
     }
@@ -373,7 +378,7 @@ public sealed class NavigationGrid
     }
 
     /// <summary>The cells under the given circles, except those next to the start and the goal cell, become closed for the search that follows.</summary>
-    private void MarkTemporary(int startX, int startY, int goalX, int goalY, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks)
+    private void MarkTemporary(int startX, int startY, int goalX, int goalY, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks, int layer)
     {
         for (var block = 0; block < temporaryBlocks.Count; block++)
         {
@@ -389,7 +394,8 @@ public sealed class NavigationGrid
                     var ddx = TerrainMap.CellCenter(cx) - x;
                     var ddy = TerrainMap.CellCenter(cy) - y;
                     if (!radiusSquared.Contains(ddx * ddx + ddy * ddy)) continue;
-                    var index = cy * _cellsX + cx;
+                    // A unit on a deck meets what stands on that deck, not what stands under it.
+                    var index = layer == 0 ? cy * _cellsX + cx : CellIndex(layer, cx, cy);
                     if ((_state[index] & TemporaryBit) != 0) continue;
                     Mark(index, TemporaryBit);
                     _temporaryCount++;
@@ -446,8 +452,8 @@ public sealed class NavigationGrid
     /// stand still where a mover's path leads: the static obstacle set does not know them). The cells next to the start and the goal stay open, so a mover that is
     /// touching a blocker, or a goal beside one, is not walled in.
     /// </summary>
-    public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks)
-        => Run(startX, startY, goalX, goalY, surfaces, temporaryBlocks, false)!;
+    public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks, int startLayer = 0, int goalLayer = 0)
+        => Run(startX, startY, goalX, goalY, surfaces, temporaryBlocks, false, startLayer, goalLayer)!;
 
     /// <summary>
     /// The path of <see cref="FindPath(Fixed, Fixed, Fixed, Fixed, LocomotorSurfaces, IReadOnlyList{ValueTuple{Fixed, Fixed, Fixed}})"/> if it reaches the goal
@@ -458,8 +464,8 @@ public sealed class NavigationGrid
     /// walks the same moves backwards, and when it runs dry without having met the start, no path exists and the search stops. A goal cell that is not open ends it before it starts.
     /// </para>
     /// </summary>
-    public PathResult? FindPathToGoal(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks)
-        => Run(startX, startY, goalX, goalY, surfaces, temporaryBlocks, true) is { Status: PathStatus.Found } found ? found : null;
+    public PathResult? FindPathToGoal(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> temporaryBlocks, int startLayer = 0, int goalLayer = 0)
+        => Run(startX, startY, goalX, goalY, surfaces, temporaryBlocks, true, startLayer, goalLayer) is { Status: PathStatus.Found } found ? found : null;
 
     /// <summary>
     /// A* over the eight-connected cell grid (costs 10 and 14, no corner cutting, ties broken by cell index). The start cell is
@@ -468,15 +474,19 @@ public sealed class NavigationGrid
     /// (ties: lower cost, lower index).
     /// </summary>
     public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces)
-        => Run(startX, startY, goalX, goalY, surfaces, null, false)!;
+        => Run(startX, startY, goalX, goalY, surfaces, null, false, 0, 0)!;
+
+    /// <summary>The search of <see cref="FindPath(Fixed, Fixed, Fixed, Fixed, LocomotorSurfaces)"/> from and to places on bridge layers (<c>Object::getLayer</c>, <c>getLayerForDestination</c>).</summary>
+    public PathResult FindPath(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, int startLayer, int goalLayer)
+        => Run(startX, startY, goalX, goalY, surfaces, null, false, startLayer, goalLayer)!;
 
     /// <summary>One search. With <paramref name="arrivingOnly"/> the result is <see langword="null"/> when the goal was proved unreachable before the search ended.</summary>
-    private PathResult? Run(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)>? temporaryBlocks, bool arrivingOnly)
+    private PathResult? Run(Fixed startX, Fixed startY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)>? temporaryBlocks, bool arrivingOnly, int startLayer, int goalLayer)
     {
         var start = ClampedCell(startX, startY);
         var goal = ClampedCell(goalX, goalY);
-        var startIndex = start.Y * _cellsX + start.X;
-        var goalIndex = goal.Y * _cellsX + goal.X;
+        var startIndex = CellIndex(startLayer, start.X, start.Y);
+        var goalIndex = CellIndex(goalLayer, goal.X, goal.Y);
         var probe = Probe;
         probe?.Started(MovementWork.PathSearch);
         // Remembered answers: not for a search around temporary blockers (their cells are part of the question) and not for the trivial one inside a single cell.
@@ -492,8 +502,8 @@ public sealed class NavigationGrid
             if (_memo.TryGetValue(key, out var known))
             {
                 var answer = known.Result;
-                if (answer.Status == PathStatus.Found && answer.Points[^1] != new PathPoint(goalX, goalY))
-                    answer = new PathResult(PathStatus.Found, answer.Points.SetItem(answer.Points.Length - 1, new PathPoint(goalX, goalY)));
+                if (answer.Status == PathStatus.Found && (answer.Points[^1].X != goalX || answer.Points[^1].Y != goalY))
+                    answer = new PathResult(PathStatus.Found, answer.Points.SetItem(answer.Points.Length - 1, new PathPoint(goalX, goalY, answer.Points[^1].Layer)));
                 if (probe is not null)
                 {
                     probe.Ended(MovementWork.PathSearch);
@@ -512,9 +522,9 @@ public sealed class NavigationGrid
         var temporaryCells = 0;
         try
         {
-            if (temporaryBlocks is not null) MarkTemporary(start.X, start.Y, goal.X, goal.Y, temporaryBlocks);
+            if (temporaryBlocks is not null) MarkTemporary(start.X, start.Y, goal.X, goal.Y, temporaryBlocks, startLayer);
             temporaryCells = _temporaryCount;
-            result = Search(start.X, start.Y, goal.X, goal.Y, goalX, goalY, surfaces, arrivingOnly);
+            result = Search(startIndex, goalIndex, start.X, start.Y, goal.X, goal.Y, goalX, goalY, surfaces, arrivingOnly);
             escapeCells = _escapeCount;
         }
         finally
@@ -540,9 +550,9 @@ public sealed class NavigationGrid
     private int _probePathCells;
     private int _probeEndDistance;
 
-    private PathResult? Search(int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, bool arrivingOnly)
+    private PathResult? Search(int startIndex, int goalIndex, int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, bool arrivingOnly)
     {
-        if (BeginSearch(startCellX, startCellY, goalCellX, goalCellY, goalX, goalY, surfaces, arrivingOnly, out var early)) return early;
+        if (BeginSearch(startIndex, goalIndex, startCellX, startCellY, goalCellX, goalCellY, goalX, goalY, surfaces, arrivingOnly, out var early)) return early;
         ContinueSearch(int.MaxValue);
         return FinishSearch();
     }
@@ -567,15 +577,12 @@ public sealed class NavigationGrid
     private int _sOutcome;
 
     /// <summary>The search's set-up; <see langword="true"/> with <paramref name="early"/> when it is decided before the loop (start in the goal cell, a goal the search may not enter).</summary>
-    private bool BeginSearch(int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, bool arrivingOnly, out PathResult? early)
+    private bool BeginSearch(int startIndex, int goalIndex, int startCellX, int startCellY, int goalCellX, int goalCellY, Fixed goalX, Fixed goalY, LocomotorSurfaces surfaces, bool arrivingOnly, out PathResult? early)
     {
         early = null;
-        var cellsX = _cellsX;
-        var startIndex = startCellY * cellsX + startCellX;
-        var goalIndex = goalCellY * cellsX + goalCellX;
         if (startIndex == goalIndex)
         {
-            early = new PathResult(PathStatus.Found, [new PathPoint(goalX, goalY)]);
+            early = new PathResult(PathStatus.Found, [new PathPoint(goalX, goalY, LayerOf(goalIndex))]);
             return true;
         }
 
@@ -588,8 +595,8 @@ public sealed class NavigationGrid
         Array.Clear(_bucketCounts);
         _queued = 0;
         _currentTotal = Heuristic(startCellX, startCellY, goalCellX, goalCellY);
-        CollectEscapeCells(startCellX, startCellY, EscapeRadius, surfaces);
-        CollectEscapeCells(goalCellX, goalCellY, GoalEscapeRadius, surfaces);
+        if (startIndex < _groundCells) CollectEscapeCells(startCellX, startCellY, EscapeRadius, surfaces);
+        if (goalIndex < _groundCells) CollectEscapeCells(goalCellX, goalCellY, GoalEscapeRadius, surfaces);
         PrepareOpenTable(surfaces);
         var search = _search;
         // A search that only counts when it arrives: the goal must be a cell the search may enter, and the flood from the goal must not run dry (see FindPathToGoal).
@@ -650,6 +657,8 @@ public sealed class NavigationGrid
         var expansions = _sExpansions;
         var nextClosestCheck = _sNextClosestCheck;
         var ended = true;
+        var groundCells = _groundCells;
+        var connect = _connectLayer;
         // A cell taken from the heap a second time (it was pushed again with a lower cost before it was expanded) counts toward the budget like an expansion; it always did.
         for (; _queued > 0 && expansions < ExpansionBudget; expansions++)
         {
@@ -686,8 +695,13 @@ public sealed class NavigationGrid
             if (cell.ClosedStamp == stamp) continue;
             cell.ClosedStamp = stamp;
             if (current == goalIndex) { reached = true; break; }
-            var cy = current / cellsX;
-            var cx = current - cy * cellsX;
+            int cy, cx;
+            if (current < groundCells)
+            {
+                cy = current / cellsX;
+                cx = current - cy * cellsX;
+            }
+            else DeckCellOf(current, out _, out cx, out cy);
             var currentCost = cell.Cost;
             var heuristic = Heuristic(cx, cy, goalCellX, goalCellY);
             if (heuristic < bestHeuristic || (heuristic == bestHeuristic && (currentCost < bestCost || (currentCost == bestCost && current < best))))
@@ -695,6 +709,12 @@ public sealed class NavigationGrid
                 best = current;
                 bestHeuristic = heuristic;
                 bestCost = currentCost;
+            }
+
+            if (current >= groundCells)
+            {
+                ExpandDeckCell(search, state, open, stamp, current, cx, cy, currentCost, goalCellX, goalCellY);
+                continue;
             }
 
             // The four straight neighbours first (north, east, south, west), then the diagonals, each of which needs both straight neighbours it passes between.
@@ -710,6 +730,9 @@ public sealed class NavigationGrid
             if (east && south && open[state[current + cellsX + 1]]) Relax(search, state, stamp, current, current + cellsX + 1, currentCost, DiagonalCost, cx + 1, cy + 1, goalCellX, goalCellY);
             if (west && south && open[state[current + cellsX - 1]]) Relax(search, state, stamp, current, current + cellsX - 1, currentCost, DiagonalCost, cx - 1, cy + 1, goalCellX, goalCellY);
             if (west && north && open[state[current - cellsX - 1]]) Relax(search, state, stamp, current, current - cellsX - 1, currentCost, DiagonalCost, cx - 1, cy - 1, goalCellX, goalCellY);
+            // Pathfinder::checkChangeLayers: at an entry point the deck is the same place at the same cost.
+            if (connect is not null && connect[current] != 0 && CellIndex(connect[current], cx, cy) is var deck and >= 0 && deck >= groundCells && open[state[deck]])
+                Relax(search, state, stamp, current, deck, currentCost, 0, cx, cy, goalCellX, goalCellY);
         }
 
         _sReverse = reverse;
@@ -752,10 +775,10 @@ public sealed class NavigationGrid
             var to = from - 1;
             while (to > 0 && LineClear(cells[from], cells[to - 1])) to--;
             if (points == _points.Length) Array.Resize(ref _points, _points.Length * 2);
-            _points[points++] = new PathPoint(TerrainMap.CellCenter(cells[to] % cellsX), TerrainMap.CellCenter(cells[to] / cellsX));
+            _points[points++] = PointOf(cells[to]);
             from = to;
         }
-        if (reached) _points[points - 1] = new PathPoint(_sGoalX, _sGoalY);
+        if (reached) _points[points - 1] = new PathPoint(_sGoalX, _sGoalY, LayerOf(_sGoalIndex));
         return new PathResult(reached ? PathStatus.Found : PathStatus.Partial, ImmutableArray.Create(_points, 0, points));
     }
 
@@ -772,6 +795,7 @@ public sealed class NavigationGrid
     private bool ClosestCellIsFinal(int goalCellX, int goalCellY, int closest, int stamp)
     {
         _closestChecks++;
+        if (_layers.Count != 0) return ClosestCellIsFinalOverLayers(goalCellX, goalCellY, closest, stamp);
         var cellsX = _cellsX;
         var cellsY = _cellsY;
         var open = _open;
@@ -829,6 +853,7 @@ public sealed class NavigationGrid
     /// </summary>
     private int AdvanceReverse(int startIndex, int stamp, int budget)
     {
+        if (_layers.Count != 0) return AdvanceReverseOverLayers(startIndex, stamp, budget);
         var cellsX = _cellsX;
         var cellsY = _cellsY;
         var open = _open;
@@ -885,9 +910,22 @@ public sealed class NavigationGrid
     /// <summary>Grid walk between two cells: every visited cell must be passable and a diagonal step needs both orthogonal neighbours.</summary>
     private bool LineClear(int fromIndex, int toIndex)
     {
-        var cellsX = _cellsX;
-        int x = fromIndex % cellsX, y = fromIndex / cellsX;
-        int x1 = toIndex % cellsX, y1 = toIndex / cellsX;
+        var layer = 0;
+        int x, y, x1, y1;
+        if (fromIndex < _groundCells && toIndex < _groundCells)
+        {
+            var cellsX = _cellsX;
+            (x, y) = (fromIndex % cellsX, fromIndex / cellsX);
+            (x1, y1) = (toIndex % cellsX, toIndex / cellsX);
+        }
+        else
+        {
+            // A straight walk stays on one layer: the way between two layers is the entry point, which the path keeps.
+            if (fromIndex < _groundCells || toIndex < _groundCells) return false;
+            DeckCellOf(fromIndex, out layer, out x, out y);
+            DeckCellOf(toIndex, out var other, out x1, out y1);
+            if (layer != other) return false;
+        }
         var dx = Math.Abs(x1 - x);
         var dy = Math.Abs(y1 - y);
         var sx = x < x1 ? 1 : -1;
@@ -900,14 +938,14 @@ public sealed class NavigationGrid
             var stepY = doubled < dx;
             if (stepX && stepY)
             {
-                if (!IsOpen(x + sx, y) || !IsOpen(x, y + sy)) return false;
+                if (!IsOpenOn(layer, x + sx, y) || !IsOpenOn(layer, x, y + sy)) return false;
                 error += dx - dy;
                 x += sx;
                 y += sy;
             }
             else if (stepX) { error -= dy; x += sx; }
             else { error += dx; y += sy; }
-            if (!IsOpen(x, y)) return false;
+            if (!IsOpenOn(layer, x, y)) return false;
         }
         return true;
     }
@@ -1111,9 +1149,9 @@ public sealed class NavigationGrid
                 ClearMarks();
                 var start = ClampedCell(query.StartX, query.StartY);
                 var goal = ClampedCell(query.GoalX, query.GoalY);
-                if (!query.Blocks.IsDefaultOrEmpty) MarkTemporary(start.X, start.Y, goal.X, goal.Y, query.Blocks);
+                if (!query.Blocks.IsDefaultOrEmpty) MarkTemporary(start.X, start.Y, goal.X, goal.Y, query.Blocks, query.StartLayer);
                 memory.TemporaryAtBegin = _temporaryCount;
-                if (BeginSearch(start.X, start.Y, goal.X, goal.Y, query.GoalX, query.GoalY, query.Surfaces, query.ArrivingOnly, out var early))
+                if (BeginSearch(CellIndex(query.StartLayer, start.X, start.Y), CellIndex(query.GoalLayer, goal.X, goal.Y), start.X, start.Y, goal.X, goal.Y, query.GoalX, query.GoalY, query.Surfaces, query.ArrivingOnly, out var early))
                 {
                     memory.EscapeAtBegin = _escapeCount;
                     ClearMarks();
@@ -1169,7 +1207,7 @@ public sealed class NavigationGrid
         if (probe is null) return;
         var start = ClampedCell(query.StartX, query.StartY);
         var goal = ClampedCell(query.GoalX, query.GoalY);
-        probe.PathSearched(new PathSearchInfo(start.Y * _cellsX + start.X, goal.Y * _cellsX + goal.X, query.Surfaces, result?.Status ?? PathStatus.Partial, _probeExpansions, _probePushes,
+        probe.PathSearched(new PathSearchInfo(CellIndex(query.StartLayer, start.X, start.Y), CellIndex(query.GoalLayer, goal.X, goal.Y), query.Surfaces, result?.Status ?? PathStatus.Partial, _probeExpansions, _probePushes,
             memory.EscapeAtBegin, memory.TemporaryAtBegin, _probePathCells, result?.Points.Length ?? 0, false, result is null, _reverseCells, _probeEndDistance, _closestFinal, _closestChecks));
     }
 
@@ -1177,14 +1215,14 @@ public sealed class NavigationGrid
     /// Whether a straight grid walk between the cells of two points stays on cells <paramref name="surfaces"/> may enter (no footprint, no marks of a search): what a member of a
     /// group needs to join the group's path and to leave it for its own goal.
     /// </summary>
-    public bool StraightWalkClear(Fixed fromX, Fixed fromY, Fixed toX, Fixed toY, LocomotorSurfaces surfaces)
+    public bool StraightWalkClear(Fixed fromX, Fixed fromY, Fixed toX, Fixed toY, LocomotorSurfaces surfaces, int layer = 0)
     {
         PrepareOpenTable(surfaces);
         var from = ClampedCell(fromX, fromY);
         var to = ClampedCell(toX, toY);
-        return LineClear(from.Y * _cellsX + from.X, to.Y * _cellsX + to.X);
+        return LineClear(CellIndex(layer, from.X, from.Y), CellIndex(layer, to.X, to.Y));
     }
 }
 
 /// <summary>A path question as the world's queue keeps it (the movement profile): start, goal, surfaces, the temporary blockers, and whether only a path that arrives counts.</summary>
-public sealed record PathQuery(Fixed StartX, Fixed StartY, Fixed GoalX, Fixed GoalY, LocomotorSurfaces Surfaces, ImmutableArray<(Fixed X, Fixed Y, Fixed Radius)> Blocks, bool ArrivingOnly, ulong Group = 0);
+public sealed record PathQuery(Fixed StartX, Fixed StartY, Fixed GoalX, Fixed GoalY, LocomotorSurfaces Surfaces, ImmutableArray<(Fixed X, Fixed Y, Fixed Radius)> Blocks, bool ArrivingOnly, ulong Group = 0, int StartLayer = 0, int GoalLayer = 0);

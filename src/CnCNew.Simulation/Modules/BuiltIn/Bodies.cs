@@ -105,7 +105,8 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
 
     public virtual DamageOutcome AttemptDamage(IWorldServices world, in DamageInfo info)
     {
-        if (Entity.EffectivelyDead) return DamageOutcome.NoEffect;
+        // "sorry, once yer dead, yer dead. Special case for bridges, cause the system now things they're dead."
+        if (Entity.EffectivelyDead && !Entity.Template.IsKindOf("BRIDGE") && !Entity.Template.IsKindOf("BRIDGE_TOWER")) return DamageOutcome.NoEffect;
         // ActiveBody::attemptDamage and attemptHealing: the body applies its armour to whatever reaches it - a weapon's damage, burning, crushing, falling, healing -; the caller
         // passes the raw amount, and the damage modules see it (F-48).
         var amount = world.AdjustDamageByArmor(Entity, info.DamageType, info.Amount);
@@ -140,6 +141,8 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
         if (info.Kill) amount = Health;
         var oldDamageState = DamageState;
         InternalChangeHealth(world, -amount);
+        // A bridge that is dead can be hit again, and its tower's death comes back to it while this call runs.
+        var healthBefore = PreviousHealth;
         RecordDamage(world, info);
         var actualDamageClipped = PreviousHealth - Health;
         if (Health < PreviousHealth)
@@ -160,7 +163,7 @@ public class ActiveBody : SimModule, IBodyModule, IMaxHealthAdjustable, IInitial
                 world.Emit(SimEventKind.VoiceFearRequested, Entity.Id, info.Source, string.Empty, 0);
         // The player's retaliation (logical retaliation mode): friends nearby answer the attacker (F-58). The original does this after the death, which changes nothing here.
         world.RetaliateFor(Entity, info.Source);
-        if (Health <= Fixed.Zero && PreviousHealth > Fixed.Zero)
+        if (Health <= Fixed.Zero && healthBefore > Fixed.Zero)
         {
             world.OnEntityDied(Entity, info);
             return DamageOutcome.Killed;

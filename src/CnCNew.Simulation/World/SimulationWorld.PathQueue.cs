@@ -99,6 +99,7 @@ public sealed partial class SimulationWorld
                 var leader = _pathQueue[leaderIndex];
                 var other = leader.Query;
                 if (leader.Begun || DecisionFrame(leader.Tick) != frame || other.Group != query.Group || other.Surfaces != query.Surfaces || !other.Blocks.IsDefaultOrEmpty || other.ArrivingOnly) continue;
+                if (other.StartLayer != query.StartLayer || other.GoalLayer != query.GoalLayer) continue;
                 if (Chebyshev(goal, (TerrainMap.CellOf(other.GoalX), TerrainMap.CellOf(other.GoalY))) > ShareGoalCells) continue;
                 if (Chebyshev(start, (TerrainMap.CellOf(other.StartX), TerrainMap.CellOf(other.StartY))) > ShareStartCells) continue;
                 leader.Followers.Add((request.Requester, query));
@@ -219,13 +220,13 @@ public sealed partial class SimulationWorld
         var points = leader.Points;
         var join = -1;
         for (var index = 0; index < points.Length; index++)
-            if (grid.StraightWalkClear(follower.StartX, follower.StartY, points[index].X, points[index].Y, follower.Surfaces)) { join = index; break; }
+            if (points[index].Layer == follower.StartLayer && grid.StraightWalkClear(follower.StartX, follower.StartY, points[index].X, points[index].Y, follower.Surfaces, follower.StartLayer)) { join = index; break; }
         if (join < 0) return null;
         var end = points[^1];
-        if (!grid.StraightWalkClear(end.X, end.Y, follower.GoalX, follower.GoalY, follower.Surfaces)) return null;
+        if (end.Layer != follower.GoalLayer || !grid.StraightWalkClear(end.X, end.Y, follower.GoalX, follower.GoalY, follower.Surfaces, follower.GoalLayer)) return null;
         var builder = ImmutableArray.CreateBuilder<PathPoint>(points.Length - join + 1);
         for (var index = join; index < points.Length - 1; index++) builder.Add(points[index]);
-        builder.Add(new PathPoint(follower.GoalX, follower.GoalY));
+        builder.Add(new PathPoint(follower.GoalX, follower.GoalY, follower.GoalLayer));
         return new PathResult(PathStatus.Found, builder.ToImmutable());
     }
 
@@ -271,6 +272,7 @@ public sealed partial class SimulationWorld
                     writer.BeginObject(null);
                     writer.Fixed("x", point.X);
                     writer.Fixed("y", point.Y);
+                    if (point.Layer != 0) writer.Int("layer", point.Layer);
                     writer.EndObject();
                 }
                 writer.EndArray();
@@ -289,6 +291,8 @@ public sealed partial class SimulationWorld
         writer.Int("surfaces", (int)query.Surfaces);
         writer.Bool("arrivingOnly", query.ArrivingOnly);
         if (query.Group != 0) writer.UInt("group", query.Group);
+        if (query.StartLayer != 0) writer.Int("startLayer", query.StartLayer);
+        if (query.GoalLayer != 0) writer.Int("goalLayer", query.GoalLayer);
         writer.BeginArray("blocks");
         if (!query.Blocks.IsDefaultOrEmpty)
             foreach (var (x, y, radius) in query.Blocks)
@@ -305,7 +309,7 @@ public sealed partial class SimulationWorld
     private static PathQuery LoadQuery(IStateReader reader)
         => new(reader.Fixed("startX"), reader.Fixed("startY"), reader.Fixed("goalX"), reader.Fixed("goalY"), (LocomotorSurfaces)checked((int)reader.Int("surfaces")),
             [..reader.Array("blocks").Select(block => (block.Fixed("x"), block.Fixed("y"), block.Fixed("radius")))], reader.Bool("arrivingOnly"),
-            reader.Has("group") ? reader.UInt("group") : 0);
+            reader.Has("group") ? reader.UInt("group") : 0, reader.Has("startLayer") ? checked((int)reader.Int("startLayer")) : 0, reader.Has("goalLayer") ? checked((int)reader.Int("goalLayer")) : 0);
 
     private void LoadPathQueue(IStateReader state)
     {
@@ -325,7 +329,7 @@ public sealed partial class SimulationWorld
         {
             var requester = checked((uint)item.UInt("requester"));
             _pathAnswers[requester] = item.Bool("hasPath")
-                ? new PathResult((PathStatus)checked((int)item.Int("status")), [..item.Array("points").Select(point => new PathPoint(point.Fixed("x"), point.Fixed("y")))])
+                ? new PathResult((PathStatus)checked((int)item.Int("status")), [..item.Array("points").Select(point => new PathPoint(point.Fixed("x"), point.Fixed("y"), point.Has("layer") ? checked((int)point.Int("layer")) : 0))])
                 : null;
         }
     }

@@ -523,7 +523,7 @@ public sealed class GarrisonContain(GarrisonContainData data) : ContainModuleBas
     {
         for (var index = 0; index < _stationRider.Length; index++)
             if (_stationRider[index] == rider.Id) _stationRider[index] = EntityId.Invalid;
-        rider.Z = world.GroundHeightAt(rider.X, rider.Y);
+        rider.Z = world.LayerHeightAt(rider.X, rider.Y, Entity.Layer);
     }
 
     // The owner the building had before its first rider came in (recorded only while somebody is inside).

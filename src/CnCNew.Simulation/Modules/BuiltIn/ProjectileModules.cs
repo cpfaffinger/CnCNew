@@ -329,6 +329,14 @@ public sealed class DumbProjectileBehavior(DumbProjectileData data) : SimModule,
         var point = PathPoint(_step);
         var previous = _step > 0 ? PathPoint(_step - 1) : _start;
         if (point.X != previous.X || point.Y != previous.Y) Entity.Angle = FixedTrig.Atan2(point.Y - previous.Y, point.X - previous.X);
+        // "see if we' still in the bridge's xy area": a shell that sinks through a deck blows up on it.
+        if (world.ProjectileHitsDeck(point.X, point.Y, previous.Z, point.Z, out var deckZ))
+        {
+            (Entity.X, Entity.Y, Entity.Z) = (point.X, point.Y, deckZ);
+            Entity.SetAhead(world.Tick, Fixed.Zero, Fixed.Zero, Fixed.Zero);
+            Detonate(world);
+            return SimulationTiming.SleepForever;
+        }
         var ticks = world.Time.TicksPerOriginalFrame;
         if (ticks == 1)
         {
@@ -530,7 +538,7 @@ public static class MissileFrames
 /// </list>
 /// Collision stand-ins (no collision system): an armed missile that reaches its goal point in any attack state, or the ground, detonates there;
 /// an unarmed one reaching the ground is destroyed; below height 0 it is destroyed (<c>newPos.z &lt; 0</c>). A missile marked by a plane's <c>CountermeasuresBehavior</c> gives up its victim for the closest flare after the decoy delay and then does no damage. Not modeled:
-/// jamming, preferred-height cruise flight, bridge layers. All vectors are <see cref="Fixed"/>; directions are normalised with the
+/// jamming, preferred-height cruise flight. All vectors are <see cref="Fixed"/>; directions are normalised with the
 /// fixed-point square root.
 /// <para>
 /// The state machine runs on the frame grid of the original, on the missile's own phase (docs/rate-invariance/RATE-INVARIANCE-PROJECTILES.md): speed, top speed and acceleration are kept per logic
@@ -832,6 +840,17 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
             // Coasting after the fuel is gone: gravity takes over (PhysicsBehavior), no thrust and no turning.
             _verticalSpeed += ProjectileModules.GravityPerFrameSquared(world);
             next = next with { Z = next.Z + _verticalSpeed };
+        }
+        if (world.ProjectileHitsDeck(next.X, next.Y, position.Z, next.Z, out var deckZ))
+        {
+            // MissileAIUpdate::detonate's neighbour: "ensure we are slightly above the bridge" - blown up on the deck.
+            next = next with { Z = deckZ };
+            if (_armed)
+            {
+                Place(world, next);
+                Detonate(world);
+                return;
+            }
         }
         var ground = world.GroundHeightAt(next.X, next.Y);
         if (next.Z < ground)

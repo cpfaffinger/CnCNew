@@ -54,7 +54,7 @@ public sealed class BridgeCatalog
     {
         ArgumentNullException.ThrowIfNull(graph);
         var bridges = ImmutableArray.CreateBuilder<BridgeTemplate>();
-        foreach (var definition in graph.Definitions.OfType<BridgeDefinition>().OrderBy(value => value.Id.ToString(), StringComparer.Ordinal))
+        foreach (var definition in graph.Definitions.OfType<BridgeDefinition>().OrderBy(value => value.OriginalName, StringComparer.Ordinal))
             bridges.Add(Read(definition));
         return new BridgeCatalog(bridges.ToImmutable());
     }

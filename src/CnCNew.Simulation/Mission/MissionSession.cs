@@ -134,6 +134,9 @@ public sealed class MissionSession
         ApplyRelations(world, program);
         var session = new MissionSession(options, world, program, map, [..notes]);
         if (options.Ai is null) world.BeginSinglePlayer((int)options.Difficulty);
+        // Object::updateObjValuesFromMapProperties: a bridge's name is its first point's, or that of its object.
+        foreach (var bridge in world.Bridges)
+            if (bridge.ScriptName.Length > 0 && bridge.ObjectId.IsValid) session.Engine.RegisterNamed(bridge.ScriptName, bridge.ObjectId);
         session.PlaceObjects(catalog, terrain);
         // The reference creates the map's objects synchronously while loading, so the first script evaluation already sees them.
         world.MaterializePendingSpawns();
@@ -188,6 +191,8 @@ public sealed class MissionSession
                 skipped[placed.Template] = skipped.GetValueOrDefault(placed.Template) + 1;
                 continue;
             }
+            // GameLogic::startNewGame: a bridge is the terrain's, and exists already.
+            if (template.IsBridge) continue;
             var prototype = placed.TeamName.Length > 0 ? Program.FindTeam(placed.TeamName) : null;
             var owner = prototype is not null && Program.FindPlayer(prototype.Owner) is { } side && World.HasPlayer(side.Id) ? side.Id : PlayerId.System;
             var id = World.RequestSpawn(template.Index, owner, placed.X, placed.Y, placed.Z, placed.Angle, placed.HealthPercent);

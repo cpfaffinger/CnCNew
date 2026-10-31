@@ -669,14 +669,14 @@ public sealed class TunnelContain(TunnelContainData data) : SimModule, IUpdateMo
         {
             rider.X = Entity.X;
             rider.Y = Entity.Y;
-            rider.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            rider.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
             ai.OrderMove(world, x, y, false);
         }
         else
         {
             rider.X = x;
             rider.Y = y;
-            rider.Z = world.GroundHeightAt(x, y);
+            rider.Z = world.LayerHeightAt(x, y, Entity.Layer);
         }
         world.MarkDirty(rider);
     }

@@ -71,7 +71,8 @@ public sealed partial class SimulationWorld
             var angle = LogicRandom.Range(Fixed.Zero, FixedTrig.TwoPi);
             destinationX += scatter * FixedTrig.Cos(angle);
             destinationY += scatter * FixedTrig.Sin(angle);
-            destinationZ = GroundHeightAt(destinationX, destinationY);
+            // "we should actually fire at the layer the victim is on, if possible, in case it is on a bridge".
+            destinationZ = victim is null ? GroundHeightAt(destinationX, destinationY) : LayerHeightAt(destinationX, destinationY, victim.Layer);
         }
 
         var projectileIndex = _templates.ProjectileTemplates.IsDefaultOrEmpty ? -1 : _templates.ProjectileTemplates[weapon.Index];

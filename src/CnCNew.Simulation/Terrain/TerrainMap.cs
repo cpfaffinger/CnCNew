@@ -65,6 +65,8 @@ public sealed class TerrainMap
         var highest = 0;
         foreach (var height in _heights) highest = Math.Max(highest, height);
         _maxHeight = Fixed.FromInt(highest) * HeightScale;
+        BridgeSpans = FindBridgeSpans(map);
+        BridgeObjects = [..map.Objects.Where(placed => !placed.IsWaypoint && !placed.IsRoadPoint && !placed.IsBridgePoint)];
         Fingerprint = ComputeFingerprint(map);
     }
 
@@ -76,6 +78,12 @@ public sealed class TerrainMap
     public Fixed ExtentY => CellSizeFixed * CellsY;
     public ImmutableArray<TerrainWaypoint> Waypoints { get; }
     public ImmutableArray<WaterArea> WaterAreas => _water;
+
+    /// <summary>The pairs of bridge points of the map.</summary>
+    public ImmutableArray<MapBridgeSpan> BridgeSpans { get; }
+
+    /// <summary>What may be a landmark bridge: every object of the map that is no waypoint and no point of a road or bridge, in file order. Which of them are, the template says.</summary>
+    public ImmutableArray<MapObject> BridgeObjects { get; }
 
     /// <summary>Waypoints named <c>Player_N_Start</c> (N from 1), ordered by N: the skirmish start positions.</summary>
     public ImmutableArray<TerrainWaypoint> StartPositions
@@ -149,6 +157,24 @@ public sealed class TerrainMap
         waypoints.Sort(CompareWaypoints);
 
         return new TerrainMap(name, map, cellsX, cellsY, water.ToImmutable(), waypoints.ToImmutable());
+    }
+
+    /// <summary>
+    /// The pairs of bridge points of the map, in file order (<c>W3DBridgeBuffer::loadBridges</c>): a <c>POINT1</c> counts only when the object after it is a <c>POINT2</c>. The properties of a
+    /// bridge are its first point's.
+    /// </summary>
+    private static ImmutableArray<MapBridgeSpan> FindBridgeSpans(MapData map)
+    {
+        var spans = ImmutableArray.CreateBuilder<MapBridgeSpan>();
+        var objects = map.Objects;
+        for (var index = 0; index + 1 < objects.Length; index++)
+        {
+            var (first, second) = (objects[index], objects[index + 1]);
+            if ((first.Flags & MapObject.FlagBridgePoint1) == 0 || (second.Flags & MapObject.FlagBridgePoint2) == 0) continue;
+            spans.Add(new MapBridgeSpan(first.Name, Fixed.FromDecimal(first.X), Fixed.FromDecimal(first.Y), Fixed.FromDecimal(second.X), Fixed.FromDecimal(second.Y), first.Properties.GetText("objectName") ?? string.Empty));
+            index++;
+        }
+        return spans.ToImmutable();
     }
 
     /// <summary><c>classifyMapCell</c>: CLIFF when the height cell is a cliff, WATER when any of its four corners lies below the water level at that corner.</summary>

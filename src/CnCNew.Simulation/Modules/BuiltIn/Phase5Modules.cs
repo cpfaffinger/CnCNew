@@ -852,6 +852,13 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
            && !target.EffectivelyDead && !target.HasStatus(ObjectStatusBits.UnderConstruction)
            && !target.HasStatus(SoldBit) && target.Body is { } body && body.Health < body.MaxHealth;
 
+    /// <summary>
+    /// <see cref="IsRepairable(Entity)"/>, and what stands behind the check the original cut: "bridges and bridge towers, which can be destroyed and die, but can be repaired to bring the bridge back to
+    /// life" (<c>ActionManager::canRepairObject</c>, <see cref="SimulationWorld.BridgeRepairIsCut"/>).
+    /// </summary>
+    public static bool IsRepairable(IWorldServices world, Entity target)
+        => IsRepairable(target) || (!world.BridgeRepairIsCut && target.Template.IsKindOf("BRIDGE_TOWER") && target.Body is { } body && body.Health < body.MaxHealth);
+
     /// <summary>The main machine is in <c>AI_DOCK</c>.</summary>
     public bool IsDocking => _dock is not null;
 
@@ -1205,7 +1212,30 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     public virtual bool AiFreeToExit(IWorldServices world, Entity rider) => true;
 
     /// <summary><c>DozerAIInterface::newTask(DOZER_TASK_REPAIR)</c>: walk to the structure and heal it until it is at full health (<c>aiRepair</c>; a bored dozer gives itself the order).</summary>
-    public void OrderRepair(IWorldServices world, Entity target, bool fromPlayer = true) => StartTask(world, BuilderTask.Repair, target, fromPlayer);
+    public void OrderRepair(IWorldServices world, Entity target, bool fromPlayer = true)
+    {
+        // findGoodBuildOrRepairPositionAndTarget: "have to repair at a tower".
+        if (target.ModuleArray.OfType<BridgeBehavior>().FirstOrDefault() is { } bridge)
+        {
+            if (ClosestTower(world, bridge) is not { } tower) return;
+            target = tower;
+        }
+        StartTask(world, BuilderTask.Repair, target, fromPlayer);
+    }
+
+    private Entity? ClosestTower(IWorldServices world, BridgeBehavior bridge)
+    {
+        Entity? best = null;
+        var bestDistance = Fixed.MaxValue;
+        for (var type = 0; type < BridgeBehavior.MaxTowers; type++)
+        {
+            if (world.FindEntity(bridge.TowerId(type)) is not { } tower) continue;
+            var (dx, dy) = (tower.X - Entity.X, tower.Y - Entity.Y);
+            var distance = Fixed.Sqrt(dx * dx + dy * dy);
+            if (distance < bestDistance) (best, bestDistance) = (tower, distance);
+        }
+        return best;
+    }
 
     private void StartTask(IWorldServices world, BuilderTask task, Entity target, bool fromPlayer = true)
     {
@@ -1271,13 +1301,19 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     private void UpdateTask(IWorldServices world)
     {
         var target = world.FindEntity(_taskTarget);
+        var tower = target is not null && _task == BuilderTask.Repair ? target.ModuleArray.OfType<BridgeTowerBehavior>().FirstOrDefault() : null;
         // Whether the task is still worth doing is looked at once per logic frame of the original of the builder (every tick at 30 Hz): what happened to the target after the
         // builder's turn in the first tick of a frame is seen with the next frame, as the 30 Hz builder sees it with its next step.
         if (world.Time.BeginsFrameOf(Entity, world.Tick))
         {
-            if (target is null || target.DestroyRequested || target.EffectivelyDead) { EndTask(world); return; }
+            if (target is null || target.DestroyRequested || (target.EffectivelyDead && tower is null)) { EndTask(world); return; }
             if (_task == BuilderTask.Construct && (!target.HasStatus(ObjectStatusBits.UnderConstruction) || target.BuilderId != Entity.Id)) { EndTask(world); return; }
-            if (_task == BuilderTask.Repair && !IsRepairable(target)) { EndTask(world); return; }
+            if (_task == BuilderTask.Repair && !IsRepairable(world, target))
+            {
+                tower?.RemoveScaffolding(world);
+                EndTask(world);
+                return;
+            }
         }
         else if (target is null) return;
         // Inside a logic frame's step (above 30 Hz) the builder is between two positions of the 30 Hz walk: it measures its reach again when the step is covered.
@@ -1304,6 +1340,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             return;
         }
         var body = target.Body!;
+        // DozerActionDoActionState::update: "when repairing bridges, we cannot actually do any repairing until the scaffolding is extended and all the way complete".
+        if (tower is not null && !tower.ScaffoldStands(world)) return;
         if (world.Time.TicksPerOriginalFrame != TickOrder.Next)
         {
             // Above 30 Hz the repair heals the slice of a logic frame of the original, once per frame of the builder (the escape "Originalraster" for a heal slice,
@@ -1603,7 +1641,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     }
 
     /// <summary><c>Object::isAboveTerrain</c>: the object's position lies above the ground under it.</summary>
-    private static bool AboveTerrain(IWorldServices world, Entity entity) => entity.Z > world.GroundHeightAt(entity.X, entity.Y);
+    private static bool AboveTerrain(IWorldServices world, Entity entity) => entity.Z > world.LayerHeightAt(entity.X, entity.Y, entity.Layer);
 
     private static bool VerticalOverlap(Entity a, Entity b)
         => a.Z + ToppleAndFallModules.MaxHeightAbovePosition(a.Template) >= b.Z && a.Z <= b.Z + ToppleAndFallModules.MaxHeightAbovePosition(b.Template);
@@ -1668,7 +1706,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         }
         else if (!_pathValid || (!air && _pathObstacles != navigation.ObstacleSum))
         {
-            PlanPath(navigation, locomotor, air);
+            PlanPath(world, navigation, locomotor, air);
             if (!air) world.RequestClearPath(Entity);
         }
         if (_path.Count == 0)
@@ -1687,6 +1725,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var arrivalRadius = Fixed.Max(locomotor.CloseEnoughDist, topSpeed);
         while (true)
         {
+            if (!air && world.Bridges.Count != 0) FollowPathLayer(world);
             var waypoint = _path[_pathIndex];
             var last = _pathIndex == _path.Count - 1;
             var reach = last ? arrivalRadius : topSpeed;
@@ -1701,7 +1740,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             }
             Entity.X = waypoint.X;
             Entity.Y = waypoint.Y;
-            if (!air) Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            if (!air) Entity.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
             var complete = _pathComplete;
             Entity.HasMoveTarget = false;
             Entity.Speed = Fixed.Zero;
@@ -1749,11 +1788,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
                 {
                     // The movement profile: the detour is a question to the world's path queue; the path the object has stays until the answer comes.
                     _blockerReplanTick = world.Tick;
-                    world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [..ahead], true));
+                    world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [..ahead], true, 0, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces)));
                     _pathWait = PathWait.Detour;
                     world.MarkDirty(Entity);
                 }
-                else ReplanAround(navigation, locomotor, ahead, world.Tick);
+                else ReplanAround(world, navigation, locomotor, ahead, world.Tick);
             }
         }
 
@@ -1771,9 +1810,20 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         Entity.Y += stepY;
         if (!air)
         {
-            Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            Entity.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
             world.ResolveFootprintCollisions(Entity, stepX, stepY);
         }
+    }
+
+    /// <summary>
+    /// <c>Path::computePointOnPath</c> and <c>Pathfinder::updateLayer</c>: a segment of the path that begins or ends on a bridge is a segment of that bridge's layer, and the object takes the layer
+    /// when it is close enough to the bridge, the ground otherwise. The segment from where the object stands begins on the layer it is on.
+    /// </summary>
+    private void FollowPathLayer(IWorldServices world)
+    {
+        var next = _path[_pathIndex].Layer;
+        var layer = next != 0 ? next : _pathIndex > 0 ? _path[_pathIndex - 1].Layer : Entity.Layer;
+        if (layer != 0 || Entity.Layer != 0) world.UpdateLayer(Entity, layer);
     }
 
     /// <summary>
@@ -2106,8 +2156,8 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         Entity.SetAhead(world.Tick, Entity.AheadX + restX, Entity.AheadY + restY, Entity.AheadZ + restZ);
         if (world.Navigation is not null && (locomotor.Surfaces & LocomotorSurfaces.Air) == 0)
         {
-            Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
-            Entity.SetAheadHeight(world.GroundHeightAt(Entity.X + Entity.AheadX, Entity.Y + Entity.AheadY) - Entity.Z);
+            Entity.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
+            Entity.SetAheadHeight(world.LayerHeightAt(Entity.X + Entity.AheadX, Entity.Y + Entity.AheadY, Entity.Layer) - Entity.Z);
         }
         if (turnsTo != Entity.Angle) Entity.SetAheadAngle(turnsTo);
     }
@@ -2203,10 +2253,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var air = (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
         if (world.Navigation is not null && !air)
         {
-            Entity.Z = world.GroundHeightAt(Entity.X, Entity.Y);
+            Entity.Z = world.LayerHeightAt(Entity.X, Entity.Y, Entity.Layer);
             // The height the frame ends with is that of the ground where it ends: an observer reads it there, and an object put where its frame ends (Entity.CompleteFrame)
             // stands on the ground of that place, as after the 30 Hz step, not on the height of the share it had covered.
-            Entity.SetAheadHeight(Entity.AheadX == Fixed.Zero && Entity.AheadY == Fixed.Zero ? Fixed.Zero : world.GroundHeightAt(Entity.X + Entity.AheadX, Entity.Y + Entity.AheadY) - Entity.Z);
+            Entity.SetAheadHeight(Entity.AheadX == Fixed.Zero && Entity.AheadY == Fixed.Zero ? Fixed.Zero : world.LayerHeightAt(Entity.X + Entity.AheadX, Entity.Y + Entity.AheadY, Entity.Layer) - Entity.Z);
         }
         if (_frameArriving)
         {
@@ -2285,7 +2335,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         if (_pathWait == PathWait.None && (!_pathValid || _pathObstacles != navigation.ObstacleSum))
         {
             if (!_pathValid) { _path.Clear(); _pathIndex = 0; }
-            world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [], false, _pathGroup));
+            world.RequestPath(Entity, new PathQuery(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, [], false, _pathGroup, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces)));
             _pathWait = PathWait.Plan;
             _pathValid = true;
             _pathObstacles = navigation.ObstacleSum;
@@ -2303,11 +2353,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         return true;
     }
 
-    private void ReplanAround(NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)
+    private void ReplanAround(IWorldServices world, NavigationGrid navigation, LocomotorInfo locomotor, IReadOnlyList<(Fixed X, Fixed Y, Fixed Radius)> blockers, long tick)
     {
         _blockerReplanTick = tick;
         // Only a detour that arrives replaces the path: the grid may stop as soon as it knows there is none.
-        var result = navigation.FindPathToGoal(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, blockers);
+        var result = navigation.FindPathToGoal(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, blockers, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces));
         if (result is null || result.Points.IsDefaultOrEmpty) return;
         _path.Clear();
         _path.AddRange(result.Points);
@@ -2318,7 +2368,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
     /// <summary>The nodes of the path the object follows.</summary>
     internal IReadOnlyList<PathPoint> PathNodes => _path;
 
-    private void PlanPath(NavigationGrid navigation, LocomotorInfo locomotor, bool air)
+    private void PlanPath(IWorldServices world, NavigationGrid navigation, LocomotorInfo locomotor, bool air)
     {
         InvalidatePath();
         _pathValid = true;
@@ -2331,10 +2381,10 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         }
         if (_viaPending)
         {
-            var toDoor = navigation.FindPath(Entity.X, Entity.Y, _viaX, _viaY, locomotor.Surfaces);
+            var toDoor = navigation.FindPath(Entity.X, Entity.Y, _viaX, _viaY, locomotor.Surfaces, Entity.Layer, Entity.Layer);
             if (toDoor.Status == PathStatus.Found)
             {
-                var onward = navigation.FindPath(_viaX, _viaY, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces);
+                var onward = navigation.FindPath(_viaX, _viaY, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces));
                 _pathComplete = onward.Status == PathStatus.Found;
                 _path.AddRange(toDoor.Points);
                 _path.AddRange(onward.Points);
@@ -2343,7 +2393,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             // The door point cannot be reached (something was built in front of the door): straight to the goal.
             _viaPending = false;
         }
-        var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces);
+        var result = navigation.FindPath(Entity.X, Entity.Y, Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces, Entity.Layer, world.LayerForGoal(Entity.MoveTargetX, Entity.MoveTargetY, locomotor.Surfaces));
         _pathComplete = result.Status == PathStatus.Found;
         _path.AddRange(result.Points);
     }
@@ -2475,6 +2525,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
                 writer.BeginObject(null);
                 writer.Fixed("x", point.X);
                 writer.Fixed("y", point.Y);
+                if (point.Layer != 0) writer.Int("layer", point.Layer);
                 writer.EndObject();
             }
             writer.EndArray();
@@ -2524,7 +2575,7 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
             _pathComplete = reader.Bool("pathComplete");
             _pathIndex = checked((int)reader.Int("pathIndex"));
             _pathObstacles = reader.UInt("pathObstacles");
-            foreach (var item in reader.Array("path")) _path.Add(new PathPoint(item.Fixed("x"), item.Fixed("y")));
+            foreach (var item in reader.Array("path")) _path.Add(new PathPoint(item.Fixed("x"), item.Fixed("y"), item.Has("layer") ? checked((int)item.Int("layer")) : 0));
         }
         _pathWait = reader.Has("pathWait") ? (PathWait)checked((int)reader.Int("pathWait")) : PathWait.None;
         _pathGroup = reader.Has("pathGroup") ? reader.UInt("pathGroup") : 0;

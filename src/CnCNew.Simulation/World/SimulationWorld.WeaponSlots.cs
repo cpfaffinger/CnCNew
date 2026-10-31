@@ -155,6 +155,18 @@ public sealed partial class SimulationWorld
         var dy = victimY - sourceY;
         var distanceSquared = dx * dx + dy * dy;
         var reach = weapon.RangeWith(_templates.GlobalWeaponBonus, WeaponBonusOf(source));
+        // "Special case - bridges have two attackable points at either end."
+        if (_bridges.Count != 0 && victim.Template.IsKindOf("BRIDGE") && BridgeOf(victim.Id) is { } bridge)
+        {
+            var (first, second) = bridge.AttackPoints();
+            (dx, dy) = (first.X - sourceX, first.Y - sourceY);
+            distanceSquared = dx * dx + dy * dy;
+            if (!SquaredReach.Of(reach).Contains(distanceSquared))
+            {
+                (dx, dy) = (second.X - sourceX, second.Y - sourceY);
+                distanceSquared = dx * dx + dy * dy;
+            }
+        }
         if (!SquaredReach.Of(reach).Contains(distanceSquared)) return false;
         var minimum = weapon.MinimumAttackRange;
         // Weapon.cpp: "distSqr < minAttackRangeSqr - 0.5f" (the shipped, non-RATIONALIZE_ATTACK_RANGE build).

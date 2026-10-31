@@ -36,6 +36,42 @@ public interface IWorldServices
     /// <summary>Terrain height at (x, y); 0 without terrain.</summary>
     Fixed GroundHeightAt(Fixed x, Fixed y);
 
+    /// <summary><c>W3DTerrainLogic::getLayerHeight</c>: the height of a layer at (x, y): the deck on the bridge of that layer, the ground off it or where the deck would be in the ground.</summary>
+    Fixed LayerHeightAt(Fixed x, Fixed y, int layer);
+
+    /// <summary><c>Pathfinder::updateLayer</c>: the object goes onto the layer if it is close enough to it, else onto the ground.</summary>
+    void UpdateLayer(Entity entity, int layer);
+
+    /// <summary><c>Object::setLayer</c>.</summary>
+    void SetLayer(Entity entity, int layer);
+
+    /// <summary>The layer of a place a ground unit is sent to (<see cref="World.SimulationWorld.LayerForGoal"/>).</summary>
+    int LayerForGoal(Fixed x, Fixed y, LocomotorSurfaces surfaces);
+
+    /// <summary>The bridges of the map.</summary>
+    IReadOnlyList<TerrainBridge> Bridges { get; }
+
+    /// <summary><c>TerrainLogic::findBridgeAt</c>.</summary>
+    TerrainBridge? BridgeAt(Fixed x, Fixed y);
+
+    /// <summary>A falling shell meets a deck (<see cref="World.SimulationWorld.ProjectileHitsDeck"/>).</summary>
+    bool ProjectileHitsDeck(Fixed x, Fixed y, Fixed zBefore, Fixed zAfter, out Fixed deckZ);
+
+    /// <summary>The bridge a bridge object stands for; <see langword="null"/> for an object that stands for none.</summary>
+    TerrainBridge? BridgeOf(EntityId bridgeObject);
+
+    /// <summary>The cut of <c>ActionManager::canRepairObject</c> (<see cref="World.SimulationWorld.BridgeRepairIsCut"/>).</summary>
+    bool BridgeRepairIsCut { get; }
+
+    /// <summary><c>TerrainLogic::updateBridgeDamageStates</c>.</summary>
+    void UpdateBridgeDamageStates();
+
+    /// <summary>A bridge's <c>Pathfinder::changeBridgeState</c>.</summary>
+    void SetBridgeUsable(TerrainBridge bridge, bool usable);
+
+    /// <summary>The object is made now, in the middle of the tick, as <c>ThingFactory::newObject</c> makes it.</summary>
+    Entity CreateNow(ObjectTemplate template, PlayerId owner, Fixed x, Fixed y, Fixed z, Fixed angle);
+
     /// <summary><c>ScriptEngine::adjustToppleDirection</c>: the direction a script gave a named object to fall in (<c>NAMED_SET_TOPPLE_DIRECTION</c>), normalised; false when it has none.</summary>
     bool TryGetToppleDirectionOverride(Entity entity, out Fixed x, out Fixed y) { x = Fixed.Zero; y = Fixed.Zero; return false; }
     SageRandom LogicRandom { get; }

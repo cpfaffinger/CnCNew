@@ -42,7 +42,47 @@ public static class ModelGeometryLoader
             layouts[definition.OriginalName] = ReadLayout(library, definition.OriginalName, model, rows, cols);
         }
 
-        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library));
+        return new ModelGeometry(layouts, ReadExitPaths(graph, visuals, library), ReadFirePoints(graph, visuals, library), ReadBridgeDecks(graph, library));
+    }
+
+    /// <summary>The fraction bits the lateral extent of a bridge model is kept with.</summary>
+    private const int BridgeExtentBits = 16;
+
+    /// <summary>
+    /// The width of the deck of every <c>Bridge</c> block (<c>W3DBridge::load</c>): the extent across the bridge of the vertices of the pristine model's <c>BRIDGE_LEFT</c> section at its rest
+    /// pose ("we assume all sections are the same width"). A block whose model is not in the content, or has no such section, gets no entry: the original then makes no bridge of it.
+    /// </summary>
+    private static SortedDictionary<string, BridgeDeck> ReadBridgeDecks(CompiledDefinitionGraph graph, W3dAssetLibrary library)
+    {
+        var decks = new SortedDictionary<string, BridgeDeck>(StringComparer.Ordinal);
+        foreach (var definition in graph.Definitions.OfType<BridgeDefinition>().OrderBy(value => value.OriginalName, StringComparer.Ordinal))
+        {
+            if (definition.Fields.LastOrDefault(value => value.Name.Equals("BridgeModelName", StringComparison.OrdinalIgnoreCase))?.Value.Value is not string { Length: > 0 } name) continue;
+            W3dModel model;
+            try
+            {
+                model = library.GetModel(name);
+            }
+            catch (W3dMissingAssetException)
+            {
+                continue;
+            }
+            // Create_Render_Obj takes the last sub-object whose name begins so.
+            var left = BridgeSection.Find(model, ".BRIDGE_LEFT");
+            if (left?.Mesh is not { } mesh) continue;
+            var transform = BoneTransform(model.Skeleton, left.BoneIndex);
+            var (lowest, highest) = (long.MaxValue, long.MinValue);
+            foreach (var vertex in mesh.Vertices)
+            {
+                var (x, y, z) = (Exact(vertex.X), Exact(vertex.Y), Exact(vertex.Z));
+                var across = (x * transform.M12 + y * transform.M22 + z * transform.M32 + transform.Y).RoundToStep(BridgeExtentBits);
+                lowest = Math.Min(lowest, across);
+                highest = Math.Max(highest, across);
+            }
+            if (lowest > highest) continue;
+            decks[definition.OriginalName] = new BridgeDeck(Fixed.FromDecimal(lowest / new decimal(1L << BridgeExtentBits)), Fixed.FromDecimal(highest / new decimal(1L << BridgeExtentBits)));
+        }
+        return decks;
     }
 
     /// <summary>The bone names <c>GameData.ini</c>'s <c>StandardPublicBone</c> makes public for every model that matter here; any other name must be an <c>ExtraPublicBone</c> of the draw module.</summary>
@@ -279,6 +319,18 @@ public static class ModelGeometryLoader
     {
         ArgumentNullException.ThrowIfNull(skeleton);
         if (bone < 0 || bone >= skeleton.BoneCount) throw new ArgumentOutOfRangeException(nameof(bone));
+        var world = BoneTransform(skeleton, bone);
+        return new BonePose(Step(world.X.RoundToStep(PositionBits), PositionBits), Step(world.Y.RoundToStep(PositionBits), PositionBits), Step(world.Z.RoundToStep(PositionBits), PositionBits),
+            Step(ExactBoneMath.Atan2ToStep(world.M12, world.M11, HeadingBits), HeadingBits));
+
+        static Fixed Step(long count, int bits) => Fixed.FromDecimal(count / new decimal(1L << bits));
+    }
+
+    /// <summary>The one place a single of the model file enters the exact domain: only its bits are read.</summary>
+    private static Dyadic Exact(float component) => Dyadic.FromSingleBits(BitConverter.SingleToInt32Bits(component));
+
+    private static ExactTransform BoneTransform(W3dSkeleton skeleton, int bone)
+    {
         var world = ExactTransform.Identity;
         for (var index = bone; index > 0;)
         {
@@ -290,15 +342,22 @@ public static class ModelGeometryLoader
             if (parent < 0 || parent >= index) throw new InvalidDataException($"bone {index} has the parent {parent}; a parent must precede its children.");
             index = parent;
         }
-
-        return new BonePose(Step(world.X.RoundToStep(PositionBits), PositionBits), Step(world.Y.RoundToStep(PositionBits), PositionBits), Step(world.Z.RoundToStep(PositionBits), PositionBits),
-            Step(ExactBoneMath.Atan2ToStep(world.M12, world.M11, HeadingBits), HeadingBits));
-
-        // The one place a single of the model file enters the exact domain: only its bits are read.
-        static Dyadic Exact(float component) => Dyadic.FromSingleBits(BitConverter.SingleToInt32Bits(component));
-        static Fixed Step(long count, int bits) => Fixed.FromDecimal(count / new decimal(1L << bits));
+        return world;
     }
 
     /// <summary>The angle of the vector (x, y), both given as single-precision bits, in steps of 1/1024 radian: the arc tangent of the table, exposed for its test.</summary>
     public static long HeadingSteps(int yBits, int xBits) => ExactBoneMath.Atan2ToStep(Dyadic.FromSingleBits(yBits), Dyadic.FromSingleBits(xBits), HeadingBits);
+}
+
+/// <summary>The sections of a bridge model (<c>W3DBridge::load</c>).</summary>
+internal static class BridgeSection
+{
+    /// <summary>The sub-object <c>Create_Render_Obj</c> gets: of those whose name begins with the model's name and <paramref name="suffix"/>, the last one, of any level of detail.</summary>
+    public static W3dSubObject? Find(W3dModel model, string suffix)
+    {
+        W3dSubObject? found = null;
+        foreach (var subObject in model.SubObjects)
+            if (subObject.Name.StartsWith(model.Name + suffix, StringComparison.OrdinalIgnoreCase)) found = subObject;
+        return found;
+    }
 }

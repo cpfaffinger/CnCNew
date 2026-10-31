@@ -1344,8 +1344,8 @@ public sealed partial class ScriptEngine
     /// <c>AIPlayer::updateBridgeRepair</c>, once a second while the queue holds something: a dozer is found (or ordered) and kept for the job - <see cref="FindDozer"/> leaves it alone from then on,
     /// also after the job - and told to repair; when it has no task left and the structure is pristine the structure leaves the queue, and with the last one it goes home.
     /// <para>
-    /// The original never gets further with a bridge: <c>ActionManager::canRepairObject</c> refuses bridges and their towers ("repairing bridges cut"), as <see cref="AIUpdateInterface.IsRepairable"/>
-    /// does here, so the order comes to nothing, the bridge stays in the queue and the dozer stays kept. Nothing of that is a deviation.
+    /// The original never gets further with a bridge: <c>ActionManager::canRepairObject</c> refuses bridges and their towers ("repairing bridges cut"), as the check of a repair
+    /// does here (<see cref="SimulationWorld.BridgeRepairIsCut"/>), so the order comes to nothing, the bridge stays in the queue and the dozer stays kept. Nothing of that is a deviation.
     /// </para>
     /// </summary>
     private void UpdateBridgeRepair(AiPlayer state)

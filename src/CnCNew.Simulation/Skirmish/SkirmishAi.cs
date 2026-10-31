@@ -867,8 +867,8 @@ public sealed partial class SkirmishAi
         var surfaces = builder.Template.Locomotor?.Surfaces ?? LocomotorSurfaces.Ground;
         // The movement profile asks the same question with the search that stops once the goal is proved unreachable (NavigationGrid.FindPathToGoal: the same answer, without
         // flooding everything the builder can reach for a spot it cannot).
-        if (_world.PathsQueued) return grid.FindPathToGoal(builder.X, builder.Y, x, y, surfaces, []) is not null;
-        return grid.FindPath(builder.X, builder.Y, x, y, surfaces).Status == PathStatus.Found;
+        if (_world.PathsQueued) return grid.FindPathToGoal(builder.X, builder.Y, x, y, surfaces, [], builder.Layer) is not null;
+        return grid.FindPath(builder.X, builder.Y, x, y, surfaces, builder.Layer, 0).Status == PathStatus.Found;
     }
 
     private bool SpotFree(ObjectTemplate template, Fixed radius, Fixed x, Fixed y)

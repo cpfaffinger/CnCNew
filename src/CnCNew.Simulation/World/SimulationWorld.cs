@@ -192,7 +192,12 @@ public sealed partial class SimulationWorld : IWorldServices
     // NotBefore: the first tick whose spawn phase may create the object (0: the next spawn phase). Only ever set above 30 Hz, see ProcessSpawns.
     private readonly record struct PendingSpawn(EntityId Id, int Template, PlayerId Owner, Fixed X, Fixed Y, Fixed Z, Fixed Angle, SpawnSetup Setup = default, long NotBefore = 0);
 
-    public SimulationWorld(WorldConfiguration configuration, TemplateCatalog templates, TerrainMap? terrain = null)
+    public SimulationWorld(WorldConfiguration configuration, TemplateCatalog templates, TerrainMap? terrain = null) : this(configuration, templates, terrain, restoring: false)
+    {
+    }
+
+    /// <param name="restoring">The world is about to load a snapshot, which holds the objects of the bridges: only what the terrain says is built.</param>
+    internal SimulationWorld(WorldConfiguration configuration, TemplateCatalog templates, TerrainMap? terrain, bool restoring)
     {
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(templates);
@@ -251,6 +256,7 @@ public sealed partial class SimulationWorld : IWorldServices
         _updates = new IndexedHeap<UpdateNode>(CompareUpdates, node => node.HeapIndex, (node, index) => node.HeapIndex = index);
         _timers = new IndexedHeap<SimTimer>(CompareTimers, timer => timer.HeapIndex, (timer, index) => timer.HeapIndex = index);
         if (terrain is not null) InitializeVision();
+        BuildBridges(placeObjects: !restoring);
         ComputeFullHash();
     }
 
@@ -1716,7 +1722,11 @@ public sealed partial class SimulationWorld : IWorldServices
         => Emit(kind, entity, other, text, value, PlayerId.System);
 
     private void Emit(SimEventKind kind, EntityId entity, EntityId other, string text, long value, PlayerId player)
-        => _events.Enqueue(new SimEvent(Ids.AllocateEvent(), _tick, kind, entity, other, player, text, value));
+    {
+        // OpenContain::onRemoving: a rider comes out on the layer of its container.
+        if (kind == SimEventKind.EntityUncontained && _bridges.Count != 0 && FindEntity(entity) is { } rider && FindEntity(other) is { } container) SetLayer(rider, container.Layer);
+        _events.Enqueue(new SimEvent(Ids.AllocateEvent(), _tick, kind, entity, other, player, text, value));
+    }
 
     private void DeliverEvents()
     {
@@ -1770,7 +1780,7 @@ public sealed partial class SimulationWorld : IWorldServices
             if (!entity.HasStatus(ObjectStatusBits.UnderConstruction)) ApplyObjectEnergy(entity, entity.Owner, false);
             if (entity.DisabledEdge) _disabledObjects.Remove(entity);
             if (entity.SellCompleteTick >= 0) _sales.Remove((entity.SellCompleteTick, entity.Id.Value));
-            if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
+            if (Navigation is { } navigation && BlocksGrid(entity))
                 navigation.RemoveFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
             _entitySum = unchecked(_entitySum - entity.CachedHash);
             UnregisterStructureHooks(entity);
@@ -1820,13 +1830,17 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         var template = _templates[pending.Template];
         var setup = pending.Setup;
-        var ground = GroundHeightAt(pending.X, pending.Y);
+        // GameLogic::startNewGame, ObjectCreationList: what comes into being on a deck is on that deck.
+        var layer = template.IsKindOf("BRIDGE") ? GroundLayer : LayerForDestination(pending.X, pending.Y, pending.Z);
+        var ground = LayerHeightAt(pending.X, pending.Y, layer);
+        var airborne = Terrain is null || IsSignificantlyAbove(pending.Z, ground);
         var entity = new Entity(pending.Id, template, pending.Owner, _tick)
         {
             X = pending.X,
             Y = pending.Y,
             // Ground placement: anything not significantly above the terrain is put on it; airborne spawns keep their height.
-            Z = Terrain is not null && !IsSignificantlyAbove(pending.Z, ground) ? ground : pending.Z,
+            Z = !airborne ? ground : pending.Z,
+            Layer = airborne ? GroundLayer : layer,
             Angle = pending.Angle,
         };
         if (builder.IsValid)
@@ -2060,7 +2074,7 @@ public sealed partial class SimulationWorld : IWorldServices
         // Energy::objectEnteringInfluence: incremental, not recomputed per frame.
         if (!entity.HasStatus(ObjectStatusBits.UnderConstruction)) ApplyObjectEnergy(entity, entity.Owner, true);
         if (entity.SellCompleteTick >= 0) _sales.Add((entity.SellCompleteTick, entity.Id.Value));
-        if (Navigation is { } navigation && NavigationGrid.Blocks(entity.Template))
+        if (Navigation is { } navigation && BlocksGrid(entity))
             navigation.AddFootprint(entity.Id.Value, entity.Template, entity.X, entity.Y, entity.Angle);
         RegisterStructureHooks(entity);
         RegisterTurrets(entity);
@@ -2105,6 +2119,7 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         var tick = _tick;
         _tickEvents.Clear();
+        ForgetBridgeStateChange(tick);
         ExecuteCommands(tick);
         FireTimers(tick);
         EndPowerSabotages();
@@ -2139,6 +2154,7 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         var tick = _tick;
         _tickEvents.Clear();
+        ForgetBridgeStateChange(tick);
         observer.PhaseStarted(TickPhase.Commands);
         ExecuteCommands(tick);
         observer.PhaseEnded(TickPhase.Commands);
@@ -2322,6 +2338,7 @@ public sealed partial class SimulationWorld : IWorldServices
     private void DescribeGlobal(IStateWriter writer)
     {
         writer.Int("tick", _tick);
+        DescribeBridges(writer);
         if (_rankLevelLimit != DefaultRankLevelLimit) writer.Int("rankLevelLimit", _rankLevelLimit);
         if (_holesRebuild) writer.Bool("holesRebuild", true);
         DescribeSoloBonus(writer);
