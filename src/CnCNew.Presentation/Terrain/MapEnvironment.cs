@@ -32,6 +32,10 @@ public sealed record SkyboxTextures(string North, string East, string South, str
 /// </summary>
 public sealed record MapEnvironment(SnowSettings Snow, SkyboxTextures Skybox, float SkyboxScale, float SkyboxZ, int BorderShroudLevel, int BorderClearLevel)
 {
+    /// <summary>The map behind the menus (<c>GlobalData::m_shellMapName</c>), as a path of the content.</summary>
+    public static string ShellMapPath(CompiledDefinitionGraph graph)
+        => WorldDefinitionReader.Text(WorldDefinitionReader.GameData(graph), "ShellMapName").Replace('\\', '/');
+
     public static MapEnvironment FromDefinitions(CompiledDefinitionGraph graph, string? mapIni)
     {
         var gameData = WorldDefinitionReader.GameData(graph);

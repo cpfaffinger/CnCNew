@@ -422,6 +422,9 @@ public sealed class GameShell
     /// <c>layout-&gt;hide(TRUE)</c>), so its windows draw nothing and the windows of the screen above lie on whatever the shell shows behind the menus (the
     /// shell map of the original, which this build does not have: black).
     /// </summary>
+    /// <summary>The lowest screen drawn is the main menu: the one screen a backdrop of the modern skin must not cover, because the battle behind the menus is its picture.</summary>
+    public bool MainMenuIsBackdrop => _stack.Count > 0 && _stack[FirstDrawnScreen()] is Screens.MainMenuScreen;
+
     internal int FirstDrawnScreen()
     {
         var index = _stack.Count - 1;

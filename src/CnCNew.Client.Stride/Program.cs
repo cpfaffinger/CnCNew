@@ -72,6 +72,7 @@ if (joinServer is not null)
 CnCNew.Client.Stride.ClientRuntime.PlayIntro = args.Contains("--intro", StringComparer.OrdinalIgnoreCase)
     || (!smokeTest && GetArgument(args, "--shell-script") is null && GetArgument(args, "--play-movie") is null && !args.Contains("--no-intro", StringComparer.OrdinalIgnoreCase));
 CnCNew.Client.Stride.ClientRuntime.StartMovie = GetArgument(args, "--play-movie");
+CnCNew.Client.Stride.ClientRuntime.ShellMapEnabled = !args.Contains("--no-shell-map", StringComparer.OrdinalIgnoreCase) && (GetArgument(args, "--shell-script") is null || args.Contains("--shell-map", StringComparer.OrdinalIgnoreCase));
 CnCNew.Client.Stride.ClientRuntime.StartRadarMovie = GetArgument(args, "--play-radar-movie");
 var shellScriptPath = GetArgument(args, "--shell-script");
 if (shellScriptPath is not null && (matchMap is not null || missionMap is not null || smokeTest)) throw new ArgumentException("--shell-script drives the menus: it excludes --match, --mission, --scenario, --join and --smoke-test.");

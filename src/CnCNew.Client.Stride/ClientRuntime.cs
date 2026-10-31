@@ -1,3 +1,5 @@
+using CnCNew.Simulation.Mission;
+using CnCNew.Presentation.Terrain;
 using System.Numerics;
 using CnCNew.Client.Stride.Audio;
 using CnCNew.Client.Stride.Rendering;
@@ -695,8 +697,49 @@ internal sealed class ClientRuntime : IDisposable
             _shell.Update(seconds);
             foreach (var output in _shell.DrainOutputs()) Carry(output);
             StepNetLoad();
+            if (_running is null) UpdateShellMap(gameTime, width, height, fixedSeconds);
         }
         _audio.Update(seconds);
+    }
+
+    /// <summary>The scene behind the menus (<c>--no-shell-map</c> and a scripted person at the menus leave it out: <c>GlobalData::m_shellMapOn</c>).</summary>
+    public static bool ShellMapEnabled { get; set; } = true;
+
+    private LiveMatchHost? _shellMap;
+
+    /// <summary>
+    /// <c>Shell::showShellMap</c>: behind the main menu and what opens from it a real map runs, <c>GameData</c>'s <c>ShellMapName</c>, in a game of its own, with its scripts and its camera and without a
+    /// viewer; its sounds go nowhere. It starts when the menus are reached and ends when anything else takes the world's place.
+    /// </summary>
+    private void UpdateShellMap(GameTime gameTime, int width, int height, double? fixedSeconds)
+    {
+        if (!ShellMapEnabled || _shell is not { Phase: ShellPhase.Menus } || _netLoad is not null)
+        {
+            StopShellMap();
+            return;
+        }
+
+        if (_shellMap is null)
+        {
+            var run = MissionRun.Load(MissionContext.From(_data), MapEnvironment.ShellMapPath(_data.Graph), MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
+            _shellMap = new LiveMatchHost(_game, _data, LiveMission.Create(_data, run, BackBufferSize()));
+        }
+
+        var map = _shellMap.Match;
+        _shellMap.Update(gameTime, _game.GraphicsContext.CommandList, width, height, fixedSeconds, elapsed =>
+        {
+            map.Advance(elapsed);
+            map.DrainSoundCues();
+        });
+    }
+
+    private void StopShellMap()
+    {
+        if (_shellMap is null) return;
+        _game.SceneSystem.SceneInstance = null;
+        _game.SceneSystem.GraphicsCompositor = null;
+        _shellMap.Dispose();
+        _shellMap = null;
     }
 
     /// <summary>
@@ -855,6 +898,7 @@ internal sealed class ClientRuntime : IDisposable
 
     private RunningGame Start(LiveGame game, StartMissionOutput? mission)
     {
+        StopShellMap();
         // The lockstep probe (--input-delay-ticks N): every order of the viewer is executed N ticks after it was given.
         if (InputDelayTicks > 0) game.UseInputDelay(InputDelayTicks);
         game.CommandResolved += resolution =>
@@ -1020,13 +1064,21 @@ internal sealed class ClientRuntime : IDisposable
         var commandList = context.CommandList;
         commandList.SetRenderTargetAndViewport(null, back);
         var alone = _intro is not null || _movies.FullScreenIsModal;
-        if (_running is null || alone) commandList.Clear(back, global::Stride.Core.Mathematics.Color.Black);
+        if ((_running is null && _shellMap is null) || alone) commandList.Clear(back, global::Stride.Core.Mathematics.Color.Black);
         // The mission scripts' screen filters (grey-scale, motion blur) go over the finished world and under the HUD. Asking for them is what makes the director count them as displayed.
         if (_running?.Host.Match is LiveMission filtered && filtered.Director.PostEffects is { Any: true } effects) _filters.Apply(context, back, effects);
         var list = alone ? null : _running is { } running ? running.BuildDrawList(back.Width, back.Height) : _shell?.BuildDrawList();
         _ui.Begin(context, back.Width, back.Height);
         if (list is not null)
-            foreach (var command in list.Commands) _ui.Execute(command);
+        {
+            // The modern skin turns a backdrop picture into its canvas colour; over the shell map the main menu keeps the scene instead.
+            var hideCanvas = _running is null && _shellMap is not null && _shell is { MainMenuIsBackdrop: true, Skin.IsModern: true };
+            foreach (var command in list.Commands)
+            {
+                if (hideCanvas && command is UiFillRect { Rect: var rect } && rect.Width * 10 >= back.Width * 9 && rect.Height * 10 >= back.Height * 9) continue;
+                _ui.Execute(command);
+            }
+        }
         if (Caption is { Length: > 0 } caption) DrawCaption(caption, back.Width);
         // The cursor lies on top of everything: the shell and the in-game menu show the arrow, a running game its context cursor.
         if (_pointer is { } pointer) _cursor.Draw(_ui, _running is { Spectator: null } playing ? playing.Hud.Cursor : CursorState.Arrow, pointer, _clockMs);
@@ -1054,6 +1106,8 @@ internal sealed class ClientRuntime : IDisposable
         _shell?.Shutdown();
         _running?.Dispose();
         _running = null;
+        _shellMap?.Dispose();
+        _shellMap = null;
         _movies.StopAll();
         _audio.Dispose();
         _cursor.Dispose();
