@@ -63,6 +63,8 @@ internal static class ShellTests
         harness.Run("Skirmish setup and options show localized words, not internal names or the layout's placeholders", () => LocalizedSetupText(data));
         harness.Run("Skirmish setup with the original AI offers the three armies of the original and starts a match of that AI", () => OriginalAiArmies(data));
         harness.Run("A window with TOOLTIPTEXT shows the pointer tooltip after the delay with the Mouse.ini style", () => PointerTooltip(data));
+        harness.Run("Credits close by themselves when the last line has left the screen", () => CreditsEnd(data));
+        harness.Run("The user's own maps: a directory of a map lands in the list's unofficial side and is a content file", () => UserMaps(data));
         harness.Run("Credits lines use the Language.ini credits fonts at the adjusted size", () => CreditsFonts(data));
         harness.Run("Shell::push replaces the screen below, overlays keep it: only what the original shows is drawn", () => ScreenStackDrawing(data));
         harness.Run("Escape leaves the load game screen without any gadget focus", () => LoadGameEscapeWithoutFocus(data));
@@ -498,6 +500,43 @@ internal static class ShellTests
     /// Credits.cpp draws TITLE lines in <c>CreditsTitleFont</c> (Arial 22), MINORTITLE in <c>CreditsMinorTitleFont</c> (Arial 16 bold) and NORMAL in
     /// <c>CreditsNormalFont</c> (Arial 14), each through <c>adjustFontSize</c>; the shell used to draw Arial 24 bold / 16 bold / 12.
     /// </summary>
+    private static void UserMaps(GameData data)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-user-maps-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(directory, "My Hill");
+        Directory.CreateDirectory(folder);
+        Directory.CreateDirectory(Path.Combine(directory, "Not A Map"));
+        try
+        {
+            using (var source = data.Content.OpenRead("Maps/Alpine Assault/Alpine Assault.map"))
+            using (var target = File.Create(Path.Combine(folder, "My Hill.map"))) source.CopyTo(target);
+            var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            shell.LoadUserMaps(directory);
+            TestHarness.Assert(shell.UserMaps.Length == 1, $"one map, got {shell.UserMaps.Length}");
+            var path = shell.UserMaps[0];
+            TestHarness.Assert(path == "UserMaps/My Hill/My Hill.map", path);
+            TestHarness.Assert(data.Content.Exists(path), "the content knows it");
+            TestHarness.Assert(data.Content.FileHash(path) == data.Content.FileHash("Maps/Alpine Assault/Alpine Assault.map"), "with the hash of its bytes");
+            TestHarness.Assert(shell.MapCatalog[path].StartPositionCount == 2, "two players come from the map");
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    private static void CreditsEnd(GameData data)
+    {
+        var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+        Click(shell, "MainMenu.wnd:ButtonCredits");
+        TestHarness.Assert(shell.CurrentScreen is CreditsScreen, "the credits are open");
+        shell.Update(1.0);
+        TestHarness.Assert(shell.CurrentScreen is CreditsScreen, "a second later they still run");
+        shell.Update(100_000.0);
+        for (var frame = 0; frame < 120; frame++) shell.Update(1.0 / 30.0);
+        TestHarness.Assert(shell.CurrentScreen is not CreditsScreen, "after the last line the menu is back");
+    }
+
     private static void CreditsFonts(GameData data)
     {
         var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);

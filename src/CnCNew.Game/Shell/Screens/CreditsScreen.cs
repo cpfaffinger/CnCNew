@@ -11,12 +11,15 @@ namespace CnCNew.Game.Shell.Screens;
 /// <c>WinTextDraw</c> is a plain <c>USER</c> window, and this runtime only routes messages for gadgets and keys (see
 /// <c>docs/UI-WND.md</c>), so a plain window click produces no event here. Escape exits the screen instead; a future
 /// revision could add a synthetic "any mouse button on a non-gadget window" event to the tree if that turns out to matter.
+/// When the last line has left the screen the credits are over and the screen closes (<c>CreditsMenuUpdate</c>: <c>TheCredits->isFinished()</c>, <c>TheShell->pop()</c>).
 /// </summary>
 public sealed class CreditsScreen : ShellScreen
 {
     private const float PixelsPerSecond = 40f;
 
     private float _scrollPixels;
+    private int? _contentHeight;
+    private bool _closing;
 
     public CreditsScreen(GameShell shell) : base(shell, ShellLayoutNames.CreditsMenu)
     {
@@ -27,6 +30,12 @@ public sealed class CreditsScreen : ShellScreen
     {
         base.Update(dtSeconds);
         _scrollPixels += (float)(dtSeconds * PixelsPerSecond);
+        _contentHeight ??= ShellCustomDraw.CreditsHeight(new ShellCreditsContext(Shell.Credits, 0, Shell.TextSource, Fonts()), Tree.Services.TextMeasure);
+        if (!_closing && _scrollPixels > Shell.Viewport.Height + _contentHeight)
+        {
+            _closing = true;
+            Shell.CloseTop();
+        }
     }
 
     public override UiDrawList BuildDrawList()

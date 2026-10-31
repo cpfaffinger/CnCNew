@@ -5,7 +5,11 @@ namespace CnCNew.Content;
 
 public sealed class ContentFileSystem
 {
+    /// <summary>Where the user's own maps lie in the content: nothing of the game's export is ever under this name.</summary>
+    public const string UserMapPrefix = "UserMaps/";
+
     private readonly Dictionary<string, ContentFileEntry> _files;
+    private readonly Dictionary<string, (ContentFileEntry Entry, string Path)> _userFiles = new(StringComparer.OrdinalIgnoreCase);
 
     private ContentFileSystem(string rootDirectory, Dictionary<string, ContentFileEntry> files)
     {
@@ -76,11 +80,41 @@ public sealed class ContentFileSystem
     }
 
     public bool Exists(string virtualPath)
-        => _files.ContainsKey(ContentPath.Normalize(virtualPath));
+    {
+        var normalized = ContentPath.Normalize(virtualPath);
+        return _files.ContainsKey(normalized) || _userFiles.ContainsKey(normalized);
+    }
+
+    /// <summary>
+    /// Lays the user's own maps over the content: every directory below <paramref name="directory"/> that holds a <c>.map</c> of its name, as <c>getPath_UserData</c> + <c>Maps</c> has them
+    /// (<c>populateMapListbox</c>). A map is a content file like any other from here on, with its hash; the files beside it (a <c>map.ini</c>) come along. Returns the maps' virtual paths in
+    /// ordinal order.
+    /// </summary>
+    public IReadOnlyList<string> AddUserMaps(string directory)
+    {
+        var maps = new List<string>();
+        if (!Directory.Exists(directory)) return maps;
+        foreach (var folder in Directory.EnumerateDirectories(directory).Order(StringComparer.OrdinalIgnoreCase))
+        {
+            var name = Path.GetFileName(folder);
+            if (!File.Exists(Path.Combine(folder, name + ".map"))) continue;
+            foreach (var file in Directory.EnumerateFiles(folder).Order(StringComparer.OrdinalIgnoreCase))
+            {
+                var virtualPath = ContentPath.Normalize($"{UserMapPrefix}{name}/{Path.GetFileName(file)}");
+                var bytes = File.ReadAllBytes(file);
+                var entry = new ContentFileEntry(ContentPath.ToAssetId(virtualPath), virtualPath, file, "user", bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), "user", [], []);
+                _userFiles[virtualPath] = (entry, file);
+                if (file.EndsWith(".map", StringComparison.OrdinalIgnoreCase)) maps.Add(virtualPath);
+            }
+        }
+
+        return maps;
+    }
 
     public ContentFileEntry GetEntry(string virtualPath)
     {
         var normalized = ContentPath.Normalize(virtualPath);
+        if (_userFiles.TryGetValue(normalized, out var user)) return user.Entry;
         return _files.TryGetValue(normalized, out var entry)
             ? entry
             : throw new FileNotFoundException($"Content file '{virtualPath}' was not found.", virtualPath);
@@ -94,6 +128,7 @@ public sealed class ContentFileSystem
 
     public Stream OpenRead(string virtualPath)
     {
+        if (_userFiles.TryGetValue(ContentPath.Normalize(virtualPath), out var user)) return new FileStream(user.Path, FileMode.Open, FileAccess.Read, FileShare.Read);
         var entry = GetEntry(virtualPath);
         var physicalPath = ResolveContainedPath(RootDirectory, entry.PhysicalPath);
         var stream = new FileStream(physicalPath, FileMode.Open, FileAccess.Read, FileShare.Read);

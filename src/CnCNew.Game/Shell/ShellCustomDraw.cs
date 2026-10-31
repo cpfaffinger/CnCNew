@@ -37,6 +37,21 @@ public static class ShellCustomDraw
     public static UiDrawList ExpandCredits(UiDrawList list, ShellCreditsContext context, IUiTextMeasure measure)
         => Rebuild(list, command => command.Callback == "W3DCreditsMenuDraw" ? Credits(command, context, measure) : null);
 
+    /// <summary>How many pixels the credits fill, line under line in their fonts.</summary>
+    public static int CreditsHeight(ShellCreditsContext context, IUiTextMeasure measure)
+    {
+        var total = 0;
+        foreach (var line in context.Lines) total += measure.LineHeight(CreditsFont(line, context.Fonts));
+        return total;
+    }
+
+    private static UiFont CreditsFont(CreditsLine line, CreditsFonts? fonts) => line.Style switch
+    {
+        CreditsStyle.Title => fonts?.Title ?? new UiFont("Arial", 24, true),
+        CreditsStyle.MinorTitle => fonts?.MinorTitle ?? new UiFont("Arial", 16, true),
+        _ => fonts?.Normal ?? new UiFont("Arial", 12, false),
+    };
+
     private static ImmutableArray<UiDrawCommand> MapPreview(UiCustomDraw command, ShellMapPreviewContext context, IUiTextMeasure measure, CnCNew.Ui.Skins.UiSkin skin, UiViewport? viewport)
     {
         var rect = command.Rect;
@@ -65,13 +80,7 @@ public static class ShellCustomDraw
         var y = rect.Y + rect.Height - context.ScrollOffsetPixels;
         foreach (var line in context.Lines)
         {
-            var fonts = context.Fonts;
-            var font = line.Style switch
-            {
-                CreditsStyle.Title => fonts?.Title ?? new UiFont("Arial", 24, true),
-                CreditsStyle.MinorTitle => fonts?.MinorTitle ?? new UiFont("Arial", 16, true),
-                _ => fonts?.Normal ?? new UiFont("Arial", 12, false),
-            };
+            var font = CreditsFont(line, context.Fonts);
             var height = measure.LineHeight(font);
             if (y + height >= rect.Y && y <= rect.Bottom)
             {

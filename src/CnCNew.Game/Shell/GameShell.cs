@@ -133,6 +133,25 @@ public sealed class GameShell
     public LocalizedText? RawText { get; private set; }
     public ImmutableDictionary<string, ShellMapEntry> MapCatalog { get; private set; } = ImmutableDictionary<string, ShellMapEntry>.Empty;
     public ShellMapNames MapNames { get; } = new();
+
+    /// <summary>The user's own maps (<see cref="LoadUserMaps"/>), by their path of the content.</summary>
+    public ImmutableArray<string> UserMaps { get; private set; } = [];
+
+    /// <summary>Adds the maps of a directory to the skirmish map list's "unofficial" side (<c>populateMapListbox</c> with <c>TheMapCache</c>'s user directory): the number of players comes from the map itself, nothing caches it.</summary>
+    public void LoadUserMaps(string directory)
+    {
+        var found = Data.Content.AddUserMaps(directory);
+        var catalog = MapCatalog.ToBuilder();
+        foreach (var path in found)
+        {
+            CnCNew.Data.World.MapData map;
+            using (var stream = Data.Content.OpenRead(path)) map = CnCNew.Formats.SageMapDecoder.Decode(stream);
+            catalog[path] = new ShellMapEntry(path, null, true, CnCNew.Simulation.Terrain.TerrainMap.Build(map, path).StartPositions.Length);
+        }
+
+        MapCatalog = catalog.ToImmutable();
+        UserMaps = [.. found.Where(path => MapCatalog[path].StartPositionCount >= 2)];
+    }
     public ImmutableArray<CreditsLine> Credits { get; private set; } = [];
     public IReadOnlyList<ShellScreen> Stack => _stack;
     public ShellScreen CurrentScreen => _stack[^1];

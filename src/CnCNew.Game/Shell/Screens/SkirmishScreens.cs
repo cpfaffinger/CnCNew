@@ -298,6 +298,15 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
         _selectedIndex = -1;
     }
 
+    private void PopulateUserMaps()
+    {
+        _mapPaths = [.. Shell.UserMaps.OrderBy(path => Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource), StringComparer.Ordinal)];
+        var list = W("ListboxMap");
+        list.ClearList();
+        foreach (var path in _mapPaths) list.AddListRow(new UiListRow(string.Empty, Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource)));
+        _selectedIndex = -1;
+    }
+
     private void OnSystem(UiWindowTree tree, UiEvent e)
     {
         switch (e.Kind)
@@ -310,11 +319,7 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
                 Shell.CloseTop();
                 break;
             case UiEventKind.ButtonSelected when e.Source == $"{LayoutName}.wnd:RadioButtonSystemMaps": PopulateSystemMaps(); break;
-            case UiEventKind.ButtonSelected when e.Source == $"{LayoutName}.wnd:RadioButtonUserMaps":
-                W("ListboxMap").ClearList();
-                _mapPaths = [];
-                _selectedIndex = -1;
-                break;
+            case UiEventKind.ButtonSelected when e.Source == $"{LayoutName}.wnd:RadioButtonUserMaps": PopulateUserMaps(); break;
         }
     }
 

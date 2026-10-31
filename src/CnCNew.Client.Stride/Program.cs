@@ -72,6 +72,8 @@ if (joinServer is not null)
 CnCNew.Client.Stride.ClientRuntime.PlayIntro = args.Contains("--intro", StringComparer.OrdinalIgnoreCase)
     || (!smokeTest && GetArgument(args, "--shell-script") is null && GetArgument(args, "--play-movie") is null && !args.Contains("--no-intro", StringComparer.OrdinalIgnoreCase));
 CnCNew.Client.Stride.ClientRuntime.StartMovie = GetArgument(args, "--play-movie");
+CnCNew.Client.Stride.ClientRuntime.UserMapsDirectory = GetArgument(args, "--user-maps") ?? (smokeTest || GetArgument(args, "--shell-script") is not null ? null
+    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Command and Conquer Generals Zero Hour Data", "Maps"));
 CnCNew.Client.Stride.ClientRuntime.ShellMapEnabled = !args.Contains("--no-shell-map", StringComparer.OrdinalIgnoreCase) && (GetArgument(args, "--shell-script") is null || args.Contains("--shell-map", StringComparer.OrdinalIgnoreCase));
 CnCNew.Client.Stride.ClientRuntime.StartRadarMovie = GetArgument(args, "--play-radar-movie");
 var shellScriptPath = GetArgument(args, "--shell-script");
@@ -522,6 +524,8 @@ internal sealed class CnCNewGame(
         var size = windowSize.Split('x');
         GraphicsDeviceManager.PreferredBackBufferWidth = int.Parse(size[0]);
         GraphicsDeviceManager.PreferredBackBufferHeight = int.Parse(size[1]);
+        // For measuring what a frame costs: without the wait for the display a smoke test's wall time is its frames' cost.
+        if (Environment.GetCommandLineArgs().Contains("--no-vsync", StringComparer.OrdinalIgnoreCase)) GraphicsDeviceManager.SynchronizeWithVerticalRetrace = false;
         base.Initialize();
         Window.Title = "CnCNew — Stride Direct3D 11 W3D Viewer";
     }
