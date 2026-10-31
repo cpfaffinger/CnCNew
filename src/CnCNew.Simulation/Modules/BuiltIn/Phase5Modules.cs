@@ -1500,7 +1500,11 @@ public class AIUpdateInterface(AIUpdateData data) : SimModule, IUpdateModule, IF
         var goal = world.FindEntity(_goal);
         if (Entity.DestroyRequested || goal is null || goal.DestroyRequested || goal.EffectivelyDead)
         {
+            // Looked at once per logic frame of the original of this object, like the container of UpdateEnter: a goal that dies in the phases after the updates is found dead by the
+            // next 30 Hz step, not by the next tick of the same frame (F-86).
+            if (Entity.HasMoveTarget && _frameTicksLeft != Math.Max(_stride, 1) - 1) return;
             _goal = EntityId.Invalid;
+            if (Entity.HasMoveTarget && _frameTicksLeft > 0) SettleFrame(world.Tick);
             StopInternalMove();
             return;
         }

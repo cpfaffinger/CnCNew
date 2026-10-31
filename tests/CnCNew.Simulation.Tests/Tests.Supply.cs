@@ -516,5 +516,36 @@ static partial class Tests
             else Check.That(left == reference, $"{rate}: it leaves in the frame 30 Hz has (frame {left} after the destruction against {reference}).");
         }
     }
+
+    /// <summary>
+    /// F-86: a unit on its way to a goal object that dies after the updates of a frame's first tick stops in the next frame at 30, 60 and 120 Hz, at the same place. Before, above 30 Hz it saw the goal dead
+    /// in the frame's second tick and stood a step short.
+    /// </summary>
+    public static void WalkerSeesItsGoalGoneInTheNextFrame()
+    {
+        Fixed? reference = null;
+        foreach (var rate in new[] { SimulationRate.Hz30, SimulationRate.Hz60, SimulationRate.Hz120 })
+        {
+            var fixture = new SyntheticFixture(rate, files: SupplyFiles());
+            var world = new SimulationWorld(new WorldConfiguration(new WorldId(1), rate, 1, TwoPlayers, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+            var feeder = new Feeder(world);
+            feeder.Spawn(1, "Warehouse", x: 900);
+            feeder.Spawn(1, "Hauler", x: 0);
+            for (var tick = 0; tick < world.Frames(1); tick++) world.Step();
+            var goal = world.FindEntity(new EntityId(IdOf(world, "Warehouse")))!;
+            var walker = world.FindEntity(new EntityId(IdOf(world, "Hauler")))!;
+            walker.Modules.OfType<AIUpdateInterface>().Single().OrderApproachGoal(world, goal, false);
+            for (var tick = 0; tick < world.Frames(30); tick++) world.Step();
+            Check.That(walker.HasMoveTarget, $"{rate}: the unit is on its way.");
+            // To the end of the tick that begins a frame of the walker: the goal is destroyed after that tick's updates.
+            while ((world.Tick - walker.SpawnTick) % world.Time.TicksPerOriginalFrame != 0) world.Step();
+            world.Step();
+            world.Kill(goal.Id);
+            for (var tick = 0; tick < world.Frames(5); tick++) world.Step();
+            Check.That(!walker.HasMoveTarget, $"{rate}: the unit has stopped.");
+            if (reference is null) reference = walker.X;
+            else Check.That(walker.X == reference, $"{rate}: it stands where it stands at 30 Hz ({walker.X} against {reference}).");
+        }
+    }
 }
 

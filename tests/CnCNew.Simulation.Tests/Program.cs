@@ -104,6 +104,7 @@ run.Test("Phase 50 (F-18): the objects under a building site", Tests.BuildSiteCl
 run.Test("Phase 50 (F-18): a building site needs the sight of the player and a way for the builder", Tests.BuildSiteNeedsSightAndAWay);
 run.Test("Phase 50 (F-84): idle allies make way for a harvester", Tests.IdleAlliesMakeWayForAHarvester);
 run.Test("Phase 50 (F-85): a bored dozer sees no hurt of its own frame", Tests.BoredDozerSeesNoHurtOfItsOwnFrame);
+run.Test("Phase 50 (F-86): a walker sees its goal gone in the next frame", Tests.WalkerSeesItsGoalGoneInTheNextFrame);
 run.Test("Rate invariance, exits: produced units leave their factory, make room and reach the rally point as at 30 Hz", Tests.RateExitsAreTheSame);
 run.Test("Phase 49 (F-80): a unit on its exit path looks for victims in the frames it does at 30 Hz", Tests.ExitPathAcquisitionIsTheSameAtEveryRate);
 run.Test("Phase 49 (F-81): a disabled module wakes on the frames of its object", Tests.DisabledModuleWakesOnItsFrames);
