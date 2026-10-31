@@ -10,5 +10,7 @@
   <ItemGroup>
     <!-- The one accepted game installation (sizes and hashes only); InstallationMaster.LoadBuiltIn reads it. -->
     <EmbeddedResource Include="../../baselines/steam-master.json" LogicalName="steam-master.json" />
+    <!-- The community patch every installation carries (names, sizes and hashes only); PatchMaster.LoadBuiltIn reads it. -->
+    <EmbeddedResource Include="../../baselines/patch-master.json" LogicalName="patch-master.json" />
   </ItemGroup>
 </Project>

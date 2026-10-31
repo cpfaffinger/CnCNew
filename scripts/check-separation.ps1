@@ -5,7 +5,7 @@
 
 .DESCRIPTION
     For every file of -Directory:
-      - its SHA-256 is compared (an empty file carries no data and is only counted) with every file of the master installation (baselines/steam-master.json) and, when this machine has it, every file of the
+      - its SHA-256 is compared (an empty file carries no data and is only counted) with every file of the master installation (baselines/steam-master.json), of the patch (baselines/patch-master.json) and, when this machine has it, every file of the
         exported content (game/content/content-manifest.json): an equal hash is a finding;
       - its extension is compared with the formats of the game's data (.big .w3d .map .csf .str .wnd .ini .scb .tga .dds .wav .mp3 .bik .wak .ani): a file of such a
         format is a finding unless the table of known files below names it with its origin;
@@ -27,10 +27,14 @@ Set-Location $root
 $Directory = (Resolve-Path -LiteralPath $Directory).Path
 
 $gameHashes = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-foreach ($file in (Get-Content -Raw 'baselines/steam-master.json' | ConvertFrom-Json).files) { [void]$gameHashes.Add([string]$file.sha256) }
+foreach ($description in 'baselines/steam-master.json', 'baselines/patch-master.json') {
+    foreach ($file in (Get-Content -Raw $description | ConvertFrom-Json).files) { [void]$gameHashes.Add([string]$file.sha256) }
+}
 $contentManifest = 'game/content/content-manifest.json'
 $withContent = Test-Path $contentManifest
-if ($withContent) { foreach ($asset in (Get-Content -Raw $contentManifest | ConvertFrom-Json).assets) { [void]$gameHashes.Add([string]$asset.sha256) } }
+foreach ($manifest in $contentManifest, 'game/original/content/content-manifest.json') {
+    if (Test-Path $manifest) { foreach ($asset in (Get-Content -Raw $manifest | ConvertFrom-Json).assets) { [void]$gameHashes.Add([string]$asset.sha256) } }
+}
 
 $gameFormats = '.big', '.w3d', '.map', '.csf', '.str', '.wnd', '.ini', '.scb', '.tga', '.dds', '.wav', '.mp3', '.bik', '.wak', '.ani'
 # Files of a data format that are not the game's, with their origin. Empty today; a new entry names where the file comes from.

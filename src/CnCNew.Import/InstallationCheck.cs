@@ -182,7 +182,7 @@ public static class InstallationInspector
         return new InstallationCheckResult(master, master.Files.Count, missing, changed, renamed, extra, harmlessFound);
     }
 
-    internal static string Physical(string root, string relativePath)
+    public static string Physical(string root, string relativePath)
         => Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
 
     // The source is only ever opened for reading, shared for reading.

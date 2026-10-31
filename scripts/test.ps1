@@ -229,7 +229,7 @@ $steps = @(
     New-Step 'diagnostics'  'Crash reports, run logs and support bundles of the client and the server: what they hold and what they never hold' (Script-Run 'check-diagnostics')
     New-Step 'client-package' 'The self-contained Windows package: layout, no original data, the packaged patcher and client run' (Script-Run 'check-client-package') -Content -Environment
     New-Step 'skins'        'The two interface skins: a person by script switches to the modern skin in the window and walks the shell; the readability of both skins with the GDI font' (Script-Run 'check-skins') -Content -Environment
-    New-Step 'patch-layer'  'The patch layer: its own compatibility baseline, a deterministic match, two layer clients on a server and an original client refused' (Script-Run 'check-patch-layer') -Content -Environment
+    New-Step 'patch-layer'  'The patched content: its compatibility baseline, a deterministic match, two clients on a server and a client of the game without the patch refused' (Script-Run 'check-patch-layer') -Content -Environment
     New-Step 'presentation-30'  'Presentation.Tests (real data, 30 Hz)'       ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '30') -Content
     New-Step 'presentation-120' 'Presentation.Tests (real data, 120 Hz)'      ((Test-Program 'Presentation') + '--' + $content + '--tick-rate' + '120') -Content
     New-Step 'game-30'      'Game.Tests (real data, 30 Hz)'                   ((Release-Run $gameTests) + $content + '--tick-rate' + '30') -Content -Release $gameTests

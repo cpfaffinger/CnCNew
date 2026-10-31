@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using CnCNew.Content;
 using CnCNew.Import;
 
 /// <summary>
@@ -56,45 +57,61 @@ internal static class InstallCommands
 
     public static async Task<int> InstallAsync(string gameDirectory, string targetDirectory, string[] options)
     {
-        if (!TryParse(options, ["--master"], [], out var values, out _)) return Usage();
+        if (!TryParse(options, ["--master", "--patch"], ["--original"], out var values, out var flags)) return Usage();
         var master = LoadMaster(values);
         if (Locate(gameDirectory, master) is not { } game) return Different;
         var watch = Stopwatch.StartNew();
-        var result = await GameInstaller.InstallAsync(game, targetDirectory, master, InstallSteps());
+        var patch = flags.Contains("--original") ? null : new PatchInstall(PatchMaster.LoadBuiltIn(), values.GetValueOrDefault("--patch"));
+        var result = await GameInstaller.InstallAsync(game, targetDirectory, master, InstallSteps(), patch: patch);
         return Report(result, watch);
     }
 
     /// <summary>
-    /// Imports the game directory with a community patch's layer above it into a content directory of its own (docs/PATCH-LAYER.md). The game directory must be
-    /// the master, as for an installation; the patch is read only. The result is a runtime content whose manifest names the layer.
+    /// Writes the description of the patch at a commit (docs/PATCH-LAYER.md): the layer's files as a checkout lists them, each taken as the blob of that commit, and the
+    /// export of the game with them. Used when the project moves to another commit of the patch.
     /// </summary>
-    public static async Task<int> ImportLayerAsync(string gameDirectory, string contentDirectory, string[] options)
+    public static async Task<int> DescribePatchAsync(string gameDirectory, string patchDirectory, string outputPath, string[] options)
     {
-        if (!TryParse(options, ["--master", "--patch", "--patch-source"], [], out var values, out _) || !values.TryGetValue("--patch", out var patch)) return Usage();
+        if (!TryParse(options, ["--master", "--repository", "--commit", "--directory"], [], out var values, out _) || !values.TryGetValue("--commit", out var commit)) return Usage();
         var master = LoadMaster(values);
-        if (Locate(gameDirectory, master) is not { } located) return Different;
-        var game = Path.GetFullPath(located);
-        var target = Path.GetFullPath(contentDirectory);
-        if (target.StartsWith(Path.TrimEndingDirectorySeparator(game) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || target.Equals(game, StringComparison.OrdinalIgnoreCase))
+        if (Locate(gameDirectory, master) is not { } game) return Different;
+        var repository = values.GetValueOrDefault("--repository") ?? "TheSuperHackers/GeneralsGamePatch";
+        var directory = values.GetValueOrDefault("--directory") ?? "Patch104pZH/" + GeneralsGamePatchLayer.EditedFolder;
+        var listed = GeneralsGamePatchLayer.Open(patchDirectory, "listing");
+        foreach (var (reason, count) in listed.Excluded) Console.WriteLine($"  not taken: {count,5}  {reason}");
+        using var client = new HttpClient();
+        var hollow = new PatchMaster(repository, commit, directory, new MasterExport("", "", 0, "", 0), []);
+        var folder = Directory.CreateTempSubdirectory("cncnew-patch-").FullName;
+        try
         {
-            Console.Error.WriteLine($"error: the target '{target}' lies in the game directory, which is never written to.");
-            return Failed;
+            var files = new List<MasterFile>();
+            foreach (var path in listed.Files.Keys)
+            {
+                var bytes = await client.GetByteArrayAsync(hollow.Address(path));
+                files.Add(new MasterFile(path, bytes.LongLength, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant()));
+                var physical = InstallationInspector.Physical(folder, path);
+                Directory.CreateDirectory(Path.GetDirectoryName(physical)!);
+                await File.WriteAllBytesAsync(physical, bytes);
+            }
+            var patch = hollow with { Files = files };
+            var layer = await new PatchFetcher(patch).FetchAsync(folder);
+            var described = await RuntimeContentImporter.DescribeAsync(game, new StepProgress<ImportProgress>("export (dry run)", value => (value.Processed, value.Total)), layer: layer);
+            var manifest = RuntimeManifestSerializer.WriteCanonical(described);
+            patch = patch with
+            {
+                ExpectedExport = new MasterExport(RuntimeContentImporter.ImporterName, RuntimeContentImporter.ImporterVersion, manifest.LongLength,
+                    Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(manifest)).ToLowerInvariant(), described.Assets.Count),
+            };
+            await File.WriteAllBytesAsync(Path.GetFullPath(outputPath), patch.Write());
+            var overlaid = described.Assets.Where(asset => asset.Origin.SelectedSource.StartsWith("overlay:", StringComparison.Ordinal)).ToArray();
+            Console.WriteLine($"Described {patch.Source}: {files.Count} files, {files.Sum(file => file.Bytes)} bytes; the export has {described.Assets.Count} runtime files, " +
+                              $"{overlaid.Count(asset => asset.Origin.Candidates.Count > 1)} replaced by the layer, {overlaid.Count(asset => asset.Origin.Candidates.Count == 1)} added by it; " +
+                              $"content manifest {manifest.LongLength} bytes, SHA-256 {patch.ExpectedExport.ContentManifestSha256}.");
         }
-        var watch = Stopwatch.StartNew();
-        var check = await InstallationInspector.CheckAsync(game, master, new StepProgress<InstallationCheckProgress>("check", value => (value.ProcessedFiles, value.TotalFiles)));
-        if (!check.IsIdentical)
+        finally
         {
-            Console.Write(check.FormatReport());
-            return Different;
+            Directory.Delete(folder, recursive: true);
         }
-        var layer = GeneralsGamePatchLayer.Open(patch, values.GetValueOrDefault("--patch-source") ?? "GeneralsGamePatch (Patch104pZH), source not stated");
-        Console.WriteLine($"Layer {layer.Name}: {layer.Files.Count} files from {layer.Source}; SHA-256 {layer.Fingerprint}.");
-        foreach (var (reason, count) in layer.Excluded) Console.WriteLine($"  not taken: {count,5}  {reason}");
-        var result = await RuntimeContentImporter.ImportAsync(game, target, new StepProgress<ImportProgress>("import", value => (value.Processed, value.Total)), layer: layer);
-        var replaced = result.Manifest.Assets.Count(asset => asset.Origin.SelectedSource.StartsWith("overlay:", StringComparison.Ordinal) && asset.Origin.Candidates.Count > 1);
-        var added = result.Manifest.Assets.Count(asset => asset.Origin.SelectedSource.StartsWith("overlay:", StringComparison.Ordinal) && asset.Origin.Candidates.Count == 1);
-        Console.WriteLine($"Imported {result.Manifest.Assets.Count} runtime files into {target}: {replaced} replaced by the layer, {added} added by it " +
-                          $"({watch.Elapsed.TotalSeconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)} s).");
         return 0;
     }
 
@@ -116,13 +133,14 @@ internal static class InstallCommands
 
     public static async Task<int> CheckExportAsync(string contentDirectory, string[] options)
     {
-        if (!TryParse(options, ["--master"], [], out var values, out _)) return Usage();
+        if (!TryParse(options, ["--master"], ["--original"], out var values, out var flags)) return Usage();
         var master = LoadMaster(values);
-        var problems = await GameInstaller.VerifyExportAsync(contentDirectory, master, InstallSteps());
+        var expected = flags.Contains("--original") ? master.ExpectedExport : PatchMaster.LoadBuiltIn().ExpectedExport;
+        var problems = await GameInstaller.VerifyExportAsync(contentDirectory, expected, InstallSteps());
         if (problems.Count == 0)
         {
-            Console.WriteLine($"The content is the known export of \"{master.Name}\": {master.ExpectedExport.RuntimeFileCount} runtime files, " +
-                              $"content manifest SHA-256 {master.ExpectedExport.ContentManifestSha256}.");
+            Console.WriteLine($"The content is the known export of \"{master.Name}\": {expected.RuntimeFileCount} runtime files, " +
+                              $"content manifest SHA-256 {expected.ContentManifestSha256}.");
             return 0;
         }
         Console.WriteLine($"The content is NOT the known export of \"{master.Name}\": {problems.Count} problem(s).");
@@ -149,9 +167,9 @@ internal static class InstallCommands
         Console.Error.WriteLine("  <game-directory> may be 'auto': the directory Steam knows for the game.");
         Console.Error.WriteLine("  CnCNew.AssetTool check-install <game-directory> [--master <steam-master.json>]");
         Console.Error.WriteLine("  CnCNew.AssetTool describe-install <game-directory> <out.json> [--name <name>] [--id <id>]");
-        Console.Error.WriteLine("  CnCNew.AssetTool install <game-directory> <target-directory> [--master <steam-master.json>]");
-        Console.Error.WriteLine("  CnCNew.AssetTool check-export <content-directory> [--master <steam-master.json>]");
-        Console.Error.WriteLine("  CnCNew.AssetTool import-layer <game-directory> <content-directory> --patch <Patch104pZH directory> [--patch-source <text>] [--master <steam-master.json>]");
+        Console.Error.WriteLine("  CnCNew.AssetTool install <game-directory> <target-directory> [--patch <GameFilesEdited directory>] [--original] [--master <steam-master.json>]");
+        Console.Error.WriteLine("  CnCNew.AssetTool check-export <content-directory> [--original] [--master <steam-master.json>]");
+        Console.Error.WriteLine("  CnCNew.AssetTool describe-patch <game-directory> <Patch104pZH directory> <out.json> --commit <commit> [--repository <owner/name>] [--directory <path>] [--master <steam-master.json>]");
         Console.Error.WriteLine("  CnCNew.AssetTool uninstall <target-directory> --yes");
     }
 

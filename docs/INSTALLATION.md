@@ -16,13 +16,16 @@ It does:
 
 1. find the Steam installation (or take `-GameDir`) and check it **file by file** against the checked-in
    master description `baselines/steam-master.json` (path, size, SHA-256);
-2. only on a complete match, export the runtime content to `<target>\content`
+2. only on a complete match, fetch the community patch GeneralsGamePatch from its public repository at the commit of
+   `baselines/patch-master.json` (600 files, 110 MB, each taken only with its recorded size and hash; **the network is needed
+   once**, `docs/PATCH-LAYER.md`) and make the runtime files of it;
+3. export the runtime content, the patch above the game, to `<target>\content`
    (`RuntimeContentImporter`, schema 2): **no `.big` archive is taken over, every file lies individually in the
    directory**;
-3. check the export (every file against size and SHA-256 of the manifest) and compare the generated
-   `content-manifest.json` with the one recorded in the master description (byte count,
+4. check the export (every file against size and SHA-256 of the manifest) and compare the generated
+   `content-manifest.json` with the one recorded in the patch description (byte count,
    SHA-256, file count) – "the export is exactly the known one" is a single comparison;
-4. write `<target>\install.json`, publish the client to `<target>\bin` and
+5. write `<target>\install.json`, publish the client to `<target>\bin` and
    create `<target>\Start-CnCNew.cmd`.
 
 It never does:
@@ -149,8 +152,9 @@ a later GUI can do without a repository path.
 ```powershell
 dotnet run -c Release --project tools/CnCNew.AssetTool -- check-install <game directory> [--master <json>]
 dotnet run -c Release --project tools/CnCNew.AssetTool -- describe-install <game directory> <out.json> [--name <name>] [--id <ID>]
-dotnet run -c Release --project tools/CnCNew.AssetTool -- install <game directory> <target> [--master <json>]
-dotnet run -c Release --project tools/CnCNew.AssetTool -- check-export <content directory> [--master <json>]
+dotnet run -c Release --project tools/CnCNew.AssetTool -- install <game directory> <target> [--patch <GameFilesEdited directory>] [--original] [--master <json>]
+dotnet run -c Release --project tools/CnCNew.AssetTool -- check-export <content directory> [--original] [--master <json>]
+dotnet run -c Release --project tools/CnCNew.AssetTool -- describe-patch <game directory> <Patch104pZH directory> baselines/patch-master.json --commit <commit>
 dotnet run -c Release --project tools/CnCNew.AssetTool -- uninstall <target> --yes
 ```
 
@@ -210,7 +214,7 @@ For players there is a package that needs neither the source code nor .NET: `pws
 | `Start-CnCNew.cmd` | starts the client with that content |
 | `README-FIRST.txt`, `LICENSE.md`, `NOTICE.md`, `THIRD-PARTY.md`, `licences\` | what it is, the licence, the third-party packages and their licence files |
 
-The package holds no file of the game: `scripts/check-client-package.ps1` compares every file with the 24,870 files of the master installation and its export, and
+The package holds no file of the game and none of the patch: `scripts/check-client-package.ps1` compares every file with the master installation, the patch's sources, the original export and the patched one, and
 runs the packaged patcher (`check-install auto`) and the packaged client (two smoke tests). Measured on 14 October 2026 on the development machine: 992 files,
 321 MB, no file of the game, the patcher found the installation at the default path and found it to be the master, both smoke tests ended with exit code 0.
 Not shown: a machine without .NET (this one has the SDK), a machine where Steam keeps the game in another library, and a person running it.

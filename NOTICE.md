@@ -9,6 +9,8 @@ a copy of the game the user already owns. The user's installation is only read i
 
 Copyright © 2026 Christopher Pfaffinger and the contributors of this repository.
 
+EA has not endorsed and does not support this product.
+
 ## 2. No game data
 
 This repository contains **no game data**: no original files, no archives, no texts,
@@ -17,7 +19,11 @@ of the game (exactly one source version is supported: the fresh English Steam in
 `docs/INSTALLATION.md`). The rights to the game data lie with Electronic Arts Inc.; this licence does not extend
 to them.
 
-The only things about the game that are checked in are metadata needed for checking: paths, sizes, counts and
+The installation also fetches the community patch GeneralsGamePatch (TheSuperHackers, GPL-3.0, with the terms of Electronic
+Arts in its `TERMS.txt`) from its public repository at a recorded commit and lays it above the game on the user's machine; neither
+this repository nor a package holds a file of it (`docs/PATCH-LAYER.md`).
+
+The only things about the game and the patch that are checked in are metadata needed for checking: paths, sizes, counts and
 SHA-256 checksums of files (`baselines/`) as well as identifiers that the data itself prescribes (names of objects,
 modules, fields, maps). Test fixtures are synthetic; they use individual `key = value` lines in the
 syntax and with identifiers of the game data, but no excerpts from original files.

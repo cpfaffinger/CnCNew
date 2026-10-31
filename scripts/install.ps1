@@ -4,9 +4,11 @@
 
 .DESCRIPTION
   The Steam installation is only read, never changed. It must be exactly the known master version (a fresh English Steam installation,
-  baselines/steam-master.json); anything else is refused with a list of the differences. Everything is written below -Target:
+  baselines/steam-master.json); anything else is refused with a list of the differences. Above it lies the community patch GeneralsGamePatch at the commit of
+  baselines/patch-master.json: its files are fetched from that commit (36 MB; the network is needed once) and each is taken only with its recorded hash
+  (docs/PATCH-LAYER.md). Everything is written below -Target:
 
-    <Target>\content          the runtime content exported from the game (plain files, no .big archive)
+    <Target>\content          the runtime content: the game's files with the patch above them (plain files, no .big archive)
     <Target>\install.json     what the installation was made from
     <Target>\bin              the published client
     <Target>\Start-CnCNew.cmd starts the client with this content
@@ -31,7 +33,13 @@ param(
     [switch]$SkipClient,
 
     # Content and install record only: no client, no start script (the developer installation, see dev-content.ps1).
-    [switch]$ContentOnly
+    [switch]$ContentOnly,
+
+    # A checkout of the patch (its GameFilesEdited directory): files found there are not fetched.
+    [string]$PatchDir,
+
+    # The game without the patch: what tells a defect of the patch from one of the port, and what the audits compare with (dev-content.ps1).
+    [switch]$Original
 )
 
 $ErrorActionPreference = 'Stop'
@@ -89,7 +97,10 @@ if ($LASTEXITCODE -ne 0) { throw "Building the asset tool failed (exit code $LAS
 $tool = Join-Path $repo 'tools\CnCNew.AssetTool\bin\Release\net10.0\CnCNew.AssetTool.dll'
 
 Write-Host "== Checking the game and exporting its content ..." -ForegroundColor Cyan
-dotnet $tool install $GameDir $Target
+$installArguments = @()
+if ($PatchDir) { $installArguments += '--patch', $PatchDir }
+if ($Original) { $installArguments += '--original' }
+dotnet $tool install $GameDir $Target @installArguments
 $installExit = $LASTEXITCODE
 if ($installExit -ne 0) {
     Write-Host "The installation was not created (exit code $installExit; 1 = the game directory is not the required version, 2 = refused target or error)." -ForegroundColor Red

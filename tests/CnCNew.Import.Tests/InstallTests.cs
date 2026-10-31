@@ -22,6 +22,7 @@ internal static class InstallTests
             await DifferencesAreNamed(game, master, root);
             await RefusedTargetsAreNotWritten(game, master, root);
             await InstallRepairAndUninstall(game, master, root);
+            await PatchIsFetchedChecked(game, master, root);
             BuiltInMasterLoads();
         }
         finally
@@ -207,12 +208,74 @@ internal static class InstallTests
         Assert(Snapshot(game).SequenceEqual(before), "The game directory changed.");
     }
 
+    // The patch's files come from a commit or a checkout (docs/PATCH-LAYER.md); whichever way, a file is taken only with its recorded size and hash.
+    private static async Task PatchIsFetchedChecked(string game, InstallationMaster master, string root)
+    {
+        var blob = "the patched text\nits second line\n"u8.ToArray();
+        var file = new MasterFile("alpha/lower.txt", blob.LongLength, Hex(blob));
+        var fetched = 0;
+        Task<byte[]> Serve(Uri address, CancellationToken cancellation)
+        {
+            Interlocked.Increment(ref fetched);
+            Assert(address.AbsoluteUri == "https://raw.githubusercontent.com/owner/patch/abc/edited/alpha/lower.txt", $"The file is asked for at {address}.");
+            return Task.FromResult(blob);
+        }
+
+        var hollow = new PatchMaster("owner/patch", "abc", "edited", master.ExpectedExport, [file]);
+        var layer = await new PatchFetcher(hollow, Serve).FetchAsync(Path.Combine(root, "patch-listing"));
+        var described = await RuntimeContentImporter.DescribeAsync(game, layer: layer);
+        var bytes = RuntimeManifestSerializer.WriteCanonical(described);
+        var patch = hollow with { ExpectedExport = new MasterExport(RuntimeContentImporter.ImporterName, RuntimeContentImporter.ImporterVersion, bytes.LongLength, Hex(bytes), described.Assets.Count) };
+        Assert(PatchMaster.Read(patch.Write()).Write().SequenceEqual(patch.Write()), "The patch description does not survive reading and writing.");
+        Throws<InvalidDataException>(() => PatchMaster.Read(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(patch.Write()).Replace("\"commit\"", "\"revision\"", StringComparison.Ordinal))), "a renamed property of the patch description");
+
+        fetched = 0;
+        var target = Path.Combine(root, "patched-install");
+        var installed = await GameInstaller.InstallAsync(game, target, master, patch: new PatchInstall(patch, Download: Serve));
+        Assert(installed.Outcome == InstallOutcome.Installed && fetched == 1, "The installation fetches the patch's file.");
+        var content = Path.Combine(target, GameInstaller.ContentDirectoryName);
+        Assert(File.ReadAllBytes(Path.Combine(content, "alpha", "lower.txt")).SequenceEqual(blob), "The patch's file is the content.");
+        Assert(!Directory.Exists(Path.Combine(target, GameInstaller.PatchDirectoryName)), "The patch's files are gone when the installation is verified.");
+        Assert(InstallRecord.TryRead(target)?.PatchSource == "owner/patch abc", "The record names the patch.");
+        Assert((await GameInstaller.VerifyExportAsync(content, patch.ExpectedExport)).Count == 0 && (await GameInstaller.VerifyExportAsync(content, master)).Count != 0, "The export is the patched one, not the plain one.");
+
+        var again = await GameInstaller.InstallAsync(game, target, master, patch: new PatchInstall(patch, Download: Serve));
+        Assert(again.Outcome == InstallOutcome.AlreadyComplete && fetched == 1, "An intact installation is verified without the network.");
+
+        // A checkout may hold CRLF where the blob has LF, and another text is never taken from it.
+        var checkout = Path.Combine(root, "patch-checkout", "alpha");
+        Directory.CreateDirectory(checkout);
+        File.WriteAllBytes(Path.Combine(checkout, "lower.txt"), Encoding.ASCII.GetBytes(Encoding.ASCII.GetString(blob).Replace("\n", "\r\n", StringComparison.Ordinal)));
+        File.Delete(Path.Combine(content, "alpha", "lower.txt"));
+        var repaired = await GameInstaller.InstallAsync(game, target, master, patch: new PatchInstall(patch, Path.Combine(root, "patch-checkout"), Serve));
+        Assert(repaired.Outcome == InstallOutcome.Repaired && fetched == 1 && File.ReadAllBytes(Path.Combine(content, "alpha", "lower.txt")).SequenceEqual(blob), "A checkout with CRLF gives the blob.");
+        File.WriteAllText(Path.Combine(checkout, "lower.txt"), "another text");
+        File.Delete(Path.Combine(content, "alpha", "lower.txt"));
+        await GameInstaller.InstallAsync(game, target, master, patch: new PatchInstall(patch, Path.Combine(root, "patch-checkout"), Serve));
+        Assert(fetched == 2, "A checkout with another text is passed over for the commit.");
+
+        // A file that is not the recorded one ends the installation, and the installation stays unverified.
+        var refused = Path.Combine(root, "patched-refused");
+        await ThrowsAsync<InvalidDataException>(() => GameInstaller.InstallAsync(game, refused, master, patch: new PatchInstall(patch, Download: (_, _) => Task.FromResult(new byte[] { 1, 2, 3 }))), "a tampered patch file");
+        Assert(InstallRecord.TryRead(refused)?.Verified == false, "A refused patch leaves no verified installation.");
+
+        // A directory of the time before the patch is ours: the next installation brings it up to the patched content.
+        var before = Path.Combine(root, "patched-schema-1");
+        await GameInstaller.InstallAsync(game, before, master);
+        var record = File.ReadAllText(Path.Combine(before, InstallRecord.FileName));
+        File.WriteAllText(Path.Combine(before, InstallRecord.FileName), record.Replace("\"schemaVersion\": 2", "\"schemaVersion\": 1", StringComparison.Ordinal).Replace(",\n  \"patchSource\": \"\"", "", StringComparison.Ordinal));
+        Assert(InstallRecord.TryRead(before) is { PatchSource: "" }, "A record of schema 1 is read.");
+        Assert((await GameInstaller.InstallAsync(game, before, master, patch: new PatchInstall(patch, Download: Serve))).Outcome == InstallOutcome.Repaired, "It is brought up to the patched content.");
+    }
+
     private static void BuiltInMasterLoads()
     {
         var master = InstallationMaster.LoadBuiltIn();
         Assert(master.FileCount > 0 && master.SteamAppId > 0 && master.Name == InstallationMaster.DefaultName && master.HarmlessExtraFiles.Count == 0,
             "The built-in master description is not the expected one.");
         Assert(master.Files.Any(file => file.Path == InstallationInspector.SteamAppIdFile), "The built-in master lacks steam_appid.txt.");
+        var patch = PatchMaster.LoadBuiltIn();
+        Assert(patch.Files.Count > 0 && patch.Commit.Length == 40 && patch.ExpectedExport.RuntimeFileCount > master.ExpectedExport.RuntimeFileCount, "The built-in patch description is not the expected one.");
     }
 
     // Reads the real installation only: every file against the built-in description, and the dry-run export against the recorded manifest.

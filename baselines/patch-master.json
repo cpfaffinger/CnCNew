@@ -1,0 +1,3015 @@
+{
+  "schemaVersion": 1,
+  "repository": "TheSuperHackers/GeneralsGamePatch",
+  "commit": "6c7f40d6af6a4babb77a33a4502ec7656446c13e",
+  "directory": "Patch104pZH/GameFilesEdited",
+  "expectedExport": {
+    "importer": "CnCNew.RuntimeContentImporter",
+    "importerVersion": "2.0.0",
+    "contentManifestBytes": 27447222,
+    "contentManifestSha256": "280e5b6dd52d8c9ccaeac36cb9f45160219473393acc56871b4c8c6d9f121a17",
+    "runtimeFileCount": 25663
+  },
+  "files": [
+    {
+      "path": "Art/Textures/GenerateMip/atbarrslab_d.psd",
+      "bytes": 696887,
+      "sha256": "865ec6c805236510f000457fc448ef1561a7beef44ea6e55e27afbf9e00a5dfb"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atbarrslab_ds.psd",
+      "bytes": 640189,
+      "sha256": "6d0009aec59236c2640873bfa3732a0bfcadd61e2409e560b97537481a1eec76"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atbarrslab_e.psd",
+      "bytes": 730728,
+      "sha256": "25d0693b6b3179ca001e116ab3bae9bd1c97a37cb99ba699d333d1fc88e89ebc"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atbarrslab_es.psd",
+      "bytes": 641016,
+      "sha256": "bb076481e2c8831cd8b5d9b9676ae40adf193dd2d268df75e24574bd7c0591c3"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atbarrslab_s.psd",
+      "bytes": 691161,
+      "sha256": "5ed19171a8a0d03bfffc9918e78f806162529a10a9b8dc1d4f7ae515a98b95d3"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemblock02_e.psd",
+      "bytes": 325988,
+      "sha256": "ae590b2a88f0239d2c5570c5ffa424d14240cdc6d192dc4b9fb030444740c0b5"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemblock02_es.psd",
+      "bytes": 328346,
+      "sha256": "3995beb975adfe70fa36d054843eeb5bbb0d4970aa0ae11f59d4a87fdf38a2b6"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall01_d.psd",
+      "bytes": 355788,
+      "sha256": "c27bc7688bc4d41d9f09f516407aa63998a7d5005483e34e3c91c93012879b3a"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall01_ds.psd",
+      "bytes": 281256,
+      "sha256": "3a6dafd627f8c9dc79042978442293c2458f2afbd49b44eb5f14e3898352af4c"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall01_e.psd",
+      "bytes": 424595,
+      "sha256": "1633acdc0245dc9540e390d214358d1436eda855d8d14e124a87fe4b193aceed"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall01_es.psd",
+      "bytes": 279302,
+      "sha256": "9d18eeb7ad9ebabf26f1b1284503f6f8ea3cc6ffacd937e697d79c10872a63d5"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall02.psd",
+      "bytes": 203876,
+      "sha256": "a43035885ed816d73202d72b6f5b51f1fccf5c52bce372a5b5dcefa012c6852d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall02_d.psd",
+      "bytes": 283872,
+      "sha256": "f6bfd4c1c14d8e37ef9482632d1e7fea885c5b9b8c0878c30fbd6e37a2330443"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall02_ds.psd",
+      "bytes": 254843,
+      "sha256": "b627fb44fa99b948f30d1dec9b3d70296a4418ba50af7dc5994705362eb1307a"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall02_e.psd",
+      "bytes": 325256,
+      "sha256": "85830f27b97679cf8556e32985e7f71558a965c41f32439a27e0e2a3749bafde"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall02_es.psd",
+      "bytes": 254419,
+      "sha256": "3c0ddd179b75aca499f26df228704c71980f36a12dd8c873b3b71f5de9dd7f71"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall02_s.psd",
+      "bytes": 207668,
+      "sha256": "b272aa56944d052e323e2546fb78be865316fd6d59f053aa6f0cf173ab8d63e8"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall03_d.psd",
+      "bytes": 56492,
+      "sha256": "f114265d3dabe8a19b77f8950fe008db567bdfeac53332e7b39e7355d684e875"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall03_e.psd",
+      "bytes": 62152,
+      "sha256": "aea3470c3883df394624253e59dead19ef5afc63d229da8c79086817d906f157"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall04_d.psd",
+      "bytes": 99154,
+      "sha256": "3fedc847ca50e8c25eba09723173bb1fa90cab94de666a0d08108731ddcc14a9"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall04_ds.psd",
+      "bytes": 99103,
+      "sha256": "973d5d1243b350cffa33a01ee91fe79fe3a5979c429eff7d2f62f745c6b5d0f5"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall04_e.psd",
+      "bytes": 118072,
+      "sha256": "6f7b17d06b7b9f4876216a26d2f4601af87e62428d49d07d581b0552e3e5016f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall04_es.psd",
+      "bytes": 99158,
+      "sha256": "83eab82c4353841f48cf2745d530a18d11d5455ee276107a676539f33f41da13"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall04_s.psd",
+      "bytes": 70346,
+      "sha256": "57b8282029f6dc3dbd71485cbea67d272d3175cbb8d3b48817b677591d57b16a"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall05.psd",
+      "bytes": 74683,
+      "sha256": "ebf6227238dd38ce23c201a815db2bf4fe86536ed532f651d7a07a7bd3139710"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall05_d.psd",
+      "bytes": 100824,
+      "sha256": "34142f682676a0eb2b689fb5bcaa09f3c41fb9cd8c20b9cf02e4b4a8a4d08422"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall05_ds.psd",
+      "bytes": 99626,
+      "sha256": "f694b47bf4762ff591a7ed35fb12ac2a97a5b91b4cb779256523ba6179bc2378"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall05_e.psd",
+      "bytes": 71258,
+      "sha256": "c88c6bd16b5a3746525195895da34bd11cb51626cbfeb4d32a7abfcbb7d871d4"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall05_es.psd",
+      "bytes": 97652,
+      "sha256": "859d56ebf266ad68c2503604aed099b8ece4676a36d639703ddb96c2e1914a6d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atcemwall05_s.psd",
+      "bytes": 99282,
+      "sha256": "8bc2e06ff59707acdcef113979290e871012ab87e1b38cd716fca0c074c32e38"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atconvey01_ds.psd",
+      "bytes": 101927,
+      "sha256": "e49333fb600041921053ce7c9b69cd8404f0f9c323c2dcd824d4cb26137d3593"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atconvey01_es.psd",
+      "bytes": 102212,
+      "sha256": "f9dc5e71043a0291459b7e3e4978a829558eeb47efb452a508329eba63f43ab9"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atconvey01_s.psd",
+      "bytes": 124603,
+      "sha256": "3247f033f5f88d1c0e700268dfae8772a71bdb44cce4372f83238e2aaf007022"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atconvey02_e.psd",
+      "bytes": 83360,
+      "sha256": "7b0b9ef625e598ea4610e94d32c507ab2152d44d2b3ad56a0042f3502dee3bdd"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdiaplate.psd",
+      "bytes": 45012,
+      "sha256": "0fc29131d47bfe6f79b9ee08e1f2f848699a41883475bec2067b286666812d51"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdiaplate_d.psd",
+      "bytes": 45462,
+      "sha256": "ffd03d1125c725794122e73486661ab73e40d5c10ba04094a63cfacac2da7b3c"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdiaplate_ds.psd",
+      "bytes": 63382,
+      "sha256": "11a6ed48e5b18db94f0db30d9424e595d16f61ee200607bef1dfcafc124796de"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdiaplate_e.psd",
+      "bytes": 55126,
+      "sha256": "e434e50087309761e71b42a02d36b8f413ac9b38bb43ab50203b0e11816a6565"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdiaplate_es.psd",
+      "bytes": 63348,
+      "sha256": "da04ed076a2de8f9d3b80eeb8b5babbf28475d74dc35a0ed2e5d3e77129002e2"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdiaplate_s.psd",
+      "bytes": 63686,
+      "sha256": "eb1d549219d14e63a0168a0ad54e35f0768e932f6dc004752c7452f7d2472397"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdoor_ds.psd",
+      "bytes": 61874,
+      "sha256": "1b4b3d6993fb96141cb5f8996b6040533f8b1971456f09b57c001e93d21d4f74"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdoor_s.psd",
+      "bytes": 60306,
+      "sha256": "2eea2b2630aca83b3b2bfcf712a7e0865ca69fdad1a9cdead0a90f28780f077c"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdriveway.psd",
+      "bytes": 117130,
+      "sha256": "712d563c1b4a959c334a8a3d6ca8caab22f787ca9cd6a71f96cb0259ce002a35"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdriveway_d.psd",
+      "bytes": 154644,
+      "sha256": "2bb61a34346fef88f4f659fe905522701f269a567066db6c3491c0c85f3dd97a"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdriveway_ds.psd",
+      "bytes": 178742,
+      "sha256": "f1c08055ed6ae6027a09955b27a0e22fa8f41011a3d7a9af9b3ef713871a6301"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdriveway_e.psd",
+      "bytes": 237426,
+      "sha256": "b8c00feeaf4819fdcac40e022f021974be8ab61454eee7c7f189c7b15d48f8f7"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdriveway_es.psd",
+      "bytes": 180202,
+      "sha256": "e1d86d319b093d9b06268cd0e10eead734804b823e84ce48b189c8bda0771af5"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atdriveway_s.psd",
+      "bytes": 239370,
+      "sha256": "bf85e38079749900ea4e064aedf0c7f695e959cc1d1e00d42bf3e3ed4e31f747"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/athqslab_d.psd",
+      "bytes": 672201,
+      "sha256": "882bd44f5a24c29c852ec111122c601d781388f8403ac66e075899f7164e24f7"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/athqslab_ds.psd",
+      "bytes": 660900,
+      "sha256": "d0a63df476cbd2edceb6349f9938e9c1e0b1936864ad7b4a6065dba3175f87a1"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/athqslab_e.psd",
+      "bytes": 1000184,
+      "sha256": "19fbad5bc224931a65ea36b428270ff893bc7a22da6436f288781ed16fde4edb"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/athqslab_es.psd",
+      "bytes": 658268,
+      "sha256": "6fc3c3a4700be87fe771a1468fc18dce51073107317552b011c3682507222c5d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atmetal02_d.psd",
+      "bytes": 161078,
+      "sha256": "c756005b59d3cfda7964f12dc4ec1fb067bc7d02e4622d33edd4fcef8ba2985f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atmetal02_ds.psd",
+      "bytes": 168544,
+      "sha256": "b72352cf2d0ac4d4e1c2e0158321f2a6e899ab997b47cd7542e93f2e522c9b48"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atmetal02_e.psd",
+      "bytes": 184334,
+      "sha256": "cbba12f3d156bc35f0d0844d4776a35e4c1d606d44b2d2cc61ca09b84b22ca90"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atmetal02_es.psd",
+      "bytes": 169046,
+      "sha256": "013c7fe0238b442a5ccfff1a760be86d6181439c1015c1e47b3afa7e7ecfd88f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atmetal02_s.psd",
+      "bytes": 332228,
+      "sha256": "745dfc0587cccd31db5a78c5b17af2a6711c6826c90f1376270c5e5793a2db88"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atmetal03_s.psd",
+      "bytes": 197067,
+      "sha256": "169f1cbf9c4af3acad077dcaba45f37e74ebf9b37e18da8c1e368d07fccfebfc"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atpanelroof3_ds.psd",
+      "bytes": 131514,
+      "sha256": "6ed8dfb91385c458165fa7f47d721e2caf1e27e0283e2c911fe1bbedf5a3f432"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atpanelroof_d.psd",
+      "bytes": 391140,
+      "sha256": "d8c8ffbd2a51a8d32d6f5869cdfb3e2f3245170ebcfc2f1e5e1a1e2a9eb6a8ef"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atpanelroof_ds.psd",
+      "bytes": 626632,
+      "sha256": "010a0eee3cc7cf4399abaa5b304ddc4f3e846e917098163100badb68ef95e08c"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atpanelroof_e.psd",
+      "bytes": 902781,
+      "sha256": "ae13d9289747ba61249b51f5b549703c148c3027765cdf03cb28f0a7594c4ce0"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atpanelroof_es.psd",
+      "bytes": 655908,
+      "sha256": "d8f2d3e54033ab03d4ddbae910ffccaaa75d68e04c806525ba93086a9f354619"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atpanelroof_s.psd",
+      "bytes": 521689,
+      "sha256": "4d12dddbabf945e1e7b7d37f635fdd0c1e4e69435302c3f82f2c854e7f2cf34e"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atprisslab_ds.psd",
+      "bytes": 629631,
+      "sha256": "666dd943078ec700c8dcb519a9538461cf86deb9ae7995b553c83da2d21f0c74"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atprisslab_es.psd",
+      "bytes": 635370,
+      "sha256": "823f067138482914661fb9d3829f82dd4fdc131c8b3224a81f90ca5008e97d7d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atprisslab_s.psd",
+      "bytes": 523081,
+      "sha256": "86655e13e1cc800ef858cfed2d7a0ec2a6ae31ece3f63d8ef05aa6466b1ff138"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atrepairbay_d.psd",
+      "bytes": 168008,
+      "sha256": "d1a337f9a8d2573fcf28c6ea1c87d807a54c8c3d7989be249e5aae975eecb0bd"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atrepairbay_ds.psd",
+      "bytes": 177678,
+      "sha256": "a0804746e606dcfc1b774fe454dffaea1f1c8e012221cba39bf7f095a454addd"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atrepairbay_e.psd",
+      "bytes": 233747,
+      "sha256": "250d1074a27628d357df7c29c96ffd072d492f7088d024933b05ab5f215e3217"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atrepairbay_es.psd",
+      "bytes": 178364,
+      "sha256": "dfd9a52eb40c2dbda3f93c2be4debff8ba2df38d29966a3f81731d043d8233c5"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atrepairbay_s.psd",
+      "bytes": 238700,
+      "sha256": "8335a768c4fa1e3ac80b40bb81703993a884ad6d9a3f7758fb8017d74f50078a"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atroofparts01_d.psd",
+      "bytes": 423132,
+      "sha256": "58effa445f558783512b59c6097854988b8553aefa19968228b96b233981bb8b"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atroofparts01_ds.psd",
+      "bytes": 549477,
+      "sha256": "dd86d6cd91ac54c08ede73f6dbbd28ee2cb3b9dfc941acd5249eb900635504ac"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atroofparts01_e.psd",
+      "bytes": 517136,
+      "sha256": "0fc30d4a72289f459ae9e41d7abdcb6dd99c6ae3079eec27cc6958d2bd43a076"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atroofparts01_es.psd",
+      "bytes": 599759,
+      "sha256": "b0956ecfe377a8cd5d206f2628d67367b0de1a604cafe5015387232cc02354b5"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atroofparts01_s.psd",
+      "bytes": 659035,
+      "sha256": "0f5e931f9ee341697e0e5dc69c8a6c2420d39588ed344a107a147877ca40c3de"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsdislab_ds.psd",
+      "bytes": 510075,
+      "sha256": "288302b425189f18d03e0282a1af259b54ae92b87603a9fbcabb2ea5a9026a45"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsdislab_es.psd",
+      "bytes": 533682,
+      "sha256": "c037af3719c0504e324bc82b20db51a67d65afd7873e09814c80e114237f3cf9"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof.psd",
+      "bytes": 82383,
+      "sha256": "2290ed6a44034b5bb5d7715a6ae174576787db72d3a8f879f9b1518fb8425d7d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof02_d.psd",
+      "bytes": 34443,
+      "sha256": "c3fe76d246e55c5530a2000141ed13a6392142dd93cf3b17bfb6e3d60b56b1bc"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof02_ds.psd",
+      "bytes": 40802,
+      "sha256": "6a9f094d0b1a111250af39d3e7a485b2e45b0e8fcc065ed14d4b38f36bf237cc"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof02_e.psd",
+      "bytes": 44896,
+      "sha256": "4f698b7ab7890862b34539529d307e39a507e3b9cd0c31b6c6d5fcb83bfa5e09"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof02_es.psd",
+      "bytes": 41892,
+      "sha256": "f117c884ab9fc729c2a576024666ac31b83bab9876db8ff0d43de0748374d58e"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof_d.psd",
+      "bytes": 174736,
+      "sha256": "c9c15cfeb124746bf3b6f22b77759d01b65580ad6ef4052ddee6a0bb72013d2e"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof_ds.psd",
+      "bytes": 182050,
+      "sha256": "3ca17252779c0e93077e5dae51372ae6e1bb8400582338bdcce2205ff7af36af"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof_e.psd",
+      "bytes": 244168,
+      "sha256": "d28ccb11ea5080d829441c41e1eb38b0df311fd39fabd0ea0c2f69c4dbff4c6a"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof_es.psd",
+      "bytes": 180892,
+      "sha256": "48d9307147fe272486b5df9bd59610ab4931f840cf7b0eae10f609ec4b31f3fd"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atsilverroof_s.psd",
+      "bytes": 184278,
+      "sha256": "d1010481bce735795115cb4d7b359b65a1fda884f1087efba0e5ee73a328ca66"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atstratslab_ds.psd",
+      "bytes": 630522,
+      "sha256": "61a00eed560f39f4584b3856e488bd5d8f2893936bb845503038ff73bec8298b"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atstratslab_es.psd",
+      "bytes": 631628,
+      "sha256": "256cdec226285b71cc47c878284bd1e59804ad2005f3dda27e906b244e1dba92"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atstratslab_s.psd",
+      "bytes": 613133,
+      "sha256": "5e5c296be8be6e3e761d8beeb4d1a501aba63d5542264eb122c5b7f073f17a94"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/attarmack02_ds.psd",
+      "bytes": 743454,
+      "sha256": "b524dc55b20d8b60afb9fdeac26f4209d81ba28affec0ea05bad25ee3d34cf94"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/attarmack02_es.psd",
+      "bytes": 752389,
+      "sha256": "47e4ffa9630b686f47249b01aac2288221d06ce9328f39e84fc494ad897922c1"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/attarmack_ds.psd",
+      "bytes": 1167886,
+      "sha256": "919369deb4428463ec52cd5b1a9788dd17b7c061fd621d41ab35dab9f5091790"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/attarmack_es.psd",
+      "bytes": 1170317,
+      "sha256": "833ed0ea6986dfcff930e84e654d2485b444509d6bf9c42c4a8cbfd79dc592de"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/attarmack_s.psd",
+      "bytes": 1166741,
+      "sha256": "5dbc28c717a215316d2e7ac64c97c9122dce904a3672a8058847f88c22e62393"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atventwall01_ds.psd",
+      "bytes": 162289,
+      "sha256": "315f3ca71ab8c5d55d168b4a1d364e57e28cca14313997ea5f52fbf4c78a53b6"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atventwall01_e.psd",
+      "bytes": 177037,
+      "sha256": "baa2b1908e4f2d0721f13a1cf179b0d22baac886e88296dd88a624984fbb499b"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atventwall01_es.psd",
+      "bytes": 174229,
+      "sha256": "292c768a3a41ef01877ba1ab48e7c0d9547328fd467d48ccb7bb114a1b2c25cb"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atventwall02_d.psd",
+      "bytes": 46983,
+      "sha256": "3cd996eadde532e1662f81aa9b862844c2005eafd9f87cd7c47a6bf3693bf497"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atventwall02_e.psd",
+      "bytes": 55318,
+      "sha256": "0e6ebea66f699b1e3f9f35b6ca777322097731168f67a80cf88df661abc471a9"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atventwall03_d.psd",
+      "bytes": 68401,
+      "sha256": "86622f40f90c29e12802388ab85d5ca65e1d721ab29d81310a76b880897274cb"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atventwall03_e.psd",
+      "bytes": 107657,
+      "sha256": "a715050dcdf6604e6c1abe6907ef53224b9acb487738d4a3b4aee61c96c2e429"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atventwall04_d.psd",
+      "bytes": 81482,
+      "sha256": "a74f9921cb8ba18c5fbae148651d655854d104d3dfd154128d20ad26f45d8453"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atventwall04_e.psd",
+      "bytes": 117854,
+      "sha256": "af1682132fd20ea143f42777a185a3ab481e13f5f8dc23c8a13e41963411a84e"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atwarfactslab_d.psd",
+      "bytes": 465518,
+      "sha256": "d6a992ea0199c57fa7aeef6b6a47bd5734e87c1ac881c1651a6086db37eada6f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atwarfactslab_ds.psd",
+      "bytes": 632651,
+      "sha256": "cb68bfdc7f63ed4f3b7992a935b474e7ca99753642b9d366d33d3adb0ac63777"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atwarfactslab_e.psd",
+      "bytes": 666649,
+      "sha256": "f0ce3f969b505b9209b1fe530e336716802579435c084725fcdaea115e95dba0"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atwarfactslab_es.psd",
+      "bytes": 627491,
+      "sha256": "5ca0ca4c86cad8f6edd657a1316c64ddff77b8f474860ac8177881c788bc389f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/atwarfactslab_s.psd",
+      "bytes": 677180,
+      "sha256": "5e9c8898a62f71143c13ca39a503089a41ee12d81cb1ee6a1cc34db02c9e70f1"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avambulance.psd",
+      "bytes": 275833,
+      "sha256": "77bf7c4121dbbf973d58aad8b9281f3205bda9d194045259d8e9efc417b77a75"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avambulance_d.psd",
+      "bytes": 305136,
+      "sha256": "7c563e32b90c0246c68902691f6a2ffa166ffe50d4a0edde4d24892059f1557a"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avambulance_d1.psd",
+      "bytes": 327411,
+      "sha256": "9bb0d18db702d179ed9dfc2fa1744f7e504cadfb09b3bc20ad690c9792fa1b57"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avavnger.psd",
+      "bytes": 441754,
+      "sha256": "81caffc51b83b60a7db8fd47b241b4e8746152e36a575f11a89b7dc8634eaa34"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avavnger_d.psd",
+      "bytes": 500375,
+      "sha256": "acb4b5f3078651c5c3feb1f1618022af6f4213ac585ac46f22cec3de722a34d3"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avavnger_e.psd",
+      "bytes": 490652,
+      "sha256": "af5963618acbd96cc78f9298d4a8ded00c3a6ae063a3c2b1563678b6aa0e5105"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avcomanche.psd",
+      "bytes": 290001,
+      "sha256": "1991743e2bb20220ce83f007e863fa57a6e12ce4b1323e3128a9f749406d866f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avcomanche_d.psd",
+      "bytes": 467919,
+      "sha256": "fe77c48c9a78fbc138bd2105a81646fa6a0097fb7214b402bb92bac7748d6635"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avcomanche_d1.psd",
+      "bytes": 335884,
+      "sha256": "2e7b37136085c6eee24d4290620586254f28c431e7d54f235b92e90e783f1d75"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avraptor.psd",
+      "bytes": 163588,
+      "sha256": "cc6b1262a4f04a6fbbd1a4f6e1beb138841521a96c69da878e04fc8a8f8b3524"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avraptor_d.psd",
+      "bytes": 361359,
+      "sha256": "819315f62b2f90b894667d49ea22ae7d5d0c9b12200791efd720d4314c3bfaad"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avraptor_d1.psd",
+      "bytes": 529186,
+      "sha256": "fbf5fcfcb4ef965bc65e546ca12026e62c32d1f1b0ba46093badc032d86eb1bf"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avraptor_d1b.psd",
+      "bytes": 502261,
+      "sha256": "9635f1c4134a8f551c48f5962d46a87748d69bc1a47430c7e88c51c4d3a126d3"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avthunderbolt.psd",
+      "bytes": 309364,
+      "sha256": "798c04e697152ddf7b4c2de7261c48112390130baeb34555bba42d5559754f17"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avthunderbolt_d.psd",
+      "bytes": 589787,
+      "sha256": "b41704d7d655710f61a7c51c6a32c34d58c851062214ee7373ef675640c0def5"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/avthunderbolt_d1.psd",
+      "bytes": 405940,
+      "sha256": "e8f23d046558534d74798da687eab1f713db45a838c203d0bab24e3145c6cfee"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exanthraxstream.psd",
+      "bytes": 45189,
+      "sha256": "72faacd12e9e44f6a5021b55bf6402a0224d17873ce83e9e4620b82c7b62b5e7"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/excleanupstream.psd",
+      "bytes": 46629,
+      "sha256": "21cd72b46a06962cf968847b6fe4bb17523f28388f9541beb42e86fcb90814ce"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exdronetrack.psd",
+      "bytes": 20808,
+      "sha256": "10d3070c3f54eb7e2a20da02eb8af6b4a5be01f30181721d4f86151007bc0a97"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exhorde.psd",
+      "bytes": 33974,
+      "sha256": "b6b30845c22733b95e306a6c6ab0df82fa8abd173a622f5edc7954acdacc9bfc"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exhorde_up.psd",
+      "bytes": 62019,
+      "sha256": "90ac585c0c5e07f536111836abbdbcc1e844cb9cf2b75d952ee7c8828b80a695"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exhordec_up.psd",
+      "bytes": 85365,
+      "sha256": "b8521730e7c9c23edbe2a25da39f2f4ebeb79c272db7b88c56840d9978e6f65d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exlnzflar1.psd",
+      "bytes": 103461,
+      "sha256": "242aeeb342a5cf53f8d4537bd49fbd2b83d43102270b1f122b60aea2a67fdb34"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exlnzflar3.psd",
+      "bytes": 223662,
+      "sha256": "4d3a071f94419c4f6725f7fff1d3ff122bbb90d110fb8c974af8ad78f01b2181"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exlnzflar4.psd",
+      "bytes": 183420,
+      "sha256": "dcb8e5fed5b77fdb0b15f38fa912a28d09b7dcfb45c9115570580e5a8306e95d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exlnzflar5.psd",
+      "bytes": 181787,
+      "sha256": "9f55c0fbe06a1a506a2c633c109efb0e6f9cf4f0ec70c99c90d1606796d1755b"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exlnzflar6.psd",
+      "bytes": 148480,
+      "sha256": "c17186542cab42ad6042925d3d6df693e4c33479178f99b0cb28974e11071299"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exlnzflar8.psd",
+      "bytes": 277587,
+      "sha256": "7ae757bd667a040fc2173ee846843e55f47057d4c30cfef5c23fa25b3d663c68"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exsmokepuf2.psd",
+      "bytes": 373301,
+      "sha256": "e66f29184cfad20b146e3945b44bd8dc9fe3703a9c130a287437f36294fde904"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/extoxinstream.psd",
+      "bytes": 45117,
+      "sha256": "3c187d47a9225b224ccc03a7730171bb130c1de5b450710711b5debfc3463a6d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exwater05add.psd",
+      "bytes": 38960,
+      "sha256": "2a8176f2ac85f8085c3901a0e2ef4659c15e07430f199ae3ab7a0fdf357e14c4"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/exwater05add75.psd",
+      "bytes": 38946,
+      "sha256": "fcf04b922f5e4cae12ac1ef7d84e7aa1706c62c9e947c845d56f87a685ffbe81"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/nbptower_e.psd",
+      "bytes": 192747,
+      "sha256": "a310f9756d372af4a5532aa83d26ad6b4430e760beede70ec2a96cd2985c4c9c"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdoor04l.psd",
+      "bytes": 55942,
+      "sha256": "bf81f2ec53ab294c5c124b16a5e3f73bc6ab5f1346337fdc128b4d968f5718cd"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdoor04l_d.psd",
+      "bytes": 55938,
+      "sha256": "bdff810f2834961e2cfac30d7a2a7b508221f211b88f07048f3bdea84c001e0e"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdoor04l_ds.psd",
+      "bytes": 55950,
+      "sha256": "9261c3f91921ffc7e7c5177d780d198fb99dccf55efa20b47d0a6c6b547ce8c7"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdoor04l_s.psd",
+      "bytes": 55938,
+      "sha256": "da2ffddfba67193ec6fbf892f4fa4097e3aac637fe9dafbf450e03cc3e723ac7"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdrive02.psd",
+      "bytes": 93384,
+      "sha256": "def2ff5c3fc4ae3fe0d1e0d347a1c3f5da237097d81a2153f71290fd580b3f35"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdrive02_d.psd",
+      "bytes": 121108,
+      "sha256": "95cad9487de71f56f58c241dc83e6a322de2048c17d3bdd10d1f5c563a61604c"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdrive02_ds.psd",
+      "bytes": 125104,
+      "sha256": "37297374d17f22ed60f5c665619ba4bd6f86370a783deb1047ec91d8d613bc2b"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdrive02_e.psd",
+      "bytes": 125776,
+      "sha256": "2dc8c33dcdb24a74f0580891ad7eb3de6525749b8ed78114b11241f22df5b182"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdrive02_es.psd",
+      "bytes": 130236,
+      "sha256": "bd3438b177b5ed75d3d42e2f0c3909bb81adb0634e61883ce1ddcfde85f36d7a"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntdrive02_s.psd",
+      "bytes": 108550,
+      "sha256": "154d9c67bd0d3e8b3ab3360d85e96560e88baef1c252abaf897ffbc4035b17b3"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntentry_ds.psd",
+      "bytes": 132188,
+      "sha256": "67d12383a63116cddc64d9f6ab497e44b943a6016acf8b829e6225a90ede50b2"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntentry_es.psd",
+      "bytes": 134176,
+      "sha256": "bb2028a1d62b16af56581fbc20d6ccc619c8c24c7d50e66bf9ace70afe0d6d93"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntentry_s.psd",
+      "bytes": 94699,
+      "sha256": "a31a95f96b0decc69a7bb16e0c588590b0ae1c9f111783307ab830b573fc8901"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntpwrplantslab.psd",
+      "bytes": 788925,
+      "sha256": "1da14b2b81eef339405a57c97274fa6c131c95dd13a54c1eaccabfb70d8cfb98"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntpwrplantslab_d.psd",
+      "bytes": 1108598,
+      "sha256": "b6d82b3f48ed60f4dd08ec419249f420fef69153578f2b4493db2d3e8be51513"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntpwrplantslab_ds.psd",
+      "bytes": 1375314,
+      "sha256": "193e1de02d17613fc8a26aa39f0c40235d95dd0cdccb1c97eceb83b283935fb5"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntpwrplantslab_e.psd",
+      "bytes": 729314,
+      "sha256": "d60dc59d7f0e596df455e2c1806b24703636dade8f3761a69d2fc0bd3ce278b7"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntpwrplantslab_es.psd",
+      "bytes": 1696862,
+      "sha256": "157e11158e6f30dc9269babb7e1bdcd99bc019b148a15afe426bfb31962c1275"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntpwrplantslab_s.psd",
+      "bytes": 1057117,
+      "sha256": "693657feda6ba3b0844e1de52f98c1319dbea15d5c35d0154f29a8afd77c8e77"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntsuppbase_ds.psd",
+      "bytes": 629876,
+      "sha256": "55bfe7da90350c65e17d2086811c9ddd4ae291bb43cdbcbec6073581a1ae788f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntsuppbase_es.psd",
+      "bytes": 629397,
+      "sha256": "4dffef4b8ccaf3c4069731832cd36cad31c7218de0b54ce6fa3a0d9fa3096d9f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntsuppbase_s.psd",
+      "bytes": 624401,
+      "sha256": "18dce46f954792803514e3cd7e055b0e371f669c9307b1ed0bd96d4a8b3ecc8b"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntwalls01_ds.psd",
+      "bytes": 251868,
+      "sha256": "c1425e5208d31ab9382369ec72c5c349fe0f7f0917123acce981ddf003bceb5f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntwalls01_es.psd",
+      "bytes": 251891,
+      "sha256": "06b78f0a416862cc7154c33593e25f03ca3d85b45284882bb751d6a40b62a4df"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntwalls04_ds.psd",
+      "bytes": 278553,
+      "sha256": "c6646145063c13aae297563d578a31817e913fc4851806e90acb21101447acf9"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntwalls04_es.psd",
+      "bytes": 281691,
+      "sha256": "29c8489382a4d0672eeec6074ef4a14e6b32a1cff3d050dc187041a74efa4f31"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/ntwalls04_s.psd",
+      "bytes": 221418,
+      "sha256": "0282350a7c14be7a3863fe18a5ea6a734224fce31b85770483dfc3284e9aca9f"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/nvgatttank.psd",
+      "bytes": 303980,
+      "sha256": "567e22f3fa0fec89f67ba6ff661e0f921f55652619e980ca6210d51ca43daacd"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/nvgatttank_d.psd",
+      "bytes": 347307,
+      "sha256": "be518291774ddfbccec5730433e25b06b495832068604bc14317a96c51e24e24"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/nvgatttank_d1.psd",
+      "bytes": 528283,
+      "sha256": "891f344dc0e175a22d5cfc72198c23f5c569f11d576c80ee6a087858c74843df"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/pmtorch_d.tga",
+      "bytes": 12332,
+      "sha256": "96618767125339f6ac577fb4d0f0acf728d69c4599f8174dcbc408aad7c21ba2"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/pmtorch_ds.psd",
+      "bytes": 62188,
+      "sha256": "7be9f58ca1546567d9ef931bec05700370c54e6f044644c8cf427906c6e81c10"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/pmtorch_n.tga",
+      "bytes": 12332,
+      "sha256": "3f7683c6fee6a8c1687db7b73a7c6e53fb864d4e5ceb410fbf748a219ff2395d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/shadow.psd",
+      "bytes": 122754,
+      "sha256": "db6ab124518a98d9f97a0f053a18f0836335c3c8d99f654eb1852b2d5a5e46b8"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/shadowi.psd",
+      "bytes": 122518,
+      "sha256": "fd642cdf8cfd8244828b6e7cb169941fd89459df05549e6bf9d074d419755d3d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/trcobbroad.psd",
+      "bytes": 1378699,
+      "sha256": "9b8a36deb05bd75837cdc7d45012e7355705dbeaf77df7e008c49217573c2c10"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utcloth2_ds.psd",
+      "bytes": 187357,
+      "sha256": "9a195d648d986b27b4706051297c07702beb64e2fc45cb915a7a4485bb18d4ee"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utcloth2_es.psd",
+      "bytes": 186913,
+      "sha256": "4b43634dc499621f15852d3c808f49b0fa96f9e02ad3a82607cbb449217ef310"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utcloth2_r.psd",
+      "bytes": 256944,
+      "sha256": "a302487e294ab37f958abe571cf3e29807475b97b0c1426d4e13fe18fd4ad064"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utcloth2_s.psd",
+      "bytes": 235202,
+      "sha256": "476665238ac2e1f50965bdcb4716ce2c1b8b97816c358d64e1fcb9db8855ed3b"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utcloth_ds.psd",
+      "bytes": 98264,
+      "sha256": "53dc0292333987f45746bcf56c9fa81dd6b989ef014da27126259a381de331d5"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utcloth_e.psd",
+      "bytes": 72616,
+      "sha256": "e67fc4934af176e198d1a42bf8b8b1d3e5edc12ba17ec66c9e3be4b7ca284e12"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utcloth_es.psd",
+      "bytes": 102935,
+      "sha256": "c94a36a983df539886ec6c1f5abd0da1cb91f907ba0f08e93467b9e354ff11d3"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utcloth_s.psd",
+      "bytes": 101470,
+      "sha256": "468df079bfb49d1683b9f65a5e4e1ae5b246f3a97f1080df62d962071a0b6027"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utconcroof_d.psd",
+      "bytes": 239174,
+      "sha256": "d11c6927904f6a1f2fed92e41e602b4008766c8a301bd899b8959ad0f848517e"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utconcroof_e.psd",
+      "bytes": 175710,
+      "sha256": "9e03b1be58b5e680ceef32d46a41a42c52bb989b61d041bf2bc2edaa41aa285b"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utconcroof_es.tga",
+      "bytes": 49196,
+      "sha256": "c97dfbefb85632279f91e42296d66c16e38ce6faf986ec5d3fb5e3bc7ce188d8"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utscudparts02.psd",
+      "bytes": 250761,
+      "sha256": "1f464ef84649e3661a07e7ee0dbc0f3edc1c382c9204d2e55114a3a5c782de88"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utscudparts02_d.psd",
+      "bytes": 555739,
+      "sha256": "45a08fb7aaa4d8192a19c878d26de769c1c5448b937b2028f68d9d36d4d9b61b"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utscudparts02_ds.psd",
+      "bytes": 361779,
+      "sha256": "a87cf208b76ddae5cb5c9609ba3d51a2c7fc5ce7feaf2a271e80cae5bb1d07af"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utscudparts02_s.psd",
+      "bytes": 307915,
+      "sha256": "8243b426e896eabc9680eeb761362de2122c3ae32e3c0abc5929c4d1b61dfa44"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utscudslab_ds.psd",
+      "bytes": 641634,
+      "sha256": "bc0dcb235e150e48bdc835fb80f22e39f333f3eb073f0da8c1c89a32b3499661"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utscudslab_es.psd",
+      "bytes": 640348,
+      "sha256": "3989b3a031f806dc4a368d60a0d9b37ae096c92dd70494c09771025662d1a708"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utscudslab_s.psd",
+      "bytes": 417963,
+      "sha256": "0eb6a56e12140d10c77234050516f3bdd4f6dcf0f2484bdf78bf4e54e1a874d2"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utsilotop01.psd",
+      "bytes": 380979,
+      "sha256": "fd7f52660dbd1516fc22c4d997ef8bde22fa3e6d30542a3f0d55b166edc80f11"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utsilotop01_d.psd",
+      "bytes": 182980,
+      "sha256": "7f9835037d58562fc14e3e25ec6c76ce0a35b0e54e9db2647533a15af4282300"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utsilotop01_ds.psd",
+      "bytes": 186090,
+      "sha256": "653892cf68a1beacddbc8448590057be5bb14dad7e28748ce0d5c8c8e77eda4d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/utsilotop01_s.psd",
+      "bytes": 243115,
+      "sha256": "f854db3b3d3f508d1d35636bafd8656c20bcb762875bf3969b307af157815648"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/uvbattbus_d.psd",
+      "bytes": 308349,
+      "sha256": "7196055e2f3e52722fc2482cd3d6e0a6b2f01a464de3b1841a06b3d934e1112d"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/uvlitetank.psd",
+      "bytes": 377698,
+      "sha256": "b11006a803ec489ee397a752b0b7a07b7f5232af54410edaacdfe246eb5f5bc8"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/uvlitetank_d.psd",
+      "bytes": 455824,
+      "sha256": "0f0f692885a177fb41f093ecb71a761aa10a1550b3250653ee779eecf333e223"
+    },
+    {
+      "path": "Art/Textures/GenerateMip/uvlitetank_d1.psd",
+      "bytes": 480083,
+      "sha256": "809e2b56f841906182b53b22568b053f2fee17e5a84aa5e92e62282dcef725b1"
+    },
+    {
+      "path": "Art/Textures/GenerateTga/zhca_aihero2.psd",
+      "bytes": 54514,
+      "sha256": "5afb37cd463edc249c532e8b5ecf5dbc7ac5e001ddc62e49b481c95834934f7d"
+    },
+    {
+      "path": "Art/Textures/NoMip/exbinarystream32.psd",
+      "bytes": 92073,
+      "sha256": "971f99f400fbad87e443ff707abec8381ffa6ba900a4ebc2fbb018755cc9b989"
+    },
+    {
+      "path": "Art/Textures/SASWGParticleCannon.tga",
+      "bytes": 65580,
+      "sha256": "23a012ef1538dfa8343b1ea4dcb28246f20730ef1a47f1d6bf9b94425b61f779"
+    },
+    {
+      "path": "Art/Textures/SASWGParticleCannon_L.tga",
+      "bytes": 65580,
+      "sha256": "01069a5c5d7e0c8730a8947364c71f80b6238546d6e74669e93880711fa900b1"
+    },
+    {
+      "path": "Art/Textures/SAWarFactory.tga",
+      "bytes": 65580,
+      "sha256": "fc7d571bae18738da9af5161c08396b104c94353ad65c93ceaf770239460fec0"
+    },
+    {
+      "path": "Art/Textures/SNNukeBattlemaster.tga",
+      "bytes": 65580,
+      "sha256": "42d36137baa3b08ff4badb098435efd589da85be1274604d311898631f6722b1"
+    },
+    {
+      "path": "Art/Textures/SNNukeBattlemaster_L.tga",
+      "bytes": 65580,
+      "sha256": "a3d9baca5c53a478ec5d90dd3a7fcac24b7d26e1d8e12df3818364e4a4925b5a"
+    },
+    {
+      "path": "Art/Textures/excontrail.dds",
+      "bytes": 1552,
+      "sha256": "5cdb3eb422eec55460636fa1984d90a11262378aa2b17a0699e2b44e90e6d7e4"
+    },
+    {
+      "path": "Art/Textures/exlaser3.dds",
+      "bytes": 312,
+      "sha256": "fd0a9f129260fcd74a7014de95ae30d250fa015c44f62fb46bdd84731bb11a2b"
+    },
+    {
+      "path": "Art/Textures/exlaser5.dds",
+      "bytes": 312,
+      "sha256": "82624009241d16bc5289cba2537e0166b119193d0d4fb7d43f75039bcedd9088"
+    },
+    {
+      "path": "Art/Textures/gxmammoth_co.tga",
+      "bytes": 196652,
+      "sha256": "d3529a0d5ae92b7eb5d1acfc16499306d3e991422303ec114073c4383dc53638"
+    },
+    {
+      "path": "Art/Textures/gxmammothalt_HI.tga",
+      "bytes": 196652,
+      "sha256": "85bc5c5c261a6439d5584525c92640327abe49f6ea532c81bbbb801da1b62c33"
+    },
+    {
+      "path": "Art/W3D/ABArFrcCmd_E.W3D",
+      "bytes": 119892,
+      "sha256": "6beb4024233c0d88b3724c770d1cb4df920e42d31e5a03c943820e1a5be5871f"
+    },
+    {
+      "path": "Art/W3D/ABBarracks_D.W3D",
+      "bytes": 84132,
+      "sha256": "c6350033715706e1fbd0ef495a574d6af352a80ff6964d8780e30ab0c761802b"
+    },
+    {
+      "path": "Art/W3D/ABBarracks_DN.W3D",
+      "bytes": 85389,
+      "sha256": "4dc2ec09ec5749127cbe429f1de965d74ac303bf7c02200bbcb2e7cb757d13ce"
+    },
+    {
+      "path": "Art/W3D/ABBarracks_DNS.W3D",
+      "bytes": 93543,
+      "sha256": "cef2d491781b10dbf3b6ad719a9da98fda22f50c76ea8ce1a2cc546c96890cd7"
+    },
+    {
+      "path": "Art/W3D/ABBarracks_DS.W3D",
+      "bytes": 84926,
+      "sha256": "70bd8b72022f82a6f1b2cfd1c5593f4f6f8f9c6084c4af98ac287f765305538a"
+    },
+    {
+      "path": "Art/W3D/ABLGCLink_L.W3D",
+      "bytes": 26259,
+      "sha256": "256d7adb9d88a4c74b01cbf52ac1156ac93567f6ee7161955aeba261fd3d8381"
+    },
+    {
+      "path": "Art/W3D/ABLaserTrt_DS.W3D",
+      "bytes": 43088,
+      "sha256": "f3eab0c57a111ad72a0c6e76a826e0b60b8c80c36db75946d82f43deb7920fc6"
+    },
+    {
+      "path": "Art/W3D/ABLaserTrt_ES.W3D",
+      "bytes": 43284,
+      "sha256": "ffb6951eb5f9d7012dc1ac83c54053851e4401820e9d5e1fafaaf616610c790c"
+    },
+    {
+      "path": "Art/W3D/ABLaserTrt_S.W3D",
+      "bytes": 42647,
+      "sha256": "5bdf5bd86c286e276e9143e8ef4f02acf809d819bfe20da7e3e9ff1dd518d407"
+    },
+    {
+      "path": "Art/W3D/ABNukeMissle.W3D",
+      "bytes": 9429,
+      "sha256": "c29888c5e91c84f927b392898515a79eb9301298eeace27e14a2ef57dd849fd3"
+    },
+    {
+      "path": "Art/W3D/ABNukeSilo_ROT.W3D",
+      "bytes": 472,
+      "sha256": "ef3e8b8a4f0f2b1fddb21e4b146bd5426cbb4bc275fa819e27470a081c33eef7"
+    },
+    {
+      "path": "Art/W3D/ABPrison_A7.W3D",
+      "bytes": 2797,
+      "sha256": "786c423bc2072adbab3550fa78a80f73cd2f531ba4458ab3f4006623abd05fc5"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant.W3D",
+      "bytes": 76628,
+      "sha256": "3f835b97d33e0d41a4d5f1ab79ba7c8f1fe9d8ab27162731ee50141042e43619"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_D.W3D",
+      "bytes": 75828,
+      "sha256": "4a5ebcf18e048bd0a3864ad4949d5caba5cff4b30aca5572f4b81a2e89b5e56a"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_DN.W3D",
+      "bytes": 81855,
+      "sha256": "84a708c4e6b917b1143f6f9f1da13ddadb014a5754d15522c8cbe6cfd94d7a7d"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_DNS.W3D",
+      "bytes": 81867,
+      "sha256": "0305fb2132d75324d29eaf5f20c69ab15487417c5c8754c9b75992a359ffe29d"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_DS.W3D",
+      "bytes": 79576,
+      "sha256": "fb8993c92ad12e67a870fa242e03780f9d1d45f4d8ca19c0f8b081da3016ff41"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_E.W3D",
+      "bytes": 72726,
+      "sha256": "91832588db80df8bede7bf296caf3288c76a5db3ba727b6733be6684480ac793"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_EN.W3D",
+      "bytes": 74518,
+      "sha256": "22db67a5850d5343ac17dd6bb72a79df1803cec39b3104894cde4db2aec9733f"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_ENS.W3D",
+      "bytes": 75091,
+      "sha256": "b3484b20251b2e4ada74dcf5a2f296160cd4ab22bdaca854fd31007b88160c62"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_ES.W3D",
+      "bytes": 75999,
+      "sha256": "aec6061ef5eef36d44da3e8f87c7facbdc8188eff903ed32688bcf8d6f73fbfc"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_N.W3D",
+      "bytes": 96514,
+      "sha256": "147d917eb9d7c802867b9ec4c5df470d566acaa3a269c6995664bc59fc62aaf6"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_NS.W3D",
+      "bytes": 97100,
+      "sha256": "7b6a5121b2368ddf304c1e5e87f9bb392e87dd7fb13eeeee4e43b413da2dce9d"
+    },
+    {
+      "path": "Art/W3D/ABPwrPlant_S.W3D",
+      "bytes": 74356,
+      "sha256": "46b4c614698cc490ada81ada07e2b9a2f1554982571e917971c1258d6947a694"
+    },
+    {
+      "path": "Art/W3D/ABSWGLink_L.W3D",
+      "bytes": 26258,
+      "sha256": "2246a5e61b5086a69000f861919268c4a45946e946a3b6f783fae96c1e918952"
+    },
+    {
+      "path": "Art/W3D/ABSupplyCT_A7.w3d",
+      "bytes": 29740,
+      "sha256": "22153f8ce4b2df649b86d79e626271314392551b6b79fddea2957184bcb48881"
+    },
+    {
+      "path": "Art/W3D/ABSupplyCT_A8.w3d",
+      "bytes": 16768,
+      "sha256": "588389b3be3eb13a4001f2a7f95a0f8b2e9ff4c137d97de07ba3a84e0510cf86"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW.W3D",
+      "bytes": 173394,
+      "sha256": "70e7012ae91e06f1252792a8e30da758340f0dd7786c9a86e11b5a65ff3cbefe"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_A1.W3D",
+      "bytes": 206586,
+      "sha256": "9e7bb7893b5caac66b222ec09113b68ad07a213c0a115dfd2522a550e7447584"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_A2.W3D",
+      "bytes": 211674,
+      "sha256": "866297c64ddf73f88323ab11e4b2611737b68825db4771a9c1791091fdf8acfa"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_A3.W3D",
+      "bytes": 269101,
+      "sha256": "99e8ceb9129b2e0847f75d5c0bb89b9384e03159b03b0c1d9b85783ba8df8629"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_D.W3D",
+      "bytes": 173788,
+      "sha256": "70373fe05f23542216ea2899ab30e7bde32ac70825a07656f6a4d5784a79bd96"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_DA1.W3D",
+      "bytes": 206980,
+      "sha256": "782f4df765deaedf5b66ecf27994db6edce8dfa0b296f5b91b07d3a7230cac59"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_DA2.W3D",
+      "bytes": 212068,
+      "sha256": "156a3d8628a4429b1a8b24d404b12c83f0ad7b94508e60b21628c5ba2dd61636"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_DA3.W3D",
+      "bytes": 367607,
+      "sha256": "633a40bbc7e1cfb1b15129a2c7dee39e80ca612c34794db0d657ddd2700d1380"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_E.W3D",
+      "bytes": 174436,
+      "sha256": "bffeac986fc22f63b07889a158470538e76dbc5486e909a66a9fe2786a923248"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_EA1.W3D",
+      "bytes": 207628,
+      "sha256": "18d003ef599c919441dfae54bd6f9894e3cd60a37573ff7f70357c826b8d575c"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_EA2.W3D",
+      "bytes": 212716,
+      "sha256": "932ce4b0d0fb159bdbc72568af1fda2e4c48d32c29f1019891f6cf129fc55b40"
+    },
+    {
+      "path": "Art/W3D/ABTmHkStmSW_EA3.W3D",
+      "bytes": 368255,
+      "sha256": "b8a18be58cda1f2366330fa5349b32be2068d7e058250df102cb924a73f41b45"
+    },
+    {
+      "path": "Art/W3D/ABWarFact_A8.W3D",
+      "bytes": 8619,
+      "sha256": "c156fe5ce5fb34584a1dfa70179754c74c062c796164b7821cb6b55f3c75f408"
+    },
+    {
+      "path": "Art/W3D/ABWarFact_A8D.W3D",
+      "bytes": 10113,
+      "sha256": "76e83a05f99fca50f12d84efde45c560f285f3c5de0de3421d2a5bb6af81bac8"
+    },
+    {
+      "path": "Art/W3D/ABWarFact_A8E.W3D",
+      "bytes": 10333,
+      "sha256": "186e25f58d72be747883aad8b3e57db9321516bae208926164d1ea0443a0a409"
+    },
+    {
+      "path": "Art/W3D/AIOFCR_ATA.W3D",
+      "bytes": 10512,
+      "sha256": "1db7045e9c65de268888cf75136109d504edb372e0a0f9c74fd307d12cff01c3"
+    },
+    {
+      "path": "Art/W3D/AVAvnger.W3D",
+      "bytes": 66238,
+      "sha256": "b173fafa0d1b4e44e0d3e4aee7fff7ee0822c49cc6e971a89f539de43bc6e66d"
+    },
+    {
+      "path": "Art/W3D/AVAvnger_D.W3D",
+      "bytes": 66703,
+      "sha256": "2dbc6c74a92f2b38b398071ac06be87c642813cd077f8913d7676fea2f7e96b5"
+    },
+    {
+      "path": "Art/W3D/AVSentry.W3D",
+      "bytes": 56093,
+      "sha256": "fe569187031761a26ede001ed3542d9b19098b25409faf42591bd6b07a5a4940"
+    },
+    {
+      "path": "Art/W3D/AVSentry_D.W3D",
+      "bytes": 56437,
+      "sha256": "8ca8b15c38dff715ce565cd853701799bc207059350cf84d93797f8c122de974"
+    },
+    {
+      "path": "Art/W3D/EXCarptBmb.W3D",
+      "bytes": 4860,
+      "sha256": "ce1ecba26add7c5c40234e7b2387a5c5b72d3a84b4a67938482681cc2d03e522"
+    },
+    {
+      "path": "Art/W3D/EXCarptBmb2.W3D",
+      "bytes": 6617,
+      "sha256": "00014e423459f5ab524d4af107002def5ea9a1862698a247cf465f9bd8642547"
+    },
+    {
+      "path": "Art/W3D/NBBunkerI_FP.W3D",
+      "bytes": 2200,
+      "sha256": "bb83c775ad262b577fab4463e446e55907acb7e296d175ceeaafad0c6e64a073"
+    },
+    {
+      "path": "Art/W3D/NBBunker_FP.W3D",
+      "bytes": 1336,
+      "sha256": "a076af82e538e19b6f3d9834d6caf81a7acd998ec789155683509e5e53da2c8e"
+    },
+    {
+      "path": "Art/W3D/NBPCenter_E.W3D",
+      "bytes": 98387,
+      "sha256": "07bc65b1b0befaaa709a3987b354f31281a3a15e9552ca960d904c5255b0b8a0"
+    },
+    {
+      "path": "Art/W3D/NBPCenter_EN.W3D",
+      "bytes": 107451,
+      "sha256": "f6ea9d796fe3cd95ae82220c51fe232090033ccbe4fecb8b48749ea2a01b8eb1"
+    },
+    {
+      "path": "Art/W3D/NBPCenter_ENS.W3D",
+      "bytes": 106770,
+      "sha256": "cf779365a2911bacf6483ff00141eba91a8cd1b7f881245193594e851c6c3ff7"
+    },
+    {
+      "path": "Art/W3D/NBPCenter_ES.W3D",
+      "bytes": 97766,
+      "sha256": "45ac37a22acc720c0f6e908f6a7f77fb8617d088122e54bf916a1a1c474ff5ba"
+    },
+    {
+      "path": "Art/W3D/NBPTower_DNS.W3D",
+      "bytes": 52599,
+      "sha256": "82f5b664cbdf0901f9e5788e4eb9cabd65b127034cada9f86ea4248eac3fab2f"
+    },
+    {
+      "path": "Art/W3D/NBPTower_DS.W3D",
+      "bytes": 48338,
+      "sha256": "5607e5a0901a355200b2fa2ad979d5d5e4f6bdbf4ec5b2032481d01cc133e519"
+    },
+    {
+      "path": "Art/W3D/NBPTower_E.W3D",
+      "bytes": 48099,
+      "sha256": "947c2042b1907e11a5f25ea749cc43772370417cec6825ecd145d0dc6cc02ac9"
+    },
+    {
+      "path": "Art/W3D/NBPTower_EN.W3D",
+      "bytes": 48233,
+      "sha256": "ad544dd70296697f167964c43369ad79d8d23aa78d6404227131632eba870f79"
+    },
+    {
+      "path": "Art/W3D/NBPTower_ENS.W3D",
+      "bytes": 50357,
+      "sha256": "7175f5044efec1ef320c91c7721442fefd1596536cad762451b523cd912c17d7"
+    },
+    {
+      "path": "Art/W3D/NBPTower_ES.W3D",
+      "bytes": 50358,
+      "sha256": "a2ee690709362882c3deb09e4d8afcaf9f0f6d526d868aeca40bb06b0104dfdf"
+    },
+    {
+      "path": "Art/W3D/NBPTower_NS.W3D",
+      "bytes": 62302,
+      "sha256": "fe8be9737f979ecf494032f458fe7fabea392b5dbce79531d4a5d0866c47ac39"
+    },
+    {
+      "path": "Art/W3D/NBPTower_S.W3D",
+      "bytes": 54625,
+      "sha256": "91516e6fd5d1143c66f7e0d7976bb117c6123408044361276669eae4c6e9dc12"
+    },
+    {
+      "path": "Art/W3D/NBPwrPlant_E.W3D",
+      "bytes": 72808,
+      "sha256": "4b36ffd23c0bd4157545540a349d984d3d90f7934dc957b8c50a5732f704e9b5"
+    },
+    {
+      "path": "Art/W3D/NBPwrPlant_EN.W3D",
+      "bytes": 84519,
+      "sha256": "3a327801845905ed26ebe6f196bbbe1b83176db80efb7e52bf0b84561651c9fb"
+    },
+    {
+      "path": "Art/W3D/NBPwrPtI_E.W3D",
+      "bytes": 80796,
+      "sha256": "f480debd1624129ceab433d5c740ebdaf388233408294a30f5b493929fc38ba3"
+    },
+    {
+      "path": "Art/W3D/NBPwrPtI_EN.W3D",
+      "bytes": 92507,
+      "sha256": "4268f9089e20f63747f0a37da00a7495fe9c03f6c9e36a64b31f0a53d49ee714"
+    },
+    {
+      "path": "Art/W3D/NBWarFact_A8.W3D",
+      "bytes": 4722,
+      "sha256": "ab7579ce683d328b0fbc9ca249d4077c39fcc849be33dccc624d774835f21905"
+    },
+    {
+      "path": "Art/W3D/NBWarFact_A8D.W3D",
+      "bytes": 5566,
+      "sha256": "f030d714787c5946b31fd05e316feb694cf6ab2001407b56ae1f56bb394f942d"
+    },
+    {
+      "path": "Art/W3D/NBWarFact_A8E.W3D",
+      "bytes": 5982,
+      "sha256": "ccd8a3e7ac16c24e99880c83bd499954bad70e41c73bfdcf76bfaa6cd70ba00f"
+    },
+    {
+      "path": "Art/W3D/NIOFCR_ATA.W3D",
+      "bytes": 9120,
+      "sha256": "008eda3b44dd7569672d2526903009834e8c30125e2358611f270b94394587d1"
+    },
+    {
+      "path": "Art/W3D/NVGattTank.W3D",
+      "bytes": 39253,
+      "sha256": "ae02724ddfb18464683382b3b3d1e3c282648260b4f9efd08c357a95e3699820"
+    },
+    {
+      "path": "Art/W3D/NVHelixNG_D.W3D",
+      "bytes": 57294,
+      "sha256": "3819be2aad48e475312892f1ee1501aa9a4ff92867203c095fb80fb7b9d62ee1"
+    },
+    {
+      "path": "Art/W3D/NVHelix_D.W3D",
+      "bytes": 42080,
+      "sha256": "6184cef78646a7c9707eeeb7de0460b107550bc504dbb2a11506dd991db9d4f6"
+    },
+    {
+      "path": "Art/W3D/NVLOutpost.W3D",
+      "bytes": 31760,
+      "sha256": "11405d8516877ea38b91effe4632d10b89a8d99278dc0d8776d07872c6a22931"
+    },
+    {
+      "path": "Art/W3D/NVLOutpost_D.W3D",
+      "bytes": 32032,
+      "sha256": "2cb19bdc9dec977a596cc15e882b65afa79fa94f35f93bf4cfae9449d8e9771c"
+    },
+    {
+      "path": "Art/W3D/UBPalace_FP9.W3D",
+      "bytes": 1552,
+      "sha256": "97468c4d68272b0a0c2ea87d63312be4ec7ae29db8c566122d4a2a69947cf845"
+    },
+    {
+      "path": "Art/W3D/UBPalace_FPX.W3D",
+      "bytes": 2200,
+      "sha256": "51d6668adfc205ba91e4ece349946ace1643c5369d39812e08713ab1d83c2b00"
+    },
+    {
+      "path": "Art/W3D/UBScudStrm_DA3X.W3D",
+      "bytes": 417528,
+      "sha256": "0d2dd800b890acb334cde63110559f70a29d82586f01f08cf0c3f1840057c5c9"
+    },
+    {
+      "path": "Art/W3D/UBScudStrm_EA3X.W3D",
+      "bytes": 417659,
+      "sha256": "1bbe01696bbad91359d7bc1c768c463cbf8f1dc853ebc8b7e567a58bb3c7a108"
+    },
+    {
+      "path": "Art/W3D/UIWRKR_CLMUP.W3D",
+      "bytes": 27616,
+      "sha256": "dabaa95f23479298c18327c359116b05a2a2c6a7cf5115dd94f28cb97c701317"
+    },
+    {
+      "path": "Art/W3D/ZBSupplyDk_BS.W3D",
+      "bytes": 124204,
+      "sha256": "75191f4690c6c211720c6a4e5e43f341f0c7847aff439cbf9625635f1fb86bf7"
+    },
+    {
+      "path": "Data/Audio/Sounds/English/ecneutup.wav",
+      "bytes": 225512,
+      "sha256": "7e18cf39218ec9a7065147a45c2afa0c88259aa845e6d0460ce1d72cad963365"
+    },
+    {
+      "path": "Data/Audio/Sounds/English/ecsat1up.wav",
+      "bytes": 216782,
+      "sha256": "34c820e95de670f8fca64bd987d4b052539cbbd0e1b59fc1d9c8f6d0c4c6e79b"
+    },
+    {
+      "path": "Data/Audio/Sounds/English/ecsat2up.wav",
+      "bytes": 213454,
+      "sha256": "97d7f6a34af9525fdf3192b28b9ea11668babafb7f26dd3fd964f88646ee5a55"
+    },
+    {
+      "path": "Data/Audio/Sounds/English/eggardup.wav",
+      "bytes": 165188,
+      "sha256": "101a8c18708e90a17831d26c3e5f5669fc8a769d0b58b483cce671c6ee247fe5"
+    },
+    {
+      "path": "Data/Audio/Sounds/English/eumoaup.wav",
+      "bytes": 156130,
+      "sha256": "619cd035b55afcd1dadacea74d4b81f67ace3bdbabe42939469f3e6c9c47df62"
+    },
+    {
+      "path": "Data/Audio/Sounds/English/eusdrnup.wav",
+      "bytes": 180622,
+      "sha256": "53fc6db9dd81ea1d8e6c28e24e23305f1bc3d80023d293781343509015d5e986"
+    },
+    {
+      "path": "Data/Audio/Sounds/English/vbansec.wav",
+      "bytes": 60270,
+      "sha256": "fd7ae6c80437c6aae11a9a98aa9bcb112cd5ba3f7ea4ceebb293db08b64350a9"
+    },
+    {
+      "path": "Data/Audio/Sounds/English/vbansed.wav",
+      "bytes": 91240,
+      "sha256": "a224e3f4f2d80d420b33472bdf8b00bd4e9581299459dd3d152792cd2af93dbd"
+    },
+    {
+      "path": "Data/Audio/Sounds/English/vgatmod.wav",
+      "bytes": 52434,
+      "sha256": "49b46cd380eb44f7bfc5f3051ca2cd919a9511a01dddbe4a9a8ff60c49c655b0"
+    },
+    {
+      "path": "Data/Audio/Sounds/bneutlo2b.wav",
+      "bytes": 41022,
+      "sha256": "73a57899922de4b759d1a21b94d90164251c4c8cc9160bb797dbd8f3f65094fb"
+    },
+    {
+      "path": "Data/Audio/Sounds/gdemsela.wav",
+      "bytes": 85596,
+      "sha256": "bc8d4413d2d528140e515936889b41a8ce0d9b46d2a268d6cb72d51655d25281"
+    },
+    {
+      "path": "Data/Audio/Sounds/gexpdaia2.wav",
+      "bytes": 219218,
+      "sha256": "e5ece5a26d3b04bd7ee8591a6103f5cc5236b5a7e8316aa249adb39cca0c852c"
+    },
+    {
+      "path": "Data/Audio/Sounds/gfirlo2h.wav",
+      "bytes": 45776,
+      "sha256": "740a8a7e8cb213b709787ce7c26dacf44e86b8eec1059c509bad6fff2514bdea"
+    },
+    {
+      "path": "Data/Audio/Sounds/gfirlo2i.wav",
+      "bytes": 47810,
+      "sha256": "52062829956febfb7579a9f7e565f1b28ba739ac651f503742889d06fdb0cf1b"
+    },
+    {
+      "path": "Data/Audio/Sounds/gsparksa2.wav",
+      "bytes": 17646,
+      "sha256": "9ebae7d800a570475bd5e253187a9e53fd6f4f547efb9f9a2f2bf3e50f8b2aa8"
+    },
+    {
+      "path": "Data/Audio/Sounds/gsparksb2.wav",
+      "bytes": 23022,
+      "sha256": "a43397cdca8130ba32835614d77ed148a2bb8febc327adb2addcd05f9ea84670"
+    },
+    {
+      "path": "Data/Audio/Sounds/iranweaa2.wav",
+      "bytes": 84476,
+      "sha256": "74da9d6d4f4441270c647c5cf30d89efb7d475eccc96be994c8fde3518d7ebc2"
+    },
+    {
+      "path": "Data/Audio/Sounds/iranweab2.wav",
+      "bytes": 82542,
+      "sha256": "11ac3facf716703d60b715da4836cfb64f1b49013a4e2854964de238d234331c"
+    },
+    {
+      "path": "Data/Audio/Sounds/iranweac2.wav",
+      "bytes": 82298,
+      "sha256": "4c52de099875e12a41c1c7f9edc5f5d0fab7c4769c4dc88ec24e0047d275a606"
+    },
+    {
+      "path": "Data/Audio/Sounds/iranwead2.wav",
+      "bytes": 84476,
+      "sha256": "2bab2112f137883c239d1ecccdc236fd9f2966a950c79e615924b8cdcf714ab2"
+    },
+    {
+      "path": "Data/Audio/Sounds/iranweae2.wav",
+      "bytes": 82444,
+      "sha256": "94767666f233b78d613144641f0f0ebaef1043b65362da701371f60a21a9f42c"
+    },
+    {
+      "path": "Data/Audio/Sounds/vb52lo1b.wav",
+      "bytes": 49376,
+      "sha256": "0f62d366819db840bc696332f93be7905d162b861678a22ecc0fe495a6a86526"
+    },
+    {
+      "path": "Data/Cursors/SCCAttack7.ani",
+      "bytes": 20386,
+      "sha256": "3a5e09025689580e0bc4653362ec2463afb21afe650e0a642bb962a0ca581517"
+    },
+    {
+      "path": "Data/English/CommandMap.ini",
+      "bytes": 19059,
+      "sha256": "5f30044e5c6ddfe7e4ca1ebd636c9ffb7539903e33cbb5562d39ecb1a2ddb67a"
+    },
+    {
+      "path": "Data/English/HeaderTemplate.ini",
+      "bytes": 2512,
+      "sha256": "ea8af074cc261f223f78e566b1ee370e48d347eebd1b1e630b3c2c572286697f"
+    },
+    {
+      "path": "Data/English/Language.ini",
+      "bytes": 2572,
+      "sha256": "fc6fabbd7d806f7403bf17f0f16da1152028566b3c087ba2587a041e62ff42a9"
+    },
+    {
+      "path": "Data/INI/AIData.ini",
+      "bytes": 63,
+      "sha256": "0a80bdab54ac9c744720fd62684e7c30a11f03ad44f4a3d4901926584df49ad6"
+    },
+    {
+      "path": "Data/INI/Animation2D.ini",
+      "bytes": 11083,
+      "sha256": "196b1b7320bad306fb97dbc240e17a52ffa00adc3b8f3d2b018c7275d3aaa0ed"
+    },
+    {
+      "path": "Data/INI/Armor.ini",
+      "bytes": 61865,
+      "sha256": "05681a8afaab495d6ed972401e6817346af13451f4684a57749117bf522ef75f"
+    },
+    {
+      "path": "Data/INI/AudioSettings.ini",
+      "bytes": 4031,
+      "sha256": "96af5956ea6f1556a194afd0eb24c74c8961901bd51a0b70e743921a34a862b0"
+    },
+    {
+      "path": "Data/INI/Campaign.ini",
+      "bytes": 16393,
+      "sha256": "1f192f0ee384798e183fb0759010e3bf6d07e4ae56214efb3dd5bd6b698c434b"
+    },
+    {
+      "path": "Data/INI/ChallengeMode.ini",
+      "bytes": 12942,
+      "sha256": "efd016c9dbcc6bf298fe5efd85340a119cdc2977a72136f46c43caa70db68a5c"
+    },
+    {
+      "path": "Data/INI/CommandButton.ini",
+      "bytes": 383234,
+      "sha256": "7de01b02ab004228b7884378ccaa2e880341d2e6cd666295ba2f166fbf44d15f"
+    },
+    {
+      "path": "Data/INI/CommandMap.ini",
+      "bytes": 245,
+      "sha256": "6b3ffc68f2858cbf625734419906a174da9e31fd5ea315aa623e6ebb4ea11a97"
+    },
+    {
+      "path": "Data/INI/CommandMapDebug.ini",
+      "bytes": 12401,
+      "sha256": "58988af31b070e5826020b34d3413c8f3596e8fd5bd7bdb2c5c393d2c131a20f"
+    },
+    {
+      "path": "Data/INI/CommandMapDemo.ini",
+      "bytes": 2571,
+      "sha256": "0cb658ef552a496172e2048d0c0a9d1eb58c7536c1250eafa9d1c78bd8a955c7"
+    },
+    {
+      "path": "Data/INI/CommandSet.ini",
+      "bytes": 181818,
+      "sha256": "0481775a71eb31ab8cb8035bcb71398957dea628d05bab2530601f448d81315f"
+    },
+    {
+      "path": "Data/INI/ControlBarResizer.ini",
+      "bytes": 8968,
+      "sha256": "6e19e4957bd496e277ca08dffe425c25599deb75f28255631f2e91854c726303"
+    },
+    {
+      "path": "Data/INI/ControlBarScheme.ini",
+      "bytes": 35220,
+      "sha256": "6ab18e0e06ef8c6915b362f606f23e9209220fb608de175c1c6db58d6906e2bc"
+    },
+    {
+      "path": "Data/INI/Crate.ini",
+      "bytes": 19644,
+      "sha256": "cf33dc5b2f5a000db510aa8a34aa1a94e3bfd37ca317dd1562526b346a47bb8b"
+    },
+    {
+      "path": "Data/INI/Credits.ini",
+      "bytes": 18007,
+      "sha256": "7f21d0aea61071f4632e0a694c81097b8fc45e094afe4a131b8db1a0d23dba15"
+    },
+    {
+      "path": "Data/INI/DamageFX.ini",
+      "bytes": 20074,
+      "sha256": "e43d6878aed1b36384aaa8ee2e8326ac96dd153ff248aa476f6b1e4d39a1f46d"
+    },
+    {
+      "path": "Data/INI/Default/AIData.ini",
+      "bytes": 61208,
+      "sha256": "f42513566a058c63f85629ee58a8164e81089a71aa0c59ec8bc12b2d34f06d3d"
+    },
+    {
+      "path": "Data/INI/Default/ButtonSets.ini",
+      "bytes": 777,
+      "sha256": "5843f241123e892f2f7512221a8a128a0b344ddc86a76cd219f8666a2e7af0d8"
+    },
+    {
+      "path": "Data/INI/Default/CommandButton.ini",
+      "bytes": 268,
+      "sha256": "c4e07aac1beafd69e22e9c6a5f9d4ad1da06d95253f624391f4dd37972decaf1"
+    },
+    {
+      "path": "Data/INI/Default/ControlBarScheme.ini",
+      "bytes": 4455,
+      "sha256": "e472cee9d4910cf54e98ae0119b10172c31a1174aa80bf08897e2318ae6a2fdd"
+    },
+    {
+      "path": "Data/INI/Default/Crate.ini",
+      "bytes": 291,
+      "sha256": "2984c14a7f586be44c4790b33ade230d2211d5f6837815beb673acc36d637632"
+    },
+    {
+      "path": "Data/INI/Default/FXList.ini",
+      "bytes": 241,
+      "sha256": "50f8901de1bf516e51beb7ba92e6417dfbf8744b663b645102ab19b5a2525ba0"
+    },
+    {
+      "path": "Data/INI/Default/GameData.ini",
+      "bytes": 36,
+      "sha256": "54450dad300767e0a4db2fcb7361509f17bd14cc557ef867e39de65a4e0a9cb2"
+    },
+    {
+      "path": "Data/INI/Default/Music.ini",
+      "bytes": 349,
+      "sha256": "a954aab2681c64b5333c40265b2b516a9d9b199b2245bd147bd1a605ba7aba30"
+    },
+    {
+      "path": "Data/INI/Default/Object.ini",
+      "bytes": 5390,
+      "sha256": "d48f75b2448fb56f2f9e86c27bc05b212d8920ea8324dcc8c642548c14578494"
+    },
+    {
+      "path": "Data/INI/Default/ObjectCreationList.ini",
+      "bytes": 240,
+      "sha256": "7bc75ced23b4b29604b8673dd897d9ece745da8ba48eb353fa8519246761ff86"
+    },
+    {
+      "path": "Data/INI/Default/PlayerTemplate.ini",
+      "bytes": 236,
+      "sha256": "4f067ba44111fd7c4c74ab7e32988ef99934683c09f51e50c38216672903ebc8"
+    },
+    {
+      "path": "Data/INI/Default/Roads.ini",
+      "bytes": 453,
+      "sha256": "6ca063649b0db2afbb5ad6e3e203719fa0b205c868495ea4b61c0ef091bbb6c6"
+    },
+    {
+      "path": "Data/INI/Default/Science.ini",
+      "bytes": 242,
+      "sha256": "b7921499c958407d543d2343f586f9c748e60e6761d173abfdc8bfbf8f8c5e39"
+    },
+    {
+      "path": "Data/INI/Default/ShellMenuScheme.ini",
+      "bytes": 39,
+      "sha256": "0828d10120e1b76f76bc597edd2f38fe3a51c059473b27d2e63d6ea5ab69c5c4"
+    },
+    {
+      "path": "Data/INI/Default/SoundEffects.ini",
+      "bytes": 334,
+      "sha256": "7a534b8a2333f7eecb8a99a16a758da6dfe263dd254897ed6c4fffc7be5234e9"
+    },
+    {
+      "path": "Data/INI/Default/SpecialPower.ini",
+      "bytes": 441,
+      "sha256": "0f821a78a17301c23420eb20930d4a72cb26199a6086a8e539c63239ed182a57"
+    },
+    {
+      "path": "Data/INI/Default/Speech.ini",
+      "bytes": 92,
+      "sha256": "427678731663beb9e8b34a41fe76d61a3934df80c5c9b3d53e88d3b8649ce12d"
+    },
+    {
+      "path": "Data/INI/Default/Terrain.ini",
+      "bytes": 356,
+      "sha256": "b30a09d10636c004d87b6349607d4d1d251604fcd1d6f9b931b770372e52734e"
+    },
+    {
+      "path": "Data/INI/Default/Upgrade.ini",
+      "bytes": 402,
+      "sha256": "a583c1c03a1cf4a8664204887b9cb505b18378826c52b2cdf05a867408a8ee44"
+    },
+    {
+      "path": "Data/INI/Default/Video.ini",
+      "bytes": 206,
+      "sha256": "cd82a72341ac29c33252c74f96c23a2d7f4213f99f70bc41ab5ef87a6a01ed28"
+    },
+    {
+      "path": "Data/INI/Default/Voice.ini",
+      "bytes": 261,
+      "sha256": "3990d0ad883cb0e2fb86845752c662a1fdaf6d91024362a393b9512f85077d7e"
+    },
+    {
+      "path": "Data/INI/Default/Water.ini",
+      "bytes": 187,
+      "sha256": "bd4e799b5ccce5f0e9c639820f8286e5a0383d48c73bf5f48b362169ca455368"
+    },
+    {
+      "path": "Data/INI/Default/Weather.ini",
+      "bytes": 189,
+      "sha256": "02eaaf686eca5e7d6130134af8cc2207f3fdecdcd00f0176bfaa9022fad44597"
+    },
+    {
+      "path": "Data/INI/Default/Webpages.ini",
+      "bytes": 237,
+      "sha256": "b1a08cdfc28f6146a9e4f77f673551b7d2270992ce9adb518d6697796d20a6f8"
+    },
+    {
+      "path": "Data/INI/Default/multiplayer.ini",
+      "bytes": 266,
+      "sha256": "e9128cd6247bbdd1d6dae0823d5efe30823eb98ed0a6e8ff5d00fde0dc66902f"
+    },
+    {
+      "path": "Data/INI/DrawGroupInfo.ini",
+      "bytes": 378,
+      "sha256": "d554a9a076591108aea145a6746b9d62142233e826b7e3039ac0c908d73c849b"
+    },
+    {
+      "path": "Data/INI/Eva.ini",
+      "bytes": 65637,
+      "sha256": "d6cdc7c60a3a91ec943e05bfa7c18754f9ce57ff5776597d667cd626565d6c25"
+    },
+    {
+      "path": "Data/INI/FXList.ini",
+      "bytes": 218100,
+      "sha256": "24dba001b44115c547cc7dfdd59b5718a2af9f75d017304ad19de8a4d3492490"
+    },
+    {
+      "path": "Data/INI/GameData.ini",
+      "bytes": 20779,
+      "sha256": "1d86fad288a401ead7da421d1b2acc91ab4de227a2c59547e5aea6cc9b4eae5a"
+    },
+    {
+      "path": "Data/INI/GameDataDebug.ini",
+      "bytes": 1741,
+      "sha256": "4142adc340d8ee9c5e12668763d5ba2945a0cfcacee24f2966c27bff631c5891"
+    },
+    {
+      "path": "Data/INI/GameLOD.ini",
+      "bytes": 6977,
+      "sha256": "a0f8d0313e08af070ed9fdbb91841cb3f79cf68827bace15c26126d433a1dd0b"
+    },
+    {
+      "path": "Data/INI/GameLODPresets.ini",
+      "bytes": 2262,
+      "sha256": "ebaecc7281086e01710cc13de1ae8893ac16201d6d949db67961558572abbb90"
+    },
+    {
+      "path": "Data/INI/InGameUI.ini",
+      "bytes": 10467,
+      "sha256": "56332d4339f1ebeff570370ef123642da1d9b6f247a13243985bd84caf0e457c"
+    },
+    {
+      "path": "Data/INI/Locomotor.ini",
+      "bytes": 262837,
+      "sha256": "5e1bf2d846c9fc33d05668804d66f6237afe63f16223ffb287183dce0e60e389"
+    },
+    {
+      "path": "Data/INI/MappedImages/HandCreated/HandCreatedMappedImages.INI",
+      "bytes": 4119,
+      "sha256": "f28e5d746d48407fb53aa386fb80532ef847b883d1ac8279ba59ac34aad4e04d"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/HandCreatedMappedImages.INI",
+      "bytes": 5567,
+      "sha256": "f5f49028be209cc4e5815bb9f2ce7d949e037a54927745ba88d345a98591b2d8"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SAControlBar512.INI",
+      "bytes": 7888,
+      "sha256": "52b04f6b9fc1d25bf9e7fd1d2fe51df2ba57611592b0b32d1ecd0986e62c2880"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SAUserInterface512.INI",
+      "bytes": 31305,
+      "sha256": "ea109025bcaa93ca7c4f8988ce42941b14e007ff8f1fc5cb81cd6dd7f4fc4780"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SCGameUserInterface512.INI",
+      "bytes": 35938,
+      "sha256": "03ab64f497d52aa414fe15c29e6ad8ac554be4e7776e1af09f27442ebdde8496"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SCGenChallengeLoad512.INI",
+      "bytes": 1262,
+      "sha256": "c7d424aa55c061b2a559f7327aca9f215e947cf960a397f6fe27a5bfe8739a34"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SCGenChallengeSelect512.INI",
+      "bytes": 8707,
+      "sha256": "6cab3adc196fcde065fcf2e5937d8d182733aac936bfde38125ee1297b75f52f"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SCGenChallengeWinLoss512.INI",
+      "bytes": 5540,
+      "sha256": "3ef211761b6dd7f28054c8fc2f23f166ec8b5a854b9999aca0ada6b16e516ed4"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SCLogosUserInterface512.INI",
+      "bytes": 2041,
+      "sha256": "fd11981b66f2d39852f86dbfe956769374a91d40b875ed1b3c309fc00588c09f"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SCPurchasePowers512.INI",
+      "bytes": 750,
+      "sha256": "c4d06fe8923ebc4c2ec18573e71df038b15504b8c191b300d2486a2d0f8dbdba"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SCShellUserInterface512.INI",
+      "bytes": 21491,
+      "sha256": "361cb41f7d18ab51d27a183bc153ca78f9de279ed40a6c3e0bfde8b930b1a213"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SCSmShellUserInterface512.INI",
+      "bytes": 43344,
+      "sha256": "8c5bcef1e31093758b50ed2f4e26bc1f19d234a841cfa0ce7450fc271360bee1"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SNControlBar512.INI",
+      "bytes": 7891,
+      "sha256": "f6793fa233332fe4455c34179557bf824e483febbb73cc2c708997bbbe16dabf"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SNUserInterface512.INI",
+      "bytes": 30566,
+      "sha256": "10eb83f893f7d0e1369140be108e1eb4995c9ad9eb1ac10d1558d8752ad99b00"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SSUserInterface512.INI",
+      "bytes": 7589,
+      "sha256": "c2ec2fc824e8bde900054d6740f892ed937d43f0496f46957354c035cf333ac8"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SUControlBar512.INI",
+      "bytes": 7702,
+      "sha256": "16a37ca50c0aaceb04c3ae3fbd62ceb6b95c63170b491b1b79d12e707c4320a9"
+    },
+    {
+      "path": "Data/INI/MappedImages/TextureSize_512/SUUserInterface512.INI",
+      "bytes": 27457,
+      "sha256": "6b58ed88fb9c4c0644b7edbf448dda944c05cb515e24918afe64a187c7359d65"
+    },
+    {
+      "path": "Data/INI/MemoryPools.ini",
+      "bytes": 530,
+      "sha256": "ae1717090ba777867e9092cbf6cde4da3fa2da79d3ef9ec4a2e4822c4a8a7172"
+    },
+    {
+      "path": "Data/INI/MiscAudio.ini",
+      "bytes": 4149,
+      "sha256": "d7b595a68c4a0629157811c7a1df72e69a8bd623d1b1e9ce792eb25b9513f349"
+    },
+    {
+      "path": "Data/INI/Mouse.ini",
+      "bytes": 5601,
+      "sha256": "2d582816507a1afb4c6d8b79ddf9d4f2b657cf2578572868e17bc3fa920ffc9f"
+    },
+    {
+      "path": "Data/INI/Music.ini",
+      "bytes": 3889,
+      "sha256": "481fd07e69b0ebafbf87f9b842ab3d08e368d21fbedb55ffcaa26097e8ade1fa"
+    },
+    {
+      "path": "Data/INI/Object/AirforceGeneral.ini",
+      "bytes": 715499,
+      "sha256": "0b75e41dca4dda324a8e9ae5c9a498a53c1659c8a8baf827d9641aa503e45df1"
+    },
+    {
+      "path": "Data/INI/Object/AmericaAir.ini",
+      "bytes": 108634,
+      "sha256": "de702de141c139f15b0e3f8af397f4cbf66ee09ca8046ebeee3e0fadfc8b007b"
+    },
+    {
+      "path": "Data/INI/Object/AmericaCINEUnit.ini",
+      "bytes": 285438,
+      "sha256": "a76a290bda761bfbbc0c448b2aff304b8ec2ff1bc1583867d3b3bb31dba50f71"
+    },
+    {
+      "path": "Data/INI/Object/AmericaInfantry.ini",
+      "bytes": 73397,
+      "sha256": "c5013cc494e9fc654facdd44a0d9494c7111bdfbbfbd535412c83175b39c5924"
+    },
+    {
+      "path": "Data/INI/Object/AmericaMiscUnit.ini",
+      "bytes": 81640,
+      "sha256": "43392eab4ac1188424107c30a6e336624228c82fd84660a993af8c8d1d16ecb2"
+    },
+    {
+      "path": "Data/INI/Object/AmericaVehicle.ini",
+      "bytes": 101656,
+      "sha256": "adbec0b37197b372cd15110cfc5c03c32a89a825f66410b5c4e3ce745842382b"
+    },
+    {
+      "path": "Data/INI/Object/BossGeneral.ini",
+      "bytes": 872553,
+      "sha256": "abb9686300a7ed363d6384aa9bf8288e1d584bfaed652ba348822b34f019789b"
+    },
+    {
+      "path": "Data/INI/Object/ChemicalGeneral.ini",
+      "bytes": 860751,
+      "sha256": "87a2565154772bac534c34aacbd8a9aa61619568e11cd5a8d3a31f6e33d7cebd"
+    },
+    {
+      "path": "Data/INI/Object/ChinaAir.ini",
+      "bytes": 37429,
+      "sha256": "678375d9879a130d148352b95c4cef2e7070ffcf169d8207878bb4c1e31cd6d1"
+    },
+    {
+      "path": "Data/INI/Object/ChinaCINEUnit.ini",
+      "bytes": 120723,
+      "sha256": "86e803c2c6bec7817df853f003df70aff512b9bd86f00c8c0e77bae4ca1459e9"
+    },
+    {
+      "path": "Data/INI/Object/ChinaInfantry.ini",
+      "bytes": 59118,
+      "sha256": "85f70524e05c12f25c013a620b6e0ce2883bb1d7c492fabecaaca1605718fe0e"
+    },
+    {
+      "path": "Data/INI/Object/ChinaMiscUnit.ini",
+      "bytes": 40723,
+      "sha256": "bcfe7cd8510cccdb05a56a6581de1989c49f7cfb4dfc23589f13085cedf849b1"
+    },
+    {
+      "path": "Data/INI/Object/ChinaVehicle.ini",
+      "bytes": 110731,
+      "sha256": "6dc2f5c5da9656cc23197c4aa471d3ef75ccaddff0807bb1cf3b25bacccbde03"
+    },
+    {
+      "path": "Data/INI/Object/CivilianBuilding.ini",
+      "bytes": 1281224,
+      "sha256": "8ad0bede753f130e9d7c2ac2fb2928db54a0fd3b1652913c1eefeae93c98c829"
+    },
+    {
+      "path": "Data/INI/Object/CivilianProp.ini",
+      "bytes": 238447,
+      "sha256": "e25cf473fd29ced419c5b682340687883ceb01b920b9d410bd075d2823653566"
+    },
+    {
+      "path": "Data/INI/Object/CivilianUnit.ini",
+      "bytes": 629385,
+      "sha256": "8ea6b1a06038ce658f7d08f785042a423ad86e9fd49ddf855ad0509181f6ee18"
+    },
+    {
+      "path": "Data/INI/Object/DemoGeneral.ini",
+      "bytes": 868962,
+      "sha256": "1d3a648ea078a6b3962e8531c3c79b2d69ceaa09a273a980c38351e228eeccea"
+    },
+    {
+      "path": "Data/INI/Object/FactionBuilding.ini",
+      "bytes": 1583767,
+      "sha256": "06bf2e38a5b10dee3e165400528975a6f3034e9db68b277f7a931446da90ecd7"
+    },
+    {
+      "path": "Data/INI/Object/FactionProp.ini",
+      "bytes": 1712,
+      "sha256": "ee7ce5035e7d6c05b8962f29c041c3ecd4c09c6219860b35c6a316cc404cbf4c"
+    },
+    {
+      "path": "Data/INI/Object/FactionUnit.ini",
+      "bytes": 218,
+      "sha256": "1d079abecfbbbad54882c6fc1d6d7f6e466cbdbf68d8cac6d7d7313827d9cd85"
+    },
+    {
+      "path": "Data/INI/Object/GC_Chem_GLABuildings.ini",
+      "bytes": 364769,
+      "sha256": "85fe2ac1c1b7181e99144ea89f3609ca28bf5a0a33620ef9a1399c1945a76a9f"
+    },
+    {
+      "path": "Data/INI/Object/GC_Chem_GLASystem.ini",
+      "bytes": 10469,
+      "sha256": "b122e69cb67e7822c9e41a68320a3c89b42c91ea74717848999b206bc004d1ef"
+    },
+    {
+      "path": "Data/INI/Object/GC_Chem_GLAUnits.ini",
+      "bytes": 152875,
+      "sha256": "58db35eed4639a2689e60f23244da29172e61426d98eda1b7869287fc920709a"
+    },
+    {
+      "path": "Data/INI/Object/GC_Slth_GLABuildings.ini",
+      "bytes": 366097,
+      "sha256": "bc00986e844a06b930839125e159670b8ac164c0177b953a4f89932ba3b3799c"
+    },
+    {
+      "path": "Data/INI/Object/GC_Slth_GLASystem.ini",
+      "bytes": 1646,
+      "sha256": "348bb64d1320ff3c1df73a7739ad6f8ce9303fe7d022e66bb7f6d4d50d3f7681"
+    },
+    {
+      "path": "Data/INI/Object/GC_Slth_GLAUnits.ini",
+      "bytes": 274388,
+      "sha256": "72844471953ca8a8d67f5367eda303b35f7544c5131f95b6fc371788f25a87c2"
+    },
+    {
+      "path": "Data/INI/Object/GLAAir.ini",
+      "bytes": 6022,
+      "sha256": "941241f0d048f21144909b0bea2275b1e2919f34632982a332efe7b7eadd11dd"
+    },
+    {
+      "path": "Data/INI/Object/GLACINEUnit.ini",
+      "bytes": 313879,
+      "sha256": "f9ef7d4167a188ee80a8b8ab0cb6b1ce4884e83d00922b78a3d8b73ed22a61e7"
+    },
+    {
+      "path": "Data/INI/Object/GLAInfantry.ini",
+      "bytes": 156103,
+      "sha256": "33504f0995cd79f558e88eba21e459f10bfd029d45f99a6a086861ff0c41f07c"
+    },
+    {
+      "path": "Data/INI/Object/GLAMiscUnit.ini",
+      "bytes": 5407,
+      "sha256": "02e87be7c00dba94e8c51e122d9b2c75c9ae1269b3834cfd8bc85c8a4925f06e"
+    },
+    {
+      "path": "Data/INI/Object/GLAVehicle.ini",
+      "bytes": 256361,
+      "sha256": "0b9e987c2fbbe4a2ca1f9ec258856ca6477dcc00bb01b2e1447d300d009ce829"
+    },
+    {
+      "path": "Data/INI/Object/Hulk.ini",
+      "bytes": 64048,
+      "sha256": "17a200bee8a1a592eeaaaacb9f45e8244d33681589d4ad4da12f8785df7a7b25"
+    },
+    {
+      "path": "Data/INI/Object/InfantryGeneral.ini",
+      "bytes": 660296,
+      "sha256": "8b8023e3be618992dc576448468baff9f01823f9864d57e707281c39eddfebae"
+    },
+    {
+      "path": "Data/INI/Object/LaserGeneral.ini",
+      "bytes": 754818,
+      "sha256": "c2498648cab52c8ffadd95f5fbb713134787ac34d2df6fc10301c025591d57e2"
+    },
+    {
+      "path": "Data/INI/Object/NatureProp.ini",
+      "bytes": 119737,
+      "sha256": "9773564c29146e2fc2962545f4337584f8a3884b7417d67794253f0f302861ad"
+    },
+    {
+      "path": "Data/INI/Object/NatureUnit.ini",
+      "bytes": 2366,
+      "sha256": "6a6f808675cb98d5f95c0df187b28ccafe991cd88923208ddbcabc18a5ff092d"
+    },
+    {
+      "path": "Data/INI/Object/NukeGeneral.ini",
+      "bytes": 699326,
+      "sha256": "33c5bcc0b1ef58defed752955a2454243eff627f2141a6a7ba34e43d46fcb32c"
+    },
+    {
+      "path": "Data/INI/Object/SpecialPowerObjects.ini",
+      "bytes": 14601,
+      "sha256": "c2c852f6bb6a4cf81e6708bc7f3cea1baf12a65fb3553875f645e4fc29fd2e44"
+    },
+    {
+      "path": "Data/INI/Object/StealthGeneral.ini",
+      "bytes": 870724,
+      "sha256": "271c6206ff70a1605058f048d0c5886ad66995dfffc2f2fcf847720330f389ad"
+    },
+    {
+      "path": "Data/INI/Object/SuperWeaponGeneral.ini",
+      "bytes": 774774,
+      "sha256": "d300aef370bba260d087773c682b94cf7925a2d64b825f3b79f11ef7aa2eddfd"
+    },
+    {
+      "path": "Data/INI/Object/System.ini",
+      "bytes": 93409,
+      "sha256": "b842a0d8cd00f4f7f61f3f4bac98b8f3601187c6812f60d3b75f4d3a6577b6db"
+    },
+    {
+      "path": "Data/INI/Object/TankGeneral.ini",
+      "bytes": 694266,
+      "sha256": "5e89f23d31f97c7e5a8abddbe3608e4a35f8add673c684f133d1cab3d5f6815a"
+    },
+    {
+      "path": "Data/INI/Object/TechBuildings.ini",
+      "bytes": 39922,
+      "sha256": "a65663d7fe8e02a0f207ab39b42cc922dc5cab3aa38671dba81b2d16385da5a2"
+    },
+    {
+      "path": "Data/INI/Object/WeaponObjects.ini",
+      "bytes": 206680,
+      "sha256": "74fb07cbbefa29115ef1ee5fc47248e6db0e2116afa1e1819a35b533d6b49155"
+    },
+    {
+      "path": "Data/INI/ObjectCreationList.ini",
+      "bytes": 323540,
+      "sha256": "d9a33d036e43ba928bf94b2d6398d35cee0751d7acc0e019cd465e2598ffadf1"
+    },
+    {
+      "path": "Data/INI/ParticleSystem.ini",
+      "bytes": 1716661,
+      "sha256": "d7892b1ef0e4c9284757d50a69e08f1a7a2c7b14a91dbeb586b6cbf2098687b4"
+    },
+    {
+      "path": "Data/INI/PlayerTemplate.ini",
+      "bytes": 22485,
+      "sha256": "35e9e143b86e7ea66c5366c25c4ace15651a23c82683c7054e42d2f100e66213"
+    },
+    {
+      "path": "Data/INI/Rank.ini",
+      "bytes": 1155,
+      "sha256": "25fcb527ec28fa4bb63d5e9e8ea147e178b4bc2a7b60e282673021b1db86c8bd"
+    },
+    {
+      "path": "Data/INI/Roads.ini",
+      "bytes": 29885,
+      "sha256": "6aac05d6f05ff2bff5f0edfdbbed323ffe4f116e808300f037386d2d05adfc3c"
+    },
+    {
+      "path": "Data/INI/Science.ini",
+      "bytes": 26089,
+      "sha256": "a2db2a41881f95f566c8e143ce840e0e1af83fc4b7193c57759257681c3647fe"
+    },
+    {
+      "path": "Data/INI/ShellMenuScheme.ini",
+      "bytes": 55,
+      "sha256": "43cc4cc6babf761ce7e1e57a8a2a095fc1b174c7e8a34c451c7bd0216d35369f"
+    },
+    {
+      "path": "Data/INI/SoundEffects.ini",
+      "bytes": 167297,
+      "sha256": "75d6c38d2c6f5e639d526091519bd75217985ba4f2bc55865d357bc60f8058c6"
+    },
+    {
+      "path": "Data/INI/SpecialPower.ini",
+      "bytes": 44933,
+      "sha256": "6e3cc7ae7759ce93d6645d9acad29a6c1f2e1d683847f25ab6bf2383dadd2dcc"
+    },
+    {
+      "path": "Data/INI/Speech.ini",
+      "bytes": 268276,
+      "sha256": "230112551369a7560a0934af210fbb39075670a4394bc7537167fa67eab450cf"
+    },
+    {
+      "path": "Data/INI/Terrain.ini",
+      "bytes": 24200,
+      "sha256": "65e07fd46c61a4fab125dfbcd41ebbb11900981b5d448879a1f5e17aacb923d0"
+    },
+    {
+      "path": "Data/INI/Upgrade.ini",
+      "bytes": 23989,
+      "sha256": "b89e4d773b2d2fb845b3b703bb863c3727f63f10b1e2be1bee96eeadbc411456"
+    },
+    {
+      "path": "Data/INI/Video.ini",
+      "bytes": 4749,
+      "sha256": "8896d3e70e091df7998431490c18381d0d248faa44fffae5bed98e8cc9ab31ae"
+    },
+    {
+      "path": "Data/INI/Voice.ini",
+      "bytes": 135769,
+      "sha256": "999b6e2946d24f200c654c4574f382fc7ccbd676dfef9423d33367e5d5e911ec"
+    },
+    {
+      "path": "Data/INI/Water.ini",
+      "bytes": 2737,
+      "sha256": "4b9f661f08c615be1b9141271579a840d392c9fdbff8dff942d4da23e302b695"
+    },
+    {
+      "path": "Data/INI/Weapon.ini",
+      "bytes": 459441,
+      "sha256": "9ffd708517d4dedffb3955fc5ed24aa390e573baa53ecc611cc58e215996121e"
+    },
+    {
+      "path": "Data/INI/Weather.ini",
+      "bytes": 1329,
+      "sha256": "330e54891ea8a8c9b1547de11c41795355beb7435b878c2d87f5b8c6cf910e58"
+    },
+    {
+      "path": "Data/INI/Webpages.ini",
+      "bytes": 711,
+      "sha256": "04e6e86f399cb887a77e2c7c3eceb5ee87145f82b5c9f2939e934b2f6ed0201e"
+    },
+    {
+      "path": "Data/INI/WindowTransitions.ini",
+      "bytes": 47849,
+      "sha256": "7ca6b30bc616495dccb7d999ad76c65a30529fc0904f3d48bfd76e5cd391c69e"
+    },
+    {
+      "path": "Data/INI/multiplayer.ini",
+      "bytes": 2871,
+      "sha256": "08ea957f31a6056f4c6527188012495cd674e968c55d71cd500a0c379a5dbd95"
+    },
+    {
+      "path": "Data/generals.str",
+      "bytes": 5431041,
+      "sha256": "8220a7abad6aa39eeeeae27c66f100c22cb73ff4b540d7c29c277bf06e397093"
+    },
+    {
+      "path": "Maps/BarrenBadlands/map.ini",
+      "bytes": 1034,
+      "sha256": "557c89ee52de5fbe8590b83fa407226101defc15b6437843ef01afe862f88575"
+    },
+    {
+      "path": "Maps/Bitter Winter/map.ini",
+      "bytes": 2380,
+      "sha256": "a6ef335286788d08ca060777d436672a4b3c7515a5cbad6bb8a76d63ff35e05c"
+    },
+    {
+      "path": "Maps/Eastern Everglades/map.ini",
+      "bytes": 1052,
+      "sha256": "48d2d3de3617bc037dd948a81fd0d7cf86e93fc3c52b43caa0556e4e56217e24"
+    },
+    {
+      "path": "Maps/FloodedPlains/map.ini",
+      "bytes": 1317,
+      "sha256": "8924465fa74b18937459118c8debb7f93a265106e5182db2bf299f0be98d0042"
+    },
+    {
+      "path": "Maps/GC_AirGeneral/map.ini",
+      "bytes": 1164,
+      "sha256": "2e4032b747444fb8e02d44c5270549f94a64980039614597ff2980fa37816e03"
+    },
+    {
+      "path": "Maps/GC_ChemGeneral/map.ini",
+      "bytes": 2063,
+      "sha256": "f1a0b386a84c087d90f21cb161cc0f91091350fe3ff72e93d35b24a4114fd239"
+    },
+    {
+      "path": "Maps/GC_ChinaBoss/map.ini",
+      "bytes": 15095,
+      "sha256": "fb75e16a4b9bc44b302ba05b2519ecfa5d40611d0882e4e1ff0425c26bfdb767"
+    },
+    {
+      "path": "Maps/GC_LaserGeneral/map.ini",
+      "bytes": 1323,
+      "sha256": "a1ddcbdb44860b1db106ae9f8eb4f7049e432023d1658f90dd5de72dd9231f6a"
+    },
+    {
+      "path": "Maps/GC_NukeGeneral/map.ini",
+      "bytes": 753,
+      "sha256": "f55049857ea492674c15fc1eb18e8c8d23b1db7d0ab5495aaec0bd859a759652"
+    },
+    {
+      "path": "Maps/GC_Stealth/map.ini",
+      "bytes": 572,
+      "sha256": "da5fec5ffeb313a0773734c8bf9a5bb6568fd13345db7bec2b500a7a97c3627a"
+    },
+    {
+      "path": "Maps/Hovercraft/map.ini",
+      "bytes": 3257,
+      "sha256": "f33d35a1845d633fa42e282a28125aacb993dbd1cebe4f29238175c69d6eb067"
+    },
+    {
+      "path": "Maps/Iron Dragon/map.ini",
+      "bytes": 1327,
+      "sha256": "713a4d46b412c488c8c51161c61b642321abb4f74fa16b4de9d55f65aa529edd"
+    },
+    {
+      "path": "Maps/Lights Out/map.ini",
+      "bytes": 1346,
+      "sha256": "c4d796dd7c6e7ae6fe3869ec52f72dc6092af65ddab3930c97ad9a052024345a"
+    },
+    {
+      "path": "Maps/MD_CHI01/map.ini",
+      "bytes": 3952,
+      "sha256": "c0927ec3a720b08495c48af4d5f15195b6da108aaa72ac74d7af34e1e567bda9"
+    },
+    {
+      "path": "Maps/MD_CHI02/map.ini",
+      "bytes": 4000,
+      "sha256": "e95289602abf71547baa006d20d80cb554b2fad2c6002e0ec6134e36d979e8c2"
+    },
+    {
+      "path": "Maps/MD_CHI03/map.ini",
+      "bytes": 8458,
+      "sha256": "bdce577a7452713870916114fdc12ecd17e531feeccf39ae2e840d6b1bb84191"
+    },
+    {
+      "path": "Maps/MD_CHI05/Map.ini",
+      "bytes": 4107,
+      "sha256": "5590c66093988705fc7f8bcb9f1e5c94f4664bc7044c012ebf8c4db6a6553cee"
+    },
+    {
+      "path": "Maps/MD_CHI05_END/Map.ini",
+      "bytes": 1568,
+      "sha256": "3630c004524cfb03a7d0ecbe0b1d6a2c543cd5844585faed8e08c7dab39e7001"
+    },
+    {
+      "path": "Maps/MD_GLA01/map.ini",
+      "bytes": 1891,
+      "sha256": "7de21a5d0fb6a22d7c5f972c0e9b92790d0b90c95f30f3d5709783cc975d7526"
+    },
+    {
+      "path": "Maps/MD_GLA01/map.str",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "Maps/MD_GLA02/map.ini",
+      "bytes": 2916,
+      "sha256": "0d8a9e9cd54d2df97727406673bb974fd5564dda320d4ab1569a9abe52c17868"
+    },
+    {
+      "path": "Maps/MD_GLA02_CINE/Map.ini",
+      "bytes": 2418,
+      "sha256": "5f5b6852985d87b34446cbc081cf69cb4c1909c117e1a936e987b84c35efeb71"
+    },
+    {
+      "path": "Maps/MD_GLA02_CINE/Map.str",
+      "bytes": 1710,
+      "sha256": "27459e5e6057f672a6182be0693f2e4d31738fe5ba31b926b4c3d21dec4e7f2b"
+    },
+    {
+      "path": "Maps/MD_GLA03/map.ini",
+      "bytes": 5763,
+      "sha256": "34fcff09f7a2ccde59ffde5dff5a9abc2cc445a435053dfe970c61108f6d4d95"
+    },
+    {
+      "path": "Maps/MD_GLA03_CINE/map.ini",
+      "bytes": 4131,
+      "sha256": "6185c3af071dd8096abf616135edf5d7313dad9eeebe8d120db0fe17dbd800e1"
+    },
+    {
+      "path": "Maps/MD_GLA03_CINE/map.str",
+      "bytes": 3148,
+      "sha256": "d0c3c57f8bb1ba73874c16a96d8e1f1c3e00cace265717616f99ed67a72c96d1"
+    },
+    {
+      "path": "Maps/MD_GLA03_END/map.ini",
+      "bytes": 4131,
+      "sha256": "6185c3af071dd8096abf616135edf5d7313dad9eeebe8d120db0fe17dbd800e1"
+    },
+    {
+      "path": "Maps/MD_GLA03_END/map.str",
+      "bytes": 3052,
+      "sha256": "309b623edd8e776dcaca7627c15d9035977bddc8f9540c4032a4f7e21c81c3f8"
+    },
+    {
+      "path": "Maps/MD_GLA04/map.ini",
+      "bytes": 11226,
+      "sha256": "5cce33b78475f0a0ad69cc46d6235ac076caca0e46b31d4424fdb0530532cdf0"
+    },
+    {
+      "path": "Maps/MD_GLA04/map.str",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "Maps/MD_GLA04_INTRO/map.ini",
+      "bytes": 7276,
+      "sha256": "0089930a1745bd6c980ec0b9a6a1494e3e51cdb24c8a7682e84b1d44201d5c56"
+    },
+    {
+      "path": "Maps/MD_GLA04_INTRO/map.str",
+      "bytes": 678,
+      "sha256": "910d638ca0c6836322addab7979b4336c013c85753ea24d92ac520ce73dc60eb"
+    },
+    {
+      "path": "Maps/MD_GLA04_Sound/map.ini",
+      "bytes": 6814,
+      "sha256": "a5791f2b64d59f3060816b72160de9d7d1c928476323185ef4afa16cedf48495"
+    },
+    {
+      "path": "Maps/MD_GLA04_Sound/map.str",
+      "bytes": 678,
+      "sha256": "910d638ca0c6836322addab7979b4336c013c85753ea24d92ac520ce73dc60eb"
+    },
+    {
+      "path": "Maps/MD_GLA05/map.ini",
+      "bytes": 12387,
+      "sha256": "392ce0d2edceacda072dd5194649db51055df75979338ba73aa7ddfe8199be71"
+    },
+    {
+      "path": "Maps/MD_GLA05/map.str",
+      "bytes": 3641,
+      "sha256": "13af759e480b60654a277ec1231263ccb22f26a8859f7a3329edda2e6ae22049"
+    },
+    {
+      "path": "Maps/MD_USA01/map.ini",
+      "bytes": 16532,
+      "sha256": "c9c12922acb0c23c84c7fa53359b7153fda8ee29f049543625eeba6a57b06230"
+    },
+    {
+      "path": "Maps/MD_USA01/map.str",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "Maps/MD_USA01_CINE/map.ini",
+      "bytes": 14103,
+      "sha256": "e96af2540edb26dd0df8e45f4f3083f9709a077c10953a412c1f7655da89f92f"
+    },
+    {
+      "path": "Maps/MD_USA01_CINE/map.str",
+      "bytes": 601,
+      "sha256": "c7e44b4a92581d31097d1c44d024f3d5c63618a73a1be92c87a9f999640d4359"
+    },
+    {
+      "path": "Maps/MD_USA02/map.ini",
+      "bytes": 6937,
+      "sha256": "a4dc47f978cf16887a70d32296b088d4a6b6942f67f135cdeaafc2cc515e02fc"
+    },
+    {
+      "path": "Maps/MD_USA03/map.ini",
+      "bytes": 7986,
+      "sha256": "be01c50d0441a3316397963a775ee38f1685c1bb0cd5c22c6b405b94e28ead3d"
+    },
+    {
+      "path": "Maps/MD_USA03/map.str",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "Maps/MD_USA03_CINE/map.ini",
+      "bytes": 785,
+      "sha256": "e5860c614ed4ba05219d000d2f1ff166876d38bb44fbbdcf64fb876d94cb52ad"
+    },
+    {
+      "path": "Maps/MD_USA03_END/map.ini",
+      "bytes": 11134,
+      "sha256": "1b268681c726c732ccb572dbe2bd2c99c2b9f479160ec3f519910340a30ef162"
+    },
+    {
+      "path": "Maps/MD_USA03_END1/map.ini",
+      "bytes": 11134,
+      "sha256": "7c99aed6e5231a3395ae5f0f7864f3436b39f0426ae9a4b3458c0a44d0054db3"
+    },
+    {
+      "path": "Maps/MD_USA03_Intro/map.ini",
+      "bytes": 4547,
+      "sha256": "2147d75175fd1bcc1c0b3d08357757d8d88ea1bfb16c30f9dcc381f57ceec3a8"
+    },
+    {
+      "path": "Maps/MD_USA04/Map.ini",
+      "bytes": 15789,
+      "sha256": "f185fdc22f5612836fbbccd0a852913bdaf64c7ece77b609330fb792ffca852c"
+    },
+    {
+      "path": "Maps/MD_USA04_CINE/map.ini",
+      "bytes": 437,
+      "sha256": "94d7e5c5d593f9b5462debc38cac25d154e3fc2b970fd849c18a4b861a95e585"
+    },
+    {
+      "path": "Maps/MD_USA05/map.ini",
+      "bytes": 2251,
+      "sha256": "ea3d77948f353b58f85efa5c659a3a243884ca256d342f872776a85f19a23ff2"
+    },
+    {
+      "path": "Maps/MapCache.ini",
+      "bytes": 179790,
+      "sha256": "07fc23e9f5d13a41dd226a647847393325acbbd80457e7f8d855f04576202635"
+    },
+    {
+      "path": "Maps/Mountain Guns/map.ini",
+      "bytes": 2350,
+      "sha256": "8ea1a4d3d07fe66d4d3ec0eed8c3ebdb27d63c8b5fa769fe42de3f8beda6bda2"
+    },
+    {
+      "path": "Maps/Red Rock/map.ini",
+      "bytes": 1118,
+      "sha256": "e71aac498489e4964f09a05df190d7d021fd0140ea0423c046ed15c615179dae"
+    },
+    {
+      "path": "Maps/Rocky Rampage/map.ini",
+      "bytes": 1052,
+      "sha256": "48d2d3de3617bc037dd948a81fd0d7cf86e93fc3c52b43caa0556e4e56217e24"
+    },
+    {
+      "path": "Maps/ShellMapMD/map.ini",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "Maps/USA05_EndsConflict_INTRO_N/map.ini",
+      "bytes": 422,
+      "sha256": "7904ecc75e2eb42a9ab3a625319e2c79855b9542543a07e50584c7763bb873a5"
+    },
+    {
+      "path": "Maps/Victory Valley/map.ini",
+      "bytes": 263,
+      "sha256": "66817b31389c075b3f6b6e2e4cb9b88ee71c96a726d593a4fd38bef96aa1798f"
+    },
+    {
+      "path": "Maps/Winding River/map.ini",
+      "bytes": 1052,
+      "sha256": "48d2d3de3617bc037dd948a81fd0d7cf86e93fc3c52b43caa0556e4e56217e24"
+    },
+    {
+      "path": "Window/ControlBar.wnd",
+      "bytes": 323477,
+      "sha256": "dab2d6319d8a0a322fdbe0082fe49319087f3da030a7d00bcbe3c36cd31a06fb"
+    },
+    {
+      "path": "Window/ControlBarPopupDescription.wnd",
+      "bytes": 12556,
+      "sha256": "e2774be8d0078ab53be23116e2b9b928b5ba0be1c6366e6ada96908c1bd88d73"
+    },
+    {
+      "path": "Window/Diplomacy.wnd",
+      "bytes": 243130,
+      "sha256": "9df20ca21f5d06c841dd2b208ef2ab282ef01aa8e67103b77788da8b0b94b9f2"
+    },
+    {
+      "path": "Window/GenPowersShortcutBarChina.wnd",
+      "bytes": 74286,
+      "sha256": "b00ecf53d68aef6db791f77efe7ca34695e6b69f4370611a5f683f0c274c5eb7"
+    },
+    {
+      "path": "Window/GenPowersShortcutBarGLA.wnd",
+      "bytes": 74241,
+      "sha256": "fc22d63b0c58557b20f1db43db28d9720fd551b4085db648e78d8e410cfd18a7"
+    },
+    {
+      "path": "Window/GenPowersShortcutBarUS.wnd",
+      "bytes": 74219,
+      "sha256": "7223816b6ee049eb849dc4e38cb43489f9b4039e0589c5ae24bb558df9b26866"
+    },
+    {
+      "path": "Window/GeneralsExpPoints.wnd",
+      "bytes": 106726,
+      "sha256": "1cde58d810f91402ccaf18125dadee20d036bccf6a8818977624536857a7e4c2"
+    },
+    {
+      "path": "Window/IMECandidateWindow.wnd",
+      "bytes": 12905,
+      "sha256": "c1f6683f48465821efbad2d6c2287074ccfbd30f37c9323911a34fc9a07abe4c"
+    },
+    {
+      "path": "Window/IMEStatusWindow.wnd",
+      "bytes": 6513,
+      "sha256": "ae025f1a3e9c3e08cfe16f55e4905de387cf3ab3eeb12a237bb3e51c6d3f6bf7"
+    },
+    {
+      "path": "Window/InGameChat.wnd",
+      "bytes": 13116,
+      "sha256": "563680e2062bce2ed77948ddb8feeccdeb55774b90fd2c5795f4be59a55e8903"
+    },
+    {
+      "path": "Window/InGamePopupMessage.wnd",
+      "bytes": 9604,
+      "sha256": "d34e6c6ba953b9cc9ad65ff73a026f1eef208b085ee755325799e19c1bf5b58d"
+    },
+    {
+      "path": "Window/MOTD.wnd",
+      "bytes": 21480,
+      "sha256": "c98000f48d6efb356cb1e6bafc43dce7ac45aaadd0faa3ddc3fb730fd8c56e32"
+    },
+    {
+      "path": "Window/Menus/BlankWindow.wnd",
+      "bytes": 3185,
+      "sha256": "d510306fc61039390e13fd11043f710136998b031f8ef155de36ae3b5e809390"
+    },
+    {
+      "path": "Window/Menus/CRCMismatch.wnd",
+      "bytes": 6257,
+      "sha256": "623c2c8094ffef5eb995cb19269a9c41afa66409bb4c87b1045941f5cbe42542"
+    },
+    {
+      "path": "Window/Menus/ChallengeLoadScreen.wnd",
+      "bytes": 95722,
+      "sha256": "cef3a2d91ce0a428daf9b8fa30756717c7c67f7239a325506ebe14267a31f829"
+    },
+    {
+      "path": "Window/Menus/ChallengeMenu.wnd",
+      "bytes": 112693,
+      "sha256": "e17f70a566eae38f1e7e39e24a2535e073a92a7084e80bcf195d34a0808d924d"
+    },
+    {
+      "path": "Window/Menus/CreditsMenu.wnd",
+      "bytes": 9446,
+      "sha256": "9e5dfb1d098cb0aff667816932533d967755efdbc72802f3dfec579cb8da0f45"
+    },
+    {
+      "path": "Window/Menus/Defeat.wnd",
+      "bytes": 6170,
+      "sha256": "7c52450d5f631e79818a29fc260b10d157b12c14925bbc90b8bb0d82662d4ec3"
+    },
+    {
+      "path": "Window/Menus/DifficultySelect.wnd",
+      "bytes": 26438,
+      "sha256": "5fc6786497c0df83e1f46582f8a65dc213c85ad029d980ab22aee6e8f35e838e"
+    },
+    {
+      "path": "Window/Menus/DisconnectScreen.wnd",
+      "bytes": 127534,
+      "sha256": "4d70f8656809459efe1de7410da0215edbef2d0cf5c9e28546b542d314e2292c"
+    },
+    {
+      "path": "Window/Menus/DownloadMenu.wnd",
+      "bytes": 22127,
+      "sha256": "191af0ff71eef24d9c68a4b1071a9a839d6f35de3b9787f1398fcc760b660807"
+    },
+    {
+      "path": "Window/Menus/EstablishConnectionsScreen.wnd",
+      "bytes": 58367,
+      "sha256": "09dcd47d7760d79f2b37f5d5ceafb2af1b091ed370398ba4b9bee26048dce258"
+    },
+    {
+      "path": "Window/Menus/GameInfoWindow.wnd",
+      "bytes": 34124,
+      "sha256": "ae9c23533183c83aa8b951aeadfddea1d8ab529d0ff21728d23340b0bdcd01de"
+    },
+    {
+      "path": "Window/Menus/GameSpyGameOptionsMenu.wnd",
+      "bytes": 994515,
+      "sha256": "59575be2d27685eac36120fb9e3db6df0ea04ca4400804808dfd2c9a6408a66e"
+    },
+    {
+      "path": "Window/Menus/GameSpyLoadScreen.wnd",
+      "bytes": 272440,
+      "sha256": "198ed1b51834c8f111b7467e2384fbdd06514820078ea0b4ed1a162b65eb62bf"
+    },
+    {
+      "path": "Window/Menus/GameSpyLoginProfile.wnd",
+      "bytes": 170700,
+      "sha256": "bda5d1d47ce8b51b53ddc9f3afa7d52e3f879869ff7994966d9973367f268d6a"
+    },
+    {
+      "path": "Window/Menus/GameSpyLoginQuick.wnd",
+      "bytes": 54920,
+      "sha256": "b3f393a4b58e432bb3be639e5e7a6eb555f877514bbee09ebb1cbf5a9a4edcae"
+    },
+    {
+      "path": "Window/Menus/LanGameOptionsMenu.wnd",
+      "bytes": 933286,
+      "sha256": "24ad3e5e1d2684562cf79f70f0d34bee446bfa5e05c772ddc609746bbf90d00b"
+    },
+    {
+      "path": "Window/Menus/LanLobbyMenu.wnd",
+      "bytes": 102722,
+      "sha256": "3285a8419bb66f274d072fca5332b6c5cd6018a187d2f7f0d92f658b4c853be4"
+    },
+    {
+      "path": "Window/Menus/LanMapSelectMenu.wnd",
+      "bytes": 67149,
+      "sha256": "b03f09f946d3fbb4688567441547567f2abd7e453c5960bdd93a072c3ebc3d7b"
+    },
+    {
+      "path": "Window/Menus/LegalPage.wnd",
+      "bytes": 6235,
+      "sha256": "e326c72c6b3c2c224d6956e81ec152ea973c9399b990d8cb612f433dc5960da7"
+    },
+    {
+      "path": "Window/Menus/LocalDefeat.wnd",
+      "bytes": 6177,
+      "sha256": "4b4f1dbc288f62c9b39316c37a03f48862ad9b1d30f8cd3343e8a2fdc2143c52"
+    },
+    {
+      "path": "Window/Menus/MainMenu.wnd",
+      "bytes": 208690,
+      "sha256": "8912be7496de12370b3a56560f75080731ca6decc08754180ec32798708cc0d7"
+    },
+    {
+      "path": "Window/Menus/MapSelectMenu.wnd",
+      "bytes": 59706,
+      "sha256": "3bae0281c2bd740032c97815aa77c4a3573ae116e042b5207d0232a1cc21e40b"
+    },
+    {
+      "path": "Window/Menus/MapTransferScreen.wnd",
+      "bytes": 118551,
+      "sha256": "1a91d5a251677217ff643c0ba724c0896da6ebb7a9bd2309e77ca3bd4c8726b2"
+    },
+    {
+      "path": "Window/Menus/MarketingScreen.wnd",
+      "bytes": 3172,
+      "sha256": "e69cfd5aa6dcdcb84122135b676ff4541e9020b9cf7806d262586c3e9b3dba06"
+    },
+    {
+      "path": "Window/Menus/MessageBox.wnd",
+      "bytes": 29551,
+      "sha256": "37462d7132260b800579387f7339b36581014852a7ddb8667f38242ff5ee04be"
+    },
+    {
+      "path": "Window/Menus/MultiplayerLoadScreen.wnd",
+      "bytes": 166376,
+      "sha256": "a8d986084a08b4d0aaa0f1176e1d4e635f66116fe162499b41aa5eb21bad9a31"
+    },
+    {
+      "path": "Window/Menus/NetworkDirectConnect.wnd",
+      "bytes": 68013,
+      "sha256": "765f5743518e25c6a4b4d928367f7f35e995f7f90b64328c28946e10e9d76c44"
+    },
+    {
+      "path": "Window/Menus/ObserverQuit.wnd",
+      "bytes": 6183,
+      "sha256": "fe5b5e595d3627eeb47c6f2e4a3d43a0e2d3320bbbad7505a97a85d99a6c0d9c"
+    },
+    {
+      "path": "Window/Menus/OptionsMenu.wnd",
+      "bytes": 447577,
+      "sha256": "13ab9f837a21fa7edf555f3ce9f462a8f75cbaa31fe175d0ab80eea2b8fa3ed5"
+    },
+    {
+      "path": "Window/Menus/PopupBuddyListNotification.wnd",
+      "bytes": 6279,
+      "sha256": "ed6b46d6c564eda71c63bc5490c5d4a35bf1d788e6e9e0e86b8baf478f1cfe2c"
+    },
+    {
+      "path": "Window/Menus/PopupCommunicator.wnd",
+      "bytes": 12728,
+      "sha256": "6b29d707ac7d7646dcb6a520e535d5ccd67907c8463c340958dbf8c6b37f31df"
+    },
+    {
+      "path": "Window/Menus/PopupGameSpyCreateGame.wnd",
+      "bytes": 26828,
+      "sha256": "923c28e55e7447932f7aef2bd8bf08246c320b300b3a594438fe0362d8321540"
+    },
+    {
+      "path": "Window/Menus/PopupHostGame.wnd",
+      "bytes": 39500,
+      "sha256": "ba2e6bb0f1cc84377f6ca24654c74a460796711d810c014997dac6bb2540d474"
+    },
+    {
+      "path": "Window/Menus/PopupJoinGame.wnd",
+      "bytes": 19322,
+      "sha256": "41f309353d46311d5ca3a4df7cbbe091dcdd2e2a8d90619c36e9d6510579f634"
+    },
+    {
+      "path": "Window/Menus/PopupLadderDetails.wnd",
+      "bytes": 24218,
+      "sha256": "e1be145c47bdcdc819fddc9449b8374c061fc7c7add1f5d3a5bfc6a8de0eca34"
+    },
+    {
+      "path": "Window/Menus/PopupLadderSelect.wnd",
+      "bytes": 75430,
+      "sha256": "795a29f98353e1e2c5b1ccb37c91a4ed5f0fa149f6d259a7bff746af259b74f4"
+    },
+    {
+      "path": "Window/Menus/PopupLocaleSelect.wnd",
+      "bytes": 31461,
+      "sha256": "9f1e2a71738499ed08359986f39ff093bcfa7b19440667bc3020c10d7bc164dd"
+    },
+    {
+      "path": "Window/Menus/PopupPlayerInfo.wnd",
+      "bytes": 169648,
+      "sha256": "bc628708b10bc3459b80477d2639f22b0f90ac96185f142854f8ad7a57410df5"
+    },
+    {
+      "path": "Window/Menus/PopupReplay.wnd",
+      "bytes": 48347,
+      "sha256": "8a23c8b4782eac1e8d29f215f006a7a5fcc8882056f0e3cb04da71cf228f99e6"
+    },
+    {
+      "path": "Window/Menus/PopupSaveLoad.wnd",
+      "bytes": 97060,
+      "sha256": "39e48273e9ba90a299b79f1b9a4db7f4a30a9fb5ccb28c9f140ca84b79dceb31"
+    },
+    {
+      "path": "Window/Menus/QuitMenu.wnd",
+      "bytes": 22651,
+      "sha256": "a8691076907849692c1aecd96aa7dc32047925bf846959b0385084a7117a3abe"
+    },
+    {
+      "path": "Window/Menus/QuitMessageBox.wnd",
+      "bytes": 32750,
+      "sha256": "1c8f93bb209be744ce0c714c4c0d3e6be2761e5a35d9c36bbd5f351d0ee4679c"
+    },
+    {
+      "path": "Window/Menus/QuitNoSave.wnd",
+      "bytes": 19437,
+      "sha256": "852c21a85cc574f4501fe2b06245bcff6769fd7de48ac5cf370a7f61785b52ad"
+    },
+    {
+      "path": "Window/Menus/RCBuddiesMenu.wnd",
+      "bytes": 12959,
+      "sha256": "f8a1aee7eab6f0989c04e696931431824df34ae1b8058930ba30ea71904936da"
+    },
+    {
+      "path": "Window/Menus/RCBuddyRequestMenu.wnd",
+      "bytes": 9701,
+      "sha256": "a16552b1c09b2b43288841b1153dc1d396a422ae2a03595cf99f31de0e17dd64"
+    },
+    {
+      "path": "Window/Menus/RCGameDetailsMenu.wnd",
+      "bytes": 6563,
+      "sha256": "2f35ad4264dd1e69e497bb3cf2cf93fcc6801bf9bc9a42ba9f6406dcab082186"
+    },
+    {
+      "path": "Window/Menus/RCLocalPlayerMenu.wnd",
+      "bytes": 6425,
+      "sha256": "dd8eac04a7670990992b46262bc719baf905cef0972c4bc99a3d6e9fa850e104"
+    },
+    {
+      "path": "Window/Menus/RCNoProfileMenu.wnd",
+      "bytes": 6435,
+      "sha256": "da95a625a533628594cdc4bcbc7a4ff5ad2b4dce1ca3f1aa2fb0d6df52baf716"
+    },
+    {
+      "path": "Window/Menus/RCNonBuddiesMenu.wnd",
+      "bytes": 12975,
+      "sha256": "935dbbe085d07f189c6affc64e88a0e4d9c24d44bc58ad261ad34b3a99188859"
+    },
+    {
+      "path": "Window/Menus/ReplayMenu.wnd",
+      "bytes": 45932,
+      "sha256": "94ada519d9a06105065f2fe02660abfee812e579de6c32b890b60ea996df7d3b"
+    },
+    {
+      "path": "Window/Menus/SaveLoad.wnd",
+      "bytes": 102686,
+      "sha256": "9549df077fa829379afe879de26642356e77778878878a28b79d6df1607f2542"
+    },
+    {
+      "path": "Window/Menus/ScoreScreen.wnd",
+      "bytes": 379519,
+      "sha256": "dd7802bc86f1df316d15e613d433b971cf03e2d2949f3e3c955eba2f5b76439b"
+    },
+    {
+      "path": "Window/Menus/ShellGameLoadScreen.wnd",
+      "bytes": 9535,
+      "sha256": "1f68509fce77092e6c5dcc6cf9b5d3f86b3c324b06ddf7554752cf711b8fa144"
+    },
+    {
+      "path": "Window/Menus/SinglePlayerLoadScreen.wnd",
+      "bytes": 66210,
+      "sha256": "8827cc1563b5204b0b0469d3bbafab8f1a67f8515a3fb0e3407c1728183e80aa"
+    },
+    {
+      "path": "Window/Menus/SinglePlayerMenu.wnd",
+      "bytes": 19364,
+      "sha256": "d4892b5f3795a71ee1372f220a937e2e3e6170ad9aca030e5a1b05b273a556e1"
+    },
+    {
+      "path": "Window/Menus/SkirmishGameOptionsMenu.wnd",
+      "bytes": 920486,
+      "sha256": "8fe59430e2bb9e3c638fc37bb6d8212d86da05e731844607da1e4400094324a8"
+    },
+    {
+      "path": "Window/Menus/SkirmishMapSelectMenu.wnd",
+      "bytes": 67335,
+      "sha256": "200613ed8e7dd7dfc5fdae0265a6ec7de8a0b4ec60b003f836c3830e77e32828"
+    },
+    {
+      "path": "Window/Menus/Victorious.wnd",
+      "bytes": 6173,
+      "sha256": "fac2911593f05667dec250b026db8534796d06879b134150449c7b4b9eab2956"
+    },
+    {
+      "path": "Window/Menus/WOLBuddyOverlay.wnd",
+      "bytes": 75250,
+      "sha256": "3118519c512e6b51ae95ae3da62e68b8c055798d7e0d3d7ae77d69160562093b"
+    },
+    {
+      "path": "Window/Menus/WOLCustomLobby.wnd",
+      "bytes": 136863,
+      "sha256": "716f2cf9fc6e489b149b593c70f3609fb5865b517fcd6725277bdbe69dd77210"
+    },
+    {
+      "path": "Window/Menus/WOLLadderScreen.wnd",
+      "bytes": 9462,
+      "sha256": "a3ecb5219bf1f11e34767a2c50b80e903acfdf0775fddf34374352db138dc41d"
+    },
+    {
+      "path": "Window/Menus/WOLLoginMenu.wnd",
+      "bytes": 94475,
+      "sha256": "983f0d97e8edbdfd48c689100f5f867fe50a8675160d0c4336f52c55ce7d9b30"
+    },
+    {
+      "path": "Window/Menus/WOLMapSelectMenu.wnd",
+      "bytes": 67188,
+      "sha256": "fdc7219185d6f25e8102d2cedae1c6792bb402128b193664afc7e3fe2939518e"
+    },
+    {
+      "path": "Window/Menus/WOLMessageWindow.wnd",
+      "bytes": 20007,
+      "sha256": "c0ec4921eb4a122eb4e2d6b059843ba233b06a55d8bb1e186845a918ed3debc4"
+    },
+    {
+      "path": "Window/Menus/WOLQuickMatchMenu.wnd",
+      "bytes": 322197,
+      "sha256": "de0a7c0d9d5f14f99ce8df3c2b6e4aa632fb4cddb0b742845fcba936a0b8794a"
+    },
+    {
+      "path": "Window/Menus/WOLStatusMenu.wnd",
+      "bytes": 28162,
+      "sha256": "d20291e6fe8d0c621dabdace067d5364147918e6b192e3ff868dd6f7d7a26e53"
+    },
+    {
+      "path": "Window/Menus/WOLWelcomeMenu.wnd",
+      "bytes": 124624,
+      "sha256": "512f3ccc7f0d670ba83f35e116446dd8e691e6655de7d5756bbf46dbb76d7188"
+    },
+    {
+      "path": "Window/ReplayControl.wnd",
+      "bytes": 19803,
+      "sha256": "12a270ed6114b5f296db9aece9333a552c83b07c64647274546f33de541bf149"
+    }
+  ]
+}

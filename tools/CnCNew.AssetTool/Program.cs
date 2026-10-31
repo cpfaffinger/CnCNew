@@ -28,7 +28,7 @@ internal static class AssetTool
                 ["check-install", var game, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.CheckInstallAsync(game, options)),
                 ["describe-install", var game, var output, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.DescribeInstallAsync(game, output, options)),
                 ["install", var game, var target, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.InstallAsync(game, target, options)),
-                ["import-layer", var game, var content, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.ImportLayerAsync(game, content, options)),
+                ["describe-patch", var game, var patch, var output, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.DescribePatchAsync(game, patch, output, options)),
                 ["check-export", var content, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.CheckExportAsync(content, options)),
                 ["uninstall", var target, .. var options] => await InstallCommands.RunAsync(() => Task.FromResult(InstallCommands.Uninstall(target, options))),
                 _ => PrintUsage(),

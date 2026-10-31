@@ -19,9 +19,10 @@ public sealed record InstallRecord(
     string ContentManifestSha256,
     long ContentManifestBytes,
     int RuntimeFileCount,
-    bool Verified)
+    bool Verified,
+    string PatchSource = "")
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
     public const string FileName = "install.json";
 
     public byte[] Write()
@@ -42,6 +43,7 @@ public sealed record InstallRecord(
             writer.WriteNumber("contentManifestBytes", ContentManifestBytes);
             writer.WriteNumber("runtimeFileCount", RuntimeFileCount);
             writer.WriteBoolean("verified", Verified);
+            writer.WriteString("patchSource", PatchSource);
             writer.WriteEndObject();
         }
         buffer.WriteByte((byte)'\n');
@@ -57,10 +59,12 @@ public sealed record InstallRecord(
         {
             using var document = JsonDocument.Parse(File.ReadAllBytes(path));
             var root = document.RootElement;
-            CanonicalJson.RequireProperties(root, "install record",
-                "schemaVersion", "product", "productVersion", "productCommit", "masterId", "masterName", "steamAppId", "importerVersion",
-                "contentManifestSha256", "contentManifestBytes", "runtimeFileCount", "verified");
-            if (root.GetProperty("schemaVersion").GetInt32() != CurrentSchemaVersion || root.GetProperty("product").GetString() != ProductInfo.Product)
+            // Schema 1 had no patch: such a directory is ours, and the next installation brings it up to the patched content.
+            var schema = root.TryGetProperty("schemaVersion", out var version) ? version.GetInt32() : CurrentSchemaVersion;
+            string[] common = ["schemaVersion", "product", "productVersion", "productCommit", "masterId", "masterName", "steamAppId", "importerVersion",
+                "contentManifestSha256", "contentManifestBytes", "runtimeFileCount", "verified"];
+            CanonicalJson.RequireProperties(root, "install record", schema == 1 ? common : [.. common, "patchSource"]);
+            if (schema is not (1 or CurrentSchemaVersion) || root.GetProperty("product").GetString() != ProductInfo.Product)
                 return null;
             return new InstallRecord(
                 ProductInfo.Product,
@@ -73,7 +77,8 @@ public sealed record InstallRecord(
                 root.GetProperty("contentManifestSha256").GetString()!,
                 root.GetProperty("contentManifestBytes").GetInt64(),
                 root.GetProperty("runtimeFileCount").GetInt32(),
-                root.GetProperty("verified").GetBoolean());
+                root.GetProperty("verified").GetBoolean(),
+                schema == 1 ? "" : root.GetProperty("patchSource").GetString()!);
         }
         catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException or FormatException)
         {
@@ -114,6 +119,9 @@ public sealed record InstallResult(
 
 public sealed record UninstallResult(bool Removed, string Message, IReadOnlyList<string> Leftovers);
 
+/// <summary>The patch of an installation: its description, and optionally a checkout to take its files from and another way of fetching them.</summary>
+public sealed record PatchInstall(PatchMaster Master, string? Checkout = null, Func<Uri, CancellationToken, Task<byte[]>>? Download = null);
+
 /// <summary>
 /// Creates a game directory of ours from the user's own installation. The game directory is only read; everything is written below the target.
 /// </summary>
@@ -122,19 +130,24 @@ public static class GameInstaller
     public const string ContentDirectoryName = "content";
     public const string ManifestFileName = "content-manifest.json";
 
+    /// <summary>Where the patch's files lie while an installation is made; it is gone when the installation is verified.</summary>
+    public const string PatchDirectoryName = "patch-files";
+
     /// <summary>The entries an installation of ours consists of; <see cref="Uninstall"/> removes exactly these.</summary>
-    public static readonly IReadOnlyList<string> OwnedEntries = [ContentDirectoryName, "bin", "Start-CnCNew.cmd", InstallRecord.FileName];
+    public static readonly IReadOnlyList<string> OwnedEntries = [ContentDirectoryName, PatchDirectoryName, "bin", "Start-CnCNew.cmd", InstallRecord.FileName];
 
     /// <summary>
     /// Checks the game directory against <paramref name="master"/> and exports its runtime content into <c>&lt;target&gt;/content</c>, then writes
     /// <c>&lt;target&gt;/install.json</c>. On an existing installation of ours it verifies every runtime file and restores what is missing or changed.
+    /// With <paramref name="patch"/> the layer lies above the game and the export is the one recorded with the patch (docs/PATCH-LAYER.md).
     /// </summary>
     public static async Task<InstallResult> InstallAsync(
         string gameDirectory,
         string targetDirectory,
         InstallationMaster master,
         IProgress<InstallProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        PatchInstall? patch = null)
     {
         ArgumentNullException.ThrowIfNull(master);
         var game = Path.GetFullPath(gameDirectory);
@@ -149,17 +162,24 @@ public static class GameInstaller
 
         var check = await CheckAsync(game, master, progress, cancellationToken);
         if (!check.IsIdentical) return Refused(InstallOutcome.InstallationDiffers, check.FormatReport(), check);
-        RequireCurrentImporter(master);
+        var expected = patch?.Master.ExpectedExport ?? master.ExpectedExport;
+        RequireCurrentImporter(expected);
 
         // The unverified record marks the directory as ours before anything else is written, so an interrupted installation can be resumed.
         Directory.CreateDirectory(target);
         var (version, commit) = ProductInfo.Read();
         var record = new InstallRecord(ProductInfo.Product, version, commit, master.Id, master.Name, master.SteamAppId,
-            master.ExpectedExport.ImporterVersion, master.ExpectedExport.ContentManifestSha256, master.ExpectedExport.ContentManifestBytes,
-            master.ExpectedExport.RuntimeFileCount, Verified: false);
+            expected.ImporterVersion, expected.ContentManifestSha256, expected.ContentManifestBytes,
+            expected.RuntimeFileCount, Verified: false, patch?.Master.Source ?? "");
         await File.WriteAllBytesAsync(Path.Combine(target, InstallRecord.FileName), record.Write(), cancellationToken);
 
-        var result = await ExportCoreAsync(game, Path.Combine(target, ContentDirectoryName), master, check, progress, cancellationToken);
+        // Fetched only when something is to be exported: an intact installation is verified without the network.
+        var patchFiles = Path.Combine(target, PatchDirectoryName);
+        var fetchProgress = progress is null ? null : new Progress(progress, "patch", every: 16);
+        async Task<ContentLayer?> LayerAsync() => patch is null ? null
+            : await new PatchFetcher(patch.Master, patch.Download).FetchAsync(patchFiles, patch.Checkout, fetchProgress, cancellationToken);
+        var result = await ExportCoreAsync(game, Path.Combine(target, ContentDirectoryName), expected, check, LayerAsync, progress, cancellationToken);
+        if (Directory.Exists(patchFiles)) Directory.Delete(patchFiles, recursive: true);
         record = record with { Verified = true };
         await File.WriteAllBytesAsync(Path.Combine(target, InstallRecord.FileName), record.Write(), cancellationToken);
         return result with { Record = record };
@@ -169,9 +189,17 @@ public static class GameInstaller
     /// Compares a content directory with the export recorded in <paramref name="master"/>: manifest bytes, hash and file count, then every runtime file.
     /// Returns the list of problems; empty means the directory is exactly the known export.
     /// </summary>
-    public static async Task<IReadOnlyList<string>> VerifyExportAsync(
+    public static Task<IReadOnlyList<string>> VerifyExportAsync(
         string contentDirectory,
         InstallationMaster master,
+        IProgress<InstallProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+        => VerifyExportAsync(contentDirectory, master.ExpectedExport, progress, cancellationToken);
+
+    /// <inheritdoc cref="VerifyExportAsync(string, InstallationMaster, IProgress{InstallProgress}?, CancellationToken)"/>
+    public static async Task<IReadOnlyList<string>> VerifyExportAsync(
+        string contentDirectory,
+        MasterExport expected,
         IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default)
     {
@@ -181,13 +209,13 @@ public static class GameInstaller
         if (!File.Exists(manifestPath)) return [$"'{ManifestFileName}' is missing."];
         var bytes = await File.ReadAllBytesAsync(manifestPath, cancellationToken);
         var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-        if (hash != master.ExpectedExport.ContentManifestSha256 || bytes.LongLength != master.ExpectedExport.ContentManifestBytes)
-            problems.Add($"'{ManifestFileName}' has {bytes.LongLength} bytes and SHA-256 {hash}; the known export has {master.ExpectedExport.ContentManifestBytes} bytes and " +
-                         $"{master.ExpectedExport.ContentManifestSha256}.");
+        if (hash != expected.ContentManifestSha256 || bytes.LongLength != expected.ContentManifestBytes)
+            problems.Add($"'{ManifestFileName}' has {bytes.LongLength} bytes and SHA-256 {hash}; the known export has {expected.ContentManifestBytes} bytes and " +
+                         $"{expected.ContentManifestSha256}.");
         var manifest = ReadPublishedManifest(content);
         if (manifest is null) return [.. problems, $"'{ManifestFileName}' is not a runtime manifest of {RuntimeContentImporter.ImporterName}."];
-        if (manifest.Assets.Count != master.ExpectedExport.RuntimeFileCount)
-            problems.Add($"The manifest lists {manifest.Assets.Count} runtime files; the known export has {master.ExpectedExport.RuntimeFileCount}.");
+        if (manifest.Assets.Count != expected.RuntimeFileCount)
+            problems.Add($"The manifest lists {manifest.Assets.Count} runtime files; the known export has {expected.RuntimeFileCount}.");
         var damage = await ScanContentAsync(content, manifest, progress, cancellationToken);
         problems.AddRange(damage.Missing.Select(path => $"missing runtime file: {path}"));
         problems.AddRange(damage.Changed.Select(path => $"changed runtime file: {path}"));
@@ -226,12 +254,12 @@ public static class GameInstaller
     private static async Task<InstallResult> ExportCoreAsync(
         string game,
         string content,
-        InstallationMaster master,
+        MasterExport expected,
         InstallationCheckResult check,
+        Func<Task<ContentLayer?>> layer,
         IProgress<InstallProgress>? progress,
         CancellationToken cancellationToken)
     {
-        var expected = master.ExpectedExport;
         var existed = Directory.Exists(content) && Directory.EnumerateFileSystemEntries(content).Any();
         ContentDamage damage = new([], [], []);
         Predicate<RuntimeArtifact>? trust = null;
@@ -259,8 +287,8 @@ public static class GameInstaller
         }
 
         var importProgress = progress is null ? null : new Progress(progress, "export");
-        var import = await RuntimeContentImporter.ImportAsync(game, content, importProgress, cancellationToken, trust);
-        var problems = await VerifyExportAsync(content, master, progress, cancellationToken);
+        var import = await RuntimeContentImporter.ImportAsync(game, content, importProgress, cancellationToken, trust, await layer());
+        var problems = await VerifyExportAsync(content, expected, progress, cancellationToken);
         if (problems.Count != 0)
             throw new InvalidDataException(
                 "The exported content is not the known export although the game directory is the master: " + string.Join(" ", problems.Take(5)) +
@@ -327,11 +355,11 @@ public static class GameInstaller
         return InstallationInspector.CheckAsync(game, master, checkProgress, cancellationToken);
     }
 
-    private static void RequireCurrentImporter(InstallationMaster master)
+    private static void RequireCurrentImporter(MasterExport expected)
     {
-        if (master.ExpectedExport.Importer != RuntimeContentImporter.ImporterName || master.ExpectedExport.ImporterVersion != RuntimeContentImporter.ImporterVersion)
+        if (expected.Importer != RuntimeContentImporter.ImporterName || expected.ImporterVersion != RuntimeContentImporter.ImporterVersion)
             throw new InvalidDataException(
-                $"The master description records the export of {master.ExpectedExport.Importer} {master.ExpectedExport.ImporterVersion}, " +
+                $"The master description records the export of {expected.Importer} {expected.ImporterVersion}, " +
                 $"this build has {RuntimeContentImporter.ImporterName} {RuntimeContentImporter.ImporterVersion}: the master description must be written again (describe-install).");
     }
 
@@ -352,11 +380,11 @@ public static class GameInstaller
     private static InstallResult Refused(InstallOutcome outcome, string message, InstallationCheckResult? check = null)
         => new(outcome, message, check, [], [], [], 0, 0, null);
 
-    private sealed class Progress(IProgress<InstallProgress> inner, string step) : IProgress<ImportProgress>
+    private sealed class Progress(IProgress<InstallProgress> inner, string step, int every = 256) : IProgress<ImportProgress>
     {
         public void Report(ImportProgress value)
         {
-            if (value.Processed % 256 == 0) inner.Report(new InstallProgress(step, value.Processed, value.Total, value.VirtualPath));
+            if (value.Processed % every == 0) inner.Report(new InstallProgress(step, value.Processed, value.Total, value.VirtualPath));
         }
     }
 

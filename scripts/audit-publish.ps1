@@ -27,6 +27,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 if (-not $ContentDir) { $ContentDir = Join-Path $repo 'game\content' }
+# The patched content does not hold the files the patch replaced: the original's export is compared as well.
+$originalDir = Join-Path $repo 'game\original\content'
+if (-not (Test-Path -LiteralPath (Join-Path $originalDir 'content-manifest.json'))) { throw "The game without the patch not found: $originalDir (run scripts/dev-content.ps1)." }
 if (-not $OutDir) { $OutDir = Join-Path ([IO.Path]::GetTempPath()) 'cncnew-audit-publish' }
 if (-not (Test-Path -LiteralPath $GameDir -PathType Container)) { throw "Game installation not found: $GameDir" }
 if (-not (Test-Path -LiteralPath (Join-Path $ContentDir 'content-manifest.json'))) { throw "Exported content not found: $ContentDir (run scripts/dev-content.ps1)." }
@@ -43,14 +46,14 @@ $lines = Get-ChildItem -LiteralPath $root -Recurse -File | Sort-Object FullName 
 [IO.File]::WriteAllLines($index, $lines, [Text.UTF8Encoding]::new($false))
 
 Write-Host '== 1. Blobs against game files ...' -ForegroundColor Cyan
-$assets = python (Join-Path $PSScriptRoot 'audit-history-assets.py') $repo $OutDir $index (Join-Path $ContentDir 'content-manifest.json')
+$assets = python (Join-Path $PSScriptRoot 'audit-history-assets.py') $repo $OutDir $index (Join-Path $ContentDir 'content-manifest.json') (Join-Path $originalDir 'content-manifest.json')
 $assets | Select-Object -First 4
 $assets | Set-Content -Encoding utf8 (Join-Path $OutDir 'assets.txt')
 $equal = [int](($assets | Select-String -Pattern '^blobs equal to a game file: (\d+)').Matches[0].Groups[1].Value)
 $binary = [int](($assets | Select-String -Pattern '^binary blobs: (\d+)').Matches[0].Groups[1].Value)
 
 Write-Host "== 2. Verbatim lines from game texts ($MinimumLineLength characters or longer) ..." -ForegroundColor Cyan
-$excerpts = python (Join-Path $PSScriptRoot 'audit-history-excerpts.py') $repo $ContentDir $OutDir $MinimumLineLength
+$excerpts = python (Join-Path $PSScriptRoot 'audit-history-excerpts.py') $repo "$ContentDir;$originalDir" $OutDir $MinimumLineLength
 $excerpts | Select-Object -First 12
 $excerpts | Set-Content -Encoding utf8 (Join-Path $OutDir 'excerpts.txt')
 

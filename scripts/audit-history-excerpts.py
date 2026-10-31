@@ -1,29 +1,30 @@
 """Looks for verbatim lines of the game's text files (INI, WND, STR, TXT, scripts as text) inside the repository's history blobs.
 
-Usage: python audit_excerpts.py <repo> <content-dir> <out-dir> [min-length]
+Usage: python audit_excerpts.py <repo> <content-dir>[;<content-dir>...] <out-dir> [min-length]
 A "distinctive" game line: at least min-length characters after whitespace normalisation, with at least 6 letters.
 """
 import os, re, subprocess, sys
 
-repo, content, out = sys.argv[1], sys.argv[2], sys.argv[3]
+repo, contents, out = sys.argv[1], sys.argv[2].split(';'), sys.argv[3]
 minimum = int(sys.argv[4]) if len(sys.argv) > 4 else 60
 norm = lambda s: re.sub(r'\s+', ' ', s.strip())
 game = {}
 count_files = 0
-for root, _, files in os.walk(content):
-    for name in files:
-        if os.path.splitext(name)[1].lower() not in ('.ini', '.wnd', '.str', '.txt', '.csv', '.lst', '.cfg', '.vdf', '.lcf'):
-            continue
-        count_files += 1
-        try:
-            text = open(os.path.join(root, name), 'r', encoding='latin-1').read()
-        except OSError:
-            continue
-        rel = os.path.relpath(os.path.join(root, name), content)
-        for line in text.splitlines():
-            n = norm(line)
-            if len(n) >= minimum and sum(c.isalpha() for c in n) >= 6:
-                game.setdefault(n, rel)
+for content in contents:
+    for root, _, files in os.walk(content):
+        for name in files:
+            if os.path.splitext(name)[1].lower() not in ('.ini', '.wnd', '.str', '.txt', '.csv', '.lst', '.cfg', '.vdf', '.lcf'):
+                continue
+            count_files += 1
+            try:
+                text = open(os.path.join(root, name), 'r', encoding='latin-1').read()
+            except OSError:
+                continue
+            rel = os.path.relpath(os.path.join(root, name), content)
+            for line in text.splitlines():
+                n = norm(line)
+                if len(n) >= minimum and sum(c.isalpha() for c in n) >= 6:
+                    game.setdefault(n, rel)
 print(f'game text files: {count_files}; distinctive lines: {len(game)}')
 
 objects = subprocess.run(['git', '-C', repo, 'rev-list', '--all', '--objects'], capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.splitlines()

@@ -67,33 +67,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "BoneFXUpdate/PristineParticleSystem4",
-      "count": 2,
-      "owners": [
-        "BoneFXUpdate"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "BoneFXUpdate/PristineParticleSystem5",
-      "count": 2,
-      "owners": [
-        "BoneFXUpdate"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "BoneFXUpdate/PristineParticleSystem6",
-      "count": 2,
-      "owners": [
-        "BoneFXUpdate"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "BoneFXUpdate/RubbleFXList1",
       "count": 2,
       "owners": [
@@ -212,7 +185,7 @@
     {
       "category": "deferred-field",
       "name": "CrushDie/BackEndCrushSound",
-      "count": 42,
+      "count": 41,
       "owners": [
         "CrushDie"
       ],
@@ -221,7 +194,7 @@
     {
       "category": "deferred-field",
       "name": "CrushDie/FrontEndCrushSound",
-      "count": 42,
+      "count": 41,
       "owners": [
         "CrushDie"
       ],
@@ -230,7 +203,7 @@
     {
       "category": "deferred-field",
       "name": "CrushDie/TotalCrushSound",
-      "count": 42,
+      "count": 41,
       "owners": [
         "CrushDie"
       ],
@@ -2731,8 +2704,26 @@
     },
     {
       "category": "deferred-field",
+      "name": "HealContain/EnterSound",
+      "count": 15,
+      "owners": [
+        "HealContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "HealContain/ExitSound",
+      "count": 15,
+      "owners": [
+        "HealContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "HeightDieUpdate/DestroyAttachedParticlesAtHeight",
-      "count": 4,
+      "count": 3,
       "owners": [
         "HeightDieUpdate"
       ],
@@ -2813,7 +2804,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/AccelerationPitchLimit",
-      "count": 101,
+      "count": 102,
       "owners": [
         "Locomotor"
       ],
@@ -2822,7 +2813,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/AirborneTargetingHeight",
-      "count": 45,
+      "count": 46,
       "owners": [
         "Locomotor"
       ],
@@ -2831,7 +2822,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/AllowAirborneMotiveForce",
-      "count": 72,
+      "count": 73,
       "owners": [
         "Locomotor"
       ],
@@ -2840,7 +2831,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/Appearance",
-      "count": 203,
+      "count": 205,
       "owners": [
         "Locomotor"
       ],
@@ -2849,7 +2840,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/Apply2DFrictionWhenAirborne",
-      "count": 45,
+      "count": 46,
       "owners": [
         "Locomotor"
       ],
@@ -2894,7 +2885,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/DecelerationPitchLimit",
-      "count": 89,
+      "count": 90,
       "owners": [
         "Locomotor"
       ],
@@ -2912,7 +2903,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/ElevatorCorrectionDegree",
-      "count": 1,
+      "count": 6,
       "owners": [
         "Locomotor"
       ],
@@ -2921,7 +2912,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/ElevatorCorrectionRate",
-      "count": 1,
+      "count": 6,
       "owners": [
         "Locomotor"
       ],
@@ -2939,7 +2930,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/ForwardAccelerationPitchFactor",
-      "count": 97,
+      "count": 98,
       "owners": [
         "Locomotor"
       ],
@@ -2984,7 +2975,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/LateralAccelerationRollFactor",
-      "count": 98,
+      "count": 99,
       "owners": [
         "Locomotor"
       ],
@@ -3002,7 +2993,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/Lift",
-      "count": 45,
+      "count": 46,
       "owners": [
         "Locomotor"
       ],
@@ -3011,7 +3002,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/LiftDamaged",
-      "count": 44,
+      "count": 45,
       "owners": [
         "Locomotor"
       ],
@@ -3047,7 +3038,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/PitchDamping",
-      "count": 143,
+      "count": 145,
       "owners": [
         "Locomotor"
       ],
@@ -3065,7 +3056,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/PitchStiffness",
-      "count": 143,
+      "count": 145,
       "owners": [
         "Locomotor"
       ],
@@ -3083,7 +3074,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/RollDamping",
-      "count": 143,
+      "count": 145,
       "owners": [
         "Locomotor"
       ],
@@ -3092,7 +3083,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/RollStiffness",
-      "count": 143,
+      "count": 145,
       "owners": [
         "Locomotor"
       ],
@@ -3101,7 +3092,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/RudderCorrectionDegree",
-      "count": 1,
+      "count": 6,
       "owners": [
         "Locomotor"
       ],
@@ -3110,7 +3101,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/RudderCorrectionRate",
-      "count": 1,
+      "count": 6,
       "owners": [
         "Locomotor"
       ],
@@ -3209,7 +3200,7 @@
     {
       "category": "deferred-field",
       "name": "Locomotor/ZAxisBehavior",
-      "count": 178,
+      "count": 180,
       "owners": [
         "Locomotor"
       ],
@@ -3227,7 +3218,7 @@
     {
       "category": "deferred-field",
       "name": "ModelConditionUpgrade/ConditionFlag",
-      "count": 55,
+      "count": 70,
       "owners": [
         "ModelConditionUpgrade"
       ],
@@ -3245,7 +3236,7 @@
     {
       "category": "deferred-field",
       "name": "OCLUpdate/FactionOCL",
-      "count": 12,
+      "count": 13,
       "owners": [
         "OCLUpdate"
       ],
@@ -3254,7 +3245,7 @@
     {
       "category": "deferred-field",
       "name": "Object/ButtonImage",
-      "count": 672,
+      "count": 695,
       "owners": [
         "Object"
       ],
@@ -3263,7 +3254,7 @@
     {
       "category": "deferred-field",
       "name": "Object/MaxSimultaneousOfType",
-      "count": 53,
+      "count": 58,
       "owners": [
         "Object"
       ],
@@ -3272,7 +3263,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SelectPortrait",
-      "count": 682,
+      "count": 712,
       "owners": [
         "Object"
       ],
@@ -3281,7 +3272,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SoundAmbient",
-      "count": 321,
+      "count": 326,
       "owners": [
         "Object"
       ],
@@ -3308,7 +3299,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SoundAmbientRubble",
-      "count": 78,
+      "count": 79,
       "owners": [
         "Object"
       ],
@@ -3326,7 +3317,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SoundEnter",
-      "count": 65,
+      "count": 75,
       "owners": [
         "Object"
       ],
@@ -3335,7 +3326,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SoundExit",
-      "count": 61,
+      "count": 65,
       "owners": [
         "Object"
       ],
@@ -3344,7 +3335,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SoundFallingFromPlane",
-      "count": 8,
+      "count": 10,
       "owners": [
         "Object"
       ],
@@ -3362,7 +3353,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SoundMoveStart",
-      "count": 280,
+      "count": 282,
       "owners": [
         "Object"
       ],
@@ -3371,7 +3362,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SoundMoveStartDamaged",
-      "count": 178,
+      "count": 181,
       "owners": [
         "Object"
       ],
@@ -3380,7 +3371,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SoundOnDamaged",
-      "count": 387,
+      "count": 406,
       "owners": [
         "Object"
       ],
@@ -3389,7 +3380,7 @@
     {
       "category": "deferred-field",
       "name": "Object/SoundOnReallyDamaged",
-      "count": 387,
+      "count": 406,
       "owners": [
         "Object"
       ],
@@ -3416,7 +3407,7 @@
     {
       "category": "deferred-field",
       "name": "Object/UpgradeCameo1",
-      "count": 378,
+      "count": 412,
       "owners": [
         "Object"
       ],
@@ -3434,7 +3425,7 @@
     {
       "category": "deferred-field",
       "name": "Object/UpgradeCameo3",
-      "count": 106,
+      "count": 114,
       "owners": [
         "Object"
       ],
@@ -3443,7 +3434,7 @@
     {
       "category": "deferred-field",
       "name": "Object/UpgradeCameo4",
-      "count": 60,
+      "count": 68,
       "owners": [
         "Object"
       ],
@@ -3461,7 +3452,7 @@
     {
       "category": "deferred-field",
       "name": "Object/VoiceAttack",
-      "count": 383,
+      "count": 388,
       "owners": [
         "Object"
       ],
@@ -3470,7 +3461,7 @@
     {
       "category": "deferred-field",
       "name": "Object/VoiceAttackAir",
-      "count": 51,
+      "count": 88,
       "owners": [
         "Object"
       ],
@@ -3497,7 +3488,7 @@
     {
       "category": "deferred-field",
       "name": "Object/VoiceFear",
-      "count": 109,
+      "count": 104,
       "owners": [
         "Object"
       ],
@@ -3524,7 +3515,7 @@
     {
       "category": "deferred-field",
       "name": "Object/VoiceGuard",
-      "count": 295,
+      "count": 301,
       "owners": [
         "Object"
       ],
@@ -3542,7 +3533,7 @@
     {
       "category": "deferred-field",
       "name": "Object/VoiceMove",
-      "count": 389,
+      "count": 391,
       "owners": [
         "Object"
       ],
@@ -3551,7 +3542,7 @@
     {
       "category": "deferred-field",
       "name": "Object/VoiceSelect",
-      "count": 623,
+      "count": 648,
       "owners": [
         "Object"
       ],
@@ -3596,7 +3587,7 @@
     {
       "category": "deferred-field",
       "name": "ParachuteContain/ParachuteOpenSound",
-      "count": 7,
+      "count": 8,
       "owners": [
         "ParachuteContain"
       ],
@@ -3911,7 +3902,7 @@
     {
       "category": "deferred-field",
       "name": "ProductionUpdate/ConstructionCompleteDuration",
-      "count": 35,
+      "count": 37,
       "owners": [
         "ProductionUpdate"
       ],
@@ -3920,7 +3911,7 @@
     {
       "category": "deferred-field",
       "name": "ProductionUpdate/DoorCloseTime",
-      "count": 35,
+      "count": 37,
       "owners": [
         "ProductionUpdate"
       ],
@@ -3929,7 +3920,7 @@
     {
       "category": "deferred-field",
       "name": "ProductionUpdate/DoorOpeningTime",
-      "count": 35,
+      "count": 37,
       "owners": [
         "ProductionUpdate"
       ],
@@ -3938,7 +3929,7 @@
     {
       "category": "deferred-field",
       "name": "ProductionUpdate/DoorWaitOpenTime",
-      "count": 35,
+      "count": 37,
       "owners": [
         "ProductionUpdate"
       ],
@@ -3947,7 +3938,7 @@
     {
       "category": "deferred-field",
       "name": "ProductionUpdate/NumDoorAnimations",
-      "count": 35,
+      "count": 37,
       "owners": [
         "ProductionUpdate"
       ],
@@ -4037,7 +4028,7 @@
     {
       "category": "deferred-field",
       "name": "RiderChangeContain/DoorOpenTime",
-      "count": 4,
+      "count": 10,
       "owners": [
         "RiderChangeContain"
       ],
@@ -4064,7 +4055,7 @@
     {
       "category": "deferred-field",
       "name": "Science/Description",
-      "count": 397,
+      "count": 400,
       "owners": [
         "Science"
       ],
@@ -4073,7 +4064,7 @@
     {
       "category": "deferred-field",
       "name": "Science/DisplayName",
-      "count": 397,
+      "count": 400,
       "owners": [
         "Science"
       ],
@@ -4100,7 +4091,7 @@
     {
       "category": "deferred-field",
       "name": "SlowDeathBehavior/FlingForce",
-      "count": 150,
+      "count": 160,
       "owners": [
         "SlowDeathBehavior"
       ],
@@ -4109,7 +4100,7 @@
     {
       "category": "deferred-field",
       "name": "SlowDeathBehavior/FlingForceVariance",
-      "count": 150,
+      "count": 160,
       "owners": [
         "SlowDeathBehavior"
       ],
@@ -4118,7 +4109,7 @@
     {
       "category": "deferred-field",
       "name": "SlowDeathBehavior/FlingPitch",
-      "count": 150,
+      "count": 160,
       "owners": [
         "SlowDeathBehavior"
       ],
@@ -4127,7 +4118,7 @@
     {
       "category": "deferred-field",
       "name": "SlowDeathBehavior/FlingPitchVariance",
-      "count": 150,
+      "count": 160,
       "owners": [
         "SlowDeathBehavior"
       ],
@@ -4136,7 +4127,7 @@
     {
       "category": "deferred-field",
       "name": "SlowDeathBehavior/ModifierBonusPerOverkillPercent",
-      "count": 27,
+      "count": 31,
       "owners": [
         "SlowDeathBehavior"
       ],
@@ -4145,7 +4136,7 @@
     {
       "category": "deferred-field",
       "name": "SlowDeathBehavior/SinkRate",
-      "count": 614,
+      "count": 659,
       "owners": [
         "SlowDeathBehavior"
       ],
@@ -4154,7 +4145,7 @@
     {
       "category": "deferred-field",
       "name": "SpecialAbility/InitiateSound",
-      "count": 85,
+      "count": 89,
       "owners": [
         "SpecialAbility"
       ],
@@ -4208,7 +4199,7 @@
     {
       "category": "deferred-field",
       "name": "SpecialPower/AcademyClassify",
-      "count": 47,
+      "count": 50,
       "owners": [
         "SpecialPower"
       ],
@@ -4226,7 +4217,7 @@
     {
       "category": "deferred-field",
       "name": "SpecialPower/InitiateSound",
-      "count": 11,
+      "count": 10,
       "owners": [
         "SpecialPower"
       ],
@@ -4244,7 +4235,7 @@
     {
       "category": "deferred-field",
       "name": "StealthDetectorUpdate/IRBeaconParticleSysName",
-      "count": 8,
+      "count": 9,
       "owners": [
         "StealthDetectorUpdate"
       ],
@@ -4253,7 +4244,7 @@
     {
       "category": "deferred-field",
       "name": "StealthDetectorUpdate/IRBrightParticleSysName",
-      "count": 3,
+      "count": 5,
       "owners": [
         "StealthDetectorUpdate"
       ],
@@ -4262,7 +4253,7 @@
     {
       "category": "deferred-field",
       "name": "StealthDetectorUpdate/IRGridParticleSysName",
-      "count": 6,
+      "count": 9,
       "owners": [
         "StealthDetectorUpdate"
       ],
@@ -4271,7 +4262,7 @@
     {
       "category": "deferred-field",
       "name": "StealthDetectorUpdate/IRParticleSysBone",
-      "count": 8,
+      "count": 9,
       "owners": [
         "StealthDetectorUpdate"
       ],
@@ -4280,7 +4271,7 @@
     {
       "category": "deferred-field",
       "name": "StealthDetectorUpdate/IRParticleSysName",
-      "count": 3,
+      "count": 5,
       "owners": [
         "StealthDetectorUpdate"
       ],
@@ -4289,7 +4280,7 @@
     {
       "category": "deferred-field",
       "name": "StealthDetectorUpdate/LoudPingSound",
-      "count": 5,
+      "count": 9,
       "owners": [
         "StealthDetectorUpdate"
       ],
@@ -4298,7 +4289,7 @@
     {
       "category": "deferred-field",
       "name": "StealthDetectorUpdate/PingSound",
-      "count": 5,
+      "count": 9,
       "owners": [
         "StealthDetectorUpdate"
       ],
@@ -4307,7 +4298,7 @@
     {
       "category": "deferred-field",
       "name": "StealthUpdate/DisguiseFX",
-      "count": 6,
+      "count": 7,
       "owners": [
         "StealthUpdate"
       ],
@@ -4316,7 +4307,7 @@
     {
       "category": "deferred-field",
       "name": "StealthUpdate/DisguiseRevealFX",
-      "count": 6,
+      "count": 7,
       "owners": [
         "StealthUpdate"
       ],
@@ -4433,7 +4424,7 @@
     {
       "category": "deferred-field",
       "name": "SubObjectsUpgrade/HideSubObjects",
-      "count": 12,
+      "count": 15,
       "owners": [
         "SubObjectsUpgrade"
       ],
@@ -4442,7 +4433,7 @@
     {
       "category": "deferred-field",
       "name": "SubObjectsUpgrade/ShowSubObjects",
-      "count": 17,
+      "count": 19,
       "owners": [
         "SubObjectsUpgrade"
       ],
@@ -4454,6 +4445,15 @@
       "count": 6,
       "owners": [
         "SupplyTruckAIUpdate"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
+      "name": "TechBuildingBehavior/PulseFX",
+      "count": 1,
+      "owners": [
+        "TechBuildingBehavior"
       ],
       "plannedTarget": "phase-5-module-field-typing"
     },
@@ -4514,7 +4514,7 @@
     {
       "category": "deferred-field",
       "name": "TransitionDamageFX/DamagedFXList1",
-      "count": 31,
+      "count": 32,
       "owners": [
         "TransitionDamageFX"
       ],
@@ -4523,7 +4523,7 @@
     {
       "category": "deferred-field",
       "name": "TransitionDamageFX/DamagedParticleSystem1",
-      "count": 425,
+      "count": 429,
       "owners": [
         "TransitionDamageFX"
       ],
@@ -4559,7 +4559,7 @@
     {
       "category": "deferred-field",
       "name": "TransitionDamageFX/ReallyDamagedFXList1",
-      "count": 263,
+      "count": 298,
       "owners": [
         "TransitionDamageFX"
       ],
@@ -4568,7 +4568,7 @@
     {
       "category": "deferred-field",
       "name": "TransitionDamageFX/ReallyDamagedParticleSystem1",
-      "count": 654,
+      "count": 680,
       "owners": [
         "TransitionDamageFX"
       ],
@@ -4577,7 +4577,7 @@
     {
       "category": "deferred-field",
       "name": "TransitionDamageFX/ReallyDamagedParticleSystem2",
-      "count": 425,
+      "count": 428,
       "owners": [
         "TransitionDamageFX"
       ],
@@ -4586,7 +4586,7 @@
     {
       "category": "deferred-field",
       "name": "TransitionDamageFX/ReallyDamagedParticleSystem3",
-      "count": 417,
+      "count": 421,
       "owners": [
         "TransitionDamageFX"
       ],
@@ -4649,7 +4649,7 @@
     {
       "category": "deferred-field",
       "name": "TransitionDamageFX/RubbleParticleSystem1",
-      "count": 209,
+      "count": 213,
       "owners": [
         "TransitionDamageFX"
       ],
@@ -4712,7 +4712,7 @@
     {
       "category": "deferred-field",
       "name": "TransportContain/DelayExitInAir",
-      "count": 7,
+      "count": 6,
       "owners": [
         "TransportContain"
       ],
@@ -4721,15 +4721,6 @@
     {
       "category": "deferred-field",
       "name": "TransportContain/DestroyRidersWhoAreNotFreeToExit",
-      "count": 23,
-      "owners": [
-        "TransportContain"
-      ],
-      "plannedTarget": "phase-5-module-field-typing"
-    },
-    {
-      "category": "deferred-field",
-      "name": "TransportContain/DoorOpenTime",
       "count": 24,
       "owners": [
         "TransportContain"
@@ -4738,8 +4729,17 @@
     },
     {
       "category": "deferred-field",
+      "name": "TransportContain/DoorOpenTime",
+      "count": 25,
+      "owners": [
+        "TransportContain"
+      ],
+      "plannedTarget": "phase-5-module-field-typing"
+    },
+    {
+      "category": "deferred-field",
       "name": "TransportContain/EnterSound",
-      "count": 6,
+      "count": 5,
       "owners": [
         "TransportContain"
       ],
@@ -4748,7 +4748,7 @@
     {
       "category": "deferred-field",
       "name": "TransportContain/ExitBone",
-      "count": 23,
+      "count": 24,
       "owners": [
         "TransportContain"
       ],
@@ -4757,7 +4757,7 @@
     {
       "category": "deferred-field",
       "name": "TransportContain/ExitPitchRate",
-      "count": 23,
+      "count": 24,
       "owners": [
         "TransportContain"
       ],
@@ -4766,7 +4766,7 @@
     {
       "category": "deferred-field",
       "name": "TransportContain/ExitSound",
-      "count": 6,
+      "count": 5,
       "owners": [
         "TransportContain"
       ],
@@ -4775,7 +4775,7 @@
     {
       "category": "deferred-field",
       "name": "TransportContain/GoAggressiveOnExit",
-      "count": 36,
+      "count": 37,
       "owners": [
         "TransportContain"
       ],
@@ -4793,7 +4793,7 @@
     {
       "category": "deferred-field",
       "name": "TransportContain/KeepContainerVelocityOnExit",
-      "count": 23,
+      "count": 24,
       "owners": [
         "TransportContain"
       ],
@@ -4802,7 +4802,7 @@
     {
       "category": "deferred-field",
       "name": "TransportContain/OrientLikeContainerOnExit",
-      "count": 23,
+      "count": 24,
       "owners": [
         "TransportContain"
       ],
@@ -4838,7 +4838,7 @@
     {
       "category": "deferred-field",
       "name": "Upgrade/ResearchSound",
-      "count": 63,
+      "count": 68,
       "owners": [
         "Upgrade"
       ],
@@ -4847,7 +4847,7 @@
     {
       "category": "deferred-field",
       "name": "Upgrade/UnitSpecificSound",
-      "count": 11,
+      "count": 13,
       "owners": [
         "Upgrade"
       ],
@@ -4883,7 +4883,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/AcceptableAimDelta",
-      "count": 44,
+      "count": 48,
       "owners": [
         "Weapon"
       ],
@@ -4910,7 +4910,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/AntiAirborneVehicle",
-      "count": 93,
+      "count": 85,
       "owners": [
         "Weapon"
       ],
@@ -4928,7 +4928,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/AntiGround",
-      "count": 69,
+      "count": 77,
       "owners": [
         "Weapon"
       ],
@@ -4964,7 +4964,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/AutoReloadWhenIdle",
-      "count": 4,
+      "count": 29,
       "owners": [
         "Weapon"
       ],
@@ -5009,7 +5009,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/DamageDealtAtSelfPosition",
-      "count": 38,
+      "count": 50,
       "owners": [
         "Weapon"
       ],
@@ -5027,7 +5027,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/FireFX",
-      "count": 292,
+      "count": 335,
       "owners": [
         "Weapon"
       ],
@@ -5036,7 +5036,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/FireOCL",
-      "count": 38,
+      "count": 51,
       "owners": [
         "Weapon"
       ],
@@ -5045,7 +5045,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/FireSound",
-      "count": 238,
+      "count": 235,
       "owners": [
         "Weapon"
       ],
@@ -5054,7 +5054,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/FireSoundLoopTime",
-      "count": 36,
+      "count": 37,
       "owners": [
         "Weapon"
       ],
@@ -5117,7 +5117,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/LeechRangeWeapon",
-      "count": 11,
+      "count": 13,
       "owners": [
         "Weapon"
       ],
@@ -5144,7 +5144,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/MissileCallsOnDie",
-      "count": 6,
+      "count": 7,
       "owners": [
         "Weapon"
       ],
@@ -5162,7 +5162,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/PreAttackDelay",
-      "count": 32,
+      "count": 33,
       "owners": [
         "Weapon"
       ],
@@ -5171,7 +5171,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/PreAttackType",
-      "count": 32,
+      "count": 33,
       "owners": [
         "Weapon"
       ],
@@ -5180,7 +5180,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/ProjectileCollidesWith",
-      "count": 150,
+      "count": 152,
       "owners": [
         "Weapon"
       ],
@@ -5189,7 +5189,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/ProjectileDetonationFX",
-      "count": 158,
+      "count": 141,
       "owners": [
         "Weapon"
       ],
@@ -5198,7 +5198,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/ProjectileDetonationOCL",
-      "count": 24,
+      "count": 25,
       "owners": [
         "Weapon"
       ],
@@ -5207,7 +5207,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/ProjectileExhaust",
-      "count": 89,
+      "count": 92,
       "owners": [
         "Weapon"
       ],
@@ -5216,7 +5216,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/ProjectileObject",
-      "count": 284,
+      "count": 303,
       "owners": [
         "Weapon"
       ],
@@ -5252,7 +5252,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/ScatterRadius",
-      "count": 34,
+      "count": 36,
       "owners": [
         "Weapon"
       ],
@@ -5261,7 +5261,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/ScatterRadiusVsInfantry",
-      "count": 128,
+      "count": 129,
       "owners": [
         "Weapon"
       ],
@@ -5270,7 +5270,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/ScatterTarget",
-      "count": 56,
+      "count": 65,
       "owners": [
         "Weapon"
       ],
@@ -5279,7 +5279,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/ScatterTargetScalar",
-      "count": 5,
+      "count": 6,
       "owners": [
         "Weapon"
       ],
@@ -5342,7 +5342,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/VeterancyFireFX",
-      "count": 61,
+      "count": 72,
       "owners": [
         "Weapon"
       ],
@@ -5351,7 +5351,7 @@
     {
       "category": "deferred-field",
       "name": "Weapon/VeterancyProjectileExhaust",
-      "count": 75,
+      "count": 77,
       "owners": [
         "Weapon"
       ],
@@ -5486,7 +5486,7 @@
     {
       "category": "definition",
       "name": "EvaEvent",
-      "count": 49,
+      "count": 48,
       "owners": [
         "top-level"
       ],
@@ -5531,7 +5531,7 @@
     {
       "category": "definition",
       "name": "MappedImage",
-      "count": 1369,
+      "count": 1375,
       "owners": [
         "top-level"
       ],
@@ -5585,7 +5585,7 @@
     {
       "category": "definition",
       "name": "MultiplayerStartingMoneyChoice",
-      "count": 4,
+      "count": 6,
       "owners": [
         "top-level"
       ],
@@ -5709,7 +5709,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-duplicate-key",
-      "count": 120,
+      "count": 8,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5723,7 +5723,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-ignored-tokens",
-      "count": 208,
+      "count": 194,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5744,7 +5744,7 @@
     {
       "category": "diagnostic",
       "name": "compatibility-module",
-      "count": 2973,
+      "count": 3057,
       "owners": [],
       "plannedTarget": "explained-in-docs"
     },
@@ -5756,34 +5756,9 @@
       "plannedTarget": "explained-in-docs"
     },
     {
-      "category": "diagnostic",
-      "name": "compatibility-value",
-      "count": 2,
-      "owners": [],
-      "plannedTarget": "explained-in-docs"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "AudioEvent/Attack",
-      "count": 1,
-      "owners": [
-        "AudioEvent"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "AudioEvent/Control",
-      "count": 1,
-      "owners": [
-        "AudioEvent"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
       "category": "duplicate-key",
       "name": "AudioEvent/Priority",
-      "count": 12,
+      "count": 2,
       "owners": [
         "AudioEvent"
       ],
@@ -5792,117 +5767,9 @@
     {
       "category": "duplicate-key",
       "name": "CommandButton/CursorName",
-      "count": 5,
+      "count": 1,
       "owners": [
         "CommandButton"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "CommandSet/1",
-      "count": 1,
-      "owners": [
-        "CommandSet"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/ButtonImage",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/CommandSet",
-      "count": 10,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/CrushableLevel",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/CrusherLevel",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/EditorSorting",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/ExperienceValue",
-      "count": 10,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/KindOf",
-      "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/PlacementViewAngle",
-      "count": 9,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/RadarPriority",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/SelectPortrait",
-      "count": 5,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/Shadow",
-      "count": 13,
-      "owners": [
-        "Object"
       ],
       "plannedTarget": "last-wins"
     },
@@ -5912,69 +5779,6 @@
       "count": 5,
       "owners": [
         "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/TransportSlotCount",
-      "count": 1,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/UpgradeCameo1",
-      "count": 6,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Object/VoiceFear",
-      "count": 7,
-      "owners": [
-        "Object"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Upgrade/ResearchSound",
-      "count": 1,
-      "owners": [
-        "Upgrade"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Weapon/AntiAirborneVehicle",
-      "count": 8,
-      "owners": [
-        "Weapon"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Weapon/DelayBetweenShots",
-      "count": 1,
-      "owners": [
-        "Weapon"
-      ],
-      "plannedTarget": "last-wins"
-    },
-    {
-      "category": "duplicate-key",
-      "name": "Weapon/ProjectileDetonationFX",
-      "count": 4,
-      "owners": [
-        "Weapon"
       ],
       "plannedTarget": "last-wins"
     },
@@ -6071,7 +5875,7 @@
     {
       "category": "module",
       "name": "LaserUpdate",
-      "count": 24,
+      "count": 27,
       "owners": [
         "Object"
       ],
@@ -6116,7 +5920,7 @@
     {
       "category": "module",
       "name": "W3DLaserDraw",
-      "count": 25,
+      "count": 28,
       "owners": [
         "Object"
       ],
@@ -6125,7 +5929,7 @@
     {
       "category": "module",
       "name": "W3DModelDraw",
-      "count": 2342,
+      "count": 2429,
       "owners": [
         "Object"
       ],
@@ -6206,7 +6010,7 @@
     {
       "category": "module",
       "name": "W3DTankDraw",
-      "count": 75,
+      "count": 77,
       "owners": [
         "Object"
       ],
@@ -6233,7 +6037,7 @@
     {
       "category": "module",
       "name": "W3DTreeDraw",
-      "count": 128,
+      "count": 116,
       "owners": [
         "Object"
       ],
@@ -6242,7 +6046,7 @@
     {
       "category": "module",
       "name": "W3DTruckDraw",
-      "count": 118,
+      "count": 119,
       "owners": [
         "Object"
       ],

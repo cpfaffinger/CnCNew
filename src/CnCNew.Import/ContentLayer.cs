@@ -49,9 +49,9 @@ public static class ContentLayerManifest
 }
 
 /// <summary>
-/// The core of GeneralsGamePatch (the community patch "Patch104pZH", <c>references/generals-game-patch</c>) as a <see cref="ContentLayer"/>: the files of its core
-/// bundles (<c>ModBundleCoreItems.json</c>) that it ships as they are - INI, window layouts, map scripts and strings, W3D models, ready textures, cursors. What its own
-/// tool chain must first convert (Photoshop and TIFF sources into DDS/TGA, Blender scenes into W3D, string sources into CSF) is not taken and is counted by reason.
+/// The core of GeneralsGamePatch (the community patch "Patch104pZH", <c>references/generals-game-patch</c>): the sources of its core bundles (<c>ModBundleCoreItems.json</c>,
+/// <c>ModBundleCoreAudioItems.json</c>, the English part of <c>ModBundleCoreLanguageItems.json</c>). INI, window layouts, map scripts and strings, W3D models, ready textures, cursors and sounds it ships as they are; its Photoshop
+/// and TGA sources and its string file <see cref="PatchBuild"/> turns into what the game loads. Every other file is not taken and is counted by reason.
 /// </summary>
 public static class GeneralsGamePatchLayer
 {
@@ -92,10 +92,12 @@ public static class GeneralsGamePatchLayer
         if (directory.Equals("Art/W3D", StringComparison.OrdinalIgnoreCase) && extension == ".w3d") return null;
         if (directory.Equals("Art/Textures", StringComparison.OrdinalIgnoreCase) && extension is ".tga" or ".dds") return null;
         if (directory.Equals("Data/Cursors", StringComparison.OrdinalIgnoreCase) && extension == ".ani") return null;
-        if (p.StartsWith("Art/Textures/", StringComparison.OrdinalIgnoreCase)) return "texture source the patch converts into DDS/TGA (Photoshop, TIFF or a TGA to be mip-mapped)";
-        if (p.StartsWith("Art/Models/", StringComparison.OrdinalIgnoreCase)) return "Blender scene the patch builds into W3D";
-        if (extension == ".str") return "string source the patch compiles into a CSF string table";
-        if (extension is ".txt" or ".md" or ".gitignore") return "note or placeholder of the patch's repository";
+        if (directory.Equals("Data/Audio/Sounds", StringComparison.OrdinalIgnoreCase) && extension == ".wav") return null;
+        if (directory.Equals("Data/Audio/Sounds/English", StringComparison.OrdinalIgnoreCase) && extension == ".wav") return null;
+        if (directory.Equals("Data/English", StringComparison.OrdinalIgnoreCase) && extension == ".ini") return null;
+        if (PatchBuild.IsConverted(p)) return null;
+        if (extension is ".txt" or ".md" or ".gitignore" || p.EndsWith("/.gitignore", StringComparison.OrdinalIgnoreCase)) return "note or placeholder of the patch's repository";
+        if (extension == ".wav") return "a sound of another language";
         return "not part of the patch's core bundles";
     }
 }

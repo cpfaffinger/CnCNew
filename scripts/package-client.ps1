@@ -48,7 +48,7 @@ $modified = if (git status --porcelain) { '+modified' } else { '' }
 $crlf = "`r`n"
 [IO.File]::WriteAllText((Join-Path $target 'Install-CnCNew.cmd'), (@(
     '@echo off',
-    'rem Makes the content of CnCNew from your own Steam installation of Command & Conquer Generals - Zero Hour (English).',
+    'rem Makes the content of CnCNew from your own Steam installation of Command & Conquer Generals - Zero Hour (English) and the community patch, fetched once from GitHub.',
     'rem The installation is only read. Pass its directory if it is not found: Install-CnCNew.cmd "D:\SteamLibrary\steamapps\common\Command & Conquer Generals - Zero Hour"',
     'setlocal',
     'set "GAME=%~1"',
@@ -68,8 +68,9 @@ $crlf = "`r`n"
     '',
     'This package holds no file of the game. You need your own copy: the English Steam version of Zero Hour (Steam app 2732960), freshly installed.',
     '',
-    '1. Run Install-CnCNew.cmd. It finds the Steam installation, checks every file of it against the one version this package knows, and exports the content',
-    '   into the folder "game" beside this file (about 3 GB). The Steam installation is only read, never changed.',
+    '1. Run Install-CnCNew.cmd. It finds the Steam installation, checks every file of it against the one version this package knows, fetches the community patch',
+    '   GeneralsGamePatch from GitHub (36 MB, once, each file checked against its recorded hash) and exports the content into the folder "game" beside this file',
+    '   (about 3 GB). The Steam installation is only read, never changed.',
     '2. Run Start-CnCNew.cmd.',
     '',
     'Logs, crash reports and keys are kept in %LOCALAPPDATA%\CnCNew, settings and saved games in %APPDATA%\CnCNew. Nothing is sent anywhere.',
