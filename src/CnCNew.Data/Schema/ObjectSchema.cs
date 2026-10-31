@@ -126,15 +126,13 @@ public static class RepeatableKeys
         // Weapon.cpp parseScatterTarget appends; GlobalData.cpp parseAsciiStringVectorAppend appends.
         Add("Weapon", "ScatterTarget", RepeatPolicy.Accumulate);
         Add("GameData", "StandardPublicBone", RepeatPolicy.Accumulate);
-        // INIMapCache.cpp, Anim2D.cpp parseImage, Credits.cpp parseText, CrateSystem.cpp, TerrainRoads.cpp push_back entries.
+        // INIMapCache.cpp, Anim2D.cpp parseImage, Credits.cpp parseText, CrateSystem.cpp push_back entries.
         Add("MapCache", "supplyPosition", RepeatPolicy.Accumulate);
         Add("MapCache", "techPosition", RepeatPolicy.Accumulate);
         Add("Animation", "Image", RepeatPolicy.Accumulate);
         Add("Credits", "Text", RepeatPolicy.Accumulate);
         Add("Credits", "Style", RepeatPolicy.Accumulate);
         Add("CrateData", "CrateObject", RepeatPolicy.Accumulate);
-        Add("Bridge", "TransitionToFX", RepeatPolicy.Accumulate);
-        Add("Bridge", "TransitionToOCL", RepeatPolicy.Accumulate);
         // AIUpdate.cpp AIUpdateModuleData::parseLocomotorSet: one locomotor list per set name.
         Add("Object", "Locomotor", RepeatPolicy.IndexedByFirstToken);
         Add("ObjectReskin", "Locomotor", RepeatPolicy.IndexedByFirstToken);

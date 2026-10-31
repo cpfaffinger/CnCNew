@@ -5377,15 +5377,6 @@
     },
     {
       "category": "definition",
-      "name": "Bridge",
-      "count": 27,
-      "owners": [
-        "top-level"
-      ],
-      "plannedTarget": "phase-specific typed definition compiler"
-    },
-    {
-      "category": "definition",
       "name": "Campaign",
       "count": 17,
       "owners": [

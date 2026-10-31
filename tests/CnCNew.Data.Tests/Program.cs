@@ -40,12 +40,45 @@ ObjectCreationListsAreTypedNuggets();
 WeaponBonusesAreTypedAndStrict();
 SingleBitsMatchTheRuntimeCast();
 FingerprintEncodingIsPinned();
+BridgeBlocksAreStrictlyTyped();
 
 var contentDirectory = args.SkipWhile(value => value != "--content-dir").Skip(1).FirstOrDefault();
 if (contentDirectory is not null) RealDataCatalogMatchesObservedModules(contentDirectory);
 
 Console.WriteLine("All typed definition compiler tests passed.");
 return 0;
+
+static void BridgeBlocksAreStrictlyTyped()
+{
+    const string text = """
+    Object SiteProp
+    End
+    Bridge Sample
+      BridgeScale = 0.85
+      RadarColor = R:192 G:128 B:64
+      BridgeModelName = SampleModel
+      Texture = Sample.tga
+      TransitionEffectsHeight = 2.5
+      NumFXPerType = 32
+      DamagedToSound = BridgeDamaged
+      TowerObjectNameFromLeft = SiteProp
+      ScaffoldObjectName = SiteProp
+      TransitionToOCL = Transition:Damage ToState:RUBBLE EffectNum:1 OCL:SomeList
+      TransitionToOCL = Transition:Repair ToState:PRISTINE EffectNum:2 OCL:OtherList
+    End
+    """;
+    var graph = DefinitionCompiler.Compile(One(text));
+    var bridge = graph.Definitions.OfType<BridgeDefinition>().Single();
+    Assert(bridge.Id.Kind == DefinitionKind.Bridge && bridge.OriginalName == "Sample", "A Bridge block is a definition of its own kind.");
+    Assert(bridge.Fields.Single(field => field.Name == "BridgeScale").Value.Value is 0.85m, "BridgeScale is a real.");
+    Assert(bridge.Fields.Single(field => field.Name == "RadarColor").Value.Value is ColorValue { Red: 192, Green: 128, Blue: 64 }, "RadarColor is a colour.");
+    Assert(bridge.Fields.Single(field => field.Name == "NumFXPerType").Value.Value is 32L, "NumFXPerType is an integer.");
+    Assert(bridge.Fields.Single(field => field.Name == "ScaffoldObjectName").Value.Value is DefinitionReference { Kind: DefinitionKind.Object, Name: "SiteProp" }, "The scaffold object is a reference.");
+    Assert(bridge.Fields.Count(field => field.Name == "TransitionToOCL") == 2, "Transitions accumulate.");
+    Assert(!graph.Audit.Compatibility.Any(entry => entry.Name == "Bridge" || entry.Name.StartsWith("Bridge/", StringComparison.Ordinal)), "A Bridge block leaves no compatibility case behind.");
+    Throws<DefinitionCompileException>(() => DefinitionCompiler.Compile(One("Bridge Sample\n  BridgeWidth = 3\nEnd\n")), "Unknown Bridge key 'BridgeWidth'");
+    Throws<Exception>(() => DefinitionCompiler.Compile(One("Bridge Sample\n  NumFXPerType = many\nEnd\n")), "many");
+}
 
 static void ParserPreservesStructureAndLocations()
 {

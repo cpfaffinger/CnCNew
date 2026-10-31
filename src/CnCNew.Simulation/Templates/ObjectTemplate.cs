@@ -427,6 +427,7 @@ public sealed class TemplateCatalog
         var factions = FactionCatalog.Build(graph, sciences);
         var crates = CrateCatalog.Build(graph, sciences);
         var creationLists = ObjectCreationListCatalog.Build(graph, timing);
+        var bridges = BridgeCatalog.Build(graph);
         var (unitDamagedThreshold, unitReallyDamagedThreshold) = ResolveDamageThresholds(graph);
         var gravity = ResolveGravity(graph);
         var (baseRegen, baseRegenDelay) = ResolveBaseRegen(graph, timing);
@@ -500,11 +501,20 @@ public sealed class TemplateCatalog
             SpecialPowerViewObject = graph.Definitions.OfType<GlobalDataDefinition>().FirstOrDefault()?.Fields
                 .LastOrDefault(field => field.Name.Equals("SpecialPowerViewObject", StringComparison.OrdinalIgnoreCase))?.Value.Value is DefinitionReference { IsNone: false } view ? view.Name : string.Empty,
             Geometry = geometry ?? ModelGeometry.None,
+            Bridges = bridges,
             Rate = rate,
             Rules = rules ?? RuleProfile.Original,
         };
         foreach (var name in catalog.Geometry.Airfields.Keys)
             if (!catalog.TryGet(name, out _)) throw new TemplateBuildException($"Model geometry names '{name}', which is not an Object definition.");
+        foreach (var bridge in bridges.Bridges)
+        {
+            foreach (var name in bridge.Towers.Add(bridge.ScaffoldObject).Add(bridge.ScaffoldSupportObject))
+                if (name.Length > 0 && !catalog.TryGet(name, out _)) throw new TemplateBuildException($"Bridge '{bridge.Name}': '{name}' is not an Object definition.");
+            foreach (var transition in bridge.DamagedTo.AddRange(bridge.RepairedTo))
+                foreach (var name in transition.CreationLists)
+                    if (name.Length > 0 && !creationLists.TryGet(name, out _)) throw new TemplateBuildException($"Bridge '{bridge.Name}': '{name}' is not an ObjectCreationList definition.");
+        }
         catalog.SoloHealthBonus = ResolveSoloHealthBonus(graph);
         foreach (var crate in crates.Crates)
             foreach (var entry in crate.Objects)
@@ -546,6 +556,9 @@ public sealed class TemplateCatalog
 
     /// <summary>Airfield bones read from the models (<see cref="ModelGeometry.None"/> when the host supplied none).</summary>
     public ModelGeometry Geometry { get; private init; } = ModelGeometry.None;
+
+    /// <summary>The <c>Bridge</c> blocks of <c>Roads.ini</c>.</summary>
+    public required BridgeCatalog Bridges { get; init; }
 
     /// <summary>Per weapon index, the index of its <see cref="WeaponInfo.ProjectileObject"/> template, or -1 when it fires none.</summary>
     public ImmutableArray<int> ProjectileTemplates { get; private set; } = [];

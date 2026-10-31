@@ -22,6 +22,7 @@ internal static class DomainSchemas
         DefinitionKind.Faction => FactionSchema.Faction,
         DefinitionKind.Crate => CrateSchema.Crate,
         DefinitionKind.SpecialPower => SpecialPowerSchema.SpecialPower,
+        DefinitionKind.Bridge => BridgeSchema.Bridge,
         DefinitionKind.GameData or DefinitionKind.GlobalData => GameDataSchema.GameData,
         _ => null,
     };

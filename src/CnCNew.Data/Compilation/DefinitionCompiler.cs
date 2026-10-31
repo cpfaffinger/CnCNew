@@ -304,6 +304,8 @@ public static class DefinitionCompiler
                 c.Diagnostics.Add(new DefinitionDiagnostic("warning", "compatibility-ignored-tokens",
                     $"'{key}' = '{property.Value.Trim()}' has {ignoredDomainTokens} trailing token(s) that the reference parser reads past and ignores.", property.Location));
         }
+        else if (state.Kind == DefinitionKind.Bridge)
+            throw new DefinitionCompileException($"Unknown Bridge key '{key}'; it is not part of TerrainRoadType::m_terrainBridgeFieldParseTable.", property.Location);
         else
         {
             repeat = RepeatableKeys.Lookup(state.DeclarationType, key);
@@ -675,6 +677,7 @@ public static class DefinitionCompiler
             DefinitionKind.Crate => new CrateDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.ObjectCreationList => new ObjectCreationListDefinition(id, state.Name, state.Location, fields, modules),
             DefinitionKind.GameData or DefinitionKind.GlobalData => new GlobalDataDefinition(id, state.Name, state.Location, fields, modules),
+            DefinitionKind.Bridge => new BridgeDefinition(id, state.Name, state.Location, fields, modules),
             _ => new CompatibilityDefinition(id, state.Name, state.Location, fields, modules),
         };
         return definition with { Sections = state.Sections.ToImmutableArray() };
@@ -777,6 +780,7 @@ public static class DefinitionCompiler
             "specialpower" or "specialpowertemplate" => DefinitionKind.SpecialPower,
             "gamedata" => DefinitionKind.GameData, "globaldata" => DefinitionKind.GlobalData, "cratedata" => DefinitionKind.Crate,
             "objectcreationlist" => DefinitionKind.ObjectCreationList,
+            "bridge" => DefinitionKind.Bridge,
             _ => DefinitionKind.Compatibility,
         };
         return kind != DefinitionKind.Compatibility;
