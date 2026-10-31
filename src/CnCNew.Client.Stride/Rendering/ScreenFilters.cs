@@ -34,11 +34,7 @@ internal sealed class ScreenFilters : IDisposable
     public void Apply(GraphicsContext context, Texture back, MissionPostEffects effects)
     {
         if (!effects.Any) return;
-        if (_copy is null || _copy.Width != back.Width || _copy.Height != back.Height || _copy.Format != back.Format)
-        {
-            _copy?.Dispose();
-            _copy = Texture.New2D(_device, back.Width, back.Height, back.Format, TextureFlags.ShaderResource);
-        }
+        EnsureCopy(back);
         var commandList = context.CommandList;
         commandList.Copy(back, _copy);
         commandList.SetRenderTargetAndViewport(null, back);
@@ -48,6 +44,42 @@ internal sealed class ScreenFilters : IDisposable
 
         if (effects.MotionBlurCount > 0) DrawBlur(context, screen, sampler, effects);
         else DrawGrey(context, screen, sampler, effects.BlackWhite);
+    }
+
+    /// <summary>Rings per smudge: a sprite batch has no fan of triangles with a shifted middle, so the fall to the edge is a stack of rectangles.</summary>
+    private const int SmudgeLayers = 5;
+
+    /// <summary><c>THE_COLOR</c> of <c>W3DSmudge.cpp</c>.</summary>
+    private static readonly Color3 SmudgeTint = new(1f, 0xEE / 255f, 0xDD / 255f);
+
+    /// <summary>
+    /// <c>W3DSmudgeManager::render</c>: over the finished world and under the HUD a copy of the picture is drawn back in every smudge, with its middle looking a little aside and its edge
+    /// fading out, which is what the heat of a microwave looks like. The original draws a fan of four triangles; here nested rectangles, each shifted a little further.
+    /// </summary>
+    public void DrawSmudges(GraphicsContext context, Texture back, IReadOnlyList<CnCNew.Client.Stride.Layers.Fx.FxSmudge> smudges, Func<System.Numerics.Vector3, (bool Visible, float X, float Y)> toScreen)
+    {
+        if (smudges.Count == 0) return;
+        EnsureCopy(back);
+        var commandList = context.CommandList;
+        commandList.Copy(back, _copy!);
+        commandList.SetRenderTargetAndViewport(null, back);
+        _batch.Begin(context, SpriteSortMode.Deferred, BlendStates.NonPremultiplied, _device.SamplerStates.LinearClamp, DepthStencilStates.None);
+        foreach (var smudge in smudges)
+        {
+            var (visible, x, y) = toScreen(smudge.Position);
+            if (!visible) continue;
+            var color = new Color4(SmudgeTint.R, SmudgeTint.G, SmudgeTint.B, Math.Clamp(smudge.Opacity, 0f, 1f) / SmudgeLayers);
+            for (var layer = 0; layer < SmudgeLayers; layer++)
+            {
+                var share = 1f - layer / (float)SmudgeLayers;
+                var width = smudge.Pixels * share;
+                var shift = (1f - share) * smudge.Pixels;
+                var target = new RectangleF(x - width / 2f, y - width / 2f, width, width);
+                _batch.Draw(_copy, target, new RectangleF(target.X + smudge.Offset.X * shift, target.Y + smudge.Offset.Y * shift, width, width), color, 0f, Vector2.Zero);
+            }
+        }
+
+        _batch.End();
     }
 
     private void DrawGrey(GraphicsContext context, RectangleF screen, SamplerState sampler, float amount)
@@ -62,6 +94,13 @@ internal sealed class ScreenFilters : IDisposable
         _batch.Begin(context, SpriteSortMode.Deferred, BlendStates.Additive, sampler, DepthStencilStates.None);
         _batch.Draw(_copy, screen, null, new Color4(amount, amount, amount, 1f), 0f, Vector2.Zero, SpriteEffects.None, ImageOrientation.AsIs, 0f, default, SwizzleMode.RRRR);
         _batch.End();
+    }
+
+    private void EnsureCopy(Texture back)
+    {
+        if (_copy is not null && _copy.Width == back.Width && _copy.Height == back.Height && _copy.Format == back.Format) return;
+        _copy?.Dispose();
+        _copy = Texture.New2D(_device, back.Width, back.Height, back.Format, TextureFlags.ShaderResource);
     }
 
     private void DrawBlur(GraphicsContext context, RectangleF screen, SamplerState sampler, MissionPostEffects effects)

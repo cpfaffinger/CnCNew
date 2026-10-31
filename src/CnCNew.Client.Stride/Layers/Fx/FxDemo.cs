@@ -108,6 +108,11 @@ internal sealed class FxDemo
         {
             fx.Decals.AddScorch(Place(RingRadius * 0.4f), 14f + index * 6f, index, fx.Frame);
         }
+
+        // The two effects that go through other passes: a light pulse and the smudges of the microwave.
+        if (fx.Catalog.ParticleSystems.TryGetValue("MicrowaveEmitter", out var smudge)) fx.Particles.Spawn(smudge, new ParticleSpawn(center + new Vector3(0, 0, 14)));
+        var pulse = fx.Catalog.FxLists.FirstOrDefault(list => list.Value.Nuggets.Any(nugget => nugget is LightPulseFxNugget { Radius: > 60f })).Key;
+        if (pulse is not null) fx.ExecuteFxListAtPosition(pulse, new FxInvocation(center + new Vector3(40, 40, 4)), match.FxView);
     }
 
     private static List<ParticleSystemTemplate> PickTemplates(FxCatalog catalog)

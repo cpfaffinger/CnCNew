@@ -56,7 +56,7 @@ internal static class TerrainMaterials
         return material;
     }
 
-    public static Material CreateWater(GraphicsDevice device, Texture water, FogMap fog, bool linearSpace, bool additive, Dictionary<MaterialPass, bool> depthWrites)
+    public static Material CreateWater(GraphicsDevice device, Texture water, FogMap fog, bool linearSpace, bool additive, Dictionary<MaterialPass, bool> depthWrites, FogMap? shore = null)
     {
         IComputeColor color = new ComputeTextureColor(water, Uv0, Vector2.One, Vector2.Zero)
         {
@@ -66,8 +66,8 @@ internal static class TerrainMaterials
         };
         var modulated = new ComputeBinaryColor(color, VertexColor(0), BinaryOperator.Multiply);
         var fogged = new ComputeBinaryColor(modulated, FogFactor(fog, linearSpace), BinaryOperator.Multiply);
-        // The fog multiplication scales alpha too; keep the modulated alpha so shrouded water stays as opaque as unshrouded water.
-        var surface = SubstituteAlpha(fogged, modulated);
+        // The fog multiplication scales alpha too; keep the modulated alpha so shrouded water stays as opaque as unshrouded water. With a soft edge the alpha is the depth's (WaterShore).
+        var surface = SubstituteAlpha(fogged, shore is null ? modulated : FogFactor(shore, false));
 
         var material = Material.New(device, new MaterialDescriptor
         {

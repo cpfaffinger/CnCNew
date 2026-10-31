@@ -44,6 +44,9 @@ internal sealed class FxLayer : IWorldLayer
     /// </summary>
     public FxFrame? LastFrame { get; private set; }
 
+    /// <summary>The smudges of the last frame, for the pass over the finished picture.</summary>
+    public IReadOnlyList<FxSmudge> Smudges => _builder is { } builder ? builder.Smudges : [];
+
     public void Attach(RenderServices services, LiveGame match)
     {
         _geometry = new FxGeometry(services.GraphicsDevice);

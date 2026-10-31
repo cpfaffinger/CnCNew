@@ -28,6 +28,7 @@ internal static class ShadowTests
         harness.Run("A decal without a texture is shadow.tga, with one its name and .tga", DecalTexture);
         harness.Run("The clouds slide with game time and a picture shifts by parts of a texel", CloudShift);
         harness.Run("Weather and sky of a map.ini over the base data; an unknown key of Weather is an error", MapIni);
+        harness.Run("The water's edge: opacity follows the depth up to the minimum opacity", WaterEdge);
         harness.Run("Snow: flakes in a box around the camera, the same picture for the same time, falling, culled by leaf", Snow);
         return harness.Failures;
     }
@@ -205,7 +206,7 @@ internal static class ShadowTests
         var (u, v) = TerrainClouds.Offset(10.0);
         TestHarness.Near(-0.2f, u, 1e-5, "0.02 a second");
         TestHarness.Near(-0.3f, v, 1e-5, "and half as much again the other way");
-        TestHarness.Near(0f, TerrainClouds.Offset(100.0).U, 1e-4, "a whole turn is nothing");
+        TestHarness.Near(1f, MathF.Abs(TerrainClouds.Offset(101.0).U) + 0.02f, 1e-3, "two turns are gone from the offset");
         TestHarness.Near(1f / 315f, TerrainClouds.Stretch, 1e-7, "31.5 cells");
 
         // Two texels, black and white: half a texel is grey, one texel swaps them.
@@ -221,6 +222,18 @@ internal static class ShadowTests
     }
 
     private static readonly SnowSettings BaseSnow = new(false, "ExSnowFlake.tga", 200f, 1f, 0.05f, 0.03f, 5f, 4f, 1f, 0f, 64f);
+
+    private static void WaterEdge()
+    {
+        var field = Field((x, _) => (byte)(x < 12 ? 0 : 40));
+        var opacity = WaterShore.Opacity(field, 10f, 20f, 0.8f);
+        var width = field.PlayableCellsX + 1;
+        TestHarness.Assert(opacity.Length == width * (field.PlayableCellsY + 1), "a byte per vertex");
+        TestHarness.Near(0.5 * 255, opacity[width * 3], 1, "ten units over a depth of twenty: half");
+        TestHarness.Assert(opacity[width * 3 + 30] == 0, "dry land: none");
+        var deep = WaterShore.Opacity(field, 100f, 20f, 0.8f);
+        TestHarness.Near(0.8 * 255, deep[width * 3], 1, "deep water stops at the minimum opacity");
+    }
 
     private static void MapIni()
     {

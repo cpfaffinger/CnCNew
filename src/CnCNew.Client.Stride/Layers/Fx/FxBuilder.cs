@@ -27,6 +27,9 @@ internal readonly record struct FxView(Vector3 Eye, Vector3 Right, Vector3 Up, V
     }
 }
 
+/// <summary>A smudge: where it is, how many pixels wide, how strong in its middle, and how far its middle looks aside, as a share of its width (<c>Smudge::m_offset</c>).</summary>
+internal readonly record struct FxSmudge(Vector3 Position, float Pixels, float Opacity, Vector2 Offset);
+
 /// <summary>What one frame of building produced (per-frame numbers; <see cref="FxLayer"/> accumulates them).</summary>
 internal readonly record struct FxBuildCounts(
     int ParticlesDrawn, int Streaks, int Tracers, int Decals, int Batches, int Runs, int Quads, int DroppedQuads,
@@ -47,9 +50,12 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
     private const float MinTracerPixels = 1.5f;
     private const float RunDepthStep = 0.01f;
 
+    /// <summary>Cells per side of the grid under a light pulse.</summary>
+    private const int LightPulseCells = 10;
+
     private static readonly FxMaterialKey TracerKey = new(null, FxBlend.Alpha);
 
-    private enum BatchClass : byte { Skip, Ground, AlphaTest, Billboard, Streak }
+    private enum BatchClass : byte { Skip, Ground, AlphaTest, Billboard, Streak, Smudge }
 
     private enum ItemKind : byte { Particle, Streak, Tracer, Stream }
 
@@ -91,6 +97,9 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
 
     public FxBuildCounts Counts { get; private set; }
 
+    /// <summary>The smudges of this frame, for the screen pass that draws them.</summary>
+    public List<FxSmudge> Smudges { get; } = [];
+
     public FxMaterialKey MaterialOf(int run) => _materials[_runs[run].Material];
 
     public int FirstQuadOf(int run) => _runs[run].First;
@@ -107,7 +116,9 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
 
         var batches = frame.Particles.Batches;
         PrepareBatches(batches);
+        CollectSmudges(frame.Particles.Particles);
         EmitDecals(frame.Decals, frustum, frame.Frame);
+        EmitLightPulses(frame.Lights, frustum);
         if (shadowDecals is not null) EmitShadowDecals(shadowDecals);
         if (snow is not null) EmitSnow(snow, seconds, frustum);
         EmitUnsortedParticles(frame.Particles.Particles, batches.Length);
@@ -166,6 +177,10 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
                 case ParticleKind.Smudge:
                     _skippedSmudge++;
                     break;
+                // ParticleSystem's constructor: the retail smudges are particles named SMUDGE.tga, a texture nobody loads.
+                case ParticleKind.Particle when key.Texture.StartsWith("SMUD", StringComparison.Ordinal):
+                    kind = BatchClass.Smudge;
+                    break;
                 case ParticleKind.None:
                     _skippedUnusable++;
                     break;
@@ -191,7 +206,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             }
 
             _batchClass[index] = kind;
-            _batchMaterial[index] = kind == BatchClass.Skip ? -1 : MaterialId(new FxMaterialKey(key.Texture, ToBlend(key.Shader)));
+            _batchMaterial[index] = kind is BatchClass.Skip or BatchClass.Smudge ? -1 : MaterialId(new FxMaterialKey(key.Texture, ToBlend(key.Shader)));
         }
     }
 
@@ -244,6 +259,71 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             EndItem(material, first, _view.Far, 0);
             _decals++;
         }
+    }
+
+    /// <summary>
+    /// <c>ParticleSystemManager::update</c> and <c>W3DSmudgeManager::render</c>: a smudge is a particle that shows the picture behind it a little shifted; its offset is drawn once, here from its
+    /// personality so that it holds still over the particle's life. What is drawn in the screen filter's pass needs the screen, so this keeps pixels.
+    /// </summary>
+    private void CollectSmudges(System.Collections.Immutable.ImmutableArray<ParticleInstance> particles)
+    {
+        Smudges.Clear();
+        foreach (var particle in particles)
+        {
+            if (_batchClass[particle.Batch] != BatchClass.Smudge) continue;
+            var depth = Depth(particle.Position);
+            if (depth < _view.Near) continue;
+            var offset = new Vector2(Hash(particle.Personality) - 0.5f, Hash(particle.Personality ^ 0x9E3779B9u) - 0.5f) * 0.12f;
+            Smudges.Add(new FxSmudge(particle.Position, particle.Size / (depth * _view.WorldPerPixelAtUnitDepth), particle.Color.W, offset));
+        }
+
+        static float Hash(uint value)
+        {
+            value = unchecked((value ^ (value >> 16)) * 0x45D9F3Bu);
+            return (value & 0xFFFF) / 65535f;
+        }
+    }
+
+    /// <summary>
+    /// <c>W3DDynamicLight</c>: the terrain under a light pulse takes the light into its vertex colours, at full strength within the inner radius and fading to nothing at the outer one. Here a grid
+    /// laid on the terrain carries that as a vertex colour and multiplies it in. The light on the objects themselves is not drawn.
+    /// </summary>
+    private void EmitLightPulses(System.Collections.Immutable.ImmutableArray<LightPulseInstance> lights, in Frustum frustum)
+    {
+        var material = lights.IsDefaultOrEmpty ? -1 : MaterialId(new FxMaterialKey(null, FxBlend.Light, Ground: true));
+        foreach (var light in lights)
+        {
+            var reach = light.OuterRadius;
+            var center = light.Position;
+            if (reach <= 0f || !frustum.Intersects(new Aabb(center - new Vector3(reach, reach, reach + 50f), center + new Vector3(reach, reach, reach + 50f)))) continue;
+            var cells = Math.Clamp((int)MathF.Ceiling(2f * reach / TerrainHeightSampler.CellSize), 2, LightPulseCells);
+            var first = geometry.QuadCount;
+            for (var row = 0; row < cells; row++)
+            {
+                for (var column = 0; column < cells; column++)
+                {
+                    var quad = geometry.NextQuad();
+                    if (quad.IsEmpty) return;
+                    SetLightCorner(ref quad[0], light, cells, column, row);
+                    SetLightCorner(ref quad[1], light, cells, column, row + 1);
+                    SetLightCorner(ref quad[2], light, cells, column + 1, row + 1);
+                    SetLightCorner(ref quad[3], light, cells, column + 1, row);
+                }
+            }
+
+            EndItem(material, first, _view.Far, 0);
+        }
+    }
+
+    private void SetLightCorner(ref FxVertex vertex, in LightPulseInstance light, int cells, int column, int row)
+    {
+        var x = light.Position.X + (column / (float)cells * 2f - 1f) * light.OuterRadius;
+        var y = light.Position.Y + (row / (float)cells * 2f - 1f) * light.OuterRadius;
+        var distance = MathF.Sqrt((x - light.Position.X) * (x - light.Position.X) + (y - light.Position.Y) * (y - light.Position.Y));
+        var strength = light.OuterRadius > light.InnerRadius ? Math.Clamp((light.OuterRadius - distance) / (light.OuterRadius - light.InnerRadius), 0f, 1f) : 1f;
+        vertex.Position = new Vector3(x, y, heights.HeightAt(x, y) + GroundLift);
+        vertex.Color = Pack(light.Color * strength, 1f);
+        vertex.Uv = default;
     }
 
     /// <summary>

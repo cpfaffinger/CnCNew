@@ -63,6 +63,30 @@ public sealed record WaterAppearance(
 }
 
 /// <summary>
+/// The soft edge of the water (<c>BaseHeightMapRenderObjClass::updateShorelineTile</c>): the original writes a factor into the destination alpha of the terrain under the water, the depth over
+/// <c>TransparentWaterDepth</c>, up to <c>TransparentWaterMinOpacity</c>, and draws the water with that alpha. Here the same factor is a small map over the playable area.
+/// </summary>
+public static class WaterShore
+{
+    /// <summary>A byte per vertex of the playable area, row 0 at the map's origin. The depth is the plane <paramref name="waterHeight"/> over the terrain.</summary>
+    public static byte[] Opacity(TerrainHeightSampler heights, float waterHeight, float transparentDepth, float minimumOpacity)
+    {
+        var (width, height) = (heights.PlayableCellsX + 1, heights.PlayableCellsY + 1);
+        var opacity = new byte[width * height];
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                var depth = waterHeight - heights.HeightAt(x * TerrainHeightSampler.CellSize, y * TerrainHeightSampler.CellSize);
+                opacity[y * width + x] = (byte)(Math.Clamp(depth / transparentDepth, 0f, minimumOpacity) * 255f + 0.5f);
+            }
+        }
+
+        return opacity;
+    }
+}
+
+/// <summary>
 /// One water polygon as a flat, double-sided mesh (the reference disables culling for water). <see cref="Uv"/> are the base texture
 /// coordinates; a renderer adds <see cref="UvScrollPerSecond"/> times elapsed seconds. Indices are counter-clockwise seen from above.
 /// </summary>

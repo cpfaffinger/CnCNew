@@ -363,15 +363,19 @@ internal sealed class TerrainLayer : IWorldLayer
         if (model.Water.IsDefaultOrEmpty) return;
         var options = TerrainRenderOptions.FromDefinitions(match.Data.Graph);
         var additive = options.Water?.AdditiveBlending ?? false;
+        var shores = new Dictionary<float, FogMap?>();
         var batches = WaterMeshBuilder.Build(model.Water, fogScale, linear ? PackedColor.SrgbDecodeTable() : PackedColor.IdentityTable());
         var materials = new Dictionary<string, Material>(StringComparer.OrdinalIgnoreCase);
         foreach (var batch in batches)
         {
-            if (!materials.TryGetValue(batch.Texture, out var material))
+            var level = batch.BoundsMax.Z;
+            if (!shores.TryGetValue(level, out var shore)) shores.Add(level, shore = CreateShore(services.GraphicsDevice, match, options.Water, level));
+            var key = FormattableString.Invariant($"{batch.Texture}|{level}");
+            if (!materials.TryGetValue(key, out var material))
             {
                 var texture = services.Textures.Resolve(new W3dTextureReference(batch.Texture));
-                material = TerrainMaterials.CreateWater(services.GraphicsDevice, texture, _fogMap!, linear, additive, services.DepthWrites);
-                materials.Add(batch.Texture, material);
+                material = TerrainMaterials.CreateWater(services.GraphicsDevice, texture, _fogMap!, linear, additive, services.DepthWrites, shore);
+                materials.Add(key, material);
             }
 
             var device = services.GraphicsDevice;
@@ -386,6 +390,19 @@ internal sealed class TerrainLayer : IWorldLayer
             _waterDraws.Add(new WaterDraw(batch, vertexBuffer));
             Console.WriteLine($"terrain: water batch '{batch.Texture}' river={batch.IsRiver} scroll={batch.Scroll} {batch.Vertices.Length} vertices, bounds {batch.BoundsMin.X:F0},{batch.BoundsMin.Y:F0}..{batch.BoundsMax.X:F0},{batch.BoundsMax.Y:F0} z {batch.BoundsMin.Z:F1}");
         }
+    }
+
+    /// <summary>The depth of the water at the height <paramref name="level"/> as an opacity over the map, in the fog's coordinates (<c>showSoftWaterEdge</c>); none when the data switch it off.</summary>
+    private FogMap? CreateShore(GraphicsDevice device, LiveGame match, WaterAppearance? water, float level)
+    {
+        if (water is not { TransparentWaterDepth: > 0f }) return null;
+        var heights = match.Heights;
+        var (width, height) = (heights.PlayableCellsX + 1, heights.PlayableCellsY + 1);
+        var opacity = WaterShore.Opacity(heights, level, water.TransparentWaterDepth, water.TransparentWaterMinOpacity);
+        var texture = Texture.New2D(device, width, height, PixelFormat.R8_UNorm, opacity);
+        Track(texture, opacity.Length);
+        // Texel centres stand on the vertices of the height field, while the fog's coordinate is 0 and 1 at the first and last vertex.
+        return new FogMap(texture, new Vector2((width - 1f) / width, (height - 1f) / height), new Vector2(0.5f / width, 0.5f / height));
     }
 
     /// <summary>

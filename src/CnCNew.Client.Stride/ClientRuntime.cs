@@ -1065,6 +1065,12 @@ internal sealed class ClientRuntime : IDisposable
         commandList.SetRenderTargetAndViewport(null, back);
         var alone = _intro is not null || _movies.FullScreenIsModal;
         if ((_running is null && _shellMap is null) || alone) commandList.Clear(back, global::Stride.Core.Mathematics.Color.Black);
+        if (_running?.Host is { } world && !alone && world.Smudges.Count > 0)
+        {
+            var camera = world.Match.Camera;
+            _filters.DrawSmudges(context, back, world.Smudges, position => camera.TryWorldToScreen(position, out var screen) ? (true, screen.X, screen.Y) : (false, 0f, 0f));
+        }
+
         // The mission scripts' screen filters (grey-scale, motion blur) go over the finished world and under the HUD. Asking for them is what makes the director count them as displayed.
         if (_running?.Host.Match is LiveMission filtered && filtered.Director.PostEffects is { Any: true } effects) _filters.Apply(context, back, effects);
         var list = alone ? null : _running is { } running ? running.BuildDrawList(back.Width, back.Height) : _shell?.BuildDrawList();

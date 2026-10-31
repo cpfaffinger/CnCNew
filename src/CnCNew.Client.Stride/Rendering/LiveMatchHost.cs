@@ -48,6 +48,8 @@ internal sealed class LiveMatchHost : IDisposable
 
     /// <summary>The object layer's counters of the frame just refreshed (drawn, culled, triangles), for the spectator's frame cost report.</summary>
     public CnCNew.Client.Stride.Layers.Objects.ObjectLayerStats ObjectStats => _layers.OfType<CnCNew.Client.Stride.Layers.ObjectLayer>().Single().Stats;
+    /// <summary>The smudges of the frame just refreshed.</summary>
+    public IReadOnlyList<CnCNew.Client.Stride.Layers.Fx.FxSmudge> Smudges => _layers.OfType<CnCNew.Client.Stride.Layers.FxLayer>().Single().Smudges;
     public Scene Scene { get; }
     public RenderServices Services { get; }
 

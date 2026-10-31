@@ -22,6 +22,9 @@ internal enum FxBlend
 
     /// <summary>Zero / SrcColor: darkens what is behind.</summary>
     Multiply,
+
+    /// <summary>DestColor / One: lights what is behind, the target times one plus the colour, as a dynamic light adds to the light of the terrain.</summary>
+    Light,
 }
 
 /// <summary>A draw state: texture name (null draws the vertex color only), blend equation, and whether it lies on the ground with the terrain, under the stencil shadows.</summary>
@@ -98,6 +101,10 @@ internal sealed class FxMaterials(RenderServices services)
             case FxBlend.Multiply:
                 pass.HasTransparency = true;
                 pass.BlendState = Shadows.ShadowVolumeRenderer.Multiply(Blend.Zero, Blend.SourceColor);
+                break;
+            case FxBlend.Light:
+                pass.HasTransparency = true;
+                pass.BlendState = Shadows.ShadowVolumeRenderer.Multiply(Blend.DestinationColor, Blend.One);
                 break;
             case FxBlend.AlphaTest:
                 pass.HasTransparency = false;
