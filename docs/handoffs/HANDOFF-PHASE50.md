@@ -1,5 +1,5 @@
 > **Stage:** 1 – Port (fidelity package L) · **Phase:** 50
-> **Status:** next (starting state: the end of Phase 49, see below)
+> **Status:** done by machine (31 October 2026); the rest is in HANDOFF-PHASE51.md
 > **Predecessor:** HANDOFF-PHASE49.md · **Results in:** docs/SIMULATION-CORE.md §64, docs/plan/STAGE-1-PORT.md §3
 > **Side items:** the special abilities that are shells (F-83, `SpecialAbilityUpdate::triggerAbilityEffect`), then the approximations of target acquisition (F-17, `docs/SIMULATION-CORE.md` §33.5)
 > **Plan:** `docs/plan/PROGRAMME.md` · **Index:** `docs/handoffs/README.md` · **Format:** `docs/plan/BRIEF-FORMAT.md`
