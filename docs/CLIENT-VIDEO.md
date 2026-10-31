@@ -59,7 +59,7 @@ because the next one depends on it, but only the newest picture is converted.
 
 | Place | Original | Port |
 |---|---|---|
-| Start of the game | `Intro.cpp`: `EALogoMovie`, 1 s of black, `Sizzle`, then the shell | `MovieIntro`, before the shell and its music. `--no-intro` leaves it out (the original's `-nologo`); a smoke test, `--shell-script` and `--play-movie` never show it. The stages of the community's own logo are left out: they are not this game |
+| Start of the game | `Intro.cpp`: `EALogoMovie`, 1 s of black, `Sizzle`, then the shell | `MovieIntro`, before the shell and its music. `--no-intro` leaves it out (the original's `-nologo`); a smoke test, `--shell-script` and `--play-movie` show it only with `--intro`. The stages of the community's own logo are left out: they are not this game |
 | A mission's load screen | `SinglePlayerLoadScreen::init`: `IntroMovie` in the root window's video buffer | `MissionBriefingScreen`: over the screen's picture, under its children; the objectives wait behind it. The menu theme ends. The mission starts when the movie ends. Without a movie the screen holds for the voice length, as before |
 | Generals' Challenge load screen | `ChallengeLoadScreen`: `GeneralsChallengeBackground`, the two portraits and `VSSmall` at their frames | The background movie plays through the same screen as a mission. **The portraits and the "VS" are not played**: the port has no `ChallengeLoadScreen.wnd` screen |
 | Campaign won to its end | `ScoreScreen.cpp`: `FinalVictoryMovie` by `PlayMovieAndBlock` | Modal, full-screen, before the result screens. The shipped `Campaign.ini` has these lines commented out, so nothing plays with the game's data |
@@ -93,6 +93,7 @@ dotnet run -c Release --project tools/CnCNew.AssetTool -- movie-frame game/conte
 dotnet run --project tests/CnCNew.Video.Tests [-- --content-dir game/content]
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir game/content --shell --play-movie MD_USA01 --frames 300 --capture <file>
 dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --content-dir game/content --match "Maps/Alpine Assault/Alpine Assault.map" --play-radar-movie VSSmall --frames 40 --capture <file>
+dotnet run --project src/CnCNew.Client.Stride -c Release -- --smoke-test --intro --content-dir game/content --shell --frames 200 --capture <file>
 ```
 
 `audit-movies` decodes every movie to its last frame and prints size, rate, audio, the SHA-256 over the visible planes and over the samples, and the cost per frame. Its exit code is 1 if
