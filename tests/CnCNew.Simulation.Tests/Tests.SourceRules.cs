@@ -369,6 +369,12 @@ static partial class Tests
     private static readonly SourceException[] ScaleLiteralExceptions =
     [
         // -- bytes of a colour or of a 32-bit word (channel n is shifted by 8 n)
+        new("Client.Stride/Layers/Fx/FxBuilder.cs", RuleScaleLiteral, "value = unchecked((value ^ (value >> 16)) * 0x45D9F3Bu);", "a mixing step of a hash"),
+        new("Client.Stride/Layers/Fx/FxGeometry.cs", RuleScaleLiteral, "public const int DefaultMaxQuads = 65536;", "a count of quads"),
+        new("Images/DdsReader.cs", RuleScaleLiteral, "ReadUInt64LittleEndian(block) >> 16", "the alpha indices of a DXT5 block"),
+        new("Presentation/Fx/SnowField.cs", RuleScaleLiteral, "public const int MaxFlakes = 65536;", "W3DSnowManager's limit of flakes"),
+        new("Presentation/Fx/SnowField.cs", RuleScaleLiteral, "(float)(1 << 24)", "a random start height of 24 bits"),
+        new("Presentation/Terrain/TerrainClouds.cs", RuleScaleLiteral, "bottom * fractionY) >> 16", "bilinear weights of 16 bits"),
         new("Client.Stride/Layers/Fx/FxBuilder.cs", RuleScaleLiteral, "((uint)b << 16) | ((uint)ToByte(alpha) << 24)", "packs colour channels"),
         new("Client.Stride/Layers/Objects/FlashTint.cs", RuleScaleLiteral, "(Steps << 16) | (Steps << 8) | Steps", "packs three tint steps into a key"),
         new("Client.Stride/Layers/Objects/FlashTint.cs", RuleScaleLiteral, "(Quantise(tint.X) << 16)", "packs three tint steps into a key"),

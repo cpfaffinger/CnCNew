@@ -5,6 +5,7 @@
       that is otherwise internal to CnCNew.Client.Stride. Build/run directly with `dotnet build`/`dotnet run`
       from this directory, or `dotnet build tools/CnCNew.UiRenderTool/CnCNew.UiRenderTool.csproj`.
     -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
