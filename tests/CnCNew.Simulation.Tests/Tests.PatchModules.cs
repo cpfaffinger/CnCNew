@@ -81,7 +81,7 @@ static partial class Tests
     private static SimulationWorld PatchModuleWorld(SyntheticFixture fixture)
     {
         ImmutableArray<PlayerConfiguration> players = [new(new PlayerId(1), "Alpha"), new(new PlayerId(2), "Beta")];
-        return new SimulationWorld(new WorldConfiguration(new WorldId(1), TestRate.Default, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
+        return new SimulationWorld(new WorldConfiguration(new WorldId(1), fixture.Templates.Rate, 1, players, SyntheticFixture.FixtureId, fixture.Fingerprint), fixture.Templates);
     }
 
     /// <summary><c>StatusBitsUpgrade::upgradeImplementation</c>: the upgrade sets <c>StatusToSet</c>, then clears <c>StatusToClear</c>; nothing happens before it, and a saved world keeps the bits.</summary>

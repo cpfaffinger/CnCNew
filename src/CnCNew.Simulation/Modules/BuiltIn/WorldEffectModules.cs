@@ -168,6 +168,8 @@ public sealed class OCLUpdate(OclUpdateData data) : SimModule, IUpdateModule
             if (_factionNeutral) return SimulationTiming.SleepNone;
         }
 
+        // Without a delay (the patch's starting objects) only the frame keeps the count of creations the same at every rate.
+        if (!world.Time.BeginsFrameOf(Entity, world.Tick)) return SimulationTiming.SleepNone;
         if (world.Tick >= _nextCreation && !Entity.HasStatus(ObjectStatusBits.UnderConstruction))
         {
             if (_nextCreation == 0)

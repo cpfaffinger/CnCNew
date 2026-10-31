@@ -1573,7 +1573,9 @@ public sealed partial class SimulationWorld : IWorldServices
             if (node.Update.NextWake > tick) break;
             _updates.Pop();
             var entity = node.Entity;
-            if (entity.DestroyRequested) continue;
+            // GameLogic::update asks nobody whether the object is destroyed: its modules run to the end of the frame. Of all of them it matters for one, the patch's starting
+            // object, whose OCLUpdate makes the builder in the very frame its DeletionUpdate ends it.
+            if (entity.DestroyRequested && node.Module is not Modules.BuiltIn.OCLUpdate) continue;
             if (++processed > MaxUpdatesPerTick) throw new InvalidOperationException("Update storm: too many module updates in one tick.");
             MarkDirty(entity);
             // GameLogic::update: a disabled object runs only the modules that process one of its disabled types; the others ask again with the object's next frame (F-81).

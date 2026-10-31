@@ -125,7 +125,7 @@ public sealed class ObjectTemplate
         WeaponSets = weaponSets;
         DefaultWeaponSet = WeaponSetResolver.Find(weaponSets, 0);
         DefaultWeapon = DefaultWeaponSet?.Primary ?? -1;
-        HasMultipleWeaponSlots = weaponSets.Any(set => set.WeaponCount > 1);
+        HasMultipleWeaponSlots = weaponSets.Any(set => set.WeaponCount > 1 || (set.WeaponCount == 1 && !set.HasWeapon(WeaponSlot.Primary))); // a lone weapon outside the primary slot needs the slots too (the patch's Scud Storm)
         Locomotor = locomotor;
         Turrets = TurretSet.Read(definition.Modules, timing);
         Prerequisites = prerequisites;
