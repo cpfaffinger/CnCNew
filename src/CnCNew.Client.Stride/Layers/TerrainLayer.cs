@@ -4,6 +4,7 @@ using CnCNew.Client.Stride.Layers.Terrain;
 using CnCNew.Client.Stride.Rendering;
 using CnCNew.Game.Data;
 using CnCNew.Game.Live;
+using CnCNew.Images;
 using CnCNew.Presentation;
 using CnCNew.Presentation.Minimap;
 using CnCNew.Presentation.Terrain;
@@ -56,6 +57,12 @@ internal sealed class TerrainLayer : IWorldLayer
     private byte[] _fogUpload = [];
     private double _nextFogSample;
     private bool _fogUploaded;
+    private TerrainOverlay? _overlay;
+    private byte[] _cloudSource = [];
+    private byte[] _cloudPicture = [];
+    private float _cloudU;
+    private float _cloudV;
+    private bool _cloudUploaded;
 
     /// <summary>Debug aid (<c>CNCNEW_TERRAIN_REVEAL=1</c>): shows the whole map regardless of the match's fog; the simulation is not touched.</summary>
     private readonly bool _revealAll = Environment.GetEnvironmentVariable("CNCNEW_TERRAIN_REVEAL") == "1";
@@ -108,7 +115,8 @@ internal sealed class TerrainLayer : IWorldLayer
         CreateMinimapTexture(device, match);
         var atlas = CreateAtlas(device, model, linear);
         var lightTable = linear ? PackedColor.SrgbDecodeTable() : PackedColor.IdentityTable();
-        var material = TerrainMaterials.CreateTerrain(device, atlas, FogTexture, linear, services.DepthWrites);
+        _overlay = CreateOverlay(services, match, linear);
+        var material = TerrainMaterials.CreateTerrain(device, atlas, FogTexture, linear, services.DepthWrites, _overlay);
 
         var blendCells = 0;
         var extraCells = 0;
@@ -178,6 +186,7 @@ internal sealed class TerrainLayer : IWorldLayer
         }
 
         UpdateFog(frame.CommandList, frame.TotalSeconds);
+        UpdateClouds(frame.CommandList);
         foreach (var draw in _bridgeDraws)
             if (draw.Index < match.World.Bridges.Count) draw.Show(match.World.Bridges[draw.Index].DamageState);
         foreach (var draw in _waterDraws)
@@ -237,6 +246,41 @@ internal sealed class TerrainLayer : IWorldLayer
         (_fogLevels, _fogUpload) = (_fogUpload, _fogLevels);
         _fogUploaded = true;
         _minimapDirty = true;
+    }
+
+    /// <summary>The clouds slide with the game's time (<c>updateCloud</c>); a new picture only when they have moved by a part of a texel.</summary>
+    private void UpdateClouds(CommandList commandList)
+    {
+        if (_overlay?.Clouds is not { } texture) return;
+        var (u, v) = TerrainClouds.Offset(_match!.Fx.Frame / (double)CnCNew.Data.OriginalFrame.PerSecond);
+        if (_cloudUploaded && MathF.Abs(u - _cloudU) + MathF.Abs(v - _cloudV) < 1f / (8f * texture.Width)) return;
+        TerrainClouds.Shift(_cloudSource, texture.Width, texture.Height, u, v, _cloudPicture);
+        texture.SetData(commandList, _cloudPicture);
+        (_cloudU, _cloudV, _cloudUploaded) = (u, v, true);
+    }
+
+    /// <summary>What <c>BaseHeightMapRenderObjClass</c> lays over the terrain, with the switches of the game data; a missing texture fails the attach rather than draws a substitute.</summary>
+    private TerrainOverlay? CreateOverlay(RenderServices services, LiveGame match, bool linear)
+    {
+        if (Environment.GetEnvironmentVariable("CNCNEW_CLOUDS") == "0") return null;
+        var options = TerrainClouds.FromDefinitions(match.Data.Graph);
+        if (!options.Clouds && !options.LightMap) return null;
+        Texture? clouds = null;
+        if (options.Clouds)
+        {
+            var path = W3dTexturePathResolver.Resolve(TerrainClouds.CloudTexture, services.Content.Exists);
+            if (!path.Found) throw new InvalidDataException($"The cloud texture '{TerrainClouds.CloudTexture}' is not in the content.");
+            using var stream = services.Content.OpenRead(path.VirtualPath!);
+            var image = path.VirtualPath!.EndsWith(".dds", StringComparison.OrdinalIgnoreCase) ? DdsReader.Read(stream) : TgaReader.Read(stream);
+            _cloudSource = image.RgbaPixels;
+            _cloudPicture = new byte[_cloudSource.Length];
+            clouds = Texture.New2D(services.GraphicsDevice, image.Width, image.Height, linear ? PixelFormat.R8G8B8A8_UNorm_SRgb : PixelFormat.R8G8B8A8_UNorm, TextureFlags.ShaderResource, 1, GraphicsResourceUsage.Dynamic);
+            Track(clouds, _cloudSource.Length);
+        }
+
+        var macro = options.LightMap ? services.Textures.Resolve(new W3dTextureReference(TerrainClouds.MacroTexture)) : null;
+        var scale = new Vector2(match.Fog.CellsX * TerrainMeshMerger.CellSize * TerrainClouds.Stretch, match.Fog.CellsY * TerrainMeshMerger.CellSize * TerrainClouds.Stretch);
+        return new TerrainOverlay(clouds, macro, scale);
     }
 
     private void RefreshMinimap(CommandList commandList, double totalSeconds, LiveGame match)
@@ -355,7 +399,7 @@ internal sealed class TerrainLayer : IWorldLayer
                 if (!W3dTexturePathResolver.Resolve(batch.Texture, services.Content.Exists).Found)
                     throw new InvalidDataException($"Road '{batch.Template}': texture '{batch.Texture}' is not in the content.");
                 var texture = services.Textures.Resolve(new W3dTextureReference(batch.Texture));
-                material = TerrainMaterials.CreateRoad(device, texture, FogTexture, linear, services.DepthWrites);
+                material = TerrainMaterials.CreateRoad(device, texture, FogTexture, linear, services.DepthWrites, _overlay);
                 services.TransparentOrder.Layers[material.Passes[0]] = StackedBackToFrontSortMode.RoadLayer;
                 materials.Add(batch.Texture, material);
             }
@@ -401,7 +445,7 @@ internal sealed class TerrainLayer : IWorldLayer
                 var mesh = BridgeMeshBuilder.Build(bridge.TemplateName, state, art, start, end, lighting);
                 if (!materials.TryGetValue(art.Texture, out var material))
                 {
-                    material = TerrainMaterials.CreateBridge(device, services.Textures.Resolve(new W3dTextureReference(art.Texture)), FogTexture, linear, services.DepthWrites);
+                    material = TerrainMaterials.CreateBridge(device, services.Textures.Resolve(new W3dTextureReference(art.Texture)), FogTexture, linear, services.DepthWrites, _overlay);
                     materials.Add(art.Texture, material);
                 }
 

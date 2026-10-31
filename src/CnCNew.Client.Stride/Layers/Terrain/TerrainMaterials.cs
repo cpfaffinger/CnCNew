@@ -6,6 +6,9 @@ using Stride.Rendering.Materials.ComputeColors;
 
 namespace CnCNew.Client.Stride.Layers.Terrain;
 
+/// <summary>The textures laid over the map: <paramref name="Clouds"/> moves, <paramref name="Macro"/> stands; <paramref name="Scale"/> takes the fog's coordinates to theirs.</summary>
+internal sealed record TerrainOverlay(Texture? Clouds, Texture? Macro, Vector2 Scale);
+
 /// <summary>
 /// Material graphs of the terrain and water layers, built from Stride compute-colour nodes (no custom shader assets). Terrain, per pixel:
 /// <c>lerp(lerp(atlas(uv0), atlas(uv1), w1), atlas(uv2), w2) * lighting * fog</c>, where <c>w1</c> is the alpha of vertex colour 0 and
@@ -19,7 +22,7 @@ internal static class TerrainMaterials
     private static readonly TextureCoordinate Uv2 = (TextureCoordinate)2;
     private static readonly TextureCoordinate FogUv = (TextureCoordinate)3;
 
-    public static Material CreateTerrain(GraphicsDevice device, Texture atlas, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites)
+    public static Material CreateTerrain(GraphicsDevice device, Texture atlas, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites, TerrainOverlay? overlay = null)
     {
         IComputeColor Atlas(TextureCoordinate coordinate) => new ComputeTextureColor(atlas, coordinate, Vector2.One, Vector2.Zero)
         {
@@ -33,7 +36,7 @@ internal static class TerrainMaterials
         var mix1 = Lerp(Atlas(Uv0), SubstituteAlpha(Atlas(Uv1), vertexColor0));
         var mix2 = Lerp(mix1, SubstituteAlpha(Atlas(Uv2), vertexColor1));
         var lit = new ComputeBinaryColor(mix2, vertexColor0, BinaryOperator.Multiply);
-        var surface = new ComputeBinaryColor(lit, FogFactor(fog, linearSpace), BinaryOperator.Multiply);
+        var surface = new ComputeBinaryColor(Overlaid(lit, overlay), FogFactor(fog, linearSpace), BinaryOperator.Multiply);
 
         var material = Material.New(device, new MaterialDescriptor
         {
@@ -89,7 +92,7 @@ internal static class TerrainMaterials
     /// both directions, double-sided. The alpha must reach the blend stage: the emissive feature drops it unless <c>UseAlpha</c> is set (the Y and H junction
     /// pieces cover transparent texels). The reference's optional cloud and noise passes are not reproduced.
     /// </summary>
-    public static Material CreateRoad(GraphicsDevice device, Texture road, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites)
+    public static Material CreateRoad(GraphicsDevice device, Texture road, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites, TerrainOverlay? overlay = null)
     {
         IComputeColor color = new ComputeTextureColor(road, Uv0, Vector2.One, Vector2.Zero)
         {
@@ -98,7 +101,7 @@ internal static class TerrainMaterials
             AddressModeV = TextureAddressMode.Wrap,
         };
         var modulated = new ComputeBinaryColor(color, VertexColor(0), BinaryOperator.Multiply);
-        var fogged = new ComputeBinaryColor(modulated, FogFactor(fog, linearSpace), BinaryOperator.Multiply);
+        var fogged = new ComputeBinaryColor(Overlaid(modulated, overlay), FogFactor(fog, linearSpace), BinaryOperator.Multiply);
         // The fog multiplication scales alpha too; keep the modulated alpha so shrouded roads stay as opaque as unshrouded roads.
         var surface = SubstituteAlpha(fogged, modulated);
 
@@ -124,7 +127,7 @@ internal static class TerrainMaterials
     /// Bridge material (<c>detailAlphaShader</c> of <c>W3DBridgeBuffer</c>): the bridge's texture times the lighting of the vertex colour times the fog, alpha tested, writing depth, seen from both
     /// sides. The original's alpha test still blends what passes it; here what passes is opaque.
     /// </summary>
-    public static Material CreateBridge(GraphicsDevice device, Texture bridge, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites)
+    public static Material CreateBridge(GraphicsDevice device, Texture bridge, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites, TerrainOverlay? overlay = null)
     {
         IComputeColor color = new ComputeTextureColor(bridge, Uv0, Vector2.One, Vector2.Zero)
         {
@@ -133,7 +136,7 @@ internal static class TerrainMaterials
             AddressModeV = TextureAddressMode.Wrap,
         };
         var modulated = new ComputeBinaryColor(color, VertexColor(0), BinaryOperator.Multiply);
-        var fogged = new ComputeBinaryColor(modulated, FogFactor(fog, linearSpace), BinaryOperator.Multiply);
+        var fogged = new ComputeBinaryColor(Overlaid(modulated, overlay), FogFactor(fog, linearSpace), BinaryOperator.Multiply);
         var surface = SubstituteAlpha(fogged, modulated);
 
         var material = Material.New(device, new MaterialDescriptor
@@ -152,6 +155,22 @@ internal static class TerrainMaterials
         depthWrites[pass] = true;
         return material;
     }
+
+    /// <summary>The colour times the textures laid over the map (<c>ST_TERRAIN_BASE_NOISE12</c>), which share the fog's coordinates, scaled.</summary>
+    private static IComputeColor Overlaid(IComputeColor color, TerrainOverlay? overlay)
+    {
+        if (overlay is null) return color;
+        if (overlay.Clouds is { } clouds) color = new ComputeBinaryColor(color, Tiled(clouds, overlay.Scale), BinaryOperator.Multiply);
+        if (overlay.Macro is { } macro) color = new ComputeBinaryColor(color, Tiled(macro, overlay.Scale), BinaryOperator.Multiply);
+        return color;
+    }
+
+    private static IComputeColor Tiled(Texture texture, Vector2 scale) => new ComputeTextureColor(texture, FogUv, scale, Vector2.Zero)
+    {
+        Filtering = TextureFilter.Linear,
+        AddressModeU = TextureAddressMode.Wrap,
+        AddressModeV = TextureAddressMode.Wrap,
+    };
 
     /// <summary>
     /// Fog level (red channel, 0..1) replicated to all channels. The reference multiplies in gamma space; in a linear colour space the

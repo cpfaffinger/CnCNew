@@ -24,6 +24,7 @@ internal static class ShadowTests
         harness.Run("Extrusion: at a cliff the light is made steeper", ExtrusionAtACliff);
         harness.Run("A decal turns with its object; offset X goes forward, offset Y to the right", DecalPlace);
         harness.Run("A decal without a texture is shadow.tga, with one its name and .tga", DecalTexture);
+        harness.Run("The clouds slide with game time and a picture shifts by parts of a texel", CloudShift);
         return harness.Failures;
     }
 
@@ -193,6 +194,26 @@ internal static class ShadowTests
         TestHarness.Near(203f, north.Center.Y, 1e-4, "offset X forward");
         var corner = north.At(1f, 0.5f);
         TestHarness.Near(203f + 7f, corner.Y, 1e-4, "half the width along u");
+    }
+
+    private static void CloudShift()
+    {
+        var (u, v) = TerrainClouds.Offset(10.0);
+        TestHarness.Near(-0.2f, u, 1e-5, "0.02 a second");
+        TestHarness.Near(-0.3f, v, 1e-5, "and half as much again the other way");
+        TestHarness.Near(0f, TerrainClouds.Offset(100.0).U, 1e-4, "a whole turn is nothing");
+        TestHarness.Near(1f / 315f, TerrainClouds.Stretch, 1e-7, "31.5 cells");
+
+        // Two texels, black and white: half a texel is grey, one texel swaps them.
+        byte[] source = [0, 0, 0, 255, 200, 200, 200, 255];
+        var target = new byte[8];
+        TerrainClouds.Shift(source, 2, 1, 0.5f, 0f, target);
+        TestHarness.Assert(target[0] == 200 && target[4] == 0, "one texel: the target shows the source one to the right");
+        TerrainClouds.Shift(source, 2, 1, 0.25f, 0f, target);
+        TestHarness.Near(100, target[0], 1, "half a texel: the mean");
+        TestHarness.Near(255, target[3], 1, "alpha is shifted like the rest");
+        TerrainClouds.Shift(source, 2, 1, -0.5f, 0f, target);
+        TestHarness.Assert(target[0] == 200, "a negative offset wraps");
     }
 
     private static void DecalTexture()
