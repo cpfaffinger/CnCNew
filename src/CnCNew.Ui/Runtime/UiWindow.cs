@@ -77,6 +77,9 @@ public sealed class UiWindow
     public bool IsSelected { get; internal set; }
     public bool IsFocused => Tree.Focus == this;
     public UiTextValue? Text { get; private set; }
+
+    /// <summary>A movie drawn into the window, over its own picture and under its children (<c>winGetInstanceData()-&gt;setVideoBuffer</c>).</summary>
+    public IUiVideoSurface? Video { get; set; }
     public int ProgressPercent { get; private set; }
     public UiListBoxState? ListBox { get; }
     public UiSliderState? Slider { get; }

@@ -61,7 +61,7 @@ because the next one depends on it, but only the newest picture is converted.
 |---|---|---|
 | Start of the game | `Intro.cpp`: `EALogoMovie`, 1 s of black, `Sizzle`, then the shell | `MovieIntro`, before the shell and its music. `--no-intro` leaves it out (the original's `-nologo`); a smoke test, `--shell-script` and `--play-movie` show it only with `--intro`. The stages of the community's own logo are left out: they are not this game |
 | A mission's load screen | `SinglePlayerLoadScreen::init`: `IntroMovie` in the root window's video buffer | `MissionBriefingScreen`: over the screen's picture, under its children; the objectives wait behind it. The menu theme ends. The mission starts when the movie ends. Without a movie the screen holds for the voice length, as before |
-| Generals' Challenge load screen | `ChallengeLoadScreen`: `GeneralsChallengeBackground`, the two portraits and `VSSmall` at their frames | The background movie plays through the same screen as a mission. **The portraits and the "VS" are not played**: the port has no `ChallengeLoadScreen.wnd` screen |
+| Generals' Challenge load screen | `ChallengeLoadScreen`: `GeneralsChallengeBackground`, the two portraits and `VSSmall` at their frames | `ChallengeLoadScreen` (Phase 59): the background in the root window, each portrait movie in its window at frame 35, `VSSmall` at frame 98, all keeping their last frame (`UiWindow.Video`, `WINDOW_PLAY_MOVIE_SHOW_LAST_FRAME`); the titles, the typed bios, the reticle, the three calls and the progress bar at the original's frames of the background. The mission starts when the background ends; the original's bar goes on through the loading, the port's has loaded already. Without a movie every piece stands at once with the large portraits (`activatePiecesMinSpec`) |
 | Campaign won to its end | `ScoreScreen.cpp`: `FinalVictoryMovie` by `PlayMovieAndBlock` | Modal, full-screen, before the result screens. The shipped `Campaign.ini` has these lines commented out, so nothing plays with the game's data |
 | `MOVIE_PLAY_FULLSCREEN` | `Display::playMovie`: over everything, the game goes on under it | The same; `MissionPresentationDirector.Movies` asks the client |
 | `MOVIE_PLAY_RADAR` | `InGameUI::playMovie`, drawn by `W3DLeftHUDDraw` | `MovieDirector.Radar`, drawn in the radar's window, whether or not the player has a radar |
@@ -140,7 +140,6 @@ Read, understood and rewritten; nothing was copied but the tables, which are dat
 ## 9. Not done, not verified
 
 - Nothing of this has been seen or heard by a human. No sound device exists on the development machine: the sound was checked through the mixer's capture.
-- The portraits and the "VS" of the Generals' Challenge load screen (section 4).
 - Revisions other than `i`, the RDFT audio variant, more than one audio track (the first is played), and the alpha plane on a real file: the game ships none, and alpha is tested on a
   synthetic file only.
 - Chroma is not interpolated; RAD's own conversion was not compared.

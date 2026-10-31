@@ -16,6 +16,14 @@ public sealed class PlayerTally
     public int BuildingsLost { get; internal set; }
     public int BuildingsDestroyed { get; internal set; }
     public long Resources { get; internal set; }
+
+    /// <summary><c>getTotalUnitsBuilt</c> with the honors' masks: scored vehicles that are no aircraft, and scored aircraft.</summary>
+    public int VehiclesBuilt { get; internal set; }
+
+    public int AircraftBuilt { get; internal set; }
+
+    /// <summary>The templates of everything the player has built that scored (<c>getTotalObjectsBuilt</c> of the battle honors).</summary>
+    public HashSet<string> Built { get; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>
@@ -81,13 +89,22 @@ public sealed class MatchStatistics
                 case SimEventKind.ProductionCompleted:
                     if (Identify(world, e.Entity) is { Owner.IsSystem: false } factory && e.Value >= 0 && e.Value < world.Templates.Templates.Length
                         && ScoresWhenBuilt(world.Templates[(int)e.Value]) == ScoreKind.Unit)
-                        TallyOf(factory.Owner).UnitsBuilt++;
+                    {
+                        var made = world.Templates[(int)e.Value];
+                        var tally = TallyOf(factory.Owner);
+                        tally.UnitsBuilt++;
+                        tally.Built.Add(made.Name);
+                        if (made.IsKindOf("AIRCRAFT")) tally.AircraftBuilt++;
+                        else if (made.IsKindOf("VEHICLE")) tally.VehiclesBuilt++;
+                    }
                     break;
                 case SimEventKind.ConstructionCompleted:
                 {
                     if (Identify(world, e.Entity) is not { } building || ScoresWhenBuilt(building.Template) != ScoreKind.Building) break;
                     var owner = !e.Player.IsSystem ? e.Player : building.Owner;
-                    if (!owner.IsSystem) TallyOf(owner).BuildingsBuilt++;
+                    if (owner.IsSystem) break;
+                    TallyOf(owner).BuildingsBuilt++;
+                    TallyOf(owner).Built.Add(building.Template.Name);
                     break;
                 }
                 case SimEventKind.SupplyDeposited:
@@ -136,11 +153,16 @@ public sealed class MatchStatistics
     {
         var copy = new MatchStatistics { HasData = HasData, _begun = _begun };
         foreach (var (player, tally) in _tallies)
-            copy._tallies[player] = new PlayerTally
+        {
+            var counted = new PlayerTally
             {
                 UnitsBuilt = tally.UnitsBuilt, UnitsLost = tally.UnitsLost, UnitsDestroyed = tally.UnitsDestroyed,
                 BuildingsBuilt = tally.BuildingsBuilt, BuildingsLost = tally.BuildingsLost, BuildingsDestroyed = tally.BuildingsDestroyed, Resources = tally.Resources,
+                VehiclesBuilt = tally.VehiclesBuilt, AircraftBuilt = tally.AircraftBuilt,
             };
+            counted.Built.UnionWith(tally.Built);
+            copy._tallies[player] = counted;
+        }
         foreach (var (id, known) in _known) copy._known[id] = known;
         copy._dead.UnionWith(_dead);
         return copy;

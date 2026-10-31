@@ -57,6 +57,8 @@ public sealed class GameShell
     private volatile string _loadStage = "";
     private ContentFileSystem? _bootContent;
     private MatchSetup? _pendingMatchSetup;
+    // The local skirmish the setup screen started, until its result came back: what the battle honors read of it.
+    private MatchSetup? _playedSkirmish;
     private bool _loadingFrameShown;
 
     private MissionRun? _pendingMission;
@@ -181,6 +183,16 @@ public sealed class GameShell
     /// <summary>Savegame files under <see cref="IShellEnvironment.SaveDirectory"/>; <see langword="null"/> only while still booting.</summary>
     public SaveGameStore? Saves { get; private set; }
 
+    /// <summary>The player's record, <c>SkirmishStats.ini</c> beside the savegames (<see cref="BattleHonors"/>).</summary>
+    public BattleHonors Honors { get; private set; } = new();
+
+    /// <summary>The maps the honors ask for (<c>m_isOfficial &amp;&amp; m_isMultiplayer</c>): the multiplayer maps of the game, not the user's own.</summary>
+    internal IEnumerable<HonorMap> HonorMaps()
+        => MapCatalog.Values.Where(map => map.IsMultiplayer && !UserMaps.Contains(map.VirtualPath)).OrderBy(map => map.VirtualPath, StringComparer.Ordinal).Select(map => new HonorMap(map.VirtualPath, map.StartPositionCount));
+
+    /// <summary>The record was changed: it is written at once, as <c>stats.write()</c> does.</summary>
+    internal void SaveHonors() => Honors.Save(Environment.SettingsDirectory);
+
     /// <summary>
     /// What the multiplayer screens reach the machine through (docs/GAME-SHELL.md section 15); null leaves the main menu's Multiplayer button inert, as in every
     /// shell that was not given one (the headless tests of the other screens).
@@ -289,6 +301,7 @@ public sealed class GameShell
             }
         }
         Saves = new SaveGameStore(Environment.SaveDirectory);
+        Honors = BattleHonors.Load(Environment.SettingsDirectory);
         Replays = new CnCNew.Game.Replays.ReplayStore(Environment.ReplayDirectory);
         Network ??= _networkFactory?.Invoke(data);
         Phase = ShellPhase.Menus;
@@ -390,6 +403,7 @@ public sealed class GameShell
             _briefingElapsed += dtSeconds;
             if (_briefingMovie is { } movie ? movie.IsFinished : _briefingElapsed >= _briefingDuration)
             {
+                (CurrentScreen as ChallengeLoadScreen)?.Finish();
                 var run = _pendingMission!;
                 var controller = _pendingMissionController;
                 _pendingMission = null;
@@ -474,9 +488,45 @@ public sealed class GameShell
         PlayedReplay = null;
         if (Net is { } net) net.Relay = null;
         _pendingNet = null;
+        if (_playedSkirmish is { } skirmish) RecordSkirmish(skirmish, result);
+        _playedSkirmish = null;
         Phase = ShellPhase.Results;
         Replace(new ScoreScreenScreen(this, result));
         if (netNote is { Length: > 0 }) Tell(NetText.TitleMatchEnded, netNote, CloseTop);
+    }
+
+    /// <summary>
+    /// <c>populatePlayerInfo</c> for the local player of a skirmish: only a match that was decided for him counts - who leaves a match that goes on is no loser (the original skips the
+    /// update while the player is active) -, and a match in which everybody stands on one team is a sandbox.
+    /// </summary>
+    private void RecordSkirmish(MatchSetup setup, MatchResult result)
+    {
+        if (result.Rows.Length == 0) return;
+        var local = result.Rows[0];
+        bool Allied(MatchResultRow row) => row == local || (local.Player.Team != 0 && row.Player.Team == local.Player.Team);
+        var won = result.Rows.Any(row => row.IsWinner && Allied(row));
+        var lost = !won && (local.IsDefeated || result.Rows.Any(row => row.IsWinner));
+        if (!won && !lost) return;
+        if (result.Rows.All(Allied)) return;
+        int easy = 0, medium = 0, hard = 0;
+        var alliedComputer = false;
+        for (var index = 1; index < result.Rows.Length; index++)
+        {
+            if (!result.Rows[index].Player.IsComputer) continue;
+            if (Allied(result.Rows[index])) { alliedComputer = true; continue; }
+            switch (setup.AiOf(index).Difficulty)
+            {
+                case ScriptDifficulty.Easy: easy++; break;
+                case ScriptDifficulty.Hard: hard++; break;
+                default: medium++; break;
+            }
+        }
+        var side = Data.Factions.FirstOrDefault(entry => entry.Faction.Name == local.Player.Faction)?.Faction.Side ?? string.Empty;
+        var tally = local.Tally;
+        var minutes = result.EndTick / Data.Rate.TicksPerSecond / 60;
+        Honors.SkirmishFinished(new SkirmishHonorResult(won, side, setup.MapPath, minutes, tally?.VehiclesBuilt ?? 0, tally?.AircraftBuilt ?? 0,
+            tally is null ? [] : [..tally.Built], easy, medium, hard, alliedComputer));
+        SaveHonors();
     }
 
     // ------------------------------------------------------------------------------------------------- multiplayer (docs/GAME-SHELL.md section 15)
@@ -590,6 +640,12 @@ public sealed class GameShell
     {
         ArgumentNullException.ThrowIfNull(run);
         var conclusion = controller is null ? (MissionConclusion?)null : controller.Conclude(run);
+        // finishSinglePlayerInit: the last mission won marks the campaign as completed on its difficulty, and the record is written.
+        if (controller is { IsFinished: true } && conclusion == MissionConclusion.Victory)
+        {
+            Honors.CampaignCompleted(controller.Campaign.Name, controller.Progress.Difficulty);
+            SaveHonors();
+        }
         // ScoreScreen.cpp: a campaign that was won to its end shows its final movie first, alone on the screen; the shipped Campaign.ini names none.
         if (controller is { IsFinished: true, Campaign.FinalVictoryMovie.Length: > 0 }) Movies?.PlayFullScreen(controller.Campaign.FinalVictoryMovie, modal: true);
         Phase = ShellPhase.MissionResults;
@@ -600,6 +656,12 @@ public sealed class GameShell
     // ------------------------------------------------------------------------------------------------- campaign and savegame navigation (called by screens)
 
     internal void OpenChallengeSelect(ScriptDifficulty difficulty) => Push(new ChallengeSelectScreen(this, difficulty));
+
+    /// <summary>A sound of a screen by its event name, when the data names one.</summary>
+    internal void PlayNamedSound(string eventName)
+    {
+        if (eventName.Length > 0) PlaySound(eventName);
+    }
     internal void OpenLoadGame() => Push(new LoadGameScreen(this));
 
     // ------------------------------------------------------------------------------------------------- replays (docs/REPLAY-BROWSER.md)
@@ -725,7 +787,10 @@ public sealed class GameShell
         Phase = ShellPhase.MissionBriefing;
         _briefingMovie = run.Mission is { IntroMovie.Length: > 0 } mission ? Movies?.Open(mission.IntroMovie) : null;
         if (_briefingMovie is not null) _outputs.Add(new StopMusicOutput());
-        Replace(new MissionBriefingScreen(this, run.Mission!, _briefingMovie));
+        // LoadScreen.cpp: a challenge mission's load screen is the two generals, the player's tied to the campaign and the opponent's to the mission.
+        if (controller.Campaign.IsChallenge && Campaigns?.PersonaOfCampaign(controller.Campaign.Name) is { } player && Campaigns.PersonaNamed(run.Mission?.GeneralName ?? string.Empty) is { } opponent)
+            Replace(new ChallengeLoadScreen(this, player, opponent, _briefingMovie));
+        else Replace(new MissionBriefingScreen(this, run.Mission!, _briefingMovie));
     }
 
     internal void BeginCampaign(CampaignDefinition campaign, ScriptDifficulty difficulty)
@@ -821,6 +886,7 @@ public sealed class GameShell
     internal void BeginMatchLoading(MatchSetup setup)
     {
         _pendingMatchSetup = setup;
+        _playedSkirmish = setup;
         _loadingFrameShown = false;
         Phase = ShellPhase.MatchLoading;
         Replace(new LoadingScreen(this, ShellLayoutNames.SinglePlayerLoadScreen));

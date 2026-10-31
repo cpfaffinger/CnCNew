@@ -59,6 +59,7 @@ public sealed partial class UiWindowTree
                     _commands.Add(new UiCustomDraw(callback, window.Name, window.Rect));
                     _custom[callback] = _custom.GetValueOrDefault(callback) + 1;
                 }
+                if (window.Video is { } video) _commands.Add(new UiVideoDraw(video, window.Rect));
             }
             foreach (var child in window.Children) Draw(child);
         }

@@ -11,6 +11,7 @@ using CnCNew.Simulation.State;
 using CnCNew.Simulation.Testing;
 using CnCNew.Simulation.Time;
 using CnCNew.Ui.Layout;
+using CnCNew.Ui.Runtime;
 
 namespace CnCNew.Game.Tests;
 
@@ -32,10 +33,16 @@ internal static class CampaignShellTests
         harness.Run("Mission conclusion: victory continues to the next mission, defeat retries", () => MissionConclusionScreens(args));
         harness.Run("A scripted mission save continues identically after a shell load", () => SaveLoadThroughShellContinuesIdentically(args));
         harness.Run("A skirmish save continues identically after a shell load, computer players included", () => SkirmishSaveThroughShellContinuesIdentically(args));
+        harness.Run("The player's record: campaigns, challenges, a skirmish's win and loss, the honors' pictures", PlayerRecord);
 
         var contentDir = ContentDir(args);
         if (contentDir is null) Console.WriteLine("SKIP CampaignShellTests real-campaign flow (pass --content-dir <dir>)");
-        else harness.Run("Main menu -> USA -> difficulty reaches a real mission with its real briefing text", () => RealCampaignFlow(contentDir));
+        else
+        {
+            harness.Run("Main menu -> USA -> difficulty reaches a real mission with its real briefing text", () => RealCampaignFlow(contentDir));
+            harness.Run("The Generals' Challenge: the menu, its load screen with movies, the win and loss, the record", () => ChallengeWay(contentDir));
+            harness.Run("The skirmish setup shows the record, and a decided match counts", () => SkirmishRecord(contentDir));
+        }
         return harness.Failures;
     }
 
@@ -139,6 +146,196 @@ internal static class CampaignShellTests
         var context = new MissionContext(fixture.Templates, fixture.Fingerprint, path => maps.TryGetValue(path, out var map) ? map : throw new FileNotFoundException(path));
         var catalog = CampaignCatalog.Parse("Campaign TWO\n  FirstMission A\n  Mission A\n    Map Maps\\One\\One.map\n    NextMission B\n  END\n  Mission B\n    Map Maps\\Two\\Two.map\n  END\nEND\n");
         return (context, catalog.Find("TWO")!);
+    }
+
+    /// <summary><see cref="BattleHonors"/>: <c>SkirmishBattleHonors</c>, <c>finishSinglePlayerInit</c>, <c>updateSkirmishBattleHonors</c>, <c>updateChallengeMedals</c>, <c>populateSkirmishBattleHonors</c>.</summary>
+    private static void PlayerRecord()
+    {
+        var record = new BattleHonors();
+        record.CampaignCompleted("CHALLENGE_4", ScriptDifficulty.Normal);
+        record.CampaignCompleted("usa", ScriptDifficulty.Hard);
+        record.CampaignCompleted("TRAINING", ScriptDifficulty.Hard);
+        TestHarness.Assert(record.IsChallengeComplete(4, ScriptDifficulty.Normal) && !record.IsChallengeComplete(4, ScriptDifficulty.Hard) && !record.IsChallengeComplete(3, ScriptDifficulty.Normal), "a challenge is kept by its number and difficulty");
+        TestHarness.Assert(record.IsCampaignComplete("USA", ScriptDifficulty.Hard) && record.HasHonor(BattleHonor.ChallengeMode) && record.HasHonor(BattleHonor.CampaignUsa), "the campaign's name is compared without its case, and sets the honors");
+        TestHarness.Assert(record.Serialize().Split('\n').Count(line => line.Length > 0) == 3, $"training leaves no mark: {record.Serialize()}");
+        var maps = new[] { new HonorMap("Maps/A/A.map", 2), new HonorMap("Maps/B/B.map", 4) };
+        var list = record.List(maps);
+        TestHarness.Assert(list.Length == 12, "two rows of six pictures");
+        TestHarness.Assert(list[2] is { Image: "USACampaign_G", Earned: true, Tooltip: "TOOLTIP:BattleHonorCampaignUSA" }, "gold for the hard campaign");
+        TestHarness.Assert(list[0] is { Image: "ChinaCampaign_B", Earned: false, Tooltip: "TOOLTIP:BattleHonorCampaignChinaDisabled" }, "a campaign not played is greyed bronze");
+        TestHarness.Assert(list[3] is { Image: "Challenge_Silver", Earned: true }, "a challenge on normal is silver");
+
+        SkirmishHonorResult Win(int minutes = 20, int vehicles = 0, int aircraft = 0, int hard = 0, int medium = 1, string map = "Maps/A/A.map", string side = "China", params string[] built)
+            => new(true, side, map, minutes, vehicles, aircraft, [..built], 0, medium, hard, false);
+        record.SkirmishFinished(Win());
+        record.SkirmishFinished(Win(minutes: 9));
+        TestHarness.Assert(record is { Wins: 2, WinStreak: 2, BestWinStreak: 2, LoyalGames: 1, LastHouse: "China" } && record.HasHonor(BattleHonor.Blitz10) && !record.HasHonor(BattleHonor.Blitz5), "two wins, one of them under ten minutes");
+        record.SkirmishFinished(new SkirmishHonorResult(false, "GLA", "Maps/A/A.map", 30, 0, 0, [], 0, 1, 0, false));
+        TestHarness.Assert(record is { Wins: 2, Losses: 1, WinStreak: 0, BestWinStreak: 2, LoyalGames: 0, LastHouse: "GLA" }, "a loss ends the streak, a new side the loyal games");
+        record.SkirmishFinished(Win(vehicles: 50, aircraft: 19, hard: 3, medium: 0, built: "GLAScudStorm"));
+        TestHarness.Assert(record.HasHonor(BattleHonor.BattleTank) && !record.HasHonor(BattleHonor.AirWing), "fifty vehicles, not twenty aircraft");
+        TestHarness.Assert(record.ChallengeMedals == 1 << 2 && record.EnduranceMedal("Maps/A/A.map", 4) == 3, "three hard opponents are the third challenge medal and the endurance of the map");
+        record.SkirmishFinished(Win(built: ["AmericaParticleCannonUplink", "ChinaNuclearMissileLauncher"]));
+        TestHarness.Assert(record.HasHonor(BattleHonor.Apocalypse), "the three superweapons need not be built in one match");
+        TestHarness.Assert(record.List(maps)[6] is { Image: "Endurance_B", Earned: false }, "endurance waits for every map");
+        record.SkirmishFinished(Win(hard: 3, medium: 0, map: "Maps/B/B.map"));
+        TestHarness.Assert(record.List(maps)[6] is { Image: "Endurance_G", Earned: true } && record.List(maps)[11] is { Image: "Ultimate", Earned: true }, "gold and the ultimate honor with every map beaten on hard to its full count");
+
+        var text = record.Serialize() + "Unknown = kept\n";
+        var again = BattleHonors.Parse(text);
+        TestHarness.Assert(again.Serialize() == text.Replace("Unknown = kept\n", string.Empty).Insert(text.IndexOf("USACampaign", StringComparison.Ordinal), "Unknown = kept\n") || again.Serialize().Contains("Unknown = kept", StringComparison.Ordinal), "a key this version does not know stays in the file");
+        TestHarness.Assert(again.Wins == record.Wins && again.HasHonor(BattleHonor.Apocalypse), "the file reads back");
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-honors-" + Guid.NewGuid().ToString("N"));
+        TestHarness.Assert(BattleHonors.Load(directory).Wins == 0, "no file is an empty record");
+        record.Save(directory);
+        TestHarness.Assert(BattleHonors.Load(directory).Serialize() == record.Serialize() && File.Exists(Path.Combine(directory, "SkirmishStats.ini")), "the record lies in the settings directory under the original's name");
+        Directory.Delete(directory, recursive: true);
+    }
+
+    /// <summary>Plays the frames of a movie through the host's two updates.</summary>
+    private static void Frame(GameShell shell, CnCNew.Game.Movies.MovieDirector movies, double seconds = 1.0 / 30)
+    {
+        movies.Update(seconds);
+        shell.Update(seconds);
+    }
+
+    /// <summary>
+    /// <c>ChallengeMenu.cpp</c>, <c>ChallengeLoadScreen::init</c>, <c>displayChallengeWinLoss</c> and the record they leave. The nine generals are open from the start (the original has
+    /// no unlocks). The movie runs on the real files of the game.
+    /// </summary>
+    private static void ChallengeWay(string contentDir)
+    {
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
+        var settings = Path.Combine(Path.GetTempPath(), "cncnew-challenge-tests-" + Guid.NewGuid().ToString("N"));
+        var shell = GameShell.Create(data, new FixedShellEnvironment(settings), viewport: new UiViewport(800, 600), skin: SkinPins.Current);
+        var movies = CnCNew.Game.Movies.MovieDirector.For(data, "English", null, null);
+        shell.Movies = movies;
+
+        ShellTestInput.Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        ShellTestInput.Click(shell, "MainMenu.wnd:ButtonChallenge");
+        ShellTestInput.Click(shell, "MainMenu.wnd:ButtonEasy");
+        TestHarness.Assert(shell.CurrentScreen is ChallengeSelectScreen, "the challenge menu opens");
+        var tree = shell.CurrentScreen.Tree;
+        var open = Enumerable.Range(0, 12).Count(index => tree.FindByName($"ChallengeMenu.wnd:GeneralPosition{index}") is { IsHidden: false });
+        TestHarness.Assert(open == 9, $"nine generals are open from the start, none waits for another ({open})");
+
+        // The pointer over a general previews him; the bio of a shell without animations stands at once.
+        var pos2 = tree.FindByName("ChallengeMenu.wnd:GeneralPosition2")!;
+        var name = tree.FindByName("ChallengeMenu.wnd:BioNameEntry")!;
+        shell.DrainOutputs();
+        shell.HandleInput(new MouseMoveEvent(100_000, new Vector2(pos2.Rect.CenterX, pos2.Rect.CenterY)));
+        var nukeName = name.Text!.Value;
+        TestHarness.Assert(nukeName.Length > 0 && !nukeName.StartsWith("GUI:", StringComparison.Ordinal) && tree.FindByName("ChallengeMenu.wnd:BioPortrait")!.EnabledImage0 is { Length: > 0 }, "the general under the pointer shows his name and portrait");
+        TestHarness.Assert(shell.DrainOutputs().OfType<PlayUiSoundOutput>().Any(sound => sound.EventName == "GUILogoMouseOver"), "the pointer over a general has its sound");
+        ShellTestInput.Click(shell, "ChallengeMenu.wnd:GeneralPosition0");
+        var chosen = name.Text!.Value;
+        TestHarness.Assert(chosen != nukeName, "the click chose the general under it");
+        TestHarness.Assert(shell.DrainOutputs().OfType<PlayUiSoundOutput>().Any(sound => sound.EventName == shell.Campaigns!.Personas[0].PreviewSound), "the choice plays his preview line");
+        shell.HandleInput(new MouseMoveEvent(100_100, new Vector2(pos2.Rect.CenterX, pos2.Rect.CenterY)));
+        TestHarness.Assert(name.Text!.Value == nukeName, "another general under the pointer previews him");
+        shell.HandleInput(new MouseMoveEvent(100_200, new Vector2(5, 5)));
+        TestHarness.Assert(name.Text!.Value == chosen, "and leaving him shows the chosen one again");
+        for (var update = 0; update < 12; update++) shell.Update(1.0 / 30);
+        TestHarness.Assert(shell.DrainOutputs().OfType<PlayUiSoundOutput>().Any(sound => sound.EventName == "Taunts_GCAnnouncer01"), "\"Choose your general\" is said ten updates after the screen opened");
+
+        ShellTestInput.Click(shell, "ChallengeMenu.wnd:ButtonPlay");
+        TestHarness.Assert(shell.Phase == ShellPhase.MissionBriefing && shell.CurrentScreen is ChallengeLoadScreen, "the challenge's load screen comes up");
+        var player = shell.Campaigns!.Personas[0];
+        var load = shell.CurrentScreen.Tree;
+        TestHarness.Assert(load.FindByName("ChallengeLoadScreen.wnd:ParentChallengeLoadScreen")!.Video is not null, "the background movie plays in the root window");
+        TestHarness.Assert(load.FindByName("ChallengeLoadScreen.wnd:PortraitMovieLeft")!.IsHidden && load.FindByName("ChallengeLoadScreen.wnd:OverlayVs")!.IsHidden, "at the start nothing else stands on it");
+        var sounds = new List<string>();
+        var shownPortrait = false;
+        var shownVs = false;
+        for (var step = 0; step < 3000 && shell.Phase == ShellPhase.MissionBriefing; step++)
+        {
+            Frame(shell, movies);
+            sounds.AddRange(shell.DrainOutputs().OfType<PlayUiSoundOutput>().Select(sound => sound.EventName));
+            if (shell.Phase != ShellPhase.MissionBriefing) break;
+            shownPortrait |= load.FindByName("ChallengeLoadScreen.wnd:PortraitMovieLeft") is { IsHidden: false, Video: not null } && load.FindByName("ChallengeLoadScreen.wnd:PortraitMovieRight")!.Video is not null;
+            shownVs |= load.FindByName("ChallengeLoadScreen.wnd:OverlayVs") is { IsHidden: false, Video: not null };
+        }
+        TestHarness.Assert(shell.Phase == ShellPhase.InMission, "the mission starts when the movie has ended");
+        TestHarness.Assert(shownPortrait && shownVs, $"the portraits and the VS played (portraits {shownPortrait}, vs {shownVs})");
+        var opponent = shell.Campaigns.PersonaNamed(shell.Campaigns.Find(player.Campaign)!.Missions[0].GeneralName)!;
+        TestHarness.Assert(sounds.IndexOf(player.NameSound) >= 0 && sounds.IndexOf(player.NameSound) < sounds.IndexOf("Taunts_GCAnnouncer12") && sounds.IndexOf("Taunts_GCAnnouncer12") < sounds.IndexOf(opponent.NameSound),
+            $"the player's name, the VS and the opponent's name are called in this order: {string.Join(", ", sounds)}");
+        TestHarness.Assert(sounds.Count(opponent.Taunts.Contains) == 1 && sounds.IndexOf(opponent.NameSound) < sounds.FindIndex(opponent.Taunts.Contains), "the opponent taunts once, last");
+        TestHarness.Assert(movies.Failed.Count == 0, "every movie of the screen played: " + string.Join(", ", movies.Failed));
+
+        // A machine without movies: everything at once, with the large portraits.
+        var bare = GameShell.Create(data, new FixedShellEnvironment(settings), viewport: new UiViewport(800, 600), skin: SkinPins.Current);
+        ShellTestInput.Click(bare, "MainMenu.wnd:ButtonSinglePlayer");
+        ShellTestInput.Click(bare, "MainMenu.wnd:ButtonChallenge");
+        ShellTestInput.Click(bare, "MainMenu.wnd:ButtonEasy");
+        ShellTestInput.Click(bare, "ChallengeMenu.wnd:GeneralPosition0");
+        ShellTestInput.Click(bare, "ChallengeMenu.wnd:ButtonPlay");
+        var pieces = bare.CurrentScreen.Tree;
+        TestHarness.Assert(pieces.FindByName("ChallengeLoadScreen.wnd:PortraitLeft") is { IsHidden: false, EnabledImage0: var large } && large == player.BioPortraitLarge
+            && pieces.FindByName("ChallengeLoadScreen.wnd:BioNameEntryRight")!.Text!.Value.Length > 0, "without a movie every piece stands at once");
+
+        // Won and lost: the opponent's picture and words on the challenge's own background, and the campaign's last mission leaves its mark.
+        var (context, _) = SyntheticCampaign();
+        var catalog = CampaignCatalog.Parse("Campaign CHALLENGE_0\n  IsChallengeCampaign yes\n  FirstMission A\n  Mission A\n    Map Maps\\One\\One.map\n    GeneralName " + opponent.BioName + "\n  END\nEND\n");
+        var challenge = catalog.Find("CHALLENGE_0")!;
+        var controller = new CampaignController(context, challenge, CampaignProgress.Begin(challenge, ScriptDifficulty.Hard));
+        var lost = controller.StartCurrentMission();
+        StepUntilOver(lost, 5);
+        Destroy(lost, "HeroBarrel");
+        StepUntilOver(lost, 200);
+        shell.MissionFinished(lost, controller);
+        var result = shell.CurrentScreen.Tree;
+        TestHarness.Assert(result.FindByName("ScoreScreen.wnd:BigPortrait") is { IsHidden: false, EnabledImage0: var victorious } && victorious == opponent.VictoriousImage, "a loss shows the victorious opponent");
+        TestHarness.Assert(result.FindByName("ScoreScreen.wnd:GadgetParent")!.IsHidden && result.FindByName("ScoreScreen.wnd:ParentScoreScreen")!.EnabledImage0 == "GeneralsChallengeWinLoss", "on the challenge's own background, without the score");
+        TestHarness.Assert(result.FindByName("ScoreScreen.wnd:ChallengeWinLossText")!.Text!.Value.Length > 0 && result.FindByName("ScoreScreen.wnd:GeneralRemarks") is { IsHidden: false }, "with his words");
+        TestHarness.Assert(shell.DrainOutputs().OfType<PlayUiSoundOutput>().Any(sound => sound.EventName == opponent.LossSound), "and his line for a loss");
+        TestHarness.Assert(!shell.Honors.IsChallengeComplete(0, ScriptDifficulty.Hard), "a loss is no completed challenge");
+        var won = controller.StartCurrentMission();
+        StepUntilOver(won, 5);
+        Destroy(won, "VillainBarrel");
+        StepUntilOver(won, 200);
+        shell.MissionFinished(won, controller);
+        TestHarness.Assert(shell.CurrentScreen.Tree.FindByName("ScoreScreen.wnd:BigPortrait") is { EnabledImage0: var defeated } && defeated == opponent.DefeatedImage, "a win shows the defeated opponent");
+        TestHarness.Assert(shell.Honors.IsChallengeComplete(0, ScriptDifficulty.Hard) && BattleHonors.Load(settings).IsChallengeComplete(0, ScriptDifficulty.Hard), "the last mission won is kept, on its difficulty, in the settings directory");
+        Directory.Delete(settings, recursive: true);
+    }
+
+    /// <summary><c>populateSkirmishBattleHonors</c>, and <c>populatePlayerInfo</c> at the end of a match. The layout's Reset button is hidden in the game's data, so nobody can press it.</summary>
+    private static void SkirmishRecord(string contentDir)
+    {
+        var data = GameData.Load(contentDir, rate: CnCNew.Tests.TestRate.Default);
+        var settings = Path.Combine(Path.GetTempPath(), "cncnew-record-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(settings);
+        File.WriteAllText(Path.Combine(settings, BattleHonors.FileName), "Wins = 12\nLosses = 3\nWinStreak = 4\nBestWinStreak = 7\nUSACampaign_2 = yes\n");
+        var shell = GameShell.Create(data, new FixedShellEnvironment(settings), viewport: new UiViewport(800, 600), skin: SkinPins.Current);
+        ShellTestInput.Click(shell, "MainMenu.wnd:ButtonSinglePlayer");
+        ShellTestInput.Click(shell, "MainMenu.wnd:ButtonSkirmish");
+        TestHarness.Assert(shell.CurrentScreen is SkirmishSetupScreen, "the setup opens");
+        var tree = shell.CurrentScreen.Tree;
+        string Value(string name) => tree.FindByName($"SkirmishGameOptionsMenu.wnd:StaticText{name}Value")!.Text!.Value;
+        TestHarness.Assert(Value("Wins") == "12" && Value("Losses") == "3" && Value("Streak") == "4" && Value("BestStreak") == "7", "the numbers of the record");
+        var images = shell.BuildDrawList().Commands.OfType<UiImageDraw>().ToArray();
+        TestHarness.Assert(images.Any(image => image.Image == "USACampaign_G" && image.Tint == CnCNew.Ui.Wnd.WndColor.White), "a medal earned stands in its colours");
+        TestHarness.Assert(images.Any(image => image.Image == "ChinaCampaign_B" && image.Tint.R == 80), "one not earned is grey");
+        var usa = images.First(image => image.Image == "USACampaign_G").Destination;
+        var box = tree.FindByName("SkirmishGameOptionsMenu.wnd:ListboxInfo")!.Rect;
+        TestHarness.Assert(box.Contains(usa.X, usa.Y) && box.Contains(usa.Right - 1, usa.Bottom - 1), "inside the list");
+
+        ShellTestInput.Click(shell, "SkirmishGameOptionsMenu.wnd:ButtonStart");
+        TestHarness.Assert(shell.Phase == ShellPhase.MatchLoading, "the match starts");
+        var human = new CnCNew.Simulation.World.PlayerConfiguration(new CnCNew.Simulation.Ids.PlayerId(1), "Human", "FactionChina");
+        var computer = new CnCNew.Simulation.World.PlayerConfiguration(new CnCNew.Simulation.Ids.PlayerId(2), "Computer", "FactionGLA", IsComputer: true);
+        shell.MatchFinished(new MatchResult([new MatchResultRow(human, false, false, null), new MatchResultRow(computer, false, false, null)], 600));
+        TestHarness.Assert(shell.Honors.Wins == 12 && shell.Honors.Losses == 3, "who leaves a match that goes on neither won nor lost");
+
+        var again = GameShell.Create(data, new FixedShellEnvironment(settings), viewport: new UiViewport(800, 600), skin: SkinPins.Current);
+        ShellTestInput.Click(again, "MainMenu.wnd:ButtonSinglePlayer");
+        ShellTestInput.Click(again, "MainMenu.wnd:ButtonSkirmish");
+        ShellTestInput.Click(again, "SkirmishGameOptionsMenu.wnd:ButtonStart");
+        again.MatchFinished(new MatchResult([new MatchResultRow(human, true, false, null), new MatchResultRow(computer, false, true, null)], 600));
+        TestHarness.Assert(again.Honors is { Wins: 13, WinStreak: 5, BestWinStreak: 7, LastHouse: "China" } && again.Honors.HasHonor(BattleHonor.Streak) && again.Honors.HasHonor(BattleHonor.Blitz5), "a win counts, with the honors of its length and streak");
+        TestHarness.Assert(BattleHonors.Load(settings).Wins == 13, "and is written at once");
+        Directory.Delete(settings, recursive: true);
     }
 
     private static void Destroy(MissionRun run, string name)

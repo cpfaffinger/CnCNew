@@ -11,6 +11,11 @@ public sealed partial class UiWindowTree
     private long _hoverSince;
     private bool _pointerInside;
     private int _hoverX, _hoverY;
+
+    /// <summary>Where the pointer last stood, for a tooltip that depends on the place inside its window.</summary>
+    public int HoverX => _hoverX;
+
+    public int HoverY => _hoverY;
     private UiWindow? _lastClickWindow;
     private int _lastClickRow = -1;
     private long _lastClickTime = long.MinValue;

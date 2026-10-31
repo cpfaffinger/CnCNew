@@ -12,10 +12,11 @@ namespace CnCNew.Game.Shell.Screens;
 /// (<see cref="CampaignCatalog.Personas"/>; a persona that does not start enabled or has no campaign keeps its button hidden, as <c>setEnabledButtons</c> does).
 /// The difficulty was chosen on the main menu before this screen opened (<c>setupGameStart</c> with <c>launchChallengeMenu</c>:
 /// <c>TheChallengeGenerals->setCurrentDifficulty</c>) and is what the campaign starts with. Like <c>ChallengeMenuInit</c> the biography panel and the Play button
-/// stay hidden until a general is picked (<c>setGeneralBio</c>); then the four lines (<c>BioNameEntry</c>, <c>BioDOBEntry</c>, <c>BioBirthplaceEntry</c>,
-/// <c>BioStrategyEntry</c>, repurposed by the original for name, rank, branch and strategy) show the persona's labels at once; the original types them out one
-/// letter per frame (<c>updateBio</c>). The buttons show the medallions of the general's player template (<c>MedallionRegular</c>/<c>Hilite</c>/<c>Select</c>); the
-/// biography portrait (<c>BioPortrait</c>) and the voice/preview sounds are not implemented.
+/// stay hidden until a general is picked (<c>setGeneralBio</c>); then the portrait shows and the four lines (<c>BioNameEntry</c>, <c>BioDOBEntry</c>, <c>BioBirthplaceEntry</c>,
+/// <c>BioStrategyEntry</c>, repurposed by the original for name, rank, branch and strategy) are typed out two letters per update (<c>updateBio</c>; a shell without animations
+/// shows them at once). A general under the pointer shows his bio; leaving him shows the chosen one's again. The buttons show the medallions of the general's player template
+/// (<c>MedallionRegular</c>/<c>Hilite</c>/<c>Select</c>). <b>Nothing is unlocked:</b> the original has no such step, every general with <c>StartsEnabled</c> is open from the start, and what a person
+/// has beaten shows only as a medal in the skirmish setup (<see cref="BattleHonors"/>).
 /// </summary>
 public sealed class ChallengeSelectScreen : ShellScreen
 {
@@ -24,6 +25,17 @@ public sealed class ChallengeSelectScreen : ShellScreen
     private readonly ImmutableArray<ChallengePersona?> _personas;
     private readonly ScriptDifficulty _difficulty;
     private int _selected = -1;
+
+    // ChallengeMenuUpdate runs once per frame of the shell, 30 a second.
+    private const double UpdateSeconds = 1.0 / CnCNew.Data.OriginalFrame.PerSecond;
+    private const int TeletypeSkip = 2;
+    private const int IntroVoiceUpdates = 10;
+    private double _updateClock;
+    private int _introUpdates;
+    private bool _introPlayed;
+    private readonly string[] _bio = [string.Empty, string.Empty, string.Empty, string.Empty];
+    private int _bioPosition;
+    private static readonly string[] BioWindows = ["BioNameEntry", "BioDOBEntry", "BioBirthplaceEntry", "BioStrategyEntry"];
 
     public ChallengeSelectScreen(GameShell shell, ScriptDifficulty difficulty) : base(shell, ShellLayoutNames.ChallengeMenu)
     {
@@ -63,26 +75,89 @@ public sealed class ChallengeSelectScreen : ShellScreen
 
     protected override string? ExitTransitionGroup => "ChallengeMenuFade";
 
+    /// <summary><c>setGeneralBio</c>: the portrait at once, the four lines cleared; <see cref="Update"/> types them out.</summary>
+    private void ShowBio(int index)
+    {
+        if (index < 0) return;
+        var persona = _personas[index]!;
+        W("GeneralsBioParent").SetHidden(false);
+        if (persona.BioPortraitSmall.Length > 0) W("BioPortrait").SetEnabledImage0(persona.BioPortraitSmall);
+        _bio[0] = Text(persona.BioName);
+        _bio[1] = Text(persona.BioRank);
+        _bio[2] = Text(persona.BioBranch);
+        _bio[3] = Text(persona.BioStrategy);
+        _bioPosition = 0;
+        foreach (var window in BioWindows) W(window).SetText(string.Empty);
+        // A shell without animations shows the end of what is typed.
+        if (Transitions is null) AdvanceBio(int.MaxValue);
+    }
+
+    /// <summary><c>updateBio</c>: the next characters of the four lines, one line after the other.</summary>
+    private void AdvanceBio(int characters)
+    {
+        var total = _bio.Sum(line => line.Length);
+        _bioPosition = Math.Min(total, characters == int.MaxValue ? total : _bioPosition + characters);
+        var left = _bioPosition;
+        for (var line = 0; line < _bio.Length; line++)
+        {
+            var shown = Math.Min(left, _bio[line].Length);
+            W(BioWindows[line]).SetText(_bio[line][..shown]);
+            left -= shown;
+        }
+    }
+
+    public override void Update(double dtSeconds)
+    {
+        base.Update(dtSeconds);
+        _updateClock += dtSeconds;
+        while (_updateClock >= UpdateSeconds)
+        {
+            _updateClock -= UpdateSeconds;
+            AdvanceBio(TeletypeSkip);
+            // "Choose your general", some updates after the transition is over.
+            if (!_introPlayed && (Transitions?.IsSettled ?? true) && ++_introUpdates == IntroVoiceUpdates)
+            {
+                _introPlayed = true;
+                Shell.PlaySound("Taunts_GCAnnouncer01");
+            }
+        }
+    }
+
     private void Select(int index)
     {
         _selected = index;
-        var persona = _personas[index]!;
-        W("GeneralsBioParent").SetHidden(false);
         W("ButtonPlay").SetHidden(false);
-        W("BioNameEntry").SetText(Text(persona.BioName));
-        W("BioDOBEntry").SetText(Text(persona.BioRank));
-        W("BioBirthplaceEntry").SetText(Text(persona.BioBranch));
-        W("BioStrategyEntry").SetText(Text(persona.BioStrategy));
+    }
+
+    private int PositionOf(string source)
+    {
+        for (var index = 0; index < Slots; index++)
+            if (source == $"ChallengeMenu.wnd:GeneralPosition{index}") return index;
+        return -1;
     }
 
     private void OnSystem(UiWindowTree tree, UiEvent e)
     {
-        if (e.Kind != UiEventKind.ButtonSelected) return;
-        for (var index = 0; index < Slots; index++)
+        // GBM_MOUSE_ENTERING and GBM_MOUSE_LEAVING: a general under the pointer shows his bio; leaving him shows the chosen one's again.
+        if (e.Kind == UiEventKind.ButtonMouseEntering && PositionOf(e.Source) is var entered and >= 0 && entered != _selected && _slots[entered] is not null)
         {
-            if (e.Source != $"ChallengeMenu.wnd:GeneralPosition{index}" || _slots[index] is null) continue;
-            Shell.PlaySound(ShellUiSounds.ButtonClick);
-            Select(index);
+            ShowBio(entered);
+            Shell.PlaySound("GUILogoMouseOver");
+            return;
+        }
+        if (e.Kind == UiEventKind.ButtonMouseLeaving && PositionOf(e.Source) is var left and >= 0 && left != _selected)
+        {
+            ShowBio(_selected);
+            return;
+        }
+        if (e.Kind != UiEventKind.ButtonSelected) return;
+        if (PositionOf(e.Source) is var position and >= 0 && _slots[position] is not null)
+        {
+            // Exactly one button stays chosen; the choice plays the general's preview line.
+            if (_selected >= 0 && _selected != position) W($"GeneralPosition{_selected}").SetChecked(false);
+            if (_selected != position) ShowBio(position);
+            Select(position);
+            Shell.PlayNamedSound(_personas[position]!.PreviewSound);
             return;
         }
         switch (e.Source)
@@ -267,6 +342,131 @@ public sealed class MissionBriefingScreen : ShellScreen
     }
 }
 
+/// <summary>
+/// <c>ChallengeLoadScreen.wnd</c>, <c>ChallengeLoadScreen::init</c>: the player's general on the left and the opponent's on the right over the mission's background movie. The pieces come
+/// at frames of that movie (<c>activatePieces</c>): the titles, the bio typed out, the portraits - movies that keep their last frame - with the player's name called, the reticle, the
+/// "VS" movie with its call, the opponent's name; when the movie ends the opponent taunts and the mission starts. A machine without the movie gets every piece at once and holds for the
+/// voice length (<c>activatePiecesMinSpec</c>), with the large portrait pictures.
+/// </summary>
+public sealed class ChallengeLoadScreen : ShellScreen
+{
+    // LoadScreen.cpp: the frames of the background movie.
+    internal const int FrameTitlesStart = 20, FrameTeletypeStart = 24, FrameFudgeAdd = 30, FramePortraitsStart = 35, FrameOuterAlphaShow = 63, FrameInnerAlphaShow = 74,
+        FrameBackdropShow = 80, FrameVsStart = 98, FrameRightVoice = 140, TeletypeUpdateFrames = 2;
+
+    private static readonly string[] Titles = ["BioNameLeft", "BioBirthplaceLeft", "BioStrategyLeft", "BioNameRight", "BioBirthplaceRight", "BioStrategyRight"];
+    private static readonly string[] Reticle = ["CircleAlphaOuter", "CircleAlphaInner", "VersusBackdrop", "OverlayVs"];
+    private readonly ChallengePersona _player;
+    private readonly ChallengePersona _opponent;
+    private readonly CnCNew.Game.Movies.MovieClip? _background;
+    private readonly List<CnCNew.Game.Movies.MovieClip> _opened = [];
+    private readonly (string Window, string Text)[] _lines;
+    private int _frame = -1;
+    private int _typed;
+
+    public ChallengeLoadScreen(GameShell shell, ChallengePersona player, ChallengePersona opponent, CnCNew.Game.Movies.MovieClip? background) : base(shell, ShellLayoutNames.ChallengeLoadScreen)
+    {
+        _player = player;
+        _opponent = opponent;
+        _background = background;
+        _lines =
+        [
+            ("BioNameEntryLeft", Text(player.BioName)), ("BigNameEntryLeft", Text(player.BioName)), ("BioBirthplaceEntryLeft", Text(player.BioRank)), ("BioStrategyEntryLeft", Text(player.BioStrategy)),
+            ("BioNameEntryRight", Text(opponent.BioName)), ("BigNameEntryRight", Text(opponent.BioName)), ("BioBirthplaceEntryRight", Text(opponent.BioRank)), ("BioStrategyEntryRight", Text(opponent.BioStrategy)),
+        ];
+        W("ProgressLoad").SetProgress(0);
+        foreach (var window in Reticle) W(window).SetHidden(true);
+        foreach (var name in new[] { "PortraitLeft", "PortraitRight", "PortraitMovieLeft", "PortraitMovieRight" }) W(name).SetHidden(true);
+        foreach (var name in Titles) W(name).SetHidden(true);
+        foreach (var (window, _) in _lines) W(window).SetHidden(true);
+        if (background is not null)
+        {
+            W("ParentChallengeLoadScreen").Video = background;
+            return;
+        }
+        // activatePiecesMinSpec.
+        foreach (var name in Titles) W(name).SetHidden(false);
+        foreach (var (window, text) in _lines)
+        {
+            W(window).SetHidden(false);
+            W(window).SetText(text);
+        }
+        if (player.BioPortraitLarge.Length > 0) W("PortraitLeft").SetEnabledImage0(player.BioPortraitLarge);
+        if (opponent.BioPortraitLarge.Length > 0) W("PortraitRight").SetEnabledImage0(opponent.BioPortraitLarge);
+        W("PortraitLeft").SetHidden(false);
+        W("PortraitRight").SetHidden(false);
+        foreach (var window in Reticle) W(window).SetHidden(false);
+        Play("OverlayVs", "VSSmall");
+    }
+
+    private void Play(string window, string movie)
+    {
+        if (movie.Length == 0 || Shell.Movies?.Open(movie) is not { } clip) return;
+        _opened.Add(clip);
+        W(window).Video = clip;
+    }
+
+    public override void Update(double dtSeconds)
+    {
+        base.Update(dtSeconds);
+        if (_background is not { } movie) return;
+        for (var frame = _frame + 1; frame <= movie.Frame; frame++) Activate(frame);
+        _frame = Math.Max(_frame, movie.Frame);
+        // Int percent = (shiftedPercent + FRAME_FUDGE_ADD)/1.3: the movie is the first 30 of the bar's 130 steps.
+        if (movie.DurationSeconds > 0) W("ProgressLoad").SetProgress((int)(Math.Min(1, movie.Seconds / movie.DurationSeconds) * FrameFudgeAdd / 1.3));
+    }
+
+    private void Activate(int frame)
+    {
+        switch (frame)
+        {
+            case FrameTitlesStart:
+                foreach (var name in Titles) W(name).SetHidden(false);
+                break;
+            case FrameTeletypeStart:
+                _typed = 0;
+                foreach (var (window, _) in _lines)
+                {
+                    W(window).SetHidden(false);
+                    W(window).SetText(string.Empty);
+                }
+                break;
+            case FramePortraitsStart:
+                Play("PortraitMovieLeft", _player.PortraitMovieLeft);
+                Play("PortraitMovieRight", _opponent.PortraitMovieRight);
+                W("PortraitMovieLeft").SetHidden(false);
+                W("PortraitMovieRight").SetHidden(false);
+                Shell.PlayNamedSound(_player.NameSound);
+                break;
+            case FrameOuterAlphaShow: W("CircleAlphaOuter").SetHidden(false); break;
+            case FrameInnerAlphaShow: W("CircleAlphaInner").SetHidden(false); break;
+            case FrameBackdropShow: W("VersusBackdrop").SetHidden(false); break;
+            case FrameVsStart:
+                W("VersusBackdrop").SetHidden(false);
+                W("OverlayVs").SetHidden(false);
+                Play("OverlayVs", "VSSmall");
+                Shell.PlaySound("Taunts_GCAnnouncer12");
+                break;
+            case FrameRightVoice: Shell.PlayNamedSound(_opponent.NameSound); break;
+        }
+        // The teletype readout: one character of every line, every second frame.
+        if (frame <= FrameTeletypeStart || frame % TeletypeUpdateFrames != 0) return;
+        _typed++;
+        foreach (var (window, text) in _lines) W(window).SetText(text[..Math.Min(_typed, text.Length)]);
+    }
+
+    /// <summary>The end of <c>init</c>: the movie is over, and the opponent says something (<c>getRandomTauntSound</c>, which does not care about its distribution).</summary>
+    internal void Finish()
+    {
+        if (_opponent.Taunts.Length == 3) Shell.PlayNamedSound(_opponent.Taunts[Random.Shared.Next(3)]);
+    }
+
+    public override void OnClosed()
+    {
+        foreach (var clip in _opened) clip.Stop();
+    }
+}
+
 /// <summary>The victory/defeat banner (<c>Victorious.wnd</c>/<c>Defeat.wnd</c>) pushed underneath
 /// <see cref="MissionResultScreen"/> by <see cref="GameShell.MissionFinished"/>. Neither shipped file declares a
 /// callback or a button (confirmed against the shipped data): they are pure decoration, same as the retail game, which
@@ -328,6 +528,30 @@ public sealed class MissionResultScreen : ShellScreen
 
         _run = run;
         _controller = controller;
+        if (controller is { Campaign.IsChallenge: true } && run.Mission is { } mission && Shell.Campaigns?.PersonaNamed(mission.GeneralName) is { } general) ShowChallenge(general, conclusion == MissionConclusion.Victory);
+    }
+
+    /// <summary>
+    /// <c>displayChallengeWinLoss</c>: the score gives way to the opponent's picture and words on <c>GeneralsChallengeWinLoss</c>; the header names him with <c>GUI:ChallengeWinText</c> or
+    /// <c>GUI:ChallengeLossText</c>, his own line is said, and a challenge has no replay.
+    /// </summary>
+    private void ShowChallenge(ChallengePersona general, bool won)
+    {
+        W("MainBackdrop").SetHidden(true);
+        W("GadgetParent").SetHidden(true);
+        W("ButtonSaveReplay").SetHidden(true);
+        W("ButtonBuddy").SetHidden(true);
+        W("ParentScoreScreen").SetEnabledImage0("GeneralsChallengeWinLoss");
+        var portrait = W("BigPortrait");
+        portrait.SetHidden(false);
+        var image = won ? general.DefeatedImage : general.VictoriousImage;
+        if (image.Length > 0) portrait.SetEnabledImage0(image);
+        var header = Shell.RawText is { } text ? text.Format(won ? "GUI:ChallengeWinText" : "GUI:ChallengeLossText", Text(general.BioName)) : Text(general.BioName);
+        W("ChallengeWinLossText").SetHidden(false);
+        W("ChallengeWinLossText").SetText(header);
+        W("GeneralRemarks").SetHidden(false);
+        W("GeneralRemarks").SetText(Text(won ? general.DefeatedString : general.VictoriousString));
+        Shell.PlayNamedSound(won ? general.WinSound : general.LossSound);
     }
 
     private readonly MissionRun _run;

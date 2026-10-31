@@ -61,6 +61,9 @@ public static class ShellLayoutNames
     /// <summary><c>Window/Menus/ChallengeMenu.wnd</c>: pick a Generals' Challenge opponent/campaign.</summary>
     public const string ChallengeMenu = "ChallengeMenu";
 
+    /// <summary><c>Window/Menus/ChallengeLoadScreen.wnd</c>: the two generals before a Generals' Challenge mission.</summary>
+    public const string ChallengeLoadScreen = "ChallengeLoadScreen";
+
     /// <summary><c>Window/Menus/SaveLoad.wnd</c>: the main-menu load-game list (<see cref="CnCNew.Game.Save.SaveGameStore"/>).</summary>
     public const string SaveLoad = "SaveLoad";
 
@@ -87,7 +90,7 @@ public static class ShellLayoutNames
     [
         MainMenu, OptionsMenu, SkirmishGameOptionsMenu, SkirmishMapSelectMenu, ScoreScreen, CreditsMenu,
         ShellGameLoadScreen, SinglePlayerLoadScreen, MessageBox, QuitMessageBox,
-        ChallengeMenu, SaveLoad, Victorious, Defeat,
+        ChallengeMenu, ChallengeLoadScreen, SaveLoad, Victorious, Defeat,
         NetworkDirectConnect, LanLobbyMenu, PopupHostGame, PopupJoinGame, LanGameOptionsMenu, LanMapSelectMenu, MultiplayerLoadScreen,
         ReplayMenu, PopupReplay,
     ];

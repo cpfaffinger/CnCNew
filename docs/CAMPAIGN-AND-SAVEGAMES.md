@@ -26,8 +26,27 @@ mission, finished flag. Transitions: `Begin` → `Started()` (counts an attempt)
 current, after the last one `Finished`) or `Lost()` (state stays, repetition of the same mission). `Describe`/`Load` in the
 canonical state form (`IStateWriter`/`IStateReader`).
 
-**Unlocks:** not modelled – every campaign and every mission of the chain is selectable. The order of the challenge campaigns and
-the profile unlocking of the original shell are a matter of the profile/the shell and not verified here.
+**Unlocks: the original has none.** `ChallengeMenu.cpp` opens every general whose `StartsEnabled` is set in `ChallengeMode.ini` (`setEnabledButtons`), and all nine playable ones are; no line reads what a
+person has beaten, no campaign opens another. Generals 9 to 11 are `StartsEnabled = no` and have no campaign. The same holds for the three campaigns of the main menu. (F-30 said "unlocks"; the source says there
+are none, so none were built.)
+
+**The record** (`BattleHonors`, `Campaign/BattleHonors.cs`, Phase 59) is what the original keeps instead: `SkirmishBattleHonors`, a `UserPreferences` file of `Key = Value` lines called `SkirmishStats.ini`, here in
+the settings directory beside `Saves` (no account, nothing online; a key this version does not know stays in the file).
+
+| What | Key | Written by |
+|---|---|---|
+| A campaign won to its end, per difficulty | `USACampaign_<d>`, `CHINACampaign_<d>`, `GLACampaign_<d>`, `ChallengeCampaign<n>_<d>` and the bit in `Honors` | `GameShell.MissionFinished` (`finishSinglePlayerInit`); the campaign's name decides, `CHALLENGE_0` to `CHALLENGE_8`; `TRAINING` leaves no mark |
+| A local skirmish decided for the player | `Wins`, `Losses`, `WinStreak`, `BestWinStreak`, `LastHouse`, `LoyalGames` | `GameShell.MatchFinished` (`populatePlayerInfo`). A match left while it goes on counts for nobody, and neither does one with everybody on one team (`isSandbox`) |
+| Honors of a win | `Honors`, `SCUD`, `PPC`, `Nuke`, `<map>_<slot state>` (endurance), `Challenge` (medals of one to seven hard opponents) | `updateSkirmishBattleHonors`, `updateChallengeMedals`, with the thresholds of the original: streak 5, 50 vehicles, 20 aircraft, under 5 and 10 minutes, 20 loyal games, the three superweapons over any number of matches |
+
+`MatchStatistics` counts for this what `ScoreKeeper` gives the original: scored vehicles without aircraft, scored aircraft, the templates built. The record is shown where the original shows it: the wins, losses and streaks
+and the two rows of medals of `ListboxInfo` in the skirmish setup, with each medal's tooltip (`populateSkirmishBattleHonors`, `InsertBattleHonor`, `BattleHonorTooltip`; drawn by the screen, not by a list box row:
+the pictures have their own size). The layout's Reset button is hidden in the game's data in both variants, so nobody can press it, and nothing in the port handles it.
+
+Not built: the opponent the setup preselects by the wins (`getWins() > 10` hard, `> 5` medium, else easy; the port starts with medium); `BATTLE_HONOR_LOYALTY_*` is written but its picture is commented out in the original; the fair-play honor and the rest belong to the online game.
+
+**A mission of the challenge** (Phase 59, `CampaignScreens.cs`): the menu types the bio two letters per update, shows the portrait, previews the general under the pointer and plays his line when he is chosen (`ChallengeMenu.cpp`); the load
+screen is `ChallengeLoadScreen.wnd` with its movies (`docs/CLIENT-VIDEO.md` section 4); the score screen gives way to `displayChallengeWinLoss`: the opponent's picture and words on `GeneralsChallengeWinLoss`, his line of win or loss, no replay button.
 
 ## 3. Flow (`CampaignController`, `MissionRun`)
 

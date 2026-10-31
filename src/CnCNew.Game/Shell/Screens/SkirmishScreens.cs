@@ -1,14 +1,18 @@
 using System.Collections.Immutable;
+using System.Globalization;
+using CnCNew.Game.Campaign;
 using CnCNew.Game.Live;
 using CnCNew.Simulation.Testing;
+using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
+using CnCNew.Ui.Wnd;
 
 namespace CnCNew.Game.Shell.Screens;
 
 /// <summary>
 /// <c>SkirmishGameOptionsMenu.wnd</c>: map, human faction/name, up to 7 computer opponents (limited by the selected
 /// map's start position count), and starting cash feed a <see cref="MatchSetup"/>. Everything else the layout shows
-/// (game speed, superweapon limit, battle-honor list, per-slot color/team) has no counterpart in <c>LiveMatch</c> or
+/// (game speed, superweapon limit) has no counterpart in <c>LiveMatch</c> or
 /// <see cref="Simulation.Skirmish.SkirmishMatchOptions"/> yet: the gadgets are populated and stay interactive so the
 /// screen looks authentic, but their values are not read at Start time. The opponent slots offer <c>GUI:Open</c>, <c>GUI:Closed</c> and the original's
 /// three armies (<c>GUI:EasyAI</c>, <c>GUI:MediumAI</c>, <c>GUI:HardAI</c>): the original AI plays them by its scripts, the built-in AI by its strength (<c>docs/SKIRMISH-AI.md</c>).
@@ -55,6 +59,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
 
         Tree.Register("SkirmishGameOptionsMenuSystem", OnSystem);
         Tree.Register("SkirmishGameOptionsMenuInput", OnInput);
+        Tree.TooltipOverride = window => window == TryW("ListboxInfo") ? HonorTooltip(window) : null;
 
         W("TextEntryPlayerName").SetEntryText(names.Player);
         var computerArmy = names.ComputerArmy;
@@ -101,11 +106,54 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         RefreshMapDisplay();
         ApplySlotVisibility();
         HideStartPositionMarkers();
+        ShowHonors();
         // SkirmishGameOptionsMenuUpdate: the screen fades in (FULLFADE of SubParent) and fades out again when it is closed.
         Transitions?.SetGroup("SkirmishGameOptionsMenuFade");
     }
 
     protected override string? ExitTransitionGroup => "SkirmishGameOptionsMenuFade";
+
+    private ImmutableArray<HonorEntry> _honors = [];
+
+    /// <summary><c>populateSkirmishBattleHonors</c>: the numbers of the record and its two rows of pictures in <c>ListboxInfo</c>; the maps are the official multiplayer maps of the list.</summary>
+    private void ShowHonors()
+    {
+        var record = Shell.Honors;
+        W("StaticTextStreakValue").SetText(record.WinStreak.ToString(CultureInfo.InvariantCulture));
+        W("StaticTextBestStreakValue").SetText(record.BestWinStreak.ToString(CultureInfo.InvariantCulture));
+        W("StaticTextWinsValue").SetText(record.Wins.ToString(CultureInfo.InvariantCulture));
+        W("StaticTextLossesValue").SetText(record.Losses.ToString(CultureInfo.InvariantCulture));
+        _honors = record.List([..Shell.HonorMaps()]);
+    }
+
+    /// <summary>
+    /// The pictures where <c>InsertBattleHonor</c> and <c>W3DGadgetListBoxDraw</c> put them: a spacer of 10 pixels above each of the two rows, the image 40 x 41 of the 800 x 600 screen,
+    /// centred in its column of the window's <c>COLUMNSWIDTH</c>, and those not earned in the grey 80, 80, 80.
+    /// </summary>
+    private IEnumerable<(UiRect Cell, UiImageDraw Draw, HonorEntry Entry)> HonorCells(UiWindow window)
+    {
+        var width = 40 * Shell.Viewport.Width / 800;
+        var height = 41 * Shell.Viewport.Height / 600;
+        var spacer = 10 * Shell.Viewport.Height / 600;
+        var content = UiGadgetGeometry.ListContent(window);
+        for (var index = 0; index < _honors.Length; index++)
+        {
+            var entry = _honors[index];
+            var row = index / 6;
+            var top = content.Y + spacer + row * (height + spacer);
+            var column = UiGadgetGeometry.Columns(window, new UiRect(content.X, top, content.Width, height))[index % 6];
+            var cell = new UiRect(column.X + Math.Max(0, (column.Width - width) / 2), top, Math.Min(width, column.Width), height);
+            yield return (cell, new UiImageDraw(entry.Image, cell, entry.Earned ? new WndColor(255, 255, 255, 255) : new WndColor(80, 80, 80, 255), false, false), entry);
+        }
+    }
+
+    /// <summary><c>BattleHonorTooltip</c>: the picture under the pointer names itself, the window's own text stands for the rest.</summary>
+    private string? HonorTooltip(UiWindow window)
+    {
+        foreach (var (cell, _, entry) in HonorCells(window))
+            if (cell.Contains(Tree.HoverX, Tree.HoverY)) return Text(entry.Tooltip);
+        return null;
+    }
 
     private bool _mapPickerOpen;
 
@@ -253,9 +301,13 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
     }
 
     public override UiDrawList BuildDrawList()
-        => ShellCustomDraw.ExpandMapPreview(Tree.BuildDrawList(),
+    {
+        var list = ShellCustomDraw.ExpandMapPreview(Tree.BuildDrawList(),
             new ShellMapPreviewContext(_selectedMapPath is null ? null : Shell.MapNames.DisplayName(_selectedMapPath, Shell.MapCatalog, Shell.TextSource)),
             Tree.Services.TextMeasure, Shell.Skin, Tree.Viewport);
+        var window = W("ListboxInfo");
+        return !window.IsVisible || _honors.IsDefaultOrEmpty ? list : list with { Commands = list.Commands.AddRange(HonorCells(window).Select(cell => (UiDrawCommand)cell.Draw)) };
+    }
 }
 
 /// <summary>

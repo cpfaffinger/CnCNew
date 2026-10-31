@@ -405,7 +405,7 @@ internal static class ShellTransitionTests
             {
                 TestHarness.Assert(fades, $"{button}: the screen fades to black before the mission starts");
             }
-            TestHarness.Assert(shell.Phase == ShellPhase.MissionBriefing && shell.CurrentScreen is MissionBriefingScreen, $"{button}: the mission briefing follows");
+            TestHarness.Assert(shell.Phase == ShellPhase.MissionBriefing && shell.CurrentScreen is MissionBriefingScreen or ChallengeLoadScreen, $"{button}: the mission briefing follows");
             for (var i = 0; i < 400 && shell.Phase == ShellPhase.MissionBriefing; i++) shell.Update(0.1);
             var started = shell.DrainOutputs().OfType<StartMissionOutput>().SingleOrDefault();
             TestHarness.Assert(started?.Controller is { } controller && controller.Progress.Difficulty == CnCNew.Simulation.Scripting.ScriptDifficulty.Easy, $"{button}: the chosen difficulty reached the mission");

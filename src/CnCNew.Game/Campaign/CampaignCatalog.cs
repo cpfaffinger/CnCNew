@@ -37,7 +37,30 @@ public sealed record CampaignDefinition(
 /// The four <c>Bio*</c> values are CSF labels that fill the biography panel of the menu (<c>setGeneralBio</c>: name, rank, branch, strategy). <see cref="Campaign"/> is
 /// the literal <c>unimplemented</c> for the personas the shipped game has no campaign for.
 /// </summary>
-public sealed record ChallengePersona(int Index, string PlayerTemplate, string Campaign, bool StartsEnabled, string BioName, string BioRank, string BioBranch, string BioStrategy);
+public sealed record ChallengePersona(int Index, string PlayerTemplate, string Campaign, bool StartsEnabled, string BioName, string BioRank, string BioBranch, string BioStrategy)
+{
+    /// <summary><c>BioPortraitSmall</c> (the menu) and <c>BioPortraitLarge</c> (the load screen of a machine that plays no movies).</summary>
+    public string BioPortraitSmall { get; init; } = string.Empty;
+    public string BioPortraitLarge { get; init; } = string.Empty;
+
+    /// <summary>The names in <c>Video.ini</c> of the general's portrait on the left and on the right of the load screen.</summary>
+    public string PortraitMovieLeft { get; init; } = string.Empty;
+    public string PortraitMovieRight { get; init; } = string.Empty;
+
+    /// <summary>What the score screen shows of this general as an opponent: <c>DefeatedImage</c> and <c>DefeatedString</c> when he lost, <c>VictoriousImage</c> and <c>VictoriousString</c> when he won.</summary>
+    public string DefeatedImage { get; init; } = string.Empty;
+    public string VictoriousImage { get; init; } = string.Empty;
+    public string DefeatedString { get; init; } = string.Empty;
+    public string VictoriousString { get; init; } = string.Empty;
+
+    public string PreviewSound { get; init; } = string.Empty;
+    public string NameSound { get; init; } = string.Empty;
+    public string WinSound { get; init; } = string.Empty;
+    public string LossSound { get; init; } = string.Empty;
+
+    /// <summary><c>TauntSound1</c> to <c>TauntSound3</c>.</summary>
+    public ImmutableArray<string> Taunts { get; init; } = [];
+}
 
 /// <summary>
 /// The campaigns of <c>Data/INI/Campaign.ini</c>. The file is not part of the compiled definition graph (the load plan lists it as
@@ -64,6 +87,12 @@ public sealed class CampaignCatalog
 
     public CampaignDefinition? Find(string name) => Campaigns.FirstOrDefault(campaign => string.Equals(campaign.Name, name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary><c>ChallengeGenerals::getPlayerGeneralByCampaignName</c>: the general a campaign is played as.</summary>
+    public ChallengePersona? PersonaOfCampaign(string campaign) => Personas.FirstOrDefault(persona => string.Equals(persona.Campaign, campaign, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary><c>getGeneralByGeneralName</c>: the opponent a mission's <c>GeneralName</c> names, by the label of his name.</summary>
+    public ChallengePersona? PersonaNamed(string generalName) => Personas.FirstOrDefault(persona => string.Equals(persona.BioName, generalName, StringComparison.OrdinalIgnoreCase));
+
     /// <summary>Virtual path of a map as the INI spells it (<c>Maps\USA01\USA01.map</c>).</summary>
     public static string NormalizeMapPath(string path) => path.Replace('\\', '/').Trim();
 
@@ -76,8 +105,8 @@ public sealed class CampaignCatalog
     {
         var list = ImmutableArray.CreateBuilder<ChallengePersona>();
         int index = -1;
-        string template = string.Empty, campaign = string.Empty, name = string.Empty, rank = string.Empty, branch = string.Empty, strategy = string.Empty;
-        var enabled = false;
+        var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        string Field(string name) => fields.GetValueOrDefault(name, string.Empty);
         foreach (var raw in challengeModeText.Split('\n'))
         {
             var line = raw;
@@ -88,22 +117,22 @@ public sealed class CampaignCatalog
             if (key.StartsWith("GeneralPersona", StringComparison.OrdinalIgnoreCase) && int.TryParse(key["GeneralPersona".Length..], NumberStyles.None, CultureInfo.InvariantCulture, out var number))
             {
                 index = number;
-                template = campaign = name = rank = branch = strategy = string.Empty;
-                enabled = false;
+                fields.Clear();
             }
-            else if (key.Equals("PlayerTemplate", StringComparison.OrdinalIgnoreCase)) template = value;
-            else if (key.Equals("Campaign", StringComparison.OrdinalIgnoreCase)) campaign = value;
-            else if (key.Equals("StartsEnabled", StringComparison.OrdinalIgnoreCase)) enabled = Bool(value);
-            else if (key.Equals("BioNameString", StringComparison.OrdinalIgnoreCase)) name = value;
-            else if (key.Equals("BioRankString", StringComparison.OrdinalIgnoreCase)) rank = value;
-            else if (key.Equals("BioBranchString", StringComparison.OrdinalIgnoreCase)) branch = value;
-            else if (key.Equals("BioStrategyString", StringComparison.OrdinalIgnoreCase)) strategy = value;
-            else if (key.Equals("END", StringComparison.OrdinalIgnoreCase) && index >= 0 && campaign.Length > 0)
+            else if (key.Equals("END", StringComparison.OrdinalIgnoreCase))
             {
-                list.Add(new ChallengePersona(index, template, campaign, enabled, name, rank, branch, strategy));
+                if (index >= 0 && Field("Campaign").Length > 0)
+                    list.Add(new ChallengePersona(index, Field("PlayerTemplate"), Field("Campaign"), Bool(Field("StartsEnabled")), Field("BioNameString"), Field("BioRankString"), Field("BioBranchString"), Field("BioStrategyString"))
+                    {
+                        BioPortraitSmall = Field("BioPortraitSmall"), BioPortraitLarge = Field("BioPortraitLarge"), PortraitMovieLeft = Field("PortraitMovieLeftName"), PortraitMovieRight = Field("PortraitMovieRightName"),
+                        DefeatedImage = Field("DefeatedImage"), VictoriousImage = Field("VictoriousImage"), DefeatedString = Field("DefeatedString"), VictoriousString = Field("VictoriousString"),
+                        PreviewSound = Field("PreviewSound"), NameSound = Field("NameSound"), WinSound = Field("WinSound"), LossSound = Field("LossSound"),
+                        Taunts = [Field("TauntSound1"), Field("TauntSound2"), Field("TauntSound3")],
+                    });
                 index = -1;
-                campaign = string.Empty;
+                fields.Clear();
             }
+            else if (key.Length > 0) fields[key] = value;
         }
         var personas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var persona in list)

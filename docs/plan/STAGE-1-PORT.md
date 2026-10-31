@@ -93,8 +93,7 @@ sound, playability) is outstanding (S1-M11), and the fidelity register has entri
   and 15/24. The driver replaces player actions by interventions in the world and verifies the **script chain, not the
   playability**; the commands-only agent (0 world writes) wins `MD_GLA04` and `MD_CHI01`, `MD_CHI02` only after 43 game
   minutes.
-- **Open:** F-10 (`<This Team>` in the mission VM), F-30 (unlocks and profile);
-  playability by a human is S1-M11.
+- **Open:** the playability by a human is S1-M11.
 
 ### S1-M8 World presentation — built, not accepted
 
@@ -232,7 +231,7 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-27 | Text rasterisation follows GDI through `GdiFontProvider` since Phase 16; pixel comparison by a human outstanding | `CreateFont`/`ExtTextOut` | Phase 16 | acceptance (S1-M11) |
 | F-28 | The pathfinder is simpler than the original's: flat A* with an expansion budget, approximated footprint, escape cells with a surcharge; a failed path ends the command | `AIPathfind.cpp` (layers, zones) | Phase 6 | limit for the port; beyond the original is S3-M6 |
 | F-29 | Determinism-driven: self-acquisition once per original frame of the unit above 30 Hz (decided 10 October 2026); at 30 Hz nothing differs | – | Phase 23 | decided, no action |
-| F-30 | Unlocks and profile of the challenge campaigns are not modelled | `CampaignManager` | Phase 9 | fix |
+| F-30 | Unlocks and profile of the challenge campaigns are not modelled | `CampaignManager`, `ChallengeMenu.cpp`, `SkirmishBattleHonors` | Phase 9 | **done** (Phase 59, `docs/CAMPAIGN-AND-SAVEGAMES.md` §2: the original has no unlocks, all nine generals start enabled; the record `SkirmishStats.ini`, its medals in the skirmish setup, the menu's bio and sounds, the load screen with its movies, the win and loss display) |
 | F-31 | Missions are not replays (script actions are direct world changes); truth is the snapshot | the original replays missions | Phase 9 | limit (design) |
 | F-32 | Skirmish savegame unsupported (`CreateSave()` throws) | the original saves skirmishes | Phase 10 | **closed** (Phase 24: `SkirmishMatchSession.Save`/`Restore`, `SkirmishSaveGame`; `docs/SIMULATION-CORE.md` §45.3, `docs/CAMPAIGN-AND-SAVEGAMES.md` §8) |
 | F-34 | `HealContain` puts a healed occupant on the building's position instead of letting it walk out through the building's exit | `HealContain::update` → `exitObjectViaDoor` | Phase 31 | **closed** (Phase 34: `c2e48e2`, manifest `3d0d276` - through the door like every `OpenContain` rider, `NumberOfExitPaths` parsed; the community fix `door-exit-to-rally` adopted after it, `docs/GGC-FIXES.md` 3.1d; `docs/SIMULATION-CORE.md` §52) |
