@@ -1007,7 +1007,7 @@ internal sealed class ClientRuntime : IDisposable
             _shell!.ReplayFinished(CnCNew.Game.Shell.MatchResult.From(playback.Match.Players, playback.Match.Winner, playback.Match.World, playback.Match.Tick, playback.Statistics), note);
         }
         else if (running.Mission is not null && running.Start is { } start)
-            _shell!.MissionFinished(start.Run, start.Controller);
+            _shell!.MissionFinished(start.Run, start.Controller, game is LiveMission finished ? CnCNew.Game.Shell.MissionScore.Rows(finished, _data, running.Statistics) : default);
         else if (game is LiveMatch match)
         {
             string? note = null;
@@ -1133,10 +1133,14 @@ internal sealed class ClientRuntime : IDisposable
 
         public void Attach()
         {
-            if (Host.Match is LiveMatch)
+            if (Host.Match is LiveMatch or LiveMission)
             {
                 Statistics.Begin(Host.Match.World);
-                Host.Match.TickStepped += result => Statistics.Record(result, Host.Match.World);
+                Host.Match.TickStepped += result =>
+                {
+                    if (Host.Match is LiveMission scored) Statistics.ScoringEnabled = scored.Director.ScoringEnabled;
+                    Statistics.Record(result, Host.Match.World);
+                };
             }
             if (Host.Match is LiveMission) Host.Match.TickStepped += _ => MissionSteps++;
         }
@@ -1159,7 +1163,7 @@ internal sealed class ClientRuntime : IDisposable
         /// <summary>Set when this game shows the playback of a replay.</summary>
         public CnCNew.Game.Replays.ReplayPlayback? Playback { get; set; }
 
-        /// <summary>The per-player counts the score screen shows, fed by every simulated tick of a skirmish match.</summary>
+        /// <summary>The per-player counts the score screen shows, fed by every simulated tick of a skirmish match or mission.</summary>
         public MatchStatistics Statistics { get; } = new();
         public MatchController Hud => Match ?? Mission!.Hud;
 

@@ -636,7 +636,10 @@ public sealed class GameShell
     /// (<c>docs/CAMPAIGN-AND-SAVEGAMES.md</c> §7). A run without a controller (should not happen once a mission is only ever
     /// reached through the campaign flow below) is reported as a defeat-less dead end: the result screen only offers Main Menu.
     /// </summary>
-    public void MissionFinished(MissionRun run, CampaignController? controller)
+    /// <param name="run">The mission.</param>
+    /// <param name="controller">Its campaign.</param>
+    /// <param name="score">The rows of the score, when the host counted while the mission ran (<see cref="MissionScore"/>).</param>
+    public void MissionFinished(MissionRun run, CampaignController? controller, ImmutableArray<MissionScoreRow> score = default)
     {
         ArgumentNullException.ThrowIfNull(run);
         var conclusion = controller is null ? (MissionConclusion?)null : controller.Conclude(run);
@@ -650,7 +653,7 @@ public sealed class GameShell
         if (controller is { IsFinished: true, Campaign.FinalVictoryMovie.Length: > 0 }) Movies?.PlayFullScreen(controller.Campaign.FinalVictoryMovie, modal: true);
         Phase = ShellPhase.MissionResults;
         Replace(new MissionBannerScreen(this, conclusion));
-        Push(new MissionResultScreen(this, run, controller, conclusion));
+        Push(new MissionResultScreen(this, run, controller, conclusion, score));
     }
 
     // ------------------------------------------------------------------------------------------------- campaign and savegame navigation (called by screens)

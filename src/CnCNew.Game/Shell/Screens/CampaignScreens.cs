@@ -482,9 +482,8 @@ public sealed class MissionBannerScreen : ShellScreen
 /// <summary>
 /// <c>ScoreScreen.wnd</c> reused as the campaign mission result screen (the retail file's own
 /// <c>Victorious.wnd</c>/<c>Defeat.wnd</c> banners have no buttons at all, see <see cref="MissionBannerScreen"/>, so this
-/// is the only shipped, buttoned screen fit for "what next"). Shows one row for the human player (no
-/// <c>MatchStatistics</c> tracker exists for missions yet, so every numeric cell is <c>-</c>, same honest-fallback
-/// convention as <see cref="ScoreScreenScreen"/>) and repurposes <c>ButtonContinue</c>/<c>ButtonOk</c> for campaign
+/// is the only shipped, buttoned screen fit for "what next"). Shows the rows of <c>grabSinglePlayerInfo</c> as <see cref="MissionScore"/> counted them, or without a count one row
+/// of <c>-</c> (the convention of <see cref="ScoreScreenScreen"/>), and repurposes <c>ButtonContinue</c>/<c>ButtonOk</c> for campaign
 /// navigation instead of their retail skirmish labels.
 /// </summary>
 public sealed class MissionResultScreen : ShellScreen
@@ -492,7 +491,7 @@ public sealed class MissionResultScreen : ShellScreen
     /// <summary>Shown over the victory/defeat banner (<see cref="MissionBannerScreen"/>), which is its backdrop here.</summary>
     public override bool HidesScreensBelow => false;
 
-    public MissionResultScreen(GameShell shell, MissionRun run, CampaignController? controller, MissionConclusion? conclusion) : base(shell, ShellLayoutNames.ScoreScreen)
+    public MissionResultScreen(GameShell shell, MissionRun run, CampaignController? controller, MissionConclusion? conclusion, ImmutableArray<MissionScoreRow> score = default) : base(shell, ShellLayoutNames.ScoreScreen)
     {
         Tree.Register("ScoreScreenSystem", OnSystem);
         Tree.Register("ScoreScreenInput", OnInput);
@@ -503,15 +502,29 @@ public sealed class MissionResultScreen : ShellScreen
         W("ButtonEmote").SetHidden(true);
         W("ListboxChatWindowScoreScreen").SetHidden(true);
 
+        var counted = !score.IsDefaultOrEmpty;
         for (var row = 0; row < 8; row++)
         {
-            var isHumanRow = row == 0;
-            foreach (var prefix in RowFieldPrefixes) W($"{prefix}{row}").SetHidden(!isHumanRow);
-            if (!isHumanRow) continue;
-            W("StaticTextPlayer0").SetText(run.Mission?.Name ?? run.MapPath);
-            foreach (var prefix in NumericPrefixes) W($"{prefix}0").SetText("-");
-            W("StaticTextObserver0").SetHidden(true);
-            W("GameWindowWinner0").SetHidden(conclusion != MissionConclusion.Victory);
+            var shown = counted ? row < score.Length : row == 0;
+            foreach (var prefix in RowFieldPrefixes) W($"{prefix}{row}").SetHidden(!shown);
+            if (!shown) continue;
+            W($"StaticTextObserver{row}").SetHidden(true);
+            W($"GameWindowWinner{row}").SetHidden(row != 0 || conclusion != MissionConclusion.Victory);
+            if (!counted)
+            {
+                W("StaticTextPlayer0").SetText(run.Mission?.Name ?? run.MapPath);
+                foreach (var prefix in NumericPrefixes) W($"{prefix}0").SetText("-");
+                continue;
+            }
+            W($"StaticTextPlayer{row}").SetText(Text(score[row].Label));
+            var tally = score[row].Tally;
+            W($"StaticTextUnitsBuilt{row}").SetText(tally.UnitsBuilt.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            W($"StaticTextUnitsLost{row}").SetText(tally.UnitsLost.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            W($"StaticTextUnitsDestroyed{row}").SetText(tally.UnitsDestroyed.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            W($"StaticTextBuildingsBuilt{row}").SetText(tally.BuildingsBuilt.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            W($"StaticTextBuildingsLost{row}").SetText(tally.BuildingsLost.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            W($"StaticTextBuildingsDestroyed{row}").SetText(tally.BuildingsDestroyed.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            W($"StaticTextResources{row}").SetText(tally.Resources.ToString(System.Globalization.CultureInfo.InvariantCulture));
         }
 
         var finished = controller?.IsFinished ?? true;

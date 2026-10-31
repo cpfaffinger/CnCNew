@@ -298,7 +298,7 @@ a camera move) is not represented, no campaign map uses it.
   (`ScriptActions::doMoveCameraTo` → `View::moveCameraTo`; the ease times of the script are replaced by a fixed S-curve), cut with viewing direction/zoom/pitch
   (`doSetupCamera`), zoom as a factor of the default value and pitch as `m_FXPitch` (`doZoomCamera`, `doPitchCamera`, `cameraModFinalZoom/Pitch`; below 1 and even negative it moves the point looked at, above 1 the camera, `W3DView::buildCameraPosition`; Phase 58), rotation (`doRotateCamera`), look toward the waypoint
   (`cameraModLookToward`; the sign of the camera angle is measured at the camera, not assumed), reset (`doResetCamera`), following a named object
-  (`doCameraFollowNamed`). Without an active script move the camera stays with the player. Limits: `MOVE_CAMERA_ALONG_WAYPOINT_PATH` moves in a straight line to the first waypoint.
+  (`doCameraFollowNamed`). Without an active script move the camera stays with the player.
 - **Input lock** (`DISABLE_INPUT`/`ENABLE_INPUT`, `ScriptActions::doDisableInput`): `MissionController` sets `MatchController.WorldInputEnabled`; everything except Esc (game menu) is discarded, the
   pointer does not scroll, on locking, selection, command modes and held keys are cleared. A victory or a defeat lifts the lock.
 - **Letterbox and fades:** `CAMERA_LETTERBOX_BEGIN/END` hide the command bar and draw two bars (`doLetterBoxMode`: `HideControlBar`), `CAMERA_FADE_ADD/SUBTRACT/MULTIPLY` a
@@ -489,21 +489,15 @@ occur in no campaign map and are only in the catalog):
 
 | `ScriptOutput` type | Uses | Maps |
 | --- | ---: | --- |
-| `CAMEO_FLASH` | 4 | MD_GLA02 |
-| `CAMERA_ADD_SHAKER_AT` | 2 | MD_GLA01, MD_GLA02 |
 | `CAMERA_MOD_FREEZE_ANGLE` | 1 | GC_ChinaBoss |
 | `DEBUG_MESSAGE_BOX` | 3 | GC_LaserGeneral, MD_GLA03, MD_GLA04 |
 | `DISABLE_BORDER_SHROUD` | 27 | 14 of 24 |
-| `DISABLE_SCORING` | 24 | 15 of 24 |
 | `DRAW_SKYBOX_BEGIN` | 24 | 14 of 24 |
 | `DRAW_SKYBOX_END` | 19 | MD_CHI02, MD_CHI04, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA01, MD_USA03, MD_USA04, MD_USA05, Training01 |
 | `ENABLE_BORDER_SHROUD` | 19 | MD_CHI01, MD_CHI02, MD_CHI03, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_GLA05, MD_USA01, MD_USA02, MD_USA03, MD_USA04, MD_USA05 |
-| `ENABLE_SCORING` | 20 | 15 of 24 |
 | `OPTIONS_SET_OCCLUSION_MODE` | 73 | 18 of 24 |
 | `OPTIONS_SET_PARTICLE_CAP_MODE` | 70 | 18 of 24 |
 | `OVERSIZE_TERRAIN` | 52 | 15 of 24 |
-| `PLAYER_EXCLUDE_FROM_SCORE_SCREEN` | 60 | MD_CHI01, MD_CHI02, MD_CHI04, MD_GLA03, MD_GLA04, MD_GLA05, MD_USA01, MD_USA02, MD_USA03, Training01 |
-| `PLAYER_SCIENCE_AVAILABILITY` | 201 | MD_CHI01, MD_CHI02, MD_CHI03, MD_CHI04, MD_GLA01, MD_GLA02, MD_GLA03, MD_GLA04, MD_USA01, MD_USA02, MD_USA03, MD_USA04, Training01 |
 | `RADAR_ENABLE` | 2 | MD_GLA04, Training01 |
 | `RADAR_FORCE_ENABLE` | 11 | MD_CHI01, MD_CHI02, MD_CHI04, MD_GLA01, MD_GLA03, MD_GLA04, MD_USA02, MD_USA03, MD_USA04 |
 | `RESIZE_VIEW_GUARDBAND` | 35 | MD_CHI02, MD_CHI04, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_USA01, MD_USA02, MD_USA03, MD_USA04, MD_USA05 |
@@ -512,11 +506,8 @@ occur in no campaign map and are only in the catalog):
 
 **Reasons for "not displayed"** (the wording per type is in `MissionOutputCatalog.cs`):
 
-- **Scoring** (`ENABLE_SCORING`, `DISABLE_SCORING`, `PLAYER_EXCLUDE_FROM_SCORE_SCREEN`): the mission result screen (`MissionResultScreen`) shows one line without numbers. With scoring
-  switched off the original counts nothing (`ScoreKeeper` asks `isScoringEnabled()`) and does not list sides with `setListInScoreScreen(false)`; the director keeps both (`ScoringEnabled`,
-  `ScoreScreenExcluded`), a statistics screen would read it there.
-- **Sciences** (`PLAYER_SCIENCE_AVAILABILITY`, 201 uses in 13 maps): the command bar knows the availability (`ControlBarScriptState`; "Hidden" = the `PurchaseScience` button is missing,
-  "Disabled" = locked; test against the retail data), but the client has no Generals Powers window in which one buys sciences – so there is nothing to see. Applies only to the local side;
+- **Scoring** (`ENABLE_SCORING`, `DISABLE_SCORING`, `PLAYER_EXCLUDE_FROM_SCORE_SCREEN`; displayed since Phase 59): the client counts a mission as it counts a skirmish (`MatchStatistics`, which stands still while `ScoringEnabled` is off, as `ScoreKeeper` asks `isScoringEnabled()`), and the mission result screen shows the rows of `grabSinglePlayerInfo` (`MissionScore`): the player, then the sum of every listed player per base side, allies before enemies, a side with `setListInScoreScreen(false)` left out. Not built: the line's colour and the side's icon; money earned from anything but supply; the money spent.
+- **Sciences** (`PLAYER_SCIENCE_AVAILABILITY`, 201 uses in 13 maps; displayed since Phase 59): the general's window (Phase 53) is built on the command bar's model, so a hidden science is missing and a disabled one grey (`ControlBarScriptState`). Applies only to the local side;
   other sides buy through the AI/simulation, which does not read this (in the report as the problem "availability of a side other than the local player").
 - **Radar** (`RADAR_ENABLE`, `RADAR_FORCE_ENABLE`, …): the client knows no radar facility rule, the minimap is always on; there is nothing to force.
 - **Sky and border** (`OVERSIZE_TERRAIN`, `RESIZE_VIEW_GUARDBAND`; since Phase 58 `DRAW_SKYBOX_*`, `ENABLE_/DISABLE_BORDER_SHROUD` and `SHOW_WEATHER` are displayed, `docs/CLIENT-SHADOWS.md`): formerly the sky body `new_skybox` was drawn by no layer (the sky
@@ -525,7 +516,8 @@ occur in no campaign map and are only in the catalog):
   `BorderShroudEnabled`.
 - **Render options** (`OPTIONS_SET_OCCLUSION_MODE`, `OPTIONS_SET_PARTICLE_CAP_MODE`, `SET_FPS_LIMIT`): options of the original (markers for units behind buildings, dynamic particle limit,
   frame rate limit) that the client does not have or does not let scripts control.
-- **Camera and world** (`CAMERA_ADD_SHAKER_AT`: the rotational shaker needs a camera roll offset that `RtsCamera` does not have; `CAMERA_MOD_FREEZE_ANGLE`; `CAMEO_FLASH`: no blinking of button images; `DEBUG_MESSAGE_BOX`). `WATER_CHANGE_HEIGHT` and `WATER_CHANGE_HEIGHT_OVER_TIME` are world changes since Phase 59 and no output any more (`docs/SIMULATION-CORE.md` §72).
+- **Camera and world** (`CAMERA_MOD_FREEZE_ANGLE`; `DEBUG_MESSAGE_BOX`). `WATER_CHANGE_HEIGHT` and `WATER_CHANGE_HEIGHT_OVER_TIME` are world changes since Phase 59 and no output any more (`docs/SIMULATION-CORE.md` §72).
+- **Displayed since Phase 59:** `MOVE_CAMERA_ALONG_WAYPOINT_PATH` flies the chain of links (`CameraPath`: `W3DView::moveCameraAlongWaypointPath`, curve through the middles of the legs, `ParabolicEase`, the stutter, the angle as the mean of two legs); `CAMERA_ADD_SHAKER_AT` adds a shaker (`RtsCamera.AddShaker`, `CameraShakeSystemClass`: the camera turns, it does not move, felt within the radius of the camera's own place, so most of what a script asks at a waypoint on the ground from a camera high above it shows nothing, in the original too; the random part comes from a private generator, the world never sees it); `CAMEO_FLASH` lays the `Cameo_push` overlay over a command button of the bar every 10 frames (`ControlBar::update`). The only campaign use names `NonCommand_GeneralsExperience`, which is the star and not one of `m_commandWindows`, so nothing flashes there, in the original neither.
 
 Tests: `tests/CnCNew.Game.Tests/MissionEffectsTests.cs` (catalog complete; script outputs → sound, objects, HUD with dummies, "displayed needs the consumer"; the clock runs while time is stopped;
 shaking; map border; the counting automata of grey veil and blur; with `--content-dir`: `MD_USA01` 3900 frames through the real HUD and the real camera, removed and re-inserted command buttons
@@ -538,8 +530,7 @@ checks the same in the real client (`docs/GAME-HUD.md` §17).
 **Finding while measuring (first session):** `MD_GLA03` ended the client in the first frame with an unhandled `InvalidDataException` – the model `cineexplbox` contains only a collision box and no mesh.
 `ModelAssetCache` now treats an unusable model like a missing one (reported once, counted, nothing drawn).
 
-**Still open (speech and camera):** no sound length (the subtitles exist, the English hides almost all of them) – `HAS_FINISHED_AUDIO` holds after 3 s, longer announcements overlap the next one; camera paths along the
-waypoint links, the ease times of the script; `CAMERA_MOD_FREEZE_TIME`, `CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER`, `CAMERA_MOD_SET_ROLLING_AVERAGE`, `CAMERA_SET_DEFAULT`,
+**Still open (speech and camera):** no sound length (the subtitles exist, the English hides almost all of them) – `HAS_FINISHED_AUDIO` holds after 3 s, longer announcements overlap the next one; the ease times of the script for everything but the path; `CAMERA_MOD_FREEZE_TIME`, `CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER`, `CAMERA_MOD_SET_ROLLING_AVERAGE`, `CAMERA_SET_DEFAULT`,
 `CAMERA_ENABLE_/DISABLE_SLAVE_MODE`, `CAMERA_MOVE_HOME`, `MOVE_CAMERA_TO_SELECTION` (used by no campaign map); the states of the script changes (command bar, house colours, selection lock,
 volumes) are host state and do **not** travel along when a mission is saved/loaded (`MissionSnapshot` knows only the simulation and the script VM): after loading the command bar applies again
 unchanged, until the script sets the state anew.

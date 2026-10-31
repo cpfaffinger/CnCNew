@@ -216,12 +216,12 @@ internal static class MissionEffectsTests
         counts = host.Counts().ToDictionary(count => count.Action);
         TestHarness.Assert(counts["NAMED_FLASH_WHITE"] is { Displayed: 1 } && counts["NAMED_CUSTOM_COLOR"] is { Displayed: 1 }, "flashes and colours are displayed once the object layer acted");
         TestHarness.Assert(counts["COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE"] is { Displayed: 1 } && counts["COMMANDBAR_ADD_BUTTON_OBJECTTYPE_SLOT"] is { Displayed: 1 } && counts["OPTIONS_SET_DRAWICON_UI_MODE"] is { Displayed: 1 }, "the control bar and the icon switch are displayed once the HUD acted");
-        TestHarness.Assert(counts["PLAYER_SCIENCE_AVAILABILITY"] is { Emitted: 2, Forwarded: 1, Displayed: 0, State: MissionOutputState.NotDisplayed }, $"the science is kept by the control bar but never counted as displayed ({counts["PLAYER_SCIENCE_AVAILABILITY"]})");
+        TestHarness.Assert(counts["PLAYER_SCIENCE_AVAILABILITY"] is { Emitted: 2, Forwarded: 1, Displayed: 1 }, $"the science of the local player reaches the window of the general ({counts["PLAYER_SCIENCE_AVAILABILITY"]})");
         TestHarness.Assert(host.Problems.ContainsKey("PLAYER_SCIENCE_AVAILABILITY: unknown player 'Nobody'"), "a side that does not exist is reported");
         TestHarness.Assert(counts["UNIT_AFFECT_OBJECT_PANEL_FLAGS"] is { Emitted: 2, Forwarded: 1, Displayed: 1 } && host.Problems.Keys.Any(key => key.Contains("flag 'Indestructible' has no consumer", StringComparison.Ordinal)),
             "only the Selectable flag has a consumer; the Indestructible one is listed as a problem");
         TestHarness.Assert(!host.ScoringEnabled && host.ScoreScreenExcluded.Contains("Hero") && !host.SpecialPowerDisplayEnabled, "the scoring and display switches are kept for the screens that read them");
-        TestHarness.Assert(counts["DISABLE_SCORING"] is { Displayed: 0, State: MissionOutputState.NotDisplayed }, "and are honestly not displayed");
+        TestHarness.Assert(counts["DISABLE_SCORING"] is { Displayed: 1 } && counts["PLAYER_EXCLUDE_FROM_SCORE_SCREEN"] is { Displayed: 1 }, "and they reach the score");
     }
 
     // ---------------------------------------------------------------------------------------------------- time

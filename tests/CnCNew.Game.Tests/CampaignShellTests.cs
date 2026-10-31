@@ -34,6 +34,7 @@ internal static class CampaignShellTests
         harness.Run("A scripted mission save continues identically after a shell load", () => SaveLoadThroughShellContinuesIdentically(args));
         harness.Run("A skirmish save continues identically after a shell load, computer players included", () => SkirmishSaveThroughShellContinuesIdentically(args));
         harness.Run("The player's record: campaigns, challenges, a skirmish's win and loss, the honors' pictures", PlayerRecord);
+        harness.Run("The score of a mission: the player, the sides, what a script excludes, and no count while scoring is off", MissionScoreRows);
 
         var contentDir = ContentDir(args);
         if (contentDir is null) Console.WriteLine("SKIP CampaignShellTests real-campaign flow (pass --content-dir <dir>)");
@@ -190,6 +191,29 @@ internal static class CampaignShellTests
         record.Save(directory);
         TestHarness.Assert(BattleHonors.Load(directory).Serialize() == record.Serialize() && File.Exists(Path.Combine(directory, "SkirmishStats.ini")), "the record lies in the settings directory under the original's name");
         Directory.Delete(directory, recursive: true);
+    }
+
+    /// <summary><c>grabSinglePlayerInfo</c>, <c>Player::getListInScoreScreen</c>, <c>GameLogic::isScoringEnabled</c>.</summary>
+    private static void MissionScoreRows()
+    {
+        var (context, campaign) = SyntheticCampaign();
+        var run = new CampaignController(context, campaign, CampaignProgress.Begin(campaign, ScriptDifficulty.Normal)).StartCurrentMission();
+        var world = run.Session.World;
+        var hero = run.Session.Program.Players.Single(player => player.Name == "Hero").Id;
+        var villain = run.Session.Program.Players.Single(player => player.Name == "Villain").Id;
+        var barrel = new CnCNew.Simulation.Ids.EntityId(run.Session.Engine.NamedObjects.First(item => item.Key == "HeroBarrel").Value);
+        var statistics = new MatchStatistics();
+        statistics.Begin(world);
+        CnCNew.Simulation.Events.SimEvent Deposit(long amount) => new(default, 0, CnCNew.Simulation.Events.SimEventKind.SupplyDeposited, barrel, default, default, string.Empty, amount);
+        statistics.ScoringEnabled = false;
+        statistics.Record(new CnCNew.Simulation.World.TickResult(0, 0, [Deposit(700)]), world);
+        TestHarness.Assert(statistics.TryGet(hero) is null, "while scoring is off nothing is counted");
+        statistics.ScoringEnabled = true;
+        statistics.Record(new CnCNew.Simulation.World.TickResult(0, 0, [Deposit(300)]), world);
+        var players = new[] { (hero, "Hero", "USA"), (villain, "Villain", "China") };
+        var rows = MissionScore.Rows(hero, players, world, statistics, []);
+        TestHarness.Assert(rows.Select(row => row.Label).SequenceEqual(["GUI:Player", "GUI:ChinaEnemies"]) && rows[0].Tally.Resources == 300, $"the player and the enemies by side: {string.Join(", ", rows.Select(row => row.Label))}");
+        TestHarness.Assert(MissionScore.Rows(hero, players, world, statistics, ["Villain"]).Length == 1, "a side the script excluded has no line");
     }
 
     /// <summary>Plays the frames of a movie through the host's two updates.</summary>

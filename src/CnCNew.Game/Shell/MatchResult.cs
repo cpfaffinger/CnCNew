@@ -54,6 +54,9 @@ public sealed class MatchStatistics
 
     public bool HasData { get; private set; }
 
+    /// <summary><c>GameLogic::isScoringEnabled</c>: a mission's script switches the counting off and on (<c>ScoreKeeper</c> asks before every count).</summary>
+    public bool ScoringEnabled { get; set; } = true;
+
     /// <summary>Notes the objects of the world the counting begins with (an object that dies and is removed within one tick is gone when its death is read).</summary>
     public void Begin(SimulationWorld world)
     {
@@ -64,6 +67,7 @@ public sealed class MatchStatistics
 
     private PlayerTally TallyOf(PlayerId player)
     {
+        if (!ScoringEnabled) return new PlayerTally();
         HasData = true;
         return _tallies.TryGetValue(player.Value, out var existing) ? existing : _tallies[player.Value] = new PlayerTally();
     }

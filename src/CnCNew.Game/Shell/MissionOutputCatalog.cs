@@ -112,9 +112,10 @@ public static class MissionOutputCatalog
         Elsewhere("MissionSession.Step runs the scripts but not the world while time is frozen (GameLogic::update returns after ScriptEngine::UPDATE); the director's clock keeps running", "FREEZE_TIME", "UNFREEZE_TIME");
 
         // ---- not displayed, with the reason
-        Not("the control bar model keeps the availability (Hidden/Disabled sciences are hidden/restricted PurchaseScience buttons), but the client has no Generals Powers panel to show it", "PLAYER_SCIENCE_AVAILABILITY");
+        Shown("the general's window hides or greys the science of the local player (Player::setScienceAvailability)", "PLAYER_SCIENCE_AVAILABILITY");
         Not("the minimap is drawn from the live world in every frame, so there is no terrain picture to refresh", "REFRESH_RADAR");
-        Not("the mission result screen shows one row without statistics; the scoring flags are kept by the director", "ENABLE_SCORING", "DISABLE_SCORING", "PLAYER_EXCLUDE_FROM_SCORE_SCREEN");
+        Shown("the count of the mission's score screen stops and goes on (ScoreKeeper asks isScoringEnabled)", "ENABLE_SCORING", "DISABLE_SCORING");
+        Shown("the side leaves the totals of allies and enemies on the mission's score screen (Player::setListInScoreScreen)", "PLAYER_EXCLUDE_FROM_SCORE_SCREEN");
         Shown("the fog texture's ring around the playable area goes black or clear (W3DShroud::setBorderShroudLevel)", "ENABLE_BORDER_SHROUD", "DISABLE_BORDER_SHROUD");
         Shown("the sky box new_skybox around the camera (WaterRenderObjClass::Render)", "DRAW_SKYBOX_BEGIN", "DRAW_SKYBOX_END");
         Not("the terrain layer draws the whole height field with its border, there is no render window to oversize", "OVERSIZE_TERRAIN");

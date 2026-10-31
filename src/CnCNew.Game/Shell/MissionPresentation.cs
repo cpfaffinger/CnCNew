@@ -1353,9 +1353,11 @@ public sealed class MissionPresentationDirector
             // ---- state a later screen reads (no consumer in this client, see MissionOutputCatalog)
             case "ENABLE_SCORING" or "DISABLE_SCORING":
                 ScoringEnabled = action == "ENABLE_SCORING";
+                if (Hud is not null) Handled(action, Channel.Hud);
                 return;
             case "PLAYER_EXCLUDE_FROM_SCORE_SCREEN":
                 _scoreScreenExcluded.Add(Argument(output, 0));
+                if (Hud is not null) Handled(action, Channel.Hud);
                 return;
             case "ENABLE_SPECIAL_POWER_DISPLAY" or "DISABLE_SPECIAL_POWER_DISPLAY":
                 // InGameUI::setSuperweaponDisplayEnabledByScript: the whole superweapon timer list.
