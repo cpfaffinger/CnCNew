@@ -134,6 +134,9 @@ public interface IWorldServices
     /// <summary>A new order ends the unit's guard (<c>AIGuardState::onExit</c>, F-58).</summary>
     void EndGuard(Entity entity);
 
+    /// <summary><c>GameLogic::getHulkMaxLifetimeOverride</c> in ticks, -1 when no script set one.</summary>
+    long HulkLifetimeOverrideTicks { get; }
+
     /// <summary><c>AIUpdateInterface::setAttitude</c>.</summary>
     void SetAttitude(Entity entity, int attitude);
 

@@ -160,6 +160,10 @@ public abstract class TimedExpiryModule(LifetimeData data) : SimModule, IUpdateM
     private long _dieTick;
     private long _minTicks = data.MinTicks;
     private long _maxTicks = data.MaxTicks;
+    private bool _rangeOverridden;
+
+    /// <summary>The range to draw from when no creation list named one.</summary>
+    protected virtual (long Min, long Max) OwnRange(IWorldServices world, long minTicks, long maxTicks) => (minTicks, maxTicks);
 
     public long NextWake
     {
@@ -174,13 +178,15 @@ public abstract class TimedExpiryModule(LifetimeData data) : SimModule, IUpdateM
     {
         _minTicks = minTicks;
         _maxTicks = maxTicks;
+        _rangeOverridden = true;
     }
 
     public override void OnSpawn(IWorldServices world)
     {
         // LifetimeUpdate.cpp, LifetimeUpdate::calcSleepDelay: GameLogicRandomValue(minFrames, maxFrames) inclusive, "if (delay < 1) delay = 1" – drawn in
         // frames of the original and then scaled, so the lifetime is the same game time at every rate; at least one frame.
-        var delay = world.Time.AtLeastOneFrame(world.Time.DrawFrames(world.LogicRandom, _minTicks, _maxTicks));
+        var (minTicks, maxTicks) = _rangeOverridden ? (_minTicks, _maxTicks) : OwnRange(world, _minTicks, _maxTicks);
+        var delay = world.Time.AtLeastOneFrame(world.Time.DrawFrames(world.LogicRandom, minTicks, maxTicks));
         _dieTick = world.Tick + delay;
         _nextWake = Math.Min(world.Tick + delay, SimulationTiming.SleepForever);
     }
@@ -211,6 +217,10 @@ public sealed class LifetimeUpdate(LifetimeData data) : TimedExpiryModule(data)
 {
     public override string ModuleName => "LifetimeUpdate";
     protected override void Expire(IWorldServices world) => world.Kill(Entity.Id);
+
+    /// <summary>The <c>LifetimeUpdate</c> constructor: a hulk made while a script overrides the hulks' lifetime lives exactly that long.</summary>
+    protected override (long Min, long Max) OwnRange(IWorldServices world, long minTicks, long maxTicks)
+        => Entity.Template.IsKindOf("HULK") && world.HulkLifetimeOverrideTicks != -1 ? (world.HulkLifetimeOverrideTicks, world.HulkLifetimeOverrideTicks) : (minTicks, maxTicks);
 }
 
 /// <summary><c>DeletionUpdate</c>: destroys (not kills) the entity when the lifetime is up, without running die modules.</summary>

@@ -27,7 +27,6 @@ public sealed partial class ScriptEngine
     private readonly SortedDictionary<string, int> _priorityDelta = new(StringComparer.Ordinal);
     private readonly SortedDictionary<uint, string> _buttonHunts = [];
     private readonly SortedDictionary<uint, long> _buttonHuntNext = [];
-    private long _hulkLifetimeOverrideTicks = -1;
     private Dictionary<uint, ScriptTeam>? _entityTeams;
     private long _entityTeamsTick = -1;
     private int _entityTeamsMembers = -1;
@@ -35,9 +34,6 @@ public sealed partial class ScriptEngine
     private long _entityTeamsVersion = -1;
     private long _memberTotalVersion = -1;
     private int _memberTotal;
-
-    /// <summary>The hulk lifetime override in ticks a script set (<c>SCRIPTING_OVERRIDE_HULK_LIFETIME</c>), or −1.</summary>
-    public long HulkLifetimeOverrideTicks => _hulkLifetimeOverrideTicks;
 
     /// <summary>The effective production priority of a team prototype: its map value plus the successes and failures scripts recorded.</summary>
     public int ProductionPriorityOf(ScriptTeamPrototype prototype) => prototype.ProductionPriority + _priorityDelta.GetValueOrDefault(prototype.Name);
@@ -202,9 +198,9 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 2) && ResolvePlayer(Str(p, 0)) is { } ranked)
                     _world.SetRankLevel(ranked.Id, type == "PLAYER_SET_RANKLEVEL" ? Int(p, 1) : _world.RankLevelOf(ranked.Id) + Int(p, 1));
                 return true;
+            // doOverrideHulkLifetime -> GameLogic::setHulkMaxLifetimeOverride; the world's value, read by LifetimeUpdate and SlowDeathBehavior.
             case "SCRIPTING_OVERRIDE_HULK_LIFETIME":
-                if (Has(type, p, 1)) _hulkLifetimeOverrideTicks = Real(p, 0).IsNegative ? -1 : _world.Time.OriginalFrames(SecondsToFrames(Real(p, 0)));
-                _recordedActions++;
+                if (Has(type, p, 1)) _world.HulkLifetimeOverrideTicks = Real(p, 0).IsNegative ? -1 : _world.Time.OriginalFrames(SecondsToFrames(Real(p, 0)));
                 return true;
             default:
                 return TryExecuteSettingAction(action);
@@ -490,7 +486,6 @@ public sealed partial class ScriptEngine
         DescribeRelations(writer, "relTeamPlayer", _relTeamPlayer);
         DescribeRelations(writer, "relPlayerTeam", _relPlayerTeam);
         DescribePairs(writer, "teamWander", _teamWander);
-        if (_hulkLifetimeOverrideTicks != -1) writer.Int("hulkLifetimeOverride", _hulkLifetimeOverrideTicks);
         if (_unmanned.Count > 0) { writer.BeginArray("unmanned"); foreach (var id in _unmanned) { writer.BeginObject(null); writer.UInt("id", id); writer.EndObject(); } writer.EndArray(); }
         if (_priorityDelta.Count > 0)
         {
@@ -528,7 +523,6 @@ public sealed partial class ScriptEngine
         LoadRelations(reader, "relTeamPlayer", _relTeamPlayer);
         LoadRelations(reader, "relPlayerTeam", _relPlayerTeam);
         LoadPairs(reader, "teamWander", _teamWander);
-        _hulkLifetimeOverrideTicks = reader.Has("hulkLifetimeOverride") ? reader.Int("hulkLifetimeOverride") : -1;
         _unmanned.Clear();
         if (reader.Has("unmanned")) foreach (var item in reader.Array("unmanned")) _unmanned.Add(checked((uint)item.UInt("id")));
         _priorityDelta.Clear();

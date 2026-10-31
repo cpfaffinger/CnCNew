@@ -38,6 +38,7 @@ public sealed partial class SimulationWorld
         if (_entities.Count != 0 || _tick != 0 || _spawnQueue.Count != 0) throw new InvalidOperationException("A snapshot can only be loaded into a fresh world.");
         _tick = state.Int("tick");
         _rankLevelLimit = state.Has("rankLevelLimit") ? checked((int)state.Int("rankLevelLimit")) : DefaultRankLevelLimit;
+        HulkLifetimeOverrideTicks = state.Has("hulkLifetimeOverride") ? state.Int("hulkLifetimeOverride") : -1;
         _holesRebuild = state.Has("holesRebuild") && state.Bool("holesRebuild");
         LoadSoloBonus(state);
         if (_tick < 0) throw new InvalidDataException("Negative tick in snapshot.");

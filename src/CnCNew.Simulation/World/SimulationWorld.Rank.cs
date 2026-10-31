@@ -12,6 +12,9 @@ public sealed partial class SimulationWorld
 {
     /// <summary><c>GameLogic::m_rankLevelLimit</c>, reset for every game; a script lowers it.</summary>
     private int _rankLevelLimit = DefaultRankLevelLimit;
+
+    /// <summary><c>GameLogic::m_scriptHulkMaxLifetimeOverride</c> in ticks (<c>SCRIPTING_OVERRIDE_HULK_LIFETIME</c>): a hulk made while it is set lives that long, and a hulk's slow death takes a second. -1: off.</summary>
+    public long HulkLifetimeOverrideTicks { get; set; } = -1;
     private const int DefaultRankLevelLimit = 1000;
 
     public int RankLevelOf(PlayerId player) => _players.TryGetValue(player.Value, out var state) ? state.RankLevel : 0;

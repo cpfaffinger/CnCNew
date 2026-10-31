@@ -395,6 +395,15 @@ public sealed class SlowDeathBehavior(SlowDeathData data) : DieModuleBase(data.M
     public void BeginSlowDeath(IWorldServices world)
     {
         _activated = true;
+        if (SlowDeathClock.HulksHurry(world, Entity))
+        {
+            _destructionTick = world.Tick + SlowDeathClock.HurriedDestruction(world);
+            _midpointTick = world.Tick + SlowDeathClock.HurriedMidpoint(world);
+            _midpointDone = false;
+            world.WakeAt(Entity, this, _midpointTick);
+            data.Phases.Do(world, Entity, SlowDeathPhase.Initial);
+            return;
+        }
         // Both draws happen every time, matching the reference's unconditional GameLogicRandomValue(0, variance) calls.
         // The variances are drawn in logic frames of the original and then scaled: the same draw at every rate, and the result stays on the 30 Hz grid.
         var sink = data.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.SinkDelayVarianceTicks);
@@ -463,9 +472,23 @@ internal sealed class SlowDeathClock
     private long _midpointTick;
     private bool _midpointDone;
 
+    /// <summary><c>beginSlowDeath</c>: "Scripts don't want hulks around, so start sinking immediately!" - no draw, the midpoint half a second and the end a second away.</summary>
+    internal static bool HulksHurry(IWorldServices world, Entity entity) => entity.Template.IsKindOf("HULK") && world.HulkLifetimeOverrideTicks != -1;
+
+    internal static long HurriedDestruction(IWorldServices world) => world.Time.OriginalFrames(SimulationRate.OriginalFramesPerSecond + 1);
+
+    internal static long HurriedMidpoint(IWorldServices world) => world.Time.OriginalFrames(SimulationRate.OriginalFramesPerSecond / 2 + 1);
+
     /// <summary>The base's begin; returns the destruction delay in ticks (at least one frame of the original).</summary>
     public long Begin(IWorldServices world, Entity entity, SlowDeathData data)
     {
+        if (HulksHurry(world, entity))
+        {
+            _midpointTick = world.Tick + HurriedMidpoint(world);
+            _midpointDone = false;
+            data.Phases.Do(world, entity, SlowDeathPhase.Initial);
+            return HurriedDestruction(world);
+        }
         _ = data.SinkDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.SinkDelayVarianceTicks);
         var destruction = data.DestructionDelayTicks + world.Time.DrawFrames(world.LogicRandom, 0, data.DestructionDelayVarianceTicks);
         var (low, high) = SlowDeathPhases.MidpointBounds(world.Time.ToOriginalFrames(destruction));
