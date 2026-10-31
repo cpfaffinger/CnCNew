@@ -1441,4 +1441,35 @@ static partial class Tests
         StepFrames(restored, 90);
         Check.That(restored.StateHash() == saved.StateHash(), "And goes on alike.");
     }
+
+    /// <summary>
+    /// <c>buildSpecificAITeam</c> and <c>recruitSpecificAITeam</c>: a team a script asks for needs a factory for every type or there is no team; the required and the optional units of a type are
+    /// two orders, trained side by side at two factories; a recruit needs no home. Before, the order waited for a factory for ever, one unit was trained at a time, and nothing was recruited.
+    /// </summary>
+    public static void OriginalAiOrdersTeamsAsTheReference()
+    {
+        MapProperties Team(string name, int minimum, int maximum, string unit) => new(
+        [
+            Scr.Text("teamName", name), Scr.Text("teamOwner", "SkirmishAlpha"), Scr.Flag("teamIsSingleton", false), IntProperty("teamMaxInstances", 1),
+            Scr.Text("teamUnitType1", unit), IntProperty("teamUnitMinCount1", minimum), IntProperty("teamUnitMaxCount1", maximum),
+        ]);
+        MapScript[] scripts =
+        [
+            Scr.Script("A Barracks", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("SKIRMISH_BUILD_BUILDING", Scr.Type("AlphaBarracks"))], oneShot: true),
+            ..AiAfter(300, Scr.Do("BUILD_TEAM", Scr.Team("A Pair")), Scr.Do("BUILD_TEAM", Scr.Team("A Beyond"))),
+        ];
+        var library = AiLibraryWithAlpha(scripts, [Team("A Pair", 1, 2, "AlphaSoldier"), Team("A Beyond", 1, 1, "AlphaGuard")]);
+        var (session, _, _, _, _, _) = StartAiVariant(AiDataText(), AiYardObjects, library);
+        session.RecordCommands();
+        StepFrames(session, 420);
+        var trained = session.RecordedCommands.OfType<CnCNew.Simulation.Commands.QueueProductionCommand>().Where(command => command.Template == "AlphaSoldier").ToArray();
+        Check.That(trained.Length == 2 && trained[0].Producer != trained[1].Producer && trained[1].Tick - trained[0].Tick <= session.World.Time.OriginalFrames(1),
+            $"The required and the optional soldier are trained side by side ({string.Join(", ", trained.Select(command => $"{command.Producer.Value}@{command.Tick}"))}).");
+        Check.That(session.Engine.Diagnostics.Keys.Any(key => key.Contains("'A Beyond0': factories or tech missing", StringComparison.Ordinal)), "A team whose unit no factory can make does not come into being.");
+
+        var recruit = AiLibraryWithAlpha(AiAfter(30, Scr.Do("RECRUIT_TEAM", Scr.Team("A Pair"), Scr.Real(0m))), [Team("A Pair", 1, 1, "AlphaSoldier") with { Items = [..Team("A Pair", 1, 1, "AlphaSoldier").Items, IntProperty("teamProductionPriority", 5)] }]);
+        var (recruiting, _, _, _, _, _) = StartAiVariant(AiDataText(), string.Empty, recruit);
+        StepFrames(recruiting, 60);
+        Check.That(recruiting.Engine.TeamInstances.Single(team => team.Prototype == "A Pair0").Members.Count == 1, "A team without a home recruits, and its recruit walks to the origin of the map as in the reference.");
+    }
 }

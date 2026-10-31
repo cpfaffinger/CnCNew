@@ -804,7 +804,8 @@ public sealed partial class ScriptEngine
             if (factory.HasStatus(UnderConstructionBit) || factory.HasStatus(SoldBit) || ProductionOf(factory) is not { } production) continue;
             // isPossibleToMakeUnit: a button of its command set, and the player may build it.
             if (!_world.Templates.OffersBuild(factory.Template, thing.Name) || !_world.CanQueueProductionTemplate(player, factory.Id, thing.Name)) continue;
-            if (production.Queue.Length == 0) return factory;
+            // A unit ordered in this round is not in the queue yet: the command reaches the world with the next step.
+            if (production.Queue.Length == 0 && !_busyThisTick.Contains(factory.Id.Value)) return factory;
             if (busyOk) busy = factory;
         }
         return busy;
@@ -819,6 +820,43 @@ public sealed partial class ScriptEngine
         var unit = template.Name;
         if (!_issue(player, (sequence, tick) => new QueueProductionCommand(player, sequence, tick, producer, unit)).Accepted) return false;
         order.Factory = producer.Value;
+        _busyThisTick.Add(producer.Value);
+        return true;
+    }
+
+    /// <summary>
+    /// The orders of <c>AIPlayer::buildSpecificAITeam</c>: one per unit type for the required units and one for the optional ones, so a type with both trains two at a time; the required ones come
+    /// first, the last unit type first. A team a script asked for goes to the head of the queue, one the AI chose to its end. Its start actions run at once.
+    /// </summary>
+    private void AiQueueTeamOrders(ScriptTeam team, ScriptTeamPrototype prototype, bool idleOnly)
+    {
+        var orders = new List<TeamBuildOrder>();
+        foreach (var required in new[] { false, true })
+            foreach (var unit in prototype.Units)
+            {
+                if (!_world.Templates.TryGet(unit.Type, out var template)) { Diagnose($"unknown object type '{unit.Type}'"); continue; }
+                if (!template.IsInstantiable) { Diagnose($"not instantiable '{unit.Type}'"); continue; }
+                var minimum = Math.Min(unit.MinCount, unit.MaxCount);
+                var count = required ? minimum : unit.MaxCount - minimum;
+                if (count > 0) orders.Insert(0, new TeamBuildOrder { TeamId = team.Id, Type = unit.Type, Min = required ? count : 0, Total = count, IdleOnly = idleOnly });
+            }
+        if (orders.Count == 0)
+        {
+            Diagnose($"BUILD_TEAM '{prototype.Name}': contains no buildable units");
+            return;
+        }
+        if (idleOnly) _teamBuilds.AddRange(orders);
+        else _teamBuilds.InsertRange(0, orders);
+        _teamQueue.RemoveAll(entry => entry.TeamId == team.Id);
+        _teamQueue.Add(new TeamQueueEntry { TeamId = team.Id, Started = _tick });
+        if (AiOfPlayer(team.Owner) is { } state) state.TeamCheckTick = _tick;
+        if (prototype.ExecutesActionsOnCreate) RunStartActions(prototype, team);
+    }
+
+    private bool AiHasFactoriesFor(AiPlayer state, ScriptTeamPrototype prototype)
+    {
+        foreach (var unit in prototype.Units)
+            if (_world.Templates.TryGet(unit.Type, out var template) && FindFactory(state, template, busyOk: true) is null) return false;
         return true;
     }
 
@@ -858,6 +896,7 @@ public sealed partial class ScriptEngine
             if (!_issue(player, (sequence, tick) => new QueueProductionCommand(player, sequence, tick, producer, unit)).Accepted) continue;
             order.Queued++;
             order.Factory = producer.Value;
+            _busyThisTick.Add(producer.Value);
         }
     }
 

@@ -350,6 +350,8 @@ public sealed partial class ScriptEngine
     {
         var prototype = _program.FindTeam(teamName);
         if (prototype is null) { Diagnose($"unknown team '{teamName}'"); return; }
+        // buildSpecificAITeam: without a factory for every unit type there is no team; money it may still find.
+        if (_ai.Count > 0 && _program.FindPlayer(prototype.Owner) is { } owner && AiOfPlayer(owner.Id) is { } builder && !AiHasFactoriesFor(builder, prototype)) { Diagnose($"BUILD_TEAM '{teamName}': factories or tech missing"); return; }
         var team = (prototype.IsSingleton || prototype.MaxInstances < 2 ? FindTeamInstance(teamName) : null) ?? CreateTeam(teamName);
         if (team is null) return;
         if (team.Owner.IsSystem || !_world.HasPlayer(team.Owner)) { Diagnose($"BUILD_TEAM '{teamName}': team has no player"); return; }
@@ -358,6 +360,11 @@ public sealed partial class ScriptEngine
         if (_teamBuilds.Any(order => order.TeamId == team.Id)) { Diagnose($"BUILD_TEAM '{teamName}': build already running"); return; }
         team.Created = false;
         AiResetTeamForRebuild(team);
+        if (_ai.Count > 0 && AiOfPlayer(team.Owner) is not null)
+        {
+            AiQueueTeamOrders(team, prototype, idleOnly);
+            return;
+        }
         foreach (var unit in prototype.Units)
         {
             if (!_world.Templates.TryGet(unit.Type, out var template)) { Diagnose($"unknown object type '{unit.Type}'"); continue; }

@@ -581,6 +581,7 @@ run.Test("Original skirmish AI: a structure a script names is repaired through t
 run.Test("Original skirmish AI: superweapons by value on a grid, cluster mines on the own entrances", Tests.OriginalAiAimsItsSuperweaponsAsTheOriginal);
 run.Test("Original skirmish AI: a human takes the start position of its slot", Tests.OriginalAiLeavesAHumanItsSlot);
 run.Test("Original skirmish AI: the first evaluation of a delayed script is drawn from the logic stream", Tests.OriginalAiDrawsTheFirstEvaluationOfDelayedScripts);
+run.Test("Original skirmish AI: team orders as buildSpecificAITeam and recruitSpecificAITeam give them", Tests.OriginalAiOrdersTeamsAsTheReference);
 run.Test("Skirmish: a live session hash-matches a fresh replay of its own recording", Tests.SkirmishLiveSessionMatchesItsOwnReplay);
 run.Test("Session state: the state of SkirmishAi names every field", Tests.SkirmishAiStateNamesEveryField);
 run.Test("Session state: SkirmishAi never acts in the order of a hash table", Tests.SkirmishAiNeverActsInTheOrderOfAHashTable);

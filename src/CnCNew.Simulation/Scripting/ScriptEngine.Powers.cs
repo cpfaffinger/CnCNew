@@ -184,6 +184,8 @@ public sealed partial class ScriptEngine
         var singleton = prototype.IsSingleton || prototype.MaxInstances < 2;
         if (singleton && FindTeamInstance(teamName) is { } existing && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"RECRUIT_TEAM '{teamName}': singleton team already exists"); return; }
         var home = prototype.Home.Length > 0 ? _program.FindWaypoint(prototype.Home) : null;
+        // AISkirmishPlayer::recruitSpecificAITeam reports a team without a home and goes on with m_homeLocation, which is the origin of the map.
+        if (home is null && _ai.Count > 0 && AiOfPlayer(owner.Id) is not null) home = new ScriptWaypoint(string.Empty, Fixed.Zero, Fixed.Zero, Fixed.Zero);
         if (home is null) { Diagnose($"RECRUIT_TEAM '{teamName}': team has no home position"); return; }
         var team = (singleton ? FindTeamInstance(teamName) : null) ?? CreateTeam(teamName);
         if (team is null) return;
