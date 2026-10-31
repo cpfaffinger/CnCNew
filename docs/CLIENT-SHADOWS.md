@@ -76,8 +76,8 @@ Measured with `--smoke-test` (Release, 1920 x 1080, Ryzen 3 4350GE with its inte
 | `ShellMapMD` as a mission, two runs each | 3,000 | 59.6 / 59.0 s | 60.9 / 60.0 s | about +0.4 ms | 4,386 sides, 34 decals, `shadowMs` 0.10 |
 | Twilight Flame, eight computer players, spectator, one run each | 6,000 | 69.7 s | 71.0 s | about +0.2 ms | 5,185 sides, 6 decals, `shadowMs` 0.10 |
 
-Wall time holds the load of 15 to 20 s, the same on both sides, and the difference is CPU and GPU together. With the display's wait the same eight-player match took 119.7 and 119.4 s without shadows and 119.7 s with them: 60 frames a second
-held either way, 6,000 frames at a mean of about 8 ms without the wait. That view shows 18 to 26 objects, a player's zoom over a base. **Not measured:** a view full of an army, or the spectator zoomed far out; the stencil's cost grows
+Wall time holds the load of 15 to 20 s, the same on both sides, and the difference is CPU and GPU together. With the display's wait the same eight-player match took 119.7 and 119.4 s without shadows and 119.7 and 123.4 s with them (the last while a build ran beside it): 60 frames a second
+held on a quiet machine, 6,000 frames at a mean of about 8 ms without the wait. That view shows 18 to 26 objects, a player's zoom over a base. **Not measured:** a view full of an army, or the spectator zoomed far out; the stencil's cost grows
 with the screen area shadows cover.
 
 The object layer's `shadowMs` is the CPU time of silhouettes, corners and the upload; `object layer:` of a smoke test prints it with `shadowQuads` and `shadowDecals`.
