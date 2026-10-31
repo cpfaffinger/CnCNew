@@ -196,9 +196,9 @@ internal sealed class TerrainLayer : IWorldLayer
             if (draw.Index < match.World.Bridges.Count) draw.Show(match.World.Bridges[draw.Index].DamageState);
         foreach (var draw in _waterDraws)
         {
-            if (!draw.Batch.Animated) continue;
-            draw.Batch.ApplyScroll(frame.TotalSeconds);
-            draw.VertexBuffer.SetData(frame.CommandList, draw.Batch.Vertices);
+            var moved = MoveWater(draw.Batch, match);
+            if (draw.Batch.Animated) draw.Batch.ApplyScroll(frame.TotalSeconds);
+            if (moved || draw.Batch.Animated) draw.VertexBuffer.SetData(frame.CommandList, draw.Batch.Vertices);
         }
 
         if (frame.TotalSeconds >= _nextMinimap)
@@ -390,6 +390,16 @@ internal sealed class TerrainLayer : IWorldLayer
             _waterDraws.Add(new WaterDraw(batch, vertexBuffer));
             Console.WriteLine($"terrain: water batch '{batch.Texture}' river={batch.IsRiver} scroll={batch.Scroll} {batch.Vertices.Length} vertices, bounds {batch.BoundsMin.X:F0},{batch.BoundsMin.Y:F0}..{batch.BoundsMax.X:F0},{batch.BoundsMax.Y:F0} z {batch.BoundsMin.Z:F1}");
         }
+    }
+
+    /// <summary>The standing water of the batch at the levels of the world; a script can move them (<c>docs/CLIENT-TERRAIN.md</c>).</summary>
+    private static bool MoveWater(WaterBatch batch, LiveGame match)
+    {
+        if (batch.IsRiver || match.World.Terrain is not { } terrain) return false;
+        var moved = false;
+        for (var area = 0; area < terrain.WaterAreas.Length; area++)
+            moved |= batch.SetLevel(terrain.WaterAreas[area].Name, (float)match.World.WaterLevelOf(area).ToDecimal());
+        return moved;
     }
 
     /// <summary>The depth of the water at the height <paramref name="level"/> as an opacity over the map, in the fog's coordinates (<c>showSoftWaterEdge</c>); none when the data switch it off.</summary>

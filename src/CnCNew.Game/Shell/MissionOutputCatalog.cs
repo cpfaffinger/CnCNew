@@ -117,7 +117,6 @@ public static class MissionOutputCatalog
         Shown("the sky box new_skybox around the camera (WaterRenderObjClass::Render)", "DRAW_SKYBOX_BEGIN", "DRAW_SKYBOX_END");
         Not("the terrain layer draws the whole height field with its border, there is no render window to oversize", "OVERSIZE_TERRAIN");
         Not("the client culls no drawables by a guard band, there is nothing to widen", "RESIZE_VIEW_GUARDBAND");
-        Not("the water plane has a fixed height; the original also moves the logic water level (TerrainLogic), which has no counterpart", "WATER_CHANGE_HEIGHT", "WATER_CHANGE_HEIGHT_OVER_TIME");
         Shown("the map's snow or rain is shown or hidden (SnowManager::setVisible)", "SHOW_WEATHER");
         Not("a render option of the original (units behind buildings as markers); the client draws no occlusion markers", "OPTIONS_SET_OCCLUSION_MODE");
         Not("a render option of the original (dynamic particle cap); the client's particle budget is fixed", "OPTIONS_SET_PARTICLE_CAP_MODE");

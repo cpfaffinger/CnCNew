@@ -218,6 +218,7 @@ run.Test("Fidelity B (F-09): a produced unit comes into being when its door is f
 run.Test("Fidelity B (F-07): a clip without reload time fires at most once per frame of the original", Tests.FidelityNoReloadClipFiresOncePerFrame);
 run.Test("Fidelity B (F-10): <This Team> in a team's create script in a mission", Tests.FidelityThisTeamInMissionCreateScript);
 run.Test("Fidelity (F-92): an action reaches one instance of a team, the newest", Tests.FidelityTeamActionsReachOneInstance);
+run.Test("Fidelity (F-25): a script moves the water", Tests.FidelityScriptMovesTheWater);
 run.Test("Fidelity B (F-43): an upgrade is researched in its producer's queue for its build time", Tests.FidelityUpgradesTakeTheirBuildTime);
 run.Test("Fidelity B (F-44): a producer that dies refunds its whole queue", Tests.FidelityDeadProducerRefundsItsQueue);
 run.Test("Rank (D-15): the start of a player, the levels, a step down", Tests.RankStartAndLevels);

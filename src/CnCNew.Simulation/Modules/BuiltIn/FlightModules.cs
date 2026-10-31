@@ -678,7 +678,7 @@ public sealed class ParachuteContain(ParachuteData data) : ContainModuleBase(dat
     {
         if (FlightModules.IsOffMap(world, rider.X, rider.Y)) return true;
         if (world.Terrain is not { } terrain) return false;
-        if (terrain.TryWaterLevel(rider.X, rider.Y, out var level) && rider.Z <= level + data.WaterSlop && terrain.IsUnderwater(rider.X, rider.Y)) return true;
+        if (world.TryWaterLevel(rider.X, rider.Y, out var level) && rider.Z <= level + data.WaterSlop && terrain.IsUnderwater(rider.X, rider.Y)) return true;
         // Cliff, water and impassable terrain cells kill (a structure's footprint is an obstacle, not terrain, and does not).
         var cellX = TerrainMap.CellOf(rider.X);
         var cellY = TerrainMap.CellOf(rider.Y);

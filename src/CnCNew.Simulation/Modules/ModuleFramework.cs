@@ -30,6 +30,12 @@ public interface IWorldServices
     /// <summary>The loaded map's terrain; <see langword="null"/> in fixture worlds (flat ground at height 0, no boundaries).</summary>
     TerrainMap? Terrain { get; }
 
+    /// <summary>The level of the water at a point, with what scripts did to it (<see cref="World.SimulationWorld.TryWaterLevel"/>).</summary>
+    bool TryWaterLevel(Fixed x, Fixed y, out Fixed level);
+
+    /// <summary><c>TerrainLogic::isUnderwater</c>.</summary>
+    bool IsUnderwater(Fixed x, Fixed y);
+
     /// <summary>Passability grid and path search over <see cref="Terrain"/>; <see langword="null"/> exactly when there is no terrain (objects then move in straight lines).</summary>
     NavigationGrid? Navigation { get; }
 

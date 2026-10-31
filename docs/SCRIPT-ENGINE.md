@@ -509,7 +509,6 @@ occur in no campaign map and are only in the catalog):
 | `RESIZE_VIEW_GUARDBAND` | 35 | MD_CHI02, MD_CHI04, MD_CHI05, MD_GLA01, MD_GLA02, MD_GLA03, MD_USA01, MD_USA02, MD_USA03, MD_USA04, MD_USA05 |
 | `SET_FPS_LIMIT` | 49 | 15 of 24 |
 | `SHOW_WEATHER` | 7 | MD_CHI05, MD_USA03 |
-| `WATER_CHANGE_HEIGHT_OVER_TIME` | 2 | MD_CHI04, MD_GLA04 |
 
 **Reasons for "not displayed"** (the wording per type is in `MissionOutputCatalog.cs`):
 
@@ -526,8 +525,7 @@ occur in no campaign map and are only in the catalog):
   `BorderShroudEnabled`.
 - **Render options** (`OPTIONS_SET_OCCLUSION_MODE`, `OPTIONS_SET_PARTICLE_CAP_MODE`, `SET_FPS_LIMIT`): options of the original (markers for units behind buildings, dynamic particle limit,
   frame rate limit) that the client does not have or does not let scripts control.
-- **Camera and world** (`CAMERA_ADD_SHAKER_AT`: the rotational shaker needs a camera roll offset that `RtsCamera` does not have; `CAMERA_MOD_FREEZE_ANGLE`; `WATER_CHANGE_HEIGHT_OVER_TIME`: the water plane
-  has a fixed height, the original also shifts the logical water level; `CAMEO_FLASH`: no blinking of button images; `DEBUG_MESSAGE_BOX`).
+- **Camera and world** (`CAMERA_ADD_SHAKER_AT`: the rotational shaker needs a camera roll offset that `RtsCamera` does not have; `CAMERA_MOD_FREEZE_ANGLE`; `CAMEO_FLASH`: no blinking of button images; `DEBUG_MESSAGE_BOX`). `WATER_CHANGE_HEIGHT` and `WATER_CHANGE_HEIGHT_OVER_TIME` are world changes since Phase 59 and no output any more (`docs/SIMULATION-CORE.md` §72).
 
 Tests: `tests/CnCNew.Game.Tests/MissionEffectsTests.cs` (catalog complete; script outputs → sound, objects, HUD with dummies, "displayed needs the consumer"; the clock runs while time is stopped;
 shaking; map border; the counting automata of grey veil and blur; with `--content-dir`: `MD_USA01` 3900 frames through the real HUD and the real camera, removed and re-inserted command buttons

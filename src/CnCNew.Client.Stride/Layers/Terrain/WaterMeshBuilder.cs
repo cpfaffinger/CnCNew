@@ -4,9 +4,22 @@ using CnCNew.Presentation.Terrain;
 namespace CnCNew.Client.Stride.Layers.Terrain;
 
 /// <summary>All water surfaces that share texture, scrolling and river-ness as one mesh (<see cref="BaseUv"/> plus <see cref="Scroll"/> times time).</summary>
-internal sealed record WaterBatch(string Texture, bool IsRiver, Vector2 Scroll, WaterVertex[] Vertices, Vector2[] BaseUv, uint[] Indices, Vector3 BoundsMin, Vector3 BoundsMax)
+internal sealed record WaterBatch(string Texture, bool IsRiver, Vector2 Scroll, WaterVertex[] Vertices, Vector2[] BaseUv, uint[] Indices, Vector3 BoundsMin, Vector3 BoundsMax, (string Name, int Start, int Count)[] Surfaces)
 {
     public bool Animated => Scroll != Vector2.Zero;
+
+    /// <summary>Puts a standing surface at the level a script gave its water (<c>W3DWater</c> redraws the polygon at its points' height); says whether it moved.</summary>
+    public bool SetLevel(string name, float level)
+    {
+        var moved = false;
+        foreach (var (surface, start, count) in Surfaces)
+        {
+            if (surface != name || Vertices[start].Position.Z == level) continue;
+            for (var i = start; i < start + count; i++) Vertices[i].Position.Z = level;
+            moved = true;
+        }
+        return moved;
+    }
 
     /// <summary>Writes the scrolled texture coordinates for <paramref name="seconds"/> (wrapped per frame to keep float precision).</summary>
     public void ApplyScroll(double seconds)
@@ -45,8 +58,10 @@ internal static class WaterMeshBuilder
             var min = new Vector3(float.MaxValue);
             var max = new Vector3(float.MinValue);
             int vertexOffset = 0, indexOffset = 0;
+            var ranges = new List<(string, int, int)>();
             foreach (var surface in members)
             {
+                ranges.Add((surface.Name, vertexOffset, surface.Positions.Length));
                 if (surface.Uv.Length != surface.Positions.Length || surface.Indices.Length % 3 != 0)
                     throw new InvalidDataException($"Water surface '{surface.Name}' has inconsistent vertex data.");
                 var color = PackedColor.Pack(colorTable[surface.Color.R], colorTable[surface.Color.G], colorTable[surface.Color.B], surface.Color.A);
@@ -71,7 +86,7 @@ internal static class WaterMeshBuilder
                 }
                 vertexOffset += surface.Positions.Length;
             }
-            if (vertexCount > 0) batches.Add(new WaterBatch(texture, isRiver, scroll, vertices, baseUv, indices, min, max));
+            if (vertexCount > 0) batches.Add(new WaterBatch(texture, isRiver, scroll, vertices, baseUv, indices, min, max, [..ranges]));
         }
         return batches;
     }

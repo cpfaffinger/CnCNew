@@ -2188,6 +2188,7 @@ public sealed partial class SimulationWorld : IWorldServices
         var tick = _tick;
         _tickEvents.Clear();
         ForgetBridgeStateChange(tick);
+        StepWater(tick);
         ExecuteCommands(tick);
         FireTimers(tick);
         EndPowerSabotages();
@@ -2225,6 +2226,7 @@ public sealed partial class SimulationWorld : IWorldServices
         var tick = _tick;
         _tickEvents.Clear();
         ForgetBridgeStateChange(tick);
+        StepWater(tick);
         observer.PhaseStarted(TickPhase.Commands);
         ExecuteCommands(tick);
         observer.PhaseEnded(TickPhase.Commands);
@@ -2411,6 +2413,7 @@ public sealed partial class SimulationWorld : IWorldServices
     {
         writer.Int("tick", _tick);
         DescribeBridges(writer);
+        DescribeWater(writer);
         if (_rankLevelLimit != DefaultRankLevelLimit) writer.Int("rankLevelLimit", _rankLevelLimit);
         if (HulkLifetimeOverrideTicks != -1) writer.Int("hulkLifetimeOverride", HulkLifetimeOverrideTicks);
         if (_contacts.Count > 0)

@@ -3,6 +3,8 @@ using System.Linq;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Templates;
+using CnCNew.Simulation.Terrain;
 using CnCNew.Simulation.Snapshots;
 using CnCNew.Simulation.Testing;
 using CnCNew.Data.World;
@@ -319,6 +321,52 @@ static partial class Tests
         Check.That(NamedIn(session, "Scout") is null, "The newer instance is gone, with the unit that joined it.");
     }
 
+
+    /// <summary>
+    /// F-25: <c>doWaterChangeHeightOverTime</c>, <c>TerrainLogic::update</c>: a script moves a water area's level once per logic frame of the original, the pathfinder learns of it, what the
+    /// rising water closes over is hurt once per second and with the last step, and the state travels with a save. <c>doWaterChangeHeight</c> moves it at once and drowns.
+    /// </summary>
+    public static void FidelityScriptMovesTheWater()
+    {
+        (MapData Map, SyntheticFixture Fixture, TerrainMap Terrain) Lake(MapScript[] scripts)
+        {
+            var (map, fixture, _) = MissionMap(scripts, objects: [Placed("BetaSoldier", 200m, 200m, "teamB", "Swimmer"), Placed("AlphaSoldier", 400m, 200m, "teamA", "Dry")]);
+            map = map with { Triggers = [..map.Triggers, SyntheticMaps.Water("Lake", -10, (100, 100), (300, 100), (300, 300), (100, 300))] };
+            return (map, fixture, TerrainMap.Build(map, "lake"));
+        }
+        var (map, fixture, terrain) = Lake([
+            Scr.Script("Rise", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("WATER_CHANGE_HEIGHT_OVER_TIME", Scr.Named(MapScriptParameterType.TriggerArea, "Lake"), Scr.Real(20m), Scr.Real(1m), Scr.Real(5m))], oneShot: true)]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var world = session.World;
+        var (cx, cy) = (TerrainMap.CellOf(Fixed.FromInt(200)), TerrainMap.CellOf(Fixed.FromInt(200)));
+        Check.That(world.WaterLevelOf(0) == Fixed.FromInt(-10) && !world.IsUnderwater(Fixed.FromInt(200), Fixed.FromInt(200)), "The lake lies below the ground.");
+        var swimmer = NamedIn(session, "Swimmer")!;
+        var full = swimmer.Body!.Health;
+        Run(session, session.Frames(10));
+        var level = world.WaterLevelOf(0);
+        Check.That(level > Fixed.FromInt(-10) && level < Fixed.FromInt(20) && level == Fixed.FromInt(level.Floor()), $"The level moves in whole numbers ({level}).");
+        var bytes = MissionSnapshot.Write(session);
+        Run(session, session.Frames(25));
+        Check.That(world.WaterLevelOf(0) == Fixed.FromInt(20), $"It ends at its target after a second ({world.WaterLevelOf(0)}).");
+        Check.That(world.IsUnderwater(Fixed.FromInt(200), Fixed.FromInt(200)) && !world.IsUnderwater(Fixed.FromInt(400), Fixed.FromInt(200)), "The lake stands over its ground now, not beyond.");
+        var lost = full - swimmer.Body!.Health;
+        Check.That(lost == Fixed.FromInt(5), $"The rising water hurt the one under it with the last step, as it was dry at the second before ({lost}).");
+        Check.That(NamedIn(session, "Dry")!.Body!.Health == NamedIn(session, "Dry")!.Body!.MaxHealth, "Nobody else was hurt.");
+        var path = world.Navigation!.FindPath(Fixed.FromInt(50), Fixed.FromInt(200), Fixed.FromInt(200), Fixed.FromInt(200), LocomotorSurfaces.Ground);
+        Check.That(path.Status != PathStatus.Found, "The pathfinder sees water where it was dry.");
+        Check.That((world.Terrain!.CellAt(cx, cy) & CellFlags.Water) == 0, "The shared terrain is untouched.");
+
+        var restored = MissionSnapshot.Restore(bytes, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Check.That(restored.World.WaterLevelOf(0) == level, "A save keeps the level.");
+        Run(restored, session.Frames(25));
+        Check.That(restored.World.WaterLevelOf(0) == Fixed.FromInt(20) && restored.World.StateHash == world.StateHash, "and the change under way goes on to the same end.");
+
+        var (drownMap, drownFixture, drownTerrain) = Lake([
+            Scr.Script("Rise", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("WATER_CHANGE_HEIGHT", Scr.Named(MapScriptParameterType.TriggerArea, "Lake"), Scr.Real(5m)), Scr.Do("WATER_CHANGE_HEIGHT", Scr.Named(MapScriptParameterType.TriggerArea, "No such lake"), Scr.Real(50m))], oneShot: true)]);
+        var drowned = MissionSession.Start(MissionOptions.Standard, drownFixture.Templates, drownFixture.Fingerprint, drownTerrain, drownMap);
+        Run(drowned, drowned.Frames(3));
+        Check.That(drowned.World.WaterLevelOf(0) == Fixed.FromInt(5) && NamedIn(drowned, "Swimmer") is null or { EffectivelyDead: true }, "The change at once drowns what it closes over.");
+    }
 
     /// <summary>
     /// F-43: <c>ProductionUpdate::queueUpgrade</c> researches an upgrade in the producer's queue for its build time - paid when queued, complete when the time is over, refunded in

@@ -199,18 +199,28 @@ public sealed class TerrainMap
         var hx = Math.Min(cx + _border, _vertexWidth - 2);
         var hy = Math.Min(cy + _border, _vertexHeight - 2);
         if (blend.IsCliff(hx, hy)) flags |= CellFlags.Cliff;
-        if (_water.Length > 0)
-            for (var corner = 0; corner < 4; corner++)
-            {
-                var x = (cx + (corner & 1)) * CellSize;
-                var y = (cy + (corner >> 1)) * CellSize;
-                if (TryWaterLevel(Fixed.FromInt(x), Fixed.FromInt(y), out var level) && HeightAt(Fixed.FromInt(x), Fixed.FromInt(y)) < level)
-                {
-                    flags |= CellFlags.Water;
-                    break;
-                }
-            }
+        if (IsWaterCell(cx, cy, null)) flags |= CellFlags.Water;
         return flags;
+    }
+
+    /// <summary>A corner of the cell lies under water at these levels (<see cref="TryWaterLevel(Fixed, Fixed, Fixed[], out Fixed)"/>).</summary>
+    public bool IsWaterCell(int cx, int cy, Fixed[]? levels)
+    {
+        if (_water.Length == 0) return false;
+        for (var corner = 0; corner < 4; corner++)
+        {
+            var x = (cx + (corner & 1)) * CellSize;
+            var y = (cy + (corner >> 1)) * CellSize;
+            if (TryWaterLevel(Fixed.FromInt(x), Fixed.FromInt(y), levels, out var level) && HeightAt(Fixed.FromInt(x), Fixed.FromInt(y)) < level) return true;
+        }
+        return false;
+    }
+
+    /// <summary>The bounding rectangle of a water area (<c>TerrainLogic::findAxisAlignedBoundingRect</c>).</summary>
+    public (int MinX, int MinY, int MaxX, int MaxY) BoundsOf(int area)
+    {
+        var water = _water[area];
+        return (water.PointX.Min(), water.PointY.Min(), water.PointX.Max(), water.PointY.Max());
     }
 
     public bool IsInside(int cx, int cy) => (uint)cx < (uint)CellsX && (uint)cy < (uint)CellsY;
@@ -251,17 +261,23 @@ public sealed class TerrainMap
 
     /// <summary><c>TerrainLogic::getWaterHandle</c> restricted to polygon water: the highest level among the areas containing the point (rounded to a whole coordinate first).</summary>
     public bool TryWaterLevel(Fixed x, Fixed y, out Fixed level)
+        => TryWaterLevel(x, y, null, out level);
+
+    /// <summary>The same with the levels by the index of <see cref="WaterAreas"/> that a world's scripts have set, or the map's with <see langword="null"/>.</summary>
+    public bool TryWaterLevel(Fixed x, Fixed y, Fixed[]? levels, out Fixed level)
     {
         level = Fixed.Zero;
         var found = false;
         var px = (int)(x + Fixed.FromRaw(Fixed.ScaleRaw / 2)).Floor();
         var py = (int)(y + Fixed.FromRaw(Fixed.ScaleRaw / 2)).Floor();
-        foreach (var area in _water)
+        for (var index = 0; index < _water.Length; index++)
         {
+            var area = _water[index];
             if (!PointInPolygon(area, px, py)) continue;
-            if (!found || area.Level >= level)
+            var height = levels is null ? area.Level : levels[index];
+            if (!found || height >= level)
             {
-                level = area.Level;
+                level = height;
                 found = true;
             }
         }

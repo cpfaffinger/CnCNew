@@ -139,7 +139,7 @@ public static class StructureConditions
     /// </summary>
     private static void HoverOverWater(Entity entity, SimulationWorld world, ref ModelConditionSet set)
     {
-        if (entity.Template.Locomotor is { IsHover: true } && world.Terrain is { } terrain && terrain.IsUnderwater(entity.X, entity.Y)) set = set.With(OverWater);
+        if (entity.Template.Locomotor is { IsHover: true } && world.IsUnderwater(entity.X, entity.Y)) set = set.With(OverWater);
     }
 
     /// <summary>

@@ -30,6 +30,13 @@ public sealed partial class ScriptEngine
         var type = action.TypeName;
         switch (type)
         {
+            // doWaterChangeHeight, doWaterChangeHeightOverTime: the world keeps the levels (SimulationWorld.Water.cs); a name that is no water area does nothing.
+            case "WATER_CHANGE_HEIGHT":
+                if (Has(type, p, 2)) _world.SetWaterHeight(Str(p, 0), Real(p, 1));
+                return true;
+            case "WATER_CHANGE_HEIGHT_OVER_TIME":
+                if (Has(type, p, 4)) _world.ChangeWaterHeightOverTime(Str(p, 0), Real(p, 1), Real(p, 2), Real(p, 3));
+                return true;
             // ScriptActions::doTeamFaceNamed: every member stops and faces the named object (the reference also clears the waypoint queue and leaves its group).
             case "TEAM_FACE_NAMED":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 1)) is { } faced)

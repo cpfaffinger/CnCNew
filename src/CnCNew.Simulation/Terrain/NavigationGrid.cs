@@ -135,6 +135,16 @@ public sealed partial class NavigationGrid
 
     public TerrainMap Terrain { get; }
 
+    /// <summary>Whether a cell is water now: a script moved the level (<c>Pathfinder::forceMapRecalculation</c>), so the terrain's class of the cell no longer says it.</summary>
+    public void SetWater(int cx, int cy, bool water)
+    {
+        var index = cy * _cellsX + cx;
+        var state = water ? (byte)(_state[index] | (byte)CellFlags.Water) : (byte)(_state[index] & ~(byte)CellFlags.Water);
+        if (state == _state[index]) return;
+        _state[index] = state;
+        _memoStale = true;
+    }
+
     /// <summary>A tool's measuring hook (<see cref="IMovementProbe"/>); <see langword="null"/> unless a tool installs one. Not part of the state: neither hashed nor saved.</summary>
     public IMovementProbe? Probe { get; set; }
 

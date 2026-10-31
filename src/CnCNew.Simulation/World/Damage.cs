@@ -25,6 +25,9 @@ public static class DamageTypes
     /// <summary><c>DAMAGE_FALLING</c>.</summary>
     public static int Falling { get; } = NameTables.DamageType.TryIndexOf("FALLING", out var index) ? index : throw new InvalidOperationException("FALLING is not a damage type.");
 
+    /// <summary><c>DAMAGE_WATER</c>.</summary>
+    public static int Water { get; } = NameTables.DamageType.TryIndexOf("WATER", out var index) ? index : throw new InvalidOperationException("WATER");
+
     public static int Count => NameTables.DamageType.Count;
     public static bool IsSubdual(int type) => type is SubdualMissile or SubdualVehicle or SubdualBuilding or SubdualUnresistable;
     public static bool IsValid(int type) => type >= 0 && type < Count;

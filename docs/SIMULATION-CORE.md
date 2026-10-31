@@ -4615,3 +4615,15 @@ Retail reference match a stalemate at tick 108,000, end hash `556023EBE5E461C2`,
 `getTeamNamed`'s alias of `teamThePlayer` for the local player's default team in a Generals' Challenge is not built: every challenge map's human side is called `ThePlayer` (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7), so the alias names the team the name names already.
 
 Expected in the manifests: the hashes of the mission runs that have two living instances of one prototype, and of the runs of the original AI, whose teams have several instances; no skirmish of the built-in AI. No run was measured here; `Tests.FidelityTeamActionsReachOneInstance` holds the behaviour at 30, 60 and 120 Hz.
+
+## 72. Phase 59: a script moves the water (F-25)
+
+`WATER_CHANGE_HEIGHT` and `WATER_CHANGE_HEIGHT_OVER_TIME` were outputs nobody read; they are world changes (`TerrainLogic::setWaterHeight`, `changeWaterHeightOverTime`, `update`), and `SimulationWorld.Water.cs` makes them that. The terrain stays immutable and shared: the levels live in the world, by the index of `TerrainMap.WaterAreas`, and are written to the state only once a script moved one, so every other run keeps its hash. `world.TryWaterLevel` and `world.IsUnderwater` are what parachutes, `FloatUpdate`, a stunned unit and the model conditions ask now.
+
+- A level is a whole number, truncated toward zero: the original keeps it in the integer points of the polygon. That is why a change over time carries its own current height.
+- A change over time steps once per logic frame of the original, in the first tick of the frame, before the commands, at every rate. A new change of an area replaces the one it had; at most 64 run.
+- Water that rises hurts what stands under it (`DAMAGE_WATER`, `FROM_CENTER_2D` over the diagonal of the bounding rectangle): at once with 999,999 for the action without a time, once per second and with the last step otherwise; water that falls hurts nothing.
+- The pathfinder learns of it: the cells of the area's bounding rectangle are classified again (`NavigationGrid.SetWater`), instead of the original's whole `forceMapRecalculation`. **Named difference:** `TerrainMap.CellAt`, which the building site reads, keeps the map's water.
+- The client moves the standing surface (`TerrainLayer.MoveWater`). **Not moved:** the soft edge's depth map and the minimap's water, both computed once.
+
+Two campaign maps use the action: `MD_CHI04` lowers `Fire Destruction Area` to 0 in 4 s, `MD_GLA04` lowers `Coolant_Reservoir` to 26 in 5 s; so I expect the hashes of the mission runs of those two maps to move, from the moment the scripts fire. `Tests.FidelityScriptMovesTheWater` holds it at 30, 60 and 120 Hz and across a save.

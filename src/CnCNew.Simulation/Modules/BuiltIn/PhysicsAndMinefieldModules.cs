@@ -454,7 +454,7 @@ public sealed class PhysicsBehavior(PhysicsData data) : SimModule, IUpdateModule
         var surfaces = Entity.Template.Locomotor?.Surfaces ?? LocomotorSurfaces.None;
         var (cx, cy) = (Terrain.TerrainMap.CellOf(x), Terrain.TerrainMap.CellOf(y));
         if (terrain.IsInside(cx, cy) && (terrain.CellAt(cx, cy) & Terrain.CellFlags.Cliff) != 0 && (surfaces & LocomotorSurfaces.Cliff) == 0) return true;
-        return terrain.IsUnderwater(x, y) && (surfaces & LocomotorSurfaces.Water) == 0;
+        return world.IsUnderwater(x, y) && (surfaces & LocomotorSurfaces.Water) == 0;
     }
 
     private void Damp(Fixed factor)

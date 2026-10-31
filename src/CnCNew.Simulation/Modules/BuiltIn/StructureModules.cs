@@ -618,7 +618,7 @@ public sealed class FloatUpdate(FloatData data) : SimModule, IUpdateModule
     public long Update(IWorldServices world)
     {
         if (!_enabled) return SimulationTiming.SleepForever;
-        if (world.Terrain is { } terrain && terrain.TryWaterLevel(Entity.X, Entity.Y, out var level)) Entity.Z = level;
+        if (world.Terrain is { } terrain && world.TryWaterLevel(Entity.X, Entity.Y, out var level)) Entity.Z = level;
         return SimulationTiming.SleepNone;
     }
 

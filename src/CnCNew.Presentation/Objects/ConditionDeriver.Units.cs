@@ -94,7 +94,7 @@ public static partial class ConditionDeriver
         }
 
         // Locomotor::moveTowardsPositionHover: a hover locomotor over water (terrain below the water level) has OVER_WATER; the flag only changes while the object moves, so a position is all it needs.
-        if (entity.Template.Locomotor is { IsHover: true } && world.Terrain is { } water && water.IsUnderwater(entity.X, entity.Y)) set = set.With(UnitFlags.OverWater);
+        if (entity.Template.Locomotor is { IsHover: true } && world.IsUnderwater(entity.X, entity.Y)) set = set.With(UnitFlags.OverWater);
         return set;
     }
 }
