@@ -25,6 +25,8 @@ internal static class AssetTool
                 ["verify", var content] => await VerifyAsync(content),
                 ["audit-formats", var content] => AuditFormats(content),
                 ["audit-dependencies", var content] => AuditDependencies(content),
+                ["audit-movies", var content, .. var options] => MovieCommands.Audit(content, options),
+                ["movie-frame", var content, var movie, var frame, var output, .. var options] => MovieCommands.WriteFrame(content, movie, frame, output, options),
                 ["check-install", var game, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.CheckInstallAsync(game, options)),
                 ["describe-install", var game, var output, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.DescribeInstallAsync(game, output, options)),
                 ["install", var game, var target, .. var options] => await InstallCommands.RunAsync(() => InstallCommands.InstallAsync(game, target, options)),
@@ -297,6 +299,8 @@ internal static class AssetTool
         Console.Error.WriteLine("  CnCNew.AssetTool verify <content-directory>");
         Console.Error.WriteLine("  CnCNew.AssetTool audit-formats <content-directory>");
         Console.Error.WriteLine("  CnCNew.AssetTool audit-dependencies <content-directory>");
+        Console.Error.WriteLine("  CnCNew.AssetTool audit-movies <content-directory> [--only <part of a path>]");
+        Console.Error.WriteLine("  CnCNew.AssetTool movie-frame <content-directory> <movie path> <frame> <output.png> [--wav <output.wav>]");
         InstallCommands.PrintUsage();
         return 2;
     }
