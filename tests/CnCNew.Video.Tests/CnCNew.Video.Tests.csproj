@@ -3,6 +3,9 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../Shared/BinkFixtures.cs" Link="Shared/BinkFixtures.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/CnCNew.Video/CnCNew.Video.csproj" />
     <ProjectReference Include="../../src/CnCNew.Content/CnCNew.Content.csproj" />
   </ItemGroup>
