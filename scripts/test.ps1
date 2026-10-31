@@ -41,6 +41,9 @@ param(
     # Do not stop at the first failed step.
     [switch]$KeepGoing,
 
+    # Begin at this step: what lies before it is not run, and the report says so. For the rest of a run that stopped.
+    [string]$From,
+
     [string]$ContentDir,
     [string]$OutDir
 )
@@ -242,6 +245,12 @@ $steps = @(
 $contained = 'game-focus', 'game-sim', 'quick', 'rate-suite'
 if ($Tier -eq 'full') { $selected = @($steps | Where-Object { $_.Id -notin $contained }) }
 else { $selected = @($steps | Where-Object { $wanted.Contains($_.Id) -or ($_.Id -eq 'build' -and $needsBuild) }) }
+if ($From) {
+    $start = [array]::FindIndex($selected, [Predicate[object]] { param($candidate) $candidate.Id -eq $From })
+    if ($start -lt 0) { throw "There is no step '$From' in this tier." }
+    Write-Host "Begins at step $From`: the $start step(s) before it are NOT RUN."
+    $selected = @($selected[$start..($selected.Length - 1)])
+}
 
 $haveContent = Test-Path -LiteralPath (Join-Path $repo (Join-Path $ContentDir 'content-manifest.json'))
 Write-Host "Tier: $Tier" -ForegroundColor Cyan

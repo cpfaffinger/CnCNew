@@ -516,7 +516,7 @@ internal static class MissionTextTests
             && style.Font(InGameUiFontRole.Message, viewport, options) is { Name: "Arial", Bold: true }
             && style.Font(InGameUiFontRole.SuperweaponReady, viewport, options).Bold && !style.Font(InGameUiFontRole.SuperweaponNormal, viewport, options).Bold
             && !style.Font(InGameUiFontRole.NamedTimerReady, viewport, options).Bold, "the retail fonts: Courier New for the caption (bold title), Arial for messages (bold), superweapon ready bold");
-        TestHarness.Assert(style.Language.Settings.MilitaryCaptionSpeed == 1 && style.Language.Settings.MilitaryCaptionDelayMilliseconds == 750, "typing speed 1, start delay 750 ms");
+        TestHarness.Assert(style.Language.Settings.MilitaryCaptionSpeed == 0 && style.Language.Settings.MilitaryCaptionDelayMilliseconds == 750, "typing speed 0 (the patch's briefing texts), start delay 750 ms");
     }
 
     private static void RealCaption(GameData data)
