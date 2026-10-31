@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using CnCNew.Data.Definitions;
 using CnCNew.Data.Registry;
+using CnCNew.Presentation.Shadows;
 
 namespace CnCNew.Presentation.Objects;
 
@@ -22,8 +23,12 @@ public sealed record ObjectVisual(
     ImmutableArray<DrawSpec> Draws,
     ImmutableArray<ConditionUpgradeSpec> ConditionUpgrades,
     SuspensionMotion? Suspension = null,
-    float PlacementViewAngle = 0f)
+    float PlacementViewAngle = 0f,
+    ShadowSpec? ShadowInfo = null)
 {
+    /// <summary>How this template casts its shadow.</summary>
+    public ShadowSpec ShadowCast => ShadowInfo ?? ShadowSpec.None;
+
     public bool IsKindOf(string kind) => KindOf.Contains(kind, StringComparer.OrdinalIgnoreCase);
     public bool IsStructure => IsKindOf("STRUCTURE");
     public bool IsUnit => IsKindOf("INFANTRY") || IsKindOf("VEHICLE") || IsKindOf("AIRCRAFT") || IsKindOf("HUGE_VEHICLE");
@@ -97,7 +102,10 @@ public sealed class ObjectVisualCatalog
         var radius = isBox ? Math.Sqrt((double)(major * major + minor * minor)) : (double)major;
         return new ObjectVisual(definition.OriginalName, kindOf, (float)(Number(definition.Fields, "Scale") ?? 1m), shadow, (float)radius,
             Text(definition.Fields, "SelectPortrait"), Text(definition.Fields, "ButtonImage"), draws, upgrades.ToImmutable(),
-            locomotors is null ? null : NormalSuspension(definition, locomotors), PlacementViewAngleOf(definition));
+            locomotors is null ? null : NormalSuspension(definition, locomotors), PlacementViewAngleOf(definition),
+            ShadowSpec.From(shadow, Text(definition.Fields, "ShadowTexture"), Size("ShadowSizeX"), Size("ShadowSizeY"), Size("ShadowOffsetX"), Size("ShadowOffsetY")));
+
+        float Size(string key) => (float)(Number(definition.Fields, key) ?? 0m);
     }
 
     /// <summary><c>PlacementViewAngle</c> in radians (<c>ThingTemplate::getPlacementViewAngle</c>): the heading a structure has while it follows the cursor and when it is placed without a drag.</summary>
