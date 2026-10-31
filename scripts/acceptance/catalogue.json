@@ -15,7 +15,22 @@
     { "id": "SPEC", "title": "Spectator mode" },
     { "id": "MISS", "title": "Campaign mission: intro and scripts" },
     { "id": "RATE", "title": "60 Hz against 30 Hz" },
-    { "id": "PERF", "title": "Performance feel" }
+    { "id": "PERF", "title": "Performance feel" },
+    { "id": "REPLAY", "title": "Replay and analysis of a match" },
+    { "id": "SKIN", "title": "The modern skin" }
+  ],
+  "packages": [
+    {"id": "P01", "title": "Menus", "groups": ["INST", "SHELL"]},
+    {"id": "P02", "title": "Command bar and input", "groups": ["HUD", "INPUT"]},
+    {"id": "P03", "title": "The world: terrain, objects, effects", "groups": ["WORLD", "FX"]},
+    {"id": "P04", "title": "Units", "groups": ["UNIT"]},
+    {"id": "P05", "title": "Sound", "groups": ["SND"]},
+    {"id": "P06", "title": "A skirmish against the computer", "groups": ["SKIRM", "PERF"]},
+    {"id": "P07", "title": "Spectator mode", "groups": ["SPEC"]},
+    {"id": "P08", "title": "A campaign mission", "groups": ["MISS"]},
+    {"id": "P09", "title": "60 Hz against 30 Hz", "groups": ["RATE"]},
+    {"id": "P10", "title": "Replay and analysis", "groups": ["REPLAY"]},
+    {"id": "P11", "title": "The modern skin", "groups": ["SKIN"]}
   ],
   "scenes": {
     "install": { "title": "Installer", "live": { "manual": "pwsh scripts\\install.ps1" } },
@@ -68,11 +83,13 @@
     "spectator-random": { "title": "Spectator mode with a fresh seed", "live": { "script": "demo-spectator.ps1", "args": ["-Speed", "4"] } },
 
     "mission-chem": { "title": "Mission GC_ChemGeneral: intro", "live": { "client": ["--mission", "Maps/GC_ChemGeneral/GC_ChemGeneral.map"] }, "capture": { "client": ["--mission", "Maps/GC_ChemGeneral/GC_ChemGeneral.map"], "frames": 960, "every": 80, "audio": true } },
-    "mission-usa01": { "title": "Mission MD_USA01: intro with texts", "live": { "client": ["--mission", "Maps/MD_USA01/MD_USA01.map"] }, "capture": { "client": ["--mission", "Maps/MD_USA01/MD_USA01.map"], "frames": 1500, "every": 100, "audio": true } }
+    "mission-usa01": { "title": "Mission MD_USA01: intro with texts", "live": { "client": ["--mission", "Maps/MD_USA01/MD_USA01.map"] }, "capture": { "client": ["--mission", "Maps/MD_USA01/MD_USA01.map"], "frames": 1500, "every": 100, "audio": true } },
+    "replay-run": {"title": "A short skirmish, its analysis and its replay", "live": {"client": ["--shell", "--skirmish-seconds", "60"]}},
+    "skin-modern": {"title": "The game in the modern skin", "live": {"client": ["--shell", "--skin", "modern", "--skirmish-seconds", "60"]}}
   },
   "items": [
     { "id": "INST-01", "group": "INST", "title": "The installer creates a game directory", "scene": "install", "needsMotion": true, "needsSound": false, "optional": true, "minutes": 3.0, "instruction": "In the cloned repository run `pwsh scripts\\install.ps1` (only if nothing lies under %LOCALAPPDATA%\\CnCNew\\Game yet, or to repeat it).", "expectation": "The script finds the Steam installation by itself, ends with `Installation: ...` naming content, record, client and the start line, and takes about two minutes. The Steam installation is unchanged afterwards.", "sources": ["docs/INSTALLATION.md"] },
-    { "id": "INST-02", "group": "INST", "title": "Start through Start-CnCNew.cmd", "scene": "start-installed", "needsMotion": true, "needsSound": true, "minutes": 1.0, "instruction": "Double-click `%LOCALAPPDATA%\\CnCNew\\Game\\Start-CnCNew.cmd`.", "expectation": "After about half a minute of loading the main menu stands in the window, with the menu music; no console window stays open, no error message.", "sources": ["docs/INSTALLATION.md", "CLAUDE.md publication paragraph: not proven"] },
+    { "id": "INST-02", "group": "INST", "title": "Start through Start-CnCNew.cmd", "scene": "start-installed", "needsMotion": true, "needsSound": true, "optional": true, "minutes": 1.0, "instruction": "Double-click `%LOCALAPPDATA%\\CnCNew\\Game\\Start-CnCNew.cmd`.", "expectation": "After about half a minute of loading the main menu stands in the window, with the menu music; no console window stays open, no error message.", "sources": ["docs/INSTALLATION.md", "CLAUDE.md publication paragraph: not proven"] },
     { "id": "INST-03", "group": "INST", "title": "Uninstalling removes only our own directory", "scene": "uninstall", "needsMotion": true, "needsSound": false, "optional": true, "minutes": 1.0, "instruction": "Only if you want to get rid of the installation: run the command.", "expectation": "content, bin, Start-CnCNew.cmd and install.json are gone; nothing outside the target directory was touched, Steam still starts the original.", "sources": ["docs/INSTALLATION.md"] },
 
     { "id": "SHELL-01", "group": "SHELL", "title": "Main menu: looks", "scene": "shell-stills", "needsMotion": false, "needsSound": false, "minutes": 0.5, "instruction": "Look at the pictures of the main menu (normal, pointer over a button, pressed).", "expectation": "Logo, frame and buttons as in the original main menu of Zero Hour; texts sit centred in the buttons and are not cut off; the button under the pointer is highlighted, the pressed one darker. (The original shows a 3D battle scene behind the menu; here the background is black - known, postponed.)", "sources": ["docs/UI-VANILLA-FIT.md §6", "DEMO-FINDINGS no. 17a, 17f"] },
@@ -168,6 +185,15 @@
 
     { "id": "PERF-01", "group": "PERF", "title": "Smoothness in a skirmish", "scene": "skirmish", "needsMotion": true, "needsSound": false, "minutes": 0.0, "instruction": "Mind the feel during SKIRM-01/02.", "expectation": "Scrolling and movement stay smooth while building and fighting; no hitches of noticeable length.", "sources": ["CLAUDE.md phase 23: tick maximum 141 ms"] },
     { "id": "PERF-02", "group": "PERF", "title": "Loading time", "scene": "skirmish", "needsMotion": true, "needsSound": false, "minutes": 0.0, "instruction": "Count along when each window starts.", "expectation": "About half a minute passes from the start to the first picture; the window stays empty in that time. Is that acceptable?", "sources": ["new"] },
-    { "id": "PERF-03", "group": "PERF", "title": "Spectator at eight times speed", "scene": "spectator", "needsMotion": true, "needsSound": false, "minutes": 0.0, "instruction": "During SPEC-06/07.", "expectation": "At eight times the picture stays smooth, the game does not visibly fall behind.", "sources": ["docs/SPECTATOR-MODE.md §11.7"] }
+    { "id": "PERF-03", "group": "PERF", "title": "Spectator at eight times speed", "scene": "spectator", "needsMotion": true, "needsSound": false, "minutes": 0.0, "instruction": "During SPEC-06/07.", "expectation": "At eight times the picture stays smooth, the game does not visibly fall behind.", "sources": ["docs/SPECTATOR-MODE.md §11.7"] },
+    {"id": "SKIRM-04", "group": "SKIRM", "title": "A refused building site says why", "scene": "skirmish", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Select a dozer and try to place a building on a slope, on a cliff, at the edge of the map and on another building. Try a supply center right beside a supply dock.", "expectation": "The preview shows the spot as refused and a line in the message list names the reason: not flat enough, restricted terrain, objects in the way, too close to supplies.", "sources": []},
+    {"id": "SKIRM-05", "group": "SKIRM", "title": "Your units make way for a building", "scene": "skirmish", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Stand a few of your soldiers where you then place a building.", "expectation": "The building is begun, and your soldiers walk off the site by themselves.", "sources": []},
+    {"id": "SKIRM-06", "group": "SKIRM", "title": "Computer units come at what they see", "scene": "skirmish", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Walk one unit close to resting units of the computer player, just beyond their weapon range.", "expectation": "They walk at your unit and attack it, and do not simply wait until it is in range.", "sources": []},
+    {"id": "REPLAY-01", "group": "REPLAY", "title": "The analysis of a match", "scene": "replay-run", "needsMotion": true, "needsSound": false, "minutes": 2.0, "instruction": "In the main menu: Single Player, Skirmish, Start. The match ends by itself after 60 seconds of game time. On the score screen press Analysis and page through it.", "expectation": "Six pages with charts of money, army and events. You can read them, and what they show fits the match you just saw.", "sources": []},
+    {"id": "REPLAY-02", "group": "REPLAY", "title": "The replay list", "scene": "replay-run", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Go back to the main menu and open Replay.", "expectation": "The match you just played is in the list with its date and map, and it can be renamed and deleted.", "sources": []},
+    {"id": "REPLAY-03", "group": "REPLAY", "title": "Playing a replay", "scene": "replay-run", "needsMotion": true, "needsSound": false, "minutes": 2.0, "instruction": "Load the replay. Press Page Down and Page Up to jump, Home to go to the start, and change the view of a player with F5 and F6.", "expectation": "The same match plays again, jumps land where they should within a moment, and the match ends with the same result.", "sources": []},
+    {"id": "SKIN-01", "group": "SKIN", "title": "The menus are easier to read", "scene": "skin-modern", "needsMotion": true, "needsSound": false, "minutes": 2.0, "instruction": "Walk through the main menu, Options and Skirmish.", "expectation": "Flat, sharp and readable at this window size, nothing cut off, every button where you expect it.", "sources": []},
+    {"id": "SKIN-02", "group": "SKIN", "title": "The command bar in a match", "scene": "skin-modern", "needsMotion": true, "needsSound": false, "minutes": 2.0, "instruction": "Start a skirmish and select a dozer, then a building, then a group of units.", "expectation": "The bar keeps its proportions, its text is readable, the art of the units and buttons is the original art.", "sources": []},
+    {"id": "SKIN-03", "group": "SKIN", "title": "Switching the skin", "scene": "skin-modern", "needsMotion": true, "needsSound": false, "minutes": 1.0, "instruction": "Options, More options: change the skin to Original and back to Modern.", "expectation": "The switch takes effect at once and nothing is left over from the other skin.", "sources": []}
   ]
 }

@@ -5,6 +5,19 @@ project owner looked at the running game twice for a few minutes and each time f
 is the template for the acceptance: one catalogue of items, one scene per item that can be started by its id, a script that leads through them and records the
 verdicts, a picture page that needs nobody at the keyboard, and the reading of an agent before – which is **not** an acceptance.
 
+
+## Start here: the guided acceptance
+
+Double-click `Start-Acceptance.cmd` in the repository (or `pwsh -STA scripts/acceptance.ps1 -Suite`). You need nothing else: no document, no list of commands.
+
+- A window stands on the right of the screen. It leads through **11 packages** one after the other: menus, command bar and input, the world, units, sound, a skirmish, spectator mode, a campaign mission, 60 against 30 Hz, replay and analysis, the modern skin.
+- Each page starts its scene by itself on the left, or shows its pictures. The first page takes a while: the pictures of the menus are made then.
+- Each page names its goals. For each goal it says what to do and when it is reached, and you answer **Reached**, **Not reached** or **Skip**, with a comment if you like. A goal that is not reached needs a comment.
+- **Save and go on** moves on; **Show the scene again** restarts the scene; **Stop for now** saves. Starting again continues where you stopped; `Start-Acceptance.cmd -Fresh` begins anew, `-IncludeOptional` adds the installer items.
+- At the end, and whenever you stop, the report lies on the desktop as `CnCNew-acceptance-report-<date>.md`. Hand it to the agent: every goal that was not reached becomes a finding.
+
+The packages are `packages` in `scripts/acceptance/catalogue.json`; new work that a person must judge adds its goals there. The sections below describe the catalogue and the older console run, which reads and writes the same results file.
+
 ## 1. The three commands
 
 ```powershell
