@@ -48,9 +48,21 @@ public abstract class LiveGame
     /// <param name="players">The players the house colors are resolved for.</param>
     /// <param name="human">The viewer: whose fog, selection and orders the presentation shows.</param>
     /// <param name="cameraStart">Where the camera starts (world x/y).</param>
+    private MapEnvironment? _environment;
+
+    /// <summary>The <c>map.ini</c> beside the map, if it has one.</summary>
+    private string? ReadMapIni()
+    {
+        var path = System.IO.Path.GetDirectoryName(MapPath)?.Replace('\\', '/') + "/map.ini";
+        if (!Data.Content.Exists(path)) return null;
+        using var reader = new StreamReader(Data.Content.OpenRead(path));
+        return reader.ReadToEnd();
+    }
+
     protected LiveGame(GameData data, SimulationWorld world, MapData map, string mapPath, TerrainMap terrain, IEnumerable<PlayerConfiguration> players, PlayerId human,
         uint fxSeed, Vector2 viewport, Vector2 cameraStart)
     {
+        MapPath = mapPath;
         var graph = data.Graph;
         Data = data;
         World = world;
@@ -124,6 +136,21 @@ public abstract class LiveGame
     /// </summary>
     public static bool Extrapolate { get; set; }
     public MapData Map { get; }
+
+    /// <summary>The virtual path of the <c>.map</c> file.</summary>
+    public string MapPath { get; }
+
+    /// <summary>The sky and the weather of this map (<see cref="MapEnvironment"/>), built when first asked for.</summary>
+    public MapEnvironment Environment => _environment ??= MapEnvironment.FromDefinitions(Data.Graph, ReadMapIni());
+
+    /// <summary>A script has asked for the sky box (<c>DRAW_SKYBOX_BEGIN</c>); <c>W3DDisplay::reset</c> turns it off for every map.</summary>
+    public virtual bool SkyboxShown => false;
+
+    /// <summary>The map's border is black (<c>ENABLE_BORDER_SHROUD</c>, the start of every map).</summary>
+    public virtual bool BorderShroudShown => true;
+
+    /// <summary>Snow and rain are shown if the map has them (<c>SHOW_WEATHER</c>, <c>SnowManager::setVisible</c>).</summary>
+    public virtual bool WeatherShown => true;
     public TerrainRenderModel TerrainModel { get; }
     public TerrainHeightSampler Heights { get; }
     public RtsCamera Camera { get; }

@@ -113,12 +113,12 @@ public static class MissionOutputCatalog
         Not("the control bar model keeps the availability (Hidden/Disabled sciences are hidden/restricted PurchaseScience buttons), but the client has no Generals Powers panel to show it", "PLAYER_SCIENCE_AVAILABILITY");
         Not("the minimap is drawn from the live world in every frame, so there is no terrain picture to refresh", "REFRESH_RADAR");
         Not("the mission result screen shows one row without statistics; the scoring flags are kept by the director", "ENABLE_SCORING", "DISABLE_SCORING", "PLAYER_EXCLUDE_FROM_SCORE_SCREEN");
-        Not("the fog texture covers the playable area only and the terrain beyond it keeps the fog's edge value; there is no separate shroud ring for the active border to switch", "ENABLE_BORDER_SHROUD", "DISABLE_BORDER_SHROUD");
-        Not("the sky box model is not drawn by the terrain layer", "DRAW_SKYBOX_BEGIN", "DRAW_SKYBOX_END");
+        Shown("the fog texture's ring around the playable area goes black or clear (W3DShroud::setBorderShroudLevel)", "ENABLE_BORDER_SHROUD", "DISABLE_BORDER_SHROUD");
+        Shown("the sky box new_skybox around the camera (WaterRenderObjClass::Render)", "DRAW_SKYBOX_BEGIN", "DRAW_SKYBOX_END");
         Not("the terrain layer draws the whole height field with its border, there is no render window to oversize", "OVERSIZE_TERRAIN");
         Not("the client culls no drawables by a guard band, there is nothing to widen", "RESIZE_VIEW_GUARDBAND");
         Not("the water plane has a fixed height; the original also moves the logic water level (TerrainLogic), which has no counterpart", "WATER_CHANGE_HEIGHT", "WATER_CHANGE_HEIGHT_OVER_TIME");
-        Not("no snow or rain is drawn", "SHOW_WEATHER");
+        Shown("the map's snow or rain is shown or hidden (SnowManager::setVisible)", "SHOW_WEATHER");
         Not("a render option of the original (units behind buildings as markers); the client draws no occlusion markers", "OPTIONS_SET_OCCLUSION_MODE");
         Not("a render option of the original (dynamic particle cap); the client's particle budget is fixed", "OPTIONS_SET_PARTICLE_CAP_MODE");
         Not("the frame pacing of the client is not script controlled", "SET_FPS_LIMIT");

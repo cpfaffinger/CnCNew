@@ -9,6 +9,9 @@ namespace CnCNew.Client.Stride.Layers.Terrain;
 /// <summary>The textures laid over the map: <paramref name="Clouds"/> moves, <paramref name="Macro"/> stands; <paramref name="Scale"/> takes the fog's coordinates to theirs.</summary>
 internal sealed record TerrainOverlay(Texture? Clouds, Texture? Macro, Vector2 Scale);
 
+/// <summary>The fog texture and how the fog's coordinates reach it: the texture has a ring of texels around the playable area, the map's border (<c>W3DShroud</c>).</summary>
+internal sealed record FogMap(Texture Texture, Vector2 Scale, Vector2 Offset);
+
 /// <summary>
 /// Material graphs of the terrain and water layers, built from Stride compute-colour nodes (no custom shader assets). Terrain, per pixel:
 /// <c>lerp(lerp(atlas(uv0), atlas(uv1), w1), atlas(uv2), w2) * lighting * fog</c>, where <c>w1</c> is the alpha of vertex colour 0 and
@@ -22,7 +25,7 @@ internal static class TerrainMaterials
     private static readonly TextureCoordinate Uv2 = (TextureCoordinate)2;
     private static readonly TextureCoordinate FogUv = (TextureCoordinate)3;
 
-    public static Material CreateTerrain(GraphicsDevice device, Texture atlas, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites, TerrainOverlay? overlay = null)
+    public static Material CreateTerrain(GraphicsDevice device, Texture atlas, FogMap fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites, TerrainOverlay? overlay = null)
     {
         IComputeColor Atlas(TextureCoordinate coordinate) => new ComputeTextureColor(atlas, coordinate, Vector2.One, Vector2.Zero)
         {
@@ -53,7 +56,7 @@ internal static class TerrainMaterials
         return material;
     }
 
-    public static Material CreateWater(GraphicsDevice device, Texture water, Texture fog, bool linearSpace, bool additive, Dictionary<MaterialPass, bool> depthWrites)
+    public static Material CreateWater(GraphicsDevice device, Texture water, FogMap fog, bool linearSpace, bool additive, Dictionary<MaterialPass, bool> depthWrites)
     {
         IComputeColor color = new ComputeTextureColor(water, Uv0, Vector2.One, Vector2.Zero)
         {
@@ -92,7 +95,7 @@ internal static class TerrainMaterials
     /// both directions, double-sided. The alpha must reach the blend stage: the emissive feature drops it unless <c>UseAlpha</c> is set (the Y and H junction
     /// pieces cover transparent texels). The reference's optional cloud and noise passes are not reproduced.
     /// </summary>
-    public static Material CreateRoad(GraphicsDevice device, Texture road, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites, TerrainOverlay? overlay = null)
+    public static Material CreateRoad(GraphicsDevice device, Texture road, FogMap fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites, TerrainOverlay? overlay = null)
     {
         IComputeColor color = new ComputeTextureColor(road, Uv0, Vector2.One, Vector2.Zero)
         {
@@ -127,7 +130,7 @@ internal static class TerrainMaterials
     /// Bridge material (<c>detailAlphaShader</c> of <c>W3DBridgeBuffer</c>): the bridge's texture times the lighting of the vertex colour times the fog, alpha tested, writing depth, seen from both
     /// sides. The original's alpha test still blends what passes it; here what passes is opaque.
     /// </summary>
-    public static Material CreateBridge(GraphicsDevice device, Texture bridge, Texture fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites, TerrainOverlay? overlay = null)
+    public static Material CreateBridge(GraphicsDevice device, Texture bridge, FogMap fog, bool linearSpace, Dictionary<MaterialPass, bool> depthWrites, TerrainOverlay? overlay = null)
     {
         IComputeColor color = new ComputeTextureColor(bridge, Uv0, Vector2.One, Vector2.Zero)
         {
@@ -176,9 +179,9 @@ internal static class TerrainMaterials
     /// Fog level (red channel, 0..1) replicated to all channels. The reference multiplies in gamma space; in a linear colour space the
     /// factor is squared so a fogged cell (0.5) ends up at the same display brightness ratio.
     /// </summary>
-    private static IComputeColor FogFactor(Texture fog, bool linearSpace)
+    private static IComputeColor FogFactor(FogMap fog, bool linearSpace)
     {
-        var level = new ComputeTextureColor(fog, FogUv, Vector2.One, Vector2.Zero)
+        var level = new ComputeTextureColor(fog.Texture, FogUv, fog.Scale, fog.Offset)
         {
             Filtering = TextureFilter.Linear,
             AddressModeU = TextureAddressMode.Clamp,

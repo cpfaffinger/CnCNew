@@ -84,6 +84,12 @@ public sealed class LiveMission : LiveGame, IMissionObjectEffects
 
     protected override void OnAdvanced(double gameSeconds) => Director.ApplyCameraTo(Camera, gameSeconds);
 
+    public override bool SkyboxShown => Director.SkyboxRequested;
+
+    public override bool BorderShroudShown => Director.BorderShroudEnabled;
+
+    public override bool WeatherShown => Director.WeatherShown;
+
     public static LiveMission Create(GameData data, MissionRun run, Vector2 viewport, Func<string, string>? resolveText = null)
     {
         ArgumentNullException.ThrowIfNull(data);

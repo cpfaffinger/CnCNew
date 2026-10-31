@@ -8,7 +8,8 @@ namespace CnCNew.Client.Stride.Layers.Fx;
 /// </summary>
 internal sealed class FxGeometry : IDisposable
 {
-    public const int DefaultMaxQuads = 32768;
+    /// <summary>The shared buffer holds all effects of a frame, and a heavy snow is 10,000 flakes by itself.</summary>
+    public const int DefaultMaxQuads = 65536;
 
     private readonly FxVertex[] _vertices;
 

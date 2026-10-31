@@ -7,6 +7,7 @@ internal static class WorldLayers
     /// <summary>Draw order is scene order; one line per layer.</summary>
     public static IWorldLayer[] CreateAll() =>
     [
+        new SkyLayer(),
         new TerrainLayer(),
         new ObjectLayer(),
         new FxLayer(),

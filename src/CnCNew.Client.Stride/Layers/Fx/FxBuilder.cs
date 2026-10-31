@@ -7,7 +7,7 @@ using CnCNew.Presentation.Terrain;
 namespace CnCNew.Client.Stride.Layers.Fx;
 
 /// <summary>Camera data the builder needs: eye, view axes (world space), clip planes and the world size of one pixel at unit depth.</summary>
-internal readonly record struct FxView(Vector3 Eye, Vector3 Right, Vector3 Up, Vector3 Forward, float Near, float Far, float WorldPerPixelAtUnitDepth)
+internal readonly record struct FxView(Vector3 Eye, Vector3 Right, Vector3 Up, Vector3 Forward, float Near, float Far, float WorldPerPixelAtUnitDepth, float ViewportHeight)
 {
     public static FxView From(RtsCamera camera)
     {
@@ -22,7 +22,8 @@ internal readonly record struct FxView(Vector3 Eye, Vector3 Right, Vector3 Up, V
             new Vector3(-view.M13, -view.M23, -view.M33),
             camera.Settings.NearPlane,
             camera.FarPlane,
-            2f / (MathF.Abs(projection.M22) * viewportHeight));
+            2f / (MathF.Abs(projection.M22) * viewportHeight),
+            viewportHeight);
     }
 }
 
@@ -83,6 +84,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
     private int[] _sortOrder = new int[1024];
     private bool[] _deferred = new bool[1024];
     private FxView _view;
+    private Vector3[]? _flakes;
     private int _particlesDrawn, _streaks, _tracers, _decals, _skippedDrawable, _skippedSmudge, _skippedUnusable, _skippedShort, _deferredItems;
 
     public int RunCount => _runCount;
@@ -95,7 +97,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
 
     public int QuadCountOf(int run) => _runs[run].Count;
 
-    public void Build(FxFrame frame, in FxView view, in Frustum frustum, IReadOnlyList<ShadowDecal>? shadowDecals = null)
+    public void Build(FxFrame frame, in FxView view, in Frustum frustum, IReadOnlyList<ShadowDecal>? shadowDecals = null, SnowField? snow = null, double seconds = 0)
     {
         geometry.Reset();
         _runCount = 0;
@@ -107,6 +109,7 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
         PrepareBatches(batches);
         EmitDecals(frame.Decals, frustum, frame.Frame);
         if (shadowDecals is not null) EmitShadowDecals(shadowDecals);
+        if (snow is not null) EmitSnow(snow, seconds, frustum);
         EmitUnsortedParticles(frame.Particles.Particles, batches.Length);
         EmitSorted(frame);
         Counts = new FxBuildCounts(_particlesDrawn, _streaks, _tracers, _decals, batches.Length, _runCount, geometry.QuadCount, geometry.DroppedQuads,
@@ -274,6 +277,35 @@ internal sealed class FxBuilder(FxGeometry geometry, TerrainHeightSampler height
             EndItem(material, first, _view.Far, 0);
             _decals++;
         }
+    }
+
+    /// <summary>
+    /// <c>W3DSnowManager::render</c>: a sprite per flake, as the original's point sprites with <c>D3DRS_POINTSCALE_C</c> 1 are: <c>SnowPointSize</c> times the height of the viewport over the
+    /// distance in pixels, within the data's limits. Drawn with the alpha shader before the sorted particles, like <c>DoParticles</c>.
+    /// </summary>
+    private void EmitSnow(SnowField snow, double seconds, in Frustum frustum)
+    {
+        _flakes ??= new Vector3[SnowField.MaxFlakes];
+        var count = snow.Collect(_view.Eye, seconds, frustum, _flakes);
+        if (count == 0) return;
+        var settings = snow.Settings;
+        var material = MaterialId(new FxMaterialKey(settings.Texture, FxBlend.Alpha));
+        var first = geometry.QuadCount;
+        var white = Pack(Vector3.One, 1f);
+        var perPixel = _view.WorldPerPixelAtUnitDepth;
+        var unclamped = settings.PointSize * _view.ViewportHeight * perPixel;
+        for (var index = 0; index < count; index++)
+        {
+            var center = _flakes[index];
+            var depth = Depth(center);
+            if (depth < _view.Near) continue;
+            var quad = geometry.NextQuad();
+            if (quad.IsEmpty) break;
+            var size = Math.Clamp(unclamped, settings.MinPointSize * depth * perPixel, settings.MaxPointSize * depth * perPixel) * 0.5f;
+            WriteQuad(quad, center, _view.Right * size, _view.Up * size, white);
+        }
+
+        EndItem(material, first, _view.Far, 0);
     }
 
     private void SetShadowCorner(ref FxVertex vertex, in ShadowDecal decal, float u, float v, uint color)

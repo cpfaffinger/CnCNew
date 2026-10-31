@@ -53,10 +53,14 @@ internal sealed class TerrainLayer : IWorldLayer
     private RenderServices? _services;
     private LiveGame? _match;
     private bool[] _chunkVisible = [];
+    private byte[] _fogCells = [];
     private byte[] _fogLevels = [];
     private byte[] _fogUpload = [];
     private double _nextFogSample;
     private bool _fogUploaded;
+    private FogMap? _fogMap;
+    private int _borderShroud;
+    private int _borderClear = 255;
     private TerrainOverlay? _overlay;
     private byte[] _cloudSource = [];
     private byte[] _cloudPicture = [];
@@ -82,13 +86,12 @@ internal sealed class TerrainLayer : IWorldLayer
     public string Name => "terrain";
 
     /// <summary>
-    /// Fog of war as an R8 texture, one texel per fog cell over the playable area (0 = shroud, 127 = fogged, 255 = visible). Sample it with
-    /// <c>uv = world.xy * <see cref="FogUvScale"/></c> using linear filtering and clamping; world positions outside the playable area land on
-    /// the edge texel. Valid after <see cref="Attach"/>.
+    /// Fog of war as an R8 texture: one texel per fog cell over the playable area (0 = shroud, 127 = fogged, 255 = visible) inside a ring of one texel that holds the level of the map's
+    /// border, which world positions outside the playable area land on by clamping. Valid after <see cref="Attach"/>.
     /// </summary>
     public Texture FogTexture { get; private set; } = null!;
 
-    /// <summary>Multiply a world (x, y) position by this to get the fog texture coordinate.</summary>
+    /// <summary>Multiply a world (x, y) position by this to get the fog coordinate; 0 to 1 over the playable area, before the ring of the texture.</summary>
     public System.Numerics.Vector2 FogUvScale { get; private set; }
 
     /// <summary>The minimap as an RGBA texture (row 0 = north), composed from terrain, fog, entity dots and the camera footprint.</summary>
@@ -112,11 +115,13 @@ internal sealed class TerrainLayer : IWorldLayer
         FogUvScale = fogScale;
 
         CreateFogTexture(device, match);
+        _borderShroud = match.Environment.BorderShroudLevel;
+        _borderClear = match.Environment.BorderClearLevel;
         CreateMinimapTexture(device, match);
         var atlas = CreateAtlas(device, model, linear);
         var lightTable = linear ? PackedColor.SrgbDecodeTable() : PackedColor.IdentityTable();
         _overlay = CreateOverlay(services, match, linear);
-        var material = TerrainMaterials.CreateTerrain(device, atlas, FogTexture, linear, services.DepthWrites, _overlay);
+        var material = TerrainMaterials.CreateTerrain(device, atlas, _fogMap!, linear, services.DepthWrites, _overlay);
 
         var blendCells = 0;
         var extraCells = 0;
@@ -144,7 +149,7 @@ internal sealed class TerrainLayer : IWorldLayer
             _chunkVisible[i] = true;
         }
 
-        CreateWater(services, match, atlas, linear, fogScale);
+        CreateWater(services, match, linear, fogScale);
         var roadWatch = Stopwatch.StartNew();
         var roads = CreateRoads(services, match, linear, fogScale, lightTable);
         CreateBridges(services, match, linear, fogScale, lightTable);
@@ -238,8 +243,15 @@ internal sealed class TerrainLayer : IWorldLayer
     {
         if (totalSeconds < _nextFogSample) return;
         _nextFogSample = totalSeconds + FogInterval;
-        _match!.Fog.CopyLevels(_fogUpload);
-        if (_revealAll) Array.Fill(_fogUpload, (byte)255);
+        var match = _match!;
+        match.Fog.CopyLevels(_fogCells);
+        if (_revealAll) Array.Fill(_fogCells, (byte)255);
+        // W3DShroud::render: the first row and column of the texture, and what lies beyond the playable area, hold the border's level.
+        var ring = (byte)(_revealAll || !match.BorderShroudShown ? _borderClear : _borderShroud);
+        var (cellsX, cellsY) = (match.Fog.CellsX, match.Fog.CellsY);
+        var stride = cellsX + 2;
+        Array.Fill(_fogUpload, ring);
+        for (var row = 0; row < cellsY; row++) _fogCells.AsSpan(row * cellsX, cellsX).CopyTo(_fogUpload.AsSpan((row + 1) * stride + 1));
         // A dynamic texture has no initial data, so the first sample is always uploaded.
         if (_fogUploaded && _fogUpload.AsSpan().SequenceEqual(_fogLevels)) return;
         FogTexture.SetData(commandList, _fogUpload);
@@ -293,7 +305,7 @@ internal sealed class TerrainLayer : IWorldLayer
             Directory.CreateDirectory(dump);
             PngDump.WriteRgba(Path.Combine(dump, "minimap.png"), match.Minimap.Width, match.Minimap.Height, rgba);
             PngDump.WriteRgba(Path.Combine(dump, "terrain.png"), match.Minimap.Width, match.Minimap.Height, match.Minimap.TerrainRgba.ToArray());
-            PngDump.WriteGray(Path.Combine(dump, "fog.png"), match.Fog.CellsX, match.Fog.CellsY, _fogLevels);
+            PngDump.WriteGray(Path.Combine(dump, "fog.png"), match.Fog.CellsX + 2, match.Fog.CellsY + 2, _fogLevels);
         }
         _lastFootprint = footprint;
         _nextMinimap = totalSeconds + MinimapInterval;
@@ -302,11 +314,14 @@ internal sealed class TerrainLayer : IWorldLayer
 
     private void CreateFogTexture(GraphicsDevice device, LiveGame match)
     {
-        var cells = match.Fog.CellsX * match.Fog.CellsY;
+        var (width, height) = (match.Fog.CellsX + 2, match.Fog.CellsY + 2);
+        var cells = width * height;
+        _fogCells = new byte[match.Fog.CellsX * match.Fog.CellsY];
         _fogLevels = new byte[cells];
         _fogUpload = new byte[cells];
-        FogTexture = Texture.New2D(device, match.Fog.CellsX, match.Fog.CellsY, PixelFormat.R8_UNorm, TextureFlags.ShaderResource, 1, GraphicsResourceUsage.Dynamic);
+        FogTexture = Texture.New2D(device, width, height, PixelFormat.R8_UNorm, TextureFlags.ShaderResource, 1, GraphicsResourceUsage.Dynamic);
         Track(FogTexture, cells);
+        _fogMap = new FogMap(FogTexture, new Vector2(match.Fog.CellsX / (float)width, match.Fog.CellsY / (float)height), new Vector2(1f / width, 1f / height));
     }
 
     private void CreateMinimapTexture(GraphicsDevice device, LiveGame match)
@@ -342,7 +357,7 @@ internal sealed class TerrainLayer : IWorldLayer
         }
     }
 
-    private void CreateWater(RenderServices services, LiveGame match, Texture atlas, bool linear, System.Numerics.Vector2 fogScale)
+    private void CreateWater(RenderServices services, LiveGame match, bool linear, System.Numerics.Vector2 fogScale)
     {
         var model = match.TerrainModel;
         if (model.Water.IsDefaultOrEmpty) return;
@@ -355,7 +370,7 @@ internal sealed class TerrainLayer : IWorldLayer
             if (!materials.TryGetValue(batch.Texture, out var material))
             {
                 var texture = services.Textures.Resolve(new W3dTextureReference(batch.Texture));
-                material = TerrainMaterials.CreateWater(services.GraphicsDevice, texture, FogTexture, linear, additive, services.DepthWrites);
+                material = TerrainMaterials.CreateWater(services.GraphicsDevice, texture, _fogMap!, linear, additive, services.DepthWrites);
                 materials.Add(batch.Texture, material);
             }
 
@@ -399,7 +414,7 @@ internal sealed class TerrainLayer : IWorldLayer
                 if (!W3dTexturePathResolver.Resolve(batch.Texture, services.Content.Exists).Found)
                     throw new InvalidDataException($"Road '{batch.Template}': texture '{batch.Texture}' is not in the content.");
                 var texture = services.Textures.Resolve(new W3dTextureReference(batch.Texture));
-                material = TerrainMaterials.CreateRoad(device, texture, FogTexture, linear, services.DepthWrites, _overlay);
+                material = TerrainMaterials.CreateRoad(device, texture, _fogMap!, linear, services.DepthWrites, _overlay);
                 services.TransparentOrder.Layers[material.Passes[0]] = StackedBackToFrontSortMode.RoadLayer;
                 materials.Add(batch.Texture, material);
             }
@@ -445,7 +460,7 @@ internal sealed class TerrainLayer : IWorldLayer
                 var mesh = BridgeMeshBuilder.Build(bridge.TemplateName, state, art, start, end, lighting);
                 if (!materials.TryGetValue(art.Texture, out var material))
                 {
-                    material = TerrainMaterials.CreateBridge(device, services.Textures.Resolve(new W3dTextureReference(art.Texture)), FogTexture, linear, services.DepthWrites, _overlay);
+                    material = TerrainMaterials.CreateBridge(device, services.Textures.Resolve(new W3dTextureReference(art.Texture)), _fogMap!, linear, services.DepthWrites, _overlay);
                     materials.Add(art.Texture, material);
                 }
 

@@ -1,5 +1,7 @@
 using System.Collections.Immutable;
 using System.Numerics;
+using CnCNew.Presentation.Camera;
+using CnCNew.Presentation.Fx;
 using CnCNew.Presentation.Shadows;
 using CnCNew.Presentation.Terrain;
 
@@ -25,6 +27,8 @@ internal static class ShadowTests
         harness.Run("A decal turns with its object; offset X goes forward, offset Y to the right", DecalPlace);
         harness.Run("A decal without a texture is shadow.tga, with one its name and .tga", DecalTexture);
         harness.Run("The clouds slide with game time and a picture shifts by parts of a texel", CloudShift);
+        harness.Run("Weather and sky of a map.ini over the base data; an unknown key of Weather is an error", MapIni);
+        harness.Run("Snow: flakes in a box around the camera, the same picture for the same time, falling, culled by leaf", Snow);
         return harness.Failures;
     }
 
@@ -214,6 +218,57 @@ internal static class ShadowTests
         TestHarness.Near(255, target[3], 1, "alpha is shifted like the rest");
         TerrainClouds.Shift(source, 2, 1, -0.5f, 0f, target);
         TestHarness.Assert(target[0] == 200, "a negative offset wraps");
+    }
+
+    private static readonly SnowSettings BaseSnow = new(false, "ExSnowFlake.tga", 200f, 1f, 0.05f, 0.03f, 5f, 4f, 1f, 0f, 64f);
+
+    private static void MapIni()
+    {
+        var (snow, sky) = MapEnvironment.ApplyMapIni("""
+            AIData
+              AICrushesInfantry = No ; not ours
+            End
+            Weather
+              SnowEnabled = yes ; on
+              SnowTexture = ExSnowFlake1.tga
+              SnowBoxDimensions = 100
+              SnowPointSprites = yes
+            End
+            WaterTransparency
+              SkyboxTextureN = TSDusky_N.tga
+              TransparentWaterDepth = 3.0
+            End
+            """, BaseSnow);
+        TestHarness.Assert(snow.Enabled && snow.Texture == "ExSnowFlake1.tga", "the map's weather");
+        TestHarness.Near(100f, snow.BoxDimensions, 1e-5, "the map's box");
+        TestHarness.Near(4f, snow.Velocity, 1e-5, "what the map leaves alone stays");
+        TestHarness.Assert(sky.Replace("TSMorningN.tga") == "TSDusky_N.tga" && sky.Replace("TSMorningE.tga") == "TSMorningE.tga", "the map's sky");
+        TestHarness.Throws<InvalidDataException>(() => MapEnvironment.ApplyMapIni(string.Join((char)10, "Weather", " SnowColour = 1", "End"), BaseSnow), "an unknown key");
+    }
+
+    private static void Snow()
+    {
+        var settings = BaseSnow with { Enabled = true, BoxDimensions = 64f };
+        var field = new SnowField(settings);
+        var camera = Matrix4x4.CreateLookAt(new Vector3(100, 100, 200), new Vector3(100, 110, 0), Vector3.UnitZ) * Matrix4x4.CreatePerspectiveFieldOfView(1f, 1.5f, 1f, 2000f);
+        var view = Frustum.FromViewProjection(camera);
+        var flakes = new Vector3[SnowField.MaxFlakes];
+        var count = field.Collect(new Vector3(100, 100, 200), 1.0, view, flakes);
+        TestHarness.Assert(count > 0 && count <= 64 * 64, $"a box of 64 by 64 flakes at most, got {count}");
+        for (var index = 0; index < count; index++)
+        {
+            TestHarness.Assert(flakes[index].Z <= 200f + 32f + 1e-3f && flakes[index].Z >= 200f - 32f - 1e-3f, "inside the box");
+            TestHarness.Assert(MathF.Abs(flakes[index].X - 100f) < 32f + settings.Amplitude + 2f, "around the camera");
+        }
+
+        var again = new Vector3[SnowField.MaxFlakes];
+        TestHarness.Assert(new SnowField(settings).Collect(new Vector3(100, 100, 200), 1.0, view, again) == count && flakes.AsSpan(0, count).SequenceEqual(again.AsSpan(0, count)), "a function of time");
+        var later = new Vector3[SnowField.MaxFlakes];
+        field.Collect(new Vector3(100, 100, 200), 1.5, view, later);
+        var fallen = (flakes[0].Z - later[0].Z + 64f) % 64f;
+        TestHarness.Near(2f, fallen, 1e-2, "half a second at four units a second");
+        var away = Frustum.FromViewProjection(Matrix4x4.CreateLookAt(new Vector3(100, 100, 200), new Vector3(100, 110, 400), Vector3.UnitZ) * Matrix4x4.CreatePerspectiveFieldOfView(0.05f, 1.5f, 1f, 3f));
+        TestHarness.Assert(field.Collect(new Vector3(100, 100, 200), 1.0, away, flakes) < count, "fewer in a narrow view");
     }
 
     private static void DecalTexture()
