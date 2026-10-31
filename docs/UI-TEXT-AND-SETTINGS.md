@@ -112,7 +112,7 @@ rectangles reaching beyond the page, unknown status names and foreign keys are `
 
 ## Settings
 
-`GameSettings` (schema 2 since Phase 38; schema 1 migrates) with sub-records and value ranges:
+`GameSettings` (schema 3 since Phase 53: `general.tickRate`, 60 or 120 Hz, D-22, and the modern skin as the default of a first start, D-21; schemas 1 and 2 migrate, and a file that names a skin keeps it) with sub-records and value ranges:
 
 | JSON path | Type, range | Default |
 |---|---|---|

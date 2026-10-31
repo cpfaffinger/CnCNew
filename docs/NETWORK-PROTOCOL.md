@@ -1035,7 +1035,7 @@ The room's:
 - What it is and is not: a way to keep a room among people who know a word. The server sees the verifier and could enter the room itself; a verifier is as strong
   as the password it was made from (somebody who has the verifier can try passwords against it without the server).
 - **A player key** is a permanent key pair a client may have (ECDSA P-256; the window client keeps it in `player-key.pem` beside its settings and makes it on the
-  first join, `--no-player-key` states none). It is what lets a server know "the same player as before" without an account - and keep that player out. The hello
+  first use, and states it only when asked to: `--use-player-key` or `--player-key FILE`, D-25). It is what lets a server know "the same player as before" without an account - and keep that player out. The hello
   states the public half. The server then sends the same challenge as for a password, and the answer carries a **signature over a label, the nonce and the room's
   name**: a stated key is a proved one, and an answer somebody recorded fits no other challenge. A wrong or missing signature is rejected with `BadIdentity` and
   counted. The server knows the member by the key's **fingerprint** (SHA-256 of the public half), logs it with the join, refuses a fingerprint on its ban list with

@@ -54,6 +54,11 @@ public sealed class SettingsStore
             if (root["audio"] is JsonObject audio && !audio.ContainsKey("device")) audio["device"] = "";
             return root;
         }),
+        new SettingsMigration(2, "general.tickRate added (60 Hz, the rate every game had)", root =>
+        {
+            if (root["general"] is JsonObject general && !general.ContainsKey("tickRate")) general["tickRate"] = 60;
+            return root;
+        }),
     ];
 
     private readonly ImmutableArray<SettingsMigration> _migrations;
@@ -188,6 +193,7 @@ public static class SettingsJson
             writer.WriteBoolean("showFps", settings.General.ShowFps);
             writer.WriteBoolean("pauseOnFocusLoss", settings.General.PauseOnFocusLoss);
             writer.WriteString("defaultAiDifficulty", Name(settings.General.DefaultAiDifficulty));
+            writer.WriteNumber("tickRate", settings.General.TickRate);
             writer.WriteEndObject();
 
             writer.WriteStartObject("skirmish");
@@ -218,7 +224,7 @@ public static class SettingsJson
         var audio = reader.Section(root, "audio", ["master", "music", "effects", "voice", "ambient", "device"]);
         var controls = reader.Section(root, "controls", ["scrollSpeed", "cameraRotateSpeed", "edgeScrolling", "alternateMouse"]);
         var accessibility = reader.Section(root, "accessibility", ["highContrastUi", "uiTextScalePercent", "colorBlindSafeTeamColors"]);
-        var general = reader.Section(root, "general", ["language", "showFps", "pauseOnFocusLoss", "defaultAiDifficulty"]);
+        var general = reader.Section(root, "general", ["language", "showFps", "pauseOnFocusLoss", "defaultAiDifficulty", "tickRate"]);
         var skirmish = reader.Section(root, "skirmish", ["lastMap", "lastFactions", "lastStartMoney"]);
 
         return new GameSettings(
@@ -250,7 +256,8 @@ public static class SettingsJson
                 reader.String(general, "general.language", d.General.Language)!,
                 reader.Bool(general, "general.showFps", d.General.ShowFps),
                 reader.Bool(general, "general.pauseOnFocusLoss", d.General.PauseOnFocusLoss),
-                reader.Enum(general, "general.defaultAiDifficulty", d.General.DefaultAiDifficulty)),
+                reader.Enum(general, "general.defaultAiDifficulty", d.General.DefaultAiDifficulty),
+                reader.Int(general, "general.tickRate", d.General.TickRate)),
             new SkirmishMemory(
                 reader.String(skirmish, "skirmish.lastMap", d.Skirmish.LastMap, nullable: true),
                 reader.StringArray(skirmish, "skirmish.lastFactions", d.Skirmish.LastFactions),

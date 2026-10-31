@@ -642,7 +642,7 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
             slots.Add(slot < current.Slots.Length ? current.Slots[slot] with { StartPosition = slot }
                 : new MatchSlotDescription(MatchSlotKind.Human, MatchSetup.RandomFaction, 0, _colorCount == 0 ? -1 : slot % _colorCount, slot));
         var standard = SkirmishMatchOptions.StandardAt(Shell.Data.Rate);
-        var maxTicks = Shell.Network is { MatchSeconds: > 0 } network ? Shell.Data.Rate.Time.WholeSecondsToTicks(network.MatchSeconds) : standard.MaxTicks;
+        var maxTicks = Shell.Network is { MatchSeconds: > 0 } network ? Shell.Data.Rate.Time.WholeSecondsToTicks(network.MatchSeconds) : SkirmishMatchOptions.NoTimeLimit;
         return new RoomSettings(Shell.Data.Rate.TicksPerSecond, mapPath, fingerprint, maxTicks, current.StartMoney > 0 ? current.StartMoney : standard.StartMoney, standard.GraceTicks,
             standard.SciencePointInterval, slots.MoveToImmutable());
     }

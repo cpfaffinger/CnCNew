@@ -22,6 +22,9 @@ namespace CnCNew.Simulation.Testing;
 /// <param name="SciencePointInterval">Every this many logic frames of the original the system credits each living player one science point (0: never); stand-in for the rank system, which does not exist.</param>
 public sealed record SkirmishMatchOptions(uint WorldSeed, uint AiSeed, long MaxTicks, long GraceTicks, int CheckpointInterval, int StartMoney, int SciencePointInterval)
 {
+    /// <summary>The budget of a match a person plays: no limit that a match reaches (D-8; two years at 120 Hz). A match of computer players keeps a budget.</summary>
+    public const long NoTimeLimit = 1L << 40;
+
     /// <summary>The standard match: a budget of 108,000 ticks (one hour of game time at 30 Hz), 10 s of grace, a science point every 90 s.</summary>
     public static SkirmishMatchOptions Standard { get; } = new(0xC0FFEE06, 0x5EED0006, 108_000, 300, 1_000, 10_000, 2_700);
 

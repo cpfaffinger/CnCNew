@@ -70,6 +70,12 @@ public static class SettingsValidator
         }
         general = general with { DefaultAiDifficulty = Enum(issues, "general.defaultAiDifficulty", general.DefaultAiDifficulty, defaults.General.DefaultAiDifficulty) };
 
+        if (general.TickRate is not (60 or 120))
+        {
+            issues.Add(new SettingsIssue("general.tickRate", "invalid-value", $"{general.TickRate} Hz is not 60 or 120 Hz; using {defaults.General.TickRate} Hz."));
+            general = general with { TickRate = defaults.General.TickRate };
+        }
+
         var skirmish = settings.Skirmish ?? Replace(issues, "skirmish", defaults.Skirmish);
         if (skirmish.LastMap is { } map && !IsVirtualPath(map))
         {

@@ -23,7 +23,7 @@ public sealed class MoreOptionsScreen : ShellScreen
     /// <summary>The rows of choices in their order (the suffix of the label's and the combo box's name, and the label's words).</summary>
     public static readonly ImmutableArray<(string Row, string Label)> Rows =
     [
-        ("Skin", "Interface skin"), ("DisplayMode", "Display mode"), ("Aspect", "Wide-screen view"), ("TextScale", "Text size"), ("AudioDevice", "Sound device"),
+        ("Skin", "Interface skin"), ("DisplayMode", "Display mode"), ("Aspect", "Wide-screen view"), ("TextScale", "Text size"), ("AudioDevice", "Sound device"), ("TickRate", "Simulation rate"),
     ];
 
     public static readonly ImmutableArray<(UiSkinName Value, string Text)> SkinChoices = [(UiSkinName.Original, "Original"), (UiSkinName.Modern, "Modern")];
@@ -33,6 +33,9 @@ public sealed class MoreOptionsScreen : ShellScreen
 
     public static readonly ImmutableArray<(AspectHandling Value, string Text)> AspectChoices =
         [(AspectHandling.KeepHorizontal, "As the original"), (AspectHandling.KeepVertical, "Wider (more to the sides)")];
+
+    /// <summary>D-22: 60 Hz is the product's, 120 Hz is offered; the game loads its data for one rate, so a change counts from the next start.</summary>
+    public static readonly ImmutableArray<(int Value, string Text)> TickRateChoices = [(60, "60 Hz"), (120, "120 Hz (from the next start)")];
 
     public const string DefaultDevice = "System default";
 
@@ -59,6 +62,7 @@ public sealed class MoreOptionsScreen : ShellScreen
         Fill("Aspect", AspectChoices.Select(choice => choice.Text));
         Fill("TextScale", SettingsValidator.TextScales.Select(percent => $"{percent} %"));
         Fill("AudioDevice", _devices);
+        Fill("TickRate", TickRateChoices.Select(choice => choice.Text));
         FillHotkeys();
         Refresh();
     }
@@ -126,6 +130,7 @@ public sealed class MoreOptionsScreen : ShellScreen
         W("ComboTextScale").SetComboSelection(SettingsValidator.TextScales.IndexOf(_working.Accessibility.UiTextScalePercent));
         // A device of the settings that is not there any more is shown as the default, which is what plays.
         W("ComboAudioDevice").SetComboSelection(Math.Max(0, _devices.IndexOf(_working.Audio.Device)));
+        W("ComboTickRate").SetComboSelection(Math.Max(0, TickRateChoices.Select(choice => choice.Value).ToList().IndexOf(_working.General.TickRate)));
     }
 
     private void OnSystem(UiWindowTree tree, UiEvent e)
@@ -148,6 +153,7 @@ public sealed class MoreOptionsScreen : ShellScreen
         else if (source == Name("ComboAspect") && index < AspectChoices.Length) _working = _working with { Display = _working.Display with { Aspect = AspectChoices[index].Value } };
         else if (source == Name("ComboTextScale") && index < SettingsValidator.TextScales.Length)
             _working = _working with { Accessibility = _working.Accessibility with { UiTextScalePercent = SettingsValidator.TextScales[index] } };
+        else if (source == Name("ComboTickRate") && index < TickRateChoices.Length) _working = _working with { General = _working.General with { TickRate = TickRateChoices[index].Value } };
         else if (source == Name("ComboAudioDevice") && index < _devices.Length) _working = _working with { Audio = _working.Audio with { Device = index == 0 ? "" : _devices[index] } };
     }
 

@@ -79,7 +79,7 @@ public sealed class ShellNetwork : IShellNetwork
 
     /// <param name="definitionFingerprint">The fingerprint of the game data this game runs (<c>GameData.Fingerprint</c>): what a room compares.</param>
     /// <param name="directory">Where the four files live; created when missing.</param>
-    public ShellNetwork(string definitionFingerprint, string directory, int port = StandardPort, bool usePlayerKey = true)
+    public ShellNetwork(string definitionFingerprint, string directory, int port = StandardPort, bool usePlayerKey = false)
     {
         _definitions = definitionFingerprint;
         _directory = directory;

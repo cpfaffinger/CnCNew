@@ -57,15 +57,15 @@ if (joinServer is not null)
         ServerKey = GetArgument(args, "--server-key") ?? string.Empty,
         KnownServersFile = GetArgument(args, "--known-servers") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CnCNew", "known-servers.json"),
         RoomPassword = GetArgument(args, "--room-password") ?? string.Empty,
-        // --player-key FILE: the permanent key of this player (made on the first use; by default player-key.pem under %LOCALAPPDATA%\\CnCNew). --no-player-key: state none -
-        // a server that requires one will then turn this client away.
-        PlayerKeyFile = args.Contains("--no-player-key") ? string.Empty : GetArgument(args, "--player-key") ?? CnCNew.Game.Lockstep.PlayerKeyFile.DefaultPath,
+        // Anonymous unless asked for (D-25): --player-key FILE states the permanent key of this player, made on the first use; --use-player-key takes the default file,
+        // player-key.pem under %LOCALAPPDATA%\\CnCNew. A server that requires a key turns a client without one away and says so.
+        PlayerKeyFile = GetArgument(args, "--player-key") ?? (args.Contains("--use-player-key") ? CnCNew.Game.Lockstep.PlayerKeyFile.DefaultPath : string.Empty),
     };
     matchMap = JoinOptions.Placeholder;
 }
 // The menus' way to a server (docs/GAME-SHELL.md sections 15 and 16). --net-dir DIR: where the game keeps the servers it met, the player's key, the key it shows when
 // it hosts and the addresses typed before (default: %LOCALAPPDATA%\CnCNew, the files --join uses). --net-port N: the port "Host game" listens on and an address
-// without a port means (27960). --no-player-key: state no player key. --net-match-seconds N: a host of this game sets matches of that length (a check).
+// without a port means (27960). --use-player-key: state the player's key (anonymous without it). --net-match-seconds N: a host of this game sets matches of that length (a check).
 // --shell-script FILE [--shell-var NAME=VALUE ...] [--shell-seconds N]: a person at the menus as a file (CnCNew.Game.Shell.ShellScript); the run ends when the script
 // is through (exit code 0), a step failed or the N seconds of real time are over (exit code 1). The device's mouse and keyboard are ignored while a script runs.
 var shellScriptPath = GetArgument(args, "--shell-script");
@@ -83,7 +83,7 @@ CnCNewGame.Shell = new ShellRunOptions(
     GetArgument(args, "--net-dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CnCNew"),
     int.Parse(GetArgument(args, "--net-port") ?? CnCNew.Game.Shell.ShellNetwork.StandardPort.ToString(System.Globalization.CultureInfo.InvariantCulture), System.Globalization.CultureInfo.InvariantCulture),
     int.Parse(GetArgument(args, "--net-match-seconds") ?? "0", System.Globalization.CultureInfo.InvariantCulture),
-    !args.Contains("--no-player-key"), shellScript, double.Parse(GetArgument(args, "--shell-seconds") ?? "600", System.Globalization.CultureInfo.InvariantCulture),
+    args.Contains("--use-player-key"), shellScript, double.Parse(GetArgument(args, "--shell-seconds") ?? "600", System.Globalization.CultureInfo.InvariantCulture),
     // --settings-dir DIR: where the menus keep the options, the last map and the savegames (default: %APPDATA%\CnCNew). A check names a directory of its run.
     GetArgument(args, "--settings-dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew"));
 CnCNew.Client.Stride.ClientRuntime.NetDiagnosticsDirectory = Path.Combine(CnCNewGame.Shell.NetDirectory, "diagnostics");
@@ -103,11 +103,11 @@ CnCNew.Client.Stride.ClientRuntime.NetStatsTrace = args.Contains("--net-stats-tr
 var inputScriptPath = GetArgument(args, "--input-script");
 CnCNew.Client.Stride.ClientRuntime.InputDelayTicks = int.Parse(GetArgument(args, "--input-delay-ticks") ?? "0", System.Globalization.CultureInfo.InvariantCulture);
 if (CnCNew.Client.Stride.ClientRuntime.InputDelayTicks is < 0 or > 600) throw new ArgumentException("--input-delay-ticks expects 0 to 600.");
-// --tick-rate N: the simulation rate of the session (30, 60 or 120 Hz; the default is the game layer's, 30 Hz until the product rate changes). Everything shown and heard
-// lasts the same game time at every rate; an unsupported rate is refused by the simulation's own message.
-var tickRate = GetArgument(args, "--tick-rate") is { } rateText
-    ? CnCNew.Simulation.Time.SimulationRate.FromTicksPerSecond(int.Parse(rateText, System.Globalization.CultureInfo.InvariantCulture))
-    : GameData.DefaultSessionRate;
+// --tick-rate N: the simulation rate of the session (30, 60 or 120 Hz). Without it the player's choice in More options, 60 or 120 Hz. Everything shown and heard lasts the
+// same game time at every rate; an unsupported rate is refused by the simulation's own message.
+var tickRate = CnCNew.Simulation.Time.SimulationRate.FromTicksPerSecond(GetArgument(args, "--tick-rate") is { } rateText
+    ? int.Parse(rateText, System.Globalization.CultureInfo.InvariantCulture)
+    : new CnCNew.Ui.Settings.SettingsStore(GetArgument(args, "--settings-dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CnCNew")).Load().Settings.General.TickRate);
 // --rules product|original|fixes|NAME[,NAME...]: the rules of the sessions (docs/GGC-FIXES.md): the product's by default; original tells a defect of the patch from one
 // of the port. The choice is part of the definition fingerprint - a server or a save made with other rules is refused.
 CnCNewGame.Rules = GetArgument(args, "--rules") is { } rulesText ? CnCNew.Simulation.Rules.RuleProfile.Parse(rulesText) : CnCNew.Simulation.Rules.RuleProfile.Product;
@@ -673,7 +673,9 @@ internal sealed class CnCNewGame(
             Window.Title = $"CnCNew — {scenario.Name}: {scenario.Title}";
             return;
         }
-        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, SkirmishMatchOptions.StandardAt(data.Rate))
+        // A person plays until the match is decided (D-8); a match of computer players keeps its budget.
+        var budget = options.AutoPlay || options.Spectate ? SkirmishMatchOptions.StandardAt(data.Rate) : SkirmishMatchOptions.StandardAt(data.Rate) with { MaxTicks = SkirmishMatchOptions.NoTimeLimit };
+        var setup = new MatchSetup(mapPath, options.Faction, options.Opponents, budget)
         {
             Seed = options.Seed, AutoPlay = options.AutoPlay, Spectator = options.Spectate, Ai = options.AiSlots(options.Opponents.Length + 1),
         };

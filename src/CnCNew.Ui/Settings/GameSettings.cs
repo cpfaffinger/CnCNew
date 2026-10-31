@@ -36,7 +36,7 @@ public enum UiSkinName { Original, Modern }
 /// <summary>Skirmish AI difficulty of the original (<c>GameDifficulty</c>: easy, normal, hard).</summary>
 public enum AiDifficulty { Easy, Medium, Hard }
 
-public sealed record DisplaySettings(DisplayMode Mode, int Width, int Height, bool VSync, UiScaleMode UiScale, AspectHandling Aspect, UiSkinName Skin = UiSkinName.Original);
+public sealed record DisplaySettings(DisplayMode Mode, int Width, int Height, bool VSync, UiScaleMode UiScale, AspectHandling Aspect, UiSkinName Skin = UiSkinName.Modern);
 
 /// <summary>Linear volumes from 0 (silent) to 1 (full).</summary>
 /// <param name="Device">The name of the sound device to play on, as the system lists it; empty is the system's default device.</param>
@@ -50,7 +50,8 @@ public sealed record ControlSettings(float ScrollSpeed, float CameraRotateSpeed,
 /// <param name="UiTextScalePercent">100, 125 or 150.</param>
 public sealed record AccessibilitySettings(bool HighContrastUi, int UiTextScalePercent, bool ColorBlindSafeTeamColors);
 
-public sealed record GeneralSettings(string Language, bool ShowFps, bool PauseOnFocusLoss, AiDifficulty DefaultAiDifficulty);
+/// <param name="TickRate">The simulation rate of this game, 60 or 120 Hz, from its next start (D-22): a match at a server is played by those of one rate.</param>
+public sealed record GeneralSettings(string Language, bool ShowFps, bool PauseOnFocusLoss, AiDifficulty DefaultAiDifficulty, int TickRate = 60);
 
 /// <summary>What the skirmish setup screen remembers between sessions.</summary>
 /// <param name="LastMap">Virtual path of the last map (for example <c>Maps/Alpine Assault/Alpine Assault.map</c>), or <c>null</c>.</param>
@@ -88,7 +89,7 @@ public sealed record GameSettings(
     SkirmishMemory Skirmish)
 {
     /// <summary>Schema version written to the settings file.</summary>
-    public const int CurrentVersion = 2;
+    public const int CurrentVersion = 3;
 
     /// <summary>
     /// First-run values. Volumes follow the retail <c>AudioSettings.ini</c> defaults (sound 80 %, speech 70 %, music

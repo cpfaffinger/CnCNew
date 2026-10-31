@@ -92,6 +92,7 @@ internal static class NetHudTests
         public string? NameOf(uint connectionId) => connectionId switch { 7 => "Alice", 8 => "Bob", 9 => "Carol", _ => null };
         public string? NameOfPlayer(int player) => player switch { 1 => "Alice", 2 => "Bob", 3 => "Carol", _ => null };
         public void SendChat(string text, bool alliesOnly) => Sent.Add((text, alliesOnly));
+        public bool HasAllies { get; set; } = true;
     }
 
     private static (NetHud Hud, Source Source, List<string> Notices) New()

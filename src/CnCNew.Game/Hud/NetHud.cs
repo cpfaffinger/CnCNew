@@ -37,6 +37,8 @@ public interface INetMatchSource
     /// <summary>The name of whoever sits (or sat) in a player's seat.</summary>
     string? NameOfPlayer(int player);
     void SendChat(string text, bool alliesOnly);
+    /// <summary>A seat in a team with another seat: whoever else a line to the allies reaches.</summary>
+    bool HasAllies { get; }
     /// <summary>Real time in milliseconds, for the countdowns between two messages of the server.</summary>
     long NowMs { get; }
 }
@@ -120,6 +122,7 @@ public sealed class NetHud
                 if (text.Length > 0)
                 {
                     _source.SendChat(text, ChatToAllies);
+                    if (ChatToAllies && !_source.Watching && !_source.HasAllies) Notice("You have no allies: nobody else reads this line.");
                     ChatSent++;
                 }
                 ChatOpen = false;
@@ -345,4 +348,15 @@ public sealed class LiveMatchNetSource(LiveMatch match) : INetMatchSource
     }
 
     public void SendChat(string text, bool alliesOnly) => _client.SendChat(text, alliesOnly);
+
+    public bool HasAllies
+    {
+        get
+        {
+            var seat = _members.Where(member => member.ConnectionId == _client.ConnectionId).Select(member => member.Slot).FirstOrDefault(-1);
+            if (seat < 0 || seat >= _settings.Slots.Length || _settings.Slots[seat].Team <= 0) return false;
+            var team = _settings.Slots[seat].Team;
+            return _settings.Slots.Where((slot, index) => index != seat && slot.Team == team).Any();
+        }
+    }
 }

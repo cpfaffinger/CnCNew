@@ -93,7 +93,7 @@ public static class SkinTests
             "the original skin draws the shipped layout as it is");
         var options = UiScaleOptions.Original with { Mode = UiScaleMode.Uniform, TextScale = 1.25m };
         Check(UiSkin.Original.ShellScale(options) == options && UiSkin.Original.HudScale(options) == options, "and lays it out as before skins existed");
-        Check(UiSkin.For(UiSkinName.Original) == UiSkin.Original && GameSettings.Default.Display.Skin == UiSkinName.Original, "the original is the default (D-21)");
+        Check(UiSkin.For(UiSkinName.Original) == UiSkin.Original && GameSettings.Default.Display.Skin == UiSkinName.Modern, "the modern skin is the default (D-21)");
     }
 
     private static void SkinsParseByNameAndRefuseOthers()
