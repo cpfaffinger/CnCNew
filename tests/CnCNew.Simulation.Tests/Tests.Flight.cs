@@ -419,6 +419,7 @@ static partial class Tests
           End
         End
         Object ScriptBridge
+          IsBridge = Yes
           KindOf = STRUCTURE IMMOBILE BRIDGE
           Geometry = BOX
           GeometryMajorRadius = 20.0

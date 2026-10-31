@@ -494,6 +494,14 @@ run.Test("Structures: a moving locomotive kills what is on its track", Tests.Str
 run.Test("Structures: demo traps go off for enemies, on command and when destroyed", Tests.StructuresDemoTrapsGoOffForEnemiesOnly);
 run.Test("Structures: mines detonate one virtual mine at a time and regenerate", Tests.StructuresMinesDetonateOnceAndRegenerate);
 run.Test("Structures: bridges, towers and scaffolds", Tests.StructuresBridgesTowersAndScaffolds);
+run.Test("Bridges (F-20): a pair of map points is a bridge with an object, a deck and a height", Tests.BridgesAreBuiltFromTheMapPoints);
+run.Test("Bridges (F-20): the layer's cells, and paths over the deck, off it and under it", Tests.BridgeLayerCellsAndPaths);
+run.Test("Bridges (F-20): a unit crosses on the deck in the same frames at 30, 60 and 120 Hz, and a save in the middle of the crossing goes on identically", Tests.UnitsCrossTheDeck);
+run.Test("Bridges (F-20): a unit walks under a deck high enough, past one standing on it", Tests.UnitsWalkUnderADeck);
+run.Test("Bridges (F-20): a landmark bridge has towers; a terrain bridge cannot be destroyed", Tests.LandmarkBridgesHaveTowersAndTerrainBridgesLast);
+run.Test("Bridges (F-20): a destroyed bridge closes its layer, kills what is on it, and comes back when healed", Tests.ADestroyedBridgeClosesItsLayer);
+run.Test("Bridges (F-20): behind the original's cut a dozer repairs a bridge under scaffolding", Tests.ScaffoldsRepairABridgeBehindTheCut);
+run.Test("Bridges (F-20): a deck stops a shell and a building, and takes a slave along", Tests.DecksStopShellsAndBuildings);
 run.Test("Structures: OCL updates, dynamic shroud, floating, checkpoints, enemy-near, firestorms", Tests.StructuresWorldEffects);
 run.Test("Structures: weapon bonus beacons and cost modifiers", Tests.StructuresWeaponBonusAndCostModifier);
 run.Test("Structures: a broken dam sends the flood wave", Tests.StructuresDamMakesTheWaveFlood);
@@ -750,6 +758,7 @@ if (contentDirectory is not null) run.Test("Real data: shells, missiles, Chinook
 if (contentDirectory is not null) run.Test("Real data: airfield, Raptor and Comanche (production, take-off, return, landing, reload)", () => Tests.RealAirfieldAndAircraft(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: winged jets fly a square, never below their minimum speed, circle, and the B-52 and helicopters keep their movement", () => Tests.RealWingedFlight(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a squad of Rangers passes a standing Dozer", () => Tests.RealSquadPassesAStandingDozer(contentDirectory));
+if (contentDirectory is not null) run.Test("Real data: a unit crosses a river on the bridge of a skirmish map, and with the bridge down the way is gone", () => Tests.RealDataUnitsCrossABridge(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: structures and world modules spawn, run, die and stay deterministic", () => Tests.RealStructuresAndWorld(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: a player starts with one builder at every rate", () => Tests.RealPlayersStartWithOneBuilder(contentDirectory));
 if (contentDirectory is not null) run.Test("Real data: retail reference match, determinism and snapshot continuation", () => Tests.RealReferenceMatch(contentDirectory));

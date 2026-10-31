@@ -1214,6 +1214,7 @@ static partial class Tests
 
     private const string AiBridgeObject = """
         Object TestBridge
+          IsBridge = Yes
           KindOf = STRUCTURE IMMOBILE BRIDGE LANDMARK_BRIDGE
           Geometry = BOX
           GeometryMajorRadius = 40.0
@@ -1248,12 +1249,11 @@ static partial class Tests
         {
             var map = AiSkirmishMapWithCliffs(Enumerable.Range(0, 40).Select(y => (30, y)));
             var path = new MapObject("*Waypoints/Waypoint", 400m, 200m, 0m, 0m, 0, new MapProperties([new MapProperty("waypointID", MapPropertyType.Int, 100, 0m, string.Empty), Scr.Text("waypointName", "Center2.Far"), Scr.Text("waypointPathLabel1", "Center2")]));
-            return map with { Objects = [..map.Objects, path] };
+            return map with { Objects = [..map.Objects, path, new MapObject("TestBridge", 305m, 200m, 0m, 0m, 0, MapProperties.Empty)] };
         }
         var follow = Scr.Do("SKIRMISH_FOLLOW_APPROACH_PATH", Scr.Team("teamplayer"), Scr.SkirmishPath("Center"), Scr.Bool(false));
         var (session, fixture, terrain, map, library, data) = StartAiVariant(AiDataText(), AiBridgeObject, AiLibraryWithAlphaScripts(AiAfter(60, follow)), Map());
-        Check.That(fixture.Templates.TryGet("TestBridge", out var template), "The fixture has the bridge.");
-        var bridgeId = session.World.RequestSpawn(template.Index, new PlayerId(0), Fixed.FromInt(305), Fixed.FromInt(200), Fixed.Zero, Fixed.Zero);
+        var bridgeId = session.World.Bridges.Single().ObjectId;
         StepFrames(session, 30);
         session.World.Kill(bridgeId);
         StepFrames(session, 90);
@@ -1270,9 +1270,7 @@ static partial class Tests
             $"It stays that way: nobody can repair a bridge ({string.Join(", ", still)}; {keptNow}, was {dozer}).");
 
         // Nothing is queued while the bridge stands: a way that is simply not there is nobody's business.
-        var (whole, wholeFixture, _, _, _, _) = StartAiVariant(AiDataText(), AiBridgeObject, AiLibraryWithAlphaScripts(AiAfter(60, follow)), Map());
-        wholeFixture.Templates.TryGet("TestBridge", out var standing);
-        whole.World.RequestSpawn(standing.Index, new PlayerId(0), Fixed.FromInt(305), Fixed.FromInt(200), Fixed.Zero, Fixed.Zero);
+        var (whole, _, _, _, _, _) = StartAiVariant(AiDataText(), AiBridgeObject, AiLibraryWithAlphaScripts(AiAfter(60, follow)), Map());
         StepFrames(whole, 120);
         Check.That(whole.Engine.AiRepairOf(player).Structures.IsEmpty, "A bridge that stands is not repaired.");
     }

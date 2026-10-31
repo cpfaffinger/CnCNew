@@ -1030,9 +1030,6 @@ static partial class Tests
         link.SetTower(1, towerB);
         Module<BridgeTowerBehavior>(towerA).SetBridge(bridge);
         Module<BridgeTowerBehavior>(towerB).SetBridge(bridge);
-        var onDeck = sw.Spawn("SwWalker", 1, 300, 200);
-        var heavy = sw.Spawn("SwHeavy", 1, 310, 200);
-        var beside = sw.Spawn("SwWalker", 1, 300, 240);
 
         Damage(sw, bridge, 20);
         Check.That(Near(towerA.Body!.Health, 90m) && Near(towerB.Body!.Health, 90m), $"Ten percent damage to the bridge is ten percent of each tower ({towerA.Body!.Health}/{towerB.Body!.Health})."); 
@@ -1045,8 +1042,6 @@ static partial class Tests
         sw.World.Kill(bridge.Id);
         sw.Run(3);
         Check.That(towerA.EffectivelyDead && towerB.EffectivelyDead, "A destroyed bridge kills its towers.");
-        Check.That(onDeck.EffectivelyDead, "Whatever stands on the deck without physics dies.");
-        Check.That(!heavy.EffectivelyDead && !beside.EffectivelyDead, "An object with physics and one beside the deck are left alone.");
         Check.That(sw.Of("SwDebris").Length == debris + 1, "The delay-0 creation list went off at once.");
         sw.Run(40);
         Check.That(sw.Of("SwDebris").Length == debris + 2, "The creation list with a one second delay went off after it, exactly once.");

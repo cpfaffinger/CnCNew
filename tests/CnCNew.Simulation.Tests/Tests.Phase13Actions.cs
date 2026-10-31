@@ -230,12 +230,12 @@ static partial class Tests
 
     public static void ScriptBoobyTrapsAndBridges()
     {
-        // NAMED_SET_BOOBYTRAPPED puts a trap object at the victim's perimeter; BRIDGE_BROKEN is true for one update after the bridge object went to rubble.
+        // NAMED_SET_BOOBYTRAPPED puts a trap object at the victim's perimeter; BRIDGE_BROKEN is true for one update after the bridge object went to rubble, in the phases of the world
+        // (a kill by the scripts themselves lies before TerrainLogic::update, which forgets the change at once).
         var (map, fixture, terrain) = MissionMap([
             Scr.Script("Trap", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("NAMED_SET_BOOBYTRAPPED", Scr.Type("ScriptTrap"), Scr.Unit("Victim")), Scr.Do("TEAM_SET_BOOBYTRAPPED", Scr.Type("ScriptTrap"), Scr.Team("Squad"))], oneShot: true),
             Scr.Script("Watch", [Scr.And(Scr.If("BRIDGE_BROKEN", Scr.Unit("Bridge")))], [Scr.Do("SET_FLAG", Scr.Flag("broken"), Scr.Bool(true))], oneShot: true),
             Scr.Script("Fixed", [Scr.And(Scr.If("BRIDGE_REPAIRED", Scr.Unit("Bridge")))], [Scr.Do("SET_FLAG", Scr.Flag("repaired"), Scr.Bool(true))], oneShot: true),
-            Scr.Script("Blow", [Scr.And(Scr.If("FLAG", Scr.Flag("blow"), Scr.Bool(true)))], [Scr.Do("NAMED_KILL", Scr.Unit("Bridge"))], oneShot: true),
         ], objects: [Placed("AlphaBunker", 200m, 100m, "teamPlayerA", "Victim"), Placed("AlphaSoldier", 100m, 100m, "Squad", "Guard"), Placed("ScriptBridge", 60m, 60m, "", "Bridge")]);
         var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
         Check.That(session.SkippedObjects.IsEmpty, "The fixture instantiates: " + string.Join(",", session.SkippedObjects));
@@ -245,7 +245,7 @@ static partial class Tests
         var victim = NamedIn(session, "Victim")!;
         Check.That(victim.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.Index("BOOBY_TRAPPED")) && NamedIn(session, "Guard")!.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.Index("BOOBY_TRAPPED")), "Both victims are booby-trapped.");
         Check.That(!session.Engine.FlagValue("broken") && !session.Engine.FlagValue("repaired"), "An intact bridge is neither broken nor repaired.");
-        session.Engine.SignalUiInteraction("blow");
+        session.World.Kill(NamedIn(session, "Bridge")!.Id);
         Run(session, session.Frames(4));
         Check.That(session.Engine.FlagValue("broken") && !session.Engine.FlagValue("repaired"), "The killed bridge reads as broken.");
         var restored = MissionSnapshot.Restore(MissionSnapshot.Write(session), fixture.Templates, fixture.Fingerprint, terrain, map);
