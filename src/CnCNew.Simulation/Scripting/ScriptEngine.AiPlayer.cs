@@ -450,11 +450,18 @@ public sealed partial class ScriptEngine
         if (_ai.Count == 0 || AiOfPlayer(entity.Owner) is not { } state) return;
         state.TeamCheckTick = _tick;
         if (entity.Template.IsKindOf("STRUCTURE")) return;
-        // "factory could be null at the start of the game."
-        if (entity.SpawnTick > 0) AiUnitProduced(state, entity);
+        // "factory could be null at the start of the game." Nor does the worker of a hole count as produced: it comes up where the hole lies, and no order waits for it.
+        if (entity.SpawnTick > 0 && !StandsOnAHole(entity)) AiUnitProduced(state, entity);
         // A unit that no team asked for belongs to the player's default team (every object of the reference has a team; recruiting takes from there).
         if (FirstTeamOf(entity.Id.Value) is not null) return;
         if (PlayerById(state.Setup.Player) is { } owner && FindTeamInstance("team" + owner.Name) is { } defaultTeam) defaultTeam.Members.Add(entity.Id.Value);
+    }
+
+    private bool StandsOnAHole(Entity unit)
+    {
+        foreach (var hole in _world.EntitiesOfKind("REBUILD_HOLE").AsSpan())
+            if (hole.X == unit.X && hole.Y == unit.Y) return true;
+        return false;
     }
 
     /// <summary>

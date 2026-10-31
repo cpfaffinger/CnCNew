@@ -532,10 +532,14 @@ public sealed class RebuildHoleBehavior(RebuildHoleBehaviorData data) : SimModul
     private void StartWorker(IWorldServices world, Entity worker, ref Entity? reconstructing)
     {
         _workerOnItsWay = false;
-        reconstructing ??= world.Reconstruct(Entity, worker, _origin);
+        if (reconstructing is null) reconstructing = world.Reconstruct(Entity, worker, _origin);
+        else
+        {
+            // "If one does, have construction resume": the site is this worker's now.
+            reconstructing.BuilderId = worker.Id;
+            CrateModules.AiOf(worker)?.OrderConstruct(world, reconstructing);
+        }
         _reconstructing = reconstructing.Id;
-        if (world.FindEntity(_reconstructing) is { BuilderId.IsValid: false } site) site.BuilderId = worker.Id;
-        if (CrateModules.AiOf(worker) is { } ai) ai.OrderConstruct(world, reconstructing);
         worker.Status |= 1UL << UnselectableBit;
         Entity.Status |= 1UL << MaskedBit;
         world.MarkDirty(worker);

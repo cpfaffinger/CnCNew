@@ -1191,6 +1191,19 @@ static partial class Tests
             Check.That(!session.World.Entities.Any(entity => entity.Template.Name is "AlphaHole" or "AlphaWorker"), $"{rate}: hole and worker are gone.");
         }
 
+        // A worker that falls: the wait starts over, the next one takes up the site that stands.
+        var (lost, _, _, _, _, _) = StartAiVariant(AiDataWithAlphaStructure("AlphaShack"), AiHoleObjects, library);
+        StepFrames(lost, 300);
+        lost.World.SetMoney(new PlayerId(1), Fixed.Zero);
+        lost.World.Kill(new CnCNew.Simulation.Ids.EntityId(AiEntryObject(lost, "AlphaShack")));
+        StepFrames(lost, 190);
+        var site = lost.World.Entities.Single(entity => entity.Template.Name == "AlphaShack");
+        Check.That(site.HasStatus(CnCNew.Simulation.Modules.ObjectStatusBits.UnderConstruction), "The worker is at work on the site.");
+        lost.World.Kill(lost.World.Entities.Single(entity => entity.Template.Name == "AlphaWorker").Id);
+        StepFrames(lost, 300);
+        Check.That(lost.World.Entities.Single(entity => entity.Template.Name == "AlphaShack").Id == site.Id && CountOwned(lost, 1, "AlphaShack") == 1, "The next worker finishes the same site.");
+        Check.That(!lost.World.Entities.Any(entity => entity.Template.Name is "AlphaHole" or "AlphaWorker"), "Hole and worker are gone.");
+
         // With the money, the round that finds the hole builds beside it.
         var (rich, _, _, _, _, _) = StartAiVariant(AiDataWithAlphaStructure("AlphaShack"), AiHoleObjects, library);
         StepFrames(rich, 300);
