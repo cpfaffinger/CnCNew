@@ -569,12 +569,17 @@ public sealed partial class SimulationWorld
     /// </summary>
     private Entity? FindMoodTarget(Entity entity, AIUpdateInterface ai, AcquireMode mode)
     {
+        // "we are doing a special ability. Shouldn't auto-acquire a target at this time."
+        if (entity.HasStatus(UsingAbilityBit)) return null;
         var computer = IsComputerPlayer(entity.Owner);
         var container = FiringContainerOf(entity);
-        // "Human units don't have a mood": only a computer player's unit sleeps or stays passive. A passive unit of the reference answers its last attacker; that is not modeled.
+        // "Human units don't have a mood": only a computer player's unit sleeps or stays passive.
         // A contained unit does not sleep: getAdjustedVisionRangeForObject gives it its weapon range instead of the mood's zero. Passive is getNextMoodTarget's own test and holds inside too.
         var attitude = computer ? AcquisitionAdvisor?.AttitudeOf(entity) ?? Attitude.Normal : Attitude.Normal;
-        if ((attitude == Attitude.Sleep && container is null) || attitude == Attitude.Passive) return null;
+        if (attitude == Attitude.Sleep && container is null) return null;
+        // A passive unit answers its last attacker: "Do not allow units that healed me to get acquired!"
+        if (attitude == Attitude.Passive)
+            return !entity.LastDamageHealing && FindEntity(entity.LastDamageSource) is { } attacker && IsAttackable(entity, attacker) ? attacker : null;
         var aircraft = entity.Template.IsKindOf("AIRCRAFT");
         var chase = mode != AcquireMode.Turret && MayChase(entity, aircraft);
         var radius = AcquireRadius(entity, chase);

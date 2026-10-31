@@ -332,6 +332,30 @@ static partial class Tests
         Check.That(ranked.AcquiredVictimOf(Slotted(ranked, "AcqSoldier")) == Slotted(ranked, "AcqWeak").Id, "Under 100 units the distance takes nothing off: priority 2 beats the closer priority 1.");
     }
 
+    /// <summary>
+    /// F-17, <c>getNextMoodTarget</c>: a passive team's unit picks nobody but answers its last attacker; a unit at a special ability acquires nothing ("Shouldn't auto-acquire a target at this time").
+    /// </summary>
+    public static void AcquisitionPassiveUnitAnswersItsAttacker()
+    {
+        var (quiet, _, _) = AcquisitionWorld(true, ("AcqSoldier", 1, 0, 0), ("AcqDummy", 2, 60, 0));
+        quiet.AcquisitionAdvisor = new FixedAdvisor { Mood = Attitude.Passive };
+        for (var step = 0; step < quiet.Frames(30); step++) quiet.Step();
+        Check.That(!quiet.AcquiredVictimOf(Slotted(quiet, "AcqSoldier")).IsValid && Hurt(Slotted(quiet, "AcqDummy")) == Fixed.Zero, "A passive unit picks nobody.");
+
+        var (world, _, _) = AcquisitionWorld(true, ("AcqSoldier", 1, 0, 0), ("AcqSoldier", 2, 60, 0));
+        world.AcquisitionAdvisor = new FixedAdvisor { Mood = Attitude.Passive };
+        var passive = Slotted(world, "AcqSoldier");
+        var shooter = Slotted(world, "AcqSoldier", 1);
+        for (var step = 0; step < world.Frames(40); step++) world.Step();
+        Check.That(Hurt(passive) > Fixed.Zero, "The enemy shoots it.");
+        Check.That(world.AcquiredVictimOf(passive) == shooter.Id && Hurt(shooter) > Fixed.Zero, "A passive unit answers its last attacker.");
+
+        var (busy, _, _) = AcquisitionWorld(false, ("AcqSoldier", 1, 0, 0), ("AcqDummy", 2, 60, 0));
+        busy.SetStatus(Slotted(busy, "AcqSoldier").Id, 1UL << ObjectStatusBits.Index("USING_ABILITY"));
+        for (var step = 0; step < busy.Frames(30); step++) busy.Step();
+        Check.That(!busy.AcquiredVictimOf(Slotted(busy, "AcqSoldier")).IsValid, "A unit at a special ability acquires nothing.");
+    }
+
     private sealed class FixedAdvisor : IAcquisitionAdvisor
     {
         public Attitude Mood { get; set; } = Attitude.Normal;
