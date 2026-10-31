@@ -135,6 +135,12 @@ public sealed class LockstepClient
     /// <summary>The connection whose request the room's pace last followed (who paused); 0 before any.</summary>
     public uint PausedBy { get; private set; }
     public int SpeedPercent { get; private set; } = 100;
+
+    /// <summary>The vote that runs, or null.</summary>
+    public VoteStateMessage? Vote { get; private set; }
+
+    /// <summary>Everything the server said about votes, in order.</summary>
+    public List<VoteStateMessage> VoteEvents { get; } = [];
     public DesyncMessage? Desync { get; private set; }
     public MatchEndMessage? End { get; private set; }
     public IReadOnlyList<ChatMessage> Chat => _chat;
@@ -262,6 +268,10 @@ public sealed class LockstepClient
                 if (lag.LagMs == 0 && !lag.Throttling) _lag.Remove(lag.ConnectionId);
                 else _lag[lag.ConnectionId] = lag;
                 break;
+            case VoteStateMessage vote:
+                Vote = vote.Result == VoteResult.Running ? vote : null;
+                VoteEvents.Add(vote);
+                break;
             case PaceStateMessage pace:
                 Paused = pace.Paused;
                 SpeedPercent = pace.SpeedPercent;
@@ -307,6 +317,11 @@ public sealed class LockstepClient
     public void SetReady(bool ready) => Send(new ReadyMessage(ready));
     public void RequestStart(ResumeState? resume = null) => Send(new StartRequestMessage(resume));
     public void SendChat(string text, bool alliesOnly = false) => Send(new ChatRequestMessage(text, alliesOnly));
+
+    /// <summary>Starts a vote of the players; <paramref name="target"/> is the connection to remove or the speed in percent.</summary>
+    public void RequestVote(VoteKind kind, uint target = 0) => Send(new VoteRequestMessage(kind, target));
+
+    public void CastVote(bool yes) => Send(new VoteCastMessage(yes));
 
     /// <summary>Sends bytes as they are, as a message of this connection: what a test of the other end's parser sends (docs/DEDICATED-SERVER.md section 9.4).</summary>
     public void SendRaw(byte[] message) => _connection.Send(message);

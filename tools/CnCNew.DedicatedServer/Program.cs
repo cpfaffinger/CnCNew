@@ -46,6 +46,8 @@ sealed record ServerConfig
     public bool AllowLateWatchers { get; init; } = true;
     public int PausesPerPlayer { get; init; } = 3;
     public int MaxPauseMs { get; init; } = 60_000;
+    public int VotesPerPlayer { get; init; } = 3;
+    public int VoteTimeMs { get; init; } = 30_000;
     /// <summary>Only the host sets the speed of a match; otherwise every player may.</summary>
     public bool HostSetsSpeed { get; init; } = true;
     /// <summary>Where the recording of every match is written as a replay file when it is over; empty: nowhere.</summary>
@@ -167,6 +169,8 @@ static class DedicatedServer
                 "--allow-late-watchers" => config with { AllowLateWatchers = true },
                 "--pauses-per-player" => config with { PausesPerPlayer = Number() },
                 "--max-pause-ms" => config with { MaxPauseMs = Number() },
+                "--votes-per-player" => config with { VotesPerPlayer = Number() },
+                "--vote-time-ms" => config with { VoteTimeMs = Number() },
                 "--anyone-sets-speed" => config with { HostSetsSpeed = false },
                 "--replay-dir" => config with { ReplayDir = index + 1 < args.Length ? args[++index] : throw new ArgumentException("--replay-dir needs a directory.") },
                 "--timeout-ms" => config with { ConnectionTimeoutMs = Number() },
@@ -313,6 +317,7 @@ static class DedicatedServer
             {
                 LagRecoveryMs = config.LagRecoveryMs, SeatHoldMs = config.SeatHoldMs, SpectatorDelayMs = config.SpectatorDelayMs, AllowLateWatchers = config.AllowLateWatchers,
                 PausesPerPlayer = config.PausesPerPlayer, MaxPauseMs = config.MaxPauseMs, HostSetsSpeed = config.HostSetsSpeed,
+                VotesPerPlayer = config.VotesPerPlayer, VoteTimeMs = config.VoteTimeMs,
                 IsKeyBanned = bans.ContainsKey, RequirePlayerKey = config.RequirePlayerKey,
                 MessagesPerSecond = config.MessagesPerSecond, MessageBurst = config.MessageBurst, MaxStateBytes = config.MaxStateBytes, MaxMatchSeconds = config.MaxMatchSeconds,
                 MaxRecordingBytes = config.MaxRecordingBytes, LoadLimitMs = config.LoadLimitMs, HashReportLimitMs = config.HashReportLimitMs, SnapshotsPerMinute = config.SnapshotsPerMinute,

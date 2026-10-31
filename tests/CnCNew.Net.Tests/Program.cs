@@ -27,6 +27,8 @@ run.Test("Relay, client-paced: a tick closes when the one client asks, an order 
 run.Test("Relay, server-paced: ticks close by the injected clock at tick rate times speed, and wait for nobody", NetTests.ServerPaced);
 run.Test("Relay: the player is stamped from the connection, intents beyond the limit wait, a flood is dropped", NetTests.StampAndLimits);
 run.Test("Relay: equal hash reports agree on a tick, different ones are a desync sent to everybody", NetTests.HashReports);
+run.Test("Relay (D-24): from three players on the majority of a tick's hashes decides, and the one who differs goes", NetTests.HashMajority);
+run.Test("Relay (D-23): votes remove a player, end the match, set the speed; one at a time, bounded, decided by a strict majority or by time", NetTests.Votes);
 run.Test("Match of one client and one computer player over the relay equals the session stepped directly (no added delay)", NetTests.OneClientEqualsDirect);
 run.Test("Match of two and three clients with a computer player: session hashes equal in every tick, with and without delay and jitter, the recording replays", NetTests.SeveralClients);
 run.Test("A client whose world differs is found: at loading, before the first tick", NetTests.DifferingWorldIsFound);
@@ -222,7 +224,8 @@ static partial class NetTests
             new DesyncReportMessage(900, [new DesyncPart("world.objects", 1, 5), new DesyncPart("world.objects", 2, 6)]), new SnapshotRequestMessage(4),
             new SnapshotOfferMessage(4, new ResumeState(901, 0xAABB, [(1, 12UL), (2, 0UL)], [1, 2, 3, 4, 5])), new SeatStateMessage(3, SeatHold.Held, 300_000),
             new SeatStateMessage(3, SeatHold.GivenUp, 0), new PasswordChallengeMessage("00112233445566778899AABBCCDDEEFF"),
-            new PasswordResponseMessage(RoomPassword.Answer(RoomPassword.Verifier("p", "r"), "00112233445566778899AABBCCDDEEFF")), new KickMessage(7),
+            new PasswordResponseMessage(RoomPassword.Answer(RoomPassword.Verifier("p", "r"), "00112233445566778899AABBCCDDEEFF")), new VoteRequestMessage(VoteKind.Speed, 150), new VoteCastMessage(true), new VoteStateMessage(VoteKind.RemovePlayer, 4, 2, 1, 0, 3, VoteResult.Running),
+            new KickMessage(7),
             new PasswordResponseMessage(new string('0', 64), new string('A', 128)),
             new RoomListRequestMessage(Protocol.Version), new RoomListMessage(0, 16, []),
             new RoomListMessage(3, 16, [new ListedRoom("a room", RoomPhase.Match, 5, 3, 4, true, "Maps/Test/Test.map", 60, "abc+modified"), new ListedRoom("", RoomPhase.Room, 1, 0, 0, false, "", 0, "")]),

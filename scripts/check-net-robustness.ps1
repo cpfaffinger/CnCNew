@@ -85,7 +85,7 @@ if ($LASTEXITCODE -ne 0) { Fail 'the match with a watcher on a delay' }
 # ---- 3. a desync and its diagnosis
 $desync = Join-Path $OutDir 'desync'
 Write-Host '== Desync: client 2 changes one object at tick 900'
-dotnet $tool net-match $ContentDir --map $map --humans 3 --ais 5 --seconds 40 @line --disturb '1:corrupt:900' --expect-desync --label desync --out $desync
+dotnet $tool net-match $ContentDir --map $map --humans 2 --ais 6 --seconds 40 @line --disturb '1:corrupt:900' --expect-desync --label desync --out $desync
 if ($LASTEXITCODE -ne 0) { Fail 'the match that was meant to break' }
 else {
     $changed = (Get-Content (Join-Path $desync 'client-2.json') -Raw | ConvertFrom-Json).corrupted

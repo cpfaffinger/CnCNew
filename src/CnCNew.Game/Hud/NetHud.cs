@@ -37,6 +37,13 @@ public interface INetMatchSource
     /// <summary>The name of whoever sits (or sat) in a player's seat.</summary>
     string? NameOfPlayer(int player);
     void SendChat(string text, bool alliesOnly);
+    /// <summary>The running vote, or null, and everything the server said about votes (docs/NETWORK-PROTOCOL.md section 24).</summary>
+    VoteStateMessage? Vote { get; }
+    IReadOnlyList<VoteStateMessage> VoteEvents { get; }
+    void RequestVote(VoteKind kind, uint target);
+    void CastVote(bool yes);
+    /// <summary>The connection of a member with this name, or null.</summary>
+    uint? ConnectionNamed(string name);
     /// <summary>A seat in a team with another seat: whoever else a line to the allies reaches.</summary>
     bool HasAllies { get; }
     /// <summary>Real time in milliseconds, for the countdowns between two messages of the server.</summary>
@@ -119,7 +126,8 @@ public sealed class NetHud
             case KeyEvent { IsDown: true, Key: KeyCode.Enter or KeyCode.KeypadEnter }:
                 var text = _chatText.Trim();
                 while (System.Text.Encoding.UTF8.GetByteCount(text) > Protocol.MaxChatBytes) text = text[..^1];
-                if (text.Length > 0)
+                if (text.StartsWith('/')) VoteCommand(text);
+                else if (text.Length > 0)
                 {
                     _source.SendChat(text, ChatToAllies);
                     if (ChatToAllies && !_source.Watching && !_source.HasAllies) Notice("You have no allies: nobody else reads this line.");
@@ -153,6 +161,11 @@ public sealed class NetHud
         {
             var dropped = _source.Dropped[_droppedSeen];
             Notice($"{(dropped.Player > 0 ? PlayerName(dropped.Player) : Name(dropped.ConnectionId))} {NetText.Drop(dropped.Reason)}.");
+        }
+        for (; _votesSeen < _source.VoteEvents.Count; _votesSeen++)
+        {
+            var vote = _source.VoteEvents[_votesSeen];
+            if (vote.Result != VoteResult.Running) Notice($"{VoteText(vote)}: {(vote.Result == VoteResult.Passed ? "passed" : "failed")} ({vote.Yes} of {vote.Voters} said yes).");
         }
         for (; _chatSeen < _source.Chat.Count; _chatSeen++)
         {
@@ -199,6 +212,7 @@ public sealed class NetHud
             var left = Math.Max(0, (int)Math.Ceiling((seat.HoldMs - (now - seat.SinceMs)) / 1000.0));
             waiting.Add(new NetWaitingLine($"{PlayerName(player)} lost the connection - the seat is held for {left} s"));
         }
+        if (_source.Vote is { } running) waiting.Add(new NetWaitingLine($"{VoteText(running)}: {running.Yes} of {running.Voters} said yes - /yes or /no"));
         string? banner = null;
         if (_source.Paused) banner = _source.PausedBy != 0 ? $"Paused by {(_source.PausedBy == _source.OwnConnection ? "you" : Name(_source.PausedBy))}" : "Paused";
         else if (halfSpeed) banner = "The game runs at half speed until everybody has caught up";
@@ -218,6 +232,47 @@ public sealed class NetHud
         _traced = said;
         Trace(StatusLine());
     }
+
+    private int _votesSeen;
+
+    /// <summary>The commands of the chat line: a vote is started and answered by typing, /kick name, /end, /speed percent, /yes and /no.</summary>
+    private void VoteCommand(string text)
+    {
+        var words = text.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var argument = words.Length > 1 ? words[1] : string.Empty;
+        switch (words[0].ToLowerInvariant())
+        {
+            case "/kick" when _source.ConnectionNamed(argument) is { } connection:
+                _source.RequestVote(VoteKind.RemovePlayer, connection);
+                break;
+            case "/kick":
+                Notice($"Nobody here is called '{argument}'.");
+                break;
+            case "/end":
+                _source.RequestVote(VoteKind.EndMatch, 0);
+                break;
+            case "/speed" when uint.TryParse(argument, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var percent) && percent is >= Protocol.MinSpeedPercent and <= Protocol.MaxSpeedPercent:
+                _source.RequestVote(VoteKind.Speed, percent);
+                break;
+            case "/yes":
+                _source.CastVote(true);
+                break;
+            case "/no":
+                _source.CastVote(false);
+                break;
+            default:
+                Notice($"The commands are /kick name, /end, /speed {Protocol.MinSpeedPercent} to {Protocol.MaxSpeedPercent}, /yes and /no.");
+                break;
+        }
+    }
+
+    private string VoteText(VoteStateMessage vote) => vote.Kind switch
+    {
+        VoteKind.RemovePlayer => $"Vote to remove {Name(vote.Target)}",
+        VoteKind.EndMatch => "Vote to end the match",
+        VoteKind.Speed => $"Vote for a game speed of {vote.Target} %",
+        _ => throw new ArgumentOutOfRangeException(nameof(vote), vote.Kind, "No text for this kind of vote."),
+    };
 
     /// <summary>The skin the indicators are drawn in (docs/UI-MODERN.md); the original's colours and font are the ones they always had.</summary>
     public CnCNew.Ui.Skins.UiSkin Skin { get; init; } = CnCNew.Ui.Skins.UiSkin.Original;
@@ -322,6 +377,18 @@ public sealed class LiveMatchNetSource(LiveMatch match) : INetMatchSource
     public int SpeedPercent => _client.SpeedPercent;
     public DesyncMessage? Desync => _client.Desync;
     public IReadOnlyList<ChatMessage> Chat => _client.Chat;
+    public VoteStateMessage? Vote => _client.Vote;
+    public IReadOnlyList<VoteStateMessage> VoteEvents => _client.VoteEvents;
+    public void RequestVote(VoteKind kind, uint target) => _client.RequestVote(kind, target);
+    public void CastVote(bool yes) => _client.CastVote(yes);
+
+    public uint? ConnectionNamed(string name)
+    {
+        foreach (var member in _members)
+            if (string.Equals(member.Name, name, StringComparison.OrdinalIgnoreCase)) return member.ConnectionId;
+        return null;
+    }
+
     public long NowMs => _watch.ElapsedMilliseconds;
 
     public string? NameOf(uint connectionId)

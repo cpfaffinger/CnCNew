@@ -402,7 +402,7 @@ public sealed class NetLobby : INetLobby, IDisposable
                 {
                     // The room closed the connection: it said why in its last message (a kick, a ban), or the line is gone.
                     var last = _client.LastRefusal;
-                    Fail(last is { Reason: RejectReason.Kicked or RejectReason.Banned } ? new LobbyFailure(LobbyFailureKind.Rejected, last.Reason, Detail: last.Text)
+                    Fail(last is { Reason: RejectReason.Kicked or RejectReason.Banned or RejectReason.VotedOut } ? new LobbyFailure(LobbyFailureKind.Rejected, last.Reason, Detail: last.Text)
                         : new LobbyFailure(LobbyFailureKind.ConnectionClosed, Close: _endpoint.Link.CloseReason));
                 }
                 else if (_client.Phase == ClientPhase.InRoom && Stage == LobbyStage.Entering) Stage = LobbyStage.InRoom;

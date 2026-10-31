@@ -177,7 +177,8 @@ static partial class NetTests
     public static void DesyncIsNamedDownToTheField()
     {
         var fixture = Fixture.Create();
-        var settings = fixture.Settings(3, 0, 1_500);
+        // Two players: from three on the majority decides and the match goes on (D-24).
+        var settings = fixture.Settings(2, 0, 1_500);
         var rate = settings.TickRate;
         var directory = Scratch("desync");
         try
@@ -189,7 +190,7 @@ static partial class NetTests
             // The damage is in the object; that the world counted it is in the rest of the world.
             Check.That(result.DesyncParts.Split("; ").Contains("world.objects") && !result.DesyncParts.Contains("ai.", StringComparison.Ordinal) && !result.DesyncParts.Contains("world.timers", StringComparison.Ordinal),
                 $"the relay names the parts of the hash the clients differ in ({result.DesyncParts})");
-            Check.That(result.Packages.Length == 3, $"every client wrote its package ({result.Packages.Length})");
+            Check.That(result.Packages.Length == 2, $"every client wrote its package ({result.Packages.Length})");
             var corrupted = uint.Parse(result.Corrupted.Split(' ')[1], System.Globalization.CultureInfo.InvariantCulture);
             var map = new MatchMap(fixture.Terrain, fixture.Map.Objects);
             var diff = DesyncPackageDiff.Compare(Path.Combine(directory, "client-1"), Path.Combine(directory, "client-2"), fixture.Synthetic.Templates, fixture.Synthetic.Fingerprint, _ => map);
@@ -198,9 +199,9 @@ static partial class NetTests
             Check.That(diff.FieldsA.IsEmpty, $"the client that is in step differs in nothing from the match played again ({string.Join("; ", diff.FieldsA.Take(3))})");
             Check.That(diff.FieldsB.Length is >= 1 and <= 8 && diff.FieldsB.Any(field => field.Contains($"[id={corrupted}]", StringComparison.Ordinal) && field.Contains("ealth", StringComparison.Ordinal)),
                 $"and the field, on the client that diverged ({string.Join("; ", diff.FieldsB.Take(5))})");
-            // Two clients that are in step: nothing differs.
-            var same = DesyncPackageDiff.Compare(Path.Combine(directory, "client-1"), Path.Combine(directory, "client-3"), fixture.Synthetic.Templates, fixture.Synthetic.Fingerprint, _ => map);
-            Check.That(same.FirstDifferingTick == -1 && same.FieldsA.IsEmpty && same.FieldsB.IsEmpty, "two clients in step have nothing to tell apart");
+            // A package against itself: nothing differs.
+            var same = DesyncPackageDiff.Compare(Path.Combine(directory, "client-1"), Path.Combine(directory, "client-1"), fixture.Synthetic.Templates, fixture.Synthetic.Fingerprint, _ => map);
+            Check.That(same.FirstDifferingTick == -1 && same.FieldsA.IsEmpty && same.FieldsB.IsEmpty, "the same state has nothing to tell apart");
         }
         finally
         {

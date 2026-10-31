@@ -55,6 +55,14 @@ internal static class NetHudTests
     {
         public bool Watching { get; set; }
         public uint OwnConnection { get; set; } = 7;
+        public VoteStateMessage? Vote { get; set; }
+        public List<VoteStateMessage> VoteEvents { get; } = [];
+        IReadOnlyList<VoteStateMessage> INetMatchSource.VoteEvents => VoteEvents;
+        public List<(VoteKind Kind, uint Target)> Requested { get; } = [];
+        public List<bool> Ballots { get; } = [];
+        public void RequestVote(VoteKind kind, uint target) => Requested.Add((kind, target));
+        public void CastVote(bool yes) => Ballots.Add(yes);
+        public uint? ConnectionNamed(string name) => name == "Bob" ? 9u : null;
         public int RoundTripMs { get; set; } = 42;
         public int DelayMs { get; set; } = 18;
         public int RateAdjustPerMille { get; set; }

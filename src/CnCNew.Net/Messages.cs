@@ -49,6 +49,10 @@ public enum MessageType : ushort
     // Protocol version 5 (phase 29).
     RoomListRequest = 38,
     RoomList = 39,
+    // Protocol version 7 (phase 53).
+    VoteRequest = 40,
+    VoteCast = 41,
+    VoteState = 42,
 }
 
 /// <summary>Why the server turned a connection or a request away.</summary>
@@ -78,6 +82,8 @@ public enum RejectReason : ushort
     BadIdentity = 16,
     /// <summary>The player key is on the server's ban list (version 4).</summary>
     Banned = 17,
+    /// <summary>The players of the match voted this client out (version 7).</summary>
+    VotedOut = 18,
 }
 
 public enum RoomPhase : byte
@@ -107,6 +113,23 @@ public enum DropReason : byte
     Kicked = 5,
     /// <summary>The member sent more than a connection may (version 4; docs/NETWORK-PROTOCOL.md section 20.4).</summary>
     Flood = 6,
+    /// <summary>The players of the match voted the member out (version 7).</summary>
+    VotedOut = 7,
+}
+
+/// <summary>What a vote of the players decides (version 7).</summary>
+public enum VoteKind : byte
+{
+    RemovePlayer = 1,
+    EndMatch = 2,
+    Speed = 3,
+}
+
+public enum VoteResult : byte
+{
+    Running = 0,
+    Passed = 1,
+    Failed = 2,
 }
 
 public enum EndReason : byte
@@ -116,19 +139,22 @@ public enum EndReason : byte
     Abandoned = 2,
     /// <summary>The match reached a limit of the server - the size of its recording (version 4).</summary>
     ServerLimit = 3,
+    /// <summary>The players voted to end the match (version 7).</summary>
+    Voted = 4,
 }
 
 /// <summary>The limits of the protocol. A message above its limit is discarded and counted, and so is one of an unknown type.</summary>
 public static class Protocol
 {
     /// <summary>
+    /// Version 7 (phase 53): the votes of a match; a hash a majority of at least three players disagrees with drops the one who said it, and the match goes on.
     /// Version 6 (phase 33): the tactics profile of a slot in the room's settings.
     /// Version 5 (phase 29): the request for the list of a server's rooms and the list - asked on a connection before its hello.
     /// Version 4 (phase 28): the verifier of a room password in the hello, the challenge and the response for it, the kick; the drop reasons "kicked" and "flood", the
     /// end reason "server limit". Version 3 (phase 27): the rejoin token and the watch flag in the hello, the token in the welcome, the detail and the report of a desync, the request and the
     /// offer of a snapshot, the state of a held seat. Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave.
     /// </summary>
-    public const ushort Version = 6;
+    public const ushort Version = 7;
     /// <summary>Rooms one list names at most; a server with more names the first ones in the order of their names.</summary>
     public const int MaxListedRooms = 64;
     /// <summary>A verifier, a nonce and a response of the room password, as hexadecimal text.</summary>
@@ -361,6 +387,64 @@ public sealed record RoomListMessage(int TotalRooms, int MaxRooms, ImmutableArra
             rooms.Add(new ListedRoom(name, (RoomPhase)phase, members, players, seats, locked, map, rate, reader.Text(Protocol.MaxIdBytes)));
         }
         return new RoomListMessage(total, max, rooms.MoveToImmutable());
+    }
+}
+
+/// <summary>A player to the server: start a vote. <paramref name="Target"/> is the connection to remove or the speed in percent.</summary>
+public sealed record VoteRequestMessage(VoteKind Kind, uint Target) : NetMessage
+{
+    public override MessageType Type => MessageType.VoteRequest;
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.U8((byte)Kind);
+        writer.U32(Target);
+    }
+
+    internal static VoteRequestMessage Read(ref WireReader reader)
+    {
+        var kind = reader.U8();
+        if (kind is < (byte)VoteKind.RemovePlayer or > (byte)VoteKind.Speed) throw new ProtocolException($"A vote of kind {kind}.");
+        return new VoteRequestMessage((VoteKind)kind, reader.U32());
+    }
+}
+
+/// <summary>A player to the server: its ballot in the running vote.</summary>
+public sealed record VoteCastMessage(bool Yes) : NetMessage
+{
+    public override MessageType Type => MessageType.VoteCast;
+    internal override void Write(WireWriter writer) => writer.Bool(Yes);
+    internal static VoteCastMessage Read(ref WireReader reader) => new(reader.Bool());
+}
+
+/// <summary>The server to everybody: where the vote stands, after every ballot and at its end.</summary>
+public sealed record VoteStateMessage(VoteKind Kind, uint Target, uint Starter, byte Yes, byte No, byte Voters, VoteResult Result) : NetMessage
+{
+    public override MessageType Type => MessageType.VoteState;
+
+    internal override void Write(WireWriter writer)
+    {
+        writer.U8((byte)Kind);
+        writer.U32(Target);
+        writer.U32(Starter);
+        writer.U8(Yes);
+        writer.U8(No);
+        writer.U8(Voters);
+        writer.U8((byte)Result);
+    }
+
+    internal static VoteStateMessage Read(ref WireReader reader)
+    {
+        var kind = reader.U8();
+        if (kind is < (byte)VoteKind.RemovePlayer or > (byte)VoteKind.Speed) throw new ProtocolException($"A vote of kind {kind}.");
+        var target = reader.U32();
+        var starter = reader.U32();
+        var yes = reader.U8();
+        var no = reader.U8();
+        var voters = reader.U8();
+        var result = reader.U8();
+        if (result > (byte)VoteResult.Failed) throw new ProtocolException($"A vote with the result {result}.");
+        return new VoteStateMessage((VoteKind)kind, target, starter, yes, no, voters, (VoteResult)result);
     }
 }
 
@@ -806,7 +890,7 @@ public sealed record PlayerDroppedMessage(int Player, uint ConnectionId, DropRea
         var player = reader.I32();
         var connection = reader.U32();
         var reason = reader.U8();
-        if (reason > (byte)DropReason.Flood) throw new ProtocolException($"Unknown drop reason {reason}.");
+        if (reason > (byte)DropReason.VotedOut) throw new ProtocolException($"Unknown drop reason {reason}.");
         return new PlayerDroppedMessage(player, connection, (DropReason)reason);
     }
 }
@@ -868,7 +952,7 @@ public sealed record MatchEndMessage(long Tick, int Winner, EndReason Reason) : 
         var tick = reader.I64();
         var winner = reader.I32();
         var reason = reader.U8();
-        if (reason > (byte)EndReason.ServerLimit) throw new ProtocolException($"Unknown end reason {reason}.");
+        if (reason > (byte)EndReason.Voted) throw new ProtocolException($"Unknown end reason {reason}.");
         return new MatchEndMessage(tick, winner, (EndReason)reason);
     }
 }
@@ -1147,6 +1231,9 @@ public static class MessageCodec
                 MessageType.PasswordChallenge => PasswordChallengeMessage.Read(ref reader),
                 MessageType.PasswordResponse => PasswordResponseMessage.Read(ref reader),
                 MessageType.Kick => KickMessage.Read(ref reader),
+                MessageType.VoteRequest => VoteRequestMessage.Read(ref reader),
+                MessageType.VoteCast => VoteCastMessage.Read(ref reader),
+                MessageType.VoteState => VoteStateMessage.Read(ref reader),
                 MessageType.RoomListRequest => RoomListRequestMessage.Read(ref reader),
                 MessageType.RoomList => RoomListMessage.Read(ref reader),
                 _ => throw new ProtocolException($"No decoder for {type}."),

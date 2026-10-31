@@ -16,7 +16,7 @@ namespace CnCNew.Server;
 public sealed record RelayOptions(bool AllowModifiedBuilds = false, bool HostMayChooseSeeds = false, ushort HashInterval = 1, Func<uint>? SeedSource = null, int MaxConnections = Protocol.MaxConnections,
     int LagReportMs = 500, int LagThrottleMs = 2_000, int ThrottleLimitMs = 10_000, int ThrottleSpeedPercent = 50, int DefaultTickRate = 60, int LagRecoveryMs = 30_000,
     int SeatHoldMs = 0, int SpectatorDelayMs = 0, bool AllowLateWatchers = false, long CatchUpLimitTicks = 432_000, int CatchUpLimitMs = 300_000, int PausesPerPlayer = 3,
-    int MaxPauseMs = 60_000, bool HostSetsSpeed = true)
+    int MaxPauseMs = 60_000, bool HostSetsSpeed = true, int VotesPerPlayer = 3, int VoteTimeMs = 30_000)
 {
     // Phase 28 (docs/NETWORK-PROTOCOL.md section 20.4): what a member may cost a room. 0 switches a limit off (the embedded server of a local game has none).
 
@@ -159,6 +159,7 @@ public sealed partial class RelayServer
         public ulong ExpectedHash { get; set; }
         public HashSet<uint> TriedDonors { get; } = [];
         public int PausesUsed { get; set; }
+        public int VotesStarted { get; set; }
         /// <summary>The end of the match, kept back until a delayed watcher has been sent all of it.</summary>
         public MatchEndMessage? PendingEnd { get; set; }
         /// <summary>Where the connection comes from, as its host says (an address without its port; empty: unknown): what a kick remembers.</summary>
@@ -426,6 +427,12 @@ public sealed partial class RelayServer
                 break;
             case KickMessage kick:
                 Kick(peer, kick.ConnectionId);
+                break;
+            case VoteRequestMessage vote when Phase == RoomPhase.Match:
+                StartVote(peer, vote);
+                break;
+            case VoteCastMessage ballot when Phase == RoomPhase.Match:
+                CastVote(peer, ballot.Yes);
                 break;
             case PingMessage ping:
                 if (Phase == RoomPhase.Match && !peer.Joining) peer.CompletedTick = Math.Max(peer.CompletedTick, Math.Min(ping.CompletedTick, NextTick - 1));
@@ -759,6 +766,7 @@ public sealed partial class RelayServer
         if (Phase != RoomPhase.Match) return;
         ExpireSeats(now);
         EndOverlongPause(now);
+        CheckVote(now);
         ApplyLagRule(now, elapsed);
         if (Phase != RoomPhase.Match || Paused) return;
         if (Throttling) ThrottledMicros += elapsed;
@@ -950,14 +958,44 @@ public sealed partial class RelayServer
         }
         if (!_hashReports.TryGetValue(report.Tick, out var reports)) _hashReports[report.Tick] = reports = [];
         reports[peer.Id] = report.SessionHash;
-        if (reports.Values.Distinct().Count() > 1)
+        var disagree = reports.Values.Distinct().Count() > 1;
+        if (disagree && _peers.Count(Decides) < MajorityFromPlayers)
         {
             ReportDesync(report.Tick, [..reports.Select(pair => (pair.Key, pair.Value))]);
             return;
         }
         if (_peers.Any(other => Decides(other) && !reports.ContainsKey(other.Id))) return;
         _hashReports.Remove(report.Tick);
-        Agree(report.Tick, report.SessionHash);
+        if (disagree) Outvote(report.Tick, reports);
+        else Agree(report.Tick, report.SessionHash);
+    }
+
+    /// <summary>D-24: from this many players on, a hash the majority does not share is the one who said it, not the match.</summary>
+    private const int MajorityFromPlayers = 3;
+
+    /// <summary>Players dropped because a majority reported another hash.</summary>
+    public long PlayersOutvoted { get; private set; }
+
+    private void Outvote(long tick, SortedDictionary<uint, ulong> reports)
+    {
+        var groups = reports.GroupBy(pair => pair.Value).OrderByDescending(group => group.Count()).ToList();
+        if (groups[0].Count() * 2 <= reports.Count)
+        {
+            ReportDesync(tick, [..reports.Select(pair => (pair.Key, pair.Value))]);
+            return;
+        }
+        var agreed = groups[0].Key;
+        foreach (var (id, said) in reports.Where(pair => pair.Value != agreed).ToList())
+        {
+            if (_peers.FirstOrDefault(peer => peer.Id == id) is not { } peer) continue;
+            PlayersOutvoted++;
+            Log("outvoted", ("connection", Text(id)), ("player", Text(peer.Player)), ("tick", Text(tick)), ("said", said.ToString("X16", System.Globalization.CultureInfo.InvariantCulture)),
+                ("agreed", agreed.ToString("X16", System.Globalization.CultureInfo.InvariantCulture)));
+            peer.Connection.Send(MessageCodec.Encode(new DesyncMessage(tick, [(id, said), (0, agreed)])));
+            peer.Connection.Close();
+            Drop(peer, DropReason.Desync);
+        }
+        if (Phase == RoomPhase.Match) Agree(tick, agreed);
     }
 
     private void ReportDesync(long tick, ImmutableArray<(uint, ulong)> reports)
@@ -1039,6 +1077,10 @@ public sealed partial class RelayServer
         if (peer.Id == _host) _host = members[0].Id;
         if (Phase == RoomPhase.Room) BroadcastRoom();
         else if (Phase == RoomPhase.Loading) CheckAllLoaded();
-        else if (Phase == RoomPhase.Match) CheckEnd();
+        else if (Phase == RoomPhase.Match)
+        {
+            if (_vote is not null) TallyVote();
+            if (Phase == RoomPhase.Match) CheckEnd();
+        }
     }
 }

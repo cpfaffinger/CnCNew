@@ -245,6 +245,7 @@ public static class NetText
         RejectReason.Kicked => "The host removed you from the room.",
         RejectReason.BadIdentity => "The server could not verify your player key.",
         RejectReason.Banned => "You are banned from this server.",
+        RejectReason.VotedOut => "The players voted you out of the match.",
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "No text for this reject reason."),
     };
 
@@ -257,6 +258,7 @@ public static class NetText
         DropReason.TooSlow => "was dropped: its game could not keep up",
         DropReason.Kicked => "was removed by the host",
         DropReason.Flood => "was dropped: its game sent too much",
+        DropReason.VotedOut => "was voted out by the players",
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "No text for this drop reason."),
     };
 
@@ -266,6 +268,7 @@ public static class NetText
         EndReason.Desync => "The games of the players were no longer in the same state. The match cannot go on.",
         EndReason.Abandoned => "Everybody has left the match.",
         EndReason.ServerLimit => "The server ended the match: it reached a limit of the server.",
+        EndReason.Voted => "The players voted to end the match.",
         _ => throw new ArgumentOutOfRangeException(nameof(reason), reason, "No text for this end reason."),
     };
 
@@ -290,7 +293,7 @@ public static class NetText
         LobbyFailureKind.ServerFull => (TitleCannotConnect, $"The server at {server} takes no more connections."),
         LobbyFailureKind.AddressFull => (TitleCannotConnect, $"The server at {server} takes no more connections from your address."),
         LobbyFailureKind.KeyChanged => (TitleKeyChanged, KeyChanged(server, failure.Shown, failure.Expected)),
-        LobbyFailureKind.Rejected => (failure.Reject is RejectReason.Kicked or RejectReason.Banned ? TitleRemoved : TitleCannotEnter,
+        LobbyFailureKind.Rejected => (failure.Reject is RejectReason.Kicked or RejectReason.Banned or RejectReason.VotedOut ? TitleRemoved : TitleCannotEnter,
             failure.Detail.Length > 0 && failure.Reject is RejectReason.ProtocolVersion or RejectReason.SimulationVersion or RejectReason.FormatVersion or RejectReason.InvalidRequest or RejectReason.NotReady
                 ? $"{Reject(failure.Reject)}\n({failure.Detail})" : Reject(failure.Reject)),
         LobbyFailureKind.ConnectionClosed => (TitleConnectionLost, Close(failure.Close)),
