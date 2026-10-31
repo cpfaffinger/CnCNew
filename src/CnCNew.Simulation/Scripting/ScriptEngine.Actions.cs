@@ -570,6 +570,11 @@ public sealed partial class ScriptEngine
                 Diagnose($"switch-weapon button '{ability}' rejected");
                 return false;
             }
+            // Object::doCommandButton, GUI_COMMAND_HACK_INTERNET: aiHackInternet. The library's script asks in every frame, and the retail hacker then packs and unpacks for ever: a hacker at
+            // work stays at it (TheSuperHackers' fix in HackInternetAIUpdate::aiDoCommand). No player command says this; a script may write the world.
+            case "HACK_INTERNET" when _ai.Count > 0 && ModuleOf<Modules.BuiltIn.HackInternetAIUpdate>(carrier) is { } hacker:
+                if (!hacker.IsHackingPackingOrUnpacking) hacker.StartHacking(_world);
+                return true;
             default:
                 Diagnose($"command button '{ability}' has command {button.Command}, not executed");
                 return false;

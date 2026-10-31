@@ -1521,4 +1521,48 @@ static partial class Tests
         var without = ScriptedSkirmishSession.Start(options with { AllMapObjects = false }, fixture.Templates, fixture.Fingerprint, terrain, map, AiLibrary(), AiData.TryBuild(fixture.Graph)!, slots);
         Check.That(!without.World.Entities.Any(entity => entity.Template.Name == "TestTree"), "The named option leaves it out.");
     }
+
+    /// <summary>The script's <c>HACK_INTERNET</c> button makes a hacker earn money, also when it asks in every frame. Before, the button was counted as not executed and no credit came in.</summary>
+    public static void OriginalAiHackersHack()
+    {
+        const string Hacker = """
+            CommandButton Cmd_AlphaHack
+              Command = HACK_INTERNET
+            End
+            Object AlphaHacker
+              Side = Alpha
+              KindOf = SELECTABLE INFANTRY
+              BuildCost = 25
+              BuildTime = 1
+              Locomotor = SET_NORMAL SkirmishLoco
+              Body = ActiveBody Body01
+                MaxHealth = 50.0
+                InitialHealth = 50.0
+              End
+              Behavior = HackInternetAIUpdate Hack01
+                UnpackTime = 300
+                PackTime = 300
+                PackUnpackVariationFactor = 0.0
+                CashUpdateDelay = 1000
+                CashUpdateDelayFast = 500
+                RegularCashAmount = 5
+                VeteranCashAmount = 6
+                EliteCashAmount = 8
+                HeroicCashAmount = 10
+                XpPerCashUpdate = 1
+              End
+              Behavior = DestroyDie Destroy01
+              End
+            End
+            """;
+        var library = AiLibraryWithAlphaScripts(Scr.Script("A Hack", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("TEAM_USE_COMMANDBUTTON_ABILITY", Scr.Team("teamplayer"), Scr.Ability("Cmd_AlphaHack"))]));
+        var (session, fixture, _, _, _, _) = StartAiVariant(AiDataText(), Hacker, library);
+        Check.That(fixture.Templates.TryGet("AlphaHacker", out var template), "The fixture has the hacker.");
+        var hacker = session.World.RequestSpawn(template.Index, new PlayerId(1), Fixed.FromInt(100), Fixed.FromInt(300), Fixed.Zero, Fixed.Zero);
+        session.World.MaterializePendingSpawns();
+        session.Engine.AssignToTeam("teamplayer0", hacker);
+        var money = session.World.MoneyOf(new PlayerId(1));
+        StepFrames(session, 300);
+        Check.That(session.World.MoneyOf(new PlayerId(1)) >= money + Fixed.FromInt(25), $"The hacker has earned for seconds, the script asking all the while ({session.World.MoneyOf(new PlayerId(1))}, from {money}).");
+    }
 }
