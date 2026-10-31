@@ -509,3 +509,7 @@ Configuration added in Phase 29: `listRooms` (default true), option `--no-room-l
   personal data) or replays; `CONTENTS.txt` lists what it holds. It is sent nowhere.
 - `scripts/check-diagnostics.ps1` proves both on every gate of `net` (`docs/TESTING.md` §8). Troubleshooting for players and operators, including a match that
   diverged: `docs/TROUBLESHOOTING.md`.
+
+## 16. The Linux package on two distributions (D-20)
+
+The owner's decision: the Linux server is delivered and tried on Debian and Ubuntu. `scripts/check-server-package.ps1 -Platform linux -Distribution <name>` runs the linux-x64 package with an empty environment against three clients under Windows. Measured on 31 October 2026 on WSL distributions of one machine: Debian (step `server-package-linux` of tier 4) and Ubuntu 24.04.5 LTS, each with one hash chain on all clients. Both ran on the same CPU, under WSL; neither is a physical Linux machine (D-10).

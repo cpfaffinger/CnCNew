@@ -884,7 +884,7 @@ static partial class NetTool
         var serverOs = ValueOf(serverLines.FirstOrDefault(line => line.Contains(" event=listening ", StringComparison.Ordinal)) ?? string.Empty, "os") ?? string.Empty;
         if (linux is not null)
         {
-            static bool IsLinux(string os) => os.Contains("Linux", StringComparison.OrdinalIgnoreCase);
+            static bool IsLinux(string os) => os.Length > 0 && !os.Contains("Windows", StringComparison.OrdinalIgnoreCase); // Ubuntu calls itself "Ubuntu 24.04.5 LTS"
             if (IsLinux(serverOs) != serverInLinux) problems.Add($"the server ran on '{serverOs}'");
             foreach (var result in results)
             {

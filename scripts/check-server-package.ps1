@@ -129,7 +129,7 @@ else {
     if ($LASTEXITCODE -ne 0) { Fail 'the match on the server of the linux-x64 package' }
     else {
         $listening = Get-Content (Join-Path $OutDir 'match/server.log') | Where-Object { $_ -match ' event=listening ' } | Select-Object -First 1
-        if ($listening -notmatch ' os="?[^"]*Linux') { Fail "the server did not run under Linux ($listening)" }
+        if ($listening -notmatch ' os=' -or $listening -match ' os="?[^"]*Windows') { Fail "the server did not run under Linux ($listening)" }
         else { Write-Host '     the server ran under Linux from the package alone (no DOTNET_ROOT, no runtime of the user in its PATH)' }
     }
 }
