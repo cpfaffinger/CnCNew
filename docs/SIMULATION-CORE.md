@@ -4599,3 +4599,19 @@ The rate-equivalence suite: `ai/skirmish FactionAmerica against FactionChina` no
 ## 70. Reference values after Phases 53 and 54
 
 Retail reference match a stalemate at tick 108,000, end hash `556023EBE5E461C2`, chain `79AF22AB1CF269A1`; stress test `9EE9F730D124C3BD` / `5611A72EDB7D52F2`; **12 of 16** AI pairings decided in their budget (§67.6 had 14: Alpine Assault America against China, Armored Fury GLA against America and Death Valley China against GLA are stalemates now, Death Valley America against China is decided); every mission run keeps its outcome. World fingerprint `51F603EE7EA1BB7B`; compatibility baseline **663** entries. `CommandTypes.Version` **21**, replay **20** (`ExecuteRailedTransportCommand`), protocol 7, `WorldSnapshot` 10, `MissionSnapshot` 3, `SaveGame` 3, match description 3, transport 2. Balance not assessed (D-9).
+
+## 71. Phase 59: one instance of a team (F-92)
+
+`ScriptEngine::getTeamNamed` gives one team: the calling team or the condition team when it is of that prototype, an active singleton, or otherwise `getFirstItemIn_TeamInstanceList`. `Team::Team` calls `prependTo_TeamInstanceList`, so **the first instance is the newest**. The VM differed in three ways:
+
+- Every action that named a prototype walked all its instances (`TeamsNamed`). Of the 81 functions of `ScriptActions.cpp` with a team in their signature, 77 call `getTeamNamed`; the other four are `doCreateReinforcements`, `doBuildTeam`, `doRecruitTeam` (they ask for the prototype) and `doCollectNearbyForTeam` (a crash in the original). `TeamNamed` now yields what `FindTeam` gives, none or one.
+- `FindTeam` gave the oldest instance. `FindTeamInstance` now gives the newest.
+- `executeScript` walks the instances of a script's condition team in the list's order, the newest first; the VM walked them by id.
+
+`evaluateHasUnits` stays the one condition that walks the instances; it first asks the team of the running script (`getTeamNamed(THIS_TEAM)`) when that is of the named prototype, and no longer the condition team alone when the calling team is another.
+
+`doAttack` and `doNamedAttackTeam` give no order when the victim team does not exist, and `setGoalTeam` takes its squad from the instance found then. A follower now keeps that instance's id (`team:<id>`) instead of a prototype's name, so a later instance does not change what it attacks. **Named difference:** the original's squad is a list of the members at that moment; the port reads the instance's living members each time, so a unit that joins the instance later can be chosen.
+
+`getTeamNamed`'s alias of `teamThePlayer` for the local player's default team in a Generals' Challenge is not built: every challenge map's human side is called `ThePlayer` (`docs/CAMPAIGN-AND-SAVEGAMES.md` §7), so the alias names the team the name names already.
+
+Expected in the manifests: the hashes of the mission runs that have two living instances of one prototype, and of the runs of the original AI, whose teams have several instances; no skirmish of the built-in AI. No run was measured here; `Tests.FidelityTeamActionsReachOneInstance` holds the behaviour at 30, 60 and 120 Hz.

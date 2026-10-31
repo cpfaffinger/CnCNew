@@ -77,11 +77,11 @@ public sealed partial class ScriptEngine
 
             // ---- team command buttons (doTeamHuntWithCommandButton, doTeamUseCommandButtonOnNearest*, doTeamPartialUseCommandButton, doTeamUseCommandButtonOnNamed)
             case "TEAM_HUNT_WITH_COMMAND_BUTTON":
-                if (Has(type, p, 2)) foreach (var team in TeamsNamed(Str(p, 0))) HuntWithCommandButton(team, Str(p, 1));
+                if (Has(type, p, 2)) foreach (var team in TeamNamed(Str(p, 0))) HuntWithCommandButton(team, Str(p, 1));
                 return true;
             case "TEAM_ALL_USE_COMMANDBUTTON_ON_NAMED":
                 if (Has(type, p, 3) && NamedEntity(Str(p, 2)) is { } named)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var carrier in Carriers(LiveMembers(team), Str(p, 1)).ToArray()) UseCommandButtonAbility(carrier, Str(p, 1), SpecialPowerTargetKind.Object, named.Id, Fixed.Zero, Fixed.Zero);
                 return true;
             case "TEAM_ALL_USE_COMMANDBUTTON_ON_NEAREST_ENEMY_UNIT":
@@ -108,7 +108,7 @@ public sealed partial class ScriptEngine
                 return true;
             case "TEAM_PARTIAL_USE_COMMANDBUTTON":
                 if (Has(type, p, 3))
-                    foreach (var team in TeamsNamed(Str(p, 1)))
+                    foreach (var team in TeamNamed(Str(p, 1)))
                     {
                         var carriers = Carriers(LiveMembers(team), Str(p, 2)).ToArray();
                         var count = (int)(Real(p, 0) * Fixed.FromInt(carriers.Length) / Fixed.FromInt(100)).Floor();
@@ -118,19 +118,19 @@ public sealed partial class ScriptEngine
 
             // ---- movement and orders (doLoadAllTransports, doMoveTeamTowardsNearest, doTeamGuardInTunnelNetwork, doTeamPanic, doNamed/TeamFaceWaypoint)
             case "TEAM_LOAD_TRANSPORTS":
-                if (Has(type, p, 1)) foreach (var team in TeamsNamed(Str(p, 0))) LoadTransports(team);
+                if (Has(type, p, 1)) foreach (var team in TeamNamed(Str(p, 0))) LoadTransports(team);
                 return true;
             case "TEAM_MOVE_TOWARDS_NEAREST_OBJECT_TYPE":
-                if (Has(type, p, 3)) foreach (var team in TeamsNamed(Str(p, 0))) MoveTowardsNearest(team, Str(p, 1), Str(p, 2));
+                if (Has(type, p, 3)) foreach (var team in TeamNamed(Str(p, 0))) MoveTowardsNearest(team, Str(p, 1), Str(p, 2));
                 return true;
             case "TEAM_GUARD_IN_TUNNEL_NETWORK":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) GuardInTunnelNetwork(member);
                 return true;
             case "TEAM_PANIC":
                 if (Has(type, p, 2) && _program.FindPath(Str(p, 1)) is { Waypoints.IsDefaultOrEmpty: false } panicPath)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Roam(member, panicPath, true);
                 return true;
             case "NAMED_FACE_WAYPOINT":
@@ -138,7 +138,7 @@ public sealed partial class ScriptEngine
                 return true;
             case "TEAM_FACE_WAYPOINT":
                 if (Has(type, p, 2) && WaypointOrDiagnose(Str(p, 1)) is { } teamFaced)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Face(member, teamFaced.X, teamFaced.Y);
                 return true;
             case "NAMED_SET_STEALTH_ENABLED":
@@ -146,7 +146,7 @@ public sealed partial class ScriptEngine
                 return true;
             case "TEAM_SET_STEALTH_ENABLED":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) SetStealthEnabled(member, Int(p, 1) != 0);
                 return true;
 
@@ -156,7 +156,7 @@ public sealed partial class ScriptEngine
                 return true;
             case "TEAM_SET_UNMANNED_STATUS":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Unman(member);
                 return true;
             case "DELETE_ALL_UNMANNED":
@@ -178,20 +178,20 @@ public sealed partial class ScriptEngine
             // updateTeamSetAttitude -> AIGroup::setAttitude: every member that is on the team now; who joins later has the team's initial attitude.
             case "TEAM_SET_ATTITUDE":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray())
                             if (AiOf(member) is not null) _world.SetAttitude(member, Int(p, 1));
                 return true;
             // doTeamWander: every member walks the path from its closest waypoint on the wander locomotors.
             case "TEAM_WANDER":
                 if (Has(type, p, 2) && _program.FindPath(Str(p, 1)) is { Waypoints.IsDefaultOrEmpty: false } wanderPath)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Roam(member, wanderPath, false);
                 return true;
             // doTeamWanderInPlace
             case "TEAM_WANDER_IN_PLACE":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray())
                         {
                             if (_world.IsAsleep(member) || member.Owner.IsSystem) continue;

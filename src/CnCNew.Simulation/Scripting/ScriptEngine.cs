@@ -522,7 +522,7 @@ public sealed partial class ScriptEngine
 
         var previousTeam = _callingTeam;
         var previousCondition = _conditionInstance;
-        // The instances of the team the conditions talk about, as they are before the first evaluation (in id order): none, one, or - rarely - several.
+        // The instances of the team the conditions talk about, as they are before the first evaluation: none, one, or - rarely - several, the newest first as the original's list has them.
         ScriptTeam? onlyInstance = null;
         List<ScriptTeam>? instances = null;
         if (_conditionTeam[unit.Index] is { } conditionTeam)
@@ -534,7 +534,7 @@ public sealed partial class ScriptEngine
         if (instances is not null)
         {
             // One evaluation per instance; the actions of that round act for that instance.
-            foreach (var instance in instances) RunForInstance(unit, script, instance);
+            for (var index = instances.Count - 1; index >= 0; index--) RunForInstance(unit, script, instances[index]);
         }
         else if (onlyInstance is not null) RunForInstance(unit, script, onlyInstance);
         else
@@ -760,7 +760,8 @@ public sealed partial class ScriptEngine
 
     /// <summary>
     /// <c>ScriptEngine::getTeamNamed</c>: the instance the running script/sequence acts for wins over any other instance of the prototype; a singleton team that is not active yet
-    /// (<see cref="ScriptTeam.Created"/>: it is still being built or recruited, or nothing ever joined it) is <see langword="null"/>; for any other prototype the first instance.
+    /// (<see cref="ScriptTeam.Created"/>: it is still being built or recruited, or nothing ever joined it) is <see langword="null"/>; for any other prototype the first instance of
+    /// the original's list, which is the newest (<see cref="FindTeamInstance"/>). The result is always one team (F-92).
     /// </summary>
     private ScriptTeam? FindTeam(string name)
     {
@@ -770,11 +771,14 @@ public sealed partial class ScriptEngine
         return team is not null && !team.Created && _program.FindTeam(name) is { IsSingleton: true } ? null : team;
     }
 
-    /// <summary>The first instance of a prototype whatever its state: the lookup that creates, builds and recruits into a team (<c>TeamPrototype::getFirstItemIn_TeamInstanceList</c>).</summary>
+    /// <summary>
+    /// The first instance of a prototype whatever its state: the lookup that creates, builds and recruits into a team (<c>TeamPrototype::getFirstItemIn_TeamInstanceList</c>). The
+    /// constructor of a <c>Team</c> prepends it to that list, so the first is the newest.
+    /// </summary>
     private ScriptTeam? FindTeamInstance(string name)
     {
         var instances = _teams.InstancesOf(name);
-        return instances.Count > 0 ? instances[0] : null;
+        return instances.Count > 0 ? instances[^1] : null;
     }
 
     /// <summary>

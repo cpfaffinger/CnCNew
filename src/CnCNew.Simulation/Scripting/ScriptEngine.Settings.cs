@@ -33,7 +33,7 @@ public sealed partial class ScriptEngine
             // ScriptActions::doTeamFaceNamed: every member stops and faces the named object (the reference also clears the waypoint queue and leaves its group).
             case "TEAM_FACE_NAMED":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 1)) is { } faced)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Face(member, faced.X, faced.Y);
                 return true;
             // ScriptActions::doPlayerSellEverything -> Player::sellEverythingUnderTheSun: iterateObjects(sellBuildings): every faction structure, command centre and power plant is sold (a sell command each).

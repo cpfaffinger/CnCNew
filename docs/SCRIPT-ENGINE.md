@@ -601,7 +601,7 @@ The director still uses the tick as a clock, but no longer assumes that it lasts
 11. Map and campaign requirements that the original obtains from the game run (difficulty per player, camera/movie times,
    progress profile) come from `MissionOptions`/host.
 
-12. **`getTeamNamed`:** the caller instance of a team (script/sequence context) takes precedence over other instances of the same prototype (`FindTeam`/`TeamsNamed` do that). Since Phase 13 the remaining rule
+12. **`getTeamNamed`:** the caller instance of a team (script/sequence context) takes precedence over other instances of the same prototype; without one the action reaches one instance, the newest, because a `Team` prepends itself to its prototype's list (`FindTeam`, `TeamNamed`; F-92, `docs/SIMULATION-CORE.md` §71). `evaluateHasUnits` is the one question that walks the instances. Since Phase 13 the remaining rule
     of the original also applies: a **non-active** singleton team (`ScriptTeam.Created` = `isActive`) is `NULL` – `TEAM_DESTROYED`, member queries and actions do not see it; singletons are created in advance on loading without
     start actions and become visible only through activation (`TEAM_CREATED` event).
 13. **Special powers:** `NAMED_FIRE_SPECIAL_POWER_AT_*` and the waypoint abilities go as an ordinary `UseSpecialPowerCommand` through the usual readiness, science and

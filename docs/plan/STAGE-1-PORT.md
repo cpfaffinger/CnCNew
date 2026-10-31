@@ -293,7 +293,7 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-89 | The modules of an object marked destroyed stopped at once; `GameLogic::update` runs them to the end of the frame, and the patch's starting objects make their builder in that frame | `docs/SIMULATION-CORE.md` §66.1 | Phase 52 | **done** (Phase 52, for `OCLUpdate`; the other modules are not known to need it) |
 | F-90 | A lone weapon outside the primary slot had no slot state | `docs/SIMULATION-CORE.md` §66.1 | Phase 52 | **done** (Phase 52) |
 | F-91 | A mission's computer player has no `AIPlayer`: `ScriptEngineOptions.Ai` is null for every mission, so nothing builds its base from the build list, trains its teams by the team timer or buys its sciences; `SET_BASE_CONSTRUCTION_SPEED`, `PLAYER_SELECT_SKILLSET` stay recorded there and six build actions missing | `AIPlayer::update` | Phase 13 (found with F-22) | open: changes every mission |
-| F-92 | Team actions reach every instance of a prototype without a calling team (`TeamsNamed`), where `getTeamNamed` gives one | `ScriptEngine::getTeamNamed` | Phase 9 (found with F-21) | open |
+| F-92 | Team actions reach every instance of a prototype without a calling team (`TeamsNamed`), where `getTeamNamed` gives one | `ScriptEngine::getTeamNamed` | Phase 9 (found with F-21) | **done** (Phase 59, §71: one instance, the newest; instances of a script walked newest first; a team's victim kept as the instance) |
 | F-33 | Installer: Steam outside the default path untested; export contains the original program files; manifest hash Windows-only; client not self-contained | – | publication | fix in R1 |
 
 ## 4. Human acceptance backlog

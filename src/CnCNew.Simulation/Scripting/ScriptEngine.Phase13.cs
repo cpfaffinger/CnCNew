@@ -83,18 +83,18 @@ public sealed partial class ScriptEngine
             // doTeamCaptureNearestUnownedFactionUnit: the group enters the closest unmanned object (PartitionFilterUnmannedObject(true)); entering one hands it to the entering side.
             case "TEAM_CAPTURE_NEAREST_UNOWNED_FACTION_UNIT":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0))) CaptureNearestUnmanned(team);
+                    foreach (var team in TeamNamed(Str(p, 0))) CaptureNearestUnmanned(team);
                 return true;
             // doTeamMoveToSkirmishApproachPath / doTeamFollowSkirmishApproachPath
             case "SKIRMISH_MOVE_TO_APPROACH_PATH":
-                if (Has(type, p, 2)) foreach (var team in TeamsNamed(Str(p, 0))) ApproachPath(team, Str(p, 1), follow: false);
+                if (Has(type, p, 2)) foreach (var team in TeamNamed(Str(p, 0))) ApproachPath(team, Str(p, 1), follow: false);
                 return true;
             case "SKIRMISH_FOLLOW_APPROACH_PATH":
-                if (Has(type, p, 3)) foreach (var team in TeamsNamed(Str(p, 0))) ApproachPath(team, Str(p, 1), follow: true);
+                if (Has(type, p, 3)) foreach (var team in TeamNamed(Str(p, 0))) ApproachPath(team, Str(p, 1), follow: true);
                 return true;
             // doSetTeamState: Team::setState, the string TEAM_STATE_IS reads.
             case "TEAM_SET_STATE":
-                if (Has(type, p, 2)) foreach (var team in TeamsNamed(Str(p, 0))) _teamStates[team.Id] = Str(p, 1);
+                if (Has(type, p, 2)) foreach (var team in TeamNamed(Str(p, 0))) _teamStates[team.Id] = Str(p, 1);
                 return true;
             // ---- more actions, each with the reference it follows
             // doNamedFaceNamed: the unit stops and faces the object (like TEAM_FACE_NAMED).
@@ -166,7 +166,7 @@ public sealed partial class ScriptEngine
             // doGuardSupplyCenter -> AIPlayer::guardSupplyCenter
             case "TEAM_GUARD_SUPPLY_CENTER":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0))) GuardSupplyCenter(team, Int(p, 1));
+                    foreach (var team in TeamNamed(Str(p, 0))) GuardSupplyCenter(team, Int(p, 1));
                 return true;
             // doBuildSupplyCenter -> AIPlayer::buildBySupplies
             case "AI_PLAYER_BUILD_SUPPLY_CENTER":
@@ -201,7 +201,7 @@ public sealed partial class ScriptEngine
                 return true;
             case "TEAM_SET_BOOBYTRAPPED":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 1)))
+                    foreach (var team in TeamNamed(Str(p, 1)))
                         foreach (var member in LiveMembers(team).OrderBy(member => member.Id.Value).ToArray()) BoobyTrap(Str(p, 0), member);
                 return true;
             default:

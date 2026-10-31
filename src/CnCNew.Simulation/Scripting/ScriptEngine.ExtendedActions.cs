@@ -81,12 +81,12 @@ public sealed partial class ScriptEngine
                 return true;
             case "TEAM_ENTER_NAMED":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 1)) is { } transport)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Enter(member, transport);
                 return true;
             case "TEAM_GARRISON_SPECIFIC_BUILDING":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 1)) is { } teamBuilding)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray())
                             if (MayGarrison(member, teamBuilding)) Enter(member, teamBuilding);
                 return true;
@@ -94,7 +94,7 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 1) && NamedEntity(Str(p, 0)) is { } nearestUser && NearestGarrisonBuilding(nearestUser, null) is { } nearest) Enter(nearestUser, nearest);
                 return true;
             case "TEAM_GARRISON_NEAREST_BUILDING":
-                if (Has(type, p, 1)) foreach (var team in TeamsNamed(Str(p, 0))) GarrisonTeamNearest(team);
+                if (Has(type, p, 1)) foreach (var team in TeamNamed(Str(p, 0))) GarrisonTeamNearest(team);
                 return true;
             case "PLAYER_GARRISON_ALL_BUILDINGS":
                 if (Has(type, p, 1) && ResolvePlayer(Str(p, 0)) is { } garrisoner) GarrisonPlayerEverywhere(garrisoner.Id);
@@ -105,7 +105,7 @@ public sealed partial class ScriptEngine
                 return true;
             case "TEAM_EXIT_ALL":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Evacuate(member);
                 return true;
             case "NAMED_EXIT_BUILDING":
@@ -113,7 +113,7 @@ public sealed partial class ScriptEngine
                 return true;
             case "TEAM_EXIT_ALL_BUILDINGS":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) ExitContainer(member);
                 return true;
             case "PLAYER_EXIT_ALL_BUILDINGS":
@@ -163,7 +163,7 @@ public sealed partial class ScriptEngine
                 return true;
             case "TEAM_USE_COMMANDBUTTON_ABILITY_AT_WAYPOINT":
                 if (Has(type, p, 3) && WaypointOrDiagnose(Str(p, 2)) is { } teamAbilitySpot)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) UseCommandButtonAbility(member, Str(p, 1), SpecialPowerTargetKind.Location, EntityId.Invalid, teamAbilitySpot.X, teamAbilitySpot.Y);
                 return true;
             case "NAMED_USE_COMMANDBUTTON_ABILITY_USING_WAYPOINT_PATH":

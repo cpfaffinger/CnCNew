@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 using CnCNew.Data.World;
 using CnCNew.Simulation.Commands;
 using CnCNew.Simulation.Ids;
@@ -174,7 +175,7 @@ public sealed partial class ScriptEngine
                 break;
             case "TEAM_KILL":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) _world.Kill(member.Id);
                 break;
             case "NAMED_DELETE":
@@ -183,7 +184,7 @@ public sealed partial class ScriptEngine
             case "TEAM_DELETE":
             case "TEAM_DELETE_LIVING":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray())
                             if (type == "TEAM_DELETE" || !member.EffectivelyDead) _world.RequestDestroy(member.Id);
                 break;
@@ -193,7 +194,7 @@ public sealed partial class ScriptEngine
                 break;
             case "DAMAGE_MEMBERS_OF_TEAM":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray())
                             _world.Damage(member.Id, new DamageInfo(EntityId.Invalid, Real(p, 1), DamageTypes.Unresistable, DeathTypes.Normal, false));
                 break;
@@ -243,7 +244,7 @@ public sealed partial class ScriptEngine
                 if (Has(type, p, 2))
                 {
                     if (!_prioritySets.ContainsKey(Str(p, 1))) { Diagnose($"unknown attack priority set '{Str(p, 1)}'"); break; }
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                     {
                         team.AttackPriority = Str(p, 1);
                         foreach (var member in LiveMembers(team)) _prioritySetOf[member.Id.Value] = Str(p, 1);
@@ -265,12 +266,12 @@ public sealed partial class ScriptEngine
                 break;
             case "TEAM_USE_COMMANDBUTTON_ABILITY":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) UseCommandButtonAbility(member, Str(p, 1), SpecialPowerTargetKind.None, EntityId.Invalid, Fixed.Zero, Fixed.Zero);
                 break;
             case "TEAM_USE_COMMANDBUTTON_ABILITY_ON_NAMED":
                 if (Has(type, p, 3) && NamedEntity(Str(p, 2)) is { } teamAbilityTarget)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) UseCommandButtonAbility(member, Str(p, 1), SpecialPowerTargetKind.Object, teamAbilityTarget.Id, Fixed.Zero, Fixed.Zero);
                 break;
 
@@ -280,12 +281,12 @@ public sealed partial class ScriptEngine
                 break;
             case "MOVE_TEAM_TO":
                 if (Has(type, p, 2) && WaypointOrDiagnose(Str(p, 1)) is { } destination)
-                    foreach (var team in TeamsNamed(Str(p, 0))) MoveGroup(LiveMembers(team).ToArray(), destination.X, destination.Y);
+                    foreach (var team in TeamNamed(Str(p, 0))) MoveGroup(LiveMembers(team).ToArray(), destination.X, destination.Y);
                 break;
             case "TEAM_FOLLOW_WAYPOINTS":
             case "TEAM_FOLLOW_WAYPOINTS_EXACT":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                     {
                         if (p.Length > 2 && Int(p, 2) != 0) FollowAsTeam(team, PathMode + Str(p, 1));
                         else foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, PathMode + Str(p, 1));
@@ -301,13 +302,13 @@ public sealed partial class ScriptEngine
             case "TEAM_STOP":
             case "TEAM_STOP_AND_DISBAND":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) Stop(member);
                 break;
             // doTeamGuard: each member guards its own position (F-58).
             case "TEAM_GUARD":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) GuardOwnPosition(member);
                 break;
             // doNamedGuard: the object guards its own position.
@@ -317,41 +318,42 @@ public sealed partial class ScriptEngine
             // doTeamGuardPosition: the team guards the waypoint (groupGuardPosition).
             case "TEAM_GUARD_POSITION":
                 if (Has(type, p, 2) && WaypointOrDiagnose(Str(p, 1)) is { } post)
-                    foreach (var team in TeamsNamed(Str(p, 0))) GuardBy(LiveMembers(team).ToArray(), post.X, post.Y, EntityId.Invalid);
+                    foreach (var team in TeamNamed(Str(p, 0))) GuardBy(LiveMembers(team).ToArray(), post.X, post.Y, EntityId.Invalid);
                 break;
             // doTeamGuardObject: the team guards the named object (groupGuardObject).
             case "TEAM_GUARD_OBJECT":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 1)) is { } guarded)
-                    foreach (var team in TeamsNamed(Str(p, 0))) GuardBy(LiveMembers(team).ToArray(), guarded.X, guarded.Y, guarded.Id);
+                    foreach (var team in TeamNamed(Str(p, 0))) GuardBy(LiveMembers(team).ToArray(), guarded.X, guarded.Y, guarded.Id);
                 break;
             case "TEAM_ATTACK_NAMED":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, NamedMode + Str(p, 1));
                 break;
             // doTeamGuardArea: the team guards the trigger area (F-58, step 3).
             case "TEAM_GUARD_AREA":
                 // A guard order of the script like the others (GuardBy): through the command path, so that it takes effect where they do at every rate.
                 if (Has(type, p, 2) && FindAreaQualified(Str(p, 1)) is { } guardedArea)
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         GuardBy(LiveMembers(team).ToArray(), Fixed.Zero, Fixed.Zero, EntityId.Invalid, guardedArea.Name);
                 else if (Has(type, p, 2)) Diagnose($"unknown trigger area '{Str(p, 1)}'");
                 break;
             case "TEAM_ATTACK_AREA":
                 if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, AreaMode + Str(p, 1));
                 break;
             case "TEAM_ATTACK_TEAM":
-                if (Has(type, p, 2))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
-                        foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, TeamMode + Str(p, 1));
+                // doAttack: the victim is the instance getTeamNamed gives now, kept by its id (setGoalTeam takes the squad from that instance).
+                if (Has(type, p, 2) && FindTeam(Str(p, 1)) is { } victims)
+                    foreach (var team in TeamNamed(Str(p, 0)))
+                        foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, TeamMode + InvariantText.Format($"{victims.Id}"));
                 break;
             case "NAMED_ATTACK_NAMED":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } attacker) StartFollowing(attacker, NamedMode + Str(p, 1));
                 break;
             case "NAMED_ATTACK_TEAM":
-                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } teamAttacker) StartFollowing(teamAttacker, TeamMode + Str(p, 1));
+                if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } teamAttacker && FindTeam(Str(p, 1)) is { } victimTeam) StartFollowing(teamAttacker, TeamMode + InvariantText.Format($"{victimTeam.Id}"));
                 break;
             case "NAMED_ATTACK_AREA":
                 if (Has(type, p, 2) && NamedEntity(Str(p, 0)) is { } areaAttacker) StartFollowing(areaAttacker, AreaMode + Str(p, 1));
@@ -361,7 +363,7 @@ public sealed partial class ScriptEngine
                 break;
             case "TEAM_HUNT":
                 if (Has(type, p, 1))
-                    foreach (var team in TeamsNamed(Str(p, 0)))
+                    foreach (var team in TeamNamed(Str(p, 0)))
                         foreach (var member in LiveMembers(team).ToArray()) StartFollowing(member, HuntMode);
                 break;
             case "PLAYER_HUNT":
@@ -742,7 +744,7 @@ public sealed partial class ScriptEngine
             }
             // aiAttackObject: the named victim is the unit's order, whatever the unit would pick by itself; the shot goes out as soon as a weapon reaches it.
             if (mode.StartsWith(NamedMode, StringComparison.Ordinal) && NamedEntity(ModeArgument(mode, NamedMode.Length)) is { EffectivelyDead: false } ordered && FireAtOrdered(entity, ordered)) continue;
-            var squadVictim = mode.StartsWith(TeamMode, StringComparison.Ordinal) ? SquadVictim(follower, entity, ModeArgument(mode, TeamMode.Length)) : null;
+            var squadVictim = mode.StartsWith(TeamMode, StringComparison.Ordinal) ? SquadVictim(follower, entity, int.Parse(ModeArgument(mode, TeamMode.Length), CultureInfo.InvariantCulture)) : null;
             if (squadVictim is not null && FireAtOrdered(entity, squadVictim)) continue;
             if (_tick % retargetInterval != follower.Entity % RetargetIntervalFrames * ticksPerFrame) continue;
             if (mode.StartsWith(PositionMode, StringComparison.Ordinal))
@@ -841,11 +843,11 @@ public sealed partial class ScriptEngine
     /// easy a random unit of the team, on normal the closest, on hard the one every attacker picks, the first of the team's list - the last that joined, as a team's list is prepended to.
     /// <c>CHOOSE_VICTIM_ALWAYS_USES_NORMAL</c> makes it the closest at every difficulty.
     /// </summary>
-    private Entity? SquadVictim(Follower follower, Entity attacker, string prototype)
+    private Entity? SquadVictim(Follower follower, Entity attacker, int teamId)
     {
         if (follower.Victim != 0 && _world.FindEntity(new EntityId(follower.Victim)) is { EffectivelyDead: false, DestroyRequested: false } kept) return kept;
         var squad = new List<Entity>();
-        foreach (var team in TeamsNamed(prototype))
+        if (_teams.TryGetValue(teamId, out var team))
             foreach (var member in LiveMembers(team))
                 if (!member.EffectivelyDead) squad.Add(member);
         follower.Victim = 0;

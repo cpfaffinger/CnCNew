@@ -274,13 +274,13 @@ public sealed partial class ScriptEngine
         return false;
     }
 
-    /// <summary>Some team <see cref="TeamsNamed"/> yields has a unit.</summary>
+    /// <summary><c>evaluateHasUnits</c>: the team of the running script when it is of that prototype, else whether any instance of the prototype has a unit - the one question about a team that walks the instances.</summary>
     private bool AnyTeamNamedHasUnits(string name)
     {
         if (name == ThisTeamName) return ThisTeam is { } calling && TeamHasUnit(calling);
-        if (ContextInstance(name) is { } instance) return TeamHasUnit(instance);
-        foreach (var team in _teams.Values)
-            if (team.Prototype == name && TeamHasUnit(team)) return true;
+        if (ThisTeam is { } self && self.Prototype == name) return TeamHasUnit(self);
+        foreach (var team in _teams.InstancesOf(name))
+            if (TeamHasUnit(team)) return true;
         return false;
     }
 
@@ -360,20 +360,10 @@ public sealed partial class ScriptEngine
         return message;
     }
 
-    private IEnumerable<ScriptTeam> TeamsNamed(string name)
+    /// <summary>The team an action names, as a sequence of none or one: <see cref="FindTeam"/>, because <c>getTeamNamed</c> gives one instance and no action of the original walks the instances of a prototype (F-92).</summary>
+    private IEnumerable<ScriptTeam> TeamNamed(string name)
     {
-        if (name == ThisTeamName)
-        {
-            if (ThisTeam is { } calling) yield return calling;
-            yield break;
-        }
-        if (ContextInstance(name) is { } instance)
-        {
-            yield return instance;
-            yield break;
-        }
-        foreach (var team in _teams.Values)
-            if (team.Prototype == name) yield return team;
+        if (FindTeam(name) is { } team) yield return team;
     }
 
     /// <summary><c>ObjectTypes</c> resolution (<c>objectTypesFromParam</c>): a named object-type list if one was built with <c>OBJECTLIST_ADDOBJECTTYPE</c>, otherwise the single template name.</summary>

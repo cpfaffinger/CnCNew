@@ -288,6 +288,37 @@ static partial class Tests
         Check.That(NamedIn(session, "Hunter") is { EffectivelyDead: false }, "Nobody else died.");
     }
 
+    /// <summary>
+    /// F-92: <c>ScriptEngine::getTeamNamed</c> gives one instance of a prototype, the first of its list, and a <c>Team</c> prepends itself to that list, so an action that names a
+    /// prototype with several instances reaches the newest one alone; the same list makes <c>executeScript</c> walk the instances newest first, and <c>evaluateHasUnits</c> is the
+    /// one question that looks at all of them. The VM walked every instance, and took the oldest where it took one.
+    /// </summary>
+    public static void FidelityTeamActionsReachOneInstance()
+    {
+        var (map, fixture, terrain) = MissionMap([
+            Scr.Script("Two", [Scr.And(Scr.If("CONDITION_TRUE"))], [Scr.Do("CREATE_REINFORCEMENT_TEAM", Scr.Team("Wave"), Scr.Waypoint("Far")), Scr.Do("CREATE_REINFORCEMENT_TEAM", Scr.Team("Wave"), Scr.Waypoint("Mid"))], oneShot: true),
+            Scr.Script("First", [Scr.And(Scr.If("TEAM_HAS_UNITS", Scr.Team("Wave")))], [Scr.Do("CREATE_NAMED_ON_TEAM_AT_WAYPOINT", Scr.Unit("Scout"), Scr.Type("BetaSoldier"), Scr.Team("<This Team>"), Scr.Waypoint("Spawn"))], oneShot: true),
+            Scr.Script("Ready", [Scr.And(Scr.If("NAMED_CREATED", Scr.Unit("Scout")))], [Scr.Do("SET_MILLISECOND_TIMER", Scr.Counter("wait"), Scr.Real(1m))], oneShot: true),
+            Scr.Script("Move", [Scr.And(Scr.If("TIMER_EXPIRED", Scr.Counter("wait")))], [Scr.Do("TEAM_DELETE", Scr.Team("Wave"))], oneShot: true),
+        ], objects: [Placed("AlphaSoldier", 100m, 100m, "teamA", "Keeper"), Placed("BetaSoldier", 500m, 300m, "teamB", "Other")]);
+        var wave = new MapProperties([Scr.Text("teamName", "Wave"), Scr.Text("teamOwner", PlayerB), Scr.Flag("teamIsSingleton", false), new MapProperty("teamMaxInstances", MapPropertyType.Int, 4, 0m, string.Empty),
+            Scr.Text("teamUnitType1", "BetaSoldier"), new MapProperty("teamUnitMinCount1", MapPropertyType.Int, 2, 0m, string.Empty), new MapProperty("teamUnitMaxCount1", MapPropertyType.Int, 2, 0m, string.Empty)]);
+        map = map with { Teams = [..map.Teams, wave] };
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        Run(session, session.Frames(5));
+        var instances = session.Engine.TeamInstances.Where(team => team.Prototype == "Wave").OrderBy(team => team.Id).ToArray();
+        Check.That(instances.Length == 2, $"Two reinforcements make two instances ({instances.Length}).");
+        var scout = NamedIn(session, "Scout");
+        Check.That(scout is not null, "The script for each instance made its unit, once.");
+        Check.That(instances[1].Members.Contains(scout!.Id.Value) && !instances[0].Members.Contains(scout.Id.Value), "The instances are walked newest first: <This Team> of the first round is the newer one.");
+        Check.That(session.Engine.Diagnostics.ContainsKey("create of already existing 'Scout'"), "The second round is the older one, and finds the name taken.");
+        var older = instances[0].Members.ToArray();
+        Check.That(older.Length == 2, $"The older instance has its two soldiers ({older.Length}).");
+        Run(session, session.Frames(45));
+        Check.That(older.All(id => session.World.FindEntity(new EntityId(id)) is { DestroyRequested: false }), "TEAM_DELETE by name left the older instance alone.");
+        Check.That(NamedIn(session, "Scout") is null, "The newer instance is gone, with the unit that joined it.");
+    }
+
 
     /// <summary>
     /// F-43: <c>ProductionUpdate::queueUpgrade</c> researches an upgrade in the producer's queue for its build time - paid when queued, complete when the time is over, refunded in
