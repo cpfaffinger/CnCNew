@@ -17,20 +17,18 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "349603C63A83A531",
-        "commandStreamSha256": "57FF5E91A487A28DD974DB983D8804A1E2895CEF284DE09588714F0D0E3D5197",
-        "commands": 1095,
-        "endTick": 26701,
-        "finalHash": "1B2A1C9353866D6A",
+        "chainHash": "280658CB2427F458",
+        "commandStreamSha256": "2D9A81AE9E4484A2DA822AA4BADFC38459BE128BE9ECB78A5141804C5640D6B4",
+        "commands": 3285,
+        "endTick": 90000,
+        "finalHash": "366E69D6C3149183",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
-        "outcome": "winner",
-        "rejectedCommands": 154,
-        "snapshotBytes": 363912,
-        "snapshotSha256": "38B70A4F9EE89EF6088748C7FA3D3B363DAE761652AA0C1E4711D787874E7AA0",
-        "snapshotTick": 13350,
-        "victoryTick": 26100,
-        "winner": "FactionAmerica"
+        "outcome": "stalemate",
+        "rejectedCommands": 410,
+        "snapshotBytes": 379336,
+        "snapshotSha256": "52F40DA0B672C5F12BD67D0A18747A8149BE80A761577C3FBC26132892444C8A",
+        "snapshotTick": 45000
       },
       "set": "full"
     },
@@ -543,17 +541,17 @@
         "worldSeed": "C0FFEE06"
       },
       "results": {
-        "chainHash": "5D27EAEACD914061",
+        "chainHash": "23DFA205878684B2",
         "commandStreamSha256": "DFECCF9CDCA6510F9607EE1A71931FDBB06F01D77B2502E07428947698A91B4E",
         "commands": 2543,
         "endTick": 18000,
-        "finalHash": "4D3828FB46B2C7D2",
+        "finalHash": "B962DD152D60DF6F",
         "identicalAfterSnapshotContinuation": true,
         "identicalInRun2": true,
         "outcome": "stalemate",
         "rejectedCommands": 500,
-        "snapshotBytes": 2604154,
-        "snapshotSha256": "26875857E2DA0F0E18CF4B127125729E1CA5F08DE8188FC7D09849353B94D7D4",
+        "snapshotBytes": 2604153,
+        "snapshotSha256": "EDFA2B8DB508ADC32E1E8A112FB913FE53AA5F6ED03A28BE1585B096450EF989",
         "snapshotTick": 9000
       },
       "set": "full"
