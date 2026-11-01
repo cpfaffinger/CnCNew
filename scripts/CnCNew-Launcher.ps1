@@ -235,9 +235,14 @@ function Get-Commit {
     $commit
 }
 
+function Get-Sha256([string]$Path) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($Path))) } finally { $sha.Dispose() }
+}
+
 # What the data depend on: the two masters and the code that makes it. A new version that changes none of these keeps the data.
 function Get-ContentKey {
-    $key = @((Get-FileHash -LiteralPath (Join-Path $repo 'baselines\steam-master.json') -Algorithm SHA256).Hash, (Get-FileHash -LiteralPath (Join-Path $repo 'baselines\patch-master.json') -Algorithm SHA256).Hash)
+    $key = @((Get-Sha256 (Join-Path $repo 'baselines\steam-master.json')), (Get-Sha256 (Join-Path $repo 'baselines\patch-master.json')))
     if ($script:tools.Git) { $key += @(& $script:tools.Git -C $repo log -1 '--format=%H' -- src/CnCNew.Import src/CnCNew.Formats src/CnCNew.Images tools/CnCNew.AssetTool 2>$null) }
     $key -join ' '
 }
@@ -391,7 +396,8 @@ function Install-Pwsh {
     $zip = Join-Path $logDir 'pwsh.zip'
     Save-Download "https://github.com/PowerShell/PowerShell/releases/download/v$powerShellVersion/PowerShell-$powerShellVersion-win-x64.zip" $zip
     $directory = Join-Path $dataDir 'tools\pwsh'
-    Expand-Archive -LiteralPath $zip -DestinationPath $directory -Force
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [IO.Compression.ZipFile]::ExtractToDirectory($zip, $directory)
     Remove-Item -LiteralPath $zip -Force
     Add-ToolPath $directory
 }
