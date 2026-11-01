@@ -54,6 +54,9 @@ public sealed record RtsCameraSettings(
     /// <summary><c>LookAtTranslator</c>: screen-edge scrolling starts within 3 pixels of the edge.</summary>
     public int EdgeScrollPixels { get; init; } = 3;
 
+    /// <summary><c>GlobalData::m_partitionCellSize</c> (<c>PartitionCellSize</c>): inside this distance a tethered camera drifts towards its object by its play.</summary>
+    public float PartitionCellSize { get; init; } = 40f;
+
     /// <summary><c>View::setPitch</c> clamp.</summary>
     public float MinPitchDegrees { get; init; } = 0.1f;
     public float MaxPitchDegrees { get; init; } = 89.9f;
@@ -76,7 +79,7 @@ public sealed record RtsCameraSettings(
             Real("KeyboardScrollSpeedFactor"),
             Real("KeyboardCameraRotateSpeed"),
             Real("MaxShakeIntensity"),
-            Real("MaxShakeRange"));
+            Real("MaxShakeRange")) { PartitionCellSize = Real("PartitionCellSize") };
     }
 }
 

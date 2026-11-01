@@ -55,17 +55,18 @@ public static class MissionOutputCatalog
         Shown("camera pans to the waypoint and returns to default angle, pitch and zoom", "RESET_CAMERA");
         Shown("camera cuts to the waypoint, looks at the second waypoint, takes zoom and pitch", "SETUP_CAMERA");
         Shown("camera rotates in place over the script's duration", "ROTATE_CAMERA");
-        Shown("camera height changes (clamped to the playable zoom range)", "ZOOM_CAMERA", "CAMERA_MOD_SET_FINAL_ZOOM");
-        Shown("camera pitch changes (clamped to the camera's pitch range)", "PITCH_CAMERA", "CAMERA_MOD_SET_FINAL_PITCH");
-        Shown("camera turns towards the waypoint", "CAMERA_MOD_LOOK_TOWARD", "CAMERA_MOD_FINAL_LOOK_TOWARD", "CAMERA_LOOK_TOWARD_WAYPOINT");
-        Shown("camera turns towards the object (its position when the action ran)", "CAMERA_LOOK_TOWARD_OBJECT");
-        Shown("camera stays on the named object", "CAMERA_FOLLOW_NAMED", "CAMERA_STOP_FOLLOW");
-        Shown("camera stays on the named object (approximation of the tether: the play radius is ignored, the object is centred)", "CAMERA_TETHER_NAMED", "CAMERA_STOP_TETHER_NAMED");
+        Shown("m_zoom goes to the script's value, or to a share of the largest zoom where the move ends, without a player's limit (ScriptedCamera)", "ZOOM_CAMERA", "CAMERA_MOD_SET_FINAL_ZOOM");
+        Shown("m_FXPitch goes to the script's value, without a limit: below 1 the point looked at rises to the camera's height, above 1 the camera comes nearer over the ground (ScriptedCamera)", "PITCH_CAMERA", "CAMERA_MOD_SET_FINAL_PITCH");
+        Shown("camera turns towards the waypoint (ScriptedCamera)", "CAMERA_MOD_LOOK_TOWARD", "CAMERA_MOD_FINAL_LOOK_TOWARD", "CAMERA_LOOK_TOWARD_WAYPOINT");
+        Shown("the move in progress keeps the angle it began with, or follows its angle over the frames given (ScriptedCamera)", "CAMERA_MOD_FREEZE_ANGLE", "CAMERA_MOD_SET_ROLLING_AVERAGE");
+        Shown("camera turns towards the object and stays on it for the hold (ScriptedCamera)", "CAMERA_LOOK_TOWARD_OBJECT");
+        Shown("the view locks onto the named object and takes up its height, turning with it while it flies (W3DView::update, LOCK_FOLLOW)", "CAMERA_FOLLOW_NAMED", "CAMERA_STOP_FOLLOW");
+        Shown("the view is tethered to the named object: outside a partition cell it closes half the way each frame, inside it drifts by the script's play (W3DView::update, LOCK_TETHER)", "CAMERA_TETHER_NAMED", "CAMERA_STOP_TETHER_NAMED");
         Shown("the view shakes (W3DView::shake: the type's GameData intensity, decaying and reversing every logic frame)", "SCREEN_SHAKE");
         Shown("the camera is confined to the map border with that index (TerrainLogic::setActiveBoundary); the minimap keeps border 0", "MAP_SWITCH_BORDER");
         Shown("black bars, control bar hidden", "CAMERA_LETTERBOX_BEGIN", "CAMERA_LETTERBOX_END");
         Shown("full-screen white/black fade", "CAMERA_FADE_ADD", "CAMERA_FADE_SUBTRACT", "CAMERA_FADE_MULTIPLY");
-        Shown("the world turns grey-scale (red-channel mono, an approximation of the luminance 0.3/0.59/0.11) over the given frames; a post pass of the Stride client", "CAMERA_BW_MODE_BEGIN", "CAMERA_BW_MODE_END");
+        Shown("the world turns grey-scale (the original's luminance 0.3/0.59/0.11) over the given frames; a post pass of the Stride client", "CAMERA_BW_MODE_BEGIN", "CAMERA_BW_MODE_END");
         Shown("zoom blur into the old view, cut to the waypoint at the apex, zoom blur out of the new one (ScreenMotionBlurFilter, 24 logic frames); a post pass of the Stride client", "CAMERA_MOTION_BLUR_JUMP");
 
         // ---- input, text, ton, film, radar (unchanged from the first Phase 16 session)
@@ -126,9 +127,9 @@ public static class MissionOutputCatalog
         Not("the frame pacing of the client is not script controlled", "SET_FPS_LIMIT");
         Not("debug output of the map designers (message box / log); never shown", "DEBUG_MESSAGE_BOX", "DEBUG_STRING");
         Not("emoticon bubbles over objects are not drawn", "NAMED_SET_EMOTICON", "TEAM_SET_EMOTICON");
-        Not("the camera mod that freezes the angle during a move is not modelled", "CAMERA_MOD_FREEZE_ANGLE", "CAMERA_MOD_FREEZE_TIME");
+        Not("the camera mod that freezes the world during a move is not modelled; no campaign map uses it", "CAMERA_MOD_FREEZE_TIME");
         Not("no retail effect or no campaign map uses it", "CAMERA_MOVE_HOME", "MOVE_CAMERA_TO_SELECTION", "CAMERA_SET_DEFAULT", "CAMERA_SET_AUDIBLE_DISTANCE", "CAMERA_ENABLE_SLAVE_MODE", "CAMERA_DISABLE_SLAVE_MODE",
-            "CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER", "CAMERA_MOD_SET_ROLLING_AVERAGE", "SET_VISUAL_SPEED_MULTIPLIER", "CAMERA_FADE_SATURATE");
+            "CAMERA_MOD_SET_FINAL_SPEED_MULTIPLIER", "SET_VISUAL_SPEED_MULTIPLIER", "CAMERA_FADE_SATURATE");
         Not("the pan variants of the motion blur are not modelled (only the jump is)", "CAMERA_MOTION_BLUR", "CAMERA_MOTION_BLUR_FOLLOW", "CAMERA_MOTION_BLUR_END_FOLLOW");
         Not("not used by any campaign map; background sounds are not suspended by scripts", "SUSPEND_BACKGROUND_SOUNDS", "RESUME_BACKGROUND_SOUNDS");
         Not("not used by any campaign map", "OBJECT_FORCE_SELECT", "SET_TREE_SWAY", "SET_INFANTRY_LIGHTING_OVERRIDE", "RESET_INFANTRY_LIGHTING_OVERRIDE");

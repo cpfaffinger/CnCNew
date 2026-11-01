@@ -71,6 +71,8 @@ internal static class MissionEffectsTests
         harness.Run("While time is frozen the presentation clock goes on: a camera move finishes and thaws the world", PresentationClockRunsWhileTimeIsFrozen);
         harness.Run("SCREEN_SHAKE shakes the real camera deterministically with the GameData intensity of its type", ScreenShakeShakesTheCamera);
         harness.Run("The camera flies a waypoint chain, a shaker turns it, a cameo flash reaches the bar", CameraPathShakerAndFlash);
+        harness.Run("The scripts' camera requests keep their order and the frames between them, however late they are drawn", CameraRequestsKeepTheirOrder);
+        harness.Run("A followed object keeps the camera, and a move does not fight it", CameraFollowsANamedObject);
         harness.Run("MAP_SWITCH_BORDER confines the camera to the border; a border the map lacks is reported", BorderSwitchConfinesTheCamera);
         harness.Run("The grey-scale and the motion blur follow the original's frame counts; the cut happens at the blur's apex", ScreenFiltersFollowTheOriginalFrameCounts);
         harness.Run("The superweapon list: a ready power is bold and flashes white every 15 frames, and the list ends in an ellipsis above the control bar", SuperweaponDrawRules);
@@ -83,6 +85,7 @@ internal static class MissionEffectsTests
         }
         var data = GameData.Load(args[index + 1], rate: CnCNew.Tests.TestRate.Default);
         harness.Run("MD_USA01 headless: freeze, shake, grey-scale, border, volumes, flashes and the removed buttons all reach their consumers", () => RealIntro(data));
+        harness.Run("The shots of MD_USA01 stand where the original's formulas put them", () => RealIntroShots(data));
         harness.Run("A removed command-bar button is gone from the bar of a selected object, and comes back when the script adds it", () => RealCommandBar(data));
         harness.Run("Sciences a script hides or disables are hidden or restricted PurchaseScience buttons; an unselectable object leaves the selection", () => RealScienceAndSelection(data));
         harness.Run("A script's custom house colour and colour flash show in the object layer's frame", () => RealColorsAndFlashes(data));
@@ -317,6 +320,51 @@ internal static class MissionEffectsTests
         TestHarness.Assert(missing.Problems.Contains("SCREEN_SHAKE: no shake intensities connected") && missing.Count.Displayed == 0, "without the GameData intensities a shake is reported, never invented");
     }
 
+    private static void CameraRequestsKeepTheirOrder()
+    {
+        var setup = OnFlag("Setup", "setup", Do("SETUP_CAMERA", Named(MapScriptParameterType.Waypoint, "A"), Real(0.5m), Real(0.8m), Named(MapScriptParameterType.Waypoint, "B")));
+        var move = OnFlag("Move", "move", Do("MOVE_CAMERA_TO", Named(MapScriptParameterType.Waypoint, "C"), Real(2), Real(0), Real(0), Real(0)), Do("CAMERA_MOD_SET_FINAL_ZOOM", Real(0.9m), Real(0), Real(0)));
+        var (map, fixture, terrain) = Mission([setup, move], [Waypoint("A", 1, 100m, 100m), Waypoint("B", 2, 200m, 100m), Waypoint("C", 3, 100m, 200m)]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var director = new MissionPresentationDirector(session);
+        var camera = new RtsCamera(MinimalCameraSettings(), new TerrainHeightSampler(map.HeightField), new Vector2(1280, 720));
+        StepFrame(session, director);
+        session.Engine.SignalUiInteraction("setup");
+        StepFrame(session, director);
+        session.Engine.SignalUiInteraction("move");
+        StepFrame(session, director);
+
+        // One drawn frame behind both scripts: the cut still happens first, with its look and its zoom, and the move begins from it.
+        director.ApplyCameraTo(camera, 1.0 / 30);
+        var largest = camera.MaxZoomAt(new Vector2(100, 100));
+        TestHarness.Assert(Math.Abs(camera.Angle + MathF.PI / 2f) < 1e-3f, $"the look of the cut survives the move of the next frame ({camera.Angle})");
+        TestHarness.Assert(Math.Abs(camera.FxPitch - 0.8f) < 1e-5f && Math.Abs(camera.Zoom - 0.5f * largest) < 0.02f, $"so do pitch and zoom ({camera.FxPitch}, {camera.Zoom})");
+        TestHarness.Assert(Vector2.Distance(camera.Pivot, new Vector2(100, 100)) < 5f, $"and the move starts at the cut ({camera.Pivot})");
+        for (var frame = 0; frame < 62; frame++) director.ApplyCameraTo(camera, 1.0 / 30);
+        TestHarness.Assert(Vector2.Distance(camera.Pivot, new Vector2(100, 200)) < 0.01f && Math.Abs(camera.Zoom - 0.9f * largest) < 1e-3f, $"the move and its final zoom end together ({camera.Pivot}, {camera.Zoom})");
+        var counts = director.Counts().ToDictionary(count => count.Action);
+        TestHarness.Assert(counts["SETUP_CAMERA"].Displayed == 1 && counts["CAMERA_MOD_SET_FINAL_ZOOM"].Displayed == 1, "both count as displayed");
+    }
+
+    private static void CameraFollowsANamedObject()
+    {
+        var follow = OnFlag("Follow", "follow", Do("CAMERA_FOLLOW_NAMED", Named(MapScriptParameterType.Unit, "Hero1"), Bool(true)));
+        var stop = OnFlag("Stop", "stop", Do("CAMERA_STOP_FOLLOW"));
+        var (map, fixture, terrain) = Mission([follow, stop], [Placed("Barrel", 120m, 140m, "Hero", "Hero1")]);
+        var session = MissionSession.Start(MissionOptions.Standard, fixture.Templates, fixture.Fingerprint, terrain, map);
+        var director = new MissionPresentationDirector(session);
+        var camera = new RtsCamera(MinimalCameraSettings(), new TerrainHeightSampler(map.HeightField), new Vector2(1280, 720));
+        StepFrame(session, director);
+        session.Engine.SignalUiInteraction("follow");
+        StepFrame(session, director);
+        director.ApplyCameraTo(camera, 1.0 / 30);
+        TestHarness.Assert(camera.Script.IsLocked && Vector2.Distance(camera.Pivot, new Vector2(120, 140)) < 1f, $"the snap puts the camera on the object ({camera.Pivot})");
+        session.Engine.SignalUiInteraction("stop");
+        StepFrame(session, director);
+        director.ApplyCameraTo(camera, 1.0 / 30);
+        TestHarness.Assert(!camera.Script.IsLocked, "CAMERA_STOP_FOLLOW ends the lock");
+    }
+
     private static void BorderSwitchConfinesTheCamera()
     {
         var script = OnFlag("Border", "go", Do("MAP_SWITCH_BORDER", Int(1)));
@@ -455,6 +503,58 @@ internal static class MissionEffectsTests
         TestHarness.Assert(counts["COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE"].Emitted > 0 && counts["COMMANDBAR_REMOVE_BUTTON_OBJECTTYPE"].Displayed > 0 && controller.Hud.Input.CommandBar!.Script.OverrideCount > 0,
             $"the removed buttons are overrides of the control bar model ({report}; problems: {string.Join(", ", director.Problems.Keys.Where(key => key.StartsWith("COMMANDBAR", StringComparison.Ordinal)).Take(3))})");
         Console.WriteLine("  " + report);
+    }
+
+    /// <summary>
+    /// <c>W3DView::buildCameraTransform</c> on real shots of the intro: the number each one must give by the original's formula, from the script's own values. The shots looked at the sky while the
+    /// zoom was a share of 310 above the terrain and the ground level stood still.
+    /// </summary>
+    private static void RealIntroShots(GameData data)
+    {
+        var (live, controller, _) = LoadMission(data, "Maps/MD_USA01/MD_USA01.map");
+        var camera = live.Camera;
+        var waypoints = live.Session.World.Terrain!.Waypoints;
+        Vector2 Place(string name)
+        {
+            var waypoint = waypoints.Single(point => point.Name == name);
+            return new Vector2((float)waypoint.X.ToDecimal(), (float)waypoint.Y.ToDecimal());
+        }
+
+        var seen = new Dictionary<string, (Vector2 Pivot, float Ground, float Angle, float Zoom, float Fx, Vector3 Eye, Vector3 Target)>();
+        var journalled = 0;
+        string? last = null;
+        for (var frame = 0; frame < 2300 && seen.Count < 3; frame++)
+        {
+            controller.Update(CnCNew.Tests.TestTime.FrameSeconds);
+            if (last is not null) seen[last] = (camera.Pivot, camera.GroundLevel, camera.Angle, camera.Zoom, camera.FxPitch, camera.Eye, camera.Target);
+            last = null;
+            for (; journalled < live.Director.Journal.Count; journalled++)
+            {
+                var entry = live.Director.Journal[journalled];
+                foreach (var name in new[] { "CINE_CameraMoveTo04", "CINE_CameraPos02", "CINE_RocketShotPos" })
+                    if (entry.Contains($"SETUP_CAMERA({name},", StringComparison.Ordinal)) last = name;
+            }
+        }
+        TestHarness.Assert(seen.Count == 3, $"the intro came to its shots ({string.Join(", ", seen.Keys)})");
+        void Shot(string name, string lookAt, float share, float fx, string what)
+        {
+            var (place, look) = (Place(name), Place(lookAt));
+            var shot = seen[name];
+            var zoom = share * camera.MaxZoomAt(place);
+            var ground = camera.GroundHeightAt(place);
+            // The script of the second shot begins its slow move a frame after the cut, so the place is the waypoint's to within that frame.
+            TestHarness.Assert(Vector2.Distance(shot.Pivot, place) < 1f && Math.Abs(shot.Ground - ground) < 0.01f, $"{what}: at the waypoint and its ground ({shot.Pivot}, {shot.Ground} against {place}, {ground})");
+            TestHarness.Assert(Math.Abs(shot.Zoom - zoom) < 1e-3f && Math.Abs(shot.Fx - fx) < 1e-4f, $"{what}: zoom {zoom} and pitch {fx} ({shot.Zoom}, {shot.Fx})");
+            var direction = look - place;
+            var angle = MathF.Atan2(direction.Y, direction.X) - MathF.PI / 2f;
+            TestHarness.Assert(Math.Abs(MathF.IEEERemainder(shot.Angle - angle, 2f * MathF.PI)) < 1e-3f, $"{what}: the angle looks at the second waypoint ({shot.Angle} against {angle})");
+            var eyeHeight = camera.OffsetHeight * zoom;
+            TestHarness.Assert(Math.Abs(shot.Eye.Z - eyeHeight) < 0.02f, $"{what}: the height is m_cameraOffset.z times the zoom ({shot.Eye.Z} against {eyeHeight})");
+        }
+        Shot("CINE_CameraMoveTo04", "CINE_CameraLookAt04", 0.1f, 0f, "the road");
+        TestHarness.Assert(Math.Abs(seen["CINE_CameraMoveTo04"].Eye.Z - seen["CINE_CameraMoveTo04"].Target.Z) < 0.01f, "a pitch of 0 looks level");
+        Shot("CINE_CameraPos02", "CINE_CameraLookAt02", 1.2f, 2f, "from above");
+        Shot("CINE_RocketShotPos", "CINE_RocketShotLookAt", 0.32f, -0.5f, "the rocket");
     }
 
     private static void RealCommandBar(GameData data)

@@ -7,10 +7,11 @@ namespace CnCNew.Presentation.Camera;
 /// <summary>
 /// The RTS camera of the retail game (<c>W3DView</c>, <c>View</c>, <c>LookAtTranslator</c> of the EA Zero Hour sources), renderer-neutral.
 /// <para>
-/// Model: a pivot on the map (<see cref="Pivot"/>, x/y) at a per-map fixed <see cref="GroundLevel"/>; the camera sits at
+/// Model: a pivot on the map (<see cref="Pivot"/>, x/y) at a <see cref="GroundLevel"/>; the camera sits at
 /// <c>pivot + factor * Rz(angle) * Rpitch * offset * zoom</c> with <c>offset = (0, -H / tan(CameraPitch), H)</c>,
-/// <c>H = GroundLevel + CameraHeight</c> and <c>factor = 1 - GroundLevel / (H * zoom)</c> (<c>buildCameraTransform</c>). The zoom follows the
-/// desired height above the highest terrain around the pivot (<c>getHeightAroundPos</c>) with <c>CameraAdjustSpeed</c> per 30 Hz frame.
+/// <c>H = </c><see cref="OffsetHeight"/> and <c>factor = 1 - GroundLevel / (H * zoom)</c> (<c>buildCameraTransform</c>). <c>H</c> is fixed per map; the ground level starts
+/// there and only a script moves it (<see cref="ScriptedCamera"/>). The zoom follows the desired height above the highest terrain around the pivot (<c>getHeightAroundPos</c>) with
+/// <c>CameraAdjustSpeed</c> per 30 Hz frame.
 /// </para>
 /// <para>
 /// Conventions: world right-handed, Z up. <see cref="View"/> is <see cref="Matrix4x4.CreateLookAt"/>, <see cref="Projection"/> is
@@ -42,6 +43,7 @@ public sealed class RtsCamera : IViewProjection
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
         _terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
+        Script = new ScriptedCamera(this);
         SetViewportSize(viewportSize);
         Pitch = DegreesToRadians(settings.PitchDegrees);
         HeightAboveGround = settings.MaxHeightAboveGround;
@@ -51,10 +53,13 @@ public sealed class RtsCamera : IViewProjection
 
     public RtsCameraSettings Settings => _settings;
 
+    /// <summary>What the mission scripts make this camera do (<c>W3DView</c>'s scripted moves).</summary>
+    public ScriptedCamera Script { get; }
+
     /// <summary>Look-at point on the ground plane (x, y) before shake and constraints are applied again.</summary>
     public Vector2 Pivot => _pivot;
 
-    /// <summary><c>m_groundLevel</c>: fixed per map by <see cref="InitializeForMap"/>; the look-at target's z.</summary>
+    /// <summary><c>m_groundLevel</c>: set for the map by <see cref="InitializeForMap"/>, changed only by a script's move, and kept after it; the look-at target's z.</summary>
     public float GroundLevel { get; private set; }
 
     /// <summary>Rotation about the up axis in radians, 0 = the default <c>CameraYaw</c> view (positive turns counter-clockwise seen from above).</summary>
@@ -101,12 +106,13 @@ public sealed class RtsCamera : IViewProjection
         {
             if ((uint)value >= (uint)_terrain.Boundaries.Length) throw new ArgumentOutOfRangeException(nameof(value));
             _activeBoundary = value;
+            _heldConstraints = null; // TerrainLogic::setActiveBoundary -> forceCameraConstraintRecalc
             ClampToConstraints();
         }
     }
 
-    /// <summary><c>getCameraOffsetZ</c> of the retail view: ground level plus <c>CameraHeight</c>.</summary>
-    public float OffsetHeight => GroundLevel + _settings.CameraHeight;
+    /// <summary><c>m_cameraOffset.z</c> of the retail view: the ground level of the map's start plus <c>CameraHeight</c>. A script's ground level does not change it.</summary>
+    public float OffsetHeight { get; private set; }
 
     public Vector3 Eye { get { Refresh(); return _eye; } }
     public Vector3 Target { get { Refresh(); return _target; } }
@@ -207,12 +213,15 @@ public sealed class RtsCamera : IViewProjection
     {
         _pivot = lookAt;
         GroundLevel = Math.Min(_terrain.HeightAt(lookAt.X, lookAt.Y), _settings.MaxGroundLevel);
+        OffsetHeight = GroundLevel + _settings.CameraHeight;
         SetZoomToDefault();
     }
 
     /// <summary><c>View::setZoomToDefault</c>: maximum height above ground, zoom snapped to it.</summary>
     public void SetZoomToDefault()
     {
+        Script.StopAll();
+        _heldConstraints = null;
         HeightAboveGround = _settings.MaxHeightAboveGround;
         Zoom = DesiredZoom();
         _dirty = true;
@@ -222,6 +231,7 @@ public sealed class RtsCamera : IViewProjection
     /// <summary><c>W3DView::lookAt</c>: centre the view on a world point.</summary>
     public void CenterOn(Vector2 world)
     {
+        Script.StopMoveAndTurn();
         _pivot = world;
         _dirty = true;
         ClampToConstraints();
@@ -229,6 +239,7 @@ public sealed class RtsCamera : IViewProjection
 
     public void SetAngle(float radians)
     {
+        Script.StopAll();
         Angle = MathF.IEEERemainder(radians, 2 * MathF.PI);
         _dirty = true;
         ClampToConstraints();
@@ -244,12 +255,18 @@ public sealed class RtsCamera : IViewProjection
 
     public void SetPitch(float radians)
     {
+        Script.StopAll();
         Pitch = Math.Clamp(radians, DegreesToRadians(_settings.MinPitchDegrees), DegreesToRadians(_settings.MaxPitchDegrees));
         _dirty = true;
         ClampToConstraints();
     }
 
-    public void SetPitchToDefault() => SetPitch(DegreesToRadians(_settings.PitchDegrees));
+    /// <summary><c>W3DView::setAngleAndPitchToDefault</c>: also ends a script's pitch.</summary>
+    public void SetPitchToDefault()
+    {
+        FxPitch = 1f;
+        SetPitch(DegreesToRadians(_settings.PitchDegrees));
+    }
 
     /// <summary><c>W3DView::m_FXPitch</c>: the pitch of the scripts, 1 by default (see <see cref="BuildMatrices"/>).</summary>
     public float FxPitch { get; private set; } = 1f;
@@ -262,15 +279,45 @@ public sealed class RtsCamera : IViewProjection
 
     public void SetHeightAboveGround(float height)
     {
+        Script.StopAll();
+        _heldConstraints = null;
         HeightAboveGround = Math.Clamp(height, _settings.MinHeightAboveGround, MaxHeightAboveGround);
         ClampToConstraints();
     }
 
-    /// <summary><c>W3DView::zoomCameraOneFrame</c>: a script sets the zoom without the player's limit below, which is how the close-ups of a cut scene come about.</summary>
-    public void SetScriptedHeightAboveGround(float height)
+    // ------------------------------------------------------------------ what a script sets, without a player's limits
+
+    /// <summary><c>getMaxZoom</c>: the zoom that is the largest height above the ground around a place; what a script's <c>SETUP_CAMERA</c> and <c>CAMERA_MOD_SET_FINAL_ZOOM</c> take a share of.</summary>
+    public float MaxZoomAt(Vector2 place) => (HeightAround(place) + MaxHeightAboveGround) / OffsetHeight;
+
+    /// <summary><c>TheTerrainLogic->getGroundHeight</c>.</summary>
+    public float GroundHeightAt(Vector2 place) => _terrain.HeightAt(place.X, place.Y);
+
+    /// <summary><c>m_cameraConstraint</c> as it stands is kept from here on: the original works it out once and only a player's zoom, a new map or a new border drop it, so the view of a cut scene never enters it.</summary>
+    internal void HoldConstraints() => _heldConstraints ??= Constraints();
+
+    /// <summary><c>zoomCameraOneFrame</c>: <c>m_zoom</c> itself.</summary>
+    internal void SetScriptedZoom(float zoom)
     {
-        HeightAboveGround = Math.Clamp(height, 1f, MaxHeightAboveGround);
-        ClampToConstraints();
+        Zoom = zoom;
+        _dirty = true;
+    }
+
+    internal void SetScriptedAngle(float radians)
+    {
+        Angle = MathF.IEEERemainder(radians, 2 * MathF.PI);
+        _dirty = true;
+    }
+
+    /// <summary><c>moveAlongWaypointPath</c>: position and <c>m_groundLevel</c>, and the constraints reach as far as the script went ("assuming that the scripter knows what he is doing").</summary>
+    internal void SetScriptedPlace(Vector2 place, float groundLevel)
+    {
+        HoldConstraints();
+        var (lo, hi) = _heldConstraints!.Value;
+        _heldConstraints = (Vector2.Min(lo, place), Vector2.Max(hi, place));
+        _pivot = place;
+        GroundLevel = groundLevel;
+        _dirty = true;
     }
 
     /// <summary>Mouse wheel: each notch towards the user (positive) zooms in by <see cref="RtsCameraSettings.WheelZoomStep"/>.</summary>
@@ -284,6 +331,7 @@ public sealed class RtsCamera : IViewProjection
     {
         LastScrollAmount = delta;
         if (delta == Vector2.Zero) return;
+        Script.StopTurn();
         Refresh();
         var aspect = _viewport.X / _viewport.Y;
         var tanX = TanHalfHorizontal(aspect);
@@ -377,10 +425,14 @@ public sealed class RtsCamera : IViewProjection
 
         var terrainUnder = HeightAroundPivot();
         var current = OffsetHeight * Zoom - terrainUnder;
-        var adjust = !isScrolling
-            || LastScrollAmount.Length() < _settings.ScrollAmountCutoff
-            || current < _settings.MinHeightAboveGround
-            || (_settings.EnforceMaxCameraHeight && current > MaxHeightAboveGround);
+        // didScriptedMovement: the height the script reached becomes the desired one, without a limit, and the zoom does not settle against the script.
+        var scripted = Script.TakeMoved();
+        if (scripted) HeightAboveGround = current;
+        var adjust = isScrolling
+            ? LastScrollAmount.Length() < _settings.ScrollAmountCutoff
+              || current < _settings.MinHeightAboveGround
+              || (_settings.EnforceMaxCameraHeight && current > MaxHeightAboveGround)
+            : !scripted;
         if (adjust)
         {
             var desired = DesiredZoom();
@@ -404,14 +456,16 @@ public sealed class RtsCamera : IViewProjection
     }
 
     /// <summary><c>getHeightAroundPos</c> (retail): the highest ground at the pivot and at the four diagonal points <c>TERRAIN_SAMPLE_SIZE</c> away.</summary>
-    public float HeightAroundPivot()
+    public float HeightAroundPivot() => HeightAround(_pivot);
+
+    private float HeightAround(Vector2 place)
     {
         var s = _settings.TerrainSampleSize;
-        var height = _terrain.HeightAt(_pivot.X, _pivot.Y);
-        height = Math.Max(height, _terrain.HeightAt(_pivot.X + s, _pivot.Y - s));
-        height = Math.Max(height, _terrain.HeightAt(_pivot.X - s, _pivot.Y - s));
-        height = Math.Max(height, _terrain.HeightAt(_pivot.X + s, _pivot.Y + s));
-        height = Math.Max(height, _terrain.HeightAt(_pivot.X - s, _pivot.Y + s));
+        var height = _terrain.HeightAt(place.X, place.Y);
+        height = Math.Max(height, _terrain.HeightAt(place.X + s, place.Y - s));
+        height = Math.Max(height, _terrain.HeightAt(place.X - s, place.Y - s));
+        height = Math.Max(height, _terrain.HeightAt(place.X + s, place.Y + s));
+        height = Math.Max(height, _terrain.HeightAt(place.X - s, place.Y + s));
         return height;
     }
 
@@ -426,6 +480,7 @@ public sealed class RtsCamera : IViewProjection
     /// </summary>
     public (Vector2 Min, Vector2 Max) Constraints()
     {
+        if (_heldConstraints is { } held) return held;
         BuildMatrices(_pivot, out _, out _, out var view, out var projection, out _);
         var inverse = Inverse(view * projection);
         var center = GroundPoint(inverse, new Vector2(0.5f * _viewport.X, 0.5f * _viewport.Y));
@@ -445,6 +500,8 @@ public sealed class RtsCamera : IViewProjection
         _pivot = Vector2.Clamp(_pivot, lo, hi);
         _dirty = true;
     }
+
+    private (Vector2 Min, Vector2 Max)? _heldConstraints;
 
     private Vector2 GroundPoint(Matrix4x4 inverse, Vector2 screen)
     {

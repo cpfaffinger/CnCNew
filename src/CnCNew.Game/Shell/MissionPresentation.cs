@@ -8,6 +8,7 @@ using CnCNew.Presentation.Camera;
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Mission;
 using CnCNew.Simulation.Scripting;
+using CnCNew.Simulation.Templates;
 using CnCNew.Simulation.Time;
 using CnCNew.Ui.Layout;
 using CnCNew.Ui.Runtime;
@@ -113,16 +114,9 @@ public sealed class MissionPresentationDirector
     private long _tickBeforeStep;
     private long _frozenSteps;
 
-    // Scripted camera: requests are recorded when the script fires and resolved against the real camera in ApplyCameraTo.
-    private readonly Tween _moveX = new(), _moveY = new(), _zoom = new(), _pitch = new(), _angle = new();
-    private (float Factor, double Seconds)? _zoomRequest, _pitchRequest;
-    private (Vector2[] Path, float Seconds, float Stutter, float EaseIn, float EaseOut)? _pathRequest;
-    private CameraPath? _cameraPath;
+    // Scripted camera: the scripts' requests wait here, with their tick and in their order, for the camera of ApplyCameraTo, whose ScriptedCamera plays them.
+    private readonly List<(long Tick, Action<ScriptedCamera> Request)> _cameraRequests = [];
     private readonly Queue<(Vector3 Position, float Radius, float Seconds, float Degrees)> _pendingShakers = new();
-    private (float Turns, double Seconds)? _rotateRequest;
-    private (Vector2 Target, double Seconds)? _lookRequest;
-    private double? _resetRequest;
-    private string? _followName;
     private (bool White, float Min, float Max, long Start, long Increase, long Hold, long Decrease)? _fade;
 
     /// <param name="resolveText">Resolves a <c>DISPLAY_TEXT</c>/<c>SHOW_MILITARY_CAPTION</c>/<c>INGAME_POPUP_MESSAGE</c> CSF
@@ -398,41 +392,10 @@ public sealed class MissionPresentationDirector
 
     // ------------------------------------------------------------------------------------------------ camera
 
-    private sealed class Tween
-    {
-        private float _from = float.NaN;
-        private float _to;
-        private double _duration;
-        private double _elapsed;
-
-        public bool Active { get; private set; }
-
-        public void Start(float to, double seconds)
-        {
-            Active = true;
-            _from = float.NaN;
-            _to = to;
-            _duration = seconds;
-            _elapsed = 0;
-        }
-
-        public void Stop() => Active = false;
-
-        /// <summary>The value after another <paramref name="seconds"/>, eased in and out (the original eases with the script's ease times; a smooth step stands in for them).</summary>
-        public float Advance(float current, double seconds)
-        {
-            if (float.IsNaN(_from)) _from = current;
-            _elapsed += seconds;
-            var t = _duration <= 0 || double.IsPositiveInfinity(seconds) ? 1.0 : Math.Min(1.0, _elapsed / _duration);
-            if (t >= 1.0) Active = false;
-            return _from + (_to - _from) * (float)(t * t * (3 - 2 * t));
-        }
-    }
-
     /// <summary>
-    /// Plays the scripted camera on <paramref name="camera"/>: call once per rendered frame with the frame time (0 while the game is paused). A move pans the pivot to
-    /// its waypoint over the script's own duration, zoom/pitch/rotation follow their requests, a followed object keeps the camera on it. Without a frame time the
-    /// pending move is applied at once (headless). When no scripted move is active the camera is left alone, so the player's own scrolling is never fought.
+    /// Plays the scripted camera on <paramref name="camera"/>: call once per rendered frame with the frame time (0 while the game is paused). The scripts' requests reach its
+    /// <see cref="ScriptedCamera"/> in their order; requests of different frames get the time between them, however late this frame is drawn, because each acts on what the one
+    /// before it left. Without a frame time everything pending is carried out at once (headless). When no scripted move is active the camera is left alone, so the player's own scrolling is never fought.
     /// <see cref="RtsCamera"/> is a <c>CnCNew.Presentation</c> type, not a Stride one, so this runs headless in tests.
     /// </summary>
     public void ApplyCameraTo(RtsCamera camera, double seconds = double.PositiveInfinity)
@@ -466,22 +429,22 @@ public sealed class MissionPresentationDirector
             camera.AddShaker(position, radius, shakerSeconds, degrees);
             Handled("CAMERA_ADD_SHAKER_AT", Channel.Camera);
         }
-        if (_pathRequest is { } flight)
+        var script = camera.Script;
+        var left = seconds;
+        long? previous = null;
+        foreach (var (tick, request) in _cameraRequests)
         {
-            _pathRequest = null;
-            _cameraPath = new CameraPath(camera.Pivot, camera.Angle, flight.Path, flight.Seconds, flight.Stutter, flight.EaseIn, flight.EaseOut);
-            _moveX.Stop();
-            _moveY.Stop();
-            _angle.Stop();
-            Handled("MOVE_CAMERA_ALONG_WAYPOINT_PATH", Channel.Camera);
+            if (previous is { } last && tick > last)
+            {
+                var between = (tick - last) / (double)Time.TicksPerSecond;
+                script.Step(between);
+                left = Math.Max(0, left - between);
+            }
+            previous = tick;
+            request(script);
         }
-        if (_cameraPath is { } flying)
-        {
-            flying.Advance(double.IsPositiveInfinity(seconds) ? float.MaxValue : (float)seconds);
-            camera.CenterOn(flying.Position);
-            camera.SetAngle(flying.Angle);
-            if (flying.IsFinished) _cameraPath = null;
-        }
+        _cameraRequests.Clear();
+        script.Step(left);
         while (_pendingShakes.Count > 0)
         {
             // ScriptActions::doScreenShake -> W3DView::shake at the view position: the full intensity of the type, a random direction (the reference draws it from the client random stream; a golden-angle sequence here).
@@ -491,71 +454,9 @@ public sealed class MissionPresentationDirector
             camera.Shake(camera.Pivot, intensity, _shakeCount++ * 2.3999632f);
             Handled("SCREEN_SHAKE", Channel.Camera);
         }
-
-        if (_resetRequest is { } reset)
-        {
-            _resetRequest = null;
-            // View::resetCamera: default angle, pitch and zoom at the waypoint.
-            _angle.Start(0f, reset);
-            _pitch.Start(1f, reset);
-            _zoom.Start(camera.Settings.MaxHeightAboveGround, reset);
-        }
-        if (_moveX.Active || _moveY.Active)
-        {
-            var x = _moveX.Advance(camera.Pivot.X, seconds);
-            var y = _moveY.Advance(camera.Pivot.Y, seconds);
-            camera.CenterOn(new Vector2(x, y));
-        }
-        else if (_followName is { } follow && TryNamedPosition(follow, out var followX, out var followY)) camera.CenterOn(new Vector2(followX, followY));
-
-        if (_lookRequest is { } look)
-        {
-            _lookRequest = null;
-            var from = CameraTarget is { } destination ? new Vector2(destination.X, destination.Y) : camera.Pivot;
-            _angle.Start(AngleToward(camera, from, look.Target), look.Seconds);
-        }
-        if (_rotateRequest is { } rotate)
-        {
-            _rotateRequest = null;
-            _angle.Start(camera.Angle + rotate.Turns * 2 * MathF.PI, rotate.Seconds);
-        }
-        if (_zoomRequest is { } zoom)
-        {
-            _zoomRequest = null;
-            // View::zoomCamera: the zoom is a factor of the default (maximum) height; the camera clamps what it cannot show.
-            _zoom.Start(zoom.Factor * camera.Settings.MaxHeightAboveGround, zoom.Seconds);
-        }
-        if (_pitchRequest is { } pitch)
-        {
-            _pitchRequest = null;
-            // W3DView::pitchCamera: the scripts' pitch is m_FXPitch, a factor with its own meaning, not an angle.
-            _pitch.Start(pitch.Factor, pitch.Seconds);
-        }
-        if (_angle.Active) camera.SetAngle(_angle.Advance(camera.Angle, seconds));
-        if (_zoom.Active) camera.SetScriptedHeightAboveGround(_zoom.Advance(camera.HeightAboveGround, seconds));
-        if (_pitch.Active) camera.SetFxPitch(_pitch.Advance(camera.FxPitch, seconds));
     }
 
-    /// <summary>The camera angle that looks from <paramref name="from"/> towards <paramref name="target"/> on the ground (<c>View::cameraModLookToward</c>); which way a larger angle turns the view is probed, not assumed.</summary>
-    private static float AngleToward(RtsCamera camera, Vector2 from, Vector2 target)
-    {
-        static Vector2 Forward(RtsCamera view)
-        {
-            var eye = view.Eye;
-            var look = view.Target;
-            return new Vector2(look.X - eye.X, look.Y - eye.Y);
-        }
-        var before = camera.Angle;
-        var forward = Forward(camera);
-        var wanted = target - from;
-        if (forward.LengthSquared() < 1e-6f || wanted.LengthSquared() < 1e-6f) return before;
-        camera.SetAngle(before + 0.05f);
-        var probed = Forward(camera);
-        camera.SetAngle(before);
-        var sign = forward.X * probed.Y - forward.Y * probed.X < 0 ? -1f : 1f;
-        var delta = MathF.IEEERemainder(MathF.Atan2(wanted.Y, wanted.X) - MathF.Atan2(forward.Y, forward.X), 2 * MathF.PI);
-        return before + sign * delta;
-    }
+    private void CameraRequest(long tick, Action<ScriptedCamera> request) => _cameraRequests.Add((tick, request));
 
     // ------------------------------------------------------------------------------------------------ overlay
 
@@ -824,9 +725,8 @@ public sealed class MissionPresentationDirector
                 _cameraCompletesAtTick = tick + DurationTicks(seconds);
                 CameraTarget = chain.Length > 0 ? (chain[^1].X, chain[^1].Y) : null;
                 if (chain.Length == 0) return;
-                _followName = null;
-                _cameraPath = null;
-                _pathRequest = (chain, (float)seconds, (float)stutter, (float)easeIn, (float)easeOut);
+                CameraRequest(tick, camera => camera.MoveAlong(chain, seconds, stutter, easeIn, easeOut));
+                Handled(action, Channel.Camera);
                 return;
             }
             case "CAMERA_ADD_SHAKER_AT":
@@ -841,32 +741,35 @@ public sealed class MissionPresentationDirector
             }
             case "MOVE_CAMERA_TO" or "RESET_CAMERA":
             {
-                // doMoveCameraTo/doResetCamera (ScriptActions.cpp): parameter 0 is the waypoint name, 1 is the move's duration in seconds.
+                // doMoveCameraTo(waypoint, sec, stutter, easeIn, easeOut) / doResetCamera(waypoint, sec, easeIn, easeOut).
                 Number(output, 1, out var seconds);
+                var reset = action == "RESET_CAMERA";
+                Number(output, reset ? 2 : 3, out var easeIn);
+                Number(output, reset ? 3 : 4, out var easeOut);
                 CameraTarget = WaypointAt(output, 0);
                 _cameraPending = true;
                 _cameraCompletesAtTick = tick + DurationTicks(seconds);
                 if (CameraTarget is not { } target) return;
-                _followName = null;
-                _cameraPath = null;
-                _pathRequest = null;
-                _moveX.Start(target.X, seconds);
-                _moveY.Start(target.Y, seconds);
-                if (action == "RESET_CAMERA") _resetRequest = seconds;
+                var place = new Vector2(target.X, target.Y);
+                if (reset) CameraRequest(tick, camera => camera.Reset(place, seconds, easeIn, easeOut));
+                else CameraRequest(tick, camera => camera.MoveTo(place, seconds, easeIn, easeOut));
                 Handled(action, Channel.Camera);
                 return;
             }
             case "SETUP_CAMERA":
             {
-                // doSetupCamera(waypoint, zoom, pitch, lookAtWaypoint): an instant cut to the waypoint, looking at the second one.
+                // doSetupCamera(waypoint, zoom, pitch, lookAtWaypoint): moveCameraTo without a time, cameraModLookToward, cameraModFinalPitch, cameraModFinalZoom, in this order.
                 if (WaypointAt(output, 0) is not { } position || WaypointAt(output, 3) is not { } lookAt) return;
+                Number(output, 1, out var zoom);
+                Number(output, 2, out var pitch);
                 CameraTarget = position;
-                _followName = null;
-                _moveX.Start(position.X, 0);
-                _moveY.Start(position.Y, 0);
-                _lookRequest = (new Vector2(lookAt.X, lookAt.Y), 0);
-                if (Number(output, 1, out var zoom)) _zoomRequest = (zoom, 0);
-                if (Number(output, 2, out var pitch)) _pitchRequest = (pitch, 0);
+                CameraRequest(tick, camera =>
+                {
+                    camera.MoveTo(new Vector2(position.X, position.Y), 0f);
+                    camera.ModLookToward(new Vector2(lookAt.X, lookAt.Y));
+                    camera.ModFinalPitch(pitch);
+                    camera.ModFinalZoom(zoom);
+                });
                 Handled(action, Channel.Camera);
                 return;
             }
@@ -874,61 +777,71 @@ public sealed class MissionPresentationDirector
             {
                 // doRotateCamera(rotations, sec, easeIn, easeOut): no waypoint, a rotation in place.
                 Number(output, 1, out var seconds);
+                Number(output, 2, out var easeIn);
+                Number(output, 3, out var easeOut);
                 CameraTarget = null;
                 _cameraPending = true;
                 _cameraCompletesAtTick = tick + DurationTicks(seconds);
                 if (!Number(output, 0, out var turns)) { Problem(action, "rotation argument missing"); return; }
-                _rotateRequest = (turns, seconds);
+                CameraRequest(tick, camera => camera.Rotate(turns, seconds, easeIn, easeOut));
                 Handled(action, Channel.Camera);
                 return;
             }
             case "ZOOM_CAMERA" or "PITCH_CAMERA":
             {
-                // doZoomCamera(zoom, sec, ...) / doPitchCamera(pitch, sec, ...).
-                if (!Number(output, 0, out var factor)) { Problem(action, "value argument missing"); return; }
+                // doZoomCamera(zoom, sec, easeIn, easeOut) / doPitchCamera(pitch, sec, easeIn, easeOut): m_zoom and m_FXPitch themselves.
+                if (!Number(output, 0, out var value)) { Problem(action, "value argument missing"); return; }
                 Number(output, 1, out var seconds);
-                if (action == "ZOOM_CAMERA") _zoomRequest = (factor, seconds);
-                else _pitchRequest = (factor, seconds);
+                Number(output, 2, out var easeIn);
+                Number(output, 3, out var easeOut);
+                if (action == "ZOOM_CAMERA") CameraRequest(tick, camera => camera.Zoom(value, seconds, easeIn, easeOut));
+                else CameraRequest(tick, camera => camera.Pitch(value, seconds, easeIn, easeOut));
                 Handled(action, Channel.Camera);
                 return;
             }
             case "CAMERA_MOD_SET_FINAL_ZOOM" or "CAMERA_MOD_SET_FINAL_PITCH":
             {
-                // cameraModFinalZoom/Pitch change where the move in progress ends; here they reach their value together with that move.
-                if (!Number(output, 0, out var factor)) { Problem(action, "value argument missing"); return; }
-                var seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)Time.TicksPerSecond);
-                if (action == "CAMERA_MOD_SET_FINAL_ZOOM") _zoomRequest = (factor, seconds);
-                else _pitchRequest = (factor, seconds);
+                // cameraModFinalZoom/Pitch(value, easeIn, easeOut): reached with the end of the move in progress; the zoom is a share of the largest one where the move ends.
+                if (!Number(output, 0, out var value)) { Problem(action, "value argument missing"); return; }
+                Number(output, 1, out var easeIn);
+                Number(output, 2, out var easeOut);
+                if (action == "CAMERA_MOD_SET_FINAL_ZOOM") CameraRequest(tick, camera => camera.ModFinalZoom(value, easeIn, easeOut));
+                else CameraRequest(tick, camera => camera.ModFinalPitch(value, easeIn, easeOut));
                 Handled(action, Channel.Camera);
                 return;
             }
             case "CAMERA_MOD_LOOK_TOWARD" or "CAMERA_MOD_FINAL_LOOK_TOWARD" or "CAMERA_LOOK_TOWARD_WAYPOINT":
             {
                 if (WaypointAt(output, 0) is not { } lookAt) return;
-                double seconds;
+                var place = new Vector2(lookAt.X, lookAt.Y);
                 if (action == "CAMERA_LOOK_TOWARD_WAYPOINT")
                 {
-                    // doRotateCameraTowardWaypoint(waypoint, sec, ...): a camera movement of its own.
-                    Number(output, 1, out var own);
-                    seconds = own;
+                    // doRotateCameraTowardWaypoint(waypoint, sec, easeIn, easeOut, reverse): a camera movement of its own.
+                    Number(output, 1, out var seconds);
+                    Number(output, 2, out var easeIn);
+                    Number(output, 3, out var easeOut);
+                    Number(output, 4, out var reverse);
                     _cameraPending = true;
                     _cameraCompletesAtTick = tick + DurationTicks(seconds);
+                    CameraRequest(tick, camera => camera.RotateToward(place, seconds, easeIn, easeOut, reverse != 0f));
                 }
-                else seconds = Math.Max(0, (_cameraCompletesAtTick - tick) / (double)Time.TicksPerSecond);
-                _lookRequest = (new Vector2(lookAt.X, lookAt.Y), seconds);
+                else if (action == "CAMERA_MOD_LOOK_TOWARD") CameraRequest(tick, camera => camera.ModLookToward(place));
+                else CameraRequest(tick, camera => camera.ModFinalLookToward(place));
                 Handled(action, Channel.Camera);
                 return;
             }
             case "CAMERA_FOLLOW_NAMED":
+            {
                 // doCameraFollowNamed(unit, snapToUnit): the view locks onto the object until CAMERA_STOP_FOLLOW.
                 if (output.Arguments.Length == 0 || !TryNamedPosition(output.Arguments[0], out _, out _)) { Problem(action, "unknown named object"); return; }
-                _followName = output.Arguments[0];
-                _moveX.Stop();
-                _moveY.Stop();
+                var name = output.Arguments[0];
+                Number(output, 1, out var snap);
+                CameraRequest(tick, camera => camera.Lock(() => LockTarget(name), snap != 0f));
                 Handled(action, Channel.Camera);
                 return;
+            }
             case "CAMERA_STOP_FOLLOW":
-                _followName = null;
+                CameraRequest(tick, camera => camera.Unlock());
                 Handled(action, Channel.Camera);
                 return;
             case "CAMERA_MOVE_HOME" or "MOVE_CAMERA_TO_SELECTION":
@@ -1238,25 +1151,40 @@ public sealed class MissionPresentationDirector
             case "CAMERA_LOOK_TOWARD_OBJECT":
             {
                 // doRotateCameraTowardObject(name, sec, holdSec, easeIn, easeOut): a camera movement of its own that turns the view to the object and holds it there.
-                if (!TryNamedPosition(Argument(output, 0), out var x, out var y)) { Problem(action, "unknown named object"); return; }
+                var name = Argument(output, 0);
+                if (!TryNamedPosition(name, out _, out _)) { Problem(action, "unknown named object"); return; }
                 Number(output, 1, out var seconds);
                 Number(output, 2, out var hold);
+                Number(output, 3, out var easeIn);
+                Number(output, 4, out var easeOut);
                 _cameraPending = true;
                 _cameraCompletesAtTick = tick + DurationTicks(seconds + Math.Max(0, hold));
-                _lookRequest = (new Vector2(x, y), seconds);
+                CameraRequest(tick, camera => camera.RotateTowardObject(() => TryNamedPosition(name, out var x, out var y) ? new Vector2(x, y) : null, seconds, hold, easeIn, easeOut));
                 Handled(action, Channel.Camera);
                 return;
             }
             case "CAMERA_TETHER_NAMED":
-                // doCameraTetherNamed(unit, snapToUnit, play): approximated by the follow lock; the object is centred instead of being allowed a play radius.
-                if (!TryNamedPosition(Argument(output, 0), out _, out _)) { Problem(action, "unknown named object"); return; }
-                _followName = Argument(output, 0);
-                _moveX.Stop();
-                _moveY.Stop();
+            {
+                // doCameraTetherNamed(unit, snapToUnit, play).
+                var name = Argument(output, 0);
+                if (!TryNamedPosition(name, out _, out _)) { Problem(action, "unknown named object"); return; }
+                Number(output, 1, out var snap);
+                Number(output, 2, out var play);
+                CameraRequest(tick, camera => camera.Lock(() => LockTarget(name), snap != 0f, tether: true, play));
                 Handled(action, Channel.Camera);
                 return;
+            }
             case "CAMERA_STOP_TETHER_NAMED":
-                _followName = null;
+                CameraRequest(tick, camera => camera.Unlock());
+                Handled(action, Channel.Camera);
+                return;
+            case "CAMERA_MOD_FREEZE_ANGLE":
+                CameraRequest(tick, camera => camera.ModFreezeAngle());
+                Handled(action, Channel.Camera);
+                return;
+            case "CAMERA_MOD_SET_ROLLING_AVERAGE":
+                if (!Number(output, 0, out var average)) { Problem(action, "frame count missing"); return; }
+                CameraRequest(tick, camera => camera.ModRollingAverage((int)average));
                 Handled(action, Channel.Camera);
                 return;
 
@@ -1469,6 +1397,14 @@ public sealed class MissionPresentationDirector
         return parts.Length >= 2
             && float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out x)
             && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out y);
+    }
+
+    /// <summary>What a camera lock follows: <c>W3DView::update</c> reads the object's place, and turns with it while it flies.</summary>
+    private CameraLockTarget? LockTarget(string name)
+    {
+        if (!TryNamedId(name, out var id) || _session.World.FindEntity(id) is not { } entity) return null;
+        var airborne = entity.Template.Locomotor is { } locomotor && (locomotor.Surfaces & LocomotorSurfaces.Air) != 0;
+        return new CameraLockTarget(new Vector3((float)entity.X.ToDecimal(), (float)entity.Y.ToDecimal(), (float)entity.Z.ToDecimal()), airborne ? (float)entity.Angle.ToDecimal() : null);
     }
 
     private bool TryNamedPosition(string name, out float x, out float y)
