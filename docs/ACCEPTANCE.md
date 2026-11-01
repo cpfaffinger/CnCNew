@@ -8,7 +8,7 @@ verdicts, a picture page that needs nobody at the keyboard, and the reading of a
 
 ## Start here: the guided acceptance
 
-On a machine that is not set up, double-click `CnCNew-Launcher.cmd` (or clone and go straight to `Start-Acceptance.cmd`, which leads there): it makes the game and offers **Start the acceptance** ([INSTALLATION.md](INSTALLATION.md)).
+On a machine that is not set up, double-click `CnCNew-Launcher.cmd` (or clone and go straight to `Start-Acceptance.cmd`, which leads there): it makes the game in a folder you choose (default `%USERPROFILE%\CnCNew`, Steam is only read) and offers **Start the acceptance** ([INSTALLATION.md](INSTALLATION.md)).
 Afterwards double-click `Start-Acceptance.cmd` in the repository (or `pwsh -STA scripts/acceptance.ps1 -Suite`). You need nothing else: no document, no list of commands.
 
 - A first window opens at once and says how this works; behind it the client is built when this commit has not been built yet (it counts the seconds, a minute or two). A second start of the same commit goes straight on.

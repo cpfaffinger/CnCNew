@@ -34,13 +34,16 @@ the things a fresh machine lacks. **It lists what it finds and asks before it in
 | Visual C++ runtime | `vcruntime140.dll` (Stride's native libraries need it) | installs it with winget, else Microsoft's redistributable |
 | Graphics, sound | what Windows reports | warns: without sound the goals about sound cannot be judged |
 | The game | the Steam libraries through the registry and `libraryfolders.vdf`, the app's manifest | offers to open Steam's install page or to choose the folder |
+| The install folder | where the game is made: **default `%USERPROFILE%\CnCNew`**, or what the user chose with "Choose the install folder ..." (remembered in `%LOCALAPPDATA%\CnCNew\install-folder.txt`) | refuses a folder of Steam or overlapping a Steam library, the checkout, a drive itself, a folder that holds other files, or one that cannot be written. In a folder that holds other things the button makes a `CnCNew` of its own |
 
-Then, each step only if it is not done for this version: the game data (`scripts/dev-content.ps1 -SkipOriginal` into `game\`: the master check first, so a wrong language is refused within minutes, in plain words, before anything
+Then, each step only if it is not done for this version: the game data (`scripts/install.ps1 -ContentOnly` into the install folder: the master check first, so a wrong language is refused within minutes, in plain words, before anything
 is built), the game program, the check of the data file by file, a first start of the game (it also prepares the shaders), and the **comparison with the reference values**: the input manifest and the quick set of the
 reference manifest on this machine's CPU. A difference there is no reason to stop, it is a finding: two machines that compute differently cannot play together. The window ends with a report on the desktop
 (`CnCNew-setup-report-<date>.md`: machine, versions, every step) and three buttons: **Start the acceptance**, **Play the game**, and **Get the new version** when GitHub has one.
 
-`Start-Acceptance.cmd` on a machine that is not set up goes to the launcher first. Without a window: `powershell -ExecutionPolicy Bypass -File scripts\CnCNew-Launcher.ps1 -CheckOnly` (changes nothing), `-Unattended`, `-GameDir`, `-NoWinget`, `-NoSimulationCheck`.
+`Start-Acceptance.cmd` on a machine that is not set up goes to the launcher first. Without a window: `powershell -ExecutionPolicy Bypass -File scripts\CnCNew-Launcher.ps1 -CheckOnly` (changes nothing), `-Unattended`, `-GameDir`, `-InstallDir`, `-NoWinget`, `-NoSimulationCheck`.
+
+**Steam is only read.** Every game file is opened read-only and copied one by one into the install folder; nothing is linked, and the client, the acceptance and every tool read that copy only. `GameInstaller` refuses any target in a Steam library, whoever calls it. A clone in the default folder keeps the game in its git-ignored `game\`. Choosing another folder later makes the game there; the old folder stays until you delete it.
 `scripts/check-setup.ps1` checks the launcher itself; `-Full` walks the whole way in an empty profile. **This is the way of the development phase: it builds from source. A launcher that downloads finished binaries comes later.**
 
 ## What the patcher does – and what it never does
@@ -68,8 +71,8 @@ It never does:
   before and after installation, repair and uninstallation);
 - silently accept another version, language or a modded installation – there is
   **no** switch that turns the check off;
-- write into a target that lies inside the game directory, contains it, or is not empty and not our own
-  earlier installation.
+- write into a target that lies inside the game directory or any Steam library, contains the game directory, or is not
+  empty and not our own earlier installation.
 
 ## Prerequisites
 
