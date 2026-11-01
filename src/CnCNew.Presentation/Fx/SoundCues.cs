@@ -72,7 +72,8 @@ public sealed class SoundCueDeriver(FxCatalog catalog, SimulationTime time)
             case SimEventKind.SupplyDeposited or SimEventKind.StructureSold or SimEventKind.ConstructionCancelled:
                 if (simEvent.Value > 0) Misc(output, tick, "MoneyDepositSound", OwnerOf(simEvent, view), "Money::deposit");
                 break;
-            case SimEventKind.UpgradeCompleted:
+            // ProductionUpdate::update: the sounds of an upgrade belong to its research. The patch hands its buildings upgrades when they are finished, and those are silent.
+            case SimEventKind.UpgradeCompleted when simEvent.Other != EntityId.Invalid:
                 Upgrade(output, simEvent, view);
                 break;
             case SimEventKind.SpecialPowerUsed:
@@ -116,15 +117,15 @@ public sealed class SoundCueDeriver(FxCatalog catalog, SimulationTime time)
 
     private void Upgrade(List<SoundCue> output, SimEvent simEvent, IFxWorldView view)
     {
-        var pose = view.GetPose(simEvent.Entity);
+        var pose = view.GetPose(simEvent.Other);
         var player = pose?.Owner ?? simEvent.Player;
         catalog.Upgrades.TryGetValue(simEvent.Text, out var upgrade);
         if (upgrade?.Primary is { } research)
-            Add(output, simEvent.Tick, research, SoundCueKind.Effect, pose?.Position, simEvent.Entity, player, "Upgrade.ResearchSound");
+            Add(output, simEvent.Tick, research, SoundCueKind.Effect, pose?.Position, simEvent.Other, player, "Upgrade.ResearchSound");
         else
-            Add(output, simEvent.Tick, "UpgradeComplete", SoundCueKind.Eva, null, simEvent.Entity, player, "ProductionUpdate EVA_UpgradeComplete");
+            Add(output, simEvent.Tick, "UpgradeComplete", SoundCueKind.Eva, null, simEvent.Other, player, "ProductionUpdate EVA_UpgradeComplete");
         if (upgrade?.Secondary is { } unitSpecific)
-            Add(output, simEvent.Tick, unitSpecific, SoundCueKind.Effect, pose?.Position, simEvent.Entity, player, "Upgrade.UnitSpecificSound");
+            Add(output, simEvent.Tick, unitSpecific, SoundCueKind.Effect, pose?.Position, simEvent.Other, player, "Upgrade.UnitSpecificSound");
     }
 
     private void Died(List<SoundCue> output, SimEvent simEvent, IFxWorldView view)

@@ -218,7 +218,7 @@ public interface IWorldServices
     /// Completes an upgrade for a player (<see cref="UpgradeScope.Player"/>) or one entity (<see cref="UpgradeScope.Object"/>),
     /// then re-evaluates every <see cref="IUpgradeModule"/> the change can affect (<c>Player::onUpgradeCompleted</c>).
     /// </summary>
-    void CompleteUpgrade(PlayerId player, EntityId? objectScope, string upgradeName);
+    void CompleteUpgrade(PlayerId player, EntityId? objectScope, string upgradeName, EntityId producer = default);
 
     void RemoveUpgradeByName(Entity entity, string upgradeName);
 

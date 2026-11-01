@@ -628,14 +628,15 @@ public sealed partial class SimulationWorld : IWorldServices
 
     public UpgradeMask UpgradeKeyMaskOf(Entity entity) => entity.CompletedUpgrades | PlayerUpgrades(entity.Owner);
 
-    public void CompleteUpgrade(PlayerId player, EntityId? objectScope, string upgradeName)
+    /// <param name="producer">The object that researched it (<c>ProductionUpdate::update</c>): the event names it, because only such an upgrade is announced. Absent for one granted by a module or a script.</param>
+    public void CompleteUpgrade(PlayerId player, EntityId? objectScope, string upgradeName, EntityId producer = default)
     {
         if (!_templates.Upgrades.TryGet(upgradeName, out var info)) throw new ArgumentException($"Unknown upgrade '{upgradeName}'.", nameof(upgradeName));
         if (info.Scope == UpgradeScope.Player)
         {
             var state = _players.TryGetValue(player.Value, out var found) ? found : throw new ArgumentException($"Unknown player {player}.", nameof(player));
             state.CompletedUpgrades = state.CompletedUpgrades.Set(info.Index);
-            Emit(SimEventKind.UpgradeCompleted, EntityId.Invalid, EntityId.Invalid, upgradeName, info.Index, player);
+            Emit(SimEventKind.UpgradeCompleted, EntityId.Invalid, producer, upgradeName, info.Index, player);
             // Player-scoped upgrades (Player::onUpgradeCompleted) re-evaluate every object of that player.
             foreach (var entity in _entities.Values) if (entity.Owner == player) ReevaluateUpgrades(entity);
         }
@@ -643,14 +644,14 @@ public sealed partial class SimulationWorld : IWorldServices
         {
             var target = objectScope is { } id ? FindEntity(id) : null;
             if (target is null) throw new ArgumentException("An object-scoped upgrade requires a valid target entity.", nameof(objectScope));
-            CompleteObjectUpgrade(target, info, player);
+            CompleteObjectUpgrade(target, info, player, producer);
         }
     }
 
-    private void CompleteObjectUpgrade(Entity target, UpgradeInfo info, PlayerId player)
+    private void CompleteObjectUpgrade(Entity target, UpgradeInfo info, PlayerId player, EntityId producer = default)
     {
         target.CompletedUpgrades = target.CompletedUpgrades.Set(info.Index);
-        Emit(SimEventKind.UpgradeCompleted, target.Id, EntityId.Invalid, info.Name, info.Index, player);
+        Emit(SimEventKind.UpgradeCompleted, target.Id, producer, info.Name, info.Index, player);
         ReevaluateUpgrades(target);
     }
 

@@ -3005,7 +3005,7 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
             // PRODUCTION_UPGRADE: the player's upgrade is complete, or the producer gets its object upgrade (us->giveUpgrade).
             _queue.RemoveAt(0);
             var upgrade = world.Upgrades.Upgrades[head.UpgradeIndex];
-            world.CompleteUpgrade(Entity.Owner, upgrade.Scope == UpgradeScope.Object ? Entity.Id : null, upgrade.Name);
+            world.CompleteUpgrade(Entity.Owner, upgrade.Scope == UpgradeScope.Object ? Entity.Id : null, upgrade.Name, Entity.Id);
             return _queue.Count == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
         }
         // ProductionUpdate::update: every unit of the entry the exit lets go now leaves (getProductionQuantityRemaining tries); one the exit holds back (the delay of
