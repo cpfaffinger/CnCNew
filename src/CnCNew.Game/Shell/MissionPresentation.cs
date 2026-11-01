@@ -617,12 +617,11 @@ public sealed class MissionPresentationDirector
             return;
         }
         if (_cinematic is { } cinematic) commands.AddRange(MissionTextOverlay.Cinematic(cinematic, style, options, measure, width, height));
-        var placeholderName = MoviePlaceholder ?? SubtitleEvent;
-        if (placeholderName is { Length: > 0 })
+        if (MoviePlaceholder is { Length: > 0 } placeholderName)
         {
-            // A movie no host could play and a speech event have no text in this build (docs/CAMPAIGN-AND-SAVEGAMES.md): the raw event/movie name is shown, clearly marked as a placeholder
-            // rather than invented dialogue, in the message font of the data. Inside the lower letterbox bar; without the letterbox above the control bar instead of on top of it.
-            var text = MoviePlaceholder is not null ? $"(movie placeholder: {placeholderName})" : $"(speech: {placeholderName})";
+            // A movie no host could play: its name is shown, clearly marked as a placeholder, in the message font of the data. Inside the lower letterbox bar; without the letterbox above the
+            // control bar instead of on top of it. A speech event is heard, not read: the original draws no line for it.
+            var text = $"(movie placeholder: {placeholderName})";
             var font = style.Font(InGameUiFontRole.Message, new UiViewport(width, height), options);
             commands.AddRange(MissionTextOverlay.CenteredText(text, font, measure, width, height, Letterbox ? Math.Max(0, height - 48) : height * 3 / 4, new WndColor(255, 255, 255, 255), new WndColor(0, 0, 0, 255)));
         }

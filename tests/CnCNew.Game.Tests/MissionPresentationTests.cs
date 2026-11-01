@@ -257,7 +257,7 @@ internal static class MissionPresentationTests
 
         var commands = director.BuildOverlayCommands(1280, 720);
         TestHarness.Assert(commands.OfType<UiTextDraw>().Any(c => c.Text == "Resolved Overlay"), "the caption's resolved text became a UiTextDraw command the existing UiRenderer already knows how to draw");
-        TestHarness.Assert(commands.OfType<UiTextDraw>().Any(c => c.Text.Contains("VoiceEvent01")), "the speech placeholder names the sound event, not invented dialogue");
+        TestHarness.Assert(!commands.OfType<UiTextDraw>().Any(c => c.Text.Contains("VoiceEvent01")), "a speech event is heard, not read: the original draws no line for it");
 
         // Start the camera off-target so the pan is observable (the synthetic map's center happens to coincide with the
         // waypoint otherwise, at 150,150 - which would make "it panned" and "it started there" indistinguishable).
