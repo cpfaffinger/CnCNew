@@ -679,6 +679,8 @@ foreach ($row in $script:rows) {
 
 $foot = New-Object Windows.Forms.Panel
 $foot.Dock = 'Bottom'; $foot.Height = 216
+# Anchors measure against the panel as it is now: at its default width the status line would grow past the window and never wrap.
+$foot.Width = $form.ClientSize.Width
 $script:statusLabel = New-Object Windows.Forms.Label
 $script:statusLabel.SetBounds(14, 8, 790, 62); $script:statusLabel.Anchor = 'Top,Left,Right'
 $progress = New-Object Windows.Forms.ProgressBar
