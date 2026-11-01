@@ -226,6 +226,11 @@ static void CorruptInputIsRejected()
 {
     Throws<IniParseException>(() => SageIniParser.Parse("Object Broken\n  BuildCost = 1\n", "broken.ini"), "missing its End");
     Throws<IniParseException>(() => SageIniParser.Parse("End\n", "broken.ini"), "Unexpected End");
+    // The original's tables decide what a block is, not the indentation of a hand-written map.ini.
+    var unindented = SageIniParser.Parse("AIData\nSideInfo America\n  SkillSet1\n  Science = A\n  End\nEnd\nSideInfo China\nEnd\nEnd\n", "map.ini");
+    Assert(unindented.Nodes.Count == 1 && ((IniBlock)unindented.Nodes[0]).Children.OfType<IniBlock>().Count() == 2, "SideInfo at the margin is a block of AIData");
+    var removal = SageIniParser.Parse("Object A\n RemoveModule Tag\n    AddModule\n      Behavior = X Y\n      End\n    End\nEnd\nObject B\nEnd\n", "map.ini");
+    Assert(removal.Nodes.Count == 2 && ((IniBlock)removal.Nodes[0]).Children[0] is IniStatement, "RemoveModule is one line, however the next one is indented");
 }
 
 static void SnapshotsAreDeterministic()

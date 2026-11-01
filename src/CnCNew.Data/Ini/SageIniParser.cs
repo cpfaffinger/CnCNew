@@ -37,7 +37,15 @@ public static class SageIniParser
         "RayEffect",
         "ReplaceModule",
         "Sound",
+        "SideInfo",
         "SideSounds",
+        "SkirmishBuildList",
+        "SkillSet1",
+        "SkillSet2",
+        "SkillSet3",
+        "SkillSet4",
+        "SkillSet5",
+        "Structure",
         "TerrainScorch",
         "Tracer",
         "Turret",
@@ -124,7 +132,9 @@ public static class SageIniParser
 
             var equalsIndex = FindEqualsOutsideQuotes(line.Content);
             var fieldName = equalsIndex < 0 ? line.Content : line.Content[..equalsIndex].Trim();
+            // RemoveModule is one line in the original's table, however a hand-written map.ini indents what follows it.
             var indentedStructuredBlock = equalsIndex < 0
+                && !FirstToken(fieldName).Equals("RemoveModule", StringComparison.OrdinalIgnoreCase)
                 && line.Indent > header.Indent
                 && index + 1 < lines.Count
                 && lines[index + 1].Indent > line.Indent
