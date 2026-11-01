@@ -34,8 +34,32 @@ internal static class AttachedEffectsTests
         harness.Run("A missile carries its weapon's exhaust from its ignition", () => MissileExhaust(data));
         harness.Run("An effect projectile with Model = NULL draws no model", () => NullModel(data));
         harness.Run("A moving truck raises dust, a standing one none", () => TreadDebris(data));
+        harness.Run("A muzzle on a turret turns with the turret", () => TurretMuzzle(data));
         harness.Run("The acceptance scene acc-flames: what burns and smokes, by system", () => AcceptanceScene(data));
         return harness.Failures;
+    }
+
+    /// <summary>The owner saw every shot leave the barrel where it would be with the turret facing forward: effects read the rest pose of the model.</summary>
+    private static void TurretMuzzle(GameData data)
+    {
+        TestHarness.Assert(data.Visuals.TryGet("AmericaTankCrusader", out var visual), "the Crusader has a visual");
+        var state = visual.Draws.SelectMany(draw => draw.States).First(item => item.Model is not null && item.Turret.AngleBone is not null && !item.WeaponBones.IsDefaultOrEmpty && item.WeaponBones[0].FireFxBone is not null);
+        var muzzle = state.WeaponBones[0].FireFxBone!;
+        var model = state.Model!;
+        TestHarness.Assert(state.Turret.AngleBone is not null, "its state names a turret");
+        var pivot = data.ModelBones.Find(model, state.Turret.AngleBone!)!.Value;
+        Matrix4x4 At(float yaw, string bone) => data.ModelBones.FindPosed(model, bone, new TurretPose(state.Turret.AngleBone, yaw, null, null, null, null, null, null))
+            ?? data.ModelBones.FindPosed(model, bone + "01", new TurretPose(state.Turret.AngleBone, yaw, null, null, null, null, null, null))
+            ?? throw new InvalidOperationException($"no bone {bone}");
+        var forward = At(0f, muzzle);
+        var aside = At(MathF.PI / 2, muzzle);
+        var from = forward.Translation - pivot;
+        var to = aside.Translation - pivot;
+        TestHarness.Assert(from.Length() > 1f, "the muzzle stands off the pivot");
+        TestHarness.Assert(MathF.Abs(to.X + from.Y) < 0.01f && MathF.Abs(to.Y - from.X) < 0.01f && MathF.Abs(to.Z - from.Z) < 0.01f, $"a quarter turn of the turret turns the muzzle: {from} -> {to}");
+        var along = Vector3.TransformNormal(Vector3.UnitX, aside);
+        var before = Vector3.TransformNormal(Vector3.UnitX, forward);
+        TestHarness.Assert(MathF.Abs(along.X + before.Y) < 0.01f && MathF.Abs(along.Y - before.X) < 0.01f, "and the direction the fire effect is handed");
     }
 
     private static void Catalog()

@@ -797,7 +797,9 @@ public static partial class FxTests
         deriver.Derive(Event(2, SimEventKind.ConstructionCompleted, TestView.Base, TestView.Tank, string.Empty, 0), view, cues);
         deriver.Derive(Event(2, SimEventKind.SupplyDeposited, TestView.Base, TestView.Tank, string.Empty, 75), view, cues);
         deriver.Derive(Event(2, SimEventKind.ConstructionStarted, TestView.Base, TestView.Tank, "TestBase", 1000, new PlayerId(1)), view, cues);
+        // Granted by a module or a script: silent. Only a research is announced (ProductionUpdate::update).
         deriver.Derive(Event(2, SimEventKind.UpgradeCompleted, TestView.Tank, EntityId.Invalid, "Upgrade_Unknown", 0, new PlayerId(1)), view, cues);
+        deriver.Derive(Event(2, SimEventKind.UpgradeCompleted, TestView.Tank, TestView.Base, "Upgrade_Unknown", 0, new PlayerId(1)), view, cues);
         deriver.Derive(Event(2, SimEventKind.CommandRejected, EntityId.Invalid, EntityId.Invalid, "MoveCommand", 3, new PlayerId(1)), view, cues);
         deriver.Derive(Event(2, SimEventKind.EntityContained, TestView.Base, TestView.Tank, string.Empty, 0), view, cues);
         Assert(cues.Select(cue => (cue.EventName, cue.Kind)).SequenceEqual(

@@ -408,7 +408,7 @@ static class InputTests
         End
 
         Object Barracks
-          KindOf = SELECTABLE STRUCTURE POWERED
+          KindOf = SELECTABLE STRUCTURE POWERED AUTO_RALLYPOINT
           BuildCost = 100
           BuildTime = 1
           EnergyProduction = -2
