@@ -33,6 +33,7 @@ public static class WeaponSchema
             Real("WeaponSpeed"),
             Real("MinWeaponSpeed"),
             new("ClipSize", FieldType.Integer, Min: 0, Max: int.MaxValue, Source: Table),
+            new("ShotsPerBarrel", FieldType.Integer, Min: 0, Max: int.MaxValue, Source: Table),
             new("ClipReloadTime", FieldType.DurationMs, Source: Table),
             // WeaponTemplate::parseShotDelay accepts a plain integer (min == max) or "Min:x Max:y" (4 shipped weapons, e.g.
             // ScudStormMissile, use the labeled form); both convert like INI::scanUnsignedInt (sscanf("%u")).

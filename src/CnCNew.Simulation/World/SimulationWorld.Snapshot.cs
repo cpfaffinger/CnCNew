@@ -109,7 +109,8 @@ public sealed partial class SimulationWorld
                     pending.Bool("hasRally"), pending.Fixed("rallyX"), pending.Fixed("rallyY"),
                     pending.Has("launchWeapon")
                         ? new ProjectileLaunch(checked((int)pending.Int("launchWeapon")), new EntityId(checked((uint)pending.UInt("launcher"))), new EntityId(checked((uint)pending.UInt("launchVictim"))),
-                            pending.Fixed("launchX"), pending.Fixed("launchY"), pending.Fixed("launchZ"), checked((uint)pending.UInt("launchConditions")))
+                            pending.Fixed("launchX"), pending.Fixed("launchY"), pending.Fixed("launchZ"), checked((uint)pending.UInt("launchConditions")),
+                            pending.Fixed("launchForwardX"), pending.Fixed("launchForwardY"), pending.Fixed("launchForwardZ"))
                         : null,
                     pending.Has("deliveryMoveX")
                         ? new Modules.BuiltIn.DeliveryOrder(pending.Fixed("deliveryMoveX"), pending.Fixed("deliveryMoveY"), pending.Fixed("deliveryTargetX"), pending.Fixed("deliveryTargetY"), CnCNew.Simulation.Templates.DeliveryRun.Load(pending), pending.Int("deliveryDelay"))
@@ -257,6 +258,7 @@ public sealed partial class SimulationWorld
         AttachModules(entity, template);
         LoadTurrets(entity, reader);
         if (reader.Has("firing")) entity.Firing = FiringState.Load(reader.Object("firing"));
+        entity.Barrels = BarrelState.Load(reader);
         if (reader.Has("acquisition")) entity.Acquisition = AcquisitionState.Load(reader.Object("acquisition"));
         if (reader.Has("guard")) entity.Guard = GuardState.Load(reader.Object("guard"));
         if (reader.Has("attackPlace")) entity.AttackPlace = AttackPlaceState.Load(reader.Object("attackPlace"));

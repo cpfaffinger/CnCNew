@@ -81,10 +81,14 @@ public sealed partial class SimulationWorld
         {
             var launchVictim = scatter > Fixed.Zero ? EntityId.Invalid : victim?.Id ?? EntityId.Invalid;
             var id = Ids.AllocateEntity();
-            var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, conditions);
-            // Weapon::positionProjectileForLaunch uses the launcher's weapon bone; without art the launch point is the launcher's geometry centre.
-            _spawnQueue.Add(new PendingSpawn(id, projectileIndex, source.Owner, sourceX, sourceY, sourceZ + source.Template.CenterZDelta, sourceAngle,
-                default(SpawnSetup) with { Launch = launch }));
+            // A rider has turned to its victim in its container; the port keeps no heading for it (a named difference).
+            if (contained && (destinationX != sourceX || destinationY != sourceY)) sourceAngle = FixedTrig.Atan2(destinationY - sourceY, destinationX - sourceX);
+            // Weapon::positionProjectileForLaunch: the launcher's weapon bone; without art, and for a rider in its container, the launcher's geometry centre along its heading.
+            var pose = (contained ? null : LaunchPoseOf(source, weapon, sourceX, sourceY, sourceZ, sourceAngle))
+                ?? new LaunchPose(sourceX, sourceY, sourceZ + source.Template.CenterZDelta, FixedTrig.Cos(sourceAngle), FixedTrig.Sin(sourceAngle), Fixed.Zero);
+            var launch = new ProjectileLaunch(weapon.Index, source.Id, launchVictim, destinationX, destinationY, destinationZ, conditions, pose.ForwardX, pose.ForwardY, pose.ForwardZ);
+            var heading = pose.ForwardX != Fixed.Zero || pose.ForwardY != Fixed.Zero ? FixedTrig.Atan2(pose.ForwardY, pose.ForwardX) : sourceAngle;
+            _spawnQueue.Add(new PendingSpawn(id, projectileIndex, source.Owner, pose.X, pose.Y, pose.Z, heading, default(SpawnSetup) with { Launch = launch }));
             EmitAt(SimEventKind.ProjectileLaunched, id, source.Id, weapon.Name, 0, destinationX, destinationY, destinationZ);
             return Fixed.Zero;
         }

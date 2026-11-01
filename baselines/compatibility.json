@@ -5233,15 +5233,6 @@
     },
     {
       "category": "deferred-field",
-      "name": "Weapon/ShotsPerBarrel",
-      "count": 6,
-      "owners": [
-        "Weapon"
-      ],
-      "plannedTarget": "phase-5-domain-field-typing"
-    },
-    {
-      "category": "deferred-field",
       "name": "Weapon/ShowsAmmoPips",
       "count": 14,
       "owners": [

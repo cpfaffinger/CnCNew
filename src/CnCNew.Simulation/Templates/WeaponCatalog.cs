@@ -34,6 +34,9 @@ public sealed record WeaponInfo(
     public static readonly Fixed InstantSpeed = Fixed.FromInt(999999);
 
     public Fixed WeaponSpeed { get; init; } = InstantSpeed;
+
+    /// <summary><c>ShotsPerBarrel</c>: how many shots a barrel fires before the next one takes over (<c>WeaponTemplate</c> ctor: 1).</summary>
+    public int ShotsPerBarrel { get; init; } = 1;
     public Fixed MinWeaponSpeed { get; init; } = InstantSpeed;
     public bool ScaleWeaponSpeed { get; init; }
     public Fixed MinimumAttackRange { get; init; }
@@ -295,6 +298,7 @@ public sealed class WeaponCatalog
                 primaryRadius, secondaryDamage, secondaryRadius, affects)
             {
                 WeaponSpeed = Speed("WeaponSpeed"),
+                ShotsPerBarrel = Field("ShotsPerBarrel")?.Value.Value is long shotsPerBarrel ? checked((int)shotsPerBarrel) : 1,
                 MinWeaponSpeed = Speed("MinWeaponSpeed"),
                 ScaleWeaponSpeed = Flag("ScaleWeaponSpeed"),
                 MinimumAttackRange = Length("MinimumAttackRange"),

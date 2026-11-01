@@ -649,6 +649,9 @@ run.Test("Projectiles: delayed hit without a projectile object", Tests.Projectil
 run.Test("Projectiles: scatter radius", Tests.ProjectileScatter);
 run.Test("Projectiles: point-defense laser shoots a missile down", Tests.ProjectilePointDefenseLaser);
 run.Test("Projectiles: snapshot mid-flight and two-run determinism", Tests.ProjectileSnapshotAndDeterminism);
+run.Test("Projectile launch: the bone turns with the turret", Tests.ProjectileLaunchTurnsWithTheTurret);
+run.Test("Projectile launch: the bone turns with the hull", Tests.ProjectileLaunchTurnsWithTheHull);
+run.Test("Projectile launch: the barrels in turn", Tests.ProjectileLaunchTakesTheBarrelsInTurn);
 run.Test("Rate invariance, projectiles: a delayed hit counts its frames against the 30 Hz speed", Tests.RateProjectilesDelayedHitCountsAgainstTheOriginalFrameSpeed);
 run.Test("Rate invariance, projectiles: the speed per frame is the 30 Hz catalog value", Tests.RateProjectilesFrameSpeedIsTheThirtyHertzValue);
 run.Test("Rate invariance, projectiles: a straight shell flies the 30 Hz path", Tests.RateProjectilesStraightShellFliesTheThirtyHertzPath);

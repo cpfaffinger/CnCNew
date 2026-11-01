@@ -656,7 +656,8 @@ public sealed class MissileAIUpdate(MissileData data) : SimModule, IUpdateModule
         var dy = launch.Y - Entity.Y;
         var xyDistance = Fixed.Max(Fixed.Sqrt(dx * dx + dy * dy), Fixed.One);
         var zFactor = dz > Fixed.Zero ? dz / xyDistance : Fixed.Zero;
-        _direction = Normalize(new Point3(FixedTrig.Cos(Entity.Angle), FixedTrig.Sin(Entity.Angle), zFactor * Fixed.FromInt(2)));
+        // The x axis of the matrix the launch gave the missile, raised for a victim above it (projectileFireAtObjectOrPosition).
+        _direction = Normalize(new Point3(launch.ForwardX, launch.ForwardY, launch.ForwardZ + zFactor * Fixed.FromInt(2)));
         _speed = initial > Fixed.Zero ? initial : Fixed.Zero;
         SwitchTo(world, MissileState.Launch);
 

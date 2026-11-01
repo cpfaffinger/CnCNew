@@ -138,6 +138,12 @@ public sealed class W3dTimeCodedMotionChannel : W3dMotionChannel
         return next < 0 ? q1 : W3dQuaternionMath.Slerp(q1, ReadQuaternion(next), ratio);
     }
 
+    /// <summary>The value of the last key at or before <paramref name="frame"/>, as stored.</summary>
+    public float GetStoredScalar(int frame) => Values[Locate(frame).Key];
+
+    /// <summary>The quaternion of the last key at or before <paramref name="frame"/>, as stored.</summary>
+    public Quaternion GetStoredQuaternion(int frame) => ReadQuaternion(Locate(frame).Key);
+
     private Quaternion ReadQuaternion(int key)
     {
         var offset = key * 4;
@@ -256,6 +262,12 @@ public sealed class W3dAdaptiveDeltaMotionChannel : W3dMotionChannel
         var q2 = new Quaternion(Get(frame1 + 1, 0), Get(frame1 + 1, 1), Get(frame1 + 1, 2), Get(frame1 + 1, 3));
         return W3dQuaternionMath.Slerp(q1, q2, ratio);
     }
+
+    /// <summary>The decoded value of a whole frame.</summary>
+    public float GetStoredScalar(int frame) => Get((uint)frame, 0);
+
+    /// <summary>The decoded quaternion of a whole frame.</summary>
+    public Quaternion GetStoredQuaternion(int frame) => new(Get((uint)frame, 0), Get((uint)frame, 1), Get((uint)frame, 2), Get((uint)frame, 3));
 
     private float Get(uint frame, int component)
     {

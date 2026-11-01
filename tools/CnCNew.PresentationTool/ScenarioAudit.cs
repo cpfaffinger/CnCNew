@@ -19,6 +19,21 @@ namespace CnCNew.PresentationTool;
 /// </summary>
 internal static class ScenarioAudit
 {
+    private static void PrintProjectiles(LiveGame live, Vector2 anchor, Dictionary<EntityId, (float X, float Y, float Z)> flights)
+    {
+        foreach (var entity in live.World.Entities.Where(value => value.Template.IsKindOf("PROJECTILE")))
+        {
+            var (x, y, z) = (ToFloat(entity.X), ToFloat(entity.Y), ToFloat(entity.Z));
+            var height = z - ToFloat(live.World.GroundHeightAt(entity.X, entity.Y));
+            var known = flights.TryGetValue(entity.Id, out var last);
+            flights[entity.Id] = (x, y, z);
+            var (dx, dy, dz) = known ? (x - last.X, y - last.Y, z - last.Z) : (0f, 0f, 0f);
+            var along = MathF.Sqrt(dx * dx + dy * dy);
+            var step = MathF.Sqrt(along * along + dz * dz);
+            Console.WriteLine(FormattableString.Invariant($"       f{live.Clock.OriginalFrames,5} #{entity.Id.Value,-5} {entity.Template.Name,-28} at ({x - anchor.X,7:F1},{y - anchor.Y,7:F1}) z {z,6:F1} h {height,6:F1} step {step,5:F2} heading {MathF.Atan2(dy, dx) * 180f / MathF.PI,7:F1} climb {MathF.Atan2(dz, along) * 180f / MathF.PI,6:F1} model heading {ToFloat(entity.Angle) * 180f / MathF.PI,7:F1}"));
+        }
+    }
+
     public static int Run(string[] args)
     {
         if (args.Length < 1) throw new ArgumentException("scenario-audit <content-dir> --name NAME [--every N] [--ticks N]");
@@ -59,6 +74,7 @@ internal static class ScenarioAudit
         var shotsAt = new List<(long Tick, string Shooter, string Victim, float Bearing, float Turret, bool HasTurret)>();
         var exits = FactoryExitAudit.Create(data, live);
         var acceptance = AcceptanceAudit.Create(live);
+        var flights = new Dictionary<EntityId, (float X, float Y, float Z)>();
         // A scene starts one tick after its objects were placed; above 30 Hz that is in the middle of an original frame. Step single ticks to the next frame
         // boundary first, so every sample is taken exactly where an original frame ends (nothing to do at 30 Hz).
         while (!live.Clock.IsOriginalFrameBoundary && !live.IsOver) live.Advance(1.0 / live.World.Time.TicksPerSecond + 1e-9);
@@ -73,6 +89,8 @@ internal static class ScenarioAudit
             acceptance?.Sample(frame);
             for (var i = eventsBefore; i < events.Count; i++) NoteEvent(live, events[i], frame, log, shotsAt);
             if (live.Clock.OriginalFrames % every == 0) PrintSample(live, sample);
+            // --projectiles: every projectile in the air in every original frame: place, height above the ground, heading and climb of its step (what a person judges by watching its flight).
+            if (args.Contains("--projectiles")) PrintProjectiles(live, new Vector2(live.Anchor.X, live.Anchor.Y), flights);
             // --drawables-at N: everything the frame of original frame N draws that is not scenery, and every simulated object it does not draw (what is on screen besides the tagged objects: projectiles, debris, wrecks).
             if (Option("--drawables-at") is { } drawablesAt && live.Clock.OriginalFrames == long.Parse(drawablesAt, CultureInfo.InvariantCulture))
             {

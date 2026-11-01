@@ -43,6 +43,27 @@ public sealed record ContainerFirePoints(ImmutableArray<ImmutableArray<BonePose>
     public bool IsEmpty => Garrison.All(set => set.IsEmpty) && Stations.IsEmpty && Transport.IsEmpty;
 }
 
+/// <summary>
+/// One barrel of a weapon slot (<c>WeaponBarrelInfo::m_projectileOffsetMtx</c>): where a projectile leaves the model and the way the bone's x axis points, in the object's frame at rest.
+/// A barrel the data name no launch bone for is the identity (<see cref="Origin"/>).
+/// </summary>
+public readonly record struct LaunchBarrel(Fixed X, Fixed Y, Fixed Z, Fixed ForwardX, Fixed ForwardY, Fixed ForwardZ)
+{
+    public static LaunchBarrel Origin => new(Fixed.Zero, Fixed.Zero, Fixed.Zero, Fixed.One, Fixed.Zero, Fixed.Zero);
+}
+
+/// <summary>
+/// What <c>W3DModelDraw::getProjectileLaunchOffset</c> tells of one turret: the rest positions of its angle and pitch bones (the origin for a bone the state does not name) and the art
+/// angles (<c>TurretArtAngle</c>, <c>TurretArtPitch</c>) in radians.
+/// </summary>
+public readonly record struct LaunchTurret(Fixed AngleX, Fixed AngleY, Fixed AngleZ, Fixed PitchX, Fixed PitchY, Fixed PitchZ, Fixed ArtAngle, Fixed ArtPitch);
+
+/// <summary>The launch points of one weapon slot in the state the object shows when that slot fires: its barrels (<c>m_weaponBarrelInfoVec</c>, empty for none) and its turrets, main first.</summary>
+public sealed record LaunchSlot(ImmutableArray<LaunchBarrel> Barrels, ImmutableArray<LaunchTurret> Turrets);
+
+/// <summary>The launch points of an object's weapon slots (<c>Weapon::calcProjectileLaunchPosition</c>), one entry per slot.</summary>
+public sealed record WeaponLaunchPoints(ImmutableArray<LaunchSlot> Slots);
+
 /// <summary>The lateral extent of a bridge model's left section, unscaled (<c>W3DBridge::load</c>: <c>m_minY</c>, <c>m_maxY</c>): how wide the deck is around the line between the bridge's two points.</summary>
 public readonly record struct BridgeDeck(Fixed MinY, Fixed MaxY);
 
@@ -68,10 +89,13 @@ public sealed class ModelGeometry
     /// <summary>The deck of the <c>Bridge</c> blocks by name, for those whose pristine model has what <c>W3DBridge::load</c> asks for; a block without an entry makes no bridge.</summary>
     public ImmutableDictionary<string, BridgeDeck> BridgeDecks { get; }
 
+    /// <summary>The launch points of objects that fire projectiles, by template name (case-insensitive); a template without an entry launches from its geometry centre along its heading.</summary>
+    public ImmutableDictionary<string, WeaponLaunchPoints> WeaponLaunches { get; }
+
     /// <summary>SHA-256 of the canonical text of the table; empty for <see cref="None"/>.</summary>
     public string Fingerprint { get; }
 
-    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty;
+    public bool IsEmpty => Airfields.IsEmpty && ExitPaths.IsEmpty && FirePoints.IsEmpty && BridgeDecks.IsEmpty && WeaponLaunches.IsEmpty;
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields) : this(airfields, []) { }
 
@@ -79,12 +103,14 @@ public sealed class ModelGeometry
         : this(airfields, exitPaths, []) { }
 
     public ModelGeometry(IEnumerable<KeyValuePair<string, AirfieldLayout>> airfields, IEnumerable<KeyValuePair<string, ImmutableArray<ExitPath>>> exitPaths,
-        IEnumerable<KeyValuePair<string, ContainerFirePoints>> firePoints, IEnumerable<KeyValuePair<string, BridgeDeck>>? bridgeDecks = null)
+        IEnumerable<KeyValuePair<string, ContainerFirePoints>> firePoints, IEnumerable<KeyValuePair<string, BridgeDeck>>? bridgeDecks = null,
+        IEnumerable<KeyValuePair<string, WeaponLaunchPoints>>? weaponLaunches = null)
     {
         Airfields = airfields.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         ExitPaths = exitPaths.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         FirePoints = firePoints.Where(pair => !pair.Value.IsEmpty).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         BridgeDecks = (bridgeDecks ?? []).ToImmutableDictionary(StringComparer.Ordinal);
+        WeaponLaunches = (weaponLaunches ?? []).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         Fingerprint = IsEmpty ? string.Empty : ComputeFingerprint();
     }
 
@@ -122,6 +148,13 @@ public sealed class ModelGeometry
         // Written only when the table has bridges: a table without them keeps its fingerprint.
         foreach (var pair in BridgeDecks.OrderBy(value => value.Key, StringComparer.Ordinal))
             text.Append(CultureInfo.InvariantCulture, $"bridge {pair.Key} {pair.Value.MinY.Raw} {pair.Value.MaxY.Raw}\n");
+        // Written only when the table has launch points: a table without them keeps its fingerprint.
+        foreach (var pair in WeaponLaunches.OrderBy(value => value.Key.ToUpperInvariant(), StringComparer.Ordinal))
+        {
+            static string Barrel(LaunchBarrel value) => string.Create(CultureInfo.InvariantCulture, $"{value.X.Raw},{value.Y.Raw},{value.Z.Raw},{value.ForwardX.Raw},{value.ForwardY.Raw},{value.ForwardZ.Raw}");
+            static string Turret(LaunchTurret value) => string.Create(CultureInfo.InvariantCulture, $"{value.AngleX.Raw},{value.AngleY.Raw},{value.AngleZ.Raw},{value.PitchX.Raw},{value.PitchY.Raw},{value.PitchZ.Raw},{value.ArtAngle.Raw},{value.ArtPitch.Raw}");
+            text.Append(CultureInfo.InvariantCulture, $"launch {pair.Key.ToUpperInvariant()} {string.Join("|", pair.Value.Slots.Select(slot => string.Join(";", slot.Barrels.Select(Barrel)) + "/" + string.Join(";", slot.Turrets.Select(Turret))))}\n");
+        }
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString())));
     }
 }
