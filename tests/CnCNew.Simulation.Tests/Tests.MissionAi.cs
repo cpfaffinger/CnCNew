@@ -215,7 +215,7 @@ static partial class Tests
 
     /// <summary>
     /// <c>AIPlayer::doTeamBuilding</c>, <c>selectTeamToBuild</c>: with unit production on, a team whose production condition holds is built by the AI itself, the highest priority first, and only as many instances as
-    /// the prototype allows. The team goes through the queues once.
+    /// the prototype allows. A singleton's team always exists, so the timer never chooses it. The team goes through the queues once.
     /// </summary>
     public static void MissionAiTrainsTheTeamsOfItsConditions()
     {
@@ -224,6 +224,7 @@ static partial class Tests
             AiTeam("Low", "BetaSoldier", 1, condition: "Wanted", priority: 1),
             AiTeam("High", "BetaDozer", 1, condition: "Wanted", priority: 5),
             AiTeam("Never", "BetaSoldier", 5, condition: "Not wanted", priority: 9),
+            AiTeam("Lone", "BetaSoldier", 5, condition: "Wanted", priority: 8, singleton: true),
         };
         var session = StartAiMission(
             [

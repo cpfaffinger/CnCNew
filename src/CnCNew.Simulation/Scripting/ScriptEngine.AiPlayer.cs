@@ -1263,7 +1263,10 @@ public sealed partial class ScriptEngine
         return true;
     }
 
-    /// <summary><c>isAGoodIdeaToBuildTeam</c>: the production condition holds, fewer instances than <c>teamMaxInstances</c> exist, none is being built, and it is possible.</summary>
+    /// <summary>
+    /// <c>isAGoodIdeaToBuildTeam</c>: the production condition holds, fewer instances than <c>teamMaxInstances</c> exist, none is being built, and it is possible. The team of a singleton prototype
+    /// exists from the start and is never deleted (<c>TeamFactory::initTeam</c>, <c>TeamPrototype::teamAboutToBeDeleted</c>), so it always counts, empty or not.
+    /// </summary>
     private bool IsGoodIdeaToBuildTeam(AiPlayer state, ScriptTeamPrototype prototype)
     {
         if (!EvaluateProductionCondition(state, prototype)) return false;
@@ -1280,6 +1283,7 @@ public sealed partial class ScriptEngine
             // An instance exists while it has members or is on its way through the queues; the engine keeps the empty shell of a single-instance prototype.
             if (queued || HasCountingMember(team)) instances++;
         }
+        if (prototype.IsSingleton && instances == 0) instances = 1;
         if (instances >= prototype.MaxInstances) return false;
         return IsPossibleToBuildTeam(state, prototype);
     }
