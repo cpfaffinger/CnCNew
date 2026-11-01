@@ -18,4 +18,26 @@ public static class ChallengeSides
         ArgumentNullException.ThrowIfNull(map);
         return ScriptProgram.Build(map).Players.Any(player => player.IsHuman && !player.Id.IsSystem) ? string.Empty : SyntheticHumanSide;
     }
+
+    /// <summary>
+    /// Who plays a map that is started by its name (<c>--mission</c>), as the menus would have it: the map of a Generals' Challenge marks nobody as human, and without its side the viewer
+    /// was the map's first player, an enemy with the whole map uncovered. Empty for a map no challenge names.
+    /// </summary>
+    public static (string Side, string Faction) OfDirectStart(CnCNew.Game.Data.GameData data, string mapPath)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        const string campaigns = "Data/INI/Campaign.ini", personas = "Data/INI/ChallengeMode.ini";
+        if (!data.Content.Exists(campaigns)) return (string.Empty, string.Empty);
+        CampaignCatalog catalog;
+        using (var stream = data.Content.OpenRead(campaigns)) catalog = CampaignCatalog.Parse(stream);
+        if (data.Content.Exists(personas))
+        {
+            using var reader = new StreamReader(data.Content.OpenRead(personas));
+            catalog = catalog.WithPersonas(reader.ReadToEnd());
+        }
+        var campaign = catalog.Campaigns.FirstOrDefault(item => item.IsChallenge && item.Sequence.Any(mission => mission.MapPath.Equals(mapPath, StringComparison.OrdinalIgnoreCase)));
+        if (campaign is null) return (string.Empty, string.Empty);
+        using var map = data.Content.OpenRead(mapPath);
+        return (HumanSideFor(CnCNew.Formats.SageMapDecoder.Decode(map)), campaign.PlayerFaction);
+    }
 }

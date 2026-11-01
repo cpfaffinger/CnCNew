@@ -658,7 +658,8 @@ internal sealed class CnCNewGame(
         {
             var viewport = GraphicsDevice.Presenter.BackBuffer;
             // The director reports when a scripted camera move, speech or movie really ended (CompletePresentation); the latency is only the bound after which the VM stops waiting.
-            var run = MissionRun.Load(MissionContext.From(data), mapPath, MissionOptions.Standard with { HumanSideName = options.HumanSide, PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
+            var challenge = options.HumanSide.Length == 0 ? CnCNew.Game.Campaign.ChallengeSides.OfDirectStart(data, mapPath) : (Side: options.HumanSide, Faction: string.Empty);
+            var run = MissionRun.Load(MissionContext.From(data), mapPath, MissionOptions.Standard with { HumanSideName = challenge.Side, HumanFaction = challenge.Faction, PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
             var text = data.LoadText("English");
             var mission = LiveMission.Create(data, run, new System.Numerics.Vector2(viewport.Width, viewport.Height), label => text.TryGet(label, out var resolved) ? resolved : label);
             ApplyCamera(mission.Camera, options);
