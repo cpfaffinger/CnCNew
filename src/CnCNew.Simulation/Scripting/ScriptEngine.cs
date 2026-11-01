@@ -787,7 +787,11 @@ public sealed partial class ScriptEngine
     /// <c>teamExecutesActionsOnCreate</c> also runs the true-actions of its <c>teamProductionCondition</c> script each time it is created, existing singleton included
     /// (<paramref name="runStartActions"/> is off for the map load, where objects join their teams before any script ran).
     /// </summary>
-    private ScriptTeam? CreateTeam(string prototypeName, bool runStartActions = true)
+    /// <param name="another">
+    /// <c>createInactiveTeam</c> of the AI: only a singleton's team is reused. The engine keeps a shell for every prototype of one instance, and a shell that is taken - it has objects, or it is
+    /// on its way through the queues - gets a new instance beside it.
+    /// </param>
+    private ScriptTeam? CreateTeam(string prototypeName, bool runStartActions = true, bool another = false)
     {
         var prototype = _program.FindTeam(prototypeName);
         if (prototype is null)
@@ -796,7 +800,7 @@ public sealed partial class ScriptEngine
             return null;
         }
         ScriptTeam team;
-        if ((prototype.IsSingleton || prototype.MaxInstances < 2) && FindTeamInstance(prototypeName) is { } existing) team = existing;
+        if ((prototype.IsSingleton || prototype.MaxInstances < 2) && FindTeamInstance(prototypeName) is { } existing && (prototype.IsSingleton || !another || !IsTaken(existing))) team = existing;
         else
         {
             var owner = _program.FindPlayer(prototype.Owner);
@@ -816,6 +820,13 @@ public sealed partial class ScriptEngine
             }
         }
         return team;
+    }
+
+    private bool IsTaken(ScriptTeam team)
+    {
+        foreach (var entry in _teamQueue)
+            if (entry.TeamId == team.Id) return true;
+        return HasCountingMember(team);
     }
 
     private Entity? NamedEntity(string name)

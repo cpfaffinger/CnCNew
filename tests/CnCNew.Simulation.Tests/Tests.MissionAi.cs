@@ -261,6 +261,25 @@ static partial class Tests
         Check.That(CountOf(session, "BetaDozer") == 1 && CountOf(session, "BetaSoldier") == 0, $"The team with the priority left goes first ({CountOf(session, "BetaDozer")}, {CountOf(session, "BetaSoldier")}).");
     }
 
+    /// <summary>
+    /// <c>buildSpecificAITeam</c> refuses a second team only for a real singleton: a script may build a team of one instance again while the first stands, and there are two then. The timer of the AI asks
+    /// for <c>teamMaxInstances</c>, a script does not.
+    /// </summary>
+    public static void AScriptBuildsAnotherInstanceOfATeam()
+    {
+        var session = StartAiMission(
+            [OnFlag("again", Scr.Do("BUILD_TEAM", Scr.Team("Wave")), Scr.Do("BUILD_TEAM", Scr.Team("Lone"))), AtStart(EnableUnits, Scr.Do("BUILD_TEAM", Scr.Team("Wave")), Scr.Do("BUILD_TEAM", Scr.Team("Lone")))],
+            objects: [Placed("BetaCenter", 300m, 100m, "teamB", "Hq")],
+            teams: [AiTeam("Wave", "BetaSoldier", 1, priority: 1), AiTeam("Lone", "BetaDozer", 1, priority: 1, singleton: true)], files: AiMissionFiles());
+        Run(session, session.Frames(300));
+        Check.That(CountOf(session, "BetaSoldier") == 1 && CountOf(session, "BetaDozer") == 1, $"Both are built ({CountOf(session, "BetaSoldier")}, {CountOf(session, "BetaDozer")}).");
+        session.Engine.SignalUiInteraction("again");
+        Run(session, session.Frames(300));
+        Check.That(CountOf(session, "BetaSoldier") == 2, $"The second order makes a second team ({CountOf(session, "BetaSoldier")}).");
+        Check.That(session.Engine.TeamInstances.Count(team => team.Prototype == "Wave" && team.Created && team.Members.Count == 1) == 2, "Two instances, each with its unit.");
+        Check.That(CountOf(session, "BetaDozer") == 1 && session.Engine.Diagnostics.ContainsKey("BUILD_TEAM 'Lone': singleton team already exists"), "A singleton that has objects is refused.");
+    }
+
     /// <summary><c>AIPlayer::onUnitProduced</c> matches an order by its factory: what a script creates while the unit is being trained fills no order, however alike the two are.</summary>
     public static void ATeamTakesTheUnitOfItsFactory()
     {

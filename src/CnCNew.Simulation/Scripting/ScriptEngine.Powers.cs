@@ -143,11 +143,10 @@ public sealed partial class ScriptEngine
         var owner = _program.FindPlayer(prototype.Owner);
         if (owner is null || !_world.HasPlayer(owner.Id)) { Diagnose($"RECRUIT_TEAM '{teamName}': team has no player"); return; }
         if (AiOfPlayer(owner.Id) is null) { Diagnose($"RECRUIT_TEAM '{teamName}': a human player has no AI"); return; }
-        var singleton = prototype.IsSingleton || prototype.MaxInstances < 2;
-        if (singleton && FindTeamInstance(teamName) is { } existing && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"RECRUIT_TEAM '{teamName}': singleton team already exists"); return; }
+        if (prototype.IsSingleton && FindTeamInstance(teamName) is { } existing && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"RECRUIT_TEAM '{teamName}': singleton team already exists"); return; }
         // recruitSpecificAITeam reports a team without a home and goes on with m_homeLocation, which is the origin of the map.
         var home = (prototype.Home.Length > 0 ? _program.FindWaypoint(prototype.Home) : null) ?? new ScriptWaypoint(string.Empty, Fixed.Zero, Fixed.Zero, Fixed.Zero);
-        if (CreateTeam(teamName) is not { } team) return;
+        if (CreateTeam(teamName, another: true) is not { } team) return;
         var maxDistanceSquared = radius < Fixed.One ? SquaredReach.OfSquare(Fixed.MaxValue) : SquaredReach.Of(radius);
         var recruited = 0;
         foreach (var unit in prototype.Units)
@@ -169,7 +168,7 @@ public sealed partial class ScriptEngine
         else
         {
             Diagnose($"RECRUIT_TEAM '{teamName}': recruited no units");
-            if (!singleton) _teams.Remove(team.Id);
+            if (!(prototype.IsSingleton || prototype.MaxInstances < 2)) _teams.Remove(team.Id);
         }
     }
 

@@ -358,11 +358,11 @@ public sealed partial class ScriptEngine
         if (_program.FindPlayer(prototype.Owner) is not { } owner || !_world.HasPlayer(owner.Id)) { Diagnose($"BUILD_TEAM '{teamName}': team has no player"); return; }
         if (AiOfPlayer(owner.Id) is not { } builder) { Diagnose($"BUILD_TEAM '{teamName}': a human player has no AI"); return; }
         if (!_world.CanBuildUnits(owner.Id)) { Diagnose($"BUILD_TEAM '{teamName}': unit construction disabled"); return; }
-        var existing = prototype.IsSingleton || prototype.MaxInstances < 2 ? FindTeamInstance(teamName) : null;
-        if (!idleOnly && prototype.IsSingleton && existing is not null && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"BUILD_TEAM '{teamName}': singleton team already exists"); return; }
+        var singleton = prototype.IsSingleton ? FindTeamInstance(teamName) : null;
+        if (!idleOnly && singleton is not null && LiveMembers(singleton).Any(CountsAsObject)) { Diagnose($"BUILD_TEAM '{teamName}': singleton team already exists"); return; }
         if (!AiHasFactoriesFor(builder, prototype)) { Diagnose($"BUILD_TEAM '{teamName}': factories or tech missing"); return; }
-        if (existing is not null && _teamBuilds.Any(order => order.TeamId == existing.Id)) { Diagnose($"BUILD_TEAM '{teamName}': build already running"); return; }
-        if (CreateTeam(teamName) is not { } team) return;
+        if (singleton is not null && _teamBuilds.Any(order => order.TeamId == singleton.Id)) { Diagnose($"BUILD_TEAM '{teamName}': build already running"); return; }
+        if (CreateTeam(teamName, another: true) is not { } team) return;
         team.Created = false;
         AiResetTeamForRebuild(team);
         AiQueueTeamOrders(team, prototype, idleOnly);
