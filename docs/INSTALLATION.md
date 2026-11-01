@@ -46,6 +46,8 @@ reference manifest on this machine's CPU. A difference there is no reason to sto
 **Steam is only read.** Every game file is opened read-only and copied one by one into the install folder; nothing is linked, and the client, the acceptance and every tool read that copy only. `GameInstaller` refuses any target in a Steam library, whoever calls it. A clone in the default folder keeps the game in its git-ignored `game\`. Choosing another folder later makes the game there; the old folder stays until you delete it.
 `scripts/check-setup.ps1` checks the launcher itself; `-Full` walks the whole way in an empty profile. **This is the way of the development phase: it builds from source. A launcher that downloads finished binaries comes later.**
 
+**How the launcher starts things.** Every program runs under a hidden `cmd.exe` with its output in a log of `%LOCALAPPDATA%\CnCNew\logs`, the acceptance too (`acceptance.log`). On a tester's Windows 11 Enterprise PC `pwsh.exe` started directly failed with `0xC0000142` (a dialog, then nothing), while the same program under `cmd.exe` had just made the game; the cause on that PC is not known. The launcher stays open until the acceptance has run for ten seconds, tries twice, and says the code in its own window when it does not start. `Start-Acceptance.cmd` leads to the launcher when `pwsh` ends with a code below zero.
+
 ## What the patcher does – and what it never does
 
 It does:

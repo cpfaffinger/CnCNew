@@ -410,13 +410,19 @@ function Get-LastLine([string]$Path) {
     ''
 }
 
+# A program under a hidden cmd.exe with its output in a log. Every start goes this way: on a tester's PC pwsh.exe started directly failed with 0xC0000142, the same program under cmd.exe ran.
+function Start-Behind([string]$File, [string]$Arguments, [string]$Log) {
+    $line = "/c `"`"$File`" $Arguments >> `"$Log`" 2>&1`""
+    $process = Start-Process -FilePath $env:ComSpec -ArgumentList $line -WorkingDirectory $repo -WindowStyle Hidden -PassThru
+    $null = $process.Handle
+    $process
+}
+
 # Runs one program with its output in a log; the window stays alive meanwhile and shows the last line.
 function Invoke-Logged([string]$Name, [string]$Title, [string]$File, [string]$Arguments) {
     $log = Join-Path $logDir "$Name.log"
     [IO.File]::WriteAllText($log, '')
-    $line = "/c `"`"$File`" $Arguments >> `"$log`" 2>&1`""
-    $process = Start-Process -FilePath $env:ComSpec -ArgumentList $line -WorkingDirectory $repo -WindowStyle Hidden -PassThru
-    $null = $process.Handle
+    $process = Start-Behind $File $Arguments $log
     $started = Get-Date
     $shown = ''
     while (-not $process.HasExited) {
@@ -742,9 +748,25 @@ function Invoke-Guarded([scriptblock]$Action) {
     try { & $Action } catch { $script:busy = $false; Say "Something went wrong: $($_.Exception.Message)`nThe logs are in $logDir"; $progress.Visible = $false }
 }
 
+# This window stays until the acceptance has lasted some seconds: what fails at once is said here, in words, and not by a dialog nobody can act on.
 function Start-Acceptance {
-    Start-Process -FilePath $script:tools.Pwsh -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', "`"$(Join-Path $repo 'scripts\acceptance.ps1')`"", '-Suite', '-ContentDir', "`"$contentDir`"" -WorkingDirectory $repo
-    $form.Close()
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -STA -File `"$(Join-Path $repo 'scripts\acceptance.ps1')`" -Suite -ContentDir `"$contentDir`""
+    $log = Join-Path $logDir 'acceptance.log'
+    $exit = 0
+    $main.Enabled = $false
+    foreach ($attempt in 1, 2) {
+        [IO.File]::WriteAllText($log, '')
+        $process = Start-Behind $script:tools.Pwsh $arguments $log
+        Say 'The acceptance is starting; its window opens in a moment.'
+        $deadline = (Get-Date).AddSeconds(10)
+        while (-not $process.HasExited -and (Get-Date) -lt $deadline) { [Windows.Forms.Application]::DoEvents(); Start-Sleep -Milliseconds 100 }
+        if (-not $process.HasExited) { $form.Close(); return }
+        $process.WaitForExit()
+        $exit = $process.ExitCode
+        if ($exit -eq 0) { $form.Close(); return }
+    }
+    $main.Enabled = $true
+    Say ("The acceptance did not start: PowerShell 7 ended with code 0x{0:X8}.`nThe log acceptance.log says more; hand it back." -f $exit)
 }
 
 $main.Add_Click({
@@ -766,7 +788,7 @@ $main.Add_Click({
     })
 $play.Add_Click({
         Invoke-Guarded {
-            Start-Process -FilePath $script:tools.Dotnet -ArgumentList "`"$(Find-Client)`" --content-dir `"$contentDir`"" -WorkingDirectory $repo -WindowStyle Hidden
+            $null = Start-Behind $script:tools.Dotnet "`"$(Find-Client)`" --content-dir `"$contentDir`"" (Join-Path $logDir 'play.log')
             Say 'The game is starting; its window opens in about 20 seconds.'
         }
     })

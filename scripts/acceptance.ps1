@@ -361,6 +361,7 @@ function Get-Client {
     $script:clientDll
 }
 
+# pwsh starts under cmd.exe here, never directly: on a tester's PC a pwsh.exe started directly failed with 0xC0000142, the same program under cmd.exe ran.
 function Format-Arguments([string[]]$Arguments) { ($Arguments | ForEach-Object { if ($_ -match '[\s;|"]' -or $_ -eq '') { '"' + ($_ -replace '"', '\"') + '"' } else { $_ } }) -join ' ' }
 
 # Starts the client (dotnet <dll>: the exe is a window application nobody could wait for) and waits for it; returns the exit code.
@@ -729,7 +730,7 @@ function Start-SuiteScene([string]$Name, $Entries, [int]$Rate, [string]$WindowSi
     if ($script) {
         $arguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot $script)) + @($live.args) + @('-ContentDir', $content.Path, '-TickRate', "$Rate", '-Size', $WindowSize, '-NoBuild')
         if ($Mute) { $arguments += '-Mute' }
-        return [pscustomobject]@{ Processes = @(Start-Process -FilePath 'pwsh' -ArgumentList (Format-Arguments $arguments) -PassThru -WindowStyle Minimized); Text = 'The game is starting ...' }
+        return [pscustomobject]@{ Processes = @(Start-Process -FilePath $env:ComSpec -ArgumentList "/c `"pwsh $(Format-Arguments $arguments)`"" -PassThru -WindowStyle Minimized); Text = 'The game is starting ...' }
     }
     $logDir = Join-Path (Split-Path -Parent $ResultsPath) 'logs'
     New-Item -ItemType Directory -Force $logDir | Out-Null
@@ -904,7 +905,7 @@ function Show-SuitePage($Step, [int]$Number, [int]$Total, [int]$PackageNumber, $
         })
     $again.Add_Click({
             $manual = Get-Prop (Get-Prop (& $current) 'live') 'manual'
-            if ($manual) { Start-Process -FilePath 'pwsh' -ArgumentList '-NoExit', '-Command', $manual -WorkingDirectory $repo; return }
+            if ($manual) { Start-Process -FilePath $env:ComSpec -ArgumentList "/c `"pwsh -NoExit -EncodedCommand $([Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($manual)))`"" -WorkingDirectory $repo; return }
             & $launch
         })
     $rate.Add_Click({ $state.Rate = if ($state.Rate -eq 30) { 60 } else { 30 }; & $launch })
