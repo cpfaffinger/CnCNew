@@ -120,12 +120,14 @@ public sealed class FxExecutor
         if (weapon.FireFx[level] is { } fire)
         {
             // Weapon::fireWeaponTemplate: without a drawable muzzle the effect plays at the drawable (or the target for contact weapons).
-            var muzzle = view.GetWeaponMuzzle(simEvent.Entity, weapon.Name);
+            var aimed = view.GetWeaponMuzzleTransform(simEvent.Entity, weapon.Name);
+            var muzzle = aimed?.Translation ?? view.GetWeaponMuzzle(simEvent.Entity, weapon.Name);
             if (muzzle is null) Count("weapon-fx-without-muzzle");
             var primary = weapon.IsContact && target is { } contact ? contact : muzzle ?? source.Position;
             ExecuteFxListAtPosition(fire, new FxInvocation(primary)
             {
-                PrimaryTransform = source.Transform,
+                // The matrix of the bone: a turret's fire points along the barrel. Without a bone, the object's own.
+                PrimaryTransform = aimed ?? source.Transform,
                 PrimarySpeed = weapon.WeaponSpeed,
                 Secondary = target,
                 OverrideRadius = weapon.PrimaryDamageRadius,

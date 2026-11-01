@@ -261,7 +261,11 @@ public sealed record LaserSpec(string Texture, float Width, int Segments, float 
 public sealed record StreamSpec(string Texture, float Width, float TileFactor, float ScrollRate, int MaxSegments);
 
 /// <summary>One object as the projector captured it this tick: what <see cref="AttachedEffects"/> needs of it.</summary>
-public readonly record struct ProjectedEntity(EntityId Entity, ObjectVisual Visual, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections);
+public readonly record struct ProjectedEntity(EntityId Entity, ObjectVisual Visual, ModelConditionSet Conditions, ImmutableArray<DrawModuleSelection> Selections,
+    float? TurretYaw = null, float? TurretPitch = null, float? AltTurretYaw = null, float? AltTurretPitch = null);
+
+/// <summary>The turrets of a model as they are drawn: the bones of the state, and the angles with the art's offsets on them.</summary>
+public readonly record struct TurretPose(string? YawBone, float? Yaw, string? PitchBone, float? Pitch, string? AltYawBone, float? AltYaw, string? AltPitchBone, float? AltPitch);
 
 /// <summary>Counters of <see cref="AttachedEffects"/>, for tests and the client's report.</summary>
 public sealed record AttachedEffectStats(long ModelStateSystems, long BodySystems, long BoneFxSystems, long BoneFxLists, long TransitionSystems, long TransitionFxLists, long ExhaustSystems,
@@ -492,20 +496,49 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
         points.Clear();
     }
 
+    /// <summary>The bones of a model with its turrets turned (<c>ModelBoneTable.FindPosed</c>). Without it a bone stands in its rest pose.</summary>
+    public Func<string, string, TurretPose, Matrix4x4?>? PosedBones { get; init; }
+
     /// <summary>The world position of a bone of the object's current model (what <see cref="IFxWorldView.GetBonePosition"/> answers), or null.</summary>
     public Vector3? BonePosition(EntityId entity, string bone, FxEntityPose pose)
     {
-        if (!_current.TryGetValue(entity.Value, out var item) || ModelOf(item) is not { } model) return null;
-        var lower = bone.ToLowerInvariant();
-        var local = bones(model, lower) ?? bones(model, lower + "01");
-        return local is { } found ? Vector3.Transform(found * item.Visual.Scale, pose.Transform) : null;
+        if (!_current.TryGetValue(entity.Value, out var item)) return null;
+        for (var module = 0; module < item.Visual.Draws.Length && module < item.Selections.Length; module++)
+        {
+            var selection = item.Selections[module];
+            if (selection.StateIndex < 0 || selection.Model is not { } model) continue;
+            return World(item, item.Visual.Draws[module].States[selection.StateIndex], model, bone.ToLowerInvariant(), pose)?.Translation;
+        }
+        return null;
+    }
+
+    /// <summary>A bone of a state's model in world space, its numbered first bone when the name itself is not one, with the turrets as they are drawn.</summary>
+    private Matrix4x4? World(ProjectedEntity item, ModelStateSpec state, string model, string bone, FxEntityPose pose)
+    {
+        var turrets = TurretsOf(item, state);
+        Matrix4x4? local = PosedBones is { } posed
+            ? posed(model, bone, turrets) ?? posed(model, bone + "01", turrets)
+            : (bones(model, bone) ?? bones(model, bone + "01")) is { } rest ? Matrix4x4.CreateTranslation(rest) : null;
+        if (local is not { } found) return null;
+        found.Translation *= item.Visual.Scale;
+        return found * pose.Transform;
+    }
+
+    private static TurretPose TurretsOf(ProjectedEntity item, ModelStateSpec state)
+    {
+        static float? With(float? angle, decimal artDegrees) => angle is { } radians ? radians + (float)artDegrees * MathF.PI / 180f : null;
+        return new TurretPose(state.Turret.AngleBone, With(item.TurretYaw, state.Turret.ArtAngleDegrees), state.Turret.PitchBone, With(item.TurretPitch, state.Turret.ArtPitchDegrees),
+            state.AltTurret.AngleBone, With(item.AltTurretYaw, state.AltTurret.ArtAngleDegrees), state.AltTurret.PitchBone, With(item.AltTurretPitch, state.AltTurret.ArtPitchDegrees));
     }
 
     /// <summary>
     /// The muzzle of the slot the object fires from now (<c>WeaponFireFXBone</c> of the current condition state, its first numbered bone when the name itself is not one), in
     /// world space, or null. The weapon of a shot is the current slot's - the event names the weapon, not the slot.
     /// </summary>
-    public Vector3? MuzzlePosition(EntityId entity, int slot, FxEntityPose pose)
+    public Vector3? MuzzlePosition(EntityId entity, int slot, FxEntityPose pose) => MuzzleTransform(entity, slot, pose)?.Translation;
+
+    /// <summary>The muzzle as a matrix (<c>Weapon::fireWeaponTemplate</c> hands the bone's matrix to the fire effect): its direction is the turret's, not the hull's.</summary>
+    public Matrix4x4? MuzzleTransform(EntityId entity, int slot, FxEntityPose pose)
     {
         if (!_current.TryGetValue(entity.Value, out var item)) return null;
         for (var module = 0; module < item.Visual.Draws.Length && module < item.Selections.Length; module++)
@@ -514,7 +547,7 @@ public sealed class AttachedEffects(AttachedEffectCatalog catalog, FxExecutor fx
             if (selection.StateIndex < 0 || selection.Model is not { } model) continue;
             var state = item.Visual.Draws[module].States[selection.StateIndex];
             if (slot >= state.WeaponBones.Length || state.WeaponBones[slot].FireFxBone is not { } name) continue;
-            if ((bones(model, name) ?? bones(model, name + "01")) is { } local) return Vector3.Transform(local * item.Visual.Scale, pose.Transform);
+            if (World(item, state, model, name, pose) is { } found) return found;
         }
         return null;
     }

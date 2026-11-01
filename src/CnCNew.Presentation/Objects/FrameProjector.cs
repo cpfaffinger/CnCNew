@@ -100,7 +100,7 @@ public sealed class FrameProjector
     {
         get
         {
-            foreach (var capture in _currentOrdered) yield return new Fx.ProjectedEntity(new EntityId(capture.Id), capture.Visual, capture.Conditions, capture.Selections);
+            foreach (var capture in _currentOrdered) yield return new Fx.ProjectedEntity(new EntityId(capture.Id), capture.Visual, capture.Conditions, capture.Selections, capture.TurretYaw, capture.TurretPitch, capture.AltTurretYaw, capture.AltTurretPitch);
         }
     }
     // The durations above in ticks of the world last captured, and the original frame the projector's tick lies in (all three equal the frame numbers at 30 Hz).

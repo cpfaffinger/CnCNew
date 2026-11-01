@@ -28,6 +28,9 @@ public interface IFxWorldView
     /// <summary>The muzzle (<c>WeaponFireFXBone</c>) of the weapon, or null to use the entity position (<c>Weapon.cpp</c> fallback).</summary>
     Vector3? GetWeaponMuzzle(EntityId entity, string weaponName);
 
+    /// <summary>The muzzle as a matrix: where the fire effect stands and which way it points. Null when only its place is known.</summary>
+    Matrix4x4? GetWeaponMuzzleTransform(EntityId entity, string weaponName) => null;
+
     /// <summary>The template name of a simulation template index (<c>ProductionCompleted.Value</c>).</summary>
     string? GetTemplateName(int templateIndex);
 
@@ -46,7 +49,8 @@ public interface IFxWorldView
 public sealed class SimulationFxWorldView(
     SimulationWorld world,
     Func<EntityId, string, Vector3?>? bones = null,
-    Func<EntityId, string, Vector3?>? muzzles = null) : IFxWorldView
+    Func<EntityId, string, Vector3?>? muzzles = null,
+    Func<EntityId, string, Matrix4x4?>? muzzleTransforms = null) : IFxWorldView
 {
     private Dictionary<uint, FxEntityPose> _current = [];
     private Dictionary<uint, FxEntityPose> _previous = [];
@@ -75,6 +79,7 @@ public sealed class SimulationFxWorldView(
 
     public Vector3? GetBonePosition(EntityId entity, string boneName) => bones?.Invoke(entity, boneName);
     public Vector3? GetWeaponMuzzle(EntityId entity, string weaponName) => muzzles?.Invoke(entity, weaponName);
+    public Matrix4x4? GetWeaponMuzzleTransform(EntityId entity, string weaponName) => muzzleTransforms?.Invoke(entity, weaponName);
 
     public string? GetTemplateName(int templateIndex)
         => templateIndex >= 0 && templateIndex < world.Templates.Templates.Length ? world.Templates[templateIndex].Name : null;
