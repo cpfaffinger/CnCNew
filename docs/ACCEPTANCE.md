@@ -10,20 +10,23 @@ verdicts, a picture page that needs nobody at the keyboard, and the reading of a
 
 Double-click `Start-Acceptance.cmd` in the repository (or `pwsh -STA scripts/acceptance.ps1 -Suite`). You need nothing else: no document, no list of commands.
 
+- A first window opens at once and says how this works; behind it the client is built when this commit has not been built yet (it counts the seconds, a minute or two). A second start of the same commit goes straight on.
 - A window stands on the right of the screen. It leads through **11 packages** one after the other: menus, command bar and input, the world, units, sound, a skirmish, spectator mode, a campaign mission, 60 against 30 Hz, replay and analysis, the modern skin.
-- Each page starts its scene by itself on the left, or shows its pictures. The first page takes a while: the pictures of the menus are made then.
+- Each page starts the game itself on the left and counts the seconds of loading, about half a minute. **The owner's first attempt on 1 November 2026 showed why:** a sheet of nineteen small pictures cannot be accepted, so nothing is judged from pictures any more; every goal is played in the window (`-SelfTest` refuses an instruction that speaks of pictures).
 - Each page names its goals. For each goal it says what to do and when it is reached, and you answer **Reached**, **Not reached** or **Skip**, with a comment if you like. A goal that is not reached needs a comment.
-- **Save and go on** moves on; **Show the scene again** restarts the scene; **Stop for now** saves. Starting again continues where you stopped; `Start-Acceptance.cmd -Fresh` begins anew, `-IncludeOptional` adds the installer items.
+- **Save and go on** moves on; **Start the scene again** restarts the scene; **Same scene at 30 Hz** shows it at the other rate; **Next view** changes the view on a page with several, such as the roads; a goal for a terminal is not started by itself, **Run it now** does that; **Stop for now** saves. Starting again continues where you stopped; `Start-Acceptance.cmd -Fresh` begins anew, `-IncludeOptional` adds the installer items.
 - At the end, and whenever you stop, the report lies on the desktop as `CnCNew-acceptance-report-<date>.md`. Hand it to the agent: every goal that was not reached becomes a finding.
 
 The packages are `packages` in `scripts/acceptance/catalogue.json`; new work that a person must judge adds its goals there. The sections below describe the catalogue and the older console run, which reads and writes the same results file.
+
+`pwsh scripts/acceptance.ps1 -Probe all` is the machine's check of this way: it starts the window of every scene of the suite, says which ended by itself, and keeps a picture of each under `%TEMP%\cncnew-acceptance\probe`.
 
 ## 1. The three commands
 
 ```powershell
 pwsh scripts/acceptance.ps1 -Capture -All   # unattended, about 50 minutes: film strips at 60 and 30 Hz, sound, scene audits, index.html
-pwsh scripts/acceptance.ps1 -Stills         # opens the page; one key per item that can be judged from still pictures (22 items, about 10 minutes)
-pwsh scripts/acceptance.ps1                 # the part in the window: one window per scene, one key per item (56 items, about 51 minutes)
+pwsh scripts/acceptance.ps1 -Stills         # opens the page; one key per item that can be judged from still pictures (6 items, about 11 minutes)
+pwsh scripts/acceptance.ps1                 # the part in the window: one window per scene, one key per item (100 items, about 94 minutes)
 ```
 
 Afterwards `pwsh scripts/acceptance.ps1 -Report` prints the summary and writes it as Markdown; that file is what goes back to the developer.
@@ -59,69 +62,76 @@ output directory (default `%TEMP%\cncnew-acceptance`, `-OutDir`), and the report
 
 ## 3. The catalogue
 
-85 items in 13 groups (`pwsh scripts/acceptance.ps1 -List`). Sources: the 27 boxes of the former "Sichtprüfliste 60 Hz" of `docs/DEMO-FINDINGS.md` (mapping there),
+114 items in 15 groups (`pwsh scripts/acceptance.ps1 -List`). Sources: the 27 boxes of the former "Sichtprüfliste 60 Hz" of `docs/DEMO-FINDINGS.md` (mapping there),
 the checklists of `docs/SPECTATOR-MODE.md` §11, `docs/CLIENT-OBJECTS.md`, `docs/DEMO-SCENARIOS.md`, `docs/UI-VANILLA-FIT.md` §6/§9, `docs/INSTALLATION.md`, and
 the "not proven" lists of `CLAUDE.md`; duplicates are merged, and each item names its sources in the JSON.
 
 | Group | Items | In the window | Minutes in the window | From stills | Optional |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| INST – installation and start | 3 | 1 | 1.0 | 0 | 2 |
-| SHELL – shell and menus | 9 | 3 | 4.5 | 5 | 1 |
-| HUD – HUD and command bar on the original layouts | 7 | 2 | 0.8 | 5 | 0 |
-| INPUT – mouse, scrolling, keys, placement | 8 | 5 | 5.5 | 2 | 1 |
-| WORLD – terrain, roads, objects, light, fog | 7 | 1 | 1.0 | 6 | 0 |
-| UNIT – unit behaviour | 17 | 14 | 11.9 | 1 | 2 |
-| FX – effects and muzzle flashes | 4 | 4 | 1.5 | 0 | 0 |
+| INST – installation and start | 3 | 0 | 0.0 | 0 | 3 |
+| SHELL – shell and menus | 13 | 12 | 14.0 | 0 | 1 |
+| HUD – hUD and command bar on the original layouts | 9 | 8 | 6.3 | 1 | 0 |
+| INPUT – input: mouse, scrolling, keys, placement | 8 | 7 | 6.5 | 0 | 1 |
+| WORLD – world rendering: terrain, roads, objects, light, fog | 11 | 9 | 5.6 | 2 | 0 |
+| UNIT – unit behaviour | 19 | 17 | 13.9 | 0 | 2 |
+| FX – effects and muzzle flashes | 6 | 6 | 3.1 | 0 | 0 |
 | SND – sound, music, Eva | 6 | 6 | 1.4 | 0 | 0 |
-| SKIRM – skirmish against the AI | 3 | 2 | 5.5 | 1 | 0 |
-| SPEC – spectator mode | 9 | 7 | 8.4 | 1 | 1 |
-| MISS – campaign mission: intro and scripts | 4 | 4 | 5.5 | 0 | 0 |
-| RATE – 60 Hz against 30 Hz | 5 | 4 | 4.2 | 1 | 0 |
+| SKIRM – skirmish against the AI | 7 | 6 | 9.0 | 1 | 0 |
+| SPEC – spectator mode | 9 | 8 | 8.9 | 0 | 1 |
+| MISS – campaign mission: intro and scripts | 9 | 7 | 10.5 | 2 | 0 |
+| RATE – 60 Hz against 30 Hz | 5 | 5 | 4.7 | 0 | 0 |
 | PERF – performance feel | 3 | 3 | 0.0 | 0 | 0 |
-| **Sum** | **85** | **56** | **51.2** | **22 (10.6 min)** | **7 (10.4 min)** |
+| REPLAY – replay and analysis of a match | 3 | 3 | 5.0 | 0 | 0 |
+| SKIN – the modern skin | 3 | 3 | 5.0 | 0 | 0 |
+| **Sum** | **114** | **100** | **93.9** | **6 (11.0 min)** | **8 (11.4 min)** |
 
-**The time is planned, not measured with a person:** per scene about half a minute of loading (counted on the first item of the scene) plus the length of the scene
-or of the actions asked for; the scene lengths are the measured ones (for example `acc-march` 49 s, `tank-duel` 30 s, `capture-building` 32 s). The window part
-without the optional items is 51 minutes in 18 scenes; the seven optional items (installer, uninstall, the old saved game, the classic mouse setup, the factory exits
-of China and GLA, two starts of the spectator for the seed) add 10 minutes and are only asked with `-IncludeOptional`. The three PERF items cost nothing: they are
-judged while other scenes run.
+**The time is planned, not measured with a person:** per scene about half a minute of loading plus the length of the scene or of the actions asked for. The optional items
+are only asked with `-IncludeOptional`. The PERF items cost nothing: they are judged while other scenes run.
 
 | Id | Title | Min | Window or stills | Scene |
 | --- | --- | ---: | --- | --- |
 | INST-01 | The installer creates a game directory | 3.0 | window (motion), optional | `install` |
-| INST-02 | Start through Start-CnCNew.cmd | 1.0 | window (motion, sound) | `start-installed` |
+| INST-02 | Start through Start-CnCNew.cmd | 1.0 | window (motion, sound), optional | `start-installed` |
 | INST-03 | Uninstalling removes only our own directory | 1.0 | window (motion), optional | `uninstall` |
-| SHELL-01 | Main menu: looks | 0.5 | stills | `shell-stills` |
-| SHELL-02 | Sub-menus: single player, difficulty, challenge, briefing | 0.5 | stills | `shell-stills` |
-| SHELL-03 | Skirmish setup, map selection, loading screen, score screen | 0.5 | stills | `shell-stills` |
-| SHELL-04 | Options, sliders, quit dialog | 0.5 | stills | `shell-stills` |
-| SHELL-05 | Font and texts | 0.5 | stills | `shell-stills` |
+| SHELL-01 | Main menu: looks | 0.5 | window (motion) | `shell` |
+| SHELL-02 | Sub-menus: single player, difficulty, challenge, briefing | 0.5 | window (motion) | `shell-sub` |
+| SHELL-03 | Skirmish setup, map selection, loading screen, score screen | 0.5 | window (motion) | `shell-match` |
+| SHELL-04 | Options, sliders, quit dialog | 0.5 | window (motion) | `shell` |
+| SHELL-05 | Font and texts | 0.5 | window (motion) | `shell-sub` |
 | SHELL-06 | Transitions and button states in the window | 1.5 | window (motion) | `shell` |
 | SHELL-07 | Menu music and clicks | 0.5 | window (sound) | `shell` |
-| SHELL-08 | Starting a skirmish and a mission from the menu | 2.5 | window (motion) | `shell` |
+| SHELL-08 | Starting a skirmish and a mission from the menu | 2.5 | window (motion) | `shell-match` |
 | SHELL-09 | A game saved at 30 Hz is refused | 2.0 | window (motion), optional | `shell-30` |
-| HUD-01 | Command bar, idle | 0.5 | stills | `hud-tour` |
-| HUD-02 | Selection: portrait, construction menu, tooltip | 0.5 | stills | `hud-tour` |
-| HUD-03 | Building with a queue, money, power | 0.5 | stills | `hud-tour` |
-| HUD-04 | Game menu (Esc) | 0.5 | stills | `hud-tour` |
-| HUD-05 | Several units selected | 0.5 | stills | `hud-multiselect` |
+| SHELL-10 | The battle behind the menu | 1.0 | window (motion) | `shell` |
+| SHELL-11 | The intro movies | 1.0 | window (motion, sound) | `intro` |
+| HUD-01 | Command bar, idle | 0.5 | window (motion) | `hud-tour` |
+| HUD-02 | Selection: portrait, construction menu, tooltip | 0.5 | window (motion) | `hud-tour` |
+| HUD-03 | Building with a queue, money, power | 0.5 | window (motion) | `hud-tour` |
+| HUD-04 | Game menu (Esc) | 0.5 | window (motion) | `hud-tour` |
+| HUD-05 | Several units selected | 0.5 | window (motion) | `hud-multiselect` |
 | HUD-06 | Messages at the top left | 0.3 | window (motion) | `tank-duel` |
 | HUD-07 | Radar | 0.5 | window (motion) | `skirmish` |
+| HUD-08 | Diplomacy in a skirmish | 1.0 | stills | `skirmish` |
+| HUD-09 | The beacon in a match of a server | 3.0 | window (motion, sound) | `net-two` |
 | INPUT-01 | Mouse: left selects, right orders | 1.0 | window (motion) | `exit-america-all` |
 | INPUT-02 | The original's mouse setup (`--mouse classic`) | 1.0 | window (motion), optional | `skirmish-classic` |
 | INPUT-03 | Scrolling, rotating, zooming | 1.0 | window (motion) | `skirmish` |
 | INPUT-04 | Construction hot keys, including S, F and E | 1.0 | window (motion) | `exit-america-all` |
-| INPUT-05 | Placement: preview on a legal and on a refused spot | 0.5 | stills | `placement` |
+| INPUT-05 | Placement: preview on a legal and on a refused spot | 0.5 | window (motion) | `skirmish` |
 | INPUT-06 | Placing and building with the mouse | 1.5 | window (motion) | `skirmish` |
-| INPUT-07 | Pointer and waypoints | 0.5 | stills | `cursor-move` |
+| INPUT-07 | Pointer and waypoints | 0.5 | window (motion) | `skirmish` |
 | INPUT-08 | Pointer changes and rally point in the window | 1.0 | window (motion) | `exit-america-all` |
-| WORLD-01 | Terrain and start base | 0.5 | stills | `skirmish` |
-| WORLD-02 | Low camera: walls, selection brackets | 0.3 | stills | `match-lowangle` |
-| WORLD-03 | Roads | 0.5 | stills | `roads-junctions` |
-| WORLD-04 | Unexplored terrain | 0.3 | stills | `match-fog` |
-| WORLD-05 | Models in the viewer | 0.5 | stills | `viewer-commandcenter` |
-| WORLD-06 | Grown base, team colours, shadows | 0.5 | stills | `skirmish-autoplay` |
+| WORLD-01 | Terrain and start base | 0.5 | window (motion) | `skirmish` |
+| WORLD-02 | Low camera: walls, selection brackets | 0.3 | window (motion) | `match-lowangle` |
+| WORLD-03 | Roads | 0.5 | window (motion) | `roads-junctions` |
+| WORLD-04 | Unexplored terrain | 0.3 | window (motion) | `match-fog` |
+| WORLD-05 | Models in the viewer | 0.5 | window (motion) | `viewer-commandcenter` |
+| WORLD-06 | Grown base, team colours, shadows | 0.5 | window (motion) | `skirmish-autoplay` |
 | WORLD-07 | Fog: revealing and darkening in the window | 1.0 | window (motion) | `skirmish` |
+| WORLD-08 | Shadows | 2.0 | stills | `skirmish` |
+| WORLD-09 | Clouds over the ground | 1.0 | window (motion) | `skirmish` |
+| WORLD-10 | Snow | 1.0 | window (motion) | `skirmish-snow` |
+| WORLD-11 | Bridges | 3.0 | stills | `skirmish-bridge` |
 | UNIT-01 | Starting, driving, braking | 1.0 | window (motion) | `acc-march` |
 | UNIT-02 | Turning | 0.2 | window (motion) | `acc-march` |
 | UNIT-03 | Arriving and standing | 0.2 | window (motion) | `acc-march` |
@@ -131,7 +141,7 @@ judged while other scenes run.
 | UNIT-07 | Factory exits, America | 0.7 | window (motion) | `exit-america-all` |
 | UNIT-08 | Factory exits, China | 1.2 | window (motion), optional | `exit-china-all` |
 | UNIT-09 | Factory exits, GLA | 1.2 | window (motion), optional | `exit-gla-all` |
-| UNIT-10 | War factory up close: door and seat of the model | 0.5 | stills | `exit-america-warfactory` |
+| UNIT-10 | War factory up close: door and seat of the model | 0.5 | window (motion) | `exit-america-warfactory` |
 | UNIT-11 | Turrets and fire release | 1.0 | window (motion) | `tank-duel` |
 | UNIT-12 | Projectile paths | 0.8 | window (motion) | `acc-artillery` |
 | UNIT-13 | Jets | 2.0 | window (motion) | `jet-strafe` |
@@ -139,11 +149,15 @@ judged while other scenes run.
 | UNIT-15 | Wheels, steering, suspension | 1.1 | window (motion) | `acc-wheels` |
 | UNIT-16 | Repair and the wrench symbol | 1.1 | window (motion) | `acc-repair` |
 | UNIT-17 | Construction | 1.0 | window (motion) | `acc-build` |
+| UNIT-18 | Paratroopers under their chutes | 1.0 | window (motion) | `skirmish-airforce` |
+| UNIT-19 | The landing arc of a jet | 0.5 | window (motion) | `jet-strafe` |
 | FX-01 | Muzzle flashes | 0.8 | window (motion) | `acc-firefight` |
 | FX-02 | Tracers and hits | 0.2 | window (motion) | `acc-firefight` |
 | FX-03 | Explosions, smoke, wreck | 0.3 | window (motion) | `tank-duel` |
+| FX-05 | Flames, smoke and burning | 0.6 | window (motion) | `acc-flames` |
 | FX-04 | Smoke trails and fire at the impact | 0.2 | window (motion) | `acc-artillery` |
-| SND-01 | Shot and impact sounds | 0.2 | window (sound) | `tank-duel` |
+| FX-06 | The data stream of the Black Lotus | 1.0 | window (motion) | `skirmish-china` |
+| SND-01 | Shot and impact sounds | 0.2 | window (motion, sound) | `tank-duel` |
 | SND-02 | Fire fight: many sounds at once | 0.1 | window (sound) | `acc-firefight` |
 | SND-03 | Tick sound of the capture | 0.0 | window (sound) | `capture-building` |
 | SND-04 | Construction and Eva | 0.1 | window (sound) | `acc-build` |
@@ -151,8 +165,8 @@ judged while other scenes run.
 | SND-06 | Sound of the mission scripts | 0.0 | window (sound) | `mission-usa01` |
 | SKIRM-01 | Building a base | 3.0 | window (motion) | `skirmish` |
 | SKIRM-02 | Fighting | 2.5 | window (motion, sound) | `skirmish` |
-| SKIRM-03 | A skirmish the computer plays | 0.5 | stills | `skirmish-autoplay` |
-| SPEC-01 | Start and readability | 0.5 | stills | `spectator` |
+| SKIRM-03 | A skirmish the computer plays | 0.5 | window (motion) | `skirmish-autoplay` |
+| SPEC-01 | Start and readability | 0.5 | window (motion) | `spectator` |
 | SPEC-02 | Panels and buttons | 1.5 | window (motion) | `spectator` |
 | SPEC-03 | Zoom and overview | 0.7 | window (motion) | `spectator` |
 | SPEC-04 | Fog views | 0.5 | window (motion) | `spectator` |
@@ -165,16 +179,33 @@ judged while other scenes run.
 | MISS-02 | Intro of MD_USA01: texts, fades, counters | 1.5 | window (motion, sound) | `mission-usa01` |
 | MISS-03 | Building after the intro | 1.0 | window (motion) | `mission-chem` |
 | MISS-04 | The mission's scripts run | 2.0 | window (motion) | `mission-chem` |
+| MISS-05 | The movie of a mission | 1.0 | window (motion, sound) | `shell` |
+| MISS-06 | Water a script moves | 2.0 | window (motion) | `mission-water` |
+| MISS-07 | Camera flights and shakers | 2.0 | window (motion) | `mission-usa01` |
+| MISS-08 | The score of a mission | 2.0 | stills | `mission-usa01` |
+| MISS-09 | The briefing history | 1.0 | stills | `mission-usa01` |
 | RATE-01 | Movement: 60 Hz against 30 Hz | 1.2 | window (motion) | `acc-march` |
 | RATE-02 | Effects and sound: 60 Hz against 30 Hz | 1.0 | window (motion, sound) | `tank-duel` |
 | RATE-03 | Capture: 60 Hz against 30 Hz | 1.0 | window (motion, sound) | `capture-building` |
 | RATE-04 | Mission intro: 60 Hz against 30 Hz | 1.0 | window (motion) | `mission-chem` |
-| RATE-05 | Roads: 60 Hz against 30 Hz | 0.5 | stills | `roads-overview` |
+| RATE-05 | Roads: 60 Hz against 30 Hz | 0.5 | window (motion) | `roads-overview` |
 | PERF-01 | Smoothness in a skirmish | 0.0 | window (motion) | `skirmish` |
 | PERF-02 | Loading time | 0.0 | window (motion) | `skirmish` |
 | PERF-03 | Spectator at eight times speed | 0.0 | window (motion) | `spectator` |
+| SKIRM-04 | A refused building site says why | 1.0 | window (motion) | `skirmish` |
+| SKIRM-05 | Your units make way for a building | 1.0 | window (motion) | `skirmish` |
+| SKIRM-06 | Computer units come at what they see | 1.0 | window (motion) | `skirmish` |
+| SKIRM-07 | The general's window | 2.0 | stills | `skirmish` |
+| SHELL-12 | The Generals' Challenge before a match | 3.0 | window (motion, sound) | `shell-sub` |
+| SHELL-13 | The record in the skirmish setup | 2.0 | window (motion) | `shell-match` |
+| REPLAY-01 | The analysis of a match | 2.0 | window (motion) | `replay-run` |
+| REPLAY-02 | The replay list | 1.0 | window (motion) | `replay-run` |
+| REPLAY-03 | Playing a replay | 2.0 | window (motion) | `replay-run` |
+| SKIN-01 | The menus are easier to read | 2.0 | window (motion) | `skin-modern` |
+| SKIN-02 | The command bar in a match | 2.0 | window (motion) | `skin-modern` |
+| SKIN-03 | Switching the skin | 1.0 | window (motion) | `skin-modern` |
 
-"Window" items need motion or sound, so no still picture can decide them; "stills" items are decided on the page. Each item's instruction and expectation (one or two
+"Window" items need motion or sound, or are played in the suite; "stills" items can also be decided from the page of `-Capture`. Each item's instruction and expectation (one or two
 sentences for a non-developer, naming what the original does where that is the yardstick) stand in `scripts/acceptance/catalogue.json` and on the page.
 
 ## 4. The scenes

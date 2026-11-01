@@ -6,8 +6,9 @@
 .DESCRIPTION
   The catalogue is scripts/acceptance/catalogue.json (items with a stable id, groups, scenes); the agent's pre-check is scripts/acceptance/precheck.json.
 
-    -Suite                THE WAY TO DO THE ACCEPTANCE (Start-Acceptance.cmd): a window leads through the packages one after the other, starts every scene by itself and asks for every named
-                          goal: reached, not reached (with a comment) or skip. Progress is saved after every scene; stop whenever you like and start it again. At the end the report lies on the desktop.
+    -Suite                THE WAY TO DO THE ACCEPTANCE (Start-Acceptance.cmd): a window leads through the packages one after the other, starts the game itself for every scene and asks for every
+                          named goal: reached, not reached (with a comment) or skip. Progress is saved after every scene; stop whenever you like and start it again. At the end the report lies on the desktop.
+    -Probe <scene,...|all> no human: starts the window of these scenes for -ProbeSeconds, says which ended by themselves and keeps a picture of each under -OutDir\probe.
     -List                 groups and items with id, minutes and totals; starts nothing.
     (no switch)           guided run through all open items that need motion or sound: one window per scene (60 Hz), then one key per item.
     -Stills               opens the picture page (index.html made by -Capture) and asks for the items that can be judged from still pictures.
@@ -70,6 +71,8 @@ param(
     [string]$Answers,
     [switch]$NoWindow,
     [switch]$SelfTest,
+    [string[]]$Probe,
+    [int]$ProbeSeconds = 40,
     [int]$TimeoutSeconds = 1500
 )
 
@@ -196,6 +199,10 @@ if ($SelfTest) {
     if ($suiteRun.Code -ne 0 -or -not $suiteData -or $suiteData.entries.Count -ne 3 -or $suiteData.entries[1].verdict -ne 'fail' -or $suiteData.entries[1].note -ne 'the bar is cut off') { $problems += "suite: exit code $($suiteRun.Code), $(@($suiteData.entries).Count) entries`n$($suiteRun.Text)" }
     $suiteReport = if (Test-Path (Join-Path $work 'suite.md')) { Get-Content (Join-Path $work 'suite.md') -Raw } else { '' }
     foreach ($needle in '## Packages', 'the bar is cut off') { if ($suiteReport -notlike "*$needle*") { $problems += "suite report without '$needle'" } }
+    foreach ($entry in $catalogue.items) {
+        if (-not (Get-Prop (Get-Scene $entry.scene) 'live')) { $problems += "$($entry.id): the suite cannot play its scene $($entry.scene) in a window" }
+        if ($entry.instruction -match '(?i)\b(pictures?|strips?)\b') { $problems += "$($entry.id): its instruction speaks of pictures, the suite shows the game" }
+    }
     $listed = Invoke-Self @('-List')
     if ($listed.Code -ne 0 -or $listed.Text -notlike '*items in*' -or $listed.Text -notlike '*UNIT-01*' -or $listed.Text -like '*(0 items*') { $problems += '-List failed' }
     if ($problems.Count -eq 0) { Write-Host "SELFTEST PASS (guided run with fed answers, resume, report, repository refused, list); files in $work" -ForegroundColor Green; exit 0 }
@@ -318,6 +325,18 @@ $commit = (& git -C $repo rev-parse --short=10 HEAD 2>$null)
 if (-not $commit) { $commit = 'unknown' } elseif (& git -C $repo status --porcelain 2>$null) { $commit += '-dirty' }
 
 $script:clientDll = $null
+$clientProject = Join-Path $repo 'src\CnCNew.Client.Stride\CnCNew.Client.Stride.csproj'
+$clientStamp = Join-Path $env:LOCALAPPDATA 'CnCNew\acceptance\client-built.txt'
+function Find-ClientDll { (Get-ChildItem (Join-Path $repo 'src\CnCNew.Client.Stride\bin\Release') -Recurse -Filter 'CnCNew.Client.Stride.dll' -ErrorAction SilentlyContinue | Select-Object -First 1).FullName }
+# A second start of the acceptance need not wait for a build of the same commit.
+function Test-ClientCurrent {
+    if ($commit -like '*-dirty' -or -not (Find-ClientDll) -or -not (Test-Path -LiteralPath $clientStamp)) { return $false }
+    (Get-Content -LiteralPath $clientStamp -Raw).Trim() -eq $commit
+}
+function Set-ClientCurrent {
+    New-Item -ItemType Directory -Force (Split-Path -Parent $clientStamp) | Out-Null
+    if ($commit -notlike '*-dirty') { [IO.File]::WriteAllText($clientStamp, $commit, $utf8) }
+}
 function Get-Client {
     if ($script:clientDll) { return $script:clientDll }
     if ($UseInstalledClient) {
@@ -326,15 +345,14 @@ function Get-Client {
         $script:clientDll = $installed
         return $script:clientDll
     }
-    $project = Join-Path $repo 'src\CnCNew.Client.Stride\CnCNew.Client.Stride.csproj'
-    if (-not $NoBuild) {
+    if (-not $NoBuild -and -not (Test-ClientCurrent)) {
         Write-Host '== Building the client (Release) ...' -ForegroundColor Cyan
-        dotnet build $project -c Release --nologo -v quiet | Out-Host
+        dotnet build $clientProject -c Release --nologo -v quiet | Out-Host
         if ($LASTEXITCODE -ne 0) { throw "The build failed (exit code $LASTEXITCODE)." }
+        Set-ClientCurrent
     }
-    $dll = Get-ChildItem (Join-Path $repo 'src\CnCNew.Client.Stride\bin\Release') -Recurse -Filter 'CnCNew.Client.Stride.dll' -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $dll) { throw 'Release client not found; call without -NoBuild.' }
-    $script:clientDll = $dll.FullName
+    $script:clientDll = Find-ClientDll
+    if (-not $script:clientDll) { throw 'Release client not found; call without -NoBuild.' }
     $script:clientDll
 }
 
@@ -587,16 +605,24 @@ function Read-Verdict([string]$Prompt) {
     }
 }
 
-Add-Type -Namespace CnCNewAcceptance -Name Win32 -MemberDefinition '[DllImport("user32.dll")] public static extern bool MoveWindow(System.IntPtr handle, int x, int y, int width, int height, bool repaint);' -ErrorAction SilentlyContinue
+Add-Type -Namespace CnCNewAcceptance -Name Win32 -MemberDefinition '[DllImport("user32.dll")] public static extern bool MoveWindow(System.IntPtr handle, int x, int y, int width, int height, bool repaint); [DllImport("winmm.dll")] public static extern uint waveOutGetNumDevs();' -ErrorAction SilentlyContinue
 
-function Start-SceneClient($Scene, $Live, [string]$Name, $Entries, [int]$UseRate, [string]$UseSize, [string]$LogDir) {
-    $caption = "$($Scene.title) - $UseRate Hz - close the window when you have seen it|" + (($Entries | Select-Object -First 5 | ForEach-Object { "$($_.id) $($_.title)" }) -join '|')
-    $arguments = @('--content-dir', $content.Path, '--size', $UseSize, '--tick-rate', "$UseRate", '--caption', $caption) + @($Live.client)
+function Start-SceneClient($Scene, $Live, [string]$Name, $Entries, [int]$UseRate, [string]$UseSize, [string]$LogDir, [switch]$Plain, [string[]]$Client) {
+    $arguments = @('--content-dir', $content.Path, '--size', $UseSize, '--tick-rate', "$UseRate")
+    # The suite's page names the goals; a caption would lie over the top of the picture that is being judged.
+    if (-not $Plain) { $arguments += @('--caption', ("$($Scene.title) - $UseRate Hz - close the window when you have seen it|" + (($Entries | Select-Object -First 5 | ForEach-Object { "$($_.id) $($_.title)" }) -join '|'))) }
+    $arguments += @(if ($Client) { $Client } else { $Live.client })
+    # The suite accepts what ships, whatever skin the settings of this machine still name.
+    if ($Plain -and $arguments -notcontains '--skin') { $arguments += @('--skin', $catalogue.defaults.skin) }
     if ($Mute) { $arguments += '--mute' }
-    $log = Join-Path $LogDir ("{0}-{1}hz-{2:HHmmss}.txt" -f $Name, $UseRate, (Get-Date))
+    $log = Join-Path $LogDir ("{0}-{1}hz-{2:HHmmssfff}.txt" -f $Name, $UseRate, (Get-Date))
     Write-Host "   dotnet <client> $(Format-Arguments $arguments)"
     if ($NoWindow) { return $null }
-    $started = Start-Process -FilePath 'dotnet' -ArgumentList (Format-Arguments (@((Get-Client)) + $arguments)) -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+    $variables = Get-Prop $Live 'env'
+    $previous = @{}
+    if ($variables) { foreach ($property in $variables.PSObject.Properties) { $previous[$property.Name] = [Environment]::GetEnvironmentVariable($property.Name); [Environment]::SetEnvironmentVariable($property.Name, [string]$property.Value) } }
+    try { $started = Start-Process -FilePath 'dotnet' -ArgumentList (Format-Arguments (@((Get-Client)) + $arguments)) -NoNewWindow -PassThru -RedirectStandardOutput $log -RedirectStandardError "$log.err" }
+    finally { foreach ($key in $previous.Keys) { [Environment]::SetEnvironmentVariable($key, $previous[$key]) } }
     $null = $started.Handle
     $started
 }
@@ -673,7 +699,9 @@ function Get-SuiteSteps($Latest) {
                 -not ($Latest.ContainsKey($_.id) -and ($Latest[$_.id].verdict -in 'pass', 'fail' -or ($Latest[$_.id].verdict -eq 'skip' -and -not $IncludeSkipped)))
             })
         foreach ($sceneName in @($open | ForEach-Object { $_.scene } | Select-Object -Unique)) {
-            $steps.Add([pscustomobject]@{ Package = $package; Scene = $sceneName; Entries = @($open | Where-Object scene -eq $sceneName) })
+            $entries = @($open | Where-Object scene -eq $sceneName)
+            $views = @($entries | ForEach-Object { Get-ItemScenes $_ } | Select-Object -Unique | Where-Object { Get-Prop (Get-Scene $_) 'live' })
+            $steps.Add([pscustomobject]@{ Package = $package; Scene = $sceneName; Views = $views; Entries = $entries })
         }
     }
     , $steps
@@ -686,39 +714,74 @@ function Add-Verdict($Data, $Entry, [string]$Verdict, [string]$Note, [string]$Sc
     }
 }
 
-# What the page runs: a process to stop when the page closes, a picture to look at, or a text saying what to do by hand.
-function Start-SuiteScene([string]$Name, $Entries, [string]$WindowSize) {
+# What the page runs: the game itself, on the left of the page. A scene with two windows stands one above the other. A scene for a terminal does not run by itself: uninstalling must stay a decision.
+function Start-SuiteScene([string]$Name, $Entries, [int]$Rate, [string]$WindowSize) {
     $scene = Get-Scene $Name
     $live = Get-Prop $scene 'live'
-    if (-not $live) {
-        $sheet = Join-Path $OutDir "$Name\60hz\sheet.jpg"
-        if (-not (Test-Path -LiteralPath $sheet)) {
-            $arguments = @('-NoProfile', '-File', $PSCommandPath, '-Item', $Entries[0].id, '-Capture', '-Rates', '60', '-NoAudit', '-ContentDir', $content.Path, '-OutDir', $OutDir, '-Size', $Size)
-            if ($NoBuild) { $arguments += '-NoBuild' }
-            return [pscustomobject]@{ Process = (Start-Process -FilePath 'pwsh' -ArgumentList (Format-Arguments $arguments) -PassThru -WindowStyle Hidden); Picture = $sheet; Text = 'Preparing the pictures of this scene ...' }
-        }
-        return [pscustomobject]@{ Process = $null; Picture = $sheet; Text = 'Judge this scene from the pictures.' }
-    }
     $manual = Get-Prop $live 'manual'
-    if ($manual) { return [pscustomobject]@{ Process = $null; Picture = $null; Text = "Run this yourself in a terminal:  $manual" } }
+    if ($manual) { return [pscustomobject]@{ Processes = @(); Text = "This one runs in a terminal. 'Run it now' opens one with:  $manual" } }
     $script = Get-Prop $live 'script'
     if ($script) {
-        $sceneRate = if (Get-Prop $live 'rate') { [int]$live.rate } else { $TickRate }
-        $arguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot $script)) + @($live.args) + @('-ContentDir', $content.Path, '-TickRate', "$sceneRate")
+        $arguments = @('-NoProfile', '-File', (Join-Path $PSScriptRoot $script)) + @($live.args) + @('-ContentDir', $content.Path, '-TickRate', "$Rate", '-Size', $WindowSize, '-NoBuild')
         if ($Mute) { $arguments += '-Mute' }
-        return [pscustomobject]@{ Process = (Start-Process -FilePath 'pwsh' -ArgumentList (Format-Arguments $arguments) -PassThru -WindowStyle Minimized); Picture = $null; Text = 'The scene is starting ...' }
+        return [pscustomobject]@{ Processes = @(Start-Process -FilePath 'pwsh' -ArgumentList (Format-Arguments $arguments) -PassThru -WindowStyle Minimized); Text = 'The game is starting ...' }
     }
     $logDir = Join-Path (Split-Path -Parent $ResultsPath) 'logs'
     New-Item -ItemType Directory -Force $logDir | Out-Null
-    $sceneRate = if (Get-Prop $live 'rate') { [int]$live.rate } else { $TickRate }
-    [pscustomobject]@{ Process = (Start-SceneClient $scene $live $Name $Entries $sceneRate $WindowSize $logDir); Picture = $null; Text = 'The scene is starting; its window opens in a few seconds.' }
+    $processes = @(Start-SceneClient $scene $live $Name $Entries $Rate $WindowSize $logDir -Plain)
+    $second = Get-Prop $live 'second'
+    if ($second) { $processes += Start-SceneClient $scene $live "$Name-second" $Entries $Rate $WindowSize $logDir -Plain -Client @($second | ForEach-Object { $_.Replace('{work}', (Join-Path $logDir 'second-window')) }) }
+    [pscustomobject]@{ Processes = $processes; Text = 'The game is starting ...' }
 }
 
 function Stop-SuiteScene($Running) {
-    if ($Running -and $Running.Process -and -not $Running.Process.HasExited) { try { $Running.Process.Kill($true) } catch { Write-Verbose "$_" } }
+    if (-not $Running) { return }
+    foreach ($process in $Running.Processes) { if (-not $process.HasExited) { try { $process.Kill($true) } catch { Write-Verbose "$_" } } }
 }
 
-# One page: the scene runs beside it, and every goal of the scene has its answer and its comment. Returns 'next' or 'stop'; the answers are in the rows.
+# The first thing a person sees: it opens at once, says how this works, and builds the game behind the words.
+function Show-SuiteWelcome($Steps) {
+    $minutes = [int][Math]::Ceiling((@($Steps | ForEach-Object { $_.Entries } | ForEach-Object { [double]$_.minutes }) | Measure-Object -Sum).Sum)
+    $goals = @($Steps | ForEach-Object { $_.Entries }).Count
+    $form = [Windows.Forms.Form]::new()
+    $form.Text = 'CnCNew acceptance'; $form.StartPosition = 'CenterScreen'; $form.TopMost = $true; $form.ClientSize = [Drawing.Size]::new(640, 460); $form.Font = [Drawing.Font]::new('Segoe UI', 11); $form.FormBorderStyle = 'FixedDialog'; $form.MaximizeBox = $false
+    $heading = [Windows.Forms.Label]::new(); $heading.Text = 'How this works'; $heading.Font = [Drawing.Font]::new('Segoe UI', 15, [Drawing.FontStyle]::Bold); $heading.SetBounds(20, 14, 600, 34)
+    $text = [Windows.Forms.Label]::new(); $text.SetBounds(20, 54, 600, 290)
+    $text.Text = "The game starts by itself on the left of the screen. On the right stands what to check: each goal says what to do and when it is reached.`n`nPlay in the game window as you normally would. Then answer every goal: Reached, Not reached or Skip. A comment says what you saw.`n`n'Save and go on' starts the next scene. 'Stop for now' keeps your answers, and the next start goes on there. At the end a report lies on your desktop: hand it back.`n`n$goals goals on $(@($Steps).Count) pages, about $minutes minutes. You need not do it in one sitting."
+    $status = [Windows.Forms.Label]::new(); $status.SetBounds(20, 352, 430, 92); $status.ForeColor = [Drawing.Color]::FromArgb(120, 80, 0)
+    # Sound goals cannot be judged in silence; better said now than found out in package five.
+    if ([CnCNewAcceptance.Win32]::waveOutGetNumDevs() -eq 0) {
+        $text.Text += "`n`nWindows reports no sound device on this computer, so the game runs silently: skip the goals about sound, or repair the sound device first."
+        $text.ForeColor = 'Firebrick'
+    }
+    $start = [Windows.Forms.Button]::new(); $start.Text = 'Start'; $start.SetBounds(460, 400, 160, 44); $start.Enabled = $false; $start.Font = [Drawing.Font]::new('Segoe UI', 11, [Drawing.FontStyle]::Bold)
+    $form.Controls.AddRange(@($heading, $text, $status, $start))
+    $state = [pscustomobject]@{ Build = $null; Started = Get-Date; Log = (Join-Path ([IO.Path]::GetTempPath()) 'cncnew-acceptance-build.txt'); Go = $false }
+    $ready = { $status.Text = 'The game is ready.'; $start.Enabled = $true; $start.Focus() | Out-Null }
+    $timer = [Windows.Forms.Timer]::new(); $timer.Interval = 500
+    $timer.Add_Tick({
+            if (-not $state.Build) { return }
+            if (-not $state.Build.HasExited) { $status.Text = "Building the game: $([int]((Get-Date) - $state.Started).TotalSeconds) s. This takes a minute or two, and only the first time."; return }
+            $timer.Stop()
+            if ($state.Build.ExitCode -ne 0) { $status.ForeColor = 'Firebrick'; $status.Text = "The build failed (exit code $($state.Build.ExitCode)). Its output: $($state.Log)"; return }
+            Set-ClientCurrent
+            & $ready
+        })
+    $form.Add_Shown({
+            $form.Activate()
+            if ($UseInstalledClient -or $NoBuild -or (Test-ClientCurrent)) { & $ready; return }
+            $state.Started = Get-Date
+            $state.Build = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c dotnet build `"$clientProject`" -c Release --nologo -v quiet > `"$($state.Log)`" 2>&1" -PassThru -WindowStyle Hidden
+            $null = $state.Build.Handle
+            $timer.Start()
+        })
+    $start.Add_Click({ $state.Go = $true; $form.Close() })
+    [void]$form.ShowDialog()
+    $timer.Stop()
+    $state.Go
+}
+
+# One page: the game runs beside it, and every goal of the scene has its answer and its comment. Returns 'next' or 'stop'; the answers are in the rows.
 function Show-SuitePage($Step, [int]$Number, [int]$Total, [int]$PackageNumber, $Rows) {
     $area = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
     $pageWidth = 540
@@ -732,24 +795,26 @@ function Show-SuitePage($Step, [int]$Number, [int]$Total, [int]$PackageNumber, $
     $head = [Windows.Forms.Panel]::new(); $head.Dock = 'Top'; $head.Height = 118; $head.BackColor = [Drawing.Color]::FromArgb(32, 48, 72)
     $title = [Windows.Forms.Label]::new(); $title.Text = "Package $PackageNumber of $(@($catalogue.packages).Count): $($Step.Package.title)"; $title.ForeColor = 'White'
     $title.Font = [Drawing.Font]::new('Segoe UI', 13, [Drawing.FontStyle]::Bold); $title.SetBounds(12, 8, $pageWidth - 40, 28)
-    $sceneLabel = [Windows.Forms.Label]::new(); $sceneLabel.Text = "Scene: $((Get-Scene $Step.Scene).title)"; $sceneLabel.ForeColor = 'White'; $sceneLabel.SetBounds(12, 38, $pageWidth - 40, 22)
+    $sceneLabel = [Windows.Forms.Label]::new(); $sceneLabel.ForeColor = 'White'; $sceneLabel.SetBounds(12, 38, $pageWidth - 40, 22)
     $progress = [Windows.Forms.ProgressBar]::new(); $progress.SetBounds(12, 64, $pageWidth - 40, 10); $progress.Maximum = [Math]::Max(1, $Total); $progress.Value = [Math]::Min($progress.Maximum, $Number)
-    $status = [Windows.Forms.Label]::new(); $status.Text = "Page $Number of $Total. Starting the scene ..."; $status.ForeColor = [Drawing.Color]::FromArgb(255, 220, 120); $status.SetBounds(12, 80, $pageWidth - 40, 34)
+    $status = [Windows.Forms.Label]::new(); $status.Text = "Page $Number of $Total. Starting the game ..."; $status.ForeColor = [Drawing.Color]::FromArgb(255, 220, 120); $status.SetBounds(12, 80, $pageWidth - 40, 34)
     $head.Controls.AddRange(@($title, $sceneLabel, $progress, $status))
 
-    $foot = [Windows.Forms.Panel]::new(); $foot.Dock = 'Bottom'; $foot.Height = 84
+    $foot = [Windows.Forms.Panel]::new(); $foot.Dock = 'Bottom'; $foot.Height = 124
     $problem = [Windows.Forms.Label]::new(); $problem.ForeColor = 'Firebrick'; $problem.SetBounds(12, 4, $pageWidth - 40, 22)
-    $again = [Windows.Forms.Button]::new(); $again.Text = 'Show the scene again'; $again.SetBounds(12, 30, 170, 40)
-    $stop = [Windows.Forms.Button]::new(); $stop.Text = 'Stop for now'; $stop.SetBounds(190, 30, 110, 40)
-    $next = [Windows.Forms.Button]::new(); $next.Text = 'Save and go on'; $next.SetBounds(308, 30, 200, 40); $next.Font = [Drawing.Font]::new('Segoe UI', 10, [Drawing.FontStyle]::Bold)
-    $foot.Controls.AddRange(@($problem, $again, $stop, $next))
+    $again = [Windows.Forms.Button]::new(); $again.Text = 'Start the scene again'; $again.SetBounds(12, 28, 170, 36)
+    $rate = [Windows.Forms.Button]::new(); $rate.SetBounds(188, 28, 160, 36)
+    $view = [Windows.Forms.Button]::new(); $view.SetBounds(354, 28, 154, 36)
+    $stop = [Windows.Forms.Button]::new(); $stop.Text = 'Stop for now'; $stop.SetBounds(12, 72, 170, 40)
+    $next = [Windows.Forms.Button]::new(); $next.Text = 'Save and go on'; $next.SetBounds(188, 72, 320, 40); $next.Font = [Drawing.Font]::new('Segoe UI', 10, [Drawing.FontStyle]::Bold)
+    $foot.Controls.AddRange(@($problem, $again, $rate, $view, $stop, $next))
 
     $body = [Windows.Forms.FlowLayoutPanel]::new(); $body.Dock = 'Fill'; $body.AutoScroll = $true; $body.FlowDirection = 'TopDown'; $body.WrapContents = $false
     $width = $pageWidth - 52
     foreach ($row in $Rows) {
         $card = [Windows.Forms.FlowLayoutPanel]::new(); $card.FlowDirection = 'TopDown'; $card.WrapContents = $false; $card.AutoSize = $true; $card.Width = $width; $card.Margin = [Windows.Forms.Padding]::new(6, 6, 6, 10); $card.BorderStyle = 'FixedSingle'; $card.Padding = [Windows.Forms.Padding]::new(8, 6, 8, 6)
         foreach ($part in @(@("Goal: $($row.Entry.title)", 'Bold'), @("Do: $($row.Entry.instruction)", 'Regular'), @("Reached when: $($row.Entry.expectation)", 'Regular'))) {
-            $line = [Windows.Forms.Label]::new(); $line.Text = $part[0].Replace('``', ''); $line.AutoSize = $true; $line.MaximumSize = [Drawing.Size]::new($width - 24, 0); $line.Margin = [Windows.Forms.Padding]::new(0, 0, 0, 6)
+            $line = [Windows.Forms.Label]::new(); $line.Text = $part[0].Replace('`', ''); $line.AutoSize = $true; $line.MaximumSize = [Drawing.Size]::new($width - 24, 0); $line.Margin = [Windows.Forms.Padding]::new(0, 0, 0, 6)
             $line.Font = [Drawing.Font]::new('Segoe UI', 10, [Drawing.FontStyle]::($part[1]))
             $card.Controls.Add($line)
         }
@@ -767,40 +832,78 @@ function Show-SuitePage($Step, [int]$Number, [int]$Total, [int]$PackageNumber, $
     $form.Controls.AddRange(@($body, $foot, $head))
     $body.BringToFront()
 
-    $state = [pscustomobject]@{ Running = $null; Result = 'stop'; Placed = $false; PictureForm = $null; PictureShown = $false }
-    $gameWidth = [Math]::Min([int]($Size -split 'x')[0], $area.Width - $pageWidth)
-    $gameHeight = [int][Math]::Round($gameWidth * [int]($Size -split 'x')[1] / [int]($Size -split 'x')[0])
-    $windowSize = "${gameWidth}x$gameHeight"
-    $showPicture = {
-        if (-not (Test-Path -LiteralPath $state.Running.Picture)) { $status.Text = 'No pictures could be made for this scene: judge what you can, or skip.'; return }
-        $viewer = [Windows.Forms.Form]::new(); $viewer.Text = (Get-Scene $Step.Scene).title; $viewer.StartPosition = 'Manual'; $viewer.SetBounds($area.Left, $area.Top, $area.Width - $pageWidth, $area.Height)
-        $box = [Windows.Forms.PictureBox]::new(); $box.Dock = 'Fill'; $box.SizeMode = 'Zoom'; $box.ImageLocation = $state.Running.Picture
-        $viewer.Controls.Add($box); $viewer.Show(); $state.PictureForm = $viewer; $state.PictureShown = $true
-        $status.Text = "Page $Number of $Total. Judge this scene from the pictures on the left."
+    $firstLive = Get-Prop (Get-Scene $Step.Views[0]) 'live'
+    $state = [pscustomobject]@{ Running = $null; Result = 'stop'; Placed = @{}; Started = Get-Date; View = 0; Rate = $(if (Get-Prop $firstLive 'rate') { [int]$firstLive.rate } else { $TickRate }); Reported = $false }
+    $width16 = [int]($Size -split 'x')[0]; $height9 = [int]($Size -split 'x')[1]
+    $gameWidth = [Math]::Min($width16, $area.Width - $pageWidth - 16)
+    $gameHeight = [int][Math]::Round($gameWidth * $height9 / $width16)
+    if ($gameHeight + 39 -gt $area.Height) { $gameHeight = $area.Height - 39; $gameWidth = [int][Math]::Round($gameHeight * $width16 / $height9) }
+    # Two windows stand one above the other, each in half of the height.
+    $halfHeight = [int][Math]::Floor($area.Height / 2) - 39
+    $halfWidth = [int][Math]::Round($halfHeight * $width16 / $height9)
+    $current = { Get-Scene $Step.Views[$state.View] }
+    $refresh = {
+        $live = Get-Prop (& $current) 'live'
+        $sceneLabel.Text = "Scene: $((& $current).title)"
+        $plain = -not (Get-Prop $live 'manual') -and -not (Get-Prop $live 'script')
+        $again.Text = if (Get-Prop $live 'manual') { 'Run it now' } else { 'Start the scene again' }
+        $rate.Visible = $plain
+        $rate.Text = if ($state.Rate -eq 30) { 'Same scene at 60 Hz' } else { 'Same scene at 30 Hz' }
+        $view.Visible = @($Step.Views).Count -gt 1
+        $view.Text = "Next view ($($state.View + 1) of $(@($Step.Views).Count))"
     }
     $launch = {
         Stop-SuiteScene $state.Running
-        if ($state.PictureForm) { $state.PictureForm.Close(); $state.PictureForm = $null; $state.PictureShown = $false }
-        $state.Placed = $false
-        $state.Running = Start-SuiteScene $Step.Scene $Step.Entries $windowSize
+        $state.Placed = @{}; $state.Reported = $false; $state.Started = Get-Date
+        & $refresh
+        $name = $Step.Views[$state.View]
+        $two = Get-Prop (Get-Prop (Get-Scene $name) 'live') 'second'
+        $state.Running = Start-SuiteScene $name $Step.Entries $state.Rate $(if ($two) { "${halfWidth}x$halfHeight" } else { "${gameWidth}x$gameHeight" })
         $status.Text = "Page $Number of $Total. $($state.Running.Text)"
-        if ($state.Running.Picture -and -not $state.Running.Process) { & $showPicture }
     }
     $timer = [Windows.Forms.Timer]::new(); $timer.Interval = 500
     $timer.Add_Tick({
             $running = $state.Running
-            if (-not $running -or -not $running.Process) { return }
-            if ($running.Picture) { if ($running.Process.HasExited -and -not $state.PictureShown) { & $showPicture }; return }
-            $running.Process.Refresh()
-            if (-not $state.Placed -and -not $running.Process.HasExited -and $running.Process.MainWindowHandle -ne [IntPtr]::Zero) {
-                try { [void][CnCNewAcceptance.Win32]::MoveWindow($running.Process.MainWindowHandle, $area.Left, $area.Top, $gameWidth + 16, $gameHeight + 39, $true) } catch { Write-Verbose "$_" }
-                $state.Placed = $true
-                $status.Text = "Page $Number of $Total. The scene runs on the left. Follow the goals, then answer below."
+            if (-not $running -or $running.Processes.Count -eq 0) { return }
+            $two = $running.Processes.Count -gt 1
+            for ($index = 0; $index -lt $running.Processes.Count; $index++) {
+                $process = $running.Processes[$index]
+                $process.Refresh()
+                if (-not $state.Placed.ContainsKey($index) -and -not $process.HasExited -and $process.MainWindowHandle -ne [IntPtr]::Zero) {
+                    $w = if ($two) { $halfWidth } else { $gameWidth }; $h = if ($two) { $halfHeight } else { $gameHeight }
+                    try { [void][CnCNewAcceptance.Win32]::MoveWindow($process.MainWindowHandle, $area.Left, $area.Top + $index * ($h + 39), $w + 16, $h + 39, $true) } catch { Write-Verbose "$_" }
+                    $state.Placed[$index] = $true
+                }
             }
-            if ($running.Process.HasExited -and $state.Placed) { $status.Text = "Page $Number of $Total. The scene has ended. 'Show the scene again' starts it once more." }
+            $ended = @($running.Processes | Where-Object HasExited)
+            if ($ended.Count -gt 0) {
+                if ($state.Reported) { return }
+                $state.Reported = $true
+                $failed = @($ended | Where-Object ExitCode -ne 0)
+                if ($failed.Count -gt 0) {
+                    $status.ForeColor = [Drawing.Color]::FromArgb(255, 150, 130)
+                    $status.Text = "Page $Number of $Total. The game ended with exit code $($failed[0].ExitCode). Say so in the comment; its log lies under $(Join-Path (Split-Path -Parent $ResultsPath) 'logs')."
+                } else { $status.Text = "Page $Number of $Total. The game has ended. 'Start the scene again' opens it once more." }
+                return
+            }
+            $seconds = [int]((Get-Date) - $state.Started).TotalSeconds
+            $status.Text = if ($seconds -lt 45) { "Page $Number of $Total. The game is loading: $seconds s, usually about half a minute. Its window may stay empty until then." }
+            else { "Page $Number of $Total. The game runs on the left. Follow the goals, then answer below." }
         })
-    $form.Add_Shown({ $timer.Start(); if (-not $SuiteScreenshot) { & $launch } })
-    $again.Add_Click({ & $launch })
+    $form.Add_Shown({
+            $timer.Start()
+            if ($SuiteScreenshot) { & $refresh; return }
+            $live = Get-Prop (& $current) 'live'
+            if (Get-Prop $live 'manual') { & $refresh; $status.Text = "Page $Number of $Total. This goal runs in a terminal: use 'Run it now', or Skip."; return }
+            & $launch
+        })
+    $again.Add_Click({
+            $manual = Get-Prop (Get-Prop (& $current) 'live') 'manual'
+            if ($manual) { Start-Process -FilePath 'pwsh' -ArgumentList '-NoExit', '-Command', $manual -WorkingDirectory $repo; return }
+            & $launch
+        })
+    $rate.Add_Click({ $state.Rate = if ($state.Rate -eq 30) { 60 } else { 30 }; & $launch })
+    $view.Add_Click({ $state.View = ($state.View + 1) % @($Step.Views).Count; & $launch })
     $stop.Add_Click({ $state.Result = 'stop'; $form.Close() })
     $next.Add_Click({
             foreach ($row in $Rows) {
@@ -809,7 +912,7 @@ function Show-SuitePage($Step, [int]$Number, [int]$Total, [int]$PackageNumber, $
             }
             $state.Result = 'next'; $form.Close()
         })
-    $form.Add_FormClosed({ $timer.Stop(); Stop-SuiteScene $state.Running; if ($state.PictureForm) { $state.PictureForm.Close() } })
+    $form.Add_FormClosed({ $timer.Stop(); Stop-SuiteScene $state.Running })
     if ($SuiteScreenshot) {
         $form.Add_Shown({
                 $bitmap = [Drawing.Bitmap]::new($form.Width, $form.Height)
@@ -821,13 +924,50 @@ function Show-SuitePage($Step, [int]$Number, [int]$Total, [int]$PackageNumber, $
     $state.Result
 }
 
+# -Probe: what a person would meet first in each scene, without a person: does the window stay, and what does it show? PrintWindow reads a window that is not in front.
+if ($Probe) {
+    Add-Type -AssemblyName System.Drawing
+    Add-Type -Namespace CnCNewAcceptance -Name Picture -MemberDefinition '[DllImport("user32.dll")] public static extern bool PrintWindow(System.IntPtr handle, System.IntPtr hdc, uint flags); [DllImport("user32.dll")] public static extern bool GetClientRect(System.IntPtr handle, out RECT rect); [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }' -ErrorAction SilentlyContinue
+    $Probe = @($Probe -split ',' | ForEach-Object { $_.Trim() })
+    $names = if ($Probe -contains 'all') { @(Get-SuiteSteps @{} | ForEach-Object { $_.Views } | Select-Object -Unique) } else { $Probe }
+    $directory = Join-Path $OutDir 'probe'
+    $logDir = Join-Path $directory 'logs'
+    New-Item -ItemType Directory -Force $logDir | Out-Null
+    $trouble = 0
+    foreach ($name in $names) {
+        $live = Get-Prop (Get-Scene $name) 'live'
+        if (-not $live -or (Get-Prop $live 'manual') -or (Get-Prop $live 'script')) { Write-Host "$name : not a window of the game, not probed"; continue }
+        $processes = @(Start-SuiteScene $name @() $TickRate $Size).Processes
+        $deadline = (Get-Date).AddSeconds($ProbeSeconds)
+        while ((Get-Date) -lt $deadline -and -not ($processes | Where-Object HasExited)) { Start-Sleep -Milliseconds 500 }
+        $ended = @($processes | Where-Object HasExited)
+        if ($ended.Count -eq 0) {
+            $process = $processes[0]; $process.Refresh()
+            $rect = [CnCNewAcceptance.Picture+RECT]::new()
+            [void][CnCNewAcceptance.Picture]::GetClientRect($process.MainWindowHandle, [ref]$rect)
+            $bitmap = [Drawing.Bitmap]::new([Math]::Max(1, $rect.Right), [Math]::Max(1, $rect.Bottom))
+            $graphics = [Drawing.Graphics]::FromImage($bitmap); $hdc = $graphics.GetHdc()
+            [void][CnCNewAcceptance.Picture]::PrintWindow($process.MainWindowHandle, $hdc, 3)
+            $graphics.ReleaseHdc($hdc); $graphics.Dispose()
+            $file = Join-Path $directory "$name.jpg"; $bitmap.Save($file, [Drawing.Imaging.ImageFormat]::Jpeg); $bitmap.Dispose()
+            Write-Host "$name : runs after $ProbeSeconds s  $file"
+        } else { $trouble++; Write-Host "$name : ended by itself with exit code $($ended[0].ExitCode)" -ForegroundColor Yellow }
+        Stop-SuiteScene ([pscustomobject]@{ Processes = $processes })
+    }
+    Write-Host "$(@($names).Count) scenes probed, $trouble ended by themselves. (Imagery of the game - do not publish, do not commit.)"
+    exit ($trouble -gt 0 ? 1 : 0)
+}
+
 if ($Suite) {
     $data = Read-Results
     $steps = Get-SuiteSteps (Get-Latest $data)
-    if (-not $SuiteScreenshot -and -not $scripted -and -not $NoWindow) { [void](Get-Client) }
     if (-not $scripted) {
         Add-Type -AssemblyName System.Windows.Forms, System.Drawing
         [Windows.Forms.Application]::EnableVisualStyles()
+    }
+    if (-not $SuiteScreenshot -and -not $scripted -and -not $NoWindow) {
+        if (-not (Show-SuiteWelcome $steps)) { exit 0 }
+        [void](Get-Client)
     }
     $packageIds = @($catalogue.packages.id)
     $pageNumber = 0
