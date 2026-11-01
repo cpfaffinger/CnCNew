@@ -26,6 +26,8 @@ public enum ScenarioOrderKind
     Capture,
     /// <summary>Queue <see cref="ScenarioOrder.Template"/> at the actor (a producer); the unit that comes out is bound to the tag in <see cref="ScenarioOrder.Target"/>.</summary>
     Produce,
+    /// <summary>The special power <see cref="ScenarioOrder.Template"/> of the actor, at the place of the order.</summary>
+    UsePower,
     /// <summary>Walk to the transport named by <see cref="ScenarioOrder.Target"/> and board it (retried every original frame until the simulation accepts it).</summary>
     Enter,
     /// <summary>The actor (a transport) lets everybody out.</summary>
@@ -65,6 +67,9 @@ public sealed record DemoScenario(
 
     /// <summary>Player upgrades the human player owns from the start (the Ranger's capture ability stays paused until <c>Upgrade_InfantryCaptureBuilding</c>).</summary>
     public ImmutableArray<string> Upgrades { get; init; } = [];
+
+    /// <summary>Sciences the human player owns from the start.</summary>
+    public ImmutableArray<string> Sciences { get; init; } = [];
 
     /// <summary>The special powers of the placed units are recharged at the start (a unit that has stood around for a while), instead of counting down from their creation.</summary>
     public bool PowersReady { get; init; }
@@ -164,6 +169,9 @@ public sealed class LiveScenario : LiveGame
                     throw new InvalidOperationException($"Scenario '{Scenario.Name}': queueing '{order.Template}' at '{order.Actor}' was refused.");
                 _pendingProduction[index] = order.Target;
                 return true;
+            case ScenarioOrderKind.UsePower when order.Template is not null:
+                return Issue(player, (sequence, tick) => new UseSpecialPowerCommand(player, sequence, tick, actor, order.Template, SpecialPowerTargetKind.Location, EntityId.Invalid,
+                    Fixed.FromDecimal((decimal)(Anchor.X + order.X)), Fixed.FromDecimal((decimal)(Anchor.Y + order.Y)))).Accepted;
             case ScenarioOrderKind.Enter when order.Target is not null && _tags.TryGetValue(order.Target, out var transport):
                 Book(player).Clear(actor);
                 return Issue(player, (sequence, tick) => new MoveAndEnterCommand(player, sequence, tick, actor, transport)).Accepted;
@@ -265,6 +273,7 @@ public sealed class LiveScenario : LiveGame
         for (var index = 0; index < created.Length; index++) _tags[Scenario.Units[index].Tag] = created[index].Id;
 
         foreach (var upgrade in Scenario.Upgrades) World.CompleteUpgrade(new PlayerId(1), null, upgrade);
+        foreach (var science in Scenario.Sciences) World.GrantScience(new PlayerId(1), science);
         if (Scenario.PowersReady)
             foreach (var entity in created)
                 foreach (var module in entity.Modules)

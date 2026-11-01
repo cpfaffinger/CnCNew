@@ -435,6 +435,7 @@ internal sealed class CnCNewGame(
         _joinDeadlineMs = remote.Clock.Milliseconds + (join.UntilTick < 0 ? 0 : join.UntilTick * 1000 / data.Rate.TicksPerSecond * 4 + 120_000);
         Console.WriteLine($"join: match on {match.Description.MapPath}, {match.Description.TickRate} Hz, player {remote.Client.Player}, pacing {remote.Client.Pacing}, from tick {match.World.Tick}");
         ApplyCamera(match.Camera, options);
+        LookAtBridge(match, options);
         if (match.Setup.Spectator)
         {
             _runtime = ClientRuntime.ForSpectator(this, data, match, audioOptions, new CnCNew.Game.Spectator.SpectatorOptions(options.SpectatorMaxZoom, options.SpectatorSpeed, options.Seed));
@@ -695,6 +696,7 @@ internal sealed class CnCNewGame(
         var match = LiveMatch.Create(data, setup, new System.Numerics.Vector2(back.Width, back.Height));
         if (setup.UsesOriginalAi) Console.WriteLine($"session: original skirmish AI - {string.Join(", ", Enumerable.Range(0, options.Opponents.Length + 1).Select(slot => $"slot {slot + 1} {setup.AiOf(slot)}"))}");
         ApplyCamera(match.Camera, options);
+        LookAtBridge(match, options);
         if (options.Spectate)
         {
             _runtime = ClientRuntime.ForSpectator(this, data, match, audioOptions, new CnCNew.Game.Spectator.SpectatorOptions(options.SpectatorMaxZoom, options.SpectatorSpeed, options.Seed));
@@ -707,10 +709,23 @@ internal sealed class CnCNewGame(
         Window.Title = $"CnCNew — {mapPath} — {options.Faction} vs {string.Join(", ", options.Opponents)}";
     }
 
+    /// <summary><c>--look bridge</c>: a person who judges a bridge should not have to search the map for it.</summary>
+    private static void LookAtBridge(LiveMatch match, LiveOptions options)
+    {
+        if (options.Look != "bridge" || match.World.Bridges.Count == 0) return;
+        var bridge = match.World.Bridges[0];
+        static float Middle(CnCNew.Simulation.Numerics.Fixed a, CnCNew.Simulation.Numerics.Fixed b) => (CnCNew.Presentation.FixedConvert.ToSingle(a) + CnCNew.Presentation.FixedConvert.ToSingle(b)) / 2f;
+        var place = new System.Numerics.Vector2(Middle(bridge.From.X, bridge.To.X), Middle(bridge.From.Y, bridge.To.Y));
+        // Unexplored ground is black. A scene of the acceptance, so the world may be told: this match is judged, not recorded for anybody.
+        match.World.RevealAreaPermanently(match.Human, bridge.From.X, bridge.From.Y, CnCNew.Simulation.Numerics.Fixed.FromInt(700), true);
+        match.Camera.CenterOn(place);
+        match.Camera.SettleZoom();
+    }
+
     private static void ApplyCamera(CnCNew.Presentation.Camera.RtsCamera camera, LiveOptions options)
     {
         static float Number(string text) => float.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
-        if (options.Look is { } look)
+        if (options.Look is { } look && look != "bridge")
         {
             var parts = look.Split(',');
             camera.CenterOn(new System.Numerics.Vector2(Number(parts[0]), Number(parts[1])));
