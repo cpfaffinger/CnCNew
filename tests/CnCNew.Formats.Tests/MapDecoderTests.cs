@@ -14,6 +14,7 @@ internal static class MapDecoderTests
         ReportsUnparsedChunks();
         RejectsBrokenMaps();
         ExpandsEveryRefPackHeader();
+        ReadsAPolygonAsLongAsItsChunk();
         Console.WriteLine("All map decoder tests passed.");
     }
 
@@ -47,6 +48,27 @@ internal static class MapDecoderTests
             catch (InvalidDataException) { refused = true; }
             if (!refused) throw new InvalidOperationException($"header {header[0]:X2} {header[1]:X2} was not refused");
         }
+    }
+
+    /// <summary>ParsePolygonTriggersDataChunk sets no limit: real maps hold a nameless polygon of 1.6 million points. Only the bytes behind a count bound it.</summary>
+    private static void ReadsAPolygonAsLongAsItsChunk()
+    {
+        const int points = 150_000;
+        byte[] Chunk(int stated)
+        {
+            var b = new MapBuilder();
+            b.Chunk("HeightMapData", 4, Height(5, 5, 1, Enumerable.Range(0, 25).Select(i => (byte)(i * 2)).ToArray()));
+            b.Chunk("BlendTileData", 8, Blend(5, 5, 8, cliffBytes: [0, 4, 0, 0, 0], blended: 2, cliffInfos: 2));
+            b.Chunk("PolygonTriggers", 4, [..I(1), 0, 0, 0, 0, ..I(1), 0, 0, ..I(0), ..I(stated), ..new byte[12 * points]]);
+            return b.Build();
+        }
+
+        var map = SageMapDecoder.Decode("CkMp", Chunk(points));
+        if (map.Triggers.Single().Points.Length != points) throw new InvalidOperationException("the polygon lost points");
+        var refused = false;
+        try { SageMapDecoder.Decode("CkMp", Chunk(points + 1)); }
+        catch (InvalidDataException) { refused = true; }
+        if (!refused) throw new InvalidOperationException("a count beyond the chunk was taken");
     }
 
     private static void DecodesFullSyntheticMap()

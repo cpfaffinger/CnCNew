@@ -390,7 +390,8 @@ public static class SageMapDecoder
                 riverStart = r.ReadInt();
             }
             var pointCount = r.ReadInt();
-            if (pointCount < 0 || pointCount > 100_000) throw new InvalidDataException($"Trigger '{name}' has invalid point count {pointCount}.");
+            // ParsePolygonTriggersDataChunk sets no limit, and some maps fill this chunk with one nameless polygon of 1.6 million points; what bounds a count is the bytes behind it.
+            if (pointCount < 0 || pointCount > r.Remaining / 12) throw new InvalidDataException($"Trigger '{name}' has invalid point count {pointCount}.");
             var points = ImmutableArray.CreateBuilder<MapPoint>(pointCount);
             for (var p = 0; p < pointCount; p++) points.Add(new MapPoint(r.ReadInt(), r.ReadInt(), r.ReadInt()));
             triggers.Add(new MapPolygonTrigger(name, layer, id, isWater, isRiver, riverStart, points.MoveToImmutable()));
@@ -590,6 +591,8 @@ public static class SageMapDecoder
         }
 
         public bool AtEnd => _position == _end;
+
+        public int Remaining => _end - _position;
 
         public ChunkReader Sub(int size)
         {
