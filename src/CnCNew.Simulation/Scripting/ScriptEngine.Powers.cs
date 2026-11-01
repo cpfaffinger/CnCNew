@@ -147,8 +147,7 @@ public sealed partial class ScriptEngine
         if (singleton && FindTeamInstance(teamName) is { } existing && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"RECRUIT_TEAM '{teamName}': singleton team already exists"); return; }
         // recruitSpecificAITeam reports a team without a home and goes on with m_homeLocation, which is the origin of the map.
         var home = (prototype.Home.Length > 0 ? _program.FindWaypoint(prototype.Home) : null) ?? new ScriptWaypoint(string.Empty, Fixed.Zero, Fixed.Zero, Fixed.Zero);
-        var team = (singleton ? FindTeamInstance(teamName) : null) ?? CreateTeam(teamName);
-        if (team is null) return;
+        if (CreateTeam(teamName) is not { } team) return;
         var maxDistanceSquared = radius < Fixed.One ? SquaredReach.OfSquare(Fixed.MaxValue) : SquaredReach.Of(radius);
         var recruited = 0;
         foreach (var unit in prototype.Units)

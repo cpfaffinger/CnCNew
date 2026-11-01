@@ -361,9 +361,8 @@ public sealed partial class ScriptEngine
         var existing = prototype.IsSingleton || prototype.MaxInstances < 2 ? FindTeamInstance(teamName) : null;
         if (!idleOnly && prototype.IsSingleton && existing is not null && LiveMembers(existing).Any(CountsAsObject)) { Diagnose($"BUILD_TEAM '{teamName}': singleton team already exists"); return; }
         if (!AiHasFactoriesFor(builder, prototype)) { Diagnose($"BUILD_TEAM '{teamName}': factories or tech missing"); return; }
-        var team = existing ?? CreateTeam(teamName);
-        if (team is null) return;
-        if (_teamBuilds.Any(order => order.TeamId == team.Id)) { Diagnose($"BUILD_TEAM '{teamName}': build already running"); return; }
+        if (existing is not null && _teamBuilds.Any(order => order.TeamId == existing.Id)) { Diagnose($"BUILD_TEAM '{teamName}': build already running"); return; }
+        if (CreateTeam(teamName) is not { } team) return;
         team.Created = false;
         AiResetTeamForRebuild(team);
         AiQueueTeamOrders(team, prototype, idleOnly);
