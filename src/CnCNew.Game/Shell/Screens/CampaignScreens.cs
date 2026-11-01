@@ -315,22 +315,10 @@ public sealed class LoadGameScreen : ShellScreen
 /// </summary>
 public sealed class MissionBriefingScreen : ShellScreen
 {
-    private readonly IUiVideoSurface? _movie;
-
-    /// <summary>The movie is drawn into the root window, between its picture and its children; the objectives wait behind it (Zero Hour's load screen shows the movie and the bar alone).</summary>
-    public override UiDrawList BuildDrawList()
-    {
-        var list = base.BuildDrawList();
-        if (_movie is null) return list;
-        var background = 0;
-        while (background < list.Commands.Length && list.Commands[background] is not UiImageDraw) background++;
-        if (background == list.Commands.Length) background = -1;
-        return list with { Commands = list.Commands.Insert(background + 1, new UiVideoDraw(_movie, W("ParentSinglePlayerLoadScreen").Rect)) };
-    }
-
+    /// <summary>The movie is the root window's video buffer, between what the skin draws for the window and its children; the objectives wait behind it (Zero Hour's load screen shows the movie and the bar alone).</summary>
     public MissionBriefingScreen(GameShell shell, CampaignMission mission, IUiVideoSurface? movie = null) : base(shell, ShellLayoutNames.SinglePlayerLoadScreen)
     {
-        _movie = movie;
+        W("ParentSinglePlayerLoadScreen").Video = movie;
         if (movie is not null) HideWindow("ObjectivesWin");
         for (var line = 0; line < 5; line++)
             W($"StaticTextLine{line}").SetText(line < mission.ObjectiveLabels.Length ? Text(mission.ObjectiveLabels[line]) : string.Empty);
