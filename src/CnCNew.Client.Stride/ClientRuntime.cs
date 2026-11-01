@@ -124,7 +124,7 @@ internal sealed class ClientRuntime : IDisposable
             shellScript.MatchInput = runtime._scriptMatchEvents.Add;
         }
         if (runtime._shell is { } timed) timed.SkirmishMatchSeconds = SkirmishSeconds;
-        if (runtime._shell is { } mapped && UserMapsDirectory is { Length: > 0 } userMaps) mapped.LoadUserMaps(userMaps);
+        if (runtime._shell is { } mapped && UserMapsDirectory is { Length: > 0 } userMaps) mapped.BeginLoadingUserMaps(userMaps, Console.WriteLine);
         // --ai original: the skirmish setup offers the three armies of the original and its matches run the original AI (the default is unchanged).
         if (runtime._shell is { } shell) shell.SkirmishAi = skirmishAi;
         // The intro comes before the shell (GameClient::update) and with it the menu theme.

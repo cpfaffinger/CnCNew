@@ -695,7 +695,8 @@ The original skin's main menu lets the scene through by itself; the modern skin'
 **Credits** end by themselves: when the last line has left the screen (`CreditsMenuUpdate`, `TheCredits->isFinished()`). The rate stays this port's 40 pixels a second.
 
 **The user's maps** (`RadioButtonUserMaps`): `GameShell.LoadUserMaps` lays the directories of a user folder over the content as `UserMaps/<name>/<name>.map`, each with its hash, and reads the number of players from the map itself
-(`ContentFileSystem.AddUserMaps`). The folder is `Documents\Command and Conquer Generals Zero Hour Data\Maps` as in the original, or `--user-maps DIR`. Such a map is an ordinary content file: a replay of it needs it, and a server
-refuses a client without it. No map preview, and no name other than the file's.
+(`ContentFileSystem.ScanUserMaps`, `AddUserMaps`). The folder is `Documents\Command and Conquer Generals Zero Hour Data\Maps` as in the original, or `--user-maps DIR`. Such a map is an ordinary content file: a replay of it needs it, and a server
+refuses a client without it. No map preview, and no name other than the file's. The client reads the folder behind the menu (`BeginLoadingUserMaps`): the owner's 370 maps on a synchronised drive held the window back for minutes and then ended the
+game, because one of them could not be read. Now the list says "Reading your maps ..." until it is done, and a map that cannot be read is left out and named (`warning:` in the log, `UserMapProblems`). The map reader knows all four RefPack headers of `REF_is`.
 
 **"Eigene Mission"** of the old list is gone by itself: the patch's layout has no such button (`ShellTests`), and the original's `ButtonWorldBuilder` only starts an external program.

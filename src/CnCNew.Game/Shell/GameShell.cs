@@ -139,21 +139,63 @@ public sealed class GameShell
     /// <summary>The user's own maps (<see cref="LoadUserMaps"/>), by their path of the content.</summary>
     public ImmutableArray<string> UserMaps { get; private set; } = [];
 
+    /// <summary>Why a map of the user's folder is not in the list, one line each.</summary>
+    public ImmutableArray<string> UserMapProblems { get; private set; } = [];
+
+    /// <summary><see cref="BeginLoadingUserMaps"/> has not finished yet.</summary>
+    public bool UserMapsLoading => _userMapLoad is not null;
+
+    private Task<UserMapRead>? _userMapLoad;
+    private Action<string>? _userMapReport;
+
+    private sealed record UserMapRead(UserMapScan Scan, ImmutableArray<ShellMapEntry> Maps, ImmutableArray<string> Problems);
+
     /// <summary>Adds the maps of a directory to the skirmish map list's "unofficial" side (<c>populateMapListbox</c> with <c>TheMapCache</c>'s user directory): the number of players comes from the map itself, nothing caches it.</summary>
-    public void LoadUserMaps(string directory)
+    public void LoadUserMaps(string directory) => ApplyUserMaps(ReadUserMaps(directory));
+
+    /// <summary>
+    /// The same behind the menu: a folder holds hundreds of maps and may lie on a network drive, and the original's map cache means it never reads them at the start. <see cref="Update"/> takes the
+    /// result; until then the list shows what it knows. <paramref name="report"/> hears every map that is left out.
+    /// </summary>
+    public void BeginLoadingUserMaps(string directory, Action<string>? report = null)
     {
-        var found = Data.Content.AddUserMaps(directory);
-        var catalog = MapCatalog.ToBuilder();
-        foreach (var path in found)
+        _userMapReport = report;
+        _userMapLoad = Task.Run(() => ReadUserMaps(directory));
+    }
+
+    private static UserMapRead ReadUserMaps(string directory)
+    {
+        var scan = ContentFileSystem.ScanUserMaps(directory);
+        var maps = ImmutableArray.CreateBuilder<ShellMapEntry>();
+        var problems = ImmutableArray.CreateBuilder<string>();
+        problems.AddRange(scan.Problems);
+        foreach (var file in scan.Files.Where(file => file.DiskPath.EndsWith(".map", StringComparison.OrdinalIgnoreCase)))
         {
-            CnCNew.Data.World.MapData map;
-            using (var stream = Data.Content.OpenRead(path)) map = CnCNew.Formats.SageMapDecoder.Decode(stream);
-            catalog[path] = new ShellMapEntry(path, null, true, CnCNew.Simulation.Terrain.TerrainMap.Build(map, path).StartPositions.Length);
+            // Files of strangers: whatever one of them breaks costs that map, never the game.
+            try
+            {
+                CnCNew.Data.World.MapData map;
+                using (var stream = File.OpenRead(file.DiskPath)) map = CnCNew.Formats.SageMapDecoder.Decode(stream);
+                maps.Add(new ShellMapEntry(file.Entry.VirtualPath, null, true, CnCNew.Simulation.Terrain.TerrainMap.Build(map, file.Entry.VirtualPath).StartPositions.Length));
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException)
+            {
+                problems.Add($"{Path.GetFileName(file.DiskPath)}: {exception.Message}");
+            }
         }
 
-        MapCatalog = catalog.ToImmutable();
-        UserMaps = [.. found.Where(path => MapCatalog[path].StartPositionCount >= 2)];
+        return new UserMapRead(scan, maps.ToImmutable(), problems.ToImmutable());
     }
+
+    private void ApplyUserMaps(UserMapRead read)
+    {
+        Data.Content.AddUserMaps(read.Scan);
+        MapCatalog = MapCatalog.SetItems(read.Maps.Select(map => KeyValuePair.Create(map.VirtualPath, map)));
+        UserMaps = [.. read.Maps.Where(map => map.StartPositionCount >= 2).Select(map => map.VirtualPath)];
+        UserMapProblems = read.Problems;
+        foreach (var problem in read.Problems) _userMapReport?.Invoke($"warning: a map of the user's folder is left out: {problem}");
+    }
+
     public ImmutableArray<CreditsLine> Credits { get; private set; } = [];
     public IReadOnlyList<ShellScreen> Stack => _stack;
     public ShellScreen CurrentScreen => _stack[^1];
@@ -367,6 +409,12 @@ public sealed class GameShell
     public void Update(double dtSeconds)
     {
         _clockMs += dtSeconds * 1000;
+        if (_userMapLoad is { IsCompleted: true } userMaps)
+        {
+            _userMapLoad = null;
+            ApplyUserMaps(userMaps.Result);
+        }
+
         if (Phase == ShellPhase.Boot)
         {
             if (_loadTask is { IsCompleted: true } task)

@@ -389,7 +389,6 @@ static partial class Tests
         new("Audio.Tests/Tests.Decoding.cs", RuleScaleLiteral, "(byte)(value >> 16), (byte)(value >> 24)", "little-endian bytes of a test word"),
         // -- file formats
         new("Audio/Wav/WavReader.cs", RuleScaleLiteral, "((sbyte)data[at + 2] << 16)", "the top byte of a 24-bit PCM sample"),
-        new("Formats/LegacyAssetReaders.cs", RuleScaleLiteral, "packed[2] << 16 | packed[3] << 8 | packed[4]", "a 24-bit length of the RefPack header"),
         new("Ui/Text/CsfFile.cs", RuleScaleLiteral, "public const uint FileId", "a four-character tag of the CSF format"),
         new("Ui/Text/CsfFile.cs", RuleScaleLiteral, "public const uint LabelId", "a four-character tag of the CSF format"),
         new("Ui/Text/CsfFile.cs", RuleScaleLiteral, "public const uint StringId", "a four-character tag of the CSF format"),

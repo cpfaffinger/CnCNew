@@ -13,7 +13,40 @@ internal static class MapDecoderTests
         ReadsVersion7ShortCliffStride();
         ReportsUnparsedChunks();
         RejectsBrokenMaps();
+        ExpandsEveryRefPackHeader();
         Console.WriteLine("All map decoder tests passed.");
+    }
+
+    /// <summary>REF_is knows four headers; five of the 370 maps of a real user folder are 90 FB, and the first of them ended the game at its start.</summary>
+    private static void ExpandsEveryRefPackHeader()
+    {
+        byte[] body = [0xe1, (byte)'C', (byte)'k', (byte)'M', (byte)'p', 0, 0, 0, 0, 0xfc];
+        byte[] Packed(byte[] header)
+        {
+            byte[] size = new byte[4];
+            BinaryPrimitives.WriteInt32LittleEndian(size, 8);
+            return [(byte)'E', (byte)'A', (byte)'R', 0, ..size, ..header, ..body];
+        }
+
+        foreach (var header in new byte[][]
+                 {
+                     [0x10, 0xfb, 0, 0, 8],
+                     [0x11, 0xfb, 0, 0, 10, 0, 0, 8],
+                     [0x90, 0xfb, 0, 0, 0, 8],
+                     [0x91, 0xfb, 0, 0, 0, 10, 0, 0, 0, 8],
+                 })
+        {
+            var (container, bytes) = LegacyAssetReaders.ExpandSageMap(new MemoryStream(Packed(header)));
+            if (container != "EAR" || !bytes.SequenceEqual(new byte[] { (byte)'C', (byte)'k', (byte)'M', (byte)'p', 0, 0, 0, 0 })) throw new InvalidOperationException($"header {header[0]:X2} {header[1]:X2} did not expand");
+        }
+
+        foreach (var header in new byte[][] { [0x20, 0xfb, 0, 0, 8], [0x10, 0xfa, 0, 0, 8], [0x10, 0xfb, 0, 0, 9] })
+        {
+            var refused = false;
+            try { LegacyAssetReaders.ExpandSageMap(new MemoryStream(Packed(header))); }
+            catch (InvalidDataException) { refused = true; }
+            if (!refused) throw new InvalidOperationException($"header {header[0]:X2} {header[1]:X2} was not refused");
+        }
     }
 
     private static void DecodesFullSyntheticMap()

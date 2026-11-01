@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Security.Cryptography;
 
@@ -86,30 +87,47 @@ public sealed class ContentFileSystem
     }
 
     /// <summary>
-    /// Lays the user's own maps over the content: every directory below <paramref name="directory"/> that holds a <c>.map</c> of its name, as <c>getPath_UserData</c> + <c>Maps</c> has them
-    /// (<c>populateMapListbox</c>). A map is a content file like any other from here on, with its hash; the files beside it (a <c>map.ini</c>) come along. Returns the maps' virtual paths in
-    /// ordinal order.
+    /// Reads the user's own maps from disk without touching the content, so that it can run beside the game: every directory below <paramref name="directory"/> that holds a <c>.map</c> of its
+    /// name, as <c>getPath_UserData</c> + <c>Maps</c> has them (<c>populateMapListbox</c>), the files beside it (a <c>map.ini</c>) with it. A directory that cannot be read is named in the result.
     /// </summary>
-    public IReadOnlyList<string> AddUserMaps(string directory)
+    public static UserMapScan ScanUserMaps(string directory)
     {
-        var maps = new List<string>();
-        if (!Directory.Exists(directory)) return maps;
+        var files = ImmutableArray.CreateBuilder<UserMapFile>();
+        var problems = ImmutableArray.CreateBuilder<string>();
+        if (!Directory.Exists(directory)) return new UserMapScan(files.ToImmutable(), problems.ToImmutable());
         foreach (var folder in Directory.EnumerateDirectories(directory).Order(StringComparer.OrdinalIgnoreCase))
         {
             var name = Path.GetFileName(folder);
             if (!File.Exists(Path.Combine(folder, name + ".map"))) continue;
-            foreach (var file in Directory.EnumerateFiles(folder).Order(StringComparer.OrdinalIgnoreCase))
+            try
             {
-                var virtualPath = ContentPath.Normalize($"{UserMapPrefix}{name}/{Path.GetFileName(file)}");
-                var bytes = File.ReadAllBytes(file);
-                var entry = new ContentFileEntry(ContentPath.ToAssetId(virtualPath), virtualPath, file, "user", bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), "user", [], []);
-                _userFiles[virtualPath] = (entry, file);
-                if (file.EndsWith(".map", StringComparison.OrdinalIgnoreCase)) maps.Add(virtualPath);
+                var read = new List<UserMapFile>();
+                foreach (var file in Directory.EnumerateFiles(folder).Order(StringComparer.OrdinalIgnoreCase))
+                {
+                    var virtualPath = ContentPath.Normalize($"{UserMapPrefix}{name}/{Path.GetFileName(file)}");
+                    var bytes = File.ReadAllBytes(file);
+                    read.Add(new UserMapFile(new ContentFileEntry(ContentPath.ToAssetId(virtualPath), virtualPath, file, "user", bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), "user", [], []), file));
+                }
+
+                files.AddRange(read);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                problems.Add($"{name}: {exception.Message}");
             }
         }
 
-        return maps;
+        return new UserMapScan(files.ToImmutable(), problems.ToImmutable());
     }
+
+    /// <summary>Lays a scan over the content: a map is a content file like any other from here on, with its hash. Returns the maps' virtual paths in ordinal order.</summary>
+    public IReadOnlyList<string> AddUserMaps(UserMapScan scan)
+    {
+        foreach (var file in scan.Files) _userFiles[file.Entry.VirtualPath] = (file.Entry, file.DiskPath);
+        return scan.Maps;
+    }
+
+    public IReadOnlyList<string> AddUserMaps(string directory) => AddUserMaps(ScanUserMaps(directory));
 
     public ContentFileEntry GetEntry(string virtualPath)
     {
@@ -208,4 +226,13 @@ public sealed class ContentFileSystem
 
         return new ContentFileSystem(root, files);
     }
+}
+
+/// <summary>One file of a user's map directory, read and hashed.</summary>
+public sealed record UserMapFile(ContentFileEntry Entry, string DiskPath);
+
+/// <summary>What <see cref="ContentFileSystem.ScanUserMaps"/> found.</summary>
+public sealed record UserMapScan(ImmutableArray<UserMapFile> Files, ImmutableArray<string> Problems)
+{
+    public ImmutableArray<string> Maps => [.. Files.Where(file => file.DiskPath.EndsWith(".map", StringComparison.OrdinalIgnoreCase)).Select(file => file.Entry.VirtualPath)];
 }

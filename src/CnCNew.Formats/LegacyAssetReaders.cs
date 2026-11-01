@@ -335,12 +335,16 @@ public static partial class LegacyAssetReaders
     {
         var packed = source.ToArray();
         if (expected <= 0 || expected > 512 * 1024 * 1024) throw new InvalidDataException($"EAR expanded size {expected} is invalid.");
-        if (packed.Length < 5 || packed[0] != 0x10 || packed[1] != 0xfb)
-            throw new InvalidDataException("EAR RefPack signature 10 FB is missing.");
-        var declared = packed[2] << 16 | packed[3] << 8 | packed[4];
-        if (declared != expected) throw new InvalidDataException($"EAR sizes disagree: wrapper {expected}, RefPack {declared}.");
+        // REF_is and REF_decode: 10 FB, or 90 FB with sizes of four bytes, and in 11 FB and 91 FB the compressed size stands first and is skipped.
+        if (packed.Length < 5 || (packed[0] & 0x7e) != 0x10 || packed[1] != 0xfb)
+            throw new InvalidDataException($"EAR RefPack signature is {(packed.Length < 2 ? "missing" : $"{packed[0]:X2} {packed[1]:X2}")}, not one of 10 FB, 11 FB, 90 FB, 91 FB.");
+        var sizeBytes = (packed[0] & 0x80) != 0 ? 4 : 3;
+        var input = 2 + ((packed[0] & 1) != 0 ? sizeBytes : 0);
+        if (packed.Length < input + sizeBytes) throw new InvalidDataException("RefPack header is truncated.");
+        var declaredSize = 0L;
+        for (var index = 0; index < sizeBytes; index++) declaredSize = declaredSize << 8 | packed[input++];
+        if (declaredSize != expected) throw new InvalidDataException($"EAR sizes disagree: wrapper {expected}, RefPack {declaredSize}.");
         var output = new byte[expected];
-        var input = 5;
         var written = 0;
         while (true)
         {

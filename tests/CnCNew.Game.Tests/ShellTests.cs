@@ -65,6 +65,7 @@ internal static class ShellTests
         harness.Run("A window with TOOLTIPTEXT shows the pointer tooltip after the delay with the Mouse.ini style", () => PointerTooltip(data));
         harness.Run("Credits close by themselves when the last line has left the screen", () => CreditsEnd(data));
         harness.Run("The user's own maps: a directory of a map lands in the list's unofficial side and is a content file", () => UserMaps(data));
+        harness.Run("The user's maps are read behind the menu, and a map that cannot be read costs that map, not the game", () => UserMapsBehindTheMenu(data));
         harness.Run("Credits lines use the Language.ini credits fonts at the adjusted size", () => CreditsFonts(data));
         harness.Run("Shell::push replaces the screen below, overlays keep it: only what the original shows is drawn", () => ScreenStackDrawing(data));
         harness.Run("Escape leaves the load game screen without any gadget focus", () => LoadGameEscapeWithoutFocus(data));
@@ -518,6 +519,40 @@ internal static class ShellTests
             TestHarness.Assert(data.Content.Exists(path), "the content knows it");
             TestHarness.Assert(data.Content.FileHash(path) == data.Content.FileHash("Maps/Alpine Assault/Alpine Assault.map"), "with the hash of its bytes");
             TestHarness.Assert(shell.MapCatalog[path].StartPositionCount == 2, "two players come from the map");
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    /// <summary>The owner's folder of 370 maps held the window back for minutes and then ended the game; no check saw it, because only a person's run reads that folder.</summary>
+    private static void UserMapsBehindTheMenu(GameData data)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-user-maps-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(directory, "Good"));
+        Directory.CreateDirectory(Path.Combine(directory, "Broken"));
+        try
+        {
+            using (var source = data.Content.OpenRead("Maps/Alpine Assault/Alpine Assault.map"))
+            using (var target = File.Create(Path.Combine(directory, "Good", "Good.map"))) source.CopyTo(target);
+            File.WriteAllBytes(Path.Combine(directory, "Broken", "Broken.map"), [0x45, 0x41, 0x52, 0x00, 8, 0, 0, 0, 0x33, 0xfb, 0, 0, 8]);
+            var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            var heard = new List<string>();
+            shell.BeginLoadingUserMaps(directory, heard.Add);
+            TestHarness.Assert(shell.UserMapsLoading, "the call returns at once");
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            while (shell.UserMapsLoading && DateTime.UtcNow < deadline)
+            {
+                shell.Update(0.016);
+                Thread.Sleep(10);
+            }
+
+            TestHarness.Assert(!shell.UserMapsLoading, "the load ends");
+            TestHarness.Assert(shell.UserMaps.SequenceEqual(["UserMaps/Good/Good.map"]), string.Join(", ", shell.UserMaps));
+            TestHarness.Assert(shell.UserMapProblems.Length == 1 && shell.UserMapProblems[0].StartsWith("Broken.map: ", StringComparison.Ordinal), string.Join(", ", shell.UserMapProblems));
+            TestHarness.Assert(heard.Count == 1 && heard[0].Contains("Broken.map", StringComparison.Ordinal), "the host hears why");
+            TestHarness.Assert(data.Content.Exists("UserMaps/Good/Good.map"), "a map is a content file once it is read");
         }
         finally
         {

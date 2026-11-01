@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Globalization;
+using CnCNew.Content;
 using CnCNew.Game.Campaign;
 using CnCNew.Game.Live;
 using CnCNew.Simulation.Testing;
@@ -311,8 +312,7 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
 }
 
 /// <summary>
-/// <c>SkirmishMapSelectMenu.wnd</c>, and <c>LanMapSelectMenu.wnd</c> for the room of a server (the same windows under the other file's name). <c>RadioButtonUserMaps</c> has no backing directory in this build (no user-map
-/// import yet), so switching to it simply empties the list; this is documented, not a silent failure. The list only
+/// <c>SkirmishMapSelectMenu.wnd</c>, and <c>LanMapSelectMenu.wnd</c> for the room of a server (the same windows under the other file's name). <c>RadioButtonUserMaps</c> shows the user's folder, read behind the menu (<see cref="GameShell.BeginLoadingUserMaps"/>). The list only
 /// shows maps <c>Maps/MapCache.ini</c> flags <c>isMultiplayer = yes</c>.
 /// </summary>
 public sealed class SkirmishMapSelectScreen : ShellScreen
@@ -323,6 +323,8 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
     private readonly IMapPickerOwner _owner;
     private ImmutableArray<string> _mapPaths = [];
     private int _selectedIndex = -1;
+    private bool _showingUserMaps;
+    private (int Count, bool Loading) _shownUserMaps;
 
     public SkirmishMapSelectScreen(GameShell shell, IMapPickerOwner owner, string layoutName = ShellLayoutNames.SkirmishMapSelectMenu) : base(shell, layoutName)
     {
@@ -338,9 +340,17 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
     /// <summary>OK and Back both give the setup its hidden elements back (<c>showSkirmishGameOptionsUnderlyingGUIElements(TRUE)</c>).</summary>
     public override void OnClosed() => _owner.SetMapPickerOpen(false);
 
+    /// <summary>The user's side follows the folder that is read behind the menu.</summary>
+    public override void Update(double dtSeconds)
+    {
+        base.Update(dtSeconds);
+        if (_showingUserMaps && _shownUserMaps != (Shell.UserMaps.Length, Shell.UserMapsLoading)) PopulateUserMaps();
+    }
+
     private void PopulateSystemMaps()
     {
-        _mapPaths = [.. Shell.MapCatalog.Values.Where(entry => entry.IsMultiplayer).Select(entry => entry.VirtualPath)
+        _showingUserMaps = false;
+        _mapPaths = [.. Shell.MapCatalog.Values.Where(entry => entry.IsMultiplayer && !entry.VirtualPath.StartsWith(ContentFileSystem.UserMapPrefix, StringComparison.Ordinal)).Select(entry => entry.VirtualPath)
             .OrderBy(path => Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource), StringComparer.Ordinal)];
         var list = W("ListboxMap");
         list.ClearList();
@@ -352,10 +362,14 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
 
     private void PopulateUserMaps()
     {
+        _showingUserMaps = true;
+        _shownUserMaps = (Shell.UserMaps.Length, Shell.UserMapsLoading);
         _mapPaths = [.. Shell.UserMaps.OrderBy(path => Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource), StringComparer.Ordinal)];
         var list = W("ListboxMap");
         list.ClearList();
         foreach (var path in _mapPaths) list.AddListRow(new UiListRow(string.Empty, Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource)));
+        // A row behind the paths: Accept refuses it.
+        if (Shell.UserMapsLoading) list.AddListRow(new UiListRow(string.Empty, "Reading your maps ..."));
         _selectedIndex = -1;
     }
 
