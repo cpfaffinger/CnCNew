@@ -71,8 +71,18 @@ try {
     $exit = $LASTEXITCODE
     Reset-Environment
     if ($exit -ne 0) { $problems.Add("the check ended with exit code ${exit}: $output") }
-    foreach ($expected in @('Missing\s+Git', 'Missing\s+\.NET SDK', 'Missing\s+PowerShell 7', 'OK\s+Windows 10', 'To do\s+Game data', 'To do\s+Game program', 'OK\s+Zero Hour.*A Folder Of Its Own')) {
+    foreach ($expected in @('Missing\s+Git', 'Missing\s+\.NET SDK', 'Missing\s+PowerShell 7', 'OK\s+Windows 10', 'To do\s+Game data', 'To do\s+Game program', 'OK\s+Zero Hour.*A Folder Of Its Own', 'OK\s+The game goes to this folder\s+\S*home\\CnCNew')) {
         if ($output -notmatch $expected) { $problems.Add("the output of an empty machine lacks '$expected':`n$output") }
+    }
+    # Folders that must not take the game.
+    $foreign = Join-Path $work 'foreign'
+    New-Item -ItemType Directory -Force $foreign | Out-Null
+    [IO.File]::WriteAllText((Join-Path $foreign 'mine.txt'), 'not ours')
+    foreach ($case in @(@((Join-Path $library 'steamapps\common\Mine'), 'folder of Steam'), @((Join-Path $library 'Beside'), 'Steam library'), @((Join-Path $repo 'tools\mine'), 'checkout'), @($foreign, 'other files'))) {
+        Set-Environment (Get-EmptyMachine $work @())
+        $refused = & $powershell -NoProfile -ExecutionPolicy Bypass -File $launcher -CheckOnly -SteamRoots $steam -InstallDir $case[0] 2>&1 | Out-String
+        Reset-Environment
+        if ($refused -notmatch "Failed\s+The game goes to this folder.*$($case[1])") { $problems.Add("the folder $($case[0]) was not refused for '$($case[1])':`n$refused") }
     }
 } finally {
     Reset-Environment
@@ -97,6 +107,17 @@ $watch = [Diagnostics.Stopwatch]::StartNew()
 if ($LASTEXITCODE -ne 0) { Write-Host "NOT RUN: no clone of $Source"; exit 3 }
 Write-Host ("clone: {0:0} s, commit {1}" -f $watch.Elapsed.TotalSeconds, (& $git -C $clone rev-parse --short=10 HEAD))
 
+# Steam is only read: path, size and time of every file, and the hash of the small ones, before and after the whole way.
+function Get-SteamState([string]$Folder) {
+    @(Get-ChildItem -LiteralPath $Folder -Recurse -File -Force | Sort-Object FullName | ForEach-Object {
+            $hash = if ($_.Length -lt 5MB) { (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash } else { '-' }
+            '{0}|{1}|{2:o}|{3:o}|{4}' -f $_.FullName, $_.Length, $_.LastWriteTimeUtc, $_.CreationTimeUtc, $hash
+        })
+}
+$steamFolder = [regex]::Match((& $powershell -NoProfile -ExecutionPolicy Bypass -File $launcher -CheckOnly 2>&1 | Out-String), 'Zero Hour in a Steam library\s+(.+?)\s*(\r?\n)').Groups[1].Value
+if (-not $steamFolder -or -not (Test-Path -LiteralPath $steamFolder)) { Write-Host 'NOT RUN: no Steam installation'; exit 3 }
+$steamBefore = Get-SteamState $steamFolder
+
 $report = Join-Path $OutDir 'setup-report.md'
 $machine = Get-EmptyMachine $OutDir @((Split-Path -Parent $git))
 Set-Environment $machine
@@ -117,6 +138,16 @@ try {
     & $pwsh -NoProfile -ExecutionPolicy Bypass -File (Join-Path $clone 'scripts\acceptance.ps1') -Probe shell -ProbeSeconds 45 -OutDir (Join-Path $OutDir 'probe') -ResultsPath (Join-Path $OutDir 'results.json')
     if ($LASTEXITCODE -ne 0) { $problems.Add('the first scene of the acceptance did not stay open') }
 } finally { Reset-Environment }
+
+$steamAfter = Get-SteamState $steamFolder
+$changed = @(Compare-Object $steamBefore $steamAfter)
+if ($changed.Count -gt 0) { $problems.Add("the Steam folder changed: $($changed.Count) line(s), first: $($changed[0].InputObject)") }
+$target = Join-Path $machine.USERPROFILE 'CnCNew'
+if (-not (Test-Path -LiteralPath (Join-Path $target 'content\content-manifest.json'))) { $problems.Add("the game is not in the default folder $target") }
+if (Test-Path -LiteralPath (Join-Path $clone 'game')) { $problems.Add('the game was written into the checkout') }
+$links = @(Get-ChildItem -LiteralPath $target -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
+if ($links.Count -gt 0) { $problems.Add("the game folder holds links: $($links[0].FullName)") }
+Write-Host "Steam: $($steamBefore.Count) files, $($changed.Count) changed. The game: $target"
 
 Write-Host ''
 Get-Content -LiteralPath $report | Write-Host

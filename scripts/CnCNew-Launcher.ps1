@@ -14,6 +14,7 @@
     -Unattended          no window: installs what is missing, builds, writes the report and ends (exit code 1 when a required step failed)
     -CheckOnly           no window: prints the checks and ends; changes nothing
     -GameDir DIR         the Steam installation of the game (default: the Steam libraries of this machine)
+    -InstallDir DIR      where the game is made (default: the folder chosen before, else CnCNew in the user's home); Steam itself is only read
     -NoWinget            leaves winget out: the fallbacks that download from the makers directly
     -NoSimulationCheck   leaves the comparison with the reference values out
     -SteamRoots DIR,...  further Steam installations to search
@@ -27,6 +28,7 @@ param(
     [switch]$Unattended,
     [switch]$CheckOnly,
     [string]$GameDir,
+    [string]$InstallDir,
     [switch]$NoWinget,
     [switch]$NoSimulationCheck,
     [string[]]$SteamRoots,
@@ -41,8 +43,8 @@ $logDir = Join-Path $dataDir 'setup'
 New-Item -ItemType Directory -Force $logDir | Out-Null
 $clientStamp = Join-Path $dataDir 'acceptance\client-built.txt'
 $gameFolderFile = Join-Path $dataDir 'game-folder.txt'
-$contentDir = Join-Path $repo 'game\content'
-$contentStamp = Join-Path $repo 'game\setup-content.txt'
+$installFolderFile = Join-Path $dataDir 'install-folder.txt'
+$contentStamp = Join-Path $logDir 'content-done.txt'
 $clientProject = Join-Path $repo 'src\CnCNew.Client.Stride\CnCNew.Client.Stride.csproj'
 $assetProject = Join-Path $repo 'tools\CnCNew.AssetTool\CnCNew.AssetTool.csproj'
 $simProject = Join-Path $repo 'tools\CnCNew.SimTool\CnCNew.SimTool.csproj'
@@ -56,7 +58,8 @@ $powerShellVersion = '7.6.9'
 $isolated = [bool]$env:CNCNEW_SETUP_ISOLATED
 # Windows sets ProgramFiles anew for every process, so that check names its empty folder here.
 $programFiles = if ($env:CNCNEW_SETUP_PROGRAM_FILES) { $env:CNCNEW_SETUP_PROGRAM_FILES } else { $env:ProgramFiles }
-$needBytes = 10GB
+$needForBuild = 6GB
+$needForGame = 4GB
 
 $script:form = $null
 $script:cancel = $false
@@ -86,6 +89,7 @@ Add-Row 'vc' 'Visual C++ runtime (x64)' 'need'
 Add-Row 'graphics' 'Graphics adapter (Direct3D 11)' 'need'
 Add-Row 'sound' 'Sound device' 'need'
 Add-Row 'game' 'Zero Hour in a Steam library' 'need'
+Add-Row 'target' 'The game goes to this folder' 'need'
 Add-Row 'content' 'Game data: from Steam and the patch' 'make'
 Add-Row 'client' 'Game program: built from this checkout' 'make'
 Add-Row 'verify' 'Game data checked file by file' 'make'
@@ -219,6 +223,58 @@ function Find-SteamGame {
     $null
 }
 
+function Test-Inside([string]$Path, [string]$Directory) {
+    $inner = [IO.Path]::GetFullPath($Path).TrimEnd('\') + '\'
+    $outer = [IO.Path]::GetFullPath($Directory).TrimEnd('\') + '\'
+    $inner.StartsWith($outer, [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-DefaultInstallDir {
+    $folder = Join-Path $env:USERPROFILE 'CnCNew'
+    # A checkout there is no empty folder: the game then lies in the part of it Git ignores.
+    if (Test-Inside $repo $folder) { return (Join-Path $repo 'game') }
+    $folder
+}
+
+function Find-InstallDir {
+    if ($InstallDir) { return [IO.Path]::GetFullPath($InstallDir) }
+    if (Test-Path -LiteralPath $installFolderFile) {
+        $saved = (Get-Content -LiteralPath $installFolderFile -Raw).Trim()
+        if ($saved) { return $saved }
+    }
+    # A developer's checkout keeps the game it already has; a check of an empty machine has none.
+    if (-not $isolated -and (Test-Path -LiteralPath (Join-Path $repo 'game\install.json'))) { return (Join-Path $repo 'game') }
+    Get-DefaultInstallDir
+}
+
+function Set-InstallDir([string]$Folder) {
+    $script:installDir = $Folder
+    $script:contentDir = Join-Path $Folder 'content'
+}
+
+# Why a folder cannot take the game, or nothing. Steam is only ever read, so no folder of Steam will do.
+function Test-InstallFolder([string]$Folder) {
+    $full = [IO.Path]::GetFullPath($Folder).TrimEnd('\')
+    if ($full.Length -le 2) { return 'A drive itself cannot be the folder: choose or make a folder on it.' }
+    if ("$full\" -match '\\steamapps\\') { return 'This is a folder of Steam. Steam is only ever read: choose a folder outside it.' }
+    foreach ($library in Get-SteamLibraries) {
+        if ((Test-Inside $full $library) -or (Test-Inside $library $full)) { return "This overlaps the Steam library $library. Steam is only ever read: choose a folder outside it." }
+    }
+    if ($script:gameDir -and ((Test-Inside $full $script:gameDir) -or (Test-Inside $script:gameDir $full))) { return 'This overlaps the game in Steam. Steam is only ever read: choose a folder outside it.' }
+    if ((Test-Inside $repo $full) -or ((Test-Inside $full $repo) -and -not (Test-Inside $full (Join-Path $repo 'game')))) { return 'This overlaps the checkout of the source code: choose another folder.' }
+    if ((Test-Path -LiteralPath $full -PathType Container) -and (Get-ChildItem -LiteralPath $full -Force | Select-Object -First 1) -and -not (Test-Path -LiteralPath (Join-Path $full 'install.json'))) {
+        return 'This folder holds other files: choose an empty one.'
+    }
+    if ($CheckOnly) { return $null }
+    # A probe in the nearest folder that exists: nothing is made before the user starts.
+    $existing = $full
+    while (-not (Test-Path -LiteralPath $existing -PathType Container)) { $existing = Split-Path -Parent $existing; if (-not $existing) { return 'Its drive does not exist.' } }
+    $probe = Join-Path $existing ('cncnew-probe-' + [Guid]::NewGuid().ToString('N'))
+    try { [IO.File]::WriteAllText($probe, ''); [IO.File]::Delete($probe) }
+    catch { return "This folder cannot be written ($existing): choose another one." }
+    $null
+}
+
 function Test-Reachable([string]$HostName) {
     $client = New-Object System.Net.Sockets.TcpClient
     try {
@@ -244,6 +300,7 @@ function Get-Sha256([string]$Path) {
 function Get-ContentKey {
     $key = @((Get-Sha256 (Join-Path $repo 'baselines\steam-master.json')), (Get-Sha256 (Join-Path $repo 'baselines\patch-master.json')))
     if ($script:tools.Git) { $key += @(& $script:tools.Git -C $repo log -1 '--format=%H' -- src/CnCNew.Import src/CnCNew.Formats src/CnCNew.Images tools/CnCNew.AssetTool 2>$null) }
+    $key += $script:installDir
     $key -join ' '
 }
 
@@ -270,10 +327,19 @@ function Invoke-Checks {
     elseif ($repo -match 'OneDrive') { Set-Row 'folder' 'Warning' 'In a synchronised folder: gigabytes get synchronised and files get locked. A plain folder is better.' }
     else { Set-Row 'folder' 'OK' $repo }
 
+    # What is needed where: the build beside the checkout and in the profile, the game in its folder. What is done needs nothing more.
+    Set-InstallDir (Find-InstallDir)
+    $needs = @{}
+    if (-not (Test-ClientDone)) { $needs[[IO.Path]::GetPathRoot($repo)] = $needForBuild }
+    if (-not (Test-ContentDone)) { $root = [IO.Path]::GetPathRoot($script:installDir); $needs[$root] = [long]$needs[$root] + $needForGame }
+    $short = @()
+    foreach ($root in $needs.Keys) {
+        if (-not (Test-Path -LiteralPath $root)) { continue }
+        $free = (New-Object System.IO.DriveInfo $root).AvailableFreeSpace
+        if ($free -lt $needs[$root]) { $short += ('{0:0.0} GB free on {1}; about {2:0} GB are needed.' -f ($free / 1GB), $root, ($needs[$root] / 1GB)) }
+    }
     $free = (New-Object System.IO.DriveInfo ([IO.Path]::GetPathRoot($repo))).AvailableFreeSpace
-    $done = Test-ContentDone
-    if ($done -or $free -ge $needBytes) { Set-Row 'disk' 'OK' ('{0:0.0} GB free on {1}' -f ($free / 1GB), [IO.Path]::GetPathRoot($repo)) }
-    else { Set-Row 'disk' 'Failed' ('{0:0.0} GB free on {1}; about {2:0} GB are needed.' -f ($free / 1GB), [IO.Path]::GetPathRoot($repo), ($needBytes / 1GB)) }
+    if ($short) { Set-Row 'disk' 'Failed' ($short -join ' ') } else { Set-Row 'disk' 'OK' ('{0:0.0} GB free on {1}' -f ($free / 1GB), [IO.Path]::GetPathRoot($repo)) }
 
     $silent = @('api.nuget.org', 'raw.githubusercontent.com') | Where-Object { -not (Test-Reachable $_) }
     if (-not $silent) { Set-Row 'network' 'OK' 'nuget.org and GitHub answer' }
@@ -304,6 +370,9 @@ function Invoke-Checks {
     $found = Find-SteamGame
     $script:gameDir = $found
     if ($found) { Set-Row 'game' 'OK' $found } else { Set-Row 'game' 'Missing' "Not found. Install it in Steam (app $steamAppId) in English, or choose its folder." }
+
+    $refusal = Test-InstallFolder $script:installDir
+    if ($refusal) { Set-Row 'target' 'Failed' "$($script:installDir): $refusal" } else { Set-Row 'target' 'OK' $script:installDir }
 
     if (Test-ContentDone) { Set-Row 'content' 'OK' 'Made for this version' } else { Set-Row 'content' 'To do' 'About 5 minutes; fetches the patch once (110 MB)' }
     if (Test-ClientDone) { Set-Row 'client' 'OK' "Built at $(Get-Commit)" } else { Set-Row 'client' 'To do' 'About 5 minutes the first time; fetches 259 packages' }
@@ -432,7 +501,9 @@ function Add-ReportLine([string]$Line) { [void]$script:report.Add($Line) }
 function Step-Content {
     if (Test-ContentDone) { return $true }
     Set-Row 'content' 'Working' 'Building the tool, checking the Steam installation, exporting'
-    $exit = Invoke-Logged 'content' 'Making the game data from Steam and the patch' $script:tools.Pwsh "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $repo 'scripts\dev-content.ps1')`" -GameDir `"$($script:gameDir)`" -SkipOriginal"
+    $patch = Join-Path $repo 'references\generals-game-patch\Patch104pZH\GameFilesEdited'
+    $patchArgument = if (Test-Path -LiteralPath $patch) { " -PatchDir `"$patch`"" } else { '' }
+    $exit = Invoke-Logged 'content' 'Making the game data from Steam and the patch' $script:tools.Pwsh "-NoProfile -ExecutionPolicy Bypass -File `"$(Join-Path $repo 'scripts\install.ps1')`" -GameDir `"$($script:gameDir)`" -Target `"$($script:installDir)`" -ContentOnly$patchArgument"
     if ($exit -ne 0) {
         $refusal = Get-Refusal
         Set-Row 'content' 'Failed' $(if ($refusal) { $refusal } else { "Exit code $exit. See the log." })
@@ -489,9 +560,9 @@ function Step-Simulation {
     if ($exit -ne 0) { Set-Row 'sim' 'Warning' "The tool did not build (exit code $exit)."; return $true }
     $tool = Join-Path $repo 'tools\CnCNew.SimTool\bin\Release\net10.0\CnCNew.SimTool.dll'
     Set-Row 'sim' 'Working' 'The data against the reference values'
-    $inputs = Invoke-Logged 'sim-inputs' 'Comparing the data with the reference values' $script:tools.Dotnet "`"$tool`" input-manifest check game/content baselines/input-manifest.json"
+    $inputs = Invoke-Logged 'sim-inputs' 'Comparing the data with the reference values' $script:tools.Dotnet "`"$tool`" input-manifest check `"$contentDir`" baselines/input-manifest.json"
     Set-Row 'sim' 'Working' 'Nine matches against their recorded results'
-    $matches9 = Invoke-Logged 'sim-matches' 'Playing nine matches against their recorded results' $script:tools.Dotnet "`"$tool`" reference-manifest check game/content baselines/reference-manifest.json --set quick"
+    $matches9 = Invoke-Logged 'sim-matches' 'Playing nine matches against their recorded results' $script:tools.Dotnet "`"$tool`" reference-manifest check `"$contentDir`" baselines/reference-manifest.json --set quick"
     Add-ReportLine "Input manifest: exit code $inputs. $(Get-LastLine (Join-Path $logDir 'sim-inputs.log'))"
     Add-ReportLine "Reference matches, quick set: exit code $matches9. $(Get-LastLine (Join-Path $logDir 'sim-matches.log'))"
     if ($inputs -eq 0 -and $matches9 -eq 0) { Set-Done 'sim'; Set-Row 'sim' 'OK' 'The same results as on the reference PC'; return $true }
@@ -520,7 +591,7 @@ function Write-Report {
 }
 
 function Test-Required {
-    foreach ($id in 'windows', 'folder', 'disk', 'game') {
+    foreach ($id in 'windows', 'folder', 'disk', 'game', 'target') {
         if ((Get-Row $id).State -in 'Failed', 'Missing') { return $false }
     }
     $true
@@ -530,6 +601,7 @@ function Invoke-Setup {
     $script:busy = $true
     try {
         if (-not (Test-Required)) { return $false }
+        [IO.File]::WriteAllText($installFolderFile, $script:installDir)
         if ((Get-Row 'git').State -eq 'Missing') { Install-Git }
         if ((Get-Row 'dotnet').State -eq 'Missing') { Install-Dotnet }
         if ((Get-Row 'pwsh').State -eq 'Missing') { Install-Pwsh }
@@ -582,7 +654,7 @@ $form = New-Object Windows.Forms.Form
 $script:form = $form
 $form.Text = 'CnCNew'
 $form.StartPosition = 'CenterScreen'
-$form.ClientSize = New-Object Drawing.Size 820, 650
+$form.ClientSize = New-Object Drawing.Size 820, 720
 $form.MinimumSize = New-Object Drawing.Size 700, 560
 $form.Font = New-Object Drawing.Font 'Segoe UI', 10
 
@@ -591,7 +663,7 @@ $head.Dock = 'Top'; $head.Height = 64; $head.BackColor = [Drawing.Color]::FromAr
 $title = New-Object Windows.Forms.Label
 $title.Text = 'CnCNew setup'; $title.ForeColor = 'White'; $title.Font = New-Object Drawing.Font 'Segoe UI', 15, ([Drawing.FontStyle]::Bold); $title.SetBounds(14, 6, 780, 30)
 $subtitle = New-Object Windows.Forms.Label
-$subtitle.Text = 'Makes the game on this PC from your Steam installation. Steam itself is only read.'; $subtitle.ForeColor = 'White'; $subtitle.SetBounds(14, 37, 780, 22)
+$subtitle.Text = 'Makes the game in a folder of its own from your Steam installation. Steam itself is only read, never changed.'; $subtitle.ForeColor = 'White'; $subtitle.SetBounds(14, 37, 780, 22)
 $head.Controls.AddRange(@($title, $subtitle))
 
 $list = New-Object Windows.Forms.ListView
@@ -606,7 +678,7 @@ foreach ($row in $script:rows) {
 }
 
 $foot = New-Object Windows.Forms.Panel
-$foot.Dock = 'Bottom'; $foot.Height = 176
+$foot.Dock = 'Bottom'; $foot.Height = 216
 $script:statusLabel = New-Object Windows.Forms.Label
 $script:statusLabel.SetBounds(14, 8, 790, 62); $script:statusLabel.Anchor = 'Top,Left,Right'
 $progress = New-Object Windows.Forms.ProgressBar
@@ -617,17 +689,19 @@ $play = New-Object Windows.Forms.Button
 $play.Text = 'Play the game'; $play.SetBounds(312, 88, 150, 44)
 $update = New-Object Windows.Forms.Button
 $update.SetBounds(470, 88, 334, 44); $update.Visible = $false
+$chooseTarget = New-Object Windows.Forms.Button
+$chooseTarget.Text = 'Choose the install folder ...'; $chooseTarget.SetBounds(14, 136, 290, 32)
 $choose = New-Object Windows.Forms.Button
-$choose.Text = 'Choose the game folder ...'; $choose.SetBounds(14, 136, 200, 32)
+$choose.Text = 'Choose the game in Steam ...'; $choose.SetBounds(14, 176, 290, 32)
 $steamPage = New-Object Windows.Forms.Button
-$steamPage.Text = 'Install it in Steam'; $steamPage.SetBounds(220, 136, 150, 32)
+$steamPage.Text = 'Install it in Steam'; $steamPage.SetBounds(312, 176, 150, 32)
 $again = New-Object Windows.Forms.Button
-$again.Text = 'Check again'; $again.SetBounds(376, 136, 120, 32)
+$again.Text = 'Check again'; $again.SetBounds(312, 136, 150, 32)
 $logs = New-Object Windows.Forms.Button
-$logs.Text = 'Open the logs'; $logs.SetBounds(502, 136, 120, 32)
+$logs.Text = 'Open the logs'; $logs.SetBounds(470, 136, 150, 32)
 $close = New-Object Windows.Forms.Button
 $close.Text = 'Close'; $close.SetBounds(684, 136, 120, 32)
-$foot.Controls.AddRange(@($script:statusLabel, $progress, $main, $play, $update, $choose, $steamPage, $again, $logs, $close))
+$foot.Controls.AddRange(@($script:statusLabel, $progress, $main, $play, $update, $chooseTarget, $choose, $steamPage, $again, $logs, $close))
 
 $form.Controls.AddRange(@($list, $foot, $head))
 $list.BringToFront()
@@ -643,6 +717,7 @@ function Update-Buttons {
     $play.Visible = $done
     foreach ($button in @($choose, $steamPage)) { $button.Visible = $gameMissing -or ((Get-Row 'content').State -eq 'Failed'); $button.Enabled = -not $script:busy }
     $again.Enabled = -not $script:busy
+    $chooseTarget.Enabled = -not $script:busy
     $update.Visible = $script:behind -gt 0
     $update.Enabled = -not $script:busy
     $update.Text = "Get the new version ($($script:behind) change(s) on GitHub)"
@@ -655,7 +730,7 @@ function Update-Buttons {
         $warning = (Get-Row 'sound').State -eq 'Warning'
         Say ("Ready. Everything is set up for version $(Get-Commit)." + $(if ($warning) { "`nThis PC has no sound device: skip the goals about sound." } else { '' }))
     } else {
-        $text = 'Everything else is automatic and takes 15 to 30 minutes. You can stop and go on later.'
+        $text = "The game goes to $($script:installDir). Steam is only read. The rest is automatic and takes 15 to 30 minutes; you can stop and go on later."
         if ($missing.Count -gt 0) { $text = "Set up will also install, each from its maker and under its own licence: $($missing -join ', '). Windows may ask for permission.`n$text" }
         Say $text
     }
@@ -666,7 +741,7 @@ function Invoke-Guarded([scriptblock]$Action) {
 }
 
 function Start-Acceptance {
-    Start-Process -FilePath $script:tools.Pwsh -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', "`"$(Join-Path $repo 'scripts\acceptance.ps1')`"", '-Suite' -WorkingDirectory $repo
+    Start-Process -FilePath $script:tools.Pwsh -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', "`"$(Join-Path $repo 'scripts\acceptance.ps1')`"", '-Suite', '-ContentDir', "`"$contentDir`"" -WorkingDirectory $repo
     $form.Close()
 }
 
@@ -703,6 +778,25 @@ $update.Add_Click({
             Update-Buttons
             if ($exit -ne 0) { Say 'The new version could not be taken (see the log update.log). Changes in this folder stand in the way.' }
             else { Say 'The new version is here. Set up the game once more; only what changed is made again.' }
+        }
+    })
+$chooseTarget.Add_Click({
+        Invoke-Guarded {
+            $dialog = New-Object Windows.Forms.FolderBrowserDialog
+            $dialog.Description = 'Where the game is made: about 3 GB. Steam is only read and stays as it is.'
+            $dialog.ShowNewFolderButton = $true
+            $start = $script:installDir
+            while ($start -and -not (Test-Path -LiteralPath $start -PathType Container)) { $start = Split-Path -Parent $start }
+            if ($start) { $dialog.SelectedPath = $start }
+            if ($dialog.ShowDialog($form) -ne 'OK') { return }
+            $folder = $dialog.SelectedPath.TrimEnd('\')
+            # As installers do: a folder that holds other things gets a CnCNew of its own.
+            if ((Get-ChildItem -LiteralPath $dialog.SelectedPath -Force -ErrorAction SilentlyContinue | Select-Object -First 1) -and -not (Test-Path -LiteralPath (Join-Path $folder 'install.json'))) { $folder = Join-Path $folder 'CnCNew' }
+            $refusal = Test-InstallFolder $folder
+            if ($refusal) { Say "$folder`n$refusal"; return }
+            [IO.File]::WriteAllText($installFolderFile, $folder)
+            Invoke-Checks
+            Update-Buttons
         }
     })
 $choose.Add_Click({

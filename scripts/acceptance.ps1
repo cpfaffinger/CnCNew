@@ -23,7 +23,7 @@
 
   The script NEVER writes into the repository and never touches the Steam installation. Results: %LOCALAPPDATA%\CnCNew\acceptance\results-<date>.json (-ResultsPath);
   pictures and sound: %TEMP%\cncnew-acceptance (-OutDir). The picture page contains imagery of the game and must not be published or committed.
-  Content: -ContentDir, else game\content of the developer checkout, else the installation made by scripts\install.ps1 (%LOCALAPPDATA%\CnCNew\Game, -InstallDir; found through install.json).
+  Content: -ContentDir, else the folder chosen in the launcher, else game\content of the developer checkout, else the installation made by scripts\install.ps1 (%LOCALAPPDATA%\CnCNew\Game, -InstallDir; found through install.json).
 
   Testable without a human: -Answers "p,f:too dark,s,q" supplies the keys (a note cannot contain a comma), -NoWindow starts no windows, -SelfTest runs a whole trial into a throw-away directory.
 
@@ -306,6 +306,8 @@ function Resolve-Content {
     $candidates = @()
     if ($ContentDir) { $candidates += , @((Get-FullPath $ContentDir), $null) }
     else {
+        $chosen = Join-Path $env:LOCALAPPDATA 'CnCNew\install-folder.txt'
+        if (Test-Path -LiteralPath $chosen) { $folder = (Get-Content -LiteralPath $chosen -Raw).Trim(); $candidates += , @((Join-Path $folder 'content'), (Join-Path $folder 'install.json')) }
         $candidates += , @((Join-Path $repo 'game\content'), (Join-Path $repo 'game\install.json'))
         $install = if ($InstallDir) { Get-FullPath $InstallDir } else { Join-Path $env:LOCALAPPDATA 'CnCNew\Game' }
         $candidates += , @((Join-Path $install 'content'), (Join-Path $install 'install.json'))
@@ -318,6 +320,8 @@ function Resolve-Content {
         elseif (Test-Path -LiteralPath (Join-Path $candidate[0] 'content-manifest.json')) { $hash = (Get-FileHash -LiteralPath (Join-Path $candidate[0] 'content-manifest.json') -Algorithm SHA256).Hash.ToLowerInvariant() }
         return [pscustomobject]@{ Path = (Resolve-Path -LiteralPath $candidate[0]).Path; ManifestSha256 = $hash }
     }
+    # Start-Acceptance.cmd takes this for "not set up yet" and opens the launcher.
+    if ($Suite) { Write-Host 'The game is not set up on this PC yet.'; exit 5 }
     throw "No content directory found (looked at: $(($candidates | ForEach-Object { $_[0] }) -join '; ')).`nDevelopers: pwsh scripts\dev-content.ps1; otherwise pwsh scripts\install.ps1, or pass -ContentDir/-InstallDir."
 }
 $content = Resolve-Content
