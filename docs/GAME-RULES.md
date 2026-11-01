@@ -555,8 +555,9 @@ Reference: `Weapon.cpp` (`WeaponTemplate::fireWeaponTemplate`, `dealDamageIntern
    after `processDestroyList`). The victim is hit at its then current position (`victimID`), if it is gone, the stored point;
    `DamageDealtAtSelfPosition` puts the damage on the shooter position. If the shooter no longer exists, as in the original **no**
    `RadiusDamageAffects` filters apply. `WeaponSpeed ≤ 0` (three damageless retail weapons; the original divides by zero) hits immediately.
-3. **With a projectile object:** The object of the template `ProjectileObject` is created at the end of the shot tick (spawn queue, §4 of the core description) at the
-   geometry centre of the shooter (the launch bones are graphics data) with its owner and facing; immediately after its
+3. **With a projectile object:** The object of the template `ProjectileObject` is created at the end of the shot tick (spawn queue, §4 of the core description) on the
+   launch bone of the barrel in turn, turned with the turret and the shooter (`Weapon::calcProjectileLaunchPosition`, `docs/SIMULATION-CORE.md` §75; a template without launch
+   bones, and a rider in its container, at the geometry centre) with its owner; immediately after its
    `OnSpawn` calls its projectile module (`IProjectileModule`) receives weapon, launcher, victim (none with scatter), target point and the
    weapon bonus conditions of the launcher (`m_extraBonusFlags`). Until then the start data are in the spawn queue entry (snapshot and hash).
    An object without a projectile module is set onto the target point ("ok, for things like Firestorm").
@@ -585,22 +586,22 @@ sums forward differences in binary32, not reproducible); start and end point are
 `BezFwdIterator` leaves the point at the origin, the orientation reads behind the array) flies directly to the end point. The highest terrain is sampled every half cell
 (`estimateTerrainExtremesAlongLine` runs over partition cells); an end point outside the map destroys the projectile.
 
-**`MissileAIUpdate`** (guided missiles) as a kinematic state machine instead of THRUST locomotor and physics:
+**`MissileAIUpdate`** (guided missiles) with the part of its AI, its THRUST locomotor and its physics a missile uses (`docs/SIMULATION-CORE.md` §75.3):
 
 | State | Behaviour |
 | --- | --- |
-| Launch | glides in the start direction (facing of the launcher, raised by `2·max(0, dz)/max(1, xy)` and normalised) with `InitialVelocity` (with `UseWeaponSpeed` the weapon speed, which is then also maximum speed and acceleration), until `IgnitionDelay` ticks have passed |
+| Launch | looks along the x axis of the launch matrix, raised by `2·max(0, dz)/max(1, xy)` and normalised, with the launcher's velocity plus `InitialVelocity` along it (with `UseWeaponSpeed` the weapon speed, which then also caps speed and acceleration), until `IgnitionDelay` ticks have passed; gravity acts |
 | Ignition | arms the warhead, requests `IgnitionFX`, fuel for `FuelLifetime` ticks (0: unlimited), continues without turning |
-| Attack (without/with turning) | accelerates with the locomotor acceleration up to the locomotor speed; without turning until `DistanceToTravelBeforeTurning` has been flown (measured before the movement, like the original), then direction straight at the target (`setMaxTurnRate(BIGNUM)`): the position of the tracked victim (`TryToFollowTarget`), otherwise the target point 10 above the ground (`APPROACH_HEIGHT`, only with lock distance) |
-| Kill | within the lock distance (`DistanceToTargetForLock`, default 75, 2D; halved for a point target and aimed at the ground point again) straight at the target; whoever reaches it detonates there |
+| Attack (without/with turning) | `Locomotor::moveTowardsPositionThrust`: without turning (thrust on the nose) until `DistanceToTravelBeforeTurning` has been flown (measured before the movement, like the original), then the thrust points at most `MaxThrustAngle` off the nose toward where the velocity meets the goal, the nose follows the velocity at the locomotor's `TurnRate`, and the velocity relaxes to the top speed by `accel = thrust · A − v · A/S`. The goal is the tracked victim (`TryToFollowTarget`), otherwise the target point 10 above the ground (`APPROACH_HEIGHT`, only with lock distance). With a `PreferredHeight` its height is `z + PreferredHeightDamping · (surface + PreferredHeight − z)` until the missile is within `DistanceToTargetBeforeDiving` of the goal |
+| Kill | within the lock distance (`DistanceToTargetForLock`, default 75, 2D; halved for a point target and aimed at the ground point again) straight at the goal at its speed ("Projectiles cheat in 3 dimensions"), the nose at three times the turn rate; whoever reaches it detonates there |
 | KillSelf | after the detonation wait `KillSelfDelay` ticks (default 3), then `DetonateCallsKill` → death, otherwise destruction |
 
-Without fuel the missile detonates (`DetonateOnNoFuel`) or glides on without thrust and turning under gravity (`GameData.ini Gravity`, −64/s² =
-−4660 raw value per tick²). If the tracked victim is gone, the fuel runs out immediately and the missile disappears without damage
+Without fuel the missile detonates (`DetonateOnNoFuel`) or coasts on without thrust and turning. Gravity (`GameData.ini Gravity`, −64/s²) and the physics module's
+`AerodynamicFriction` act in every frame. If the tracked victim is gone, the fuel runs out immediately and the missile disappears without damage
 (`airborneTargetGone`). `MissileCallsOnDie` of the weapon (`m_dieOnDetonate`) kills the missile on detonation. **Stand-in for collisions**
-(there are none, item 9 of the handoff): an armed missile that reaches its target point in an attack state or would get below the ground
-detonates there; an unarmed one glides along the ground; below height 0 it is destroyed. Not modelled: decoys, jammers
-(`DistanceScatterWhenJammed`), cruise altitude (`DistanceToTargetBeforeDiving`), bridge layers, `GarrisonHitKill*` (needs collision with buildings).
+(there are none, item 9 of the handoff): an armed missile detonates when it meets the geometry of the object it was fired at, or when it reaches its goal point in an attack
+state; coming down on the ground it detonates, unless it is more than a cell above its goal and more than three cells from it (`projectileHandleCollision(NULL)`); an unarmed one
+slides along the ground; below height 0 it is destroyed. Not modelled: jammers (`DistanceScatterWhenJammed`), the frames a missile waits for its path, a damaged locomotor.
 All vectors are `Fixed`, directions are normalised with the fixed-point root.
 
 **`PointDefenseLaserUpdate`** (Paladin, Avenger, Air Force Chinook): every `ScanRate` ticks it chooses the nearest enemy object of the primary kinds
@@ -612,9 +613,9 @@ effect in the original (the predicted position is computed, but not used).
 
 **Evidence** (`Tests.Projectiles.cs`, hand calculations): straight shell 200 units at 300/s = 20 points, impact F + 21 with impact event and
 detonation FX at the target point; arc 120 units (heights 30/30 at 25 %/75 %, length 131.43 recalculated independently in binary64) = 14 points,
-impact F + 15, point 5 at (44.515; 21.302), apex below the analytical 22.5; missile without ignition delay (10 per tick immediately) impact F + 10,
-removal F + 13; missile with 3 ticks ignition delay, 2 per tick initial speed and 1 per tick² acceleration with all 14 positions and
-impact F + 15; delayed hit 150 units at 600/s = F + 8, below one tick immediately; scatter deterministic within the radius; the
+impact F + 15, point 5 at (44.515; 21.302), apex below the analytical 22.5; missile without ignition delay (10 per tick immediately) impact F + 11,
+removal F + 14; missile with 3 ticks ignition delay, 2 per tick initial speed and 1 per tick² acceleration with all 17 positions and
+impact F + 18; delayed hit 150 units at 600/s = F + 8, below one tick immediately; scatter deterministic within the radius; the
 point defense laser shoots down the missile; snapshot in mid-flight (shell, missile, delayed hit) and two runs with equal hashes.
 Real data (`Tests.RealFlight.cs`): the first instantiable unit with a shell (`AmericaTankCrusader`/`GenericTankShell`, impact after 11 ticks) and the
 first with a missile (`AirF_AmericaVehicleTomahawk`/`TomahawkMissile`, 45 ticks) hit a Crusader, twice with equal hashes.
