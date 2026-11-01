@@ -66,6 +66,7 @@ internal static class ShellTests
         harness.Run("Credits close by themselves when the last line has left the screen", () => CreditsEnd(data));
         harness.Run("The user's own maps: a directory of a map lands in the list's unofficial side and is a content file", () => UserMaps(data));
         harness.Run("The user's maps are read behind the menu, and a map that cannot be read costs that map, not the game", () => UserMapsBehindTheMenu(data));
+        harness.Run("A user's map plays with its own map.ini, in a match, a saved game and against the shipped maps", () => UserMapRules(data));
         harness.Run("Credits lines use the Language.ini credits fonts at the adjusted size", () => CreditsFonts(data));
         harness.Run("Shell::push replaces the screen below, overlays keep it: only what the original shows is drawn", () => ScreenStackDrawing(data));
         harness.Run("Escape leaves the load game screen without any gadget focus", () => LoadGameEscapeWithoutFocus(data));
@@ -553,6 +554,69 @@ internal static class ShellTests
             TestHarness.Assert(shell.UserMapProblems.Length == 1 && shell.UserMapProblems[0].StartsWith("Broken.map: ", StringComparison.Ordinal), string.Join(", ", shell.UserMapProblems));
             TestHarness.Assert(heard.Count == 1 && heard[0].Contains("Broken.map", StringComparison.Ordinal), "the host hears why");
             TestHarness.Assert(data.Content.Exists("UserMaps/Good/Good.map"), "a map is a content file once it is read");
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    /// <summary>
+    /// 144 of the owner's 368 maps carry a map.ini, and the running game read only its sky. The file below is written as such maps are: a key form the strict compiler did not know, a
+    /// weapon and a model nobody has, a number no type holds, an image without sizes, indentation that means nothing.
+    /// </summary>
+    private static void UserMapRules(GameData data)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-user-maps-" + Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(directory, "Own Rules");
+        Directory.CreateDirectory(folder);
+        Directory.CreateDirectory(Path.Combine(directory, "Bad Rules"));
+        try
+        {
+            foreach (var name in new[] { Path.Combine(folder, "Own Rules.map"), Path.Combine(directory, "Bad Rules", "Bad Rules.map") })
+            {
+                using var source = data.Content.OpenRead("Maps/Alpine Assault/Alpine Assault.map");
+                using var target = File.Create(name);
+                source.CopyTo(target);
+            }
+            Directory.CreateDirectory(Path.Combine(directory, "With Scripts"));
+            using (var source = data.Content.OpenRead("Maps/GC_ChemGeneral/GC_ChemGeneral.map"))
+            using (var target = File.Create(Path.Combine(directory, "With Scripts", "With Scripts.map"))) source.CopyTo(target);
+            File.WriteAllText(Path.Combine(folder, "map.ini"), string.Join('\n',
+                "MappedImage NoSizes", "  Texture = nothing.tga", "End",
+                "Object AmericaInfantryRanger", "  BuildCost = 7", "End",
+                "Object ChinaInfantryRedguard", "  BuildCost = 9",
+                " RemoveModule = ModuleTag_NotThere",
+                " RemoveModule ModuleTag_AlsoNotThere",
+                "    AddModule", "      Behavior = ArmorUpgrade ModuleTag_ForTest", "      End", "    End",
+                "  WeaponSet", "    Conditions = None", "    Weapon = PRIMARY NoSuchWeapon", "    Weapon = SECONDARY None 816/Sultan", "  End",
+                "End",
+                "ParticleSystem LongLife", "  SystemLifetime = 99999999999999999999", "End",
+                "Object GLAInfantryRebel", "  Draw = W3DModelDraw ModuleTag_01", "    DefaultConditionState", "      Model = NoSuchModel", "    End", "  End", "End", ""));
+            File.WriteAllText(Path.Combine(directory, "Bad Rules", "map.ini"), "Object NoEnd\n  BuildCost = 1\n");
+            var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            shell.LoadUserMaps(directory);
+            var own = "UserMaps/Own Rules/Own Rules.map";
+            TestHarness.Assert(shell.MapCatalog["UserMaps/With Scripts/With Scripts.map"].HasScripts && !shell.MapCatalog[own].HasScripts, "a map with scripts of its own is known as one");
+            TestHarness.Assert(ReferenceEquals(data.ForMap("Maps/Alpine Assault/Alpine Assault.map"), data), "a shipped map keeps the data as it is");
+            var rules = data.ForMap(own);
+            static object Cost(GameData of) => of.Templates.TryGet("AmericaInfantryRanger", out var ranger) ? ranger.BuildCost : throw new InvalidOperationException("no Ranger");
+            TestHarness.Assert(Cost(rules).ToString() == "7" && Cost(data).ToString() != "7", $"the map's rules hold for the map alone: {Cost(rules)}, {Cost(data)}");
+            TestHarness.Assert(rules.Fingerprint == data.FingerprintFor(own) && rules.Fingerprint != data.Fingerprint, "its fingerprint is known without building it");
+            foreach (var word in new[] { "NoSizes", "NoSuchWeapon", "816/Sultan", "NoSuchModel", "too long" })
+                TestHarness.Assert(rules.MapRuleNotes.Any(note => note.Contains(word, StringComparison.Ordinal)), $"named: {word}; got {string.Join(" | ", rules.MapRuleNotes)}");
+            TestHarness.Throws<MapRulesException>(() => data.ForMap("UserMaps/Bad Rules/Bad Rules.map"), "Bad Rules");
+
+            var setup = new MatchSetup(own, "FactionAmerica", ["FactionChina"], SkirmishMatchOptions.StandardAt(data.Rate));
+            var match = LiveMatch.Create(rules, setup, new System.Numerics.Vector2(NavWidth, NavHeight));
+            var recorder = CnCNew.Game.Replays.MatchRecorder.Attach(match) ?? throw new InvalidOperationException("the match cannot be recorded");
+            for (var step = 0; step < 30; step++) match.Advance(1.0 / 30);
+            var file = recorder.Build(CnCNew.Game.Replays.MatchRecorder.EndingOf(match, leftByChoice: true), DateTimeOffset.UnixEpoch);
+            var playback = CnCNew.Game.Replays.ReplayPlayback.Open(data, file, new System.Numerics.Vector2(NavWidth, NavHeight));
+            TestHarness.Assert(Cost(playback.Match.Data).ToString() == "7", "a replay comes back with the map's rules, from the data without them");
+            var saved = match.Save("test");
+            var again = LiveMatch.Restore(data, saved, new System.Numerics.Vector2(NavWidth, NavHeight));
+            TestHarness.Assert(Cost(again.Data).ToString() == "7", "a saved game comes back with the map's rules");
         }
         finally
         {

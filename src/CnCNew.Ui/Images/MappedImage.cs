@@ -66,7 +66,7 @@ public sealed class MappedImageFormatException(string message) : FormatException
 public sealed class MappedImageTable
 {
     public const string DefinitionPrefix = "mappedimage/";
-    private static readonly string[] RequiredKeys = ["Texture", "TextureWidth", "TextureHeight", "Coords", "Status"];
+    public static ImmutableArray<string> RequiredKeys { get; } = ["Texture", "TextureWidth", "TextureHeight", "Coords", "Status"];
 
     private readonly Dictionary<string, MappedImage> _byName;
 

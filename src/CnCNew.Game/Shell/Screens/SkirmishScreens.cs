@@ -237,6 +237,8 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
         var ai = ImmutableArray.CreateBuilder<MatchAi>();
         ai.Add(MatchAi.Builtin);
         // Team and colour of every slot that takes part, in the order of the match's slots; the start positions follow that order (the layout has no box for them).
+        // A map's own scripts run only in the session with the script engine, and that is the session of the original AI (SidesList::prepareForMP_or_Skirmish): a user's map brings them.
+        var scripted = _originalAi || (Shell.MapCatalog.TryGetValue(_selectedMapPath, out var chosenMap) && chosenMap.HasScripts);
         var details = ImmutableArray.CreateBuilder<MatchSlotDetails>();
         details.Add(new MatchSlotDetails(_team[0], _color[0], StartPosition: 0));
         for (var slot = 1; slot < _startPositionCount; slot++)
@@ -244,8 +246,8 @@ public sealed class SkirmishSetupScreen : ShellScreen, IMapPickerOwner
             if (!_computer[slot]) continue;
             details.Add(new MatchSlotDetails(_team[slot], _color[slot], StartPosition: details.Count));
             opponents.Add(ResolveFaction(slot));
-            ai.Add(new MatchAi(_originalAi ? CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original : CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, _difficulty[slot],
-                _originalAi ? null : _tactics[slot]));
+            ai.Add(new MatchAi(scripted ? CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original : CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Builtin, _difficulty[slot],
+                scripted ? null : _tactics[slot]));
         }
         if (opponents.Count == 0) return;
         // A person plays until the match is decided (D-8); a check's short match (the client's --skirmish-seconds) has its length in game time.

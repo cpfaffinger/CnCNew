@@ -829,7 +829,19 @@ internal sealed class ClientRuntime : IDisposable
             case StartMatchOutput start:
             {
                 var size = BackBufferSize();
-                _running = Start(LiveMatch.Create(_data, start.Setup, size), null);
+                var rules = _data;
+                try
+                {
+                    rules = _data.ForMap(start.Setup.MapPath);
+                    foreach (var note in rules.MapRuleNotes) Console.WriteLine($"warning: {start.Setup.MapPath}: {note}");
+                    _running = Start(LiveMatch.Create(rules, start.Setup, size), null);
+                }
+                // A stranger's file must not end the game: whatever a map's own rules break costs that match. The shipped data keep their crash report.
+                catch (Exception refused) when (refused is CnCNew.Game.Data.MapRulesException || (!ReferenceEquals(rules, _data) && refused is not OutOfMemoryException))
+                {
+                    Console.WriteLine($"warning: {start.Setup.MapPath}: {refused.Message}");
+                    _shell!.MatchFailed(refused.Message);
+                }
                 break;
             }
             case StartNetMatchOutput net:
@@ -910,7 +922,7 @@ internal sealed class ClientRuntime : IDisposable
             if (resolution.Deviates)
                 Console.WriteLine($"[input] order {resolution.Receipt} ({resolution.Command.GetType().Name}) was answered differently at tick {resolution.Command.Tick} than its pre-check at tick {resolution.IssuedTick}: {(resolution.Result.Accepted ? "accepted" : $"rejected ({resolution.Result.Reason})")}");
         };
-        var host = new LiveMatchHost(_game, _data, game);
+        var host = new LiveMatchHost(_game, game.Data, game);
         var running = game switch
         {
             LiveMission live => new RunningGame(host, null, new MissionController(live, GameplaySettings, "English", _ui.TextMeasure), mission),

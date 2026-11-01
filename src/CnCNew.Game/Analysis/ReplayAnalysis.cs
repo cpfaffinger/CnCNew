@@ -90,7 +90,7 @@ public sealed class ReplayAnalysis
         var prepared = ReplayPlayback.Prepare(data, file, machine);
         try
         {
-            return new ReplayAnalysis(data, prepared, source);
+            return new ReplayAnalysis(prepared.Data, prepared, source);
         }
         catch (ArgumentException exception)
         {

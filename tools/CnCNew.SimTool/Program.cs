@@ -39,6 +39,7 @@ const string Usage = """
       ai-match <content-dir> --map <virtual-map-path> [--players N] [--factions A,B,..] [--max-ticks N] [--seed N] [--out replay.bin] [--trace N [--trace-army]]
                                                            skirmish AIs on a real map: record, two fresh runs, snapshot continuation;
                                                            [--tactics balanced|rush|turtle|eco|default,..] [--strength easy|medium|hard,..] [--composition ..] per slot
+      user-maps <content-dir> [--dir DIR] [--max-ticks N] [--jobs N] [--out <tsv>]   reads every map of the player's folder and starts it as a short match; says what stopped it
       skirmish-sweep <content-dir> [--max-ticks N]        starts a short two-AI skirmish on every map with >= 2 start positions;
                                                            reports which start and end (by victory or the tick budget) without crashing
       mission-run <content-dir> --map <virtual-map-path> [--ticks N] [--difficulty easy|normal|hard] [--seed N]
@@ -128,6 +129,7 @@ try
         "ai-match" when args.Length >= 2 => AiMatch(args[1], args),
         "reference-manifest" or "input-manifest" => CnCNew.SimTool.ManifestCommands.Run(args),
         "skirmish-sweep" when args.Length >= 2 => SkirmishSweep(args[1], args),
+        "user-maps" when args.Length >= 2 => UserMapSweep(args[1], args),
         "unit-audit" when args.Length >= 2 => UnitAudit(args[1], args),
         "mission-run" when args.Length >= 2 => MissionRun(args[1], args),
         "perf" when args.Length >= 2 && CnCNew.SimTool.OriginalAi.Requested(args) => CnCNew.SimTool.PerfCommand.OriginalSkirmish(args),
@@ -569,6 +571,84 @@ static int AiMatch(string directory, string[] args)
         Console.WriteLine($"  {player.Faction}: {string.Join(", ", world.Entities.Where(value => value.Owner == player.Id && !value.EffectivelyDead).GroupBy(value => value.Template.Name).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => $"{group.Key}={group.Count()}"))}");
     Console.WriteLine($"Rejections by reason: {string.Join(", ", Enum.GetValues<CommandRejection>().Where(reason => world.RejectionCounts[(int)reason] > 0).Select(reason => $"{reason}={world.RejectionCounts[(int)reason]}"))}.");
     return identical && continued && first.FinalHash == second.FinalHash ? 0 : 1;
+}
+
+/// <summary>
+/// What a player's own folder of maps does in this game: every map is read and started as a short two-faction match, and the table says what stopped it, and how many of its objects this
+/// game does not know. It reads the folder and writes only the table; a map's name is the player's, so the table belongs outside the repository.
+/// </summary>
+static int UserMapSweep(string directory, string[] args)
+{
+    var maxTicks = CnCNew.SimTool.ToolRate.Budget(args, "--max-ticks", 3000);
+    var folder = Arg(args, "--dir") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Command and Conquer Generals Zero Hour Data", "Maps");
+    var jobs = int.Parse(Arg(args, "--jobs") ?? "4", CultureInfo.InvariantCulture);
+    var data = CnCNew.Game.Data.GameData.Load(directory, rate: CnCNew.SimTool.ToolRate.Current, rules: CnCNew.SimTool.ToolRate.Rules);
+    var scan = ContentFileSystem.ScanUserMaps(folder);
+    data.Content.AddUserMaps(scan);
+    var files = scan.Files.Where(file => file.DiskPath.EndsWith(".map", StringComparison.OrdinalIgnoreCase)).ToArray();
+    var rows = new string[files.Length];
+    Parallel.For(0, files.Length, new ParallelOptions { MaxDegreeOfParallelism = jobs }, index =>
+    {
+        var path = files[index].Entry.VirtualPath;
+        var name = Path.GetFileNameWithoutExtension(files[index].DiskPath);
+        var overlay = File.Exists(Path.Combine(Path.GetDirectoryName(files[index].DiskPath)!, "map.ini")) ? "map.ini" : "-";
+        string state, detail = "-";
+        var starts = -1;
+        var objects = 0;
+        var unknown = 0;
+        var firstUnknown = "-";
+        var scripts = 0;
+        var yours = -1;
+        var lacking = "-";
+        try
+        {
+            CnCNew.Data.World.MapData map;
+            using (var stream = File.OpenRead(files[index].DiskPath)) map = SageMapDecoder.Decode(stream);
+            var terrain = TerrainMap.Build(map, path);
+            starts = terrain.StartPositions.Length;
+            scripts = map.PlayerScripts.Sum(list => list.Scripts.Length + list.Groups.Sum(group => group.Scripts.Length));
+            var rules = data.ForMap(path);
+            var catalog = rules.Templates;
+            var chosen = ReferenceMatchScenario.Participants(catalog, out _).Take(2).ToImmutableArray();
+            var names = map.Objects.Where(mapObject => !mapObject.IsWaypoint && !mapObject.IsRoadPoint && !mapObject.IsBridgePoint).Select(mapObject => mapObject.Name).ToArray();
+            objects = names.Length;
+            var missing = names.Where(mapName => !catalog.TryGet(mapName, out _)).ToArray();
+            unknown = missing.Length;
+            if (missing.Length > 0) firstUnknown = missing.Order(StringComparer.Ordinal).First();
+            if (starts < 2) state = "no-skirmish";
+            else
+            {
+                var options = SkirmishMatchOptions.Standard with { MaxTicks = maxTicks, GraceTicks = CnCNew.SimTool.ToolRate.GraceWithinBudget(SkirmishMatchOptions.Standard.GraceTicks, maxTicks, catalog.Rate) };
+                new SkirmishMatchScenario(options).Record(catalog, rules.Fingerprint, terrain, map.Objects, chosen);
+                // What the client builds in front of a match: its rules reach the HUD and the sky as well.
+                var setup = new CnCNew.Game.Live.MatchSetup(path, chosen[0].Faction.Name, [chosen[1].Faction.Name], options);
+                // The session the skirmish setup chooses: a map with scripts of its own plays with the script engine.
+                if (scripts > 0) setup = setup with { Ai = [new CnCNew.Game.Live.MatchAi(CnCNew.Simulation.Skirmish.Original.SkirmishAiKind.Original)] };
+                var live = CnCNew.Game.Live.LiveMatch.Create(rules, setup, new System.Numerics.Vector2(1280, 720));
+                _ = new CnCNew.Game.Hud.MatchController(live, CnCNew.Ui.Settings.GameSettings.Default);
+                _ = live.Environment;
+                for (var step = 0; step < 1800; step++) live.Advance(1.0 / 30);
+                yours = live.World.EntitiesOwnedBy(live.Human).AsSpan().Length;
+                state = yours == 0 ? "empty" : "played";
+                if (live.Scripted is { } session)
+                {
+                    lacking = string.Join(' ', session.Mission.Engine.MissingActionHits.Keys.Concat(session.Mission.Engine.MissingConditionHits.Keys).Order(StringComparer.Ordinal));
+                    if (lacking.Length == 0) lacking = "-";
+                }
+            }
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            state = "failed";
+            detail = $"{exception.GetType().Name}: {exception.Message}".ReplaceLineEndings(" ");
+        }
+        rows[index] = string.Join('\t', name, state, starts.ToString(CultureInfo.InvariantCulture), scripts.ToString(CultureInfo.InvariantCulture), yours.ToString(CultureInfo.InvariantCulture), overlay, objects.ToString(CultureInfo.InvariantCulture), unknown.ToString(CultureInfo.InvariantCulture), firstUnknown, lacking, detail);
+    });
+    var table = new[] { "map\tstate\tstarts\tscripts\tyours\toverlay\tobjects\tunknown\tfirstUnknown\tmissingScriptTypes\tdetail" }.Concat(rows).ToArray();
+    if (Arg(args, "--out") is { } file) File.WriteAllLines(file, table);
+    foreach (var group in rows.Select(row => row.Split('\t')[1]).GroupBy(state => state).OrderBy(group => group.Key, StringComparer.Ordinal)) Console.WriteLine($"{group.Key}: {group.Count()}");
+    Console.WriteLine($"with a map.ini: {rows.Count(row => row.Split('\t')[5] == "map.ini")}, with objects this game does not know: {rows.Count(row => row.Split('\t')[7] != "0")}, of {rows.Length} maps; folders not read: {scan.Problems.Length}");
+    return rows.Any(row => row.Split('\t')[1] == "failed") ? 1 : 0;
 }
 
 /// <summary>

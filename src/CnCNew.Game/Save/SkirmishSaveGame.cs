@@ -89,7 +89,10 @@ public static class SkirmishSaveGame
     }
 
     /// <summary>Checks the file and returns its session state; restoring the session needs the map, which the caller loads (<c>LiveMatch.Restore</c>).</summary>
-    public static LoadedSkirmishSave Load(ReadOnlySpan<byte> bytes, int tickRate, string definitionFingerprint)
+    public static LoadedSkirmishSave Load(ReadOnlySpan<byte> bytes, int tickRate, string definitionFingerprint) => Load(bytes, tickRate, _ => definitionFingerprint);
+
+    /// <param name="definitionFingerprintOf">The fingerprint of the data for a map: a user's map with rules of its own has its own (<see cref="CnCNew.Game.Data.GameData.FingerprintFor"/>).</param>
+    public static LoadedSkirmishSave Load(ReadOnlySpan<byte> bytes, int tickRate, Func<string, string> definitionFingerprintOf)
     {
         try
         {
@@ -97,7 +100,7 @@ public static class SkirmishSaveGame
             var root = new JsonStateReader(document.RootElement);
             var header = Header(root);
             if (header.TickRate != tickRate) throw new SaveGameException($"This savegame was written at {header.TickRate} Hz; this session runs at {tickRate} Hz. It cannot be loaded.");
-            if (!string.Equals(header.DefinitionFingerprint, definitionFingerprint, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(header.DefinitionFingerprint, definitionFingerprintOf(header.MapPath), StringComparison.OrdinalIgnoreCase))
                 throw new SaveGameException("This savegame was written with different game data (definition fingerprint mismatch) and cannot be loaded.");
             var session = root.Text("session");
             if (session is not ("builtin" or "original")) throw new SaveGameException($"Unknown session kind '{session}' in the savegame.");

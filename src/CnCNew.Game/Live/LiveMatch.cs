@@ -443,9 +443,11 @@ public sealed class LiveMatch : LiveGame
     /// </summary>
     public static LiveMatch Restore(GameData data, ReadOnlySpan<byte> save, Vector2 viewport)
     {
-        var loaded = CnCNew.Game.Save.SkirmishSaveGame.Load(save, data.Rate.TicksPerSecond, data.Fingerprint);
+        var loaded = CnCNew.Game.Save.SkirmishSaveGame.Load(save, data.Rate.TicksPerSecond, data.FingerprintFor);
         var mapPath = loaded.Header.MapPath;
         if (!data.Content.Exists(mapPath)) throw new CnCNew.Game.Save.SaveGameException($"The savegame was played on '{mapPath}', which this game does not have.");
+        try { data = data.ForMap(mapPath); }
+        catch (CnCNew.Game.Data.MapRulesException refused) { throw new CnCNew.Game.Save.SaveGameException(refused.Message); }
         MapData map;
         using (var stream = data.Content.OpenRead(mapPath)) map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, mapPath);

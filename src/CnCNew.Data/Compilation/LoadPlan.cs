@@ -190,7 +190,7 @@ public static class OriginalLoadPlan
                         : $"language '{fileLanguage}' is not the selected language '{language}'"));
                 continue;
             }
-            if (path.StartsWith("Maps/", StringComparison.OrdinalIgnoreCase) && path.EndsWith("/map.ini", StringComparison.OrdinalIgnoreCase))
+            if ((path.StartsWith("Maps/", StringComparison.OrdinalIgnoreCase) || path.StartsWith("UserMaps/", StringComparison.OrdinalIgnoreCase)) && path.EndsWith("/map.ini", StringComparison.OrdinalIgnoreCase))
             {
                 if (maps == MapOverlayMode.Exclude)
                     excluded.Add(new PlannedFile(path, IniFileClass.MapOverlay, -1, 0, "excluded", "map overlays are excluded from this compilation"));

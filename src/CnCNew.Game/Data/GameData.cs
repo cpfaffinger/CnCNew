@@ -96,17 +96,69 @@ public sealed class GameData
         var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Exclude };
         var graph = DefinitionCompiler.Compile(new ContentDefinitionSource(content), ModuleRegistry.Default, options);
         progress?.Invoke("Building catalogs");
+        return Build(content, graph, modelGeometry, rate ?? DefaultSessionRate, rules ?? CnCNew.Simulation.Rules.RuleProfile.Product, null);
+    }
+
+    private static GameData Build(ContentFileSystem content, CompiledDefinitionGraph graph, bool modelGeometry, SimulationRate rate, CnCNew.Simulation.Rules.RuleProfile rules, string? fingerprintOfOverlay)
+    {
         var visuals = ObjectVisualCatalog.Build(graph);
         // The airfields' parking and runway points come from the draw models' bones, which the simulation cannot read: they enter the world as fingerprinted data (docs/SIM-JET-FLIGHT.md).
         var geometry = modelGeometry ? ModelGeometryLoader.Load(graph, visuals, content) : ModelGeometry.None;
-        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate ?? DefaultSessionRate, geometry, rules ?? CnCNew.Simulation.Rules.RuleProfile.Product);
-        var fingerprint = templates.Rules.Combine(templates.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256)));
+        var templates = TemplateCatalog.Build(graph, ModuleBindingTable.Default, rate, geometry, rules);
+        var fingerprint = fingerprintOfOverlay ?? templates.Rules.Combine(templates.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256)));
         var fx = FxCatalog.Build(graph);
         var audio = AudioCatalog.FromGraph(graph, content.Exists);
         var images = MappedImageTable.FromGraph(graph);
         var factions = ReferenceMatchScenario.Participants(templates, out _);
         var maps = EnumerateMaps(content);
-        return new GameData(content, graph, templates, fingerprint, visuals, fx, audio, images, factions, maps);
+        return new GameData(content, graph, templates, fingerprint, visuals, fx, audio, images, factions, maps) { _modelGeometry = modelGeometry };
+    }
+
+    private bool _modelGeometry;
+
+    /// <summary>What a map's <c>map.ini</c> asked for that does not exist, and what became of it.</summary>
+    public ImmutableArray<string> MapRuleNotes { get; private set; } = [];
+
+    /// <summary>The <c>map.ini</c> of a user's map, if it has one. The shipped maps keep the base data: their rules in a <c>map.ini</c> are F-95.</summary>
+    private string? UserMapOverlay(string mapPath)
+    {
+        if (!mapPath.StartsWith(ContentFileSystem.UserMapPrefix, StringComparison.Ordinal)) return null;
+        var overlay = mapPath[..(mapPath.LastIndexOf('/') + 1)] + "map.ini";
+        return Content.Exists(overlay) ? overlay : null;
+    }
+
+    /// <summary>
+    /// The fingerprint of the data <see cref="ForMap"/> gives for this map, without building it: the replay list and a saved game judge a file by this. It rests on the base data and the
+    /// bytes of the <c>map.ini</c>, so every machine with both comes to the same value.
+    /// </summary>
+    public string FingerprintFor(string mapPath)
+        => UserMapOverlay(mapPath) is { } overlay
+            ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{Fingerprint}\n{Content.FileHash(overlay).ToUpperInvariant()}")))
+            : Fingerprint;
+
+    /// <summary>
+    /// The data a match on this map runs with: this data, or for a user's map with a <c>map.ini</c> the definitions compiled again with it on top (<c>GameLogic::startNewGame</c>,
+    /// <c>INI_LOAD_CREATE_OVERRIDES</c>). A map's rules are how its author built it, and many of the maps players collect are whole small mods. Throws <see cref="MapRulesException"/> when they do not compile.
+    /// </summary>
+    public GameData ForMap(string mapPath)
+    {
+        if (UserMapOverlay(mapPath) is not { } overlay) return this;
+        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Include };
+        try
+        {
+            var notes = new List<string>();
+            string text;
+            using (var reader = new StreamReader(Content.OpenRead(overlay), System.Text.Encoding.Latin1)) text = reader.ReadToEnd();
+            var cleaned = MapRulesText.Clean(text, name => Templates.Weapons.TryGet(name, out _), model => Content.Exists($"Art/W3D/{model}.W3D"), notes);
+            var graph = DefinitionCompiler.Compile(new OverlaySource(Content, overlay, cleaned), ModuleRegistry.Default, options);
+            var data = Build(Content, graph, _modelGeometry, Rate, Rules, FingerprintFor(mapPath));
+            data.MapRuleNotes = [.. notes];
+            return data;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            throw new MapRulesException($"The rules of this map ({overlay}) cannot be read: {exception.Message}", exception);
+        }
     }
 
     /// <summary>The script library of the original skirmish AI in the content.</summary>
@@ -173,6 +225,19 @@ public sealed class GameData
     /// (<c>GameTextManager::init</c> opens the CSF or <c>Generals.str</c> only), so that the retail executable does is inferred from the data, not shown.
     /// </summary>
     public const string PatchStringFile = "Data/Patch.str";
+}
+
+/// <summary>A map's <c>map.ini</c> that this game cannot read.</summary>
+public sealed class MapRulesException(string message, Exception inner) : Exception(message, inner);
+
+/// <summary>The base data and one map's overlay: a match sees its own map's rules and no other map's.</summary>
+internal sealed class OverlaySource(ContentFileSystem content, string overlay, string overlayText) : IDefinitionSource
+{
+    public IEnumerable<string> EnumerateIniFiles()
+        => content.EnumerateFiles().Where(path => path.EndsWith(".ini", StringComparison.OrdinalIgnoreCase) && !path.EndsWith("/map.ini", StringComparison.OrdinalIgnoreCase)).Append(overlay);
+    public Stream OpenRead(string virtualPath)
+        => virtualPath.Equals(overlay, StringComparison.OrdinalIgnoreCase) ? new MemoryStream(System.Text.Encoding.Latin1.GetBytes(overlayText)) : content.OpenRead(virtualPath);
+    public bool Exists(string virtualPath) => content.Exists(virtualPath);
 }
 
 public sealed class ContentDefinitionSource(ContentFileSystem content) : IDefinitionSource

@@ -131,7 +131,7 @@ public sealed class ReplayPlayback
         var prepared = Prepare(data, file, machine);
         try
         {
-            return new ReplayPlayback(data, prepared.Recording, prepared.Replay, prepared.Description, prepared.Map, prepared.Terrain, viewport, options ?? new ReplayPlaybackOptions(),
+            return new ReplayPlayback(prepared.Data, prepared.Recording, prepared.Replay, prepared.Description, prepared.Map, prepared.Terrain, viewport, options ?? new ReplayPlaybackOptions(),
                 prepared.SimulationId);
         }
         catch (ArgumentException exception)
@@ -141,7 +141,7 @@ public sealed class ReplayPlayback
     }
 
     /// <summary>A replay file read and checked, with what its match is built from: the description, the map and its terrain, and the build this game states.</summary>
-    internal sealed record Prepared(MatchRecording Recording, ReplayFile Replay, MatchDescription Description, MapData Map, TerrainMap Terrain, string SimulationId);
+    internal sealed record Prepared(GameData Data, MatchRecording Recording, ReplayFile Replay, MatchDescription Description, MapData Map, TerrainMap Terrain, string SimulationId);
 
     /// <summary>
     /// Reads and checks a replay file as a playback does (and the analysis of a replay, <c>ReplayAnalysis</c>): the header against this game, then the replay inside it - which
@@ -170,7 +170,7 @@ public sealed class ReplayPlayback
             throw new ReplayRefusedException("The replay is damaged: its header does not describe the match inside it.");
         try
         {
-            ReplayRunner.CheckCompatibility(replay.Header, machine.DefinitionFingerprint);
+            ReplayRunner.CheckCompatibility(replay.Header, machine.FingerprintFor(info.MapPath));
         }
         catch (ReplayRejectedException exception)
         {
@@ -181,7 +181,9 @@ public sealed class ReplayPlayback
         var terrain = TerrainMap.Build(map, description.MapPath);
         if (!string.Equals(terrain.Fingerprint, description.TerrainFingerprint, StringComparison.Ordinal))
             throw new ReplayRefusedException($"This game's '{description.MapPath}' is not the map the match was played on (its terrain differs).", ReplayCompatibilityKind.OtherMap);
-        return new Prepared(recording, replay, description, map, terrain, machine.SimulationId);
+        try { data = data.ForMap(description.MapPath); }
+        catch (CnCNew.Game.Data.MapRulesException refused) { throw new ReplayRefusedException(refused.Message, ReplayCompatibilityKind.OtherDefinitions, refused); }
+        return new Prepared(data, recording, replay, description, map, terrain, machine.SimulationId);
     }
 
     private SkirmishMatchSession Start() => LiveMatch.StartPlayback(_data, _description, _terrain, _map, Replay.Header.CheckpointInterval, _simulationId);

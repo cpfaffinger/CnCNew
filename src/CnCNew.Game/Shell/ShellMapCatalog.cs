@@ -8,7 +8,8 @@ namespace CnCNew.Game.Shell;
 /// <param name="NameLookupTag">The CSF label of the map's display name (<c>MAP:AlpineAssault</c>), or null when the entry has none.</param>
 /// <param name="IsMultiplayer">Whether the map is flagged for skirmish/multiplayer.</param>
 /// <param name="StartPositionCount">Number of <c>Player_N_Start</c> entries (playable slots).</param>
-public sealed record ShellMapEntry(string VirtualPath, string? NameLookupTag, bool IsMultiplayer, int StartPositionCount);
+/// <param name="HasScripts">A user's map with scripts of its own: only the session with the script engine plays it as its author built it.</param>
+public sealed record ShellMapEntry(string VirtualPath, string? NameLookupTag, bool IsMultiplayer, int StartPositionCount, bool HasScripts = false);
 
 /// <summary>
 /// A minimal reader of <c>Maps/MapCache.ini</c> (<c>WorldBuilder</c>'s auto-generated map cache), used only to pick

@@ -31,10 +31,14 @@ public enum ReplayCompatibilityKind
 }
 
 /// <summary>What this game is, for judging a replay: the definitions, the rate, the rule profile, the build and which maps it has.</summary>
-public sealed record ReplayMachine(string DefinitionFingerprint, int TickRate, string Rules, string SimulationId, Func<string, bool> HasMap)
+/// <param name="MapFingerprint">The fingerprint of the data for a map, where that is not <paramref name="DefinitionFingerprint"/>: a user's map with rules of its own.</param>
+public sealed record ReplayMachine(string DefinitionFingerprint, int TickRate, string Rules, string SimulationId, Func<string, bool> HasMap, Func<string, string>? MapFingerprint = null)
 {
+    /// <summary>The fingerprint a match on this map has here.</summary>
+    public string FingerprintFor(string mapPath) => MapFingerprint?.Invoke(mapPath) ?? DefinitionFingerprint;
+
     /// <summary>This game as <paramref name="data"/> and the running build make it.</summary>
-    public static ReplayMachine Of(GameData data) => new(data.Fingerprint, data.Rate.TicksPerSecond, data.Rules.Name, CnCNew.Net.BuildIdentity.Current.Id, data.Content.Exists);
+    public static ReplayMachine Of(GameData data) => new(data.Fingerprint, data.Rate.TicksPerSecond, data.Rules.Name, CnCNew.Net.BuildIdentity.Current.Id, data.Content.Exists, data.FingerprintFor);
 }
 
 /// <param name="Label">The short word of the list's state column.</param>
@@ -68,10 +72,10 @@ public sealed record ReplayCompatibility(ReplayCompatibilityKind Kind, string La
             return new(ReplayCompatibilityKind.OtherRate, $"{info.TickRate} Hz", $"The match ran at {info.TickRate} Hz; this game runs at {machine.TickRate} Hz. Start the game with --tick-rate {info.TickRate} to play it.");
         if (!string.Equals(info.Rules, machine.Rules, StringComparison.Ordinal))
             return new(ReplayCompatibilityKind.OtherRules, "Other rules", $"The match was played with the rule profile {RulesText(info.Rules)}; this game runs {RulesText(machine.Rules)}. Start the game with --rules {info.Rules} to play it.");
-        if (!string.Equals(info.DefinitionFingerprint, machine.DefinitionFingerprint, StringComparison.OrdinalIgnoreCase))
-            return new(ReplayCompatibilityKind.OtherDefinitions, "Other data", "The match was played with other game data (the definition fingerprint differs).");
         if (!machine.HasMap(info.MapPath))
             return new(ReplayCompatibilityKind.MapMissing, "Map missing", $"The match was played on '{info.MapPath}', which this game does not have.");
+        if (!string.Equals(info.DefinitionFingerprint, machine.FingerprintFor(info.MapPath), StringComparison.OrdinalIgnoreCase))
+            return new(ReplayCompatibilityKind.OtherDefinitions, "Other data", "The match was played with other game data (the definition fingerprint differs).");
         return Playable;
     }
 

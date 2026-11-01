@@ -176,7 +176,8 @@ public sealed class GameShell
             {
                 CnCNew.Data.World.MapData map;
                 using (var stream = File.OpenRead(file.DiskPath)) map = CnCNew.Formats.SageMapDecoder.Decode(stream);
-                maps.Add(new ShellMapEntry(file.Entry.VirtualPath, null, true, CnCNew.Simulation.Terrain.TerrainMap.Build(map, file.Entry.VirtualPath).StartPositions.Length));
+                var scripted = map.PlayerScripts.Any(list => list.Scripts.Length + list.Groups.Length > 0);
+                maps.Add(new ShellMapEntry(file.Entry.VirtualPath, null, true, CnCNew.Simulation.Terrain.TerrainMap.Build(map, file.Entry.VirtualPath).StartPositions.Length, scripted));
             }
             catch (Exception exception) when (exception is not OutOfMemoryException)
             {
@@ -823,6 +824,14 @@ public sealed class GameShell
     {
         ReplayStopped();
         ShowError(CnCNew.Game.Replays.ReplayText.CannotPlayTitle, message);
+    }
+
+    /// <summary>The host could not start the skirmish the shell handed it (the rules of a user's map do not compile): back to the menu, with why.</summary>
+    public void MatchFailed(string message)
+    {
+        Phase = ShellPhase.Menus;
+        Replace(new MainMenuScreen(this));
+        ShowError("The map cannot be played", message);
     }
 
     /// <summary>Starts (or restarts) the current mission of <paramref name="controller"/> and shows its briefing
