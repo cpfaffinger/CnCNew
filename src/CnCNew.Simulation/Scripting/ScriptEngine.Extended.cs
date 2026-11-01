@@ -226,8 +226,9 @@ public sealed partial class ScriptEngine
             case CnCNew.Simulation.Events.SimEventKind.EntitySpawned:
                 if (_world.FindEntity(item.Entity) is { } produced)
                 {
-                    JoinProducedUnit(produced);
-                    AiObserveSpawn(produced);
+                    var factory = TakeFactoryOf(produced);
+                    JoinProducedUnit(produced, factory);
+                    AiObserveSpawn(produced, factory != 0);
                 }
                 break;
             case CnCNew.Simulation.Events.SimEventKind.ConstructionCompleted:

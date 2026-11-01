@@ -389,13 +389,9 @@ public sealed partial class ScriptEngine
     /// <c>AIPlayer::onUnitProduced</c>: a unit that came out of a factory joins the team whose order waits for that type at that factory (<c>m_factoryID</c>); the team activates (<c>setActive</c>) once
     /// every minimum is met. What a script creates comes out of no factory and fills no order.
     /// </summary>
-    private void JoinProducedUnit(Entity unit)
+    private void JoinProducedUnit(Entity unit, uint factory)
     {
-        var made = _madeByFactories.FindIndex(entry => entry.Template == unit.Template.Index);
-        if (made < 0) return;
-        var factory = _madeByFactories[made].Factory;
-        _madeByFactories.RemoveAt(made);
-        if (_teamBuilds.Count == 0) return;
+        if (factory == 0 || _teamBuilds.Count == 0) return;
         // "factory could be NULL at the start of the game": what a session placed before its first tick came out of no factory and fills no order.
         if (unit.SpawnTick <= 0) return;
         var order = _teamBuilds.FirstOrDefault(candidate => candidate.Joined < candidate.Queued && candidate.Factory == factory && candidate.Type == unit.Template.Name
@@ -413,6 +409,16 @@ public sealed partial class ScriptEngine
         }
         if (_program.FindTeam(joined.Prototype) is { Home.Length: > 0 } built && _program.FindWaypoint(built.Home) is { } home && unit.Template.Locomotor is not null) MoveTo(unit, home.X, home.Y);
         if (_teamBuilds.Where(other => other.TeamId == order.TeamId).All(other => other.Joined >= other.Total)) _teamBuilds.RemoveAll(other => other.TeamId == order.TeamId);
+    }
+
+    /// <summary>The factory that finished this object in the step being observed (<c>onUnitProduced</c>'s <c>factory</c>), or 0: whatever else appears came out of none.</summary>
+    private uint TakeFactoryOf(Entity unit)
+    {
+        var made = _madeByFactories.FindIndex(entry => entry.Template == unit.Template.Index);
+        if (made < 0) return 0;
+        var factory = _madeByFactories[made].Factory;
+        _madeByFactories.RemoveAt(made);
+        return factory;
     }
 
     private void DescribeTeamBuilds(IStateWriter writer)

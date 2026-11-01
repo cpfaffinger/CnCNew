@@ -559,11 +559,14 @@ public sealed partial class ScriptEngine
         }
     }
 
-    /// <summary><c>AIPlayer::onUnitProduced</c> / <c>onStructureProduced</c>: something of an AI player came into the world, so its queues are looked at again at once.</summary>
-    private void AiObserveSpawn(Entity entity)
+    /// <summary>
+    /// <c>AIPlayer::onUnitProduced</c>: something of an AI player came out of a factory, so its queues are looked at again at once. A skirmish takes whatever appears for that; in a mission most of
+    /// it is a script's, and that does not shorten the five seconds.
+    /// </summary>
+    private void AiObserveSpawn(Entity entity, bool fromFactory)
     {
         if (AiOfPlayer(entity.Owner) is not { } state) return;
-        state.TeamCheckTick = _tick;
+        if (fromFactory || IsSkirmish) state.TeamCheckTick = _tick;
         if (entity.Template.IsKindOf("STRUCTURE")) return;
         // "factory could be null at the start of the game." Nor does the worker of a hole count as produced: it comes up where the hole lies, and no order waits for it.
         if (entity.SpawnTick > 0 && !StandsOnAHole(entity)) AiUnitProduced(state, entity);
