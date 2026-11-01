@@ -70,7 +70,7 @@ internal sealed class ClientRuntime : IDisposable
         _movies = CnCNew.Game.Movies.MovieDirector.For(data, "English", _audio.Game, name => _audio.Game.Director.OnMovieRequested(name));
         if (_shell is not null) _shell.Movies = _movies;
         _minimapBatch = new SpriteBatch(game.GraphicsDevice);
-        _filters = new ScreenFilters(game.GraphicsDevice);
+        _filters = new ScreenFilters(game.GraphicsDevice, game.EffectSystem);
         _ui.CustomDraw = DrawCustom;
         _cursor = new SoftwareCursor(game.GraphicsDevice, data);
     }
@@ -542,7 +542,7 @@ internal sealed class ClientRuntime : IDisposable
             $"mission: {_frame} frames, world tick {mission.Tick} at {mission.World.Time.Rate}, session steps {_running.MissionSteps} (script VM updates), outcome {mission.Outcome}, over {mission.IsOver}, missing action hits {engine.MissingActionHits.Values.Sum()}, missing condition hits {engine.MissingConditionHits.Values.Sum()}",
         };
         lines.AddRange(mission.Director.Report());
-        lines.Add($"mission screen filters: {_filters.FramesFiltered} frames drawn through the grey-scale or the motion blur; camera shake offset at exit {mission.Camera.ShakeOffset.Length():F2}, border {mission.Camera.ActiveBoundary}");
+        lines.Add($"mission screen filters: {_filters.FramesFiltered} frames drawn through the grey-scale or the motion blur; grey shader {(_filters.GreyShaderState.Length == 0 ? "not needed" : _filters.GreyShaderState)}; camera shake offset at exit {mission.Camera.ShakeOffset.Length():F2}, border {mission.Camera.ActiveBoundary}");
         foreach (var entry in mission.Director.Journal.Take(journalLines)) lines.Add($"mission journal: {entry}");
         return lines;
     }
