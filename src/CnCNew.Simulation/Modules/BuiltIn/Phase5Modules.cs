@@ -2983,6 +2983,14 @@ public sealed class ProductionUpdate(ProductionData data) : SimModule, IUpdateMo
         var frame = world.Time.TicksPerOriginalFrame;
         if (_constructionComplete >= 0 && !ConstructionCompleteAt(world.Tick, frame)) _constructionComplete = -1;
         var head = _queue[0];
+        // ProductionUpdate::update: "you can disallow types of units on the fly in scripts": a unit that may not be built any more leaves the queue, refunded. "Don't cancel dozers."
+        if (head.UpgradeIndex < 0 && world.Templates[head.TemplateIndex] is var queued && !world.AllowedToBuild(Entity.Owner, queued) && !queued.IsKindOf("DOZER"))
+        {
+            TryCancel(0, out var refund);
+            world.AddMoney(Entity.Owner, refund);
+            world.MarkDirty(Entity);
+            return _queue.Count == 0 ? SimulationTiming.SleepForever : SimulationTiming.SleepNone;
+        }
         var exit = Entity.Modules.OfType<IProductionExit>().FirstOrDefault();
         // ProductionUpdate::update: one more frame under construction against calcTimeToBuild of this frame - a unit's total follows the player's power, an upgrade's does not.
         var elapsed = head.ElapsedTicks + TickOrder.Next;

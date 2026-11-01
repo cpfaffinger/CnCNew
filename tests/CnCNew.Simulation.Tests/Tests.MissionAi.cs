@@ -66,4 +66,29 @@ static partial class Tests
 
         Check.Throws<TemplateBuildException>(() => _ = new SyntheticFixture(TestRate.Default, files: new Dictionary<string, string>(ScriptFiles()) { ["Data/INI/GameData.ini"] = "GameData\n  DefaultStartingCash = plenty\nEnd\n" }), "DefaultStartingCash");
     }
+
+    /// <summary>
+    /// <c>ProductionUpdate::update</c>: a unit that may not be built any more is cancelled and refunded when it comes to the head of the queue; a dozer is not. <c>PLAYER_DISABLE_UNIT_CONSTRUCTION</c> did not
+    /// touch a queue before.
+    /// </summary>
+    public static void ADisabledFactoryRefundsItsUnitsButNotItsDozers()
+    {
+        var session = StartMission([Scr.Script("Off", [Scr.And(Scr.If("FLAG", Scr.Flag("off"), Scr.Bool(true)))], [Scr.Do("PLAYER_DISABLE_UNIT_CONSTRUCTION", Scr.Side(PlayerA))], oneShot: true)],
+            objects: [Placed("AlphaCenter", 100m, 100m, "teamA", "Hq")]);
+        Run(session, session.Frames(2));
+        session.World.SetMoney(HumanOfAiMission, Fixed.FromInt(1000));
+        var hq = NamedIn(session, "Hq")!;
+        var production = hq.Modules.OfType<CnCNew.Simulation.Modules.BuiltIn.ProductionUpdate>().First();
+        foreach (var template in new[] { "AlphaSoldier", "AlphaDozer" })
+            Check.That(session.Issue(HumanOfAiMission, (sequence, tick) => new CnCNew.Simulation.Commands.QueueProductionCommand(HumanOfAiMission, sequence, tick, hq.Id, template)).Accepted, $"{template} is queued.");
+        Run(session, 1);
+        Check.That(session.World.MoneyOf(HumanOfAiMission) == Fixed.FromInt(955) && production.Queue.Length == 2, $"Both are paid for ({session.World.MoneyOf(HumanOfAiMission)}).");
+        session.Engine.SignalUiInteraction("off");
+        Run(session, session.Frames(2));
+        Check.That(!session.World.CanBuildUnits(HumanOfAiMission), "The script switched units off.");
+        Check.That(session.World.MoneyOf(HumanOfAiMission) == Fixed.FromInt(980), $"The soldier at the head of the queue is refunded ({session.World.MoneyOf(HumanOfAiMission)}).");
+        Check.That(production.Queue.Length == 1 && session.World.Templates[production.Queue[0].TemplateIndex].Name == "AlphaDozer", "The dozer stays in the queue.");
+        Run(session, session.Frames(60));
+        Check.That(production.Queue.Length == 0 && session.World.Entities.Any(entity => entity.Template.Name == "AlphaDozer"), "And is built.");
+    }
 }

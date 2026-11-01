@@ -347,6 +347,9 @@ public interface IWorldServices
     /// <summary><c>Player::getPlayerType() == PLAYER_COMPUTER</c>.</summary>
     bool IsComputerPlayer(PlayerId player);
 
+    /// <summary><c>Player::allowedToBuild</c>: the switches of the <c>PLAYER_DISABLE_*_CONSTRUCTION</c> script actions, by whether the template is a structure.</summary>
+    bool AllowedToBuild(PlayerId player, ObjectTemplate template);
+
     /// <summary>A rebuild hole sends out its worker (<see cref="SimulationWorld.EnableHoleRebuilding"/>); otherwise it stays a hole, and <c>docs/SIMULATION-CORE.md</c> says why.</summary>
     bool HolesRebuild { get; }
 

@@ -1,6 +1,7 @@
 using CnCNew.Simulation.Ids;
 using CnCNew.Simulation.Modules;
 using CnCNew.Simulation.Numerics;
+using CnCNew.Simulation.Templates;
 
 namespace CnCNew.Simulation.World;
 
@@ -40,6 +41,9 @@ public sealed partial class SimulationWorld
 
     public bool CanBuildStructures(PlayerId player) => !_players.TryGetValue(player.Value, out var state) || state.CanBuildBase;
     public bool CanBuildUnits(PlayerId player) => !_players.TryGetValue(player.Value, out var state) || state.CanBuildUnits;
+
+    /// <inheritdoc cref="Modules.IWorldServices.AllowedToBuild"/>
+    public bool AllowedToBuild(PlayerId player, ObjectTemplate template) => template.IsKindOf("STRUCTURE") ? CanBuildStructures(player) : CanBuildUnits(player);
 
     /// <summary>
     /// Map reveal/shroud for one player (<c>ScriptActions::doRevealMapEntirePermanently</c>, <c>doRevealMapEntire</c>, <c>doRevealMapAtWaypoint</c>,

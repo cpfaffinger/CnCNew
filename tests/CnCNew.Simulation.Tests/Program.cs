@@ -596,6 +596,7 @@ run.Test("Skirmish profiles: easy, medium and hard decide at their pace and know
 run.Test("Skirmish AI: an army that stopped growing marches with what it has", Tests.SkirmishArmyDoesNotStandStill);
 run.Test("Skirmish profiles: balanced is the AI as it was; profiles and strengths travel with description and savegame", Tests.SkirmishProfilesTravelWithTheMatch);
 run.Test("Mission AI: the players of a mission start with the default cash and the map's money", Tests.MissionPlayersStartWithTheDefaultCash);
+run.Test("Mission AI: a factory that may not build refunds its units, but keeps its dozers", Tests.ADisabledFactoryRefundsItsUnitsButNotItsDozers);
 run.Test("Original skirmish AI: AIData is read strictly", Tests.OriginalAiDataIsReadStrictly);
 run.Test("Original skirmish AI: the script library is attached to the slots like the reference does", Tests.OriginalAiScriptLibraryIsAttachedLikeTheReference);
 run.Test("Original skirmish AI: base, teams, difficulty per player, determinism and save/restore", Tests.OriginalAiPlaysASkirmishFromItsScripts);
