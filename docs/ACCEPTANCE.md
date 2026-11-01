@@ -197,6 +197,7 @@ are only asked with `-IncludeOptional`. The PERF items cost nothing: they are ju
 | SKIRM-05 | Your units make way for a building | 1.0 | window (motion) | `skirmish` |
 | SKIRM-06 | Computer units come at what they see | 1.0 | window (motion) | `skirmish` |
 | SKIRM-07 | The general's window | 2.0 | stills | `skirmish` |
+| SKIRM-08 | Your own maps | 5.0 | window (motion) | `shell` |
 | SHELL-12 | The Generals' Challenge before a match | 3.0 | window (motion, sound) | `shell-sub` |
 | SHELL-13 | The record in the skirmish setup | 2.0 | window (motion) | `shell-match` |
 | REPLAY-01 | The analysis of a match | 2.0 | window (motion) | `replay-run` |

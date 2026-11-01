@@ -294,6 +294,7 @@ planned to change. New deviations are entered here before they are fixed or left
 | F-92 | Team actions reach every instance of a prototype without a calling team (`TeamsNamed`), where `getTeamNamed` gives one | `ScriptEngine::getTeamNamed` | Phase 9 (found with F-21) | **done** (Phase 59, §71: one instance, the newest; instances of a script walked newest first; a team's victim kept as the instance) |
 | F-93 | The players of a mission started with the money of their template, which is 0 in the shipped data | `Player::init`, `Player::initFromDict` | F-91 | **done** (`docs/SKIRMISH-AI-ORIGINAL.md` §10): `DefaultStartingCash`, the map's `playerStartMoney` on top; the human player too |
 | F-94 | `PLAYER_DISABLE_UNIT_CONSTRUCTION` did not touch a queue | `ProductionUpdate::update` | F-91 | **done** (`docs/SKIRMISH-AI-ORIGINAL.md` §10): cancelled and refunded at the head of the queue, a dozer excepted |
+| F-95 | A shipped map's `map.ini` reaches only the sky and the weather; the definitions of a match are the base data. With the patch 83 maps carry one | `GameLogic::startNewGame` (`INI_LOAD_CREATE_OVERRIDES`) | a user's map, 1 November 2026 | **open**: a user's map has it since `GameData.ForMap`; for the shipped maps the same call changes missions and skirmishes, so it needs its manifest commit |
 | F-33 | Installer: Steam outside the default path untested; export contains the original program files; manifest hash Windows-only; client not self-contained | – | publication | fix in R1 |
 
 ## 4. Human acceptance backlog
