@@ -120,6 +120,7 @@ internal static class AiProfiles
 
     private static string Play(SimContext context, string subject, string side, AiSlotChoice choice, string id, string mapPath, string[] factions, uint seed, long maxTicks)
     {
+        context = context.ForMap(mapPath);
         using var stream = context.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, mapPath);

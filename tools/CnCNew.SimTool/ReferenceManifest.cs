@@ -630,6 +630,7 @@ internal static class ReferenceManifest
 
     private static JobResult AiMatchJob(SimContext context, string mapPath, string[] factions, SkirmishMatchOptions options, VerifyMode verify)
     {
+        context = context.ForMap(mapPath);
         using var stream = context.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, mapPath);
@@ -644,6 +645,7 @@ internal static class ReferenceManifest
     /// <summary>One map of the sweep: decoded, and when it has at least two start positions played live by the first two factions to its end or the tick budget.</summary>
     private static JobResult SweepMapJob(SimContext context, string path, SkirmishMatchOptions options, VerifyMode verify)
     {
+        context = context.ForMap(path);
         var values = new ManifestObject();
         try
         {
@@ -706,6 +708,7 @@ internal static class ReferenceManifest
     /// </summary>
     private static JobResult MissionJob(SimContext context, string mapPath, bool challenge, string faction, long ticks, VerifyMode verify)
     {
+        context = context.ForMap(mapPath);
         using var stream = context.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, mapPath);

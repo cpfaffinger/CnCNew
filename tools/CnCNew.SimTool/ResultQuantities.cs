@@ -143,6 +143,7 @@ internal static class ResultQuantities
 
     public static ManifestObject AiMatch(SimContext context, string mapPath, string[] factions, SkirmishMatchOptions options, Func<SimContext, IReadOnlyList<string>, System.Collections.Immutable.ImmutableArray<MatchParticipant>> participants)
     {
+        context = context.ForMap(mapPath);
         using var stream = context.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, mapPath);
@@ -154,6 +155,7 @@ internal static class ResultQuantities
 
     public static ManifestObject SweepMap(SimContext context, string path, SkirmishMatchOptions options)
     {
+        context = context.ForMap(path);
         try
         {
             using var stream = context.Content.OpenRead(path);
@@ -177,6 +179,7 @@ internal static class ResultQuantities
 
     public static ManifestObject Mission(SimContext context, string mapPath, bool challenge, string faction, long ticks)
     {
+        context = context.ForMap(mapPath);
         using var stream = context.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, mapPath);

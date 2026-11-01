@@ -132,6 +132,7 @@ internal static class AiCensus
 
     private static MatchCensus Play(SimContext context, string id, string mapPath, string[] factions, uint seed, long maxTicks, string[] args)
     {
+        context = context.ForMap(mapPath);
         using var stream = context.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, mapPath);

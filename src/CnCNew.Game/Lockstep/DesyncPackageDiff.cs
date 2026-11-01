@@ -68,7 +68,8 @@ public static class DesyncPackageDiff
         var replay = ReplayFormat.Read(File.ReadAllBytes(Path.Combine(directory, "replay.bin")));
         var description = SkirmishReplay.DescriptionOf(replay.Header) ?? throw new InvalidDataException("The package's recording has no match description.");
         var map = loadMap(description.MapPath);
-        var played = SkirmishReplay.Play(replay, catalog, definitionFingerprint, map.Terrain, map.Objects, stopAtFirstDeviation: false, audit: false);
+        var (templates, fingerprint) = map.Rules ?? (catalog, definitionFingerprint);
+        var played = SkirmishReplay.Play(replay, templates, fingerprint, map.Terrain, map.Objects, stopAtFirstDeviation: false, audit: false);
         using var expected = JsonDocument.Parse(played.Session.Save());
         using var actual = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(directory, "state.bin")));
         // The shared field comparison of the diagnosis tools (docs/MATCH-ANALYSIS.md section 5); the embedded recording is not compared.

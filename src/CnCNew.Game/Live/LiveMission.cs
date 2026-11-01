@@ -94,6 +94,7 @@ public sealed class LiveMission : LiveGame, IMissionObjectEffects
     {
         ArgumentNullException.ThrowIfNull(data);
         ArgumentNullException.ThrowIfNull(run);
+        data = data.ForMap(run.MapPath);
         var human = MissionSession.LocalPlayerOf(run.Session.Program, run.Session.Options.HumanSideName);
         var players = ImmutableArray.CreateBuilder<PlayerConfiguration>();
         var faction = string.Empty;

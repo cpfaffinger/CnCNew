@@ -569,6 +569,8 @@ internal sealed class CnCNewGame(
         if (shellMode)
         {
             var data = GameData.Load(contentDirectory!, step => Console.WriteLine($"loading: {step}"), rate: tickRate, rules: Rules);
+            // The shell map brings a map.ini too: compiled here with the rest, not in the first frame of the menu.
+            if (ClientRuntime.ShellMapEnabled) data.ForMap(CnCNew.Presentation.Terrain.MapEnvironment.ShellMapPath(data.Graph));
             var back = GraphicsDevice.Presenter.BackBuffer;
             var shellRun = Shell;
             var network = shellRun is null ? null : new CnCNew.Game.Shell.ShellNetwork(data.Fingerprint, shellRun.NetDirectory, shellRun.NetPort, shellRun.UsePlayerKey) { MatchSeconds = shellRun.NetMatchSeconds };

@@ -97,7 +97,7 @@ public static class SaveGame
             // The rate first: the fingerprint contains it, so a save of another rate would otherwise only be reported as "different game data".
             if (header.TickRate != context.Templates.Rate.TicksPerSecond)
                 throw new SaveGameException($"This savegame was written at {header.TickRate} Hz; this session runs at {context.Templates.Rate.TicksPerSecond} Hz. It cannot be loaded.");
-            if (header.DefinitionFingerprint != context.Fingerprint)
+            if (header.DefinitionFingerprint != context.RulesOf(header.MapPath).Fingerprint)
                 throw new SaveGameException("This savegame was written with different game data (definition fingerprint mismatch) and cannot be loaded.");
             CampaignProgress? progress = null;
             CampaignMission? mission = null;

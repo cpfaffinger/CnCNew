@@ -119,45 +119,41 @@ public sealed class GameData
     /// <summary>What a map's <c>map.ini</c> asked for that does not exist, and what became of it.</summary>
     public ImmutableArray<string> MapRuleNotes { get; private set; } = [];
 
-    /// <summary>The <c>map.ini</c> of a user's map, if it has one. The shipped maps keep the base data: their rules in a <c>map.ini</c> are F-95.</summary>
-    private string? UserMapOverlay(string mapPath)
-    {
-        if (!mapPath.StartsWith(ContentFileSystem.UserMapPrefix, StringComparison.Ordinal)) return null;
-        var overlay = mapPath[..(mapPath.LastIndexOf('/') + 1)] + "map.ini";
-        return Content.Exists(overlay) ? overlay : null;
-    }
+    private GameData? _root;
+
+    // Two, because the shell map stays behind the menus while a match on another map is played.
+    private readonly List<(string Fingerprint, GameData Data)> _mapData = [];
+
+    /// <summary>The fingerprint of the data <see cref="ForMap"/> gives for this map, without building it: the replay list and a saved game judge a file by this.</summary>
+    public string FingerprintFor(string mapPath) => MapRules.FingerprintFor(Content, (_root ?? this).Fingerprint, mapPath);
 
     /// <summary>
-    /// The fingerprint of the data <see cref="ForMap"/> gives for this map, without building it: the replay list and a saved game judge a file by this. It rests on the base data and the
-    /// bytes of the <c>map.ini</c>, so every machine with both comes to the same value.
-    /// </summary>
-    public string FingerprintFor(string mapPath)
-        => UserMapOverlay(mapPath) is { } overlay
-            ? Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes($"{Fingerprint}\n{Content.FileHash(overlay).ToUpperInvariant()}")))
-            : Fingerprint;
-
-    /// <summary>
-    /// The data a match on this map runs with: this data, or for a user's map with a <c>map.ini</c> the definitions compiled again with it on top (<c>GameLogic::startNewGame</c>,
-    /// <c>INI_LOAD_CREATE_OVERRIDES</c>). A map's rules are how its author built it, and many of the maps players collect are whole small mods. Throws <see cref="MapRulesException"/> when they do not compile.
+    /// The data a match on this map runs with: the base data with the map's <c>map.ini</c> on top (<see cref="MapRules"/>), or the base data for a map without one. Asked of the data of another map
+    /// it answers from the base. Throws <see cref="MapRulesException"/> when the rules do not compile.
     /// </summary>
     public GameData ForMap(string mapPath)
     {
-        if (UserMapOverlay(mapPath) is not { } overlay) return this;
-        var options = DefinitionCompilerOptions.Audit with { StrictUnknownModules = true, StrictLoadPlan = true, MapOverlays = MapOverlayMode.Include };
-        try
+        var root = _root ?? this;
+        if (MapRules.OverlayOf(Content, mapPath) is not { } overlay) return root;
+        var fingerprint = FingerprintFor(mapPath);
+        lock (root._mapData)
         {
-            var notes = new List<string>();
-            string text;
-            using (var reader = new StreamReader(Content.OpenRead(overlay), System.Text.Encoding.Latin1)) text = reader.ReadToEnd();
-            var cleaned = MapRulesText.Clean(text, name => Templates.Weapons.TryGet(name, out _), model => Content.Exists($"Art/W3D/{model}.W3D"), notes);
-            var graph = DefinitionCompiler.Compile(new OverlaySource(Content, overlay, cleaned), ModuleRegistry.Default, options);
-            var data = Build(Content, graph, _modelGeometry, Rate, Rules, FingerprintFor(mapPath));
-            data.MapRuleNotes = [.. notes];
-            return data;
-        }
-        catch (Exception exception) when (exception is not OutOfMemoryException)
-        {
-            throw new MapRulesException($"The rules of this map ({overlay}) cannot be read: {exception.Message}", exception);
+            foreach (var known in root._mapData) if (known.Fingerprint == fingerprint) return known.Data;
+            try
+            {
+                var notes = new List<string>();
+                var graph = MapRules.Compile(Content, overlay, root.Templates, notes);
+                var data = Build(Content, graph, _modelGeometry, Rate, Rules, fingerprint);
+                data.MapRuleNotes = [.. notes];
+                data._root = root;
+                root._mapData.Insert(0, (fingerprint, data));
+                if (root._mapData.Count > 2) root._mapData.RemoveAt(2);
+                return data;
+            }
+            catch (Exception exception) when (exception is not OutOfMemoryException)
+            {
+                throw new MapRulesException($"The rules of this map ({overlay}) cannot be read: {exception.Message}", exception);
+            }
         }
     }
 

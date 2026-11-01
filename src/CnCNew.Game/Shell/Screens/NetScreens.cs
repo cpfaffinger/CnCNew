@@ -644,7 +644,7 @@ public sealed class NetRoomScreen : ShellScreen, IMapPickerOwner
         var standard = SkirmishMatchOptions.StandardAt(Shell.Data.Rate);
         var maxTicks = Shell.Network is { MatchSeconds: > 0 } network ? Shell.Data.Rate.Time.WholeSecondsToTicks(network.MatchSeconds) : SkirmishMatchOptions.NoTimeLimit;
         return new RoomSettings(Shell.Data.Rate.TicksPerSecond, mapPath, fingerprint, maxTicks, current.StartMoney > 0 ? current.StartMoney : standard.StartMoney, standard.GraceTicks,
-            standard.SciencePointInterval, slots.MoveToImmutable());
+            standard.SciencePointInterval, slots.MoveToImmutable(), MapRules: Shell.Data.FingerprintFor(mapPath).ToUpperInvariant());
     }
 
     private void TakeSeat(int slot)

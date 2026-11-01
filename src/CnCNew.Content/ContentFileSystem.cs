@@ -89,9 +89,11 @@ public sealed class ContentFileSystem
     /// <summary>
     /// Reads the user's own maps from disk without touching the content, so that it can run beside the game: every directory below <paramref name="directory"/> that holds a <c>.map</c> of its
     /// name, as <c>getPath_UserData</c> + <c>Maps</c> has them (<c>populateMapListbox</c>), the files beside it (a <c>map.ini</c>) with it. A directory that cannot be read is named in the result.
+    /// A file of <paramref name="known"/> with its size and time unchanged is taken as it is, so looking at the folder again costs a listing.
     /// </summary>
-    public static UserMapScan ScanUserMaps(string directory)
+    public static UserMapScan ScanUserMaps(string directory, UserMapScan? known = null)
     {
+        var unchanged = known?.Files.ToDictionary(file => file.DiskPath, StringComparer.OrdinalIgnoreCase);
         var files = ImmutableArray.CreateBuilder<UserMapFile>();
         var problems = ImmutableArray.CreateBuilder<string>();
         if (!Directory.Exists(directory)) return new UserMapScan(files.ToImmutable(), problems.ToImmutable());
@@ -104,9 +106,16 @@ public sealed class ContentFileSystem
                 var read = new List<UserMapFile>();
                 foreach (var file in Directory.EnumerateFiles(folder).Order(StringComparer.OrdinalIgnoreCase))
                 {
+                    var written = File.GetLastWriteTimeUtc(file);
+                    if (unchanged is not null && unchanged.TryGetValue(file, out var same) && same.Written == written && same.Entry.Bytes == new FileInfo(file).Length)
+                    {
+                        read.Add(same);
+                        continue;
+                    }
+
                     var virtualPath = ContentPath.Normalize($"{UserMapPrefix}{name}/{Path.GetFileName(file)}");
                     var bytes = File.ReadAllBytes(file);
-                    read.Add(new UserMapFile(new ContentFileEntry(ContentPath.ToAssetId(virtualPath), virtualPath, file, "user", bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), "user", [], []), file));
+                    read.Add(new UserMapFile(new ContentFileEntry(ContentPath.ToAssetId(virtualPath), virtualPath, file, "user", bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), "user", [], []), file) { Written = written });
                 }
 
                 files.AddRange(read);
@@ -128,6 +137,13 @@ public sealed class ContentFileSystem
     }
 
     public IReadOnlyList<string> AddUserMaps(string directory) => AddUserMaps(ScanUserMaps(directory));
+
+    /// <summary>A newer look at the folder in place of <paramref name="before"/>: what is gone is gone from the content too.</summary>
+    public IReadOnlyList<string> ReplaceUserMaps(UserMapScan? before, UserMapScan scan)
+    {
+        if (before is not null) foreach (var file in before.Files) _userFiles.Remove(file.Entry.VirtualPath);
+        return AddUserMaps(scan);
+    }
 
     public ContentFileEntry GetEntry(string virtualPath)
     {
@@ -229,7 +245,10 @@ public sealed class ContentFileSystem
 }
 
 /// <summary>One file of a user's map directory, read and hashed.</summary>
-public sealed record UserMapFile(ContentFileEntry Entry, string DiskPath);
+public sealed record UserMapFile(ContentFileEntry Entry, string DiskPath)
+{
+    public DateTime Written { get; init; }
+}
 
 /// <summary>What <see cref="ContentFileSystem.ScanUserMaps"/> found.</summary>
 public sealed record UserMapScan(ImmutableArray<UserMapFile> Files, ImmutableArray<string> Problems)

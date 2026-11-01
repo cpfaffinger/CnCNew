@@ -227,13 +227,13 @@ static partial class NetTool
         var target = Ticks(args, rate, 120);
         var settings = Settings(loaded, humans, ais, Math.Max(target, SkirmishMatchOptions.StandardAt(rate).MaxTicks));
         var timeoutSeconds = Number(args, "--timeout-seconds", target / rate.TicksPerSecond * 4 + 300);
-        var maps = new Dictionary<string, MatchMap>(StringComparer.Ordinal) { [mapPath] = new MatchMap(loaded.Terrain, loaded.Map.Objects) };
+        var maps = new Dictionary<string, MatchMap>(StringComparer.Ordinal) { [mapPath] = new MatchMap(loaded.Terrain, loaded.Map.Objects) { Rules = (loaded.Data.Templates, loaded.Data.Fingerprint) } };
         MatchMap LoadMap(string path)
         {
             if (!maps.TryGetValue(path, out var map))
             {
                 var other = Load(data, path);
-                maps[path] = map = new MatchMap(other.Terrain, other.Map.Objects);
+                maps[path] = map = new MatchMap(other.Terrain, other.Map.Objects) { Rules = (other.Data.Templates, other.Data.Fingerprint) };
             }
             return map;
         }
@@ -241,7 +241,7 @@ static partial class NetTool
         // The code of a tick is compiled before the match, not during its first second: a throw-away match of this map, played for a few game seconds.
         if (!args.Contains("--cold"))
         {
-            var warm = SkirmishMatchSession.Start(settings.ToDescription(string.Empty, data.Fingerprint.ToUpperInvariant(), 1, 2), data.Templates, loaded.Terrain, loaded.Map.Objects);
+            var warm = SkirmishMatchSession.Start(settings.ToDescription(string.Empty, loaded.Data.Fingerprint.ToUpperInvariant(), 1, 2), loaded.Data.Templates, loaded.Terrain, loaded.Map.Objects);
             for (var tick = 0; tick < 10 * rate.TicksPerSecond; tick++) warm.Step();
         }
         // What loading and warming left behind is collected now, not during the match.

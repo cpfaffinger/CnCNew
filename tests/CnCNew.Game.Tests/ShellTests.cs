@@ -67,6 +67,8 @@ internal static class ShellTests
         harness.Run("The user's own maps: a directory of a map lands in the list's unofficial side and is a content file", () => UserMaps(data));
         harness.Run("The user's maps are read behind the menu, and a map that cannot be read costs that map, not the game", () => UserMapsBehindTheMenu(data));
         harness.Run("A user's map plays with its own map.ini, in a match, a saved game and against the shipped maps", () => UserMapRules(data));
+        harness.Run("A map copied into the user's folder, changed or taken away is seen without a restart", () => UserMapsFollowTheFolder(data));
+        harness.Run("Every map brings its map.ini: a match, a mission and a fingerprint see the map's rules", () => ShippedMapsBringTheirRules(data));
         harness.Run("Credits lines use the Language.ini credits fonts at the adjusted size", () => CreditsFonts(data));
         harness.Run("Shell::push replaces the screen below, overlays keep it: only what the original shows is drawn", () => ScreenStackDrawing(data));
         harness.Run("Escape leaves the load game screen without any gadget focus", () => LoadGameEscapeWithoutFocus(data));
@@ -527,6 +529,84 @@ internal static class ShellTests
         }
     }
 
+    /// <summary>A map copied into the folder, changed or taken away while the game runs is seen without a restart; what did not change is not read again.</summary>
+    private static void UserMapsFollowTheFolder(GameData data)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "cncnew-user-maps-" + Guid.NewGuid().ToString("N"));
+        void Copy(string name)
+        {
+            Directory.CreateDirectory(Path.Combine(directory, name));
+            using var source = data.Content.OpenRead("Maps/Alpine Assault/Alpine Assault.map");
+            using var target = File.Create(Path.Combine(directory, name, name + ".map"));
+            source.CopyTo(target);
+        }
+        void Look(GameShell shell)
+        {
+            shell.RescanUserMaps();
+            for (var turn = 0; turn < 2_000 && shell.UserMapsBusy; turn++)
+            {
+                Thread.Sleep(5);
+                shell.Update(0.001);
+            }
+            TestHarness.Assert(!shell.UserMapsBusy, "the look at the folder ends");
+        }
+        Directory.CreateDirectory(directory);
+        try
+        {
+            Copy("First");
+            var shell = GameShell.Create(data, NewEnvironment(), viewport: new UiViewport(NavWidth, NavHeight), skin: SkinPins.Current);
+            shell.LoadUserMaps(directory);
+            TestHarness.Assert(shell.UserMaps.SequenceEqual(["UserMaps/First/First.map"]), string.Join(",", shell.UserMaps));
+            var version = shell.UserMapsVersion;
+
+            Look(shell);
+            TestHarness.Assert(shell.UserMapsVersion == version, "nothing changed, nothing moves");
+
+            Copy("Second");
+            Look(shell);
+            TestHarness.Assert(shell.UserMaps.SequenceEqual(["UserMaps/First/First.map", "UserMaps/Second/Second.map"]), "a new map appears: " + string.Join(",", shell.UserMaps));
+            TestHarness.Assert(shell.UserMapsVersion != version, "and the list hears of it");
+            TestHarness.Assert(shell.MapCatalog.ContainsKey("UserMaps/Second/Second.map") && data.Content.Exists("UserMaps/Second/Second.map"), "the content and the catalog know it");
+
+            Directory.Delete(Path.Combine(directory, "First"), true);
+            Look(shell);
+            TestHarness.Assert(shell.UserMaps.SequenceEqual(["UserMaps/Second/Second.map"]), "a map taken away goes: " + string.Join(",", shell.UserMaps));
+            TestHarness.Assert(!shell.MapCatalog.ContainsKey("UserMaps/First/First.map") && !data.Content.Exists("UserMaps/First/First.map"), "from the catalog and the content too");
+
+            var before = data.FingerprintFor("UserMaps/Second/Second.map");
+            File.WriteAllText(Path.Combine(directory, "Second", "map.ini"), "; no rules yet\n");
+            Look(shell);
+            var withRules = data.FingerprintFor("UserMaps/Second/Second.map");
+            TestHarness.Assert(withRules != before, "a map.ini put beside a map changes its rules");
+            File.WriteAllText(Path.Combine(directory, "Second", "map.ini"), "; other rules\n");
+            Look(shell);
+            TestHarness.Assert(data.FingerprintFor("UserMaps/Second/Second.map") != withRules, "and so does an edit of it");
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    /// <summary>Every map brings its <c>map.ini</c>, shipped or not: a match, a mission and a fingerprint see the map's rules, and asking again costs nothing.</summary>
+    private static void ShippedMapsBringTheirRules(GameData data)
+    {
+        const string withRules = "Maps/Armored Fury/Armored Fury.map";
+        var rules = data.ForMap(withRules);
+        TestHarness.Assert(!ReferenceEquals(rules, data), "Armored Fury has a map.ini");
+        TestHarness.Assert(rules.MapRuleNotes.Length == 0, "nothing of a shipped map.ini is left out: " + string.Join(" | ", rules.MapRuleNotes));
+        TestHarness.Assert(rules.Fingerprint == data.FingerprintFor(withRules), "the fingerprint is known before the rules are built");
+        TestHarness.Assert(rules.Fingerprint != data.Fingerprint, "the rules are part of what a match is");
+        TestHarness.Assert(ReferenceEquals(data.ForMap(withRules), rules), "asking again builds nothing");
+        TestHarness.Assert(ReferenceEquals(rules.ForMap(withRules), rules), "the data of a map answers for its own map");
+        TestHarness.Assert(ReferenceEquals(rules.ForMap("Maps/Alpine Assault/Alpine Assault.map"), data), "and goes back to the base for a map without rules");
+        TestHarness.Assert(rules.FingerprintFor(withRules) == rules.Fingerprint, "a fingerprint does not stack on itself");
+        var context = CnCNew.Game.Campaign.MissionContext.From(data);
+        TestHarness.Assert(context.RulesOf(withRules).Fingerprint == rules.Fingerprint && ReferenceEquals(context.RulesOf(withRules).Templates, rules.Templates), "a mission gets the same rules");
+        var live = LiveMatch.Create(data, new MatchSetup(withRules, rules.Factions[0].Faction.Name, [rules.Factions[1].Faction.Name], SkirmishMatchOptions.Standard) { AutoPlay = true }, new System.Numerics.Vector2(800, 600));
+        TestHarness.Assert(ReferenceEquals(live.Data, rules) && live.World.Configuration.DefinitionFingerprint == rules.Fingerprint, "and a match");
+    }
+
     /// <summary>The owner's folder of 370 maps held the window back for minutes and then ended the game; no check saw it, because only a person's run reads that folder.</summary>
     private static void UserMapsBehindTheMenu(GameData data)
     {
@@ -598,7 +678,7 @@ internal static class ShellTests
             shell.LoadUserMaps(directory);
             var own = "UserMaps/Own Rules/Own Rules.map";
             TestHarness.Assert(shell.MapCatalog["UserMaps/With Scripts/With Scripts.map"].HasScripts && !shell.MapCatalog[own].HasScripts, "a map with scripts of its own is known as one");
-            TestHarness.Assert(ReferenceEquals(data.ForMap("Maps/Alpine Assault/Alpine Assault.map"), data), "a shipped map keeps the data as it is");
+            TestHarness.Assert(ReferenceEquals(data.ForMap("Maps/Alpine Assault/Alpine Assault.map"), data), "a map without a map.ini keeps the base data");
             var rules = data.ForMap(own);
             static object Cost(GameData of) => of.Templates.TryGet("AmericaInfantryRanger", out var ranger) ? ranger.BuildCost : throw new InvalidOperationException("no Ranger");
             TestHarness.Assert(Cost(rules).ToString() == "7" && Cost(data).ToString() != "7", $"the map's rules hold for the map alone: {Cost(rules)}, {Cost(data)}");

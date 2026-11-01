@@ -102,7 +102,7 @@ $stepsOfArea = @{
     images       = @{ affected = 'images', 'import', 'presentation';        gate = 'presentation-content', 'game' }
     formats      = @{ affected = 'formats', 'import';                       gate = 'inputs', 'quick', 'presentation-content' }
     w3d          = @{ affected = 'w3d';                                     gate = 'presentation-content', 'game' }
-    data         = @{ affected = 'data', 'data-content', 'compat';          gate = 'ui', 'audio', 'sim', 'inputs', 'quick', 'patch-layer' }
+    data         = @{ affected = 'data', 'data-content', 'compat';          gate = 'ui', 'audio', 'sim', 'inputs', 'quick', 'patch-layer', 'map-rules' }
     simulation   = @{ affected = 'sim';                                     gate = 'sim-30', 'sim-120', 'presentation', 'inputs', 'quick', 'rate-suite', 'game-sim', 'check-match', 'net' }
     simtool      = @{ affected = @();                                       gate = 'inputs', 'quick' }
     manifest     = @{ affected = 'inputs', 'reference';                     gate = @() }
@@ -207,6 +207,7 @@ $steps = @(
     New-Step 'sim'          'Simulation.Tests (60 Hz)'                        (Release-Run $simTests) -Release $simTests
     New-Step 'game-focus'   "Game.Tests ($($focus -join ', '))"               ((Release-Run $gameTests) + $content + '--only' + ($focus -join ',')) -Content -Release $gameTests
     New-Step 'game-sim'     "Game.Tests ($($gameSuitesOfSimulation -join ', '))" ((Release-Run $gameTests) + $content + '--only' + ($gameSuitesOfSimulation -join ',')) -Content -Release $gameTests
+    New-Step 'map-rules'    'Every map.ini of the content compiles without a note' ((Release-Run $simTool) + 'map-rules' + $ContentDir) -Content -Release $simTool
     New-Step 'inputs'       'Input manifest'                                  ((Release-Run $simTool) + 'input-manifest' + 'check' + $ContentDir + 'baselines/input-manifest.json') -Content -Release $simTool
     New-Step 'sim-30'       'Simulation.Tests (30 Hz)'                        ((Release-Run $simTests) + '--tick-rate' + '30') -Release $simTests
     New-Step 'sim-120'      'Simulation.Tests (120 Hz)'                       ((Release-Run $simTests) + '--tick-rate' + '120') -Release $simTests

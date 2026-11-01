@@ -135,7 +135,7 @@ static partial class NetTool
         if (!data.Content.Exists(mapPath)) throw new FileNotFoundException($"The map {mapPath} is not in the content.");
         using var stream = data.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
-        return new Loaded(data, TerrainMap.Build(map, mapPath), map, mapPath);
+        return new Loaded(data.ForMap(mapPath), TerrainMap.Build(map, mapPath), map, mapPath);
     }
 
     private static RoomSettings Settings(Loaded loaded, int humans, int ais, long maxTicks)
@@ -146,7 +146,7 @@ static partial class NetTool
         var slots = ImmutableArray.CreateBuilder<MatchSlotDescription>();
         for (var index = 0; index < humans + ais; index++)
             slots.Add(new MatchSlotDescription(index < humans ? MatchSlotKind.Human : MatchSlotKind.Computer, EightFactions[index], StartPosition: index));
-        return new RoomSettings(loaded.Data.Rate.TicksPerSecond, loaded.MapPath, loaded.Terrain.Fingerprint, maxTicks, standard.StartMoney, standard.GraceTicks, standard.SciencePointInterval, slots.ToImmutable());
+        return new RoomSettings(loaded.Data.Rate.TicksPerSecond, loaded.MapPath, loaded.Terrain.Fingerprint, maxTicks, standard.StartMoney, standard.GraceTicks, standard.SciencePointInterval, slots.ToImmutable()) with { MapRules = loaded.Data.Fingerprint.ToUpperInvariant() };
     }
 
     private static string Describe(LoopbackProbeResult result, double seconds)
@@ -165,7 +165,7 @@ static partial class NetTool
         var jitter = (int)Number(args, "--jitter", 0);
         var options = new LoopbackProbeOptions(ticks, new LinkQuality(delay, jitter), new LinkQuality(delay, jitter), (uint)Number(args, "--net-seed", 1), GeneratorSeedSalt: (uint)Number(args, "--salt", 0));
         var watch = Stopwatch.StartNew();
-        var result = new LoopbackProbe(data.Templates, data.Fingerprint, loaded.Terrain, loaded.Map.Objects).Run(settings, options);
+        var result = new LoopbackProbe(loaded.Data.Templates, loaded.Data.Fingerprint, loaded.Terrain, loaded.Map.Objects).Run(settings, options);
         Console.WriteLine($"{(result.Ok ? "ok  " : "FAIL")} {mapPath}: {Describe(result, watch.Elapsed.TotalSeconds)}");
         if (!result.Ok) Console.WriteLine($"     {result.Problem}");
         return result.Ok ? 0 : 1;
@@ -204,7 +204,7 @@ static partial class NetTool
                     if (!loadedMaps.TryGetValue(run.Map, out var loaded)) loadedMaps[run.Map] = loaded = Load(data, run.Map);
                     var settings = Settings(loaded, run.Mix.Humans, run.Mix.Ais, Math.Max(ticks, SkirmishMatchOptions.StandardAt(rate).MaxTicks));
                     var options = new LoopbackProbeOptions(ticks, run.Network.Link, run.Network.Link, NetworkSeed: 7);
-                    var result = new LoopbackProbe(data.Templates, data.Fingerprint, loaded.Terrain, loaded.Map.Objects).Run(settings, options);
+                    var result = new LoopbackProbe(loaded.Data.Templates, loaded.Data.Fingerprint, loaded.Terrain, loaded.Map.Objects).Run(settings, options);
                     row = (result.Ok, $"{Describe(result, watch.Elapsed.TotalSeconds)}{(result.Ok ? string.Empty : " :: " + result.Problem)}", result.FinalSessionHash);
                 }
                 catch (Exception exception)
@@ -243,8 +243,8 @@ static partial class NetTool
 
         (double MicrosPerTick, ulong Hash, long Messages, long Bytes) Direct()
         {
-            var description = settings.ToDescription(BuildIdentity.Current.Id, data.Fingerprint.ToUpperInvariant(), settings.Seed, settings.AiSeed);
-            var session = SkirmishMatchSession.Start(description, data.Templates, loaded.Terrain, loaded.Map.Objects);
+            var description = settings.ToDescription(BuildIdentity.Current.Id, loaded.Data.Fingerprint.ToUpperInvariant(), settings.Seed, settings.AiSeed);
+            var session = SkirmishMatchSession.Start(description, loaded.Data.Templates, loaded.Terrain, loaded.Map.Objects);
             var watch = Stopwatch.StartNew();
             while (session.World.Tick < ticks) session.Step();
             return (watch.Elapsed.TotalMilliseconds * 1000 / ticks, session.StateHash(), 0, 0);
@@ -252,9 +252,9 @@ static partial class NetTool
 
         (double MicrosPerTick, ulong Hash, long Messages, long Bytes) Relayed()
         {
-            var relay = LocalRelay.Open(data.Fingerprint);
+            var relay = LocalRelay.Open(loaded.Data.Fingerprint);
             relay.StartMatch(settings, 0);
-            var session = SkirmishMatchSession.Start(relay.Client.Description!, data.Templates, loaded.Terrain, loaded.Map.Objects, 0, data.Fingerprint, BuildIdentity.Current.Id);
+            var session = SkirmishMatchSession.Start(relay.Client.Description!, loaded.Data.Templates, loaded.Terrain, loaded.Map.Objects, 0, loaded.Data.Fingerprint, BuildIdentity.Current.Id);
             relay.ReportLoaded(session.StateHash());
             var tickSeconds = 1.0 / rate.TicksPerSecond;
             var driver = new LockstepDriver(relay.Client, tickSeconds, relay.Pump, session.StateHash, settings.MaxTicks - 1);
@@ -299,12 +299,12 @@ static partial class NetTool
         GC.Collect();
         var before = GC.GetTotalMemory(true);
         var worlds = new List<SkirmishMatchSession>();
-        var description2 = settings.ToDescription(string.Empty, data.Fingerprint.ToUpperInvariant(), settings.Seed, settings.AiSeed);
+        var description2 = settings.ToDescription(string.Empty, loaded.Data.Fingerprint.ToUpperInvariant(), settings.Seed, settings.AiSeed);
         foreach (var count in new[] { 1, 2, 4, 8 })
         {
             while (worlds.Count < count)
             {
-                var session = SkirmishMatchSession.Start(description2, data.Templates, loaded.Terrain, loaded.Map.Objects);
+                var session = SkirmishMatchSession.Start(description2, loaded.Data.Templates, loaded.Terrain, loaded.Map.Objects);
                 for (var tick = 0; tick < Math.Min(ticks, 3_600); tick++) session.Step();
                 worlds.Add(session);
             }

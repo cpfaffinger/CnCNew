@@ -142,16 +142,28 @@ public sealed class GameShell
     /// <summary>Why a map of the user's folder is not in the list, one line each.</summary>
     public ImmutableArray<string> UserMapProblems { get; private set; } = [];
 
-    /// <summary><see cref="BeginLoadingUserMaps"/> has not finished yet.</summary>
-    public bool UserMapsLoading => _userMapLoad is not null;
+    /// <summary>The first look at the folder has not finished yet (<see cref="BeginLoadingUserMaps"/>).</summary>
+    public bool UserMapsLoading => _userMapLoad is not null && _userMapRead is null;
+
+    /// <summary>A look at the folder is under way.</summary>
+    public bool UserMapsBusy => _userMapLoad is not null;
+
+    /// <summary>Counts the changes of <see cref="UserMaps"/>: a list on the screen follows it.</summary>
+    public int UserMapsVersion { get; private set; }
 
     private Task<UserMapRead>? _userMapLoad;
+    private UserMapRead? _userMapRead;
+    private string? _userMapDirectory;
     private Action<string>? _userMapReport;
 
     private sealed record UserMapRead(UserMapScan Scan, ImmutableArray<ShellMapEntry> Maps, ImmutableArray<string> Problems);
 
     /// <summary>Adds the maps of a directory to the skirmish map list's "unofficial" side (<c>populateMapListbox</c> with <c>TheMapCache</c>'s user directory): the number of players comes from the map itself, nothing caches it.</summary>
-    public void LoadUserMaps(string directory) => ApplyUserMaps(ReadUserMaps(directory));
+    public void LoadUserMaps(string directory)
+    {
+        _userMapDirectory = directory;
+        ApplyUserMaps(ReadUserMaps(directory, _userMapRead));
+    }
 
     /// <summary>
     /// The same behind the menu: a folder holds hundreds of maps and may lie on a network drive, and the original's map cache means it never reads them at the start. <see cref="Update"/> takes the
@@ -159,18 +171,35 @@ public sealed class GameShell
     /// </summary>
     public void BeginLoadingUserMaps(string directory, Action<string>? report = null)
     {
+        _userMapDirectory = directory;
         _userMapReport = report;
-        _userMapLoad = Task.Run(() => ReadUserMaps(directory));
+        _userMapLoad = Task.Run(() => ReadUserMaps(directory, null));
     }
 
-    private static UserMapRead ReadUserMaps(string directory)
+    /// <summary>Looks at the folder again behind the menu: a map copied there, changed or taken away while the game runs is seen without a restart. <see cref="Update"/> takes the result.</summary>
+    public void RescanUserMaps()
     {
-        var scan = ContentFileSystem.ScanUserMaps(directory);
+        if (_userMapDirectory is not { } directory || _userMapLoad is not null) return;
+        var known = _userMapRead;
+        _userMapLoad = Task.Run(() => ReadUserMaps(directory, known));
+    }
+
+    private static UserMapRead ReadUserMaps(string directory, UserMapRead? known)
+    {
+        var scan = ContentFileSystem.ScanUserMaps(directory, known?.Scan);
+        var unchanged = known?.Scan.Files.ToHashSet();
+        var entries = known?.Maps.ToDictionary(map => map.VirtualPath, StringComparer.OrdinalIgnoreCase);
         var maps = ImmutableArray.CreateBuilder<ShellMapEntry>();
         var problems = ImmutableArray.CreateBuilder<string>();
         problems.AddRange(scan.Problems);
         foreach (var file in scan.Files.Where(file => file.DiskPath.EndsWith(".map", StringComparison.OrdinalIgnoreCase)))
         {
+            if (unchanged?.Contains(file) == true && entries!.TryGetValue(file.Entry.VirtualPath, out var entry))
+            {
+                maps.Add(entry);
+                continue;
+            }
+
             // Files of strangers: whatever one of them breaks costs that map, never the game.
             try
             {
@@ -190,11 +219,16 @@ public sealed class GameShell
 
     private void ApplyUserMaps(UserMapRead read)
     {
-        Data.Content.AddUserMaps(read.Scan);
+        var before = _userMapRead;
+        Data.Content.ReplaceUserMaps(before?.Scan, read.Scan);
+        if (before is not null) MapCatalog = MapCatalog.RemoveRange(before.Maps.Select(map => map.VirtualPath));
         MapCatalog = MapCatalog.SetItems(read.Maps.Select(map => KeyValuePair.Create(map.VirtualPath, map)));
-        UserMaps = [.. read.Maps.Where(map => map.StartPositionCount >= 2).Select(map => map.VirtualPath)];
+        ImmutableArray<string> maps = [.. read.Maps.Where(map => map.StartPositionCount >= 2).Select(map => map.VirtualPath)];
+        if (!maps.SequenceEqual(UserMaps)) UserMapsVersion++;
+        UserMaps = maps;
         UserMapProblems = read.Problems;
-        foreach (var problem in read.Problems) _userMapReport?.Invoke($"warning: a map of the user's folder is left out: {problem}");
+        foreach (var problem in read.Problems.Except(before?.Problems ?? [])) _userMapReport?.Invoke($"warning: a map of the user's folder is left out: {problem}");
+        _userMapRead = read;
     }
 
     public ImmutableArray<CreditsLine> Credits { get; private set; } = [];
@@ -864,7 +898,7 @@ public sealed class GameShell
         if (SkirmishSaveGame.IsSkirmishSave(bytes))
         {
             // Checked here, so that a file that does not fit is refused in the load screen; the host restores the session with the map.
-            SkirmishSaveGame.Load(bytes, Data.Rate.TicksPerSecond, Data.Fingerprint);
+            SkirmishSaveGame.Load(bytes, Data.Rate.TicksPerSecond, Data.FingerprintFor);
             Phase = ShellPhase.InMatch;
             _outputs.Add(new ResumeMatchOutput(bytes, slot));
             return;

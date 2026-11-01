@@ -80,6 +80,7 @@ internal static class SessionCheck
 
     private static Row Check(SimContext context, string id, string mapPath, string[] factions, SkirmishMatchOptions options)
     {
+        context = context.ForMap(mapPath);
         using var stream = context.Content.OpenRead(mapPath);
         var map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, mapPath);

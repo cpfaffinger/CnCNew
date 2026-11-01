@@ -726,7 +726,8 @@ internal sealed class ClientRuntime : IDisposable
         if (_shellMap is null)
         {
             var run = MissionRun.Load(MissionContext.From(_data), MapEnvironment.ShellMapPath(_data.Graph), MissionOptions.Standard with { PresentationLatencyTicks = LiveMission.ClientPresentationLatencyFrames });
-            _shellMap = new LiveMatchHost(_game, _data, LiveMission.Create(_data, run, BackBufferSize()));
+            var shown = LiveMission.Create(_data, run, BackBufferSize());
+            _shellMap = new LiveMatchHost(_game, shown.Data, shown);
         }
 
         var map = _shellMap.Match;
@@ -836,8 +837,8 @@ internal sealed class ClientRuntime : IDisposable
                     foreach (var note in rules.MapRuleNotes) Console.WriteLine($"warning: {start.Setup.MapPath}: {note}");
                     _running = Start(LiveMatch.Create(rules, start.Setup, size), null);
                 }
-                // A stranger's file must not end the game: whatever a map's own rules break costs that match. The shipped data keep their crash report.
-                catch (Exception refused) when (refused is CnCNew.Game.Data.MapRulesException || (!ReferenceEquals(rules, _data) && refused is not OutOfMemoryException))
+                // A stranger's file must not end the game: whatever a map's own rules break costs that match, and a map may have left the user's folder since it was chosen. The shipped data keep their crash report.
+                catch (Exception refused) when (refused is CnCNew.Game.Data.MapRulesException or FileNotFoundException or DirectoryNotFoundException || (!ReferenceEquals(rules, _data) && refused is not OutOfMemoryException))
                 {
                     Console.WriteLine($"warning: {start.Setup.MapPath}: {refused.Message}");
                     _shell!.MatchFailed(refused.Message);

@@ -154,7 +154,7 @@ public static class Protocol
     /// end reason "server limit". Version 3 (phase 27): the rejoin token and the watch flag in the hello, the token in the welcome, the detail and the report of a desync, the request and the
     /// offer of a snapshot, the state of a held seat. Version 2 (phase 26): the room name in the hello, ping/pong, lag state, leave.
     /// </summary>
-    public const ushort Version = 7;
+    public const ushort Version = 8;
     /// <summary>Rooms one list names at most; a server with more names the first ones in the order of their names.</summary>
     public const int MaxListedRooms = 64;
     /// <summary>A verifier, a nonce and a response of the room password, as hexadecimal text.</summary>
@@ -494,7 +494,7 @@ public sealed record RejectMessage(RejectReason Reason, string Text) : NetMessag
 /// <see cref="HasSeed"/>), and the fingerprints of definitions and simulation, which come from the handshake.
 /// </summary>
 public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFingerprint, long MaxTicks, int StartMoney, long GraceFrames, long SciencePointIntervalFrames,
-    ImmutableArray<MatchSlotDescription> Slots, bool HasSeed = false, uint Seed = 0, uint AiSeed = 0)
+    ImmutableArray<MatchSlotDescription> Slots, bool HasSeed = false, uint Seed = 0, uint AiSeed = 0, string MapRules = "")
 {
     public static RoomSettings Empty { get; } = new(0, string.Empty, string.Empty, 0, 0, 0, 0, []);
 
@@ -523,6 +523,7 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
             writer.I32(slot.AiComposition);
             writer.I32(slot.AiTactics);
         }
+        writer.Text(MapRules, Protocol.MaxIdBytes);
     }
 
     internal static RoomSettings Read(ref WireReader reader)
@@ -546,14 +547,14 @@ public sealed record RoomSettings(int TickRate, string MapPath, string TerrainFi
             if (kind > (byte)MatchSlotKind.Spectator) throw new ProtocolException($"Unknown slot kind {kind}.");
             slots.Add(new MatchSlotDescription((MatchSlotKind)kind, reader.Text(Protocol.MaxNameBytes), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32(), reader.I32()));
         }
-        return new RoomSettings(tickRate, map, terrain, maxTicks, money, grace, science, slots.MoveToImmutable(), hasSeed, seed, aiSeed);
+        return new RoomSettings(tickRate, map, terrain, maxTicks, money, grace, science, slots.MoveToImmutable(), hasSeed, seed, aiSeed, reader.Text(Protocol.MaxIdBytes));
     }
 
     /// <summary>Content equality (the slots are compared one by one).</summary>
     public bool SameAs(RoomSettings other)
         => TickRate == other.TickRate && MapPath == other.MapPath && TerrainFingerprint == other.TerrainFingerprint && MaxTicks == other.MaxTicks && StartMoney == other.StartMoney
            && GraceFrames == other.GraceFrames && SciencePointIntervalFrames == other.SciencePointIntervalFrames && HasSeed == other.HasSeed && Seed == other.Seed && AiSeed == other.AiSeed
-           && Slots.SequenceEqual(other.Slots);
+           && MapRules == other.MapRules && Slots.SequenceEqual(other.Slots);
 }
 
 /// <summary>Host to server: set the room.</summary>
@@ -1270,13 +1271,16 @@ public readonly record struct FormatVersions(int CommandTable, int Replay, int W
 
 public static class RoomSettingsExtensions
 {
-    /// <summary>The match description of a room: its settings, the identity and definitions its members agreed on in their handshakes, and the seeds of the start.</summary>
+    /// <summary>
+    /// The match description of a room: its settings, the identity and definitions its members agreed on in their handshakes, and the seeds of the start. A map with rules of its own states
+    /// them in <see cref="RoomSettings.MapRules"/>: the server has no game data and passes them on; a client whose map rules differ refuses the description.
+    /// </summary>
     public static MatchDescription ToDescription(this RoomSettings settings, string simulationId, string definitionFingerprint, uint seed, uint aiSeed)
-        => new(settings.TickRate, settings.MapPath, settings.TerrainFingerprint, definitionFingerprint, seed, aiSeed, settings.MaxTicks, settings.StartMoney, settings.GraceFrames,
+        => new(settings.TickRate, settings.MapPath, settings.TerrainFingerprint, settings.MapRules.Length > 0 ? settings.MapRules : definitionFingerprint, seed, aiSeed, settings.MaxTicks, settings.StartMoney, settings.GraceFrames,
             settings.SciencePointIntervalFrames, settings.Slots) { SimulationId = simulationId };
 
     /// <summary>The room settings a description was made from (a host that already holds a description, such as a saved match).</summary>
     public static RoomSettings ToRoomSettings(this MatchDescription description, bool withSeed)
         => new(description.TickRate, description.MapPath, description.TerrainFingerprint, description.MaxTicks, description.StartMoney, description.GraceFrames,
-            description.SciencePointIntervalFrames, description.Slots, withSeed, description.Seed, description.AiSeed);
+            description.SciencePointIntervalFrames, description.Slots, withSeed, description.Seed, description.AiSeed, description.DefinitionFingerprint);
 }

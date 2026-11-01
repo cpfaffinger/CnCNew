@@ -47,6 +47,22 @@ internal sealed class SimContext
     /// <summary>The data of the original skirmish AI (<c>AIData.ini</c>); not part of the catalog and of no manifest.</summary>
     public CnCNew.Simulation.Skirmish.Original.AiData? AiData { get; private init; }
 
+    private SimContext? _base;
+    private CnCNew.Game.Data.MapCatalogs? _maps;
+
+    /// <summary>The context of a match on this map: what the client plays there, the map's <c>map.ini</c> on top (<see cref="CnCNew.Game.Data.MapRules"/>).</summary>
+    public SimContext ForMap(string mapPath)
+    {
+        var root = _base ?? this;
+        lock (CompileGate)
+        {
+            root._maps ??= new CnCNew.Game.Data.MapCatalogs(Content, root.Catalog, root.Fingerprint);
+            var (catalog, fingerprint) = root._maps.For(mapPath, out var graph);
+            if (graph is null) return root;
+            return new SimContext(Content, catalog, fingerprint, DefinitionSha256, DefinitionBytes, Definitions, Geometry) { AiData = CnCNew.Simulation.Skirmish.Original.AiData.TryBuild(graph), _base = root };
+        }
+    }
+
     /// <summary>Compiles under a process-wide gate: the loaders of the client layer are not known to be safe to run side by side.</summary>
     /// <param name="rate">The rate the catalog is built for; the rate of this run of the tool (<see cref="ToolRate.Current"/>) when absent (<c>ai-survey</c> passes its own).</param>
     public static SimContext Load(string directory, CnCNew.Simulation.Time.SimulationRate? rate = null)
@@ -223,6 +239,7 @@ internal static class InputManifest
             var entry = FileEntry(context.Content, path);
             using var stream = context.Content.OpenRead(path);
             var terrain = TerrainMap.Build(SageMapDecoder.Decode(stream), path);
+            if (CnCNew.Game.Data.MapRules.OverlayOf(context.Content, path) is { } overlay) entry.Add("rulesSha256", context.Content.FileHash(overlay));
             entry.Add("terrainFingerprint", terrain.Fingerprint.ToUpperInvariant()).Add("cellsX", terrain.CellsX).Add("cellsY", terrain.CellsY).Add("startPositions", terrain.StartPositions.Length);
             entries[path] = entry;
         });

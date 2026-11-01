@@ -23,7 +23,7 @@ internal static class MatchCommands
         var outPath = ManifestCommands.Option(args, "--out");
         if (args.Length < 2 || mapPath is null || slotText is null || outPath is null) return ManifestCommands.Fail(DescribeUsage);
         var rate = ToolRate.Current;
-        var context = SimContext.Load(args[1], rate);
+        var context = SimContext.Load(args[1], rate).ForMap(mapPath);
         using var stream = context.Content.OpenRead(mapPath);
         var terrain = TerrainMap.Build(SageMapDecoder.Decode(stream), mapPath);
         var standard = SkirmishMatchOptions.StandardAt(rate);
@@ -61,7 +61,7 @@ internal static class MatchCommands
         var description = MatchDescription.Decode(File.ReadAllBytes(args[2]));
         var ticks = long.Parse(ManifestCommands.Option(args, "--ticks") ?? "0", CultureInfo.InvariantCulture);
         // The description names its rate; the process builds its catalog for it, whatever its own default is.
-        var context = SimContext.Load(args[1], description.Rate);
+        var context = SimContext.Load(args[1], description.Rate).ForMap(description.MapPath);
         using var stream = context.Content.OpenRead(description.MapPath);
         var map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, description.MapPath);

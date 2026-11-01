@@ -9,7 +9,11 @@ using CnCNew.Simulation.Terrain;
 namespace CnCNew.Game.Lockstep;
 
 /// <summary>The map of a match as a client needs it to build its world.</summary>
-public sealed record MatchMap(TerrainMap Terrain, ImmutableArray<MapObject> Objects);
+public sealed record MatchMap(TerrainMap Terrain, ImmutableArray<MapObject> Objects)
+{
+    /// <summary>What the map's own rules make of the client's catalog (<see cref="CnCNew.Game.Data.MapRules"/>); <see langword="null"/> for a map that has none.</summary>
+    public (TemplateCatalog Templates, string Fingerprint)? Rules { get; init; }
+}
 
 /// <summary>
 /// A client without a window (docs/NETWORK-PROTOCOL.md section 8): the protocol client, its own world, the lockstep driver and the command path - everything a playing
@@ -159,10 +163,11 @@ public sealed class HeadlessClient
         try
         {
             map = _loadMap(description.MapPath);
+            var (catalog, fingerprint) = map.Rules ?? (_catalog, _fingerprint);
             // A running match is joined at the state a member handed over (or a saved match is continued); otherwise the match begins.
             Session = Client.Start!.Resume is { } resume
-                ? SkirmishMatchSession.Restore(SessionTransfer.Unpack(resume.State), _catalog, _fingerprint, map.Terrain)
-                : SkirmishMatchSession.Start(description, _catalog, map.Terrain, map.Objects, 0, _fingerprint, Client.Identity.Id);
+                ? SkirmishMatchSession.Restore(SessionTransfer.Unpack(resume.State), catalog, fingerprint, map.Terrain)
+                : SkirmishMatchSession.Start(description, catalog, map.Terrain, map.Objects, 0, fingerprint, Client.Identity.Id);
             JoinedAtTick = Session.World.Tick;
         }
         catch (Exception exception) when (exception is ArgumentException or IOException or InvalidDataException or CnCNew.Simulation.Snapshots.SnapshotFormatException)

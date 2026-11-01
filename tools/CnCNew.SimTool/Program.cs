@@ -130,6 +130,7 @@ try
         "reference-manifest" or "input-manifest" => CnCNew.SimTool.ManifestCommands.Run(args),
         "skirmish-sweep" when args.Length >= 2 => SkirmishSweep(args[1], args),
         "user-maps" when args.Length >= 2 => UserMapSweep(args[1], args),
+        "map-rules" when args.Length >= 2 => MapRulesCheck(args[1]),
         "unit-audit" when args.Length >= 2 => UnitAudit(args[1], args),
         "mission-run" when args.Length >= 2 => MissionRun(args[1], args),
         "perf" when args.Length >= 2 && CnCNew.SimTool.OriginalAi.Requested(args) => CnCNew.SimTool.PerfCommand.OriginalSkirmish(args),
@@ -174,6 +175,7 @@ static int UnitAudit(string directory, string[] args)
     if (Arg(args, "--seed") is { } seed) options = options with { AiSeed = uint.Parse(seed, CultureInfo.InvariantCulture), WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) ^ 0xC0FFEE06 };
     var (_, catalog, fingerprint) = CompileShipped(directory);
     var content = ContentFileSystem.Open(directory);
+    (catalog, fingerprint) = new CnCNew.Game.Data.MapCatalogs(content, catalog, fingerprint).For(mapPath);
     using var mapStream = content.OpenRead(mapPath);
     var map = SageMapDecoder.Decode(mapStream);
     var terrain = TerrainMap.Build(map, mapPath);
@@ -465,6 +467,7 @@ static int AiMatch(string directory, string[] args)
     var watch = Stopwatch.StartNew();
     var (_, catalog, fingerprint) = CompileShipped(directory);
     var content = ContentFileSystem.Open(directory);
+    (catalog, fingerprint) = new CnCNew.Game.Data.MapCatalogs(content, catalog, fingerprint).For(mapPath);
     using var mapStream = content.OpenRead(mapPath);
     var map = SageMapDecoder.Decode(mapStream);
     var terrain = TerrainMap.Build(map, mapPath);
@@ -571,6 +574,31 @@ static int AiMatch(string directory, string[] args)
         Console.WriteLine($"  {player.Faction}: {string.Join(", ", world.Entities.Where(value => value.Owner == player.Id && !value.EffectivelyDead).GroupBy(value => value.Template.Name).OrderBy(group => group.Key, StringComparer.Ordinal).Select(group => $"{group.Key}={group.Count()}"))}");
     Console.WriteLine($"Rejections by reason: {string.Join(", ", Enum.GetValues<CommandRejection>().Where(reason => world.RejectionCounts[(int)reason] > 0).Select(reason => $"{reason}={world.RejectionCounts[(int)reason]}"))}.");
     return identical && continued && first.FinalHash == second.FinalHash ? 0 : 1;
+}
+
+/// <summary>Every <c>map.ini</c> of the content compiles on top of the base data with nothing left out: what the shipped maps bring is the game, and the cleaning of <see cref="CnCNew.Game.Data.MapRulesText"/> is for strangers' files.</summary>
+static int MapRulesCheck(string directory)
+{
+    var data = CnCNew.Game.Data.GameData.Load(directory, rate: CnCNew.SimTool.ToolRate.Current, rules: CnCNew.SimTool.ToolRate.Rules);
+    var failed = 0;
+    var overlays = data.Content.EnumerateFiles().Where(path => path.EndsWith("/map.ini", StringComparison.OrdinalIgnoreCase)).Order(StringComparer.Ordinal).ToArray();
+    foreach (var overlay in overlays)
+    {
+        try
+        {
+            var rules = data.ForMap(overlay);
+            if (rules.MapRuleNotes.Length == 0) continue;
+            failed++;
+            Console.WriteLine($"{overlay}: {string.Join(" | ", rules.MapRuleNotes)}");
+        }
+        catch (CnCNew.Game.Data.MapRulesException refused)
+        {
+            failed++;
+            Console.WriteLine(refused.Message);
+        }
+    }
+    Console.WriteLine($"map rules: {overlays.Length - failed} of {overlays.Length} compile without a note");
+    return failed == 0 ? 0 : 1;
 }
 
 /// <summary>
@@ -760,6 +788,7 @@ static int MissionRun(string directory, string[] args)
     if (Arg(args, "--seed") is { } seed) options = options with { WorldSeed = uint.Parse(seed, CultureInfo.InvariantCulture) };
     var (_, catalog, fingerprint) = CompileShipped(directory);
     var content = ContentFileSystem.Open(directory);
+    (catalog, fingerprint) = new CnCNew.Game.Data.MapCatalogs(content, catalog, fingerprint).For(mapPath);
     using var mapStream = content.OpenRead(mapPath);
     var map = SageMapDecoder.Decode(mapStream);
     var terrain = TerrainMap.Build(map, mapPath);

@@ -31,7 +31,7 @@ static partial class NetTool
             if (!maps.TryGetValue(path, out var map))
             {
                 var loaded = Load(data, path);
-                maps[path] = map = new MatchMap(loaded.Terrain, loaded.Map.Objects);
+                maps[path] = map = new MatchMap(loaded.Terrain, loaded.Map.Objects) { Rules = (loaded.Data.Templates, loaded.Data.Fingerprint) };
             }
             return map;
         }
@@ -70,7 +70,7 @@ static partial class NetTool
         // Up to the tick the clients agreed on: the ticks below the end are played, so the state after that tick is the one they hashed.
         var end = agreedTick >= 0 && agreedHash.Length > 0 ? Math.Min(replay.Header.EndTick, agreedTick + 1) : replay.Header.EndTick;
         var watch = Stopwatch.StartNew();
-        var played = SkirmishReplay.Play(replay with { Header = replay.Header with { EndTick = end } }, data.Templates, data.Fingerprint, loaded.Terrain, loaded.Map.Objects, audit: false);
+        var played = SkirmishReplay.Play(replay with { Header = replay.Header with { EndTick = end } }, loaded.Data.Templates, loaded.Data.Fingerprint, loaded.Terrain, loaded.Map.Objects, audit: false);
         var hash = played.FinalSessionHash.ToString("X16", CultureInfo.InvariantCulture);
         Console.WriteLine(Invariant($"{Path.GetFileName(file)}: {description.MapPath}, {description.TickRate} Hz, {replay.Header.EndTick} ticks recorded, {replay.Commands.Length} commands of the players ({played.HumanCommands} fed in); played to tick {played.EndTick} in {watch.Elapsed.TotalSeconds:F1} s"));
         Console.WriteLine($"session hash after tick {played.EndTick - 1}: {hash}");
@@ -103,7 +103,7 @@ static partial class NetTool
         var loaded = Load(data, mapPath);
         var total = minutes * 60 * rate.TicksPerSecond;
         var settings = Settings(loaded, 1, players - 1, Math.Max(total + 1, SkirmishMatchOptions.StandardAt(rate).MaxTicks));
-        var session = SkirmishMatchSession.Start(settings.ToDescription(string.Empty, data.Fingerprint.ToUpperInvariant(), 1, 2), data.Templates, loaded.Terrain, loaded.Map.Objects);
+        var session = SkirmishMatchSession.Start(settings.ToDescription(string.Empty, loaded.Data.Fingerprint.ToUpperInvariant(), 1, 2), loaded.Data.Templates, loaded.Terrain, loaded.Map.Objects);
         var rows = new List<SnapshotRow>();
         static double Median(List<double> values)
         {
@@ -130,7 +130,7 @@ static partial class NetTool
                 var unpacked = SessionTransfer.Unpack(packed);
                 unpack.Add(watch.Elapsed.TotalMilliseconds);
                 watch.Restart();
-                var restored = SkirmishMatchSession.Restore(unpacked, data.Templates, data.Fingerprint, loaded.Terrain);
+                var restored = SkirmishMatchSession.Restore(unpacked, loaded.Data.Templates, loaded.Data.Fingerprint, loaded.Terrain);
                 restore.Add(watch.Elapsed.TotalMilliseconds);
                 equal &= restored.StateHash() == session.StateHash() && restored.World.Tick == session.World.Tick;
             }

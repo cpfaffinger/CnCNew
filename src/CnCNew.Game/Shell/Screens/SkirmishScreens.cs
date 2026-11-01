@@ -326,7 +326,11 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
     private ImmutableArray<string> _mapPaths = [];
     private int _selectedIndex = -1;
     private bool _showingUserMaps;
-    private (int Count, bool Loading) _shownUserMaps;
+    private (int Version, bool Loading) _shownUserMaps;
+    private double _nextLookSeconds = LookSeconds;
+
+    /// <summary>How often the open list looks at the user's folder: a map copied there while the list is open appears by itself.</summary>
+    private const double LookSeconds = 5;
 
     public SkirmishMapSelectScreen(GameShell shell, IMapPickerOwner owner, string layoutName = ShellLayoutNames.SkirmishMapSelectMenu) : base(shell, layoutName)
     {
@@ -337,6 +341,7 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
         PopulateSystemMaps();
         SkirmishSetupScreen.HideStartPositionMarkers(this);
         _owner.SetMapPickerOpen(true);
+        Shell.RescanUserMaps();
     }
 
     /// <summary>OK and Back both give the setup its hidden elements back (<c>showSkirmishGameOptionsUnderlyingGUIElements(TRUE)</c>).</summary>
@@ -346,7 +351,13 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
     public override void Update(double dtSeconds)
     {
         base.Update(dtSeconds);
-        if (_showingUserMaps && _shownUserMaps != (Shell.UserMaps.Length, Shell.UserMapsLoading)) PopulateUserMaps();
+        _nextLookSeconds -= dtSeconds;
+        if (_nextLookSeconds <= 0)
+        {
+            _nextLookSeconds = LookSeconds;
+            Shell.RescanUserMaps();
+        }
+        if (_showingUserMaps && _shownUserMaps != (Shell.UserMapsVersion, Shell.UserMapsLoading)) PopulateUserMaps();
     }
 
     private void PopulateSystemMaps()
@@ -365,7 +376,7 @@ public sealed class SkirmishMapSelectScreen : ShellScreen
     private void PopulateUserMaps()
     {
         _showingUserMaps = true;
-        _shownUserMaps = (Shell.UserMaps.Length, Shell.UserMapsLoading);
+        _shownUserMaps = (Shell.UserMapsVersion, Shell.UserMapsLoading);
         _mapPaths = [.. Shell.UserMaps.OrderBy(path => Shell.MapNames.DisplayName(path, Shell.MapCatalog, Shell.TextSource), StringComparer.Ordinal)];
         var list = W("ListboxMap");
         list.ClearList();

@@ -198,7 +198,7 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
     var outcomeOnly = Arg(args, "--outcome");
     var agentThreshold = int.Parse(Arg(args, "--agent-threshold") ?? "0", CultureInfo.InvariantCulture);
     var timeline = int.Parse(Arg(args, "--timeline") ?? "0", CultureInfo.InvariantCulture);
-    var (context, catalog, fingerprint) = Compile(content);
+    var (context, _, _) = Compile(content);
     var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     int maps = 0, victories = 0, defeats = 0;
     foreach (var campaign in campaigns.Campaigns)
@@ -212,6 +212,7 @@ static int Drive(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             try { map = context.LoadMap(mission.MapPath); }
             catch (FileNotFoundException) { Console.WriteLine($"{campaign.Name,-12} {mission.Name,-9} {mission.MapPath}: map not in the content"); continue; }
             maps++;
+            var (catalog, fingerprint) = context.RulesOf(mission.MapPath);
             var terrain = TerrainMap.Build(map, mission.MapPath);
             var options = MissionOptions.Standard with { HumanSideName = campaign.IsChallenge ? ChallengeSides.HumanSideFor(map) : string.Empty, HumanFaction = campaign.IsChallenge ? campaign.PlayerFaction : string.Empty };
             var cells = new List<string>();
@@ -275,11 +276,12 @@ static (MissionContext Context, TemplateCatalog Catalog, string Fingerprint) Com
     var geometry = CnCNew.Game.Data.ModelGeometryLoader.Load(graph, CnCNew.Presentation.Objects.ObjectVisualCatalog.Build(graph), content);
     var catalog = TemplateCatalog.Build(graph, ModuleBindingTable.Default, CnCNew.CampaignTool.ToolRate.Current, geometry, CnCNew.CampaignTool.ToolRate.Rules);
     var fingerprint = catalog.Rate.Combine(geometry.Combine(DefinitionSnapshotWriter.ComputeFingerprint(graph).Sha256));
+    var maps = new CnCNew.Game.Data.MapCatalogs(content, catalog, fingerprint);
     return (new MissionContext(catalog, fingerprint, path =>
     {
         using var stream = content.OpenRead(path);
         return SageMapDecoder.Decode(stream);
-    }), catalog, fingerprint);
+    }) { MapRules = path => maps.For(path) }, catalog, fingerprint);
 }
 
 static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] args)
@@ -291,7 +293,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
     var continuation = !args.Contains("--no-continuation");
     var explain = args.Contains("--explain");
     var humanSideName = Arg(args, "--human-side") ?? string.Empty;
-    var (context, catalog, fingerprint) = Compile(content);
+    var (context, _, _) = Compile(content);
     var missing = new SortedDictionary<string, long>(StringComparer.Ordinal);
     var missingMissions = new SortedDictionary<string, int>(StringComparer.Ordinal);
     var missingConditions = new SortedDictionary<string, long>(StringComparer.Ordinal);
@@ -312,6 +314,7 @@ static int Audit(ContentFileSystem content, CampaignCatalog campaigns, string[] 
             try
             {
                 var map = context.LoadMap(mission.MapPath);
+                var (catalog, fingerprint) = context.RulesOf(mission.MapPath);
                 var terrain = TerrainMap.Build(map, mission.MapPath);
                 var options = MissionOptions.Standard with { HumanSideName = humanSideName.Length > 0 || !campaign.IsChallenge ? humanSideName : ChallengeSides.HumanSideFor(map), HumanFaction = campaign.IsChallenge ? campaign.PlayerFaction : string.Empty };
                 var first = MissionScenario.Run(options, catalog, fingerprint, terrain, map, ticks);
@@ -438,6 +441,7 @@ static int ObjectInfo(ContentFileSystem content, CampaignCatalog campaigns, stri
     var name = Arg(args, "--name");
     var mission = campaigns.Campaigns.SelectMany(campaign => campaign.Sequence).FirstOrDefault(item => item.MapPath.Contains(mapFilter, StringComparison.OrdinalIgnoreCase));
     if (mission is null) return Fail("no such map");
+    catalog = context.RulesOf(mission.MapPath).Templates;
     var program = ScriptProgram.Build(context.LoadMap(mission.MapPath));
     foreach (var placed in program.Objects.Where(item => name is null ? item.ScriptName.Length > 0 : item.ScriptName == name))
     {
@@ -550,6 +554,7 @@ static int TeamInfo(ContentFileSystem content, CampaignCatalog campaigns, string
     var filter = Arg(args, "--filter") ?? string.Empty;
     var mission = campaigns.Campaigns.SelectMany(campaign => campaign.Sequence).FirstOrDefault(item => item.MapPath.Contains(mapFilter, StringComparison.OrdinalIgnoreCase));
     if (mission is null) return Fail("no such map");
+    catalog = context.RulesOf(mission.MapPath).Templates;
     var program = ScriptProgram.Build(context.LoadMap(mission.MapPath));
     foreach (var team in program.Teams.Where(team => team.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)))
     {

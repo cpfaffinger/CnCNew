@@ -28,6 +28,7 @@ internal static class OriginalAiCensus
 
     public static (string Outcome, List<string> Lines) Play(SimContext context, string id, string mapPath, string[] factions, uint seed, long maxTicks, string[] args)
     {
+        context = context.ForMap(mapPath);
         var (map, terrain, library) = OriginalAi.Load(context, mapPath);
         var slots = OriginalAi.Slots(context, factions, args);
         var session = OriginalAi.Start(context, map, terrain, library, slots, seed, maxTicks, libraryForMissingSides: OriginalAi.LibraryForMissingSides(args));

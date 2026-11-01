@@ -8,7 +8,7 @@ using CnCNew.Simulation.Terrain;
 
 namespace CnCNew.Game.Campaign;
 
-/// <summary>What loading a mission needs from the content, without tying it to a file system: the compiled templates and the means to read a decoded map.</summary>
+/// <summary>What loading a mission needs from the content, without tying it to a file system: the compiled templates, what a map makes of them, and the means to read a decoded map.</summary>
 /// <param name="LoadMap">Decodes the map at a virtual path (<c>Maps/USA01/USA01.map</c>); throws <see cref="FileNotFoundException"/> when it does not exist.</param>
 public sealed record MissionContext(TemplateCatalog Templates, string Fingerprint, Func<string, MapData> LoadMap)
 {
@@ -16,7 +16,20 @@ public sealed record MissionContext(TemplateCatalog Templates, string Fingerprin
     {
         using var stream = data.Content.OpenRead(path);
         return SageMapDecoder.Decode(stream);
-    });
+    })
+    {
+        MapRules = path =>
+        {
+            var rules = data.ForMap(path);
+            return (rules.Templates, rules.Fingerprint);
+        },
+    };
+
+    /// <summary>The rules of a map (<see cref="CnCNew.Game.Data.MapRules"/>). Without it every map plays <see cref="Templates"/>.</summary>
+    public Func<string, (TemplateCatalog Templates, string Fingerprint)>? MapRules { get; init; }
+
+    /// <summary>The templates and the fingerprint a mission on this map runs with.</summary>
+    public (TemplateCatalog Templates, string Fingerprint) RulesOf(string mapPath) => MapRules?.Invoke(mapPath) ?? (Templates, Fingerprint);
 }
 
 /// <summary>A mission ready to be stepped: the map, its terrain and the running <see cref="MissionSession"/>. <see cref="Mission"/> is <see langword="null"/> for a map played on its own.</summary>
@@ -42,7 +55,8 @@ public sealed class MissionRun
         ArgumentNullException.ThrowIfNull(context);
         var map = context.LoadMap(mapPath);
         var terrain = TerrainMap.Build(map, mapPath);
-        return new MissionRun(mapPath, mission, map, terrain, MissionSession.Start(options, context.Templates, context.Fingerprint, terrain, map));
+        var (templates, fingerprint) = context.RulesOf(mapPath);
+        return new MissionRun(mapPath, mission, map, terrain, MissionSession.Start(options, templates, fingerprint, terrain, map));
     }
 
     /// <summary>Rebuilds a run from a <see cref="MissionSnapshot"/> of the same map.</summary>
@@ -51,6 +65,7 @@ public sealed class MissionRun
         ArgumentNullException.ThrowIfNull(context);
         var map = context.LoadMap(mapPath);
         var terrain = TerrainMap.Build(map, mapPath);
-        return new MissionRun(mapPath, mission, map, terrain, MissionSnapshot.Restore(state, context.Templates, context.Fingerprint, terrain, map));
+        var (templates, fingerprint) = context.RulesOf(mapPath);
+        return new MissionRun(mapPath, mission, map, terrain, MissionSnapshot.Restore(state, templates, fingerprint, terrain, map));
     }
 }

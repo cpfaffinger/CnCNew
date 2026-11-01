@@ -120,7 +120,7 @@ internal static class RateCompare
         var frames = long.Parse(Value(args, "--frames") ?? "14400", CultureInfo.InvariantCulture);
         RateCompareFields.Match Of(SimulationRate rate)
         {
-            var context = SimContext.Load(directory, rate);
+            var context = SimContext.Load(directory, rate).ForMap(mapPath);
             var (map, terrain, library) = OriginalAi.Load(context, mapPath);
             var session = OriginalAi.Start(context, map, terrain, library, OriginalAi.Slots(context, factions, args), seed, rate.Time.OriginalFrames(frames));
             return new RateCompareFields.Match(session.World, () => session.IsOver, session.Step);
@@ -142,7 +142,7 @@ internal static class RateCompare
         var ends = new List<Func<string>>();
         RateCompareFields.Match Of(SimulationRate rate)
         {
-            var context = SimContext.Load(directory, rate);
+            var context = SimContext.Load(directory, rate).ForMap(mapPath);
             using var stream = context.Content.OpenRead(mapPath);
             var map = CnCNew.Formats.SageMapDecoder.Decode(stream);
             var terrain = CnCNew.Simulation.Terrain.TerrainMap.Build(map, mapPath);

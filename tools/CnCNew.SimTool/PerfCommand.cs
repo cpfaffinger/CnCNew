@@ -88,6 +88,7 @@ internal static class PerfCommand
         var setup = Stopwatch.StartNew();
         var (_, catalog, fingerprint) = compile(common.Directory);
         var content = ContentFileSystem.Open(common.Directory);
+        (catalog, fingerprint) = new CnCNew.Game.Data.MapCatalogs(content, catalog, fingerprint).For(common.MapPath);
         using var mapStream = content.OpenRead(common.MapPath);
         var map = SageMapDecoder.Decode(mapStream);
         var terrain = TerrainMap.Build(map, common.MapPath);
@@ -216,7 +217,7 @@ internal static class PerfCommand
         var hardware = HardwareLine();
         Console.WriteLine("Hardware: " + hardware);
         var setup = Stopwatch.StartNew();
-        var context = SimContext.Load(common.Directory, ToolRate.Current);
+        var context = SimContext.Load(common.Directory, ToolRate.Current).ForMap(common.MapPath);
         var (map, terrain, library) = OriginalAi.Load(context, common.MapPath);
         var everyone = ReferenceMatchScenario.Participants(context.Catalog, out _);
         var factions = Arg(args, "--factions")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -289,6 +290,7 @@ internal static class PerfCommand
         var setup = Stopwatch.StartNew();
         var (_, catalog, fingerprint) = compile(common.Directory);
         var content = ContentFileSystem.Open(common.Directory);
+        (catalog, fingerprint) = new CnCNew.Game.Data.MapCatalogs(content, catalog, fingerprint).For(common.MapPath);
         using var mapStream = content.OpenRead(common.MapPath);
         var map = SageMapDecoder.Decode(mapStream);
         var terrain = TerrainMap.Build(map, common.MapPath);

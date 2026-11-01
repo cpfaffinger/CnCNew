@@ -106,6 +106,7 @@ internal static class OriginalAi
     /// <summary>The line the surveys write for one match played in a <see cref="ScriptedSkirmishSession"/>.</summary>
     public static SurveyRow Survey(SimContext context, string id, string mapPath, string[] factions, uint seed, long maxTicks, string[] args)
     {
+        context = context.ForMap(mapPath);
         var (map, terrain, library) = Load(context, mapPath);
         var slots = Slots(context, factions, args);
         var session = Start(context, map, terrain, library, slots, seed, maxTicks, libraryForMissingSides: LibraryForMissingSides(args));
@@ -166,6 +167,7 @@ internal static class OriginalAi
         var trace = ManifestCommands.Option(args, "--trace") is { } every ? long.Parse(every, CultureInfo.InvariantCulture) : 0;
         var watch = Stopwatch.StartNew();
         var context = SimContext.Load(args[1], ToolRate.Current);
+        context = context.ForMap(mapPath);
         var (map, terrain, library) = Load(context, mapPath);
         var slots = Slots(context, factions, args);
         Console.WriteLine($"Original-AI match on {mapPath} ({terrain.StartPositions.Length} start positions), seed {seed}, definitions {context.Fingerprint[..16]}, loaded in {watch.Elapsed.TotalSeconds:F1} s.");

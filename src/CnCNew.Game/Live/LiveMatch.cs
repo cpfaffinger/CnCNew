@@ -114,7 +114,7 @@ public sealed record MatchSetup(string MapPath, string HumanFaction, ImmutableAr
             slots.Add(new MatchSlotDescription(human ? MatchSlotKind.Human : MatchSlotKind.Computer, slot == 0 ? HumanFaction : Opponents[slot - 1], details.Team, details.Color, details.StartPosition,
                 human ? MatchSlotDescription.MediumStrength : ai.Strength, AiTactics: !human && ai.Kind == SkirmishAiKind.Builtin && ai.Tactics is { } tactics ? (int)tactics : -1));
         }
-        return new MatchDescription(data.Rate.TicksPerSecond, MapPath, terrain.Fingerprint, data.Fingerprint.ToUpperInvariant(), options.WorldSeed, options.AiSeed, options.MaxTicks, options.StartMoney,
+        return new MatchDescription(data.Rate.TicksPerSecond, MapPath, terrain.Fingerprint, data.FingerprintFor(MapPath).ToUpperInvariant(), options.WorldSeed, options.AiSeed, options.MaxTicks, options.StartMoney,
             options.GraceTicks, options.SciencePointInterval, slots.ToImmutable());
     }
 
@@ -343,6 +343,7 @@ public sealed class LiveMatch : LiveGame
 
     public static LiveMatch Create(GameData data, MatchSetup setup, Vector2 viewport)
     {
+        data = data.ForMap(setup.MapPath);
         MapData map;
         using (var stream = data.Content.OpenRead(setup.MapPath)) map = SageMapDecoder.Decode(stream);
         var terrain = TerrainMap.Build(map, setup.MapPath);
@@ -397,6 +398,8 @@ public sealed class LiveMatch : LiveGame
         var client = remote.Client;
         var start = client.Start ?? throw new InvalidOperationException("The room has not started its match.");
         var description = client.Description!;
+        try { data = data.ForMap(description.MapPath); }
+        catch (CnCNew.Game.Data.MapRulesException refused) { throw new CnCNew.Game.Lockstep.RemoteRelayException(refused.Message); }
         SkirmishMatchSession session;
         try
         {
